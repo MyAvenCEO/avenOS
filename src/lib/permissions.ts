@@ -1,5 +1,5 @@
-import { setDefaultSchemaPermissions } from "jazz-tools";
+import { setDefaultSchemaPermissions } from 'jazz-tools'
 
 setDefaultSchemaPermissions({
-	onInlineCreate: "sameAsContainer",
-});
+	onInlineCreate: 'sameAsContainer'
+})

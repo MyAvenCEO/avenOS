@@ -14,6 +14,15 @@ To recreate this project with the same configuration:
 bunx sv@0.15.2 create --template minimal --types ts --install bun .
 ```
 
+## Lint and format
+
+[Biome](https://biomejs.dev) checks format, imports, and lint rules (including experimental Svelte/HTML support).
+
+```sh
+bun run lint
+bun run lint:fix
+```
+
 ## Developing
 
 ```sh
