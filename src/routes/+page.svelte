@@ -1,90 +1,146 @@
 <svelte:head>
-	<title>aven.ceo — Agentischer CEO für den Papierkram</title>
+	<title>aven.ceo — CEO-Agent für dein Unternehmen</title>
 	<meta
 		name="description"
-		content="aven.ceo: ein agentischer CEO, der lästigen Papierkram übernimmt. Use Case 1 — Dokumente digitalisieren; die erste Worker-Skill, mehr folgt."
+		content="aven.ceo: Aven ist der CEO-Agent deines Unternehmens. +10 h/m mehr Zeit, 95% weniger Papierkram."
 	>
 </svelte:head>
 
 <div lang="de" class="min-h-screen bg-background text-foreground">
-	<!-- Volle Viewport-Höhe: Pitch + große Typo -->
-	<header class="min-h-dvh flex flex-col border-b border-border/50">
-		<div class="shrink-0 w-full px-5 sm:px-8 pt-6 sm:pt-10">
-			<p
-				class="text-center text-base sm:text-lg md:text-xl font-medium tracking-tight text-balance max-w-3xl mx-auto leading-snug"
-			>
-				<strong class="font-semibold">Aven</strong>
-				ist dein <span class="font-semibold">agentischer CEO</span> für Formulare, PDFs und
-				Nachfasserei — du bleibst der echte CEO mit dem letzten Wort.
+	<header
+		class="min-h-dvh flex flex-col items-center justify-center px-6 sm:px-10 border-b border-border/50"
+	>
+		<div class="w-full max-w-2xl mx-auto text-center flex flex-col items-center gap-10 sm:gap-12">
+			<p class="text-[10px] sm:text-xs font-bold font-mono tracking-[0.12em] opacity-35 lowercase">
+				aven.ceo
 			</p>
-		</div>
 
-		<div
-			class="flex-1 flex flex-col items-center justify-center px-6 sm:px-10 pb-16 sm:pb-24 pt-10 sm:pt-14"
-		>
-			<div class="w-full max-w-4xl mx-auto text-center flex flex-col items-center gap-8 sm:gap-10">
+			<div class="space-y-6 sm:space-y-8">
 				<p
-					class="text-[10px] sm:text-xs font-bold font-mono tracking-[0.12em] opacity-35 lowercase"
+					class="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight text-balance leading-snug"
 				>
-					aven.ceo
+					<strong>Aven</strong> ist der <strong>CEO-Agent</strong> deines Unternehmens.
 				</p>
-
-				<h1
-					class="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-semibold tracking-tighter leading-[0.95] text-balance max-w-4xl"
-				>
-					Papierkram erledigt.<br class="hidden sm:block">
-					<span class="opacity-85">Du entscheidest.</span>
-				</h1>
-
-				<p
-					class="text-lg sm:text-xl md:text-2xl font-normal tracking-tight text-balance max-w-2xl mx-auto leading-relaxed opacity-75"
-				>
-					Während du Strategie und Risiko führst, arbeitet Aven die Bürokratie ab — strukturiert,
-					erklärbar, in deinem Auftrag.
+				<p class="text-lg sm:text-xl md:text-2xl text-balance leading-relaxed opacity-80 font-medium">
+					<strong class="text-foreground/95">+10h/m mehr Zeit</strong>
+					<span class="opacity-50 mx-1">-</span>
+					<strong class="text-foreground/95">95&nbsp;% weniger Papierkram</strong>.
 				</p>
-
-				<a
-					href="/me"
-					class="mt-2 inline-flex items-center justify-center rounded-full bg-foreground px-8 py-3.5 text-base font-semibold text-background hover:opacity-90 transition-opacity"
-				>
-					Zum Workspace
-				</a>
 			</div>
+
+			<a
+				href="/me"
+				class="inline-flex items-center justify-center rounded-full bg-foreground px-8 py-3.5 text-base font-semibold text-background hover:opacity-90 transition-opacity"
+			>
+				Zum Workspace
+			</a>
 		</div>
 	</header>
 
-	<main class="mx-auto max-w-2xl px-6 py-16 sm:py-20 sm:px-8 space-y-14 sm:space-y-16">
+	<section
+		class="border-b border-border/50 px-6 sm:px-10 py-12 sm:py-14"
+		aria-label="Grundprinzipien"
+	>
+		<div
+			class="mx-auto max-w-5xl grid grid-cols-1 sm:grid-cols-3 gap-10 sm:gap-8 lg:gap-12"
+		>
+			<div class="text-center sm:text-left space-y-2.5">
+				<h3 class="text-base sm:text-[1.0625rem] font-semibold tracking-tight text-balance leading-snug">
+					Privat zwischen dir &amp; Aven
+				</h3>
+				<p class="text-xs sm:text-sm leading-relaxed text-pretty opacity-70 max-w-sm mx-auto sm:mx-0">
+					100&nbsp;% <strong class="font-medium text-foreground/85">E2E-verschlüsselt</strong> — vom
+					Gerät bis zum Sync. Kein Klartext auf
+					<strong class="font-medium text-foreground/85">fremden Servern</strong>, die wir nicht
+					kontrollieren.
+				</p>
+			</div>
+			<div class="text-center sm:text-left space-y-2.5">
+				<h3 class="text-base sm:text-[1.0625rem] font-semibold tracking-tight text-balance leading-snug">
+					Local-first. Open Source.
+				</h3>
+				<p class="text-xs sm:text-sm leading-relaxed text-pretty opacity-70 max-w-sm mx-auto sm:mx-0">
+					Zeitnah offline nutzbar, <strong class="font-medium text-foreground/85">Backup unter deiner
+						Kontrolle</strong> — und Code, den du prüfen kannst. Transparenz statt Blackbox.
+				</p>
+			</div>
+			<div class="text-center sm:text-left space-y-2.5">
+				<h3 class="text-base sm:text-[1.0625rem] font-semibold tracking-tight text-balance leading-snug">
+					Deine Daten. Null Lock-in.
+				</h3>
+				<p class="text-xs sm:text-sm leading-relaxed text-pretty opacity-70 max-w-sm mx-auto sm:mx-0">
+					<strong class="font-medium text-foreground/85">Exportierbar</strong>, wenn du willst —
+					<strong class="font-medium text-foreground/85">you own your data</strong>. Kein Vendor-Gefängnis,
+					kein „wir horten alles“.
+				</p>
+			</div>
+		</div>
+	</section>
+
+	<main class="mx-auto max-w-2xl px-6 py-16 sm:py-20 sm:px-8 space-y-12">
 		<section>
 			<h2 class="text-[10px] sm:text-xs font-bold uppercase tracking-[0.35em] opacity-35 mb-3">
-				Use Case 1
+				Skill 1
 			</h2>
-			<p class="text-xl sm:text-2xl font-semibold tracking-tight leading-snug mb-3 text-balance">
-				Dokumente digitalisieren &amp; auslesen
+			<p class="text-lg sm:text-xl font-semibold tracking-tight mb-3 text-balance">
+				Bürokratie &amp; Dokumente
 			</p>
-			<p class="leading-relaxed opacity-80 text-pretty">
-				Das ist die <strong class="font-medium text-foreground/95">erste Worker-Skill</strong> auf
-				<span class="font-mono text-sm opacity-90">aven.ceo</span>
-				— nicht das Endprodukt. Weitere Use Cases und Fähigkeiten kommen; hier starten wir mit dem
-				Fundament: Material erfassen, Felder extrahieren, Metadaten zuordnen.
+			<p class="text-sm sm:text-base leading-relaxed opacity-80 text-pretty">
+				Alles einspeisen (Abschlüsse, Rechnungen, Verträge …), auslesen, durchspielen —
+				<strong class="font-medium text-foreground/90">eine klare Aktionsliste</strong>; Aven meldet
+				sich, wenn <strong class="font-medium text-foreground/90">dein Okay</strong> nötig ist.
+			</p>
+		</section>
+
+		<section class="opacity-90">
+			<h2 class="text-[10px] sm:text-xs font-bold uppercase tracking-[0.35em] opacity-35 mb-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+				<span>Skill 2</span>
+				<span
+					class="font-mono text-[9px] sm:text-[10px] tracking-[0.12em] opacity-50 normal-case"
+				>Demnächst</span>
+			</h2>
+			<p class="text-lg sm:text-xl font-semibold tracking-tight mb-3 text-balance">
+				Aven&nbsp;E-Mail
+			</p>
+			<p class="text-sm sm:text-base leading-relaxed opacity-80 text-pretty">
+				Dein Posteingang, aber endlich ruhig. Aven
+				<strong class="font-medium text-foreground/90">sortiert, fasst zusammen und skizziert Antworten</strong>
+				— Prioritäten sind klar, Noise verschwindet. Du freigibst, was rausgeht; der Rest läuft im
+				Hintergrund.
+			</p>
+		</section>
+
+		<section class="opacity-90">
+			<h2 class="text-[10px] sm:text-xs font-bold uppercase tracking-[0.35em] opacity-35 mb-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+				<span>Skill 3</span>
+				<span
+					class="font-mono text-[9px] sm:text-[10px] tracking-[0.12em] opacity-50 normal-case"
+				>Demnächst</span>
+			</h2>
+			<p class="text-lg sm:text-xl font-semibold tracking-tight mb-3 text-balance">
+				Meetings &amp; Commitments
+			</p>
+			<p class="text-sm sm:text-base leading-relaxed opacity-80 text-pretty">
+				Aus Gesprächen werden
+				<strong class="font-medium text-foreground/90">Entscheidungen und To-dos</strong>, die nicht in
+				Notizen versickern. Aven
+				<strong class="font-medium text-foreground/90">hält Fristen fest</strong>, erinnert an Follow-ups
+				und spiegelt Status — ohne zweites Projekttool.
 			</p>
 		</section>
 
 		<section class="rounded-2xl border border-border/80 bg-white/25 px-6 py-7 sm:px-8 sm:py-8">
-			<h2 class="text-[10px] sm:text-xs font-bold uppercase tracking-[0.35em] opacity-35 mb-4">
-				Was du siehst
+			<h2 class="text-[10px] sm:text-xs font-bold uppercase tracking-[0.35em] opacity-35 mb-3">
+				Workspace
 			</h2>
-			<p class="text-lg font-medium tracking-tight mb-3">
-				Ein klarer Aufgaben‑Posteingang — kein Ordner‑Chaos.
-			</p>
 			<p class="text-sm sm:text-base leading-relaxed opacity-80">
-				Unterschreiben, verlängern, Abgleich — sortiert und begründet. Aven bereitet vor; du
-				bestätigst.
+				Intent-Posteingang für das, was noch von dir braucht — ohne Ordner graben.
 			</p>
 			<a
 				href="/me"
-				class="inline-block mt-6 text-sm font-semibold underline underline-offset-4 opacity-90 hover:opacity-100"
+				class="inline-block mt-5 text-sm font-semibold underline underline-offset-4 opacity-90 hover:opacity-100"
 			>
-				Intent‑Liste öffnen →
+				Öffnen →
 			</a>
 		</section>
 	</main>
