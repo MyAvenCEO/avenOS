@@ -31,6 +31,12 @@
 			"trailingCommas": "none"
 		}
 	},
+	"css": {
+		"parser": {
+			"cssModules": true,
+			"tailwindDirectives": true
+		}
+	},
 	"json": {
 		"formatter": {
 			"indentStyle": "tab",

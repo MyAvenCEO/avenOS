@@ -4,6 +4,7 @@ import { JazzSvelteProvider } from 'jazz-tools/svelte'
 import { beforeNavigate, goto } from '$app/navigation'
 import favicon from '$lib/assets/favicon.svg'
 import { AvenOSAccount } from '$lib/schema'
+import '../app.css'
 
 let { children } = $props()
 

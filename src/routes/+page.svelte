@@ -31,187 +31,176 @@ function toggleTodo(todo: {
 	todo.$jazz.set('done', !todo.done)
 }
 
-function removeTodo(index: number) {
+function removeTodo(id: string) {
 	const acc = me.current
 	if (!acc?.$isLoaded) return
-	acc.root.todos.$jazz.splice(index, 1)
+	const idx = acc.root.todos.findIndex((t) => t?.$jazz.id === id)
+	if (idx >= 0) acc.root.todos.$jazz.splice(idx, 1)
 }
+
+// Mock workers for the UI concept
+const workers = [
+	{ name: 'Calendar', task: 'Resolving conflicts', status: 'Active', score: '0.94' },
+	{ name: 'Finance', task: 'Q3 Variance Analysis', status: 'Standby', score: '0.98' },
+	{ name: 'Health', task: 'Sleep monitoring', status: 'Active', score: '0.82' },
+	{ name: 'Projects', task: 'Maia City Tick 47', status: 'Ready', score: '-' }
+]
 </script>
 
-<div class="wrap">
-	<header class="header">
-		<h1>Todos</h1>
-		{#if me.current?.$isLoaded}
-			<p class="meta">
-				Signed in as
-				<strong>{me.current.profile.name}</strong>
-				<button type="button" class="linkish" onclick={() => void me.logOut()}>Sign out</button>
-			</p>
-			<label class="profile">
-				Display name
-				<input
-					type="text"
-					value={me.current.profile.name}
-					oninput={(e) => {
-						const acc = me.current;
-						if (!acc?.$isLoaded) return;
-						acc.profile.$jazz.set('name', e.currentTarget.value);
-					}}
-				>
-			</label>
-		{:else}
-			<p class="meta muted">Loading account…</p>
-		{/if}
+<svelte:head>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+</svelte:head>
+
+<div class="min-h-screen bg-background p-6 sm:p-8 pb-10">
+	<!-- Top Bar -->
+	<header class="mx-auto max-w-2xl flex items-center justify-between mb-6">
+		<div class="flex flex-col">
+			<span class="text-xs font-bold opacity-30 uppercase tracking-widest mb-1">Aven Maia</span>
+			<div class="flex items-center gap-2">
+				{#if me.current?.$isLoaded}
+					<input
+						type="text"
+						class="border-none bg-transparent p-0 text-3xl font-medium tracking-tighter outline-none focus:ring-0"
+						value={me.current.profile.name}
+						oninput={(e) => {
+							const acc = me.current
+							if (!acc?.$isLoaded) return
+							acc.profile.$jazz.set('name', e.currentTarget.value)
+						}}
+						size={me.current.profile.name?.length || 5}
+					/>
+				{:else}
+					<span class="text-3xl font-medium tracking-tighter opacity-20">Loading...</span>
+				{/if}
+			</div>
+		</div>
+		<button 
+			class="size-10 flex items-center justify-center rounded-full border border-border bg-white/10 hover:bg-white/30 transition-all"
+			onclick={() => void me.logOut()}
+			aria-label="Log out"
+		>
+			<svg class="size-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
+			</svg>
+		</button>
 	</header>
 
-	{#if me.current?.$isLoaded}
-		<form
-			onsubmit={(e) => {
-				e.preventDefault();
-				addTodo();
-			}}
-			class="add"
-		>
-			<input bind:value={newTitle} placeholder="New todo" autocomplete="off">
-			<button type="submit">Add</button>
-		</form>
+	<main class="mx-auto max-w-2xl space-y-10">
+		<!-- Main Intent Input -->
+		<section class="tech-pill py-2.5 px-4 justify-between">
+			<div class="flex items-center gap-3 flex-1">
+				<div class="size-9 shrink-0 rounded-full border border-border flex items-center justify-center bg-white/20">
+					<svg class="size-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+					</svg>
+				</div>
+				<form 
+					class="flex-1"
+					onsubmit={(e) => { e.preventDefault(); addTodo(); }}
+				>
+					<input
+						bind:value={newTitle}
+						placeholder="Add new intent..."
+						class="w-full bg-transparent border-none p-0 text-xl font-medium tracking-tight placeholder:opacity-20 outline-none focus:ring-0"
+					>
+				</form>
+			</div>
+			<div class="flex items-center gap-3 pl-3 border-l border-border">
+				<div class="flex flex-col items-end">
+					<span class="text-[8px] font-bold uppercase opacity-30">Maia</span>
+					<span class="text-xs font-bold uppercase tracking-tighter">Ready</span>
+				</div>
+			</div>
+		</section>
 
-		<ul class="list">
-			{#each me.current.root.todos as todo, i (todo.$jazz.id)}
-				<li class="row">
-					<label class="tick">
-						<input type="checkbox" checked={todo.done} onchange={() => toggleTodo(todo)}>
-						<span class:done={todo.done}>{todo.title}</span>
-					</label>
-					<button type="button" class="danger" onclick={() => removeTodo(i)}>Remove</button>
-				</li>
-			{:else}
-				<li class="empty muted">No todos yet.</li>
-			{/each}
-		</ul>
-	{/if}
+		<!-- Intentions List (Now Middle) -->
+		<section>
+			<div class="flex items-center gap-2 mb-6">
+				<span class="text-[10px] font-bold opacity-30 uppercase tracking-[0.3em]">My Intents</span>
+			</div>
+			<div class="space-y-0">
+				{#if me.current?.$isLoaded}
+					{#each me.current.root.todos as todo (todo.$jazz.id)}
+						{#if todo}
+							<div class="tech-row group">
+								<div class="flex items-center gap-8">
+									<span class="font-mono text-[10px] opacity-20">0{me.current.root.todos.indexOf(todo) + 1}</span>
+									<span class="text-lg font-medium tracking-tight {todo.done ? 'opacity-20 line-through' : ''}">
+										{todo.title}
+									</span>
+								</div>
+								<div class="flex items-center gap-4">
+									<button 
+										type="button"
+										onclick={() => toggleTodo(todo)}
+										class="px-3 py-1 rounded-full border border-border text-[10px] font-bold uppercase transition-all {todo.done ? 'bg-foreground text-background' : 'hover:bg-foreground hover:text-background'}"
+										aria-label={todo.done ? 'Mark intent as open' : 'Mark intent as done'}
+										aria-pressed={todo.done}
+									>
+										{todo.done ? 'Done' : 'Open'}
+									</button>
+									<button 
+										onclick={() => removeTodo(todo.$jazz.id)}
+										class="opacity-0 group-hover:opacity-100 transition-all p-1 hover:text-error"
+										aria-label="Delete"
+									>
+										<svg class="size-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+										</svg>
+									</button>
+								</div>
+							</div>
+						{/if}
+					{/each}
+				{:else}
+					{#each [1, 2, 3] as _}
+						<div class="tech-row animate-pulse">
+							<div class="h-6 w-48 bg-black/5 rounded"></div>
+							<div class="h-6 w-12 bg-black/5 rounded-full"></div>
+						</div>
+					{/each}
+				{/if}
+			</div>
+		</section>
+
+		<!-- Worker Grid (Now Bottom) -->
+		<section>
+			<div class="flex items-center gap-2 mb-6">
+				<span class="text-[10px] font-bold opacity-30 uppercase tracking-[0.3em]">Active Workers</span>
+			</div>
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+				{#each workers as worker}
+					<div class="tech-card flex flex-col justify-between min-h-[140px]">
+						<div class="flex justify-between items-start">
+							<div class="flex flex-col">
+								<span class="tech-label">{worker.name} Worker</span>
+								<span class="text-sm font-bold tracking-tight">{worker.task}</span>
+							</div>
+							<div class="flex items-center gap-2">
+								<span class="text-[10px] font-bold opacity-40">{worker.status}</span>
+								<div class="worker-status-dot {worker.status === 'Active' ? 'bg-foreground animate-pulse' : 'bg-foreground/20'}"></div>
+							</div>
+						</div>
+						<div class="flex justify-between items-end">
+							<div class="flex flex-col">
+								<span class="tech-label">Score</span>
+								<span class="tech-value text-sm">{worker.score}</span>
+							</div>
+							<svg class="size-4 opacity-10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+							</svg>
+						</div>
+					</div>
+				{/each}
+			</div>
+		</section>
+	</main>
 </div>
 
 <style>
-.wrap {
-	max-width: 36rem;
-	margin: 0 auto;
-	padding: 2rem 1.25rem 4rem;
-	font-family:
-		system-ui,
-		-apple-system,
-		Segoe UI,
-		Roboto,
-		sans-serif;
-	line-height: 1.5;
-	color: #0f172a;
-}
-.header h1 {
-	font-size: 1.75rem;
-	font-weight: 650;
-	margin: 0 0 0.5rem;
-	letter-spacing: -0.02em;
-}
-.meta {
-	margin: 0 0 1rem;
-	font-size: 0.9rem;
-}
-.meta strong {
-	font-weight: 600;
-}
-.muted {
-	color: #64748b;
-}
-.linkish {
-	margin-left: 0.5rem;
-	border: none;
-	background: none;
-	color: #2563eb;
-	cursor: pointer;
-	font: inherit;
-	text-decoration: underline;
-	padding: 0;
-}
-.profile {
-	display: flex;
-	flex-direction: column;
-	gap: 0.35rem;
-	font-size: 0.85rem;
-	color: #475569;
-	margin-bottom: 1.5rem;
-}
-.profile input {
-	padding: 0.5rem 0.65rem;
-	border: 1px solid #cbd5e1;
-	border-radius: 0.375rem;
-	font: inherit;
-}
-.add {
-	display: flex;
-	gap: 0.5rem;
-	margin-bottom: 1.25rem;
-}
-.add input {
-	flex: 1;
-	padding: 0.55rem 0.65rem;
-	border: 1px solid #cbd5e1;
-	border-radius: 0.375rem;
-	font: inherit;
-}
-.add button,
-.row button {
-	padding: 0.55rem 0.85rem;
-	border-radius: 0.375rem;
-	font: inherit;
-	font-weight: 500;
-	cursor: pointer;
-	border: 1px solid #1e293b;
-	background: #1e293b;
-	color: #fff;
-}
-.list {
-	list-style: none;
-	padding: 0;
-	margin: 0;
-	border: 1px solid #e2e8f0;
-	border-radius: 0.5rem;
-	overflow: hidden;
-}
-.row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 0.75rem;
-	padding: 0.65rem 0.85rem;
-	border-bottom: 1px solid #e2e8f0;
-	background: #fff;
-}
-.row:last-child {
-	border-bottom: none;
-}
-.tick {
-	display: flex;
-	align-items: flex-start;
-	gap: 0.5rem;
-	cursor: pointer;
-	flex: 1;
-	min-width: 0;
-}
-.tick span {
-	word-break: break-word;
-}
-.done {
-	text-decoration: line-through;
-	color: #94a3b8;
-}
-.danger {
-	border-color: #b91c1c;
-	background: #fff;
-	color: #b91c1c;
-	flex-shrink: 0;
-}
-.empty {
-	padding: 1rem 0.85rem;
-	margin: 0;
+:global(body) {
+	background-color: #E8EDE1;
 }
 </style>

@@ -7,7 +7,7 @@ export const Todo = co.map({
 	done: z.boolean()
 })
 
-const AccountRoot = co.map({
+export const AccountRoot = co.map({
 	todos: co.list(Todo)
 })
 
@@ -17,9 +17,16 @@ export const AvenOSAccount = co
 		profile: co.profile()
 	})
 	.withMigration(async (account) => {
+		// If `root` is missing, deep resolve fails with "ref root is required but missing".
+		// Seed it first (see jazz-tools deepLoading / custom account tests).
+		if (!account.$jazz.has('root')) {
+			account.$jazz.set('root', { todos: [] })
+		}
+
 		const { root } = await account.$jazz.ensureLoaded({
 			resolve: { root: true }
 		})
+
 		if (!root.$jazz.has('todos')) {
 			const owner = Group.create({ owner: account })
 			root.$jazz.set('todos', co.list(Todo).create([], { owner }))

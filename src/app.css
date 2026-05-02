@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+@theme {
+	--font-sans:
+		"Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+		"Segoe UI Symbol";
+	--font-mono: "JetBrains Mono", monospace;
+
+	/* Minimalist Tech Palette from Image */
+	--color-background: #E8EDE1; /* Light Sage/Grey Background */
+	--color-foreground: #1A1A1A; /* Near Black Ink */
+	
+	/* Tuscan Sun Highlight */
+	--color-tuscan-sun: #E6B34D;
+	
+	--color-accent: #1A1A1A;
+	--color-accent-foreground: #E8EDE1;
+
+	--color-muted: rgba(0, 0, 0, 0.05);
+	--color-muted-foreground: rgba(0, 0, 0, 0.4);
+
+	--color-border: rgba(0, 0, 0, 0.1);
+	--color-input: rgba(255, 255, 255, 0.5);
+
+	--radius-lg: 1rem;
+	--radius-xl: 1.5rem;
+	--radius-2xl: 2rem;
+	--radius-full: 9999px;
+}
+
+@layer base {
+	html {
+		@apply scroll-smooth antialiased;
+	}
+
+	body {
+		@apply bg-background text-foreground font-sans tracking-tight;
+	}
+
+	h1, h2, h3 {
+		@apply font-sans font-medium tracking-tighter;
+	}
+}
+
+@layer components {
+	.tech-card {
+		@apply border border-border rounded-2xl p-6 bg-white/10 transition-all hover:bg-white/20;
+	}
+
+	.tech-pill {
+		@apply border border-border rounded-full px-4 py-2 flex items-center gap-3 bg-white/20;
+	}
+
+	.tech-row {
+		@apply border-b border-border py-4 flex items-center justify-between;
+	}
+
+	.tech-label {
+		@apply text-[10px] font-bold uppercase tracking-widest opacity-40;
+	}
+
+	.tech-value {
+		@apply font-mono text-xl;
+	}
+
+	.worker-status-dot {
+		@apply size-1.5 rounded-full;
+	}
+}
