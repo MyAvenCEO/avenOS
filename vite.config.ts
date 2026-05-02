@@ -3,13 +3,26 @@ import tailwindcss from '@tailwindcss/vite'
 import { jazzSvelteKit } from 'jazz-tools/dev/sveltekit'
 import { createLogger, defineConfig } from 'vite'
 
+/** jazz-tools ships sourcemaps that reference unpublished paths; Vite logs those via warnOnce. */
+function silenceJazzBrokenSourcemaps(msg: unknown): boolean {
+	return (
+		typeof msg === 'string' &&
+		msg.includes('Sourcemap for') &&
+		msg.includes('jazz-tools') &&
+		msg.includes('missing source files')
+	)
+}
+
 const logger = createLogger()
 const origWarn = logger.warn.bind(logger)
+const origWarnOnce = logger.warnOnce.bind(logger)
 logger.warn = (msg, options) => {
-	if (typeof msg === 'string' && msg.includes('Sourcemap for') && msg.includes('jazz-tools')) {
-		return
-	}
+	if (silenceJazzBrokenSourcemaps(msg)) return
 	origWarn(msg, options)
+}
+logger.warnOnce = (msg, options) => {
+	if (silenceJazzBrokenSourcemaps(msg)) return
+	origWarnOnce(msg, options)
 }
 
 export default defineConfig({
