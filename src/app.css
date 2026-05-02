@@ -7,14 +7,14 @@
 	--font-mono: "JetBrains Mono", monospace;
 
 	/* Minimalist Tech Palette from Image */
-	--color-background: #E8EDE1; /* Light Sage/Grey Background */
-	--color-foreground: #1A1A1A; /* Near Black Ink */
-	
+	--color-background: #e8ede1; /* Light Sage/Grey Background */
+	--color-foreground: #1a1a1a; /* Near Black Ink */
+
 	/* Tuscan Sun Highlight */
-	--color-tuscan-sun: #E6B34D;
-	
-	--color-accent: #1A1A1A;
-	--color-accent-foreground: #E8EDE1;
+	--color-tuscan-sun: #e6b34d;
+
+	--color-accent: #1a1a1a;
+	--color-accent-foreground: #e8ede1;
 
 	--color-muted: rgba(0, 0, 0, 0.05);
 	--color-muted-foreground: rgba(0, 0, 0, 0.4);
@@ -37,7 +37,9 @@
 		@apply bg-background text-foreground font-sans tracking-tight;
 	}
 
-	h1, h2, h3 {
+	h1,
+	h2,
+	h3 {
 		@apply font-sans font-medium tracking-tighter;
 	}
 }
