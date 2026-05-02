@@ -1,0 +1,16 @@
+---
+description: Use Jazz docs MCP for API questions and setup
+alwaysApply: true
+---
+
+# Jazz documentation (MCP)
+
+When answering questions about Jazz (`jazz-tools`, CoValues, sync, Svelte, schema, permissions, auth, MCP tools themselves), use the **jazz-docs** MCP server if it is enabled:
+
+- **`list_pages`** — overview of doc slugs and topics
+- **`search_docs`** — full-text search (`query`, optional `limit`)
+- **`get_doc`** — full page by slug (paths under `/docs/`, e.g. `getting-started/client-setup`, `schemas/defining-tables`)
+
+Prefer jazz-docs over guessing so answers match the **documented** API (note: the MCP package may track **`jazz-tools@alpha`** docs while this repo may pin an older `jazz-tools`; call out any mismatch you see).
+
+The **jazz-docs** MCP server is started with **`bunx jazz-tools@alpha mcp`** (see `.cursor/mcp.json`). Node **22.13+** is recommended for best search (SQLite FTS); older Node falls back to basic keyword search.

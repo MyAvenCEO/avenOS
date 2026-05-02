@@ -1,0 +1,14 @@
+---
+description: Use Bun only for JS tooling in this repo
+alwaysApply: true
+---
+
+# Package manager: Bun only
+
+In this project, use **Bun** for all package management and script runs. Use **`bunx`** for one-off package binaries (never **`npx`**). Do **not** use **`npm`**, **`pnpm`**, or **`yarn`** unless the user explicitly overrides.
+
+- Install / add deps: `bun install`, `bun add`, `bun remove`
+- Run scripts: `bun run <script>` or `bun <file>`
+- One-off CLIs: **`bunx`** (e.g. `bunx sv create`, `bunx jazz-tools@alpha mcp`)
+
+When suggesting commands in chat or in docs for this repo, default to these.
