@@ -11,10 +11,15 @@ const permissions = s.definePermissions(app, ({ policy }) => {
 	policy.profiles.allowUpdate.always()
 	policy.profiles.allowDelete.always()
 
-	policy.todos.allowRead.always()
-	policy.todos.allowInsert.always()
-	policy.todos.allowUpdate.always()
-	policy.todos.allowDelete.always()
+	policy.intents.allowRead.always()
+	policy.intents.allowInsert.always()
+	policy.intents.allowUpdate.always()
+	policy.intents.allowDelete.always()
+
+	policy.workers.allowRead.always()
+	policy.workers.allowInsert.always()
+	policy.workers.allowUpdate.always()
+	policy.workers.allowDelete.always()
 })
 
 export default permissions

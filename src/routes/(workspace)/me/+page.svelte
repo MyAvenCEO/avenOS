@@ -1,12 +1,18 @@
 <script lang="ts">
 import { getJazzContext, QuerySubscription } from 'jazz-tools/svelte'
 import { app } from '$lib/schema'
+import { randomWorkerCategoryKey, WORKER_CATEGORY_LABELS } from '$lib/worker-catalog'
 
 /** Must read context here — `getDb()`/`getSession()` call `getContext` and cannot run inside `$effect`. */
 const ctx = getJazzContext()
 
-const todos = new QuerySubscription(app.todos)
+const intents = new QuerySubscription(app.intents)
 const profiles = new QuerySubscription(app.profiles.limit(1))
+const workersQuery = new QuerySubscription(() => {
+	const uid = ctx.session?.user_id
+	if (!uid) return undefined
+	return app.workers.where({ ownerUserId: uid })
+})
 
 let newTitle = $state('')
 let profileSeedForUser = $state<string | null>(null)
@@ -14,6 +20,7 @@ let profileSeedForUser = $state<string | null>(null)
 let nameDraft = $state('')
 
 let writeError = $state<string | null>(null)
+let jazzResetBusy = $state(false)
 
 $effect(() => {
 	const db = ctx.db
@@ -45,28 +52,45 @@ $effect(() => {
 	if (p) nameDraft = p.name
 })
 
-function addTodo() {
+/** Hardcoded test: each new intent spawns a random catalog worker row for the current user. */
+function spawnRandomWorkerForIntent(intentTitle: string) {
+	const db = ctx.db
+	const uid = ctx.session?.user_id
+	if (!db || !uid) return
+	const key = randomWorkerCategoryKey()
+	db.insert(app.workers, {
+		ownerUserId: uid,
+		categoryKey: key,
+		label: `${WORKER_CATEGORY_LABELS[key]} Worker`,
+		taskLine: intentTitle.slice(0, 200),
+		status: 'Active',
+		score: (0.55 + Math.random() * 0.44).toFixed(2)
+	})
+}
+
+function addIntent() {
 	writeError = null
 	const title = newTitle.trim()
 	if (!title) return
 	const db = ctx.db
 	if (!db) return
-	db.insert(app.todos, { title, done: false })
+	db.insert(app.intents, { title, done: false })
+	spawnRandomWorkerForIntent(title)
 	newTitle = ''
 }
 
-function toggleTodo(todo: { id: string; done: boolean }) {
+function toggleIntent(row: { id: string; done: boolean }) {
 	writeError = null
 	const db = ctx.db
 	if (!db) return
-	db.update(app.todos, todo.id, { done: !todo.done })
+	db.update(app.intents, row.id, { done: !row.done })
 }
 
-function removeTodo(id: string) {
+function removeIntent(id: string) {
 	writeError = null
 	const db = ctx.db
 	if (!db) return
-	db.delete(app.todos, id)
+	db.delete(app.intents, id)
 }
 
 function syncDisplayName() {
@@ -90,12 +114,22 @@ async function logOut() {
 	if (db) await db.logout()
 }
 
-const workers = [
-	{ name: 'Calendar', task: 'Resolving conflicts', status: 'Active', score: '0.94' },
-	{ name: 'Finance', task: 'Q3 Variance Analysis', status: 'Standby', score: '0.98' },
-	{ name: 'Health', task: 'Sleep monitoring', status: 'Active', score: '0.82' },
-	{ name: 'Projects', task: 'Maia City Tick 47', status: 'Ready', score: '-' }
-]
+/** Wipes browser OPFS for this Jazz DB (coordinated across tabs). Does not remove local-first auth secret in localStorage. */
+async function resetLocalJazzStorage() {
+	if (!import.meta.env.DEV) return
+	writeError = null
+	const db = ctx.db
+	if (!db) return
+	jazzResetBusy = true
+	try {
+		await db.deleteClientStorage()
+		profileSeedForUser = null
+	} catch (e) {
+		writeError = e instanceof Error ? e.message : String(e)
+	} finally {
+		jazzResetBusy = false
+	}
+}
 </script>
 
 <svelte:head>
@@ -160,27 +194,40 @@ const workers = [
 				{/if}
 			</div>
 		</div>
-		<button
-			type="button"
-			class="size-10 shrink-0 flex items-center justify-center rounded-full border border-border bg-white/10 hover:bg-white/30 transition-all"
-			onclick={() => void logOut()}
-			aria-label="Log out"
-		>
-			<svg
-				class="size-5"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="1.5"
-				viewBox="0 0 24 24"
-				aria-hidden="true"
+		<div class="flex items-center gap-2 shrink-0">
+			{#if import.meta.env.DEV}
+				<button
+					type="button"
+					class="text-[10px] font-bold uppercase tracking-wider opacity-40 hover:opacity-70 px-2 py-1 rounded border border-border/60 disabled:opacity-20"
+					disabled={jazzResetBusy || ctx.db == null}
+					onclick={() => void resetLocalJazzStorage()}
+					title="Clears Jazz browser storage (OPFS) after schema changes. Keeps your local-first login secret."
+				>
+					{jazzResetBusy ? '…' : 'Reset DB'}
+				</button>
+			{/if}
+			<button
+				type="button"
+				class="size-10 shrink-0 flex items-center justify-center rounded-full border border-border bg-white/10 hover:bg-white/30 transition-all"
+				onclick={() => void logOut()}
+				aria-label="Log out"
 			>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9"
-				/>
-			</svg>
-		</button>
+				<svg
+					class="size-5"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.5"
+					viewBox="0 0 24 24"
+					aria-hidden="true"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9"
+					/>
+				</svg>
+			</button>
+		</div>
 	</header>
 
 	<main class="mx-auto max-w-6xl">
@@ -208,7 +255,7 @@ const workers = [
 								/>
 							</svg>
 						</div>
-						<form class="flex-1 min-w-0" onsubmit={(e) => { e.preventDefault(); addTodo(); }}>
+						<form class="flex-1 min-w-0" onsubmit={(e) => { e.preventDefault(); addIntent(); }}>
 							<input
 								bind:value={newTitle}
 								placeholder="Add new intent..."
@@ -231,9 +278,9 @@ const workers = [
 						>
 					</div>
 					<div class="space-y-0">
-						{#if todos.error}
-							<p class="text-error text-sm">{todos.error.message}</p>
-						{:else if todos.loading}
+						{#if intents.error}
+							<p class="text-error text-sm">{intents.error.message}</p>
+						{:else if intents.loading}
 							{#each [1, 2, 3] as _}
 								<div class="tech-row animate-pulse">
 									<div class="h-6 w-48 bg-black/5 rounded"></div>
@@ -241,31 +288,31 @@ const workers = [
 								</div>
 							{/each}
 						{:else}
-							{#each todos.current ?? [] as todo, i (todo.id)}
+							{#each intents.current ?? [] as intent, i (intent.id)}
 								<div class="tech-row group">
 									<div class="flex items-center gap-8 min-w-0">
 										<span class="font-mono text-[10px] opacity-20 shrink-0">0{i + 1}</span>
 										<span
-											class="text-lg font-medium tracking-tight truncate {todo.done ? 'opacity-20 line-through' : ''}"
+											class="text-lg font-medium tracking-tight truncate {intent.done ? 'opacity-20 line-through' : ''}"
 										>
-											{todo.title}
+											{intent.title}
 										</span>
 									</div>
 									<div class="flex items-center gap-4 shrink-0">
 										<button
 											type="button"
-											onclick={() => toggleTodo(todo)}
-											class="px-3 py-1 rounded-full border border-border text-[10px] font-bold uppercase transition-all {todo.done
+											onclick={() => toggleIntent(intent)}
+											class="px-3 py-1 rounded-full border border-border text-[10px] font-bold uppercase transition-all {intent.done
 												? 'bg-foreground text-background'
 												: 'hover:bg-foreground hover:text-background'}"
-											aria-label={todo.done ? 'Mark intent as open' : 'Mark intent as done'}
-											aria-pressed={todo.done}
+											aria-label={intent.done ? 'Mark intent as open' : 'Mark intent as done'}
+											aria-pressed={intent.done}
 										>
-											{todo.done ? 'Done' : 'Open'}
+											{intent.done ? 'Done' : 'Open'}
 										</button>
 										<button
 											type="button"
-											onclick={() => removeTodo(todo.id)}
+											onclick={() => removeIntent(intent.id)}
 											class="opacity-0 group-hover:opacity-100 transition-all p-1 hover:text-error"
 											aria-label="Delete"
 										>
@@ -301,44 +348,59 @@ const workers = [
 					>
 				</div>
 				<div class="flex flex-col gap-4">
-					{#each workers as worker}
-						<div class="tech-card flex flex-col justify-between min-h-[128px]">
-							<div class="flex justify-between items-start gap-3">
-								<div class="flex flex-col min-w-0">
-									<span class="tech-label">{worker.name} Worker</span>
-									<span class="text-sm font-bold tracking-tight leading-snug">{worker.task}</span>
+					{#if workersQuery.error}
+						<p class="text-error text-sm">{workersQuery.error.message}</p>
+					{:else if workersQuery.loading}
+						{#each [1, 2] as _}
+							<div class="tech-card min-h-[96px] animate-pulse bg-black/5"></div>
+						{/each}
+					{:else if (workersQuery.current ?? []).length === 0}
+						<p class="text-xs opacity-40 leading-relaxed">
+							No workers yet. Add an intent — test flow spawns one random worker per intent.
+						</p>
+					{:else}
+						{#each workersQuery.current ?? [] as worker (worker.id)}
+							<div class="tech-card flex flex-col justify-between min-h-[128px]">
+								<div class="flex justify-between items-start gap-3">
+									<div class="flex flex-col min-w-0">
+										<span class="tech-label">{worker.label}</span>
+										<span class="text-sm font-bold tracking-tight leading-snug"
+											>{worker.taskLine}</span
+										>
+										<span class="font-mono text-[10px] opacity-35 mt-1">{worker.categoryKey}</span>
+									</div>
+									<div class="flex items-center gap-2 shrink-0">
+										<span class="text-[10px] font-bold opacity-40">{worker.status}</span>
+										<div
+											class="worker-status-dot {worker.status === 'Active'
+												? 'bg-foreground animate-pulse'
+												: 'bg-foreground/20'}"
+										></div>
+									</div>
 								</div>
-								<div class="flex items-center gap-2 shrink-0">
-									<span class="text-[10px] font-bold opacity-40">{worker.status}</span>
-									<div
-										class="worker-status-dot {worker.status === 'Active'
-											? 'bg-foreground animate-pulse'
-											: 'bg-foreground/20'}"
-									></div>
+								<div class="flex justify-between items-end mt-4">
+									<div class="flex flex-col">
+										<span class="tech-label">Score</span>
+										<span class="tech-value text-sm">{worker.score}</span>
+									</div>
+									<svg
+										class="size-4 opacity-10 shrink-0"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										viewBox="0 0 24 24"
+										aria-hidden="true"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+										/>
+									</svg>
 								</div>
 							</div>
-							<div class="flex justify-between items-end mt-4">
-								<div class="flex flex-col">
-									<span class="tech-label">Score</span>
-									<span class="tech-value text-sm">{worker.score}</span>
-								</div>
-								<svg
-									class="size-4 opacity-10 shrink-0"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									viewBox="0 0 24 24"
-									aria-hidden="true"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-									/>
-								</svg>
-							</div>
-						</div>
-					{/each}
+						{/each}
+					{/if}
 				</div>
 			</aside>
 		</div>
