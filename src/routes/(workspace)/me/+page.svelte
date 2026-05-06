@@ -1,7 +1,13 @@
 <script lang="ts">
 import { getJazzContext, QuerySubscription } from 'jazz-tools/svelte'
+import { defaultInferenceSnapshot } from '$lib/aven/bootstrap-defaults'
+import type { ClassifyIntentArgs } from '$lib/aven/intent-request'
 import { app } from '$lib/schema'
-import { randomWorkerCategoryKey, WORKER_CATEGORY_LABELS } from '$lib/worker-catalog'
+import {
+	isWorkerCategoryKey,
+	randomWorkerCategoryKey,
+	WORKER_CATEGORY_LABELS
+} from '$lib/worker-catalog'
 
 /** Must read context here — `getDb()`/`getSession()` call `getContext` and cannot run inside `$effect`. */
 const ctx = getJazzContext()
@@ -21,6 +27,9 @@ let nameDraft = $state('')
 
 let writeError = $state<string | null>(null)
 let jazzResetBusy = $state(false)
+let avenError = $state<string | null>(null)
+let avenLoading = $state(false)
+let lastClassification = $state<ClassifyIntentArgs | null>(null)
 
 $effect(() => {
 	const db = ctx.db
@@ -52,31 +61,83 @@ $effect(() => {
 	if (p) nameDraft = p.name
 })
 
-/** Hardcoded test: each new intent spawns a random catalog worker row for the current user. */
-function spawnRandomWorkerForIntent(intentTitle: string) {
+function spawnWorkerFromClassification(intentTitle: string, c: ClassifyIntentArgs) {
 	const db = ctx.db
 	const uid = ctx.session?.user_id
 	if (!db || !uid) return
-	const key = randomWorkerCategoryKey()
+	const key = isWorkerCategoryKey(c.worker_class) ? c.worker_class : randomWorkerCategoryKey()
+	const base = WORKER_CATEGORY_LABELS[key]
+	const label =
+		c.worker_mode === 'spawn' && c.spawn_worker_display_name?.trim()
+			? `${base} · ${c.spawn_worker_display_name.trim()}`
+			: base
+	const taskLine = (c.request_title || intentTitle).slice(0, 200)
 	db.insert(app.workers, {
 		ownerUserId: uid,
 		categoryKey: key,
-		label: `${WORKER_CATEGORY_LABELS[key]} Worker`,
-		taskLine: intentTitle.slice(0, 200),
-		status: 'Active',
+		label,
+		taskLine,
+		status: c.worker_mode === 'spawn' ? 'Spawn' : 'Active',
 		score: (0.55 + Math.random() * 0.44).toFixed(2)
 	})
 }
 
-function addIntent() {
+async function classifyAndSpawnWorker(intentTitle: string) {
+	const origin =
+		typeof window !== 'undefined' && window.location?.origin ? window.location.origin : ''
+	const res = await fetch(`${origin}/api/aven/intent`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({
+			intent: intentTitle,
+			snapshot: defaultInferenceSnapshot()
+		})
+	})
+	const data: unknown = await res.json().catch(() => null)
+	if (!res.ok || data === null || typeof data !== 'object') {
+		const err =
+			data !== null &&
+			typeof data === 'object' &&
+			'error' in data &&
+			typeof (data as { error: unknown }).error === 'string'
+				? (data as { error: string }).error
+				: `Classification failed (${res.status})`
+		throw new Error(err)
+	}
+	if (!('ok' in data) || !(data as { ok: unknown }).ok) {
+		const err =
+			'error' in data && typeof (data as { error: unknown }).error === 'string'
+				? (data as { error: string }).error
+				: 'Classification failed'
+		throw new Error(err)
+	}
+	const classification = (data as { classification?: unknown }).classification
+	if (!classification || typeof classification !== 'object') {
+		throw new Error('Missing classification')
+	}
+	const c = classification as ClassifyIntentArgs
+	spawnWorkerFromClassification(intentTitle, c)
+	lastClassification = c
+}
+
+async function addIntent() {
 	writeError = null
+	avenError = null
 	const title = newTitle.trim()
 	if (!title) return
 	const db = ctx.db
 	if (!db) return
 	db.insert(app.intents, { title, done: false })
-	spawnRandomWorkerForIntent(title)
 	newTitle = ''
+	avenLoading = true
+	try {
+		await classifyAndSpawnWorker(title)
+	} catch (e) {
+		avenError = e instanceof Error ? e.message : String(e)
+		lastClassification = null
+	} finally {
+		avenLoading = false
+	}
 }
 
 function toggleIntent(row: { id: string; done: boolean }) {
@@ -130,6 +191,10 @@ async function resetLocalJazzStorage() {
 		jazzResetBusy = false
 	}
 }
+
+function truncate(s: string, max: number) {
+	return s.length <= max ? s : `${s.slice(0, max)}…`
+}
 </script>
 
 <svelte:head>
@@ -142,7 +207,7 @@ async function resetLocalJazzStorage() {
 	<title>My workspace — Aven Maia</title>
 </svelte:head>
 
-<div class="min-h-screen bg-background p-6 sm:p-8 pb-10">
+<div class="min-h-screen bg-background p-6 sm:p-8 pb-32 sm:pb-36">
 	{#if writeError}
 		<div
 			class="mx-auto max-w-6xl mb-4 rounded-lg border border-error/40 bg-error/10 px-4 py-3 text-sm text-error"
@@ -154,6 +219,24 @@ async function resetLocalJazzStorage() {
 				class="ml-2 underline font-medium"
 				onclick={() => {
 					writeError = null
+				}}
+			>
+				Schließen
+			</button>
+		</div>
+	{/if}
+
+	{#if avenError}
+		<div
+			class="mx-auto max-w-6xl mb-4 rounded-lg border border-error/40 bg-error/10 px-4 py-3 text-sm text-error"
+			role="alert"
+		>
+			{avenError}
+			<button
+				type="button"
+				class="ml-2 underline font-medium"
+				onclick={() => {
+					avenError = null
 				}}
 			>
 				Schließen
@@ -235,42 +318,6 @@ async function resetLocalJazzStorage() {
 			class="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-10 lg:gap-12 items-start"
 		>
 			<div class="min-w-0 space-y-10">
-				<section class="tech-pill py-2.5 px-4 justify-between">
-					<div class="flex items-center gap-3 flex-1 min-w-0">
-						<div
-							class="size-9 shrink-0 rounded-full border border-border flex items-center justify-center bg-white/20"
-						>
-							<svg
-								class="size-4"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								viewBox="0 0 24 24"
-								aria-hidden="true"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"
-								/>
-							</svg>
-						</div>
-						<form class="flex-1 min-w-0" onsubmit={(e) => { e.preventDefault(); addIntent(); }}>
-							<input
-								bind:value={newTitle}
-								placeholder="Add new intent..."
-								class="w-full bg-transparent border-none p-0 text-xl font-medium tracking-tight placeholder:opacity-20 outline-none focus:ring-0"
-							>
-						</form>
-					</div>
-					<div class="flex items-center gap-3 pl-3 border-l border-border shrink-0">
-						<div class="flex flex-col items-end">
-							<span class="text-[8px] font-bold uppercase opacity-30">Maia</span>
-							<span class="text-xs font-bold uppercase tracking-tighter">Ready</span>
-						</div>
-					</div>
-				</section>
-
 				<section>
 					<div class="flex items-center gap-2 mb-6">
 						<span class="text-[10px] font-bold opacity-30 uppercase tracking-[0.3em]"
@@ -347,56 +394,54 @@ async function resetLocalJazzStorage() {
 						>Active Workers</span
 					>
 				</div>
+				{#if lastClassification?.worker_mode === 'spawn'}
+					<div class="tech-card mb-4 flex flex-col gap-2 border-dashed border-foreground/25">
+						<span class="tech-label">Spawn signal</span>
+						{#if lastClassification.spawn_worker_display_name}
+							<span class="text-sm font-bold tracking-tight"
+								>{lastClassification.spawn_worker_display_name}</span
+							>
+						{/if}
+						{#if lastClassification.spawn_worker_key}
+							<span class="font-mono text-[10px] opacity-40"
+								>{lastClassification.spawn_worker_key}</span
+							>
+						{/if}
+						<p class="text-xs leading-relaxed opacity-70 font-mono whitespace-pre-wrap">
+							{truncate(lastClassification.instructions, 320)}
+						</p>
+					</div>
+				{/if}
 				<div class="flex flex-col gap-4">
 					{#if workersQuery.error}
 						<p class="text-error text-sm">{workersQuery.error.message}</p>
 					{:else if workersQuery.loading}
 						{#each [1, 2] as _}
-							<div class="tech-card min-h-[96px] animate-pulse bg-black/5"></div>
+							<div class="tech-card min-h-[52px] animate-pulse bg-black/5 py-3"></div>
 						{/each}
 					{:else if (workersQuery.current ?? []).length === 0}
 						<p class="text-xs opacity-40 leading-relaxed">
-							No workers yet. Add an intent — test flow spawns one random worker per intent.
+							No workers yet. Add an intent — Maia classifies it (Tinfoil) and inserts a worker row.
 						</p>
 					{:else}
 						{#each workersQuery.current ?? [] as worker (worker.id)}
-							<div class="tech-card flex flex-col justify-between min-h-[128px]">
-								<div class="flex justify-between items-start gap-3">
-									<div class="flex flex-col min-w-0">
-										<span class="tech-label">{worker.label}</span>
-										<span class="text-sm font-bold tracking-tight leading-snug"
-											>{worker.taskLine}</span
-										>
-										<span class="font-mono text-[10px] opacity-35 mt-1">{worker.categoryKey}</span>
-									</div>
-									<div class="flex items-center gap-2 shrink-0">
-										<span class="text-[10px] font-bold opacity-40">{worker.status}</span>
-										<div
-											class="worker-status-dot {worker.status === 'Active'
-												? 'bg-foreground animate-pulse'
-												: 'bg-foreground/20'}"
-										></div>
-									</div>
-								</div>
-								<div class="flex justify-between items-end mt-4">
-									<div class="flex flex-col">
-										<span class="tech-label">Score</span>
-										<span class="tech-value text-sm">{worker.score}</span>
-									</div>
-									<svg
-										class="size-4 opacity-10 shrink-0"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-										viewBox="0 0 24 24"
-										aria-hidden="true"
+							<div
+								class="tech-card flex items-start justify-between gap-3 py-3 px-4 min-h-0"
+							>
+								<div class="flex flex-col min-w-0 gap-0.5">
+									<span class="tech-label">{worker.label}</span>
+									<span class="text-sm font-semibold tracking-tight leading-snug text-balance"
+										>{worker.taskLine}</span
 									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-										/>
-									</svg>
+								</div>
+								<div class="flex items-center gap-2 shrink-0 pt-0.5">
+									<span class="text-[10px] font-bold opacity-40">{worker.status}</span>
+									<div
+										class="worker-status-dot rounded-full {worker.status === 'Active' ||
+										worker.status === 'Spawn'
+											? 'bg-foreground animate-pulse'
+											: 'bg-foreground/20'}"
+									></div>
 								</div>
 							</div>
 						{/each}
@@ -405,6 +450,57 @@ async function resetLocalJazzStorage() {
 			</aside>
 		</div>
 	</main>
+
+	<!-- Bottom-centered intent composer (full width within max-w-4xl); lists stay in 2/3–1/3 grid above. -->
+	<div
+		class="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-6 pt-10 bg-gradient-to-t from-background from-40% via-background/95 to-transparent"
+	>
+		<div class="pointer-events-auto w-full max-w-4xl">
+			<section class="tech-pill py-3 px-4 sm:px-5 justify-between gap-4 w-full">
+				<div class="flex items-center gap-3 flex-1 min-w-0">
+					<div
+						class="size-9 shrink-0 rounded-full border border-border flex items-center justify-center bg-white/20"
+					>
+						<svg
+							class="size-4"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							viewBox="0 0 24 24"
+							aria-hidden="true"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"
+							/>
+						</svg>
+					</div>
+					<form
+						class="flex-1 min-w-0"
+						onsubmit={(e) => {
+							e.preventDefault()
+							void addIntent()
+						}}
+					>
+						<input
+							bind:value={newTitle}
+							placeholder="Add new intent..."
+							class="w-full min-w-0 bg-transparent border-none p-0 text-xl font-medium tracking-tight placeholder:opacity-20 outline-none focus:ring-0"
+						>
+					</form>
+				</div>
+				<div class="flex items-center gap-3 pl-3 border-l border-border shrink-0">
+					<div class="flex flex-col items-end">
+						<span class="text-[8px] font-bold uppercase opacity-30">Maia</span>
+						<span class="text-xs font-bold uppercase tracking-tighter"
+							>{avenLoading ? 'Routing…' : 'Ready'}</span
+						>
+					</div>
+				</div>
+			</section>
+		</div>
+	</div>
 </div>
 
 <style>
