@@ -37,6 +37,7 @@ const entityPhrase = $derived(entityPhrases[entityTick % entityPhrases.length])
 			<nav
 				class="flex items-center gap-5 text-[11px] font-semibold uppercase tracking-[0.12em] opacity-55"
 			>
+				<a href="/board" class="opacity-90 hover:opacity-100 transition-opacity">Board</a>
 				<a
 					href="/me"
 					class="rounded-full border border-border/80 bg-white/15 px-3 py-1 opacity-90 hover:opacity-100 transition-opacity"
@@ -72,8 +73,8 @@ const entityPhrase = $derived(entityPhrases[entityTick % entityPhrases.length])
 				class="mx-auto mt-5 max-w-xl text-base text-foreground/70 sm:text-lg text-pretty leading-relaxed"
 			>
 				Du hast die <strong class="font-medium text-foreground/88">Vision</strong> —{' '}
-				<strong class="font-medium text-foreground/88">Dein AvenCEO</strong> plant, koordiniert und
-				setzt um.
+				<strong class="font-medium text-foreground/88">Dein AvenCEO</strong>
+				plant, koordiniert und setzt um.
 			</p>
 			<p
 				class="mx-auto mt-3 max-w-xl text-base text-foreground/65 sm:text-lg text-pretty leading-relaxed"
