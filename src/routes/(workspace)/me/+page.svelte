@@ -425,9 +425,7 @@ function truncate(s: string, max: number) {
 						</p>
 					{:else}
 						{#each workersQuery.current ?? [] as worker (worker.id)}
-							<div
-								class="tech-card flex items-start justify-between gap-3 py-3 px-4 min-h-0"
-							>
+							<div class="tech-card flex items-start justify-between gap-3 py-3 px-4 min-h-0">
 								<div class="flex flex-col min-w-0 gap-0.5">
 									<span class="tech-label">{worker.label}</span>
 									<span class="text-sm font-semibold tracking-tight leading-snug text-balance"

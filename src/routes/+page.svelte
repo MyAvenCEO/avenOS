@@ -1,152 +1,100 @@
+<script lang="ts">
+const entityPhrases = [
+	'deine Firma',
+	'dein Startup',
+	'dein Gewerbe',
+	'dein Einzelunternehmen'
+] as const
+let entityTick = $state(0)
+
+$effect(() => {
+	const id = setInterval(() => {
+		entityTick += 1
+	}, 2500)
+	return () => clearInterval(id)
+})
+
+const entityPhrase = $derived(entityPhrases[entityTick % entityPhrases.length])
+</script>
+
 <svelte:head>
-	<title>aven.ceo — CEO-Agent für dein Unternehmen</title>
+	<title>aven.ceo — AvenCEO managed deine Firma auf Autopilot</title>
 	<meta
 		name="description"
-		content="aven.ceo: Aven ist der CEO-Agent deines Unternehmens. +10 h/m mehr Zeit, 95% weniger Papierkram."
+		content="AvenCEO orchestriert dein Geschäft. Du hast die Vision — AvenCEO plant, koordiniert und setzt um."
 	>
 </svelte:head>
 
-<div lang="de" class="min-h-screen bg-background text-foreground">
-	<header
-		class="min-h-dvh flex flex-col items-center justify-center px-6 sm:px-10 border-b border-border/50"
-	>
-		<div class="w-full max-w-2xl mx-auto text-center flex flex-col items-center gap-10 sm:gap-12">
-			<p class="text-[10px] sm:text-xs font-bold font-mono tracking-[0.12em] opacity-35 lowercase">
-				aven.ceo
-			</p>
-
-			<div class="space-y-6 sm:space-y-8">
-				<p
-					class="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight text-balance leading-snug"
-				>
-					<strong>Aven</strong> ist der <strong>CEO-Agent</strong> deines Unternehmens.
-				</p>
-				<p class="text-lg sm:text-xl md:text-2xl text-balance leading-relaxed opacity-80 font-medium">
-					<strong class="text-foreground/95">+10h/m mehr Zeit</strong>
-					<span class="opacity-50 mx-1">-</span>
-					<strong class="text-foreground/95">95&nbsp;% weniger Papierkram</strong>.
-				</p>
-			</div>
-
+<div lang="de" class="min-h-screen bg-background text-foreground font-sans antialiased">
+	<header class="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-md">
+		<div class="mx-auto flex max-w-3xl items-center justify-center gap-8 px-5 py-3 sm:px-8">
 			<a
-				href="/me"
-				class="inline-flex items-center justify-center rounded-full bg-foreground px-8 py-3.5 text-base font-semibold text-background hover:opacity-90 transition-opacity"
+				href="/"
+				class="font-mono text-[11px] font-bold tracking-[0.14em] opacity-80 hover:opacity-100"
 			>
-				Zum Workspace
+				aven.ceo
 			</a>
+			<nav
+				class="flex items-center gap-5 text-[11px] font-semibold uppercase tracking-[0.12em] opacity-55"
+			>
+				<a
+					href="/me"
+					class="rounded-full border border-border/80 bg-white/15 px-3 py-1 opacity-90 hover:opacity-100 transition-opacity"
+				>
+					Schreibtisch
+				</a>
+			</nav>
 		</div>
 	</header>
 
 	<section
-		class="border-b border-border/50 px-6 sm:px-10 py-12 sm:py-14"
-		aria-label="Grundprinzipien"
+		class="border-b border-border/40 px-5 pt-12 pb-16 sm:px-8 sm:pt-16 sm:pb-20 md:pt-20 md:pb-24"
 	>
-		<div
-			class="mx-auto max-w-5xl grid grid-cols-1 sm:grid-cols-3 gap-10 sm:gap-8 lg:gap-12"
-		>
-			<div class="text-center sm:text-left space-y-2.5">
-				<h3 class="text-base sm:text-[1.0625rem] font-semibold tracking-tight text-balance leading-snug">
-					Privat zwischen dir &amp; Aven
-				</h3>
-				<p class="text-xs sm:text-sm leading-relaxed text-pretty opacity-70 max-w-sm mx-auto sm:mx-0">
-					100&nbsp;% <strong class="font-medium text-foreground/85">E2E-verschlüsselt</strong> — vom
-					Gerät bis zum Sync. Kein Klartext auf
-					<strong class="font-medium text-foreground/85">fremden Servern</strong>, die wir nicht
-					kontrollieren.
-				</p>
-			</div>
-			<div class="text-center sm:text-left space-y-2.5">
-				<h3 class="text-base sm:text-[1.0625rem] font-semibold tracking-tight text-balance leading-snug">
-					Local-first. Open Source.
-				</h3>
-				<p class="text-xs sm:text-sm leading-relaxed text-pretty opacity-70 max-w-sm mx-auto sm:mx-0">
-					Zeitnah offline nutzbar, <strong class="font-medium text-foreground/85">Backup unter deiner
-						Kontrolle</strong> — und Code, den du prüfen kannst. Transparenz statt Blackbox.
-				</p>
-			</div>
-			<div class="text-center sm:text-left space-y-2.5">
-				<h3 class="text-base sm:text-[1.0625rem] font-semibold tracking-tight text-balance leading-snug">
-					Deine Daten. Null Lock-in.
-				</h3>
-				<p class="text-xs sm:text-sm leading-relaxed text-pretty opacity-70 max-w-sm mx-auto sm:mx-0">
-					<strong class="font-medium text-foreground/85">Exportierbar</strong>, wenn du willst —
-					<strong class="font-medium text-foreground/85">you own your data</strong>. Kein Vendor-Gefängnis,
-					kein „wir horten alles“.
-				</p>
+		<div class="mx-auto max-w-3xl text-center">
+			<p
+				class="mb-5 font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40"
+			>
+				aven.ceo
+			</p>
+			<h1
+				class="flex flex-col items-center gap-1.5 text-[1.6rem] leading-[1.15] font-semibold tracking-[-0.03em] text-pretty sm:gap-2 sm:text-4xl md:text-5xl md:leading-[1.1]"
+			>
+				<span>AvenCEO managed</span>
+				<span
+					class="inline-block w-fit max-w-full rounded-lg bg-tuscan-sun/55 px-2.5 py-1 text-foreground font-semibold shadow-sm ring-1 ring-black/6 transition-colors duration-300"
+					aria-live="polite"
+				>
+					{entityPhrase}
+				</span>
+				<span>auf Autopilot</span>
+			</h1>
+			<p
+				class="mx-auto mt-5 max-w-xl text-base text-foreground/70 sm:text-lg text-pretty leading-relaxed"
+			>
+				Du hast die <strong class="font-medium text-foreground/88">Vision</strong> —{' '}
+				<strong class="font-medium text-foreground/88">Dein AvenCEO</strong> plant, koordiniert und
+				setzt um.
+			</p>
+			<p
+				class="mx-auto mt-3 max-w-xl text-base text-foreground/65 sm:text-lg text-pretty leading-relaxed"
+			>
+				Wenn es zählt, fragt er dich um Rat.
+			</p>
+			<div class="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+				<a
+					href="/me"
+					class="inline-flex h-11 items-center justify-center rounded-full bg-foreground px-7 text-sm font-semibold text-background hover:opacity-90 transition-opacity"
+				>
+					Zum Schreibtisch
+				</a>
 			</div>
 		</div>
 	</section>
 
-	<main class="mx-auto max-w-2xl px-6 py-16 sm:py-20 sm:px-8 space-y-12">
-		<section>
-			<h2 class="text-[10px] sm:text-xs font-bold uppercase tracking-[0.35em] opacity-35 mb-3">
-				Skill 1
-			</h2>
-			<p class="text-lg sm:text-xl font-semibold tracking-tight mb-3 text-balance">
-				Bürokratie &amp; Dokumente
-			</p>
-			<p class="text-sm sm:text-base leading-relaxed opacity-80 text-pretty">
-				Alles einspeisen (Abschlüsse, Rechnungen, Verträge …), auslesen, durchspielen —
-				<strong class="font-medium text-foreground/90">eine klare Aktionsliste</strong>; Aven meldet
-				sich, wenn <strong class="font-medium text-foreground/90">dein Okay</strong> nötig ist.
-			</p>
-		</section>
-
-		<section class="opacity-90">
-			<h2 class="text-[10px] sm:text-xs font-bold uppercase tracking-[0.35em] opacity-35 mb-3 flex flex-wrap items-center gap-x-2 gap-y-1">
-				<span>Skill 2</span>
-				<span
-					class="font-mono text-[9px] sm:text-[10px] tracking-[0.12em] opacity-50 normal-case"
-				>Demnächst</span>
-			</h2>
-			<p class="text-lg sm:text-xl font-semibold tracking-tight mb-3 text-balance">
-				Aven&nbsp;E-Mail
-			</p>
-			<p class="text-sm sm:text-base leading-relaxed opacity-80 text-pretty">
-				Dein Posteingang, aber endlich ruhig. Aven
-				<strong class="font-medium text-foreground/90">sortiert, fasst zusammen und skizziert Antworten</strong>
-				— Prioritäten sind klar, Noise verschwindet. Du freigibst, was rausgeht; der Rest läuft im
-				Hintergrund.
-			</p>
-		</section>
-
-		<section class="opacity-90">
-			<h2 class="text-[10px] sm:text-xs font-bold uppercase tracking-[0.35em] opacity-35 mb-3 flex flex-wrap items-center gap-x-2 gap-y-1">
-				<span>Skill 3</span>
-				<span
-					class="font-mono text-[9px] sm:text-[10px] tracking-[0.12em] opacity-50 normal-case"
-				>Demnächst</span>
-			</h2>
-			<p class="text-lg sm:text-xl font-semibold tracking-tight mb-3 text-balance">
-				Meetings &amp; Commitments
-			</p>
-			<p class="text-sm sm:text-base leading-relaxed opacity-80 text-pretty">
-				Aus Gesprächen werden
-				<strong class="font-medium text-foreground/90">Entscheidungen und To-dos</strong>, die nicht in
-				Notizen versickern. Aven
-				<strong class="font-medium text-foreground/90">hält Fristen fest</strong>, erinnert an Follow-ups
-				und spiegelt Status — ohne zweites Projekttool.
-			</p>
-		</section>
-
-		<section class="rounded-2xl border border-border/80 bg-white/25 px-6 py-7 sm:px-8 sm:py-8">
-			<h2 class="text-[10px] sm:text-xs font-bold uppercase tracking-[0.35em] opacity-35 mb-3">
-				Workspace
-			</h2>
-			<p class="text-sm sm:text-base leading-relaxed opacity-80">
-				Intent-Posteingang für das, was noch von dir braucht — ohne Ordner graben.
-			</p>
-			<a
-				href="/me"
-				class="inline-block mt-5 text-sm font-semibold underline underline-offset-4 opacity-90 hover:opacity-100"
-			>
-				Öffnen →
-			</a>
-		</section>
-	</main>
-
-	<footer class="mx-auto max-w-2xl px-6 pb-14 sm:px-8 text-xs opacity-35 text-center">
-		Aven Maia
+	<footer
+		class="border-t border-border/40 px-5 py-10 sm:px-8 text-center text-[11px] font-mono text-foreground/30"
+	>
+		Aven Maia · AvenOS
 	</footer>
 </div>
 
