@@ -68,4 +68,132 @@
 	.worker-status-dot {
 		@apply size-1.5 rounded-full;
 	}
+
+	.memory-prose {
+		color: var(--color-foreground);
+		word-wrap: break-word;
+		overflow-wrap: break-word;
+	}
+
+	.memory-prose .memory-wikilink {
+		cursor: pointer;
+		text-underline-offset: 3px;
+		text-decoration: underline dashed rgba(26, 26, 26, 0.35);
+		font-weight: 600;
+	}
+
+	.memory-prose :where(h1) {
+		font-size: 1.25rem;
+		font-weight: 500;
+		margin: 0 0 1rem;
+		letter-spacing: -0.02em;
+	}
+	.memory-prose :where(h2) {
+		font-size: 1.125rem;
+		font-weight: 500;
+		margin: 2rem 0 0.75rem;
+		letter-spacing: -0.015em;
+	}
+	.memory-prose :where(h3) {
+		font-size: 1rem;
+		font-weight: 500;
+		margin: 1.5rem 0 0.5rem;
+		opacity: 0.92;
+	}
+
+	.memory-prose :where(p) {
+		margin: 0.75rem 0;
+		line-height: 1.65;
+	}
+
+	.memory-prose :where(ul, ol) {
+		margin: 0.75rem 0;
+		padding-left: 1.5rem;
+	}
+	.memory-prose :where(ul) {
+		list-style-type: disc;
+	}
+	.memory-prose :where(ol) {
+		list-style-type: decimal;
+	}
+	.memory-prose :where(li) {
+		margin: 0.2rem 0;
+	}
+
+	.memory-prose :where(blockquote) {
+		border-left: 2px solid var(--color-border);
+		margin: 1rem 0;
+		padding-left: 1rem;
+		opacity: 0.82;
+		font-style: italic;
+	}
+
+	.memory-prose :where(hr) {
+		border: none;
+		border-top: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
+		margin: 2rem 0;
+	}
+
+	.memory-prose :where(a) {
+		color: var(--color-foreground);
+		text-decoration: underline;
+		text-underline-offset: 2px;
+		text-decoration-color: color-mix(in srgb, var(--color-foreground) 35%, transparent);
+	}
+	.memory-prose :where(a:hover) {
+		text-decoration-color: color-mix(in srgb, var(--color-foreground) 55%, transparent);
+	}
+
+	.memory-prose :where(code) {
+		font-family: var(--font-mono);
+		font-size: 0.875em;
+		border-radius: 0.25rem;
+		padding: 0.1rem 0.3rem;
+		background: rgba(0, 0, 0, 0.06);
+	}
+
+	.memory-prose :where(pre) {
+		margin: 1rem 0;
+		overflow-x: auto;
+		border-radius: 0.75rem;
+		border: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
+		background: rgba(0, 0, 0, 0.05);
+		padding: 1rem;
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		line-height: 1.55;
+	}
+	.memory-prose :where(pre code) {
+		background: transparent;
+		padding: 0;
+		font-size: inherit;
+	}
+
+	.memory-prose :where(table) {
+		width: 100%;
+		border-collapse: collapse;
+		margin: 1.5rem 0;
+		font-size: 0.8125rem;
+		text-align: left;
+	}
+	.memory-prose :where(thead) {
+		border-bottom: 1px solid var(--color-border);
+	}
+	.memory-prose :where(th) {
+		font-weight: 600;
+		padding: 0.45rem 0.5rem;
+		vertical-align: bottom;
+	}
+	.memory-prose :where(td) {
+		padding: 0.45rem 0.5rem;
+		vertical-align: top;
+		border-top: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
+	}
+
+	.memory-prose :where(img) {
+		max-width: 100%;
+		border-radius: 0.5rem;
+		border: 1px solid color-mix(in srgb, var(--color-border) 40%, transparent);
+		margin: 1rem 0;
+	}
 }

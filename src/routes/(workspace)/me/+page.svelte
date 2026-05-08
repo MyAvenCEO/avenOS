@@ -8,12 +8,12 @@ import {
 	randomWorkerCategoryKey,
 	WORKER_CATEGORY_LABELS
 } from '$lib/worker-catalog'
+import { workspaceContentClass } from '$lib/workspace/layout'
 
 /** Must read context here — `getDb()`/`getSession()` call `getContext` and cannot run inside `$effect`. */
 const ctx = getJazzContext()
 
 const intents = new QuerySubscription(app.intents)
-const profiles = new QuerySubscription(app.profiles.limit(1))
 const workersQuery = new QuerySubscription(() => {
 	const uid = ctx.session?.user_id
 	if (!uid) return undefined
@@ -21,12 +21,8 @@ const workersQuery = new QuerySubscription(() => {
 })
 
 let newTitle = $state('')
-let profileSeedForUser = $state<string | null>(null)
-/** Local draft for display name — quickstart-style binding; synced from server row. */
-let nameDraft = $state('')
 
 let writeError = $state<string | null>(null)
-let jazzResetBusy = $state(false)
 let avenError = $state<string | null>(null)
 let avenLoading = $state(false)
 let lastClassification = $state<ClassifyIntentArgs | null>(null)
@@ -38,27 +34,6 @@ $effect(() => {
 		writeError = ev.reason ? `${ev.code}: ${ev.reason}` : ev.code
 	})
 	return off
-})
-
-$effect(() => {
-	const s = ctx.session
-	if (!s) return
-	if (profileSeedForUser === s.user_id) return
-	const db = ctx.db
-	if (!db) return
-	void db.all(app.profiles.limit(1)).then((rows) => {
-		if (rows.length === 0) {
-			db.insert(app.profiles, { name: 'You' })
-		}
-		profileSeedForUser = s.user_id
-	})
-})
-
-const profile = $derived(profiles.current?.[0] ?? null)
-
-$effect(() => {
-	const p = profile
-	if (p) nameDraft = p.name
 })
 
 function spawnWorkerFromClassification(intentTitle: string, c: ClassifyIntentArgs) {
@@ -154,44 +129,6 @@ function removeIntent(id: string) {
 	db.delete(app.intents, id)
 }
 
-function syncDisplayName() {
-	const p = profile
-	if (!p) return
-	writeError = null
-	const next = nameDraft.trim()
-	if (next === p.name) return
-	const db = ctx.db
-	if (!db) return
-	try {
-		db.update(app.profiles, p.id, { name: next || 'You' })
-	} catch (e) {
-		writeError = e instanceof Error ? e.message : String(e)
-	}
-}
-
-async function logOut() {
-	writeError = null
-	const db = ctx.db
-	if (db) await db.logout()
-}
-
-/** Wipes browser OPFS for this Jazz DB (coordinated across tabs). Does not remove local-first auth secret in localStorage. */
-async function resetLocalJazzStorage() {
-	if (!import.meta.env.DEV) return
-	writeError = null
-	const db = ctx.db
-	if (!db) return
-	jazzResetBusy = true
-	try {
-		await db.deleteClientStorage()
-		profileSeedForUser = null
-	} catch (e) {
-		writeError = e instanceof Error ? e.message : String(e)
-	} finally {
-		jazzResetBusy = false
-	}
-}
-
 function truncate(s: string, max: number) {
 	return s.length <= max ? s : `${s.slice(0, max)}…`
 }
@@ -207,10 +144,10 @@ function truncate(s: string, max: number) {
 	<title>My workspace — Aven Maia</title>
 </svelte:head>
 
-<div class="min-h-screen bg-background p-6 sm:p-8 pb-32 sm:pb-36">
+<div class="flex flex-1 flex-col min-h-0 overflow-y-auto">
 	{#if writeError}
 		<div
-			class="mx-auto max-w-6xl mb-4 rounded-lg border border-error/40 bg-error/10 px-4 py-3 text-sm text-error"
+			class={`${workspaceContentClass} mb-4 rounded-lg border border-error/40 bg-error/10 px-4 py-3 text-sm text-error`}
 			role="alert"
 		>
 			{writeError}
@@ -228,7 +165,7 @@ function truncate(s: string, max: number) {
 
 	{#if avenError}
 		<div
-			class="mx-auto max-w-6xl mb-4 rounded-lg border border-error/40 bg-error/10 px-4 py-3 text-sm text-error"
+			class={`${workspaceContentClass} mb-4 rounded-lg border border-error/40 bg-error/10 px-4 py-3 text-sm text-error`}
 			role="alert"
 		>
 			{avenError}
@@ -244,76 +181,7 @@ function truncate(s: string, max: number) {
 		</div>
 	{/if}
 
-	<header class="mx-auto max-w-6xl flex items-center justify-between mb-8 gap-4">
-		<div class="flex flex-col min-w-0">
-			<a
-				href="/"
-				class="text-xs font-bold opacity-30 uppercase tracking-widest mb-1 hover:opacity-50 transition-opacity w-fit"
-			>
-				Aven Maia
-			</a>
-			<div class="flex items-center gap-2">
-				{#if profiles.loading}
-					<span class="text-3xl font-medium tracking-tighter opacity-20">Loading...</span>
-				{:else if profiles.error}
-					<span class="text-3xl font-medium tracking-tighter text-error"
-						>{profiles.error.message}</span
-					>
-				{:else if profile}
-					<input
-						type="text"
-						class="border-none bg-transparent p-0 text-3xl font-medium tracking-tighter outline-none focus:ring-0 max-w-full"
-						bind:value={nameDraft}
-						onblur={() => syncDisplayName()}
-						onkeydown={(e) => {
-							if (e.key === 'Enter') {
-								e.currentTarget.blur()
-							}
-						}}
-						aria-label="Display name"
-					>
-				{:else}
-					<span class="text-3xl font-medium tracking-tighter opacity-20">Loading...</span>
-				{/if}
-			</div>
-		</div>
-		<div class="flex items-center gap-2 shrink-0">
-			{#if import.meta.env.DEV}
-				<button
-					type="button"
-					class="text-[10px] font-bold uppercase tracking-wider opacity-40 hover:opacity-70 px-2 py-1 rounded border border-border/60 disabled:opacity-20"
-					disabled={jazzResetBusy || ctx.db == null}
-					onclick={() => void resetLocalJazzStorage()}
-					title="Clears Jazz browser storage (OPFS) after schema changes. Keeps your local-first login secret."
-				>
-					{jazzResetBusy ? '…' : 'Reset DB'}
-				</button>
-			{/if}
-			<button
-				type="button"
-				class="size-10 shrink-0 flex items-center justify-center rounded-full border border-border bg-white/10 hover:bg-white/30 transition-all"
-				onclick={() => void logOut()}
-				aria-label="Log out"
-			>
-				<svg
-					class="size-5"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="1.5"
-					viewBox="0 0 24 24"
-					aria-hidden="true"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9"
-					/>
-				</svg>
-			</button>
-		</div>
-	</header>
-
-	<main class="mx-auto max-w-6xl">
+	<main class={`${workspaceContentClass} flex-1`}>
 		<div
 			class="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-10 lg:gap-12 items-start"
 		>
@@ -449,11 +317,11 @@ function truncate(s: string, max: number) {
 		</div>
 	</main>
 
-	<!-- Bottom-centered intent composer (full width within max-w-4xl); lists stay in 2/3–1/3 grid above. -->
+	<!-- Bottom-centered intent composer (aligned with workspace content width). -->
 	<div
 		class="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-6 pt-10 bg-gradient-to-t from-background from-40% via-background/95 to-transparent"
 	>
-		<div class="pointer-events-auto w-full max-w-4xl">
+		<div class={`pointer-events-auto w-full ${workspaceContentClass}`}>
 			<section class="tech-pill py-3 px-4 sm:px-5 justify-between gap-4 w-full">
 				<div class="flex items-center gap-3 flex-1 min-w-0">
 					<div
@@ -500,9 +368,3 @@ function truncate(s: string, max: number) {
 		</div>
 	</div>
 </div>
-
-<style>
-:global(body) {
-	background-color: #e8ede1;
-}
-</style>

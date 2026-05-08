@@ -1,0 +1,49 @@
+{
+	"$schema": "../schemas/agent.schema.json",
+	"id": "aven.maia.v1",
+	"name": "Maia",
+	"version": "1.0.0",
+	"llm": {
+		"provider": "tinfoil",
+		"temperature": 0.3,
+		"maxToolRounds": 12,
+		"defaultModel": "glm-5-1",
+		"toolChoice": "auto",
+		"fallbackConfigFiles": ["tinfoil-chat.config.json"]
+	},
+	"sources": {
+		"systemPrompt": {
+			"kind": "markdown_frontmatter_raw",
+			"path": ".data/agents/maia/RULES.md",
+			"seedPath": "src/lib/memory/prompts/maia-assistant.md"
+		},
+		"tools": {
+			"openAiFunctionSchemas": "src/lib/memory/tools/memory.openai.json"
+		},
+		"transcript": {
+			"conversationJsonRelative": ".data/messages/conversation.json",
+			"messageMarkdownGlob": ".data/messages/message*.md"
+		},
+		"identityMarkdown": ".data/agents/maia/SOUL.md"
+	},
+	"systemBundle": {
+		"delimiterMarkdown": "---",
+		"snapshotHeadingMarkdownTemplate": "## Vault snapshot ({iso})"
+	},
+	"contextPreview": {
+		"sectionHeadings": {
+			"soul": "@.data/agents/maia/SOUL.md",
+			"rules": "@.data/agents/maia/RULES.md",
+			"vaultSnapshot": "@.data/knowledge (live index)",
+			"tools": "@src/lib/memory/tools/memory.openai.json",
+			"transcript": "@.data/messages"
+		},
+		"toolBadgeTailwindClasses": {
+			"memory_list_notes": "border-violet-400/35 bg-violet-500/[0.14] text-violet-950",
+			"memory_read_file": "border-sky-400/35 bg-sky-500/[0.14] text-sky-950",
+			"memory_edit": "border-amber-400/40 bg-amber-500/[0.16] text-amber-950",
+			"memory_write_file": "border-emerald-400/35 bg-emerald-500/[0.14] text-emerald-950",
+			"memory_search": "border-fuchsia-400/35 bg-fuchsia-500/[0.13] text-fuchsia-950"
+		}
+	}
+}

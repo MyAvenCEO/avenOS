@@ -1,5 +1,9 @@
 node_modules
 
+# Local second brain vault + upstream mirrors (never commit)
+/.data/
+/.repos/
+
 # Output
 .output
 .vercel

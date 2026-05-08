@@ -6,6 +6,7 @@ import {
 	JazzSvelteProvider
 } from 'jazz-tools/svelte'
 import { PUBLIC_JAZZ_APP_ID, PUBLIC_JAZZ_SERVER_URL } from '$env/static/public'
+import WorkspaceHeader from '$lib/workspace/WorkspaceHeader.svelte'
 
 let { children: pageContent } = $props()
 
@@ -37,7 +38,14 @@ if (typeof window !== 'undefined' && PUBLIC_JAZZ_APP_ID) {
 {:else if client}
 	<JazzSvelteProvider {client}>
 		{#snippet children({ db: _db })}
-			{@render pageContent()}
+			<div
+				class="box-border flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-background p-6 sm:p-8 pb-32 sm:pb-36"
+			>
+				<WorkspaceHeader />
+				<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+					{@render pageContent()}
+				</div>
+			</div>
 		{/snippet}
 		{#snippet fallback()}
 			<div class="min-h-screen flex items-center justify-center bg-background text-sm opacity-50">
@@ -50,3 +58,9 @@ if (typeof window !== 'undefined' && PUBLIC_JAZZ_APP_ID) {
 		Loading…
 	</div>
 {/if}
+
+<style>
+:global(body) {
+	background-color: #e8ede1;
+}
+</style>
