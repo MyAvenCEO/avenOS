@@ -15,14 +15,14 @@
 		"systemPrompt": {
 			"kind": "markdown_frontmatter_raw",
 			"path": ".data/agents/maia/RULES.md",
-			"seedPath": "src/lib/memory/prompts/maia-assistant.md"
+			"seedPath": "seed/agents/maia/RULES.md"
 		},
 		"tools": {
-			"openAiFunctionSchemas": "src/lib/memory/tools/memory.openai.json"
+			"openAiFunctionSchemas": ".data/agents/maia/tools/memory.openai.json"
 		},
 		"transcript": {
-			"conversationJsonRelative": ".data/messages/conversation.json",
-			"messageMarkdownGlob": ".data/messages/message*.md"
+			"conversationJsonRelative": ".data/agents/maia/messages/conversation.json",
+			"messageMarkdownGlob": ".data/agents/maia/messages/m*.md"
 		},
 		"identityMarkdown": ".data/agents/maia/SOUL.md"
 	},
@@ -33,11 +33,12 @@
 	"contextPreview": {
 		"sectionHeadings": {
 			"soul": "@.data/agents/maia/SOUL.md",
+			"owner": "Vault owner (`Humans/OWNER_*.md` — Identity & Preferences)",
 			"rules": "@.data/agents/maia/RULES.md",
 			"vaultSnapshot": "@.data/knowledge (live index)",
-			"vaultGraph": "Link graph (derived)",
-			"tools": "@src/lib/memory/tools/memory.openai.json",
-			"transcript": "@.data/messages"
+			"vaultGraph": "@.data/state/vault-graph.json (derived wikilink summary)",
+			"tools": "@.data/agents/maia/tools/memory.openai.json",
+			"transcript": "@.data/agents/maia/messages"
 		},
 		"toolBadgeTailwindClasses": {
 			"memory_list_notes": "border-violet-400/35 bg-violet-500/[0.14] text-violet-950",

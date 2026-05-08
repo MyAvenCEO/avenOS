@@ -17,7 +17,7 @@ function escapeAttr(s: string): string {
 	return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
 }
 
-/** `[[People/Sam]]` / `[[People/Sam|Sam]]` → clickable spans (fenced ``` blocks untouched). */
+/** `[[Humans/Sam]]` / `[[Humans/Sam|Sam]]` → clickable spans (fenced ``` blocks untouched). */
 export function injectWikilinkSpans(markdown: string): string {
 	return injectWikilinkSpansImpl(markdown, { escapeHtml, escapeAttr })
 }
@@ -28,7 +28,7 @@ function parseMarkdownToHtml(markdown: string): string {
 	return DOMPurify.sanitize(unsafe, {
 		ALLOW_DATA_ATTR: true,
 		ADD_TAGS: ['span'],
-		ADD_ATTR: ['class', 'data-wikilink']
+		ADD_ATTR: ['class', 'data-wikilink', 'data-talk-turn']
 	})
 }
 

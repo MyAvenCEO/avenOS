@@ -1,4 +1,6 @@
+import { memoryToolSourceAls } from '$lib/aven/memory-tool-context'
 import { rebuildVaultGraph } from '$lib/memory/vault-graph'
+import { appendMemoryProvenance } from '$lib/memory/memory-provenance'
 import {
 	editVaultNote,
 	ensureVaultDir,
@@ -7,6 +9,13 @@ import {
 	searchVault,
 	writeVaultNote
 } from './vault'
+
+function appendTalkProvenanceToVaultFile(posixPath: string): void {
+	const src = memoryToolSourceAls.getStore()
+	if (!src || src.type !== 'talk') return
+	const withProv = appendMemoryProvenance(readVaultNote(posixPath), src)
+	writeVaultNote(posixPath, withProv)
+}
 
 export {
 	memoryToolDoneLine,
@@ -30,18 +39,17 @@ export function executeMemoryTool(name: string, args: Record<string, unknown>): 
 				return readVaultNote(p)
 			}
 			case 'memory_edit': {
-				editVaultNote(
-					String(args.path ?? ''),
-					String(args.oldString ?? ''),
-					String(args.newString ?? '')
-				)
+				const rel = String(args.path ?? '')
+				editVaultNote(rel, String(args.oldString ?? ''), String(args.newString ?? ''))
+				appendTalkProvenanceToVaultFile(rel)
 				rebuildVaultGraph()
-				return JSON.stringify({ ok: true, path: args.path ?? '' })
+				return JSON.stringify({ ok: true, path: rel })
 			}
 			case 'memory_write_file': {
 				const p = String(args.path ?? '')
 				const content = String(args.content ?? '')
 				writeVaultNote(p, content)
+				appendTalkProvenanceToVaultFile(p)
 				rebuildVaultGraph()
 				return JSON.stringify({ ok: true, path: p, bytes: content.length })
 			}

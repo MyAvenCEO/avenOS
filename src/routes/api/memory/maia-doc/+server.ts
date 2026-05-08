@@ -4,13 +4,12 @@ import path from 'node:path'
 import {
 	ensureMaiaAgentWorkspace,
 	ensureMaiaRulesFile,
-	maiaReadmePath,
 	maiaRulesDataPath
 } from '$lib/memory/maia-rules-md.js'
 import { ensureSoulMarkdownFile, soulMarkdownPath } from '$lib/memory/soul-md.js'
 import type { RequestHandler } from './$types'
 
-const KINDS = ['soul', 'rules', 'readme'] as const
+const KINDS = ['soul', 'rules'] as const
 type Kind = (typeof KINDS)[number]
 
 function resolvePath(kind: Kind): string {
@@ -19,8 +18,6 @@ function resolvePath(kind: Kind): string {
 			return soulMarkdownPath()
 		case 'rules':
 			return maiaRulesDataPath()
-		case 'readme':
-			return maiaReadmePath()
 	}
 }
 
@@ -33,7 +30,10 @@ function parseKind(raw: string | null): Kind | null {
 export const GET: RequestHandler = async ({ url }) => {
 	const kind = parseKind(url.searchParams.get('kind'))
 	if (!kind) {
-		return json({ ok: false as const, error: 'Query ?kind=soul|rules|readme required.' }, { status: 400 })
+		return json(
+			{ ok: false as const, error: 'Query ?kind=soul|rules required.' },
+			{ status: 400 }
+		)
 	}
 	try {
 		ensureMaiaAgentWorkspace()
@@ -41,10 +41,11 @@ export const GET: RequestHandler = async ({ url }) => {
 		ensureMaiaRulesFile()
 		const abs = resolvePath(kind)
 		const content = fs.readFileSync(abs, 'utf8')
+		const relName = kind === 'soul' ? 'SOUL.md' : 'RULES.md'
 		return json({
 			ok: true as const,
 			kind,
-			path: `.data/agents/maia/${kind === 'soul' ? 'SOUL.md' : kind === 'rules' ? 'RULES.md' : 'README.md'}`,
+			path: `.data/agents/maia/${relName}`,
 			content
 		})
 	} catch (e) {
@@ -56,7 +57,10 @@ export const GET: RequestHandler = async ({ url }) => {
 export const PUT: RequestHandler = async ({ request, url }) => {
 	const kind = parseKind(url.searchParams.get('kind'))
 	if (!kind) {
-		return json({ ok: false as const, error: 'Query ?kind=soul|rules|readme required.' }, { status: 400 })
+		return json(
+			{ ok: false as const, error: 'Query ?kind=soul|rules required.' },
+			{ status: 400 }
+		)
 	}
 	let body: unknown
 	try {

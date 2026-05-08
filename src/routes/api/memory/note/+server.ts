@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit'
+import { appendMemoryProvenance } from '$lib/memory/memory-provenance.js'
 import { rebuildVaultGraph } from '$lib/memory/vault-graph.js'
 import { ensureVaultDir, readVaultNote, writeVaultNote } from '$lib/memory/vault.js'
 import type { RequestHandler } from './$types'
@@ -39,7 +40,8 @@ export const PUT: RequestHandler = async ({ request }) => {
 	const { path: relPath, content } = raw as { path: string; content: string }
 	try {
 		ensureVaultDir()
-		writeVaultNote(relPath, content)
+		const merged = appendMemoryProvenance(content, { type: 'memory_ui' })
+		writeVaultNote(relPath, merged)
 		rebuildVaultGraph()
 		return json({ ok: true as const, path: relPath })
 	} catch (e) {

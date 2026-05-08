@@ -28,8 +28,8 @@ export type WikilinkResolution =
 
 /**
  * Resolve a wikilink to a vault-relative path.
- * 1) Exact path as written (e.g. `People/Samuel` or `Topics/X.md`).
- * 2) Otherwise unique basename match (`[[Samuel]]` → only `People/Samuel.md`).
+ * 1) Exact path as written (e.g. `Humans/Samuel` or `Topics/X.md`).
+ * 2) Otherwise unique basename match (`[[Samuel]]` → only `Humans/Samuel.md` if unique).
  * Matches Obsidian-style short links when filename is unique in the vault.
  */
 export function resolveWikilinkToVaultPath(
@@ -71,9 +71,15 @@ export function resolveWikilinkToVaultPath(
 	return { status: 'unresolved', attempted: n }
 }
 
+/** True for `[[Talk/m5]]`-style links (not vault paths; excluded from link graph). */
+export function isTalkTurnWikilinkPath(raw: string): boolean {
+	const t = raw.trim().replace(/\\/g, '/')
+	return /^Talk\/m?\d+(?:\.md)?$/i.test(t)
+}
+
 type WikilinkEscapers = { escapeHtml: (s: string) => string; escapeAttr: (s: string) => string }
 
-/** `[[People/Sam]]` / `[[People/Sam|Sam]]` → HTML spans (fenced ``` blocks untouched). */
+/** `[[Humans/Sam]]` / `[[Humans/Sam|Sam]]` → HTML spans (fenced ``` blocks untouched). */
 export function injectWikilinkSpans(markdown: string, esc: WikilinkEscapers): string {
 	const parts = splitMarkdownSkipFencedCode(markdown)
 	return parts
@@ -82,6 +88,13 @@ export function injectWikilinkSpans(markdown: string, esc: WikilinkEscapers): st
 			return chunk.replace(
 				/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,
 				(_, pathRaw: string, labelRaw?: string) => {
+					const pathTrim = pathRaw.trim().replace(/\\/g, '/')
+					const talkM = /^Talk\/m?(\d+)(?:\.md)?$/i.exec(pathTrim)
+					if (talkM) {
+						const n = talkM[1]
+						const label = String(labelRaw ?? `Talk m${n}`).trim()
+						return `<span class="memory-talk-source cursor-pointer underline decoration-border/50" data-talk-turn="${esc.escapeAttr(n)}">${esc.escapeHtml(label)}</span>`
+					}
 					const path = pathRaw.trim()
 					const label = String(labelRaw ?? path).trim()
 					return `<span class="memory-wikilink" data-wikilink="${esc.escapeAttr(path)}">${esc.escapeHtml(label)}</span>`

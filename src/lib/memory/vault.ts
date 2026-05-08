@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { ensureSeedRuntimeSynced } from '$lib/seed/seed-service'
 import { parseMarkdownFrontmatter } from './frontmatter'
 
 function repoRootFromModule(): string {
@@ -46,17 +47,10 @@ export function assertVaultRelativePath(rel: string): string {
 }
 
 export function ensureVaultDir(): string {
+	ensureSeedRuntimeSynced()
 	const root = vaultAbsolutePath()
 	if (!fs.existsSync(root)) {
 		fs.mkdirSync(root, { recursive: true })
-	}
-	const welcome = path.join(root, 'README.md')
-	if (!fs.existsSync(welcome)) {
-		fs.writeFileSync(
-			welcome,
-			'# Knowledge vault\n\nLocal-only notes (**not** committed to git). Edit via **Memory** or **Talk** (`/talk`).\n',
-			'utf8'
-		)
 	}
 	return root
 }
@@ -91,7 +85,8 @@ export function listVaultNotes(): { path: string; title: string }[] {
 		try {
 			const content = fs.readFileSync(full, 'utf8')
 			const { meta, body } = parseMarkdownFrontmatter(content)
-			const title = meta.title?.trim() || extractTitleFromBody(body) || path.basename(full, '.md')
+			const title =
+				extractTitleFromBody(body) || meta.title?.trim() || path.basename(full, '.md')
 			list.push({ path: posixRel, title })
 		} catch {
 			list.push({ path: posixRel, title: path.basename(full, '.md') })

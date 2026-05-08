@@ -1,11 +1,18 @@
 <script lang="ts">
-import { onMount } from 'svelte'
+import { onMount, tick } from 'svelte'
 import {
 	type AvenContextFull,
 	type AvenContextPreview,
 	type AvenContextSection,
-	memoryToolBadgeClasses
 } from '$lib/aven/context-preview'
+import { maiaAgent } from '$lib/aven/maia-agent'
+import {
+	hrefForAgentSourcePath,
+	memoryHrefForVaultPath,
+	talkTranscriptHref,
+} from '$lib/aven/talk-actor-links'
+import ContextHeadingInline from '$lib/aven/ContextHeadingInline.svelte'
+import { memoryToolBadgeClasses } from '$lib/aven/context-tool-badges'
 import { renderVaultMarkdown } from '$lib/memory/markdown-view'
 import { workspaceContentClass } from '$lib/workspace/layout'
 
@@ -26,15 +33,44 @@ let contextPreview = $state<AvenContextPreview | null>(null)
 let fullContext = $state<AvenContextFull | null>(null)
 let bootingConversation = $state(true)
 
+/** When true, keep `#talk-context-scroll` pinned to the bottom as content grows; false after user scrolls up. */
+let stickToBottom = $state(true)
+let contextScrollRoot: HTMLDivElement | undefined = $state()
+
+const FROM_BOTTOM_EPS_PX = 80
+
+function distanceFromBottom(el: HTMLElement) {
+	return el.scrollHeight - el.scrollTop - el.clientHeight
+}
+
+function onTalkContextScroll() {
+	const el = contextScrollRoot
+	if (!el) return
+	stickToBottom = distanceFromBottom(el) < FROM_BOTTOM_EPS_PX
+}
+
+async function scrollTalkContextToBottom(behavior: ScrollBehavior = 'smooth') {
+	await tick()
+	const el = contextScrollRoot
+	if (!el) return
+	// Markdown `{@html}` can resize after tick; next frame catches layout.
+	requestAnimationFrame(() => {
+		requestAnimationFrame(() => {
+			el.scrollTo({ top: el.scrollHeight, behavior })
+		})
+	})
+}
+
 const origin =
 	typeof window !== 'undefined' && window.location?.origin ? window.location.origin : ''
 
 function anchorForSection(id: AvenContextSection['id']): string {
 	const map: Record<AvenContextSection['id'], string> = {
 		soul: 'ctx-soul',
+		owner: 'ctx-owner',
 		rules: 'ctx-rules',
 		vault_snapshot: 'ctx-vault',
-		vault_graph: 'ctx-graph',
+		vault_graph: 'ctx-link-graph',
 		tools: 'ctx-tools',
 		transcript: 'ctx-transcript'
 	}
@@ -63,7 +99,41 @@ async function refreshContextFromServer() {
 	}
 }
 
+/** Sync accordion `<details name="talk-ctx">` from `#ctx-…` (exclusive: one open; transcript collapses all). */
+function openDetailsTargetFromHash() {
+	if (typeof document === 'undefined') return
+	const id = window.location.hash.slice(1)
+	if (!id || !id.startsWith('ctx-')) return
+
+	const panels = document.querySelectorAll<HTMLDetailsElement>('details[name="talk-ctx"]')
+
+	const closeAllAccordions = () => {
+		panels.forEach((d) => {
+			d.open = false
+		})
+	}
+
+	if (id === 'ctx-actor-config') {
+		closeAllAccordions()
+		return
+	}
+
+	if (id === 'ctx-transcript') {
+		closeAllAccordions()
+		return
+	}
+
+	const target = document.getElementById(id)
+	if (target instanceof HTMLDetailsElement && target.getAttribute('name') === 'talk-ctx') {
+		panels.forEach((d) => {
+			d.open = d.id === id
+		})
+	}
+}
+
 onMount(() => {
+	openDetailsTargetFromHash()
+	window.addEventListener('hashchange', openDetailsTargetFromHash)
 	void (async () => {
 		try {
 			const res = await fetch(`${origin}/api/aven/conversation`)
@@ -98,13 +168,22 @@ onMount(() => {
 		} finally {
 			bootingConversation = false
 		}
+		openDetailsTargetFromHash()
 	})()
+	return () => window.removeEventListener('hashchange', openDetailsTargetFromHash)
+})
+
+$effect(() => {
+	void messages
+	if (bootingConversation || !stickToBottom) return
+	void scrollTalkContextToBottom('smooth')
 })
 
 async function send() {
 	const text = draft.trim()
 	if (!text || busy || bootingConversation) return
 	error = null
+	stickToBottom = true
 	const prev = messages
 	const next: Msg[] = [...messages, { role: 'user', content: text }]
 	messages = next
@@ -210,27 +289,174 @@ async function send() {
 				</p>
 			</div>
 			<div
+				bind:this={contextScrollRoot}
 				id="talk-context-scroll"
-				class="min-h-0 flex-1 space-y-10 overflow-y-auto scroll-pb-40 pr-1 max-lg:min-h-[46vh] pb-36 sm:scroll-mt-2"
+				class="min-h-0 flex-1 space-y-4 overflow-y-auto scroll-pb-40 pr-1 max-lg:min-h-[46vh] pb-36 sm:scroll-mt-2"
+				onscroll={onTalkContextScroll}
 			>
+				<section
+					id="ctx-actor-config"
+					class="scroll-mt-12 rounded-2xl border border-border/70 bg-white/10 p-4 sm:p-5"
+					aria-labelledby="ctx-actor-config-h"
+				>
+					<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border/35 pb-3">
+						<div class="min-w-0">
+							<h2
+								id="ctx-actor-config-h"
+								class="tech-label block border-0 pb-0 normal-case !text-[11px] opacity-90"
+							>
+								Actor · <span class="font-mono">maia.agent.json</span>
+							</h2>
+							<p class="mt-1 font-mono text-[10px] leading-snug opacity-55">
+								{maiaAgent.id} · v{maiaAgent.version}
+							</p>
+							{#if contextPreview}
+								<p class="mt-1 font-mono text-[10px] leading-snug opacity-45">
+									model · {contextPreview.model}
+								</p>
+								<p
+									class="mt-0.5 font-mono text-[9px] tabular-nums opacity-40"
+									title="Rough char÷4 sum: system + transcript user/assistant text + tools JSON."
+								>
+									Σ ≈ ~{contextPreview.totalEstimatedTokens.toLocaleString()} tok
+								</p>
+							{/if}
+						</div>
+						<span
+							class="rounded-full border border-border/50 px-2 py-0.5 text-[10px] font-semibold opacity-80"
+							>{maiaAgent.name}</span
+						>
+					</div>
+					<dl class="mt-3 grid gap-2 text-[11px] leading-snug sm:grid-cols-2">
+						<div class="rounded-xl border border-border/40 bg-white/6 px-3 py-2">
+							<dt class="tech-label mb-1 opacity-50">LLM provider</dt>
+							<dd class="m-0 font-mono">{maiaAgent.llm.provider}</dd>
+						</div>
+						<div class="rounded-xl border border-border/40 bg-white/6 px-3 py-2">
+							<dt class="tech-label mb-1 opacity-50">Default model</dt>
+							<dd class="m-0 font-mono">{maiaAgent.llm.defaultModel}</dd>
+						</div>
+						<div class="rounded-xl border border-border/40 bg-white/6 px-3 py-2">
+							<dt class="tech-label mb-1 opacity-50">Temperature</dt>
+							<dd class="m-0 font-mono">{String(maiaAgent.llm.temperature)}</dd>
+						</div>
+						<div class="rounded-xl border border-border/40 bg-white/6 px-3 py-2">
+							<dt class="tech-label mb-1 opacity-50">Max tool rounds</dt>
+							<dd class="m-0 font-mono">{String(maiaAgent.llm.maxToolRounds)}</dd>
+						</div>
+						<div class="rounded-xl border border-border/40 bg-white/6 px-3 py-2">
+							<dt class="tech-label mb-1 opacity-50">Tool choice</dt>
+							<dd class="m-0 font-mono">{maiaAgent.llm.toolChoice}</dd>
+						</div>
+						{#if maiaAgent.llm.fallbackConfigFiles?.length}
+							<div class="sm:col-span-2 rounded-xl border border-border/40 bg-white/6 px-3 py-2">
+								<dt class="tech-label mb-1 opacity-50">Fallback configs</dt>
+								<dd class="m-0 flex flex-wrap gap-1.5">
+									{#each maiaAgent.llm.fallbackConfigFiles as file (file)}
+										<a
+											href={memoryHrefForVaultPath(file)}
+											class="break-all font-mono text-[10px] text-foreground underline decoration-border/60 underline-offset-2 hover:decoration-foreground/80"
+											>{file}</a
+										>
+									{/each}
+								</dd>
+							</div>
+						{/if}
+					</dl>
+					<div class="mt-4 space-y-2 text-[11px]">
+						<p class="tech-label mb-1 opacity-50">Sources</p>
+						<ul class="m-0 list-none space-y-2 p-0">
+							<li class="rounded-xl border border-border/35 bg-white/4 px-3 py-2">
+								<span class="tech-label block text-[9px] opacity-45">identityMarkdown</span>
+								<a
+									href={hrefForAgentSourcePath(maiaAgent.sources.identityMarkdown)}
+									class="mt-0.5 block break-all font-mono text-[10px] text-foreground underline decoration-border/60 underline-offset-2 hover:decoration-foreground/80"
+									>{maiaAgent.sources.identityMarkdown}</a
+								>
+							</li>
+							<li class="rounded-xl border border-border/35 bg-white/4 px-3 py-2">
+								<span class="tech-label block text-[9px] opacity-45">systemPrompt</span>
+								<a
+									href={hrefForAgentSourcePath(maiaAgent.sources.systemPrompt.path)}
+									class="mt-0.5 block break-all font-mono text-[10px] text-foreground underline decoration-border/60 underline-offset-2 hover:decoration-foreground/80"
+									>{maiaAgent.sources.systemPrompt.path}</a
+								>
+								{#if maiaAgent.sources.systemPrompt.seedPath}
+									<span class="mt-1 block text-[9px] opacity-40"
+										>seed · <span class="font-mono">{maiaAgent.sources.systemPrompt.seedPath}</span></span
+									>
+								{/if}
+							</li>
+							<li class="rounded-xl border border-border/35 bg-white/4 px-3 py-2">
+								<span class="tech-label block text-[9px] opacity-45">tools.openAiFunctionSchemas</span>
+								<a
+									href={memoryHrefForVaultPath(maiaAgent.sources.tools.openAiFunctionSchemas)}
+									class="mt-0.5 block break-all font-mono text-[10px] text-foreground underline decoration-border/60 underline-offset-2 hover:decoration-foreground/80"
+									>{maiaAgent.sources.tools.openAiFunctionSchemas}</a
+								>
+							</li>
+							<li class="rounded-xl border border-border/35 bg-white/4 px-3 py-2">
+								<span class="tech-label block text-[9px] opacity-45">transcript</span>
+								<a
+									href={talkTranscriptHref()}
+									class="mt-0.5 block break-all font-mono text-[10px] text-foreground underline decoration-border/60 underline-offset-2 hover:decoration-foreground/80"
+									>{maiaAgent.sources.transcript.conversationJsonRelative}</a
+								>
+								<span class="mt-1 block font-mono text-[9px] opacity-45"
+									>{maiaAgent.sources.transcript.messageMarkdownGlob}</span
+								>
+							</li>
+						</ul>
+					</div>
+					<div class="mt-3 grid gap-1 text-[10px] leading-snug opacity-60 sm:grid-cols-2">
+						<p class="m-0">
+							<span class="tech-label opacity-50">Bundle delimiter</span>
+							<span class="ml-1 font-mono">{maiaAgent.systemBundle.delimiterMarkdown}</span>
+						</p>
+						<p class="m-0 sm:col-span-2">
+							<span class="tech-label opacity-50">Snapshot heading template</span>
+							<span class="ml-1 font-mono">{maiaAgent.systemBundle.snapshotHeadingMarkdownTemplate}</span>
+						</p>
+					</div>
+					<details class="mt-4 rounded-xl border border-border/40 bg-white/4 p-3">
+						<summary
+							class="cursor-pointer text-[10px] font-semibold uppercase tracking-wide opacity-70 [&::-webkit-details-marker]:hidden"
+						>
+							Raw JSON
+						</summary>
+						<pre
+							class="mt-2 max-h-[min(50vh,20rem)] overflow-auto whitespace-pre-wrap border-t border-border/30 pt-2 font-mono text-[9px] leading-relaxed text-foreground/88 sm:text-[10px]"
+						>{JSON.stringify(maiaAgent, null, 2)}</pre>
+					</details>
+				</section>
+
 				{#if bootingConversation}
 					<p class="text-sm opacity-35 leading-relaxed">Loading conversation and context…</p>
 				{:else if !fullContext}
 					<p class="text-sm opacity-35 leading-relaxed">Send a message to build context.</p>
 				{:else}
-					<section
+					<details
+						name="talk-ctx"
 						id="ctx-soul"
-						class="scroll-mt-20 rounded-2xl border border-border/70 bg-white/10 p-4 sm:p-5"
-						aria-labelledby="ctx-soul-h"
+						class="talk-ctx-disclosure scroll-mt-12 rounded-2xl border border-border/70 bg-white/10 p-4 sm:p-5"
 					>
-						<h2
-							id="ctx-soul-h"
-							class="tech-label mb-3 block border-b border-border/35 pb-2 normal-case !text-[11px]"
+						<summary
+							class="tech-label cursor-pointer list-none border-b border-border/35 pb-2 normal-case !text-[11px] [&::-webkit-details-marker]:hidden"
 						>
-							{contextPreview?.sections.find((s) => s.id === 'soul')?.heading ?? 'SOUL.md'}
-						</h2>
+							<span class="flex items-start gap-2">
+								<span class="talk-ctx-chevron mt-0.5 shrink-0 text-[10px] opacity-45" aria-hidden="true"
+									>▸</span
+								>
+								<span class="min-w-0 flex-1">
+									<ContextHeadingInline
+										heading={contextPreview?.sections.find((s) => s.id === 'soul')?.heading ??
+											'@.data/agents/maia/SOUL.md'}
+									/>
+								</span>
+							</span>
+						</summary>
 						<div
-							class="memory-prose max-h-[min(70vh,32rem)] overflow-x-hidden overflow-y-auto text-sm leading-relaxed [&_table]:text-[11px] sm:[&_table]:text-sm"
+							class="memory-prose mt-3 max-h-[min(70vh,32rem)] overflow-x-hidden overflow-y-auto text-sm leading-relaxed [&_table]:text-[11px] sm:[&_table]:text-sm"
 							role="region"
 							aria-label="SOUL rendered"
 						>
@@ -240,21 +466,63 @@ async function send() {
 								{@html renderVaultMarkdown(fullContext.soulMarkdown)}
 							{/if}
 						</div>
-					</section>
+					</details>
 
-					<section
-						id="ctx-rules"
-						class="scroll-mt-20 rounded-2xl border border-border/70 bg-white/10 p-4 sm:p-5"
-						aria-labelledby="ctx-rules-h"
+					<details
+						name="talk-ctx"
+						id="ctx-owner"
+						class="talk-ctx-disclosure scroll-mt-12 rounded-2xl border border-border/70 bg-white/10 p-4 sm:p-5"
 					>
-						<h2
-							id="ctx-rules-h"
-							class="tech-label mb-3 block border-b border-border/35 pb-2 normal-case !text-[11px]"
+						<summary
+							class="tech-label cursor-pointer list-none border-b border-border/35 pb-2 normal-case !text-[11px] [&::-webkit-details-marker]:hidden"
 						>
-							{contextPreview?.sections.find((s) => s.id === 'rules')?.heading ?? 'RULES.md'}
-						</h2>
+							<span class="flex items-start gap-2">
+								<span class="talk-ctx-chevron mt-0.5 shrink-0 text-[10px] opacity-45" aria-hidden="true"
+									>▸</span
+								>
+								<span class="min-w-0 flex-1">
+									<ContextHeadingInline
+										heading={contextPreview?.sections.find((s) => s.id === 'owner')?.heading ??
+											'Vault owner (`Humans/OWNER_*.md`)'}
+									/>
+								</span>
+							</span>
+						</summary>
 						<div
-							class="memory-prose max-h-[min(70vh,32rem)] overflow-x-hidden overflow-y-auto text-sm leading-relaxed [&_table]:text-[11px] sm:[&_table]:text-sm"
+							class="memory-prose mt-3 max-h-[min(70vh,32rem)] overflow-x-hidden overflow-y-auto text-sm leading-relaxed [&_table]:text-[11px] sm:[&_table]:text-sm"
+							role="region"
+							aria-label="Vault owner context rendered"
+						>
+							{#if !fullContext.ownerMarkdown.trim()}
+								<p class="text-xs opacity-35">Empty</p>
+							{:else}
+								{@html renderVaultMarkdown(fullContext.ownerMarkdown)}
+							{/if}
+						</div>
+					</details>
+
+					<details
+						name="talk-ctx"
+						id="ctx-rules"
+						class="talk-ctx-disclosure scroll-mt-12 rounded-2xl border border-border/70 bg-white/10 p-4 sm:p-5"
+					>
+						<summary
+							class="tech-label cursor-pointer list-none border-b border-border/35 pb-2 normal-case !text-[11px] [&::-webkit-details-marker]:hidden"
+						>
+							<span class="flex items-start gap-2">
+								<span class="talk-ctx-chevron mt-0.5 shrink-0 text-[10px] opacity-45" aria-hidden="true"
+									>▸</span
+								>
+								<span class="min-w-0 flex-1">
+									<ContextHeadingInline
+										heading={contextPreview?.sections.find((s) => s.id === 'rules')?.heading ??
+											'@.data/agents/maia/RULES.md'}
+									/>
+								</span>
+							</span>
+						</summary>
+						<div
+							class="memory-prose mt-3 max-h-[min(70vh,32rem)] overflow-x-hidden overflow-y-auto text-sm leading-relaxed [&_table]:text-[11px] sm:[&_table]:text-sm"
 							role="region"
 							aria-label="RULES rendered"
 						>
@@ -264,22 +532,30 @@ async function send() {
 								{@html renderVaultMarkdown(fullContext.rulesMarkdown)}
 							{/if}
 						</div>
-					</section>
+					</details>
 
-					<section
+					<details
+						name="talk-ctx"
 						id="ctx-vault"
-						class="scroll-mt-20 rounded-2xl border border-border/70 bg-white/10 p-4 sm:p-5"
-						aria-labelledby="ctx-vault-h"
+						class="talk-ctx-disclosure scroll-mt-12 rounded-2xl border border-border/70 bg-white/10 p-4 sm:p-5"
 					>
-						<h2
-							id="ctx-vault-h"
-							class="tech-label mb-3 block border-b border-border/35 pb-2 normal-case !text-[11px]"
+						<summary
+							class="tech-label cursor-pointer list-none border-b border-border/35 pb-2 normal-case !text-[11px] [&::-webkit-details-marker]:hidden"
 						>
-							{contextPreview?.sections.find((s) => s.id === 'vault_snapshot')?.heading ??
-								'Vault snapshot'}
-						</h2>
+							<span class="flex items-start gap-2">
+								<span class="talk-ctx-chevron mt-0.5 shrink-0 text-[10px] opacity-45" aria-hidden="true"
+									>▸</span
+								>
+								<span class="min-w-0 flex-1">
+									<ContextHeadingInline
+										heading={contextPreview?.sections.find((s) => s.id === 'vault_snapshot')
+											?.heading ?? '@.data/knowledge (live index)'}
+									/>
+								</span>
+							</span>
+						</summary>
 						<div
-							class="memory-prose max-h-[min(70vh,32rem)] overflow-x-hidden overflow-y-auto text-sm leading-relaxed [&_table]:text-[11px] sm:[&_table]:text-sm"
+							class="memory-prose mt-3 max-h-[min(70vh,32rem)] overflow-x-hidden overflow-y-auto text-sm leading-relaxed [&_table]:text-[11px] sm:[&_table]:text-sm"
 							role="region"
 							aria-label="Vault snapshot rendered"
 						>
@@ -289,24 +565,32 @@ async function send() {
 								{@html renderVaultMarkdown(fullContext.vaultSnapshotMarkdown)}
 							{/if}
 						</div>
-					</section>
+					</details>
 
-					<section
-						id="ctx-graph"
-						class="scroll-mt-20 rounded-2xl border border-border/70 bg-white/10 p-4 sm:p-5"
-						aria-labelledby="ctx-graph-h"
+					<details
+						name="talk-ctx"
+						id="ctx-link-graph"
+						class="talk-ctx-disclosure scroll-mt-12 rounded-2xl border border-border/70 bg-white/10 p-4 sm:p-5"
 					>
-						<h2
-							id="ctx-graph-h"
-							class="tech-label mb-3 block border-b border-border/35 pb-2 normal-case !text-[11px]"
+						<summary
+							class="tech-label cursor-pointer list-none border-b border-border/35 pb-2 normal-case !text-[11px] [&::-webkit-details-marker]:hidden"
 						>
-							{contextPreview?.sections.find((s) => s.id === 'vault_graph')?.heading ??
-								'Link graph'}
-						</h2>
+							<span class="flex items-start gap-2">
+								<span class="talk-ctx-chevron mt-0.5 shrink-0 text-[10px] opacity-45" aria-hidden="true"
+									>▸</span
+								>
+								<span class="min-w-0 flex-1">
+									<ContextHeadingInline
+										heading={contextPreview?.sections.find((s) => s.id === 'vault_graph')
+											?.heading ?? '@.data/state/vault-graph.json (derived wikilink summary)'}
+									/>
+								</span>
+							</span>
+						</summary>
 						<div
-							class="memory-prose max-h-[min(52vh,24rem)] overflow-x-hidden overflow-y-auto text-sm leading-relaxed [&_table]:text-[11px] sm:[&_table]:text-sm"
+							class="memory-prose mt-3 max-h-[min(70vh,32rem)] overflow-x-hidden overflow-y-auto text-sm leading-relaxed [&_table]:text-[11px] sm:[&_table]:text-sm"
 							role="region"
-							aria-label="Link graph summary rendered"
+							aria-label="Vault wikilink graph summary rendered"
 						>
 							{#if !fullContext.vaultGraphMarkdown.trim()}
 								<p class="text-xs opacity-35">Empty</p>
@@ -314,34 +598,46 @@ async function send() {
 								{@html renderVaultMarkdown(fullContext.vaultGraphMarkdown)}
 							{/if}
 						</div>
-					</section>
+					</details>
 
-					<section
+					<details
+						name="talk-ctx"
 						id="ctx-tools"
-						class="scroll-mt-20 rounded-2xl border border-border/70 bg-white/10 p-4 sm:p-5"
-						aria-labelledby="ctx-tools-h"
+						class="talk-ctx-disclosure scroll-mt-12 rounded-2xl border border-border/70 bg-white/10 p-4 sm:p-5"
 					>
-						<h2
-							id="ctx-tools-h"
-							class="tech-label mb-3 block border-b border-border/35 pb-2 normal-case !text-[11px]"
+						<summary
+							class="tech-label cursor-pointer list-none border-b border-border/35 pb-2 normal-case !text-[11px] [&::-webkit-details-marker]:hidden"
 						>
-							{contextPreview?.sections.find((s) => s.id === 'tools')?.heading ?? 'Tools (OpenAI JSON)'}
-						</h2>
+							<span class="flex items-start gap-2">
+								<span class="talk-ctx-chevron mt-0.5 shrink-0 text-[10px] opacity-45" aria-hidden="true"
+									>▸</span
+								>
+								<span class="min-w-0 flex-1">
+									<ContextHeadingInline
+										heading={contextPreview?.sections.find((s) => s.id === 'tools')?.heading ??
+											'@.data/agents/maia/tools/memory.openai.json'}
+									/>
+								</span>
+							</span>
+						</summary>
 						<pre
-							class="m-0 max-h-[min(70vh,32rem)] overflow-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-foreground/88 sm:text-[11px]"
+							class="m-0 mt-3 max-h-[min(70vh,32rem)] overflow-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-foreground/88 sm:text-[11px]"
 						>{fullContext.toolsSchemaJson}</pre>
-					</section>
+					</details>
 
 					<section
 						id="ctx-transcript"
-						class="scroll-mt-20 rounded-2xl border border-border/70 bg-white/10 p-4 sm:p-5"
+						class="scroll-mt-12 rounded-2xl border border-border/70 bg-white/10 p-4 sm:p-5"
 						aria-labelledby="ctx-transcript-h"
 					>
 						<h2
 							id="ctx-transcript-h"
 							class="tech-label mb-4 block border-b border-border/35 pb-2 normal-case !text-[11px]"
 						>
-							{contextPreview?.sections.find((s) => s.id === 'transcript')?.heading ?? 'Transcript'}
+							<ContextHeadingInline
+								heading={contextPreview?.sections.find((s) => s.id === 'transcript')?.heading ??
+									'@.data/agents/maia/messages'}
+							/>
 						</h2>
 						{#if messages.length === 0}
 							<p class="text-sm opacity-35">No messages yet.</p>
@@ -379,23 +675,32 @@ async function send() {
 		>
 			<div class="mb-2 shrink-0 lg:sticky lg:top-0 lg:z-10 lg:bg-background/85 lg:pb-2 lg:backdrop-blur-sm">
 				<span class="tech-label block opacity-60">On this page</span>
-				{#if contextPreview}
-					<p class="mt-1 text-[10px] font-mono opacity-45">
-						model · {contextPreview.model}
-					</p>
-					<p
-						class="text-[9px] opacity-40"
-						title="Rough char÷4 sum: system + transcript user/assistant text + tools JSON."
-					>
-						Σ ≈ ~{contextPreview.totalEstimatedTokens.toLocaleString()} tok
-					</p>
-				{/if}
 			</div>
 			<nav
 				class="flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto overscroll-contain pr-1 text-[11px] leading-snug lg:max-h-none"
 			>
+				<ul class="m-0 mb-2 list-none space-y-1 border-b border-border/30 pb-2 p-0">
+					<li>
+						<a
+							href="#ctx-actor-config"
+							title={contextPreview
+								? `Rough char÷4 sum: system + transcript user/assistant text + tools JSON. Model ${contextPreview.model}.`
+								: 'Jump to bundled maia.agent.json and request summary.'}
+							class="flex flex-col gap-1 rounded-lg border border-transparent px-2 py-2 transition-colors hover:border-border/50 hover:bg-white/10"
+						>
+							<span class="opacity-90">Actor · maia.agent.json</span>
+							<span class="break-all font-mono text-[9px] tabular-nums opacity-45">{maiaAgent.id}</span>
+							{#if contextPreview}
+								<span class="font-mono text-[10px] opacity-45">model · {contextPreview.model}</span>
+								<span class="font-mono text-[9px] tabular-nums opacity-40">
+									Σ ≈ ~{contextPreview.totalEstimatedTokens.toLocaleString()} tok
+								</span>
+							{/if}
+						</a>
+					</li>
+				</ul>
 				{#if !contextPreview}
-					<p class="text-[10px] opacity-40">Send a message to load outline.</p>
+					<p class="text-[10px] opacity-40">Send a message to load context outline.</p>
 				{:else}
 					<ul class="m-0 list-none space-y-1 p-0">
 						{#each contextPreview.sections as block (block.id + block.heading)}
@@ -404,10 +709,9 @@ async function send() {
 									href={anchorForSection(block.id)}
 									class="flex flex-col gap-0.5 rounded-lg border border-transparent px-2 py-2 transition-colors hover:border-border/50 hover:bg-white/10"
 								>
-									<span
-										class="break-words font-mono text-[10px] font-semibold tracking-tight opacity-70"
-										>{block.heading}</span
-									>
+									<span class="opacity-75">
+										<ContextHeadingInline heading={block.heading} compact />
+									</span>
 									<span class="font-mono text-[9px] tabular-nums opacity-45"
 										>~{block.estimatedTokens.toLocaleString()} tok</span
 									>
@@ -498,3 +802,13 @@ async function send() {
 		</div>
 	</div>
 </div>
+
+<style>
+	.talk-ctx-disclosure summary .talk-ctx-chevron {
+		display: inline-block;
+		transition: transform 0.15s ease;
+	}
+	.talk-ctx-disclosure[open] summary .talk-ctx-chevron {
+		transform: rotate(90deg);
+	}
+</style>

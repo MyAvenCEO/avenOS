@@ -1,6 +1,8 @@
 <script lang="ts">
+import { get } from 'svelte/store'
 import { onMount } from 'svelte'
 import type { Action } from 'svelte/action'
+import { page } from '$app/stores'
 import { renderVaultMarkdown, resolveWikilinkToVaultPath } from '$lib/memory/markdown-view'
 import { workspaceContentClass } from '$lib/workspace/layout'
 
@@ -35,13 +37,11 @@ const origin =
 /** Sentinel path — not a real vault file; opens live Path|Title snapshot in the panel. */
 const VAULT_INDEX_PATH = '__aven_vault_index__'
 
-/** Maia runtime Markdown under `.data/agents/maia` — loaded via `/api/memory/maia-doc`. */
-type MaiaDocKind = 'soul' | 'rules' | 'readme'
 const MAIA_DOC_PREFIX = '__aven_maia__/'
+type MaiaDocKind = 'soul' | 'rules'
 const MAIA_DOC_ROWS: readonly { kind: MaiaDocKind; file: string; hint: string }[] = [
 	{ kind: 'soul', file: 'SOUL.md', hint: 'Identity' },
-	{ kind: 'rules', file: 'RULES.md', hint: 'Procedures' },
-	{ kind: 'readme', file: 'README.md', hint: 'Folder reference' }
+	{ kind: 'rules', file: 'RULES.md', hint: 'Procedures' }
 ]
 
 function maiaSentinelPath(kind: MaiaDocKind): string {
@@ -51,15 +51,15 @@ function maiaSentinelPath(kind: MaiaDocKind): string {
 function parseMaiaDocKind(path: string | null): MaiaDocKind | null {
 	if (!path?.startsWith(MAIA_DOC_PREFIX)) return null
 	const k = path.slice(MAIA_DOC_PREFIX.length)
-	return k === 'soul' || k === 'rules' || k === 'readme' ? k : null
+	return k === 'soul' || k === 'rules' ? k : null
 }
 
 function diskPathForMaiaKind(kind: MaiaDocKind): string {
-	const file = MAIA_DOC_ROWS.find((r) => r.kind === kind)?.file ?? `${kind}.md`
+	const file = kind === 'soul' ? 'SOUL.md' : 'RULES.md'
 	return `.data/agents/maia/${file}`
 }
 
-/** Sidebar selection for Talk transcript (`conversation.json` / same as /talk). */
+/** Sidebar selection for Talk transcript (`.data/agents/maia/messages/conversation.json` — same as /talk). */
 const MSG_SENTINEL_PREFIX = '__aven_msg__'
 function messageSentinelPath(i: number): string {
 	return `${MSG_SENTINEL_PREFIX}${i}`
@@ -80,18 +80,12 @@ async function loadMaiaDocContent(kind: MaiaDocKind): Promise<string> {
 		data !== null && typeof data === 'object' && !Array.isArray(data)
 			? (data as { ok?: unknown; content?: unknown })
 			: null
-	if (
-		!res.ok ||
-		body === null ||
-		body.ok !== true ||
-		typeof body.content !== 'string'
-	) {
+	if (!res.ok || body === null || body.ok !== true || typeof body.content !== 'string') {
 		const err =
 			body && typeof body === 'object' && 'error' in body
 				? (body as { error: unknown }).error
 				: undefined
-		const msg =
-			typeof err === 'string' ? err : `Maia doc load failed (${res.status})`
+		const msg = typeof err === 'string' ? err : `Maia doc load failed (${res.status})`
 		throw new Error(msg)
 	}
 	return body.content
@@ -206,7 +200,7 @@ async function refreshConversation() {
 	}
 }
 
-/** Refresh vault list + Talk transcript (shared Refresh control). */
+/** Refresh vault list + Talk transcript. */
 async function refreshSidebarData() {
 	await refreshList()
 	await refreshConversation()
@@ -223,10 +217,10 @@ function openTalkMessage(i: number) {
 	if (!m) return
 	saveError = null
 	loadingNote = false
+	graphNeighbors = null
 	selectedPath = messageSentinelPath(i)
 	editorContent = m.content
 	viewMode = 'display'
-	graphNeighbors = null
 }
 
 const filtered = $derived(
@@ -372,6 +366,32 @@ async function openNote(path: string) {
 
 const previewWikilinkHost: Action<HTMLElement> = (node) => {
 	const onClick = (ev: MouseEvent) => {
+		const talkEl = (ev.target as HTMLElement | null)?.closest?.('[data-talk-turn]')
+		if (talkEl instanceof HTMLElement) {
+			const n = Number.parseInt(talkEl.getAttribute('data-talk-turn') ?? '', 10)
+			if (!Number.isFinite(n) || n < 1) return
+			ev.preventDefault()
+			let seen = 0
+			let idx = -1
+			for (let i = 0; i < streamMessages.length; i++) {
+				if (streamMessages[i].role === 'assistant') {
+					seen++
+					if (seen === n) {
+						idx = i
+						break
+					}
+				}
+			}
+			if (idx < 0) {
+				saveError = `No assistant turn m${n} in the loaded transcript — use Refresh or chat more in /talk first.`
+				return
+			}
+			saveError = null
+			sidebarTab = 'messages'
+			openTalkMessage(idx)
+			return
+		}
+
 		const el = (ev.target as HTMLElement | null)?.closest?.('[data-wikilink]')
 		if (!(el instanceof HTMLElement)) return
 		const raw = el.getAttribute('data-wikilink')
@@ -385,7 +405,7 @@ const previewWikilinkHost: Action<HTMLElement> = (node) => {
 			return
 		}
 		if (res.status === 'ambiguous') {
-			saveError = `Multiple notes match “${raw.trim()}”: ${res.matches.join(', ')} — use a path like People/Samuel.md in the link.`
+			saveError = `Multiple notes match “${raw.trim()}”: ${res.matches.join(', ')} — disambiguate with the full vault path (e.g. Humans/SomeName.md) in the link.`
 			return
 		}
 		saveError = `No note found for [[${raw.trim()}]] — use the full vault path if the title is not unique.`
@@ -460,20 +480,23 @@ async function saveNote() {
 	}
 }
 
-async function createBlank() {
-	const name = window.prompt('New note path (e.g. Topics/Scratch.md)')
-	if (!name?.trim()) return
-	const path = name.trim().replace(/^\/+/, '')
-	selectedPath = path
-	graphNeighbors = null
-	editorContent = `# ${path.split('/').pop()?.replace(/\.md$/i, '') ?? 'Note'}\n\n`
-	saveError = null
-	viewMode = 'markdown'
-	sidebarTab = 'knowledge'
-}
-
 onMount(() => {
-	void refreshSidebarData()
+	void (async () => {
+		await refreshSidebarData()
+		const u = get(page).url
+		const pathParam = u.searchParams.get('path')?.trim()
+		if (!pathParam) return
+		sidebarTab = 'knowledge'
+		if (pathParam === diskPathForMaiaKind('soul')) {
+			await openMaiaDoc('soul')
+			return
+		}
+		if (pathParam === diskPathForMaiaKind('rules')) {
+			await openMaiaDoc('rules')
+			return
+		}
+		await openNote(pathParam)
+	})()
 })
 </script>
 
@@ -514,7 +537,7 @@ onMount(() => {
 				</button>
 			</div>
 			<div
-				class="mb-3 flex shrink-0 rounded-full border border-border/80 bg-white/10 p-0.5"
+				class="mb-3 grid shrink-0 grid-cols-2 gap-0.5 rounded-full border border-border/80 bg-white/10 p-0.5"
 				role="tablist"
 				aria-label="Memory sidebar"
 			>
@@ -522,7 +545,7 @@ onMount(() => {
 					type="button"
 					role="tab"
 					aria-selected={sidebarTab === 'knowledge'}
-					class="flex-1 rounded-full px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors {sidebarTab ===
+					class="min-w-0 rounded-full px-1.5 py-1.5 text-[9px] font-bold uppercase tracking-wider transition-colors sm:px-2 {sidebarTab ===
 					'knowledge'
 						? 'bg-foreground/10 text-foreground'
 						: 'opacity-50 hover:opacity-80'}"
@@ -534,7 +557,7 @@ onMount(() => {
 					type="button"
 					role="tab"
 					aria-selected={sidebarTab === 'messages'}
-					class="flex-1 rounded-full px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors {sidebarTab ===
+					class="min-w-0 rounded-full px-1.5 py-1.5 text-[9px] font-bold uppercase tracking-wider transition-colors sm:px-2 {sidebarTab ===
 					'messages'
 						? 'bg-foreground/10 text-foreground'
 						: 'opacity-50 hover:opacity-80'}"
@@ -547,13 +570,6 @@ onMount(() => {
 				</button>
 			</div>
 			{#if sidebarTab === 'knowledge'}
-				<button
-					type="button"
-					class="tech-pill mb-3 w-full justify-center py-2 text-xs font-semibold"
-					onclick={() => createBlank()}
-				>
-					New note
-				</button>
 				<input
 					bind:value={filter}
 					placeholder="Filter…"
@@ -626,11 +642,10 @@ onMount(() => {
 						{/each}
 					{/if}
 				</ul>
-			{:else}
+			{:else if sidebarTab === 'messages'}
 				<p class="mb-2 shrink-0 text-[10px] leading-snug text-foreground/45">
-					Talk transcript — same store as <a class="underline decoration-border/50 hover:opacity-100" href="/talk"
-						>/talk</a
-					>.
+					Talk transcript — same store as
+					<a class="underline decoration-border/50 hover:opacity-100" href="/talk">/talk</a>.
 				</p>
 				<ul
 					class="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-y-contain max-h-[55vh] lg:max-h-none"
@@ -652,9 +667,12 @@ onMount(() => {
 									aria-current={selectedPath === messageSentinelPath(i) ? 'page' : undefined}
 								>
 									<span class="block font-mono text-[10px] opacity-50"
-										>{m.role === 'user' ? 'You' : 'Maia'} · #{i + 1}</span
+										>{m.role === 'user' ? 'You' : 'Maia'}
+										· #{i + 1}</span
 									>
-									<span class="block truncate text-[12px] opacity-90">{snippetSidebar(m.content)}</span>
+									<span class="block truncate text-[12px] opacity-90"
+										>{snippetSidebar(m.content)}</span
+									>
 								</button>
 							</li>
 						{/each}
@@ -663,187 +681,188 @@ onMount(() => {
 			{/if}
 		</aside>
 
-		<section
-			class="tech-card flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-4 lg:h-full"
-		>
-			<div class="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
-				{#if isVaultIndexSelected}
-					<div class="min-w-0">
+		<section class="tech-card flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-4 lg:h-full">
+				<div class="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
+					{#if isVaultIndexSelected}
+						<div class="min-w-0">
+							<span
+								class="block font-mono text-[10px] font-bold leading-none tracking-tight text-foreground/55"
+								>_index.md</span
+							>
+							<span class="tech-label mt-0.5 block normal-case tracking-normal opacity-60"
+								>Live snapshot (same as Talk context) · not a file on disk</span
+							>
+						</div>
+					{:else if selectedMaiaKind}
+						<div class="min-w-0">
+							<span
+								class="block truncate font-mono text-[10px] font-bold leading-none tracking-tight text-foreground/55"
+								title={diskPathForMaiaKind(selectedMaiaKind)}
+								>{diskPathForMaiaKind(selectedMaiaKind)}</span
+							>
+							<span class="tech-label mt-0.5 block normal-case tracking-normal opacity-60"
+								>Maia runtime · loaded into Talk before the vault table</span
+							>
+						</div>
+					{:else if isTalkMessageSelected && selectedMessageIndex !== null}
+						<div class="min-w-0">
+							<span
+								class="block font-mono text-[10px] font-bold leading-none tracking-tight text-foreground/55"
+								>{`Talk · message ${selectedMessageIndex + 1} of ${streamMessages.length}`}</span
+							>
+							<span class="tech-label mt-0.5 block normal-case tracking-normal opacity-60">
+								{(streamMessages[selectedMessageIndex]?.role === 'user' ? 'You' : 'Maia')}
+								· read-only transcript
+							</span>
+						</div>
+					{:else if selectedPath}
 						<span
-							class="block font-mono text-[10px] font-bold leading-none tracking-tight text-foreground/55"
-							>_index.md</span
+							class="min-w-0 truncate font-mono text-[10px] font-bold leading-none tracking-tight text-foreground/55"
+							title={selectedPath}
+							>{selectedPath}</span
 						>
-						<span class="tech-label mt-0.5 block normal-case tracking-normal opacity-60"
-							>Live snapshot (same as Talk context) · not a file on disk</span
+					{:else}
+						<span class="tech-label">Select a note</span>
+					{/if}
+					<div class="flex shrink-0 flex-wrap items-center gap-2">
+						<div
+							class="inline-flex rounded-full border border-border/80 bg-white/15 p-0.5"
+							role="group"
+							aria-label="Note view"
 						>
-					</div>
-				{:else if selectedMaiaKind}
-					<div class="min-w-0">
-						<span
-							class="block truncate font-mono text-[10px] font-bold leading-none tracking-tight text-foreground/55"
-							title={diskPathForMaiaKind(selectedMaiaKind)}
-							>{diskPathForMaiaKind(selectedMaiaKind)}</span
-						>
-						<span class="tech-label mt-0.5 block normal-case tracking-normal opacity-60"
-							>Maia runtime · loaded into Talk before the vault table</span
-						>
-					</div>
-				{:else if isTalkMessageSelected && selectedMessageIndex !== null}
-					<div class="min-w-0">
-						<span
-							class="block font-mono text-[10px] font-bold leading-none tracking-tight text-foreground/55"
-							>{`Talk · message ${selectedMessageIndex + 1} of ${streamMessages.length}`}</span
-						>
-						<span class="tech-label mt-0.5 block normal-case tracking-normal opacity-60">
-							{(streamMessages[selectedMessageIndex]?.role === 'user' ? 'You' : 'Maia')} · read-only
-							transcript
-						</span>
-					</div>
-				{:else if selectedPath}
-					<span
-						class="min-w-0 truncate font-mono text-[10px] font-bold leading-none tracking-tight text-foreground/55"
-						title={selectedPath}
-						>{selectedPath}</span
-					>
-				{:else}
-					<span class="tech-label">Select a note</span>
-				{/if}
-				<div class="flex shrink-0 flex-wrap items-center gap-2">
-					<div
-						class="inline-flex rounded-full border border-border/80 bg-white/15 p-0.5"
-						role="group"
-						aria-label="Note view"
-					>
-						<button
-							type="button"
-							disabled={!selectedPath || loadingNote}
-							class="rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors disabled:opacity-25 {viewMode ===
+							<button
+								type="button"
+								disabled={!selectedPath || loadingNote}
+								class="rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors disabled:opacity-25 {viewMode ===
 							'display'
 								? 'bg-foreground/10 text-foreground'
 								: 'opacity-50 hover:opacity-80'}"
-							onclick={() => (viewMode = 'display')}
-						>
-							Display
-						</button>
-						<button
-							type="button"
-							disabled={!selectedPath || loadingNote || isTalkMessageSelected}
-							class="rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors disabled:opacity-25 {viewMode ===
+								onclick={() => (viewMode = 'display')}
+							>
+								Display
+							</button>
+							<button
+								type="button"
+								disabled={!selectedPath || loadingNote || isTalkMessageSelected}
+								class="rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors disabled:opacity-25 {viewMode ===
 							'markdown'
 								? 'bg-foreground/10 text-foreground'
 								: 'opacity-50 hover:opacity-80'}"
-							onclick={() => (viewMode = 'markdown')}
-						>
-							Markdown
-						</button>
-					</div>
-					<button
-						type="button"
-						class="rounded-full border border-border px-4 py-2 text-xs font-bold uppercase tracking-wider hover:bg-white/20 disabled:opacity-30"
-						disabled={!selectedPath ||
+								onclick={() => (viewMode = 'markdown')}
+							>
+								Markdown
+							</button>
+						</div>
+						<button
+							type="button"
+							class="rounded-full border border-border px-4 py-2 text-xs font-bold uppercase tracking-wider hover:bg-white/20 disabled:opacity-30"
+							disabled={!selectedPath ||
 							saving ||
 							loadingNote ||
 							isVaultIndexSelected ||
 							isTalkMessageSelected}
-						onclick={() => void saveNote()}
+							onclick={() => void saveNote()}
+						>
+							{saving ? 'Saving…' : 'Save'}
+						</button>
+					</div>
+				</div>
+				{#if loadingNote}
+					<p class="mb-2 shrink-0 text-xs opacity-40">Loading note…</p>
+				{/if}
+				{#if isVaultNoteSelected && graphNeighbors}
+					<div
+						class="mb-3 grid max-h-40 shrink-0 grid-cols-1 gap-3 overflow-hidden rounded-xl border border-border/50 bg-white/10 p-3 sm:max-h-none sm:grid-cols-3"
+						aria-label="Wikilink relations for this note"
 					>
-						{saving ? 'Saving…' : 'Save'}
-					</button>
-				</div>
-			</div>
-			{#if loadingNote}
-				<p class="mb-2 shrink-0 text-xs opacity-40">Loading note…</p>
-			{/if}
-			{#if isVaultNoteSelected && graphNeighbors}
-				<div
-					class="mb-3 grid max-h-40 shrink-0 grid-cols-1 gap-3 overflow-hidden sm:grid-cols-3 sm:max-h-none rounded-xl border border-border/50 bg-white/10 p-3"
-					aria-label="Wikilink graph for this note"
-				>
-					<div class="min-h-0 flex flex-col">
-						<span class="tech-label mb-1.5">Links to</span>
-						<ul class="m-0 min-h-0 list-none space-y-1 overflow-y-auto p-0 text-[11px]">
-							{#each graphNeighbors.outgoing as p (p)}
-								<li>
-									<button
-										type="button"
-										class="w-full truncate text-left font-mono text-[10px] opacity-85 underline decoration-border/40 hover:opacity-100"
-										onclick={() => void openNote(p)}
-									>{p}</button>
-								</li>
-							{:else}
-								<li class="opacity-40">None</li>
-							{/each}
-						</ul>
-					</div>
-					<div class="min-h-0 flex flex-col">
-						<span class="tech-label mb-1.5">Backlinks</span>
-						<ul class="m-0 min-h-0 list-none space-y-1 overflow-y-auto p-0 text-[11px]">
-							{#each graphNeighbors.backlinks as p (p)}
-								<li>
-									<button
-										type="button"
-										class="w-full truncate text-left font-mono text-[10px] opacity-85 underline decoration-border/40 hover:opacity-100"
-										onclick={() => void openNote(p)}
-									>{p}</button>
-								</li>
-							{:else}
-								<li class="opacity-40">None</li>
-							{/each}
-						</ul>
-					</div>
-					<div class="min-h-0 flex flex-col">
-						<span class="tech-label mb-1.5">Unresolved</span>
-						<ul class="m-0 min-h-0 list-none space-y-0.5 overflow-y-auto p-0 font-mono text-[10px] opacity-60">
-							{#each graphNeighbors.unresolved as t (t)}
-								<li class="truncate" title={t}>{t}</li>
-							{:else}
-								<li class="opacity-40">None</li>
-							{/each}
-						</ul>
-					</div>
-				</div>
-			{/if}
-			<div class="flex min-h-0 flex-1 flex-col">
-				{#if viewMode === 'display'}
-					{#if isTalkMessageSelected}
-						<div
-							class="memory-prose min-h-0 w-full max-w-none flex-1 rounded-xl border border-border/90 bg-white/15 p-5 text-sm leading-relaxed overflow-x-hidden overflow-y-auto sm:p-6"
-							role="region"
-							aria-label="Talk message"
-						>
-							<pre
-								class="m-0 whitespace-pre-wrap wrap-break-word font-sans text-sm leading-relaxed text-foreground/95">{editorContent}</pre>
+						<div class="min-h-0 flex flex-col">
+							<span class="tech-label mb-1.5">Links to</span>
+							<ul class="m-0 min-h-0 list-none space-y-1 overflow-y-auto p-0 text-[11px]">
+								{#each graphNeighbors.outgoing as p (p)}
+									<li>
+										<button
+											type="button"
+											class="w-full truncate text-left font-mono text-[10px] opacity-85 underline decoration-border/40 hover:opacity-100"
+											onclick={() => void openNote(p)}>{p}</button
+										>
+									</li>
+								{:else}
+									<li class="opacity-40">None</li>
+								{/each}
+							</ul>
 						</div>
-					{:else}
-						<div
-							class="memory-prose min-h-0 w-full max-w-none flex-1 rounded-xl border border-border/90 bg-white/15 p-5 text-sm leading-relaxed overflow-x-hidden overflow-y-auto sm:p-6 [&_table]:text-[11px] sm:[&_table]:text-sm"
-							role="region"
-							aria-label="Rendered note preview"
-							use:previewWikilinkHost
-						>
-							{#if isVaultIndexSelected}
-								{#if !vaultSnapshotMarkdown.trim()}
-									<p class="text-xs opacity-35">Empty vault — add Markdown under .data/knowledge.</p>
+						<div class="min-h-0 flex flex-col">
+							<span class="tech-label mb-1.5">Backlinks</span>
+							<ul class="m-0 min-h-0 list-none space-y-1 overflow-y-auto p-0 text-[11px]">
+								{#each graphNeighbors.backlinks as p (p)}
+									<li>
+										<button
+											type="button"
+											class="w-full truncate text-left font-mono text-[10px] opacity-85 underline decoration-border/40 hover:opacity-100"
+											onclick={() => void openNote(p)}>{p}</button
+										>
+									</li>
+								{:else}
+									<li class="opacity-40">None</li>
+								{/each}
+							</ul>
+						</div>
+						<div class="min-h-0 flex flex-col">
+							<span class="tech-label mb-1.5">Unresolved</span>
+							<ul class="m-0 min-h-0 list-none space-y-0.5 overflow-y-auto p-0 font-mono text-[10px] opacity-60">
+								{#each graphNeighbors.unresolved as t (t)}
+									<li class="truncate" title={t}>{t}</li>
+								{:else}
+									<li class="opacity-40">None</li>
+								{/each}
+							</ul>
+						</div>
+					</div>
+				{/if}
+				<div class="flex min-h-0 flex-1 flex-col">
+					{#if viewMode === 'display'}
+						{#if isTalkMessageSelected}
+							<div
+								class="memory-prose min-h-0 w-full max-w-none flex-1 rounded-xl border border-border/90 bg-white/15 p-5 text-sm leading-relaxed overflow-x-hidden overflow-y-auto sm:p-6"
+								role="region"
+								aria-label="Talk message"
+							>
+								<pre
+									class="m-0 whitespace-pre-wrap wrap-break-word font-sans text-sm leading-relaxed text-foreground/95"
+								>{editorContent}</pre>
+							</div>
+						{:else}
+							<div
+								class="memory-prose min-h-0 w-full max-w-none flex-1 rounded-xl border border-border/90 bg-white/15 p-5 text-sm leading-relaxed overflow-x-hidden overflow-y-auto sm:p-6 [&_table]:text-[11px] sm:[&_table]:text-sm"
+								role="region"
+								aria-label="Rendered note preview"
+								use:previewWikilinkHost
+							>
+								{#if isVaultIndexSelected}
+									{#if !vaultSnapshotMarkdown.trim()}
+										<p class="text-xs opacity-35">
+											Empty vault — add Markdown under .data/knowledge.
+										</p>
+									{:else}
+										{@html displayPanelHtml}
+									{/if}
+								{:else if !editorContent.trim()}
+									<p class="text-xs opacity-35">Empty note — use Markdown to add content.</p>
 								{:else}
 									{@html displayPanelHtml}
 								{/if}
-							{:else if !editorContent.trim()}
-								<p class="text-xs opacity-35">Empty note — use Markdown to add content.</p>
-							{:else}
-								{@html displayPanelHtml}
-							{/if}
-						</div>
+							</div>
+						{/if}
+					{:else}
+						<textarea
+							bind:value={editorContent}
+							readonly={isVaultIndexSelected || isTalkMessageSelected}
+							class="min-h-[12rem] w-full flex-1 resize-y rounded-xl border border-border/90 bg-white/15 p-4 font-mono text-sm leading-relaxed outline-none focus:ring-1 focus:ring-foreground/20 read-only:cursor-default read-only:bg-white/10"
+							placeholder="Markdown source…"
+							spellcheck="false"
+						></textarea>
 					{/if}
-				{:else}
-					<textarea
-						bind:value={editorContent}
-						readonly={isVaultIndexSelected || isTalkMessageSelected}
-						class="min-h-[12rem] w-full flex-1 resize-y rounded-xl border border-border/90 bg-white/15 p-4 font-mono text-sm leading-relaxed outline-none focus:ring-1 focus:ring-foreground/20 read-only:cursor-default read-only:bg-white/10"
-						placeholder="Markdown source…"
-						spellcheck="false"
-					></textarea>
-				{/if}
-			</div>
+				</div>
 		</section>
 	</div>
 </div>

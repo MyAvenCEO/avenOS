@@ -102,12 +102,13 @@
 			"properties": {
 				"sectionHeadings": {
 					"type": "object",
-					"required": ["soul", "rules", "vaultSnapshot", "vaultGraph", "transcript", "tools"],
+					"required": ["soul", "owner", "rules", "vaultSnapshot", "vaultGraph", "transcript", "tools"],
 					"properties": {
 						"soul": { "type": "string" },
+						"owner": { "type": "string", "description": "Talk aside label for injected vault owner note (Humans/OWNER_*.md)." },
 						"rules": { "type": "string", "description": "Talk aside label for RULES.md path." },
 						"vaultSnapshot": { "type": "string" },
-						"vaultGraph": { "type": "string", "description": "Talk aside label for derived wikilink graph summary." },
+						"vaultGraph": { "type": "string", "description": "Talk aside label for derived vault wikilink graph summary." },
 						"transcript": { "type": "string" },
 						"tools": { "type": "string" }
 					},

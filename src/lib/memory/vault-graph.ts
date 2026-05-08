@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { bodyAfterFrontmatter } from '$lib/memory/frontmatter'
-import { forEachWikilinkPath, resolveWikilinkToVaultPath } from '$lib/memory/wikilink-parse'
+import { forEachWikilinkPath, isTalkTurnWikilinkPath, resolveWikilinkToVaultPath } from '$lib/memory/wikilink-parse'
 import { listVaultNotes, readVaultNote, resolveRepoRoot } from '$lib/memory/vault'
 
 export const VAULT_GRAPH_SCHEMA_VERSION = 2 as const
@@ -70,6 +70,7 @@ export function computeVaultGraph(): VaultGraphState {
 		const body = bodyAfterFrontmatter(raw)
 		const paths = notes.map((n) => n.path)
 		forEachWikilinkPath(body, (pathRaw) => {
+			if (isTalkTurnWikilinkPath(pathRaw)) return
 			const res = resolveWikilinkToVaultPath(pathRaw, paths)
 			if (res.status === 'resolved') {
 				const target = res.vaultPath

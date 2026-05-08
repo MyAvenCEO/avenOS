@@ -1,14 +1,27 @@
 /**
- * Browser-safe definitions: OpenAI tool schemas + UX strings.
+ * OpenAI tool schemas: at runtime under `.data/agents/maia/tools/` (seeded from `seed/memory/tools/`).
  * Procedural + identity Markdown lives under `.data/agents/maia/` (see `maia-rules-md.ts`, `soul-md.ts`).
  *
- * Tool JSON: `tools/memory.openai.json` (referenced from `aven/agents/maia.agent.json`).
+ * Server: reads JSON from disk after `ensureSeedRuntimeSynced()`.
+ * Browser: uses the committed `seed/` copy via `$seed` alias (for token/heuristic UI only).
  */
+import fs from 'node:fs'
 import type { ChatCompletionTool } from 'openai/resources/chat/completions.mjs'
-import memoryToolsFromJson from './tools/memory.openai.json' with { type: 'json' }
+import { ensureSeedRuntimeSynced, maiaMemoryToolsJsonPath } from '$lib/seed/seed-service'
+import bundledFromSeed from '$seed/memory/tools/memory.openai.json' with { type: 'json' }
 
 export function memoryToolsOpenAI(): ChatCompletionTool[] {
-	return memoryToolsFromJson as ChatCompletionTool[]
+	if (typeof window === 'undefined') {
+		ensureSeedRuntimeSynced()
+		const p = maiaMemoryToolsJsonPath()
+		if (!fs.existsSync(p)) {
+			throw new Error(
+				`Missing tool definitions at ${p} — ensure seed/memory/tools/memory.openai.json exists.`
+			)
+		}
+		return JSON.parse(fs.readFileSync(p, 'utf8')) as ChatCompletionTool[]
+	}
+	return bundledFromSeed as ChatCompletionTool[]
 }
 
 /** Short path tail for status copy (vault-relative, truncated). */

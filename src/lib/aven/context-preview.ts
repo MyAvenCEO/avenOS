@@ -10,14 +10,6 @@ export function roughTokenEstimateChars(charCount: number): number {
 	return Math.max(1, Math.ceil(charCount / 4))
 }
 
-/** Tailwind badge classes per tool name (Talk context aside). */
-export function memoryToolBadgeClasses(name: string): string {
-	const tail = maiaAgent.contextPreview.toolBadgeTailwindClasses as
-		| Record<string, string>
-		| undefined
-	return tail?.[name] ?? 'border-border/70 bg-white/25 text-foreground/85'
-}
-
 export function memoryToolNamesOrdered(): string[] {
 	return memoryToolsOpenAI()
 		.map((t) => (t.type === 'function' ? t.function.name : ''))
@@ -26,6 +18,7 @@ export function memoryToolNamesOrdered(): string[] {
 
 export type AvenContextSection =
 	| { id: 'soul'; heading: string; bodyLines: readonly string[]; estimatedTokens: number }
+	| { id: 'owner'; heading: string; bodyLines: readonly string[]; estimatedTokens: number }
 	| { id: 'rules'; heading: string; bodyLines: readonly string[]; estimatedTokens: number }
 	| { id: 'vault_snapshot'; heading: string; bodyLines: readonly string[]; estimatedTokens: number }
 	| { id: 'vault_graph'; heading: string; bodyLines: readonly string[]; estimatedTokens: number }
@@ -47,13 +40,14 @@ export type AvenContextPreview = {
 	model: string
 	/** Rough sum of full system blob + transcript + tools JSON (char ÷ 4 heuristic). */
 	totalEstimatedTokens: number
-	/** Same order as Talk context inspector: soul → rules → vault → graph → tools → transcript. */
+	/** Talk context inspector: soul → vault owner → rules → vault → link graph → tools → transcript. */
 	sections: AvenContextSection[]
 }
 
 /** Full text blobs the server sends to the API (for Talk UI inspector). */
 export type AvenContextFull = {
 	soulMarkdown: string
+	ownerMarkdown: string
 	rulesMarkdown: string
 	vaultSnapshotMarkdown: string
 	vaultGraphMarkdown: string
@@ -78,6 +72,7 @@ export function buildAvenContextPreview(opts: {
 	model: string
 	messages: { role: 'user' | 'assistant'; content: string }[]
 	soulChars: number
+	ownerChars: number
 	instructionChars: number
 	vaultSnapshotChars: number
 	vaultGraphChars: number
@@ -87,6 +82,7 @@ export function buildAvenContextPreview(opts: {
 		model,
 		messages,
 		soulChars,
+		ownerChars,
 		instructionChars,
 		vaultSnapshotChars,
 		vaultGraphChars,
@@ -94,6 +90,7 @@ export function buildAvenContextPreview(opts: {
 	} = opts
 
 	const soulTokens = roughTokenEstimateChars(soulChars)
+	const ownerTokens = roughTokenEstimateChars(ownerChars)
 	const rulesTokens = roughTokenEstimateChars(instructionChars)
 	const vaultSnapshotTokens = roughTokenEstimateChars(vaultSnapshotChars)
 	const vaultGraphTokens = roughTokenEstimateChars(vaultGraphChars)
@@ -107,13 +104,19 @@ export function buildAvenContextPreview(opts: {
 	const toolsChars = toolsSchemaJsonChars()
 	const toolsTokens = roughTokenEstimateChars(toolsChars)
 	const toolNames = memoryToolNamesOrdered()
-
 	const heads = maiaAgent.contextPreview.sectionHeadings
 
 	const soulSection: AvenContextSection = {
 		id: 'soul',
 		heading: heads.soul,
 		estimatedTokens: soulTokens,
+		bodyLines: []
+	}
+
+	const ownerSection: AvenContextSection = {
+		id: 'owner',
+		heading: heads.owner,
+		estimatedTokens: ownerTokens,
 		bodyLines: []
 	}
 
@@ -159,6 +162,7 @@ export function buildAvenContextPreview(opts: {
 
 	const sections: AvenContextSection[] = [
 		soulSection,
+		ownerSection,
 		rulesSection,
 		vaultSection,
 		vaultGraphSection,

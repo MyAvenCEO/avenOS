@@ -20,7 +20,7 @@ export function formatVaultSnapshotMarkdown(rows: VaultNoteRow[]): string {
 		md += `| ${p} | ${t} |\n`
 	}
 	md +=
-		'\n**Use this snapshot for entity resolution**: if a person or org already maps to one Path above, prefer **memory_edit** on **that** path — do not add another file for synonyms (Sam vs Samuel).\n'
+		'\n**Use this snapshot for entity resolution**: if a human or org already maps to one Path above, prefer **memory_edit** on **that** path — do not add another file for synonyms (Sam vs Samuel).\n'
 
 	return md
 }

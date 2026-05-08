@@ -1,12 +1,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { z } from 'zod'
-import { resolveRepoRoot } from '$lib/memory/vault'
+import { maiaMessagesDir, migrateLegacyMessagesToMaia } from '$lib/aven/maia-messages-path'
 
 const CONV_FILE = 'conversation.json'
 
 function messagesDir(): string {
-	return path.join(resolveRepoRoot(), '.data', 'messages')
+	migrateLegacyMessagesToMaia()
+	return maiaMessagesDir()
 }
 
 const fileSchema = z.object({
@@ -37,12 +38,12 @@ function parseTurnMarkdown(source: string): { user: string; assistant: string } 
 	return { user, assistant }
 }
 
-/** Sorted indexes from filenames `message1.md`, … */
+/** Sorted indexes from filenames `m1.md`, `m2.md`, … */
 function listMessageTurnIndexes(dir: string): number[] {
 	const out: number[] = []
 	if (!fs.existsSync(dir)) return out
 	for (const name of fs.readdirSync(dir)) {
-		const m = /^message(\d+)\.md$/i.exec(name)
+		const m = /^m(\d+)\.md$/i.exec(name)
 		if (m) out.push(Number.parseInt(m[1], 10))
 	}
 	out.sort((a, b) => a - b)
@@ -50,14 +51,14 @@ function listMessageTurnIndexes(dir: string): number[] {
 }
 
 /**
- * Rebuild `{ role, content }[]` from per-turn markdown logs (`messageN.md`).
+ * Rebuild `{ role, content }[]` from per-turn markdown logs (`mN.md`).
  * Used when **`conversation.json`** is missing / empty — e.g. JSON write failed earlier.
  */
 function rebuildConversationFromMessageLogs(): AvenConversationMessage[] {
 	const dir = messagesDir()
 	const messages: AvenConversationMessage[] = []
 	for (const n of listMessageTurnIndexes(dir)) {
-		const fp = path.join(dir, `message${n}.md`)
+		const fp = path.join(dir, `m${n}.md`)
 		let raw: string
 		try {
 			raw = fs.readFileSync(fp, 'utf8')
@@ -84,7 +85,7 @@ function readMessagesFromJsonFile(): AvenConversationMessage[] {
 	}
 }
 
-/** Reads rolling transcript JSON; falls back to `messageN.md` logs and restores JSON. */
+/** Reads rolling transcript JSON; falls back to `mN.md` logs and restores JSON. */
 export function readAvenConversation(): AvenConversationMessage[] {
 	const fromJson = readMessagesFromJsonFile()
 	if (fromJson.length > 0) return fromJson

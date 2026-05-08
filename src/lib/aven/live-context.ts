@@ -1,9 +1,10 @@
 import { type AvenContextFull, type AvenContextPreview, buildAvenContextPreview } from '$lib/aven/context-preview'
 import { maiaAgent } from '$lib/aven/maia-agent'
-import { formatVaultGraphSummaryMarkdown, loadVaultGraph } from '$lib/memory/vault-graph'
 import { readMaiaRulesDoc } from '$lib/memory/maia-rules-md'
+import { buildOwnerContextMarkdown } from '$lib/memory/owner-context'
 import { readSoulMarkdownBody } from '$lib/memory/soul-md'
 import { memoryToolsOpenAI } from '$lib/memory/chat-tools-core'
+import { formatVaultGraphSummaryMarkdown, loadVaultGraph } from '$lib/memory/vault-graph'
 import { ensureVaultDir, listVaultNotes } from '$lib/memory/vault'
 import { buildVaultSnapshotPayload } from '$lib/memory/vault-snapshot-api'
 
@@ -11,8 +12,7 @@ export type AvenChatTurn = { role: 'user' | 'assistant'; content: string }
 
 /**
  * Builds the same system bundle + context preview the chat stream uses for `messages`.
- * Order: **SOUL** (`.data/agents/maia/SOUL.md`) → delimiter → **RULES** (`.data/agents/maia/RULES.md`)
- * → delimiter → **vault snapshot** + delimiter → **vault link graph summary** (derived; `.data/state/vault-graph.json`).
+ * Order: **SOUL** → **vault owner** (`Humans/OWNER_*.md`) → **RULES** → **vault snapshot** → **vault link graph summary** (derived `[[wikilinks]]` stats).
  */
 export function buildAvenChatRoundContext(
 	model: string,
@@ -23,11 +23,12 @@ export function buildAvenChatRoundContext(
 	const proceduralBody = rules.body
 	const notes = listVaultNotes()
 	const soulRaw = readSoulMarkdownBody().trimEnd()
+	const ownerMd = buildOwnerContextMarkdown()
 	const snap = buildVaultSnapshotPayload(notes)
 	const graphMd = formatVaultGraphSummaryMarkdown(loadVaultGraph())
 	const sb = maiaAgent.systemBundle
 	const d = sb.delimiterMarkdown.trim()
-	const systemContent = `${soulRaw}\n\n${d}\n\n${proceduralBody}\n\n${d}\n\n${snap.fullMarkdown}\n\n${d}\n\n${graphMd}`
+	const systemContent = `${soulRaw}\n\n${d}\n\n${ownerMd}\n\n${d}\n\n${proceduralBody}\n\n${d}\n\n${snap.fullMarkdown}\n\n${d}\n\n${graphMd}`
 
 	let toolsSchemaJson: string
 	try {
@@ -38,6 +39,7 @@ export function buildAvenChatRoundContext(
 
 	const fullContext: AvenContextFull = {
 		soulMarkdown: soulRaw,
+		ownerMarkdown: ownerMd,
 		rulesMarkdown: proceduralBody,
 		vaultSnapshotMarkdown: snap.fullMarkdown,
 		vaultGraphMarkdown: graphMd,
@@ -49,6 +51,7 @@ export function buildAvenChatRoundContext(
 		model,
 		messages,
 		soulChars: soulRaw.length,
+		ownerChars: ownerMd.length,
 		instructionChars: proceduralBody.length,
 		vaultSnapshotChars: snap.fullMarkdown.length,
 		vaultGraphChars: graphMd.length,

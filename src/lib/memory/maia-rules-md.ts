@@ -2,18 +2,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { parseMarkdownFrontmatter } from '$lib/memory/frontmatter'
 import { resolveRepoRoot } from '$lib/memory/vault'
+import { ensureSeedRuntimeSynced } from '$lib/seed/seed-service'
 
 const MAIA_AGENT_DIR_SEG = ['.data', 'agents', 'maia'] as const
 
-/** Repo bootstrap when no legacy runtime file exists. */
-const RULES_SEED_REPO_PATH = path.join(
-	resolveRepoRoot(),
-	'src',
-	'lib',
-	'memory',
-	'prompts',
-	'maia-assistant.md'
-)
+const RULES_SEED_REPO_PATH = path.join(resolveRepoRoot(), 'seed', 'agents', 'maia', 'RULES.md')
 
 const LEGACY_RULES_PATH = path.join(resolveRepoRoot(), '.data', 'context', 'MaiaInstructions.md')
 
@@ -25,27 +18,9 @@ export function maiaAgentDataDir(): string {
 	return maiaAgentDir()
 }
 
-export function maiaReadmePath(): string {
-	return path.join(maiaAgentDir(), 'README.md')
-}
-
-const MAIA_README = `# Maia runtime Markdown
-
-Paths below are injected into Talk **before** vault snapshot JSON (outside \`src/\`).
-
-| File | Role |
-|------|------|
-| \`SOUL.md\` | Identity |
-| \`RULES.md\` | Procedures: snapshot discipline, tools, duplicates |
-
-Knowledge notes live under \`.data/knowledge/\`. The vault **index table** is generated each request, not saved here.
-`
-
 export function ensureMaiaAgentWorkspace(): void {
 	const dir = maiaAgentDir()
 	if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-	const readme = path.join(dir, 'README.md')
-	if (!fs.existsSync(readme)) fs.writeFileSync(readme, MAIA_README, 'utf8')
 }
 
 export function maiaRulesDataPath(): string {
@@ -54,6 +29,7 @@ export function maiaRulesDataPath(): string {
 
 export function ensureMaiaRulesFile(): void {
 	ensureMaiaAgentWorkspace()
+	ensureSeedRuntimeSynced()
 	const abs = maiaRulesDataPath()
 	if (fs.existsSync(abs)) return
 	if (fs.existsSync(LEGACY_RULES_PATH)) {

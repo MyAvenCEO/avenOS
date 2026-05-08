@@ -1,6 +1,8 @@
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import { TinfoilAI } from 'tinfoil'
+import { peekNextAssistantMessageIndex } from '$lib/aven/chat-message-log.js'
 import type { AvenContextFull, AvenContextPreview } from '$lib/aven/context-preview'
+import { memoryToolSourceAls } from '$lib/aven/memory-tool-context.js'
 import { buildAvenChatRoundContext } from '$lib/aven/live-context'
 import { maiaAgent } from '$lib/aven/maia-agent'
 import {
@@ -28,6 +30,9 @@ async function* streamAvenChatCore(
 	yield { type: 'status', detail: 'Maia · connecting…' }
 	const client = new TinfoilAI({ apiKey })
 	await client.ready()
+
+	/** Same index as the `mN.md` file this turn will write on `done` (provenance for memory tools). */
+	const reservedAssistantTurn = peekNextAssistantMessageIndex()
 
 	const { systemContent, preview, fullContext } = buildAvenChatRoundContext(model, messages)
 
@@ -107,7 +112,9 @@ async function* streamAvenChatCore(
 				}
 
 				yield { type: 'status', detail: `Maia · ${memoryToolRunningLine(fn.name, parsed)}` }
-				const payload = executeMemoryTool(fn.name, parsed)
+				const payload = memoryToolSourceAls.run({ type: 'talk', messageTurn: reservedAssistantTurn }, () =>
+					executeMemoryTool(fn.name, parsed)
+				)
 				thread.push({
 					role: 'tool',
 					tool_call_id: tc.id,
