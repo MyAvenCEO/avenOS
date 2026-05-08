@@ -1,6 +1,6 @@
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import { TinfoilAI } from 'tinfoil'
-import type { AvenContextPreview } from '$lib/aven/context-preview'
+import type { AvenContextFull, AvenContextPreview } from '$lib/aven/context-preview'
 import { buildAvenChatRoundContext } from '$lib/aven/live-context'
 import { maiaAgent } from '$lib/aven/maia-agent'
 import {
@@ -8,13 +8,14 @@ import {
 	memoryToolDoneLine,
 	memoryToolPlanLine,
 	memoryToolRunningLine,
+	memoryToolTitlesLine,
 	memoryToolsOpenAI
 } from '$lib/memory/chat-tools'
 
 const MAX_TOOL_ROUNDS = maiaAgent.llm.maxToolRounds
 
 export type ChatStreamEvent =
-	| { type: 'context'; preview: AvenContextPreview }
+	| { type: 'context'; preview: AvenContextPreview; fullContext: AvenContextFull }
 	| { type: 'status'; detail: string }
 	| { type: 'done'; reply: string; model: string }
 	| { type: 'error'; message: string; status: number }
@@ -28,7 +29,7 @@ async function* streamAvenChatCore(
 	const client = new TinfoilAI({ apiKey })
 	await client.ready()
 
-	const { systemContent, preview } = buildAvenChatRoundContext(model, messages)
+	const { systemContent, preview, fullContext } = buildAvenChatRoundContext(model, messages)
 
 	const tools = memoryToolsOpenAI()
 	const thread: ChatCompletionMessageParam[] = [
@@ -38,15 +39,24 @@ async function* streamAvenChatCore(
 
 	yield {
 		type: 'context',
-		preview
+		preview,
+		fullContext
 	}
 
 	yield { type: 'status', detail: 'Maia · ready' }
 
+	let prevRoundToolNames: string[] = []
+
 	for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+		const thinkingDetail =
+			round === 0
+				? 'Maia · thinking…'
+				: prevRoundToolNames.length > 0
+					? `Maia · next · after ${memoryToolTitlesLine(prevRoundToolNames)}`
+					: 'Maia · thinking…'
 		yield {
 			type: 'status',
-			detail: round === 0 ? 'Maia · thinking…' : 'Maia · thinking after tools…'
+			detail: thinkingDetail
 		}
 
 		let completion: Awaited<ReturnType<TinfoilAI['chat']['completions']['create']>>
@@ -105,7 +115,8 @@ async function* streamAvenChatCore(
 				})
 				yield { type: 'status', detail: `Maia · ${memoryToolDoneLine(fn.name)}` }
 			}
-			yield { type: 'status', detail: 'Maia · back to reasoning…' }
+			prevRoundToolNames = names
+			yield { type: 'status', detail: 'Maia · next · reasoning…' }
 			continue
 		}
 

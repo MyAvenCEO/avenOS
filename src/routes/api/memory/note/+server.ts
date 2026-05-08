@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit'
+import { rebuildVaultGraph } from '$lib/memory/vault-graph.js'
 import { ensureVaultDir, readVaultNote, writeVaultNote } from '$lib/memory/vault.js'
 import type { RequestHandler } from './$types'
 
@@ -39,6 +40,7 @@ export const PUT: RequestHandler = async ({ request }) => {
 	try {
 		ensureVaultDir()
 		writeVaultNote(relPath, content)
+		rebuildVaultGraph()
 		return json({ ok: true as const, path: relPath })
 	} catch (e) {
 		const message = e instanceof Error ? e.message : String(e)

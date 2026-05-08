@@ -1,7 +1,6 @@
 /**
- * Rowboat-equivalent idea: inject a searchable table of paths + titles each turn
- * (see `.repos/rowboat/apps/x/packages/core/src/knowledge/note_creation.ts` —
- * `# Knowledge Base Index` / resolve entities against pre-built index before creating files).
+ * Markdown snapshot Maia sees each turn: every vault note as Path | Title so the model
+ * can resolve entities before creating new files (see `.data/agents/maia/RULES.md`).
  */
 
 export interface VaultNoteRow {
@@ -21,9 +20,7 @@ export function formatVaultSnapshotMarkdown(rows: VaultNoteRow[]): string {
 		md += `| ${p} | ${t} |\n`
 	}
 	md +=
-		'\n**Use this snapshot for entity resolution** (same discipline as Rowboat’s `knowledge_index`). '
-	md +=
-		'If a logical person/org already maps to one Path above, prefer **memory_edit** on THAT path — do not add a second file for synonyms (Sam vs Samuel).\n'
+		'\n**Use this snapshot for entity resolution**: if a person or org already maps to one Path above, prefer **memory_edit** on **that** path — do not add another file for synonyms (Sam vs Samuel).\n'
 
 	return md
 }

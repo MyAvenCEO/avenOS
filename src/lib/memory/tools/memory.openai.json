@@ -30,7 +30,7 @@
 		"type": "function",
 		"function": {
 			"name": "memory_edit",
-			"description": "PRIMARY update tool — replace ONE unique substring in an existing note (matches Rowboat workspace-edit semantics). Paths must appear in vault snapshot.",
+			"description": "PRIMARY update tool — replace ONE unique substring in an existing note (oldString must occur exactly once). Prefer for paths already listed in the injected vault snapshot.",
 			"parameters": {
 				"type": "object",
 				"additionalProperties": false,

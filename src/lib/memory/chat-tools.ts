@@ -1,3 +1,4 @@
+import { rebuildVaultGraph } from '$lib/memory/vault-graph'
 import {
 	editVaultNote,
 	ensureVaultDir,
@@ -12,6 +13,8 @@ export {
 	memoryToolPlanLine,
 	memoryToolRunningLine,
 	memoryToolsOpenAI,
+	memoryToolTitle,
+	memoryToolTitlesLine,
 	memoryVaultPathTail
 } from './chat-tools-core'
 
@@ -32,12 +35,14 @@ export function executeMemoryTool(name: string, args: Record<string, unknown>): 
 					String(args.oldString ?? ''),
 					String(args.newString ?? '')
 				)
+				rebuildVaultGraph()
 				return JSON.stringify({ ok: true, path: args.path ?? '' })
 			}
 			case 'memory_write_file': {
 				const p = String(args.path ?? '')
 				const content = String(args.content ?? '')
 				writeVaultNote(p, content)
+				rebuildVaultGraph()
 				return JSON.stringify({ ok: true, path: p, bytes: content.length })
 			}
 			case 'memory_search': {

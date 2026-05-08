@@ -35,6 +35,7 @@
 			"soul": "@.data/agents/maia/SOUL.md",
 			"rules": "@.data/agents/maia/RULES.md",
 			"vaultSnapshot": "@.data/knowledge (live index)",
+			"vaultGraph": "Link graph (derived)",
 			"tools": "@src/lib/memory/tools/memory.openai.json",
 			"transcript": "@.data/messages"
 		},

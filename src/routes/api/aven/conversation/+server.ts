@@ -15,10 +15,11 @@ function defaultChatModel(): string {
 export const GET: RequestHandler = () => {
 	const messages = readAvenConversation()
 	const model = defaultChatModel()
-	const { preview } = buildAvenChatRoundContext(model, messages)
+	const { preview, fullContext } = buildAvenChatRoundContext(model, messages)
 	return json({
 		ok: true as const,
 		messages,
-		contextPreview: preview
+		contextPreview: preview,
+		fullContext
 	})
 }

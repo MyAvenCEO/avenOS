@@ -28,6 +28,7 @@ export type AvenContextSection =
 	| { id: 'soul'; heading: string; bodyLines: readonly string[]; estimatedTokens: number }
 	| { id: 'rules'; heading: string; bodyLines: readonly string[]; estimatedTokens: number }
 	| { id: 'vault_snapshot'; heading: string; bodyLines: readonly string[]; estimatedTokens: number }
+	| { id: 'vault_graph'; heading: string; bodyLines: readonly string[]; estimatedTokens: number }
 	| {
 			id: 'transcript'
 			heading: string
@@ -44,10 +45,20 @@ export type AvenContextSection =
 export type AvenContextPreview = {
 	/** Effective chat model for this roundtrip. */
 	model: string
-	/** Rough sum of §1–5 (full system blob + transcript + tools JSON); aside lists tools above messages. */
+	/** Rough sum of full system blob + transcript + tools JSON (char ÷ 4 heuristic). */
 	totalEstimatedTokens: number
-	/** Talk aside visual order — not the API wire shape. Last block is always messages. */
+	/** Same order as Talk context inspector: soul → rules → vault → graph → tools → transcript. */
 	sections: AvenContextSection[]
+}
+
+/** Full text blobs the server sends to the API (for Talk UI inspector). */
+export type AvenContextFull = {
+	soulMarkdown: string
+	rulesMarkdown: string
+	vaultSnapshotMarkdown: string
+	vaultGraphMarkdown: string
+	toolsSchemaJson: string
+	messages: readonly { role: 'user' | 'assistant'; content: string }[]
 }
 
 function toolsSchemaJsonChars(): number {
@@ -68,14 +79,24 @@ export function buildAvenContextPreview(opts: {
 	messages: { role: 'user' | 'assistant'; content: string }[]
 	soulChars: number
 	instructionChars: number
+	vaultSnapshotChars: number
+	vaultGraphChars: number
 	fullSystemChars: number
 }): AvenContextPreview {
-	const { model, messages, soulChars, instructionChars, fullSystemChars } = opts
+	const {
+		model,
+		messages,
+		soulChars,
+		instructionChars,
+		vaultSnapshotChars,
+		vaultGraphChars,
+		fullSystemChars
+	} = opts
 
 	const soulTokens = roughTokenEstimateChars(soulChars)
 	const rulesTokens = roughTokenEstimateChars(instructionChars)
-	const vaultBundleChars = Math.max(0, fullSystemChars - soulChars - instructionChars)
-	const vaultBundleTokens = roughTokenEstimateChars(vaultBundleChars)
+	const vaultSnapshotTokens = roughTokenEstimateChars(vaultSnapshotChars)
+	const vaultGraphTokens = roughTokenEstimateChars(vaultGraphChars)
 
 	let transcriptChars = 0
 	for (const m of messages) {
@@ -106,7 +127,14 @@ export function buildAvenContextPreview(opts: {
 	const vaultSection: AvenContextSection = {
 		id: 'vault_snapshot',
 		heading: heads.vaultSnapshot,
-		estimatedTokens: vaultBundleTokens,
+		estimatedTokens: vaultSnapshotTokens,
+		bodyLines: []
+	}
+
+	const vaultGraphSection: AvenContextSection = {
+		id: 'vault_graph',
+		heading: heads.vaultGraph,
+		estimatedTokens: vaultGraphTokens,
 		bodyLines: []
 	}
 
@@ -129,11 +157,11 @@ export function buildAvenContextPreview(opts: {
 		}))
 	}
 
-	/** Aside order: identity → procedure → vault → tools → messages (last). */
 	const sections: AvenContextSection[] = [
 		soulSection,
 		rulesSection,
 		vaultSection,
+		vaultGraphSection,
 		toolsSection,
 		transcriptSection
 	]

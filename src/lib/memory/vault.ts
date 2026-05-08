@@ -117,7 +117,7 @@ export function writeVaultNote(relPosix: string, content: string): void {
 	fs.writeFileSync(full, content, 'utf8')
 }
 
-/** Replace one unique occurrence — Rowboat-style `workspace-edit` primitive. */
+/** Replace one unique substring in a file (fail if zero or multiple matches). */
 export function editVaultNote(relPosix: string, oldString: string, newString: string): void {
 	const posix = assertVaultRelativePath(relPosix)
 	if (!oldString) {
