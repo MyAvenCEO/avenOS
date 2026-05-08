@@ -15,7 +15,7 @@ Everything about the **vault owner** — identity and preferences — lives in *
 - **\`## Identity\`** — name, roles, how they want to be addressed
 - **\`## Preferences\`** — style, habits, timezone, likes, durable tastes
 
-Do **not** maintain **\`Topics/Preferences.md\`** for owner-scoped material; merge it into **\`Humans/OWNER_*.md\`** under the appropriate **\`##\`** sections with **\`memory_edit\`**.`
+Do **not** maintain **\`Concepts/Preferences.md\`** for owner-scoped material; merge it into **\`Humans/OWNER_*.md\`** under the appropriate **\`##\`** sections with **\`memory_edit\`**.`
 
 function envOwnerBasename(): string | null {
 	const v =

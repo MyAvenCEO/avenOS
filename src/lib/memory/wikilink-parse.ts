@@ -28,7 +28,7 @@ export type WikilinkResolution =
 
 /**
  * Resolve a wikilink to a vault-relative path.
- * 1) Exact path as written (e.g. `Humans/Samuel` or `Topics/X.md`).
+ * 1) Exact path as written (e.g. `Humans/Samuel` or `Concepts/X.md`).
  * 2) Otherwise unique basename match (`[[Samuel]]` → only `Humans/Samuel.md` if unique).
  * Matches Obsidian-style short links when filename is unique in the vault.
  */

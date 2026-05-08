@@ -28,7 +28,7 @@ All vault I/O resolves under **`/.data/knowledge/`** at the repo root (see below
 | **`.data/knowledge/`** | Canonical vault (`**/*.md`). Created on first use; **no default readme note** — only your Markdown files appear in the index. |
 | **`.data/agents/maia/messages/`** | **`conversation.json`** restores the rolling chat; **`mN.md`** logs each completed assistant turn (Maia agent–scoped). |
 
-**Folder convention:** **`Humans/`**, **`Sparks/`** (orgs + missions, visions, shared spaces, teams, companies, …), **`Projects/`**, **`Topics/`** — a soft schema; Aven does **not** require rigid templates in v1. Prefer **one canonical note per entity** (aliases in the body) and **edit-in-place** using **`memory_edit`** when the path already exists in the injected snapshot.
+**Folder convention:** **`Humans/`**, **`Sparks/`** (orgs + missions, visions, shared spaces, teams, companies, …), **`Projects/`**, **`Concepts/`** — a soft schema; Aven does **not** require rigid templates in v1. Prefer **one canonical note per entity** (aliases in the body) and **edit-in-place** using **`memory_edit`** when the path already exists in the injected snapshot.
 
 **Runtime:** Paths are gated server-side (**no `..`**, resolved under vault root). **Local filesystem** implies: run **`bun dev`** from repo root so `process.cwd()` points at AvenOS.
 

@@ -16,9 +16,9 @@ version: '2'
 | Folder | Put here |
 |--------|----------|
 | **`Humans/`** | Individuals — **one canonical note per human**. Use **`Humans/OWNER_<slug>.md`** for the **vault owner** (injected **before** this file as **Vault owner** context). Others: **`Humans/GivenName.md`**. |
-| **`Sparks/`** | Same class as “organizations”: **companies, teams, institutions, groups**, plus **missions, visions, shared spaces** — any coordinated collective (not one human, not only a topic). |
+| **`Sparks/`** | Same class as “organizations”: **companies, teams, institutions, groups**, plus **missions, visions, shared spaces** — any coordinated collective (not one human, not merely a **Concepts/** note). |
 | **`Projects/`** | Initiatives, deals, ongoing work streams. |
-| **`Topics/`** | Concepts and subject matter. **Do not** use **`Topics/Preferences.md`** for vault-owner prefs; put those under **`## Preferences`** on **`Humans/OWNER_*.md`**. |
+| **`Concepts/`** | Cross-cutting themes and subject matter (models, frameworks, ideas). **Do not** use **`Concepts/Preferences.md`** for vault-owner prefs; put those under **`## Preferences`** on **`Humans/OWNER_*.md`**. |
 
 **Extra top-level folders** — You may add roots when they clearly help (e.g. `Areas/`, `Resources/`, `Archive/`, `Research/`). Use a **stable, obvious** name; do not put the same real-world entity in two parallel folders. If a note fits one of the four canonical types, **prefer that folder** over inventing a duplicate bucket.
 

@@ -113,11 +113,6 @@ function openDetailsTargetFromHash() {
 		})
 	}
 
-	if (id === 'ctx-actor-config') {
-		closeAllAccordions()
-		return
-	}
-
 	if (id === 'ctx-transcript') {
 		closeAllAccordions()
 		return
@@ -294,39 +289,45 @@ async function send() {
 				class="min-h-0 flex-1 space-y-4 overflow-y-auto scroll-pb-40 pr-1 max-lg:min-h-[46vh] pb-36 sm:scroll-mt-2"
 				onscroll={onTalkContextScroll}
 			>
-				<section
+				<details
+					name="talk-ctx"
 					id="ctx-actor-config"
-					class="scroll-mt-12 rounded-2xl border border-border/70 bg-white/10 p-4 sm:p-5"
+					class="talk-ctx-disclosure scroll-mt-12 rounded-2xl border border-border/70 bg-white/10 p-4 sm:p-5"
 					aria-labelledby="ctx-actor-config-h"
 				>
-					<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border/35 pb-3">
-						<div class="min-w-0">
-							<h2
-								id="ctx-actor-config-h"
-								class="tech-label block border-0 pb-0 normal-case !text-[11px] opacity-90"
+					<summary
+						class="tech-label cursor-pointer list-none border-b border-border/35 pb-2 normal-case !text-[11px] [&::-webkit-details-marker]:hidden"
+					>
+						<span class="flex items-start gap-2">
+							<span class="talk-ctx-chevron mt-0.5 shrink-0 text-[10px] opacity-45" aria-hidden="true"
+								>▸</span
 							>
-								Actor · <span class="font-mono">maia.agent.json</span>
-							</h2>
-							<p class="mt-1 font-mono text-[10px] leading-snug opacity-55">
-								{maiaAgent.id} · v{maiaAgent.version}
-							</p>
-							{#if contextPreview}
-								<p class="mt-1 font-mono text-[10px] leading-snug opacity-45">
-									model · {contextPreview.model}
+							<span class="min-w-0 flex-1">
+								<span id="ctx-actor-config-h" class="block opacity-90">
+									Actor · <span class="font-mono">maia.agent.json</span>
+								</span>
+								<p class="mt-1 font-mono text-[10px] leading-snug opacity-55">
+									{maiaAgent.id} · v{maiaAgent.version}
 								</p>
-								<p
-									class="mt-0.5 font-mono text-[9px] tabular-nums opacity-40"
-									title="Rough char÷4 sum: system + transcript user/assistant text + tools JSON."
-								>
-									Σ ≈ ~{contextPreview.totalEstimatedTokens.toLocaleString()} tok
-								</p>
-							{/if}
-						</div>
-						<span
-							class="rounded-full border border-border/50 px-2 py-0.5 text-[10px] font-semibold opacity-80"
-							>{maiaAgent.name}</span
-						>
-					</div>
+								{#if contextPreview}
+									<p class="mt-1 font-mono text-[10px] leading-snug opacity-45">
+										model · {contextPreview.model}
+									</p>
+									<p
+										class="mt-0.5 font-mono text-[9px] tabular-nums opacity-40"
+										title="Rough char÷4 sum: system + transcript user/assistant text + tools JSON."
+									>
+										Σ ≈ ~{contextPreview.totalEstimatedTokens.toLocaleString()} tok
+									</p>
+								{/if}
+							</span>
+							<span
+								class="shrink-0 rounded-full border border-border/50 px-2 py-0.5 text-[10px] font-semibold opacity-80"
+								>{maiaAgent.name}</span
+							>
+						</span>
+					</summary>
+					<div>
 					<dl class="mt-3 grid gap-2 text-[11px] leading-snug sm:grid-cols-2">
 						<div class="rounded-xl border border-border/40 bg-white/6 px-3 py-2">
 							<dt class="tech-label mb-1 opacity-50">LLM provider</dt>
@@ -428,7 +429,8 @@ async function send() {
 							class="mt-2 max-h-[min(50vh,20rem)] overflow-auto whitespace-pre-wrap border-t border-border/30 pt-2 font-mono text-[9px] leading-relaxed text-foreground/88 sm:text-[10px]"
 						>{JSON.stringify(maiaAgent, null, 2)}</pre>
 					</details>
-				</section>
+					</div>
+				</details>
 
 				{#if bootingConversation}
 					<p class="text-sm opacity-35 leading-relaxed">Loading conversation and context…</p>
