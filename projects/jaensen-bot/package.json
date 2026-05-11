@@ -1,20 +1,21 @@
 {
-  "name": "jaensen-bot",
-  "version": "1.0.0",
-  "description": "Getting started Flue bot",
-  "type": "module",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@flue/sdk": "^0.5.1",
-    "valibot": "^1.4.0"
-  },
-  "devDependencies": {
-    "@flue/cli": "^0.5.1"
-  }
+	"name": "@avenos/jaensen-bot",
+	"private": true,
+	"version": "1.0.0",
+	"description": "Flue agent bot (experimental)",
+	"type": "module",
+	"scripts": {
+		"dev": "bunx @flue/cli dev --target node --env ../../.env",
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"dependencies": {
+		"@flue/sdk": "^0.5.1",
+		"valibot": "^1.4.0"
+	},
+	"devDependencies": {
+		"@flue/cli": "^0.5.1"
+	}
 }

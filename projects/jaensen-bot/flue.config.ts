@@ -1,5 +1,5 @@
-import { defineConfig } from '@flue/sdk/config';
+import { defineConfig } from '@flue/sdk/config'
 
 export default defineConfig({
-  target: 'node',
-});
+	target: 'node'
+})

@@ -10,6 +10,7 @@
 		"dev": "bun run dev:aven-ceo",
 		"dev:aven-ceo": "bun --filter @avenos/aven-ceo dev",
 		"dev:ocr-example": "bun --filter @avenos/ocr-example dev",
+		"dev:jaensen-bot": "bun --filter @avenos/jaensen-bot dev",
 		"test:mail": "bun --filter @avenos/mail test",
 		"test:self": "bun --filter @avenos/self test",
 		"build": "bun --filter @avenos/aven-ceo build",
