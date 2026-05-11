@@ -3,6 +3,11 @@ import type { DispatcherRoutingDecision, JaensenInput, RuntimeDependencies } fro
 import type { IntentRecord } from '../storage/types.js'
 
 export async function routeInputToIntents(input: JaensenInput, activeIntents: IntentRecord[], generate: (prompt: string) => Promise<string>): Promise<DispatcherRoutingDecision> {
+	const pinnedIntentId = typeof input.metadata?.intentId === 'string' ? input.metadata.intentId : undefined
+	if (pinnedIntentId) {
+		console.log('[jaensen] dispatcher:pinned-intent', { intentId: pinnedIntentId })
+		return { relevantIntentIds: [pinnedIntentId] }
+	}
 	const prompt = `DISPATCHER_ROUTING_DECISION\nReturn strict JSON with shape {"relevantIntentIds": string[], "createIntent": {"title": string, "summary": string} | null}.\nIdentify which existing intents this belongs to. If none, propose a new intent.\n\nActive intents:\n${JSON.stringify(activeIntents, null, 2)}\n\nInput:\n${JSON.stringify(input, null, 2)}`
 	const raw = await generate(prompt)
 	console.log('[jaensen] dispatcher:raw-output', raw.slice(0, 500))

@@ -20,9 +20,11 @@ export function normalizeWebhookPayload(payload: unknown): JaensenInput {
 function normalizeAttachment(value: unknown): JaensenInput['attachment'] {
 	if (!value || typeof value !== 'object') return undefined
 	const attachment = value as Record<string, unknown>
+	const archiveKey = asOptionalString(attachment.archiveKey) ?? asOptionalString(attachment.key)
 	const base64 = asOptionalString(attachment.base64) ?? asOptionalString(attachment.content)
-	if (!base64) return undefined
+	if (!base64 && !archiveKey) return undefined
 	return {
+		archiveKey,
 		name: asOptionalString(attachment.name) ?? asOptionalString(attachment.filename),
 		contentType: asOptionalString(attachment.contentType),
 		base64

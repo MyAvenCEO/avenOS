@@ -5,10 +5,21 @@ import type { RuntimeDependencies } from '../types.js'
 import type { JaensenInput } from '../types.js'
 import type { IntentRecord } from '../../storage/types.js'
 
-export async function runIngestSkill(input: JaensenInput, intent: IntentRecord, action: Extract<SkillAction, { skill: 'ingest' }>, deps: RuntimeDependencies): Promise<SkillResult> {
-	const worker = await runWorkerTask({ sandboxFactory: deps.sandboxFactory, intent, skill: 'ingest', workerType: action.operation, skillDoc: deps.skillDocs.ingest, task: action.input })
+export async function runIngestSkill(input: JaensenInput, intent: IntentRecord, action: SkillAction, deps: RuntimeDependencies): Promise<SkillResult> {
+	const skillDoc = deps.skillRegistry.ingest?.doc
+	if (!skillDoc) return { skill: 'ingest', ok: false, summary: 'Ingest skill is not registered' }
+	const worker = await runWorkerTask({ sandboxFactory: deps.sandboxFactory, intent, skill: 'ingest', workerType: action.operation, skillDoc, task: action.input })
 	if (action.operation === 'archive-attachment') {
 		if (!input.attachment) return { skill: 'ingest', ok: false, summary: 'No attachment available' }
+		if (input.attachment.archiveKey) {
+			return {
+				skill: 'ingest',
+				ok: worker.exitCode === 0,
+				summary: 'Attachment already archived',
+				data: { key: input.attachment.archiveKey, worker, name: input.attachment.name }
+			}
+		}
+		if (!input.attachment.base64) return { skill: 'ingest', ok: false, summary: 'No attachment content available' }
 		const content = Buffer.from(input.attachment.base64, 'base64')
 		const result = await deps.storage.archive.put({ content, contentType: input.attachment.contentType, metadata: { name: input.attachment.name } })
 		return { skill: 'ingest', ok: worker.exitCode === 0, summary: 'Archived attachment', data: { key: result.key, worker } }

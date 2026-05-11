@@ -59,6 +59,16 @@ function summarizeIntentDecision(data: Record<string, unknown>): { title: string
 }
 
 function mapActivityItem(intent: IntentRecord, event: IntentRecord['events'][number], index: number): ActivityItem {
+	if (event.type === 'response_ready') {
+		return {
+			id: `${intent.id}-activity-${index}`,
+			at: new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+			kind: 'orchestrator',
+			title: 'Jaensen prepared a reply for the owner',
+			detail: typeof event.data.reply === 'string' ? event.data.reply : stringifyContribution(event.data)
+		}
+	}
+
 	if (event.source === 'skill') {
 		const skillId = typeof event.data.skill === 'string' ? event.data.skill : 'skill'
 		return {
@@ -121,9 +131,9 @@ function mapActivity(intent: IntentRecord): ActivityItem[] {
 }
 
 function mapHitl(intent: IntentRecord): HitlTodo[] {
-	if (!intent.humanLoop?.needed) return []
-	return [
-		{
+	const todos: HitlTodo[] = []
+	if (intent.humanLoop?.needed) {
+		todos.push({
 			id: `${intent.id}-human-loop`,
 			intentId: intent.id,
 			title: intent.humanLoop.reason || 'Human review required',
@@ -131,8 +141,25 @@ function mapHitl(intent: IntentRecord): HitlTodo[] {
 			createdAt: intent.updatedAt,
 			type: 'approve_reject',
 			summary: intent.humanLoop.message || intent.summary
-		}
-	]
+		})
+	}
+
+	const latestResponse = [...intent.events].reverse().find((event) => event.type === 'response_ready')
+	if (latestResponse && intent.status !== 'resolved') {
+		const reply = typeof latestResponse.data.reply === 'string' ? latestResponse.data.reply.trim() : ''
+		todos.push({
+			id: `${intent.id}-owner-follow-up`,
+			intentId: intent.id,
+			title: 'Reply to Jaensen',
+			status: 'open',
+			createdAt: latestResponse.timestamp,
+			type: 'text_reply',
+			question: reply || intent.summary,
+			placeholder: 'Tell Jaensen the next step…'
+		})
+	}
+
+	return todos
 }
 
 function mapSkills(intent: IntentRecord): IntentSkillBinding[] {

@@ -11,8 +11,8 @@
 	"scripts": {
 		"dev": "bunx @flue/cli dev --target node --env ../../.env",
 		"build": "tsc",
-		"test": "bunx tsx .flue/test.ts",
-		"test:watch": "bunx tsx watch .flue/test.ts"
+		"test": "bun .flue/test.ts",
+		"test:watch": "bun --watch .flue/test.ts"
 	},
 	"keywords": ["flue", "agent", "llm", "triage"],
 	"author": "",

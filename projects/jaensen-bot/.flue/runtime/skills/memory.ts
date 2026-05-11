@@ -3,14 +3,16 @@ import type { IntentRecord } from '../../storage/types.js'
 import type { SkillAction, SkillResult } from '../types.js'
 import type { RuntimeDependencies } from '../types.js'
 
-export async function runMemorySkill(intent: IntentRecord, action: Extract<SkillAction, { skill: 'memory' }>, deps: RuntimeDependencies): Promise<SkillResult> {
+export async function runMemorySkill(intent: IntentRecord, action: SkillAction, deps: RuntimeDependencies): Promise<SkillResult> {
 	const input = action.input && typeof action.input === 'object' ? action.input : {}
+	const skillDoc = deps.skillRegistry.memory?.doc
+	if (!skillDoc) return { skill: 'memory', ok: false, summary: 'Memory skill is not registered' }
 	const worker = await runWorkerTask({
 		sandboxFactory: deps.sandboxFactory,
 		intent,
 		skill: 'memory',
 		workerType: action.operation,
-		skillDoc: deps.skillDocs.memory,
+		skillDoc,
 		task: input
 	})
 	if (action.operation === 'remember') {

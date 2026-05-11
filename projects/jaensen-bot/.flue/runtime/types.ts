@@ -7,9 +7,10 @@ export interface JaensenInput {
 	subject?: string
 	metadata?: Record<string, unknown>
 	attachment?: {
+		archiveKey?: string
 		name?: string
 		contentType?: string
-		base64: string
+		base64?: string
 	}
 }
 
@@ -18,10 +19,21 @@ export interface DispatcherRoutingDecision {
 	createIntent?: { title: string; summary: string }
 }
 
-export type SkillAction =
-	| { skill: 'memory'; operation: 'remember' | 'recall' | 'search'; input: Record<string, unknown> }
-	| { skill: 'ingest'; operation: 'archive-url' | 'archive-attachment'; input: Record<string, unknown> }
-	| { skill: 'extract'; operation: 'extract-text' | 'extract-entities'; input: Record<string, unknown> }
+export interface RegisteredSkill {
+	id: string
+	description?: string
+	doc: string
+	operations: string[]
+	runtimeSupported: boolean
+}
+
+export type SkillRegistry = Record<string, RegisteredSkill>
+
+export interface SkillAction {
+	skill: string
+	operation: string
+	input: Record<string, unknown>
+}
 
 export interface IntentDecision {
 	summary: string
@@ -33,7 +45,7 @@ export interface IntentDecision {
 }
 
 export interface SkillResult {
-	skill: 'memory' | 'ingest' | 'extract'
+	skill: string
 	ok: boolean
 	summary: string
 	data?: Record<string, unknown>
@@ -44,7 +56,7 @@ export interface RuntimeDependencies {
 	sandboxFactory: SandboxFactory
 	generate: (prompt: string) => Promise<string>
 	now?: Date
-	skillDocs: Record<'memory' | 'ingest' | 'extract', string>
+	skillRegistry: SkillRegistry
 }
 
 export interface RunResult {

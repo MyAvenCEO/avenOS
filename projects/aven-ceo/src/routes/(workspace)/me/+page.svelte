@@ -29,6 +29,14 @@ async function refreshIntents() {
 	if (!selectedId) selectedId = intents[0]?.id ?? null
 }
 
+function upsertIntent(next: IntentOrchestrator) {
+	const existing = intents.findIndex((intent) => intent.id === next.id)
+	if (existing >= 0) intents[existing] = next
+	else intents = [next, ...intents]
+	selectedId = next.id
+	intents = [...intents]
+}
+
 $effect(() => {
 	void refreshIntents()
 	return undefined
@@ -127,7 +135,45 @@ function handleResolveHitl(
 		| { kind: 'choice'; optionId: string }
 		| { kind: 'approve_reject'; approved: boolean }
 ) {
-	console.info('TODO resolve Jaensen HITL', todoId, payload)
+	const intent = selectedIntent
+	if (!intent) return
+	busy = true
+	error = null
+	void (async () => {
+		try {
+			let message = ''
+			if (payload.kind === 'text_reply') message = payload.text.trim()
+			else if (payload.kind === 'choice') message = `Choice selected: ${payload.optionId}`
+			else message = payload.approved ? 'Approved.' : 'Rejected.'
+			if (!message) throw new Error('Response cannot be empty')
+
+			const res = await fetch('/api/aven/jaensen/chat', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					message,
+					from: 'owner@aven.ceo',
+					metadata: {
+						intentId: intent.id,
+						hitlTodoId: todoId,
+						hitlKind: payload.kind
+					}
+				})
+			})
+			const data = (await res.json()) as {
+				ok: boolean
+				reply?: string
+				intent?: IntentOrchestrator
+				error?: string
+			}
+			if (!data.ok || !data.intent) throw new Error(data.error ?? 'Failed to send response to Jaensen')
+			upsertIntent(data.intent)
+		} catch (err) {
+			error = err instanceof Error ? err.message : String(err)
+		} finally {
+			busy = false
+		}
+	})()
 }
 
 function handleDemoHitl() {

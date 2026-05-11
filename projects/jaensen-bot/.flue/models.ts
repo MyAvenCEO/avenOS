@@ -12,14 +12,26 @@ export interface ModelConfig {
 	reasoning?: boolean
 }
 
+const DEFAULT_TINFOIL_BASE_URL = 'https://api.tinfoil.ai/v1'
+const DEFAULT_OPENAI_COMPAT_BASE_URL = 'http://box:8000/v1'
+
 export const models: Record<string, ModelConfig> = {
+	'tinfoil-glm-5-1': {
+		provider: 'tinfoil',
+		modelId: 'glm-5-1',
+		api: 'openai-completions',
+		baseUrl: process.env.JAENSEN_TINFOIL_BASE_URL || DEFAULT_TINFOIL_BASE_URL,
+		apiKey: process.env.JAENSEN_TINFOIL_API_KEY || '',
+		reasoning: true
+	},
+
 	// Local models (e.g., via local LLM server)
 	'minimax-m2.7-nvfp4': {
 		provider: 'minimax',
 		modelId: 'minimax-m2.7-nvfp4',
 		api: 'openai-completions',
-		baseUrl: process.env.OPENAI_BASE_URL || 'http://box:8000/v1',
-		apiKey: process.env.OPENAI_API_KEY || 'local',
+		baseUrl: process.env.JAENSEN_OPENAI_BASE_URL || DEFAULT_OPENAI_COMPAT_BASE_URL,
+		apiKey: process.env.JAENSEN_OPENAI_API_KEY || 'local',
 		reasoning: true
 	}
 
@@ -48,4 +60,53 @@ export function getModel(modelKey: string): ModelConfig | undefined {
 
 export function getAllModels(): ModelConfig[] {
 	return Object.values(models)
+}
+
+export function resolveActiveModelConfig(): { modelKey: string; modelConfig: ModelConfig } {
+	const explicitModelKey = process.env.JAENSEN_MODEL?.trim()
+	const hasTinfoil = Boolean(process.env.JAENSEN_TINFOIL_API_KEY?.trim())
+	const hasOpenAiCompat = Boolean(process.env.JAENSEN_OPENAI_BASE_URL?.trim() || process.env.JAENSEN_OPENAI_API_KEY?.trim())
+
+	if (hasTinfoil && hasOpenAiCompat) {
+		throw new Error(
+			'Jaensen provider configuration is ambiguous. Configure exactly one provider prefix: JAENSEN_TINFOIL_* or JAENSEN_OPENAI_*.'
+		)
+	}
+
+	const inferredModelKey = hasTinfoil ? 'tinfoil-glm-5-1' : 'minimax-m2.7-nvfp4'
+	const modelKey = explicitModelKey || inferredModelKey
+	const modelConfig = getModel(modelKey)
+
+	if (!modelConfig) {
+		throw new Error(`Model "${modelKey}" not found in model registry.`)
+	}
+
+	if (modelConfig.provider === 'tinfoil') {
+		if (!process.env.JAENSEN_TINFOIL_API_KEY?.trim()) {
+			throw new Error('Jaensen Tinfoil configuration requires JAENSEN_TINFOIL_API_KEY.')
+		}
+		return {
+			modelKey,
+			modelConfig: {
+				...modelConfig,
+				modelId: process.env.JAENSEN_TINFOIL_MODEL?.trim() || modelConfig.modelId,
+				baseUrl: process.env.JAENSEN_TINFOIL_BASE_URL?.trim() || modelConfig.baseUrl,
+				apiKey: process.env.JAENSEN_TINFOIL_API_KEY.trim()
+			}
+		}
+	}
+
+	if (modelConfig.provider === 'minimax') {
+		return {
+			modelKey,
+			modelConfig: {
+				...modelConfig,
+				modelId: process.env.JAENSEN_OPENAI_MODEL?.trim() || modelConfig.modelId,
+				baseUrl: process.env.JAENSEN_OPENAI_BASE_URL?.trim() || modelConfig.baseUrl,
+				apiKey: process.env.JAENSEN_OPENAI_API_KEY?.trim() || modelConfig.apiKey
+			}
+		}
+	}
+
+	return { modelKey, modelConfig }
 }

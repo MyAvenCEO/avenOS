@@ -8,6 +8,8 @@ export async function runWorkerTask(args: {
 	workerType: string
 	skillDoc: string
 	task: Record<string, unknown>
+	files?: Array<{ path: string; content: string | Uint8Array }>
+	command?: string
 }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
 	const sandbox = await args.sandboxFactory.createSandbox({
 		skill: args.skill,
@@ -17,5 +19,6 @@ export async function runWorkerTask(args: {
 	await sandbox.writeFile('SKILL.md', args.skillDoc)
 	await sandbox.writeFile('intent.json', JSON.stringify(args.intent, null, 2))
 	await sandbox.writeFile('task.json', JSON.stringify(args.task, null, 2))
-	return sandbox.run(`cat SKILL.md >/dev/null && cat intent.json >/dev/null && cat task.json >/dev/null && echo worker:${args.skill}:${args.workerType}`)
+	for (const file of args.files ?? []) await sandbox.writeFile(file.path, file.content)
+	return sandbox.run(args.command ?? `cat SKILL.md >/dev/null && cat intent.json >/dev/null && cat task.json >/dev/null && echo worker:${args.skill}:${args.workerType}`)
 }

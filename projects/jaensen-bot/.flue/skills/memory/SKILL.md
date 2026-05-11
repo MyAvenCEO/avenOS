@@ -5,7 +5,7 @@ description: Long-term memory storage and retrieval for facts, entities, and kno
 
 # Memory Skill
 
-This skill manages long-term memory storage. Memory is organized into **threads** (topic-based files) that accumulate knowledge over time.
+This skill manages long-term memory storage. In the current implementation, memory is organized into topic-based markdown files under `.flue/memory/`.
 
 ## When to Use Memory
 
@@ -14,59 +14,55 @@ This skill manages long-term memory storage. Memory is organized into **threads*
 - Querying accumulated knowledge
 - Maintaining audit trails
 
-## Memory Worker Lifecycle
+## Current Runtime Reality
 
-### Long-Running Pattern
-Memory workers are **long-running**. Each worker manages one thread (markdown file) and persists across multiple tasks.
-
-### Spawning Rules
-1. **New topic detected**: Spawn worker with topic specialty (e.g., "thread:people")
-2. **Existing topic**: Route to existing worker for that thread
-3. **Query without matching worker**: Spawn new worker to search across all threads
-
-### Specialty Naming
-- `thread:<topic>` - e.g., `thread:people`, `thread:companies`, `thread:events`
-- `search` - special specialty for queries that span multiple threads
+- Memory workers are **short-lived task executions** in a sandbox.
+- There is **no persistent worker pool** yet.
+- The actual durable state lives in storage, not in a long-running worker process.
+- Supported operations are:
+  - `remember`
+  - `recall`
+  - `search`
 
 ## Worker Capabilities
 
-### `memory_read(query)`
-Reads memory and returns matching content.
+### `remember`
+Append a note to a topic.
 
 **Input:**
-- `query`: Search string or topic
+- `topic?`: Topic name. Falls back to the current intent title.
+- `note?`: Note content. Falls back to `content` or the current intent summary.
 
 **Output:**
-- Matching entries from relevant threads
-- Source thread information
+- Confirmation that the note was stored
+- The topic name
 
-### `memory_write(content, topic?)`
-Writes content to memory.
+### `recall`
+Read a topic file from memory.
 
 **Input:**
-- `content`: The knowledge to store (markdown formatted)
-- `topic`: Optional topic hint (e.g., "people", "companies")
+- `topic?`: Topic name. Falls back to the current intent title.
 
 **Output:**
-- Confirmation with thread path
+- Topic content, if found
 
-### `memory_search(entity)`
-Cross-thread search for an entity.
+### `search`
+Search memory files for matching content.
 
 **Input:**
-- `entity`: Name or identifier to search
+- `query?`: Search query. Falls back to the current intent title.
 
 **Output:**
-- All mentions across threads
+- Matching snippets from stored memory topics
 
-## Thread Management
+## Storage Layout
 
 ### Thread File Location
 ```
 .flue/memory/<topic>.md
 ```
 
-### Thread Format
+### Topic Format
 ```markdown
 ---
 thread: <topic>
@@ -82,44 +78,8 @@ Content of the entry...
 More content...
 ```
 
-### Thread Naming Conventions
-| Topic | File | Examples |
-|-------|------|----------|
-| People | people.md | Alice, Bob Smith |
-| Companies | companies.md | Acme Corp, Apple Inc |
-| Events | events.md | Meetings, Decisions |
-| Projects | projects.md | Project Alpha, Initiative X |
-| Decisions | decisions.md | Strategic choices |
-| Audit | audit.md | System events, changes |
+## Notes
 
-## Injected Context
-
-The Memory Skill Agent provides:
-- Active thread workers (per specialty)
-- Entry counts per thread
-- Last activity timestamps
-- Search results across threads
-
-## Routing Logic
-
-### Task: "store fact about X"
-1. Analyze X to determine topic (person → people, company → companies)
-2. Check if matching worker exists for that topic
-3. If yes: route to existing worker
-4. If no: spawn new worker for topic, then route
-
-### Task: "what do you know about X"
-1. Spawn search worker with entity X
-2. Search across all thread files
-3. Aggregate and return results
-
-### Task: "remember this decision"
-1. Route to "decisions" thread worker
-2. If no worker exists, spawn one
-3. Store with timestamp and context
-
-## Max Workers
-Default: 10 (one per major topic area)
-
-## Direct Calls Not allowed
-Memory workers can not be called directly by other skills (Ingest, Extract) without going through the Skill Agent.
+- Search is keyword-based and intentionally simple.
+- There is currently no entity-specific indexing, worker specialty routing, or long-running memory agent.
+- This skill is invoked only when selected by the intent.
