@@ -121,5 +121,5 @@ The Memory Skill Agent provides:
 ## Max Workers
 Default: 10 (one per major topic area)
 
-## Direct Calls Allowed
-Memory workers can be called directly by other skills (Ingest, Extract) without going through the Skill Agent.
+## Direct Calls Not allowed
+Memory workers can not be called directly by other skills (Ingest, Extract) without going through the Skill Agent.

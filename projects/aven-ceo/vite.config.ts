@@ -1,7 +1,12 @@
 import { sveltekit } from '@sveltejs/kit/vite'
 import tailwindcss from '@tailwindcss/vite'
 import { jazzSvelteKit } from 'jazz-tools/dev/sveltekit'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createLogger, defineConfig } from 'vite'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 /** jazz-tools ships sourcemaps that reference unpublished paths; Vite logs those via warnOnce. */
 function silenceJazzBrokenSourcemaps(msg: unknown): boolean {
@@ -27,6 +32,11 @@ logger.warnOnce = (msg, options) => {
 
 export default defineConfig({
 	customLogger: logger,
+	resolve: {
+		alias: {
+			'@avenos/jaensen-bot': path.resolve(__dirname, '../jaensen-bot/index.ts')
+		}
+	},
 	plugins: [
 		// Must run before sveltekit so PUBLIC_JAZZ_* from the dev runtime are visible to SvelteKit.
 		jazzSvelteKit({

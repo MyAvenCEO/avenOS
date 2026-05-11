@@ -3,9 +3,10 @@
 		"target": "ES2024",
 		"module": "ESNext",
 		"moduleResolution": "Bundler",
+		"types": ["node"],
 		"strict": true,
 		"skipLibCheck": true
 	},
-	"include": [".flue/**/*.ts"],
+	"include": ["app.ts", "index.ts", ".flue/**/*.ts"],
 	"exclude": ["dist"]
 }

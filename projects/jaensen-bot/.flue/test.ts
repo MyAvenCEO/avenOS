@@ -1,105 +1,78 @@
-// Integration test for Jaensen architecture
-// Run with: npx tsx .flue/test.ts
-
-import { JaensenDispatcher } from './agents/dispatcher.js';
-import { MemorySkillAgent } from './agents/memory.js';
-import { mkdir, rm } from 'fs/promises';
-import { join } from 'path';
+import { rm } from 'fs/promises'
+import { createMemoryStorage, loadSkillDocs, MockSandboxFactory, runJaensenTurn } from './jaensen.js'
 
 async function runTests() {
-  console.log('🧪 Testing Jaensen Architecture\n');
+	console.log('🧪 Testing lean Jaensen bot\n')
 
-  // Setup
-  const testDir = '/tmp/jaensen-test';
-  await mkdir(testDir, { recursive: true });
-  
-  const memoryPath = join(testDir, 'memory');
-  const archivePath = join(testDir, 'archive');
-  await mkdir(memoryPath, { recursive: true });
-  await mkdir(archivePath, { recursive: true });
+	const testDir = '/tmp/jaensen-test'
+	await rm(testDir, { recursive: true, force: true })
+	const storage = createMemoryStorage()
+	const skillDocs = await loadSkillDocs('/home/daniel/src/oMaiaCity/AvenOS/projects/jaensen-bot')
 
-  // Initialize dispatcher
-  const dispatcher = new JaensenDispatcher({
-    memoryPath,
-    archivePath,
-  });
-  
-  await dispatcher.initialize();
-  console.log('✅ Dispatcher initialized\n');
+	const prompts: string[] = []
+	const result = await runJaensenTurn(
+		{
+			from: 'customer@client.com',
+			message:
+				'Customer says order #12345 is delayed. Please remember the case and review https://example.com/orders/12345.'
+		},
+		{
+			storage,
+			sandboxFactory: new MockSandboxFactory(() => ({ stdout: 'ok', exitCode: 0 })),
+			skillDocs,
+			generate: async (prompt) => {
+				prompts.push(prompt)
+				if (prompt.includes('DISPATCHER_ROUTING_DECISION')) {
+					return JSON.stringify({
+						relevantIntentIds: [],
+						createIntent: {
+							title: 'Order #12345 support case',
+							summary: 'Customer asked about a delayed shipment for order #12345.'
+						}
+					})
+				}
+				if (prompt.includes('INTENT_DECISION')) {
+					return JSON.stringify({
+						summary: 'Customer asked about a delayed shipment for order #12345.',
+						status: 'pending',
+						replyDraft: 'I will review the order and keep track of the case.',
+						contextUpdates: { orderId: '12345' },
+						actions: [
+							{
+								skill: 'memory',
+								operation: 'remember',
+								input: { topic: 'Order #12345 support case', note: 'Customer reported a delayed shipment for order #12345.' }
+							}
+						],
+						humanLoop: {
+							needed: true,
+							reason: 'shipment delayed',
+							message: 'Human follow-up may be needed if the shipment remains delayed.'
+						}
+					})
+				}
 
-  // Test 1: Memory skill
-  console.log('--- Test 1: Memory Skill ---');
-  const memoryAgent = new MemorySkillAgent(memoryPath);
-  await memoryAgent.initialize();
-  
-  // Write to memory
-  const writeResult = await memoryAgent.executeTask({
-    action: 'write',
-    params: {
-      content: 'Alice works at Acme Corp as CEO. Founded in 2020.',
-      topic: 'people',
-    },
-  });
-  console.log('Write result:', writeResult.success ? '✅' : '❌', writeResult);
-  
-  // Read from memory
-  const readResult = await memoryAgent.executeTask({
-    action: 'read',
-    params: { topic: 'people' },
-  });
-  console.log('Read result:', readResult.success ? '✅' : '❌', {
-    thread: readResult.thread,
-    entryCount: (readResult.result as any)?.entryCount,
-  });
-  
-  // Search memory
-  const searchResult = await memoryAgent.executeTask({
-    action: 'search',
-    params: { entity: 'Alice' },
-  });
-  console.log('Search result:', searchResult.success ? '✅' : '❌', {
-    totalMatches: (searchResult.result as any)?.totalMatches,
-  });
+				return JSON.stringify({
+					reply:
+						'I have logged the delayed-shipment case for order #12345 and noted that human follow-up may be needed.'
+				})
+			}
+		}
+	)
 
-  // Test 2: Dispatcher routing
-  console.log('\n--- Test 2: Dispatcher Routing ---');
-  
-  // Route a memory query
-  const routeResult1 = await dispatcher.routeMessage({
-    id: 'test-1',
-    type: 'task',
-    from: 'user',
-    payload: 'memory: search: Alice',
-    timestamp: new Date(),
-  });
-  console.log('Memory routing:', routeResult1.success ? '✅' : '❌');
-  
-  // Route an ingest (will fail without real URL, but routing should work)
-  const routeResult2 = await dispatcher.routeMessage({
-    id: 'test-2',
-    type: 'task',
-    from: 'user',
-    payload: 'ingest: https://example.com/test.pdf',
-    timestamp: new Date(),
-  });
-  console.log('Ingest routing:', routeResult2.success ? '✅' : '❌', routeResult2.error || 'OK');
+	const memoryContent = (await storage.memory.readTopic('Order #12345 support case')) ?? ''
 
-  // Test 3: Intent tracking
-  console.log('\n--- Test 3: Intent Tracking ---');
-  const activeIntents = dispatcher.getActiveIntents();
-  console.log('Active intents:', activeIntents.length, '✅');
+	console.log('Response:', result.response)
+	console.log('Primary intent:', result.primaryIntent.title)
+	console.log('Prompts used:', prompts.length)
+	console.log('Memory written:', memoryContent.includes('delayed shipment') ? '✅' : '❌')
+	console.log('Human notify:', result.humanNotification ? '✅' : '❌')
 
-  // Test 4: Status
-  console.log('\n--- Test 4: Status ---');
-  const status = dispatcher.getStatus();
-  console.log('Dispatcher status:', status);
-
-  // Cleanup
-  console.log('\n--- Cleanup ---');
-  await rm(testDir, { recursive: true, force: true });
-  console.log('✅ Test directory cleaned up');
-
-  console.log('\n🎉 All tests completed!');
+	await rm(testDir, { recursive: true, force: true })
+	console.log('\n🎉 Lean Jaensen test completed!')
 }
 
-runTests().catch(console.error);
+runTests().catch((error) => {
+	console.error(error)
+	process.exitCode = 1
+})

@@ -2,21 +2,23 @@
 	"name": "@avenos/jaensen-bot",
 	"private": true,
 	"version": "1.0.0",
-	"description": "Flue agent bot with dispatcher-worker-intent architecture",
+	"description": "Lean LLM-first Flue agent for inbox and document triage",
 	"type": "module",
+	"exports": {
+		".": "./index.ts"
+	},
+	"main": "./index.ts",
 	"scripts": {
 		"dev": "bunx @flue/cli dev --target node --env ../../.env",
 		"build": "tsc",
-		"test": "npx tsx .flue/test.ts",
-		"test:watch": "npx tsx watch .flue/test.ts"
+		"test": "bunx tsx .flue/test.ts",
+		"test:watch": "bunx tsx watch .flue/test.ts"
 	},
-	"keywords": ["flue", "agent", "dispatcher", "skill"],
+	"keywords": ["flue", "agent", "llm", "triage"],
 	"author": "",
 	"license": "ISC",
 	"dependencies": {
-		"@flue/sdk": "^0.5.1",
-		"express": "^4.18.2",
-		"valibot": "^1.4.0"
+		"@flue/sdk": "^0.5.1"
 	},
 	"devDependencies": {
 		"@flue/cli": "^0.5.1",
