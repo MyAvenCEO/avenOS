@@ -1,24 +1,28 @@
-import { json } from '@sveltejs/kit'
-import { env } from '$env/dynamic/private'
-import { Buffer } from 'buffer'
-import { TinfoilAI } from 'tinfoil'
+import { Buffer } from 'node:buffer'
 import {
 	createFsStorage,
-	loadSkillRegistry,
+	type JaensenInput,
 	LocalSandboxFactory,
-	runJaensenTurn,
-	type JaensenInput
+	loadSkillRegistry,
+	runJaensenTurn
 } from '@avenos/jaensen-bot'
+import { json } from '@sveltejs/kit'
+import { TinfoilAI } from 'tinfoil'
+import { env } from '$env/dynamic/private'
 import { mapIntentToOrchestrator } from '$lib/jaensen/map-intent-to-orchestrator.js'
+import {
+	AVENOS_SANDBOXES_DIR,
+	JAENSEN_DATA_DIR,
+	JAENSEN_DOCUMENT_DIR,
+	JAENSEN_PACKAGE_DIR
+} from '$lib/jaensen/paths'
 import type { RequestHandler } from './$types'
-
-const JAENSEN_DATA_DIR = '/home/daniel/src/oMaiaCity/AvenOS/projects/aven-ceo/.data/jaensen'
-const JAENSEN_PACKAGE_DIR = '/home/daniel/src/oMaiaCity/AvenOS/projects/jaensen-bot'
-const JAENSEN_DOCUMENT_DIR = `${JAENSEN_DATA_DIR}/.flue/archive`
 
 function resolveJaensenLlmConfig() {
 	const hasTinfoil = Boolean(env.JAENSEN_TINFOIL_API_KEY?.trim())
-	const hasOpenAiCompat = Boolean(env.JAENSEN_OPENAI_BASE_URL?.trim() || env.JAENSEN_OPENAI_API_KEY?.trim())
+	const hasOpenAiCompat = Boolean(
+		env.JAENSEN_OPENAI_BASE_URL?.trim() || env.JAENSEN_OPENAI_API_KEY?.trim()
+	)
 
 	if (hasTinfoil && hasOpenAiCompat) {
 		throw new Error(
@@ -29,7 +33,10 @@ function resolveJaensenLlmConfig() {
 	if (hasTinfoil) {
 		return {
 			provider: 'tinfoil' as const,
-			baseUrl: (env.JAENSEN_TINFOIL_BASE_URL?.trim() || 'https://api.tinfoil.sh/v1').replace(/\/$/, ''),
+			baseUrl: (env.JAENSEN_TINFOIL_BASE_URL?.trim() || 'https://api.tinfoil.sh/v1').replace(
+				/\/$/,
+				''
+			),
 			apiKey: env.JAENSEN_TINFOIL_API_KEY?.trim() || '',
 			model: env.JAENSEN_TINFOIL_MODEL?.trim() || 'glm-5-1'
 		}
@@ -76,7 +83,9 @@ async function generate(prompt: string): Promise<string> {
 		throw new Error(`Jaensen completion failed: ${response.status} ${await response.text()}`)
 	}
 	const json = (await response.json()) as { choices?: Array<{ text?: string }> }
-	console.log('[aven-ceo][jaensen] llm:response', { textPreview: (json.choices?.[0]?.text ?? '').slice(0, 200) })
+	console.log('[aven-ceo][jaensen] llm:response', {
+		textPreview: (json.choices?.[0]?.text ?? '').slice(0, 200)
+	})
 	return json.choices?.[0]?.text ?? ''
 }
 
@@ -132,8 +141,15 @@ export const POST: RequestHandler = async ({ request }) => {
 				size: content.byteLength
 			})
 		}
-		if (hydratedInput.metadata?.attachment && typeof hydratedInput.metadata.attachment === 'object') {
-			const { base64: _base64, content: _content, ...restAttachment } = hydratedInput.metadata.attachment as Record<string, unknown>
+		if (
+			hydratedInput.metadata?.attachment &&
+			typeof hydratedInput.metadata.attachment === 'object'
+		) {
+			const {
+				base64: _base64,
+				content: _content,
+				...restAttachment
+			} = hydratedInput.metadata.attachment as Record<string, unknown>
 			hydratedInput = {
 				...hydratedInput,
 				metadata: {
@@ -143,10 +159,13 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 		}
 		const skillRegistry = await loadSkillRegistry(JAENSEN_PACKAGE_DIR)
-		console.log('[aven-ceo][jaensen] chat:runtime-ready', { dataDir: JAENSEN_DATA_DIR })
+		console.log('[aven-ceo][jaensen] chat:runtime-ready', {
+			dataDir: JAENSEN_DATA_DIR,
+			sandboxesDir: AVENOS_SANDBOXES_DIR
+		})
 		const result = await runJaensenTurn(hydratedInput, {
 			storage,
-			sandboxFactory: new LocalSandboxFactory(`${JAENSEN_DATA_DIR}/sandboxes`, JAENSEN_DOCUMENT_DIR),
+			sandboxFactory: new LocalSandboxFactory(AVENOS_SANDBOXES_DIR, JAENSEN_DOCUMENT_DIR),
 			skillRegistry,
 			generate
 		})
@@ -159,6 +178,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		})
 	} catch (error) {
 		console.error('[aven-ceo][jaensen] chat:error', error)
-		return json({ ok: false as const, error: error instanceof Error ? error.message : String(error) }, { status: 500 })
+		return json(
+			{ ok: false as const, error: error instanceof Error ? error.message : String(error) },
+			{ status: 500 }
+		)
 	}
 }

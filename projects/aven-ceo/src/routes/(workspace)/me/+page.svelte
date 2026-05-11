@@ -25,6 +25,7 @@ async function refreshIntents() {
 		error = data.error ?? 'Failed to load intents'
 		return
 	}
+	error = null
 	intents = data.intents ?? []
 	if (!selectedId) selectedId = intents[0]?.id ?? null
 }

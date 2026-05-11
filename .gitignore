@@ -1,8 +1,8 @@
 node_modules
 
-# Local second brain vault + upstream mirrors (never commit)
+# Local second brain vault + app data at repo root (never commit)
 /.data/
-/projects/aven-ceo/.data/
+/projects/*/.data/
 /.repos/
 
 # Output

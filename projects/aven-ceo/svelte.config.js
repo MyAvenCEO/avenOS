@@ -16,7 +16,8 @@ const config = {
 		// https://svelte.dev/docs/kit/adapters for more information about adapters.
 		adapter: adapter(),
 		alias: {
-			$seed: path.resolve(__dirname, 'seed')
+			$seed: path.resolve(__dirname, 'seed'),
+			'@avenos/jaensen-bot': path.resolve(__dirname, '../jaensen-bot/index.ts')
 		}
 	}
 }

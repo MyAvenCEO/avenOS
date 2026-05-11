@@ -22,7 +22,10 @@ function stringifyContribution(value: unknown): string | undefined {
 	}
 }
 
-function summarizeIntentDecision(data: Record<string, unknown>): { title: string; detail?: string } {
+function summarizeIntentDecision(data: Record<string, unknown>): {
+	title: string
+	detail?: string
+} {
 	const actions = Array.isArray(data.actions) ? data.actions : []
 	const skillResults = Array.isArray(data.skillResults) ? data.skillResults : []
 	if (actions.length === 0 && skillResults.length === 0) {
@@ -58,28 +61,41 @@ function summarizeIntentDecision(data: Record<string, unknown>): { title: string
 	}
 }
 
-function mapActivityItem(intent: IntentRecord, event: IntentRecord['events'][number], index: number): ActivityItem {
+function mapActivityItem(
+	intent: IntentRecord,
+	event: IntentRecord['events'][number],
+	index: number
+): ActivityItem {
+	const data = event.data && typeof event.data === 'object' ? event.data : {}
+	const at = (() => {
+		try {
+			return new Date(event.timestamp).toLocaleTimeString([], {
+				hour: '2-digit',
+				minute: '2-digit'
+			})
+		} catch {
+			return '--:--'
+		}
+	})()
+
 	if (event.type === 'response_ready') {
 		return {
 			id: `${intent.id}-activity-${index}`,
-			at: new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+			at,
 			kind: 'orchestrator',
 			title: 'Jaensen prepared a reply for the owner',
-			detail: typeof event.data.reply === 'string' ? event.data.reply : stringifyContribution(event.data)
+			detail: typeof data.reply === 'string' ? data.reply : stringifyContribution(data)
 		}
 	}
 
 	if (event.source === 'skill') {
-		const skillId = typeof event.data.skill === 'string' ? event.data.skill : 'skill'
+		const skillId = typeof data.skill === 'string' ? data.skill : 'skill'
 		return {
 			id: `${intent.id}-activity-${index}`,
-			at: new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+			at,
 			kind: 'tool',
-			title:
-				typeof event.data.summary === 'string'
-					? event.data.summary
-					: `${skillId} reported progress`,
-			detail: stringifyContribution(event.data),
+			title: typeof data.summary === 'string' ? data.summary : `${skillId} reported progress`,
+			detail: stringifyContribution(data),
 			agentId: skillAgentId(intent, skillId)
 		}
 	}
@@ -87,18 +103,18 @@ function mapActivityItem(intent: IntentRecord, event: IntentRecord['events'][num
 	if (event.source === 'human') {
 		return {
 			id: `${intent.id}-activity-${index}`,
-			at: new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+			at,
 			kind: 'human',
 			title: 'Human contributed to the case',
-			detail: stringifyContribution(event.data)
+			detail: stringifyContribution(data)
 		}
 	}
 
 	if (event.type === 'intent_decision_applied') {
-		const summary = summarizeIntentDecision(event.data)
+		const summary = summarizeIntentDecision(data as Record<string, unknown>)
 		return {
 			id: `${intent.id}-activity-${index}`,
-			at: new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+			at,
 			kind: 'orchestrator',
 			title: summary.title,
 			detail: summary.detail
@@ -108,30 +124,35 @@ function mapActivityItem(intent: IntentRecord, event: IntentRecord['events'][num
 	if (event.type === 'input_received') {
 		return {
 			id: `${intent.id}-activity-${index}`,
-			at: new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+			at,
 			kind: 'human',
-			title: typeof event.data.from === 'string' ? `${event.data.from} added a new message` : 'A new message arrived',
-			detail: typeof event.data.message === 'string' ? event.data.message : stringifyContribution(event.data)
+			title:
+				typeof data.from === 'string'
+					? `${data.from} added a new message`
+					: 'A new message arrived',
+			detail: typeof data.message === 'string' ? data.message : stringifyContribution(data)
 		}
 	}
 
 	return {
 		id: `${intent.id}-activity-${index}`,
-		at: new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+		at,
 		kind: event.source === 'system' ? 'orchestrator' : 'human',
 		title: event.type,
-		detail: stringifyContribution(event.data)
+		detail: stringifyContribution(data)
 	}
 }
 
 function mapActivity(intent: IntentRecord): ActivityItem[] {
-	return intent.events.map((event: IntentRecord['events'][number], index: number) =>
+	const events = Array.isArray(intent.events) ? intent.events : []
+	return events.map((event: IntentRecord['events'][number], index: number) =>
 		mapActivityItem(intent, event, index)
 	)
 }
 
 function mapHitl(intent: IntentRecord): HitlTodo[] {
 	const todos: HitlTodo[] = []
+	const events = Array.isArray(intent.events) ? intent.events : []
 	if (intent.humanLoop?.needed) {
 		todos.push({
 			id: `${intent.id}-human-loop`,
@@ -144,9 +165,11 @@ function mapHitl(intent: IntentRecord): HitlTodo[] {
 		})
 	}
 
-	const latestResponse = [...intent.events].reverse().find((event) => event.type === 'response_ready')
+	const latestResponse = [...events].reverse().find((event) => event.type === 'response_ready')
 	if (latestResponse && intent.status !== 'resolved') {
-		const reply = typeof latestResponse.data.reply === 'string' ? latestResponse.data.reply.trim() : ''
+		const replyData =
+			latestResponse.data && typeof latestResponse.data === 'object' ? latestResponse.data : {}
+		const reply = typeof replyData.reply === 'string' ? replyData.reply.trim() : ''
 		todos.push({
 			id: `${intent.id}-owner-follow-up`,
 			intentId: intent.id,
@@ -163,10 +186,14 @@ function mapHitl(intent: IntentRecord): HitlTodo[] {
 }
 
 function mapSkills(intent: IntentRecord): IntentSkillBinding[] {
+	const events = Array.isArray(intent.events) ? intent.events : []
 	const used = new Set(
-		intent.events
+		events
 			.filter((event: IntentRecord['events'][number]) => event.source === 'skill')
-			.map((event: IntentRecord['events'][number]) => String(event.data.skill ?? ''))
+			.map((event: IntentRecord['events'][number]) => {
+				const d = event.data && typeof event.data === 'object' ? event.data : {}
+				return String((d as Record<string, unknown>).skill ?? '')
+			})
 			.filter(Boolean)
 	)
 	const all: Array<IntentSkillBinding> = [
@@ -184,44 +211,76 @@ function mapSubAgents(intent: IntentRecord): SubAgent[] {
 			id: skillAgentId(intent, skill.skillId),
 			name: `${skill.name} Worker`,
 			role: `${skill.name} execution`,
-			status: intent.status === 'resolved' ? 'done' : intent.status === 'pending' ? 'blocked_hitl' : 'idle',
+			status:
+				intent.status === 'resolved'
+					? 'done'
+					: intent.status === 'pending'
+						? 'blocked_hitl'
+						: 'idle',
 			parentOrchestratorId: intent.id,
 			skillId: skill.skillId
 		}))
 }
 
 function mapToolCalls(intent: IntentRecord): ToolCallStep[] {
-	return intent.events
+	const events = Array.isArray(intent.events) ? intent.events : []
+	return events
 		.filter((event: IntentRecord['events'][number]) => event.source === 'skill')
 		.map((event: IntentRecord['events'][number], index: number) => {
-			const skillId = typeof event.data.skill === 'string' ? event.data.skill : 'skill'
+			const d = event.data && typeof event.data === 'object' ? event.data : {}
+			const skillId =
+				typeof (d as Record<string, unknown>).skill === 'string'
+					? (d as { skill: string }).skill
+					: 'skill'
 			return {
 				id: `${intent.id}-tool-${index}`,
 				agentId: skillAgentId(intent, skillId),
 				tool: skillId,
-				inputSummary: typeof event.data.summary === 'string' ? event.data.summary : event.type,
-				outputSummary: stringifyContribution(event.data),
-				status: event.data.ok === false ? 'error' : 'ok'
+				inputSummary:
+					typeof (d as Record<string, unknown>).summary === 'string'
+						? (d as { summary: string }).summary
+						: event.type,
+				outputSummary: stringifyContribution(d),
+				status: (d as Record<string, unknown>).ok === false ? 'error' : 'ok'
 			}
 		})
 }
 
 export function mapIntentToOrchestrator(intent: IntentRecord): IntentOrchestrator {
+	const events = Array.isArray(intent.events) ? intent.events : []
+	const title = intent.title?.trim() || 'Untitled'
+	const summary = (intent.summary?.trim() || title).slice(0, 2000)
+	const status =
+		intent.status === 'resolved' || intent.status === 'pending' || intent.status === 'active'
+			? intent.status
+			: 'active'
+	const safe: IntentRecord = {
+		...intent,
+		id: String(intent.id ?? 'unknown'),
+		title,
+		summary,
+		status,
+		createdAt: intent.createdAt ?? new Date().toISOString(),
+		updatedAt: intent.updatedAt ?? new Date().toISOString(),
+		events,
+		context: intent.context && typeof intent.context === 'object' ? intent.context : {}
+	}
+
 	return {
-		id: intent.id,
-		title: intent.title,
-		summary: intent.summary,
-		done: intent.status === 'resolved',
+		id: safe.id,
+		title: safe.title,
+		summary,
+		done: safe.status === 'resolved',
 		orchestratorLabel: 'Jaensen Intent',
-		subAgents: mapSubAgents(intent),
-		activity: mapActivity(intent),
-		toolCalls: mapToolCalls(intent),
-		hitlTodos: mapHitl(intent),
+		subAgents: mapSubAgents(safe),
+		activity: mapActivity(safe),
+		toolCalls: mapToolCalls(safe),
+		hitlTodos: mapHitl(safe),
 		config: {
 			routingMode: 'select',
 			workerClassLabel: 'Jaensen dispatcher',
-			notes: `Status: ${intent.status}`
+			notes: `Status: ${safe.status}`
 		},
-		skills: mapSkills(intent)
+		skills: mapSkills(safe)
 	}
 }
