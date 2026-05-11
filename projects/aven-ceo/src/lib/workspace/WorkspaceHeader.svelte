@@ -4,8 +4,6 @@ import { page } from '$app/stores'
 import { app } from '$lib/schema'
 import { workspaceContentClass } from '$lib/workspace/layout'
 
-const SECOND_BRAIN_LABEL = 'Second brain'
-
 const ctx = getJazzContext()
 const profiles = new QuerySubscription(app.profiles.limit(1))
 
@@ -30,7 +28,6 @@ $effect(() => {
 const profile = $derived(profiles.current?.[0] ?? null)
 
 $effect(() => {
-	if ($page.url.pathname !== '/me') return
 	const p = profile
 	if (p) nameDraft = p.name
 })
@@ -45,7 +42,7 @@ function syncDisplayName() {
 	try {
 		db.update(app.profiles, p.id, { name: next || 'You' })
 	} catch {
-		/* Jazz mutation errors surface via db.onMutationError on /me */
+		/* Jazz mutation errors surface via db.onMutationError */
 	}
 }
 
@@ -53,78 +50,59 @@ async function logOut() {
 	const db = ctx.db
 	if (db) await db.logout()
 }
-
-function titleFor(path: string): string {
-	if (path === '/talk') return 'Talk'
-	if (path === '/memory') return 'Memory'
-	return ''
-}
 </script>
 
-<header
-	class={`mb-8 flex flex-wrap items-center justify-between gap-x-8 gap-y-4 ${workspaceContentClass}`}
->
-	<div class="min-w-0 flex-1">
-		<div class="flex flex-col gap-1.5">
-			<span class="text-[10px] font-bold uppercase tracking-[0.3em] opacity-30">
-				{SECOND_BRAIN_LABEL}
-			</span>
-			{#if $page.url.pathname === '/me'}
-				{#if profiles.loading}
-					<span class="text-2xl font-medium tracking-tight opacity-25">…</span>
-				{:else if profiles.error}
-					<span class="text-sm text-error">{profiles.error.message}</span>
-				{:else if profile}
-					<input
-						type="text"
-						class="w-full max-w-[12rem] border-b border-border/45 bg-transparent pb-0.5 text-2xl font-medium tracking-tight outline-none focus:border-border focus:ring-0 sm:max-w-[14rem]"
-						bind:value={nameDraft}
-						onblur={() => syncDisplayName()}
-						onkeydown={(e) => {
-							if (e.key === 'Enter') {
-								e.currentTarget.blur()
-							}
-						}}
-						aria-label="Display name"
-					>
-				{:else}
-					<span class="text-2xl font-medium tracking-tight opacity-25">…</span>
-				{/if}
-			{:else}
-				<h1 class="text-2xl font-medium tracking-tight">{titleFor($page.url.pathname)}</h1>
-			{/if}
-		</div>
-	</div>
+<header class={`mb-8 grid grid-cols-3 items-center gap-x-2 gap-y-3 ${workspaceContentClass}`}>
+	<div class="min-w-0" aria-hidden="true"></div>
 
-	<div class="flex shrink-0 items-center gap-3 sm:gap-4">
-		<nav
-			class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-bold uppercase tracking-wider"
-			aria-label="Workspace sections"
+	<nav
+		class="flex flex-wrap items-center justify-center justify-self-center gap-x-2 gap-y-1 text-[10px] font-bold uppercase tracking-wider"
+		aria-label="Workspace sections"
+	>
+		<a
+			href="/me"
+			class="uppercase opacity-40 transition-opacity hover:opacity-80 {$page.url.pathname === '/me'
+				? 'opacity-95 underline underline-offset-4'
+				: ''}"
+			>Me</a
 		>
-			<a
-				href="/me"
-				class="uppercase opacity-40 transition-opacity hover:opacity-80 {$page.url.pathname === '/me'
-					? 'opacity-95 underline underline-offset-4'
-					: ''}"
-				>Me</a
+		<span class="opacity-25 select-none" aria-hidden="true">|</span>
+		<a
+			href="/talk"
+			class="uppercase opacity-40 transition-opacity hover:opacity-80 {$page.url.pathname === '/talk'
+				? 'opacity-95 underline underline-offset-4'
+				: ''}"
+			>Talk</a
+		>
+		<span class="opacity-25 select-none" aria-hidden="true">|</span>
+		<a
+			href="/memory"
+			class="uppercase opacity-40 transition-opacity hover:opacity-80 {$page.url.pathname === '/memory'
+				? 'opacity-95 underline underline-offset-4'
+				: ''}"
+			>Brain</a
+		>
+	</nav>
+
+	<div class="flex min-w-0 items-center justify-end justify-self-end gap-2 sm:gap-3">
+		{#if profiles.loading}
+			<span class="text-xl font-medium tracking-tight opacity-30 tabular-nums">…</span>
+		{:else if profiles.error}
+			<span class="truncate text-sm text-error" title={profiles.error.message}>!</span>
+		{:else if profile}
+			<input
+				type="text"
+				class="min-w-0 max-w-full shrink border-0 bg-transparent p-0 text-right text-lg font-medium tracking-tight no-underline shadow-none outline-none ring-0 placeholder:text-foreground/35 focus:border-0 focus:ring-0 focus:outline-none focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/20 sm:text-xl"
+				bind:value={nameDraft}
+				onblur={() => syncDisplayName()}
+				onkeydown={(e) => {
+					if (e.key === 'Enter') {
+						e.currentTarget.blur()
+					}
+				}}
+				aria-label="Display name"
 			>
-			<span class="opacity-25 select-none" aria-hidden="true">|</span>
-			<a
-				href="/talk"
-				class="uppercase opacity-40 transition-opacity hover:opacity-80 {$page.url.pathname === '/talk'
-					? 'opacity-95 underline underline-offset-4'
-					: ''}"
-				>Talk</a
-			>
-			<span class="opacity-25 select-none" aria-hidden="true">|</span>
-			<a
-				href="/memory"
-				class="uppercase opacity-40 transition-opacity hover:opacity-80 {$page.url.pathname === '/memory'
-					? 'opacity-95 underline underline-offset-4'
-					: ''}"
-				>Memory</a
-			>
-		</nav>
+		{/if}
 		<button
 			type="button"
 			class="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-white/10 transition-all hover:bg-white/30"
