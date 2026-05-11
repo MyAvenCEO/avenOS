@@ -1,8 +1,18 @@
 // Memory Worker - manages a single memory thread (markdown file)
 // Long-running worker that accumulates knowledge
 
-import { readFile, writeFile, exists } from 'fs/promises';
+import { readFile, writeFile, mkdir } from 'fs/promises';
+import { access } from 'fs/promises';
 import { join, dirname } from 'path';
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export interface MemoryWorkerConfig {
   threadPath: string;        // Path to the thread file
@@ -50,7 +60,7 @@ export class MemoryWorker {
   // Read memory entries matching a query
   async read(query?: string): Promise<MemoryReadResult> {
     try {
-      if (!await exists(this.threadPath)) {
+      if (!await fileExists(this.threadPath)) {
         return {
           content: '',
           thread: this.topic,
@@ -108,7 +118,7 @@ export class MemoryWorker {
 
       // Check if file exists
       let existingContent = '';
-      if (await exists(this.threadPath)) {
+      if (await fileExists(this.threadPath)) {
         existingContent = await readFile(this.threadPath, 'utf-8');
       } else {
         // Create new thread with header
@@ -141,7 +151,7 @@ thread: ${this.topic}
   // Search within this thread
   async search(entity: string): Promise<MemorySearchResult> {
     try {
-      if (!await exists(this.threadPath)) {
+      if (!await fileExists(this.threadPath)) {
         return { matches: [], totalMatches: 0 };
       }
 
