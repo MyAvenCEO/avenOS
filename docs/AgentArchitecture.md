@@ -8,7 +8,7 @@ This document describes **JSON-shaped configuration** for Agents, **Tinfoil** LL
 |------|---------|
 | **Sprite per agent** | **Every agent** — Aven or worker — maps to **its own** Sprite VM boundary at execution time (isolation, filesystem, egress policy). |
 | **Sparks** | Meta **governance** grouping — omitted from **`/board`** until the control plane wires it explicitly. |
-| **Actor shell** | **Inbox · Process · Report**: one **agent** primitive (**child agents** nest the same faces). **`/board`** docs: [`skill-playground-config.ts`](../src/lib/board/skill-playground-config.ts), [`build-board-graph.ts`](../src/lib/board/build-board-graph.ts). |
+| **Actor shell** | **Inbox · Process · Report**: one **agent** primitive (**child agents** nest the same faces). **`/board`** docs: [`skill-playground-config.ts`](../projects/aven-ceo/src/lib/board/skill-playground-config.ts), [`build-board-graph.ts`](../projects/aven-ceo/src/lib/board/build-board-graph.ts). |
 
 ### Playground `/board`
 
@@ -165,7 +165,7 @@ flowchart LR
 | `tool_bundles` | Aven: **`delegate_to_time_worker`**; `time_worker`: **`return_current_time`**. |
 | `inference_snapshot` | Example **first turn** on Aven: `systemPrompt` = **`identity_system_prompt`** + turn/task block; **stringified** `toolsJson`; optional `tool_choice` at runtime (see [Tinfoil JS SDK](https://docs.tinfoil.sh/sdk/javascript-sdk)). |
 
-> **Note:** The production app may still use a different intent snapshot (e.g. routing enums) in [`run-intent.ts`](../src/lib/aven/run-intent.ts). This file is the **target shape** for the time-worker roundtrip; migration is a separate step.
+> **Note:** The production app may still use a different intent snapshot (e.g. routing enums) in [`run-intent.ts`](../projects/aven-ceo/src/lib/aven/run-intent.ts). This file is the **target shape** for the time-worker roundtrip; migration is a separate step.
 
 ---
 
@@ -327,7 +327,7 @@ Single tool — the **specialist’s** allowed action. Implementation returns **
 
 ## `inference_snapshot` (Aven — first turn on an Intent)
 
-Same structural idea as [`InferenceSnapshot`](../src/lib/aven/intent-request.ts): **`toolsJson` is a string** (one JSON array of tools, stringified). Below, **`toolsJson`** holds exactly the **Aven** bundle **`delegate_to_time_worker`**.
+Same structural idea as [`InferenceSnapshot`](../projects/aven-ceo/src/lib/aven/intent-request.ts): **`toolsJson` is a string** (one JSON array of tools, stringified). Below, **`toolsJson`** holds exactly the **Aven** bundle **`delegate_to_time_worker`**.
 
 **`systemPrompt` here is composed:** **`agents.aven.identity_system_prompt`** (first) **+** a short **turn / task block** (second). In implementation, load identity from the agent record, then append the task instructions for this Intent type.
 

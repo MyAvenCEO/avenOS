@@ -1,0 +1,23 @@
+{
+	"name": "@avenos/self",
+	"version": "26.4.212041-next",
+	"type": "module",
+	"main": "./src/index.js",
+	"exports": {
+		".": "./src/index.js",
+		"./generate-credentials": "./scripts/generate-credentials.js"
+	},
+	"scripts": {
+		"generate-credentials": "bun scripts/generate-credentials.js",
+		"test": "bun test tests"
+	},
+	"dependencies": {
+		"@MaiaOS/logs": "workspace:*",
+		"@tauri-apps/api": "2.10.1",
+		"@AvenOS/db": "workspace:*",
+		"@MaiaOS/peer": "workspace:*",
+		"@MaiaOS/storage": "workspace:*",
+		"cojson": "0.20.16"
+	},
+	"description": "Self-Sovereign Identity (SSI) via WebAuthn PRF (AvenOS workspace)"
+}

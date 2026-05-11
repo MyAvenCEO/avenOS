@@ -2,6 +2,7 @@ node_modules
 
 # Local second brain vault + upstream mirrors (never commit)
 /.data/
+/projects/aven-ceo/.data/
 /.repos/
 
 # Output
@@ -10,7 +11,9 @@ node_modules
 .netlify
 .wrangler
 /.svelte-kit
+/projects/*/.svelte-kit
 /build
+/projects/*/build
 
 # OS
 .DS_Store
@@ -21,6 +24,11 @@ Thumbs.db
 .env.*
 !.env.example
 !.env.test
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
 
 # Vite
 vite.config.js.timestamp-*

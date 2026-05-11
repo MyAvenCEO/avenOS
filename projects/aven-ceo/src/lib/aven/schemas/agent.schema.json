@@ -1,0 +1,152 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"$id": "https://aven.local/schemas/agent.schema.json",
+	"title": "Aven agent",
+	"description": "Declarative wiring for prompts, vault context, chat LLM knobs, tools, transcript storage, and Talk UI chrome.",
+	"type": "object",
+	"required": ["id", "name", "version", "llm", "sources", "systemBundle", "contextPreview"],
+	"properties": {
+		"$schema": { "type": "string", "description": "Optional IDE schema hint (relative path)." },
+		"id": {
+			"type": "string",
+			"description": "Stable id (reverse-DNS suggested), e.g. aven.maia.v1."
+		},
+		"name": { "type": "string", "description": "Display label." },
+		"version": { "type": "string", "description": "Semver-ish string for manifests." },
+		"llm": {
+			"type": "object",
+			"required": ["provider", "temperature", "maxToolRounds", "defaultModel"],
+			"properties": {
+				"provider": {
+					"type": "string",
+					"description": "Upstream API family (maps to SDK on server)."
+				},
+				"temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+				"maxToolRounds": { "type": "integer", "minimum": 1, "maximum": 100 },
+				"defaultModel": { "type": "string", "description": "Model id passed to completions API." },
+				"fallbackConfigFiles": {
+					"type": "array",
+					"description": "Optional legacy JSON overlays (documentation / future loader).",
+					"items": { "type": "string" }
+				},
+				"toolChoice": { "type": "string", "description": "e.g. auto, none." }
+			},
+			"additionalProperties": true
+		},
+		"sources": {
+			"type": "object",
+			"required": ["systemPrompt", "tools"],
+			"properties": {
+				"systemPrompt": {
+					"type": "object",
+					"required": ["kind", "path"],
+					"properties": {
+						"kind": {
+							"type": "string",
+							"enum": ["markdown_frontmatter_raw"]
+						},
+						"path": {
+							"type": "string",
+							"description": "Vault-relative manifest path (built with ?raw importer in code)."
+						}
+					},
+					"additionalProperties": true
+				},
+				"tools": {
+					"type": "object",
+					"required": ["openAiFunctionSchemas"],
+					"properties": {
+						"openAiFunctionSchemas": {
+							"type": "string",
+							"description": "Path to ChatCompletion-compatible tools JSON (array)."
+						}
+					},
+					"additionalProperties": true
+				},
+				"transcript": {
+					"type": "object",
+					"properties": {
+						"conversationJsonRelative": { "type": "string" },
+						"messageMarkdownGlob": {
+							"type": "string",
+							"description": "Glob pattern describing per-turn Markdown logs."
+						}
+					},
+					"additionalProperties": true
+				},
+				"identityMarkdown": {
+					"type": "string",
+					"description": "Path to Maia identity Markdown (e.g. .data/agents/maia/SOUL.md)."
+				}
+			},
+			"additionalProperties": true
+		},
+		"systemBundle": {
+			"type": "object",
+			"required": ["delimiterMarkdown", "snapshotHeadingMarkdownTemplate"],
+			"properties": {
+				"delimiterMarkdown": {
+					"type": "string",
+					"description": "Inserted between assistant instructions and dynamic vault block."
+				},
+				"snapshotHeadingMarkdownTemplate": {
+					"type": "string",
+					"description": "## line; use `{iso}` for heading timestamp ISO string."
+				}
+			},
+			"additionalProperties": false
+		},
+		"contextPreview": {
+			"type": "object",
+			"required": ["sectionHeadings"],
+			"properties": {
+				"sectionHeadings": {
+					"type": "object",
+					"required": [
+						"soul",
+						"owner",
+						"rules",
+						"vaultSnapshot",
+						"vaultGraph",
+						"transcript",
+						"tools"
+					],
+					"properties": {
+						"soul": { "type": "string" },
+						"owner": {
+							"type": "string",
+							"description": "Talk aside label for injected vault owner note (Humans/OWNER_*.md)."
+						},
+						"rules": { "type": "string", "description": "Talk aside label for RULES.md path." },
+						"vaultSnapshot": { "type": "string" },
+						"vaultGraph": {
+							"type": "string",
+							"description": "Talk aside label for derived vault wikilink graph summary."
+						},
+						"transcript": { "type": "string" },
+						"tools": { "type": "string" }
+					},
+					"additionalProperties": false
+				},
+				"instructionProvenanceLine": { "type": "string", "deprecated": true },
+				"soulProvenanceLine": {
+					"type": "string",
+					"description": "Optional; provenance strings are no longer shown in the Talk aside.",
+					"deprecated": true
+				},
+				"fullSystemBlobLineTemplate": {
+					"type": "string",
+					"description": "Optional legacy field.",
+					"deprecated": true
+				},
+				"toolBadgeTailwindClasses": {
+					"type": "object",
+					"description": "Optional map tool name → Tailwind class string for badges.",
+					"additionalProperties": { "type": "string" }
+				}
+			},
+			"additionalProperties": true
+		}
+	},
+	"additionalProperties": false
+}

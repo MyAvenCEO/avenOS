@@ -1,0 +1,9 @@
+{
+	"name": "@avenos/ocr-example",
+	"private": true,
+	"version": "0.0.1",
+	"description": "Python CLI: PDF/image → invoice or bank-statement JSON (Gemini). Use python3 -m venv .venv && pip install -r requirements.txt",
+	"scripts": {
+		"dev": "bun run --env-file=../../.env python3 run.py --help"
+	}
+}

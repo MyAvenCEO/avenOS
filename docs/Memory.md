@@ -6,7 +6,7 @@ Memory is **separate** from Aven’s **[agent / IPR / board orchestration](./Age
 
 ## Seed vs runtime (`seed/`)
 
-Committed defaults live in **`seed/`** (Maia **SOUL** / **RULES** / agent **README**, **memory tool** OpenAI JSON). The vault (**`.data/knowledge/`**) starts **empty** except for notes you or Maia create. The vault owner’s note **`Humans/OWNER_<slug>.md`** (e.g. **`## Identity`**, **`## Preferences`**) is **not** seeded — it lives only under **`.data/knowledge/`** and is injected each turn **before** RULES; Maia learns the **slug** from conversation (or you set **`AVEN_VAULT_OWNER_HUMANS_FILE`**). On startup of any path that needs them, **`ensureSeedRuntimeSynced()`** in **`src/lib/seed/seed-service.ts`** copies into **`.data/...` only if the destination file does not exist** (your edits stay). **`maia.agent.json`** points at **`.data`** for agent files; chat loads tool definitions from **`.data/agents/maia/tools/memory.openai.json`** after sync.
+Committed defaults live in **`seed/`** (Maia **SOUL** / **RULES** / agent **README**, **memory tool** OpenAI JSON). The vault (**`.data/knowledge/`**) starts **empty** except for notes you or Maia create. The vault owner’s note **`Humans/OWNER_<slug>.md`** (e.g. **`## Identity`**, **`## Preferences`**) is **not** seeded — it lives only under **`.data/knowledge/`** and is injected each turn **before** RULES; Maia learns the **slug** from conversation (or you set **`AVEN_VAULT_OWNER_HUMANS_FILE`**). On startup of any path that needs them, **`ensureSeedRuntimeSynced()`** in **`projects/aven-ceo/src/lib/seed/seed-service.ts`** copies into **`.data/...` only if the destination file does not exist** (your edits stay). **`maia.agent.json`** points at **`.data`** for agent files; chat loads tool definitions from **`.data/agents/maia/tools/memory.openai.json`** after sync.
 
 ## 1. Separation of concerns
 
@@ -16,7 +16,7 @@ Committed defaults live in **`seed/`** (Maia **SOUL** / **RULES** / agent **READ
 | **`/talk`** | One continuous **Aven Maia** chat: transcript in **`.data/agents/maia/messages/conversation.json`**, reloaded on `/talk` with a live **context** summary; tools mutate the vault. |
 | **`/me`** + `/api/aven/intent` | Intent classification → Jazz workers (**not** vault maintenance). |
 
-All vault I/O resolves under **`/.data/knowledge/`** at the repo root (see below).
+All vault I/O resolves under **`projects/aven-ceo/.data/knowledge/`** (Svelte app root; see below).
 
 ---
 
@@ -24,13 +24,13 @@ All vault I/O resolves under **`/.data/knowledge/`** at the repo root (see below
 
 | Path | Role |
 |------|------|
-| **`.gitignore`** | Includes **`/.data/`** — never committed. |
+| **`.gitignore`** | Includes **`projects/aven-ceo/.data/`** — never committed. |
 | **`.data/knowledge/`** | Canonical vault (`**/*.md`). Created on first use; **no default readme note** — only your Markdown files appear in the index. |
 | **`.data/agents/maia/messages/`** | **`conversation.json`** restores the rolling chat; **`mN.md`** logs each completed assistant turn (Maia agent–scoped). |
 
 **Folder convention:** **`Humans/`**, **`Sparks/`** (orgs + missions, visions, shared spaces, teams, companies, …), **`Projects/`**, **`Concepts/`** — a soft schema; Aven does **not** require rigid templates in v1. Prefer **one canonical note per entity** (aliases in the body) and **edit-in-place** using **`memory_edit`** when the path already exists in the injected snapshot.
 
-**Runtime:** Paths are gated server-side (**no `..`**, resolved under vault root). **Local filesystem** implies: run **`bun dev`** from repo root so `process.cwd()` points at AvenOS.
+**Runtime:** Paths are gated server-side (**no `..`**, resolved under vault root). **Local filesystem** implies: run **`bun run dev:aven-ceo`** from the monorepo root (or **`bun dev`** inside **`projects/aven-ceo`**) so `process.cwd()` points at the app package.
 
 ---
 
@@ -65,7 +65,7 @@ Updating alias examples (“Sam” vs full name) should hit **`memory_edit`** on
 
 4. Until the model emits a plain assistant message (tool round cap), repeat.
 
-**Chat model:** Default is **`glm-5-1`** ([model details](https://tinfoil.sh/models/glm-5-1)), set in repo JSON [`src/lib/aven/tinfoil-chat.config.json`](../src/lib/aven/tinfoil-chat.config.json) under **`chatModel`**. The POST body may still pass **`model`** to override a single turn. Secrets stay in env: **`TINFOIL_API_KEY`** only (same pattern as the [JavaScript inference example](https://docs.tinfoil.sh/sdk/javascript-sdk)).
+**Chat model:** Default is **`glm-5-1`** ([model details](https://tinfoil.sh/models/glm-5-1)), set in repo JSON [`tinfoil-chat.config.json`](../projects/aven-ceo/src/lib/aven/tinfoil-chat.config.json) under **`chatModel`**. The POST body may still pass **`model`** to override a single turn. Secrets stay in env: **`TINFOIL_API_KEY`** only (same pattern as the [JavaScript inference example](https://docs.tinfoil.sh/sdk/javascript-sdk)).
 
 ---
 
@@ -91,10 +91,10 @@ Same vault helpers (`$lib/memory/vault.ts`) as tool executor — **single source
 | Artifact | Role |
 |----------|------|
 | **`.data/state/vault-graph.json`** | Built from all `[[wikilinks]]` in **`.data/knowledge`** (body after frontmatter). **Outgoing**, **backlinks**, **unresolved** targets; rebuilt on **`memory_edit` / `memory_write_file`**, **`PUT /api/memory/note`**, and **`GET /api/memory/notes`**. |
-| **Talk** | [live-context.ts](../src/lib/aven/live-context.ts) appends a **short graph summary** after the Path \| Title snapshot. |
+| **Talk** | [live-context.ts](../projects/aven-ceo/src/lib/aven/live-context.ts) appends a **short graph summary** after the Path \| Title snapshot. |
 | **Memory UI** | Text panels **Links to / Backlinks / Unresolved** for the selected vault note via `GET /api/memory/graph?path=`. |
 
-Shared parsing: [`wikilink-parse.ts`](../src/lib/memory/wikilink-parse.ts) (same rules as preview injection in [`markdown-view.ts`](../src/lib/memory/markdown-view.ts)).
+Shared parsing: [`wikilink-parse.ts`](../projects/aven-ceo/src/lib/memory/wikilink-parse.ts) (same rules as preview injection in [`markdown-view.ts`](../projects/aven-ceo/src/lib/memory/markdown-view.ts)).
 
 ---
 
