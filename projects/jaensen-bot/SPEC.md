@@ -8,7 +8,7 @@ Jaensen is a multi-skill agent system built on Flue. It uses a dispatcher-intent
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  Dispatcher                                              │
+│  Dispatcher                                             │
 │  Role: Route messages to Intent or Skill                │
 │  - Notify Intents on every event                        │
 │  Input: User message, worker reports, human responses   │
