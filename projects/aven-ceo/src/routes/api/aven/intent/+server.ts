@@ -1,3 +1,4 @@
+/** Live intent classification; `/me` workspace uses a client-only mock and does not call this route. */
 import { json } from '@sveltejs/kit'
 import { env } from '$env/dynamic/private'
 import { postIntentBodySchema } from '$lib/aven/intent-request'
