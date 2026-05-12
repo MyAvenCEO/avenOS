@@ -1,0 +1,23 @@
+{
+	"name": "@jaensen/conversation-actors",
+	"version": "0.1.0",
+	"type": "module",
+	"main": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"build": "tsc",
+		"typecheck": "tsc --noEmit",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"@jaensen/actor-runtime": "workspace:*",
+		"@jaensen/persistence-sqlite": "workspace:*",
+		"@jaensen/skills": "workspace:*",
+		"zod": "^3.25.76"
+	},
+	"devDependencies": {
+		"typescript": "^5.9.3"
+	}
+}

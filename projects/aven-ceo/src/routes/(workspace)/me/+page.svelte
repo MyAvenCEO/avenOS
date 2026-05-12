@@ -2,92 +2,55 @@
 import IntentCenterPanel from '$lib/intent-mock/IntentCenterPanel.svelte'
 import IntentLeftNav from '$lib/intent-mock/IntentLeftNav.svelte'
 import IntentRightRail from '$lib/intent-mock/IntentRightRail.svelte'
-import type { IntentOrchestrator, RightPanelTab } from '$lib/intent-mock/types'
+import { IntentStore } from '$lib/jaensen/intent-store.svelte'
+import type { RightPanelTab } from '$lib/intent-mock/types'
 import { workspaceOrchestratorClass } from '$lib/workspace/layout'
 
-let intents = $state<IntentOrchestrator[]>([])
-let selectedId = $state<string | null>(null)
 let rightTab = $state<RightPanelTab>('overview')
 let newTitle = $state('')
-let error = $state<string | null>(null)
 let busy = $state(false)
 let dragActive = $state(false)
 let pendingFile = $state<File | null>(null)
 let fileInput: HTMLInputElement | null = null
 let composerEl: HTMLTextAreaElement | null = null
 
-const selectedIntent = $derived(intents.find((i) => i.id === selectedId) ?? null)
+const store = new IntentStore()
 
-async function refreshIntents() {
-	const res = await fetch('/api/aven/jaensen/intents')
-	const data = (await res.json()) as { ok: boolean; intents?: IntentOrchestrator[]; error?: string }
-	if (!data.ok) {
-		error = data.error ?? 'Failed to load intents'
-		return
-	}
-	intents = data.intents ?? []
-	if (!selectedId) selectedId = intents[0]?.id ?? null
-}
+const intents = $derived.by(() => store.intentList())
+const selectedIntent = $derived.by(() => store.selectedIntent())
+const error = $derived(store.error)
 
-function upsertIntent(next: IntentOrchestrator) {
-	const existing = intents.findIndex((intent) => intent.id === next.id)
-	if (existing >= 0) intents[existing] = next
-	else intents = [next, ...intents]
-	selectedId = next.id
-	intents = [...intents]
+function captureUiError(context: string, err: unknown) {
+	console.error(`[aven-ceo][/me] ${context}`, err)
+	store.error = err instanceof Error ? err.stack ?? err.message : String(err)
 }
 
 $effect(() => {
-	void refreshIntents()
+	void store.init()
 	return undefined
 })
 
 function selectIntent(id: string) {
-	selectedId = id
+	store.selectIntent(id)
 }
 
 function handleRemove(id: string) {
-	intents = intents.filter((intent) => intent.id !== id)
-	if (selectedId === id) {
-		selectedId = intents[0]?.id ?? null
-	}
+	store.removeIntent(id)
 }
 
 async function addIntent() {
 	const text = newTitle.trim()
 	if ((!text && !pendingFile) || busy) return
 	busy = true
-	error = null
+	store.error = null
 	try {
 		const attachment = pendingFile ? await fileToAttachment(pendingFile) : undefined
-		const res = await fetch('/api/aven/jaensen/chat', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				message: text || `Please ingest attachment ${pendingFile?.name ?? ''}`,
-				from: 'owner@aven.ceo',
-				attachment
-			})
-		})
-		const data = (await res.json()) as {
-			ok: boolean
-			reply?: string
-			intent?: IntentOrchestrator
-			error?: string
-		}
-		if (!data.ok || !data.intent) {
-			throw new Error(data.error ?? 'Failed to dispatch to Jaensen')
-		}
-		const next = data.intent
-		const existing = intents.findIndex((intent) => intent.id === next.id)
-		if (existing >= 0) intents[existing] = next
-		else intents = [next, ...intents]
-		selectedId = next.id
+		await store.sendMessage(text || `Please ingest attachment ${pendingFile?.name ?? ''}`, { attachment })
 		newTitle = ''
 		pendingFile = null
 		if (fileInput) fileInput.value = ''
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err)
+		captureUiError('addIntent failed', err)
 	} finally {
 		busy = false
 	}
@@ -138,7 +101,7 @@ function handleResolveHitl(
 	const intent = selectedIntent
 	if (!intent) return
 	busy = true
-	error = null
+	store.error = null
 	void (async () => {
 		try {
 			let message = ''
@@ -146,30 +109,9 @@ function handleResolveHitl(
 			else if (payload.kind === 'choice') message = `Choice selected: ${payload.optionId}`
 			else message = payload.approved ? 'Approved.' : 'Rejected.'
 			if (!message) throw new Error('Response cannot be empty')
-
-			const res = await fetch('/api/aven/jaensen/chat', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					message,
-					from: 'owner@aven.ceo',
-					metadata: {
-						intentId: intent.id,
-						hitlTodoId: todoId,
-						hitlKind: payload.kind
-					}
-				})
-			})
-			const data = (await res.json()) as {
-				ok: boolean
-				reply?: string
-				intent?: IntentOrchestrator
-				error?: string
-			}
-			if (!data.ok || !data.intent) throw new Error(data.error ?? 'Failed to send response to Jaensen')
-			upsertIntent(data.intent)
+			await store.sendMessage(message, { intentIdHint: intent.id })
 		} catch (err) {
-			error = err instanceof Error ? err.message : String(err)
+			captureUiError('handleResolveHitl failed', err)
 		} finally {
 			busy = false
 		}
@@ -200,7 +142,7 @@ function handleDemoHitl() {
 			class="grid grid-cols-1 min-h-0 flex-1 gap-8 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)_auto] xl:gap-6 xl:items-stretch py-6"
 		>
 			<div class="min-w-0 min-h-0 flex flex-col xl:max-w-[22rem]">
-				<IntentLeftNav {intents} {selectedId} onSelect={selectIntent} onRemove={handleRemove} />
+				<IntentLeftNav intents={intents} selectedId={store.selectedIntentId} onSelect={selectIntent} onRemove={handleRemove} />
 			</div>
 			<div class="min-w-0 min-h-0 flex flex-col">
 				<IntentCenterPanel

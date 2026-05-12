@@ -1,0 +1,152 @@
+export type IntentStatus = 'active' | 'waiting_for_user' | 'completed' | 'failed'
+
+export interface PostMessageAttachmentInput {
+	id: string
+	path?: string
+	mimeType?: string
+	name?: string
+}
+
+export interface PostMessageInput {
+	text: string
+	intentIdHint?: string
+	attachments?: PostMessageAttachmentInput[]
+}
+
+export interface PostMessageResult {
+	envelopeId: string
+	correlationId: string
+}
+
+export interface IntentSummaryDto {
+	id: string
+	title: string | null
+	goal: string | null
+	status: string | null
+	summary: string | null
+	pendingSkillCalls: Record<string, unknown>
+	version: number
+	createdAt: string
+	updatedAt: string
+	state: unknown
+}
+
+export interface IntentDetailDto extends IntentSummaryDto {}
+
+export interface HumanMessage {
+	id: string
+	intentId: string
+	role: 'user' | 'assistant'
+	text: string
+	createdAt?: string
+	envelopeId?: string | null
+	seq?: number
+}
+
+export interface HumanQuestion {
+	id: string
+	intentId: string
+	question: string
+	createdAt?: string
+	envelopeId?: string | null
+	resolved?: boolean
+	seq?: number
+}
+
+export interface SkillCallView {
+	callId: string
+	skillId: string
+	request: string
+	status: 'pending' | 'completed' | 'failed' | 'needs_clarification'
+	startedAt?: string
+	updatedAt?: string
+	resultSummary?: string
+	metadata?: Record<string, unknown>
+}
+
+export interface WorkerView {
+	workerId: string
+	skillId?: string
+	workerActorId?: string
+	status: 'spawned' | 'routed' | 'completed'
+	startedAt?: string
+	updatedAt?: string
+	metadata?: Record<string, unknown>
+}
+
+export interface TimelineItem {
+	id: string
+	seq: number
+	type: string
+	title: string
+	detail?: string
+	at?: string
+	kind:
+		| 'human'
+		| 'question'
+		| 'intent'
+		| 'skill_call'
+		| 'worker'
+		| 'debug'
+}
+
+export interface IntentView {
+	intentId: string
+	title: string
+	status: IntentStatus
+	summary: string
+	createdAt?: string
+	updatedAt?: string
+	correlationId?: string
+	messages: HumanMessage[]
+	questions: HumanQuestion[]
+	skillCalls: Record<string, SkillCallView>
+	workers: Record<string, WorkerView>
+	timeline: TimelineItem[]
+	lastSeqByScope: Record<string, number>
+}
+
+export interface StreamEventRecord<TPayload = unknown> {
+	seq: number
+	scope: string
+	type: string
+	payload: TPayload
+	createdAt?: string
+	envelopeId?: string | null
+}
+
+export interface StreamEventEnvelope<TPayload = unknown> {
+	seq: number
+	type: string
+	payload: TPayload
+}
+
+export interface EventListResponse {
+	events: Array<{
+		seq: number
+		scope: string
+		actorId: string | null
+		envelopeId: string | null
+		type: string
+		payload: unknown
+		createdAt: string
+	}>
+}
+
+export const STREAM_EVENT_TYPES = [
+	'intent.created',
+	'intent.status_changed',
+	'intent.skill_call_started',
+	'intent.skill_call_completed',
+	'intent.message_to_user',
+	'skill.worker_spawned',
+	'skill.worker_routed',
+	'skill.worker_completed',
+	'runtime.envelope.completed',
+	'runtime.envelope.queued',
+	'runtime.envelope.claimed',
+	'runtime.envelope.failed',
+	'actor.event'
+] as const
+
+export type KnownStreamEventType = (typeof STREAM_EVENT_TYPES)[number]

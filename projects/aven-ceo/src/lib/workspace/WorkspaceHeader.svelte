@@ -1,31 +1,58 @@
 <script lang="ts">
-import { getJazzContext, QuerySubscription } from 'jazz-tools/svelte'
+import { getJazzContext } from 'jazz-tools/svelte'
 import { page } from '$app/stores'
 import { app } from '$lib/schema'
 import { workspaceContentClass } from '$lib/workspace/layout'
 
 const ctx = getJazzContext()
-const profiles = new QuerySubscription(app.profiles.limit(1))
+
+type ProfileRow = {
+	id: string
+	name: string
+}
 
 let profileSeedForUser = $state<string | null>(null)
 let nameDraft = $state('')
+let profile = $state<ProfileRow | null>(null)
+let profileLoading = $state(true)
+let profileError = $state<Error | null>(null)
+
+async function loadProfile() {
+	const db = ctx.db
+	if (!db) return
+	profileLoading = true
+	profileError = null
+	try {
+		const rows = (await db.all(app.profiles.limit(1))) as ProfileRow[]
+		profile = rows[0] ?? null
+		if (profile) nameDraft = profile.name
+	} catch (error) {
+		profileError = error instanceof Error ? error : new Error(String(error))
+		profile = null
+	} finally {
+		profileLoading = false
+	}
+}
 
 $effect(() => {
-	if ($page.url.pathname !== '/me') return
+	const pathname = $page.url.pathname
+	const db = ctx.db
+	if (!db) return
+	if (pathname !== '/me') {
+		void loadProfile()
+		return
+	}
 	const s = ctx.session
 	if (!s) return
 	if (profileSeedForUser === s.user_id) return
-	const db = ctx.db
-	if (!db) return
 	void db.all(app.profiles.limit(1)).then((rows) => {
 		if (rows.length === 0) {
 			db.insert(app.profiles, { name: 'You' })
 		}
 		profileSeedForUser = s.user_id
+		void loadProfile()
 	})
 })
-
-const profile = $derived(profiles.current?.[0] ?? null)
 
 $effect(() => {
 	const p = profile
@@ -41,6 +68,7 @@ function syncDisplayName() {
 	if (next === p.name) return
 	try {
 		db.update(app.profiles, p.id, { name: next || 'You' })
+		profile = { ...p, name: next || 'You' }
 	} catch {
 		/* Jazz mutation errors surface via db.onMutationError */
 	}
@@ -85,10 +113,10 @@ async function logOut() {
 	</nav>
 
 	<div class="flex min-w-0 items-center justify-end justify-self-end gap-2 sm:gap-3">
-		{#if profiles.loading}
+		{#if profileLoading}
 			<span class="text-xl font-medium tracking-tight opacity-30 tabular-nums">…</span>
-		{:else if profiles.error}
-			<span class="truncate text-sm text-error" title={profiles.error.message}>!</span>
+		{:else if profileError}
+			<span class="truncate text-sm text-error" title={profileError.message}>!</span>
 		{:else if profile}
 			<input
 				type="text"
