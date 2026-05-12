@@ -28,7 +28,6 @@
 		"vite": "^8.0.7"
 	},
 	"dependencies": {
-		"@avenos/jaensen-bot": "workspace:*",
 		"@dagrejs/dagre": "^3.0.0",
 		"@xyflow/svelte": "^1.5.2",
 		"isomorphic-dompurify": "^3.12.0",
