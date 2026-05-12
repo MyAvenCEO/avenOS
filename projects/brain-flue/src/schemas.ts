@@ -23,6 +23,16 @@ const sendActionSchema = z.object({
 	payload: z.unknown()
 })
 
+const skillActorSchema = z.string().trim().regex(/^skill\/[a-z0-9]+(?:-[a-z0-9]+)*$/, 'to must target skill/<skillId>')
+
+const callSkillActionSchema = z.object({
+	type: z.literal('call_skill'),
+	to: skillActorSchema,
+	callId: z.string().trim().min(1, 'callId is required'),
+	request: z.string().trim().min(1, 'request is required'),
+	payload: z.unknown()
+})
+
 const routeWorkerActionSchema = z.object({
 	type: z.literal('route_worker'),
 	workerId: z.string().refine((value) => isSlugSafe(value), 'workerId must be slug-safe'),
@@ -39,16 +49,17 @@ const spawnWorkerActionSchema = z.object({
 })
 
 export const skillSupervisorDecisionSchema = z.object({
-	state: z.unknown(),
+	state: z.unknown().default({}),
 	events: z.array(eventSchema).optional(),
-	actions: z.array(z.discriminatedUnion('type', [replyActionSchema, sendActionSchema, routeWorkerActionSchema, spawnWorkerActionSchema])).optional()
+	actions: z.array(z.discriminatedUnion('type', [replyActionSchema, sendActionSchema, routeWorkerActionSchema, spawnWorkerActionSchema, callSkillActionSchema])).optional()
 })
 
 export const skillWorkerResultSchema = z.object({
-	state: z.unknown(),
+	state: z.unknown().default({}),
 	events: z.array(eventSchema).optional(),
 	result: z.unknown().optional(),
-	completed: z.boolean().optional()
+	completed: z.boolean().optional(),
+	actions: z.array(callSkillActionSchema).optional()
 })
 
 export function validateSupervisorDecision(input: unknown, envelopeFromActor: string) {

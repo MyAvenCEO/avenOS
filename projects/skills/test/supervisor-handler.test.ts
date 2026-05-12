@@ -11,6 +11,7 @@ const skill: SkillDefinition = {
 	id: 'memory',
 	path: 'memory/SKILL.md',
 	description: 'Memory skill',
+	directActors: ['skill/files'],
 	frontmatter: { id: 'memory', description: 'Memory skill' },
 	body: '# Memory',
 	bodyHash: 'hash-memory',
@@ -138,13 +139,179 @@ test('supervisor deterministically routes skill.request and stores call mapping'
 			'call-1': expect.objectContaining({ workerId: 'call-1', intentId: 'intent-123', callId: 'call-1', status: 'active' })
 		},
 		calls: {
-			'call-1': { callId: 'call-1', intentId: 'intent-123', workerId: 'call-1', status: 'active' }
+			'call-1': { callId: 'call-1', intentId: 'intent-123', workerId: 'call-1', status: 'active', replyTo: 'intent/default' }
 		}
 	})
 	expect(result.outgoing?.[0]).toMatchObject({
 		toActor: 'skill-worker/memory/call-1',
 		type: 'memory.run',
 		payload: expect.objectContaining({ intentId: 'intent-123', callId: 'call-1', initialState: {} })
+	})
+})
+
+test('skill.bootstrap does not invoke the brain and preserves state', async () => {
+	const handler = createSkillSupervisorHandler({
+		registry: createSkillRegistry([skill]),
+		brain: {
+			async decide() {
+				throw new Error('brain should not run for skill.bootstrap')
+			}
+		}
+	})
+
+	const initialState = { skillId: 'memory', workers: {}, calls: {}, bootstrappedAt: '2026-05-12T00:00:00.000Z' }
+	const result = await handler.activate({
+		actor: makeActor('skill/memory', 'skill-supervisor', initialState),
+		envelope: makeEnvelopeRecord({
+			fromActor: 'system',
+			toActor: 'skill/memory',
+			type: 'skill.bootstrap',
+			payload: { skillId: 'memory' }
+		}),
+		context: makeContext()
+	})
+
+	expect(result.state).toEqual({ skillId: 'memory', workers: {}, calls: {} })
+	expect(result.outgoing).toEqual([])
+	expect(result.events).toEqual([])
+})
+
+test('supervisor call_skill maps to skill.request', async () => {
+	const handler = createSkillSupervisorHandler({
+		registry: createSkillRegistry([
+			skill,
+			{ ...skill, id: 'files', path: 'files/SKILL.md', directActors: [], frontmatter: { id: 'files', description: 'Files skill' } }
+		]),
+		brain: {
+			async decide() {
+				return {
+					state: { skillId: 'memory', workers: {}, calls: {} },
+					actions: [{ type: 'call_skill', to: 'skill/files', callId: 'call-2', request: 'Read file', payload: { path: 'a.txt' } }]
+				}
+			}
+		}
+	})
+
+	const result = await handler.activate({
+		actor: makeActor('skill/memory', 'skill-supervisor', { skillId: 'memory', workers: {}, calls: {} }),
+		envelope: makeEnvelopeRecord({ payload: { intentId: 'intent-123', callId: 'parent-1' } }),
+		context: makeContext()
+	})
+
+	expect(result.outgoing?.[0]).toMatchObject({
+		fromActor: 'skill/memory',
+		toActor: 'skill/files',
+		type: 'skill.request',
+		correlationId: 'corr-1',
+		causationId: 'env-1',
+		payload: {
+			callId: 'call-2',
+			request: 'Read file',
+			input: { path: 'a.txt' },
+			replyTo: 'skill/memory',
+			intentId: 'intent-123',
+			parentCallId: 'parent-1'
+		}
+	})
+})
+
+test('supervisor call_skill rejects unlisted target', async () => {
+	const handler = createSkillSupervisorHandler({
+		registry: createSkillRegistry([
+			{ ...skill, directActors: [] },
+			{ ...skill, id: 'files', path: 'files/SKILL.md', directActors: [], frontmatter: { id: 'files', description: 'Files skill' } }
+		]),
+		brain: {
+			async decide() {
+				return {
+					state: { skillId: 'memory', workers: {}, calls: {} },
+					actions: [{ type: 'call_skill', to: 'skill/files', callId: 'call-2', request: 'Read file', payload: {} }]
+				}
+			}
+		}
+	})
+
+	await expect(handler.activate({
+		actor: makeActor('skill/memory', 'skill-supervisor', { skillId: 'memory', workers: {}, calls: {} }),
+		envelope: makeEnvelopeRecord(),
+		context: makeContext()
+	})).rejects.toThrow(/may not call unlisted actor skill\/files/)
+})
+
+test('direct skill request stores replyTo', async () => {
+	const handler = createSkillSupervisorHandler({
+		registry: createSkillRegistry([skill]),
+		brain: { async decide() { throw new Error('brain should not run for skill.request') } }
+	})
+
+	const result = await handler.activate({
+		actor: makeActor('skill/memory', 'skill-supervisor', { skillId: 'memory', workers: {}, calls: {} }),
+		envelope: makeEnvelopeRecord({
+			fromActor: 'skill/pdf',
+			type: 'skill.request',
+			payload: { callId: 'call-1', request: 'Remember', replyTo: 'skill-worker/pdf/job1', parentCallId: 'parent-1', input: {} }
+		}),
+		context: makeContext()
+	})
+
+	expect(result.state).toMatchObject({
+		calls: {
+			'call-1': expect.objectContaining({ replyTo: 'skill-worker/pdf/job1', parentCallId: 'parent-1' })
+		}
+	})
+})
+
+test('direct skill result replies to replyTo when no intentId exists', async () => {
+	const handler = createSkillSupervisorHandler({
+		registry: createSkillRegistry([skill]),
+		brain: { async decide() { throw new Error('brain should not run for skill.worker.result') } }
+	})
+
+	const result = await handler.activate({
+		actor: makeActor('skill/memory', 'skill-supervisor', {
+			skillId: 'memory',
+			workers: { workerA: { workerId: 'workerA', status: 'active', callId: 'call-1', updatedAt: '2026-05-12T00:00:00.000Z' } },
+			calls: { 'call-1': { callId: 'call-1', workerId: 'workerA', status: 'active', replyTo: 'skill-worker/pdf/job1', parentCallId: 'parent-1' } }
+		}),
+		envelope: makeEnvelopeRecord({
+			fromActor: 'skill-worker/memory/workerA',
+			type: 'skill.worker.result',
+			payload: { workerId: 'workerA', callId: 'call-1', result: { ok: true }, completed: true }
+		}),
+		context: makeContext()
+	})
+
+	expect(result.outgoing?.[0]).toMatchObject({
+		toActor: 'skill-worker/pdf/job1',
+		type: 'skill.result',
+		payload: { callId: 'call-1', parentCallId: 'parent-1', fromSkillId: 'memory', workerId: 'workerA', result: { ok: true } }
+	})
+})
+
+test('intent-origin skill result still replies to intent/<intentId>', async () => {
+	const handler = createSkillSupervisorHandler({
+		registry: createSkillRegistry([skill]),
+		brain: { async decide() { throw new Error('brain should not run for skill.worker.result') } }
+	})
+
+	const result = await handler.activate({
+		actor: makeActor('skill/memory', 'skill-supervisor', {
+			skillId: 'memory',
+			workers: { workerA: { workerId: 'workerA', status: 'active', intentId: 'intent-123', callId: 'call-1', updatedAt: '2026-05-12T00:00:00.000Z' } },
+			calls: { 'call-1': { callId: 'call-1', intentId: 'intent-123', workerId: 'workerA', status: 'active', replyTo: 'intent/intent-123' } }
+		}),
+		envelope: makeEnvelopeRecord({
+			fromActor: 'skill-worker/memory/workerA',
+			type: 'skill.worker.result',
+			payload: { workerId: 'workerA', callId: 'call-1', result: { ok: true }, completed: true }
+		}),
+		context: makeContext()
+	})
+
+	expect(result.outgoing?.[0]).toMatchObject({
+		toActor: 'intent/intent-123',
+		type: 'skill.result',
+		payload: { intentId: 'intent-123', callId: 'call-1', fromSkillId: 'memory', workerId: 'workerA', result: { ok: true } }
 	})
 })
 

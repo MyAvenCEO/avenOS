@@ -2,6 +2,7 @@ import type { ActorHandler } from '@jaensen/actor-runtime'
 
 import { parseSkillWorkerActorId } from './skill-id'
 import { SkillValidationError } from './errors'
+import { inferCallId, inferIntentId } from './skill-supervisor-handler'
 import type { CreateSkillWorkerHandlerInput } from './types'
 
 export function createSkillWorkerHandler(input: CreateSkillWorkerHandlerInput): ActorHandler {
@@ -27,24 +28,93 @@ export function createSkillWorkerHandler(input: CreateSkillWorkerHandlerInput): 
 			return {
 				state: result.state,
 				events: result.events ?? [],
-				outgoing: [
-					context.makeEnvelope({
-						from: actor.id,
-						to: `skill/${parsed.skillId}`,
-						type: 'skill.worker.result',
-						correlationId: envelope.correlationId,
-						causationId: envelope.id,
-						payload: {
-							workerId: parsed.workerId,
-							intentId: readStringField(envelope.payload, 'intentId'),
-							callId: readStringField(envelope.payload, 'callId'),
-							result: result.result,
-							completed: result.completed ?? false
-						}
-					})
-				]
+				outgoing: mapWorkerOutgoing({
+					skill,
+					actorId: actor.id,
+					skillId: parsed.skillId,
+					workerId: parsed.workerId,
+					envelope,
+					result,
+					makeEnvelope: context.makeEnvelope
+				})
 			}
 		}
+	}
+}
+
+function mapWorkerOutgoing(input: {
+	skill: { id: string; directActors: string[] }
+	actorId: string
+	skillId: string
+	workerId: string
+	envelope: { id: string; correlationId: string | null; payload: unknown }
+	result: Awaited<ReturnType<CreateSkillWorkerHandlerInput['brain']['run']>>
+	makeEnvelope: (input: {
+		from: string
+		to: string
+		type: string
+		payload: unknown
+		correlationId?: string
+		causationId?: string
+		availableAt?: Date
+	}) => unknown
+}): unknown[] {
+	const outgoing: unknown[] = []
+
+	for (const action of input.result.actions ?? []) {
+		validateWorkerDirectSkillCall(input.skill, action)
+		outgoing.push(input.makeEnvelope({
+			from: input.actorId,
+			to: action.to,
+			type: 'skill.request',
+			correlationId: input.envelope.correlationId ?? undefined,
+			causationId: input.envelope.id,
+			payload: {
+				callId: action.callId,
+				request: action.request,
+				input: action.payload,
+				replyTo: input.actorId,
+				intentId: inferIntentId(input.envelope.payload),
+				parentCallId: inferCallId(input.envelope.payload)
+			}
+		}))
+	}
+
+	if (input.result.result !== undefined || input.result.completed === true) {
+		outgoing.push(input.makeEnvelope({
+			from: input.actorId,
+			to: `skill/${input.skillId}`,
+			type: 'skill.worker.result',
+			correlationId: input.envelope.correlationId ?? undefined,
+			causationId: input.envelope.id,
+			payload: {
+				workerId: input.workerId,
+				intentId: readStringField(input.envelope.payload, 'intentId'),
+				callId: readStringField(input.envelope.payload, 'callId'),
+				result: input.result.result,
+				completed: input.result.completed ?? false
+			}
+		}))
+	}
+
+	return outgoing
+}
+
+function validateWorkerDirectSkillCall(
+	skill: { id: string; directActors: string[] },
+	action: { to: string; callId: string; request: string }
+): void {
+	if (!action.to.startsWith('skill/')) {
+		throw new SkillValidationError('Worker direct skill calls must target skill/<skillId> actors')
+	}
+	if (!action.callId) {
+		throw new SkillValidationError('Worker direct skill calls require a non-empty callId')
+	}
+	if (!action.request) {
+		throw new SkillValidationError('Worker direct skill calls require a non-empty request')
+	}
+	if (!skill.directActors.includes(action.to)) {
+		throw new SkillValidationError(`Skill ${skill.id} may not call unlisted actor ${action.to}`)
 	}
 }
 

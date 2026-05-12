@@ -8,6 +8,7 @@ import {
 } from './skill-id'
 import type {
 	CreateSkillSupervisorHandlerInput,
+	SkillDefinition,
 	SkillSupervisorAction,
 	SkillSupervisorState
 } from './types'
@@ -40,9 +41,18 @@ export function createSkillSupervisorHandler(
 				return { state, events: [], outgoing: [outgoing] }
 			}
 
+			if (envelope.type === 'skill.bootstrap') {
+				return {
+					state: actorState,
+					events: [],
+					outgoing: []
+				}
+			}
+
 			if (envelope.type === 'skill.worker.result') {
 				const { state, outgoing } = handleWorkerResult({
 					actorId: actor.id,
+					skillId,
 					state: actorState,
 					envelope,
 					makeEnvelope: context.makeEnvelope,
@@ -60,7 +70,7 @@ export function createSkillSupervisorHandler(
 			const outgoing = (decision.actions ?? []).map((action) =>
 				mapSupervisorAction({
 					action,
-					skillId,
+					skill,
 					fromActor: actor.id,
 					envelope,
 					makeEnvelope: context.makeEnvelope
@@ -94,7 +104,10 @@ function handleSkillRequest(input: {
 }): { state: SkillSupervisorState; outgoing: EnvelopeInput } {
 	const payload = toRecord(input.envelope.payload)
 	const callId = requireString(payload.callId, 'skill.request payload.callId is required')
-	const intentId = requireString(payload.intentId, 'skill.request payload.intentId is required')
+	requireString(payload.request, 'skill.request payload.request is required')
+	const intentId = optionalString(payload.intentId)
+	const parentCallId = optionalString(payload.parentCallId)
+	const replyTo = optionalString(payload.replyTo) ?? input.envelope.fromActor
 	const workerId = selectWorkerId(payload, callId)
 	const existingWorker = input.state.workers[workerId]
 	const state: SkillSupervisorState = {
@@ -113,9 +126,11 @@ function handleSkillRequest(input: {
 			...input.state.calls,
 			[callId]: {
 				callId,
-				intentId,
 				workerId,
-				status: 'active'
+				status: 'active',
+				replyTo,
+				intentId,
+				parentCallId
 			}
 		}
 	}
@@ -135,6 +150,7 @@ function handleSkillRequest(input: {
 
 function handleWorkerResult(input: {
 	actorId: string
+	skillId: string
 	state: SkillSupervisorState
 	envelope: EnvelopeRecord
 	makeEnvelope: (input: {
@@ -184,11 +200,14 @@ function handleWorkerResult(input: {
 		state,
 		outgoing: input.makeEnvelope({
 			from: input.actorId,
-			to: `intent/${call.intentId}`,
+			to: shouldReplyToIntent(call) ? `intent/${call.intentId}` : call.replyTo,
 			type: 'skill.result',
 			payload: {
-				intentId: call.intentId,
 				callId,
+				parentCallId: call.parentCallId,
+				intentId: call.intentId,
+				fromSkillId: input.skillId,
+				workerId,
 				result: payload.result
 			},
 			correlationId: input.envelope.correlationId,
@@ -199,9 +218,9 @@ function handleWorkerResult(input: {
 
 function mapSupervisorAction(input: {
 	action: SkillSupervisorAction
-	skillId: string
+	skill: SkillDefinition
 	fromActor: string
-	envelope: { fromActor: string }
+	envelope: EnvelopeRecord
 	makeEnvelope: (input: {
 		from: string
 		to: string
@@ -224,6 +243,7 @@ function mapSupervisorAction(input: {
 		}
 		case 'send': {
 			assertNotHumanTarget(input.action.to)
+			assertAllowedSkillTarget(input.skill, input.action.to)
 			return input.makeEnvelope({
 				from: input.fromActor,
 				to: input.action.to,
@@ -234,7 +254,7 @@ function mapSupervisorAction(input: {
 		case 'route_worker': {
 			return input.makeEnvelope({
 				from: input.fromActor,
-				to: createSkillWorkerActorId(input.skillId, input.action.workerId),
+				to: createSkillWorkerActorId(input.skill.id, input.action.workerId),
 				type: input.action.messageType,
 				payload: input.action.payload
 			})
@@ -242,9 +262,18 @@ function mapSupervisorAction(input: {
 		case 'spawn_worker': {
 			return input.makeEnvelope({
 				from: input.fromActor,
-				to: createSkillWorkerActorId(input.skillId, input.action.workerId),
+				to: createSkillWorkerActorId(input.skill.id, input.action.workerId),
 				type: input.action.messageType,
 				payload: withInitialState(input.action.payload, input.action.initialState)
+			})
+		}
+		case 'call_skill': {
+			return mapDirectSkillCall({
+				skill: input.skill,
+				fromActor: input.fromActor,
+				envelope: input.envelope,
+				action: input.action,
+				makeEnvelope: input.makeEnvelope
 			})
 		}
 	}
@@ -272,14 +301,25 @@ function toSupervisorState(state: unknown, actorId: string): SkillSupervisorStat
 		calls: Object.fromEntries(
 			Object.entries(rawCalls).flatMap(([callId, value]) => {
 				const call = toRecord(value)
-				if (typeof call.intentId !== 'string' || typeof call.workerId !== 'string') {
+				if (typeof call.workerId !== 'string') {
+					return []
+				}
+				const intentId = typeof call.intentId === 'string' ? call.intentId : undefined
+				const replyTo = typeof call.replyTo === 'string'
+					? call.replyTo
+					: intentId
+						? `intent/${intentId}`
+						: undefined
+				if (!replyTo) {
 					return []
 				}
 				return [[callId, {
 					callId,
-					intentId: call.intentId,
 					workerId: call.workerId,
-					status: call.status === 'completed' || call.status === 'failed' ? call.status : 'active'
+					status: call.status === 'completed' || call.status === 'failed' ? call.status : 'active',
+					replyTo,
+					intentId,
+					parentCallId: typeof call.parentCallId === 'string' ? call.parentCallId : undefined
 				}]]
 			})
 		)
@@ -295,6 +335,10 @@ function requireString(value: unknown, message: string): string {
 		throw new SkillValidationError(message)
 	}
 	return value
+}
+
+function optionalString(value: unknown): string | undefined {
+	return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
 function selectWorkerId(payload: Record<string, unknown>, callId: string): string {
@@ -325,4 +369,105 @@ function assertNotHumanTarget(target: string): void {
 	if (target === 'human') {
 		throw new SkillValidationError('Skill supervisors must not send directly to human')
 	}
+}
+
+function assertAllowedSkillTarget(skill: SkillDefinition, target: string): void {
+	if (!target.startsWith('skill/')) {
+		return
+	}
+
+	if (!skill.directActors.includes(target)) {
+		throw new SkillValidationError(
+			`Skill ${skill.id} may not send directly to unlisted actor ${target}`
+		)
+	}
+}
+
+function mapDirectSkillCall(input: {
+	skill: SkillDefinition
+	fromActor: string
+	envelope: EnvelopeRecord
+	action: Extract<SkillSupervisorAction, { type: 'call_skill' }>
+	makeEnvelope: (input: {
+		from: string
+		to: string
+		type: string
+		payload: unknown
+		correlationId?: string
+		causationId?: string
+		availableAt?: Date
+	}) => EnvelopeInput
+}): EnvelopeInput {
+	validateDirectSkillCall(input.skill, input.action)
+	return input.makeEnvelope({
+		from: input.fromActor,
+		to: input.action.to,
+		type: 'skill.request',
+		correlationId: input.envelope.correlationId,
+		causationId: input.envelope.id,
+		payload: {
+			callId: input.action.callId,
+			request: input.action.request,
+			input: input.action.payload,
+			replyTo: input.fromActor,
+			intentId: inferIntentId(input.envelope.payload),
+			parentCallId: inferCallId(input.envelope.payload)
+		}
+	})
+}
+
+function validateDirectSkillCall(
+	skill: SkillDefinition,
+	action: Extract<SkillSupervisorAction, { type: 'call_skill' }>
+): void {
+	if (!action.to.startsWith('skill/')) {
+		throw new SkillValidationError('Direct skill calls must target skill/<skillId> actors')
+	}
+	if (action.callId.length === 0) {
+		throw new SkillValidationError('Direct skill calls require a non-empty callId')
+	}
+	if (action.request.length === 0) {
+		throw new SkillValidationError('Direct skill calls require a non-empty request')
+	}
+	if (!skill.directActors.includes(action.to)) {
+		throw new SkillValidationError(`Skill ${skill.id} may not call unlisted actor ${action.to}`)
+	}
+}
+
+export function inferIntentId(payload: unknown): string | undefined {
+	const record = toRecord(payload)
+	return firstString(
+		record.intentId,
+		toRecord(record.input).intentId,
+		toRecord(record.result).intentId
+	)
+}
+
+export function inferCallId(payload: unknown): string | undefined {
+	const record = toRecord(payload)
+	return firstString(
+		record.parentCallId,
+		record.callId,
+		toRecord(record.input).parentCallId,
+		toRecord(record.input).callId,
+		toRecord(record.result).parentCallId,
+		toRecord(record.result).callId
+	)
+}
+
+function firstString(...values: unknown[]): string | undefined {
+	for (const value of values) {
+		if (typeof value === 'string' && value.length > 0) {
+			return value
+		}
+	}
+	return undefined
+}
+
+function shouldReplyToIntent(call: SkillSupervisorState['calls'][string]): boolean {
+	return typeof call.intentId === 'string' && call.replyTo === createIntentActorId(call.intentId)
+}
+
+function createIntentActorId(intentId: string): string {
+	return `intent/${intentId}`
 }

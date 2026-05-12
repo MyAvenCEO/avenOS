@@ -12,6 +12,7 @@ const skill: SkillDefinition = {
 	id: 'memory',
 	path: 'memory/SKILL.md',
 	description: 'Memory skill',
+	directActors: ['skill/files'],
 	frontmatter: { id: 'memory', description: 'Memory skill' },
 	body: '# Memory',
 	bodyHash: 'hash-memory',
@@ -101,6 +102,65 @@ test('missing skill fails clearly', async () => {
 			context: makeContext()
 		})
 	).rejects.toThrow(new SkillNotFoundError('missing'))
+})
+
+test('worker call_skill maps to skill.request', async () => {
+	const handler = createSkillWorkerHandler({
+		registry: createSkillRegistry([
+			skill,
+			{ ...skill, id: 'files', path: 'files/SKILL.md', directActors: [], frontmatter: { id: 'files', description: 'Files skill' } }
+		]),
+		brain: {
+			async run() {
+				return {
+					state: {},
+					actions: [{ type: 'call_skill', to: 'skill/files', callId: 'call-2', request: 'Read file', payload: { path: 'a.txt' } }],
+					completed: false
+				}
+			}
+		}
+	})
+
+	const result = await handler.activate({
+		actor: makeActor('skill-worker/memory/topic-jaensen-architecture', {}),
+		envelope: makeEnvelopeRecord({ payload: { intentId: 'intent-123', callId: 'call-1' } }),
+		context: makeContext()
+	})
+
+	expect(result.outgoing).toHaveLength(1)
+	expect(result.outgoing?.[0]).toMatchObject({
+		toActor: 'skill/files',
+		type: 'skill.request',
+		payload: {
+			callId: 'call-2',
+			request: 'Read file',
+			input: { path: 'a.txt' },
+			replyTo: 'skill-worker/memory/topic-jaensen-architecture',
+			intentId: 'intent-123',
+			parentCallId: 'call-1'
+		}
+	})
+})
+
+test('worker call_skill rejects unlisted target', async () => {
+	const handler = createSkillWorkerHandler({
+		registry: createSkillRegistry([{ ...skill, directActors: [] }]),
+		brain: {
+			async run() {
+				return {
+					state: {},
+					actions: [{ type: 'call_skill', to: 'skill/files', callId: 'call-2', request: 'Read file', payload: {} }],
+					completed: false
+				}
+			}
+		}
+	})
+
+	await expect(handler.activate({
+		actor: makeActor('skill-worker/memory/topic-jaensen-architecture', {}),
+		envelope: makeEnvelopeRecord(),
+		context: makeContext()
+	})).rejects.toThrow(/may not call unlisted actor skill\/files/)
 })
 
 function makeActor(id: string, state: unknown) {

@@ -33,12 +33,15 @@ export async function loadSkills(input: LoadSkillsInput): Promise<SkillDefinitio
 			id: frontmatter.id,
 			path: relativePath,
 			description: frontmatter.description,
+			directActors: frontmatter.direct_actors ?? [],
 			frontmatter: frontmatter as Record<string, unknown>,
 			body: parsed.body,
 			bodyHash: createHash('sha256').update(parsed.body).digest('hex'),
 			loadedAt: now
 		})
 	}
+
+	validateDirectActors(definitions)
 
 	return definitions.sort((left, right) => left.id.localeCompare(right.id))
 }
@@ -70,12 +73,15 @@ interface ParsedSkillFrontmatter {
 	id: string
 	description: string
 	worker_policy?: 'ephemeral' | 'pooled' | 'durable'
+	direct_actors?: string[]
 	message_types?: string[]
 	resources?: {
 		fs?: string[]
 		shell?: boolean
 	}
 }
+
+const DIRECT_SKILL_ACTOR_PATTERN = /^skill\/[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 function parseSkillMarkdown(
 	raw: string,
@@ -118,6 +124,14 @@ function validateFrontmatter(
 	}
 
 	if (
+		frontmatter.direct_actors !== undefined &&
+		(!Array.isArray(frontmatter.direct_actors) ||
+			!frontmatter.direct_actors.every((value) => typeof value === 'string'))
+	) {
+		throw new SkillValidationError(`Invalid skill frontmatter in ${relativePath}: direct_actors must be an array of strings`)
+	}
+
+	if (
 		frontmatter.message_types !== undefined &&
 		(!Array.isArray(frontmatter.message_types) ||
 			!frontmatter.message_types.every((value) => typeof value === 'string'))
@@ -141,6 +155,33 @@ function validateFrontmatter(
 
 		if (resources.shell !== undefined && typeof resources.shell !== 'boolean') {
 			throw new SkillValidationError(`Invalid skill frontmatter in ${relativePath}: resources.shell must be a boolean`)
+		}
+	}
+}
+
+function validateDirectActors(definitions: SkillDefinition[]): void {
+	const knownSkills = new Set(definitions.map((definition) => definition.id))
+
+	for (const definition of definitions) {
+		for (const actor of definition.directActors) {
+			if (!DIRECT_SKILL_ACTOR_PATTERN.test(actor)) {
+				throw new SkillValidationError(
+					`Invalid skill frontmatter in ${definition.path}: direct_actors entries must match ${DIRECT_SKILL_ACTOR_PATTERN}`
+				)
+			}
+
+			const targetSkillId = actor.slice('skill/'.length)
+			if (targetSkillId === definition.id) {
+				throw new SkillValidationError(
+					`Invalid skill frontmatter in ${definition.path}: direct_actors must not reference the skill itself`
+				)
+			}
+
+			if (!knownSkills.has(targetSkillId)) {
+				throw new SkillValidationError(
+					`Invalid skill frontmatter in ${definition.path}: direct_actors references unknown skill \"${targetSkillId}\"`
+				)
+			}
 		}
 	}
 }

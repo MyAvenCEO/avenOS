@@ -9,10 +9,19 @@ export interface SkillDefinition {
 	id: string
 	path: string
 	description: string
+	directActors: string[]
 	frontmatter: Record<string, unknown>
 	body: string
 	bodyHash: string
 	loadedAt: string
+}
+
+export interface SkillCallAction {
+	type: 'call_skill'
+	to: string
+	callId: string
+	request: string
+	payload: unknown
 }
 
 export interface SkillRegistry {
@@ -57,9 +66,11 @@ export interface SkillSupervisorState {
 	}>
 	calls: Record<string, {
 		callId: string
-		intentId: string
 		workerId: string
 		status: 'active' | 'completed' | 'failed'
+		replyTo: string
+		intentId?: string
+		parentCallId?: string
 	}>
 }
 
@@ -88,6 +99,7 @@ export type SkillSupervisorAction =
 			messageType: string
 			payload: unknown
 	  }
+	| SkillCallAction
 
 export interface SkillWorkerBrain {
 	run(input: {
@@ -103,6 +115,7 @@ export interface SkillWorkerResult {
 	events?: ActorEventInput[]
 	result?: unknown
 	completed?: boolean
+	actions?: SkillCallAction[]
 }
 
 export interface CreateSkillSupervisorHandlerInput {

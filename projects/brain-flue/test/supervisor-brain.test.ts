@@ -11,6 +11,7 @@ const skill: SkillDefinition = {
 	id: 'memory',
 	path: 'memory/SKILL.md',
 	description: 'Memory skill',
+	directActors: [],
 	frontmatter: { id: 'memory', description: 'Memory skill' },
 	body: '# Memory\nRemember important facts.',
 	bodyHash: 'hash-memory',
