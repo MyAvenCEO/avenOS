@@ -16,8 +16,8 @@ let {
 </script>
 
 <section class="min-w-0 flex flex-col min-h-0">
-	<div class="flex items-center gap-2 mb-1.5 shrink-0">
-		<span class="text-[9px] font-bold opacity-30 uppercase tracking-[0.26em]">Intents</span>
+	<div class="flex shrink-0 items-center gap-2 mb-1.5">
+		<span class="text-[9px] font-bold uppercase tracking-[0.26em] opacity-30">Intents</span>
 	</div>
 	<div class="flex flex-col gap-1.5 flex-1 min-h-0 overflow-y-auto pr-0.5">
 		{#each intents as intent (intent.id)}

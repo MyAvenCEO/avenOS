@@ -2,7 +2,8 @@
 
 export type AgentStatus = 'idle' | 'running' | 'blocked_hitl' | 'done'
 
-export type RightPanelTab = 'todos' | 'stream' | 'config' | 'context'
+/** Sub-views for the selected actor (see `actor-context-tabs.ts` — configurable per actor tier). */
+export type ActorContextTab = 'overview' | 'config' | 'context'
 
 export interface ToolCallStep {
 	id: string

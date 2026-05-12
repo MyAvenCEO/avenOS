@@ -5,12 +5,19 @@ import { beamAvatarSvg, paletteFromCommaString } from './beam-avatar'
 
 export { paletteFromCommaString }
 
+/** Ordering: orchestrator → supervisors → workers (see IntentActorColumn dividers). */
+export type ActorTier = 'orchestrator' | 'supervisor' | 'worker'
+
 export type MockInvolvedActor = {
 	id: string
 	label: string
 	seed: string
 	colors: string
+	tier: ActorTier
 }
+
+/** Intent lead — only this actor owns HITL / Todos toward humans. */
+export const AVENCEO_ACTOR_ID = 'mock-avenceo'
 
 /** Neutral greys only — sits on sage `#e8ede1` without accent hues. */
 export const MOCK_BEAM_COLORS = 'eceee9,e0e2dd,d4d6d0,b8bab4,8a8d87'
@@ -20,31 +27,36 @@ export const MOCK_INVOLVED_ACTORS: MockInvolvedActor[] = [
 		id: 'mock-avenceo',
 		label: 'AvenCEO',
 		seed: 'Margaret Brent',
-		colors: MOCK_BEAM_COLORS
+		colors: MOCK_BEAM_COLORS,
+		tier: 'orchestrator'
 	},
 	{
 		id: 'mock-dispatch',
 		label: 'Dispatcher',
 		seed: 'Amelia Earhart',
-		colors: MOCK_BEAM_COLORS
+		colors: MOCK_BEAM_COLORS,
+		tier: 'supervisor'
 	},
 	{
 		id: 'mock-ocr',
 		label: 'OCR worker',
 		seed: 'Mary Edwards',
-		colors: MOCK_BEAM_COLORS
+		colors: MOCK_BEAM_COLORS,
+		tier: 'worker'
 	},
 	{
 		id: 'mock-qa',
 		label: 'QA checker',
 		seed: 'Lucy Stone',
-		colors: MOCK_BEAM_COLORS
+		colors: MOCK_BEAM_COLORS,
+		tier: 'worker'
 	},
 	{
 		id: 'mock-tools',
 		label: 'Tool runtime',
 		seed: 'Mahalia Jackson',
-		colors: MOCK_BEAM_COLORS
+		colors: MOCK_BEAM_COLORS,
+		tier: 'worker'
 	}
 ]
 

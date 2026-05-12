@@ -1,15 +1,25 @@
 <script lang="ts">
 import { tick } from 'svelte'
+import IntentActorColumn from '$lib/intent-mock/IntentActorColumn.svelte'
 import IntentCenterPanel from '$lib/intent-mock/IntentCenterPanel.svelte'
 import IntentLeftNav from '$lib/intent-mock/IntentLeftNav.svelte'
 import IntentRightRail from '$lib/intent-mock/IntentRightRail.svelte'
-import type { RightPanelTab } from '$lib/intent-mock/types'
+import {
+	contextTabsForTier,
+	firstTabForTier,
+	isTabAllowedForTier
+} from '$lib/intent-mock/actor-context-tabs'
+import { AVENCEO_ACTOR_ID, MOCK_INVOLVED_ACTORS } from '$lib/intent-mock/boring-avatar'
+import type { InvolvedActorId } from '$lib/intent-mock/involved-actors-display'
+import type { ActorContextTab } from '$lib/intent-mock/types'
+import { HITL_LAYOUT_REF_ID_PREFIX } from '$lib/intent-mock/hitl-layout-examples'
 import { IntentStore } from '$lib/jaensen/intent-store.svelte'
 import { workspaceOrchestratorClass } from '$lib/workspace/layout'
 
 const COMPOSER_MAX_LINES = 4
 
-let rightTab = $state<RightPanelTab>('todos')
+let contextTab = $state<ActorContextTab>('overview')
+let selectedActorId = $state<InvolvedActorId>(AVENCEO_ACTOR_ID)
 let newTitle = $state('')
 let busy = $state(false)
 let dragActive = $state(false)
@@ -22,6 +32,24 @@ const store = new IntentStore()
 const intents = $derived.by(() => store.intentList())
 const selectedIntent = $derived.by(() => store.selectedIntent())
 const error = $derived(store.error)
+
+const selectedActorTier = $derived.by(() => {
+	return MOCK_INVOLVED_ACTORS.find((a) => a.id === selectedActorId)?.tier ?? 'worker'
+})
+
+const contextTabs = $derived.by(() => contextTabsForTier(selectedActorTier))
+
+$effect(() => {
+	void selectedIntent?.id
+	selectedActorId = AVENCEO_ACTOR_ID
+	contextTab = 'overview'
+})
+
+$effect(() => {
+	if (!isTabAllowedForTier(contextTab, selectedActorTier)) {
+		contextTab = firstTabForTier(selectedActorTier)
+	}
+})
 
 function resizeComposer() {
 	const el = composerEl
@@ -121,12 +149,13 @@ async function fileToAttachment(
 }
 
 function handleResolveHitl(
-	_todoId: string,
+	todoId: string,
 	payload:
 		| { kind: 'text_reply'; text: string }
 		| { kind: 'choice'; optionId: string }
 		| { kind: 'approve_reject'; approved: boolean }
 ) {
+	if (todoId.startsWith(HITL_LAYOUT_REF_ID_PREFIX)) return
 	const intent = selectedIntent
 	if (!intent) return
 	busy = true
@@ -164,7 +193,7 @@ function handleResolveHitl(
 	{/if}
 	<main class={`${workspaceOrchestratorClass} flex-1 flex flex-col min-h-0 px-3 sm:px-5`}>
 		<div
-			class="grid grid-cols-1 min-h-0 flex-1 gap-3 sm:gap-4 xl:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_auto] xl:gap-3 xl:items-stretch pt-1 pb-1"
+			class="grid grid-cols-1 min-h-0 flex-1 gap-3 sm:gap-4 xl:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_auto_minmax(0,7.75rem)] xl:gap-3 xl:items-stretch pt-1 pb-1"
 		>
 			<div class="min-w-0 min-h-0 flex flex-col xl:max-w-[15rem]">
 				<IntentLeftNav
@@ -177,13 +206,30 @@ function handleResolveHitl(
 			<div class="flex h-full min-h-0 min-w-0 flex-col">
 				<IntentCenterPanel
 					intent={selectedIntent}
-					panel={rightTab}
+					panel={contextTab}
+					selectedActorId={selectedActorId}
 					onResolveHitl={handleResolveHitl}
 				/>
 			</div>
-			<div class="min-h-0 shrink-0 flex flex-col">
-				<IntentRightRail tab={rightTab} onTab={(t) => (rightTab = t)} />
-			</div>
+			{#if selectedIntent}
+				<div class="flex min-h-0 w-fit min-w-0 shrink-0 flex-col self-stretch justify-start">
+					<IntentRightRail
+						tabs={contextTabs}
+						tab={contextTab}
+						onTab={(t) => (contextTab = t)}
+					/>
+				</div>
+				<div class="min-h-0 max-w-31 shrink-0 xl:w-full">
+					<IntentActorColumn
+						intent={selectedIntent}
+						selectedActorId={selectedActorId}
+						onSelectActor={(id) => (selectedActorId = id)}
+					/>
+				</div>
+			{:else}
+				<div class="hidden min-h-0 w-0 shrink-0 flex-col xl:flex" aria-hidden="true"></div>
+				<div class="hidden min-h-0 max-w-31 shrink-0 xl:block xl:w-full" aria-hidden="true"></div>
+			{/if}
 		</div>
 	</main>
 

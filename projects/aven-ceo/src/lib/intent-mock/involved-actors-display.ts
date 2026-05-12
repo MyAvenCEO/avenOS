@@ -3,21 +3,18 @@ import { skillLinesForSubAgent } from './skill-display'
 import type { MockInvolvedActor } from './boring-avatar'
 import { MOCK_INVOLVED_ACTORS } from './boring-avatar'
 
-/** `all` or one of the five mock actor ids (`MOCK_INVOLVED_ACTORS[].id`). */
-export type ActorFilterSelection = 'all' | (typeof MOCK_INVOLVED_ACTORS)[number]['id']
+export type InvolvedActorId = (typeof MOCK_INVOLVED_ACTORS)[number]['id']
 
 /**
- * Filter activity rows by the selected actor lane (Stream tab).
- * Unknown / orchestrator-side ids map to the lead (first) slot when not a sub-agent id.
+ * Filter activity rows for the Overview log (skill-scoped).
+ * Slot index aligns with {@link MOCK_INVOLVED_ACTORS} order.
  */
 export function activityMatchesActorFilter(
 	intent: IntentOrchestrator,
 	activity: ActivityItem,
-	filter: ActorFilterSelection
+	actorId: InvolvedActorId
 ): boolean {
-	if (filter === 'all') return true
-
-	const slot = MOCK_INVOLVED_ACTORS.findIndex((a) => a.id === filter)
+	const slot = MOCK_INVOLVED_ACTORS.findIndex((a) => a.id === actorId)
 	if (slot < 0) return true
 
 	const agentId = activity.agentId
@@ -25,7 +22,6 @@ export function activityMatchesActorFilter(
 	if (agentId) {
 		const subIx = intent.subAgents.findIndex((s) => s.id === agentId)
 		if (subIx >= 0) return slot === subIx + 2
-		// Orchestrator / system ids — show under “lead” lane only
 		return slot === 0
 	}
 
@@ -43,7 +39,6 @@ export function activityMatchesActorFilter(
 		return activity.kind === 'delegation'
 	}
 
-	// Slots 2–4: only rows with that sub-agent’s id match (handled when agentId is set above).
 	return false
 }
 
@@ -58,7 +53,7 @@ function statusForOrchestrator(intent: IntentOrchestrator): InvolvedActorDisplay
 	return 'orchestrating'
 }
 
-/** Short label for the small status pill under each skill name. */
+/** Short label for the small status pill under each actor name. */
 export function statusBadgeLabel(status: InvolvedActorDisplayRow['status']): string {
 	switch (status) {
 		case 'orchestrating':
@@ -77,7 +72,8 @@ export function statusBadgeLabel(status: InvolvedActorDisplayRow['status']): str
 }
 
 /**
- * Five fixed mock faces + live skill names / statuses derived from the current intent.
+ * Mock faces + live skill names / statuses derived from the current intent.
+ * Order: AvenCEO → supervisor(s) → workers (see {@link MOCK_INVOLVED_ACTORS} tiers).
  */
 export function involvedActorsForIntent(intent: IntentOrchestrator): InvolvedActorDisplayRow[] {
 	const sa = intent.subAgents
