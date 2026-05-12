@@ -1,5 +1,4 @@
 <script lang="ts">
-import { mockActorBeamSvg } from './boring-avatar'
 import {
 	involvedActorsForIntent,
 	statusBadgeLabel,
@@ -7,9 +6,6 @@ import {
 	type InvolvedActorId
 } from './involved-actors-display'
 import type { IntentOrchestrator } from './types'
-
-/** Beam output size — fits the {@link size-8} frame. */
-const AVATAR_PX = 32
 
 let {
 	intent,
@@ -27,28 +23,27 @@ function showDividerAfter(prev: InvolvedActorDisplayRow, row: InvolvedActorDispl
 	return prev.actor.tier !== row.actor.tier
 }
 
-/** Match {@link IntentLeftNav} pill vocabulary: ring + uppercase micro label. */
-function badgeClass(status: InvolvedActorDisplayRow['status']): string {
-	const shell =
-		'inline-flex rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide leading-none text-center ring-1 uppercase'
+/** State dots — richer greens / amber / orange / grey (higher chroma, still UI-soft). */
+function statusDotClass(status: InvolvedActorDisplayRow['status']): string {
+	const shell = 'size-2.5 shrink-0 rounded-full ring-2 ring-background shadow-sm'
 	switch (status) {
 		case 'blocked_hitl':
-			return `${shell} bg-amber-500/15 text-amber-950 ring-amber-500/25`
+			return `${shell} bg-orange-400`
 		case 'running':
-			return `${shell} bg-sky-500/10 text-sky-950 ring-sky-500/20`
+			return `${shell} bg-amber-300`
 		case 'orchestrating':
-			return `${shell} bg-foreground/[0.06] text-foreground/70 ring-border/50`
+			return `${shell} bg-emerald-400`
 		case 'done':
-			return `${shell} bg-foreground/10 text-foreground/65 ring-transparent`
+			return `${shell} bg-green-500`
 		case 'idle':
 		default:
-			return `${shell} bg-foreground/[0.04] text-foreground/50 ring-border/55`
+			return `${shell} bg-stone-500`
 	}
 }
 
 function itemClass(isOn: boolean): string {
 	const base =
-		'group w-full cursor-pointer rounded-lg border text-left transition-colors duration-150 ease-out px-2 py-2'
+		'group w-full cursor-pointer rounded-lg border text-left transition-colors duration-150 ease-out px-2 py-1.5'
 	return isOn
 		? `${base} border-foreground/20 bg-background/90`
 		: `${base} border-border/40 bg-background/40 hover:bg-background/70`
@@ -60,7 +55,7 @@ function itemClass(isOn: boolean): string {
 		<span class="text-[9px] font-bold uppercase tracking-[0.26em] opacity-30">Skills</span>
 	</div>
 	<nav
-		class="scrollbar-gutter-stable flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden pr-0.5"
+		class="scrollbar-gutter-stable flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden pr-0.5"
 		aria-label="Select skill"
 	>
 		{#each rows as row, i (row.actor.id)}
@@ -70,28 +65,18 @@ function itemClass(isOn: boolean): string {
 			<button
 				type="button"
 				class={itemClass(selectedActorId === row.actor.id)}
+				title={`${row.skillName} · ${statusBadgeLabel(row.status)}`}
 				aria-pressed={selectedActorId === row.actor.id}
-				aria-label={`Skill: ${row.skillName}`}
+				aria-label={`Skill ${row.skillName}, ${statusBadgeLabel(row.status)}`}
 				onclick={() => onSelectActor(row.actor.id)}
 			>
-				<div class="flex items-start gap-2">
-					<div
-						class="size-8 shrink-0 overflow-hidden rounded-full border border-border/50 bg-background/50 [&_svg]:block [&_svg]:size-full"
+				<div class="flex items-center gap-2">
+					<span class={statusDotClass(row.status)} aria-hidden="true"></span>
+					<p
+						class="min-w-0 flex-1 text-[11px] font-semibold leading-snug tracking-tight text-foreground/90 line-clamp-2"
 					>
-						{@html mockActorBeamSvg(row.actor, AVATAR_PX)}
-					</div>
-					<div class="min-w-0 flex-1 space-y-1 pt-0.5">
-						<p
-							class="text-[11px] font-semibold leading-snug tracking-tight text-foreground/90 line-clamp-2"
-						>
-							{row.skillName}
-						</p>
-						<span
-							class="inline-flex max-w-full items-center justify-center {badgeClass(row.status)}"
-						>
-							{statusBadgeLabel(row.status)}
-						</span>
-					</div>
+						{row.skillName}
+					</p>
 				</div>
 			</button>
 		{/each}
