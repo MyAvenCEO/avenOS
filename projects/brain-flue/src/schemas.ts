@@ -87,5 +87,13 @@ export function validateWorkerResult(input: unknown) {
 		throw new FlueBrainValidationError(`Invalid worker result: ${parsed.error.issues.map((issue) => issue.message).join('; ')}`)
 	}
 
+	const hasChildActions = (parsed.data.actions?.length ?? 0) > 0
+	const hasFinalResult = parsed.data.completed === true || parsed.data.result !== undefined
+	if (hasChildActions && hasFinalResult) {
+		throw new FlueBrainValidationError(
+			'Invalid worker result: call_skill actions may not be returned together with completed=true or result'
+		)
+	}
+
 	return parsed.data
 }

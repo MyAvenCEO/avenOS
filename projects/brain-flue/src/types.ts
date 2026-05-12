@@ -35,6 +35,7 @@ export interface FlueSessionAdapter {
 		stdout: string
 		stderr: string
 		exitCode: number
+		timedOut?: boolean
 	}>
 }
 
@@ -48,6 +49,7 @@ export interface CreateFlueSkillSupervisorBrainInput {
 export interface CreateFlueSkillWorkerBrainInput {
 	harness: FlueHarnessAdapter
 	workspaceRoot: string
+	skillsRoot?: string
 	model?: string
 	thinkingLevel?: ThinkingLevel
 }

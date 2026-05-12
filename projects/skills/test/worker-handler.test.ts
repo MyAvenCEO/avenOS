@@ -176,6 +176,136 @@ test('worker call_skill maps to skill.request', async () => {
 	})
 })
 
+test('worker delegation does not also emit skill.worker.result for the parent call', async () => {
+	const handler = createSkillWorkerHandler({
+		registry: createSkillRegistry([
+			skill,
+			{ ...skill, id: 'files', path: 'files/SKILL.md', directActors: [], frontmatter: { id: 'files', description: 'Files skill' } }
+		]),
+		brain: {
+			async run() {
+				return {
+					state: { waitingOnChild: true },
+					actions: [{ type: 'call_skill', to: 'skill/files', callId: 'child-call-1', request: 'Read file', payload: { path: 'a.txt' } }],
+					completed: false
+				}
+			}
+		}
+	})
+
+	const result = await handler.activate({
+		actor: makeActor('skill-worker/memory/topic-jaensen-architecture', {}),
+		envelope: makeEnvelopeRecord({ payload: { intentId: 'intent-123', callId: 'parent-call-1' } }),
+		context: makeContext()
+	})
+
+	expect(result.outgoing).toHaveLength(1)
+	expect(result.outgoing?.[0]).toMatchObject({
+		toActor: 'skill/files',
+		type: 'skill.request',
+		payload: expect.objectContaining({ parentCallId: 'parent-call-1', callId: 'child-call-1' })
+	})
+})
+
+test('worker rejects mixed delegation and completion payloads loudly', async () => {
+	const handler = createSkillWorkerHandler({
+		registry: createSkillRegistry([
+			skill,
+			{ ...skill, id: 'files', path: 'files/SKILL.md', directActors: [], frontmatter: { id: 'files', description: 'Files skill' } }
+		]),
+		brain: {
+			async run() {
+				return {
+					state: {},
+					result: { invalid: true },
+					completed: true,
+					actions: [{ type: 'call_skill', to: 'skill/files', callId: 'child-call-1', request: 'Read file', payload: {} }]
+				}
+			}
+		}
+	})
+
+	await expect(handler.activate({
+		actor: makeActor('skill-worker/memory/topic-jaensen-architecture', {}),
+		envelope: makeEnvelopeRecord({ payload: { intentId: 'intent-123', callId: 'parent-call-1' } }),
+		context: makeContext()
+	})).rejects.toThrow(/may not include call_skill actions and also complete/i)
+})
+
+test('worker completing a child skill.result routes completion to parent call id', async () => {
+	const handler = createSkillWorkerHandler({
+		registry: createSkillRegistry([skill]),
+		brain: {
+			async run() {
+				return {
+					state: { done: true },
+					result: { stored: true },
+					completed: true
+				}
+			}
+		}
+	})
+
+	const result = await handler.activate({
+		actor: makeActor('skill-worker/memory/topic-jaensen-architecture', {}),
+		envelope: makeEnvelopeRecord({
+			type: 'skill.result',
+			payload: {
+				intentId: 'intent-123',
+				callId: 'child-call-1',
+				parentCallId: 'parent-call-1',
+				result: { ok: true }
+			}
+		}),
+		context: makeContext()
+	})
+
+	expect(result.outgoing).toHaveLength(1)
+	expect(result.outgoing?.[0]).toMatchObject({
+		toActor: 'skill/memory',
+		type: 'skill.worker.result',
+		payload: expect.objectContaining({
+			workerId: 'topic-jaensen-architecture',
+			callId: 'parent-call-1',
+			result: { stored: true },
+			completed: true
+		})
+	})
+})
+
+test('worker normal run completion uses local callId even when parentCallId exists', async () => {
+	const handler = createSkillWorkerHandler({
+		registry: createSkillRegistry([skill]),
+		brain: {
+			async run() {
+				return {
+					state: { done: true },
+					result: { stored: true },
+					completed: true
+				}
+			}
+		}
+	})
+
+	const result = await handler.activate({
+		actor: makeActor('skill-worker/memory/topic-jaensen-architecture', {}),
+		envelope: makeEnvelopeRecord({
+			type: 'memory.remember',
+			payload: {
+				intentId: 'intent-123',
+				callId: 'child-call-1',
+				parentCallId: 'parent-call-1'
+			}
+		}),
+		context: makeContext()
+	})
+
+	expect(result.outgoing).toHaveLength(1)
+	expect(result.outgoing?.[0]).toMatchObject({
+		payload: expect.objectContaining({ callId: 'child-call-1' })
+	})
+})
+
 test('worker call_skill rejects unlisted target', async () => {
 	const handler = createSkillWorkerHandler({
 		registry: createSkillRegistry([{ ...skill, directActors: [] }]),

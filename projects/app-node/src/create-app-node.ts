@@ -152,6 +152,7 @@ export async function createAppNode(input: CreateAppNodeInput): Promise<AppNode>
 				createFlueSkillWorkerBrain({
 					harness,
 					workspaceRoot,
+					skillsRoot,
 					model: input.model,
 					thinkingLevel: input.thinkingLevel
 				})

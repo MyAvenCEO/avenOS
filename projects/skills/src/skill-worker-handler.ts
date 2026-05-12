@@ -1,8 +1,8 @@
 import type { ActorHandler } from '@jaensen/actor-runtime'
 
+import { inferCallId, inferIntentId, inferLocalCallId } from './call-id'
 import { parseSkillWorkerActorId } from './skill-id'
 import { SkillValidationError } from './errors'
-import { inferCallId, inferIntentId } from './skill-supervisor-handler'
 import type { CreateSkillWorkerHandlerInput } from './types'
 
 export function createSkillWorkerHandler(input: CreateSkillWorkerHandlerInput): ActorHandler {
@@ -60,8 +60,25 @@ function mapWorkerOutgoing(input: {
 	}) => unknown
 }): unknown[] {
 	const outgoing: unknown[] = []
+	const actions = input.result.actions ?? []
+	const hasChildActions = actions.some((action) => action.type === 'call_skill')
+	const hasFinalResult = input.result.completed === true || input.result.result !== undefined
+	const localCallId = inferLocalCallId(input.envelope.payload)
+	const continuationCallId = input.envelope.type === 'skill.result'
+		? inferCallId(input.envelope.payload)
+		: localCallId
 
-	for (const action of input.result.actions ?? []) {
+	if (hasChildActions && hasFinalResult) {
+		throw new SkillValidationError(
+			'Worker result may not include call_skill actions and also complete in the same response'
+		)
+	}
+
+	if (hasChildActions && !continuationCallId) {
+		throw new SkillValidationError('Worker call_skill actions require an active parent callId')
+	}
+
+	for (const action of actions) {
 		validateWorkerDirectSkillCall(input.skill, action)
 		outgoing.push(input.makeEnvelope({
 			from: input.actorId,
@@ -75,12 +92,20 @@ function mapWorkerOutgoing(input: {
 				input: action.payload,
 				replyTo: input.actorId,
 				intentId: inferIntentId(input.envelope.payload),
-				parentCallId: inferCallId(input.envelope.payload)
+				parentCallId: continuationCallId
 			}
 		}))
 	}
 
-	if (input.result.result !== undefined || input.result.completed === true) {
+	if (hasChildActions) {
+		return outgoing
+	}
+
+	if (hasFinalResult) {
+		if (!continuationCallId) {
+			throw new SkillValidationError('Worker final results require an active callId')
+		}
+
 		outgoing.push(input.makeEnvelope({
 			from: input.actorId,
 			to: `skill/${input.skillId}`,
@@ -90,16 +115,17 @@ function mapWorkerOutgoing(input: {
 			payload: {
 				workerId: input.workerId,
 				intentId: readStringField(input.envelope.payload, 'intentId'),
-				callId: readStringField(input.envelope.payload, 'callId'),
+				callId: continuationCallId,
 				result: input.result.result,
 				completed: input.result.completed ?? false
 			}
 		}))
+		return outgoing
 	}
 
 	if (
 		outgoing.length === 0 &&
-		readStringField(input.envelope.payload, 'callId')
+		continuationCallId
 	) {
 		outgoing.push(input.makeEnvelope({
 			from: input.actorId,
@@ -110,7 +136,7 @@ function mapWorkerOutgoing(input: {
 			payload: {
 				workerId: input.workerId,
 				intentId: readStringField(input.envelope.payload, 'intentId'),
-				callId: readStringField(input.envelope.payload, 'callId'),
+				callId: continuationCallId,
 				result: input.result.result,
 				completed: input.result.completed ?? true
 			}

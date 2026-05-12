@@ -1,6 +1,7 @@
 import type { ActorHandler } from '@jaensen/actor-runtime'
 import type { EnvelopeInput, EnvelopeRecord } from '@jaensen/persistence-sqlite'
 
+import { inferCallId, inferIntentId } from './call-id'
 import { SkillValidationError } from './errors'
 import {
 	createSkillWorkerActorId,
@@ -166,7 +167,7 @@ function handleWorkerResult(input: {
 }): { state: SkillSupervisorState; outgoing?: EnvelopeInput } {
 	const payload = toRecord(input.envelope.payload)
 	const workerId = requireString(payload.workerId, 'skill.worker.result payload.workerId is required')
-	const callId = typeof payload.callId === 'string' ? payload.callId : input.state.workers[workerId]?.callId
+	const callId = inferCallId(payload) ?? input.state.workers[workerId]?.callId
 	if (!callId) {
 		throw new SkillValidationError(`Missing callId for worker result ${workerId}`)
 	}
@@ -432,36 +433,6 @@ function validateDirectSkillCall(
 	if (!skill.directActors.includes(action.to)) {
 		throw new SkillValidationError(`Skill ${skill.id} may not call unlisted actor ${action.to}`)
 	}
-}
-
-export function inferIntentId(payload: unknown): string | undefined {
-	const record = toRecord(payload)
-	return firstString(
-		record.intentId,
-		toRecord(record.input).intentId,
-		toRecord(record.result).intentId
-	)
-}
-
-export function inferCallId(payload: unknown): string | undefined {
-	const record = toRecord(payload)
-	return firstString(
-		record.parentCallId,
-		record.callId,
-		toRecord(record.input).parentCallId,
-		toRecord(record.input).callId,
-		toRecord(record.result).parentCallId,
-		toRecord(record.result).callId
-	)
-}
-
-function firstString(...values: unknown[]): string | undefined {
-	for (const value of values) {
-		if (typeof value === 'string' && value.length > 0) {
-			return value
-		}
-	}
-	return undefined
 }
 
 function shouldReplyToIntent(call: SkillSupervisorState['calls'][string]): boolean {

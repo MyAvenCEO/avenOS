@@ -350,6 +350,90 @@ test('supervisor deterministically forwards worker result back to intent', async
 	})
 })
 
+test('worker result prefers parentCallId when routing nested child completion', async () => {
+	const handler = createSkillSupervisorHandler({
+		registry: createSkillRegistry([skill]),
+		brain: { async decide() { throw new Error('brain should not run for skill.worker.result') } }
+	})
+
+	const result = await handler.activate({
+		actor: makeActor('skill/memory', 'skill-supervisor', {
+			skillId: 'memory',
+			workers: {
+				workerA: { workerId: 'workerA', status: 'active', intentId: 'intent-123', callId: 'parent-call-1', updatedAt: '2026-05-12T00:00:00.000Z' }
+			},
+			calls: {
+				'parent-call-1': { callId: 'parent-call-1', intentId: 'intent-123', workerId: 'workerA', status: 'active', replyTo: 'skill-worker/pdf/job1' }
+			}
+		}),
+		envelope: makeEnvelopeRecord({
+			fromActor: 'skill-worker/memory/workerA',
+			type: 'skill.worker.result',
+			payload: {
+				workerId: 'workerA',
+				callId: 'child-call-1',
+				parentCallId: 'parent-call-1',
+				result: { ok: true },
+				completed: true
+			}
+		}),
+		context: makeContext()
+	})
+
+	expect(result.state).toMatchObject({
+		workers: { workerA: expect.objectContaining({ callId: 'parent-call-1', status: 'completed' }) },
+		calls: { 'parent-call-1': expect.objectContaining({ status: 'completed' }) }
+	})
+	expect(result.outgoing?.[0]).toMatchObject({
+		toActor: 'skill-worker/pdf/job1',
+		type: 'skill.result',
+		payload: expect.objectContaining({ callId: 'parent-call-1', workerId: 'workerA', result: { ok: true } })
+	})
+})
+
+test('nested child completion resolves parent call without unknown callId error', async () => {
+	const handler = createSkillSupervisorHandler({
+		registry: createSkillRegistry([skill]),
+		brain: { async decide() { throw new Error('brain should not run for skill.worker.result') } }
+	})
+
+	const first = await handler.activate({
+		actor: makeActor('skill/memory', 'skill-supervisor', {
+			skillId: 'memory',
+			workers: {
+				workerA: { workerId: 'workerA', status: 'active', callId: 'parent-call-1', updatedAt: '2026-05-12T00:00:00.000Z' }
+			},
+			calls: {
+				'parent-call-1': {
+					callId: 'parent-call-1',
+					workerId: 'workerA',
+					status: 'active',
+					replyTo: 'skill-worker/pdf/job1'
+				}
+			}
+		}),
+		envelope: makeEnvelopeRecord({
+			fromActor: 'skill-worker/memory/workerA',
+			type: 'skill.worker.result',
+			payload: {
+				workerId: 'workerA',
+				callId: 'child-call-1',
+				parentCallId: 'parent-call-1',
+				result: { ok: true },
+				completed: true
+			}
+		}),
+		context: makeContext()
+	})
+
+	expect(first.state).toMatchObject({
+		calls: {
+			'parent-call-1': expect.objectContaining({ status: 'completed' })
+		}
+	})
+	expect(() => first.outgoing?.[0]).not.toThrow()
+})
+
 function makeActor(id: string, kind: string, state: unknown) {
 	return {
 		id,

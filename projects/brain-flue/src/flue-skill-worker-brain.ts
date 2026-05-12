@@ -5,6 +5,7 @@ import { buildWorkerPrompt } from './prompts'
 import { skillWorkerResultSchema, validateWorkerResult } from './schemas'
 import { createSupervisorSessionName, createWorkerSessionName } from './session-names'
 import type { CreateFlueSkillWorkerBrainInput } from './types'
+import { runWorkerToolLoop } from './worker-tool-loop'
 
 export function createFlueSkillWorkerBrain(input: CreateFlueSkillWorkerBrainInput): SkillWorkerBrain {
 	return {
@@ -23,11 +24,13 @@ export function createFlueSkillWorkerBrain(input: CreateFlueSkillWorkerBrainInpu
 			try {
 				const response = await runWorkerPrompt({
 					harness: input.harness,
+					skill,
 					skillId: skill.id,
 					workerId,
 					workerPolicy,
 					prompt,
 					workspaceRoot: input.workspaceRoot,
+					skillsRoot: input.skillsRoot,
 					model: input.model,
 					thinkingLevel: input.thinkingLevel
 				})
@@ -42,11 +45,13 @@ export function createFlueSkillWorkerBrain(input: CreateFlueSkillWorkerBrainInpu
 
 async function runWorkerPrompt(input: {
 	harness: CreateFlueSkillWorkerBrainInput['harness']
+	skill: Parameters<SkillWorkerBrain['run']>[0]['skill']
 	skillId: string
 	workerId: string
 	workerPolicy: 'ephemeral' | 'pooled' | 'durable'
 	prompt: string
 	workspaceRoot: string
+	skillsRoot?: string
 	model?: string
 	thinkingLevel?: string
 }) {
@@ -55,11 +60,20 @@ async function runWorkerPrompt(input: {
 			role: 'jaensen-skill-worker'
 		})
 
-		return session.prompt(input.prompt, {
-			schema: skillWorkerResultSchema,
-			role: 'jaensen-skill-worker',
-			model: input.model,
-			thinkingLevel: input.thinkingLevel
+		return runWorkerToolLoop({
+			skill: input.skill,
+			workspaceRoot: input.workspaceRoot,
+			skillsRoot: input.skillsRoot,
+			runShell: (command, options) => session.shell(command, options),
+			invokeModel: (prompt) => session.prompt(prompt, {
+				schema: skillWorkerResultSchema,
+				role: 'jaensen-skill-worker',
+				model: input.model,
+				thinkingLevel: input.thinkingLevel
+			}),
+			basePrompt: input.prompt,
+			validateFinalResult: validateWorkerResult,
+			unwrapModelData: readFlueData
 		})
 	}
 
@@ -67,12 +81,21 @@ async function runWorkerPrompt(input: {
 		role: 'jaensen-skill-supervisor'
 	})
 
-	return parentSession.task(input.prompt, {
-		schema: skillWorkerResultSchema,
-		cwd: input.workspaceRoot,
-		role: 'jaensen-skill-worker',
-		model: input.model,
-		thinkingLevel: input.thinkingLevel
+	return runWorkerToolLoop({
+		skill: input.skill,
+		workspaceRoot: input.workspaceRoot,
+		skillsRoot: input.skillsRoot,
+		runShell: (command, options) => parentSession.shell(command, options),
+		invokeModel: (prompt) => parentSession.task(prompt, {
+			schema: skillWorkerResultSchema,
+			cwd: input.workspaceRoot,
+			role: 'jaensen-skill-worker',
+			model: input.model,
+			thinkingLevel: input.thinkingLevel
+		}),
+		basePrompt: input.prompt,
+		validateFinalResult: validateWorkerResult,
+		unwrapModelData: readFlueData
 	})
 }
 

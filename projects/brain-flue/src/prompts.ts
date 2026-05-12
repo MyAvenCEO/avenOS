@@ -113,6 +113,7 @@ export function buildWorkerPrompt(input: {
 		'- Do not send to human, dispatcher, intent actors, or skill-worker actors.',
 		'- Direct skill calls return later as skill.result.',
 		'- Prefer returning result data directly. Use actions only when delegating to a different allowed skill.',
+		'- If you return one or more call_skill actions, do not also return result data and do not set completed=true in that same response.',
 		'',
 		'Return JSON only. Use this exact minimal shape when finished without extra result data:',
 		jsonBlock({ state: {}, completed: true }),
@@ -132,7 +133,7 @@ export function buildWorkerPrompt(input: {
 					}
 				}
 			],
-			completed: true
+			completed: false
 		}),
 		'',
 		'Example of direct completion without any skill call:',

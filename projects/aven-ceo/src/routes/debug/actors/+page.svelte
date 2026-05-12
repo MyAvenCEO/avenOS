@@ -1,5 +1,5 @@
 <script lang="ts">
-import ActorGraph from '../../lib/actor-graph/ActorGraph.svelte'
+import ActorGraph from '$lib/actor-graph/ActorGraph.svelte';
 </script>
 
 <svelte:head>

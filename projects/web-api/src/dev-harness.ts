@@ -21,6 +21,7 @@ type FlueSessionAdapter = {
 		stdout: string
 		stderr: string
 		exitCode: number
+		timedOut?: boolean
 	}>
 }
 
@@ -264,7 +265,7 @@ function buildSystemPrompt(input: {
 		`Role: ${input.role || input.sessionRole || 'unspecified'}`,
 		`Thinking level: ${input.thinkingLevel}`,
 		input.mode === 'task'
-			? 'This request came from Flue task(). Solve it as a structured task response, but you do not have tool execution in this adapter.'
+			? 'This request came from Flue task(). Solve it as a structured task response.'
 			: 'This request came from Flue prompt().',
 		input.cwd ? `Working directory hint: ${input.cwd}` : null,
 		buildRoleOutputContract(input.role || input.sessionRole),
@@ -432,10 +433,11 @@ function assertShellAvailable(): void {
 	}
 }
 
-async function runShell(command: string, options?: { cwd?: string }): Promise<{
+export async function runShell(command: string, options?: { cwd?: string }): Promise<{
 	stdout: string
 	stderr: string
 	exitCode: number
+	timedOut?: boolean
 }> {
 	return await new Promise((resolve, reject) => {
 		const child = spawn('/bin/bash', ['-lc', command], {
@@ -454,7 +456,7 @@ async function runShell(command: string, options?: { cwd?: string }): Promise<{
 		})
 		child.on('error', (error) => reject(new Error(`Dev harness shell failed to start: ${error.message}`)))
 		child.on('close', (code) => {
-			resolve({ stdout, stderr, exitCode: code ?? 1 })
+			resolve({ stdout, stderr, exitCode: code ?? 1, timedOut: false })
 		})
 	})
 }
