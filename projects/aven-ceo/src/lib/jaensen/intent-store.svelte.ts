@@ -14,6 +14,19 @@ import type {
 	WorkerView
 } from './types'
 
+const ACTIVE_ENVELOPE_EVENT_TYPES = new Set([
+	'runtime.envelope.queued',
+	'runtime.envelope.claimed',
+	'runtime.envelope.completed',
+	'runtime.envelope.failed',
+	'intent.skill_call_started',
+	'intent.skill_call_completed',
+	'skill.worker_spawned',
+	'skill.worker_routed',
+	'skill.worker_completed',
+	'actor.event'
+])
+
 const STORAGE_PREFIX = 'aven-ceo:jaensen:last-seq:'
 
 function logJaensenError(context: string, error: unknown) {
@@ -74,12 +87,22 @@ export class IntentStore {
 		}
 	}
 
-	async sendMessage(text: string, options?: { intentIdHint?: string; attachment?: PostMessageAttachmentInput }) {
+	async sendMessage(
+		text: string,
+		options?: {
+			intentIdHint?: string
+			attachment?: PostMessageAttachmentInput
+			resolvedQuestionId?: string
+		}
+	) {
 		const result = await postMessage({
 			text,
 			intentIdHint: options?.intentIdHint,
 			attachments: options?.attachment ? [options.attachment] : []
 		})
+		if (options?.intentIdHint && options?.resolvedQuestionId) {
+			this.markQuestionResolved(options.intentIdHint, options.resolvedQuestionId)
+		}
 		this.subscribe(`correlation/${result.correlationId}`)
 		return result
 	}
@@ -172,6 +195,19 @@ export class IntentStore {
 			if (scope.includes(intentId)) this.closeScope(scope)
 		}
 	}
+
+	private markQuestionResolved(intentId: string, questionId: string) {
+		const intent = this.intents[intentId]
+		if (!intent) return
+		const nextQuestions = intent.questions.map((question) =>
+			question.id === questionId ? { ...question, resolved: true } : question
+		)
+		if (nextQuestions === intent.questions) return
+		this.writeIntent({
+			...intent,
+			questions: nextQuestions
+		})
+	}
 }
 
 function reduceIntentEvent(state: IntentView, event: StreamEventRecord): IntentView {
@@ -226,6 +262,7 @@ function createEmptyIntentView(intentId: string): IntentView {
 		title: 'Untitled intent',
 		status: 'active',
 		summary: '',
+		lastActiveAt: undefined,
 		messages: [],
 		questions: [],
 		skillCalls: {},
@@ -264,9 +301,14 @@ function mergeSnapshot(state: IntentView, snapshot: IntentDetailDto): IntentView
 }
 
 function updateSeq(state: IntentView, event: StreamEventRecord): IntentView {
+	const nextCorrelationId = inferCorrelationIdFromPayload(toRecord(event.payload)) ?? state.correlationId
+	const nextLastActiveAt =
+		ACTIVE_ENVELOPE_EVENT_TYPES.has(event.type) && nextCorrelationId ? (event.createdAt ?? state.lastActiveAt) : state.lastActiveAt
 	return {
 		...state,
 		updatedAt: event.createdAt ?? state.updatedAt,
+		correlationId: nextCorrelationId,
+		lastActiveAt: nextLastActiveAt,
 		lastSeqByScope: {
 			...state.lastSeqByScope,
 			[event.scope]: Math.max(event.seq, state.lastSeqByScope[event.scope] ?? 0)
@@ -622,6 +664,8 @@ function toIntentOrchestrator(intent: IntentView | null): IntentOrchestrator | n
 		title: intent.title,
 		summary: intent.summary,
 		done: intent.status === 'completed',
+		isActivelyWorkedOn: isIntentActivelyWorkedOn(intent),
+		lastActiveAt: intent.lastActiveAt,
 		orchestratorLabel: 'Jaensen Intent',
 		subAgents,
 		activity: buildActivity(intent, subAgents, skills),
@@ -828,6 +872,46 @@ function inferIntentIdFromPayload(payload: Record<string, unknown>): string | un
 	}
 
 	return undefined
+}
+
+function inferCorrelationIdFromPayload(payload: Record<string, unknown>): string | undefined {
+	const queue: Array<{ value: Record<string, unknown>; depth: number }> = [{ value: payload, depth: 0 }]
+	const seen = new WeakSet<Record<string, unknown>>()
+	let inspected = 0
+	const MAX_DEPTH = 6
+	const MAX_OBJECTS = 64
+
+	while (queue.length > 0) {
+		const current = queue.shift()
+		if (!current) break
+		const { value, depth } = current
+		if (seen.has(value)) continue
+		seen.add(value)
+		inspected += 1
+		if (inspected > MAX_OBJECTS) break
+
+		const direct = readString(value.correlationId)
+		if (direct) return direct
+
+		if (depth >= MAX_DEPTH) continue
+
+		for (const key of ['event', 'input', 'result', 'call', 'payload'] as const) {
+			const nested = value[key]
+			if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+				queue.push({ value: nested as Record<string, unknown>, depth: depth + 1 })
+			}
+		}
+	}
+
+	return undefined
+}
+
+function isIntentActivelyWorkedOn(intent: IntentView, now = Date.now()): boolean {
+	if (intent.status !== 'active') return false
+	if (!intent.correlationId || !intent.lastActiveAt) return false
+	const activeAt = Date.parse(intent.lastActiveAt)
+	if (!Number.isFinite(activeAt)) return false
+	return now - activeAt < 60_000
 }
 
 function toRecord(value: unknown): Record<string, unknown> {

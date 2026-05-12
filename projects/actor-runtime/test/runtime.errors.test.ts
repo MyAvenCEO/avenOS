@@ -3,7 +3,7 @@ import { expect, test } from 'bun:test'
 import { ConcurrencyError } from '../../persistence-sqlite/src/errors'
 
 import { createActorRuntime } from '../src/create-actor-runtime'
-import { RuntimeCommitError } from '../src/errors'
+import { RuntimeActivationTimeoutError, RuntimeCommitError } from '../src/errors'
 import { FakePersistence } from './helpers'
 
 test('fails message when handler missing', async () => {
@@ -101,6 +101,45 @@ test('fails message when handler returns a bad result', async () => {
 	expect(row?.status).toBe('queued')
 	expect(row?.lastError).toBe('Actor activation result must include state')
 })
+
+test('retries message when handler times out after 60s', async () => {
+	const persistence = new FakePersistence()
+	await persistence.migrate()
+	await persistence.upsertActor({ id: 'intent/slow', kind: 'intent', state: {} })
+
+	const runtime = createActorRuntime({
+		persistence,
+		workerId: 'worker-1',
+		activationTimeoutMs: 60_000,
+		clock: () => new Date('2026-05-12T00:00:00.000Z')
+	})
+
+	runtime.register({
+		kind: 'intent',
+		async activate() {
+			await new Promise((resolve) => setTimeout(resolve, 61_000))
+			return { state: { done: true } }
+		}
+	})
+
+	await runtime.enqueue({
+		id: 'env-slow',
+		fromActor: 'dispatcher/root',
+		toActor: 'intent/slow',
+		type: 'message',
+		correlationId: 'corr-slow',
+		payload: null
+	})
+
+	await expect(runtime.tick()).resolves.toBe('processed')
+
+	const row = persistence.envelopes.get('env-slow')
+	expect(row?.status).toBe('queued')
+	expect(row?.attempts).toBe(1)
+	expect(typeof row?.lastError).toBe('string')
+	expect(row?.lastError).toContain('did not produce a valid response within 60000ms')
+	expect(new RuntimeActivationTimeoutError('x').name).toBe('RuntimeActivationTimeoutError')
+}, 70_000)
 
 test('throws RuntimeCommitError after failActivation when commit conflicts', async () => {
 	const persistence = new FakePersistence()

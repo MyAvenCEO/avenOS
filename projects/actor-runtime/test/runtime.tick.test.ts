@@ -214,3 +214,42 @@ test('runUntilIdle respects maxTicks', async () => {
 	const queued = [...persistence.envelopes.values()].filter((envelope) => envelope.status === 'queued')
 	expect(queued).toHaveLength(1)
 })
+
+test('debug registry tracks actor state and message events', async () => {
+	const persistence = new FakePersistence()
+	await persistence.migrate()
+	await persistence.upsertActor({ id: 'intent/debug', kind: 'intent', state: { ok: true } })
+
+	const runtime = createActorRuntime({
+		persistence,
+		workerId: 'worker-debug',
+		clock: () => new Date('2026-05-12T00:00:00.000Z')
+	})
+
+	runtime.register({
+		kind: 'intent',
+		async activate({ actor }) {
+			return { state: actor.state }
+		}
+	})
+
+	await runtime.enqueue({
+		id: 'env-debug',
+		fromActor: 'dispatcher',
+		toActor: 'intent/debug',
+		type: 'intent.start',
+		correlationId: 'corr-debug',
+		payload: { ok: true }
+	})
+
+	await runtime.tick()
+
+	const snapshot = runtime.debug.getSnapshot()
+	const actor = snapshot.actors.find((item) => item.id === 'intent/debug')
+	expect(actor).toBeDefined()
+	expect(actor?.status).toBe('idle')
+
+	const events = runtime.debug.listEvents()
+	expect(events.some((event) => event.event.type === 'MessageSent')).toBe(true)
+	expect(events.some((event) => event.event.type === 'ActorStateChanged')).toBe(true)
+	})

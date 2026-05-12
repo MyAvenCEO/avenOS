@@ -107,3 +107,13 @@ export function involvedActorsForIntent(intent: IntentOrchestrator): InvolvedAct
 		}
 	})
 }
+
+export function runtimeActorIdsForSelection(intent: IntentOrchestrator, actorId: InvolvedActorId): string[] {
+	const slot = MOCK_INVOLVED_ACTORS.findIndex((actor) => actor.id === actorId)
+	if (slot < 0) return []
+	if (slot === 0) return [`intent/${intent.id}`]
+	if (slot === 1) return ['dispatcher']
+	const sub = intent.subAgents[slot - 2]
+	if (!sub) return []
+	return [sub.name, sub.id].filter((value, index, all) => value.length > 0 && all.indexOf(value) === index)
+}

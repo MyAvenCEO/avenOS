@@ -13,3 +13,15 @@ export async function proxyJson(path: string, init?: RequestInit): Promise<Respo
 		}
 	})
 }
+
+export async function proxyEventStream(path: string, init?: RequestInit): Promise<Response> {
+	const response = await fetch(`${resolveJaensenWebApiBaseUrl()}${path}`, init)
+	return new Response(response.body, {
+		status: response.status,
+		headers: {
+			'content-type': response.headers.get('content-type') ?? 'text/event-stream; charset=utf-8',
+			'cache-control': response.headers.get('cache-control') ?? 'no-cache, no-transform',
+			connection: response.headers.get('connection') ?? 'keep-alive'
+		}
+	})
+}

@@ -85,6 +85,40 @@ test('worker initializes from initialState once', async () => {
 	expect(seenStates).toEqual([{ seeded: true }, { persisted: true }])
 })
 
+test('worker sends fallback skill.worker.result when it returns only state for a call', async () => {
+	const handler = createSkillWorkerHandler({
+		registry: createSkillRegistry([skill]),
+		brain: {
+			async run() {
+				return {
+					state: { lookedUp: true }
+				}
+			}
+		}
+	})
+
+	const result = await handler.activate({
+		actor: makeActor('skill-worker/memory/call-lookup-1', {}),
+		envelope: makeEnvelopeRecord({
+			toActor: 'skill-worker/memory/call-lookup-1',
+			payload: { intentId: 'intent-123', callId: 'call-lookup-1' }
+		}),
+		context: makeContext()
+	})
+
+	expect(result.outgoing).toHaveLength(1)
+	expect(result.outgoing?.[0]).toMatchObject({
+		toActor: 'skill/memory',
+		type: 'skill.worker.result',
+		payload: {
+			workerId: 'call-lookup-1',
+			intentId: 'intent-123',
+			callId: 'call-lookup-1',
+			completed: true
+		}
+	})
+})
+
 test('missing skill fails clearly', async () => {
 	const handler = createSkillWorkerHandler({
 		registry: createSkillRegistry([]),

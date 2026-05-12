@@ -4,6 +4,7 @@ import IntentActorColumn from '$lib/intent-mock/IntentActorColumn.svelte'
 import IntentCenterPanel from '$lib/intent-mock/IntentCenterPanel.svelte'
 import IntentLeftNav from '$lib/intent-mock/IntentLeftNav.svelte'
 import IntentRightRail from '$lib/intent-mock/IntentRightRail.svelte'
+import SelectedActorDetails from '$lib/intent-mock/SelectedActorDetails.svelte'
 import {
 	contextTabsForTier,
 	firstTabForTier,
@@ -12,7 +13,6 @@ import {
 import { AVENCEO_ACTOR_ID, MOCK_INVOLVED_ACTORS } from '$lib/intent-mock/boring-avatar'
 import type { InvolvedActorId } from '$lib/intent-mock/involved-actors-display'
 import type { ActorContextTab } from '$lib/intent-mock/types'
-import { HITL_LAYOUT_REF_ID_PREFIX } from '$lib/intent-mock/hitl-layout-examples'
 import { IntentStore } from '$lib/jaensen/intent-store.svelte'
 import { workspaceOrchestratorClass } from '$lib/workspace/layout'
 
@@ -155,7 +155,6 @@ function handleResolveHitl(
 		| { kind: 'choice'; optionId: string }
 		| { kind: 'approve_reject'; approved: boolean }
 ) {
-	if (todoId.startsWith(HITL_LAYOUT_REF_ID_PREFIX)) return
 	const intent = selectedIntent
 	if (!intent) return
 	busy = true
@@ -167,7 +166,10 @@ function handleResolveHitl(
 			else if (payload.kind === 'choice') message = `Choice selected: ${payload.optionId}`
 			else message = payload.approved ? 'Approved.' : 'Rejected.'
 			if (!message) throw new Error('Response cannot be empty')
-			await store.sendMessage(message, { intentIdHint: intent.id })
+			await store.sendMessage(message, {
+				intentIdHint: intent.id,
+				resolvedQuestionId: todoId
+			})
 		} catch (err) {
 			captureUiError('handleResolveHitl failed', err)
 		} finally {
@@ -220,11 +222,18 @@ function handleResolveHitl(
 					/>
 				</div>
 				<div class="min-h-0 max-w-31 shrink-0 xl:w-full">
-					<IntentActorColumn
-						intent={selectedIntent}
-						selectedActorId={selectedActorId}
-						onSelectActor={(id) => (selectedActorId = id)}
-					/>
+					<div class="flex h-full min-h-0 flex-col gap-3">
+						<div class="min-h-0 shrink-0">
+							<IntentActorColumn
+								intent={selectedIntent}
+								selectedActorId={selectedActorId}
+								onSelectActor={(id) => (selectedActorId = id)}
+							/>
+						</div>
+						<div class="min-h-0 flex-1 border-l border-border/50 pl-2">
+							<SelectedActorDetails intent={selectedIntent} {selectedActorId} />
+						</div>
+					</div>
 				</div>
 			{:else}
 				<div class="hidden min-h-0 w-0 shrink-0 flex-col xl:flex" aria-hidden="true"></div>

@@ -2,6 +2,9 @@
 id: memory
 description: Stores things long term but mutable.
 worker_policy: durable
+direct_actors:
+  - skill/script-runner
+  - skill/file-creator
 resources:
   fs:
     - .
@@ -12,7 +15,36 @@ resources:
 
 Use this skill for durable, mutable, topic-based storage.
 
-Storage is kept in `store.json` next to this skill. Do not rely on model memory for correctness; always inspect or update the store through `memory.py`.
+Storage is kept in `store.json` next to this skill. Do not rely on model memory for correctness.
+
+This skill has direct access to:
+- `skill/file-creator` — use this to materialize helper files if they do not exist yet
+- `skill/script-runner` — use this to run `memory.py` commands once the files exist
+
+You must use those direct actors instead of pretending files already exist.
+
+## Bootstrap / file materialization
+
+Before the first real memory operation in a workspace, ensure these files exist in this skill directory:
+- `memory.py`
+- `store.json`
+
+If `memory.py` does not exist yet:
+1. Call `skill/file-creator` to create `memory.py` in this skill directory.
+2. Use the embedded `memory.py` source from this SKILL.md exactly.
+3. Call `skill/script-runner` to run `chmod +x memory.py`.
+
+If `store.json` does not exist yet:
+1. Call `skill/file-creator` to create it with this exact initial content:
+
+```json
+{
+  "version": 1,
+  "topics": {}
+}
+```
+
+Do not call `skill/memory` from inside `skill/memory`. Do same-skill work directly by creating/running the helper files above.
 
 ## Rules
 
@@ -20,7 +52,7 @@ Storage is kept in `store.json` next to this skill. Do not rely on model memory 
 - Pick the narrowest useful topic.
 - Before storing, check existing topics.
 - Append to an existing matching topic when confidence is high.
-- Create a new topic when no good match exists.
+- Create a new topic when no good match exis.
 - Do not store secrets, credentials, private keys, seed phrases, or access tokens.
 - Do not delete or rewrite memory unless explicitly asked.
 - When correcting memory, prefer deleting the wrong item and adding the corrected item.
@@ -66,7 +98,8 @@ python3 memory.py rename-topic --old "old topic" --new "new topic"
 ## Storing new stuff
 
 1. Determine the topic.
-2. Run `topics`.
+2. Ensure `memory.py` and `store.json` exist.
+3. Run `topics` via `skill/script-runner`.
 3. If the topic already exists or is clearly equivalent, use that topic.
 4. Otherwise create a new topic via `add`.
 5. Return the saved topic and item id.
@@ -74,9 +107,10 @@ python3 memory.py rename-topic --old "old topic" --new "new topic"
 ## Retrieving stuff
 
 1. Determine the requested topic.
-2. Run `get`.
-3. If no topic matches, run `search`.
-4. If still nothing matches, say no memory was found and ask whether to refine the search or move on.
+2. Ensure `memory.py` and `store.json` exist.
+3. Run `get` via `skill/script-runner`.
+4. If no topic matches, run `search` via `skill/script-runner`.
+5. If still nothing matches, say no memory was found and ask whether to refine the search or move on.
 
 ````
 

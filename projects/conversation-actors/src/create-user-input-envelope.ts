@@ -8,6 +8,7 @@ export function createUserInputEnvelope(input: {
 	id?: string
 	text: string
 	attachments?: UserAttachment[]
+	intentIdHint?: string
 	now: Date
 }): EnvelopeInput {
 	const id = input.id ?? randomUUID()
@@ -19,7 +20,8 @@ export function createUserInputEnvelope(input: {
 		correlationId: id,
 		payload: {
 			text: input.text,
-			attachments: input.attachments
+			attachments: input.attachments,
+			intentIdHint: input.intentIdHint
 		},
 		createdAt: input.now,
 		availableAt: input.now

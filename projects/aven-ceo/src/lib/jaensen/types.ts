@@ -98,6 +98,7 @@ export interface IntentView {
 	createdAt?: string
 	updatedAt?: string
 	correlationId?: string
+	lastActiveAt?: string
 	messages: HumanMessage[]
 	questions: HumanQuestion[]
 	skillCalls: Record<string, SkillCallView>
@@ -150,3 +151,55 @@ export const STREAM_EVENT_TYPES = [
 ] as const
 
 export type KnownStreamEventType = (typeof STREAM_EVENT_TYPES)[number]
+
+export type DebugActorStatus = 'running' | 'idle' | 'blocked' | 'failed' | 'stopped'
+
+export interface DebugActorInfo {
+	id: string
+	parentId?: string
+	type: string
+	name: string
+	status: DebugActorStatus
+	mailboxDepth: number
+	currentTask?: string
+	restartCount: number
+	lastEventAt: string
+}
+
+export interface DebugActorSnapshot {
+	actors: DebugActorInfo[]
+}
+
+export type DebugActorTrace =
+	| {
+		kind: 'prompt'
+		label: string
+		inputSummary: string
+		outputSummary?: string
+		at: string
+	}
+	| {
+		kind: 'task'
+		label: string
+		inputSummary: string
+		outputSummary?: string
+		cwd?: string
+		at: string
+	}
+	| {
+		kind: 'shell'
+		label: string
+		command: string
+		cwd?: string
+		stdout?: string
+		stderr?: string
+		exitCode: number
+		at: string
+	}
+
+export type DebugActorEvent =
+	| { type: 'ActorSpawned'; actor: DebugActorInfo }
+	| { type: 'ActorStateChanged'; actorId: string; status: DebugActorStatus; at: string; currentTask?: string }
+	| { type: 'MessageSent'; id: string; from: string; to: string; messageType: string; at: string }
+	| { type: 'ActorStopped'; actorId: string; at: string }
+	| { type: 'ActorTraceRecorded'; actorId: string; trace: DebugActorTrace }

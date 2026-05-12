@@ -19,10 +19,17 @@ export function sidebarIntentPhase(intent: IntentOrchestrator): {
 	if (needsYou) {
 		return { phase: 'human_review', label: 'Human Review' }
 	}
-	if (intent.subAgents.some((s) => s.status === 'running')) {
+	if (intent.isActivelyWorkedOn || intent.subAgents.some((s) => s.status === 'running')) {
 		return { phase: 'working', label: 'Working' }
 	}
 	return { phase: 'open', label: 'Queued' }
+}
+
+export function isRecentIntentActivity(lastActiveAt?: string, now = Date.now(), thresholdMs = 60_000): boolean {
+	if (!lastActiveAt) return false
+	const activeAtMs = Date.parse(lastActiveAt)
+	if (!Number.isFinite(activeAtMs)) return false
+	return now - activeAtMs < thresholdMs
 }
 
 export function sidebarStatusBadgeClass(phase: IntentSidebarPhase): string {

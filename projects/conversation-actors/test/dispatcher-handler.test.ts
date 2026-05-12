@@ -13,7 +13,7 @@ test('dispatcher creates new intent from user input', async () => {
 		createIntentId: () => 'intent-123',
 		brain: {
 			async route({ userInput }) {
-				expect(userInput).toEqual({ text: 'Need help', attachments: [] })
+				expect(userInput).toEqual({ text: 'Need help', attachments: [], intentIdHint: undefined })
 				return {
 					type: 'create_intent',
 					title: 'Help request',
@@ -82,6 +82,40 @@ test('dispatcher routes user input to existing intent', async () => {
 		toActor: 'intent/intent-123',
 		type: 'intent.user_input',
 		payload: { text: 'More details', attachments: [] }
+	})
+})
+
+test('dispatcher routes hinted user input to existing waiting intent without consulting brain', async () => {
+	const state: DispatcherState = {
+		activeIntents: {
+			'intent-123': {
+				intentId: 'intent-123',
+				title: 'Help request',
+				summary: 'Awaiting clarification',
+				status: 'waiting_for_user',
+				lastActivityAt: '2026-05-12T00:00:00.000Z'
+			}
+		}
+	}
+	const handler = createDispatcherHandler({
+		brain: {
+			async route() {
+				throw new Error('brain should not be called for valid intentIdHint')
+			}
+		}
+	})
+
+	const result = await handler.activate({
+		actor: makeDispatcherActor(state),
+		envelope: makeUserInputEnvelope({ payload: { text: 'Sure, do it', intentIdHint: 'intent-123' } }),
+		context: makeContext()
+	})
+
+	expect(result.outgoing?.[0]).toMatchObject({
+		fromActor: 'dispatcher',
+		toActor: 'intent/intent-123',
+		type: 'intent.user_input',
+		payload: { text: 'Sure, do it', attachments: [], intentIdHint: 'intent-123' }
 	})
 })
 

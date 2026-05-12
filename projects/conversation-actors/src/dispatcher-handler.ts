@@ -16,7 +16,8 @@ const attachmentSchema = z.object({
 
 const userInputSchema = z.object({
 	text: z.string(),
-	attachments: z.array(attachmentSchema).optional()
+	attachments: z.array(attachmentSchema).optional(),
+	intentIdHint: z.string().trim().min(1).optional()
 })
 
 const lifecycleSchema = z.object({
@@ -64,7 +65,29 @@ async function handleUserInput(input: {
 
 	const userInput = {
 		text: parsed.data.text,
-		attachments: (parsed.data.attachments ?? []) as UserAttachment[]
+		attachments: (parsed.data.attachments ?? []) as UserAttachment[],
+		intentIdHint: parsed.data.intentIdHint
+	}
+
+	const hintedIntentId = userInput.intentIdHint
+	if (hintedIntentId) {
+		const hintedIntent = input.state.activeIntents[hintedIntentId]
+		if (hintedIntent && hintedIntent.status !== 'completed' && hintedIntent.status !== 'failed') {
+			return {
+				state: input.state,
+				events: [],
+				outgoing: [
+					input.context.makeEnvelope({
+						from: 'dispatcher',
+						to: `intent/${hintedIntentId}`,
+						type: 'intent.user_input',
+						correlationId: input.envelope.correlationId,
+						causationId: input.envelope.id,
+						payload: userInput
+					})
+				]
+			}
+		}
 	}
 
 	const decision = await input.input.brain.route({

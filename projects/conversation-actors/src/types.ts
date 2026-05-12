@@ -33,6 +33,7 @@ export interface DispatcherBrain {
 		userInput: {
 			text: string
 			attachments: UserAttachment[]
+			intentIdHint?: string
 		}
 	}): Promise<DispatcherDecision>
 }

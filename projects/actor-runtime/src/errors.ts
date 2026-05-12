@@ -11,3 +11,10 @@ export class RuntimeCommitError extends RuntimeError {
 		this.name = 'RuntimeCommitError'
 	}
 }
+
+export class RuntimeActivationTimeoutError extends RuntimeError {
+	constructor(message: string, options?: ErrorOptions) {
+		super(message, options)
+		this.name = 'RuntimeActivationTimeoutError'
+	}
+}

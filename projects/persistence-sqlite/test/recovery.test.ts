@@ -162,3 +162,38 @@ test('releaseExpiredLocks requeues stale envelopes and dead-letters exhausted on
 	expect(dead.status).toBe('dead')
 	expect(lockCount.count).toBe(0)
 })
+
+test('releaseExpiredLocks preserves retry timing by requeueing stale envelopes immediately for retry', async () => {
+	const persistence = new SqlitePersistence()
+	await persistence.migrate()
+
+	await persistence.enqueue({
+		id: 'env-timeout',
+		fromActor: 'dispatcher/root',
+		toActor: 'intent/timeout',
+		type: 'message',
+		correlationId: 'corr-timeout',
+		payload: { timeout: true }
+	})
+
+	await persistence.claimNext({
+		workerId: 'worker-timeout',
+		leaseMs: 60_000,
+		now: new Date('2026-05-12T00:00:00.000Z')
+	})
+
+	const released = await persistence.releaseExpiredLocks(new Date('2026-05-12T00:01:01.000Z'))
+	expect(released).toBe(1)
+
+	const db = persistence.db
+	const row = db.prepare('SELECT status, available_at, locked_by, locked_until FROM envelopes WHERE id = ?').get('env-timeout') as {
+		status: string
+		available_at: string
+		locked_by: string | null
+		locked_until: string | null
+	}
+	expect(row.status).toBe('queued')
+	expect(row.available_at).toBe('2026-05-12T00:01:01.000Z')
+	expect(row.locked_by).toBeNull()
+	expect(row.locked_until).toBeNull()
+})

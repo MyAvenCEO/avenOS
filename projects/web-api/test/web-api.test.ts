@@ -88,6 +88,52 @@ test('POST /api/messages returns envelope and correlation ids, and intent endpoi
 	}
 })
 
+test('POST /api/messages forwards intentIdHint to the queued envelope payload', async () => {
+	const persistence = new SqlitePersistence()
+	const api = await createWebApi({
+		persistence,
+		harness: createHarnessStub(),
+		skills: [],
+		dispatcherBrain: {
+			async route() {
+				return {
+					type: 'create_intent',
+					title: 'Follow-up',
+					initialGoal: 'Handle follow-up',
+					reason: 'New user input'
+				}
+			}
+		},
+		intentBrain: {
+			async decide() {
+				return { state: undefined, summary: 'noop', actions: [] } as never
+			}
+		},
+		skillSupervisorBrain: { async decide() { return { state: {} } } },
+		skillWorkerBrain: { async run() { return { state: {} } } }
+	})
+
+	try {
+		const response = await fetch(`${api.url}api/messages`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ text: 'That works', intentIdHint: 'intent-123', attachments: [] })
+		})
+		expect(response.status).toBe(202)
+		const body = (await response.json()) as { envelopeId: string }
+		const row = persistence.db.prepare('SELECT payload_json FROM envelopes WHERE id = ?').get(body.envelopeId) as {
+			payload_json: string
+		}
+		expect(JSON.parse(row.payload_json)).toEqual({
+			text: 'That works',
+			attachments: [],
+			intentIdHint: 'intent-123'
+		})
+	} finally {
+		await api.stop()
+	}
+})
+
 test('GET /api/events supports after cursors', async () => {
 	const persistence = new SqlitePersistence()
 	await persistence.migrate()
@@ -199,6 +245,61 @@ test('aven-ceo flow can post a message, inspect intents, and keep the SSE stream
 		expect(streamText).toContain('"payload":')
 		expect(streamText).toContain('"createdAt":')
 		expect(streamText).toContain(': heartbeat ')
+	} finally {
+		await api.stop()
+	}
+})
+
+test('debug actor endpoints expose snapshots and runtime events', async () => {
+	const persistence = new SqlitePersistence()
+	const api = await createWebApi({
+		persistence,
+		harness: createHarnessStub(),
+		skills: [],
+		pollIntervalMs: 10,
+		streamHeartbeatMs: 20,
+		dispatcherBrain: {
+			async route() {
+				return {
+					type: 'create_intent',
+					title: 'Debug me',
+					initialGoal: 'Exercise debug visibility',
+					reason: 'visibility test'
+				}
+			}
+		},
+		intentBrain: {
+			async decide() {
+				return { summary: 'ok', actions: [{ type: 'reply_user', message: 'done' }] }
+			}
+		},
+		skillSupervisorBrain: { async decide() { return { state: {} } } },
+		skillWorkerBrain: { async run() { return { state: {} } } }
+	})
+
+	try {
+		const initialSnapshot = (await (await fetch(`${api.url}debug/actors`)).json()) as { actors: Array<{ id: string }> }
+		expect(initialSnapshot.actors.some((actor) => actor.id === 'dispatcher')).toBe(true)
+
+		const streamResponse = await fetch(`${api.url}debug/actors/events`)
+		expect(streamResponse.status).toBe(200)
+		expect(streamResponse.headers.get('content-type')).toContain('text/event-stream')
+
+		const postResponse = await fetch(`${api.url}api/messages`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ text: 'show debug actor events', attachments: [] })
+		})
+		expect(postResponse.status).toBe(202)
+
+		const streamText = await readStreamUntil(streamResponse, ['event: MessageSent', 'event: ActorStateChanged'])
+		expect(streamText).toContain('event: MessageSent')
+		expect(streamText).toContain('event: ActorStateChanged')
+
+		const snapshot = (await (await fetch(`${api.url}debug/actors`)).json()) as {
+			actors: Array<{ id: string; type: string }>
+		}
+		expect(snapshot.actors.some((actor) => actor.id.startsWith('intent/') && actor.type === 'intent')).toBe(true)
 	} finally {
 		await api.stop()
 	}

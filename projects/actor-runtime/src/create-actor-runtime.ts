@@ -3,35 +3,59 @@ import { randomUUID } from 'node:crypto'
 import type { ActorEventInput, EnvelopeInput } from '../../persistence-sqlite/src/index'
 
 import { ActorRegistry } from './actor-registry'
-import { RuntimeCommitError } from './errors'
+import { ActorIntrospectionRegistry } from './actor-introspection'
+import { RuntimeActivationTimeoutError, RuntimeCommitError } from './errors'
 import { makeEnvelope } from './envelope-factory'
 import { logDebug, logError, logInfo, logWarn } from './logger'
 import type {
 	ActorActivationResult,
 	ActorContext,
 	ActorHandler,
+	ActorRuntimeDebug,
 	ActorRuntime,
 	CreateActorRuntimeInput
 } from './types'
 
 const DEFAULT_LEASE_MS = 60_000
+const DEFAULT_ACTIVATION_TIMEOUT_MS = 60_000
 
 export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime {
 	if (input.leaseMs !== undefined && input.leaseMs <= 0) {
 		throw new RangeError('leaseMs must be greater than zero')
 	}
 
+	if (input.activationTimeoutMs !== undefined && input.activationTimeoutMs <= 0) {
+		throw new RangeError('activationTimeoutMs must be greater than zero')
+	}
+
 	const registry = new ActorRegistry()
 	const leaseMs = input.leaseMs ?? DEFAULT_LEASE_MS
+	const activationTimeoutMs = input.activationTimeoutMs ?? DEFAULT_ACTIVATION_TIMEOUT_MS
 	const clock = input.clock ?? (() => new Date())
+	const introspection = new ActorIntrospectionRegistry()
+	const debug: ActorRuntimeDebug = {
+		getSnapshot: () => introspection.getSnapshot(),
+		listEvents: (after = 0) => introspection.listEvents(after),
+		subscribe: (listener) => introspection.subscribe(listener),
+		seedActor: (actor) => introspection.seedActor(actor),
+		recordTrace: (actorId, trace) => introspection.recordTrace(actorId, trace)
+	}
 
 	return {
+		debug,
 		register(handler: ActorHandler): void {
 			registry.register(handler)
 		},
 
 		async enqueue(envelope: EnvelopeInput): Promise<void> {
 			await input.persistence.enqueue(envelope)
+			introspection.messageSent({
+				id: envelope.id,
+				from: envelope.fromActor,
+				to: envelope.toActor,
+				messageType: envelope.type,
+				at: toIsoString(envelope.createdAt ?? clock())
+			})
 		},
 
 		async tick(): Promise<'processed' | 'idle'> {
@@ -49,6 +73,8 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 			}
 
 			const { actor, envelope } = claimed
+			introspection.actorSpawned({ id: actor.id, type: actor.kind, name: actor.id })
+			introspection.activationStarted(envelope, actor, now)
 			logDebug(input.logger, 'actor-runtime.activation.started', {
 				workerId: input.workerId,
 				actorId: actor.id,
@@ -64,6 +90,7 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 
 			if (!handler) {
 				const error = new Error(`No actor handler registered for kind: ${actor.kind}`)
+				introspection.activationFailed({ actorId: actor.id, now, task: envelope.type })
 				await failClaimedEnvelope({
 					persistence: input.persistence,
 					workerId: input.workerId,
@@ -94,8 +121,16 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 
 			let activationResult: ActorActivationResult
 			try {
-				activationResult = await handler.activate({ actor, envelope, context })
+				activationResult = await withTimeout(
+					handler.activate({ actor, envelope, context }),
+					activationTimeoutMs,
+					() =>
+						new RuntimeActivationTimeoutError(
+							`Actor ${actor.id} did not produce a valid response within ${activationTimeoutMs}ms`
+						)
+				)
 			} catch (error) {
+				introspection.activationFailed({ actorId: actor.id, now, task: envelope.type })
 				await failClaimedEnvelope({
 					persistence: input.persistence,
 					workerId: input.workerId,
@@ -117,6 +152,7 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 			try {
 				normalizedResult = normalizeActivationResult(activationResult)
 			} catch (error) {
+				introspection.activationFailed({ actorId: actor.id, now, task: envelope.type })
 				await failClaimedEnvelope({
 					persistence: input.persistence,
 					workerId: input.workerId,
@@ -159,6 +195,7 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 					now
 				})
 			} catch (error) {
+				introspection.activationFailed({ actorId: actor.id, now, task: envelope.type })
 				await failClaimedEnvelope({
 					persistence: input.persistence,
 					workerId: input.workerId,
@@ -192,6 +229,16 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 				eventCount: normalizedResult.events.length + 1,
 				outgoingCount: normalizedResult.outgoing.length
 			})
+			introspection.activationCompleted({ actorId: actor.id, now })
+			for (const outgoing of normalizedResult.outgoing) {
+				introspection.messageSent({
+					id: outgoing.id,
+					from: outgoing.fromActor,
+					to: outgoing.toActor,
+					messageType: outgoing.type,
+					at: toIsoString(outgoing.createdAt ?? now)
+				})
+			}
 
 			return 'processed'
 		},
@@ -297,4 +344,22 @@ function toError(error: unknown): Error {
 	}
 
 	return new Error(typeof error === 'string' ? error : 'Unknown runtime error')
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, makeError: () => Error): Promise<T> {
+	let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+	try {
+		return await Promise.race([
+			promise,
+			new Promise<T>((_, reject) => {
+				timeoutHandle = setTimeout(() => reject(makeError()), timeoutMs)
+			})
+		])
+	} finally {
+		if (timeoutHandle !== undefined) clearTimeout(timeoutHandle)
+	}
+}
+
+function toIsoString(value: Date | string): string {
+	return value instanceof Date ? value.toISOString() : value
 }

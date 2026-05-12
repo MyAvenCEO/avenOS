@@ -19,9 +19,26 @@ test('createUserInputEnvelope creates a dispatcher envelope for human input', ()
 		correlationId: 'env-user-1',
 		payload: {
 			text: 'Hello there',
-			attachments: [{ id: 'att-1', name: 'brief.txt' }]
+			attachments: [{ id: 'att-1', name: 'brief.txt' }],
+			intentIdHint: undefined
 		},
 		createdAt: now,
 		availableAt: now
+	})
+})
+
+test('createUserInputEnvelope includes intentIdHint when provided', () => {
+	const now = new Date('2026-05-12T00:00:00.000Z')
+	const envelope = createUserInputEnvelope({
+		id: 'env-user-2',
+		text: 'Here is my answer',
+		intentIdHint: 'intent-123',
+		now
+	})
+
+	expect(envelope.payload).toEqual({
+		text: 'Here is my answer',
+		attachments: undefined,
+		intentIdHint: 'intent-123'
 	})
 })

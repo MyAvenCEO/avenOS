@@ -23,6 +23,15 @@ export interface ActivityItem {
 	agentId?: string
 }
 
+export interface ActorDetailItem {
+	id: string
+	at: string
+	kind: 'status' | 'message' | 'prompt' | 'task' | 'shell'
+	title: string
+	detail?: string
+	meta?: string
+}
+
 export interface SubAgent {
 	id: string
 	name: string
@@ -81,9 +90,12 @@ export interface IntentOrchestrator {
 	/** Short line for the intent list (CEO-facing). */
 	summary: string
 	done: boolean
+	isActivelyWorkedOn?: boolean
+	lastActiveAt?: string
 	orchestratorLabel: string
 	subAgents: SubAgent[]
 	activity: ActivityItem[]
+	actorDetails?: Record<string, ActorDetailItem[]>
 	toolCalls: ToolCallStep[]
 	hitlTodos: HitlTodo[]
 	config: IntentConfig

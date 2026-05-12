@@ -1,5 +1,4 @@
 <script lang="ts">
-import { hitlLayoutExampleTodos } from './hitl-layout-examples'
 import { AVENCEO_ACTOR_ID } from './boring-avatar'
 import { AVENCEO_NAME, activityStreamKindLabel } from './ceo-copy'
 import HitlTodoHost from './HitlTodoHost.svelte'
@@ -33,18 +32,9 @@ const filteredActivity = $derived.by(() => {
 	)
 })
 
-const devHitlLayout = import.meta.env.DEV
-
-const hitlTodosForDisplay = $derived.by(() => {
-	if (!intent) return []
-	if (!devHitlLayout) return intent.hitlTodos
-	return [...intent.hitlTodos, ...hitlLayoutExampleTodos(intent.id)]
-})
-
 /** Human review (HITL) on the lead skill; in dev, static layout examples are appended. */
 const showHitlOnOverview = $derived.by(() => {
 	if (!intent || selectedActorId !== AVENCEO_ACTOR_ID) return false
-	if (devHitlLayout) return true
 	const openTodos = intent.hitlTodos.some((t) => t.status === 'open')
 	const blocked = intent.subAgents.some((s) => s.status === 'blocked_hitl')
 	return openTodos || blocked
@@ -85,14 +75,7 @@ const showHitlOnOverview = $derived.by(() => {
 					{#if showHitlOnOverview}
 						<div class="space-y-2">
 							<p class="text-[9px] font-bold uppercase tracking-[0.26em] opacity-30">Human review</p>
-							{#if devHitlLayout}
-								<p class="text-[9px] leading-snug opacity-40">
-									Dev: appended HITL cards below are static shape samples (ids
-									<code class="rounded bg-foreground/[0.06] px-1 font-mono text-[8px]">layout-ref-*</code>) —
-									submits are ignored until wired to the API.
-								</p>
-							{/if}
-							<HitlTodoHost todos={hitlTodosForDisplay} onResolve={onResolveHitl} />
+							<HitlTodoHost todos={intent.hitlTodos} onResolve={onResolveHitl} />
 						</div>
 					{/if}
 

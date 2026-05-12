@@ -97,6 +97,26 @@ function mapWorkerOutgoing(input: {
 		}))
 	}
 
+	if (
+		outgoing.length === 0 &&
+		readStringField(input.envelope.payload, 'callId')
+	) {
+		outgoing.push(input.makeEnvelope({
+			from: input.actorId,
+			to: `skill/${input.skillId}`,
+			type: 'skill.worker.result',
+			correlationId: input.envelope.correlationId ?? undefined,
+			causationId: input.envelope.id,
+			payload: {
+				workerId: input.workerId,
+				intentId: readStringField(input.envelope.payload, 'intentId'),
+				callId: readStringField(input.envelope.payload, 'callId'),
+				result: input.result.result,
+				completed: input.result.completed ?? true
+			}
+		}))
+	}
+
 	return outgoing
 }
 

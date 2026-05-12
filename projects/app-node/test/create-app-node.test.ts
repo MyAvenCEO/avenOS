@@ -85,6 +85,26 @@ test('app can enqueue user input and expose human outbox after runtime settles',
 	])
 })
 
+test('app forwards intentIdHint when enqueueing user input', async () => {
+	const persistence = new SqlitePersistence()
+	const app = await createAppNode({
+		persistence,
+		harness: createHarnessStub(),
+		skills: []
+	})
+
+	const queued = await app.enqueueUserInput({ text: 'Answer', intentIdHint: 'intent-123' })
+	const envelope = persistence.db
+		.prepare('SELECT payload_json FROM envelopes WHERE id = ?')
+		.get(queued.envelopeId) as { payload_json: string }
+
+	expect(JSON.parse(envelope.payload_json)).toEqual({
+		text: 'Answer',
+		attachments: undefined,
+		intentIdHint: 'intent-123'
+	})
+})
+
 function createHarnessStub() {
 	return {
 		async session() {

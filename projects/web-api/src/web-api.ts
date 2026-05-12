@@ -4,6 +4,7 @@ import {
 	type AppNode,
 	type CreateAppNodeInput
 } from '@jaensen/app-node'
+import type { ActorEvent as RuntimeActorEvent } from '@jaensen/actor-runtime'
 import type { UserAttachment } from '@jaensen/conversation-actors'
 import type { StreamEventRecord } from '@jaensen/persistence-sqlite'
 
@@ -178,7 +179,87 @@ async function routeRequest(input: {
 		})
 	}
 
+	if (input.request.method === 'GET' && path === '/debug/actors') {
+		return jsonResponse(input.app.runtime.debug.getSnapshot())
+	}
+
+	if (input.request.method === 'GET' && path === '/debug/actors/events') {
+		const after = maxAfter(
+			parseAfter(url.searchParams.get('after')),
+			parseAfter(input.request.headers.get('last-event-id'))
+		)
+		return createActorDebugStreamResponse({
+			app: input.app,
+			after,
+			signal: input.request.signal,
+			heartbeatMs: input.streamHeartbeatMs
+		})
+	}
+
 	return notFound(`No route for ${input.request.method} ${path}`)
+}
+
+function createActorDebugStreamResponse(input: {
+	app: AppNode
+	after: number
+	signal: AbortSignal
+	heartbeatMs: number
+}): Response {
+	const encoder = new TextEncoder()
+	const pending = input.app.runtime.debug.listEvents(input.after)
+	let closed = false
+
+	const stream = new ReadableStream<Uint8Array>({
+		start(controller) {
+			controller.enqueue(encoder.encode(`retry: 1000\n\n`))
+			let lastWriteAt = Date.now()
+
+			for (const item of pending) {
+				controller.enqueue(encoder.encode(formatActorDebugSseEvent(item.seq, item.event)))
+				lastWriteAt = Date.now()
+			}
+
+			const unsubscribe = input.app.runtime.debug.subscribe((item) => {
+				if (closed || item.seq <= input.after) return
+				controller.enqueue(encoder.encode(formatActorDebugSseEvent(item.seq, item.event)))
+				lastWriteAt = Date.now()
+			})
+
+			const heartbeat = setInterval(() => {
+				if (closed) return
+				if (Date.now() - lastWriteAt >= input.heartbeatMs) {
+					controller.enqueue(encoder.encode(`: heartbeat ${Date.now()}\n\n`))
+					lastWriteAt = Date.now()
+				}
+			}, Math.max(250, Math.min(input.heartbeatMs, 1000)))
+
+			const abort = () => {
+				if (closed) return
+				closed = true
+				clearInterval(heartbeat)
+				unsubscribe()
+				try {
+					controller.close()
+				} catch {
+					// ignore close races
+				}
+			}
+
+			input.signal.addEventListener('abort', abort, { once: true })
+		}
+	})
+
+	return new Response(stream, {
+		headers: {
+			'content-type': 'text/event-stream; charset=utf-8',
+			'cache-control': 'no-cache, no-transform',
+			connection: 'keep-alive'
+		}
+	})
+}
+
+function formatActorDebugSseEvent(seq: number, event: RuntimeActorEvent): string {
+	return `id: ${seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`
 }
 
 async function handlePostMessages(request: Request, app: AppNode): Promise<Response> {
@@ -193,7 +274,11 @@ async function handlePostMessages(request: Request, app: AppNode): Promise<Respo
 	}
 
 	const attachments = normalizeAttachments((payload as Record<string, unknown>).attachments)
-	const result = await app.enqueueUserInput({ text, attachments })
+	const intentIdHint =
+		typeof (payload as Record<string, unknown>).intentIdHint === 'string'
+			? (payload as Record<string, unknown>).intentIdHint.trim() || undefined
+			: undefined
+	const result = await app.enqueueUserInput({ text, attachments, intentIdHint })
 	return jsonResponse(result, { status: 202 })
 }
 
