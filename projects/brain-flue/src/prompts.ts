@@ -106,46 +106,47 @@ export function buildWorkerPrompt(input: {
 		'Rules:',
 		'- state is always required',
 		'- events are optional',
-		'- completed defaults to false if omitted',
-		'- You may call another skill only with action type call_skill.',
+		'- Use tools for all external actions.',
+		'- Available tools may include shell, read_file, write_file, inspect_attachment, call_skill, and finish.',
+		'- Use call_skill to delegate to another skill.',
+		'- Use finish when the requested work is complete.',
+		'- Do not manually emit worker result JSON unless explicitly asked by the runtime.',
 		`- Never call your own skill actor (${`skill/${input.skill.id}`}). Do same-skill work directly and return result/completed instead.`,
 		'- The target must be listed in Direct actor access.',
 		'- Do not send to human, dispatcher, intent actors, or skill-worker actors.',
 		'- Direct skill calls return later as skill.result.',
-		'- Prefer returning result data directly. Use actions only when delegating to a different allowed skill.',
-		'- If you return one or more call_skill actions, do not also return result data and do not set completed=true in that same response.',
 		'',
-		'Return JSON only. Use this exact minimal shape when finished without extra result data:',
-		jsonBlock({ state: {}, completed: true }),
+		'Return JSON only as tool calls.',
+		'Use this exact shape for completion:',
+		jsonBlock({ tool: 'finish', args: { result: { ok: true }, state: {} } }),
 		'',
 		'Example with a direct skill call to memory:',
 		jsonBlock({
-			state: {},
-			actions: [
-				{
-					type: 'call_skill',
-					to: 'skill/memory',
-					callId: 'remember-file-greeting-txt',
-					request: 'store',
-					payload: {
-						topic: 'files',
-						text: 'Created greeting.txt'
-					}
-				}
-			],
-			completed: false
+			tool: 'call_skill',
+			args: {
+				to: 'skill/memory',
+				callId: 'remember-file-greeting-txt',
+				request: 'store',
+				payload: {
+					topic: 'files',
+					text: 'Created greeting.txt'
+				},
+				state: {}
+			}
 		}),
 		'',
 		'Example of direct completion without any skill call:',
 		jsonBlock({
-			state: {},
-			result: {
-				ok: true
-			},
-			completed: true
+			tool: 'finish',
+			args: {
+				result: {
+					ok: true
+				},
+				state: {}
+			}
 		}),
 		'',
-		'If you call another skill, every action must include exactly: type, to, callId, request, payload.'
+		'If you call another skill, every call_skill tool call must include exactly: to, callId, request, payload.'
 	].join('\n')
 }
 

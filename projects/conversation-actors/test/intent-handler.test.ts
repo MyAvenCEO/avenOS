@@ -90,7 +90,6 @@ test('intent call_skill sends to skill/<id>', async () => {
 						{
 							type: 'call_skill',
 							skillId: 'memory',
-							callId: 'call-1',
 							request: 'Remember this',
 							payload: { text: 'hello' }
 						}
@@ -111,11 +110,11 @@ test('intent call_skill sends to skill/<id>', async () => {
 		type: 'skill.request',
 		payload: {
 			intentId: 'intent-123',
-			callId: 'call-1',
 			request: 'Remember this',
 			input: { text: 'hello' }
 		}
 	})
+	expect(typeof (result.outgoing?.[0] as { payload?: { callId?: unknown } }).payload?.callId).toBe('string')
 })
 
 test('intent rejects unknown skillId', async () => {
@@ -129,7 +128,6 @@ test('intent rejects unknown skillId', async () => {
 						{
 							type: 'call_skill',
 							skillId: 'missing',
-							callId: 'call-1',
 							request: 'Remember this',
 							payload: { text: 'hello' }
 						}
@@ -247,7 +245,6 @@ test('intent cannot send to skill-worker', async () => {
 						{
 							type: 'call_skill',
 							skillId: 'worker/memory',
-							callId: 'call-2',
 							request: 'Run safely',
 							payload: {}
 						}
@@ -296,7 +293,7 @@ test('pendingSkillCalls is populated on call and cleared on skill.result', async
 				if (envelope.type === 'intent.user_input') {
 					return {
 						summary: 'Calling skill',
-						actions: [{ type: 'call_skill', skillId: 'memory', callId: 'call-1', request: 'Remember this', payload: { text: 'hello' } }]
+						actions: [{ type: 'call_skill', skillId: 'memory', request: 'Remember this', payload: { text: 'hello' } }]
 					}
 				}
 				return { summary: 'Skill completed' }
@@ -309,13 +306,14 @@ test('pendingSkillCalls is populated on call and cleared on skill.result', async
 		envelope: makeEnvelopeRecord(),
 		context: makeContext()
 	})
+	const pendingCallId = Object.keys(first.state.pendingSkillCalls)[0]
 	expect(first.state.pendingSkillCalls).toMatchObject({
-		'call-1': expect.objectContaining({ callId: 'call-1', skillId: 'memory', request: 'Remember this' })
+		[pendingCallId]: expect.objectContaining({ callId: pendingCallId, skillId: 'memory', request: 'Remember this' })
 	})
 
 	const second = await handler.activate({
 		actor: makeIntentActor(first.state),
-		envelope: makeEnvelopeRecord({ type: 'skill.result', fromActor: 'skill/memory', payload: { callId: 'call-1', result: { ok: true } } }),
+		envelope: makeEnvelopeRecord({ type: 'skill.result', fromActor: 'skill/memory', payload: { callId: pendingCallId, result: { ok: true } } }),
 		context: makeContext()
 	})
 	expect(second.state.pendingSkillCalls).toEqual({})
@@ -369,6 +367,9 @@ function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRe
 function makeContext() {
 	return {
 		now: new Date('2026-05-12T00:00:00.000Z'),
+		generateId() {
+			return 'generated-call-id'
+		},
 		makeEnvelope(input: {
 			from: string
 			to: string

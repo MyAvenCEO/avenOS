@@ -24,10 +24,11 @@ test('worker prompt includes exact call_skill example', () => {
 		workerPolicy: 'durable'
 	})
 
-	expect(prompt).toContain('Return JSON only. Use this exact minimal shape')
-	expect(prompt).toContain('"type": "call_skill"')
+	expect(prompt).toContain('Return JSON only as tool calls.')
+	expect(prompt).toContain('"tool": "call_skill"')
 	expect(prompt).toContain('"callId": "remember-file-greeting-txt"')
 	expect(prompt).toContain('"request": "store"')
+	expect(prompt).toContain('"tool": "finish"')
 	expect(prompt).toContain('Never call your own skill actor (skill/file-creator)')
 	expect(prompt).toContain('Example of direct completion without any skill call:')
 })

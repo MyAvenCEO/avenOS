@@ -101,6 +101,7 @@ test('app forwards intentIdHint when enqueueing user input', async () => {
 	expect(JSON.parse(envelope.payload_json)).toEqual({
 		text: 'Answer',
 		attachments: undefined,
+		attachmentScopeId: undefined,
 		intentIdHint: 'intent-123'
 	})
 })

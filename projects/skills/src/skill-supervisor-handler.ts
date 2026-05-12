@@ -65,7 +65,8 @@ export function createSkillSupervisorHandler(
 			const decision = await input.brain.decide({
 				skill,
 				actorState,
-				envelope
+				envelope,
+				signal: context.signal
 			})
 
 			const outgoing = (decision.actions ?? []).map((action) =>
@@ -412,9 +413,27 @@ function mapDirectSkillCall(input: {
 			input: input.action.payload,
 			replyTo: input.fromActor,
 			intentId: inferIntentId(input.envelope.payload),
+			attachmentScopeId: readStringField(input.envelope.payload, 'attachmentScopeId'),
+			attachments: readArrayField(input.envelope.payload, 'attachments'),
 			parentCallId: inferCallId(input.envelope.payload)
 		}
 	})
+}
+
+function readStringField(payload: unknown, key: string): string | undefined {
+	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+		return undefined
+	}
+	const value = (payload as Record<string, unknown>)[key]
+	return typeof value === 'string' ? value : undefined
+}
+
+function readArrayField(payload: unknown, key: string): unknown[] | undefined {
+	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+		return undefined
+	}
+	const value = (payload as Record<string, unknown>)[key]
+	return Array.isArray(value) ? value : undefined
 }
 
 function validateDirectSkillCall(

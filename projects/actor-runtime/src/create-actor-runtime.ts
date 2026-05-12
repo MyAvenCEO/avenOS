@@ -4,7 +4,12 @@ import type { ActorEventInput, EnvelopeInput } from '../../persistence-sqlite/sr
 
 import { ActorRegistry } from './actor-registry'
 import { ActorIntrospectionRegistry } from './actor-introspection'
-import { RuntimeActivationTimeoutError, RuntimeCommitError } from './errors'
+import {
+	RuntimeActivationAbortedError,
+	RuntimeActivationTimeoutError,
+	RuntimeCommitError,
+	RuntimeNonRetryableError
+} from './errors'
 import { makeEnvelope } from './envelope-factory'
 import { logDebug, logError, logInfo, logWarn } from './logger'
 import type {
@@ -18,6 +23,7 @@ import type {
 
 const DEFAULT_LEASE_MS = 60_000
 const DEFAULT_ACTIVATION_TIMEOUT_MS = 60_000
+const DEFAULT_ACTIVATION_CLEANUP_MS = 5_000
 
 export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime {
 	if (input.leaseMs !== undefined && input.leaseMs <= 0) {
@@ -28,9 +34,15 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 		throw new RangeError('activationTimeoutMs must be greater than zero')
 	}
 
+	if (input.activationCleanupMs !== undefined && input.activationCleanupMs <= 0) {
+		throw new RangeError('activationCleanupMs must be greater than zero')
+	}
+
 	const registry = new ActorRegistry()
 	const leaseMs = input.leaseMs ?? DEFAULT_LEASE_MS
 	const activationTimeoutMs = input.activationTimeoutMs ?? DEFAULT_ACTIVATION_TIMEOUT_MS
+	const activationCleanupMs = input.activationCleanupMs ?? DEFAULT_ACTIVATION_CLEANUP_MS
+	const effectiveLeaseMs = Math.max(leaseMs, activationTimeoutMs + activationCleanupMs)
 	const clock = input.clock ?? (() => new Date())
 	const introspection = new ActorIntrospectionRegistry()
 	const debug: ActorRuntimeDebug = {
@@ -64,7 +76,7 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 
 			const claimed = await input.persistence.claimNext({
 				workerId: input.workerId,
-				leaseMs,
+				leaseMs: effectiveLeaseMs,
 				now
 			})
 
@@ -110,6 +122,8 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 
 			const context: ActorContext = {
 				now,
+				signal: new AbortController().signal,
+				generateId: () => randomUUID(),
 				makeEnvelope: (envelopeInput) =>
 					makeEnvelope({
 						...envelopeInput,
@@ -120,15 +134,15 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 			}
 
 			let activationResult: ActorActivationResult
+			const activationController = new AbortController()
+			context.signal = activationController.signal
 			try {
-				activationResult = await withTimeout(
-					handler.activate({ actor, envelope, context }),
-					activationTimeoutMs,
-					() =>
-						new RuntimeActivationTimeoutError(
-							`Actor ${actor.id} did not produce a valid response within ${activationTimeoutMs}ms`
-						)
-				)
+				activationResult = await runActivationWithCancellation({
+					activate: () => handler.activate({ actor, envelope, context }),
+					controller: activationController,
+					timeoutMs: activationTimeoutMs,
+					actorId: actor.id
+				})
 			} catch (error) {
 				introspection.activationFailed({ actorId: actor.id, now, task: envelope.type })
 				await failClaimedEnvelope({
@@ -250,7 +264,18 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 
 			let processed = 0
 			while (processed < maxTicks) {
-				const status = await this.tick()
+				let status: 'processed' | 'idle'
+				try {
+					status = await this.tick()
+				} catch (error) {
+					logError(input.logger, 'actor-runtime.tick.error', {
+						workerId: input.workerId,
+						error: toError(error).message,
+						kind: classifyError(toError(error))
+					})
+					processed += 1
+					continue
+				}
 				if (status === 'idle') {
 					break
 				}
@@ -306,6 +331,7 @@ async function failClaimedEnvelope(input: {
 	allowFailureError?: boolean
 }): Promise<void> {
 	const error = toError(input.error)
+	const nonRetryable = error instanceof RuntimeNonRetryableError
 	logWarn(input.logger, 'actor-runtime.activation.failed', {
 		workerId: input.workerId,
 		actorId: input.actorId,
@@ -315,7 +341,9 @@ async function failClaimedEnvelope(input: {
 		fromActor: input.fromActor,
 		toActor: input.toActor,
 		correlationId: input.correlationId,
-		error: error.message
+		error: error.message,
+		kind: classifyError(error),
+		nonRetryable
 	})
 
 	try {
@@ -323,6 +351,7 @@ async function failClaimedEnvelope(input: {
 			workerId: input.workerId,
 			envelopeId: input.envelopeId,
 			error: error.message,
+			nonRetryable,
 			now: input.now
 		})
 	} catch (failureError) {
@@ -346,18 +375,48 @@ function toError(error: unknown): Error {
 	return new Error(typeof error === 'string' ? error : 'Unknown runtime error')
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, makeError: () => Error): Promise<T> {
+async function runActivationWithCancellation<T>(input: {
+	activate: () => Promise<T>
+	controller: AbortController
+	timeoutMs: number
+	actorId: string
+}): Promise<T> {
 	let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+	let abortListener: (() => void) | undefined
+	const promise = input.activate()
+	promise.catch(() => undefined)
 	try {
-		return await Promise.race([
-			promise,
-			new Promise<T>((_, reject) => {
-				timeoutHandle = setTimeout(() => reject(makeError()), timeoutMs)
-			})
-		])
+		return await new Promise<T>((resolve, reject) => {
+			abortListener = () => {
+				const reason = input.controller.signal.reason
+				reject(
+					reason instanceof Error
+						? reason
+						: new RuntimeActivationAbortedError(`Actor ${input.actorId} activation aborted`)
+				)
+			}
+			input.controller.signal.addEventListener('abort', abortListener, { once: true })
+			timeoutHandle = setTimeout(() => {
+				input.controller.abort(
+					new RuntimeActivationTimeoutError(
+						`[timeout] Actor ${input.actorId} did not produce a valid response within ${input.timeoutMs}ms`
+					)
+				)
+			}, input.timeoutMs)
+			promise.then(resolve, reject)
+		})
 	} finally {
 		if (timeoutHandle !== undefined) clearTimeout(timeoutHandle)
+		if (abortListener) input.controller.signal.removeEventListener('abort', abortListener)
 	}
+}
+
+function classifyError(error: Error): string {
+	if (error instanceof RuntimeActivationTimeoutError) return 'timeout'
+	if (error instanceof RuntimeActivationAbortedError) return 'abort'
+	if (error instanceof RuntimeCommitError) return 'commit_conflict'
+	if (error instanceof RuntimeNonRetryableError) return error.code
+	return 'error'
 }
 
 function toIsoString(value: Date | string): string {

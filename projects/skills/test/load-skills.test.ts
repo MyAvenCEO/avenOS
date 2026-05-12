@@ -36,6 +36,18 @@ test('loadSkills accepts direct_actors', async () => {
 	expect(skills.find((skill) => skill.id === 'pdf')?.directActors).toEqual(['skill/memory'])
 })
 
+test('loadSkills accepts resources.fs and shell declarations', async () => {
+	const rootDir = await createTempRoot()
+	await writeSkill(
+		rootDir,
+		'memory/SKILL.md',
+		`---\nid: memory\ndescription: Memory skill\nresources:\n  fs:\n    - .\n    - .jaensen/uploads\n  shell: true\n---\n`
+	)
+
+	const skill = (await loadSkills({ rootDir }))[0]
+	expect(skill.frontmatter.resources).toEqual({ fs: ['.', '.jaensen/uploads'], shell: true })
+})
+
 test('loadSkills rejects non-array direct_actors', async () => {
 	const rootDir = await createTempRoot()
 	await writeSkill(rootDir, 'memory/SKILL.md', `---\nid: memory\ndescription: Memory skill\ndirect_actors: skill/pdf\n---\n`)

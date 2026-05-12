@@ -1,8 +1,40 @@
 import { expect, test } from 'bun:test'
+import { access, mkdtemp, readFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 
 import { SqlitePersistence } from '@jaensen/persistence-sqlite'
 
 import { createWebApi } from '../src/index'
+
+test('daemon continues after tick failures', async () => {
+	let calls = 0
+	const api = await createWebApi({
+		persistence: new SqlitePersistence(),
+		harness: createHarnessStub(),
+		skills: [],
+		dispatcherBrain: { async route() { return { type: 'create_intent', title: 'x', initialGoal: 'y', reason: 'z' } } },
+		intentBrain: { async decide() { return { summary: 'noop', actions: [] } } },
+		skillSupervisorBrain: { async decide() { return { state: {} } } },
+		skillWorkerBrain: { async run() { return { state: {} } } }
+	})
+	await api.stopDaemon()
+	const originalTick = api.app.tick
+	api.app.tick = async () => {
+		calls += 1
+		if (calls === 1) throw new Error('tick boom')
+		return 'idle'
+	}
+
+	try {
+		api.startDaemon()
+		await new Promise((resolve) => setTimeout(resolve, 150))
+		expect(calls).toBeGreaterThan(1)
+	} finally {
+		api.app.tick = originalTick
+		await api.stop()
+	}
+})
 
 test('POST /api/messages returns envelope and correlation ids, and intent endpoints expose runtime state', async () => {
 	const persistence = new SqlitePersistence()
@@ -127,7 +159,194 @@ test('POST /api/messages forwards intentIdHint to the queued envelope payload', 
 		expect(JSON.parse(row.payload_json)).toEqual({
 			text: 'That works',
 			attachments: [],
+			attachmentScopeId: expect.any(String),
 			intentIdHint: 'intent-123'
+		})
+	} finally {
+		await api.stop()
+	}
+})
+
+test('POST /api/messages rejects client-supplied attachment paths', async () => {
+	const persistence = new SqlitePersistence()
+	const api = await createWebApi({
+		persistence,
+		harness: createHarnessStub(),
+		skills: [],
+		dispatcherBrain: {
+			async route() {
+				return { type: 'create_intent', title: 'Upload', initialGoal: 'Use upload', reason: 'upload' }
+			}
+		},
+		intentBrain: { async decide() { return { state: undefined, summary: 'noop', actions: [] } as never } },
+		skillSupervisorBrain: { async decide() { return { state: {} } } },
+		skillWorkerBrain: { async run() { return { state: {} } } }
+	})
+
+	try {
+		const attachment = {
+			id: 'att-1',
+			name: 'brief.txt',
+			mimeType: 'text/plain',
+			path: '.jaensen/uploads/att-1/brief.txt',
+			sizeBytes: 5,
+			sha256: 'a'.repeat(64),
+			base64: 'aGVsbG8='
+		}
+		const response = await fetch(`${api.url}api/messages`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ text: 'That works', attachments: [attachment] })
+		})
+		expect(response.status).toBe(400)
+		expect(await response.json()).toEqual({ error: 'Client-provided attachment paths are not allowed.' })
+	} finally {
+		await api.stop()
+	}
+})
+
+test('POST /api/attachments stages uploads and POST /api/messages accepts returned attachment ids', async () => {
+	const persistence = new SqlitePersistence()
+	const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'jaensen-web-api-uploads-'))
+	const api = await createWebApi({
+		persistence,
+		workspaceRoot,
+		harness: createHarnessStub(),
+		skills: [],
+		dispatcherBrain: { async route() { return { type: 'create_intent', title: 'Upload', initialGoal: 'Use upload', reason: 'upload' } } },
+		intentBrain: { async decide() { return { state: undefined, summary: 'noop', actions: [] } as never } },
+		skillSupervisorBrain: { async decide() { return { state: {} } } },
+		skillWorkerBrain: { async run() { return { state: {} } } }
+	})
+
+	try {
+		const uploadResponse = await fetch(`${api.url}api/attachments`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ attachments: [{ name: '../brief.txt', mimeType: 'text/plain', base64: 'aGVsbG8=' }] })
+		})
+		expect(uploadResponse.status).toBe(201)
+		const sessionId = uploadResponse.headers.get('x-jaensen-session-id')
+		expect(sessionId).toEqual(expect.any(String))
+		const uploadBody = (await uploadResponse.json()) as { attachments: Array<Record<string, unknown>> }
+		expect(uploadBody.attachments).toHaveLength(1)
+		expect(uploadBody.attachments[0]).toEqual({
+			id: expect.any(String),
+			name: 'brief.txt',
+			mimeType: 'text/plain',
+			sizeBytes: 5,
+			sha256: expect.any(String)
+		})
+
+		const messageResponse = await fetch(`${api.url}api/messages`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json', 'x-jaensen-session-id': sessionId ?? '' },
+			body: JSON.stringify({ text: 'That works', attachments: [{ id: uploadBody.attachments[0]?.id }] })
+		})
+		expect(messageResponse.status).toBe(202)
+		const body = (await messageResponse.json()) as { envelopeId: string }
+		const row = persistence.db.prepare('SELECT payload_json FROM envelopes WHERE id = ?').get(body.envelopeId) as { payload_json: string }
+		expect(JSON.parse(row.payload_json)).toEqual({
+			text: 'That works',
+			attachments: [
+				{
+					id: expect.any(String),
+					name: 'brief.txt',
+					mimeType: 'text/plain',
+					sizeBytes: 5,
+					sha256: expect.any(String)
+				}
+			],
+			attachmentScopeId: expect.any(String),
+			intentIdHint: undefined
+		})
+
+		const payload = JSON.parse(row.payload_json) as {
+			attachments: Array<{ id: string }>
+			attachmentScopeId: string
+		}
+		expect(payload.attachments[0]).not.toHaveProperty('path')
+
+		const requestBlobPath = path.join(
+			workspaceRoot,
+			'.jaensen/uploads/requests',
+			payload.attachmentScopeId,
+			payload.attachments[0].id,
+			'blob'
+		)
+		await access(requestBlobPath)
+		expect(await readFile(requestBlobPath, 'utf8')).toBe('hello')
+	} finally {
+		await api.stop()
+	}
+})
+
+test('POST /api/messages rejects invalid x-jaensen-session-id', async () => {
+	const persistence = new SqlitePersistence()
+	const api = await createWebApi({
+		persistence,
+		harness: createHarnessStub(),
+		skills: [],
+		dispatcherBrain: { async route() { return { type: 'create_intent', title: 'Upload', initialGoal: 'Use upload', reason: 'upload' } } },
+		intentBrain: { async decide() { return { state: undefined, summary: 'noop', actions: [] } as never } },
+		skillSupervisorBrain: { async decide() { return { state: {} } } },
+		skillWorkerBrain: { async run() { return { state: {} } } }
+	})
+
+	try {
+		const response = await fetch(`${api.url}api/messages`, {
+			method: 'POST',
+			headers: {
+				'content-type': 'application/json',
+				'x-jaensen-session-id': '../bad-session'
+			},
+			body: JSON.stringify({ text: 'That works', attachments: [] })
+		})
+		expect(response.status).toBe(400)
+		expect(await response.json()).toEqual({ error: 'Invalid session id.' })
+	} finally {
+		await api.stop()
+	}
+})
+
+test('staged uploads can be consumed only once', async () => {
+	const persistence = new SqlitePersistence()
+	const api = await createWebApi({
+		persistence,
+		harness: createHarnessStub(),
+		skills: [],
+		dispatcherBrain: { async route() { return { type: 'create_intent', title: 'Upload', initialGoal: 'Use upload', reason: 'upload' } } },
+		intentBrain: { async decide() { return { state: undefined, summary: 'noop', actions: [] } as never } },
+		skillSupervisorBrain: { async decide() { return { state: {} } } },
+		skillWorkerBrain: { async run() { return { state: {} } } }
+	})
+
+	try {
+		const uploadResponse = await fetch(`${api.url}api/attachments`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ attachments: [{ name: 'brief.txt', mimeType: 'text/plain', base64: 'aGVsbG8=' }] })
+		})
+		expect(uploadResponse.status).toBe(201)
+		const sessionId = uploadResponse.headers.get('x-jaensen-session-id') ?? ''
+		const uploadBody = (await uploadResponse.json()) as { attachments: Array<{ id: string }> }
+		const stagedId = uploadBody.attachments[0]?.id
+
+		const firstConsume = await fetch(`${api.url}api/messages`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json', 'x-jaensen-session-id': sessionId },
+			body: JSON.stringify({ text: 'first', attachments: [{ id: stagedId }] })
+		})
+		expect(firstConsume.status).toBe(202)
+
+		const secondConsume = await fetch(`${api.url}api/messages`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json', 'x-jaensen-session-id': sessionId },
+			body: JSON.stringify({ text: 'second', attachments: [{ id: stagedId }] })
+		})
+		expect(secondConsume.status).toBe(400)
+		expect(await secondConsume.json()).toEqual({
+			error: `Attachment has already been consumed: ${stagedId}`
 		})
 	} finally {
 		await api.stop()

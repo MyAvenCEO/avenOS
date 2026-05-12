@@ -43,7 +43,7 @@ test('intent accepts call_skill for known skill', async () => {
 					async prompt() {
 						return {
 							summary: 'Working',
-							actions: [{ type: 'call_skill', skillId: 'memory', callId: 'call-1', request: 'Remember this', payload: { text: 'hello' } }]
+							actions: [{ type: 'call_skill', skillId: 'memory', request: 'Remember this', payload: { text: 'hello' } }]
 						}
 					},
 					async task() {
@@ -70,7 +70,7 @@ test('intent falls back when model requests an unknown skill twice', async () =>
 					async prompt() {
 						return {
 							summary: 'Working',
-							actions: [{ type: 'call_skill', skillId: 'missing', callId: 'call-1', request: 'Remember this', payload: {} }]
+							actions: [{ type: 'call_skill', skillId: 'missing', request: 'Remember this', payload: {} }]
 						}
 					},
 					async task() {

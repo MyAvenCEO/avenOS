@@ -21,6 +21,7 @@ export interface FlueSessionAdapter {
 		role?: string
 		model?: string
 		thinkingLevel?: string
+		signal?: AbortSignal
 	}): Promise<unknown>
 
 	task(text: string, options: {
@@ -29,13 +30,20 @@ export interface FlueSessionAdapter {
 		role?: string
 		model?: string
 		thinkingLevel?: string
+		signal?: AbortSignal
 	}): Promise<unknown>
 
-	shell(command: string, options?: { cwd?: string }): Promise<{
+	shell(command: string, options?: {
+		cwd?: string
+		signal?: AbortSignal
+		timeoutMs?: number
+		maxOutputBytes?: number
+	}): Promise<{
 		stdout: string
 		stderr: string
 		exitCode: number
 		timedOut?: boolean
+		aborted?: boolean
 	}>
 }
 
@@ -50,6 +58,8 @@ export interface CreateFlueSkillWorkerBrainInput {
 	harness: FlueHarnessAdapter
 	workspaceRoot: string
 	skillsRoot?: string
+	uploadRoot?: string
+	resolveAttachmentScopeId?: (envelope: EnvelopeRecord) => string | undefined
 	model?: string
 	thinkingLevel?: ThinkingLevel
 }

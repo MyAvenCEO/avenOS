@@ -22,7 +22,8 @@ export function createSkillWorkerHandler(input: CreateSkillWorkerHandlerInput): 
 				skill,
 				workerId: parsed.workerId,
 				actorState,
-				envelope
+				envelope,
+				signal: context.signal
 			})
 
 			return {
@@ -92,6 +93,8 @@ function mapWorkerOutgoing(input: {
 				input: action.payload,
 				replyTo: input.actorId,
 				intentId: inferIntentId(input.envelope.payload),
+				attachmentScopeId: readStringField(input.envelope.payload, 'attachmentScopeId'),
+				attachments: readArrayField(input.envelope.payload, 'attachments'),
 				parentCallId: continuationCallId
 			}
 		}))
@@ -123,24 +126,10 @@ function mapWorkerOutgoing(input: {
 		return outgoing
 	}
 
-	if (
-		outgoing.length === 0 &&
-		continuationCallId
-	) {
-		outgoing.push(input.makeEnvelope({
-			from: input.actorId,
-			to: `skill/${input.skillId}`,
-			type: 'skill.worker.result',
-			correlationId: input.envelope.correlationId ?? undefined,
-			causationId: input.envelope.id,
-			payload: {
-				workerId: input.workerId,
-				intentId: readStringField(input.envelope.payload, 'intentId'),
-				callId: continuationCallId,
-				result: input.result.result,
-				completed: input.result.completed ?? true
-			}
-		}))
+	if (outgoing.length === 0 && continuationCallId) {
+		throw new SkillValidationError(
+			'Worker produced no result and no actions for an active skill call'
+		)
 	}
 
 	return outgoing
@@ -170,6 +159,14 @@ function readStringField(payload: unknown, key: string): string | undefined {
 	}
 	const value = (payload as Record<string, unknown>)[key]
 	return typeof value === 'string' ? value : undefined
+}
+
+function readArrayField(payload: unknown, key: string): unknown[] | undefined {
+	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+		return undefined
+	}
+	const value = (payload as Record<string, unknown>)[key]
+	return Array.isArray(value) ? value : undefined
 }
 
 function getInitialState(payload: unknown): unknown {

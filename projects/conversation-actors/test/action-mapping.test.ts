@@ -8,6 +8,7 @@ import {
 	applyIntentActionStateEffects,
 	createLifecycleEnvelope,
 	mapIntentActionsToEnvelopes,
+	resolveIntentActions,
 	type IntentState
 } from '../src/index'
 
@@ -48,24 +49,42 @@ test('intent ask_user sends human.question and updates status', () => {
 })
 
 test('intent call_skill rejects unknown skillId', () => {
+	const resolved = resolveIntentActions({
+		state: makeIntentState(),
+		actions: [
+			{
+				type: 'call_skill',
+				skillId: 'missing',
+				request: 'Store this',
+				payload: { text: 'hello' }
+			}
+		],
+		generateId: () => 'call-1'
+	})
+
 	expect(() =>
 		mapIntentActionsToEnvelopes({
 			fromActor: 'intent/intent-123',
-			state: makeIntentState(),
-			actions: [
-				{
-					type: 'call_skill',
-					skillId: 'missing',
-					callId: 'call-1',
-					request: 'Store this',
-					payload: { text: 'hello' }
-				}
-			],
+			state: resolved.state,
+			actions: resolved.actions,
 			envelope: makeEnvelopeRecord(),
 			skillRegistry: createSkillRegistry([skill]),
 			makeEnvelope
 		})
 	).toThrow(new UnknownSkillError('missing'))
+})
+
+test('resolveIntentActions assigns runtime-owned call ids', () => {
+	const resolved = resolveIntentActions({
+		state: makeIntentState(),
+		actions: [{ type: 'call_skill', skillId: 'memory', request: 'Store this', payload: { text: 'hello' } }],
+		generateId: () => 'runtime-call-1'
+	})
+
+	expect(resolved.actions[0]).toMatchObject({ type: 'call_skill', skillId: 'memory', callId: 'runtime-call-1' })
+	expect(resolved.state.pendingSkillCalls).toMatchObject({
+		'runtime-call-1': expect.objectContaining({ callId: 'runtime-call-1', skillId: 'memory', request: 'Store this' })
+	})
 })
 
 test('complete creates lifecycle payload for dispatcher', () => {
@@ -89,6 +108,38 @@ test('complete creates lifecycle payload for dispatcher', () => {
 			title: 'My intent',
 			summary: 'Done',
 			status: 'completed'
+		}
+	})
+})
+
+test('intent.start userInput attachment context propagates into skill.request', () => {
+	const resolved = resolveIntentActions({
+		state: makeIntentState(),
+		actions: [{ type: 'call_skill', skillId: 'memory', request: 'Read file', payload: { ask: true } }],
+		generateId: () => 'call-attach-1'
+	})
+
+	const outgoing = mapIntentActionsToEnvelopes({
+		fromActor: 'intent/intent-123',
+		state: resolved.state,
+		actions: resolved.actions,
+		envelope: makeEnvelopeRecord({
+			type: 'intent.start',
+			payload: {
+				userInput: {
+					attachmentScopeId: '123e4567-e89b-12d3-a456-426614174000',
+					attachments: [{ id: 'att-1', name: 'brief.txt', mimeType: 'text/plain', sizeBytes: 5, sha256: 'a'.repeat(64) }]
+				}
+			}
+		}),
+		skillRegistry: createSkillRegistry([skill]),
+		makeEnvelope
+	})
+
+	expect(outgoing[0]).toMatchObject({
+		payload: {
+			attachmentScopeId: '123e4567-e89b-12d3-a456-426614174000',
+			attachments: [{ id: 'att-1', name: 'brief.txt' }]
 		}
 	})
 })

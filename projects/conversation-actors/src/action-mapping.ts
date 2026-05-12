@@ -3,10 +3,97 @@ import type { EnvelopeInput, EnvelopeRecord } from '@jaensen/persistence-sqlite'
 import { UnknownSkillError } from './errors'
 import type { IntentAction, IntentState, SkillRegistry } from './types'
 
+export interface ResolvedIntentAction {
+	type: 'call_skill' | 'reply_user' | 'ask_user' | 'complete' | 'fail'
+	skillId?: string
+	callId?: string
+	request?: string
+	payload?: unknown
+	message?: string
+	question?: string
+	summary?: string
+	reason?: string
+}
+
+export function resolveIntentActions(input: {
+	state: IntentState
+	actions: IntentAction[]
+	generateId: () => string
+	now?: Date
+}): {
+	state: IntentState
+	actions: ResolvedIntentAction[]
+} {
+	const resolvedActions: ResolvedIntentAction[] = input.actions.map((action) =>
+		action.type === 'call_skill'
+			? {
+				type: 'call_skill',
+				skillId: action.skillId,
+				callId: input.generateId(),
+				request: action.request,
+				payload: action.payload
+			}
+			: action
+	)
+
+	return {
+		state: applyIntentActionStateEffects({
+			state: input.state,
+			actions: resolvedActions,
+			now: input.now
+		}),
+		actions: resolvedActions
+	}
+}
+
+export function applyIntentActionStateEffects(input: {
+	state: IntentState
+	actions: Array<IntentAction | ResolvedIntentAction>
+	now?: Date
+}): IntentState {
+	let nextState: IntentState = {
+		...input.state,
+		pendingSkillCalls: { ...input.state.pendingSkillCalls }
+	}
+	const nowIso = (input.now ?? new Date()).toISOString()
+
+	for (const action of input.actions) {
+		switch (action.type) {
+			case 'ask_user':
+				nextState = { ...nextState, status: 'waiting_for_user' }
+				break
+			case 'complete':
+				nextState = { ...nextState, status: 'completed', summary: action.summary }
+				break
+			case 'fail':
+				nextState = { ...nextState, status: 'failed', summary: action.reason }
+				break
+			case 'call_skill':
+				nextState = {
+					...nextState,
+					pendingSkillCalls: {
+						...nextState.pendingSkillCalls,
+						[action.callId]: {
+							callId: action.callId,
+							skillId: action.skillId,
+							request: action.request,
+							createdAt: nowIso
+						}
+					}
+				}
+				break
+			default:
+				break
+		}
+	}
+
+	return nextState
+}
+
 export function mapIntentActionsToEnvelopes(input: {
 	fromActor: string
 	state: IntentState
-	actions: IntentAction[]
+	actions: Array<IntentAction | ResolvedIntentAction>
 	envelope: EnvelopeRecord
 	skillRegistry: SkillRegistry
 	makeEnvelope: (input: {
@@ -59,6 +146,7 @@ function mapIntentActionToEnvelopes(input: {
 						intentId: input.state.intentId,
 						callId: input.action.callId,
 						request: input.action.request,
+						...readAttachmentContext(input.envelope.payload),
 						input: input.action.payload
 					}
 				})
@@ -119,6 +207,31 @@ function mapIntentActionToEnvelopes(input: {
 		default:
 			return []
 	}
+}
+
+function readAttachmentContext(payload: unknown): {
+	attachmentScopeId?: string
+	attachments?: unknown[]
+} {
+	const record = toRecord(payload)
+	const userInput = toRecord(record.userInput)
+
+	return {
+		attachmentScopeId: readString(record.attachmentScopeId) ?? readString(userInput.attachmentScopeId),
+		attachments: readAttachments(record.attachments) ?? readAttachments(userInput.attachments)
+	}
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+	return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+function readString(value: unknown): string | undefined {
+	return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function readAttachments(value: unknown): unknown[] | undefined {
+	return Array.isArray(value) ? value : undefined
 }
 
 export function createLifecycleEnvelope(input: {

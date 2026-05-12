@@ -35,6 +35,10 @@ export interface LoadSkillsInput {
 	now?: Date
 }
 
+export interface SharedSkillResourceConfig {
+	uploadRoot?: string
+}
+
 export interface BootstrapSkillsInput {
 	persistence: Persistence
 	skills: SkillDefinition[]
@@ -46,6 +50,7 @@ export interface SkillSupervisorBrain {
 		skill: SkillDefinition
 		actorState: unknown
 		envelope: EnvelopeRecord
+		signal?: AbortSignal
 	}): Promise<SkillSupervisorDecision>
 }
 
@@ -107,6 +112,7 @@ export interface SkillWorkerBrain {
 		workerId: string
 		actorState: unknown
 		envelope: EnvelopeRecord
+		signal?: AbortSignal
 	}): Promise<SkillWorkerResult>
 }
 

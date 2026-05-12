@@ -43,7 +43,11 @@ test('supervisor cannot send to human', () => {
 })
 
 test('worker result defaults missing state to empty object', () => {
-	expect(validateWorkerResult({ completed: true })).toMatchObject({ state: {}, completed: true })
+	expect(validateWorkerResult({ result: { ok: true }, completed: true })).toMatchObject({
+		state: {},
+		result: { ok: true },
+		completed: true
+	})
 })
 
 test('supervisor decision defaults missing state to empty object', () => {
@@ -67,6 +71,24 @@ test('worker schema accepts call_skill action', () => {
 		state: {},
 		actions: [{ type: 'call_skill', to: 'skill/memory', callId: 'call-1', request: 'Remember', payload: {} }]
 	}).success).toBe(true)
+})
+
+test('worker validation rejects completed=true without result', () => {
+	expect(() => validateWorkerResult({ state: {}, completed: true })).toThrow(
+		'completed=true requires result'
+	)
+})
+
+test('worker validation rejects empty worker result payloads', () => {
+	expect(() => validateWorkerResult({ state: {} })).toThrow(
+		'must include result, actions, or a useful state change'
+	)
+})
+
+test('worker validation accepts useful state-only updates', () => {
+	expect(validateWorkerResult({ state: { waitingOnChild: true } })).toMatchObject({
+		state: { waitingOnChild: true }
+	})
 })
 
 test('schema rejects call_skill without callId', () => {

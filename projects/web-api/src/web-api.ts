@@ -8,6 +8,13 @@ import type { ActorEvent as RuntimeActorEvent } from '@jaensen/actor-runtime'
 import type { UserAttachment } from '@jaensen/conversation-actors'
 import type { StreamEventRecord } from '@jaensen/persistence-sqlite'
 
+import {
+	AttachmentValidationError,
+	createAttachmentStore,
+	DEFAULT_ATTACHMENT_ROOT,
+	type AttachmentStore
+} from './attachment-store'
+
 declare const Bun: {
 	serve(input: {
 		port?: number
@@ -46,6 +53,7 @@ export interface CreateWebApiInput extends CreateAppNodeInput {
 
 export interface WebApi {
 	app: AppNode
+	attachmentStore: AttachmentStore
 	port: number
 	hostname: string
 	url: string
@@ -60,7 +68,23 @@ export interface WebApi {
 }
 
 export async function createWebApi(input: CreateWebApiInput): Promise<WebApi> {
-	const app = await createAppNode(input)
+	const workspaceRoot = input.workspaceRoot ?? process.cwd()
+	const uploadRoot =
+		input.sharedSkillResources?.uploadRoot ??
+		process.env.JAENSEN_UPLOAD_DIR ??
+		DEFAULT_ATTACHMENT_ROOT
+	const app = await createAppNode({
+		...input,
+		workspaceRoot,
+		sharedSkillResources: {
+			...input.sharedSkillResources,
+			uploadRoot
+		}
+	})
+	const attachmentStore = createAttachmentStore({
+		workspaceRoot,
+		attachmentRoot: uploadRoot
+	})
 	const persistence = asQueryablePersistence(app)
 	const pollIntervalMs = input.pollIntervalMs ?? 150
 	const idleDelayMs = input.idleDelayMs ?? 100
@@ -73,10 +97,18 @@ export async function createWebApi(input: CreateWebApiInput): Promise<WebApi> {
 		if (daemonPromise) {
 			return
 		}
+		daemonRunning = true
 
 		daemonPromise = (async () => {
 			while (daemonRunning) {
-				const result = await app.tick()
+				let result: 'processed' | 'idle'
+				try {
+					result = await app.tick()
+				} catch (error) {
+					console.error('[jaensen/web-api] daemon tick failed', error)
+					await sleep(idleDelayMs)
+					continue
+				}
 				if (result === 'idle') {
 					await sleep(idleDelayMs)
 				}
@@ -88,6 +120,7 @@ export async function createWebApi(input: CreateWebApiInput): Promise<WebApi> {
 		daemonRunning = false
 		if (daemonPromise) {
 			await daemonPromise
+			daemonPromise = null
 		}
 	}
 
@@ -96,7 +129,7 @@ export async function createWebApi(input: CreateWebApiInput): Promise<WebApi> {
 		hostname: input.hostname ?? '127.0.0.1',
 		idleTimeout: input.idleTimeoutSeconds ?? 30,
 		fetch(request) {
-			return routeRequest({ request, app, persistence, pollIntervalMs, streamHeartbeatMs })
+			return routeRequest({ request, app, attachmentStore, persistence, pollIntervalMs, streamHeartbeatMs })
 		}
 	})
 
@@ -104,6 +137,7 @@ export async function createWebApi(input: CreateWebApiInput): Promise<WebApi> {
 
 	return {
 		app,
+		attachmentStore,
 		port: server.port,
 		hostname: server.url.hostname,
 		url: server.url.toString(),
@@ -120,6 +154,7 @@ export async function createWebApi(input: CreateWebApiInput): Promise<WebApi> {
 async function routeRequest(input: {
 	request: Request
 	app: AppNode
+	attachmentStore: AttachmentStore
 	persistence: SqliteQueryable
 	pollIntervalMs: number
 	streamHeartbeatMs: number
@@ -128,7 +163,11 @@ async function routeRequest(input: {
 	const path = trimTrailingSlash(url.pathname)
 
 	if (input.request.method === 'POST' && path === '/api/messages') {
-		return handlePostMessages(input.request, input.app)
+		return handlePostMessages(input.request, input.app, input.attachmentStore)
+	}
+
+	if (input.request.method === 'POST' && path === '/api/attachments') {
+		return handlePostAttachments(input.request, input.attachmentStore)
 	}
 
 	if (input.request.method === 'GET' && path === '/api/intents') {
@@ -262,7 +301,7 @@ function formatActorDebugSseEvent(seq: number, event: RuntimeActorEvent): string
 	return `id: ${seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`
 }
 
-async function handlePostMessages(request: Request, app: AppNode): Promise<Response> {
+async function handlePostMessages(request: Request, app: AppNode, attachmentStore: AttachmentStore): Promise<Response> {
 	const payload = await request.json().catch(() => null)
 	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
 		return badRequest('Body must be a JSON object')
@@ -273,13 +312,63 @@ async function handlePostMessages(request: Request, app: AppNode): Promise<Respo
 		return badRequest('text is required')
 	}
 
-	const attachments = normalizeAttachments((payload as Record<string, unknown>).attachments)
+	let sessionId: string
+	let attachments: UserAttachment[]
+	let attachmentScopeId: string
+	try {
+		sessionId = getOrIssueSessionId(request, attachmentStore)
+		const materialized = await attachmentStore.materializeForMessage({
+			sessionId,
+			attachments: (payload as Record<string, unknown>).attachments,
+			messageScopeId: crypto.randomUUID()
+		})
+		attachments = materialized.attachments
+		attachmentScopeId = materialized.attachmentScopeId
+	} catch (error) {
+		if (error instanceof AttachmentValidationError) {
+			return badRequest(error.message)
+		}
+		throw error
+	}
+
 	const intentIdHint =
 		typeof (payload as Record<string, unknown>).intentIdHint === 'string'
 			? (payload as Record<string, unknown>).intentIdHint.trim() || undefined
 			: undefined
-	const result = await app.enqueueUserInput({ text, attachments, intentIdHint })
-	return jsonResponse(result, { status: 202 })
+	const result = await app.enqueueUserInput({
+		text,
+		attachments,
+		attachmentScopeId,
+		intentIdHint,
+	})
+	return jsonResponse(result, {
+		status: 202,
+		headers: { 'x-jaensen-session-id': sessionId, 'x-jaensen-attachment-scope-id': attachmentScopeId }
+	})
+}
+
+async function handlePostAttachments(request: Request, attachmentStore: AttachmentStore): Promise<Response> {
+	const payload = await request.json().catch(() => null)
+	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+		return badRequest('Body must be a JSON object')
+	}
+
+	try {
+		const sessionId = getOrIssueSessionId(request, attachmentStore)
+		const attachments = await attachmentStore.stageUploads({
+			sessionId,
+			attachments: (payload as Record<string, unknown>).attachments
+		})
+		return jsonResponse(
+			{ attachments },
+			{ status: 201, headers: { 'x-jaensen-session-id': sessionId } }
+		)
+	} catch (error) {
+		if (error instanceof AttachmentValidationError) {
+			return badRequest(error.message)
+		}
+		throw error
+	}
 }
 
 function createEventStreamResponse(input: {
@@ -383,30 +472,15 @@ function asQueryablePersistence(app: AppNode): SqliteQueryable {
 	return persistence as SqliteQueryable
 }
 
-function normalizeAttachments(value: unknown): UserAttachment[] {
-	if (!Array.isArray(value)) {
-		return []
+function getOrIssueSessionId(request: Request, attachmentStore: AttachmentStore): string {
+	const existing = request.headers.get('x-jaensen-session-id')?.trim()
+	if (!existing) {
+		return attachmentStore.issueSessionId()
 	}
-
-	return value.flatMap((item) => {
-		if (!item || typeof item !== 'object' || Array.isArray(item)) {
-			return []
-		}
-
-		const record = item as Record<string, unknown>
-		if (typeof record.id !== 'string' || record.id.length === 0) {
-			return []
-		}
-
-		return [
-			{
-				id: record.id,
-				path: typeof record.path === 'string' ? record.path : undefined,
-				mimeType: typeof record.mimeType === 'string' ? record.mimeType : undefined,
-				name: typeof record.name === 'string' ? record.name : undefined
-			}
-		]
-	})
+	if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(existing)) {
+		throw new AttachmentValidationError('Invalid session id.')
+	}
+	return existing
 }
 
 function parseAfter(value: string | null): number {

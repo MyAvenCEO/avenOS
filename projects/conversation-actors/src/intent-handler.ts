@@ -3,6 +3,7 @@ import type { EnvelopeRecord } from '@jaensen/persistence-sqlite'
 import { z } from 'zod'
 
 import {
+	resolveIntentActions,
 	createLifecycleEnvelope,
 	mapIntentActionsToEnvelopes
 } from './action-mapping'
@@ -18,13 +19,15 @@ const startPayloadSchema = z.object({
 	userInput: z
 		.object({
 			text: z.string(),
+			attachmentScopeId: z.string().trim().min(1).optional(),
 			attachments: z
 				.array(
 					z.object({
 						id: z.string(),
-						path: z.string().optional(),
-						mimeType: z.string().optional(),
-						name: z.string().optional()
+						name: z.string(),
+						mimeType: z.string(),
+						sizeBytes: z.number().nonnegative(),
+						sha256: z.string()
 					})
 				)
 				.optional()
@@ -66,12 +69,19 @@ export function createIntentHandler(input: CreateIntentHandlerInput): ActorHandl
 				availableSkills: input.skillRegistry.list().map((skill) => ({
 					id: skill.id,
 					description: skill.description
-				}))
+				})),
+				signal: context.signal
 			})
 
-			const actions = decision.actions ?? []
+			const resolved = resolveIntentActions({
+				state: previousState,
+				actions: decision.actions ?? [],
+				generateId: context.generateId,
+				now: context.now
+			})
+			const actions = resolved.actions
 			const nextState = reduceIntentState({
-				previousState,
+				previousState: resolved.state,
 				envelope,
 				decision,
 				now: context.now
@@ -119,36 +129,6 @@ function reduceIntentState(input: {
 		status: input.previousState.status,
 		summary: input.decision.summary ?? input.previousState.summary,
 		pendingSkillCalls: { ...input.previousState.pendingSkillCalls }
-	}
-
-	for (const action of input.decision.actions ?? []) {
-		switch (action.type) {
-			case 'ask_user':
-				nextState = { ...nextState, status: 'waiting_for_user' }
-				break
-			case 'complete':
-				nextState = { ...nextState, status: 'completed', summary: action.summary }
-				break
-			case 'fail':
-				nextState = { ...nextState, status: 'failed', summary: action.reason }
-				break
-			case 'call_skill':
-				nextState = {
-					...nextState,
-					pendingSkillCalls: {
-						...nextState.pendingSkillCalls,
-						[action.callId]: {
-							callId: action.callId,
-							skillId: action.skillId,
-							request: action.request,
-							createdAt: input.now.toISOString()
-						}
-					}
-				}
-				break
-			default:
-				break
-		}
 	}
 
 	if (

@@ -20,6 +20,7 @@ test('createUserInputEnvelope creates a dispatcher envelope for human input', ()
 		payload: {
 			text: 'Hello there',
 			attachments: [{ id: 'att-1', name: 'brief.txt' }],
+			attachmentScopeId: undefined,
 			intentIdHint: undefined
 		},
 		createdAt: now,
@@ -39,6 +40,7 @@ test('createUserInputEnvelope includes intentIdHint when provided', () => {
 	expect(envelope.payload).toEqual({
 		text: 'Here is my answer',
 		attachments: undefined,
+		attachmentScopeId: undefined,
 		intentIdHint: 'intent-123'
 	})
 })

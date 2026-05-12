@@ -82,7 +82,7 @@ export function buildIntentPrompt(input: IntentPromptInput): string {
 				{ eventType: 'optional.event_type', event: { note: 'optional event payload' } }
 			],
 			actions: [
-				{ type: 'call_skill', skillId: '<skill-id>', callId: '<unique-call-id>', request: '<request>', payload: {} },
+				{ type: 'call_skill', skillId: '<skill-id>', request: '<request>', payload: {} },
 				{ type: 'reply_user', message: '<message>' },
 				{ type: 'ask_user', question: '<question>' },
 				{ type: 'complete', summary: '<summary>', message: '<optional final user message>' },
@@ -99,7 +99,8 @@ export function buildIntentPrompt(input: IntentPromptInput): string {
 		'- always return full updated state',
 		'- actions must be objects, never strings',
 		'- every action.type must be exactly one of: call_skill, reply_user, ask_user, complete, fail',
-		'- if you call a skill, include skillId, callId, request, and payload',
+		'- if you call a skill, include skillId, request, and payload',
+		'- do not invent or manage call ids; the runtime creates them',
 		'- do not wrap output in data/result/decision/output'
 	].join('\n')
 }
@@ -107,9 +108,10 @@ export function buildIntentPrompt(input: IntentPromptInput): string {
 function toAttachmentMetadata(attachment: UserAttachment) {
 	return {
 		id: attachment.id,
-		path: attachment.path,
+		name: attachment.name,
 		mimeType: attachment.mimeType,
-		name: attachment.name
+		sizeBytes: attachment.sizeBytes,
+		sha256: attachment.sha256
 	}
 }
 

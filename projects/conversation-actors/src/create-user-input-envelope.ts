@@ -8,6 +8,7 @@ export function createUserInputEnvelope(input: {
 	id?: string
 	text: string
 	attachments?: UserAttachment[]
+	attachmentScopeId?: string
 	intentIdHint?: string
 	now: Date
 }): EnvelopeInput {
@@ -21,6 +22,7 @@ export function createUserInputEnvelope(input: {
 		payload: {
 			text: input.text,
 			attachments: input.attachments,
+			attachmentScopeId: input.attachmentScopeId,
 			intentIdHint: input.intentIdHint
 		},
 		createdAt: input.now,

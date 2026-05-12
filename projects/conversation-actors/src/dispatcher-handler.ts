@@ -9,14 +9,16 @@ import type { CreateDispatcherHandlerInput, DispatcherState, UserAttachment } fr
 
 const attachmentSchema = z.object({
 	id: z.string(),
-	path: z.string().optional(),
-	mimeType: z.string().optional(),
-	name: z.string().optional()
+	name: z.string(),
+	mimeType: z.string(),
+	sizeBytes: z.number().nonnegative(),
+	sha256: z.string()
 })
 
 const userInputSchema = z.object({
 	text: z.string(),
 	attachments: z.array(attachmentSchema).optional(),
+	attachmentScopeId: z.string().trim().min(1).optional(),
 	intentIdHint: z.string().trim().min(1).optional()
 })
 
@@ -66,6 +68,7 @@ async function handleUserInput(input: {
 	const userInput = {
 		text: parsed.data.text,
 		attachments: (parsed.data.attachments ?? []) as UserAttachment[],
+		attachmentScopeId: parsed.data.attachmentScopeId,
 		intentIdHint: parsed.data.intentIdHint
 	}
 

@@ -128,6 +128,7 @@ export interface Persistence {
 		workerId: string
 		envelopeId: string
 		error: string
+		nonRetryable?: boolean
 		retryAt?: Date
 		now: Date
 	}): Promise<void>

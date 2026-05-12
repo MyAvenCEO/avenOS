@@ -8,7 +8,7 @@ import type { CreateFlueIntentBrainInput } from './types'
 
 export function createFlueIntentBrain(input: CreateFlueIntentBrainInput): IntentBrain {
 	return {
-		async decide({ state, envelope, availableSkills }) {
+		async decide({ state, envelope, availableSkills, signal }) {
 			const session = await input.harness.session(createIntentSessionName(state.intentId), {
 				role: 'jaensen-conversation-intent'
 			})
@@ -23,7 +23,8 @@ export function createFlueIntentBrain(input: CreateFlueIntentBrainInput): Intent
 					envelope,
 					availableSkills,
 					model: input.model,
-					thinkingLevel: input.thinkingLevel
+					thinkingLevel: input.thinkingLevel,
+					signal
 				})
 			} catch (error) {
 				throw toFlueBrainModelError(`Flue intent decide failed for intent ${state.intentId}`, error)
@@ -40,6 +41,7 @@ async function decideWithRepair(input: {
 	availableSkills: Parameters<IntentBrain['decide']>[0]['availableSkills']
 	model?: string
 	thinkingLevel?: string
+	signal?: AbortSignal
 }): Promise<IntentBrainDecision> {
 	const validationContext = {
 		state: input.state,
@@ -64,7 +66,8 @@ async function decideWithRepair(input: {
 				schema: flueIntentOutputSchema,
 				role: 'jaensen-conversation-intent',
 				model: input.model,
-				thinkingLevel: input.thinkingLevel
+				thinkingLevel: input.thinkingLevel,
+				signal: input.signal
 			}
 		)
 

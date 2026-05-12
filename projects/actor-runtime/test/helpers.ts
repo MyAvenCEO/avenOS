@@ -17,6 +17,7 @@ export class FakePersistence implements Persistence {
 	readonly envelopes = new Map<string, EnvelopeRow>()
 	readonly events: ActorEventInput[] = []
 	readonly claims: string[] = []
+	claimedLeaseMs: number | null = null
 	commitError: Error | null = null
 
 	async migrate(): Promise<void> {}
@@ -70,6 +71,7 @@ export class FakePersistence implements Persistence {
 	}
 
 	async claimNext(input: { workerId: string; leaseMs: number; now: Date }): Promise<ClaimedEnvelope | null> {
+		this.claimedLeaseMs = input.leaseMs
 		const claimable = [...this.envelopes.values()]
 			.filter((envelope) => envelope.status === 'queued' && envelope.availableAt <= input.now.toISOString())
 			.sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0]
@@ -158,6 +160,7 @@ export class FakePersistence implements Persistence {
 		workerId: string
 		envelopeId: string
 		error: string
+		nonRetryable?: boolean
 		retryAt?: Date
 		now: Date
 	}): Promise<void> {
@@ -168,7 +171,7 @@ export class FakePersistence implements Persistence {
 
 		this.envelopes.set(input.envelopeId, {
 			...envelope,
-			status: 'queued',
+			status: input.nonRetryable ? 'dead' : 'queued',
 			availableAt: (input.retryAt ?? input.now).toISOString(),
 			lockedBy: null,
 			lockedUntil: null,

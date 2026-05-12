@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 
 import {
 	createDevHarness,
+	runShell,
 	normalizeTinfoilBaseUrl,
 	resolveProviderConfig,
 	setTinfoilClientFactoryForTests
@@ -28,7 +29,8 @@ test('resolveProviderConfig normalizes tinfoil configuration', () => {
 		provider: 'tinfoil',
 		model: 'glm-5-1',
 		baseUrl: 'https://api.tinfoil.sh/v1',
-		apiKey: 'tk_test'
+		apiKey: 'tk_test',
+		responseFormat: 'json_object'
 	})
 })
 
@@ -43,8 +45,20 @@ test('resolveProviderConfig selects openai-compatible configuration', () => {
 		provider: 'openai',
 		model: 'minimax-m2.7-nvfp4',
 		baseUrl: 'http://box:8000/v1',
-		apiKey: 'local'
+		apiKey: 'local',
+		responseFormat: 'text'
 	})
+})
+
+test('resolveProviderConfig accepts explicit OpenAI response format override', () => {
+	const config = resolveProviderConfig({
+		JAENSEN_OPENAI_BASE_URL: 'http://box:8000/v1/',
+		JAENSEN_OPENAI_API_KEY: 'local',
+		JAENSEN_OPENAI_MODEL: 'google/gemma-4-26b-a4b',
+		JAENSEN_OPENAI_RESPONSE_FORMAT: 'json_schema'
+	} as EnvLike)
+
+	expect(config.responseFormat).toBe('json_schema')
 })
 
 test('normalizeTinfoilBaseUrl appends v1 only once', () => {
@@ -67,7 +81,8 @@ test('createDevHarness parses JSON model responses', async () => {
 			provider: 'openai',
 			model: 'demo-model',
 			baseUrl: 'http://example.test/v1',
-			apiKey: 'local'
+			apiKey: 'local',
+			responseFormat: 'text'
 		})
 
 		const session = await harness.session('actor/dispatcher', { role: 'jaensen-conversation-dispatcher' })
@@ -108,7 +123,8 @@ test('createDevHarness unwraps dispatcher decision wrappers', async () => {
 			provider: 'tinfoil',
 			model: 'glm-5-1',
 			baseUrl: 'https://api.tinfoil.sh/v1',
-			apiKey: 'tk_test'
+			apiKey: 'tk_test',
+			responseFormat: 'json_object'
 		})
 
 		const session = await harness.session('actor/dispatcher', { role: 'jaensen-conversation-dispatcher' })
@@ -148,7 +164,8 @@ test('createDevHarness normalizes intent summary and actions from root response'
 			provider: 'tinfoil',
 			model: 'glm-5-1',
 			baseUrl: 'https://api.tinfoil.sh/v1',
-			apiKey: 'tk_test'
+			apiKey: 'tk_test',
+			responseFormat: 'json_object'
 		})
 
 		const session = await harness.session('actor/intent/intent-123', { role: 'jaensen-conversation-intent' })
@@ -190,7 +207,8 @@ test('createDevHarness warns when recovering root-level intent action', async ()
 			provider: 'tinfoil',
 			model: 'glm-5-1',
 			baseUrl: 'https://api.tinfoil.sh/v1',
-			apiKey: 'tk_test'
+			apiKey: 'tk_test',
+			responseFormat: 'json_object'
 		})
 
 		const session = await harness.session('actor/intent/intent-123', { role: 'jaensen-conversation-intent' })
@@ -236,7 +254,8 @@ test('createDevHarness derives intent actions from event-shaped responses', asyn
 			provider: 'tinfoil',
 			model: 'glm-5-1',
 			baseUrl: 'https://api.tinfoil.sh/v1',
-			apiKey: 'tk_test'
+			apiKey: 'tk_test',
+			responseFormat: 'json_object'
 		})
 
 		const session = await harness.session('actor/intent/intent-123', { role: 'jaensen-conversation-intent' })
@@ -283,7 +302,8 @@ test('createDevHarness converts intent.confirmation_requested events into ask_us
 			provider: 'tinfoil',
 			model: 'glm-5-1',
 			baseUrl: 'https://api.tinfoil.sh/v1',
-			apiKey: 'tk_test'
+			apiKey: 'tk_test',
+			responseFormat: 'json_object'
 		})
 
 		const session = await harness.session('actor/intent/intent-123', { role: 'jaensen-conversation-intent' })
@@ -320,7 +340,8 @@ test('createDevHarness uses Tinfoil SDK for tinfoil provider', async () => {
 			provider: 'tinfoil',
 			model: 'glm-5-1',
 			baseUrl: 'https://api.tinfoil.sh/v1',
-			apiKey: 'tk_test'
+			apiKey: 'tk_test',
+			responseFormat: 'json_object'
 		})
 
 		const session = await harness.session('actor/dispatcher', { role: 'jaensen-conversation-dispatcher' })
@@ -343,3 +364,23 @@ test('createDevHarness uses Tinfoil SDK for tinfoil provider', async () => {
 		setTinfoilClientFactoryForTests(undefined)
 	}
 })
+
+test('runShell aborts child process when signal is aborted', async () => {
+	const controller = new AbortController()
+	const promise = runShell('sleep 10', {
+		signal: controller.signal,
+		timeoutMs: 5_000
+	})
+	setTimeout(() => controller.abort(new Error('abort requested')), 50)
+	const result = await promise
+	expect(result.aborted).toBe(true)
+	expect(result.timedOut).toBe(false)
+	expect(result.exitCode).not.toBe(0)
+}, 5_000)
+
+test('runShell times out long-running commands', async () => {
+	const result = await runShell('sleep 10', { timeoutMs: 50 })
+	expect(result.timedOut).toBe(true)
+	expect(result.aborted).toBe(false)
+	expect(result.exitCode).not.toBe(0)
+}, 5_000)

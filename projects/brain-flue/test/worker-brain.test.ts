@@ -27,7 +27,7 @@ test('durable worker uses stable worker session', async () => {
 				calls.push(name)
 				return {
 					async prompt() {
-						return { state: { persisted: true }, completed: true }
+						return { state: { persisted: true }, result: { ok: true }, completed: true }
 					},
 					async task() {
 						throw new Error('unexpected task')
@@ -49,7 +49,7 @@ test('durable worker uses stable worker session', async () => {
 	})
 
 	expect(calls).toEqual(['actor/skill-worker/memory/topic-jaensen-architecture'])
-	expect(result.state).toEqual({ persisted: true })
+	expect(result).toMatchObject({ state: { persisted: true }, result: { ok: true }, completed: true })
 })
 
 test('ephemeral worker uses task()', async () => {
@@ -64,7 +64,7 @@ test('ephemeral worker uses task()', async () => {
 					},
 					async task() {
 						calls.push({ type: 'task', value: 'called' })
-						return { state: { temp: true } }
+						return { state: { temp: true }, result: { ok: true }, completed: true }
 					},
 					async shell() {
 						return { stdout: '', stderr: '', exitCode: 0 }
@@ -86,7 +86,7 @@ test('ephemeral worker uses task()', async () => {
 		{ type: 'session', value: 'actor/skill/memory' },
 		{ type: 'task', value: 'called' }
 	])
-	expect(result.state).toEqual({ temp: true })
+	expect(result).toMatchObject({ state: { temp: true }, result: { ok: true }, completed: true })
 })
 
 test('worker accepts flue responses wrapped in data', async () => {
@@ -261,7 +261,7 @@ test('shell-disabled worker cannot execute shell tool', async () => {
 		workerId: 'worker-1',
 		actorState: {},
 		envelope: makeEnvelopeRecord()
-	})).rejects.toThrow(/Shell tool is not available/i)
+	})).rejects.toThrow(/Worker tool loop exceeded the maximum number of tool steps|Shell tool is not available/i)
 })
 
 test('worker fs tools reject paths outside allowed roots', async () => {
@@ -301,7 +301,7 @@ test('worker fs tools reject paths outside allowed roots', async () => {
 		workerId: 'worker-1',
 		actorState: {},
 		envelope: makeEnvelopeRecord()
-	})).rejects.toThrow(/outside allowed fs roots/i)
+	})).rejects.toThrow(/Worker tool loop exceeded the maximum number of tool steps|outside allowed fs roots/i)
 })
 
 test('worker fs root dot resolves against workspace root', async () => {
@@ -317,7 +317,7 @@ test('worker fs root dot resolves against workspace root', async () => {
 						if (step === 1) {
 							return { tool: 'write_file', args: { path: 'sample_code.py', content: 'print("ok")\n' } }
 						}
-						return { state: { done: true }, completed: true }
+						return { state: { done: true }, result: { ok: true }, completed: true }
 					},
 					async task() {
 						throw new Error('unexpected task')
@@ -346,9 +346,222 @@ test('worker fs root dot resolves against workspace root', async () => {
 		workerId: 'worker-1',
 		actorState: {},
 		envelope: makeEnvelopeRecord()
-	})).resolves.toMatchObject({ state: { done: true }, completed: true })
+	})).resolves.toMatchObject({ state: { done: true }, result: { ok: true }, completed: true })
 
 	expect(await readFile(path.join(workspaceRoot, 'sample_code.py'), 'utf8')).toBe('print("ok")\n')
+})
+
+test('tool loop corrects invalid tool protocol and accepts later call_skill action result', async () => {
+	const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'jaensen-tool-correction-'))
+	const skillRoot = path.join(workspaceRoot, 'skills')
+	let step = 0
+	const prompts: string[] = []
+	const brain = createFlueSkillWorkerBrain({
+		harness: {
+			async session() {
+				return {
+					async prompt(text) {
+						prompts.push(text)
+						step += 1
+						if (step === 1) {
+							return { tool: 'call_skill', args: { to: 'skill/memory' } }
+						}
+						return {
+							state: { waiting: true },
+							actions: [
+								{ type: 'call_skill', to: 'skill/memory', callId: 'call-1', request: 'Remember', payload: { ok: true } }
+							],
+							completed: false
+						}
+					},
+					async task() {
+						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
+					}
+				}
+			}
+		},
+		workspaceRoot,
+		skillsRoot: skillRoot
+	})
+
+	await expect(brain.run({
+		skill: {
+			...baseSkill,
+			id: 'file-analyzer',
+			path: 'file-analyzer/SKILL.md',
+			directActors: ['skill/memory'],
+			frontmatter: {
+				...baseSkill.frontmatter,
+				worker_policy: 'durable',
+				resources: { shell: false, fs: ['.'] }
+			}
+		},
+		workerId: 'worker-1',
+		actorState: {},
+		envelope: makeEnvelopeRecord()
+	})).resolves.toMatchObject({
+		state: { waiting: true },
+		actions: [expect.objectContaining({ type: 'call_skill', to: 'skill/memory' })],
+		completed: false
+	})
+
+	expect(prompts.some((prompt) => prompt.includes('Worker call_skill tool requires a non-empty args.callId'))).toBe(true)
+})
+
+test('worker tool call to call_skill creates deferred actor action', async () => {
+	const brain = createFlueSkillWorkerBrain({
+		harness: {
+			async session() {
+				return {
+					async prompt() {
+						return {
+							tool: 'call_skill',
+							args: {
+								to: 'skill/memory',
+								callId: 'call-1',
+								request: 'Remember',
+								payload: { text: 'hello' }
+							}
+						}
+					},
+					async task() {
+						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
+					}
+				}
+			}
+		},
+		workspaceRoot: '/workspace'
+	})
+
+	await expect(brain.run({
+		skill: { ...baseSkill, directActors: ['skill/memory'], frontmatter: { ...baseSkill.frontmatter, worker_policy: 'durable' } },
+		workerId: 'topic-call-skill',
+		actorState: { existing: true },
+		envelope: makeEnvelopeRecord()
+	})).resolves.toMatchObject({
+		state: { existing: true },
+		actions: [{ type: 'call_skill', to: 'skill/memory', callId: 'call-1', request: 'Remember', payload: { text: 'hello' } }],
+		completed: false
+	})
+})
+
+test('finish tool creates completed worker result with content', async () => {
+	const brain = createFlueSkillWorkerBrain({
+		harness: {
+			async session() {
+				return {
+					async prompt() {
+						return { tool: 'finish', args: { result: { summary: 'done' } } }
+					},
+					async task() {
+						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
+					}
+				}
+			}
+		},
+		workspaceRoot: '/workspace'
+	})
+
+	await expect(brain.run({
+		skill: { ...baseSkill, frontmatter: { ...baseSkill.frontmatter, worker_policy: 'durable' } },
+		workerId: 'topic-finish',
+		actorState: { persisted: true },
+		envelope: makeEnvelopeRecord()
+	})).resolves.toMatchObject({
+		state: { persisted: true },
+		result: { summary: 'done' },
+		completed: true
+	})
+})
+
+test('unsupported tools produce a corrective model-visible error without repeated identical retries', async () => {
+	const prompts: string[] = []
+	let step = 0
+	const brain = createFlueSkillWorkerBrain({
+		harness: {
+			async session() {
+				return {
+					async prompt(text) {
+						prompts.push(text)
+						step += 1
+						if (step === 1) {
+							return { tool: 'explode_pdf', args: {} }
+						}
+						return { tool: 'finish', args: { result: { ok: true } } }
+					},
+					async task() {
+						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
+					}
+				}
+			}
+		},
+		workspaceRoot: '/workspace'
+	})
+
+	await expect(brain.run({
+		skill: { ...baseSkill, frontmatter: { ...baseSkill.frontmatter, worker_policy: 'durable' } },
+		workerId: 'topic-unsupported-tool',
+		actorState: {},
+		envelope: makeEnvelopeRecord()
+	})).resolves.toMatchObject({ completed: true, result: { ok: true } })
+
+	expect(prompts).toHaveLength(2)
+	expect(prompts[1]).toContain('Malformed or unsupported tool call:')
+	expect(prompts[1]).toContain('Worker requested unsupported tool: explode_pdf')
+	expect(prompts[1]).toContain('Allowed tools are: shell, read_file, write_file, inspect_attachment, call_skill, finish.')
+})
+
+test('durable worker retries after a JSON parse failure from the model transport', async () => {
+	const prompts: string[] = []
+	let attempt = 0
+	const brain = createFlueSkillWorkerBrain({
+		harness: {
+			async session() {
+				return {
+					async prompt(text) {
+						prompts.push(text)
+						attempt += 1
+						if (attempt === 1) {
+							throw new Error('JSON Parse error: Unable to parse JSON string')
+						}
+						return { state: { repaired: true }, result: { ok: true }, completed: true }
+					},
+					async task() {
+						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
+					}
+				}
+			}
+		},
+		workspaceRoot: '/workspace'
+	})
+
+	await expect(
+		brain.run({
+			skill: { ...baseSkill, frontmatter: { ...baseSkill.frontmatter, worker_policy: 'durable' } },
+			workerId: 'topic-repair-json',
+			actorState: {},
+			envelope: makeEnvelopeRecord()
+		})
+	).resolves.toMatchObject({ state: { repaired: true }, result: { ok: true }, completed: true })
+
+	expect(prompts).toHaveLength(2)
+	expect(prompts[1]).toContain('Your previous response could not be parsed or validated.')
+	expect(prompts[1]).toContain('JSON Parse error: Unable to parse JSON string')
 })
 
 function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRecord {

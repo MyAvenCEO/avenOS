@@ -1,10 +1,14 @@
 export type IntentStatus = 'active' | 'waiting_for_user' | 'completed' | 'failed'
 
 export interface PostMessageAttachmentInput {
-	id: string
+	id?: string
+	name?: string
+	contentType?: string
+	base64?: string
 	path?: string
 	mimeType?: string
-	name?: string
+	sizeBytes?: number
+	sha256?: string
 }
 
 export interface PostMessageInput {

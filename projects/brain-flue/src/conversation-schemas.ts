@@ -25,7 +25,6 @@ const eventSchema = z.object({
 const callSkillActionSchema = z.object({
 	type: z.literal('call_skill'),
 	skillId: z.string().trim().min(1, 'skillId is required'),
-	callId: z.string().trim().min(1, 'callId is required'),
 	request: z.string().trim().min(1, 'request is required'),
 	payload: z.unknown()
 })
@@ -111,20 +110,11 @@ export function validateIntentDecision(
 		)
 	}
 
-	const existingPendingIds = new Set(Object.keys(context.state.pendingSkillCalls))
-	const seenCallIds = new Set<string>()
-
 	for (const action of parsed.data.actions ?? []) {
 		if (action.type === 'call_skill') {
 			if (!context.availableSkillIds.has(action.skillId)) {
 				throw new FlueBrainValidationError('Invalid intent decision: call_skill.skillId must exist in availableSkills')
 			}
-
-			if (existingPendingIds.has(action.callId) || seenCallIds.has(action.callId)) {
-				throw new FlueBrainValidationError('Invalid intent decision: call_skill.callId must be unique among pending calls')
-			}
-
-			seenCallIds.add(action.callId)
 		}
 	}
 

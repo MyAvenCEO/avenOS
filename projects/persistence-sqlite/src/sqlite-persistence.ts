@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+
 import { Database } from 'bun:sqlite'
 
 import { exponentialBackoffMilliseconds, plusMilliseconds, toIsoUtcString } from './clock'
@@ -383,6 +385,7 @@ export class SqlitePersistence implements Persistence {
 		workerId: string
 		envelopeId: string
 		error: string
+		nonRetryable?: boolean
 		retryAt?: Date
 		now: Date
 	}): Promise<void> {
@@ -403,7 +406,7 @@ export class SqlitePersistence implements Persistence {
 			}
 
 			const nowIso = input.now.toISOString()
-			const exhausted = envelopeRow.attempts >= envelopeRow.max_attempts
+			const exhausted = input.nonRetryable === true || envelopeRow.attempts >= envelopeRow.max_attempts
 			const nextAvailableAt = exhausted
 				? envelopeRow.available_at
 				: (input.retryAt ?? plusMilliseconds(input.now, exponentialBackoffMilliseconds(envelopeRow.attempts))).toISOString()
@@ -488,6 +491,21 @@ export class SqlitePersistence implements Persistence {
 				const exhausted = envelope.attempts >= envelope.max_attempts
 				updateEnvelope.run(exhausted ? 'dead' : 'queued', nowIso, nowIso, envelope.id)
 				deleteLock.run(envelope.id)
+				insertStreamEvents(this.db, [{
+					id: randomUUID(),
+					scope: envelope.to_actor,
+					actorId: envelope.to_actor,
+					envelopeId: envelope.id,
+					type: 'runtime.envelope.lease_expired',
+					payload: {
+						envelopeId: envelope.id,
+						actorId: envelope.to_actor,
+						lockedBy: envelope.locked_by,
+						lockedUntil: envelope.locked_until,
+						nextStatus: exhausted ? 'dead' : 'queued'
+					},
+					createdAt: nowIso
+				}])
 			}
 
 			return staleEnvelopes.length
@@ -1163,7 +1181,7 @@ function normalizeActorEventInput(input: {
 }): Required<Pick<ActorEventInput, 'id' | 'actorId' | 'eventType' | 'event' | 'createdAt'>> & ActorEventInput {
 	return {
 		...input.event,
-		id: input.event.id ?? crypto.randomUUID(),
+		id: input.event.id ?? randomUUID(),
 		actorId: input.event.actorId ?? input.actorId,
 		envelopeId: input.event.envelopeId ?? input.envelopeId,
 		createdAt: toIsoUtcString(input.event.createdAt, input.now)

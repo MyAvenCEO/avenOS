@@ -9,6 +9,7 @@ type FlueSessionAdapter = {
 		role?: string
 		model?: string
 		thinkingLevel?: string
+		signal?: AbortSignal
 	}): Promise<unknown>
 	task(text: string, options: {
 		schema: unknown
@@ -16,12 +17,19 @@ type FlueSessionAdapter = {
 		role?: string
 		model?: string
 		thinkingLevel?: string
+		signal?: AbortSignal
 	}): Promise<unknown>
-	shell(command: string, options?: { cwd?: string }): Promise<{
+	shell(command: string, options?: {
+		cwd?: string
+		signal?: AbortSignal
+		timeoutMs?: number
+		maxOutputBytes?: number
+	}): Promise<{
 		stdout: string
 		stderr: string
 		exitCode: number
 		timedOut?: boolean
+		aborted?: boolean
 	}>
 }
 
@@ -34,6 +42,7 @@ export interface ProviderConfig {
 	model: string
 	baseUrl: string
 	apiKey: string
+	responseFormat: 'text' | 'json_object' | 'json_schema'
 }
 
 type EnvLike = Record<string, string | undefined>
@@ -44,7 +53,15 @@ const DEFAULT_TINFOIL_BASE_URL = 'https://api.tinfoil.sh/v1'
 const DEFAULT_TINFOIL_MODEL = 'glm-5-1'
 
 type ModelCompletionResponse = {
-	choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> } }>
+	choices?: Array<{
+		text?: string
+		message?: {
+			content?: string | Array<{ type?: string; text?: string }> | null
+			reasoning_content?: string
+			refusal?: string | null
+			parsed?: unknown
+		}
+	}>
 }
 
 type TinfoilClientLike = {
@@ -53,8 +70,9 @@ type TinfoilClientLike = {
 		completions: {
 			create(input: {
 				model: string
-				response_format: { type: 'json_object' }
+				response_format: { type: 'text' | 'json_object' | 'json_schema' }
 				messages: Array<{ role: 'system' | 'user'; content: string }>
+				signal?: AbortSignal
 			}): Promise<ModelCompletionResponse>
 		}
 	}
@@ -77,9 +95,11 @@ export function createDevHarness(config: ProviderConfig): FlueHarnessAdapter {
 						sessionName: name,
 						sessionRole: sessionOptions?.role,
 						text,
+						schema: options.schema,
 						role: options.role,
 						model: options.model,
 						thinkingLevel: normalizeThinkingLevel(options.thinkingLevel),
+						signal: options.signal,
 						cwd: undefined,
 						mode: 'prompt'
 					})
@@ -90,9 +110,11 @@ export function createDevHarness(config: ProviderConfig): FlueHarnessAdapter {
 						sessionName: name,
 						sessionRole: sessionOptions?.role,
 						text,
+						schema: options.schema,
 						role: options.role,
 						model: options.model,
 						thinkingLevel: normalizeThinkingLevel(options.thinkingLevel),
+						signal: options.signal,
 						cwd: options.cwd,
 						mode: 'task'
 					})
@@ -125,7 +147,11 @@ export function resolveProviderConfig(env: EnvLike): ProviderConfig {
 			provider: 'tinfoil',
 			model: env.JAENSEN_TINFOIL_MODEL?.trim() || DEFAULT_TINFOIL_MODEL,
 			baseUrl: normalizeTinfoilBaseUrl(env.JAENSEN_TINFOIL_BASE_URL?.trim() || DEFAULT_TINFOIL_BASE_URL),
-			apiKey
+			apiKey,
+			responseFormat: resolveResponseFormat({
+				provider: 'tinfoil',
+				configured: env.JAENSEN_TINFOIL_RESPONSE_FORMAT?.trim()
+			})
 		}
 	}
 
@@ -134,7 +160,11 @@ export function resolveProviderConfig(env: EnvLike): ProviderConfig {
 			provider: 'openai',
 			model: env.JAENSEN_OPENAI_MODEL?.trim() || DEFAULT_OPENAI_MODEL,
 			baseUrl: normalizeOpenAiBaseUrl(env.JAENSEN_OPENAI_BASE_URL?.trim() || DEFAULT_OPENAI_BASE_URL),
-			apiKey: env.JAENSEN_OPENAI_API_KEY?.trim() || 'local'
+			apiKey: env.JAENSEN_OPENAI_API_KEY?.trim() || 'local',
+			responseFormat: resolveResponseFormat({
+				provider: 'openai',
+				configured: env.JAENSEN_OPENAI_RESPONSE_FORMAT?.trim()
+			})
 		}
 	}
 
@@ -156,6 +186,24 @@ function hasAnyConfigured(env: EnvLike, keys: string[]): boolean {
 	return keys.some((key) => Boolean(env[key]?.trim()))
 }
 
+function resolveResponseFormat(input: {
+	provider: ProviderConfig['provider']
+	configured: string | undefined
+}): ProviderConfig['responseFormat'] {
+	const configured = input.configured?.trim().toLowerCase()
+	if (!configured || configured === 'auto') {
+		return input.provider === 'openai' ? 'text' : 'json_object'
+	}
+
+	if (configured === 'text' || configured === 'json_object' || configured === 'json_schema') {
+		return configured
+	}
+
+	throw new Error(
+		`Unsupported Jaensen ${input.provider} response format \"${input.configured}\". Use auto, text, json_object, or json_schema.`
+	)
+}
+
 function normalizeThinkingLevel(value: string | undefined): ThinkingLevel {
 	return value === 'off' || value === 'low' || value === 'medium' || value === 'high' ? value : 'medium'
 }
@@ -165,9 +213,11 @@ async function runModelCall(input: {
 	sessionName: string
 	sessionRole?: string
 	text: string
+	schema?: unknown
 	role?: string
 	model?: string
 	thinkingLevel: ThinkingLevel
+	signal?: AbortSignal
 	cwd?: string
 	mode: 'prompt' | 'task'
 }): Promise<unknown> {
@@ -178,14 +228,18 @@ async function runModelCall(input: {
 				apiKey: input.config.apiKey,
 				model: input.model || input.config.model,
 				system,
-				text: input.text
+				text: input.text,
+				responseFormat: input.config.responseFormat,
+				signal: input.signal
 			})
 			: await runOpenAiCompatibleModelCall({
 				baseUrl: input.config.baseUrl,
 				apiKey: input.config.apiKey,
 				model: input.model || input.config.model,
 				system,
-				text: input.text
+				text: input.text,
+				responseFormat: input.config.responseFormat,
+				signal: input.signal
 			})
 
 	const content = readMessageContent(body)
@@ -201,17 +255,20 @@ async function runTinfoilModelCall(input: {
 	model: string
 	system: string
 	text: string
+	responseFormat: ProviderConfig['responseFormat']
+	signal?: AbortSignal
 }): Promise<ModelCompletionResponse> {
 	try {
 		const client = createTinfoilClient(input.apiKey)
 		await client.ready()
 		return await client.chat.completions.create({
 			model: input.model,
-			response_format: { type: 'json_object' },
+			response_format: { type: input.responseFormat },
 			messages: [
 				{ role: 'system', content: input.system },
 				{ role: 'user', content: input.text }
-			]
+			],
+			signal: input.signal as never
 		})
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error)
@@ -225,16 +282,19 @@ async function runOpenAiCompatibleModelCall(input: {
 	model: string
 	system: string
 	text: string
+	responseFormat: ProviderConfig['responseFormat']
+	signal?: AbortSignal
 }): Promise<ModelCompletionResponse> {
 	const response = await fetch(`${input.baseUrl}/chat/completions`, {
 		method: 'POST',
+		signal: input.signal,
 		headers: {
 			'content-type': 'application/json',
 			authorization: `Bearer ${input.apiKey}`
 		},
 		body: JSON.stringify({
 			model: input.model,
-			response_format: { type: 'json_object' },
+			response_format: { type: input.responseFormat },
 			messages: [
 				{ role: 'system', content: input.system },
 				{ role: 'user', content: input.text }
@@ -276,9 +336,18 @@ function buildSystemPrompt(input: {
 }
 
 function readMessageContent(body: {
-	choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> } }>
+	choices?: Array<{
+		text?: string
+		message?: {
+			content?: string | Array<{ type?: string; text?: string }> | null
+			reasoning_content?: string
+			refusal?: string | null
+			parsed?: unknown
+		}
+	}>
 }): string {
-	const content = body.choices?.[0]?.message?.content
+	const choice = body.choices?.[0]
+	const content = choice?.message?.content
 	if (typeof content === 'string') {
 		return content
 	}
@@ -290,14 +359,94 @@ function readMessageContent(body: {
 			.trim()
 	}
 
+	if (typeof choice?.text === 'string' && choice.text.trim()) {
+		return choice.text.trim()
+	}
+
+	if (typeof choice?.message?.reasoning_content === 'string' && choice.message.reasoning_content.trim()) {
+		return choice.message.reasoning_content.trim()
+	}
+
+	if (choice?.message?.parsed && typeof choice.message.parsed === 'object') {
+		return JSON.stringify(choice.message.parsed)
+	}
+
+	if (typeof choice?.message?.refusal === 'string' && choice.message.refusal.trim()) {
+		return choice.message.refusal.trim()
+	}
+
 	return ''
 }
 
 function parseJsonObject(content: string): unknown {
+	const candidate = extractJsonCandidate(content)
+	return JSON.parse(candidate)
+}
+
+function extractJsonCandidate(content: string): string {
 	const trimmed = content.trim()
 	const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)
-	const candidate = fenced?.[1]?.trim() || trimmed
-	return JSON.parse(candidate)
+	if (fenced?.[1]?.trim()) {
+		return fenced[1].trim()
+	}
+
+	if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+		return trimmed
+	}
+
+	const extracted = extractFirstBalancedJson(trimmed)
+	if (extracted) {
+		return extracted
+	}
+
+	return trimmed
+}
+
+function extractFirstBalancedJson(text: string): string | null {
+	const start = text.search(/[\[{]/)
+	if (start === -1) {
+		return null
+	}
+
+	const stack: string[] = []
+	let inString = false
+	let escaped = false
+
+	for (let index = start; index < text.length; index += 1) {
+		const char = text[index]
+
+		if (escaped) {
+			escaped = false
+			continue
+		}
+
+		if (char === '\\') {
+			escaped = true
+			continue
+		}
+
+		if (char === '"') {
+			inString = !inString
+			continue
+		}
+
+		if (inString) {
+			continue
+		}
+
+		if (char === '{') stack.push('}')
+		else if (char === '[') stack.push(']')
+		else if (char === '}' || char === ']') {
+			if (stack.pop() !== char) {
+				return null
+			}
+			if (stack.length === 0) {
+				return text.slice(start, index + 1)
+			}
+		}
+	}
+
+	return null
 }
 
 function buildRoleOutputContract(role: string | undefined): string | null {
@@ -433,11 +582,17 @@ function assertShellAvailable(): void {
 	}
 }
 
-export async function runShell(command: string, options?: { cwd?: string }): Promise<{
+export async function runShell(command: string, options?: {
+	cwd?: string
+	signal?: AbortSignal
+	timeoutMs?: number
+	maxOutputBytes?: number
+}): Promise<{
 	stdout: string
 	stderr: string
 	exitCode: number
 	timedOut?: boolean
+	aborted?: boolean
 }> {
 	return await new Promise((resolve, reject) => {
 		const child = spawn('/bin/bash', ['-lc', command], {
@@ -448,15 +603,45 @@ export async function runShell(command: string, options?: { cwd?: string }): Pro
 
 		let stdout = ''
 		let stderr = ''
+		let finished = false
+		let timedOut = false
+		let aborted = false
+		const maxOutputBytes = options?.maxOutputBytes ?? 64 * 1024
+		const timeoutHandle = options?.timeoutMs
+			? setTimeout(() => {
+				if (finished) return
+				timedOut = true
+				child.kill('SIGTERM')
+				setTimeout(() => child.kill('SIGKILL'), 250)
+			}, options.timeoutMs)
+			: undefined
+		const abortHandler = () => {
+			if (finished) return
+			aborted = true
+			child.kill('SIGTERM')
+			setTimeout(() => child.kill('SIGKILL'), 250)
+		}
+		options?.signal?.addEventListener('abort', abortHandler, { once: true })
 		child.stdout.on('data', (chunk) => {
 			stdout += String(chunk)
+			if (stdout.length + stderr.length > maxOutputBytes && !finished) {
+				stderr += '\n[output truncated: maxOutputBytes exceeded]'
+				child.kill('SIGTERM')
+			}
 		})
 		child.stderr.on('data', (chunk) => {
 			stderr += String(chunk)
+			if (stdout.length + stderr.length > maxOutputBytes && !finished) {
+				stderr += '\n[output truncated: maxOutputBytes exceeded]'
+				child.kill('SIGTERM')
+			}
 		})
 		child.on('error', (error) => reject(new Error(`Dev harness shell failed to start: ${error.message}`)))
 		child.on('close', (code) => {
-			resolve({ stdout, stderr, exitCode: code ?? 1, timedOut: false })
+			finished = true
+			if (timeoutHandle) clearTimeout(timeoutHandle)
+			options?.signal?.removeEventListener('abort', abortHandler)
+			resolve({ stdout, stderr, exitCode: code ?? 1, timedOut, aborted })
 		})
 	})
 }

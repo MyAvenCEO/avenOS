@@ -87,12 +87,28 @@ export function validateWorkerResult(input: unknown) {
 		throw new FlueBrainValidationError(`Invalid worker result: ${parsed.error.issues.map((issue) => issue.message).join('; ')}`)
 	}
 
+	const stateChanged = parsed.data.state !== undefined && (
+		typeof parsed.data.state !== 'object' ||
+		parsed.data.state === null ||
+		Array.isArray(parsed.data.state) ||
+		Object.keys(parsed.data.state as Record<string, unknown>).length > 0
+	)
 	const hasChildActions = (parsed.data.actions?.length ?? 0) > 0
-	const hasFinalResult = parsed.data.completed === true || parsed.data.result !== undefined
+	const hasResult = parsed.data.result !== undefined
+	const completed = parsed.data.completed === true
+	const hasFinalResult = completed || hasResult
 	if (hasChildActions && hasFinalResult) {
 		throw new FlueBrainValidationError(
 			'Invalid worker result: call_skill actions may not be returned together with completed=true or result'
 		)
+	}
+
+	if (completed && !hasResult) {
+		throw new FlueBrainValidationError('Invalid worker result: completed=true requires result')
+	}
+
+	if (!hasChildActions && !hasResult && !stateChanged) {
+		throw new FlueBrainValidationError('Invalid worker result: must include result, actions, or a useful state change')
 	}
 
 	return parsed.data

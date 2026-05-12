@@ -8,9 +8,10 @@ import type { SkillRegistry } from '@jaensen/skills'
 
 export interface UserAttachment {
 	id: string
-	path?: string
-	mimeType?: string
-	name?: string
+	name: string
+	mimeType: string
+	sizeBytes: number
+	sha256: string
 }
 
 export interface DispatcherState {
@@ -33,6 +34,7 @@ export interface DispatcherBrain {
 		userInput: {
 			text: string
 			attachments: UserAttachment[]
+			attachmentScopeId?: string
 			intentIdHint?: string
 		}
 	}): Promise<DispatcherDecision>
@@ -76,6 +78,7 @@ export interface IntentBrain {
 			id: string
 			description: string
 		}>
+		signal?: AbortSignal
 	}): Promise<IntentBrainDecision>
 }
 
@@ -89,7 +92,6 @@ export type IntentAction =
 	| {
 			type: 'call_skill'
 			skillId: string
-			callId: string
 			request: string
 			payload: unknown
 	  }

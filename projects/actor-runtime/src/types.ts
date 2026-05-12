@@ -20,6 +20,8 @@ export interface ActorActivation {
 
 export interface ActorContext {
 	now: Date
+	signal: AbortSignal
+	generateId(): string
 	makeEnvelope(input: {
 		from: string
 		to: string
@@ -124,6 +126,7 @@ export interface CreateActorRuntimeInput {
 	workerId: string
 	leaseMs?: number
 	activationTimeoutMs?: number
+	activationCleanupMs?: number
 	clock?: () => Date
 	logger?: RuntimeLogger
 }

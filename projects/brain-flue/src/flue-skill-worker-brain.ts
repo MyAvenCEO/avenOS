@@ -9,7 +9,7 @@ import { runWorkerToolLoop } from './worker-tool-loop'
 
 export function createFlueSkillWorkerBrain(input: CreateFlueSkillWorkerBrainInput): SkillWorkerBrain {
 	return {
-		async run({ skill, workerId, actorState, envelope }) {
+		async run({ skill, workerId, actorState, envelope, signal }) {
 			const workerPolicy = readWorkerPolicy(skill.frontmatter)
 			const prompt = buildWorkerPrompt({
 				skill,
@@ -27,12 +27,16 @@ export function createFlueSkillWorkerBrain(input: CreateFlueSkillWorkerBrainInpu
 					skill,
 					skillId: skill.id,
 					workerId,
+					actorState,
 					workerPolicy,
 					prompt,
 					workspaceRoot: input.workspaceRoot,
 					skillsRoot: input.skillsRoot,
+					uploadRoot: input.uploadRoot,
+					attachmentScopeId: input.resolveAttachmentScopeId?.(envelope),
 					model: input.model,
-					thinkingLevel: input.thinkingLevel
+					thinkingLevel: input.thinkingLevel,
+					signal
 				})
 
 				return validateWorkerResult(readFlueData(response))
@@ -48,12 +52,16 @@ async function runWorkerPrompt(input: {
 	skill: Parameters<SkillWorkerBrain['run']>[0]['skill']
 	skillId: string
 	workerId: string
+	actorState: Parameters<SkillWorkerBrain['run']>[0]['actorState']
 	workerPolicy: 'ephemeral' | 'pooled' | 'durable'
 	prompt: string
 	workspaceRoot: string
 	skillsRoot?: string
+	uploadRoot?: string
+	attachmentScopeId?: string
 	model?: string
 	thinkingLevel?: string
+	signal?: AbortSignal
 }) {
 	if (input.workerPolicy === 'durable' || input.workerPolicy === 'pooled') {
 		const session = await input.harness.session(createWorkerSessionName(input.skillId, input.workerId), {
@@ -64,16 +72,23 @@ async function runWorkerPrompt(input: {
 			skill: input.skill,
 			workspaceRoot: input.workspaceRoot,
 			skillsRoot: input.skillsRoot,
+			uploadRoot: input.uploadRoot,
+			attachmentScopeId: input.attachmentScopeId,
 			runShell: (command, options) => session.shell(command, options),
 			invokeModel: (prompt) => session.prompt(prompt, {
 				schema: skillWorkerResultSchema,
 				role: 'jaensen-skill-worker',
 				model: input.model,
-				thinkingLevel: input.thinkingLevel
+				thinkingLevel: input.thinkingLevel,
+				signal: input.signal
 			}),
 			basePrompt: input.prompt,
+			currentState: input.actorState,
 			validateFinalResult: validateWorkerResult,
-			unwrapModelData: readFlueData
+			unwrapModelData: readFlueData,
+			signal: input.signal,
+			shellTimeoutMs: 30_000,
+			shellMaxOutputBytes: 64 * 1024
 		})
 	}
 
@@ -85,17 +100,24 @@ async function runWorkerPrompt(input: {
 		skill: input.skill,
 		workspaceRoot: input.workspaceRoot,
 		skillsRoot: input.skillsRoot,
+		uploadRoot: input.uploadRoot,
+		attachmentScopeId: input.attachmentScopeId,
 		runShell: (command, options) => parentSession.shell(command, options),
 		invokeModel: (prompt) => parentSession.task(prompt, {
 			schema: skillWorkerResultSchema,
 			cwd: input.workspaceRoot,
 			role: 'jaensen-skill-worker',
 			model: input.model,
-			thinkingLevel: input.thinkingLevel
+			thinkingLevel: input.thinkingLevel,
+			signal: input.signal
 		}),
 		basePrompt: input.prompt,
+		currentState: input.actorState,
 		validateFinalResult: validateWorkerResult,
-		unwrapModelData: readFlueData
+		unwrapModelData: readFlueData,
+		signal: input.signal,
+		shellTimeoutMs: 30_000,
+		shellMaxOutputBytes: 64 * 1024
 	})
 }
 

@@ -29,6 +29,7 @@ import {
 	createSkillSupervisorHandler,
 	createSkillWorkerHandler,
 	loadSkills,
+	type SharedSkillResourceConfig,
 	type SkillDefinition,
 	type SkillRegistry,
 	type SkillSupervisorBrain,
@@ -60,6 +61,7 @@ export interface CreateAppNodeInput {
 	skillWorkerBrain?: SkillWorkerBrain
 	skills?: SkillDefinition[]
 	skillRegistry?: SkillRegistry
+	sharedSkillResources?: SharedSkillResourceConfig
 }
 
 export interface AppNode {
@@ -70,6 +72,7 @@ export interface AppNode {
 	enqueueUserInput(input: {
 		text: string
 		attachments?: UserAttachment[]
+		attachmentScopeId?: string
 		intentIdHint?: string
 		now?: Date
 		id?: string
@@ -84,6 +87,7 @@ export async function createAppNode(input: CreateAppNodeInput): Promise<AppNode>
 	const workspaceRoot = input.workspaceRoot ?? process.cwd()
 	const skillsRoot = resolveFromWorkspace(workspaceRoot, input.skillsRoot ?? '.flue/skills')
 	const persistencePath = resolveFromWorkspace(workspaceRoot, input.persistencePath ?? '.jaensen/state.db')
+	const sharedSkillResources = input.sharedSkillResources ?? { uploadRoot: '.jaensen/uploads' }
 	const persistence =
 		input.persistence ??
 		(await createSqlitePersistence({
@@ -153,6 +157,10 @@ export async function createAppNode(input: CreateAppNodeInput): Promise<AppNode>
 					harness,
 					workspaceRoot,
 					skillsRoot,
+					uploadRoot: sharedSkillResources.uploadRoot
+						? resolveFromWorkspace(workspaceRoot, sharedSkillResources.uploadRoot)
+						: undefined,
+					resolveAttachmentScopeId: (envelope) => readAttachmentScopeId(envelope.payload),
 					model: input.model,
 					thinkingLevel: input.thinkingLevel
 				})
@@ -176,6 +184,7 @@ export async function createAppNode(input: CreateAppNodeInput): Promise<AppNode>
 				id: userInput.id,
 				text: userInput.text,
 				attachments: userInput.attachments,
+				attachmentScopeId: userInput.attachmentScopeId,
 				intentIdHint: userInput.intentIdHint,
 				now: userInput.now ?? new Date()
 			})
@@ -311,8 +320,37 @@ function truncate(value: string, max = 280): string {
 
 function safeJson(value: unknown): string {
 	try {
-		return JSON.stringify(value)
+		return JSON.stringify(redactAttachmentSensitiveData(value))
 	} catch {
 		return String(value)
 	}
+}
+
+function readAttachmentScopeId(payload: unknown): string | undefined {
+	const record = payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Record<string, unknown>) : {}
+	const userInput =
+		record.userInput && typeof record.userInput === 'object' && !Array.isArray(record.userInput)
+			? (record.userInput as Record<string, unknown>)
+			: {}
+	const value = typeof record.attachmentScopeId === 'string' ? record.attachmentScopeId : userInput.attachmentScopeId
+	return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function redactAttachmentSensitiveData(value: unknown): unknown {
+	if (Array.isArray(value)) {
+		return value.map((item) => redactAttachmentSensitiveData(item))
+	}
+	if (!value || typeof value !== 'object') {
+		return value
+	}
+
+	const result: Record<string, unknown> = {}
+	for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+		if (key === 'path' && typeof entry === 'string') {
+			result[key] = '[redacted]'
+			continue
+		}
+		result[key] = redactAttachmentSensitiveData(entry)
+	}
+	return result
 }

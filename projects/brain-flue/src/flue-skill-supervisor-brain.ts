@@ -10,7 +10,7 @@ export function createFlueSkillSupervisorBrain(
 	input: CreateFlueSkillSupervisorBrainInput
 ): SkillSupervisorBrain {
 	return {
-		async decide({ skill, actorState, envelope }) {
+		async decide({ skill, actorState, envelope, signal }) {
 			const session = await input.harness.session(createSupervisorSessionName(skill.id), {
 				role: 'jaensen-skill-supervisor'
 			})
@@ -29,7 +29,8 @@ export function createFlueSkillSupervisorBrain(
 					schema: skillSupervisorDecisionSchema,
 					role: 'jaensen-skill-supervisor',
 					model: input.model,
-					thinkingLevel: input.thinkingLevel
+					thinkingLevel: input.thinkingLevel,
+					signal
 				})
 
 				return validateSupervisorDecision(readFlueData(response), envelope.fromActor)
