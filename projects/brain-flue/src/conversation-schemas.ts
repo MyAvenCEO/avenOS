@@ -1,9 +1,7 @@
 import { z } from 'zod'
-import type { DispatcherDecision, DispatcherState, IntentDecision, IntentState } from '@jaensen/conversation-actors'
+import type { DispatcherDecision, DispatcherState, IntentBrainDecision, IntentState } from '@jaensen/conversation-actors'
 
 import { FlueBrainValidationError } from './errors'
-
-const INTENT_STATUS_VALUES = ['active', 'waiting_for_user', 'completed', 'failed'] as const
 
 const dispatcherOutputSchema = z.discriminatedUnion('type', [
 	z.object({
@@ -18,22 +16,6 @@ const dispatcherOutputSchema = z.discriminatedUnion('type', [
 		reason: z.string().trim().min(1, 'reason is required')
 	})
 ])
-
-const pendingSkillCallSchema = z.object({
-	callId: z.string(),
-	skillId: z.string(),
-	request: z.string(),
-	createdAt: z.string()
-})
-
-const intentStateSchema = z.object({
-	intentId: z.string().trim().min(1, 'state.intentId is required'),
-	title: z.string().trim().min(1, 'state.title is required'),
-	goal: z.string().trim().min(1, 'state.goal is required'),
-	status: z.enum(INTENT_STATUS_VALUES),
-	summary: z.string(),
-	pendingSkillCalls: z.record(z.string(), pendingSkillCallSchema)
-})
 
 const eventSchema = z.object({
 	eventType: z.string().trim().min(1, 'eventType is required'),
@@ -73,7 +55,7 @@ const failActionSchema = z.object({
 export const flueDispatcherOutputSchema = dispatcherOutputSchema
 
 export const flueIntentOutputSchema = z.object({
-	state: intentStateSchema,
+	summary: z.string().optional(),
 	events: z.array(eventSchema).optional(),
 	actions: z.array(z.discriminatedUnion('type', [
 		callSkillActionSchema,
@@ -121,16 +103,12 @@ export function validateIntentDecision(
 		envelope: { toActor: string }
 		availableSkillIds: Set<string>
 	}
-): IntentDecision {
+): IntentBrainDecision {
 	const parsed = flueIntentOutputSchema.safeParse(input)
 	if (!parsed.success) {
 		throw new FlueBrainValidationError(
 			`Invalid intent decision: ${parsed.error.issues.map((issue) => issue.message).join('; ')}`
 		)
-	}
-
-	if (parsed.data.state.intentId !== context.state.intentId) {
-		throw new FlueBrainValidationError('Invalid intent decision: state.intentId must match current actor state/envelope')
 	}
 
 	const existingPendingIds = new Set(Object.keys(context.state.pendingSkillCalls))
@@ -147,18 +125,6 @@ export function validateIntentDecision(
 			}
 
 			seenCallIds.add(action.callId)
-		}
-
-		if (action.type === 'ask_user' && parsed.data.state.status !== 'waiting_for_user') {
-			throw new FlueBrainValidationError('Invalid intent decision: ask_user requires state.status = waiting_for_user')
-		}
-
-		if (action.type === 'complete' && parsed.data.state.status !== 'completed') {
-			throw new FlueBrainValidationError('Invalid intent decision: complete requires state.status = completed')
-		}
-
-		if (action.type === 'fail' && parsed.data.state.status !== 'failed') {
-			throw new FlueBrainValidationError('Invalid intent decision: fail requires state.status = failed')
 		}
 	}
 

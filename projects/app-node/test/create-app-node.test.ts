@@ -47,9 +47,9 @@ test('app can enqueue user input and expose human outbox after runtime settles',
 			}
 		},
 		intentBrain: {
-			async decide({ state }) {
+			async decide() {
 				return {
-					state,
+					summary: 'Say hello',
 					actions: [{ type: 'reply_user', message: 'Hello from runtime' }]
 				}
 			}
@@ -94,6 +94,9 @@ function createHarnessStub() {
 				},
 				async task() {
 					throw new Error('unexpected task')
+				},
+				async shell() {
+					throw new Error('unexpected shell')
 				}
 			}
 		}

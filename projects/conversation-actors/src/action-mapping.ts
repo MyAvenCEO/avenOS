@@ -3,31 +3,6 @@ import type { EnvelopeInput, EnvelopeRecord } from '@jaensen/persistence-sqlite'
 import { UnknownSkillError } from './errors'
 import type { IntentAction, IntentState, SkillRegistry } from './types'
 
-export function applyIntentActionStateEffects(input: {
-	state: IntentState
-	actions: IntentAction[]
-}): IntentState {
-	let nextState = input.state
-
-	for (const action of input.actions) {
-		switch (action.type) {
-			case 'ask_user':
-				nextState = { ...nextState, status: 'waiting_for_user' }
-				break
-			case 'complete':
-				nextState = { ...nextState, status: 'completed', summary: action.summary }
-				break
-			case 'fail':
-				nextState = { ...nextState, status: 'failed', summary: action.reason }
-				break
-			default:
-				break
-		}
-	}
-
-	return nextState
-}
-
 export function mapIntentActionsToEnvelopes(input: {
 	fromActor: string
 	state: IntentState

@@ -25,10 +25,13 @@ test('supervisor uses stable session name', async () => {
 				calls.push(name)
 				return {
 					async prompt() {
-						return { state: { skillId: 'memory', workers: {} } }
+						return { state: { skillId: 'memory', workers: {}, calls: {} } }
 					},
 					async task() {
 						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
 					}
 				}
 			}
@@ -43,7 +46,7 @@ test('supervisor uses stable session name', async () => {
 	})
 
 	expect(calls).toEqual(['actor/skill/memory'])
-	expect(result.state).toEqual({ skillId: 'memory', workers: {} })
+	expect(result.state).toEqual({ skillId: 'memory', workers: {}, calls: {} })
 })
 
 test('model errors propagate clearly', async () => {
@@ -56,6 +59,9 @@ test('model errors propagate clearly', async () => {
 					},
 					async task() {
 						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
 					}
 				}
 			}
@@ -87,10 +93,13 @@ test('supervisor accepts flue responses wrapped in data', async () => {
 			async session() {
 				return {
 					async prompt() {
-						return { data: { state: { skillId: 'memory', workers: {} } } }
+						return { data: { state: { skillId: 'memory', workers: {}, calls: {} } } }
 					},
 					async task() {
 						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
 					}
 				}
 			}
@@ -99,8 +108,8 @@ test('supervisor accepts flue responses wrapped in data', async () => {
 	})
 
 	await expect(
-		brain.decide({ skill, actorState: { skillId: 'memory', workers: {} }, envelope: makeEnvelopeRecord() })
-	).resolves.toMatchObject({ state: { skillId: 'memory', workers: {} } })
+		brain.decide({ skill, actorState: { skillId: 'memory', workers: {}, calls: {} }, envelope: makeEnvelopeRecord() })
+	).resolves.toMatchObject({ state: { skillId: 'memory', workers: {}, calls: {} } })
 })
 
 function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRecord {

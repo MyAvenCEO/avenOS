@@ -26,7 +26,7 @@ test('intent.start initializes intent state', async () => {
 		brain: {
 			async decide({ state }) {
 				seenState = state
-				return { state }
+				return { summary: state.summary }
 			}
 		}
 	})
@@ -65,7 +65,7 @@ test('intent.user_input calls IntentBrain', async () => {
 			async decide({ envelope }) {
 				calls += 1
 				expect(envelope.type).toBe('intent.user_input')
-				return { state: makeIntentState() }
+				return { summary: 'Working' }
 			}
 		}
 	})
@@ -85,7 +85,7 @@ test('intent call_skill sends to skill/<id>', async () => {
 		brain: {
 			async decide() {
 				return {
-					state: makeIntentState(),
+					summary: 'Working',
 					actions: [
 						{
 							type: 'call_skill',
@@ -124,7 +124,7 @@ test('intent rejects unknown skillId', async () => {
 		brain: {
 			async decide() {
 				return {
-					state: makeIntentState(),
+					summary: 'Working',
 					actions: [
 						{
 							type: 'call_skill',
@@ -154,7 +154,7 @@ test('intent reply_user sends human.message', async () => {
 		brain: {
 			async decide() {
 				return {
-					state: makeIntentState(),
+					summary: 'Working',
 					actions: [{ type: 'reply_user', message: 'Here is the answer' }]
 				}
 			}
@@ -183,7 +183,7 @@ test('intent ask_user sends human.question', async () => {
 		brain: {
 			async decide() {
 				return {
-					state: makeIntentState(),
+					summary: 'Working',
 					actions: [{ type: 'ask_user', question: 'Which project?' }]
 				}
 			}
@@ -209,7 +209,7 @@ test('intent complete sends lifecycle update to dispatcher', async () => {
 		brain: {
 			async decide() {
 				return {
-					state: makeIntentState(),
+					summary: 'Done',
 					actions: [{ type: 'complete', summary: 'Done', message: 'All set' }]
 				}
 			}
@@ -242,7 +242,7 @@ test('intent cannot send to skill-worker', async () => {
 		brain: {
 			async decide() {
 				return {
-					state: makeIntentState(),
+					summary: 'Working',
 					actions: [
 						{
 							type: 'call_skill',
@@ -274,7 +274,7 @@ test('skill.result is routed through IntentBrain', async () => {
 		brain: {
 			async decide({ envelope }) {
 				seenType = envelope.type
-				return { state: makeIntentState() }
+				return { summary: 'Working' }
 			}
 		}
 	})
@@ -286,6 +286,39 @@ test('skill.result is routed through IntentBrain', async () => {
 	})
 
 	expect(seenType).toBe('skill.result')
+})
+
+test('pendingSkillCalls is populated on call and cleared on skill.result', async () => {
+	const handler = createIntentHandler({
+		skillRegistry: createSkillRegistry([skill]),
+		brain: {
+			async decide({ envelope }) {
+				if (envelope.type === 'intent.user_input') {
+					return {
+						summary: 'Calling skill',
+						actions: [{ type: 'call_skill', skillId: 'memory', callId: 'call-1', request: 'Remember this', payload: { text: 'hello' } }]
+					}
+				}
+				return { summary: 'Skill completed' }
+			}
+		}
+	})
+
+	const first = await handler.activate({
+		actor: makeIntentActor(makeIntentState()),
+		envelope: makeEnvelopeRecord(),
+		context: makeContext()
+	})
+	expect(first.state.pendingSkillCalls).toMatchObject({
+		'call-1': expect.objectContaining({ callId: 'call-1', skillId: 'memory', request: 'Remember this' })
+	})
+
+	const second = await handler.activate({
+		actor: makeIntentActor(first.state),
+		envelope: makeEnvelopeRecord({ type: 'skill.result', fromActor: 'skill/memory', payload: { callId: 'call-1', result: { ok: true } } }),
+		context: makeContext()
+	})
+	expect(second.state.pendingSkillCalls).toEqual({})
 })
 
 function makeIntentState(): IntentState {

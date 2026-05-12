@@ -1,3 +1,7 @@
+import { mkdtemp, readFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+
 import { expect, test } from 'bun:test'
 import type { EnvelopeRecord } from '@jaensen/persistence-sqlite'
 import type { SkillDefinition } from '@jaensen/skills'
@@ -26,6 +30,9 @@ test('durable worker uses stable worker session', async () => {
 					},
 					async task() {
 						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
 					}
 				}
 			}
@@ -57,6 +64,9 @@ test('ephemeral worker uses task()', async () => {
 					async task() {
 						calls.push({ type: 'task', value: 'called' })
 						return { state: { temp: true } }
+					},
+					async shell() {
+						return { stdout: '', stderr: '', exitCode: 0 }
 					}
 				}
 			}
@@ -88,6 +98,9 @@ test('worker accepts flue responses wrapped in data', async () => {
 					},
 					async task() {
 						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
 					}
 				}
 			}
@@ -103,6 +116,52 @@ test('worker accepts flue responses wrapped in data', async () => {
 			envelope: makeEnvelopeRecord()
 		})
 	).resolves.toMatchObject({ state: { persisted: true }, result: { ok: true }, completed: true })
+})
+
+test('ephemeral worker smoke task can create sandbox file and return ok', async () => {
+	const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'jaensen-smoke-'))
+	const brain = createFlueSkillWorkerBrain({
+		harness: {
+			async session() {
+				return {
+					async prompt() {
+						throw new Error('unexpected prompt')
+					},
+					async task(_text, options) {
+						const shellResult = await this.shell(
+							'mkdir -p artifacts/smoke && echo "ok" > artifacts/smoke/sandbox.txt && cat artifacts/smoke/sandbox.txt',
+							{ cwd: options.cwd }
+						)
+						return { state: { smoke: true }, result: { output: shellResult.stdout.trim() }, completed: true }
+					},
+					async shell(command, options) {
+						const proc = Bun.spawn(['/bin/bash', '-lc', command], {
+							cwd: options?.cwd,
+							stdout: 'pipe',
+							stderr: 'pipe'
+						})
+						const [stdout, stderr, exitCode] = await Promise.all([
+							new Response(proc.stdout).text(),
+							new Response(proc.stderr).text(),
+							proc.exited
+						])
+						return { stdout, stderr, exitCode }
+					}
+				}
+			}
+		},
+		workspaceRoot
+	})
+
+	await expect(
+		brain.run({
+			skill: { ...baseSkill, id: 'smoke', frontmatter: { ...baseSkill.frontmatter, worker_policy: 'ephemeral' } },
+			workerId: 'call-1',
+			actorState: {},
+			envelope: makeEnvelopeRecord()
+		})
+	).resolves.toMatchObject({ result: { output: 'ok' }, completed: true })
+	expect(await readFile(path.join(workspaceRoot, 'artifacts/smoke/sandbox.txt'), 'utf8')).toBe('ok\n')
 })
 
 function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRecord {

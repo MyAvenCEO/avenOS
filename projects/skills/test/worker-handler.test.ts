@@ -47,6 +47,8 @@ test('worker sends skill.worker.result to supervisor', async () => {
 		causationId: 'env-1',
 		payload: {
 			workerId: 'topic-jaensen-architecture',
+			intentId: 'intent-123',
+			callId: 'call-1',
 			result: { stored: true },
 			completed: true
 		}
@@ -121,7 +123,7 @@ function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRe
 		type: 'memory.remember',
 		correlationId: 'corr-1',
 		causationId: null,
-		payload: {},
+		payload: { intentId: 'intent-123', callId: 'call-1' },
 		status: 'queued',
 		availableAt: '2026-05-12T00:00:00.000Z',
 		attempts: 0,

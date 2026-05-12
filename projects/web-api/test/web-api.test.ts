@@ -21,9 +21,9 @@ test('POST /api/messages returns envelope and correlation ids, and intent endpoi
 			}
 		},
 		intentBrain: {
-			async decide({ state }) {
+			async decide() {
 				return {
-					state,
+					summary: 'Please review this repo',
 					actions: [{ type: 'reply_user', message: 'Starting review' }]
 				}
 			}
@@ -147,9 +147,9 @@ test('aven-ceo flow can post a message, inspect intents, and keep the SSE stream
 			}
 		},
 		intentBrain: {
-			async decide({ state }) {
+			async decide() {
 				return {
-					state,
+					summary: 'Check whether the web api is healthy',
 					actions: [{ type: 'reply_user', message: 'Everything is underway' }]
 				}
 			}
@@ -213,6 +213,9 @@ function createHarnessStub() {
 				},
 				async task() {
 					throw new Error('unexpected task')
+				},
+				async shell() {
+					throw new Error('unexpected shell')
 				}
 			}
 		}

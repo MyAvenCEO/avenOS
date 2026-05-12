@@ -121,7 +121,7 @@ test('createDevHarness unwraps dispatcher decision wrappers', async () => {
 	}
 })
 
-test('createDevHarness synthesizes required intent state from root response', async () => {
+test('createDevHarness normalizes intent summary and actions from root response', async () => {
 	const originalFetch = globalThis.fetch
 	globalThis.fetch = (async () =>
 		new Response(
@@ -130,9 +130,7 @@ test('createDevHarness synthesizes required intent state from root response', as
 					{
 						message: {
 							content: JSON.stringify({
-								intentId: 'intent-123',
-								title: 'My intent',
-								goal: 'Help the user',
+								summary: 'Starting review',
 								actions: [{ type: 'reply_user', message: 'Starting review' }]
 							})
 						}
@@ -152,14 +150,7 @@ test('createDevHarness synthesizes required intent state from root response', as
 
 		const session = await harness.session('actor/intent/intent-123', { role: 'jaensen-conversation-intent' })
 		await expect(session.prompt('Return JSON', { schema: {}, role: 'jaensen-conversation-intent' })).resolves.toEqual({
-			state: {
-				intentId: 'intent-123',
-				title: 'My intent',
-				goal: 'Help the user',
-				status: 'active',
-				summary: '',
-				pendingSkillCalls: {}
-			},
+			summary: 'Starting review',
 			events: undefined,
 			actions: [{ type: 'reply_user', message: 'Starting review' }]
 		})
@@ -181,13 +172,7 @@ test('createDevHarness warns when recovering root-level intent action', async ()
 				choices: [
 					{
 						message: {
-							content: JSON.stringify({
-								intentId: 'intent-123',
-								title: 'My intent',
-								goal: 'Help the user',
-								type: 'reply_user',
-								message: 'Starting review'
-							})
+							content: JSON.stringify({ type: 'reply_user', message: 'Starting review' })
 						}
 					}
 				]
@@ -222,9 +207,6 @@ test('createDevHarness derives intent actions from event-shaped responses', asyn
 					{
 						message: {
 							content: JSON.stringify({
-								intentId: 'intent-123',
-								title: 'My intent',
-								goal: 'Help the user',
 								events: [
 									{
 										eventType: 'event',
@@ -252,14 +234,7 @@ test('createDevHarness derives intent actions from event-shaped responses', asyn
 
 		const session = await harness.session('actor/intent/intent-123', { role: 'jaensen-conversation-intent' })
 		await expect(session.prompt('Return JSON', { schema: {}, role: 'jaensen-conversation-intent' })).resolves.toEqual({
-			state: {
-				intentId: 'intent-123',
-				title: 'My intent',
-				goal: 'Help the user',
-				status: 'waiting_for_user',
-				summary: '',
-				pendingSkillCalls: {}
-			},
+			summary: undefined,
 			events: [{ eventType: 'event', event: { type: 'ask_user', payload: { question: 'Which account should I check?' } } }],
 			actions: [{ type: 'ask_user', question: 'Which account should I check?' }]
 		})
@@ -277,9 +252,6 @@ test('createDevHarness converts intent.confirmation_requested events into ask_us
 					{
 						message: {
 							content: JSON.stringify({
-								intentId: 'intent-123',
-								title: 'My intent',
-								goal: 'Help the user',
 								events: [
 									{
 										eventType: 'event',
@@ -307,14 +279,7 @@ test('createDevHarness converts intent.confirmation_requested events into ask_us
 
 		const session = await harness.session('actor/intent/intent-123', { role: 'jaensen-conversation-intent' })
 		await expect(session.prompt('Return JSON', { schema: {}, role: 'jaensen-conversation-intent' })).resolves.toEqual({
-			state: {
-				intentId: 'intent-123',
-				title: 'My intent',
-				goal: 'Help the user',
-				status: 'waiting_for_user',
-				summary: '',
-				pendingSkillCalls: {}
-			},
+			summary: undefined,
 			events: [{ eventType: 'event', event: { type: 'intent.confirmation_requested', payload: { clarification: 'Would you like me to send this?' } } }],
 			actions: [{ type: 'ask_user', question: 'Would you like me to send this?' }]
 		})

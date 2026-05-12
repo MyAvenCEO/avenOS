@@ -1,8 +1,6 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import type { RuntimeLogger } from '@jaensen/actor-runtime'
-
 import { createDevHarness, resolveProviderConfig } from './dev-harness'
 import { createWebApi } from './index'
 
@@ -37,18 +35,18 @@ function resolveRepoRoot(): string {
 	return path.resolve(here, '..', '..', '..')
 }
 
-function createConsoleRuntimeLogger(): RuntimeLogger {
+function createConsoleRuntimeLogger() {
 	return {
-		debug(message, metadata) {
+		debug(message: string, metadata?: Record<string, unknown>) {
 			console.debug(formatRuntimeLog(message, metadata))
 		},
-		info(message, metadata) {
+		info(message: string, metadata?: Record<string, unknown>) {
 			console.info(formatRuntimeLog(message, metadata))
 		},
-		warn(message, metadata) {
+		warn(message: string, metadata?: Record<string, unknown>) {
 			console.warn(formatRuntimeLog(message, metadata))
 		},
-		error(message, metadata) {
+		error(message: string, metadata?: Record<string, unknown>) {
 			console.error(formatRuntimeLog(message, metadata))
 		}
 	}

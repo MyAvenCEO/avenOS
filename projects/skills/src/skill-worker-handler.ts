@@ -36,6 +36,8 @@ export function createSkillWorkerHandler(input: CreateSkillWorkerHandlerInput): 
 						causationId: envelope.id,
 						payload: {
 							workerId: parsed.workerId,
+							intentId: readStringField(envelope.payload, 'intentId'),
+							callId: readStringField(envelope.payload, 'callId'),
 							result: result.result,
 							completed: result.completed ?? false
 						}
@@ -44,6 +46,14 @@ export function createSkillWorkerHandler(input: CreateSkillWorkerHandlerInput): 
 			}
 		}
 	}
+}
+
+function readStringField(payload: unknown, key: string): string | undefined {
+	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+		return undefined
+	}
+	const value = (payload as Record<string, unknown>)[key]
+	return typeof value === 'string' ? value : undefined
 }
 
 function getInitialState(payload: unknown): unknown {

@@ -1,14 +1,14 @@
 import type { ActorHandler } from '@jaensen/actor-runtime'
+import type { EnvelopeRecord } from '@jaensen/persistence-sqlite'
 import { z } from 'zod'
 
 import {
-	applyIntentActionStateEffects,
 	createLifecycleEnvelope,
 	mapIntentActionsToEnvelopes
 } from './action-mapping'
 import { ConversationActorsValidationError } from './errors'
 import { assertIntentState, createInitialIntentState, parseIntentActorId } from './intent-state'
-import type { CreateIntentHandlerInput, IntentState } from './types'
+import type { CreateIntentHandlerInput, IntentBrainDecision, IntentState } from './types'
 
 const startPayloadSchema = z.object({
 	intentId: z.string(),
@@ -70,9 +70,11 @@ export function createIntentHandler(input: CreateIntentHandlerInput): ActorHandl
 			})
 
 			const actions = decision.actions ?? []
-			const nextState = applyIntentActionStateEffects({
-				state: decision.state,
-				actions
+			const nextState = reduceIntentState({
+				previousState,
+				envelope,
+				decision,
+				now: context.now
 			})
 
 			const outgoing = mapIntentActionsToEnvelopes({
@@ -102,6 +104,70 @@ export function createIntentHandler(input: CreateIntentHandlerInput): ActorHandl
 			}
 		}
 	}
+}
+
+function reduceIntentState(input: {
+	previousState: IntentState
+	envelope: EnvelopeRecord
+	decision: IntentBrainDecision
+	now: Date
+}): IntentState {
+	let nextState: IntentState = {
+		intentId: input.previousState.intentId,
+		title: input.previousState.title,
+		goal: input.previousState.goal,
+		status: input.previousState.status,
+		summary: input.decision.summary ?? input.previousState.summary,
+		pendingSkillCalls: { ...input.previousState.pendingSkillCalls }
+	}
+
+	for (const action of input.decision.actions ?? []) {
+		switch (action.type) {
+			case 'ask_user':
+				nextState = { ...nextState, status: 'waiting_for_user' }
+				break
+			case 'complete':
+				nextState = { ...nextState, status: 'completed', summary: action.summary }
+				break
+			case 'fail':
+				nextState = { ...nextState, status: 'failed', summary: action.reason }
+				break
+			case 'call_skill':
+				nextState = {
+					...nextState,
+					pendingSkillCalls: {
+						...nextState.pendingSkillCalls,
+						[action.callId]: {
+							callId: action.callId,
+							skillId: action.skillId,
+							request: action.request,
+							createdAt: input.now.toISOString()
+						}
+					}
+				}
+				break
+			default:
+				break
+		}
+	}
+
+	if (
+		input.envelope.type === 'skill.result' ||
+		input.envelope.type === 'skill.failed' ||
+		input.envelope.type === 'skill.needs_clarification'
+	) {
+		const payload =
+			input.envelope.payload && typeof input.envelope.payload === 'object' && !Array.isArray(input.envelope.payload)
+				? (input.envelope.payload as Record<string, unknown>)
+				: null
+		const callId = typeof payload?.callId === 'string' ? payload.callId : null
+		if (callId) {
+			const { [callId]: _removed, ...pendingSkillCalls } = nextState.pendingSkillCalls
+			nextState = { ...nextState, pendingSkillCalls }
+		}
+	}
+
+	return nextState
 }
 
 function getStartState(input: { actorId: string; payload: unknown }): IntentState {

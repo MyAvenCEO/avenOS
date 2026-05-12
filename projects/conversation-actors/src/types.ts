@@ -75,11 +75,11 @@ export interface IntentBrain {
 			id: string
 			description: string
 		}>
-	}): Promise<IntentDecision>
+	}): Promise<IntentBrainDecision>
 }
 
-export interface IntentDecision {
-	state: IntentState
+export interface IntentBrainDecision {
+	summary?: string
 	events?: ActorEventInput[]
 	actions?: IntentAction[]
 }

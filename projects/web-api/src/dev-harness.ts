@@ -1,3 +1,5 @@
+import { spawn } from 'node:child_process'
+
 type ThinkingLevel = 'off' | 'low' | 'medium' | 'high'
 
 type FlueSessionAdapter = {
@@ -14,6 +16,11 @@ type FlueSessionAdapter = {
 		model?: string
 		thinkingLevel?: string
 	}): Promise<unknown>
+	shell(command: string, options?: { cwd?: string }): Promise<{
+		stdout: string
+		stderr: string
+		exitCode: number
+	}>
 }
 
 export type FlueHarnessAdapter = {
@@ -35,6 +42,7 @@ const DEFAULT_TINFOIL_BASE_URL = 'https://api.tinfoil.sh/v1'
 const DEFAULT_TINFOIL_MODEL = 'glm-5-1'
 
 export function createDevHarness(config: ProviderConfig): FlueHarnessAdapter {
+	assertShellAvailable()
 	return {
 		async session(name, sessionOptions) {
 			return {
@@ -63,6 +71,9 @@ export function createDevHarness(config: ProviderConfig): FlueHarnessAdapter {
 						cwd: options.cwd,
 						mode: 'task'
 					})
+				},
+				shell(command, options) {
+					return runShell(command, options)
 				}
 			}
 		}
@@ -233,7 +244,7 @@ function buildRoleOutputContract(role: string | undefined): string | null {
 	if (role === 'jaensen-conversation-intent') {
 		return [
 			'INTENT OUTPUT CONTRACT:',
-			'- Return one object with top-level keys: state, optional events, optional actions.',
+			'- Return one object with top-level keys: optional summary, optional events, optional actions.',
 			'- Do not wrap the result in data/result/decision.'
 		].join('\n')
 	}
@@ -328,7 +339,7 @@ function normalizeIntentResult(value: unknown): unknown {
 	}
 
 	const record = value as Record<string, unknown>
-	const state = normalizeIntentState(record.state)
+	const summary = typeof record.summary === 'string' ? record.summary : undefined
 	const explicitActions = normalizeIntentActions(record.actions)
 	const rootAction = extractIntentActionFromRecord(record)
 	if (rootAction && !explicitActions?.length) {
@@ -339,86 +350,44 @@ function normalizeIntentResult(value: unknown): unknown {
 	}
 	const actionsFromEvents = extractIntentActionsFromEvents(record.events)
 	const actions = [...(explicitActions ?? []), ...(rootAction ? [rootAction] : []), ...actionsFromEvents]
-
-	if (state) {
-		return {
-			state,
-			events: normalizeIntentEvents(record.events),
-			actions: actions.length > 0 ? actions : undefined
-		}
-	}
-
-	if (actions.length > 0) {
-		const synthesizedState = synthesizeIntentStateFromRoot(record, actions)
-		if (synthesizedState) {
-			return {
-				state: synthesizedState,
-				events: normalizeIntentEvents(record.events),
-				actions
-			}
-		}
-	}
-
-	return value
-}
-
-function normalizeIntentState(value: unknown): Record<string, unknown> | undefined {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) {
-		return undefined
-	}
-
-	const state = value as Record<string, unknown>
-	const intentId = firstString(state, ['intentId'])
-	const title = firstString(state, ['title'])
-	const goal = firstString(state, ['goal', 'initialGoal'])
-	const status = firstString(state, ['status'])
-	const summary = typeof state.summary === 'string' ? state.summary : ''
-	const pendingSkillCalls =
-		state.pendingSkillCalls && typeof state.pendingSkillCalls === 'object' && !Array.isArray(state.pendingSkillCalls)
-			? state.pendingSkillCalls
-			: {}
-
-	if (!intentId || !title || !goal || !status) {
-		return undefined
-	}
-
 	return {
-		intentId,
-		title,
-		goal,
-		status,
 		summary,
-		pendingSkillCalls
+		events: normalizeIntentEvents(record.events),
+		actions: actions.length > 0 ? actions : undefined
 	}
 }
 
-function synthesizeIntentStateFromRoot(
-	record: Record<string, unknown>,
-	actions: Array<Record<string, unknown>>
-): Record<string, unknown> | undefined {
-	const intentId = firstString(record, ['intentId'])
-	const title = firstString(record, ['title'])
-	const goal = firstString(record, ['goal', 'initialGoal'])
-	if (!intentId || !title || !goal) {
-		return undefined
+function assertShellAvailable(): void {
+	if (typeof spawn !== 'function') {
+		throw new Error('Dev harness shell support is unavailable. Startup requires a working shell adapter.')
 	}
+}
 
-	let status = firstString(record, ['status']) || 'active'
-	if (actions.some((action) => action.type === 'ask_user')) status = 'waiting_for_user'
-	if (actions.some((action) => action.type === 'complete')) status = 'completed'
-	if (actions.some((action) => action.type === 'fail')) status = 'failed'
+async function runShell(command: string, options?: { cwd?: string }): Promise<{
+	stdout: string
+	stderr: string
+	exitCode: number
+}> {
+	return await new Promise((resolve, reject) => {
+		const child = spawn('/bin/bash', ['-lc', command], {
+			cwd: options?.cwd,
+			env: process.env,
+			stdio: ['ignore', 'pipe', 'pipe']
+		})
 
-	return {
-		intentId,
-		title,
-		goal,
-		status,
-		summary: typeof record.summary === 'string' ? record.summary : '',
-		pendingSkillCalls:
-			record.pendingSkillCalls && typeof record.pendingSkillCalls === 'object' && !Array.isArray(record.pendingSkillCalls)
-				? record.pendingSkillCalls
-				: {}
-	}
+		let stdout = ''
+		let stderr = ''
+		child.stdout.on('data', (chunk) => {
+			stdout += String(chunk)
+		})
+		child.stderr.on('data', (chunk) => {
+			stderr += String(chunk)
+		})
+		child.on('error', (error) => reject(new Error(`Dev harness shell failed to start: ${error.message}`)))
+		child.on('close', (code) => {
+			resolve({ stdout, stderr, exitCode: code ?? 1 })
+		})
+	})
 }
 
 function normalizeIntentActions(value: unknown): Array<Record<string, unknown>> | undefined {

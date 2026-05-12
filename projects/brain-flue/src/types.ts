@@ -4,7 +4,7 @@ import type {
 	DispatcherDecision,
 	DispatcherState,
 	IntentBrain,
-	IntentDecision,
+	IntentBrainDecision,
 	IntentState
 } from '@jaensen/conversation-actors'
 import type { SkillSupervisorBrain, SkillSupervisorDecision, SkillWorkerBrain, SkillWorkerResult } from '@jaensen/skills'
@@ -30,6 +30,12 @@ export interface FlueSessionAdapter {
 		model?: string
 		thinkingLevel?: string
 	}): Promise<unknown>
+
+	shell(command: string, options?: { cwd?: string }): Promise<{
+		stdout: string
+		stderr: string
+		exitCode: number
+	}>
 }
 
 export interface CreateFlueSkillSupervisorBrainInput {
@@ -76,7 +82,7 @@ export type {
 	DispatcherDecision,
 	DispatcherState,
 	IntentBrain,
-	IntentDecision,
+	IntentBrainDecision,
 	IntentState,
 	SkillSupervisorBrain,
 	SkillSupervisorDecision,

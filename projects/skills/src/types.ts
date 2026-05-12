@@ -46,6 +46,23 @@ export interface SkillSupervisorDecision {
 	actions?: SkillSupervisorAction[]
 }
 
+export interface SkillSupervisorState {
+	skillId: string
+	workers: Record<string, {
+		workerId: string
+		status: 'active' | 'completed' | 'failed'
+		intentId?: string
+		callId?: string
+		updatedAt: string
+	}>
+	calls: Record<string, {
+		callId: string
+		intentId: string
+		workerId: string
+		status: 'active' | 'completed' | 'failed'
+	}>
+}
+
 export type SkillSupervisorAction =
 	| {
 			type: 'reply'

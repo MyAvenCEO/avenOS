@@ -19,6 +19,9 @@ test('dispatcher uses actor/dispatcher session', async () => {
 					},
 					async task() {
 						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
 					}
 				}
 			}
@@ -40,6 +43,9 @@ test('dispatcher accepts create_intent output', async () => {
 					},
 					async task() {
 						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
 					}
 				}
 			}
@@ -61,6 +67,9 @@ test('dispatcher rejects route to unknown intent', async () => {
 					},
 					async task() {
 						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
 					}
 				}
 			}
@@ -82,6 +91,9 @@ test('dispatcher rejects route to completed intent', async () => {
 					},
 					async task() {
 						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
 					}
 				}
 			}

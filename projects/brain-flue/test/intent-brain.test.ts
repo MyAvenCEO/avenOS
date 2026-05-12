@@ -3,7 +3,6 @@ import type { EnvelopeRecord } from '@jaensen/persistence-sqlite'
 import type { IntentState } from '@jaensen/conversation-actors'
 
 import {
-	FlueBrainValidationError,
 	createFlueIntentBrain
 } from '../src/index'
 
@@ -16,12 +15,15 @@ test('intent uses actor/intent/<intentId> session', async () => {
 				return {
 					async prompt() {
 						return {
-							state: makeIntentState(),
+							summary: 'Working',
 							actions: [{ type: 'reply_user', message: 'hi' }]
 						}
 					},
 					async task() {
 						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
 					}
 				}
 			}
@@ -40,12 +42,15 @@ test('intent accepts call_skill for known skill', async () => {
 				return {
 					async prompt() {
 						return {
-							state: makeIntentState(),
+							summary: 'Working',
 							actions: [{ type: 'call_skill', skillId: 'memory', callId: 'call-1', request: 'Remember this', payload: { text: 'hello' } }]
 						}
 					},
 					async task() {
 						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
 					}
 				}
 			}
@@ -57,19 +62,22 @@ test('intent accepts call_skill for known skill', async () => {
 	).resolves.toMatchObject({ actions: [{ type: 'call_skill', skillId: 'memory' }] })
 })
 
-test('intent rejects call_skill for unknown skill', async () => {
+test('intent falls back when model requests an unknown skill twice', async () => {
 	const brain = createFlueIntentBrain({
 		harness: {
 			async session() {
 				return {
 					async prompt() {
 						return {
-							state: makeIntentState(),
+							summary: 'Working',
 							actions: [{ type: 'call_skill', skillId: 'missing', callId: 'call-1', request: 'Remember this', payload: {} }]
 						}
 					},
 					async task() {
 						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
 					}
 				}
 			}
@@ -78,19 +86,28 @@ test('intent rejects call_skill for unknown skill', async () => {
 
 	await expect(
 		brain.decide({ state: makeIntentState(), envelope: makeEnvelopeRecord(), availableSkills: makeSkills() })
-	).rejects.toThrow('call_skill.skillId must exist in availableSkills')
+	).resolves.toMatchObject({
+		summary: 'Working',
+		events: [{ eventType: 'intent.brain.invalid_output' }],
+		actions: [{ type: 'ask_user' }]
+	})
 })
 
-test('intent rejects missing state', async () => {
+	test('intent falls back safely after invalid output and one repair attempt', async () => {
+		let attempts = 0
 	const brain = createFlueIntentBrain({
 		harness: {
 			async session() {
 				return {
 					async prompt() {
-						return { actions: [] }
+							attempts += 1
+							return { actions: [{ type: 'ask_user' }] }
 					},
 					async task() {
 						throw new Error('unexpected task')
+						},
+						async shell() {
+							throw new Error('unexpected shell')
 					}
 				}
 			}
@@ -99,19 +116,27 @@ test('intent rejects missing state', async () => {
 
 	await expect(
 		brain.decide({ state: makeIntentState(), envelope: makeEnvelopeRecord(), availableSkills: makeSkills() })
-	).rejects.toThrow(FlueBrainValidationError)
+		).resolves.toMatchObject({
+			summary: 'Working',
+			events: [{ eventType: 'intent.brain.invalid_output' }],
+			actions: [{ type: 'ask_user' }]
+		})
+		expect(attempts).toBe(2)
 })
 
-test('intent rejects mismatched intentId', async () => {
+	test('intent accepts summary-only output', async () => {
 	const brain = createFlueIntentBrain({
 		harness: {
 			async session() {
 				return {
 					async prompt() {
-						return { state: { ...makeIntentState(), intentId: 'intent-999' } }
+							return { summary: 'Updated summary' }
 					},
 					async task() {
 						throw new Error('unexpected task')
+						},
+						async shell() {
+							throw new Error('unexpected shell')
 					}
 				}
 			}
@@ -120,19 +145,22 @@ test('intent rejects mismatched intentId', async () => {
 
 	await expect(
 		brain.decide({ state: makeIntentState(), envelope: makeEnvelopeRecord(), availableSkills: makeSkills() })
-	).rejects.toThrow('state.intentId must match current actor state/envelope')
+		).resolves.toEqual({ summary: 'Updated summary' })
 })
 
-test('intent rejects ask_user unless waiting_for_user', async () => {
+	test('intent accepts ask_user without model-owned status', async () => {
 	const brain = createFlueIntentBrain({
 		harness: {
 			async session() {
 				return {
 					async prompt() {
-						return { state: makeIntentState('active'), actions: [{ type: 'ask_user', question: 'Need more info?' }] }
+							return { actions: [{ type: 'ask_user', question: 'Need more info?' }] }
 					},
 					async task() {
 						throw new Error('unexpected task')
+						},
+						async shell() {
+							throw new Error('unexpected shell')
 					}
 				}
 			}
@@ -141,19 +169,22 @@ test('intent rejects ask_user unless waiting_for_user', async () => {
 
 	await expect(
 		brain.decide({ state: makeIntentState(), envelope: makeEnvelopeRecord(), availableSkills: makeSkills() })
-	).rejects.toThrow('ask_user requires state.status = waiting_for_user')
+		).resolves.toMatchObject({ actions: [{ type: 'ask_user', question: 'Need more info?' }] })
 })
 
-test('intent rejects complete unless completed', async () => {
+	test('intent accepts complete without model-owned status', async () => {
 	const brain = createFlueIntentBrain({
 		harness: {
 			async session() {
 				return {
 					async prompt() {
-						return { state: makeIntentState('active'), actions: [{ type: 'complete', summary: 'Done' }] }
+							return { actions: [{ type: 'complete', summary: 'Done' }] }
 					},
 					async task() {
 						throw new Error('unexpected task')
+						},
+						async shell() {
+							throw new Error('unexpected shell')
 					}
 				}
 			}
@@ -162,19 +193,22 @@ test('intent rejects complete unless completed', async () => {
 
 	await expect(
 		brain.decide({ state: makeIntentState(), envelope: makeEnvelopeRecord(), availableSkills: makeSkills() })
-	).rejects.toThrow('complete requires state.status = completed')
+		).resolves.toMatchObject({ actions: [{ type: 'complete', summary: 'Done' }] })
 })
 
-test('intent rejects fail unless failed', async () => {
+	test('intent accepts fail without model-owned status', async () => {
 	const brain = createFlueIntentBrain({
 		harness: {
 			async session() {
 				return {
 					async prompt() {
-						return { state: makeIntentState('active'), actions: [{ type: 'fail', reason: 'Nope' }] }
+							return { actions: [{ type: 'fail', reason: 'Nope' }] }
 					},
 					async task() {
 						throw new Error('unexpected task')
+						},
+						async shell() {
+							throw new Error('unexpected shell')
 					}
 				}
 			}
@@ -183,7 +217,7 @@ test('intent rejects fail unless failed', async () => {
 
 	await expect(
 		brain.decide({ state: makeIntentState(), envelope: makeEnvelopeRecord(), availableSkills: makeSkills() })
-	).rejects.toThrow('fail requires state.status = failed')
+		).resolves.toMatchObject({ actions: [{ type: 'fail', reason: 'Nope' }] })
 })
 
 test('Flue response .data is normalized before validation', async () => {
@@ -194,13 +228,16 @@ test('Flue response .data is normalized before validation', async () => {
 					async prompt() {
 						return {
 							data: {
-								state: makeIntentState(),
+								summary: 'Normalized',
 								actions: [{ type: 'reply_user', message: 'Normalized' }]
 							}
 						}
 					},
 					async task() {
 						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
 					}
 				}
 			}
@@ -209,7 +246,7 @@ test('Flue response .data is normalized before validation', async () => {
 
 	await expect(
 		brain.decide({ state: makeIntentState(), envelope: makeEnvelopeRecord(), availableSkills: makeSkills() })
-	).resolves.toMatchObject({ actions: [{ type: 'reply_user', message: 'Normalized' }] })
+	).resolves.toMatchObject({ summary: 'Normalized', actions: [{ type: 'reply_user', message: 'Normalized' }] })
 })
 
 function makeIntentState(status: 'active' | 'waiting_for_user' | 'completed' | 'failed' = 'active'): IntentState {

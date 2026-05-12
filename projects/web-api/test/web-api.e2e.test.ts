@@ -77,9 +77,9 @@ test('web-api end-to-end covers creating an intent, loading real skills, creatin
 
 		const workerSpawnEvents = intentEventsBody.events.filter((event) => event.type === 'skill.worker_spawned')
 		expect(workerSpawnEvents).toEqual([
-			expect.objectContaining({ payload: expect.objectContaining({ skillId: 'file-creator', workerId: 'random-file' }) }),
-			expect.objectContaining({ payload: expect.objectContaining({ skillId: 'file-analyzer', workerId: 'created-file' }) }),
-			expect.objectContaining({ payload: expect.objectContaining({ skillId: 'file-analyzer', workerId: 'known-file' }) })
+			expect.objectContaining({ payload: expect.objectContaining({ skillId: 'file-creator', workerId: 'call-random-file-create' }) }),
+			expect.objectContaining({ payload: expect.objectContaining({ skillId: 'file-analyzer', workerId: 'call-random-file-analyze' }) }),
+			expect.objectContaining({ payload: expect.objectContaining({ skillId: 'file-analyzer', workerId: 'call-known-file-analyze' }) })
 		])
 
 		const globalEventsResponse = await fetch(`${api.url}api/events?scope=global`)
@@ -259,21 +259,7 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 						if (text.includes('intent.start')) {
 							state.phase = 'await-create-result'
 							return {
-								state: {
-									intentId,
-									title: 'Create then analyze a random file',
-									goal: 'Create a random file, analyze that exact file, then analyze a known verification file',
-									status: 'active',
-									summary: 'Creating a random file before analysis begins',
-									pendingSkillCalls: {
-										'call-random-file-create': {
-											callId: 'call-random-file-create',
-											skillId: 'file-creator',
-											request: 'Create a random file inside the workspace',
-											createdAt: '2026-05-12T00:00:00.000Z'
-										}
-									}
-								},
+								summary: 'Creating a random file before analysis begins',
 								actions: [
 									{
 										type: 'reply_user',
@@ -300,21 +286,7 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 							expect(text).toContain(state.randomFilePath as string)
 							expect(text).toContain('Available skills (id + description only):')
 							return {
-								state: {
-									intentId,
-									title: 'Create then analyze a random file',
-									goal: 'Create a random file, analyze that exact file, then analyze a known verification file',
-									status: 'active',
-									summary: 'Analyzing the exact random file that was created',
-									pendingSkillCalls: {
-										'call-random-file-analyze': {
-											callId: 'call-random-file-analyze',
-											skillId: 'file-analyzer',
-											request: 'Analyze the exact file that was just created',
-											createdAt: '2026-05-12T00:00:00.000Z'
-										}
-									}
-								},
+								summary: 'Analyzing the exact random file that was created',
 								actions: [
 									{
 										type: 'call_skill',
@@ -334,14 +306,7 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 							state.phase = 'completed'
 							expect(text).toContain('call-known-file-analyze')
 							return {
-								state: {
-									intentId,
-									title: 'Create then analyze a random file',
-									goal: 'Create a random file, analyze that exact file, then analyze a known verification file',
-									status: 'completed',
-									summary: 'Random file created and analyzed, then known fact verified',
-									pendingSkillCalls: {}
-								},
+								summary: 'Random file created and analyzed, then known fact verified',
 								actions: [
 									{
 										type: 'complete',
@@ -357,21 +322,7 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 							state.phase = 'await-known-file-result'
 							expect(text).toContain(state.randomFilePath as string)
 							return {
-								state: {
-									intentId,
-									title: 'Create then analyze a random file',
-									goal: 'Create a random file, analyze that exact file, then analyze a known verification file',
-									status: 'active',
-									summary: 'Analyzing the known verification file for one exact fact',
-									pendingSkillCalls: {
-										'call-known-file-analyze': {
-											callId: 'call-known-file-analyze',
-											skillId: 'file-analyzer',
-											request: 'Analyze the known verification file and extract exactly one fact',
-											createdAt: '2026-05-12T00:00:00.000Z'
-										}
-									}
-								},
+								summary: 'Analyzing the known verification file for one exact fact',
 								actions: [
 									{
 										type: 'call_skill',
@@ -395,7 +346,8 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 							return {
 								state: {
 									skillId,
-									workers: {}
+									workers: {},
+									calls: {}
 								}
 							}
 						}
@@ -424,8 +376,19 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 									skillId,
 									workers: {
 										[workerId]: {
-											status: 'running',
-											intentActorId: `intent/${state.createdIntentId}`
+											workerId,
+											status: 'active',
+											intentId: state.createdIntentId ?? undefined,
+											callId,
+											updatedAt: '2026-05-12T00:00:00.000Z'
+										}
+									},
+									calls: {
+										[callId]: {
+											callId,
+											intentId: state.createdIntentId ?? '',
+											workerId,
+											status: 'active'
 										}
 									}
 								},
@@ -479,8 +442,33 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 									skillId,
 									workers: {
 										[workerId]: {
+											workerId,
 											status: 'completed',
-											intentActorId: `intent/${state.createdIntentId}`
+											intentId: state.createdIntentId ?? undefined,
+											callId:
+												skillId === 'file-creator'
+													? 'call-random-file-create'
+													: text.includes('call-known-file-analyze')
+														? 'call-known-file-analyze'
+														: 'call-random-file-analyze',
+											updatedAt: '2026-05-12T00:00:00.000Z'
+										}
+									},
+									calls: {
+										[(skillId === 'file-creator'
+											? 'call-random-file-create'
+											: text.includes('call-known-file-analyze')
+												? 'call-known-file-analyze'
+												: 'call-random-file-analyze')]: {
+											callId:
+												skillId === 'file-creator'
+													? 'call-random-file-create'
+													: text.includes('call-known-file-analyze')
+														? 'call-known-file-analyze'
+														: 'call-random-file-analyze',
+											intentId: state.createdIntentId ?? '',
+											workerId,
+											status: 'completed'
 										}
 									}
 								},
@@ -565,6 +553,9 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 				},
 				async task() {
 					throw new Error('unexpected task call in durable worker scenario')
+				},
+				async shell() {
+					throw new Error('unexpected shell call in durable worker scenario')
 				}
 			}
 		}
@@ -592,14 +583,7 @@ function createAskUserEventOnlyHarness() {
 						const intentId = name.slice('actor/intent/'.length)
 						if (text.includes('intent.start')) {
 							return {
-								state: {
-									intentId,
-									title: 'Ask for next task',
-									goal: 'Ask the user what they want to work on next',
-									status: 'active',
-									summary: 'Awaiting user input for next task selection.',
-									pendingSkillCalls: {}
-								},
+								summary: 'Awaiting user input for next task selection.',
 								events: [
 									{
 										eventType: 'event',
@@ -626,6 +610,9 @@ function createAskUserEventOnlyHarness() {
 				},
 				async task() {
 					throw new Error('unexpected task')
+				},
+				async shell() {
+					throw new Error('unexpected shell')
 				}
 			}
 		}
