@@ -146,6 +146,7 @@ export class IntentStore {
 			const next = reduceIntentEvent(current, event)
 			this.writeIntent(next)
 			this.subscribe(`intent/${intentId}`)
+			this.closeCorrelationScope(event, payload)
 			if (!this.selectedIntentId) this.selectedIntentId = intentId
 			return
 		}
@@ -154,11 +155,21 @@ export class IntentStore {
 			return
 		}
 
+		const intentScope = `intent/${intentId}`
+		if (event.scope.startsWith('correlation/') && this.streams.has(intentScope)) {
+			this.closeScope(event.scope)
+			return
+		}
+
 		const current = this.intents[intentId] ?? createEmptyIntentView(intentId)
 		const next = reduceIntentEvent(current, event)
 		this.writeIntent(next)
+		if (next.status === 'active' || next.status === 'waiting_for_user') {
+			this.subscribe(intentScope)
+		}
+		this.closeCorrelationScope(event, payload)
 		if (next.status === 'completed' || next.status === 'failed') {
-			this.closeScope(`intent/${intentId}`)
+			this.closeScope(intentScope)
 		}
 	}
 
@@ -194,6 +205,16 @@ export class IntentStore {
 		for (const scope of [...this.streams.keys()]) {
 			if (scope.includes(intentId)) this.closeScope(scope)
 		}
+	}
+
+	private closeCorrelationScope(event: StreamEventRecord, payload: Record<string, unknown>) {
+		if (event.scope.startsWith('correlation/')) {
+			this.closeScope(event.scope)
+			return
+		}
+		const correlationId = inferCorrelationIdFromPayload(payload)
+		if (!correlationId) return
+		this.closeScope(`correlation/${correlationId}`)
 	}
 
 	private markQuestionResolved(intentId: string, questionId: string) {

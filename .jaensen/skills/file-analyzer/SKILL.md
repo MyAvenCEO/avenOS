@@ -23,8 +23,28 @@ Guidelines:
 
 After extraction, store the extracted information close to the file it was extracted from in memory.
 
+Preferred memory call payload:
+
+```json
+{
+  "artifact": {
+    "sha256": "...",
+    "originalName": "report.pdf",
+    "mimeType": "application/pdf",
+    "sizeBytes": 1234,
+    "storageUri": "attachment://att-pdf-1"
+  },
+  "extraction": {
+    "extractor": "file-analyzer",
+    "summary": "Short user-facing summary",
+    "bodyMarkdown": "# Report\n\n...",
+    "chunks": ["chunk 1", "chunk 2"]
+  }
+}
+```
+
 If storing in memory is still needed:
 1. Extract first.
 2. Save the intended final answer in state.pendingResult.
-3. Return a call_skill action to skill/memory with completed=false.
+3. Return a call_skill action to skill/memory with request `memory_ingest_document` and completed=false.
 4. When the memory skill.result arrives, return state.pendingResult as result with completed=true.
