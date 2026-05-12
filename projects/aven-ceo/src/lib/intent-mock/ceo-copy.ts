@@ -1,18 +1,10 @@
 /** User-facing labels for non-technical executives (internal types stay technical). */
 
-import type { ActivityItem, AgentStatus, IntentOrchestrator } from './types'
+import type { ActivityItem, IntentOrchestrator } from './types'
 
 export const AVENCEO_NAME = 'AvenCEO'
 
 export type IntentSidebarPhase = 'done' | 'human_review' | 'working' | 'open'
-
-export type SkillKanbanColumn = 'open' | 'working' | 'review'
-
-export function subAgentKanbanColumn(status: AgentStatus): SkillKanbanColumn {
-	if (status === 'running') return 'working'
-	if (status === 'blocked_hitl') return 'review'
-	return 'open'
-}
 
 export function sidebarIntentPhase(intent: IntentOrchestrator): {
 	phase: IntentSidebarPhase
@@ -57,10 +49,4 @@ const STREAM_KIND_LABEL: Record<ActivityItem['kind'], string> = {
 
 export function activityStreamKindLabel(kind: ActivityItem['kind']): string {
 	return STREAM_KIND_LABEL[kind]
-}
-
-export const KANBAN_COLUMN_HEADING: Record<SkillKanbanColumn, string> = {
-	open: 'Open',
-	working: 'Working',
-	review: 'Review'
 }

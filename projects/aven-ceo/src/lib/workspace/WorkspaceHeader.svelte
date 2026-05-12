@@ -1,86 +1,24 @@
 <script lang="ts">
-import { getJazzContext } from 'jazz-tools/svelte'
+/**
+ * Jazz profile UI is dewired. Re-enable: `(workspace)/+layout` `JazzSvelteProvider`,
+ * `jazzSvelteKit` in `vite.config.ts`, and `.env` `PUBLIC_JAZZ_*`.
+ */
+
 import { page } from '$app/stores'
-import { app } from '$lib/schema'
 import { workspaceContentClass } from '$lib/workspace/layout'
-
-const ctx = getJazzContext()
-
-type ProfileRow = {
-	id: string
-	name: string
-}
-
-let profileSeedForUser = $state<string | null>(null)
-let nameDraft = $state('')
-let profile = $state<ProfileRow | null>(null)
-let profileLoading = $state(true)
-let profileError = $state<Error | null>(null)
-
-async function loadProfile() {
-	const db = ctx.db
-	if (!db) return
-	profileLoading = true
-	profileError = null
-	try {
-		const rows = (await db.all(app.profiles.limit(1))) as ProfileRow[]
-		profile = rows[0] ?? null
-		if (profile) nameDraft = profile.name
-	} catch (error) {
-		profileError = error instanceof Error ? error : new Error(String(error))
-		profile = null
-	} finally {
-		profileLoading = false
-	}
-}
-
-$effect(() => {
-	const pathname = $page.url.pathname
-	const db = ctx.db
-	if (!db) return
-	if (pathname !== '/me') {
-		void loadProfile()
-		return
-	}
-	const s = ctx.session
-	if (!s) return
-	if (profileSeedForUser === s.user_id) return
-	void db.all(app.profiles.limit(1)).then((rows) => {
-		if (rows.length === 0) {
-			db.insert(app.profiles, { name: 'You' })
-		}
-		profileSeedForUser = s.user_id
-		void loadProfile()
-	})
-})
-
-$effect(() => {
-	const p = profile
-	if (p) nameDraft = p.name
-})
-
-function syncDisplayName() {
-	const p = profile
-	if (!p) return
-	const db = ctx.db
-	if (!db) return
-	const next = nameDraft.trim()
-	if (next === p.name) return
-	try {
-		db.update(app.profiles, p.id, { name: next || 'You' })
-		profile = { ...p, name: next || 'You' }
-	} catch {
-		/* Jazz mutation errors surface via db.onMutationError */
-	}
-}
-
-async function logOut() {
-	const db = ctx.db
-	if (db) await db.logout()
-}
 </script>
 
-<header class={`mb-8 grid grid-cols-3 items-center gap-x-2 gap-y-3 ${workspaceContentClass}`}>
+<!--
+ORIGINAL (Jazz) script — restore when rewiring:
+import { getJazzContext } from 'jazz-tools/svelte'
+import { app } from '$lib/schema'
+const ctx = getJazzContext()
+… loadProfile, syncDisplayName, logOut …
+-->
+
+<header
+	class={`mb-3 sm:mb-4 grid grid-cols-3 items-center gap-x-2 gap-y-3 ${workspaceContentClass}`}
+>
 	<div class="min-w-0" aria-hidden="true"></div>
 
 	<nav
@@ -113,44 +51,11 @@ async function logOut() {
 	</nav>
 
 	<div class="flex min-w-0 items-center justify-end justify-self-end gap-2 sm:gap-3">
-		{#if profileLoading}
-			<span class="text-xl font-medium tracking-tight opacity-30 tabular-nums">…</span>
-		{:else if profileError}
-			<span class="truncate text-sm text-error" title={profileError.message}>!</span>
-		{:else if profile}
-			<input
-				type="text"
-				class="min-w-0 max-w-full shrink border-0 bg-transparent p-0 text-right text-lg font-medium tracking-tight no-underline shadow-none outline-none ring-0 placeholder:text-foreground/35 focus:border-0 focus:ring-0 focus:outline-none focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/20 sm:text-xl"
-				bind:value={nameDraft}
-				onblur={() => syncDisplayName()}
-				onkeydown={(e) => {
-					if (e.key === 'Enter') {
-						e.currentTarget.blur()
-					}
-				}}
-				aria-label="Display name"
-			>
-		{/if}
-		<button
-			type="button"
-			class="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-white/10 transition-all hover:bg-white/30"
-			onclick={() => void logOut()}
-			aria-label="Log out"
+		<span
+			class="min-w-0 truncate text-right text-lg font-medium tracking-tight opacity-50 sm:text-xl"
+			title="Jazz profile sync disabled (POC dewired)"
 		>
-			<svg
-				class="size-5"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="1.5"
-				viewBox="0 0 24 24"
-				aria-hidden="true"
-			>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9"
-				/>
-			</svg>
-		</button>
+			You
+		</span>
 	</div>
 </header>

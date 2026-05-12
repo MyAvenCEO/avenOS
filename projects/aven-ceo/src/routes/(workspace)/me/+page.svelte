@@ -1,12 +1,15 @@
 <script lang="ts">
+import { tick } from 'svelte'
 import IntentCenterPanel from '$lib/intent-mock/IntentCenterPanel.svelte'
 import IntentLeftNav from '$lib/intent-mock/IntentLeftNav.svelte'
 import IntentRightRail from '$lib/intent-mock/IntentRightRail.svelte'
-import { IntentStore } from '$lib/jaensen/intent-store.svelte'
 import type { RightPanelTab } from '$lib/intent-mock/types'
+import { IntentStore } from '$lib/jaensen/intent-store.svelte'
 import { workspaceOrchestratorClass } from '$lib/workspace/layout'
 
-let rightTab = $state<RightPanelTab>('overview')
+const COMPOSER_MAX_LINES = 4
+
+let rightTab = $state<RightPanelTab>('todos')
 let newTitle = $state('')
 let busy = $state(false)
 let dragActive = $state(false)
@@ -20,9 +23,31 @@ const intents = $derived.by(() => store.intentList())
 const selectedIntent = $derived.by(() => store.selectedIntent())
 const error = $derived(store.error)
 
+function resizeComposer() {
+	const el = composerEl
+	if (!el) return
+	el.style.height = 'auto'
+	const style = getComputedStyle(el)
+	const lineHeight = parseFloat(style.lineHeight)
+	const pad = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
+	const lh =
+		Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : (parseFloat(style.fontSize) || 16) * 1.3
+	const maxPx = lh * COMPOSER_MAX_LINES + (Number.isFinite(pad) ? pad : 0)
+	const h = Math.min(el.scrollHeight, maxPx)
+	el.style.height = `${h}px`
+	el.style.overflowY = el.scrollHeight > maxPx ? 'auto' : 'hidden'
+}
+
+$effect(() => {
+	void newTitle
+	void busy
+	void composerEl
+	void tick().then(() => resizeComposer())
+})
+
 function captureUiError(context: string, err: unknown) {
 	console.error(`[aven-ceo][/me] ${context}`, err)
-	store.error = err instanceof Error ? err.stack ?? err.message : String(err)
+	store.error = err instanceof Error ? (err.stack ?? err.message) : String(err)
 }
 
 $effect(() => {
@@ -45,7 +70,9 @@ async function addIntent() {
 	store.error = null
 	try {
 		const attachment = pendingFile ? await fileToAttachment(pendingFile) : undefined
-		await store.sendMessage(text || `Please ingest attachment ${pendingFile?.name ?? ''}`, { attachment })
+		await store.sendMessage(text || `Please ingest attachment ${pendingFile?.name ?? ''}`, {
+			attachment
+		})
 		newTitle = ''
 		pendingFile = null
 		if (fileInput) fileInput.value = ''
@@ -79,7 +106,9 @@ function onFileChange(event: Event) {
 	if (file) pendingFile = file
 }
 
-async function fileToAttachment(file: File): Promise<{ name?: string; contentType?: string; base64: string }> {
+async function fileToAttachment(
+	file: File
+): Promise<{ name?: string; contentType?: string; base64: string }> {
 	const buffer = await file.arrayBuffer()
 	const bytes = new Uint8Array(buffer)
 	let binary = ''
@@ -92,7 +121,7 @@ async function fileToAttachment(file: File): Promise<{ name?: string; contentTyp
 }
 
 function handleResolveHitl(
-	todoId: string,
+	_todoId: string,
 	payload:
 		| { kind: 'text_reply'; text: string }
 		| { kind: 'choice'; optionId: string }
@@ -117,10 +146,6 @@ function handleResolveHitl(
 		}
 	})()
 }
-
-function handleDemoHitl() {
-	console.info('TODO open Jaensen HITL')
-}
 </script>
 
 <svelte:head>
@@ -133,23 +158,27 @@ function handleDemoHitl() {
 	<title>My workspace — Aven Maia</title>
 </svelte:head>
 
-<div class="flex flex-1 flex-col min-h-0 overflow-y-auto">
+<div class="flex flex-1 flex-col min-h-0 overflow-hidden">
 	{#if error}
 		<div class="px-6 pt-4 text-sm text-error">{error}</div>
 	{/if}
-	<main class={`${workspaceOrchestratorClass} flex-1 flex flex-col min-h-0 px-4 sm:px-6`}>
+	<main class={`${workspaceOrchestratorClass} flex-1 flex flex-col min-h-0 px-3 sm:px-5`}>
 		<div
-			class="grid grid-cols-1 min-h-0 flex-1 gap-8 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)_auto] xl:gap-6 xl:items-stretch py-6"
+			class="grid grid-cols-1 min-h-0 flex-1 gap-3 sm:gap-4 xl:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_auto] xl:gap-3 xl:items-stretch pt-1 pb-1"
 		>
-			<div class="min-w-0 min-h-0 flex flex-col xl:max-w-[22rem]">
-				<IntentLeftNav intents={intents} selectedId={store.selectedIntentId} onSelect={selectIntent} onRemove={handleRemove} />
+			<div class="min-w-0 min-h-0 flex flex-col xl:max-w-[15rem]">
+				<IntentLeftNav
+					{intents}
+					selectedId={store.selectedIntentId}
+					onSelect={selectIntent}
+					onRemove={handleRemove}
+				/>
 			</div>
-			<div class="min-w-0 min-h-0 flex flex-col">
+			<div class="flex h-full min-h-0 min-w-0 flex-col">
 				<IntentCenterPanel
 					intent={selectedIntent}
 					panel={rightTab}
 					onResolveHitl={handleResolveHitl}
-					onDemoHitl={handleDemoHitl}
 				/>
 			</div>
 			<div class="min-h-0 shrink-0 flex flex-col">
@@ -159,13 +188,15 @@ function handleDemoHitl() {
 	</main>
 
 	<div
-		class="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-6 pt-10 bg-gradient-to-t from-background from-40% via-background/95 to-transparent"
+		class="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center bg-gradient-to-t from-background from-55% via-background/88 to-transparent px-3 pb-4 pt-3 sm:px-5 sm:pb-5"
 	>
-		<div class={`pointer-events-auto w-full ${workspaceOrchestratorClass} px-4 sm:px-6`}>
-			<section class="tech-pill py-3 px-4 sm:px-5 justify-between gap-4 w-full">
-				<div class="flex items-center gap-3 flex-1 min-w-0">
+		<div class={`pointer-events-auto w-full ${workspaceOrchestratorClass} px-3 sm:px-5`}>
+			<section
+				class="tech-pill !rounded-2xl max-w-full w-full items-start justify-between gap-2.5 py-2.5 px-3 sm:gap-3 sm:px-4"
+			>
+				<div class="flex min-w-0 flex-1 items-start gap-2 sm:gap-2.5">
 					<div
-						class="size-9 shrink-0 rounded-full border border-border flex items-center justify-center bg-white/20"
+						class="size-8 shrink-0 self-start rounded-full border border-border flex items-center justify-center bg-white/20 mt-0.5 sm:size-9"
 					>
 						<svg
 							class="size-4"
@@ -192,42 +223,49 @@ function handleDemoHitl() {
 							void addIntent()
 						}}
 					>
-						<input bind:this={fileInput} type="file" class="hidden" onchange={onFileChange} />
+						<input bind:this={fileInput} type="file" class="hidden" onchange={onFileChange}>
 						<div class={`w-full min-w-0 ${dragActive ? 'opacity-70' : ''}`}>
 							<textarea
 								bind:this={composerEl}
 								bind:value={newTitle}
 								placeholder={pendingFile ? `Ready: ${pendingFile.name}` : 'Send to Jaensen dispatcher…'}
 								disabled={busy}
-								rows="2"
+								rows="1"
+								oninput={resizeComposer}
 								onkeydown={(event) => {
 									if (event.key === 'Enter' && !event.shiftKey) {
 										event.preventDefault()
 										void addIntent()
 									}
 								}}
-								class="w-full min-w-0 resize-none bg-transparent border-none p-0 text-xl font-medium tracking-tight placeholder:opacity-20 outline-none focus:ring-0"
+								class="w-full min-h-0 min-w-0 resize-none overflow-hidden bg-transparent border-none p-0 text-lg sm:text-xl font-medium tracking-tight placeholder:opacity-20 outline-none focus:ring-0 leading-snug"
 							></textarea>
-						{#if pendingFile}
-							<div class="mt-2 flex items-center gap-2 text-xs opacity-70">
-								<span>Attachment:</span>
-								<strong>{pendingFile.name}</strong>
-								<button type="button" class="underline" onclick={() => { pendingFile = null; if (fileInput) fileInput.value = '' }}>clear</button>
-							</div>
-						{:else}
-							<div class="mt-2 flex items-center gap-2 text-xs opacity-50">
-								<button type="button" class="underline" onclick={() => fileInput?.click()}>upload file</button>
-								<span>or drag and drop here</span>
-							</div>
-						{/if}
+							{#if pendingFile}
+								<div class="mt-1 flex items-center gap-2 text-[11px] opacity-70">
+									<span>Attachment:</span>
+									<strong>{pendingFile.name}</strong>
+									<button
+										type="button"
+										class="underline"
+										onclick={() => { pendingFile = null; if (fileInput) fileInput.value = '' }}
+									>
+										clear
+									</button>
+								</div>
+							{:else}
+								<div class="mt-1 flex items-center gap-2 text-[11px] opacity-50">
+									<button type="button" class="underline" onclick={() => fileInput?.click()}>
+										upload file
+									</button>
+									<span>or drag and drop here</span>
+								</div>
+							{/if}
 						</div>
 					</form>
 				</div>
-				<div class="flex items-center gap-3 pl-3 border-l border-border shrink-0">
-					<div class="flex flex-col items-end">
-						<span class="text-[8px] font-bold uppercase opacity-30">Live</span>
-						<span class="text-xs font-bold uppercase tracking-tighter">Jaensen</span>
-					</div>
+				<div class="flex shrink-0 flex-col items-end border-l border-border pl-2 pt-1 sm:pl-2.5">
+					<span class="text-[8px] font-bold uppercase opacity-30">Live</span>
+					<span class="text-xs font-bold uppercase tracking-tighter">Jaensen</span>
 				</div>
 			</section>
 		</div>

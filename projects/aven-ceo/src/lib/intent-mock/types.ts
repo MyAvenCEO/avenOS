@@ -2,7 +2,7 @@
 
 export type AgentStatus = 'idle' | 'running' | 'blocked_hitl' | 'done'
 
-export type RightPanelTab = 'overview' | 'stream' | 'skills'
+export type RightPanelTab = 'todos' | 'stream' | 'config' | 'context'
 
 export interface ToolCallStep {
 	id: string

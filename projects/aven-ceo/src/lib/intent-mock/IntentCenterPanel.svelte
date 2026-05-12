@@ -1,15 +1,18 @@
 <script lang="ts">
 import { AVENCEO_NAME, activityStreamKindLabel } from './ceo-copy'
 import HitlTodoHost from './HitlTodoHost.svelte'
-import SkillKanbanBoard from './SkillKanbanBoard.svelte'
+import InvolvedActorsStrip from './InvolvedActorsStrip.svelte'
+import {
+	activityMatchesActorFilter,
+	type ActorFilterSelection
+} from './involved-actors-display'
 import { skillLinesForBinding, skillLinesForSubAgent } from './skill-display'
 import type { IntentOrchestrator, RightPanelTab } from './types'
 
 let {
 	intent,
 	panel,
-	onResolveHitl,
-	onDemoHitl
+	onResolveHitl
 }: {
 	intent: IntentOrchestrator | null
 	panel: RightPanelTab
@@ -20,100 +23,215 @@ let {
 			| { kind: 'choice'; optionId: string }
 			| { kind: 'approve_reject'; approved: boolean }
 	) => void
-	onDemoHitl: () => void
 } = $props()
+
+let selectedActorFilter = $state<ActorFilterSelection>('all')
+
+const filteredActivity = $derived.by(() => {
+	if (!intent || panel !== 'stream') return []
+	return intent.activity.filter((row) =>
+		activityMatchesActorFilter(intent, row, selectedActorFilter)
+	)
+})
+
+$effect(() => {
+	const id = intent?.id
+	if (id) selectedActorFilter = 'all'
+})
 </script>
 
-<div class="min-w-0 flex flex-col gap-8 flex-1 min-h-0 overflow-y-auto pr-2">
+<div class="min-w-0 flex flex-1 flex-col min-h-0 gap-3 overflow-hidden">
 	{#if !intent}
 		<div
-			class="flex flex-1 items-center justify-center rounded-xl border border-dashed border-border/60 p-12"
+			class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-dashed border-border/60 p-12"
 		>
 			<p class="text-sm opacity-40 text-center max-w-sm">
 				Choose an intent on the left to see what {AVENCEO_NAME} and your skills are doing, and when
 				your input is needed.
 			</p>
 		</div>
-	{:else if panel === 'overview'}
-		<section class="space-y-6">
-			<div class="flex items-baseline justify-between gap-4 flex-wrap">
-				<div>
-					<p class="text-[10px] font-bold opacity-30 uppercase tracking-[0.3em]">{AVENCEO_NAME}</p>
-					<h1 class="text-xl font-semibold tracking-tight mt-1">{intent.title}</h1>
-					<p class="text-sm opacity-60 mt-2 leading-relaxed max-w-2xl">{intent.summary}</p>
-				</div>
-				<button
-					type="button"
-					class="text-[10px] font-bold uppercase border border-dashed border-foreground/25 px-3 py-1.5 rounded-full hover:bg-foreground/5"
-					onclick={onDemoHitl}
-				>
-					Demo Human Review
-				</button>
-			</div>
-
-			<SkillKanbanBoard subAgents={intent.subAgents} skills={intent.skills} />
-
-			<div>
-				<p class="text-[10px] font-bold opacity-30 uppercase tracking-[0.3em] mb-3">Human Review</p>
-				<HitlTodoHost todos={intent.hitlTodos} onResolve={onResolveHitl} />
-			</div>
-		</section>
-	{:else if panel === 'stream'}
-		<section class="space-y-4">
-			<div>
-				<p class="text-[10px] font-bold opacity-30 uppercase tracking-[0.3em]">Activity</p>
-				<h2 class="text-lg font-semibold tracking-tight mt-1">{intent.title}</h2>
-				<p class="text-xs opacity-50 mt-1">What happened, in order — in plain language.</p>
-			</div>
-			<div class="tech-card p-4 space-y-3">
-				<ol class="space-y-4">
-					{#each intent.activity as row (row.id)}
-						{@const sa =
-							row.agentId !== undefined
-								? intent.subAgents.find((s) => s.id === row.agentId)
-								: undefined}
-						{@const skillLines = sa ? skillLinesForSubAgent(sa, intent.skills) : null}
-						<li class="flex gap-3 text-sm border-b border-border/25 pb-4 last:border-0 last:pb-0">
-							<span class="font-mono text-[10px] opacity-35 shrink-0 w-11 pt-0.5">{row.at}</span>
-							<div class="min-w-0">
-								<span class="text-[9px] font-bold uppercase opacity-45"
-									>{activityStreamKindLabel(row.kind)}</span
-								>
-								{#if skillLines}
-									<p class="font-medium text-sm leading-snug mt-0.5">{skillLines.primary}</p>
-									<p class="font-mono text-[10px] opacity-40 mt-0.5">{skillLines.secondary}</p>
-								{/if}
-								<p class="font-medium leading-snug {skillLines ? 'mt-1' : 'mt-0.5'}">{row.title}</p>
-								{#if row.detail}
-									<p class="text-xs opacity-65 mt-1 leading-relaxed">{row.detail}</p>
-								{/if}
-							</div>
-						</li>
-					{/each}
-				</ol>
-			</div>
-		</section>
 	{:else}
-		<section class="space-y-3 max-w-xl">
-			<p class="text-[10px] font-bold opacity-30 uppercase tracking-[0.3em]">Capabilities</p>
-			<p class="text-xs opacity-50 leading-relaxed">
-				Extra building blocks attached to this intent (for advanced setups).
-			</p>
-			<ul class="space-y-2">
-				{#each intent.skills as s (s.skillId)}
-					{@const lines = skillLinesForBinding(s)}
-					<li class="tech-card px-4 py-3 flex items-center justify-between gap-3">
-						<div>
-							<p class="font-medium text-sm leading-snug">{lines.primary}</p>
-							<p class="font-mono text-[10px] opacity-40 mt-0.5">{lines.secondary}</p>
-						</div>
-						<span
-							class="text-[10px] font-bold uppercase {s.bound ? 'text-emerald-800' : 'opacity-40'}"
-							>{s.bound ? 'Active' : 'Available'}</span
+		<div class="min-w-0 shrink-0 space-y-2">
+			<div class="min-w-0">
+				<p class="text-[9px] font-bold opacity-30 uppercase tracking-[0.26em]">{AVENCEO_NAME}</p>
+				<h1 class="text-[15px] sm:text-base font-semibold tracking-tight mt-0.5 leading-snug">
+					{intent.title}
+				</h1>
+				<p class="text-[11px] opacity-55 mt-0.5 leading-snug line-clamp-2 max-w-2xl">
+					{intent.summary}
+				</p>
+			</div>
+		</div>
+
+		<div class="shrink-0 border-b border-border/15 pb-1.5 pt-0">
+			<InvolvedActorsStrip
+				intent={intent}
+				selectedFilter={selectedActorFilter}
+				onFilterChange={(f) => (selectedActorFilter = f)}
+			/>
+		</div>
+
+		<div
+			class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain pr-2 scrollbar-gutter-stable pb-8"
+		>
+			{#if panel === 'todos'}
+				<section class="space-y-2">
+					<p class="text-[9px] font-bold opacity-30 uppercase tracking-[0.26em]">Human Review</p>
+					<HitlTodoHost todos={intent.hitlTodos} onResolve={onResolveHitl} />
+				</section>
+			{:else if panel === 'stream'}
+				<section class="min-w-0 space-y-2">
+					<p class="text-[9px] font-bold opacity-30 uppercase tracking-[0.26em]">Activity</p>
+					{#if filteredActivity.length === 0}
+						<p class="text-[11px] opacity-45 py-3 text-center">
+							{intent.activity.length === 0
+								? 'No activity yet.'
+								: 'No activity for this actor.'}
+						</p>
+					{:else}
+						<ol class="space-y-0 divide-y divide-border/20">
+							{#each filteredActivity as row (row.id)}
+								{@const sa =
+									row.agentId !== undefined
+										? intent.subAgents.find((s) => s.id === row.agentId)
+										: undefined}
+								{@const skillLines = sa ? skillLinesForSubAgent(sa, intent.skills) : null}
+								<li class="flex gap-2 py-2.5 first:pt-0 text-[12px] leading-snug">
+									<span class="font-mono text-[9px] opacity-35 shrink-0 w-9 pt-0.5 tabular-nums"
+										>{row.at}</span
+									>
+									<div class="min-w-0 flex-1">
+										<span class="text-[9px] font-bold uppercase tracking-wide opacity-40"
+											>{activityStreamKindLabel(row.kind)}</span
+										>
+										{#if skillLines}
+											<p class="font-medium text-[12px] leading-snug mt-0.5">{skillLines.primary}</p>
+											<p class="font-mono text-[9px] opacity-40 mt-0.5">{skillLines.secondary}</p>
+										{/if}
+										<p class="font-medium text-[12px] leading-snug {skillLines ? 'mt-1' : 'mt-0.5'}">
+											{row.title}
+										</p>
+										{#if row.detail}
+											<p class="text-[11px] opacity-60 mt-1 leading-relaxed">{row.detail}</p>
+										{/if}
+									</div>
+								</li>
+							{/each}
+						</ol>
+					{/if}
+				</section>
+			{:else if panel === 'config'}
+			<section class="space-y-3 max-w-2xl">
+				<div>
+					<p class="text-[9px] font-bold opacity-30 uppercase tracking-[0.26em]">Actor config</p>
+					<h2 class="text-base font-semibold tracking-tight mt-0.5">Tools &amp; model (mock)</h2>
+					<p class="text-xs opacity-50 mt-1">
+						Placeholder for how this actor is wired — swap for real settings later.
+					</p>
+				</div>
+
+				<div class="tech-card p-3 sm:p-4 space-y-4">
+					<div>
+						<p class="text-[10px] font-bold uppercase opacity-40 tracking-wide mb-2">Tools</p>
+						<ul class="text-sm space-y-2 opacity-90">
+							<li class="flex justify-between gap-3 border-b border-border/20 pb-2">
+								<span class="font-mono text-xs">read_workspace_file</span>
+								<span class="text-[10px] uppercase text-emerald-800 font-bold">On</span>
+							</li>
+							<li class="flex justify-between gap-3 border-b border-border/20 pb-2">
+								<span class="font-mono text-xs">delegate_to_skill</span>
+								<span class="text-[10px] uppercase text-emerald-800 font-bold">On</span>
+							</li>
+							<li class="flex justify-between gap-3">
+								<span class="font-mono text-xs">sandbox_exec</span>
+								<span class="text-[10px] uppercase opacity-40 font-bold">Off</span>
+							</li>
+						</ul>
+					</div>
+					<div>
+						<p class="text-[10px] font-bold uppercase opacity-40 tracking-wide mb-2">LLM</p>
+						<dl class="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-2 text-sm">
+							<dt class="opacity-45">Model</dt>
+							<dd class="font-mono text-xs">glm-5-1 · structured</dd>
+							<dt class="opacity-45">Temperature</dt>
+							<dd class="font-mono text-xs">0.2 (mock)</dd>
+							<dt class="opacity-45">Actor</dt>
+							<dd class="font-mono text-xs">{intent.orchestratorLabel}</dd>
+						</dl>
+					</div>
+				</div>
+			</section>
+		{:else}
+			<section class="space-y-3 max-w-2xl">
+				<div>
+					<p class="text-[9px] font-bold opacity-30 uppercase tracking-[0.26em]">Context</p>
+					<h2 class="text-base font-semibold tracking-tight mt-0.5">Prompt stack (mock)</h2>
+					<p class="text-xs opacity-50 mt-1">
+						Talk-style SOUL, rules, and snippets (static for now).
+					</p>
+				</div>
+
+				<div class="space-y-3">
+					<details class="tech-card group" open>
+						<summary
+							class="cursor-pointer list-none px-3 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-2 text-sm font-semibold tracking-tight marker:content-none"
 						>
-					</li>
-				{/each}
-			</ul>
-		</section>
+							SOUL.md
+							<span
+								class="text-[10px] font-bold uppercase opacity-35 group-open:rotate-180 transition-transform"
+								>▾</span
+							>
+						</summary>
+						<div
+							class="px-3 pb-3 sm:px-4 sm:pb-4 text-xs opacity-75 leading-relaxed border-t border-border/30 pt-3 font-mono"
+						>
+							You are a careful specialist under {AVENCEO_NAME}. Prefer small, verifiable steps. Ask
+							the human when policy is unclear.
+						</div>
+					</details>
+
+					<details class="tech-card group">
+						<summary
+							class="cursor-pointer list-none px-3 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-2 text-sm font-semibold tracking-tight marker:content-none"
+						>
+							Workspace rules
+							<span
+								class="text-[10px] font-bold uppercase opacity-35 group-open:rotate-180 transition-transform"
+								>▾</span
+							>
+						</summary>
+						<div
+							class="px-3 pb-3 sm:px-4 sm:pb-4 text-xs opacity-75 leading-relaxed border-t border-border/30 pt-3 font-mono"
+						>
+							— Never exfiltrate secrets.<br>
+							— Cite file paths when claiming facts.<br>
+							— Escalate blocked HITL items with a one-line reason.
+						</div>
+					</details>
+
+					<details class="tech-card group">
+						<summary
+							class="cursor-pointer list-none px-3 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-2 text-sm font-semibold tracking-tight marker:content-none"
+						>
+							Skill bindings (preview)
+							<span
+								class="text-[10px] font-bold uppercase opacity-35 group-open:rotate-180 transition-transform"
+								>▾</span
+							>
+						</summary>
+						<ul class="px-3 pb-3 sm:px-4 sm:pb-4 space-y-2 border-t border-border/30 pt-3">
+							{#each intent.skills as s (s.skillId)}
+								{@const lines = skillLinesForBinding(s)}
+								<li class="text-sm">
+									<p class="font-medium leading-snug">{lines.primary}</p>
+									<p class="font-mono text-[10px] opacity-40 mt-0.5">{lines.secondary}</p>
+								</li>
+							{/each}
+						</ul>
+					</details>
+				</div>
+			</section>
+		{/if}
+		</div>
 	{/if}
 </div>
