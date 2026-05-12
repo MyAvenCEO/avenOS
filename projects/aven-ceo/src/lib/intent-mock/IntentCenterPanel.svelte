@@ -1,5 +1,4 @@
 <script lang="ts">
-import { AVENCEO_ACTOR_ID } from './boring-avatar'
 import { AVENCEO_NAME, activityStreamKindLabel } from './ceo-copy'
 import HitlTodoHost from './HitlTodoHost.svelte'
 import { activityMatchesActorFilter } from './involved-actors-display'
@@ -34,7 +33,7 @@ const filteredActivity = $derived.by(() => {
 
 /** Human review (HITL) on the lead skill; in dev, static layout examples are appended. */
 const showHitlOnOverview = $derived.by(() => {
-	if (!intent || selectedActorId !== AVENCEO_ACTOR_ID) return false
+	if (!intent || selectedActorId !== `intent/${intent.id}`) return false
 	const openTodos = intent.hitlTodos.some((t) => t.status === 'open')
 	const blocked = intent.subAgents.some((s) => s.status === 'blocked_hitl')
 	return openTodos || blocked

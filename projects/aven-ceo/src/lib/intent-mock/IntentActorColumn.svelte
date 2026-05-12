@@ -20,7 +20,7 @@ let {
 const rows = $derived(involvedActorsForIntent(intent))
 
 function showDividerAfter(prev: InvolvedActorDisplayRow, row: InvolvedActorDisplayRow): boolean {
-	return prev.actor.tier !== row.actor.tier
+	return prev.tier !== row.tier
 }
 
 /** State dots — richer greens / amber / orange / grey (higher chroma, still UI-soft). */
@@ -58,17 +58,17 @@ function itemClass(isOn: boolean): string {
 		class="scrollbar-gutter-stable flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden pr-0.5"
 		aria-label="Select skill"
 	>
-		{#each rows as row, i (row.actor.id)}
+		{#each rows as row, i (row.id)}
 			{#if i > 0 && showDividerAfter(rows[i - 1]!, row)}
 				<div class="my-1 h-px shrink-0 bg-border/60" role="separator" aria-hidden="true"></div>
 			{/if}
 			<button
 				type="button"
-				class={itemClass(selectedActorId === row.actor.id)}
+				class={itemClass(selectedActorId === row.id)}
 				title={`${row.skillName} · ${statusBadgeLabel(row.status)}`}
-				aria-pressed={selectedActorId === row.actor.id}
+				aria-pressed={selectedActorId === row.id}
 				aria-label={`Skill ${row.skillName}, ${statusBadgeLabel(row.status)}`}
-				onclick={() => onSelectActor(row.actor.id)}
+				onclick={() => onSelectActor(row.id)}
 			>
 				<div class="flex items-center gap-2">
 					<span class={statusDotClass(row.status)} aria-hidden="true"></span>

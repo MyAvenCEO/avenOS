@@ -1,9 +1,17 @@
 import type { ActivityItem, IntentOrchestrator, SubAgent } from './types'
 import { skillLinesForSubAgent } from './skill-display'
-import type { MockInvolvedActor } from './boring-avatar'
-import { MOCK_INVOLVED_ACTORS } from './boring-avatar'
+import type { ActorTier } from './boring-avatar'
 
-export type InvolvedActorId = (typeof MOCK_INVOLVED_ACTORS)[number]['id']
+export type InvolvedActorId = string
+
+export type InvolvedActorDisplayRow = {
+	id: InvolvedActorId
+	label: string
+	skillName: string
+	tier: ActorTier
+	status: SubAgent['status'] | 'orchestrating'
+	runtimeActorIds: string[]
+}
 
 /**
  * Filter activity rows for the Overview log (skill-scoped).
@@ -14,38 +22,17 @@ export function activityMatchesActorFilter(
 	activity: ActivityItem,
 	actorId: InvolvedActorId
 ): boolean {
-	const slot = MOCK_INVOLVED_ACTORS.findIndex((a) => a.id === actorId)
-	if (slot < 0) return true
-
-	const agentId = activity.agentId
-
-	if (agentId) {
-		const subIx = intent.subAgents.findIndex((s) => s.id === agentId)
-		if (subIx >= 0) return slot === subIx + 2
-		return slot === 0
+	const row = actorSelectionRowForId(intent, actorId)
+	if (!row) return true
+	if (activity.actorIds?.some((id) => row.runtimeActorIds.includes(id))) return true
+	if (activity.agentId && row.runtimeActorIds.includes(activity.agentId)) return true
+	if (row.id === `intent/${intent.id}`) {
+		return activity.kind === 'orchestrator' || activity.kind === 'human' || activity.kind === 'hitl'
 	}
-
-	if (slot === 0) {
-		return (
-			activity.kind === 'orchestrator' ||
-			activity.kind === 'human' ||
-			activity.kind === 'hitl' ||
-			activity.kind === 'sub_agent' ||
-			activity.kind === 'tool'
-		)
-	}
-
-	if (slot === 1) {
+	if (row.id === 'dispatcher') {
 		return activity.kind === 'delegation'
 	}
-
 	return false
-}
-
-export type InvolvedActorDisplayRow = {
-	actor: MockInvolvedActor
-	skillName: string
-	status: SubAgent['status'] | 'orchestrating'
 }
 
 function statusForOrchestrator(intent: IntentOrchestrator): InvolvedActorDisplayRow['status'] {
@@ -76,44 +63,70 @@ export function statusBadgeLabel(status: InvolvedActorDisplayRow['status']): str
  * Order: AvenCEO → supervisor(s) → workers (see {@link MOCK_INVOLVED_ACTORS} tiers).
  */
 export function involvedActorsForIntent(intent: IntentOrchestrator): InvolvedActorDisplayRow[] {
-	const sa = intent.subAgents
-	const skills = intent.skills
+	const rows: InvolvedActorDisplayRow[] = [
+		{
+			id: `intent/${intent.id}`,
+			label: 'Intent',
+			skillName: intent.orchestratorLabel,
+			tier: 'orchestrator',
+			status: statusForOrchestrator(intent),
+			runtimeActorIds: [`intent/${intent.id}`]
+		},
+		{
+			id: 'dispatcher',
+			label: 'Dispatcher',
+			skillName: 'Dispatch',
+			tier: 'supervisor',
+			status: intent.done ? 'done' : 'running',
+			runtimeActorIds: ['dispatcher']
+		}
+	]
 
-	return MOCK_INVOLVED_ACTORS.map((actor, i): InvolvedActorDisplayRow => {
-		if (i === 0) {
-			return {
-				actor,
-				skillName: intent.orchestratorLabel,
-				status: statusForOrchestrator(intent)
-			}
+	for (const sub of intent.subAgents) {
+		const lines = skillLinesForSubAgent(sub, intent.skills)
+		rows.push({
+			id: sub.id,
+			label: sub.name,
+			skillName: lines.primary,
+			tier: 'worker',
+			status: sub.status,
+			runtimeActorIds: [sub.name, sub.id].filter((value, index, all) => value.length > 0 && all.indexOf(value) === index)
+		})
+	}
+
+	const known = new Set(rows.flatMap((row) => row.runtimeActorIds))
+	for (const activity of intent.activity) {
+		for (const actorRef of activity.actorIds ?? []) {
+			if (known.has(actorRef) || actorRef === `intent/${intent.id}`) continue
+			known.add(actorRef)
+			rows.push({
+				id: actorRef,
+				label: actorRef,
+				skillName: prettifyActorLabel(actorRef),
+				tier: actorRef === 'dispatcher' ? 'supervisor' : 'worker',
+				status: 'running',
+				runtimeActorIds: [actorRef]
+			})
 		}
-		if (i === 1) {
-			return {
-				actor,
-				skillName: 'Dispatch',
-				status: intent.done ? 'done' : 'running'
-			}
-		}
-		const subIndex = i - 2
-		const sub = sa[subIndex]
-		if (sub) {
-			const lines = skillLinesForSubAgent(sub, skills)
-			return { actor, skillName: lines.primary, status: sub.status }
-		}
-		return {
-			actor,
-			skillName: actor.label,
-			status: 'idle'
-		}
-	})
+	}
+
+	return rows
 }
 
 export function runtimeActorIdsForSelection(intent: IntentOrchestrator, actorId: InvolvedActorId): string[] {
-	const slot = MOCK_INVOLVED_ACTORS.findIndex((actor) => actor.id === actorId)
-	if (slot < 0) return []
-	if (slot === 0) return [`intent/${intent.id}`]
-	if (slot === 1) return ['dispatcher']
-	const sub = intent.subAgents[slot - 2]
-	if (!sub) return []
-	return [sub.name, sub.id].filter((value, index, all) => value.length > 0 && all.indexOf(value) === index)
+	return actorSelectionRowForId(intent, actorId)?.runtimeActorIds ?? []
+}
+
+export function actorSelectionRowForId(
+	intent: IntentOrchestrator,
+	actorId: InvolvedActorId
+): InvolvedActorDisplayRow | undefined {
+	return involvedActorsForIntent(intent).find((row) => row.id === actorId)
+}
+
+function prettifyActorLabel(actorId: string): string {
+	return actorId
+		.replace(/^intent\//, 'Intent ')
+		.replaceAll(/[-_]/g, ' ')
+		.trim()
 }

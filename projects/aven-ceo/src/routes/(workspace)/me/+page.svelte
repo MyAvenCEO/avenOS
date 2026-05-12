@@ -10,8 +10,8 @@ import {
 	firstTabForTier,
 	isTabAllowedForTier
 } from '$lib/intent-mock/actor-context-tabs'
-import { AVENCEO_ACTOR_ID, MOCK_INVOLVED_ACTORS } from '$lib/intent-mock/boring-avatar'
-import type { InvolvedActorId } from '$lib/intent-mock/involved-actors-display'
+import type { ActorTier } from '$lib/intent-mock/boring-avatar'
+import { actorSelectionRowForId, type InvolvedActorId } from '$lib/intent-mock/involved-actors-display'
 import type { ActorContextTab } from '$lib/intent-mock/types'
 import { IntentStore } from '$lib/jaensen/intent-store.svelte'
 import { workspaceOrchestratorClass } from '$lib/workspace/layout'
@@ -19,7 +19,7 @@ import { workspaceOrchestratorClass } from '$lib/workspace/layout'
 const COMPOSER_MAX_LINES = 4
 
 let contextTab = $state<ActorContextTab>('overview')
-let selectedActorId = $state<InvolvedActorId>(AVENCEO_ACTOR_ID)
+let selectedActorId = $state<InvolvedActorId>('intent/unset')
 let newTitle = $state('')
 let busy = $state(false)
 let dragActive = $state(false)
@@ -34,14 +34,14 @@ const selectedIntent = $derived.by(() => store.selectedIntent())
 const error = $derived(store.error)
 
 const selectedActorTier = $derived.by(() => {
-	return MOCK_INVOLVED_ACTORS.find((a) => a.id === selectedActorId)?.tier ?? 'worker'
+	return (selectedIntent && actorSelectionRowForId(selectedIntent, selectedActorId)?.tier) ?? ('worker' as ActorTier)
 })
 
 const contextTabs = $derived.by(() => contextTabsForTier(selectedActorTier))
 
 $effect(() => {
 	void selectedIntent?.id
-	selectedActorId = AVENCEO_ACTOR_ID
+	selectedActorId = selectedIntent ? `intent/${selectedIntent.id}` : 'intent/unset'
 	contextTab = 'overview'
 })
 

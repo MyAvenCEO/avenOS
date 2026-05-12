@@ -21,6 +21,7 @@ export interface ActivityItem {
 	title: string
 	detail?: string
 	agentId?: string
+	actorIds?: string[]
 }
 
 export interface ActorDetailItem {

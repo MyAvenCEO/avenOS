@@ -473,6 +473,10 @@ function applyRuntimeEnvelopeQueued(state: IntentView, payload: Record<string, u
 		title: 'Work queued',
 		detail: summarizeEnvelopeLifecycle(payload),
 		at: event.createdAt,
+		actorId: readString(payload.actorId),
+		fromActor: readString(payload.fromActor),
+		toActor: readString(payload.toActor),
+		envelopeId: event.envelopeId,
 		kind: 'intent'
 	})
 }
@@ -485,6 +489,10 @@ function applyRuntimeEnvelopeClaimed(state: IntentView, payload: Record<string, 
 		title: 'Work started',
 		detail: summarizeEnvelopeLifecycle(payload),
 		at: event.createdAt,
+		actorId: readString(payload.actorId),
+		fromActor: readString(payload.fromActor),
+		toActor: readString(payload.toActor),
+		envelopeId: event.envelopeId,
 		kind: 'intent'
 	})
 }
@@ -497,6 +505,10 @@ function applyRuntimeEnvelopeCompleted(state: IntentView, payload: Record<string
 		title: 'Work completed',
 		detail: summarizeEnvelopeLifecycle(payload),
 		at: event.createdAt,
+		actorId: readString(payload.actorId),
+		fromActor: readString(payload.fromActor),
+		toActor: readString(payload.toActor),
+		envelopeId: event.envelopeId,
 		kind: 'intent'
 	})
 }
@@ -517,6 +529,10 @@ function applyRuntimeEnvelopeFailed(state: IntentView, payload: Record<string, u
 		title: 'Work failed',
 		detail: summarizeEnvelopeLifecycle(payload),
 		at: event.createdAt,
+		actorId: readString(payload.actorId),
+		fromActor: readString(payload.fromActor),
+		toActor: readString(payload.toActor),
+		envelopeId: event.envelopeId,
 		kind: 'intent'
 	})
 }
@@ -732,8 +748,21 @@ function buildActivity(
 		kind: mapTimelineKind(item.kind),
 		title: item.title,
 		detail: item.detail,
-		agentId: resolveAgentId(item, subAgents, skills)
+		agentId: resolveAgentId(item, subAgents, skills),
+		actorIds: extractActorIds(item, intent.intentId, subAgents)
 	}))
+}
+
+function extractActorIds(item: TimelineItem, intentId: string, subAgents: SubAgent[]): string[] {
+	const values = [item.actorId, item.fromActor, item.toActor].filter(
+		(value): value is string => typeof value === 'string' && value.length > 0
+	)
+	if (item.kind === 'question' || item.kind === 'human') {
+		values.push(`intent/${intentId}`)
+	}
+	const agentId = resolveAgentId(item, subAgents, [])
+	if (agentId) values.push(agentId)
+	return [...new Set(values)]
 }
 
 function buildToolCalls(intent: IntentView): ToolCallStep[] {

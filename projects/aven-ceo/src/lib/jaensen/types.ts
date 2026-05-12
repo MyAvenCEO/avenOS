@@ -81,6 +81,10 @@ export interface TimelineItem {
 	title: string
 	detail?: string
 	at?: string
+	actorId?: string
+	fromActor?: string
+	toActor?: string
+	envelopeId?: string | null
 	kind:
 		| 'human'
 		| 'question'
