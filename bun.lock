@@ -118,6 +118,7 @@
         "@jaensen/app-node": "workspace:*",
         "@jaensen/conversation-actors": "workspace:*",
         "@jaensen/persistence-sqlite": "workspace:*",
+        "tinfoil": "^1.1.4",
       },
       "devDependencies": {
         "typescript": "^5.9.3",

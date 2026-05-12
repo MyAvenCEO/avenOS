@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { TinfoilAI } from 'tinfoil'
 
 type ThinkingLevel = 'off' | 'low' | 'medium' | 'high'
 
@@ -40,6 +41,29 @@ const DEFAULT_OPENAI_BASE_URL = 'http://box:8000/v1'
 const DEFAULT_OPENAI_MODEL = 'minimax-m2.7-nvfp4'
 const DEFAULT_TINFOIL_BASE_URL = 'https://api.tinfoil.sh/v1'
 const DEFAULT_TINFOIL_MODEL = 'glm-5-1'
+
+type ModelCompletionResponse = {
+	choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> } }>
+}
+
+type TinfoilClientLike = {
+	ready(): Promise<void>
+	chat: {
+		completions: {
+			create(input: {
+				model: string
+				response_format: { type: 'json_object' }
+				messages: Array<{ role: 'system' | 'user'; content: string }>
+			}): Promise<ModelCompletionResponse>
+		}
+	}
+}
+
+let createTinfoilClient: (apiKey: string) => TinfoilClientLike = (apiKey) => new TinfoilAI({ apiKey })
+
+export function setTinfoilClientFactoryForTests(factory: ((apiKey: string) => TinfoilClientLike) | undefined): void {
+	createTinfoilClient = factory ?? ((apiKey) => new TinfoilAI({ apiKey }))
+}
 
 export function createDevHarness(config: ProviderConfig): FlueHarnessAdapter {
 	assertShellAvailable()
@@ -147,17 +171,71 @@ async function runModelCall(input: {
 	mode: 'prompt' | 'task'
 }): Promise<unknown> {
 	const system = buildSystemPrompt(input)
-	const response = await fetch(`${input.config.baseUrl}/chat/completions`, {
+	const body =
+		input.config.provider === 'tinfoil'
+			? await runTinfoilModelCall({
+				apiKey: input.config.apiKey,
+				model: input.model || input.config.model,
+				system,
+				text: input.text
+			})
+			: await runOpenAiCompatibleModelCall({
+				baseUrl: input.config.baseUrl,
+				apiKey: input.config.apiKey,
+				model: input.model || input.config.model,
+				system,
+				text: input.text
+			})
+
+	const content = readMessageContent(body)
+	if (!content) {
+		throw new Error('Flue model returned no message content.')
+	}
+
+	return normalizeStructuredResult(parseJsonObject(content), input.role || input.sessionRole)
+}
+
+async function runTinfoilModelCall(input: {
+	apiKey: string
+	model: string
+	system: string
+	text: string
+}): Promise<ModelCompletionResponse> {
+	try {
+		const client = createTinfoilClient(input.apiKey)
+		await client.ready()
+		return await client.chat.completions.create({
+			model: input.model,
+			response_format: { type: 'json_object' },
+			messages: [
+				{ role: 'system', content: input.system },
+				{ role: 'user', content: input.text }
+			]
+		})
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error)
+		throw new Error(`Flue model request failed via Tinfoil SDK: ${message}`)
+	}
+}
+
+async function runOpenAiCompatibleModelCall(input: {
+	baseUrl: string
+	apiKey: string
+	model: string
+	system: string
+	text: string
+}): Promise<ModelCompletionResponse> {
+	const response = await fetch(`${input.baseUrl}/chat/completions`, {
 		method: 'POST',
 		headers: {
 			'content-type': 'application/json',
-			authorization: `Bearer ${input.config.apiKey}`
+			authorization: `Bearer ${input.apiKey}`
 		},
 		body: JSON.stringify({
-			model: input.model || input.config.model,
+			model: input.model,
 			response_format: { type: 'json_object' },
 			messages: [
-				{ role: 'system', content: system },
+				{ role: 'system', content: input.system },
 				{ role: 'user', content: input.text }
 			]
 		})
@@ -167,16 +245,7 @@ async function runModelCall(input: {
 		throw new Error(`Flue model request failed (${response.status} ${response.statusText}): ${await response.text()}`)
 	}
 
-	const body = (await response.json()) as {
-		choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> } }>
-	}
-
-	const content = readMessageContent(body)
-	if (!content) {
-		throw new Error('Flue model returned no message content.')
-	}
-
-	return normalizeStructuredResult(parseJsonObject(content), input.role || input.sessionRole)
+	return (await response.json()) as ModelCompletionResponse
 }
 
 function buildSystemPrompt(input: {

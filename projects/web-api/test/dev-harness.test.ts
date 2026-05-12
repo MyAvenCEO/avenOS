@@ -3,7 +3,8 @@ import { expect, test } from 'bun:test'
 import {
 	createDevHarness,
 	normalizeTinfoilBaseUrl,
-	resolveProviderConfig
+	resolveProviderConfig,
+	setTinfoilClientFactoryForTests
 } from '../src/dev-harness'
 
 type EnvLike = Record<string, string | undefined>
@@ -80,27 +81,28 @@ test('createDevHarness parses JSON model responses', async () => {
 })
 
 test('createDevHarness unwraps dispatcher decision wrappers', async () => {
-	const originalFetch = globalThis.fetch
-	globalThis.fetch = (async () =>
-		new Response(
-			JSON.stringify({
-				choices: [
-					{
-						message: {
-							content: JSON.stringify({
-								decision: {
-									title: 'Repo review',
-									goal: 'Please review this repo',
-									reason: 'New user goal'
-								}
-							})
+	setTinfoilClientFactoryForTests(() => ({
+		ready: async () => {},
+		chat: {
+			completions: {
+				create: async () => ({
+					choices: [
+						{
+							message: {
+								content: JSON.stringify({
+									decision: {
+										title: 'Repo review',
+										goal: 'Please review this repo',
+										reason: 'New user goal'
+									}
+								})
+							}
 						}
-					}
-				]
-			}),
-			{ status: 200, headers: { 'content-type': 'application/json' } }
-		)) as typeof fetch
-
+					]
+				})
+			}
+		}
+	}))
 	try {
 		const harness = createDevHarness({
 			provider: 'tinfoil',
@@ -117,29 +119,30 @@ test('createDevHarness unwraps dispatcher decision wrappers', async () => {
 			reason: 'New user goal'
 		})
 	} finally {
-		globalThis.fetch = originalFetch
+		setTinfoilClientFactoryForTests(undefined)
 	}
 })
 
 test('createDevHarness normalizes intent summary and actions from root response', async () => {
-	const originalFetch = globalThis.fetch
-	globalThis.fetch = (async () =>
-		new Response(
-			JSON.stringify({
-				choices: [
-					{
-						message: {
-							content: JSON.stringify({
-								summary: 'Starting review',
-								actions: [{ type: 'reply_user', message: 'Starting review' }]
-							})
+	setTinfoilClientFactoryForTests(() => ({
+		ready: async () => {},
+		chat: {
+			completions: {
+				create: async () => ({
+					choices: [
+						{
+							message: {
+								content: JSON.stringify({
+									summary: 'Starting review',
+									actions: [{ type: 'reply_user', message: 'Starting review' }]
+								})
+							}
 						}
-					}
-				]
-			}),
-			{ status: 200, headers: { 'content-type': 'application/json' } }
-		)) as typeof fetch
-
+					]
+				})
+			}
+		}
+	}))
 	try {
 		const harness = createDevHarness({
 			provider: 'tinfoil',
@@ -155,30 +158,32 @@ test('createDevHarness normalizes intent summary and actions from root response'
 			actions: [{ type: 'reply_user', message: 'Starting review' }]
 		})
 	} finally {
-		globalThis.fetch = originalFetch
+		setTinfoilClientFactoryForTests(undefined)
 	}
 })
 
 test('createDevHarness warns when recovering root-level intent action', async () => {
-	const originalFetch = globalThis.fetch
 	const originalWarn = console.warn
 	const warnings: unknown[][] = []
 	console.warn = (...args: unknown[]) => {
 		warnings.push(args)
 	}
-	globalThis.fetch = (async () =>
-		new Response(
-			JSON.stringify({
-				choices: [
-					{
-						message: {
-							content: JSON.stringify({ type: 'reply_user', message: 'Starting review' })
+	setTinfoilClientFactoryForTests(() => ({
+		ready: async () => {},
+		chat: {
+			completions: {
+				create: async () => ({
+					choices: [
+						{
+							message: {
+								content: JSON.stringify({ type: 'reply_user', message: 'Starting review' })
+							}
 						}
-					}
-				]
-			}),
-			{ status: 200, headers: { 'content-type': 'application/json' } }
-		)) as typeof fetch
+					]
+				})
+			}
+		}
+	}))
 
 	try {
 		const harness = createDevHarness({
@@ -193,36 +198,38 @@ test('createDevHarness warns when recovering root-level intent action', async ()
 		expect(warnings).toHaveLength(1)
 		expect(String(warnings[0]?.[0])).toContain('Recovered intent action from malformed root-level model output')
 	} finally {
-		globalThis.fetch = originalFetch
+		setTinfoilClientFactoryForTests(undefined)
 		console.warn = originalWarn
 	}
 })
 
 test('createDevHarness derives intent actions from event-shaped responses', async () => {
-	const originalFetch = globalThis.fetch
-	globalThis.fetch = (async () =>
-		new Response(
-			JSON.stringify({
-				choices: [
-					{
-						message: {
-							content: JSON.stringify({
-								events: [
-									{
-										eventType: 'event',
-										event: {
-											type: 'ask_user',
-											payload: { question: 'Which account should I check?' }
+	setTinfoilClientFactoryForTests(() => ({
+		ready: async () => {},
+		chat: {
+			completions: {
+				create: async () => ({
+					choices: [
+						{
+							message: {
+								content: JSON.stringify({
+									events: [
+										{
+											eventType: 'event',
+											event: {
+												type: 'ask_user',
+												payload: { question: 'Which account should I check?' }
+											}
 										}
-									}
-								]
-							})
+									]
+								})
+							}
 						}
-					}
-				]
-			}),
-			{ status: 200, headers: { 'content-type': 'application/json' } }
-		)) as typeof fetch
+					]
+				})
+			}
+		}
+	}))
 
 	try {
 		const harness = createDevHarness({
@@ -239,35 +246,37 @@ test('createDevHarness derives intent actions from event-shaped responses', asyn
 			actions: [{ type: 'ask_user', question: 'Which account should I check?' }]
 		})
 	} finally {
-		globalThis.fetch = originalFetch
+		setTinfoilClientFactoryForTests(undefined)
 	}
 })
 
 test('createDevHarness converts intent.confirmation_requested events into ask_user actions', async () => {
-	const originalFetch = globalThis.fetch
-	globalThis.fetch = (async () =>
-		new Response(
-			JSON.stringify({
-				choices: [
-					{
-						message: {
-							content: JSON.stringify({
-								events: [
-									{
-										eventType: 'event',
-										event: {
-											type: 'intent.confirmation_requested',
-											payload: { clarification: 'Would you like me to send this?' }
+	setTinfoilClientFactoryForTests(() => ({
+		ready: async () => {},
+		chat: {
+			completions: {
+				create: async () => ({
+					choices: [
+						{
+							message: {
+								content: JSON.stringify({
+									events: [
+										{
+											eventType: 'event',
+											event: {
+												type: 'intent.confirmation_requested',
+												payload: { clarification: 'Would you like me to send this?' }
+											}
 										}
-									}
-								]
-							})
+									]
+								})
+							}
 						}
-					}
-				]
-			}),
-			{ status: 200, headers: { 'content-type': 'application/json' } }
-		)) as typeof fetch
+					]
+				})
+			}
+		}
+	}))
 
 	try {
 		const harness = createDevHarness({
@@ -284,6 +293,53 @@ test('createDevHarness converts intent.confirmation_requested events into ask_us
 			actions: [{ type: 'ask_user', question: 'Would you like me to send this?' }]
 		})
 	} finally {
-		globalThis.fetch = originalFetch
+		setTinfoilClientFactoryForTests(undefined)
+	}
+})
+
+test('createDevHarness uses Tinfoil SDK for tinfoil provider', async () => {
+	const calls: unknown[] = []
+	setTinfoilClientFactoryForTests((apiKey) => ({
+		ready: async () => {
+			calls.push({ type: 'ready', apiKey })
+		},
+		chat: {
+			completions: {
+				create: async (input) => {
+					calls.push({ type: 'create', apiKey, input })
+					return {
+						choices: [{ message: { content: '{"ok":true}' } }]
+					}
+				}
+			}
+		}
+	}))
+
+	try {
+		const harness = createDevHarness({
+			provider: 'tinfoil',
+			model: 'glm-5-1',
+			baseUrl: 'https://api.tinfoil.sh/v1',
+			apiKey: 'tk_test'
+		})
+
+		const session = await harness.session('actor/dispatcher', { role: 'jaensen-conversation-dispatcher' })
+		await expect(session.prompt('Return JSON', { schema: {}, role: 'jaensen-conversation-dispatcher' })).resolves.toEqual({ ok: true })
+		expect(calls).toHaveLength(2)
+		expect(calls[0]).toEqual({ type: 'ready', apiKey: 'tk_test' })
+		expect(calls[1]).toEqual({
+			type: 'create',
+			apiKey: 'tk_test',
+			input: {
+				model: 'glm-5-1',
+				response_format: { type: 'json_object' },
+				messages: [
+					{ role: 'system', content: expect.any(String) },
+					{ role: 'user', content: 'Return JSON' }
+				]
+			}
+		})
+	} finally {
+		setTinfoilClientFactoryForTests(undefined)
 	}
 })
