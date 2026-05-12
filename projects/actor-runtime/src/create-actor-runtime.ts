@@ -45,7 +45,6 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 			})
 
 			if (!claimed) {
-				logDebug(input.logger, 'actor-runtime.idle', { workerId: input.workerId })
 				return 'idle'
 			}
 
