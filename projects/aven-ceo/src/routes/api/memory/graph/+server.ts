@@ -6,7 +6,7 @@ import type { RequestHandler } from './$types'
 export const GET: RequestHandler = async ({ url }) => {
 	try {
 		ensureVaultDir()
-		const state = loadVaultGraph()
+		const state = await loadVaultGraph()
 		const full = url.searchParams.get('full') === '1' || url.searchParams.get('export') === '1'
 		if (full) {
 			return json({ ok: true as const, state })

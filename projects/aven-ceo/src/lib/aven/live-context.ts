@@ -18,18 +18,18 @@ export type AvenChatTurn = { role: 'user' | 'assistant'; content: string }
  * Builds the same system bundle + context preview the chat stream uses for `messages`.
  * Order: **SOUL** → **vault owner** (`Humans/OWNER_*.md`) → **RULES** → **vault snapshot** → **vault link graph summary** (derived `[[wikilinks]]` stats).
  */
-export function buildAvenChatRoundContext(
+export async function buildAvenChatRoundContext(
 	model: string,
 	messages: AvenChatTurn[]
-): { systemContent: string; preview: AvenContextPreview; fullContext: AvenContextFull } {
+): Promise<{ systemContent: string; preview: AvenContextPreview; fullContext: AvenContextFull }> {
 	ensureVaultDir()
 	const rules = readMaiaRulesDoc()
 	const proceduralBody = rules.body
-	const notes = listVaultNotes()
+	const notes = await listVaultNotes()
 	const soulRaw = readSoulMarkdownBody().trimEnd()
 	const ownerMd = buildOwnerContextMarkdown()
 	const snap = buildVaultSnapshotPayload(notes)
-	const graphMd = formatVaultGraphSummaryMarkdown(loadVaultGraph())
+	const graphMd = formatVaultGraphSummaryMarkdown(await loadVaultGraph())
 	const sb = maiaAgent.systemBundle
 	const d = sb.delimiterMarkdown.trim()
 	const systemContent = `${soulRaw}\n\n${d}\n\n${ownerMd}\n\n${d}\n\n${proceduralBody}\n\n${d}\n\n${snap.fullMarkdown}\n\n${d}\n\n${graphMd}`

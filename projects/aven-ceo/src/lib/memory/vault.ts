@@ -1,8 +1,14 @@
-import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ensureSeedRuntimeSynced } from '$lib/seed/seed-service'
-import { parseMarkdownFrontmatter } from './frontmatter'
+import { ensureSeedRuntimeSynced } from '../seed/seed-service'
+import {
+	listMemoryNotes,
+	readMemoryNoteByPath,
+	searchMemory,
+	writeMemoryNoteByPath
+} from './jazz-memory-store'
+
+type MemoryWriteSource = Parameters<typeof writeMemoryNoteByPath>[2]
 
 function repoRootFromModule(): string {
 	const here = path.dirname(fileURLToPath(import.meta.url))
@@ -48,76 +54,42 @@ export function assertVaultRelativePath(rel: string): string {
 
 export function ensureVaultDir(): string {
 	ensureSeedRuntimeSynced()
-	const root = vaultAbsolutePath()
-	if (!fs.existsSync(root)) {
-		fs.mkdirSync(root, { recursive: true })
-	}
-	return root
+	return vaultAbsolutePath()
 }
 
-function scanMarkdownFiles(dir: string, baseRel = ''): string[] {
-	const out: string[] = []
-	if (!fs.existsSync(dir)) return out
-	const entries = fs.readdirSync(dir, { withFileTypes: true })
-	for (const e of entries) {
-		const childAbs = path.join(dir, e.name)
-		const childRel = baseRel ? `${baseRel}/${e.name}` : e.name
-		if (e.isDirectory()) {
-			out.push(...scanMarkdownFiles(childAbs, childRel))
-		} else if (e.isFile() && e.name.endsWith('.md')) {
-			out.push(childRel.split(path.sep).join('/'))
-		}
-	}
-	return out
+export async function listVaultNotes(): Promise<{ path: string; title: string }[]> {
+	ensureVaultDir()
+	const notes = await listMemoryNotes()
+	return notes.map(({ path, title }) => ({ path, title })).sort((a, b) => a.path.localeCompare(b.path))
 }
 
-function extractTitleFromBody(body: string): string {
-	const m = body.match(/^#\s+(.+)$/m)
-	return m ? m[1].trim() : ''
-}
-
-export function listVaultNotes(): { path: string; title: string }[] {
-	const root = ensureVaultDir()
-	const files = scanMarkdownFiles(root)
-	const list: { path: string; title: string }[] = []
-	for (const posixRel of files) {
-		const full = path.join(root, ...posixRel.split('/'))
-		try {
-			const content = fs.readFileSync(full, 'utf8')
-			const { meta, body } = parseMarkdownFrontmatter(content)
-			const title = extractTitleFromBody(body) || meta.title?.trim() || path.basename(full, '.md')
-			list.push({ path: posixRel, title })
-		} catch {
-			list.push({ path: posixRel, title: path.basename(full, '.md') })
-		}
-	}
-	return list.sort((a, b) => a.path.localeCompare(b.path))
-}
-
-export function readVaultNote(relPosix: string): string {
+export async function readVaultNote(relPosix: string): Promise<string> {
 	const posix = assertVaultRelativePath(relPosix)
-	const full = path.join(vaultAbsolutePath(), ...posix.split('/'))
-	if (!fs.existsSync(full)) {
-		throw new Error('Note not found.')
-	}
-	return fs.readFileSync(full, 'utf8')
+	const note = await readMemoryNoteByPath(posix)
+	return note.bodyMarkdown
 }
 
-export function writeVaultNote(relPosix: string, content: string): void {
+export async function writeVaultNote(
+	relPosix: string,
+	content: string,
+	source: MemoryWriteSource = { type: 'memory_ui' }
+): Promise<void> {
 	const posix = assertVaultRelativePath(relPosix)
-	const full = path.join(vaultAbsolutePath(), ...posix.split('/'))
-	const dir = path.dirname(full)
-	fs.mkdirSync(dir, { recursive: true })
-	fs.writeFileSync(full, content, 'utf8')
+	await writeMemoryNoteByPath(posix, content, source)
 }
 
 /** Replace one unique substring in a file (fail if zero or multiple matches). */
-export function editVaultNote(relPosix: string, oldString: string, newString: string): void {
+export async function editVaultNote(
+	relPosix: string,
+	oldString: string,
+	newString: string,
+	source: MemoryWriteSource = { type: 'memory_ui' }
+): Promise<void> {
 	const posix = assertVaultRelativePath(relPosix)
 	if (!oldString) {
 		throw new Error('oldString must not be empty.')
 	}
-	let full = readVaultNote(posix)
+	let full = await readVaultNote(posix)
 	const idx = full.indexOf(oldString)
 	if (idx === -1) {
 		throw new Error('oldString was not found in file.')
@@ -129,7 +101,7 @@ export function editVaultNote(relPosix: string, oldString: string, newString: st
 		)
 	}
 	full = full.slice(0, idx) + newString + full.slice(idx + oldString.length)
-	writeVaultNote(posix, full)
+	await writeVaultNote(posix, full, source)
 }
 
 export interface SearchHit {
@@ -138,44 +110,7 @@ export interface SearchHit {
 	snippet: string
 }
 
-export function searchVault(query: string, limit = 20): SearchHit[] {
-	if (!query.trim()) return []
-	const root = ensureVaultDir()
-	const lower = query.toLowerCase()
-	const hits: SearchHit[] = []
-	const seenPath = new Set<string>()
-
-	const files = scanMarkdownFiles(root)
-
-	for (const posixRel of files) {
-		const full = path.join(root, ...posixRel.split('/'))
-		let content: string
-		try {
-			content = fs.readFileSync(full, 'utf8')
-		} catch {
-			continue
-		}
-		if (posixRel.toLowerCase().includes(lower) && !seenPath.has(posixRel)) {
-			seenPath.add(posixRel)
-			hits.push({
-				path: posixRel,
-				line: 0,
-				snippet: `(filename) ${posixRel}`
-			})
-			if (hits.length >= limit) return hits
-		}
-		const lines = content.split(/\r?\n/)
-		for (let i = 0; i < lines.length; i++) {
-			if (lines[i].toLowerCase().includes(lower)) {
-				hits.push({
-					path: posixRel,
-					line: i + 1,
-					snippet: lines[i].trim().slice(0, 200)
-				})
-				if (hits.length >= limit) return hits
-			}
-		}
-	}
-
-	return hits.slice(0, limit)
+export async function searchVault(query: string, limit = 20): Promise<SearchHit[]> {
+	const result = await searchMemory(query, limit)
+	return result.hits.map(({ path, line, snippet }) => ({ path, line, snippet }))
 }

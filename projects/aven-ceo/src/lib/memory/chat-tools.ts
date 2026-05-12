@@ -1,5 +1,4 @@
 import { memoryToolSourceAls } from '$lib/aven/memory-tool-context'
-import { appendMemoryProvenance } from '$lib/memory/memory-provenance'
 import { rebuildVaultGraph } from '$lib/memory/vault-graph'
 import {
 	editVaultNote,
@@ -9,13 +8,6 @@ import {
 	searchVault,
 	writeVaultNote
 } from './vault'
-
-function appendTalkProvenanceToVaultFile(posixPath: string): void {
-	const src = memoryToolSourceAls.getStore()
-	if (!src || src.type !== 'talk') return
-	const withProv = appendMemoryProvenance(readVaultNote(posixPath), src)
-	writeVaultNote(posixPath, withProv)
-}
 
 export {
 	memoryToolDoneLine,
@@ -27,36 +19,36 @@ export {
 	memoryVaultPathTail
 } from './chat-tools-core'
 
-/** Server-side tool execution against the local vault (Node/fs). */
-export function executeMemoryTool(name: string, args: Record<string, unknown>): string {
+/** Server-side tool execution against Jazz-backed memory with fs projection export. */
+export async function executeMemoryTool(name: string, args: Record<string, unknown>): Promise<string> {
 	ensureVaultDir()
 	try {
 		switch (name) {
 			case 'memory_list_notes':
-				return JSON.stringify({ notes: listVaultNotes() })
+				return JSON.stringify({ notes: await listVaultNotes() })
 			case 'memory_read_file': {
 				const p = String(args.path ?? '')
-				return readVaultNote(p)
+				return await readVaultNote(p)
 			}
 			case 'memory_edit': {
 				const rel = String(args.path ?? '')
-				editVaultNote(rel, String(args.oldString ?? ''), String(args.newString ?? ''))
-				appendTalkProvenanceToVaultFile(rel)
-				rebuildVaultGraph()
+				const src = memoryToolSourceAls.getStore() ?? { type: 'memory_ui' as const }
+				await editVaultNote(rel, String(args.oldString ?? ''), String(args.newString ?? ''), src)
+				await rebuildVaultGraph()
 				return JSON.stringify({ ok: true, path: rel })
 			}
 			case 'memory_write_file': {
 				const p = String(args.path ?? '')
 				const content = String(args.content ?? '')
-				writeVaultNote(p, content)
-				appendTalkProvenanceToVaultFile(p)
-				rebuildVaultGraph()
+				const src = memoryToolSourceAls.getStore() ?? { type: 'memory_ui' as const }
+				await writeVaultNote(p, content, src)
+				await rebuildVaultGraph()
 				return JSON.stringify({ ok: true, path: p, bytes: content.length })
 			}
 			case 'memory_search': {
 				const q = String(args.query ?? '')
 				const lim = typeof args.limit === 'number' ? args.limit : 20
-				return JSON.stringify({ hits: searchVault(q, lim) })
+				return JSON.stringify({ hits: await searchVault(q, lim) })
 			}
 			default:
 				return JSON.stringify({ error: `Unknown tool: ${name}` })

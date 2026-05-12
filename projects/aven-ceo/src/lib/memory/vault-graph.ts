@@ -56,8 +56,8 @@ function dedupeIncoming(map: Map<string, Set<string>>): Record<string, string[]>
 /**
  * Full scan of `.data/knowledge` — builds resolved + unresolved wikilink edges.
  */
-export function computeVaultGraph(): VaultGraphState {
-	const notes = listVaultNotes()
+export async function computeVaultGraph(): Promise<VaultGraphState> {
+	const notes = await listVaultNotes()
 
 	const outgoing = new Map<string, Set<string>>()
 	const unresolvedFrom = new Map<string, Set<string>>()
@@ -67,7 +67,7 @@ export function computeVaultGraph(): VaultGraphState {
 	for (const { path: src } of notes) {
 		let raw: string
 		try {
-			raw = readVaultNote(src)
+			raw = await readVaultNote(src)
 		} catch {
 			continue
 		}
@@ -145,14 +145,14 @@ export function writeVaultGraphState(state: VaultGraphState): void {
 	fs.writeFileSync(graphFileAbs(), `${JSON.stringify(state, null, 2)}\n`, 'utf8')
 }
 
-export function rebuildVaultGraph(): VaultGraphState {
-	const state = computeVaultGraph()
+export async function rebuildVaultGraph(): Promise<VaultGraphState> {
+	const state = await computeVaultGraph()
 	writeVaultGraphState(state)
 	return state
 }
 
 /** Reads cached graph or rebuilds if missing / unreadable. */
-export function loadVaultGraph(): VaultGraphState {
+export async function loadVaultGraph(): Promise<VaultGraphState> {
 	ensureVaultStateDir()
 	const abs = graphFileAbs()
 	if (!fs.existsSync(abs)) {

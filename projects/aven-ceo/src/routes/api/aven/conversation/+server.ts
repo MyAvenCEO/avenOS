@@ -12,10 +12,10 @@ function defaultChatModel(): string {
 	return typeof v === 'string' && v.trim().length > 0 ? v.trim() : 'glm-5-1'
 }
 
-export const GET: RequestHandler = () => {
+export const GET: RequestHandler = async () => {
 	const messages = readAvenConversation()
 	const model = defaultChatModel()
-	const { preview, fullContext } = buildAvenChatRoundContext(model, messages)
+	const { preview, fullContext } = await buildAvenChatRoundContext(model, messages)
 	return json({
 		ok: true as const,
 		messages,

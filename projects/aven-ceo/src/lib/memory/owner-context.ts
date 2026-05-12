@@ -3,7 +3,6 @@ import path from 'node:path'
 import {
 	assertVaultRelativePath,
 	ensureVaultDir,
-	readVaultNote,
 	vaultAbsolutePath
 } from '$lib/memory/vault'
 
@@ -76,7 +75,8 @@ export function vaultOwnerHumansVaultPath(): string | null {
 function tryReadVaultRel(posixRel: string): string | null {
 	try {
 		assertVaultRelativePath(posixRel)
-		return readVaultNote(posixRel)
+		const full = path.join(vaultAbsolutePath(), ...posixRel.split('/'))
+		return fs.existsSync(full) ? fs.readFileSync(full, 'utf8') : null
 	} catch {
 		return null
 	}

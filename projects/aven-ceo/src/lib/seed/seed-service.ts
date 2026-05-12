@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { resolveRepoRoot } from '$lib/memory/vault'
+import { resolveRepoRoot } from '../memory/vault'
 
 /** OpenAI-format memory tool definitions living under `.data/` after sync (editable at runtime). */
 export function maiaMemoryToolsJsonPath(): string {

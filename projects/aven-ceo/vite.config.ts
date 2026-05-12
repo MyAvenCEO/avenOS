@@ -1,7 +1,6 @@
 import { sveltekit } from '@sveltejs/kit/vite'
 import tailwindcss from '@tailwindcss/vite'
-// Jazz POC dewired — re-enable plugin + `PUBLIC_JAZZ_*` / `JAZZ_ADMIN_SECRET` when wiring sync again.
-// import { jazzSvelteKit } from 'jazz-tools/dev/sveltekit'
+import { jazzSvelteKit } from 'jazz-tools/dev/sveltekit'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createLogger, defineConfig, loadEnv } from 'vite'
@@ -55,12 +54,10 @@ export default defineConfig(({ mode }) => {
 			}
 		},
 		plugins: [
-			/*
 			jazzSvelteKit({
 				adminSecret: process.env.JAZZ_ADMIN_SECRET,
 				schemaDir: 'src/lib'
 			}),
-			*/
 			tailwindcss(),
 			sveltekit()
 		]

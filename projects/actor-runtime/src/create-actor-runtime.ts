@@ -22,7 +22,7 @@ import type {
 } from './types'
 
 const DEFAULT_LEASE_MS = 60_000
-const DEFAULT_ACTIVATION_TIMEOUT_MS = 60_000
+const DEFAULT_ACTIVATION_TIMEOUT_MS = 120_000
 const DEFAULT_ACTIVATION_CLEANUP_MS = 5_000
 
 export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime {

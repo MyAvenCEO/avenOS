@@ -20,6 +20,31 @@ const permissions = s.definePermissions(app, ({ policy }) => {
 	policy.workers.allowInsert.always()
 	policy.workers.allowUpdate.always()
 	policy.workers.allowDelete.always()
+
+	policy.memoryArtifacts.allowRead.always()
+	policy.memoryArtifacts.allowInsert.always()
+	policy.memoryArtifacts.allowUpdate.always()
+	policy.memoryArtifacts.allowDelete.always()
+
+	policy.memoryNotes.allowRead.always()
+	policy.memoryNotes.allowInsert.always()
+	policy.memoryNotes.allowUpdate.always()
+	policy.memoryNotes.allowDelete.always()
+
+	policy.memoryLinks.allowRead.always()
+	policy.memoryLinks.allowInsert.always()
+	policy.memoryLinks.allowUpdate.always()
+	policy.memoryLinks.allowDelete.always()
+
+	policy.memoryChunks.allowRead.always()
+	policy.memoryChunks.allowInsert.always()
+	policy.memoryChunks.allowUpdate.always()
+	policy.memoryChunks.allowDelete.always()
+
+	policy.extractionRuns.allowRead.always()
+	policy.extractionRuns.allowInsert.always()
+	policy.extractionRuns.allowUpdate.always()
+	policy.extractionRuns.allowDelete.always()
 })
 
 export default permissions

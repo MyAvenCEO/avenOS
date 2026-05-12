@@ -12,8 +12,8 @@ export const GET: RequestHandler = async () => {
 		ensureVaultDir()
 		ensureSoulMarkdownFile()
 		ensureMaiaRulesFile()
-		const notes = listVaultNotes()
-		rebuildVaultGraph()
+		const notes = await listVaultNotes()
+		await rebuildVaultGraph()
 		const snapshot = buildVaultSnapshotPayload(notes)
 		const vaultMarkdown = snapshot.fullMarkdown + memoryVaultSnapshotMaiaAppendix()
 		return json({

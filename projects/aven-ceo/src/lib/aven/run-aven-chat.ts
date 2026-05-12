@@ -34,7 +34,7 @@ async function* streamAvenChatCore(
 	/** Same index as the `mN.md` file this turn will write on `done` (provenance for memory tools). */
 	const reservedAssistantTurn = peekNextAssistantMessageIndex()
 
-	const { systemContent, preview, fullContext } = buildAvenChatRoundContext(model, messages)
+	const { systemContent, preview, fullContext } = await buildAvenChatRoundContext(model, messages)
 
 	const tools = memoryToolsOpenAI()
 	const thread: ChatCompletionMessageParam[] = [
@@ -112,7 +112,7 @@ async function* streamAvenChatCore(
 				}
 
 				yield { type: 'status', detail: `Maia · ${memoryToolRunningLine(fn.name, parsed)}` }
-				const payload = memoryToolSourceAls.run(
+				const payload = await memoryToolSourceAls.run(
 					{ type: 'talk', messageTurn: reservedAssistantTurn },
 					() => executeMemoryTool(fn.name, parsed)
 				)
