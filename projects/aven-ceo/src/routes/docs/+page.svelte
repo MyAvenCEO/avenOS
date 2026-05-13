@@ -3,7 +3,7 @@ import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 </script>
 
 <svelte:head>
-	<title>Documentation — Aven CEO</title>
+	<title>Dokumentation — Aven CEO</title>
 </svelte:head>
 
 <div class="flex min-h-dvh flex-col bg-background text-foreground font-sans antialiased">
@@ -12,12 +12,12 @@ import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 	<main class="flex-1 px-6 py-10 sm:px-10 sm:py-14">
 		<div class="mx-auto max-w-5xl">
 			<header class="mb-10">
-				<p class="tech-label mb-3">Documentation</p>
+				<p class="tech-label mb-3">Dokumentation</p>
 				<h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">AvenOS</h1>
 				<p class="mt-2 max-w-prose text-sm leading-relaxed text-muted-foreground">
 					<strong class="font-medium text-foreground">AvenOS</strong>
-					is our foundational operating layer — shared libraries, runtime contracts, sync, and
-					deployment fabric — for AvenCEO, integrations, and everything documented here.
+					ist unsere operative Grundschicht — gemeinsame Bibliotheken, Laufzeitverträge, Sync und
+					Deployment für AvenCEO, Integrationen und alle hier dokumentierten Komponenten.
 				</p>
 			</header>
 
@@ -44,15 +44,15 @@ import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 						</svg>
 					</div>
 					<div>
-						<p class="text-sm font-semibold tracking-tight text-foreground">Vibe View Library</p>
+						<p class="text-sm font-semibold tracking-tight text-foreground">Vibe-View-Bibliothek</p>
 						<p class="mt-0.5 text-xs text-muted-foreground leading-snug">
-							Kitchen-sink sandbox: cross-origin artifact viewers, schema → UI.
+							Sandbox-Playground: Artefakt-Viewer fremder Herkunft, Schema → UI.
 						</p>
 					</div>
 					<span
 						class="mt-auto flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground opacity-50 transition-opacity group-hover:opacity-100"
 					>
-						Explore
+						Öffnen
 						<svg
 							class="size-3"
 							viewBox="0 0 24 24"

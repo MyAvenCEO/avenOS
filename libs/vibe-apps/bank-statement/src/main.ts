@@ -88,7 +88,7 @@ function renderPartyCard(party: UnknownRecord, roleTitle: string, footerHtml = '
 	const name = typeof party.name === 'string' ? party.name : '–'
 	const contact = typeof party.contact_name === 'string' ? party.contact_name.trim() : ''
 	const contactBlock = contact
-		? `<div class="muted" style="margin-top:4px">Contact: ${esc(contact)}</div>`
+		? `<div class="muted" style="margin-top:4px">Ansprechpartner: ${esc(contact)}</div>`
 		: ''
 	const street = typeof party.street === 'string' ? party.street : ''
 	const pc = typeof party.postal_code === 'string' ? party.postal_code : ''
@@ -145,7 +145,7 @@ function renderTxnRows(transactions: unknown[], cur: string): string {
 				)
 			}
 			if (raw.fx_surcharge_eur != null && typeof raw.fx_surcharge_eur === 'number') {
-				fxBits.push(`FX fee EUR ${fmtMoney(raw.fx_surcharge_eur, cur)}`)
+				fxBits.push(`FX-Gebühr EUR ${fmtMoney(raw.fx_surcharge_eur, cur)}`)
 			}
 			if (
 				raw.foreign_exchange_fee_percent != null &&
@@ -197,12 +197,12 @@ function render() {
 	const iban = typeof overview.iban === 'string' ? overview.iban.trim() : ''
 
 	const heroLeft = stmtId
-		? `<div><div class="bs-banner-title">${esc(stmtId)}</div><div class="bs-banner-sub">Statement ID</div></div>`
-		: `<div><div class="bs-banner-title">Bank statement</div><div class="bs-banner-sub">Document</div></div>`
+		? `<div><div class="bs-banner-title">${esc(stmtId)}</div><div class="bs-banner-sub">Auszugs-Nr.</div></div>`
+		: `<div><div class="bs-banner-title">Kontoauszug</div><div class="bs-banner-sub">Dokument</div></div>`
 
 	const heroRight =
 		closeB != null && typeof closeB === 'number'
-			? `<div class="bs-banner-money"><div>${fmtMoney(closeB, cur)}</div><div class="bs-banner-sub">Closing balance</div></div>`
+			? `<div class="bs-banner-money"><div>${fmtMoney(closeB, cur)}</div><div class="bs-banner-sub">Schlusssaldo</div></div>`
 			: ''
 
 	const line2Rows: string[] = []
@@ -227,18 +227,18 @@ function render() {
 		periodFrom && periodTo ? `${periodFrom} – ${periodTo}` : periodFrom || periodTo || null
 
 	/* Line 3: same value / label grid as line 2 (compact). Statement kind first, flush-left grid. */
-	addField(line3Rows, 'Statement kind', kindLabel)
-	addField(line3Rows, 'Period', periodRange)
-	addField(line3Rows, 'Opening balance', openB, true)
-	addField(line3Rows, 'Issue date', issueD || null)
-	addField(line3Rows, 'Payment due', dueD || null)
+	addField(line3Rows, 'Auszugsart', kindLabel)
+	addField(line3Rows, 'Zeitraum', periodRange)
+	addField(line3Rows, 'Anfangssaldo', openB, true)
+	addField(line3Rows, 'Ausstellungsdatum', issueD || null)
+	addField(line3Rows, 'Zahlungsfrist', dueD || null)
 
 	/* Line 2: account / routing; IBAN last. */
 	addField(line2Rows, 'BIC / SWIFT', overview.bic)
-	addField(line2Rows, 'Bank code', overview.domestic_bank_code)
-	addField(line2Rows, 'Account number', overview.account_number)
-	addField(line2Rows, 'Product', overview.product_name)
-	addField(line2Rows, 'Card (last 4)', overview.card_last_four)
+	addField(line2Rows, 'Bankleitzahl', overview.domestic_bank_code)
+	addField(line2Rows, 'Kontonummer', overview.account_number)
+	addField(line2Rows, 'Produkt', overview.product_name)
+	addField(line2Rows, 'Karte (letzte 4)', overview.card_last_four)
 	addField(line2Rows, 'IBAN', iban || null, false, true)
 
 	const bannerLine2 =
@@ -270,28 +270,28 @@ function render() {
 		typeof overview.branch_name === 'string' && overview.branch_name.trim()
 			? `<div class="muted" style="margin-top:8px">Branch: ${esc(overview.branch_name.trim())}</div>`
 			: ''
-	const instCard = renderPartyCard(inst, 'Institution', branchFooter)
+	const instCard = renderPartyCard(inst, 'Institut', branchFooter)
 
-	const parties = `<div class="bs-grid">${renderPartyCard(holder, 'Account holder')}${instCard}</div>`
+	const parties = `<div class="bs-grid">${renderPartyCard(holder, 'Kontoinhaber')}${instCard}</div>`
 
 	const tx = state.transactions as unknown[]
 	const txBody = renderTxnRows(tx, cur)
 	const table = txBody
-		? `<div class="bs-items-wrap"><table class="bs-items" aria-label="Transactions">
+		? `<div class="bs-items-wrap"><table class="bs-items" aria-label="Umsätze">
 <thead><tr>
-  <th>Booking date</th>
-  <th>Value date</th>
-  <th>Description</th>
-  <th class="num">Amount</th>
-  <th class="num">Balance</th>
-  <th class="num">FX rate</th>
+  <th>Buchungsdatum</th>
+  <th>Wertstellung</th>
+  <th>Verwendungszweck</th>
+  <th class="num">Betrag</th>
+  <th class="num">Saldo</th>
+  <th class="num">Kurs</th>
 </tr></thead><tbody>${txBody}</tbody></table></div>`
 		: ''
 
 	const notesRaw = state.notes
 	const notesBlock =
 		typeof notesRaw === 'string' && notesRaw.trim()
-			? `<div class="bs-card"><h4>Notes</h4><div class="bs-notes">${esc(notesRaw.trim())}</div></div>`
+			? `<div class="bs-card"><h4>Hinweise</h4><div class="bs-notes">${esc(notesRaw.trim())}</div></div>`
 			: ''
 
 	$root.innerHTML = `<div class="bs-ui-container">${banner}${parties}${table}${notesBlock}</div>`

@@ -15,11 +15,11 @@ export interface VibeAppDefinition {
 
 /** Default payload for the todos mini-app (`toolArguments` / structured content shape). */
 export const todosDemoToolArguments = {
-	title: 'Workspace todos',
+	title: 'Arbeitsaufträge',
 	items: [
-		{ id: '1', text: 'Ship vibe-app sandbox', done: true },
-		{ id: '2', text: 'Wire Jazz-backed artifacts', done: false },
-		{ id: '3', text: 'Harden CSP for production', done: false }
+		{ id: '1', text: 'Vibe-App-Sandbox ausliefern', done: true },
+		{ id: '2', text: 'Jazz-gestützte Artefakte anbinden', done: false },
+		{ id: '3', text: 'CSP für Produktion schärfen', done: false }
 	]
 } as const
 
@@ -29,34 +29,34 @@ export { bankStatementDemoToolArguments, invoiceDemoToolArguments }
 export const vibeAppList: VibeAppDefinition[] = [
 	{
 		id: 'invoice',
-		label: 'Invoice',
-		description: 'Invoice viewer (legacy layout) with a schema-shaped demo document.',
+		label: 'Rechnung',
+		description: 'Rechnungsansicht (Legacy-Layout) mit schema-geprägter Demo.',
 		getToolArguments: () =>
 			JSON.parse(JSON.stringify(invoiceDemoToolArguments)) as Record<string, unknown>,
 		getToolResult: () =>
 			Promise.resolve({
-				content: [{ type: 'text', text: 'Demo invoice tool finished OK' }]
+				content: [{ type: 'text', text: 'Demo-Rechnungstool beendet.' }]
 			})
 	},
 	{
 		id: 'bank-statement',
-		label: 'Bank statement',
-		description: 'Kontoauszug-style viewer aligned with OCR bank_statement schema.',
+		label: 'Kontoauszug',
+		description: 'Kontoauszug-Ansicht, angeglichen an das OCR-Schema bank_statement.',
 		getToolArguments: () =>
 			JSON.parse(JSON.stringify(bankStatementDemoToolArguments)) as Record<string, unknown>,
 		getToolResult: () =>
 			Promise.resolve({
-				content: [{ type: 'text', text: 'Demo bank statement tool finished OK' }]
+				content: [{ type: 'text', text: 'Demo-Kontoauszug beendet.' }]
 			})
 	},
 	{
 		id: 'todos',
-		label: 'Todos',
-		description: 'Minimal task list with host ↔ sandbox sync.',
+		label: 'Aufgaben',
+		description: 'Kleine Aufgabenliste mit Host- und Sandbox-Sync.',
 		getToolArguments: () => ({ ...todosDemoToolArguments }),
 		getToolResult: () =>
 			Promise.resolve({
-				content: [{ type: 'text', text: 'Demo tool finished OK' }]
+				content: [{ type: 'text', text: 'Demo beendet.' }]
 			})
 	}
 ]

@@ -43,7 +43,10 @@ function fmtDate(s: unknown): string {
 function fmtMoney(n: unknown, currency: string): string {
 	if (n == null || typeof n !== 'number' || Number.isNaN(n)) return '–'
 	try {
-		return new Intl.NumberFormat('de-DE', { style: 'currency', currency: currency || 'EUR' }).format(n)
+		return new Intl.NumberFormat('de-DE', {
+			style: 'currency',
+			currency: currency || 'EUR'
+		}).format(n)
 	} catch {
 		return `${fmtNum(n)} ${currency}`
 	}
@@ -80,7 +83,7 @@ function renderPartyCard(party: unknown, roleTitle: string): string {
 	const nameInner = `<span class="inv-party-name-text">${esc(name)}</span>`
 	const contact = typeof party.contact_name === 'string' ? party.contact_name.trim() : ''
 	const contactBlock = contact
-		? `<div class="party-representative-line" role="group" aria-label="Contact person"><div class="party-representative-sublabel muted">Contact person</div><div class="inv-party-rep-name">${esc(contact)}</div></div>`
+		? `<div class="party-representative-line" role="group" aria-label="Ansprechpartner"><div class="party-representative-sublabel muted">Ansprechpartner</div><div class="inv-party-rep-name">${esc(contact)}</div></div>`
 		: ''
 	const street = typeof party.street === 'string' ? party.street : ''
 	const pc = typeof party.postal_code === 'string' ? party.postal_code : ''
@@ -89,11 +92,15 @@ function renderPartyCard(party: unknown, roleTitle: string): string {
 	const plzCity = [pc, city].filter(Boolean).join(' ')
 	const addrBits: string[] = []
 	if (street) {
-		addrBits.push(`<div class="line inv-party-addr-line" style="white-space:pre-line">${esc(street)}</div>`)
+		addrBits.push(
+			`<div class="line inv-party-addr-line" style="white-space:pre-line">${esc(street)}</div>`
+		)
 	}
 	if (plzCity) addrBits.push(`<div class="line inv-party-addr-line">${esc(plzCity)}</div>`)
 	if (country) addrBits.push(`<div class="line muted inv-party-addr-line">${esc(country)}</div>`)
-	const addressBlock = addrBits.length ? `<div class="inv-party-address-block">${addrBits.join('')}</div>` : ''
+	const addressBlock = addrBits.length
+		? `<div class="inv-party-address-block">${addrBits.join('')}</div>`
+		: ''
 
 	const idents = party.identifiers
 	let idHtml = ''
@@ -127,7 +134,9 @@ function renderTaxBreakdownRow(r: UnknownRecord, cur: string): string {
 			? String(r.tax_group_letter).trim().charAt(0)
 			: ''
 	const tx =
-		r.tax_rate_text != null && String(r.tax_rate_text).trim() !== '' ? String(r.tax_rate_text).trim() : ''
+		r.tax_rate_text != null && String(r.tax_rate_text).trim() !== ''
+			? String(r.tax_rate_text).trim()
+			: ''
 	const hasPct = p != null && p !== '' && !Number.isNaN(Number(p))
 	let lab = 'Tax'
 	if (hasPct) {
@@ -141,7 +150,8 @@ function renderTaxBreakdownRow(r: UnknownRecord, cur: string): string {
 	} else if (tx) {
 		lab = `Tax ${tx}`
 	}
-	const amt = r.tax_amount != null && typeof r.tax_amount === 'number' ? fmtMoney(r.tax_amount, cur) : '–'
+	const amt =
+		r.tax_amount != null && typeof r.tax_amount === 'number' ? fmtMoney(r.tax_amount, cur) : '–'
 	const netGrossSub =
 		r.net_subtotal != null || r.gross_subtotal != null
 			? `<span class="inv-totals-line__tax-sub">${[
@@ -160,7 +170,10 @@ function renderLineRows(lineItems: unknown, cur: string): string {
 	return lineItems
 		.map((raw, i) => {
 			if (!isRecord(raw)) return ''
-			const kind = raw.line_kind != null && String(raw.line_kind).trim() !== '' ? String(raw.line_kind).trim() : ''
+			const kind =
+				raw.line_kind != null && String(raw.line_kind).trim() !== ''
+					? String(raw.line_kind).trim()
+					: ''
 			const trCls = kind ? `inv-line inv-line-${kind.replace(/[^a-z0-9_-]/gi, '_')}` : 'inv-line'
 			const pos = raw.position
 			const art = raw.article_number
@@ -185,7 +198,10 @@ function renderLineRows(lineItems: unknown, cur: string): string {
 			let taxCell = '–'
 			if (taxPct != null && taxPct !== '' && !Number.isNaN(Number(taxPct))) {
 				const main = `${fmtNum(Number(taxPct))}%`
-				const extra = g && /^[A-Za-z]$/.test(g) ? ` <span class="muted" title="POS tax group">(${esc(g)})</span>` : ''
+				const extra =
+					g && /^[A-Za-z]$/.test(g)
+						? ` <span class="muted" title="POS tax group">(${esc(g)})</span>`
+						: ''
 				taxCell = `${main}${extra}`
 			}
 			const amt = raw.amount
@@ -221,7 +237,13 @@ function renderEmbeddedTotals(totals: unknown, cur: string): string {
 	}
 
 	let taxLabel = 'Tax total'
-	if (!hasBreakdown && typeof sub === 'number' && sub > 0 && typeof taxTotal === 'number' && taxTotal > 0) {
+	if (
+		!hasBreakdown &&
+		typeof sub === 'number' &&
+		sub > 0 &&
+		typeof taxTotal === 'number' &&
+		taxTotal > 0
+	) {
 		const implied = (taxTotal / sub) * 100
 		if (implied > 0.05 && implied < 99.95) {
 			taxLabel = `Tax total · ≈${fmtNum(Math.round(implied * 10) / 10)}%`
@@ -245,7 +267,9 @@ function renderEmbeddedTotals(totals: unknown, cur: string): string {
 		)
 	}
 	parts.push(bdHtml)
-	parts.push(`<div class="${taxRowCls}"><span>${esc(taxLabel)}</span><span class="num">${taxAmt}</span></div>`)
+	parts.push(
+		`<div class="${taxRowCls}"><span>${esc(taxLabel)}</span><span class="num">${taxAmt}</span></div>`
+	)
 	if (invTotal != null) {
 		parts.push(
 			`<div class="row inv-totals-line inv-totals-line--invoice-total"><span>Invoice total</span><span class="num">${fmtMoney(invTotal, cur)}</span></div>`
@@ -324,23 +348,23 @@ function render() {
 			invNum &&
 			`<div class="inv-banner-hero-left inv-banner-hero-invoice">
   <div class="inv-banner-value inv-banner-kind">${esc(invNum)}</div>
-  <div class="inv-banner-sublabel">Invoice #</div>
+  <div class="inv-banner-sublabel">Rechnungs-Nr.</div>
 </div>`
 		const right =
 			grand != null
 				? `<div class="inv-banner-hero-right">
   <div class="inv-banner-value inv-banner-money">${fmtMoney(grand, cur)}</div>
-  <div class="inv-banner-sublabel">Total amount</div>
+  <div class="inv-banner-sublabel">Gesamtbetrag</div>
 </div>`
 				: ''
 		heroRow = `<div class="inv-banner-hero-row${invNum ? '' : ' inv-banner-hero-only-right'}">${left || '<div></div>'}${right}</div>`
 	}
 
 	const midRightBits: string[] = []
-	if (dueD) midRightBits.push(invBannerField(esc(fmtDate(dueD)), 'Due'))
-	if (issueD) midRightBits.push(invBannerField(esc(fmtDate(issueD)), 'Issue date'))
+	if (dueD) midRightBits.push(invBannerField(esc(fmtDate(dueD)), 'Fällig'))
+	if (issueD) midRightBits.push(invBannerField(esc(fmtDate(issueD)), 'Ausstellungsdatum'))
 	if (Array.isArray(refs) && refs.length) {
-		midRightBits.push(invBannerField(refs.map((r) => esc(String(r))).join(' · '), 'Referenced'))
+		midRightBits.push(invBannerField(refs.map((r) => esc(String(r))).join(' · '), 'Referenz'))
 	}
 
 	let midRow = ''
@@ -348,7 +372,7 @@ function render() {
 		midRow = `<div class="inv-banner-mid inv-banner-mid--compact">
   <div class="inv-banner-mid-left">
     <div class="inv-banner-compact-value">${esc(docKind)}</div>
-    <div class="inv-banner-compact-sublabel">Document type</div>
+    <div class="inv-banner-compact-sublabel">Belegart</div>
   </div>
   <div class="inv-banner-mid-dates inv-banner-mid-dates--merged">${midRightBits.join('')}</div>
 </div>`
@@ -356,7 +380,7 @@ function render() {
 		midRow = `<div class="inv-banner-mid inv-banner-mid--compact">
   <div class="inv-banner-mid-left">
     <div class="inv-banner-compact-value">${esc(docKind)}</div>
-    <div class="inv-banner-compact-sublabel">Document type</div>
+    <div class="inv-banner-compact-sublabel">Belegart</div>
   </div>
 </div>`
 	} else if (midRightBits.length) {
@@ -366,10 +390,12 @@ function render() {
 	}
 
 	const fieldBits: string[] = []
-	if (orderN) fieldBits.push(invBannerField(esc(orderN), 'Order / project'))
-	if (custN) fieldBits.push(invBannerField(esc(custN), 'Customer #'))
+	if (orderN) fieldBits.push(invBannerField(esc(orderN), 'Auftrag / Projekt'))
+	if (custN) fieldBits.push(invBannerField(esc(custN), 'Kundennr.'))
 
-	const fieldsRow = fieldBits.length ? `<div class="inv-banner-fields-row">${fieldBits.join('')}</div>` : ''
+	const fieldsRow = fieldBits.length
+		? `<div class="inv-banner-fields-row">${fieldBits.join('')}</div>`
+		: ''
 
 	const banner =
 		heroRow || midRow || fieldsRow
@@ -377,8 +403,8 @@ function render() {
 			: ''
 
 	const parties = `<div class="invoice-grid">
-  ${renderPartyCard(state.vendor, 'Vendor')}
-  ${renderPartyCard(state.buyer, 'Buyer')}
+  ${renderPartyCard(state.vendor, 'Lieferant')}
+  ${renderPartyCard(state.buyer, 'Käufer')}
 </div>`
 
 	const stmts = Array.isArray(state.statements) ? state.statements : []
@@ -392,26 +418,27 @@ function render() {
 		const period = typeof st.service_period === 'string' ? st.service_period.trim() : ''
 		let capInner = ''
 		if (title && period) {
-			capInner = `<div class="invoice-items-cap-title-row"><div class="invoice-cap-block invoice-cap-block--title">${esc(title)}</div><div class="invoice-items-cap-subline"><div class="invoice-cap-kv" role="group" aria-label="Service period"><span class="invoice-cap-k">SERVICE PERIOD</span><span class="invoice-cap-v">${esc(period)}</span></div></div></div>`
+			capInner = `<div class="invoice-items-cap-title-row"><div class="invoice-cap-block invoice-cap-block--title">${esc(title)}</div><div class="invoice-items-cap-subline"><div class="invoice-cap-kv" role="group" aria-label="Leistungszeitraum"><span class="invoice-cap-k">LEISTUNGSZEITRAUM</span><span class="invoice-cap-v">${esc(period)}</span></div></div></div>`
 		} else if (title) {
 			capInner = `<div class="invoice-cap-block invoice-cap-block--title">${esc(title)}</div>`
 		} else if (period) {
-			capInner = `<div class="invoice-items-cap-title-row invoice-items-cap-title-row--subline-only"><div class="invoice-items-cap-subline"><div class="invoice-cap-kv" role="group" aria-label="Service period"><span class="invoice-cap-k">SERVICE PERIOD</span><span class="invoice-cap-v">${esc(period)}</span></div></div></div>`
+			capInner = `<div class="invoice-items-cap-title-row invoice-items-cap-title-row--subline-only"><div class="invoice-items-cap-subline"><div class="invoice-cap-kv" role="group" aria-label="Leistungszeitraum"><span class="invoice-cap-k">LEISTUNGSZEITRAUM</span><span class="invoice-cap-v">${esc(period)}</span></div></div></div>`
 		}
-		const cap =
-			capInner ? `<div class="invoice-items-cap invoice-items-cap--statement">${capInner}</div>` : ''
+		const cap = capInner
+			? `<div class="invoice-items-cap invoice-items-cap--statement">${capInner}</div>`
+			: ''
 		const lineBody = renderLineRows(st.line_items, cur)
 		const tbl = lineBody
-			? `<table class="invoice-items" aria-label="Line items"><thead><tr>
+			? `<table class="invoice-items" aria-label="Positionen"><thead><tr>
   <th class="idx">#</th>
   <th>Pos.</th>
   <th>Art.-Nr.</th>
-  <th>Description</th>
+  <th>Bezeichnung</th>
   <th class="num">Menge</th>
   <th>ME</th>
   <th class="num">Einzelpreis</th>
-  <th class="num">Tax %</th>
-  <th class="num">Amount</th>
+  <th class="num">USt. %</th>
+  <th class="num">Betrag</th>
 </tr></thead><tbody>${lineBody}</tbody></table>`
 			: ''
 
@@ -436,7 +463,7 @@ function render() {
 				outBlock
 			].join('')
 			if (finInner) {
-				financials = `<div class="invoice-financials" role="group" aria-label="Payments and totals">${finInner}</div>`
+				financials = `<div class="invoice-financials" role="group" aria-label="Zahlungen und Summen">${finInner}</div>`
 			}
 		}
 
@@ -445,14 +472,18 @@ function render() {
 
 	const payInstr = state.payment_instructions
 	const instrBlock =
-		typeof payInstr === 'string' && payInstr.trim() ? renderPaymentInstructions(payInstr.trim()) : ''
+		typeof payInstr === 'string' && payInstr.trim()
+			? renderPaymentInstructions(payInstr.trim())
+			: ''
 
 	$root.innerHTML = `<div class="invoice-ui-container">${banner}${parties}${sectionsHtml}${instrBlock}</div>`
 }
 
 async function pushModelContext() {
 	const summary =
-		isInvoicePayload(state) && isRecord(state.header) && typeof state.header.invoice_number === 'string'
+		isInvoicePayload(state) &&
+		isRecord(state.header) &&
+		typeof state.header.invoice_number === 'string'
 			? `Invoice ${state.header.invoice_number}`
 			: 'Invoice'
 	await app.updateModelContext({

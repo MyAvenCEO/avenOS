@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
 	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>Todos — Aven</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Aufgaben — Aven</title>
 	</head>
 	<body>
 		<div id="doc-root">
@@ -11,37 +11,37 @@
 				<section class="td-card">
 					<div class="td-banner-grid">
 						<div>
-							<span class="td-eyebrow">Task list</span>
-							<h1 id="title" class="td-banner-title">Todos</h1>
+							<span class="td-eyebrow">Aufgabenliste</span>
+							<h1 id="title" class="td-banner-title">Aufgaben</h1>
 						</div>
 						<div class="td-banner-stat">
-							<span class="td-field-label">Remaining</span>
-							<div id="count" class="td-banner-accent">0 of 0</div>
+							<span class="td-field-label">Offen</span>
+							<div id="count" class="td-banner-accent">0 von 0</div>
 						</div>
 					</div>
 				</section>
 
 				<section class="td-card">
-					<h4>Add item</h4>
+					<h4>Neu</h4>
 					<form id="add-form" class="td-add-form">
 						<input
 							id="add-input"
 							class="td-input"
 							type="text"
-							placeholder="Describe a task…"
+							placeholder="Aufgabe beschreiben …"
 							required
 							autocomplete="off"
-						/>
-						<button class="td-btn td-btn--primary" type="submit">Add</button>
+						>
+						<button class="td-btn td-btn--primary" type="submit">Hinzufügen</button>
 					</form>
 				</section>
 
 				<section class="td-card td-card--list">
-					<h4>Items</h4>
+					<h4>Einträge</h4>
 					<ul id="list" class="td-list"></ul>
 					<div class="td-list-footer">
 						<button id="clear-done-btn" class="td-btn td-btn--ghost" type="button">
-							Clear done
+							Erledigte löschen
 						</button>
 					</div>
 				</section>

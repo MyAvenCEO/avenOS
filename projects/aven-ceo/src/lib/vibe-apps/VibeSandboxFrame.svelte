@@ -25,7 +25,7 @@ onMount(() => {
 		const def = vibeAppById(appId)
 		const html = bundles[appId]
 		if (!html?.trim()) {
-			initError = `No built bundle for “${appId}”. From the repo root, run: bun run build:vibe-apps`
+			initError = `Kein Build-Bundle für „${appId}“. Im Repo-Root ausführen: bun run build:vibe-apps`
 			return
 		}
 		try {
@@ -70,7 +70,7 @@ onDestroy(() => {
 	>
 		<iframe
 			bind:this={iframe}
-			title="Vibe app sandbox"
+			title="Vibe-App-Sandbox"
 			class="block min-h-0 w-full flex-1 border-0 bg-transparent"
 		></iframe>
 	</div>

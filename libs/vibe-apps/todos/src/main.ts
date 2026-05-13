@@ -5,7 +5,7 @@ import './todos.css'
 type Todo = { id: string; text: string; done: boolean }
 type TodoListConfig = { title?: string; items?: Todo[] }
 
-const state: { title: string; todos: Todo[] } = { title: 'Todos', todos: [] }
+const state: { title: string; todos: Todo[] } = { title: 'Aufgaben', todos: [] }
 
 function byId<T extends HTMLElement>(id: string): T {
 	const el = document.getElementById(id)
@@ -30,7 +30,7 @@ function render() {
 	if (state.todos.length === 0) {
 		const li = document.createElement('li')
 		li.className = 'empty'
-		li.textContent = 'No todos yet — add one above.'
+		li.textContent = 'Noch keine Aufgaben — oben hinzufügen.'
 		$list.appendChild(li)
 	} else {
 		for (const t of state.todos) {
@@ -38,9 +38,9 @@ function render() {
 			li.className = `td-row${t.done ? ' done' : ''}`
 			li.dataset.id = t.id
 			li.innerHTML = `
-              <input type="checkbox" ${t.done ? 'checked' : ''} aria-label="Mark done">
+              <input type="checkbox" ${t.done ? 'checked' : ''} aria-label="Als erledigt markieren">
               <span class="td-row-text" contenteditable="plaintext-only" spellcheck="false"></span>
-              <button class="td-btn td-btn--icon delete" aria-label="Delete">×</button>
+              <button class="td-btn td-btn--icon delete" aria-label="Löschen">×</button>
             `
 			const textEl = li.querySelector('.td-row-text')
 			if (!textEl) throw new Error('Missing .td-row-text in row')
@@ -49,7 +49,7 @@ function render() {
 		}
 	}
 	const remaining = state.todos.filter((t) => !t.done).length
-	$count.textContent = `${remaining} of ${state.todos.length} remaining`
+	$count.textContent = `${remaining} von ${state.todos.length} offen`
 	const hasDone = state.todos.some((t) => t.done)
 	if ($clearDone instanceof HTMLButtonElement) {
 		$clearDone.disabled = !hasDone
@@ -62,7 +62,7 @@ async function pushModelContext() {
 		content: [
 			{
 				type: 'text',
-				text: `${state.todos.filter((t) => !t.done).length} of ${state.todos.length} todos remaining.`
+				text: `${state.todos.filter((t) => !t.done).length} von ${state.todos.length} Aufgaben offen.`
 			}
 		]
 	})
