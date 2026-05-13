@@ -2,7 +2,7 @@
 	<title>aven.ceo — AvenCEO · dein privates zweites Gehirn für Gründer &amp; CEOs</title>
 	<meta
 		name="description"
-		content="Lieber CEO und Gründer: 10+ Stunden mehr Zeit pro Woche — Ein AvenCEO verwandelt deine Arbeitsweise in selbstoptimierende KI‑Skills und arbeitet so einen Großteil deines zeitraubenden Alltags ab."
+		content="Lieber Gründer und CEO: 10+ Stunden mehr Zeit pro Woche — Ein AvenCEO verwandelt deine Arbeitsweise in selbstoptimierende KI‑Skills und arbeitet so einen Großteil deines zeitraubenden Alltags ab."
 	>
 	<link rel="preload" as="image" href="/hero.png" />
 </svelte:head>
@@ -11,6 +11,11 @@
 	import { beamAvatarSvg, paletteFromCommaString } from '$lib/intent-mock/beam-avatar'
 	import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 	import { loadPublishersWithSkills, skillDetailHref } from '$lib/skills/loader'
+	import danielPhoto from '../images/daniel.png'
+	import samuelPhoto from '../images/samuel.jpg'
+
+	/** Beam “seed” string — AvenOS avatar matches Samuel’s early‑alpha beam geometry. */
+	const beamSeedSamuelProfile = 'Samuel Andert'
 
 	let heroEl: HTMLElement | undefined = $state()
 	let heroInView = $state(true)
@@ -136,7 +141,7 @@
 						class="text-[1.55rem] font-semibold tracking-[-0.03em] leading-snug text-white sm:text-3xl md:text-[2.35rem] md:leading-[1.15]"
 					>
 						<span class="block text-lg font-normal text-white/82 sm:text-xl md:text-2xl"
-							>Lieber CEO und Gründer,</span
+							>Lieber Gründer und CEO,</span
 						>
 						<span class="mt-3 block">10+ Stunden mehr Zeit pro Woche</span>
 						<span
@@ -175,7 +180,7 @@
 					<strong class="font-medium text-foreground/82">weltweit ersten echten agentischen CEOs der Welt</strong>
 					— kein Chatbot am Rand, sondern
 					<strong class="font-medium text-foreground/80">KI im Gründerteam</strong>, die Firma, Produkt und Alltag von
-					Grund auf mit aufbaut.</p>
+					Grund auf mit aufbauen.</p>
 			</header>
 
 			<div class="mx-auto mt-8 grid max-w-4xl gap-3 sm:grid-cols-2 sm:gap-4">
@@ -183,10 +188,16 @@
 					<div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-x-2 sm:gap-x-3">
 						<div class="flex min-w-0 flex-col items-center justify-start text-center">
 							<div
-								class="size-14 shrink-0 overflow-hidden rounded-full ring-2 ring-background sm:size-16 [&>svg]:block [&>svg]:size-full"
-								aria-hidden="true"
+								class="size-14 shrink-0 overflow-hidden rounded-full ring-2 ring-background sm:size-16"
 							>
-								{@html beamAvatarSvg('Samuel Andert', paletteHuman, 64, 'fnd-h-s')}
+								<img
+									src={samuelPhoto}
+									alt="Samuel Andert"
+									class="h-full w-full object-cover"
+									width="64"
+									height="64"
+									decoding="async"
+								/>
 							</div>
 							<p class="mt-2 text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/36">Mensch</p>
 							<p class="mt-0.5 truncate text-[12px] font-semibold tracking-tight text-foreground sm:text-[13px]">
@@ -223,10 +234,16 @@
 					<div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-x-2 sm:gap-x-3">
 						<div class="flex min-w-0 flex-col items-center justify-start text-center">
 							<div
-								class="size-14 shrink-0 overflow-hidden rounded-full ring-2 ring-background sm:size-16 [&>svg]:block [&>svg]:size-full"
-								aria-hidden="true"
+								class="size-14 shrink-0 overflow-hidden rounded-full ring-2 ring-background sm:size-16"
 							>
-								{@html beamAvatarSvg('Daniel Janz', paletteHuman, 64, 'fnd-h-d')}
+								<img
+									src={danielPhoto}
+									alt="Daniel Janz"
+									class="h-full w-full object-cover"
+									width="64"
+									height="64"
+									decoding="async"
+								/>
 							</div>
 							<p class="mt-2 text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/36">Mensch</p>
 							<p class="mt-0.5 truncate text-[12px] font-semibold tracking-tight text-foreground sm:text-[13px]">
@@ -243,7 +260,7 @@
 								class="size-14 shrink-0 overflow-hidden rounded-full ring-2 ring-background sm:size-16 [&>svg]:block [&>svg]:size-full"
 								aria-hidden="true"
 							>
-								{@html beamAvatarSvg('AvenOS', paletteKi, 64, 'fnd-k-o')}
+								{@html beamAvatarSvg(beamSeedSamuelProfile, paletteHuman, 64, 'fnd-k-o')}
 							</div>
 							<p class="mt-2 font-mono text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/40">
 								KI‑AGENT</p>

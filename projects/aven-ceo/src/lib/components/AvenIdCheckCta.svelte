@@ -20,7 +20,7 @@
 	function submit(e: SubmitEvent) {
 		e.preventDefault()
 		if (!slug) return
-		goto(`/pricing?name=${encodeURIComponent(slug)}#aven-id`)
+		goto(`/waitlist?intent=aven-id&preferred=${encodeURIComponent(slug)}`)
 	}
 
 	const wrapperClass =
@@ -29,7 +29,7 @@
 			: 'rounded-2xl border border-border/40 bg-white/55 px-5 py-7 ring-1 ring-black/5 sm:px-8 sm:py-8'
 </script>
 
-<form onsubmit={submit} class={wrapperClass} aria-label="AvenCEO‑Name prüfen">
+<form onsubmit={submit} class={wrapperClass} aria-label="AvenCEO‑Name zur Warteliste">
 	<p class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-tuscan-sun">
 		Limited Time Offer · Nur 10× Early&nbsp;Bird
 	</p>
@@ -61,7 +61,7 @@
 			disabled={!slug}
 			class="inline-flex min-h-12 shrink-0 items-center justify-center rounded-full bg-foreground px-7 text-[13px] font-semibold text-background transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40 sm:px-8"
 		>
-			Verfügbarkeit prüfen →
+			Weiter zur Warteliste →
 		</button>
 	</div>
 	<p class="mt-3 text-[12px] leading-snug text-foreground/55">

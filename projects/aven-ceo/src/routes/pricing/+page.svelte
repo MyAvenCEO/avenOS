@@ -32,6 +32,7 @@
 			</a>
 			<nav class="flex items-center gap-5 text-[11px] font-semibold uppercase tracking-[0.12em] opacity-70">
 				<a href="/skills" class="transition-opacity hover:opacity-100">Skills</a>
+
 				<a href="/pricing" class="transition-opacity opacity-100">Preise</a>
 				<a
 					href="/me"
@@ -120,10 +121,14 @@
 						</div>
 						<div class="flex justify-center">
 							<a
-								href={claimedName ? `/me?name=${encodeURIComponent(claimedName)}` : '/me'}
+								href={
+									claimedName
+										? `/waitlist?intent=aven-id&preferred=${encodeURIComponent(claimedName)}`
+										: '/waitlist?intent=aven-id'
+								}
 								class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-foreground px-8 text-[12px] font-semibold text-background transition-opacity hover:opacity-90 sm:text-[13px]"
 							>
-								AvenID sichern
+								Aven Name sichern
 							</a>
 						</div>
 					</div>
@@ -160,7 +165,7 @@
 							<li>AvenOS&nbsp;support</li>
 						</ul>
 						<div class="mt-6 flex justify-center border-t border-foreground/10 pt-4 lg:mt-auto">
-							<a href="/me" class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-foreground px-8 text-[12px] font-semibold text-background transition-opacity hover:opacity-90">
+							<a href="/waitlist?intent=ceo-plan&tier=founder" class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-foreground px-8 text-[12px] font-semibold text-background transition-opacity hover:opacity-90">
 								Buchen</a>
 						</div>
 					</div>
@@ -197,7 +202,7 @@
 							<li class="font-medium text-foreground/82">+ 1&nbsp;Std/Woche Samuel &amp; Daniel</li>
 						</ul>
 						<div class="mt-6 flex justify-center border-t border-foreground/10 pt-4 lg:mt-auto">
-							<a href="/me" class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-foreground px-8 text-[12px] font-semibold text-background transition-opacity hover:opacity-90">
+							<a href="/waitlist?intent=ceo-plan&tier=startup" class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-foreground px-8 text-[12px] font-semibold text-background transition-opacity hover:opacity-90">
 								Buchen</a>
 						</div>
 					</div>
@@ -231,10 +236,10 @@
 							<li>Nie wieder Papier – Briefpost digital</li>
 							<li class="font-medium text-foreground/82">Support durch AvenOS&nbsp;+ AvenMaia</li>
 							<li class="font-medium text-foreground/82">+ 10&nbsp;Std/Woche Samuel &amp; Daniel</li>
-							<li class="font-medium text-foreground/82">Secure your AvenCEO GmbH share</li>
+							<li class="font-semibold text-foreground">Become an AvenCEO Shareholder</li>
 						</ul>
 						<div class="mt-6 flex justify-center border-t border-foreground/10 pt-4 lg:mt-auto">
-							<a href="/me" class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-foreground px-8 text-[12px] font-semibold text-background transition-opacity hover:opacity-90">
+							<a href="/waitlist?intent=ceo-plan&tier=investor" class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-foreground px-8 text-[12px] font-semibold text-background transition-opacity hover:opacity-90">
 								Buchen</a>
 						</div>
 					</div>
@@ -286,7 +291,7 @@
 					<p class="max-w-xl text-[12px] font-medium leading-snug text-foreground/58 sm:text-[13px]">
 						Du zahlst immer nur die Minuten, die du Samuel &amp; Daniel für Skill‑Tuning tatsächlich genutzt hast.</p>
 					<a
-						href="/me"
+						href="/waitlist?intent=skill-tuning"
 						class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-border/60 bg-white/55 px-6 text-[12px] font-semibold text-foreground transition-colors hover:bg-white/85"
 					>
 						Request Skill Tuning</a>

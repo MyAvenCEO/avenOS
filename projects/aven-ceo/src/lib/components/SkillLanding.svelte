@@ -38,6 +38,7 @@
 			</a>
 			<nav class="flex items-center gap-5 text-[11px] font-semibold uppercase tracking-[0.12em] opacity-70">
 				<a href="/skills" class="transition-opacity hover:opacity-100">Skills</a>
+
 				<a href="/pricing" class="transition-opacity hover:opacity-100">Preise</a>
 				<a
 					href="/me"
