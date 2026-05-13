@@ -253,3 +253,29 @@ test('debug registry tracks actor state and message events', async () => {
 	expect(events.some((event) => event.event.type === 'MessageSent')).toBe(true)
 	expect(events.some((event) => event.event.type === 'ActorStateChanged')).toBe(true)
 	})
+
+test('recordTrace persists actor IO traces to the stream store', async () => {
+	const persistence = new FakePersistence()
+	await persistence.migrate()
+	await persistence.upsertActor({ id: 'skills/memory/topic-jaensen-architecture', kind: 'skill-worker', state: {} })
+
+	const runtime = createActorRuntime({
+		persistence,
+		workerId: 'worker-trace',
+		clock: () => new Date('2026-05-12T00:00:00.000Z')
+	})
+
+	runtime.debug.recordTrace('skills/memory/topic-jaensen-architecture', {
+		kind: 'task',
+		label: 'worker',
+		inputSummary: 'analyze file',
+		outputSummary: 'done',
+		cwd: '/tmp',
+		at: '2026-05-12T00:00:00.000Z'
+	})
+
+	await new Promise((resolve) => setTimeout(resolve, 0))
+
+	expect(persistence.streamEvents.some((event) => event.type === 'actor.io.task')).toBe(true)
+	expect(persistence.streamEvents.some((event) => event.scope === 'actor/skills/memory/topic-jaensen-architecture')).toBe(true)
+})

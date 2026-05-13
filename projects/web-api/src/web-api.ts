@@ -6,7 +6,13 @@ import {
 } from '@jaensen/app-node'
 import type { ActorEvent as RuntimeActorEvent } from '@jaensen/actor-runtime'
 import type { UserAttachment } from '@jaensen/conversation-actors'
-import type { StreamEventRecord } from '@jaensen/persistence-sqlite'
+import type {
+	ActorHierarchyRecord,
+	ActorLogRecord,
+	CommunicationTreeRecord,
+	CommunicationTreeSummary,
+	StreamEventRecord
+} from '@jaensen/persistence-sqlite'
 
 import {
 	AttachmentValidationError,
@@ -40,6 +46,35 @@ type SqliteQueryable = ReturnType<typeof asSqlitePersistence> & {
 	listIntents(): Promise<IntentRecord[]>
 	getIntent(intentId: string): Promise<IntentRecord | null>
 	listStreamEvents(input: { scope: string; after?: number; limit?: number }): Promise<StreamEventRecord[]>
+	listActorHierarchy(input: { rootActorId: string; observed?: boolean; includeRoot?: boolean }): Promise<ActorHierarchyRecord[]>
+	listStructuralActorChildren(input: { parentActorId?: string | null }): Promise<Array<ActorHierarchyRecord & { directChildCount: number }>>
+	listCommunicationActorChildren(input: { actorId?: string | null }): Promise<Array<ActorHierarchyRecord & { directChildCount: number; messageCount: number }>>
+	listActorBranchLogs(input: {
+		rootActorId: string
+		view?: 'chat' | 'deep-dive'
+		after?: number
+		limit?: number
+	}): Promise<ActorLogRecord[]>
+	listCommunicationTree(input: {
+		correlationId?: string
+		intentId?: string
+		rootEnvelopeId?: string
+		view?: 'chat' | 'deep-dive'
+	}): Promise<CommunicationTreeRecord[]>
+	summarizeCommunicationTree(input: {
+		correlationId?: string
+		intentId?: string
+		rootEnvelopeId?: string
+		view?: 'chat' | 'deep-dive'
+	}): Promise<CommunicationTreeSummary>
+}
+
+type ActorHierarchyNodeRecord = ActorHierarchyRecord & {
+	directChildCount: number
+}
+
+type CommunicationTreeNodeRecord = CommunicationTreeRecord & {
+	directChildCount: number
 }
 
 export interface CreateWebApiInput extends CreateAppNodeInput {
@@ -197,6 +232,71 @@ async function routeRequest(input: {
 		return jsonResponse({ events })
 	}
 
+	if (input.request.method === 'GET' && path === '/api/actors/hierarchy') {
+		const rootActorId = url.searchParams.get('rootActorId')?.trim()
+		if (!rootActorId) return badRequest('Missing rootActorId')
+		const observed = url.searchParams.get('observed') === 'true'
+		const parentActorId = url.searchParams.get('parentActorId')?.trim() || undefined
+		const actors = await input.persistence.listActorHierarchy({ rootActorId, observed, includeRoot: true })
+		const childCounts = new Map<string, number>()
+		for (const actor of actors) {
+			if (!actor.parentActorId) continue
+			childCounts.set(actor.parentActorId, (childCounts.get(actor.parentActorId) ?? 0) + 1)
+		}
+		const filteredActors = parentActorId
+			? actors.filter((actor) => actor.parentActorId === parentActorId)
+			: actors.filter((actor) => actor.actorId === rootActorId)
+		const responseActors: ActorHierarchyNodeRecord[] = filteredActors.map((actor) => ({
+			...actor,
+			directChildCount: childCounts.get(actor.actorId) ?? 0
+		}))
+		return jsonResponse({ actors: responseActors })
+	}
+
+	if (input.request.method === 'GET' && path === '/api/actors/structural-children') {
+		const parentActorId = url.searchParams.get('parentActorId')?.trim() || null
+		const actors = await input.persistence.listStructuralActorChildren({ parentActorId })
+		return jsonResponse({ actors })
+	}
+
+	if (input.request.method === 'GET' && path === '/api/actors/communication-children') {
+		const actorId = url.searchParams.get('actorId')?.trim() || null
+		const actors = await input.persistence.listCommunicationActorChildren({ actorId })
+		return jsonResponse({ actors })
+	}
+
+	if (input.request.method === 'GET' && path === '/api/actors/branch-logs') {
+		const rootActorId = url.searchParams.get('rootActorId')?.trim()
+		if (!rootActorId) return badRequest('Missing rootActorId')
+		const view = url.searchParams.get('view') === 'chat' ? 'chat' : 'deep-dive'
+		const after = parseAfter(url.searchParams.get('after'))
+		const limit = parseLimit(url.searchParams.get('limit'))
+		const events = await input.persistence.listActorBranchLogs({ rootActorId, view, after, limit })
+		return jsonResponse({ events })
+	}
+
+	if (input.request.method === 'GET' && path === '/api/communication/tree') {
+		const view = url.searchParams.get('view') === 'chat' ? 'chat' : 'deep-dive'
+		const correlationId = url.searchParams.get('correlationId')?.trim() || undefined
+		const intentId = url.searchParams.get('intentId')?.trim() || undefined
+		const rootEnvelopeId = url.searchParams.get('rootEnvelopeId')?.trim() || undefined
+		const nodeId = url.searchParams.get('nodeId')?.trim() || undefined
+		if (!correlationId && !intentId && !rootEnvelopeId) return badRequest('Missing correlationId, intentId, or rootEnvelopeId')
+		const tree = await input.persistence.listCommunicationTree({ correlationId, intentId, rootEnvelopeId, view })
+		const summary = await input.persistence.summarizeCommunicationTree({ correlationId, intentId, rootEnvelopeId, view })
+		const childCounts = new Map<string, number>()
+		for (const node of tree) {
+			if (!node.parentNodeId) continue
+			childCounts.set(node.parentNodeId, (childCounts.get(node.parentNodeId) ?? 0) + 1)
+		}
+		const filteredTree = nodeId ? tree.filter((node) => node.parentNodeId === nodeId) : tree.filter((node) => node.parentNodeId === null)
+		const responseTree: CommunicationTreeNodeRecord[] = filteredTree.map((node) => ({
+			...node,
+			directChildCount: childCounts.get(node.nodeId) ?? 0
+		}))
+		return jsonResponse({ tree: responseTree, summary })
+	}
+
 	if (input.request.method === 'GET' && path === '/api/events/stream') {
 		const scope = url.searchParams.get('scope')
 		if (!scope) {
@@ -299,6 +399,13 @@ function createActorDebugStreamResponse(input: {
 
 function formatActorDebugSseEvent(seq: number, event: RuntimeActorEvent): string {
 	return `id: ${seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`
+}
+
+function parseLimit(raw: string | null): number | undefined {
+	if (!raw) return undefined
+	const value = Number(raw)
+	if (!Number.isFinite(value) || value <= 0) return undefined
+	return Math.min(1000, Math.trunc(value))
 }
 
 async function handlePostMessages(request: Request, app: AppNode, attachmentStore: AttachmentStore): Promise<Response> {

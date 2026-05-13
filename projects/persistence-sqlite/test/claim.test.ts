@@ -99,3 +99,34 @@ test('claimNext seeds missing intent actors from intent.start payload', async ()
 		pendingSkillCalls: {}
 	})
 })
+
+test('listActorHierarchy returns structural and observed descendants for a branch', async () => {
+	const persistence = new SqlitePersistence()
+	await persistence.migrate()
+
+	await persistence.upsertActor({ id: 'skills', kind: 'skills', state: {} })
+	await persistence.upsertActor({ id: 'skills/invoice-extractor', kind: 'skill-supervisor', state: {} })
+	await persistence.upsertActor({ id: 'skills/invoice-extractor/job-01', kind: 'skill-worker', state: {} })
+
+	await persistence.appendStreamEvents([
+		{
+			id: 'obs-1',
+			scope: 'actor/skills/invoice-extractor/job-02',
+			actorId: 'skills/invoice-extractor/job-02',
+			type: 'actor.io.shell',
+			payload: { actorId: 'skills/invoice-extractor/job-02' },
+			createdAt: '2026-05-12T00:00:00.000Z'
+		}
+	])
+
+	const current = await persistence.listActorHierarchy({ rootActorId: 'skills/invoice-extractor' })
+	expect(current.map((row) => row.actorId)).toEqual(['skills/invoice-extractor/job-01'])
+	expect(current[0]).toMatchObject({
+		parentActorId: 'skills/invoice-extractor',
+		depth: 1,
+		isCurrent: true
+	})
+
+	const observed = await persistence.listActorHierarchy({ rootActorId: 'skills/invoice-extractor', observed: true })
+	expect(observed.map((row) => row.actorId)).toContain('skills/invoice-extractor/job-02')
+})

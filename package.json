@@ -26,5 +26,9 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.14"
+	},
+	"dependencies": {
+		"@keenmate/svelte-treeview": "^4.8.0",
+		"svelte-tree-view": "^1.4.2"
 	}
 }

@@ -48,6 +48,14 @@ const ctx = getJazzContext()
 				: ''}"
 			>Brain</a
 		>
+		<span class="opacity-25 select-none" aria-hidden="true">|</span>
+		<a
+			href="/demo/runtime-explorer"
+			class="uppercase opacity-40 transition-opacity hover:opacity-80 {$page.url.pathname === '/demo/runtime-explorer'
+				? 'opacity-95 underline underline-offset-4'
+				: ''}"
+			>Demo</a
+		>
 	</nav>
 
 	<div class="flex min-w-0 items-center justify-end justify-self-end gap-2 sm:gap-3">

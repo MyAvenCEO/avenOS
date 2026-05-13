@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-import type { ActorEventInput, EnvelopeInput } from '../../persistence-sqlite/src/index'
+import type { ActorEventInput, EnvelopeInput, StreamEventInput } from '../../persistence-sqlite/src/index'
 
 import { ActorRegistry } from './actor-registry'
 import { ActorIntrospectionRegistry } from './actor-introspection'
@@ -15,6 +15,7 @@ import { logDebug, logError, logInfo, logWarn } from './logger'
 import type {
 	ActorActivationResult,
 	ActorContext,
+	ActorDebugTrace,
 	ActorHandler,
 	ActorRuntimeDebug,
 	ActorRuntime,
@@ -50,7 +51,18 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 		listEvents: (after = 0) => introspection.listEvents(after),
 		subscribe: (listener) => introspection.subscribe(listener),
 		seedActor: (actor) => introspection.seedActor(actor),
-		recordTrace: (actorId, trace) => introspection.recordTrace(actorId, trace)
+		recordTrace: (actorId, trace) => {
+			introspection.recordTrace(actorId, trace)
+			void input.persistence
+				.appendStreamEvents(buildTraceStreamEvents(actorId, trace))
+				.catch((error) =>
+					logWarn(input.logger, 'actor-runtime.trace.persist.failed', {
+						workerId: input.workerId,
+						actorId,
+						error: toError(error).message
+					})
+				)
+		}
 	}
 
 	return {
@@ -421,4 +433,23 @@ function classifyError(error: Error): string {
 
 function toIsoString(value: Date | string): string {
 	return value instanceof Date ? value.toISOString() : value
+}
+
+function buildTraceStreamEvents(actorId: string, trace: ActorDebugTrace): StreamEventInput[] {
+	const type = `actor.io.${trace.kind}`
+	const createdAt = trace.at
+	return [
+		'global',
+		`actor/${actorId}`
+	].map((scope) => ({
+		id: `${actorId}:${trace.kind}:${createdAt}:${scope}`,
+		scope,
+		actorId,
+		type,
+		payload: {
+			actorId,
+			trace
+		},
+		createdAt
+	}))
 }

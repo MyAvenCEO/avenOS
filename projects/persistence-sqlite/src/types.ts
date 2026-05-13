@@ -86,6 +86,57 @@ export interface StreamEventRecord {
 	createdAt: string
 }
 
+export interface StreamEventInput {
+	readonly id: string
+	readonly scope: string
+	readonly actorId?: string | null
+	readonly envelopeId?: string | null
+	readonly type: string
+	readonly payload: unknown
+	readonly createdAt: Date | string
+}
+
+export interface ActorHierarchyRecord {
+	actorId: string
+	parentActorId: string | null
+	kind: string
+	name: string
+	depth: number
+	isCurrent: boolean
+	firstSeenAt: string | null
+	lastSeenAt: string | null
+}
+
+export interface ActorLogRecord extends StreamEventRecord {
+	logView: 'chat' | 'deep-dive'
+}
+
+export interface CommunicationTreeRecord {
+	nodeId: string
+	parentNodeId: string | null
+	nodeKind: 'envelope' | 'log'
+	depth: number
+	correlationId: string | null
+	envelopeId: string | null
+	actorId: string | null
+	fromActor: string | null
+	toActor: string | null
+	eventType: string
+	payload: unknown
+	createdAt: string
+}
+
+export interface CommunicationTreeSummary {
+	rootCount: number
+	envelopeCount: number
+	logCount: number
+	actorCount: number
+	actorIoCount: number
+	errorCount: number
+	startedAt: string | null
+	endedAt: string | null
+}
+
 export interface Persistence {
 	migrate(): Promise<void>
 
@@ -138,4 +189,31 @@ export interface Persistence {
 	replaceSkills(skills: SkillRecordInput[], now: Date): Promise<void>
 
 	listSkills(): Promise<SkillRecord[]>
+
+	appendStreamEvents(events: StreamEventInput[]): Promise<void>
+
+	listStreamEvents(input: { scope: string; after?: number; limit?: number }): Promise<StreamEventRecord[]>
+
+	listActorHierarchy(input: { rootActorId: string; observed?: boolean; includeRoot?: boolean }): Promise<ActorHierarchyRecord[]>
+
+	listActorBranchLogs(input: {
+		rootActorId: string
+		view?: 'chat' | 'deep-dive'
+		after?: number
+		limit?: number
+	}): Promise<ActorLogRecord[]>
+
+	listCommunicationTree(input: {
+		correlationId?: string
+		intentId?: string
+		rootEnvelopeId?: string
+		view?: 'chat' | 'deep-dive'
+	}): Promise<CommunicationTreeRecord[]>
+
+	summarizeCommunicationTree(input: {
+		correlationId?: string
+		intentId?: string
+		rootEnvelopeId?: string
+		view?: 'chat' | 'deep-dive'
+	}): Promise<CommunicationTreeSummary>
 }

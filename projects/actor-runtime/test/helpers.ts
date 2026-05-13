@@ -1,13 +1,19 @@
 import { ConcurrencyError } from '../../persistence-sqlite/src/errors'
 import type {
 	ActorEventInput,
+	ActorHierarchyRecord,
+	ActorLogRecord,
 	ActorRecord,
 	ClaimedEnvelope,
+	CommunicationTreeRecord,
+	CommunicationTreeSummary,
 	EnvelopeInput,
 	EnvelopeRecord,
 	Persistence,
 	SkillRecord,
-	SkillRecordInput
+	SkillRecordInput,
+	StreamEventInput,
+	StreamEventRecord
 } from '../../persistence-sqlite/src/types'
 
 type EnvelopeRow = EnvelopeRecord
@@ -16,6 +22,7 @@ export class FakePersistence implements Persistence {
 	readonly actors = new Map<string, ActorRecord>()
 	readonly envelopes = new Map<string, EnvelopeRow>()
 	readonly events: ActorEventInput[] = []
+	readonly streamEvents: StreamEventRecord[] = []
 	readonly claims: string[] = []
 	claimedLeaseMs: number | null = null
 	commitError: Error | null = null
@@ -188,6 +195,67 @@ export class FakePersistence implements Persistence {
 
 	async listSkills(): Promise<SkillRecord[]> {
 		return []
+	}
+
+	async appendStreamEvents(events: StreamEventInput[]): Promise<void> {
+		for (const event of events) {
+			this.streamEvents.push({
+				seq: this.streamEvents.length + 1,
+				id: event.id,
+				scope: event.scope,
+				actorId: event.actorId ?? null,
+				envelopeId: event.envelopeId ?? null,
+				type: event.type,
+				payload: event.payload,
+				createdAt: toIso(event.createdAt)
+			})
+		}
+	}
+
+	async listStreamEvents(input: { scope: string; after?: number; limit?: number }): Promise<StreamEventRecord[]> {
+		return this.streamEvents
+			.filter((event) => event.scope === input.scope && event.seq > (input.after ?? 0))
+			.slice(0, input.limit ?? 200)
+	}
+
+	async listActorHierarchy(_input: { rootActorId: string; observed?: boolean; includeRoot?: boolean }): Promise<ActorHierarchyRecord[]> {
+		return []
+	}
+
+	async listActorBranchLogs(_input: {
+		rootActorId: string
+		view?: 'chat' | 'deep-dive'
+		after?: number
+		limit?: number
+	}): Promise<ActorLogRecord[]> {
+		return []
+	}
+
+	async listCommunicationTree(_input: {
+		correlationId?: string
+		intentId?: string
+		rootEnvelopeId?: string
+		view?: 'chat' | 'deep-dive'
+	}): Promise<CommunicationTreeRecord[]> {
+		return []
+	}
+
+	async summarizeCommunicationTree(_input: {
+		correlationId?: string
+		intentId?: string
+		rootEnvelopeId?: string
+		view?: 'chat' | 'deep-dive'
+	}): Promise<CommunicationTreeSummary> {
+		return {
+			rootCount: 0,
+			envelopeCount: 0,
+			logCount: 0,
+			actorCount: 0,
+			actorIoCount: 0,
+			errorCount: 0,
+			startedAt: null,
+			endedAt: null
+		}
 	}
 }
 

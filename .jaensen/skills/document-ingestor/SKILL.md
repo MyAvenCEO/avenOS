@@ -31,6 +31,6 @@ resources:
 3.2. BankStatement: (skills/bank-statement-extractor)[.jaensen/skills/bank-statement-extractor/SKILL.md]  
 3.3. Other: error out  
 4. Once the extraction is done (the extractor returned valid json), store the extracted metadata together with the pdfa in memory.  
-5. Notify the user that the document has been ingested and present it for review. [END]  
+5. Notify the user that the document has been ingested and present the extracted data for review. [END]  
   
 CATCH ALL: If anything of the above doesn't apply or work, error out.  [END]  

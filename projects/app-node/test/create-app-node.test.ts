@@ -106,6 +106,49 @@ test('app forwards intentIdHint when enqueueing user input', async () => {
 	})
 })
 
+test('app persists harness prompt/task/shell traces to sqlite stream events', async () => {
+	const persistence = new SqlitePersistence()
+	const app = await createAppNode({
+		persistence,
+		harness: createHarnessStub(),
+		skills: []
+	})
+
+	app.runtime.debug.recordTrace('dispatcher', {
+		kind: 'prompt',
+		label: 'tester',
+		inputSummary: 'hello',
+		outputSummary: '{"ok":true}',
+		at: '2026-05-12T00:00:00.000Z'
+	})
+	app.runtime.debug.recordTrace('dispatcher', {
+		kind: 'task',
+		label: 'tester',
+		inputSummary: 'do work',
+		outputSummary: '{"ok":true}',
+		cwd: '/tmp',
+		at: '2026-05-12T00:00:01.000Z'
+	})
+	app.runtime.debug.recordTrace('dispatcher', {
+		kind: 'shell',
+		label: 'tester',
+		command: 'pwd',
+		cwd: '/tmp',
+		stdout: 'ok',
+		stderr: '',
+		exitCode: 0,
+		at: '2026-05-12T00:00:02.000Z'
+	})
+
+	await new Promise((resolve) => setTimeout(resolve, 0))
+
+	const events = persistence.db
+		.prepare("SELECT type FROM stream_events WHERE type LIKE 'actor.io.%' ORDER BY created_at ASC")
+		.all() as Array<{ type: string }>
+
+	expect(events.map((event) => event.type)).toEqual(expect.arrayContaining(['actor.io.prompt', 'actor.io.task', 'actor.io.shell']))
+})
+
 function createHarnessStub() {
 	return {
 		async session() {

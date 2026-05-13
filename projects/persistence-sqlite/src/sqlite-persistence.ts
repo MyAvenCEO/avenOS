@@ -3,8 +3,10 @@ import { randomUUID } from 'node:crypto'
 import { Database } from 'bun:sqlite'
 
 import {
+	assertCanonicalActorId,
 	actorKindFromId,
 	createIntentActorId,
+	parseActorId,
 	parseIntentActorId,
 	parseSkillActorId,
 	parseSkillWorkerActorId
@@ -15,13 +17,18 @@ import { parseJson, stringifyJson } from './json'
 import { SQLITE_PRAGMAS, SQLITE_SCHEMA } from './schema'
 import type {
 	ActorEventInput,
+	ActorHierarchyRecord,
+	ActorLogRecord,
 	ActorRecord,
 	ClaimedEnvelope,
+	CommunicationTreeRecord,
+	CommunicationTreeSummary,
 	EnvelopeInput,
 	EnvelopeRecord,
 	Persistence,
 	SkillRecord,
 	SkillRecordInput,
+	StreamEventInput,
 	StreamEventRecord
 } from './types'
 
@@ -108,6 +115,7 @@ export class SqlitePersistence implements Persistence {
 		status?: ActorRecord['status']
 		state?: unknown
 	}): Promise<void> {
+		assertActorRecordIdentity(input.id, input.kind)
 		const nowIso = new Date().toISOString()
 		query(
 			this.db,
@@ -135,6 +143,7 @@ export class SqlitePersistence implements Persistence {
 		status?: ActorRecord['status']
 		state?: unknown
 	}): Promise<void> {
+		assertActorRecordIdentity(input.id, input.kind)
 		const nowIso = new Date().toISOString()
 		query(
 			this.db,
@@ -158,6 +167,8 @@ export class SqlitePersistence implements Persistence {
 	}
 
 	async enqueue(envelope: EnvelopeInput): Promise<void> {
+		assertCanonicalActorId(envelope.fromActor)
+		assertCanonicalActorId(envelope.toActor)
 		this.withTransaction(() => {
 			const insertedEnvelope = insertEnvelope(this.db, envelope)
 			insertStreamEvents(this.db, [
@@ -553,6 +564,20 @@ export class SqlitePersistence implements Persistence {
 		}))
 	}
 
+	async appendStreamEvents(events: StreamEventInput[]): Promise<void> {
+		this.withTransaction(() => {
+			insertStreamEvents(this.db, events.map((event) => ({
+				id: event.id,
+				scope: event.scope,
+				actorId: event.actorId ?? null,
+				envelopeId: event.envelopeId ?? null,
+				type: event.type,
+				payload: event.payload,
+				createdAt: toIsoUtcString(event.createdAt, new Date())
+			})))
+		})
+	}
+
 	async listIntents(): Promise<Array<{ id: string; state: unknown; version: number; createdAt: string; updatedAt: string }>> {
 		const rows = query(this.db, `SELECT * FROM actors WHERE kind = 'intent' ORDER BY created_at DESC`)
 			.all() as ActorRow[]
@@ -594,6 +619,299 @@ export class SqlitePersistence implements Persistence {
 		return rows.map(mapStreamEventRow)
 	}
 
+	async listActorHierarchy(input: { rootActorId: string; observed?: boolean; includeRoot?: boolean }): Promise<ActorHierarchyRecord[]> {
+		const root = assertCanonicalActorId(input.rootActorId)
+		const prefix = `${input.rootActorId}/%`
+		const rows = input.observed
+			? (query(
+					this.db,
+					`WITH observed AS (
+					   SELECT actor_id AS actor_id, MIN(created_at) AS first_seen_at, MAX(created_at) AS last_seen_at
+					   FROM stream_events
+					   WHERE actor_id IS NOT NULL AND (actor_id = ? OR actor_id LIKE ?)
+					   GROUP BY actor_id
+					 )
+					 SELECT o.actor_id,
+					        a.kind,
+					        a.created_at,
+					        a.updated_at
+					 FROM observed o
+					 LEFT JOIN actors a ON a.id = o.actor_id
+					 ORDER BY o.actor_id ASC`
+				)
+				.all(input.rootActorId, prefix) as Array<{ actor_id: string; kind: string | null; created_at: string | null; updated_at: string | null }>)
+			: (query(
+					this.db,
+					`SELECT id AS actor_id, kind, created_at, updated_at
+					 FROM actors
+					 WHERE id = ? OR id LIKE ?
+					 ORDER BY id ASC`
+				)
+				.all(input.rootActorId, prefix) as Array<{ actor_id: string; kind: string | null; created_at: string | null; updated_at: string | null }>)
+
+		return rows
+			.filter((row) => (input.includeRoot ?? false) || row.actor_id !== input.rootActorId)
+			.map((row) => mapActorHierarchyRecord(row.actor_id, row.kind, row.created_at, row.updated_at, input.observed === true, root))
+	}
+
+	async listActorBranchLogs(input: {
+		rootActorId: string
+		view?: 'chat' | 'deep-dive'
+		after?: number
+		limit?: number
+	}): Promise<ActorLogRecord[]> {
+		assertCanonicalActorId(input.rootActorId)
+		const view = input.view ?? 'deep-dive'
+		const prefix = `actor/${input.rootActorId}/%`
+		const rows = query(
+			this.db,
+				`SELECT * FROM stream_events
+				 WHERE seq > ?
+				   AND (scope = ? OR scope LIKE ?)
+				   ${chatViewWhereClause(view)}
+				 ORDER BY seq ASC
+				 LIMIT ?`
+		)
+			.all(input.after ?? 0, `actor/${input.rootActorId}`, prefix, input.limit ?? 200) as StreamEventRow[]
+		return rows.map((row) => ({ ...mapStreamEventRow(row), logView: view }))
+	}
+
+	async listCommunicationTree(input: {
+		correlationId?: string
+		intentId?: string
+		rootEnvelopeId?: string
+		view?: 'chat' | 'deep-dive'
+	}): Promise<CommunicationTreeRecord[]> {
+		const selector = resolveCommunicationSelector(input)
+		const rows = query(
+			this.db,
+				`WITH RECURSIVE roots AS (
+				   SELECT e.id, e.causation_id, e.correlation_id, e.from_actor, e.to_actor, e.type, e.payload_json, e.created_at
+				   FROM envelopes e
+				   WHERE ${selector.rootWhere}
+				 ), tree AS (
+				   SELECT r.id, r.causation_id, r.correlation_id, r.from_actor, r.to_actor, r.type, r.payload_json, r.created_at, 0 AS depth
+				   FROM roots r
+				   UNION ALL
+				   SELECT e.id, e.causation_id, e.correlation_id, e.from_actor, e.to_actor, e.type, e.payload_json, e.created_at, t.depth + 1
+				   FROM envelopes e
+				   JOIN tree t ON e.causation_id = t.id
+				 )
+				 SELECT 'env:' || t.id AS node_id,
+				        CASE WHEN t.causation_id IS NULL THEN NULL ELSE 'env:' || t.causation_id END AS parent_node_id,
+				        'envelope' AS node_kind,
+				        t.depth,
+				        t.correlation_id,
+				        t.id AS envelope_id,
+				        t.to_actor AS actor_id,
+				        t.from_actor,
+				        t.to_actor,
+				        t.type AS event_type,
+				        t.payload_json,
+				        t.created_at
+				 FROM tree t
+				 UNION ALL
+				 SELECT 'log:' || s.id AS node_id,
+				        CASE WHEN s.envelope_id IS NULL THEN NULL ELSE 'env:' || s.envelope_id END AS parent_node_id,
+				        'log' AS node_kind,
+				        tree.depth + 1 AS depth,
+				        tree.correlation_id,
+				        s.envelope_id,
+				        s.actor_id,
+				        json_extract(s.payload_json, '$.fromActor') AS from_actor,
+				        json_extract(s.payload_json, '$.toActor') AS to_actor,
+				        s.type AS event_type,
+				        s.payload_json,
+				        s.created_at
+				 FROM stream_events s
+				 JOIN tree ON s.envelope_id = tree.id
+				 WHERE 1=1 ${chatViewWhereClause(input.view ?? 'deep-dive', 's.type')}
+				 ORDER BY created_at ASC, node_id ASC`
+		)
+			.all(...selector.params) as Array<{
+				node_id: string
+				parent_node_id: string | null
+				node_kind: 'envelope' | 'log'
+				depth: number
+				correlation_id: string | null
+				envelope_id: string | null
+				actor_id: string | null
+				from_actor: string | null
+				to_actor: string | null
+				event_type: string
+				payload_json: string
+				created_at: string
+			}>
+		return rows.map((row) => ({
+			nodeId: row.node_id,
+			parentNodeId: row.parent_node_id,
+			nodeKind: row.node_kind,
+			depth: row.depth,
+			correlationId: row.correlation_id,
+			envelopeId: row.envelope_id,
+			actorId: row.actor_id,
+			fromActor: row.from_actor,
+			toActor: row.to_actor,
+			eventType: row.event_type,
+			payload: parseJson(row.payload_json),
+			createdAt: row.created_at
+		}))
+	}
+
+	async summarizeCommunicationTree(input: {
+		correlationId?: string
+		intentId?: string
+		rootEnvelopeId?: string
+		view?: 'chat' | 'deep-dive'
+	}): Promise<CommunicationTreeSummary> {
+		const rows = await this.listCommunicationTree(input)
+		const actors = new Set(rows.map((row) => row.actorId).filter((value): value is string => Boolean(value)))
+		return {
+			rootCount: rows.filter((row) => row.parentNodeId === null).length,
+			envelopeCount: rows.filter((row) => row.nodeKind === 'envelope').length,
+			logCount: rows.filter((row) => row.nodeKind === 'log').length,
+			actorCount: actors.size,
+			actorIoCount: rows.filter((row) => row.eventType.startsWith('actor.io.')).length,
+			errorCount: rows.filter((row) => row.eventType.includes('failed') || row.eventType.includes('error')).length,
+			startedAt: rows[0]?.createdAt ?? null,
+			endedAt: rows.at(-1)?.createdAt ?? null
+		}
+	}
+
+	async listStructuralActorChildren(input: { parentActorId?: string | null }): Promise<Array<ActorHierarchyRecord & { directChildCount: number }>> {
+		const rows = query(
+			this.db,
+				`WITH known AS (
+				   SELECT actor_id, MIN(created_at) AS first_seen_at, MAX(created_at) AS last_seen_at
+				   FROM stream_events
+				   WHERE actor_id IS NOT NULL
+				   GROUP BY actor_id
+				   UNION
+				   SELECT id AS actor_id, created_at AS first_seen_at, updated_at AS last_seen_at
+				   FROM actors
+				 )
+				 SELECT k.actor_id,
+				        a.kind,
+				        MIN(k.first_seen_at) AS first_seen_at,
+				        MAX(k.last_seen_at) AS last_seen_at
+				 FROM known k
+				 LEFT JOIN actors a ON a.id = k.actor_id
+				 GROUP BY k.actor_id, a.kind
+				 ORDER BY k.actor_id ASC`
+		).all() as Array<{
+			actor_id: string
+			kind: string | null
+			first_seen_at: string | null
+			last_seen_at: string | null
+		}>
+
+		const parentActorId = input.parentActorId ?? null
+		const allActors = rows
+			.map((row) => {
+				const parsed = parseActorId(row.actor_id)
+				if (!parsed) {
+					return null
+				}
+				return {
+					actorId: row.actor_id,
+					parentActorId: parsed.parentId ?? null,
+					kind: row.kind ?? parsed.kind,
+					name: parsed.name,
+					depth: Math.max(0, parsed.segments.length - 1),
+					isCurrent: row.kind !== null,
+					firstSeenAt: row.first_seen_at,
+					lastSeenAt: row.last_seen_at
+				}
+			})
+			.filter((row): row is ActorHierarchyRecord => Boolean(row))
+
+		const childCounts = new Map<string, number>()
+		for (const actor of allActors) {
+			if (!actor.parentActorId) continue
+			childCounts.set(actor.parentActorId, (childCounts.get(actor.parentActorId) ?? 0) + 1)
+		}
+
+		return allActors
+			.filter((actor) => actor.parentActorId === parentActorId)
+			.map((actor) => ({
+				...actor,
+				directChildCount: childCounts.get(actor.actorId) ?? 0
+			}))
+	}
+
+	async listCommunicationActorChildren(input: { actorId?: string | null }): Promise<Array<ActorHierarchyRecord & { directChildCount: number; messageCount: number }>> {
+		const rows = input.actorId
+			? (query(
+					this.db,
+					`SELECT e.to_actor AS actor_id,
+					        COUNT(*) AS message_count,
+					        MIN(e.created_at) AS first_seen_at,
+					        MAX(e.created_at) AS last_seen_at,
+					        a.kind AS kind
+					 FROM envelopes e
+					 LEFT JOIN actors a ON a.id = e.to_actor
+					 WHERE e.from_actor = ?
+					 GROUP BY e.to_actor, a.kind
+					 ORDER BY e.to_actor ASC`
+				)
+				.all(input.actorId) as Array<{
+					actor_id: string
+					message_count: number
+					first_seen_at: string | null
+					last_seen_at: string | null
+					kind: string | null
+				}>)
+			: (query(
+					this.db,
+					`SELECT e.from_actor AS actor_id,
+					        COUNT(*) AS message_count,
+					        MIN(e.created_at) AS first_seen_at,
+					        MAX(e.created_at) AS last_seen_at,
+					        a.kind AS kind
+					 FROM envelopes e
+					 LEFT JOIN actors a ON a.id = e.from_actor
+					 GROUP BY e.from_actor, a.kind
+					 ORDER BY e.from_actor ASC`
+				)
+				.all() as Array<{
+					actor_id: string
+					message_count: number
+					first_seen_at: string | null
+					last_seen_at: string | null
+					kind: string | null
+				}>)
+
+		const childCountRows = query(
+			this.db,
+				`SELECT from_actor AS actor_id, COUNT(DISTINCT to_actor) AS direct_child_count
+				 FROM envelopes
+				 GROUP BY from_actor`
+		).all() as Array<{ actor_id: string; direct_child_count: number }>
+
+		const childCounts = new Map(childCountRows.map((row) => [row.actor_id, row.direct_child_count]))
+
+		return rows
+			.map((row) => {
+				const parsed = parseActorId(row.actor_id)
+				if (!parsed) {
+					return null
+				}
+				return {
+					actorId: row.actor_id,
+					parentActorId: input.actorId ?? null,
+					kind: row.kind ?? parsed.kind,
+					name: parsed.name,
+					depth: input.actorId ? 1 : 0,
+					isCurrent: true,
+					firstSeenAt: row.first_seen_at,
+					lastSeenAt: row.last_seen_at,
+					directChildCount: childCounts.get(row.actor_id) ?? 0,
+					messageCount: row.message_count
+				}
+			})
+			.filter((row): row is ActorHierarchyRecord & { directChildCount: number; messageCount: number } => Boolean(row))
+	}
+
 	private applyPragmas(): void {
 		for (const pragma of SQLITE_PRAGMAS) {
 			this.db.exec(pragma)
@@ -627,6 +945,13 @@ export class SqlitePersistence implements Persistence {
 
 function inferActorKind(actorId: string): string {
 	return actorKindFromId(actorId)
+}
+
+function assertActorRecordIdentity(actorId: string, kind: string): void {
+	const parsed = assertCanonicalActorId(actorId)
+	if (parsed.kind !== kind) {
+		throw new Error(`Actor kind mismatch for ${actorId}: expected ${parsed.kind}, got ${kind}`)
+	}
 }
 
 function inferInitialActorState(input: {
@@ -922,6 +1247,30 @@ function buildCommitStreamEvents(input: {
 		})
 	)
 
+	streamEvents.push(
+		...scopedStreamEvents({
+			baseId: `${input.inputEnvelope.id}:actor-io-inbound`,
+			actorId: input.actor.id,
+			envelopeId: input.inputEnvelope.id,
+			type: 'actor.io.inbound',
+			payload: {
+				actorId: input.actor.id,
+				fromActor: input.inputEnvelope.fromActor,
+				toActor: input.inputEnvelope.toActor,
+				envelopeId: input.inputEnvelope.id,
+				envelopeType: input.inputEnvelope.type,
+				correlationId: input.inputEnvelope.correlationId,
+				payload: input.inputEnvelope.payload
+			},
+			createdAt: input.now,
+			scopes: scopesForStreamEvent({
+				actorId: input.actor.id,
+				correlationId: input.inputEnvelope.correlationId,
+				intentId: inferIntentId(input.actor.id, input.newActorState, input.inputEnvelope.payload)
+			})
+		})
+	)
+
 	for (const actorEvent of input.actorEvents) {
 		streamEvents.push(
 			...scopedStreamEvents({
@@ -946,6 +1295,29 @@ function buildCommitStreamEvents(input: {
 
 	for (const outgoing of input.outgoingEnvelopes) {
 		streamEvents.push(...buildEnvelopeQueuedStreamEvents({ envelope: outgoing, now: input.now }))
+		streamEvents.push(
+			...scopedStreamEvents({
+				baseId: `${outgoing.id}:actor-io-outbound`,
+				actorId: input.actor.id,
+				envelopeId: outgoing.id,
+				type: 'actor.io.outbound',
+				payload: {
+					actorId: input.actor.id,
+					fromActor: outgoing.fromActor,
+					toActor: outgoing.toActor,
+					envelopeId: outgoing.id,
+					envelopeType: outgoing.type,
+					correlationId: outgoing.correlationId,
+					payload: outgoing.payload
+				},
+				createdAt: input.now,
+				scopes: scopesForStreamEvent({
+					actorId: input.actor.id,
+					correlationId: outgoing.correlationId,
+					intentId: inferIntentId(outgoing.toActor, input.newActorState, outgoing.payload)
+				})
+			})
+		)
 	}
 
 	const previousIntentState = input.actor.kind === 'intent' ? toIntentState(input.actor.state) : null
@@ -1277,6 +1649,78 @@ function buildFailedIntentState(actorRow: ActorRow | undefined, error: string): 
 
 function readString(value: unknown): string | null {
 	return typeof value === 'string' ? value : null
+}
+
+function mapActorHierarchyRecord(
+	actorId: string,
+	kind: string | null,
+	createdAt: string | null,
+	updatedAt: string | null,
+	observedOnly: boolean,
+	root: ReturnType<typeof assertCanonicalActorId>
+): ActorHierarchyRecord {
+	const parsed = assertCanonicalActorId(actorId)
+	return {
+		actorId,
+		parentActorId: parsed.parentId ?? null,
+		kind: kind ?? parsed.kind,
+		name: parsed.name,
+		depth: Math.max(0, parsed.segments.length - root.segments.length),
+		isCurrent: !observedOnly && createdAt !== null,
+		firstSeenAt: createdAt,
+		lastSeenAt: updatedAt
+	}
+}
+
+function chatViewWhereClause(view: 'chat' | 'deep-dive', typeColumn = 'type'): string {
+	if (view === 'deep-dive') {
+		return ''
+	}
+
+	return `AND (${typeColumn} IN (
+		'intent.created',
+		'intent.status_changed',
+		'intent.skill_call_started',
+		'intent.skill_call_completed',
+		'intent.message_to_user',
+		'runtime.envelope.failed',
+		'actor.io.prompt',
+		'actor.io.task',
+		'actor.io.shell',
+		'actor.io.inbound',
+		'actor.io.outbound'
+	))`
+	}
+
+function resolveCommunicationSelector(input: {
+	correlationId?: string
+	intentId?: string
+	rootEnvelopeId?: string
+}): { rootWhere: string; params: string[] } {
+	if (input.rootEnvelopeId) {
+		return {
+			rootWhere: 'e.id = ?',
+			params: [input.rootEnvelopeId]
+		}
+	}
+
+	if (input.intentId) {
+		return {
+			rootWhere: `e.correlation_id IN (
+				SELECT correlation_id FROM envelopes WHERE to_actor = ? OR from_actor = ?
+			) AND e.causation_id IS NULL`,
+			params: [createIntentActorId(input.intentId), createIntentActorId(input.intentId)]
+		}
+	}
+
+	if (input.correlationId) {
+		return {
+			rootWhere: 'e.correlation_id = ? AND e.causation_id IS NULL',
+			params: [input.correlationId]
+		}
+	}
+
+	throw new Error('listCommunicationTree requires correlationId, intentId, or rootEnvelopeId')
 }
 
 function query(db: SqliteDatabase, sql: string): SqliteStatement {

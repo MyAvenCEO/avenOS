@@ -1,4 +1,4 @@
-const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+const SLUG_PATTERN = /^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*$/
 
 export type CanonicalActorKind =
 	| 'dispatcher'
@@ -31,14 +31,18 @@ export function isSlugSafe(value: string): boolean {
 }
 
 export function createIntentActorId(intentId: string): string {
+	assertSlugSafe(intentId, 'intentId')
 	return `${INTENTS_ACTOR_ID}/${intentId}`
 }
 
 export function createSkillActorId(skillId: string): string {
+	assertSlugSafe(skillId, 'skillId')
 	return `${SKILLS_ACTOR_ID}/${skillId}`
 }
 
 export function createSkillWorkerActorId(skillId: string, workerId: string): string {
+	assertSlugSafe(skillId, 'skillId')
+	assertSlugSafe(workerId, 'workerId')
 	return `${SKILLS_ACTOR_ID}/${skillId}/${workerId}`
 }
 
@@ -97,7 +101,7 @@ export function parseActorId(actorId: string): ParsedActorId | null {
 	}
 
 	const segments = actorId.split('/')
-	if (segments[0] === INTENTS_ACTOR_ID && segments.length === 2 && segments[1]) {
+	if (segments[0] === INTENTS_ACTOR_ID && segments.length === 2 && isSlugSafe(segments[1])) {
 		return {
 			id: actorId,
 			kind: 'intent',
@@ -108,7 +112,7 @@ export function parseActorId(actorId: string): ParsedActorId | null {
 		}
 	}
 
-	if (segments[0] === SKILLS_ACTOR_ID && segments.length === 2 && segments[1]) {
+	if (segments[0] === SKILLS_ACTOR_ID && segments.length === 2 && isSlugSafe(segments[1])) {
 		return {
 			id: actorId,
 			kind: 'skill-supervisor',
@@ -119,8 +123,8 @@ export function parseActorId(actorId: string): ParsedActorId | null {
 		}
 	}
 
-	if (segments[0] === SKILLS_ACTOR_ID && segments.length >= 3 && segments[1] && segments[2]) {
-		const workerId = segments.slice(2).join('/')
+	if (segments[0] === SKILLS_ACTOR_ID && segments.length === 3 && isSlugSafe(segments[1]) && isSlugSafe(segments[2])) {
+		const workerId = segments[2]
 		return {
 			id: actorId,
 			kind: 'skill-worker',
@@ -137,4 +141,10 @@ export function parseActorId(actorId: string): ParsedActorId | null {
 
 function base(id: string, kind: CanonicalActorKind, name: string): ParsedActorId {
 	return { id, kind, name, segments: [id] }
+}
+
+function assertSlugSafe(value: string, label: string): void {
+	if (!isSlugSafe(value)) {
+		throw new Error(`Invalid ${label}: ${value}`)
+	}
 }
