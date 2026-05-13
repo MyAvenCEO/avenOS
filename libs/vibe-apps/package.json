@@ -1,0 +1,28 @@
+{
+	"name": "@avenos/vibe-apps",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"description": "Catalog of vibe-coded mini apps (single-file HTML) for @avenos/vibe-app-sandbox.",
+	"main": "./src/registry.ts",
+	"types": "./src/registry.ts",
+	"exports": {
+		".": "./src/registry.ts"
+	},
+	"scripts": {
+		"build": "bun run build:todos && bun run build:invoice",
+		"build:todos": "bunx --bun vite build --config todos/vite.config.ts",
+		"build:invoice": "bunx --bun vite build --config invoice/vite.config.ts"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/ext-apps": "^1.0.0",
+		"@modelcontextprotocol/sdk": "^1.29.0",
+		"zod": "^4.4.2",
+		"zod-to-json-schema": "^3.25.2"
+	},
+	"devDependencies": {
+		"typescript": "^6.0.2",
+		"vite": "^8.0.7",
+		"vite-plugin-singlefile": "^2.3.0"
+	}
+}

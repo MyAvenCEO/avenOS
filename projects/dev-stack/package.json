@@ -1,0 +1,9 @@
+{
+	"name": "@avenos/dev-stack",
+	"private": true,
+	"type": "module",
+	"description": "Runs Jaensen web-api, Aven CEO (dev:local), and MCP sandbox together",
+	"scripts": {
+		"dev": "bun run ./run-dev.ts"
+	}
+}

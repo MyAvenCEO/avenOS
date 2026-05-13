@@ -8,6 +8,36 @@
         "@biomejs/biome": "^2.4.14",
       },
     },
+    "libs/vibe-app-sandbox": {
+      "name": "@avenos/vibe-app-sandbox",
+      "version": "0.0.1",
+      "dependencies": {
+        "@modelcontextprotocol/ext-apps": "^1.0.0",
+        "@modelcontextprotocol/sdk": "^1.29.0",
+        "zod": "^4.4.2",
+        "zod-to-json-schema": "^3.25.2",
+      },
+      "devDependencies": {
+        "typescript": "^6.0.2",
+        "vite": "^8.0.7",
+        "vite-plugin-singlefile": "^2.3.0",
+      },
+    },
+    "libs/vibe-apps": {
+      "name": "@avenos/vibe-apps",
+      "version": "0.0.1",
+      "dependencies": {
+        "@modelcontextprotocol/ext-apps": "^1.0.0",
+        "@modelcontextprotocol/sdk": "^1.29.0",
+        "zod": "^4.4.2",
+        "zod-to-json-schema": "^3.25.2",
+      },
+      "devDependencies": {
+        "typescript": "^6.0.2",
+        "vite": "^8.0.7",
+        "vite-plugin-singlefile": "^2.3.0",
+      },
+    },
     "projects/actor-runtime": {
       "name": "@jaensen/actor-runtime",
       "version": "0.1.0",
@@ -37,6 +67,8 @@
       "name": "@avenos/aven-ceo",
       "version": "0.0.1",
       "dependencies": {
+        "@avenos/vibe-app-sandbox": "workspace:*",
+        "@avenos/vibe-apps": "workspace:*",
         "isomorphic-dompurify": "^3.12.0",
         "jazz-tools": "^2.0.0-alpha.45",
         "marked": "^18.0.3",
@@ -55,6 +87,7 @@
         "tailwindcss": "^4.2.4",
         "typescript": "^6.0.2",
         "vite": "^8.0.7",
+        "vite-plugin-singlefile": "^2.3.0",
       },
     },
     "projects/brain-flue": {
@@ -84,6 +117,9 @@
       "devDependencies": {
         "typescript": "^5.9.3",
       },
+    },
+    "projects/dev-stack": {
+      "name": "@avenos/dev-stack",
     },
     "projects/ocr-example": {
       "name": "@avenos/ocr-example",
@@ -142,7 +178,13 @@
 
     "@avenos/aven-ceo": ["@avenos/aven-ceo@workspace:projects/aven-ceo"],
 
+    "@avenos/dev-stack": ["@avenos/dev-stack@workspace:projects/dev-stack"],
+
     "@avenos/ocr-example": ["@avenos/ocr-example@workspace:projects/ocr-example"],
+
+    "@avenos/vibe-app-sandbox": ["@avenos/vibe-app-sandbox@workspace:libs/vibe-app-sandbox"],
+
+    "@avenos/vibe-apps": ["@avenos/vibe-apps@workspace:libs/vibe-apps"],
 
     "@aws-crypto/crc32": ["@aws-crypto/crc32@5.2.0", "", { "dependencies": { "@aws-crypto/util": "^5.2.0", "@aws-sdk/types": "^3.222.0", "tslib": "^2.6.2" } }, "sha512-nLbCWqQNgUiwwtFsen1AdzAtvuLRsQS8rYgMuxCrdKf9kOssamGLuPwyTY9wyYblNr9+1XM8v6zoDTPPSIeANg=="],
 
@@ -415,6 +457,8 @@
     "@mistralai/mistralai": ["@mistralai/mistralai@2.2.1", "", { "dependencies": { "ws": "^8.18.0", "zod": "^3.25.0 || ^4.0.0", "zod-to-json-schema": "^3.25.0" } }, "sha512-uKU8CZmL2RzYKmplsU01hii4p3pe4HqJefpWNRWXm1Tcm0Sm4xXfwSLIy4k7ZCPlbETCGcp69E7hZs+WOJ5itQ=="],
 
     "@mixmark-io/domino": ["@mixmark-io/domino@2.2.0", "", {}, "sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw=="],
+
+    "@modelcontextprotocol/ext-apps": ["@modelcontextprotocol/ext-apps@1.7.1", "", { "dependencies": { "@standard-schema/spec": "^1.1.0" }, "peerDependencies": { "@modelcontextprotocol/sdk": "^1.29.0", "react": "^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom": "^17.0.0 || ^18.0.0 || ^19.0.0", "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["react", "react-dom"] }, "sha512-J3WdG1A4JSSKnSWKyU+895dBVYBV2Utgtf7fUsUK45mlkETm53a/1DR6Pm3hUGKqLLQthZLmpxOg8VPzJi/lyg=="],
 
     "@modelcontextprotocol/sdk": ["@modelcontextprotocol/sdk@1.29.0", "", { "dependencies": { "@hono/node-server": "^1.19.9", "ajv": "^8.17.1", "ajv-formats": "^3.0.1", "content-type": "^1.0.5", "cors": "^2.8.5", "cross-spawn": "^7.0.5", "eventsource": "^3.0.2", "eventsource-parser": "^3.0.0", "express": "^5.2.1", "express-rate-limit": "^8.2.1", "hono": "^4.11.4", "jose": "^6.1.3", "json-schema-typed": "^8.0.2", "pkce-challenge": "^5.0.0", "raw-body": "^3.0.0", "zod": "^3.25 || ^4.0", "zod-to-json-schema": "^3.25.1" }, "peerDependencies": { "@cfworker/json-schema": "^4.1.1" }, "optionalPeers": ["@cfworker/json-schema"] }, "sha512-zo37mZA9hJWpULgkRpowewez1y6ML5GsXJPY8FI0tBBCd77HEvza4jDqRKOXgHNn867PVGCyTdzqpz0izu5ZjQ=="],
 
@@ -1523,6 +1567,8 @@
     "vary": ["vary@1.1.2", "", {}, "sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg=="],
 
     "vite": ["vite@8.0.12", "", { "dependencies": { "lightningcss": "^1.32.0", "picomatch": "^4.0.4", "postcss": "^8.5.14", "rolldown": "1.0.0", "tinyglobby": "^0.2.16" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "@vitejs/devtools": "^0.1.18", "esbuild": "^0.27.0 || ^0.28.0", "jiti": ">=1.21.0", "less": "^4.0.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "@vitejs/devtools", "esbuild", "jiti", "less", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-w2dDofOWv2QB09ZITZBsvKTVAlYvPR4IAmrY/v0ir9KvLs0xybR7i48wxhM1/oyBWO34wPns+bPGw5ZrZqDpZg=="],
+
+    "vite-plugin-singlefile": ["vite-plugin-singlefile@2.3.3", "", { "dependencies": { "micromatch": "^4.0.8" }, "peerDependencies": { "rollup": "^4.59.0", "vite": "^5.4.21 || ^6.0.0 || ^7.0.0 || ^8.0.0" }, "optionalPeers": ["rollup"] }, "sha512-XVnGH0QzbOa8fxRSsHdCarVN1BSBXNi7uLMQYlrGRN5apdHkk62XQWRJhVever0lnfuyBkwn+kvVChdm/OoOUg=="],
 
     "vitefu": ["vitefu@1.1.3", "", { "peerDependencies": { "vite": "^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0" }, "optionalPeers": ["vite"] }, "sha512-ub4okH7Z5KLjb6hDyjqrGXqWtWvoYdU3IGm/NorpgHncKoLTCfRIbvlhBm7r0YstIaQRYlp4yEbFqDcKSzXSSg=="],
 

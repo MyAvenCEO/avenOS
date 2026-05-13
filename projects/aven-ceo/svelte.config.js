@@ -16,7 +16,12 @@ const config = {
 		// https://svelte.dev/docs/kit/adapters for more information about adapters.
 		adapter: adapter(),
 		alias: {
-			$seed: path.resolve(__dirname, 'seed')
+			$seed: path.resolve(__dirname, 'seed'),
+			'@avenos/vibe-app-sandbox': path.resolve(
+				__dirname,
+				'../../libs/vibe-app-sandbox/src/index.ts'
+			),
+			'@avenos/vibe-apps': path.resolve(__dirname, '../../libs/vibe-apps/src/registry.ts')
 		}
 	}
 }

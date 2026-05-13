@@ -37,3 +37,7 @@ __pycache__/
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Vibe app sandbox + mini-app build outputs (rebuilt by `bun run build` per package).
+/libs/vibe-app-sandbox/sandbox/dist/
+/libs/vibe-apps/*/dist/

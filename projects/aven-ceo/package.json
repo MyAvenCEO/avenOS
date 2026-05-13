@@ -4,13 +4,15 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "bun run --env-file=../../.env vite dev",
-		"dev:local": "JAZZ_DEV_USE_LOCAL=1 bun run --env-file=../../.env vite dev",
-		"build": "bun run --env-file=../../.env vite build",
-		"preview": "bun run --env-file=../../.env vite preview",
-		"prepare": "svelte-kit sync || echo ''",
-		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"dev": "bun --env-file=../../.env x --bun vite dev",
+		"dev:local": "JAZZ_DEV_USE_LOCAL=1 bun --env-file=../../.env x --bun vite dev",
+		"build:vibe-apps": "bun --cwd=../../libs/vibe-apps run build",
+		"build:vibe-sandbox": "bun --cwd=../../libs/vibe-app-sandbox run build",
+		"build": "bun run build:vibe-apps && bun run build:vibe-sandbox && bun --env-file=../../.env x --bun vite build",
+		"preview": "bun --env-file=../../.env x --bun vite preview",
+		"prepare": "bunx --bun svelte-kit sync || echo ''",
+		"check": "bunx --bun svelte-kit sync && bunx --bun svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "bunx --bun svelte-kit sync && bunx --bun svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"format": "biome format --write ."
@@ -26,9 +28,12 @@
 		"svelte-check": "^4.4.6",
 		"tailwindcss": "^4.2.4",
 		"typescript": "^6.0.2",
-		"vite": "^8.0.7"
+		"vite": "^8.0.7",
+		"vite-plugin-singlefile": "^2.3.0"
 	},
 	"dependencies": {
+		"@avenos/vibe-app-sandbox": "workspace:*",
+		"@avenos/vibe-apps": "workspace:*",
 		"isomorphic-dompurify": "^3.12.0",
 		"jazz-tools": "^2.0.0-alpha.45",
 		"marked": "^18.0.3",

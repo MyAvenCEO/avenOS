@@ -3,13 +3,15 @@
 	"private": true,
 	"type": "module",
 	"workspaces": [
-		"projects/*"
+		"projects/*",
+		"libs/*"
 	],
 	"scripts": {
 		"dev": "bun --env-file=.env run dev:aven-ceo",
 		"dev:local": "JAENSEN_OPENAI_API_KEY=local JAENSEN_OPENAI_BASE_URL=http://box:8000/v1 JAENSEN_OPENAI_MODEL=minimax-m2.7-nvfp4 bun --env-file=.env run dev:aven-ceo",
 		"dev:tinfoil": "bun --env-file=.env run dev:aven-ceo",
 		"dev:aven-ceo": "bun --env-file=.env --filter @avenos/aven-ceo dev",
+		"dev:stack": "bun ./projects/dev-stack/run-dev.ts",
 		"dev:jaensen-server": "bun --env-file=.env --filter @jaensen/web-api dev",
 		"dev:ocr-example": "bun --env-file=.env --filter @avenos/ocr-example dev",
 		"dev:jaensen-bot": "bun --env-file=.env --filter @avenos/jaensen-bot dev",

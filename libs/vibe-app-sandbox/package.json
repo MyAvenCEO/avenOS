@@ -1,0 +1,25 @@
+{
+	"name": "@avenos/vibe-app-sandbox",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"description": "Reusable host glue + outer-iframe sandbox proxy for running untrusted (vibe-coded / model-generated) UI artifacts via the MCP Apps protocol.",
+	"main": "./src/index.ts",
+	"types": "./src/index.ts",
+	"scripts": {
+		"build": "bunx --bun vite build --config sandbox/vite.config.ts",
+		"serve": "bun --watch sandbox/serve.ts",
+		"dev": "bun run build && bun run serve"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/ext-apps": "^1.0.0",
+		"@modelcontextprotocol/sdk": "^1.29.0",
+		"zod": "^4.4.2",
+		"zod-to-json-schema": "^3.25.2"
+	},
+	"devDependencies": {
+		"typescript": "^6.0.2",
+		"vite": "^8.0.7",
+		"vite-plugin-singlefile": "^2.3.0"
+	}
+}

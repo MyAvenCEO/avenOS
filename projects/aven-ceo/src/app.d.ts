@@ -10,4 +10,10 @@ declare global {
 	}
 }
 
+interface ImportMetaEnv {
+	readonly PUBLIC_VIBE_SANDBOX_URL?: string
+	/** @deprecated use PUBLIC_VIBE_SANDBOX_URL */
+	readonly PUBLIC_MCP_SANDBOX_URL?: string
+}
+
 export {}
