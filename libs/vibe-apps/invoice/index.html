@@ -777,7 +777,11 @@
 				$root.innerHTML = `<div class="invoice-ui-container">${banner}${parties}${sectionsHtml}${instrBlock}</div>`
 			}
 
-			const app = new App({ name: 'Aven Invoice viewer', version: '1.0.0' })
+			const app = new App(
+				{ name: 'Aven Invoice viewer', version: '1.0.0' },
+				{},
+				{ autoResize: false, allowUnsafeEval: true }
+			)
 
 			async function pushModelContext() {
 				const summary = isInvoicePayload(state) && isRecord(state.header) && typeof state.header.invoice_number === 'string'
@@ -795,7 +799,13 @@
 				void pushModelContext()
 			}
 
-			app.ontoolinput = (params) => applyConfig(params.arguments)
+			app.ontoolinput = (params) => {
+				const args =
+					params && typeof params === 'object' && params.arguments !== undefined
+						? params.arguments
+						: params
+				applyConfig(args)
+			}
 			app.ontoolresult = (result) => {
 				const sc = result.structuredContent
 				if (sc && isInvoicePayload(sc)) applyConfig(sc)
