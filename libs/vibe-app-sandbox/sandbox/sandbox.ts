@@ -28,19 +28,6 @@ if (!document.referrer.match(ALLOWED_REFERRER_PATTERN)) {
 const EXPECTED_HOST_ORIGIN = new URL(document.referrer).origin
 const OWN_ORIGIN = new URL(window.location.href).origin
 
-/**
- * `document.write`/`srcdoc` inner documents often keep `about:blank` as URL; without a `<base>`,
- * absolute module URLs like `/ext-apps.js` fail to fetch. Inject once into `<head>`.
- */
-function withSandboxDocumentBase(html: string, origin: string): string {
-	const base = `<base href="${origin}/">`
-	if (/<base\s+href=/i.test(html)) return html
-	if (/<head(\s[^>]*)?>/i.test(html)) {
-		return html.replace(/<head(\s[^>]*)?>/i, `<head$1>${base}`)
-	}
-	return `<!doctype html><html><head>${base}</head><body>${html}</body></html>`
-}
-
 try {
 	// Must call `alert` on `top` (not optional) — if this runs, sandbox is broken.
 	// biome-ignore lint/style/noNonNullAssertion: deliberate cross-origin probe for sandbox self-test
@@ -98,15 +85,14 @@ window.addEventListener('message', async (event: MessageEvent) => {
 				inner.setAttribute('allow', allowAttribute)
 			}
 			if (typeof html === 'string') {
-				const htmlWithBase = withSandboxDocumentBase(html, OWN_ORIGIN)
 				const doc = inner.contentDocument ?? inner.contentWindow?.document
 				if (doc) {
 					doc.open()
-					doc.write(htmlWithBase)
+					doc.write(html)
 					doc.close()
 				} else {
 					console.warn('[Sandbox] document.write not available, falling back to srcdoc')
-					inner.srcdoc = htmlWithBase
+					inner.srcdoc = html
 				}
 			}
 		} else if (inner.contentWindow) {

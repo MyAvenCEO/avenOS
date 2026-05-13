@@ -543,11 +543,7 @@
 				$root.innerHTML = `<div class="bs-ui-container">${banner}${parties}${table}${notesBlock}</div>`
 			}
 
-			const app = new App(
-				{ name: 'Aven Kontoauszug', version: '1.0.0' },
-				{},
-				{ autoResize: false, allowUnsafeEval: true }
-			)
+			const app = new App({ name: 'Aven Kontoauszug', version: '1.0.0' })
 
 			async function pushModelContext() {
 				const summary =

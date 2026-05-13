@@ -56,7 +56,8 @@ export const HOST_STYLE_VARIABLES: Record<string, string> = {
 	'--color-ring-info': '#e6b34d',
 	'--color-text-inverse': '#e8ede1',
 	'--border-radius-md': '1rem',
-	'--border-radius-2xl': '2rem',
+	// Note: MCP Apps schema does NOT include `--border-radius-2xl`. Apps can rely on
+	// the inline CSS fallback `var(--border-radius-2xl, 2rem)` instead.
 	'--font-sans': 'Inter, ui-sans-serif, system-ui, sans-serif'
 }
 

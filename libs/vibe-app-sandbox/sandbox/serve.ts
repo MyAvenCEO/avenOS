@@ -36,8 +36,7 @@ function buildCspHeader(csp?: McpUiResourceCsp): string {
 		`worker-src 'self' blob: ${resourceDomains}`.trim(),
 		frameDomains ? `frame-src ${frameDomains}` : "frame-src 'none'",
 		"object-src 'none'",
-		// Allow <base href> in inner iframe HTML (host injects sandbox origin for document.write docs).
-		baseUriDomains ? `base-uri ${baseUriDomains}` : "base-uri 'self'"
+		baseUriDomains ? `base-uri ${baseUriDomains}` : "base-uri 'none'"
 	]
 
 	return directives.join('; ')
