@@ -1,8 +1,9 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 
+import { bankStatementDemoToolArguments } from '../bank-statement/src/demo-bank-statement'
 import { invoiceDemoToolArguments } from '../invoice/src/demo-invoice'
 
-export type VibeAppId = 'todos' | 'invoice'
+export type VibeAppId = 'todos' | 'invoice' | 'bank-statement'
 
 export interface VibeAppDefinition {
 	id: VibeAppId
@@ -22,8 +23,8 @@ export const todosDemoToolArguments = {
 	]
 } as const
 
-/** Re-export: demo invoice body matching OCR `extracted` for doctype `invoice`. */
-export { invoiceDemoToolArguments }
+/** Re-export demo payloads matching OCR headless schemas (`invoice`, `bank_statement`). */
+export { bankStatementDemoToolArguments, invoiceDemoToolArguments }
 
 export const vibeAppList: VibeAppDefinition[] = [
 	{
@@ -40,10 +41,22 @@ export const vibeAppList: VibeAppDefinition[] = [
 		id: 'invoice',
 		label: 'Invoice',
 		description: 'Invoice viewer (legacy layout) with a schema-shaped demo document.',
-		getToolArguments: () => JSON.parse(JSON.stringify(invoiceDemoToolArguments)) as Record<string, unknown>,
+		getToolArguments: () =>
+			JSON.parse(JSON.stringify(invoiceDemoToolArguments)) as Record<string, unknown>,
 		getToolResult: () =>
 			Promise.resolve({
 				content: [{ type: 'text', text: 'Demo invoice tool finished OK' }]
+			})
+	},
+	{
+		id: 'bank-statement',
+		label: 'Bank statement',
+		description: 'Kontoauszug-style viewer aligned with OCR bank_statement schema.',
+		getToolArguments: () =>
+			JSON.parse(JSON.stringify(bankStatementDemoToolArguments)) as Record<string, unknown>,
+		getToolResult: () =>
+			Promise.resolve({
+				content: [{ type: 'text', text: 'Demo bank statement tool finished OK' }]
 			})
 	}
 ]

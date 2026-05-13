@@ -3,12 +3,14 @@ import type { AppBridge } from '@avenos/vibe-app-sandbox'
 import { createAppBridge, loadSandboxProxy, log, runApp } from '@avenos/vibe-app-sandbox'
 import { type VibeAppId, vibeAppById } from '@avenos/vibe-apps'
 import { onDestroy, onMount } from 'svelte'
-import todosHtml from '../../../../../libs/vibe-apps/todos/dist/index.html?raw'
+import bankStatementHtml from '../../../../../libs/vibe-apps/bank-statement/dist/index.html?raw'
 import invoiceHtml from '../../../../../libs/vibe-apps/invoice/dist/index.html?raw'
+import todosHtml from '../../../../../libs/vibe-apps/todos/dist/index.html?raw'
 
 const bundles: Record<VibeAppId, string> = {
 	todos: todosHtml,
-	invoice: invoiceHtml
+	invoice: invoiceHtml,
+	'bank-statement': bankStatementHtml
 }
 
 let { appId }: { appId: VibeAppId } = $props()
