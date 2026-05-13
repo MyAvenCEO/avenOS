@@ -12,6 +12,7 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const SANDBOX_PORT = Number.parseInt(process.env.SANDBOX_PORT ?? '8081', 10)
 const DIRECTORY = join(__dirname, 'dist')
 const SANDBOX_FILE = Bun.file(join(DIRECTORY, 'sandbox.html'))
+const EXT_APPS_FILE = Bun.file(join(DIRECTORY, 'ext-apps.js'))
 
 function sanitizeCspDomains(domains?: string[]): string[] {
 	if (!domains) return []
@@ -52,8 +53,30 @@ Bun.serve({
 		}
 
 		const url = new URL(req.url)
+
+		// Vendored MCP App SDK — vibe apps `import 'http://.../ext-apps.js'` to
+		// stay pure HTML/CSS/JS without a per-app bundler.
+		if (url.pathname === '/ext-apps.js') {
+			if (!(await EXT_APPS_FILE.exists())) {
+				return new Response(
+					'Run `bun run build:ext-apps` (in @avenos/vibe-app-sandbox) — missing sandbox/dist/ext-apps.js.',
+					{ status: 503 }
+				)
+			}
+			return new Response(EXT_APPS_FILE, {
+				headers: {
+					'Content-Type': 'text/javascript; charset=utf-8',
+					'Cache-Control': 'public, max-age=31536000, immutable',
+					// Allow same-origin loading from the inner iframe.
+					'Access-Control-Allow-Origin': '*'
+				}
+			})
+		}
+
 		if (url.pathname !== '/' && url.pathname !== '/sandbox.html') {
-			return new Response('Only sandbox.html is served on this port.', { status: 404 })
+			return new Response('Only sandbox.html and ext-apps.js are served on this port.', {
+				status: 404
+			})
 		}
 
 		let cspConfig: McpUiResourceCsp | undefined

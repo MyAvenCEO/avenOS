@@ -6,9 +6,8 @@
 	"scripts": {
 		"dev": "bun --env-file=../../.env x --bun vite dev",
 		"dev:local": "JAZZ_DEV_USE_LOCAL=1 bun --env-file=../../.env x --bun vite dev",
-		"build:vibe-apps": "bun --cwd=../../libs/vibe-apps run build",
 		"build:vibe-sandbox": "bun --cwd=../../libs/vibe-app-sandbox run build",
-		"build": "bun run build:vibe-apps && bun run build:vibe-sandbox && bun --env-file=../../.env x --bun vite build",
+		"build": "bun run build:vibe-sandbox && bun --env-file=../../.env x --bun vite build",
 		"preview": "bun --env-file=../../.env x --bun vite preview",
 		"prepare": "bunx --bun svelte-kit sync || echo ''",
 		"check": "bunx --bun svelte-kit sync && bunx --bun svelte-check --tsconfig ./tsconfig.json",

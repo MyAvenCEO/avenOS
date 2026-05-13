@@ -15,9 +15,9 @@ import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 				<p class="tech-label mb-3">Dokumentation</p>
 				<h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">AvenOS</h1>
 				<p class="mt-2 max-w-prose text-sm leading-relaxed text-muted-foreground">
-					<strong class="font-medium text-foreground">AvenOS</strong>
-					ist unsere operative Grundschicht — gemeinsame Bibliotheken, Laufzeitverträge, Sync und
-					Deployment für AvenCEO, Integrationen und alle hier dokumentierten Komponenten.
+					<strong class="font-medium text-foreground">AvenOS</strong> ist das Betriebssystem unter
+					deinem AvenCEO — mit Ende-zu-Ende-Verschlüsselung, Daten die dir gehören und einem KI,
+					der mit dir wächst. Hier findest du, wie die einzelnen Teile zusammenspielen.
 				</p>
 			</header>
 
@@ -44,9 +44,9 @@ import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 						</svg>
 					</div>
 					<div>
-						<p class="text-sm font-semibold tracking-tight text-foreground">Vibe-View-Bibliothek</p>
+						<p class="text-sm font-semibold tracking-tight text-foreground">Vibe-View Library</p>
 						<p class="mt-0.5 text-xs text-muted-foreground leading-snug">
-							Sandbox-Playground: Artefakt-Viewer fremder Herkunft, Schema → UI.
+							Alle Ansichten live im Browser — so sehen deine Daten in AvenCEO aus.
 						</p>
 					</div>
 					<span

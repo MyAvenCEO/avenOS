@@ -10,20 +10,6 @@
 		".": "./src/registry.ts"
 	},
 	"scripts": {
-		"build": "bun run build:todos && bun run build:invoice && bun run build:bank-statement",
-		"build:todos": "bunx --bun vite build --config todos/vite.config.ts",
-		"build:invoice": "bunx --bun vite build --config invoice/vite.config.ts",
-		"build:bank-statement": "bunx --bun vite build --config bank-statement/vite.config.ts"
-	},
-	"dependencies": {
-		"@modelcontextprotocol/ext-apps": "^1.0.0",
-		"@modelcontextprotocol/sdk": "^1.29.0",
-		"zod": "^4.4.2",
-		"zod-to-json-schema": "^3.25.2"
-	},
-	"devDependencies": {
-		"typescript": "^6.0.2",
-		"vite": "^8.0.7",
-		"vite-plugin-singlefile": "^2.3.0"
+		"build": "bun -e \"console.log('@avenos/vibe-apps: static HTML, no build step')\""
 	}
 }

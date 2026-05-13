@@ -26,17 +26,6 @@
     "libs/vibe-apps": {
       "name": "@avenos/vibe-apps",
       "version": "0.0.1",
-      "dependencies": {
-        "@modelcontextprotocol/ext-apps": "^1.0.0",
-        "@modelcontextprotocol/sdk": "^1.29.0",
-        "zod": "^4.4.2",
-        "zod-to-json-schema": "^3.25.2",
-      },
-      "devDependencies": {
-        "typescript": "^6.0.2",
-        "vite": "^8.0.7",
-        "vite-plugin-singlefile": "^2.3.0",
-      },
     },
     "projects/actor-runtime": {
       "name": "@jaensen/actor-runtime",

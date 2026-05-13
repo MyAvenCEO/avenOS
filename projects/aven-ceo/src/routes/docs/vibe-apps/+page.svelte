@@ -7,7 +7,7 @@ let selectedId = $state<VibeAppId>('invoice')
 </script>
 
 <svelte:head>
-	<title>Vibe-View-Bibliothek — Aven Dokumentation</title>
+	<title>Vibe-View Library — Aven Dokumentation</title>
 </svelte:head>
 
 <div class="flex min-h-dvh flex-col bg-background text-foreground font-sans antialiased">
@@ -16,9 +16,9 @@ let selectedId = $state<VibeAppId>('invoice')
 	<div class="flex min-h-0 min-w-0 flex-1">
 		<aside
 			class="flex w-64 shrink-0 flex-col border-r border-border p-4"
-			aria-label="Vibe-View-Bibliothek"
+			aria-label="Vibe-View Library"
 		>
-			<p class="tech-label px-1 pb-2">Vibe-View-Bibliothek</p>
+			<p class="tech-label px-1 pb-2">Vibe-View Library</p>
 			<div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
 				{#each vibeAppList as app}
 					<button
