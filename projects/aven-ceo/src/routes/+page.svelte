@@ -4,23 +4,38 @@
 		name="description"
 		content="Lieber CEO und Gründer: 10+ Stunden mehr Zeit pro Woche — Ein AvenCEO verwandelt deine Arbeitsweise in selbstoptimierende KI‑Skills und arbeitet so einen Großteil deines zeitraubenden Alltags ab."
 	>
+	<link rel="preload" as="image" href="/hero.png" />
 </svelte:head>
 
 <script lang="ts">
 	import { beamAvatarSvg, paletteFromCommaString } from '$lib/intent-mock/beam-avatar'
+	import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
+	import { loadPublishersWithSkills, skillDetailHref } from '$lib/skills/loader'
+
+	let heroEl: HTMLElement | undefined = $state()
+	let heroInView = $state(true)
+	let navHeight = $state(84)
+
+	$effect(() => {
+		const el = heroEl
+		if (!el || typeof IntersectionObserver === 'undefined') return
+		const io = new IntersectionObserver(([e]) => {
+			heroInView = e?.isIntersecting ?? false
+		}, { threshold: 0.08, rootMargin: '-56px 0px 0px 0px' })
+		io.observe(el)
+		return () => io.disconnect()
+	})
+
+	const publishersForHome = loadPublishersWithSkills('de')
+	const homepageFeaturedSkills = publishersForHome.flatMap((pub) =>
+		pub.featuredSlugs.flatMap((slug) => {
+			const s = pub.skills.find((x) => x.slug === slug)
+			return s ? [s] : []
+		}),
+	)
 
 	const paletteHuman = paletteFromCommaString('f7ead9,ccc7a8,88b499,305669,222e49')
 	const paletteKi = paletteFromCommaString('e8c9a8,d4a574,c9a962,305669,222e49')
-
-	/** Repo für Selbst-Hosting · Open‑Source‑Stack (URL bei Bedarf anpassen). */
-	const openSourceGithubHref = 'https://github.com/jaensen/AvenOS'
-
-	const avenIdPriceStandardEur = 55
-	const avenIdPriceEarlyBirdEur = 8
-	/** Rundung gegen Standardpreis Early Bird vs. Standard. */
-	const avenIdDiscountVsStandardPct = Math.round(
-		((avenIdPriceStandardEur - avenIdPriceEarlyBirdEur) / avenIdPriceStandardEur) * 100,
-	)
 
 	const stattStacks = [
 		'Notion · Confluence · interne Wikis',
@@ -31,7 +46,7 @@
 		'sevDesk · Lexoffice · Odoo / SAP B1 Cloud'
 	] as const
 
-	/** Kalendertag in Europe/Berlin — für den Brieftext „heute“. */
+	/** Kalendertag in Europe/Berlin — für den Brieftext „heute". */
 	const letterDate = (() => {
 		const now = new Date()
 		const iso = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' })
@@ -46,21 +61,42 @@
 </script>
 
 <div lang="de" class="min-h-screen bg-background text-foreground font-sans antialiased">
-	<header class="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-md">
+	<!-- Sticky nav overlays hero; hero negative margin = photo meets viewport top -->
+	<header
+		bind:clientHeight={navHeight}
+		class="sticky top-0 z-50 border-b backdrop-blur-md transition-[background-color,border-color,color] duration-300 {heroInView
+			? 'border-white/15 bg-black/14 text-white'
+			: 'border-border/40 bg-background/88 text-foreground'}"
+	>
 		<div class="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-10 gap-y-2 px-5 py-5 sm:justify-between sm:px-8">
 			<a
 				href="/"
-				class="font-mono text-[11px] font-bold tracking-[0.14em] opacity-80 hover:opacity-100"
+				class="font-serif text-[17px] font-light tracking-[-0.01em] {heroInView
+					? 'text-white/95 hover:text-white'
+					: 'opacity-85 hover:opacity-100'}"
 			>
-				aven.ceo
+				AvenCEO
 			</a>
 			<nav
-				class="flex items-center gap-5 text-[11px] font-semibold uppercase tracking-[0.12em] opacity-70"
+				class="flex items-center gap-5 text-[11px] font-semibold uppercase tracking-[0.12em] {heroInView
+					? 'text-white/78'
+					: 'opacity-70'}"
 			>
-				<a href="/#pricing" class="transition-opacity hover:opacity-100">Preise</a>
+				<a
+					href="/skills"
+					class="transition-colors hover:opacity-100 {heroInView ? 'hover:text-white' : 'hover:opacity-100'}"
+					>Skills</a
+				>
+				<a
+					href="/pricing"
+					class="transition-colors hover:opacity-100 {heroInView ? 'hover:text-white' : 'hover:opacity-100'}"
+					>Preise</a
+				>
 				<a
 					href="/me"
-					class="rounded-full border border-border/80 bg-white/15 px-3 py-1 opacity-95 hover:opacity-100 transition-opacity"
+					class="rounded-full border px-3 py-1 transition-colors {heroInView
+						? 'border-white/40 bg-white/14 text-white hover:border-white/55 hover:bg-white/22'
+						: 'border-border/80 bg-white/15 opacity-95 hover:opacity-100'}"
 				>
 					Login
 				</a>
@@ -68,33 +104,60 @@
 		</div>
 	</header>
 
-	<section class="border-b border-border/40 px-5 py-24 sm:px-8 sm:py-32 md:py-40">
-		<div class="mx-auto max-w-3xl text-center">
-			<p class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
-				aven.ceo
-			</p>
-			<h1
-				class="mt-4 text-[1.55rem] font-semibold tracking-[-0.03em] text-pretty leading-snug text-foreground sm:text-3xl md:text-[2.35rem] md:leading-[1.15]"
-			>
-				<span class="block text-lg font-normal text-foreground/80 sm:text-xl md:text-2xl"
-					>Lieber CEO und Gründer,</span
-				>
-				<span class="mt-3 block">10+ Stunden mehr Zeit pro Woche</span>
-				<span
-					class="mt-2 block font-serif text-[clamp(1.25rem,3.85vw,2.05rem)] font-light leading-[1.08] tracking-tight text-foreground/92"
-					>Für Vision, Produkt und das Leben, das wirklich zählt.</span
-				>
-			</h1>
-			<div class="mx-auto mt-8 max-w-2xl space-y-5 text-[15px] leading-relaxed text-foreground/72 sm:text-base">
-				<p>
-					Ein AvenCEO verwandelt deine Arbeitsweise in
-					<strong class="font-medium text-foreground/88">selbstoptimierende KI‑Skills</strong>
-					und arbeitet so einen Großteil
-					<strong class="font-medium text-foreground/85">deines zeitraubenden Unternehmer‑Alltags</strong>
-					ab.</p>
-			</div>
+	<div
+		bind:this={heroEl}
+		class="relative isolate overflow-hidden border-b border-white/15"
+		style="margin-top: -{navHeight}px; padding-top: {navHeight}px"
+	>
+		<div class="absolute inset-0 z-0" aria-hidden="true">
+			<img
+				src="/hero.png"
+				alt=""
+				class="h-full min-h-[560px] w-full object-cover object-[48%_26%] sm:min-h-0 sm:object-[52%_22%]"
+				fetchpriority="high"
+				decoding="async"
+			/>
 		</div>
-	</section>
+		<div
+			class="pointer-events-none absolute inset-0 z-[1] bg-linear-to-b from-black/10 via-black/14 to-black/38 sm:via-black/16 sm:to-black/36"
+			aria-hidden="true"
+		></div>
+		<div
+			class="pointer-events-none absolute inset-0 z-[1] bg-linear-to-l from-transparent via-black/6 to-black/48 md:to-black/44"
+			aria-hidden="true"
+		></div>
+
+		<section class="relative z-10 flex min-h-[min(92vh,960px)] items-center px-5 py-24 sm:px-8 sm:py-32 md:py-36">
+			<div class="mx-auto flex w-full max-w-6xl justify-center md:justify-end">
+				<div
+					class="w-full max-w-3xl text-center md:max-w-4xl lg:max-w-5xl md:text-right [text-shadow:0_2px_28px_rgba(0,0,0,0.32)]"
+				>
+					<h1
+						class="text-[1.55rem] font-semibold tracking-[-0.03em] leading-snug text-white sm:text-3xl md:text-[2.35rem] md:leading-[1.15]"
+					>
+						<span class="block text-lg font-normal text-white/82 sm:text-xl md:text-2xl"
+							>Lieber CEO und Gründer,</span
+						>
+						<span class="mt-3 block">10+ Stunden mehr Zeit pro Woche</span>
+						<span
+							class="mt-2 block font-serif text-[clamp(1.25rem,3.85vw,2.05rem)] font-light leading-[1.08] tracking-tight text-white/94"
+							>Für Vision, Produkt und das Leben, das wirklich zählt.</span
+						>
+					</h1>
+					<div
+						class="mx-auto mt-8 w-full max-w-2xl space-y-5 text-[15px] leading-relaxed text-white/76 sm:max-w-3xl sm:text-base md:mx-0 md:ml-auto lg:max-w-4xl"
+					>
+						<p>
+							<strong class="font-medium text-white">Dein AvenCEO</strong> verwandelt deine Arbeitsweise in
+							<strong class="font-medium text-white">selbstoptimierende KI‑Skills</strong><br />
+							und arbeitet so einen Großteil
+							<strong class="font-medium text-white/92">deines zeitraubenden Unternehmer‑Alltags</strong>
+							ab.</p>
+					</div>
+				</div>
+			</div>
+		</section>
+	</div>
 
 	<section
 		class="border-b border-border/40 bg-linear-to-b from-white/18 via-white/6 to-transparent px-5 py-9 sm:px-8 sm:py-11"
@@ -115,7 +178,6 @@
 					Grund auf mit aufbaut.</p>
 			</header>
 
-			<!-- Zwei Tandems: Human + Aven nebeneinander, echte Trio-Zeile mit Plus -->
 			<div class="mx-auto mt-8 grid max-w-4xl gap-3 sm:grid-cols-2 sm:gap-4">
 				<div class="rounded-2xl border border-border/35 bg-white/25 px-3 py-4 sm:px-4 sm:py-4">
 					<div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-x-2 sm:gap-x-3">
@@ -318,57 +380,37 @@
 					</ol>
 					<div class="mx-auto mt-7 w-full max-w-4xl text-left">
 						<p class="text-center font-mono text-[9px] font-bold uppercase tracking-[0.24em] text-foreground/42">
-							Beispiel‑Skills</p>
+							Featured Skills · Marketplace</p>
 						<ul
-							class="mt-2 grid grid-cols-2 gap-x-2 gap-y-1.5 sm:grid-cols-3 md:grid-cols-3"
-							aria-label="Beispiele für mögliche Skills"
+							class="mt-4 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4"
+							aria-label="Featured Skills aus dem Marketplace"
 						>
-							{#each [
-								{
-									title: 'Posteingang & Triage',
-									blurb: 'Triage · Entwürfe — du gibst frei.'
-								},
-								{
-									title: 'Rechnungen & Belege',
-									blurb: 'Zuordnung & Freigaben vorbereiten.'
-								},
-								{
-									title: 'Kunden‑Onboarding',
-									blurb: 'Checklisten & erste Schritte im Griff.'
-								},
-								{
-									title: 'Investor‑Updates',
-									blurb: 'Struktur, KPIs, Lücken schließen.'
-								},
-								{
-									title: 'Verträge & Fristen',
-									blurb: 'Laufzeiten, Versionen, Reminder.'
-								},
-								{
-									title: 'Hiring & Termine',
-									blurb: 'Slots koordinieren, Follow-ups nicht verlieren.'
-								},
-								{
-									title: 'Meetings & Nachbereitung',
-									blurb: 'Notizen → To-dos mit Owner & Deadline.'
-								},
-								{
-									title: 'Board & KPIs',
-									blurb: 'Zahlen bündeln, Abweichungen, Kurzbrief.'
-								},
-								{
-									title: 'Produktfeedback',
-									blurb: 'Support/Sales bündeln, priorisieren.'
-								}
-							] as skill (skill)}
-								<li
-									class="flex flex-col gap-0.5 rounded-lg border border-border/35 bg-white/45 px-2 py-1.5 text-left ring-1 ring-black/3 sm:px-2.5 sm:py-2"
-								>
-									<span class="text-[11px] font-semibold leading-tight text-foreground/88 sm:text-[12px]">{skill.title}</span>
-									<span class="text-[10px] leading-snug text-foreground/58 sm:text-[11px]">{skill.blurb}</span>
+							{#each homepageFeaturedSkills as skill (skill.slug)}
+								<li>
+									<a
+										href={skillDetailHref(skill.slug, 'de')}
+										class="flex h-full min-h-[6.5rem] flex-col gap-1 rounded-xl border border-border/35 bg-white/55 px-2.5 py-2 text-left ring-1 ring-black/4 transition-colors hover:border-border/65 hover:bg-white/75 sm:min-h-0 sm:px-3 sm:py-2.5"
+									>
+										<span
+											class="font-mono text-[8px] font-bold uppercase tracking-[0.18em] text-foreground/44"
+											>{skill.publisher.displayName}</span
+										>
+										<span class="font-mono text-[11px] font-bold leading-tight tracking-[0.06em] text-foreground/88 sm:text-[12px]"
+											>{skill.slug}</span
+										>
+										<span class="mt-0.5 text-[10px] leading-snug text-foreground/58 sm:text-[11px]">{skill.oneLineCopy}</span>
+									</a>
 								</li>
 							{/each}
 						</ul>
+						<p class="mt-5 text-center">
+							<a
+								href="/skills"
+								class="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-tuscan-sun/90 underline-offset-4 transition-colors hover:text-tuscan-sun hover:underline"
+							>
+								Alle Skills im Marketplace →
+							</a>
+						</p>
 					</div>
 					<div
 						class="mx-auto mt-14 w-full max-w-xl border-t-2 border-tuscan-sun px-6 pt-8 text-center sm:mt-16 sm:px-8 sm:pt-9"
@@ -450,328 +492,9 @@
 		</div>
 	</section>
 
-	<section id="pricing" class="scroll-mt-28 border-b border-border/40 px-5 py-14 sm:px-8 sm:py-16">
-		<div class="mx-auto max-w-6xl">
-			<div class="mx-auto max-w-2xl text-center">
-				<p class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/40">
-					Pricing
-				</p>
-				<h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-					Wähle das Paket, das zu deiner aktuellen unternehmerischen Phase passt.</h2>
-			</div>
-
-			<div class="mt-12 flex flex-col gap-5 lg:flex-row lg:gap-6 lg:items-stretch">
-				<aside
-					class="flex min-w-0 flex-col rounded-2xl border border-border/40 bg-white/55 p-5 ring-1 ring-black/5 lg:w-[min(20rem,100%)] lg:max-w-none lg:shrink-0"
-				>
-					<div class="text-center">
-						<p class="mt-2 text-lg font-bold uppercase tracking-[0.14em] text-foreground sm:text-xl sm:tracking-[0.12em]">
-							Aven CEO – ID</p>
-					</div>
-					<div class="mt-3 space-y-2">
-						<div class="grid grid-cols-2 gap-x-3 gap-y-1">
-							<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45">Early&nbsp;Bird</p>
-							<p class="text-right text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45">
-								Standard</p>
-							<div class="flex min-w-0 flex-nowrap items-center justify-start gap-x-2">
-								<span class="shrink-0 text-2xl font-bold tabular-nums tracking-tight text-foreground"
-									>{avenIdPriceEarlyBirdEur}&nbsp;€</span>
-								<span
-									class="inline-flex shrink-0 items-center rounded-full border border-border/45 bg-tuscan-sun/55 px-2 py-0.5 text-[13px] font-semibold tabular-nums leading-none tracking-tight text-foreground ring-1 ring-black/6 sm:text-sm"
-									title={`Ersparnis gegenüber Standard (${avenIdPriceStandardEur}\u00a0€)`}
-								>
-									−{avenIdDiscountVsStandardPct}&nbsp;%</span>
-							</div>
-							<p class="text-right text-2xl font-bold tabular-nums tracking-tight text-foreground">
-								{avenIdPriceStandardEur}&nbsp;€</p>
-							<p
-								class="col-span-2 mt-2 text-center text-[12px] font-semibold uppercase tracking-[0.14em] text-tuscan-sun sm:text-[13px]"
-							>
-								Nur noch 10x Early&nbsp;Bird</p>
-						</div>
-					</div>
-					<ul class="mt-4 space-y-1.5 text-left text-[12px] leading-snug text-foreground/75">
-						<li>
-							<strong class="font-medium text-foreground/82">4&nbsp;Std</strong> AvenCEO Test‑Zugang</li>
-						<li>Sichere dir deine AvenID</li>
-						<li>
-							z.&nbsp;B. <strong class="font-semibold text-foreground/82">AvenBob</strong>
-							<span class="text-foreground/55">· bob.aven.ceo · bob@aven.ceo</span></li>
-						<li>
-							Exklusiver Social‑CEO‑Netzwerk‑Zugang</li>
-						<li>
-							Einfaches <strong class="font-medium text-foreground/82">One‑Click‑Self‑Hosting</strong> mit deiner Aven&nbsp;ID
-							<span class="text-foreground/55">· BYO API‑Keys</span></li>
-					</ul>
-					<div class="mt-3 flex min-h-0 flex-1 flex-col justify-end gap-2">
-						<div class="border-t border-foreground/8 pt-3 text-center">
-							<p class="font-mono text-[8px] font-bold uppercase tracking-[0.22em] text-foreground/45">Bonus</p>
-							<p class="mt-1 text-center text-[9px] leading-snug text-foreground/62 sm:text-[10px] sm:leading-[1.42]">
-								<strong class="font-medium text-foreground/78">Dauerhafter Zugang</strong> zu Maia&nbsp;City — das
-								<strong class="font-medium text-foreground/78">CEO‑Gründerspiel</strong>, in dem wir skizzieren, wie wir
-								<strong class="font-medium text-foreground/82">menschliche Städte von morgen</strong>
-								in den Arbeitsalltag einweben.
-								Eine <strong class="font-medium text-foreground/82">Post‑AGI‑Wirtschaftssimulation</strong>: Gründerinnen und Gründer
-								erproben kühnere und freundlichere Rhythmen von Wirtschaft, Fürsorge und
-								<strong class="font-medium text-foreground/82">besseren Lebensweisen</strong>.</p>
-						</div>
-						<div class="flex justify-center">
-							<a
-								href="/me"
-								class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-foreground px-8 text-[12px] font-semibold text-background transition-opacity hover:opacity-90 sm:text-[13px]"
-							>
-								AvenID sichern
-							</a>
-						</div>
-					</div>
-				</aside>
-
-				<div class="grid min-w-0 flex-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5">
-				<div
-					class="flex min-w-0 flex-col rounded-2xl border border-border/45 bg-tuscan-sun/55 p-5 ring-1 ring-black/6"
-				>
-					<div class="text-center">
-						<p class="mt-2 text-lg font-bold uppercase tracking-[0.14em] text-foreground sm:text-xl sm:tracking-[0.12em]">
-							Founder CEO</p>
-					</div>
-					<div class="mt-3 space-y-1">
-						<div class="flex items-baseline justify-between gap-2">
-							<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45">Erste 3 Monate</p>
-							<p class="text-[10px] font-semibold uppercase tracking-widest text-foreground/45">Danach</p>
-						</div>
-						<div class="flex items-baseline justify-between gap-2">
-							<p class="text-2xl font-bold tabular-nums tracking-tight text-foreground">
-								144&nbsp;€<span class="text-lg font-semibold text-foreground/62">/m</span></p>
-							<p class="text-right text-base font-semibold tabular-nums tracking-tight text-foreground/55">
-								233&nbsp;€<span class="text-sm font-semibold text-foreground/55">/m</span></p>
-						</div>
-					</div>
-					<ul class="mt-4 flex-1 space-y-1.5 text-left text-[12px] leading-snug text-foreground/75">
-						<li>1 Aven ID</li>
-						<li>
-							KI inklusive: max. <strong class="font-medium text-foreground/82">1&nbsp;Std / Tag</strong>
-							<span class="text-foreground/55">(~60&nbsp;Min.)</span>
-						</li>
-						<li>2 Workspaces Private + Work</li>
-						<li>25 Skills</li>
-						<li>Unbegrenzte Import‑Connectors</li>
-						<li>Social‑Media‑Export‑Connectors</li>
-						<li>100&nbsp;GB Storage</li>
-						<li>Wöchentliche Snapshots</li>
-						<li>AvenOS&nbsp;support</li>
-					</ul>
-					<div class="mt-6 flex justify-center border-t border-foreground/10 pt-4 lg:mt-auto">
-						<a
-							href="/me"
-							class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-foreground px-8 text-[12px] font-semibold text-background transition-opacity hover:opacity-90"
-						>
-							Buchen</a>
-					</div>
-				</div>
-
-				<div
-					class="flex min-w-0 flex-col rounded-2xl border border-border/40 bg-white/50 p-5 ring-1 ring-black/5"
-				>
-					<div class="text-center">
-						<p class="mt-2 text-lg font-bold uppercase tracking-[0.14em] text-foreground sm:text-xl sm:tracking-[0.12em]">
-							Startup CEO</p>
-					</div>
-					<div class="mt-3 space-y-1">
-						<div class="flex items-baseline justify-between gap-2">
-							<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45">Erste 6 Monate</p>
-							<p class="text-[10px] font-semibold uppercase tracking-widest text-foreground/45">Danach</p>
-						</div>
-						<div class="flex items-baseline justify-between gap-2">
-							<p class="text-2xl font-bold tabular-nums tracking-tight text-foreground">
-								610&nbsp;€<span class="text-lg font-semibold text-foreground/62">/m</span></p>
-							<p class="text-right text-base font-semibold tracking-tight text-foreground/55 tabular-nums">
-								987&nbsp;€<span class="text-sm font-semibold text-foreground/55">/m</span></p>
-						</div>
-					</div>
-					<ul class="mt-4 flex-1 space-y-1.5 text-left text-[12px] leading-snug text-foreground/75">
-						<li>1 Aven ID</li>
-						<li>
-							KI inklusive: max. <strong class="font-medium text-foreground/82">4&nbsp;Std / Tag</strong>
-							<span class="text-foreground/55">(~240&nbsp;Min.)</span>
-						</li>
-						<li>5 Workspaces</li>
-						<li>Unbegrenzte Skills</li>
-						<li>Unbegrenzte Import‑Connectors</li>
-						<li>10 Export‑Connectors</li>
-						<li>4&nbsp;TB Storage</li>
-						<li>Tägliche Snapshots</li>
-						<li>Nie wieder Papier – Briefpost digital</li>
-						<li class="font-medium text-foreground/82">Support durch AvenOS&nbsp;+ AvenMaia</li>
-						<li class="font-medium text-foreground/82">+ 1&nbsp;Std/Woche Samuel &amp; Daniel</li>
-					</ul>
-					<div class="mt-6 flex justify-center border-t border-foreground/10 pt-4 lg:mt-auto">
-						<a
-							href="/me"
-							class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-foreground px-8 text-[12px] font-semibold text-background transition-opacity hover:opacity-90"
-						>
-							Buchen</a>
-					</div>
-				</div>
-
-				<div
-					class="flex min-w-0 flex-col rounded-2xl border border-border/45 bg-white/55 p-5 ring-1 ring-black/5 sm:col-span-2 lg:col-span-1"
-				>
-					<div class="text-center">
-						<p class="mt-2 text-lg font-bold uppercase tracking-[0.14em] text-foreground sm:text-xl sm:tracking-[0.12em]">
-							Enterprise CEO</p>
-					</div>
-					<div class="mt-3 space-y-1">
-						<div class="flex items-baseline justify-between gap-2">
-							<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45">Erste 12 Monate</p>
-							<p class="text-[10px] font-semibold uppercase tracking-widest text-foreground/45">Danach</p>
-						</div>
-						<div class="flex items-baseline justify-between gap-2">
-							<p class="text-2xl font-bold tabular-nums tracking-tight text-foreground">
-								6.875&nbsp;€<span class="text-lg font-semibold text-foreground/62">/m</span></p>
-							<p class="text-right text-base font-semibold tracking-tight text-foreground/55 tabular-nums">
-								10.950&nbsp;€<span class="text-sm font-semibold text-foreground/55">/m</span></p>
-						</div>
-					</div>
-					<ul class="mt-4 flex-1 space-y-1.5 text-left text-[12px] leading-snug text-foreground/75">
-						<li>1 Aven ID</li>
-						<li>
-							KI inklusive: bis zu <strong class="font-medium text-foreground/82">24&nbsp;Std / Tag</strong>
-							<span class="text-foreground/55">(Fair‑Use)</span>
-						</li>
-						<li>100 Workspaces</li>
-						<li>Unbegrenzte Skills</li>
-						<li>Unbegrenzte Import‑ &amp; Export‑Connectors</li>
-						<li>12&nbsp;TB + monatliches LTO</li>
-						<li>Stündliche Snapshots</li>
-						<li>Nie wieder Papier – Briefpost digital</li>
-						<li class="font-medium text-foreground/82">Support durch AvenOS&nbsp;+ AvenMaia</li>
-						<li class="font-medium text-foreground/82">+ 10&nbsp;Std/Woche Samuel &amp; Daniel</li>
-					</ul>
-					<div class="mt-6 flex justify-center border-t border-foreground/10 pt-4 lg:mt-auto">
-						<a
-							href="/me"
-							class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-foreground px-8 text-[12px] font-semibold text-background transition-opacity hover:opacity-90"
-						>
-							Buchen</a>
-					</div>
-				</div>
-				</div>
-			</div>
-
-			<div
-				class="mx-auto mt-12 max-w-4xl rounded-2xl border border-border/50 bg-linear-to-br from-white/55 via-white/38 to-transparent px-5 py-6 shadow-[0_12px_40px_-24px_rgb(0_0_0/0.35)] ring-1 ring-black/6 sm:mt-14 sm:px-8 sm:py-8"
-			>
-				<p
-					class="text-center font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-tuscan-sun sm:text-[11px]"
-				>
-					OPTIONAL · MEHR KI + COACH PER MINUTE</p>
-				<p
-					class="mx-auto mt-2 max-w-2xl text-center font-mono text-[9px] font-medium uppercase tracking-[0.2em] text-foreground/45 sm:text-[10px]"
-				>
-					Extra KI‑Minuten&nbsp;· höchst persönlicher Skill‑Support durch Samuel&nbsp;&amp; Daniel</p>
-				<div
-					class="mt-6 flex flex-col gap-8 lg:mt-8 lg:flex-row lg:items-stretch lg:gap-0 lg:divide-x lg:divide-border/35"
-				>
-					<aside
-						class="border-b border-border/35 pb-8 text-center lg:w-[min(17rem,38%)] lg:shrink-0 lg:border-b-0 lg:border-border/35 lg:pb-0 lg:pr-8 lg:text-left"
-					>
-						<p class="font-mono text-[9px] font-bold uppercase tracking-[0.28em] text-foreground/45">
-							Zusätzliche KI‑Minuten</p>
-						<p class="mx-auto mt-3 max-w-[16rem] text-[13px] leading-snug text-foreground/72 lg:mx-0">
-							Jede zusätzliche <strong class="font-medium text-foreground/82">KI‑Minute</strong> über dein
-							tagesbezogenes Kontingent.</p>
-						<p class="mx-auto mt-4 text-2xl font-bold tabular-nums tracking-tight text-foreground lg:mx-0">10&nbsp;Cent/min</p>
-						<p class="mx-auto mt-2 max-w-[16rem] font-mono text-[10px] font-medium leading-snug uppercase tracking-[0.08em] text-foreground/38 lg:mx-0">
-							Kein Mindestvolumen · minutengleich abgerechnet</p>
-					</aside>
-					<div class="min-w-0 flex-1 lg:pl-8">
-						<p
-							class="mx-auto max-w-xl text-center text-[14px] font-medium leading-relaxed text-foreground/74 sm:text-[16px] sm:leading-snug lg:mx-0 lg:max-w-none lg:text-left"
-						>
-							Wenn du bei deinem Skill‑Tuning Hilfe brauchst, begleiten dich Samuel + Daniel höchst persönlich — jeder
-							Use&nbsp;Case, nach Bedarf auf <strong class="font-semibold text-foreground/82">Minutenbasis</strong>.</p>
-						<div
-							class="mx-auto mt-6 grid max-w-sm grid-cols-1 gap-7 text-center sm:mt-8 sm:max-w-2xl sm:grid-cols-3 sm:gap-6 lg:mx-0"
-						>
-							<div class="flex flex-col items-center gap-1 lg:items-start lg:text-left">
-								<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground/50">Founder</p>
-								<p class="text-lg font-semibold tabular-nums text-foreground sm:text-xl">3&nbsp;€/min</p>
-								<p class="text-[11px] font-medium tabular-nums tracking-tight text-foreground/42 sm:text-[12px]">
-									≈ 180&nbsp;€/h</p>
-							</div>
-							<div class="flex flex-col items-center gap-1 lg:items-start lg:text-left">
-								<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground/50">Startup</p>
-								<p class="text-lg font-semibold tabular-nums text-foreground sm:text-xl">4&nbsp;€/min</p>
-								<p class="text-[11px] font-medium tabular-nums tracking-tight text-foreground/42 sm:text-[12px]">
-									≈ 240&nbsp;€/h</p>
-							</div>
-							<div class="flex flex-col items-center gap-1 lg:items-start lg:text-left">
-								<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground/50">Enterprise</p>
-								<p class="text-lg font-semibold tabular-nums text-foreground sm:text-xl">5&nbsp;€/min</p>
-								<p class="text-[11px] font-medium tabular-nums tracking-tight text-foreground/42 sm:text-[12px]">
-									≈ 300&nbsp;€/h</p>
-							</div>
-						</div>
-					</div>
-				</div>
-				<div
-					class="mx-auto mt-8 flex w-full max-w-none flex-col items-center gap-4 border-t border-border/35 pt-5 text-center"
-				>
-					<p class="max-w-xl text-[12px] font-medium leading-snug text-foreground/58 sm:text-[13px]">
-						Du zahlst immer nur die Minuten, die du Samuel &amp; Daniel für Skill‑Tuning tatsächlich genutzt hast.</p>
-					<a
-						href="/me"
-						class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-border/60 bg-white/55 px-6 text-[12px] font-semibold text-foreground transition-colors hover:bg-white/85"
-					>
-						Request Skill Tuning</a>
-				</div>
-			</div>
-
-			<div class="mx-auto mt-12 max-w-6xl rounded-2xl border border-border/40 bg-white/40 p-5 ring-1 ring-black/5 sm:p-7 lg:p-8">
-				<div class="grid gap-10 lg:grid-cols-[minmax(13.5rem,17rem)_1fr] lg:gap-14 lg:items-start">
-					<div class="shrink-0 border-b border-foreground/8 pb-8 lg:border-b-0 lg:border-r lg:border-foreground/8 lg:pb-0 lg:pr-10">
-						<p class="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-foreground/45">
-							OPTIONAL · EIGENES HOSTING</p>
-						<h3 class="mt-2 text-lg font-semibold text-foreground sm:text-xl">AvenOS</h3>
-						<p class="mt-1 text-[11px] leading-snug text-foreground/55 sm:text-[12px]">Open‑Source‑Stack zum Selbsthosten</p>
-						<p class="mt-1 text-lg font-semibold tabular-nums text-foreground">0&nbsp;€</p>
-						<ul
-							class="mt-5 space-y-2 border-t border-border/30 pt-5 text-[13px] leading-snug text-foreground/72"
-							aria-label="AvenOS Übersicht"
-						>
-							<li class="flex gap-2"><span aria-hidden="true" class="text-foreground/40">·</span><span>Self‑hosted Sync‑Service</span></li>
-							<li class="flex gap-2"><span aria-hidden="true" class="text-foreground/40">·</span><span>Bring Your Own API Keys</span></li>
-							<li class="flex gap-2">
-								<span aria-hidden="true" class="text-foreground/40">·</span>
-								<span>Keine Backups<span class="text-foreground/55"> — optional selbst bereitstellbar</span></span>
-							</li>
-							<li class="flex gap-2"><span aria-hidden="true" class="text-foreground/40">·</span><span>Community‑Forum‑Support</span></li>
-						</ul>
-					</div>
-					<div class="min-w-0 lg:max-w-none">
-						<p class="max-w-none font-serif text-[1.0625rem] font-light italic leading-snug text-foreground/84 sm:text-[1.125rem] sm:leading-snug">
-							Kein Produkt ohne Haltung&nbsp;— das ist kein Satz aus dem Handbuch. Deine Daten gehören dir. Deine Arbeitsintelligenz gehört dir.
-							Ende‑zu‑Ende‑verschlüsselt, Schlüssel bei dir&nbsp;— wir haben keinen Hinterzugang, und wir wollen keinen. Das wäre kein Geschäftsmodell.
-							Das wäre Verrat.</p>
-						<p class="mt-5 max-w-none text-[14px] leading-[1.65] text-foreground/73 sm:text-[15px] sm:leading-[1.7]">
-							Wir bauen keine Falle. Wenn du gehst, kommen deine Skills und deine gesamte aufgebaute Arbeitsintelligenz mit.
-							Kein Pflichtgespräch, kein Labyrinth, das sich erst beim Kündigen zeigt. Wer dich festhält, wenn du frei sein willst,
-							war nie wirklich auf deiner Seite.</p>
-						<p class="mt-5 max-w-none text-[14px] font-medium leading-[1.6] text-foreground/78 sm:text-[15px] sm:leading-[1.68]">
-							<strong class="font-semibold text-foreground/85">Self‑Hosting über AvenOS</strong> ist für alle,
-							die ihre eigene Infra lieben&nbsp;— und für alle, die einfach wissen wollen, dass die Tür offen ist.</p>
-					</div>
-				</div>
-				<div class="mt-8 flex justify-center border-t border-foreground/10 pt-6">
-					<a
-						href={openSourceGithubHref}
-						target="_blank"
-						rel="noopener noreferrer"
-						class="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-foreground px-8 text-[12px] font-semibold text-background transition-opacity hover:opacity-90"
-					>
-						AvenOS auf GitHub</a>
-				</div>
-			</div>
+	<section class="border-b border-border/40 px-5 py-14 sm:px-8 sm:py-16">
+		<div class="mx-auto max-w-2xl">
+			<AvenIdCheckCta variant="banner" />
 		</div>
 	</section>
 

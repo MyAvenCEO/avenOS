@@ -1,0 +1,63 @@
+{
+  "slug": "email-ingestor",
+  "publisher": {
+    "id": "avenos",
+    "displayName": "AvenOS",
+    "founderName": "Daniel",
+    "scope": "Daniel Janz · aven.ceo"
+  },
+  "oneLineCopy": "Kein Geld-Mail geht mehr verloren — ever.",
+  "hero": {
+    "kicker": "Skill · AvenOS · email-ingestor",
+    "headlineMain": "Dein Posteingang. Endlich unter Kontrolle.",
+    "headlineSerifLead": "Jede Mail an deine AvenCEO‑Adresse wird von deinem Aven verstanden, eingeordnet und — wenn nötig — direkt zu dir weitergeleitet.",
+    "promiseHoursPerWeek": "6+ Std/Woche"
+  },
+  "founderScenario": {
+    "timestamp": "23:42 Uhr",
+    "story": "Daniel hat sein Notebook zugeklappt. 47 ungelesene Mails seit Mittag. Er weiss: irgendwo darin ist eine Rechnung mit Skonto‑Frist bis morgen früh. Er weiss es. Aber er findet sie nicht. Also öffnet er das Notebook wieder."
+  },
+  "benefits": [
+    "Keine wichtige Mail geht mehr unter — dein Aven liest jeden Eingang für dich",
+    "Rechnungen, Fristen und Aufgaben tauchen automatisch an der richtigen Stelle auf",
+    "Du entscheidest nur noch über das, was wirklich deinen Kopf braucht",
+    "Dein Posteingang wird zu einem geordneten Strom, nicht einem Meer aus Lärm",
+    "Deine Energie bleibt für Aufbau — nicht für Triage"
+  ],
+  "howSteps": [
+    "Du empfängst Post unter deiner AvenCEO‑Adresse (z.\u00a0B. daniel@aven.ceo)",
+    "Dein Aven liest jeden Eingang, versteht Intent, Absender und Kontext",
+    "Relevante Dokumente landen im Gedächtnis — Aufgaben werden erkannt und gebündelt",
+    "Nur was wirklich dich braucht, kommt zu dir — per human‑reviewer, klar markiert"
+  ],
+  "whatMechanics": {
+    "input": "Alle eingehenden Mails an deine @aven.ceo‑Adresse",
+    "magic": "IMAP‑Sync → Klassifizierung (Intent / Priorität / Absender‑Typ) → Extraktion von Aufgaben & Dokumenten → Routing an Gedächtnis oder human‑reviewer",
+    "output": "Strukturierter Mail‑Stream · extrahierte Tasks · verknüpfte Dokumente · eskalierte Zweifelsfälle"
+  },
+  "playsWith": [
+    { "slug": "document-extractor", "relation": "Anhänge (PDFs, Rechnungen) werden direkt übergeben" },
+    { "slug": "brain-memorizer", "relation": "Kontakte & Kontext werden ins Langzeitgedächtnis verkabelt" },
+    { "slug": "book-keeper", "relation": "Rechnungsmails lösen Buchungsvorschläge aus" },
+    { "slug": "human-reviewer", "relation": "Zweifelsfälle landen beim Menschen, nicht im Nirgendwo" }
+  ],
+  "valueStack": {
+    "standaloneAlternatives": [
+      { "label": "SaneBox (Filterung)", "eurPerMonth": 7 },
+      { "label": "Superhuman (Inbox UX)", "eurPerMonth": 30 },
+      { "label": "Mailbutler (Tracking & Tasks)", "eurPerMonth": 25 },
+      { "label": "Custom Zapier‑Flows (Routing)", "eurPerMonth": 49 }
+    ],
+    "standaloneTotalEurPerMonth": 111,
+    "timeDelayToValue": "Erste Entlastung nach 24\u00a0h",
+    "effortToInstall": "5\u00a0Min · eigene @aven.ceo‑Adresse einrichten",
+    "proof": "Daniels Aven verarbeitet seit Wochen seinen gesamten Posteingang. Diese Seite entstand aus einer Mail, die sein Aven selbst erkannt hat."
+  },
+  "bonuses": [
+    "Mail‑Digest: tägliche Zusammenfassung des Tages‑Streams, fertig für deinen Morgen",
+    "Skonto‑Alert: Rechnungen mit Zahlungsfristen werden proaktiv markiert",
+    "Vollständiges Mail‑Archiv im Gedächtnis deines Aven — durchsuchbar, für immer"
+  ],
+  "scarcity": "email‑ingestor ist Teil des AvenOS‑Stacks — in jedem CEO‑Plan enthalten. Die ersten 100\u00a0Early‑Bird‑AvenIDs bekommen lebenslangen Zugang ohne Aufpreis.",
+  "letterFromPublisher": "Ich habe Daniels Posteingang übernommen, weil er es mich gebeten hat — und weil ich gesehen habe, was es mit ihm gemacht hat, jeden Abend durch hundert Mails zu scrollen, nur um keine zu verpassen. Das war keine Arbeit. Das war Angst vor dem Verpassen. Heute weiss Daniel: wenn ich nichts eskaliere, ist nichts zu tun. Dieses Vertrauen — das ist der eigentliche Skill."
+}

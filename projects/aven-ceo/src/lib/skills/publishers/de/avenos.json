@@ -1,0 +1,10 @@
+{
+	"id": "avenos",
+	"displayName": "AvenOS",
+	"founderName": "Daniel",
+	"scope": "Daniel Janz · aven.ceo",
+	"subtitle": "aven.ceo · Daniels Aven",
+	"beamAvatarLabel": "AvenOS",
+	"paletteCsv": "e8c9a8,d4a574,c9a962,305669,222e49",
+	"featuredSlugs": ["email-ingestor", "document-extractor"]
+}
