@@ -3,6 +3,7 @@ import { generateAuthSecret } from 'jazz-tools'
 import {
 	configureJazzMemoryStoreForTests,
 	createOrGetArtifact,
+	normalizeJazzBackendSecretFromEnv,
 	createOrUpdateDocumentNote,
 	deriveChunksFromMarkdown,
 	listMemoryLinksForPath,
@@ -31,6 +32,30 @@ async function freshStore() {
 afterEach(async () => {
 	await resetJazzMemoryStoreForTests()
 })
+
+test('normalizeJazzBackendSecretFromEnv: empty, hex64, passthrough base64url32, arbitrary string', () => {
+	expect(normalizeJazzBackendSecretFromEnv(undefined)).toBeUndefined()
+	expect(normalizeJazzBackendSecretFromEnv('  ')).toBeUndefined()
+	const hex =
+		'0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+	const fromHex = normalizeJazzBackendSecretFromEnv(hex)
+	expect(fromHex).toBeDefined()
+	expect(tryDecodeBase64Url(fromHex!)).toHaveLength(32)
+	const fromPlain = normalizeJazzBackendSecretFromEnv('your-backend-secret')
+	expect(fromPlain).toBeDefined()
+	expect(tryDecodeBase64Url(fromPlain!)).toHaveLength(32)
+	const raw32 = Buffer.alloc(32, 7)
+	const utf32Pass = raw32.toString('utf8')
+	expect(normalizeJazzBackendSecretFromEnv(utf32Pass)).toBeDefined()
+	const generated = generateAuthSecret()
+	expect(normalizeJazzBackendSecretFromEnv(generated)).toBe(generated)
+})
+
+function tryDecodeBase64Url(s: string): Buffer {
+	const b64 = s.replace(/-/g, '+').replace(/_/g, '/')
+	const pad = (4 - (b64.length % 4)) % 4
+	return Buffer.from(b64 + '='.repeat(pad), 'base64')
+}
 
 test('create artifact once by sha256', async () => {
 	await freshStore()

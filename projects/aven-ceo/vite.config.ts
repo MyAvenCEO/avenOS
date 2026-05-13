@@ -32,18 +32,16 @@ logger.warnOnce = (msg, options) => {
 	origWarnOnce(msg, options)
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
 	const loaded = loadEnv(mode, repoRoot, '')
 	for (const key of Object.keys(loaded)) {
 		if (process.env[key] === undefined) process.env[key] = loaded[key]
 	}
 
-	/*
-	// Dev only: skip Jazz Cloud schema push — use embedded local sync (see `.env.example`).
+	// Dev only: avoid Jazz Cloud branch/schema drift — embedded local sync (see `.env.example`).
 	if (command === 'serve' && process.env.JAZZ_DEV_USE_LOCAL === '1') {
 		delete process.env.PUBLIC_JAZZ_SERVER_URL
 	}
-	*/
 
 	return {
 		envDir: repoRoot,

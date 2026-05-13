@@ -5,6 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "bun run --env-file=../../.env vite dev",
+		"dev:local": "JAZZ_DEV_USE_LOCAL=1 bun run --env-file=../../.env vite dev",
 		"build": "bun run --env-file=../../.env vite build",
 		"preview": "bun run --env-file=../../.env vite preview",
 		"prepare": "svelte-kit sync || echo ''",

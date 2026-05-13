@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { createDb, type Db, type DbConfig, type WriteHandle, type WriteResult } from 'jazz-tools'
-import { generateAuthSecret } from 'jazz-tools'
 import { app } from '../schema'
 import { bodyAfterFrontmatter, parseMarkdownFrontmatter } from './frontmatter'
 import { appendMemoryProvenance } from './memory-provenance'
@@ -85,6 +84,49 @@ let storeConfigOverride: StoreConfig | null = null
 const SECRET_PATTERN =
 	/(-----BEGIN [A-Z ]+PRIVATE KEY-----|seed phrase|mnemonic phrase|api[_-]?key|access[_-]?token|secret[_-]?key)/i
 
+function bufferToBase64Url(buf: Buffer): string {
+	return buf
+		.toString('base64')
+		.replace(/\+/g, '-')
+		.replace(/\//g, '_')
+		.replace(/=+$/, '')
+}
+
+function tryDecodeBase64UrlToBuffer(s: string): Buffer | null {
+	const normalized = s.trim()
+	if (!normalized) return null
+	const b64 = normalized.replace(/-/g, '+').replace(/_/g, '/')
+	const pad = (4 - (b64.length % 4)) % 4
+	try {
+		return Buffer.from(b64 + '='.repeat(pad), 'base64')
+	} catch {
+		return null
+	}
+}
+
+/**
+ * Jazz `createDb({ secret })` requires a **base64url** string that decodes to **32 bytes**
+ * (same as `generateAuthSecret()`). Raw `.env` values are often human-readable; normalize
+ * so vault APIs do not throw `seed must be exactly 32 bytes`.
+ */
+export function normalizeJazzBackendSecretFromEnv(raw: string | undefined): string | undefined {
+	const trimmed = typeof raw === 'string' ? raw.trim() : ''
+	if (!trimmed) return undefined
+
+	const fromB64 = tryDecodeBase64UrlToBuffer(trimmed)
+	if (fromB64 && fromB64.length === 32) return trimmed
+
+	if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+		return bufferToBase64Url(Buffer.from(trimmed, 'hex'))
+	}
+
+	const utf8 = Buffer.from(trimmed, 'utf8')
+	if (utf8.length === 32) return bufferToBase64Url(utf8)
+
+	const derived = createHash('sha256').update(trimmed, 'utf8').digest()
+	return bufferToBase64Url(derived)
+}
+
 function defaultStoreConfig(): StoreConfig {
 	const appId = String(process.env.PUBLIC_JAZZ_APP_ID ?? '').trim()
 	if (!appId) {
@@ -94,7 +136,7 @@ function defaultStoreConfig(): StoreConfig {
 		appId,
 		serverUrl: String(process.env.PUBLIC_JAZZ_SERVER_URL ?? '').trim() || undefined,
 		adminSecret: String(process.env.JAZZ_ADMIN_SECRET ?? '').trim() || undefined,
-		secret: String(process.env.BACKEND_SECRET ?? '').trim() || undefined,
+		secret: normalizeJazzBackendSecretFromEnv(process.env.BACKEND_SECRET),
 		env: process.env.NODE_ENV === 'production' ? 'prod' : 'dev',
 		userBranch: 'main',
 		driver: { type: 'persistent', dbName: 'aven-ceo-memory' },
@@ -120,7 +162,12 @@ async function getDb(): Promise<Db> {
 			dbName: config.dbName
 		})
 	}
-	return dbPromise
+	try {
+		return await dbPromise
+	} catch (err) {
+		dbPromise = null
+		throw err
+	}
 }
 
 export async function configureJazzMemoryStoreForTests(config: StoreConfig): Promise<void> {
