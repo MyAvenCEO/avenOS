@@ -1,0 +1,96 @@
+{
+	"contract_id": "AVN-V-2026-0413",
+	"title": "Rahmenvertrag über digitale Dienstleistungen",
+	"contract_type": "Dienstleistungsvertrag",
+	"jurisdiction": "Bundesrepublik Deutschland",
+	"effective_date": "2026-05-01",
+	"language": "de",
+	"preamble": "Die Parteien beabsichtigen, im Rahmen ihrer jeweiligen Geschäftstätigkeit eine vertrauensvolle und nachhaltige Zusammenarbeit zu gestalten. Dieser Vertrag regelt die wesentlichen Bedingungen; Einzelvereinbarungen und Anlagen können ergänzend vereinbart werden.",
+	"parties": [
+		{
+			"role": "Auftragnehmerin",
+			"name": "Aven Labs GmbH",
+			"legal_form": "Gesellschaft mit beschränkter Haftung",
+			"registration": "HRB 123456 B, Amtsgericht Berlin Charlottenburg",
+			"address": "Eichenweg 7\n10439 Berlin",
+			"representative": "Dr. Elena Vogt (Geschäftsführerin)",
+			"email": "legal@avenlabs.example"
+		},
+		{
+			"role": "Auftraggeber",
+			"name": "Nordlicht Retail AG",
+			"legal_form": "Aktiengesellschaft",
+			"registration": "HRB 987654, Amtsgericht Hamburg",
+			"address": "Hafenstraße 4\n20354 Hamburg",
+			"representative": "Dr. Jonas Klein (Vorstand)",
+			"email": "vertrag@nordlicht.example"
+		},
+		{
+			"role": "Garantin (Bürgin)",
+			"name": "Stadtsparkasse Berlin",
+			"legal_form": "Anstalt des öffentlichen Rechts",
+			"registration": "—",
+			"address": "ABC-Platz 16\n10172 Berlin",
+			"representative": "—",
+			"email": "firmenkunden@stadtsparkasse.example"
+		}
+	],
+	"definitions": [
+		{
+			"term": "„Plattform“",
+			"definition": "die von der Auftragnehmerin bereitgestellte Software-, Hosting- und Schnittstellenlandschaft einschließlich Dokumentation."
+		},
+		{
+			"term": "„SLA“",
+			"definition": "die in Anlage 1 beschriebene Vereinbarung zu Verfügbarkeit und Reaktionszeiten (sofern vereinbart)."
+		}
+	],
+	"clauses": [
+		{
+			"number": "§ 1",
+			"title": "Gegenstand und Leistungsumfang",
+			"body": "Die Auftragnehmerin stellt dem Auftraggeber die Plattform zur Nutzung im vereinbarten Umfang zur Verfügung, inklusive Wartung, Updates nach angemessener Planung sowie Support gemäß dem gewählten Service-Level.\n\nLeistungsänderungen bedürfen der schriftlichen oder textformvertraglichen Zustimmung beider Parteien, sofern sie den wirtschaftlichen Kern der Vereinbarung berühren."
+		},
+		{
+			"number": "§ 2",
+			"title": "Laufzeit und Kündigung",
+			"body": "Der Vertrag beginnt mit dem Wirksamwerden und läuft auf unbestimmte Zeit, sofern nichts anderes vereinbart ist.\n\nDie ordentliche Kündigung ist mit einer Frist von drei (3) Monaten zum Monatsende zulässig. Die außerordentliche Kündigung aus wichtigem Grund bleibt unberührt.",
+			"subclauses": [
+				{
+					"label": "(1)",
+					"body": "Nach Vertragsende stellt die Auftragnehmerin auf Verlangen einen Export maschinenlesbarer Daten nach angemessenem Aufwand bereit."
+				},
+				{
+					"label": "(2)",
+					"body": "Gesetzliche Aufbewahrungsfristen und Treuhandpflichten gehen vor."
+				}
+			]
+		},
+		{
+			"number": "§ 3",
+			"title": "Vergütung und Rechnungsstellung",
+			"body": "Die Vergütung erfolgt nach der jeweils gültigen Preisliste bzw. Angebotsbestätigung, zzgl. gesetzlicher Umsatzsteuer. Rechnungen sind innerhalb von vierzehn (14) Tagen nach Rechnungsdatum zahlbar, sofern nicht abweichend vereinbart."
+		},
+		{
+			"number": "§ 4",
+			"title": "Geheimhaltung und Datenschutz",
+			"body": "Die Parteien verpflichten sich, alle im Rahmen der Zusammenarbeit zugänglich gewordenen vertraulichen Informationen streng vertraulich zu behandeln und nur zur Vertragserfüllung zu verwenden.\n\nDie Parteien werden personenbezogene Daten ausschließlich im Einklang mit der DSGVO und den jeweils geschlossenen Auftragsverarbeitungsvereinbarungen verarbeiten."
+		},
+		{
+			"number": "§ 5",
+			"title": "Haftung",
+			"body": "Die Haftung der Auftragnehmerin für Schäden aus leichter Fahrlässigkeit ist — soweit gesetzlich zulässig — auf Vorsatz und grobe Fahrlässigkeit sowie auf die Verletzung wesentlicher Vertragspflichten beschränkt; in letzterem Fall ist die Haftung auf den typischerweise vorhersehbaren Schaden begrenzt.\n\nDie vorstehenden Haftungsbeschränkungen gelten nicht bei Verletzung von Leben, Körper oder Gesundheit oder bei zwingender gesetzlicher Haftung."
+		},
+		{
+			"number": "§ 6",
+			"title": "Schriftform, salvatorische Klausel, Gerichtsstand",
+			"body": "Änderungen und Ergänzungen dieses Vertrags bedürfen zu ihrer Wirksamkeit der Textform, soweit gesetzlich nichts anderes erforderlich ist.\n\nSollten einzelne Bestimmungen unwirksam sein, bleibt die Wirksamkeit der übrigen Bestimmungen unberührt.\n\nSofern die Parteien Kaufleute sind, ist ausschließlicher Gerichtsstand der Sitz der Auftragnehmerin; zwingende gesetzliche Gerichtsstände bleiben unberührt."
+		}
+	],
+	"signature_note": "Dieses Dokument ist eine technische Vorschau zu Demonstrationszwecken und ersetzt keine Rechtsberatung.",
+	"signatures": [
+		{ "party_index": 0, "signer_name": "Dr. Elena Vogt", "signer_role": "Geschäftsführerin", "place": "Berlin", "date": "2026-04-28" },
+		{ "party_index": 1, "signer_name": "Dr. Jonas Klein", "signer_role": "Vorstand", "place": "Hamburg", "date": "2026-04-28" },
+		{ "party_index": 2, "signer_name": "— (Kenntnisnahme)", "signer_role": "Institutsbevollmächtigte", "place": "Berlin", "date": "2026-04-28" }
+	]
+}

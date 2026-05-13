@@ -5,10 +5,11 @@
  * round-trip.
  */
 import bankStatementDemo from '../bank-statement/demo.json'
+import contractDemo from '../contract/demo.json'
 import invoiceDemo from '../invoice/demo.json'
 import todosDemo from '../todos/demo.json'
 
-export type VibeAppId = 'todos' | 'invoice' | 'bank-statement'
+export type VibeAppId = 'todos' | 'invoice' | 'bank-statement' | 'contract'
 
 /** Minimal subset of the MCP `CallToolResult` shape the host actually sends back. */
 export interface VibeToolResult {
@@ -32,6 +33,7 @@ function clone<T>(x: T): T {
 export const todosDemoToolArguments = todosDemo
 export const invoiceDemoToolArguments = invoiceDemo
 export const bankStatementDemoToolArguments = bankStatementDemo
+export const contractDemoToolArguments = contractDemo
 
 export const vibeAppList: VibeAppDefinition[] = [
 	{
@@ -52,6 +54,16 @@ export const vibeAppList: VibeAppDefinition[] = [
 		getToolResult: () =>
 			Promise.resolve({
 				content: [{ type: 'text', text: 'Demo-Kontoauszug beendet.' }]
+			})
+	},
+	{
+		id: 'contract',
+		label: 'Vertrag',
+		description: 'Mehrparteien-Vertrag mit Präambel, Begriffen, Klauseln und Signaturen.',
+		getToolArguments: () => clone(contractDemo) as Record<string, unknown>,
+		getToolResult: () =>
+			Promise.resolve({
+				content: [{ type: 'text', text: 'Demo-Vertragstool beendet.' }]
 			})
 	},
 	{

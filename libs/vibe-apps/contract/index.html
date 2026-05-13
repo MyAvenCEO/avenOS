@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="de">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Vertrag — Aven</title>
+		<style>
+			:root {
+				--bg-a: var(--color-background-primary, #e8ede1);
+				--tech-fill: rgba(255, 255, 255, 0.1);
+				--tech-fill-inner: rgba(255, 255, 255, 0.15);
+				--hitl-dash: color-mix(in srgb, var(--text) 20%, transparent);
+				--border: var(--color-border-primary, rgba(0, 0, 0, 0.1));
+				--muted: var(--color-text-secondary, rgba(26, 26, 26, 0.45));
+				--text: var(--color-text-primary, #1a1a1a);
+				--brand-accent: var(--color-ring-info, #e6b34d);
+				--radius-2xl: var(--border-radius-2xl, 2rem);
+				--radius-md: var(--border-radius-md, 1rem);
+			}
+			*,
+			*::before,
+			*::after {
+				box-sizing: border-box;
+			}
+			html,
+			body {
+				margin: 0;
+				min-height: 100%;
+				height: 100%;
+			}
+			body {
+				font-family: var(
+					--font-sans,
+					'Inter',
+					-apple-system,
+					BlinkMacSystemFont,
+					'Segoe UI',
+					Roboto,
+					sans-serif
+				);
+				background: var(--bg-a);
+				color: var(--text);
+				letter-spacing: -0.015em;
+			}
+			#doc-root {
+				min-height: 100%;
+				width: 100%;
+				margin: 0;
+				padding: 0;
+			}
+			.cv-shell {
+				padding: 1.25rem 1.5rem;
+				border-radius: var(--radius-2xl);
+				background: var(--tech-fill);
+				border: none;
+				max-width: 52rem;
+				margin: 0 auto;
+			}
+			.cv-hero {
+				background: var(--tech-fill-inner);
+				border: 1px dashed var(--hitl-dash);
+				border-radius: var(--radius-2xl);
+				padding: 1rem 1.25rem 1.1rem;
+				margin-bottom: 1rem;
+			}
+			.cv-hero-eyebrow {
+				font-size: 10px;
+				font-weight: 700;
+				letter-spacing: 0.1em;
+				text-transform: uppercase;
+				color: var(--muted);
+				opacity: 0.65;
+				margin-bottom: 0.35rem;
+			}
+			.cv-hero-title {
+				margin: 0;
+				font-size: 1.2rem;
+				font-weight: 800;
+				line-height: 1.25;
+				letter-spacing: -0.02em;
+			}
+			.cv-hero-meta {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 0.65rem 1.25rem;
+				margin-top: 0.75rem;
+				font-size: 12px;
+				color: var(--muted);
+			}
+			.cv-hero-meta strong {
+				color: var(--text);
+				font-weight: 600;
+			}
+			.cv-parties {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+				gap: 12px;
+				margin-bottom: 1rem;
+			}
+			.cv-party {
+				background: var(--tech-fill);
+				border: 1px dashed var(--hitl-dash);
+				border-radius: var(--radius-2xl);
+				padding: 14px 16px;
+			}
+			.cv-party-role {
+				font-size: 10px;
+				font-weight: 700;
+				text-transform: uppercase;
+				letter-spacing: 0.1em;
+				color: var(--brand-accent);
+				margin-bottom: 6px;
+			}
+			.cv-party-name {
+				font-size: 15px;
+				font-weight: 700;
+				line-height: 1.3;
+				margin-bottom: 4px;
+			}
+			.cv-party-line {
+				font-size: 12px;
+				color: var(--muted);
+				line-height: 1.45;
+				margin-top: 3px;
+				white-space: pre-line;
+			}
+			.cv-preamble {
+				background: var(--tech-fill);
+				border: 1px dashed var(--hitl-dash);
+				border-radius: var(--radius-2xl);
+				padding: 14px 18px;
+				margin-bottom: 1rem;
+				font-size: 13px;
+				line-height: 1.55;
+				color: var(--text);
+				white-space: pre-line;
+			}
+			.cv-preamble h3 {
+				margin: 0 0 8px;
+				font-size: 10px;
+				font-weight: 700;
+				text-transform: uppercase;
+				letter-spacing: 0.08em;
+				color: var(--muted);
+			}
+			.cv-defs {
+				margin-bottom: 1rem;
+				padding: 0 4px;
+			}
+			.cv-defs h3 {
+				margin: 0 0 10px;
+				font-size: 10px;
+				font-weight: 700;
+				text-transform: uppercase;
+				letter-spacing: 0.08em;
+				color: var(--muted);
+			}
+			.cv-def-row {
+				display: grid;
+				grid-template-columns: minmax(0, 1fr) minmax(0, 2.2fr);
+				gap: 10px 18px;
+				padding: 10px 0;
+				border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+				font-size: 12px;
+			}
+			.cv-def-row:last-child {
+				border-bottom: none;
+			}
+			.cv-def-term {
+				font-weight: 700;
+				color: var(--text);
+			}
+			.cv-def-body {
+				color: var(--muted);
+				line-height: 1.45;
+			}
+			@media (max-width: 560px) {
+				.cv-def-row {
+					grid-template-columns: 1fr;
+				}
+			}
+			.cv-clauses {
+				margin-bottom: 1rem;
+			}
+			.cv-clause {
+				background: var(--tech-fill-inner);
+				border: 1px dashed var(--hitl-dash);
+				border-radius: var(--radius-md);
+				padding: 12px 16px 14px;
+				margin-bottom: 10px;
+			}
+			.cv-clause-head {
+				display: flex;
+				flex-wrap: wrap;
+				align-items: baseline;
+				gap: 6px 12px;
+				margin-bottom: 8px;
+			}
+			.cv-clause-num {
+				font-family: ui-monospace, Menlo, monospace;
+				font-size: 12px;
+				font-weight: 800;
+				color: var(--brand-accent);
+			}
+			.cv-clause-title {
+				font-size: 14px;
+				font-weight: 700;
+			}
+			.cv-clause-body {
+				font-size: 13px;
+				line-height: 1.55;
+				white-space: pre-line;
+				color: var(--text);
+			}
+			.cv-subclause {
+				margin-top: 10px;
+				padding-left: 12px;
+				border-left: 2px solid color-mix(in srgb, var(--brand-accent) 55%, transparent);
+			}
+			.cv-subclause-label {
+				font-size: 12px;
+				font-weight: 700;
+				margin-bottom: 4px;
+				color: var(--muted);
+			}
+			.cv-subclause-body {
+				font-size: 12px;
+				line-height: 1.5;
+				color: var(--text);
+				white-space: pre-line;
+			}
+			.cv-signatures {
+				background: var(--tech-fill);
+				border: 1px dashed var(--hitl-dash);
+				border-radius: var(--radius-2xl);
+				padding: 14px 18px 18px;
+				margin-bottom: 10px;
+			}
+			.cv-signatures h3 {
+				margin: 0 0 12px;
+				font-size: 10px;
+				font-weight: 700;
+				text-transform: uppercase;
+				letter-spacing: 0.08em;
+				color: var(--muted);
+			}
+			.cv-sign-grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+				gap: 14px;
+			}
+			.cv-sign-block {
+				min-height: 72px;
+				padding-top: 6px;
+				border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+			}
+			.cv-sign-party {
+				font-size: 10px;
+				font-weight: 700;
+				text-transform: uppercase;
+				letter-spacing: 0.06em;
+				color: var(--muted);
+				margin-bottom: 4px;
+			}
+			.cv-sign-name {
+				font-size: 13px;
+				font-weight: 700;
+			}
+			.cv-sign-meta {
+				font-size: 11px;
+				color: var(--muted);
+				margin-top: 4px;
+			}
+			.cv-footnote {
+				font-size: 11px;
+				line-height: 1.45;
+				color: var(--muted);
+				font-style: italic;
+				padding: 0 4px 8px;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="doc-root">
+			<div class="cv-shell">
+				<div class="empty-doc" style="padding: 2rem; text-align: center; color: var(--muted)">Lade …</div>
+			</div>
+		</div>
+
+		<script type="module">
+			;(async () => {
+				const extOrigin = window.parent?.location?.origin ?? window.location.origin
+				const { App } = await import(`${extOrigin}/ext-apps.js`)
+
+				const $root = document.getElementById('doc-root')
+				let state = {}
+
+				const cloneJson = (x) => JSON.parse(JSON.stringify(x))
+				const isRecord = (x) => typeof x === 'object' && x !== null
+				const esc = (s) => {
+					if (s == null) return ''
+					return String(s)
+						.replace(/&/g, '&amp;')
+						.replace(/</g, '&lt;')
+						.replace(/>/g, '&gt;')
+						.replace(/"/g, '&quot;')
+				}
+				const fmtDate = (s) => {
+					if (s == null || typeof s !== 'string' || !s.trim()) return ''
+					const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.trim())
+					if (m) {
+						const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+						if (!Number.isNaN(d.getTime())) {
+							return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+						}
+					}
+					return s.trim()
+				}
+
+				function isContractPayload(x) {
+					if (!isRecord(x)) return false
+					if (typeof x.title !== 'string' || !x.title.trim()) return false
+					if (!Array.isArray(x.parties) || x.parties.length < 2) return false
+					for (const p of x.parties) {
+						if (!isRecord(p) || typeof p.name !== 'string' || !p.name.trim()) return false
+					}
+					if (!Array.isArray(x.clauses)) return false
+					for (const c of x.clauses) {
+						if (!isRecord(c)) return false
+					}
+					return true
+				}
+
+				function renderParty(p, idx) {
+					if (!isRecord(p)) return ''
+					const role = typeof p.role === 'string' && p.role.trim() ? p.role.trim() : `Partei ${idx + 1}`
+					const lines = []
+					if (typeof p.legal_form === 'string' && p.legal_form.trim())
+						lines.push(`<div class="cv-party-line">${esc(p.legal_form.trim())}</div>`)
+					if (typeof p.registration === 'string' && p.registration.trim())
+						lines.push(`<div class="cv-party-line">${esc(p.registration.trim())}</div>`)
+					if (typeof p.address === 'string' && p.address.trim())
+						lines.push(`<div class="cv-party-line">${esc(p.address.trim())}</div>`)
+					if (typeof p.representative === 'string' && p.representative.trim())
+						lines.push(`<div class="cv-party-line">Vertreten durch: ${esc(p.representative.trim())}</div>`)
+					if (typeof p.email === 'string' && p.email.trim())
+						lines.push(`<div class="cv-party-line">${esc(p.email.trim())}</div>`)
+					return `<div class="cv-party" role="group">
+			<div class="cv-party-role">${esc(role)}</div>
+			<div class="cv-party-name">${esc(p.name)}</div>
+			${lines.join('')}
+		</div>`
+				}
+
+				function renderDefinitions(defs) {
+					if (!Array.isArray(defs) || !defs.length) return ''
+					const rows = defs
+						.map((d) => {
+							if (!isRecord(d)) return ''
+							const term = typeof d.term === 'string' ? d.term.trim() : ''
+							const def = typeof d.definition === 'string' ? d.definition.trim() : ''
+							if (!term && !def) return ''
+							return `<div class="cv-def-row">
+				<div class="cv-def-term">${esc(term || 'Begriff')}</div>
+				<div class="cv-def-body">${esc(def)}</div>
+			</div>`
+						})
+						.join('')
+					if (!rows) return ''
+					return `<div class="cv-defs"><h3>Begriffsbestimmungen</h3>${rows}</div>`
+				}
+
+				function renderClauses(clauses) {
+					if (!Array.isArray(clauses) || !clauses.length) {
+						return `<div class="cv-clauses"><p class="cv-footnote" style="margin:0">Keine Klauseln übermittelt.</p></div>`
+					}
+					return `<div class="cv-clauses">${clauses
+						.map((c) => {
+							if (!isRecord(c)) return ''
+							const num = typeof c.number === 'string' && c.number.trim() ? c.number.trim() : ''
+							const title = typeof c.title === 'string' && c.title.trim() ? c.title.trim() : ''
+							const body = typeof c.body === 'string' ? c.body : ''
+							const sub = Array.isArray(c.subclauses) ? c.subclauses : []
+							const subHtml = sub
+								.map((s) => {
+									if (!isRecord(s)) return ''
+									const lab = typeof s.label === 'string' ? s.label : ''
+									const sb = typeof s.body === 'string' ? s.body : ''
+									if (!sb && !lab) return ''
+									return `<div class="cv-subclause">
+						<div class="cv-subclause-label">${esc(lab)}</div>
+						<div class="cv-subclause-body">${esc(sb)}</div>
+					</div>`
+								})
+								.join('')
+							return `<article class="cv-clause">
+				<div class="cv-clause-head">
+					${num ? `<span class="cv-clause-num">${esc(num)}</span>` : ''}
+					${title ? `<span class="cv-clause-title">${esc(title)}</span>` : ''}
+				</div>
+				${body.trim() ? `<div class="cv-clause-body">${esc(body.trim())}</div>` : ''}
+				${subHtml}
+			</article>`
+						})
+						.join('')}</div>`
+				}
+
+				function renderSignatures(signatures, parties) {
+					if (!Array.isArray(signatures) || !signatures.length) return ''
+					const blocks = signatures
+						.map((sig) => {
+							if (!isRecord(sig)) return ''
+							const idx =
+								typeof sig.party_index === 'number' && !Number.isNaN(sig.party_index)
+									? sig.party_index
+									: -1
+							const partyLab =
+								idx >= 0 && Array.isArray(parties) && parties[idx] && isRecord(parties[idx])
+									? typeof parties[idx].role === 'string' && parties[idx].role.trim()
+										? parties[idx].role.trim()
+										: `Partei ${idx + 1}`
+									: 'Signatur'
+							const name = typeof sig.signer_name === 'string' ? sig.signer_name : '—'
+							const srole = typeof sig.signer_role === 'string' ? sig.signer_role : ''
+							const place = typeof sig.place === 'string' ? sig.place : ''
+							const date = fmtDate(sig.date)
+							const meta = [place && `Ort: ${place}`, date && `Datum: ${date}`].filter(Boolean).join(' · ')
+							return `<div class="cv-sign-block">
+				<div class="cv-sign-party">${esc(partyLab)}</div>
+				<div class="cv-sign-name">${esc(name)}</div>
+				${srole ? `<div class="cv-sign-meta">${esc(srole)}</div>` : ''}
+				${meta ? `<div class="cv-sign-meta">${esc(meta)}</div>` : ''}
+			</div>`
+						})
+						.join('')
+					return `<div class="cv-signatures"><h3>Unterschriften / Kenntnisnahme</h3><div class="cv-sign-grid">${blocks}</div></div>`
+				}
+
+				function render() {
+					if (!$root) return
+					if (!isContractPayload(state)) {
+						$root.innerHTML =
+							'<div class="cv-shell"><div class="empty-doc" style="padding:2rem;text-align:center;color:var(--muted)">Ungültige oder unvollständige Vertragsdaten (mindestens Titel, zwei Parteien mit Namen).</div></div>'
+						return
+					}
+
+					const parties = state.parties
+					const partyHtml = parties.map((p, i) => renderParty(p, i)).join('')
+					const ctype = typeof state.contract_type === 'string' && state.contract_type.trim()
+						? state.contract_type.trim()
+						: 'Vertrag'
+					const cid =
+						typeof state.contract_id === 'string' && state.contract_id.trim()
+							? state.contract_id.trim()
+							: ''
+					const jur =
+						typeof state.jurisdiction === 'string' && state.jurisdiction.trim()
+							? state.jurisdiction.trim()
+							: ''
+					const eff = fmtDate(state.effective_date)
+					const lang =
+						typeof state.language === 'string' && state.language.trim() ? state.language.trim() : ''
+
+					const metaParts = []
+					if (cid) metaParts.push(`<span><strong>Kennung:</strong> ${esc(cid)}</span>`)
+					if (eff) metaParts.push(`<span><strong>Inkrafttreten:</strong> ${esc(eff)}</span>`)
+					if (jur) metaParts.push(`<span><strong>Rechtsordnung:</strong> ${esc(jur)}</span>`)
+					if (lang) metaParts.push(`<span><strong>Sprache:</strong> ${esc(lang.toUpperCase())}</span>`)
+
+					const preamble =
+						typeof state.preamble === 'string' && state.preamble.trim()
+							? `<div class="cv-preamble"><h3>Präambel</h3>${esc(state.preamble.trim())}</div>`
+							: ''
+
+					const defs = renderDefinitions(state.definitions)
+					const clauses = renderClauses(state.clauses)
+					const signs = renderSignatures(state.signatures, parties)
+					const foot =
+						typeof state.signature_note === 'string' && state.signature_note.trim()
+							? `<p class="cv-footnote">${esc(state.signature_note.trim())}</p>`
+							: ''
+
+					$root.innerHTML = `<div class="cv-shell">
+		<div class="cv-hero">
+			<div class="cv-hero-eyebrow">${esc(ctype)}</div>
+			<h1 class="cv-hero-title">${esc(state.title.trim())}</h1>
+			<div class="cv-hero-meta">${metaParts.join('')}</div>
+		</div>
+		<div class="cv-parties">${partyHtml}</div>
+		${preamble}
+		${defs}
+		${clauses}
+		${signs}
+		${foot}
+	</div>`
+				}
+
+				const app = new App({ name: 'Aven Vertragsvorschau', version: '1.0.0' })
+
+				async function pushModelContext() {
+					const id =
+						isContractPayload(state) &&
+						typeof state.contract_id === 'string' &&
+						state.contract_id.trim()
+							? state.contract_id.trim()
+							: null
+					const summary = id ? `Vertrag ${id}` : state.title && typeof state.title === 'string' ? state.title : 'Vertrag'
+					await app.updateModelContext({
+						structuredContent: state,
+						content: [{ type: 'text', text: summary }]
+					})
+				}
+
+				function applyConfig(cfg) {
+					if (!isContractPayload(cfg)) return
+					state = cloneJson(cfg)
+					render()
+					void pushModelContext()
+				}
+
+				app.ontoolinput = (params) => {
+					const args =
+						params && typeof params === 'object' && params.arguments !== undefined
+							? params.arguments
+							: params
+					applyConfig(args)
+				}
+				app.ontoolresult = (result) => {
+					const sc = result.structuredContent
+					if (sc && isContractPayload(sc)) applyConfig(sc)
+				}
+
+				await app.connect()
+				render()
+				void pushModelContext()
+			})().catch((err) => {
+				console.error('[vibe-app contract]', err)
+				const r = document.getElementById('doc-root')
+				if (r) {
+					r.innerHTML =
+						'<div class="cv-shell"><div class="empty-doc" style="padding:2rem;text-align:center;color:#b91c1c">Vorschau konnte nicht starten: ' +
+						String(err?.message ?? err) +
+						'</div></div>'
+				}
+			})
+		</script>
+	</body>
+</html>
