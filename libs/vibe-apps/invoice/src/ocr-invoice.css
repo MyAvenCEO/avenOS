@@ -63,7 +63,7 @@ body {
   padding: 1.25rem 1.5rem;
   border-radius: var(--radius-2xl);
   background: var(--tech-fill);
-  border: 1px solid var(--border);
+  border: none;
   box-shadow: none;
 }
 

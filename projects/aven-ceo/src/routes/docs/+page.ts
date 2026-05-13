@@ -1,2 +1,2 @@
-/** Vibe apps: iframe + AppBridge — browser only. */
+/** Documentation index. */
 export const ssr = false

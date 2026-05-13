@@ -9,6 +9,8 @@
 	/* Minimalist Tech Palette from Image */
 	--color-background: #e8ede1; /* Light Sage/Grey Background */
 	--color-foreground: #1a1a1a; /* Near Black Ink */
+	/* Slightly darker sage for preview host areas (contrast vs. white sandbox card) */
+	--color-sandbox-host: color-mix(in srgb, var(--color-background) 94%, var(--color-foreground));
 
 	/* Tuscan Sun Highlight */
 	--color-tuscan-sun: #e6b34d;

@@ -65,9 +65,13 @@ onDestroy(() => {
 		</div>
 	{/if}
 
-	<iframe
-		bind:this={iframe}
-		title="Vibe app sandbox"
-		class="min-h-0 w-full flex-1 border-0 bg-transparent"
-	></iframe>
+	<div
+		class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-white/10"
+	>
+		<iframe
+			bind:this={iframe}
+			title="Vibe app sandbox"
+			class="block min-h-0 w-full flex-1 border-0 bg-transparent"
+		></iframe>
+	</div>
 </div>

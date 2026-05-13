@@ -5,26 +5,27 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>Vibe App sandbox</title>
 		<style>
-			html,
 			body {
+				display: flex;
+				flex-direction: column;
 				margin: 0;
 				height: 100vh;
 				width: 100vw;
 				background-color: transparent;
 			}
-			body {
-				display: flex;
-				flex-direction: column;
-			}
 			* {
 				box-sizing: border-box;
 			}
-			iframe {
-				background-color: transparent;
-				border: 0 none transparent;
+			/* Chrome lives on .vibe-shell — keep iframes borderless for reliable nested rendering. */
+			.vibe-shell iframe {
+				display: block;
+				width: 100%;
+				flex: 1;
+				min-height: 0;
+				margin: 0;
 				padding: 0;
-				overflow: hidden;
-				flex-grow: 1;
+				border: 0 none transparent;
+				background-color: transparent;
 				color-scheme: inherit;
 			}
 		</style>

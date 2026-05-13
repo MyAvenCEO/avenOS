@@ -1,5 +1,7 @@
 import { App } from '@modelcontextprotocol/ext-apps'
 
+import './todos.css'
+
 type Todo = { id: string; text: string; done: boolean }
 type TodoListConfig = { title?: string; items?: Todo[] }
 
@@ -33,21 +35,25 @@ function render() {
 	} else {
 		for (const t of state.todos) {
 			const li = document.createElement('li')
-			li.className = `todo${t.done ? ' done' : ''}`
+			li.className = `td-row${t.done ? ' done' : ''}`
 			li.dataset.id = t.id
 			li.innerHTML = `
-              <input type="checkbox" ${t.done ? 'checked' : ''} aria-label="Toggle">
-              <span class="text" contenteditable="plaintext-only" spellcheck="false"></span>
-              <button class="delete" aria-label="Delete">×</button>
+              <input type="checkbox" ${t.done ? 'checked' : ''} aria-label="Mark done">
+              <span class="td-row-text" contenteditable="plaintext-only" spellcheck="false"></span>
+              <button class="td-btn td-btn--icon delete" aria-label="Delete">×</button>
             `
-			const textEl = li.querySelector('.text')
-			if (!textEl) throw new Error('Missing .text in row')
+			const textEl = li.querySelector('.td-row-text')
+			if (!textEl) throw new Error('Missing .td-row-text in row')
 			textEl.textContent = t.text
 			$list.appendChild(li)
 		}
 	}
 	const remaining = state.todos.filter((t) => !t.done).length
 	$count.textContent = `${remaining} of ${state.todos.length} remaining`
+	const hasDone = state.todos.some((t) => t.done)
+	if ($clearDone instanceof HTMLButtonElement) {
+		$clearDone.disabled = !hasDone
+	}
 }
 
 async function pushModelContext() {
@@ -89,7 +95,7 @@ $form.addEventListener('submit', (e) => {
 $list.addEventListener('change', (e) => {
 	const t = e.target as HTMLInputElement
 	if (t.type !== 'checkbox') return
-	const li = t.closest('.todo')
+	const li = t.closest('.td-row')
 	const todo = state.todos.find((x) => x.id === li?.dataset.id)
 	if (!todo) return
 	todo.done = t.checked
@@ -100,7 +106,7 @@ $list.addEventListener('change', (e) => {
 $list.addEventListener('click', (e) => {
 	const t = e.target as HTMLElement
 	if (!t.classList?.contains('delete')) return
-	const li = t.closest('.todo')
+	const li = t.closest('.td-row')
 	state.todos = state.todos.filter((x) => x.id !== li?.dataset.id)
 	render()
 	void pushModelContext()
@@ -108,8 +114,8 @@ $list.addEventListener('click', (e) => {
 
 $list.addEventListener('input', (e) => {
 	const t = e.target as HTMLElement
-	if (!t.classList?.contains('text')) return
-	const li = t.closest('.todo')
+	if (!t.classList.contains('td-row-text')) return
+	const li = t.closest('.td-row')
 	const todo = state.todos.find((x) => x.id === li?.dataset.id)
 	if (!todo) return
 	todo.text = (t.textContent ?? '').trim()

@@ -28,16 +28,6 @@ export { bankStatementDemoToolArguments, invoiceDemoToolArguments }
 
 export const vibeAppList: VibeAppDefinition[] = [
 	{
-		id: 'todos',
-		label: 'Todos',
-		description: 'Minimal task list with host ↔ sandbox sync.',
-		getToolArguments: () => ({ ...todosDemoToolArguments }),
-		getToolResult: () =>
-			Promise.resolve({
-				content: [{ type: 'text', text: 'Demo tool finished OK' }]
-			})
-	},
-	{
 		id: 'invoice',
 		label: 'Invoice',
 		description: 'Invoice viewer (legacy layout) with a schema-shaped demo document.',
@@ -57,6 +47,16 @@ export const vibeAppList: VibeAppDefinition[] = [
 		getToolResult: () =>
 			Promise.resolve({
 				content: [{ type: 'text', text: 'Demo bank statement tool finished OK' }]
+			})
+	},
+	{
+		id: 'todos',
+		label: 'Todos',
+		description: 'Minimal task list with host ↔ sandbox sync.',
+		getToolArguments: () => ({ ...todosDemoToolArguments }),
+		getToolResult: () =>
+			Promise.resolve({
+				content: [{ type: 'text', text: 'Demo tool finished OK' }]
 			})
 	}
 ]

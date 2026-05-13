@@ -1,50 +1,71 @@
 <script lang="ts">
-import { type VibeAppId, vibeAppList } from '@avenos/vibe-apps'
-import VibeSandboxFrame from '$lib/vibe-apps/VibeSandboxFrame.svelte'
-
-let selectedId = $state<VibeAppId>('todos')
+import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 </script>
 
 <svelte:head>
-	<title>Vibe apps — Aven CEO</title>
+	<title>Documentation — Aven CEO</title>
 </svelte:head>
 
-<div class="flex min-h-dvh bg-background text-foreground">
-	<aside
-		class="flex w-72 shrink-0 flex-col gap-1 border-r border-border p-4"
-		aria-label="Vibe apps"
-	>
-		<p class="tech-label px-1 pb-2">Vibe apps</p>
-		{#each vibeAppList as app}
-			<button
-				type="button"
-				onclick={() => {
-					selectedId = app.id
-				}}
-				class="rounded-xl border px-3 py-2.5 text-left transition-colors {selectedId === app.id
-					? 'border-[color:var(--color-tuscan-sun)] bg-white/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]'
-					: 'border-border bg-white/10 hover:bg-white/20'}"
-			>
-				<span class="block text-sm font-medium tracking-tight">{app.label}</span>
-				<span class="mt-0.5 block text-xs text-muted-foreground">{app.description}</span>
-			</button>
-		{/each}
-	</aside>
+<div class="flex min-h-dvh flex-col bg-background text-foreground font-sans antialiased">
+	<MarketingSiteHeader active="docs" />
 
-	<section class="flex min-h-0 min-w-0 flex-1 flex-col">
-		<header class="shrink-0 px-6 pt-6 pb-4">
-			<h1 class="text-lg font-semibold tracking-tight">Sandbox</h1>
-			<p class="mt-1 max-w-prose text-sm text-muted-foreground">
-				The artifact runs in a separate origin (<code class="rounded bg-muted px-1 py-px text-xs"
-					>localhost:8081</code
-				>).
-			</p>
-		</header>
+	<main class="flex-1 px-6 py-10 sm:px-10 sm:py-14">
+		<div class="mx-auto max-w-5xl">
+			<header class="mb-10">
+				<p class="tech-label mb-3">Documentation</p>
+				<h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">AvenOS</h1>
+				<p class="mt-2 max-w-prose text-sm leading-relaxed text-muted-foreground">
+					<strong class="font-medium text-foreground">AvenOS</strong>
+					is our foundational operating layer — shared libraries, runtime contracts, sync, and
+					deployment fabric — for AvenCEO, integrations, and everything documented here.
+				</p>
+			</header>
 
-		<div class="flex min-h-0 min-w-0 flex-1 flex-col">
-			{#key selectedId}
-				<VibeSandboxFrame appId={selectedId} />
-			{/key}
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+				<a
+					href="/docs/vibe-apps"
+					class="tech-card group flex flex-col gap-3 p-5 no-underline transition-all hover:bg-white/20"
+				>
+					<div
+						class="flex size-9 items-center justify-center rounded-xl border border-border/60 bg-white/20 text-foreground/60 transition-colors group-hover:border-[color:var(--color-tuscan-sun)]/50 group-hover:text-foreground"
+					>
+						<svg
+							class="size-4"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.75"
+							aria-hidden="true"
+						>
+							<rect x="3" y="3" width="7" height="7" rx="1.5" />
+							<rect x="14" y="3" width="7" height="7" rx="1.5" />
+							<rect x="3" y="14" width="7" height="7" rx="1.5" />
+							<rect x="14" y="14" width="7" height="7" rx="1.5" />
+						</svg>
+					</div>
+					<div>
+						<p class="text-sm font-semibold tracking-tight text-foreground">Vibe View Library</p>
+						<p class="mt-0.5 text-xs text-muted-foreground leading-snug">
+							Kitchen-sink sandbox: cross-origin artifact viewers, schema → UI.
+						</p>
+					</div>
+					<span
+						class="mt-auto flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground opacity-50 transition-opacity group-hover:opacity-100"
+					>
+						Explore
+						<svg
+							class="size-3"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							aria-hidden="true"
+						>
+							<path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+						</svg>
+					</span>
+				</a>
+			</div>
 		</div>
-	</section>
+	</main>
 </div>

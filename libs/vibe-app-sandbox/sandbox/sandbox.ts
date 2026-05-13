@@ -40,10 +40,17 @@ try {
 	// Expected: SecurityError confirms proper sandboxing.
 }
 
+const shell = document.createElement('div')
+shell.className = 'vibe-shell'
+shell.style.cssText =
+	'flex:1;min-height:0;display:flex;flex-direction:column;box-sizing:border-box;' +
+	'border:1px solid rgba(0,0,0,0.1);border-radius:2rem;overflow:hidden;' +
+	'background:rgba(255,255,255,0.1);'
 const inner = document.createElement('iframe')
-inner.style.cssText = 'width:100%; height:100%; border:none;'
+inner.style.cssText = 'width:100%;flex:1;min-height:0;'
 inner.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms')
-document.body.appendChild(inner)
+document.body.appendChild(shell)
+shell.appendChild(inner)
 
 const RESOURCE_READY_NOTIFICATION: McpUiSandboxResourceReadyNotification['method'] =
 	'ui/notifications/sandbox-resource-ready'
