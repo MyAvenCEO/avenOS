@@ -7,12 +7,12 @@ import {
 } from '../src/index'
 
 test('creates stable supervisor session name', () => {
-	expect(createSupervisorSessionName('memory')).toBe('actor/skill/memory')
+	expect(createSupervisorSessionName('memory')).toBe('actor/skills/memory')
 })
 
 test('creates stable worker session name', () => {
 	expect(createWorkerSessionName('memory', 'topic-jaensen-architecture')).toBe(
-		'actor/skill-worker/memory/topic-jaensen-architecture'
+		'actor/skills/memory/topic-jaensen-architecture'
 	)
 })
 

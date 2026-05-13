@@ -51,7 +51,7 @@ test('bootstraps one skill supervisor actor per skill', async () => {
 
 	expect(persistence.upsertedActors).toEqual([
 		{
-			id: 'skill/memory',
+			id: 'skills/memory',
 			kind: 'skill-supervisor',
 			state: {
 				skillId: 'memory',
@@ -60,7 +60,7 @@ test('bootstraps one skill supervisor actor per skill', async () => {
 			}
 		},
 		{
-			id: 'skill/extract',
+			id: 'skills/extract',
 			kind: 'skill-supervisor',
 			state: {
 				skillId: 'extract',
@@ -71,8 +71,8 @@ test('bootstraps one skill supervisor actor per skill', async () => {
 	])
 	expect(persistence.enqueued).toHaveLength(2)
 	expect(persistence.enqueued[0]).toMatchObject({
-		fromActor: 'system',
-		toActor: 'skill/memory',
+		fromActor: 'skills',
+		toActor: 'skills/memory',
 		type: 'skill.bootstrap',
 		payload: { skillId: 'memory' }
 	})

@@ -15,7 +15,7 @@ test('invalid supervisor action is rejected', () => {
 				state: {},
 				actions: [{ type: 'explode', payload: {} }]
 			},
-			'intent/1'
+			'intents/1'
 		)
 	).toThrow(FlueBrainValidationError)
 })
@@ -27,7 +27,7 @@ test('supervisor cannot send to human', () => {
 				state: {},
 				actions: [{ type: 'send', to: 'human', messageType: 'x', payload: {} }]
 			},
-			'intent/1'
+			'intents/1'
 		)
 	).toThrow('supervisor may not send to human')
 
@@ -51,7 +51,7 @@ test('worker result defaults missing state to empty object', () => {
 })
 
 test('supervisor decision defaults missing state to empty object', () => {
-	expect(validateSupervisorDecision({ actions: [] }, 'intent/1')).toMatchObject({ state: {}, actions: [] })
+	expect(validateSupervisorDecision({ actions: [] }, 'intents/1')).toMatchObject({ state: {}, actions: [] })
 })
 
 test('schemas reject malformed llm output', () => {
@@ -62,14 +62,14 @@ test('schemas reject malformed llm output', () => {
 test('supervisor schema accepts call_skill', () => {
 	expect(skillSupervisorDecisionSchema.safeParse({
 		state: {},
-		actions: [{ type: 'call_skill', to: 'skill/memory', callId: 'call-1', request: 'Remember', payload: {} }]
+		actions: [{ type: 'call_skill', to: 'skills/memory', callId: 'call-1', request: 'Remember', payload: {} }]
 	}).success).toBe(true)
 })
 
 test('worker schema accepts call_skill action', () => {
 	expect(skillWorkerResultSchema.safeParse({
 		state: {},
-		actions: [{ type: 'call_skill', to: 'skill/memory', callId: 'call-1', request: 'Remember', payload: {} }]
+		actions: [{ type: 'call_skill', to: 'skills/memory', callId: 'call-1', request: 'Remember', payload: {} }]
 	}).success).toBe(true)
 })
 
@@ -94,13 +94,13 @@ test('worker validation accepts useful state-only updates', () => {
 test('schema rejects call_skill without callId', () => {
 	expect(skillSupervisorDecisionSchema.safeParse({
 		state: {},
-		actions: [{ type: 'call_skill', to: 'skill/memory', request: 'Remember', payload: {} }]
+		actions: [{ type: 'call_skill', to: 'skills/memory', request: 'Remember', payload: {} }]
 	}).success).toBe(false)
 })
 
 test('schema rejects call_skill without request', () => {
 	expect(skillWorkerResultSchema.safeParse({
 		state: {},
-		actions: [{ type: 'call_skill', to: 'skill/memory', callId: 'call-1', payload: {} }]
+		actions: [{ type: 'call_skill', to: 'skills/memory', callId: 'call-1', payload: {} }]
 	}).success).toBe(false)
 })

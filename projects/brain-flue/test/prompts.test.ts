@@ -6,8 +6,8 @@ const skill = {
 	id: 'file-creator',
 	path: 'file-creator/SKILL.md',
 	description: 'Create files',
-	directActors: ['skill/memory'],
-	frontmatter: { id: 'file-creator', direct_actors: ['skill/memory'] },
+	directActors: ['skills/memory'],
+	frontmatter: { id: 'file-creator', direct_actors: ['skills/memory'] },
 	body: 'Create files and remember them.',
 	bodyHash: 'hash',
 	loadedAt: '2026-05-12T00:00:00.000Z'
@@ -18,7 +18,7 @@ test('worker prompt includes exact call_skill example', () => {
 		skill,
 		workerId: 'call-1',
 		actorState: {},
-		envelope: { id: 'env-1', payload: {}, fromActor: 'skill/file-creator' } as never,
+		envelope: { id: 'env-1', payload: {}, fromActor: 'skills/file-creator' } as never,
 		workspaceRoot: '/workspace',
 		resourceHints: {},
 		workerPolicy: 'durable'
@@ -29,7 +29,7 @@ test('worker prompt includes exact call_skill example', () => {
 	expect(prompt).toContain('"callId": "remember-file-greeting-txt"')
 	expect(prompt).toContain('"request": "store"')
 	expect(prompt).toContain('"tool": "finish"')
-	expect(prompt).toContain('Never call your own skill actor (skill/file-creator)')
+	expect(prompt).toContain('Never call your own skill actor (skills/file-creator)')
 	expect(prompt).toContain('Example of direct completion without any skill call:')
 })
 
@@ -37,7 +37,7 @@ test('supervisor prompt includes exact decision shape and call_skill example', (
 	const prompt = buildSupervisorPrompt({
 		skill,
 		actorState: {},
-		envelope: { id: 'env-1', payload: {}, fromActor: 'intent/test' } as never,
+		envelope: { id: 'env-1', payload: {}, fromActor: 'intents/test' } as never,
 		knownWorkers: {},
 		workspaceRoot: '/workspace'
 	})

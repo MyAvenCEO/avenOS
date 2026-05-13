@@ -7,15 +7,15 @@ test('commitActivation updates actor state, appends events, and enqueues outgoin
 	await persistence.migrate()
 
 	await persistence.upsertActor({
-		id: 'intent/invoice-7',
+		id: 'intents/invoice-7',
 		kind: 'intent',
 		state: { phase: 'queued' }
 	})
 
 	await persistence.enqueue({
 		id: 'env-in',
-		fromActor: 'dispatcher/root',
-		toActor: 'intent/invoice-7',
+		fromActor: 'dispatcher',
+		toActor: 'intents/invoice-7',
 		type: 'message',
 		correlationId: 'corr-in',
 		payload: { invoiceId: 7 }
@@ -32,13 +32,13 @@ test('commitActivation updates actor state, appends events, and enqueues outgoin
 	await persistence.commitActivation({
 		workerId: 'worker-1',
 		envelopeId: 'env-in',
-		actorId: 'intent/invoice-7',
+		actorId: 'intents/invoice-7',
 		expectedActorVersion: 0,
 		newActorState: { phase: 'processed' },
 		events: [
 			{
 				id: 'evt-1',
-				actorId: 'intent/invoice-7',
+				actorId: 'intents/invoice-7',
 				eventType: 'processed',
 				event: { ok: true }
 			}
@@ -46,8 +46,8 @@ test('commitActivation updates actor state, appends events, and enqueues outgoin
 		outgoing: [
 			{
 				id: 'env-out',
-				fromActor: 'intent/invoice-7',
-				toActor: 'skill/extract',
+				fromActor: 'intents/invoice-7',
+				toActor: 'skills/extract',
 				type: 'extract-request',
 				correlationId: 'corr-out',
 				causationId: 'env-in',
@@ -57,7 +57,7 @@ test('commitActivation updates actor state, appends events, and enqueues outgoin
 		now: new Date('2026-05-12T00:01:00.000Z')
 	})
 
-	const actor = await persistence.getActor('intent/invoice-7')
+	const actor = await persistence.getActor('intents/invoice-7')
 	expect(actor?.state).toEqual({ phase: 'processed' })
 	expect(actor?.version).toBe(1)
 
@@ -77,7 +77,7 @@ test('commitActivation updates actor state, appends events, and enqueues outgoin
 		event_type: string
 		event_json: string
 	}
-	expect(eventRow.actor_id).toBe('intent/invoice-7')
+	expect(eventRow.actor_id).toBe('intents/invoice-7')
 	expect(eventRow.envelope_id).toBe('env-in')
 	expect(eventRow.event_type).toBe('processed')
 	expect(JSON.parse(eventRow.event_json)).toEqual({ ok: true })

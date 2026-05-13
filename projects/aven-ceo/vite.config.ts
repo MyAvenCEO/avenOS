@@ -53,6 +53,9 @@ export default defineConfig(({ mode }) => {
 				'@avenos/jaensen-bot': path.resolve(__dirname, '../jaensen-bot/index.ts')
 			}
 		},
+		ssr: {
+			noExternal: ['@xyflow/svelte']
+		},
 		plugins: [
 			jazzSvelteKit({
 				adminSecret: process.env.JAZZ_ADMIN_SECRET,

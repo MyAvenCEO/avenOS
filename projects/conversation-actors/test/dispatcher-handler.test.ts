@@ -34,7 +34,7 @@ test('dispatcher creates new intent from user input', async () => {
 	expect(result.outgoing).toHaveLength(1)
 	expect(result.outgoing?.[0]).toMatchObject({
 		fromActor: 'dispatcher',
-		toActor: 'intent/intent-123',
+		toActor: 'intents/intent-123',
 		type: 'intent.start',
 		payload: {
 			intentId: 'intent-123',
@@ -79,7 +79,7 @@ test('dispatcher routes user input to existing intent', async () => {
 	expect(result.state).toEqual(state)
 	expect(result.outgoing?.[0]).toMatchObject({
 		fromActor: 'dispatcher',
-		toActor: 'intent/intent-123',
+		toActor: 'intents/intent-123',
 		type: 'intent.user_input',
 		payload: { text: 'More details', attachments: [] }
 	})
@@ -113,7 +113,7 @@ test('dispatcher routes hinted user input to existing waiting intent without con
 
 	expect(result.outgoing?.[0]).toMatchObject({
 		fromActor: 'dispatcher',
-		toActor: 'intent/intent-123',
+		toActor: 'intents/intent-123',
 		type: 'intent.user_input',
 		payload: { text: 'Sure, do it', attachments: [], intentIdHint: 'intent-123' }
 	})
@@ -202,7 +202,7 @@ test('dispatcher never sends to skill', async () => {
 		context: makeContext()
 	})
 
-	expect(result.outgoing?.every((envelope) => !envelope.toActor.startsWith('skill/'))).toBeTrue()
+	expect(result.outgoing?.every((envelope) => !envelope.toActor.startsWith('skills/'))).toBeTrue()
 })
 
 function makeDispatcherActor(state: unknown) {
@@ -243,7 +243,7 @@ function makeLifecycleEnvelope(overrides: Partial<EnvelopeRecord> = {}): Envelop
 	return {
 		...makeUserInputEnvelope(),
 		id: 'env-life-1',
-		fromActor: 'intent/intent-404',
+		fromActor: 'intents/intent-404',
 		toActor: 'dispatcher',
 		type: 'intent.lifecycle',
 		payload: {

@@ -6,7 +6,7 @@ import {
 	createFlueIntentBrain
 } from '../src/index'
 
-test('intent uses actor/intent/<intentId> session', async () => {
+test('intent uses actor/intents/<intentId> session', async () => {
 	const calls: string[] = []
 	const brain = createFlueIntentBrain({
 		harness: {
@@ -32,7 +32,7 @@ test('intent uses actor/intent/<intentId> session', async () => {
 
 	await brain.decide({ state: makeIntentState(), envelope: makeEnvelopeRecord(), availableSkills: makeSkills() })
 
-	expect(calls).toEqual(['actor/intent/intent-123'])
+	expect(calls).toEqual(['actor/intents/intent-123'])
 })
 
 test('intent accepts call_skill for known skill', async () => {
@@ -268,7 +268,7 @@ function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRe
 	return {
 		id: 'env-1',
 		fromActor: 'dispatcher',
-		toActor: 'intent/intent-123',
+		toActor: 'intents/intent-123',
 		type: 'intent.user_input',
 		correlationId: 'corr-1',
 		causationId: null,

@@ -23,7 +23,7 @@ const sendActionSchema = z.object({
 	payload: z.unknown()
 })
 
-const skillActorSchema = z.string().trim().regex(/^skill\/[a-z0-9]+(?:-[a-z0-9]+)*$/, 'to must target skill/<skillId>')
+const skillActorSchema = z.string().trim().regex(/^skills\/[a-z0-9]+(?:-[a-z0-9]+)*$/, 'to must target skills/<skillId>')
 
 const callSkillActionSchema = z.object({
 	type: z.literal('call_skill'),

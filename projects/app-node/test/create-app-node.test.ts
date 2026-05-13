@@ -26,7 +26,7 @@ test('createAppNode ensures startup actors and bootstraps skill supervisors', as
 	expect((await persistence.getActor('dispatcher'))?.state).toEqual({ activeIntents: {} })
 	expect((await persistence.getActor('human'))?.kind).toBe('human-outbox')
 	expect((await persistence.getActor('human'))?.state).toEqual({ messages: [] })
-	expect((await persistence.getActor('skill/memory'))?.kind).toBe('skill-supervisor')
+	expect((await persistence.getActor('skills/memory'))?.kind).toBe('skill-supervisor')
 	expect(app.skillRegistry.list().map((skill) => skill.id)).toEqual(['memory'])
 })
 

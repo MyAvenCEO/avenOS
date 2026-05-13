@@ -1,0 +1,434 @@
+{
+  "id": "bank_statement",
+  "name": "Bank statement",
+  "description": "Account statements from banks and electronic money institutions: periodic statements (Kontoauszug), posted transaction lists with opening and closing balances, billing-period summaries, and fee or service charge statements (e.g. neobank monthly closures). The focus is movements on one account for a period. Do not pick this for third-party payment demands or commercial invoices for goods and services—use Invoice instead.",
+  "merge_spec": {
+    "strategy": "bank_statement"
+  },
+  "llm_model": null,
+  "system_prompt": "This tool is for bank and payment-account statements, not for invoices payable to a supplier. **`account_holder` and `institution`** may be filled from the parties pipeline when configured; **`transactions`** maps every posted logical line.\n\n**`account_overview` —** Only **account / product** metadata: `iban`, `bic` (or SWIFT), `account_number`, `domestic_bank_code`, `product_name`, `card_last_four`, `branch_name` as printed. Card nicknames (*CC SSKM (Keydex)*) belong in **`product_name`** or **`notes`** when shown. Do not put person or institution legal names here.\n\nLayout — use `period_start` and `period_end` for the **transaction/listing period** (Von / Bis), not the document print date. If the document shows an **issue or print date** that differs from the period, put it in `statement_issue_date`. For credit or charge-card statements, map **payment due** to `payment_due_date` when shown.\n\nMap `opening_balance` and `closing_balance` from the **header or summary** for the **full** statement period. For **credit / charge-card** statements (`statement_kind` **`credit_card_statement`**): merge each **card charge + separate *Währungsumrechnung* fee line** into **one** `transactions[]` object — **`amount`** = combined signed total in EUR (purchase line + fee line); optional **`fx_surcharge_eur`** holds the *x% für Währungsumrechnung* EUR surcharge (not the **Kurs** — use **`exchange_rate`** for Umrechnungskurs); **`description`** = **Verwendungszweck** (merchant/unternehmen line plus fee line joined with **`\\n`** if needed — do not duplicate **`title`**). Preserve **Debit/Credit signage** (**`amount`** negative for outgoing debits).\n\nEach **transactions[]** field is **discrete**: **`value_date`** (**Datum Beleg**), **`booking_date`** (**Datum Buchung**), **`fx_surcharge_eur`**, **`amount`**, **`description`** — never merge pseudo-JSON tails (e.g. `,fx_surcharge_eur:…`) into date strings.\n\n**Statement kind —** `statement_kind` is required (`periodic_account_statement`, `fee_or_service_statement`, `credit_card_statement`, `savings_account_statement`, or `other`).",
+  "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "statement_kind",
+      "currency",
+      "account_holder",
+      "institution",
+      "account_overview",
+      "period_start",
+      "period_end",
+      "transactions"
+    ],
+    "properties": {
+      "statement_kind": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "enum": [
+          "periodic_account_statement",
+          "fee_or_service_statement",
+          "credit_card_statement",
+          "savings_account_statement",
+          "other",
+          null
+        ],
+        "description": "Category of statement. Required. Pick the single best fit."
+      },
+      "statement_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Statement or period identifier as printed (e.g. reference number, period code)."
+      },
+      "statement_issue_date": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Document issue or print date when shown separately from the transaction period. YYYY-MM-DD if unambiguous."
+      },
+      "currency": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "ISO 4217 account currency."
+      },
+      "period_start": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "First day of the statement period. YYYY-MM-DD if unambiguous."
+      },
+      "period_end": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Last day of the statement period. YYYY-MM-DD if unambiguous."
+      },
+      "payment_due_date": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Payment due or pay-by date, mainly on credit or charge card statements. YYYY-MM-DD if unambiguous."
+      },
+      "opening_balance": {
+        "type": [
+          "number",
+          "null"
+        ],
+        "description": "Opening balance for the period (signed)."
+      },
+      "closing_balance": {
+        "type": [
+          "number",
+          "null"
+        ],
+        "description": "Closing balance after all posted lines (signed)."
+      },
+      "account_holder": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Account holder: same party shape as invoice `buyer` / `vendor` (structured address, not one blob). Filled from extraction and merged with the identity pipeline (`account_holder` role).",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "identity_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Resolved identity UUID from the party pipeline (for UI)."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Legal name of the account holder (person or company) as printed."
+          },
+          "contact_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Contact or representative (natural person) when shown next to the holder company."
+          },
+          "contact_identity_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Person identity when stored separately from the holder row."
+          },
+          "street": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Street line only (building number, street name)."
+          },
+          "postal_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "country": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Full country name in English, or as printed; expand 2-letter codes to names when unambiguous."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tax_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "institution": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Bank or payment institution (letterhead / account servicer): same party field model as `account_holder` and invoice parties.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "identity_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Resolved identity UUID (for UI)."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Institution legal or trading name as printed (e.g. bank name)."
+          },
+          "contact_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contact_identity_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "street": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Institution or branch address — street line."
+          },
+          "postal_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "country": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Full country name when shown."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tax_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "account_overview": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Account and product metadata only (IBAN, BIC, product, card). Party names and addresses go in `account_holder` and `institution`, not here.",
+        "properties": {
+          "branch_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Branch, office, or service centre if printed (distinct from the legal institution name)."
+          },
+          "iban": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "IBAN if shown for this account."
+          },
+          "bic": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "BIC or SWIFT code (often next to IBAN)."
+          },
+          "account_number": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Domestic account number if shown separately from IBAN."
+          },
+          "domestic_bank_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Domestic bank routing (e.g. German BLZ, UK sort code) if printed and not part of a single IBAN line."
+          },
+          "product_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Product or account type label (e.g. Giro, Business, Tagesgeld)."
+          },
+          "card_last_four": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last four digits of the card when a masked number is shown (e.g. …4242)."
+          }
+        }
+      },
+      "transactions": {
+        "type": "array",
+        "description": "Posted **logical** rows in table order. **Credit/charge cards:** one object per card charge even when the issuer prints a **second EUR line** (*x% für Währungsumrechnung*) — merge into the same object: **`exchange_rate`** = **Kurs** (Umrechnungskurs), **`foreign_exchange_fee_percent`** = *x* from **x%**, **`fx_surcharge_eur`** = that surcharge in EUR, **`amount`** = total EUR.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "description",
+            "amount"
+          ],
+          "properties": {
+            "booking_date": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Booking / **posting date** column (**Datum Buchung** when two date columns exist). **ONLY** **YYYY-MM-DD** or **null** — never fuse **`fx_surcharge_eur`**, **`description`**, or other keys into this string."
+            },
+            "booking_date_as_printed": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Same booking/posting row as **`booking_date`** but **verbatim print style** (e.g. *dd.mm.yy*, *05.03.26*) when useful for localization or PHP/export pipelines — complements ISO **`booking_date`**."
+            },
+            "value_date": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "**Value / receipt date** column (**Datum Beleg**, *Wertstellung* / Belegdatum) when printed **before or separate from** **`booking_date`**. **ONLY** **YYYY-MM-DD** or **null** — never concatenate fee text or other JSON keys (use **`fx_surcharge_eur`** separately)."
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Verwendungszweck / merchant text only. Real newline between lines if needed (**`\\n`** in JSON). Do **not** append pseudo-JSON like `,fx_surcharge_eur:` here."
+            },
+            "counterparty_name": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Primary counterparty label when split from full description."
+            },
+            "transaction_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Foreign key to `.data/transactions/<id>.json`."
+            },
+            "amount": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "Signed **total booked in account currency** (root **`currency`**, usually EUR): **Betrag in EUR** main cell **plus** **`fx_surcharge_eur`** when the statement posts them as one logical charge. **Preserve sign** (debits negative). Not the **Kurs** — use **`exchange_rate`**; not the foreign **Betrag** — use **`original_amount`** + **`original_currency`**."
+            },
+            "fx_surcharge_eur": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "Second **Betrag in EUR** line for *x% für Währungsumrechnung* (Zuschlag/Gebühr on the conversion **— not** the **Umrechnungskurs**; that is **`exchange_rate`**). Signed (usually negative). **null** if only one EUR amount is printed."
+            },
+            "foreign_exchange_fee_percent": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "**Währungsumrechnungs**-percentage as a **numeric rate** (*1,75%* → **`1.75`**, independent of **`exchange_rate`** / **Kurs**). Omit if the surcharge line does not show a percentage or wording is unreadable."
+            },
+            "original_amount": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "**Betrag** in **foreign transaction currency** (**Währung** column, e.g. 96.79). Signed if the table uses signs. Pair with **`original_currency`**."
+            },
+            "original_currency": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "**Währung** column as ISO 4217 (e.g. **USD**). Root **`currency`** is the **statement account** currency (e.g. **EUR**)."
+            },
+            "exchange_rate": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "**Kurs** / **Umrechnungskurs** as printed (e.g. 1,1573) — rate from foreign currency to EUR. **Not** the *x%* EUR surcharge (**`fx_surcharge_eur`**) nor the USD **Betrag** (**`original_amount`**)."
+            },
+            "balance_after": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "Running balance after this line if shown."
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Short merchant / payee headline when the PDF uses two lines (**title** + **Verwendungszweck** detail). Do not repeat it in **`description`**."
+            }
+          }
+        }
+      },
+      "notes": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Footnotes, interest summary, or other narrative not mapped to a transaction line."
+      }
+    }
+  }
+}

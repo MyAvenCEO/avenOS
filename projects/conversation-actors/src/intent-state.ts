@@ -1,3 +1,5 @@
+import { createIntentActorId, parseIntentActorId } from '@jaensen/persistence-sqlite'
+
 import { ConversationActorsValidationError } from './errors'
 import type { IntentState } from './types'
 
@@ -49,6 +51,4 @@ export function assertIntentState(state: unknown, actorId?: string): IntentState
 	}
 }
 
-export function parseIntentActorId(actorId: string): string | null {
-	return actorId.startsWith('intent/') ? actorId.slice('intent/'.length) || null : null
-}
+export { createIntentActorId, parseIntentActorId }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import type { ActorHandler } from '@jaensen/actor-runtime'
+import { createIntentActorId } from '@jaensen/persistence-sqlite'
 import { z } from 'zod'
 
 import { UnknownIntentError, ConversationActorsValidationError } from './errors'
@@ -82,7 +83,7 @@ async function handleUserInput(input: {
 				outgoing: [
 					input.context.makeEnvelope({
 						from: 'dispatcher',
-						to: `intent/${hintedIntentId}`,
+						to: createIntentActorId(hintedIntentId),
 						type: 'intent.user_input',
 						correlationId: input.envelope.correlationId,
 						causationId: input.envelope.id,
@@ -110,7 +111,7 @@ async function handleUserInput(input: {
 			outgoing: [
 				input.context.makeEnvelope({
 					from: 'dispatcher',
-					to: `intent/${decision.intentId}`,
+					to: createIntentActorId(decision.intentId),
 					type: 'intent.user_input',
 					correlationId: input.envelope.correlationId,
 					causationId: input.envelope.id,
@@ -128,7 +129,7 @@ async function handleUserInput(input: {
 		outgoing: [
 			input.context.makeEnvelope({
 				from: 'dispatcher',
-				to: `intent/${intentId}`,
+				to: createIntentActorId(intentId),
 				type: 'intent.start',
 				correlationId: input.envelope.correlationId,
 				causationId: input.envelope.id,

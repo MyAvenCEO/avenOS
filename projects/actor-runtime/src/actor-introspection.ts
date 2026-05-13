@@ -1,4 +1,9 @@
-import type { EnvelopeRecord } from '../../persistence-sqlite/src/index'
+import {
+	actorKindFromId,
+	actorNameFromId,
+	actorParentIdFromId,
+	type EnvelopeRecord
+} from '../../persistence-sqlite/src/index'
 
 import type {
 	ActorDebugTrace,
@@ -131,9 +136,9 @@ export class ActorIntrospectionRegistry {
 		if (existing) return existing
 		const created: MutableActorInfo = {
 			id,
-			parentId: inferParentId(id),
-			type: inferActorType(id),
-			name: defaultActorName(id),
+			parentId: actorParentIdFromId(id),
+			type: actorKindFromId(id),
+			name: actorNameFromId(id),
 			status: 'idle',
 			mailboxDepth: 0,
 			restartCount: 0,
@@ -153,31 +158,4 @@ export class ActorIntrospectionRegistry {
 			listener(wrapped)
 		}
 	}
-}
-
-function inferActorType(actorId: string): string {
-	if (actorId === 'dispatcher') return 'dispatcher'
-	if (actorId === 'human') return 'human-outbox'
-	if (actorId.startsWith('intent/')) return 'intent'
-	if (actorId.startsWith('skill-worker/')) return 'skill-worker'
-	if (actorId.startsWith('skill/')) return 'skill-supervisor'
-	return 'actor'
-}
-
-function inferParentId(actorId: string): string | undefined {
-	if (actorId.startsWith('intent/')) return 'dispatcher'
-	if (actorId.startsWith('skill-worker/')) {
-		const [, skillId] = actorId.split('/')
-		return skillId ? `skill/${skillId}` : undefined
-	}
-	return undefined
-}
-
-function defaultActorName(actorId: string): string {
-	if (actorId === 'dispatcher') return 'Dispatcher'
-	if (actorId === 'human') return 'Human outbox'
-	if (actorId.startsWith('intent/')) return actorId.slice('intent/'.length)
-	if (actorId.startsWith('skill-worker/')) return actorId.slice('skill-worker/'.length)
-	if (actorId.startsWith('skill/')) return actorId.slice('skill/'.length)
-	return actorId
 }

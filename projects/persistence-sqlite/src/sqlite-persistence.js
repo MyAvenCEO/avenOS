@@ -298,7 +298,7 @@ export class SqlitePersistence {
         }));
     }
     async getIntent(intentId) {
-        const row = this.db.prepare(`SELECT * FROM actors WHERE id = ? AND kind = 'intent'`).get(`intent/${intentId}`);
+        const row = this.db.prepare(`SELECT * FROM actors WHERE id = ? AND kind = 'intent'`).get(`intents/${intentId}`);
         if (!row) {
             return null;
         }
@@ -643,7 +643,7 @@ function buildCommitStreamEvents(input) {
     const supervisorIntentId = inferIntentId(input.actor.id, input.newActorState, input.inputEnvelope.payload);
     if (input.actor.kind === 'skill-supervisor') {
         for (const outgoing of input.outgoingEnvelopes) {
-            if (outgoing.toActor.startsWith('skill-worker/')) {
+            if (outgoing.toActor.startsWith('skills/')) {
                 const type = hasInitialState(outgoing.payload) ? 'skill.worker_spawned' : 'skill.worker_routed';
                 streamEvents.push(...scopedStreamEvents({
                     baseId: `${outgoing.id}:${type}`,
@@ -705,11 +705,11 @@ function scopesForStreamEvent(input) {
         'global',
         input.actorId ? `actor/${input.actorId}` : null,
         input.correlationId ? `correlation/${input.correlationId}` : null,
-        input.intentId ? `intent/${input.intentId}` : null
+        input.intentId ? `intents/${input.intentId}` : null
     ].filter((value) => Boolean(value));
 }
 function inferIntentId(actorId, state, payload) {
-    if (actorId?.startsWith('intent/')) {
+    if (actorId?.startsWith('intents/')) {
         return extractIntentId(actorId);
     }
     const candidate = readIntentIdFromUnknown(payload) ??
@@ -745,16 +745,16 @@ function readIntentIdFromUnknown(value) {
     return null;
 }
 function extractIntentId(actorId) {
-    return actorId.startsWith('intent/') ? actorId.slice('intent/'.length) : actorId;
+    return actorId.startsWith('intents/') ? actorId.slice('intents/'.length) : actorId;
 }
 function parseSkillId(actorId) {
-    if (!actorId?.startsWith('skill/')) {
+    if (!actorId?.startsWith('skills/')) {
         return null;
     }
-    return actorId.slice('skill/'.length) || null;
+    return actorId.slice('skills/'.length) || null;
 }
 function parseWorkerId(actorId) {
-    if (!actorId.startsWith('skill-worker/')) {
+    if (!actorId.startsWith('skills/')) {
         return null;
     }
     const parts = actorId.split('/');

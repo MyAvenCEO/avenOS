@@ -18,11 +18,21 @@ const edgeTypes = { message: MessageEdge }
 onMount(() => {
 	let source: EventSource | null = null
 	void fetch('/api/aven/jaensen/debug/actors')
-		.then((response) => response.json())
+		.then(async (response) => {
+			if (!response.ok) {
+				throw new Error(`Failed to load actor snapshot: ${response.status}`)
+			}
+			return response.json()
+		})
 		.then((snapshot: DebugActorSnapshot) => {
 			const graph = snapshotToGraph(snapshot)
 			nodes = graph.nodes
 			edges = graph.edges
+		})
+		.catch((error) => {
+			console.error('Failed to initialize actor graph', error)
+			nodes = []
+			edges = []
 		})
 
 	source = new EventSource('/api/aven/jaensen/debug/actors/events')

@@ -2,6 +2,13 @@ import { randomUUID } from 'node:crypto'
 
 import { Database } from 'bun:sqlite'
 
+import {
+	actorKindFromId,
+	createIntentActorId,
+	parseIntentActorId,
+	parseSkillActorId,
+	parseSkillWorkerActorId
+} from './actor-id'
 import { exponentialBackoffMilliseconds, plusMilliseconds, toIsoUtcString } from './clock'
 import { ConcurrencyError, NotFoundError } from './errors'
 import { parseJson, stringifyJson } from './json'
@@ -559,7 +566,7 @@ export class SqlitePersistence implements Persistence {
 	}
 
 	async getIntent(intentId: string): Promise<{ id: string; state: unknown; version: number; createdAt: string; updatedAt: string } | null> {
-		const row = query(this.db, `SELECT * FROM actors WHERE id = ? AND kind = 'intent'`).get(`intent/${intentId}`) as
+		const row = query(this.db, `SELECT * FROM actors WHERE id = ? AND kind = 'intent'`).get(createIntentActorId(intentId)) as
 			| ActorRow
 			| undefined
 		if (!row) {
@@ -619,8 +626,7 @@ export class SqlitePersistence implements Persistence {
 }
 
 function inferActorKind(actorId: string): string {
-	const [kind] = actorId.split('/', 1)
-	return kind && kind.length > 0 ? kind : 'unknown'
+	return actorKindFromId(actorId)
 }
 
 function inferInitialActorState(input: {
@@ -628,7 +634,7 @@ function inferInitialActorState(input: {
 	envelopeType: string
 	payload: unknown
 }): unknown {
-	if (input.actorId.startsWith('intent/') && input.envelopeType === 'intent.start') {
+	if (parseIntentActorId(input.actorId) && input.envelopeType === 'intent.start') {
 		const payload =
 			input.payload && typeof input.payload === 'object' && !Array.isArray(input.payload)
 				? (input.payload as Record<string, unknown>)
@@ -1068,7 +1074,7 @@ function buildCommitStreamEvents(input: {
 
 	if (input.actor.kind === 'skill-supervisor') {
 		for (const outgoing of input.outgoingEnvelopes) {
-			if (outgoing.toActor.startsWith('skill-worker/')) {
+			if (parseSkillWorkerActorId(outgoing.toActor)) {
 				const type = hasInitialState(outgoing.payload) ? 'skill.worker_spawned' : 'skill.worker_routed'
 				streamEvents.push(
 					...scopedStreamEvents({
@@ -1151,14 +1157,14 @@ function scopesForStreamEvent(input: {
 		'global',
 		input.actorId ? `actor/${input.actorId}` : null,
 		input.correlationId ? `correlation/${input.correlationId}` : null,
-		input.intentId ? `intent/${input.intentId}` : null
+		input.intentId ? `intents/${input.intentId}` : null
 	].filter(
 		(value): value is string => Boolean(value)
 	)
 }
 
 function inferIntentId(actorId: string | null | undefined, state: unknown, payload: unknown): string | null {
-	if (actorId?.startsWith('intent/')) {
+	if (actorId && parseIntentActorId(actorId)) {
 		return extractIntentId(actorId)
 	}
 
@@ -1209,22 +1215,16 @@ function readIntentIdFromUnknown(value: unknown): string | null {
 }
 
 function extractIntentId(actorId: string): string {
-	return actorId.startsWith('intent/') ? actorId.slice('intent/'.length) : actorId
+	return parseIntentActorId(actorId) ?? actorId
 }
 
 function parseSkillId(actorId: string | null | undefined): string | null {
-	if (!actorId?.startsWith('skill/')) {
-		return null
-	}
-	return actorId.slice('skill/'.length) || null
+	if (!actorId) return null
+	return parseSkillActorId(actorId)?.skillId ?? null
 }
 
 function parseWorkerId(actorId: string): string | null {
-	if (!actorId.startsWith('skill-worker/')) {
-		return null
-	}
-	const parts = actorId.split('/')
-	return parts[2] ?? null
+	return parseSkillWorkerActorId(actorId)?.workerId ?? null
 }
 
 function hasInitialState(payload: unknown): boolean {

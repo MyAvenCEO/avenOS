@@ -52,7 +52,7 @@ export function buildSupervisorPrompt(input: {
 		'Example direct skill call action:',
 		jsonBlock({
 			type: 'call_skill',
-			to: 'skill/memory',
+			to: 'skills/memory',
 			callId: 'remember-file-greeting-txt',
 			request: 'store',
 			payload: {
@@ -111,7 +111,7 @@ export function buildWorkerPrompt(input: {
 		'- Use call_skill to delegate to another skill.',
 		'- Use finish when the requested work is complete.',
 		'- Do not manually emit worker result JSON unless explicitly asked by the runtime.',
-		`- Never call your own skill actor (${`skill/${input.skill.id}`}). Do same-skill work directly and return result/completed instead.`,
+		`- Never call your own skill actor (${`skills/${input.skill.id}`}). Do same-skill work directly and return result/completed instead.`,
 		'- The target must be listed in Direct actor access.',
 		'- Do not send to human, dispatcher, intent actors, or skill-worker actors.',
 		'- Direct skill calls return later as skill.result.',
@@ -124,7 +124,7 @@ export function buildWorkerPrompt(input: {
 		jsonBlock({
 			tool: 'call_skill',
 			args: {
-				to: 'skill/memory',
+				to: 'skills/memory',
 				callId: 'remember-file-greeting-txt',
 				request: 'store',
 				payload: {

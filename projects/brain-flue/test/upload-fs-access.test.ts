@@ -127,7 +127,7 @@ test('file-analyzer can inspect a pdf, optionally call memory, and return summar
 							return {
 								tool: 'call_skill',
 								args: {
-									to: 'skill/memory',
+									to: 'skills/memory',
 									callId: 'remember-pdf-1',
 									request: 'store',
 									payload: { topic: 'pdf', text: 'Inspected report.pdf' },
@@ -167,7 +167,7 @@ test('file-analyzer can inspect a pdf, optionally call memory, and return summar
 				...baseSkill,
 				id: 'file-analyzer',
 				path: 'file-analyzer/SKILL.md',
-				directActors: ['skill/memory'],
+				directActors: ['skills/memory'],
 				frontmatter: { ...baseSkill.frontmatter, id: 'file-analyzer', resources: { shell: false, fs: [] } }
 			},
 			workerId: 'worker-pdf',
@@ -175,7 +175,7 @@ test('file-analyzer can inspect a pdf, optionally call memory, and return summar
 			envelope: makeEnvelopeRecord({ payload: { attachmentScopeId, callId: 'parent-call-1' } })
 		})
 	).resolves.toMatchObject({
-		actions: [{ type: 'call_skill', to: 'skill/memory', callId: 'remember-pdf-1' }],
+		actions: [{ type: 'call_skill', to: 'skills/memory', callId: 'remember-pdf-1' }],
 		completed: false,
 		state: { phase: 'waiting-memory' }
 	})
@@ -186,7 +186,7 @@ test('file-analyzer can inspect a pdf, optionally call memory, and return summar
 				...baseSkill,
 				id: 'file-analyzer',
 				path: 'file-analyzer/SKILL.md',
-				directActors: ['skill/memory'],
+				directActors: ['skills/memory'],
 				frontmatter: { ...baseSkill.frontmatter, id: 'file-analyzer', resources: { shell: false, fs: [] } }
 			},
 			workerId: 'worker-pdf',
@@ -282,8 +282,8 @@ async function seedRequestUploadBuffer(
 function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRecord {
 	return {
 		id: 'env-1',
-		fromActor: 'skill/reader',
-		toActor: 'skill-worker/reader/worker-1',
+		fromActor: 'skills/reader',
+		toActor: 'skills/reader/worker-1',
 		type: 'reader.run',
 		correlationId: 'corr-1',
 		causationId: null,

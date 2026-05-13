@@ -10,7 +10,8 @@ export type ActorGraph = { nodes: Node<ActorNodeData>[]; edges: Edge[] }
 const MESSAGE_TTL_MS = 800
 
 export function snapshotToGraph(snapshot: DebugActorSnapshot): ActorGraph {
-	const nodes = snapshot.actors.map((actor: DebugActorInfo) => ({
+	const actors = Array.isArray(snapshot.actors) ? snapshot.actors : []
+	const nodes = actors.map((actor: DebugActorInfo) => ({
 		id: actor.id,
 		type: 'actor',
 		position: { x: 0, y: 0 },
@@ -18,7 +19,7 @@ export function snapshotToGraph(snapshot: DebugActorSnapshot): ActorGraph {
 		width: 220,
 		height: 72
 	}))
-	const edges = snapshot.actors
+	const edges = actors
 		.filter((actor: DebugActorInfo) => actor.parentId)
 		.map((actor: DebugActorInfo) => ({
 			id: `parent:${actor.parentId}:${actor.id}`,

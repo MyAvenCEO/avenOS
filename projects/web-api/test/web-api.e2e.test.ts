@@ -250,7 +250,7 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 					}
 
 					if (role === 'jaensen-conversation-intent') {
-						const intentId = name.slice('actor/intent/'.length)
+						const intentId = name.slice('actor/intents/'.length)
 						state.createdIntentId ??= intentId
 						debugLog(
 							`intent-phase=${state.phase} hasCreate=${text.includes('call-random-file-create')} hasRandomAnalyze=${text.includes('call-random-file-analyze')} hasKnownAnalyze=${text.includes('call-known-file-analyze')} hasKnownPath=${text.includes('known-fact.txt')} hasSaturn=${text.includes('Saturn has rings.')}`
@@ -341,7 +341,7 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 					}
 
 					if (role === 'jaensen-skill-supervisor') {
-						const skillId = name.slice('actor/skill/'.length)
+						const skillId = name.slice('actor/skills/'.length)
 						if (text.includes('skill.bootstrap')) {
 							return {
 								state: {
@@ -475,7 +475,7 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 								actions: [
 									{
 										type: 'send',
-										to: `intent/${state.createdIntentId}`,
+										to: `intents/${state.createdIntentId}`,
 										messageType: 'skill.result',
 										payload: {
 											intentId: state.createdIntentId,
@@ -580,7 +580,7 @@ function createAskUserEventOnlyHarness() {
 					}
 
 					if (role === 'jaensen-conversation-intent') {
-						const intentId = name.slice('actor/intent/'.length)
+						const intentId = name.slice('actor/intents/'.length)
 						if (text.includes('intent.start')) {
 							return {
 								summary: 'Awaiting user input for next task selection.',

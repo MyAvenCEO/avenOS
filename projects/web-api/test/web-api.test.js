@@ -76,14 +76,14 @@ test('GET /api/events supports after cursors', async () => {
     const persistence = new SqlitePersistence();
     await persistence.migrate();
     await persistence.upsertActor({
-        id: 'intent/demo',
+        id: 'intents/demo',
         kind: 'intent',
         state: { intentId: 'demo', title: 'Demo', goal: 'Demo', status: 'active', summary: 'Demo', pendingSkillCalls: {} }
     });
     await persistence.enqueue({
         id: 'env-demo',
         fromActor: 'human',
-        toActor: 'intent/demo',
+        toActor: 'intents/demo',
         type: 'intent.start',
         correlationId: 'env-demo',
         payload: { intentId: 'demo' }

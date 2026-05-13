@@ -32,7 +32,7 @@ test('supervisor uses stable session name', async () => {
         actorState: { skillId: 'memory', workers: {} },
         envelope: makeEnvelopeRecord()
     });
-    expect(calls).toEqual(['actor/skill/memory']);
+    expect(calls).toEqual(['actor/skills/memory']);
     expect(result.state).toEqual({ skillId: 'memory', workers: {} });
 });
 test('model errors propagate clearly', async () => {
@@ -84,8 +84,8 @@ test('supervisor accepts flue responses wrapped in data', async () => {
 function makeEnvelopeRecord(overrides = {}) {
     return {
         id: 'env-1',
-        fromActor: 'intent/default',
-        toActor: 'skill/memory',
+        fromActor: 'intents/default',
+        toActor: 'skills/memory',
         type: 'memory.remember',
         correlationId: 'corr-1',
         causationId: null,

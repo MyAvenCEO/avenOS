@@ -1,4 +1,5 @@
 import type { ActorHandler } from '@jaensen/actor-runtime'
+import { createSkillActorId } from '@jaensen/persistence-sqlite'
 
 import { inferCallId, inferIntentId, inferLocalCallId } from './call-id'
 import { parseSkillWorkerActorId } from './skill-id'
@@ -111,7 +112,7 @@ function mapWorkerOutgoing(input: {
 
 		outgoing.push(input.makeEnvelope({
 			from: input.actorId,
-			to: `skill/${input.skillId}`,
+			to: createSkillActorId(input.skillId),
 			type: 'skill.worker.result',
 			correlationId: input.envelope.correlationId ?? undefined,
 			causationId: input.envelope.id,
@@ -139,8 +140,8 @@ function validateWorkerDirectSkillCall(
 	skill: { id: string; directActors: string[] },
 	action: { to: string; callId: string; request: string }
 ): void {
-	if (!action.to.startsWith('skill/')) {
-		throw new SkillValidationError('Worker direct skill calls must target skill/<skillId> actors')
+	if (!action.to.startsWith('skills/')) {
+		throw new SkillValidationError('Worker direct skill calls must target skills/<skillId> actors')
 	}
 	if (!action.callId) {
 		throw new SkillValidationError('Worker direct skill calls require a non-empty callId')

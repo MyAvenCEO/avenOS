@@ -6,7 +6,7 @@ import { FakePersistence } from './helpers'
 test('processes one envelope successfully', async () => {
 	const persistence = new FakePersistence()
 	await persistence.migrate()
-	await persistence.upsertActor({ id: 'intent/example', kind: 'intent', state: { step: 'queued' } })
+	await persistence.upsertActor({ id: 'intents/example', kind: 'intent', state: { step: 'queued' } })
 
 	const runtime = createActorRuntime({
 		persistence,
@@ -23,8 +23,8 @@ test('processes one envelope successfully', async () => {
 
 	await runtime.enqueue({
 		id: 'env-1',
-		fromActor: 'dispatcher/root',
-		toActor: 'intent/example',
+		fromActor: 'dispatcher',
+		toActor: 'intents/example',
 		type: 'message',
 		correlationId: 'corr-1',
 		payload: { ok: true }
@@ -38,7 +38,7 @@ test('processes one envelope successfully', async () => {
 test('preserves actor state when handler returns same state', async () => {
 	const persistence = new FakePersistence()
 	await persistence.migrate()
-	await persistence.upsertActor({ id: 'intent/same', kind: 'intent', state: { phase: 'same' } })
+	await persistence.upsertActor({ id: 'intents/same', kind: 'intent', state: { phase: 'same' } })
 
 	const runtime = createActorRuntime({
 		persistence,
@@ -55,8 +55,8 @@ test('preserves actor state when handler returns same state', async () => {
 
 	await runtime.enqueue({
 		id: 'env-same',
-		fromActor: 'dispatcher/root',
-		toActor: 'intent/same',
+		fromActor: 'dispatcher',
+		toActor: 'intents/same',
 		type: 'message',
 		correlationId: 'corr-same',
 		payload: null
@@ -64,7 +64,7 @@ test('preserves actor state when handler returns same state', async () => {
 
 	await runtime.tick()
 
-	const actor = await persistence.getActor('intent/same')
+	const actor = await persistence.getActor('intents/same')
 	expect(actor?.state).toEqual({ phase: 'same' })
 	expect(actor?.version).toBe(1)
 })
@@ -72,7 +72,7 @@ test('preserves actor state when handler returns same state', async () => {
 test('persists updated actor state, enqueues outgoing envelopes, and records handler events', async () => {
 	const persistence = new FakePersistence()
 	await persistence.migrate()
-	await persistence.upsertActor({ id: 'intent/update', kind: 'intent', state: { phase: 'queued' } })
+	await persistence.upsertActor({ id: 'intents/update', kind: 'intent', state: { phase: 'queued' } })
 
 	const runtime = createActorRuntime({
 		persistence,
@@ -97,7 +97,7 @@ test('persists updated actor state, enqueues outgoing envelopes, and records han
 				outgoing: [
 					context.makeEnvelope({
 						from: actor.id,
-						to: 'skill/extract',
+						to: 'skills/extract',
 						type: 'extract-request',
 						payload: { extract: true }
 					})
@@ -108,8 +108,8 @@ test('persists updated actor state, enqueues outgoing envelopes, and records han
 
 	await runtime.enqueue({
 		id: 'env-update',
-		fromActor: 'dispatcher/root',
-		toActor: 'intent/update',
+		fromActor: 'dispatcher',
+		toActor: 'intents/update',
 		type: 'message',
 		correlationId: 'corr-update',
 		payload: { work: true }
@@ -117,10 +117,10 @@ test('persists updated actor state, enqueues outgoing envelopes, and records han
 
 	await runtime.tick()
 
-	const actor = await persistence.getActor('intent/update')
+	const actor = await persistence.getActor('intents/update')
 	expect(actor?.state).toEqual({ phase: 'processed' })
 
-	const events = persistence.events.filter((event) => event.actorId === 'intent/update')
+	const events = persistence.events.filter((event) => event.actorId === 'intents/update')
 	expect(events).toHaveLength(2)
 	expect(events.some((event) => event.id === 'evt-handler' && event.eventType === 'intent.processed')).toBe(true)
 	expect(events.some((event) => event.eventType === 'runtime.activation.completed')).toBe(true)
@@ -129,8 +129,8 @@ test('persists updated actor state, enqueues outgoing envelopes, and records han
 
 	expect(outgoing).toHaveLength(1)
 	expect(outgoing[0]).toMatchObject({
-		fromActor: 'intent/update',
-		toActor: 'skill/extract',
+		fromActor: 'intents/update',
+		toActor: 'skills/extract',
 		type: 'extract-request',
 		correlationId: 'corr-update',
 		causationId: 'env-update',
@@ -141,7 +141,7 @@ test('persists updated actor state, enqueues outgoing envelopes, and records han
 test('runUntilIdle stops when idle', async () => {
 	const persistence = new FakePersistence()
 	await persistence.migrate()
-	await persistence.upsertActor({ id: 'intent/idle', kind: 'intent', state: { count: 0 } })
+	await persistence.upsertActor({ id: 'intents/idle', kind: 'intent', state: { count: 0 } })
 
 	const runtime = createActorRuntime({
 		persistence,
@@ -158,8 +158,8 @@ test('runUntilIdle stops when idle', async () => {
 
 	await runtime.enqueue({
 		id: 'env-idle',
-		fromActor: 'dispatcher/root',
-		toActor: 'intent/idle',
+		fromActor: 'dispatcher',
+		toActor: 'intents/idle',
 		type: 'message',
 		correlationId: 'corr-idle',
 		payload: null
@@ -172,7 +172,7 @@ test('runUntilIdle stops when idle', async () => {
 test('runUntilIdle respects maxTicks', async () => {
 	const persistence = new FakePersistence()
 	await persistence.migrate()
-	await persistence.upsertActor({ id: 'intent/max', kind: 'intent', state: { count: 0 } })
+	await persistence.upsertActor({ id: 'intents/max', kind: 'intent', state: { count: 0 } })
 
 	const runtime = createActorRuntime({
 		persistence,
@@ -202,8 +202,8 @@ test('runUntilIdle respects maxTicks', async () => {
 
 	await runtime.enqueue({
 		id: 'env-max',
-		fromActor: 'dispatcher/root',
-		toActor: 'intent/max',
+		fromActor: 'dispatcher',
+		toActor: 'intents/max',
 		type: 'message',
 		correlationId: 'corr-max',
 		payload: { count: 0 }
@@ -218,7 +218,7 @@ test('runUntilIdle respects maxTicks', async () => {
 test('debug registry tracks actor state and message events', async () => {
 	const persistence = new FakePersistence()
 	await persistence.migrate()
-	await persistence.upsertActor({ id: 'intent/debug', kind: 'intent', state: { ok: true } })
+	await persistence.upsertActor({ id: 'intents/debug', kind: 'intent', state: { ok: true } })
 
 	const runtime = createActorRuntime({
 		persistence,
@@ -236,7 +236,7 @@ test('debug registry tracks actor state and message events', async () => {
 	await runtime.enqueue({
 		id: 'env-debug',
 		fromActor: 'dispatcher',
-		toActor: 'intent/debug',
+		toActor: 'intents/debug',
 		type: 'intent.start',
 		correlationId: 'corr-debug',
 		payload: { ok: true }
@@ -245,7 +245,7 @@ test('debug registry tracks actor state and message events', async () => {
 	await runtime.tick()
 
 	const snapshot = runtime.debug.getSnapshot()
-	const actor = snapshot.actors.find((item) => item.id === 'intent/debug')
+	const actor = snapshot.actors.find((item) => item.id === 'intents/debug')
 	expect(actor).toBeDefined()
 	expect(actor?.status).toBe('idle')
 

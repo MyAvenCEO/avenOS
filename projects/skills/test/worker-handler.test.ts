@@ -12,7 +12,7 @@ const skill: SkillDefinition = {
 	id: 'memory',
 	path: 'memory/SKILL.md',
 	description: 'Memory skill',
-	directActors: ['skill/files'],
+	directActors: ['skills/files'],
 	frontmatter: { id: 'memory', description: 'Memory skill' },
 	body: '# Memory',
 	bodyHash: 'hash-memory',
@@ -34,15 +34,15 @@ test('worker sends skill.worker.result to supervisor', async () => {
 	})
 
 	const result = await handler.activate({
-		actor: makeActor('skill-worker/memory/topic-jaensen-architecture', {}),
+		actor: makeActor('skills/memory/topic-jaensen-architecture', {}),
 		envelope: makeEnvelopeRecord(),
 		context: makeContext()
 	})
 
 	expect(result.outgoing).toHaveLength(1)
 	expect(result.outgoing?.[0]).toMatchObject({
-		fromActor: 'skill-worker/memory/topic-jaensen-architecture',
-		toActor: 'skill/memory',
+		fromActor: 'skills/memory/topic-jaensen-architecture',
+		toActor: 'skills/memory',
 		type: 'skill.worker.result',
 		correlationId: 'corr-1',
 		causationId: 'env-1',
@@ -71,13 +71,13 @@ test('worker initializes from initialState once', async () => {
 	})
 
 	await handler.activate({
-		actor: makeActor('skill-worker/memory/job-01J', {}),
+		actor: makeActor('skills/memory/job-01J', {}),
 		envelope: makeEnvelopeRecord({ payload: { initialState: { seeded: true } } }),
 		context: makeContext()
 	})
 
 	await handler.activate({
-		actor: makeActor('skill-worker/memory/job-01J', { persisted: true }),
+		actor: makeActor('skills/memory/job-01J', { persisted: true }),
 		envelope: makeEnvelopeRecord({ payload: { initialState: { seeded: false } } }),
 		context: makeContext()
 	})
@@ -99,9 +99,9 @@ test('worker rejects empty active-call responses when it returns only state for 
 
 	await expect(
 		handler.activate({
-			actor: makeActor('skill-worker/memory/call-lookup-1', {}),
+			actor: makeActor('skills/memory/call-lookup-1', {}),
 			envelope: makeEnvelopeRecord({
-				toActor: 'skill-worker/memory/call-lookup-1',
+				toActor: 'skills/memory/call-lookup-1',
 				payload: { intentId: 'intent-123', callId: 'call-lookup-1' }
 			}),
 			context: makeContext()
@@ -121,8 +121,8 @@ test('missing skill fails clearly', async () => {
 
 	await expect(
 		handler.activate({
-			actor: makeActor('skill-worker/missing/job-01J', {}),
-			envelope: makeEnvelopeRecord({ toActor: 'skill-worker/missing/job-01J' }),
+			actor: makeActor('skills/missing/job-01J', {}),
+			envelope: makeEnvelopeRecord({ toActor: 'skills/missing/job-01J' }),
 			context: makeContext()
 		})
 	).rejects.toThrow(new SkillNotFoundError('missing'))
@@ -138,7 +138,7 @@ test('worker call_skill maps to skill.request', async () => {
 			async run() {
 				return {
 					state: {},
-					actions: [{ type: 'call_skill', to: 'skill/files', callId: 'call-2', request: 'Read file', payload: { path: 'a.txt' } }],
+					actions: [{ type: 'call_skill', to: 'skills/files', callId: 'call-2', request: 'Read file', payload: { path: 'a.txt' } }],
 					completed: false
 				}
 			}
@@ -146,20 +146,20 @@ test('worker call_skill maps to skill.request', async () => {
 	})
 
 	const result = await handler.activate({
-		actor: makeActor('skill-worker/memory/topic-jaensen-architecture', {}),
+		actor: makeActor('skills/memory/topic-jaensen-architecture', {}),
 		envelope: makeEnvelopeRecord({ payload: { intentId: 'intent-123', callId: 'call-1' } }),
 		context: makeContext()
 	})
 
 	expect(result.outgoing).toHaveLength(1)
 	expect(result.outgoing?.[0]).toMatchObject({
-		toActor: 'skill/files',
+		toActor: 'skills/files',
 		type: 'skill.request',
 		payload: {
 			callId: 'call-2',
 			request: 'Read file',
 			input: { path: 'a.txt' },
-			replyTo: 'skill-worker/memory/topic-jaensen-architecture',
+			replyTo: 'skills/memory/topic-jaensen-architecture',
 			intentId: 'intent-123',
 			parentCallId: 'call-1'
 		}
@@ -176,7 +176,7 @@ test('worker delegation does not also emit skill.worker.result for the parent ca
 			async run() {
 				return {
 					state: { waitingOnChild: true },
-					actions: [{ type: 'call_skill', to: 'skill/files', callId: 'child-call-1', request: 'Read file', payload: { path: 'a.txt' } }],
+					actions: [{ type: 'call_skill', to: 'skills/files', callId: 'child-call-1', request: 'Read file', payload: { path: 'a.txt' } }],
 					completed: false
 				}
 			}
@@ -184,14 +184,14 @@ test('worker delegation does not also emit skill.worker.result for the parent ca
 	})
 
 	const result = await handler.activate({
-		actor: makeActor('skill-worker/memory/topic-jaensen-architecture', {}),
+		actor: makeActor('skills/memory/topic-jaensen-architecture', {}),
 		envelope: makeEnvelopeRecord({ payload: { intentId: 'intent-123', callId: 'parent-call-1' } }),
 		context: makeContext()
 	})
 
 	expect(result.outgoing).toHaveLength(1)
 	expect(result.outgoing?.[0]).toMatchObject({
-		toActor: 'skill/files',
+		toActor: 'skills/files',
 		type: 'skill.request',
 		payload: expect.objectContaining({ parentCallId: 'parent-call-1', callId: 'child-call-1' })
 	})
@@ -209,14 +209,14 @@ test('worker rejects mixed delegation and completion payloads loudly', async () 
 					state: {},
 					result: { invalid: true },
 					completed: true,
-					actions: [{ type: 'call_skill', to: 'skill/files', callId: 'child-call-1', request: 'Read file', payload: {} }]
+					actions: [{ type: 'call_skill', to: 'skills/files', callId: 'child-call-1', request: 'Read file', payload: {} }]
 				}
 			}
 		}
 	})
 
 	await expect(handler.activate({
-		actor: makeActor('skill-worker/memory/topic-jaensen-architecture', {}),
+		actor: makeActor('skills/memory/topic-jaensen-architecture', {}),
 		envelope: makeEnvelopeRecord({ payload: { intentId: 'intent-123', callId: 'parent-call-1' } }),
 		context: makeContext()
 	})).rejects.toThrow(/may not include call_skill actions and also complete/i)
@@ -237,7 +237,7 @@ test('worker completing a child skill.result routes completion to parent call id
 	})
 
 	const result = await handler.activate({
-		actor: makeActor('skill-worker/memory/topic-jaensen-architecture', {}),
+		actor: makeActor('skills/memory/topic-jaensen-architecture', {}),
 		envelope: makeEnvelopeRecord({
 			type: 'skill.result',
 			payload: {
@@ -252,7 +252,7 @@ test('worker completing a child skill.result routes completion to parent call id
 
 	expect(result.outgoing).toHaveLength(1)
 	expect(result.outgoing?.[0]).toMatchObject({
-		toActor: 'skill/memory',
+		toActor: 'skills/memory',
 		type: 'skill.worker.result',
 		payload: expect.objectContaining({
 			workerId: 'topic-jaensen-architecture',
@@ -278,7 +278,7 @@ test('worker normal run completion uses local callId even when parentCallId exis
 	})
 
 	const result = await handler.activate({
-		actor: makeActor('skill-worker/memory/topic-jaensen-architecture', {}),
+		actor: makeActor('skills/memory/topic-jaensen-architecture', {}),
 		envelope: makeEnvelopeRecord({
 			type: 'memory.remember',
 			payload: {
@@ -303,7 +303,7 @@ test('worker call_skill rejects unlisted target', async () => {
 			async run() {
 				return {
 					state: {},
-					actions: [{ type: 'call_skill', to: 'skill/files', callId: 'call-2', request: 'Read file', payload: {} }],
+					actions: [{ type: 'call_skill', to: 'skills/files', callId: 'call-2', request: 'Read file', payload: {} }],
 					completed: false
 				}
 			}
@@ -311,10 +311,10 @@ test('worker call_skill rejects unlisted target', async () => {
 	})
 
 	await expect(handler.activate({
-		actor: makeActor('skill-worker/memory/topic-jaensen-architecture', {}),
+		actor: makeActor('skills/memory/topic-jaensen-architecture', {}),
 		envelope: makeEnvelopeRecord(),
 		context: makeContext()
-	})).rejects.toThrow(/may not call unlisted actor skill\/files/)
+	})).rejects.toThrow(/may not call unlisted actor skills\/files/)
 })
 
 function makeActor(id: string, state: unknown) {
@@ -332,8 +332,8 @@ function makeActor(id: string, state: unknown) {
 function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRecord {
 	return {
 		id: 'env-1',
-		fromActor: 'skill/memory',
-		toActor: 'skill-worker/memory/topic-jaensen-architecture',
+		fromActor: 'skills/memory',
+		toActor: 'skills/memory/topic-jaensen-architecture',
 		type: 'memory.remember',
 		correlationId: 'corr-1',
 		causationId: null,

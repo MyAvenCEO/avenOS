@@ -8,8 +8,8 @@ test('failActivation requeues work with retry metadata and clears locks', async 
 
 	await persistence.enqueue({
 		id: 'env-fail',
-		fromActor: 'dispatcher/root',
-		toActor: 'intent/failure-case',
+		fromActor: 'dispatcher',
+		toActor: 'intents/failure-case',
 		type: 'message',
 		correlationId: 'corr-fail',
 		payload: { hello: 'world' }
@@ -52,7 +52,7 @@ test('failActivation marks dead intent envelopes as failed intent state and emit
 	await persistence.migrate()
 
 	await persistence.upsertActor({
-		id: 'intent/failure-case',
+		id: 'intents/failure-case',
 		kind: 'intent',
 		state: {
 			intentId: 'failure-case',
@@ -66,8 +66,8 @@ test('failActivation marks dead intent envelopes as failed intent state and emit
 
 	await persistence.enqueue({
 		id: 'env-dead-intent',
-		fromActor: 'dispatcher/root',
-		toActor: 'intent/failure-case',
+		fromActor: 'dispatcher',
+		toActor: 'intents/failure-case',
 		type: 'message',
 		correlationId: 'corr-dead-intent',
 		payload: { hello: 'world' },
@@ -87,7 +87,7 @@ test('failActivation marks dead intent envelopes as failed intent state and emit
 		now: new Date('2026-05-12T00:01:00.000Z')
 	})
 
-	const actor = await persistence.getActor('intent/failure-case')
+	const actor = await persistence.getActor('intents/failure-case')
 	expect(actor?.state).toEqual({
 		intentId: 'failure-case',
 		title: 'Failure case',
@@ -97,7 +97,7 @@ test('failActivation marks dead intent envelopes as failed intent state and emit
 		pendingSkillCalls: {}
 	})
 
-	const events = await persistence.listStreamEvents({ scope: 'intent/failure-case' })
+	const events = await persistence.listStreamEvents({ scope: 'intents/failure-case' })
 	expect(events.some((event) => event.type === 'runtime.envelope.failed')).toBe(true)
 	expect(events).toContainEqual(
 		expect.objectContaining({
@@ -117,16 +117,16 @@ test('releaseExpiredLocks requeues stale envelopes and dead-letters exhausted on
 
 	await persistence.enqueue({
 		id: 'env-stale',
-		fromActor: 'dispatcher/root',
-		toActor: 'intent/stale',
+		fromActor: 'dispatcher',
+		toActor: 'intents/stale',
 		type: 'message',
 		correlationId: 'corr-stale',
 		payload: { stale: true }
 	})
 	await persistence.enqueue({
 		id: 'env-dead',
-		fromActor: 'dispatcher/root',
-		toActor: 'intent/dead',
+		fromActor: 'dispatcher',
+		toActor: 'intents/dead',
 		type: 'message',
 		correlationId: 'corr-dead',
 		payload: { dead: true },
@@ -169,8 +169,8 @@ test('releaseExpiredLocks preserves retry timing by requeueing stale envelopes i
 
 	await persistence.enqueue({
 		id: 'env-timeout',
-		fromActor: 'dispatcher/root',
-		toActor: 'intent/timeout',
+		fromActor: 'dispatcher',
+		toActor: 'intents/timeout',
 		type: 'message',
 		correlationId: 'corr-timeout',
 		payload: { timeout: true }

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-import { createSkillActorId } from './skill-id'
+import { SKILLS_ACTOR_ID, createSkillActorId } from '@jaensen/persistence-sqlite'
 import type { BootstrapSkillsInput } from './types'
 
 export async function bootstrapSkills(input: BootstrapSkillsInput): Promise<void> {
@@ -20,7 +20,7 @@ export async function bootstrapSkills(input: BootstrapSkillsInput): Promise<void
 
 		await input.persistence.enqueue({
 			id: randomUUID(),
-			fromActor: 'system',
+			fromActor: SKILLS_ACTOR_ID,
 			toActor: actorId,
 			type: 'skill.bootstrap',
 			correlationId: randomUUID(),

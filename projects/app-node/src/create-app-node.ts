@@ -22,7 +22,18 @@ import {
 	type IntentBrain,
 	type UserAttachment
 } from '@jaensen/conversation-actors'
-import { SqlitePersistence, type Persistence } from '@jaensen/persistence-sqlite'
+import {
+	DISPATCHER_ACTOR_ID,
+	HUMAN_ACTOR_ID,
+	INTENTS_ACTOR_ID,
+	SKILLS_ACTOR_ID,
+	SqlitePersistence,
+	actorKindFromId,
+	actorNameFromId,
+	actorParentIdFromId,
+	createSkillActorId,
+	type Persistence
+} from '@jaensen/persistence-sqlite'
 import {
 	bootstrapSkills,
 	createSkillRegistry,
@@ -168,10 +179,17 @@ export async function createAppNode(input: CreateAppNodeInput): Promise<AppNode>
 	)
 
 	runtime.register(createHumanOutboxHandler())
-	runtime.debug.seedActor({ id: 'dispatcher', type: 'dispatcher', name: 'Dispatcher' })
-	runtime.debug.seedActor({ id: 'human', type: 'human-outbox', name: 'Human outbox' })
+	runtime.debug.seedActor({ id: DISPATCHER_ACTOR_ID, type: 'dispatcher', name: 'Dispatcher' })
+	runtime.debug.seedActor({ id: HUMAN_ACTOR_ID, type: 'human-outbox', name: 'Human outbox' })
+	runtime.debug.seedActor({ id: INTENTS_ACTOR_ID, type: 'intents', name: 'Intents' })
+	runtime.debug.seedActor({ id: SKILLS_ACTOR_ID, type: 'skills', name: 'Skills' })
 	for (const skill of skills) {
-		runtime.debug.seedActor({ id: `skill/${skill.id}`, type: 'skill-supervisor', name: skill.id, parentId: 'dispatcher' })
+		runtime.debug.seedActor({
+			id: createSkillActorId(skill.id),
+			type: 'skill-supervisor',
+			name: skill.id,
+			parentId: SKILLS_ACTOR_ID
+		})
 	}
 
 	return {
@@ -201,7 +219,7 @@ export async function createAppNode(input: CreateAppNodeInput): Promise<AppNode>
 			return runtime.runUntilIdle(maxTicks)
 		},
 		async readHumanOutbox() {
-			const actor = await persistence.getActor('human')
+			const actor = await persistence.getActor(HUMAN_ACTOR_ID)
 			return normalizeHumanOutboxState(actor?.state).messages
 		}
 	}
@@ -282,36 +300,25 @@ function recordTrace(runtime: ActorRuntime, actorId: string | null, trace: Actor
 }
 
 function actorIdFromSessionName(name: string): string | null {
-	if (name === 'actor/dispatcher') return 'dispatcher'
-	if (name.startsWith('actor/intent/')) return `intent/${name.slice('actor/intent/'.length)}`
-	if (name.startsWith('actor/skill-worker/')) return `skill-worker/${name.slice('actor/skill-worker/'.length)}`
-	if (name.startsWith('actor/skill/')) return `skill/${name.slice('actor/skill/'.length)}`
+	if (name === 'actor/dispatcher') return DISPATCHER_ACTOR_ID
+	if (name === 'actor/human') return HUMAN_ACTOR_ID
+	if (name === 'actor/intents') return INTENTS_ACTOR_ID
+	if (name === 'actor/skills') return SKILLS_ACTOR_ID
+	if (name.startsWith('actor/intents/')) return name.slice('actor/'.length)
+	if (name.startsWith('actor/skills/')) return name.slice('actor/'.length)
 	return null
 }
 
 function actorTypeFromActorId(actorId: string): string {
-	if (actorId === 'dispatcher') return 'dispatcher'
-	if (actorId.startsWith('intent/')) return 'intent'
-	if (actorId.startsWith('skill-worker/')) return 'skill-worker'
-	if (actorId.startsWith('skill/')) return 'skill-supervisor'
-	if (actorId === 'human') return 'human-outbox'
-	return 'actor'
+	return actorKindFromId(actorId)
 }
 
 function actorNameFromActorId(actorId: string): string {
-	if (actorId === 'dispatcher') return 'Dispatcher'
-	if (actorId === 'human') return 'Human outbox'
-	return actorId.split('/').slice(1).join('/') || actorId
+	return actorNameFromId(actorId)
 }
 
 function actorParentId(actorId: string): string | undefined {
-	if (actorId.startsWith('intent/')) return 'dispatcher'
-	if (actorId.startsWith('skill/')) return 'dispatcher'
-	if (actorId.startsWith('skill-worker/')) {
-		const [, skillId] = actorId.split('/')
-		return skillId ? `skill/${skillId}` : undefined
-	}
-	return undefined
+	return actorParentIdFromId(actorId)
 }
 
 function truncate(value: string, max = 280): string {

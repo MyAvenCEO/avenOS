@@ -110,7 +110,7 @@ export class IntentStore {
 	private async hydrateIntent(intentId: string): Promise<IntentView> {
 		const snapshot = await getIntent(intentId)
 		let state = mergeSnapshot(createEmptyIntentView(intentId), snapshot)
-		const scope = `intent/${intentId}`
+		const scope = `intents/${intentId}`
 		// Always replay the full persisted intent event stream when hydrating.
 		// `lastSeq` is only safe for resuming live SSE subscriptions; it is not
 		// enough to reconstruct derived UI state like timeline/messages after a
@@ -145,7 +145,7 @@ export class IntentStore {
 			const current = this.intents[intentId] ?? createEmptyIntentView(intentId)
 			const next = reduceIntentEvent(current, event)
 			this.writeIntent(next)
-			this.subscribe(`intent/${intentId}`)
+			this.subscribe(`intents/${intentId}`)
 			this.closeCorrelationScope(event, payload)
 			if (!this.selectedIntentId) this.selectedIntentId = intentId
 			return
@@ -155,7 +155,7 @@ export class IntentStore {
 			return
 		}
 
-		const intentScope = `intent/${intentId}`
+		const intentScope = `intents/${intentId}`
 		if (event.scope.startsWith('correlation/') && this.streams.has(intentScope)) {
 			this.closeScope(event.scope)
 			return
@@ -201,7 +201,7 @@ export class IntentStore {
 	}
 
 	private closeIntentStreams(intentId: string) {
-		this.closeScope(`intent/${intentId}`)
+		this.closeScope(`intents/${intentId}`)
 		for (const scope of [...this.streams.keys()]) {
 			if (scope.includes(intentId)) this.closeScope(scope)
 		}
@@ -271,9 +271,9 @@ function matchesIntent(intentId: string, payload: Record<string, unknown>): bool
 	const directIntentId = inferIntentIdFromPayload(payload)
 	if (directIntentId) return directIntentId === intentId
 	const actorId = readString(payload.actorId)
-	if (actorId) return actorId === `intent/${intentId}`
+	if (actorId) return actorId === `intents/${intentId}`
 	const toActor = readString(payload.toActor)
-	if (toActor) return toActor === `intent/${intentId}`
+	if (toActor) return toActor === `intents/${intentId}`
 	return false
 }
 
@@ -535,7 +535,7 @@ function applyRuntimeEnvelopeCompleted(state: IntentView, payload: Record<string
 }
 
 function applyRuntimeEnvelopeFailed(state: IntentView, payload: Record<string, unknown>, event: StreamEventRecord): IntentView {
-	const failedIntentActor = readString(payload.actorId) === `intent/${state.intentId}`
+	const failedIntentActor = readString(payload.actorId) === `intents/${state.intentId}`
 	const nextState = failedIntentActor
 		? {
 				...state,
@@ -779,7 +779,7 @@ function extractActorIds(item: TimelineItem, intentId: string, subAgents: SubAge
 		(value): value is string => typeof value === 'string' && value.length > 0
 	)
 	if (item.kind === 'question' || item.kind === 'human') {
-		values.push(`intent/${intentId}`)
+		values.push(`intents/${intentId}`)
 	}
 	const agentId = resolveAgentId(item, subAgents, [])
 	if (agentId) values.push(agentId)
@@ -906,8 +906,8 @@ function inferIntentIdFromPayload(payload: Record<string, unknown>): string | un
 
 		for (const key of ['actorId', 'toActor', 'fromActor'] as const) {
 			const actorRef = readString(value[key])
-			if (actorRef?.startsWith('intent/')) {
-				return actorRef.slice('intent/'.length)
+			if (actorRef?.startsWith('intents/')) {
+				return actorRef.slice('intents/'.length)
 			}
 		}
 

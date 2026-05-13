@@ -1,4 +1,4 @@
-import type { EnvelopeInput, EnvelopeRecord } from '@jaensen/persistence-sqlite'
+import { createSkillActorId, type EnvelopeInput, type EnvelopeRecord } from '@jaensen/persistence-sqlite'
 
 import { UnknownSkillError } from './errors'
 import type { IntentAction, IntentState, SkillRegistry } from './types'
@@ -140,7 +140,7 @@ function mapIntentActionToEnvelopes(input: {
 			return [
 				input.makeEnvelope({
 					...base,
-					to: `skill/${input.action.skillId}`,
+					to: createSkillActorId(input.action.skillId),
 					type: 'skill.request',
 					payload: {
 						intentId: input.state.intentId,

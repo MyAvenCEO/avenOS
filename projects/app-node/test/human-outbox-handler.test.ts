@@ -61,7 +61,7 @@ function makeActor(state: unknown): ActorRecord {
 function makeEnvelope(type: string, payload: unknown): EnvelopeRecord {
 	return {
 		id: 'env-1',
-		fromActor: 'intent/intent-1',
+		fromActor: 'intents/intent-1',
 		toActor: 'human',
 		type,
 		correlationId: 'corr-1',

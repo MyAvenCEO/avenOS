@@ -30,10 +30,10 @@ test('loads SKILL.md recursively', async () => {
 test('loadSkills accepts direct_actors', async () => {
 	const rootDir = await createTempRoot()
 	await writeSkill(rootDir, 'memory/SKILL.md', `---\nid: memory\ndescription: Memory skill\n---\n`)
-	await writeSkill(rootDir, 'pdf/SKILL.md', `---\nid: pdf\ndescription: PDF skill\ndirect_actors:\n  - skill/memory\n---\n`)
+	await writeSkill(rootDir, 'pdf/SKILL.md', `---\nid: pdf\ndescription: PDF skill\ndirect_actors:\n  - skills/memory\n---\n`)
 
 	const skills = await loadSkills({ rootDir })
-	expect(skills.find((skill) => skill.id === 'pdf')?.directActors).toEqual(['skill/memory'])
+	expect(skills.find((skill) => skill.id === 'pdf')?.directActors).toEqual(['skills/memory'])
 })
 
 test('loadSkills accepts resources.fs and shell declarations', async () => {
@@ -50,14 +50,22 @@ test('loadSkills accepts resources.fs and shell declarations', async () => {
 
 test('loadSkills rejects non-array direct_actors', async () => {
 	const rootDir = await createTempRoot()
-	await writeSkill(rootDir, 'memory/SKILL.md', `---\nid: memory\ndescription: Memory skill\ndirect_actors: skill/pdf\n---\n`)
+	await writeSkill(rootDir, 'memory/SKILL.md', `---\nid: memory\ndescription: Memory skill\ndirect_actors: skills/pdf\n---\n`)
 	await writeSkill(rootDir, 'pdf/SKILL.md', `---\nid: pdf\ndescription: PDF skill\n---\n`)
 
 	await expect(loadSkills({ rootDir })).rejects.toThrow(/direct_actors must be an array of strings/)
 })
 
+test('loadSkills treats empty direct_actors as omitted', async () => {
+	const rootDir = await createTempRoot()
+	await writeSkill(rootDir, 'memory/SKILL.md', `---\nid: memory\ndescription: Memory skill\ndirect_actors:\n---\n`)
+
+	const skills = await loadSkills({ rootDir })
+	expect(skills[0]?.directActors).toEqual([])
+})
+
 test('loadSkills rejects human intent and worker targets', async () => {
-	for (const target of ['human', 'intent/abc', 'skill-worker/memory/foo', 'memory']) {
+	for (const target of ['human', 'intents/abc', 'skills/memory/foo', 'memory']) {
 		const rootDir = await createTempRoot()
 		await writeSkill(rootDir, 'memory/SKILL.md', `---\nid: memory\ndescription: Memory skill\ndirect_actors:\n  - ${target}\n---\n`)
 		await writeSkill(rootDir, 'pdf/SKILL.md', `---\nid: pdf\ndescription: PDF skill\n---\n`)
@@ -68,14 +76,14 @@ test('loadSkills rejects human intent and worker targets', async () => {
 
 test('loadSkills rejects unknown skill target', async () => {
 	const rootDir = await createTempRoot()
-	await writeSkill(rootDir, 'memory/SKILL.md', `---\nid: memory\ndescription: Memory skill\ndirect_actors:\n  - skill/missing\n---\n`)
+	await writeSkill(rootDir, 'memory/SKILL.md', `---\nid: memory\ndescription: Memory skill\ndirect_actors:\n  - skills/missing\n---\n`)
 
 	await expect(loadSkills({ rootDir })).rejects.toThrow(/references unknown skill "missing"/)
 })
 
 test('loadSkills rejects self target', async () => {
 	const rootDir = await createTempRoot()
-	await writeSkill(rootDir, 'memory/SKILL.md', `---\nid: memory\ndescription: Memory skill\ndirect_actors:\n  - skill/memory\n---\n`)
+	await writeSkill(rootDir, 'memory/SKILL.md', `---\nid: memory\ndescription: Memory skill\ndirect_actors:\n  - skills/memory\n---\n`)
 
 	await expect(loadSkills({ rootDir })).rejects.toThrow(/must not reference the skill itself/)
 })

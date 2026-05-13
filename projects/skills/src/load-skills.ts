@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto'
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import { createSkillActorId } from '@jaensen/persistence-sqlite'
+
 import { SkillValidationError } from './errors'
 import { isValidSkillId } from './skill-id'
 import type { LoadSkillsInput, SkillDefinition } from './types'
@@ -81,7 +83,7 @@ interface ParsedSkillFrontmatter {
 	}
 }
 
-const DIRECT_SKILL_ACTOR_PATTERN = /^skill\/[a-z0-9]+(?:-[a-z0-9]+)*$/
+const DIRECT_SKILL_ACTOR_PATTERN = /^skills\/[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 function parseSkillMarkdown(
 	raw: string,
@@ -106,6 +108,18 @@ function validateFrontmatter(
 	frontmatter: Record<string, unknown>,
 	relativePath: string
 ): asserts frontmatter is ParsedSkillFrontmatter {
+	if (frontmatter.direct_actors === '') {
+		delete frontmatter.direct_actors
+	}
+
+	if (frontmatter.message_types === '') {
+		delete frontmatter.message_types
+	}
+
+	if (frontmatter.resources === '') {
+		delete frontmatter.resources
+	}
+
 	if (typeof frontmatter.id !== 'string' || frontmatter.id.length === 0) {
 		throw new SkillValidationError(`Invalid skill frontmatter in ${relativePath}: id is required`)
 	}
@@ -170,7 +184,7 @@ function validateDirectActors(definitions: SkillDefinition[]): void {
 				)
 			}
 
-			const targetSkillId = actor.slice('skill/'.length)
+			const targetSkillId = actor.slice('skills/'.length)
 			if (targetSkillId === definition.id) {
 				throw new SkillValidationError(
 					`Invalid skill frontmatter in ${definition.path}: direct_actors must not reference the skill itself`

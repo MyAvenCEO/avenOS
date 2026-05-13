@@ -29,7 +29,7 @@ test('intent ask_user sends human.question and updates status', () => {
 		actions: [{ type: 'ask_user', question: 'Which file should I use?' }]
 	})
 	const outgoing = mapIntentActionsToEnvelopes({
-		fromActor: 'intent/intent-123',
+		fromActor: 'intents/intent-123',
 		state: nextState,
 		actions: [{ type: 'ask_user', question: 'Which file should I use?' }],
 		envelope: makeEnvelopeRecord(),
@@ -64,7 +64,7 @@ test('intent call_skill rejects unknown skillId', () => {
 
 	expect(() =>
 		mapIntentActionsToEnvelopes({
-			fromActor: 'intent/intent-123',
+			fromActor: 'intents/intent-123',
 			state: resolved.state,
 			actions: resolved.actions,
 			envelope: makeEnvelopeRecord(),
@@ -93,7 +93,7 @@ test('complete creates lifecycle payload for dispatcher', () => {
 		actions: [{ type: 'complete', summary: 'Done', message: 'Finished' }]
 	})
 	const lifecycle = createLifecycleEnvelope({
-		fromActor: 'intent/intent-123',
+		fromActor: 'intents/intent-123',
 		state,
 		envelope: makeEnvelopeRecord(),
 		makeEnvelope
@@ -120,7 +120,7 @@ test('intent.start userInput attachment context propagates into skill.request', 
 	})
 
 	const outgoing = mapIntentActionsToEnvelopes({
-		fromActor: 'intent/intent-123',
+		fromActor: 'intents/intent-123',
 		state: resolved.state,
 		actions: resolved.actions,
 		envelope: makeEnvelopeRecord({
@@ -159,7 +159,7 @@ function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRe
 	return {
 		id: 'env-1',
 		fromActor: 'dispatcher',
-		toActor: 'intent/intent-123',
+		toActor: 'intents/intent-123',
 		type: 'intent.user_input',
 		correlationId: 'corr-1',
 		causationId: null,

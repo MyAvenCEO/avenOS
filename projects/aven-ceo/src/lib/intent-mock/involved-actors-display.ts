@@ -26,7 +26,7 @@ export function activityMatchesActorFilter(
 	if (!row) return true
 	if (activity.actorIds?.some((id) => row.runtimeActorIds.includes(id))) return true
 	if (activity.agentId && row.runtimeActorIds.includes(activity.agentId)) return true
-	if (row.id === `intent/${intent.id}`) {
+	if (row.id === `intents/${intent.id}`) {
 		return activity.kind === 'orchestrator' || activity.kind === 'human' || activity.kind === 'hitl'
 	}
 	if (row.id === 'dispatcher') {
@@ -65,12 +65,12 @@ export function statusBadgeLabel(status: InvolvedActorDisplayRow['status']): str
 export function involvedActorsForIntent(intent: IntentOrchestrator): InvolvedActorDisplayRow[] {
 	const rows: InvolvedActorDisplayRow[] = [
 		{
-			id: `intent/${intent.id}`,
+			id: `intents/${intent.id}`,
 			label: 'Intent',
 			skillName: intent.orchestratorLabel,
 			tier: 'orchestrator',
 			status: statusForOrchestrator(intent),
-			runtimeActorIds: [`intent/${intent.id}`]
+			runtimeActorIds: [`intents/${intent.id}`]
 		},
 		{
 			id: 'dispatcher',
@@ -97,7 +97,7 @@ export function involvedActorsForIntent(intent: IntentOrchestrator): InvolvedAct
 	const known = new Set(rows.flatMap((row) => row.runtimeActorIds))
 	for (const activity of intent.activity) {
 		for (const actorRef of activity.actorIds ?? []) {
-			if (known.has(actorRef) || actorRef === `intent/${intent.id}`) continue
+			if (known.has(actorRef) || actorRef === `intents/${intent.id}`) continue
 			known.add(actorRef)
 			rows.push({
 				id: actorRef,

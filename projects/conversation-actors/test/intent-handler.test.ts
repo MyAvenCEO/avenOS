@@ -32,7 +32,7 @@ test('intent.start initializes intent state', async () => {
 	})
 
 	const result = await handler.activate({
-		actor: makeIntentActor({}, 'intent/intent-123'),
+		actor: makeIntentActor({}, 'intents/intent-123'),
 		envelope: makeEnvelopeRecord({
 			type: 'intent.start',
 			payload: {
@@ -79,7 +79,7 @@ test('intent.user_input calls IntentBrain', async () => {
 	expect(calls).toBe(1)
 })
 
-test('intent call_skill sends to skill/<id>', async () => {
+test('intent call_skill sends to skills/<id>', async () => {
 	const handler = createIntentHandler({
 		skillRegistry: createSkillRegistry([skill]),
 		brain: {
@@ -106,7 +106,7 @@ test('intent call_skill sends to skill/<id>', async () => {
 	})
 
 	expect(result.outgoing?.[0]).toMatchObject({
-		toActor: 'skill/memory',
+		toActor: 'skills/memory',
 		type: 'skill.request',
 		payload: {
 			intentId: 'intent-123',
@@ -232,7 +232,7 @@ test('intent complete sends lifecycle update to dispatcher', async () => {
 	})
 })
 
-test('intent cannot send to skill-worker', async () => {
+	test('intent call_skill still routes through the skills hierarchy', async () => {
 	const handler = createIntentHandler({
 		skillRegistry: createSkillRegistry([
 			{ ...skill, id: 'worker/memory', description: 'Nested id still uses supervisor route' }
@@ -260,7 +260,7 @@ test('intent cannot send to skill-worker', async () => {
 		context: makeContext()
 	})
 
-	expect(result.outgoing?.[0].toActor).toBe('skill/worker/memory')
+	expect(result.outgoing?.[0].toActor).toBe('skills/worker/memory')
 	expect(result.outgoing?.[0].toActor.startsWith('skill-worker/')).toBeFalse()
 })
 
@@ -278,7 +278,7 @@ test('skill.result is routed through IntentBrain', async () => {
 
 	await handler.activate({
 		actor: makeIntentActor(makeIntentState()),
-		envelope: makeEnvelopeRecord({ type: 'skill.result', fromActor: 'skill/memory' }),
+		envelope: makeEnvelopeRecord({ type: 'skill.result', fromActor: 'skills/memory' }),
 		context: makeContext()
 	})
 
@@ -313,7 +313,7 @@ test('pendingSkillCalls is populated on call and cleared on skill.result', async
 
 	const second = await handler.activate({
 		actor: makeIntentActor(first.state),
-		envelope: makeEnvelopeRecord({ type: 'skill.result', fromActor: 'skill/memory', payload: { callId: pendingCallId, result: { ok: true } } }),
+		envelope: makeEnvelopeRecord({ type: 'skill.result', fromActor: 'skills/memory', payload: { callId: pendingCallId, result: { ok: true } } }),
 		context: makeContext()
 	})
 	expect(second.state.pendingSkillCalls).toEqual({})
@@ -330,7 +330,7 @@ function makeIntentState(): IntentState {
 	}
 }
 
-function makeIntentActor(state: unknown, id = 'intent/intent-123') {
+function makeIntentActor(state: unknown, id = 'intents/intent-123') {
 	return {
 		id,
 		kind: 'intent',
@@ -346,7 +346,7 @@ function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRe
 	return {
 		id: 'env-1',
 		fromActor: 'dispatcher',
-		toActor: 'intent/intent-123',
+		toActor: 'intents/intent-123',
 		type: 'intent.user_input',
 		correlationId: 'corr-1',
 		causationId: null,

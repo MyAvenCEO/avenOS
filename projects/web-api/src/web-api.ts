@@ -183,7 +183,7 @@ async function routeRequest(input: {
 	if (input.request.method === 'GET' && /^\/api\/intents\/[^/]+\/events$/.test(path)) {
 		const intentId = decodeURIComponent(path.split('/')[3] ?? '')
 		const after = parseAfter(url.searchParams.get('after'))
-		const events = await input.persistence.listStreamEvents({ scope: `intent/${intentId}`, after })
+		const events = await input.persistence.listStreamEvents({ scope: `intents/${intentId}`, after })
 		return jsonResponse({ events })
 	}
 

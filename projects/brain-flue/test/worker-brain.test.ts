@@ -48,7 +48,7 @@ test('durable worker uses stable worker session', async () => {
 		envelope: makeEnvelopeRecord()
 	})
 
-	expect(calls).toEqual(['actor/skill-worker/memory/topic-jaensen-architecture'])
+	expect(calls).toEqual(['actor/skills/memory/topic-jaensen-architecture'])
 	expect(result).toMatchObject({ state: { persisted: true }, result: { ok: true }, completed: true })
 })
 
@@ -83,7 +83,7 @@ test('ephemeral worker uses task()', async () => {
 	})
 
 	expect(calls).toEqual([
-		{ type: 'session', value: 'actor/skill/memory' },
+		{ type: 'session', value: 'actor/skills/memory' },
 		{ type: 'task', value: 'called' }
 	])
 	expect(result).toMatchObject({ state: { temp: true }, result: { ok: true }, completed: true })
@@ -364,12 +364,12 @@ test('tool loop corrects invalid tool protocol and accepts later call_skill acti
 						prompts.push(text)
 						step += 1
 						if (step === 1) {
-							return { tool: 'call_skill', args: { to: 'skill/memory' } }
+							return { tool: 'call_skill', args: { to: 'skills/memory' } }
 						}
 						return {
 							state: { waiting: true },
 							actions: [
-								{ type: 'call_skill', to: 'skill/memory', callId: 'call-1', request: 'Remember', payload: { ok: true } }
+								{ type: 'call_skill', to: 'skills/memory', callId: 'call-1', request: 'Remember', payload: { ok: true } }
 							],
 							completed: false
 						}
@@ -392,7 +392,7 @@ test('tool loop corrects invalid tool protocol and accepts later call_skill acti
 			...baseSkill,
 			id: 'file-analyzer',
 			path: 'file-analyzer/SKILL.md',
-			directActors: ['skill/memory'],
+			directActors: ['skills/memory'],
 			frontmatter: {
 				...baseSkill.frontmatter,
 				worker_policy: 'durable',
@@ -404,7 +404,7 @@ test('tool loop corrects invalid tool protocol and accepts later call_skill acti
 		envelope: makeEnvelopeRecord()
 	})).resolves.toMatchObject({
 		state: { waiting: true },
-		actions: [expect.objectContaining({ type: 'call_skill', to: 'skill/memory' })],
+		actions: [expect.objectContaining({ type: 'call_skill', to: 'skills/memory' })],
 		completed: false
 	})
 
@@ -420,7 +420,7 @@ test('worker tool call to call_skill creates deferred actor action', async () =>
 						return {
 							tool: 'call_skill',
 							args: {
-								to: 'skill/memory',
+								to: 'skills/memory',
 								callId: 'call-1',
 								request: 'Remember',
 								payload: { text: 'hello' }
@@ -440,13 +440,13 @@ test('worker tool call to call_skill creates deferred actor action', async () =>
 	})
 
 	await expect(brain.run({
-		skill: { ...baseSkill, directActors: ['skill/memory'], frontmatter: { ...baseSkill.frontmatter, worker_policy: 'durable' } },
+		skill: { ...baseSkill, directActors: ['skills/memory'], frontmatter: { ...baseSkill.frontmatter, worker_policy: 'durable' } },
 		workerId: 'topic-call-skill',
 		actorState: { existing: true },
 		envelope: makeEnvelopeRecord()
 	})).resolves.toMatchObject({
 		state: { existing: true },
-		actions: [{ type: 'call_skill', to: 'skill/memory', callId: 'call-1', request: 'Remember', payload: { text: 'hello' } }],
+		actions: [{ type: 'call_skill', to: 'skills/memory', callId: 'call-1', request: 'Remember', payload: { text: 'hello' } }],
 		completed: false
 	})
 })
@@ -567,8 +567,8 @@ test('durable worker retries after a JSON parse failure from the model transport
 function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRecord {
 	return {
 		id: 'env-1',
-		fromActor: 'skill/memory',
-		toActor: 'skill-worker/memory/topic-jaensen-architecture',
+		fromActor: 'skills/memory',
+		toActor: 'skills/memory/topic-jaensen-architecture',
 		type: 'memory.remember',
 		correlationId: 'corr-1',
 		causationId: null,

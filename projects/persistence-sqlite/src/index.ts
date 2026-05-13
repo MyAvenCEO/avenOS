@@ -1,3 +1,4 @@
+export * from './actor-id'
 export * from './clock'
 export * from './errors'
 export * from './json'

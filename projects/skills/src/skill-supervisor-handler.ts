@@ -1,5 +1,9 @@
 import type { ActorHandler } from '@jaensen/actor-runtime'
-import type { EnvelopeInput, EnvelopeRecord } from '@jaensen/persistence-sqlite'
+import {
+	createIntentActorId,
+	type EnvelopeInput,
+	type EnvelopeRecord
+} from '@jaensen/persistence-sqlite'
 
 import { inferCallId, inferIntentId } from './call-id'
 import { SkillValidationError } from './errors'
@@ -202,7 +206,7 @@ function handleWorkerResult(input: {
 		state,
 		outgoing: input.makeEnvelope({
 			from: input.actorId,
-			to: shouldReplyToIntent(call) ? `intent/${call.intentId}` : call.replyTo,
+			to: shouldReplyToIntent(call) ? createIntentActorId(call.intentId) : call.replyTo,
 			type: 'skill.result',
 			payload: {
 				callId,
@@ -310,7 +314,7 @@ function toSupervisorState(state: unknown, actorId: string): SkillSupervisorStat
 				const replyTo = typeof call.replyTo === 'string'
 					? call.replyTo
 					: intentId
-						? `intent/${intentId}`
+						? createIntentActorId(intentId)
 						: undefined
 				if (!replyTo) {
 					return []
@@ -374,7 +378,7 @@ function assertNotHumanTarget(target: string): void {
 }
 
 function assertAllowedSkillTarget(skill: SkillDefinition, target: string): void {
-	if (!target.startsWith('skill/')) {
+	if (!target.startsWith('skills/')) {
 		return
 	}
 
@@ -440,8 +444,8 @@ function validateDirectSkillCall(
 	skill: SkillDefinition,
 	action: Extract<SkillSupervisorAction, { type: 'call_skill' }>
 ): void {
-	if (!action.to.startsWith('skill/')) {
-		throw new SkillValidationError('Direct skill calls must target skill/<skillId> actors')
+	if (!action.to.startsWith('skills/')) {
+		throw new SkillValidationError('Direct skill calls must target skills/<skillId> actors')
 	}
 	if (action.callId.length === 0) {
 		throw new SkillValidationError('Direct skill calls require a non-empty callId')
@@ -456,8 +460,4 @@ function validateDirectSkillCall(
 
 function shouldReplyToIntent(call: SkillSupervisorState['calls'][string]): boolean {
 	return typeof call.intentId === 'string' && call.replyTo === createIntentActorId(call.intentId)
-}
-
-function createIntentActorId(intentId: string): string {
-	return `intent/${intentId}`
 }

@@ -357,14 +357,14 @@ test('GET /api/events supports after cursors', async () => {
 	const persistence = new SqlitePersistence()
 	await persistence.migrate()
 	await persistence.upsertActor({
-		id: 'intent/demo',
+		id: 'intents/demo',
 		kind: 'intent',
 		state: { intentId: 'demo', title: 'Demo', goal: 'Demo', status: 'active', summary: 'Demo', pendingSkillCalls: {} }
 	})
 	await persistence.enqueue({
 		id: 'env-demo',
 		fromActor: 'human',
-		toActor: 'intent/demo',
+		toActor: 'intents/demo',
 		type: 'intent.start',
 		correlationId: 'env-demo',
 		payload: { intentId: 'demo' }
@@ -448,7 +448,7 @@ test('aven-ceo flow can post a message, inspect intents, and keep the SSE stream
 		const detailResponse = await fetch(`${api.url}api/intents/${intentId}`)
 		expect(detailResponse.status).toBe(200)
 
-		const streamResponse = await fetch(`${api.url}api/events/stream?scope=${encodeURIComponent(`intent/${intentId}`)}`)
+		const streamResponse = await fetch(`${api.url}api/events/stream?scope=${encodeURIComponent(`intents/${intentId}`)}`)
 		expect(streamResponse.status).toBe(200)
 		expect(streamResponse.headers.get('content-type')).toContain('text/event-stream')
 
@@ -518,7 +518,7 @@ test('debug actor endpoints expose snapshots and runtime events', async () => {
 		const snapshot = (await (await fetch(`${api.url}debug/actors`)).json()) as {
 			actors: Array<{ id: string; type: string }>
 		}
-		expect(snapshot.actors.some((actor) => actor.id.startsWith('intent/') && actor.type === 'intent')).toBe(true)
+		expect(snapshot.actors.some((actor) => actor.id.startsWith('intents/') && actor.type === 'intent')).toBe(true)
 	} finally {
 		await api.stop()
 	}

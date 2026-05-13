@@ -17,7 +17,7 @@ test('durable worker uses stable worker session', async () => {
                 calls.push(name);
                 return {
                     async prompt() {
-                        return { state: { persisted: true }, completed: true };
+                        return { state: { persisted: true }, result: { ok: true }, completed: true };
                     },
                     async task() {
                         throw new Error('unexpected task');
@@ -33,7 +33,7 @@ test('durable worker uses stable worker session', async () => {
         actorState: {},
         envelope: makeEnvelopeRecord()
     });
-    expect(calls).toEqual(['actor/skill-worker/memory/topic-jaensen-architecture']);
+    expect(calls).toEqual(['actor/skills/memory/topic-jaensen-architecture']);
     expect(result.state).toEqual({ persisted: true });
 });
 test('ephemeral worker uses task()', async () => {
@@ -48,7 +48,7 @@ test('ephemeral worker uses task()', async () => {
                     },
                     async task() {
                         calls.push({ type: 'task', value: 'called' });
-                        return { state: { temp: true } };
+                        return { state: { temp: true }, result: { ok: true }, completed: true };
                     }
                 };
             }
@@ -62,7 +62,7 @@ test('ephemeral worker uses task()', async () => {
         envelope: makeEnvelopeRecord()
     });
     expect(calls).toEqual([
-        { type: 'session', value: 'actor/skill/memory' },
+        { type: 'session', value: 'actor/skills/memory' },
         { type: 'task', value: 'called' }
     ]);
     expect(result.state).toEqual({ temp: true });
@@ -93,8 +93,8 @@ test('worker accepts flue responses wrapped in data', async () => {
 function makeEnvelopeRecord(overrides = {}) {
     return {
         id: 'env-1',
-        fromActor: 'skill/memory',
-        toActor: 'skill-worker/memory/topic-jaensen-architecture',
+        fromActor: 'skills/memory',
+        toActor: 'skills/memory/topic-jaensen-architecture',
         type: 'memory.remember',
         correlationId: 'corr-1',
         causationId: null,

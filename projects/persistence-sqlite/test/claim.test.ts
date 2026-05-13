@@ -8,8 +8,8 @@ test('claimNext creates missing actors and never claims two envelopes for the sa
 
 	await persistence.enqueue({
 		id: 'env-1',
-		fromActor: 'dispatcher/root',
-		toActor: 'intent/order-123',
+		fromActor: 'dispatcher',
+		toActor: 'intents/order-123',
 		type: 'message',
 		correlationId: 'corr-1',
 		payload: { step: 1 },
@@ -17,8 +17,8 @@ test('claimNext creates missing actors and never claims two envelopes for the sa
 	})
 	await persistence.enqueue({
 		id: 'env-2',
-		fromActor: 'dispatcher/root',
-		toActor: 'intent/order-123',
+		fromActor: 'dispatcher',
+		toActor: 'intents/order-123',
 		type: 'message',
 		correlationId: 'corr-2',
 		payload: { step: 2 },
@@ -26,8 +26,8 @@ test('claimNext creates missing actors and never claims two envelopes for the sa
 	})
 	await persistence.enqueue({
 		id: 'env-3',
-		fromActor: 'dispatcher/root',
-		toActor: 'skill/extract',
+		fromActor: 'dispatcher',
+		toActor: 'skills/extract',
 		type: 'message',
 		correlationId: 'corr-3',
 		payload: { step: 3 },
@@ -40,17 +40,17 @@ test('claimNext creates missing actors and never claims two envelopes for the sa
 	const thirdClaim = await persistence.claimNext({ workerId: 'worker-c', leaseMs: 30_000, now })
 
 	expect(firstClaim?.envelope.id).toBe('env-1')
-	expect(firstClaim?.actor.id).toBe('intent/order-123')
+	expect(firstClaim?.actor.id).toBe('intents/order-123')
 	expect(firstClaim?.actor.kind).toBe('intent')
 	expect(firstClaim?.envelope.status).toBe('processing')
 	expect(firstClaim?.envelope.attempts).toBe(1)
 
 	expect(secondClaim?.envelope.id).toBe('env-3')
-	expect(secondClaim?.actor.id).toBe('skill/extract')
+	expect(secondClaim?.actor.id).toBe('skills/extract')
 
 	expect(thirdClaim).toBeNull()
 
-	const createdActor = await persistence.getActor('intent/order-123')
+	const createdActor = await persistence.getActor('intents/order-123')
 	expect(createdActor?.state).toEqual({})
 	expect(createdActor?.version).toBe(0)
 })
@@ -62,7 +62,7 @@ test('claimNext seeds missing intent actors from intent.start payload', async ()
 	await persistence.enqueue({
 		id: 'env-start',
 		fromActor: 'dispatcher',
-		toActor: 'intent/intent-123',
+		toActor: 'intents/intent-123',
 		type: 'intent.start',
 		correlationId: 'corr-start',
 		payload: {
@@ -79,7 +79,7 @@ test('claimNext seeds missing intent actors from intent.start payload', async ()
 		now: new Date('2026-05-12T00:00:10.000Z')
 	})
 
-	expect(claimed?.actor.id).toBe('intent/intent-123')
+	expect(claimed?.actor.id).toBe('intents/intent-123')
 	expect(claimed?.actor.kind).toBe('intent')
 	expect(claimed?.actor.state).toEqual({
 		intentId: 'intent-123',
@@ -89,7 +89,7 @@ test('claimNext seeds missing intent actors from intent.start payload', async ()
 		summary: 'Help the user say hello',
 		pendingSkillCalls: {}
 	})
-	const actor = await persistence.getActor('intent/intent-123')
+	const actor = await persistence.getActor('intents/intent-123')
 	expect(actor?.state).toEqual({
 		intentId: 'intent-123',
 		title: 'Greeting',

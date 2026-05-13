@@ -168,7 +168,7 @@ test('createDevHarness normalizes intent summary and actions from root response'
 			responseFormat: 'json_object'
 		})
 
-		const session = await harness.session('actor/intent/intent-123', { role: 'jaensen-conversation-intent' })
+		const session = await harness.session('actor/intents/intent-123', { role: 'jaensen-conversation-intent' })
 		await expect(session.prompt('Return JSON', { schema: {}, role: 'jaensen-conversation-intent' })).resolves.toEqual({
 			summary: 'Starting review',
 			events: undefined,
@@ -211,7 +211,7 @@ test('createDevHarness warns when recovering root-level intent action', async ()
 			responseFormat: 'json_object'
 		})
 
-		const session = await harness.session('actor/intent/intent-123', { role: 'jaensen-conversation-intent' })
+		const session = await harness.session('actor/intents/intent-123', { role: 'jaensen-conversation-intent' })
 		await session.prompt('Return JSON', { schema: {}, role: 'jaensen-conversation-intent' })
 		expect(warnings).toHaveLength(1)
 		expect(String(warnings[0]?.[0])).toContain('Recovered intent action from malformed root-level model output')
@@ -258,7 +258,7 @@ test('createDevHarness derives intent actions from event-shaped responses', asyn
 			responseFormat: 'json_object'
 		})
 
-		const session = await harness.session('actor/intent/intent-123', { role: 'jaensen-conversation-intent' })
+		const session = await harness.session('actor/intents/intent-123', { role: 'jaensen-conversation-intent' })
 		await expect(session.prompt('Return JSON', { schema: {}, role: 'jaensen-conversation-intent' })).resolves.toEqual({
 			summary: undefined,
 			events: [{ eventType: 'event', event: { type: 'ask_user', payload: { question: 'Which account should I check?' } } }],
@@ -306,7 +306,7 @@ test('createDevHarness converts intent.confirmation_requested events into ask_us
 			responseFormat: 'json_object'
 		})
 
-		const session = await harness.session('actor/intent/intent-123', { role: 'jaensen-conversation-intent' })
+		const session = await harness.session('actor/intents/intent-123', { role: 'jaensen-conversation-intent' })
 		await expect(session.prompt('Return JSON', { schema: {}, role: 'jaensen-conversation-intent' })).resolves.toEqual({
 			summary: undefined,
 			events: [{ eventType: 'event', event: { type: 'intent.confirmation_requested', payload: { clarification: 'Would you like me to send this?' } } }],
