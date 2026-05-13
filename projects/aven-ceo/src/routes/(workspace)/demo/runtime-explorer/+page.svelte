@@ -43,7 +43,7 @@
 
 	type LogPreset = 'overview' | 'conversation' | 'prompts' | 'skills' | 'technical' | 'errors' | 'raw'
 
-	type TreeKind = 'root' | 'actor' | 'intent'
+	type TreeKind = 'root' | 'actor' | 'intent' | 'conversation'
 	type Projection = 'structural' | 'communication'
 
 	type RuntimeTreeItem = {
@@ -54,6 +54,7 @@
 		projection?: Projection
 		actorId?: string | null
 		intentId?: string | null
+		conversationIndex?: number
 		pathActors?: string[]
 		payload?: unknown
 		hasChildren?: boolean
@@ -65,6 +66,7 @@
 	}
 
 	type SelectedItem = {
+		id: string
 		kind: TreeKind
 		projection?: Projection
 		title: string
@@ -202,11 +204,29 @@
 			sublabel: `${record.status ?? 'unknown'} · ${record.updatedAt}`,
 			kind: 'intent',
 			intentId: record.id,
+			hasChildren: true,
+			childCount: undefined,
+			children: [],
+			isExpanded: false,
+			payload: record
+		}
+	}
+
+	function mapTraceEntryToNode(intentId: string, entry: IntentTraceEntry, index: number): RuntimeTreeItem {
+		const icon = entry.kind === 'trace' ? 'Trace' : entry.role === 'user' ? 'User' : 'Assistant'
+		const preview = entry.text?.replace(/\s+/g, ' ').trim() ?? entry.title ?? 'Conversation step'
+		return {
+			id: `intent:${intentId}:conversation:${index}`,
+			label: preview.length > 72 ? `${preview.slice(0, 71)}…` : preview,
+			sublabel: `${icon}${entry.meta ? ` · ${entry.meta}` : ''}`,
+			kind: 'conversation',
+			intentId,
+			conversationIndex: index,
 			hasChildren: false,
 			childCount: 0,
 			children: [],
 			isExpanded: false,
-			payload: record
+			payload: entry
 		}
 	}
 
@@ -232,6 +252,12 @@
 		return body.intents.toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 	}
 
+	async function fetchIntentEvents(intentId: string): Promise<ActorLogRecord[]> {
+		const scope = `intents/${intentId}`
+		const response = await fetch(`/api/aven/jaensen/events?scope=${encodeURIComponent(scope)}`)
+		return (await expectJson<{ events: ActorLogRecord[] }>(response)).events.toSorted((a, b) => a.seq - b.seq)
+	}
+
 	async function loadActorDetails(actorId: string) {
 		const response = await fetch(`/api/aven/jaensen/actors/branch-logs?rootActorId=${encodeURIComponent(actorId)}&view=deep-dive&limit=300`)
 		detailLogs = (await expectJson<{ events: ActorLogRecord[] }>(response)).events.toSorted((a, b) => a.seq - b.seq)
@@ -241,9 +267,7 @@
 	}
 
 	async function loadIntentDetails(intentId: string) {
-		const scope = `intents/${intentId}`
-		const response = await fetch(`/api/aven/jaensen/events?scope=${encodeURIComponent(scope)}`)
-		detailLogs = (await expectJson<{ events: ActorLogRecord[] }>(response)).events.toSorted((a, b) => a.seq - b.seq)
+		detailLogs = await fetchIntentEvents(intentId)
 		intentTraceEntries = buildIntentTraceEntries(detailLogs)
 		activePreset = 'conversation'
 		activeLogType = null
@@ -275,6 +299,10 @@
 			if (item.id === 'intent-root') {
 				const intents = await loadIntentChildren()
 				children = intents.map(mapIntentToNode)
+			} else if (item.kind === 'intent' && item.intentId) {
+				const events = await fetchIntentEvents(item.intentId)
+				const entries = buildIntentTraceEntries(events)
+				children = entries.map((entry, index) => mapTraceEntryToNode(item.intentId ?? 'intent', entry, index))
 			} else {
 				const rows = item.projection === 'structural'
 					? await loadStructuralChildren(item.actorId ?? null)
@@ -309,6 +337,7 @@
 		error = null
 		tree = updateTreeItem(clearSelection(tree), item.id, (node) => ({ ...node, isSelected: true }))
 		selectedItem = {
+			id: item.id,
 			kind: item.kind,
 			projection: item.projection,
 			title: item.label,
@@ -317,6 +346,7 @@
 		}
 		if (item.kind === 'actor' && item.actorId) await loadActorDetails(item.actorId)
 		else if (item.kind === 'intent' && item.intentId) await loadIntentDetails(item.intentId)
+		else if (item.kind === 'conversation' && item.intentId) await loadIntentDetails(item.intentId)
 		else {
 			detailLogs = []
 			intentTraceEntries = []
@@ -349,7 +379,28 @@
 		if (selectedItem.kind === 'intent') {
 			const payload = selectedItem.payload as IntentSummaryRecord
 			if (payload.id) await loadIntentDetails(payload.id)
+			return
 		}
+		if (selectedItem.kind === 'conversation') {
+			const item = findItemById(tree, selectedItem.id)
+			if (item?.intentId) await loadIntentDetails(item.intentId)
+		}
+	}
+
+	function findItemById(items: RuntimeTreeItem[], itemId: string): RuntimeTreeItem | null {
+		for (const item of items) {
+			if (item.id === itemId) return item
+			const child = item.children ? findItemById(item.children, itemId) : null
+			if (child) return child
+		}
+		return null
+	}
+
+	function visibleIntentTraceEntries(): IntentTraceEntry[] {
+		if (selectedItem?.kind !== 'conversation') return intentTraceEntries
+		const item = findItemById(tree, selectedItem.id)
+		const start = item?.conversationIndex ?? 0
+		return intentTraceEntries.slice(start)
 	}
 
 	function directionParts(event: ActorLogRecord) {
@@ -996,11 +1047,17 @@
 								<p class="text-sm opacity-60">No logs found for this actor yet.</p>
 							{/if}
 						</div>
-					{:else if selectedItem.kind === 'intent'}
+					{:else if selectedItem.kind === 'intent' || selectedItem.kind === 'conversation'}
 						<div class="min-h-0 flex flex-1 flex-col overflow-y-auto pr-1">
-							<div class="mb-3 text-xs opacity-60">Chat-like trace of the selected intent: user input → orchestration → tools/workers → reply.</div>
+							<div class="mb-3 text-xs opacity-60">
+								{#if selectedItem.kind === 'conversation'}
+									Sub-conversation from the selected node downward.
+								{:else}
+									Chat-like trace of the selected intent: user input → orchestration → tools/workers → reply.
+								{/if}
+							</div>
 							<div class="flex flex-col gap-3">
-								{#each intentTraceEntries as entry (entry.id)}
+								{#each visibleIntentTraceEntries() as entry (entry.id)}
 									{#if entry.kind === 'message'}
 										<div class:justify-end={entry.role === 'user'} class="flex">
 											<div class:chat-user={entry.role === 'user'} class:chat-assistant={entry.role === 'assistant'} class="chat-bubble max-w-[42rem] rounded-2xl px-4 py-3 shadow-sm">

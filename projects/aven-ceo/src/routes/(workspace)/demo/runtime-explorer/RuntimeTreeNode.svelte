@@ -3,9 +3,11 @@
 		id: string
 		label: string
 		sublabel?: string
-		kind: 'root' | 'actor'
+		kind: 'root' | 'actor' | 'intent' | 'conversation'
 		projection?: 'structural' | 'communication'
 		actorId?: string | null
+		intentId?: string | null
+		conversationIndex?: number
 		pathActors?: string[]
 		payload?: unknown
 		hasChildren?: boolean
@@ -33,6 +35,13 @@
 	function childCount(node: RuntimeTreeItem): number {
 		return node.childCount ?? node.children?.length ?? 0
 	}
+
+	function kindIcon(node: RuntimeTreeItem): string {
+		if (node.kind === 'root') return '🌳'
+		if (node.kind === 'intent') return '🧠'
+		if (node.kind === 'conversation') return '💬'
+		return '👤'
+	}
 </script>
 
 <li class="tree-item">
@@ -53,7 +62,7 @@
 
 			<button type="button" class="min-w-0 flex-1 text-left" onclick={() => onSelect(item)}>
 				<div class="flex items-start gap-2">
-					<span class="mt-[1px] text-xs opacity-50">{item.kind === 'root' ? '🌳' : '👤'}</span>
+					<span class="mt-[1px] text-xs opacity-50">{kindIcon(item)}</span>
 					<div class="min-w-0 flex-1">
 						<div class="break-all text-sm font-medium">{item.label}</div>
 						{#if item.sublabel}
