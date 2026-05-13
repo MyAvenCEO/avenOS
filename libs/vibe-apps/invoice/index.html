@@ -416,7 +416,10 @@
 		</div>
 
 		<script type="module">
-			import { App } from '/ext-apps.js'
+			;(async () => {
+			// Inner iframe URL is often about:blank; parent is the sandbox frame (same origin as ext-apps.js).
+			const extOrigin = window.parent?.location?.origin ?? window.location.origin
+			const { App } = await import(`${extOrigin}/ext-apps.js`)
 
 			const $root = document.getElementById('doc-root')
 			let state = {}
@@ -814,6 +817,16 @@
 			await app.connect()
 			render()
 			void pushModelContext()
+			})().catch((err) => {
+				console.error('[vibe-app invoice]', err)
+				const r = document.getElementById('doc-root')
+				if (r) {
+					r.innerHTML =
+						'<div class="invoice-ui-container"><div class="empty-doc" style="padding:2rem;text-align:center;color:#b91c1c">Vorschau konnte nicht starten: ' +
+						String(err?.message ?? err) +
+						'</div></div>'
+				}
+			})
 		</script>
 	</body>
 </html>

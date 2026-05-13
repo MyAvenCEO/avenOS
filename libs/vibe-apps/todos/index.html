@@ -331,7 +331,9 @@
 		</div>
 
 		<script type="module">
-			import { App } from '/ext-apps.js'
+			;(async () => {
+			const extOrigin = window.parent?.location?.origin ?? window.location.origin
+			const { App } = await import(`${extOrigin}/ext-apps.js`)
 
 			const $ = (id) => {
 				const el = document.getElementById(id)
@@ -455,6 +457,16 @@
 			await app.connect()
 			render()
 			void pushModelContext()
+			})().catch((err) => {
+				console.error('[vibe-app todos]', err)
+				const r = document.getElementById('doc-root')
+				if (r) {
+					r.innerHTML =
+						'<main class="td-ui-container"><div class="td-card" style="color:#b91c1c">Vorschau konnte nicht starten: ' +
+						String(err?.message ?? err) +
+						'</div></main>'
+				}
+			})
 		</script>
 	</body>
 </html>
