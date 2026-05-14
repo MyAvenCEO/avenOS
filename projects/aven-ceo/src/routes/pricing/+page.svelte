@@ -256,7 +256,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 							<li>4&nbsp;TB Storage</li>
 							<li>Tägliche Snapshots</li>
 							<li>Nie wieder Papier – Briefpost digital</li>
-							<li class="font-medium text-foreground/82">Support durch AvenOS&nbsp;+ AvenMaia</li>
+							<li class="font-medium text-foreground/82">Support durch AvenTin&nbsp;+ AvenMaia</li>
 							<li class="font-medium text-foreground/82">+ 1&nbsp;Std/Woche Samuel &amp; Daniel</li>
 						</ul>
 						<div class="mt-6 flex justify-center border-t border-foreground/10 pt-4 lg:mt-auto">
@@ -314,7 +314,7 @@ const claimedName = $derived($page.url.searchParams.get('name') ?? '')
 							<li>12&nbsp;TB + monatliches LTO</li>
 							<li>Stündliche Snapshots</li>
 							<li>Nie wieder Papier – Briefpost digital</li>
-							<li class="font-medium text-foreground/82">Support durch AvenOS&nbsp;+ AvenMaia</li>
+							<li class="font-medium text-foreground/82">Support durch AvenTin&nbsp;+ AvenMaia</li>
 							<li class="font-medium text-foreground/82">
 								+ 10&nbsp;Std/Woche Samuel &amp; Daniel
 							</li>

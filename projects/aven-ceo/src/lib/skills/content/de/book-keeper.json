@@ -1,14 +1,14 @@
 {
   "slug": "book-keeper",
   "publisher": {
-    "id": "avenos",
-    "displayName": "AvenOS",
+    "id": "aventin",
+    "displayName": "AvenTin",
     "founderName": "Daniel",
     "scope": "Daniel Janz · aven.ceo"
   },
   "oneLineCopy": "Rechnungen mit Kontoauszügen abgeglichen. Buchungen vorgeschlagen. Steuern vorbereitet.",
   "hero": {
-    "kicker": "Skill · AvenOS · book-keeper",
+    "kicker": "Skill · AvenTin · book-keeper",
     "headlineMain": "8 Stunden Buchhaltung. Auf 20 Minuten reduziert.",
     "headlineSerifLead": "Dein Aven matcht Rechnungen mit Kontoauszügen, schlägt Buchungskonten vor und bereitet deinen Steuerberater‑Export vor.",
     "promiseHoursPerWeek": "8+ Std/Woche"

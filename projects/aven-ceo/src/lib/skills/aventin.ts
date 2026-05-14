@@ -13,7 +13,7 @@ export type {
 export {
 	allSlugs,
 	avenmaiaSkillSlugs,
-	avenosSkillSlugs,
+	aventinSkillSlugs,
 	loadPublishersWithSkills,
 	loadSkill as getAvenosSkill,
 	loadSkills as avenosSkills,

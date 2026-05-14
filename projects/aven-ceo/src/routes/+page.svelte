@@ -2,37 +2,20 @@
 	<title>aven.ceo — AvenCEO · dein privates zweites Gehirn für Gründer &amp; CEOs</title>
 	<meta
 		name="description"
-		content="Lieber Gründer und CEO: 10+ Stunden mehr Zeit pro Woche — Ein AvenCEO verwandelt deine Arbeitsweise in selbstoptimierende KI‑Skills und arbeitet so einen Großteil deines zeitraubenden Alltags ab."
+		content="Lieber Gründer und CEO: 10+ Stunden mehr Zeit pro Woche für Vision, Produkt und das Leben, das wirklich zählt. Dein AvenCEO verwandelt deine Arbeitsweise in selbstoptimierende KI-Skills und arbeitet einen Großteil deines zeitraubenden Unternehmer-Alltags ab."
 	>
-	<link rel="preload" as="image" href="/hero.png">
 </svelte:head>
 
 <script lang="ts">
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
+import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 import { beamAvatarSvg, paletteFromCommaString } from '$lib/intent-mock/beam-avatar'
 import { loadPublishersWithSkills, skillDetailHref } from '$lib/skills/loader'
 import danielPhoto from '../images/daniel.png'
 import samuelPhoto from '../images/samuel.jpg'
 
-/** Beam “seed” string — AvenOS avatar matches Samuel’s early‑alpha beam geometry. */
+/** Beam “seed” string — hero beam geometry matches Samuel’s early‑alpha profile. */
 const beamSeedSamuelProfile = 'Samuel Andert'
-
-let heroEl: HTMLElement | undefined = $state()
-let heroInView = $state(true)
-let navHeight = $state(84)
-
-$effect(() => {
-	const el = heroEl
-	if (!el || typeof IntersectionObserver === 'undefined') return
-	const io = new IntersectionObserver(
-		([e]) => {
-			heroInView = e?.isIntersecting ?? false
-		},
-		{ threshold: 0.08, rootMargin: '-56px 0px 0px 0px' }
-	)
-	io.observe(el)
-	return () => io.disconnect()
-})
 
 const publishersForHome = loadPublishersWithSkills('de')
 const homepageFeaturedSkills = publishersForHome.flatMap((pub) =>
@@ -69,116 +52,43 @@ const letterDate = (() => {
 </script>
 
 <div lang="de" class="min-h-screen bg-background text-foreground font-sans antialiased">
-	<!-- Sticky nav overlays hero; hero negative margin = photo meets viewport top -->
-	<header
-		bind:clientHeight={navHeight}
-		class="sticky top-0 z-50 border-b backdrop-blur-md transition-[background-color,border-color,color] duration-300 {heroInView
-			? 'border-white/15 bg-black/14 text-white'
-			: 'border-border/40 bg-background/88 text-foreground'}"
-	>
-		<div
-			class="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-10 gap-y-2 px-5 py-5 sm:justify-between sm:px-8"
-		>
-			<a
-				href="/"
-				class="font-serif text-[17px] font-light tracking-[-0.01em] {heroInView
-					? 'text-white/95 hover:text-white'
-					: 'opacity-85 hover:opacity-100'}"
-			>
-				AvenCEO
-			</a>
-			<nav
-				class="flex items-center gap-5 text-[11px] font-semibold uppercase tracking-[0.12em] {heroInView
-					? 'text-white/78'
-					: 'opacity-70'}"
-			>
-				<a
-					href="/skills"
-					class="transition-colors hover:opacity-100 {heroInView ? 'hover:text-white' : 'hover:opacity-100'}"
-					>Skills</a
-				>
-				<a
-					href="/pricing"
-					class="transition-colors hover:opacity-100 {heroInView ? 'hover:text-white' : 'hover:opacity-100'}"
-					>Preise</a
-				>
-				<a
-					href="/docs"
-					class="transition-colors hover:opacity-100 {heroInView ? 'hover:text-white' : 'hover:opacity-100'}"
-					>Docs</a
-				>
-				<a
-					href="/me"
-					class="rounded-full border px-3 py-1 transition-colors {heroInView
-						? 'border-white/40 bg-white/14 text-white hover:border-white/55 hover:bg-white/22'
-						: 'border-border/80 bg-white/15 opacity-95 hover:opacity-100'}"
-				>
-					Login
-				</a>
-			</nav>
-		</div>
-	</header>
+	<MarketingSiteHeader />
 
-	<div
-		bind:this={heroEl}
-		class="relative isolate overflow-hidden border-b border-white/15"
-		style="margin-top: -{navHeight}px; padding-top: {navHeight}px"
+	<section
+		class="border-b border-border/35 bg-linear-to-b from-white/35 via-background to-background px-5 py-24 sm:px-8 sm:py-32 md:py-40"
+		aria-labelledby="home-hero-heading"
 	>
-		<div class="absolute inset-0 z-0" aria-hidden="true">
-			<img
-				src="/hero.png"
-				alt=""
-				class="h-full min-h-[560px] w-full object-cover object-[48%_26%] sm:min-h-0 sm:object-[52%_22%]"
-				fetchpriority="high"
-				decoding="async"
+		<div class="mx-auto max-w-3xl text-center">
+			<p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+				Lieber Gründer und CEO,
+			</p>
+			<h1
+				id="home-hero-heading"
+				class="mt-5 font-sans text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl md:text-[2.1rem] md:leading-[1.12]"
 			>
-		</div>
-		<div
-			class="pointer-events-none absolute inset-0 z-[1] bg-linear-to-b from-black/10 via-black/14 to-black/38 sm:via-black/16 sm:to-black/36"
-			aria-hidden="true"
-		></div>
-		<div
-			class="pointer-events-none absolute inset-0 z-[1] bg-linear-to-l from-transparent via-black/6 to-black/48 md:to-black/44"
-			aria-hidden="true"
-		></div>
-
-		<section
-			class="relative z-10 flex min-h-[min(92vh,960px)] items-center px-5 py-24 sm:px-8 sm:py-32 md:py-36"
-		>
-			<div class="mx-auto flex w-full max-w-6xl justify-center md:justify-end">
-				<div
-					class="w-full max-w-3xl text-center md:max-w-4xl lg:max-w-5xl md:text-right [text-shadow:0_2px_28px_rgba(0,0,0,0.32)]"
-				>
-					<h1
-						class="text-[1.55rem] font-semibold tracking-[-0.03em] leading-snug text-white sm:text-3xl md:text-[2.35rem] md:leading-[1.15]"
+				10+ Stunden mehr Zeit pro Woche
+			</h1>
+			<p
+				class="mx-auto mt-4 max-w-2xl font-serif text-[clamp(1.15rem,2.8vw,1.55rem)] font-light leading-snug tracking-tight text-foreground/78"
+			>
+				Für Vision, Produkt und das Leben, das wirklich zählt.
+			</p>
+			<div
+				class="mx-auto mt-10 max-w-xl space-y-4 border-t border-border/40 pt-8 text-[15px] leading-relaxed text-muted-foreground sm:max-w-2xl sm:text-base"
+			>
+				<p class="text-pretty">
+					<strong class="font-medium text-foreground">Dein AvenCEO</strong>
+					verwandelt deine Arbeitsweise in
+					<strong class="font-medium text-foreground">selbstoptimierende KI‑Skills</strong>
+					und arbeitet so einen Großteil
+					<strong class="font-medium text-foreground"
+						>deines zeitraubenden Unternehmer‑Alltags</strong
 					>
-						<span class="block text-lg font-normal text-white/82 sm:text-xl md:text-2xl"
-							>Lieber Gründer und CEO,</span
-						>
-						<span class="mt-3 block">10+ Stunden mehr Zeit pro Woche</span>
-						<span
-							class="mt-2 block font-serif text-[clamp(1.25rem,3.85vw,2.05rem)] font-light leading-[1.08] tracking-tight text-white/94"
-							>Für Vision, Produkt und das Leben, das wirklich zählt.</span
-						>
-					</h1>
-					<div
-						class="mx-auto mt-8 w-full max-w-2xl space-y-5 text-[15px] leading-relaxed text-white/76 sm:max-w-3xl sm:text-base md:mx-0 md:ml-auto lg:max-w-4xl"
-					>
-						<p>
-							<strong class="font-medium text-white">Dein AvenCEO</strong>
-							verwandelt deine Arbeitsweise in
-							<strong class="font-medium text-white">selbstoptimierende KI‑Skills</strong><br>
-							und arbeitet so einen Großteil
-							<strong class="font-medium text-white/92"
-								>deines zeitraubenden Unternehmer‑Alltags</strong
-							>
-							ab.
-						</p>
-					</div>
-				</div>
+					ab.
+				</p>
 			</div>
-		</section>
-	</div>
+		</div>
+	</section>
 
 	<section
 		class="border-b border-border/40 bg-linear-to-b from-white/18 via-white/6 to-transparent px-5 py-9 sm:px-8 sm:py-11"
@@ -192,7 +102,7 @@ const letterDate = (() => {
 				<h2
 					class="mt-2 font-serif text-[clamp(1.5rem,4vw,2.15rem)] font-light leading-tight tracking-tight text-foreground/90"
 				>
-					Hallo, wir sind AvenMaia und AvenOS.
+					Hallo, wir sind AvenMaia und AvenTin.
 				</h2>
 				<p
 					class="mx-auto mt-4 max-w-xl text-[13px] leading-relaxed text-foreground/67 sm:max-w-2xl sm:text-[15px] sm:leading-[1.52]"
@@ -334,7 +244,7 @@ const letterDate = (() => {
 							<p
 								class="mt-0.5 font-mono text-[12px] font-bold tracking-[0.1em] text-tuscan-sun sm:text-[13px]"
 							>
-								AvenOS
+								AvenTin
 							</p>
 							<p
 								class="mt-0.5 max-w-[9rem] text-[9px] leading-tight text-foreground/50 sm:text-[10px]"
@@ -351,7 +261,7 @@ const letterDate = (() => {
 				</div>
 			</div>
 
-			<div class="mx-auto mt-10 max-w-2xl sm:mt-11" aria-label="Brief von AvenMaia und AvenOS">
+			<div class="mx-auto mt-10 max-w-2xl sm:mt-11" aria-label="Brief von AvenMaia und AvenTin">
 				<div
 					class="rounded-2xl border border-border/40 bg-linear-to-br from-white/92 via-white/78 to-white/62 px-5 py-7 shadow-[0_22px_50px_-32px_rgb(0_0_0/0.55)] ring-1 ring-black/8 sm:px-8 sm:py-9"
 				>
@@ -369,7 +279,7 @@ const letterDate = (() => {
 							>
 								<span class="text-tuscan-sun">AvenMaia</span>
 								<span class="font-light text-foreground/35">&amp;</span>
-								<span class="text-tuscan-sun">AvenOS</span>
+								<span class="text-tuscan-sun">AvenTin</span>
 							</p>
 						</div>
 						<p
@@ -459,7 +369,7 @@ const letterDate = (() => {
 								<p
 									class="mt-2 font-mono text-[13px] font-bold tracking-[0.1em] text-tuscan-sun sm:text-[14px]"
 								>
-									AvenOS
+									AvenTin
 								</p>
 							</div>
 						</footer>

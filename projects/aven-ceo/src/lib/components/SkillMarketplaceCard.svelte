@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { AvenosSkill } from '$lib/skills/avenos'
+	import type { AvenosSkill } from '$lib/skills/types'
 	import { skillDetailHref } from '$lib/skills/loader'
 
 	type Props = {

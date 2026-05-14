@@ -1,14 +1,14 @@
 {
   "slug": "email-ingestor",
   "publisher": {
-    "id": "avenos",
-    "displayName": "AvenOS",
+    "id": "aventin",
+    "displayName": "AvenTin",
     "founderName": "Daniel",
     "scope": "Daniel Janz · aven.ceo"
   },
   "oneLineCopy": "No money-mail ever gets lost — ever.",
   "hero": {
-    "kicker": "Skill · AvenOS · email-ingestor",
+    "kicker": "Skill · AvenTin · email-ingestor",
     "headlineMain": "Your inbox. Finally under control.",
     "headlineSerifLead": "Every mail to your AvenCEO address is understood, categorized and — when needed — escalated directly to you by your Aven.",
     "promiseHoursPerWeek": "6+ hrs/week"

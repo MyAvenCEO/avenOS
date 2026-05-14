@@ -1,14 +1,14 @@
 {
   "slug": "brain-memorizer",
   "publisher": {
-    "id": "avenos",
-    "displayName": "AvenOS",
+    "id": "aventin",
+    "displayName": "AvenTin",
     "founderName": "Daniel",
     "scope": "Daniel Janz · aven.ceo"
   },
   "oneLineCopy": "Your Aven never forgets — who, what, when, how often.",
   "hero": {
-    "kicker": "Skill · AvenOS · brain-memorizer",
+    "kicker": "Skill · AvenTin · brain-memorizer",
     "headlineMain": "The memory you've been missing.",
     "headlineSerifLead": "Resolve identities, link context, remember relationships — so your Aven always knows who you're dealing with.",
     "promiseHoursPerWeek": "4+ hrs/week"

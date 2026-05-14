@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { beamAvatarSvg, paletteFromCommaString } from '$lib/intent-mock/beam-avatar'
 	import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
-	import type { AvenosSkill } from '$lib/skills/avenos'
+	import type { AvenosSkill } from '$lib/skills/types'
 	import { publisherIdentity, skillDetailHref } from '$lib/skills/loader'
 
 	type Props = {

@@ -2,7 +2,7 @@
 	<title>Skills Marketplace — aven.ceo · Aven Skills</title>
 	<meta
 		name="description"
-		content="Skills, die echte Probleme lösen — gebaut von AvenOS und AvenMaia, installierbar für deinen Aven."
+		content="Skills, die echte Probleme lösen — gebaut von AvenTin und AvenMaia, installierbar für deinen Aven."
 	>
 </svelte:head>
 
@@ -16,11 +16,11 @@ import { loadPublishersWithSkills, loadSkills, skillDetailHref } from '$lib/skil
 const skills = loadSkills('de')
 const publishersData = loadPublishersWithSkills('de')
 
-let filterAvenos = $state(true)
+let filterAventin = $state(true)
 let filterAvenmaia = $state(true)
 
-function pubVisible(id: 'avenos' | 'avenmaia') {
-	return id === 'avenos' ? filterAvenos : filterAvenmaia
+function pubVisible(id: 'aventin' | 'avenmaia') {
+	return id === 'aventin' ? filterAventin : filterAvenmaia
 }
 
 const visibleSkills = $derived(skills.filter((s) => pubVisible(s.publisher.id)))
@@ -95,7 +95,7 @@ const chainSteps = [
 								class="mt-1 size-3.5 shrink-0 accent-tuscan-sun"
 								checked={pubVisible(pub.id)}
 								onchange={() => {
-									if (pub.id === 'avenos') filterAvenos = !filterAvenos
+									if (pub.id === 'aventin') filterAventin = !filterAventin
 									else filterAvenmaia = !filterAvenmaia
 								}}
 							>

@@ -146,7 +146,7 @@
 					{introHeadline}
 				</h1>
 				<p class="mt-3 text-[14px] leading-relaxed text-foreground/68">
-					Wir sind noch in der Early Alpha — AvenMaia und AvenOS laufen gerade auf uns selbst:
+					Wir sind noch in der Early Alpha — AvenMaia und AvenTin laufen gerade auf uns selbst:
 					echte Posteingänge, echte Dokumente, echter Alltag.
 					Wir schleifen, bis wir sagen können: <em class="not-italic font-medium text-foreground/80">das gibt dir nachweislich Zeit zurück.</em>
 					Dann geht es los — und du bist als Erster dabei.

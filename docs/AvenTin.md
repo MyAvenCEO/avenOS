@@ -1,5 +1,7 @@
 # AvenOS — Architecture Reference
 
+> In diesem Dokument bezeichnet **AvenOS** den **Open‑Source‑Betriebssystem‑Stack**. Daniels **AvenCEO**‑Agent‑Persona im Marketing heißt **[AvenTin](./AVENS/AvenTin/IDENTITY.md)**.
+
 ---
 
 ## The Organisation

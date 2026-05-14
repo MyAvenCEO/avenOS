@@ -7,13 +7,13 @@ export type AvenosSkillSlug =
 	| 'blog-writer'
 	| 'golden-offer'
 
-export type SkillPublisherId = 'avenos' | 'avenmaia'
+export type SkillPublisherId = 'aventin' | 'avenmaia'
 
 export type SkillPublisher = {
 	id: SkillPublisherId
-	displayName: string  // "AvenOS" | "AvenMaia"
-	founderName: string  // "Daniel" | "Samuel"
-	scope: string        // "Daniel Janz · aven.ceo"
+	displayName: string // "AvenTin" | "AvenMaia"
+	founderName: string // "Daniel" | "Samuel"
+	scope: string // "Daniel Janz · aven.ceo"
 }
 
 /**

@@ -1,14 +1,14 @@
 {
   "slug": "document-extractor",
   "publisher": {
-    "id": "avenos",
-    "displayName": "AvenOS",
+    "id": "aventin",
+    "displayName": "AvenTin",
     "founderName": "Daniel",
     "scope": "Daniel Janz · aven.ceo"
   },
   "oneLineCopy": "Kein Dokument bleibt ungelesen — egal in welchem Format.",
   "hero": {
-    "kicker": "Skill · AvenOS · document-extractor",
+    "kicker": "Skill · AvenTin · document-extractor",
     "headlineMain": "Dokumente lesen. Daten herausziehen. Weiterdenken.",
     "headlineSerifLead": "PDFs, gescannte Rechnungen, Verträge, Briefpost‑Scans — alles wird zu strukturierten Daten, die dein Aven versteht.",
     "promiseHoursPerWeek": "3+ Std/Woche"

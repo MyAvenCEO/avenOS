@@ -1,14 +1,14 @@
 {
   "slug": "email-ingestor",
   "publisher": {
-    "id": "avenos",
-    "displayName": "AvenOS",
+    "id": "aventin",
+    "displayName": "AvenTin",
     "founderName": "Daniel",
     "scope": "Daniel Janz · aven.ceo"
   },
   "oneLineCopy": "Kein Geld-Mail geht mehr verloren — ever.",
   "hero": {
-    "kicker": "Skill · AvenOS · email-ingestor",
+    "kicker": "Skill · AvenTin · email-ingestor",
     "headlineMain": "Dein Posteingang. Endlich unter Kontrolle.",
     "headlineSerifLead": "Jede Mail an deine AvenCEO‑Adresse wird von deinem Aven verstanden, eingeordnet und — wenn nötig — direkt zu dir weitergeleitet.",
     "promiseHoursPerWeek": "6+ Std/Woche"
