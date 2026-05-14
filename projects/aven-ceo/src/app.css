@@ -10,6 +10,43 @@
 	/* Slightly darker sage for preview host areas (contrast vs. white sandbox card) */
 	--color-sandbox-host: color-mix(in srgb, var(--color-background) 94%, var(--color-foreground));
 
+	/* Marine primary + archive / intent status (pre brand-token palette remap) */
+	--color-marine: #2c5f6b;
+	--color-marine-foreground: #f3f7f8;
+
+	--color-primary: var(--color-marine);
+	--color-primary-foreground: var(--color-marine-foreground);
+
+	--color-driftwood: #dcd3c2;
+	--color-driftwood-foreground: #3a342e;
+	--color-archive: var(--color-driftwood);
+	--color-archive-foreground: var(--color-driftwood-foreground);
+
+	--color-paradise-water: #4a6f7e;
+	--color-paradise-water-foreground: #f3f7f8;
+
+	--color-moss: #3d5c40;
+	--color-moss-foreground: #f2f5f2;
+
+	--color-terracotta: #a84a32;
+	--color-terracotta-foreground: #fdf8f5;
+
+	/*
+	 * Semantic status — Tailwind v4 `@theme` resolves `var()` at CSS time so
+	 * opacity utilities like `bg-status-info/22` still work via `color-mix(...)`.
+	 */
+	--color-status-error: var(--color-terracotta);
+	--color-status-error-foreground: var(--color-terracotta-foreground);
+
+	--color-status-info: var(--color-marine);
+	--color-status-info-foreground: var(--color-marine-foreground);
+
+	--color-status-success: var(--color-moss);
+	--color-status-success-foreground: var(--color-moss-foreground);
+
+	--color-status-working: var(--color-paradise-water);
+	--color-status-working-foreground: var(--color-paradise-water-foreground);
+
 	/* Tuscan Sun Highlight */
 	--color-tuscan-sun: #e6b34d;
 

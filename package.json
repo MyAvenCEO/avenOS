@@ -4,7 +4,8 @@
 	"type": "module",
 	"workspaces": [
 		"projects/*",
-		"libs/*"
+		"libs/*",
+		"lib/*"
 	],
 	"scripts": {
 		"dev": "bun --env-file=.env run dev:aven-ceo",
@@ -12,6 +13,8 @@
 		"dev:tinfoil": "bun --env-file=.env run dev:aven-ceo",
 		"dev:aven-ceo": "bun --env-file=.env --filter @avenos/aven-ceo dev",
 		"dev:stack": "bun ./projects/dev-stack/run-dev.ts",
+		"dev:app": "bun --env-file=.env ./node_modules/.bin/concurrently -n app,sandbox -c cyan,magenta \"bun run --cwd lib/app dev\" \"bun run --cwd libs/vibe-app-sandbox dev\"",
+		"dev:all": "concurrently -k -c auto -n backend,svelte-app \"bun run dev:stack\" \"bun run --cwd lib/app dev -- --port 5174\"",
 		"dev:jaensen-server": "bun --env-file=.env --filter @jaensen/web-api dev",
 		"dev:ocr-example": "bun --env-file=.env --filter @avenos/ocr-example dev",
 		"dev:jaensen-bot": "bun --env-file=.env --filter @avenos/jaensen-bot dev",
@@ -27,6 +30,7 @@
 		"format": "bunx biome format --write ."
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.4.14"
+		"@biomejs/biome": "^2.4.14",
+		"concurrently": "^9.2.1"
 	}
 }

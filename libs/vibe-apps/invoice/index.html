@@ -6,7 +6,19 @@
 		<title>Rechnung — Aven</title>
 		<style>
 			:root {
-				--bg-a: var(--color-background-primary, #e8ede1);
+				/* Outer page background — clean near-white that visually approximates
+				   the docs-card surface (Tailwind `bg-white/10` over the cream page,
+				   #F8F6EF) used by the Display panel iframe wrapper in lib/app. The
+				   Display panel layers `bg-white/10` over the page cream and renders
+				   as a subtle translucent near-white; vibe apps inside the iframe have
+				   no parent transparency, so this is a literal hex chosen to match
+				   that perceived tone. Slightly cooler/cleaner than the legacy
+				   eggshell display surface (#F9F5E6, `--color-surface-soft` in
+				   lib/app) — that token is no longer used by the active panel and
+				   has been replaced by the docs-card tone here for visual parity.
+				   Hard-coded because vibe apps are bundled into the sandbox
+				   independently of lib/app's CSS variables. */
+				--bg-a: #FBFAF6;
 				--bg-b: color-mix(in srgb, var(--bg-a) 82%, rgb(255 255 255));
 				--tech-fill: rgba(255, 255, 255, 0.1);
 				--tech-fill-inner: rgba(255, 255, 255, 0.15);

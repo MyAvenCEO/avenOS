@@ -2,7 +2,7 @@
 
 Minimal host + **separate-origin sandbox** for running untrusted HTML/JS “vibe apps” using the **MCP Apps** shape (`AppBridge`, `PostMessageTransport`, tool input/result, model context).
 
-This repo wraps [`@modelcontextprotocol/ext-apps`](https://www.npmjs.com/package/@modelcontextprotocol/ext-apps) with AvenOS-specific defaults (theme variables, logging prefix) and ships the **outer iframe proxy** (`sandbox/`) as a single-file bundle served by Bun on `:8081`.
+This repo wraps [`@modelcontextprotocol/ext-apps`](https://www.npmjs.com/package/@modelcontextprotocol/ext-apps) with AvenOS-specific defaults (theme variables, logging prefix) and ships the **outer iframe proxy** (`sandbox/`) as a single-file bundle served by Bun on `:8081` by default (`VIBE_SANDBOX_PORT` / `PORT` override).
 
 ## Architecture (three layers)
 
@@ -42,13 +42,14 @@ SDK on npm: [`@modelcontextprotocol/ext-apps`](https://www.npmjs.com/package/@mo
 | Command | Purpose |
 |---------|---------|
 | `bun run build` | Vite single-file build → `sandbox/dist/sandbox.html` |
-| `bun run serve` | `bun --watch sandbox/serve.ts` — dev server (default port **8081**, override with `SANDBOX_PORT`) |
+| `bun run serve` | `bun --watch sandbox/serve.ts` — dev server (default port **8081**, override with `VIBE_SANDBOX_PORT` or `PORT`; dev retries **8081–8086** if both unset) |
 
 Monorepo entry point: **`bun dev:stack`** (see `projects/dev-stack/run-dev.ts`) builds `@avenos/vibe-apps` + this package, then runs the sandbox watcher.
 
 ## Host configuration
 
 - **Sandbox URL** — Defaults to `http://localhost:8081/sandbox.html`. Override with `PUBLIC_VIBE_SANDBOX_URL` or `PUBLIC_MCP_SANDBOX_URL` in the host’s Vite env (see `resolveSandboxBase` in `src/host.ts`).
+- **Listen port** — Set `VIBE_SANDBOX_PORT` (preferred) or `PORT` for `sandbox/serve.ts` (default **8081**); keep that origin aligned with `PUBLIC_VIBE_SANDBOX_URL` when not default.
 
 ## Related packages
 

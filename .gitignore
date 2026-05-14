@@ -12,8 +12,10 @@ node_modules
 .wrangler
 /.svelte-kit
 /projects/*/.svelte-kit
+/lib/*/.svelte-kit
 /build
 /projects/*/build
+/lib/*/build
 
 # OS
 .DS_Store

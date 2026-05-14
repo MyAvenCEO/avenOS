@@ -1,0 +1,420 @@
+<script lang="ts">
+import { tick } from 'svelte'
+
+const COMPOSER_MAX_LINES = 4
+const BAR_COUNT = 24
+
+/** Plausible mock transcripts when user “sends” a voice note (no real STT). */
+const VOICE_MOCK_TRANSCRIPTS = [
+	'Voice note — follow up on the vendor invoice; needs approval before Friday.',
+	'Diction: schedule a sync with finance on the Q2 close checklist.',
+	'Note to self: reconcile the MT940 import with last week’s bank feed.',
+	'Quick capture: flag the EU VAT line items for a second reviewer.',
+	'Voice: remind me to archive the signed PO once legal countersigns.',
+	'Memo — escalate the unmatched IBAN on the Acme transfer.',
+	'Capture: bundle the three expense PDFs into one intent for bookkeeping.'
+]
+
+type Mode = 'collapsed' | 'listening' | 'typing'
+
+let {
+	onSubmitMessage,
+	onModeChange,
+	/**
+	 * Invoked on submit while a command badge is active. Receives the active
+	 * command label (e.g. `'retrain'`) and the trailing free-form feedback the
+	 * user typed after the badge. The composer clears its own state after firing.
+	 */
+	onCommandSubmit,
+	/** Outer shell omits full-width stretch — use inline in centered HITL / archive clusters. */
+	rowCluster = false,
+	/**
+	 * Active command badge ("slash command" style chip rendered at the start of
+	 * the typing-mode input). `$bindable` so the parent owns the value and it
+	 * survives composer remounts (the page swaps which `IntentComposer` instance
+	 * is rendered as `mode` flips between `collapsed` and `typing`).
+	 */
+	command = $bindable<string | null>(null)
+}: {
+	onSubmitMessage?: (text: string) => void
+	onModeChange?: (mode: Mode) => void
+	onCommandSubmit?: (command: string, text: string) => void
+	rowCluster?: boolean
+	command?: string | null
+} = $props()
+
+/** Composer mode is intentionally not `$bindable`: a parent-held bind can reconcile after clears and resurrect `typing`. */
+let mode = $state<Mode>('collapsed')
+let text = $state('')
+let elapsed = $state(0)
+let textareaEl = $state<HTMLTextAreaElement | null>(null)
+/** Skip the typing auto-collapse `$effect` while we drive `mode` + `text` after submit/stop (avoids reorder races). */
+let suppressTextEffect = false
+
+/** Briefly suppress Space→mic while collapsed right after Space-to-submit avoids reopening listening. */
+let openMicCooldownUntilMs = 0
+
+$effect(() => {
+	onModeChange?.(mode)
+})
+
+/**
+ * Parent-callable entry: opens typing mode with a prefilled slash-command badge.
+ * Safe to call right after `bind:this` resolves; the auto-open `$effect` below
+ * also handles cases where the composer instance is freshly mounted with
+ * `command` already non-null (after a parent-driven mode swap).
+ */
+export function openWithCommand(label: string) {
+	command = label
+	if (mode !== 'typing') {
+		mode = 'typing'
+	}
+	void tick().then(() => {
+		textareaEl?.focus()
+		const len = text.length
+		textareaEl?.setSelectionRange(len, len)
+	})
+}
+
+/**
+ * Whenever a command badge is present, force typing mode (covers the remount
+ * case where a fresh composer instance receives `command` via bindable prop).
+ */
+$effect(() => {
+	if (command != null && mode !== 'typing' && mode !== 'listening') {
+		mode = 'typing'
+		void tick().then(() => {
+			textareaEl?.focus()
+			const len = text.length
+			textareaEl?.setSelectionRange(len, len)
+		})
+	}
+})
+
+const barIndices = [...Array.from({ length: BAR_COUNT }).keys()]
+
+function isEditableTarget(node: EventTarget | null): boolean {
+	if (!(node instanceof HTMLElement)) return false
+	const tag = node.tagName
+	if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+	if (node.isContentEditable) return true
+	return false
+}
+
+$effect(() => {
+	const onKeyDown = async (e: KeyboardEvent) => {
+		if (mode === 'listening' && e.key === 'Escape') {
+			e.preventDefault()
+			await stopListening()
+			return
+		}
+
+		if (isEditableTarget(document.activeElement)) return
+
+		const isSpace = e.key === ' ' || e.code === 'Space'
+
+		if (mode === 'collapsed') {
+			if (isSpace) {
+				e.preventDefault()
+				if (performance.now() < openMicCooldownUntilMs) return
+				openListening()
+				return
+			}
+			if (e.metaKey || e.ctrlKey || e.altKey) return
+			if (e.key.length !== 1) return
+			e.preventDefault()
+			mode = 'typing'
+			text = e.key
+			await tick()
+			textareaEl?.focus()
+			textareaEl?.setSelectionRange(text.length, text.length)
+			return
+		}
+
+		if (mode === 'listening' && isSpace) {
+			e.preventDefault()
+			void commitVoiceNote()
+		}
+	}
+
+	window.addEventListener('keydown', onKeyDown, true)
+	return () => window.removeEventListener('keydown', onKeyDown, true)
+})
+
+$effect(() => {
+	if (mode !== 'listening') {
+		elapsed = 0
+		return
+	}
+	elapsed = 0
+	const id = setInterval(() => {
+		elapsed += 1
+	}, 1000)
+	return () => clearInterval(id)
+})
+
+function resizeComposer() {
+	const el = textareaEl
+	if (!el) return
+	el.style.height = 'auto'
+	const style = getComputedStyle(el)
+	const lineHeight = parseFloat(style.lineHeight)
+	const pad = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
+	const lh =
+		Number.isFinite(lineHeight) && lineHeight > 0
+			? lineHeight
+			: (parseFloat(style.fontSize) || 16) * 1.3
+	const maxPx = lh * COMPOSER_MAX_LINES + (Number.isFinite(pad) ? pad : 0)
+	const h = Math.min(el.scrollHeight, maxPx)
+	el.style.height = `${h}px`
+	el.style.overflowY = el.scrollHeight > maxPx ? 'auto' : 'hidden'
+}
+
+$effect(() => {
+	void text
+	void textareaEl
+	void mode
+	void tick().then(() => resizeComposer())
+})
+
+function openListening() {
+	mode = 'listening'
+}
+
+async function stopListening() {
+	suppressTextEffect = true
+	mode = 'collapsed'
+	await tick()
+	suppressTextEffect = false
+}
+
+function collapseIfEmpty() {
+	if (command != null) return
+	if (text.trim() === '') mode = 'collapsed'
+}
+
+$effect(() => {
+	if (suppressTextEffect) return
+	if (mode !== 'typing') return
+	if (command != null) return
+	if (text.trim() !== '') return
+	mode = 'collapsed'
+})
+
+async function finalizeSubmitCollapseAfterParent() {
+	await tick()
+	await tick()
+	mode = 'collapsed'
+	suppressTextEffect = false
+}
+
+async function commitVoiceNote() {
+	if (!onSubmitMessage) return
+	const body = VOICE_MOCK_TRANSCRIPTS[Math.floor(Math.random() * VOICE_MOCK_TRANSCRIPTS.length)]
+
+	suppressTextEffect = true
+	text = ''
+	mode = 'collapsed'
+	openMicCooldownUntilMs = performance.now() + 280
+
+	onSubmitMessage(body)
+	await finalizeSubmitCollapseAfterParent()
+}
+
+async function commitMessage() {
+	const raw = text.trim()
+	const activeCommand = command
+
+	if (activeCommand != null) {
+		if (!onCommandSubmit) return
+		suppressTextEffect = true
+		text = ''
+		command = null
+		mode = 'collapsed'
+		textareaEl?.blur()
+		onCommandSubmit(activeCommand, raw)
+		await finalizeSubmitCollapseAfterParent()
+		return
+	}
+
+	if (!raw || !onSubmitMessage) return
+
+	suppressTextEffect = true
+	text = ''
+	mode = 'collapsed'
+	textareaEl?.blur()
+
+	onSubmitMessage(raw)
+	await finalizeSubmitCollapseAfterParent()
+}
+
+async function onTextareaKeydown(e: KeyboardEvent) {
+	if (e.key === 'Escape') {
+		e.preventDefault()
+		suppressTextEffect = true
+		text = ''
+		command = null
+		mode = 'collapsed'
+		textareaEl?.blur()
+		await tick()
+		suppressTextEffect = false
+		return
+	}
+	if (e.key === 'Backspace' && command != null && text.length === 0) {
+		e.preventDefault()
+		command = null
+		return
+	}
+	if (e.key === 'Enter' && !e.shiftKey) {
+		e.preventDefault()
+		commitMessage()
+	}
+}
+
+const timerLabel = $derived.by(() => {
+	const m = Math.floor(elapsed / 60)
+	const s = elapsed % 60
+	return `${m}:${String(s).padStart(2, '0')}`
+})
+
+const pillClass = $derived.by(() => {
+	const base =
+		'flex max-w-full overflow-hidden transition-[width,max-width,background-color,border-color,border-radius,box-shadow,padding] duration-[360ms] ease-[cubic-bezier(0.2,0.8,0.2,1)]'
+	if (mode === 'collapsed') {
+		return `${base} h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary p-0 text-primary-foreground shadow-[0_8px_24px_-8px_color-mix(in_srgb,var(--color-primary)_50%,transparent)]`
+	}
+	if (mode === 'listening') {
+		return `${base} h-14 w-[min(18rem,46vw)] items-center gap-2.5 rounded-full border border-primary/25 bg-primary px-3 text-primary-foreground shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--color-primary)_45%,transparent)] sm:gap-3 sm:px-3.5`
+	}
+	return `${base} tech-pill !max-w-[min(36rem,80vw)] !rounded-2xl mx-auto w-full items-center justify-between gap-2.5 border-border py-0 px-3 text-foreground shadow-none sm:gap-3 sm:px-4`
+})
+</script>
+
+<div class={rowCluster ? 'flex shrink-0 justify-center' : 'flex w-full justify-center'}>
+	<div class={pillClass} role="group">
+		{#if mode === 'collapsed'}
+			<button
+				type="button"
+				class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+				onclick={openListening}
+				aria-label="Start voice note (mock)"
+			>
+				<svg
+					class="size-6"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					viewBox="0 0 24 24"
+					aria-hidden="true"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"
+					/>
+				</svg>
+			</button>
+		{:else if mode === 'listening'}
+			<div class="flex w-[4.5rem] shrink-0 items-center justify-start">
+				<span class="font-mono text-[10px] font-bold tracking-wider opacity-80 tabular-nums"
+					>{timerLabel}</span
+				>
+			</div>
+			<div
+				class="flex min-h-7 min-w-0 flex-1 items-end justify-center gap-px px-2 py-1"
+				aria-hidden="true"
+			>
+				{#each barIndices as i (i)}
+					<span
+						class="intent-mock-bar inline-block h-7 w-0.5 shrink-0 rounded-full bg-primary-foreground/75"
+						style={`animation-delay: ${i * 0.08}s`}
+					></span>
+				{/each}
+			</div>
+			<div class="flex w-[4.5rem] shrink-0 items-center justify-end gap-2">
+				<button
+					type="button"
+					class="flex size-8 shrink-0 items-center justify-center rounded-full border border-status-success/35 bg-status-success text-status-success-foreground shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] outline-none transition-colors hover:bg-status-success/90 focus-visible:ring-2 focus-visible:ring-status-success/40"
+					onclick={commitVoiceNote}
+					aria-label="Submit voice note as intent (mock)"
+				>
+					<svg
+						class="size-4"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.5"
+						viewBox="0 0 24 24"
+						aria-hidden="true"
+					>
+						<path stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5L20 7" />
+					</svg>
+				</button>
+				<button
+					type="button"
+					class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15 text-primary-foreground transition-opacity hover:bg-primary-foreground/25"
+					onclick={() => void stopListening()}
+					aria-label="Stop listening"
+				>
+					<svg
+						class="size-4"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						viewBox="0 0 24 24"
+						aria-hidden="true"
+					>
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</div>
+		{:else}
+			<form
+				class="flex min-w-0 flex-1 items-center gap-2"
+				onsubmit={(e) => {
+					e.preventDefault()
+					commitMessage()
+				}}
+			>
+				{#if command}
+					<span
+						class="inline-flex shrink-0 items-center rounded-md border border-border bg-surface-card px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.15em] text-foreground/70 select-none"
+						aria-label={`Active command: ${command}`}
+						title="Backspace or Escape to remove"
+					>
+						/{command}
+					</span>
+				{/if}
+				<textarea
+					bind:this={textareaEl}
+					bind:value={text}
+					placeholder={command
+						? 'Add feedback (optional)…'
+						: 'Describe an intent… (mock — not sent)'}
+					rows="1"
+					oninput={resizeComposer}
+					onkeydown={onTextareaKeydown}
+					onblur={collapseIfEmpty}
+					class="min-h-10 w-full min-w-0 flex-1 resize-none overflow-hidden border-none bg-transparent py-2.5 px-0 text-lg leading-tight font-medium tracking-tight outline-none placeholder:opacity-20 focus:ring-0 sm:text-xl"
+				></textarea>
+			</form>
+			<button
+				type="button"
+				onclick={commitMessage}
+				disabled={command == null && text.trim().length === 0}
+				aria-label="Send message"
+				class="flex size-9 shrink-0 self-center items-center justify-center rounded-full border border-primary/25 bg-primary text-primary-foreground shadow-[0_6px_18px_-8px_color-mix(in_srgb,var(--color-primary)_50%,transparent)] outline-none transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
+			>
+				<svg
+					class="size-4"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					viewBox="0 0 24 24"
+					aria-hidden="true"
+				>
+					<path stroke-linecap="round" stroke-linejoin="round" d="M12 19V5m0 0-7 7m7-7 7 7" />
+				</svg>
+			</button>
+		{/if}
+	</div>
+</div>

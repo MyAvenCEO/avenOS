@@ -31,7 +31,7 @@ const DEFAULT_IMPLEMENTATION = { name: '@avenos/vibe-app-sandbox host', version:
 
 export const DEFAULT_SANDBOX_BASE = 'http://localhost:8081/sandbox.html'
 
-/** Resolve the sandbox proxy URL. Hosts can override per call or via Vite env. */
+/** Resolve the sandbox proxy URL. Hosts can override per call or via Vite env (`PUBLIC_VIBE_SANDBOX_URL` must match the sandbox server port when non-default). */
 function resolveSandboxBase(explicit?: string): string {
 	if (explicit && explicit.length > 0) return explicit
 	const meta =

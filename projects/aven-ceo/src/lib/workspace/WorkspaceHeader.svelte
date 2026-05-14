@@ -42,6 +42,14 @@ function workspaceNavigate(path: string, event: MouseEvent) {
 			onclick={(e) => workspaceNavigate('/talk', e)}>Talk</a>
 		<span class="opacity-25 select-none" aria-hidden="true">|</span>
 		<a
+			href="/intents"
+			data-sveltekit-preload-data="off"
+			class="uppercase opacity-40 transition-opacity hover:opacity-80 {$page.url.pathname === '/intents'
+				? 'opacity-95 underline underline-offset-4'
+				: ''}"
+			onclick={(e) => workspaceNavigate('/intents', e)}>Intents</a>
+		<span class="opacity-25 select-none" aria-hidden="true">|</span>
+		<a
 			href="/memory"
 			data-sveltekit-preload-data="off"
 			class="uppercase opacity-40 transition-opacity hover:opacity-80 {$page.url.pathname === '/memory'
