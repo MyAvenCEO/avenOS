@@ -1,7 +1,8 @@
 <script lang="ts">
 import { tick } from 'svelte'
 
-const COMPOSER_MAX_LINES = 4
+/** Typing-mode textarea: grow with content up to this many text rows, then scroll. */
+const TYPING_TEXTAREA_MAX_ROWS = 12
 const BAR_COUNT = 24
 
 /** Plausible mock transcripts when user “sends” a voice note (no real STT). */
@@ -43,8 +44,22 @@ let {
 	command?: string | null
 } = $props()
 
-/** Composer mode is intentionally not `$bindable`: a parent-held bind can reconcile after clears and resurrect `typing`. */
-let mode = $state<Mode>('collapsed')
+/**
+ * Composer mode is intentionally not `$bindable`: a parent-held bind can reconcile after clears and resurrect `typing`.
+ *
+ * Initial value is derived from the `command` prop at mount time: when the
+ * parent swaps which `IntentComposer` instance is rendered (rowCluster vs
+ * stacked) in response to a mode change, the freshly-mounted instance must
+ * start in a mode that *agrees* with the parent's already-set view of
+ * `composerMode`. If we always defaulted to `'collapsed'`, the new instance
+ * would emit `onModeChange('collapsed')` from its first effect run, undoing
+ * the parent's `'typing'` state and triggering an unmount/remount swap of
+ * the *other* layout — which then re-applies the typing intent via the
+ * auto-open `$effect` below, causing an infinite mount/swap loop (freeze)
+ * after clicking Re-train. By seeding from `command`, the new instance
+ * mounts in `'typing'` and the cycle terminates immediately.
+ */
+let mode = $state<Mode>(command != null ? 'typing' : 'collapsed')
 let text = $state('')
 let elapsed = $state(0)
 let textareaEl = $state<HTMLTextAreaElement | null>(null)
@@ -59,6 +74,26 @@ $effect(() => {
 })
 
 /**
+ * Keep the textarea focused when entering typing mode — including when the parent
+ * swaps composer layout (rowCluster ↔ stacked) and this instance mounts with
+ * `mode === 'typing'` already, which skips the command auto-open effect below.
+ * Subscribes to `textareaEl` / `command` only while typing so we do not steal
+ * focus on unrelated updates in other modes.
+ */
+$effect(() => {
+	if (mode !== 'typing') return
+	void textareaEl
+	void command
+	void tick().then(() => {
+		const el = textareaEl
+		if (!el || mode !== 'typing') return
+		el.focus()
+		const len = el.value.length
+		el.setSelectionRange(len, len)
+	})
+})
+
+/**
  * Parent-callable entry: opens typing mode with a prefilled slash-command badge.
  * Safe to call right after `bind:this` resolves; the auto-open `$effect` below
  * also handles cases where the composer instance is freshly mounted with
@@ -69,11 +104,6 @@ export function openWithCommand(label: string) {
 	if (mode !== 'typing') {
 		mode = 'typing'
 	}
-	void tick().then(() => {
-		textareaEl?.focus()
-		const len = text.length
-		textareaEl?.setSelectionRange(len, len)
-	})
 }
 
 /**
@@ -83,11 +113,6 @@ export function openWithCommand(label: string) {
 $effect(() => {
 	if (command != null && mode !== 'typing' && mode !== 'listening') {
 		mode = 'typing'
-		void tick().then(() => {
-			textareaEl?.focus()
-			const len = text.length
-			textareaEl?.setSelectionRange(len, len)
-		})
 	}
 })
 
@@ -125,9 +150,6 @@ $effect(() => {
 			e.preventDefault()
 			mode = 'typing'
 			text = e.key
-			await tick()
-			textareaEl?.focus()
-			textareaEl?.setSelectionRange(text.length, text.length)
 			return
 		}
 
@@ -164,7 +186,7 @@ function resizeComposer() {
 		Number.isFinite(lineHeight) && lineHeight > 0
 			? lineHeight
 			: (parseFloat(style.fontSize) || 16) * 1.3
-	const maxPx = lh * COMPOSER_MAX_LINES + (Number.isFinite(pad) ? pad : 0)
+	const maxPx = lh * TYPING_TEXTAREA_MAX_ROWS + (Number.isFinite(pad) ? pad : 0)
 	const h = Math.min(el.scrollHeight, maxPx)
 	el.style.height = `${h}px`
 	el.style.overflowY = el.scrollHeight > maxPx ? 'auto' : 'hidden'
@@ -286,7 +308,7 @@ const pillClass = $derived.by(() => {
 	if (mode === 'listening') {
 		return `${base} h-14 w-[min(18rem,46vw)] items-center gap-2.5 rounded-full border border-primary/25 bg-primary px-3 text-primary-foreground shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--color-primary)_45%,transparent)] sm:gap-3 sm:px-3.5`
 	}
-	return `${base} tech-pill !max-w-[min(36rem,80vw)] !rounded-2xl mx-auto w-full items-center justify-between gap-2.5 border-border py-0 px-3 text-foreground shadow-none sm:gap-3 sm:px-4`
+	return `${base} tech-pill !max-w-[min(36rem,80vw)] !rounded-2xl mx-auto w-full items-center justify-between gap-2.5 border-border py-0 pl-3 pr-2 text-foreground shadow-none sm:gap-3 sm:pl-4 sm:pr-2`
 })
 </script>
 
@@ -377,11 +399,11 @@ const pillClass = $derived.by(() => {
 			>
 				{#if command}
 					<span
-						class="inline-flex shrink-0 items-center rounded-md border border-border bg-surface-card px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.15em] text-foreground/70 select-none"
+						class="inline-flex shrink-0 items-center rounded-full border border-status-error/30 bg-status-error px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-status-error-foreground select-none"
 						aria-label={`Active command: ${command}`}
 						title="Backspace or Escape to remove"
 					>
-						/{command}
+						{command.toUpperCase()}
 					</span>
 				{/if}
 				<textarea

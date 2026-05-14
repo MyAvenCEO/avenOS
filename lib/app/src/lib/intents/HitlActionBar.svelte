@@ -69,6 +69,10 @@ const isSuccess = $derived(intent?.status === 'success')
 const isHitlOrError = $derived(
 	intent != null && (intent.status === 'hitl' || intent.status === 'error')
 )
+/** Hide Re-train / Accept|Archive row while retrain typing so the textarea does not overlap that chrome. */
+const hideHitlCluster = $derived(
+	isHitlOrError && composerMode === 'typing' && composerCommand != null
+)
 </script>
 
 <div class="flex min-w-0 flex-1 items-center justify-center gap-2 sm:gap-3">
@@ -181,41 +185,43 @@ const isHitlOrError = $derived(
 						composerMode = m
 					}}
 				/>
-				<div class="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3">
-					<div class="flex items-center justify-end gap-2">
-						<button
-							type="button"
-							class="inline-flex h-10 min-h-10 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-status-error border-r-status-error bg-surface-card px-3.5 text-[11px] font-semibold text-status-error transition-colors hover:bg-status-error hover:text-status-error-foreground sm:px-4"
-							onclick={() => composerRef?.openWithCommand('retrain')}
-							aria-label="Re-train intent — open composer with retrain command"
-						>
-							Re-train
-						</button>
-					</div>
-					<div></div>
-					<div class="flex items-center justify-start gap-2">
-						{#if intent?.status === 'error'}
+				{#if !hideHitlCluster}
+					<div class="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3">
+						<div class="flex items-center justify-end gap-2">
 							<button
 								type="button"
-								class="inline-flex h-10 min-h-10 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-border border-r-border bg-surface-card px-3.5 text-[11px] font-semibold text-foreground/70 transition-colors hover:bg-foreground/5 sm:px-4"
-								onclick={onArchive}
-								aria-label="Archive intent — dismiss without resolving"
-								title="Archive intent"
+								class="inline-flex h-10 min-h-10 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-status-error border-r-status-error bg-surface-card px-3.5 text-[11px] font-semibold text-status-error transition-colors hover:bg-status-error hover:text-status-error-foreground sm:px-4"
+								onclick={() => composerRef?.openWithCommand('retrain')}
+								aria-label="Re-train intent — open composer with retrain command"
 							>
-								Archive
+								Re-train
 							</button>
-						{:else}
-							<button
-								type="button"
-								class="inline-flex h-10 min-h-10 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-status-success border-r-status-success bg-surface-card px-3.5 text-[11px] font-semibold text-status-success transition-colors hover:bg-status-success hover:text-status-success-foreground sm:px-4"
-								onclick={onAccept}
-								aria-label="Accept intent — mark completed successfully"
-							>
-								Accept
-							</button>
-						{/if}
+						</div>
+						<div></div>
+						<div class="flex items-center justify-start gap-2">
+							{#if intent?.status === 'error'}
+								<button
+									type="button"
+									class="inline-flex h-10 min-h-10 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-border border-r-border bg-surface-card px-3.5 text-[11px] font-semibold text-foreground/70 transition-colors hover:bg-foreground/5 sm:px-4"
+									onclick={onArchive}
+									aria-label="Archive intent — dismiss without resolving"
+									title="Archive intent"
+								>
+									Archive
+								</button>
+							{:else}
+								<button
+									type="button"
+									class="inline-flex h-10 min-h-10 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-status-success border-r-status-success bg-surface-card px-3.5 text-[11px] font-semibold text-status-success transition-colors hover:bg-status-success hover:text-status-success-foreground sm:px-4"
+									onclick={onAccept}
+									aria-label="Accept intent — mark completed successfully"
+								>
+									Accept
+								</button>
+							{/if}
+						</div>
 					</div>
-				</div>
+				{/if}
 			</div>
 		{/if}
 	{:else}
