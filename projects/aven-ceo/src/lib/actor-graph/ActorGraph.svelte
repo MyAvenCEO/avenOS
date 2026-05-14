@@ -7,13 +7,13 @@ import type { DebugActorEvent, DebugActorSnapshot } from '../jaensen/types'
 
 import ActorNode from './ActorNode.svelte'
 import MessageEdge from './MessageEdge.svelte'
-import { applyActorEvent, snapshotToGraph } from './reducer'
+import { applyActorEvent, snapshotToGraph, type ActorGraph } from './reducer'
 
-let nodes = $state([])
-let edges = $state([])
+let nodes = $state<ActorGraph['nodes']>([])
+let edges = $state<ActorGraph['edges']>([])
 
-const nodeTypes = { actor: ActorNode }
-const edgeTypes = { message: MessageEdge }
+const nodeTypes = { actor: ActorNode } as Record<string, typeof ActorNode>
+const edgeTypes = { message: MessageEdge } as Record<string, typeof MessageEdge>
 
 onMount(() => {
 	let source: EventSource | null = null

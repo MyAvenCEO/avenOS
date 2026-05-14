@@ -58,6 +58,88 @@ export interface ActorEventInput {
 	createdAt?: Date | string
 }
 
+export type ContextScope =
+	| { type: 'run'; correlationId: string }
+	| { type: 'intent'; intentId: string }
+	| { type: 'call'; callId: string; rootCallId: string; parentCallId?: string }
+	| { type: 'actor'; actorId: string }
+	| { type: 'global'; name: 'archive' | 'system' }
+
+export type ContextKind =
+	| 'user_input'
+	| 'fact'
+	| 'hypothesis'
+	| 'decision'
+	| 'handoff'
+	| 'tool_result'
+	| 'artifact_ref'
+	| 'error'
+	| 'observation'
+	| 'constraint'
+
+export interface ContextAppendInput {
+	scope: ContextScope
+	kind: ContextKind
+	key?: string
+	schema?: string
+	tags: string[]
+	body?: unknown
+	artifactId?: string
+	summary?: string
+	producedByCommandId?: string
+	producedByToolCallId?: string
+	sourceContextItemIds: string[]
+	confidence?: number
+	supersedesItemId?: string
+	redactsItemId?: string
+}
+
+export interface ContextItemRecord {
+	id: string
+	seq: number
+	scope: ContextScope
+	kind: ContextKind
+	key?: string
+	schema?: string
+	tags: string[]
+	body?: unknown
+	artifactId?: string
+	summary?: string
+	correlationId: string
+	intentId?: string
+	actorId: string
+	callId?: string
+	parentCallId?: string
+	rootCallId?: string
+	producedByActorId: string
+	producedByEnvelopeId: string
+	producedByCommandId?: string
+	producedByToolCallId?: string
+	sourceContextItemIds: string[]
+	confidence?: number
+	hash: string
+	createdAt: string
+	supersedesItemId?: string
+	redactsItemId?: string
+}
+
+export interface ContextSelector {
+	scopes?: ContextScope[]
+	kinds?: ContextKind[]
+	keys?: string[]
+	tags?: string[]
+	schemas?: string[]
+	producedByActorIds?: string[]
+	afterSeq?: number
+	limit?: number
+	includeRedacted?: boolean
+}
+
+export type ActorCommand =
+	| { type: 'send_envelope'; envelope: EnvelopeInput }
+	| { type: 'schedule_envelope'; envelope: EnvelopeInput; availableAt: string }
+	| { type: 'emit_event'; event: ActorEventInput }
+
 export interface SkillRecordInput {
 	id: string
 	path: string
@@ -169,11 +251,18 @@ export interface Persistence {
 		envelopeId: string
 		actorId: string
 		expectedActorVersion: number
-		newActorState: unknown
-		events: ActorEventInput[]
-		outgoing: EnvelopeInput[]
+		nextActorState: unknown
+		contextAppends: ContextAppendInput[]
+		commands: ActorCommand[]
 		now: Date
 	}): Promise<void>
+
+	listContextItems(input: {
+		selector: ContextSelector
+		snapshotSeq?: number
+	}): Promise<ContextItemRecord[]>
+
+	getContextSnapshotSeq(): Promise<number>
 
 	failActivation(input: {
 		workerId: string

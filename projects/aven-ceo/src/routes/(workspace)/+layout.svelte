@@ -1,5 +1,5 @@
 <script lang="ts">
-import { PUBLIC_JAZZ_APP_ID, PUBLIC_JAZZ_SERVER_URL } from '$env/static/public'
+import { env } from '$env/dynamic/public'
 import {
 	BrowserAuthSecretStore,
 	createJazzClient,
@@ -10,7 +10,9 @@ import WorkspaceHeader from '$lib/workspace/WorkspaceHeader.svelte'
 
 let { children: pageContent } = $props()
 
-const serverUrl = PUBLIC_JAZZ_SERVER_URL?.trim() || undefined
+const PUBLIC_JAZZ_APP_ID = env.PUBLIC_JAZZ_APP_ID?.trim() ?? ''
+const PUBLIC_JAZZ_SERVER_URL = env.PUBLIC_JAZZ_SERVER_URL?.trim() ?? ''
+const serverUrl = PUBLIC_JAZZ_SERVER_URL || undefined
 
 let client = $state<Promise<JazzClient> | null>(null)
 

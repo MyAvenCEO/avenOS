@@ -62,6 +62,47 @@ export const SQLITE_SCHEMA = [
 	);`,
 	`CREATE INDEX IF NOT EXISTS stream_events_scope_seq_idx
 	ON stream_events(scope, seq);`,
+	`CREATE TABLE IF NOT EXISTS context_items (
+	  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+	  id TEXT NOT NULL UNIQUE,
+	  scope_type TEXT NOT NULL CHECK (scope_type IN ('run','intent','call','actor','global')),
+	  scope_key TEXT NOT NULL,
+	  correlation_id TEXT NOT NULL,
+	  intent_id TEXT,
+	  actor_id TEXT NOT NULL,
+	  call_id TEXT,
+	  parent_call_id TEXT,
+	  root_call_id TEXT,
+	  kind TEXT NOT NULL,
+	  key TEXT,
+	  schema TEXT,
+	  tags_json TEXT NOT NULL DEFAULT '[]',
+	  body_json TEXT,
+	  artifact_id TEXT,
+	  summary TEXT,
+	  produced_by_actor_id TEXT NOT NULL,
+	  produced_by_envelope_id TEXT NOT NULL,
+	  produced_by_command_id TEXT,
+	  produced_by_tool_call_id TEXT,
+	  source_context_item_ids_json TEXT NOT NULL DEFAULT '[]',
+	  confidence REAL,
+	  hash TEXT NOT NULL,
+	  supersedes_item_id TEXT,
+	  redacts_item_id TEXT,
+	  created_at TEXT NOT NULL
+	);`,
+	`CREATE INDEX IF NOT EXISTS context_items_scope_seq_idx
+	ON context_items(scope_type, scope_key, seq);`,
+	`CREATE INDEX IF NOT EXISTS context_items_correlation_idx
+	ON context_items(correlation_id, seq);`,
+	`CREATE INDEX IF NOT EXISTS context_items_intent_idx
+	ON context_items(intent_id, seq);`,
+	`CREATE INDEX IF NOT EXISTS context_items_call_idx
+	ON context_items(root_call_id, call_id, seq);`,
+	`CREATE INDEX IF NOT EXISTS context_items_actor_idx
+	ON context_items(actor_id, seq);`,
+	`CREATE INDEX IF NOT EXISTS context_items_kind_key_idx
+	ON context_items(kind, key, seq);`,
 	`CREATE TABLE IF NOT EXISTS skills (
 	  id TEXT PRIMARY KEY,
 	  path TEXT NOT NULL UNIQUE,

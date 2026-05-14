@@ -12,7 +12,7 @@ export function roughTokenEstimateChars(charCount: number): number {
 
 export function memoryToolNamesOrdered(): string[] {
 	return memoryToolsOpenAI()
-		.map((t) => (t.type === 'function' ? t.function.name : ''))
+		.map((t) => (t.type === 'function' ? (t.function?.name ?? '') : ''))
 		.filter(Boolean)
 }
 

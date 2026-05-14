@@ -14,6 +14,7 @@
 	},
 	"dependencies": {
 		"@jaensen/app-node": "workspace:*",
+		"@jaensen/actor-runtime": "workspace:*",
 		"@jaensen/conversation-actors": "workspace:*",
 		"@jaensen/persistence-sqlite": "workspace:*",
 		"tinfoil": "^1.1.4"

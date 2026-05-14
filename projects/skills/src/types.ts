@@ -1,9 +1,5 @@
 import type { ActorHandler } from '@jaensen/actor-runtime'
-import type {
-	ActorEventInput,
-	EnvelopeRecord,
-	Persistence
-} from '@jaensen/persistence-sqlite'
+import type { ActorEventInput, EnvelopeRecord, Persistence } from '@jaensen/persistence-sqlite'
 
 export interface SkillDefinition {
 	id: string
@@ -45,21 +41,6 @@ export interface BootstrapSkillsInput {
 	now: Date
 }
 
-export interface SkillSupervisorBrain {
-	decide(input: {
-		skill: SkillDefinition
-		actorState: unknown
-		envelope: EnvelopeRecord
-		signal?: AbortSignal
-	}): Promise<SkillSupervisorDecision>
-}
-
-export interface SkillSupervisorDecision {
-	state: unknown
-	events?: ActorEventInput[]
-	actions?: SkillSupervisorAction[]
-}
-
 export interface SkillSupervisorState {
 	skillId: string
 	workers: Record<string, {
@@ -71,6 +52,7 @@ export interface SkillSupervisorState {
 	}>
 	calls: Record<string, {
 		callId: string
+		rootCallId: string
 		workerId: string
 		status: 'active' | 'completed' | 'failed'
 		replyTo: string
@@ -78,33 +60,6 @@ export interface SkillSupervisorState {
 		parentCallId?: string
 	}>
 }
-
-export type SkillSupervisorAction =
-	| {
-			type: 'reply'
-			messageType: string
-			payload: unknown
-	  }
-	| {
-			type: 'send'
-			to: string
-			messageType: string
-			payload: unknown
-	  }
-	| {
-			type: 'route_worker'
-			workerId: string
-			messageType: string
-			payload: unknown
-	  }
-	| {
-			type: 'spawn_worker'
-			workerId: string
-			initialState?: unknown
-			messageType: string
-			payload: unknown
-	  }
-	| SkillCallAction
 
 export interface SkillWorkerBrain {
 	run(input: {
@@ -122,11 +77,11 @@ export interface SkillWorkerResult {
 	result?: unknown
 	completed?: boolean
 	actions?: SkillCallAction[]
+	contextAppends?: import('@jaensen/persistence-sqlite').ContextAppendInput[]
 }
 
 export interface CreateSkillSupervisorHandlerInput {
 	registry: SkillRegistry
-	brain: SkillSupervisorBrain
 }
 
 export interface CreateSkillWorkerHandlerInput {

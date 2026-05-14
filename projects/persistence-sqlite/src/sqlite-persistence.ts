@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 
 import { Database } from 'bun:sqlite'
 
@@ -16,11 +16,16 @@ import { ConcurrencyError, NotFoundError } from './errors'
 import { parseJson, stringifyJson } from './json'
 import { SQLITE_PRAGMAS, SQLITE_SCHEMA } from './schema'
 import type {
+	ActorCommand,
 	ActorEventInput,
 	ActorHierarchyRecord,
 	ActorLogRecord,
 	ActorRecord,
 	ClaimedEnvelope,
+	ContextAppendInput,
+	ContextItemRecord,
+	ContextScope,
+	ContextSelector,
 	CommunicationTreeRecord,
 	CommunicationTreeSummary,
 	EnvelopeInput,
@@ -81,12 +86,46 @@ type StreamEventRow = {
 	created_at: string
 }
 
+type ContextItemRow = {
+	seq: number
+	id: string
+	scope_type: 'run' | 'intent' | 'call' | 'actor' | 'global'
+	scope_key: string
+	correlation_id: string
+	intent_id: string | null
+	actor_id: string
+	call_id: string | null
+	parent_call_id: string | null
+	root_call_id: string | null
+	kind: ContextItemRecord['kind']
+	key: string | null
+	schema: string | null
+	tags_json: string
+	body_json: string | null
+	artifact_id: string | null
+	summary: string | null
+	produced_by_actor_id: string
+	produced_by_envelope_id: string
+	produced_by_command_id: string | null
+	produced_by_tool_call_id: string | null
+	source_context_item_ids_json: string
+	confidence: number | null
+	hash: string
+	supersedes_item_id: string | null
+	redacts_item_id: string | null
+	created_at: string
+}
+
 export interface SqlitePersistenceOptions {
 	filename?: string
 	database?: SqliteDatabase
 }
 
-type SqliteDatabase = Pick<Database, 'exec' | 'query'>
+type SqliteDatabase = {
+	exec(sql: string): unknown
+	query(sql: string): ReturnType<Database['query']>
+	prepare(sql: string): ReturnType<Database['query']>
+}
 
 type SqliteStatement = ReturnType<Database['query']>
 
@@ -99,7 +138,7 @@ export class SqlitePersistence implements Persistence {
 	readonly db: SqliteDatabase
 
 	constructor(options: SqlitePersistenceOptions = {}) {
-		this.db = options.database ?? new Database(options.filename ?? ':memory:')
+		this.db = options.database ?? (new Database(options.filename ?? ':memory:') as unknown as SqliteDatabase)
 		this.applyPragmas()
 	}
 
@@ -275,9 +314,9 @@ export class SqlitePersistence implements Persistence {
 		envelopeId: string
 		actorId: string
 		expectedActorVersion: number
-		newActorState: unknown
-		events: ActorEventInput[]
-		outgoing: EnvelopeInput[]
+		nextActorState: unknown
+		contextAppends: ContextAppendInput[]
+		commands: ActorCommand[]
 		now: Date
 	}): Promise<void> {
 		this.withTransaction(() => {
@@ -330,7 +369,19 @@ export class SqlitePersistence implements Persistence {
 					     updated_at = ?
 					 WHERE id = ?`
 				)
-				.run(stringifyJson(input.newActorState), nowIso, input.actorId)
+				.run(stringifyJson(input.nextActorState), nowIso, input.actorId)
+
+			const inputEnvelope = mapEnvelopeRow(envelopeRow)
+			const previousActor = mapActorRow(actorRow)
+			const contextRecords = input.contextAppends.map((append) =>
+				materializeContextItemRecord({
+					append,
+					actorId: input.actorId,
+					envelope: inputEnvelope,
+					now: input.now
+				})
+			)
+			const persistedContextRecords = insertContextItems(this.db, contextRecords)
 
 			const insertEvent = query(
 				this.db,
@@ -338,36 +389,51 @@ export class SqlitePersistence implements Persistence {
 				 VALUES (?, ?, ?, ?, ?, ?)`
 			)
 
-			for (const event of input.events) {
-				const normalizedEvent = normalizeActorEventInput({
-					event,
-					actorId: input.actorId,
-					envelopeId: input.envelopeId,
-					now: input.now
-				})
-
-				insertEvent.run(
-					normalizedEvent.id,
-					normalizedEvent.actorId,
-					normalizedEvent.envelopeId,
-					normalizedEvent.eventType,
-					stringifyJson(normalizedEvent.event),
-					normalizedEvent.createdAt
-				)
-			}
-
-			const previousActor = mapActorRow(actorRow)
-			const inputEnvelope = mapEnvelopeRow(envelopeRow)
+			const normalizedActorEvents: Array<Required<Pick<ActorEventInput, 'id' | 'actorId' | 'eventType' | 'event' | 'createdAt'>> & ActorEventInput> = []
 			const outgoingEnvelopes: EnvelopeRecord[] = []
 
-			for (const outgoingEnvelope of input.outgoing) {
-				outgoingEnvelopes.push(insertEnvelope(this.db, outgoingEnvelope, input.now))
+			for (const command of input.commands) {
+				if (command.type === 'emit_event') {
+					const normalizedEvent = normalizeActorEventInput({
+						event: command.event,
+						actorId: input.actorId,
+						envelopeId: input.envelopeId,
+						now: input.now
+					})
+					normalizedActorEvents.push(normalizedEvent)
+					insertEvent.run(
+						normalizedEvent.id,
+						normalizedEvent.actorId,
+						normalizedEvent.envelopeId ?? null,
+						normalizedEvent.eventType,
+						stringifyJson(normalizedEvent.event),
+						toIsoUtcString(normalizedEvent.createdAt, input.now)
+					)
+					continue
+				}
+
+				if (command.type === 'send_envelope') {
+					outgoingEnvelopes.push(insertEnvelope(this.db, command.envelope, input.now))
+					continue
+				}
+
+				outgoingEnvelopes.push(
+					insertEnvelope(
+						this.db,
+						{
+							...command.envelope,
+							availableAt: command.availableAt
+						},
+						input.now
+					)
+				)
 			}
 
 			query(
 				this.db,
 					`UPDATE envelopes
 					 SET status = 'done',
+					     last_error = NULL,
 					     locked_by = NULL,
 					     locked_until = NULL,
 					     updated_at = ?
@@ -382,21 +448,76 @@ export class SqlitePersistence implements Persistence {
 				this.db,
 				buildCommitStreamEvents({
 					actor: previousActor,
-					newActorState: input.newActorState,
+					newActorState: input.nextActorState,
 					inputEnvelope,
-					actorEvents: input.events.map((event) =>
-						normalizeActorEventInput({
-							event,
-							actorId: input.actorId,
-							envelopeId: input.envelopeId,
-							now: input.now
-						})
-					),
+					actorEvents: normalizedActorEvents,
 					outgoingEnvelopes,
+					contextItems: persistedContextRecords,
 					now: nowIso
 				})
 			)
 		})
+	}
+
+	async listContextItems(input: {
+		selector: ContextSelector
+		snapshotSeq?: number
+	}): Promise<ContextItemRecord[]> {
+		const clauses: string[] = []
+		const params: Array<string | number> = []
+
+		if (input.snapshotSeq !== undefined) {
+			clauses.push('seq <= ?')
+			params.push(input.snapshotSeq)
+		}
+		if (input.selector.afterSeq !== undefined) {
+			clauses.push('seq > ?')
+			params.push(input.selector.afterSeq)
+		}
+		if (!input.selector.includeRedacted) {
+			clauses.push('id NOT IN (SELECT redacts_item_id FROM context_items WHERE redacts_item_id IS NOT NULL)')
+		}
+		if (input.selector.scopes?.length) {
+			const scopeClauses = input.selector.scopes.map((scope) => {
+				params.push(scope.type, getScopeKey(scope))
+				return '(scope_type = ? AND scope_key = ?)'
+			})
+			clauses.push(`(${scopeClauses.join(' OR ')})`)
+		}
+		if (input.selector.kinds?.length) {
+			clauses.push(`kind IN (${input.selector.kinds.map(() => '?').join(', ')})`)
+			params.push(...input.selector.kinds)
+		}
+		if (input.selector.keys?.length) {
+			clauses.push(`key IN (${input.selector.keys.map(() => '?').join(', ')})`)
+			params.push(...input.selector.keys)
+		}
+		if (input.selector.schemas?.length) {
+			clauses.push(`schema IN (${input.selector.schemas.map(() => '?').join(', ')})`)
+			params.push(...input.selector.schemas)
+		}
+		if (input.selector.producedByActorIds?.length) {
+			clauses.push(`produced_by_actor_id IN (${input.selector.producedByActorIds.map(() => '?').join(', ')})`)
+			params.push(...input.selector.producedByActorIds)
+		}
+		if (input.selector.tags?.length) {
+			for (const tag of input.selector.tags) {
+				clauses.push('tags_json LIKE ?')
+				params.push(`%"${tag}"%`)
+			}
+		}
+
+		const rows = query(
+			this.db,
+			`SELECT * FROM context_items ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''} ORDER BY seq ASC LIMIT ?`
+		).all(...params, input.selector.limit ?? 200) as ContextItemRow[]
+
+		return rows.map(mapContextItemRow)
+	}
+
+	async getContextSnapshotSeq(): Promise<number> {
+		const row = query(this.db, 'SELECT COALESCE(MAX(seq), 0) AS seq FROM context_items').get() as { seq: number }
+		return row.seq ?? 0
 	}
 
 	async failActivation(input: {
@@ -1089,6 +1210,184 @@ function mapStreamEventRow(row: StreamEventRow): StreamEventRecord {
 	}
 }
 
+function mapContextItemRow(row: ContextItemRow): ContextItemRecord {
+	return {
+		id: row.id,
+		seq: row.seq,
+		scope: parseContextScope(row),
+		kind: row.kind,
+		key: row.key ?? undefined,
+		schema: row.schema ?? undefined,
+		tags: parseJson(row.tags_json),
+		body: row.body_json ? parseJson(row.body_json) : undefined,
+		artifactId: row.artifact_id ?? undefined,
+		summary: row.summary ?? undefined,
+		correlationId: row.correlation_id,
+		intentId: row.intent_id ?? undefined,
+		actorId: row.actor_id,
+		callId: row.call_id ?? undefined,
+		parentCallId: row.parent_call_id ?? undefined,
+		rootCallId: row.root_call_id ?? undefined,
+		producedByActorId: row.produced_by_actor_id,
+		producedByEnvelopeId: row.produced_by_envelope_id,
+		producedByCommandId: row.produced_by_command_id ?? undefined,
+		producedByToolCallId: row.produced_by_tool_call_id ?? undefined,
+		sourceContextItemIds: parseJson(row.source_context_item_ids_json),
+		confidence: row.confidence ?? undefined,
+		hash: row.hash,
+		createdAt: row.created_at,
+		supersedesItemId: row.supersedes_item_id ?? undefined,
+		redactsItemId: row.redacts_item_id ?? undefined
+	}
+}
+
+function insertContextItems(db: SqliteDatabase, items: ContextItemRecord[]): ContextItemRecord[] {
+	if (items.length === 0) {
+		return []
+	}
+
+	const insert = query(
+		db,
+		`INSERT INTO context_items (
+		  id,
+		  scope_type,
+		  scope_key,
+		  correlation_id,
+		  intent_id,
+		  actor_id,
+		  call_id,
+		  parent_call_id,
+		  root_call_id,
+		  kind,
+		  key,
+		  schema,
+		  tags_json,
+		  body_json,
+		  artifact_id,
+		  summary,
+		  produced_by_actor_id,
+		  produced_by_envelope_id,
+		  produced_by_command_id,
+		  produced_by_tool_call_id,
+		  source_context_item_ids_json,
+		  confidence,
+		  hash,
+		  supersedes_item_id,
+		  redacts_item_id,
+		  created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	)
+
+	const persisted: ContextItemRecord[] = []
+
+	for (const item of items) {
+		const result = insert.run(
+			item.id,
+			item.scope.type,
+			getScopeKey(item.scope),
+			item.correlationId,
+			item.intentId ?? null,
+			item.actorId,
+			item.callId ?? null,
+			item.parentCallId ?? null,
+			item.rootCallId ?? null,
+			item.kind,
+			item.key ?? null,
+			item.schema ?? null,
+			stringifyJson(item.tags),
+			item.body === undefined ? null : stringifyJson(item.body),
+			item.artifactId ?? null,
+			item.summary ?? null,
+			item.producedByActorId,
+			item.producedByEnvelopeId,
+			item.producedByCommandId ?? null,
+			item.producedByToolCallId ?? null,
+			stringifyJson(item.sourceContextItemIds),
+			item.confidence ?? null,
+			item.hash,
+			item.supersedesItemId ?? null,
+			item.redactsItemId ?? null,
+			item.createdAt
+		)
+		persisted.push({
+			...item,
+			seq: Number(result.lastInsertRowid)
+		})
+	}
+
+	return persisted
+}
+
+function materializeContextItemRecord(input: {
+	append: ContextAppendInput
+	actorId: string
+	envelope: EnvelopeRecord
+	now: Date
+}): ContextItemRecord {
+	const correlationId = input.envelope.correlationId
+	const payload = input.envelope.payload
+	const scope = input.append.scope
+	const intentId = scope.type === 'intent' ? scope.intentId : readIntentIdFromUnknown(payload) ?? undefined
+	const callId = scope.type === 'call' ? scope.callId : inferCallId(payload) ?? undefined
+	const parentCallId = scope.type === 'call' ? scope.parentCallId : inferParentCallId(payload) ?? undefined
+	const rootCallId =
+		scope.type === 'call'
+			? scope.rootCallId
+			: inferRootCallId(payload) ?? inferParentCallId(payload) ?? inferCallId(payload) ?? undefined
+	const producedByActorId = input.actorId
+	const producedByEnvelopeId = input.envelope.id
+	const createdAt = input.now.toISOString()
+
+	const hash = createHash('sha256')
+		.update(
+			JSON.stringify({
+				scope,
+				kind: input.append.kind,
+				key: input.append.key,
+				schema: input.append.schema,
+				tags: input.append.tags,
+				body: input.append.body,
+				artifactId: input.append.artifactId,
+				summary: input.append.summary,
+				producedByActorId,
+				producedByEnvelopeId,
+				producedByCommandId: input.append.producedByCommandId,
+				producedByToolCallId: input.append.producedByToolCallId,
+				sourceContextItemIds: input.append.sourceContextItemIds
+			})
+		)
+		.digest('hex')
+
+	return {
+		id: randomUUID(),
+		seq: 0,
+		scope,
+		kind: input.append.kind,
+		key: input.append.key,
+		schema: input.append.schema,
+		tags: input.append.tags,
+		body: input.append.body,
+		artifactId: input.append.artifactId,
+		summary: input.append.summary,
+		correlationId,
+		intentId,
+		actorId: input.actorId,
+		callId,
+		parentCallId,
+		rootCallId,
+		producedByActorId,
+		producedByEnvelopeId,
+		producedByCommandId: input.append.producedByCommandId,
+		producedByToolCallId: input.append.producedByToolCallId,
+		sourceContextItemIds: input.append.sourceContextItemIds,
+		confidence: input.append.confidence,
+		hash,
+		createdAt,
+		supersedesItemId: input.append.supersedesItemId,
+		redactsItemId: input.append.redactsItemId
+	}
+}
+
 function insertStreamEvents(
 	db: SqliteDatabase,
 	events: Array<{
@@ -1214,6 +1513,7 @@ function buildCommitStreamEvents(input: {
 	inputEnvelope: EnvelopeRecord
 	actorEvents: Required<Pick<ActorEventInput, 'id' | 'actorId' | 'eventType' | 'event' | 'createdAt'>>[] & Array<ActorEventInput>
 	outgoingEnvelopes: EnvelopeRecord[]
+	contextItems: ContextItemRecord[]
 	now: string
 }) {
 	const streamEvents: Array<{
@@ -1289,6 +1589,40 @@ function buildCommitStreamEvents(input: {
 					correlationId: input.inputEnvelope.correlationId,
 					intentId: inferIntentId(actorEvent.actorId, input.newActorState, actorEvent.event)
 				})
+			})
+		)
+	}
+
+	for (const contextItem of input.contextItems) {
+		streamEvents.push(
+			...scopedStreamEvents({
+				baseId: `${contextItem.id}:context-appended`,
+				actorId: contextItem.actorId,
+				envelopeId: contextItem.producedByEnvelopeId,
+				type: 'context.appended',
+				payload: {
+					id: contextItem.id,
+					seq: contextItem.seq,
+					scope: contextItem.scope,
+					kind: contextItem.kind,
+					key: contextItem.key,
+					schema: contextItem.schema,
+					tags: contextItem.tags,
+					summary: contextItem.summary,
+					artifactId: contextItem.artifactId,
+					correlationId: contextItem.correlationId,
+					intentId: contextItem.intentId,
+					actorId: contextItem.actorId,
+					callId: contextItem.callId,
+					parentCallId: contextItem.parentCallId,
+					rootCallId: contextItem.rootCallId,
+					producedByActorId: contextItem.producedByActorId,
+					producedByEnvelopeId: contextItem.producedByEnvelopeId,
+					sourceContextItemIds: contextItem.sourceContextItemIds,
+					createdAt: contextItem.createdAt
+				},
+				createdAt: contextItem.createdAt,
+				scopes: scopesForContextItem(contextItem)
 			})
 		)
 	}
@@ -1524,15 +1858,97 @@ function scopesForStreamEvent(input: {
 	actorId?: string | null
 	correlationId?: string | null
 	intentId?: string | null
+	rootCallId?: string | null
+	callId?: string | null
 }): string[] {
 	return [
 		'global',
 		input.actorId ? `actor/${input.actorId}` : null,
 		input.correlationId ? `correlation/${input.correlationId}` : null,
-		input.intentId ? `intents/${input.intentId}` : null
+		input.intentId ? `intents/${input.intentId}` : null,
+		input.rootCallId ? `calls/${input.rootCallId}` : null,
+		input.rootCallId && input.callId ? `calls/${input.rootCallId}/${input.callId}` : null
 	].filter(
 		(value): value is string => Boolean(value)
 	)
+}
+
+function scopesForContextItem(item: ContextItemRecord): string[] {
+	return scopesForStreamEvent({
+		actorId: item.actorId,
+		correlationId: item.correlationId,
+		intentId: item.intentId,
+		rootCallId: item.rootCallId,
+		callId: item.callId
+	})
+}
+
+function getScopeKey(scope: ContextScope): string {
+	if (scope.type === 'run') {
+		return scope.correlationId
+	}
+
+	if (scope.type === 'intent') {
+		return scope.intentId
+	}
+
+	if (scope.type === 'call') {
+		return scope.callId
+	}
+
+	if (scope.type === 'actor') {
+		return scope.actorId
+	}
+
+	return scope.name
+}
+
+function parseContextScope(row: ContextItemRow): ContextScope {
+	switch (row.scope_type) {
+		case 'run':
+			return { type: 'run', correlationId: row.scope_key }
+		case 'intent':
+			return { type: 'intent', intentId: row.scope_key }
+		case 'call':
+			return {
+				type: 'call',
+				callId: row.call_id ?? row.scope_key,
+				rootCallId: row.root_call_id ?? row.call_id ?? row.scope_key,
+				parentCallId: row.parent_call_id ?? undefined
+			}
+		case 'actor':
+			return { type: 'actor', actorId: row.scope_key }
+		case 'global':
+			return { type: 'global', name: row.scope_key as 'archive' | 'system' }
+	}
+}
+
+function inferCallId(payload: unknown): string | null {
+	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+		return null
+	}
+	const record = payload as Record<string, unknown>
+	return readString(record.callId) ?? readString(toRecord(record.input).callId) ?? readString(toRecord(record.result).callId)
+}
+
+function inferParentCallId(payload: unknown): string | null {
+	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+		return null
+	}
+	const record = payload as Record<string, unknown>
+	return readString(record.parentCallId) ?? readString(toRecord(record.input).parentCallId) ?? readString(toRecord(record.result).parentCallId)
+}
+
+function inferRootCallId(payload: unknown): string | null {
+	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+		return null
+	}
+	const record = payload as Record<string, unknown>
+	return readString(record.rootCallId) ?? readString(toRecord(record.input).rootCallId) ?? readString(toRecord(record.result).rootCallId)
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+	return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
 function inferIntentId(actorId: string | null | undefined, state: unknown, payload: unknown): string | null {

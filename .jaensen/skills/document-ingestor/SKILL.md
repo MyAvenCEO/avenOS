@@ -1,6 +1,6 @@
 ---
 id: document-ingestor
-description: Ingests electronic documents and photos of printed documents and stores it as pdfa in memory.
+description: Ingests electronic documents and photos of printed documents and stores it as pdfa.
 worker_policy: durable
 direct_actors:
   - skills/memory
@@ -15,7 +15,7 @@ resources:
 1. Check which format the uploaded document has. Allowed inputs are:  
 1.1. Images (png, jpg)  
 1.2. PDF  
-2. Convert to pdfa  
+2. Convert the input to pdfa  
     Use the pdfa and classify the document. Return exactly this metadata excerpt. If you can't extract that, error out:
     ```
     {

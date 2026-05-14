@@ -1,9 +1,7 @@
 <script lang="ts">
-import type { NodeProps } from '@xyflow/svelte'
-
 import type { ActorNodeData } from './reducer'
 
-const { data } = $props<NodeProps<ActorNodeData>>()
+const { data } = $props<{ data: ActorNodeData }>()
 
 function tone(status: string): string {
 	switch (status) {

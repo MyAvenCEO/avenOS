@@ -1,6 +1,10 @@
 import type {
+	ActorCommand,
 	ActorEventInput,
 	ActorRecord,
+	ContextAppendInput,
+	ContextItemRecord,
+	ContextSelector,
 	EnvelopeInput,
 	EnvelopeRecord,
 	Persistence
@@ -9,7 +13,7 @@ import type {
 export interface ActorHandler {
 	kind: string
 
-	activate(input: ActorActivation): Promise<ActorActivationResult>
+	activate(input: ActorActivation): Promise<ActorDecision>
 }
 
 export interface ActorActivation {
@@ -22,6 +26,7 @@ export interface ActorContext {
 	now: Date
 	signal: AbortSignal
 	generateId(): string
+	contextSnapshotSeq: number
 	makeEnvelope(input: {
 		from: string
 		to: string
@@ -31,12 +36,13 @@ export interface ActorContext {
 		causationId?: string
 		availableAt?: Date
 	}): EnvelopeInput
+	queryContext(selector: ContextSelector): Promise<ContextItemRecord[]>
 }
 
-export interface ActorActivationResult {
-	state: unknown
-	events?: ActorEventInput[]
-	outgoing?: EnvelopeInput[]
+export interface ActorDecision {
+	nextState: unknown
+	contextAppends: ContextAppendInput[]
+	commands: ActorCommand[]
 }
 
 export interface ActorRuntime {

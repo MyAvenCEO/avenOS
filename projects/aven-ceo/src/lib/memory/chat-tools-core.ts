@@ -6,9 +6,17 @@
  * Browser: uses the committed `seed/` copy via `$seed` alias (for token/heuristic UI only).
  */
 import fs from 'node:fs'
-import type { ChatCompletionTool } from 'openai/resources/chat/completions.mjs'
 import { ensureSeedRuntimeSynced, maiaMemoryToolsJsonPath } from '$lib/seed/seed-service'
 import bundledFromSeed from '$seed/memory/tools/memory.openai.json' with { type: 'json' }
+
+type ChatCompletionTool = {
+	type: string
+	function?: {
+		name: string
+		description?: string
+		parameters?: unknown
+	}
+}
 
 export function memoryToolsOpenAI(): ChatCompletionTool[] {
 	if (typeof window === 'undefined') {

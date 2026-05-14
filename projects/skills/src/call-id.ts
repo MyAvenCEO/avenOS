@@ -34,6 +34,15 @@ export function inferCallId(payload: unknown): string | undefined {
 	)
 }
 
+export function inferRootCallId(payload: unknown): string | undefined {
+	const record = toRecord(payload)
+	return firstString(
+		record.rootCallId,
+		toRecord(record.input).rootCallId,
+		toRecord(record.result).rootCallId
+	)
+}
+
 export function inferLocalCallId(payload: unknown): string | undefined {
 	const record = toRecord(payload)
 	return firstString(

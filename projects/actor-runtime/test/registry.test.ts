@@ -6,7 +6,7 @@ test('refuses duplicate handler registration', () => {
 	const registry = new ActorRegistry()
 	const handler = {
 		kind: 'intent',
-		activate: async () => ({ state: {} })
+		activate: async () => ({ nextState: {}, contextAppends: [], commands: [] })
 	}
 
 	registry.register(handler)

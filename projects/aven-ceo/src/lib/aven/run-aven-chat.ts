@@ -1,4 +1,3 @@
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import { TinfoilAI } from 'tinfoil'
 import { peekNextAssistantMessageIndex } from '$lib/aven/chat-message-log.js'
 import type { AvenContextFull, AvenContextPreview } from '$lib/aven/context-preview'
@@ -13,6 +12,38 @@ import {
 	memoryToolsOpenAI,
 	memoryToolTitlesLine
 } from '$lib/memory/chat-tools'
+
+type ChatCompletionTool = {
+	type: 'function' | string
+	function?: {
+		name: string
+		description?: string
+		parameters?: unknown
+	}
+}
+
+type ChatCompletionToolCall = {
+	id: string
+	type: 'function' | string
+	function: {
+		name: string
+		arguments?: string
+	}
+}
+
+type ChatCompletionMessageParam =
+	| { role: 'system' | 'user'; content: string }
+	| { role: 'assistant'; content: string; tool_calls?: ChatCompletionToolCall[] }
+	| { role: 'tool'; tool_call_id: string; content: string }
+
+type ChatCompletionResponse = {
+	choices?: Array<{
+		message?: {
+			content?: string | null
+			tool_calls?: ChatCompletionToolCall[]
+		}
+	}>
+}
 
 const MAX_TOOL_ROUNDS = maiaAgent.llm.maxToolRounds
 
@@ -36,7 +67,7 @@ async function* streamAvenChatCore(
 
 	const { systemContent, preview, fullContext } = await buildAvenChatRoundContext(model, messages)
 
-	const tools = memoryToolsOpenAI()
+	const tools = memoryToolsOpenAI() as ChatCompletionTool[]
 	const thread: ChatCompletionMessageParam[] = [
 		{ role: 'system', content: systemContent },
 		...messages.map((m) => ({ role: m.role, content: m.content }))
@@ -64,9 +95,15 @@ async function* streamAvenChatCore(
 			detail: thinkingDetail
 		}
 
-		let completion: Awaited<ReturnType<TinfoilAI['chat']['completions']['create']>>
+		let completion: ChatCompletionResponse
 		try {
-			completion = await client.chat.completions.create({
+			completion = await (client.chat.completions.create as unknown as (input: {
+				model: string
+				temperature: number
+				messages: ChatCompletionMessageParam[]
+				tools: ChatCompletionTool[]
+				tool_choice: 'none' | 'auto'
+			}) => Promise<ChatCompletionResponse>)({
 				model,
 				temperature: maiaAgent.llm.temperature,
 				messages: thread,
@@ -79,7 +116,13 @@ async function* streamAvenChatCore(
 			return
 		}
 
-		const choice = completion.choices[0]?.message
+		const choices = completion.choices
+		if (!choices?.length) {
+			yield { type: 'error', message: 'No assistant message.', status: 422 }
+			return
+		}
+
+		const choice = choices[0]?.message
 		if (!choice) {
 			yield { type: 'error', message: 'No assistant message.', status: 422 }
 			return
@@ -89,13 +132,13 @@ async function* streamAvenChatCore(
 		if (toolCalls?.length) {
 			thread.push({
 				role: 'assistant',
-				content: choice.content ?? null,
+				content: choice.content ?? '',
 				tool_calls: toolCalls
-			})
+			} as ChatCompletionMessageParam)
 
 			const names = toolCalls
-				.filter((tc): tc is typeof tc & { type: 'function' } => tc.type === 'function')
-				.map((tc) => tc.function.name)
+				.filter((tc: (typeof toolCalls)[number]): tc is (typeof toolCalls)[number] & { type: 'function' } => tc.type === 'function')
+				.map((tc: (typeof toolCalls)[number] & { type: 'function' }) => tc.function.name)
 			yield {
 				type: 'status',
 				detail: names.length > 0 ? `Maia · ${memoryToolPlanLine(names)}` : 'Maia · choosing tools…'

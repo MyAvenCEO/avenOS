@@ -4,13 +4,15 @@ import {
 	type AppNode,
 	type CreateAppNodeInput
 } from '@jaensen/app-node'
-import type { ActorEvent as RuntimeActorEvent } from '@jaensen/actor-runtime'
 import type { UserAttachment } from '@jaensen/conversation-actors'
 import type {
 	ActorHierarchyRecord,
 	ActorLogRecord,
 	CommunicationTreeRecord,
 	CommunicationTreeSummary,
+	ContextItemRecord,
+	ContextScope,
+	ContextSelector,
 	StreamEventRecord
 } from '@jaensen/persistence-sqlite'
 
@@ -61,6 +63,7 @@ type SqliteQueryable = ReturnType<typeof asSqlitePersistence> & {
 		rootEnvelopeId?: string
 		view?: 'chat' | 'deep-dive'
 	}): Promise<CommunicationTreeRecord[]>
+	listContextItems(input: { selector: ContextSelector; snapshotSeq?: number }): Promise<ContextItemRecord[]>
 	summarizeCommunicationTree(input: {
 		correlationId?: string
 		intentId?: string
@@ -76,6 +79,8 @@ type ActorHierarchyNodeRecord = ActorHierarchyRecord & {
 type CommunicationTreeNodeRecord = CommunicationTreeRecord & {
 	directChildCount: number
 }
+
+type RuntimeActorEvent = { type: string } & Record<string, unknown>
 
 export interface CreateWebApiInput extends CreateAppNodeInput {
 	port?: number
@@ -230,6 +235,12 @@ async function routeRequest(input: {
 		const after = parseAfter(url.searchParams.get('after'))
 		const events = await input.persistence.listStreamEvents({ scope, after })
 		return jsonResponse({ events })
+	}
+
+	if (input.request.method === 'GET' && path === '/api/context/items') {
+		const selector = selectorFromQuery(url.searchParams)
+		const items = await input.persistence.listContextItems({ selector })
+		return jsonResponse({ items })
 	}
 
 	if (input.request.method === 'GET' && path === '/api/actors/hierarchy') {
@@ -438,10 +449,9 @@ async function handlePostMessages(request: Request, app: AppNode, attachmentStor
 		throw error
 	}
 
-	const intentIdHint =
-		typeof (payload as Record<string, unknown>).intentIdHint === 'string'
-			? (payload as Record<string, unknown>).intentIdHint.trim() || undefined
-			: undefined
+	const payloadRecord = payload as Record<string, unknown>
+	const rawIntentIdHint = payloadRecord.intentIdHint
+	const intentIdHint = typeof rawIntentIdHint === 'string' ? rawIntentIdHint.trim() || undefined : undefined
 	const result = await app.enqueueUserInput({
 		text,
 		attachments,
@@ -597,6 +607,53 @@ function parseAfter(value: string | null): number {
 
 	const parsed = Number.parseInt(value, 10)
 	return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+function selectorFromQuery(searchParams: URLSearchParams): ContextSelector {
+	const scopes: ContextScope[] = []
+	const scopeType = searchParams.get('scopeType')?.trim()
+	const scopeKey = searchParams.get('scopeKey')?.trim()
+	if (scopeType && scopeKey) {
+		scopes.push(scopeFromQuery(scopeType, scopeKey))
+	}
+
+	const selector: ContextSelector = {
+		afterSeq: parseOptionalInt(searchParams.get('afterSeq')),
+		limit: parseOptionalInt(searchParams.get('limit'))
+	}
+	if (scopes.length > 0) selector.scopes = scopes
+	const kind = searchParams.get('kind')?.trim()
+	if (kind) selector.kinds = [kind as ContextItemRecord['kind']]
+	const key = searchParams.get('key')?.trim()
+	if (key) selector.keys = [key]
+	const actorId = searchParams.get('actorId')?.trim()
+	if (actorId) selector.producedByActorIds = [actorId]
+	if (searchParams.get('correlationId')?.trim()) {
+		selector.scopes = [...(selector.scopes ?? []), { type: 'run', correlationId: searchParams.get('correlationId')!.trim() }]
+	}
+	if (searchParams.get('intentId')?.trim()) {
+		selector.scopes = [...(selector.scopes ?? []), { type: 'intent', intentId: searchParams.get('intentId')!.trim() }]
+	}
+	const callId = searchParams.get('callId')?.trim()
+	const rootCallId = searchParams.get('rootCallId')?.trim()
+	if (callId) {
+		selector.scopes = [...(selector.scopes ?? []), { type: 'call', callId, rootCallId: rootCallId ?? callId }]
+	}
+	return selector
+}
+
+function scopeFromQuery(scopeType: string, scopeKey: string): ContextScope {
+	if (scopeType === 'run') return { type: 'run', correlationId: scopeKey }
+	if (scopeType === 'intent') return { type: 'intent', intentId: scopeKey }
+	if (scopeType === 'call') return { type: 'call', callId: scopeKey, rootCallId: scopeKey }
+	if (scopeType === 'actor') return { type: 'actor', actorId: scopeKey }
+	return { type: 'global', name: scopeKey === 'archive' ? 'archive' : 'system' }
+}
+
+function parseOptionalInt(raw: string | null): number | undefined {
+	if (!raw) return undefined
+	const parsed = Number.parseInt(raw, 10)
+	return Number.isFinite(parsed) ? parsed : undefined
 }
 
 function maxAfter(a: number, b: number): number {

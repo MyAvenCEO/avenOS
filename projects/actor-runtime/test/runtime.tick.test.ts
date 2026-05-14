@@ -17,7 +17,7 @@ test('processes one envelope successfully', async () => {
 	runtime.register({
 		kind: 'intent',
 		async activate({ actor }) {
-			return { state: actor.state }
+			return { nextState: actor.state, contextAppends: [], commands: [] }
 		}
 	})
 
@@ -49,7 +49,7 @@ test('preserves actor state when handler returns same state', async () => {
 	runtime.register({
 		kind: 'intent',
 		async activate({ actor }) {
-			return { state: actor.state }
+			return { nextState: actor.state, contextAppends: [], commands: [] }
 		}
 	})
 
@@ -84,23 +84,25 @@ test('persists updated actor state, enqueues outgoing envelopes, and records han
 		kind: 'intent',
 		async activate({ actor, envelope, context }) {
 			return {
-				state: { phase: 'processed' },
-				events: [
+				nextState: { phase: 'processed' },
+				contextAppends: [],
+				commands: [
 					{
-						id: 'evt-handler',
-						actorId: actor.id,
-						envelopeId: envelope.id,
-						eventType: 'intent.processed',
-						event: { ok: true }
-					}
-				],
-				outgoing: [
-					context.makeEnvelope({
+						type: 'emit_event',
+						event: {
+							id: 'evt-handler',
+							actorId: actor.id,
+							envelopeId: envelope.id,
+							eventType: 'intent.processed',
+							event: { ok: true }
+						}
+					},
+					{ type: 'send_envelope', envelope: context.makeEnvelope({
 						from: actor.id,
 						to: 'skills/extract',
 						type: 'extract-request',
 						payload: { extract: true }
-					})
+					}) }
 				]
 			}
 		}
@@ -152,7 +154,7 @@ test('runUntilIdle stops when idle', async () => {
 	runtime.register({
 		kind: 'intent',
 		async activate({ actor }) {
-			return { state: actor.state }
+			return { nextState: actor.state, contextAppends: [], commands: [] }
 		}
 	})
 
@@ -185,15 +187,16 @@ test('runUntilIdle respects maxTicks', async () => {
 		async activate({ actor, context }) {
 			const count = (actor.state as { count: number }).count
 			return {
-				state: { count: count + 1 },
-				outgoing: count === 0
+				nextState: { count: count + 1 },
+				contextAppends: [],
+				commands: count === 0
 					? [
-							context.makeEnvelope({
+							{ type: 'send_envelope', envelope: context.makeEnvelope({
 								from: actor.id,
 								to: actor.id,
 								type: 'message',
 								payload: { count: count + 1 }
-							})
+							}) }
 						]
 					: []
 			}
@@ -229,7 +232,7 @@ test('debug registry tracks actor state and message events', async () => {
 	runtime.register({
 		kind: 'intent',
 		async activate({ actor }) {
-			return { state: actor.state }
+			return { nextState: actor.state, contextAppends: [], commands: [] }
 		}
 	})
 

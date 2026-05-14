@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
-import type { ActorHandler } from '@jaensen/actor-runtime'
-import { createIntentActorId } from '@jaensen/persistence-sqlite'
+import type { ActorCommand, ActorDecision, ActorHandler } from '@jaensen/actor-runtime'
+import { createIntentActorId, type ContextAppendInput } from '@jaensen/persistence-sqlite'
 import { z } from 'zod'
 
 import { UnknownIntentError, ConversationActorsValidationError } from './errors'
@@ -58,7 +58,7 @@ async function handleUserInput(input: {
 	context: Parameters<ActorHandler['activate']>[0]['context']
 	input: CreateDispatcherHandlerInput
 	createIntentId: () => string
-}) {
+}): Promise<ActorDecision> {
 	const parsed = userInputSchema.safeParse(input.envelope.payload)
 	if (!parsed.success) {
 		throw new ConversationActorsValidationError('Invalid conversation.user_input payload', {
@@ -77,19 +77,20 @@ async function handleUserInput(input: {
 	if (hintedIntentId) {
 		const hintedIntent = input.state.activeIntents[hintedIntentId]
 		if (hintedIntent && hintedIntent.status !== 'completed' && hintedIntent.status !== 'failed') {
+			const commands: ActorCommand[] = [
+				{ type: 'send_envelope', envelope: input.context.makeEnvelope({
+					from: 'dispatcher',
+					to: createIntentActorId(hintedIntentId),
+					type: 'intent.user_input',
+					correlationId: input.envelope.correlationId,
+					causationId: input.envelope.id,
+					payload: userInput
+				}) }
+			]
 			return {
-				state: input.state,
-				events: [],
-				outgoing: [
-					input.context.makeEnvelope({
-						from: 'dispatcher',
-						to: createIntentActorId(hintedIntentId),
-						type: 'intent.user_input',
-						correlationId: input.envelope.correlationId,
-						causationId: input.envelope.id,
-						payload: userInput
-					})
-				]
+				nextState: input.state,
+				contextAppends: [buildUserInputContextAppend(input.envelope.correlationId, userInput)],
+				commands
 			}
 		}
 	}
@@ -105,50 +106,52 @@ async function handleUserInput(input: {
 			throw new UnknownIntentError(decision.intentId)
 		}
 
+		const commands: ActorCommand[] = [
+			{ type: 'send_envelope', envelope: input.context.makeEnvelope({
+				from: 'dispatcher',
+				to: createIntentActorId(decision.intentId),
+				type: 'intent.user_input',
+				correlationId: input.envelope.correlationId,
+				causationId: input.envelope.id,
+				payload: userInput
+			}) }
+		]
 		return {
-			state: input.state,
-			events: [],
-			outgoing: [
-				input.context.makeEnvelope({
-					from: 'dispatcher',
-					to: createIntentActorId(decision.intentId),
-					type: 'intent.user_input',
-					correlationId: input.envelope.correlationId,
-					causationId: input.envelope.id,
-					payload: userInput
-				})
-			]
+			nextState: input.state,
+			contextAppends: [buildUserInputContextAppend(input.envelope.correlationId, userInput)],
+			commands
 		}
 	}
 
 	const intentId = input.createIntentId()
+	const commands: ActorCommand[] = [
+		{ type: 'send_envelope', envelope: input.context.makeEnvelope({
+			from: 'dispatcher',
+			to: createIntentActorId(intentId),
+			type: 'intent.start',
+			correlationId: input.envelope.correlationId,
+			causationId: input.envelope.id,
+			payload: {
+				intentId,
+				title: decision.title,
+				goal: decision.initialGoal,
+				reason: decision.reason,
+				userInput
+			}
+		}) }
+	]
 
 	return {
-		state: input.state,
-		events: [],
-		outgoing: [
-			input.context.makeEnvelope({
-				from: 'dispatcher',
-				to: createIntentActorId(intentId),
-				type: 'intent.start',
-				correlationId: input.envelope.correlationId,
-				causationId: input.envelope.id,
-				payload: {
-					intentId,
-					title: decision.title,
-					goal: decision.initialGoal,
-					reason: decision.reason,
-					userInput
-				}
-			})
-		]
+		nextState: input.state,
+		contextAppends: [buildUserInputContextAppend(input.envelope.correlationId, userInput)],
+		commands
 	}
 }
 
 function handleLifecycle(input: {
 	state: DispatcherState
 	envelope: Parameters<ActorHandler['activate']>[0]['envelope']
-}) {
+}): ActorDecision {
 	const parsed = lifecycleSchema.safeParse(input.envelope.payload)
 	if (!parsed.success) {
 		throw new ConversationActorsValidationError('Invalid intent.lifecycle payload', {
@@ -157,7 +160,7 @@ function handleLifecycle(input: {
 	}
 
 	return {
-		state: {
+		nextState: {
 			activeIntents: {
 				...input.state.activeIntents,
 				[parsed.data.intentId]: {
@@ -169,8 +172,25 @@ function handleLifecycle(input: {
 				}
 			}
 		},
-		events: [],
-		outgoing: []
+		contextAppends: [],
+		commands: []
+	}
+}
+
+function buildUserInputContextAppend(correlationId: string, userInput: {
+	text: string
+	attachments: UserAttachment[]
+	attachmentScopeId?: string
+	intentIdHint?: string
+}): ContextAppendInput {
+	return {
+		scope: { type: 'run', correlationId },
+		kind: 'user_input',
+		key: 'user.message',
+		tags: ['user', 'input'],
+		body: userInput,
+		summary: userInput.text.slice(0, 240),
+		sourceContextItemIds: []
 	}
 }
 

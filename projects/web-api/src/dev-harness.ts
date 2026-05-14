@@ -68,20 +68,15 @@ type TinfoilClientLike = {
 	ready(): Promise<void>
 	chat: {
 		completions: {
-			create(input: {
-				model: string
-				response_format: { type: 'text' | 'json_object' | 'json_schema' }
-				messages: Array<{ role: 'system' | 'user'; content: string }>
-				signal?: AbortSignal
-			}): Promise<ModelCompletionResponse>
+			create(input: unknown, options?: unknown): Promise<ModelCompletionResponse>
 		}
 	}
 }
 
-let createTinfoilClient: (apiKey: string) => TinfoilClientLike = (apiKey) => new TinfoilAI({ apiKey })
+let createTinfoilClient: (apiKey: string) => TinfoilClientLike = (apiKey) => new TinfoilAI({ apiKey }) as unknown as TinfoilClientLike
 
 export function setTinfoilClientFactoryForTests(factory: ((apiKey: string) => TinfoilClientLike) | undefined): void {
-	createTinfoilClient = factory ?? ((apiKey) => new TinfoilAI({ apiKey }))
+	createTinfoilClient = factory ?? ((apiKey) => new TinfoilAI({ apiKey }) as unknown as TinfoilClientLike)
 }
 
 export function createDevHarness(config: ProviderConfig): FlueHarnessAdapter {
@@ -672,7 +667,7 @@ function extractIntentActionsFromEvents(value: unknown): Array<Record<string, un
 		return []
 	}
 
-	return value.flatMap((item) => {
+	return value.flatMap<Record<string, unknown>>((item) => {
 		if (!item || typeof item !== 'object' || Array.isArray(item)) {
 			return []
 		}

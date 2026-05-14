@@ -74,7 +74,7 @@ test('createDevHarness parses JSON model responses', async () => {
 				choices: [{ message: { content: '```json\n{"ok":true,"value":1}\n```' } }]
 			}),
 			{ status: 200, headers: { 'content-type': 'application/json' } }
-		)) as typeof fetch
+		)) as unknown as typeof fetch
 
 	try {
 		const harness = createDevHarness({

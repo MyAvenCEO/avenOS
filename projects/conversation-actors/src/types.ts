@@ -63,6 +63,7 @@ export interface IntentState {
 		string,
 		{
 			callId: string
+			rootCallId: string
 			skillId: string
 			request: string
 			createdAt: string

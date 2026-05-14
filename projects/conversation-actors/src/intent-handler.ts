@@ -1,5 +1,5 @@
-import type { ActorHandler } from '@jaensen/actor-runtime'
-import type { EnvelopeRecord } from '@jaensen/persistence-sqlite'
+import type { ActorDecision, ActorHandler } from '@jaensen/actor-runtime'
+import type { ContextAppendInput, EnvelopeRecord } from '@jaensen/persistence-sqlite'
 import { z } from 'zod'
 
 import {
@@ -107,11 +107,47 @@ export function createIntentHandler(input: CreateIntentHandlerInput): ActorHandl
 				)
 			}
 
-			return {
-				state: nextState,
-				events: decision.events ?? [],
-				outgoing
+			const contextAppends: ContextAppendInput[] = []
+			if (envelope.type === 'intent.start') {
+				const payload = envelope.payload as Record<string, unknown>
+				contextAppends.push({
+					scope: { type: 'intent', intentId },
+					kind: 'constraint',
+					key: 'intent.goal',
+					tags: ['intent', 'goal'],
+					body: { title: nextState.title, goal: nextState.goal, reason: payload.reason },
+					summary: nextState.goal,
+					sourceContextItemIds: []
+				})
 			}
+			for (const action of actions) {
+				if (action.type === 'call_skill' && action.callId) {
+					contextAppends.push({
+						scope: { type: 'intent', intentId },
+						kind: 'decision',
+						key: 'skill.call.requested',
+						tags: ['skill', 'request'],
+						body: {
+							callId: action.callId,
+							rootCallId: action.rootCallId ?? action.callId,
+							skillId: action.skillId,
+							request: action.request,
+							input: action.payload
+						},
+						summary: `${action.skillId}: ${action.request}`,
+						sourceContextItemIds: []
+					})
+				}
+			}
+
+			return {
+				nextState: nextState,
+				contextAppends,
+				commands: [
+					...(decision.events ?? []).map((event) => ({ type: 'emit_event', event }) as const),
+					...outgoing.map((envelope) => ({ type: 'send_envelope', envelope }) as const)
+				]
+			} satisfies ActorDecision
 		}
 	}
 }

@@ -7,7 +7,7 @@ test('createUserInputEnvelope creates a dispatcher envelope for human input', ()
 	const envelope = createUserInputEnvelope({
 		id: 'env-user-1',
 		text: 'Hello there',
-		attachments: [{ id: 'att-1', name: 'brief.txt' }],
+		attachments: [{ id: 'att-1', name: 'brief.txt', mimeType: 'text/plain', sizeBytes: 12, sha256: 'a'.repeat(64) }],
 		now
 	})
 
@@ -19,7 +19,7 @@ test('createUserInputEnvelope creates a dispatcher envelope for human input', ()
 		correlationId: 'env-user-1',
 		payload: {
 			text: 'Hello there',
-			attachments: [{ id: 'att-1', name: 'brief.txt' }],
+			attachments: [{ id: 'att-1', name: 'brief.txt', mimeType: 'text/plain', sizeBytes: 12, sha256: 'a'.repeat(64) }],
 			attachmentScopeId: undefined,
 			intentIdHint: undefined
 		},

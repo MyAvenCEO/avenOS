@@ -36,7 +36,7 @@ export async function loadSkills(input: LoadSkillsInput): Promise<SkillDefinitio
 			path: relativePath,
 			description: frontmatter.description,
 			directActors: frontmatter.direct_actors ?? [],
-			frontmatter: frontmatter as Record<string, unknown>,
+			frontmatter: frontmatter as unknown as Record<string, unknown>,
 			body: parsed.body,
 			bodyHash: createHash('sha256').update(parsed.body).digest('hex'),
 			loadedAt: now
@@ -107,7 +107,7 @@ function parseSkillMarkdown(
 function validateFrontmatter(
 	frontmatter: Record<string, unknown>,
 	relativePath: string
-): asserts frontmatter is ParsedSkillFrontmatter {
+): asserts frontmatter is Record<string, unknown> & ParsedSkillFrontmatter {
 	if (frontmatter.direct_actors === '') {
 		delete frontmatter.direct_actors
 	}

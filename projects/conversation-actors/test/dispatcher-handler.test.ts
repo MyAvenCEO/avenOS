@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import type { EnvelopeRecord } from '@jaensen/persistence-sqlite'
+import type { EnvelopeInput, EnvelopeRecord } from '@jaensen/persistence-sqlite'
 
 import {
 	UnknownIntentError,
@@ -30,9 +30,10 @@ test('dispatcher creates new intent from user input', async () => {
 		context: makeContext()
 	})
 
-	expect(result.state).toEqual(initialDispatcherState)
-	expect(result.outgoing).toHaveLength(1)
-	expect(result.outgoing?.[0]).toMatchObject({
+	const outgoing = sentEnvelopes(result)
+	expect(result.nextState).toEqual(initialDispatcherState)
+	expect(outgoing).toHaveLength(1)
+	expect(outgoing[0]).toMatchObject({
 		fromActor: 'dispatcher',
 		toActor: 'intents/intent-123',
 		type: 'intent.start',
@@ -76,8 +77,9 @@ test('dispatcher routes user input to existing intent', async () => {
 		context: makeContext()
 	})
 
-	expect(result.state).toEqual(state)
-	expect(result.outgoing?.[0]).toMatchObject({
+	const outgoing = sentEnvelopes(result)
+	expect(result.nextState).toEqual(state)
+	expect(outgoing[0]).toMatchObject({
 		fromActor: 'dispatcher',
 		toActor: 'intents/intent-123',
 		type: 'intent.user_input',
@@ -111,7 +113,7 @@ test('dispatcher routes hinted user input to existing waiting intent without con
 		context: makeContext()
 	})
 
-	expect(result.outgoing?.[0]).toMatchObject({
+	expect(sentEnvelopes(result)[0]).toMatchObject({
 		fromActor: 'dispatcher',
 		toActor: 'intents/intent-123',
 		type: 'intent.user_input',
@@ -142,7 +144,7 @@ test('dispatcher lifecycle creates or updates tracked intent state', async () =>
 			context: makeContext()
 		})
 	).resolves.toMatchObject({
-		state: {
+		nextState: {
 			activeIntents: {
 				'intent-404': {
 					intentId: 'intent-404',
@@ -153,7 +155,7 @@ test('dispatcher lifecycle creates or updates tracked intent state', async () =>
 				}
 			}
 		},
-		outgoing: []
+		commands: []
 	})
 })
 
@@ -178,7 +180,7 @@ test('dispatcher never sends to human', async () => {
 		context: makeContext()
 	})
 
-	expect(result.outgoing?.every((envelope) => envelope.toActor !== 'human')).toBeTrue()
+	expect(sentEnvelopes(result).every((envelope) => envelope.toActor !== 'human')).toBeTrue()
 })
 
 test('dispatcher never sends to skill', async () => {
@@ -202,7 +204,7 @@ test('dispatcher never sends to skill', async () => {
 		context: makeContext()
 	})
 
-	expect(result.outgoing?.every((envelope) => !envelope.toActor.startsWith('skills/'))).toBeTrue()
+	expect(sentEnvelopes(result).every((envelope) => !envelope.toActor.startsWith('skills/'))).toBeTrue()
 })
 
 function makeDispatcherActor(state: unknown) {
@@ -259,6 +261,14 @@ function makeLifecycleEnvelope(overrides: Partial<EnvelopeRecord> = {}): Envelop
 function makeContext() {
 	return {
 		now: new Date('2026-05-12T00:00:00.000Z'),
+		signal: new AbortController().signal,
+		generateId() {
+			return 'generated-id'
+		},
+		contextSnapshotSeq: 0,
+		async queryContext() {
+			return []
+		},
 		makeEnvelope(input: {
 			from: string
 			to: string
@@ -280,4 +290,10 @@ function makeContext() {
 			}
 		}
 	}
+}
+
+function sentEnvelopes(result: { commands: Array<{ type: string; envelope?: EnvelopeInput }> }): EnvelopeInput[] {
+	return result.commands
+		.filter((command): command is { type: 'send_envelope'; envelope: EnvelopeInput } => command.type === 'send_envelope' && Boolean(command.envelope))
+		.map((command) => command.envelope)
 }

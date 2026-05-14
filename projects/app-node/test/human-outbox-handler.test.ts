@@ -11,7 +11,7 @@ test('human outbox appends human.message payloads', async () => {
 		context: makeContext()
 	})
 
-	expect(result.state).toEqual({
+	expect(result.nextState).toEqual({
 		messages: [
 			{
 				type: 'human.message',
@@ -22,7 +22,7 @@ test('human outbox appends human.message payloads', async () => {
 			}
 		]
 	})
-	expect(result.outgoing).toEqual([])
+	expect(result.commands).toEqual([])
 })
 
 test('human outbox appends human.question payloads', async () => {
@@ -33,7 +33,7 @@ test('human outbox appends human.question payloads', async () => {
 		context: makeContext()
 	})
 
-	expect(result.state).toEqual({
+	expect(result.nextState).toEqual({
 		messages: [
 			{
 				type: 'human.question',
@@ -82,6 +82,14 @@ function makeEnvelope(type: string, payload: unknown): EnvelopeRecord {
 function makeContext() {
 	return {
 		now: new Date('2026-05-12T00:00:00.000Z'),
+		signal: new AbortController().signal,
+		generateId() {
+			return 'generated-id'
+		},
+		contextSnapshotSeq: 0,
+		async queryContext() {
+			return []
+		},
 		makeEnvelope() {
 			throw new Error('unexpected')
 		}

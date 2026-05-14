@@ -9,7 +9,6 @@ import {
 import {
 	createFlueDispatcherBrain,
 	createFlueIntentBrain,
-	createFlueSkillSupervisorBrain,
 	createFlueSkillWorkerBrain,
 	type FlueHarnessAdapter,
 	type ThinkingLevel
@@ -43,7 +42,6 @@ import {
 	type SharedSkillResourceConfig,
 	type SkillDefinition,
 	type SkillRegistry,
-	type SkillSupervisorBrain,
 	type SkillWorkerBrain
 } from '@jaensen/skills'
 
@@ -68,7 +66,6 @@ export interface CreateAppNodeInput {
 	thinkingLevel?: ThinkingLevel
 	dispatcherBrain?: DispatcherBrain
 	intentBrain?: IntentBrain
-	skillSupervisorBrain?: SkillSupervisorBrain
 	skillWorkerBrain?: SkillWorkerBrain
 	skills?: SkillDefinition[]
 	skillRegistry?: SkillRegistry
@@ -147,15 +144,7 @@ export async function createAppNode(input: CreateAppNodeInput): Promise<AppNode>
 
 	runtime.register(
 		createSkillSupervisorHandler({
-			registry: skillRegistry,
-			brain:
-				input.skillSupervisorBrain ??
-				createFlueSkillSupervisorBrain({
-					harness,
-					workspaceRoot,
-					model: input.model,
-					thinkingLevel: input.thinkingLevel
-				})
+			registry: skillRegistry
 		})
 	)
 

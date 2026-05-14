@@ -38,7 +38,11 @@ test('web-api end-to-end covers creating an intent, loading real skills, creatin
 		await api.app.runUntilIdle(200)
 
 		const createdIntent = await waitForIntentByTitle(api.url, 'Create then analyze a random file')
-		expect(['active', 'completed']).toContain(createdIntent.status)
+		const createdIntentStatus = createdIntent.status
+		if (createdIntentStatus === null) {
+			throw new Error('Expected created intent status to be non-null')
+		}
+		expect(['active', 'completed']).toContain(createdIntentStatus)
 
 		const finalIntent = await driveIntentToStatus(api, createdIntent.id, 'completed')
 		expect(finalIntent.summary).toBe('Random file created and analyzed, then known fact verified')

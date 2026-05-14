@@ -502,6 +502,11 @@
 				if (typeof inner.actorKind === 'string') items.push({ label: 'Kind', value: inner.actorKind })
 				break
 			}
+			case 'context.appended':
+				if (typeof payload.kind === 'string') items.push({ label: 'Kind', value: payload.kind })
+				if (typeof payload.key === 'string') items.push({ label: 'Key', value: payload.key })
+				if (typeof payload.actorId === 'string') items.push({ label: 'Actor', value: payload.actorId })
+				break
 		}
 
 		for (const chip of eventMetaChips(event)) {
@@ -556,7 +561,7 @@
 			return event.type.startsWith('intent.skill_call_') || event.type.startsWith('skill.worker_')
 		}
 		if (preset === 'technical') {
-			return event.type.startsWith('runtime.') || event.type === 'actor.event'
+			return event.type.startsWith('runtime.') || event.type === 'actor.event' || event.type === 'context.appended'
 		}
 		return [
 			'intent.created',
@@ -847,12 +852,12 @@
 		if (event.type === 'intent.message_to_user' || event.type === 'intent.created' || event.type === 'intent.status_changed') return 'hero'
 		if (event.type.startsWith('intent.skill_call_') || event.type.startsWith('skill.worker_')) return 'skill'
 		if (event.type === 'actor.io.prompt' || event.type === 'actor.io.shell') return 'trace'
-		if (event.type.startsWith('runtime.') || event.type === 'actor.event') return 'technical'
+		if (event.type.startsWith('runtime.') || event.type === 'actor.event' || event.type === 'context.appended') return 'technical'
 		return 'message'
 	}
 
 	function isCompactEvent(event: ActorLogRecord): boolean {
-		return ['runtime.envelope.queued', 'runtime.envelope.claimed', 'runtime.envelope.completed', 'actor.event'].includes(event.type)
+		return ['runtime.envelope.queued', 'runtime.envelope.claimed', 'runtime.envelope.completed', 'actor.event', 'context.appended'].includes(event.type)
 	}
 
 	function summaryClass(event: ActorLogRecord): string {
@@ -893,6 +898,8 @@
 				return 130
 			case 'actor.event':
 				return 140
+			case 'context.appended':
+				return 145
 			default:
 				return 200
 		}

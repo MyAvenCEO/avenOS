@@ -38,7 +38,7 @@ export function createHumanOutboxHandler(): ActorHandler {
 				case 'human.message': {
 					const parsed = humanMessageSchema.parse(envelope.payload)
 					return {
-						state: {
+						nextState: {
 							messages: [
 								...state.messages,
 								{
@@ -50,14 +50,14 @@ export function createHumanOutboxHandler(): ActorHandler {
 								}
 							]
 						},
-						events: [],
-						outgoing: []
+						contextAppends: [],
+						commands: []
 					}
 				}
 				case 'human.question': {
 					const parsed = humanQuestionSchema.parse(envelope.payload)
 					return {
-						state: {
+						nextState: {
 							messages: [
 								...state.messages,
 								{
@@ -69,8 +69,8 @@ export function createHumanOutboxHandler(): ActorHandler {
 								}
 							]
 						},
-						events: [],
-						outgoing: []
+						contextAppends: [],
+						commands: []
 					}
 				}
 				default:

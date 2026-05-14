@@ -13,6 +13,7 @@ test('createAppNode ensures startup actors and bootstraps skill supervisors', as
 				id: 'memory',
 				path: 'memory/SKILL.md',
 				description: 'Memory skill',
+				directActors: [],
 				frontmatter: { id: 'memory', description: 'Memory skill' },
 				body: '# Memory',
 				bodyHash: 'hash-memory',
@@ -54,11 +55,6 @@ test('app can enqueue user input and expose human outbox after runtime settles',
 				}
 			}
 		},
-		skillSupervisorBrain: {
-			async decide() {
-				return { state: {} }
-			}
-		},
 		skillWorkerBrain: {
 			async run() {
 				return { state: {} }
@@ -94,8 +90,8 @@ test('app forwards intentIdHint when enqueueing user input', async () => {
 	})
 
 	const queued = await app.enqueueUserInput({ text: 'Answer', intentIdHint: 'intent-123' })
-	const envelope = persistence.db
-		.prepare('SELECT payload_json FROM envelopes WHERE id = ?')
+	const envelope = (persistence as unknown as { db: { query: (sql: string) => { get: (...args: unknown[]) => unknown } } }).db
+		.query('SELECT payload_json FROM envelopes WHERE id = ?')
 		.get(queued.envelopeId) as { payload_json: string }
 
 	expect(JSON.parse(envelope.payload_json)).toEqual({
@@ -142,8 +138,8 @@ test('app persists harness prompt/task/shell traces to sqlite stream events', as
 
 	await new Promise((resolve) => setTimeout(resolve, 0))
 
-	const events = persistence.db
-		.prepare("SELECT type FROM stream_events WHERE type LIKE 'actor.io.%' ORDER BY created_at ASC")
+	const events = (persistence as unknown as { db: { query: (sql: string) => { all: (...args: unknown[]) => unknown } } }).db
+		.query("SELECT type FROM stream_events WHERE type LIKE 'actor.io.%' ORDER BY created_at ASC")
 		.all() as Array<{ type: string }>
 
 	expect(events.map((event) => event.type)).toEqual(expect.arrayContaining(['actor.io.prompt', 'actor.io.task', 'actor.io.shell']))

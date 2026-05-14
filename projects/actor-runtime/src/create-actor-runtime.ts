@@ -13,8 +13,8 @@ import {
 import { makeEnvelope } from './envelope-factory'
 import { logDebug, logError, logInfo, logWarn } from './logger'
 import type {
-	ActorActivationResult,
 	ActorContext,
+	ActorDecision,
 	ActorDebugTrace,
 	ActorHandler,
 	ActorRuntimeDebug,
@@ -136,16 +136,22 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 				now,
 				signal: new AbortController().signal,
 				generateId: () => randomUUID(),
+				contextSnapshotSeq: await input.persistence.getContextSnapshotSeq(),
 				makeEnvelope: (envelopeInput) =>
 					makeEnvelope({
 						...envelopeInput,
 						createdAt: now,
 						causationId: envelopeInput.causationId ?? envelope.id,
 						correlationId: envelopeInput.correlationId ?? envelope.correlationId
+					}),
+				queryContext: (selector) =>
+					input.persistence.listContextItems({
+						selector,
+						snapshotSeq: context.contextSnapshotSeq
 					})
 			}
 
-			let activationResult: ActorActivationResult
+			let activationResult: ActorDecision
 			const activationController = new AbortController()
 			context.signal = activationController.signal
 			try {
@@ -174,9 +180,9 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 				return 'processed'
 			}
 
-			let normalizedResult: Required<ActorActivationResult>
+			let normalizedResult: ActorDecision
 			try {
-				normalizedResult = normalizeActivationResult(activationResult)
+				normalizedResult = normalizeDecision(activationResult)
 			} catch (error) {
 				introspection.activationFailed({ actorId: actor.id, now, task: envelope.type })
 				await failClaimedEnvelope({
@@ -215,9 +221,12 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 					envelopeId: envelope.id,
 					actorId: actor.id,
 					expectedActorVersion: actor.version,
-					newActorState: normalizedResult.state,
-					events: [...normalizedResult.events, technicalEvent],
-					outgoing: normalizedResult.outgoing,
+					nextActorState: normalizedResult.nextState,
+					contextAppends: normalizedResult.contextAppends,
+					commands: [
+						...normalizedResult.commands,
+						{ type: 'emit_event', event: technicalEvent }
+					],
 					now
 				})
 			} catch (error) {
@@ -252,17 +261,24 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 				fromActor: envelope.fromActor,
 				toActor: envelope.toActor,
 				correlationId: envelope.correlationId,
-				eventCount: normalizedResult.events.length + 1,
-				outgoingCount: normalizedResult.outgoing.length
+				eventCount: normalizedResult.commands.filter((command) => command.type === 'emit_event').length + 1,
+				outgoingCount: normalizedResult.commands.filter((command) => command.type !== 'emit_event').length,
+				contextAppendCount: normalizedResult.contextAppends.length
 			})
 			introspection.activationCompleted({ actorId: actor.id, now })
-			for (const outgoing of normalizedResult.outgoing) {
+			for (const outgoing of normalizedResult.commands) {
+				if (outgoing.type === 'emit_event') {
+					continue
+				}
+				const envelopeRecord = outgoing.type === 'send_envelope'
+					? outgoing.envelope
+					: { ...outgoing.envelope, availableAt: outgoing.availableAt }
 				introspection.messageSent({
-					id: outgoing.id,
-					from: outgoing.fromActor,
-					to: outgoing.toActor,
-					messageType: outgoing.type,
-					at: toIsoString(outgoing.createdAt ?? now)
+					id: envelopeRecord.id,
+					from: envelopeRecord.fromActor,
+					to: envelopeRecord.toActor,
+					messageType: envelopeRecord.type,
+					at: toIsoString(envelopeRecord.createdAt ?? now)
 				})
 			}
 
@@ -300,31 +316,24 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 	}
 }
 
-function normalizeActivationResult(result: ActorActivationResult): Required<ActorActivationResult> {
+function normalizeDecision(result: ActorDecision): ActorDecision {
 	if (!result || typeof result !== 'object' || Array.isArray(result)) {
-		throw new Error('Actor activation result must be an object')
+		throw new Error('Actor decision must be an object')
 	}
 
-	if (!Object.hasOwn(result, 'state')) {
-		throw new Error('Actor activation result must include state')
+	if (!Object.hasOwn(result, 'nextState')) {
+		throw new Error('Actor decision must include nextState')
 	}
 
-	const events = result.events ?? []
-	const outgoing = result.outgoing ?? []
-
-	if (!Array.isArray(events)) {
-		throw new Error('Actor activation result events must be an array')
+	if (!Array.isArray(result.contextAppends)) {
+		throw new Error('Actor decision contextAppends must be an array')
 	}
 
-	if (!Array.isArray(outgoing)) {
-		throw new Error('Actor activation result outgoing must be an array')
+	if (!Array.isArray(result.commands)) {
+		throw new Error('Actor decision commands must be an array')
 	}
 
-	return {
-		state: result.state,
-		events,
-		outgoing
-	}
+	return result
 }
 
 async function failClaimedEnvelope(input: {

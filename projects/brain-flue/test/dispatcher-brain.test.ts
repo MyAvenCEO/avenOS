@@ -115,6 +115,9 @@ test('dispatcher rejects empty title/goal', async () => {
 					},
 					async task() {
 						throw new Error('unexpected task')
+					},
+					async shell() {
+						throw new Error('unexpected shell')
 					}
 				}
 			}

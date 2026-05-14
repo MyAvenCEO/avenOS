@@ -142,6 +142,44 @@ export interface EventListResponse {
 	}>
 }
 
+export interface ContextItemDto {
+	id: string
+	seq: number
+	scope:
+		| { type: 'run'; correlationId: string }
+		| { type: 'intent'; intentId: string }
+		| { type: 'call'; callId: string; rootCallId: string; parentCallId?: string }
+		| { type: 'actor'; actorId: string }
+		| { type: 'global'; name: 'archive' | 'system' }
+	kind: string
+	key?: string
+	schema?: string
+	tags: string[]
+	body?: unknown
+	artifactId?: string
+	summary?: string
+	correlationId: string
+	intentId?: string
+	actorId: string
+	callId?: string
+	parentCallId?: string
+	rootCallId?: string
+	producedByActorId: string
+	producedByEnvelopeId: string
+	producedByCommandId?: string
+	producedByToolCallId?: string
+	sourceContextItemIds: string[]
+	confidence?: number
+	hash: string
+	createdAt: string
+	supersedesItemId?: string
+	redactsItemId?: string
+}
+
+export interface ContextItemsResponse {
+	items: ContextItemDto[]
+}
+
 export const STREAM_EVENT_TYPES = [
 	'intent.created',
 	'intent.status_changed',
@@ -155,7 +193,8 @@ export const STREAM_EVENT_TYPES = [
 	'runtime.envelope.queued',
 	'runtime.envelope.claimed',
 	'runtime.envelope.failed',
-	'actor.event'
+	'actor.event',
+	'context.appended'
 ] as const
 
 export type KnownStreamEventType = (typeof STREAM_EVENT_TYPES)[number]

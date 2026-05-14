@@ -48,11 +48,6 @@ export default defineConfig(({ mode }) => {
 	return {
 		envDir: repoRoot,
 		customLogger: logger,
-		resolve: {
-			alias: {
-				'@avenos/jaensen-bot': path.resolve(__dirname, '../jaensen-bot/index.ts')
-			}
-		},
 		ssr: {
 			noExternal: ['@xyflow/svelte']
 		},

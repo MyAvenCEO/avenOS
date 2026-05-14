@@ -11,6 +11,7 @@ test('stores loaded skills in persistence', async () => {
 			id: 'memory',
 			path: 'memory/SKILL.md',
 			description: 'Memory skill',
+			directActors: [],
 			frontmatter: { id: 'memory', description: 'Memory skill' },
 			body: '# Memory',
 			bodyHash: 'hash-memory',
@@ -31,6 +32,7 @@ test('bootstraps one skill supervisor actor per skill', async () => {
 			id: 'memory',
 			path: 'memory/SKILL.md',
 			description: 'Memory skill',
+			directActors: [],
 			frontmatter: { id: 'memory', description: 'Memory skill' },
 			body: '# Memory',
 			bodyHash: 'hash-memory',
@@ -40,6 +42,7 @@ test('bootstraps one skill supervisor actor per skill', async () => {
 			id: 'extract',
 			path: 'extract/SKILL.md',
 			description: 'Extract skill',
+			directActors: [],
 			frontmatter: { id: 'extract', description: 'Extract skill' },
 			body: '# Extract',
 			bodyHash: 'hash-extract',
@@ -109,5 +112,15 @@ class BootstrapPersistence implements Persistence {
 	}
 	async listSkills(): Promise<SkillRecord[]> {
 		return []
+	}
+	async listContextItems(): Promise<[]> { return [] }
+	async getContextSnapshotSeq(): Promise<number> { return 0 }
+	async appendStreamEvents(): Promise<void> {}
+	async listStreamEvents(): Promise<[]> { return [] }
+	async listActorHierarchy(): Promise<[]> { return [] }
+	async listActorBranchLogs(): Promise<[]> { return [] }
+	async listCommunicationTree(): Promise<[]> { return [] }
+	async summarizeCommunicationTree() {
+		return { rootCount: 0, envelopeCount: 0, logCount: 0, actorCount: 0, actorIoCount: 0, errorCount: 0, startedAt: null, endedAt: null }
 	}
 }

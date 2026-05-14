@@ -794,7 +794,10 @@ function buildToolCalls(intent: IntentView): ToolCallStep[] {
 			tool: call.skillId,
 			inputSummary: call.request,
 			outputSummary: call.resultSummary,
-			status: call.status === 'failed' ? 'error' : call.status === 'pending' ? 'pending' : 'ok'
+			status: (call.status === 'failed' ? 'error' : call.status === 'pending' ? 'pending' : 'ok') as
+				| 'error'
+				| 'pending'
+				| 'ok'
 		}))
 		.sort((a, b) => a.id.localeCompare(b.id))
 }

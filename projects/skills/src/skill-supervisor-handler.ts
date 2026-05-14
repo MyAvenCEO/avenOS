@@ -1,92 +1,64 @@
 import type { ActorHandler } from '@jaensen/actor-runtime'
 import {
 	createIntentActorId,
+	type ContextAppendInput,
 	type EnvelopeInput,
 	type EnvelopeRecord
 } from '@jaensen/persistence-sqlite'
 
-import { inferCallId, inferIntentId } from './call-id'
+import { inferCallId } from './call-id'
 import { SkillValidationError } from './errors'
-import {
-	createSkillWorkerActorId,
-	parseSkillActorId
-} from './skill-id'
-import type {
-	CreateSkillSupervisorHandlerInput,
-	SkillDefinition,
-	SkillSupervisorAction,
-	SkillSupervisorState
-} from './types'
+import { createSkillWorkerActorId, parseSkillActorId } from './skill-id'
+import type { CreateSkillSupervisorHandlerInput, SkillSupervisorState } from './types'
 
-export function createSkillSupervisorHandler(
-	input: CreateSkillSupervisorHandlerInput
-): ActorHandler {
+export function createSkillSupervisorHandler(input: CreateSkillSupervisorHandlerInput): ActorHandler {
 	return {
 		kind: 'skill-supervisor',
 		async activate({ actor, envelope, context }) {
 			const actorState = toSupervisorState(actor.state, actor.id)
-			const actorIdSkill = parseSkillActorId(actor.id)?.skillId
-			const skillId = actorState.skillId ?? actorIdSkill
+			const skillId = actorState.skillId || parseSkillActorId(actor.id)?.skillId
 
 			if (!skillId) {
 				throw new SkillValidationError(`Unable to resolve skillId for actor ${actor.id}`)
 			}
 
-			const skill = input.registry.require(skillId)
+			input.registry.require(skillId)
 
-			if (envelope.type === 'skill.request') {
-				const { state, outgoing } = handleSkillRequest({
-					actorId: actor.id,
-					skillId,
-					state: actorState,
-					envelope,
-					makeEnvelope: context.makeEnvelope,
-					now: context.now
-				})
-				return { state, events: [], outgoing: [outgoing] }
-			}
-
-			if (envelope.type === 'skill.bootstrap') {
-				return {
-					state: actorState,
-					events: [],
-					outgoing: []
+			switch (envelope.type) {
+				case 'skill.bootstrap':
+					return { nextState: actorState, contextAppends: [], commands: [] }
+				case 'skill.request': {
+					const { state, outgoing, contextAppend } = handleSkillRequest({
+						actorId: actor.id,
+						skillId,
+						state: actorState,
+						envelope,
+						makeEnvelope: context.makeEnvelope,
+						now: context.now
+					})
+					return {
+						nextState: state,
+						contextAppends: [contextAppend],
+						commands: [{ type: 'send_envelope', envelope: outgoing }]
+					}
 				}
-			}
-
-			if (envelope.type === 'skill.worker.result') {
-				const { state, outgoing } = handleWorkerResult({
-					actorId: actor.id,
-					skillId,
-					state: actorState,
-					envelope,
-					makeEnvelope: context.makeEnvelope,
-					now: context.now
-				})
-				return { state, events: [], outgoing: outgoing ? [outgoing] : [] }
-			}
-
-			const decision = await input.brain.decide({
-				skill,
-				actorState,
-				envelope,
-				signal: context.signal
-			})
-
-			const outgoing = (decision.actions ?? []).map((action) =>
-				mapSupervisorAction({
-					action,
-					skill,
-					fromActor: actor.id,
-					envelope,
-					makeEnvelope: context.makeEnvelope
-				})
-			)
-
-			return {
-				state: decision.state,
-				events: decision.events ?? [],
-				outgoing
+				case 'skill.worker.result': {
+					const { state, outgoing, contextAppend } = handleWorkerResult({
+						actorId: actor.id,
+						skillId,
+						state: actorState,
+						envelope,
+						makeEnvelope: context.makeEnvelope,
+						now: context.now
+					})
+					return {
+						nextState: state,
+						contextAppends: contextAppend ? [contextAppend] : [],
+						commands: outgoing ? [{ type: 'send_envelope', envelope: outgoing }] : []
+					}
+				}
+				default:
+					throw new SkillValidationError(`Unsupported envelope type for skill supervisor: ${envelope.type}`)
 			}
 		}
 	}
@@ -107,12 +79,13 @@ function handleSkillRequest(input: {
 		availableAt?: Date
 	}) => EnvelopeInput
 	now: Date
-}): { state: SkillSupervisorState; outgoing: EnvelopeInput } {
+}): { state: SkillSupervisorState; outgoing: EnvelopeInput; contextAppend: ContextAppendInput } {
 	const payload = toRecord(input.envelope.payload)
 	const callId = requireString(payload.callId, 'skill.request payload.callId is required')
 	requireString(payload.request, 'skill.request payload.request is required')
 	const intentId = optionalString(payload.intentId)
 	const parentCallId = optionalString(payload.parentCallId)
+	const rootCallId = optionalString(payload.rootCallId) ?? callId
 	const replyTo = optionalString(payload.replyTo) ?? input.envelope.fromActor
 	const workerId = selectWorkerId(payload, callId)
 	const existingWorker = input.state.workers[workerId]
@@ -132,6 +105,7 @@ function handleSkillRequest(input: {
 			...input.state.calls,
 			[callId]: {
 				callId,
+				rootCallId,
 				workerId,
 				status: 'active',
 				replyTo,
@@ -143,11 +117,20 @@ function handleSkillRequest(input: {
 
 	return {
 		state,
+		contextAppend: {
+			scope: { type: 'call', callId, parentCallId, rootCallId },
+			kind: 'handoff',
+			key: 'skill.request',
+			tags: ['skill', 'handoff'],
+			body: payload,
+			summary: requireString(payload.request, 'skill.request payload.request is required'),
+			sourceContextItemIds: []
+		},
 		outgoing: input.makeEnvelope({
 			from: input.actorId,
 			to: createSkillWorkerActorId(input.skillId, workerId),
 			type: `${input.skillId}.run`,
-			payload: existingWorker ? payload : { ...payload, initialState: {} },
+			payload: existingWorker ? { ...payload, rootCallId } : { ...payload, rootCallId, initialState: {} },
 			correlationId: input.envelope.correlationId,
 			causationId: input.envelope.id
 		})
@@ -169,18 +152,18 @@ function handleWorkerResult(input: {
 		availableAt?: Date
 	}) => EnvelopeInput
 	now: Date
-}): { state: SkillSupervisorState; outgoing?: EnvelopeInput } {
+}): { state: SkillSupervisorState; outgoing?: EnvelopeInput; contextAppend?: ContextAppendInput } {
 	const payload = toRecord(input.envelope.payload)
 	const workerId = requireString(payload.workerId, 'skill.worker.result payload.workerId is required')
-	const callId = inferCallId(payload) ?? input.state.workers[workerId]?.callId
-	if (!callId) {
-		throw new SkillValidationError(`Missing callId for worker result ${workerId}`)
-	}
+	const callId = optionalString(payload.callId) ?? input.state.workers[workerId]?.callId
+	const parentCallId = optionalString(payload.parentCallId)
+	if (!callId) throw new SkillValidationError(`Missing callId for worker result ${workerId}`)
+
 	const call = input.state.calls[callId]
-	if (!call) {
-		throw new SkillValidationError(`Unknown callId ${callId} for worker result ${workerId}`)
-	}
+	if (!call) throw new SkillValidationError(`Unknown callId ${callId} for worker result ${workerId}`)
+
 	const completed = payload.completed !== false
+	const rootCallId = call.rootCallId
 	const state: SkillSupervisorState = {
 		...input.state,
 		workers: {
@@ -204,13 +187,23 @@ function handleWorkerResult(input: {
 
 	return {
 		state,
+		contextAppend: {
+			scope: { type: 'call', callId, parentCallId: call.parentCallId, rootCallId },
+			kind: 'tool_result',
+			key: 'skill.worker.result',
+			tags: ['skill', 'result'],
+			body: payload.result,
+			summary: typeof payload.result === 'string' ? payload.result.slice(0, 240) : 'Skill worker result',
+			sourceContextItemIds: []
+		},
 		outgoing: input.makeEnvelope({
 			from: input.actorId,
-			to: shouldReplyToIntent(call) ? createIntentActorId(call.intentId) : call.replyTo,
+			to: shouldReplyToIntent(call) && call.intentId ? createIntentActorId(call.intentId) : call.replyTo,
 			type: 'skill.result',
 			payload: {
 				callId,
 				parentCallId: call.parentCallId,
+				rootCallId,
 				intentId: call.intentId,
 				fromSkillId: input.skillId,
 				workerId,
@@ -219,69 +212,6 @@ function handleWorkerResult(input: {
 			correlationId: input.envelope.correlationId,
 			causationId: input.envelope.id
 		})
-	}
-}
-
-function mapSupervisorAction(input: {
-	action: SkillSupervisorAction
-	skill: SkillDefinition
-	fromActor: string
-	envelope: EnvelopeRecord
-	makeEnvelope: (input: {
-		from: string
-		to: string
-		type: string
-		payload: unknown
-		correlationId?: string
-		causationId?: string
-		availableAt?: Date
-	}) => EnvelopeInput
-}): EnvelopeInput {
-	switch (input.action.type) {
-		case 'reply': {
-			assertNotHumanTarget(input.envelope.fromActor)
-			return input.makeEnvelope({
-				from: input.fromActor,
-				to: input.envelope.fromActor,
-				type: input.action.messageType,
-				payload: input.action.payload
-			})
-		}
-		case 'send': {
-			assertNotHumanTarget(input.action.to)
-			assertAllowedSkillTarget(input.skill, input.action.to)
-			return input.makeEnvelope({
-				from: input.fromActor,
-				to: input.action.to,
-				type: input.action.messageType,
-				payload: input.action.payload
-			})
-		}
-		case 'route_worker': {
-			return input.makeEnvelope({
-				from: input.fromActor,
-				to: createSkillWorkerActorId(input.skill.id, input.action.workerId),
-				type: input.action.messageType,
-				payload: input.action.payload
-			})
-		}
-		case 'spawn_worker': {
-			return input.makeEnvelope({
-				from: input.fromActor,
-				to: createSkillWorkerActorId(input.skill.id, input.action.workerId),
-				type: input.action.messageType,
-				payload: withInitialState(input.action.payload, input.action.initialState)
-			})
-		}
-		case 'call_skill': {
-			return mapDirectSkillCall({
-				skill: input.skill,
-				fromActor: input.fromActor,
-				envelope: input.envelope,
-				action: input.action,
-				makeEnvelope: input.makeEnvelope
-			})
-		}
 	}
 }
 
@@ -321,6 +251,7 @@ function toSupervisorState(state: unknown, actorId: string): SkillSupervisorStat
 				}
 				return [[callId, {
 					callId,
+					rootCallId: typeof call.rootCallId === 'string' ? call.rootCallId : callId,
 					workerId: call.workerId,
 					status: call.status === 'completed' || call.status === 'failed' ? call.status : 'active',
 					replyTo,
@@ -357,106 +288,6 @@ function selectWorkerId(payload: Record<string, unknown>, callId: string): strin
 	return callId
 }
 
-function withInitialState(payload: unknown, initialState: unknown): unknown {
-	if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-		return {
-			...(payload as Record<string, unknown>),
-			initialState
-		}
-	}
-
-	return {
-		payload,
-		initialState
-	}
-}
-
-function assertNotHumanTarget(target: string): void {
-	if (target === 'human') {
-		throw new SkillValidationError('Skill supervisors must not send directly to human')
-	}
-}
-
-function assertAllowedSkillTarget(skill: SkillDefinition, target: string): void {
-	if (!target.startsWith('skills/')) {
-		return
-	}
-
-	if (!skill.directActors.includes(target)) {
-		throw new SkillValidationError(
-			`Skill ${skill.id} may not send directly to unlisted actor ${target}`
-		)
-	}
-}
-
-function mapDirectSkillCall(input: {
-	skill: SkillDefinition
-	fromActor: string
-	envelope: EnvelopeRecord
-	action: Extract<SkillSupervisorAction, { type: 'call_skill' }>
-	makeEnvelope: (input: {
-		from: string
-		to: string
-		type: string
-		payload: unknown
-		correlationId?: string
-		causationId?: string
-		availableAt?: Date
-	}) => EnvelopeInput
-}): EnvelopeInput {
-	validateDirectSkillCall(input.skill, input.action)
-	return input.makeEnvelope({
-		from: input.fromActor,
-		to: input.action.to,
-		type: 'skill.request',
-		correlationId: input.envelope.correlationId,
-		causationId: input.envelope.id,
-		payload: {
-			callId: input.action.callId,
-			request: input.action.request,
-			input: input.action.payload,
-			replyTo: input.fromActor,
-			intentId: inferIntentId(input.envelope.payload),
-			attachmentScopeId: readStringField(input.envelope.payload, 'attachmentScopeId'),
-			attachments: readArrayField(input.envelope.payload, 'attachments'),
-			parentCallId: inferCallId(input.envelope.payload)
-		}
-	})
-}
-
-function readStringField(payload: unknown, key: string): string | undefined {
-	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-		return undefined
-	}
-	const value = (payload as Record<string, unknown>)[key]
-	return typeof value === 'string' ? value : undefined
-}
-
-function readArrayField(payload: unknown, key: string): unknown[] | undefined {
-	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-		return undefined
-	}
-	const value = (payload as Record<string, unknown>)[key]
-	return Array.isArray(value) ? value : undefined
-}
-
-function validateDirectSkillCall(
-	skill: SkillDefinition,
-	action: Extract<SkillSupervisorAction, { type: 'call_skill' }>
-): void {
-	if (!action.to.startsWith('skills/')) {
-		throw new SkillValidationError('Direct skill calls must target skills/<skillId> actors')
-	}
-	if (action.callId.length === 0) {
-		throw new SkillValidationError('Direct skill calls require a non-empty callId')
-	}
-	if (action.request.length === 0) {
-		throw new SkillValidationError('Direct skill calls require a non-empty request')
-	}
-	if (!skill.directActors.includes(action.to)) {
-		throw new SkillValidationError(`Skill ${skill.id} may not call unlisted actor ${action.to}`)
-	}
-}
 
 function shouldReplyToIntent(call: SkillSupervisorState['calls'][string]): boolean {
 	return typeof call.intentId === 'string' && call.replyTo === createIntentActorId(call.intentId)

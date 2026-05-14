@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ActorLogRecord } from './types'
 	import ActorEventLog from './ActorEventLog.svelte'
+	import ContextAppendedLog from './ContextAppendedLog.svelte'
 	import ActorIoInboundLog from './ActorIoInboundLog.svelte'
 	import ActorIoOutboundLog from './ActorIoOutboundLog.svelte'
 	import ActorIoPromptLog from './ActorIoPromptLog.svelte'
@@ -23,6 +24,8 @@
 
 {#if event.type === 'actor.event'}
 	<ActorEventLog {event} />
+{:else if event.type === 'context.appended'}
+	<ContextAppendedLog {event} />
 {:else if event.type === 'actor.io.inbound'}
 	<ActorIoInboundLog {event} />
 {:else if event.type === 'actor.io.outbound'}

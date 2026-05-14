@@ -1,4 +1,5 @@
 import type {
+	ContextItemsResponse,
 	EventListResponse,
 	IntentDetailDto,
 	IntentSummaryDto,
@@ -62,4 +63,14 @@ export async function getEvents(scope: string, after?: number): Promise<StreamEv
 		createdAt: event.createdAt,
 		envelopeId: event.envelopeId
 	}))
+}
+
+export async function listContextItems(query: Record<string, string>): Promise<ContextItemsResponse['items']> {
+	const url = new URL('/api/aven/jaensen/context/items', window.location.origin)
+	for (const [key, value] of Object.entries(query)) {
+		url.searchParams.set(key, value)
+	}
+	const response = await fetch(url)
+	const body = await expectJson<ContextItemsResponse>(response)
+	return body.items
 }

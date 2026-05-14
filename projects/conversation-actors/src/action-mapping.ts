@@ -7,6 +7,7 @@ export interface ResolvedIntentAction {
 	type: 'call_skill' | 'reply_user' | 'ask_user' | 'complete' | 'fail'
 	skillId?: string
 	callId?: string
+	rootCallId?: string
 	request?: string
 	payload?: unknown
 	message?: string
@@ -30,11 +31,18 @@ export function resolveIntentActions(input: {
 				type: 'call_skill',
 				skillId: action.skillId,
 				callId: input.generateId(),
+				rootCallId: undefined,
 				request: action.request,
 				payload: action.payload
 			}
 			: action
 	)
+
+	for (const action of resolvedActions) {
+		if (action.type === 'call_skill' && action.callId) {
+			action.rootCallId = action.callId
+		}
+	}
 
 	return {
 		state: applyIntentActionStateEffects({
@@ -48,7 +56,7 @@ export function resolveIntentActions(input: {
 
 export function applyIntentActionStateEffects(input: {
 	state: IntentState
-	actions: Array<IntentAction | ResolvedIntentAction>
+	actions: ResolvedIntentAction[]
 	now?: Date
 }): IntentState {
 	let nextState: IntentState = {
@@ -63,18 +71,22 @@ export function applyIntentActionStateEffects(input: {
 				nextState = { ...nextState, status: 'waiting_for_user' }
 				break
 			case 'complete':
-				nextState = { ...nextState, status: 'completed', summary: action.summary }
+				nextState = { ...nextState, status: 'completed', summary: action.summary ?? nextState.summary }
 				break
 			case 'fail':
-				nextState = { ...nextState, status: 'failed', summary: action.reason }
+				nextState = { ...nextState, status: 'failed', summary: action.reason ?? nextState.summary }
 				break
 			case 'call_skill':
+				if (!action.callId || !action.skillId || !action.request) {
+					break
+				}
 				nextState = {
 					...nextState,
 					pendingSkillCalls: {
 						...nextState.pendingSkillCalls,
 						[action.callId]: {
 							callId: action.callId,
+							rootCallId: action.rootCallId ?? action.callId,
 							skillId: action.skillId,
 							request: action.request,
 							createdAt: nowIso
@@ -93,7 +105,7 @@ export function applyIntentActionStateEffects(input: {
 export function mapIntentActionsToEnvelopes(input: {
 	fromActor: string
 	state: IntentState
-	actions: Array<IntentAction | ResolvedIntentAction>
+	actions: ResolvedIntentAction[]
 	envelope: EnvelopeRecord
 	skillRegistry: SkillRegistry
 	makeEnvelope: (input: {
@@ -112,7 +124,7 @@ export function mapIntentActionsToEnvelopes(input: {
 function mapIntentActionToEnvelopes(input: {
 	fromActor: string
 	state: IntentState
-	action: IntentAction
+	action: ResolvedIntentAction
 	envelope: EnvelopeRecord
 	skillRegistry: SkillRegistry
 	makeEnvelope: (input: {
@@ -133,6 +145,9 @@ function mapIntentActionToEnvelopes(input: {
 
 	switch (input.action.type) {
 		case 'call_skill': {
+			if (!input.action.skillId || !input.action.callId || !input.action.request) {
+				return []
+			}
 			if (!input.skillRegistry.get(input.action.skillId)) {
 				throw new UnknownSkillError(input.action.skillId)
 			}
@@ -145,6 +160,8 @@ function mapIntentActionToEnvelopes(input: {
 					payload: {
 						intentId: input.state.intentId,
 						callId: input.action.callId,
+						rootCallId: (input.action as ResolvedIntentAction).rootCallId ?? input.action.callId,
+						parentCallId: undefined,
 						request: input.action.request,
 						...readAttachmentContext(input.envelope.payload),
 						input: input.action.payload

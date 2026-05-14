@@ -15,7 +15,6 @@ test('daemon continues after tick failures', async () => {
 		skills: [],
 		dispatcherBrain: { async route() { return { type: 'create_intent', title: 'x', initialGoal: 'y', reason: 'z' } } },
 		intentBrain: { async decide() { return { summary: 'noop', actions: [] } } },
-		skillSupervisorBrain: { async decide() { return { state: {} } } },
 		skillWorkerBrain: { async run() { return { state: {} } } }
 	})
 	await api.stopDaemon()
@@ -58,11 +57,6 @@ test('POST /api/messages returns envelope and correlation ids, and intent endpoi
 					summary: 'Please review this repo',
 					actions: [{ type: 'reply_user', message: 'Starting review' }]
 				}
-			}
-		},
-		skillSupervisorBrain: {
-			async decide() {
-				return { state: {} }
 			}
 		},
 		skillWorkerBrain: {
@@ -141,7 +135,6 @@ test('POST /api/messages forwards intentIdHint to the queued envelope payload', 
 				return { state: undefined, summary: 'noop', actions: [] } as never
 			}
 		},
-		skillSupervisorBrain: { async decide() { return { state: {} } } },
 		skillWorkerBrain: { async run() { return { state: {} } } }
 	})
 
@@ -179,7 +172,6 @@ test('POST /api/messages rejects client-supplied attachment paths', async () => 
 			}
 		},
 		intentBrain: { async decide() { return { state: undefined, summary: 'noop', actions: [] } as never } },
-		skillSupervisorBrain: { async decide() { return { state: {} } } },
 		skillWorkerBrain: { async run() { return { state: {} } } }
 	})
 
@@ -215,7 +207,6 @@ test('POST /api/attachments stages uploads and POST /api/messages accepts return
 		skills: [],
 		dispatcherBrain: { async route() { return { type: 'create_intent', title: 'Upload', initialGoal: 'Use upload', reason: 'upload' } } },
 		intentBrain: { async decide() { return { state: undefined, summary: 'noop', actions: [] } as never } },
-		skillSupervisorBrain: { async decide() { return { state: {} } } },
 		skillWorkerBrain: { async run() { return { state: {} } } }
 	})
 
@@ -289,7 +280,6 @@ test('POST /api/messages rejects invalid x-jaensen-session-id', async () => {
 		skills: [],
 		dispatcherBrain: { async route() { return { type: 'create_intent', title: 'Upload', initialGoal: 'Use upload', reason: 'upload' } } },
 		intentBrain: { async decide() { return { state: undefined, summary: 'noop', actions: [] } as never } },
-		skillSupervisorBrain: { async decide() { return { state: {} } } },
 		skillWorkerBrain: { async run() { return { state: {} } } }
 	})
 
@@ -316,8 +306,7 @@ test('staged uploads can be consumed only once', async () => {
 		harness: createHarnessStub(),
 		skills: [],
 		dispatcherBrain: { async route() { return { type: 'create_intent', title: 'Upload', initialGoal: 'Use upload', reason: 'upload' } } },
-		intentBrain: { async decide() { return { state: undefined, summary: 'noop', actions: [] } as never } },
-		skillSupervisorBrain: { async decide() { return { state: {} } } },
+		intentBrain: { async decide() { throw new Error('unused') } },
 		skillWorkerBrain: { async run() { return { state: {} } } }
 	})
 
@@ -376,7 +365,6 @@ test('GET /api/events supports after cursors', async () => {
 		skills: [],
 		dispatcherBrain: { async route() { throw new Error('unused') } },
 		intentBrain: { async decide() { throw new Error('unused') } },
-		skillSupervisorBrain: { async decide() { return { state: {} } } },
 		skillWorkerBrain: { async run() { return { state: {} } } }
 	})
 
@@ -417,11 +405,6 @@ test('aven-ceo flow can post a message, inspect intents, and keep the SSE stream
 					summary: 'Check whether the web api is healthy',
 					actions: [{ type: 'reply_user', message: 'Everything is underway' }]
 				}
-			}
-		},
-		skillSupervisorBrain: {
-			async decide() {
-				return { state: {} }
 			}
 		},
 		skillWorkerBrain: {
@@ -492,7 +475,6 @@ test('debug actor endpoints expose snapshots and runtime events', async () => {
 				return { summary: 'ok', actions: [{ type: 'reply_user', message: 'done' }] }
 			}
 		},
-		skillSupervisorBrain: { async decide() { return { state: {} } } },
 		skillWorkerBrain: { async run() { return { state: {} } } }
 	})
 

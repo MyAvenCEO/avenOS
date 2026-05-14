@@ -39,7 +39,14 @@ export function createFlueSkillWorkerBrain(input: CreateFlueSkillWorkerBrainInpu
 					signal
 				})
 
-				return validateWorkerResult(readFlueData(response))
+				const result = validateWorkerResult(readFlueData(response))
+				return {
+					state: result.state ?? {},
+					result: result.result,
+					completed: result.completed,
+					events: result.events?.map((event) => ({ eventType: event.eventType, event: event.event ?? null })),
+					actions: result.actions?.map((action) => ({ ...action, payload: action.payload ?? null }))
+				}
 			} catch (error) {
 				throw toFlueBrainModelError(`Flue worker run failed for skill ${skill.id} worker ${workerId}`, error)
 			}

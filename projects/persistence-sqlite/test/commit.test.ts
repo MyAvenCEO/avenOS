@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 
 import { SqlitePersistence } from '../src/sqlite-persistence'
 
-test('commitActivation updates actor state, appends events, and enqueues outgoing envelopes atomically', async () => {
+test('commitActivation updates actor state, appends context, emits events, and enqueues outgoing envelopes atomically', async () => {
 	const persistence = new SqlitePersistence()
 	await persistence.migrate()
 
@@ -34,24 +34,39 @@ test('commitActivation updates actor state, appends events, and enqueues outgoin
 		envelopeId: 'env-in',
 		actorId: 'intents/invoice-7',
 		expectedActorVersion: 0,
-		newActorState: { phase: 'processed' },
-		events: [
+		nextActorState: { phase: 'processed' },
+		contextAppends: [
 			{
-				id: 'evt-1',
-				actorId: 'intents/invoice-7',
-				eventType: 'processed',
-				event: { ok: true }
+				scope: { type: 'run', correlationId: 'corr-in' },
+				kind: 'fact',
+				key: 'invoice.status',
+				tags: ['invoice'],
+				body: { ok: true },
+				summary: 'Invoice processed',
+				sourceContextItemIds: []
 			}
 		],
-		outgoing: [
+		commands: [
 			{
-				id: 'env-out',
-				fromActor: 'intents/invoice-7',
-				toActor: 'skills/extract',
-				type: 'extract-request',
-				correlationId: 'corr-out',
-				causationId: 'env-in',
-				payload: { archiveKey: 'archive-7' }
+				type: 'emit_event',
+				event: {
+					id: 'evt-1',
+					actorId: 'intents/invoice-7',
+					eventType: 'processed',
+					event: { ok: true }
+				}
+			},
+			{
+				type: 'send_envelope',
+				envelope: {
+					id: 'env-out',
+					fromActor: 'intents/invoice-7',
+					toActor: 'skills/extract',
+					type: 'extract-request',
+					correlationId: 'corr-out',
+					causationId: 'env-in',
+					payload: { archiveKey: 'archive-7' }
+				}
 			}
 		],
 		now: new Date('2026-05-12T00:01:00.000Z')
@@ -91,6 +106,189 @@ test('commitActivation updates actor state, appends events, and enqueues outgoin
 	const streamEvents = await persistence.listStreamEvents({ scope: 'actor/intents/invoice-7' })
 	expect(streamEvents.some((event) => event.type === 'actor.io.inbound')).toBe(true)
 	expect(streamEvents.some((event) => event.type === 'actor.io.outbound')).toBe(true)
+	expect(streamEvents.some((event) => event.type === 'context.appended')).toBe(true)
+
+	const contextItems = await persistence.listContextItems({
+		selector: { scopes: [{ type: 'run', correlationId: 'corr-in' }] }
+	})
+	expect(contextItems).toHaveLength(1)
+	expect(contextItems[0]).toMatchObject({
+		kind: 'fact',
+		key: 'invoice.status',
+		summary: 'Invoice processed',
+		correlationId: 'corr-in'
+	})
+})
+
+test('commitActivation clears stale last_error on success', async () => {
+	const persistence = new SqlitePersistence()
+	await persistence.migrate()
+
+	await persistence.upsertActor({
+		id: 'intents/commit-clear-error',
+		kind: 'intent',
+		state: { phase: 'queued' }
+	})
+
+	await persistence.enqueue({
+		id: 'env-clear-error',
+		fromActor: 'dispatcher',
+		toActor: 'intents/commit-clear-error',
+		type: 'message',
+		correlationId: 'corr-clear-error',
+		payload: { ok: true }
+	})
+
+	await persistence.claimNext({
+		workerId: 'worker-clear-error',
+		leaseMs: 60_000,
+		now: new Date('2026-05-12T00:00:00.000Z')
+	})
+
+	persistence.db.prepare('UPDATE envelopes SET last_error = ? WHERE id = ?').run('previous failure', 'env-clear-error')
+
+	await persistence.commitActivation({
+		workerId: 'worker-clear-error',
+		envelopeId: 'env-clear-error',
+		actorId: 'intents/commit-clear-error',
+		expectedActorVersion: 0,
+		nextActorState: { phase: 'done' },
+		contextAppends: [],
+		commands: [],
+		now: new Date('2026-05-12T00:00:01.000Z')
+	})
+
+	const envelope = persistence.db.prepare('SELECT status, last_error FROM envelopes WHERE id = ?').get('env-clear-error') as {
+		status: string
+		last_error: string | null
+	}
+
+	expect(envelope.status).toBe('done')
+	expect(envelope.last_error).toBeNull()
+})
+
+test('listContextItems supports query by run, intent, call/rootCallId, actor, and snapshotSeq', async () => {
+	const persistence = new SqlitePersistence()
+	await persistence.migrate()
+
+	await persistence.upsertActor({
+		id: 'intents/intent-ctx',
+		kind: 'intent',
+		state: { status: 'active' }
+	})
+	await persistence.enqueue({
+		id: 'env-ctx',
+		fromActor: 'dispatcher',
+		toActor: 'intents/intent-ctx',
+		type: 'intent.start',
+		correlationId: 'corr-ctx',
+		payload: { intentId: 'intent-ctx', callId: 'call-a', rootCallId: 'root-a' }
+	})
+	await persistence.claimNext({ workerId: 'worker-ctx', leaseMs: 60_000, now: new Date('2026-05-12T00:00:00.000Z') })
+	await persistence.commitActivation({
+		workerId: 'worker-ctx',
+		envelopeId: 'env-ctx',
+		actorId: 'intents/intent-ctx',
+		expectedActorVersion: 0,
+		nextActorState: { status: 'active', intentId: 'intent-ctx' },
+		contextAppends: [
+			{
+				scope: { type: 'run', correlationId: 'corr-ctx' },
+				kind: 'fact',
+				key: 'run.fact',
+				tags: ['run'],
+				sourceContextItemIds: []
+			},
+			{
+				scope: { type: 'intent', intentId: 'intent-ctx' },
+				kind: 'decision',
+				key: 'intent.decision',
+				tags: ['intent'],
+				sourceContextItemIds: []
+			},
+			{
+				scope: { type: 'call', callId: 'call-a', rootCallId: 'root-a' },
+				kind: 'handoff',
+				key: 'call.handoff',
+				tags: ['call'],
+				sourceContextItemIds: []
+			},
+			{
+				scope: { type: 'actor', actorId: 'intents/intent-ctx' },
+				kind: 'observation',
+				key: 'actor.observation',
+				tags: ['actor'],
+				sourceContextItemIds: []
+			}
+		],
+		commands: [],
+		now: new Date('2026-05-12T00:00:01.000Z')
+	})
+
+	const all = await persistence.listContextItems({ selector: {} })
+	const snapshotSeq = all[1]?.seq
+	expect((await persistence.listContextItems({ selector: { scopes: [{ type: 'run', correlationId: 'corr-ctx' }] } })).map((item) => item.key)).toEqual(['run.fact'])
+	expect((await persistence.listContextItems({ selector: { scopes: [{ type: 'intent', intentId: 'intent-ctx' }] } })).map((item) => item.key)).toEqual(['intent.decision'])
+	expect((await persistence.listContextItems({ selector: { scopes: [{ type: 'call', callId: 'call-a', rootCallId: 'root-a' }] } })).map((item) => item.key)).toEqual(['call.handoff'])
+	expect((await persistence.listContextItems({ selector: { scopes: [{ type: 'actor', actorId: 'intents/intent-ctx' }] } })).map((item) => item.key)).toEqual(['actor.observation'])
+	expect((await persistence.listContextItems({ selector: {}, snapshotSeq })).length).toBe(2)
+})
+
+test('listContextItems excludes redacted target rows by default and can include them explicitly', async () => {
+	const persistence = new SqlitePersistence()
+	await persistence.migrate()
+
+	await persistence.upsertActor({ id: 'intents/redact', kind: 'intent', state: {} })
+	await persistence.enqueue({
+		id: 'env-redact',
+		fromActor: 'dispatcher',
+		toActor: 'intents/redact',
+		type: 'message',
+		correlationId: 'corr-redact',
+		payload: {}
+	})
+	await persistence.claimNext({ workerId: 'worker-redact', leaseMs: 60_000, now: new Date('2026-05-12T00:00:00.000Z') })
+	await persistence.commitActivation({
+		workerId: 'worker-redact',
+		envelopeId: 'env-redact',
+		actorId: 'intents/redact',
+		expectedActorVersion: 0,
+		nextActorState: {},
+		contextAppends: [
+			{ scope: { type: 'intent', intentId: 'redact' }, kind: 'fact', key: 'secret', tags: [], summary: 'secret', sourceContextItemIds: [] }
+		],
+		commands: [],
+		now: new Date('2026-05-12T00:00:01.000Z')
+	})
+	const target = (await persistence.listContextItems({ selector: { includeRedacted: true } }))[0]
+
+	await persistence.enqueue({
+		id: 'env-redact-2',
+		fromActor: 'dispatcher',
+		toActor: 'intents/redact',
+		type: 'message',
+		correlationId: 'corr-redact',
+		payload: {}
+	})
+	await persistence.claimNext({ workerId: 'worker-redact', leaseMs: 60_000, now: new Date('2026-05-12T00:00:02.000Z') })
+	await persistence.commitActivation({
+		workerId: 'worker-redact',
+		envelopeId: 'env-redact-2',
+		actorId: 'intents/redact',
+		expectedActorVersion: 1,
+		nextActorState: {},
+		contextAppends: [
+			{ scope: { type: 'intent', intentId: 'redact' }, kind: 'error', key: 'redaction', tags: ['redaction'], redactsItemId: target.id, sourceContextItemIds: [target.id] }
+		],
+		commands: [],
+		now: new Date('2026-05-12T00:00:03.000Z')
+	})
+
+	const defaultItems = await persistence.listContextItems({ selector: {} })
+	expect(defaultItems.some((item) => item.id === target.id)).toBe(false)
+	const withRedacted = await persistence.listContextItems({ selector: { includeRedacted: true } })
+	expect(withRedacted.some((item) => item.id === target.id)).toBe(true)
+	expect(withRedacted.some((item) => item.redactsItemId === target.id)).toBe(true)
 })
 
 test('appendStreamEvents persists actor prompt/task/shell IO traces', async () => {

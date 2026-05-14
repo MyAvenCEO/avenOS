@@ -26,7 +26,7 @@ export function snapshotToGraph(snapshot: DebugActorSnapshot): ActorGraph {
 			source: actor.parentId!,
 			target: actor.id,
 			animated: false,
-			style: { stroke: 'rgba(120,120,120,0.45)' }
+			style: 'stroke: rgba(120,120,120,0.45)'
 		}))
 	return layoutGraph({ nodes, edges })
 }

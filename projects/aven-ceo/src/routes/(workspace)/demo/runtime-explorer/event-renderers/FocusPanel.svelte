@@ -1,5 +1,9 @@
 <script lang="ts">
-	let { title, rows = [] as Array<{ label: string; value: string | null }>, prose = null as string | null } = $props()
+	let {
+		title = null as string | null,
+		rows = [] as Array<{ label: string; value: string | null }>,
+		prose = null as string | null
+	} = $props()
 </script>
 
 <div class="focus-panel space-y-2">

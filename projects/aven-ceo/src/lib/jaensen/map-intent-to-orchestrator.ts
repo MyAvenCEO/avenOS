@@ -1,4 +1,3 @@
-import type { IntentRecord } from '@avenos/jaensen-bot'
 import type {
 	ActivityItem,
 	HitlTodo,
@@ -7,6 +6,27 @@ import type {
 	SubAgent,
 	ToolCallStep
 } from '$lib/intent-mock/types'
+
+type LegacyIntentEvent = {
+	type: string
+	source?: 'system' | 'human' | 'skill'
+	timestamp: string
+	data: Record<string, unknown>
+}
+
+type IntentRecord = {
+	id: string
+	title: string
+	summary: string
+	status: string
+	updatedAt: string
+	events: LegacyIntentEvent[]
+	humanLoop?: {
+		needed?: boolean
+		reason?: string
+		message?: string
+	}
+}
 
 function skillAgentId(intent: IntentRecord, skillId: string): string {
 	return `${intent.id}-${skillId}`

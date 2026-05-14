@@ -118,5 +118,13 @@ export function validateIntentDecision(
 		}
 	}
 
-	return parsed.data
+	return {
+		summary: parsed.data.summary,
+		events: parsed.data.events?.map((event) => ({ eventType: event.eventType, event: event.event })),
+		actions: parsed.data.actions?.map((action) =>
+			action.type === 'call_skill'
+				? { ...action, payload: action.payload ?? null }
+				: action
+		)
+	}
 }

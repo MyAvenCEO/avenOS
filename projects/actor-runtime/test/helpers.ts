@@ -1,10 +1,14 @@
 import { ConcurrencyError } from '../../persistence-sqlite/src/errors'
 import type {
+	ActorCommand,
 	ActorEventInput,
 	ActorHierarchyRecord,
 	ActorLogRecord,
 	ActorRecord,
 	ClaimedEnvelope,
+	ContextAppendInput,
+	ContextItemRecord,
+	ContextSelector,
 	CommunicationTreeRecord,
 	CommunicationTreeSummary,
 	EnvelopeInput,
@@ -23,6 +27,7 @@ export class FakePersistence implements Persistence {
 	readonly envelopes = new Map<string, EnvelopeRow>()
 	readonly events: ActorEventInput[] = []
 	readonly streamEvents: StreamEventRecord[] = []
+	readonly contextItems: ContextItemRecord[] = []
 	readonly claims: string[] = []
 	claimedLeaseMs: number | null = null
 	commitError: Error | null = null
@@ -121,9 +126,9 @@ export class FakePersistence implements Persistence {
 		envelopeId: string
 		actorId: string
 		expectedActorVersion: number
-		newActorState: unknown
-		events: ActorEventInput[]
-		outgoing: EnvelopeInput[]
+		nextActorState: unknown
+		contextAppends: ContextAppendInput[]
+		commands: ActorCommand[]
 		now: Date
 	}): Promise<void> {
 		if (this.commitError) {
@@ -144,14 +149,53 @@ export class FakePersistence implements Persistence {
 
 		this.actors.set(input.actorId, {
 			...actor,
-			state: input.newActorState,
+			state: input.nextActorState,
 			version: actor.version + 1,
 			updatedAt: input.now.toISOString()
 		})
 
-		this.events.push(...input.events)
-		for (const outgoing of input.outgoing) {
-			await this.enqueue(outgoing)
+		for (const append of input.contextAppends) {
+			this.contextItems.push({
+				id: `ctx-${this.contextItems.length + 1}`,
+				seq: this.contextItems.length + 1,
+				scope: append.scope,
+				kind: append.kind,
+				key: append.key,
+				schema: append.schema,
+				tags: append.tags,
+				body: append.body,
+				artifactId: append.artifactId,
+				summary: append.summary,
+				correlationId: envelope.correlationId,
+				intentId: undefined,
+				actorId: input.actorId,
+				callId: undefined,
+				parentCallId: undefined,
+				rootCallId: undefined,
+				producedByActorId: input.actorId,
+				producedByEnvelopeId: input.envelopeId,
+				producedByCommandId: append.producedByCommandId,
+				producedByToolCallId: append.producedByToolCallId,
+				sourceContextItemIds: append.sourceContextItemIds,
+				confidence: append.confidence,
+				hash: '',
+				createdAt: input.now.toISOString(),
+				supersedesItemId: append.supersedesItemId,
+				redactsItemId: append.redactsItemId
+			})
+		}
+
+		for (const command of input.commands) {
+			if (command.type === 'emit_event') {
+				this.events.push(command.event)
+				continue
+			}
+
+			await this.enqueue(
+				command.type === 'send_envelope'
+					? command.envelope
+					: { ...command.envelope, availableAt: command.availableAt }
+			)
 		}
 
 		this.envelopes.set(input.envelopeId, {
@@ -216,6 +260,18 @@ export class FakePersistence implements Persistence {
 		return this.streamEvents
 			.filter((event) => event.scope === input.scope && event.seq > (input.after ?? 0))
 			.slice(0, input.limit ?? 200)
+	}
+
+	async listContextItems(input: { selector: ContextSelector; snapshotSeq?: number }): Promise<ContextItemRecord[]> {
+		return this.contextItems.filter((item) => {
+			if (input.snapshotSeq !== undefined && item.seq > input.snapshotSeq) return false
+			if (input.selector.afterSeq !== undefined && item.seq <= input.selector.afterSeq) return false
+			return true
+		})
+	}
+
+	async getContextSnapshotSeq(): Promise<number> {
+		return this.contextItems.at(-1)?.seq ?? 0
 	}
 
 	async listActorHierarchy(_input: { rootActorId: string; observed?: boolean; includeRoot?: boolean }): Promise<ActorHierarchyRecord[]> {

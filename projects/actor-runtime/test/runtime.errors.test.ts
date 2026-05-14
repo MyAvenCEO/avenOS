@@ -99,7 +99,7 @@ test('fails message when handler returns a bad result', async () => {
 
 	const row = persistence.envelopes.get('env-bad-result')
 	expect(row?.status).toBe('queued')
-	expect(row?.lastError).toBe('Actor activation result must include state')
+	expect(row?.lastError).toBe('Actor decision must include nextState')
 })
 
 test('retries message when handler times out quickly in test configuration', async () => {
@@ -119,7 +119,7 @@ test('retries message when handler times out quickly in test configuration', asy
 		kind: 'intent',
 		async activate() {
 			await new Promise((resolve) => setTimeout(resolve, activationTimeoutMs + 5))
-			return { state: { done: true } }
+			return { nextState: { done: true }, contextAppends: [], commands: [] }
 		}
 	})
 
@@ -157,7 +157,7 @@ test('throws RuntimeCommitError after failActivation when commit conflicts', asy
 	runtime.register({
 		kind: 'intent',
 		async activate() {
-			return { state: { done: true } }
+			return { nextState: { done: true }, contextAppends: [], commands: [] }
 		}
 	})
 
@@ -199,7 +199,7 @@ test('timeout aborts signal-aware activations', async () => {
 					reject(context.signal.reason)
 				}, { once: true })
 			})
-			return { state: { done: true } }
+			return { nextState: { done: true }, contextAppends: [], commands: [] }
 		}
 	})
 
@@ -235,7 +235,7 @@ test('claim lease is padded to cover activation timeout and cleanup window', asy
 	runtime.register({
 		kind: 'intent',
 		async activate() {
-			return { state: {} }
+			return { nextState: {}, contextAppends: [], commands: [] }
 		}
 	})
 
@@ -277,7 +277,7 @@ test('runUntilIdle continues after commit conflicts', async () => {
 			} else {
 				persistence.commitError = null
 			}
-			return { state: { done: true } }
+			return { nextState: { done: true }, contextAppends: [], commands: [] }
 		}
 	})
 

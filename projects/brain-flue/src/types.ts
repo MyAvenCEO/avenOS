@@ -7,7 +7,7 @@ import type {
 	IntentBrainDecision,
 	IntentState
 } from '@jaensen/conversation-actors'
-import type { SkillSupervisorBrain, SkillSupervisorDecision, SkillWorkerBrain, SkillWorkerResult } from '@jaensen/skills'
+import type { SkillDefinition, SkillWorkerBrain, SkillWorkerResult } from '@jaensen/skills'
 
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high'
 
@@ -47,13 +47,6 @@ export interface FlueSessionAdapter {
 	}>
 }
 
-export interface CreateFlueSkillSupervisorBrainInput {
-	harness: FlueHarnessAdapter
-	workspaceRoot: string
-	model?: string
-	thinkingLevel?: ThinkingLevel
-}
-
 export interface CreateFlueSkillWorkerBrainInput {
 	harness: FlueHarnessAdapter
 	workspaceRoot: string
@@ -77,8 +70,8 @@ export interface CreateFlueIntentBrainInput {
 }
 
 export interface SupervisorBrainInput {
-	skill: Parameters<SkillSupervisorBrain['decide']>[0]['skill']
-	actorState: Parameters<SkillSupervisorBrain['decide']>[0]['actorState']
+	skill: SkillDefinition
+	actorState: unknown
 	envelope: EnvelopeRecord
 }
 
@@ -96,8 +89,6 @@ export type {
 	IntentBrain,
 	IntentBrainDecision,
 	IntentState,
-	SkillSupervisorBrain,
-	SkillSupervisorDecision,
 	SkillWorkerBrain,
 	SkillWorkerResult
 }

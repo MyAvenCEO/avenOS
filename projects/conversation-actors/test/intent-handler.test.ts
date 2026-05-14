@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import type { EnvelopeRecord } from '@jaensen/persistence-sqlite'
+import type { EnvelopeInput, EnvelopeRecord } from '@jaensen/persistence-sqlite'
 
 import { createSkillRegistry, type SkillDefinition } from '../../skills/src/index'
 
@@ -13,6 +13,7 @@ const skill: SkillDefinition = {
 	id: 'memory',
 	path: 'memory/SKILL.md',
 	description: 'Memory skill',
+	directActors: [],
 	frontmatter: { id: 'memory', description: 'Memory skill' },
 	body: '# Memory',
 	bodyHash: 'hash-memory',
@@ -51,7 +52,7 @@ test('intent.start initializes intent state', async () => {
 		status: 'active',
 		summary: 'Help the user'
 	})
-	expect(result.state).toMatchObject({
+	expect(result.nextState).toMatchObject({
 		intentId: 'intent-123',
 		title: 'My intent'
 	})
@@ -105,7 +106,8 @@ test('intent call_skill sends to skills/<id>', async () => {
 		context: makeContext()
 	})
 
-	expect(result.outgoing?.[0]).toMatchObject({
+	const outgoing = sentEnvelopes(result)
+	expect(outgoing[0]).toMatchObject({
 		toActor: 'skills/memory',
 		type: 'skill.request',
 		payload: {
@@ -114,7 +116,7 @@ test('intent call_skill sends to skills/<id>', async () => {
 			input: { text: 'hello' }
 		}
 	})
-	expect(typeof (result.outgoing?.[0] as { payload?: { callId?: unknown } }).payload?.callId).toBe('string')
+	expect(typeof (outgoing[0] as { payload?: { callId?: unknown } }).payload?.callId).toBe('string')
 })
 
 test('intent rejects unknown skillId', async () => {
@@ -165,7 +167,7 @@ test('intent reply_user sends human.message', async () => {
 		context: makeContext()
 	})
 
-	expect(result.outgoing?.[0]).toMatchObject({
+	expect(sentEnvelopes(result)[0]).toMatchObject({
 		toActor: 'human',
 		type: 'human.message',
 		payload: {
@@ -194,8 +196,8 @@ test('intent ask_user sends human.question', async () => {
 		context: makeContext()
 	})
 
-	expect(result.state).toMatchObject({ status: 'waiting_for_user' })
-	expect(result.outgoing?.[0]).toMatchObject({
+	expect(result.nextState as IntentState).toMatchObject({ status: 'waiting_for_user' })
+	expect(sentEnvelopes(result)[0]).toMatchObject({
 		toActor: 'human',
 		type: 'human.question'
 	})
@@ -220,8 +222,8 @@ test('intent complete sends lifecycle update to dispatcher', async () => {
 		context: makeContext()
 	})
 
-	expect(result.outgoing?.some((envelope) => envelope.toActor === 'dispatcher')).toBeTrue()
-	expect(result.outgoing?.find((envelope) => envelope.toActor === 'dispatcher')).toMatchObject({
+	expect(sentEnvelopes(result).some((envelope) => envelope.toActor === 'dispatcher')).toBeTrue()
+	expect(sentEnvelopes(result).find((envelope) => envelope.toActor === 'dispatcher')).toMatchObject({
 		type: 'intent.lifecycle',
 		payload: {
 			intentId: 'intent-123',
@@ -260,12 +262,12 @@ test('intent complete sends lifecycle update to dispatcher', async () => {
 		context: makeContext()
 	})
 
-	expect(result.outgoing?.[0].toActor).toBe('skills/worker/memory')
-	expect(result.outgoing?.[0].toActor.startsWith('skill-worker/')).toBeFalse()
+	expect(sentEnvelopes(result)[0].toActor).toBe('skills/worker/memory')
+	expect(sentEnvelopes(result)[0].toActor.startsWith('skill-worker/')).toBeFalse()
 })
 
 test('skill.result is routed through IntentBrain', async () => {
-	let seenType: string | null = null
+	let seenType: string = 'unseen'
 	const handler = createIntentHandler({
 		skillRegistry: createSkillRegistry([skill]),
 		brain: {
@@ -306,17 +308,18 @@ test('pendingSkillCalls is populated on call and cleared on skill.result', async
 		envelope: makeEnvelopeRecord(),
 		context: makeContext()
 	})
-	const pendingCallId = Object.keys(first.state.pendingSkillCalls)[0]
-	expect(first.state.pendingSkillCalls).toMatchObject({
+	const firstState = first.nextState as IntentState
+	const pendingCallId = Object.keys(firstState.pendingSkillCalls)[0]
+	expect(firstState.pendingSkillCalls).toMatchObject({
 		[pendingCallId]: expect.objectContaining({ callId: pendingCallId, skillId: 'memory', request: 'Remember this' })
 	})
 
 	const second = await handler.activate({
-		actor: makeIntentActor(first.state),
+		actor: makeIntentActor(firstState),
 		envelope: makeEnvelopeRecord({ type: 'skill.result', fromActor: 'skills/memory', payload: { callId: pendingCallId, result: { ok: true } } }),
 		context: makeContext()
 	})
-	expect(second.state.pendingSkillCalls).toEqual({})
+	expect((second.nextState as IntentState).pendingSkillCalls).toEqual({})
 })
 
 function makeIntentState(): IntentState {
@@ -367,8 +370,13 @@ function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRe
 function makeContext() {
 	return {
 		now: new Date('2026-05-12T00:00:00.000Z'),
+		signal: new AbortController().signal,
 		generateId() {
 			return 'generated-call-id'
+		},
+		contextSnapshotSeq: 0,
+		async queryContext() {
+			return []
 		},
 		makeEnvelope(input: {
 			from: string
@@ -391,4 +399,10 @@ function makeContext() {
 			}
 		}
 	}
+}
+
+function sentEnvelopes(result: { commands: Array<{ type: string; envelope?: EnvelopeInput }> }): EnvelopeInput[] {
+	return result.commands
+		.filter((command): command is { type: 'send_envelope'; envelope: EnvelopeInput } => command.type === 'send_envelope' && Boolean(command.envelope))
+		.map((command) => command.envelope)
 }
