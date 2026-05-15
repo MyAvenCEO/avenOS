@@ -1,16 +1,8 @@
 /**
  * Host glue for the vibe-app sandbox.
  *
- * Responsibilities:
- * - Point an outer iframe at a separate-origin sandbox proxy (`sandbox.html`).
- * - Construct an `AppBridge` with sensible host context and forward MCP Apps
- *   lifecycle events to caller-supplied callbacks.
- * - Drive a single end-to-end "run app" flow: connect → ship HTML → tool I/O.
- *
- * Transport seam: `AppBridge` is constructed with `null` instead of an MCP
- * `Client`. To wire a real MCP server later, pass `new Client(...)` in
- * `createAppBridge` (extend `AppBridgeHostOptions`) and connect it before
- * `bridge.connect()` — the iframe and View code stay the same.
+ * - **Browser:** outer `<iframe>` → separate-origin `sandbox.html` (Bun `serve.ts` or static URL).
+ * - **Tauri:** outer **native child WebView** + `TauriSandboxTransport`; inner `sandbox.html` still uses the inner iframe for untrusted HTML.
  */
 import {
 	AppBridge,
@@ -25,6 +17,7 @@ import {
 	type McpUiUpdateModelContextRequest,
 	PostMessageTransport
 } from '@modelcontextprotocol/ext-apps/app-bridge'
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 
 const DEFAULT_IMPLEMENTATION = { name: '@avenos/vibe-app-sandbox host', version: '0.0.1' }
@@ -135,7 +128,7 @@ function hookInitializedCallback(appBridge: AppBridge): Promise<void> {
 }
 
 export function createAppBridge(
-	outerIframe: HTMLIFrameElement,
+	sizing: HTMLIFrameElement | HTMLElement,
 	callbacks?: AppBridgeCallbacks,
 	options?: AppBridgeHostOptions
 ): AppBridge {
@@ -179,7 +172,7 @@ export function createAppBridge(
 			})
 		}
 	})
-	iframeResizeObserver.observe(outerIframe)
+	iframeResizeObserver.observe(sizing)
 
 	const prevOnClose = appBridge.onclose
 	appBridge.onclose = () => {
@@ -213,7 +206,7 @@ export function createAppBridge(
 	}
 
 	appBridge.onsizechange = async ({ width, height }: McpUiSizeChangedNotification['params']) => {
-		const style = getComputedStyle(outerIframe)
+		const style = getComputedStyle(sizing)
 		const isBorderBox = style.boxSizing === 'border-box'
 		const from: Keyframe = {}
 		const to: Keyframe = {}
@@ -227,15 +220,15 @@ export function createAppBridge(
 			h += Number.parseFloat(style.borderTopWidth) + Number.parseFloat(style.borderBottomWidth)
 		}
 		if (w !== undefined) {
-			from.minWidth = `${outerIframe.offsetWidth}px`
-			outerIframe.style.minWidth = to.minWidth = `min(${w}px, 100%)`
+			from.minWidth = `${sizing.offsetWidth}px`
+			sizing.style.minWidth = to.minWidth = `min(${w}px, 100%)`
 		}
 		if (h !== undefined) {
-			from.height = `${outerIframe.offsetHeight}px`
-			outerIframe.style.height = to.height = `${h}px`
+			from.height = `${sizing.offsetHeight}px`
+			sizing.style.height = to.height = `${h}px`
 		}
 		if (w !== undefined || h !== undefined) {
-			outerIframe.animate([from, to], { duration: 300, easing: 'ease-out' })
+			sizing.animate([from, to], { duration: 300, easing: 'ease-out' })
 		}
 	}
 
@@ -271,20 +264,24 @@ export interface RunAppOptions {
 	toolResult: Promise<CallToolResult>
 }
 
-/** Full handshake: connect transport → push HTML into inner iframe → tool input/result. */
+/** Connect `AppBridge` via outer iframe `contentWindow` or a custom MCP `Transport` (e.g. Tauri). */
 export async function runApp(
-	outerIframe: HTMLIFrameElement,
+	target: HTMLIFrameElement | { transport: Transport },
 	appBridge: AppBridge,
 	opts: RunAppOptions
 ): Promise<void> {
-	const contentWindow = outerIframe.contentWindow
-	if (!contentWindow) {
-		throw new Error('Outer iframe has no contentWindow (sandbox not loaded?)')
-	}
-
 	const initialized = hookInitializedCallback(appBridge)
 
-	await appBridge.connect(new PostMessageTransport(contentWindow, contentWindow))
+	if ('transport' in target && target.transport !== undefined) {
+		await appBridge.connect(target.transport)
+	} else {
+		const outerIframe = target as HTMLIFrameElement
+		const contentWindow = outerIframe.contentWindow
+		if (!contentWindow) {
+			throw new Error('Outer iframe has no contentWindow (sandbox not loaded?)')
+		}
+		await appBridge.connect(new PostMessageTransport(contentWindow, contentWindow))
+	}
 
 	await appBridge.sendSandboxResourceReady({
 		html: opts.html,

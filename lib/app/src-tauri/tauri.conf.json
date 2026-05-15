@@ -4,7 +4,7 @@
 	"version": "0.0.1",
 	"identifier": "ceo.aven.os",
 	"build": {
-		"beforeDevCommand": "bun run dev",
+		"beforeDevCommand": "bun run build:vibe-sandbox && bun run dev",
 		"devUrl": "http://127.0.0.1:1420",
 		"beforeBuildCommand": "bun run build",
 		"frontendDist": "../build"
@@ -18,7 +18,8 @@
 				"width": 1280,
 				"height": 800,
 				"minWidth": 960,
-				"minHeight": 600
+				"minHeight": 600,
+				"dragDropEnabled": false
 			}
 		],
 		"security": {
@@ -40,6 +41,10 @@
 			"icons/icon.icns",
 			"icons/icon.ico"
 		],
+		"resources": {
+			"../../../libs/vibe-app-sandbox/sandbox/dist/sandbox.html": "vibe-sandbox/sandbox.html",
+			"../../../libs/vibe-app-sandbox/sandbox/dist/ext-apps.js": "vibe-sandbox/ext-apps.js"
+		},
 		"macOS": {
 			"minimumSystemVersion": "11.0"
 		}

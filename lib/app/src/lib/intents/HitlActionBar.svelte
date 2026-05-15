@@ -10,16 +10,20 @@
  *  - `hitl` / `error` → `Re-train` pill (left) + composer + `Accept` pill (right)
  *  - none / `working` / `archived` → bare composer
  *
- * Each variant has a `rowCluster` form (when the composer is collapsed)
- * and a stacked form (when the composer expands into typing/listening
- * mode). The `composerMode` and slash-command state stay local to this
- * component — the parent only learns about message submits, retrain
- * submits, archive clicks, and accept clicks via callback props.
+ * For `hitl` / `error`, when the composer expands (typing or listening), the
+ * pill row is **hidden** and a single full-width `IntentComposer` replaces the
+ * whole cluster — same mic / keyboard flow as the non-HITL bar so new intents
+ * and voice notes are not visually or spatially blocked by the action pills.
+ *
+ * The `composerMode` and slash-command state stay local to this component — the parent
+ * only learns via `onSubmitMessage`, `onRetrain`, `onArchive`, and `onAccept`.
  */
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
+import { focusShellWebview } from '$lib/intent-mock/focus-shell-webview'
+import { tick } from 'svelte'
 import { type ComposerMode, type IntentRow } from './types'
 
-type ComposerApi = { openWithCommand(label: string): void }
+type ComposerApi = { openWithCommand(label: string): void; openWithFiles(files: File[] | FileList): void }
 
 let {
 	intent,
@@ -65,23 +69,32 @@ function handleCommand(command: string, feedback: string) {
 	onRetrain(feedback)
 }
 
+/** Called from the page when the user drops files on the window. */
+export function ingestDroppedFiles(files: File[] | FileList) {
+	const list = Array.from(files)
+	if (!list.length) return
+	void tick().then(() => composerRef?.openWithFiles(list))
+}
+
 const isSuccess = $derived(intent?.status === 'success')
 const isHitlOrError = $derived(
 	intent != null && (intent.status === 'hitl' || intent.status === 'error')
 )
-/** Hide Re-train / Accept|Archive row while retrain typing so the textarea does not overlap that chrome. */
-const hideHitlCluster = $derived(
-	isHitlOrError && composerMode === 'typing' && composerCommand != null
-)
 </script>
 
-<div class="flex min-w-0 flex-1 items-center justify-center gap-2 sm:gap-3">
+<div
+	role="group"
+	aria-label="Intent composer"
+	class="flex min-w-0 flex-1 items-center justify-center gap-2 sm:gap-3"
+	onpointerdown={() => void focusShellWebview()}
+>
 	{#if isSuccess}
 		{#if composerMode === 'collapsed'}
 			<div class="grid min-h-12 w-full grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3">
 				<div class="flex items-center justify-end gap-2"></div>
 				<div class="justify-self-center">
 					<IntentComposer
+						bind:this={composerRef}
 						rowCluster
 						onSubmitMessage={onSubmitMessage}
 						onModeChange={(m: ComposerMode) => {
@@ -104,6 +117,7 @@ const hideHitlCluster = $derived(
 		{:else}
 			<div class="flex w-full flex-col items-stretch gap-2">
 				<IntentComposer
+					bind:this={composerRef}
 					onSubmitMessage={onSubmitMessage}
 					onModeChange={(m: ComposerMode) => {
 						composerMode = m
@@ -175,7 +189,7 @@ const hideHitlCluster = $derived(
 				</div>
 			</div>
 		{:else}
-			<div class="flex w-full flex-col items-stretch gap-2">
+			<div class="flex w-full min-w-0 justify-center">
 				<IntentComposer
 					bind:this={composerRef}
 					bind:command={composerCommand}
@@ -185,47 +199,11 @@ const hideHitlCluster = $derived(
 						composerMode = m
 					}}
 				/>
-				{#if !hideHitlCluster}
-					<div class="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3">
-						<div class="flex items-center justify-end gap-2">
-							<button
-								type="button"
-								class="inline-flex h-10 min-h-10 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-status-error border-r-status-error bg-surface-card px-3.5 text-[11px] font-semibold text-status-error transition-colors hover:bg-status-error hover:text-status-error-foreground sm:px-4"
-								onclick={() => composerRef?.openWithCommand('retrain')}
-								aria-label="Re-train intent — open composer with retrain command"
-							>
-								Re-train
-							</button>
-						</div>
-						<div></div>
-						<div class="flex items-center justify-start gap-2">
-							{#if intent?.status === 'error'}
-								<button
-									type="button"
-									class="inline-flex h-10 min-h-10 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-border border-r-border bg-surface-card px-3.5 text-[11px] font-semibold text-foreground/70 transition-colors hover:bg-foreground/5 sm:px-4"
-									onclick={onArchive}
-									aria-label="Archive intent — dismiss without resolving"
-									title="Archive intent"
-								>
-									Archive
-								</button>
-							{:else}
-								<button
-									type="button"
-									class="inline-flex h-10 min-h-10 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-status-success border-r-status-success bg-surface-card px-3.5 text-[11px] font-semibold text-status-success transition-colors hover:bg-status-success hover:text-status-success-foreground sm:px-4"
-									onclick={onAccept}
-									aria-label="Accept intent — mark completed successfully"
-								>
-									Accept
-								</button>
-							{/if}
-						</div>
-					</div>
-				{/if}
 			</div>
 		{/if}
 	{:else}
 		<IntentComposer
+			bind:this={composerRef}
 			onSubmitMessage={onSubmitMessage}
 			onModeChange={(m: ComposerMode) => {
 				composerMode = m

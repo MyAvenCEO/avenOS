@@ -1,12 +1,13 @@
 <script lang="ts">
 import type { AppBridge } from '@avenos/vibe-app-sandbox'
-import { createAppBridge, loadSandboxProxy, log, runApp } from '@avenos/vibe-app-sandbox'
+import { createAppBridge, log, runApp } from '@avenos/vibe-app-sandbox'
 import { type VibeAppId, vibeAppById } from '@avenos/vibe-apps'
-import { onDestroy, onMount } from 'svelte'
+import { onDestroy, onMount, tick } from 'svelte'
 import bankStatementHtml from '../../../../../libs/vibe-apps/bank-statement/index.html?raw'
 import contractHtml from '../../../../../libs/vibe-apps/contract/index.html?raw'
 import invoiceHtml from '../../../../../libs/vibe-apps/invoice/index.html?raw'
 import todosHtml from '../../../../../libs/vibe-apps/todos/index.html?raw'
+import { createTauriSandboxSession, isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 
 type RunAppToolResult = Parameters<typeof runApp>[2]['toolResult']
 
@@ -19,13 +20,19 @@ const bundles: Record<VibeAppId, string> = {
 
 let { appId }: { appId: VibeAppId } = $props()
 
-let iframe = $state<HTMLIFrameElement | null>(null)
+let host = $state<HTMLElement | null>(null)
 let bridge = $state<AppBridge | null>(null)
-let initError = $state<string | null>(null)
+let initError = $state<string | null>(
+	isTauriRuntime()
+		? null
+		: 'Vibe-Apps laufen nur in der Desktop-App (Tauri mit Child-WebView). Start: «bun dev:app:macos» bzw. «bun run --cwd lib/app tauri dev».'
+)
+let tauriTeardown: (() => Promise<void>) | null = null
 
 onMount(() => {
 	void (async () => {
-		if (!iframe) return
+		if (!isTauriRuntime()) return
+		await tick()
 		const def = vibeAppById(appId)
 		const html = bundles[appId]
 		if (!html?.trim()) {
@@ -33,13 +40,18 @@ onMount(() => {
 			return
 		}
 		try {
-			await loadSandboxProxy(iframe)
-			const b = createAppBridge(iframe, undefined, {
+			if (!host) {
+				initError = 'Kein Sandbox-Platzhalter — bitte UI prüfen.'
+				return
+			}
+			const session = await createTauriSandboxSession({ host })
+			tauriTeardown = session.destroy
+			const b = createAppBridge(host, undefined, {
 				containerDimensions: { maxHeight: 6000 },
 				displayMode: 'inline'
 			})
 			bridge = b
-			await runApp(iframe, b, {
+			await runApp({ transport: session.transport }, b, {
 				html,
 				toolArguments: def.getToolArguments(),
 				toolResult: def.getToolResult() as RunAppToolResult
@@ -52,10 +64,16 @@ onMount(() => {
 })
 
 onDestroy(() => {
-	if (bridge) {
-		void bridge.teardownResource({}).catch(() => {})
-		bridge = null
-	}
+	void (async () => {
+		if (bridge) {
+			await bridge.teardownResource({}).catch(() => {})
+			bridge = null
+		}
+		if (tauriTeardown) {
+			await tauriTeardown().catch(() => {})
+			tauriTeardown = null
+		}
+	})()
 })
 </script>
 
@@ -69,11 +87,11 @@ onDestroy(() => {
 		</div>
 	{/if}
 
-	<div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-		<iframe
-			bind:this={iframe}
-			title="Vibe-App-Sandbox"
-			class="block min-h-0 w-full flex-1 border-0 bg-transparent"
-		></iframe>
-	</div>
+	{#if isTauriRuntime()}
+		<div
+			bind:this={host}
+			title="Vibe-Sandbox-Platzhalter"
+			class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] bg-transparent"
+		></div>
+	{/if}
 </div>

@@ -15,6 +15,8 @@
       "dependencies": {
         "@avenos/vibe-app-sandbox": "workspace:*",
         "@avenos/vibe-apps": "workspace:*",
+        "@modelcontextprotocol/ext-apps": "^1.0.0",
+        "@modelcontextprotocol/sdk": "^1.29.0",
         "@tauri-apps/api": "^2",
         "@xterm/addon-fit": "^0.11.0",
         "@xterm/addon-web-links": "^0.12.0",
@@ -41,6 +43,7 @@
       "dependencies": {
         "@modelcontextprotocol/ext-apps": "^1.0.0",
         "@modelcontextprotocol/sdk": "^1.29.0",
+        "@tauri-apps/api": "^2",
         "zod": "^4.4.2",
         "zod-to-json-schema": "^3.25.2",
       },

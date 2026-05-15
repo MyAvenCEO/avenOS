@@ -4,6 +4,7 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
+		"predev": "bun ../../scripts/free-dev-server-port.ts",
 		"dev": "bun --env-file=../../.env x --bun vite dev",
 		"build:vibe-sandbox": "bun --cwd=../../libs/vibe-app-sandbox run build",
 		"build": "bun run build:vibe-sandbox && bun --env-file=../../.env x --bun vite build",
@@ -12,7 +13,8 @@
 		"check": "bunx --bun svelte-kit sync && bunx --bun svelte-check --tsconfig ./tsconfig.json",
 		"tauri": "bunx --bun tauri",
 		"tauri:dev": "bunx --bun tauri dev",
-		"tauri:build:macos": "bunx --bun tauri build"
+		"tauri:build:macos": "bunx --bun tauri build",
+		"tauri:build:linux": "bunx --bun tauri build --bundles deb,appimage"
 	},
 	"devDependencies": {
 		"@tauri-apps/cli": "^2",
@@ -30,6 +32,8 @@
 	"dependencies": {
 		"@avenos/vibe-app-sandbox": "workspace:*",
 		"@avenos/vibe-apps": "workspace:*",
+		"@modelcontextprotocol/ext-apps": "^1.0.0",
+		"@modelcontextprotocol/sdk": "^1.29.0",
 		"@tauri-apps/api": "^2",
 		"@xterm/addon-fit": "^0.11.0",
 		"@xterm/addon-web-links": "^0.12.0",

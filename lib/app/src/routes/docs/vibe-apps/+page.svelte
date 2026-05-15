@@ -53,7 +53,9 @@ let selectedId = $state<VibeAppId>('invoice')
 			</a>
 		</aside>
 
-		<section class="flex min-h-0 min-w-0 flex-1 flex-col bg-sandbox-host p-6">
+		<section
+			class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] bg-sandbox-host p-6"
+		>
 			<div class="flex min-h-0 min-w-0 flex-1 flex-col">
 				{#key selectedId}
 					<VibeSandboxFrame appId={selectedId} />

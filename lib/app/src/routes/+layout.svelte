@@ -1,8 +1,13 @@
 <script lang="ts">
 import { page } from '$app/state'
+import { ensureComposerTauriShortcutBridge } from '$lib/intent-mock/composer-tauri-bridge'
 import '../app.css'
 
 let { children: pageContent } = $props()
+
+$effect(() => {
+	ensureComposerTauriShortcutBridge()
+})
 
 const path = $derived(page.url.pathname)
 const intentsActive = $derived(path === '/')

@@ -333,6 +333,8 @@ let activityTab = $state<ActivityTab>('activity')
 /** Nested window drag-enter/leave counter for reliable file-drag overlay dismissal. */
 let dragDepth = $state(0)
 
+let hitlActionBarRef = $state<{ ingestDroppedFiles(files: File[] | FileList): void } | null>(null)
+
 /** True whenever at least one file-drag enter hasn't been balanced by leave yet. */
 const dragActive = $derived(dragDepth > 0)
 
@@ -766,10 +768,8 @@ $effect(() => {
 		resetDragOverlay()
 		const list = e.dataTransfer?.files
 		if (!list?.length) return
-		const names = Array.from(list, (f) => f.name)
-		const payload =
-			names.length === 1 ? `Dropped: ${names[0]}` : `Dropped (${names.length}): ${names.join(', ')}`
-		handleComposerSubmit(payload)
+		const files = Array.from(list)
+		hitlActionBarRef?.ingestDroppedFiles(files)
 	}
 
 	window.addEventListener('dragenter', onDragEnter)
@@ -820,7 +820,7 @@ function backToMasterList() {
 		<div
 			class="pointer-events-auto fixed inset-0 z-[100] flex touch-none items-center justify-center bg-background/95 backdrop-blur-md"
 			role="region"
-			aria-label="Drop files to create mock intent"
+			aria-label="Drop files to attach in composer"
 		>
 			<div class="mx-6 w-full max-w-md">
 				<div
@@ -833,10 +833,10 @@ function backToMasterList() {
 							Drop files here
 						</p>
 						<p class="mt-2.5 px-1 text-[12px] leading-relaxed opacity-85">
-							Release to create a mock intent from file names.
+							Release to open the composer with thumbnails and optional message.
 						</p>
 						<p class="mt-1.5 px-1 text-[11px] leading-relaxed opacity-55">
-							Filenames only — nothing is uploaded in this mock preview.
+							Mock preview — files stay in-browser only; submit sends filenames in the intent text.
 						</p>
 					</div>
 				</div>
@@ -914,6 +914,7 @@ function backToMasterList() {
 					</button>
 				{/if}
 				<HitlActionBar
+					bind:this={hitlActionBarRef}
 					intent={selectedIntent}
 					onSubmitMessage={handleComposerSubmit}
 					onRetrain={handleRetrainCommand}

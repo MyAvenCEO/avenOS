@@ -26,6 +26,7 @@ import ActivityView from './ActivityView.svelte'
 import DisplayView from './DisplayView.svelte'
 import ConfigView from './ConfigView.svelte'
 import ContextView from './ContextView.svelte'
+import SandboxTerminal from '$lib/sandbox/SandboxTerminal.svelte'
 
 let {
 	intent,
@@ -135,6 +136,7 @@ $effect(() => {
 	stacked item under flex-col).
 -->
 <div
+	data-native-webview-scope
 	class={`col-start-1 row-start-4 flex min-h-0 min-w-0 flex-1 flex-col max-sm:items-start max-sm:justify-start sm:col-start-2 sm:row-start-1 sm:row-end-3 ${!intent ? 'max-sm:hidden' : 'max-sm:row-start-2'}`}
 >
 	<div class="flex min-h-[12rem] min-w-0 flex-1 flex-col gap-2 sm:min-h-[18rem]">
@@ -193,7 +195,12 @@ $effect(() => {
 				by /docs/vibe-apps). All postMessage origin checks and iframe
 				`sandbox` attributes are owned by `VibeSandboxFrame`.
 			-->
-			<div class="mt-1 flex items-center gap-3" role="tablist" aria-label="Activity panel tabs">
+			<div
+				data-native-webview-clearance="activity-tabs"
+				class="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+				role="tablist"
+				aria-label="Activity panel tabs"
+			>
 				<button
 					type="button"
 					role="tab"
@@ -247,6 +254,18 @@ $effect(() => {
 				>
 					Context
 				</button>
+				<button
+					type="button"
+					role="tab"
+					aria-selected={activityTab === 'terminal'}
+					onclick={() => (activityTab = 'terminal')}
+					class="cursor-pointer text-[8px] font-bold tracking-[0.22em] uppercase transition-opacity {activityTab ===
+					'terminal'
+						? 'text-foreground opacity-90'
+						: 'opacity-30 hover:opacity-60'}"
+				>
+					Terminal
+				</button>
 			</div>
 
 			{#if activityTab === 'display' && inDisplay && (isError || intent.hitlVibeAppId)}
@@ -255,6 +274,12 @@ $effect(() => {
 				<ConfigView {intent} skill={selectedSkill} />
 			{:else if activityTab === 'context'}
 				<ContextView {intent} skill={selectedSkill} />
+			{:else if activityTab === 'terminal'}
+				<div
+					class="flex min-h-[min(28rem,50dvh)] min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] border-2 border-dotted border-border/40 bg-black"
+				>
+					<SandboxTerminal />
+				</div>
 			{:else}
 				<ActivityView logs={filteredLogs} />
 			{/if}

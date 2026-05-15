@@ -79,7 +79,7 @@ const errorReason = $derived(
 	</div>
 {:else if intent.hitlVibeAppId}
 	<div
-		class="flex min-h-[400px] min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] bg-white/10"
+		class="mt-5 flex min-h-[400px] min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] bg-white/10 sm:mt-6"
 	>
 		{#key `${intent.id}:${intent.hitlVibeAppId}`}
 			<VibeSandboxFrame appId={intent.hitlVibeAppId} />
