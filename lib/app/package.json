@@ -9,11 +9,15 @@
 		"build": "bun run build:vibe-sandbox && bun --env-file=../../.env x --bun vite build",
 		"preview": "bun --env-file=../../.env x --bun vite preview",
 		"prepare": "bunx --bun svelte-kit sync || echo ''",
-		"check": "bunx --bun svelte-kit sync && bunx --bun svelte-check --tsconfig ./tsconfig.json"
+		"check": "bunx --bun svelte-kit sync && bunx --bun svelte-check --tsconfig ./tsconfig.json",
+		"tauri": "bunx --bun tauri",
+		"tauri:dev": "bunx --bun tauri dev",
+		"tauri:build:macos": "bunx --bun tauri build"
 	},
 	"devDependencies": {
+		"@tauri-apps/cli": "^2",
 		"@types/node": "^22.13.9",
-		"@sveltejs/adapter-auto": "^7.0.1",
+		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.57.0",
 		"@sveltejs/vite-plugin-svelte": "^7.0.0",
 		"@tailwindcss/vite": "^4.2.4",
@@ -24,6 +28,7 @@
 		"vite": "^8.0.7"
 	},
 	"dependencies": {
+		"@tauri-apps/api": "^2",
 		"@avenos/vibe-app-sandbox": "workspace:*",
 		"@avenos/vibe-apps": "workspace:*"
 	}
