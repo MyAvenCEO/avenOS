@@ -253,7 +253,7 @@
 	}
 
 	async function fetchIntentEvents(intentId: string): Promise<ActorLogRecord[]> {
-		const scope = `intents/${intentId}`
+		const scope = `aven/intents/${intentId}`
 		const response = await fetch(`/api/aven/jaensen/events?scope=${encodeURIComponent(scope)}`)
 		return (await expectJson<{ events: ActorLogRecord[] }>(response)).events.toSorted((a, b) => a.seq - b.seq)
 	}
@@ -435,7 +435,8 @@
 		if (typeof payload.intentId === 'string') chips.push({ label: 'Intent', value: payload.intentId })
 		if (typeof payload.skillId === 'string') chips.push({ label: 'Skill', value: payload.skillId })
 		if (typeof payload.fromSkillId === 'string') chips.push({ label: 'Skill', value: payload.fromSkillId })
-		if (typeof payload.workerId === 'string') chips.push({ label: 'Worker', value: payload.workerId })
+		const runtimeWorkerId = readRuntimeWorkerId(payload)
+		if (runtimeWorkerId) chips.push({ label: 'Runtime worker', value: runtimeWorkerId })
 		if (typeof payload.workerActorId === 'string') chips.push({ label: 'Worker actor', value: payload.workerActorId })
 		if (typeof payload.messageType === 'string') chips.push({ label: 'Message', value: payload.messageType })
 		if (typeof payload.status === 'string') chips.push({ label: 'Status', value: payload.status })
@@ -471,7 +472,7 @@
 			case 'skill.worker_spawned':
 			case 'skill.worker_routed':
 				if (typeof payload.skillId === 'string') items.push({ label: 'Skill', value: payload.skillId })
-				if (typeof payload.workerId === 'string') items.push({ label: 'Worker', value: payload.workerId })
+				if (typeof payload.workerActorId === 'string') items.push({ label: 'Worker actor', value: payload.workerActorId })
 				break
 			case 'actor.io.prompt':
 				if (typeof trace.label === 'string') items.push({ label: 'Prompt', value: trace.label })
@@ -590,7 +591,7 @@
 			case 'intent.skill_call_completed':
 				return `Skill call completed: ${String(payload.fromSkillId ?? payload.skillId ?? 'unknown')}`
 			case 'skill.worker_completed':
-				return `Worker completed: ${String(payload.workerId ?? 'unknown')}`
+				return `Worker completed: ${String(payload.workerName ?? payload.workerActorId ?? 'unknown')}`
 			case 'skill.worker_spawned':
 				return `Worker spawned: ${String(payload.workerActorId ?? 'unknown')}`
 			case 'actor.io.prompt':
@@ -660,11 +661,11 @@
 				return { label: `Called ${String(payload.skillId ?? 'skill')}`, detail: typeof payload.request === 'string' ? payload.request : undefined }
 			case 'intent.skill_call_completed':
 			case 'skill.worker_completed':
-				return { label: `Completed ${String(payload.fromSkillId ?? payload.skillId ?? payload.workerId ?? 'work')}`, detail: eventSummary(event) ?? undefined, tone: 'success' }
+				return { label: `Completed ${String(payload.fromSkillId ?? payload.skillId ?? payload.workerName ?? payload.workerActorId ?? 'work')}`, detail: eventSummary(event) ?? undefined, tone: 'success' }
 			case 'skill.worker_spawned':
-				return { label: `Spawned worker ${String(payload.workerId ?? 'unknown')}`, detail: typeof payload.skillId === 'string' ? payload.skillId : undefined }
+				return { label: `Spawned worker ${String(payload.workerName ?? payload.workerActorId ?? 'unknown')}`, detail: typeof payload.skillId === 'string' ? payload.skillId : undefined }
 			case 'skill.worker_routed':
-				return { label: `Routed worker ${String(payload.workerId ?? 'unknown')}`, detail: typeof payload.skillId === 'string' ? payload.skillId : undefined }
+				return { label: `Routed worker ${String(payload.workerName ?? payload.workerActorId ?? 'unknown')}`, detail: typeof payload.skillId === 'string' ? payload.skillId : undefined }
 			case 'actor.io.prompt':
 				return { label: `LLM prompt: ${String(trace.label ?? 'prompt')}`, detail: typeof trace.outputSummary === 'string' ? shorten(trace.outputSummary, 180) : undefined }
 			case 'actor.io.shell':
@@ -683,7 +684,7 @@
 		for (const event of events) {
 			if (event.type === 'actor.io.inbound') {
 				const payload = payloadRecord(event.payload)
-				if (typeof payload.toActor === 'string' && payload.toActor.startsWith('intents/')) {
+				if (typeof payload.toActor === 'string' && payload.toActor.startsWith('aven/intents/')) {
 					const text = humanInputFromEvent(event)
 					if (text) {
 						currentAssistant = null
@@ -845,6 +846,11 @@
 			stderr: typeof trace.stderr === 'string' && trace.stderr.trim().length > 0 ? trace.stderr : null,
 			exitCode: typeof trace.exitCode === 'number' ? String(trace.exitCode) : null
 		}
+	}
+
+	function readRuntimeWorkerId(payload: Record<string, unknown>): string | null {
+		const value = payload['workerActorId']
+		return typeof value === 'string' && value.length > 0 ? value : null
 	}
 
 	function eventTone(event: ActorLogRecord): 'hero' | 'message' | 'skill' | 'trace' | 'technical' | 'error' {

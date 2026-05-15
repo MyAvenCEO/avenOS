@@ -9,11 +9,12 @@ import { runWorkerToolLoop } from './worker-tool-loop'
 
 export function createFlueSkillWorkerBrain(input: CreateFlueSkillWorkerBrainInput): SkillWorkerBrain {
 	return {
-		async run({ skill, workerId, actorState, envelope, signal }) {
+		async run({ skill, workerActorId, workerName, actorState, envelope, signal }) {
 			const workerPolicy = readWorkerPolicy(skill.frontmatter)
 			const prompt = buildWorkerPrompt({
 				skill,
-				workerId,
+				workerActorId,
+				workerName,
 				actorState,
 				envelope,
 				workspaceRoot: input.workspaceRoot,
@@ -26,7 +27,7 @@ export function createFlueSkillWorkerBrain(input: CreateFlueSkillWorkerBrainInpu
 					harness: input.harness,
 					skill,
 					skillId: skill.id,
-					workerId,
+					workerActorId,
 					actorState,
 					workerPolicy,
 					prompt,
@@ -48,7 +49,7 @@ export function createFlueSkillWorkerBrain(input: CreateFlueSkillWorkerBrainInpu
 					actions: result.actions?.map((action) => ({ ...action, payload: action.payload ?? null }))
 				}
 			} catch (error) {
-				throw toFlueBrainModelError(`Flue worker run failed for skill ${skill.id} worker ${workerId}`, error)
+				throw toFlueBrainModelError(`Flue worker run failed for skill ${skill.id} worker ${workerActorId}`, error)
 			}
 		}
 	}
@@ -58,7 +59,7 @@ async function runWorkerPrompt(input: {
 	harness: CreateFlueSkillWorkerBrainInput['harness']
 	skill: Parameters<SkillWorkerBrain['run']>[0]['skill']
 	skillId: string
-	workerId: string
+	workerActorId: string
 	actorState: Parameters<SkillWorkerBrain['run']>[0]['actorState']
 	workerPolicy: 'ephemeral' | 'pooled' | 'durable'
 	prompt: string
@@ -71,7 +72,7 @@ async function runWorkerPrompt(input: {
 	signal?: AbortSignal
 }) {
 	if (input.workerPolicy === 'durable' || input.workerPolicy === 'pooled') {
-		const session = await input.harness.session(createWorkerSessionName(input.skillId, input.workerId), {
+		const session = await input.harness.session(createWorkerSessionName(input.workerActorId), {
 			role: 'jaensen-skill-worker'
 		})
 

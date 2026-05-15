@@ -19,7 +19,7 @@ export interface PostMessageInput {
 
 export interface PostMessageResult {
 	envelopeId: string
-	correlationId: string
+	runId: string
 }
 
 export interface IntentSummaryDto {
@@ -36,6 +36,8 @@ export interface IntentSummaryDto {
 }
 
 export interface IntentDetailDto extends IntentSummaryDto {}
+
+export type ActorDetailTab = 'log' | 'messages' | 'context' | 'state' | 'config' | 'debug'
 
 export interface HumanMessage {
 	id: string
@@ -69,9 +71,9 @@ export interface SkillCallView {
 }
 
 export interface WorkerView {
-	workerId: string
+	workerActorId: string
+	workerName: string
 	skillId?: string
-	workerActorId?: string
 	status: 'spawned' | 'routed' | 'completed'
 	startedAt?: string
 	updatedAt?: string
@@ -105,7 +107,7 @@ export interface IntentView {
 	summary: string
 	createdAt?: string
 	updatedAt?: string
-	correlationId?: string
+	runId?: string
 	lastActiveAt?: string
 	messages: HumanMessage[]
 	questions: HumanQuestion[]
@@ -115,89 +117,104 @@ export interface IntentView {
 	lastSeqByScope: Record<string, number>
 }
 
-export interface StreamEventRecord<TPayload = unknown> {
-	seq: number
-	scope: string
-	type: string
-	payload: TPayload
-	createdAt?: string
-	envelopeId?: string | null
-}
-
-export interface StreamEventEnvelope<TPayload = unknown> {
+export interface EventRecord<TPayload = unknown> {
 	seq: number
 	type: string
+	visibility: 'chat' | 'worklog' | 'debug'
+	runId: string | null
+	intentId: string | null
+	actorId: string | null
 	payload: TPayload
+	createdAt: string
+	envelopeId: string | null
+	callId: string | null
+	parentSeq: number | null
 }
 
 export interface EventListResponse {
 	events: Array<{
 		seq: number
-		scope: string
+		visibility?: 'chat' | 'worklog' | 'debug'
+		runId?: string | null
+		intentId?: string | null
 		actorId: string | null
 		envelopeId: string | null
+		callId?: string | null
+		parentSeq?: number | null
 		type: string
 		payload: unknown
 		createdAt: string
 	}>
 }
 
-export interface ContextItemDto {
-	id: string
-	seq: number
-	scope:
-		| { type: 'run'; correlationId: string }
-		| { type: 'intent'; intentId: string }
-		| { type: 'call'; callId: string; rootCallId: string; parentCallId?: string }
-		| { type: 'actor'; actorId: string }
-		| { type: 'global'; name: 'archive' | 'system' }
-	kind: string
-	key?: string
-	schema?: string
-	tags: string[]
-	body?: unknown
-	artifactId?: string
-	summary?: string
-	correlationId: string
-	intentId?: string
+export interface IntentActorNode {
 	actorId: string
-	callId?: string
-	parentCallId?: string
-	rootCallId?: string
-	producedByActorId: string
-	producedByEnvelopeId: string
-	producedByCommandId?: string
-	producedByToolCallId?: string
-	sourceContextItemIds: string[]
-	confidence?: number
-	hash: string
+	uiParentActorId: string | null
+	pathParentActorId: string | null
+	kind: 'intent' | 'skill' | 'worker' | 'system' | 'human' | 'group' | 'unknown'
+	label: string
+	subtitle?: string
+	isAggregateRoot: boolean
+	isVirtual: boolean
+	status?: 'active' | 'idle' | 'completed' | 'failed'
+	eventCount: number
+	envelopeCount: number
+	contextCount: number
+	firstSeenAt: string | null
+	lastSeenAt: string | null
+}
+
+export interface IntentActorsResponse {
+	actors: IntentActorNode[]
+}
+
+export interface EnvelopeDto {
+	id: string
+	fromActor: string
+	toActor: string
+	type: string
+	runId: string
+	causedBy: string | null
+	status: string
+	payload: unknown
 	createdAt: string
-	supersedesItemId?: string
-	redactsItemId?: string
+	updatedAt: string
+}
+
+export interface EnvelopeListResponse {
+	envelopes: EnvelopeDto[]
+}
+
+export interface ActorDetailDto {
+	actorId: string
+	kind: string
+	status: string | null
+	state: unknown
+	version: number | null
+	createdAt: string | null
+	updatedAt: string | null
+	config?: unknown
+}
+
+export interface ContextItemDto {
+	seq: number
+	kind: string
+	visibility: 'chat' | 'worklog' | 'debug'
+	runId: string | null
+	intentId: string | null
+	actorId: string | null
+	envelopeId: string | null
+	callId: string | null
+	key: string | null
+	summary: string | null
+	body: unknown
+	artifactUri: string | null
+	createdAt: string
 }
 
 export interface ContextItemsResponse {
 	items: ContextItemDto[]
 }
-
-export const STREAM_EVENT_TYPES = [
-	'intent.created',
-	'intent.status_changed',
-	'intent.skill_call_started',
-	'intent.skill_call_completed',
-	'intent.message_to_user',
-	'skill.worker_spawned',
-	'skill.worker_routed',
-	'skill.worker_completed',
-	'runtime.envelope.completed',
-	'runtime.envelope.queued',
-	'runtime.envelope.claimed',
-	'runtime.envelope.failed',
-	'actor.event',
-	'context.appended'
-] as const
-
-export type KnownStreamEventType = (typeof STREAM_EVENT_TYPES)[number]
 
 export type DebugActorStatus = 'running' | 'idle' | 'blocked' | 'failed' | 'stopped'
 

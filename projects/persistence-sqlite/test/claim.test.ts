@@ -1,5 +1,12 @@
 import { expect, test } from 'bun:test'
 
+import {
+	DISPATCHER_ACTOR_ID,
+	createIntentActorId,
+	createSkillActorId,
+	createStableWorkerActorId,
+	createWorkerActorId
+} from '../src/actor-id'
 import { SqlitePersistence } from '../src/sqlite-persistence'
 
 test('claimNext creates missing actors and never claims two envelopes for the same actor at once', async () => {
@@ -8,28 +15,28 @@ test('claimNext creates missing actors and never claims two envelopes for the sa
 
 	await persistence.enqueue({
 		id: 'env-1',
-		fromActor: 'dispatcher',
-		toActor: 'intents/order-123',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('order-123'),
 		type: 'message',
-		correlationId: 'corr-1',
+		runId: 'corr-1',
 		payload: { step: 1 },
 		createdAt: '2026-05-12T00:00:00.000Z'
 	})
 	await persistence.enqueue({
 		id: 'env-2',
-		fromActor: 'dispatcher',
-		toActor: 'intents/order-123',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('order-123'),
 		type: 'message',
-		correlationId: 'corr-2',
+		runId: 'corr-2',
 		payload: { step: 2 },
 		createdAt: '2026-05-12T00:00:01.000Z'
 	})
 	await persistence.enqueue({
 		id: 'env-3',
-		fromActor: 'dispatcher',
-		toActor: 'skills/extract',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createSkillActorId('extract'),
 		type: 'message',
-		correlationId: 'corr-3',
+		runId: 'corr-3',
 		payload: { step: 3 },
 		createdAt: '2026-05-12T00:00:02.000Z'
 	})
@@ -40,17 +47,17 @@ test('claimNext creates missing actors and never claims two envelopes for the sa
 	const thirdClaim = await persistence.claimNext({ workerId: 'worker-c', leaseMs: 30_000, now })
 
 	expect(firstClaim?.envelope.id).toBe('env-1')
-	expect(firstClaim?.actor.id).toBe('intents/order-123')
+	expect(firstClaim?.actor.id).toBe(createIntentActorId('order-123'))
 	expect(firstClaim?.actor.kind).toBe('intent')
 	expect(firstClaim?.envelope.status).toBe('processing')
 	expect(firstClaim?.envelope.attempts).toBe(1)
 
 	expect(secondClaim?.envelope.id).toBe('env-3')
-	expect(secondClaim?.actor.id).toBe('skills/extract')
+	expect(secondClaim?.actor.id).toBe(createSkillActorId('extract'))
 
 	expect(thirdClaim).toBeNull()
 
-	const createdActor = await persistence.getActor('intents/order-123')
+	const createdActor = await persistence.getActor(createIntentActorId('order-123'))
 	expect(createdActor?.state).toEqual({})
 	expect(createdActor?.version).toBe(0)
 })
@@ -61,10 +68,10 @@ test('claimNext seeds missing intent actors from intent.start payload', async ()
 
 	await persistence.enqueue({
 		id: 'env-start',
-		fromActor: 'dispatcher',
-		toActor: 'intents/intent-123',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('intent-123'),
 		type: 'intent.start',
-		correlationId: 'corr-start',
+		runId: 'corr-start',
 		payload: {
 			intentId: 'intent-123',
 			title: 'Greeting',
@@ -79,7 +86,7 @@ test('claimNext seeds missing intent actors from intent.start payload', async ()
 		now: new Date('2026-05-12T00:00:10.000Z')
 	})
 
-	expect(claimed?.actor.id).toBe('intents/intent-123')
+	expect(claimed?.actor.id).toBe(createIntentActorId('intent-123'))
 	expect(claimed?.actor.kind).toBe('intent')
 	expect(claimed?.actor.state).toEqual({
 		intentId: 'intent-123',
@@ -89,7 +96,7 @@ test('claimNext seeds missing intent actors from intent.start payload', async ()
 		summary: 'Help the user say hello',
 		pendingSkillCalls: {}
 	})
-	const actor = await persistence.getActor('intents/intent-123')
+	const actor = await persistence.getActor(createIntentActorId('intent-123'))
 	expect(actor?.state).toEqual({
 		intentId: 'intent-123',
 		title: 'Greeting',
@@ -104,29 +111,28 @@ test('listActorHierarchy returns structural and observed descendants for a branc
 	const persistence = new SqlitePersistence()
 	await persistence.migrate()
 
-	await persistence.upsertActor({ id: 'skills', kind: 'skills', state: {} })
-	await persistence.upsertActor({ id: 'skills/invoice-extractor', kind: 'skill-supervisor', state: {} })
-	await persistence.upsertActor({ id: 'skills/invoice-extractor/job-01', kind: 'skill-worker', state: {} })
+	await persistence.upsertActor({ id: createSkillActorId('invoice-extractor'), kind: 'skill', state: {} })
+	const workerJob01 = createStableWorkerActorId('invoice-extractor', 'job-01')
+	await persistence.upsertActor({ id: workerJob01, kind: 'worker', state: {} })
 
-	await persistence.appendStreamEvents([
+	await persistence.appendEvents([
 		{
-			id: 'obs-1',
-			scope: 'actor/skills/invoice-extractor/job-02',
-			actorId: 'skills/invoice-extractor/job-02',
 			type: 'actor.io.shell',
-			payload: { actorId: 'skills/invoice-extractor/job-02' },
+			visibility: 'debug',
+			actorId: createStableWorkerActorId('invoice-extractor', 'job-02'),
+			payload: { actorId: createStableWorkerActorId('invoice-extractor', 'job-02') },
 			createdAt: '2026-05-12T00:00:00.000Z'
 		}
 	])
 
-	const current = await persistence.listActorHierarchy({ rootActorId: 'skills/invoice-extractor' })
-	expect(current.map((row) => row.actorId)).toEqual(['skills/invoice-extractor/job-01'])
+	const current = await persistence.listActorHierarchy({ rootActorId: createSkillActorId('invoice-extractor') })
+	expect(current.map((row) => row.actorId)).toEqual([workerJob01])
 	expect(current[0]).toMatchObject({
-		parentActorId: 'skills/invoice-extractor',
-		depth: 1,
+		parentActorId: `${createSkillActorId('invoice-extractor')}/workers`,
+		depth: 2,
 		isCurrent: true
 	})
 
-	const observed = await persistence.listActorHierarchy({ rootActorId: 'skills/invoice-extractor', observed: true })
-	expect(observed.map((row) => row.actorId)).toContain('skills/invoice-extractor/job-02')
+	const observed = await persistence.listActorHierarchy({ rootActorId: createSkillActorId('invoice-extractor'), observed: true })
+	expect(observed.map((row) => row.actorId)).toContain(createStableWorkerActorId('invoice-extractor', 'job-02'))
 })

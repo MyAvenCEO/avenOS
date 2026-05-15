@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test'
-import type { EnvelopeInput, EnvelopeRecord } from '@jaensen/persistence-sqlite'
+import {
+	createSkillActorId,
+	createWorkerActorId,
+	parseSkillWorkerActorId,
+	type EnvelopeInput,
+	type EnvelopeRecord
+} from '@jaensen/persistence-sqlite'
 
 import {
 	SkillNotFoundError,
@@ -12,7 +18,7 @@ const skill: SkillDefinition = {
 	id: 'memory',
 	path: 'memory/SKILL.md',
 	description: 'Memory skill',
-	directActors: ['skills/files'],
+	directActors: [createSkillActorId('files')],
 	frontmatter: { id: 'memory', description: 'Memory skill' },
 	body: '# Memory',
 	bodyHash: 'hash-memory',
@@ -20,6 +26,8 @@ const skill: SkillDefinition = {
 }
 
 test('worker sends skill.worker.result to supervisor', async () => {
+	const actorId = createWorkerActorId('memory', 'topic-jaensen-architecture')
+	const workerName = parseSkillWorkerActorId(actorId)?.workerName
 	const handler = createSkillWorkerHandler({
 		registry: createSkillRegistry([skill]),
 		brain: {
@@ -34,20 +42,21 @@ test('worker sends skill.worker.result to supervisor', async () => {
 	})
 
 	const result = await handler.activate({
-		actor: makeActor('skills/memory/topic-jaensen-architecture', {}),
+		actor: makeActor(actorId, {}),
 		envelope: makeEnvelopeRecord(),
 		context: makeContext()
 	})
 
 	expect(sentEnvelopes(result)).toHaveLength(1)
 	expect(sentEnvelopes(result)[0]).toMatchObject({
-		fromActor: 'skills/memory/topic-jaensen-architecture',
-		toActor: 'skills/memory',
+		fromActor: actorId,
+		toActor: createSkillActorId('memory'),
 		type: 'skill.worker.result',
-		correlationId: 'corr-1',
-		causationId: 'env-1',
+		runId: 'corr-1',
+		causedBy: 'env-1',
 		payload: {
-			workerId: 'topic-jaensen-architecture',
+			workerActorId: actorId,
+			workerName,
 			intentId: 'intent-123',
 			callId: 'call-1',
 			result: { stored: true },
@@ -72,13 +81,13 @@ test('worker initializes from initialState once', async () => {
 	})
 
 	await handler.activate({
-		actor: makeActor('skills/memory/job-01J', {}),
+		actor: makeActor(createWorkerActorId('memory', 'job-01j'), {}),
 		envelope: makeEnvelopeRecord({ payload: { initialState: { seeded: true } } }),
 		context: makeContext()
 	})
 
 	await handler.activate({
-		actor: makeActor('skills/memory/job-01J', { persisted: true }),
+		actor: makeActor(createWorkerActorId('memory', 'job-01j'), { persisted: true }),
 		envelope: makeEnvelopeRecord({ payload: { initialState: { seeded: false } } }),
 		context: makeContext()
 	})
@@ -100,9 +109,9 @@ test('worker rejects empty active-call responses when it returns only state for 
 
 	await expect(
 		handler.activate({
-			actor: makeActor('skills/memory/call-lookup-1', {}),
+			actor: makeActor(createWorkerActorId('memory', 'call-lookup-1'), {}),
 			envelope: makeEnvelopeRecord({
-				toActor: 'skills/memory/call-lookup-1',
+				toActor: createWorkerActorId('memory', 'call-lookup-1'),
 				payload: { intentId: 'intent-123', callId: 'call-lookup-1' }
 			}),
 			context: makeContext()
@@ -122,14 +131,15 @@ test('missing skill fails clearly', async () => {
 
 	await expect(
 		handler.activate({
-			actor: makeActor('skills/missing/job-01J', {}),
-			envelope: makeEnvelopeRecord({ toActor: 'skills/missing/job-01J' }),
+			actor: makeActor(createWorkerActorId('missing', 'job-01j'), {}),
+			envelope: makeEnvelopeRecord({ toActor: createWorkerActorId('missing', 'job-01j') }),
 			context: makeContext()
 		})
 	).rejects.toThrow(new SkillNotFoundError('missing'))
 })
 
 test('worker call_skill maps to skill.request', async () => {
+	const actorId = createWorkerActorId('memory', 'topic-jaensen-architecture')
 	const handler = createSkillWorkerHandler({
 		registry: createSkillRegistry([
 			skill,
@@ -139,7 +149,7 @@ test('worker call_skill maps to skill.request', async () => {
 			async run() {
 				return {
 					state: {},
-					actions: [{ type: 'call_skill', to: 'skills/files', callId: 'call-2', request: 'Read file', payload: { path: 'a.txt' } }],
+					actions: [{ type: 'call_skill', to: createSkillActorId('files'), callId: 'call-2', request: 'Read file', payload: { path: 'a.txt' } }],
 					completed: false
 				}
 			}
@@ -147,20 +157,20 @@ test('worker call_skill maps to skill.request', async () => {
 	})
 
 	const result = await handler.activate({
-		actor: makeActor('skills/memory/topic-jaensen-architecture', {}),
+		actor: makeActor(actorId, {}),
 		envelope: makeEnvelopeRecord({ payload: { intentId: 'intent-123', callId: 'call-1' } }),
 		context: makeContext()
 	})
 
 	expect(sentEnvelopes(result)).toHaveLength(1)
 	expect(sentEnvelopes(result)[0]).toMatchObject({
-		toActor: 'skills/files',
+		toActor: createSkillActorId('files'),
 		type: 'skill.request',
 		payload: {
 			callId: 'call-2',
 			request: 'Read file',
 			input: { path: 'a.txt' },
-			replyTo: 'skills/memory/topic-jaensen-architecture',
+			replyTo: actorId,
 			intentId: 'intent-123',
 			parentCallId: 'call-1'
 		}
@@ -177,7 +187,7 @@ test('worker delegation does not also emit skill.worker.result for the parent ca
 			async run() {
 				return {
 					state: { waitingOnChild: true },
-					actions: [{ type: 'call_skill', to: 'skills/files', callId: 'child-call-1', request: 'Read file', payload: { path: 'a.txt' } }],
+					actions: [{ type: 'call_skill', to: createSkillActorId('files'), callId: 'child-call-1', request: 'Read file', payload: { path: 'a.txt' } }],
 					completed: false
 				}
 			}
@@ -185,14 +195,14 @@ test('worker delegation does not also emit skill.worker.result for the parent ca
 	})
 
 	const result = await handler.activate({
-		actor: makeActor('skills/memory/topic-jaensen-architecture', {}),
+		actor: makeActor(createWorkerActorId('memory', 'topic-jaensen-architecture'), {}),
 		envelope: makeEnvelopeRecord({ payload: { intentId: 'intent-123', callId: 'parent-call-1' } }),
 		context: makeContext()
 	})
 
 	expect(sentEnvelopes(result)).toHaveLength(1)
 	expect(sentEnvelopes(result)[0]).toMatchObject({
-		toActor: 'skills/files',
+		toActor: createSkillActorId('files'),
 		type: 'skill.request',
 		payload: expect.objectContaining({ parentCallId: 'parent-call-1', callId: 'child-call-1' })
 	})
@@ -210,20 +220,22 @@ test('worker rejects mixed delegation and completion payloads loudly', async () 
 					state: {},
 					result: { invalid: true },
 					completed: true,
-					actions: [{ type: 'call_skill', to: 'skills/files', callId: 'child-call-1', request: 'Read file', payload: {} }]
+					actions: [{ type: 'call_skill', to: createSkillActorId('files'), callId: 'child-call-1', request: 'Read file', payload: {} }]
 				}
 			}
 		}
 	})
 
 	await expect(handler.activate({
-		actor: makeActor('skills/memory/topic-jaensen-architecture', {}),
+		actor: makeActor(createWorkerActorId('memory', 'topic-jaensen-architecture'), {}),
 		envelope: makeEnvelopeRecord({ payload: { intentId: 'intent-123', callId: 'parent-call-1' } }),
 		context: makeContext()
-	})).rejects.toThrow(/may not include call_skill actions and also complete/i)
+	})).rejects.toThrow(/may not include both actions and result/i)
 })
 
-test('worker completing a child skill.result routes completion to parent call id', async () => {
+	test('worker completing a child skill.result routes completion to parent call id', async () => {
+	const actorId = createWorkerActorId('memory', 'topic-jaensen-architecture')
+	const workerName = parseSkillWorkerActorId(actorId)?.workerName
 	const handler = createSkillWorkerHandler({
 		registry: createSkillRegistry([skill]),
 		brain: {
@@ -238,9 +250,8 @@ test('worker completing a child skill.result routes completion to parent call id
 	})
 
 	const result = await handler.activate({
-		actor: makeActor('skills/memory/topic-jaensen-architecture', {
+		actor: makeActor(actorId, {
 			callId: 'parent-call-1',
-			rootCallId: 'parent-call-1',
 			intentId: 'intent-123'
 		}),
 		envelope: makeEnvelopeRecord({
@@ -257,19 +268,20 @@ test('worker completing a child skill.result routes completion to parent call id
 
 	expect(sentEnvelopes(result)).toHaveLength(1)
 	expect(sentEnvelopes(result)[0]).toMatchObject({
-		toActor: 'skills/memory',
+		toActor: createSkillActorId('memory'),
 		type: 'skill.worker.result',
 		payload: expect.objectContaining({
-			workerId: 'topic-jaensen-architecture',
+			workerActorId: actorId,
+			workerName,
 			callId: 'parent-call-1',
-			rootCallId: 'parent-call-1',
+			intentId: 'intent-123',
 			result: { stored: true },
 			completed: true
 		})
 	})
 })
 
-test('worker final context append after child result stays scoped to parent call', async () => {
+	test('worker final context append after child result stays scoped to parent call', async () => {
 	const handler = createSkillWorkerHandler({
 		registry: createSkillRegistry([skill]),
 		brain: {
@@ -284,10 +296,9 @@ test('worker final context append after child result stays scoped to parent call
 	})
 
 	const result = await handler.activate({
-		actor: makeActor('skills/memory/topic-jaensen-architecture', {
+		actor: makeActor(createWorkerActorId('memory', 'topic-jaensen-architecture'), {
 			waitingOnChild: true,
 			callId: 'parent-call',
-			rootCallId: 'parent-call'
 		}),
 		envelope: makeEnvelopeRecord({
 			type: 'skill.result',
@@ -295,7 +306,6 @@ test('worker final context append after child result stays scoped to parent call
 				intentId: 'intent-123',
 				callId: 'child-call',
 				parentCallId: 'parent-call',
-				rootCallId: 'parent-call',
 				result: { ok: true }
 			}
 		}),
@@ -304,13 +314,12 @@ test('worker final context append after child result stays scoped to parent call
 
 	expect(result.contextAppends).toEqual([
 		expect.objectContaining({
-			scope: { type: 'call', callId: 'parent-call', parentCallId: undefined, rootCallId: 'parent-call' }
+			callId: 'parent-call'
 		})
 	])
 	expect(sentEnvelopes(result)[0]).toMatchObject({
 		payload: expect.objectContaining({
-			callId: 'parent-call',
-			rootCallId: 'parent-call'
+			callId: 'parent-call'
 		})
 	})
 })
@@ -330,7 +339,7 @@ test('worker normal run completion uses local callId even when parentCallId exis
 	})
 
 	const result = await handler.activate({
-		actor: makeActor('skills/memory/topic-jaensen-architecture', {}),
+		actor: makeActor(createWorkerActorId('memory', 'topic-jaensen-architecture'), {}),
 		envelope: makeEnvelopeRecord({
 			type: 'memory.remember',
 			payload: {
@@ -355,7 +364,7 @@ test('worker call_skill rejects unlisted target', async () => {
 			async run() {
 				return {
 					state: {},
-					actions: [{ type: 'call_skill', to: 'skills/files', callId: 'call-2', request: 'Read file', payload: {} }],
+					actions: [{ type: 'call_skill', to: createSkillActorId('files'), callId: 'call-2', request: 'Read file', payload: {} }],
 					completed: false
 				}
 			}
@@ -363,10 +372,10 @@ test('worker call_skill rejects unlisted target', async () => {
 	})
 
 	await expect(handler.activate({
-		actor: makeActor('skills/memory/topic-jaensen-architecture', {}),
+		actor: makeActor(createWorkerActorId('memory', 'topic-jaensen-architecture'), {}),
 		envelope: makeEnvelopeRecord(),
 		context: makeContext()
-	})).rejects.toThrow(/may not call unlisted actor skills\/files/)
+	})).rejects.toThrow(/may not call unlisted actor aven\/skills\/files/)
 })
 
 function makeActor(id: string, state: unknown) {
@@ -384,11 +393,11 @@ function makeActor(id: string, state: unknown) {
 function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRecord {
 	return {
 		id: 'env-1',
-		fromActor: 'skills/memory',
-		toActor: 'skills/memory/topic-jaensen-architecture',
+		fromActor: createSkillActorId('memory'),
+		toActor: createWorkerActorId('memory', 'topic-jaensen-architecture'),
 		type: 'memory.remember',
-		correlationId: 'corr-1',
-		causationId: null,
+		runId: 'corr-1',
+		causedBy: null,
 		payload: { intentId: 'intent-123', callId: 'call-1' },
 		status: 'queued',
 		availableAt: '2026-05-12T00:00:00.000Z',
@@ -419,8 +428,8 @@ function makeContext() {
 			to: string
 			type: string
 			payload: unknown
-			correlationId?: string
-			causationId?: string
+			runId?: string
+			causedBy?: string
 			availableAt?: Date
 		}) {
 			return {
@@ -428,8 +437,8 @@ function makeContext() {
 				fromActor: input.from,
 				toActor: input.to,
 				type: input.type,
-				correlationId: input.correlationId ?? 'corr-1',
-				causationId: input.causationId,
+				runId: input.runId ?? 'corr-1',
+				causedBy: input.causedBy,
 				payload: input.payload,
 				availableAt: input.availableAt
 			}

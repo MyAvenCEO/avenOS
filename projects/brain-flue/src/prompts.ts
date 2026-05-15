@@ -37,7 +37,7 @@ export function buildSupervisorPrompt(input: {
 		'Rules:',
 		'- state is always required',
 		'- messageType must be non-empty',
-		'- workerId must be slug-safe lowercase kebab-case',
+		'- worker names must be slug-safe lowercase kebab-case',
 		'- never send to human',
 		'- use reply only to answer the sender when allowed',
 		'- use route_worker or spawn_worker for worker activity',
@@ -52,7 +52,7 @@ export function buildSupervisorPrompt(input: {
 		'Example direct skill call action:',
 		jsonBlock({
 			type: 'call_skill',
-			to: 'skills/memory',
+			to: 'aven/skills/memory',
 			callId: 'remember-file-greeting-txt',
 			request: 'store',
 			payload: {
@@ -68,7 +68,8 @@ export function buildSupervisorPrompt(input: {
 
 export function buildWorkerPrompt(input: {
 	skill: SkillDefinition
-	workerId: string
+	workerActorId: string
+	workerName: string
 	actorState: unknown
 	envelope: EnvelopeRecord
 	workspaceRoot: string
@@ -82,7 +83,8 @@ export function buildWorkerPrompt(input: {
 		'',
 		`Workspace root: ${input.workspaceRoot}`,
 		`Skill id: ${input.skill.id}`,
-		`Worker id: ${input.workerId}`,
+		`Worker actor id: ${input.workerActorId}`,
+		`Worker name: ${input.workerName}`,
 		`Worker policy: ${String(input.workerPolicy ?? 'ephemeral')}`,
 		'',
 		'Skill frontmatter:',
@@ -111,7 +113,7 @@ export function buildWorkerPrompt(input: {
 		'- Use call_skill to delegate to another skill.',
 		'- Use finish when the requested work is complete.',
 		'- Do not manually emit worker result JSON unless explicitly asked by the runtime.',
-		`- Never call your own skill actor (${`skills/${input.skill.id}`}). Do same-skill work directly and return result/completed instead.`,
+		`- Never call your own skill actor (${`aven/skills/${input.skill.id}`}). Do same-skill work directly and return result/completed instead.`,
 		'- The target must be listed in Direct actor access.',
 		'- Do not send to human, dispatcher, intent actors, or skill-worker actors.',
 		'- Direct skill calls return later as skill.result.',
@@ -124,7 +126,7 @@ export function buildWorkerPrompt(input: {
 		jsonBlock({
 			tool: 'call_skill',
 			args: {
-				to: 'skills/memory',
+				to: 'aven/skills/memory',
 				callId: 'remember-file-greeting-txt',
 				request: 'store',
 				payload: {

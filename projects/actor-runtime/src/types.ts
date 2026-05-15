@@ -4,7 +4,7 @@ import type {
 	ActorRecord,
 	ContextAppendInput,
 	ContextItemRecord,
-	ContextSelector,
+	ContextQuery,
 	EnvelopeInput,
 	EnvelopeRecord,
 	Persistence
@@ -32,11 +32,11 @@ export interface ActorContext {
 		to: string
 		type: string
 		payload: unknown
-		correlationId?: string
-		causationId?: string
+		runId?: string
+		causedBy?: string
 		availableAt?: Date
 	}): EnvelopeInput
-	queryContext(selector: ContextSelector): Promise<ContextItemRecord[]>
+	queryContext(selector: ContextQuery): Promise<ContextItemRecord[]>
 }
 
 export interface ActorDecision {

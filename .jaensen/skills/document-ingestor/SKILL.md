@@ -3,9 +3,9 @@ id: document-ingestor
 description: Ingests electronic documents and photos of printed documents and stores it as pdfa.
 worker_policy: durable
 direct_actors:
-  - skills/memory
-  - skills/invoice-extractor
-  - skills/bank-statement-extractor
+  - aven/skills/memory
+  - aven/skills/invoice-extractor
+  - aven/skills/bank-statement-extractor
 resources:
   fs:
     - .

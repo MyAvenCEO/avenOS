@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto'
 
 import type { ActorCommand, ActorDecision, ActorHandler } from '@jaensen/actor-runtime'
-import { createIntentActorId, type ContextAppendInput } from '@jaensen/persistence-sqlite'
+import {
+	DISPATCHER_ACTOR_ID,
+	createIntentActorId,
+	type ContextAppendInput
+} from '@jaensen/persistence-sqlite'
 import { z } from 'zod'
 
 import { UnknownIntentError, ConversationActorsValidationError } from './errors'
@@ -79,17 +83,17 @@ async function handleUserInput(input: {
 		if (hintedIntent && hintedIntent.status !== 'completed' && hintedIntent.status !== 'failed') {
 			const commands: ActorCommand[] = [
 				{ type: 'send_envelope', envelope: input.context.makeEnvelope({
-					from: 'dispatcher',
+					from: DISPATCHER_ACTOR_ID,
 					to: createIntentActorId(hintedIntentId),
 					type: 'intent.user_input',
-					correlationId: input.envelope.correlationId,
-					causationId: input.envelope.id,
+					runId: input.envelope.runId,
+					causedBy: input.envelope.id,
 					payload: userInput
 				}) }
 			]
 			return {
 				nextState: input.state,
-				contextAppends: [buildUserInputContextAppend(input.envelope.correlationId, userInput)],
+				contextAppends: [buildUserInputContextAppend(input.envelope.runId, userInput)],
 				commands
 			}
 		}
@@ -108,17 +112,17 @@ async function handleUserInput(input: {
 
 		const commands: ActorCommand[] = [
 			{ type: 'send_envelope', envelope: input.context.makeEnvelope({
-				from: 'dispatcher',
+				from: DISPATCHER_ACTOR_ID,
 				to: createIntentActorId(decision.intentId),
 				type: 'intent.user_input',
-				correlationId: input.envelope.correlationId,
-				causationId: input.envelope.id,
+				runId: input.envelope.runId,
+				causedBy: input.envelope.id,
 				payload: userInput
 			}) }
 		]
 		return {
 			nextState: input.state,
-			contextAppends: [buildUserInputContextAppend(input.envelope.correlationId, userInput)],
+			contextAppends: [buildUserInputContextAppend(input.envelope.runId, userInput)],
 			commands
 		}
 	}
@@ -126,11 +130,11 @@ async function handleUserInput(input: {
 	const intentId = input.createIntentId()
 	const commands: ActorCommand[] = [
 		{ type: 'send_envelope', envelope: input.context.makeEnvelope({
-			from: 'dispatcher',
+			from: DISPATCHER_ACTOR_ID,
 			to: createIntentActorId(intentId),
 			type: 'intent.start',
-			correlationId: input.envelope.correlationId,
-			causationId: input.envelope.id,
+			runId: input.envelope.runId,
+			causedBy: input.envelope.id,
 			payload: {
 				intentId,
 				title: decision.title,
@@ -143,7 +147,7 @@ async function handleUserInput(input: {
 
 	return {
 		nextState: input.state,
-		contextAppends: [buildUserInputContextAppend(input.envelope.correlationId, userInput)],
+		contextAppends: [buildUserInputContextAppend(input.envelope.runId, userInput)],
 		commands
 	}
 }
@@ -177,20 +181,19 @@ function handleLifecycle(input: {
 	}
 }
 
-function buildUserInputContextAppend(correlationId: string, userInput: {
+function buildUserInputContextAppend(runId: string, userInput: {
 	text: string
 	attachments: UserAttachment[]
 	attachmentScopeId?: string
 	intentIdHint?: string
 }): ContextAppendInput {
 	return {
-		scope: { type: 'run', correlationId },
 		kind: 'user_input',
+		visibility: 'worklog',
+		runId,
 		key: 'user.message',
-		tags: ['user', 'input'],
 		body: userInput,
-		summary: userInput.text.slice(0, 240),
-		sourceContextItemIds: []
+		summary: userInput.text.slice(0, 240)
 	}
 }
 

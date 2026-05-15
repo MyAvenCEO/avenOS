@@ -4,14 +4,14 @@ import type { RequestHandler } from './$types'
 import { resolveJaensenWebApiBaseUrl } from '../../_shared'
 
 export const GET: RequestHandler = async ({ request, url, fetch }) => {
-	const scope = url.searchParams.get('scope')
-	if (!scope) {
-		throw error(400, 'Missing scope')
-	}
 	const target = new URL('/api/events/stream', resolveJaensenWebApiBaseUrl())
-	target.searchParams.set('scope', scope)
-	const after = url.searchParams.get('after')
-	if (after) target.searchParams.set('after', after)
+	for (const key of ['after', 'visibility', 'runId', 'intentId', 'actorId', 'callId'] as const) {
+		const value = url.searchParams.get(key)
+		if (value) target.searchParams.set(key, value)
+	}
+	if (!['runId', 'intentId', 'actorId', 'callId', 'visibility'].some((key) => url.searchParams.get(key))) {
+		throw error(400, 'Missing event stream filters')
+	}
 
 	const response = await fetch(target, {
 		headers: {

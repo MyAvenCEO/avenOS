@@ -7,4 +7,4 @@
 	const result = payloadRecord(payload.result)
 </script>
 
-<FocusPanel title="Worker finished" prose={readNumber(result.count) != null ? `Produced ${result.count} result${result.count === 1 ? '' : 's'}` : null} rows={[{ label: 'Worker', value: readString(payload.workerId) }, { label: 'Call', value: readString(payload.callId) }, { label: 'Intent', value: readString(payload.intentId) }]} />
+<FocusPanel title="Worker finished" prose={readNumber(result.count) != null ? `Produced ${result.count} result${result.count === 1 ? '' : 's'}` : null} rows={[{ label: 'Worker', value: readString(payload.workerName) ?? readString(payload.workerActorId) }, { label: 'Call', value: readString(payload.callId) }, { label: 'Intent', value: readString(payload.intentId) }]} />

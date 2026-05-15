@@ -77,7 +77,8 @@ export interface SupervisorBrainInput {
 
 export interface WorkerBrainInput {
 	skill: Parameters<SkillWorkerBrain['run']>[0]['skill']
-	workerId: string
+	workerActorId: string
+	workerName: string
 	actorState: Parameters<SkillWorkerBrain['run']>[0]['actorState']
 	envelope: EnvelopeRecord
 }

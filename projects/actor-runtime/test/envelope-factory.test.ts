@@ -9,8 +9,8 @@ test('makeEnvelope maps actor fields and preserves explicit ids', () => {
 		to: 'actor/target',
 		type: 'demo',
 		payload: { ok: true },
-		correlationId: 'corr-1',
-		causationId: 'cause-1',
+		runId: 'corr-1',
+		causedBy: 'cause-1',
 		availableAt
 	})
 
@@ -19,8 +19,8 @@ test('makeEnvelope maps actor fields and preserves explicit ids', () => {
 	expect(envelope.toActor).toBe('actor/target')
 	expect(envelope.type).toBe('demo')
 	expect(envelope.payload).toEqual({ ok: true })
-	expect(envelope.correlationId).toBe('corr-1')
-	expect(envelope.causationId).toBe('cause-1')
+	expect(envelope.runId).toBe('corr-1')
+	expect(envelope.causedBy).toBe('cause-1')
 	expect(envelope.availableAt).toBe(availableAt)
 })
 
@@ -33,9 +33,9 @@ test('makeEnvelope generates ids when omitted', () => {
 	})
 
 	expect(envelope.id).toBeString()
-	expect(envelope.correlationId).toBeString()
-	if (typeof envelope.id === 'string' && typeof envelope.correlationId === 'string') {
+	expect(envelope.runId).toBeString()
+	if (typeof envelope.id === 'string' && typeof envelope.runId === 'string') {
 		expect(envelope.id.length).toBeGreaterThan(0)
-		expect(envelope.correlationId.length).toBeGreaterThan(0)
+		expect(envelope.runId.length).toBeGreaterThan(0)
 	}
 })

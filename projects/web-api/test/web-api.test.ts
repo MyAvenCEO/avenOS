@@ -3,7 +3,14 @@ import { access, mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import { SqlitePersistence } from '@jaensen/persistence-sqlite'
+import {
+	DISPATCHER_ACTOR_ID,
+	HUMAN_ACTOR_ID,
+	SqlitePersistence,
+	createIntentActorId,
+	createSkillActorId,
+	createStableWorkerActorId
+} from '@jaensen/persistence-sqlite'
 
 import { createWebApi } from '../src/index'
 
@@ -76,10 +83,10 @@ test('POST /api/messages returns envelope and correlation ids, and intent endpoi
 		expect(messageResponse.status).toBe(202)
 		const messageBody = (await messageResponse.json()) as {
 			envelopeId: string
-			correlationId: string
+			runId: string
 		}
 		expect(typeof messageBody.envelopeId).toBe('string')
-		expect(messageBody.correlationId).toBe(messageBody.envelopeId)
+		expect(messageBody.runId).toBe(messageBody.envelopeId)
 
 		await waitFor(async () => {
 			const intentsResponse = await fetch(`${api.url}api/intents`)
@@ -346,16 +353,16 @@ test('GET /api/events supports after cursors', async () => {
 	const persistence = new SqlitePersistence()
 	await persistence.migrate()
 	await persistence.upsertActor({
-		id: 'intents/demo',
+		id: createIntentActorId('demo'),
 		kind: 'intent',
 		state: { intentId: 'demo', title: 'Demo', goal: 'Demo', status: 'active', summary: 'Demo', pendingSkillCalls: {} }
 	})
 	await persistence.enqueue({
 		id: 'env-demo',
-		fromActor: 'human',
-		toActor: 'intents/demo',
+		fromActor: HUMAN_ACTOR_ID,
+		toActor: createIntentActorId('demo'),
 		type: 'intent.start',
-		correlationId: 'env-demo',
+		runId: 'env-demo',
 		payload: { intentId: 'demo' }
 	})
 
@@ -375,6 +382,177 @@ test('GET /api/events supports after cursors', async () => {
 		const afterResponse = await fetch(`${api.url}api/events?scope=global&after=${firstSeq}`)
 		const afterBody = (await afterResponse.json()) as { events: Array<{ seq: number }> }
 		expect(afterBody.events.every((event) => event.seq > firstSeq)).toBe(true)
+	} finally {
+		await api.stop()
+	}
+})
+
+test('intent lifecycle endpoints expose actors, activity, envelopes, and actor detail', async () => {
+	const persistence = new SqlitePersistence()
+	await persistence.migrate()
+
+	await persistence.upsertActor({
+		id: createIntentActorId('intent-life'),
+		kind: 'intent',
+		status: 'active',
+		state: { status: 'active', summary: 'Working' }
+	})
+	await persistence.upsertActor({
+		id: createSkillActorId('files'),
+		kind: 'skill',
+		status: 'active',
+		state: { supervisor: true }
+	})
+	await persistence.upsertActor({
+		id: createStableWorkerActorId('files', 'create-file-a8f3k2'),
+		kind: 'worker',
+		status: 'active',
+		state: { worker: true }
+	})
+	await persistence.replaceSkills(
+		[
+			{
+				id: 'files',
+				path: 'skills/files/SOUL.md',
+				frontmatter: { name: 'files', config: { mode: 'write' } },
+				body: '# files',
+				bodyHash: 'hash-files'
+			}
+		],
+		new Date('2026-05-12T00:00:00.000Z')
+	)
+
+	await persistence.appendEvents([
+		{
+			type: 'intent.created',
+			visibility: 'worklog',
+			runId: 'run-life',
+			intentId: 'intent-life',
+			actorId: createIntentActorId('intent-life'),
+			payload: { intentId: 'intent-life' },
+			createdAt: '2026-05-12T00:00:00.000Z'
+		},
+		{
+			type: 'intent.skill_call_started',
+			visibility: 'worklog',
+			runId: 'run-life',
+			intentId: 'intent-life',
+			actorId: createSkillActorId('files'),
+			payload: { skillId: 'files' },
+			createdAt: '2026-05-12T00:00:01.000Z'
+		},
+		{
+			type: 'actor.io.shell',
+			visibility: 'debug',
+			runId: 'run-life',
+			intentId: 'intent-life',
+			actorId: createStableWorkerActorId('files', 'create-file-a8f3k2'),
+			payload: { workerActorId: createStableWorkerActorId('files', 'create-file-a8f3k2') },
+			createdAt: '2026-05-12T00:00:02.000Z'
+		}
+	])
+
+	await persistence.appendContext({
+		kind: 'fact',
+		visibility: 'worklog',
+		runId: 'run-life',
+		intentId: 'intent-life',
+		actorId: createStableWorkerActorId('files', 'create-file-a8f3k2'),
+		key: 'file.result',
+		summary: 'Created file',
+		body: { ok: true },
+		createdAt: '2026-05-12T00:00:03.000Z'
+	})
+
+	await persistence.enqueue({
+		id: 'env-life-1',
+		fromActor: HUMAN_ACTOR_ID,
+		toActor: createIntentActorId('intent-life'),
+		type: 'intent.start',
+		runId: 'run-life',
+		payload: { intentId: 'intent-life' },
+		createdAt: '2026-05-12T00:00:00.500Z'
+	})
+	await persistence.enqueue({
+		id: 'env-life-2',
+		fromActor: createIntentActorId('intent-life'),
+		toActor: createStableWorkerActorId('files', 'create-file-a8f3k2'),
+		type: 'skill.run',
+		runId: 'run-life',
+		payload: { intentId: 'intent-life' },
+		createdAt: '2026-05-12T00:00:01.500Z'
+	})
+
+	const api = await createWebApi({
+		persistence,
+		harness: createHarnessStub(),
+		skills: [],
+		dispatcherBrain: { async route() { throw new Error('unused') } },
+		intentBrain: { async decide() { throw new Error('unused') } },
+		skillWorkerBrain: { async run() { return { state: {} } } }
+	})
+
+	try {
+		const actorsResponse = await fetch(`${api.url}api/intents/intent-life/actors`)
+		expect(actorsResponse.status).toBe(200)
+		const actorsBody = (await actorsResponse.json()) as { actors: Array<Record<string, unknown>> }
+		expect(actorsBody.actors[0]).toMatchObject({
+			actorId: 'aven/intents/intent-life',
+			label: 'Intent lifecycle',
+			isAggregateRoot: true,
+			isVirtual: false
+		})
+		expect(actorsBody.actors.some((actor) => actor.actorId === 'aven/skills/files')).toBe(true)
+		expect(
+			actorsBody.actors.some(
+				(actor) =>
+					actor.actorId === 'aven/skills/files/workers/create-file-a8f3k2' &&
+					actor.uiParentActorId === 'aven/skills/files' &&
+					actor.contextCount === 1
+			)
+		).toBe(true)
+
+		const activityResponse = await fetch(`${api.url}api/intents/intent-life/activity`)
+		const activityBody = (await activityResponse.json()) as { events: Array<{ actorId: string | null; type: string }> }
+		expect(activityBody.events.some((event) => event.type === 'intent.created')).toBe(true)
+		expect(activityBody.events.some((event) => event.type === 'intent.skill_call_started')).toBe(true)
+		expect(activityBody.events.some((event) => event.type === 'actor.io.shell')).toBe(true)
+
+		const rootActivityResponse = await fetch(`${api.url}api/intents/intent-life/activity?actorId=${encodeURIComponent('aven/intents/intent-life')}`)
+		const rootActivityBody = (await rootActivityResponse.json()) as { events: Array<{ type: string }> }
+		expect(rootActivityBody.events.map((event) => event.type)).toEqual(activityBody.events.map((event) => event.type))
+
+		const workerActivityResponse = await fetch(
+			`${api.url}api/intents/intent-life/activity?actorId=${encodeURIComponent('aven/skills/files/workers/create-file-a8f3k2')}`
+		)
+		const workerActivityBody = (await workerActivityResponse.json()) as { events: Array<{ actorId: string | null; type: string }> }
+		expect(workerActivityBody.events.every((event) => event.actorId === 'aven/skills/files/workers/create-file-a8f3k2')).toBe(true)
+		expect(workerActivityBody.events.some((event) => event.type === 'actor.io.shell')).toBe(true)
+		expect(workerActivityBody.events.some((event) => event.type === 'runtime.envelope.queued')).toBe(true)
+		expect(workerActivityBody.events.some((event) => event.type === 'runtime.envelope.claimed')).toBe(true)
+		expect(workerActivityBody.events.some((event) => event.type === 'runtime.envelope.failed')).toBe(true)
+
+		const debugActivityResponse = await fetch(`${api.url}api/intents/intent-life/activity?visibility=debug`)
+		const debugActivityBody = (await debugActivityResponse.json()) as { events: Array<{ type: string }> }
+		expect(debugActivityBody.events.some((event) => event.type === 'actor.io.shell')).toBe(true)
+		expect(debugActivityBody.events.every((event) => ['actor.io.shell', 'runtime.envelope.queued', 'runtime.envelope.claimed'].includes(event.type))).toBe(true)
+
+		const envelopesResponse = await fetch(`${api.url}api/intents/intent-life/envelopes`)
+		const envelopesBody = (await envelopesResponse.json()) as { envelopes: Array<{ id: string }> }
+		expect(envelopesBody.envelopes.map((envelope) => envelope.id)).toEqual(['env-life-1', 'env-life-2'])
+
+		const workerEnvelopesResponse = await fetch(
+			`${api.url}api/intents/intent-life/envelopes?actorId=${encodeURIComponent('aven/skills/files/workers/create-file-a8f3k2')}`
+		)
+		const workerEnvelopesBody = (await workerEnvelopesResponse.json()) as { envelopes: Array<{ id: string }> }
+		expect(workerEnvelopesBody.envelopes.map((envelope) => envelope.id)).toEqual(['env-life-2'])
+
+		const actorDetailResponse = await fetch(`${api.url}api/actors/${encodeURIComponent('aven/skills/files')}`)
+		expect(actorDetailResponse.status).toBe(200)
+		const actorDetailBody = (await actorDetailResponse.json()) as { actorId: string; kind: string; state: unknown; config?: Record<string, unknown> }
+		expect(actorDetailBody.actorId).toBe('aven/skills/files')
+		expect(actorDetailBody.kind).toBe('skill')
+		expect(actorDetailBody.state).toEqual({ supervisor: true })
 	} finally {
 		await api.stop()
 	}
@@ -480,7 +658,7 @@ test('debug actor endpoints expose snapshots and runtime events', async () => {
 
 	try {
 		const initialSnapshot = (await (await fetch(`${api.url}debug/actors`)).json()) as { actors: Array<{ id: string }> }
-		expect(initialSnapshot.actors.some((actor) => actor.id === 'dispatcher')).toBe(true)
+		expect(initialSnapshot.actors.some((actor) => actor.id === DISPATCHER_ACTOR_ID)).toBe(true)
 
 		const streamResponse = await fetch(`${api.url}debug/actors/events`)
 		expect(streamResponse.status).toBe(200)
@@ -500,7 +678,7 @@ test('debug actor endpoints expose snapshots and runtime events', async () => {
 		const snapshot = (await (await fetch(`${api.url}debug/actors`)).json()) as {
 			actors: Array<{ id: string; type: string }>
 		}
-		expect(snapshot.actors.some((actor) => actor.id.startsWith('intents/') && actor.type === 'intent')).toBe(true)
+		expect(snapshot.actors.some((actor) => actor.id.startsWith('aven/intents/') && actor.type === 'intent')).toBe(true)
 	} finally {
 		await api.stop()
 	}

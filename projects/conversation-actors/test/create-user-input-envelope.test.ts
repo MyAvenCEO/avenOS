@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 
+import { DISPATCHER_ACTOR_ID, HUMAN_ACTOR_ID } from '@jaensen/persistence-sqlite'
 import { createUserInputEnvelope } from '../src/index'
 
 test('createUserInputEnvelope creates a dispatcher envelope for human input', () => {
@@ -13,10 +14,10 @@ test('createUserInputEnvelope creates a dispatcher envelope for human input', ()
 
 	expect(envelope).toEqual({
 		id: 'env-user-1',
-		fromActor: 'human',
-		toActor: 'dispatcher',
+		fromActor: HUMAN_ACTOR_ID,
+		toActor: DISPATCHER_ACTOR_ID,
 		type: 'conversation.user_input',
-		correlationId: 'env-user-1',
+		runId: 'env-user-1',
 		payload: {
 			text: 'Hello there',
 			attachments: [{ id: 'att-1', name: 'brief.txt', mimeType: 'text/plain', sizeBytes: 12, sha256: 'a'.repeat(64) }],

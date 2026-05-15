@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test'
-import type { EnvelopeInput, EnvelopeRecord } from '@jaensen/persistence-sqlite'
+import {
+	DISPATCHER_ACTOR_ID,
+	HUMAN_ACTOR_ID,
+	createIntentActorId,
+	type EnvelopeInput,
+	type EnvelopeRecord
+} from '@jaensen/persistence-sqlite'
 
 import {
 	UnknownIntentError,
@@ -34,8 +40,8 @@ test('dispatcher creates new intent from user input', async () => {
 	expect(result.nextState).toEqual(initialDispatcherState)
 	expect(outgoing).toHaveLength(1)
 	expect(outgoing[0]).toMatchObject({
-		fromActor: 'dispatcher',
-		toActor: 'intents/intent-123',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('intent-123'),
 		type: 'intent.start',
 		payload: {
 			intentId: 'intent-123',
@@ -80,8 +86,8 @@ test('dispatcher routes user input to existing intent', async () => {
 	const outgoing = sentEnvelopes(result)
 	expect(result.nextState).toEqual(state)
 	expect(outgoing[0]).toMatchObject({
-		fromActor: 'dispatcher',
-		toActor: 'intents/intent-123',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('intent-123'),
 		type: 'intent.user_input',
 		payload: { text: 'More details', attachments: [] }
 	})
@@ -114,8 +120,8 @@ test('dispatcher routes hinted user input to existing waiting intent without con
 	})
 
 	expect(sentEnvelopes(result)[0]).toMatchObject({
-		fromActor: 'dispatcher',
-		toActor: 'intents/intent-123',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('intent-123'),
 		type: 'intent.user_input',
 		payload: { text: 'Sure, do it', attachments: [], intentIdHint: 'intent-123' }
 	})
@@ -180,7 +186,7 @@ test('dispatcher never sends to human', async () => {
 		context: makeContext()
 	})
 
-	expect(sentEnvelopes(result).every((envelope) => envelope.toActor !== 'human')).toBeTrue()
+	expect(sentEnvelopes(result).every((envelope) => envelope.toActor !== HUMAN_ACTOR_ID)).toBeTrue()
 })
 
 test('dispatcher never sends to skill', async () => {
@@ -209,7 +215,7 @@ test('dispatcher never sends to skill', async () => {
 
 function makeDispatcherActor(state: unknown) {
 	return {
-		id: 'dispatcher',
+		id: DISPATCHER_ACTOR_ID,
 		kind: 'dispatcher',
 		status: 'active' as const,
 		state,
@@ -222,11 +228,11 @@ function makeDispatcherActor(state: unknown) {
 function makeUserInputEnvelope(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRecord {
 	return {
 		id: 'env-1',
-		fromActor: 'human',
-		toActor: 'dispatcher',
+		fromActor: HUMAN_ACTOR_ID,
+		toActor: DISPATCHER_ACTOR_ID,
 		type: 'conversation.user_input',
-		correlationId: 'corr-1',
-		causationId: null,
+		runId: 'corr-1',
+		causedBy: null,
 		payload: { text: 'Need help' },
 		status: 'queued',
 		availableAt: '2026-05-12T00:00:00.000Z',
@@ -245,8 +251,8 @@ function makeLifecycleEnvelope(overrides: Partial<EnvelopeRecord> = {}): Envelop
 	return {
 		...makeUserInputEnvelope(),
 		id: 'env-life-1',
-		fromActor: 'intents/intent-404',
-		toActor: 'dispatcher',
+		fromActor: createIntentActorId('intent-404'),
+		toActor: DISPATCHER_ACTOR_ID,
 		type: 'intent.lifecycle',
 		payload: {
 			intentId: 'intent-404',
@@ -274,8 +280,8 @@ function makeContext() {
 			to: string
 			type: string
 			payload: unknown
-			correlationId?: string
-			causationId?: string
+			runId?: string
+			causedBy?: string
 			availableAt?: Date
 		}) {
 			return {
@@ -283,8 +289,8 @@ function makeContext() {
 				fromActor: input.from,
 				toActor: input.to,
 				type: input.type,
-				correlationId: input.correlationId ?? 'corr-1',
-				causationId: input.causationId,
+				runId: input.runId ?? 'corr-1',
+				causedBy: input.causedBy,
 				payload: input.payload,
 				availableAt: input.availableAt
 			}

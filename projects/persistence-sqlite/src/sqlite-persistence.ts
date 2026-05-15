@@ -1,8 +1,11 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 
 import { Database } from 'bun:sqlite'
 
 import {
+	HUMAN_ACTOR_ID,
+	INTENTS_ACTOR_ID,
+	SKILLS_ACTOR_ID,
 	assertCanonicalActorId,
 	actorKindFromId,
 	createIntentActorId,
@@ -24,8 +27,8 @@ import type {
 	ClaimedEnvelope,
 	ContextAppendInput,
 	ContextItemRecord,
-	ContextScope,
-	ContextSelector,
+	ContextQuery,
+	ContextVisibility,
 	CommunicationTreeRecord,
 	CommunicationTreeSummary,
 	EnvelopeInput,
@@ -33,8 +36,8 @@ import type {
 	Persistence,
 	SkillRecord,
 	SkillRecordInput,
-	StreamEventInput,
-	StreamEventRecord
+	EventInput,
+	EventRecord
 } from './types'
 
 type ActorRow = {
@@ -52,8 +55,8 @@ type EnvelopeRow = {
 	from_actor: string
 	to_actor: string
 	type: string
-	correlation_id: string
-	causation_id: string | null
+	run_id: string
+	caused_by: string | null
 	payload_json: string
 	status: EnvelopeRecord['status']
 	available_at: string
@@ -75,12 +78,15 @@ type SkillRow = {
 	loaded_at: string
 }
 
-type StreamEventRow = {
+type EventRow = {
 	seq: number
-	id: string
-	scope: string
+	visibility: 'chat' | 'worklog' | 'debug'
+	run_id: string | null
+	intent_id: string | null
 	actor_id: string | null
 	envelope_id: string | null
+	call_id: string | null
+	parent_seq: number | null
 	type: string
 	payload_json: string
 	created_at: string
@@ -88,31 +94,17 @@ type StreamEventRow = {
 
 type ContextItemRow = {
 	seq: number
-	id: string
-	scope_type: 'run' | 'intent' | 'call' | 'actor' | 'global'
-	scope_key: string
-	correlation_id: string
+	kind: string
+	visibility: ContextVisibility
+	run_id: string | null
 	intent_id: string | null
-	actor_id: string
+	actor_id: string | null
+	envelope_id: string | null
 	call_id: string | null
-	parent_call_id: string | null
-	root_call_id: string | null
-	kind: ContextItemRecord['kind']
 	key: string | null
-	schema: string | null
-	tags_json: string
 	body_json: string | null
-	artifact_id: string | null
+	artifact_uri: string | null
 	summary: string | null
-	produced_by_actor_id: string
-	produced_by_envelope_id: string
-	produced_by_command_id: string | null
-	produced_by_tool_call_id: string | null
-	source_context_item_ids_json: string
-	confidence: number | null
-	hash: string
-	supersedes_item_id: string | null
-	redacts_item_id: string | null
 	created_at: string
 }
 
@@ -210,9 +202,7 @@ export class SqlitePersistence implements Persistence {
 		assertCanonicalActorId(envelope.toActor)
 		this.withTransaction(() => {
 			const insertedEnvelope = insertEnvelope(this.db, envelope)
-			insertStreamEvents(this.db, [
-				...buildEnvelopeQueuedStreamEvents({ envelope: insertedEnvelope, now: insertedEnvelope.createdAt })
-			])
+			insertEvents(this.db, buildEnvelopeQueuedEvents({ envelope: insertedEnvelope, now: insertedEnvelope.createdAt }))
 		})
 	}
 
@@ -293,7 +283,7 @@ export class SqlitePersistence implements Persistence {
 			const claimedEnvelope = query(this.db, 'SELECT * FROM envelopes WHERE id = ?')
 				.get(envelopeRow.id) as EnvelopeRow
 
-			insertStreamEvents(this.db, buildEnvelopeClaimedStreamEvents({
+			insertEvents(this.db, buildEnvelopeClaimedEvents({
 				envelope: mapEnvelopeRow(claimedEnvelope),
 				workerId: input.workerId,
 				now: nowIso
@@ -373,21 +363,12 @@ export class SqlitePersistence implements Persistence {
 
 			const inputEnvelope = mapEnvelopeRow(envelopeRow)
 			const previousActor = mapActorRow(actorRow)
-			const contextRecords = input.contextAppends.map((append) =>
-				materializeContextItemRecord({
-					append,
-					actorId: input.actorId,
-					envelope: inputEnvelope,
-					now: input.now
-				})
-			)
-			const persistedContextRecords = insertContextItems(this.db, contextRecords)
-
-			const insertEvent = query(
-				this.db,
-				`INSERT INTO actor_events (id, actor_id, envelope_id, event_type, event_json, created_at)
-				 VALUES (?, ?, ?, ?, ?, ?)`
-			)
+			const persistedContextRecords = appendContext(this.db, {
+				appends: input.contextAppends,
+				actorId: input.actorId,
+				envelope: inputEnvelope,
+				now: input.now
+			})
 
 			const normalizedActorEvents: Array<Required<Pick<ActorEventInput, 'id' | 'actorId' | 'eventType' | 'event' | 'createdAt'>> & ActorEventInput> = []
 			const outgoingEnvelopes: EnvelopeRecord[] = []
@@ -401,14 +382,6 @@ export class SqlitePersistence implements Persistence {
 						now: input.now
 					})
 					normalizedActorEvents.push(normalizedEvent)
-					insertEvent.run(
-						normalizedEvent.id,
-						normalizedEvent.actorId,
-						normalizedEvent.envelopeId ?? null,
-						normalizedEvent.eventType,
-						stringifyJson(normalizedEvent.event),
-						toIsoUtcString(normalizedEvent.createdAt, input.now)
-					)
 					continue
 				}
 
@@ -444,9 +417,9 @@ export class SqlitePersistence implements Persistence {
 			query(this.db, 'DELETE FROM actor_locks WHERE actor_id = ? AND envelope_id = ?')
 				.run(input.actorId, input.envelopeId)
 
-			insertStreamEvents(
+			insertEvents(
 				this.db,
-				buildCommitStreamEvents({
+				buildCommitEvents({
 					actor: previousActor,
 					newActorState: input.nextActorState,
 					inputEnvelope,
@@ -459,8 +432,22 @@ export class SqlitePersistence implements Persistence {
 		})
 	}
 
+	async appendContext(input: ContextAppendInput): Promise<number> {
+		const now = input.createdAt instanceof Date || typeof input.createdAt === 'string'
+			? new Date(input.createdAt)
+			: new Date()
+		const item = materializeContextItemRecord({
+			append: input,
+			actorId: input.actorId ?? null,
+			envelopeId: input.envelopeId ?? null,
+			runId: input.runId ?? null,
+			now
+		})
+		return insertContextItem(this.db, item)
+	}
+
 	async listContextItems(input: {
-		selector: ContextSelector
+		selector: ContextQuery
 		snapshotSeq?: number
 	}): Promise<ContextItemRecord[]> {
 		const clauses: string[] = []
@@ -474,37 +461,33 @@ export class SqlitePersistence implements Persistence {
 			clauses.push('seq > ?')
 			params.push(input.selector.afterSeq)
 		}
-		if (!input.selector.includeRedacted) {
-			clauses.push('id NOT IN (SELECT redacts_item_id FROM context_items WHERE redacts_item_id IS NOT NULL)')
+		if (input.selector.runId) {
+			clauses.push('run_id = ?')
+			params.push(input.selector.runId)
 		}
-		if (input.selector.scopes?.length) {
-			const scopeClauses = input.selector.scopes.map((scope) => {
-				params.push(scope.type, getScopeKey(scope))
-				return '(scope_type = ? AND scope_key = ?)'
-			})
-			clauses.push(`(${scopeClauses.join(' OR ')})`)
+		if (input.selector.intentId) {
+			clauses.push('intent_id = ?')
+			params.push(input.selector.intentId)
 		}
-		if (input.selector.kinds?.length) {
-			clauses.push(`kind IN (${input.selector.kinds.map(() => '?').join(', ')})`)
-			params.push(...input.selector.kinds)
+		if (input.selector.callId) {
+			clauses.push('call_id = ?')
+			params.push(input.selector.callId)
 		}
-		if (input.selector.keys?.length) {
-			clauses.push(`key IN (${input.selector.keys.map(() => '?').join(', ')})`)
-			params.push(...input.selector.keys)
+		if (input.selector.actorId) {
+			clauses.push('actor_id = ?')
+			params.push(input.selector.actorId)
 		}
-		if (input.selector.schemas?.length) {
-			clauses.push(`schema IN (${input.selector.schemas.map(() => '?').join(', ')})`)
-			params.push(...input.selector.schemas)
+		if (input.selector.visibility) {
+			const visibilityValues = Array.isArray(input.selector.visibility)
+				? input.selector.visibility
+				: [input.selector.visibility]
+			clauses.push(`visibility IN (${visibilityValues.map(() => '?').join(', ')})`)
+			params.push(...visibilityValues)
 		}
-		if (input.selector.producedByActorIds?.length) {
-			clauses.push(`produced_by_actor_id IN (${input.selector.producedByActorIds.map(() => '?').join(', ')})`)
-			params.push(...input.selector.producedByActorIds)
-		}
-		if (input.selector.tags?.length) {
-			for (const tag of input.selector.tags) {
-				clauses.push('tags_json LIKE ?')
-				params.push(`%"${tag}"%`)
-			}
+		if (input.selector.kind) {
+			const kindValues = Array.isArray(input.selector.kind) ? input.selector.kind : [input.selector.kind]
+			clauses.push(`kind IN (${kindValues.map(() => '?').join(', ')})`)
+			params.push(...kindValues)
 		}
 
 		const rows = query(
@@ -582,9 +565,9 @@ export class SqlitePersistence implements Persistence {
 					.run(stringifyJson(nextIntentState), nowIso, envelopeRow.to_actor)
 			}
 
-			insertStreamEvents(
+			insertEvents(
 				this.db,
-				buildEnvelopeFailedStreamEvents({
+				buildEnvelopeFailedEvents({
 					envelope: mapEnvelopeRow({
 						...envelopeRow,
 						status: exhausted ? 'dead' : 'queued',
@@ -630,12 +613,12 @@ export class SqlitePersistence implements Persistence {
 				const exhausted = envelope.attempts >= envelope.max_attempts
 				updateEnvelope.run(exhausted ? 'dead' : 'queued', nowIso, nowIso, envelope.id)
 				deleteLock.run(envelope.id)
-				insertStreamEvents(this.db, [{
-					id: randomUUID(),
-					scope: envelope.to_actor,
+				insertEvents(this.db, [{
+					type: 'runtime.envelope.lease_expired',
+					visibility: eventVisibilityForType('runtime.envelope.lease_expired'),
+					runId: envelope.run_id,
 					actorId: envelope.to_actor,
 					envelopeId: envelope.id,
-					type: 'runtime.envelope.lease_expired',
 					payload: {
 						envelopeId: envelope.id,
 						actorId: envelope.to_actor,
@@ -685,14 +668,17 @@ export class SqlitePersistence implements Persistence {
 		}))
 	}
 
-	async appendStreamEvents(events: StreamEventInput[]): Promise<void> {
-		this.withTransaction(() => {
-			insertStreamEvents(this.db, events.map((event) => ({
-				id: event.id,
-				scope: event.scope,
+	async appendEvents(events: EventInput[]): Promise<number[]> {
+		return this.withTransaction(() => {
+			return insertEvents(this.db, events.map((event) => ({
+				type: event.type,
+				visibility: event.visibility,
+				runId: event.runId ?? null,
+				intentId: event.intentId ?? null,
 				actorId: event.actorId ?? null,
 				envelopeId: event.envelopeId ?? null,
-				type: event.type,
+				callId: event.callId ?? null,
+				parentSeq: event.parentSeq ?? null,
 				payload: event.payload,
 				createdAt: toIsoUtcString(event.createdAt, new Date())
 			})))
@@ -727,17 +713,49 @@ export class SqlitePersistence implements Persistence {
 		}
 	}
 
-	async listStreamEvents(input: { scope: string; after?: number; limit?: number }): Promise<StreamEventRecord[]> {
+	async listEvents(input: {
+		after?: number
+		limit?: number
+		visibility?: 'chat' | 'worklog' | 'debug' | Array<'chat' | 'worklog' | 'debug'>
+		runId?: string
+		intentId?: string
+		actorId?: string
+		callId?: string
+	}): Promise<EventRecord[]> {
+		const clauses = ['seq > ?']
+		const params: Array<string | number> = [input.after ?? 0]
+
+		if (input.visibility) {
+			const visibilityValues = Array.isArray(input.visibility) ? input.visibility : [input.visibility]
+			clauses.push(`visibility IN (${visibilityValues.map(() => '?').join(', ')})`)
+			params.push(...visibilityValues)
+		}
+		if (input.runId) {
+			clauses.push('run_id = ?')
+			params.push(input.runId)
+		}
+		if (input.intentId) {
+			clauses.push('intent_id = ?')
+			params.push(input.intentId)
+		}
+		if (input.actorId) {
+			clauses.push('actor_id = ?')
+			params.push(input.actorId)
+		}
+		if (input.callId) {
+			clauses.push('call_id = ?')
+			params.push(input.callId)
+		}
+
 		const rows = query(
 			this.db,
-				`SELECT * FROM stream_events
-				 WHERE scope = ?
-				   AND seq > ?
+				`SELECT * FROM events
+				 WHERE ${clauses.join(' AND ')}
 				 ORDER BY seq ASC
 				 LIMIT ?`
 			)
-			.all(input.scope, input.after ?? 0, input.limit ?? 200) as StreamEventRow[]
-		return rows.map(mapStreamEventRow)
+			.all(...params, input.limit ?? 200) as EventRow[]
+		return rows.map(mapEventRow)
 	}
 
 	async listActorHierarchy(input: { rootActorId: string; observed?: boolean; includeRoot?: boolean }): Promise<ActorHierarchyRecord[]> {
@@ -748,7 +766,7 @@ export class SqlitePersistence implements Persistence {
 					this.db,
 					`WITH observed AS (
 					   SELECT actor_id AS actor_id, MIN(created_at) AS first_seen_at, MAX(created_at) AS last_seen_at
-					   FROM stream_events
+					   FROM events
 					   WHERE actor_id IS NOT NULL AND (actor_id = ? OR actor_id LIKE ?)
 					   GROUP BY actor_id
 					 )
@@ -784,21 +802,23 @@ export class SqlitePersistence implements Persistence {
 		assertCanonicalActorId(input.rootActorId)
 		const view = input.view ?? 'deep-dive'
 		const prefix = `actor/${input.rootActorId}/%`
+		const actorPrefix = `${input.rootActorId}/%`
 		const rows = query(
 			this.db,
-				`SELECT * FROM stream_events
+				`SELECT * FROM events
 				 WHERE seq > ?
-				   AND (scope = ? OR scope LIKE ?)
-				   ${chatViewWhereClause(view)}
+				   AND actor_id IS NOT NULL
+				   AND (actor_id = ? OR actor_id LIKE ?)
+				   ${visibilityWhereClause(view)}
 				 ORDER BY seq ASC
 				 LIMIT ?`
 		)
-			.all(input.after ?? 0, `actor/${input.rootActorId}`, prefix, input.limit ?? 200) as StreamEventRow[]
-		return rows.map((row) => ({ ...mapStreamEventRow(row), logView: view }))
+			.all(input.after ?? 0, input.rootActorId, actorPrefix, input.limit ?? 200) as EventRow[]
+		return rows.map((row) => ({ ...mapEventRow(row), logView: view }))
 	}
 
 	async listCommunicationTree(input: {
-		correlationId?: string
+		runId?: string
 		intentId?: string
 		rootEnvelopeId?: string
 		view?: 'chat' | 'deep-dive'
@@ -807,22 +827,22 @@ export class SqlitePersistence implements Persistence {
 		const rows = query(
 			this.db,
 				`WITH RECURSIVE roots AS (
-				   SELECT e.id, e.causation_id, e.correlation_id, e.from_actor, e.to_actor, e.type, e.payload_json, e.created_at
+				   SELECT e.id, e.caused_by, e.run_id, e.from_actor, e.to_actor, e.type, e.payload_json, e.created_at
 				   FROM envelopes e
 				   WHERE ${selector.rootWhere}
 				 ), tree AS (
-				   SELECT r.id, r.causation_id, r.correlation_id, r.from_actor, r.to_actor, r.type, r.payload_json, r.created_at, 0 AS depth
+				   SELECT r.id, r.caused_by, r.run_id, r.from_actor, r.to_actor, r.type, r.payload_json, r.created_at, 0 AS depth
 				   FROM roots r
 				   UNION ALL
-				   SELECT e.id, e.causation_id, e.correlation_id, e.from_actor, e.to_actor, e.type, e.payload_json, e.created_at, t.depth + 1
+				   SELECT e.id, e.caused_by, e.run_id, e.from_actor, e.to_actor, e.type, e.payload_json, e.created_at, t.depth + 1
 				   FROM envelopes e
-				   JOIN tree t ON e.causation_id = t.id
+				   JOIN tree t ON e.caused_by = t.id
 				 )
 				 SELECT 'env:' || t.id AS node_id,
-				        CASE WHEN t.causation_id IS NULL THEN NULL ELSE 'env:' || t.causation_id END AS parent_node_id,
+				        CASE WHEN t.caused_by IS NULL THEN NULL ELSE 'env:' || t.caused_by END AS parent_node_id,
 				        'envelope' AS node_kind,
 				        t.depth,
-				        t.correlation_id,
+				        t.run_id,
 				        t.id AS envelope_id,
 				        t.to_actor AS actor_id,
 				        t.from_actor,
@@ -832,11 +852,11 @@ export class SqlitePersistence implements Persistence {
 				        t.created_at
 				 FROM tree t
 				 UNION ALL
-				 SELECT 'log:' || s.id AS node_id,
+				 SELECT 'log:' || s.seq AS node_id,
 				        CASE WHEN s.envelope_id IS NULL THEN NULL ELSE 'env:' || s.envelope_id END AS parent_node_id,
 				        'log' AS node_kind,
 				        tree.depth + 1 AS depth,
-				        tree.correlation_id,
+				        s.run_id,
 				        s.envelope_id,
 				        s.actor_id,
 				        json_extract(s.payload_json, '$.fromActor') AS from_actor,
@@ -844,9 +864,9 @@ export class SqlitePersistence implements Persistence {
 				        s.type AS event_type,
 				        s.payload_json,
 				        s.created_at
-				 FROM stream_events s
+				 FROM events s
 				 JOIN tree ON s.envelope_id = tree.id
-				 WHERE 1=1 ${chatViewWhereClause(input.view ?? 'deep-dive', 's.type')}
+				 WHERE 1=1 ${visibilityWhereClause(input.view ?? 'deep-dive', 's')}
 				 ORDER BY created_at ASC, node_id ASC`
 		)
 			.all(...selector.params) as Array<{
@@ -854,7 +874,7 @@ export class SqlitePersistence implements Persistence {
 				parent_node_id: string | null
 				node_kind: 'envelope' | 'log'
 				depth: number
-				correlation_id: string | null
+				run_id: string | null
 				envelope_id: string | null
 				actor_id: string | null
 				from_actor: string | null
@@ -868,7 +888,7 @@ export class SqlitePersistence implements Persistence {
 			parentNodeId: row.parent_node_id,
 			nodeKind: row.node_kind,
 			depth: row.depth,
-			correlationId: row.correlation_id,
+			runId: row.run_id,
 			envelopeId: row.envelope_id,
 			actorId: row.actor_id,
 			fromActor: row.from_actor,
@@ -880,7 +900,7 @@ export class SqlitePersistence implements Persistence {
 	}
 
 	async summarizeCommunicationTree(input: {
-		correlationId?: string
+		runId?: string
 		intentId?: string
 		rootEnvelopeId?: string
 		view?: 'chat' | 'deep-dive'
@@ -904,7 +924,7 @@ export class SqlitePersistence implements Persistence {
 			this.db,
 				`WITH known AS (
 				   SELECT actor_id, MIN(created_at) AS first_seen_at, MAX(created_at) AS last_seen_at
-				   FROM stream_events
+				   FROM events
 				   WHERE actor_id IS NOT NULL
 				   GROUP BY actor_id
 				   UNION
@@ -930,9 +950,6 @@ export class SqlitePersistence implements Persistence {
 		const allActors = rows
 			.map((row) => {
 				const parsed = parseActorId(row.actor_id)
-				if (!parsed) {
-					return null
-				}
 				return {
 					actorId: row.actor_id,
 					parentActorId: parsed.parentId ?? null,
@@ -946,13 +963,54 @@ export class SqlitePersistence implements Persistence {
 			})
 			.filter((row): row is ActorHierarchyRecord => Boolean(row))
 
-		const childCounts = new Map<string, number>()
+		const actorMap = new Map<string, ActorHierarchyRecord>()
 		for (const actor of allActors) {
+			actorMap.set(actor.actorId, actor)
+			let parentId = actor.parentActorId
+			while (parentId) {
+				if (actorMap.has(parentId)) {
+					parentId = actorMap.get(parentId)?.parentActorId ?? null
+					continue
+				}
+				const parsedParent = parseActorId(parentId)
+				actorMap.set(parentId, {
+					actorId: parsedParent.id,
+					parentActorId: parsedParent.parentId,
+					kind: parsedParent.kind,
+					name: parsedParent.name,
+					depth: Math.max(0, parsedParent.segments.length - 1),
+					isCurrent: false,
+					firstSeenAt: null,
+					lastSeenAt: null
+				})
+				parentId = parsedParent.parentId
+			}
+		}
+
+		for (const virtualRootId of ['aven', 'aven/system', 'aven/intents', 'aven/skills'] as const) {
+			if (actorMap.has(virtualRootId)) continue
+			const parsed = parseActorId(virtualRootId)
+			actorMap.set(virtualRootId, {
+				actorId: parsed.id,
+				parentActorId: parsed.parentId,
+				kind: parsed.kind,
+				name: parsed.name,
+				depth: Math.max(0, parsed.segments.length - 1),
+				isCurrent: false,
+				firstSeenAt: null,
+				lastSeenAt: null
+			})
+		}
+
+		const allActorNodes = [...actorMap.values()].sort((a, b) => a.actorId.localeCompare(b.actorId))
+
+		const childCounts = new Map<string, number>()
+		for (const actor of allActorNodes) {
 			if (!actor.parentActorId) continue
 			childCounts.set(actor.parentActorId, (childCounts.get(actor.parentActorId) ?? 0) + 1)
 		}
 
-		return allActors
+		return allActorNodes
 			.filter((actor) => actor.parentActorId === parentActorId)
 			.map((actor) => ({
 				...actor,
@@ -1065,13 +1123,48 @@ export class SqlitePersistence implements Persistence {
 }
 
 function inferActorKind(actorId: string): string {
-	return actorKindFromId(actorId)
+	const parsed = assertCanonicalActorId(actorId)
+	switch (parsed.kind) {
+		case 'worker':
+			return 'skill-worker'
+		case 'skill':
+			return 'skill-supervisor'
+		case 'system':
+			return actorId === HUMAN_ACTOR_ID ? 'human-outbox' : 'dispatcher'
+		case 'group':
+			return actorId === INTENTS_ACTOR_ID ? 'group' : actorId === SKILLS_ACTOR_ID ? 'group' : 'group'
+		case 'intent':
+			return 'intent'
+		case 'runtime':
+			return 'runtime'
+		default:
+			return actorKindFromId(actorId)
+	}
 }
 
 function assertActorRecordIdentity(actorId: string, kind: string): void {
 	const parsed = assertCanonicalActorId(actorId)
-	if (parsed.kind !== kind) {
+	if (!actorKindMatches(parsed.kind, kind, actorId)) {
 		throw new Error(`Actor kind mismatch for ${actorId}: expected ${parsed.kind}, got ${kind}`)
+	}
+}
+
+function actorKindMatches(parsedKind: string, recordKind: string, actorId: string): boolean {
+	if (parsedKind === recordKind) {
+		return true
+	}
+
+	switch (parsedKind) {
+		case 'system':
+			return recordKind === 'dispatcher' || recordKind === 'human-outbox'
+		case 'group':
+			return recordKind === 'group' || (actorId === INTENTS_ACTOR_ID && recordKind === 'intents') || (actorId === SKILLS_ACTOR_ID && recordKind === 'skills')
+		case 'skill':
+			return recordKind === 'skill-supervisor'
+		case 'worker':
+			return recordKind === 'skill-worker' || recordKind === 'worker'
+		default:
+			return false
 	}
 }
 
@@ -1117,8 +1210,8 @@ function insertEnvelope(db: SqliteDatabase, envelope: EnvelopeInput, now = new D
 		  from_actor,
 		  to_actor,
 		  type,
-		  correlation_id,
-		  causation_id,
+		  run_id,
+		  caused_by,
 		  payload_json,
 		  status,
 		  available_at,
@@ -1135,8 +1228,8 @@ function insertEnvelope(db: SqliteDatabase, envelope: EnvelopeInput, now = new D
 		envelope.fromActor,
 		envelope.toActor,
 		envelope.type,
-		envelope.correlationId,
-		envelope.causationId ?? null,
+		envelope.runId,
+		envelope.causedBy ?? null,
 		stringifyJson(envelope.payload),
 		availableAtIso,
 		envelope.maxAttempts ?? 5,
@@ -1149,8 +1242,8 @@ function insertEnvelope(db: SqliteDatabase, envelope: EnvelopeInput, now = new D
 		fromActor: envelope.fromActor,
 		toActor: envelope.toActor,
 		type: envelope.type,
-		correlationId: envelope.correlationId,
-		causationId: envelope.causationId ?? null,
+		runId: envelope.runId,
+		causedBy: envelope.causedBy ?? null,
 		payload: envelope.payload,
 		status: 'queued',
 		availableAt: availableAtIso,
@@ -1182,8 +1275,8 @@ function mapEnvelopeRow(row: EnvelopeRow): EnvelopeRecord {
 		fromActor: row.from_actor,
 		toActor: row.to_actor,
 		type: row.type,
-		correlationId: row.correlation_id,
-		causationId: row.causation_id,
+		runId: row.run_id,
+		causedBy: row.caused_by,
 		payload: parseJson(row.payload_json),
 		status: row.status,
 		availableAt: row.available_at,
@@ -1197,13 +1290,16 @@ function mapEnvelopeRow(row: EnvelopeRow): EnvelopeRecord {
 	}
 }
 
-function mapStreamEventRow(row: StreamEventRow): StreamEventRecord {
+function mapEventRow(row: EventRow): EventRecord {
 	return {
 		seq: row.seq,
-		id: row.id,
-		scope: row.scope,
+		visibility: row.visibility,
+		runId: row.run_id,
+		intentId: row.intent_id,
 		actorId: row.actor_id,
 		envelopeId: row.envelope_id,
+		callId: row.call_id,
+		parentSeq: row.parent_seq,
 		type: row.type,
 		payload: parseJson(row.payload_json),
 		createdAt: row.created_at
@@ -1212,302 +1308,219 @@ function mapStreamEventRow(row: StreamEventRow): StreamEventRecord {
 
 function mapContextItemRow(row: ContextItemRow): ContextItemRecord {
 	return {
-		id: row.id,
 		seq: row.seq,
-		scope: parseContextScope(row),
 		kind: row.kind,
-		key: row.key ?? undefined,
-		schema: row.schema ?? undefined,
-		tags: parseJson(row.tags_json),
-		body: row.body_json ? parseJson(row.body_json) : undefined,
-		artifactId: row.artifact_id ?? undefined,
-		summary: row.summary ?? undefined,
-		correlationId: row.correlation_id,
-		intentId: row.intent_id ?? undefined,
+		visibility: row.visibility,
+		runId: row.run_id,
+		intentId: row.intent_id,
 		actorId: row.actor_id,
-		callId: row.call_id ?? undefined,
-		parentCallId: row.parent_call_id ?? undefined,
-		rootCallId: row.root_call_id ?? undefined,
-		producedByActorId: row.produced_by_actor_id,
-		producedByEnvelopeId: row.produced_by_envelope_id,
-		producedByCommandId: row.produced_by_command_id ?? undefined,
-		producedByToolCallId: row.produced_by_tool_call_id ?? undefined,
-		sourceContextItemIds: parseJson(row.source_context_item_ids_json),
-		confidence: row.confidence ?? undefined,
-		hash: row.hash,
-		createdAt: row.created_at,
-		supersedesItemId: row.supersedes_item_id ?? undefined,
-		redactsItemId: row.redacts_item_id ?? undefined
+		envelopeId: row.envelope_id,
+		callId: row.call_id,
+		key: row.key,
+		summary: row.summary,
+		body: row.body_json ? parseJson(row.body_json) : undefined,
+		artifactUri: row.artifact_uri,
+		createdAt: row.created_at
 	}
 }
 
-function insertContextItems(db: SqliteDatabase, items: ContextItemRecord[]): ContextItemRecord[] {
-	if (items.length === 0) {
-		return []
-	}
 
-	const insert = query(
+function insertContextItem(db: SqliteDatabase, item: Omit<ContextItemRecord, 'seq'>): number {
+	const result = query(
 		db,
 		`INSERT INTO context_items (
-		  id,
-		  scope_type,
-		  scope_key,
-		  correlation_id,
+		  kind,
+		  visibility,
+		  run_id,
 		  intent_id,
 		  actor_id,
+		  envelope_id,
 		  call_id,
-		  parent_call_id,
-		  root_call_id,
-		  kind,
 		  key,
-		  schema,
-		  tags_json,
-		  body_json,
-		  artifact_id,
 		  summary,
-		  produced_by_actor_id,
-		  produced_by_envelope_id,
-		  produced_by_command_id,
-		  produced_by_tool_call_id,
-		  source_context_item_ids_json,
-		  confidence,
-		  hash,
-		  supersedes_item_id,
-		  redacts_item_id,
+		  body_json,
+		  artifact_uri,
 		  created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	).run(
+		item.kind,
+		item.visibility,
+		item.runId,
+		item.intentId,
+		item.actorId,
+		item.envelopeId,
+		item.callId,
+		item.key,
+		item.summary,
+		item.body === undefined ? null : stringifyJson(item.body),
+		item.artifactUri,
+		item.createdAt
 	)
+	return Number(result.lastInsertRowid)
+}
 
+function appendContext(db: SqliteDatabase, input: {
+	appends: ContextAppendInput[]
+	actorId: string
+	envelope: EnvelopeRecord
+	now: Date
+}): ContextItemRecord[] {
 	const persisted: ContextItemRecord[] = []
-
-	for (const item of items) {
-		const result = insert.run(
-			item.id,
-			item.scope.type,
-			getScopeKey(item.scope),
-			item.correlationId,
-			item.intentId ?? null,
-			item.actorId,
-			item.callId ?? null,
-			item.parentCallId ?? null,
-			item.rootCallId ?? null,
-			item.kind,
-			item.key ?? null,
-			item.schema ?? null,
-			stringifyJson(item.tags),
-			item.body === undefined ? null : stringifyJson(item.body),
-			item.artifactId ?? null,
-			item.summary ?? null,
-			item.producedByActorId,
-			item.producedByEnvelopeId,
-			item.producedByCommandId ?? null,
-			item.producedByToolCallId ?? null,
-			stringifyJson(item.sourceContextItemIds),
-			item.confidence ?? null,
-			item.hash,
-			item.supersedesItemId ?? null,
-			item.redactsItemId ?? null,
-			item.createdAt
-		)
-		persisted.push({
-			...item,
-			seq: Number(result.lastInsertRowid)
+	for (const append of input.appends) {
+		const item = materializeContextItemRecord({
+			append,
+			actorId: input.actorId,
+			envelopeId: input.envelope.id,
+			runId: input.envelope.runId,
+			now: append.createdAt instanceof Date || typeof append.createdAt === 'string' ? new Date(append.createdAt) : input.now
 		})
+		const seq = insertContextItem(db, item)
+		persisted.push({ ...item, seq })
 	}
-
 	return persisted
 }
 
 function materializeContextItemRecord(input: {
 	append: ContextAppendInput
-	actorId: string
-	envelope: EnvelopeRecord
+	actorId: string | null
+	envelopeId: string | null
+	runId: string | null
 	now: Date
-}): ContextItemRecord {
-	const correlationId = input.envelope.correlationId
-	const payload = input.envelope.payload
-	const scope = input.append.scope
-	const intentId = scope.type === 'intent' ? scope.intentId : readIntentIdFromUnknown(payload) ?? undefined
-	const callId = scope.type === 'call' ? scope.callId : inferCallId(payload) ?? undefined
-	const parentCallId = scope.type === 'call' ? scope.parentCallId : inferParentCallId(payload) ?? undefined
-	const rootCallId =
-		scope.type === 'call'
-			? scope.rootCallId
-			: inferRootCallId(payload) ?? inferParentCallId(payload) ?? inferCallId(payload) ?? undefined
-	const producedByActorId = input.actorId
-	const producedByEnvelopeId = input.envelope.id
-	const createdAt = input.now.toISOString()
-
-	const hash = createHash('sha256')
-		.update(
-			JSON.stringify({
-				scope,
-				kind: input.append.kind,
-				key: input.append.key,
-				schema: input.append.schema,
-				tags: input.append.tags,
-				body: input.append.body,
-				artifactId: input.append.artifactId,
-				summary: input.append.summary,
-				producedByActorId,
-				producedByEnvelopeId,
-				producedByCommandId: input.append.producedByCommandId,
-				producedByToolCallId: input.append.producedByToolCallId,
-				sourceContextItemIds: input.append.sourceContextItemIds
-			})
-		)
-		.digest('hex')
-
+}): Omit<ContextItemRecord, 'seq'> {
 	return {
-		id: randomUUID(),
-		seq: 0,
-		scope,
 		kind: input.append.kind,
-		key: input.append.key,
-		schema: input.append.schema,
-		tags: input.append.tags,
+		visibility: input.append.visibility ?? 'worklog',
+		runId: input.append.runId ?? input.runId ?? null,
+		intentId: input.append.intentId ?? null,
+		actorId: input.append.actorId ?? input.actorId ?? null,
+		envelopeId: input.append.envelopeId ?? input.envelopeId ?? null,
+		callId: input.append.callId ?? null,
+		key: input.append.key ?? null,
+		summary: input.append.summary ?? null,
 		body: input.append.body,
-		artifactId: input.append.artifactId,
-		summary: input.append.summary,
-		correlationId,
-		intentId,
-		actorId: input.actorId,
-		callId,
-		parentCallId,
-		rootCallId,
-		producedByActorId,
-		producedByEnvelopeId,
-		producedByCommandId: input.append.producedByCommandId,
-		producedByToolCallId: input.append.producedByToolCallId,
-		sourceContextItemIds: input.append.sourceContextItemIds,
-		confidence: input.append.confidence,
-		hash,
-		createdAt,
-		supersedesItemId: input.append.supersedesItemId,
-		redactsItemId: input.append.redactsItemId
+		artifactUri: input.append.artifactUri ?? null,
+		createdAt: toIsoUtcString(input.append.createdAt, input.now)
 	}
 }
 
-function insertStreamEvents(
+function insertEvents(
 	db: SqliteDatabase,
-	events: Array<{
-		id: string
-		scope: string
-		actorId?: string | null
-		envelopeId?: string | null
-		type: string
-		payload: unknown
-		createdAt: string
-	}>
-): void {
+	events: EventInput[]
+): number[] {
 	if (events.length === 0) {
-		return
+		return []
 	}
 
 	const insert = query(
 		db,
-		`INSERT OR IGNORE INTO stream_events (id, scope, actor_id, envelope_id, type, payload_json, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`
+		`INSERT INTO events (type, visibility, run_id, intent_id, actor_id, envelope_id, call_id, parent_seq, payload_json, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	)
+	const seqs: number[] = []
 
 	for (const event of events) {
-		insert.run(
-			event.id,
-			event.scope,
+		const result = insert.run(
+			event.type,
+			event.visibility,
+			event.runId ?? null,
+			event.intentId ?? null,
 			event.actorId ?? null,
 			event.envelopeId ?? null,
-			event.type,
+			event.callId ?? null,
+			event.parentSeq ?? null,
 			stringifyJson(event.payload),
-			event.createdAt
+			toIsoUtcString(event.createdAt, new Date())
 		)
+		seqs.push(Number(result.lastInsertRowid))
 	}
+	return seqs
 }
 
-function buildEnvelopeQueuedStreamEvents(input: { envelope: EnvelopeRecord; now: string }) {
-	return scopedStreamEvents({
-		baseId: `${input.envelope.id}:queued`,
+function buildEnvelopeQueuedEvents(input: { envelope: EnvelopeRecord; now: string }): EventInput[] {
+	return [{
+		type: 'runtime.envelope.queued',
+		visibility: eventVisibilityForType('runtime.envelope.queued'),
+		runId: input.envelope.runId,
+		intentId: inferIntentId(input.envelope.toActor, undefined, input.envelope.payload),
 		actorId: input.envelope.toActor,
 		envelopeId: input.envelope.id,
-		type: 'runtime.envelope.queued',
+		callId: inferCallId(input.envelope.payload),
 		payload: {
 			envelopeId: input.envelope.id,
 			fromActor: input.envelope.fromActor,
 			toActor: input.envelope.toActor,
 			envelopeType: input.envelope.type,
-			correlationId: input.envelope.correlationId
+			runId: input.envelope.runId
 		},
-		createdAt: input.now,
-		scopes: scopesForEnvelope(input.envelope)
-	})
+		createdAt: input.now
+	}]
 }
 
-function buildEnvelopeClaimedStreamEvents(input: { envelope: EnvelopeRecord; workerId: string; now: string }) {
-	return scopedStreamEvents({
-		baseId: `${input.envelope.id}:claimed`,
+function buildEnvelopeClaimedEvents(input: { envelope: EnvelopeRecord; workerId: string; now: string }): EventInput[] {
+	return [{
+		type: 'runtime.envelope.claimed',
+		visibility: eventVisibilityForType('runtime.envelope.claimed'),
+		runId: input.envelope.runId,
+		intentId: inferIntentId(input.envelope.toActor, undefined, input.envelope.payload),
 		actorId: input.envelope.toActor,
 		envelopeId: input.envelope.id,
-		type: 'runtime.envelope.claimed',
+		callId: inferCallId(input.envelope.payload),
 		payload: {
 			envelopeId: input.envelope.id,
 			actorId: input.envelope.toActor,
 			workerId: input.workerId,
 			attempts: input.envelope.attempts
 		},
-		createdAt: input.now,
-		scopes: scopesForEnvelope(input.envelope)
-	})
+		createdAt: input.now
+	}]
 }
 
-function buildEnvelopeFailedStreamEvents(input: {
+function buildEnvelopeFailedEvents(input: {
 	envelope: EnvelopeRecord
 	error: string
 	now: string
 	nextIntentState?: { intentId?: string; title?: string; summary?: string; status?: string } | null
-}) {
-	const events = [
-		...scopedStreamEvents({
-			baseId: `${input.envelope.id}:failed`,
-			actorId: input.envelope.toActor,
+}): EventInput[] {
+	const events: EventInput[] = [{
+		type: 'runtime.envelope.failed',
+		visibility: eventVisibilityForType('runtime.envelope.failed'),
+		runId: input.envelope.runId,
+		intentId: inferIntentId(input.envelope.toActor, input.nextIntentState, input.envelope.payload),
+		actorId: input.envelope.toActor,
+		envelopeId: input.envelope.id,
+		callId: inferCallId(input.envelope.payload),
+		payload: {
 			envelopeId: input.envelope.id,
-			type: 'runtime.envelope.failed',
-			payload: {
-				envelopeId: input.envelope.id,
-				actorId: input.envelope.toActor,
-				error: input.error,
-				status: input.envelope.status
-			},
-			createdAt: input.now,
-			scopes: scopesForEnvelope(input.envelope)
-		})
-	]
+			actorId: input.envelope.toActor,
+			error: input.error,
+			status: input.envelope.status
+		},
+		createdAt: input.now
+	}]
 
 	if (input.envelope.status === 'dead' && input.nextIntentState?.intentId && input.nextIntentState.status === 'failed') {
-		events.push(
-			...scopedStreamEvents({
-				baseId: `${input.envelope.id}:intent-status-failed`,
-				actorId: input.envelope.toActor,
-				envelopeId: input.envelope.id,
-				type: 'intent.status_changed',
-				payload: {
-					intentId: input.nextIntentState.intentId,
-					status: 'failed',
-					summary: input.nextIntentState.summary,
-					title: input.nextIntentState.title
-				},
-				createdAt: input.now,
-				scopes: scopesForStreamEvent({
-					actorId: input.envelope.toActor,
-					correlationId: input.envelope.correlationId,
-					intentId: input.nextIntentState.intentId
-				})
-			})
-		)
+		events.push({
+			type: 'intent.status_changed',
+			visibility: eventVisibilityForType('intent.status_changed'),
+			runId: input.envelope.runId,
+			intentId: input.nextIntentState.intentId,
+			actorId: input.envelope.toActor,
+			envelopeId: input.envelope.id,
+			callId: inferCallId(input.envelope.payload),
+			payload: {
+				intentId: input.nextIntentState.intentId,
+				status: 'failed',
+				summary: input.nextIntentState.summary,
+				title: input.nextIntentState.title
+			},
+			createdAt: input.now
+		})
 	}
 
 	return events
 }
 
-function buildCommitStreamEvents(input: {
+function buildCommitEvents(input: {
 	actor: ActorRecord
 	newActorState: unknown
 	inputEnvelope: EnvelopeRecord
@@ -1515,412 +1528,280 @@ function buildCommitStreamEvents(input: {
 	outgoingEnvelopes: EnvelopeRecord[]
 	contextItems: ContextItemRecord[]
 	now: string
-}) {
-	const streamEvents: Array<{
-		id: string
-		scope: string
-		actorId?: string | null
-		envelopeId?: string | null
-		type: string
-		payload: unknown
-		createdAt: string
-	}> = []
+}): EventInput[] {
+	const events: EventInput[] = []
+	const intentId = inferIntentId(input.actor.id, input.newActorState, input.inputEnvelope.payload)
+	const envelopeCallId = inferCallId(input.inputEnvelope.payload)
 
-	streamEvents.push(
-		...scopedStreamEvents({
-			baseId: `${input.inputEnvelope.id}:completed`,
-			actorId: input.actor.id,
+	events.push({
+		type: 'runtime.envelope.completed',
+		visibility: eventVisibilityForType('runtime.envelope.completed'),
+		runId: input.inputEnvelope.runId,
+		intentId,
+		actorId: input.actor.id,
+		envelopeId: input.inputEnvelope.id,
+		callId: envelopeCallId,
+		payload: {
 			envelopeId: input.inputEnvelope.id,
-			type: 'runtime.envelope.completed',
-			payload: {
-				envelopeId: input.inputEnvelope.id,
-				actorId: input.actor.id,
-				envelopeType: input.inputEnvelope.type,
-				correlationId: input.inputEnvelope.correlationId
-			},
-			createdAt: input.now,
-			scopes: scopesForStreamEvent({
-				actorId: input.actor.id,
-				correlationId: input.inputEnvelope.correlationId,
-				intentId: inferIntentId(input.actor.id, input.newActorState, input.inputEnvelope.payload)
-			})
-		})
-	)
+			actorId: input.actor.id,
+			envelopeType: input.inputEnvelope.type,
+			runId: input.inputEnvelope.runId
+		},
+		createdAt: input.now
+	})
 
-	streamEvents.push(
-		...scopedStreamEvents({
-			baseId: `${input.inputEnvelope.id}:actor-io-inbound`,
+	events.push({
+		type: 'actor.io.inbound',
+		visibility: eventVisibilityForType('actor.io.inbound'),
+		runId: input.inputEnvelope.runId,
+		intentId,
+		actorId: input.actor.id,
+		envelopeId: input.inputEnvelope.id,
+		callId: envelopeCallId,
+		payload: {
 			actorId: input.actor.id,
+			fromActor: input.inputEnvelope.fromActor,
+			toActor: input.inputEnvelope.toActor,
 			envelopeId: input.inputEnvelope.id,
-			type: 'actor.io.inbound',
-			payload: {
-				actorId: input.actor.id,
-				fromActor: input.inputEnvelope.fromActor,
-				toActor: input.inputEnvelope.toActor,
-				envelopeId: input.inputEnvelope.id,
-				envelopeType: input.inputEnvelope.type,
-				correlationId: input.inputEnvelope.correlationId,
-				payload: input.inputEnvelope.payload
-			},
-			createdAt: input.now,
-			scopes: scopesForStreamEvent({
-				actorId: input.actor.id,
-				correlationId: input.inputEnvelope.correlationId,
-				intentId: inferIntentId(input.actor.id, input.newActorState, input.inputEnvelope.payload)
-			})
-		})
-	)
+			envelopeType: input.inputEnvelope.type,
+			runId: input.inputEnvelope.runId,
+			payload: input.inputEnvelope.payload
+		},
+		createdAt: input.now
+	})
 
 	for (const actorEvent of input.actorEvents) {
-		streamEvents.push(
-			...scopedStreamEvents({
-				baseId: `${actorEvent.id}:actor`,
+		events.push({
+			type: 'actor.event',
+			visibility: eventVisibilityForType('actor.event'),
+			runId: input.inputEnvelope.runId,
+			intentId: inferIntentId(actorEvent.actorId, input.newActorState, actorEvent.event),
+			actorId: actorEvent.actorId,
+			envelopeId: actorEvent.envelopeId ?? input.inputEnvelope.id,
+			callId: inferCallId(actorEvent.event),
+			payload: {
 				actorId: actorEvent.actorId,
-				envelopeId: actorEvent.envelopeId ?? input.inputEnvelope.id,
-				type: 'actor.event',
-				payload: {
-					actorId: actorEvent.actorId,
-					eventType: actorEvent.eventType,
-					event: actorEvent.event
-				},
-				createdAt: toIsoUtcString(actorEvent.createdAt, input.now),
-				scopes: scopesForStreamEvent({
-					actorId: actorEvent.actorId,
-					correlationId: input.inputEnvelope.correlationId,
-					intentId: inferIntentId(actorEvent.actorId, input.newActorState, actorEvent.event)
-				})
-			})
-		)
+				eventType: actorEvent.eventType,
+				event: actorEvent.event
+			},
+			createdAt: toIsoUtcString(actorEvent.createdAt, input.now)
+		})
 	}
 
 	for (const contextItem of input.contextItems) {
-		streamEvents.push(
-			...scopedStreamEvents({
-				baseId: `${contextItem.id}:context-appended`,
+		events.push({
+			type: 'context.appended',
+			visibility: eventVisibilityForType('context.appended'),
+			runId: contextItem.runId,
+			intentId: contextItem.intentId,
+			actorId: contextItem.actorId,
+				envelopeId: contextItem.envelopeId,
+			callId: contextItem.callId,
+			payload: {
+				seq: contextItem.seq,
+				kind: contextItem.kind,
+					visibility: contextItem.visibility,
+				key: contextItem.key,
+				summary: contextItem.summary,
+				runId: contextItem.runId,
+				intentId: contextItem.intentId,
 				actorId: contextItem.actorId,
-				envelopeId: contextItem.producedByEnvelopeId,
-				type: 'context.appended',
-				payload: {
-					id: contextItem.id,
-					seq: contextItem.seq,
-					scope: contextItem.scope,
-					kind: contextItem.kind,
-					key: contextItem.key,
-					schema: contextItem.schema,
-					tags: contextItem.tags,
-					summary: contextItem.summary,
-					artifactId: contextItem.artifactId,
-					correlationId: contextItem.correlationId,
-					intentId: contextItem.intentId,
-					actorId: contextItem.actorId,
-					callId: contextItem.callId,
-					parentCallId: contextItem.parentCallId,
-					rootCallId: contextItem.rootCallId,
-					producedByActorId: contextItem.producedByActorId,
-					producedByEnvelopeId: contextItem.producedByEnvelopeId,
-					sourceContextItemIds: contextItem.sourceContextItemIds,
-					createdAt: contextItem.createdAt
-				},
-				createdAt: contextItem.createdAt,
-				scopes: scopesForContextItem(contextItem)
-			})
-		)
+					envelopeId: contextItem.envelopeId,
+				callId: contextItem.callId,
+					body: contextItem.body,
+					artifactUri: contextItem.artifactUri,
+				createdAt: contextItem.createdAt
+			},
+			createdAt: contextItem.createdAt
+		})
 	}
 
 	for (const outgoing of input.outgoingEnvelopes) {
-		streamEvents.push(...buildEnvelopeQueuedStreamEvents({ envelope: outgoing, now: input.now }))
-		streamEvents.push(
-			...scopedStreamEvents({
-				baseId: `${outgoing.id}:actor-io-outbound`,
+		events.push(...buildEnvelopeQueuedEvents({ envelope: outgoing, now: input.now }))
+		events.push({
+			type: 'actor.io.outbound',
+			visibility: eventVisibilityForType('actor.io.outbound'),
+			runId: outgoing.runId,
+			intentId: inferIntentId(outgoing.toActor, input.newActorState, outgoing.payload),
+			actorId: input.actor.id,
+			envelopeId: outgoing.id,
+			callId: inferCallId(outgoing.payload),
+			payload: {
 				actorId: input.actor.id,
+				fromActor: outgoing.fromActor,
+				toActor: outgoing.toActor,
 				envelopeId: outgoing.id,
-				type: 'actor.io.outbound',
-				payload: {
-					actorId: input.actor.id,
-					fromActor: outgoing.fromActor,
-					toActor: outgoing.toActor,
-					envelopeId: outgoing.id,
-					envelopeType: outgoing.type,
-					correlationId: outgoing.correlationId,
-					payload: outgoing.payload
-				},
-				createdAt: input.now,
-				scopes: scopesForStreamEvent({
-					actorId: input.actor.id,
-					correlationId: outgoing.correlationId,
-					intentId: inferIntentId(outgoing.toActor, input.newActorState, outgoing.payload)
-				})
-			})
-		)
+				envelopeType: outgoing.type,
+				runId: outgoing.runId,
+				payload: outgoing.payload
+			},
+			createdAt: input.now
+		})
 	}
 
 	const previousIntentState = input.actor.kind === 'intent' ? toIntentState(input.actor.state) : null
 	const nextIntentState = input.actor.kind === 'intent' ? toIntentState(input.newActorState) : null
-	const intentId = inferIntentId(input.actor.id, input.newActorState, input.inputEnvelope.payload)
 
 	if (input.actor.kind === 'intent' && intentId && input.inputEnvelope.type === 'intent.start' && input.actor.version === 0) {
-		streamEvents.push(
-			...scopedStreamEvents({
-				baseId: `${input.inputEnvelope.id}:intent-created`,
-				actorId: input.actor.id,
-				envelopeId: input.inputEnvelope.id,
-				type: 'intent.created',
-				payload: {
-					intentId,
-					title: nextIntentState?.title,
-					goal: nextIntentState?.goal,
-					status: nextIntentState?.status,
-					summary: nextIntentState?.summary
-				},
-				createdAt: input.now,
-				scopes: scopesForStreamEvent({ actorId: input.actor.id, correlationId: input.inputEnvelope.correlationId, intentId })
-			})
-		)
+		events.push({
+			type: 'intent.created',
+			visibility: eventVisibilityForType('intent.created'),
+			runId: input.inputEnvelope.runId,
+			intentId,
+			actorId: input.actor.id,
+			envelopeId: input.inputEnvelope.id,
+			callId: envelopeCallId,
+			payload: {
+				intentId,
+				title: nextIntentState?.title,
+				goal: nextIntentState?.goal,
+				status: nextIntentState?.status,
+				summary: nextIntentState?.summary
+			},
+			createdAt: input.now
+		})
 	}
 
-	if (
-		input.actor.kind === 'intent' &&
-		intentId &&
-		nextIntentState &&
-		(!previousIntentState ||
-			previousIntentState.status !== nextIntentState.status ||
-			previousIntentState.summary !== nextIntentState.summary)
-	) {
-		streamEvents.push(
-			...scopedStreamEvents({
-				baseId: `${input.inputEnvelope.id}:intent-status`,
-				actorId: input.actor.id,
-				envelopeId: input.inputEnvelope.id,
-				type: 'intent.status_changed',
-				payload: {
-					intentId,
-					status: nextIntentState.status,
-					summary: nextIntentState.summary,
-					title: nextIntentState.title
-				},
-				createdAt: input.now,
-				scopes: scopesForStreamEvent({ actorId: input.actor.id, correlationId: input.inputEnvelope.correlationId, intentId })
-			})
-		)
+	if (input.actor.kind === 'intent' && intentId && nextIntentState && (!previousIntentState || previousIntentState.status !== nextIntentState.status || previousIntentState.summary !== nextIntentState.summary)) {
+		events.push({
+			type: 'intent.status_changed',
+			visibility: eventVisibilityForType('intent.status_changed'),
+			runId: input.inputEnvelope.runId,
+			intentId,
+			actorId: input.actor.id,
+			envelopeId: input.inputEnvelope.id,
+			callId: envelopeCallId,
+			payload: {
+				intentId,
+				status: nextIntentState.status,
+				summary: nextIntentState.summary,
+				title: nextIntentState.title
+			},
+			createdAt: input.now
+		})
 	}
 
 	if (input.actor.kind === 'intent' && intentId) {
 		for (const outgoing of input.outgoingEnvelopes) {
 			if (outgoing.type === 'skill.request') {
-				streamEvents.push(
-					...scopedStreamEvents({
-						baseId: `${outgoing.id}:skill-call-started`,
-						actorId: input.actor.id,
-						envelopeId: outgoing.id,
-						type: 'intent.skill_call_started',
-						payload: {
-							intentId,
-							callId: readString((outgoing.payload as Record<string, unknown>)?.callId),
-							skillId: parseSkillId(outgoing.toActor),
-							request: readString((outgoing.payload as Record<string, unknown>)?.request)
-						},
-						createdAt: input.now,
-						scopes: scopesForStreamEvent({
-							actorId: input.actor.id,
-							correlationId: outgoing.correlationId,
-							intentId: inferIntentId(input.actor.id, input.newActorState, outgoing.payload)
-						})
-					})
-				)
+				events.push({
+					type: 'intent.skill_call_started',
+					visibility: eventVisibilityForType('intent.skill_call_started'),
+					runId: outgoing.runId,
+					intentId: inferIntentId(input.actor.id, input.newActorState, outgoing.payload),
+					actorId: input.actor.id,
+					envelopeId: outgoing.id,
+					callId: readString((outgoing.payload as Record<string, unknown>)?.callId),
+					payload: {
+						intentId,
+						callId: readString((outgoing.payload as Record<string, unknown>)?.callId),
+						skillId: parseSkillId(outgoing.toActor),
+						request: readString((outgoing.payload as Record<string, unknown>)?.request)
+					},
+					createdAt: input.now
+				})
 			}
 
-			if (outgoing.toActor === 'human' && (outgoing.type === 'human.message' || outgoing.type === 'human.question')) {
-				streamEvents.push(
-					...scopedStreamEvents({
-						baseId: `${outgoing.id}:message-to-user`,
-						actorId: input.actor.id,
-						envelopeId: outgoing.id,
-						type: 'intent.message_to_user',
-						payload: {
-							intentId,
-							messageType: outgoing.type,
-							...(typeof outgoing.payload === 'object' && outgoing.payload ? (outgoing.payload as Record<string, unknown>) : {})
-						},
-						createdAt: input.now,
-						scopes: scopesForStreamEvent({
-							actorId: input.actor.id,
-							correlationId: outgoing.correlationId,
-							intentId: inferIntentId(input.actor.id, input.newActorState, outgoing.payload)
-						})
-					})
-				)
+			if (outgoing.toActor === HUMAN_ACTOR_ID && (outgoing.type === 'human.message' || outgoing.type === 'human.question')) {
+				events.push({
+					type: 'intent.message_to_user',
+					visibility: eventVisibilityForType('intent.message_to_user'),
+					runId: outgoing.runId,
+					intentId: inferIntentId(input.actor.id, input.newActorState, outgoing.payload),
+					actorId: input.actor.id,
+					envelopeId: outgoing.id,
+					callId: inferCallId(outgoing.payload),
+					payload: {
+						intentId,
+						messageType: outgoing.type,
+						...(typeof outgoing.payload === 'object' && outgoing.payload ? (outgoing.payload as Record<string, unknown>) : {})
+					},
+					createdAt: input.now
+				})
 			}
 		}
 
-		if (
-			input.inputEnvelope.type === 'skill.result' ||
-			input.inputEnvelope.type === 'skill.failed' ||
-			input.inputEnvelope.type === 'skill.needs_clarification'
-		) {
+		if (input.inputEnvelope.type === 'skill.result' || input.inputEnvelope.type === 'skill.failed' || input.inputEnvelope.type === 'skill.needs_clarification') {
 			const payload = typeof input.inputEnvelope.payload === 'object' && input.inputEnvelope.payload ? input.inputEnvelope.payload : {}
-			streamEvents.push(
-				...scopedStreamEvents({
-					baseId: `${input.inputEnvelope.id}:skill-call-completed`,
-					actorId: input.actor.id,
-					envelopeId: input.inputEnvelope.id,
-					type: 'intent.skill_call_completed',
-					payload: {
-						intentId,
-						messageType: input.inputEnvelope.type,
-						...(payload as Record<string, unknown>)
-					},
-					createdAt: input.now,
-					scopes: scopesForStreamEvent({ actorId: input.actor.id, correlationId: input.inputEnvelope.correlationId, intentId })
-				})
-			)
+			events.push({
+				type: 'intent.skill_call_completed',
+				visibility: eventVisibilityForType('intent.skill_call_completed'),
+				runId: input.inputEnvelope.runId,
+				intentId,
+				actorId: input.actor.id,
+				envelopeId: input.inputEnvelope.id,
+				callId: inferCallId(payload),
+				payload: {
+					intentId,
+					messageType: input.inputEnvelope.type,
+					...(payload as Record<string, unknown>)
+				},
+				createdAt: input.now
+			})
 		}
 	}
 
-		const supervisorIntentId = inferIntentId(input.actor.id, input.newActorState, input.inputEnvelope.payload)
-
+	const supervisorIntentId = inferIntentId(input.actor.id, input.newActorState, input.inputEnvelope.payload)
 	if (input.actor.kind === 'skill-supervisor') {
 		for (const outgoing of input.outgoingEnvelopes) {
 			if (parseSkillWorkerActorId(outgoing.toActor)) {
 				const type = hasInitialState(outgoing.payload) ? 'skill.worker_spawned' : 'skill.worker_routed'
-				streamEvents.push(
-					...scopedStreamEvents({
-						baseId: `${outgoing.id}:${type}`,
-						actorId: input.actor.id,
-						envelopeId: outgoing.id,
-						type,
-						payload: {
-							skillId: parseSkillId(input.actor.id),
-							workerActorId: outgoing.toActor,
-							workerId: parseWorkerId(outgoing.toActor)
-						},
-						createdAt: input.now,
-						scopes: scopesForStreamEvent({
-							actorId: input.actor.id,
-							correlationId: outgoing.correlationId,
-							intentId: inferIntentId(outgoing.toActor, input.newActorState, outgoing.payload) ?? supervisorIntentId
-						})
-					})
-				)
+				events.push({
+					type,
+					visibility: eventVisibilityForType(type),
+					runId: outgoing.runId,
+					intentId: inferIntentId(outgoing.toActor, input.newActorState, outgoing.payload) ?? supervisorIntentId,
+					actorId: input.actor.id,
+					envelopeId: outgoing.id,
+					callId: inferCallId(outgoing.payload),
+					payload: {
+						skillId: parseSkillId(input.actor.id),
+						workerActorId: outgoing.toActor,
+						workerName: parseSkillWorkerActorId(outgoing.toActor)?.workerName ?? parseActorId(outgoing.toActor).name
+					},
+					createdAt: input.now
+				})
 			}
 		}
 
 		if (input.inputEnvelope.type === 'skill.worker.result') {
-			streamEvents.push(
-				...scopedStreamEvents({
-					baseId: `${input.inputEnvelope.id}:worker-completed`,
-					actorId: input.actor.id,
-					envelopeId: input.inputEnvelope.id,
-					type: 'skill.worker_completed',
-					payload: typeof input.inputEnvelope.payload === 'object' && input.inputEnvelope.payload ? input.inputEnvelope.payload : {},
-					createdAt: input.now,
-					scopes: scopesForStreamEvent({
-						actorId: input.actor.id,
-						correlationId: input.inputEnvelope.correlationId,
-						intentId: inferIntentId(input.actor.id, input.newActorState, input.inputEnvelope.payload) ?? supervisorIntentId
-					})
-				})
-			)
+			events.push({
+				type: 'skill.worker_completed',
+				visibility: eventVisibilityForType('skill.worker_completed'),
+				runId: input.inputEnvelope.runId,
+				intentId: inferIntentId(input.actor.id, input.newActorState, input.inputEnvelope.payload) ?? supervisorIntentId,
+				actorId: input.actor.id,
+				envelopeId: input.inputEnvelope.id,
+				callId: inferCallId(input.inputEnvelope.payload),
+				payload: typeof input.inputEnvelope.payload === 'object' && input.inputEnvelope.payload ? input.inputEnvelope.payload : {},
+				createdAt: input.now
+			})
 		}
 	}
 
-	return streamEvents
+	return events
 }
 
-function scopedStreamEvents(input: {
-	baseId: string
-	scopes: string[]
-	actorId?: string | null
-	envelopeId?: string | null
-	type: string
-	payload: unknown
-	createdAt: string
-}) {
-	return [...new Set(input.scopes)].map((scope) => ({
-		id: `${input.baseId}:${scope}`,
-		scope,
-		actorId: input.actorId ?? null,
-		envelopeId: input.envelopeId ?? null,
-		type: input.type,
-		payload: input.payload,
-		createdAt: input.createdAt
-	}))
-}
-
-function scopesForEnvelope(envelope: EnvelopeRecord): string[] {
-	return scopesForStreamEvent({
-		actorId: envelope.toActor,
-		correlationId: envelope.correlationId,
-		intentId: inferIntentId(envelope.toActor, envelope.payload, envelope.payload)
-	})
-}
-
-function scopesForStreamEvent(input: {
-	actorId?: string | null
-	correlationId?: string | null
-	intentId?: string | null
-	rootCallId?: string | null
-	callId?: string | null
-}): string[] {
-	return [
-		'global',
-		input.actorId ? `actor/${input.actorId}` : null,
-		input.correlationId ? `correlation/${input.correlationId}` : null,
-		input.intentId ? `intents/${input.intentId}` : null,
-		input.rootCallId ? `calls/${input.rootCallId}` : null,
-		input.rootCallId && input.callId ? `calls/${input.rootCallId}/${input.callId}` : null
-	].filter(
-		(value): value is string => Boolean(value)
-	)
-}
-
-function scopesForContextItem(item: ContextItemRecord): string[] {
-	return scopesForStreamEvent({
-		actorId: item.actorId,
-		correlationId: item.correlationId,
-		intentId: item.intentId,
-		rootCallId: item.rootCallId,
-		callId: item.callId
-	})
-}
-
-function getScopeKey(scope: ContextScope): string {
-	if (scope.type === 'run') {
-		return scope.correlationId
+function eventVisibilityForType(type: string): 'chat' | 'worklog' | 'debug' {
+	if (
+		type === 'intent.created' ||
+		type === 'intent.status_changed' ||
+		type === 'intent.message_to_user' ||
+		type === 'runtime.envelope.failed'
+	) {
+		return 'chat'
 	}
-
-	if (scope.type === 'intent') {
-		return scope.intentId
+	if (
+		type === 'intent.skill_call_started' ||
+		type === 'intent.skill_call_completed' ||
+		type === 'skill.worker_spawned' ||
+		type === 'skill.worker_routed' ||
+		type === 'skill.worker_completed' ||
+		type === 'context.appended'
+	) {
+		return 'worklog'
 	}
-
-	if (scope.type === 'call') {
-		return scope.callId
-	}
-
-	if (scope.type === 'actor') {
-		return scope.actorId
-	}
-
-	return scope.name
-}
-
-function parseContextScope(row: ContextItemRow): ContextScope {
-	switch (row.scope_type) {
-		case 'run':
-			return { type: 'run', correlationId: row.scope_key }
-		case 'intent':
-			return { type: 'intent', intentId: row.scope_key }
-		case 'call':
-			return {
-				type: 'call',
-				callId: row.call_id ?? row.scope_key,
-				rootCallId: row.root_call_id ?? row.call_id ?? row.scope_key,
-				parentCallId: row.parent_call_id ?? undefined
-			}
-		case 'actor':
-			return { type: 'actor', actorId: row.scope_key }
-		case 'global':
-			return { type: 'global', name: row.scope_key as 'archive' | 'system' }
-	}
+	return 'debug'
 }
 
 function inferCallId(payload: unknown): string | null {
@@ -1929,22 +1810,6 @@ function inferCallId(payload: unknown): string | null {
 	}
 	const record = payload as Record<string, unknown>
 	return readString(record.callId) ?? readString(toRecord(record.input).callId) ?? readString(toRecord(record.result).callId)
-}
-
-function inferParentCallId(payload: unknown): string | null {
-	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-		return null
-	}
-	const record = payload as Record<string, unknown>
-	return readString(record.parentCallId) ?? readString(toRecord(record.input).parentCallId) ?? readString(toRecord(record.result).parentCallId)
-}
-
-function inferRootCallId(payload: unknown): string | null {
-	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-		return null
-	}
-	const record = payload as Record<string, unknown>
-	return readString(record.rootCallId) ?? readString(toRecord(record.input).rootCallId) ?? readString(toRecord(record.result).rootCallId)
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -2009,10 +1874,6 @@ function extractIntentId(actorId: string): string {
 function parseSkillId(actorId: string | null | undefined): string | null {
 	if (!actorId) return null
 	return parseSkillActorId(actorId)?.skillId ?? null
-}
-
-function parseWorkerId(actorId: string): string | null {
-	return parseSkillWorkerActorId(actorId)?.workerId ?? null
 }
 
 function hasInitialState(payload: unknown): boolean {
@@ -2088,28 +1949,16 @@ function mapActorHierarchyRecord(
 	}
 }
 
-function chatViewWhereClause(view: 'chat' | 'deep-dive', typeColumn = 'type'): string {
+function visibilityWhereClause(view: 'chat' | 'deep-dive', alias = ''): string {
 	if (view === 'deep-dive') {
 		return ''
 	}
-
-	return `AND (${typeColumn} IN (
-		'intent.created',
-		'intent.status_changed',
-		'intent.skill_call_started',
-		'intent.skill_call_completed',
-		'intent.message_to_user',
-		'runtime.envelope.failed',
-		'actor.io.prompt',
-		'actor.io.task',
-		'actor.io.shell',
-		'actor.io.inbound',
-		'actor.io.outbound'
-	))`
-	}
+	const prefix = alias ? `${alias}.` : ''
+	return `AND ${prefix}visibility IN ('chat', 'worklog')`
+}
 
 function resolveCommunicationSelector(input: {
-	correlationId?: string
+	runId?: string
 	intentId?: string
 	rootEnvelopeId?: string
 }): { rootWhere: string; params: string[] } {
@@ -2122,21 +1971,21 @@ function resolveCommunicationSelector(input: {
 
 	if (input.intentId) {
 		return {
-			rootWhere: `e.correlation_id IN (
-				SELECT correlation_id FROM envelopes WHERE to_actor = ? OR from_actor = ?
-			) AND e.causation_id IS NULL`,
+			rootWhere: `e.run_id IN (
+				SELECT run_id FROM envelopes WHERE to_actor = ? OR from_actor = ?
+			) AND e.caused_by IS NULL`,
 			params: [createIntentActorId(input.intentId), createIntentActorId(input.intentId)]
 		}
 	}
 
-	if (input.correlationId) {
+	if (input.runId) {
 		return {
-			rootWhere: 'e.correlation_id = ? AND e.causation_id IS NULL',
-			params: [input.correlationId]
+			rootWhere: 'e.run_id = ? AND e.caused_by IS NULL',
+			params: [input.runId]
 		}
 	}
 
-	throw new Error('listCommunicationTree requires correlationId, intentId, or rootEnvelopeId')
+	throw new Error('listCommunicationTree requires runId, intentId, or rootEnvelopeId')
 }
 
 function query(db: SqliteDatabase, sql: string): SqliteStatement {

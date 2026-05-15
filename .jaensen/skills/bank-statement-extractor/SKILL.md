@@ -3,7 +3,7 @@ id: bank-statement-extractor
 description: Analyze files in the workspace and ask for clarification when the target or goal is ambiguous
 worker_policy: durable
 direct_actors:
-  - skills/memory
+  - aven/skills/memory
 resources:
   fs:
     - .

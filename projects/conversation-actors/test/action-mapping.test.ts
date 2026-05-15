@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test'
-import type { EnvelopeRecord } from '@jaensen/persistence-sqlite'
+import {
+	DISPATCHER_ACTOR_ID,
+	HUMAN_ACTOR_ID,
+	createIntentActorId,
+	createSkillActorId,
+	type EnvelopeRecord
+} from '@jaensen/persistence-sqlite'
 
 import { createSkillRegistry, type SkillDefinition } from '../../skills/src/index'
 
@@ -30,7 +36,7 @@ test('intent ask_user sends human.question and updates status', () => {
 		actions: [{ type: 'ask_user', question: 'Which file should I use?' }]
 	})
 	const outgoing = mapIntentActionsToEnvelopes({
-		fromActor: 'intents/intent-123',
+		fromActor: createIntentActorId('intent-123'),
 		state: nextState,
 		actions: [{ type: 'ask_user', question: 'Which file should I use?' }],
 		envelope: makeEnvelopeRecord(),
@@ -40,7 +46,7 @@ test('intent ask_user sends human.question and updates status', () => {
 
 	expect(nextState.status).toBe('waiting_for_user')
 	expect(outgoing[0]).toMatchObject({
-		toActor: 'human',
+		toActor: HUMAN_ACTOR_ID,
 		type: 'human.question',
 		payload: {
 			intentId: 'intent-123',
@@ -65,7 +71,7 @@ test('intent call_skill rejects unknown skillId', () => {
 
 	expect(() =>
 		mapIntentActionsToEnvelopes({
-			fromActor: 'intents/intent-123',
+			fromActor: createIntentActorId('intent-123'),
 			state: resolved.state,
 			actions: resolved.actions,
 			envelope: makeEnvelopeRecord(),
@@ -94,7 +100,7 @@ test('complete creates lifecycle payload for dispatcher', () => {
 		actions: [{ type: 'complete', summary: 'Done', message: 'Finished' }]
 	})
 	const lifecycle = createLifecycleEnvelope({
-		fromActor: 'intents/intent-123',
+		fromActor: createIntentActorId('intent-123'),
 		state,
 		envelope: makeEnvelopeRecord(),
 		makeEnvelope
@@ -102,7 +108,7 @@ test('complete creates lifecycle payload for dispatcher', () => {
 
 	expect(state.status).toBe('completed')
 	expect(lifecycle).toMatchObject({
-		toActor: 'dispatcher',
+		toActor: DISPATCHER_ACTOR_ID,
 		type: 'intent.lifecycle',
 		payload: {
 			intentId: 'intent-123',
@@ -121,7 +127,7 @@ test('intent.start userInput attachment context propagates into skill.request', 
 	})
 
 	const outgoing = mapIntentActionsToEnvelopes({
-		fromActor: 'intents/intent-123',
+		fromActor: createIntentActorId('intent-123'),
 		state: resolved.state,
 		actions: resolved.actions,
 		envelope: makeEnvelopeRecord({
@@ -159,11 +165,11 @@ function makeIntentState(): IntentState {
 function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRecord {
 	return {
 		id: 'env-1',
-		fromActor: 'dispatcher',
-		toActor: 'intents/intent-123',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('intent-123'),
 		type: 'intent.user_input',
-		correlationId: 'corr-1',
-		causationId: null,
+		runId: 'corr-1',
+		causedBy: null,
 		payload: {},
 		status: 'queued',
 		availableAt: '2026-05-12T00:00:00.000Z',
@@ -183,8 +189,8 @@ function makeEnvelope(input: {
 	to: string
 	type: string
 	payload: unknown
-	correlationId?: string
-	causationId?: string
+	runId?: string
+	causedBy?: string
 	availableAt?: Date
 }) {
 	return {
@@ -192,8 +198,8 @@ function makeEnvelope(input: {
 		fromActor: input.from,
 		toActor: input.to,
 		type: input.type,
-		correlationId: input.correlationId ?? 'corr-1',
-		causationId: input.causationId,
+		runId: input.runId ?? 'corr-1',
+		causedBy: input.causedBy,
 		payload: input.payload,
 		availableAt: input.availableAt
 	}

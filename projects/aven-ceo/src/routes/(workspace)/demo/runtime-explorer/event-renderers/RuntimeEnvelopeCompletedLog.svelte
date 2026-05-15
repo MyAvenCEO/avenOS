@@ -6,4 +6,4 @@
 	const payload = payloadRecord(event.payload)
 </script>
 
-<FocusPanel title="Envelope completed" prose={`${readString(payload.actorId) ?? 'Actor'} finished ${readString(payload.envelopeType) ?? 'work'}`} rows={[{ label: 'Envelope', value: readString(payload.envelopeId) }, { label: 'Correlation', value: readString(payload.correlationId) }]} />
+<FocusPanel title="Envelope completed" prose={`${readString(payload.actorId) ?? 'Actor'} finished ${readString(payload.envelopeType) ?? 'work'}`} rows={[{ label: 'Envelope', value: readString(payload.envelopeId) }, { label: 'Run', value: readString(payload.runId) }]} />

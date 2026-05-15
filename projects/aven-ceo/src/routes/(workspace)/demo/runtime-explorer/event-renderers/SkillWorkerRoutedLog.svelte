@@ -6,4 +6,4 @@
 	const payload = payloadRecord(event.payload)
 </script>
 
-<FocusPanel title="Worker routed" prose={`${readString(payload.workerActorId) ?? 'Worker'} was routed for ${readString(payload.skillId) ?? 'skill work'}`} rows={[{ label: 'Worker', value: readString(payload.workerId) }]} />
+<FocusPanel title="Worker routed" prose={`${readString(payload.workerActorId) ?? 'Worker'} was routed for ${readString(payload.skillId) ?? 'skill work'}`} rows={[{ label: 'Worker', value: readString(payload.workerName) ?? readString(payload.workerActorId) }]} />

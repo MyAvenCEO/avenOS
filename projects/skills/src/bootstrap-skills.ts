@@ -23,7 +23,7 @@ export async function bootstrapSkills(input: BootstrapSkillsInput): Promise<void
 			fromActor: SKILLS_ACTOR_ID,
 			toActor: actorId,
 			type: 'skill.bootstrap',
-			correlationId: randomUUID(),
+			runId: randomUUID(),
 			payload: { skillId: skill.id },
 			createdAt: input.now
 		})

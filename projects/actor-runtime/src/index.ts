@@ -9,7 +9,5 @@ export type {
 	ActorCommand,
 	ContextAppendInput,
 	ContextItemRecord,
-	ContextKind,
-	ContextScope,
-	ContextSelector
+	ContextQuery
 } from '../../persistence-sqlite/src/index'

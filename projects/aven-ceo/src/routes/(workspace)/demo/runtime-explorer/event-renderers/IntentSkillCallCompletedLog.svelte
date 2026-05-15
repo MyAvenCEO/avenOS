@@ -9,7 +9,7 @@
 </script>
 
 <div class="space-y-2">
-	<FocusPanel title="Skill result" prose={readNumber(result.count) != null ? `Returned ${result.count} result${result.count === 1 ? '' : 's'}` : null} rows={[{ label: 'Skill', value: readString(payload.fromSkillId) }, { label: 'Worker', value: readString(payload.workerId) }, { label: 'Call', value: readString(payload.callId) }]} />
+	<FocusPanel title="Skill result" prose={readNumber(result.count) != null ? `Returned ${result.count} result${result.count === 1 ? '' : 's'}` : null} rows={[{ label: 'Skill', value: readString(payload.fromSkillId) }, { label: 'Worker', value: readString(payload.workerName) ?? readString(payload.workerActorId) }, { label: 'Call', value: readString(payload.callId) }]} />
 	{#if invoices.length > 0}
 		<FocusPanel title="Top results" rows={invoices.slice(0,3).map((invoice, i) => ({ label: `Invoice ${i+1}`, value: `${payloadRecord(invoice).entityId ?? 'unknown'} · ${payloadRecord(invoice).status ?? 'unknown'}` }))} />
 	{/if}

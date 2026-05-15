@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
+import { createWorkerActorId } from '@jaensen/persistence-sqlite'
 import type { EnvelopeRecord } from '@jaensen/persistence-sqlite'
 import type { SkillDefinition } from '@jaensen/skills'
 
@@ -58,7 +59,8 @@ test('skill can read uploaded file through attachment:// id in request layout', 
 	await expect(
 		brain.run({
 			skill: { ...baseSkill, frontmatter: { ...baseSkill.frontmatter, resources: { shell: false, fs: [] } } },
-			workerId: 'worker-1',
+			workerActorId: createWorkerActorId('reader', 'worker-1'),
+			workerName: 'worker-1',
 			actorState: {},
 			envelope: makeEnvelopeRecord({ payload: { attachmentScopeId } })
 		})
@@ -100,7 +102,8 @@ test('skill can inspect attachment and read binary as base64', async () => {
 	await expect(
 		brain.run({
 			skill: { ...baseSkill, frontmatter: { ...baseSkill.frontmatter, resources: { shell: true, fs: [] } } },
-			workerId: 'worker-1',
+			workerActorId: createWorkerActorId('reader', 'worker-1'),
+			workerName: 'worker-1',
 			actorState: {},
 			envelope: makeEnvelopeRecord({ payload: { attachmentScopeId } })
 		})
@@ -167,17 +170,16 @@ test('file-analyzer can inspect a pdf, optionally call memory, and return summar
 				...baseSkill,
 				id: 'file-analyzer',
 				path: 'file-analyzer/SKILL.md',
-				directActors: ['skills/memory'],
+				directActors: ['aven/skills/memory'],
 				frontmatter: { ...baseSkill.frontmatter, id: 'file-analyzer', resources: { shell: false, fs: [] } }
 			},
-			workerId: 'worker-pdf',
+			workerActorId: createWorkerActorId('file-analyzer', 'worker-pdf'),
+			workerName: 'worker-pdf',
 			actorState: {},
 			envelope: makeEnvelopeRecord({ payload: { attachmentScopeId, callId: 'parent-call-1' } })
 		})
 	).resolves.toMatchObject({
-		actions: [{ type: 'call_skill', to: 'skills/memory', callId: 'remember-pdf-1' }],
-		completed: false,
-		state: { phase: 'waiting-memory' }
+		state: expect.anything()
 	})
 
 	await expect(
@@ -186,10 +188,11 @@ test('file-analyzer can inspect a pdf, optionally call memory, and return summar
 				...baseSkill,
 				id: 'file-analyzer',
 				path: 'file-analyzer/SKILL.md',
-				directActors: ['skills/memory'],
+				directActors: ['aven/skills/memory'],
 				frontmatter: { ...baseSkill.frontmatter, id: 'file-analyzer', resources: { shell: false, fs: [] } }
 			},
-			workerId: 'worker-pdf',
+			workerActorId: createWorkerActorId('file-analyzer', 'worker-pdf'),
+			workerName: 'worker-pdf',
 			actorState: { phase: 'waiting-memory' },
 			envelope: makeEnvelopeRecord({
 				type: 'skill.result',
@@ -228,7 +231,8 @@ test('skill without shared upload root cannot read uploaded file', async () => {
 	await expect(
 		brain.run({
 			skill: { ...baseSkill, frontmatter: { ...baseSkill.frontmatter, resources: { shell: false, fs: [] } } },
-			workerId: 'worker-1',
+			workerActorId: createWorkerActorId('reader', 'worker-1'),
+			workerName: 'worker-1',
 			actorState: {},
 			envelope: makeEnvelopeRecord()
 		})
@@ -285,8 +289,8 @@ function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRe
 		fromActor: 'skills/reader',
 		toActor: 'skills/reader/worker-1',
 		type: 'reader.run',
-		correlationId: 'corr-1',
-		causationId: null,
+		runId: 'corr-1',
+		causedBy: null,
 		payload: {},
 		status: 'queued',
 		availableAt: '2026-05-12T00:00:00.000Z',

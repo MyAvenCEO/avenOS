@@ -17,8 +17,8 @@ export interface EnvelopeInput {
 	fromActor: string
 	toActor: string
 	type: string
-	correlationId: string
-	causationId?: string | null
+	runId: string
+	causedBy?: string | null
 	payload: unknown
 	availableAt?: Date | string
 	maxAttempts?: number
@@ -30,8 +30,8 @@ export interface EnvelopeRecord {
 	fromActor: string
 	toActor: string
 	type: string
-	correlationId: string
-	causationId: string | null
+	runId: string
+	causedBy: string | null
 	payload: unknown
 	status: EnvelopeStatus
 	availableAt: string
@@ -58,81 +58,77 @@ export interface ActorEventInput {
 	createdAt?: Date | string
 }
 
-export type ContextScope =
-	| { type: 'run'; correlationId: string }
-	| { type: 'intent'; intentId: string }
-	| { type: 'call'; callId: string; rootCallId: string; parentCallId?: string }
-	| { type: 'actor'; actorId: string }
-	| { type: 'global'; name: 'archive' | 'system' }
+export type EventVisibility = 'chat' | 'worklog' | 'debug'
 
-export type ContextKind =
-	| 'user_input'
-	| 'fact'
-	| 'hypothesis'
-	| 'decision'
-	| 'handoff'
-	| 'tool_result'
-	| 'artifact_ref'
-	| 'error'
-	| 'observation'
-	| 'constraint'
-
-export interface ContextAppendInput {
-	scope: ContextScope
-	kind: ContextKind
-	key?: string
-	schema?: string
-	tags: string[]
-	body?: unknown
-	artifactId?: string
-	summary?: string
-	producedByCommandId?: string
-	producedByToolCallId?: string
-	sourceContextItemIds: string[]
-	confidence?: number
-	supersedesItemId?: string
-	redactsItemId?: string
+export interface EventInput {
+	type: string
+	visibility: EventVisibility
+	runId?: string | null
+	intentId?: string | null
+	actorId?: string | null
+	envelopeId?: string | null
+	callId?: string | null
+	parentSeq?: number | null
+	payload: unknown
+	createdAt?: Date | string
 }
 
-export interface ContextItemRecord {
-	id: string
+export interface EventRecord {
 	seq: number
-	scope: ContextScope
-	kind: ContextKind
-	key?: string
-	schema?: string
-	tags: string[]
-	body?: unknown
-	artifactId?: string
-	summary?: string
-	correlationId: string
-	intentId?: string
-	actorId: string
-	callId?: string
-	parentCallId?: string
-	rootCallId?: string
-	producedByActorId: string
-	producedByEnvelopeId: string
-	producedByCommandId?: string
-	producedByToolCallId?: string
-	sourceContextItemIds: string[]
-	confidence?: number
-	hash: string
+	type: string
+	visibility: EventVisibility
+	runId: string | null
+	intentId: string | null
+	actorId: string | null
+	envelopeId: string | null
+	callId: string | null
+	parentSeq: number | null
+	payload: unknown
 	createdAt: string
-	supersedesItemId?: string
-	redactsItemId?: string
 }
 
-export interface ContextSelector {
-	scopes?: ContextScope[]
-	kinds?: ContextKind[]
-	keys?: string[]
-	tags?: string[]
-	schemas?: string[]
-	producedByActorIds?: string[]
+export type ContextVisibility = 'chat' | 'worklog' | 'debug'
+
+export type ContextAppendInput = {
+	kind: string
+	visibility?: ContextVisibility
+	runId?: string | null
+	intentId?: string | null
+	actorId?: string | null
+	envelopeId?: string | null
+	callId?: string | null
+	key?: string | null
+	summary?: string | null
+	body?: unknown
+	artifactUri?: string | null
+	createdAt?: Date | string
+}
+
+export type ContextItemRecord = {
+	seq: number
+	kind: string
+	visibility: ContextVisibility
+	runId: string | null
+	intentId: string | null
+	actorId: string | null
+	envelopeId: string | null
+	callId: string | null
+	key: string | null
+	summary: string | null
+	body: unknown
+	artifactUri: string | null
+	createdAt: string
+}
+
+export type ContextQuery = {
 	afterSeq?: number
 	limit?: number
-	includeRedacted?: boolean
+	visibility?: ContextVisibility | ContextVisibility[]
+	runId?: string
+	intentId?: string
+	actorId?: string
+	callId?: string
+	kind?: string | string[]
 }
 
 export type ActorCommand =
@@ -157,27 +153,6 @@ export interface SkillRecord {
 	loadedAt: string
 }
 
-export interface StreamEventRecord {
-	seq: number
-	id: string
-	scope: string
-	actorId: string | null
-	envelopeId: string | null
-	type: string
-	payload: unknown
-	createdAt: string
-}
-
-export interface StreamEventInput {
-	readonly id: string
-	readonly scope: string
-	readonly actorId?: string | null
-	readonly envelopeId?: string | null
-	readonly type: string
-	readonly payload: unknown
-	readonly createdAt: Date | string
-}
-
 export interface ActorHierarchyRecord {
 	actorId: string
 	parentActorId: string | null
@@ -189,7 +164,7 @@ export interface ActorHierarchyRecord {
 	lastSeenAt: string | null
 }
 
-export interface ActorLogRecord extends StreamEventRecord {
+export interface ActorLogRecord extends EventRecord {
 	logView: 'chat' | 'deep-dive'
 }
 
@@ -198,7 +173,7 @@ export interface CommunicationTreeRecord {
 	parentNodeId: string | null
 	nodeKind: 'envelope' | 'log'
 	depth: number
-	correlationId: string | null
+	runId: string | null
 	envelopeId: string | null
 	actorId: string | null
 	fromActor: string | null
@@ -257,8 +232,10 @@ export interface Persistence {
 		now: Date
 	}): Promise<void>
 
+	appendContext(input: ContextAppendInput): Promise<number>
+
 	listContextItems(input: {
-		selector: ContextSelector
+		selector: ContextQuery
 		snapshotSeq?: number
 	}): Promise<ContextItemRecord[]>
 
@@ -279,9 +256,17 @@ export interface Persistence {
 
 	listSkills(): Promise<SkillRecord[]>
 
-	appendStreamEvents(events: StreamEventInput[]): Promise<void>
+	appendEvents(events: EventInput[]): Promise<number[]>
 
-	listStreamEvents(input: { scope: string; after?: number; limit?: number }): Promise<StreamEventRecord[]>
+	listEvents(input: {
+		after?: number
+		limit?: number
+		visibility?: EventVisibility | EventVisibility[]
+		runId?: string
+		intentId?: string
+		actorId?: string
+		callId?: string
+	}): Promise<EventRecord[]>
 
 	listActorHierarchy(input: { rootActorId: string; observed?: boolean; includeRoot?: boolean }): Promise<ActorHierarchyRecord[]>
 
@@ -293,14 +278,14 @@ export interface Persistence {
 	}): Promise<ActorLogRecord[]>
 
 	listCommunicationTree(input: {
-		correlationId?: string
+		runId?: string
 		intentId?: string
 		rootEnvelopeId?: string
 		view?: 'chat' | 'deep-dive'
 	}): Promise<CommunicationTreeRecord[]>
 
 	summarizeCommunicationTree(input: {
-		correlationId?: string
+		runId?: string
 		intentId?: string
 		rootEnvelopeId?: string
 		view?: 'chat' | 'deep-dive'

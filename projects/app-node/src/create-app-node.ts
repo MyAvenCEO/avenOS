@@ -84,7 +84,7 @@ export interface AppNode {
 		intentIdHint?: string
 		now?: Date
 		id?: string
-	}): Promise<{ envelopeId: string; correlationId: string }>
+	}): Promise<{ envelopeId: string; runId: string }>
 	tick(): Promise<'processed' | 'idle'>
 	runUntilIdle(maxTicks?: number): Promise<number>
 	readHumanOutbox(): Promise<HumanOutboxEntry[]>
@@ -198,7 +198,7 @@ export async function createAppNode(input: CreateAppNodeInput): Promise<AppNode>
 			await runtime.enqueue(envelope)
 			return {
 				envelopeId: envelope.id,
-				correlationId: envelope.correlationId
+				runId: envelope.runId
 			}
 		},
 		tick() {
@@ -289,12 +289,12 @@ function recordTrace(runtime: ActorRuntime, actorId: string | null, trace: Actor
 }
 
 function actorIdFromSessionName(name: string): string | null {
-	if (name === 'actor/dispatcher') return DISPATCHER_ACTOR_ID
-	if (name === 'actor/human') return HUMAN_ACTOR_ID
-	if (name === 'actor/intents') return INTENTS_ACTOR_ID
-	if (name === 'actor/skills') return SKILLS_ACTOR_ID
-	if (name.startsWith('actor/intents/')) return name.slice('actor/'.length)
-	if (name.startsWith('actor/skills/')) return name.slice('actor/'.length)
+	if (name === `actor/${DISPATCHER_ACTOR_ID}`) return DISPATCHER_ACTOR_ID
+	if (name === `actor/${HUMAN_ACTOR_ID}`) return HUMAN_ACTOR_ID
+	if (name === `actor/${INTENTS_ACTOR_ID}`) return INTENTS_ACTOR_ID
+	if (name === `actor/${SKILLS_ACTOR_ID}`) return SKILLS_ACTOR_ID
+	if (name.startsWith(`actor/${INTENTS_ACTOR_ID}/`)) return name.slice('actor/'.length)
+	if (name.startsWith(`actor/${SKILLS_ACTOR_ID}/`)) return name.slice('actor/'.length)
 	return null
 }
 

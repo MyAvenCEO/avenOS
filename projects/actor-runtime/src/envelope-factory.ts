@@ -7,8 +7,8 @@ export function makeEnvelope(input: {
 	to: string
 	type: string
 	payload: unknown
-	correlationId?: string
-	causationId?: string
+	runId?: string
+	causedBy?: string
 	availableAt?: Date
 	createdAt?: Date
 }): EnvelopeInput {
@@ -17,8 +17,8 @@ export function makeEnvelope(input: {
 		fromActor: input.from,
 		toActor: input.to,
 		type: input.type,
-		correlationId: input.correlationId ?? randomUUID(),
-		causationId: input.causationId,
+		runId: input.runId ?? randomUUID(),
+		causedBy: input.causedBy,
 		payload: input.payload,
 		availableAt: input.availableAt,
 		createdAt: input.createdAt

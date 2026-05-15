@@ -6,8 +6,8 @@ const skill = {
 	id: 'file-creator',
 	path: 'file-creator/SKILL.md',
 	description: 'Create files',
-	directActors: ['skills/memory'],
-	frontmatter: { id: 'file-creator', direct_actors: ['skills/memory'] },
+	directActors: ['aven/skills/memory'],
+	frontmatter: { id: 'file-creator', direct_actors: ['aven/skills/memory'] },
 	body: 'Create files and remember them.',
 	bodyHash: 'hash',
 	loadedAt: '2026-05-12T00:00:00.000Z'
@@ -16,9 +16,10 @@ const skill = {
 test('worker prompt includes exact call_skill example', () => {
 	const prompt = buildWorkerPrompt({
 		skill,
-		workerId: 'call-1',
+		workerActorId: 'aven/skills/file-creator/workers/call-1-abc123',
+		workerName: 'call-1-abc123',
 		actorState: {},
-		envelope: { id: 'env-1', payload: {}, fromActor: 'skills/file-creator' } as never,
+		envelope: { id: 'env-1', payload: {}, fromActor: 'aven/skills/file-creator' } as never,
 		workspaceRoot: '/workspace',
 		resourceHints: {},
 		workerPolicy: 'durable'
@@ -29,7 +30,7 @@ test('worker prompt includes exact call_skill example', () => {
 	expect(prompt).toContain('"callId": "remember-file-greeting-txt"')
 	expect(prompt).toContain('"request": "store"')
 	expect(prompt).toContain('"tool": "finish"')
-	expect(prompt).toContain('Never call your own skill actor (skills/file-creator)')
+	expect(prompt).toContain('Never call your own skill actor (aven/skills/file-creator)')
 	expect(prompt).toContain('Example of direct completion without any skill call:')
 })
 

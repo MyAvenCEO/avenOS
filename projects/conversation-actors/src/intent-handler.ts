@@ -111,31 +111,29 @@ export function createIntentHandler(input: CreateIntentHandlerInput): ActorHandl
 			if (envelope.type === 'intent.start') {
 				const payload = envelope.payload as Record<string, unknown>
 				contextAppends.push({
-					scope: { type: 'intent', intentId },
 					kind: 'constraint',
+					visibility: 'worklog',
+					intentId,
 					key: 'intent.goal',
-					tags: ['intent', 'goal'],
 					body: { title: nextState.title, goal: nextState.goal, reason: payload.reason },
-					summary: nextState.goal,
-					sourceContextItemIds: []
+					summary: nextState.goal
 				})
 			}
 			for (const action of actions) {
 				if (action.type === 'call_skill' && action.callId) {
 					contextAppends.push({
-						scope: { type: 'intent', intentId },
 						kind: 'decision',
+						visibility: 'worklog',
+						intentId,
+						callId: action.callId,
 						key: 'skill.call.requested',
-						tags: ['skill', 'request'],
 						body: {
 							callId: action.callId,
-							rootCallId: action.rootCallId ?? action.callId,
 							skillId: action.skillId,
 							request: action.request,
 							input: action.payload
 						},
-						summary: `${action.skillId}: ${action.request}`,
-						sourceContextItemIds: []
+						summary: `${action.skillId}: ${action.request}`
 					})
 				}
 			}

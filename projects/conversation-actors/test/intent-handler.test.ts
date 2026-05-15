@@ -1,5 +1,12 @@
 import { expect, test } from 'bun:test'
-import type { EnvelopeInput, EnvelopeRecord } from '@jaensen/persistence-sqlite'
+import {
+	DISPATCHER_ACTOR_ID,
+	HUMAN_ACTOR_ID,
+	createIntentActorId,
+	createSkillActorId,
+	type EnvelopeInput,
+	type EnvelopeRecord
+} from '@jaensen/persistence-sqlite'
 
 import { createSkillRegistry, type SkillDefinition } from '../../skills/src/index'
 
@@ -33,7 +40,7 @@ test('intent.start initializes intent state', async () => {
 	})
 
 	const result = await handler.activate({
-		actor: makeIntentActor({}, 'intents/intent-123'),
+		actor: makeIntentActor({}, createIntentActorId('intent-123')),
 		envelope: makeEnvelopeRecord({
 			type: 'intent.start',
 			payload: {
@@ -108,7 +115,7 @@ test('intent call_skill sends to skills/<id>', async () => {
 
 	const outgoing = sentEnvelopes(result)
 	expect(outgoing[0]).toMatchObject({
-		toActor: 'skills/memory',
+		toActor: createSkillActorId('memory'),
 		type: 'skill.request',
 		payload: {
 			intentId: 'intent-123',
@@ -168,7 +175,7 @@ test('intent reply_user sends human.message', async () => {
 	})
 
 	expect(sentEnvelopes(result)[0]).toMatchObject({
-		toActor: 'human',
+		toActor: HUMAN_ACTOR_ID,
 		type: 'human.message',
 		payload: {
 			intentId: 'intent-123',
@@ -198,7 +205,7 @@ test('intent ask_user sends human.question', async () => {
 
 	expect(result.nextState as IntentState).toMatchObject({ status: 'waiting_for_user' })
 	expect(sentEnvelopes(result)[0]).toMatchObject({
-		toActor: 'human',
+		toActor: HUMAN_ACTOR_ID,
 		type: 'human.question'
 	})
 })
@@ -222,8 +229,8 @@ test('intent complete sends lifecycle update to dispatcher', async () => {
 		context: makeContext()
 	})
 
-	expect(sentEnvelopes(result).some((envelope) => envelope.toActor === 'dispatcher')).toBeTrue()
-	expect(sentEnvelopes(result).find((envelope) => envelope.toActor === 'dispatcher')).toMatchObject({
+	expect(sentEnvelopes(result).some((envelope) => envelope.toActor === DISPATCHER_ACTOR_ID)).toBeTrue()
+	expect(sentEnvelopes(result).find((envelope) => envelope.toActor === DISPATCHER_ACTOR_ID)).toMatchObject({
 		type: 'intent.lifecycle',
 		payload: {
 			intentId: 'intent-123',
@@ -237,7 +244,7 @@ test('intent complete sends lifecycle update to dispatcher', async () => {
 	test('intent call_skill still routes through the skills hierarchy', async () => {
 	const handler = createIntentHandler({
 		skillRegistry: createSkillRegistry([
-			{ ...skill, id: 'worker/memory', description: 'Nested id still uses supervisor route' }
+			{ ...skill, id: 'worker-memory', description: 'Nested id still uses supervisor route' }
 		]),
 		brain: {
 			async decide() {
@@ -246,7 +253,7 @@ test('intent complete sends lifecycle update to dispatcher', async () => {
 					actions: [
 						{
 							type: 'call_skill',
-							skillId: 'worker/memory',
+							skillId: 'worker-memory',
 							request: 'Run safely',
 							payload: {}
 						}
@@ -262,8 +269,8 @@ test('intent complete sends lifecycle update to dispatcher', async () => {
 		context: makeContext()
 	})
 
-	expect(sentEnvelopes(result)[0].toActor).toBe('skills/worker/memory')
-	expect(sentEnvelopes(result)[0].toActor.startsWith('skill-worker/')).toBeFalse()
+	expect(sentEnvelopes(result)[0].toActor).toBe('aven/skills/worker-memory')
+	expect(sentEnvelopes(result)[0].toActor.startsWith('aven/skills/worker-memory/workers/')).toBeFalse()
 })
 
 test('skill.result is routed through IntentBrain', async () => {
@@ -333,7 +340,7 @@ function makeIntentState(): IntentState {
 	}
 }
 
-function makeIntentActor(state: unknown, id = 'intents/intent-123') {
+function makeIntentActor(state: unknown, id = createIntentActorId('intent-123')) {
 	return {
 		id,
 		kind: 'intent',
@@ -348,11 +355,11 @@ function makeIntentActor(state: unknown, id = 'intents/intent-123') {
 function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRecord {
 	return {
 		id: 'env-1',
-		fromActor: 'dispatcher',
-		toActor: 'intents/intent-123',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('intent-123'),
 		type: 'intent.user_input',
-		correlationId: 'corr-1',
-		causationId: null,
+		runId: 'corr-1',
+		causedBy: null,
 		payload: { text: 'hello' },
 		status: 'queued',
 		availableAt: '2026-05-12T00:00:00.000Z',
@@ -383,8 +390,8 @@ function makeContext() {
 			to: string
 			type: string
 			payload: unknown
-			correlationId?: string
-			causationId?: string
+			runId?: string
+			causedBy?: string
 			availableAt?: Date
 		}) {
 			return {
@@ -392,8 +399,8 @@ function makeContext() {
 				fromActor: input.from,
 				toActor: input.to,
 				type: input.type,
-				correlationId: input.correlationId ?? 'corr-1',
-				causationId: input.causationId,
+				runId: input.runId ?? 'corr-1',
+				causedBy: input.causedBy,
 				payload: input.payload,
 				availableAt: input.availableAt
 			}

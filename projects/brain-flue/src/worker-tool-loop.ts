@@ -225,7 +225,7 @@ function buildToolLoopPrompt(
 		'- For read_file use: {"tool":"read_file","args":{"path":"relative/or/absolute-path-or-attachment://id","encoding":"utf8|base64"}}',
 		'- For inspect_attachment use: {"tool":"inspect_attachment","args":{"id":"attachment-id"}}',
 		'- For write_file use: {"tool":"write_file","args":{"path":"relative/or/absolute-path","content":"..."}}',
-		'- For call_skill use: {"tool":"call_skill","args":{"to":"skills/memory","callId":"remember-1","request":"store","payload":{},"state":{}}}',
+		'- For call_skill use: {"tool":"call_skill","args":{"to":"aven/skills/memory","callId":"remember-1","request":"store","payload":{},"state":{}}}',
 		'- For finish use: {"tool":"finish","args":{"result":{"ok":true},"state":{}}}',
 		'- After a tool result is provided, continue and either call another tool, call_skill, or finish.',
 		'- Do not return a final worker result in the same response as a tool request.'

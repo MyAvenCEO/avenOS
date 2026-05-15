@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
-import { createSkillActorId } from '@jaensen/persistence-sqlite'
+import { createSkillActorId, parseSkillActorId } from '@jaensen/persistence-sqlite'
 
 import { SkillValidationError } from './errors'
 import { isValidSkillId } from './skill-id'
@@ -82,8 +82,6 @@ interface ParsedSkillFrontmatter {
 		shell?: boolean
 	}
 }
-
-const DIRECT_SKILL_ACTOR_PATTERN = /^skills\/[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 function parseSkillMarkdown(
 	raw: string,
@@ -178,13 +176,14 @@ function validateDirectActors(definitions: SkillDefinition[]): void {
 
 	for (const definition of definitions) {
 		for (const actor of definition.directActors) {
-			if (!DIRECT_SKILL_ACTOR_PATTERN.test(actor)) {
+			const target = parseSkillActorId(actor)
+			if (!target) {
 				throw new SkillValidationError(
-					`Invalid skill frontmatter in ${definition.path}: direct_actors entries must match ${DIRECT_SKILL_ACTOR_PATTERN}`
+					`Invalid skill frontmatter in ${definition.path}: direct_actors entries must be canonical skill actor ids`
 				)
 			}
 
-			const targetSkillId = actor.slice('skills/'.length)
+			const targetSkillId = target.skillId
 			if (targetSkillId === definition.id) {
 				throw new SkillValidationError(
 					`Invalid skill frontmatter in ${definition.path}: direct_actors must not reference the skill itself`

@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
+import { createSkillActorId } from '@jaensen/persistence-sqlite'
 import { SkillValidationError, loadSkills } from '../src/index'
 
 const tempDirs: string[] = []
@@ -30,10 +31,10 @@ test('loads SKILL.md recursively', async () => {
 test('loadSkills accepts direct_actors', async () => {
 	const rootDir = await createTempRoot()
 	await writeSkill(rootDir, 'memory/SKILL.md', `---\nid: memory\ndescription: Memory skill\n---\n`)
-	await writeSkill(rootDir, 'pdf/SKILL.md', `---\nid: pdf\ndescription: PDF skill\ndirect_actors:\n  - skills/memory\n---\n`)
+	await writeSkill(rootDir, 'pdf/SKILL.md', `---\nid: pdf\ndescription: PDF skill\ndirect_actors:\n  - ${createSkillActorId('memory')}\n---\n`)
 
 	const skills = await loadSkills({ rootDir })
-	expect(skills.find((skill) => skill.id === 'pdf')?.directActors).toEqual(['skills/memory'])
+	expect(skills.find((skill) => skill.id === 'pdf')?.directActors).toEqual([createSkillActorId('memory')])
 })
 
 test('loadSkills accepts resources.fs and shell declarations', async () => {
@@ -65,25 +66,25 @@ test('loadSkills treats empty direct_actors as omitted', async () => {
 })
 
 test('loadSkills rejects human intent and worker targets', async () => {
-	for (const target of ['human', 'intents/abc', 'skills/memory/foo', 'memory']) {
+	for (const target of ['human', 'aven/intents/abc', 'aven/skills/memory/workers/foo', 'memory']) {
 		const rootDir = await createTempRoot()
 		await writeSkill(rootDir, 'memory/SKILL.md', `---\nid: memory\ndescription: Memory skill\ndirect_actors:\n  - ${target}\n---\n`)
 		await writeSkill(rootDir, 'pdf/SKILL.md', `---\nid: pdf\ndescription: PDF skill\n---\n`)
 
-		await expect(loadSkills({ rootDir })).rejects.toThrow(/direct_actors entries must match/)
+		await expect(loadSkills({ rootDir })).rejects.toThrow(/direct_actors entries must match|direct_actors entries must be canonical skill actor ids|Actor id must be rooted at aven/)
 	}
 })
 
 test('loadSkills rejects unknown skill target', async () => {
 	const rootDir = await createTempRoot()
-	await writeSkill(rootDir, 'memory/SKILL.md', `---\nid: memory\ndescription: Memory skill\ndirect_actors:\n  - skills/missing\n---\n`)
+	await writeSkill(rootDir, 'memory/SKILL.md', `---\nid: memory\ndescription: Memory skill\ndirect_actors:\n  - ${createSkillActorId('missing')}\n---\n`)
 
 	await expect(loadSkills({ rootDir })).rejects.toThrow(/references unknown skill "missing"/)
 })
 
 test('loadSkills rejects self target', async () => {
 	const rootDir = await createTempRoot()
-	await writeSkill(rootDir, 'memory/SKILL.md', `---\nid: memory\ndescription: Memory skill\ndirect_actors:\n  - skills/memory\n---\n`)
+	await writeSkill(rootDir, 'memory/SKILL.md', `---\nid: memory\ndescription: Memory skill\ndirect_actors:\n  - ${createSkillActorId('memory')}\n---\n`)
 
 	await expect(loadSkills({ rootDir })).rejects.toThrow(/must not reference the skill itself/)
 })

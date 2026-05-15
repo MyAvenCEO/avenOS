@@ -1,6 +1,8 @@
 import type { ActorHandler } from '@jaensen/actor-runtime'
 import {
 	createIntentActorId,
+	createWorkerActorId,
+	parseActorId,
 	type ContextAppendInput,
 	type EnvelopeInput,
 	type EnvelopeRecord
@@ -8,7 +10,8 @@ import {
 
 import { inferCallId } from './call-id'
 import { SkillValidationError } from './errors'
-import { createSkillWorkerActorId, parseSkillActorId } from './skill-id'
+import { normalizeWorkerResult } from './normalize-worker-result'
+import { parseSkillActorId } from './skill-id'
 import type { CreateSkillSupervisorHandlerInput, SkillSupervisorState } from './types'
 
 export function createSkillSupervisorHandler(input: CreateSkillSupervisorHandlerInput): ActorHandler {
@@ -74,8 +77,8 @@ function handleSkillRequest(input: {
 		to: string
 		type: string
 		payload: unknown
-		correlationId?: string
-		causationId?: string
+		runId?: string
+		causedBy?: string
 		availableAt?: Date
 	}) => EnvelopeInput
 	now: Date
@@ -85,16 +88,18 @@ function handleSkillRequest(input: {
 	requireString(payload.request, 'skill.request payload.request is required')
 	const intentId = optionalString(payload.intentId)
 	const parentCallId = optionalString(payload.parentCallId)
-	const rootCallId = optionalString(payload.rootCallId) ?? callId
 	const replyTo = optionalString(payload.replyTo) ?? input.envelope.fromActor
-	const workerId = selectWorkerId(payload, callId)
-	const existingWorker = input.state.workers[workerId]
+	const existingCall = input.state.calls[callId]
+	const workerActorId = existingCall?.workerActorId ?? createWorkerActorId(input.skillId, selectWorkerPurpose(payload, callId))
+	const workerName = parseActorId(workerActorId).segments.at(-1)!
+	const existingWorker = input.state.workers[workerActorId]
 	const state: SkillSupervisorState = {
 		...input.state,
 		workers: {
 			...input.state.workers,
-			[workerId]: {
-				workerId,
+			[workerActorId]: {
+				workerActorId,
+				workerName,
 				status: 'active',
 				intentId,
 				callId,
@@ -105,8 +110,7 @@ function handleSkillRequest(input: {
 			...input.state.calls,
 			[callId]: {
 				callId,
-				rootCallId,
-				workerId,
+				workerActorId,
 				status: 'active',
 				replyTo,
 				intentId,
@@ -118,21 +122,21 @@ function handleSkillRequest(input: {
 	return {
 		state,
 		contextAppend: {
-			scope: { type: 'call', callId, parentCallId, rootCallId },
 			kind: 'handoff',
+			visibility: 'worklog',
+			intentId,
+			callId,
 			key: 'skill.request',
-			tags: ['skill', 'handoff'],
 			body: payload,
-			summary: requireString(payload.request, 'skill.request payload.request is required'),
-			sourceContextItemIds: []
+			summary: requireString(payload.request, 'skill.request payload.request is required')
 		},
 		outgoing: input.makeEnvelope({
 			from: input.actorId,
-			to: createSkillWorkerActorId(input.skillId, workerId),
+			to: workerActorId,
 			type: `${input.skillId}.run`,
-			payload: existingWorker ? { ...payload, rootCallId } : { ...payload, rootCallId, initialState: {} },
-			correlationId: input.envelope.correlationId,
-			causationId: input.envelope.id
+			payload: existingWorker ? payload : { ...payload, initialState: {} },
+			runId: input.envelope.runId,
+			causedBy: input.envelope.id
 		})
 	}
 }
@@ -147,29 +151,37 @@ function handleWorkerResult(input: {
 		to: string
 		type: string
 		payload: unknown
-		correlationId?: string
-		causationId?: string
+		runId?: string
+		causedBy?: string
 		availableAt?: Date
 	}) => EnvelopeInput
 	now: Date
 }): { state: SkillSupervisorState; outgoing?: EnvelopeInput; contextAppend?: ContextAppendInput } {
 	const payload = toRecord(input.envelope.payload)
-	const workerId = requireString(payload.workerId, 'skill.worker.result payload.workerId is required')
-	const callId = optionalString(payload.callId) ?? input.state.workers[workerId]?.callId
-	const parentCallId = optionalString(payload.parentCallId)
-	if (!callId) throw new SkillValidationError(`Missing callId for worker result ${workerId}`)
+	const workerActorId = input.envelope.fromActor
+	const payloadWorkerActorId = optionalString(payload.workerActorId)
+	if (payloadWorkerActorId && payloadWorkerActorId !== workerActorId) {
+		throw new SkillValidationError(`skill.worker.result payload.workerActorId mismatch: ${payloadWorkerActorId} !== ${workerActorId}`)
+	}
+	const callId = optionalString(payload.callId) ?? input.state.workers[workerActorId]?.callId
+	if (!callId) throw new SkillValidationError(`Missing callId for worker result ${workerActorId}`)
 
 	const call = input.state.calls[callId]
-	if (!call) throw new SkillValidationError(`Unknown callId ${callId} for worker result ${workerId}`)
+	if (!call) throw new SkillValidationError(`Unknown callId ${callId} for worker result ${workerActorId}`)
+	if (call.workerActorId !== workerActorId) {
+		throw new SkillValidationError(`Call ${callId} is assigned to ${call.workerActorId}, not ${workerActorId}`)
+	}
 
-	const completed = payload.completed !== false
-	const rootCallId = call.rootCallId
+	const normalized = normalizeWorkerResult(payload)
+	const completed = normalized.completed
+	const workerName = parseActorId(workerActorId).segments.at(-1)!
 	const state: SkillSupervisorState = {
 		...input.state,
 		workers: {
 			...input.state.workers,
-			[workerId]: {
-				workerId,
+			[workerActorId]: {
+				workerActorId,
+				workerName,
 				status: completed ? 'completed' : 'active',
 				intentId: call.intentId,
 				callId,
@@ -188,13 +200,13 @@ function handleWorkerResult(input: {
 	return {
 		state,
 		contextAppend: {
-			scope: { type: 'call', callId, parentCallId: call.parentCallId, rootCallId },
 			kind: 'tool_result',
+			visibility: 'worklog',
+			intentId: call.intentId,
+			callId,
 			key: 'skill.worker.result',
-			tags: ['skill', 'result'],
-			body: payload.result,
-			summary: typeof payload.result === 'string' ? payload.result.slice(0, 240) : 'Skill worker result',
-			sourceContextItemIds: []
+			body: normalized.result,
+			summary: typeof normalized.result === 'string' ? normalized.result.slice(0, 240) : 'Skill worker result'
 		},
 		outgoing: input.makeEnvelope({
 			from: input.actorId,
@@ -203,14 +215,14 @@ function handleWorkerResult(input: {
 			payload: {
 				callId,
 				parentCallId: call.parentCallId,
-				rootCallId,
 				intentId: call.intentId,
 				fromSkillId: input.skillId,
-				workerId,
-				result: payload.result
+				workerActorId,
+				workerName,
+				result: normalized.result
 			},
-			correlationId: input.envelope.correlationId,
-			causationId: input.envelope.id
+			runId: input.envelope.runId,
+			causedBy: input.envelope.id
 		})
 	}
 }
@@ -223,10 +235,11 @@ function toSupervisorState(state: unknown, actorId: string): SkillSupervisorStat
 	return {
 		skillId,
 		workers: Object.fromEntries(
-			Object.entries(rawWorkers).map(([workerId, value]) => {
+			Object.entries(rawWorkers).map(([workerActorId, value]) => {
 				const worker = toRecord(value)
-				return [workerId, {
-					workerId,
+				return [workerActorId, {
+					workerActorId,
+					workerName: typeof worker.workerName === 'string' ? worker.workerName : parseActorId(workerActorId).segments.at(-1) ?? workerActorId,
 					status: worker.status === 'completed' || worker.status === 'failed' ? worker.status : 'active',
 					intentId: typeof worker.intentId === 'string' ? worker.intentId : undefined,
 					callId: typeof worker.callId === 'string' ? worker.callId : undefined,
@@ -237,7 +250,7 @@ function toSupervisorState(state: unknown, actorId: string): SkillSupervisorStat
 		calls: Object.fromEntries(
 			Object.entries(rawCalls).flatMap(([callId, value]) => {
 				const call = toRecord(value)
-				if (typeof call.workerId !== 'string') {
+				if (typeof call.workerActorId !== 'string') {
 					return []
 				}
 				const intentId = typeof call.intentId === 'string' ? call.intentId : undefined
@@ -251,8 +264,7 @@ function toSupervisorState(state: unknown, actorId: string): SkillSupervisorStat
 				}
 				return [[callId, {
 					callId,
-					rootCallId: typeof call.rootCallId === 'string' ? call.rootCallId : callId,
-					workerId: call.workerId,
+					workerActorId: call.workerActorId,
 					status: call.status === 'completed' || call.status === 'failed' ? call.status : 'active',
 					replyTo,
 					intentId,
@@ -278,7 +290,7 @@ function optionalString(value: unknown): string | undefined {
 	return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
-function selectWorkerId(payload: Record<string, unknown>, callId: string): string {
+function selectWorkerPurpose(payload: Record<string, unknown>, callId: string): string {
 	if (payload.workerPolicy === 'ephemeral') {
 		return callId
 	}

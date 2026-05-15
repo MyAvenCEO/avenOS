@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test'
-import type { EnvelopeRecord } from '@jaensen/persistence-sqlite'
+import { DISPATCHER_ACTOR_ID, createIntentActorId, type EnvelopeRecord } from '@jaensen/persistence-sqlite'
 import type { IntentState } from '@jaensen/conversation-actors'
 
 import {
 	createFlueIntentBrain
 } from '../src/index'
 
-test('intent uses actor/intents/<intentId> session', async () => {
+test('intent uses canonical intent session', async () => {
 	const calls: string[] = []
 	const brain = createFlueIntentBrain({
 		harness: {
@@ -32,7 +32,7 @@ test('intent uses actor/intents/<intentId> session', async () => {
 
 	await brain.decide({ state: makeIntentState(), envelope: makeEnvelopeRecord(), availableSkills: makeSkills() })
 
-	expect(calls).toEqual(['actor/intents/intent-123'])
+	expect(calls).toEqual([`actor/${createIntentActorId('intent-123')}`])
 })
 
 test('intent accepts call_skill for known skill', async () => {
@@ -267,11 +267,11 @@ function makeSkills() {
 function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRecord {
 	return {
 		id: 'env-1',
-		fromActor: 'dispatcher',
-		toActor: 'intents/intent-123',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('intent-123'),
 		type: 'intent.user_input',
-		correlationId: 'corr-1',
-		causationId: null,
+		runId: 'corr-1',
+		causedBy: null,
 		payload: { text: 'hello' },
 		status: 'queued',
 		availableAt: '2026-05-12T00:00:00.000Z',

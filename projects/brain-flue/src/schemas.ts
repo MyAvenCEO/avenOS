@@ -1,5 +1,8 @@
 import { z } from 'zod'
 
+import { parseSkillActorId } from '@jaensen/persistence-sqlite'
+import { normalizeWorkerResult } from '@jaensen/skills'
+
 import { FlueBrainValidationError } from './errors'
 import { isSlugSafe } from './session-names'
 
@@ -23,7 +26,7 @@ const sendActionSchema = z.object({
 	payload: z.unknown()
 })
 
-const skillActorSchema = z.string().trim().regex(/^skills\/[a-z0-9]+(?:-[a-z0-9]+)*$/, 'to must target skills/<skillId>')
+const skillActorSchema = z.string().trim().refine((value) => parseSkillActorId(value) !== null, 'to must target aven/skills/<skill-id>')
 
 const callSkillActionSchema = z.object({
 	type: z.literal('call_skill'),
@@ -35,14 +38,16 @@ const callSkillActionSchema = z.object({
 
 const routeWorkerActionSchema = z.object({
 	type: z.literal('route_worker'),
-	workerId: z.string().refine((value) => isSlugSafe(value), 'workerId must be slug-safe'),
+	workerActorId: z.string().min(1, 'workerActorId is required'),
+	workerName: z.string().refine((value) => isSlugSafe(value), 'workerName must be slug-safe'),
 	messageType: messageTypeSchema,
 	payload: z.unknown()
 })
 
 const spawnWorkerActionSchema = z.object({
 	type: z.literal('spawn_worker'),
-	workerId: z.string().refine((value) => isSlugSafe(value), 'workerId must be slug-safe'),
+	workerActorId: z.string().min(1, 'workerActorId is required'),
+	workerName: z.string().refine((value) => isSlugSafe(value), 'workerName must be slug-safe'),
 	initialState: z.unknown().optional(),
 	messageType: messageTypeSchema,
 	payload: z.unknown()
@@ -87,29 +92,19 @@ export function validateWorkerResult(input: unknown) {
 		throw new FlueBrainValidationError(`Invalid worker result: ${parsed.error.issues.map((issue) => issue.message).join('; ')}`)
 	}
 
-	const stateChanged = parsed.data.state !== undefined && (
-		typeof parsed.data.state !== 'object' ||
-		parsed.data.state === null ||
-		Array.isArray(parsed.data.state) ||
-		Object.keys(parsed.data.state as Record<string, unknown>).length > 0
+	const normalized = normalizeWorkerResult(parsed.data)
+	const stateChanged = normalized.state !== undefined && (
+		typeof normalized.state !== 'object' ||
+		normalized.state === null ||
+		Array.isArray(normalized.state) ||
+		Object.keys(normalized.state as Record<string, unknown>).length > 0
 	)
-	const hasChildActions = (parsed.data.actions?.length ?? 0) > 0
-	const hasResult = parsed.data.result !== undefined
-	const completed = parsed.data.completed === true
-	const hasFinalResult = completed || hasResult
-	if (hasChildActions && hasFinalResult) {
-		throw new FlueBrainValidationError(
-			'Invalid worker result: call_skill actions may not be returned together with completed=true or result'
-		)
-	}
-
-	if (completed && !hasResult) {
-		throw new FlueBrainValidationError('Invalid worker result: completed=true requires result')
-	}
+	const hasChildActions = (normalized.actions?.length ?? 0) > 0
+	const hasResult = normalized.completed
 
 	if (!hasChildActions && !hasResult && !stateChanged) {
 		throw new FlueBrainValidationError('Invalid worker result: must include result, actions, or a useful state change')
 	}
 
-	return parsed.data
+	return normalized
 }

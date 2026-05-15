@@ -3,7 +3,7 @@ id: script-runner
 description: Runs scripts on the command line.
 worker_policy: durable
 direct_actors:
-  - skills/memory
+  - aven/skills/memory
 resources:
   fs:
     - .

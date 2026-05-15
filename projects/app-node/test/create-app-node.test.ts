@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test'
-import { SqlitePersistence } from '@jaensen/persistence-sqlite'
+import {
+	DISPATCHER_ACTOR_ID,
+	HUMAN_ACTOR_ID,
+	createSkillActorId,
+	SqlitePersistence
+} from '@jaensen/persistence-sqlite'
 
 import { createAppNode } from '../src/index'
 
@@ -23,11 +28,11 @@ test('createAppNode ensures startup actors and bootstraps skill supervisors', as
 		now: new Date('2026-05-12T00:00:00.000Z')
 	})
 
-	expect((await persistence.getActor('dispatcher'))?.kind).toBe('dispatcher')
-	expect((await persistence.getActor('dispatcher'))?.state).toEqual({ activeIntents: {} })
-	expect((await persistence.getActor('human'))?.kind).toBe('human-outbox')
-	expect((await persistence.getActor('human'))?.state).toEqual({ messages: [] })
-	expect((await persistence.getActor('skills/memory'))?.kind).toBe('skill-supervisor')
+	expect((await persistence.getActor(DISPATCHER_ACTOR_ID))?.kind).toBe('dispatcher')
+	expect((await persistence.getActor(DISPATCHER_ACTOR_ID))?.state).toEqual({ activeIntents: {} })
+	expect((await persistence.getActor(HUMAN_ACTOR_ID))?.kind).toBe('human-outbox')
+	expect((await persistence.getActor(HUMAN_ACTOR_ID))?.state).toEqual({ messages: [] })
+	expect((await persistence.getActor(createSkillActorId('memory')))?.kind).toBe('skill-supervisor')
 	expect(app.skillRegistry.list().map((skill) => skill.id)).toEqual(['memory'])
 })
 
@@ -65,9 +70,9 @@ test('app can enqueue user input and expose human outbox after runtime settles',
 	const queued = await app.enqueueUserInput({ text: 'Hi' })
 	expect(queued).toEqual({
 		envelopeId: expect.any(String),
-		correlationId: expect.any(String)
+		runId: expect.any(String)
 	})
-	expect(queued.envelopeId).toBe(queued.correlationId)
+	expect(queued.envelopeId).toBe(queued.runId)
 	await app.runUntilIdle(20)
 
 	expect(await app.readHumanOutbox()).toEqual([
@@ -102,7 +107,7 @@ test('app forwards intentIdHint when enqueueing user input', async () => {
 	})
 })
 
-test('app persists harness prompt/task/shell traces to sqlite stream events', async () => {
+test('app persists harness prompt/task/shell traces to unified events', async () => {
 	const persistence = new SqlitePersistence()
 	const app = await createAppNode({
 		persistence,
@@ -110,14 +115,14 @@ test('app persists harness prompt/task/shell traces to sqlite stream events', as
 		skills: []
 	})
 
-	app.runtime.debug.recordTrace('dispatcher', {
+	app.runtime.debug.recordTrace(DISPATCHER_ACTOR_ID, {
 		kind: 'prompt',
 		label: 'tester',
 		inputSummary: 'hello',
 		outputSummary: '{"ok":true}',
 		at: '2026-05-12T00:00:00.000Z'
 	})
-	app.runtime.debug.recordTrace('dispatcher', {
+	app.runtime.debug.recordTrace(DISPATCHER_ACTOR_ID, {
 		kind: 'task',
 		label: 'tester',
 		inputSummary: 'do work',
@@ -125,7 +130,7 @@ test('app persists harness prompt/task/shell traces to sqlite stream events', as
 		cwd: '/tmp',
 		at: '2026-05-12T00:00:01.000Z'
 	})
-	app.runtime.debug.recordTrace('dispatcher', {
+	app.runtime.debug.recordTrace(DISPATCHER_ACTOR_ID, {
 		kind: 'shell',
 		label: 'tester',
 		command: 'pwd',
@@ -139,7 +144,7 @@ test('app persists harness prompt/task/shell traces to sqlite stream events', as
 	await new Promise((resolve) => setTimeout(resolve, 0))
 
 	const events = (persistence as unknown as { db: { query: (sql: string) => { all: (...args: unknown[]) => unknown } } }).db
-		.query("SELECT type FROM stream_events WHERE type LIKE 'actor.io.%' ORDER BY created_at ASC")
+		.query("SELECT type FROM events WHERE type LIKE 'actor.io.%' ORDER BY created_at ASC")
 		.all() as Array<{ type: string }>
 
 	expect(events.map((event) => event.type)).toEqual(expect.arrayContaining(['actor.io.prompt', 'actor.io.task', 'actor.io.shell']))

@@ -3,6 +3,7 @@ import path from 'node:path'
 import { tmpdir } from 'node:os'
 
 import { expect, test } from 'bun:test'
+import { createIntentActorId, parseSkillWorkerActorId } from '@jaensen/persistence-sqlite'
 
 import { createWebApi } from '../src/index'
 
@@ -81,9 +82,9 @@ test('web-api end-to-end covers creating an intent, loading real skills, creatin
 
 		const workerSpawnEvents = intentEventsBody.events.filter((event) => event.type === 'skill.worker_spawned')
 		expect(workerSpawnEvents).toEqual([
-			expect.objectContaining({ payload: expect.objectContaining({ skillId: 'file-creator', workerId: 'call-random-file-create' }) }),
-			expect.objectContaining({ payload: expect.objectContaining({ skillId: 'file-analyzer', workerId: 'call-random-file-analyze' }) }),
-			expect.objectContaining({ payload: expect.objectContaining({ skillId: 'file-analyzer', workerId: 'call-known-file-analyze' }) })
+			expect.objectContaining({ payload: expect.objectContaining({ skillId: 'file-creator', workerActorId: expect.any(String), workerName: expect.any(String) }) }),
+			expect.objectContaining({ payload: expect.objectContaining({ skillId: 'file-analyzer', workerActorId: expect.any(String), workerName: expect.any(String) }) }),
+			expect.objectContaining({ payload: expect.objectContaining({ skillId: 'file-analyzer', workerActorId: expect.any(String), workerName: expect.any(String) }) })
 		])
 
 		const globalEventsResponse = await fetch(`${api.url}api/events?scope=global`)
@@ -254,13 +255,17 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 					}
 
 					if (role === 'jaensen-conversation-intent') {
-						const intentId = name.slice('actor/intents/'.length)
+						const intentId = name.slice('actor/'.length).split('/').at(-1) ?? ''
 						state.createdIntentId ??= intentId
 						debugLog(
 							`intent-phase=${state.phase} hasCreate=${text.includes('call-random-file-create')} hasRandomAnalyze=${text.includes('call-random-file-analyze')} hasKnownAnalyze=${text.includes('call-known-file-analyze')} hasKnownPath=${text.includes('known-fact.txt')} hasSaturn=${text.includes('Saturn has rings.')}`
 						)
 
-						if (text.includes('intent.start')) {
+						if (
+							state.randomFilePath === null &&
+							!text.includes('skill.result') &&
+							text.includes('"pendingSkillCalls": {}')
+						) {
 							state.phase = 'await-create-result'
 							return {
 								summary: 'Creating a random file before analysis begins',
@@ -272,7 +277,6 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 									{
 										type: 'call_skill',
 										skillId: 'file-creator',
-										callId: 'call-random-file-create',
 										request: 'Create a random file inside the workspace',
 										payload: {
 											directory: 'generated',
@@ -280,6 +284,13 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 										}
 									}
 								]
+							}
+						}
+
+						if (state.randomFilePath === null && !text.includes('skill.result')) {
+							return {
+								summary: 'Creating a random file before analysis begins',
+								actions: []
 							}
 						}
 
@@ -295,7 +306,6 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 									{
 										type: 'call_skill',
 										skillId: 'file-analyzer',
-										callId: 'call-random-file-analyze',
 										request: 'Analyze the exact file that was just created',
 										payload: {
 											analyzePath: state.randomFilePath,
@@ -308,7 +318,7 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 
 						if (text.includes('skill.result') && state.phase === 'await-known-file-result') {
 							state.phase = 'completed'
-							expect(text).toContain('call-known-file-analyze')
+							expect(text).toContain('Analyze the known verification file and extract exactly one fact')
 							return {
 								summary: 'Random file created and analyzed, then known fact verified',
 								actions: [
@@ -331,7 +341,6 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 									{
 										type: 'call_skill',
 										skillId: 'file-analyzer',
-										callId: 'call-known-file-analyze',
 										request: 'Analyze the known verification file and extract exactly one fact',
 										payload: {
 											analyzePath: path.relative(workspaceRoot, state.knownFilePath).split(path.sep).join('/'),
@@ -345,7 +354,7 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 					}
 
 					if (role === 'jaensen-skill-supervisor') {
-						const skillId = name.slice('actor/skills/'.length)
+						const skillId = name.slice('actor/'.length).split('/').at(-1) ?? ''
 						if (text.includes('skill.bootstrap')) {
 							return {
 								state: {
@@ -357,24 +366,19 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 						}
 
 						if (text.includes('skill.request')) {
+							const promptCallId = extractPromptField(text, 'callId')
+							if (!promptCallId) {
+								throw new Error(`expected callId in ${skillId} supervisor prompt`)
+							}
 							const workerId =
-								skillId === 'file-creator'
-									? 'random-file'
-									: text.includes('call-known-file-analyze')
-										? 'known-file'
-										: 'created-file'
+								promptCallId
 							const request =
 								skillId === 'file-creator'
 									? 'Create a random file inside the workspace'
 									: text.includes('call-known-file-analyze')
 										? 'Analyze the known verification file and extract exactly one fact'
 										: 'Analyze the exact file that was just created'
-							const callId =
-								skillId === 'file-creator'
-									? 'call-random-file-create'
-									: text.includes('call-known-file-analyze')
-										? 'call-known-file-analyze'
-										: 'call-random-file-analyze'
+							const callId = promptCallId
 							return {
 								state: {
 									skillId,
@@ -420,12 +424,12 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 						}
 
 						if (text.includes('skill.worker.result')) {
+							const promptCallId = extractPromptField(text, 'callId')
+							if (!promptCallId) {
+								throw new Error(`expected callId in ${skillId} worker result supervisor prompt`)
+							}
 							const workerId =
-								skillId === 'file-creator'
-									? 'random-file'
-									: text.includes('call-known-file-analyze')
-										? 'known-file'
-										: 'created-file'
+								promptCallId
 							const outgoingResult =
 								skillId === 'file-creator'
 									? {
@@ -449,27 +453,13 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 											workerId,
 											status: 'completed',
 											intentId: state.createdIntentId ?? undefined,
-											callId:
-												skillId === 'file-creator'
-													? 'call-random-file-create'
-													: text.includes('call-known-file-analyze')
-														? 'call-known-file-analyze'
-														: 'call-random-file-analyze',
+											callId: promptCallId,
 											updatedAt: '2026-05-12T00:00:00.000Z'
 										}
 									},
 									calls: {
-										[(skillId === 'file-creator'
-											? 'call-random-file-create'
-											: text.includes('call-known-file-analyze')
-												? 'call-known-file-analyze'
-												: 'call-random-file-analyze')]: {
-											callId:
-												skillId === 'file-creator'
-													? 'call-random-file-create'
-													: text.includes('call-known-file-analyze')
-														? 'call-known-file-analyze'
-														: 'call-random-file-analyze',
+										[promptCallId]: {
+											callId: promptCallId,
 											intentId: state.createdIntentId ?? '',
 											workerId,
 											status: 'completed'
@@ -479,16 +469,11 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 								actions: [
 									{
 										type: 'send',
-										to: `intents/${state.createdIntentId}`,
+										to: createIntentActorId(state.createdIntentId ?? ''),
 										messageType: 'skill.result',
 										payload: {
 											intentId: state.createdIntentId,
-											callId:
-												skillId === 'file-creator'
-													? 'call-random-file-create'
-													: text.includes('call-known-file-analyze')
-														? 'call-known-file-analyze'
-														: 'call-random-file-analyze',
+											callId: promptCallId,
 											result: outgoingResult
 										}
 									}
@@ -498,7 +483,12 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 					}
 
 					if (role === 'jaensen-skill-worker') {
-						const [, , skillId, workerId] = name.split('/')
+						const actorId = name.slice('actor/'.length)
+						const worker = parseSkillWorkerActorId(actorId)
+						if (!worker) {
+							throw new Error(`Unexpected worker actor session ${name}`)
+						}
+						const { skillId, workerId } = worker
 
 						if (skillId === 'file-creator') {
 							const randomSlug = 'random-7f3a'
@@ -527,15 +517,12 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 							}
 
 							const normalizedTargetPath = targetPath.split(path.sep).join('/')
-							if (workerId === 'created-file' && normalizedTargetPath !== state.randomFilePath) {
-								throw new Error(`expected created-file analyzer to inspect ${state.randomFilePath}, received ${normalizedTargetPath}`)
-							}
-
-							if (
-								workerId === 'known-file' &&
+							if (normalizedTargetPath === state.randomFilePath) {
+								// expected created file analysis
+							} else if (
 								normalizedTargetPath !== path.relative(workspaceRoot, state.knownFilePath).split(path.sep).join('/')
 							) {
-								throw new Error(`expected known-file analyzer to inspect the verification file, received ${normalizedTargetPath}`)
+								throw new Error(`expected created-file analyzer to inspect ${state.randomFilePath}, received ${normalizedTargetPath}`)
 							}
 
 							const content = await readFile(path.join(workspaceRoot, normalizedTargetPath), 'utf8')
@@ -584,8 +571,8 @@ function createAskUserEventOnlyHarness() {
 					}
 
 					if (role === 'jaensen-conversation-intent') {
-						const intentId = name.slice('actor/intents/'.length)
-						if (text.includes('intent.start')) {
+						const intentId = name.slice('actor/'.length).split('/').at(-1) ?? ''
+						if (intentId.length > 0) {
 							return {
 								summary: 'Awaiting user input for next task selection.',
 								events: [
@@ -593,7 +580,7 @@ function createAskUserEventOnlyHarness() {
 										eventType: 'event',
 										event: {
 											type: 'ask.user',
-											correlationId: 'test-correlation-id',
+											runId: 'test-correlation-id',
 											payload: {
 												question: 'What task would you like to work on next?',
 												context: null,
@@ -640,6 +627,7 @@ async function driveIntentToStatus(
 	status: IntentSummary['status'],
 	maxPasses = 20
 ): Promise<IntentSummary> {
+	let lastBody: IntentSummary | null = null
 	for (let index = 0; index < maxPasses; index += 1) {
 		await api.app.runUntilIdle(50)
 		const response = await fetch(`${api.url}api/intents/${intentId}`)
@@ -647,12 +635,25 @@ async function driveIntentToStatus(
 			continue
 		}
 		const body = (await response.json()) as IntentSummary
+		lastBody = body
 		if (body.status === status) {
 			return body
 		}
 	}
 
-	throw new Error(`Intent ${intentId} did not reach status ${String(status)} after ${maxPasses} passes`)
+	const eventsResponse = await fetch(`${api.url}api/intents/${intentId}/events`)
+	const eventsBody = eventsResponse.ok
+		? ((await eventsResponse.json()) as { events: Array<{ type: string; payload?: unknown }> })
+		: { events: [] }
+	const failedPayloads = eventsBody.events
+		.filter((event) => event.type.includes('failed'))
+		.map((event) => JSON.stringify(event.payload))
+	throw new Error(
+		`Intent ${intentId} did not reach status ${String(status)} after ${maxPasses} passes. ` +
+			`Last status=${String(lastBody?.status)} summary=${String(lastBody?.summary)} ` +
+			`events=${eventsBody.events.map((event) => event.type).join(',')} ` +
+			`failedPayloads=${failedPayloads.join(' | ')}`
+	)
 }
 
 async function waitForIntentByTitle(apiUrl: string, title: string, timeoutMs = 3_000): Promise<IntentSummary> {

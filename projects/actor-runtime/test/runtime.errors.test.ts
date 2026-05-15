@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 
+import { DISPATCHER_ACTOR_ID, createIntentActorId } from '../../persistence-sqlite/src/actor-id'
 import { ConcurrencyError } from '../../persistence-sqlite/src/errors'
 
 import { createActorRuntime } from '../src/create-actor-runtime'
@@ -9,7 +10,7 @@ import { FakePersistence } from './helpers'
 test('fails message when handler missing', async () => {
 	const persistence = new FakePersistence()
 	await persistence.migrate()
-	await persistence.upsertActor({ id: 'intents/missing', kind: 'intent', state: {} })
+	await persistence.upsertActor({ id: createIntentActorId('missing'), kind: 'intent', state: {} })
 
 	const runtime = createActorRuntime({
 		persistence,
@@ -19,10 +20,10 @@ test('fails message when handler missing', async () => {
 
 	await runtime.enqueue({
 		id: 'env-missing',
-		fromActor: 'dispatcher',
-		toActor: 'intents/missing',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('missing'),
 		type: 'message',
-		correlationId: 'corr-missing',
+		runId: 'corr-missing',
 		payload: null
 	})
 
@@ -36,7 +37,7 @@ test('fails message when handler missing', async () => {
 test('retries message when handler throws', async () => {
 	const persistence = new FakePersistence()
 	await persistence.migrate()
-	await persistence.upsertActor({ id: 'intents/throw', kind: 'intent', state: {} })
+	await persistence.upsertActor({ id: createIntentActorId('throw'), kind: 'intent', state: {} })
 
 	const runtime = createActorRuntime({
 		persistence,
@@ -53,10 +54,10 @@ test('retries message when handler throws', async () => {
 
 	await runtime.enqueue({
 		id: 'env-throw',
-		fromActor: 'dispatcher',
-		toActor: 'intents/throw',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('throw'),
 		type: 'message',
-		correlationId: 'corr-throw',
+		runId: 'corr-throw',
 		payload: null
 	})
 
@@ -71,7 +72,7 @@ test('retries message when handler throws', async () => {
 test('fails message when handler returns a bad result', async () => {
 	const persistence = new FakePersistence()
 	await persistence.migrate()
-	await persistence.upsertActor({ id: 'intents/bad-result', kind: 'intent', state: {} })
+	await persistence.upsertActor({ id: createIntentActorId('bad-result'), kind: 'intent', state: {} })
 
 	const runtime = createActorRuntime({
 		persistence,
@@ -88,10 +89,10 @@ test('fails message when handler returns a bad result', async () => {
 
 	await runtime.enqueue({
 		id: 'env-bad-result',
-		fromActor: 'dispatcher',
-		toActor: 'intents/bad-result',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('bad-result'),
 		type: 'message',
-		correlationId: 'corr-bad-result',
+		runId: 'corr-bad-result',
 		payload: null
 	})
 
@@ -105,7 +106,7 @@ test('fails message when handler returns a bad result', async () => {
 test('retries message when handler times out quickly in test configuration', async () => {
 	const persistence = new FakePersistence()
 	await persistence.migrate()
-	await persistence.upsertActor({ id: 'intents/slow', kind: 'intent', state: {} })
+	await persistence.upsertActor({ id: createIntentActorId('slow'), kind: 'intent', state: {} })
 	const activationTimeoutMs = 30
 
 	const runtime = createActorRuntime({
@@ -125,10 +126,10 @@ test('retries message when handler times out quickly in test configuration', asy
 
 	await runtime.enqueue({
 		id: 'env-slow',
-		fromActor: 'dispatcher',
-		toActor: 'intents/slow',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('slow'),
 		type: 'message',
-		correlationId: 'corr-slow',
+		runId: 'corr-slow',
 		payload: null
 	})
 
@@ -145,8 +146,8 @@ test('retries message when handler times out quickly in test configuration', asy
 test('throws RuntimeCommitError after failActivation when commit conflicts', async () => {
 	const persistence = new FakePersistence()
 	await persistence.migrate()
-	await persistence.upsertActor({ id: 'intents/conflict', kind: 'intent', state: {} })
-	persistence.commitError = new ConcurrencyError('Actor intents/conflict version mismatch: expected 0, got 1')
+	await persistence.upsertActor({ id: createIntentActorId('conflict'), kind: 'intent', state: {} })
+	persistence.commitError = new ConcurrencyError(`Actor ${createIntentActorId('conflict')} version mismatch: expected 0, got 1`)
 
 	const runtime = createActorRuntime({
 		persistence,
@@ -163,10 +164,10 @@ test('throws RuntimeCommitError after failActivation when commit conflicts', asy
 
 	await runtime.enqueue({
 		id: 'env-conflict',
-		fromActor: 'dispatcher',
-		toActor: 'intents/conflict',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('conflict'),
 		type: 'message',
-		correlationId: 'corr-conflict',
+		runId: 'corr-conflict',
 		payload: null
 	})
 
@@ -180,7 +181,7 @@ test('throws RuntimeCommitError after failActivation when commit conflicts', asy
 test('timeout aborts signal-aware activations', async () => {
 	const persistence = new FakePersistence()
 	await persistence.migrate()
-	await persistence.upsertActor({ id: 'intents/abortable', kind: 'intent', state: {} })
+	await persistence.upsertActor({ id: createIntentActorId('abortable'), kind: 'intent', state: {} })
 	let aborted = false
 
 	const runtime = createActorRuntime({
@@ -205,10 +206,10 @@ test('timeout aborts signal-aware activations', async () => {
 
 	await runtime.enqueue({
 		id: 'env-abortable',
-		fromActor: 'dispatcher',
-		toActor: 'intents/abortable',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('abortable'),
 		type: 'message',
-		correlationId: 'corr-abortable',
+		runId: 'corr-abortable',
 		payload: null
 	})
 
@@ -220,7 +221,7 @@ test('timeout aborts signal-aware activations', async () => {
 test('claim lease is padded to cover activation timeout and cleanup window', async () => {
 	const persistence = new FakePersistence()
 	await persistence.migrate()
-	await persistence.upsertActor({ id: 'intents/leasey', kind: 'intent', state: {} })
+	await persistence.upsertActor({ id: createIntentActorId('leasey'), kind: 'intent', state: {} })
 
 	const now = new Date('2026-05-12T00:00:00.000Z')
 	const runtime = createActorRuntime({
@@ -241,10 +242,10 @@ test('claim lease is padded to cover activation timeout and cleanup window', asy
 
 	await runtime.enqueue({
 		id: 'env-leasey',
-		fromActor: 'dispatcher',
-		toActor: 'intents/leasey',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('leasey'),
 		type: 'message',
-		correlationId: 'corr-leasey',
+		runId: 'corr-leasey',
 		payload: null
 	})
 
@@ -258,8 +259,8 @@ test('claim lease is padded to cover activation timeout and cleanup window', asy
 test('runUntilIdle continues after commit conflicts', async () => {
 	const persistence = new FakePersistence()
 	await persistence.migrate()
-	await persistence.upsertActor({ id: 'intents/conflict-1', kind: 'intent', state: {} })
-	await persistence.upsertActor({ id: 'intents/conflict-2', kind: 'intent', state: {} })
+	await persistence.upsertActor({ id: createIntentActorId('conflict-1'), kind: 'intent', state: {} })
+	await persistence.upsertActor({ id: createIntentActorId('conflict-2'), kind: 'intent', state: {} })
 
 	const runtime = createActorRuntime({
 		persistence,
@@ -273,7 +274,7 @@ test('runUntilIdle continues after commit conflicts', async () => {
 		async activate() {
 			if (first) {
 				first = false
-				persistence.commitError = new ConcurrencyError('Actor intents/conflict-1 version mismatch: expected 0, got 1')
+				persistence.commitError = new ConcurrencyError(`Actor ${createIntentActorId('conflict-1')} version mismatch: expected 0, got 1`)
 			} else {
 				persistence.commitError = null
 			}
@@ -283,18 +284,18 @@ test('runUntilIdle continues after commit conflicts', async () => {
 
 	await runtime.enqueue({
 		id: 'env-conflict-1',
-		fromActor: 'dispatcher',
-		toActor: 'intents/conflict-1',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('conflict-1'),
 		type: 'message',
-		correlationId: 'corr-conflict-1',
+		runId: 'corr-conflict-1',
 		payload: null
 	})
 	await runtime.enqueue({
 		id: 'env-conflict-2',
-		fromActor: 'dispatcher',
-		toActor: 'intents/conflict-2',
+		fromActor: DISPATCHER_ACTOR_ID,
+		toActor: createIntentActorId('conflict-2'),
 		type: 'message',
-		correlationId: 'corr-conflict-2',
+		runId: 'corr-conflict-2',
 		payload: null
 	})
 

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-import type { ActorEventInput, EnvelopeInput, StreamEventInput } from '../../persistence-sqlite/src/index'
+import type { ActorEventInput, EnvelopeInput, EventInput } from '../../persistence-sqlite/src/index'
 
 import { ActorRegistry } from './actor-registry'
 import { ActorIntrospectionRegistry } from './actor-introspection'
@@ -54,7 +54,7 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 		recordTrace: (actorId, trace) => {
 			introspection.recordTrace(actorId, trace)
 			void input.persistence
-				.appendStreamEvents(buildTraceStreamEvents(actorId, trace))
+				.appendEvents(buildTraceEvents(actorId, trace))
 				.catch((error) =>
 					logWarn(input.logger, 'actor-runtime.trace.persist.failed', {
 						workerId: input.workerId,
@@ -107,7 +107,7 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 				envelopeType: envelope.type,
 				fromActor: envelope.fromActor,
 				toActor: envelope.toActor,
-				correlationId: envelope.correlationId,
+				runId: envelope.runId,
 				attempts: envelope.attempts
 			})
 			const handler = registry.get(actor.kind)
@@ -124,7 +124,7 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 					envelopeType: envelope.type,
 					fromActor: envelope.fromActor,
 					toActor: envelope.toActor,
-					correlationId: envelope.correlationId,
+					runId: envelope.runId,
 					error,
 					now,
 					logger: input.logger
@@ -141,8 +141,8 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 					makeEnvelope({
 						...envelopeInput,
 						createdAt: now,
-						causationId: envelopeInput.causationId ?? envelope.id,
-						correlationId: envelopeInput.correlationId ?? envelope.correlationId
+						causedBy: envelopeInput.causedBy ?? envelope.id,
+						runId: envelopeInput.runId ?? envelope.runId
 					}),
 				queryContext: (selector) =>
 					input.persistence.listContextItems({
@@ -172,7 +172,7 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 					envelopeType: envelope.type,
 					fromActor: envelope.fromActor,
 					toActor: envelope.toActor,
-					correlationId: envelope.correlationId,
+					runId: envelope.runId,
 					error,
 					now,
 					logger: input.logger
@@ -194,7 +194,7 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 					envelopeType: envelope.type,
 					fromActor: envelope.fromActor,
 					toActor: envelope.toActor,
-					correlationId: envelope.correlationId,
+					runId: envelope.runId,
 					error,
 					now,
 					logger: input.logger
@@ -240,7 +240,7 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 					envelopeType: envelope.type,
 					fromActor: envelope.fromActor,
 					toActor: envelope.toActor,
-					correlationId: envelope.correlationId,
+					runId: envelope.runId,
 					error,
 					now,
 					logger: input.logger,
@@ -260,7 +260,7 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 				envelopeType: envelope.type,
 				fromActor: envelope.fromActor,
 				toActor: envelope.toActor,
-				correlationId: envelope.correlationId,
+				runId: envelope.runId,
 				eventCount: normalizedResult.commands.filter((command) => command.type === 'emit_event').length + 1,
 				outgoingCount: normalizedResult.commands.filter((command) => command.type !== 'emit_event').length,
 				contextAppendCount: normalizedResult.contextAppends.length
@@ -345,7 +345,7 @@ async function failClaimedEnvelope(input: {
 	envelopeType?: string
 	fromActor?: string
 	toActor?: string
-	correlationId?: string
+	runId?: string
 	error: unknown
 	now: Date
 	logger: CreateActorRuntimeInput['logger']
@@ -361,7 +361,7 @@ async function failClaimedEnvelope(input: {
 		envelopeType: input.envelopeType,
 		fromActor: input.fromActor,
 		toActor: input.toActor,
-		correlationId: input.correlationId,
+		runId: input.runId,
 		error: error.message,
 		kind: classifyError(error),
 		nonRetryable
@@ -441,24 +441,15 @@ function classifyError(error: Error): string {
 }
 
 function toIsoString(value: Date | string): string {
-	return value instanceof Date ? value.toISOString() : value
+    return value instanceof Date ? value.toISOString() : value
 }
 
-function buildTraceStreamEvents(actorId: string, trace: ActorDebugTrace): StreamEventInput[] {
-	const type = `actor.io.${trace.kind}`
-	const createdAt = trace.at
-	return [
-		'global',
-		`actor/${actorId}`
-	].map((scope) => ({
-		id: `${actorId}:${trace.kind}:${createdAt}:${scope}`,
-		scope,
+function buildTraceEvents(actorId: string, trace: ActorDebugTrace): EventInput[] {
+	return [{
+		type: `actor.io.${trace.kind}`,
+		visibility: 'debug',
 		actorId,
-		type,
-		payload: {
-			actorId,
-			trace
-		},
-		createdAt
-	}))
+		payload: { actorId, trace },
+		createdAt: trace.at
+	}]
 }

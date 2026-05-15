@@ -44,7 +44,8 @@ export interface BootstrapSkillsInput {
 export interface SkillSupervisorState {
 	skillId: string
 	workers: Record<string, {
-		workerId: string
+		workerActorId: string
+		workerName: string
 		status: 'active' | 'completed' | 'failed'
 		intentId?: string
 		callId?: string
@@ -52,8 +53,7 @@ export interface SkillSupervisorState {
 	}>
 	calls: Record<string, {
 		callId: string
-		rootCallId: string
-		workerId: string
+		workerActorId: string
 		status: 'active' | 'completed' | 'failed'
 		replyTo: string
 		intentId?: string
@@ -64,7 +64,8 @@ export interface SkillSupervisorState {
 export interface SkillWorkerBrain {
 	run(input: {
 		skill: SkillDefinition
-		workerId: string
+		workerActorId: string
+		workerName: string
 		actorState: unknown
 		envelope: EnvelopeRecord
 		signal?: AbortSignal

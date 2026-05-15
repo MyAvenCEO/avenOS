@@ -63,7 +63,6 @@ export interface IntentState {
 		string,
 		{
 			callId: string
-			rootCallId: string
 			skillId: string
 			request: string
 			createdAt: string
@@ -135,8 +134,8 @@ export interface IntentActionEnvelopeInput {
 		to: string
 		type: string
 		payload: unknown
-		correlationId?: string
-		causationId?: string
+		runId?: string
+		causedBy?: string
 		availableAt?: Date
 	}) => EnvelopeInput
 }

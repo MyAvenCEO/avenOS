@@ -1,9 +1,15 @@
 import type { ActorDecision, ActorHandler } from '@jaensen/actor-runtime'
-import { createSkillActorId, type ContextAppendInput, type EnvelopeInput } from '@jaensen/persistence-sqlite'
+import {
+	createSkillActorId,
+	parseSkillActorId,
+	type ContextAppendInput,
+	type EnvelopeInput
+} from '@jaensen/persistence-sqlite'
 
-import { inferCallId, inferIntentId, inferLocalCallId, inferRootCallId } from './call-id'
+import { inferCallId, inferIntentId, inferLocalCallId } from './call-id'
 import { parseSkillWorkerActorId } from './skill-id'
 import { SkillValidationError } from './errors'
+import { normalizeWorkerResult } from './normalize-worker-result'
 import type { CreateSkillWorkerHandlerInput } from './types'
 
 export function createSkillWorkerHandler(input: CreateSkillWorkerHandlerInput): ActorHandler {
@@ -20,13 +26,15 @@ export function createSkillWorkerHandler(input: CreateSkillWorkerHandlerInput): 
 			const actorState = shouldInitializeState(actor.state, initialState) ? initialState : actor.state
 			const activeCall = resolveActiveWorkerCall(actorState, envelope.payload)
 
-			const result = await input.brain.run({
+			const rawResult = await input.brain.run({
 				skill,
-				workerId: parsed.workerId,
+				workerActorId: actor.id,
+				workerName: parsed.workerName,
 				actorState,
 				envelope,
 				signal: context.signal
 			})
+			const result = normalizeWorkerResult(rawResult)
 
 			return {
 				nextState: withActiveWorkerCall(result.state, activeCall),
@@ -37,7 +45,6 @@ export function createSkillWorkerHandler(input: CreateSkillWorkerHandlerInput): 
 					skill,
 					actorId: actor.id,
 					skillId: parsed.skillId,
-					workerId: parsed.workerId,
 					envelope,
 						activeCall,
 					result,
@@ -53,8 +60,7 @@ function mapWorkerOutgoing(input: {
 	skill: { id: string; directActors: string[] }
 	actorId: string
 	skillId: string
-	workerId: string
-	envelope: { id: string; type: string; correlationId: string | null; payload: unknown }
+	envelope: { id: string; type: string; runId: string | null; payload: unknown }
 	activeCall?: ActiveWorkerCall
 	result: Awaited<ReturnType<CreateSkillWorkerHandlerInput['brain']['run']>>
 	makeEnvelope: (input: {
@@ -62,17 +68,16 @@ function mapWorkerOutgoing(input: {
 		to: string
 		type: string
 		payload: unknown
-		correlationId?: string
-		causationId?: string
+		runId?: string
+		causedBy?: string
 		availableAt?: Date
 	}) => EnvelopeInput
 }): EnvelopeInput[] {
 	const outgoing: EnvelopeInput[] = []
 	const actions = input.result.actions ?? []
 	const hasChildActions = actions.some((action) => action.type === 'call_skill')
-	const hasFinalResult = input.result.completed === true || input.result.result !== undefined
+	const hasFinalResult = input.result.completed
 	const continuationCallId = input.activeCall?.callId
-	const rootCallId = input.activeCall?.rootCallId
 
 	if (hasChildActions && hasFinalResult) {
 		throw new SkillValidationError(
@@ -90,8 +95,8 @@ function mapWorkerOutgoing(input: {
 			from: input.actorId,
 			to: action.to,
 			type: 'skill.request',
-			correlationId: input.envelope.correlationId ?? undefined,
-			causationId: input.envelope.id,
+			runId: input.envelope.runId ?? undefined,
+			causedBy: input.envelope.id,
 			payload: {
 				callId: action.callId,
 				request: action.request,
@@ -101,7 +106,6 @@ function mapWorkerOutgoing(input: {
 				attachmentScopeId: readStringField(input.envelope.payload, 'attachmentScopeId'),
 				attachments: readArrayField(input.envelope.payload, 'attachments'),
 				parentCallId: continuationCallId,
-				rootCallId: rootCallId ?? continuationCallId ?? action.callId
 			}
 		}))
 	}
@@ -119,16 +123,16 @@ function mapWorkerOutgoing(input: {
 			from: input.actorId,
 			to: createSkillActorId(input.skillId),
 			type: 'skill.worker.result',
-			correlationId: input.envelope.correlationId ?? undefined,
-			causationId: input.envelope.id,
+			runId: input.envelope.runId ?? undefined,
+			causedBy: input.envelope.id,
 			payload: {
-				workerId: input.workerId,
+				workerActorId: input.actorId,
+				workerName: parseSkillWorkerActorId(input.actorId)?.workerName,
 				intentId: input.activeCall?.intentId,
 				callId: continuationCallId,
 				...optionalParentCallId(input.activeCall?.parentCallId),
-				rootCallId: rootCallId ?? continuationCallId,
 				result: input.result.result,
-				completed: input.result.completed ?? false
+				completed: input.result.completed
 			}
 		}))
 		return outgoing
@@ -148,22 +152,20 @@ function buildDefaultWorkerContextAppends(input: {
 	result: Awaited<ReturnType<CreateSkillWorkerHandlerInput['brain']['run']>>
 }): ContextAppendInput[] {
 	const callId = input.activeCall?.callId
-	const rootCallId = input.activeCall?.rootCallId
-	if (!callId || !rootCallId || input.result.result === undefined || input.result.result === null) {
+	if (!callId || input.result.result === undefined || input.result.result === null) {
 		return []
 	}
 	if (typeof input.result.result === 'string' && input.result.result.length > 1000) {
 		return []
 	}
 	return [{
-		scope: { type: 'call', callId, parentCallId: input.activeCall?.parentCallId, rootCallId },
 		kind: 'fact',
+		visibility: 'worklog',
+		intentId: input.activeCall?.intentId,
+		callId,
 		key: 'skill.result',
-		schema: 'skill.result.v1',
-		tags: ['extracted'],
 		body: input.result.result,
-		summary: typeof input.result.result === 'string' ? input.result.result.slice(0, 240) : 'Skill result',
-		sourceContextItemIds: []
+		summary: typeof input.result.result === 'string' ? input.result.result.slice(0, 240) : 'Skill result'
 	}]
 }
 
@@ -171,8 +173,8 @@ function validateWorkerDirectSkillCall(
 	skill: { id: string; directActors: string[] },
 	action: { to: string; callId: string; request: string }
 ): void {
-	if (!action.to.startsWith('skills/')) {
-		throw new SkillValidationError('Worker direct skill calls must target skills/<skillId> actors')
+	if (!parseSkillActorId(action.to)) {
+		throw new SkillValidationError('Worker direct skill calls must target canonical skill actors')
 	}
 	if (!action.callId) {
 		throw new SkillValidationError('Worker direct skill calls require a non-empty callId')
@@ -228,20 +230,17 @@ function shouldInitializeState(currentState: unknown, initialState: unknown): bo
 type ActiveWorkerCall = {
 	callId: string
 	parentCallId?: string
-	rootCallId: string
 	intentId?: string
 }
 
 function activeWorkerCall(state: Record<string, unknown>): ActiveWorkerCall | undefined {
 	const callId = typeof state.callId === 'string' && state.callId.length > 0 ? state.callId : undefined
-	const rootCallId = typeof state.rootCallId === 'string' && state.rootCallId.length > 0 ? state.rootCallId : undefined
-	if (!callId || !rootCallId) {
+	if (!callId) {
 		return undefined
 	}
 	return {
 		callId,
 		parentCallId: typeof state.parentCallId === 'string' && state.parentCallId.length > 0 ? state.parentCallId : undefined,
-		rootCallId,
 		intentId: typeof state.intentId === 'string' && state.intentId.length > 0 ? state.intentId : undefined
 	}
 }
@@ -252,14 +251,12 @@ function resolveActiveWorkerCall(state: unknown, payload: unknown): ActiveWorker
 		return persisted
 	}
 	const callId = inferLocalCallId(payload)
-	const rootCallId = inferRootCallId(payload) ?? callId
-	if (!callId || !rootCallId) {
+	if (!callId) {
 		return undefined
 	}
 	return {
 		callId,
 		parentCallId: readStringField(payload, 'parentCallId'),
-		rootCallId,
 		intentId: inferIntentId(payload)
 	}
 }
@@ -273,7 +270,6 @@ function withActiveWorkerCall(state: unknown, call: ActiveWorkerCall | undefined
 		...record,
 		callId: call.callId,
 		parentCallId: call.parentCallId,
-		rootCallId: call.rootCallId,
 		intentId: call.intentId
 	}
 }

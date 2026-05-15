@@ -1,25 +1,24 @@
 <script lang="ts">
 import { tick } from 'svelte'
-import IntentActorColumn from '$lib/intent-mock/IntentActorColumn.svelte'
-import IntentCenterPanel from '$lib/intent-mock/IntentCenterPanel.svelte'
-import IntentLeftNav from '$lib/intent-mock/IntentLeftNav.svelte'
-import IntentRightRail from '$lib/intent-mock/IntentRightRail.svelte'
-import SelectedActorDetails from '$lib/intent-mock/SelectedActorDetails.svelte'
-import {
-	contextTabsForTier,
-	firstTabForTier,
-	isTabAllowedForTier
-} from '$lib/intent-mock/actor-context-tabs'
-import type { ActorTier } from '$lib/intent-mock/boring-avatar'
-import { actorSelectionRowForId, type InvolvedActorId } from '$lib/intent-mock/involved-actors-display'
-import type { ActorContextTab } from '$lib/intent-mock/types'
-import { IntentStore } from '$lib/jaensen/intent-store.svelte'
+import ActorDetailsPanel from '$lib/jaensen/ActorDetailsPanel.svelte'
+import DetailTabsRail from '$lib/jaensen/DetailTabsRail.svelte'
+import ActorTreeColumn from '$lib/jaensen/ActorTreeColumn.svelte'
+import IntentListColumn from '$lib/jaensen/IntentListColumn.svelte'
+import { MeStore, intentActorId, selectionKey } from '$lib/jaensen/me-store.svelte'
+import type { ActorDetailTab } from '$lib/jaensen/types'
 import { workspaceOrchestratorClass } from '$lib/workspace/layout'
 
 const COMPOSER_MAX_LINES = 4
 
-let contextTab = $state<ActorContextTab>('overview')
-let selectedActorId = $state<InvolvedActorId>('intent/unset')
+const TABS: Array<{ id: ActorDetailTab; label: string }> = [
+	{ id: 'log', label: 'Log' },
+	{ id: 'messages', label: 'Messages' },
+	{ id: 'context', label: 'Context' },
+	{ id: 'state', label: 'State' },
+	{ id: 'config', label: 'Config' },
+	{ id: 'debug', label: 'Debug' }
+]
+
 let newTitle = $state('')
 let busy = $state(false)
 let dragActive = $state(false)
@@ -27,28 +26,15 @@ let pendingFile = $state<File | null>(null)
 let fileInput: HTMLInputElement | null = null
 let composerEl: HTMLTextAreaElement | null = null
 
-const store = new IntentStore()
+const store = new MeStore()
 
-const intents = $derived.by(() => store.intentList())
-const selectedIntent = $derived.by(() => store.selectedIntent())
+const intents = $derived(store.intents)
+const selectedIntent = $derived(store.selectedIntent)
 const error = $derived(store.error)
 
-const selectedActorTier = $derived.by(() => {
-	return (selectedIntent && actorSelectionRowForId(selectedIntent, selectedActorId)?.tier) ?? ('worker' as ActorTier)
-})
-
-const contextTabs = $derived.by(() => contextTabsForTier(selectedActorTier))
-
 $effect(() => {
-	void selectedIntent?.id
-	selectedActorId = selectedIntent ? `intent/${selectedIntent.id}` : 'intent/unset'
-	contextTab = 'overview'
-})
-
-$effect(() => {
-	if (!isTabAllowedForTier(contextTab, selectedActorTier)) {
-		contextTab = firstTabForTier(selectedActorTier)
-	}
+	void store.init()
+	return undefined
 })
 
 function resizeComposer() {
@@ -78,13 +64,8 @@ function captureUiError(context: string, err: unknown) {
 	store.error = err instanceof Error ? (err.stack ?? err.message) : String(err)
 }
 
-$effect(() => {
-	void store.init()
-	return undefined
-})
-
 function selectIntent(id: string) {
-	store.selectIntent(id)
+	void store.selectIntent(id)
 }
 
 function handleRemove(id: string) {
@@ -148,35 +129,6 @@ async function fileToAttachment(
 	}
 }
 
-function handleResolveHitl(
-	todoId: string,
-	payload:
-		| { kind: 'text_reply'; text: string }
-		| { kind: 'choice'; optionId: string }
-		| { kind: 'approve_reject'; approved: boolean }
-) {
-	const intent = selectedIntent
-	if (!intent) return
-	busy = true
-	store.error = null
-	void (async () => {
-		try {
-			let message = ''
-			if (payload.kind === 'text_reply') message = payload.text.trim()
-			else if (payload.kind === 'choice') message = `Choice selected: ${payload.optionId}`
-			else message = payload.approved ? 'Approved.' : 'Rejected.'
-			if (!message) throw new Error('Response cannot be empty')
-			await store.sendMessage(message, {
-				intentIdHint: intent.id,
-				resolvedQuestionId: todoId
-			})
-		} catch (err) {
-			captureUiError('handleResolveHitl failed', err)
-		} finally {
-			busy = false
-		}
-	})()
-}
 </script>
 
 <svelte:head>
@@ -198,7 +150,7 @@ function handleResolveHitl(
 			class="grid grid-cols-1 min-h-0 flex-1 gap-3 sm:gap-4 xl:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_auto_minmax(0,7.75rem)] xl:gap-3 xl:items-stretch pt-1 pb-1"
 		>
 			<div class="min-w-0 min-h-0 flex flex-col xl:max-w-[15rem]">
-				<IntentLeftNav
+				<IntentListColumn
 					{intents}
 					selectedId={store.selectedIntentId}
 					onSelect={selectIntent}
@@ -206,32 +158,41 @@ function handleResolveHitl(
 				/>
 			</div>
 			<div class="flex h-full min-h-0 min-w-0 flex-col">
-				<IntentCenterPanel
-					intent={selectedIntent}
-					panel={contextTab}
-					selectedActorId={selectedActorId}
-					onResolveHitl={handleResolveHitl}
-				/>
+				<section class="min-h-0 flex-1 overflow-auto rounded-xl border border-border/40 bg-background/45 p-4">
+					{#if selectedIntent}
+						<h2 class="text-lg font-semibold tracking-tight">{selectedIntent.title ?? 'Untitled intent'}</h2>
+						<p class="mt-1 text-sm opacity-65">{selectedIntent.summary ?? 'No summary available.'}</p>
+						<div class="mt-3 text-[11px] opacity-55">Intent: {selectedIntent.id} · Actor: {store.selectedActorId}</div>
+						<div class="mt-4 min-h-0 flex-1">
+							<ActorDetailsPanel
+								tab={store.selectedTab}
+								events={store.selectedIntentId && store.selectedActorId ? store.eventsBySelection[selectionKey(store.selectedIntentId, store.selectedActorId, store.selectedTab)] ?? [] : []}
+								envelopes={store.selectedIntentId && store.selectedActorId ? store.envelopesBySelection[selectionKey(store.selectedIntentId, store.selectedActorId, store.selectedTab)] ?? [] : []}
+								contextItems={store.selectedIntentId && store.selectedActorId ? store.contextBySelection[selectionKey(store.selectedIntentId, store.selectedActorId, store.selectedTab)] ?? [] : []}
+								actorDetail={store.selectedActorId ? store.actorDetails[store.selectedActorId] ?? null : null}
+							/>
+						</div>
+					{:else}
+						<div class="opacity-45">No intent selected.</div>
+					{/if}
+				</section>
 			</div>
 			{#if selectedIntent}
 				<div class="flex min-h-0 w-fit min-w-0 shrink-0 flex-col self-stretch justify-start">
-					<IntentRightRail
-						tabs={contextTabs}
-						tab={contextTab}
-						onTab={(t) => (contextTab = t)}
+					<DetailTabsRail
+						tabs={TABS}
+						tab={store.selectedTab}
+						onTab={(t) => void store.selectTab(t)}
 					/>
 				</div>
 				<div class="min-h-0 max-w-31 shrink-0 xl:w-full">
 					<div class="flex h-full min-h-0 flex-col gap-3">
-						<div class="min-h-0 shrink-0">
-							<IntentActorColumn
-								intent={selectedIntent}
-								selectedActorId={selectedActorId}
-								onSelectActor={(id) => (selectedActorId = id)}
+						<div class="min-h-0 flex-1">
+							<ActorTreeColumn
+								actors={store.selectedActors}
+								selectedActorId={store.selectedActorId ?? intentActorId(selectedIntent.id)}
+								onSelectActor={(id) => void store.selectActor(id)}
 							/>
-						</div>
-						<div class="min-h-0 flex-1 border-l border-border/50 pl-2">
-							<SelectedActorDetails intent={selectedIntent} {selectedActorId} />
 						</div>
 					</div>
 				</div>

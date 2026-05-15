@@ -5,22 +5,20 @@
 	let { event }: { event: ActorLogRecord } = $props()
 
 	const payload = $derived(payloadRecord(event.payload))
-	const scope = $derived(payloadRecord(payload.scope))
 	const kind = $derived(readString(payload.kind) ?? 'unknown')
 	const key = $derived(readString(payload.key) ?? 'unknown')
 	const summary = $derived(readString(payload.summary))
 	const actorId = $derived(readString(payload.actorId))
 	const callId = $derived(readString(payload.callId))
-	const rootCallId = $derived(readString(payload.rootCallId))
+	const visibility = $derived(readString(payload.visibility) ?? 'worklog')
 </script>
 
 <div class="space-y-1 text-sm">
 	<div class="font-medium">Context appended: {kind}/{key}</div>
 	<div class="text-xs opacity-75">
-		seq {payload.seq} · scope {scope.type}
+		seq {payload.seq} · {visibility}
 		{#if actorId} · actor {actorId}{/if}
 		{#if callId} · call {callId}{/if}
-		{#if rootCallId} · root {rootCallId}{/if}
 	</div>
 	{#if summary}
 		<div class="text-xs opacity-85">{summary}</div>

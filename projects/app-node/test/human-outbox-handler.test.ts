@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import type { ActorRecord, EnvelopeRecord } from '@jaensen/persistence-sqlite'
+import { HUMAN_ACTOR_ID, createIntentActorId, type ActorRecord, type EnvelopeRecord } from '@jaensen/persistence-sqlite'
 
 import { createHumanOutboxHandler, initialHumanOutboxState } from '../src/index'
 
@@ -48,7 +48,7 @@ test('human outbox appends human.question payloads', async () => {
 
 function makeActor(state: unknown): ActorRecord {
 	return {
-		id: 'human',
+		id: HUMAN_ACTOR_ID,
 		kind: 'human-outbox',
 		status: 'active',
 		state,
@@ -61,11 +61,11 @@ function makeActor(state: unknown): ActorRecord {
 function makeEnvelope(type: string, payload: unknown): EnvelopeRecord {
 	return {
 		id: 'env-1',
-		fromActor: 'intents/intent-1',
-		toActor: 'human',
+		fromActor: createIntentActorId('intent-1'),
+		toActor: HUMAN_ACTOR_ID,
 		type,
-		correlationId: 'corr-1',
-		causationId: null,
+		runId: 'corr-1',
+		causedBy: null,
 		payload,
 		status: 'queued',
 		availableAt: '2026-05-12T00:00:00.000Z',

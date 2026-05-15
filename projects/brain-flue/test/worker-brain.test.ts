@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import { expect, test } from 'bun:test'
-import type { EnvelopeRecord } from '@jaensen/persistence-sqlite'
+import {
+	createSkillActorId,
+	createWorkerActorId,
+	type EnvelopeRecord
+} from '@jaensen/persistence-sqlite'
 import type { SkillDefinition } from '@jaensen/skills'
 
 import { createFlueSkillWorkerBrain } from '../src/index'
@@ -18,6 +22,9 @@ const baseSkill: SkillDefinition = {
 	bodyHash: 'hash-memory',
 	loadedAt: '2026-05-12T00:00:00.000Z'
 }
+
+const MEMORY_ACTOR_ID = createSkillActorId('memory')
+const MEMORY_WORKER_ACTOR_ID = createWorkerActorId('memory', 'topic-jaensen-architecture')
 
 test('durable worker uses stable worker session', async () => {
 	const calls: string[] = []
@@ -43,12 +50,13 @@ test('durable worker uses stable worker session', async () => {
 
 	const result = await brain.run({
 		skill: { ...baseSkill, frontmatter: { ...baseSkill.frontmatter, worker_policy: 'durable' } },
-		workerId: 'topic-jaensen-architecture',
+		workerActorId: MEMORY_WORKER_ACTOR_ID,
+		workerName: 'topic-jaensen-architecture',
 		actorState: {},
 		envelope: makeEnvelopeRecord()
 	})
 
-	expect(calls).toEqual(['actor/skills/memory/topic-jaensen-architecture'])
+	expect(calls).toEqual([`actor/${MEMORY_WORKER_ACTOR_ID}`])
 	expect(result).toMatchObject({ state: { persisted: true }, result: { ok: true }, completed: true })
 })
 
@@ -77,13 +85,14 @@ test('ephemeral worker uses task()', async () => {
 
 	const result = await brain.run({
 		skill: { ...baseSkill, frontmatter: { ...baseSkill.frontmatter, worker_policy: 'ephemeral' } },
-		workerId: 'topic-jaensen-architecture',
+		workerActorId: MEMORY_WORKER_ACTOR_ID,
+		workerName: 'topic-jaensen-architecture',
 		actorState: {},
 		envelope: makeEnvelopeRecord()
 	})
 
 	expect(calls).toEqual([
-		{ type: 'session', value: 'actor/skills/memory' },
+		{ type: 'session', value: `actor/${MEMORY_ACTOR_ID}` },
 		{ type: 'task', value: 'called' }
 	])
 	expect(result).toMatchObject({ state: { temp: true }, result: { ok: true }, completed: true })
@@ -112,7 +121,8 @@ test('worker accepts flue responses wrapped in data', async () => {
 	await expect(
 		brain.run({
 			skill: { ...baseSkill, frontmatter: { ...baseSkill.frontmatter, worker_policy: 'durable' } },
-			workerId: 'topic-jaensen-architecture',
+			workerActorId: MEMORY_WORKER_ACTOR_ID,
+			workerName: 'topic-jaensen-architecture',
 			actorState: {},
 			envelope: makeEnvelopeRecord()
 		})
@@ -160,7 +170,8 @@ test('ephemeral worker smoke task can create sandbox file and return ok', async 
 	await expect(
 		brain.run({
 			skill: { ...baseSkill, id: 'smoke', frontmatter: { ...baseSkill.frontmatter, worker_policy: 'ephemeral' } },
-			workerId: 'call-1',
+			workerActorId: createWorkerActorId('smoke', 'call-1'),
+			workerName: 'call-1',
 			actorState: {},
 			envelope: makeEnvelopeRecord()
 		})
@@ -217,7 +228,8 @@ test('shell-enabled worker can write, read, and execute shell via tool loop', as
 				resources: { shell: true, fs: ['data'] }
 			}
 		},
-		workerId: 'worker-1',
+		workerActorId: createWorkerActorId('file-worker', 'worker-1'),
+		workerName: 'worker-1',
 		actorState: {},
 		envelope: makeEnvelopeRecord()
 	})
@@ -261,7 +273,8 @@ test('shell-disabled worker cannot execute shell tool', async () => {
 				resources: { shell: false, fs: ['data'] }
 			}
 		},
-		workerId: 'worker-1',
+		workerActorId: createWorkerActorId('no-shell', 'worker-1'),
+		workerName: 'worker-1',
 		actorState: {},
 		envelope: makeEnvelopeRecord()
 	})).rejects.toThrow(/Worker tool loop exceeded the maximum number of tool steps|Shell tool is not available/i)
@@ -301,7 +314,8 @@ test('worker fs tools reject paths outside allowed roots', async () => {
 				resources: { shell: true, fs: ['data'] }
 			}
 		},
-		workerId: 'worker-1',
+		workerActorId: createWorkerActorId('fs-guard', 'worker-1'),
+		workerName: 'worker-1',
 		actorState: {},
 		envelope: makeEnvelopeRecord()
 	})).rejects.toThrow(/Worker tool loop exceeded the maximum number of tool steps|outside allowed fs roots/i)
@@ -346,7 +360,8 @@ test('worker fs root dot resolves against workspace root', async () => {
 				resources: { shell: true, fs: ['.'] }
 			}
 		},
-		workerId: 'worker-1',
+		workerActorId: createWorkerActorId('file-creator', 'worker-1'),
+		workerName: 'worker-1',
 		actorState: {},
 		envelope: makeEnvelopeRecord()
 	})).resolves.toMatchObject({ state: { done: true }, result: { ok: true }, completed: true })
@@ -367,12 +382,12 @@ test('tool loop corrects invalid tool protocol and accepts later call_skill acti
 						prompts.push(text)
 						step += 1
 						if (step === 1) {
-							return { tool: 'call_skill', args: { to: 'skills/memory' } }
+						return { tool: 'call_skill', args: { to: MEMORY_ACTOR_ID } }
 						}
 						return {
 							state: { waiting: true },
 							actions: [
-								{ type: 'call_skill', to: 'skills/memory', callId: 'call-1', request: 'Remember', payload: { ok: true } }
+							{ type: 'call_skill', to: MEMORY_ACTOR_ID, callId: 'call-1', request: 'Remember', payload: { ok: true } }
 							],
 							completed: false
 						}
@@ -395,19 +410,20 @@ test('tool loop corrects invalid tool protocol and accepts later call_skill acti
 			...baseSkill,
 			id: 'file-analyzer',
 			path: 'file-analyzer/SKILL.md',
-			directActors: ['skills/memory'],
+			directActors: [MEMORY_ACTOR_ID],
 			frontmatter: {
 				...baseSkill.frontmatter,
 				worker_policy: 'durable',
 				resources: { shell: false, fs: ['.'] }
 			}
 		},
-		workerId: 'worker-1',
+		workerActorId: createWorkerActorId('file-analyzer', 'worker-1'),
+		workerName: 'worker-1',
 		actorState: {},
 		envelope: makeEnvelopeRecord()
 	})).resolves.toMatchObject({
 		state: { waiting: true },
-		actions: [expect.objectContaining({ type: 'call_skill', to: 'skills/memory' })],
+		actions: [expect.objectContaining({ type: 'call_skill', to: MEMORY_ACTOR_ID })],
 		completed: false
 	})
 
@@ -423,7 +439,7 @@ test('worker tool call to call_skill creates deferred actor action', async () =>
 						return {
 							tool: 'call_skill',
 							args: {
-								to: 'skills/memory',
+								to: MEMORY_ACTOR_ID,
 								callId: 'call-1',
 								request: 'Remember',
 								payload: { text: 'hello' }
@@ -443,13 +459,14 @@ test('worker tool call to call_skill creates deferred actor action', async () =>
 	})
 
 	await expect(brain.run({
-		skill: { ...baseSkill, directActors: ['skills/memory'], frontmatter: { ...baseSkill.frontmatter, worker_policy: 'durable' } },
-		workerId: 'topic-call-skill',
+		skill: { ...baseSkill, directActors: [MEMORY_ACTOR_ID], frontmatter: { ...baseSkill.frontmatter, worker_policy: 'durable' } },
+		workerActorId: createWorkerActorId('memory', 'topic-call-skill'),
+		workerName: 'topic-call-skill',
 		actorState: { existing: true },
 		envelope: makeEnvelopeRecord()
 	})).resolves.toMatchObject({
 		state: { existing: true },
-		actions: [{ type: 'call_skill', to: 'skills/memory', callId: 'call-1', request: 'Remember', payload: { text: 'hello' } }],
+		actions: [{ type: 'call_skill', to: MEMORY_ACTOR_ID, callId: 'call-1', request: 'Remember', payload: { text: 'hello' } }],
 		completed: false
 	})
 })
@@ -476,7 +493,8 @@ test('finish tool creates completed worker result with content', async () => {
 
 	await expect(brain.run({
 		skill: { ...baseSkill, frontmatter: { ...baseSkill.frontmatter, worker_policy: 'durable' } },
-		workerId: 'topic-finish',
+		workerActorId: createWorkerActorId('memory', 'topic-finish'),
+		workerName: 'topic-finish',
 		actorState: { persisted: true },
 		envelope: makeEnvelopeRecord()
 	})).resolves.toMatchObject({
@@ -515,7 +533,8 @@ test('unsupported tools produce a corrective model-visible error without repeate
 
 	await expect(brain.run({
 		skill: { ...baseSkill, frontmatter: { ...baseSkill.frontmatter, worker_policy: 'durable' } },
-		workerId: 'topic-unsupported-tool',
+		workerActorId: createWorkerActorId('memory', 'topic-unsupported-tool'),
+		workerName: 'topic-unsupported-tool',
 		actorState: {},
 		envelope: makeEnvelopeRecord()
 	})).resolves.toMatchObject({ completed: true, result: { ok: true } })
@@ -556,7 +575,8 @@ test('durable worker retries after a JSON parse failure from the model transport
 	await expect(
 		brain.run({
 			skill: { ...baseSkill, frontmatter: { ...baseSkill.frontmatter, worker_policy: 'durable' } },
-			workerId: 'topic-repair-json',
+			workerActorId: createWorkerActorId('memory', 'topic-repair-json'),
+			workerName: 'topic-repair-json',
 			actorState: {},
 			envelope: makeEnvelopeRecord()
 		})
@@ -570,11 +590,11 @@ test('durable worker retries after a JSON parse failure from the model transport
 function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRecord {
 	return {
 		id: 'env-1',
-		fromActor: 'skills/memory',
-		toActor: 'skills/memory/topic-jaensen-architecture',
+		fromActor: MEMORY_ACTOR_ID,
+		toActor: MEMORY_WORKER_ACTOR_ID,
 		type: 'memory.remember',
-		correlationId: 'corr-1',
-		causationId: null,
+		runId: 'corr-1',
+		causedBy: null,
 		payload: {},
 		status: 'queued',
 		availableAt: '2026-05-12T00:00:00.000Z',

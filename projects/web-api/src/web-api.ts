@@ -5,15 +5,24 @@ import {
 	type CreateAppNodeInput
 } from '@jaensen/app-node'
 import type { UserAttachment } from '@jaensen/conversation-actors'
+import {
+	HUMAN_ACTOR_ID,
+	createIntentActorId,
+	parseActorId,
+	parseSkillActorId,
+	parseSkillWorkerActorId
+} from '@jaensen/persistence-sqlite'
 import type {
 	ActorHierarchyRecord,
 	ActorLogRecord,
+	ActorRecord,
 	CommunicationTreeRecord,
 	CommunicationTreeSummary,
 	ContextItemRecord,
-	ContextScope,
-	ContextSelector,
-	StreamEventRecord
+	ContextQuery,
+	EventRecord,
+	EventVisibility,
+	SkillRecord
 } from '@jaensen/persistence-sqlite'
 
 import {
@@ -45,9 +54,17 @@ type IntentRecord = {
 }
 
 type SqliteQueryable = ReturnType<typeof asSqlitePersistence> & {
+	db: {
+		query(sql: string): {
+			get(...params: Array<string | number | null>): unknown
+			all(...params: Array<string | number | null>): unknown[]
+		}
+	}
 	listIntents(): Promise<IntentRecord[]>
 	getIntent(intentId: string): Promise<IntentRecord | null>
-	listStreamEvents(input: { scope: string; after?: number; limit?: number }): Promise<StreamEventRecord[]>
+	listEvents(input: { after?: number; limit?: number; visibility?: EventVisibility | EventVisibility[]; runId?: string; intentId?: string; actorId?: string; callId?: string }): Promise<EventRecord[]>
+	listSkills(): Promise<SkillRecord[]>
+	getActor(id: string): Promise<ActorRecord | null>
 	listActorHierarchy(input: { rootActorId: string; observed?: boolean; includeRoot?: boolean }): Promise<ActorHierarchyRecord[]>
 	listStructuralActorChildren(input: { parentActorId?: string | null }): Promise<Array<ActorHierarchyRecord & { directChildCount: number }>>
 	listCommunicationActorChildren(input: { actorId?: string | null }): Promise<Array<ActorHierarchyRecord & { directChildCount: number; messageCount: number }>>
@@ -58,14 +75,14 @@ type SqliteQueryable = ReturnType<typeof asSqlitePersistence> & {
 		limit?: number
 	}): Promise<ActorLogRecord[]>
 	listCommunicationTree(input: {
-		correlationId?: string
+		runId?: string
 		intentId?: string
 		rootEnvelopeId?: string
 		view?: 'chat' | 'deep-dive'
 	}): Promise<CommunicationTreeRecord[]>
-	listContextItems(input: { selector: ContextSelector; snapshotSeq?: number }): Promise<ContextItemRecord[]>
+	listContextItems(input: { selector: ContextQuery; snapshotSeq?: number }): Promise<ContextItemRecord[]>
 	summarizeCommunicationTree(input: {
-		correlationId?: string
+		runId?: string
 		intentId?: string
 		rootEnvelopeId?: string
 		view?: 'chat' | 'deep-dive'
@@ -81,6 +98,93 @@ type CommunicationTreeNodeRecord = CommunicationTreeRecord & {
 }
 
 type RuntimeActorEvent = { type: string } & Record<string, unknown>
+
+type IntentActorKind = 'intent' | 'skill' | 'worker' | 'system' | 'human' | 'group' | 'unknown'
+
+type IntentActorNode = {
+	actorId: string
+	uiParentActorId: string | null
+	pathParentActorId: string | null
+	kind: IntentActorKind
+	label: string
+	subtitle?: string
+	isAggregateRoot: boolean
+	isVirtual: boolean
+	status?: 'active' | 'idle' | 'completed' | 'failed'
+	eventCount: number
+	envelopeCount: number
+	contextCount: number
+	firstSeenAt: string | null
+	lastSeenAt: string | null
+}
+
+type EnvelopeDto = {
+	id: string
+	fromActor: string
+	toActor: string
+	type: string
+	runId: string
+	causedBy: string | null
+	status: string
+	payload: unknown
+	createdAt: string
+	updatedAt: string
+}
+
+type ActorDetailDto = {
+	actorId: string
+	kind: string
+	status: string | null
+	state: unknown
+	version: number | null
+	createdAt: string | null
+	updatedAt: string | null
+	config?: unknown
+}
+
+type EventAggregateRow = {
+	actor_id: string
+	event_count: number
+	first_seen_at: string | null
+	last_seen_at: string | null
+}
+
+type ContextAggregateRow = {
+	actor_id: string
+	context_count: number
+	first_seen_at: string | null
+	last_seen_at: string | null
+}
+
+type EnvelopeAggregateRow = {
+	actor_id: string
+	envelope_count: number
+	first_seen_at: string | null
+	last_seen_at: string | null
+}
+
+type EnvelopeRow = {
+	id: string
+	from_actor: string
+	to_actor: string
+	type: string
+	run_id: string
+	caused_by: string | null
+	status: string
+	payload_json: string
+	created_at: string
+	updated_at: string
+}
+
+type ActorRow = {
+	id: string
+	kind: string
+	status: string
+	state_json: string
+	version: number
+	created_at: string
+	updated_at: string
+}
 
 export interface CreateWebApiInput extends CreateAppNodeInput {
 	port?: number
@@ -220,20 +324,59 @@ async function routeRequest(input: {
 		return intent ? jsonResponse(mapIntentRecord(intent)) : notFound(`Intent ${intentId} not found`)
 	}
 
+	if (input.request.method === 'GET' && /^\/api\/intents\/[^/]+\/actors$/.test(path)) {
+		const intentId = decodeURIComponent(path.split('/')[3] ?? '')
+		return jsonResponse({ actors: await listIntentActors(input.persistence, intentId) })
+	}
+
+	if (input.request.method === 'GET' && /^\/api\/intents\/[^/]+\/activity$/.test(path)) {
+		const intentId = decodeURIComponent(path.split('/')[3] ?? '')
+		const actorId = url.searchParams.get('actorId')?.trim() || undefined
+		const after = parseAfter(url.searchParams.get('after'))
+		const limit = parseLimit(url.searchParams.get('limit'))
+		const visibility = parseVisibility(url.searchParams.get('visibility'))
+		const intentActorId = createIntentActorId(intentId)
+		const events = await input.persistence.listEvents({
+			after,
+			limit,
+			visibility,
+			intentId,
+			actorId: actorId && actorId !== intentActorId ? actorId : undefined
+		})
+		return jsonResponse({ events })
+	}
+
+	if (input.request.method === 'GET' && /^\/api\/intents\/[^/]+\/envelopes$/.test(path)) {
+		const intentId = decodeURIComponent(path.split('/')[3] ?? '')
+		const actorId = url.searchParams.get('actorId')?.trim() || undefined
+		const after = url.searchParams.get('after')?.trim() || undefined
+		const limit = parseLimit(url.searchParams.get('limit'))
+		return jsonResponse({
+			envelopes: await listIntentEnvelopes(input.persistence, {
+				intentId,
+				actorId,
+				after,
+				limit
+			})
+		})
+	}
+
 	if (input.request.method === 'GET' && /^\/api\/intents\/[^/]+\/events$/.test(path)) {
 		const intentId = decodeURIComponent(path.split('/')[3] ?? '')
 		const after = parseAfter(url.searchParams.get('after'))
-		const events = await input.persistence.listStreamEvents({ scope: `intents/${intentId}`, after })
+		const events = await input.persistence.listEvents({ intentId, after, limit: 200 })
 		return jsonResponse({ events })
 	}
 
 	if (input.request.method === 'GET' && path === '/api/events') {
-		const scope = url.searchParams.get('scope')
-		if (!scope) {
-			return badRequest('Missing scope')
-		}
 		const after = parseAfter(url.searchParams.get('after'))
-		const events = await input.persistence.listStreamEvents({ scope, after })
+		const limit = parseLimit(url.searchParams.get('limit'))
+		const visibility = parseVisibility(url.searchParams.get('visibility'))
+		const runId = url.searchParams.get('runId')?.trim() || undefined
+		const intentId = url.searchParams.get('intentId')?.trim() || undefined
+		const actorId = url.searchParams.get('actorId')?.trim() || undefined
+		const callId = url.searchParams.get('callId')?.trim() || undefined
+		const events = await input.persistence.listEvents({ after, limit, visibility, runId, intentId, actorId, callId })
 		return jsonResponse({ events })
 	}
 
@@ -286,15 +429,20 @@ async function routeRequest(input: {
 		return jsonResponse({ events })
 	}
 
+	if (input.request.method === 'GET' && /^\/api\/actors\/.+$/.test(path)) {
+		const actorId = decodeURIComponent(path.slice('/api/actors/'.length))
+		return jsonResponse(await getActorDetail(input.persistence, actorId))
+	}
+
 	if (input.request.method === 'GET' && path === '/api/communication/tree') {
 		const view = url.searchParams.get('view') === 'chat' ? 'chat' : 'deep-dive'
-		const correlationId = url.searchParams.get('correlationId')?.trim() || undefined
+		const runId = url.searchParams.get('runId')?.trim() || undefined
 		const intentId = url.searchParams.get('intentId')?.trim() || undefined
 		const rootEnvelopeId = url.searchParams.get('rootEnvelopeId')?.trim() || undefined
 		const nodeId = url.searchParams.get('nodeId')?.trim() || undefined
-		if (!correlationId && !intentId && !rootEnvelopeId) return badRequest('Missing correlationId, intentId, or rootEnvelopeId')
-		const tree = await input.persistence.listCommunicationTree({ correlationId, intentId, rootEnvelopeId, view })
-		const summary = await input.persistence.summarizeCommunicationTree({ correlationId, intentId, rootEnvelopeId, view })
+		if (!runId && !intentId && !rootEnvelopeId) return badRequest('Missing runId, intentId, or rootEnvelopeId')
+		const tree = await input.persistence.listCommunicationTree({ runId, intentId, rootEnvelopeId, view })
+		const summary = await input.persistence.summarizeCommunicationTree({ runId, intentId, rootEnvelopeId, view })
 		const childCounts = new Map<string, number>()
 		for (const node of tree) {
 			if (!node.parentNodeId) continue
@@ -309,11 +457,6 @@ async function routeRequest(input: {
 	}
 
 	if (input.request.method === 'GET' && path === '/api/events/stream') {
-		const scope = url.searchParams.get('scope')
-		if (!scope) {
-			return badRequest('Missing scope')
-		}
-
 		const after = maxAfter(
 			parseAfter(url.searchParams.get('after')),
 			parseAfter(input.request.headers.get('last-event-id'))
@@ -321,7 +464,11 @@ async function routeRequest(input: {
 
 		return createEventStreamResponse({
 			persistence: input.persistence,
-			scope,
+			runId: url.searchParams.get('runId')?.trim() || undefined,
+			intentId: url.searchParams.get('intentId')?.trim() || undefined,
+			actorId: url.searchParams.get('actorId')?.trim() || undefined,
+			callId: url.searchParams.get('callId')?.trim() || undefined,
+			visibility: parseVisibility(url.searchParams.get('visibility')),
 			after,
 			pollIntervalMs: input.pollIntervalMs,
 			heartbeatMs: input.streamHeartbeatMs,
@@ -490,7 +637,11 @@ async function handlePostAttachments(request: Request, attachmentStore: Attachme
 
 function createEventStreamResponse(input: {
 	persistence: SqliteQueryable
-	scope: string
+	runId?: string
+	intentId?: string
+	actorId?: string
+	callId?: string
+	visibility?: EventVisibility
 	after: number
 	pollIntervalMs: number
 	heartbeatMs: number
@@ -519,11 +670,7 @@ function createEventStreamResponse(input: {
 
 			try {
 				while (!closed && !input.signal.aborted) {
-					const events = await input.persistence.listStreamEvents({
-						scope: input.scope,
-						after: cursor,
-						limit: 200
-					})
+					const events = await input.persistence.listEvents({ after: cursor, limit: 200, runId: input.runId, intentId: input.intentId, actorId: input.actorId, callId: input.callId, visibility: input.visibility })
 
 					if (events.length === 0) {
 						if (Date.now() - lastWriteAt >= input.heartbeatMs) {
@@ -558,8 +705,300 @@ function createEventStreamResponse(input: {
 	})
 }
 
-function formatSseEvent(event: StreamEventRecord): string {
+function formatSseEvent(event: EventRecord): string {
 	return `id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`
+}
+
+async function listIntentActors(persistence: SqliteQueryable, intentId: string): Promise<IntentActorNode[]> {
+	const rootActorId = createIntentActorId(intentId)
+	const lifecycleEnvelopes = await listIntentEnvelopes(persistence, { intentId, limit: 1000 })
+	const eventRows = persistence.db
+		.query(
+			`SELECT actor_id, COUNT(*) AS event_count, MIN(created_at) AS first_seen_at, MAX(created_at) AS last_seen_at
+			 FROM events
+			 WHERE intent_id = ? AND actor_id IS NOT NULL
+			 GROUP BY actor_id`
+		)
+		.all(intentId) as EventAggregateRow[]
+	const contextRows = persistence.db
+		.query(
+			`SELECT actor_id, COUNT(*) AS context_count, MIN(created_at) AS first_seen_at, MAX(created_at) AS last_seen_at
+			 FROM context_items
+			 WHERE intent_id = ? AND actor_id IS NOT NULL
+			 GROUP BY actor_id`
+		)
+		.all(intentId) as ContextAggregateRow[]
+	const envelopeRows = aggregateEnvelopeActors(lifecycleEnvelopes)
+	const actorRows = persistence.db
+		.query(
+			`SELECT id, kind, status, state_json, version, created_at, updated_at
+			 FROM actors
+			 WHERE id = ? OR id IN (
+			   SELECT actor_id FROM events WHERE intent_id = ? AND actor_id IS NOT NULL
+			   UNION
+			   SELECT actor_id FROM context_items WHERE intent_id = ? AND actor_id IS NOT NULL
+			 )`
+		)
+		.all(rootActorId, intentId, intentId) as ActorRow[]
+
+	const actorMeta = new Map(actorRows.map((row) => [row.id, row]))
+	const eventMeta = new Map(eventRows.map((row) => [row.actor_id, row]))
+	const contextMeta = new Map(contextRows.map((row) => [row.actor_id, row]))
+	const envelopeMeta = new Map(envelopeRows.map((row) => [row.actor_id, row]))
+	const actorIds = new Set<string>([rootActorId])
+
+	for (const row of eventRows) actorIds.add(row.actor_id)
+	for (const row of contextRows) actorIds.add(row.actor_id)
+	for (const row of lifecycleEnvelopes) {
+		actorIds.add(row.fromActor)
+		actorIds.add(row.toActor)
+	}
+
+	for (const actorId of [...actorIds]) {
+		const worker = parseSkillWorkerActorId(actorId)
+		if (worker) actorIds.add(`aven/skills/${worker.skillId}`)
+	}
+
+	const nodes = [...actorIds]
+		.map((actorId) => buildIntentActorNode({
+			actorId,
+			intentId,
+			rootActorId,
+			actorRow: actorMeta.get(actorId),
+			eventRow: eventMeta.get(actorId),
+			contextRow: contextMeta.get(actorId),
+			envelopeRow: envelopeMeta.get(actorId),
+			isVirtualInserted: !actorMeta.has(actorId) && !eventMeta.has(actorId) && !contextMeta.has(actorId) && !envelopeMeta.has(actorId)
+		}))
+		.sort(compareIntentActorNodes)
+
+	const rootIndex = nodes.findIndex((node) => node.actorId === rootActorId)
+	if (rootIndex > 0) {
+		const [root] = nodes.splice(rootIndex, 1)
+		nodes.unshift(root)
+	}
+
+	return nodes
+}
+
+async function listIntentEnvelopes(
+	persistence: SqliteQueryable,
+	input: { intentId: string; actorId?: string; after?: string; limit?: number }
+): Promise<EnvelopeDto[]> {
+	const rootActorId = createIntentActorId(input.intentId)
+	const limit = input.limit ?? 200
+	const runIdRows = persistence.db
+		.query(
+			`SELECT DISTINCT run_id AS run_id FROM events WHERE intent_id = ? AND run_id IS NOT NULL
+			 UNION
+			 SELECT DISTINCT run_id AS run_id FROM context_items WHERE intent_id = ? AND run_id IS NOT NULL`
+		)
+		.all(input.intentId, input.intentId) as Array<{ run_id: string }>
+	const runIds = runIdRows.map((row) => row.run_id)
+	const clauses: string[] = []
+	const params: Array<string | number | null> = []
+
+	if (runIds.length > 0) {
+		clauses.push(`run_id IN (${runIds.map(() => '?').join(', ')})`)
+		params.push(...runIds)
+	}
+	clauses.push('from_actor = ?')
+	params.push(rootActorId)
+	clauses.push('to_actor = ?')
+	params.push(rootActorId)
+
+	let sql = `SELECT id, from_actor, to_actor, type, run_id, caused_by, status, payload_json, created_at, updated_at
+		FROM envelopes
+		WHERE (${clauses.join(' OR ')})`
+
+	const selectedActorId = input.actorId && input.actorId !== rootActorId ? input.actorId : undefined
+	if (selectedActorId) {
+		sql += ' AND (from_actor = ? OR to_actor = ?)'
+		params.push(selectedActorId, selectedActorId)
+	}
+	if (input.after) {
+		sql += ' AND created_at > COALESCE((SELECT created_at FROM envelopes WHERE id = ?), "")'
+		params.push(input.after)
+	}
+	sql += ' ORDER BY created_at ASC, id ASC LIMIT ?'
+	params.push(limit)
+
+	const rows = persistence.db.query(sql).all(...params) as EnvelopeRow[]
+	return rows.map((row) => ({
+		id: row.id,
+		fromActor: row.from_actor,
+		toActor: row.to_actor,
+		type: row.type,
+		runId: row.run_id,
+		causedBy: row.caused_by,
+		status: row.status,
+		payload: JSON.parse(row.payload_json),
+		createdAt: row.created_at,
+		updatedAt: row.updated_at
+	}))
+}
+
+async function getActorDetail(persistence: SqliteQueryable, actorId: string): Promise<ActorDetailDto> {
+	const actor = await persistence.getActor(actorId)
+	const parsed = parseActorId(actorId)
+	const detail: ActorDetailDto = {
+		actorId,
+		kind: actor?.kind ?? parsed.kind,
+		status: actor?.status ?? null,
+		state: actor?.state ?? null,
+		version: actor?.version ?? null,
+		createdAt: actor?.createdAt ?? null,
+		updatedAt: actor?.updatedAt ?? null
+	}
+
+	const skill = parseSkillActorId(actorId)
+	if (skill) {
+		const skillRecord = (await persistence.listSkills()).find((item) => item.id === skill.skillId)
+		if (skillRecord) {
+			detail.config = {
+				skillId: skillRecord.id,
+				path: skillRecord.path,
+				frontmatter: skillRecord.frontmatter,
+				loadedAt: skillRecord.loadedAt,
+				body: skillRecord.body
+			}
+		}
+	}
+
+	return detail
+}
+
+function aggregateEnvelopeActors(envelopes: EnvelopeDto[]): EnvelopeAggregateRow[] {
+	const counts = new Map<string, EnvelopeAggregateRow>()
+	for (const envelope of envelopes) {
+		for (const actorId of [envelope.fromActor, envelope.toActor]) {
+			const current = counts.get(actorId) ?? {
+				actor_id: actorId,
+				envelope_count: 0,
+				first_seen_at: null,
+				last_seen_at: null
+			}
+			current.envelope_count += 1
+			current.first_seen_at = minIso(current.first_seen_at, envelope.createdAt)
+			current.last_seen_at = maxIso(current.last_seen_at, envelope.updatedAt)
+			counts.set(actorId, current)
+		}
+	}
+	return [...counts.values()]
+}
+
+function buildIntentActorNode(input: {
+	actorId: string
+	intentId: string
+	rootActorId: string
+	actorRow?: ActorRow
+	eventRow?: EventAggregateRow
+	contextRow?: ContextAggregateRow
+	envelopeRow?: EnvelopeAggregateRow
+	isVirtualInserted: boolean
+}): IntentActorNode {
+	if (input.actorId === input.rootActorId) {
+		return {
+			actorId: input.rootActorId,
+			uiParentActorId: null,
+			pathParentActorId: 'aven/intents',
+			kind: 'intent',
+			label: 'Intent lifecycle',
+			isAggregateRoot: true,
+			isVirtual: false,
+			status: mapActorStatus(input.actorRow?.status),
+			eventCount: input.eventRow?.event_count ?? 0,
+			envelopeCount: input.envelopeRow?.envelope_count ?? 0,
+			contextCount: input.contextRow?.context_count ?? 0,
+			firstSeenAt: pickFirstSeen(input.eventRow?.first_seen_at, input.contextRow?.first_seen_at, input.envelopeRow?.first_seen_at),
+			lastSeenAt: pickLastSeen(input.eventRow?.last_seen_at, input.contextRow?.last_seen_at, input.envelopeRow?.last_seen_at)
+		}
+	}
+
+	const parsed = parseActorId(input.actorId)
+	const kind = mapIntentActorKind(input.actorId)
+	const parentSkillActorId = parseSkillWorkerActorId(input.actorId)?.skillId
+	return {
+		actorId: input.actorId,
+		uiParentActorId:
+			kind === 'worker'
+				? `aven/skills/${parentSkillActorId}`
+				: kind === 'intent'
+					? null
+					: input.rootActorId,
+		pathParentActorId: parsed.parentId,
+		kind,
+		label: labelForActor(input.actorId),
+		subtitle: input.actorId,
+		isAggregateRoot: false,
+		isVirtual: input.isVirtualInserted,
+		status: mapActorStatus(input.actorRow?.status),
+		eventCount: input.eventRow?.event_count ?? 0,
+		envelopeCount: input.envelopeRow?.envelope_count ?? 0,
+		contextCount: input.contextRow?.context_count ?? 0,
+		firstSeenAt: pickFirstSeen(input.eventRow?.first_seen_at, input.contextRow?.first_seen_at, input.envelopeRow?.first_seen_at),
+		lastSeenAt: pickLastSeen(input.eventRow?.last_seen_at, input.contextRow?.last_seen_at, input.envelopeRow?.last_seen_at)
+	}
+}
+
+function compareIntentActorNodes(a: IntentActorNode, b: IntentActorNode): number {
+	if (a.isAggregateRoot && !b.isAggregateRoot) return -1
+	if (!a.isAggregateRoot && b.isAggregateRoot) return 1
+	if (a.uiParentActorId === null && b.uiParentActorId !== null) return -1
+	if (a.uiParentActorId !== null && b.uiParentActorId === null) return 1
+	return a.actorId.localeCompare(b.actorId)
+}
+
+function mapIntentActorKind(actorId: string): IntentActorKind {
+	const parsed = parseActorId(actorId)
+	if (actorId === HUMAN_ACTOR_ID) return 'human'
+	if (parsed.kind === 'system') return 'system'
+	if (parsed.kind === 'intent') return 'intent'
+	if (parsed.kind === 'skill') return 'skill'
+	if (parsed.kind === 'worker') return 'worker'
+	if (parsed.kind === 'group') return 'group'
+	return 'unknown'
+}
+
+function labelForActor(actorId: string): string {
+	if (actorId === HUMAN_ACTOR_ID) return 'Human'
+	const skill = parseSkillActorId(actorId)
+	if (skill) return skill.skillId
+	const worker = parseSkillWorkerActorId(actorId)
+	if (worker) return worker.workerName
+	const parsed = parseActorId(actorId)
+	return parsed.name
+		.split('-')
+		.map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+		.join(' ')
+}
+
+function mapActorStatus(status: string | undefined): 'active' | 'idle' | 'completed' | 'failed' | undefined {
+	if (status === 'active') return 'active'
+	if (status === 'stopped') return 'completed'
+	if (status === 'failed') return 'failed'
+	return undefined
+}
+
+function pickFirstSeen(...values: Array<string | null | undefined>): string | null {
+	return values.filter((value): value is string => Boolean(value)).sort()[0] ?? null
+}
+
+function pickLastSeen(...values: Array<string | null | undefined>): string | null {
+	return values.filter((value): value is string => Boolean(value)).sort().at(-1) ?? null
+}
+
+function minIso(current: string | null, next: string): string {
+	return !current || next < current ? next : current
+}
+
+function maxIso(current: string | null, next: string): string {
+	return !current || next > current ? next : current
+}
+
+function parseVisibility(raw: string | null): EventVisibility | undefined {
+	if (raw === 'chat' || raw === 'worklog' || raw === 'debug') return raw
+	return undefined
 }
 
 function mapIntentRecord(intent: IntentRecord) {
@@ -609,45 +1048,24 @@ function parseAfter(value: string | null): number {
 	return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 }
 
-function selectorFromQuery(searchParams: URLSearchParams): ContextSelector {
-	const scopes: ContextScope[] = []
-	const scopeType = searchParams.get('scopeType')?.trim()
-	const scopeKey = searchParams.get('scopeKey')?.trim()
-	if (scopeType && scopeKey) {
-		scopes.push(scopeFromQuery(scopeType, scopeKey))
-	}
-
-	const selector: ContextSelector = {
+function selectorFromQuery(searchParams: URLSearchParams): ContextQuery {
+	const selector: ContextQuery = {
 		afterSeq: parseOptionalInt(searchParams.get('afterSeq')),
 		limit: parseOptionalInt(searchParams.get('limit'))
 	}
-	if (scopes.length > 0) selector.scopes = scopes
 	const kind = searchParams.get('kind')?.trim()
-	if (kind) selector.kinds = [kind as ContextItemRecord['kind']]
-	const key = searchParams.get('key')?.trim()
-	if (key) selector.keys = [key]
+	if (kind) selector.kind = kind
 	const actorId = searchParams.get('actorId')?.trim()
-	if (actorId) selector.producedByActorIds = [actorId]
-	if (searchParams.get('correlationId')?.trim()) {
-		selector.scopes = [...(selector.scopes ?? []), { type: 'run', correlationId: searchParams.get('correlationId')!.trim() }]
-	}
-	if (searchParams.get('intentId')?.trim()) {
-		selector.scopes = [...(selector.scopes ?? []), { type: 'intent', intentId: searchParams.get('intentId')!.trim() }]
-	}
+	if (actorId) selector.actorId = actorId
+	const runId = searchParams.get('runId')?.trim()
+	if (runId) selector.runId = runId
+	const intentId = searchParams.get('intentId')?.trim()
+	if (intentId) selector.intentId = intentId
 	const callId = searchParams.get('callId')?.trim()
-	const rootCallId = searchParams.get('rootCallId')?.trim()
-	if (callId) {
-		selector.scopes = [...(selector.scopes ?? []), { type: 'call', callId, rootCallId: rootCallId ?? callId }]
-	}
+	if (callId) selector.callId = callId
+	const visibility = searchParams.get('visibility')?.trim()
+	if (visibility === 'chat' || visibility === 'worklog' || visibility === 'debug') selector.visibility = visibility
 	return selector
-}
-
-function scopeFromQuery(scopeType: string, scopeKey: string): ContextScope {
-	if (scopeType === 'run') return { type: 'run', correlationId: scopeKey }
-	if (scopeType === 'intent') return { type: 'intent', intentId: scopeKey }
-	if (scopeType === 'call') return { type: 'call', callId: scopeKey, rootCallId: scopeKey }
-	if (scopeType === 'actor') return { type: 'actor', actorId: scopeKey }
-	return { type: 'global', name: scopeKey === 'archive' ? 'archive' : 'system' }
 }
 
 function parseOptionalInt(raw: string | null): number | undefined {

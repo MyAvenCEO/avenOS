@@ -8,16 +8,16 @@ import type {
 	ClaimedEnvelope,
 	ContextAppendInput,
 	ContextItemRecord,
-	ContextSelector,
+	ContextQuery,
 	CommunicationTreeRecord,
 	CommunicationTreeSummary,
 	EnvelopeInput,
 	EnvelopeRecord,
+	EventInput,
+	EventRecord,
 	Persistence,
 	SkillRecord,
 	SkillRecordInput,
-	StreamEventInput,
-	StreamEventRecord
 } from '../../persistence-sqlite/src/types'
 
 type EnvelopeRow = EnvelopeRecord
@@ -26,7 +26,7 @@ export class FakePersistence implements Persistence {
 	readonly actors = new Map<string, ActorRecord>()
 	readonly envelopes = new Map<string, EnvelopeRow>()
 	readonly events: ActorEventInput[] = []
-	readonly streamEvents: StreamEventRecord[] = []
+	readonly appendedEvents: EventRecord[] = []
 	readonly contextItems: ContextItemRecord[] = []
 	readonly claims: string[] = []
 	claimedLeaseMs: number | null = null
@@ -67,8 +67,8 @@ export class FakePersistence implements Persistence {
 			fromActor: envelope.fromActor,
 			toActor: envelope.toActor,
 			type: envelope.type,
-			correlationId: envelope.correlationId,
-			causationId: envelope.causationId ?? null,
+			runId: envelope.runId,
+			causedBy: envelope.causedBy ?? null,
 			payload: envelope.payload,
 			status: 'queued',
 			availableAt: toIso(envelope.availableAt ?? envelope.createdAt ?? new Date('1970-01-01T00:00:00.000Z')),
@@ -156,32 +156,19 @@ export class FakePersistence implements Persistence {
 
 		for (const append of input.contextAppends) {
 			this.contextItems.push({
-				id: `ctx-${this.contextItems.length + 1}`,
 				seq: this.contextItems.length + 1,
-				scope: append.scope,
 				kind: append.kind,
-				key: append.key,
-				schema: append.schema,
-				tags: append.tags,
+				visibility: append.visibility ?? 'worklog',
+				runId: append.runId ?? envelope.runId,
+				intentId: append.intentId ?? null,
+				actorId: append.actorId ?? input.actorId,
+				envelopeId: append.envelopeId ?? input.envelopeId,
+				callId: append.callId ?? null,
+				key: append.key ?? null,
+				summary: append.summary ?? null,
 				body: append.body,
-				artifactId: append.artifactId,
-				summary: append.summary,
-				correlationId: envelope.correlationId,
-				intentId: undefined,
-				actorId: input.actorId,
-				callId: undefined,
-				parentCallId: undefined,
-				rootCallId: undefined,
-				producedByActorId: input.actorId,
-				producedByEnvelopeId: input.envelopeId,
-				producedByCommandId: append.producedByCommandId,
-				producedByToolCallId: append.producedByToolCallId,
-				sourceContextItemIds: append.sourceContextItemIds,
-				confidence: append.confidence,
-				hash: '',
-				createdAt: input.now.toISOString(),
-				supersedesItemId: append.supersedesItemId,
-				redactsItemId: append.redactsItemId
+				artifactUri: append.artifactUri ?? null,
+				createdAt: append.createdAt ? toIso(append.createdAt) : input.now.toISOString()
 			})
 		}
 
@@ -241,31 +228,76 @@ export class FakePersistence implements Persistence {
 		return []
 	}
 
-	async appendStreamEvents(events: StreamEventInput[]): Promise<void> {
+	async appendEvents(events: EventInput[]): Promise<number[]> {
+		const seqs: number[] = []
 		for (const event of events) {
-			this.streamEvents.push({
-				seq: this.streamEvents.length + 1,
-				id: event.id,
-				scope: event.scope,
+			const seq = this.appendedEvents.length + 1
+			this.appendedEvents.push({
+				seq,
+				type: event.type,
+				visibility: event.visibility,
+				runId: event.runId ?? null,
+				intentId: event.intentId ?? null,
 				actorId: event.actorId ?? null,
 				envelopeId: event.envelopeId ?? null,
-				type: event.type,
+				callId: event.callId ?? null,
+				parentSeq: event.parentSeq ?? null,
 				payload: event.payload,
-				createdAt: toIso(event.createdAt)
+				createdAt: toIso(event.createdAt ?? new Date())
 			})
+			seqs.push(seq)
 		}
+		return seqs
 	}
 
-	async listStreamEvents(input: { scope: string; after?: number; limit?: number }): Promise<StreamEventRecord[]> {
-		return this.streamEvents
-			.filter((event) => event.scope === input.scope && event.seq > (input.after ?? 0))
+	async listEvents(input: { after?: number; limit?: number; visibility?: EventRecord['visibility'] | EventRecord['visibility'][]; runId?: string; intentId?: string; actorId?: string; callId?: string }): Promise<EventRecord[]> {
+		const visibilityValues = input.visibility ? (Array.isArray(input.visibility) ? input.visibility : [input.visibility]) : null
+		return this.appendedEvents
+			.filter((event) => event.seq > (input.after ?? 0))
+			.filter((event) => !visibilityValues || visibilityValues.includes(event.visibility))
+			.filter((event) => !input.runId || event.runId === input.runId)
+			.filter((event) => !input.intentId || event.intentId === input.intentId)
+			.filter((event) => !input.actorId || event.actorId === input.actorId)
+			.filter((event) => !input.callId || event.callId === input.callId)
 			.slice(0, input.limit ?? 200)
 	}
 
-	async listContextItems(input: { selector: ContextSelector; snapshotSeq?: number }): Promise<ContextItemRecord[]> {
+	async appendContext(input: ContextAppendInput): Promise<number> {
+		const seq = this.contextItems.length + 1
+		this.contextItems.push({
+			seq,
+			kind: input.kind,
+			visibility: input.visibility ?? 'worklog',
+			runId: input.runId ?? null,
+			intentId: input.intentId ?? null,
+			actorId: input.actorId ?? null,
+			envelopeId: input.envelopeId ?? null,
+			callId: input.callId ?? null,
+			key: input.key ?? null,
+			summary: input.summary ?? null,
+			body: input.body,
+			artifactUri: input.artifactUri ?? null,
+			createdAt: input.createdAt ? toIso(input.createdAt) : new Date().toISOString()
+		})
+		return seq
+	}
+
+	async listContextItems(input: { selector: ContextQuery; snapshotSeq?: number }): Promise<ContextItemRecord[]> {
 		return this.contextItems.filter((item) => {
 			if (input.snapshotSeq !== undefined && item.seq > input.snapshotSeq) return false
 			if (input.selector.afterSeq !== undefined && item.seq <= input.selector.afterSeq) return false
+			if (input.selector.runId && item.runId !== input.selector.runId) return false
+			if (input.selector.intentId && item.intentId !== input.selector.intentId) return false
+			if (input.selector.actorId && item.actorId !== input.selector.actorId) return false
+			if (input.selector.callId && item.callId !== input.selector.callId) return false
+			if (input.selector.visibility) {
+				const visibilities = Array.isArray(input.selector.visibility) ? input.selector.visibility : [input.selector.visibility]
+				if (!visibilities.includes(item.visibility)) return false
+			}
+			if (input.selector.kind) {
+				const kinds = Array.isArray(input.selector.kind) ? input.selector.kind : [input.selector.kind]
+				if (!kinds.includes(item.kind)) return false
+			}
 			return true
 		})
 	}
@@ -288,7 +320,7 @@ export class FakePersistence implements Persistence {
 	}
 
 	async listCommunicationTree(_input: {
-		correlationId?: string
+		runId?: string
 		intentId?: string
 		rootEnvelopeId?: string
 		view?: 'chat' | 'deep-dive'
@@ -297,7 +329,7 @@ export class FakePersistence implements Persistence {
 	}
 
 	async summarizeCommunicationTree(_input: {
-		correlationId?: string
+		runId?: string
 		intentId?: string
 		rootEnvelopeId?: string
 		view?: 'chat' | 'deep-dive'

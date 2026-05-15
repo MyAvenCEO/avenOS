@@ -1,5 +1,12 @@
 import { expect, test } from 'bun:test'
-import type { EnvelopeInput, Persistence, SkillRecord, SkillRecordInput } from '@jaensen/persistence-sqlite'
+import {
+	SKILLS_ACTOR_ID,
+	createSkillActorId,
+	type EnvelopeInput,
+	type Persistence,
+	type SkillRecord,
+	type SkillRecordInput
+} from '@jaensen/persistence-sqlite'
 
 import { bootstrapSkills } from '../src/index'
 
@@ -54,7 +61,7 @@ test('bootstraps one skill supervisor actor per skill', async () => {
 
 	expect(persistence.upsertedActors).toEqual([
 		{
-			id: 'skills/memory',
+			id: createSkillActorId('memory'),
 			kind: 'skill-supervisor',
 			state: {
 				skillId: 'memory',
@@ -63,7 +70,7 @@ test('bootstraps one skill supervisor actor per skill', async () => {
 			}
 		},
 		{
-			id: 'skills/extract',
+			id: createSkillActorId('extract'),
 			kind: 'skill-supervisor',
 			state: {
 				skillId: 'extract',
@@ -74,8 +81,8 @@ test('bootstraps one skill supervisor actor per skill', async () => {
 	])
 	expect(persistence.enqueued).toHaveLength(2)
 	expect(persistence.enqueued[0]).toMatchObject({
-		fromActor: 'skills',
-		toActor: 'skills/memory',
+		fromActor: SKILLS_ACTOR_ID,
+		toActor: createSkillActorId('memory'),
 		type: 'skill.bootstrap',
 		payload: { skillId: 'memory' }
 	})
@@ -103,6 +110,7 @@ class BootstrapPersistence implements Persistence {
 		return null
 	}
 	async commitActivation(): Promise<void> {}
+	async appendContext(): Promise<number> { return 0 }
 	async failActivation(): Promise<void> {}
 	async releaseExpiredLocks(): Promise<number> {
 		return 0
@@ -115,8 +123,8 @@ class BootstrapPersistence implements Persistence {
 	}
 	async listContextItems(): Promise<[]> { return [] }
 	async getContextSnapshotSeq(): Promise<number> { return 0 }
-	async appendStreamEvents(): Promise<void> {}
-	async listStreamEvents(): Promise<[]> { return [] }
+	async appendEvents(): Promise<number[]> { return [] }
+	async listEvents(): Promise<[]> { return [] }
 	async listActorHierarchy(): Promise<[]> { return [] }
 	async listActorBranchLogs(): Promise<[]> { return [] }
 	async listCommunicationTree(): Promise<[]> { return [] }

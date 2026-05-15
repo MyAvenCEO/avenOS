@@ -1,5 +1,9 @@
 import { expect, test } from 'bun:test'
-import type { EnvelopeRecord } from '@jaensen/persistence-sqlite'
+import {
+	DISPATCHER_ACTOR_ID,
+	HUMAN_ACTOR_ID,
+	type EnvelopeRecord
+} from '@jaensen/persistence-sqlite'
 import type { DispatcherState } from '@jaensen/conversation-actors'
 
 import {
@@ -7,7 +11,7 @@ import {
 	createFlueDispatcherBrain
 } from '../src/index'
 
-test('dispatcher uses actor/dispatcher session', async () => {
+test('dispatcher uses canonical dispatcher session', async () => {
 	const calls: string[] = []
 	const brain = createFlueDispatcherBrain({
 		harness: {
@@ -30,7 +34,7 @@ test('dispatcher uses actor/dispatcher session', async () => {
 
 	await brain.route({ state: makeDispatcherState(), envelope: makeEnvelopeRecord(), userInput: { text: 'Plan a trip', attachments: [] } })
 
-	expect(calls).toEqual(['actor/dispatcher'])
+	expect(calls).toEqual([`actor/${DISPATCHER_ACTOR_ID}`])
 })
 
 test('dispatcher accepts create_intent output', async () => {
@@ -146,11 +150,11 @@ function makeDispatcherState(status: 'active' | 'waiting_for_user' | 'completed'
 function makeEnvelopeRecord(overrides: Partial<EnvelopeRecord> = {}): EnvelopeRecord {
 	return {
 		id: 'env-1',
-		fromActor: 'human',
-		toActor: 'dispatcher',
+		fromActor: HUMAN_ACTOR_ID,
+		toActor: DISPATCHER_ACTOR_ID,
 		type: 'conversation.user_input',
-		correlationId: 'corr-1',
-		causationId: null,
+		runId: 'corr-1',
+		causedBy: null,
 		payload: { text: 'hello', attachments: [] },
 		status: 'queued',
 		availableAt: '2026-05-12T00:00:00.000Z',

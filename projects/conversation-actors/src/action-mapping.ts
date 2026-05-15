@@ -1,4 +1,10 @@
-import { createSkillActorId, type EnvelopeInput, type EnvelopeRecord } from '@jaensen/persistence-sqlite'
+import {
+	DISPATCHER_ACTOR_ID,
+	HUMAN_ACTOR_ID,
+	createSkillActorId,
+	type EnvelopeInput,
+	type EnvelopeRecord
+} from '@jaensen/persistence-sqlite'
 
 import { UnknownSkillError } from './errors'
 import type { IntentAction, IntentState, SkillRegistry } from './types'
@@ -7,7 +13,6 @@ export interface ResolvedIntentAction {
 	type: 'call_skill' | 'reply_user' | 'ask_user' | 'complete' | 'fail'
 	skillId?: string
 	callId?: string
-	rootCallId?: string
 	request?: string
 	payload?: unknown
 	message?: string
@@ -31,18 +36,11 @@ export function resolveIntentActions(input: {
 				type: 'call_skill',
 				skillId: action.skillId,
 				callId: input.generateId(),
-				rootCallId: undefined,
 				request: action.request,
 				payload: action.payload
 			}
 			: action
 	)
-
-	for (const action of resolvedActions) {
-		if (action.type === 'call_skill' && action.callId) {
-			action.rootCallId = action.callId
-		}
-	}
 
 	return {
 		state: applyIntentActionStateEffects({
@@ -86,7 +84,6 @@ export function applyIntentActionStateEffects(input: {
 						...nextState.pendingSkillCalls,
 						[action.callId]: {
 							callId: action.callId,
-							rootCallId: action.rootCallId ?? action.callId,
 							skillId: action.skillId,
 							request: action.request,
 							createdAt: nowIso
@@ -113,8 +110,8 @@ export function mapIntentActionsToEnvelopes(input: {
 		to: string
 		type: string
 		payload: unknown
-		correlationId?: string
-		causationId?: string
+		runId?: string
+		causedBy?: string
 		availableAt?: Date
 	}) => EnvelopeInput
 }): EnvelopeInput[] {
@@ -132,15 +129,15 @@ function mapIntentActionToEnvelopes(input: {
 		to: string
 		type: string
 		payload: unknown
-		correlationId?: string
-		causationId?: string
+		runId?: string
+		causedBy?: string
 		availableAt?: Date
 	}) => EnvelopeInput
 }): EnvelopeInput[] {
 	const base = {
 		from: input.fromActor,
-		correlationId: input.envelope.correlationId,
-		causationId: input.envelope.id
+		runId: input.envelope.runId,
+		causedBy: input.envelope.id
 	} as const
 
 	switch (input.action.type) {
@@ -160,7 +157,6 @@ function mapIntentActionToEnvelopes(input: {
 					payload: {
 						intentId: input.state.intentId,
 						callId: input.action.callId,
-						rootCallId: (input.action as ResolvedIntentAction).rootCallId ?? input.action.callId,
 						parentCallId: undefined,
 						request: input.action.request,
 						...readAttachmentContext(input.envelope.payload),
@@ -173,7 +169,7 @@ function mapIntentActionToEnvelopes(input: {
 			return [
 				input.makeEnvelope({
 					...base,
-					to: 'human',
+					to: HUMAN_ACTOR_ID,
 					type: 'human.message',
 					payload: {
 						intentId: input.state.intentId,
@@ -185,7 +181,7 @@ function mapIntentActionToEnvelopes(input: {
 			return [
 				input.makeEnvelope({
 					...base,
-					to: 'human',
+					to: HUMAN_ACTOR_ID,
 					type: 'human.question',
 					payload: {
 						intentId: input.state.intentId,
@@ -198,7 +194,7 @@ function mapIntentActionToEnvelopes(input: {
 				? [
 						input.makeEnvelope({
 							...base,
-							to: 'human',
+							to: HUMAN_ACTOR_ID,
 							type: 'human.message',
 							payload: {
 								intentId: input.state.intentId,
@@ -212,7 +208,7 @@ function mapIntentActionToEnvelopes(input: {
 				? [
 						input.makeEnvelope({
 							...base,
-							to: 'human',
+							to: HUMAN_ACTOR_ID,
 							type: 'human.message',
 							payload: {
 								intentId: input.state.intentId,
@@ -260,17 +256,17 @@ export function createLifecycleEnvelope(input: {
 		to: string
 		type: string
 		payload: unknown
-		correlationId?: string
-		causationId?: string
+		runId?: string
+		causedBy?: string
 		availableAt?: Date
 	}) => EnvelopeInput
 }): EnvelopeInput {
 	return input.makeEnvelope({
 		from: input.fromActor,
-		to: 'dispatcher',
+		to: DISPATCHER_ACTOR_ID,
 		type: 'intent.lifecycle',
-		correlationId: input.envelope.correlationId,
-		causationId: input.envelope.id,
+		runId: input.envelope.runId,
+		causedBy: input.envelope.id,
 		payload: {
 			intentId: input.state.intentId,
 			title: input.state.title,

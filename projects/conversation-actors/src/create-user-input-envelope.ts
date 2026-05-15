@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto'
 
-import type { EnvelopeInput } from '@jaensen/persistence-sqlite'
+import {
+	DISPATCHER_ACTOR_ID,
+	HUMAN_ACTOR_ID,
+	type EnvelopeInput
+} from '@jaensen/persistence-sqlite'
 
 import type { UserAttachment } from './types'
 
@@ -15,10 +19,10 @@ export function createUserInputEnvelope(input: {
 	const id = input.id ?? randomUUID()
 	return {
 		id,
-		fromActor: 'human',
-		toActor: 'dispatcher',
+		fromActor: HUMAN_ACTOR_ID,
+		toActor: DISPATCHER_ACTOR_ID,
 		type: 'conversation.user_input',
-		correlationId: id,
+		runId: id,
 		payload: {
 			text: input.text,
 			attachments: input.attachments,
