@@ -15,8 +15,7 @@ const TABS: Array<{ id: ActorDetailTab; label: string }> = [
 	{ id: 'messages', label: 'Messages' },
 	{ id: 'context', label: 'Context' },
 	{ id: 'state', label: 'State' },
-	{ id: 'config', label: 'Config' },
-	{ id: 'debug', label: 'Debug' }
+	{ id: 'config', label: 'Config' }
 ]
 
 let newTitle = $state('')

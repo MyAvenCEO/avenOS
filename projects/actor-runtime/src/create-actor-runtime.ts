@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto'
 import type { ActorEventInput, EnvelopeInput, EventInput } from '../../persistence-sqlite/src/index'
 
 import { ActorRegistry } from './actor-registry'
-import { ActorIntrospectionRegistry } from './actor-introspection'
 import {
 	RuntimeActivationAbortedError,
 	RuntimeActivationTimeoutError,
@@ -45,14 +44,8 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 	const activationCleanupMs = input.activationCleanupMs ?? DEFAULT_ACTIVATION_CLEANUP_MS
 	const effectiveLeaseMs = Math.max(leaseMs, activationTimeoutMs + activationCleanupMs)
 	const clock = input.clock ?? (() => new Date())
-	const introspection = new ActorIntrospectionRegistry()
 	const debug: ActorRuntimeDebug = {
-		getSnapshot: () => introspection.getSnapshot(),
-		listEvents: (after = 0) => introspection.listEvents(after),
-		subscribe: (listener) => introspection.subscribe(listener),
-		seedActor: (actor) => introspection.seedActor(actor),
 		recordTrace: (actorId, trace) => {
-			introspection.recordTrace(actorId, trace)
 			void input.persistence
 				.appendEvents(buildTraceEvents(actorId, trace))
 				.catch((error) =>
@@ -73,21 +66,15 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 
 		async enqueue(envelope: EnvelopeInput): Promise<void> {
 			await input.persistence.enqueue(envelope)
-			introspection.messageSent({
-				id: envelope.id,
-				from: envelope.fromActor,
-				to: envelope.toActor,
-				messageType: envelope.type,
-				at: toIsoString(envelope.createdAt ?? clock())
-			})
 		},
 
-		async tick(): Promise<'processed' | 'idle'> {
+		async tick(tickInput?: { workerId?: string }): Promise<'processed' | 'idle'> {
+			const workerId = tickInput?.workerId ?? input.workerId
 			const now = clock()
 			await input.persistence.releaseExpiredLocks(now)
 
 			const claimed = await input.persistence.claimNext({
-				workerId: input.workerId,
+				workerId,
 				leaseMs: effectiveLeaseMs,
 				now
 			})
@@ -97,10 +84,8 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 			}
 
 			const { actor, envelope } = claimed
-			introspection.actorSpawned({ id: actor.id, type: actor.kind, name: actor.id })
-			introspection.activationStarted(envelope, actor, now)
 			logDebug(input.logger, 'actor-runtime.activation.started', {
-				workerId: input.workerId,
+				workerId,
 				actorId: actor.id,
 				actorKind: actor.kind,
 				envelopeId: envelope.id,
@@ -114,10 +99,9 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 
 			if (!handler) {
 				const error = new Error(`No actor handler registered for kind: ${actor.kind}`)
-				introspection.activationFailed({ actorId: actor.id, now, task: envelope.type })
 				await failClaimedEnvelope({
 					persistence: input.persistence,
-					workerId: input.workerId,
+					workerId,
 					actorId: actor.id,
 					actorKind: actor.kind,
 					envelopeId: envelope.id,
@@ -162,10 +146,9 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 					actorId: actor.id
 				})
 			} catch (error) {
-				introspection.activationFailed({ actorId: actor.id, now, task: envelope.type })
 				await failClaimedEnvelope({
 					persistence: input.persistence,
-					workerId: input.workerId,
+					workerId,
 					actorId: actor.id,
 					actorKind: actor.kind,
 					envelopeId: envelope.id,
@@ -184,10 +167,9 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 			try {
 				normalizedResult = normalizeDecision(activationResult)
 			} catch (error) {
-				introspection.activationFailed({ actorId: actor.id, now, task: envelope.type })
 				await failClaimedEnvelope({
 					persistence: input.persistence,
-					workerId: input.workerId,
+					workerId,
 					actorId: actor.id,
 					actorKind: actor.kind,
 					envelopeId: envelope.id,
@@ -217,7 +199,7 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 
 			try {
 				await input.persistence.commitActivation({
-					workerId: input.workerId,
+					workerId,
 					envelopeId: envelope.id,
 					actorId: actor.id,
 					expectedActorVersion: actor.version,
@@ -230,10 +212,9 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 					now
 				})
 			} catch (error) {
-				introspection.activationFailed({ actorId: actor.id, now, task: envelope.type })
 				await failClaimedEnvelope({
 					persistence: input.persistence,
-					workerId: input.workerId,
+					workerId,
 					actorId: actor.id,
 					actorKind: actor.kind,
 					envelopeId: envelope.id,
@@ -253,7 +234,7 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 			}
 
 			logInfo(input.logger, 'actor-runtime.processed', {
-				workerId: input.workerId,
+				workerId,
 				actorId: actor.id,
 				actorKind: actor.kind,
 				envelopeId: envelope.id,
@@ -265,22 +246,6 @@ export function createActorRuntime(input: CreateActorRuntimeInput): ActorRuntime
 				outgoingCount: normalizedResult.commands.filter((command) => command.type !== 'emit_event').length,
 				contextAppendCount: normalizedResult.contextAppends.length
 			})
-			introspection.activationCompleted({ actorId: actor.id, now })
-			for (const outgoing of normalizedResult.commands) {
-				if (outgoing.type === 'emit_event') {
-					continue
-				}
-				const envelopeRecord = outgoing.type === 'send_envelope'
-					? outgoing.envelope
-					: { ...outgoing.envelope, availableAt: outgoing.availableAt }
-				introspection.messageSent({
-					id: envelopeRecord.id,
-					from: envelopeRecord.fromActor,
-					to: envelopeRecord.toActor,
-					messageType: envelopeRecord.type,
-					at: toIsoString(envelopeRecord.createdAt ?? now)
-				})
-			}
 
 			return 'processed'
 		},
@@ -438,10 +403,6 @@ function classifyError(error: Error): string {
 	if (error instanceof RuntimeCommitError) return 'commit_conflict'
 	if (error instanceof RuntimeNonRetryableError) return error.code
 	return 'error'
-}
-
-function toIsoString(value: Date | string): string {
-    return value instanceof Date ? value.toISOString() : value
 }
 
 function buildTraceEvents(actorId: string, trace: ActorDebugTrace): EventInput[] {

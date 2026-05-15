@@ -42,6 +42,81 @@ test('daemon continues after tick failures', async () => {
 	}
 })
 
+test('daemon starts multiple runtime slots with distinct worker ids', async () => {
+	const seenWorkerIds = new Set<string>()
+	const api = await createWebApi({
+		persistence: new SqlitePersistence(),
+		harness: createHarnessStub(),
+		skills: [],
+		workerId: 'daemon-base',
+		runtimeConcurrency: 3,
+		idleDelayMs: 10,
+		dispatcherBrain: { async route() { return { type: 'create_intent', title: 'x', initialGoal: 'y', reason: 'z' } } },
+		intentBrain: { async decide() { return { summary: 'noop', actions: [] } } },
+		skillWorkerBrain: { async run() { return { state: {} } } }
+	})
+	await api.stopDaemon()
+	const originalTick = api.app.tick
+	api.app.tick = async (input) => {
+		if (input?.workerId) {
+			seenWorkerIds.add(input.workerId)
+		}
+		return 'idle'
+	}
+
+	try {
+		api.startDaemon()
+		await waitFor(async () => (seenWorkerIds.size >= 3 ? seenWorkerIds.size : null), 1_000)
+		expect([...seenWorkerIds].sort()).toEqual(['daemon-base-0', 'daemon-base-1', 'daemon-base-2'])
+	} finally {
+		api.app.tick = originalTick
+		await api.stop()
+	}
+})
+
+test('runtimeConcurrency is normalized and capped', async () => {
+	const cases = [
+		{ input: undefined, expectedCount: 4, expectedWorkerIds: ['daemon-base-0', 'daemon-base-1', 'daemon-base-2', 'daemon-base-3'] },
+		{ input: 0, expectedCount: 1, expectedWorkerIds: ['daemon-base-0'] },
+		{ input: Number.NaN, expectedCount: 4, expectedWorkerIds: ['daemon-base-0', 'daemon-base-1', 'daemon-base-2', 'daemon-base-3'] },
+		{ input: Number.POSITIVE_INFINITY, expectedCount: 4, expectedWorkerIds: ['daemon-base-0', 'daemon-base-1', 'daemon-base-2', 'daemon-base-3'] },
+		{ input: 1000, expectedCount: 32, expectedWorkerIds: Array.from({ length: 32 }, (_, index) => `daemon-base-${index}`) },
+		{ input: 3.8, expectedCount: 3, expectedWorkerIds: ['daemon-base-0', 'daemon-base-1', 'daemon-base-2'] }
+	] as const
+
+	for (const testCase of cases) {
+		const seenWorkerIds = new Set<string>()
+		const api = await createWebApi({
+			persistence: new SqlitePersistence(),
+			harness: createHarnessStub(),
+			skills: [],
+			workerId: 'daemon-base',
+			runtimeConcurrency: testCase.input,
+			idleDelayMs: 10,
+			dispatcherBrain: { async route() { return { type: 'create_intent', title: 'x', initialGoal: 'y', reason: 'z' } } },
+			intentBrain: { async decide() { return { summary: 'noop', actions: [] } } },
+			skillWorkerBrain: { async run() { return { state: {} } } }
+		})
+		await api.stopDaemon()
+		const originalTick = api.app.tick
+		api.app.tick = async (input) => {
+			if (input?.workerId) {
+				seenWorkerIds.add(input.workerId)
+			}
+			return 'idle'
+		}
+
+		try {
+			api.startDaemon()
+			await waitFor(async () => (seenWorkerIds.size >= testCase.expectedCount ? seenWorkerIds.size : null), 1_500)
+			expect([...seenWorkerIds].sort()).toEqual([...testCase.expectedWorkerIds].sort())
+		} finally {
+			api.app.tick = originalTick
+			await api.stop()
+		}
+	}
+})
+
 test('POST /api/messages returns envelope and correlation ids, and intent endpoints expose runtime state', async () => {
 	const persistence = new SqlitePersistence()
 	const api = await createWebApi({
@@ -376,10 +451,10 @@ test('GET /api/events supports after cursors', async () => {
 	})
 
 	try {
-		const allResponse = await fetch(`${api.url}api/events?scope=global`)
+		const allResponse = await fetch(`${api.url}api/events`)
 		const allBody = (await allResponse.json()) as { events: Array<{ seq: number }> }
 		const firstSeq = allBody.events[0]?.seq ?? 0
-		const afterResponse = await fetch(`${api.url}api/events?scope=global&after=${firstSeq}`)
+		const afterResponse = await fetch(`${api.url}api/events?after=${firstSeq}`)
 		const afterBody = (await afterResponse.json()) as { events: Array<{ seq: number }> }
 		expect(afterBody.events.every((event) => event.seq > firstSeq)).toBe(true)
 	} finally {
@@ -482,6 +557,15 @@ test('intent lifecycle endpoints expose actors, activity, envelopes, and actor d
 		payload: { intentId: 'intent-life' },
 		createdAt: '2026-05-12T00:00:01.500Z'
 	})
+		await persistence.enqueue({
+			id: 'env-life-3',
+			fromActor: createIntentActorId('intent-life'),
+			toActor: createStableWorkerActorId('files', 'envelope-only-worker'),
+			type: 'skill.run',
+			runId: 'run-life',
+			payload: { intentId: 'intent-life' },
+			createdAt: '2026-05-12T00:00:02.500Z'
+		})
 
 	const api = await createWebApi({
 		persistence,
@@ -509,6 +593,11 @@ test('intent lifecycle endpoints expose actors, activity, envelopes, and actor d
 					actor.actorId === 'aven/skills/files/workers/create-file-a8f3k2' &&
 					actor.uiParentActorId === 'aven/skills/files' &&
 					actor.contextCount === 1
+			)
+		).toBe(true)
+		expect(
+			actorsBody.actors.some(
+				(actor) => actor.actorId === 'aven/skills/files/workers/envelope-only-worker' && actor.uiParentActorId === 'aven/skills/files'
 			)
 		).toBe(true)
 
@@ -539,7 +628,7 @@ test('intent lifecycle endpoints expose actors, activity, envelopes, and actor d
 
 		const envelopesResponse = await fetch(`${api.url}api/intents/intent-life/envelopes`)
 		const envelopesBody = (await envelopesResponse.json()) as { envelopes: Array<{ id: string }> }
-		expect(envelopesBody.envelopes.map((envelope) => envelope.id)).toEqual(['env-life-1', 'env-life-2'])
+		expect(envelopesBody.envelopes.map((envelope) => envelope.id)).toEqual(['env-life-1', 'env-life-2', 'env-life-3'])
 
 		const workerEnvelopesResponse = await fetch(
 			`${api.url}api/intents/intent-life/envelopes?actorId=${encodeURIComponent('aven/skills/files/workers/create-file-a8f3k2')}`
@@ -609,7 +698,7 @@ test('aven-ceo flow can post a message, inspect intents, and keep the SSE stream
 		const detailResponse = await fetch(`${api.url}api/intents/${intentId}`)
 		expect(detailResponse.status).toBe(200)
 
-		const streamResponse = await fetch(`${api.url}api/events/stream?scope=${encodeURIComponent(`intents/${intentId}`)}`)
+		const streamResponse = await fetch(`${api.url}api/events/stream?intentId=${encodeURIComponent(intentId)}`)
 		expect(streamResponse.status).toBe(200)
 		expect(streamResponse.headers.get('content-type')).toContain('text/event-stream')
 
@@ -630,59 +719,6 @@ test('aven-ceo flow can post a message, inspect intents, and keep the SSE stream
 	}
 })
 
-test('debug actor endpoints expose snapshots and runtime events', async () => {
-	const persistence = new SqlitePersistence()
-	const api = await createWebApi({
-		persistence,
-		harness: createHarnessStub(),
-		skills: [],
-		pollIntervalMs: 10,
-		streamHeartbeatMs: 20,
-		dispatcherBrain: {
-			async route() {
-				return {
-					type: 'create_intent',
-					title: 'Debug me',
-					initialGoal: 'Exercise debug visibility',
-					reason: 'visibility test'
-				}
-			}
-		},
-		intentBrain: {
-			async decide() {
-				return { summary: 'ok', actions: [{ type: 'reply_user', message: 'done' }] }
-			}
-		},
-		skillWorkerBrain: { async run() { return { state: {} } } }
-	})
-
-	try {
-		const initialSnapshot = (await (await fetch(`${api.url}debug/actors`)).json()) as { actors: Array<{ id: string }> }
-		expect(initialSnapshot.actors.some((actor) => actor.id === DISPATCHER_ACTOR_ID)).toBe(true)
-
-		const streamResponse = await fetch(`${api.url}debug/actors/events`)
-		expect(streamResponse.status).toBe(200)
-		expect(streamResponse.headers.get('content-type')).toContain('text/event-stream')
-
-		const postResponse = await fetch(`${api.url}api/messages`, {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ text: 'show debug actor events', attachments: [] })
-		})
-		expect(postResponse.status).toBe(202)
-
-		const streamText = await readStreamUntil(streamResponse, ['event: MessageSent', 'event: ActorStateChanged'])
-		expect(streamText).toContain('event: MessageSent')
-		expect(streamText).toContain('event: ActorStateChanged')
-
-		const snapshot = (await (await fetch(`${api.url}debug/actors`)).json()) as {
-			actors: Array<{ id: string; type: string }>
-		}
-		expect(snapshot.actors.some((actor) => actor.id.startsWith('aven/intents/') && actor.type === 'intent')).toBe(true)
-	} finally {
-		await api.stop()
-	}
-})
 
 function createHarnessStub() {
 	return {

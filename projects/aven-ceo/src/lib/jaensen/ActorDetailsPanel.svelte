@@ -21,7 +21,7 @@
 </script>
 
 <section class="min-h-0 flex-1 overflow-auto rounded-xl border border-border/40 bg-background/45 p-3 text-[11px]">
-	{#if tab === 'log' || tab === 'debug'}
+	{#if tab === 'log'}
 		<div class="space-y-2">
 			{#each events as event (event.seq)}
 				<div class="rounded-lg border border-border/35 p-2">

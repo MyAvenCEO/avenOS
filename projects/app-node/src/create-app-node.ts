@@ -27,10 +27,6 @@ import {
 	INTENTS_ACTOR_ID,
 	SKILLS_ACTOR_ID,
 	SqlitePersistence,
-	actorKindFromId,
-	actorNameFromId,
-	actorParentIdFromId,
-	createSkillActorId,
 	type Persistence
 } from '@jaensen/persistence-sqlite'
 import {
@@ -85,7 +81,7 @@ export interface AppNode {
 		now?: Date
 		id?: string
 	}): Promise<{ envelopeId: string; runId: string }>
-	tick(): Promise<'processed' | 'idle'>
+	tick(input?: { workerId?: string }): Promise<'processed' | 'idle'>
 	runUntilIdle(maxTicks?: number): Promise<number>
 	readHumanOutbox(): Promise<HumanOutboxEntry[]>
 }
@@ -168,18 +164,6 @@ export async function createAppNode(input: CreateAppNodeInput): Promise<AppNode>
 	)
 
 	runtime.register(createHumanOutboxHandler())
-	runtime.debug.seedActor({ id: DISPATCHER_ACTOR_ID, type: 'dispatcher', name: 'Dispatcher' })
-	runtime.debug.seedActor({ id: HUMAN_ACTOR_ID, type: 'human-outbox', name: 'Human outbox' })
-	runtime.debug.seedActor({ id: INTENTS_ACTOR_ID, type: 'intents', name: 'Intents' })
-	runtime.debug.seedActor({ id: SKILLS_ACTOR_ID, type: 'skills', name: 'Skills' })
-	for (const skill of skills) {
-		runtime.debug.seedActor({
-			id: createSkillActorId(skill.id),
-			type: 'skill-supervisor',
-			name: skill.id,
-			parentId: SKILLS_ACTOR_ID
-		})
-	}
 
 	return {
 		persistence,
@@ -201,8 +185,8 @@ export async function createAppNode(input: CreateAppNodeInput): Promise<AppNode>
 				runId: envelope.runId
 			}
 		},
-		tick() {
-			return runtime.tick()
+		tick(tickInput) {
+			return runtime.tick(tickInput)
 		},
 		runUntilIdle(maxTicks = 100) {
 			return runtime.runUntilIdle(maxTicks)
@@ -230,15 +214,6 @@ function instrumentHarness(
 	return {
 		async session(name, options) {
 			const actorId = actorIdFromSessionName(name)
-			if (actorId) {
-				runtime.debug.seedActor({
-					id: actorId,
-					type: actorTypeFromActorId(actorId),
-					name: actorNameFromActorId(actorId),
-					parentId: actorParentId(actorId),
-					lastEventAt: startupNow.toISOString()
-				})
-			}
 			const session = await harness.session(name, options)
 			return {
 				async prompt(text, promptOptions) {
@@ -296,18 +271,6 @@ function actorIdFromSessionName(name: string): string | null {
 	if (name.startsWith(`actor/${INTENTS_ACTOR_ID}/`)) return name.slice('actor/'.length)
 	if (name.startsWith(`actor/${SKILLS_ACTOR_ID}/`)) return name.slice('actor/'.length)
 	return null
-}
-
-function actorTypeFromActorId(actorId: string): string {
-	return actorKindFromId(actorId)
-}
-
-function actorNameFromActorId(actorId: string): string {
-	return actorNameFromId(actorId)
-}
-
-function actorParentId(actorId: string): string | undefined {
-	return actorParentIdFromId(actorId)
 }
 
 function truncate(value: string, max = 280): string {

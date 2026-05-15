@@ -1,5 +1,4 @@
 export * from './actor-registry'
-export * from './actor-introspection'
 export * from './create-actor-runtime'
 export * from './envelope-factory'
 export * from './errors'

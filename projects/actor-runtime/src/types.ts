@@ -48,27 +48,9 @@ export interface ActorDecision {
 export interface ActorRuntime {
 	register(handler: ActorHandler): void
 	enqueue(envelope: EnvelopeInput): Promise<void>
-	tick(): Promise<'processed' | 'idle'>
+	tick(input?: { workerId?: string }): Promise<'processed' | 'idle'>
 	runUntilIdle(maxTicks?: number): Promise<number>
 	debug: ActorRuntimeDebug
-}
-
-export type ActorStatus = 'running' | 'idle' | 'blocked' | 'failed' | 'stopped'
-
-export interface ActorInfo {
-	id: string
-	parentId?: string
-	type: string
-	name: string
-	status: ActorStatus
-	mailboxDepth: number
-	currentTask?: string
-	restartCount: number
-	lastEventAt: string
-}
-
-export interface ActorSnapshot {
-	actors: ActorInfo[]
 }
 
 export type ActorDebugTrace =
@@ -98,25 +80,7 @@ export type ActorDebugTrace =
 		at: string
 	}
 
-export type ActorEvent =
-	| { type: 'ActorSpawned'; actor: ActorInfo }
-	| { type: 'ActorStateChanged'; actorId: string; status: ActorStatus; at: string; currentTask?: string }
-	| { type: 'MessageSent'; id: string; from: string; to: string; messageType: string; at: string }
-	| { type: 'ActorStopped'; actorId: string; at: string }
-	| { type: 'ActorTraceRecorded'; actorId: string; trace: ActorDebugTrace }
-
-export interface DebugEventCursor {
-	seq: number
-	event: ActorEvent
-}
-
-export type DebugEventListener = (event: DebugEventCursor) => void
-
 export interface ActorRuntimeDebug {
-	getSnapshot(): ActorSnapshot
-	listEvents(after?: number): DebugEventCursor[]
-	subscribe(listener: DebugEventListener): () => void
-	seedActor(actor: Pick<ActorInfo, 'id' | 'type' | 'name'> & Partial<ActorInfo>): ActorInfo
 	recordTrace(actorId: string, trace: ActorDebugTrace): void
 }
 

@@ -219,14 +219,14 @@ test('runUntilIdle respects maxTicks', async () => {
 	expect(queued).toHaveLength(1)
 })
 
-test('debug registry tracks actor state and message events', async () => {
+test('tick uses per-call workerId when provided', async () => {
 	const persistence = new FakePersistence()
 	await persistence.migrate()
-	await persistence.upsertActor({ id: createIntentActorId('debug'), kind: 'intent', state: { ok: true } })
+	await persistence.upsertActor({ id: createIntentActorId('worker-override'), kind: 'intent', state: { ok: true } })
 
 	const runtime = createActorRuntime({
 		persistence,
-		workerId: 'worker-debug',
+		workerId: 'worker-default',
 		clock: () => new Date('2026-05-12T00:00:00.000Z')
 	})
 
@@ -238,25 +238,20 @@ test('debug registry tracks actor state and message events', async () => {
 	})
 
 	await runtime.enqueue({
-		id: 'env-debug',
+		id: 'env-worker-override',
 		fromActor: DISPATCHER_ACTOR_ID,
-		toActor: createIntentActorId('debug'),
-		type: 'intent.start',
-		runId: 'corr-debug',
-		payload: { ok: true }
+		toActor: createIntentActorId('worker-override'),
+		type: 'message',
+		runId: 'corr-worker-override',
+		payload: null
 	})
 
-	await runtime.tick()
-
-	const snapshot = runtime.debug.getSnapshot()
-	const actor = snapshot.actors.find((item) => item.id === createIntentActorId('debug'))
-	expect(actor).toBeDefined()
-	expect(actor?.status).toBe('idle')
-
-	const events = runtime.debug.listEvents()
-	expect(events.some((event) => event.event.type === 'MessageSent')).toBe(true)
-	expect(events.some((event) => event.event.type === 'ActorStateChanged')).toBe(true)
-	})
+	await expect(runtime.tick({ workerId: 'worker-slot-2' })).resolves.toBe('processed')
+	const envelope = persistence.envelopes.get('env-worker-override')
+	expect(envelope?.lockedBy).toBeNull()
+	expect(persistence.claims).toEqual(['env-worker-override'])
+	expect(persistence.claimedBy.at(-1)).toBe('worker-slot-2')
+})
 
 test('recordTrace persists actor IO traces to the stream store', async () => {
 	const persistence = new FakePersistence()

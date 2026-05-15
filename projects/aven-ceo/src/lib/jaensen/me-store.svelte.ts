@@ -109,17 +109,16 @@ export class MeStore {
 		if (!this.selectedIntentId || !this.selectedActorId) return
 		const key = selectionKey(this.selectedIntentId, this.selectedActorId, this.selectedTab)
 		if (!force) {
-			if ((this.selectedTab === 'log' || this.selectedTab === 'debug') && this.eventsBySelection[key]) return
+			if (this.selectedTab === 'log' && this.eventsBySelection[key]) return
 			if (this.selectedTab === 'messages' && this.envelopesBySelection[key]) return
 			if (this.selectedTab === 'context' && this.contextBySelection[key]) return
 			if ((this.selectedTab === 'state' || this.selectedTab === 'config') && this.actorDetails[this.selectedActorId]) return
 		}
 
-		if (this.selectedTab === 'log' || this.selectedTab === 'debug') {
+		if (this.selectedTab === 'log') {
 			this.eventsBySelection[key] = await getIntentActivity({
 				intentId: this.selectedIntentId,
-				actorId: this.selectedActorId,
-				visibility: this.selectedTab === 'debug' ? 'debug' : undefined
+				actorId: this.selectedActorId
 			})
 			return
 		}

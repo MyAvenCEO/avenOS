@@ -97,8 +97,6 @@ type CommunicationTreeNodeRecord = CommunicationTreeRecord & {
 	directChildCount: number
 }
 
-type RuntimeActorEvent = { type: string } & Record<string, unknown>
-
 type IntentActorKind = 'intent' | 'skill' | 'worker' | 'system' | 'human' | 'group' | 'unknown'
 
 type IntentActorNode = {
@@ -189,6 +187,7 @@ type ActorRow = {
 export interface CreateWebApiInput extends CreateAppNodeInput {
 	port?: number
 	hostname?: string
+	runtimeConcurrency?: number
 	pollIntervalMs?: number
 	idleDelayMs?: number
 	idleTimeoutSeconds?: number
@@ -233,9 +232,29 @@ export async function createWebApi(input: CreateWebApiInput): Promise<WebApi> {
 	const pollIntervalMs = input.pollIntervalMs ?? 150
 	const idleDelayMs = input.idleDelayMs ?? 100
 	const streamHeartbeatMs = input.streamHeartbeatMs ?? 5_000
+	const runtimeConcurrency = normalizeRuntimeConcurrency(input.runtimeConcurrency)
 
 	let daemonRunning = true
 	let daemonPromise: Promise<void> | null = null
+	const baseWorkerId = input.workerId ?? `node-${process.pid}`
+
+	async function runDaemonSlot(slot: number): Promise<void> {
+		const workerId = `${baseWorkerId}-${slot}`
+
+		while (daemonRunning) {
+			let result: 'processed' | 'idle'
+			try {
+				result = await app.tick({ workerId })
+			} catch (error) {
+				console.error('[jaensen/web-api] daemon tick failed', { slot, workerId, error })
+				await sleep(idleDelayMs)
+				continue
+			}
+			if (result === 'idle') {
+				await sleep(idleDelayMs)
+			}
+		}
+	}
 
 	function startDaemon(): void {
 		if (daemonPromise) {
@@ -244,19 +263,7 @@ export async function createWebApi(input: CreateWebApiInput): Promise<WebApi> {
 		daemonRunning = true
 
 		daemonPromise = (async () => {
-			while (daemonRunning) {
-				let result: 'processed' | 'idle'
-				try {
-					result = await app.tick()
-				} catch (error) {
-					console.error('[jaensen/web-api] daemon tick failed', error)
-					await sleep(idleDelayMs)
-					continue
-				}
-				if (result === 'idle') {
-					await sleep(idleDelayMs)
-				}
-			}
+			await Promise.all(Array.from({ length: runtimeConcurrency }, (_, slot) => runDaemonSlot(slot)))
 		})()
 	}
 
@@ -476,87 +483,7 @@ async function routeRequest(input: {
 		})
 	}
 
-	if (input.request.method === 'GET' && path === '/debug/actors') {
-		return jsonResponse(input.app.runtime.debug.getSnapshot())
-	}
-
-	if (input.request.method === 'GET' && path === '/debug/actors/events') {
-		const after = maxAfter(
-			parseAfter(url.searchParams.get('after')),
-			parseAfter(input.request.headers.get('last-event-id'))
-		)
-		return createActorDebugStreamResponse({
-			app: input.app,
-			after,
-			signal: input.request.signal,
-			heartbeatMs: input.streamHeartbeatMs
-		})
-	}
-
 	return notFound(`No route for ${input.request.method} ${path}`)
-}
-
-function createActorDebugStreamResponse(input: {
-	app: AppNode
-	after: number
-	signal: AbortSignal
-	heartbeatMs: number
-}): Response {
-	const encoder = new TextEncoder()
-	const pending = input.app.runtime.debug.listEvents(input.after)
-	let closed = false
-
-	const stream = new ReadableStream<Uint8Array>({
-		start(controller) {
-			controller.enqueue(encoder.encode(`retry: 1000\n\n`))
-			let lastWriteAt = Date.now()
-
-			for (const item of pending) {
-				controller.enqueue(encoder.encode(formatActorDebugSseEvent(item.seq, item.event)))
-				lastWriteAt = Date.now()
-			}
-
-			const unsubscribe = input.app.runtime.debug.subscribe((item) => {
-				if (closed || item.seq <= input.after) return
-				controller.enqueue(encoder.encode(formatActorDebugSseEvent(item.seq, item.event)))
-				lastWriteAt = Date.now()
-			})
-
-			const heartbeat = setInterval(() => {
-				if (closed) return
-				if (Date.now() - lastWriteAt >= input.heartbeatMs) {
-					controller.enqueue(encoder.encode(`: heartbeat ${Date.now()}\n\n`))
-					lastWriteAt = Date.now()
-				}
-			}, Math.max(250, Math.min(input.heartbeatMs, 1000)))
-
-			const abort = () => {
-				if (closed) return
-				closed = true
-				clearInterval(heartbeat)
-				unsubscribe()
-				try {
-					controller.close()
-				} catch {
-					// ignore close races
-				}
-			}
-
-			input.signal.addEventListener('abort', abort, { once: true })
-		}
-	})
-
-	return new Response(stream, {
-		headers: {
-			'content-type': 'text/event-stream; charset=utf-8',
-			'cache-control': 'no-cache, no-transform',
-			connection: 'keep-alive'
-		}
-	})
-}
-
-function formatActorDebugSseEvent(seq: number, event: RuntimeActorEvent): string {
-	return `id: ${seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`
 }
 
 function parseLimit(raw: string | null): number | undefined {
@@ -729,35 +656,32 @@ async function listIntentActors(persistence: SqliteQueryable, intentId: string):
 		)
 		.all(intentId) as ContextAggregateRow[]
 	const envelopeRows = aggregateEnvelopeActors(lifecycleEnvelopes)
+	const actorIds = new Set<string>([rootActorId])
+
+	for (const row of eventRows) actorIds.add(row.actor_id)
+	for (const row of contextRows) actorIds.add(row.actor_id)
+	for (const envelope of lifecycleEnvelopes) {
+		actorIds.add(envelope.fromActor)
+		actorIds.add(envelope.toActor)
+	}
+	for (const actorId of [...actorIds]) {
+		const worker = parseSkillWorkerActorId(actorId)
+		if (worker) actorIds.add(`aven/skills/${worker.skillId}`)
+	}
+
+	const realActorIds = [...actorIds].filter((actorId) => !actorId.startsWith('aven/groups/'))
 	const actorRows = persistence.db
 		.query(
 			`SELECT id, kind, status, state_json, version, created_at, updated_at
 			 FROM actors
-			 WHERE id = ? OR id IN (
-			   SELECT actor_id FROM events WHERE intent_id = ? AND actor_id IS NOT NULL
-			   UNION
-			   SELECT actor_id FROM context_items WHERE intent_id = ? AND actor_id IS NOT NULL
-			 )`
+			 WHERE id IN (${realActorIds.map(() => '?').join(', ')})`
 		)
-		.all(rootActorId, intentId, intentId) as ActorRow[]
+		.all(...realActorIds) as ActorRow[]
 
 	const actorMeta = new Map(actorRows.map((row) => [row.id, row]))
 	const eventMeta = new Map(eventRows.map((row) => [row.actor_id, row]))
 	const contextMeta = new Map(contextRows.map((row) => [row.actor_id, row]))
 	const envelopeMeta = new Map(envelopeRows.map((row) => [row.actor_id, row]))
-	const actorIds = new Set<string>([rootActorId])
-
-	for (const row of eventRows) actorIds.add(row.actor_id)
-	for (const row of contextRows) actorIds.add(row.actor_id)
-	for (const row of lifecycleEnvelopes) {
-		actorIds.add(row.fromActor)
-		actorIds.add(row.toActor)
-	}
-
-	for (const actorId of [...actorIds]) {
-		const worker = parseSkillWorkerActorId(actorId)
-		if (worker) actorIds.add(`aven/skills/${worker.skillId}`)
-	}
 
 	const nodes = [...actorIds]
 		.map((actorId) => buildIntentActorNode({
@@ -1076,6 +1000,14 @@ function parseOptionalInt(raw: string | null): number | undefined {
 
 function maxAfter(a: number, b: number): number {
 	return Math.max(a, b)
+}
+
+function normalizeRuntimeConcurrency(value: unknown): number {
+	if (typeof value !== 'number' || !Number.isFinite(value)) {
+		return 4
+	}
+
+	return Math.max(1, Math.min(32, Math.trunc(value)))
 }
 
 function trimTrailingSlash(pathname: string): string {

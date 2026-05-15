@@ -29,6 +29,7 @@ export class FakePersistence implements Persistence {
 	readonly appendedEvents: EventRecord[] = []
 	readonly contextItems: ContextItemRecord[] = []
 	readonly claims: string[] = []
+	readonly claimedBy: string[] = []
 	claimedLeaseMs: number | null = null
 	commitError: Error | null = null
 
@@ -84,6 +85,7 @@ export class FakePersistence implements Persistence {
 
 	async claimNext(input: { workerId: string; leaseMs: number; now: Date }): Promise<ClaimedEnvelope | null> {
 		this.claimedLeaseMs = input.leaseMs
+		this.claimedBy.push(input.workerId)
 		const claimable = [...this.envelopes.values()]
 			.filter((envelope) => envelope.status === 'queued' && envelope.availableAt <= input.now.toISOString())
 			.sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0]

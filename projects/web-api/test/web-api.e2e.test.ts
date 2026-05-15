@@ -87,7 +87,7 @@ test('web-api end-to-end covers creating an intent, loading real skills, creatin
 			expect.objectContaining({ payload: expect.objectContaining({ skillId: 'file-analyzer', workerActorId: expect.any(String), workerName: expect.any(String) }) })
 		])
 
-		const globalEventsResponse = await fetch(`${api.url}api/events?scope=global`)
+		const globalEventsResponse = await fetch(`${api.url}api/events`)
 		expect(globalEventsResponse.status).toBe(200)
 		const globalEventsBody = (await globalEventsResponse.json()) as {
 			events: Array<{ type: string; payload: Record<string, unknown> }>
@@ -488,7 +488,7 @@ function createCreateThenAnalyzeHarness(workspaceRoot: string) {
 						if (!worker) {
 							throw new Error(`Unexpected worker actor session ${name}`)
 						}
-						const { skillId, workerId } = worker
+						const { skillId } = worker
 
 						if (skillId === 'file-creator') {
 							const randomSlug = 'random-7f3a'
