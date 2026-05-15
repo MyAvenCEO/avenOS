@@ -1,0 +1,3 @@
+# Large vendored assets — run: bun run fetch:webcm (repo root)
+webcm.mjs
+webcm.wasm

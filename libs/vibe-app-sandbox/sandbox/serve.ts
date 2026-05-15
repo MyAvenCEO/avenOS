@@ -104,7 +104,8 @@ async function handleFetch(req: Request): Promise<Response> {
 			headers: {
 				'Content-Type': 'text/javascript; charset=utf-8',
 				'Cache-Control': 'public, max-age=31536000, immutable',
-				'Access-Control-Allow-Origin': '*'
+				'Access-Control-Allow-Origin': '*',
+				'Cross-Origin-Resource-Policy': 'cross-origin'
 			}
 		})
 	}
@@ -133,7 +134,8 @@ async function handleFetch(req: Request): Promise<Response> {
 			'Content-Security-Policy': cspHeader,
 			'Cache-Control': 'no-cache, no-store, must-revalidate',
 			Pragma: 'no-cache',
-			Expires: '0'
+			Expires: '0',
+			'Cross-Origin-Resource-Policy': 'cross-origin'
 		}
 	})
 }
