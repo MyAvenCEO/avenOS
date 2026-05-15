@@ -6,17 +6,19 @@
  * mobile-only Back button).
  *
  * Three layout variants gated on the selected intent's status:
- *  - `success`  → just the composer + an `Archive` pill on the right
+ *  - `success`  → composer + `Archive` pill on the right
  *  - `hitl` / `error` → `Re-train` pill (left) + composer + `Accept` pill (right)
  *  - none / `working` / `archived` → bare composer
  *
- * For `hitl` / `error`, when the composer expands (typing or listening), the
- * pill row is **hidden** and a single full-width `IntentComposer` replaces the
- * whole cluster — same mic / keyboard flow as the non-HITL bar so new intents
- * and voice notes are not visually or spatially blocked by the action pills.
- *
- * The `composerMode` and slash-command state stay local to this component — the parent
- * only learns via `onSubmitMessage`, `onRetrain`, `onArchive`, and `onAccept`.
+ * The composer is mounted ONCE per branch and the surrounding pills are
+ * conditionally rendered based on `composerMode`. We deliberately do not
+ * unmount + remount the composer between collapsed / typing / listening
+ * because remounting drops voice/keyboard input in HITL: a fresh instance
+ * seeds `mode` from the `command` prop only — without a slash command it
+ * starts in `collapsed`, fires `onModeChange('collapsed')` immediately,
+ * and the parent reverts the user's mic click or first keystroke. Keeping
+ * the composer stable lets free-form intent submission (voice and text)
+ * coexist with the HITL action pills.
  */
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import { focusShellWebview } from '$lib/intent-mock/focus-shell-webview'
@@ -89,20 +91,26 @@ const isHitlOrError = $derived(
 	onpointerdown={() => void focusShellWebview()}
 >
 	{#if isSuccess}
-		{#if composerMode === 'collapsed'}
-			<div class="grid min-h-12 w-full grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3">
-				<div class="flex items-center justify-end gap-2"></div>
-				<div class="justify-self-center">
-					<IntentComposer
-						bind:this={composerRef}
-						rowCluster
-						onSubmitMessage={onSubmitMessage}
-						onModeChange={(m: ComposerMode) => {
-							composerMode = m
-						}}
-					/>
-				</div>
-				<div class="flex items-center justify-start gap-2">
+		<div class="flex min-h-12 w-full min-w-0 items-center justify-center gap-2 sm:gap-3">
+			{#if composerMode === 'collapsed'}
+				<div class="flex flex-1 items-center justify-end gap-2"></div>
+			{/if}
+			<div
+				class={composerMode === 'collapsed'
+					? 'shrink-0'
+					: 'flex min-w-0 flex-1 items-center justify-center'}
+			>
+				<IntentComposer
+					bind:this={composerRef}
+					rowCluster={composerMode === 'collapsed'}
+					onSubmitMessage={onSubmitMessage}
+					onModeChange={(m: ComposerMode) => {
+						composerMode = m
+					}}
+				/>
+			</div>
+			{#if composerMode === 'collapsed'}
+				<div class="flex flex-1 items-center justify-start gap-2">
 					<button
 						type="button"
 						class="inline-flex h-10 min-h-10 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border border-border bg-transparent px-3.5 text-[11px] font-semibold text-foreground/85 transition-colors hover:bg-foreground/5 sm:px-4"
@@ -113,37 +121,12 @@ const isHitlOrError = $derived(
 						Archive
 					</button>
 				</div>
-			</div>
-		{:else}
-			<div class="flex w-full flex-col items-stretch gap-2">
-				<IntentComposer
-					bind:this={composerRef}
-					onSubmitMessage={onSubmitMessage}
-					onModeChange={(m: ComposerMode) => {
-						composerMode = m
-					}}
-				/>
-				<div class="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3">
-					<div class="flex items-center justify-end gap-2"></div>
-					<div></div>
-					<div class="flex items-center justify-start gap-2">
-						<button
-							type="button"
-							class="inline-flex h-10 min-h-10 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border border-border bg-transparent px-3.5 text-[11px] font-semibold text-foreground/85 transition-colors hover:bg-foreground/5 sm:px-4"
-							onclick={onArchive}
-							aria-label="Archive"
-							title="Archive intent"
-						>
-							Archive
-						</button>
-					</div>
-				</div>
-			</div>
-		{/if}
+			{/if}
+		</div>
 	{:else if isHitlOrError}
-		{#if composerMode === 'collapsed'}
-			<div class="grid min-h-12 w-full grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3">
-				<div class="flex items-center justify-end gap-2">
+		<div class="flex min-h-12 w-full min-w-0 items-center justify-center gap-2 sm:gap-3">
+			{#if composerMode === 'collapsed'}
+				<div class="flex flex-1 items-center justify-end gap-2">
 					<button
 						type="button"
 						class="inline-flex h-10 min-h-10 max-w-full shrink-0 cursor-pointer touch-manipulation items-center justify-center truncate rounded-full border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-status-error border-r-status-error bg-surface-card px-3.5 text-[11px] font-semibold text-status-error transition-colors hover:bg-status-error hover:text-status-error-foreground sm:px-4"
@@ -153,19 +136,25 @@ const isHitlOrError = $derived(
 						Re-train
 					</button>
 				</div>
-				<div class="justify-self-center">
-					<IntentComposer
-						bind:this={composerRef}
-						bind:command={composerCommand}
-						rowCluster
-						onSubmitMessage={onSubmitMessage}
-						onCommandSubmit={handleCommand}
-						onModeChange={(m: ComposerMode) => {
-							composerMode = m
-						}}
-					/>
-				</div>
-				<div class="flex items-center justify-start gap-2">
+			{/if}
+			<div
+				class={composerMode === 'collapsed'
+					? 'shrink-0'
+					: 'flex min-w-0 flex-1 items-center justify-center'}
+			>
+				<IntentComposer
+					bind:this={composerRef}
+					bind:command={composerCommand}
+					rowCluster={composerMode === 'collapsed'}
+					onSubmitMessage={onSubmitMessage}
+					onCommandSubmit={handleCommand}
+					onModeChange={(m: ComposerMode) => {
+						composerMode = m
+					}}
+				/>
+			</div>
+			{#if composerMode === 'collapsed'}
+				<div class="flex flex-1 items-center justify-start gap-2">
 					{#if intent?.status === 'error'}
 						<button
 							type="button"
@@ -185,22 +174,19 @@ const isHitlOrError = $derived(
 						>
 							Accept
 						</button>
+						<button
+							type="button"
+							class="inline-flex h-10 min-h-10 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-border border-r-border bg-surface-card px-3.5 text-[11px] font-semibold text-foreground/70 transition-colors hover:bg-foreground/5 sm:px-4"
+							onclick={onArchive}
+							aria-label="Archive intent — dismiss without resolving"
+							title="Archive intent"
+						>
+							Archive
+						</button>
 					{/if}
 				</div>
-			</div>
-		{:else}
-			<div class="flex w-full min-w-0 justify-center">
-				<IntentComposer
-					bind:this={composerRef}
-					bind:command={composerCommand}
-					onSubmitMessage={onSubmitMessage}
-					onCommandSubmit={handleCommand}
-					onModeChange={(m: ComposerMode) => {
-						composerMode = m
-					}}
-				/>
-			</div>
-		{/if}
+			{/if}
+		</div>
 	{:else}
 		<IntentComposer
 			bind:this={composerRef}

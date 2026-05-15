@@ -127,6 +127,7 @@ export function openWithCommand(label: string) {
 	if (mode !== 'typing') {
 		mode = 'typing'
 	}
+	scheduleResizeForProgrammaticOpen()
 }
 
 /**
@@ -163,6 +164,7 @@ export function openWithFiles(fileList: File[] | FileList) {
 		const len = el.value.length
 		el.setSelectionRange(len, len)
 	})
+	scheduleResizeForProgrammaticOpen()
 }
 
 function removeAttachmentAt(index: number) {
@@ -272,10 +274,20 @@ function resizeComposer() {
 			: (parseFloat(style.fontSize) || 16) * 1.3
 	const minH = lh + (Number.isFinite(pad) ? pad : 0)
 	const maxPx = lh * TYPING_TEXTAREA_MAX_ROWS + (Number.isFinite(pad) ? pad : 0)
-	const scrollH = el.scrollHeight
+	// Empty text → always one line. Avoids initial mount measurement returning a multi-line scrollHeight
+	// when the box was just inserted into a flex container with align-items: stretch.
+	const scrollH = el.value.length === 0 ? minH : el.scrollHeight
 	const h = Math.min(Math.max(scrollH, minH), maxPx)
 	el.style.height = `${h}px`
 	el.style.overflowY = scrollH > maxPx ? 'auto' : 'hidden'
+}
+
+/** Ensure the textarea is sized for one line on programmatic open (drop / retrain). */
+function scheduleResizeForProgrammaticOpen() {
+	void tick().then(() => {
+		resizeComposer()
+		requestAnimationFrame(() => resizeComposer())
+	})
 }
 
 $effect(() => {
