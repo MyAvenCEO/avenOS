@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::RwLock;
 
 use groove::{
-	query_manager::types::{ColumnType, TableSchema},
+	query_manager::types::{ColumnType, SchemaHash, TableSchema},
 	AppContext,
 	AppId,
 	ClientId,
@@ -103,7 +103,14 @@ pub(super) fn format_jazz_err(err: JazzError) -> String {
 				"groove write (display): {msg} | debug: {:?}",
 				err
 			);
-			msg.clone()
+			// BranchNotFound maps to QueryError::ObjectNotFound upstream; surfaced as unreadable IDs.
+			if msg.contains("ObjectNotFound") {
+				format!(
+					"{msg}. Groove cannot apply this write: row history may sit on another schema lane while lists still merge-read older branches (Spark denials surface as biscuit_deny, not ObjectNotFound). If this persists across restarts, remove this app's Jazz data folder (macOS `Application Support/*/jazz`).",
+				)
+			} else {
+				msg.clone()
+			}
 		}
 		JazzError::Query(msg) => {
 			log::warn!(
@@ -153,14 +160,25 @@ fn schema_manifest_fingerprint() -> Result<[u8; 32], String> {
 /// stranded on a key prefix the new client can never reach, producing `ObjectNotFound` on every
 /// write to a row that does still appear in `list`. Dev-mode safety net: in production this
 /// should be a real schema migration with `add_live_schema` + lens transforms.
+const JAZZ_LANE_FILE: &str = "jazz_lane";
+const GROOVE_SCHEMA_HASH_FILE: &str = "groove_schema_hash";
+
+/// Persisted lane must align with `JazzClient::connect`, which mounts `SchemaManager::new(.., env, branch)`.
+/// Mismatch survives manifest fingerprint checks (same JSON blob) yet maps to disjoint Groove branch names.
+const CURRENT_JAZZ_LANE: &str = "lane-v1;env=client;user_branch=main";
+
 fn reconcile_jazz_identity_cache_dir(
 	jazz_dir: &Path,
 	desired_uuid: Uuid,
 	current_schema_fp: &[u8; 32],
+	expected_groove_schema_hash: SchemaHash,
 ) -> Result<(), String> {
 	let mut reason: Option<String> = None;
 
 	let client_path = jazz_dir.join("client_id");
+	let groove_db_path = jazz_dir.join("groove.surrealkv");
+	let has_prior_groove_data =
+		client_path.exists() || groove_db_path.exists();
 	match fs::read_to_string(&client_path) {
 		Ok(s) => {
 			if let Some(cid) = ClientId::parse(s.trim()) {
@@ -188,14 +206,52 @@ fn reconcile_jazz_identity_cache_dir(
 				));
 			}
 			Err(e) if e.kind() == ErrorKind::NotFound => {
-				// First boot, or upgrade from an older AvenOS that didn't track this.
-				// If client_id already exists from such an older boot we cannot tell whether the
-				// schema matches the data on disk; treat that as a mismatch and wipe.
-				if client_path.exists() {
-					reason = Some("schema fingerprint missing while groove data present".into());
+				if has_prior_groove_data {
+					reason =
+						Some("schema fingerprint missing while groove data present".into());
 				}
 			}
 			Err(e) => return Err(format!("read {}: {e}", fp_path.display())),
+		}
+	}
+
+	let lane_path = jazz_dir.join(JAZZ_LANE_FILE);
+	if reason.is_none() {
+		match fs::read_to_string(&lane_path) {
+			Ok(stored) => {
+				let stored = stored.trim();
+				if stored != CURRENT_JAZZ_LANE {
+					reason = Some(format!(
+						"jazz lane mismatch (on-disk={stored:?}, current={CURRENT_JAZZ_LANE:?})"
+					));
+				}
+			}
+			Err(e) if e.kind() == ErrorKind::NotFound => {
+				// Older AvenOS: migrate without wiping by writing the canonical lane stamp below.
+			}
+			Err(e) => return Err(format!("read {}: {e}", lane_path.display())),
+		}
+	}
+
+	let grove_hash_path = jazz_dir.join(GROOVE_SCHEMA_HASH_FILE);
+	if reason.is_none() {
+		match fs::read(&grove_hash_path) {
+			Ok(bytes) => {
+				if bytes.len() != 32 {
+					reason = Some(format!(
+						"groove_schema_hash malformed ({} bytes, expected 32)",
+						bytes.len(),
+					));
+				} else if !bytes[..].eq(expected_groove_schema_hash.as_bytes().as_slice()) {
+					let on = hex_short(&bytes);
+					let cur = hex_short(expected_groove_schema_hash.as_bytes());
+					reason = Some(format!(
+						"groove SchemaHash mismatch (on-disk={on}, current={cur}); jazz-tools/schema builder drift"
+					));
+				}
+			}
+			Err(e) if e.kind() == ErrorKind::NotFound => {}
+			Err(e) => return Err(format!("read {}: {e}", grove_hash_path.display())),
 		}
 	}
 
@@ -214,6 +270,15 @@ fn reconcile_jazz_identity_cache_dir(
 	fs::create_dir_all(jazz_dir).map_err(|e| format!("recreate jazz dir: {e}"))?;
 	fs::write(&fp_path, current_schema_fp)
 		.map_err(|e| format!("write {}: {e}", fp_path.display()))?;
+	fs::write(jazz_dir.join(JAZZ_LANE_FILE), CURRENT_JAZZ_LANE.as_bytes()).map_err(|e| {
+		format!(
+			"write {}: {e}",
+			jazz_dir.join(JAZZ_LANE_FILE).display()
+		)
+	})?;
+	fs::write(&grove_hash_path, expected_groove_schema_hash.as_bytes()).map_err(|e| {
+		format!("write {}: {e}", grove_hash_path.display())
+	})?;
 	Ok(())
 }
 
@@ -386,6 +451,7 @@ async fn jazz_connect(
 	let schema = crate::schema_manifest::load_jazz_schema_from_manifest()?;
 	let pk = ed25519_public(&root)?;
 	let deterministic = crate::jazz_auth::client_uuid_from_ed_pubkey(&pk);
+	let groove_schema_digest = SchemaHash::compute(&schema);
 	let schema_fp = schema_manifest_fingerprint()?;
 
 	let data_dir = app
@@ -393,7 +459,7 @@ async fn jazz_connect(
 		.app_data_dir()
 		.map_err(|e| e.to_string())?
 		.join("jazz");
-	reconcile_jazz_identity_cache_dir(&data_dir, deterministic, &schema_fp)?;
+	reconcile_jazz_identity_cache_dir(&data_dir, deterministic, &schema_fp, groove_schema_digest)?;
 
 	let ctx = AppContext {
 		app_id: AppId::from_name("ceo.aven.os"),
