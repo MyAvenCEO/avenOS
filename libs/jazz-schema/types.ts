@@ -22,7 +22,7 @@ export type TodosRow = {
 	spark_id: string
 	title: string
 	done: boolean
-	description?: string
+	description?: string | undefined
 }
 
 export type SchemaTables = {

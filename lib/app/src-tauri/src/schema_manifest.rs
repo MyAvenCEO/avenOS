@@ -14,6 +14,7 @@ struct ManifestColumn {
 	ty: String,
 	#[serde(default)]
 	nullable: bool,
+	/// When false (default): column is encrypted at rest and gated by biscuit on IPC paths.
 	#[serde(default)]
 	plaintext: bool,
 }
@@ -53,15 +54,20 @@ pub fn jazz_schema_manifest_path() -> PathBuf {
 	PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../libs/jazz-schema/schema.manifest.json")
 }
 
-pub fn manifest_secret_columns() -> Result<HashMap<String, HashSet<String>>, String> {
+fn read_manifest() -> Result<Manifest, String> {
 	let path = jazz_schema_manifest_path();
 	let raw =
 		std::fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
-	let m: Manifest = serde_json::from_str(&raw).map_err(|e| format!("manifest JSON: {e}"))?;
+	serde_json::from_str(&raw).map_err(|e| format!("manifest JSON: {e}"))
+}
+
+/// Rows marked `plaintext` in the manifest are public; everything else is sealed + IPC-gated by default.
+pub fn manifest_sensitive_columns() -> Result<HashMap<String, HashSet<String>>, String> {
+	let m = read_manifest()?;
 	let mut out: HashMap<String, HashSet<String>> = HashMap::new();
 	for (table_name, def) in m.tables {
 		for col in def.columns {
-			if col.plaintext || col.ty != "text" {
+			if col.plaintext {
 				continue;
 			}
 			out.entry(table_name.clone())
@@ -72,12 +78,15 @@ pub fn manifest_secret_columns() -> Result<HashMap<String, HashSet<String>>, Str
 	Ok(out)
 }
 
+/// Back-compat name for callers that historically called this «secret manifest» for text-only sealing.
+#[inline]
+pub fn manifest_secret_columns() -> Result<HashMap<String, HashSet<String>>, String> {
+	manifest_sensitive_columns()
+}
+
 /// Build a Jazz [`Schema`] from the checked-in manifest alongside this crate.
 pub fn load_jazz_schema_from_manifest() -> Result<Schema, String> {
-	let path = jazz_schema_manifest_path();
-	let raw =
-		std::fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
-	let m: Manifest = serde_json::from_str(&raw).map_err(|e| format!("manifest JSON: {e}"))?;
+	let m = read_manifest()?;
 
 	let mut builder = SchemaBuilder::new();
 	for (table_name, def) in m.tables {

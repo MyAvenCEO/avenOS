@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use groove::{
-	query_manager::types::{TableName, TableSchema},
+	query_manager::types::{ColumnType, TableName, TableSchema},
 	JazzClient,
 	ObjectId,
 	QueryBuilder,
@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 use crate::{
 	crypto::{
+		cell_seal_aad, column_type_slug, groove_value_to_canonical_utf8, ipc_json_from_opened_sensitive_plaintext,
 		decrypt_keyshare_payload, derive_kek_x25519, encrypt_keyshare_payload, open_text_cell_payload,
 		keyshare_wrap_aad, random_spark_dek, seal_text_cell_payload, Dek, CELL_ENVELOPE_V1,
 	},
@@ -60,10 +61,6 @@ fn secret_manifest() -> &'static HashMap<String, HashSet<String>> {
 	})
 }
 
-pub(super) fn acc_skip_table(table: &str) -> bool {
-	matches!(table, "sparks" | "keyshares")
-}
-
 pub(super) fn col_ix(tbl: &TableSchema, name: &str) -> Result<usize, String> {
 	tbl.descriptor
 		.columns
@@ -100,9 +97,6 @@ pub(super) fn authorize_gate(
 	spark_id: Uuid,
 	row_uuid: Option<Uuid>,
 ) -> Result<(), String> {
-	if acc_skip_table(table) {
-		return Ok(());
-	}
 	spark_acc::authorize(&state.vault, spark_id, op, table, row_uuid, &state.peer_did)
 }
 
@@ -127,6 +121,26 @@ pub(super) fn spark_urn(id: Uuid) -> String {
 	format!("spark:{id}")
 }
 
+pub(super) fn spark_uuid_from_json_row(
+	tbl: &TableSchema,
+	row: &Map<String, JsonValue>,
+) -> Result<Uuid, String> {
+	let ix = col_ix(tbl, "spark_id")?;
+	let desc = tbl.descriptor.columns.get(ix).ok_or("spark_desc_ix")?;
+	let raw = row
+		.get("spark_id")
+		.ok_or_else(|| "missing_spark_id".to_string())?;
+	let v =
+		super::json_cell_to_jazz(raw, &desc.column_type, desc.nullable)?;
+	match v {
+		Value::Uuid(oid) => Ok(*oid.uuid()),
+		Value::Text(s) => {
+			Uuid::parse_str(s.trim()).map_err(|e| format!("uuid_parse:{e}"))
+		}
+		x => Err(format!("expected_uuid_cell:{x:?}")),
+	}
+}
+
 pub(super) fn place_secrets_for_insert(
 	tbl: &TableSchema,
 	table: &str,
@@ -137,28 +151,31 @@ pub(super) fn place_secrets_for_insert(
 	let Some(secrets) = secret_manifest().get(table) else {
 		return Ok(());
 	};
-	for col in secrets {
-		let Some(desc) = tbl.descriptor.column(col) else {
-			continue;
-		};
-		let Some(raw) = values.get(col) else {
-			if desc.nullable {
-				continue;
-			}
-			return Err(format!("missing_secret_column:{col}"));
-		};
-		if raw.is_null() {
-			if !desc.nullable {
-				return Err(format!("null_secret_disallowed:{col}"));
-			}
+	for desc in tbl.descriptor.columns.iter() {
+		let key = desc.name_str();
+		if !secrets.contains(key) {
 			continue;
 		}
-		let s = raw
-			.as_str()
-			.ok_or_else(|| format!("secret_not_string:{col}"))?
-			.to_string();
-		plaintext_out.insert(col.clone(), s);
-		values.insert(col.clone(), JsonValue::String(phase1.into()));
+		match values.get_mut(key) {
+			None => {
+				if !desc.nullable {
+					return Err(format!("missing_secret_column:{key}"));
+				}
+			}
+			Some(raw) => {
+				if raw.is_null() {
+					if !desc.nullable {
+						return Err(format!("null_secret_disallowed:{key}"));
+					}
+					continue;
+				}
+				let gv =
+					super::loose_json_to_sealable_value(raw, &desc.column_type, desc.nullable)?;
+				let canon = groove_value_to_canonical_utf8(&gv)?;
+				plaintext_out.insert(key.to_string(), canon);
+				*raw = JsonValue::String(phase1.into());
+			}
+		}
 	}
 	Ok(())
 }
@@ -193,9 +210,10 @@ pub(super) fn seal_column_plain(
 	state: &ShellState,
 	table: &str,
 	col_name: &str,
+	storage_ty: &ColumnType,
 	spark: Uuid,
 	row: Uuid,
-	plaintext: &str,
+	canonical_plaintext_utf8: &str,
 ) -> Result<String, String> {
 	let v = current_dek_version(state, spark)?;
 	let dek_entry = state
@@ -203,28 +221,31 @@ pub(super) fn seal_column_plain(
 		.get(&(spark, v))
 		.ok_or_else(|| format!("missing_dek_cached:{spark}|{v}"))?;
 	let urn = spark_urn(spark);
-	let aad = format!("{urn}|{table}|{col_name}|{row}|{v}").into_bytes();
-	seal_text_cell_payload(dek_entry.expose(), &aad, plaintext)
+	let slug = column_type_slug(storage_ty);
+	let aad = cell_seal_aad(&urn, table, col_name, row, v, slug);
+	seal_text_cell_payload(dek_entry.expose(), &aad, canonical_plaintext_utf8)
 }
 
-fn map_secret_text_cell(
+fn map_sensitive_storage_cell(
 	state: &ShellState,
-	_table: &str,
 	col: &str,
+	storage_ty: &ColumnType,
 	spark: Uuid,
-	_row: Uuid,
 	raw: &str,
 	miss: &mut Vec<String>,
 ) -> JsonValue {
 	if !raw.starts_with(CELL_ENVELOPE_V1) {
-		return JsonValue::String(raw.into());
+		return ipc_json_from_opened_sensitive_plaintext(raw, storage_ty)
+			.unwrap_or_else(|_| JsonValue::String(raw.into()));
 	}
 	for ((sp, _dv), dek) in &state.deks {
 		if *sp != spark {
 			continue;
 		}
-		if let Ok((s, _ver)) = open_text_cell_payload(dek.expose(), raw) {
-			return JsonValue::String(s);
+		if let Ok((opened, _ver)) = open_text_cell_payload(dek.expose(), raw) {
+			return ipc_json_from_opened_sensitive_plaintext(&opened, storage_ty).unwrap_or_else(|_| {
+				JsonValue::String(opened.into())
+			});
 		}
 	}
 	miss.push(col.into());
@@ -249,12 +270,18 @@ pub(super) fn row_to_public_map(
 		let name = desc.name_str();
 		let jv = if let Some(set) = secrets {
 			if set.contains(name) {
-				let t = match cell {
-					Value::Text(s) => s.as_str(),
-					Value::Null => "",
-					_ => return Err(format!("secret_col_bad_storage:{name}")),
-				};
-				map_secret_text_cell(state, table, name, spark, *oid.uuid(), t, &mut miss)
+				match cell {
+					Value::Text(s) => map_sensitive_storage_cell(
+						state,
+						name,
+						&desc.column_type,
+						spark,
+						s.as_str(),
+						&mut miss,
+					),
+					Value::Null if desc.nullable => JsonValue::Null,
+					_ => return Err(format!("secret_col_bad_storage:{name}:{cell:?}")),
+				}
 			} else {
 				jazz_cell_json(cell)
 			}
@@ -296,9 +323,7 @@ pub(super) async fn query_table_publish(
 	let mut out = Vec::with_capacity(rows.len());
 	for (oid, vals) in rows {
 		let spark_row = spark_uuid_row(&table_schema, &vals).unwrap_or(state.default_spark);
-		if !acc_skip_table(table) {
-			authorize_gate(state, table, AccOp::Read, spark_row, Some(*oid.uuid()))?;
-		}
+		authorize_gate(state, table, AccOp::Read, spark_row, Some(*oid.uuid()))?;
 		out.push(row_to_public_map(
 			state,
 			table,

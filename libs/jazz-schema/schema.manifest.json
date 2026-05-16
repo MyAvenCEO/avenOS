@@ -19,9 +19,18 @@
 		},
 		"todos": {
 			"columns": [
-				{ "name": "spark_id", "type": "uuid", "plaintext": true },
+				{
+					"name": "spark_id",
+					"type": "uuid",
+					"plaintext": true,
+					"comment": "public linkage — ACC routing; ciphertext AAD binds rows to sparks"
+				},
 				{ "name": "title", "type": "text" },
-				{ "name": "done", "type": "boolean", "plaintext": true },
+				{
+					"name": "done",
+					"type": "text",
+					"exposeTs": "boolean"
+				},
 				{ "name": "description", "type": "text", "nullable": true }
 			]
 		}

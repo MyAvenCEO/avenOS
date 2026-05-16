@@ -6,14 +6,19 @@ use chacha20poly1305::aead::Aead;
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use ed25519_dalek::SigningKey;
+use groove::query_manager::types::ColumnType;
+use groove::{ObjectId, Value};
 use hkdf::Hkdf;
 use rand_core::{OsRng, RngCore};
+use serde_json::{json, Number, Value as JsonValue};
 use sha2::{Digest, Sha256, Sha512};
 use x25519_dalek::{PublicKey as XPub, StaticSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 const KEYSHARE_INFO: &[u8] = b"ceo.aven.os/spark/keyshare/v1";
 pub const CELL_ENVELOPE_V1: &str = "v1";
+pub const CELL_CANON_SCHEMA_V: u64 = 2;
+pub const CELL_PAYLOAD_MSV: u32 = 2;
 
 static BASE64_ENC: base64::engine::general_purpose::GeneralPurpose =
 	base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -199,13 +204,175 @@ pub fn open_text_cell_payload(dek32: &[u8; 32], envelope: &str) -> Result<(Strin
 }
 
 #[must_use]
+pub fn column_type_slug(ty: &ColumnType) -> &'static str {
+	match ty {
+		ColumnType::Text => "text",
+		ColumnType::Boolean => "boolean",
+		ColumnType::Integer => "integer",
+		ColumnType::BigInt => "bigint",
+		ColumnType::Timestamp => "timestamp",
+		ColumnType::Uuid => "uuid",
+		ColumnType::Array(_) => "array",
+		ColumnType::Row(_) => "row",
+	}
+}
+
+#[must_use]
+pub fn cell_seal_aad(
+	spark_urn: &str,
+	table: &str,
+	column: &str,
+	row: uuid::Uuid,
+	dek_version_line: i64,
+	storage_ty_slug: &str,
+) -> Vec<u8> {
+	format!(
+		"{spark_urn}|{table}|{column}|{row}|{dek_version_line}|ty:{storage_ty_slug}|msv:{}",
+		CELL_PAYLOAD_MSV
+	)
+	.into_bytes()
+}
+
+pub fn groove_value_to_canonical_utf8(val: &Value) -> Result<String, String> {
+	let j = match val {
+		Value::Null => json!({"schema_v": CELL_CANON_SCHEMA_V, "t": "null"}),
+		Value::Text(s) => json!({"schema_v": CELL_CANON_SCHEMA_V, "t": "text", "v": s}),
+		Value::Boolean(b) => json!({"schema_v": CELL_CANON_SCHEMA_V, "t": "boolean", "v": *b}),
+		Value::Integer(i) => json!({"schema_v": CELL_CANON_SCHEMA_V, "t": "integer", "v": *i}),
+		Value::BigInt(i) => json!({"schema_v": CELL_CANON_SCHEMA_V, "t": "bigint", "v": *i}),
+		Value::Timestamp(ts) => json!({"schema_v": CELL_CANON_SCHEMA_V, "t": "timestamp", "v": *ts}),
+		Value::Uuid(oid) => {
+			json!({"schema_v": CELL_CANON_SCHEMA_V, "t": "uuid", "v": oid.uuid().to_string()})
+		}
+		Value::Array(_) | Value::Row(_) => return Err("canon_nested_unsupported".into()),
+	};
+	Ok(j.to_string())
+}
+
+fn canonical_json_to_grove(j: &JsonValue) -> Result<Value, String> {
+	let t = j
+		.get("t")
+		.and_then(JsonValue::as_str)
+		.ok_or_else(|| "canon_t".to_string())?;
+	Ok(match t {
+		"null" => Value::Null,
+		"text" => Value::Text(
+			j.get("v")
+				.and_then(JsonValue::as_str)
+				.ok_or_else(|| "canon_v_text".to_string())?
+				.to_string(),
+		),
+		"boolean" => Value::Boolean(
+			j.get("v")
+				.and_then(JsonValue::as_bool)
+				.ok_or_else(|| "canon_v_bool".to_string())?,
+		),
+		"integer" => Value::Integer(
+			j.get("v")
+				.and_then(JsonValue::as_i64)
+				.and_then(|v| i32::try_from(v).ok())
+				.ok_or_else(|| "canon_v_i32".to_string())?,
+		),
+		"bigint" => {
+			Value::BigInt(
+				j.get("v")
+					.and_then(JsonValue::as_i64)
+					.ok_or_else(|| "canon_v_i64".to_string())?,
+			)
+		}
+		"timestamp" => {
+			Value::Timestamp(
+				j.get("v")
+					.and_then(JsonValue::as_u64)
+					.ok_or_else(|| "canon_v_ts".to_string())?,
+			)
+		}
+		"uuid" => {
+			let s = j
+				.get("v")
+				.and_then(JsonValue::as_str)
+				.ok_or_else(|| "canon_v_uuid_str".to_string())?;
+			let u = uuid::Uuid::parse_str(s).map_err(|_| "canon_uuid".to_string())?;
+			Value::Uuid(ObjectId::from_uuid(u))
+		}
+		_ => return Err(format!("canon_tag:{t}")),
+	})
+}
+
+fn groove_value_to_ipc_json(cell: &Value) -> JsonValue {
+	match cell {
+		Value::Integer(i) => JsonValue::Number(Number::from(*i)),
+		Value::BigInt(i) => JsonValue::Number(Number::from(*i)),
+		Value::Boolean(b) => JsonValue::Bool(*b),
+		Value::Text(s) => JsonValue::String(s.clone()),
+		Value::Timestamp(ts) => JsonValue::Number(Number::from(*ts)),
+		Value::Uuid(oid) => JsonValue::String(oid.uuid().to_string()),
+		Value::Null => JsonValue::Null,
+		Value::Array(items) => JsonValue::Array(items.iter().map(groove_value_to_ipc_json).collect()),
+		Value::Row(items) => JsonValue::Array(items.iter().map(groove_value_to_ipc_json).collect()),
+	}
+}
+
+fn legacy_plain_to_ipc(opened_plain: &str, storage_ty: &ColumnType) -> Result<JsonValue, String> {
+	match storage_ty {
+		ColumnType::Text => Ok(JsonValue::String(opened_plain.into())),
+		ColumnType::Boolean => match opened_plain.trim() {
+			"true" => Ok(JsonValue::Bool(true)),
+			"false" => Ok(JsonValue::Bool(false)),
+			other => Err(format!("legacy_boolean:{other}")),
+		},
+		ColumnType::Integer => {
+			let n: i32 = opened_plain
+				.trim()
+				.parse()
+				.map_err(|_| "legacy_i32".to_string())?;
+			Ok(JsonValue::Number(Number::from(n)))
+		}
+		ColumnType::BigInt => {
+			let n: i64 = opened_plain
+				.trim()
+				.parse()
+				.map_err(|_| "legacy_i64".to_string())?;
+			Ok(JsonValue::Number(Number::from(n)))
+		}
+		ColumnType::Timestamp => {
+			let n: u64 = opened_plain
+				.trim()
+				.parse()
+				.map_err(|_| "legacy_ts".to_string())?;
+			Ok(JsonValue::Number(Number::from(n)))
+		}
+		ColumnType::Uuid => {
+			let u = uuid::Uuid::parse_str(opened_plain.trim()).map_err(|_| "legacy_uuid".to_string())?;
+			Ok(JsonValue::String(u.to_string()))
+		}
+		ColumnType::Array(_) | ColumnType::Row(_) => Err("legacy_nested".into()),
+	}
+}
+
+/// Interprets post-decrypt plaintext: typed canonical JSON preferred, UTF-8 legacy fallback for migration.
+pub fn ipc_json_from_opened_sensitive_plaintext(
+	opened_plain: &str,
+	storage_ty: &ColumnType,
+) -> Result<JsonValue, String> {
+	if let Ok(v) = serde_json::from_str::<JsonValue>(opened_plain) {
+		if v.get("schema_v").and_then(JsonValue::as_u64) == Some(CELL_CANON_SCHEMA_V) {
+			let gv = canonical_json_to_grove(&v)?;
+			return Ok(groove_value_to_ipc_json(&gv));
+		}
+	}
+	legacy_plain_to_ipc(opened_plain, storage_ty)
+}
+
+#[must_use]
 pub fn dek_version_from_aad_bytes(aad_plain: &[u8]) -> Result<u64, String> {
-	let s =
-		std::str::from_utf8(aad_plain).map_err(|_| "aad_utf8".to_string())?;
-	let last = s.split('|').next_back().ok_or_else(|| "aad_pipe".to_string())?;
-	last
-		.parse::<u64>()
-		.map_err(|_| format!("aad_dek_version:{last}"))
+	let s = std::str::from_utf8(aad_plain).map_err(|_| "aad_utf8".to_string())?;
+	let parts: Vec<&str> = s.split('|').collect();
+	let seg = parts
+		.get(4)
+		.ok_or_else(|| "aad_segments".to_string())?;
+	seg.parse::<u64>()
+		.map_err(|_| format!("aad_dek_version:{seg}"))
 }
 
 #[must_use]
@@ -215,7 +382,12 @@ pub fn keyshare_wrap_aad(spark_urn: &str, recipient_did: &str, dek_version: i64)
 
 #[cfg(test)]
 mod tests {
-	use super::{open_text_cell_payload, random_spark_dek, seal_text_cell_payload};
+	use super::{
+		column_type_slug, dek_version_from_aad_bytes, groove_value_to_canonical_utf8, ipc_json_from_opened_sensitive_plaintext,
+		open_text_cell_payload, random_spark_dek, seal_text_cell_payload,
+		cell_seal_aad, ColumnType,
+		Value,
+	};
 
 	#[test]
 	fn envelope_roundtrip() {
@@ -229,5 +401,29 @@ mod tests {
 		let (out, dv) = open_text_cell_payload(dek.expose(), &enc).unwrap();
 		assert_eq!(out, "hello");
 		assert_eq!(dv, 1u64);
+		assert_eq!(dek_version_from_aad_bytes(&aad_plain).unwrap(), 1);
+	}
+
+	#[test]
+	fn envelope_roundtrip_extended_aad() {
+		let dek = random_spark_dek();
+		let spark = uuid::Uuid::nil();
+		let row = uuid::Uuid::nil();
+		let spark_urn = format!("spark:{spark}");
+		let aad_plain = cell_seal_aad(&spark_urn, "todos", "done", row, 2, column_type_slug(&ColumnType::Text));
+		assert_eq!(
+			dek_version_from_aad_bytes(&aad_plain).unwrap(),
+			2u64
+		);
+
+		let canon =
+			groove_value_to_canonical_utf8(&Value::Boolean(true)).unwrap();
+
+		let enc = seal_text_cell_payload(dek.expose(), &aad_plain, &canon).unwrap();
+		let (out, dv) = open_text_cell_payload(dek.expose(), &enc).unwrap();
+		let j =
+			ipc_json_from_opened_sensitive_plaintext(&out, &ColumnType::Text).unwrap();
+		assert_eq!(j, serde_json::json!(true));
+		assert_eq!(dv, 2u64);
 	}
 }

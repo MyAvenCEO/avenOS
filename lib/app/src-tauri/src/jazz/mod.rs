@@ -76,11 +76,11 @@ impl ManagedJazz {
 	}
 }
 
-fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable: bool) -> Result<Value, String> {
+pub(super) fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable: bool) -> Result<Value, String> {
 	if cell.is_null() || *cell == JsonValue::Null {
 		return nullable
-			.then(|| Value::Null)
-			.ok_or_else(|| "null not permitted".into());
+			.then(|| Ok(Value::Null))
+			.unwrap_or_else(|| Err("null not permitted".into()));
 	}
 	match col_ty {
 		ColumnType::Text => cell
@@ -113,6 +113,41 @@ fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable: bool) -> R
 			"nested {:?} unsupported through JSON IPC for now",
 			col_ty,
 		)),
+	}
+}
+
+/// Same as [`json_cell_to_jazz`] for non-`Text`. For `Text` storage, accepts bool/number payloads as well
+/// as strings so IPC can keep logical scalars (e.g. `done: true`) while Groove stores ciphertext in a `Text` cell.
+pub(super) fn loose_json_to_sealable_value(
+	cell: &JsonValue,
+	storage_ty: &ColumnType,
+	nullable: bool,
+) -> Result<Value, String> {
+	if cell.is_null() || *cell == JsonValue::Null {
+		return nullable
+			.then(|| Ok(Value::Null))
+			.unwrap_or_else(|| Err("null not permitted".into()));
+	}
+	match storage_ty {
+		ColumnType::Text => {
+			if let Some(s) = cell.as_str() {
+				return Ok(Value::Text(s.to_string()));
+			}
+			if let Some(b) = cell.as_bool() {
+				return Ok(Value::Boolean(b));
+			}
+			if let Some(n) = cell.as_i64() {
+				if let Ok(i) = i32::try_from(n) {
+					return Ok(Value::Integer(i));
+				}
+				return Ok(Value::BigInt(n));
+			}
+			if let Some(n) = cell.as_u64() {
+				return Ok(Value::Timestamp(n));
+			}
+			Err("expected JSON string, boolean, or integer for text-storage column".into())
+		}
+		_ => json_cell_to_jazz(cell, storage_ty, nullable),
 	}
 }
 
@@ -339,19 +374,17 @@ pub async fn jazz_create(
 	let shell = jazz_shell_ready(&jazz, &self_state, &c).await?;
 	let tbl = jazz_engine::resolved_table_schema(std::sync::Arc::as_ref(&c), &table).await?;
 
-	if !jazz_engine::acc_skip_table(&table) {
-		jazz_engine::authorize_gate(
-			&shell,
-			&table,
-			crate::spark_acc::AccOp::Write,
-			shell.default_spark,
-			None,
-		)?;
-	}
-
 	let mut plaintext = std::collections::HashMap::new();
 
 	jazz_engine::inject_default_spark(&mut values, &tbl, shell.default_spark)?;
+	let spark_gate = jazz_engine::spark_uuid_from_json_row(&tbl, &values)?;
+	jazz_engine::authorize_gate(
+		&shell,
+		&table,
+		crate::spark_acc::AccOp::Write,
+		spark_gate,
+		None,
+	)?;
 	jazz_engine::place_secrets_for_insert(
 		&tbl,
 		&table,
@@ -370,12 +403,17 @@ pub async fn jazz_create(
 		let spark = jazz_engine::spark_uuid_row(&tbl, &vals)?;
 		let mut ph = JsonRow::new();
 		for (col, pt) in plaintext {
+			let cd = tbl
+				.descriptor
+				.column(&col)
+				.ok_or_else(|| format!("manifest_missing_col:{col}"))?;
 			ph.insert(
 				col.clone(),
 				JsonValue::String(jazz_engine::seal_column_plain(
 					&shell,
 					&table,
 					&col,
+					&cd.column_type,
 					spark,
 					*oid.uuid(),
 					&pt,
@@ -433,15 +471,13 @@ pub async fn jazz_update(
 			.ok_or_else(|| format!("row_not_found:{uuid}"))?;
 	let spark = jazz_engine::spark_uuid_row(&tbl, &old_row.1)?;
 
-	if !jazz_engine::acc_skip_table(&table) {
-		jazz_engine::authorize_gate(
-			&shell,
-			&table,
-			crate::spark_acc::AccOp::Write,
-			spark,
-			Some(uuid),
-		)?;
-	}
+	jazz_engine::authorize_gate(
+		&shell,
+		&table,
+		crate::spark_acc::AccOp::Write,
+		spark,
+		Some(uuid),
+	)?;
 
 	let mut sealed_patch = patch;
 	if let Some(sec) = jazz_engine::secrets_for_table(&table) {
@@ -450,11 +486,21 @@ pub async fn jazz_update(
 				if js.is_null() {
 					continue;
 				}
-				let pt = js
-					.as_str()
-					.ok_or_else(|| format!("secret_patch_not_str:{col}"))?;
-				let ct =
-					jazz_engine::seal_column_plain(&shell, &table, col, spark, uuid, pt)?;
+				let cd = tbl
+					.descriptor
+					.column(col)
+					.ok_or_else(|| format!("unknown_sensitive_col:{col}"))?;
+				let gv = loose_json_to_sealable_value(&js, &cd.column_type, cd.nullable)?;
+				let canon = crate::crypto::groove_value_to_canonical_utf8(&gv)?;
+				let ct = jazz_engine::seal_column_plain(
+					&shell,
+					&table,
+					col,
+					&cd.column_type,
+					spark,
+					uuid,
+					&canon,
+				)?;
 				sealed_patch.insert(col.clone(), JsonValue::String(ct));
 			}
 		}
@@ -493,15 +539,13 @@ pub async fn jazz_delete(
 			.ok_or_else(|| format!("row_not_found:{uuid}"))?;
 	let spark = jazz_engine::spark_uuid_row(&tbl, &old_row.1)?;
 
-	if !jazz_engine::acc_skip_table(&table) {
-		jazz_engine::authorize_gate(
-			&shell,
-			&table,
-			crate::spark_acc::AccOp::Delete,
-			spark,
-			Some(uuid),
-		)?;
-	}
+	jazz_engine::authorize_gate(
+		&shell,
+		&table,
+		crate::spark_acc::AccOp::Delete,
+		spark,
+		Some(uuid),
+	)?;
 
 	std::sync::Arc::as_ref(&c)
 		.delete(oid)
