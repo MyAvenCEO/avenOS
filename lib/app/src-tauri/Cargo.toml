@@ -22,6 +22,10 @@ http = "1"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tauri-plugin-self = { path = "../../../projects/tauri-plugin-self" }
+base64 = "0.22"
+p256 = "0.13"
+rand_core = { version = "0.6", features = ["getrandom"] }
 tauri = { version = "2", features = ["macos-private-api", "unstable"] }
 url = "2"
 urlencoding = "2"

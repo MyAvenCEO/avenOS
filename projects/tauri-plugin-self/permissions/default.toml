@@ -1,0 +1,14 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Default permissions for tauri-plugin-self"
+permissions = [
+  "allow-register",
+  "allow-public-key",
+  "allow-unlock",
+  "allow-peer-status",
+  "allow-signing-public-key",
+  "allow-sign",
+  "allow-verify",
+  "allow-lock",
+]

@@ -1,3 +1,5 @@
+mod genesis;
+
 use std::path::PathBuf;
 use tauri::path::BaseDirectory;
 use tauri::{
@@ -373,13 +375,23 @@ async fn destroy_sandbox_webview(window: Window, label: String) -> Result<(), St
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
 	tauri::Builder::default()
+		.plugin(tauri_plugin_self::init())
+		.manage(genesis::GenesisState::default())
+		.setup(|app| {
+			let state = app.state::<genesis::GenesisState>();
+			if let Err(e) = genesis::bootstrap(&state) {
+				log::error!("GENESIS_NETWORK_ID bootstrap: {e}");
+			}
+			Ok(())
+		})
 		.register_uri_scheme_protocol("vibe-sandbox", |ctx, request| {
 			serve_vibe_sandbox(ctx.app_handle(), &request)
 		})
 		.invoke_handler(tauri::generate_handler![
 			create_sandbox_webview,
 			set_sandbox_webview_rect,
-			destroy_sandbox_webview
+			destroy_sandbox_webview,
+			genesis::genesis_network_id
 		])
 		.run(tauri::generate_context!())
 		.expect("error while running tauri application");

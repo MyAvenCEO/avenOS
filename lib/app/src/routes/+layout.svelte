@@ -1,6 +1,7 @@
 <script lang="ts">
 import { page } from '$app/state'
 import { ensureComposerTauriShortcutBridge } from '$lib/intent-mock/composer-tauri-bridge'
+import LockGate from '$lib/self/LockGate.svelte'
 import '../app.css'
 
 let { children: pageContent } = $props()
@@ -13,6 +14,7 @@ const path = $derived(page.url.pathname)
 const intentsActive = $derived(path === '/')
 const sandboxActive = $derived(path.startsWith('/sandbox'))
 const docsActive = $derived(path.startsWith('/docs'))
+const selfActive = $derived(path.startsWith('/self'))
 </script>
 
 <svelte:head>
@@ -47,6 +49,14 @@ const docsActive = $derived(path.startsWith('/docs'))
 				>
 				<span class="select-none opacity-25" aria-hidden="true">|</span>
 				<a
+					href="/self"
+					data-sveltekit-preload-data="hover"
+					class="transition-opacity hover:opacity-80 {selfActive ? 'opacity-95' : 'opacity-40'}"
+					aria-current={selfActive ? 'page' : undefined}
+					>Self</a
+				>
+				<span class="select-none opacity-25" aria-hidden="true">|</span>
+				<a
 					href="/docs"
 					data-sveltekit-preload-data="hover"
 					class="transition-opacity hover:opacity-80 {docsActive ? 'opacity-95' : 'opacity-40'}"
@@ -58,7 +68,8 @@ const docsActive = $derived(path.startsWith('/docs'))
 			<div class="min-w-0 justify-self-end" aria-hidden="true"></div>
 		</div>
 	</header>
-	<div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+	<div class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+		<LockGate />
 		{@render pageContent()}
 	</div>
 </div>
