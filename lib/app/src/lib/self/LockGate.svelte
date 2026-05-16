@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte'
 	import { getCurrentWindow } from '@tauri-apps/api/window'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+	import { bootstrapJazzAfterUnlock } from '$lib/jazz/bootstrap'
 	import {
 		clearDeviceSession,
 		deviceSession,
@@ -40,7 +41,10 @@
 				if (!cancelled) {
 					showBypass = import.meta.env.DEV && !st.platformSupported
 					// Rust state survives webview reloads; reflect it if we landed unlocked.
-					if (st.unlocked) setUnlocked()
+					if (st.unlocked) {
+						setUnlocked()
+						void bootstrapJazzAfterUnlock()
+					}
 				}
 			} catch {
 				if (!cancelled) showBypass = import.meta.env.DEV
@@ -80,6 +84,7 @@
 
 	function bypass(): void {
 		devBypassUnlock()
+		void bootstrapJazzAfterUnlock()
 	}
 </script>
 

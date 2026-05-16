@@ -15,6 +15,7 @@ const intentsActive = $derived(path === '/')
 const sandboxActive = $derived(path.startsWith('/sandbox'))
 const docsActive = $derived(path.startsWith('/docs'))
 const selfActive = $derived(path.startsWith('/self'))
+const jazzActive = $derived(path.startsWith('/jazz'))
 </script>
 
 <svelte:head>
@@ -54,6 +55,14 @@ const selfActive = $derived(path.startsWith('/self'))
 					class="transition-opacity hover:opacity-80 {selfActive ? 'opacity-95' : 'opacity-40'}"
 					aria-current={selfActive ? 'page' : undefined}
 					>Self</a
+				>
+				<span class="select-none opacity-25" aria-hidden="true">|</span>
+				<a
+					href="/jazz/todos"
+					data-sveltekit-preload-data="hover"
+					class="transition-opacity hover:opacity-80 {jazzActive ? 'opacity-95' : 'opacity-40'}"
+					aria-current={jazzActive ? 'page' : undefined}
+					>Jazz</a
 				>
 				<span class="select-none opacity-25" aria-hidden="true">|</span>
 				<a

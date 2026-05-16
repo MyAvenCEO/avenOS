@@ -1,4 +1,6 @@
 mod genesis;
+mod jazz;
+mod schema_manifest;
 
 use std::path::PathBuf;
 use tauri::path::BaseDirectory;
@@ -377,6 +379,7 @@ pub fn run() {
 	tauri::Builder::default()
 		.plugin(tauri_plugin_self::init())
 		.manage(genesis::GenesisState::default())
+		.manage(jazz::ManagedJazz::default())
 		.setup(|app| {
 			let state = app.state::<genesis::GenesisState>();
 			if let Err(e) = genesis::bootstrap(&state) {
@@ -391,7 +394,15 @@ pub fn run() {
 			create_sandbox_webview,
 			set_sandbox_webview_rect,
 			destroy_sandbox_webview,
-			genesis::genesis_network_id
+			genesis::genesis_network_id,
+			jazz::jazz_bootstrap,
+			jazz::jazz_status,
+			jazz::jazz_list,
+			jazz::jazz_get,
+			jazz::jazz_create,
+			jazz::jazz_update,
+			jazz::jazz_delete,
+			jazz::jazz_subscribe,
 		])
 		.run(tauri::generate_context!())
 		.expect("error while running tauri application");

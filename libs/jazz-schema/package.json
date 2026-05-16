@@ -1,0 +1,16 @@
+{
+	"name": "@avenos/jazz-schema",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./types.ts"
+		}
+	},
+	"scripts": {
+		"build": "bun run scripts/codegen-types.ts"
+	},
+	"devDependencies": {
+		"typescript": "^6.0.2"
+	}
+}

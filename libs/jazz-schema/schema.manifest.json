@@ -1,0 +1,11 @@
+{
+	"tables": {
+		"todos": {
+			"columns": [
+				{ "name": "title", "type": "text" },
+				{ "name": "done", "type": "boolean" },
+				{ "name": "description", "type": "text", "nullable": true }
+			]
+		}
+	}
+}
