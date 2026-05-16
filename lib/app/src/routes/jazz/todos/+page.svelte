@@ -1,16 +1,18 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
 	import type { TodosRow } from '@avenos/jazz-schema'
-	import { jazzTable } from '$lib/jazz/api'
+	import { jazzSession, jazzTable, type JazzSessionReply } from '$lib/jazz/api'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/self/device-session-store'
 
-	const todosApi = jazzTable('todos')
+	let session = $state<JazzSessionReply | undefined>()
 
 	let rows = $state<TodosRow[]>([])
 	let err = $state<string | undefined>()
 	let titleDraft = $state('')
 	let busy = $state(false)
+
+	const todosApi = jazzTable('todos')
 
 	const unlocked = $derived(
 		$deviceSession.kind === 'unlocked' || $deviceSession.kind === 'dev_bypass',
@@ -21,6 +23,7 @@
 	$effect(() => {
 		if (!tauri || !unlocked) {
 			rows = []
+			session = undefined
 			return
 		}
 
@@ -30,6 +33,7 @@
 		void (async () => {
 			try {
 				err = undefined
+				session = await jazzSession().catch(() => undefined)
 				unlisten = await todosApi.subscribe((next) => {
 					if (!cancelled) rows = next
 				})
@@ -103,9 +107,13 @@
 	{:else if !unlocked}
 		<p class="text-muted-foreground text-sm">Unlock with Touch ID to load your local Jazz store.</p>
 	{:else}
-		{#if err}
-			<p class="text-destructive text-sm">{err}</p>
-		{/if}
+	{#if session}
+				<p class="text-muted-foreground font-mono text-xs leading-snug">
+					{session.peerDidShort}
+					<span class="mx-2 text-border">·</span>
+					<span>{session.defaultSparkUrn}</span>
+				</p>
+			{/if}
 
 		<form
 			class="flex flex-col gap-2 sm:flex-row sm:items-center"

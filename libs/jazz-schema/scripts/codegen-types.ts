@@ -4,7 +4,12 @@
  */
 import manifest from "../schema.manifest.json" with { type: "json" }
 
-type Col = { name: string; type: string; nullable?: boolean }
+type Col = {
+	name: string
+	type: string
+	nullable?: boolean
+	plaintext?: boolean
+}
 type Manifest = {
 	tables: Record<string, { columns: Col[] }>
 }

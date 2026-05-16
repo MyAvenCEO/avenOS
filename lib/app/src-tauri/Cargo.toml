@@ -34,6 +34,14 @@ tracing = "0.1"
 url = "2"
 urlencoding = "2"
 uuid = { version = "1", features = ["serde", "v4"] }
+biscuit-auth = { version = "6", features = ["datalog-macro"] }
+chacha20poly1305 = { version = "0.10", features = ["std"] }
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc"] }
+ed25519-dalek = { version = "2", features = ["zeroize"] }
+hkdf = "0.12"
+multibase = "0.9"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+zeroize = { version = "1", features = ["derive"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6", default-features = false }

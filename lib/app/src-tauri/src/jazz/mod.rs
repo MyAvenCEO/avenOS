@@ -1,20 +1,20 @@
 //! Generic Jazz CRUD over Tauri IPC. Schema mirrors `libs/jazz-schema/schema.manifest.json`.
 
+mod jazz_engine;
+
 use std::collections::HashMap;
 use std::sync::RwLock;
 
 use groove::{
-	query_manager::types::{ColumnType, TableName, TableSchema},
+	query_manager::types::{ColumnType, TableSchema},
 	AppContext,
 	AppId,
 	ClientId,
 	JazzClient,
 	ObjectId,
-	QueryBuilder,
 	Value,
 };
 use serde_json::{Map, Value as JsonValue};
-use sha2::{Digest, Sha256};
 use tauri::{Emitter, Manager};
 use tauri_plugin_self::derive::ed25519_public;
 use tauri_plugin_self::state::SelfState;
@@ -23,6 +23,9 @@ use uuid::Uuid;
 
 pub type JsonRow = Map<String, JsonValue>;
 
+pub(super) const PHASE1_SECRET_PLACEHOLDER: &str = "\u{feff}";
+pub(super) const ENCRYPTED_META: &str = "_encryptedColumns";
+
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JazzStatusReply {
@@ -30,10 +33,19 @@ pub struct JazzStatusReply {
 	pub tables: Vec<String>,
 }
 
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JazzSessionReply {
+	pub peer_did: String,
+	pub peer_did_short: String,
+	pub default_spark_urn: String,
+}
+
 #[derive(Default)]
 pub struct ManagedJazz {
 	client: Mutex<Option<std::sync::Arc<JazzClient>>>,
 	table_txs: RwLock<HashMap<String, broadcast::Sender<Vec<JsonRow>>>>,
+	shell: Mutex<Option<std::sync::Arc<jazz_engine::ShellState>>>,
 }
 
 impl ManagedJazz {
@@ -47,8 +59,13 @@ impl ManagedJazz {
 		tx
 	}
 
-	pub async fn snapshot_broadcast(&self, client: &JazzClient, table: &str) -> Result<(), String> {
-		let snap = query_table_maps(client, table).await?;
+	pub async fn snapshot_broadcast(
+		&self,
+		client: &JazzClient,
+		shell: &jazz_engine::ShellState,
+		table: &str,
+	) -> Result<(), String> {
+		let snap = jazz_engine::query_table_publish(client, shell, table, ENCRYPTED_META).await?;
 		let r = self.table_txs.read().expect("table_txs poisoned");
 		if let Some(tx) = r.get(table) {
 			if tx.receiver_count() > 0 {
@@ -57,45 +74,6 @@ impl ManagedJazz {
 		}
 		Ok(())
 	}
-}
-
-async fn resolved_table_schema(client: &JazzClient, table: &str) -> Result<TableSchema, String> {
-	let sch = client.schema().await.map_err(|e| format!("schema: {e}"))?;
-	let tn = TableName::new(table);
-	sch.get(&tn)
-		.cloned()
-		.ok_or_else(|| format!("unknown_table: {table}"))
-}
-
-fn jazz_cell_to_json(cell: &Value) -> JsonValue {
-	match cell {
-		Value::Integer(i) => JsonValue::Number((*i).into()),
-		Value::BigInt(i) => JsonValue::Number((*i).into()),
-		Value::Boolean(b) => JsonValue::Bool(*b),
-		Value::Text(s) => JsonValue::String(s.clone()),
-		Value::Timestamp(ts) => JsonValue::Number((*ts).into()),
-		Value::Uuid(oid) => JsonValue::String(oid.uuid().to_string()),
-		Value::Null => JsonValue::Null,
-		Value::Array(items) => JsonValue::Array(items.iter().map(jazz_cell_to_json).collect()),
-		Value::Row(items) => JsonValue::Array(items.iter().map(jazz_cell_to_json).collect()),
-	}
-}
-
-fn row_to_map(table_schema: &TableSchema, oid: ObjectId, vals: &[Value]) -> Result<JsonRow, String> {
-	let cols = &table_schema.descriptor.columns;
-	if vals.len() != cols.len() {
-		return Err(format!(
-			"row len {} ≠ schema {}",
-			vals.len(),
-			cols.len(),
-		));
-	}
-	let mut m = JsonRow::new();
-	m.insert("id".into(), JsonValue::String(oid.uuid().to_string()));
-	for (desc, cell) in cols.iter().zip(vals.iter()) {
-		m.insert(desc.name_str().to_string(), jazz_cell_to_json(cell));
-	}
-	Ok(m)
 }
 
 fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable: bool) -> Result<Value, String> {
@@ -138,25 +116,7 @@ fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable: bool) -> R
 	}
 }
 
-async fn exec_list_rows(client: &JazzClient, table: &str) -> Result<Vec<(ObjectId, Vec<Value>)>, String> {
-	// Leave `Query.branches` empty so Jazz expands to `schema_context.all_branch_names()`
-	// (composed branches like `client#…`). A literal `.branch("main")` misses rows written by the client.
-	let q = QueryBuilder::new(TableName::new(table)).build();
-
-	client.query(q, None).await.map_err(|e| format!("{e}"))
-}
-
-async fn query_table_maps(client: &JazzClient, table: &str) -> Result<Vec<JsonRow>, String> {
-	let table_schema = resolved_table_schema(client, table).await?;
-	let rows = exec_list_rows(client, table).await?;
-	let mut out = Vec::with_capacity(rows.len());
-	for (oid, vals) in rows {
-		out.push(row_to_map(&table_schema, oid, &vals)?);
-	}
-	Ok(out)
-}
-
-fn insert_values(table_schema: &TableSchema, values: JsonRow) -> Result<Vec<Value>, String> {
+pub(super) fn insert_values(table_schema: &TableSchema, values: JsonRow) -> Result<Vec<Value>, String> {
 	let cols = &table_schema.descriptor.columns;
 	let mut row = Vec::with_capacity(cols.len());
 	for cd in cols {
@@ -200,15 +160,7 @@ async fn jazz_connect(
 
 	let schema = crate::schema_manifest::load_jazz_schema_from_manifest()?;
 	let pk = ed25519_public(&root)?;
-
-	let mut digest = Sha256::new();
-	digest.update(b"ceo.aven.os/jazz/client-id-v1");
-	digest.update(pk.as_slice());
-	let hash16: [u8; 16] = digest.finalize()[..16]
-		.try_into()
-		.map_err(|_| "truncate hash failed")?;
-
-	let deterministic = Uuid::from_bytes(hash16);
+	let deterministic = crate::jazz_auth::client_uuid_from_ed_pubkey(&pk);
 
 	let ctx = AppContext {
 		app_id: AppId::from_name("ceo.aven.os"),
@@ -245,6 +197,25 @@ async fn ensure_arc(
 	Ok(arc)
 }
 
+async fn jazz_shell_ready(
+	mj: &ManagedJazz,
+	self_state: &SelfState,
+	client: &std::sync::Arc<JazzClient>,
+) -> Result<std::sync::Arc<jazz_engine::ShellState>, String> {
+	let mut slot = mj.shell.lock().await;
+	if let Some(s) = slot.as_ref() {
+		return Ok(std::sync::Arc::clone(s));
+	}
+	let root = self_state
+		.with_root(|r| Ok(*r))
+		.map_err(|_| "locked: unlock AvenOS identity first".to_string())?;
+	let hydrated =
+		jazz_engine::hydrate_shell(std::sync::Arc::as_ref(client), &root).await?;
+	let arc = std::sync::Arc::new(hydrated);
+	*slot = Some(std::sync::Arc::clone(&arc));
+	Ok(arc)
+}
+
 #[tauri::command(rename_all = "camelCase")]
 pub async fn jazz_status(
 	_app: tauri::AppHandle,
@@ -270,12 +241,13 @@ pub async fn jazz_status(
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub async fn jazz_bootstrap(
+	pub async fn jazz_bootstrap(
 	app: tauri::AppHandle,
 	jazz: tauri::State<'_, ManagedJazz>,
 	self_state: tauri::State<'_, SelfState>,
 ) -> Result<JazzStatusReply, String> {
 	let c = ensure_arc(&app, &self_state, &jazz).await?;
+	let _ = jazz_shell_ready(&jazz, &self_state, &c).await?;
 
 	let sch = c.schema().await.map_err(|e| format!("{e}"))?;
 	let mut tables: Vec<String> = sch.keys().map(|k| k.to_string()).collect();
@@ -287,6 +259,21 @@ pub async fn jazz_bootstrap(
 }
 
 #[tauri::command(rename_all = "camelCase")]
+pub async fn jazz_session(
+	app: tauri::AppHandle,
+	jazz: tauri::State<'_, ManagedJazz>,
+	self_state: tauri::State<'_, SelfState>,
+) -> Result<JazzSessionReply, String> {
+	let c = ensure_arc(&app, &self_state, &jazz).await?;
+	let shell = jazz_shell_ready(&jazz, &self_state, &c).await?;
+	Ok(JazzSessionReply {
+		peer_did: shell.peer_did.clone(),
+		peer_did_short: jazz_engine::short_peer_did(&shell.peer_did),
+		default_spark_urn: jazz_engine::spark_urn(shell.default_spark),
+	})
+}
+
+#[tauri::command(rename_all = "camelCase")]
 pub async fn jazz_list(
 	app: tauri::AppHandle,
 	jazz: tauri::State<'_, ManagedJazz>,
@@ -294,7 +281,14 @@ pub async fn jazz_list(
 	table: String,
 ) -> Result<Vec<JsonRow>, String> {
 	let c = ensure_arc(&app, &self_state, &jazz).await?;
-	query_table_maps(std::sync::Arc::as_ref(&c), &table).await
+	let shell = jazz_shell_ready(&jazz, &self_state, &c).await?;
+	jazz_engine::query_table_publish(
+		std::sync::Arc::as_ref(&c),
+		&shell,
+		&table,
+		ENCRYPTED_META,
+	)
+	.await
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -306,18 +300,31 @@ pub async fn jazz_get(
 	id: String,
 ) -> Result<JsonRow, String> {
 	let c = ensure_arc(&app, &self_state, &jazz).await?;
+	let shell = jazz_shell_ready(&jazz, &self_state, &c).await?;
 	let uuid = Uuid::parse_str(&id).map_err(|e| format!("invalid id UUID: {e}"))?;
 
-	for row in query_table_maps(std::sync::Arc::as_ref(&c), &table).await? {
-		let rid = row
-			.get("id")
-			.and_then(|v| v.as_str())
-			.and_then(|s| Uuid::parse_str(s).ok());
-		if rid == Some(uuid) {
-			return Ok(row);
+	let tbl = jazz_engine::resolved_table_schema(std::sync::Arc::as_ref(&c), &table).await?;
+	match jazz_engine::find_row_snapshot(std::sync::Arc::as_ref(&c), &table, &tbl, uuid).await? {
+		Some((oid, vals)) => {
+			let spark_row = jazz_engine::spark_uuid_row(&tbl, &vals).unwrap_or(shell.default_spark);
+			jazz_engine::authorize_gate(
+				&shell,
+				&table,
+				crate::spark_acc::AccOp::Read,
+				spark_row,
+				Some(*oid.uuid()),
+			)?;
+			jazz_engine::row_to_public_map(
+				&shell,
+				&table,
+				&tbl,
+				oid,
+				&vals,
+				ENCRYPTED_META,
+			)
 		}
+		None => Err(format!("row not found table={table} id={uuid}")),
 	}
-	Err(format!("row not found table={table} id={uuid}"))
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -326,19 +333,78 @@ pub async fn jazz_create(
 	jazz: tauri::State<'_, ManagedJazz>,
 	self_state: tauri::State<'_, SelfState>,
 	table: String,
-	values: JsonRow,
+	mut values: JsonRow,
 ) -> Result<JsonRow, String> {
 	let c = ensure_arc(&app, &self_state, &jazz).await?;
-	let tbl = resolved_table_schema(std::sync::Arc::as_ref(&c), &table).await?;
+	let shell = jazz_shell_ready(&jazz, &self_state, &c).await?;
+	let tbl = jazz_engine::resolved_table_schema(std::sync::Arc::as_ref(&c), &table).await?;
+
+	if !jazz_engine::acc_skip_table(&table) {
+		jazz_engine::authorize_gate(
+			&shell,
+			&table,
+			crate::spark_acc::AccOp::Write,
+			shell.default_spark,
+			None,
+		)?;
+	}
+
+	let mut plaintext = std::collections::HashMap::new();
+
+	jazz_engine::inject_default_spark(&mut values, &tbl, shell.default_spark)?;
+	jazz_engine::place_secrets_for_insert(
+		&tbl,
+		&table,
+		&mut values,
+		&mut plaintext,
+		PHASE1_SECRET_PLACEHOLDER,
+	)?;
+
 	let vals = insert_values(&tbl, values)?;
 	let oid = std::sync::Arc::as_ref(&c)
 		.create(&table, vals.clone())
 		.await
 		.map_err(|e| format!("{e}"))?;
 
-	let reply = row_to_map(&tbl, oid, &vals).map_err(|e| format!("{e}"))?;
+	if !plaintext.is_empty() {
+		let spark = jazz_engine::spark_uuid_row(&tbl, &vals)?;
+		let mut ph = JsonRow::new();
+		for (col, pt) in plaintext {
+			ph.insert(
+				col.clone(),
+				JsonValue::String(jazz_engine::seal_column_plain(
+					&shell,
+					&table,
+					&col,
+					spark,
+					*oid.uuid(),
+					&pt,
+				)?),
+			);
+		}
+		let ops = patch_updates(&tbl, ph)?;
+		std::sync::Arc::as_ref(&c)
+			.update(oid, ops)
+			.await
+			.map_err(|e| format!("{e}"))?;
+	}
 
-	jazz.snapshot_broadcast(std::sync::Arc::as_ref(&c), &table).await?;
+	let (_, vals_fresh) =
+		jazz_engine::find_row_snapshot(std::sync::Arc::as_ref(&c), &table, &tbl, *oid.uuid())
+			.await?
+			.ok_or_else(|| "create_reread_missing".to_string())?;
+
+	let reply = jazz_engine::row_to_public_map(
+		&shell,
+		&table,
+		&tbl,
+		oid,
+		&vals_fresh,
+		ENCRYPTED_META,
+	)?;
+
+	jazz.snapshot_broadcast(std::sync::Arc::as_ref(&c), &shell, &table)
+		.await?;
 
 	Ok(reply)
 }
@@ -353,20 +419,55 @@ pub async fn jazz_update(
 	patch: JsonRow,
 ) -> Result<JsonRow, String> {
 	let c = ensure_arc(&app, &self_state, &jazz).await?;
-	let tbl = resolved_table_schema(std::sync::Arc::as_ref(&c), &table).await?;
+	let shell = jazz_shell_ready(&jazz, &self_state, &c).await?;
+	let tbl =
+		jazz_engine::resolved_table_schema(std::sync::Arc::as_ref(&c), &table).await?;
 	let uuid =
 		uuid::Uuid::parse_str(&id).map_err(|e| format!("invalid id UUID parse: {e}"))?;
 
 	let oid = ObjectId::from_uuid(uuid);
 
-	let ops = patch_updates(&tbl, patch)?;
+	let old_row =
+		jazz_engine::find_row_snapshot(std::sync::Arc::as_ref(&c), &table, &tbl, uuid)
+			.await?
+			.ok_or_else(|| format!("row_not_found:{uuid}"))?;
+	let spark = jazz_engine::spark_uuid_row(&tbl, &old_row.1)?;
+
+	if !jazz_engine::acc_skip_table(&table) {
+		jazz_engine::authorize_gate(
+			&shell,
+			&table,
+			crate::spark_acc::AccOp::Write,
+			spark,
+			Some(uuid),
+		)?;
+	}
+
+	let mut sealed_patch = patch;
+	if let Some(sec) = jazz_engine::secrets_for_table(&table) {
+		for col in sec.iter() {
+			if let Some(js) = sealed_patch.get(col.as_str()).cloned() {
+				if js.is_null() {
+					continue;
+				}
+				let pt = js
+					.as_str()
+					.ok_or_else(|| format!("secret_patch_not_str:{col}"))?;
+				let ct =
+					jazz_engine::seal_column_plain(&shell, &table, col, spark, uuid, pt)?;
+				sealed_patch.insert(col.clone(), JsonValue::String(ct));
+			}
+		}
+	}
+
+	let ops = patch_updates(&tbl, sealed_patch)?;
 
 	std::sync::Arc::as_ref(&c)
 		.update(oid, ops)
 		.await
 		.map_err(|e| format!("{e}"))?;
 
-	jazz.snapshot_broadcast(std::sync::Arc::as_ref(&c), &table).await?;
+	jazz.snapshot_broadcast(std::sync::Arc::as_ref(&c), &shell, &table).await?;
 
 	jazz_get(app.clone(), jazz, self_state, table, id.to_string()).await
 }
@@ -380,14 +481,33 @@ pub async fn jazz_delete(
 	id: String,
 ) -> Result<(), String> {
 	let c = ensure_arc(&app, &self_state, &jazz).await?;
+	let shell = jazz_shell_ready(&jazz, &self_state, &c).await?;
+	let tbl =
+		jazz_engine::resolved_table_schema(std::sync::Arc::as_ref(&c), &table).await?;
 	let uuid =
 		uuid::Uuid::parse_str(&id).map_err(|e| format!("invalid UUID: {e}"))?;
 	let oid = ObjectId::from_uuid(uuid);
+	let old_row =
+		jazz_engine::find_row_snapshot(std::sync::Arc::as_ref(&c), &table, &tbl, uuid)
+			.await?
+			.ok_or_else(|| format!("row_not_found:{uuid}"))?;
+	let spark = jazz_engine::spark_uuid_row(&tbl, &old_row.1)?;
+
+	if !jazz_engine::acc_skip_table(&table) {
+		jazz_engine::authorize_gate(
+			&shell,
+			&table,
+			crate::spark_acc::AccOp::Delete,
+			spark,
+			Some(uuid),
+		)?;
+	}
+
 	std::sync::Arc::as_ref(&c)
 		.delete(oid)
 		.await
 		.map_err(|e| format!("{e}"))?;
-	jazz.snapshot_broadcast(std::sync::Arc::as_ref(&c), &table).await?;
+	jazz.snapshot_broadcast(std::sync::Arc::as_ref(&c), &shell, &table).await?;
 	Ok(())
 }
 
@@ -400,9 +520,16 @@ pub async fn jazz_subscribe(
 	table: String,
 ) -> Result<(), String> {
 	let c = ensure_arc(&app, &self_state, &jazz).await?;
+	let shell = jazz_shell_ready(&jazz, &self_state, &c).await?;
 
 	let evt = format!("jazz:{}:changed", table);
-	let first = query_table_maps(std::sync::Arc::as_ref(&c), &table).await?;
+	let first: Vec<JsonRow> = jazz_engine::query_table_publish(
+		std::sync::Arc::as_ref(&c),
+		&shell,
+		&table,
+		ENCRYPTED_META,
+	)
+	.await?;
 	window.emit(&evt, first).map_err(|e| e.to_string())?;
 
 	let tx = jazz.broadcaster(&table);

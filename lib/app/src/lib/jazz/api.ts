@@ -7,6 +7,16 @@ export type JazzStatusReply = {
 	tables: string[]
 }
 
+export type JazzSessionReply = {
+	peerDid: string
+	peerDidShort: string
+	defaultSparkUrn: string
+}
+
+export async function jazzSession(): Promise<JazzSessionReply> {
+	return invoke<JazzSessionReply>('jazz_session')
+}
+
 export async function jazzBootstrap(): Promise<JazzStatusReply> {
 	return invoke<JazzStatusReply>('jazz_bootstrap')
 }
@@ -14,6 +24,15 @@ export async function jazzBootstrap(): Promise<JazzStatusReply> {
 export async function jazzStatus(): Promise<JazzStatusReply> {
 	return invoke<JazzStatusReply>('jazz_status')
 }
+
+type DbRowExtraOmit<R> = 'spark_id' extends keyof R ? 'spark_id' : never
+
+/** Omit `id` (and `spark_id` when the row has one); shell may inject `spark_id`. */
+type JazzCreatePayload<R extends { id: string }> = Omit<
+	R,
+	'id' | DbRowExtraOmit<R>
+> &
+	('spark_id' extends keyof R ? { spark_id?: string } : {})
 
 /** Table-parameterized IPC CRUD (`jazz-tools` runs in the Rust shell only). */
 export function jazzTable<TName extends keyof SchemaTables>(table: TName) {
@@ -26,7 +45,7 @@ export function jazzTable<TName extends keyof SchemaTables>(table: TName) {
 		async get(id: string): Promise<Row> {
 			return invoke<Row>('jazz_get', { table, id })
 		},
-		async create(values: Omit<Row, 'id'>): Promise<Row> {
+		async create(values: JazzCreatePayload<Row>): Promise<Row> {
 			const valuesPayload = values as Record<string, unknown>
 			return invoke<Row>('jazz_create', { table, values: valuesPayload })
 		},

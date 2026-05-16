@@ -1,6 +1,9 @@
+mod crypto;
 mod genesis;
 mod jazz;
+mod jazz_auth;
 mod schema_manifest;
+mod spark_acc;
 
 use std::path::PathBuf;
 use tauri::path::BaseDirectory;
@@ -396,6 +399,7 @@ pub fn run() {
 			destroy_sandbox_webview,
 			genesis::genesis_network_id,
 			jazz::jazz_bootstrap,
+			jazz::jazz_session,
 			jazz::jazz_status,
 			jazz::jazz_list,
 			jazz::jazz_get,
