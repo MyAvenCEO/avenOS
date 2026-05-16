@@ -17,9 +17,11 @@ hkdf = "0.12"
 sha2 = "0.10"
 zeroize = { version = "1", features = ["zeroize_derive"] }
 base64 = "0.22"
+multibase = "0.9"
 log = "0.4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+p256 = "0.13"
 libc = "0.2"
 swift-rs = { version = "1.0.5" }
 tokio = { version = "1", features = ["sync"] }

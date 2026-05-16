@@ -18,9 +18,14 @@
 	const tabs = [
 		{ href: '/self', label: 'Peer IDs', match: (p: string) => p === '/self' || p === '/self/' },
 		{
-			href: '/self/test-sign',
-			label: 'Test sign',
-			match: (p: string) => p.startsWith('/self/test-sign'),
+			href: '/self/sparks',
+			label: 'Sparks',
+			match: (p: string) => p.startsWith('/self/sparks'),
+		},
+		{
+			href: '/self/network',
+			label: 'Network',
+			match: (p: string) => p.startsWith('/self/network'),
 		},
 	]
 

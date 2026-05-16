@@ -25,6 +25,27 @@ export async function jazzStatus(): Promise<JazzStatusReply> {
 	return invoke<JazzStatusReply>('jazz_status')
 }
 
+/** Result of `jazz_explorer_list` — rows omit unauthorized biscuit/spark gates; count is diagnostics-only. */
+export type JazzExplorerListReply = {
+	rows: Record<string, unknown>[]
+	skippedUnauthorizedRows: number
+}
+
+/** List any manifest table without typing against `SchemaTables` (explorer / tooling). */
+export async function jazzExplorerList(table: string): Promise<JazzExplorerListReply> {
+	return invoke<JazzExplorerListReply>('jazz_explorer_list', { table })
+}
+
+export async function jazzExplorerSubscribe(
+	table: string,
+	handler: (rows: Record<string, unknown>[]) => void,
+): Promise<UnlistenFn> {
+	const event = `jazz:${table}:changed`
+	const unlisten = await listen<Record<string, unknown>[]>(event, (e) => handler(e.payload))
+	await invoke('jazz_subscribe', { table })
+	return unlisten
+}
+
 type DbRowExtraOmit<R> = 'spark_id' extends keyof R ? 'spark_id' : never
 
 /** Omit `id` (and `spark_id` when the row has one); shell may inject `spark_id`. */

@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-signing-peer-did"
+description = "Enables the signing_peer_did command without any pre-configured scope."
+commands.allow = ["signing_peer_did"]
+
+[[permission]]
+identifier = "deny-signing-peer-did"
+description = "Denies the signing_peer_did command without any pre-configured scope."
+commands.deny = ["signing_peer_did"]

@@ -20,14 +20,15 @@
 </script>
 
 <svelte:head>
-	<title>Your identity · AvenOS</title>
+	<title>Peer IDs · AvenOS</title>
 </svelte:head>
 
 <div class="flex flex-col gap-8">
 	<header class="space-y-1.5">
-		<h1 class="text-2xl font-semibold tracking-tight">Your identity</h1>
+		<h1 class="text-2xl font-semibold tracking-tight">Peer IDs</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
-			Built into this Mac. No password, no account, no cloud — your identity here is your device.
+			<code class="font-mono text-[11px]">did:key</code> anchors for your hardware-backed P-256 credential and your
+			HKDF-derived Ed25519 signing identity (Jazz / ACC).
 		</p>
 	</header>
 
@@ -40,94 +41,64 @@
 	{/if}
 
 	<section class="space-y-4">
-		<div class="flex items-baseline justify-between gap-3">
-			<div class="flex flex-col">
-				<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">Network</h2>
-				<span class="text-muted-foreground text-[10px]"
-					>The shared anchor everyone on this network connects through</span
-				>
-			</div>
-			{#if ctx.genesisShort}
-				<span
-					class="rounded-full border border-border/60 bg-background/60 px-2 py-1 font-mono text-[10px]"
-					>{ctx.genesisShort}</span
-				>
-			{/if}
-		</div>
-
-		<div class="rounded-xl border border-border/60 bg-card/30 p-4">
-			{#if ctx.genesisB64}
-				<div class="space-y-2">
-					<pre
-						class="overflow-x-auto rounded-md border border-border/40 bg-background/50 px-3 py-2 font-mono text-[11px] leading-snug select-text">{ctx.genesisB64}</pre>
-					<details class="text-muted-foreground text-[11px]">
-						<summary class="cursor-pointer select-none">Show as hex</summary>
-						<pre
-							class="mt-2 overflow-x-auto rounded-md border border-border/40 bg-background/50 px-3 py-2 font-mono leading-snug select-text">{ctx.genesisHex}</pre>
-					</details>
-					<div class="flex items-center justify-between gap-3">
-						<button
-							type="button"
-							class="border-input hover:bg-accent rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide"
-							onclick={() => void copy('genesis', ctx.genesisB64)}
-						>
-							{copyKey === 'genesis' ? 'Copied' : 'Copy'}
-						</button>
-						<span class="text-muted-foreground font-mono text-[10px]">GENESIS_NETWORK_ID</span>
-					</div>
-				</div>
-			{:else}
-				<p class="text-muted-foreground text-xs">Loading…</p>
-			{/if}
-		</div>
-	</section>
-
-	<section class="space-y-4">
 		<div class="flex flex-col">
-			<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">This device</h2>
+			<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">Device credential</h2>
 			<span class="text-muted-foreground text-[10px]"
-				>Two keys, both unique to this Mac. The private halves never leave the chip.</span
+				>NIST P-256 peer key sealed in Secure Enclave. Private key never exits the chip.</span
 			>
 		</div>
 
 		<article class="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
 			<div class="flex items-baseline justify-between gap-3">
-				<div class="flex flex-col">
-					<h3 class="text-sm font-medium">Device key</h3>
-					<span class="text-muted-foreground text-[11px] leading-snug"
-						>Locked into your Mac's secure chip. Unlocked with Touch ID.</span
-					>
+				<div class="flex flex-col gap-1">
+					<h3 class="text-sm font-medium">Hardware peer</h3>
+					{#if ctx.devicePeerDid}
+						<p class="break-all font-mono text-[11px] leading-snug select-text text-foreground">
+							{ctx.devicePeerDid}
+						</p>
+					{/if}
 				</div>
 				<span
-					class="rounded-full border border-border/60 bg-background/60 px-2 py-1 font-mono text-[10px]"
+					class="shrink-0 rounded-full border border-border/60 bg-background/60 px-2 py-1 font-mono text-[10px]"
 					class:opacity-50={!ctx.status?.registered}
 				>
-					{ctx.status?.registered ? 'set up' : 'not yet set up'}
+					{ctx.status?.registered ? 'registered' : 'not registered'}
 				</span>
 			</div>
 
 			{#if !ctx.status?.registered}
 				<p class="text-muted-foreground text-xs leading-relaxed">
-					Open the lock screen and unlock once to create your device key.
+					Unlock once from the lock screen to provision the device keypair.
 				</p>
-			{:else if ctx.peerPubB64}
+			{:else if ctx.peerPubB64 && ctx.devicePeerDid}
+				<span class="text-muted-foreground text-[10px] uppercase tracking-wide"
+					>SEC1-encoded public material (offline transcript)</span
+				>
 				<pre
 					class="overflow-x-auto rounded-md border border-border/40 bg-background/50 px-3 py-2 font-mono text-[11px] leading-snug select-text">{ctx.peerPubB64}</pre>
-				<details class="text-muted-foreground text-[11px]">
-					<summary class="cursor-pointer select-none">Show as hex</summary>
-					<pre
-						class="mt-2 overflow-x-auto rounded-md border border-border/40 bg-background/50 px-3 py-2 font-mono leading-snug select-text">{ctx.peerPubHex}</pre>
-				</details>
 				<div class="flex items-center justify-between gap-3">
 					<button
 						type="button"
 						class="border-input hover:bg-accent rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide"
-						onclick={() => void copy('peer', ctx.peerPubB64)}
+						onclick={() => void copy('device-did', ctx.devicePeerDid)}
 					>
-						{copyKey === 'peer' ? 'Copied' : 'Copy'}
+						{copyKey === 'device-did' ? 'Copied' : 'Copy DID'}
 					</button>
-					<span class="text-muted-foreground font-mono text-[10px]">PEER_ID_&lt;device&gt;</span>
+					<button
+						type="button"
+						class="border-input hover:bg-accent rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide"
+						onclick={() => void copy('device-pub', ctx.peerPubB64)}
+					>
+						{copyKey === 'device-pub' ? 'Copied' : 'Copy transcript'}
+					</button>
 				</div>
+				<span class="text-muted-foreground text-[10px] leading-snug"
+					>Device DID (<code class="font-mono">did:key</code>, multicodec <code class="font-mono">p256-pub</code>).</span
+				>
+			{:else if ctx.peerPubB64}
+				<pre
+					class="overflow-x-auto rounded-md border border-border/40 bg-background/50 px-3 py-2 font-mono text-[11px] leading-snug select-text">{ctx.peerPubB64}</pre>
+				<p class="text-muted-foreground text-[11px]">Computing device DID failed — raw transcript shown above.</p>
 			{:else}
 				<p class="text-muted-foreground text-xs">Loading…</p>
 			{/if}
@@ -135,45 +106,54 @@
 
 		<article class="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
 			<div class="flex items-baseline justify-between gap-3">
-				<div class="flex flex-col">
-					<h3 class="text-sm font-medium">Signing key</h3>
-					<span class="text-muted-foreground text-[11px] leading-snug"
-						>Used to prove your actions are really yours. Lives in memory only while you're signed
-						in.</span
-					>
+				<div class="flex flex-col gap-1">
+					<h3 class="text-sm font-medium">Application signing (Ed25519)</h3>
+					{#if ctx.signingPeerDid}
+						<p class="break-all font-mono text-[11px] leading-snug select-text text-foreground">
+							{ctx.signingPeerDid}
+						</p>
+					{/if}
 				</div>
 				<span
-					class="rounded-full border border-border/60 bg-background/60 px-2 py-1 font-mono text-[10px]"
+					class="shrink-0 rounded-full border border-border/60 bg-background/60 px-2 py-1 font-mono text-[10px]"
 					class:opacity-50={!ctx.status?.unlocked}
 				>
-					{ctx.status?.unlocked ? 'ready' : 'locked'}
+					{ctx.status?.unlocked ? 'derived' : 'locked'}
 				</span>
 			</div>
 
 			{#if !ctx.status?.unlocked}
 				<p class="text-muted-foreground text-xs leading-relaxed">
-					Sign in with Touch ID from the lock screen to derive your signing key.
+					Unlock with Touch ID so AvenOS can derive this Ed25519 key from your device root in memory only.
 				</p>
-			{:else if ctx.signingPubB64}
+			{:else if ctx.signingPubB64 && ctx.signingPeerDid}
+				<span class="text-muted-foreground text-[10px] uppercase tracking-wide">Raw verifying key bytes (base64)</span>
 				<pre
 					class="overflow-x-auto rounded-md border border-border/40 bg-background/50 px-3 py-2 font-mono text-[11px] leading-snug select-text">{ctx.signingPubB64}</pre>
-				<details class="text-muted-foreground text-[11px]">
-					<summary class="cursor-pointer select-none">Show as hex</summary>
-					<pre
-						class="mt-2 overflow-x-auto rounded-md border border-border/40 bg-background/50 px-3 py-2 font-mono leading-snug select-text">{ctx.signingPubHex}</pre>
-				</details>
-				<div class="flex items-center justify-between gap-3">
+				<div class="flex flex-wrap items-center justify-between gap-3">
 					<button
 						type="button"
 						class="border-input hover:bg-accent rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide"
-						onclick={() => void copy('signing', ctx.signingPubB64)}
+						onclick={() => void copy('signing-did', ctx.signingPeerDid)}
 					>
-						{copyKey === 'signing' ? 'Copied' : 'Copy'}
+						{copyKey === 'signing-did' ? 'Copied' : 'Copy DID'}
 					</button>
-					<span class="text-muted-foreground font-mono text-[10px]"
-						>PEER_ID_&lt;device&gt;_ED25519</span
+					<button
+						type="button"
+						class="border-input hover:bg-accent rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide"
+						onclick={() => void copy('signing-pub', ctx.signingPubB64)}
 					>
+						{copyKey === 'signing-pub' ? 'Copied' : 'Copy bytes'}
+					</button>
 				</div>
+				<span class="text-muted-foreground text-[10px] leading-snug"
+					>Jazz ACC subject / signing DID (<code class="font-mono">did:key</code>, multicodec prefix
+					<code class="font-mono">ed25519-pub</code> · <code class="font-mono">0xed01</code>).</span
+				>
+			{:else if ctx.signingPubB64}
+				<pre
+					class="overflow-x-auto rounded-md border border-border/40 bg-background/50 px-3 py-2 font-mono text-[11px] leading-snug select-text">{ctx.signingPubB64}</pre>
+				<p class="text-muted-foreground text-[11px]">Computing signing DID failed — raw key bytes shown above.</p>
 			{:else}
 				<p class="text-muted-foreground text-xs">Loading…</p>
 			{/if}

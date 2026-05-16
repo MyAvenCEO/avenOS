@@ -7,6 +7,8 @@ permissions = [
   "allow-public-key",
   "allow-unlock",
   "allow-peer-status",
+  "allow-device-peer-did",
+  "allow-signing-peer-did",
   "allow-signing-public-key",
   "allow-sign",
   "allow-verify",

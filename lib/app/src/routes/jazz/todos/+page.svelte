@@ -10,9 +10,22 @@
 	let rows = $state<TodosRow[]>([])
 	let err = $state<string | undefined>()
 	let titleDraft = $state('')
-	let busy = $state(false)
+	let addBusy = $state(false)
+	/** Locks list row actions during toggle/delete/edit so we never send overlapping mutations. */
+	let listBusy = $state(false)
+
+	let editingId = $state<string | null>(null)
+	let editDraft = $state('')
 
 	const todosApi = jazzTable('todos')
+
+	function focusEditable(node: HTMLInputElement) {
+		queueMicrotask(() => {
+			node.focus()
+			node.select()
+		})
+		return {}
+	}
 
 	const unlocked = $derived(
 		$deviceSession.kind === 'unlocked' || $deviceSession.kind === 'dev_bypass',
@@ -51,7 +64,7 @@
 	async function addTodo(): Promise<void> {
 		const title = titleDraft.trim()
 		if (!title || !tauri || !unlocked) return
-		busy = true
+		addBusy = true
 		err = undefined
 		try {
 			await todosApi.create({ title, done: false })
@@ -59,33 +72,70 @@
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {
-			busy = false
+			addBusy = false
+		}
+	}
+
+	function beginEdit(row: TodosRow): void {
+		if (!tauri || !unlocked || listBusy || editingId !== null) return
+		editingId = row.id
+		editDraft = row.title
+	}
+
+	function cancelEdit(): void {
+		editingId = null
+		editDraft = ''
+	}
+
+	async function finishTitleEdit(row: TodosRow, reason: 'blur' | 'enter'): Promise<void> {
+		if (!tauri || !unlocked || editingId !== row.id) return
+		const next = editDraft.trim()
+		if (!next) {
+			if (reason === 'blur') cancelEdit()
+			else err = 'Title cannot be empty'
+			return
+		}
+		if (next === row.title) {
+			cancelEdit()
+			return
+		}
+		listBusy = true
+		err = undefined
+		try {
+			await todosApi.update(row.id, { title: next })
+			cancelEdit()
+		} catch (e) {
+			err = e instanceof Error ? e.message : String(e)
+		} finally {
+			listBusy = false
 		}
 	}
 
 	async function toggle(row: TodosRow): Promise<void> {
 		if (!tauri || !unlocked) return
-		busy = true
+		listBusy = true
 		err = undefined
 		try {
 			await todosApi.update(row.id, { done: !row.done })
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {
-			busy = false
+			listBusy = false
 		}
 	}
 
-	async function remove(row: TodosRow): Promise<void> {
+	async function remove(row: TodosRow, ev: MouseEvent): Promise<void> {
+		ev.stopPropagation()
 		if (!tauri || !unlocked) return
-		busy = true
+		if (editingId === row.id) cancelEdit()
+		listBusy = true
 		err = undefined
 		try {
 			await todosApi.delete(row.id)
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {
-			busy = false
+			listBusy = false
 		}
 	}
 </script>
@@ -115,6 +165,15 @@
 				</p>
 			{/if}
 
+		{#if err}
+			<p
+				class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border px-3 py-2 text-sm leading-snug"
+				role="alert"
+			>
+				{err}
+			</p>
+		{/if}
+
 		<form
 			class="flex flex-col gap-2 sm:flex-row sm:items-center"
 			onsubmit={(e) => {
@@ -126,12 +185,12 @@
 				bind:value={titleDraft}
 				placeholder="New todo…"
 				class="border-input bg-background focus-visible:ring-ring flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus-visible:ring-2"
-				disabled={busy}
+				disabled={addBusy}
 			/>
 			<button
 				type="submit"
 				class="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-				disabled={busy || !titleDraft.trim()}
+				disabled={addBusy || !titleDraft.trim()}
 			>
 				Add
 			</button>
@@ -140,26 +199,61 @@
 		<ul class="divide-border/60 divide-y rounded-xl border border-border/60">
 			{#each rows as row (row.id)}
 				<li class="flex items-start gap-3 px-3 py-3">
-					<label class="mt-0.5 flex cursor-pointer items-center gap-2">
+					<div class="mt-0.5 flex shrink-0 items-center">
 						<input
 							type="checkbox"
+							aria-label="Toggle done"
 							checked={row.done}
-							class="accent-primary h-4 w-4"
-							disabled={busy}
-							onchange={() => void toggle(row)}
+							class="accent-primary h-4 w-4 cursor-pointer disabled:opacity-40"
+							disabled={listBusy}
+							onclick={(e) => {
+								e.preventDefault()
+								void toggle(row)
+							}}
 						/>
-						<span class:text-muted-foreground={row.done} class:line-through={row.done} class="text-sm">
-							{row.title}
-						</span>
-					</label>
-					{#if row.description}
-						<p class="text-muted-foreground ml-6 text-xs leading-snug sm:ml-0 sm:flex-1">{row.description}</p>
-					{/if}
+					</div>
+					<div class="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-start sm:gap-3">
+						<div class="min-w-0 flex-1">
+							{#if editingId === row.id}
+								<input
+									use:focusEditable
+									class="border-input bg-background focus-visible:ring-ring w-full rounded-md border px-2 py-1 text-sm outline-none focus-visible:ring-2"
+									disabled={listBusy}
+									bind:value={editDraft}
+									onkeydown={(e) => {
+										if (e.key === 'Enter') {
+											e.preventDefault()
+											void finishTitleEdit(row, 'enter')
+										}
+										if (e.key === 'Escape') cancelEdit()
+									}}
+									onblur={() => void finishTitleEdit(row, 'blur')}
+								/>
+							{:else}
+								<button
+									type="button"
+									class:text-muted-foreground={row.done}
+									class="text-left text-sm hover:underline {row.done ? 'line-through' : ''}"
+									disabled={listBusy || editingId !== null}
+									title="Double-click to edit"
+									ondblclick={() => beginEdit(row)}
+								>
+									{row.title}
+								</button>
+							{/if}
+						</div>
+						{#if row.description}
+							<p class="text-muted-foreground max-w-full text-xs leading-snug sm:flex-1">
+								{row.description}
+							</p>
+						{/if}
+					</div>
 					<button
 						type="button"
-						class="text-muted-foreground hover:text-destructive ml-auto text-xs uppercase tracking-wide"
-						disabled={busy}
-						onclick={() => void remove(row)}
+						class="text-destructive/80 hover:text-destructive shrink-0 self-start pt-0.5 text-xs font-semibold uppercase tracking-wide disabled:opacity-40"
+						disabled={listBusy}
+						onmousedown={(ev) => ev.preventDefault()}
+						onclick={(e) => void remove(row, e)}
 					>
 						Delete
 					</button>

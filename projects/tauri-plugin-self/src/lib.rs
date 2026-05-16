@@ -10,6 +10,7 @@
 
 pub mod commands;
 pub mod derive;
+pub mod did;
 pub mod state;
 
 #[cfg(target_os = "macos")]
@@ -32,6 +33,8 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 			macos::commands::public_key,
 			macos::commands::unlock,
 			macos::commands::peer_status,
+			commands::device_peer_did,
+			commands::signing_peer_did,
 			commands::signing_public_key,
 			commands::sign,
 			commands::verify,
@@ -96,6 +99,8 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 			public_key,
 			unlock,
 			peer_status,
+			commands::device_peer_did,
+			commands::signing_peer_did,
 			commands::signing_public_key,
 			commands::sign,
 			commands::verify,

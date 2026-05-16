@@ -3,10 +3,37 @@
 //! Everything here operates against `SelfState` — the Rust-resident root secret cache populated
 //! by `unlock` (macOS) or `unlock_with_root` (dev bypass / future platforms).
 
+use tauri::AppHandle;
+use tauri::Emitter;
 use tauri::State;
 
 use crate::derive;
 use crate::state::SelfState;
+
+/// Stable `did:key` for HKDF-derived **Ed25519** application signing (`PEER_ID_<device>_ED25519`).
+#[tauri::command]
+pub async fn signing_peer_did(state: State<'_, SelfState>) -> Result<String, String> {
+	state.with_root(|root| {
+		let pk = derive::ed25519_public(root)?;
+		Ok(crate::did::signing_did_ed25519(&pk))
+	})
+}
+
+/// `did:key` for the device's **P-256 Secure Enclave** credential transcript (needs macOS peer pub on disk).
+#[tauri::command]
+pub async fn device_peer_did(app: AppHandle, slot: String) -> Result<String, String> {
+	#[cfg(target_os = "macos")]
+	{
+		let pk = crate::macos::commands::public_key(app, slot).await?;
+		crate::did::device_did_from_sec1_public_key(&pk)
+	}
+
+	#[cfg(not(target_os = "macos"))]
+	{
+		let _ = (app, slot);
+		Err("device_peer_did (P-256 credential) is unavailable on this platform in v1".into())
+	}
+}
 
 /// 32-byte Ed25519 public key derived from the cached root secret. No biometric prompt.
 #[tauri::command]
@@ -39,8 +66,12 @@ pub async fn verify(
 }
 
 /// Zeroize the cached root secret. Frontend should call this on window close / explicit re-lock.
+///
+/// Emits **`self:did-lock`** so the shell can tear down dependents (e.g. Groove / Jazz runtime)
+/// whose cache must never outlive this secret.
 #[tauri::command]
-pub async fn lock(state: State<'_, SelfState>) -> Result<(), String> {
+pub async fn lock(app: AppHandle, state: State<'_, SelfState>) -> Result<(), String> {
 	state.clear();
+	let _ = app.emit("self:did-lock", ());
 	Ok(())
 }

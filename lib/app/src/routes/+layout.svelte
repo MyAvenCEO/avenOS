@@ -16,6 +16,7 @@ const sandboxActive = $derived(path.startsWith('/sandbox'))
 const docsActive = $derived(path.startsWith('/docs'))
 const selfActive = $derived(path.startsWith('/self'))
 const jazzActive = $derived(path.startsWith('/jazz'))
+const dbActive = $derived(path.startsWith('/db'))
 </script>
 
 <svelte:head>
@@ -50,19 +51,19 @@ const jazzActive = $derived(path.startsWith('/jazz'))
 				>
 				<span class="select-none opacity-25" aria-hidden="true">|</span>
 				<a
-					href="/self"
-					data-sveltekit-preload-data="hover"
-					class="transition-opacity hover:opacity-80 {selfActive ? 'opacity-95' : 'opacity-40'}"
-					aria-current={selfActive ? 'page' : undefined}
-					>Self</a
-				>
-				<span class="select-none opacity-25" aria-hidden="true">|</span>
-				<a
 					href="/jazz/todos"
 					data-sveltekit-preload-data="hover"
 					class="transition-opacity hover:opacity-80 {jazzActive ? 'opacity-95' : 'opacity-40'}"
 					aria-current={jazzActive ? 'page' : undefined}
 					>Jazz</a
+				>
+				<span class="select-none opacity-25" aria-hidden="true">|</span>
+				<a
+					href="/db"
+					data-sveltekit-preload-data="hover"
+					class="transition-opacity hover:opacity-80 {dbActive ? 'opacity-95' : 'opacity-40'}"
+					aria-current={dbActive ? 'page' : undefined}
+					>DB</a
 				>
 				<span class="select-none opacity-25" aria-hidden="true">|</span>
 				<a
@@ -74,7 +75,18 @@ const jazzActive = $derived(path.startsWith('/jazz'))
 				>
 			</nav>
 
-			<div class="min-w-0 justify-self-end" aria-hidden="true"></div>
+			<nav
+				class="flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 justify-self-end text-[10px] font-bold tracking-wider uppercase"
+				aria-label="Device identity"
+			>
+				<a
+					href="/self"
+					data-sveltekit-preload-data="hover"
+					class="transition-opacity hover:opacity-80 {selfActive ? 'opacity-95' : 'opacity-40'}"
+					aria-current={selfActive ? 'page' : undefined}
+					>Self</a
+				>
+			</nav>
 		</div>
 	</header>
 	<div class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">

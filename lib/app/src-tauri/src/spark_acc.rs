@@ -266,4 +266,21 @@ mod tests {
 		)
 		.is_err());
 	}
+
+	#[test]
+	fn genesis_then_authorize_delete() {
+		let root = [9u8; 32];
+		let mut v = build_vault_from_root(&root).unwrap();
+		let sid = uuid::Uuid::new_v4();
+		let biscuit = mint_genesis_spark(&v, sid).unwrap();
+		v.sparks.insert(
+			sid,
+			BiscuitSpark {
+				spark_id: sid,
+				biscuit,
+			},
+		);
+		let rid = uuid::Uuid::new_v4();
+		authorize(&v, sid, AccOp::Delete, "todos", Some(rid), &v.peer_did.clone()).unwrap();
+	}
 }

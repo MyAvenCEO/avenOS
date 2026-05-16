@@ -297,7 +297,7 @@ pub(super) fn row_to_public_map(
 }
 
 pub(super) async fn resolved_table_schema(client: &JazzClient, table: &str) -> Result<TableSchema, String> {
-	let sch = client.schema().await.map_err(|e| format!("schema: {e}"))?;
+	let sch = client.schema().await.map_err(super::format_jazz_err)?;
 	let tn = TableName::new(table);
 	sch.get(&tn)
 		.cloned()
@@ -309,7 +309,7 @@ pub(super) async fn exec_list_rows(
 	table: &str,
 ) -> Result<Vec<(ObjectId, Vec<Value>)>, String> {
 	let q = QueryBuilder::new(TableName::new(table)).build();
-	client.query(q, None).await.map_err(|e| format!("{e}"))
+	client.query(q, None).await.map_err(super::format_jazz_err)
 }
 
 pub(super) async fn query_table_publish(
@@ -317,13 +317,20 @@ pub(super) async fn query_table_publish(
 	state: &ShellState,
 	table: &str,
 	meta_key: &str,
-) -> Result<Vec<Map<String, JsonValue>>, String> {
+) -> Result<(Vec<Map<String, JsonValue>>, usize), String> {
 	let table_schema = resolved_table_schema(client, table).await?;
 	let rows = exec_list_rows(client, table).await?;
 	let mut out = Vec::with_capacity(rows.len());
+	let mut skipped_unauthorized_rows = 0usize;
 	for (oid, vals) in rows {
 		let spark_row = spark_uuid_row(&table_schema, &vals).unwrap_or(state.default_spark);
-		authorize_gate(state, table, AccOp::Read, spark_row, Some(*oid.uuid()))?;
+		match authorize_gate(state, table, AccOp::Read, spark_row, Some(*oid.uuid())) {
+			Ok(()) => {}
+			Err(_) => {
+				skipped_unauthorized_rows = skipped_unauthorized_rows.saturating_add(1);
+				continue;
+			}
+		}
 		out.push(row_to_public_map(
 			state,
 			table,
@@ -333,7 +340,7 @@ pub(super) async fn query_table_publish(
 			meta_key,
 		)?);
 	}
-	Ok(out)
+	Ok((out, skipped_unauthorized_rows))
 }
 
 pub(super) async fn find_row_snapshot(
@@ -431,9 +438,9 @@ pub(super) async fn hydrate_shell(client: &JazzClient, root: &[u8; 32]) -> Resul
 		);
 		let sparks_vals = super::insert_values(&sparks_schema, row)?;
 		client
-			.create("sparks", sparks_vals)
-			.await
-			.map_err(|e| format!("{e}"))?;
+				.create("sparks", sparks_vals)
+				.await
+				.map_err(super::format_jazz_err)?;
 
 		vault.sparks.insert(
 			spark_id,
@@ -464,9 +471,9 @@ pub(super) async fn hydrate_shell(client: &JazzClient, root: &[u8; 32]) -> Resul
 		let ks_schema = resolved_table_schema(client, "keyshares").await?;
 		let ks_vals = super::insert_values(&ks_schema, ks)?;
 		client
-			.create("keyshares", ks_vals)
-			.await
-			.map_err(|e| format!("{e}"))?;
+				.create("keyshares", ks_vals)
+				.await
+				.map_err(super::format_jazz_err)?;
 
 		deks.insert((spark_id, dek_ver), dek_plain);
 	}

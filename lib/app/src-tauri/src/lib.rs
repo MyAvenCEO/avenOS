@@ -8,7 +8,8 @@ mod spark_acc;
 use std::path::PathBuf;
 use tauri::path::BaseDirectory;
 use tauri::{
-	AppHandle, LogicalPosition, LogicalSize, Manager, Rect, Runtime, Webview, WebviewUrl, Window,
+	AppHandle, Listener, LogicalPosition, LogicalSize, Manager, Rect, Runtime, Webview, WebviewUrl,
+	Window,
 };
 use url::Url;
 
@@ -388,6 +389,16 @@ pub fn run() {
 			if let Err(e) = genesis::bootstrap(&state) {
 				log::error!("GENESIS_NETWORK_ID bootstrap: {e}");
 			}
+
+			let handle_for_lock = app.handle().clone();
+			let _vault_lock_listen = app.listen("self:did-lock", move |_event| {
+				let handle = handle_for_lock.clone();
+				tauri::async_runtime::spawn(async move {
+					let mj = handle.state::<jazz::ManagedJazz>();
+					mj.reset_connection().await;
+				});
+			});
+
 			Ok(())
 		})
 		.register_uri_scheme_protocol("vibe-sandbox", |ctx, request| {
@@ -402,6 +413,7 @@ pub fn run() {
 			jazz::jazz_session,
 			jazz::jazz_status,
 			jazz::jazz_list,
+			jazz::jazz_explorer_list,
 			jazz::jazz_get,
 			jazz::jazz_create,
 			jazz::jazz_update,

@@ -27,11 +27,6 @@ export function bytesToBase64(bytes: number[] | Uint8Array): string {
 	return btoa(s)
 }
 
-export function bytesToHex(bytes: number[] | Uint8Array): string {
-	const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
-	return [...arr].map((b) => b.toString(16).padStart(2, '0')).join('')
-}
-
 export function base64ToBytes(b64: string): number[] {
 	const bin = atob(b64)
 	const out = new Array<number>(bin.length)
@@ -44,18 +39,19 @@ function createSelfContext() {
 	let statusErr = $state<string | undefined>()
 
 	let genesisB64 = $state<string | undefined>()
-	let genesisHex = $state<string | undefined>()
 	let genesisShort = $state<string | undefined>()
 
 	let peerPubB64 = $state<string | undefined>()
-	let peerPubHex = $state<string | undefined>()
 
 	let signingPubB64 = $state<string | undefined>()
-	let signingPubHex = $state<string | undefined>()
+	let signingPeerDid = $state<string | undefined>()
+	let devicePeerDid = $state<string | undefined>()
 
 	async function refresh(): Promise<void> {
 		if (!browser || !isTauriRuntime()) return
 		statusErr = undefined
+		devicePeerDid = undefined
+		signingPeerDid = undefined
 
 		try {
 			status = await invoke<PeerStatus>('plugin:self|peer_status', { slot: DEVICE_PEER_SLOT })
@@ -68,11 +64,9 @@ function createSelfContext() {
 		try {
 			const g = await invoke<number[]>('genesis_network_id')
 			genesisB64 = bytesToBase64(g)
-			genesisHex = bytesToHex(g)
 			genesisShort = `${genesisB64.slice(0, 6)}…${genesisB64.slice(-6)}`
 		} catch (e) {
 			genesisB64 = undefined
-			genesisHex = undefined
 			genesisShort = undefined
 			statusErr = e instanceof Error ? e.message : String(e)
 		}
@@ -81,30 +75,38 @@ function createSelfContext() {
 			try {
 				const pk = await invoke<number[]>('plugin:self|public_key', { slot: DEVICE_PEER_SLOT })
 				peerPubB64 = bytesToBase64(pk)
-				peerPubHex = bytesToHex(pk)
 			} catch (e) {
 				peerPubB64 = undefined
-				peerPubHex = undefined
 				statusErr = e instanceof Error ? e.message : String(e)
+			}
+
+			try {
+				devicePeerDid = await invoke<string>('plugin:self|device_peer_did', {
+					slot: DEVICE_PEER_SLOT,
+				})
+			} catch {
+				devicePeerDid = undefined
 			}
 		} else {
 			peerPubB64 = undefined
-			peerPubHex = undefined
 		}
 
 		if (status?.unlocked) {
 			try {
 				const pk = await invoke<number[]>('plugin:self|signing_public_key')
 				signingPubB64 = bytesToBase64(pk)
-				signingPubHex = bytesToHex(pk)
 			} catch (e) {
 				signingPubB64 = undefined
-				signingPubHex = undefined
 				statusErr = e instanceof Error ? e.message : String(e)
+			}
+
+			try {
+				signingPeerDid = await invoke<string>('plugin:self|signing_peer_did')
+			} catch {
+				signingPeerDid = undefined
 			}
 		} else {
 			signingPubB64 = undefined
-			signingPubHex = undefined
 		}
 	}
 
@@ -118,23 +120,20 @@ function createSelfContext() {
 		get genesisB64() {
 			return genesisB64
 		},
-		get genesisHex() {
-			return genesisHex
-		},
 		get genesisShort() {
 			return genesisShort
 		},
 		get peerPubB64() {
 			return peerPubB64
 		},
-		get peerPubHex() {
-			return peerPubHex
-		},
 		get signingPubB64() {
 			return signingPubB64
 		},
-		get signingPubHex() {
-			return signingPubHex
+		get signingPeerDid() {
+			return signingPeerDid
+		},
+		get devicePeerDid() {
+			return devicePeerDid
 		},
 		refresh,
 	}

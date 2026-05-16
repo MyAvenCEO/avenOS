@@ -8,6 +8,8 @@ Default permissions for tauri-plugin-self
 - `allow-public-key`
 - `allow-unlock`
 - `allow-peer-status`
+- `allow-device-peer-did`
+- `allow-signing-peer-did`
 - `allow-signing-public-key`
 - `allow-sign`
 - `allow-verify`
@@ -21,6 +23,32 @@ Default permissions for tauri-plugin-self
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`self:allow-device-peer-did`
+
+</td>
+<td>
+
+Enables the device_peer_did command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:deny-device-peer-did`
+
+</td>
+<td>
+
+Denies the device_peer_did command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>
@@ -148,6 +176,32 @@ Enables the sign command without any pre-configured scope.
 <td>
 
 Denies the sign command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:allow-signing-peer-did`
+
+</td>
+<td>
+
+Enables the signing_peer_did command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:deny-signing-peer-did`
+
+</td>
+<td>
+
+Denies the signing_peer_did command without any pre-configured scope.
 
 </td>
 </tr>
