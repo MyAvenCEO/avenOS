@@ -11,6 +11,7 @@
 pub mod commands;
 pub mod derive;
 pub mod did;
+pub mod paths;
 pub mod state;
 
 #[cfg(target_os = "macos")]

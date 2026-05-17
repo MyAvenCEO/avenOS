@@ -34,6 +34,10 @@ pub(crate) struct ShellState {
 	pub(crate) default_spark: Uuid,
 	pub(crate) deks: HashMap<(Uuid, i64), Dek>,
 	pub(crate) spark_versions: HashMap<Uuid, i64>,
+	/// Groove write branch (`JazzClient` uses SchemaManager `"client"` / `"main"`). List queries must
+	/// use this branch only; empty `Query.branches` expands to **all live schema branches**, so merged
+	/// reads can expose rows whose tips are not writable on `current_branch()` (ObjectNotFound).
+	pub(crate) groove_write_branch: String,
 }
 
 fn jazz_cell_json(cell: &Value) -> JsonValue {
@@ -304,6 +308,19 @@ pub(super) async fn resolved_table_schema(client: &JazzClient, table: &str) -> R
 		.ok_or_else(|| format!("unknown_table: {table}"))
 }
 
+/// Canonical Jazz read pattern — **no** `.branch()` override.
+///
+/// Per the Jazz docs ("Branches" → "Schema versions are merged automatically"):
+/// reads auto-merge across **all known schema-version branches** in the current
+/// env/userBranch; writes go to the current schema branch. Earlier AvenOS code
+/// forced `.branch(groove_write_branch)`, which:
+///   * silently scoped reads to a single branch (no lens activation),
+///   * and only loaded `obj.branches[write_branch]` into `ObjectManager`, so
+///     when the row's commits lived on any **other** loaded branch, the
+///     subsequent `client.update`/`client.delete` saw the row in memory but
+///     `add_commit` on `current_branch()` could not find the right tip and
+///     returned a `BranchNotFound`/`ParentNotFound` that jazz-tools maps to
+///     the misleading `QueryError::ObjectNotFound(id)`.
 pub(super) async fn exec_list_rows(
 	client: &JazzClient,
 	table: &str,
@@ -343,6 +360,28 @@ pub(super) async fn query_table_publish(
 	Ok((out, skipped_unauthorized_rows))
 }
 
+/// Diagnostic-only re-derivation of the writable Groove branch from the connected client's
+/// current schema. Failures are logged and converted to the literal "<unavailable>" rather than
+/// propagated, so this is safe to call inside write IPC paths purely for log enrichment.
+pub(super) async fn groove_write_branch_from_connected_schema_or_log(client: &JazzClient) -> String {
+	match super::groove_write_branch_from_connected_schema(client).await {
+		Ok(b) => b,
+		Err(e) => {
+			log::warn!(
+				target: "avenos::jazz",
+				"groove_write_branch_from_connected_schema failed (logging only): {e}"
+			);
+			"<unavailable>".to_string()
+		}
+	}
+}
+
+/// Look up `(ObjectId, values)` for a row across **all** known schema branches
+/// (no `.branch()` override). Reading via the canonical multi-branch path also
+/// populates `ObjectManager` with every branch the row lives on, which is what
+/// `client.update` / `client.delete` need so `add_commit` can resolve tips on
+/// `current_branch()` without spuriously returning `BranchNotFound` (surfaced
+/// upstream as the misleading `ObjectNotFound`).
 pub(super) async fn find_row_snapshot(
 	client: &JazzClient,
 	table: &str,
@@ -361,6 +400,17 @@ pub(super) async fn hydrate_shell(client: &JazzClient, root: &[u8; 32]) -> Resul
 	let mut vault = spark_acc::build_vault_from_root(root)?;
 	let signing_key = jazz_auth::signing_key_from_device_root(root)?;
 	let biscuit_root_pub = vault.biscuit_kp.public();
+
+	let groove_write_branch =
+		super::groove_write_branch_from_connected_schema(client).await?;
+	if let Ok(manifest_branch) = super::groove_write_branch_for_manifest_schema() {
+		if manifest_branch != groove_write_branch {
+			log::warn!(
+				target: "avenos::jazz",
+				"Groove writable branch from connected schema differs from raw-manifest branch (writes use runtime): manifest_branch={manifest_branch} runtime_branch={groove_write_branch}"
+			);
+		}
+	}
 
 	let sparks_schema = resolved_table_schema(client, "sparks").await?;
 	let spark_id_ix = col_ix(&sparks_schema, "spark_id")?;
@@ -486,6 +536,11 @@ pub(super) async fn hydrate_shell(client: &JazzClient, root: &[u8; 32]) -> Resul
 			.copied()
 			.ok_or_else(|| "shell_no_sparks".to_string())?;
 
+	log::info!(
+		target: "avenos::jazz",
+		"hydrate_shell ready groove_write_branch={groove_write_branch} default_spark={default_spark}"
+	);
+
 	Ok(ShellState {
 		peer_did: vault.peer_did.clone(),
 		vault,
@@ -493,5 +548,6 @@ pub(super) async fn hydrate_shell(client: &JazzClient, root: &[u8; 32]) -> Resul
 		default_spark,
 		deks,
 		spark_versions,
+		groove_write_branch,
 	})
 }

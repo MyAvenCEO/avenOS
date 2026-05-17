@@ -168,12 +168,12 @@
 </script>
 
 <svelte:head>
-	<title>Jazz DB · AvenOS</title>
+	<title>Database · AvenOS</title>
 </svelte:head>
 
 <div class="mx-auto flex h-full min-h-0 w-full max-w-[min(100%,88rem)] flex-1 flex-col gap-4 px-4 pb-6 pt-2 sm:px-6">
 	<header class="shrink-0 space-y-1">
-		<h1 class="text-2xl font-semibold tracking-tight">Jazz database</h1>
+		<h1 class="text-2xl font-semibold tracking-tight">Local database</h1>
 		<p class="text-muted-foreground max-w-xl text-sm leading-relaxed">
 			Grove-backed rows for this device identity via the Rust shell — read-only explorer.
 		</p>
@@ -185,9 +185,9 @@
 	</header>
 
 	{#if !tauri}
-		<p class="text-muted-foreground text-sm">Open this screen in the AvenOS desktop app to inspect Jazz IPC data.</p>
+		<p class="text-muted-foreground text-sm">Open this screen in the AvenOS desktop app to inspect local Groove rows.</p>
 	{:else if !unlocked}
-		<p class="text-muted-foreground text-sm">Unlock with Touch ID to load your local Jazz store.</p>
+		<p class="text-muted-foreground text-sm">Unlock with Touch ID to load your local database.</p>
 	{:else}
 		{#if bootstrapErr}
 			<p

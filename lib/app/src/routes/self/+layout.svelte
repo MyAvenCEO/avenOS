@@ -27,6 +27,11 @@
 			label: 'Network',
 			match: (p: string) => p.startsWith('/self/network'),
 		},
+		{
+			href: '/self/db',
+			label: 'DB',
+			match: (p: string) => p.startsWith('/self/db'),
+		},
 	]
 
 	const sessionLabel = $derived(

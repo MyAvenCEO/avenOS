@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::RwLock;
 
 use groove::{
-	query_manager::types::{ColumnType, SchemaHash, TableSchema},
+	query_manager::types::{ColumnType, ComposedBranchName, SchemaHash, TableSchema},
 	AppContext,
 	AppId,
 	ClientId,
@@ -19,7 +19,7 @@ use groove::{
 	Value,
 };
 use serde_json::{Map, Value as JsonValue};
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 use tauri_plugin_self::derive::ed25519_public;
 use tauri_plugin_self::state::SelfState;
 use tokio::sync::{broadcast, Mutex};
@@ -54,46 +54,55 @@ pub struct JazzExplorerListReply {
 
 /// Groove-backed Jazz client lifecycle. Clearing on lock / fingerprint mismatch avoids serving
 /// a stale SurrealKV view after `SelfState` changes.
+struct JazzConn {
+	client: Option<JazzClient>,
+	/// Device root → Groove [`ClientId`](groove::ClientId) UUID; `Some` iff `client` is populated.
+	linked_identity: Option<Uuid>,
+}
+
+impl Default for JazzConn {
+	fn default() -> Self {
+		Self {
+			client: None,
+			linked_identity: None,
+		}
+	}
+}
+
 pub struct ManagedJazz {
-	client: Mutex<Option<std::sync::Arc<JazzClient>>>,
+	conn: Mutex<JazzConn>,
 	table_txs: RwLock<HashMap<String, broadcast::Sender<Vec<JsonRow>>>>,
 	shell: Mutex<Option<std::sync::Arc<jazz_engine::ShellState>>>,
-	/// Jazz Groove persistence [`ClientId`](groove::ClientId)`s UUID`; must track the unlocked shell.
-	connected_client_uuid: Mutex<Option<Uuid>>,
 }
 
 impl Default for ManagedJazz {
 	fn default() -> Self {
 		Self {
-			client: Mutex::new(None),
+			conn: Mutex::new(JazzConn::default()),
 			table_txs: RwLock::new(HashMap::new()),
 			shell: Mutex::new(None),
-			connected_client_uuid: Mutex::new(None),
 		}
 	}
 }
 
-async fn shutdown_jazz_holder(old: Option<std::sync::Arc<JazzClient>>) {
-	let Some(arc) = old else {
+async fn shutdown_owned_client(old: Option<JazzClient>) {
+	let Some(client) = old else {
 		return;
 	};
-	match std::sync::Arc::try_unwrap(arc) {
-		Ok(client) => {
-			if let Err(e) = client.shutdown().await {
-				log::warn!(target: "avenos::jazz", "JazzClient shutdown failed (flush/sync): {e}");
-			}
-		}
-		Err(remaining) => {
-			log::warn!(
-				target: "avenos::jazz",
-				"JazzClient shutdown skipped: {} Arc holder(s) still alive; SurrealKV may delay lock release until process exit",
-				std::sync::Arc::strong_count(&remaining)
-			);
-		}
+	if let Err(e) = client.shutdown().await {
+		log::warn!(target: "avenos::jazz", "JazzClient shutdown failed (flush/sync): {e}");
 	}
 }
 
 /// Normalize [`JazzError`] for IPC strings and structured logs (avoids `Write error: Write error:` layering).
+///
+/// jazz-tools' `update_with_session` / `delete_with_session` collapse every
+/// failure inside `add_commit` (including `BranchNotFound`, `ParentNotFound`,
+/// and `StorageError`) into `QueryError::ObjectNotFound(id)`. The message
+/// `ObjectNotFound(...)` therefore tells you very little about the real cause.
+/// We surface the raw text unchanged so the caller can wrap it with its own
+/// context (`table`, `write_branch`, `runtime_branch`) and so any "fix"
+/// suggestion isn't fabricated from a misread of the upstream error code.
 #[must_use]
 pub(super) fn format_jazz_err(err: JazzError) -> String {
 	match &err {
@@ -103,14 +112,7 @@ pub(super) fn format_jazz_err(err: JazzError) -> String {
 				"groove write (display): {msg} | debug: {:?}",
 				err
 			);
-			// BranchNotFound maps to QueryError::ObjectNotFound upstream; surfaced as unreadable IDs.
-			if msg.contains("ObjectNotFound") {
-				format!(
-					"{msg}. Groove cannot apply this write: row history may sit on another schema lane while lists still merge-read older branches (Spark denials surface as biscuit_deny, not ObjectNotFound). If this persists across restarts, remove this app's Jazz data folder (macOS `Application Support/*/jazz`).",
-				)
-			} else {
-				msg.clone()
-			}
+			msg.clone()
 		}
 		JazzError::Query(msg) => {
 			log::warn!(
@@ -136,42 +138,98 @@ fn desired_root_client_uuid(self_state: &SelfState) -> Result<Uuid, String> {
 	Ok(crate::jazz_auth::client_uuid_from_ed_pubkey(&pk))
 }
 
-const SCHEMA_FINGERPRINT_FILE: &str = "schema_fingerprint";
+/// Persisted Groove [`SchemaHash`] as 32-byte SHA digest from `SchemaHash::compute(schema)`.
+/// This is the **same value** Groove uses to derive its composed write branch
+/// (`ComposedBranchName::new(env, schema_hash, user_branch)`). If on-disk != current,
+/// old rows live on a stale branch that `current_branch()` cannot resolve — every
+/// `update`/`delete` will return `ObjectNotFound`/`BranchNotFound`. We wipe in that case.
+///
+/// Replaces the old raw-manifest SHA256 fingerprint: byte-identical manifest JSON
+/// can still produce a different `SchemaHash` if jazz-tools' Schema-build
+/// changes shape between versions.
+const GROOVE_SCHEMA_HASH_FILE: &str = "groove_schema_hash";
+/// Legacy manifest-JSON fingerprint file. Kept only so old installs can be migrated/cleaned.
+const LEGACY_SCHEMA_FINGERPRINT_FILE: &str = "schema_fingerprint";
 
-/// Stable signature of the **current** `libs/jazz-schema/schema.manifest.json`. Used to detect a
-/// schema-shape change between app launches. Any change of column names / types / order changes
-/// Groove's `SchemaHash`, which changes the **branch name** every existing row was committed
-/// under. Old commits then live on a branch that the new schema cannot read (`load_branch =
-/// Ok(None)`), and `update`/`delete` on those `ObjectId`s return `ObjectNotFound` because they
-/// require `current_branch()` tip-ids that simply don't exist for those rows.
-fn schema_manifest_fingerprint() -> Result<[u8; 32], String> {
-	use sha2::Digest;
-	let path = crate::schema_manifest::jazz_schema_manifest_path();
-	let bytes =
-		fs::read(&path).map_err(|e| format!("read schema manifest {}: {e}", path.display()))?;
-	let mut h = sha2::Sha256::new();
-	h.update(b"ceo.aven.os/jazz/schema-fingerprint-v1");
-	h.update(&bytes);
-	Ok(h.finalize().into())
+const JAZZ_LANE_FILE: &str = "jazz_lane";
+
+/// Must stay aligned with JazzClient `SchemaManager::new(.., env, user_branch)` in jazz-tools (`client.rs`).
+pub(super) const GROOVE_CLIENT_ENV: &str = "client";
+pub(super) const GROOVE_USER_BRANCH_MAIN: &str = "main";
+
+/// Composed Groove branch string derived from the **raw** manifest JSON (before Jazz normalizes schemas).
+/// Prefer `groove_write_branch_from_connected_schema` for list/write queries so branch matches persisted Groove state.
+pub(super) fn groove_write_branch_for_manifest_schema() -> Result<String, String> {
+	let schema = crate::schema_manifest::load_jazz_schema_from_manifest()?;
+	let h = SchemaHash::compute(&schema);
+	let bn = ComposedBranchName::new(
+		GROOVE_CLIENT_ENV,
+		h,
+		GROOVE_USER_BRANCH_MAIN,
+	)
+	.to_branch_name();
+	Ok(bn.as_str().to_string())
 }
 
-/// Wipe Groove storage when **either** identity (Ed25519 → ClientId) **or** schema shape
-/// changed since the last successful boot. Both situations leave old commits/index entries
-/// stranded on a key prefix the new client can never reach, producing `ObjectNotFound` on every
-/// write to a row that does still appear in `list`. Dev-mode safety net: in production this
-/// should be a real schema migration with `add_live_schema` + lens transforms.
-const JAZZ_LANE_FILE: &str = "jazz_lane";
-const GROOVE_SCHEMA_HASH_FILE: &str = "groove_schema_hash";
+/// Branch string **exactly** as Groove resolves it from the connected client's normalized schema.
+/// List/write queries must use this; deriving only from the manifest JSON can drift after Jazz normalizes/persists schemas.
+pub(super) async fn groove_write_branch_from_connected_schema(
+	client: &JazzClient,
+) -> Result<String, String> {
+	let sch = client.schema().await.map_err(format_jazz_err)?;
+	let bn = ComposedBranchName::from_schema(
+		GROOVE_CLIENT_ENV,
+		&sch,
+		GROOVE_USER_BRANCH_MAIN,
+	)
+	.to_branch_name();
+	Ok(bn.as_str().to_string())
+}
 
-/// Persisted lane must align with `JazzClient::connect`, which mounts `SchemaManager::new(.., env, branch)`.
-/// Mismatch survives manifest fingerprint checks (same JSON blob) yet maps to disjoint Groove branch names.
+/// Groove durable files live here (was `.avenOS/jazz` before AvenOS renamed the folder).
+const AVEN_OS_GROOVE_DATA_DIR: &str = "db";
+const LEGACY_JAZZ_DATA_DIR: &str = "jazz";
+
+fn migrate_legacy_jazz_dir_to_db(user_root: &Path) -> Result<(), String> {
+	let db = user_root.join(AVEN_OS_GROOVE_DATA_DIR);
+	if db.exists() {
+		return Ok(());
+	}
+	let legacy = user_root.join(LEGACY_JAZZ_DATA_DIR);
+	if legacy.exists() {
+		fs::rename(&legacy, &db).map_err(|e| {
+			format!(
+				"migrate Groove dir {} -> {}: {e}",
+				legacy.display(),
+				db.display()
+			)
+		})?;
+		log::info!(
+			target: "avenos::jazz",
+			"Migrated legacy Groove directory {} -> {}",
+			legacy.display(),
+			db.display()
+		);
+	}
+	Ok(())
+}
+
 const CURRENT_JAZZ_LANE: &str = "lane-v1;env=client;user_branch=main";
 
+/// Wipe and re-stamp the Groove data dir when **any** of these disagree with the previous boot:
+/// 1. `client_id` — different device identity.
+/// 2. Groove `SchemaHash` — different writable branch derivation; existing rows would be
+///    unreachable on `current_branch()`, causing `ObjectNotFound` on every update/delete
+///    even though scans on multi-branch fallback still see them. See
+///    [`current_groove_schema_hash_bytes`] for rationale.
+/// 3. Jazz lane stamp — env/user_branch mismatch.
+///
+/// This is the **once-and-for-all** safeguard against the
+/// "old session todos can be read but not edited" failure mode.
 fn reconcile_jazz_identity_cache_dir(
 	jazz_dir: &Path,
 	desired_uuid: Uuid,
-	current_schema_fp: &[u8; 32],
-	expected_groove_schema_hash: SchemaHash,
+	current_groove_hash: &[u8; 32],
 ) -> Result<(), String> {
 	let mut reason: Option<String> = None;
 
@@ -194,24 +252,25 @@ fn reconcile_jazz_identity_cache_dir(
 		Err(e) => return Err(format!("read {}: {e}", client_path.display())),
 	}
 
-	let fp_path = jazz_dir.join(SCHEMA_FINGERPRINT_FILE);
+	let hash_path = jazz_dir.join(GROOVE_SCHEMA_HASH_FILE);
 	if reason.is_none() {
-		match fs::read(&fp_path) {
-			Ok(bytes) if bytes == current_schema_fp => {}
+		match fs::read(&hash_path) {
+			Ok(bytes) if bytes == current_groove_hash => {}
 			Ok(bytes) => {
 				reason = Some(format!(
-					"schema fingerprint changed (on-disk={}, current={})",
+					"groove SchemaHash changed (on-disk={}, current={}); writable branch derivation drifted, old rows would be unreachable on current_branch()",
 					hex_short(&bytes),
-					hex_short(current_schema_fp)
+					hex_short(current_groove_hash)
 				));
 			}
 			Err(e) if e.kind() == ErrorKind::NotFound => {
 				if has_prior_groove_data {
-					reason =
-						Some("schema fingerprint missing while groove data present".into());
+					reason = Some(
+						"groove SchemaHash file missing while groove data present (older AvenOS install or aborted write); cannot prove writable branch matches on-disk rows".into(),
+					);
 				}
 			}
-			Err(e) => return Err(format!("read {}: {e}", fp_path.display())),
+			Err(e) => return Err(format!("read {}: {e}", hash_path.display())),
 		}
 	}
 
@@ -233,32 +292,10 @@ fn reconcile_jazz_identity_cache_dir(
 		}
 	}
 
-	let grove_hash_path = jazz_dir.join(GROOVE_SCHEMA_HASH_FILE);
-	if reason.is_none() {
-		match fs::read(&grove_hash_path) {
-			Ok(bytes) => {
-				if bytes.len() != 32 {
-					reason = Some(format!(
-						"groove_schema_hash malformed ({} bytes, expected 32)",
-						bytes.len(),
-					));
-				} else if !bytes[..].eq(expected_groove_schema_hash.as_bytes().as_slice()) {
-					let on = hex_short(&bytes);
-					let cur = hex_short(expected_groove_schema_hash.as_bytes());
-					reason = Some(format!(
-						"groove SchemaHash mismatch (on-disk={on}, current={cur}); jazz-tools/schema builder drift"
-					));
-				}
-			}
-			Err(e) if e.kind() == ErrorKind::NotFound => {}
-			Err(e) => return Err(format!("read {}: {e}", grove_hash_path.display())),
-		}
-	}
-
 	if let Some(why) = reason {
 		log::warn!(
 			target: "avenos::jazz",
-			"Purging {}: {why}; Groove partition mismatch causes ObjectNotFound-style write failures.",
+			"Purging {}: {why}",
 			jazz_dir.display(),
 		);
 		if jazz_dir.exists() {
@@ -268,17 +305,34 @@ fn reconcile_jazz_identity_cache_dir(
 	}
 
 	fs::create_dir_all(jazz_dir).map_err(|e| format!("recreate jazz dir: {e}"))?;
-	fs::write(&fp_path, current_schema_fp)
-		.map_err(|e| format!("write {}: {e}", fp_path.display()))?;
+	fs::write(&hash_path, current_groove_hash)
+		.map_err(|e| format!("write {}: {e}", hash_path.display()))?;
 	fs::write(jazz_dir.join(JAZZ_LANE_FILE), CURRENT_JAZZ_LANE.as_bytes()).map_err(|e| {
 		format!(
 			"write {}: {e}",
 			jazz_dir.join(JAZZ_LANE_FILE).display()
 		)
 	})?;
-	fs::write(&grove_hash_path, expected_groove_schema_hash.as_bytes()).map_err(|e| {
-		format!("write {}: {e}", grove_hash_path.display())
-	})?;
+
+	// Best-effort cleanup of the legacy manifest-fingerprint file (kept for diagnostics only).
+	let legacy_fp = jazz_dir.join(LEGACY_SCHEMA_FINGERPRINT_FILE);
+	if legacy_fp.exists() {
+		let _ = fs::remove_file(&legacy_fp);
+	}
+
+	let composed = ComposedBranchName::new(
+		GROOVE_CLIENT_ENV,
+		SchemaHash::from_bytes(*current_groove_hash),
+		GROOVE_USER_BRANCH_MAIN,
+	)
+	.to_branch_name();
+	log::info!(
+		target: "avenos::jazz",
+		"groove cache stamped: dir={} groove_hash={} composed_branch={}",
+		jazz_dir.display(),
+		hex_short(current_groove_hash),
+		composed.as_str()
+	);
 	Ok(())
 }
 
@@ -297,11 +351,12 @@ impl ManagedJazz {
 	/// [`SelfState`] is cleared (vault lock).
 	pub(crate) async fn reset_connection(&self) {
 		let old_client = {
-			*self.connected_client_uuid.lock().await = None;
+			let mut jc = self.conn.lock().await;
+			jc.linked_identity = None;
 			self.shell.lock().await.take();
-			self.client.lock().await.take()
+			jc.client.take()
 		};
-		shutdown_jazz_holder(old_client).await;
+		shutdown_owned_client(old_client).await;
 	}
 
 	fn broadcaster(&self, table: &str) -> broadcast::Sender<Vec<JsonRow>> {
@@ -451,15 +506,12 @@ async fn jazz_connect(
 	let schema = crate::schema_manifest::load_jazz_schema_from_manifest()?;
 	let pk = ed25519_public(&root)?;
 	let deterministic = crate::jazz_auth::client_uuid_from_ed_pubkey(&pk);
-	let groove_schema_digest = SchemaHash::compute(&schema);
-	let schema_fp = schema_manifest_fingerprint()?;
+	let groove_hash = *SchemaHash::compute(&schema).as_bytes();
 
-	let data_dir = app
-		.path()
-		.app_data_dir()
-		.map_err(|e| e.to_string())?
-		.join("jazz");
-	reconcile_jazz_identity_cache_dir(&data_dir, deterministic, &schema_fp, groove_schema_digest)?;
+	let user_root = tauri_plugin_self::paths::aven_os_user_root(app)?;
+	migrate_legacy_jazz_dir_to_db(&user_root)?;
+	let data_dir = user_root.join(AVEN_OS_GROOVE_DATA_DIR);
+	reconcile_jazz_identity_cache_dir(&data_dir, deterministic, &groove_hash)?;
 
 	let ctx = AppContext {
 		app_id: AppId::from_name("ceo.aven.os"),
@@ -477,43 +529,40 @@ async fn jazz_connect(
 		.map_err(format_jazz_err)
 }
 
-async fn ensure_arc(
+async fn ensure_jazz_connection(
+	jc: &mut JazzConn,
+	jazz: &ManagedJazz,
 	app: &tauri::AppHandle,
 	self_state: &SelfState,
-	mj: &ManagedJazz,
-) -> Result<std::sync::Arc<JazzClient>, String> {
+) -> Result<(), String> {
 	if !self_state.is_unlocked() {
-		mj.reset_connection().await;
+		let old = jc.client.take();
+		jc.linked_identity = None;
+		jazz.shell.lock().await.take();
+		shutdown_owned_client(old).await;
 		return Err("locked: unlock AvenOS identity first".into());
 	}
 	let desired = desired_root_client_uuid(self_state)?;
-
-	let existing = mj.client.lock().await.clone();
-	let linked = mj.connected_client_uuid.lock().await.clone();
-
-	if let (Some(arc), Some(uuid)) = (&existing, &linked) {
-		if *uuid == desired {
-			return Ok(std::sync::Arc::clone(arc));
+	if let (Some(_), Some(linked)) = (&jc.client, &jc.linked_identity) {
+		if *linked == desired {
+			return Ok(());
 		}
 	}
-
-	mj.reset_connection().await;
+	let old = jc.client.take();
+	jc.linked_identity = None;
+	jazz.shell.lock().await.take();
+	shutdown_owned_client(old).await;
 
 	let client = jazz_connect(app, self_state).await?;
-	let arc = std::sync::Arc::new(client);
-	{
-		let mut slot = mj.client.lock().await;
-		*slot = Some(std::sync::Arc::clone(&arc));
-	}
-	*mj.connected_client_uuid.lock().await = Some(desired);
-
-	Ok(arc)
+	jc.client = Some(client);
+	jc.linked_identity = Some(desired);
+	Ok(())
 }
 
 async fn jazz_shell_ready(
 	mj: &ManagedJazz,
 	self_state: &SelfState,
-	client: &std::sync::Arc<JazzClient>,
+	client: &JazzClient,
 ) -> Result<std::sync::Arc<jazz_engine::ShellState>, String> {
 	let mut slot = mj.shell.lock().await;
 	if let Some(s) = slot.as_ref() {
@@ -522,8 +571,7 @@ async fn jazz_shell_ready(
 	let root = self_state
 		.with_root(|r| Ok(*r))
 		.map_err(|_| "locked: unlock AvenOS identity first".to_string())?;
-	let hydrated =
-		jazz_engine::hydrate_shell(std::sync::Arc::as_ref(client), &root).await?;
+	let hydrated = jazz_engine::hydrate_shell(client, &root).await?;
 	let arc = std::sync::Arc::new(hydrated);
 	*slot = Some(std::sync::Arc::clone(&arc));
 	Ok(arc)
@@ -545,11 +593,11 @@ pub async fn jazz_status(
 
 	let desired = desired_root_client_uuid(&self_state)?;
 
-	let arc_opt = jazz.client.lock().await.clone();
-	let linked = jazz.connected_client_uuid.lock().await.clone();
-
-	if linked != Some(desired) {
-		if arc_opt.is_some() || linked.is_some() {
+	let jc = jazz.conn.lock().await;
+	if jc.linked_identity != Some(desired) {
+		let stale = jc.client.is_some() || jc.linked_identity.is_some();
+		drop(jc);
+		if stale {
 			jazz.reset_connection().await;
 		}
 		return Ok(JazzStatusReply {
@@ -558,7 +606,7 @@ pub async fn jazz_status(
 		});
 	}
 
-	if let Some(c) = arc_opt {
+	if let Some(ref c) = jc.client {
 		let sch = c.schema().await.map_err(format_jazz_err)?;
 		let mut names: Vec<String> = sch.keys().map(|k| k.to_string()).collect();
 		names.sort();
@@ -580,10 +628,12 @@ pub async fn jazz_status(
 	jazz: tauri::State<'_, ManagedJazz>,
 	self_state: tauri::State<'_, SelfState>,
 ) -> Result<JazzStatusReply, String> {
-	let c = ensure_arc(&app, &self_state, &jazz).await?;
-	let _ = jazz_shell_ready(&jazz, &self_state, &c).await?;
+	let mut jc = jazz.conn.lock().await;
+	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
+	let client = jc.client.as_ref().expect("jazz connected");
+	let _ = jazz_shell_ready(&jazz, &self_state, client).await?;
 
-	let sch = c.schema().await.map_err(format_jazz_err)?;
+	let sch = client.schema().await.map_err(format_jazz_err)?;
 	let mut tables: Vec<String> = sch.keys().map(|k| k.to_string()).collect();
 	tables.sort();
 	Ok(JazzStatusReply {
@@ -598,8 +648,11 @@ pub async fn jazz_session(
 	jazz: tauri::State<'_, ManagedJazz>,
 	self_state: tauri::State<'_, SelfState>,
 ) -> Result<JazzSessionReply, String> {
-	let c = ensure_arc(&app, &self_state, &jazz).await?;
-	let shell = jazz_shell_ready(&jazz, &self_state, &c).await?;
+	let mut jc = jazz.conn.lock().await;
+	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
+	let client = jc.client.as_ref().expect("jazz connected");
+	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
+	drop(jc);
 	Ok(JazzSessionReply {
 		peer_did: shell.peer_did.clone(),
 		peer_did_short: jazz_engine::short_peer_did(&shell.peer_did),
@@ -614,15 +667,12 @@ pub async fn jazz_list(
 	self_state: tauri::State<'_, SelfState>,
 	table: String,
 ) -> Result<Vec<JsonRow>, String> {
-	let c = ensure_arc(&app, &self_state, &jazz).await?;
-	let shell = jazz_shell_ready(&jazz, &self_state, &c).await?;
-	let (rows, _) = jazz_engine::query_table_publish(
-		std::sync::Arc::as_ref(&c),
-		&shell,
-		&table,
-		ENCRYPTED_META,
-	)
-	.await?;
+	let mut jc = jazz.conn.lock().await;
+	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
+	let client = jc.client.as_ref().expect("jazz connected");
+	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let (rows, _) =
+		jazz_engine::query_table_publish(client, &shell, &table, ENCRYPTED_META).await?;
 	Ok(rows)
 }
 
@@ -633,15 +683,12 @@ pub async fn jazz_explorer_list(
 	self_state: tauri::State<'_, SelfState>,
 	table: String,
 ) -> Result<JazzExplorerListReply, String> {
-	let c = ensure_arc(&app, &self_state, &jazz).await?;
-	let shell = jazz_shell_ready(&jazz, &self_state, &c).await?;
-	let (rows, skipped_unauthorized_rows) = jazz_engine::query_table_publish(
-		std::sync::Arc::as_ref(&c),
-		&shell,
-		&table,
-		ENCRYPTED_META,
-	)
-	.await?;
+	let mut jc = jazz.conn.lock().await;
+	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
+	let client = jc.client.as_ref().expect("jazz connected");
+	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let (rows, skipped_unauthorized_rows) =
+		jazz_engine::query_table_publish(client, &shell, &table, ENCRYPTED_META).await?;
 	Ok(JazzExplorerListReply {
 		rows,
 		skipped_unauthorized_rows,
@@ -656,12 +703,14 @@ pub async fn jazz_get(
 	table: String,
 	id: String,
 ) -> Result<JsonRow, String> {
-	let c = ensure_arc(&app, &self_state, &jazz).await?;
-	let shell = jazz_shell_ready(&jazz, &self_state, &c).await?;
+	let mut jc = jazz.conn.lock().await;
+	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
+	let client = jc.client.as_ref().expect("jazz connected");
+	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
 	let uuid = Uuid::parse_str(&id).map_err(|e| format!("invalid id UUID: {e}"))?;
 
-	let tbl = jazz_engine::resolved_table_schema(std::sync::Arc::as_ref(&c), &table).await?;
-	match jazz_engine::find_row_snapshot(std::sync::Arc::as_ref(&c), &table, &tbl, uuid).await? {
+	let tbl = jazz_engine::resolved_table_schema(client, &table).await?;
+	match jazz_engine::find_row_snapshot(client, &table, &tbl, uuid).await? {
 		Some((oid, vals)) => {
 			let spark_row = jazz_engine::spark_uuid_row(&tbl, &vals).unwrap_or(shell.default_spark);
 			jazz_engine::authorize_gate(
@@ -692,9 +741,11 @@ pub async fn jazz_create(
 	table: String,
 	mut values: JsonRow,
 ) -> Result<JsonRow, String> {
-	let c = ensure_arc(&app, &self_state, &jazz).await?;
-	let shell = jazz_shell_ready(&jazz, &self_state, &c).await?;
-	let tbl = jazz_engine::resolved_table_schema(std::sync::Arc::as_ref(&c), &table).await?;
+	let mut jc = jazz.conn.lock().await;
+	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
+	let client = jc.client.as_ref().expect("jazz connected");
+	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let tbl = jazz_engine::resolved_table_schema(client, &table).await?;
 
 	let mut plaintext = std::collections::HashMap::new();
 
@@ -716,7 +767,7 @@ pub async fn jazz_create(
 	)?;
 
 	let vals = insert_values(&tbl, values)?;
-	let oid = std::sync::Arc::as_ref(&c)
+	let oid = client
 		.create(&table, vals.clone())
 		.await
 		.map_err(format_jazz_err)?;
@@ -743,14 +794,14 @@ pub async fn jazz_create(
 			);
 		}
 		let ops = patch_updates(&tbl, ph)?;
-		std::sync::Arc::as_ref(&c)
+		client
 			.update(oid, ops)
 			.await
 			.map_err(format_jazz_err)?;
 	}
 
 	let (_, vals_fresh) =
-		jazz_engine::find_row_snapshot(std::sync::Arc::as_ref(&c), &table, &tbl, *oid.uuid())
+		jazz_engine::find_row_snapshot(client, &table, &tbl, *oid.uuid())
 			.await?
 			.ok_or_else(|| "create_reread_missing".to_string())?;
 
@@ -763,8 +814,7 @@ pub async fn jazz_create(
 		ENCRYPTED_META,
 	)?;
 
-	jazz.snapshot_broadcast(std::sync::Arc::as_ref(&c), &shell, &table)
-		.await?;
+	jazz.snapshot_broadcast(client, &shell, &table).await?;
 
 	Ok(reply)
 }
@@ -778,18 +828,38 @@ pub async fn jazz_update(
 	id: String,
 	patch: JsonRow,
 ) -> Result<JsonRow, String> {
-	let c = ensure_arc(&app, &self_state, &jazz).await?;
-	let shell = jazz_shell_ready(&jazz, &self_state, &c).await?;
-	let tbl =
-		jazz_engine::resolved_table_schema(std::sync::Arc::as_ref(&c), &table).await?;
+	let mut jc = jazz.conn.lock().await;
+	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
+	let client = jc.client.as_ref().expect("jazz connected");
+	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let tbl = jazz_engine::resolved_table_schema(client, &table).await?;
 	let uuid =
 		uuid::Uuid::parse_str(&id).map_err(|e| format!("invalid id UUID parse: {e}"))?;
 
-	// Important: Use `oid` from Groove queries, not `ObjectId::from_uuid` — interned IDs use pointer hashing.
-	let (oid, old_vals) =
-		jazz_engine::find_row_snapshot(std::sync::Arc::as_ref(&c), &table, &tbl, uuid)
-			.await?
-			.ok_or_else(|| format!("row_not_found:{uuid}"))?;
+	// `find_row_snapshot` reads without `.branch()` so jazz-tools auto-loads the
+	// row's `Object` on **every** known schema-version branch into ObjectManager.
+	// Important: keep using `oid` from the query result — `ObjectId::from_uuid`
+	// produces a non-interned id that misses the pointer-keyed in-memory map.
+	let (oid, old_vals) = jazz_engine::find_row_snapshot(client, &table, &tbl, uuid)
+		.await?
+		.ok_or_else(|| {
+			log::warn!(
+				target: "avenos::jazz",
+				"jazz_update row missing in any known schema branch table={table} uuid={uuid} groove_branch={}",
+				shell.groove_write_branch
+			);
+			format!(
+				"row_not_found:{uuid} (table={table}). Row is not visible on any known schema-version branch \
+				— it may have been hard-deleted, or this client has no lens path to its schema yet."
+			)
+		})?;
+	let runtime_branch = jazz_engine::groove_write_branch_from_connected_schema_or_log(client).await;
+	log::debug!(
+		target: "avenos::jazz",
+		"jazz_update resolved row table={table} uuid={uuid} cached_branch={} runtime_branch={runtime_branch} oid_uuid={}",
+		shell.groove_write_branch,
+		oid.uuid()
+	);
 	let spark = jazz_engine::spark_uuid_row(&tbl, &old_vals)?;
 
 	jazz_engine::authorize_gate(
@@ -829,13 +899,27 @@ pub async fn jazz_update(
 
 	let ops = patch_updates(&tbl, sealed_patch)?;
 
-	std::sync::Arc::as_ref(&c)
+	client
 		.update(oid, ops)
 		.await
-		.map_err(format_jazz_err)?;
+		.map_err(|e| {
+			let msg = format_jazz_err(e);
+			log::warn!(
+				target: "avenos::jazz",
+				"jazz_update Groove write failed table={table} uuid={uuid} write_branch={} runtime_branch={runtime_branch} oid_uuid={} err={}",
+				shell.groove_write_branch,
+				oid.uuid(),
+				msg
+			);
+			format!(
+				"{msg} (table={table} id={uuid} write_branch={} runtime_branch={runtime_branch})",
+				shell.groove_write_branch
+			)
+		})?;
 
-	jazz.snapshot_broadcast(std::sync::Arc::as_ref(&c), &shell, &table).await?;
+	jazz.snapshot_broadcast(client, &shell, &table).await?;
 
+	drop(jc);
 	jazz_get(app.clone(), jazz, self_state, table, id.to_string()).await
 }
 
@@ -847,18 +931,35 @@ pub async fn jazz_delete(
 	table: String,
 	id: String,
 ) -> Result<(), String> {
-	let c = ensure_arc(&app, &self_state, &jazz).await?;
-	let shell = jazz_shell_ready(&jazz, &self_state, &c).await?;
-	let tbl =
-		jazz_engine::resolved_table_schema(std::sync::Arc::as_ref(&c), &table).await?;
+	let mut jc = jazz.conn.lock().await;
+	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
+	let client = jc.client.as_ref().expect("jazz connected");
+	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let tbl = jazz_engine::resolved_table_schema(client, &table).await?;
 	let uuid =
 		uuid::Uuid::parse_str(&id).map_err(|e| format!("invalid UUID: {e}"))?;
-	// Important: Use `oid` returned by Groove scans, not `ObjectId::from_uuid(id)` —
-	// Jazz uses pointer-based hashing for interned IDs; reconstructed ids can miss the map edge.
-	let (oid, row_vals) =
-		jazz_engine::find_row_snapshot(std::sync::Arc::as_ref(&c), &table, &tbl, uuid)
-			.await?
-			.ok_or_else(|| format!("row_not_found:{uuid}"))?;
+	// See jazz_update: read across all known schema branches so the row's
+	// `Object` is loaded into ObjectManager on every branch it lives on. Use
+	// the interned `oid` from the query (never `ObjectId::from_uuid`).
+	let (oid, row_vals) = jazz_engine::find_row_snapshot(client, &table, &tbl, uuid)
+		.await?
+		.ok_or_else(|| {
+			log::warn!(
+				target: "avenos::jazz",
+				"jazz_delete row missing in any known schema branch table={table} uuid={uuid} groove_branch={}",
+				shell.groove_write_branch
+			);
+			format!(
+				"row_not_found:{uuid} (table={table}). Row is not visible on any known schema-version branch."
+			)
+		})?;
+	let runtime_branch = jazz_engine::groove_write_branch_from_connected_schema_or_log(client).await;
+	log::debug!(
+		target: "avenos::jazz",
+		"jazz_delete resolved row table={table} uuid={uuid} cached_branch={} runtime_branch={runtime_branch} oid_uuid={}",
+		shell.groove_write_branch,
+		oid.uuid()
+	);
 	let spark = jazz_engine::spark_uuid_row(&tbl, &row_vals)?;
 
 	jazz_engine::authorize_gate(
@@ -869,11 +970,24 @@ pub async fn jazz_delete(
 		Some(uuid),
 	)?;
 
-	std::sync::Arc::as_ref(&c)
+	client
 		.delete(oid)
 		.await
-		.map_err(format_jazz_err)?;
-	jazz.snapshot_broadcast(std::sync::Arc::as_ref(&c), &shell, &table).await?;
+		.map_err(|e| {
+			let msg = format_jazz_err(e);
+			log::warn!(
+				target: "avenos::jazz",
+				"jazz_delete Groove write failed table={table} uuid={uuid} write_branch={} runtime_branch={runtime_branch} oid_uuid={} err={}",
+				shell.groove_write_branch,
+				oid.uuid(),
+				msg
+			);
+			format!(
+				"{msg} (table={table} id={uuid} write_branch={} runtime_branch={runtime_branch})",
+				shell.groove_write_branch
+			)
+		})?;
+	jazz.snapshot_broadcast(client, &shell, &table).await?;
 	Ok(())
 }
 
@@ -885,17 +999,15 @@ pub async fn jazz_subscribe(
 	self_state: tauri::State<'_, SelfState>,
 	table: String,
 ) -> Result<(), String> {
-	let c = ensure_arc(&app, &self_state, &jazz).await?;
-	let shell = jazz_shell_ready(&jazz, &self_state, &c).await?;
+	let mut jc = jazz.conn.lock().await;
+	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
+	let client = jc.client.as_ref().expect("jazz connected");
+	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
 
 	let evt = format!("jazz:{}:changed", table);
-	let (first, _) = jazz_engine::query_table_publish(
-		std::sync::Arc::as_ref(&c),
-		&shell,
-		&table,
-		ENCRYPTED_META,
-	)
-	.await?;
+	let (first, _) =
+		jazz_engine::query_table_publish(client, &shell, &table, ENCRYPTED_META).await?;
+	drop(jc);
 	window.emit(&evt, first).map_err(|e| e.to_string())?;
 
 	let tx = jazz.broadcaster(&table);
@@ -917,5 +1029,42 @@ pub async fn jazz_subscribe(
 		}
 	});
 
+	Ok(())
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelfStoragePathsReply {
+	pub root: String,
+	pub db_dir: String,
+	pub self_identity_dir: String,
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn self_storage_paths(app: tauri::AppHandle) -> Result<SelfStoragePathsReply, String> {
+	let root = tauri_plugin_self::paths::aven_os_user_root(&app)?;
+	let db_dir = root.join(AVEN_OS_GROOVE_DATA_DIR);
+	let self_identity_dir = root.join("self");
+	Ok(SelfStoragePathsReply {
+		root: root.to_string_lossy().into_owned(),
+		db_dir: db_dir.to_string_lossy().into_owned(),
+		self_identity_dir: self_identity_dir.to_string_lossy().into_owned(),
+	})
+}
+
+/// Deletes the local Groove store (`db/` under AvenOS user root, plus legacy `jazz/` if present).
+#[tauri::command(rename_all = "camelCase")]
+pub async fn self_clear_jazz_database(
+	app: tauri::AppHandle,
+	jazz: tauri::State<'_, ManagedJazz>,
+) -> Result<(), String> {
+	jazz.reset_connection().await;
+	let root = tauri_plugin_self::paths::aven_os_user_root(&app)?;
+	for rel in [AVEN_OS_GROOVE_DATA_DIR, LEGACY_JAZZ_DATA_DIR] {
+		let p = root.join(rel);
+		if p.exists() {
+			fs::remove_dir_all(&p).map_err(|e| format!("remove {}: {e}", p.display()))?;
+		}
+	}
 	Ok(())
 }

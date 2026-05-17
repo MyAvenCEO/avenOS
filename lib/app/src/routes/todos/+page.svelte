@@ -141,21 +141,21 @@
 </script>
 
 <svelte:head>
-	<title>Jazz todos · AvenOS</title>
+	<title>Todos · AvenOS</title>
 </svelte:head>
 
 <div class="mx-auto flex w-full max-w-xl flex-col gap-6 px-4 py-8 sm:px-6">
 	<header class="space-y-1.5">
-		<h1 class="text-2xl font-semibold tracking-tight">Jazz todos</h1>
+		<h1 class="text-2xl font-semibold tracking-tight">Todos</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
-			Local-first rows via the desktop shell — no Jazz runtime in the webview.
+			Local-first rows via the desktop shell — Groove-backed storage in process; no Jazz runtime in the webview.
 		</p>
 	</header>
 
 	{#if !tauri}
-		<p class="text-muted-foreground text-sm">Open this screen in the AvenOS desktop app to use Jazz IPC.</p>
+		<p class="text-muted-foreground text-sm">Open this screen in the AvenOS desktop app to use local todos.</p>
 	{:else if !unlocked}
-		<p class="text-muted-foreground text-sm">Unlock with Touch ID to load your local Jazz store.</p>
+		<p class="text-muted-foreground text-sm">Unlock with Touch ID to load your local database.</p>
 	{:else}
 	{#if session}
 				<p class="text-muted-foreground font-mono text-xs leading-snug">

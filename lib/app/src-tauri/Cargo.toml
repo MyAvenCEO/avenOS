@@ -29,7 +29,7 @@ base64 = "0.22"
 p256 = "0.13"
 rand_core = { version = "0.6", features = ["getrandom"] }
 tauri = { version = "2", features = ["macos-private-api", "unstable"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync"] }
 tracing = "0.1"
 url = "2"
 urlencoding = "2"
@@ -42,6 +42,17 @@ hkdf = "0.12"
 multibase = "0.9"
 x25519-dalek = { version = "2", features = ["static_secrets"] }
 zeroize = { version = "1", features = ["derive"] }
+env_logger = "0.11.10"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6", default-features = false }
+
+# Vendored jazz-tools@2.0.0-alpha.0 with a single AvenOS-local patch:
+# `QueryManager` write paths used to `.map_err(|_| QueryError::ObjectNotFound(id))`,
+# which collapses BranchNotFound / ParentNotFound / StorageError into a single
+# misleading "ObjectNotFound" string. The vendored copy preserves the real
+# upstream error via `QueryError::InternalError(format!("{:?}", e))` so we can
+# diagnose the "row visible on read, write fails" failure mode. Pin to local
+# path to keep dev iteration fast; review the diff before bumping versions.
+[patch.crates-io]
+jazz-tools = { path = "../../../third_party/jazz-tools" }

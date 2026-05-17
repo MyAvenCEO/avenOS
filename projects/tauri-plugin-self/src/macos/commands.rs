@@ -5,7 +5,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 
 use crate::state::SelfState;
 
@@ -22,11 +22,7 @@ pub struct PeerStatus {
 }
 
 fn slot_dir(app: &AppHandle) -> Result<PathBuf, String> {
-	let dir = app
-		.path()
-		.app_data_dir()
-		.map_err(|e| format!("app_data_dir: {e}"))?
-		.join("self");
+	let dir = crate::paths::aven_os_user_root(app)?.join("self");
 	fs::create_dir_all(&dir).map_err(|e| format!("create_dir_all({}): {e}", dir.display()))?;
 	Ok(dir)
 }

@@ -1,0 +1,7 @@
+{
+  "git": {
+    "sha1": "5bbc8a01d6149fab053377e17d14199109e376f4",
+    "dirty": true
+  },
+  "path_in_vcs": "crates/jazz-cli"
+}

@@ -6,11 +6,15 @@ mod schema_manifest;
 mod spark_acc;
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::path::BaseDirectory;
 use tauri::{
-	AppHandle, Listener, LogicalPosition, LogicalSize, Manager, Rect, Runtime, Webview, WebviewUrl,
-	Window,
+	AppHandle, Listener, LogicalPosition, LogicalSize, Manager, Rect, Runtime, RunEvent, Webview,
+	WebviewUrl, Window,
 };
+
+/// Prevents duplicated drain work when [`RunEvent::ExitRequested`] fires more than once.
+static JAZZ_EXIT_DRAINING: AtomicBool = AtomicBool::new(false);
 use url::Url;
 
 /// Child sandbox webview bounds in **logical/CSS pixels**, i.e. raw host `getBoundingClientRect()`
@@ -378,8 +382,70 @@ async fn destroy_sandbox_webview(window: Window, label: String) -> Result<(), St
 	webview.close().map_err(|e| e.to_string())
 }
 
+/// Install the global `log` subscriber.
+///
+/// Without this, every `log::debug!` / `log::warn!` in this crate is a no-op,
+/// so `RUST_LOG=avenos::jazz=debug` produces nothing — leaving us blind whenever
+/// SurrealKV / ObjectManager state diverges and we ask the user for diagnostics.
+///
+/// Default filter prints `info` everywhere plus `debug` for our own `avenos::*`
+/// targets so dev runs always show the Jazz lifecycle. Users can override via
+/// `RUST_LOG` (standard `env_logger` semantics).
+fn init_logging() {
+	let _ = env_logger::Builder::from_env(
+		env_logger::Env::default().default_filter_or("info,avenos=debug"),
+	)
+	.format_timestamp_millis()
+	.try_init();
+}
+
+/// Idempotently drain JazzClient + flush SurrealKV.
+///
+/// `JAZZ_EXIT_DRAINING` is a single-shot guard: if `Ok(false)` was previously
+/// observed, this is the first call and we run the drain. Otherwise we no-op
+/// (e.g. SIGINT then a follow-up `ExitRequested`).
+async fn drain_jazz_async(app_handle: AppHandle) {
+	if JAZZ_EXIT_DRAINING.swap(true, Ordering::SeqCst) {
+		log::debug!("drain_jazz_async: already draining, skipping");
+		return;
+	}
+	log::info!("shutdown: draining JazzClient + SurrealKV before exit");
+	let mj = app_handle.state::<jazz::ManagedJazz>();
+	// Hard cap the drain. If `reset_connection` is wedged on a Mutex /
+	// `runtime.flush()` deadlock, blocking forever just trades one bad
+	// shutdown (no flush) for a worse one (no exit at all, and the dev
+	// supervisor escalates to SIGKILL anyway). 5s is plenty for an idle
+	// client and short enough to detect a wedge in tests.
+	let drain_start = std::time::Instant::now();
+	let drain = tokio::time::timeout(
+		std::time::Duration::from_secs(5),
+		mj.reset_connection(),
+	);
+	match drain.await {
+		Ok(()) => log::info!(
+			"shutdown: drain complete in {:?}",
+			drain_start.elapsed()
+		),
+		Err(_) => log::error!(
+			"shutdown: drain TIMED OUT after 5s — SurrealKV may not be fully flushed (likely deadlock on JazzClient/runtime flush)"
+		),
+	}
+}
+
+/// Same as [`drain_jazz_async`] but **blocks** the calling thread.
+///
+/// Safe to call only from a thread that is **not** already inside a tokio
+/// runtime — typically the Tauri main thread from a `RunEvent::ExitRequested`
+/// callback. Calling this from within a tokio task would deadlock.
+fn drain_jazz_blocking(app_handle: &AppHandle) {
+	let ah = app_handle.clone();
+	tauri::async_runtime::block_on(drain_jazz_async(ah));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+	init_logging();
+
 	tauri::Builder::default()
 		.plugin(tauri_plugin_self::init())
 		.manage(genesis::GenesisState::default())
@@ -397,6 +463,39 @@ pub fn run() {
 					let mj = handle.state::<jazz::ManagedJazz>();
 					mj.reset_connection().await;
 				});
+			});
+
+			// CRITICAL: A bare `Ctrl+C` (SIGINT) bypasses Tauri's `ExitRequested`
+			// path and kills the process before our async shutdown can flush
+			// SurrealKV. The result on next boot is the very symptom we have
+			// been chasing for hours: commits visible on read (`get_or_load`
+			// reconstructs branches from the durable commit log), but writes
+			// fail with `ObjectNotFound` because index pages, branch tips, or
+			// catalogue entries written in the same transaction never reached
+			// disk. Catch SIGINT/SIGTERM here so dev (`bun dev:app:macos` +
+			// Ctrl+C) gets the same graceful drain a window-close uses.
+			let handle_for_signal = app.handle().clone();
+			tauri::async_runtime::spawn(async move {
+				use tokio::signal::unix::{signal, SignalKind};
+				let (mut sigint, mut sigterm) = match (
+					signal(SignalKind::interrupt()),
+					signal(SignalKind::terminate()),
+				) {
+					(Ok(i), Ok(t)) => (i, t),
+					(int_res, term_res) => {
+						log::warn!(
+							"signal handler install failed (int={:?} term={:?}); Ctrl+C will skip Jazz flush",
+							int_res.err(), term_res.err()
+						);
+						return;
+					}
+				};
+				tokio::select! {
+					_ = sigint.recv() => log::info!("SIGINT received → draining Jazz"),
+					_ = sigterm.recv() => log::info!("SIGTERM received → draining Jazz"),
+				}
+				drain_jazz_async(handle_for_signal.clone()).await;
+				handle_for_signal.exit(130);
 			});
 
 			Ok(())
@@ -419,7 +518,33 @@ pub fn run() {
 			jazz::jazz_update,
 			jazz::jazz_delete,
 			jazz::jazz_subscribe,
+			jazz::self_storage_paths,
+			jazz::self_clear_jazz_database,
 		])
-		.run(tauri::generate_context!())
-		.expect("error while running tauri application");
+		.build(tauri::generate_context!())
+		.expect("error while building tauri application")
+		.run(|app_handle, event| {
+			match event {
+				RunEvent::ExitRequested { api, code, .. } => {
+					// JazzClient owns a SurrealKV handle that requires an
+					// explicit async flush (`shutdown()` → `runtime.flush()` →
+					// `storage.flush()`). If the process exits while that flush
+					// is still in flight, the next boot opens a half-written
+					// store: commits are visible on read but `add_commit` index
+					// updates / branch-tip writes are missing → every `update`
+					// / `delete` fails with the misleading
+					// `QueryError::ObjectNotFound`. Block here (we're on the
+					// main thread, no tokio runtime is active locally) so we
+					// only return after the drain finishes.
+					if JAZZ_EXIT_DRAINING.load(Ordering::SeqCst) {
+						return;
+					}
+					api.prevent_exit();
+					let exit_code = code.unwrap_or(0);
+					drain_jazz_blocking(app_handle);
+					app_handle.exit(exit_code);
+				}
+				_ => {}
+			}
+		});
 }

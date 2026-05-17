@@ -15,7 +15,7 @@ const intentsActive = $derived(path === '/')
 const sandboxActive = $derived(path.startsWith('/sandbox'))
 const docsActive = $derived(path.startsWith('/docs'))
 const selfActive = $derived(path.startsWith('/self'))
-const jazzActive = $derived(path.startsWith('/jazz'))
+const todosActive = $derived(path.startsWith('/todos'))
 const dbActive = $derived(path.startsWith('/db'))
 </script>
 
@@ -51,11 +51,11 @@ const dbActive = $derived(path.startsWith('/db'))
 				>
 				<span class="select-none opacity-25" aria-hidden="true">|</span>
 				<a
-					href="/jazz/todos"
+					href="/todos"
 					data-sveltekit-preload-data="hover"
-					class="transition-opacity hover:opacity-80 {jazzActive ? 'opacity-95' : 'opacity-40'}"
-					aria-current={jazzActive ? 'page' : undefined}
-					>Jazz</a
+					class="transition-opacity hover:opacity-80 {todosActive ? 'opacity-95' : 'opacity-40'}"
+					aria-current={todosActive ? 'page' : undefined}
+					>Todos</a
 				>
 				<span class="select-none opacity-25" aria-hidden="true">|</span>
 				<a
