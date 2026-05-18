@@ -34,6 +34,8 @@ pub use transport_protocol as jazz_transport;
 mod client;
 #[cfg(feature = "client")]
 mod transport;
+#[cfg(all(feature = "client", feature = "peer-transport"))]
+mod peer_transport;
 
 #[cfg(feature = "client")]
 use std::path::PathBuf;
@@ -43,6 +45,14 @@ use thiserror::Error;
 
 #[cfg(feature = "client")]
 pub use client::{JazzClient, SessionClient};
+
+#[cfg(all(feature = "client", feature = "peer-transport"))]
+pub use peer_transport::{PeerTransport, decode_length_prefixed, encode_length_prefixed};
+#[cfg(all(feature = "client", feature = "peer-transport"))]
+pub use sync_manager::SyncPayload;
+#[cfg(all(feature = "client", feature = "peer-transport"))]
+pub use sync_manager::{InboxEntry, Source};
+
 
 #[cfg(all(feature = "client", feature = "transport"))]
 pub use jazz_transport::ServerEvent;

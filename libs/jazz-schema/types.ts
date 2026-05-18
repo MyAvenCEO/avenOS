@@ -8,10 +8,19 @@ export type KeysharesRow = {
 	wrapped_dek: string
 }
 
+export type PeersRow = {
+	id: string
+	peer_did: string
+	label: string
+	added_at_ms: number
+	status: string
+}
+
 export type SparksRow = {
 	id: string
 	spark_id: string
 	name: string
+	issuer_pubkey_b64: string
 	genesis_b64: string
 	current_dek_version: number
 	created_at_ms: number
@@ -27,6 +36,7 @@ export type TodosRow = {
 
 export type SchemaTables = {
 	keyshares: KeysharesRow
+	peers: PeersRow
 	sparks: SparksRow
 	todos: TodosRow
 }

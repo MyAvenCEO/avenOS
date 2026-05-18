@@ -2,6 +2,8 @@ mod crypto;
 mod genesis;
 mod jazz;
 mod jazz_auth;
+mod peers;
+mod peer_sync_gate;
 mod schema_manifest;
 mod spark_acc;
 
@@ -393,10 +395,15 @@ async fn destroy_sandbox_webview(window: Window, label: String) -> Result<(), St
 /// `RUST_LOG` (standard `env_logger` semantics).
 fn init_logging() {
 	let _ = env_logger::Builder::from_env(
-		env_logger::Env::default().default_filter_or("info,avenos=debug"),
+		env_logger::Env::default().default_filter_or("info,avenos=debug,groove::sync_manager=debug"),
 	)
 	.format_timestamp_millis()
 	.try_init();
+
+	// Bridge `tracing` events emitted by vendored jazz-tools / groove into the `log` crate
+	// (env_logger). Without this, our `tracing::warn!` / `tracing::debug!` diagnostics inside
+	// `_published_groove/sync_manager/inbox.rs` are silently dropped.
+	let _ = tracing_log::LogTracer::init();
 }
 
 /// Idempotently drain JazzClient + flush SurrealKV.
@@ -448,6 +455,7 @@ pub fn run() {
 
 	tauri::Builder::default()
 		.plugin(tauri_plugin_self::init())
+		.plugin(tauri_plugin_peer::init())
 		.manage(genesis::GenesisState::default())
 		.manage(jazz::ManagedJazz::default())
 		.setup(|app| {
@@ -498,6 +506,48 @@ pub fn run() {
 				handle_for_signal.exit(130);
 			});
 
+			let h_invite = app.handle().clone();
+			let _peer_invite_listen = app.listen("peer:invite-paired", move |event| {
+				let hh = h_invite.clone();
+				let payload = event.payload().to_string();
+				tauri::async_runtime::spawn(async move {
+					if let Err(e) = crate::jazz::apply_peer_invite_paired(&hh, &payload).await {
+						log::warn!(target: "avenos::jazz", "peer:invite-paired: {e}");
+					}
+				});
+			});
+
+			// Hyperswarm connections form **asynchronously** after pairing/grant: by the time
+			// `apply_peer_invite_paired` runs `refresh_peer_mesh_primitives`, the peer's
+			// `SwarmConnection` usually hasn't reached `HyperswarmGrooveBridge.on_swarm_connection`
+			// yet, so `register_peer_sync_client` is never called and Groove never replicates rows
+			// to that peer (and vice versa). The bridge now fires `peer_set_changed_notify` every
+			// time a peer is added/removed; mirror that into a mesh-refresh + a 10s belt-and-braces
+			// reconcile so newly-formed swarm links always get registered with Jazz sync.
+			#[cfg(target_os = "macos")]
+			{
+				let h_mesh = app.handle().clone();
+				tauri::async_runtime::spawn(async move {
+					let bridge = h_mesh.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
+					let notify = bridge.peer_set_changed_notify();
+					loop {
+						let n = notify.clone();
+						let tick = tokio::time::sleep(std::time::Duration::from_secs(10));
+						tokio::select! {
+							_ = n.notified() => {}
+							_ = tick => {}
+						}
+						let mj = h_mesh.state::<jazz::ManagedJazz>();
+						if let Err(e) = jazz::refresh_peer_mesh_primitives(&h_mesh, &mj).await {
+							log::debug!(
+								target: "avenos::jazz",
+								"peer-mesh reconcile skipped: {e}"
+							);
+						}
+					}
+				});
+			}
+
 			Ok(())
 		})
 		.register_uri_scheme_protocol("vibe-sandbox", |ctx, request| {
@@ -518,6 +568,12 @@ pub fn run() {
 			jazz::jazz_update,
 			jazz::jazz_delete,
 			jazz::jazz_subscribe,
+			jazz::jazz_peer_mesh_refresh,
+			jazz::spark_admin_add,
+			jazz::spark_admin_list,
+			jazz::spark_admin_revoke,
+			jazz::peer_list,
+			jazz::peer_revoke,
 			jazz::self_storage_paths,
 			jazz::self_clear_jazz_database,
 		])

@@ -65,7 +65,7 @@ fn secret_manifest() -> &'static HashMap<String, HashSet<String>> {
 	})
 }
 
-pub(super) fn col_ix(tbl: &TableSchema, name: &str) -> Result<usize, String> {
+pub(crate) fn col_ix(tbl: &TableSchema, name: &str) -> Result<usize, String> {
 	tbl.descriptor
 		.columns
 		.iter()
@@ -73,7 +73,7 @@ pub(super) fn col_ix(tbl: &TableSchema, name: &str) -> Result<usize, String> {
 		.ok_or_else(|| format!("manifest_missing_col:{name}"))
 }
 
-fn uuid_cell_at(vals: &[Value], ix: usize) -> Result<Uuid, String> {
+pub(super) fn uuid_cell_at(vals: &[Value], ix: usize) -> Result<Uuid, String> {
 	match vals.get(ix).ok_or("col_ix_oob")? {
 		Value::Uuid(oid) => Ok(*oid.uuid()),
 		Value::Text(s) => Uuid::parse_str(s.trim()).map_err(|e| format!("uuid_parse:{e}")),
@@ -300,7 +300,7 @@ pub(super) fn row_to_public_map(
 	Ok(m)
 }
 
-pub(super) async fn resolved_table_schema(client: &JazzClient, table: &str) -> Result<TableSchema, String> {
+pub(crate) async fn resolved_table_schema(client: &JazzClient, table: &str) -> Result<TableSchema, String> {
 	let sch = client.schema().await.map_err(super::format_jazz_err)?;
 	let tn = TableName::new(table);
 	sch.get(&tn)
@@ -321,7 +321,7 @@ pub(super) async fn resolved_table_schema(client: &JazzClient, table: &str) -> R
 ///     `add_commit` on `current_branch()` could not find the right tip and
 ///     returned a `BranchNotFound`/`ParentNotFound` that jazz-tools maps to
 ///     the misleading `QueryError::ObjectNotFound(id)`.
-pub(super) async fn exec_list_rows(
+pub(crate) async fn exec_list_rows(
 	client: &JazzClient,
 	table: &str,
 ) -> Result<Vec<(ObjectId, Vec<Value>)>, String> {
@@ -414,6 +414,7 @@ pub(super) async fn hydrate_shell(client: &JazzClient, root: &[u8; 32]) -> Resul
 
 	let sparks_schema = resolved_table_schema(client, "sparks").await?;
 	let spark_id_ix = col_ix(&sparks_schema, "spark_id")?;
+	let issuer_ix = col_ix(&sparks_schema, "issuer_pubkey_b64")?;
 	let genesis_ix = col_ix(&sparks_schema, "genesis_b64")?;
 	let ver_ix = col_ix(&sparks_schema, "current_dek_version")?;
 
@@ -424,6 +425,7 @@ pub(super) async fn hydrate_shell(client: &JazzClient, root: &[u8; 32]) -> Resul
 		spark_acc::ingest_genesis_row(
 			&mut vault,
 			spark_id_ix,
+			issuer_ix,
 			genesis_ix,
 			vals.as_slice(),
 			biscuit_root_pub,
@@ -477,6 +479,12 @@ pub(super) async fn hydrate_shell(client: &JazzClient, root: &[u8; 32]) -> Resul
 			JsonValue::String(spark_id.to_string()),
 		);
 		row.insert("name".into(), JsonValue::String("My spark".into()));
+		row.insert(
+			"issuer_pubkey_b64".into(),
+			JsonValue::String(spark_acc::encode_issuer_pubkey_b64(
+				&vault.biscuit_kp.public(),
+			)),
+		);
 		row.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
 		row.insert(
 			"current_dek_version".into(),

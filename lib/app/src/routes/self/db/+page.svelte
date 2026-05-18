@@ -127,7 +127,7 @@
 						</button>
 						<button
 							type="button"
-							class="border-input hover:bg-accent rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+							class="border-input hover:bg-accent hover:text-accent-foreground rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
 							disabled={busy}
 							onclick={() => (confirmOpen = false)}
 						>

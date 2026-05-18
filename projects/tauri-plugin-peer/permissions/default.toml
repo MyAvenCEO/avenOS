@@ -1,0 +1,10 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Default permissions for tauri-plugin-peer"
+permissions = [
+  "allow-peer-transport-status",
+  "allow-peer-invite-create",
+  "allow-peer-invite-accept",
+  "allow-peer-invite-cancel",
+]

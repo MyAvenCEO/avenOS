@@ -26,7 +26,7 @@ use groove::runtime_core::{
 };
 use groove::schema_manager::{QuerySchemaContext, SchemaManager};
 use groove::storage::Storage;
-use groove::sync_manager::{ClientId, InboxEntry, OutboxEntry, PersistenceTier, ServerId};
+use groove::sync_manager::{ClientId, ClientRole, InboxEntry, OutboxEntry, PersistenceTier, ServerId};
 
 // ============================================================================
 // TokioScheduler
@@ -399,6 +399,17 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
     pub fn set_client_admin(&self, client_id: ClientId) -> Result<(), RuntimeError> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
         core.set_client_admin(client_id);
+        Ok(())
+    }
+
+    /// Set a client's role explicitly (including [`crate::groove::sync_manager::ClientRole::Peer`] for P2P relay).
+    pub fn set_client_role(
+        &self,
+        client_id: ClientId,
+        role: ClientRole,
+    ) -> Result<(), RuntimeError> {
+        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        core.set_client_role_by_name(client_id, role);
         Ok(())
     }
 

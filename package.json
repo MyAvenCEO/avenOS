@@ -16,6 +16,7 @@
 		"dev:app": "bun --env-file=.env run --cwd lib/app dev",
 		"dev:app:macos": "bun --env-file=.env ./scripts/dev-app-macos.ts",
 		"dev:app:linux": "bun --env-file=.env ./scripts/dev-app-linux.ts",
+		"dev:two-instances": "bun --env-file=.env ./scripts/dev-two-instances.ts",
 		"build:app:macos": "bun run --cwd lib/app tauri:build:macos",
 		"build:app:linux": "bun run --cwd lib/app tauri:build:linux",
 		"fetch:webcm": "bun run ./scripts/fetch-webcm.ts",

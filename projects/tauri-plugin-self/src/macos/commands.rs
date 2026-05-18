@@ -5,7 +5,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::state::SelfState;
 
@@ -115,6 +115,7 @@ pub async fn unlock(
 		.try_into()
 		.map_err(|_| format!("se_ecdh_hkdf produced {} bytes, expected 32", secret.len()))?;
 	state.set_root(bytes);
+	let _ = app.emit("self:did-unlock", ());
 	Ok(())
 }
 

@@ -129,23 +129,45 @@ impl SyncManager {
         }
 
         // Extract needed info without holding mutable borrow
-        let (in_scope, include_metadata, already_sent) = {
+        //
+        // AvenOS patch: `ClientRole::Peer` clients are treated as in-scope for any
+        // (object, branch) so P2P broadcasts work without first driving the
+        // QueryManager subscribe path. Per-row authorization is handled by the
+        // outer `BiscuitGatedPeerTransport` wrapper before the frame goes on-wire.
+        let (is_peer, in_scope, include_metadata, already_sent) = {
             let Some(client) = self.clients.get(&client_id) else {
                 return;
             };
 
-            // Check if in scope
-            let in_scope = client.is_in_scope(object_id, &branch_name);
+            let is_peer = client.role == ClientRole::Peer;
+            let in_scope = is_peer || client.is_in_scope(object_id, &branch_name);
 
-            let include_metadata = !client.sent_metadata.contains(&object_id);
+            // AvenOS patch: for Peer clients we treat each send as if metadata + history
+            // were never delivered. The outbound transport (`BiscuitGatedPeerTransport`)
+            // may silently drop frames the destination DID isn't biscuit-authorised for,
+            // and the upstream tracking would otherwise mark `sent_metadata` / `sent_tips`
+            // as covered even though nothing ever reached the wire. Subsequent commits
+            // (e.g. after an admin grant) would then arrive at the peer without metadata
+            // and without their parent history, so `apply_object_updated` would silently
+            // reject them. Re-sending full metadata + reachable history is idempotent on
+            // the receiver and costs a few hundred extra bytes per frame.
+            let include_metadata = if is_peer {
+                true
+            } else {
+                !client.sent_metadata.contains(&object_id)
+            };
 
-            let already_sent = client
-                .sent_tips
-                .get(&(object_id, branch_name))
-                .cloned()
-                .unwrap_or_default();
+            let already_sent = if is_peer {
+                HashSet::new()
+            } else {
+                client
+                    .sent_tips
+                    .get(&(object_id, branch_name))
+                    .cloned()
+                    .unwrap_or_default()
+            };
 
-            (in_scope, include_metadata, already_sent)
+            (is_peer, in_scope, include_metadata, already_sent)
         };
 
         if !in_scope {
@@ -159,12 +181,14 @@ impl SyncManager {
             return;
         }
 
-        // Now update client state
+        // Now update client state — but skip for Peer clients (see AvenOS patch above).
         let client = self.clients.get_mut(&client_id).unwrap();
-        if include_metadata {
-            client.sent_metadata.insert(object_id);
+        if !is_peer {
+            if include_metadata {
+                client.sent_metadata.insert(object_id);
+            }
+            client.sent_tips.insert((object_id, branch_name), tips);
         }
-        client.sent_tips.insert((object_id, branch_name), tips);
 
         self.outbox.push(OutboxEntry {
             destination: Destination::Client(client_id),

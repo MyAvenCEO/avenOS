@@ -44,6 +44,14 @@ impl SyncManager {
     }
 
     /// Forward an update to clients except the specified one.
+    ///
+    /// AvenOS patch: `ClientRole::Peer` clients always match here, even when their
+    /// per-query scope is empty. Pure P2P deployments (e.g. AvenOS Hyperswarm bridge)
+    /// register remote devices via `register_peer_sync_client` without driving the
+    /// QueryManager subscribe path, so upstream's strict `is_in_scope` gate would
+    /// otherwise drop every outbound sync frame. The transport layer wraps this in
+    /// `BiscuitGatedPeerTransport` which performs row-level biscuit/spark auth, so
+    /// broadcasting to Peer clients here is safe.
     pub(super) fn forward_update_to_clients_except(
         &mut self,
         object_id: ObjectId,
@@ -53,7 +61,11 @@ impl SyncManager {
         let client_ids: Vec<ClientId> = self
             .clients
             .iter()
-            .filter(|(id, client)| **id != except && client.is_in_scope(object_id, &branch_name))
+            .filter(|(id, client)| {
+                **id != except
+                    && (client.role == ClientRole::Peer
+                        || client.is_in_scope(object_id, &branch_name))
+            })
             .map(|(id, _)| *id)
             .collect();
 
@@ -147,10 +159,16 @@ impl SyncManager {
             return;
         }
 
+        // AvenOS patch: same Peer-bypass as `forward_update_to_clients_except` —
+        // P2P Peer clients have no scope set, but must still receive truncations.
         let client_ids: Vec<ClientId> = self
             .clients
             .iter()
-            .filter(|(id, client)| **id != except && client.is_in_scope(object_id, &branch_name))
+            .filter(|(id, client)| {
+                **id != except
+                    && (client.role == ClientRole::Peer
+                        || client.is_in_scope(object_id, &branch_name))
+            })
             .map(|(id, _)| *id)
             .collect();
 

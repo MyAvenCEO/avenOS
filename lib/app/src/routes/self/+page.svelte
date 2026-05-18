@@ -79,14 +79,14 @@
 				<div class="flex items-center justify-between gap-3">
 					<button
 						type="button"
-						class="border-input hover:bg-accent rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide"
+						class="border-input hover:bg-accent hover:text-accent-foreground rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide"
 						onclick={() => void copy('device-did', ctx.devicePeerDid)}
 					>
 						{copyKey === 'device-did' ? 'Copied' : 'Copy DID'}
 					</button>
 					<button
 						type="button"
-						class="border-input hover:bg-accent rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide"
+						class="border-input hover:bg-accent hover:text-accent-foreground rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide"
 						onclick={() => void copy('device-pub', ctx.peerPubB64)}
 					>
 						{copyKey === 'device-pub' ? 'Copied' : 'Copy transcript'}
@@ -133,14 +133,14 @@
 				<div class="flex flex-wrap items-center justify-between gap-3">
 					<button
 						type="button"
-						class="border-input hover:bg-accent rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide"
+						class="border-input hover:bg-accent hover:text-accent-foreground rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide"
 						onclick={() => void copy('signing-did', ctx.signingPeerDid)}
 					>
 						{copyKey === 'signing-did' ? 'Copied' : 'Copy DID'}
 					</button>
 					<button
 						type="button"
-						class="border-input hover:bg-accent rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide"
+						class="border-input hover:bg-accent hover:text-accent-foreground rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide"
 						onclick={() => void copy('signing-pub', ctx.signingPubB64)}
 					>
 						{copyKey === 'signing-pub' ? 'Copied' : 'Copy bytes'}

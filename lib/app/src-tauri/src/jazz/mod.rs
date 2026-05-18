@@ -1,12 +1,12 @@
 //! Generic Jazz CRUD over Tauri IPC. Schema mirrors `libs/jazz-schema/schema.manifest.json`.
 
-mod jazz_engine;
+pub(crate) mod jazz_engine;
 
 use std::collections::HashMap;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use groove::{
 	query_manager::types::{ColumnType, ComposedBranchName, SchemaHash, TableSchema},
@@ -18,8 +18,9 @@ use groove::{
 	ObjectId,
 	Value,
 };
+use crate::peer_sync_gate::{self, BiscuitGatedPeerTransport, PeerClientIdMap, SyncAclSnapshot};
 use serde_json::{Map, Value as JsonValue};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tauri_plugin_self::derive::ed25519_public;
 use tauri_plugin_self::state::SelfState;
 use tokio::sync::{broadcast, Mutex};
@@ -43,6 +44,12 @@ pub struct JazzSessionReply {
 	pub peer_did: String,
 	pub peer_did_short: String,
 	pub default_spark_urn: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JazzPeerMeshRefreshReply {
+	pub registered_count: u32,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -73,6 +80,8 @@ pub struct ManagedJazz {
 	conn: Mutex<JazzConn>,
 	table_txs: RwLock<HashMap<String, broadcast::Sender<Vec<JsonRow>>>>,
 	shell: Mutex<Option<std::sync::Arc<jazz_engine::ShellState>>>,
+	/// Shared with [`BiscuitGatedPeerTransport`] — spark biscuit snapshot for outbound sync policy.
+	pub(crate) sync_acl: Arc<RwLock<Option<SyncAclSnapshot>>>,
 }
 
 impl Default for ManagedJazz {
@@ -81,6 +90,7 @@ impl Default for ManagedJazz {
 			conn: Mutex::new(JazzConn::default()),
 			table_txs: RwLock::new(HashMap::new()),
 			shell: Mutex::new(None),
+			sync_acl: Arc::new(RwLock::new(None)),
 		}
 	}
 }
@@ -354,6 +364,7 @@ impl ManagedJazz {
 			let mut jc = self.conn.lock().await;
 			jc.linked_identity = None;
 			self.shell.lock().await.take();
+			*self.sync_acl.write().expect("sync_acl poisoned") = None;
 			jc.client.take()
 		};
 		shutdown_owned_client(old_client).await;
@@ -477,7 +488,7 @@ pub(super) fn insert_values(table_schema: &TableSchema, values: JsonRow) -> Resu
 	Ok(row)
 }
 
-fn patch_updates(table_schema: &TableSchema, patch: JsonRow) -> Result<Vec<(String, Value)>, String> {
+pub(crate) fn patch_updates(table_schema: &TableSchema, patch: JsonRow) -> Result<Vec<(String, Value)>, String> {
 	let mut ops = Vec::new();
 	let desc = &table_schema.descriptor;
 
@@ -498,6 +509,7 @@ fn patch_updates(table_schema: &TableSchema, patch: JsonRow) -> Result<Vec<(Stri
 async fn jazz_connect(
 	app: &tauri::AppHandle,
 	self_state: &SelfState,
+	mj: &ManagedJazz,
 ) -> Result<JazzClient, String> {
 	let root = self_state
 		.with_root(|r| Ok(*r))
@@ -524,9 +536,55 @@ async fn jazz_connect(
 		admin_secret: None,
 	};
 
-	JazzClient::connect(ctx)
-		.await
-		.map_err(format_jazz_err)
+	#[cfg(target_os = "macos")]
+	{
+		use std::sync::Arc;
+
+		let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
+		let peer_ctl = app.state::<Arc<tauri_plugin_peer::PeerCtl>>();
+		let local_cid = ClientId(deterministic);
+		bridge.configure_local_party(local_cid).await;
+
+		let cid_map = PeerClientIdMap::from_shared(bridge.shared_client_id_to_did());
+		let inner_transport = bridge.arc_transport_dyn();
+		let gated = Arc::new(BiscuitGatedPeerTransport::new(
+			inner_transport,
+			cid_map,
+			Arc::clone(&mj.sync_acl),
+		));
+
+		let client = JazzClient::connect_with_peer_transport(ctx, gated)
+			.await
+			.map_err(format_jazz_err)?;
+
+		let root2 = self_state
+			.with_root(|r| Ok(*r))
+			.map_err(|_| "locked: unlock AvenOS identity first".to_string())?;
+		let pk = ed25519_public(&root2)?;
+		let local_did = crate::jazz_auth::peer_did_from_ed25519(&pk)?;
+
+		let allow = crate::peers::list_active_peer_dids(&client).await?;
+		peer_ctl
+			.set_allowlist_and_join_pair_topics(&local_did, &allow)
+			.await?;
+
+		let bridge_cids = bridge.snapshot_remote_clients().await;
+		let m = bridge.shared_client_id_to_did();
+		for p in bridge_cids {
+			let did_opt = m.read().expect("cid map poisoned").get(&p).cloned();
+			if let Some(did) = did_opt {
+				if allow.iter().any(|a| a == &did) {
+					let _ = client.register_peer_sync_client(p).map_err(format_jazz_err)?;
+				}
+			}
+		}
+		return Ok(client);
+	}
+
+	#[cfg(not(target_os = "macos"))]
+	{
+		JazzClient::connect(ctx).await.map_err(format_jazz_err)
+	}
 }
 
 async fn ensure_jazz_connection(
@@ -553,7 +611,7 @@ async fn ensure_jazz_connection(
 	jazz.shell.lock().await.take();
 	shutdown_owned_client(old).await;
 
-	let client = jazz_connect(app, self_state).await?;
+	let client = jazz_connect(app, self_state, jazz).await?;
 	jc.client = Some(client);
 	jc.linked_identity = Some(desired);
 	Ok(())
@@ -564,16 +622,18 @@ async fn jazz_shell_ready(
 	self_state: &SelfState,
 	client: &JazzClient,
 ) -> Result<std::sync::Arc<jazz_engine::ShellState>, String> {
-	let mut slot = mj.shell.lock().await;
-	if let Some(s) = slot.as_ref() {
-		return Ok(std::sync::Arc::clone(s));
-	}
 	let root = self_state
 		.with_root(|r| Ok(*r))
 		.map_err(|_| "locked: unlock AvenOS identity first".to_string())?;
+	// Always rehydrate from live Groove. P2P sync can merge new `sparks` / `keyshares` rows without
+	// restarting the Jazz client; an earlier implementation cached ShellState permanently, so
+	// `authorize_gate` still used a vault snapshot from before replication and hid remote sparks.
 	let hydrated = jazz_engine::hydrate_shell(client, &root).await?;
 	let arc = std::sync::Arc::new(hydrated);
+	let mut slot = mj.shell.lock().await;
 	*slot = Some(std::sync::Arc::clone(&arc));
+	let snap = peer_sync_gate::load_acl_snapshot(&arc.vault)?;
+	*mj.sync_acl.write().expect("sync_acl poisoned") = Some(snap);
 	Ok(arc)
 }
 
@@ -658,6 +718,244 @@ pub async fn jazz_session(
 		peer_did_short: jazz_engine::short_peer_did(&shell.peer_did),
 		default_spark_urn: jazz_engine::spark_urn(shell.default_spark),
 	})
+}
+
+/// Re-register Groove P2P sync clients + Hyperswarm allowlist + per-pair topics after the peer table changes.
+#[cfg(target_os = "macos")]
+#[tauri::command(rename_all = "camelCase")]
+pub async fn jazz_peer_mesh_refresh(
+	app: tauri::AppHandle,
+	jazz: tauri::State<'_, ManagedJazz>,
+	self_state: tauri::State<'_, SelfState>,
+) -> Result<JazzPeerMeshRefreshReply, String> {
+	if !self_state.is_unlocked() {
+		return Ok(JazzPeerMeshRefreshReply { registered_count: 0 });
+	}
+	let mut jc = jazz.conn.lock().await;
+	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
+	drop(jc);
+	let n = refresh_peer_mesh_primitives(&app, &jazz).await?;
+	Ok(JazzPeerMeshRefreshReply {
+		registered_count: n,
+	})
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command(rename_all = "camelCase")]
+pub async fn jazz_peer_mesh_refresh() -> Result<JazzPeerMeshRefreshReply, String> {
+	Ok(JazzPeerMeshRefreshReply { registered_count: 0 })
+}
+
+/// Append biscuit third-party `owns` for `peerDid`, persist updated `genesis_b64`, and add a DEK keyshare row so the peer can decrypt ciphertext for this spark after sync.
+#[tauri::command(rename_all = "camelCase")]
+pub async fn spark_admin_add(
+	app: tauri::AppHandle,
+	jazz: tauri::State<'_, ManagedJazz>,
+	self_state: tauri::State<'_, SelfState>,
+	spark_id: String,
+	peer_did: String,
+) -> Result<(), String> {
+	use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+	use base64::Engine;
+
+	let spark_uuid =
+		Uuid::parse_str(spark_id.trim()).map_err(|e| format!("invalid spark_id UUID: {e}"))?;
+	let peer_did = peer_did.trim().to_string();
+	if peer_did.is_empty() {
+		return Err("peer_did is empty".into());
+	}
+
+	let mut jc = jazz.conn.lock().await;
+	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
+	let client = jc.client.as_ref().expect("jazz connected");
+
+	let shell_arc = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let shell = shell_arc.as_ref();
+
+	if peer_did == shell.peer_did {
+		return Err("cannot grant a spark to your own DID".into());
+	}
+
+	crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
+
+	if !crate::peers::is_allowlisted(client, &peer_did).await? {
+		return Err(
+			"This DID is not in My Network — connect the peer first (invite flow).".into(),
+		);
+	}
+
+	jazz_engine::authorize_gate(
+		shell,
+		"sparks",
+		crate::spark_acc::AccOp::Write,
+		spark_uuid,
+		None,
+	)?;
+
+	let dek_ver = shell
+		.spark_versions
+		.get(&spark_uuid)
+		.copied()
+		.ok_or_else(|| format!("missing dek version for spark {spark_uuid}"))?;
+	let dek = shell
+		.deks
+		.get(&(spark_uuid, dek_ver))
+		.ok_or_else(|| format!("missing DEK for spark {spark_uuid} v{dek_ver}"))?;
+
+	let ks_schema_pre = jazz_engine::resolved_table_schema(client, "keyshares").await?;
+	let ks_spark_ix_pre = jazz_engine::col_ix(&ks_schema_pre, "spark_id")?;
+	let ks_ver_ix_pre = jazz_engine::col_ix(&ks_schema_pre, "dek_version")?;
+	let ks_recip_ix_pre = jazz_engine::col_ix(&ks_schema_pre, "recipient_did")?;
+
+	let ks_rows_pre = jazz_engine::exec_list_rows(client, "keyshares").await?;
+	let mut ks_exists = false;
+	for (_oid, vals) in ks_rows_pre {
+		let sid = jazz_engine::uuid_cell_at(vals.as_slice(), ks_spark_ix_pre)?;
+		let dv = jazz_engine::bigint_i64(vals.get(ks_ver_ix_pre).ok_or("ks_ver_missing")?)?;
+		let recip = match vals.get(ks_recip_ix_pre).ok_or("ks_recip_missing")? {
+			Value::Text(s) => s.as_str(),
+			_ => continue,
+		};
+		if sid == spark_uuid && dv == dek_ver && recip == peer_did.as_str() {
+			ks_exists = true;
+			break;
+		}
+	}
+
+	let bisc_spark = shell
+		.vault
+		.sparks
+		.get(&spark_uuid)
+		.ok_or_else(|| format!("spark {spark_uuid} not loaded in vault"))?;
+
+	let already_owner =
+		crate::spark_acc::spark_peer_is_owner(&bisc_spark.biscuit, spark_uuid, &peer_did)?;
+
+	if already_owner && ks_exists {
+		return Ok(());
+	}
+
+	if !already_owner {
+		let new_biscuit = crate::spark_acc::attenuate_add_owner_third_party(
+			&shell.vault.biscuit_kp,
+			&bisc_spark.biscuit,
+			spark_uuid,
+			&peer_did,
+		)?;
+
+		let genesis_vec = new_biscuit
+			.to_vec()
+			.map_err(|e| format!("biscuit_encode:{e:?}"))?;
+		let genesis_b64 = URL_SAFE_NO_PAD.encode(genesis_vec);
+
+		let sparks_schema = jazz_engine::resolved_table_schema(client, "sparks").await?;
+		let spark_id_ix = jazz_engine::col_ix(&sparks_schema, "spark_id")?;
+
+		let sparks_rows = jazz_engine::exec_list_rows(client, "sparks").await?;
+		let mut sparks_oid: Option<ObjectId> = None;
+		for (oid, vals) in sparks_rows {
+			let sid = jazz_engine::uuid_cell_at(vals.as_slice(), spark_id_ix)?;
+			if sid == spark_uuid {
+				sparks_oid = Some(oid);
+				break;
+			}
+		}
+		let sparks_oid =
+			sparks_oid.ok_or_else(|| format!("no sparks row for spark_id={spark_uuid}"))?;
+
+		let mut patch_sparks = Map::new();
+		patch_sparks.insert(
+			"genesis_b64".into(),
+			JsonValue::String(genesis_b64),
+		);
+		let sparks_ops = patch_updates(&sparks_schema, patch_sparks)?;
+		client
+			.update(sparks_oid, sparks_ops)
+			.await
+			.map_err(format_jazz_err)?;
+	}
+
+	if !ks_exists {
+		let recipient_pk = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
+		let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recipient_pk)?;
+		let urn = jazz_engine::spark_urn(spark_uuid);
+		let aad = crate::crypto::keyshare_wrap_aad(&urn, &peer_did, dek_ver);
+		let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
+
+		let ks_schema = jazz_engine::resolved_table_schema(client, "keyshares").await?;
+		let mut ks = Map::new();
+		ks.insert(
+			"spark_id".into(),
+			JsonValue::String(spark_uuid.to_string()),
+		);
+		ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
+		ks.insert(
+			"recipient_did".into(),
+			JsonValue::String(peer_did.clone()),
+		);
+		ks.insert(
+			"wrapped_dek".into(),
+			JsonValue::String(wrapped),
+		);
+		let ks_vals = insert_values(&ks_schema, ks)?;
+		client
+			.create("keyshares", ks_vals)
+			.await
+			.map_err(format_jazz_err)?;
+	}
+
+	drop(jc);
+	jazz.shell.lock().await.take();
+	let mut jc2 = jazz.conn.lock().await;
+	ensure_jazz_connection(&mut jc2, &jazz, &app, &self_state).await?;
+	let client2 = jc2.client.as_ref().expect("jazz connected");
+	let shell_new = jazz_shell_ready(&jazz, &self_state, client2).await?;
+	jazz.snapshot_broadcast(client2, shell_new.as_ref(), "sparks").await?;
+	jazz.snapshot_broadcast(client2, shell_new.as_ref(), "keyshares").await?;
+
+	Ok(())
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SparkAdminListReply {
+	pub admin_dids: Vec<String>,
+}
+
+/// Who can administer this spark (from biscuit `owns` facts).
+#[tauri::command(rename_all = "camelCase")]
+pub async fn spark_admin_list(
+	app: tauri::AppHandle,
+	jazz: tauri::State<'_, ManagedJazz>,
+	self_state: tauri::State<'_, SelfState>,
+	spark_id: String,
+) -> Result<SparkAdminListReply, String> {
+	let spark_uuid =
+		Uuid::parse_str(spark_id.trim()).map_err(|e| format!("invalid spark_id UUID: {e}"))?;
+
+	let mut jc = jazz.conn.lock().await;
+	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
+	let client = jc.client.as_ref().expect("jazz connected");
+	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let bs = shell
+		.vault
+		.sparks
+		.get(&spark_uuid)
+		.ok_or_else(|| format!("spark {spark_uuid} not in vault"))?;
+	let mut admin_dids: Vec<String> = crate::spark_acc::spark_admins(&bs.biscuit, spark_uuid)?
+		.into_iter()
+		.collect();
+	admin_dids.sort();
+	Ok(SparkAdminListReply { admin_dids })
+}
+
+/// Placeholder for v2 admin removal (requires key rotation).
+#[tauri::command(rename_all = "camelCase")]
+pub async fn spark_admin_revoke(
+	_spark_id: String,
+	_peer_did: String,
+) -> Result<(), String> {
+	Err("spark_admin_revoke is not implemented yet (planned: v2 key rotation).".into())
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -746,6 +1044,37 @@ pub async fn jazz_create(
 	let client = jc.client.as_ref().expect("jazz connected");
 	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
 	let tbl = jazz_engine::resolved_table_schema(client, &table).await?;
+
+	if table == "peers" {
+		let vals = insert_values(&tbl, values)?;
+		let oid = client
+			.create(&table, vals.clone())
+			.await
+			.map_err(format_jazz_err)?;
+
+		let (_, vals_fresh) =
+			jazz_engine::find_row_snapshot(client, &table, &tbl, *oid.uuid())
+				.await?
+				.ok_or_else(|| "create_reread_missing".to_string())?;
+
+		let reply = jazz_engine::row_to_public_map(
+			&shell,
+			&table,
+			&tbl,
+			oid,
+			&vals_fresh,
+			ENCRYPTED_META,
+		)?;
+
+		jazz.snapshot_broadcast(client, &shell, &table).await?;
+
+		#[cfg(target_os = "macos")]
+		{
+			let _ = refresh_peer_mesh_primitives(&app, &jazz).await?;
+		}
+
+		return Ok(reply);
+	}
 
 	let mut plaintext = std::collections::HashMap::new();
 
@@ -1029,6 +1358,137 @@ pub async fn jazz_subscribe(
 		}
 	});
 
+	Ok(())
+}
+
+/// Reconcile allowlisted DIDs, Hyperswarm topics, and Groove `register_peer_sync_client` (macOS).
+#[cfg(target_os = "macos")]
+pub(crate) async fn refresh_peer_mesh_primitives(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+) -> Result<u32, String> {
+	use std::sync::Arc;
+
+	let self_state: tauri::State<'_, SelfState> = app.state();
+	let jc = jazz.conn.lock().await;
+	let Some(ref client) = jc.client else {
+		return Ok(0);
+	};
+	let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
+	let peer_ctl = app.state::<Arc<tauri_plugin_peer::PeerCtl>>();
+	let root = self_state
+		.with_root(|r| Ok(*r))
+		.map_err(|_| "locked: unlock identity first".to_string())?;
+	let pk = ed25519_public(&root)?;
+	let local_did = crate::jazz_auth::peer_did_from_ed25519(&pk)?;
+	let allow = crate::peers::list_active_peer_dids(client).await?;
+	drop(jc);
+
+	peer_ctl
+		.set_allowlist_and_join_pair_topics(&local_did, &allow)
+		.await?;
+
+	let jc = jazz.conn.lock().await;
+	let Some(ref client) = jc.client else {
+		return Ok(0);
+	};
+
+	let mut n = 0u32;
+	for p in bridge.snapshot_remote_clients().await {
+		let m = bridge.shared_client_id_to_did();
+		let did_opt = m.read().expect("cid map").get(&p).cloned();
+		if let Some(did) = did_opt {
+			if allow.iter().any(|a| a == &did) {
+				match client.register_peer_sync_client(p) {
+					Ok(()) => {
+						n += 1;
+						log::info!(
+							target: "avenos::jazz",
+							"register_peer_sync_client ok peer={p:?} did={did}",
+						);
+					}
+					Err(e) => {
+						log::warn!(
+							target: "avenos::jazz",
+							"register_peer_sync_client failed peer={p:?} did={did} err={e}",
+						);
+					}
+				}
+			}
+		}
+	}
+	if n > 0 {
+		log::info!(target: "avenos::jazz", "peer-mesh reconcile: {n} peer client(s) registered");
+	}
+	Ok(n)
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) async fn refresh_peer_mesh_primitives(
+	_app: &tauri::AppHandle,
+	_jazz: &ManagedJazz,
+) -> Result<u32, String> {
+	Ok(0)
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PeerInvitePairedPayload {
+	remote_did: String,
+	label: String,
+}
+
+pub(crate) async fn apply_peer_invite_paired(
+	app: &tauri::AppHandle,
+	payload: &str,
+) -> Result<(), String> {
+	let p: PeerInvitePairedPayload =
+		serde_json::from_str(payload).map_err(|e| format!("peer:invite-paired json: {e}"))?;
+	let jazz = app.state::<ManagedJazz>();
+	let self_state = app.state::<SelfState>();
+	let mut jc = jazz.conn.lock().await;
+	ensure_jazz_connection(&mut jc, &jazz, app, &self_state).await?;
+	let client = jc.client.as_ref().expect("jazz connected");
+	crate::peers::upsert_peer_row(client, &p.remote_did, &p.label, "active")
+		.await?;
+	drop(jc);
+
+	#[cfg(target_os = "macos")]
+	{
+		use std::sync::Arc;
+		let ctl = app.state::<Arc<tauri_plugin_peer::PeerCtl>>();
+		let _ = ctl.peer_invite_cancel().await;
+	}
+
+	let _ = refresh_peer_mesh_primitives(app, &jazz).await?;
+	Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn peer_list(
+	app: tauri::AppHandle,
+	jazz: tauri::State<'_, ManagedJazz>,
+	self_state: tauri::State<'_, SelfState>,
+) -> Result<Vec<crate::peers::PeerRowReply>, String> {
+	let mut jc = jazz.conn.lock().await;
+	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
+	let client = jc.client.as_ref().expect("jazz connected");
+	crate::peers::list_peer_rows(client).await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn peer_revoke(
+	app: tauri::AppHandle,
+	jazz: tauri::State<'_, ManagedJazz>,
+	self_state: tauri::State<'_, SelfState>,
+	peer_did: String,
+) -> Result<(), String> {
+	let mut jc = jazz.conn.lock().await;
+	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
+	let client = jc.client.as_ref().expect("jazz connected");
+	crate::peers::set_peer_status(client, &peer_did, "revoked").await?;
+	drop(jc);
+	let _ = refresh_peer_mesh_primitives(&app, &jazz).await?;
 	Ok(())
 }
 

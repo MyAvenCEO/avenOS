@@ -141,7 +141,14 @@ impl SyncManager {
         payload: SyncPayload,
     ) {
         let Some(client) = self.clients.get(&client_id) else {
-            tracing::warn!(%client_id, "message from unknown client, ignoring");
+            // AvenOS: this silent drop was the root cause of P2P frames vanishing on the receiver
+            // when the inbound frame raced the peer-mesh reconcile loop. Logged at WARN so it
+            // shows up in the host's env_logger via the tracing-log bridge.
+            tracing::warn!(
+                target: "groove::sync_manager",
+                %client_id,
+                "process_from_client: unknown client (peer not yet registered via register_peer_sync_client?), ignoring frame",
+            );
             return;
         };
         tracing::trace!(%client_id, role = ?client.role, payload = payload.variant_name(), "client→payload");
@@ -160,6 +167,8 @@ impl SyncManager {
                         // Trusted — apply directly
                         self.apply_payload_from_client(storage, client_id, payload, false);
                     }
+                    // AvenOS: P2P Hyperswarm links register remotes as `Peer` only; outbound sync is policy-gated in the shell.
+                    // `User` is for hosted/server ReBAC flows, not desktop mesh peers.
                     ClientRole::User => {
                         // User requires session
                         let Some(session) = &client.session else {
@@ -442,12 +451,39 @@ impl SyncManager {
         branch_name: BranchName,
         commits: Vec<Commit>,
     ) -> HashSet<CommitId> {
+        // AvenOS diagnostic: log the apply attempt so we can verify P2P frames land in storage.
+        let table_label = metadata
+            .as_ref()
+            .and_then(|m| {
+                m.metadata
+                    .get(crate::metadata::MetadataKey::Table.as_str())
+                    .cloned()
+            })
+            .unwrap_or_else(|| "<no-table>".to_string());
+        tracing::debug!(
+            target: "groove::sync_manager",
+            %object_id,
+            %branch_name,
+            table = %table_label,
+            commits_in = commits.len(),
+            create_object = self.object_manager.get(object_id).is_none(),
+            "apply_object_updated start",
+        );
+
         // If we don't have this object yet and metadata is provided, create it
         if self.object_manager.get(object_id).is_none() {
             if let Some(meta) = metadata {
                 self.object_manager
                     .receive_object(storage, object_id, meta.metadata);
             } else {
+                tracing::warn!(
+                    target: "groove::sync_manager",
+                    %object_id,
+                    %branch_name,
+                    table = %table_label,
+                    rejected_commits = commits.len(),
+                    "apply_object_updated: unknown object and no metadata; rejecting commits",
+                );
                 return HashSet::new();
             }
         }
@@ -462,15 +498,36 @@ impl SyncManager {
                 .and_then(|obj| obj.branches.get(&branch_name))
                 .is_some_and(|branch| branch.commits.contains_key(&commit_id));
 
-            if self
+            match self
                 .object_manager
                 .receive_commit(storage, object_id, branch_name, commit)
-                .is_ok()
-                && !already_exists
             {
-                persisted.insert(commit_id);
+                Ok(_) => {
+                    if !already_exists {
+                        persisted.insert(commit_id);
+                    }
+                }
+                Err(e) => {
+                    // AvenOS diagnostic: receive_commit rejecting a commit silently was the
+                    // smoking gun for one earlier sync regression; surface it via the host logger.
+                    tracing::warn!(
+                        target: "groove::sync_manager",
+                        %object_id,
+                        %branch_name,
+                        commit_id = ?commit_id,
+                        error = ?e,
+                        "receive_commit rejected",
+                    );
+                }
             }
         }
+        tracing::debug!(
+            target: "groove::sync_manager",
+            %object_id,
+            %branch_name,
+            newly_persisted = persisted.len(),
+            "apply_object_updated done",
+        );
         persisted
     }
 }

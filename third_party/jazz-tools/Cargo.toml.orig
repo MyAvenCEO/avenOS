@@ -21,6 +21,7 @@ surrealkv = ["dep:surrealkv", "dep:tokio"]
 runtime-tokio = ["dep:tokio"]
 transport = []
 transport-http = ["transport", "dep:reqwest", "dep:base64", "dep:bytes"]
+peer-transport = ["dep:bincode", "dep:async-trait"]
 client = ["runtime-tokio", "transport-http", "surrealkv", "dep:thiserror", "dep:tokio"]
 cli = [
   "runtime-tokio",
@@ -56,6 +57,9 @@ bitvec = "1.0"
 ahash = "0.8"
 
 tokio = { version = "1", features = ["full"], optional = true }
+
+bincode = { version = "2.0", features = ["serde"], optional = true }
+async-trait = { version = "0.1", optional = true }
 surrealkv = { version = "0.19", optional = true }
 
 axum = { version = "0.7", optional = true }

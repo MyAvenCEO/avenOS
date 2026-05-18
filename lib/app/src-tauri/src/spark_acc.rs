@@ -2,10 +2,11 @@
 
 use std::collections::HashSet;
 
+use base64::engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD};
+use base64::Engine;
 use biscuit_auth::{
-	builder::{Algorithm, AuthorizerBuilder},
-	Biscuit,
-	KeyPair, PublicKey,
+	builder::{Algorithm, AuthorizerBuilder, BlockBuilder},
+	Biscuit, KeyPair, PublicKey,
 };
 use groove::query_manager::types::Value;
 
@@ -49,6 +50,23 @@ fn spark_urn_for(spark_id: Uuid) -> String {
 
 pub fn biscuit_keypair_from_ed25519_signing(secret32: &[u8; 32]) -> Result<KeyPair, String> {
 	KeyPair::from_bytes(secret32, Algorithm::Ed25519.into()).map_err(|e| format!("biscuit-kp-from-bytes:{e:?}"))
+}
+
+pub fn encode_issuer_pubkey_b64(pubkey: &PublicKey) -> String {
+	URL_SAFE_NO_PAD.encode(pubkey.to_bytes())
+}
+
+/// Decode verifier root pubkey stored in [`sparks.issuer_pubkey_b64`].
+pub fn decode_issuer_pubkey_b64(b64: &str) -> Result<PublicKey, String> {
+	let trimmed = b64.trim();
+	if trimmed.is_empty() {
+		return Err("issuer_pubkey_b64_empty".into());
+	}
+	let raw = URL_SAFE_NO_PAD
+		.decode(trimmed.as_bytes())
+		.or_else(|_| STANDARD_NO_PAD.decode(trimmed.as_bytes()))
+		.map_err(|e| format!("issuer_pubkey_b64_decode:{e}"))?;
+	PublicKey::from_bytes(raw.as_slice(), Algorithm::Ed25519.into()).map_err(|e| format!("issuer_pubkey_bad:{e:?}"))
 }
 
 pub fn build_vault_from_root(root: &[u8; 32]) -> Result<BiscuitVault, String> {
@@ -96,12 +114,42 @@ pub fn mint_genesis_spark(
 		.map_err(|e| format!("genesis-build:{e}"))
 }
 
+/// Append a third-party biscuit block granting `new_peer_did` an [`owns`] fact on this Spark,
+/// signed by `delegating_kp` (typically the device's biscuit [`KeyPair`], i.e. same key that
+/// anchored the genesis or a prior delegated admin's key — see biscuit third-party semantics).
+pub fn attenuate_add_owner_third_party(
+	delegating_kp: &KeyPair,
+	chain: &Biscuit,
+	spark_id: Uuid,
+	new_peer_did: &str,
+) -> Result<Biscuit, String> {
+	let req = chain
+		.third_party_request()
+		.map_err(|e| format!("tp_request:{e:?}"))?;
+	let spark_str = spark_urn_for(spark_id);
+	let own_f = format!(
+		"owns(\"{}\", \"{}\")",
+		new_peer_did.replace('\\', "\\\\").replace('"', "\\\""),
+		spark_str.replace('\\', "\\\\").replace('"', "\\\"")
+	);
+	let bb = BlockBuilder::new()
+		.fact(own_f.as_str())
+		.map_err(|e| format!("tp_fact:{e}"))?;
+	let block = req
+		.create_block(&delegating_kp.private(), bb)
+		.map_err(|e| format!("tp_create:{e:?}"))?;
+	chain
+		.append_third_party(delegating_kp.public(), block)
+		.map_err(|e| format!("tp_append:{e:?}"))
+}
+
 pub fn ingest_genesis_row(
 	vault: &mut BiscuitVault,
 	spark_id_col: usize,
+	issuer_pubkey_ix: usize,
 	genesis_ix: usize,
 	vals: &[Value],
-	root: PublicKey,
+	local_fallback_issuer_pk: PublicKey,
 ) -> Result<(), String> {
 	let sid_cell = vals.get(spark_id_col).ok_or("spark_missing_col")?;
 	let spark_id =
@@ -109,7 +157,12 @@ pub fn ingest_genesis_row(
 	let genesis_cell = vals.get(genesis_ix).ok_or("genesis_missing_col")?;
 	let genesis_b64 = text_cell(genesis_cell).ok_or_else(|| format!("genesis_bad:{genesis_cell:?}"))?;
 
-	let biscuit = biscuit_from_storage(genesis_b64, root)?;
+	let issuer_pk = match vals.get(issuer_pubkey_ix) {
+		Some(Value::Text(s)) if !s.trim().is_empty() => decode_issuer_pubkey_b64(s)?,
+		_ => local_fallback_issuer_pk,
+	};
+
+	let biscuit = biscuit_from_storage(genesis_b64, issuer_pk)?;
 
 	vault.sparks.insert(
 		spark_id,
@@ -119,6 +172,18 @@ pub fn ingest_genesis_row(
 		},
 	);
 	Ok(())
+}
+
+pub fn spark_peer_is_owner(chain: &Biscuit, spark_id: Uuid, peer_did: &str) -> Result<bool, String> {
+	let spark_str = spark_urn_for(spark_id);
+	let admins = trusted_subject_dids(chain, &spark_str)?;
+	Ok(admins.contains(peer_did))
+}
+
+/// All admin (`owns`) DIDs for a spark per the biscuit chain.
+pub fn spark_admins(chain: &Biscuit, spark_id: Uuid) -> Result<std::collections::HashSet<String>, String> {
+	let spark_str = spark_urn_for(spark_id);
+	trusted_subject_dids(chain, &spark_str)
 }
 
 fn uuid_cell(v: &Value) -> Option<Uuid> {
@@ -137,15 +202,12 @@ fn text_cell(v: &Value) -> Option<&str> {
 }
 
 pub fn biscuit_from_storage(genesis_b64: &str, root: PublicKey) -> Result<Biscuit, String> {
-	use base64::Engine;
-	let raw = base64::engine::general_purpose::URL_SAFE_NO_PAD
+	let raw = URL_SAFE_NO_PAD
 		.decode(genesis_b64.as_bytes())
-		.or_else(|_| {
-			base64::engine::general_purpose::STANDARD_NO_PAD.decode(genesis_b64.as_bytes())
-		})
+		.or_else(|_| STANDARD_NO_PAD.decode(genesis_b64.as_bytes()))
 		.map_err(|e| format!("genesis-base64:{e}"))?;
 
-	Biscuit::from(raw.as_slice(), root).map_err(|e| format!("biscuit-from:{e}"))
+	Biscuit::from(raw.as_slice(), root).map_err(|e| format!("biscuit-from:{e:?}"))
 }
 
 fn trusted_subject_dids(b: &Biscuit, spark_urn: &str) -> Result<HashSet<String>, String> {
@@ -282,5 +344,53 @@ mod tests {
 		);
 		let rid = uuid::Uuid::new_v4();
 		authorize(&v, sid, AccOp::Delete, "todos", Some(rid), &v.peer_did.clone()).unwrap();
+	}
+
+	#[test]
+	fn third_party_grant_allows_second_device() {
+		let root_alice = [1u8; 32];
+		let root_bob = [2u8; 32];
+		let mut alice = build_vault_from_root(&root_alice).unwrap();
+		let bob = build_vault_from_root(&root_bob).unwrap();
+
+		let sid = uuid::Uuid::new_v4();
+		let genesis = mint_genesis_spark(&alice, sid).unwrap();
+		let issuer_pk = alice.biscuit_kp.public();
+
+		let chain = attenuate_add_owner_third_party(
+			&alice.biscuit_kp,
+			&genesis,
+			sid,
+			bob.peer_did.as_str(),
+		)
+		.unwrap();
+
+		alice.sparks.insert(
+			sid,
+			BiscuitSpark {
+				spark_id: sid,
+				biscuit: chain.clone(),
+			},
+		);
+		let mut bob_vault = BiscuitVault {
+			biscuit_kp: bob.biscuit_kp,
+			peer_did: bob.peer_did.clone(),
+			ed25519_public: bob.ed25519_public,
+			sparks: std::collections::HashMap::new(),
+		};
+		bob_vault.sparks.insert(
+			sid,
+			BiscuitSpark {
+				spark_id: sid,
+				biscuit: chain,
+			},
+		);
+
+		authorize(&alice, sid, AccOp::Write, "todos", None, &alice.peer_did).unwrap();
+		authorize(&bob_vault, sid, AccOp::Write, "todos", None, &bob.peer_did).unwrap();
+		let other = build_vault_from_root(&[33u8; 32]).unwrap();
+		assert!(authorize(&bob_vault, sid, AccOp::Write, "todos", None, &other.peer_did).is_err());
+
+		let _ = issuer_pk;
 	}
 }

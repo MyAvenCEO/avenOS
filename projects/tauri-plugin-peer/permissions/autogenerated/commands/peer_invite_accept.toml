@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-peer-invite-accept"
+description = "Enables the peer_invite_accept command without any pre-configured scope."
+commands.allow = ["peer_invite_accept"]
+
+[[permission]]
+identifier = "deny-peer-invite-accept"
+description = "Denies the peer_invite_accept command without any pre-configured scope."
+commands.deny = ["peer_invite_accept"]

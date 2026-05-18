@@ -1,0 +1,31 @@
+[package]
+name = "tauri-plugin-peer"
+version = "0.0.1"
+edition = "2021"
+publish = false
+links = "tauri-plugin-peer"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[lib]
+name = "tauri_plugin_peer"
+path = "src/lib.rs"
+
+[dependencies]
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
+tauri-plugin-self = { path = "../tauri-plugin-self" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+async-trait = "0.1"
+ed25519-dalek = { version = "2", features = ["zeroize"] }
+groove = { package = "jazz-tools", path = "../../third_party/jazz-tools", default-features = false, features = ["client", "peer-transport"] }
+multibase = "0.9"
+peeroxide = "1.3.1"
+rand = "0.8"
+sha2 = "0.10"
+uuid = { version = "1", features = ["serde"] }

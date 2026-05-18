@@ -8,6 +8,7 @@
 		"core:window:default",
 		"core:webview:default",
 		"core:event:default",
-		"self:default"
+		"self:default",
+		"peer:default"
 	]
 }

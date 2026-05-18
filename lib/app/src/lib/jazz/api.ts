@@ -25,6 +25,41 @@ export async function jazzStatus(): Promise<JazzStatusReply> {
 	return invoke<JazzStatusReply>('jazz_status')
 }
 
+/** Re-register allowlisted Hyperswarm peers + Groove sync (safe to call after peer table changes). */
+export type JazzPeerMeshRefreshReply = {
+	registeredCount: number
+}
+
+export async function jazzPeerMeshRefresh(): Promise<JazzPeerMeshRefreshReply> {
+	return invoke<JazzPeerMeshRefreshReply>('jazz_peer_mesh_refresh')
+}
+
+/** Add a network peer as spark admin (biscuit + DEK keyshare); peer must be in My Network allowlist. */
+export async function sparkAdminAdd(payload: {
+	sparkId: string
+	peerDid: string
+}): Promise<void> {
+	await invoke<void>('spark_admin_add', {
+		sparkId: payload.sparkId,
+		peerDid: payload.peerDid,
+	})
+}
+
+export type SparkAdminListReply = {
+	adminDids: string[]
+}
+
+export async function sparkAdminList(sparkId: string): Promise<SparkAdminListReply> {
+	return invoke<SparkAdminListReply>('spark_admin_list', { sparkId })
+}
+
+export async function sparkAdminRevoke(_payload: {
+	sparkId: string
+	peerDid: string
+}): Promise<void> {
+	await invoke<void>('spark_admin_revoke', _payload)
+}
+
 /** Result of `jazz_explorer_list` — rows omit unauthorized biscuit/spark gates; count is diagnostics-only. */
 export type JazzExplorerListReply = {
 	rows: Record<string, unknown>[]

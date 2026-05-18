@@ -15,22 +15,40 @@
 	})
 
 	const path = $derived(page.url.pathname)
-	const tabs = [
-		{ href: '/self', label: 'Peer IDs', match: (p: string) => p === '/self' || p === '/self/' },
+
+	const navSections: {
+		title: string
+		items: { href: string; label: string; match: (p: string) => boolean }[]
+	}[] = [
 		{
-			href: '/self/sparks',
-			label: 'Sparks',
-			match: (p: string) => p.startsWith('/self/sparks'),
+			title: 'Identity',
+			items: [
+				{ href: '/self', label: 'Peer IDs', match: (p) => p === '/self' || p === '/self/' },
+			],
 		},
 		{
-			href: '/self/network',
-			label: 'Network',
-			match: (p: string) => p.startsWith('/self/network'),
+			title: 'Connectivity',
+			items: [
+				{
+					href: '/self/network',
+					label: 'Peers & anchor',
+					match: (p) => p.startsWith('/self/network'),
+				},
+			],
 		},
 		{
-			href: '/self/db',
-			label: 'DB',
-			match: (p: string) => p.startsWith('/self/db'),
+			title: 'Workspaces',
+			items: [
+				{
+					href: '/self/workspaces',
+					label: 'Sharing',
+					match: (p) => p.startsWith('/self/workspaces'),
+				},
+			],
+		},
+		{
+			title: 'Developer',
+			items: [{ href: '/self/db', label: 'DB', match: (p) => p.startsWith('/self/db') }],
 		},
 	]
 
@@ -53,27 +71,34 @@
 	>
 		<div class="mb-4 px-3">
 			<h2 class="text-sm font-semibold tracking-tight">Self</h2>
-			<p class="text-muted-foreground text-[11px] leading-snug">Who you are on this Mac</p>
+			<p class="text-muted-foreground text-[11px] leading-snug">Device identity and workspace access</p>
 		</div>
 
-		<nav class="flex flex-col gap-0.5">
-			{#each tabs as tab (tab.href)}
-				{@const active = tab.match(path)}
-				<a
-					href={tab.href}
-					data-sveltekit-preload-data="hover"
-					class="rounded-md px-3 py-1.5 text-[13px] transition-colors
-						{active
-						? 'bg-accent/15 text-foreground font-medium'
-						: 'text-muted-foreground hover:bg-accent/10 hover:text-foreground'}"
-					aria-current={active ? 'page' : undefined}
-				>
-					{tab.label}
-				</a>
+		<nav class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+			{#each navSections as section (section.title)}
+				<div class="flex flex-col gap-0.5">
+					<p class="text-muted-foreground mb-1 px-3 text-[9px] font-bold tracking-[0.2em] uppercase">
+						{section.title}
+					</p>
+					{#each section.items as tab (tab.href)}
+						{@const active = tab.match(path)}
+						<a
+							href={tab.href}
+							data-sveltekit-preload-data="hover"
+							class="rounded-md px-3 py-1.5 text-[13px] transition-colors
+								{active
+								? 'bg-accent/15 text-foreground font-medium'
+								: 'text-muted-foreground hover:bg-accent/10 hover:text-foreground'}"
+							aria-current={active ? 'page' : undefined}
+						>
+							{tab.label}
+						</a>
+					{/each}
+				</div>
 			{/each}
 		</nav>
 
-		<div class="mt-auto flex items-center gap-2 rounded-md px-3 py-2 text-[11px]">
+		<div class="mt-4 flex items-center gap-2 rounded-md px-3 py-2 text-[11px]">
 			<span class="inline-flex h-2 w-2 rounded-full {sessionDot}" aria-hidden="true"></span>
 			<span class="text-muted-foreground">{sessionLabel}</span>
 		</div>

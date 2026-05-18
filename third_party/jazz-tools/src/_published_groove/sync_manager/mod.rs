@@ -178,9 +178,63 @@ impl SyncManager {
     }
 
     /// Set the role for a client.
+    ///
+    /// AvenOS patch: when a client transitions into [`ClientRole::Peer`] we queue
+    /// initial tips for every existing non-nosync (object, branch) so the new P2P
+    /// peer catches up on rows created before pairing. Without this, only commits
+    /// authored *after* `set_client_role(Peer)` would ever leave the local outbox
+    /// — pre-existing sparks/keyshares would never replicate. The outbound
+    /// `BiscuitGatedPeerTransport` still gates each frame against the recipient's
+    /// biscuit-admin rights, so this catchup is bounded by spark authorization.
     pub fn set_client_role(&mut self, client_id: ClientId, role: ClientRole) {
+        let already_peer = self
+            .clients
+            .get(&client_id)
+            .is_some_and(|c| c.role == ClientRole::Peer);
         if let Some(client) = self.clients.get_mut(&client_id) {
             client.role = role;
+        }
+        if role == ClientRole::Peer && !already_peer {
+            self.queue_full_catchup_to_peer(client_id);
+        }
+    }
+
+    /// AvenOS patch: queue tips for every non-nosync (object, branch) to a Peer client.
+    /// Mirrors `queue_full_sync_to_server` but targets a single Peer-role client.
+    fn queue_full_catchup_to_peer(&mut self, client_id: ClientId) {
+        use crate::commit::CommitId;
+        use std::collections::HashSet;
+
+        // Snapshot first to avoid holding a borrow of `self.object_manager`
+        // while `queue_tips_to_client` mutably borrows `self`.
+        let mut to_sync: Vec<(
+            ObjectId,
+            std::collections::HashMap<String, String>,
+            BranchName,
+            HashSet<CommitId>,
+        )> = Vec::new();
+        for (object_id, object) in &self.object_manager.objects {
+            // Honour the nosync metadata flag — local-only objects (index pages,
+            // peers table, etc.) must never leave the device.
+            let nosync = object
+                .metadata
+                .get(crate::metadata::MetadataKey::NoSync.as_str())
+                .map(|v| v == "true")
+                .unwrap_or(false);
+            if nosync {
+                continue;
+            }
+            for (branch_name, branch) in &object.branches {
+                to_sync.push((
+                    *object_id,
+                    object.metadata.clone(),
+                    *branch_name,
+                    branch.tips.iter().copied().collect(),
+                ));
+            }
+        }
+        for (object_id, metadata, branch_name, tips) in to_sync {
+            self.queue_tips_to_client(client_id, object_id, metadata, branch_name, tips);
         }
     }
 

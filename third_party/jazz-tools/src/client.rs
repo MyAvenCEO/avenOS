@@ -14,12 +14,40 @@ use groove::query_manager::types::{RowDelta, Value};
 use groove::schema_manager::SchemaManager;
 use groove::storage::{Storage, StorageError, SurrealKvStorage};
 use groove::sync_manager::{
-    ClientId, Destination, InboxEntry, PersistenceTier, ServerId, Source, SyncManager,
+    ClientId, Destination, InboxEntry, PersistenceTier, ServerId, Source, SyncManager, SyncPayload,
 };
 use tokio::sync::{RwLock, mpsc};
 
 use crate::transport::{AuthConfig, ServerConnection};
 use crate::{AppContext, JazzError, ObjectId, Result, SubscriptionHandle, SubscriptionStream};
+
+#[cfg(not(feature = "peer-transport"))]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct MaybePeerTransport;
+
+#[cfg(feature = "peer-transport")]
+#[derive(Clone)]
+pub(crate) enum MaybePeerTransport {
+    Off,
+    Active(std::sync::Arc<dyn crate::peer_transport::PeerTransport>),
+}
+
+#[cfg(feature = "peer-transport")]
+impl Default for MaybePeerTransport {
+    fn default() -> Self {
+        Self::Off
+    }
+}
+
+#[cfg(feature = "peer-transport")]
+impl std::fmt::Debug for MaybePeerTransport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Off => f.write_str("Off"),
+            Self::Active(_) => f.write_str("Active(..)"),
+        }
+    }
+}
 
 /// Jazz client for building applications.
 ///
@@ -37,11 +65,46 @@ pub struct JazzClient {
     next_handle: std::sync::atomic::AtomicU64,
     /// Handle for the stream listener task.
     stream_listener_task: Option<tokio::task::JoinHandle<()>>,
+    /// P2P transport (disconnect + shutdown sequencing).
+    #[cfg(feature = "peer-transport")]
+    peer_transport: Option<Arc<dyn crate::peer_transport::PeerTransport>>,
+    /// Drains inbound peer frames into Groove inbox.
+    #[cfg(feature = "peer-transport")]
+    peer_inbound_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 /// State for an active subscription.
 struct SubscriptionState {
     runtime_handle: RuntimeSubHandle,
+}
+
+/// Non-async hook invoked from Groove's sync outbox drain for `Destination::Client`.
+type PeerOutboundFn = Arc<dyn Fn(ClientId, SyncPayload) + Send + Sync + 'static>;
+
+#[cfg(not(feature = "peer-transport"))]
+fn build_peer_bundle(_layer: &MaybePeerTransport) -> PeerOutboundFn {
+	Arc::new(|_peer_runtime_id, _payload| {})
+}
+
+#[cfg(feature = "peer-transport")]
+fn build_peer_bundle(layer: &MaybePeerTransport) -> PeerOutboundFn {
+	match layer {
+		MaybePeerTransport::Off => Arc::new(|_peer_runtime_id, _payload| {}),
+		MaybePeerTransport::Active(transport) => {
+			let transport = transport.clone();
+			Arc::new(move |peer_runtime_id, payload| {
+				let tt = transport.clone();
+				tokio::spawn(async move {
+					if let Err(e) =
+						crate::peer_transport::PeerTransport::send_to(&*tt, peer_runtime_id, payload)
+							.await
+					{
+						tracing::warn!("PeerTransport::send_to failed: {e:?}");
+					}
+				});
+			})
+		}
+	}
 }
 
 impl JazzClient {
@@ -52,7 +115,56 @@ impl JazzClient {
     /// 2. Initialize the runtime
     /// 3. Connect to the server (if URL provided)
     /// 4. Start syncing
+    #[cfg(not(feature = "peer-transport"))]
     pub async fn connect(context: AppContext) -> Result<Self> {
+        let layer = MaybePeerTransport::default();
+        let fwd = build_peer_bundle(&layer);
+        Self::do_connect(context, fwd, layer).await
+    }
+
+    #[cfg(feature = "peer-transport")]
+    pub async fn connect(context: AppContext) -> Result<Self> {
+        let layer = MaybePeerTransport::Off;
+        let fwd = build_peer_bundle(&layer);
+        Self::do_connect(context, fwd, layer).await
+    }
+
+    #[cfg(feature = "peer-transport")]
+    pub async fn connect_with_peer_transport(
+        context: AppContext,
+        peer_transport: Arc<dyn crate::peer_transport::PeerTransport>,
+    ) -> Result<Self> {
+        let layer = MaybePeerTransport::Active(peer_transport);
+        let fwd = build_peer_bundle(&layer);
+        Self::do_connect(context, fwd, layer).await
+    }
+
+    /// Registers a trusted remote peer id for trusted relay ingestion (Groove [`groove::sync_manager::ClientRole::Peer`]).
+    #[cfg(feature = "peer-transport")]
+    pub fn register_peer_sync_client(&self, peer_id: ClientId) -> Result<()> {
+        use groove::sync_manager::ClientRole;
+        self.runtime
+            .add_client(peer_id, None)
+            .map_err(|e| JazzError::Sync(format!("add_client peer {peer_id}: {e}")))?;
+        self.runtime
+            .set_client_role(peer_id, ClientRole::Peer)
+            .map_err(|e| JazzError::Sync(format!("set_client_role Peer {peer_id}: {e}")))?;
+        Ok(())
+    }
+
+    /// Push a replicated [`SyncPayload`] from a remote Jazz peer into the local Groove inbox.
+    #[cfg(feature = "peer-transport")]
+    pub fn ingest_peer_sync(&self, from_peer_runtime_id: ClientId, payload: SyncPayload) -> Result<()> {
+        let entry = InboxEntry {
+            source: Source::Client(from_peer_runtime_id),
+            payload,
+        };
+        self.runtime
+            .push_sync_inbox(entry)
+            .map_err(|e| JazzError::Sync(format!("push_sync_inbox: {e}")))
+    }
+
+    async fn do_connect(context: AppContext, peer_forwarder: PeerOutboundFn, peer_layer: MaybePeerTransport) -> Result<Self> {
         // Create data directory if needed
         std::fs::create_dir_all(&context.data_dir)?;
 
@@ -147,26 +259,31 @@ impl JazzClient {
         // Clone server connection for sync callback
         let server_conn_for_sync = server_connection.clone();
         let client_id_for_sync = client_id;
+        let peer_forward = peer_forwarder.clone();
 
         // Create runtime with sync callback
         let runtime = TokioRuntime::new(schema_manager, storage, move |entry| {
-            // Send to server if connected and destination is server
-            if let Destination::Server(_) = entry.destination {
-                eprintln!(
-                    "DEBUG [client sync_cb]: Sending to server: {:?}",
-                    entry.payload.variant_name()
-                );
-                if let Some(ref conn) = server_conn_for_sync {
-                    let conn = conn.clone();
-                    let payload = entry.payload.clone();
-                    let cid = client_id_for_sync;
-                    tokio::spawn(async move {
-                        if let Err(e) = conn.push_sync(payload, cid).await {
-                            tracing::warn!("Failed to push sync to server: {}", e);
-                        }
-                    });
-                } else {
-                    eprintln!("DEBUG [client sync_cb]: No server connection!");
+            match &entry.destination {
+                Destination::Server(_) => {
+                    eprintln!(
+                        "DEBUG [client sync_cb]: Sending to server: {:?}",
+                        entry.payload.variant_name()
+                    );
+                    if let Some(ref conn) = server_conn_for_sync {
+                        let conn = conn.clone();
+                        let payload = entry.payload.clone();
+                        let cid = client_id_for_sync;
+                        tokio::spawn(async move {
+                            if let Err(e) = conn.push_sync(payload, cid).await {
+                                tracing::warn!("Failed to push sync to server: {}", e);
+                            }
+                        });
+                    } else {
+                        eprintln!("DEBUG [client sync_cb]: No server connection!");
+                    }
+                }
+                Destination::Client(peer_runtime_id) => {
+                    peer_forward(*peer_runtime_id, entry.payload.clone());
                 }
             }
         });
@@ -287,6 +404,34 @@ impl JazzClient {
             None
         };
 
+        #[cfg(feature = "peer-transport")]
+        let (peer_transport_stored, peer_inbox_task) = match peer_layer {
+            MaybePeerTransport::Off => (None, None),
+            MaybePeerTransport::Active(t) => {
+                let inbound_runtime = runtime.clone();
+                let tin = Arc::clone(&t);
+                let task = tokio::spawn(async move {
+                    loop {
+                        match crate::peer_transport::PeerTransport::recv_inbound(&*tin).await {
+                            None => break,
+                            Some(entry) => {
+                                if let Err(err) = inbound_runtime.push_sync_inbox(entry) {
+                                    tracing::warn!(
+                                        "push_sync_inbox (peer inbound): {}",
+                                        err
+                                    );
+                                }
+                            }
+                        }
+                    }
+                });
+                (Some(t), Some(task))
+            }
+        };
+
+        #[cfg(not(feature = "peer-transport"))]
+        let _ = peer_layer;
+
         Ok(Self {
             runtime,
             server_connection,
@@ -294,6 +439,10 @@ impl JazzClient {
             subscription_senders,
             next_handle: std::sync::atomic::AtomicU64::new(1),
             stream_listener_task,
+            #[cfg(feature = "peer-transport")]
+            peer_transport: peer_transport_stored,
+            #[cfg(feature = "peer-transport")]
+            peer_inbound_task: peer_inbox_task,
         })
     }
 
@@ -428,6 +577,19 @@ impl JazzClient {
 
     /// Shutdown the client and release resources.
     pub async fn shutdown(mut self) -> Result<()> {
+        #[cfg(feature = "peer-transport")]
+        if let Some(h) = self.peer_inbound_task.take() {
+            h.abort();
+            let _ = h.await;
+        }
+
+        #[cfg(feature = "peer-transport")]
+        if let Some(t) = self.peer_transport.take() {
+            if let Err(err) = t.shutdown().await {
+                tracing::warn!("PeerTransport::shutdown failed: {err:?}");
+            }
+        }
+
         // Abort stream listener first (it holds TokioRuntime clone)
         if let Some(handle) = self.stream_listener_task.take() {
             handle.abort();

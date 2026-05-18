@@ -119,7 +119,7 @@
 			{#if showBypass}
 				<button
 					type="button"
-					class="border-input hover:bg-accent rounded-lg border px-6 py-2.5 text-sm font-medium"
+					class="border-input hover:bg-accent hover:text-accent-foreground rounded-lg border px-6 py-2.5 text-sm font-medium"
 					disabled={loading}
 					onclick={bypass}
 				>
