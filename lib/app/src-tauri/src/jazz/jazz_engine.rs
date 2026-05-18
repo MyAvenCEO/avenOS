@@ -419,6 +419,14 @@ pub(super) async fn hydrate_shell(client: &JazzClient, root: &[u8; 32]) -> Resul
 	let ver_ix = col_ix(&sparks_schema, "current_dek_version")?;
 
 	let mut spark_versions = HashMap::new();
+	// Map spark_id → issuer's raw ed25519 pubkey (= the biscuit signing key the
+	// genesis was minted with). We need this on the keyshare unwrap path
+	// because a peer-issued keyshare was wrapped with `KEK = DH(issuer_priv,
+	// recipient_pub)`, so the recipient must derive `KEK = DH(recipient_priv,
+	// issuer_pub)` — using `vault.ed25519_public` (the *local* device's
+	// pubkey) instead of the issuer's pubkey produced `unwrap_fail` for every
+	// peer-issued spark once P2P sync started actually delivering keyshares.
+	let mut spark_issuer_pubkey: HashMap<Uuid, [u8; 32]> = HashMap::new();
 	let sparks_rows = exec_list_rows(client, "sparks").await?;
 
 	for (_oid, vals) in &sparks_rows {
@@ -433,6 +441,28 @@ pub(super) async fn hydrate_shell(client: &JazzClient, root: &[u8; 32]) -> Resul
 		let sid = uuid_cell_at(vals.as_slice(), spark_id_ix)?;
 		let v = bigint_i64(vals.get(ver_ix).ok_or("sparks_missing_version")?)?;
 		spark_versions.insert(sid, v);
+
+		if let Some(Value::Text(b64)) = vals.get(issuer_ix) {
+			let trimmed = b64.trim();
+			if !trimmed.is_empty() {
+				let raw = URL_SAFE_NO_PAD
+					.decode(trimmed.as_bytes())
+					.or_else(|_| {
+						base64::engine::general_purpose::STANDARD_NO_PAD
+							.decode(trimmed.as_bytes())
+					})
+					.map_err(|e| format!("spark_issuer_b64_decode:{e}"))?;
+				if raw.len() != 32 {
+					return Err(format!(
+						"spark_issuer_pubkey_len: expected 32 got {}",
+						raw.len()
+					));
+				}
+				let mut k = [0u8; 32];
+				k.copy_from_slice(&raw);
+				spark_issuer_pubkey.insert(sid, k);
+			}
+		}
 	}
 
 	let mut deks: HashMap<(Uuid, i64), Dek> = HashMap::new();
@@ -459,7 +489,16 @@ pub(super) async fn hydrate_shell(client: &JazzClient, root: &[u8; 32]) -> Resul
 				_ => return Err("ks_wrap_bad".into()),
 			};
 			let urn = spark_urn(sid);
-			let kek = derive_kek_x25519(&signing_key, &vault.ed25519_public)?;
+			// MVP assumption: every keyshare for a spark is wrapped by that
+			// spark's genesis issuer (the only admin who has the DEK in the
+			// current grant flow). When we add multi-step delegation
+			// (admin-A grants admin-B → admin-B grants admin-C), we'll need
+			// a dedicated `wrapper_did` column on the keyshare row instead
+			// of inferring it from the spark issuer.
+			let issuer_pk = spark_issuer_pubkey.get(&sid).ok_or_else(|| {
+				format!("keyshare for unknown spark issuer: spark_id={sid}")
+			})?;
+			let kek = derive_kek_x25519(&signing_key, issuer_pk)?;
 			let aad = keyshare_wrap_aad(&urn, recipient, dv);
 			let raw32 = decrypt_keyshare_payload(wrapped, &kek, &aad)?;
 			deks.insert((sid, dv), Dek::from_plain_32(raw32));

@@ -11,11 +11,12 @@ use groove::{JazzError, Result as GrooveResult};
 use peeroxide::SwarmConnection;
 use sha2::{Digest, Sha256};
 use tokio::sync::{mpsc, Mutex, Notify};
-// `Mutex` is still used for the bridge's internal bookkeeping maps
-// (`outbound_by_peer`, `active_remote_clients`, etc.). The SwarmConnection
-// itself is no longer mutex-wrapped — it's moved into a single owning task
-// inside `multiplex_connection` to avoid the read/write deadlock that
-// previously made P2P sync silently fail.
+// `Mutex` is used only for the bridge's internal bookkeeping maps
+// (`outbound_by_peer`, `active_remote_clients`, …). The encrypted SecretStream
+// is *not* shared behind a mutex anywhere — `multiplex_connection` splits it
+// via the vendored `SecretStream::into_split()` patch and runs the reader and
+// writer on independent tasks so they never contend for state. See the long
+// rationale on `multiplex_connection`.
 use uuid::Uuid;
 
 use crate::did;
@@ -107,89 +108,117 @@ impl HyperswarmGrooveBridge {
 		}
 	}
 
+	/// Drive a single peer link: spawn an independent reader and writer task
+	/// over the split halves of the encrypted SecretStream.
+	///
+	/// Why split halves instead of a single owning task + `tokio::select!`:
+	///
+	/// `peeroxide-dht::SecretStream::read` calls `tokio::io::AsyncReadExt::read_exact`
+	/// internally. `read_exact` is **not cancel-safe** — if it has consumed a
+	/// partial frame header from the underlying UDX socket and the future is
+	/// dropped, the next `read()` reads from a misaligned offset, the
+	/// `secretstream::Pull::next` decrypt step then fails with
+	/// `Decrypt(DecryptionFailed)`, and the link dies forever.
+	///
+	/// `tokio::select!` between `stream.read()` and `capsule_rx.recv()` always
+	/// cancels the losing future, so any write request that arrives mid-frame
+	/// corrupts the decrypt counter. We saw this in production:
+	///   `[B] peer stream read stopped: Decrypt(DecryptionFailed)`
+	/// after about one second of healthy bidirectional sync.
+	///
+	/// With `SecretStream::into_split()` (vendored AvenOS patch) the read and
+	/// write halves own disjoint state — independent libsodium counters plus
+	/// the two halves of `tokio::io::split(raw_stream)` — so two tasks can run
+	/// concurrently with zero shared state and zero cancellation hazards.
 	async fn multiplex_connection(
 		bridge: HyperswarmGrooveBridge,
-		mut conn: SwarmConnection,
+		conn: SwarmConnection,
 		remote_client: ClientId,
-		mut capsule_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+		capsule_rx: mpsc::UnboundedReceiver<Vec<u8>>,
 		local_party_id: ClientId,
 	) {
-		// Owning task that interleaves reads and writes on a single `SwarmConnection`.
-		//
-		// Previously the bridge wrapped the connection in `Arc<Mutex<SwarmConnection>>`
-		// and spawned two tasks — one calling `stream.read().await` and one calling
-		// `stream.write().await`, each acquiring the mutex around the IO. Because
-		// `SecretStream::read` suspends until incoming bytes arrive AND the
-		// `MutexGuard` is held across that `.await`, the writer could never acquire
-		// the mutex and **no outbound bytes ever left the wire**. From the host's
-		// perspective every `forward outbound` log line was a lie — the capsule made
-		// it into the mpsc channel but the writer half was deadlocked behind the
-		// reader holding the connection mutex. (Symptom: both peers logged endless
-		// `forward outbound` events but zero `recv inbound` on either side.)
-		//
-		// Borrow-checker shape: each `select!` branch only borrows a disjoint field of
-		// the local task (one borrows `capsule_rx`, the other borrows `conn.peer.stream`).
-		// When one branch wins, the other future is dropped before the matched handler
-		// runs, freeing the mutable borrow for the handler.
-		//
-		// Cancel-safety caveat: `SecretStream::read` is not fully cancel-safe — if a
-		// partial frame has been consumed from the underlying UDX stream and the read
-		// future is dropped, the next `read()` will desync. In practice the window is
-		// microseconds because UDX delivers frames atomically per packet. The `biased`
-		// ordering below makes `read` win when both are ready, so cancellation only
-		// happens when `read` is blocked with zero bytes in flight (the actual
-		// deadlock-relevant case). TODO: vendor `peeroxide-dht::SecretStream` to add
-		// `into_split()` so reader/writer have independent state and full cancel-safety.
+		let (mut reader, mut writer) = conn.peer.stream.into_split();
 		let inbound = bridge.0.inbound_dispatch.clone();
-		loop {
-			tokio::select! {
-				biased;
-				msg = conn.peer.stream.read() => {
-					match msg {
-						Ok(Some(plaintext)) => {
-							match decode_length_prefixed(&plaintext) {
-								Ok((decoded_target, payload)) => {
-									if decoded_target != local_party_id {
-										log::warn!(
-											target: "avenos::peeroxide",
-											"dropping mis-addressed groove frame from {remote_client:?}; target={decoded_target:?}, local={local_party_id:?}",
-										);
-										continue;
-									}
-									let entry = InboxEntry {
-										source: Source::Client(remote_client),
-										payload,
-									};
-									if inbound.send(entry).is_err() {
-										break;
+
+		// Notify both halves to tear down when either side dies, so we don't
+		// leak a half-task hanging on a dead socket.
+		let shutdown = Arc::new(Notify::new());
+
+		// Reader task: pure inbound — decode every frame, dispatch to Groove.
+		let reader_handle = tokio::spawn({
+			let shutdown = Arc::clone(&shutdown);
+			async move {
+				loop {
+					tokio::select! {
+						_ = shutdown.notified() => break,
+						msg = reader.read() => {
+							match msg {
+								Ok(Some(plaintext)) => {
+									match decode_length_prefixed(&plaintext) {
+										Ok((decoded_target, payload)) => {
+											if decoded_target != local_party_id {
+												log::warn!(
+													target: "avenos::peeroxide",
+													"dropping mis-addressed groove frame from {remote_client:?}; target={decoded_target:?}, local={local_party_id:?}",
+												);
+												continue;
+											}
+											let entry = InboxEntry {
+												source: Source::Client(remote_client),
+												payload,
+											};
+											if inbound.send(entry).is_err() {
+												break;
+											}
+										}
+										Err(msg) => {
+											log::warn!(target: "avenos::peeroxide", "groove capsule decode failed: {msg}");
+										}
 									}
 								}
-								Err(msg) => {
-									log::warn!(target: "avenos::peeroxide", "groove capsule decode failed: {msg}");
+								Ok(None) => break,
+								Err(e) => {
+									log::debug!(target: "avenos::peeroxide", "peer stream read stopped: {e:?}");
+									break;
 								}
 							}
 						}
-						Ok(None) => break,
-						Err(e) => {
-							log::debug!(target: "avenos::peeroxide", "peer stream read stopped: {e:?}");
-							break;
+					}
+				}
+				// Reader exited → signal writer to stop too.
+				shutdown.notify_waiters();
+			}
+		});
+
+		// Writer task: pure outbound — pull capsules from the bridge's mpsc
+		// and encrypt-write them. No cancellation here either; we only stop
+		// on a write error or shutdown signal from the reader.
+		let writer_handle = tokio::spawn({
+			let shutdown = Arc::clone(&shutdown);
+			let mut capsule_rx = capsule_rx;
+			async move {
+				loop {
+					tokio::select! {
+						_ = shutdown.notified() => break,
+						capsule_opt = capsule_rx.recv() => {
+							let Some(data) = capsule_opt else { break };
+							if let Err(e) = writer.write(&data).await {
+								log::warn!(
+									target: "avenos::peeroxide",
+									"peer stream write failed peer={remote_client:?}: {e:?}",
+								);
+								break;
+							}
 						}
 					}
 				}
-				capsule_opt = capsule_rx.recv() => {
-					let Some(data) = capsule_opt else { break };
-					if let Err(e) = conn.peer.stream.write(&data).await {
-						log::warn!(
-							target: "avenos::peeroxide",
-							"peer stream write failed peer={remote_client:?}: {e:?}",
-						);
-						break;
-					}
-				}
+				let _ = writer.shutdown().await;
+				shutdown.notify_waiters();
 			}
-		}
+		});
 
-		let _ = conn.peer.stream.shutdown().await;
+		// Park until both halves wind down.
+		let _ = tokio::join!(reader_handle, writer_handle);
 
 		bridge
 			.0
@@ -254,11 +283,9 @@ impl HyperswarmGrooveBridge {
 
 		let groove_bridge = HyperswarmGrooveBridge(Arc::clone(&self.0));
 
-		// IMPORTANT: pass the `SwarmConnection` by value into the owning task. Earlier
-		// versions wrapped it in `Arc<Mutex<SwarmConnection>>` and ran read+write on
-		// separate tasks, which deadlocked permanently because `SecretStream::read`
-		// suspends the task while holding the connection mutex (see `multiplex_connection`
-		// docs above).
+		// `multiplex_connection` internally splits the SecretStream and spawns
+		// independent reader + writer tasks — see its doc comment for the
+		// rationale (deadlock + cancel-safety hazards of the prior designs).
 		let h = tokio::spawn(async move {
 			let local_party_id = groove_bridge.wait_until_local_party().await;
 			HyperswarmGrooveBridge::multiplex_connection(
