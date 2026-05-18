@@ -2,14 +2,9 @@
 	import { goto } from '$app/navigation'
 	import { browser } from '$app/environment'
 	import { page } from '$app/state'
-	import type { SparksRow, TodosRow } from '@avenos/jazz-schema'
-	import {
-		jazzBootstrap,
-		jazzSession,
-		jazzStatus,
-		jazzTable,
-		type JazzSessionReply,
-	} from '$lib/jazz/api'
+	import type { TodosRow } from '@avenos/jazz-schema'
+	import { jazzSession, jazzTable, type JazzSessionReply } from '$lib/jazz/api'
+	import { jazzTableStore } from '$lib/jazz/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/self/device-session-store'
 
@@ -17,9 +12,6 @@
 	const decodedSparkId = $derived(decodeURIComponent(sparkParam))
 
 	let session = $state<JazzSessionReply | undefined>()
-	let sparkMeta = $state<SparksRow | undefined>()
-	let sparksResolved = $state(false)
-	let allTodos = $state<TodosRow[]>([])
 	let err = $state<string | undefined>()
 	let titleDraft = $state('')
 	let addBusy = $state(false)
@@ -29,14 +21,21 @@
 	let editDraft = $state('')
 
 	const todosApi = jazzTable('todos')
-	const sparksApi = jazzTable('sparks')
+
+	// Reactive stores: rows update on every local CRUD AND every inbound peer-sync delta.
+	const sparksStore = jazzTableStore('sparks')
+	const todosStore = jazzTableStore('todos')
 
 	function idsMatch(a: string, b: string): boolean {
 		return a.trim().toLowerCase() === b.trim().toLowerCase()
 	}
 
+	const sparkMeta = $derived(
+		sparksStore.rows.find((s) => idsMatch(s.spark_id, decodedSparkId)),
+	)
+	const sparksResolved = $derived(sparksStore.loaded)
 	const canonicalSparkId = $derived(sparkMeta?.spark_id ?? decodedSparkId)
-	const rows = $derived(allTodos.filter((r) => idsMatch(r.spark_id, canonicalSparkId)))
+	const rows = $derived(todosStore.rows.filter((r) => idsMatch(r.spark_id, canonicalSparkId)))
 
 	function focusEditable(node: HTMLInputElement) {
 		queueMicrotask(() => {
@@ -51,48 +50,26 @@
 	)
 	const tauri = $derived(browser && isTauriRuntime())
 
+	// Session is one-shot per identity; both stores above subscribe themselves.
 	$effect(() => {
-		if (!tauri || !unlocked || !decodedSparkId) {
-			allTodos = []
+		if (!tauri || !unlocked) {
 			session = undefined
-			sparkMeta = undefined
-			sparksResolved = false
 			return
 		}
-
 		let cancelled = false
-		let unlisten: (() => void) | undefined
-
-		void (async () => {
-			sparksResolved = false
-			sparkMeta = undefined
-			try {
-				err = undefined
-				const status = await jazzStatus()
-				if (!status.ready) {
-					await jazzBootstrap()
-				}
-				session = await jazzSession().catch(() => undefined)
-				const sparks = await sparksApi.list()
-				if (!cancelled) {
-					sparkMeta = sparks.find((s) => idsMatch(s.spark_id, decodedSparkId))
-					sparksResolved = true
-				}
-				unlisten = await todosApi.subscribe((next) => {
-					if (!cancelled) allTodos = next
-				})
-			} catch (e) {
-				if (!cancelled) {
-					err = e instanceof Error ? e.message : String(e)
-					sparksResolved = true
-				}
-			}
-		})()
-
+		void jazzSession()
+			.then((s) => {
+				if (!cancelled) session = s
+			})
+			.catch(() => {})
 		return () => {
 			cancelled = true
-			unlisten?.()
 		}
+	})
+
+	const storeError = $derived(sparksStore.error ?? todosStore.error)
+	$effect(() => {
+		if (storeError) err = storeError
 	})
 
 	async function addTodo(): Promise<void> {

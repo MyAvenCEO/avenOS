@@ -2,55 +2,27 @@
 	import { goto } from '$app/navigation'
 	import { browser } from '$app/environment'
 	import type { SparksRow } from '@avenos/jazz-schema'
-	import { jazzBootstrap, jazzStatus, jazzTable } from '$lib/jazz/api'
+	import { jazzTableStore } from '$lib/jazz/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/self/device-session-store'
 
-	let sparks = $state<SparksRow[]>([])
-	let err = $state<string | undefined>()
-	let loading = $state(false)
-
-	const sparksApi = jazzTable('sparks')
+	const sparksStore = jazzTableStore('sparks')
 
 	const unlocked = $derived(
 		$deviceSession.kind === 'unlocked' || $deviceSession.kind === 'dev_bypass',
 	)
 	const tauri = $derived(browser && isTauriRuntime())
 
+	// Snapshot is reactive: peer-sync deltas land in `sparksStore.rows` automatically.
+	const sparks = $derived(
+		[...sparksStore.rows].sort((a, b) => a.name.localeCompare(b.name)),
+	)
+	const loading = $derived(tauri && unlocked && !sparksStore.loaded && !sparksStore.error)
+
 	function sparkSubtitle(row: SparksRow): string {
 		const id = row.spark_id
 		return id.length > 14 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id
 	}
-
-	$effect(() => {
-		if (!tauri || !unlocked) {
-			sparks = []
-			return
-		}
-
-		let cancelled = false
-
-		void (async () => {
-			loading = true
-			err = undefined
-			try {
-				const status = await jazzStatus()
-				if (!status.ready) {
-					await jazzBootstrap()
-				}
-				const list = await sparksApi.list()
-				if (!cancelled) sparks = [...list].sort((a, b) => a.name.localeCompare(b.name))
-			} catch (e) {
-				if (!cancelled) err = e instanceof Error ? e.message : String(e)
-			} finally {
-				if (!cancelled) loading = false
-			}
-		})()
-
-		return () => {
-			cancelled = true
-		}
-	})
 </script>
 
 <svelte:head>
@@ -74,8 +46,8 @@
 		<p class="text-muted-foreground text-sm">Open this screen in the AvenOS desktop app to load workspaces.</p>
 	{:else if !unlocked}
 		<p class="text-muted-foreground text-sm">Unlock with Touch ID to load your Groove data.</p>
-	{:else if err}
-		<p class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border px-3 py-2 text-sm" role="alert">{err}</p>
+	{:else if sparksStore.error}
+		<p class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border px-3 py-2 text-sm" role="alert">{sparksStore.error}</p>
 	{:else if loading}
 		<p class="text-muted-foreground text-sm">Loading workspaces…</p>
 	{:else if sparks.length === 0}

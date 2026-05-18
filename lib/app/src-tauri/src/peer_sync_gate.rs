@@ -45,6 +45,14 @@ pub struct BiscuitGatedPeerTransport {
 	inner: Arc<dyn PeerTransport>,
 	cid_did: PeerClientIdMap,
 	acl: Arc<RwLock<Option<SyncAclSnapshot>>>,
+	/// Optional MPSC sender wired to [`ManagedJazz::run_table_change_drain`]. When a
+	/// peer-sync `ObjectUpdated` arrives carrying a `Table` metadata key we post the
+	/// table name here so the drain can re-query and republish the snapshot on the
+	/// per-table broadcaster (driving the webview's `jazz:<table>:changed` event).
+	///
+	/// Optional rather than required because tests construct the gate without a Tauri
+	/// runtime; dropping the notify is a no-op.
+	change_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 }
 
 impl BiscuitGatedPeerTransport {
@@ -52,11 +60,13 @@ impl BiscuitGatedPeerTransport {
 		inner: Arc<dyn PeerTransport>,
 		cid_did: PeerClientIdMap,
 		acl: Arc<RwLock<Option<SyncAclSnapshot>>>,
+		change_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 	) -> Self {
 		Self {
 			inner,
 			cid_did,
 			acl,
+			change_tx,
 		}
 	}
 }
@@ -103,6 +113,14 @@ impl PeerTransport for BiscuitGatedPeerTransport {
 			target: "avenos::peer_sync_gate",
 			"recv inbound src={src} variant={variant} table={tbl:?} commits={commits}",
 		);
+		// Notify the table-change drain so the webview's `jazz:<table>:changed`
+		// subscribers see this peer delta without requiring a manual refresh.
+		// We post before returning the entry: Groove applies it immediately after
+		// `recv_inbound` returns, and the drain debounces ~50ms which is plenty
+		// of headroom for that apply to land before we re-query.
+		if let (Some(table), Some(tx)) = (tbl.as_ref(), self.change_tx.as_ref()) {
+			let _ = tx.send(table.clone());
+		}
 		Some(entry)
 	}
 

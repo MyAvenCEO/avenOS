@@ -82,16 +82,132 @@ pub struct ManagedJazz {
 	shell: Mutex<Option<std::sync::Arc<jazz_engine::ShellState>>>,
 	/// Shared with [`BiscuitGatedPeerTransport`] — spark biscuit snapshot for outbound sync policy.
 	pub(crate) sync_acl: Arc<RwLock<Option<SyncAclSnapshot>>>,
+	/// MPSC sender shared with [`BiscuitGatedPeerTransport::recv_inbound`] (peer-sync deltas)
+	/// and any future write-path notifier. Sending a table name on this channel asks the
+	/// background drain task (see [`run_table_change_drain`]) to coalesce, re-query the
+	/// table, and republish the snapshot on the per-table broadcaster — which is what
+	/// powers `jazz:<table>:changed` Tauri events for the webview. Local CRUD calls
+	/// continue to invoke `snapshot_broadcast` directly because they already hold the
+	/// shell/client locks and can publish without an extra round-trip.
+	pub(crate) change_tx: tokio::sync::mpsc::UnboundedSender<String>,
+	/// Receiver moved out of here by [`take_change_rx`] once at startup; afterwards this
+	/// stays `None`. Kept inside `std::sync::Mutex` so we can extract it from
+	/// `tauri::setup` without an async runtime.
+	change_rx: std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<String>>>,
 }
 
 impl Default for ManagedJazz {
 	fn default() -> Self {
+		let (change_tx, change_rx) = tokio::sync::mpsc::unbounded_channel();
 		Self {
 			conn: Mutex::new(JazzConn::default()),
 			table_txs: RwLock::new(HashMap::new()),
 			shell: Mutex::new(None),
 			sync_acl: Arc::new(RwLock::new(None)),
+			change_tx,
+			change_rx: std::sync::Mutex::new(Some(change_rx)),
 		}
+	}
+}
+
+impl ManagedJazz {
+	/// Consumes the receiver once. Subsequent calls return `None`. Called from
+	/// `tauri::Builder::setup` so the drain task can own the receiver for the
+	/// lifetime of the process.
+	pub fn take_change_rx(&self) -> Option<tokio::sync::mpsc::UnboundedReceiver<String>> {
+		self.change_rx
+			.lock()
+			.expect("change_rx poisoned")
+			.take()
+	}
+}
+
+/// Background loop that coalesces table-change notifications into one `snapshot_broadcast`
+/// per table per ~50ms window. Spawned once from `tauri::Builder::setup`.
+///
+/// Why coalesce: a single inbound sync delta from a peer can fire many `ObjectUpdated`
+/// commits in quick succession for the same table; without coalescing we'd re-query the
+/// store and serialize the snapshot once per commit, which is wasted work and noisy on
+/// the event channel.
+///
+/// Why on a separate task: peer-sync's `recv_inbound` is called from inside the Groove
+/// sync loop, which holds its own locks. Doing the snapshot query inline would risk
+/// re-entering the `JazzConn` mutex and stalling Groove. Posting to an unbounded MPSC
+/// keeps `recv_inbound` non-blocking; the drain task takes the locks at its own pace.
+pub async fn run_table_change_drain(
+	app: tauri::AppHandle,
+	mut rx: tokio::sync::mpsc::UnboundedReceiver<String>,
+) {
+	use std::collections::HashSet;
+	use std::time::Duration;
+
+	const COALESCE_WINDOW: Duration = Duration::from_millis(50);
+
+	loop {
+		let Some(first) = rx.recv().await else {
+			log::debug!(
+				target: "avenos::jazz",
+				"table-change drain: channel closed, exiting",
+			);
+			return;
+		};
+		let mut pending: HashSet<String> = HashSet::new();
+		pending.insert(first);
+
+		let sleep = tokio::time::sleep(COALESCE_WINDOW);
+		tokio::pin!(sleep);
+		loop {
+			tokio::select! {
+				_ = &mut sleep => break,
+				next = rx.recv() => match next {
+					Some(t) => { pending.insert(t); }
+					None => return,
+				}
+			}
+		}
+
+		let jazz = app.state::<ManagedJazz>();
+		let self_state = app.state::<SelfState>();
+
+		// Snapshot needs `&JazzClient + &ShellState`. Acquire the jazz conn lock once
+		// for the whole batch — held briefly because `query_table_publish` only reads.
+		let mut jc = jazz.conn.lock().await;
+		if ensure_jazz_connection(&mut jc, &jazz, &app, &self_state)
+			.await
+			.is_err()
+		{
+			// Locked or no identity: nothing to publish; drop the batch.
+			continue;
+		}
+		let Some(ref client) = jc.client else { continue };
+		let shell = match jazz_shell_ready(&jazz, &self_state, client).await {
+			Ok(s) => s,
+			Err(e) => {
+				log::debug!(
+					target: "avenos::jazz",
+					"table-change drain: shell not ready ({e}); skip batch ({} table(s))",
+					pending.len(),
+				);
+				continue;
+			}
+		};
+
+		for table in pending {
+			match jazz
+				.snapshot_broadcast(client, shell.as_ref(), &table)
+				.await
+			{
+				Ok(()) => log::debug!(
+					target: "avenos::jazz",
+					"table-change drain: republished {table}",
+				),
+				Err(e) => log::warn!(
+					target: "avenos::jazz",
+					"table-change drain: snapshot_broadcast({table}) failed: {e}",
+				),
+			}
+		}
+		drop(jc);
 	}
 }
 
@@ -551,6 +667,7 @@ async fn jazz_connect(
 			inner_transport,
 			cid_map,
 			Arc::clone(&mj.sync_acl),
+			Some(mj.change_tx.clone()),
 		));
 
 		let client = JazzClient::connect_with_peer_transport(ctx, gated)

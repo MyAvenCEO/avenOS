@@ -464,6 +464,20 @@ pub fn run() {
 				log::error!("GENESIS_NETWORK_ID bootstrap: {e}");
 			}
 
+			// Start the table-change drain so peer-sync deltas reach the webview without
+			// requiring a manual refresh. Local CRUD already calls `snapshot_broadcast`
+			// inline; this drain is what closes the loop for *remote* writes.
+			let mj_drain = app.state::<jazz::ManagedJazz>();
+			if let Some(rx) = mj_drain.take_change_rx() {
+				let handle_for_drain = app.handle().clone();
+				tauri::async_runtime::spawn(jazz::run_table_change_drain(handle_for_drain, rx));
+			} else {
+				log::warn!(
+					target: "avenos::jazz",
+					"table-change drain receiver already taken; webview will only refresh on local writes",
+				);
+			}
+
 			let handle_for_lock = app.handle().clone();
 			let _vault_lock_listen = app.listen("self:did-lock", move |_event| {
 				let handle = handle_for_lock.clone();

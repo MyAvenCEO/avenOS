@@ -7,21 +7,24 @@
 		jazzBootstrap,
 		jazzSession,
 		jazzStatus,
-		jazzTable,
 		sparkAdminAdd,
 		sparkAdminList,
 		type JazzSessionReply,
 	} from '$lib/jazz/api'
+	import { jazzTableStore } from '$lib/jazz/store.svelte'
 	import type { PeerRowReply } from '$lib/peer/api'
 	import { peerList } from '$lib/peer/api'
 	import { deviceSession } from '$lib/self/device-session-store'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 
-	let sparks = $state<SparksRow[]>([])
-	let sparksErr = $state<string | undefined>()
-	let sparksLoading = $state(false)
+	const sparksStore = jazzTableStore('sparks')
 
-	const sparksApi = jazzTable('sparks')
+	// Snapshot is reactive: peer-sync deltas refresh `sparksStore.rows` automatically,
+	// so granting another device admin appears here without a manual reload.
+	const sparks = $derived<SparksRow[]>(
+		[...sparksStore.rows].sort((a, b) => a.name.localeCompare(b.name)),
+	)
+	const sparksErr = $derived(sparksStore.error)
 
 	const sparkRaw = $derived(page.url.searchParams.get('spark')?.trim() ?? '')
 	const sparkId = $derived(sparkRaw ? decodeURIComponent(sparkRaw) : '')
@@ -89,27 +92,7 @@
 		goto(`/self/workspaces?spark=${encodeURIComponent(id)}`)
 	}
 
-	async function loadSparks(): Promise<void> {
-		if (!tauri || !unlocked) {
-			sparks = []
-			return
-		}
-
-		let cancelled = false
-		sparksLoading = true
-		sparksErr = undefined
-
-		try {
-			const status = await jazzStatus()
-			if (!status.ready) await jazzBootstrap()
-			const list = await sparksApi.list()
-			if (!cancelled) sparks = [...list].sort((a, b) => a.name.localeCompare(b.name))
-		} catch (e) {
-			if (!cancelled) sparksErr = e instanceof Error ? e.message : String(e)
-		} finally {
-			if (!cancelled) sparksLoading = false
-		}
-	}
+	// `sparks` is now driven by `jazzTableStore('sparks')` above — no manual loader.
 
 	async function loadSessionAndAdmins(): Promise<void> {
 		if (!tauri || !unlocked) {
@@ -165,12 +148,6 @@
 	let defaultedUrl = $state(false)
 
 	const hasSparkQuery = $derived(page.url.searchParams.has('spark'))
-
-	$effect(() => {
-		sessionKind
-		browser
-		void loadSparks()
-	})
 
 	$effect(() => {
 		if (!browser || !tauri || !unlocked) return
@@ -278,7 +255,7 @@
 
 	<section class="space-y-3">
 		<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">Workspaces</h2>
-		{#if tauri && unlocked && sparksLoading}
+		{#if tauri && unlocked && !sparksStore.loaded && !sparksErr}
 			<p class="text-muted-foreground text-sm">Loading workspaces…</p>
 		{:else if tauri && unlocked && sparks.length === 0}
 			<p class="text-muted-foreground text-sm">No sparks yet — bootstrap normally provisions one after unlock.</p>
