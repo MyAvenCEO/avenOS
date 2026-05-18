@@ -11,13 +11,13 @@
 		sparkAdminList,
 		type JazzSessionReply,
 	} from '$lib/jazz/api'
-	import { jazzTableStore } from '$lib/jazz/store.svelte'
+	import { jazzStore } from '$lib/jazz/store.svelte'
 	import type { PeerRowReply } from '$lib/peer/api'
 	import { peerList } from '$lib/peer/api'
 	import { deviceSession } from '$lib/self/device-session-store'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 
-	const sparksStore = jazzTableStore('sparks')
+	const sparksStore = jazzStore('sparks')
 
 	// Snapshot is reactive: peer-sync deltas refresh `sparksStore.rows` automatically,
 	// so granting another device admin appears here without a manual reload.
@@ -92,7 +92,7 @@
 		goto(`/self/workspaces?spark=${encodeURIComponent(id)}`)
 	}
 
-	// `sparks` is now driven by `jazzTableStore('sparks')` above — no manual loader.
+	// `sparks` is driven by `jazzStore('sparks')` above — no manual loader.
 
 	async function loadSessionAndAdmins(): Promise<void> {
 		if (!tauri || !unlocked) {

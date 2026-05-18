@@ -2,11 +2,11 @@
 	import { goto } from '$app/navigation'
 	import { browser } from '$app/environment'
 	import type { SparksRow } from '@avenos/jazz-schema'
-	import { jazzTableStore } from '$lib/jazz/store.svelte'
+	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/self/device-session-store'
 
-	const sparksStore = jazzTableStore('sparks')
+	const sparksStore = jazzStore('sparks')
 
 	const unlocked = $derived(
 		$deviceSession.kind === 'unlocked' || $deviceSession.kind === 'dev_bypass',

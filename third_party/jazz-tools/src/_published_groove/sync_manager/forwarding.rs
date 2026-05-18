@@ -35,7 +35,7 @@ impl SyncManager {
     }
 
     /// Forward an update to clients whose scope includes this object/branch.
-    pub(super) fn forward_update_to_clients(
+    pub fn forward_update_to_clients(
         &mut self,
         object_id: ObjectId,
         branch_name: BranchName,
@@ -52,7 +52,7 @@ impl SyncManager {
     /// otherwise drop every outbound sync frame. The transport layer wraps this in
     /// `BiscuitGatedPeerTransport` which performs row-level biscuit/spark auth, so
     /// broadcasting to Peer clients here is safe.
-    pub(super) fn forward_update_to_clients_except(
+    pub fn forward_update_to_clients_except(
         &mut self,
         object_id: ObjectId,
         branch_name: BranchName,

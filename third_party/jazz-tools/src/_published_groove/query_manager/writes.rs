@@ -1,9 +1,19 @@
+//! Row writes and sync fanout.
+//!
+//! **AvenOS fork:** AvenOS is pure P2P (`ClientRole::Peer` only). Local writes fan out via
+//! [`crate::sync_manager::SyncManager::forward_update_to_clients_except`] so paired peers
+//! receive updates. [`SyncManager::forward_update_to_servers`] is not invoked from this
+//! module — it remains for upstream tests / server-tier builds. Per-row authorization over
+//! Hyperswarm is enforced by the host app (e.g. `BiscuitGatedPeerTransport` in AvenOS).
+
 use std::collections::HashMap;
 
 use crate::commit::CommitId;
 use crate::metadata::{DeleteKind, MetadataKey, hard_delete_metadata, soft_delete_metadata};
 use crate::object::{BranchName, ObjectId};
 use crate::storage::Storage;
+use crate::sync_manager::ClientId;
+use uuid::Uuid;
 
 use super::encoding::{decode_row, encode_row};
 use super::manager::{DeleteHandle, InsertHandle, QueryError, QueryManager};
@@ -96,9 +106,8 @@ impl QueryManager {
             )
             .map_err(|e| QueryError::InternalError(format!("{e:?}")))?;
 
-        // Forward new row to all connected servers
         self.sync_manager
-            .forward_update_to_servers(object_id, branch.into());
+            .forward_update_to_clients_except(object_id, branch.into(), ClientId(Uuid::nil()));
 
         // Update indices immediately and persist
         self.update_indices_for_insert(storage, table, object_id, &data, &descriptor)?;
@@ -192,9 +201,8 @@ impl QueryManager {
             )
             .map_err(|e| QueryError::InternalError(format!("{e:?}")))?;
 
-        // Forward new row to all connected servers
         self.sync_manager
-            .forward_update_to_servers(object_id, branch.into());
+            .forward_update_to_clients_except(object_id, branch.into(), ClientId(Uuid::nil()));
 
         // Update indices on specified branch
         Self::update_indices_for_insert_on_branch(
@@ -449,10 +457,10 @@ impl QueryManager {
             )
             .map_err(|e| QueryError::InternalError(format!("add_commit: {e:?}")))?;
 
-        // Forward update to all connected servers
+        // AvenOS fork: fan out to peer clients (pure P2P; see module doc).
         let branch = self.current_branch();
         self.sync_manager
-            .forward_update_to_servers(id, branch.into());
+            .forward_update_to_clients_except(id, branch.into(), ClientId(Uuid::nil()));
 
         // Update indices and persist modified nodes
         self.update_indices_for_update(
@@ -590,11 +598,11 @@ impl QueryManager {
             )
             .map_err(|e| QueryError::InternalError(format!("add_commit: {e:?}")))?;
 
-        // Forward delete to all connected servers
+        // AvenOS fork: fan out to peer clients (pure P2P; see module doc).
         {
             let branch = self.current_branch();
             self.sync_manager
-                .forward_update_to_servers(id, branch.into());
+                .forward_update_to_clients_except(id, branch.into(), ClientId(Uuid::nil()));
         }
 
         // Update indices: remove from _id and column indices, add to _id_deleted

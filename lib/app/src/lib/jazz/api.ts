@@ -81,10 +81,10 @@ export async function jazzExplorerSubscribe(
 	return unlisten
 }
 
-type DbRowExtraOmit<R> = 'spark_id' extends keyof R ? 'spark_id' : never
+export type DbRowExtraOmit<R> = 'spark_id' extends keyof R ? 'spark_id' : never
 
 /** Omit `id` (and `spark_id` when the row has one); shell may inject `spark_id`. */
-type JazzCreatePayload<R extends { id: string }> = Omit<
+export type JazzCreatePayload<R extends { id: string }> = Omit<
 	R,
 	'id' | DbRowExtraOmit<R>
 > &

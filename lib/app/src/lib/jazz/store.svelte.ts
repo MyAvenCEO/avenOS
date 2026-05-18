@@ -4,42 +4,44 @@ import { browser } from '$app/environment'
 import type { SchemaTables } from '@avenos/jazz-schema'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { deviceSession } from '$lib/self/device-session-store'
-import { jazzBootstrap, jazzStatus, jazzTable } from './api'
+import { type JazzCreatePayload, jazzBootstrap, jazzStatus, jazzTable } from './api'
 
-export type JazzTableStore<TName extends keyof SchemaTables> = {
+export type JazzStore<TName extends keyof SchemaTables> = {
 	/** Current snapshot. Empty array until the first publish lands. */
 	readonly rows: SchemaTables[TName][]
-	/** `true` once the first snapshot (or a terminal error) has been observed. */
 	readonly loaded: boolean
-	/** Last subscription error, if any. */
 	readonly error: string | undefined
+
+	get(id: string): Promise<SchemaTables[TName]>
+	create(values: JazzCreatePayload<SchemaTables[TName]>): Promise<SchemaTables[TName]>
+	update(id: string, patch: Partial<Omit<SchemaTables[TName], 'id'>>): Promise<SchemaTables[TName]>
+	delete(id: string): Promise<void>
 }
 
+/** @deprecated Prefer `jazzStore` — same implementation. Will remove after one revision. */
+export type JazzTableStore<TName extends keyof SchemaTables> = Pick<
+	JazzStore<TName>,
+	'rows' | 'loaded' | 'error'
+>
+
 /**
- * Auto-subscribing Svelte-5 rune store for one Jazz table.
+ * Svelte 5 handle for **one Jazz table**: reactive snapshot + mutations over the unified
+ * `change_tx` drain (local CRUD and peer deltas both converge on `jazz:<table>:changed`).
  *
- * The Rust shell owns the data: snapshots arrive over `jazz:<table>:changed` Tauri
- * events on every local CRUD AND on every inbound peer-sync delta (see
- * `ManagedJazz::run_table_change_drain`). Components do not need to re-fetch on user
- * interaction — keystrokes, focus changes, navigation, etc. are decoupled from data
- * freshness.
+ * Prefer this over juggling `jazzTable(t).subscribe` separately from `.create`/`.update`.
  *
- * Lifecycle:
- *   - Subscribes lazily after `deviceSession` is unlocked (Touch-ID or dev bypass).
- *   - Resubscribes if the vault locks then unlocks again (rows reset to `[]` first
- *     so stale data doesn't leak across identities).
- *   - Tears down on component destroy.
- *
- * MUST be called from a component's `<script>` initialisation (uses `onDestroy`).
+ * MUST be called from component `<script>` init (uses `onDestroy`).
  */
-export function jazzTableStore<TName extends keyof SchemaTables>(
+export function jazzStore<TName extends keyof SchemaTables>(
 	table: TName,
-): JazzTableStore<TName> {
+): JazzStore<TName> {
 	type Row = SchemaTables[TName]
 
 	let rows = $state<Row[]>([])
 	let loaded = $state(false)
 	let error = $state<string | undefined>()
+
+	const api = jazzTable(table)
 
 	let unlisten: (() => void) | undefined
 	let alive = true
@@ -54,7 +56,7 @@ export function jazzTableStore<TName extends keyof SchemaTables>(
 		try {
 			const status = await jazzStatus()
 			if (!status.ready) await jazzBootstrap()
-			const u = await jazzTable(table).subscribe((next) => {
+			const u = await api.subscribe((next) => {
 				if (!alive) return
 				rows = next as Row[]
 				loaded = true
@@ -73,9 +75,6 @@ export function jazzTableStore<TName extends keyof SchemaTables>(
 
 	void start()
 
-	// Re-subscribe across vault lock/unlock so a fresh identity starts from a clean
-	// snapshot instead of inheriting the previous one. `deviceSession.subscribe` fires
-	// once eagerly with the current value; skip that first fire.
 	let prevKind: string | null = null
 	const stopWatch = deviceSession.subscribe(($s) => {
 		const k = $s.kind
@@ -109,5 +108,24 @@ export function jazzTableStore<TName extends keyof SchemaTables>(
 		get error() {
 			return error
 		},
+		get(id: string) {
+			return api.get(id)
+		},
+		create(values: JazzCreatePayload<Row>) {
+			return api.create(values)
+		},
+		update(id: string, patch: Partial<Omit<Row, 'id'>>) {
+			return api.update(id, patch)
+		},
+		delete(id: string) {
+			return api.delete(id)
+		},
 	}
+}
+
+/** @deprecated Use [`jazzStore`] */
+export function jazzTableStore<TName extends keyof SchemaTables>(
+	table: TName,
+): JazzStore<TName> {
+	return jazzStore(table)
 }

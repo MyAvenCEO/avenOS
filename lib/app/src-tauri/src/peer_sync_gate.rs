@@ -152,6 +152,10 @@ fn payload_variant(p: &SyncPayload) -> &'static str {
 }
 
 fn should_forward(acl: &Arc<RwLock<Option<SyncAclSnapshot>>>, dest_did: &str, payload: &SyncPayload) -> bool {
+	// TODO(perf): consider filtering unauthorized peers earlier (e.g. in Groove's
+	// `queue_tips_to_client`) so we skip serializing payloads for DID↔spark pairs that
+	// will never pass this check. Security is correct today: every outbound frame is
+	// evaluated here (`spark_peer_is_owner`) before Hyperswarm.
 	if payload.is_catalogue() {
 		return true;
 	}

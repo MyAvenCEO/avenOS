@@ -82,13 +82,10 @@ pub struct ManagedJazz {
 	shell: Mutex<Option<std::sync::Arc<jazz_engine::ShellState>>>,
 	/// Shared with [`BiscuitGatedPeerTransport`] — spark biscuit snapshot for outbound sync policy.
 	pub(crate) sync_acl: Arc<RwLock<Option<SyncAclSnapshot>>>,
-	/// MPSC sender shared with [`BiscuitGatedPeerTransport::recv_inbound`] (peer-sync deltas)
-	/// and any future write-path notifier. Sending a table name on this channel asks the
-	/// background drain task (see [`run_table_change_drain`]) to coalesce, re-query the
-	/// table, and republish the snapshot on the per-table broadcaster — which is what
-	/// powers `jazz:<table>:changed` Tauri events for the webview. Local CRUD calls
-	/// continue to invoke `snapshot_broadcast` directly because they already hold the
-	/// shell/client locks and can publish without an extra round-trip.
+	/// MPSC sender for **all** UI-facing table deltas: paired peer inbound sync and local
+	/// IPC writes both post `(table)` here. The drain task [`run_table_change_drain`] is
+	/// the sole caller of [`ManagedJazz::snapshot_broadcast`], keeping one code path from
+	/// "row changed somewhere" → `jazz:<table>:changed` for the webview.
 	pub(crate) change_tx: tokio::sync::mpsc::UnboundedSender<String>,
 	/// Receiver moved out of here by [`take_change_rx`] once at startup; afterwards this
 	/// stays `None`. Kept inside `std::sync::Mutex` so we can extract it from
@@ -123,7 +120,7 @@ impl ManagedJazz {
 }
 
 /// Background loop that coalesces table-change notifications into one `snapshot_broadcast`
-/// per table per ~50ms window. Spawned once from `tauri::Builder::setup`.
+/// per table per ~25ms window. Spawned once from `tauri::Builder::setup`.
 ///
 /// Why coalesce: a single inbound sync delta from a peer can fire many `ObjectUpdated`
 /// commits in quick succession for the same table; without coalescing we'd re-query the
@@ -141,7 +138,7 @@ pub async fn run_table_change_drain(
 	use std::collections::HashSet;
 	use std::time::Duration;
 
-	const COALESCE_WINDOW: Duration = Duration::from_millis(50);
+	const COALESCE_WINDOW: Duration = Duration::from_millis(25);
 
 	loop {
 		let Some(first) = rx.recv().await else {
@@ -496,6 +493,12 @@ impl ManagedJazz {
 		tx
 	}
 
+	/// Re-query `table` through the shell and push the JSON snapshot to every
+	/// `jazz:<table>:changed` subscriber via the in-process broadcast channel.
+	///
+	/// **Sole production caller:** [`run_table_change_drain`]. Local IPC and
+	/// peer-sync both notify through [`ManagedJazz::change_tx`] so the webview
+	/// has one code path from "row changed somewhere" to Tauri emit.
 	pub async fn snapshot_broadcast(
 		&self,
 		client: &JazzClient,
@@ -1026,9 +1029,10 @@ pub async fn spark_admin_add(
 	let mut jc2 = jazz.conn.lock().await;
 	ensure_jazz_connection(&mut jc2, &jazz, &app, &self_state).await?;
 	let client2 = jc2.client.as_ref().expect("jazz connected");
-	let shell_new = jazz_shell_ready(&jazz, &self_state, client2).await?;
-	jazz.snapshot_broadcast(client2, shell_new.as_ref(), "sparks").await?;
-	jazz.snapshot_broadcast(client2, shell_new.as_ref(), "keyshares").await?;
+	let _shell_new = jazz_shell_ready(&jazz, &self_state, client2).await?;
+	drop(jc2);
+	let _ = jazz.change_tx.send("sparks".to_string());
+	let _ = jazz.change_tx.send("keyshares".to_string());
 
 	Ok(())
 }
@@ -1183,7 +1187,7 @@ pub async fn jazz_create(
 			ENCRYPTED_META,
 		)?;
 
-		jazz.snapshot_broadcast(client, &shell, &table).await?;
+		let _ = jazz.change_tx.send(table.clone());
 
 		#[cfg(target_os = "macos")]
 		{
@@ -1260,7 +1264,7 @@ pub async fn jazz_create(
 		ENCRYPTED_META,
 	)?;
 
-	jazz.snapshot_broadcast(client, &shell, &table).await?;
+	let _ = jazz.change_tx.send(table.clone());
 
 	Ok(reply)
 }
@@ -1363,7 +1367,7 @@ pub async fn jazz_update(
 			)
 		})?;
 
-	jazz.snapshot_broadcast(client, &shell, &table).await?;
+	let _ = jazz.change_tx.send(table.clone());
 
 	drop(jc);
 	jazz_get(app.clone(), jazz, self_state, table, id.to_string()).await
@@ -1433,7 +1437,7 @@ pub async fn jazz_delete(
 				shell.groove_write_branch
 			)
 		})?;
-	jazz.snapshot_broadcast(client, &shell, &table).await?;
+	let _ = jazz.change_tx.send(table.clone());
 	Ok(())
 }
 

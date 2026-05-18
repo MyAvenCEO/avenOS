@@ -3,8 +3,8 @@
 	import { browser } from '$app/environment'
 	import { page } from '$app/state'
 	import type { TodosRow } from '@avenos/jazz-schema'
-	import { jazzSession, jazzTable, type JazzSessionReply } from '$lib/jazz/api'
-	import { jazzTableStore } from '$lib/jazz/store.svelte'
+	import { jazzSession, type JazzSessionReply } from '$lib/jazz/api'
+	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/self/device-session-store'
 
@@ -20,11 +20,8 @@
 	let editingId = $state<string | null>(null)
 	let editDraft = $state('')
 
-	const todosApi = jazzTable('todos')
-
-	// Reactive stores: rows update on every local CRUD AND every inbound peer-sync delta.
-	const sparksStore = jazzTableStore('sparks')
-	const todosStore = jazzTableStore('todos')
+	const sparksStore = jazzStore('sparks')
+	const todos = jazzStore('todos')
 
 	function idsMatch(a: string, b: string): boolean {
 		return a.trim().toLowerCase() === b.trim().toLowerCase()
@@ -35,7 +32,7 @@
 	)
 	const sparksResolved = $derived(sparksStore.loaded)
 	const canonicalSparkId = $derived(sparkMeta?.spark_id ?? decodedSparkId)
-	const rows = $derived(todosStore.rows.filter((r) => idsMatch(r.spark_id, canonicalSparkId)))
+	const rows = $derived(todos.rows.filter((r) => idsMatch(r.spark_id, canonicalSparkId)))
 
 	function focusEditable(node: HTMLInputElement) {
 		queueMicrotask(() => {
@@ -67,7 +64,7 @@
 		}
 	})
 
-	const storeError = $derived(sparksStore.error ?? todosStore.error)
+	const storeError = $derived(sparksStore.error ?? todos.error)
 	$effect(() => {
 		if (storeError) err = storeError
 	})
@@ -78,7 +75,7 @@
 		addBusy = true
 		err = undefined
 		try {
-			await todosApi.create({ title, done: false, spark_id: canonicalSparkId })
+			await todos.create({ title, done: false, spark_id: canonicalSparkId })
 			titleDraft = ''
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
@@ -113,7 +110,7 @@
 		listBusy = true
 		err = undefined
 		try {
-			await todosApi.update(row.id, { title: next })
+			await todos.update(row.id, { title: next })
 			cancelEdit()
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
@@ -127,7 +124,7 @@
 		listBusy = true
 		err = undefined
 		try {
-			await todosApi.update(row.id, { done: !row.done })
+			await todos.update(row.id, { done: !row.done })
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {
@@ -142,7 +139,7 @@
 		listBusy = true
 		err = undefined
 		try {
-			await todosApi.delete(row.id)
+			await todos.delete(row.id)
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {
