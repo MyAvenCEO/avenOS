@@ -43,12 +43,10 @@
 		return vaults[0]
 	})
 
-	const profileTitle = $derived.by(() => {
+	const profileName = $derived.by(() => {
 		const v = activeVault
 		if (!v) return 'Self'
-		const name = vaultCardTitle(v)
-		const dev = v.deviceLabel?.trim()
-		return dev ? `${name} ·` : name
+		return vaultCardTitle(v)
 	})
 
 	const profileDevice = $derived(activeVault?.deviceLabel?.trim() ?? '')
@@ -58,18 +56,13 @@
 		items: { href: string; label: string; match: (p: string) => boolean }[]
 	}[] = [
 		{
-			title: 'You',
+			title: 'Identities',
 			items: [
-				{ href: '/self', label: 'Profile & IDs', match: (p) => p === '/self' || p === '/self/' },
-			],
-		},
-		{
-			title: 'Devices',
-			items: [
+				{ href: '/self', label: 'Self', match: (p) => p === '/self' || p === '/self/' },
 				{
-					href: '/self/network',
-					label: 'Connect & trust',
-					match: (p) => p.startsWith('/self/network'),
+					href: '/self/peers',
+					label: 'Peers',
+					match: (p) => p.startsWith('/self/peers'),
 				},
 			],
 		},
@@ -78,28 +71,34 @@
 			items: [
 				{
 					href: '/self/workspaces',
-					label: 'Workspace sharing',
+					label: 'Share',
 					match: (p) => p.startsWith('/self/workspaces'),
 				},
 			],
 		},
 		{
 			title: 'Advanced',
-			items: [{ href: '/self/db', label: 'DB', match: (p) => p.startsWith('/self/db') }],
+			items: [
+				{
+					href: '/self/advanced/network',
+					label: 'Network',
+					match: (p) => p.startsWith('/self/advanced/network'),
+				},
+				{ href: '/self/db', label: 'DB', match: (p) => p.startsWith('/self/db') },
+			],
 		},
 	]
-
 </script>
 
 <div class="grid h-full min-h-0 w-full grid-cols-[14rem_1fr]">
 	<aside
-		class="flex min-h-0 flex-col border-r border-border/60 bg-card/20 px-3 py-6"
+		class="flex min-h-0 flex-col border-r border-border/60 bg-card/20 px-3 pt-1 pb-6"
 		aria-label="Self settings"
 	>
-		<div class="mb-4 px-3">
-			<h2 class="text-sm font-semibold tracking-tight">{profileTitle}</h2>
+		<div class="mb-3 space-y-0.5 px-3">
+			<h2 class="text-sm font-semibold tracking-tight">{profileName}</h2>
 			{#if profileDevice}
-				<p class="text-muted-foreground mt-0.5 text-[11px] leading-snug">{profileDevice}</p>
+				<p class="text-muted-foreground text-xs leading-snug">{profileDevice}</p>
 			{/if}
 		</div>
 
@@ -129,7 +128,7 @@
 	</aside>
 
 	<main class="min-h-0 overflow-y-auto">
-		<div class="mx-auto w-full max-w-3xl px-6 py-8 sm:px-8">
+		<div class="mx-auto w-full max-w-3xl px-6 pt-4 pb-8 sm:px-8">
 			{@render children()}
 		</div>
 	</main>

@@ -149,7 +149,7 @@
 </script>
 
 <svelte:head>
-	<title>{sparkMeta?.name ?? 'Workspace'} · Todos · AvenOS</title>
+	<title>{sparkMeta?.name ?? 'Spark'} · Todos · AvenOS</title>
 </svelte:head>
 
 <div class="mx-auto flex w-full max-w-xl flex-col gap-6 px-4 py-8 sm:px-6">
@@ -163,16 +163,16 @@
 		</button>
 		<div class="flex flex-wrap items-center gap-2">
 			<h1 class="text-2xl font-semibold tracking-tight">
-				{sparkMeta?.name ?? 'Workspace'} · Todos
+				{sparkMeta?.name ?? 'Spark'} · Todos
 			</h1>
 			<a
 				href="/self/workspaces?spark={encodeURIComponent(decodedSparkId)}"
 				class="text-primary hover:underline text-xs font-semibold uppercase tracking-wide"
-				>Sharing</a
+				>Share</a
 			>
 		</div>
 		<p class="text-muted-foreground text-sm leading-relaxed">
-			Todos for this spark — pair devices under <strong>Self → Peers &amp; anchor</strong>, grant access under <strong>Self → Sharing</strong>.
+			Todos in this spark. Pair under <strong>Self → Peers</strong>, share access under <strong>Self → Share</strong>.
 		</p>
 	</header>
 
@@ -201,7 +201,7 @@
 		{/if}
 
 		{#if !sparksResolved && !err}
-			<p class="text-muted-foreground text-xs">Loading workspace…</p>
+			<p class="text-muted-foreground text-xs">Loading spark…</p>
 		{:else if sparksResolved && !sparkMeta && !err}
 			<p class="text-muted-foreground text-sm">
 				No spark matches this id in your ledger —
