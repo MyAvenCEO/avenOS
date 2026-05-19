@@ -33,7 +33,7 @@
 	<header class="space-y-1.5">
 		<h1 class="text-2xl font-semibold tracking-tight">Sparks</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
-			Your sparks on this device. Open one for todos. To share with someone else, pair under
+			Your sparks on this device. Open one to talk or manage todos. To share with someone else, pair under
 			<a href="/self/workspaces" class="text-primary underline">Self → Share</a>.
 		</p>
 		<p class="text-muted-foreground border-border/50 bg-card/20 rounded-lg border border-dashed px-3 py-2 text-[11px] leading-relaxed">
@@ -58,7 +58,7 @@
 					<button
 						type="button"
 						class="group border-input hover:bg-accent hover:text-accent-foreground hover:border-border flex w-full flex-col gap-1 rounded-xl border bg-card/40 px-4 py-4 text-left transition-colors"
-						onclick={() => goto(`/sparks/${encodeURIComponent(row.spark_id)}`)}
+						onclick={() => goto(`/sparks/${encodeURIComponent(row.spark_id)}/talk`)}
 					>
 						<span class="text-[11px] font-semibold tracking-wider uppercase opacity-70 group-hover:text-accent-foreground/90">Spark</span>
 						<span class="text-base font-medium tracking-tight group-hover:text-accent-foreground">{row.name || 'Unnamed spark'}</span>

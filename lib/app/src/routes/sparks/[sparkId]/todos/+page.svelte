@@ -42,12 +42,9 @@
 		return {}
 	}
 
-	const unlocked = $derived(
-		$deviceSession.kind === 'unlocked',
-	)
+	const unlocked = $derived($deviceSession.kind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
 
-	// Session is one-shot per identity; both stores above subscribe themselves.
 	$effect(() => {
 		if (!tauri || !unlocked) {
 			session = undefined
@@ -149,30 +146,15 @@
 </script>
 
 <svelte:head>
-	<title>{sparkMeta?.name ?? 'Spark'} · Todos · AvenOS</title>
+	<title>Todos · AvenOS</title>
 </svelte:head>
 
-<div class="mx-auto flex w-full max-w-xl flex-col gap-6 px-4 py-8 sm:px-6">
-	<header class="space-y-2">
-		<button
-			type="button"
-			class="text-muted-foreground hover:text-foreground text-[11px] font-semibold uppercase tracking-wide"
-			onclick={() => goto('/sparks')}
-		>
-			← All sparks
-		</button>
-		<div class="flex flex-wrap items-center gap-2">
-			<h1 class="text-2xl font-semibold tracking-tight">
-				{sparkMeta?.name ?? 'Spark'} · Todos
-			</h1>
-			<a
-				href="/self/workspaces?spark={encodeURIComponent(decodedSparkId)}"
-				class="text-primary hover:underline text-xs font-semibold uppercase tracking-wide"
-				>Share</a
-			>
-		</div>
+<div class="flex flex-col gap-6">
+	<header class="space-y-1">
+		<h1 class="text-xl font-semibold tracking-tight">Todos</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
-			Todos in this spark. Pair under <strong>Self → Peers</strong>, share access under <strong>Self → Share</strong>.
+			Task list for this spark. Pair under <strong>Self → Peers</strong>, share access under
+			<strong>Self → Share</strong>.
 		</p>
 	</header>
 

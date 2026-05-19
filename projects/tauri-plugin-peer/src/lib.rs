@@ -8,6 +8,8 @@ use std::sync::Arc;
 #[cfg(target_os = "macos")]
 mod did;
 #[cfg(target_os = "macos")]
+mod pairing_label;
+#[cfg(target_os = "macos")]
 mod hyperswarm_groove_bridge;
 #[cfg(target_os = "macos")]
 mod commands_macos;
@@ -59,8 +61,8 @@ pub(crate) struct PeerInviteCreateReply {
 struct PairSession {
 	topic: [u8; 32],
 	code: String,
-	/// Label this device uses for the remote peer once the invite completes.
-	my_label_for_remote: String,
+	/// This device's advertised pairing label (`first/device`).
+	my_advertised_label: String,
 }
 
 #[cfg(target_os = "macos")]
@@ -269,7 +271,7 @@ impl PeerCtl {
 		Ok(())
 	}
 
-	async fn handle_incoming_swarm_conn(&self, conn: peeroxide::SwarmConnection) {
+	async fn handle_incoming_swarm_conn(&self, mut conn: peeroxide::SwarmConnection) {
 		let remote_pk = conn.remote_public_key();
 		let Ok(remote_did) = crate::did::peer_did_from_ed25519(remote_pk) else {
 			log::warn!(target: "avenos::peeroxide", "reject swarm: invalid remote static key");
@@ -303,19 +305,32 @@ impl PeerCtl {
 		}
 
 		if on_pairing {
-			let label = {
+			let my_label = {
 				let pairing = self.pairing_session.lock().await;
 				pairing
 					.as_ref()
-					.map(|s| s.my_label_for_remote.clone())
+					.map(|s| s.my_advertised_label.clone())
 					.unwrap_or_else(|| "Peer".into())
+			};
+			let remote_label = match pairing_label::exchange_pairing_label(
+				&mut conn.peer.stream,
+				&my_label,
+				conn.is_initiator,
+			)
+			.await
+			{
+				Ok(l) => l,
+				Err(e) => {
+					log::warn!(target: "avenos::peeroxide", "pair label exchange: {e}");
+					pairing_label::short_did_fallback(&remote_did)
+				}
 			};
 			if let Err(e) = self.app_handle.emit(
 				"peer:invite-paired",
 				serde_json::json!({
 					"remoteDid": remote_did,
-					"remoteDisplayLabel": label,
-					"label": label,
+					"remoteDisplayLabel": remote_label,
+					"label": remote_label,
 				}),
 			) {
 				log::warn!(target: "avenos::peeroxide", "emit peer:invite-paired failed: {e}");
@@ -442,7 +457,7 @@ impl PeerCtl {
 		*pairing = Some(PairSession {
 			topic,
 			code: normalized.clone(),
-			my_label_for_remote: advertised,
+			my_advertised_label: advertised,
 		});
 
 		log::info!(
@@ -490,7 +505,7 @@ impl PeerCtl {
 		*pairing = Some(PairSession {
 			topic,
 			code: normalized.clone(),
-			my_label_for_remote: my_label,
+			my_advertised_label: my_label,
 		});
 
 		log::info!(

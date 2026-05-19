@@ -50,3 +50,11 @@ export function vaultCardTitle(entry: VaultListEntry): string {
 	if (entry.firstName?.trim()) return entry.firstName.trim()
 	return titleCaseFromSlug(entry.usernameSlug)
 }
+
+/** `firstName/deviceLabel` — same string advertised during peer pairing. */
+export function vaultPairingLabel(entry: VaultListEntry): string | undefined {
+	const name = vaultCardTitle(entry).trim()
+	if (!name) return undefined
+	const dev = entry.deviceLabel?.trim()
+	return dev ? `${name}/${dev}` : name
+}

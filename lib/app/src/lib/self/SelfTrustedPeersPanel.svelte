@@ -13,7 +13,14 @@
 	} from '$lib/peer/api'
 	import { deviceSession } from '$lib/self/device-session-store'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+	import { peerDisplayLabel } from '$lib/peer/display-label'
 	import { peerRowSyncPhase, peerSyncLabel, peerSyncTextClass } from '$lib/peer/sync-display'
+	import {
+		vaultList,
+		vaultPairingLabel,
+		vaultSelectedSlug,
+		type VaultListEntry,
+	} from '$lib/self/vault'
 
 	let err = $state<string | undefined>()
 	let busy = $state(false)
@@ -21,9 +28,11 @@
 	let peerStatus = $state<import('$lib/peer/api').PeerTransportStatusReply | undefined>()
 	let rows = $state<PeerRowReply[]>([])
 	let inviteCode = $state<string | undefined>()
+	let inviteCodeCopied = $state(false)
 	let acceptCode = $state('')
 	let actionErr = $state<string | undefined>()
 	let actionBusy = $state(false)
+	let localPairingLabel = $state<string | undefined>(undefined)
 
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
@@ -134,12 +143,27 @@
 		}
 	}
 
+	async function copyInviteCode(): Promise<void> {
+		const code = inviteCode?.trim()
+		if (!code) return
+		try {
+			await navigator.clipboard.writeText(code)
+			inviteCodeCopied = true
+			window.setTimeout(() => {
+				inviteCodeCopied = false
+			}, 2000)
+		} catch {
+			inviteCodeCopied = false
+		}
+	}
+
 	async function cancelInvite(): Promise<void> {
 		actionBusy = true
 		actionErr = undefined
 		try {
 			await peerInviteCancel()
 			inviteCode = undefined
+			inviteCodeCopied = false
 			await refreshPeersTransport()
 		} catch (e) {
 			actionErr = e instanceof Error ? e.message : String(e)
@@ -186,6 +210,25 @@
 		const id = window.setInterval(() => void refreshPeersTransport(), ms)
 		return () => clearInterval(id)
 	})
+
+	$effect(() => {
+		if (!browser || !tauri || !unlocked) {
+			localPairingLabel = undefined
+			return
+		}
+		void (async () => {
+			try {
+				const vaults = await vaultList()
+				const slug = await vaultSelectedSlug()
+				const active = slug
+					? vaults.find((v: VaultListEntry) => v.usernameSlug === slug)
+					: vaults[0]
+				localPairingLabel = active ? vaultPairingLabel(active) : undefined
+			} catch {
+				localPairingLabel = undefined
+			}
+		})()
+	})
 </script>
 
 <section class="space-y-4">
@@ -215,6 +258,13 @@
 			</button>
 			{#if inviteCode}
 				<span class="font-mono text-lg font-semibold tracking-widest">{inviteCode}</span>
+				<button
+					type="button"
+					class="border-input hover:bg-accent rounded-md border px-3 py-1.5 text-xs font-medium uppercase tracking-wide"
+					onclick={() => void copyInviteCode()}
+				>
+					{inviteCodeCopied ? 'Copied' : 'Copy code'}
+				</button>
 				<button
 					type="button"
 					class="border-input rounded-md border px-3 py-1.5 text-xs"
@@ -270,7 +320,11 @@
 									></span>
 								{/if}
 								<div class="min-w-0 flex-1">
-									<div class="font-medium">{r.deviceLabel || '(no label)'}</div>
+									<div class="font-medium">
+										{r.placeholder
+											? r.deviceLabel || '(no label)'
+											: peerDisplayLabel(r.peerDid, r.deviceLabel, localPairingLabel)}
+									</div>
 									{#if r.pairingDetail}
 										<p class="text-muted-foreground mt-0.5 text-[11px] leading-snug">{r.pairingDetail}</p>
 									{:else if r.peerDid}

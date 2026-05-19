@@ -13,8 +13,8 @@
  * After unlock on each window: pick different people at "Who are you?" if testing two-human flows.
  *
  * Prerequisites:
- *   - Run `bun run dev:app:macos` once first so the binary and front-end are compiled.
- *   - Alternatively, pre-build: `bun run build:app:macos` (slower first build).
+ *   - Run `bun run dev:app:mac` or `bun run dev:app:linux` once first so deps compile.
+ *   - Alternatively, pre-build: `bun run build:app:mac` / `build:app:linux` (slower first build).
  *
  * Reset vaults during dev (destructive — removes all saved personas):
  *   rm -rf ~/Documents/.avenOS/vaults
@@ -23,22 +23,33 @@
  * AVENOS_DATA_DIR_OVERRIDE yourself — not handled by this script.
  *
  * Usage:
- *   bun run dev:two-instances
+ *   bun run dev:app2x:mac
+ *   bun run dev:app2x:linux
  *
  * The script starts two SvelteKit dev servers on :1420 and :1421 simultaneously,
  * then starts both Tauri processes. Stdout/stderr from each instance is prefixed
  * with a colored label [A] or [B] so you can tell them apart.
  */
 
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { homedir } from 'node:os'
+import { homedir, platform } from 'node:os'
 import { freeDevServerPort } from './free-dev-server-port.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appDir = path.join(repoRoot, 'lib/app')
 const vaultsHint = path.join(homedir(), 'Documents', '.avenOS', 'vaults')
+
+/** Linux WebKitGTK defaults (same as dev-app-linux.ts). */
+function devBaseEnv(): Record<string, string> {
+	const env = { ...process.env } as Record<string, string>
+	if (platform() === 'linux') {
+		env.WEBKIT_DISABLE_DMABUF_RENDERER ??= '1'
+		env.WEBKIT_DISABLE_COMPOSITING_MODE ??= '1'
+	}
+	return env
+}
 
 /**
  * Wait until a TCP port is accepting connections (or timeout).
@@ -129,8 +140,17 @@ function spawnTauri(label: 'A' | 'B', colour: string, env: Record<string, string
 }
 
 async function main() {
+	const plat = platform()
+	const platLabel = plat === 'darwin' ? 'macOS' : plat === 'linux' ? 'Linux' : plat
+
+	const cargo = spawnSync('cargo', ['--version'], { encoding: 'utf8' })
+	if (cargo.status !== 0) {
+		console.error('dev:app2x: `cargo` not found. Install Rust from https://rustup.rs')
+		process.exit(1)
+	}
+
 	console.log(
-		`\n${BOLD}AvenOS — P2P dev harness${RESET}\n` +
+		`\n${BOLD}AvenOS — P2P dev harness (${platLabel})${RESET}\n` +
 			`  ${CYAN}[A]${RESET}  http://127.0.0.1:1420\n` +
 			`  ${MAGENTA}[B]${RESET}  http://127.0.0.1:1421\n\n` +
 			`Shared vault store: ${vaultsHint}\n` +
@@ -142,8 +162,7 @@ async function main() {
 	freeDevServerPort(1420)
 	freeDevServerPort(1421)
 
-	// Load .env so child processes inherit the same variables
-	const baseEnv = process.env as Record<string, string>
+	const baseEnv = devBaseEnv()
 
 	// Instance A: Tauri handles the full lifecycle (beforeDevCommand starts Vite on :1420)
 	const tauriA = spawnTauri('A', CYAN, baseEnv)

@@ -14,7 +14,14 @@
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import type { PeerRowReply } from '$lib/peer/api'
 	import { peerList } from '$lib/peer/api'
+	import { peerDisplayLabel } from '$lib/peer/display-label'
 	import { deviceSession } from '$lib/self/device-session-store'
+	import {
+		vaultList,
+		vaultPairingLabel,
+		vaultSelectedSlug,
+		type VaultListEntry,
+	} from '$lib/self/vault'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 
 	const sparksStore = jazzStore('sparks')
@@ -38,6 +45,7 @@
 	let adminBusy = $state(false)
 	let addAdminDid = $state('')
 	let addNote = $state<string | undefined>()
+	let localPairingLabel = $state<string | undefined>(undefined)
 
 	const sessionKind = $derived($deviceSession.kind)
 	const unlocked = $derived(
@@ -54,9 +62,9 @@
 		return `spark:${row.spark_id.trim()}`
 	}
 
-	function shortDid(did: string): string {
-		const t = did.trim()
-		return t.length > 32 ? `${t.slice(0, 18)}…${t.slice(-8)}` : t
+	function peerAccessLabel(peerDid: string, storedLabel: string | undefined, isThisDevice: boolean): string {
+		if (isThisDevice) return 'This device'
+		return peerDisplayLabel(peerDid, storedLabel, localPairingLabel)
 	}
 
 	type SparkAccessEntry = {
@@ -75,9 +83,7 @@
 			const norm = did.trim().toLowerCase()
 			const peer = peersByDid.get(norm)
 			const isThisDevice = localDid !== '' && norm === localDid
-			const label = isThisDevice
-				? 'This device'
-				: peer?.deviceLabel?.trim() || shortDid(did)
+			const label = peerAccessLabel(did, peer?.deviceLabel, isThisDevice)
 			const capabilities = isThisDevice
 				? ['Owner', 'Read', 'Write', 'Delete', 'Share']
 				: ['Admin', 'Read', 'Write', 'Delete']
@@ -176,6 +182,25 @@
 		unlocked
 		tauri
 		void loadSessionAndAdmins()
+	})
+
+	$effect(() => {
+		if (!browser || !tauri || !unlocked) {
+			localPairingLabel = undefined
+			return
+		}
+		void (async () => {
+			try {
+				const vaults = await vaultList()
+				const slug = await vaultSelectedSlug()
+				const active = slug
+					? vaults.find((v: VaultListEntry) => v.usernameSlug === slug)
+					: vaults[0]
+				localPairingLabel = active ? vaultPairingLabel(active) : undefined
+			} catch {
+				localPairingLabel = undefined
+			}
+		})()
 	})
 </script>
 
@@ -291,7 +316,9 @@
 						<select class="border-input bg-background flex-1 rounded-md border px-3 py-2 text-sm" bind:value={addAdminDid}>
 							<option value="">Select a paired peer…</option>
 							{#each selectablePeers as p (p.id)}
-								<option value={p.peerDid}>{p.deviceLabel?.trim() || p.peerDid.slice(0, 24)}…</option>
+								<option value={p.peerDid}
+									>{peerDisplayLabel(p.peerDid, p.deviceLabel, localPairingLabel)}</option
+								>
 							{/each}
 						</select>
 						<button
