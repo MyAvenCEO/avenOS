@@ -1,6 +1,7 @@
 <script lang="ts">
 import { page } from '$app/state'
 import { ensureComposerTauriShortcutBridge } from '$lib/intent-mock/composer-tauri-bridge'
+import P2pSyncBadge from '$lib/peer/P2pSyncBadge.svelte'
 import LockGate from '$lib/self/LockGate.svelte'
 import '../app.css'
 
@@ -28,7 +29,9 @@ const dbActive = $derived(path.startsWith('/db'))
 		<div
 			class="mx-auto grid w-full max-w-[min(100%,88rem)] grid-cols-3 items-center gap-x-2 gap-y-2"
 		>
-			<div class="min-w-0" aria-hidden="true"></div>
+			<div class="flex min-w-0 items-center justify-start justify-self-start">
+				<P2pSyncBadge />
+			</div>
 
 			<nav
 				class="flex flex-wrap items-center justify-center justify-self-center gap-x-2 gap-y-1 text-[10px] font-bold tracking-wider uppercase"
@@ -55,7 +58,7 @@ const dbActive = $derived(path.startsWith('/db'))
 					data-sveltekit-preload-data="hover"
 					class="transition-opacity hover:opacity-80 {sparksNavActive ? 'opacity-95' : 'opacity-40'}"
 					aria-current={sparksNavActive ? 'page' : undefined}
-					>Workspaces</a
+					>Sparks</a
 				>
 				<span class="select-none opacity-25" aria-hidden="true">|</span>
 				<a

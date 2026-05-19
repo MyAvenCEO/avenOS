@@ -106,8 +106,9 @@ impl QueryManager {
             )
             .map_err(|e| QueryError::InternalError(format!("{e:?}")))?;
 
+        let branch_key: BranchName = branch.clone().into();
         self.sync_manager
-            .forward_update_to_clients_except(object_id, branch.into(), ClientId(Uuid::nil()));
+            .forward_update_to_clients_except(object_id, branch_key, ClientId(Uuid::nil()));
 
         // Update indices immediately and persist
         self.update_indices_for_insert(storage, table, object_id, &data, &descriptor)?;
@@ -458,9 +459,9 @@ impl QueryManager {
             .map_err(|e| QueryError::InternalError(format!("add_commit: {e:?}")))?;
 
         // AvenOS fork: fan out to peer clients (pure P2P; see module doc).
-        let branch = self.current_branch();
+        let branch_key: BranchName = self.current_branch().into();
         self.sync_manager
-            .forward_update_to_clients_except(id, branch.into(), ClientId(Uuid::nil()));
+            .forward_update_to_clients_except(id, branch_key, ClientId(Uuid::nil()));
 
         // Update indices and persist modified nodes
         self.update_indices_for_update(
@@ -600,9 +601,9 @@ impl QueryManager {
 
         // AvenOS fork: fan out to peer clients (pure P2P; see module doc).
         {
-            let branch = self.current_branch();
+            let branch_key: BranchName = self.current_branch().into();
             self.sync_manager
-                .forward_update_to_clients_except(id, branch.into(), ClientId(Uuid::nil()));
+                .forward_update_to_clients_except(id, branch_key, ClientId(Uuid::nil()));
         }
 
         // Update indices: remove from _id and column indices, add to _id_deleted

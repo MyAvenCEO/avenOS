@@ -71,12 +71,19 @@ export async function jazzExplorerList(table: string): Promise<JazzExplorerListR
 	return invoke<JazzExplorerListReply>('jazz_explorer_list', { table })
 }
 
+async function jazzListRows(table: string): Promise<Record<string, unknown>[]> {
+	return invoke('jazz_list', { table })
+}
+
+/** Explorer subscribe: listener first, deterministic seed query, then live shell emits. */
 export async function jazzExplorerSubscribe(
 	table: string,
 	handler: (rows: Record<string, unknown>[]) => void,
 ): Promise<UnlistenFn> {
 	const event = `jazz:${table}:changed`
 	const unlisten = await listen<Record<string, unknown>[]>(event, (e) => handler(e.payload))
+	const seed = await jazzListRows(table)
+	handler(seed)
 	await invoke('jazz_subscribe', { table })
 	return unlisten
 }
@@ -112,10 +119,12 @@ export function jazzTable<TName extends keyof SchemaTables>(table: TName) {
 		async delete(id: string): Promise<void> {
 			await invoke<void>('jazz_delete', { table, id })
 		},
-		/** Register `jazz:<table>:changed` listener, then start `jazz_subscribe` from the shell. */
+		/** Register listener, seed from `jazz_list` (same auth as snapshots), then `jazz_subscribe` for deltas. */
 		async subscribe(handler: (rows: Row[]) => void): Promise<UnlistenFn> {
 			const event = `jazz:${table}:changed`
 			const unlisten = await listen<Row[]>(event, (e) => handler(e.payload))
+			const seed = (await jazzListRows(table)) as Row[]
+			handler(seed)
 			await invoke('jazz_subscribe', { table })
 			return unlisten
 		},

@@ -4754,6 +4754,7 @@ version = "0.0.1"
 dependencies = [
  "async-trait",
  "ed25519-dalek",
+ "hex",
  "jazz-tools",
  "log",
  "multibase",

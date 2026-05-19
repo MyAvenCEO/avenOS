@@ -89,6 +89,78 @@ fn hex_pk_prefix(pk: &[u8]) -> String {
 	pk.iter().take(8).fold(String::new(), |acc, b| acc + &format!("{b:02x}"))
 }
 
+/// Optional Hyperswarm tuning from the process environment (lab / self-hosted relays).
+///
+/// - `AVENOS_DHT_BOOTSTRAP`: comma-separated bootstrap strings (`ip@host:port` HyperDHT form).
+/// - `AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX`: 64 hex chars → `relay_through`.
+/// - `AVENOS_HYPERSWARM_RELAY_ADDR`: socket address for `relay_address` (pairs with pubkey).
+/// - `AVENOS_HYPERSWARM_MAX_PARALLEL` / `AVENOS_HYPERSWARM_MAX_PEERS`: positive integers.
+#[cfg(target_os = "macos")]
+fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(), String> {
+	use std::str::FromStr;
+
+	if let Ok(raw) = std::env::var("AVENOS_DHT_BOOTSTRAP") {
+		let extras: Vec<String> = raw
+			.split(',')
+			.map(|s| s.trim().to_string())
+			.filter(|s| !s.is_empty())
+			.collect();
+		let n = extras.len();
+		for s in extras.into_iter().rev() {
+			cfg.dht.dht.bootstrap.insert(0, s);
+		}
+		if n > 0 {
+			log::info!(
+				target: "avenos::peeroxide",
+				"prepended {n} DHT bootstrap node(s) from AVENOS_DHT_BOOTSTRAP"
+			);
+		}
+	}
+
+	if let Ok(hex_pk) = std::env::var("AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX") {
+		let bytes = hex::decode(hex_pk.trim())
+			.map_err(|e| format!("AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX: invalid hex ({e})"))?;
+		let arr: [u8; 32] = bytes.try_into().map_err(|_| {
+			"AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX: expected exactly 32 bytes (64 hex chars)".to_string()
+		})?;
+		cfg.relay_through = Some(arr);
+		log::info!(target: "avenos::peeroxide", "relay_through set from AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX");
+	}
+
+	if let Ok(addr_s) = std::env::var("AVENOS_HYPERSWARM_RELAY_ADDR") {
+		let addr = std::net::SocketAddr::from_str(addr_s.trim())
+			.map_err(|e| format!("AVENOS_HYPERSWARM_RELAY_ADDR: invalid address ({e})"))?;
+		cfg.relay_address = Some(addr);
+		log::info!(target: "avenos::peeroxide", "relay_address set from AVENOS_HYPERSWARM_RELAY_ADDR");
+	}
+
+	if let Ok(v) = std::env::var("AVENOS_HYPERSWARM_MAX_PARALLEL") {
+		if let Ok(n) = v.trim().parse::<usize>() {
+			if !(1..=512).contains(&n) {
+				return Err(format!(
+					"AVENOS_HYPERSWARM_MAX_PARALLEL: out of range 1..=512 ({n})"
+				));
+			}
+			cfg.max_parallel = n;
+			log::info!(target: "avenos::peeroxide", "max_parallel={n} from env");
+		}
+	}
+
+	if let Ok(v) = std::env::var("AVENOS_HYPERSWARM_MAX_PEERS") {
+		if let Ok(n) = v.trim().parse::<usize>() {
+			if !(1..=4096).contains(&n) {
+				return Err(format!(
+					"AVENOS_HYPERSWARM_MAX_PEERS: out of range 1..=4096 ({n})"
+				));
+			}
+			cfg.max_peers = n;
+			log::info!(target: "avenos::peeroxide", "max_peers={n} from env");
+		}
+	}
+
+	Ok(())
+}
+
 #[cfg(target_os = "macos")]
 fn normalize_pair_code(raw: &str) -> Result<String, String> {
 	let mut s = raw.trim().to_ascii_uppercase();
@@ -153,6 +225,7 @@ impl PeerCtl {
 		let kp = peeroxide::KeyPair::from_seed(seed);
 		let mut cfg = peeroxide::SwarmConfig::with_public_bootstrap();
 		cfg.key_pair = Some(kp);
+		apply_avensos_swarm_env(&mut cfg)?;
 
 		let (actor_join, swarm, mut conn_rx) =
 			peeroxide::spawn(cfg).await.map_err(|e| format!("peeroxide spawn: {e}"))?;
@@ -177,6 +250,10 @@ impl PeerCtl {
 			"hyperswarm_up local_pk_prefix={:02x?} (awaiting per-pair topic joins)",
 			&local_pk[..local_prefix_len],
 		);
+
+		if let Err(e) = _app.emit("peer:hyperswarm-ready", serde_json::Value::Null) {
+			log::debug!(target: "avenos::peeroxide", "emit peer:hyperswarm-ready failed: {e}");
+		}
 
 		*guard = Some(RunningSwarm {
 			swarm,
@@ -291,6 +368,13 @@ impl PeerCtl {
 
 		let mut guard = self.inner.lock().await;
 		let Some(running) = guard.as_mut() else {
+			if !active_remote_dids.is_empty() {
+				log::warn!(
+					target: "avenos::peeroxide",
+					"set_allowlist: Hyperswarm not running yet; pair-topic joins deferred ({} Jazz peer DID(s))",
+					active_remote_dids.len(),
+				);
+			}
 			return Ok(());
 		};
 

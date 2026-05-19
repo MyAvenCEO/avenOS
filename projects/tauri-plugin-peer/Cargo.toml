@@ -22,6 +22,7 @@ tauri-plugin-self = { path = "../tauri-plugin-self" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 async-trait = "0.1"
+hex = "0.4"
 ed25519-dalek = { version = "2", features = ["zeroize"] }
 groove = { package = "jazz-tools", path = "../../third_party/jazz-tools", default-features = false, features = ["client", "peer-transport"] }
 multibase = "0.9"

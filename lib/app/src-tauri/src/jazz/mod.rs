@@ -748,6 +748,8 @@ async fn jazz_shell_ready(
 	// Always rehydrate from live Groove. P2P sync can merge new `sparks` / `keyshares` rows without
 	// restarting the Jazz client; an earlier implementation cached ShellState permanently, so
 	// `authorize_gate` still used a vault snapshot from before replication and hid remote sparks.
+	// Performance note: many IPC handlers call here; costly `hydrate_shell` work amplifies navigation
+	// churn. Prefer a cached shell keyed by replicated epoch / table versions when correctness allows.
 	let hydrated = jazz_engine::hydrate_shell(client, &root).await?;
 	let arc = std::sync::Arc::new(hydrated);
 	let mut slot = mj.shell.lock().await;

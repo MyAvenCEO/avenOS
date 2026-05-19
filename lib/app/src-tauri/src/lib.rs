@@ -531,22 +531,61 @@ pub fn run() {
 				});
 			});
 
+			// Hyperswarm can finish spawning *after* the first Jazz connect + allowlist rebuild.
+			// In that narrow window `set_allowlist_and_join_pair_topics` returns early (no swarm
+			// handle) and durable per-pair topic joins stay pending until the next reconcile tick.
+			// The peer plugin emits this as soon as the swarm actor is alive so we eagerly re-run the
+			// same mesh refresh Groove expects after pairing.
+			let h_swarm_ready = app.handle().clone();
+			let _hyperswarm_ready_mesh = app.listen("peer:hyperswarm-ready", move |_event| {
+				let hh = h_swarm_ready.clone();
+				tauri::async_runtime::spawn(async move {
+					let mj = hh.state::<jazz::ManagedJazz>();
+					match jazz::refresh_peer_mesh_primitives(&hh, &mj).await {
+						Ok(n) if n > 0 => {
+							log::info!(
+								target: "avenos::jazz",
+								"peer:hyperswarm-ready → Groove peers registered={n}",
+							);
+						}
+						Ok(_) => {
+							log::debug!(target: "avenos::jazz", "peer:hyperswarm-ready mesh refresh ok (no live links yet)");
+						}
+						Err(e) => log::debug!(
+							target: "avenos::jazz",
+							"peer:hyperswarm-ready mesh refresh skipped: {e}",
+						),
+					}
+				});
+			});
+
 			// Hyperswarm connections form **asynchronously** after pairing/grant: by the time
 			// `apply_peer_invite_paired` runs `refresh_peer_mesh_primitives`, the peer's
 			// `SwarmConnection` usually hasn't reached `HyperswarmGrooveBridge.on_swarm_connection`
 			// yet, so `register_peer_sync_client` is never called and Groove never replicates rows
 			// to that peer (and vice versa). The bridge now fires `peer_set_changed_notify` every
-			// time a peer is added/removed; mirror that into a mesh-refresh + a 10s belt-and-braces
-			// reconcile so newly-formed swarm links always get registered with Jazz sync.
+			// time a peer is added/removed; mirror that into a mesh-refresh + an **adaptive** timer
+			// (fast tick right after startup, slower steady-state) so new swarm links register with
+			// Jazz sync without fixed 10s latency.
 			#[cfg(target_os = "macos")]
 			{
 				let h_mesh = app.handle().clone();
 				tauri::async_runtime::spawn(async move {
+					use std::time::{Duration, Instant};
+
 					let bridge = h_mesh.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
 					let notify = bridge.peer_set_changed_notify();
+					let fast_until = Instant::now() + Duration::from_secs(90);
+					let mut in_fast_phase = true;
 					loop {
+						let tick_dur = if in_fast_phase && Instant::now() < fast_until {
+							Duration::from_secs(2)
+						} else {
+							in_fast_phase = false;
+							Duration::from_secs(30)
+						};
 						let n = notify.clone();
-						let tick = tokio::time::sleep(std::time::Duration::from_secs(10));
+						let tick = tokio::time::sleep(tick_dur);
 						tokio::select! {
 							_ = n.notified() => {}
 							_ = tick => {}

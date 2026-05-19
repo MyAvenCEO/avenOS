@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
+	import { listen } from '@tauri-apps/api/event'
 	import {
 		jazzPeerMeshRefresh,
 		jazzSession,
@@ -55,7 +56,37 @@
 	)
 	const tauri = $derived(browser && isTauriRuntime())
 
-	async function loadPeersBlock(): Promise<void> {
+	const pairingPending = $derived(
+		Boolean(inviteCode) || Boolean(peerStatus?.pairingCodePending),
+	)
+
+	/** Peers row + Hyperswarm status only — avoids jazzSession → hydrate_shell every tick. */
+	async function refreshPeersTransport(): Promise<void> {
+		if (!tauri || !unlocked) {
+			return
+		}
+		err = undefined
+		try {
+			const status = await jazzStatus()
+			if (!status.ready) await jazzBootstrap()
+			rows = await peerList()
+			peerStatus = await peerTransportStatus()
+			const mesh = await jazzPeerMeshRefresh()
+			if (mesh.registeredCount === 0) {
+				meshNote = undefined
+			} else {
+				meshNote =
+					mesh.registeredCount === 1
+						? 'Sync is connected to one other device.'
+						: `Sync is connected across ${mesh.registeredCount} other devices.`
+			}
+		} catch (e) {
+			err = e instanceof Error ? e.message : String(e)
+		}
+	}
+
+	/** First paint + DID line: one jazzSession (hydrate_shell) when identity context is fresh. */
+	async function loadPeersBlockFull(): Promise<void> {
 		if (!tauri || !unlocked) {
 			session = undefined
 			rows = []
@@ -67,10 +98,7 @@
 			const status = await jazzStatus()
 			if (!status.ready) await jazzBootstrap()
 			session = await jazzSession()
-			rows = await peerList()
-			peerStatus = await peerTransportStatus()
-			const mesh = await jazzPeerMeshRefresh()
-			meshNote = `Sync registry: ${mesh.registeredCount} linked peer transport id(s).`
+			await refreshPeersTransport()
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {
@@ -84,7 +112,7 @@
 		try {
 			const r = await peerInviteCreate()
 			inviteCode = r.code
-			await loadPeersBlock()
+			await refreshPeersTransport()
 		} catch (e) {
 			actionErr = e instanceof Error ? e.message : String(e)
 		} finally {
@@ -98,7 +126,7 @@
 		try {
 			await peerInviteAccept(acceptCode.trim(), acceptLabel.trim() || 'Peer')
 			acceptCode = ''
-			await loadPeersBlock()
+			await refreshPeersTransport()
 		} catch (e) {
 			actionErr = e instanceof Error ? e.message : String(e)
 		} finally {
@@ -112,7 +140,7 @@
 		try {
 			await peerInviteCancel()
 			inviteCode = undefined
-			await loadPeersBlock()
+			await refreshPeersTransport()
 		} catch (e) {
 			actionErr = e instanceof Error ? e.message : String(e)
 		} finally {
@@ -125,7 +153,7 @@
 		actionErr = undefined
 		try {
 			await peerRevoke(did)
-			await loadPeersBlock()
+			await refreshPeersTransport()
 		} catch (e) {
 			actionErr = e instanceof Error ? e.message : String(e)
 		} finally {
@@ -136,12 +164,28 @@
 	$effect(() => {
 		unlocked
 		tauri
-		void loadPeersBlock()
+		void loadPeersBlockFull()
 	})
 
+	/** Event-driven refresh when Rust finishes pairing handshake (writes peers row). */
 	$effect(() => {
 		if (!browser || !tauri || !unlocked) return
-		const id = window.setInterval(() => void loadPeersBlock(), 4000)
+
+		const p = listen('peer:invite-paired', () => {
+			void refreshPeersTransport()
+		})
+
+		return () => {
+			void p.then((u) => u())
+		}
+	})
+
+	/** Light polling: fast while invite is open (waiting for Noise link); slow when idle. */
+	$effect(() => {
+		if (!browser || !tauri || !unlocked) return
+		const fast = pairingPending
+		const ms = fast ? 2500 : 12000
+		const id = window.setInterval(() => void refreshPeersTransport(), ms)
 		return () => clearInterval(id)
 	})
 </script>
@@ -150,11 +194,11 @@
 	<title>Peers &amp; anchor · AvenOS</title>
 </svelte:head>
 
-<div class="flex flex-col gap-10">
+<div class="flex flex-col gap-8">
 	<header class="space-y-1.5">
 		<h1 class="text-2xl font-semibold tracking-tight">Peers &amp; anchor</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
-			Read-only deployment anchor plus invite-only peer devices on this Mac. After pairing here, delegate spark access under
+			Stable anchor for installs and trusted Macs. Add another computer here, then share workspaces under
 			<a href="/self/workspaces" class="text-primary font-medium underline">Self → Workspace sharing</a>.
 		</p>
 	</header>
@@ -205,35 +249,59 @@
 
 	<hr class="border-border/50" />
 
-	<section class="space-y-6">
-		<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">Device peers</h2>
-
-		{#if session?.peerDid}
-			<p class="text-muted-foreground font-mono text-xs break-all">
-				This device: <span class="text-foreground">{session.peerDid}</span>
-			</p>
-		{/if}
+	<section class="space-y-4">
+		<div class="flex flex-wrap items-start justify-between gap-2">
+			<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">Devices</h2>
+			{#if session?.peerDid}
+				<p
+					class="text-muted-foreground max-w-[min(100%,28rem)] break-words text-right text-[10px] leading-tight"
+					title={session.peerDid}
+				>
+					<span class="opacity-80">Your ID</span><br />
+					<span class="font-mono text-[9px] text-foreground break-all">{session.peerDid}</span>
+				</p>
+			{/if}
+		</div>
 
 		{#if err}
 			<p class="text-destructive text-sm">{err}</p>
 		{/if}
 
 		{#if busy}
-			<p class="text-muted-foreground text-sm">Loading peers…</p>
-		{/if}
-
-		{#if meshNote}
-			<p class="text-muted-foreground text-xs">{meshNote}</p>
-		{/if}
-
-		{#if peerStatus}
-			<p class="text-muted-foreground text-xs">
-				Hyperswarm {peerStatus.hyperswarmRunning ? 'on' : 'off'} · linked Groove transport ids: {peerStatus.linkedPeerIds.length}
+			<p class="text-muted-foreground flex items-center gap-2 text-sm">
+				<span class="peers-spinner shrink-0 opacity-60" aria-hidden="true"></span>
+				<span>Getting things ready…</span>
 			</p>
 		{/if}
 
-		<div class="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
-			<h3 class="text-[10px] font-semibold tracking-wider uppercase opacity-70">Pair a device</h3>
+		{#if meshNote && !pairingPending}
+			<p class="text-muted-foreground text-[11px] leading-snug">{meshNote}</p>
+		{/if}
+
+		{#if pairingPending}
+			<div
+				class="border-border/60 bg-muted/20 flex items-start gap-2.5 rounded-lg border px-3 py-2 text-[11px] leading-snug"
+				role="status"
+				aria-live="polite"
+			>
+				<span class="peers-spinner text-primary mt-0.5 shrink-0" aria-hidden="true"></span>
+				<div class="text-muted-foreground min-w-0 flex-1">
+					{#if peerStatus && peerStatus.linkedPeerIds.length > 0}
+						<p class="text-foreground font-medium">Almost there…</p>
+						<p>Finishing pairing and saving your connection on this Mac.</p>
+					{:else}
+						<p class="text-foreground font-medium">Looking for the other device…</p>
+						<p>
+							Two devices finding each other on the internet usually takes less than a minute; sometimes longer
+							with VPNs or strict networks. Putting both on the same Wi‑Fi often speeds this up.
+						</p>
+					{/if}
+				</div>
+			</div>
+		{/if}
+
+		<div class="space-y-2.5 rounded-xl border border-border/60 bg-card/30 p-3">
+			<h3 class="text-[10px] font-semibold tracking-wider uppercase opacity-70">Add another Mac</h3>
 			<div class="flex flex-wrap gap-2">
 				<button
 					type="button"
@@ -241,18 +309,18 @@
 					disabled={actionBusy}
 					onclick={() => void hostInvite()}
 				>
-					{actionBusy ? '…' : 'Invite (show code)'}
+					{actionBusy ? '…' : 'Get invite code'}
 				</button>
 				{#if inviteCode}
 					<span class="font-mono text-lg font-semibold tracking-widest">{inviteCode}</span>
 					<button type="button" class="border-input rounded-md border px-3 py-1.5 text-xs" onclick={() => void cancelInvite()}
-						>Cancel invite</button
+						>Cancel</button
 					>
 				{/if}
 			</div>
 			<div class="flex flex-col gap-2 sm:flex-row sm:items-end">
 				<label class="flex flex-1 flex-col gap-1 text-xs">
-					<span class="text-muted-foreground">Join with code</span>
+					<span class="text-muted-foreground">Code from other Mac</span>
 					<input
 						class="border-input bg-background rounded-md border px-3 py-2 font-mono text-sm uppercase"
 						placeholder="ABC12X"
@@ -261,7 +329,7 @@
 					/>
 				</label>
 				<label class="flex flex-1 flex-col gap-1 text-xs">
-					<span class="text-muted-foreground">Label for them on this device</span>
+					<span class="text-muted-foreground">Name on this Mac</span>
 					<input class="border-input bg-background rounded-md border px-3 py-2 text-sm" bind:value={acceptLabel} />
 				</label>
 				<button
@@ -278,18 +346,30 @@
 			{/if}
 		</div>
 
-		<div class="space-y-3">
-			<h3 class="text-[10px] font-semibold tracking-wider uppercase opacity-70">Allowlist</h3>
+		<div class="space-y-2">
+			<h3 class="text-[10px] font-semibold tracking-wider uppercase opacity-70">Trusted devices</h3>
 			{#if rows.length === 0}
-				<p class="text-muted-foreground text-sm">No peers yet — pair above or accept an invite.</p>
+				{#if pairingPending}
+					<p class="text-muted-foreground text-xs leading-snug">
+						No devices here yet — as soon as the connection completes, the other Mac appears in this list
+						automatically.
+					</p>
+				{:else}
+					<p class="text-muted-foreground text-xs leading-snug">
+						No other Mac has been added yet. Use the invite or code above, then approve workspace sharing under
+						<a href="/self/workspaces" class="text-primary font-medium underline">Self → Workspace sharing</a>.
+					</p>
+				{/if}
 			{:else}
 				<ul class="divide-border/60 divide-y rounded-xl border border-border/60">
 					{#each rows as r (r.id)}
-						<li class="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+						<li class="flex flex-col gap-1.5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
 							<div>
 								<div class="font-medium">{r.label || '(no label)'}</div>
 								<div class="text-muted-foreground font-mono text-[11px] break-all">{r.peerDid}</div>
-								<div class="text-muted-foreground text-[10px] uppercase">{r.status}</div>
+								<div class="text-muted-foreground text-[10px] uppercase">
+									{r.status === 'active' ? 'Connected' : r.status}
+								</div>
 							</div>
 							{#if r.status === 'active'}
 								<button
@@ -298,7 +378,7 @@
 									disabled={actionBusy}
 									onclick={() => void revoke(r.peerDid)}
 								>
-									Revoke
+									Remove
 								</button>
 							{/if}
 						</li>
@@ -308,3 +388,22 @@
 		</div>
 	</section>
 </div>
+
+<style>
+	@keyframes peers-network-spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+	.peers-spinner {
+		display: inline-block;
+		width: 1rem;
+		height: 1rem;
+		box-sizing: border-box;
+		border-radius: 9999px;
+		border: 2px solid currentColor;
+		border-right-color: transparent;
+		animation: peers-network-spin 0.7s linear infinite;
+		vertical-align: middle;
+	}
+</style>
