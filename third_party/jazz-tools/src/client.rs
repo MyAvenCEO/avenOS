@@ -191,7 +191,7 @@ impl JazzClient {
 
         // Create managers
         let sync_manager = SyncManager::new();
-        let schema_manager = SchemaManager::new(
+        let mut schema_manager = SchemaManager::new(
             sync_manager,
             context.schema.clone(),
             context.app_id,
@@ -199,6 +199,12 @@ impl JazzClient {
             "main",
         )
         .map_err(|e| JazzError::Schema(format!("{:?}", e)))?;
+
+        for old in &context.live_schemas {
+            schema_manager
+                .add_live_schema(old.clone())
+                .map_err(|e| JazzError::Schema(format!("live_schema migration: {e:?}")))?;
+        }
 
         // Connect to server if URL provided (before creating runtime so we have the connection)
         let auth_config = AuthConfig::from_context(&context);

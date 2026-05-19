@@ -5,6 +5,7 @@ mod jazz_auth;
 mod peers;
 mod peer_sync_gate;
 mod schema_manifest;
+mod schema_migrations;
 mod spark_acc;
 
 use std::path::PathBuf;

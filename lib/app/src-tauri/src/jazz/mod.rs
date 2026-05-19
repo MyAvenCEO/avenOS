@@ -345,21 +345,16 @@ fn migrate_legacy_jazz_dir_to_db(user_root: &Path) -> Result<(), String> {
 
 const CURRENT_JAZZ_LANE: &str = "lane-v1;env=client;user_branch=main";
 
-/// Wipe and re-stamp the Groove data dir when **any** of these disagree with the previous boot:
-/// 1. `client_id` — different device identity.
-/// 2. Groove `SchemaHash` — different writable branch derivation; existing rows would be
-///    unreachable on `current_branch()`, causing `ObjectNotFound` on every update/delete
-///    even though scans on multi-branch fallback still see them. See
-///    [`current_groove_schema_hash_bytes`] for rationale.
-/// 3. Jazz lane stamp — env/user_branch mismatch.
+/// Re-stamp the Groove data dir. Wipes only when **identity** disagrees (`client_id` or lane).
 ///
-/// This is the **once-and-for-all** safeguard against the
-/// "old session todos can be read but not edited" failure mode.
+/// Schema hash changes use Jazz v2 lenses ([`schema_migrations`]) — data stays on older branches
+/// and remains readable/writable via composed lenses (see <https://jazz.tools/docs/schemas/migrations>).
 fn reconcile_jazz_identity_cache_dir(
 	jazz_dir: &Path,
 	desired_uuid: Uuid,
 	current_groove_hash: &[u8; 32],
-) -> Result<(), String> {
+	current_schema: &groove::Schema,
+) -> Result<Vec<groove::Schema>, String> {
 	let mut reason: Option<String> = None;
 
 	let client_path = jazz_dir.join("client_id");
@@ -382,14 +377,19 @@ fn reconcile_jazz_identity_cache_dir(
 	}
 
 	let hash_path = jazz_dir.join(GROOVE_SCHEMA_HASH_FILE);
+	let mut live_schemas: Vec<groove::Schema> = Vec::new();
 	if reason.is_none() {
 		match fs::read(&hash_path) {
-			Ok(bytes) if bytes == current_groove_hash => {}
+			Ok(bytes) if bytes.len() == 32 && bytes.as_slice() == current_groove_hash => {}
+			Ok(bytes) if bytes.len() == 32 => {
+				let stored: [u8; 32] = bytes.try_into().expect("length checked");
+				live_schemas =
+					crate::schema_migrations::live_schemas_for_stored_hash(jazz_dir, &stored, current_schema)?;
+			}
 			Ok(bytes) => {
 				reason = Some(format!(
-					"groove SchemaHash changed (on-disk={}, current={}); writable branch derivation drifted, old rows would be unreachable on current_branch()",
-					hex_short(&bytes),
-					hex_short(current_groove_hash)
+					"invalid groove SchemaHash file ({} bytes, expected 32)",
+					bytes.len()
 				));
 			}
 			Err(e) if e.kind() == ErrorKind::NotFound => {
@@ -457,12 +457,13 @@ fn reconcile_jazz_identity_cache_dir(
 	.to_branch_name();
 	log::info!(
 		target: "avenos::jazz",
-		"groove cache stamped: dir={} groove_hash={} composed_branch={}",
+		"groove cache stamped: dir={} groove_hash={} composed_branch={} live_schemas={}",
 		jazz_dir.display(),
 		hex_short(current_groove_hash),
-		composed.as_str()
+		composed.as_str(),
+		live_schemas.len()
 	);
-	Ok(())
+	Ok(live_schemas)
 }
 
 fn hex_short(bytes: &[u8]) -> String {
@@ -658,14 +659,16 @@ async fn jazz_connect(
 	let user_root = vault_user_root(app)?;
 	migrate_legacy_jazz_dir_to_db(&user_root)?;
 	let data_dir = user_root.join(AVEN_OS_GROOVE_DATA_DIR);
-	reconcile_jazz_identity_cache_dir(&data_dir, deterministic, &groove_hash)?;
+	let live_schemas =
+		reconcile_jazz_identity_cache_dir(&data_dir, deterministic, &groove_hash, &schema)?;
 
 	let ctx = AppContext {
 		app_id: AppId::from_name("ceo.aven.os"),
 		client_id: Some(ClientId(deterministic)),
-		schema,
+		schema: schema.clone(),
+		live_schemas,
 		server_url: String::new(),
-		data_dir,
+		data_dir: data_dir.clone(),
 		jwt_token: None,
 		backend_secret: None,
 		admin_secret: None,
@@ -714,12 +717,15 @@ async fn jazz_connect(
 				}
 			}
 		}
+		crate::schema_migrations::stamp_current_vault_snapshot(&data_dir, &schema)?;
 		return Ok(client);
 	}
 
 	#[cfg(not(target_os = "macos"))]
 	{
-		JazzClient::connect(ctx).await.map_err(format_jazz_err)
+		let client = JazzClient::connect(ctx).await.map_err(format_jazz_err)?;
+		crate::schema_migrations::stamp_current_vault_snapshot(&data_dir, &schema)?;
+		Ok(client)
 	}
 }
 

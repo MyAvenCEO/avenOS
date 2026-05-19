@@ -8,7 +8,8 @@
 		}
 	},
 	"scripts": {
-		"build": "bun run scripts/codegen-types.ts"
+		"build": "bun run scripts/codegen-types.ts",
+		"snapshot:hash": "bun run scripts/snapshot-hash.ts"
 	},
 	"devDependencies": {
 		"typescript": "^6.0.2"

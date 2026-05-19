@@ -54,6 +54,20 @@ function devBaseEnv(): Record<string, string> {
 /**
  * Wait until a TCP port is accepting connections (or timeout).
  */
+async function waitForFile(filePath: string, timeoutMs = 60_000): Promise<void> {
+	const deadline = Date.now() + timeoutMs
+	const { access, constants } = await import('node:fs/promises')
+	while (Date.now() < deadline) {
+		try {
+			await access(filePath, constants.F_OK)
+			return
+		} catch {
+			await Bun.sleep(750)
+		}
+	}
+	throw new Error(`File ${filePath} did not appear within ${timeoutMs}ms`)
+}
+
 async function waitForPort(port: number, timeoutMs = 60_000): Promise<void> {
 	const deadline = Date.now() + timeoutMs
 	while (Date.now() < deadline) {
@@ -185,6 +199,20 @@ async function main() {
 		await waitForPort(1421, 60_000)
 	} catch {
 		console.error(`${BOLD}${MAGENTA}[B]${RESET} Timed out waiting for :1421`)
+		tauriA.kill('SIGTERM')
+		viteB.kill('SIGTERM')
+		process.exit(1)
+	}
+
+	// Let instance A finish its Rust build first (shared target/ avoids lock + disk spike).
+	const tauriBin = path.join(appDir, 'src-tauri/target/debug/aven-os-app')
+	console.log(`${BOLD}${CYAN}[A]${RESET} Waiting for Rust build (aven-os-app)…`)
+	try {
+		await waitForFile(tauriBin, 300_000)
+	} catch {
+		console.error(
+			`${BOLD}${CYAN}[A]${RESET} Timed out waiting for ${tauriBin} — check [A] logs (disk full? run: cargo clean --manifest-path lib/app/src-tauri/Cargo.toml)`,
+		)
 		tauriA.kill('SIGTERM')
 		viteB.kill('SIGTERM')
 		process.exit(1)

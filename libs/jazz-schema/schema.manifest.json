@@ -91,6 +91,33 @@
 				},
 				{ "name": "description", "type": "text", "nullable": true }
 			]
+		},
+		"messages": {
+			"columns": [
+				{
+					"name": "spark_id",
+					"type": "uuid",
+					"plaintext": true,
+					"comment": "spark scope — biscuit + P2P sync routing"
+				},
+				{
+					"name": "created_at_ms",
+					"type": "bigint",
+					"plaintext": true,
+					"comment": "ordering in chat threads"
+				},
+				{
+					"name": "author_did",
+					"type": "text",
+					"plaintext": true,
+					"comment": "did:key of sender — display without decrypting body"
+				},
+				{
+					"name": "body",
+					"type": "text",
+					"comment": "message text — sealed at rest per spark DEK"
+				}
+			]
 		}
 	}
 }

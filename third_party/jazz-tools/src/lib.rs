@@ -100,6 +100,10 @@ pub struct AppContext {
     /// Admin secret for schema/policy sync.
     /// Required to sync catalogue objects.
     pub admin_secret: Option<String>,
+
+    /// Older schema versions to register via Jazz lenses (local-first migrations).
+    /// Populated by the host when on-disk schema hash differs from the current manifest.
+    pub live_schemas: Vec<Schema>,
 }
 
 /// Errors from Jazz client operations.

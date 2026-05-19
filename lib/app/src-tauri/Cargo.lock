@@ -204,6 +204,7 @@ dependencies = [
  "curve25519-dalek",
  "ed25519-dalek",
  "env_logger",
+ "hex",
  "hkdf",
  "http",
  "jazz-tools",

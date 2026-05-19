@@ -20,6 +20,7 @@
 	)
 
 	const path = $derived(page.url.pathname)
+	const isTalkView = $derived(path.includes('/talk'))
 
 	const viewTabs = $derived([
 		{
@@ -89,8 +90,13 @@
 		</nav>
 	</aside>
 
-	<main class="min-h-0 overflow-y-auto">
-		<div class="mx-auto w-full max-w-xl px-4 py-6 sm:px-6 sm:py-8">
+	<main
+		class="flex min-h-0 flex-col {isTalkView ? 'overflow-hidden' : 'overflow-y-auto'}"
+	>
+		<div
+			class="mx-auto flex w-full max-w-3xl flex-col px-4 sm:px-6
+				{isTalkView ? 'min-h-0 flex-1 py-4 sm:py-6' : 'py-6 sm:py-8'}"
+		>
 			{@render children()}
 		</div>
 	</main>

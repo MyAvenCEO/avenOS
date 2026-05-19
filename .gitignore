@@ -43,3 +43,7 @@ vite.config.ts.timestamp-*
 # Vibe app sandbox + mini-app build outputs (rebuilt by `bun run build` per package).
 /libs/vibe-app-sandbox/sandbox/dist/
 /libs/vibe-apps/*/dist/
+
+# Rust / Cargo (all crates in repo)
+target/
+**/target/

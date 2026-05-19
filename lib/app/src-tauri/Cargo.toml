@@ -5,7 +5,6 @@ description = "Aven OS desktop shell"
 authors = ["Aven"]
 edition = "2021"
 rust-version = "1.88"
-
 [lib]
 name = "aven_os_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
@@ -28,6 +27,7 @@ sha2 = "0.10"
 tauri-plugin-peer = { path = "../../../projects/tauri-plugin-peer" }
 tauri-plugin-self = { path = "../../../projects/tauri-plugin-self" }
 base64 = "0.22"
+hex = "0.4"
 p256 = "0.13"
 rand_core = { version = "0.6", features = ["getrandom"] }
 tauri = { version = "2", features = ["macos-private-api", "unstable"] }

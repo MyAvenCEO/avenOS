@@ -92,9 +92,15 @@ pub fn manifest_secret_columns() -> Result<HashMap<String, HashSet<String>>, Str
 	manifest_sensitive_columns()
 }
 
-/// Build a Jazz [`Schema`] from the checked-in manifest alongside this crate.
-pub fn load_jazz_schema_from_manifest() -> Result<Schema, String> {
-	let m = read_manifest()?;
+/// Build a Jazz [`Schema`] from a manifest JSON file (e.g. migration snapshots).
+pub fn load_jazz_schema_from_manifest_path(path: &std::path::Path) -> Result<Schema, String> {
+	let raw =
+		std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+	let m: Manifest = serde_json::from_str(&raw).map_err(|e| format!("manifest JSON: {e}"))?;
+	manifest_to_schema(m)
+}
+
+fn manifest_to_schema(m: Manifest) -> Result<Schema, String> {
 
 	let mut builder = SchemaBuilder::new();
 	for (table_name, def) in m.tables {
@@ -105,4 +111,9 @@ pub fn load_jazz_schema_from_manifest() -> Result<Schema, String> {
 		builder = builder.table(tb);
 	}
 	Ok(builder.build())
+}
+
+/// Build a Jazz [`Schema`] from the checked-in manifest alongside this crate.
+pub fn load_jazz_schema_from_manifest() -> Result<Schema, String> {
+	load_jazz_schema_from_manifest_path(&jazz_schema_manifest_path())
 }

@@ -1,0 +1,4 @@
+{
+	"description": "Optional bundled schema snapshots (hash → manifest) when a vault has no copy under db/schema_snapshots/. Most migrations rely on per-vault stamps written at connect.",
+	"snapshots": []
+}
