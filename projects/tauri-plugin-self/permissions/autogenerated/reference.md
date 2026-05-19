@@ -14,6 +14,7 @@ Default permissions for tauri-plugin-self
 - `allow-sign`
 - `allow-verify`
 - `allow-lock`
+- `allow-host-device-label`
 - `allow-vault-list`
 - `allow-vault-slug-preview`
 - `allow-vault-select`
@@ -51,6 +52,32 @@ Enables the device_peer_did command without any pre-configured scope.
 <td>
 
 Denies the device_peer_did command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:allow-host-device-label`
+
+</td>
+<td>
+
+Enables the host_device_label command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:deny-host-device-label`
+
+</td>
+<td>
+
+Denies the host_device_label command without any pre-configured scope.
 
 </td>
 </tr>

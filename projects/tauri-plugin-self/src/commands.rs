@@ -66,6 +66,25 @@ pub async fn verify(
 	derive::verify(&pk, &message, &sig)
 }
 
+/// Friendly host device label for onboarding (e.g. macOS "Computer Name": MacBook Air).
+#[tauri::command]
+pub async fn host_device_label() -> Result<String, String> {
+	Ok(host_device_label_inner())
+}
+
+fn host_device_label_inner() -> String {
+	let label = whoami::devicename();
+	let label = label.trim();
+	let label = label.strip_suffix(".local").unwrap_or(label);
+	if label.is_empty()
+		|| label.eq_ignore_ascii_case("localhost")
+		|| label.eq_ignore_ascii_case("LocalHost")
+	{
+		return String::new();
+	}
+	label.to_string()
+}
+
 /// Zeroize the cached root secret. Frontend should call this on window close / explicit re-lock.
 ///
 /// Emits **`self:did-lock`** so the shell can tear down dependents (e.g. Groove / Jazz runtime)

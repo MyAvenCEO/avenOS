@@ -6,7 +6,10 @@ use serde::Serialize;
 use tauri::{AppHandle, State};
 
 use crate::paths::{self, OVERRIDE_VAULT_SLUG};
-use crate::vault::{ActiveVault, VaultManifest, VAULT_MANIFEST_FILENAME};
+use crate::state::SelfState;
+use crate::vault::{
+	pairing_label_for_app, ActiveVault, VaultManifest, VAULT_MANIFEST_FILENAME,
+};
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -190,6 +193,54 @@ pub async fn vault_create(
 #[tauri::command(rename_all = "camelCase")]
 pub async fn vault_selected_slug(vault_state: State<'_, ActiveVault>) -> Result<Option<String>, String> {
 	vault_state.selected_slug()
+}
+
+/// Single source of truth for the currently unlocked identity.
+///
+/// Returns `Some` only when the vault is `Unlocked` AND `SelfState` holds a root —
+/// i.e. the on-disk vault directory backing the cached ppK is pinned and consistent.
+/// Returns `None` whenever locked. The frontend should read this (and re-fetch on
+/// `self:did-unlock` / `self:did-lock` events) instead of polling the slug separately.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActiveIdentityReply {
+	pub username_slug: String,
+	pub pairing_label: Option<String>,
+	pub ppk_hex: String,
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn active_identity(
+	app: AppHandle,
+	vault: State<'_, ActiveVault>,
+	state: State<'_, SelfState>,
+) -> Result<Option<ActiveIdentityReply>, String> {
+	if !state.is_unlocked() {
+		return Ok(None);
+	}
+	let Some(slug) = vault.selected_slug()? else {
+		return Ok(None);
+	};
+	let Some(ppk) = vault.pinned_ppk()? else {
+		// SelfState says unlocked but vault is not pinned — invariant violation.
+		// Surface as "not yet ready" rather than returning a half-resolved identity.
+		return Ok(None);
+	};
+	Ok(Some(ActiveIdentityReply {
+		username_slug: slug,
+		pairing_label: pairing_label_for_app(&app, &*vault),
+		ppk_hex: hex_lower(&ppk),
+	}))
+}
+
+fn hex_lower(bytes: &[u8; 32]) -> String {
+	const HEX: &[u8; 16] = b"0123456789abcdef";
+	let mut out = String::with_capacity(64);
+	for b in bytes {
+		out.push(HEX[(b >> 4) as usize] as char);
+		out.push(HEX[(b & 0x0f) as usize] as char);
+	}
+	out
 }
 
 fn write_manifest(dir: &std::path::Path, m: &VaultManifest) -> Result<(), String> {

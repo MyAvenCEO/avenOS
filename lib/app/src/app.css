@@ -1,5 +1,22 @@
 @import "tailwindcss";
 
+@font-face {
+	font-family: 'Ouroboros';
+	src: url('/fonts/ouroboros-regular.woff2') format('woff2');
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+.avenos-wordmark {
+	font-family: 'Ouroboros', ui-serif, Georgia, serif;
+	font-size: clamp(2.75rem, 9vw, 3.5rem);
+	font-weight: 400;
+	line-height: 1;
+	letter-spacing: -0.02em;
+	color: var(--color-brand-navy, #1e293b);
+}
+
 /*
  * Brand & semantic status palette (documented hex):
  * — Primary / brand navy: #1E293B

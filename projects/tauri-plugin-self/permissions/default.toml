@@ -13,6 +13,7 @@ permissions = [
   "allow-sign",
   "allow-verify",
   "allow-lock",
+  "allow-host-device-label",
   "allow-vault-list",
   "allow-vault-slug-preview",
   "allow-vault-select",

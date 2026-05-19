@@ -45,11 +45,13 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 			commands::sign,
 			commands::verify,
 			commands::lock,
+			commands::host_device_label,
 			vault_commands::vault_list,
 			vault_commands::vault_slug_preview,
 			vault_commands::vault_select,
 			vault_commands::vault_create,
 			vault_commands::vault_selected_slug,
+			vault_commands::active_identity,
 		])
 		.build()
 }
@@ -131,11 +133,13 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 			commands::sign,
 			commands::verify,
 			commands::lock,
+			commands::host_device_label,
 			vault_commands::vault_list,
 			vault_commands::vault_slug_preview,
 			vault_commands::vault_select,
 			vault_commands::vault_create,
 			vault_commands::vault_selected_slug,
+			vault_commands::active_identity,
 		])
 		.build()
 }

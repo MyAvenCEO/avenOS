@@ -106,6 +106,10 @@ pub async fn public_key(
 
 /// One Touch ID prompt, then the resulting 32-byte root secret is cached in `SelfState`.
 /// **Never returned to JS** — only its derived public outputs (Ed25519 pubkey, signatures) cross IPC.
+///
+/// After the secret is cached, the active vault is **pinned** to the derived Ed25519 ppK
+/// via [`ActiveVault::pin_unlocked`]. This is the single transition `Locked → Unlocked`;
+/// once pinned, no `vault_select` IPC can swap to a different identity until `lock` runs.
 #[tauri::command]
 pub async fn unlock(
 	app: AppHandle,
@@ -121,6 +125,7 @@ pub async fn unlock(
 		));
 	}
 
+	let slug = vault.require_slug()?;
 	let blob_p = blob_path(&app, &*vault, &slot)?;
 	if !blob_p.exists() {
 		return Err("not_registered: call register first".into());
@@ -132,7 +137,16 @@ pub async fn unlock(
 		.as_slice()
 		.try_into()
 		.map_err(|_| format!("se_ecdh_hkdf produced {} bytes, expected 32", secret.len()))?;
+	// Derive Ed25519 ppK BEFORE caching the secret so a derivation failure can't leave us
+	// half-unlocked (root cached but vault unpinned).
+	let ppk = crate::derive::ed25519_public(&bytes)?;
 	state.set_root(bytes);
+	if let Err(e) = vault.pin_unlocked(slug, ppk) {
+		// Refuse to leave the process in a state where SelfState says unlocked but the
+		// vault binding still allows `vault_select` to swap underneath. Roll back.
+		state.clear();
+		return Err(e);
+	}
 	let _ = app.emit("self:did-unlock", ());
 	Ok(())
 }
@@ -144,11 +158,19 @@ pub async fn peer_status(
 	slot: String,
 	state: State<'_, SelfState>,
 ) -> Result<PeerStatus, String> {
-	let pub_p = pub_path(&app, &*vault, &slot)?;
-	let blob_p = blob_path(&app, &*vault, &slot)?;
+	// Before pick/create onboarding, no vault is selected — report status without error.
+	let registered = match crate::paths::aven_os_user_root(&app, &*vault) {
+		Ok(root) => {
+			let self_dir = root.join("self");
+			let pub_p = self_dir.join(format!("peer-id-{slot}.pub"));
+			let blob_p = self_dir.join(format!("peer-id-{slot}.se-blob"));
+			pub_p.exists() && blob_p.exists()
+		}
+		Err(_) => false,
+	};
 	Ok(PeerStatus {
 		platform_supported: true,
-		registered: pub_p.exists() && blob_p.exists(),
+		registered,
 		unlocked: state.is_unlocked(),
 	})
 }

@@ -10,6 +10,7 @@ fn main() {
 		"sign",
 		"verify",
 		"lock",
+		"host_device_label",
 		"vault_list",
 		"vault_slug_preview",
 		"vault_select",
