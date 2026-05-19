@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-vault-selected-slug"
+description = "Enables the vault_selected_slug command without any pre-configured scope."
+commands.allow = ["vault_selected_slug"]
+
+[[permission]]
+identifier = "deny-vault-selected-slug"
+description = "Denies the vault_selected_slug command without any pre-configured scope."
+commands.deny = ["vault_selected_slug"]

@@ -19,8 +19,8 @@ export async function peerInviteCreate(): Promise<PeerInviteCreateReply> {
 	return invoke<PeerInviteCreateReply>('plugin:peer|peer_invite_create')
 }
 
-export async function peerInviteAccept(code: string, label: string): Promise<void> {
-	await invoke<void>('plugin:peer|peer_invite_accept', { code, label })
+export async function peerInviteAccept(code: string): Promise<void> {
+	await invoke<void>('plugin:peer|peer_invite_accept', { code })
 }
 
 export async function peerInviteCancel(): Promise<void> {
@@ -30,7 +30,8 @@ export async function peerInviteCancel(): Promise<void> {
 export type PeerRowReply = {
 	id: string
 	peerDid: string
-	label: string
+	deviceLabel: string
+	kind: string
 	addedAtMs: number
 	status: string
 }

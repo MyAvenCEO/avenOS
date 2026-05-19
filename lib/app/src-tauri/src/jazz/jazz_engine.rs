@@ -1,6 +1,7 @@
 //! Shell: vault, DEKs, sealed text columns (submodule of `jazz`).
 
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use std::sync::OnceLock;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -13,6 +14,7 @@ use groove::{
 	Value,
 };
 use serde_json::{json, Map, Value as JsonValue};
+use tauri_plugin_self::vault::{VaultManifest, VAULT_MANIFEST_FILENAME};
 use uuid::Uuid;
 
 use crate::{
@@ -396,7 +398,33 @@ pub(super) async fn find_row_snapshot(
 	Ok(None)
 }
 
-pub(super) async fn hydrate_shell(client: &JazzClient, root: &[u8; 32]) -> Result<ShellState, String> {
+fn ascii_slug_fallback(name: &str) -> String {
+	let s: String = name
+		.chars()
+		.filter(|c| c.is_ascii_alphanumeric())
+		.map(|c| c.to_ascii_lowercase())
+		.take(48)
+		.collect();
+	if s.is_empty() {
+		"you".into()
+	} else {
+		s
+	}
+}
+
+fn possessive_spark_title(first_name_for_spark: &str) -> String {
+	let n = first_name_for_spark.trim();
+	if n.is_empty() {
+		return "My spark".into();
+	}
+	format!("{n}'s spark")
+}
+
+pub(super) async fn hydrate_shell(
+	client: &JazzClient,
+	root: &[u8; 32],
+	vault_files: &Path,
+) -> Result<ShellState, String> {
 	let mut vault = spark_acc::build_vault_from_root(root)?;
 	let signing_key = jazz_auth::signing_key_from_device_root(root)?;
 	let biscuit_root_pub = vault.biscuit_kp.public();
@@ -428,6 +456,12 @@ pub(super) async fn hydrate_shell(client: &JazzClient, root: &[u8; 32]) -> Resul
 	// peer-issued spark once P2P sync started actually delivering keyshares.
 	let mut spark_issuer_pubkey: HashMap<Uuid, [u8; 32]> = HashMap::new();
 	let sparks_rows = exec_list_rows(client, "sparks").await?;
+
+	let manifest_opt: Option<VaultManifest> = std::fs::read_to_string(
+		vault_files.join(VAULT_MANIFEST_FILENAME),
+	)
+	.ok()
+	.and_then(|raw| serde_json::from_str(&raw).ok());
 
 	for (_oid, vals) in &sparks_rows {
 		spark_acc::ingest_genesis_row(
@@ -504,6 +538,69 @@ pub(super) async fn hydrate_shell(client: &JazzClient, root: &[u8; 32]) -> Resul
 			deks.insert((sid, dv), Dek::from_plain_32(raw32));
 		}
 	} else {
+		let first_name = manifest_opt
+			.as_ref()
+			.map(|m| m.first_name.trim())
+			.filter(|s| !s.is_empty())
+			.unwrap_or("Friend");
+		let username_slug = manifest_opt
+			.as_ref()
+			.and_then(|m| {
+				let u = m.username_slug.trim();
+				if u.is_empty() {
+					None
+				} else {
+					Some(u.to_string())
+				}
+			})
+			.unwrap_or_else(|| ascii_slug_fallback(first_name));
+		let device_label = manifest_opt
+			.as_ref()
+			.map(|m| m.device_label.trim())
+			.filter(|s| !s.is_empty())
+			.unwrap_or("This Mac");
+
+		let peers_schema_seed = resolved_table_schema(client, "peers").await?;
+		let peer_vals = super::insert_values(
+			&peers_schema_seed,
+			vec![
+				("peer_did".into(), JsonValue::String(vault.peer_did.clone())),
+				("device_label".into(), JsonValue::String(device_label.into())),
+				("kind".into(), JsonValue::String("local".into())),
+				("added_at_ms".into(), JsonValue::Number(now_unix_ms_i64().into())),
+				("status".into(), JsonValue::String("active".into())),
+			]
+			.into_iter()
+			.collect(),
+		)?;
+		let local_peer_oid = client
+			.create("peers", peer_vals)
+			.await
+			.map_err(super::format_jazz_err)?;
+
+		let humans_schema_seed = resolved_table_schema(client, "humans").await?;
+		let human_vals_map: Map<String, JsonValue> = vec![
+			("first_name".into(), JsonValue::String(first_name.to_string())),
+			("username_slug".into(), JsonValue::String(username_slug)),
+			(
+				"my_devices".into(),
+				JsonValue::Array(vec![JsonValue::String(
+					local_peer_oid.uuid().to_string(),
+				)]),
+			),
+			(
+				"created_at_ms".into(),
+				JsonValue::Number(now_unix_ms_i64().into()),
+			),
+		]
+		.into_iter()
+		.collect();
+		let humans_vals = super::insert_values(&humans_schema_seed, human_vals_map)?;
+		client
+			.create("humans", humans_vals)
+			.await
+			.map_err(super::format_jazz_err)?;
+
 		let spark_id = Uuid::new_v4();
 		let biscuit_gen = spark_acc::mint_genesis_spark(&vault, spark_id)?;
 		let genesis_b64 = URL_SAFE_NO_PAD.encode(
@@ -517,7 +614,10 @@ pub(super) async fn hydrate_shell(client: &JazzClient, root: &[u8; 32]) -> Resul
 			"spark_id".into(),
 			JsonValue::String(spark_id.to_string()),
 		);
-		row.insert("name".into(), JsonValue::String("My spark".into()));
+		row.insert(
+			"name".into(),
+			JsonValue::String(possessive_spark_title(first_name)),
+		);
 		row.insert(
 			"issuer_pubkey_b64".into(),
 			JsonValue::String(spark_acc::encode_issuer_pubkey_b64(

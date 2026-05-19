@@ -5,9 +5,10 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Runtime, State};
 
 use crate::state::SelfState;
+use crate::vault::ActiveVault;
 
 /// Lock-screen reason shown in the Touch ID sheet.
 const UNLOCK_REASON: &str = "Unlock AvenOS device identity";
@@ -21,18 +22,18 @@ pub struct PeerStatus {
 	pub unlocked: bool,
 }
 
-fn slot_dir(app: &AppHandle) -> Result<PathBuf, String> {
-	let dir = crate::paths::aven_os_user_root(app)?.join("self");
+fn slot_dir<R: Runtime>(app: &AppHandle<R>, vault: &ActiveVault) -> Result<PathBuf, String> {
+	let dir = crate::paths::aven_os_user_root(app, vault)?.join("self");
 	fs::create_dir_all(&dir).map_err(|e| format!("create_dir_all({}): {e}", dir.display()))?;
 	Ok(dir)
 }
 
-fn blob_path(app: &AppHandle, slot: &str) -> Result<PathBuf, String> {
-	Ok(slot_dir(app)?.join(format!("peer-id-{slot}.se-blob")))
+fn blob_path<R: Runtime>(app: &AppHandle<R>, vault: &ActiveVault, slot: &str) -> Result<PathBuf, String> {
+	Ok(slot_dir(app, vault)?.join(format!("peer-id-{slot}.se-blob")))
 }
 
-fn pub_path(app: &AppHandle, slot: &str) -> Result<PathBuf, String> {
-	Ok(slot_dir(app)?.join(format!("peer-id-{slot}.pub")))
+fn pub_path<R: Runtime>(app: &AppHandle<R>, vault: &ActiveVault, slot: &str) -> Result<PathBuf, String> {
+	Ok(slot_dir(app, vault)?.join(format!("peer-id-{slot}.pub")))
 }
 
 /// Atomic write at `0600`. SE-wrapped blob is ciphertext; the `0600` is defence-in-depth only.
@@ -46,9 +47,13 @@ fn write_secure(path: &Path, data: &[u8]) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn register(app: AppHandle, slot: String) -> Result<(), String> {
-	let blob_p = blob_path(&app, &slot)?;
-	let pub_p = pub_path(&app, &slot)?;
+pub async fn register(
+	app: AppHandle,
+	vault: State<'_, ActiveVault>,
+	slot: String,
+) -> Result<(), String> {
+	let blob_p = blob_path(&app, &*vault, &slot)?;
+	let pub_p = pub_path(&app, &*vault, &slot)?;
 
 	if blob_p.exists() && pub_p.exists() {
 		// Already registered for this slot — no-op, no biometric prompt.
@@ -69,15 +74,18 @@ pub async fn register(app: AppHandle, slot: String) -> Result<(), String> {
 	Ok(())
 }
 
-#[tauri::command]
-pub async fn public_key(app: AppHandle, slot: String) -> Result<Vec<u8>, String> {
-	let pub_p = pub_path(&app, &slot)?;
+
+pub(crate) async fn read_device_pubkey_file(
+	app: &AppHandle,
+	vault: &ActiveVault,
+	slot: &str,
+) -> Result<Vec<u8>, String> {
+	let pub_p = pub_path(app, vault, slot)?;
 	if pub_p.exists() {
 		return fs::read(&pub_p).map_err(|e| format!("read {}: {e}", pub_p.display()));
 	}
 
-	// Cache missing but blob still there — repair by re-deriving.
-	let blob_p = blob_path(&app, &slot)?;
+	let blob_p = blob_path(app, vault, slot)?;
 	if !blob_p.exists() {
 		return Err("not_registered: call register first".into());
 	}
@@ -87,11 +95,21 @@ pub async fn public_key(app: AppHandle, slot: String) -> Result<Vec<u8>, String>
 	Ok(pub_bytes)
 }
 
+#[tauri::command]
+pub async fn public_key(
+	app: AppHandle,
+	vault: State<'_, ActiveVault>,
+	slot: String,
+) -> Result<Vec<u8>, String> {
+	read_device_pubkey_file(&app, &*vault, &slot).await
+}
+
 /// One Touch ID prompt, then the resulting 32-byte root secret is cached in `SelfState`.
 /// **Never returned to JS** — only its derived public outputs (Ed25519 pubkey, signatures) cross IPC.
 #[tauri::command]
 pub async fn unlock(
 	app: AppHandle,
+	vault: State<'_, ActiveVault>,
 	slot: String,
 	genesis_network_id: Vec<u8>,
 	state: State<'_, SelfState>,
@@ -103,7 +121,7 @@ pub async fn unlock(
 		));
 	}
 
-	let blob_p = blob_path(&app, &slot)?;
+	let blob_p = blob_path(&app, &*vault, &slot)?;
 	if !blob_p.exists() {
 		return Err("not_registered: call register first".into());
 	}
@@ -122,11 +140,12 @@ pub async fn unlock(
 #[tauri::command]
 pub async fn peer_status(
 	app: AppHandle,
+	vault: State<'_, ActiveVault>,
 	slot: String,
 	state: State<'_, SelfState>,
 ) -> Result<PeerStatus, String> {
-	let pub_p = pub_path(&app, &slot)?;
-	let blob_p = blob_path(&app, &slot)?;
+	let pub_p = pub_path(&app, &*vault, &slot)?;
+	let blob_p = blob_path(&app, &*vault, &slot)?;
 	Ok(PeerStatus {
 		platform_supported: true,
 		registered: pub_p.exists() && blob_p.exists(),

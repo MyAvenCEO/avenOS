@@ -1,34 +1,103 @@
-//! Canonical on-disk layout under `<Documents>/.avenOS/` (cross-platform: OS Documents folder).
+//! Canonical layout: `~/Documents/.avenOS/vaults/<slug>/{db,self}`.
 //!
-//! **Dev harness override**: if `AVENOS_DATA_DIR_OVERRIDE` is set, that path is used instead of
-//! the Documents-relative default. This lets two Tauri instances on the same Mac use disjoint
-//! data directories (e.g. `~/Documents/.avenOS/avenAlice` and `~/Documents/.avenOS/avenBob`)
-//! for P2P sync development.
+//! **Override**: `AVENOS_DATA_DIR_OVERRIDE` points at a **full vault root** (directory that directly
+//! contains `db/` and `self/`) for tests and tooling — bypasses `vaults/` and [`ActiveVault`].
 
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use tauri::{AppHandle, Manager};
 
-/// `<Documents>/.avenOS` — all AvenOS user-local durable state (identity blobs, Jazz SurrealKV, etc.).
-///
-/// If `AVENOS_DATA_DIR_OVERRIDE` is set in the environment, that path is used verbatim instead.
-/// The directory is created if it does not already exist.
-pub fn aven_os_user_root<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
-	let root = if let Ok(override_path) = std::env::var("AVENOS_DATA_DIR_OVERRIDE") {
-		let p = PathBuf::from(shellexpand::tilde(&override_path).as_ref());
-		log::info!(
-			target: "avenos::paths",
-			"AVENOS_DATA_DIR_OVERRIDE active: using {}",
-			p.display()
+use crate::vault::ActiveVault;
+
+/// Slug used for synthetic entries when `AVENOS_DATA_DIR_OVERRIDE` is active.
+pub const OVERRIDE_VAULT_SLUG: &str = "sandbox";
+
+pub(crate) fn expand_override() -> Option<PathBuf> {
+	let ok = std::env::var("AVENOS_DATA_DIR_OVERRIDE").ok()?;
+	let p = PathBuf::from(shellexpand::tilde(&ok).as_ref());
+	log::info!(
+		target: "avenos::paths",
+		"AVENOS_DATA_DIR_OVERRIDE active: using {}",
+		p.display(),
+	);
+	Some(p)
+}
+
+/// `<Documents>/.avenOS` — parent of `vaults/` (not a vault root unless override).
+pub fn aven_os_app_base<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+	if let Some(root) = expand_override() {
+		fs::create_dir_all(&root).map_err(|e| format!("create_dir_all {}: {e}", root.display()))?;
+		return Ok(root);
+	}
+	let docs = app
+		.path()
+		.document_dir()
+		.map_err(|e| format!("document_dir: {e}"))?;
+	let base = docs.join(".avenOS");
+	fs::create_dir_all(&base).map_err(|e| format!("create_dir_all {}: {e}", base.display()))?;
+	Ok(base)
+}
+
+pub fn vaults_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+	if expand_override().is_some() {
+		return Err("vaults_dir_unavailable_under_data_dir_override".into());
+	}
+	Ok(aven_os_app_base(app)?.join("vaults"))
+}
+
+/// Resolves the active vault directory (`…/vaults/<slug>` or override root).
+pub fn aven_os_user_root<R: tauri::Runtime>(
+	app: &AppHandle<R>,
+	vault: &ActiveVault,
+) -> Result<PathBuf, String> {
+	if let Some(root) = expand_override() {
+		return Ok(root);
+	}
+	let slug = vault.require_slug()?;
+	let vr = vaults_dir(app)?.join(&slug);
+	Ok(vr)
+}
+
+pub fn slugify_first_name(raw: &str) -> Result<String, String> {
+	let s = raw.trim();
+	if s.is_empty() {
+		return Err("first_name_required".into());
+	}
+	let mut out = String::new();
+	let lower = s.to_lowercase();
+	for ch in lower.chars() {
+		match ch {
+			'a'..='z' | '0'..='9' => out.push(ch),
+			' ' | '-' | '_' | '.' => {}
+			_ => return Err("first_name_contains_invalid_slug_characters".into()),
+		}
+	}
+	if out.is_empty() {
+		return Err("first_name_must_contain_alphanumeric_slug_characters".into());
+	}
+	validate_username_slug(&out)?;
+	Ok(out)
+}
+
+pub fn validate_username_slug(slug: &str) -> Result<(), String> {
+	if slug.is_empty() {
+		return Err("username_slug_empty".into());
+	}
+	if slug == "." || slug == ".." || slug.contains('/') || slug.contains('\\') {
+		return Err("unsafe_username_slug".into());
+	}
+	if !slug
+		.chars()
+		.all(|c| matches!(c, 'a'..='z' | '0'..='9' | '-' | '_'))
+	{
+		return Err(
+			"username_slug_must_be_lowercase_alphanumeric_hyphen_or_underscore".into(),
 		);
-		p
-	} else {
-		let docs = app
-			.path()
-			.document_dir()
-			.map_err(|e| format!("document_dir: {e}"))?;
-		docs.join(".avenOS")
-	};
-	std::fs::create_dir_all(&root).map_err(|e| format!("create_dir_all {}: {e}", root.display()))?;
-	Ok(root)
+	}
+	Ok(())
+}
+
+pub fn vault_is_complete(root: &Path) -> bool {
+	root.join("self").is_dir() && root.join("db").is_dir()
 }

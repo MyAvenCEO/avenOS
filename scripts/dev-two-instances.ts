@@ -2,32 +2,32 @@
 /**
  * P2P dev harness: spawn two AvenOS Tauri instances side by side.
  *
- * Instance A (avenAlice)  →  http://127.0.0.1:1420  data dir: ~/Documents/.avenOS/avenAlice
- * Instance B (avenBob)    →  http://127.0.0.1:1421  data dir: ~/Documents/.avenOS/avenBob
+ * Instance A → http://127.0.0.1:1420
+ * Instance B → http://127.0.0.1:1421
  *
- * Both instances use the SAME compiled binary (already-built dev binary from the
- * first `cargo tauri dev` run) but point to different data directories via
- * AVENOS_DATA_DIR_OVERRIDE, so they maintain independent identities and Jazz stores.
- * Each scoped root contains the normal `<root>/db/` (SurrealKV) and `<root>/self/`
- * (Secure Enclave blobs) folders the production path creates — they just live next
- * to each other under `.avenOS/` instead of in `$HOME`.
+ * Both use the normal user data layout: ~/Documents/.avenOS/vaults/<slug>/{db,self}.
+ * **Do not** set AVENOS_DATA_DIR_OVERRIDE here — each window gets its own in-memory active vault via
+ * the lock-screen picker, so two personas (e.g. alice + bob vaults) can run concurrently without two
+ * separate override trees.
  *
- * After unlock on each machine: use **Self → Peers & anchor** for invite + accept, then **Self → Sharing**
- * → grant admin so encrypted rows sync. Per-pair Hyperswarm topics are derived from your DIDs.
- *
- * Usage:
- *   bun run dev:two-instances
+ * After unlock on each window: pick different people at "Who are you?" if testing two-human flows.
  *
  * Prerequisites:
  *   - Run `bun run dev:app:macos` once first so the binary and front-end are compiled.
  *   - Alternatively, pre-build: `bun run build:app:macos` (slower first build).
  *
- * Reset both identities:
- *   rm -rf ~/Documents/.avenOS/avenAlice ~/Documents/.avenOS/avenBob
+ * Reset vaults during dev (destructive — removes all saved personas):
+ *   rm -rf ~/Documents/.avenOS/vaults
+ *
+ * For a fully isolated sandbox (single flat vault root, no multi-vault), set per-process
+ * AVENOS_DATA_DIR_OVERRIDE yourself — not handled by this script.
+ *
+ * Usage:
+ *   bun run dev:two-instances
  *
  * The script starts two SvelteKit dev servers on :1420 and :1421 simultaneously,
  * then starts both Tauri processes. Stdout/stderr from each instance is prefixed
- * with a colored label [A] (avenAlice) or [B] (avenBob) so you can tell them apart.
+ * with a colored label [A] or [B] so you can tell them apart.
  */
 
 import { spawn } from 'node:child_process'
@@ -38,6 +38,7 @@ import { freeDevServerPort } from './free-dev-server-port.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appDir = path.join(repoRoot, 'lib/app')
+const vaultsHint = path.join(homedir(), 'Documents', '.avenOS', 'vaults')
 
 /**
  * Wait until a TCP port is accepting connections (or timeout).
@@ -114,13 +115,8 @@ const TAURI_B_CONFIG = JSON.stringify({
 	},
 })
 
-function spawnTauri(
-	label: 'A' | 'B',
-	colour: string,
-	dataDir: string,
-	env: Record<string, string>,
-) {
-	const instanceEnv = { ...env, AVENOS_DATA_DIR_OVERRIDE: dataDir, AVENOS_DEV_INSTANCE: label }
+function spawnTauri(label: 'A' | 'B', colour: string, env: Record<string, string>) {
+	const instanceEnv = { ...env, AVENOS_DEV_INSTANCE: label }
 
 	// For B: pass the overlay as inline JSON to `tauri dev --config '{...}'`.
 	// Do NOT use `--` before --config — that routes it to cargo, not to the Tauri CLI.
@@ -133,17 +129,14 @@ function spawnTauri(
 }
 
 async function main() {
-	const avenOsRoot = path.join(homedir(), 'Documents', '.avenOS')
-	const dataDirA = path.join(avenOsRoot, 'avenAlice')
-	const dataDirB = path.join(avenOsRoot, 'avenBob')
-
 	console.log(
 		`\n${BOLD}AvenOS — P2P dev harness${RESET}\n` +
-		`  ${CYAN}[A] avenAlice${RESET}  data: ${dataDirA}   port: 1420\n` +
-		`  ${MAGENTA}[B] avenBob${RESET}    data: ${dataDirB}   port: 1421\n\n` +
-		`Both instances will join the same Hyperswarm topic once unlocked.\n` +
-		`Reset both identities: rm -rf ${dataDirA} ${dataDirB}\n` +
-		`Press Ctrl-C to stop both.\n`,
+			`  ${CYAN}[A]${RESET}  http://127.0.0.1:1420\n` +
+			`  ${MAGENTA}[B]${RESET}  http://127.0.0.1:1421\n\n` +
+			`Shared vault store: ${vaultsHint}\n` +
+			`Pick a different persona in each window to exercise two-human P2P (or reuse one vault — avoid opening the same slug in both).\n\n` +
+			`Reset all dev personas: rm -rf ${vaultsHint}\n` +
+			`Press Ctrl-C to stop both.\n`,
 	)
 
 	freeDevServerPort(1420)
@@ -153,7 +146,7 @@ async function main() {
 	const baseEnv = process.env as Record<string, string>
 
 	// Instance A: Tauri handles the full lifecycle (beforeDevCommand starts Vite on :1420)
-	const tauriA = spawnTauri('A', CYAN, dataDirA, baseEnv)
+	const tauriA = spawnTauri('A', CYAN, baseEnv)
 
 	// Wait until instance A's Vite is up before starting instance B
 	console.log(`${BOLD}${CYAN}[A]${RESET} Waiting for Vite on :1420…`)
@@ -179,7 +172,7 @@ async function main() {
 	}
 
 	// Now launch instance B's Tauri (devUrl :1421 is ready)
-	const tauriB = spawnTauri('B', MAGENTA, dataDirB, baseEnv)
+	const tauriB = spawnTauri('B', MAGENTA, baseEnv)
 
 	const allProcs = [tauriA, viteB, tauriB]
 

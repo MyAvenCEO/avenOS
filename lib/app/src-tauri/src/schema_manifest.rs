@@ -43,6 +43,14 @@ fn add_column(tb: TableSchemaBuilder, col: &ManifestColumn) -> Result<TableSchem
 		("bigint", true) => Ok(tb.nullable_column(&col.name, ColumnType::BigInt)),
 		("uuid", false) => Ok(tb.column(&col.name, ColumnType::Uuid)),
 		("uuid", true) => Ok(tb.nullable_column(&col.name, ColumnType::Uuid)),
+		("uuid[]", false) => Ok(tb.column(
+			&col.name,
+			ColumnType::Array(Box::new(ColumnType::Uuid)),
+		)),
+		("uuid[]", true) => Ok(tb.nullable_column(
+			&col.name,
+			ColumnType::Array(Box::new(ColumnType::Uuid)),
+		)),
 		_ => Err(format!(
 			"unknown column `{}` kind {:?} nullable={}",
 			col.name, t, col.nullable,

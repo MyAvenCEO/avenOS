@@ -208,6 +208,12 @@ fn generate_pair_code() -> String {
 }
 
 #[cfg(target_os = "macos")]
+fn pairing_advertised_label(app: &tauri::AppHandle) -> String {
+	let vault = app.state::<tauri_plugin_self::vault::ActiveVault>();
+	tauri_plugin_self::vault::pairing_label_for_app(app, &*vault).unwrap_or_else(|| "Peer".into())
+}
+
+#[cfg(target_os = "macos")]
 impl PeerCtl {
 	async fn start_swarm(&self, _app: tauri::AppHandle) -> Result<(), String> {
 		use tauri_plugin_self::derive::derive_ed25519_seed;
@@ -308,6 +314,7 @@ impl PeerCtl {
 				"peer:invite-paired",
 				serde_json::json!({
 					"remoteDid": remote_did,
+					"remoteDisplayLabel": label,
 					"label": label,
 				}),
 			) {
@@ -413,6 +420,8 @@ impl PeerCtl {
 		let normalized = normalize_pair_code(&code)?;
 		let topic = pair_topic_hash(&normalized);
 
+		let advertised = pairing_advertised_label(&self.app_handle);
+
 		let mut inner = self.inner.lock().await;
 		let Some(running) = inner.as_mut() else {
 			return Err("Hyperswarm is not running yet — unlock identity and wait a moment.".into());
@@ -433,7 +442,7 @@ impl PeerCtl {
 		*pairing = Some(PairSession {
 			topic,
 			code: normalized.clone(),
-			my_label_for_remote: "Peer".into(),
+			my_label_for_remote: advertised,
 		});
 
 		log::info!(
@@ -447,10 +456,11 @@ impl PeerCtl {
 	pub(crate) async fn peer_invite_accept(
 		&self,
 		raw_code: String,
-		label_for_remote: String,
 	) -> Result<(), String> {
 		let normalized = normalize_pair_code(&raw_code)?;
 		let topic = pair_topic_hash(&normalized);
+
+		let my_label = pairing_advertised_label(&self.app_handle);
 
 		let mut inner = self.inner.lock().await;
 		let Some(running) = inner.as_mut() else {
@@ -480,7 +490,7 @@ impl PeerCtl {
 		*pairing = Some(PairSession {
 			topic,
 			code: normalized.clone(),
-			my_label_for_remote: label_for_remote,
+			my_label_for_remote: my_label,
 		});
 
 		log::info!(

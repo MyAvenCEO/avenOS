@@ -3,7 +3,7 @@
 //! Conceptually:
 //!     PEER_ID_<device>            P-256 keypair, private in Secure Enclave (macOS).
 //!     device_root_secret          32 bytes, HKDF(ECDH(SE_priv, GENESIS_NETWORK_ID)). RAM only.
-//!     PEER_ID_<device>_ED25519    HKDF-expanded from root_secret. Used for `sign` / `verify` /
+//!     PEER_ID_<device>_ED25519    HKDF-expanded from root secret. Used for `sign` / `verify` /
 //!                                 future Jazz agent + peeroxide Noise XX static key.
 //!
 //! There is no separate "identity" plugin: everything visible from JS is a self primitive.
@@ -13,9 +13,13 @@ pub mod derive;
 pub mod did;
 pub mod paths;
 pub mod state;
+pub mod vault;
+mod vault_commands;
 
 #[cfg(target_os = "macos")]
 mod macos;
+
+use vault::ActiveVault;
 
 use state::SelfState;
 
@@ -27,6 +31,7 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 		.setup(|app, _| {
 			use tauri::Manager;
 			app.manage(SelfState::default());
+			app.manage(ActiveVault::default());
 			Ok(())
 		})
 		.invoke_handler(generate_handler![
@@ -40,6 +45,11 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 			commands::sign,
 			commands::verify,
 			commands::lock,
+			vault_commands::vault_list,
+			vault_commands::vault_slug_preview,
+			vault_commands::vault_select,
+			vault_commands::vault_create,
+			vault_commands::vault_selected_slug,
 		])
 		.build()
 }
@@ -55,19 +65,32 @@ struct PeerStatusStub {
 
 #[cfg(not(target_os = "macos"))]
 #[tauri::command]
-async fn register(_slot: String) -> Result<(), String> {
+async fn register(
+	_app: tauri::AppHandle,
+	_vault: tauri::State<'_, ActiveVault>,
+	_slot: String,
+) -> Result<(), String> {
 	Err("tauri-plugin-self: macOS only in v1".into())
 }
 
 #[cfg(not(target_os = "macos"))]
 #[tauri::command]
-async fn public_key(_slot: String) -> Result<Vec<u8>, String> {
+async fn public_key(
+	_app: tauri::AppHandle,
+	_vault: tauri::State<'_, ActiveVault>,
+	_slot: String,
+) -> Result<Vec<u8>, String> {
 	Err("tauri-plugin-self: macOS only in v1".into())
 }
 
 #[cfg(not(target_os = "macos"))]
 #[tauri::command]
-async fn unlock(_slot: String, _genesis_network_id: Vec<u8>) -> Result<(), String> {
+async fn unlock(
+	_app: tauri::AppHandle,
+	_vault: tauri::State<'_, ActiveVault>,
+	_slot: String,
+	_genesis_network_id: Vec<u8>,
+) -> Result<(), String> {
 	Err("tauri-plugin-self: macOS only in v1".into())
 }
 
@@ -75,6 +98,7 @@ async fn unlock(_slot: String, _genesis_network_id: Vec<u8>) -> Result<(), Strin
 #[tauri::command]
 async fn peer_status(
 	_app: tauri::AppHandle,
+	_vault: tauri::State<'_, ActiveVault>,
 	_slot: String,
 	state: tauri::State<'_, SelfState>,
 ) -> Result<PeerStatusStub, String> {
@@ -93,6 +117,7 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 		.setup(|app, _| {
 			use tauri::Manager;
 			app.manage(SelfState::default());
+			app.manage(ActiveVault::default());
 			Ok(())
 		})
 		.invoke_handler(generate_handler![
@@ -106,6 +131,11 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 			commands::sign,
 			commands::verify,
 			commands::lock,
+			vault_commands::vault_list,
+			vault_commands::vault_slug_preview,
+			vault_commands::vault_select,
+			vault_commands::vault_create,
+			vault_commands::vault_selected_slug,
 		])
 		.build()
 }

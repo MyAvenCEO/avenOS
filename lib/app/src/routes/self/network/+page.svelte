@@ -46,13 +46,13 @@
 	let rows = $state<PeerRowReply[]>([])
 	let inviteCode = $state<string | undefined>()
 	let acceptCode = $state('')
-	let acceptLabel = $state('Their device')
+	let showAdvanced = $state(false)
 	let meshNote = $state<string | undefined>()
 	let actionErr = $state<string | undefined>()
 	let actionBusy = $state(false)
 
 	const unlocked = $derived(
-		$deviceSession.kind === 'unlocked' || $deviceSession.kind === 'dev_bypass',
+		$deviceSession.kind === 'unlocked',
 	)
 	const tauri = $derived(browser && isTauriRuntime())
 
@@ -124,7 +124,7 @@
 		actionBusy = true
 		actionErr = undefined
 		try {
-			await peerInviteAccept(acceptCode.trim(), acceptLabel.trim() || 'Peer')
+			await peerInviteAccept(acceptCode.trim())
 			acceptCode = ''
 			await refreshPeersTransport()
 		} catch (e) {
@@ -191,15 +191,16 @@
 </script>
 
 <svelte:head>
-	<title>Peers &amp; anchor · AvenOS</title>
+	<title>Devices · AvenOS</title>
 </svelte:head>
 
 <div class="flex flex-col gap-8">
 	<header class="space-y-1.5">
-		<h1 class="text-2xl font-semibold tracking-tight">Peers &amp; anchor</h1>
+		<h1 class="text-2xl font-semibold tracking-tight">Devices</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
-			Stable anchor for installs and trusted Macs. Add another computer here, then share workspaces under
+			Connect another Mac on your account, then share sparks from
 			<a href="/self/workspaces" class="text-primary font-medium underline">Self → Workspace sharing</a>.
+			Labels come from each person’s profile automatically.
 		</p>
 	</header>
 
@@ -211,26 +212,26 @@
 		</p>
 	{/if}
 
-	<section class="space-y-4">
-		<div class="flex items-baseline justify-between gap-3">
-			<div class="flex flex-col">
-				<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">Genesis anchor</h2>
-				<span class="text-muted-foreground text-[10px]">SEC1 uncompressed P-256 point (offline constant)</span>
+	<details class="rounded-lg border border-border/50 bg-card/15" bind:open={showAdvanced}>
+		<summary class="cursor-pointer px-4 py-3 text-[11px] font-semibold tracking-wider uppercase opacity-70">
+			Advanced · Genesis anchor
+		</summary>
+		<div class="border-border/50 space-y-4 border-t px-4 py-4">
+			<div class="flex items-baseline justify-between gap-3">
+				<span class="text-muted-foreground text-[10px]">SEC1 P-256 (offline constant)</span>
+				{#if ctx.genesisShort}
+					<span
+						class="rounded-full border border-border/60 bg-background/60 px-2 py-1 font-mono text-[10px]"
+						>{ctx.genesisShort}</span
+					>
+				{/if}
 			</div>
-			{#if ctx.genesisShort}
-				<span
-					class="rounded-full border border-border/60 bg-background/60 px-2 py-1 font-mono text-[10px]"
-					>{ctx.genesisShort}</span
-				>
-			{/if}
-		</div>
 
-		<div class="rounded-xl border border-border/60 bg-card/30 p-4">
-			{#if ctx.genesisB64}
-				<div class="space-y-3">
+			<div class="rounded-xl border border-border/60 bg-background/40 p-3">
+				{#if ctx.genesisB64}
 					<pre
 						class="overflow-x-auto rounded-md border border-border/40 bg-background/50 px-3 py-2 font-mono text-[11px] leading-snug select-text">{ctx.genesisB64}</pre>
-					<div class="flex items-center justify-between gap-3">
+					<div class="mt-3 flex justify-end">
 						<button
 							type="button"
 							class="border-input hover:bg-accent hover:text-accent-foreground rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide"
@@ -238,20 +239,17 @@
 						>
 							{copyGenesisKey === 'genesis' ? 'Copied' : 'Copy'}
 						</button>
-						<span class="text-muted-foreground font-mono text-[10px]">GENESIS_NETWORK_ID</span>
 					</div>
-				</div>
-			{:else}
-				<p class="text-muted-foreground text-xs">Loading…</p>
-			{/if}
+				{:else}
+					<p class="text-muted-foreground text-xs">Loading…</p>
+				{/if}
+			</div>
 		</div>
-	</section>
-
-	<hr class="border-border/50" />
+	</details>
 
 	<section class="space-y-4">
 		<div class="flex flex-wrap items-start justify-between gap-2">
-			<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">Devices</h2>
+		<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">Connect another Mac</h2>
 			{#if session?.peerDid}
 				<p
 					class="text-muted-foreground max-w-[min(100%,28rem)] break-words text-right text-[10px] leading-tight"
@@ -301,7 +299,7 @@
 		{/if}
 
 		<div class="space-y-2.5 rounded-xl border border-border/60 bg-card/30 p-3">
-			<h3 class="text-[10px] font-semibold tracking-wider uppercase opacity-70">Add another Mac</h3>
+			<h3 class="text-[10px] font-semibold tracking-wider uppercase opacity-70">Invite or join</h3>
 			<div class="flex flex-wrap gap-2">
 				<button
 					type="button"
@@ -327,10 +325,6 @@
 						maxlength={6}
 						bind:value={acceptCode}
 					/>
-				</label>
-				<label class="flex flex-1 flex-col gap-1 text-xs">
-					<span class="text-muted-foreground">Name on this Mac</span>
-					<input class="border-input bg-background rounded-md border px-3 py-2 text-sm" bind:value={acceptLabel} />
 				</label>
 				<button
 					type="button"
@@ -365,7 +359,7 @@
 					{#each rows as r (r.id)}
 						<li class="flex flex-col gap-1.5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
 							<div>
-								<div class="font-medium">{r.label || '(no label)'}</div>
+								<div class="font-medium">{r.deviceLabel || '(no label)'}</div>
 								<div class="text-muted-foreground font-mono text-[11px] break-all">{r.peerDid}</div>
 								<div class="text-muted-foreground text-[10px] uppercase">
 									{r.status === 'active' ? 'Connected' : r.status}

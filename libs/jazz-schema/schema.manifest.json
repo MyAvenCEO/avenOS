@@ -1,15 +1,49 @@
 {
 	"tables": {
+		"humans": {
+			"columns": [
+				{
+					"name": "first_name",
+					"type": "text",
+					"plaintext": true,
+					"comment": "singleton per vault — nosync Groove inserts (local-only identity graph)"
+				},
+				{ "name": "username_slug", "type": "text", "plaintext": true },
+				{
+					"name": "my_devices",
+					"type": "uuid[]",
+					"plaintext": true,
+					"exposeTs": "string[]",
+					"comment": "ordered peer row IDs (Groove UUID object ids referencing peers)"
+				},
+				{ "name": "created_at_ms", "type": "bigint", "plaintext": true }
+			]
+		},
 		"peers": {
 			"columns": [
 				{
 					"name": "peer_did",
 					"type": "text",
 					"plaintext": true,
-					"comment": "did:key of the remote peer — local allowlist; objects use nosync metadata so Groove never forwards this table over P2P"
+					"comment": "did:key — nosync peers table"
 				},
-				{ "name": "label", "type": "text", "plaintext": true },
-				{ "name": "added_at_ms", "type": "bigint", "plaintext": true },
+				{
+					"name": "device_label",
+					"type": "text",
+					"plaintext": true,
+					"comment": "e.g. MacBook M1 — display for this peer"
+				},
+				{
+					"name": "kind",
+					"type": "text",
+					"plaintext": true,
+					"comment": "local | remote"
+				},
+				{
+					"name": "added_at_ms",
+					"type": "bigint",
+					"plaintext": true
+				},
 				{
 					"name": "status",
 					"type": "text",

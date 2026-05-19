@@ -10,6 +10,11 @@ fn main() {
 		"sign",
 		"verify",
 		"lock",
+		"vault_list",
+		"vault_slug_preview",
+		"vault_select",
+		"vault_create",
+		"vault_selected_slug",
 	];
 
 	if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {

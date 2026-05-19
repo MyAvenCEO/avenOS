@@ -8,17 +8,11 @@ export type DeviceSession =
 	| { kind: 'locked' }
 	/** Root secret + every derived key live in the Rust process, not in this WebView. */
 	| { kind: 'unlocked' }
-	/** CI / Linux dev escape — no hardware identity (never ship unlocked prod flows here). */
-	| { kind: 'dev_bypass' }
 
 export const deviceSession = writable<DeviceSession>({ kind: 'locked' })
 
 export function setUnlocked(): void {
 	deviceSession.set({ kind: 'unlocked' })
-}
-
-export function devBypassUnlock(): void {
-	deviceSession.set({ kind: 'dev_bypass' })
 }
 
 /** Best-effort lock: zeroizes the Rust-side root and resets the store. Safe to call when locked. */

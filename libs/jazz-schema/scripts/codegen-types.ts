@@ -36,6 +36,17 @@ function colTs(col: Col): string {
 		const base = col.exposeTs
 		return nullable ? `${base} | undefined` : base
 	}
+	if (col.type.endsWith('[]')) {
+		const elt = col.type.slice(0, -2)
+		const innerTs =
+			elt === 'uuid' || elt === 'text'
+				? 'string'
+				: elt === 'bigint'
+					? 'number'
+					: tsScalar(elt, false)
+		const base = `${innerTs}[]`
+		return nullable ? `${base} | undefined` : base
+	}
 	return tsScalar(col.type, nullable)
 }
 

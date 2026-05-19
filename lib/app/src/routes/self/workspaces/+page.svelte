@@ -43,7 +43,7 @@
 
 	const sessionKind = $derived($deviceSession.kind)
 	const unlocked = $derived(
-		sessionKind === 'unlocked' || sessionKind === 'dev_bypass',
+		sessionKind === 'unlocked',
 	)
 	const tauri = $derived(browser && isTauriRuntime())
 
@@ -316,7 +316,7 @@
 						<select class="border-input bg-background flex-1 rounded-md border px-3 py-2 text-sm" bind:value={addAdminDid}>
 							<option value="">Select a paired peer…</option>
 							{#each selectablePeers as p (p.id)}
-								<option value={p.peerDid}>{p.label || p.peerDid.slice(0, 24)}…</option>
+								<option value={p.peerDid}>{p.deviceLabel?.trim() || p.peerDid.slice(0, 24)}…</option>
 							{/each}
 						</select>
 						<button

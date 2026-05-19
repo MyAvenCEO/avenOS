@@ -20,12 +20,12 @@
 </script>
 
 <svelte:head>
-	<title>Peer IDs · AvenOS</title>
+	<title>You · AvenOS</title>
 </svelte:head>
 
 <div class="flex flex-col gap-8">
 	<header class="space-y-1.5">
-		<h1 class="text-2xl font-semibold tracking-tight">Peer IDs</h1>
+		<h1 class="text-2xl font-semibold tracking-tight">You</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
 			<code class="font-mono text-[11px]">did:key</code> anchors for your hardware-backed P-256 credential and your
 			HKDF-derived Ed25519 signing identity (Jazz / ACC).

@@ -13,4 +13,9 @@ permissions = [
   "allow-sign",
   "allow-verify",
   "allow-lock",
+  "allow-vault-list",
+  "allow-vault-slug-preview",
+  "allow-vault-select",
+  "allow-vault-create",
+  "allow-vault-selected-slug",
 ]

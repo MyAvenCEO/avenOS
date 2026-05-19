@@ -80,7 +80,7 @@ impl QueryManager {
         // Create object with table metadata
         let mut metadata = HashMap::new();
         metadata.insert(MetadataKey::Table.to_string(), table.to_string());
-        if table == "peers" {
+        if matches!(table, "peers" | "humans") {
             metadata.insert(MetadataKey::NoSync.to_string(), "true".to_string());
         }
 
@@ -177,7 +177,7 @@ impl QueryManager {
         // Create object with table metadata
         let mut metadata = HashMap::new();
         metadata.insert(MetadataKey::Table.to_string(), table.to_string());
-        if table == "peers" {
+        if matches!(table, "peers" | "humans") {
             metadata.insert(MetadataKey::NoSync.to_string(), "true".to_string());
         }
 

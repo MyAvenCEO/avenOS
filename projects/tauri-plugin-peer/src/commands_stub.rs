@@ -33,7 +33,7 @@ pub async fn peer_invite_create() -> Result<PeerInviteCreateReply, String> {
 }
 
 #[tauri::command]
-pub async fn peer_invite_accept(_code: String, _label: String) -> Result<(), String> {
+pub async fn peer_invite_accept(_code: String) -> Result<(), String> {
 	Err("Hyperswarm pairing is macOS-only in this build.".into())
 }
 

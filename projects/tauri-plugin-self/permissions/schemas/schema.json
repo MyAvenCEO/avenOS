@@ -403,6 +403,66 @@
           "markdownDescription": "Denies the unlock command without any pre-configured scope."
         },
         {
+          "description": "Enables the vault_create command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-vault-create",
+          "markdownDescription": "Enables the vault_create command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the vault_create command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-vault-create",
+          "markdownDescription": "Denies the vault_create command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the vault_list command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-vault-list",
+          "markdownDescription": "Enables the vault_list command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the vault_list command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-vault-list",
+          "markdownDescription": "Denies the vault_list command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the vault_select command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-vault-select",
+          "markdownDescription": "Enables the vault_select command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the vault_select command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-vault-select",
+          "markdownDescription": "Denies the vault_select command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the vault_selected_slug command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-vault-selected-slug",
+          "markdownDescription": "Enables the vault_selected_slug command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the vault_selected_slug command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-vault-selected-slug",
+          "markdownDescription": "Denies the vault_selected_slug command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the vault_slug_preview command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-vault-slug-preview",
+          "markdownDescription": "Enables the vault_slug_preview command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the vault_slug_preview command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-vault-slug-preview",
+          "markdownDescription": "Denies the vault_slug_preview command without any pre-configured scope."
+        },
+        {
           "description": "Enables the verify command without any pre-configured scope.",
           "type": "string",
           "const": "allow-verify",
@@ -415,10 +475,10 @@
           "markdownDescription": "Denies the verify command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-device-peer-did`\n- `allow-signing-peer-did`\n- `allow-signing-public-key`\n- `allow-sign`\n- `allow-verify`\n- `allow-lock`",
+          "description": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-device-peer-did`\n- `allow-signing-peer-did`\n- `allow-signing-public-key`\n- `allow-sign`\n- `allow-verify`\n- `allow-lock`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-device-peer-did`\n- `allow-signing-peer-did`\n- `allow-signing-public-key`\n- `allow-sign`\n- `allow-verify`\n- `allow-lock`"
+          "markdownDescription": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-device-peer-did`\n- `allow-signing-peer-did`\n- `allow-signing-public-key`\n- `allow-sign`\n- `allow-verify`\n- `allow-lock`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`"
         }
       ]
     }

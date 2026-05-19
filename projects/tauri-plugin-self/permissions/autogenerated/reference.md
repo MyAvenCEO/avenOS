@@ -14,6 +14,11 @@ Default permissions for tauri-plugin-self
 - `allow-sign`
 - `allow-verify`
 - `allow-lock`
+- `allow-vault-list`
+- `allow-vault-slug-preview`
+- `allow-vault-select`
+- `allow-vault-create`
+- `allow-vault-selected-slug`
 
 ## Permission Table
 
@@ -254,6 +259,136 @@ Enables the unlock command without any pre-configured scope.
 <td>
 
 Denies the unlock command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:allow-vault-create`
+
+</td>
+<td>
+
+Enables the vault_create command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:deny-vault-create`
+
+</td>
+<td>
+
+Denies the vault_create command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:allow-vault-list`
+
+</td>
+<td>
+
+Enables the vault_list command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:deny-vault-list`
+
+</td>
+<td>
+
+Denies the vault_list command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:allow-vault-select`
+
+</td>
+<td>
+
+Enables the vault_select command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:deny-vault-select`
+
+</td>
+<td>
+
+Denies the vault_select command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:allow-vault-selected-slug`
+
+</td>
+<td>
+
+Enables the vault_selected_slug command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:deny-vault-selected-slug`
+
+</td>
+<td>
+
+Denies the vault_selected_slug command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:allow-vault-slug-preview`
+
+</td>
+<td>
+
+Enables the vault_slug_preview command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:deny-vault-slug-preview`
+
+</td>
+<td>
+
+Denies the vault_slug_preview command without any pre-configured scope.
 
 </td>
 </tr>

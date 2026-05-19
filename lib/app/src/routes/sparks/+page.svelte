@@ -9,7 +9,7 @@
 	const sparksStore = jazzStore('sparks')
 
 	const unlocked = $derived(
-		$deviceSession.kind === 'unlocked' || $deviceSession.kind === 'dev_bypass',
+		$deviceSession.kind === 'unlocked',
 	)
 	const tauri = $derived(browser && isTauriRuntime())
 

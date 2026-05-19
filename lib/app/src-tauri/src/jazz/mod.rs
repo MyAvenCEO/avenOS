@@ -5,7 +5,7 @@ pub(crate) mod jazz_engine;
 use std::collections::HashMap;
 use std::fs;
 use std::io::ErrorKind;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 use groove::{
@@ -23,8 +23,14 @@ use serde_json::{Map, Value as JsonValue};
 use tauri::{Emitter, Manager};
 use tauri_plugin_self::derive::ed25519_public;
 use tauri_plugin_self::state::SelfState;
+use tauri_plugin_self::vault::ActiveVault;
 use tokio::sync::{broadcast, Mutex};
 use uuid::Uuid;
+
+fn vault_user_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+	let v = app.state::<ActiveVault>();
+	tauri_plugin_self::paths::aven_os_user_root(app, &*v)
+}
 
 pub type JsonRow = Map<String, JsonValue>;
 
@@ -177,7 +183,7 @@ pub async fn run_table_change_drain(
 			continue;
 		}
 		let Some(ref client) = jc.client else { continue };
-		let shell = match jazz_shell_ready(&jazz, &self_state, client).await {
+		let shell = match jazz_shell_ready(&app, &jazz, &self_state, client).await {
 			Ok(s) => s,
 			Err(e) => {
 				log::debug!(
@@ -549,8 +555,18 @@ pub(super) fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable:
 			.and_then(|s| Uuid::parse_str(s).ok())
 			.map(|u| Value::Uuid(ObjectId::from_uuid(u)))
 			.ok_or_else(|| "expected UUID string column".into()),
-		ColumnType::Array(_) | ColumnType::Row(_) => Err(format!(
-			"nested {:?} unsupported through JSON IPC for now",
+		ColumnType::Array(inner) => {
+			let arr = cell
+				.as_array()
+				.ok_or_else(|| format!("expected JSON array column (inner={inner:?})"))?;
+			let mut elems = Vec::with_capacity(arr.len());
+			for item in arr {
+				elems.push(json_cell_to_jazz(item, inner.as_ref(), false)?);
+			}
+			Ok(Value::Array(elems))
+		}
+		ColumnType::Row(_) => Err(format!(
+			"row {:?} unsupported through JSON IPC for now",
 			col_ty,
 		)),
 	}
@@ -639,7 +655,7 @@ async fn jazz_connect(
 	let deterministic = crate::jazz_auth::client_uuid_from_ed_pubkey(&pk);
 	let groove_hash = *SchemaHash::compute(&schema).as_bytes();
 
-	let user_root = tauri_plugin_self::paths::aven_os_user_root(app)?;
+	let user_root = vault_user_root(app)?;
 	migrate_legacy_jazz_dir_to_db(&user_root)?;
 	let data_dir = user_root.join(AVEN_OS_GROOVE_DATA_DIR);
 	reconcile_jazz_identity_cache_dir(&data_dir, deterministic, &groove_hash)?;
@@ -738,6 +754,7 @@ async fn ensure_jazz_connection(
 }
 
 async fn jazz_shell_ready(
+	app: &tauri::AppHandle,
 	mj: &ManagedJazz,
 	self_state: &SelfState,
 	client: &JazzClient,
@@ -745,12 +762,13 @@ async fn jazz_shell_ready(
 	let root = self_state
 		.with_root(|r| Ok(*r))
 		.map_err(|_| "locked: unlock AvenOS identity first".to_string())?;
+	let vault_files = vault_user_root(app)?;
 	// Always rehydrate from live Groove. P2P sync can merge new `sparks` / `keyshares` rows without
 	// restarting the Jazz client; an earlier implementation cached ShellState permanently, so
 	// `authorize_gate` still used a vault snapshot from before replication and hid remote sparks.
 	// Performance note: many IPC handlers call here; costly `hydrate_shell` work amplifies navigation
 	// churn. Prefer a cached shell keyed by replicated epoch / table versions when correctness allows.
-	let hydrated = jazz_engine::hydrate_shell(client, &root).await?;
+	let hydrated = jazz_engine::hydrate_shell(client, &root, &vault_files).await?;
 	let arc = std::sync::Arc::new(hydrated);
 	let mut slot = mj.shell.lock().await;
 	*slot = Some(std::sync::Arc::clone(&arc));
@@ -813,7 +831,7 @@ pub async fn jazz_status(
 	let mut jc = jazz.conn.lock().await;
 	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
 	let client = jc.client.as_ref().expect("jazz connected");
-	let _ = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let _ = jazz_shell_ready(&app, &jazz, &self_state, client).await?;
 
 	let sch = client.schema().await.map_err(format_jazz_err)?;
 	let mut tables: Vec<String> = sch.keys().map(|k| k.to_string()).collect();
@@ -833,7 +851,7 @@ pub async fn jazz_session(
 	let mut jc = jazz.conn.lock().await;
 	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
 	let client = jc.client.as_ref().expect("jazz connected");
-	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let shell = jazz_shell_ready(&app, &jazz, &self_state, client).await?;
 	drop(jc);
 	Ok(JazzSessionReply {
 		peer_did: shell.peer_did.clone(),
@@ -891,7 +909,7 @@ pub async fn spark_admin_add(
 	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
 	let client = jc.client.as_ref().expect("jazz connected");
 
-	let shell_arc = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let shell_arc = jazz_shell_ready(&app, &jazz, &self_state, client).await?;
 	let shell = shell_arc.as_ref();
 
 	if peer_did == shell.peer_did {
@@ -1031,7 +1049,7 @@ pub async fn spark_admin_add(
 	let mut jc2 = jazz.conn.lock().await;
 	ensure_jazz_connection(&mut jc2, &jazz, &app, &self_state).await?;
 	let client2 = jc2.client.as_ref().expect("jazz connected");
-	let _shell_new = jazz_shell_ready(&jazz, &self_state, client2).await?;
+	let _shell_new = jazz_shell_ready(&app, &jazz, &self_state, client2).await?;
 	drop(jc2);
 	let _ = jazz.change_tx.send("sparks".to_string());
 	let _ = jazz.change_tx.send("keyshares".to_string());
@@ -1059,7 +1077,7 @@ pub async fn spark_admin_list(
 	let mut jc = jazz.conn.lock().await;
 	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
 	let client = jc.client.as_ref().expect("jazz connected");
-	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let shell = jazz_shell_ready(&app, &jazz, &self_state, client).await?;
 	let bs = shell
 		.vault
 		.sparks
@@ -1091,7 +1109,7 @@ pub async fn jazz_list(
 	let mut jc = jazz.conn.lock().await;
 	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
 	let client = jc.client.as_ref().expect("jazz connected");
-	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let shell = jazz_shell_ready(&app, &jazz, &self_state, client).await?;
 	let (rows, _) =
 		jazz_engine::query_table_publish(client, &shell, &table, ENCRYPTED_META).await?;
 	Ok(rows)
@@ -1107,7 +1125,7 @@ pub async fn jazz_explorer_list(
 	let mut jc = jazz.conn.lock().await;
 	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
 	let client = jc.client.as_ref().expect("jazz connected");
-	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let shell = jazz_shell_ready(&app, &jazz, &self_state, client).await?;
 	let (rows, skipped_unauthorized_rows) =
 		jazz_engine::query_table_publish(client, &shell, &table, ENCRYPTED_META).await?;
 	Ok(JazzExplorerListReply {
@@ -1127,7 +1145,7 @@ pub async fn jazz_get(
 	let mut jc = jazz.conn.lock().await;
 	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
 	let client = jc.client.as_ref().expect("jazz connected");
-	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let shell = jazz_shell_ready(&app, &jazz, &self_state, client).await?;
 	let uuid = Uuid::parse_str(&id).map_err(|e| format!("invalid id UUID: {e}"))?;
 
 	let tbl = jazz_engine::resolved_table_schema(client, &table).await?;
@@ -1165,7 +1183,7 @@ pub async fn jazz_create(
 	let mut jc = jazz.conn.lock().await;
 	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
 	let client = jc.client.as_ref().expect("jazz connected");
-	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let shell = jazz_shell_ready(&app, &jazz, &self_state, client).await?;
 	let tbl = jazz_engine::resolved_table_schema(client, &table).await?;
 
 	if table == "peers" {
@@ -1283,7 +1301,7 @@ pub async fn jazz_update(
 	let mut jc = jazz.conn.lock().await;
 	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
 	let client = jc.client.as_ref().expect("jazz connected");
-	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let shell = jazz_shell_ready(&app, &jazz, &self_state, client).await?;
 	let tbl = jazz_engine::resolved_table_schema(client, &table).await?;
 	let uuid =
 		uuid::Uuid::parse_str(&id).map_err(|e| format!("invalid id UUID parse: {e}"))?;
@@ -1386,7 +1404,7 @@ pub async fn jazz_delete(
 	let mut jc = jazz.conn.lock().await;
 	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
 	let client = jc.client.as_ref().expect("jazz connected");
-	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let shell = jazz_shell_ready(&app, &jazz, &self_state, client).await?;
 	let tbl = jazz_engine::resolved_table_schema(client, &table).await?;
 	let uuid =
 		uuid::Uuid::parse_str(&id).map_err(|e| format!("invalid UUID: {e}"))?;
@@ -1454,7 +1472,7 @@ pub async fn jazz_subscribe(
 	let mut jc = jazz.conn.lock().await;
 	ensure_jazz_connection(&mut jc, &jazz, &app, &self_state).await?;
 	let client = jc.client.as_ref().expect("jazz connected");
-	let shell = jazz_shell_ready(&jazz, &self_state, client).await?;
+	let shell = jazz_shell_ready(&app, &jazz, &self_state, client).await?;
 
 	let evt = format!("jazz:{}:changed", table);
 	let (first, _) =
@@ -1558,7 +1576,20 @@ pub(crate) async fn refresh_peer_mesh_primitives(
 #[serde(rename_all = "camelCase")]
 struct PeerInvitePairedPayload {
 	remote_did: String,
-	label: String,
+	#[serde(default)]
+	label: Option<String>,
+	#[serde(default)]
+	remote_display_label: Option<String>,
+}
+
+fn peer_invite_device_label(p: &PeerInvitePairedPayload, remote_did: &str) -> String {
+	p.remote_display_label
+		.as_deref()
+		.or(p.label.as_deref())
+		.map(str::trim)
+		.filter(|s| !s.is_empty())
+		.map(|s| s.to_string())
+		.unwrap_or_else(|| jazz_engine::short_peer_did(remote_did))
 }
 
 pub(crate) async fn apply_peer_invite_paired(
@@ -1572,7 +1603,8 @@ pub(crate) async fn apply_peer_invite_paired(
 	let mut jc = jazz.conn.lock().await;
 	ensure_jazz_connection(&mut jc, &jazz, app, &self_state).await?;
 	let client = jc.client.as_ref().expect("jazz connected");
-	crate::peers::upsert_peer_row(client, &p.remote_did, &p.label, "active")
+	let device_label = peer_invite_device_label(&p, &p.remote_did);
+	crate::peers::upsert_remote_peer_row(client, &p.remote_did, &device_label, "active")
 		.await?;
 	drop(jc);
 
@@ -1625,7 +1657,7 @@ pub struct SelfStoragePathsReply {
 
 #[tauri::command(rename_all = "camelCase")]
 pub async fn self_storage_paths(app: tauri::AppHandle) -> Result<SelfStoragePathsReply, String> {
-	let root = tauri_plugin_self::paths::aven_os_user_root(&app)?;
+	let root = vault_user_root(&app)?;
 	let db_dir = root.join(AVEN_OS_GROOVE_DATA_DIR);
 	let self_identity_dir = root.join("self");
 	Ok(SelfStoragePathsReply {
@@ -1642,7 +1674,7 @@ pub async fn self_clear_jazz_database(
 	jazz: tauri::State<'_, ManagedJazz>,
 ) -> Result<(), String> {
 	jazz.reset_connection().await;
-	let root = tauri_plugin_self::paths::aven_os_user_root(&app)?;
+	let root = vault_user_root(&app)?;
 	for rel in [AVEN_OS_GROOVE_DATA_DIR, LEGACY_JAZZ_DATA_DIR] {
 		let p = root.join(rel);
 		if p.exists() {

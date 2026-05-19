@@ -9,6 +9,7 @@ use tauri::State;
 
 use crate::derive;
 use crate::state::SelfState;
+use crate::vault::ActiveVault;
 
 /// Stable `did:key` for HKDF-derived **Ed25519** application signing (`PEER_ID_<device>_ED25519`).
 #[tauri::command]
@@ -21,16 +22,16 @@ pub async fn signing_peer_did(state: State<'_, SelfState>) -> Result<String, Str
 
 /// `did:key` for the device's **P-256 Secure Enclave** credential transcript (needs macOS peer pub on disk).
 #[tauri::command]
-pub async fn device_peer_did(app: AppHandle, slot: String) -> Result<String, String> {
+pub async fn device_peer_did(app: AppHandle, vault: State<'_, ActiveVault>, slot: String) -> Result<String, String> {
 	#[cfg(target_os = "macos")]
 	{
-		let pk = crate::macos::commands::public_key(app, slot).await?;
+		let pk = crate::macos::commands::read_device_pubkey_file(&app, &*vault, &slot).await?;
 		crate::did::device_did_from_sec1_public_key(&pk)
 	}
 
 	#[cfg(not(target_os = "macos"))]
 	{
-		let _ = (app, slot);
+		let _ = (app, vault, slot);
 		Err("device_peer_did (P-256 credential) is unavailable on this platform in v1".into())
 	}
 }
@@ -70,8 +71,13 @@ pub async fn verify(
 /// Emits **`self:did-lock`** so the shell can tear down dependents (e.g. Groove / Jazz runtime)
 /// whose cache must never outlive this secret.
 #[tauri::command]
-pub async fn lock(app: AppHandle, state: State<'_, SelfState>) -> Result<(), String> {
+pub async fn lock(
+	app: AppHandle,
+	state: State<'_, SelfState>,
+	vault: State<'_, ActiveVault>,
+) -> Result<(), String> {
 	state.clear();
+	let _ = vault.clear();
 	let _ = app.emit("self:did-lock", ());
 	Ok(())
 }

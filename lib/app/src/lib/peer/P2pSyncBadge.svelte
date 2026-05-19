@@ -140,7 +140,9 @@
 				/>
 			</svg>
 		{/if}
-		<span class="h-1.5 w-1.5 shrink-0 rounded-full {dotClass}" aria-hidden="true"></span>
+		{#if syncState !== 'pairing'}
+			<span class="h-1.5 w-1.5 shrink-0 rounded-full {dotClass}" aria-hidden="true"></span>
+		{/if}
 		<span class="truncate">{label}</span>
 	</span>
 {/if}

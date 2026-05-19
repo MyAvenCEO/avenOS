@@ -52,7 +52,7 @@ export function jazzStore<TName extends keyof SchemaTables>(
 			return
 		}
 		const kind = get(deviceSession).kind
-		if (kind !== 'unlocked' && kind !== 'dev_bypass') return
+		if (kind !== 'unlocked') return
 		try {
 			const status = await jazzStatus()
 			if (!status.ready) await jazzBootstrap()

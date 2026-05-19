@@ -31,12 +31,11 @@ pub async fn peer_invite_accept(
 	app: AppHandle,
 	ctl: State<'_, Arc<PeerCtl>>,
 	code: String,
-	label: String,
 ) -> Result<(), String> {
 	if !app.state::<SelfState>().is_unlocked() {
 		return Err("Unlock AvenOS identity first.".into());
 	}
-	ctl.peer_invite_accept(code, label).await
+	ctl.peer_invite_accept(code).await
 }
 
 #[tauri::command]
