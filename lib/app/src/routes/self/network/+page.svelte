@@ -20,6 +20,7 @@
 	import { deviceSession } from '$lib/self/device-session-store'
 	import { useSelfContext } from '$lib/self/self-context.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+	import { peerRowSyncPhase, peerSyncLabel, peerSyncTextClass } from '$lib/peer/sync-display'
 
 	const ctx = useSelfContext()
 
@@ -59,6 +60,49 @@
 	const pairingPending = $derived(
 		Boolean(inviteCode) || Boolean(peerStatus?.pairingCodePending),
 	)
+
+	/** Shown in Trusted devices while invite/accept is in flight (before `peer:invite-paired`). */
+	type TrustedDeviceRow = PeerRowReply & { placeholder?: boolean; pairingDetail?: string }
+
+	function pairingPlaceholderCopy(
+		hostWaiting: boolean,
+		linkedCount: number,
+	): { title: string; detail: string } {
+		if (linkedCount > 0) {
+			return {
+				title: 'Almost there…',
+				detail: 'Finishing pairing and saving your connection on this device.',
+			}
+		}
+		const detail =
+			'Usually under a minute on the open internet; same Wi‑Fi often helps with VPNs or strict networks.'
+		if (hostWaiting) {
+			return { title: 'Waiting for the other device…', detail }
+		}
+		return { title: 'Connecting to the other device…', detail }
+	}
+
+	const trustedRows = $derived.by((): TrustedDeviceRow[] => {
+		if (!pairingPending) return rows
+
+		const hasPairingRow = rows.some((r) => r.status === 'pairing')
+		if (hasPairingRow) return rows
+
+		const linked = peerStatus?.linkedPeerIds.length ?? 0
+		const copy = pairingPlaceholderCopy(Boolean(inviteCode), linked)
+		const placeholder: TrustedDeviceRow = {
+			id: '__pairing_placeholder__',
+			peerDid: '',
+			deviceLabel: copy.title,
+			pairingDetail: copy.detail,
+			kind: 'remote',
+			addedAtMs: 0,
+			status: 'pairing',
+			placeholder: true,
+		}
+
+		return [...rows, placeholder]
+	})
 
 	/** Peers row + Hyperswarm status only — avoids jazzSession → hydrate_shell every tick. */
 	async function refreshPeersTransport(): Promise<void> {
@@ -198,7 +242,7 @@
 	<header class="space-y-1.5">
 		<h1 class="text-2xl font-semibold tracking-tight">Devices</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
-			Connect another Mac on your account, then share sparks from
+			Connect another device on your account, then share sparks from
 			<a href="/self/workspaces" class="text-primary font-medium underline">Self → Workspace sharing</a>.
 			Labels come from each person’s profile automatically.
 		</p>
@@ -249,7 +293,7 @@
 
 	<section class="space-y-4">
 		<div class="flex flex-wrap items-start justify-between gap-2">
-		<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">Connect another Mac</h2>
+			<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">Connect another device</h2>
 			{#if session?.peerDid}
 				<p
 					class="text-muted-foreground max-w-[min(100%,28rem)] break-words text-right text-[10px] leading-tight"
@@ -272,32 +316,6 @@
 			</p>
 		{/if}
 
-		{#if meshNote && !pairingPending}
-			<p class="text-muted-foreground text-[11px] leading-snug">{meshNote}</p>
-		{/if}
-
-		{#if pairingPending}
-			<div
-				class="border-border/60 bg-muted/20 flex items-start gap-2.5 rounded-lg border px-3 py-2 text-[11px] leading-snug"
-				role="status"
-				aria-live="polite"
-			>
-				<span class="peers-spinner text-primary mt-0.5 shrink-0" aria-hidden="true"></span>
-				<div class="text-muted-foreground min-w-0 flex-1">
-					{#if peerStatus && peerStatus.linkedPeerIds.length > 0}
-						<p class="text-foreground font-medium">Almost there…</p>
-						<p>Finishing pairing and saving your connection on this Mac.</p>
-					{:else}
-						<p class="text-foreground font-medium">Looking for the other device…</p>
-						<p>
-							Two devices finding each other on the internet usually takes less than a minute; sometimes longer
-							with VPNs or strict networks. Putting both on the same Wi‑Fi often speeds this up.
-						</p>
-					{/if}
-				</div>
-			</div>
-		{/if}
-
 		<div class="space-y-2.5 rounded-xl border border-border/60 bg-card/30 p-3">
 			<h3 class="text-[10px] font-semibold tracking-wider uppercase opacity-70">Invite or join</h3>
 			<div class="flex flex-wrap gap-2">
@@ -318,7 +336,7 @@
 			</div>
 			<div class="flex flex-col gap-2 sm:flex-row sm:items-end">
 				<label class="flex flex-1 flex-col gap-1 text-xs">
-					<span class="text-muted-foreground">Code from other Mac</span>
+					<span class="text-muted-foreground">Code from other device</span>
 					<input
 						class="border-input bg-background rounded-md border px-3 py-2 font-mono text-sm uppercase"
 						placeholder="ABC12X"
@@ -342,30 +360,43 @@
 
 		<div class="space-y-2">
 			<h3 class="text-[10px] font-semibold tracking-wider uppercase opacity-70">Trusted devices</h3>
-			{#if rows.length === 0}
-				{#if pairingPending}
-					<p class="text-muted-foreground text-xs leading-snug">
-						No devices here yet — as soon as the connection completes, the other Mac appears in this list
-						automatically.
-					</p>
-				{:else}
-					<p class="text-muted-foreground text-xs leading-snug">
-						No other Mac has been added yet. Use the invite or code above, then approve workspace sharing under
-						<a href="/self/workspaces" class="text-primary font-medium underline">Self → Workspace sharing</a>.
-					</p>
-				{/if}
+			{#if trustedRows.length === 0}
+				<p class="text-muted-foreground text-xs leading-snug">
+					No other device has been added yet. Use the invite or code above, then approve workspace sharing under
+					<a href="/self/workspaces" class="text-primary font-medium underline">Self → Workspace sharing</a>.
+				</p>
 			{:else}
 				<ul class="divide-border/60 divide-y rounded-xl border border-border/60">
-					{#each rows as r (r.id)}
-						<li class="flex flex-col gap-1.5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-							<div>
-								<div class="font-medium">{r.deviceLabel || '(no label)'}</div>
-								<div class="text-muted-foreground font-mono text-[11px] break-all">{r.peerDid}</div>
-								<div class="text-muted-foreground text-[10px] uppercase">
-									{r.status === 'active' ? 'Connected' : r.status}
+					{#each trustedRows as r (r.id)}
+						{@const rowPhase = peerRowSyncPhase(r.status, pairingPending && !r.placeholder)}
+						<li
+							class="flex flex-col gap-1.5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between
+								{r.placeholder ? 'bg-[color-mix(in_srgb,var(--color-status-info-base)_6%,transparent)]' : ''}"
+						>
+							<div class="min-w-0 flex-1">
+								<div class="flex items-start gap-2">
+									{#if r.placeholder}
+										<span
+											class="peers-spinner mt-1 shrink-0 text-[var(--color-status-info-base)]"
+											aria-hidden="true"
+										></span>
+									{/if}
+									<div class="min-w-0 flex-1">
+										<div class="font-medium">{r.deviceLabel || '(no label)'}</div>
+										{#if r.pairingDetail}
+											<p class="text-muted-foreground mt-0.5 text-[11px] leading-snug">{r.pairingDetail}</p>
+										{:else if r.peerDid}
+											<div class="text-muted-foreground font-mono text-[11px] break-all">{r.peerDid}</div>
+										{/if}
+										<div
+											class="mt-1 text-[10px] font-bold tracking-wider uppercase {peerSyncTextClass(rowPhase)}"
+										>
+											{peerSyncLabel(rowPhase)}
+										</div>
+									</div>
 								</div>
 							</div>
-							{#if r.status === 'active'}
+							{#if r.status === 'active' && !r.placeholder}
 								<button
 									type="button"
 									class="text-destructive border-destructive/40 hover:bg-destructive/10 rounded-md border px-3 py-1 text-xs"

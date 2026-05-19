@@ -43,14 +43,15 @@
 		return vaults[0]
 	})
 
-	const profileLine = $derived.by(() => {
+	const profileTitle = $derived.by(() => {
 		const v = activeVault
 		if (!v) return 'Self'
 		const name = vaultCardTitle(v)
 		const dev = v.deviceLabel?.trim()
-		if (dev) return `${name} · ${dev}`
-		return name
+		return dev ? `${name} ·` : name
 	})
+
+	const profileDevice = $derived(activeVault?.deviceLabel?.trim() ?? '')
 
 	const navSections: {
 		title: string
@@ -88,8 +89,6 @@
 		},
 	]
 
-	const sessionLabel = $derived(sessionKind === 'unlocked' ? 'Unlocked' : 'Locked')
-	const sessionDot = $derived(sessionKind === 'unlocked' ? 'bg-emerald-500' : 'bg-zinc-400')
 </script>
 
 <div class="grid h-full min-h-0 w-full grid-cols-[14rem_1fr]">
@@ -98,10 +97,10 @@
 		aria-label="Self settings"
 	>
 		<div class="mb-4 px-3">
-			<h2 class="text-sm font-semibold tracking-tight">{profileLine}</h2>
-			<p class="text-muted-foreground text-[11px] leading-snug">
-				You, your devices, and how sparks sync
-			</p>
+			<h2 class="text-sm font-semibold tracking-tight">{profileTitle}</h2>
+			{#if profileDevice}
+				<p class="text-muted-foreground mt-0.5 text-[11px] leading-snug">{profileDevice}</p>
+			{/if}
 		</div>
 
 		<nav class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
@@ -127,11 +126,6 @@
 				</div>
 			{/each}
 		</nav>
-
-		<div class="mt-4 flex items-center gap-2 rounded-md px-3 py-2 text-[11px]">
-			<span class="inline-flex h-2 w-2 rounded-full {sessionDot}" aria-hidden="true"></span>
-			<span class="text-muted-foreground">{sessionLabel}</span>
-		</div>
 	</aside>
 
 	<main class="min-h-0 overflow-y-auto">

@@ -1,6 +1,6 @@
 {
 	"$schema": "https://schema.tauri.app/config/2",
-	"productName": "Aven OS",
+	"productName": "avenOS",
 	"version": "0.0.1",
 	"identifier": "ceo.aven.os",
 	"build": {
@@ -14,7 +14,7 @@
 		"windows": [
 			{
 				"label": "main",
-				"title": "Aven OS",
+				"title": "avenOS",
 				"width": 1280,
 				"height": 800,
 				"minWidth": 960,
