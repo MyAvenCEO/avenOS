@@ -5,7 +5,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Runtime, State};
+use tauri::{AppHandle, Runtime, State};
 
 use crate::state::SelfState;
 use crate::vault::ActiveVault;
@@ -125,7 +125,6 @@ pub async fn unlock(
 		));
 	}
 
-	let slug = vault.require_slug()?;
 	let blob_p = blob_path(&app, &*vault, &slot)?;
 	if !blob_p.exists() {
 		return Err("not_registered: call register first".into());
@@ -137,18 +136,7 @@ pub async fn unlock(
 		.as_slice()
 		.try_into()
 		.map_err(|_| format!("se_ecdh_hkdf produced {} bytes, expected 32", secret.len()))?;
-	// Derive Ed25519 ppK BEFORE caching the secret so a derivation failure can't leave us
-	// half-unlocked (root cached but vault unpinned).
-	let ppk = crate::derive::ed25519_public(&bytes)?;
-	state.set_root(bytes);
-	if let Err(e) = vault.pin_unlocked(slug, ppk) {
-		// Refuse to leave the process in a state where SelfState says unlocked but the
-		// vault binding still allows `vault_select` to swap underneath. Roll back.
-		state.clear();
-		return Err(e);
-	}
-	let _ = app.emit("self:did-unlock", ());
-	Ok(())
+	crate::unlock::unlock_with_root_secret(&app, &vault, &state, bytes)
 }
 
 #[tauri::command]

@@ -40,6 +40,18 @@ fn self_dir_has_se_blob(dir: &std::path::Path) -> bool {
 	false
 }
 
+fn self_dir_has_identity(dir: &std::path::Path) -> bool {
+	if self_dir_has_se_blob(dir) {
+		return true;
+	}
+	#[cfg(not(target_os = "macos"))]
+	{
+		return crate::dev_insecure::self_dir_has_dev_root(dir);
+	}
+	#[cfg(target_os = "macos")]
+	false
+}
+
 /// List vault folders under `<app-base>/vaults/`, or a synthetic entry when data-dir override is set.
 #[tauri::command(rename_all = "camelCase")]
 pub async fn vault_list(app: AppHandle, _vault_state: State<'_, ActiveVault>) -> Result<Vec<VaultListEntry>, String> {
@@ -50,7 +62,7 @@ pub async fn vault_list(app: AppHandle, _vault_state: State<'_, ActiveVault>) ->
 			username_slug: OVERRIDE_VAULT_SLUG.into(),
 			first_name: man.as_ref().map(|m| m.first_name.clone()),
 			device_label: man.as_ref().map(|m| m.device_label.clone()),
-			has_identity_blob: paths::vault_is_complete(&root) && self_dir_has_se_blob(&root.join("self")),
+			has_identity_blob: paths::vault_is_complete(&root) && self_dir_has_identity(&root.join("self")),
 		}]);
 	}
 
@@ -79,7 +91,7 @@ pub async fn vault_list(app: AppHandle, _vault_state: State<'_, ActiveVault>) ->
 			username_slug: name,
 			first_name: man.as_ref().map(|m| m.first_name.clone()),
 			device_label: man.as_ref().map(|m| m.device_label.clone()),
-			has_identity_blob: self_dir_has_se_blob(&vr.join("self")),
+			has_identity_blob: self_dir_has_identity(&vr.join("self")),
 		});
 	}
 	out.sort_by(|a, b| a.username_slug.cmp(&b.username_slug));

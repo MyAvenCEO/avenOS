@@ -5,7 +5,7 @@
  * Instance A → http://127.0.0.1:1420
  * Instance B → http://127.0.0.1:1421
  *
- * Both use the normal user data layout: ~/Documents/.avenOS/vaults/<slug>/{db,self}.
+ * Both use the normal user data layout: <Documents>/.avenOS/vaults/<slug>/{db,self}.
  * **Do not** set AVENOS_DATA_DIR_OVERRIDE here — each window gets its own in-memory active vault via
  * the lock-screen picker, so two personas (e.g. alice + bob vaults) can run concurrently without two
  * separate override trees.
@@ -17,7 +17,7 @@
  *   - Alternatively, pre-build: `bun run build:app:mac` / `build:app:linux` (slower first build).
  *
  * Reset vaults during dev (destructive — removes all saved personas):
- *   rm -rf ~/Documents/.avenOS/vaults
+ *   rm -rf "<Documents>/.avenOS/vaults"  (see vaultsHint printed at startup)
  *
  * For a fully isolated sandbox (single flat vault root, no multi-vault), set per-process
  * AVENOS_DATA_DIR_OVERRIDE yourself — not handled by this script.
@@ -39,7 +39,13 @@ import { freeDevServerPort } from './free-dev-server-port.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appDir = path.join(repoRoot, 'lib/app')
-const vaultsHint = path.join(homedir(), 'Documents', '.avenOS', 'vaults')
+function userDocumentsDir(): string {
+	const xdg = process.env.XDG_DOCUMENTS_DIR?.trim()
+	if (xdg) return xdg
+	return path.join(homedir(), 'Documents')
+}
+
+const vaultsHint = path.join(userDocumentsDir(), '.avenOS', 'vaults')
 
 /** Linux WebKitGTK defaults (same as dev-app-linux.ts). */
 function devBaseEnv(): Record<string, string> {

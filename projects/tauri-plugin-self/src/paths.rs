@@ -1,4 +1,4 @@
-//! Canonical layout: `~/Documents/.avenOS/vaults/<slug>/{db,self}`.
+//! Canonical layout: `<user Documents>/.avenOS/vaults/<slug>/{db,self}` (OS-localized Documents folder).
 //!
 //! **Override**: `AVENOS_DATA_DIR_OVERRIDE` points at a **full vault root** (directory that directly
 //! contains `db/` and `self/`) for tests and tooling — bypasses `vaults/` and [`ActiveVault`].
@@ -24,16 +24,23 @@ pub(crate) fn expand_override() -> Option<PathBuf> {
 	Some(p)
 }
 
+/// User-local Documents directory (Tauri resolver, then `dirs` / XDG fallback).
+pub fn user_documents_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+	match app.path().document_dir() {
+		Ok(p) if !p.as_os_str().is_empty() => Ok(p),
+		_ => dirs::document_dir().ok_or_else(|| {
+			"could not resolve user Documents directory (set XDG_DOCUMENTS_DIR on Linux)".into()
+		}),
+	}
+}
+
 /// `<Documents>/.avenOS` — parent of `vaults/` (not a vault root unless override).
 pub fn aven_os_app_base<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
 	if let Some(root) = expand_override() {
 		fs::create_dir_all(&root).map_err(|e| format!("create_dir_all {}: {e}", root.display()))?;
 		return Ok(root);
 	}
-	let docs = app
-		.path()
-		.document_dir()
-		.map_err(|e| format!("document_dir: {e}"))?;
+	let docs = user_documents_dir(app)?;
 	let base = docs.join(".avenOS");
 	fs::create_dir_all(&base).map_err(|e| format!("create_dir_all {}: {e}", base.display()))?;
 	Ok(base)

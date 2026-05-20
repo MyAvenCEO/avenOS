@@ -4795,12 +4795,14 @@ name = "tauri-plugin-self"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "dirs",
  "ed25519-dalek",
  "hkdf",
  "libc",
  "log",
  "multibase",
  "p256",
+ "rand_core 0.6.4",
  "serde",
  "serde_json",
  "sha2 0.10.9",

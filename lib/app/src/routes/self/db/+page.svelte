@@ -60,9 +60,10 @@
 	<header class="space-y-1.5">
 		<h1 class="text-2xl font-semibold tracking-tight">Local database</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
-			AvenOS keeps durable state under <code class="font-mono text-[11px]">Documents/.avenOS/</code>
-			(macOS: <code class="font-mono text-[11px]">~/Documents/.avenOS</code>). Groove/SurrealKV data lives in
-			<code class="font-mono text-[11px]">db/</code>; Secure Enclave identity transcripts live in
+			AvenOS keeps durable state under your OS <strong>Documents</strong> folder in
+			<code class="font-mono text-[11px]">.avenOS/</code> (e.g.
+			<code class="font-mono text-[11px]">~/Documents/.avenOS</code> on macOS, XDG Documents on Linux).
+			Groove/SurrealKV data lives in <code class="font-mono text-[11px]">db/</code>; device identity material lives in
 			<code class="font-mono text-[11px]">self/</code>.
 		</p>
 	</header>

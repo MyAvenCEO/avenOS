@@ -32,6 +32,11 @@ pub async fn device_peer_did(app: AppHandle, vault: State<'_, ActiveVault>, slot
 	#[cfg(not(target_os = "macos"))]
 	{
 		let _ = (app, vault, slot);
+		if crate::dev_insecure::enabled() {
+			return Err(
+				"device_peer_did (P-256 credential) unavailable with dev plain-root identity".into(),
+			);
+		}
 		Err("device_peer_did (P-256 credential) is unavailable on this platform in v1".into())
 	}
 }
