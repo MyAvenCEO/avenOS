@@ -1,7 +1,9 @@
 <script lang="ts">
+import { goto } from '$app/navigation'
 import { page } from '$app/state'
 import { browser } from '$app/environment'
 import { ensureComposerTauriShortcutBridge } from '$lib/intent-mock/composer-tauri-bridge'
+import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
 import P2pSyncBadge from '$lib/peer/P2pSyncBadge.svelte'
 import LockGate from '$lib/self/LockGate.svelte'
 import { deviceSession } from '$lib/self/device-session-store'
@@ -26,6 +28,10 @@ const dbActive = $derived(path.startsWith('/db'))
 const shellLocked = $derived(
 	browser && isTauriRuntime() && $deviceSession.kind === 'locked',
 )
+
+$effect(() => {
+	if (shellLocked) pendingIntentFileDrop.set(null)
+})
 
 const sessionKind = $derived($deviceSession.kind)
 
@@ -53,6 +59,65 @@ const selfNavLabel = $derived.by(() => {
 	const first = vaults[0]
 	if (first) return vaultCardTitle(first)
 	return 'Self'
+})
+
+/** Global file-drag overlay (all routes when unlocked; not active on lock screen). */
+let dragDepth = $state(0)
+const dragActive = $derived(dragDepth > 0)
+
+function isFilesDrag(dt: DataTransfer | null): boolean {
+	if (!dt) return false
+	return Array.from(dt.types).includes('Files')
+}
+
+$effect(() => {
+	if (!browser || shellLocked) return
+	const onDragEnter = (e: DragEvent) => {
+		if (!isFilesDrag(e.dataTransfer)) return
+		e.preventDefault()
+		dragDepth += 1
+	}
+	const onDragLeave = (e: DragEvent) => {
+		if (!isFilesDrag(e.dataTransfer)) return
+		e.preventDefault()
+		dragDepth = Math.max(0, dragDepth - 1)
+	}
+	const onDragOver = (e: DragEvent) => {
+		const dt = e.dataTransfer
+		if (!dt || !isFilesDrag(dt)) return
+		e.preventDefault()
+		dt.dropEffect = 'copy'
+	}
+	const resetDragOverlay = () => {
+		dragDepth = 0
+	}
+	const onDrop = (e: DragEvent) => {
+		if (!isFilesDrag(e.dataTransfer)) return
+		e.preventDefault()
+		resetDragOverlay()
+		const list = e.dataTransfer?.files
+		if (!list?.length) return
+		const files = Array.from(list)
+		pendingIntentFileDrop.set(files)
+		if (page.url.pathname !== '/') {
+			void goto('/')
+		}
+	}
+
+	window.addEventListener('dragenter', onDragEnter)
+	window.addEventListener('dragleave', onDragLeave)
+	window.addEventListener('dragover', onDragOver)
+	window.addEventListener('drop', onDrop)
+	window.addEventListener('dragend', resetDragOverlay)
+
+	return () => {
+		window.removeEventListener('dragenter', onDragEnter)
+		window.removeEventListener('dragleave', onDragLeave)
+		window.removeEventListener('dragover', onDragOver)
+		window.removeEventListener('drop', onDrop)
+		window.removeEventListener('dragend', resetDragOverlay)
+		resetDragOverlay()
+	}
 })
 </script>
 
@@ -131,7 +196,38 @@ const selfNavLabel = $derived.by(() => {
 				</nav>
 			</div>
 		</header>
-		<div class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+		{#if dragActive}
+			<div
+				class="pointer-events-auto fixed inset-0 z-[100] flex touch-none items-center justify-center bg-background/95 backdrop-blur-md"
+				role="region"
+				aria-label="Drop files to attach in composer"
+			>
+				<div class="mx-6 w-full max-w-md">
+					<div
+						class="rounded-[var(--radius-lg)] border-[3px] border-dashed border-primary/50 bg-card/96 p-[10px] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-primary)_14%,transparent)] ring-2 ring-primary/20 ring-offset-[8px] ring-offset-background backdrop-blur-sm"
+					>
+						<div
+							class="rounded-[calc(var(--radius-lg)-8px)] border border-dotted border-primary/40 bg-muted/40 px-7 py-9 text-center"
+						>
+							<p class="text-xl font-semibold tracking-tight text-primary md:text-[1.3rem]">
+								Drop files here
+							</p>
+							<p class="mt-2.5 px-1 text-[12px] leading-relaxed opacity-85">
+								Release to open Intents with thumbnails and optional message.
+							</p>
+							<p class="mt-1.5 px-1 text-[11px] leading-relaxed opacity-55">
+								PDF, JPEG, PNG, or SVG — on submit, allowed files sync to your local Groove
+								<code class="font-mono text-[10px]">files</code> table (unlock required).
+							</p>
+						</div>
+					</div>
+				</div>
+			</div>
+		{/if}
+		<div
+			class={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden${dragActive ? ' pointer-events-none select-none saturate-75 contrast-[0.85] brightness-90 blur-[3px]' : ''}`}
+			aria-hidden={dragActive ? true : undefined}
+		>
 			{@render pageContent()}
 		</div>
 	{/if}

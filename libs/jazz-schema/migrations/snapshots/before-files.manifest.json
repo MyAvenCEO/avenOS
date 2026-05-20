@@ -118,48 +118,6 @@
 					"comment": "message text — sealed at rest per spark DEK"
 				}
 			]
-		},
-		"files": {
-			"columns": [
-				{
-					"name": "spark_id",
-					"type": "uuid",
-					"plaintext": true,
-					"comment": "spark scope — ACC routing; ciphertext AAD binds rows to sparks"
-				},
-				{
-					"name": "intent_id",
-					"type": "text",
-					"plaintext": true,
-					"comment": "client intent row id when uploaded from composer"
-				},
-				{
-					"name": "filename",
-					"type": "text",
-					"plaintext": true
-				},
-				{
-					"name": "mime_type",
-					"type": "text",
-					"plaintext": true,
-					"comment": "application/pdf | image/jpeg | image/png | image/svg+xml"
-				},
-				{
-					"name": "size_bytes",
-					"type": "bigint",
-					"plaintext": true
-				},
-				{
-					"name": "created_at_ms",
-					"type": "bigint",
-					"plaintext": true
-				},
-				{
-					"name": "content_b64",
-					"type": "text",
-					"comment": "standard base64 file bytes — sealed at rest (v1; chunked file_parts later)"
-				}
-			]
 		}
 	}
 }

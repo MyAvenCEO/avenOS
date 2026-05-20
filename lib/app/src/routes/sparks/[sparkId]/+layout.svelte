@@ -21,6 +21,7 @@
 
 	const path = $derived(page.url.pathname)
 	const isTalkView = $derived(path.includes('/talk'))
+	const isGalleryView = $derived(path.includes('/gallery'))
 
 	const viewTabs = $derived([
 		{
@@ -32,6 +33,11 @@
 			href: `${sparkBase}/todos`,
 			label: 'Todos',
 			match: (p: string) => p.startsWith(`${sparkBase}/todos`),
+		},
+		{
+			href: `${sparkBase}/gallery`,
+			label: 'Gallery',
+			match: (p: string) => p.startsWith(`${sparkBase}/gallery`),
 		},
 	])
 </script>
@@ -94,7 +100,8 @@
 		class="flex min-h-0 flex-col {isTalkView ? 'overflow-hidden' : 'overflow-y-auto'}"
 	>
 		<div
-			class="mx-auto flex w-full max-w-3xl flex-col px-4 sm:px-6
+			class="mx-auto flex w-full flex-col px-4 sm:px-6
+				{isGalleryView ? 'max-w-5xl' : 'max-w-3xl'}
 				{isTalkView ? 'min-h-0 flex-1 py-4 sm:py-6' : 'py-6 sm:py-8'}"
 		>
 			{@render children()}

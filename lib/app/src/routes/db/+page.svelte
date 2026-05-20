@@ -45,7 +45,20 @@
 
 	const cellPreviewMax = 200
 
-	function formatCell(value: unknown): { text: string; title?: string } {
+	function formatCell(
+		column: string,
+		value: unknown,
+		row: Record<string, unknown>,
+	): { text: string; title?: string } {
+		if (column === 'content_b64' && typeof value === 'string' && value.length > 0) {
+			const n = value.length
+			const sizeBytes = typeof row.size_bytes === 'number' ? row.size_bytes : undefined
+			const hint = sizeBytes != null ? ` · original ~${sizeBytes} B` : ''
+			return {
+				text: `[sealed payload, ${n} base64 chars${hint}]`,
+				title: `${value.slice(0, 120)}…`,
+			}
+		}
 		if (value === null) return { text: '' }
 		if (value === undefined) return { text: '' }
 		if (typeof value === 'boolean') return { text: value ? 'true' : 'false' }
@@ -286,7 +299,7 @@
 									{#each explorerRows as row, ix (typeof row.id === 'string' ? row.id : ix)}
 										<tr class="border-border/60 odd:bg-muted/40 hover:bg-muted/60 transition-colors border-b align-top">
 											{#each columns as col (col)}
-												{@const c = formatCell(row[col])}
+												{@const c = formatCell(col, row[col], row as Record<string, unknown>)}
 												<td
 													class="max-w-xl border-border/40 px-2 py-1.5 text-[11px] leading-snug break-all"
 													title={c.title}

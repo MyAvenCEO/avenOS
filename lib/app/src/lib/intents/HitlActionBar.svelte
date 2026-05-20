@@ -35,9 +35,9 @@ let {
 	onAccept
 }: {
 	intent: IntentRow | null
-	onSubmitMessage: (text: string) => void
+	onSubmitMessage: (text: string, files: File[]) => void | Promise<void>
 	/** Called when the composer submits with the active `retrain` slash command. */
-	onRetrain: (feedback: string) => void
+	onRetrain: (feedback: string, files: File[]) => void | Promise<void>
 	/** Archive the currently selected intent. The bar only renders this for `success`. */
 	onArchive: () => void
 	/** Accept the currently selected HITL/error intent — mark it `success`. */
@@ -66,9 +66,9 @@ let composerCommand = $state<string | null>(null)
  */
 let composerRef = $state<ComposerApi | null>(null)
 
-function handleCommand(command: string, feedback: string) {
+function handleCommand(command: string, feedback: string, files: File[]) {
 	if (command !== 'retrain') return
-	onRetrain(feedback)
+	onRetrain(feedback, files)
 }
 
 /** Called from the page when the user drops files on the window. */

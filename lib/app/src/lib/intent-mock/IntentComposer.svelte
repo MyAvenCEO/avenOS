@@ -52,9 +52,9 @@ let {
 	 */
 	command = $bindable<string | null>(null)
 }: {
-	onSubmitMessage?: (text: string) => void
+	onSubmitMessage?: (text: string, files: File[]) => void
 	onModeChange?: (mode: Mode) => void
-	onCommandSubmit?: (command: string, text: string) => void
+	onCommandSubmit?: (command: string, text: string, files: File[]) => void
 	rowCluster?: boolean
 	command?: string | null
 } = $props()
@@ -340,7 +340,7 @@ async function commitVoiceNote() {
 	mode = 'collapsed'
 	openMicCooldownUntilMs = performance.now() + 280
 
-	onSubmitMessage(body)
+	onSubmitMessage(body, [])
 	await finalizeSubmitCollapseAfterParent()
 }
 
@@ -352,6 +352,7 @@ async function commitMessage() {
 	if (activeCommand != null) {
 		if (!onCommandSubmit) return
 		if (!raw && !attachBlock) return
+		const filesSnapshot = attachments.map((a) => a.file)
 		suppressTextEffect = true
 		text = ''
 		command = null
@@ -359,7 +360,7 @@ async function commitMessage() {
 		textareaEl?.blur()
 		const combined = [raw, attachBlock].filter(Boolean).join('\n\n')
 		clearAttachments()
-		onCommandSubmit(activeCommand, combined)
+		onCommandSubmit(activeCommand, combined, filesSnapshot)
 		await finalizeSubmitCollapseAfterParent()
 		return
 	}
@@ -367,6 +368,7 @@ async function commitMessage() {
 	if (!onSubmitMessage) return
 	if (!raw && !attachBlock) return
 
+	const filesSnapshot = attachments.map((a) => a.file)
 	suppressTextEffect = true
 	text = ''
 	mode = 'collapsed'
@@ -375,7 +377,7 @@ async function commitMessage() {
 	const message = [attachBlock, raw].filter(Boolean).join('\n\n')
 	clearAttachments()
 
-	onSubmitMessage(message)
+	onSubmitMessage(message, filesSnapshot)
 	await finalizeSubmitCollapseAfterParent()
 }
 

@@ -15,6 +15,8 @@ import {
 	secondsFromElapsedMs
 } from '$lib/intents/types'
 import type { VibeAppId } from '@avenos/vibe-apps'
+import { persistIntentFiles } from '$lib/jazz/intent-files'
+import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
 
 /**
  * Pool of vibe-view apps used as live HITL placeholders inside the Activity
@@ -330,18 +332,24 @@ $effect(() => {
  */
 let activityTab = $state<ActivityTab>('activity')
 
-/** Nested window drag-enter/leave counter for reliable file-drag overlay dismissal. */
-let dragDepth = $state(0)
-
 let hitlActionBarRef = $state<{ ingestDroppedFiles(files: File[] | FileList): void } | null>(null)
 
-/** True whenever at least one file-drag enter hasn't been balanced by leave yet. */
-const dragActive = $derived(dragDepth > 0)
+/** Mirror of global `pendingIntentFileDrop` so Svelte effects react to updates. */
+let pendingDrop = $state<File[] | null>(null)
 
-function isFilesDrag(dt: DataTransfer | null): boolean {
-	if (!dt) return false
-	return Array.from(dt.types).includes('Files')
-}
+$effect(() => {
+	const unsub = pendingIntentFileDrop.subscribe((v) => {
+		pendingDrop = v
+	})
+	return unsub
+})
+
+$effect(() => {
+	const files = pendingDrop
+	if (!files?.length || !hitlActionBarRef) return
+	hitlActionBarRef.ingestDroppedFiles(files)
+	pendingIntentFileDrop.set(null)
+})
 
 const STATUS_SORT: Record<IntentStatus, number> = {
 	error: 0,
@@ -707,10 +715,13 @@ function intentRowFromMessage(text: string): IntentRow {
 	return row
 }
 
-function handleComposerSubmit(message: string) {
+async function handleComposerSubmit(message: string, files: File[]) {
 	const row = intentRowFromMessage(message)
 	savedIntents = [row, ...savedIntents]
 	selectedId = row.id
+	const { stored, errors } = await persistIntentFiles(row.id, files)
+	if (errors.length) console.warn('[intent files]', errors.join('; '))
+	if (stored > 0) console.info(`[intent files] stored ${stored} file(s) in Groove`)
 }
 
 /**
@@ -719,7 +730,7 @@ function handleComposerSubmit(message: string) {
  * present) so the mock activity log captures the human-provided context,
  * then trigger the same mock resume flow the direct button used to invoke.
  */
-function handleRetrainCommand(feedback: string) {
+async function handleRetrainCommand(feedback: string, files: File[]) {
 	const intent = selectedIntent
 	if (!intent) return
 	const trimmed = feedback.trim()
@@ -739,53 +750,10 @@ function handleRetrainCommand(feedback: string) {
 		mockIntents = patch(mockIntents)
 		savedIntents = patch(savedIntents)
 	}
+	const { errors } = await persistIntentFiles(intent.id, files)
+	if (errors.length) console.warn('[intent files]', errors.join('; '))
 	declineResumeWorkingPhase(intent.id)
 }
-
-$effect(() => {
-	const onDragEnter = (e: DragEvent) => {
-		if (!isFilesDrag(e.dataTransfer)) return
-		e.preventDefault()
-		dragDepth += 1
-	}
-	const onDragLeave = (e: DragEvent) => {
-		if (!isFilesDrag(e.dataTransfer)) return
-		e.preventDefault()
-		dragDepth = Math.max(0, dragDepth - 1)
-	}
-	const onDragOver = (e: DragEvent) => {
-		const dt = e.dataTransfer
-		if (!dt || !isFilesDrag(dt)) return
-		e.preventDefault()
-		dt.dropEffect = 'copy'
-	}
-	const resetDragOverlay = () => {
-		dragDepth = 0
-	}
-	const onDrop = (e: DragEvent) => {
-		if (!isFilesDrag(e.dataTransfer)) return
-		e.preventDefault()
-		resetDragOverlay()
-		const list = e.dataTransfer?.files
-		if (!list?.length) return
-		const files = Array.from(list)
-		hitlActionBarRef?.ingestDroppedFiles(files)
-	}
-
-	window.addEventListener('dragenter', onDragEnter)
-	window.addEventListener('dragleave', onDragLeave)
-	window.addEventListener('dragover', onDragOver)
-	window.addEventListener('drop', onDrop)
-	window.addEventListener('dragend', resetDragOverlay)
-
-	return () => {
-		window.removeEventListener('dragenter', onDragEnter)
-		window.removeEventListener('dragleave', onDragLeave)
-		window.removeEventListener('dragover', onDragOver)
-		window.removeEventListener('drop', onDrop)
-		window.removeEventListener('dragend', resetDragOverlay)
-	}
-})
 
 function selectIntent(id: string) {
 	selectedId = id
@@ -815,39 +783,7 @@ function backToMasterList() {
 </svelte:head>
 
 <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-	{#if dragActive}
-		<!-- Full-viewport veil: stacks above bottom bar (z-[45]) and hides page chrome from view & input. -->
-		<div
-			class="pointer-events-auto fixed inset-0 z-[100] flex touch-none items-center justify-center bg-background/95 backdrop-blur-md"
-			role="region"
-			aria-label="Drop files to attach in composer"
-		>
-			<div class="mx-6 w-full max-w-md">
-				<div
-					class="rounded-[var(--radius-lg)] border-[3px] border-dashed border-primary/50 bg-card/96 p-[10px] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-primary)_14%,transparent)] ring-2 ring-primary/20 ring-offset-[8px] ring-offset-background backdrop-blur-sm"
-				>
-					<div
-						class="rounded-[calc(var(--radius-lg)-8px)] border border-dotted border-primary/40 bg-muted/40 px-7 py-9 text-center"
-					>
-						<p class="text-xl font-semibold tracking-tight text-primary md:text-[1.3rem]">
-							Drop files here
-						</p>
-						<p class="mt-2.5 px-1 text-[12px] leading-relaxed opacity-85">
-							Release to open the composer with thumbnails and optional message.
-						</p>
-						<p class="mt-1.5 px-1 text-[11px] leading-relaxed opacity-55">
-							Mock preview — files stay in-browser only; submit sends filenames in the intent text.
-						</p>
-					</div>
-				</div>
-			</div>
-		</div>
-	{/if}
-	<div
-		class={`flex min-h-0 flex-1 flex-col overflow-hidden${dragActive ? ' pointer-events-none select-none saturate-75 contrast-[0.85] brightness-90 blur-[3px]' : ''}`}
-		aria-hidden={dragActive ? true : undefined}
-	>
-		<main class={`${contentMaxWidthClass} flex min-h-0 flex-1 flex-col px-3 pb-28 sm:px-5`}>
+	<main class={`${contentMaxWidthClass} flex min-h-0 flex-1 flex-col px-3 pb-28 sm:px-5`}>
 			<div
 				class="grid min-h-0 flex-1 grid-cols-1 gap-x-3 gap-y-1 pt-1 pb-1 max-sm:flex max-sm:min-h-0 max-sm:flex-1 max-sm:flex-col sm:grid-cols-[13rem_minmax(0,1fr)_13rem] sm:grid-rows-[auto_minmax(0,1fr)] sm:items-stretch"
 			>
@@ -923,5 +859,4 @@ function backToMasterList() {
 				/>
 			</div>
 		</div>
-	</div>
 </div>
