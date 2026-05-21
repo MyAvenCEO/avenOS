@@ -14,6 +14,7 @@ When central mode is on, **`AVEN_RELAY_URL` is required** (no implicit default â
 
 **Data plane**: AvenOS keeps **`AVENOS_P2P_DIRECT_ONLY` / `AVENOS_P2P_IGNORE_RELAY_ENV`** so peeroxide **never** wires **`relay_through`** from **`AVENOS_HYPERSWARM_RELAY_*`**. Blind-relay stays on the **signal stack**, not Jazz sync transports.
 
+Outbound **Jazz / Groove** mesh rows use a dedicated **peer catch-up worker** (see `aven-os-app`'s `peer_catchup` module): per Hyperswarm `ClientId` we track Idle / Pending / Flushing / Ready, coalesce **`rebroadcast_peer_catchup` + single `flush_peer_sync`** batches, bump state on link up/down rather than spawning unbounded reconcile flushes, and treat **Ready only after flush Ok** while the Jazz `conn_epoch` still matches â€” so reconnects replay catch-up reliably without starving table subscribe IPC.
 ---
 
 ## Hosted relay on Fly (`relay-aven-ceo`)

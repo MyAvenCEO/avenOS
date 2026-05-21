@@ -98,10 +98,6 @@ pub struct ManagedJazz {
 	shell_vault_stale: AtomicBool,
 	/// Groove peers registered this Jazz session (`register_peer_sync_client` once each).
 	mesh_groove_registered: Mutex<HashSet<ClientId>>,
-	/// Peers we already ran catch-up for the **current** live Hyperswarm link.
-	mesh_catchup_for_link: Mutex<HashSet<ClientId>>,
-	/// Set when ACL becomes ready before any live P2P link; cleared after rebroadcast on link-up.
-	peer_catchup_pending: AtomicBool,
 	/// Bumped on every Groove client replace/reset so background tasks never touch a stale `Arc`.
 	conn_epoch: AtomicU64,
 	/// Opens after [`jazz_shell_ready`] succeeds (cached or hydrated). Hyperswarm/mesh work must wait.
@@ -138,8 +134,6 @@ impl Default for ManagedJazz {
 			shell_hydrate: Mutex::new(()),
 			shell_vault_stale: AtomicBool::new(true),
 			mesh_groove_registered: Mutex::new(HashSet::new()),
-			mesh_catchup_for_link: Mutex::new(HashSet::new()),
-			peer_catchup_pending: AtomicBool::new(false),
 			conn_epoch: AtomicU64::new(0),
 			mesh_local_shell_gate: AtomicBool::new(false),
 			mesh_sidecar_last_epoch: AtomicU64::new(0),
@@ -160,17 +154,6 @@ pub(super) fn emit_avenos_runtime(app: &tauri::AppHandle, payload: serde_json::V
 }
 
 impl ManagedJazz {
-	/// Inputs for [`crate::peer_mesh_state::peer_mesh_status`] (per-peer phase machine).
-	#[cfg(target_os = "macos")]
-	pub(crate) async fn peer_mesh_catchup_snapshot(
-		&self,
-	) -> (bool, std::collections::HashSet<groove::sync_manager::ClientId>) {
-		(
-			self.peer_catchup_pending.load(Ordering::Acquire),
-			self.mesh_catchup_for_link.lock().await.clone(),
-		)
-	}
-
 	/// Consumes the receiver once. Subsequent calls return `None`. Called from
 	/// `tauri::Builder::setup` so the drain task can own the receiver for the
 	/// lifetime of the process.
@@ -320,6 +303,8 @@ async fn with_connected_client(
 	self_state: &SelfState,
 ) -> Result<Arc<JazzClient>, String> {
 	if !self_state.is_unlocked() {
+		#[cfg(any(target_os = "macos", target_os = "linux"))]
+		crate::peer_catchup::notify_jazz_connection_teardown(app).await;
 		jazz.reset_connection().await;
 		return Err("locked: unlock AvenOS identity first".into());
 	}
@@ -353,6 +338,8 @@ async fn with_connected_client(
 				let old = jc.client.take();
 				jc.linked_identity = None;
 				jazz.shell.lock().await.take();
+				#[cfg(any(target_os = "macos", target_os = "linux"))]
+				crate::peer_catchup::notify_jazz_connection_teardown(app).await;
 				let _epoch = jazz.bump_conn_epoch();
 				jazz.reset_mesh_acl_catchup();
 				drop(jc);
@@ -640,6 +627,18 @@ impl ManagedJazz {
 		self.conn_epoch.load(Ordering::Acquire) == epoch
 	}
 
+	pub(crate) fn groove_conn_epoch(&self) -> u64 {
+		self.conn_epoch.load(Ordering::Acquire)
+	}
+
+	pub(crate) fn groove_conn_epoch_is(&self, epoch: u64) -> bool {
+		self.conn_epoch_is(epoch)
+	}
+
+	pub(crate) async fn groove_clone_connected_client(&self) -> Option<Arc<JazzClient>> {
+		self.conn.lock().await.client.clone()
+	}
+
 	fn invalidate_vault_shell(&self) {
 		self.shell_vault_stale.store(true, Ordering::Release);
 		self.last_table_snapshots
@@ -664,8 +663,6 @@ impl ManagedJazz {
 			self.shell.lock().await.take();
 			self.shell_vault_stale.store(true, Ordering::Release);
 			self.mesh_groove_registered.lock().await.clear();
-			self.mesh_catchup_for_link.lock().await.clear();
-			self.peer_catchup_pending.store(false, Ordering::Release);
 			self.mesh_local_shell_gate.store(false, Ordering::Release);
 			self.mesh_sidecar_last_epoch.store(0, Ordering::Release);
 			*self.sync_acl.write().expect("sync_acl poisoned") = None;
@@ -1057,36 +1054,21 @@ async fn jazz_shell_ready(
 	// One catch-up rebroadcast per conn epoch — not on every vault-table invalidation reload.
 	let first_acl_catchup = !mj.mesh_acl_rebroadcast_done.swap(true, Ordering::AcqRel);
 	if first_acl_catchup {
-		mj.mesh_catchup_for_link.lock().await.clear();
-		#[cfg(target_os = "macos")]
+		#[cfg(any(target_os = "macos", target_os = "linux"))]
 		{
 			let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
 			let live_n = bridge.snapshot_remote_clients().await.len();
-			if live_n > 0 {
-				let client_bg = Arc::clone(&client);
-				let epoch = mj.conn_epoch.load(Ordering::Acquire);
-				let app_bg = app.clone();
-				tauri::async_runtime::spawn(async move {
-					let mj = app_bg.state::<ManagedJazz>();
-					if !mj.conn_epoch_is(epoch) {
-						return;
-					}
-					match client_bg.rebroadcast_all_peer_clients_and_flush().await {
-						Ok(()) => log::debug!(
-							target: "avenos::jazz",
-							"sync_acl catch-up rebroadcast flushed ({live_n} live)",
-						),
-						Err(e) => log::warn!(
-							target: "avenos::jazz",
-							"sync_acl catch-up rebroadcast failed: {e}",
-						),
-					}
-				});
-			} else {
-				mj.peer_catchup_pending.store(true, Ordering::Release);
+			let h = app.state::<crate::peer_catchup::PeerCatchupHandle>();
+			h.on_shell_acl_first_loaded_prepare_catchup().await;
+			if live_n == 0 {
 				log::debug!(
 					target: "avenos::jazz",
 					"sync_acl ready (catch-up deferred — no live P2P link yet)",
+				);
+			} else {
+				log::debug!(
+					target: "avenos::jazz",
+					"sync_acl ready (acl bootstrap queued for {live_n} live link(s))",
 				);
 			}
 			bridge.peer_set_changed_notify().notify_waiters();
@@ -1097,12 +1079,12 @@ async fn jazz_shell_ready(
 	Ok(arc)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 async fn publish_peer_mesh_after_acl(app: &tauri::AppHandle) {
 	crate::peer_mesh_state::publish_peer_mesh_snapshot(app).await;
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 async fn publish_peer_mesh_after_acl(_app: &tauri::AppHandle) {}
 
 /// Load biscuit sync ACL once; mesh reconcile must not re-run full `hydrate_shell` every tick.
@@ -1125,11 +1107,13 @@ async fn ensure_sync_acl_for_mesh(
 }
 
 pub(crate) async fn groove_ipc_status(
-	_app: &tauri::AppHandle,
+	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
 	self_state: &SelfState,
 ) -> Result<JazzStatusReply, String> {
 	if !self_state.is_unlocked() {
+		#[cfg(any(target_os = "macos", target_os = "linux"))]
+		crate::peer_catchup::notify_jazz_connection_teardown(app).await;
 		jazz.reset_connection().await;
 		return Ok(JazzStatusReply {
 			ready: false,
@@ -1144,6 +1128,8 @@ pub(crate) async fn groove_ipc_status(
 		let stale = jc.client.is_some() || jc.linked_identity.is_some();
 		drop(jc);
 		if stale {
+			#[cfg(any(target_os = "macos", target_os = "linux"))]
+			crate::peer_catchup::notify_jazz_connection_teardown(app).await;
 			jazz.reset_connection().await;
 		}
 		return Ok(JazzStatusReply {
@@ -1194,7 +1180,7 @@ pub(crate) async fn groove_ipc_bootstrap(
 				"defaultSparkUrn": jazz_engine::spark_urn(shell.default_spark),
 				"tables": tables.clone(),
 			}));
-			#[cfg(target_os = "macos")]
+			#[cfg(any(target_os = "macos", target_os = "linux"))]
 			{
 				if let Err(e) = execute_mesh_refresh_full(app, jazz).await {
 					log::debug!(
@@ -1860,8 +1846,9 @@ pub(crate) async fn groove_ipc_jazz_unsubscribe(jazz: &ManagedJazz, table: Strin
 	Ok(())
 }
 
-/// Groove Jazz sync registration + catch-up; Hyperswarm allowlist/topics are owned by [`PeerCtl`].
-#[cfg(target_os = "macos")]
+/// Groove Jazz sync registration + outbound catch-up (Hyperswarm allowlist/topics in [`PeerCtl`];
+/// coalesced flushes via [`crate::peer_catchup`]).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) async fn refresh_peer_mesh_groove_register_primitives(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -1874,6 +1861,7 @@ pub(crate) async fn refresh_peer_mesh_groove_register_primitives(
 	let peer_ctl = app.state::<Arc<tauri_plugin_peer::PeerCtl>>();
 	let self_state: tauri::State<'_, SelfState> = app.state();
 	let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
+	let peer_catchup = app.state::<crate::peer_catchup::PeerCatchupHandle>();
 
 	if ensure_sync_acl_for_mesh(app, jazz, &self_state, Arc::clone(&client))
 		.await
@@ -1897,22 +1885,20 @@ pub(crate) async fn refresh_peer_mesh_groove_register_primitives(
 		}
 	}
 
-	{
-		let mut sent = jazz.mesh_catchup_for_link.lock().await;
-		sent.retain(|p| live.contains(p));
-	}
-
 	let mut n = 0u32;
-	let mut catchup_peers: Vec<ClientId> = Vec::new();
 	let m = bridge.shared_client_id_to_did();
-	for p in &live {
-		let did_opt = m.read().expect("cid map").get(p).cloned();
-		let Some(did) = did_opt else {
-			continue;
-		};
-		if !allow.iter().any(|a| a == &did) {
-			continue;
-		}
+	let per_live_did: Vec<(ClientId, String)> = {
+		let g = m.read().expect("cid map poisoned");
+		live.iter()
+			.filter_map(|p| g.get(p).cloned().map(|d| (*p, d)))
+			.filter(|(_, did)| allow.iter().any(|a| a == did))
+			.collect()
+	};
+
+	let mut allow_live = HashSet::new();
+
+	for (p, did) in &per_live_did {
+		allow_live.insert(*p);
 
 		let mut registered = jazz.mesh_groove_registered.lock().await;
 		if !registered.contains(p) {
@@ -1920,11 +1906,12 @@ pub(crate) async fn refresh_peer_mesh_groove_register_primitives(
 				Ok(()) => {
 					n += 1;
 					registered.insert(*p);
-					jazz.mesh_catchup_for_link.lock().await.insert(*p);
 					log::info!(
 						target: "avenos::jazz",
 						"register_peer_sync_client ok peer={p:?} did={did}",
 					);
+					drop(registered);
+					peer_catchup.on_peer_registered(*p).await;
 				}
 				Err(e) => {
 					log::warn!(
@@ -1933,83 +1920,29 @@ pub(crate) async fn refresh_peer_mesh_groove_register_primitives(
 					);
 				}
 			}
-		} else {
-			drop(registered);
-			let mut sent = jazz.mesh_catchup_for_link.lock().await;
-			if !sent.contains(p) {
-				catchup_peers.push(*p);
-				sent.insert(*p);
-			}
 		}
 	}
 
 	if n > 0 {
 		log::info!(target: "avenos::jazz", "peer-mesh reconcile: {n} new Groove peer(s)");
 	}
-	let catchup_n = catchup_peers.len();
-	let need_flush = n > 0 || catchup_n > 0;
-	let deferred_acl_catchup = !live.is_empty()
-		&& jazz
-			.peer_catchup_pending
-			.swap(false, Ordering::AcqRel);
+
+	peer_catchup.sync_allowlisted_live(allow_live).await;
 
 	crate::peer_mesh_state::publish_peer_mesh_snapshot(app).await;
 
-	// P2P flush/catch-up can take many seconds — never hold `conn` or block IPC while it runs.
-	if need_flush || deferred_acl_catchup {
-		let app_bg = app.clone();
-		let client_bg = client.clone();
-		let catchup_peers_bg = catchup_peers;
-		let live_n = live.len();
-		let epoch = jazz.conn_epoch.load(Ordering::Acquire);
-		tauri::async_runtime::spawn(async move {
-			let mj = app_bg.state::<ManagedJazz>();
-			if !mj.conn_epoch_is(epoch) {
-				return;
-			}
-			for p in catchup_peers_bg {
-				if !mj.conn_epoch_is(epoch) {
-					return;
-				}
-				if let Err(e) = client_bg.rebroadcast_peer_catchup(p) {
-					log::warn!(
-						target: "avenos::jazz",
-						"rebroadcast_peer_catchup peer={p:?} failed: {e}",
-					);
-				} else {
-					log::debug!(
-						target: "avenos::jazz",
-						"rebroadcast_peer_catchup peer={p:?} (link restored)",
-					);
-				}
-			}
-			if need_flush && mj.conn_epoch_is(epoch) {
-				if let Err(e) = client_bg.flush_peer_sync().await {
-					log::warn!(
-						target: "avenos::jazz",
-						"peer-mesh reconcile flush failed: {e}",
-					);
-				}
-			}
-			if deferred_acl_catchup && mj.conn_epoch_is(epoch) {
-				if let Err(e) = client_bg.rebroadcast_all_peer_clients_and_flush().await {
-					log::warn!(
-						target: "avenos::jazz",
-						"deferred sync_acl catch-up failed: {e}",
-					);
-					mj.peer_catchup_pending.store(true, Ordering::Release);
-				} else {
-					log::info!(
-						target: "avenos::jazz",
-						"deferred sync_acl catch-up flushed ({live_n} live link(s))",
-					);
-				}
-			}
-			crate::peer_mesh_state::publish_peer_mesh_snapshot(&app_bg).await;
-		});
-	}
-
 	Ok(n)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+pub(crate) async fn refresh_peer_mesh_groove_register_primitives(
+	_app: &tauri::AppHandle,
+	_jazz: &ManagedJazz,
+	_client: Arc<JazzClient>,
+	_allow: &[String],
+	_nudge_discovery_if_no_live_links: bool,
+) -> Result<u32, String> {
+	Ok(0)
 }
 
 /// Actor-only: assemble + emit mesh snapshot (no re-enqueue).
@@ -2044,11 +1977,11 @@ pub(crate) async fn execute_mesh_snapshot(
 		vec![]
 	};
 
-	#[cfg(target_os = "macos")]
+	#[cfg(any(target_os = "macos", target_os = "linux"))]
 	{
 		crate::peer_mesh_state::assemble_mesh_snapshot(app, jazz, db_rows).await
 	}
-	#[cfg(not(target_os = "macos"))]
+	#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 	{
 		let _ = (app, jazz, db_rows);
 		Ok(crate::peer_mesh_state::PeerMeshStatusReply {
@@ -2061,7 +1994,7 @@ pub(crate) async fn execute_mesh_snapshot(
 }
 
 /// Actor-only: full Hyperswarm allowlist sync + Groove register path.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) async fn execute_mesh_refresh_full(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -2101,7 +2034,7 @@ pub(crate) async fn execute_mesh_refresh_full(
 	refresh_peer_mesh_groove_register_primitives(app, jazz, client, &allow, true).await
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub(crate) async fn execute_mesh_refresh_full(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -2112,7 +2045,7 @@ pub(crate) async fn execute_mesh_refresh_full(
 }
 
 /// Actor-only: periodic reconcile tick (Groove register + optional DHT nudge).
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) async fn execute_mesh_reconcile(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -2159,7 +2092,7 @@ pub(crate) async fn execute_mesh_reconcile(
 	Ok(())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub(crate) async fn execute_mesh_reconcile(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -2432,6 +2365,8 @@ pub async fn self_clear_jazz_database(
 	app: tauri::AppHandle,
 	jazz: tauri::State<'_, ManagedJazz>,
 ) -> Result<(), String> {
+	#[cfg(any(target_os = "macos", target_os = "linux"))]
+	crate::peer_catchup::notify_jazz_connection_teardown(&app).await;
 	jazz.reset_connection().await;
 	let root = vault_user_root(&app)?;
 	for rel in [AVEN_OS_GROOVE_DATA_DIR, LEGACY_JAZZ_DATA_DIR] {

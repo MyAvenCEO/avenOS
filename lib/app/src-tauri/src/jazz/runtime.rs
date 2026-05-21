@@ -148,6 +148,8 @@ pub fn spawn_groove_actor(app: AppHandle) -> GrooveActorHandle {
 					super::execute_publish_mesh(&app_loop, &jazz, ss).await;
 				}
 				GrooveActorMsg::ResetConnection { reply } => {
+					#[cfg(any(target_os = "macos", target_os = "linux"))]
+					crate::peer_catchup::notify_jazz_connection_teardown(&app_loop).await;
 					jazz.reset_connection().await;
 					let _ = reply.send(());
 				}

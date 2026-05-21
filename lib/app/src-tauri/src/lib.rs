@@ -2,6 +2,8 @@ mod crypto;
 mod genesis;
 mod jazz;
 mod jazz_auth;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod peer_catchup;
 mod peer_mesh_state;
 mod peers;
 mod peer_sync_gate;
@@ -464,6 +466,8 @@ pub fn run() {
 		.manage(jazz::ManagedJazz::default())
 		.setup(|app| {
 			app.manage(jazz::runtime::spawn_groove_actor(app.handle().clone()));
+			#[cfg(any(target_os = "macos", target_os = "linux"))]
+			app.manage(peer_catchup::spawn_peer_catchup_worker(app.handle().clone()));
 
 			let state = app.state::<genesis::GenesisState>();
 			if let Err(e) = genesis::bootstrap(&state) {
@@ -562,8 +566,11 @@ pub fn run() {
 			// time a peer is added/removed; mirror that into a mesh-refresh + an **adaptive** timer
 			// (fast tick right after startup, slower steady-state) so new swarm links register with
 			// Jazz sync without fixed 10s latency.
-			#[cfg(target_os = "macos")]
+			#[cfg(any(target_os = "macos", target_os = "linux"))]
 			{
+				use groove::sync_manager::ClientId;
+				use std::collections::HashSet;
+
 				let h_mesh = app.handle().clone();
 				tauri::async_runtime::spawn(async move {
 					use std::time::{Duration, Instant};
@@ -585,6 +592,10 @@ pub fn run() {
 							_ = n.notified() => {}
 							_ = tick => {}
 						};
+						let live: HashSet<ClientId> =
+							bridge.snapshot_remote_clients().await.into_iter().collect();
+						let h_catch = h_mesh.state::<crate::peer_catchup::PeerCatchupHandle>();
+						h_catch.live_clients_changed(live).await;
 						if let Err(e) = jazz::peer_mesh_reconcile_tick(&h_mesh).await {
 							log::debug!(
 								target: "avenos::jazz",

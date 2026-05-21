@@ -46,7 +46,7 @@ pub async fn publish_peer_mesh_snapshot(app: &tauri::AppHandle) {
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) async fn assemble_mesh_snapshot(
 	app: &tauri::AppHandle,
-	jazz: &crate::jazz::ManagedJazz,
+	_jazz: &crate::jazz::ManagedJazz,
 	db_rows: Vec<PeerRowReply>,
 ) -> Result<PeerMeshStatusReply, String> {
 	use std::collections::{HashMap, HashSet};
@@ -59,10 +59,15 @@ pub(crate) async fn assemble_mesh_snapshot(
 	let peer_ctl: tauri::State<'_, Arc<PeerCtl>> = app.state();
 	let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
 
+	let catchup = app
+		.state::<crate::peer_catchup::PeerCatchupHandle>()
+		.mesh_catchup_ui_snapshot()
+		.await;
+
 	let transport = peer_ctl.peer_transport_status().await;
 	let linked: HashSet<String> = transport.linked_peer_dids.iter().cloned().collect();
-	let (catchup_pending, mesh_catchup) = jazz.peer_mesh_catchup_snapshot().await;
-
+	let catchup_pending = catchup.global_catchup_busy;
+	let mesh_catchup = catchup.ready_client_ids;
 	let live: Vec<ClientId> = bridge.snapshot_remote_clients().await;
 	let cid_map = bridge.shared_client_id_to_did();
 
