@@ -1,0 +1,17 @@
+# Fly.io stub — AvenOS centralized P2P signal (Rust HyperDHT bootstrap UDP + Bun blind relay UDP).
+#
+# Prerequisites (confirm against current Fly Machines docs before production):
+# - UDP listeners for bootstrap (49737 default) + relay UDP (49738 default).
+# - Dedicated public IPv4 when clients must reach across the internet (`fly ips allocate-v4`).
+# - Set `AVENOS_P2P_ADVERTISED_HOST` to that IPv4 so the bootstrap string matches what peers resolve.
+# - Persistent volume mounted at `/data/p2p-signal` so the relay HyperDHT Ed25519 seed stays stable.
+#
+# ENTRYPOINT (`CMD`): `bun /app/start-fly.ts` supervises Rust `aven-p2p-signal-dht`
+# plus `bun infra/p2p-signal-relay/blind-relay-server.cjs`. Bun is the runtime for the relay bundle on Fly.io —
+# **no standalone Node runtime** beyond what Bun bundles.
+
+app = "avenos-p2p-signal"
+primary_region = "iad"
+
+[build]
+dockerfile = "projects/aven-p2p-signal/Dockerfile"

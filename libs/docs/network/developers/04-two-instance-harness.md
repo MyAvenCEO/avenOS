@@ -4,7 +4,9 @@ title: Two-instance harness
 
 # Two-instance harness
 
-Use `scripts/dev-two-instances.ts` (or your usual two-window dev flow). **`bun run dev:two-instances`** launches:
+Use [`scripts/dev-two-instances.ts`](../../../../scripts/dev-two-instances.ts) (**`bun run dev:app2x:mac`** or **`dev:app2x:linux`**). **Central discovery is on by default** (`AVEN_RELAY`); set **`AVEN_RELAY=false`** for public Holepunch HyperDHT. Data sync stays **direct P2P** — see [Local P2P signal](05-p2p-signal.md).
+
+The harness launches:
 
 - **`[A]`** — dev server `http://127.0.0.1:1420`
 - **`[B]`** — dev server `http://127.0.0.1:1421` (second Tauri bundle id)
@@ -38,7 +40,7 @@ If sync seems quiet, watch the dev log for `groove_p2p link up peer=...` (proves
 Exercise **native reconnect** — pairing + topics already saved; no new invite code:
 
 1. After the first-session steps above succeed, fully **quit** both Tauri apps (Cmd+Q).
-2. Start both harness instances again (`bun run dev:two-instances` or equivalent), unlock **both** vaults.
+2. Start both harness instances again (`bun run dev:app2x:mac` / `dev:app2x:linux` or equivalent), unlock **both** vaults.
 3. In the header / Self → peers, expect **Connecting…** briefly, then **Up to date** (often within **about 30–60 seconds** on the public DHT).
 
 **Logs to confirm** (`RUST_LOG=info,avenos::peeroxide=info,avenos::jazz=info` is a reasonable filter):

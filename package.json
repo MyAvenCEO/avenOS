@@ -16,6 +16,7 @@
 		"dev:app": "bun --env-file=.env run --cwd lib/app dev",
 		"dev:app:mac": "bun --env-file=.env ./scripts/dev-app-macos.ts",
 		"dev:app:linux": "bun --env-file=.env ./scripts/dev-app-linux.ts",
+		"dev:p2p-signal": "bun ./scripts/p2p-signal.ts --foreground",
 		"dev:app2x:mac": "bun --env-file=.env ./scripts/dev-two-instances.ts",
 		"dev:app2x:linux": "bun --env-file=.env ./scripts/dev-two-instances.ts",
 		"build:app:mac": "bun run --cwd lib/app tauri:build:macos",

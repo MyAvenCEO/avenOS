@@ -104,13 +104,80 @@ fn hex_pk_prefix(pk: &[u8]) -> String {
 
 /// Optional Hyperswarm tuning from the process environment (lab / self-hosted relays).
 ///
+/// **Master switch — `AVEN_RELAY`** (alias **`AVENOS_RELAY`**): defaults **on** (central discovery).
+/// Set **`AVEN_RELAY=false`** for public Holepunch HyperDHT roots.
+///
+/// - `AVENOS_DHT_ISOLATED=1`: empty bootstrap table unless `AVENOS_DHT_BOOTSTRAP` fills it (set by central mode).
+/// - `AVENOS_DHT_PUBLIC=1`: public Holepunch roots (non-central mode).
 /// - `AVENOS_DHT_BOOTSTRAP`: comma-separated bootstrap strings (`ip@host:port` HyperDHT form).
-/// - `AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX`: 64 hex chars → `relay_through`.
-/// - `AVENOS_HYPERSWARM_RELAY_ADDR`: socket address for `relay_address` (pairs with pubkey).
+/// - `AVENOS_P2P_DIRECT_ONLY=1`: never apply **`AVENOS_HYPERSWARM_RELAY_*`** to the swarm (no blind-relay transport).
+/// - `AVENOS_P2P_IGNORE_RELAY_ENV=1`: same as direct-only for relay env vars (legacy alias).
+/// - `AVENOS_HYPERSWARM_RELAY_*`: ignored when direct-only or central mode is active.
 /// - `AVENOS_HYPERSWARM_MAX_PARALLEL` / `AVENOS_HYPERSWARM_MAX_PEERS`: positive integers.
+#[cfg(target_os = "macos")]
+fn env_truthy_os(key: &str) -> bool {
+	std::env::var(key)
+		.map(|v| {
+			matches!(
+				v.trim(),
+				"1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON"
+			)
+		})
+		.unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+fn env_falsy_os(key: &str) -> bool {
+	std::env::var(key)
+		.map(|v| {
+			matches!(
+				v.trim(),
+				"0" | "false" | "FALSE" | "no" | "NO" | "off" | "OFF"
+			)
+		})
+		.unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+fn aven_relay_central_mode() -> bool {
+	if env_truthy_os("AVENOS_SKIP_P2P_SIGNAL") {
+		return false;
+	}
+	if env_falsy_os("AVEN_RELAY") || env_falsy_os("AVENOS_RELAY") {
+		return false;
+	}
+	true
+}
+
+#[cfg(target_os = "macos")]
+fn p2p_direct_data_plane_only() -> bool {
+	aven_relay_central_mode()
+		|| env_truthy_os("AVENOS_P2P_DIRECT_ONLY")
+		|| env_truthy_os("AVENOS_P2P_IGNORE_RELAY_ENV")
+}
+
+#[cfg(target_os = "macos")]
+fn base_swarm_config_from_env() -> peeroxide::SwarmConfig {
+	if aven_relay_central_mode() {
+		log::info!(
+			target: "avenos::peeroxide",
+			"AVEN_RELAY central discovery — isolated HyperDHT bootstrap (direct P2P data plane)"
+		);
+		return peeroxide::SwarmConfig::default();
+	}
+	if env_truthy_os("AVENOS_DHT_PUBLIC") || !env_truthy_os("AVENOS_DHT_ISOLATED") {
+		return peeroxide::SwarmConfig::with_public_bootstrap();
+	}
+	peeroxide::SwarmConfig::default()
+}
+
 #[cfg(target_os = "macos")]
 fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(), String> {
 	use std::str::FromStr;
+
+	let central = aven_relay_central_mode();
+	let isolated = central
+		|| (env_truthy_os("AVENOS_DHT_ISOLATED") && !env_truthy_os("AVENOS_DHT_PUBLIC"));
 
 	if let Ok(raw) = std::env::var("AVENOS_DHT_BOOTSTRAP") {
 		let extras: Vec<String> = raw
@@ -119,32 +186,59 @@ fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(), Strin
 			.filter(|s| !s.is_empty())
 			.collect();
 		let n = extras.len();
-		for s in extras.into_iter().rev() {
-			cfg.dht.dht.bootstrap.insert(0, s);
+		if isolated {
+			cfg.dht.dht.bootstrap = extras.clone();
+			if n == 0 {
+				log::warn!(
+					target: "avenos::peeroxide",
+					"isolated DHT but AVENOS_DHT_BOOTSTRAP is empty — peers cannot bootstrap"
+				);
+			} else {
+				log::info!(
+					target: "avenos::peeroxide",
+					"custom DHT bootstrap only (isolated): {n} node(s)"
+				);
+			}
+		} else {
+			for s in extras.into_iter().rev() {
+				cfg.dht.dht.bootstrap.insert(0, s);
+			}
+			if n > 0 {
+				log::info!(
+					target: "avenos::peeroxide",
+					"prepended {n} DHT bootstrap node(s) from AVENOS_DHT_BOOTSTRAP"
+				);
+			}
 		}
-		if n > 0 {
-			log::info!(
-				target: "avenos::peeroxide",
-				"prepended {n} DHT bootstrap node(s) from AVENOS_DHT_BOOTSTRAP"
-			);
-		}
+	} else if central {
+		log::warn!(
+			target: "avenos::peeroxide",
+			"AVEN_RELAY=1 but AVENOS_DHT_BOOTSTRAP missing — start embedded p2p-signal or set bootstrap"
+		);
 	}
 
-	if let Ok(hex_pk) = std::env::var("AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX") {
-		let bytes = hex::decode(hex_pk.trim())
-			.map_err(|e| format!("AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX: invalid hex ({e})"))?;
-		let arr: [u8; 32] = bytes.try_into().map_err(|_| {
-			"AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX: expected exactly 32 bytes (64 hex chars)".to_string()
-		})?;
-		cfg.relay_through = Some(arr);
-		log::info!(target: "avenos::peeroxide", "relay_through set from AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX");
-	}
+	if p2p_direct_data_plane_only() {
+		log::info!(
+			target: "avenos::peeroxide",
+			"direct P2P data plane — AVENOS_HYPERSWARM_RELAY_* ignored (no blind-relay transport)"
+		);
+	} else {
+		if let Ok(hex_pk) = std::env::var("AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX") {
+			let bytes = hex::decode(hex_pk.trim())
+				.map_err(|e| format!("AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX: invalid hex ({e})"))?;
+			let arr: [u8; 32] = bytes.try_into().map_err(|_| {
+				"AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX: expected exactly 32 bytes (64 hex chars)".to_string()
+			})?;
+			cfg.relay_through = Some(arr);
+			log::info!(target: "avenos::peeroxide", "relay_through set from AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX");
+		}
 
-	if let Ok(addr_s) = std::env::var("AVENOS_HYPERSWARM_RELAY_ADDR") {
-		let addr = std::net::SocketAddr::from_str(addr_s.trim())
-			.map_err(|e| format!("AVENOS_HYPERSWARM_RELAY_ADDR: invalid address ({e})"))?;
-		cfg.relay_address = Some(addr);
-		log::info!(target: "avenos::peeroxide", "relay_address set from AVENOS_HYPERSWARM_RELAY_ADDR");
+		if let Ok(addr_s) = std::env::var("AVENOS_HYPERSWARM_RELAY_ADDR") {
+			let addr = std::net::SocketAddr::from_str(addr_s.trim())
+				.map_err(|e| format!("AVENOS_HYPERSWARM_RELAY_ADDR: invalid address ({e})"))?;
+			cfg.relay_address = Some(addr);
+			log::info!(target: "avenos::peeroxide", "relay_address set from AVENOS_HYPERSWARM_RELAY_ADDR");
+		}
 	}
 
 	if let Ok(v) = std::env::var("AVENOS_HYPERSWARM_MAX_PARALLEL") {
@@ -332,7 +426,7 @@ impl PeerCtl {
 		let seed: [u8; 32] = *seed_z;
 
 		let kp = peeroxide::KeyPair::from_seed(seed);
-		let mut cfg = peeroxide::SwarmConfig::with_public_bootstrap();
+		let mut cfg = base_swarm_config_from_env();
 		cfg.key_pair = Some(kp);
 		cfg.max_parallel = 8;
 		apply_avensos_swarm_env(&mut cfg)?;

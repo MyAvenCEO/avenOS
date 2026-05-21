@@ -47,3 +47,6 @@ vite.config.ts.timestamp-*
 # Rust / Cargo (all crates in repo)
 target/
 **/target/
+
+# Repo-local P2p signal relay seed (<repo>/.avenOS/dev/p2p-signal)
+/.avenOS/

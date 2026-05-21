@@ -1,0 +1,19 @@
+[package]
+name = "aven-p2p-signal"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Isolated HyperDHT bootstrap node for local AvenOS P2p dev pairing."
+
+[[bin]]
+name = "aven-p2p-signal-dht"
+path = "src/main.rs"
+
+[dependencies]
+libudx = "1.3.1"
+peeroxide-dht = "1.3.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
