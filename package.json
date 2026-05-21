@@ -35,7 +35,8 @@
 		"prepare": "bun --env-file=.env --filter @avenos/aven-ceo prepare",
 		"lint": "bunx biome check .",
 		"lint:fix": "bunx biome check --write .",
-		"format": "bunx biome format --write ."
+		"format": "bunx biome format --write .",
+		"deploy:relay-fly": "bun ./scripts/deploy-relay-fly.ts"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.14",

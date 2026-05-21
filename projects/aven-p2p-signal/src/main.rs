@@ -34,10 +34,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
+        .with_writer(std::io::stderr)
         .init();
 
+    // Fly mentions `fly-global-services` for some stacks; **`peeroxide_dht` parses bind host as SocketAddr**.
+    // Map that sentinel to **`0.0.0.0`**; missing / empty env ⇒ **`127.0.0.1`** (local dev).
     let host = std::env::var("AVENOS_P2P_SIGNAL_HOST")
-        .unwrap_or_else(|_| "127.0.0.1".to_string());
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            if s.eq_ignore_ascii_case("fly-global-services") {
+                "0.0.0.0".to_string()
+            } else {
+                s
+            }
+        })
+        .unwrap_or_else(|| "127.0.0.1".to_string());
 
     let port = env_port("AVENOS_P2P_SIGNAL_PORT", 49737);
 

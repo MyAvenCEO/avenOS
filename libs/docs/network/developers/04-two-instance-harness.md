@@ -4,7 +4,7 @@ title: Two-instance harness
 
 # Two-instance harness
 
-Use [`scripts/dev-two-instances.ts`](../../../../scripts/dev-two-instances.ts) (**`bun run dev:app2x:mac`** or **`dev:app2x:linux`**). **Central discovery is on by default** (`AVEN_RELAY`); set **`AVEN_RELAY=false`** for public Holepunch HyperDHT. Data sync stays **direct P2P** — see [Local P2P signal](05-p2p-signal.md).
+Use [`scripts/dev-two-instances.ts`](../../../../scripts/dev-two-instances.ts) (**`bun run dev:app2x:mac`** or **`dev:app2x:linux`**). **Central discovery is on by default** (`AVEN_RELAY`); with central mode **`AVEN_RELAY_URL` is required** (e.g. **`127.0.0.1`** for embedded local signal, or **`relay.aven.ceo`** against Fly — see that doc). Set **`AVEN_RELAY=false`** for public Holepunch HyperDHT. Data sync stays **direct P2P** — see [Central P2P signal](05-p2p-signal.md).
 
 The harness launches:
 

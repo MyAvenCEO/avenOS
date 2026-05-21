@@ -1,17 +1,55 @@
-# Fly.io stub — AvenOS centralized P2P signal (Rust HyperDHT bootstrap UDP + Bun blind relay UDP).
+# relay-aven-ceo — central HyperDHT bootstrap (UDP) + blind-relay UDP + HTTP manifest (:8080).
+# Deploy from repo root: `bun run deploy:relay-fly`
 #
-# Prerequisites (confirm against current Fly Machines docs before production):
-# - UDP listeners for bootstrap (49737 default) + relay UDP (49738 default).
-# - Dedicated public IPv4 when clients must reach across the internet (`fly ips allocate-v4`).
-# - Set `AVENOS_P2P_ADVERTISED_HOST` to that IPv4 so the bootstrap string matches what peers resolve.
-# - Persistent volume mounted at `/data/p2p-signal` so the relay HyperDHT Ed25519 seed stays stable.
-#
-# ENTRYPOINT (`CMD`): `bun /app/start-fly.ts` supervises Rust `aven-p2p-signal-dht`
-# plus `bun infra/p2p-signal-relay/blind-relay-server.cjs`. Bun is the runtime for the relay bundle on Fly.io —
-# **no standalone Node runtime** beyond what Bun bundles.
+# Ingress UDP is mapped via [`[[services]]`]; the process must **`bind()` a parseable IP** (`0.0.0.0`, not `fly-global-services`).
 
-app = "avenos-p2p-signal"
-primary_region = "iad"
+app = "relay-aven-ceo"
+primary_region = "fra"
 
+# Dockerfile path is beside this file; Docker **build context** must be repo root — see deploy script (`fly deploy . …`).
 [build]
-dockerfile = "projects/aven-p2p-signal/Dockerfile"
+	dockerfile = "Dockerfile"
+
+[[vm]]
+	size = "shared-cpu-1x"
+	memory = "256mb"
+
+[mounts]
+	source = "p2p_signal_data"
+	destination = "/data/p2p-signal"
+	initial_size = "1gb"
+
+[env]
+	# Keys dir is non-secret (/data/…); Dockerfile sets AVENOS_P2P_SIGNAL_KEYS_DIR — omit here so Fly skips false “sensitive KEY” heuristic.
+	AVENOS_P2P_SIGNAL_HOST = "0.0.0.0"
+	AVENOS_P2P_SIGNAL_RELAY_HOST = "0.0.0.0"
+	AVENOS_P2P_ADVERTISED_HOST = "relay.aven.ceo"
+	AVEN_RELAY_MANIFEST_HTTP_PORT = "8080"
+
+[http_service]
+	internal_port = 8080
+	force_https = true
+	auto_stop_machines = "stop"
+	auto_start_machines = true
+	min_machines_running = 0
+
+# Startup waits on Rust DHT + Node blind-relay before Bun binds :8080 (often ~5s).
+# Without grace_period, deploy-time probes warn "not listening on 0.0.0.0:8080".
+[[http_service.checks]]
+	grace_period = "25s"
+	interval = "15s"
+	timeout = "3s"
+	method = "GET"
+	path = "/health"
+
+[[services]]
+	protocol = "udp"
+	internal_port = 49737
+	[[services.ports]]
+		port = 49737
+
+[[services]]
+	protocol = "udp"
+	internal_port = 49738
+	[[services.ports]]
+		port = 49738

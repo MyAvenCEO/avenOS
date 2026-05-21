@@ -107,6 +107,10 @@ fn hex_pk_prefix(pk: &[u8]) -> String {
 /// **Master switch — `AVEN_RELAY`** (alias **`AVENOS_RELAY`**): defaults **on** (central discovery).
 /// Set **`AVEN_RELAY=false`** for public Holepunch HyperDHT roots.
 ///
+/// When **`AVEN_RELAY` is central**, **`AVEN_RELAY_URL` is required** (e.g. `127.0.0.1` for embedded
+/// dev stacks, `relay.aven.ceo` for hosted Fly bootstrap). With **`AVENOS_DHT_BOOTSTRAP`** unset or
+/// blank, bootstrap is **`127.0.0.1@{host}:{dht_port}`** where **`host`** is parsed from **`AVEN_RELAY_URL`**.
+///
 /// - `AVENOS_DHT_ISOLATED=1`: empty bootstrap table unless `AVENOS_DHT_BOOTSTRAP` fills it (set by central mode).
 /// - `AVENOS_DHT_PUBLIC=1`: public Holepunch roots (non-central mode).
 /// - `AVENOS_DHT_BOOTSTRAP`: comma-separated bootstrap strings (`ip@host:port` HyperDHT form).
@@ -172,6 +176,64 @@ fn base_swarm_config_from_env() -> peeroxide::SwarmConfig {
 }
 
 #[cfg(target_os = "macos")]
+fn p2p_dht_udp_port_default() -> u16 {
+	std::env::var("AVENOS_P2P_SIGNAL_PORT")
+		.ok()
+		.and_then(|s| s.trim().parse().ok())
+		.unwrap_or(49737)
+}
+
+/// Strip scheme/path/port suffix; hostname only (IPv6 inner, no brackets).
+#[cfg(target_os = "macos")]
+fn normalize_aven_relay_url_host(raw: &str) -> Result<String, String> {
+	fn trim_outer_quotes(mut s: &str) -> &str {
+		s = s.trim();
+		while (s.starts_with('"') && s.ends_with('"') && s.len() >= 2)
+			|| (s.starts_with('\'') && s.ends_with('\'') && s.len() >= 2)
+		{
+			s = &s[1..s.len() - 1].trim();
+		}
+		s
+	}
+	let mut h = trim_outer_quotes(raw);
+	if h.is_empty() {
+		return Err("AVEN_RELAY_URL is empty".into());
+	}
+	let lower = h.to_ascii_lowercase();
+	if lower.starts_with("https://") {
+		h = &h["https://".len()..];
+	} else if lower.starts_with("http://") {
+		h = &h["http://".len()..];
+	}
+	if let Some(ix) = h.find('/') {
+		h = &h[..ix];
+	}
+	if let Some(close) = h.find(']') {
+		if h.starts_with('[') {
+			let inner = h[1..close].trim();
+			if inner.is_empty() {
+				return Err("AVEN_RELAY_URL: empty IPv6".into());
+			}
+			return Ok(inner.to_string());
+		}
+		return Err("AVEN_RELAY_URL: unexpected ']' outside bracketed IPv6".into());
+	}
+	if let Some(lc) = h.rfind(':') {
+		if lc > 0 {
+			let tail = &h[lc + 1..];
+			if tail.parse::<u16>().is_ok() {
+				h = &h[..lc];
+			}
+		}
+	}
+	let h = h.trim();
+	if h.is_empty() {
+		return Err("AVEN_RELAY_URL: no hostname".into());
+	}
+	Ok(h.to_string())
+}
+
+#[cfg(target_os = "macos")]
 fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(), String> {
 	use std::str::FromStr;
 
@@ -179,42 +241,64 @@ fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(), Strin
 	let isolated = central
 		|| (env_truthy_os("AVENOS_DHT_ISOLATED") && !env_truthy_os("AVENOS_DHT_PUBLIC"));
 
-	if let Ok(raw) = std::env::var("AVENOS_DHT_BOOTSTRAP") {
-		let extras: Vec<String> = raw
+	if central {
+		let raw = std::env::var("AVEN_RELAY_URL").unwrap_or_default();
+		if raw.trim().is_empty() {
+			return Err(
+				"[peeroxide] AVEN_RELAY_URL is required when AVEN_RELAY is on (central discovery). \
+Examples: 127.0.0.1 with dev signal stack; relay.aven.ceo for Fly-hosted bootstrap."
+					.into(),
+			);
+		}
+	}
+
+	let env_bootstrap_entries: Vec<String> = match std::env::var("AVENOS_DHT_BOOTSTRAP") {
+		Ok(raw) => raw
 			.split(',')
 			.map(|s| s.trim().to_string())
 			.filter(|s| !s.is_empty())
-			.collect();
-		let n = extras.len();
-		if isolated {
-			cfg.dht.dht.bootstrap = extras.clone();
-			if n == 0 {
-				log::warn!(
-					target: "avenos::peeroxide",
-					"isolated DHT but AVENOS_DHT_BOOTSTRAP is empty — peers cannot bootstrap"
-				);
-			} else {
-				log::info!(
-					target: "avenos::peeroxide",
-					"custom DHT bootstrap only (isolated): {n} node(s)"
-				);
-			}
-		} else {
-			for s in extras.into_iter().rev() {
-				cfg.dht.dht.bootstrap.insert(0, s);
-			}
-			if n > 0 {
-				log::info!(
-					target: "avenos::peeroxide",
-					"prepended {n} DHT bootstrap node(s) from AVENOS_DHT_BOOTSTRAP"
-				);
-			}
-		}
-	} else if central {
-		log::warn!(
+			.collect(),
+		Err(_) => Vec::new(),
+	};
+
+	let mut bootstrap_nodes = env_bootstrap_entries.clone();
+	if isolated && central && bootstrap_nodes.is_empty() {
+		let relay_raw = std::env::var("AVEN_RELAY_URL").unwrap_or_default();
+		let hostname = normalize_aven_relay_url_host(&relay_raw)?;
+		let udp = p2p_dht_udp_port_default();
+		let line = format!("127.0.0.1@{hostname}:{udp}");
+		bootstrap_nodes = vec![line.clone()];
+		log::info!(
 			target: "avenos::peeroxide",
-			"AVEN_RELAY=1 but AVENOS_DHT_BOOTSTRAP missing — start embedded p2p-signal or set bootstrap"
+			"DHT bootstrap from AVEN_RELAY_URL (central, no AVENOS_DHT_BOOTSTRAP): {line}",
 		);
+	}
+
+	if isolated {
+		cfg.dht.dht.bootstrap = bootstrap_nodes.clone();
+		let n = bootstrap_nodes.len();
+		if n == 0 {
+			log::warn!(
+				target: "avenos::peeroxide",
+				"isolated DHT but bootstrap list is empty — peers cannot bootstrap"
+			);
+		} else {
+			log::info!(
+				target: "avenos::peeroxide",
+				"custom DHT bootstrap only (isolated): {n} node(s)"
+			);
+		}
+	} else {
+		let n = env_bootstrap_entries.len();
+		for s in env_bootstrap_entries.into_iter().rev() {
+			cfg.dht.dht.bootstrap.insert(0, s);
+		}
+		if n > 0 {
+			log::info!(
+				target: "avenos::peeroxide",
+				"prepended {n} DHT bootstrap node(s) from AVENOS_DHT_BOOTSTRAP"
+			);
+		}
 	}
 
 	if p2p_direct_data_plane_only() {
