@@ -1,4 +1,4 @@
-//! Single source of truth for per-peer P2P mesh UI state (macOS Hyperswarm + Jazz mesh).
+//! Single source of truth for per-peer P2P mesh UI state (Hyperswarm + Jazz mesh).
 //!
 //! Snapshots are built on the Groove actor (reads peer rows via `conn` there only).
 
@@ -43,7 +43,7 @@ pub async fn publish_peer_mesh_snapshot(app: &tauri::AppHandle) {
 }
 
 /// Assemble UI snapshot from transport + bridge state and pre-fetched DB rows (no `conn` here).
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) async fn assemble_mesh_snapshot(
 	app: &tauri::AppHandle,
 	jazz: &crate::jazz::ManagedJazz,
@@ -101,7 +101,7 @@ pub(crate) async fn assemble_mesh_snapshot(
 	})
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn phase_for_peer(
 	peer_did: &str,
 	db_status: &str,

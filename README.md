@@ -29,6 +29,7 @@ Python OCR example (optional): `cd projects/ocr-example && python3 -m venv .venv
 bun run dev:aven-ceo      # SvelteKit (default: bun run dev)
 bun run dev:ocr-example    # prints CLI help (requires Python + venv above)
 bun run dev:jaensen-bot    # Flue dev server (Node target, loads repo-root .env)
+bun run dev:app:linux      # Tauri desktop app on Linux
 
 # or from the package folder
 cd projects/aven-ceo && bun run dev
@@ -37,6 +38,51 @@ cd projects/aven-ceo && bun run dev
 **Note:** `bun run dev:jaensen-bot` runs **Flue**, which currently requires **Node.js ≥ patch 22.18** (or newer) for TypeScript config. If the CLI exits with a version error, upgrade Node and retry.
 
 Env for the **Svelte app**, **OCR CLI**, and **jaensen-bot**: keep **`.env`** at the **repo root** (see **`.env.example`**). `projects/aven-ceo` and `bun run dev:ocr-example` load it via Bun **`--env-file=../../.env`**; **`bun run dev:jaensen-bot`** passes **`flue dev --env ../../.env`**; Python also reads that path plus optional **`projects/ocr-example/.env`** overrides (see `projects/ocr-example/README.md`).
+
+## Linux desktop prerequisites
+
+`bun run dev:app:linux` builds the Tauri shell against system WebKitGTK / GTK / DBus libraries. On a fresh Linux install, missing native packages usually show up as Cargo errors such as `pkg-config ... dbus-1` not found.
+
+Ubuntu / Debian:
+
+```sh
+sudo apt update
+sudo apt install -y \
+  pkg-config \
+  libdbus-1-dev \
+  libgtk-3-dev \
+  libsoup-3.0-dev \
+  libwebkit2gtk-4.1-dev \
+  libayatana-appindicator3-dev \
+  build-essential \
+  curl \
+  wget \
+  file \
+  libssl-dev
+```
+
+Fedora:
+
+```sh
+sudo dnf install \
+  pkgconf-pkg-config \
+  dbus-devel \
+  gtk3-devel \
+  libsoup3-devel \
+  webkit2gtk4.1-devel \
+  libappindicator-gtk3-devel \
+  openssl-devel \
+  curl \
+  wget \
+  file \
+  gcc-c++
+```
+
+After installing the packages, retry:
+
+```sh
+bun run dev:app:linux
+```
 
 ## Lint / format (repo root)
 
