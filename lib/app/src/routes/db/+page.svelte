@@ -1,13 +1,15 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
 	import {
-		jazzBootstrap,
 		jazzExplorerList,
 		jazzExplorerSubscribe,
 		jazzSession,
+		jazzStatus,
 		type JazzExplorerListReply,
 		type JazzSessionReply,
 	} from '$lib/jazz/api'
+	import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
+	import { withTimeoutMs } from '$lib/async-timeout'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/self/device-session-store'
 
@@ -25,6 +27,8 @@
 		$deviceSession.kind === 'unlocked',
 	)
 	const tauri = $derived(browser && isTauriRuntime())
+
+	const DB_IPC_BUDGET_MS = 12_000
 
 	function buildColumns(rows: Record<string, unknown>[]): string[] {
 		const s = new Set<string>()
@@ -88,7 +92,7 @@
 		let cancelled = false
 		void (async () => {
 			try {
-				session = await jazzSession().catch(() => undefined)
+				session = await withTimeoutMs(jazzSession(), DB_IPC_BUDGET_MS, 'DB: Jazz session')
 			} catch {
 				if (!cancelled) session = undefined
 			}
@@ -104,9 +108,23 @@
 		void (async () => {
 			try {
 				bootstrapErr = undefined
-				const boot = await jazzBootstrap()
+				await withTimeoutMs(
+					waitForGrooveSessionReady(),
+					DB_IPC_BUDGET_MS,
+					'DB: Groove session',
+				)
 				if (cancelled) return
-				tables = boot.tables ?? []
+				const status = await withTimeoutMs(
+					jazzStatus(),
+					DB_IPC_BUDGET_MS,
+					'DB: Jazz status',
+				)
+				if (cancelled) return
+				tables = status.tables ?? []
+				if (!status.ready) {
+					bootstrapErr =
+						'Local Groove shell did not report ready — the listing may be incomplete. Retry or reload.'
+				}
 			} catch (e) {
 				if (!cancelled) {
 					bootstrapErr = e instanceof Error ? e.message : String(e)

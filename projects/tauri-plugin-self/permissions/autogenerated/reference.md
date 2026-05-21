@@ -20,6 +20,7 @@ Default permissions for tauri-plugin-self
 - `allow-vault-select`
 - `allow-vault-create`
 - `allow-vault-selected-slug`
+- `allow-active-identity`
 
 ## Permission Table
 
@@ -29,6 +30,32 @@ Default permissions for tauri-plugin-self
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`self:allow-active-identity`
+
+</td>
+<td>
+
+Enables the active_identity command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:deny-active-identity`
+
+</td>
+<td>
+
+Denies the active_identity command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>

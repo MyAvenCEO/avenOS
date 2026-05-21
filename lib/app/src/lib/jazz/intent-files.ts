@@ -2,7 +2,8 @@ import { browser } from '$app/environment'
 import { get } from 'svelte/store'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { deviceSession } from '$lib/self/device-session-store'
-import { jazzBootstrap, jazzStatus, jazzTable } from '$lib/jazz/api'
+import { jazzTable } from '$lib/jazz/api'
+import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
 
 /** Max binary size before base64 (v1 single text column). */
 export const INTENT_FILE_MAX_BYTES = 15 * 1024 * 1024
@@ -83,8 +84,7 @@ export async function persistIntentFiles(
 
 	let stored = 0
 	try {
-		const status = await jazzStatus()
-		if (!status.ready) await jazzBootstrap()
+		await waitForGrooveSessionReady()
 	} catch (e) {
 		return {
 			stored: 0,

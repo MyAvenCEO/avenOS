@@ -3,16 +3,12 @@
 	import type { MessagesRow } from '@avenos/jazz-schema'
 	import { jazzSession, type JazzSessionReply } from '$lib/jazz/api'
 	import { jazzStore } from '$lib/jazz/store.svelte'
+	import { pairingLabelForSession } from '$lib/self/active-vault-ui'
 	import { peerDisplayLabel } from '$lib/peer/display-label'
 	import { peerList, type PeerRowReply } from '$lib/peer/api'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/self/device-session-store'
-	import {
-		vaultList,
-		vaultPairingLabel,
-		vaultSelectedSlug,
-		type VaultListEntry,
-	} from '$lib/self/vault'
+	import { vaultList } from '$lib/self/vault'
 
 	type Props = {
 		sparkId: string
@@ -115,14 +111,11 @@
 			localPairingLabel = undefined
 			return
 		}
+		void $deviceSession
 		void (async () => {
 			try {
-				const vaults = await vaultList()
-				const slug = await vaultSelectedSlug()
-				const active = slug
-					? vaults.find((v: VaultListEntry) => v.usernameSlug === slug)
-					: vaults[0]
-				localPairingLabel = active ? vaultPairingLabel(active) : undefined
+				const vr = await vaultList()
+				localPairingLabel = pairingLabelForSession(vr, $deviceSession)
 			} catch {
 				localPairingLabel = undefined
 			}

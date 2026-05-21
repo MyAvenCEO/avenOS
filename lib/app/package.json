@@ -11,6 +11,7 @@
 		"preview": "bun --env-file=../../.env x --bun vite preview",
 		"prepare": "bunx --bun svelte-kit sync || echo ''",
 		"check": "bun run --cwd ../../libs/jazz-schema build && bunx --bun svelte-kit sync && bunx --bun svelte-check --tsconfig ./tsconfig.json && bun run docs:words",
+		"test": "bun test tests",
 		"docs:words": "bun run --cwd ../../libs/docs words:check",
 		"tauri": "bunx --bun tauri",
 		"tauri:dev": "bunx --bun tauri dev",

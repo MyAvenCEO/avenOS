@@ -152,6 +152,32 @@ impl JazzClient {
         Ok(())
     }
 
+    /// Re-queue full catch-up for an already-registered peer (after P2P link comes back).
+    #[cfg(feature = "peer-transport")]
+    pub fn rebroadcast_peer_catchup(&self, peer_id: ClientId) -> Result<()> {
+        self.runtime
+            .rebroadcast_peer_catchup(peer_id)
+            .map_err(|e| JazzError::Sync(format!("rebroadcast_peer_catchup {peer_id}: {e}")))
+    }
+
+    /// Re-queue catch-up for every registered Peer client and drain the outbox (e.g. after sync ACL loads).
+    #[cfg(feature = "peer-transport")]
+    pub async fn rebroadcast_all_peer_clients_and_flush(&self) -> Result<()> {
+        self.runtime
+            .rebroadcast_all_peer_clients_and_flush()
+            .await
+            .map_err(|e| JazzError::Sync(format!("rebroadcast_all_peer_clients_and_flush: {e}")))
+    }
+
+    /// Drain pending Groove sync outbox to peer transport.
+    #[cfg(feature = "peer-transport")]
+    pub async fn flush_peer_sync(&self) -> Result<()> {
+        self.runtime
+            .flush()
+            .await
+            .map_err(|e| JazzError::Sync(format!("flush: {e}")))
+    }
+
     /// Push a replicated [`SyncPayload`] from a remote Jazz peer into the local Groove inbox.
     #[cfg(feature = "peer-transport")]
     pub fn ingest_peer_sync(&self, from_peer_runtime_id: ClientId, payload: SyncPayload) -> Result<()> {

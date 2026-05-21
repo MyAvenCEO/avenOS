@@ -84,13 +84,16 @@ impl PeerTransport for BiscuitGatedPeerTransport {
 		let variant = payload_variant(&payload);
 		let tbl = table_from_metadata(&payload);
 		if !should_forward(&self.acl, &dest_did, &payload) {
+			// Keep at debug: a dropped spark frame is the usual ACL / catch-up timing signal.
 			log::debug!(
 				target: "avenos::peer_sync_gate",
 				"drop outbound peer={peer:?} did={dest_did} variant={variant} table={tbl:?}",
 			);
 			return Ok(());
 		}
-		log::debug!(
+		// Per-frame trace only — full catch-up can emit thousands/sec at `avenos=debug`.
+		// Enable with `RUST_LOG=avenos::peer_sync_gate=trace` when you need wire-level detail.
+		log::trace!(
 			target: "avenos::peer_sync_gate",
 			"forward outbound peer={peer:?} did={dest_did} variant={variant} table={tbl:?}",
 		);
@@ -109,7 +112,7 @@ impl PeerTransport for BiscuitGatedPeerTransport {
 			SyncPayload::ObjectUpdated { commits, .. } => commits.len(),
 			_ => 0,
 		};
-		log::debug!(
+		log::trace!(
 			target: "avenos::peer_sync_gate",
 			"recv inbound src={src} variant={variant} table={tbl:?} commits={commits}",
 		);

@@ -2,66 +2,73 @@
 	import { browser } from '$app/environment'
 	import { deviceSession } from '$lib/self/device-session-store'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-	import { peerList, peerTransportStatus } from '$lib/peer/api'
-	import PeerSyncStatusBadge from '$lib/peer/PeerSyncStatusBadge.svelte'
-	import { derivePeerSyncPhase, type PeerSyncPhase } from '$lib/peer/sync-display'
-
-	let phase = $state<PeerSyncPhase>('offline')
-	let title = $state('')
-	let connectedCount = $state(0)
+	import PeerMeshPhaseBadge from '$lib/peer/PeerMeshPhaseBadge.svelte'
+	import { peerPersonName } from '$lib/peer/display-label'
+	import { peerMeshPhaseLabel, peerMeshPhaseUserLabel } from '$lib/peer/mesh-state'
+	import { peerMeshSnapshot } from '$lib/peer/peer-mesh.svelte'
 
 	const show = $derived(
-		browser && isTauriRuntime() && $deviceSession.kind !== 'locked',
+		browser && isTauriRuntime() && $deviceSession.kind === 'unlocked',
 	)
 
-	async function poll(): Promise<void> {
-		if (!browser || !isTauriRuntime()) return
-		if ($deviceSession.kind === 'locked') {
-			title = ''
-			phase = 'offline'
-			connectedCount = 0
-			return
-		}
+	const mesh = $derived($peerMeshSnapshot)
 
-		try {
-			const st = await peerTransportStatus()
-			const peers = await peerList().catch(() => [] as Awaited<ReturnType<typeof peerList>>)
-			const allowlisted = peers.filter((p) => p.status === 'active').length
-			connectedCount = st.linkedPeerIds.length
+	const pendingInviteCode = $derived(mesh?.pairingCodePending?.trim() ?? '')
 
-			title = [
-				`pk ${st.localPkPrefixHex}`,
-				`linked ${st.linkedPeerIds.length}`,
-				`allowlisted ${allowlisted}`,
-				st.pairingCodePending ? `code ${st.pairingCodePending}` : null,
-			]
-				.filter(Boolean)
-				.join(' · ')
-
-			phase = derivePeerSyncPhase(st, allowlisted)
-		} catch {
-			phase = 'offline'
-			title = ''
-			connectedCount = 0
-		}
-	}
-
-	$effect(() => {
-		if (!show) return
-		void poll()
-		const ms = phase === 'pairing' ? 2500 : 5000
-		const id = window.setInterval(() => void poll(), ms)
-		return () => clearInterval(id)
-	})
-
-	$effect(() => {
-		if (!browser || !show) return
-		const onFocus = () => void poll()
-		window.addEventListener('focus', onFocus)
-		return () => window.removeEventListener('focus', onFocus)
+	const title = $derived.by(() => {
+		if (!mesh) return ''
+		return [
+			`pk ${mesh.localPkPrefixHex}`,
+			mesh.hyperswarmRunning ? 'swarm up' : 'swarm down',
+			mesh.pairingCodePending ? `code ${mesh.pairingCodePending}` : null,
+			...mesh.peers.map((p) => {
+				const showInviteInstead =
+					Boolean(pendingInviteCode) && p.phase === 'pairing' && !p.deviceLabel?.trim()
+				const head = showInviteInstead
+					? `invite ${pendingInviteCode}`
+					: peerPersonName(p.peerDid, p.deviceLabel, undefined)
+				return `${head}: ${peerMeshPhaseUserLabel(p.phase)}`
+			}),
+		]
+			.filter(Boolean)
+			.join(' · ')
 	})
 </script>
 
-{#if show}
-	<PeerSyncStatusBadge {phase} {title} {connectedCount} />
+{#if show && mesh}
+	<div
+		class="flex min-w-0 max-w-[min(100%,42rem)] flex-row flex-wrap items-center gap-x-3 gap-y-1"
+		role="status"
+		aria-label="Peer mesh status"
+		title={title}
+	>
+		{#if mesh.peers.length === 0 && pendingInviteCode}
+			{@const hostPairingChipTitle =
+				pendingInviteCode + ' · ' + peerMeshPhaseLabel('pairing')}
+			<PeerMeshPhaseBadge
+				phase="pairing"
+				variant="header"
+				displayName={pendingInviteCode}
+				monospaceName={true}
+				title={hostPairingChipTitle}
+			/>
+		{:else}
+			{#each mesh.peers as p (p.peerDid)}
+				{@const showInviteInstead =
+					Boolean(pendingInviteCode) && p.phase === 'pairing' && !p.deviceLabel?.trim()}
+				{@const peerChipTitle = showInviteInstead
+					? `${pendingInviteCode} · ${peerMeshPhaseLabel(p.phase)}`
+					: `${p.peerDid} · ${peerMeshPhaseLabel(p.phase)}`}
+				<PeerMeshPhaseBadge
+					phase={p.phase}
+					variant="header"
+					displayName={showInviteInstead
+						? pendingInviteCode
+						: peerPersonName(p.peerDid, p.deviceLabel, undefined)}
+					monospaceName={showInviteInstead}
+					title={peerChipTitle}
+				/>
+			{/each}
+		{/if}
+	</div>
 {/if}

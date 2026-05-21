@@ -19,3 +19,31 @@ export function peerDisplayLabel(
 	if (local && stored.toLowerCase() === local) return shortPeerDid(peerDid)
 	return stored
 }
+
+/** Person name for compact UI (`firstName/deviceName` pairing label → `firstName` only). */
+export function peerPersonName(
+	peerDid: string,
+	storedLabel: string | undefined,
+	localPairingLabel: string | undefined,
+): string {
+	const full = peerDisplayLabel(peerDid, storedLabel, localPairingLabel)
+	const slash = full.indexOf('/')
+	if (slash > 0) return full.slice(0, slash).trim()
+	return full
+}
+
+/** Person name + device name for picker rows (`firstName/deviceName` → two lines). */
+export function peerPickerLines(
+	peerDid: string,
+	storedLabel: string | undefined,
+	localPairingLabel: string | undefined,
+): { title: string; device?: string } {
+	const full = peerDisplayLabel(peerDid, storedLabel, localPairingLabel)
+	const slash = full.indexOf('/')
+	if (slash > 0) {
+		const title = full.slice(0, slash).trim()
+		const device = full.slice(slash + 1).trim()
+		return device ? { title, device } : { title }
+	}
+	return { title: full }
+}

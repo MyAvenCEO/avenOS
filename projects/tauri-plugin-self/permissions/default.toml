@@ -19,4 +19,5 @@ permissions = [
   "allow-vault-select",
   "allow-vault-create",
   "allow-vault-selected-slug",
+  "allow-active-identity",
 ]

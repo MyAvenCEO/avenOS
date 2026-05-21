@@ -295,6 +295,18 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the active_identity command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-active-identity",
+          "markdownDescription": "Enables the active_identity command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the active_identity command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-active-identity",
+          "markdownDescription": "Denies the active_identity command without any pre-configured scope."
+        },
+        {
           "description": "Enables the device_peer_did command without any pre-configured scope.",
           "type": "string",
           "const": "allow-device-peer-did",
@@ -487,10 +499,10 @@
           "markdownDescription": "Denies the verify command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-device-peer-did`\n- `allow-signing-peer-did`\n- `allow-signing-public-key`\n- `allow-sign`\n- `allow-verify`\n- `allow-lock`\n- `allow-host-device-label`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`",
+          "description": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-device-peer-did`\n- `allow-signing-peer-did`\n- `allow-signing-public-key`\n- `allow-sign`\n- `allow-verify`\n- `allow-lock`\n- `allow-host-device-label`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`\n- `allow-active-identity`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-device-peer-did`\n- `allow-signing-peer-did`\n- `allow-signing-public-key`\n- `allow-sign`\n- `allow-verify`\n- `allow-lock`\n- `allow-host-device-label`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`"
+          "markdownDescription": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-device-peer-did`\n- `allow-signing-peer-did`\n- `allow-signing-public-key`\n- `allow-sign`\n- `allow-verify`\n- `allow-lock`\n- `allow-host-device-label`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`\n- `allow-active-identity`"
         }
       ]
     }

@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
 	import { useSelfContext } from '$lib/self/self-context.svelte'
+	import { pickVaultRowForIdentity } from '$lib/self/active-vault-ui'
 	import SelfDidCard from '$lib/self/SelfDidCard.svelte'
-	import { vaultCardTitle, vaultList, vaultSelectedSlug, type VaultListEntry } from '$lib/self/vault'
+	import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/self/vault'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/self/device-session-store'
 
@@ -10,29 +11,24 @@
 
 	let copyKey = $state<string | null>(null)
 	let vaults = $state<VaultListEntry[]>([])
-	let activeSlug = $state<string | undefined>(undefined)
 
 	const sessionKind = $derived($deviceSession.kind)
 
 	$effect(() => {
 		if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked') return
+		void $deviceSession
 		void (async () => {
 			try {
 				vaults = await vaultList()
-				activeSlug = await vaultSelectedSlug()
 			} catch {
 				vaults = []
-				activeSlug = undefined
 			}
 		})()
 	})
 
 	const activeVault = $derived.by(() => {
-		if (activeSlug) {
-			const m = vaults.find((v) => v.usernameSlug === activeSlug)
-			if (m) return m
-		}
-		return vaults[0]
+		if ($deviceSession.kind === 'locked') return undefined
+		return pickVaultRowForIdentity(vaults, $deviceSession)
 	})
 
 	const personName = $derived.by(() => {

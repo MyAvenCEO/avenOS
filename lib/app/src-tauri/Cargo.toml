@@ -58,15 +58,10 @@ objc2 = { version = "0.6", default-features = false }
 # diagnose the "row visible on read, write fails" failure mode. Pin to local
 # path to keep dev iteration fast; review the diff before bumping versions.
 #
-# Vendored peeroxide@1.3.1 + peeroxide-dht@1.3.1 with one additive patch:
-# `SecretStream::into_split()` returns independent read/write halves so the
-# Hyperswarm bridge can run a reader task and a writer task per peer link
-# without sharing a `Mutex<SecretStream>`. Without this, the reader holds
-# the lock across `await` while waiting for the next inbound frame, and the
-# writer deadlocks; using `tokio::select!` instead corrupts the secretstream
-# decrypt counter because `SecretStream::read` is not cancel-safe. The patch
-# adds new types only — no existing API is modified — so wire compatibility
-# with Node.js Hypercore/Hyperswarm/protomux is fully preserved.
+# Vendored peeroxide@1.3.1 + peeroxide-dht@1.3.1 with additive patches:
+# - `SecretStream::into_split()` — independent read/write halves for the Groove bridge.
+# - `JoinOpts::fast_refresh` — 3s DHT refresh + 2s connect retry cap on invite topics.
+# Wire compatibility with Node.js Hypercore/Hyperswarm/protomux is preserved.
 [patch.crates-io]
 jazz-tools = { path = "../../../third_party/jazz-tools" }
 peeroxide = { path = "../../../third_party/peeroxide" }

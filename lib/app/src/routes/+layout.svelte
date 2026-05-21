@@ -5,9 +5,15 @@ import { browser } from '$app/environment'
 import { ensureComposerTauriShortcutBridge } from '$lib/intent-mock/composer-tauri-bridge'
 import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
 import P2pSyncBadge from '$lib/peer/P2pSyncBadge.svelte'
+import {
+	attachAvenosRuntimeBridge,
+	grooveSessionReady,
+} from '$lib/runtime/groove-runtime'
+import { startPeerMeshStore } from '$lib/peer/peer-mesh.svelte'
 import LockGate from '$lib/self/LockGate.svelte'
-import { deviceSession } from '$lib/self/device-session-store'
-import { vaultCardTitle, vaultList, vaultSelectedSlug, type VaultListEntry } from '$lib/self/vault'
+import { attachSelfRustEventMirrors, deviceSession } from '$lib/self/device-session-store'
+import { displayTitleForSession } from '$lib/self/active-vault-ui'
+import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/self/vault'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import '../app.css'
 
@@ -33,32 +39,49 @@ $effect(() => {
 	if (shellLocked) pendingIntentFileDrop.set(null)
 })
 
-const sessionKind = $derived($deviceSession.kind)
-
-let vaults = $state<VaultListEntry[]>([])
-let activeSlug = $state<string | undefined>(undefined)
+$effect(() => {
+	if (!browser || !isTauriRuntime()) return () => {}
+	return attachAvenosRuntimeBridge()
+})
 
 $effect(() => {
+	if (!browser || !isTauriRuntime()) return () => {}
+	return attachSelfRustEventMirrors()
+})
+
+const sessionKind = $derived($deviceSession.kind)
+
+/** Mesh touches Groove ACL — defer until strict local-first bootstrap confirms shell hydrate. */
+const meshAllowed = $derived(sessionKind === 'unlocked' && $grooveSessionReady)
+
+$effect(() => {
+	if (!browser || !isTauriRuntime() || !meshAllowed) return
+	return startPeerMeshStore()
+})
+
+let vaults = $state<VaultListEntry[]>([])
+
+$effect(() => {
+	void sessionKind
 	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked') return
 	void (async () => {
 		try {
 			vaults = await vaultList()
-			activeSlug = await vaultSelectedSlug()
 		} catch {
 			vaults = []
-			activeSlug = undefined
 		}
 	})()
 })
 
 const selfNavLabel = $derived.by(() => {
-	if (activeSlug) {
-		const match = vaults.find((v) => v.usernameSlug === activeSlug)
-		if (match) return vaultCardTitle(match)
-	}
-	const first = vaults[0]
-	if (first) return vaultCardTitle(first)
-	return 'Self'
+	const ds = $deviceSession
+	const title =
+		ds.kind === 'unlocked'
+			? displayTitleForSession(vaults, ds)
+			: vaults.length > 0
+				? vaultCardTitle(vaults[0])
+				: 'Self'
+	return title
 })
 
 /** Global file-drag overlay (all routes when unlocked; not active on lock screen). */

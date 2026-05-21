@@ -174,7 +174,8 @@ async function main() {
 			`  ${CYAN}[A]${RESET}  http://127.0.0.1:1420\n` +
 			`  ${MAGENTA}[B]${RESET}  http://127.0.0.1:1421\n\n` +
 			`Shared vault store: ${vaultsHint}\n` +
-			`Pick a different persona in each window to exercise two-human P2P (or reuse one vault — avoid opening the same slug in both).\n\n` +
+			`${BOLD}${MAGENTA}WARNING:${RESET} Unlocking the same vault slug in [A] and [B] at once grabs the same SurrealKV files — Share/DB can stay on Loading indefinitely (not a vault-switch bug). Pick different people on each lock screen.\n\n` +
+			`${BOLD}Note:${RESET} AVENOS_DEV_INSTANCE is ${CYAN}A${RESET} / ${MAGENTA}B${RESET} for log prefixes only; it does not isolate vault dirs.\n\n` +
 			`Reset all dev personas: rm -rf ${vaultsHint}\n` +
 			`Press Ctrl-C to stop both.\n`,
 	)

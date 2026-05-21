@@ -3,28 +3,28 @@
 	import { browser } from '$app/environment'
 	import { page } from '$app/state'
 	import type { SparksRow } from '@avenos/jazz-schema'
+	import { withTimeoutMs } from '$lib/async-timeout'
 	import {
-		jazzBootstrap,
 		jazzSession,
 		jazzStatus,
 		sparkAdminAdd,
 		sparkAdminList,
 		type JazzSessionReply,
 	} from '$lib/jazz/api'
+	import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import type { PeerRowReply } from '$lib/peer/api'
 	import { peerList } from '$lib/peer/api'
 	import { peerDisplayLabel } from '$lib/peer/display-label'
+	import PeerPickerSelect from '$lib/peer/PeerPickerSelect.svelte'
+	import { pairingLabelForSession } from '$lib/self/active-vault-ui'
 	import { deviceSession } from '$lib/self/device-session-store'
-	import {
-		vaultList,
-		vaultPairingLabel,
-		vaultSelectedSlug,
-		type VaultListEntry,
-	} from '$lib/self/vault'
+	import { vaultList } from '$lib/self/vault'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 
 	const sparksStore = jazzStore('sparks')
+
+	const LOCAL_IPC_BUDGET_MS = 12_000
 
 	// Snapshot is reactive: peer-sync deltas refresh `sparksStore.rows` automatically,
 	// so granting another device admin appears here without a manual reload.
@@ -118,22 +118,31 @@
 		busy = true
 		err = undefined
 		try {
-			const status = await jazzStatus()
-			if (!status.ready) await jazzBootstrap()
-			session = await jazzSession()
+			await withTimeoutMs(
+				(async () => {
+					await waitForGrooveSessionReady()
+					const status = await jazzStatus()
+					if (!status.ready) {
+						throw new Error('Local Groove shell is not ready yet.')
+					}
+					session = await jazzSession()
 
-			const sid = sparkId.trim()
-			if (sid) {
-				peersAllow = await peerList()
-				const a = await sparkAdminList(sid)
-				adminDids = a.adminDids
-			} else {
-				peersAllow = []
-				adminDids = []
-			}
-			addAdminDid = ''
-			addNote = undefined
-			adminErr = undefined
+					const sid = sparkId.trim()
+					if (sid) {
+						peersAllow = await peerList()
+						const a = await sparkAdminList(sid)
+						adminDids = a.adminDids
+					} else {
+						peersAllow = []
+						adminDids = []
+					}
+					addAdminDid = ''
+					addNote = undefined
+					adminErr = undefined
+				})(),
+				LOCAL_IPC_BUDGET_MS,
+				'Share: loading session stalled',
+			)
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {
@@ -189,14 +198,12 @@
 			localPairingLabel = undefined
 			return
 		}
+		void sessionKind
+		void $deviceSession
 		void (async () => {
 			try {
-				const vaults = await vaultList()
-				const slug = await vaultSelectedSlug()
-				const active = slug
-					? vaults.find((v: VaultListEntry) => v.usernameSlug === slug)
-					: vaults[0]
-				localPairingLabel = active ? vaultPairingLabel(active) : undefined
+				const sessionVaultRows = await vaultList()
+				localPairingLabel = pairingLabelForSession(sessionVaultRows, $deviceSession)
 			} catch {
 				localPairingLabel = undefined
 			}
@@ -231,8 +238,10 @@
 		<p class="text-destructive rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs select-text">{sparksErr}</p>
 	{/if}
 
-	{#if tauri && unlocked && busy && !session}
-		<p class="text-muted-foreground text-xs">Loading…</p>
+	{#if tauri && unlocked && sparksStore.loaded && busy && !session}
+		<p class="text-muted-foreground rounded-lg border border-border/40 bg-muted/20 px-4 py-3 text-xs leading-relaxed">
+			Still loading session details… If this lasts more than ~{LOCAL_IPC_BUDGET_MS / 1000}s, check logs or reload.
+		</p>
 	{/if}
 
 	{#if err}
@@ -313,21 +322,19 @@
 				<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">Give access</h2>
 				{#if selectablePeers.length > 0}
 					<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-						<select class="border-input bg-background flex-1 rounded-md border px-3 py-2 text-sm" bind:value={addAdminDid}>
-							<option value="">Select a paired peer…</option>
-							{#each selectablePeers as p (p.id)}
-								<option value={p.peerDid}
-									>{peerDisplayLabel(p.peerDid, p.deviceLabel, localPairingLabel)}</option
-								>
-							{/each}
-						</select>
+						<PeerPickerSelect
+							peers={selectablePeers}
+							bind:value={addAdminDid}
+							{localPairingLabel}
+							disabled={adminBusy}
+						/>
 						<button
 							type="button"
 							class="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
 							disabled={adminBusy || !addAdminDid}
 							onclick={() => void addAdmin()}
 						>
-							{adminBusy ? '…' : 'Allow access'}
+							{adminBusy ? '…' : 'Add as admin'}
 						</button>
 					</div>
 				{:else if activeAllowlistPeers.length === 0}

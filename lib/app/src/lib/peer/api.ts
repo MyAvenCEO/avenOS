@@ -1,9 +1,12 @@
 import { invoke } from '@tauri-apps/api/core'
+import { grooveRuntime } from '$lib/runtime/groove-ipc'
 
 export type PeerTransportStatusReply = {
 	hyperswarmRunning: boolean
 	localPkPrefixHex: string
 	linkedPeerIds: string[]
+	/** Live Hyperswarm links by `did:key` — matches `PeerRowReply.peerDid`. */
+	linkedPeerDids: string[]
 	pairingCodePending?: string | null
 }
 
@@ -37,9 +40,9 @@ export type PeerRowReply = {
 }
 
 export async function peerList(): Promise<PeerRowReply[]> {
-	return invoke<PeerRowReply[]>('peer_list')
+	return grooveRuntime<PeerRowReply[]>('peerList', {})
 }
 
 export async function peerRevoke(peerDid: string): Promise<void> {
-	await invoke<void>('peer_revoke', { peerDid })
+	await grooveRuntime('peerRevoke', { peerDid })
 }

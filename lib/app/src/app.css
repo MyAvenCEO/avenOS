@@ -22,7 +22,8 @@
  * — Primary / brand navy: #1E293B
  * — Success: #2F5D50
  * — Working (sage): #A4B69A
- * — Info / HITL / waiting (sand): #D4A373
+ * — Info / connectivity / connecting (sand): #D4A373
+ * — Pairing handshake (distinct from info): #7E6EAD — violet, reads as invitation flow
  * — Error terracotta (chosen): #C15B40 — saturated, readable vs sage/cream surrounds
  * — Cream page surface — slightly lighter near-white. The page reads as the
  *   neutral base while card surfaces sit slightly warmer/darker on top:
@@ -50,6 +51,7 @@
 	--color-brand-navy: #1e293b;
 	--color-status-success-base: #2f5d50;
 	--color-status-working-base: #a4b69a;
+	--color-status-pairing-base: #7e6ead;
 	--color-status-info-base: #d4a373;
 	/* Terracotta error: #C15B40 */
 	--color-status-error-base: #c15b40;
@@ -126,6 +128,9 @@
 
 	--color-status-info: var(--color-status-info-base);
 	--color-status-info-foreground: #2b231c;
+
+	--color-status-pairing: var(--color-status-pairing-base);
+	--color-status-pairing-foreground: #f4f3fc;
 
 	--color-status-error: var(--color-status-error-base);
 	--color-status-error-foreground: #fffefb;

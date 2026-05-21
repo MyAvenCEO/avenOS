@@ -8,6 +8,7 @@ pub struct PeerTransportStatusReply {
 	pub hyperswarm_running: bool,
 	pub local_pk_prefix_hex: String,
 	pub linked_peer_ids: Vec<String>,
+	pub linked_peer_dids: Vec<String>,
 	pub pairing_code_pending: Option<String>,
 }
 
@@ -23,6 +24,7 @@ pub async fn peer_transport_status() -> Result<PeerTransportStatusReply, String>
 		hyperswarm_running: false,
 		local_pk_prefix_hex: String::new(),
 		linked_peer_ids: vec![],
+		linked_peer_dids: vec![],
 		pairing_code_pending: None,
 	})
 }

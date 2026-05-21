@@ -4,8 +4,16 @@
 	import { onMount, tick } from 'svelte'
 	import { getCurrentWindow } from '@tauri-apps/api/window'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-	import { bootstrapJazzAfterUnlock } from '$lib/jazz/bootstrap'
-	import { clearDeviceSession, deviceSession, setUnlocked, DEVICE_PEER_SLOT } from '$lib/self/device-session-store'
+	import { bootstrapJazzStrict } from '$lib/jazz/bootstrap'
+	import { grooveSessionReady } from '$lib/runtime/groove-runtime'
+	import {
+		applyLockedFrontendState,
+		clearDeviceSession,
+		deviceSession,
+		DEVICE_PEER_SLOT,
+		fetchActiveVaultIdentity,
+		setUnlockedWithIdentity,
+	} from '$lib/self/device-session-store'
 	import {
 		vaultCardTitle,
 		vaultCreate,
@@ -125,8 +133,20 @@
 					slot: DEVICE_PEER_SLOT,
 				})
 				if (!cancelled && st.unlocked) {
-					setUnlocked()
-					void bootstrapJazzAfterUnlock()
+					try {
+						const id = await fetchActiveVaultIdentity()
+						if (!id) {
+							err = 'Unlocked vault session could not be read — pick yourself again.'
+							return
+						}
+						await bootstrapJazzStrict()
+						setUnlockedWithIdentity(id)
+						grooveSessionReady.set(true)
+					} catch (e) {
+						if (!cancelled) {
+							err = e instanceof Error ? e.message : String(e)
+						}
+					}
 				}
 			} catch {
 				/* already unlocked path is optional on cold start */
@@ -149,6 +169,7 @@
 		if (!browser || !isTauriRuntime()) return
 		loading = true
 		err = undefined
+		let unlockedRust = false
 		try {
 			await invoke('plugin:self|register', { slot: DEVICE_PEER_SLOT })
 			const genesisNetworkId = await invoke<number[]>('genesis_network_id')
@@ -156,10 +177,24 @@
 				slot: DEVICE_PEER_SLOT,
 				genesisNetworkId,
 			})
-			setUnlocked()
-			await bootstrapJazzAfterUnlock()
+			unlockedRust = true
+			const identity = await fetchActiveVaultIdentity()
+			if (!identity) {
+				throw new Error('Identity unavailable after unlock — try again.')
+			}
+			await bootstrapJazzStrict()
+			setUnlockedWithIdentity(identity)
+			grooveSessionReady.set(true)
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
+			if (unlockedRust) {
+				try {
+					await invoke('plugin:self|lock')
+				} catch {
+					/* swallow */
+				}
+				applyLockedFrontendState()
+			}
 		} finally {
 			loading = false
 			unlockingSlug = undefined

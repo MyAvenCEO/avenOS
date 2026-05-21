@@ -21,6 +21,11 @@ const REFRESH_INTERVAL: Duration = Duration::from_secs(600);
 /// Up to 2-minute random jitter added to refresh interval.
 const REFRESH_JITTER_MS: u64 = 120_000;
 
+/// Fast refresh for short-lived pairing / invite topics (AvenOS `aven:pair:v1:*`, etc.).
+const FAST_REFRESH_INTERVAL: Duration = Duration::from_secs(3);
+
+const FAST_REFRESH_JITTER_MS: u64 = 500;
+
 pub(crate) enum DiscoveryEvent {
     PeerFound {
         public_key: [u8; 32],
@@ -36,6 +41,8 @@ pub(crate) struct PeerDiscoveryConfig {
     pub topic: [u8; 32],
     pub is_server: bool,
     pub is_client: bool,
+    /// When true, re-announce / re-lookup every few seconds instead of ~10 minutes.
+    pub fast_refresh: bool,
 }
 
 pub(crate) async fn run_discovery(
@@ -49,8 +56,13 @@ pub(crate) async fn run_discovery(
     do_refresh(&config, &dht, &key_pair, &relay_addresses, &event_tx).await;
 
     loop {
-        let jitter_ms = rand::rng().random_range(0..REFRESH_JITTER_MS);
-        let delay = REFRESH_INTERVAL + Duration::from_millis(jitter_ms);
+        let (base, jitter_cap) = if config.fast_refresh {
+            (FAST_REFRESH_INTERVAL, FAST_REFRESH_JITTER_MS)
+        } else {
+            (REFRESH_INTERVAL, REFRESH_JITTER_MS)
+        };
+        let jitter_ms = rand::rng().random_range(0..jitter_cap);
+        let delay = base + Duration::from_millis(jitter_ms);
 
         tokio::select! {
             _ = tokio::time::sleep(delay) => {

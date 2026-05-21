@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-active-identity"
+description = "Enables the active_identity command without any pre-configured scope."
+commands.allow = ["active_identity"]
+
+[[permission]]
+identifier = "deny-active-identity"
+description = "Denies the active_identity command without any pre-configured scope."
+commands.deny = ["active_identity"]

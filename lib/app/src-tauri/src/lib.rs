@@ -2,6 +2,7 @@ mod crypto;
 mod genesis;
 mod jazz;
 mod jazz_auth;
+mod peer_mesh_state;
 mod peers;
 mod peer_sync_gate;
 mod schema_manifest;
@@ -392,8 +393,10 @@ async fn destroy_sandbox_webview(window: Window, label: String) -> Result<(), St
 /// SurrealKV / ObjectManager state diverges and we ask the user for diagnostics.
 ///
 /// Default filter prints `info` everywhere plus `debug` for our own `avenos::*`
-/// targets so dev runs always show the Jazz lifecycle. Users can override via
-/// `RUST_LOG` (standard `env_logger` semantics).
+/// targets so dev runs always show the Jazz lifecycle. Per-frame P2P gate traffic
+/// stays at `trace` (see `peer_sync_gate.rs`) so catch-up does not flood the terminal.
+/// Users can override via `RUST_LOG` (standard `env_logger` semantics), e.g.
+/// `RUST_LOG=avenos::peer_sync_gate=trace` or pipe to a file: `2>&1 | tee avenos.log`.
 fn init_logging() {
 	let _ = env_logger::Builder::from_env(
 		env_logger::Env::default().default_filter_or("info,avenos=debug,groove::sync_manager=debug"),
@@ -418,7 +421,7 @@ async fn drain_jazz_async(app_handle: AppHandle) {
 		return;
 	}
 	log::info!("shutdown: draining JazzClient + SurrealKV before exit");
-	let mj = app_handle.state::<jazz::ManagedJazz>();
+	let actor = jazz::runtime::groove_actor(&app_handle);
 	// Hard cap the drain. If `reset_connection` is wedged on a Mutex /
 	// `runtime.flush()` deadlock, blocking forever just trades one bad
 	// shutdown (no flush) for a worse one (no exit at all, and the dev
@@ -427,7 +430,7 @@ async fn drain_jazz_async(app_handle: AppHandle) {
 	let drain_start = std::time::Instant::now();
 	let drain = tokio::time::timeout(
 		std::time::Duration::from_secs(5),
-		mj.reset_connection(),
+		actor.reset_connection(),
 	);
 	match drain.await {
 		Ok(()) => log::info!(
@@ -460,6 +463,8 @@ pub fn run() {
 		.manage(genesis::GenesisState::default())
 		.manage(jazz::ManagedJazz::default())
 		.setup(|app| {
+			app.manage(jazz::runtime::spawn_groove_actor(app.handle().clone()));
+
 			let state = app.state::<genesis::GenesisState>();
 			if let Err(e) = genesis::bootstrap(&state) {
 				log::error!("GENESIS_NETWORK_ID bootstrap: {e}");
@@ -483,8 +488,7 @@ pub fn run() {
 			let _vault_lock_listen = app.listen("self:did-lock", move |_event| {
 				let handle = handle_for_lock.clone();
 				tauri::async_runtime::spawn(async move {
-					let mj = handle.state::<jazz::ManagedJazz>();
-					mj.reset_connection().await;
+					jazz::runtime::groove_actor(&handle).reset_connection().await;
 				});
 			});
 
@@ -541,21 +545,11 @@ pub fn run() {
 			let _hyperswarm_ready_mesh = app.listen("peer:hyperswarm-ready", move |_event| {
 				let hh = h_swarm_ready.clone();
 				tauri::async_runtime::spawn(async move {
-					let mj = hh.state::<jazz::ManagedJazz>();
-					match jazz::refresh_peer_mesh_primitives(&hh, &mj).await {
-						Ok(n) if n > 0 => {
-							log::info!(
-								target: "avenos::jazz",
-								"peer:hyperswarm-ready → Groove peers registered={n}",
-							);
-						}
-						Ok(_) => {
-							log::debug!(target: "avenos::jazz", "peer:hyperswarm-ready mesh refresh ok (no live links yet)");
-						}
-						Err(e) => log::debug!(
+					if let Err(e) = jazz::refresh_peer_mesh_primitives(&hh).await {
+						log::debug!(
 							target: "avenos::jazz",
 							"peer:hyperswarm-ready mesh refresh skipped: {e}",
-						),
+						);
 					}
 				});
 			});
@@ -583,16 +577,15 @@ pub fn run() {
 							Duration::from_secs(2)
 						} else {
 							in_fast_phase = false;
-							Duration::from_secs(30)
+							Duration::from_secs(8)
 						};
 						let n = notify.clone();
 						let tick = tokio::time::sleep(tick_dur);
 						tokio::select! {
 							_ = n.notified() => {}
 							_ = tick => {}
-						}
-						let mj = h_mesh.state::<jazz::ManagedJazz>();
-						if let Err(e) = jazz::refresh_peer_mesh_primitives(&h_mesh, &mj).await {
+						};
+						if let Err(e) = jazz::peer_mesh_reconcile_tick(&h_mesh).await {
 							log::debug!(
 								target: "avenos::jazz",
 								"peer-mesh reconcile skipped: {e}"
@@ -612,22 +605,7 @@ pub fn run() {
 			set_sandbox_webview_rect,
 			destroy_sandbox_webview,
 			genesis::genesis_network_id,
-			jazz::jazz_bootstrap,
-			jazz::jazz_session,
-			jazz::jazz_status,
-			jazz::jazz_list,
-			jazz::jazz_explorer_list,
-			jazz::jazz_get,
-			jazz::jazz_create,
-			jazz::jazz_update,
-			jazz::jazz_delete,
-			jazz::jazz_subscribe,
-			jazz::jazz_peer_mesh_refresh,
-			jazz::spark_admin_add,
-			jazz::spark_admin_list,
-			jazz::spark_admin_revoke,
-			jazz::peer_list,
-			jazz::peer_revoke,
+			jazz::groove_runtime,
 			jazz::self_storage_paths,
 			jazz::self_clear_jazz_database,
 		])

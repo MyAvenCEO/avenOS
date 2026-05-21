@@ -413,6 +413,34 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         Ok(())
     }
 
+    /// Whether `client_id` is already registered as a Peer-role sync client.
+    pub fn is_peer_sync_client(&self, client_id: ClientId) -> Result<bool, RuntimeError> {
+        use crate::groove::sync_manager::ClientRole;
+        let core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        Ok(core
+            .schema_manager()
+            .query_manager()
+            .sync_manager()
+            .get_client(client_id)
+            .is_some_and(|c| c.role == ClientRole::Peer))
+    }
+
+    /// Re-queue full P2P catch-up for one peer (swarm reconnect or ACL now available).
+    pub fn rebroadcast_peer_catchup(&self, client_id: ClientId) -> Result<(), RuntimeError> {
+        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        core.rebroadcast_peer_catchup(client_id);
+        Ok(())
+    }
+
+    /// Re-queue catch-up for every Peer-role client, then drain the outbox.
+    pub async fn rebroadcast_all_peer_clients_and_flush(&self) -> Result<(), RuntimeError> {
+        {
+            let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+            core.rebroadcast_all_peer_clients();
+        }
+        self.flush().await
+    }
+
     // =========================================================================
     // Schema Access
     // =========================================================================

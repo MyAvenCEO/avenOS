@@ -16,6 +16,7 @@ fn main() {
 		"vault_select",
 		"vault_create",
 		"vault_selected_slug",
+		"active_identity",
 	];
 
 	if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {

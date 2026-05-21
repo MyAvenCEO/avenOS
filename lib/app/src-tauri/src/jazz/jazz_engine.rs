@@ -529,9 +529,16 @@ pub(super) async fn hydrate_shell(
 			// (admin-A grants admin-B → admin-B grants admin-C), we'll need
 			// a dedicated `wrapper_did` column on the keyshare row instead
 			// of inferring it from the spark issuer.
-			let issuer_pk = spark_issuer_pubkey.get(&sid).ok_or_else(|| {
-				format!("keyshare for unknown spark issuer: spark_id={sid}")
-			})?;
+			let issuer_pk = match spark_issuer_pubkey.get(&sid) {
+				Some(pk) => pk,
+				None => {
+					log::debug!(
+						target: "avenos::jazz",
+						"skip keyshare until spark issuer syncs: spark_id={sid}",
+					);
+					continue;
+				}
+			};
 			let kek = derive_kek_x25519(&signing_key, issuer_pk)?;
 			let aad = keyshare_wrap_aad(&urn, recipient, dv);
 			let raw32 = decrypt_keyshare_payload(wrapped, &kek, &aad)?;
@@ -683,7 +690,7 @@ pub(super) async fn hydrate_shell(
 			.copied()
 			.ok_or_else(|| "shell_no_sparks".to_string())?;
 
-	log::info!(
+	log::debug!(
 		target: "avenos::jazz",
 		"hydrate_shell ready groove_write_branch={groove_write_branch} default_spark={default_spark}"
 	);

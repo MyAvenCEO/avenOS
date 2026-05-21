@@ -9,7 +9,13 @@ Use `scripts/dev-two-instances.ts` (or your usual two-window dev flow). **`bun r
 - **`[A]`** — dev server `http://127.0.0.1:1420`
 - **`[B]`** — dev server `http://127.0.0.1:1421` (second Tauri bundle id)
 
-Both processes use the normal layout under **`~/Documents/.avenOS/vaults/<slug>/{db,self}`**. Do **not** rely on separate `AVENOS_DATA_DIR_OVERRIDE` trees (`avenAlice` / `avenBob`) for this harness anymore: spawn two windows, then on **each** lock screen **pick or create a persona**. Use **two different vault slugs** when testing cross-person sync so only one process holds the SurrealKV lock for each DB.
+Both processes use the normal layout under **`~/Documents/.avenOS/vaults/<slug>/{db,self}`**. Do **not** rely on separate `AVENOS_DATA_DIR_OVERRIDE` trees (`avenAlice` / `avenBob`) for this harness anymore: spawn two windows, then on **each** lock screen **pick or create a persona**.
+
+### Same slug in both windows breaks local-first UX
+
+Opening the **same vault slug** in instance A **and** B at the same time makes both apps contend for one SurrealKV database file — you can see **empty tables**, **`Share` / `DB` stuck Loading**, or lock errors that look like a \"vault disappeared\" bug. Use **distinct slugs** (e.g. `alice` vs `bob`) whenever both processes are unlocked.
+
+Each process receives **`AVENOS_DEV_INSTANCE` = `A` or `B`** for log-line prefixes only; it does **not** split vault storage.
 
 Destructive reset of **all** local vaults:
 
@@ -26,6 +32,22 @@ On **each** instance:
 5. Open todos (or any spark-scoped data) on either side; both should merge updates after sync. Non-admin sparks stay private.
 
 If sync seems quiet, watch the dev log for `groove_p2p link up peer=...` (proves the swarm connection landed) and the periodic mesh reconcile (`peer-mesh reconcile`) — the app auto-registers each new peer with Jazz sync as soon as the swarm connects.
+
+## Session 2+ (cold restart reconnect)
+
+Exercise **native reconnect** — pairing + topics already saved; no new invite code:
+
+1. After the first-session steps above succeed, fully **quit** both Tauri apps (Cmd+Q).
+2. Start both harness instances again (`bun run dev:two-instances` or equivalent), unlock **both** vaults.
+3. In the header / Self → peers, expect **Connecting…** briefly, then **Up to date** (often within **about 30–60 seconds** on the public DHT).
+
+**Logs to confirm** (`RUST_LOG=info,avenos::peeroxide=info,avenos::jazz=info` is a reasonable filter):
+
+- A capped flush tagged **`reconnect allowlisted peers`** — transport nudge after re-joining pair topics.
+- **`groove_p2p link up`** — swarm stream is live to the peer.
+- **`register_peer_sync_client`** (or equivalent Jazz Groove hook) — app attached sync/catch-up for that link.
+
+Repeat **lock one device → unlock**: the locked side should reconnect without a new pairing code once the swarm restarts post-unlock.
 
 ## Developer repro: todos in DB vs Spark todo view (offline)
 

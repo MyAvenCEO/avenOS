@@ -35,7 +35,10 @@ fn next_stream_id() -> u32 {
 }
 
 const DEFAULT_MAX_PEERS: usize = 64;
-const DEFAULT_MAX_PARALLEL: usize = 3;
+const DEFAULT_MAX_PARALLEL: usize = 8;
+
+/// Max connect retry delay while any [`JoinOpts::fast_refresh`] topic is joined.
+const PAIRING_MAX_RETRY_DELAY: Duration = Duration::from_millis(2000);
 
 // ── Retry backoff tiers (matching Node.js lib/retry-timer.js) ────────────────
 // Each tier: [base_ms, jitter1, jitter2, jitter3]
@@ -45,7 +48,7 @@ const BACKOFF_M: [u64; 4] = [5000, 1000, 500, 250];
 const BACKOFF_L: [u64; 4] = [15000, 5000, 2500, 1000];
 const BACKOFF_X: [u64; 4] = [600_000, 60_000, 30_000, 15_000];
 
-fn retry_delay(info: &PeerInfo) -> Duration {
+fn retry_delay(info: &PeerInfo, cap_for_pairing: bool) -> Duration {
     let idx = if info.proven {
         (info.attempts as usize).min(3)
     } else {
@@ -61,7 +64,11 @@ fn retry_delay(info: &PeerInfo) -> Duration {
     let jitter = rng.random_range(0..tier[1])
         + rng.random_range(0..tier[2])
         + rng.random_range(0..tier[3]);
-    Duration::from_millis(tier[0] + jitter)
+    let mut delay = Duration::from_millis(tier[0] + jitter);
+    if cap_for_pairing && delay > PAIRING_MAX_RETRY_DELAY {
+        delay = PAIRING_MAX_RETRY_DELAY;
+    }
+    delay
 }
 
 fn short_hex(bytes: &[u8]) -> String {
@@ -83,7 +90,7 @@ pub struct SwarmConfig {
     pub dht: HyperDhtConfig,
     /// Maximum total peer connections (default 64).
     pub max_peers: usize,
-    /// Maximum concurrent outgoing connection attempts (default 3).
+    /// Maximum concurrent outgoing connection attempts (default 8).
     pub max_parallel: usize,
     /// Firewall value sent in handshakes (default 0).
     pub firewall: u64,
@@ -127,6 +134,8 @@ pub struct JoinOpts {
     pub server: bool,
     /// Look up peers on this topic (client mode).
     pub client: bool,
+    /// Re-announce / re-lookup every few seconds (for short-lived invite topics).
+    pub fast_refresh: bool,
 }
 
 impl Default for JoinOpts {
@@ -134,6 +143,18 @@ impl Default for JoinOpts {
         Self {
             server: true,
             client: true,
+            fast_refresh: false,
+        }
+    }
+}
+
+impl JoinOpts {
+    /// Invite / short-lived topics: fast DHT refresh and capped connect retry backoff.
+    pub fn fast_refresh() -> Self {
+        Self {
+            server: true,
+            client: true,
+            fast_refresh: true,
         }
     }
 }
@@ -230,6 +251,7 @@ impl SwarmHandle {
                 topic,
                 server: opts.server,
                 client: opts.client,
+                fast_refresh: opts.fast_refresh,
                 reply_tx,
             })
             .await
@@ -273,6 +295,7 @@ enum SwarmCommand {
         topic: [u8; 32],
         server: bool,
         client: bool,
+        fast_refresh: bool,
         reply_tx: oneshot::Sender<Result<(), SwarmError>>,
     },
     Leave {
@@ -291,6 +314,7 @@ enum SwarmCommand {
 struct TopicState {
     is_server: bool,
     is_client: bool,
+    fast_refresh: bool,
     cancel_tx: Option<oneshot::Sender<()>>,
     refreshed: bool,
 }
@@ -460,9 +484,10 @@ impl SwarmActor {
                 topic,
                 server,
                 client,
+                fast_refresh,
                 reply_tx,
             } => {
-                let result = self.do_join(topic, server, client);
+                let result = self.do_join(topic, server, client, fast_refresh);
                 let _ = reply_tx.send(result);
                 false
             }
@@ -491,7 +516,17 @@ impl SwarmActor {
         }
     }
 
-    fn do_join(&mut self, topic: [u8; 32], server: bool, client: bool) -> Result<(), SwarmError> {
+    fn any_fast_refresh_topic(&self) -> bool {
+        self.topics.values().any(|t| t.fast_refresh)
+    }
+
+    fn do_join(
+        &mut self,
+        topic: [u8; 32],
+        server: bool,
+        client: bool,
+        fast_refresh: bool,
+    ) -> Result<(), SwarmError> {
         if self.topics.contains_key(&topic) {
             return Ok(());
         }
@@ -514,6 +549,7 @@ impl SwarmActor {
                 topic,
                 is_server: server,
                 is_client: client,
+                fast_refresh,
             },
             self.dht.clone(),
             self.key_pair.clone(),
@@ -527,6 +563,7 @@ impl SwarmActor {
             TopicState {
                 is_server: server,
                 is_client: client,
+                fast_refresh,
                 cancel_tx: Some(cancel_tx),
                 refreshed: false,
             },
@@ -726,6 +763,7 @@ impl SwarmActor {
     }
 
     fn schedule_retry(&mut self, pk: [u8; 32]) {
+        let cap_for_pairing = self.any_fast_refresh_topic();
         let Some(info) = self.peers.get_mut(&pk) else {
             return;
         };
@@ -733,7 +771,7 @@ impl SwarmActor {
             return;
         }
 
-        let delay = retry_delay(info);
+        let delay = retry_delay(info, cap_for_pairing);
         info.set_waiting(true);
 
         let relay_addresses = info.relay_addresses.clone();
@@ -1117,7 +1155,7 @@ mod tests {
     fn retry_delay_first_attempt_unproven() {
         let mut info = PeerInfo::new([0u8; 32], vec![]);
         info.attempts = 0;
-        let d = retry_delay(&info);
+        let d = retry_delay(&info, false);
         // Tier M: 5000..6750 ms (unproven, idx = min(0+1, 3) = 1)
         assert!(d.as_millis() >= 5000);
         assert!(d.as_millis() < 7000);
@@ -1128,7 +1166,7 @@ mod tests {
         let mut info = PeerInfo::new([0u8; 32], vec![]);
         info.attempts = 0;
         info.proven = true;
-        let d = retry_delay(&info);
+        let d = retry_delay(&info, false);
         // Tier S: 1000..1400 ms (proven, idx = min(0, 3) = 0)
         assert!(d.as_millis() >= 1000);
         assert!(d.as_millis() < 1500);
@@ -1138,7 +1176,7 @@ mod tests {
     fn retry_delay_many_attempts() {
         let mut info = PeerInfo::new([0u8; 32], vec![]);
         info.attempts = 10;
-        let d = retry_delay(&info);
+        let d = retry_delay(&info, false);
         // Tier X: 600_000..705_000 ms (idx capped at 3)
         assert!(d.as_millis() >= 600_000);
         assert!(d.as_millis() < 710_000);
@@ -1155,7 +1193,7 @@ mod tests {
         let c = SwarmConfig::default();
         assert!(c.key_pair.is_none());
         assert_eq!(c.max_peers, 64);
-        assert_eq!(c.max_parallel, 3);
+        assert_eq!(c.max_parallel, 8);
         assert_eq!(c.firewall, 0);
     }
 
@@ -1164,6 +1202,7 @@ mod tests {
         let j = JoinOpts::default();
         assert!(j.server);
         assert!(j.client);
+        assert!(!j.fast_refresh);
     }
 
     #[tokio::test]
@@ -1174,7 +1213,17 @@ mod tests {
         let target = hash(&handle.key_pair().public_key);
         let topic = [0xAA; 32];
 
-        handle.join(topic, JoinOpts { server: true, client: false }).await.unwrap();
+        handle
+            .join(
+                topic,
+                JoinOpts {
+                    server: true,
+                    client: false,
+                    fast_refresh: false,
+                },
+            )
+            .await
+            .unwrap();
 
         {
             let router = handle.dht().router().lock().unwrap();
@@ -1206,7 +1255,17 @@ mod tests {
         let target = hash(&handle.key_pair().public_key);
         let topic = [0xBB; 32];
 
-        handle.join(topic, JoinOpts { server: true, client: false }).await.unwrap();
+        handle
+            .join(
+                topic,
+                JoinOpts {
+                    server: true,
+                    client: false,
+                    fast_refresh: false,
+                },
+            )
+            .await
+            .unwrap();
 
         {
             let router = handle.dht().router().lock().unwrap();
@@ -1237,7 +1296,17 @@ mod tests {
         let target = hash(&handle.key_pair().public_key);
         let topic = [0xCC; 32];
 
-        handle.join(topic, JoinOpts { server: true, client: false }).await.unwrap();
+        handle
+            .join(
+                topic,
+                JoinOpts {
+                    server: true,
+                    client: false,
+                    fast_refresh: false,
+                },
+            )
+            .await
+            .unwrap();
 
         {
             let router = dht_handle.router().lock().unwrap();

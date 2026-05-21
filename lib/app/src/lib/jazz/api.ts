@@ -1,6 +1,7 @@
-import { invoke } from '@tauri-apps/api/core'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import type { UnlistenFn } from '@tauri-apps/api/event'
 import type { SchemaTables } from '@avenos/jazz-schema'
+import { getTableRowsStore } from '$lib/runtime/table-stores'
+import { grooveRuntime } from '$lib/runtime/groove-ipc'
 
 export type JazzStatusReply = {
 	ready: boolean
@@ -14,15 +15,15 @@ export type JazzSessionReply = {
 }
 
 export async function jazzSession(): Promise<JazzSessionReply> {
-	return invoke<JazzSessionReply>('jazz_session')
+	return grooveRuntime<JazzSessionReply>('session', {})
 }
 
 export async function jazzBootstrap(): Promise<JazzStatusReply> {
-	return invoke<JazzStatusReply>('jazz_bootstrap')
+	return grooveRuntime<JazzStatusReply>('bootstrap', {})
 }
 
 export async function jazzStatus(): Promise<JazzStatusReply> {
-	return invoke<JazzStatusReply>('jazz_status')
+	return grooveRuntime<JazzStatusReply>('status', {})
 }
 
 /** Re-register allowlisted Hyperswarm peers + Groove sync (safe to call after peer table changes). */
@@ -31,7 +32,7 @@ export type JazzPeerMeshRefreshReply = {
 }
 
 export async function jazzPeerMeshRefresh(): Promise<JazzPeerMeshRefreshReply> {
-	return invoke<JazzPeerMeshRefreshReply>('jazz_peer_mesh_refresh')
+	return grooveRuntime<JazzPeerMeshRefreshReply>('peerMeshRefresh', {})
 }
 
 /** Add a network peer as spark admin (biscuit + DEK keyshare); peer must be in My Network allowlist. */
@@ -39,7 +40,7 @@ export async function sparkAdminAdd(payload: {
 	sparkId: string
 	peerDid: string
 }): Promise<void> {
-	await invoke<void>('spark_admin_add', {
+	await grooveRuntime('sparkAdminAdd', {
 		sparkId: payload.sparkId,
 		peerDid: payload.peerDid,
 	})
@@ -50,17 +51,17 @@ export type SparkAdminListReply = {
 }
 
 export async function sparkAdminList(sparkId: string): Promise<SparkAdminListReply> {
-	return invoke<SparkAdminListReply>('spark_admin_list', { sparkId })
+	return grooveRuntime<SparkAdminListReply>('sparkAdminList', { sparkId })
 }
 
 export async function sparkAdminRevoke(_payload: {
 	sparkId: string
 	peerDid: string
 }): Promise<void> {
-	await invoke<void>('spark_admin_revoke', _payload)
+	await grooveRuntime('sparkAdminRevoke', _payload)
 }
 
-/** Result of `jazz_explorer_list` — rows omit unauthorized biscuit/spark gates; count is diagnostics-only. */
+/** Result of explorer list — rows omit unauthorized biscuit/spark gates; count is diagnostics-only. */
 export type JazzExplorerListReply = {
 	rows: Record<string, unknown>[]
 	skippedUnauthorizedRows: number
@@ -68,24 +69,32 @@ export type JazzExplorerListReply = {
 
 /** List any manifest table without typing against `SchemaTables` (explorer / tooling). */
 export async function jazzExplorerList(table: string): Promise<JazzExplorerListReply> {
-	return invoke<JazzExplorerListReply>('jazz_explorer_list', { table })
+	return grooveRuntime<JazzExplorerListReply>('explorerList', { table })
 }
 
-async function jazzListRows(table: string): Promise<Record<string, unknown>[]> {
-	return invoke('jazz_list', { table })
+/**
+ * Ref-counted subscribe on the Groove actor; row snapshots arrive on `avenos:runtime`
+ * `{ kind: 'table', table, rows }` → [`getTableRowsStore`].
+ */
+async function subscribeToTableSnapshot<T>(
+	table: string,
+	handler: (rows: T[]) => void,
+): Promise<UnlistenFn> {
+	const st = getTableRowsStore(table)
+	const un = st.subscribe((rows) => handler(rows as T[]))
+	await grooveRuntime('subscribe', { table })
+	return () => {
+		un()
+		void grooveRuntime('unsubscribe', { table })
+	}
 }
 
-/** Explorer subscribe: listener first, deterministic seed query, then live shell emits. */
+/** Explorer subscribe: untyped rows over the same single subscribe pipe. */
 export async function jazzExplorerSubscribe(
 	table: string,
 	handler: (rows: Record<string, unknown>[]) => void,
 ): Promise<UnlistenFn> {
-	const event = `jazz:${table}:changed`
-	const unlisten = await listen<Record<string, unknown>[]>(event, (e) => handler(e.payload))
-	const seed = await jazzListRows(table)
-	handler(seed)
-	await invoke('jazz_subscribe', { table })
-	return unlisten
+	return subscribeToTableSnapshot<Record<string, unknown>>(table, handler)
 }
 
 export type DbRowExtraOmit<R> = 'spark_id' extends keyof R ? 'spark_id' : never
@@ -103,30 +112,29 @@ export function jazzTable<TName extends keyof SchemaTables>(table: TName) {
 
 	return {
 		async list(): Promise<Row[]> {
-			return invoke<Row[]>('jazz_list', { table })
+			return grooveRuntime<Row[]>('list', { table: String(table) })
 		},
 		async get(id: string): Promise<Row> {
-			return invoke<Row>('jazz_get', { table, id })
+			return grooveRuntime<Row>('get', { table: String(table), id })
 		},
 		async create(values: JazzCreatePayload<Row>): Promise<Row> {
 			const valuesPayload = values as Record<string, unknown>
-			return invoke<Row>('jazz_create', { table, values: valuesPayload })
+			return grooveRuntime<Row>('create', { table: String(table), values: valuesPayload })
 		},
 		async update(id: string, patch: Partial<Omit<Row, 'id'>>): Promise<Row> {
 			const patchPayload = patch as Record<string, unknown>
-			return invoke<Row>('jazz_update', { table, id, patch: patchPayload })
+			return grooveRuntime<Row>('update', {
+				table: String(table),
+				id,
+				patch: patchPayload,
+			})
 		},
 		async delete(id: string): Promise<void> {
-			await invoke<void>('jazz_delete', { table, id })
+			await grooveRuntime('delete', { table: String(table), id })
 		},
-		/** Register listener, seed from `jazz_list` (same auth as snapshots), then `jazz_subscribe` for deltas. */
+		/** Row snapshots via `avenos:runtime` `{ kind: 'table' }` (Groove actor). */
 		async subscribe(handler: (rows: Row[]) => void): Promise<UnlistenFn> {
-			const event = `jazz:${table}:changed`
-			const unlisten = await listen<Row[]>(event, (e) => handler(e.payload))
-			const seed = (await jazzListRows(table)) as Row[]
-			handler(seed)
-			await invoke('jazz_subscribe', { table })
-			return unlisten
+			return subscribeToTableSnapshot<Row>(String(table), handler)
 		},
 	}
 }

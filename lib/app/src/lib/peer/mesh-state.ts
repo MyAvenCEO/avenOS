@@ -1,0 +1,155 @@
+/** Per trusted peer-pair — matches Rust `PeerMeshPhase`. */
+export type PeerMeshPhase = 'pairing' | 'offline' | 'searching' | 'syncing' | 'ready'
+
+export type PeerMeshPeerState = {
+	peerDid: string
+	deviceLabel: string
+	dbStatus: string
+	phase: PeerMeshPhase
+}
+
+/** Single source of truth for P2P mesh UI (header + Self → Peers). */
+export type PeerMeshStatusReply = {
+	hyperswarmRunning: boolean
+	localPkPrefixHex: string
+	pairingCodePending?: string | null
+	peers: PeerMeshPeerState[]
+}
+
+export function peerMeshPhaseLabel(phase: PeerMeshPhase): string {
+	switch (phase) {
+		case 'pairing':
+			return 'PAIRING'
+		case 'offline':
+			return 'OFFLINE'
+		case 'searching':
+			return 'SEARCHING'
+		case 'syncing':
+			return 'SYNCING'
+		case 'ready':
+			return 'READY'
+	}
+}
+
+/** User-facing chip text (technical labels stay on `peerMeshPhaseLabel`). */
+export function peerMeshPhaseUserLabel(phase: PeerMeshPhase): string {
+	switch (phase) {
+		case 'pairing':
+			return 'Pairing…'
+		case 'offline':
+			return 'Offline'
+		case 'searching':
+			return 'Connecting…'
+		case 'syncing':
+			return 'Syncing…'
+		case 'ready':
+			return 'Up to date'
+	}
+}
+
+export function peerMeshPhaseAnimating(phase: PeerMeshPhase): boolean {
+	return phase === 'pairing' || phase === 'searching' || phase === 'syncing'
+}
+
+/** Compact label for the left rail badge in the peers list. */
+export function peerMeshShortLabel(phase: PeerMeshPhase): string {
+	switch (phase) {
+		case 'pairing':
+			return 'PAIR'
+		case 'offline':
+			return 'OFF'
+		case 'searching':
+			return 'CONN'
+		case 'syncing':
+			return 'SYNC'
+		case 'ready':
+			return 'OK'
+	}
+}
+
+export function peerMeshDotClass(phase: PeerMeshPhase): string {
+	switch (phase) {
+		case 'offline':
+			return 'bg-[var(--color-status-error-base)]'
+		case 'pairing':
+			return 'bg-[var(--color-status-pairing-base)] animate-pulse'
+		case 'searching':
+			return 'bg-[var(--color-status-info-base)] animate-pulse'
+		case 'syncing':
+			return 'bg-[var(--color-status-working-base)] animate-pulse'
+		case 'ready':
+			return 'bg-[var(--color-status-success-base)]'
+	}
+}
+
+export function peerMeshTextClass(phase: PeerMeshPhase): string {
+	switch (phase) {
+		case 'offline':
+			return 'text-[var(--color-status-error-base)]'
+		case 'pairing':
+			return 'text-[var(--color-status-pairing-base)]'
+		case 'searching':
+			return 'text-[var(--color-status-info-base)]'
+		case 'syncing':
+			return 'text-[var(--color-status-working-base)]'
+		case 'ready':
+			return 'text-[var(--color-status-success-base)]'
+	}
+}
+
+/** Border + tinted background for header chips / pills (readable name uses neutral foreground separately). */
+function peerMeshPillSurfaceClass(phase: PeerMeshPhase): string {
+	switch (phase) {
+		case 'offline':
+			return 'border border-[color-mix(in_srgb,var(--color-status-error-base)_38%,transparent)] bg-[color-mix(in_srgb,var(--color-status-error-base)_12%,transparent)]'
+		case 'pairing':
+			return 'border border-[color-mix(in_srgb,var(--color-status-pairing-base)_42%,transparent)] bg-[color-mix(in_srgb,var(--color-status-pairing-base)_16%,transparent)]'
+		case 'searching':
+			return 'border border-[color-mix(in_srgb,var(--color-status-info-base)_40%,transparent)] bg-[color-mix(in_srgb,var(--color-status-info-base)_14%,transparent)]'
+		case 'syncing':
+			return 'border border-[color-mix(in_srgb,var(--color-status-working-base)_42%,transparent)] bg-[color-mix(in_srgb,var(--color-status-working-base)_16%,transparent)]'
+		case 'ready':
+			return 'border border-[color-mix(in_srgb,var(--color-status-success-base)_38%,transparent)] bg-[color-mix(in_srgb,var(--color-status-success-base)_12%,transparent)]'
+	}
+}
+
+/** Tinted pill (legacy / full-chip): phase text colour + surface. Prefer `peerMeshHeaderPillSurfaceClass` when the label is neutral. */
+export function peerMeshPillClass(phase: PeerMeshPhase): string {
+	return `${peerMeshTextClass(phase)} ${peerMeshPillSurfaceClass(phase)}`
+}
+
+/** Compact header chip: tinted border/background only; peer name uses neutral foreground. */
+export function peerMeshHeaderPillSurfaceClass(phase: PeerMeshPhase): string {
+	return peerMeshPillSurfaceClass(phase)
+}
+
+export function peerMeshRailClass(phase: PeerMeshPhase): string {
+	switch (phase) {
+		case 'offline':
+			return 'bg-[color-mix(in_srgb,var(--color-status-error-base)_18%,transparent)] border-[color-mix(in_srgb,var(--color-status-error-base)_32%,transparent)]'
+		case 'pairing':
+			return 'bg-[color-mix(in_srgb,var(--color-status-pairing-base)_24%,transparent)] border-[color-mix(in_srgb,var(--color-status-pairing-base)_38%,transparent)]'
+		case 'searching':
+			return 'bg-[color-mix(in_srgb,var(--color-status-info-base)_22%,transparent)] border-[color-mix(in_srgb,var(--color-status-info-base)_34%,transparent)]'
+		case 'syncing':
+			return 'bg-[color-mix(in_srgb,var(--color-status-working-base)_24%,transparent)] border-[color-mix(in_srgb,var(--color-status-working-base)_36%,transparent)]'
+		case 'ready':
+			return 'bg-[color-mix(in_srgb,var(--color-status-success-base)_18%,transparent)] border-[color-mix(in_srgb,var(--color-status-success-base)_32%,transparent)]'
+	}
+}
+
+export function findPeerMeshPhase(
+	status: PeerMeshStatusReply | undefined,
+	peerDid: string,
+	dbStatus?: string,
+): PeerMeshPhase {
+	const did = peerDid.trim()
+	if (!did) return 'offline'
+	if (!status) {
+		// Snapshot not loaded yet — trusted row is reconnecting, not idle offline.
+		return dbStatus === 'active' ? 'searching' : 'offline'
+	}
+	const row = status.peers.find((p) => p.peerDid === did)
+	if (row) return row.phase
+	return dbStatus === 'active' ? 'searching' : 'offline'
+}

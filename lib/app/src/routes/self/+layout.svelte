@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/state'
+	import { pickVaultRowForIdentity } from '$lib/self/active-vault-ui'
 	import { deviceSession } from '$lib/self/device-session-store'
 	import { provideSelfContext } from '$lib/self/self-context.svelte'
-	import { vaultCardTitle, vaultList, vaultSelectedSlug, type VaultListEntry } from '$lib/self/vault'
+	import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/self/vault'
 	import { browser } from '$app/environment'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 
@@ -12,7 +13,8 @@
 	const sessionKind = $derived($deviceSession.kind)
 
 	let vaults = $state<VaultListEntry[]>([])
-	let activeSlug = $state<string | undefined>(undefined)
+
+	const path = $derived(page.url.pathname)
 
 	$effect(() => {
 		void sessionKind
@@ -22,25 +24,19 @@
 	$effect(() => {
 		if (!browser || !isTauriRuntime()) return
 		void sessionKind
+		void $deviceSession
 		void (async () => {
 			try {
 				vaults = await vaultList()
-				activeSlug = await vaultSelectedSlug()
 			} catch {
 				vaults = []
-				activeSlug = undefined
 			}
 		})()
 	})
 
-	const path = $derived(page.url.pathname)
-
 	const activeVault = $derived.by(() => {
-		if (activeSlug) {
-			const m = vaults.find((v) => v.usernameSlug === activeSlug)
-			if (m) return m
-		}
-		return vaults[0]
+		if ($deviceSession.kind === 'locked') return undefined
+		return pickVaultRowForIdentity(vaults, $deviceSession)
 	})
 
 	const profileName = $derived.by(() => {
@@ -98,14 +94,16 @@
 		<div class="mb-3 space-y-0.5 px-3">
 			<h2 class="text-sm font-semibold tracking-tight">{profileName}</h2>
 			{#if profileDevice}
-				<p class="text-muted-foreground text-xs leading-snug">{profileDevice}</p>
+				<p class="text-muted-foreground/70 text-xs leading-snug">{profileDevice}</p>
 			{/if}
 		</div>
 
 		<nav class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
 			{#each navSections as section (section.title)}
 				<div class="flex flex-col gap-0.5">
-					<p class="text-muted-foreground mb-1 px-3 text-[9px] font-bold tracking-[0.2em] uppercase">
+					<p
+						class="text-muted-foreground/70 mb-1 px-3 text-[9px] font-bold tracking-[0.2em] uppercase"
+					>
 						{section.title}
 					</p>
 					{#each section.items as tab (tab.href)}
@@ -116,7 +114,7 @@
 							class="rounded-md px-3 py-1.5 text-[13px] transition-colors
 								{active
 								? 'bg-accent/15 text-foreground font-medium'
-								: 'text-muted-foreground hover:bg-accent/10 hover:text-foreground'}"
+								: 'text-muted-foreground/70 hover:bg-accent/10 hover:text-foreground'}"
 							aria-current={active ? 'page' : undefined}
 						>
 							{tab.label}

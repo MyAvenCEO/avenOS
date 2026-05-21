@@ -238,6 +238,17 @@ impl SyncManager {
         }
     }
 
+    /// Re-queue full catch-up for an existing Peer client (e.g. after ACL hydration or swarm reconnect).
+    pub fn rebroadcast_peer_catchup(&mut self, client_id: ClientId) {
+        if self
+            .clients
+            .get(&client_id)
+            .is_some_and(|c| c.role == ClientRole::Peer)
+        {
+            self.queue_full_catchup_to_peer(client_id);
+        }
+    }
+
     // ========================================================================
     // Outbox / Inbox
     // ========================================================================

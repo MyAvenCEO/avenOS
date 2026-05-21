@@ -917,6 +917,33 @@ impl<S: Storage, Sch: Scheduler, Sy: SyncSender> RuntimeCore<S, Sch, Sy> {
             .query_manager_mut()
             .sync_manager_mut()
             .set_client_role(client_id, role);
+        self.immediate_tick();
+    }
+
+    /// Re-queue outbound tips for one Peer client and process the outbox synchronously.
+    pub fn rebroadcast_peer_catchup(&mut self, client_id: ClientId) {
+        self.schema_manager
+            .query_manager_mut()
+            .sync_manager_mut()
+            .rebroadcast_peer_catchup(client_id);
+        self.immediate_tick();
+    }
+
+    /// Re-queue catch-up for every registered Peer client (after sync ACL becomes available).
+    pub fn rebroadcast_all_peer_clients(&mut self) {
+        use crate::sync_manager::ClientRole;
+        let peer_ids: Vec<ClientId> = self
+            .schema_manager
+            .query_manager()
+            .sync_manager()
+            .clients
+            .iter()
+            .filter(|(_, c)| c.role == ClientRole::Peer)
+            .map(|(id, _)| *id)
+            .collect();
+        for id in peer_ids {
+            self.rebroadcast_peer_catchup(id);
+        }
     }
 
     // =========================================================================
