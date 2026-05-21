@@ -36,7 +36,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { homedir, platform } from 'node:os'
 import { freeDevServerPort } from './free-dev-server-port.ts'
-import { startP2pSignal } from './p2p-signal.ts'
+import { applyCentralRelayUrlDevDefault, startP2pSignal } from './p2p-signal.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appDir = path.join(repoRoot, 'lib/app')
@@ -184,6 +184,7 @@ async function main() {
 	freeDevServerPort(1420)
 	freeDevServerPort(1421)
 
+	applyCentralRelayUrlDevDefault('dev-two-instances')
 	const p2 = await startP2pSignal(repoRoot)
 	async function exitWithCode(code: number): Promise<void> {
 		await p2.dispose()

@@ -90,6 +90,20 @@ export function avenRelayCentralMode(
 	return true
 }
 
+/**
+ * Bun dev wrappers only (`dev-app-*`, `dev-two-instances`, `--foreground`): when central relay is on but
+ * `AVEN_RELAY_URL` is empty, assume embedded localhost signal so `.env` is not strictly required for local dev.
+ * Packaged/desktop env and CI still set `AVEN_RELAY_URL` explicitly for remote bootstrap.
+ */
+export function applyCentralRelayUrlDevDefault(launcherTag: string): void {
+	if (!avenRelayCentralMode()) return
+	if (process.env.AVEN_RELAY_URL?.trim()) return
+	process.env.AVEN_RELAY_URL = '127.0.0.1'
+	console.warn(
+		`[${launcherTag}] AVEN_RELAY_URL unset — defaulting to 127.0.0.1 (embedded local signal). Set relay.aven.ceo in .env for Fly-hosted bootstrap.`
+	)
+}
+
 export function udpListenerPids(port: number): string[] {
 	try {
 		const out = execFileSync('lsof', ['-nP', `-iUDP:${port}`, '-t'], {
@@ -364,6 +378,7 @@ export async function startP2pSignal(repoRoot = REPO_ROOT): Promise<P2pSignalHan
 }
 
 async function foreground(): Promise<void> {
+	applyCentralRelayUrlDevDefault('p2p-signal --foreground')
 	const { envAugment, dispose } = await startP2pSignal(REPO_ROOT)
 	console.log(
 		JSON.stringify(
