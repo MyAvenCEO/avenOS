@@ -10,8 +10,9 @@
  *   AVEN_PKG_INSTALLER_IDENTITY — `productbuild --sign` installer cert (e.g. "3rd Party Mac Developer Installer: …")
  *
  * Optional:
- *   AVEN_MAC_CF_BUNDLE_VERSION — CFBundleVersion for this upload (default "4")
+ *   AVEN_MAC_CF_BUNDLE_VERSION — CFBundleVersion for this upload (default "5")
  *   GENESIS_NETWORK_ID — optional override; else read from repo `.env` (see resolveGenesisNetworkId)
+ *   AVEN_RELAY_URL — optional shell override; default hardcoded `relay.aven.ceo` (compile-time embed for P2P)
  *   AVEN_OUTPUT_PKG — output path for the pkg (default dist/macos-appstore/avenOS-<version>-b<build>.pkg)
  */
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -22,6 +23,9 @@ import { fileURLToPath } from 'node:url'
 import { applyAppleEnvLocal, resolveGenesisNetworkId } from './apple-env'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+
+/** Production Hyperswarm bootstrap host — compile-time embed for App Store sandbox (no .env). */
+const MAC_APPSTORE_AVEN_RELAY_URL = 'relay.aven.ceo'
 
 applyAppleEnvLocal(repoRoot)
 const appDir = path.join(repoRoot, 'lib/app')
@@ -92,8 +96,12 @@ function main() {
 	const profileSrc = mustEnv('AVEN_APP_STORE_PROVISIONING_PROFILE_MACOS')
 	const signId = mustEnv('APPLE_SIGNING_IDENTITY')
 	const pkgSignId = mustEnv('AVEN_PKG_INSTALLER_IDENTITY')
-	const bundleVersion = process.env.AVEN_MAC_CF_BUNDLE_VERSION?.trim() || '4'
+	const bundleVersion = process.env.AVEN_MAC_CF_BUNDLE_VERSION?.trim() || '5'
 	const version = readPackageVersion()
+	console.log(
+		'[build-appstore-macos] CFBundleVersion=%s (AVEN_MAC_CF_BUNDLE_VERSION or default 5)',
+		bundleVersion,
+	)
 
 	const genesisNetworkId = resolveGenesisNetworkId(repoRoot)
 	if (!genesisNetworkId) {
@@ -102,6 +110,7 @@ function main() {
 		)
 		process.exit(1)
 	}
+	const avenRelayUrl = process.env.AVEN_RELAY_URL?.trim() || MAC_APPSTORE_AVEN_RELAY_URL
 
 	mkdirSync(path.dirname(profileDest), { recursive: true })
 	copyFileSync(profileSrc, profileDest)
@@ -146,10 +155,15 @@ function main() {
 	// App Store `.app` is signed with Apple Distribution — notarization needs Developer ID and
 	// must not run here (Apple re-processes after Transporter upload). Strip API creds so Tauri skips it.
 	const cargoTargetDir = path.join(tauriDir, 'target')
-	const tauriEnv = { ...process.env, GENESIS_NETWORK_ID: genesisNetworkId }
+	const tauriEnv = {
+		...process.env,
+		GENESIS_NETWORK_ID: genesisNetworkId,
+		AVEN_RELAY_URL: avenRelayUrl,
+	}
 	delete tauriEnv.CARGO_TARGET_DIR
 	tauriEnv.CARGO_TARGET_DIR = cargoTargetDir
 	console.log('[build-appstore-macos] embedding GENESIS_NETWORK_ID at compile time')
+	console.log('[build-appstore-macos] embedding AVEN_RELAY_URL=%s at compile time', avenRelayUrl)
 	for (const key of [
 		'APPLE_API_ISSUER',
 		'APPLE_API_KEY',

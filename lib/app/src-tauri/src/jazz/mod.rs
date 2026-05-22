@@ -1986,6 +1986,7 @@ pub(crate) async fn execute_mesh_snapshot(
 		let _ = (app, jazz, db_rows);
 		Ok(crate::peer_mesh_state::PeerMeshStatusReply {
 			hyperswarm_running: false,
+			hyperswarm_start_error: None,
 			local_pk_prefix_hex: String::new(),
 			pairing_code_pending: None,
 			peers: vec![],

@@ -9,7 +9,7 @@ When central mode is on, **`AVEN_RELAY_URL` is required** (no implicit default �
 | `AVEN_RELAY` | `AVEN_RELAY_URL` (required if central) | Discovery | Dev scripts spawn signal? | Data plane |
 |--------------|----------------------------------------|-----------|---------------------------|------------|
 | **default / true** | `127.0.0.1`, `localhost`, or `::1` | Embedded **Rust HyperDHT** + blind-relay **node** (isolated) | Yes (`scripts/p2p-signal.ts`) | **Direct P2P only** |
-| **default / true** | e.g. `relay.aven.ceo` | Remote bootstrap `127.0.0.1@{host}:{port}` (**49737** by default) | No subprocess | **Direct P2P only** |
+| **default / true** | e.g. `relay.aven.ceo` | Remote bootstrap `{host}:{port}` (**49737** by default; DNS-resolved) | No subprocess | **Direct P2P only** |
 | **`false`** | (ignored) | Public Holepunch HyperDHT roots | No (`AVEN_RELAY=false` skips central path) | **Direct P2P only** |
 
 **Data plane**: AvenOS keeps **`AVENOS_P2P_DIRECT_ONLY` / `AVENOS_P2P_IGNORE_RELAY_ENV`** so peeroxide **never** wires **`relay_through`** from **`AVENOS_HYPERSWARM_RELAY_*`**. Blind-relay stays on the **signal stack**, not Jazz sync transports.
@@ -50,6 +50,8 @@ curl -s https://relay.aven.ceo/.well-known/aven-relay.json
 
 Fly may **scale to zero**; first pairing after sleep can incur wake latency — use `fly scale` / `fly machine start` if needed during testing.
 
+**Fly UDP ingress:** the DHT process must bind **`fly-global-services`** (resolved to its IPv4 at runtime), **not** `0.0.0.0`. Binding to `0.0.0.0` breaks public UDP replies (HTTP health still works). See [Fly UDP docs](https://fly.io/docs/networking/udp-and-tcp/).
+
 ---
 
 ## Local embedded dev (`AVEN_RELAY_URL` local host)
@@ -76,7 +78,7 @@ Logs:
 
 ## Remote bootstrap dev (`AVEN_RELAY_URL` = Fly hostname)
 
-No local Rust/relay subprocess; Tauri merges bootstrap from **`AVEN_RELAY_URL`** (ports overridable with **`AVENOS_P2P_SIGNAL_PORT`** / **`AVENOS_P2P_SIGNAL_RELAY_PORT`** for the script-side only; swarm uses **`AVENOS_P2P_SIGNAL_PORT`** for **`127.0.0.1@{host}:{dhtUdp}`**).
+No local Rust/relay subprocess; Tauri merges bootstrap from **`AVEN_RELAY_URL`** (ports overridable with **`AVENOS_P2P_SIGNAL_PORT`** / **`AVENOS_P2P_SIGNAL_RELAY_PORT`** for the script-side only; swarm uses **`AVENOS_P2P_SIGNAL_PORT`** for **`{host}:{dhtUdp}`** on remote hosts, or **`127.0.0.1@{host}:{dhtUdp}`** when embedded locally).
 
 ```bash
 AVEN_RELAY=true
@@ -86,10 +88,10 @@ AVEN_RELAY_URL=relay.aven.ceo
 Expect:
 
 ```text
-[p2p-signal] central discovery (remote host) — bootstrap=127.0.0.1@relay.aven.ceo:49737 …
+[p2p-signal] central discovery (remote host) — bootstrap=relay.aven.ceo:49737 …
 ```
 
-Packaged builds (no **`scripts/p2p-signal`**): set **`AVEN_RELAY_URL`** and optionally **`AVENOS_DHT_BOOTSTRAP`** in process env — see [`projects/tauri-plugin-peer/src/lib.rs`](../../../../projects/tauri-plugin-peer/src/lib.rs). If **`AVENOS_DHT_BOOTSTRAP`** is omitted, the plugin derives **`127.0.0.1@{AVEN_RELAY_URL}:{udp}`**.
+Packaged builds (no **`scripts/p2p-signal`**): set **`AVEN_RELAY_URL`** and optionally **`AVENOS_DHT_BOOTSTRAP`** in process env — see [`projects/tauri-plugin-peer/src/lib.rs`](../../../../projects/tauri-plugin-peer/src/lib.rs). If **`AVENOS_DHT_BOOTSTRAP`** is omitted, the plugin derives **`{AVEN_RELAY_URL}:{udp}`** for remote hosts (or **`127.0.0.1@127.0.0.1:{udp}`** when embedded locally).
 
 ---
 

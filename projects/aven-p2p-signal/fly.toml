@@ -20,9 +20,9 @@ primary_region = "fra"
 	initial_size = "1gb"
 
 [env]
-	# Keys dir is non-secret (/data/…); Dockerfile sets AVENOS_P2P_SIGNAL_KEYS_DIR — omit here so Fly skips false “sensitive KEY” heuristic.
-	AVENOS_P2P_SIGNAL_HOST = "0.0.0.0"
-	AVENOS_P2P_SIGNAL_RELAY_HOST = "0.0.0.0"
+	# Public Fly UDP ingress requires binding fly-global-services (resolved to IPv4 at runtime).
+	AVENOS_P2P_SIGNAL_HOST = "fly-global-services"
+	AVENOS_P2P_SIGNAL_RELAY_HOST = "fly-global-services"
 	AVENOS_P2P_ADVERTISED_HOST = "relay.aven.ceo"
 	AVEN_RELAY_MANIFEST_HTTP_PORT = "8080"
 

@@ -273,7 +273,9 @@ async function main() {
 
 	// First arg = Docker build context (repo root) — Dockerfile COPY infra/ … and projects/.
 	// Absolute --config/--dockerfile avoids Fly resolving relative to fly.toml dirname (double path segments).
-	run(['deploy', ROOT, '--config', FLY_TOML, '--dockerfile', FLY_DOCKERFILE], { inherit: true })
+	run(['deploy', ROOT, '--config', FLY_TOML, '--dockerfile', FLY_DOCKERFILE, '--wait-timeout', '5m'], {
+		inherit: true
+	})
 
 	run(['scale', 'count', '1', '-a', APP], { inherit: true })
 	run(['ips', 'list', '-a', APP], { inherit: true })

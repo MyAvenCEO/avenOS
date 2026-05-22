@@ -9,6 +9,7 @@
 FROM rust:bookworm AS rust-builder
 WORKDIR /build
 COPY projects/aven-p2p-signal/Cargo.toml projects/aven-p2p-signal/Cargo.lock ./projects/aven-p2p-signal/
+COPY third_party/peeroxide-dht ./third_party/peeroxide-dht
 COPY projects/aven-p2p-signal/src ./projects/aven-p2p-signal/src
 RUN cargo build --release --manifest-path projects/aven-p2p-signal/Cargo.toml
 

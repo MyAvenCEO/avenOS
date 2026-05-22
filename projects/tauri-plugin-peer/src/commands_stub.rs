@@ -6,6 +6,7 @@ use serde::Serialize;
 #[serde(rename_all = "camelCase")]
 pub struct PeerTransportStatusReply {
 	pub hyperswarm_running: bool,
+	pub hyperswarm_start_error: Option<String>,
 	pub local_pk_prefix_hex: String,
 	pub linked_peer_ids: Vec<String>,
 	pub linked_peer_dids: Vec<String>,
@@ -22,6 +23,7 @@ pub struct PeerInviteCreateReply {
 pub async fn peer_transport_status() -> Result<PeerTransportStatusReply, String> {
 	Ok(PeerTransportStatusReply {
 		hyperswarm_running: false,
+		hyperswarm_start_error: None,
 		local_pk_prefix_hex: String::new(),
 		linked_peer_ids: vec![],
 		linked_peer_dids: vec![],

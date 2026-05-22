@@ -24,6 +24,9 @@ fn main() {
 		let mut link = swift_rs::SwiftLinker::new("13").with_package("SelfBridge", "swift-lib");
 		if target_os == "ios" {
 			link = link.with_ios("14");
+			// Xcode's "Build Rust Code" phase exports SDKROOT=iphoneos. SwiftPM must parse
+			// Package.swift for the host (macOS); leaving SDKROOT set breaks manifest compile.
+			std::env::remove_var("SDKROOT");
 		}
 		link.link();
 	} else {

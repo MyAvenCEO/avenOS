@@ -50,6 +50,7 @@ pub type IoResult<T> = Result<T, IoError>;
 pub struct IoConfig {
     pub max_window: usize,
     pub port: u16,
+    /// UDP bind address (may differ from DHT identity host on NAT / Fly ingress).
     pub host: String,
     pub firewalled: bool,
     pub ephemeral: bool,

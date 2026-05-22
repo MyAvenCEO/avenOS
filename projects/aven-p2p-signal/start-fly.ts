@@ -11,12 +11,29 @@ const DHT_BIN = Bun.env.P2P_SIGNAL_DHT_BINARY ?? '/usr/local/bin/aven-p2p-signal
 const RELAY_DIR = Bun.env.P2P_SIGNAL_RELAY_DIR ?? '/app/infra/p2p-signal-relay'
 const MANIFEST_HTTP_PORT = Number(Bun.env.AVEN_RELAY_MANIFEST_HTTP_PORT ?? '8080')
 
-/** `fly-global-services` is not bindable (`SocketAddr`); Rust/Node UDP stacks need `0.0.0.0`. */
-function patchFlyBindEnv(ev: Record<string, string | undefined>): void {
+import dns from 'node:dns/promises'
+
+/** Fly public UDP ingress requires the fly-global-services IPv4, not 0.0.0.0. */
+async function resolveFlyUdpBindHost(host: string): Promise<string> {
+	const h = host.trim()
+	if (h.toLowerCase() !== 'fly-global-services') {
+		return h
+	}
+	try {
+		const { address } = await dns.lookup('fly-global-services', { family: 4 })
+		console.log(`[p2p-fly] UDP bind fly-global-services -> ${address}`)
+		return address
+	} catch (e) {
+		console.warn('[p2p-fly] fly-global-services DNS failed — relay/DHT UDP may not receive public traffic:', e)
+		return h
+	}
+}
+
+async function applyFlyUdpBindEnv(ev: Record<string, string | undefined>): Promise<void> {
 	for (const key of ['AVENOS_P2P_SIGNAL_HOST', 'AVENOS_P2P_SIGNAL_RELAY_HOST'] as const) {
-		if ((ev[key] ?? '').trim() === 'fly-global-services') {
-			ev[key] = '0.0.0.0'
-		}
+		const raw = ev[key]?.trim()
+		if (!raw) continue
+		ev[key] = await resolveFlyUdpBindHost(raw)
 	}
 }
 
@@ -115,8 +132,25 @@ async function main() {
 	const relayPort = Number(Bun.env.AVENOS_P2P_SIGNAL_RELAY_PORT ?? '49738')
 	const keysDir = Bun.env.AVENOS_P2P_SIGNAL_KEYS_DIR ?? '/data/p2p-signal'
 
+	let manifest: Record<string, unknown> | null = null
+	const server = Bun.serve({
+		port: MANIFEST_HTTP_PORT,
+		hostname: '0.0.0.0',
+		fetch(req) {
+			const u = new URL(req.url)
+			if (req.method !== 'GET') return new Response('Method Not Allowed', { status: 405 })
+			if (u.pathname === '/health') return new Response('ok\n')
+			if (u.pathname === '/.well-known/aven-relay.json') {
+				if (manifest) return Response.json(manifest)
+				return Response.json({ ready: false, note: 'DHT/relay starting' }, { status: 503 })
+			}
+			return new Response('Not Found', { status: 404 })
+		}
+	})
+	console.log('[p2p-fly] HTTP listening on 0.0.0.0:', MANIFEST_HTTP_PORT)
+
 	const env: Record<string, string | undefined> = { ...process.env }
-	patchFlyBindEnv(env)
+	await applyFlyUdpBindEnv(env)
 
 	console.log('[p2p-fly] starting Rust HyperDHT bootstrap:', DHT_BIN)
 	const rust = Bun.spawn([DHT_BIN], {
@@ -160,7 +194,7 @@ async function main() {
 		AVENOS_P2P_SIGNAL_RELAY_HOST:
 			Bun.env.AVENOS_P2P_SIGNAL_RELAY_HOST ?? Bun.env.AVENOS_P2P_SIGNAL_HOST ?? '0.0.0.0'
 	}
-	patchFlyBindEnv(relayEnv)
+	await applyFlyUdpBindEnv(relayEnv)
 
 	const relay = Bun.spawn(relayArgv, {
 		cwd: RELAY_DIR,
@@ -188,11 +222,10 @@ async function main() {
 	}
 
 	const rlPort = typeof relayLine.port === 'number' ? relayLine.port : relayPort
-	const manifest: Record<string, unknown> = {
+	manifest = {
 		bootstrap,
 		host: advertised || null,
 		dhtUdpPort: dhtPort,
-		// Fly publishes `relayPort` on the edge — HyperDHT's `address()` often reports ephemeral/local.
 		relayUdpPort: relayPort,
 		relayPublicKeyHex: relayLine.publicKey as string,
 		note:
@@ -204,19 +237,7 @@ async function main() {
 			port: rlPort
 		}
 	}
-
-	const server = Bun.serve({
-		port: MANIFEST_HTTP_PORT,
-		hostname: '0.0.0.0',
-		fetch(req) {
-			const u = new URL(req.url)
-			if (req.method !== 'GET') return new Response('Method Not Allowed', { status: 405 })
-			if (u.pathname === '/health') return new Response('ok\n')
-			if (u.pathname === '/.well-known/aven-relay.json') return Response.json(manifest)
-			return new Response('Not Found', { status: 404 })
-		}
-	})
-	console.log('[p2p-fly] HTTP manifest:', server.hostname, ':', server.port)
+	console.log('[p2p-fly] manifest ready — bootstrap=', bootstrap)
 
 	async function shutdown(signal: NodeJS.Signals) {
 		console.warn(`[p2p-fly] ${signal} — stopping…`)

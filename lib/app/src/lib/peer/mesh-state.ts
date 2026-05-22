@@ -11,6 +11,7 @@ export type PeerMeshPeerState = {
 /** Single source of truth for P2P mesh UI (header + Self → Peers). */
 export type PeerMeshStatusReply = {
 	hyperswarmRunning: boolean
+	hyperswarmStartError?: string | null
 	localPkPrefixHex: string
 	pairingCodePending?: string | null
 	peers: PeerMeshPeerState[]

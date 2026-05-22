@@ -11,6 +11,7 @@
 		peerInviteCreate,
 		peerList,
 		peerRevoke,
+		peerSwarmRetry,
 	} from '$lib/peer/api'
 	import { deviceSession } from '$lib/self/device-session-store'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
@@ -166,6 +167,19 @@
 		}
 		if (gen === loadGeneration) {
 			void refreshPeersJazz()
+		}
+	}
+
+	async function retryPeerNetwork(): Promise<void> {
+		actionBusy = true
+		actionErr = undefined
+		try {
+			await peerSwarmRetry()
+			await refreshPeerMeshSnapshot()
+		} catch (e) {
+			actionErr = e instanceof Error ? e.message : String(e)
+		} finally {
+			actionBusy = false
 		}
 	}
 
@@ -326,7 +340,19 @@
 		</h3>
 
 		<div class="flex flex-col items-center gap-4 px-1 py-2 sm:py-4">
-			{#if !initialLoading && mesh && !mesh.hyperswarmRunning}
+			{#if mesh?.hyperswarmStartError}
+				<div class="max-w-sm space-y-2 text-center">
+					<p class="text-destructive text-xs leading-relaxed">{mesh.hyperswarmStartError}</p>
+					<button
+						type="button"
+						class="text-primary text-xs font-semibold underline"
+						disabled={actionBusy}
+						onclick={() => void retryPeerNetwork()}
+					>
+						Retry peer network
+					</button>
+				</div>
+			{:else if !initialLoading && mesh && !mesh.hyperswarmRunning}
 				<p class="text-muted-foreground max-w-sm text-center text-xs leading-relaxed">
 					Peer network is still starting — wait a few seconds after unlock.
 				</p>

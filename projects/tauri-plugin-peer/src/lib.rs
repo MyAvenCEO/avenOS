@@ -46,6 +46,8 @@ struct PeerListenGuards {
 #[serde(rename_all = "camelCase")]
 pub struct PeerTransportStatusReply {
 	pub hyperswarm_running: bool,
+	/// Set when `start_swarm` failed after unlock (e.g. missing `AVEN_RELAY_URL` in sandbox builds).
+	pub hyperswarm_start_error: Option<String>,
 	pub local_pk_prefix_hex: String,
 	/// Groove runtime ids for live Hyperswarm links (diagnostics).
 	pub linked_peer_ids: Vec<String>,
@@ -85,6 +87,8 @@ pub struct PeerCtl {
 	pending_allowlist: Arc<tokio::sync::Mutex<Option<(String, Vec<String>)>>>,
 	/// Last allowlist synced from `peers` table — skips redundant Hyperswarm `set_allowlist` on mesh ticks.
 	applied_peer_allow_sorted: Arc<tokio::sync::Mutex<Option<Vec<String>>>>,
+	/// Last `start_swarm` failure — surfaced to UI when buttons stay disabled.
+	swarm_start_error: Arc<tokio::sync::Mutex<Option<String>>>,
 }
 
 #[cfg(target_os = "macos")]
@@ -109,7 +113,8 @@ fn hex_pk_prefix(pk: &[u8]) -> String {
 ///
 /// When **`AVEN_RELAY` is central**, **`AVEN_RELAY_URL` is required** (e.g. `127.0.0.1` for embedded
 /// dev stacks, `relay.aven.ceo` for hosted Fly bootstrap). With **`AVENOS_DHT_BOOTSTRAP`** unset or
-/// blank, bootstrap is **`127.0.0.1@{host}:{dht_port}`** where **`host`** is parsed from **`AVEN_RELAY_URL`**.
+/// blank, bootstrap is derived from **`AVEN_RELAY_URL`**: **`127.0.0.1@{host}:{dht_port}`** for local
+/// embedded signal, or **`{host}:{dht_port}`** for remote hosts (DNS-resolved — not loopback).
 ///
 /// - `AVENOS_DHT_ISOLATED=1`: empty bootstrap table unless `AVENOS_DHT_BOOTSTRAP` fills it (set by central mode).
 /// - `AVENOS_DHT_PUBLIC=1`: public Holepunch roots (non-central mode).
@@ -183,7 +188,34 @@ fn p2p_dht_udp_port_default() -> u16 {
 		.unwrap_or(49737)
 }
 
-/// Strip scheme/path/port suffix; hostname only (IPv6 inner, no brackets).
+#[cfg(target_os = "macos")]
+fn is_embedded_local_relay_host(host: &str) -> bool {
+	matches!(
+		host.to_ascii_lowercase().as_str(),
+		"127.0.0.1" | "localhost" | "::1"
+	)
+}
+
+#[cfg(target_os = "macos")]
+fn resolve_ipv4(hostname: &str) -> Option<String> {
+	use std::net::ToSocketAddrs;
+	format!("{hostname}:0")
+		.to_socket_addrs()
+		.ok()?
+		.find_map(|a| a.is_ipv4().then(|| a.ip().to_string()))
+}
+
+#[cfg(target_os = "macos")]
+fn central_bootstrap_line(hostname: &str, udp: u16) -> String {
+	if is_embedded_local_relay_host(hostname) {
+		format!("127.0.0.1@{hostname}:{udp}")
+	} else if let Some(ip) = resolve_ipv4(hostname) {
+		format!("{ip}@{hostname}:{udp}")
+	} else {
+		format!("{hostname}:{udp}")
+	}
+}
+
 #[cfg(target_os = "macos")]
 fn normalize_aven_relay_url_host(raw: &str) -> Result<String, String> {
 	fn trim_outer_quotes(mut s: &str) -> &str {
@@ -234,6 +266,32 @@ fn normalize_aven_relay_url_host(raw: &str) -> Result<String, String> {
 }
 
 #[cfg(target_os = "macos")]
+fn resolve_aven_relay_url() -> Result<String, String> {
+	if let Ok(v) = std::env::var("AVEN_RELAY_URL") {
+		let t = v.trim();
+		if !t.is_empty() {
+			return Ok(t.to_string());
+		}
+	}
+	if let Some(baked) = option_env!("AVEN_RELAY_URL") {
+		let t = baked.trim();
+		if !t.is_empty() {
+			log::info!(
+				target: "avenos::peeroxide",
+				"AVEN_RELAY_URL from compile-time embed: {t}",
+			);
+			return Ok(t.to_string());
+		}
+	}
+	const PRODUCTION_RELAY_HOST: &str = "relay.aven.ceo";
+	log::info!(
+		target: "avenos::peeroxide",
+		"AVEN_RELAY_URL unset — using production default {PRODUCTION_RELAY_HOST}",
+	);
+	Ok(PRODUCTION_RELAY_HOST.to_string())
+}
+
+#[cfg(target_os = "macos")]
 fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(), String> {
 	use std::str::FromStr;
 
@@ -242,14 +300,7 @@ fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(), Strin
 		|| (env_truthy_os("AVENOS_DHT_ISOLATED") && !env_truthy_os("AVENOS_DHT_PUBLIC"));
 
 	if central {
-		let raw = std::env::var("AVEN_RELAY_URL").unwrap_or_default();
-		if raw.trim().is_empty() {
-			return Err(
-				"[peeroxide] AVEN_RELAY_URL is required when AVEN_RELAY is on (central discovery). \
-Examples: 127.0.0.1 with dev signal stack; relay.aven.ceo for Fly-hosted bootstrap."
-					.into(),
-			);
-		}
+		resolve_aven_relay_url()?;
 	}
 
 	let env_bootstrap_entries: Vec<String> = match std::env::var("AVENOS_DHT_BOOTSTRAP") {
@@ -263,10 +314,10 @@ Examples: 127.0.0.1 with dev signal stack; relay.aven.ceo for Fly-hosted bootstr
 
 	let mut bootstrap_nodes = env_bootstrap_entries.clone();
 	if isolated && central && bootstrap_nodes.is_empty() {
-		let relay_raw = std::env::var("AVEN_RELAY_URL").unwrap_or_default();
+		let relay_raw = resolve_aven_relay_url()?;
 		let hostname = normalize_aven_relay_url_host(&relay_raw)?;
 		let udp = p2p_dht_udp_port_default();
-		let line = format!("127.0.0.1@{hostname}:{udp}");
+		let line = central_bootstrap_line(&hostname, udp);
 		bootstrap_nodes = vec![line.clone()];
 		log::info!(
 			target: "avenos::peeroxide",
@@ -504,6 +555,8 @@ impl PeerCtl {
 	async fn start_swarm_inner(&self, app: tauri::AppHandle) -> Result<(), String> {
 		use tauri_plugin_self::derive::derive_ed25519_seed;
 
+		*self.swarm_start_error.lock().await = None;
+
 		let seed_z = app
 			.state::<tauri_plugin_self::state::SelfState>()
 			.with_root(|root| derive_ed25519_seed(root))?;
@@ -513,10 +566,19 @@ impl PeerCtl {
 		let mut cfg = base_swarm_config_from_env();
 		cfg.key_pair = Some(kp);
 		cfg.max_parallel = 8;
-		apply_avensos_swarm_env(&mut cfg)?;
+		if let Err(e) = apply_avensos_swarm_env(&mut cfg) {
+			*self.swarm_start_error.lock().await = Some(e.clone());
+			return Err(e);
+		}
 
-		let (actor_join, swarm, mut conn_rx) =
-			peeroxide::spawn(cfg).await.map_err(|e| format!("peeroxide spawn: {e}"))?;
+		let (actor_join, swarm, mut conn_rx) = match peeroxide::spawn(cfg).await {
+			Ok(v) => v,
+			Err(e) => {
+				let msg = format!("peeroxide spawn: {e}");
+				*self.swarm_start_error.lock().await = Some(msg.clone());
+				return Err(msg);
+			}
+		};
 
 		let ctl_for_conns = self.clone();
 		let conns_worker = tokio::spawn(async move {
@@ -675,8 +737,11 @@ impl PeerCtl {
 			.as_ref()
 			.map(|s| s.code.clone());
 
+		let hyperswarm_start_error = self.swarm_start_error.lock().await.clone();
+
 		PeerTransportStatusReply {
 			hyperswarm_running,
+			hyperswarm_start_error,
 			local_pk_prefix_hex,
 			linked_peer_ids,
 			linked_peer_dids,
@@ -1040,6 +1105,7 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 	Builder::new("peer")
 		.invoke_handler(generate_handler![
 			commands_macos::peer_transport_status,
+			commands_macos::peer_swarm_retry,
 			commands_macos::peer_invite_create,
 			commands_macos::peer_invite_accept,
 			commands_macos::peer_invite_cancel,
@@ -1061,6 +1127,7 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 				joined_pair_topics: Arc::new(tokio::sync::Mutex::new(std::collections::HashSet::new())),
 				pending_allowlist: Arc::new(tokio::sync::Mutex::new(None)),
 				applied_peer_allow_sorted: Arc::new(tokio::sync::Mutex::new(None)),
+				swarm_start_error: Arc::new(tokio::sync::Mutex::new(None)),
 			});
 
 			let h = app.clone();

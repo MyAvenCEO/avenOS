@@ -31,6 +31,7 @@ pub struct PeerMeshPeerState {
 #[serde(rename_all = "camelCase")]
 pub struct PeerMeshStatusReply {
 	pub hyperswarm_running: bool,
+	pub hyperswarm_start_error: Option<String>,
 	pub local_pk_prefix_hex: String,
 	pub pairing_code_pending: Option<String>,
 	pub peers: Vec<PeerMeshPeerState>,
@@ -100,6 +101,7 @@ pub(crate) async fn assemble_mesh_snapshot(
 
 	Ok(PeerMeshStatusReply {
 		hyperswarm_running: transport.hyperswarm_running,
+		hyperswarm_start_error: transport.hyperswarm_start_error,
 		local_pk_prefix_hex: transport.local_pk_prefix_hex,
 		pairing_code_pending: transport.pairing_code_pending,
 		peers: out,

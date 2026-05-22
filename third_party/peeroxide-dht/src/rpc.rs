@@ -70,8 +70,10 @@ pub struct DhtConfig {
     pub bootstrap: Vec<String>,
     /// Local port to bind.
     pub port: u16,
-    /// Local host to bind.
+    /// Identity host for deterministic node id (`peer_id(host, port)`).
     pub host: String,
+    /// Optional UDP bind address when it differs from [`Self::host`] (e.g. Fly fly-global-services vs public IP).
+    pub bind_host: Option<String>,
     /// Whether to force ephemeral mode.
     pub ephemeral: Option<bool>,
     /// Whether to advertise as firewalled.
@@ -88,6 +90,7 @@ impl Default for DhtConfig {
             bootstrap: vec![],
             port: 0,
             host: "0.0.0.0".to_string(),
+            bind_host: None,
             ephemeral: None,
             firewalled: true,
             concurrency: 10,
@@ -1511,7 +1514,10 @@ pub async fn spawn(
     let io_config = IoConfig {
         max_window: config.max_window,
         port: config.port,
-        host: config.host.clone(),
+        host: config
+            .bind_host
+            .clone()
+            .unwrap_or_else(|| config.host.clone()),
         firewalled: config.firewalled,
         ephemeral,
     };

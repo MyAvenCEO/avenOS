@@ -37,7 +37,7 @@ Run on a **physical Mac** against a release build produced for the **Mac App Sto
 | Symptom | Next check |
 |---------|-------------|
 | `codesign`/notary validation says sandbox missing | `--entitlements` not embedded → re-sign `.app` before `productbuild`. |
-| P2P never connects inside TestFlight build | Confirm **network.server** entitlement + provisioning profile/App ID inbound bit. |
+| P2P never connects inside TestFlight build | App Store builds embed **`AVEN_RELAY_URL`** at compile time (default `relay.aven.ceo`). UI shows **`hyperswarmStartError`** if swarm failed to start. Console.app → filter **`avenos::peeroxide`** for `spawn_after_unlock_failed`. Confirm relay host is reachable and entitlements include **network.client** + **network.server**. |
 | Blank WebView post-install | Add JIT entitlement only after App Review risk assessment; reproduce with logging from Tauri/WebKit console. |
 
 When this checklist passes reliably, proceed to upload via Transporter (`macos-testflight-upload-transporter.md`).

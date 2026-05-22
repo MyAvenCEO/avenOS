@@ -14,6 +14,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
+import dns from 'node:dns'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -75,8 +76,31 @@ export function isEmbeddedLocalRelayHost(host: string): boolean {
 	return l === '127.0.0.1' || l === 'localhost' || l === '::1'
 }
 
+function resolveIpv4Sync(hostname: string): string | undefined {
+	try {
+		return dns.lookupSync(hostname, { family: 4 })
+	} catch {
+		return undefined
+	}
+}
+
+/**
+ * HyperDHT bootstrap string for central discovery.
+ * Local embedded signal uses `127.0.0.1@host:port` (peeroxide connects to loopback).
+ * Remote hosts use `{publicIp}@host:port` so node ids match Fly ingress (bind IP ≠ public IP).
+ */
+export function centralBootstrap(hostname: string, dhtUdpPort: number): string {
+	if (isEmbeddedLocalRelayHost(hostname)) {
+		return `127.0.0.1@${hostname}:${dhtUdpPort}`
+	}
+	const ip = resolveIpv4Sync(hostname)
+	if (ip) return `${ip}@${hostname}:${dhtUdpPort}`
+	return `${hostname}:${dhtUdpPort}`
+}
+
+/** @deprecated use {@link centralBootstrap} */
 export function remoteCentralBootstrap(hostname: string, dhtUdpPort: number): string {
-	return `127.0.0.1@${hostname}:${dhtUdpPort}`
+	return centralBootstrap(hostname, dhtUdpPort)
 }
 
 /** Central discovery + pairing service (DHT bootstrap + optional local relay subprocess). Default **on** unless explicitly false. */
@@ -234,7 +258,7 @@ export async function startP2pSignal(repoRoot = REPO_ROOT): Promise<P2pSignalHan
 	const dhtPort = Number(process.env.AVENOS_P2P_SIGNAL_PORT || P2P_DHT_UDP_PORT_DEFAULT)
 
 	if (!isEmbeddedLocalRelayHost(relayHostNorm)) {
-		const bootstrap = remoteCentralBootstrap(relayHostNorm, dhtPort)
+		const bootstrap = centralBootstrap(relayHostNorm, dhtPort)
 		const envAugment: Record<string, string> = {
 			AVEN_RELAY: '1',
 			AVEN_RELAY_URL: relayUrlRaw,

@@ -3,6 +3,7 @@ import { grooveRuntime } from '$lib/runtime/groove-ipc'
 
 export type PeerTransportStatusReply = {
 	hyperswarmRunning: boolean
+	hyperswarmStartError?: string | null
 	localPkPrefixHex: string
 	linkedPeerIds: string[]
 	/** Live Hyperswarm links by `did:key` — matches `PeerRowReply.peerDid`. */
@@ -16,6 +17,10 @@ export type PeerInviteCreateReply = {
 
 export async function peerTransportStatus(): Promise<PeerTransportStatusReply> {
 	return invoke<PeerTransportStatusReply>('plugin:peer|peer_transport_status')
+}
+
+export async function peerSwarmRetry(): Promise<void> {
+	await invoke<void>('plugin:peer|peer_swarm_retry')
 }
 
 export async function peerInviteCreate(): Promise<PeerInviteCreateReply> {

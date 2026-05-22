@@ -15,6 +15,17 @@ pub async fn peer_transport_status(
 }
 
 #[tauri::command]
+pub async fn peer_swarm_retry(
+	app: AppHandle,
+	ctl: State<'_, Arc<PeerCtl>>,
+) -> Result<(), String> {
+	if !app.state::<SelfState>().is_unlocked() {
+		return Err("Unlock AvenOS identity first.".into());
+	}
+	ctl.start_swarm(app).await
+}
+
+#[tauri::command]
 pub async fn peer_invite_create(
 	app: AppHandle,
 	ctl: State<'_, Arc<PeerCtl>>,
