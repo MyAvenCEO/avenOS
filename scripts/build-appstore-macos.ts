@@ -10,7 +10,8 @@
  *   AVEN_PKG_INSTALLER_IDENTITY — `productbuild --sign` installer cert (e.g. "3rd Party Mac Developer Installer: …")
  *
  * Optional:
- *   AVEN_MAC_CF_BUNDLE_VERSION — CFBundleVersion for this upload (default "1")
+ *   AVEN_MAC_CF_BUNDLE_VERSION — CFBundleVersion for this upload (default "3")
+ *   GENESIS_NETWORK_ID — optional override; else read from repo `.env` (see resolveGenesisNetworkId)
  *   AVEN_OUTPUT_PKG — output path for the pkg (default dist/macos-appstore/avenOS-<version>-b<build>.pkg)
  */
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -18,7 +19,7 @@ import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { applyAppleEnvLocal } from './apple-env'
+import { applyAppleEnvLocal, resolveGenesisNetworkId } from './apple-env'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -45,8 +46,16 @@ function main() {
 	const profileSrc = mustEnv('AVEN_APP_STORE_PROVISIONING_PROFILE_MACOS')
 	const signId = mustEnv('APPLE_SIGNING_IDENTITY')
 	const pkgSignId = mustEnv('AVEN_PKG_INSTALLER_IDENTITY')
-	const bundleVersion = process.env.AVEN_MAC_CF_BUNDLE_VERSION?.trim() || '1'
+	const bundleVersion = process.env.AVEN_MAC_CF_BUNDLE_VERSION?.trim() || '3'
 	const version = readPackageVersion()
+
+	const genesisNetworkId = resolveGenesisNetworkId(repoRoot)
+	if (!genesisNetworkId) {
+		console.error(
+			'build-appstore-macos: missing GENESIS_NETWORK_ID — set in shell, .env.apple.local, or repo .env (GENESIS_NETWORK_ID or DEV_GENESIS_NETWORK_ID)',
+		)
+		process.exit(1)
+	}
 
 	mkdirSync(path.dirname(profileDest), { recursive: true })
 	copyFileSync(profileSrc, profileDest)
@@ -90,7 +99,8 @@ function main() {
 
 	// App Store `.app` is signed with Apple Distribution — notarization needs Developer ID and
 	// must not run here (Apple re-processes after Transporter upload). Strip API creds so Tauri skips it.
-	const tauriEnv = { ...process.env }
+	const tauriEnv = { ...process.env, GENESIS_NETWORK_ID: genesisNetworkId }
+	console.log('[build-appstore-macos] embedding GENESIS_NETWORK_ID at compile time')
 	for (const key of [
 		'APPLE_API_ISSUER',
 		'APPLE_API_KEY',

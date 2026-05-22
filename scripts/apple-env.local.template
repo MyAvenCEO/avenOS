@@ -12,8 +12,15 @@ AVEN_APP_STORE_PROVISIONING_PROFILE_MACOS="/absolute/path/Mac App Store Connect_
 APPLE_SIGNING_IDENTITY="Apple Distribution: Your Org (YOURTEAMID)"
 AVEN_PKG_INSTALLER_IDENTITY="3rd Party Mac Developer Installer: Your Org (YOURTEAMID)"
 
-# Optional: iOS App Store `.mobileprovision` — tauri-ios-asc.ts maps this to IOS_MOBILE_PROVISION for Tauri CLI
-AVEN_IOS_APP_STORE_MOBILEPROVISION="/absolute/path/iOS_App_Store_Connect_ceo_aven_os.mobileprovision"
+# Optional: bump before each Transporter upload (Apple rejects duplicate CFBundleVersion)
+# AVEN_MAC_CF_BUNDLE_VERSION=3
+# AVEN_IOS_CF_BUNDLE_VERSION=1
+
+# Optional: iOS manual CI signing (base64-encoded by tauri-ios-asc.ts from these paths).
+# If APPLE_API_* is set below, automatic CI signing is used instead (no p12/mobileprovision paths needed).
+# AVEN_IOS_CERTIFICATE_P12="/absolute/path/Apple Distribution.p12"
+# AVEN_IOS_CERTIFICATE_PASSWORD="your-p12-export-password"
+# AVEN_IOS_APP_STORE_MOBILEPROVISION="/absolute/path/iOS_App_Store_Connect_ceo_aven_os.mobileprovision"
 
 # App Store Connect API (optional CLI uploads / Developer ID notarization — NOT used by build-appstore-macos.ts)
 APPLE_API_ISSUER=your-issuer-uuid-from-app-store-connect

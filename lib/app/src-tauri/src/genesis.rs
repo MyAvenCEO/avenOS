@@ -1,7 +1,8 @@
 //! `GENESIS_NETWORK_ID` is the 65-byte SEC1 uncompressed P-256 public point that anchors every
 //! device identity on this network. It is **sourced from an environment variable**:
 //!
-//! - **release builds** read `GENESIS_NETWORK_ID`. Missing or empty = hard error.
+//! - **release builds** read `GENESIS_NETWORK_ID` at runtime, then a compile-time embed from the
+//!   same env var at build time (App Store / packaged builds). Missing both = hard error.
 //! - **debug builds** read `DEV_GENESIS_NETWORK_ID`. If unset, the binary generates a fresh
 //!   P-256 keypair, persists *only the public bytes* to the repo-root `.env` under
 //!   `DEV_GENESIS_NETWORK_ID=`, discards the private scalar, and uses it for this session.
@@ -134,6 +135,17 @@ pub fn bootstrap(state: &GenesisState) -> Result<(), String> {
 	}
 
 	if !cfg!(debug_assertions) {
+		if let Some(baked) = option_env!("GENESIS_NETWORK_ID") {
+			if !baked.trim().is_empty() {
+				let bytes = decode_env_value(baked)?;
+				log::info!(
+					"{ENV_VAR} loaded from compile-time embed ({} bytes)",
+					bytes.len()
+				);
+				state.set(bytes);
+				return Ok(());
+			}
+		}
 		return Err(format!(
 			"{ENV_VAR} not set — release builds require an injected genesis network id."
 		));
