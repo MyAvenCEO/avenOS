@@ -10,7 +10,7 @@
  *   AVEN_PKG_INSTALLER_IDENTITY — `productbuild --sign` installer cert (e.g. "3rd Party Mac Developer Installer: …")
  *
  * Optional:
- *   AVEN_MAC_CF_BUNDLE_VERSION — CFBundleVersion for this upload (default "5")
+ *   AVEN_MAC_CF_BUNDLE_VERSION — CFBundleVersion for this upload (default "6")
  *   GENESIS_NETWORK_ID — optional override; else read from repo `.env` (see resolveGenesisNetworkId)
  *   AVEN_RELAY_URL — optional shell override; default hardcoded `relay.aven.ceo` (compile-time embed for P2P)
  *   AVEN_OUTPUT_PKG — output path for the pkg (default dist/macos-appstore/avenOS-<version>-b<build>.pkg)
@@ -96,10 +96,10 @@ function main() {
 	const profileSrc = mustEnv('AVEN_APP_STORE_PROVISIONING_PROFILE_MACOS')
 	const signId = mustEnv('APPLE_SIGNING_IDENTITY')
 	const pkgSignId = mustEnv('AVEN_PKG_INSTALLER_IDENTITY')
-	const bundleVersion = process.env.AVEN_MAC_CF_BUNDLE_VERSION?.trim() || '5'
+	const bundleVersion = process.env.AVEN_MAC_CF_BUNDLE_VERSION?.trim() || '6'
 	const version = readPackageVersion()
 	console.log(
-		'[build-appstore-macos] CFBundleVersion=%s (AVEN_MAC_CF_BUNDLE_VERSION or default 5)',
+		'[build-appstore-macos] CFBundleVersion=%s (AVEN_MAC_CF_BUNDLE_VERSION or default 6)',
 		bundleVersion,
 	)
 
