@@ -24,12 +24,8 @@ struct RegistrySnapshot {
 	manifest: String,
 }
 
-fn jazz_schema_root() -> PathBuf {
-	PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../libs/jazz-schema")
-}
-
 fn registry_path() -> PathBuf {
-	jazz_schema_root().join("migrations/registry.json")
+	schema_manifest::jazz_schema_root().join("migrations/registry.json")
 }
 
 pub fn schema_hash_bytes(schema: &Schema) -> [u8; 32] {
@@ -51,7 +47,7 @@ fn bundled_manifest_for_hash(hash: &[u8; 32]) -> Option<PathBuf> {
 	let want = hash_hex(hash);
 	for snap in reg.snapshots {
 		if snap.hash.trim().eq_ignore_ascii_case(&want) {
-			return Some(jazz_schema_root().join(snap.manifest));
+			return Some(schema_manifest::jazz_schema_root().join(snap.manifest));
 		}
 	}
 	None

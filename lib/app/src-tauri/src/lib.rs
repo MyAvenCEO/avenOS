@@ -497,6 +497,10 @@ pub fn run() {
 		.manage(genesis::GenesisState::default())
 		.manage(jazz::ManagedJazz::default())
 		.setup(|app| {
+			if let Err(e) = schema_manifest::install_runtime_schema_files(app.handle()) {
+				log::error!("jazz-schema runtime install: {e}");
+			}
+
 			app.manage(jazz::runtime::spawn_groove_actor(app.handle().clone()));
 			#[cfg(any(target_os = "macos", target_os = "linux"))]
 			app.manage(peer_catchup::spawn_peer_catchup_worker(app.handle().clone()));

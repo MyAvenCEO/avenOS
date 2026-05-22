@@ -13,7 +13,7 @@ APPLE_SIGNING_IDENTITY="Apple Distribution: Your Org (YOURTEAMID)"
 AVEN_PKG_INSTALLER_IDENTITY="3rd Party Mac Developer Installer: Your Org (YOURTEAMID)"
 
 # Optional: bump before each Transporter upload (Apple rejects duplicate CFBundleVersion)
-# AVEN_MAC_CF_BUNDLE_VERSION=3
+# AVEN_MAC_CF_BUNDLE_VERSION=4
 # AVEN_IOS_CF_BUNDLE_VERSION=1
 
 # Genesis anchor — embedded at compile time for App Store / TestFlight (else read from repo .env)

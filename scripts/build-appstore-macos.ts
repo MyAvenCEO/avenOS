@@ -10,11 +10,11 @@
  *   AVEN_PKG_INSTALLER_IDENTITY — `productbuild --sign` installer cert (e.g. "3rd Party Mac Developer Installer: …")
  *
  * Optional:
- *   AVEN_MAC_CF_BUNDLE_VERSION — CFBundleVersion for this upload (default "3")
+ *   AVEN_MAC_CF_BUNDLE_VERSION — CFBundleVersion for this upload (default "4")
  *   GENESIS_NETWORK_ID — optional override; else read from repo `.env` (see resolveGenesisNetworkId)
  *   AVEN_OUTPUT_PKG — output path for the pkg (default dist/macos-appstore/avenOS-<version>-b<build>.pkg)
  */
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -42,11 +42,57 @@ function readPackageVersion(): string {
 	return (pkg.version ?? '0.0.0').trim()
 }
 
+function readCfBundleVersion(appPath: string): string | null {
+	const plist = path.join(appPath, 'Contents/Info.plist')
+	const r = spawnSync('plutil', ['-extract', 'CFBundleVersion', 'raw', '-o', '-', plist], {
+		encoding: 'utf8',
+	})
+	if (r.status !== 0) return null
+	return r.stdout.trim()
+}
+
+/** Tauri may bundle outside `src-tauri/target` when the environment redirects `CARGO_TARGET_DIR`. */
+function resolveBuiltAppPath(
+	buildLog: string,
+	cargoTargetDir: string,
+	tauriTarget: string,
+	bundleVersion: string,
+): string {
+	const appName = 'avenOS.app'
+	const rel = path.join(tauriTarget, 'release', 'bundle', 'macos', appName)
+	const candidates = new Set<string>()
+
+	for (const line of buildLog.split('\n')) {
+		const finished = line.match(/Finished 1 bundle at:\s*(.+avenOS\.app)\s*$/)
+		if (finished) candidates.add(finished[1].trim())
+		const bundling = line.match(/Bundling avenOS\.app \((.+avenOS\.app)\)/)
+		if (bundling) candidates.add(bundling[1].trim())
+	}
+
+	candidates.add(path.join(cargoTargetDir, rel))
+	const redirected = process.env.CARGO_TARGET_DIR?.trim()
+	if (redirected) candidates.add(path.join(redirected, rel))
+
+	for (const candidate of candidates) {
+		if (!existsSync(candidate)) continue
+		const ver = readCfBundleVersion(candidate)
+		if (ver === bundleVersion) {
+			console.log(`[build-appstore-macos] packaging ${candidate} (CFBundleVersion=${ver})`)
+			return candidate
+		}
+	}
+
+	console.error(
+		`build-appstore-macos: no signed .app with CFBundleVersion=${bundleVersion}. Checked:\n${[...candidates].map((p) => `  ${p}`).join('\n')}`,
+	)
+	process.exit(1)
+}
+
 function main() {
 	const profileSrc = mustEnv('AVEN_APP_STORE_PROVISIONING_PROFILE_MACOS')
 	const signId = mustEnv('APPLE_SIGNING_IDENTITY')
 	const pkgSignId = mustEnv('AVEN_PKG_INSTALLER_IDENTITY')
-	const bundleVersion = process.env.AVEN_MAC_CF_BUNDLE_VERSION?.trim() || '3'
+	const bundleVersion = process.env.AVEN_MAC_CF_BUNDLE_VERSION?.trim() || '4'
 	const version = readPackageVersion()
 
 	const genesisNetworkId = resolveGenesisNetworkId(repoRoot)
@@ -99,7 +145,10 @@ function main() {
 
 	// App Store `.app` is signed with Apple Distribution — notarization needs Developer ID and
 	// must not run here (Apple re-processes after Transporter upload). Strip API creds so Tauri skips it.
+	const cargoTargetDir = path.join(tauriDir, 'target')
 	const tauriEnv = { ...process.env, GENESIS_NETWORK_ID: genesisNetworkId }
+	delete tauriEnv.CARGO_TARGET_DIR
+	tauriEnv.CARGO_TARGET_DIR = cargoTargetDir
 	console.log('[build-appstore-macos] embedding GENESIS_NETWORK_ID at compile time')
 	for (const key of [
 		'APPLE_API_ISSUER',
@@ -114,24 +163,18 @@ function main() {
 
 	const br = spawnSync('bunx', ['--bun', ...tauriArgs], {
 		cwd: appDir,
-		stdio: 'inherit',
+		encoding: 'utf8',
 		env: tauriEnv,
 	})
+	if (br.stdout) process.stdout.write(br.stdout)
+	if (br.stderr) process.stderr.write(br.stderr)
 	if (br.status !== 0) {
 		console.error('build-appstore-macos: tauri build failed')
 		process.exit(br.status ?? 1)
 	}
 
-	const appName = 'avenOS.app'
-	const appPath = path.join(
-		tauriDir,
-		'target',
-		tauriTarget,
-		'release',
-		'bundle',
-		'macos',
-		appName,
-	)
+	const buildLog = `${br.stdout ?? ''}\n${br.stderr ?? ''}`
+	const appPath = resolveBuiltAppPath(buildLog, cargoTargetDir, tauriTarget, bundleVersion)
 
 	const verify = spawnSync('codesign', ['--verify', '--deep', '--strict', appPath], {
 		stdio: 'inherit',
