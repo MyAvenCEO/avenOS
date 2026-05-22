@@ -277,6 +277,7 @@ fn serve_vibe_sandbox(
 		.unwrap()
 }
 
+#[cfg(target_os = "macos")]
 #[tauri::command]
 async fn create_sandbox_webview(
 	window: Window,
@@ -316,12 +317,26 @@ async fn create_sandbox_webview(
 		)
 		.map_err(|e| e.to_string())?;
 
-	#[cfg(target_os = "macos")]
 	macos_round_child_webview(&webview);
 
 	Ok(())
 }
 
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+async fn create_sandbox_webview(
+	_window: Window,
+	_label: String,
+	_rect: SandboxRect,
+	_host_origin: String,
+	_csp_json: Option<String>,
+) -> Result<(), String> {
+	Err(
+		"Native vibe-sandbox child webviews require macOS. iOS/Linux shells should use iframe-based sandboxes.".into(),
+	)
+}
+
+#[cfg(target_os = "macos")]
 #[tauri::command]
 async fn set_sandbox_webview_rect(
 	window: Window,
@@ -342,6 +357,16 @@ async fn set_sandbox_webview_rect(
 		})
 		.map_err(|e| e.to_string())?;
 	Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+async fn set_sandbox_webview_rect(
+	_window: Window,
+	_label: String,
+	_rect: SandboxRect,
+) -> Result<(), String> {
+	Err("sandbox webview layout is unsupported on this platform.".into())
 }
 
 /// Match AvenOS `--radius-lg` (1rem ≈ 16px) on the native WKWebView layer.
@@ -377,6 +402,7 @@ unsafe fn macos_wkwebview_round_layer(wkwebview: *mut std::ffi::c_void, radius: 
 	let () = msg_send![&*layer, setMasksToBounds: true];
 }
 
+#[cfg(target_os = "macos")]
 #[tauri::command]
 async fn destroy_sandbox_webview(window: Window, label: String) -> Result<(), String> {
 	let webview = window
@@ -386,6 +412,12 @@ async fn destroy_sandbox_webview(window: Window, label: String) -> Result<(), St
 		.ok_or_else(|| format!("sandbox webview not found: {label}"))?;
 
 	webview.close().map_err(|e| e.to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+async fn destroy_sandbox_webview(_window: Window, _label: String) -> Result<(), String> {
+	Err("sandbox webviews are unsupported on this platform.".into())
 }
 
 /// Install the global `log` subscriber.
@@ -503,31 +535,33 @@ pub fn run() {
 			// reconstructs branches from the durable commit log), but writes
 			// fail with `ObjectNotFound` because index pages, branch tips, or
 			// catalogue entries written in the same transaction never reached
-			// disk. Catch SIGINT/SIGTERM here so dev (`bun dev:app:macos` +
-			// Ctrl+C) gets the same graceful drain a window-close uses.
-			let handle_for_signal = app.handle().clone();
-			tauri::async_runtime::spawn(async move {
-				use tokio::signal::unix::{signal, SignalKind};
-				let (mut sigint, mut sigterm) = match (
-					signal(SignalKind::interrupt()),
-					signal(SignalKind::terminate()),
-				) {
-					(Ok(i), Ok(t)) => (i, t),
-					(int_res, term_res) => {
-						log::warn!(
-							"signal handler install failed (int={:?} term={:?}); Ctrl+C will skip Jazz flush",
-							int_res.err(), term_res.err()
-						);
-						return;
+			// disk. Catch SIGINT/SIGTERM on macOS/Linux dev hosts so `Ctrl+C` matches window-close drain.
+			#[cfg(any(target_os = "macos", target_os = "linux"))]
+			{
+				let handle_for_signal = app.handle().clone();
+				tauri::async_runtime::spawn(async move {
+					use tokio::signal::unix::{signal, SignalKind};
+					let (mut sigint, mut sigterm) = match (
+						signal(SignalKind::interrupt()),
+						signal(SignalKind::terminate()),
+					) {
+						(Ok(i), Ok(t)) => (i, t),
+						(int_res, term_res) => {
+							log::warn!(
+								"signal handler install failed (int={:?} term={:?}); Ctrl+C will skip Jazz flush",
+								int_res.err(), term_res.err()
+							);
+							return;
+						}
+					};
+					tokio::select! {
+						_ = sigint.recv() => log::info!("SIGINT received → draining Jazz"),
+						_ = sigterm.recv() => log::info!("SIGTERM received → draining Jazz"),
 					}
-				};
-				tokio::select! {
-					_ = sigint.recv() => log::info!("SIGINT received → draining Jazz"),
-					_ = sigterm.recv() => log::info!("SIGTERM received → draining Jazz"),
-				}
-				drain_jazz_async(handle_for_signal.clone()).await;
-				handle_for_signal.exit(130);
-			});
+					drain_jazz_async(handle_for_signal.clone()).await;
+					handle_for_signal.exit(130);
+				});
+			}
 
 			let h_invite = app.handle().clone();
 			let _peer_invite_listen = app.listen("peer:invite-paired", move |event| {

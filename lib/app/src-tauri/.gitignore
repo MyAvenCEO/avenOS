@@ -1,2 +1,9 @@
 target/
-gen/
+
+# Xcode / iOS scaffolding: regenerate locally (`CI=true bunx tauri ios init --ci` from `lib/app`).
+gen/*
+!gen/schemas/
+!gen/schemas/**
+
+profiles/*.provisionprofile
+*.mobileprovision

@@ -16,7 +16,8 @@
 		"tauri": "bunx --bun tauri",
 		"tauri:dev": "bunx --bun tauri dev",
 		"tauri:build:macos": "bunx --bun tauri build",
-		"tauri:build:linux": "bunx --bun tauri build --bundles deb,appimage"
+		"tauri:build:linux": "bunx --bun tauri build --bundles deb,appimage",
+		"tauri:ios:build:asc": "bun ../../scripts/tauri-ios-asc.ts"
 	},
 	"devDependencies": {
 		"@tauri-apps/cli": "^2",

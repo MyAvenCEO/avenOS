@@ -23,13 +23,13 @@ pub async fn signing_peer_did(state: State<'_, SelfState>) -> Result<String, Str
 /// `did:key` for the device's **P-256 Secure Enclave** credential transcript (needs macOS peer pub on disk).
 #[tauri::command]
 pub async fn device_peer_did(app: AppHandle, vault: State<'_, ActiveVault>, slot: String) -> Result<String, String> {
-	#[cfg(target_os = "macos")]
+	#[cfg(any(target_os = "macos", target_os = "ios"))]
 	{
 		let pk = crate::macos::commands::read_device_pubkey_file(&app, &*vault, &slot).await?;
 		crate::did::device_did_from_sec1_public_key(&pk)
 	}
 
-	#[cfg(not(target_os = "macos"))]
+	#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 	{
 		let _ = (app, vault, slot);
 		if crate::dev_insecure::enabled() {

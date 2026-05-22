@@ -34,6 +34,7 @@
 	},
 	"bundle": {
 		"active": true,
+		"category": "Productivity",
 		"targets": ["app", "dmg"],
 		"icon": [
 			"icons/32x32.png",
@@ -47,7 +48,7 @@
 			"../../../libs/vibe-app-sandbox/sandbox/dist/ext-apps.js": "vibe-sandbox/ext-apps.js"
 		},
 		"macOS": {
-			"minimumSystemVersion": "11.0"
+			"minimumSystemVersion": "12.0"
 		}
 	}
 }

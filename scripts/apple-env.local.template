@@ -1,0 +1,21 @@
+# ── Copy this file to:  <repo-root>/.env.apple.local   (already gitignored) ─────────
+#
+# Paths can include spaces — use quotes, e.g. "/Users/you/Desktop/Maia City/Apple/foo.provisionprofile"
+#
+# After editing: `bun run build:app:mac:appstore` and `cd lib/app && bun run tauri:ios:build:asc` load this automatically.
+
+APPLE_DEVELOPMENT_TEAM=YOUR10CHARTEAMID
+
+# Mac App Store Connect profile (used by scripts/build-appstore-macos.ts)
+AVEN_APP_STORE_PROVISIONING_PROFILE_MACOS="/absolute/path/Mac App Store Connect_ceo_aven_os.provisionprofile"
+
+APPLE_SIGNING_IDENTITY="Apple Distribution: Your Org (YOURTEAMID)"
+AVEN_PKG_INSTALLER_IDENTITY="3rd Party Mac Developer Installer: Your Org (YOURTEAMID)"
+
+# Optional: iOS App Store `.mobileprovision` — tauri-ios-asc.ts maps this to IOS_MOBILE_PROVISION for Tauri CLI
+AVEN_IOS_APP_STORE_MOBILEPROVISION="/absolute/path/iOS_App_Store_Connect_ceo_aven_os.mobileprovision"
+
+# App Store Connect API (optional CLI uploads / Developer ID notarization — NOT used by build-appstore-macos.ts)
+APPLE_API_ISSUER=your-issuer-uuid-from-app-store-connect
+APPLE_API_KEY=YOUR10CHARKEYID
+APPLE_API_KEY_PATH="/absolute/path/AuthKey_YOUR10CHARKEYID.p8"

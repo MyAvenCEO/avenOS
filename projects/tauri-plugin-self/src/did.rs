@@ -5,7 +5,7 @@ use multibase::Base;
 const DID_ED25519_PREFIX: &[u8] = &[0xed, 0x01];
 
 /// multicodec `p256-pub` (`0x1200`), unsigned‑varint bytes (constant for our codec tag).
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 const P256_PUB_CODEC_VARINT: [u8; 2] = [0x80, 0x24];
 
 /// `did:key` for an Ed25519 public key (HKDF-derived application signing DID).
@@ -21,7 +21,7 @@ pub fn signing_did_ed25519(pub_raw32: &[u8; 32]) -> String {
 /// `did:key` for the device's Secure‑Enclave P‑256 credential (SEC1 pubkey bytes from disk).
 ///
 /// Codec: multicodec `p256-pub`; value is the **compressed** SEC1 pubkey.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub fn device_did_from_sec1_public_key(pub_sec1: &[u8]) -> Result<String, String> {
 	use p256::elliptic_curve::sec1::ToEncodedPoint;
 	use p256::PublicKey;

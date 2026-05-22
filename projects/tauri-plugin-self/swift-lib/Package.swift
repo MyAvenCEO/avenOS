@@ -6,6 +6,7 @@ let package = Package(
 	name: "SelfBridge",
 	platforms: [
 		.macOS(.v13),
+		.iOS(.v14),
 	],
 	products: [
 		.library(name: "SelfBridge", type: .static, targets: ["SelfBridge"]),

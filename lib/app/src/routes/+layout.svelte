@@ -4,6 +4,7 @@ import { page } from '$app/state'
 import { browser } from '$app/environment'
 import { ensureComposerTauriShortcutBridge } from '$lib/intent-mock/composer-tauri-bridge'
 import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
+import { isIosHostedTauriShell } from '$lib/tauri/tauri-shell-platform'
 import P2pSyncBadge from '$lib/peer/P2pSyncBadge.svelte'
 import {
 	attachAvenosRuntimeBridge,
@@ -52,7 +53,9 @@ $effect(() => {
 const sessionKind = $derived($deviceSession.kind)
 
 /** Mesh touches Groove ACL — defer until strict local-first bootstrap confirms shell hydrate. */
-const meshAllowed = $derived(sessionKind === 'unlocked' && $grooveSessionReady)
+const meshAllowed = $derived(
+	sessionKind === 'unlocked' && $grooveSessionReady && !isIosHostedTauriShell(),
+)
 
 $effect(() => {
 	if (!browser || !isTauriRuntime() || !meshAllowed) return
@@ -145,7 +148,8 @@ $effect(() => {
 </script>
 
 <svelte:head>
-	<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+	<link rel="icon" href="/favicon.png" type="image/png" sizes="32x32">
+	<link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="128x128">
 </svelte:head>
 
 <div class="box-border flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-background">

@@ -2,7 +2,7 @@
 //!
 //! Never used in release macOS builds. Emits loud terminal warnings.
 
-#![cfg(not(target_os = "macos"))]
+#![cfg(not(any(target_os = "macos", target_os = "ios")))]
 
 use std::fs;
 use std::path::{Path, PathBuf};

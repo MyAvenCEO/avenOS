@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Must match Mac App Store Connect provisioning profile (TestFlight error 90886 if missing). -->
+	<key>com.apple.application-identifier</key>
+	<string>2P6VCHVJWB.ceo.aven.os</string>
+	<key>com.apple.developer.team-identifier</key>
+	<string>2P6VCHVJWB</string>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>2P6VCHVJWB.*</string>
+	</array>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.network.server</key>
+	<true/>
+</dict>
+</plist>

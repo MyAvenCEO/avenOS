@@ -6,6 +6,7 @@
 	import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/self/vault'
 	import { browser } from '$app/environment'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+	import { isIosHostedTauriShell } from '$lib/tauri/tauri-shell-platform'
 
 	let { children } = $props()
 
@@ -47,7 +48,11 @@
 
 	const profileDevice = $derived(activeVault?.deviceLabel?.trim() ?? '')
 
-	const navSections: {
+	const peersHiddenMobile = $derived(
+		browser && isTauriRuntime() && isIosHostedTauriShell(),
+	)
+
+	const navSectionsAll: {
 		title: string
 		items: { href: string; label: string; match: (p: string) => boolean }[]
 	}[] = [
@@ -84,6 +89,14 @@
 			],
 		},
 	]
+
+	const navSections = $derived.by(() => {
+		if (!peersHiddenMobile) return navSectionsAll
+		return navSectionsAll.map((section) => ({
+			...section,
+			items: section.items.filter((tab) => tab.href !== '/self/peers'),
+		}))
+	})
 </script>
 
 <div class="grid h-full min-h-0 w-full grid-cols-[14rem_1fr]">

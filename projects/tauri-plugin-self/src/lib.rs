@@ -8,7 +8,7 @@
 //!
 //! There is no separate "identity" plugin: everything visible from JS is a self primitive.
 //!
-//! **Non-macOS debug builds** use [`dev_insecure`] (plain `peer-id-{slot}.dev-root-secret` on disk).
+//! **Linux / Windows debug builds** use [`dev_insecure`] (plain `peer-id-{slot}.dev-root-secret` on disk).
 
 pub mod commands;
 pub mod derive;
@@ -19,17 +19,17 @@ pub mod unlock;
 pub mod vault;
 mod vault_commands;
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 mod dev_insecure;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod macos;
 
 use vault::ActiveVault;
 
 use state::SelfState;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 	use tauri::{generate_handler, plugin::Builder};
 
@@ -62,7 +62,7 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 		.build()
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 	use tauri::{generate_handler, plugin::Builder};
 

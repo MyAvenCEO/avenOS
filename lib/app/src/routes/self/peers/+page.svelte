@@ -1,8 +1,19 @@
 <script lang="ts">
+	import { goto } from '$app/navigation'
+	import { browser } from '$app/environment'
+	import { onMount } from 'svelte'
 	import SelfTrustedPeersPanel from '$lib/self/SelfTrustedPeersPanel.svelte'
 	import { useSelfContext } from '$lib/self/self-context.svelte'
+	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+	import { isIosHostedTauriShell } from '$lib/tauri/tauri-shell-platform'
 
 	const ctx = useSelfContext()
+
+	onMount(() => {
+		if (browser && isTauriRuntime() && isIosHostedTauriShell()) {
+			void goto('/self')
+		}
+	})
 </script>
 
 <svelte:head>

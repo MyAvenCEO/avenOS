@@ -44,11 +44,11 @@ fn self_dir_has_identity(dir: &std::path::Path) -> bool {
 	if self_dir_has_se_blob(dir) {
 		return true;
 	}
-	#[cfg(not(target_os = "macos"))]
+	#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 	{
 		return crate::dev_insecure::self_dir_has_dev_root(dir);
 	}
-	#[cfg(target_os = "macos")]
+	#[cfg(any(target_os = "macos", target_os = "ios"))]
 	false
 }
 

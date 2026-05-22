@@ -48,5 +48,9 @@ vite.config.ts.timestamp-*
 target/
 **/target/
 
+# App Store / local packaging outputs (never commit)
+/dist/
+**/*.pkg
+
 # Repo-local P2p signal relay seed (<repo>/.avenOS/dev/p2p-signal)
 /.avenOS/

@@ -1,4 +1,4 @@
-#![cfg(target_os = "macos")]
+#![cfg(any(target_os = "macos", target_os = "ios"))]
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;

@@ -19,13 +19,16 @@ fn main() {
 		"active_identity",
 	];
 
-	if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
-		swift_rs::SwiftLinker::new("13")
-			.with_package("SelfBridge", "swift-lib")
-			.link();
+	let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+	if matches!(target_os.as_str(), "macos" | "ios") {
+		let mut link = swift_rs::SwiftLinker::new("13").with_package("SelfBridge", "swift-lib");
+		if target_os == "ios" {
+			link = link.with_ios("14");
+		}
+		link.link();
 	} else {
 		println!(
-			"cargo:warning=tauri-plugin-self: Swift bridge skipped (target_os != macos)"
+			"cargo:warning=tauri-plugin-self: Swift bridge skipped (target_os not macos/ios)"
 		);
 	}
 
