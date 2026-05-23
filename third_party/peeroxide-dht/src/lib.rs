@@ -59,6 +59,8 @@
 
 /// Blind relay for proxying encrypted traffic between peers behind restrictive NATs.
 pub mod blind_relay;
+/// Optional connect-progress hooks for UI surfaces.
+pub mod connect_ui;
 /// Compact binary encoding primitives compatible with the
 /// [compact-encoding](https://github.com/holepunchto/compact-encoding) wire format.
 pub mod compact_encoding;
@@ -87,6 +89,8 @@ pub mod secret_stream;
 // top-level docs. Access via `peeroxide_dht::<module>` if needed.
 #[doc(hidden)]
 pub mod holepuncher;
+/// Local LAN IPv4 enumeration for Noise `addresses4`.
+pub mod local_addresses;
 #[doc(hidden)]
 pub mod io;
 #[doc(hidden)]

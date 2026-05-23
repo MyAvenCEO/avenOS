@@ -747,6 +747,19 @@ pub fn run() {
 				});
 			});
 
+			let h_connect_ui = app.handle().clone();
+			let _connect_ui_mesh = app.listen("peer:connect-ui-changed", move |_event| {
+				let hh = h_connect_ui.clone();
+				tauri::async_runtime::spawn(async move {
+					if let Err(e) = jazz::refresh_peer_mesh_primitives(&hh).await {
+						log::debug!(
+							target: "avenos::jazz",
+							"peer:connect-ui-changed mesh refresh skipped: {e}",
+						);
+					}
+				});
+			});
+
 			// Hyperswarm connections form **asynchronously** after pairing/grant: by the time
 			// `apply_peer_invite_paired` runs `refresh_peer_mesh_primitives`, the peer's
 			// `SwarmConnection` usually hasn't reached `HyperswarmGrooveBridge.on_swarm_connection`

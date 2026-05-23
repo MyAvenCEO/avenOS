@@ -13,11 +13,21 @@ export type P2pDiagnostics = {
 	pairingTopicHex?: string | null
 }
 
+export type PeerConnectSubstate =
+	| 'discovering'
+	| 'handshaking'
+	| 'holepunching'
+	| 'relayFallback'
+
+export type PeerTransportMode = 'lan' | 'direct' | 'punched' | 'relay'
+
 export type PeerMeshPeerState = {
 	peerDid: string
 	deviceLabel: string
 	dbStatus: string
 	phase: PeerMeshPhase
+	connectSubstate?: PeerConnectSubstate | null
+	transportMode?: PeerTransportMode | null
 }
 
 /** Single source of truth for P2P mesh UI (header + Self → Peers). */
@@ -166,4 +176,76 @@ export function findPeerMeshPhase(
 	const row = status.peers.find((p) => p.peerDid === did)
 	if (row) return row.phase
 	return dbStatus === 'active' ? 'searching' : 'offline'
+}
+
+/** Granular connect sub-label while parent phase is `searching` (Connecting). */
+export function peerConnectSubstateLabel(sub: PeerConnectSubstate): string {
+	switch (sub) {
+		case 'discovering':
+			return 'Discovering'
+		case 'handshaking':
+			return 'Handshaking'
+		case 'holepunching':
+			return 'Holepunching'
+		case 'relayFallback':
+			return 'Relay fallback'
+	}
+}
+
+/** Established transport sub-label while parent phase is `syncing` / `ready`. */
+export function peerTransportModeLabel(mode: PeerTransportMode): string {
+	switch (mode) {
+		case 'lan':
+			return 'LAN'
+		case 'direct':
+			return 'Direct'
+		case 'punched':
+			return 'Punched'
+		case 'relay':
+			return 'Relay'
+	}
+}
+
+export function peerTransportModeTitle(mode: PeerTransportMode): string {
+	switch (mode) {
+		case 'lan':
+			return 'Same local network (Wi‑Fi / hotspot)'
+		case 'direct':
+			return 'Internet, no NAT punch needed'
+		case 'punched':
+			return 'NAT traversal'
+		case 'relay':
+			return 'Fallback via Aven relay (encrypted)'
+	}
+}
+
+export function peerMeshDetailSubLabel(
+	status: PeerMeshStatusReply | undefined,
+	peerDid: string,
+	phase: PeerMeshPhase,
+): string | null {
+	if (!status || !peerDid.trim()) return null
+	const row = status.peers.find((p) => p.peerDid === peerDid.trim())
+	if (!row) return null
+	if (phase === 'searching' && row.connectSubstate) {
+		return peerConnectSubstateLabel(row.connectSubstate)
+	}
+	if ((phase === 'syncing' || phase === 'ready') && row.transportMode) {
+		return peerTransportModeLabel(row.transportMode)
+	}
+	return null
+}
+
+export function peerMeshDetailSubTitle(
+	status: PeerMeshStatusReply | undefined,
+	peerDid: string,
+	phase: PeerMeshPhase,
+): string | null {
+	if (!status || !peerDid.trim()) return null
+	const row = status.peers.find((p) => p.peerDid === peerDid.trim())
+	if (!row?.transportMode) return null
+	if (phase === 'syncing' || phase === 'ready') {
+		return peerTransportModeTitle(row.transportMode)
+	}
+	return null
 }

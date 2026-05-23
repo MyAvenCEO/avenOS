@@ -47,6 +47,7 @@ pub struct HyperswarmGrooveBridgeInner {
 	/// listens to this to call `JazzClient::register_peer_sync_client` for newly-arrived peers and
 	/// otherwise reconcile its peer mesh — the bridge itself has no JazzClient handle.
 	peer_set_changed: Arc<Notify>,
+	connect_ui_tracker: Mutex<Option<Arc<crate::peer_connect_ui::PeerConnectUiTracker>>>,
 }
 
 #[derive(Clone)]
@@ -67,8 +68,16 @@ impl HyperswarmGrooveBridge {
 			shutting_down: Mutex::new(false),
 			client_id_to_did: cid_map,
 			peer_set_changed: Arc::new(Notify::new()),
+			connect_ui_tracker: Mutex::new(None),
 		});
 		HyperswarmGrooveBridge(inner)
+	}
+
+	pub fn attach_connect_ui(&self, tracker: Arc<crate::peer_connect_ui::PeerConnectUiTracker>) {
+		*self
+			.0
+			.connect_ui_tracker
+			.blocking_lock() = Some(tracker);
 	}
 
 	pub fn shared_client_id_to_did(&self) -> Arc<RwLock<HashMap<ClientId, String>>> {
@@ -134,6 +143,7 @@ impl HyperswarmGrooveBridge {
 		bridge: HyperswarmGrooveBridge,
 		conn: SwarmConnection,
 		remote_client: ClientId,
+		remote_pk: [u8; 32],
 		capsule_rx: mpsc::UnboundedReceiver<Vec<u8>>,
 		local_party_id: ClientId,
 	) {
@@ -235,6 +245,9 @@ impl HyperswarmGrooveBridge {
 			m.remove(&remote_client);
 		}
 		bridge.0.peer_set_changed.notify_waiters();
+		if let Some(tracker) = bridge.0.connect_ui_tracker.lock().await.as_ref() {
+			tracker.note_disconnected_pk(&remote_pk);
+		}
 		log::debug!(
 			target: "avenos::peeroxide",
 			"groove_p2p link closed peer={:?}",
@@ -247,9 +260,9 @@ impl HyperswarmGrooveBridge {
 			return;
 		}
 
-		let remote_pk = conn.remote_public_key();
-		let remote_client = ClientId(groove_client_uuid_from_pubkey(remote_pk));
-		if let Ok(did) = did::peer_did_from_ed25519(remote_pk) {
+		let remote_pk = *conn.remote_public_key();
+		let remote_client = ClientId(groove_client_uuid_from_pubkey(&remote_pk));
+		if let Ok(did) = did::peer_did_from_ed25519(&remote_pk) {
 			let mut m = self.0.client_id_to_did.write().expect("cid map poisoned");
 			m.insert(remote_client, did);
 		} else {
@@ -292,6 +305,7 @@ impl HyperswarmGrooveBridge {
 				groove_bridge,
 				conn,
 				remote_client,
+				remote_pk,
 				caps_rx,
 				local_party_id,
 			)

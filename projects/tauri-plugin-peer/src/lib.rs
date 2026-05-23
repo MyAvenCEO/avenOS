@@ -11,12 +11,16 @@ mod did;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod pairing_label;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
+mod peer_connect_ui;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod hyperswarm_groove_bridge;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod commands_macos;
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use hyperswarm_groove_bridge::HyperswarmGrooveBridge;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub use peer_connect_ui::{PeerConnectSubstate, PeerConnectUiRow, PeerTransportMode};
 
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
 mod commands_stub;
@@ -116,6 +120,14 @@ pub struct PeerCtl {
 	swarm_start_error: Arc<tokio::sync::Mutex<Option<String>>>,
 	/// Last resolved P2P stack config — surfaced in UI for TestFlight diagnostics.
 	p2p_diagnostics: Arc<tokio::sync::RwLock<P2pDiagnostics>>,
+	connect_ui_tracker: Arc<peer_connect_ui::PeerConnectUiTracker>,
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+impl PeerCtl {
+	pub fn connect_ui_row_for_did(&self, peer_did: &str) -> peer_connect_ui::PeerConnectUiRow {
+		self.connect_ui_tracker.row_for_did(peer_did)
+	}
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -146,7 +158,9 @@ fn hex_pk_prefix(pk: &[u8]) -> String {
 /// - `AVENOS_DHT_ISOLATED=1`: empty bootstrap table unless `AVENOS_DHT_BOOTSTRAP` fills it (set by central mode).
 /// - `AVENOS_DHT_PUBLIC=1`: public Holepunch roots (non-central mode).
 /// - `AVENOS_DHT_BOOTSTRAP`: comma-separated bootstrap strings (`ip@host:port` HyperDHT form).
-/// - Connectivity uses HyperDHT in-band handshake relay + holepunch (see peeroxide docs) — no separate blind-relay UDP.
+/// - Connectivity: HyperDHT in-band handshake relay + holepunch + LAN `addresses4` (peeroxide docs).
+///   Blind-relay (`relay_through`) is **last-resort fallback** after holepunch — set via
+///   `AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX` + `AVENOS_HYPERSWARM_RELAY_ADDR` (runtime or compile-time embed).
 /// - `AVENOS_HYPERSWARM_MAX_PARALLEL` / `AVENOS_HYPERSWARM_MAX_PEERS`: positive integers.
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 fn env_truthy_os(key: &str) -> bool {
@@ -310,6 +324,82 @@ fn resolve_aven_relay_url() -> Result<String, String> {
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
+fn parse_relay_pubkey_hex(raw: &str) -> Result<[u8; 32], String> {
+	let t = raw.trim();
+	if t.len() != 64 {
+		return Err(format!(
+			"AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX: expected 64 hex chars, got {}",
+			t.len()
+		));
+	}
+	let bytes = hex::decode(t).map_err(|e| format!("relay pubkey hex decode: {e}"))?;
+	if bytes.len() != 32 {
+		return Err(format!(
+			"AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX: decoded {} bytes, want 32",
+			bytes.len()
+		));
+	}
+	let mut pk = [0u8; 32];
+	pk.copy_from_slice(&bytes);
+	Ok(pk)
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn parse_relay_socket_addr(raw: &str) -> Result<std::net::SocketAddr, String> {
+	raw.trim()
+		.parse()
+		.map_err(|e| format!("AVENOS_HYPERSWARM_RELAY_ADDR parse ({raw:?}): {e}"))
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn resolve_hyperswarm_relay_embed() -> Option<(String, String)> {
+	let pk = option_env!("AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX")?.trim();
+	let addr = option_env!("AVENOS_HYPERSWARM_RELAY_ADDR")?.trim();
+	if pk.is_empty() || addr.is_empty() || pk.len() != 64 {
+		return None;
+	}
+	Some((pk.to_string(), addr.to_string()))
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn apply_hyperswarm_blind_relay(cfg: &mut peeroxide::SwarmConfig) -> Result<(), String> {
+	let mut pk_hex: Option<String> = std::env::var("AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX")
+		.ok()
+		.map(|s| s.trim().to_string())
+		.filter(|s| !s.is_empty());
+	let mut addr_raw: Option<String> = std::env::var("AVENOS_HYPERSWARM_RELAY_ADDR")
+		.ok()
+		.map(|s| s.trim().to_string())
+		.filter(|s| !s.is_empty());
+
+	if pk_hex.is_none() || addr_raw.is_none() {
+		if let Some((baked_pk, baked_addr)) = resolve_hyperswarm_relay_embed() {
+			pk_hex.get_or_insert(baked_pk);
+			addr_raw.get_or_insert(baked_addr);
+		}
+	}
+
+	let (Some(pk_hex), Some(addr_raw)) = (pk_hex, addr_raw) else {
+		log::info!(
+			target: "avenos::peeroxide",
+			"blind-relay fallback unset (no AVENOS_HYPERSWARM_RELAY_* — holepunch-only data plane)"
+		);
+		return Ok(());
+	};
+
+	let relay_through = parse_relay_pubkey_hex(&pk_hex)?;
+	let relay_address = parse_relay_socket_addr(&addr_raw)?;
+	cfg.relay_through = Some(relay_through);
+	cfg.relay_address = Some(relay_address);
+	log::info!(
+		target: "avenos::peeroxide",
+		"blind-relay fallback configured relay_through={} relay_addr={relay_address}",
+		hex_pk_prefix(&relay_through),
+	);
+	Ok(())
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 async fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(), String> {
 	let central = aven_relay_central_mode();
 	let isolated = central
@@ -404,6 +494,8 @@ async fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(),
 			log::info!(target: "avenos::peeroxide", "max_peers={n} from env");
 		}
 	}
+
+	apply_hyperswarm_blind_relay(cfg)?;
 
 	Ok(())
 }
@@ -595,6 +687,7 @@ impl PeerCtl {
 			*self.swarm_start_error.lock().await = Some(e.clone());
 			return Err(e);
 		}
+		cfg.connect_ui = Some(self.connect_ui_tracker.hook());
 
 		let linked_count = self.jazz_hyperswarm.snapshot_remote_clients().await.len();
 		let mut diag = build_p2p_diagnostics(&cfg, linked_count);
@@ -662,8 +755,9 @@ impl PeerCtl {
 	}
 
 	async fn handle_incoming_swarm_conn(&self, mut conn: peeroxide::SwarmConnection) {
-		let remote_pk = conn.remote_public_key();
-		let Ok(remote_did) = crate::did::peer_did_from_ed25519(remote_pk) else {
+		let remote_pk = *conn.remote_public_key();
+		let transport_mode = conn.peer.transport_mode;
+		let Ok(remote_did) = crate::did::peer_did_from_ed25519(&remote_pk) else {
 			log::warn!(target: "avenos::peeroxide", "reject swarm: invalid remote static key");
 			drop(conn);
 			return;
@@ -738,6 +832,9 @@ impl PeerCtl {
 				log::warn!(target: "avenos::peeroxide", "emit peer:invite-paired failed: {e}");
 			}
 		}
+
+		self.connect_ui_tracker
+			.note_inbound_connected(&remote_pk, transport_mode);
 
 		self.jazz_hyperswarm.on_swarm_connection(conn).await;
 	}
@@ -1159,6 +1256,16 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 		])
 		.setup(|app, _plugin| {
 			let jazz_hyperswarm = HyperswarmGrooveBridge::new();
+			let app_mesh = app.clone();
+			let connect_ui_tracker = Arc::new(peer_connect_ui::PeerConnectUiTracker::new(Some(
+				Arc::new(move || {
+					let hh = app_mesh.clone();
+					tauri::async_runtime::spawn(async move {
+						let _ = hh.emit("peer:connect-ui-changed", ());
+					});
+				}),
+			)));
+			jazz_hyperswarm.attach_connect_ui(Arc::clone(&connect_ui_tracker));
 
 			app.manage(jazz_hyperswarm.clone());
 
@@ -1186,6 +1293,7 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 					relay_https_probe: None,
 					dht_bootstrap_closest_seen: None,
 				})),
+				connect_ui_tracker,
 			});
 
 			let h = app.clone();

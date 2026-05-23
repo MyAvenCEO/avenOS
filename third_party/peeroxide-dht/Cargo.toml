@@ -128,6 +128,9 @@ version = "0.10"
 [dependencies.curve25519-dalek]
 version = "4"
 
+[dependencies.if-addrs]
+version = "0.13"
+
 [dependencies.ed25519-dalek]
 version = "2"
 features = ["rand_core"]

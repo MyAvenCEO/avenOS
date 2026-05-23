@@ -72,7 +72,8 @@ async fn run_handshake_test() -> Result<(), Box<dyn std::error::Error>> {
 
     srv_handle.register_server(&target);
 
-    let server_config = ServerConfig::new(server_kp.clone(), 0);
+    let mut server_config = ServerConfig::new(server_kp.clone(), 0);
+    server_config.noise_addresses_listen_udp_port = Some(srv_port);
     let server_rt = UdxRuntime::new()?;
     let server_task = tokio::spawn(run_server(srv_rx, server_config, server_rt));
 

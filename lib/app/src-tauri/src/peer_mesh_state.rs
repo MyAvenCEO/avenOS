@@ -25,6 +25,10 @@ pub struct PeerMeshPeerState {
 	pub device_label: String,
 	pub db_status: String,
 	pub phase: PeerMeshPhase,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub connect_substate: Option<tauri_plugin_peer::PeerConnectSubstate>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub transport_mode: Option<tauri_plugin_peer::PeerTransportMode>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -90,11 +94,14 @@ pub(crate) async fn assemble_mesh_snapshot(
 			catchup_pending,
 			&catchup_done_by_did,
 		);
+		let ui = peer_ctl.connect_ui_row_for_did(&row.peer_did);
 		out.push(PeerMeshPeerState {
 			peer_did: row.peer_did,
 			device_label: row.device_label,
 			db_status: row.status,
 			phase,
+			connect_substate: ui.connect_substate,
+			transport_mode: ui.transport_mode,
 		});
 	}
 

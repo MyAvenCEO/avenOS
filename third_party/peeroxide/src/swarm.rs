@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use libudx::{RuntimeHandle, UdxRuntime};
 use peeroxide_dht::crypto::hash;
+use peeroxide_dht::local_addresses::build_addresses4;
 use peeroxide_dht::hyperdht::{
     self, handle_peer_holepunch_reply, HolepunchServerPeerState, HyperDhtConfig, HyperDhtHandle,
     KeyPair, PeerConnection, ServerEvent,
@@ -147,13 +148,14 @@ pub struct SwarmConfig {
     pub max_parallel: usize,
     /// Firewall value sent in handshakes (default 0).
     pub firewall: u64,
-    /// Public key of a relay node to force all server connections through (Hyperswarm blind-relay extension).
-    /// Unused in AvenOS-first-principles setups — prefer HyperDHT in-band handshake relay via bootstrap.
+    /// Public key of the hosted blind-relay node (`relay_through` in Noise; fallback after holepunch).
     pub relay_through: Option<[u8; 32]>,
     /// Socket address hints for Hyperswarm blind-relay wired mode (normally unused).
     pub relay_address: Option<std::net::SocketAddr>,
     /// Extra UDP hints advertised in handshake `relay_addresses` (e.g. DHT bootstrap + blind-relay).
     pub relay_address_hints: Vec<std::net::SocketAddr>,
+    /// Optional connect UI progress callbacks (discovering + outbound connect path).
+    pub connect_ui: Option<peeroxide_dht::connect_ui::ConnectUiHook>,
 }
 
 impl Default for SwarmConfig {
@@ -167,6 +169,7 @@ impl Default for SwarmConfig {
             relay_through: None,
             relay_address: None,
             relay_address_hints: Vec::new(),
+            connect_ui: None,
         }
     }
 }
@@ -384,6 +387,8 @@ struct ActorConfig {
     /// ahead of loopback in topic announces so remote peers can route handshakes via the same
     /// bootstrap that already forwards `PEER_HANDSHAKE` relay traffic.
     announce_bootstrap_relays: Vec<Ipv4Peer>,
+    /// UDP port for this node's DHT — used with [`build_addresses4`] so peers can LAN/hotspot-connect.
+    dht_listen_port: u16,
 }
 
 struct SwarmActor {
@@ -409,6 +414,7 @@ struct SwarmActor {
 
     active_connects: usize,
     flush_waiters: Vec<oneshot::Sender<Result<(), SwarmError>>>,
+    connect_ui: Option<peeroxide_dht::connect_ui::ConnectUiHook>,
 }
 
 struct ConnectAttemptResult {
@@ -427,14 +433,20 @@ pub async fn spawn(
 ) -> Result<(JoinHandle<()>, SwarmHandle, mpsc::Receiver<SwarmConnection>), SwarmError> {
     let SwarmConfig {
         key_pair: key_pair_opt,
-        dht,
+        mut dht,
         max_peers,
         max_parallel,
         firewall,
         relay_through,
         relay_address,
         relay_address_hints,
+        connect_ui,
     } = config;
+
+    dht.connect_relay.relay_through = relay_through;
+    dht.connect_relay.relay_address = relay_address;
+    dht.connect_relay.relay_address_hints = relay_address_hints.clone();
+    dht.connect_ui = connect_ui.clone();
 
     let key_pair = key_pair_opt.unwrap_or_else(KeyPair::generate);
     let runtime = UdxRuntime::new()?;
@@ -472,6 +484,7 @@ pub async fn spawn(
             relay_address,
             relay_address_hints,
             announce_bootstrap_relays,
+            dht_listen_port: local_port,
         },
         runtime_handle: runtime.handle(),
         holepunch_secrets: HashMap::new(),
@@ -485,6 +498,7 @@ pub async fn spawn(
         relay_address: Some(local_relay_peer),
         active_connects: 0,
         flush_waiters: Vec::new(),
+        connect_ui,
     };
 
     // Keep the DHT runtime alive for the swarm's lifetime.
@@ -711,6 +725,13 @@ impl SwarmActor {
                     return;
                 }
 
+                if let Some(hook) = &self.connect_ui {
+                    hook(peeroxide_dht::connect_ui::ConnectUiEvent::Progress {
+                        remote_pk: public_key,
+                        phase: peeroxide_dht::connect_ui::ConnectProgressPhase::Discovering,
+                    });
+                }
+
                 let info = self
                     .peers
                     .entry(public_key)
@@ -848,6 +869,11 @@ impl SwarmActor {
             }
             Err(e) => {
                 tracing::debug!(pk = %short_hex(&result.public_key), err = %e, "connect failed");
+                if let Some(hook) = &self.connect_ui {
+                    hook(peeroxide_dht::connect_ui::ConnectUiEvent::Disconnected {
+                        remote_pk: result.public_key,
+                    });
+                }
                 self.schedule_retry(result.public_key);
             }
         }
@@ -898,6 +924,7 @@ impl SwarmActor {
                 ..
             } => {
                 let firewall = self.config.firewall;
+                let dht_port = self.config.dht_listen_port;
                 let snapshots: Vec<HolepunchServerPeerState> =
                     self.holepunch_secrets.values().cloned().collect();
                 let rh = self.runtime_handle.clone();
@@ -906,7 +933,15 @@ impl SwarmActor {
                     let pool = SocketPool::new("0.0.0.0".into());
                     let runtime = UdxRuntime::shared(rh);
                     let reply =
-                        handle_peer_holepunch_reply(firewall, &refs, &pool, &runtime, msg, &peer_address)
+                        handle_peer_holepunch_reply(
+                            firewall,
+                            Some(dht_port),
+                            &refs,
+                            &pool,
+                            &runtime,
+                            msg,
+                            &peer_address,
+                        )
                             .await;
                     let _ = reply_tx.send(reply);
                 });
@@ -968,12 +1003,13 @@ impl SwarmActor {
             (None, None)
         };
 
+        let addresses4_list = build_addresses4(self.config.dht_listen_port);
         let reply_payload = NoisePayload {
             version: 1,
             error: 0,
             firewall: self.config.firewall,
             holepunch: holepunch_info,
-            addresses4: vec![],
+            addresses4: addresses4_list,
             addresses6: vec![],
             udx: Some(UdxInfo {
                 version: 1,

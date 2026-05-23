@@ -24,7 +24,7 @@
 	import { pairingLabelForSession } from '$lib/self/active-vault-ui'
 	import { peerPersonName } from '$lib/peer/display-label'
 	import PeerMeshPhaseBadge from '$lib/peer/PeerMeshPhaseBadge.svelte'
-	import { findPeerMeshPhase, peerMeshPhaseLabel } from '$lib/peer/mesh-state'
+	import { findPeerMeshPhase, peerMeshDetailSubLabel, peerMeshDetailSubTitle, peerMeshPhaseLabel } from '$lib/peer/mesh-state'
 	import { peerMeshSnapshot, refreshPeerMeshSnapshot } from '$lib/peer/peer-mesh.svelte'
 	import { vaultList } from '$lib/self/vault'
 
@@ -592,6 +592,12 @@
 					{@const rowPhase = r.placeholder
 						? 'pairing'
 						: findPeerMeshPhase(mesh, r.peerDid, r.status)}
+					{@const rowSubLabel = r.placeholder || !r.peerDid
+						? null
+						: peerMeshDetailSubLabel(mesh, r.peerDid, rowPhase)}
+					{@const rowSubTitle = r.placeholder || !r.peerDid
+						? null
+						: peerMeshDetailSubTitle(mesh, r.peerDid, rowPhase)}
 					<li
 						class="flex overflow-hidden first:rounded-t-xl last:rounded-b-xl sm:items-stretch
 							{r.placeholder ? 'bg-[color-mix(in_srgb,var(--color-status-pairing-base)_7%,transparent)]' : ''}"
@@ -634,6 +640,14 @@
 											? r.deviceLabel || '(no label)'
 											: peerPersonName(r.peerDid, r.deviceLabel, localPairingLabel)}
 									</div>
+									{#if rowSubLabel}
+										<p
+											class="text-muted-foreground/75 mt-0.5 text-[10px] font-medium tracking-wide"
+											title={rowSubTitle ?? undefined}
+										>
+											{rowSubLabel}
+										</p>
+									{/if}
 									{#if r.pairingDetail}
 										<p class="text-muted-foreground/65 mt-0.5 text-[11px] leading-snug">
 											{r.pairingDetail}

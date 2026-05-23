@@ -21,13 +21,21 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { applyAppleEnvLocal, resolveGenesisNetworkId } from './apple-env'
-import { resolveAppStoreRelayConfig } from './relay-bootstrap.ts'
+import { resolveAppStoreRelayConfig, type AppStoreRelayConfig } from './relay-bootstrap.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 /** Production Hyperswarm bootstrap host — compile-time embed for App Store sandbox (no .env). */
 const MAC_APPSTORE_AVEN_RELAY_URL = 'relay.aven.ceo'
 const MAC_APPSTORE_DHT_UDP_PORT = 49737
+
+function hyperswarmRelayCompileEnv(relayCfg: AppStoreRelayConfig): Record<string, string> {
+	if (!relayCfg.relayPublicKeyHex || !relayCfg.relayAddr) return {}
+	return {
+		AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX: relayCfg.relayPublicKeyHex,
+		AVENOS_HYPERSWARM_RELAY_ADDR: relayCfg.relayAddr,
+	}
+}
 
 applyAppleEnvLocal(repoRoot)
 const appDir = path.join(repoRoot, 'lib/app')
@@ -171,12 +179,19 @@ async function main() {
 		GENESIS_NETWORK_ID: genesisNetworkId,
 		AVEN_RELAY_URL: avenRelayUrl,
 		AVENOS_DHT_BOOTSTRAP: dhtBootstrap,
+		...hyperswarmRelayCompileEnv(relayCfg),
 	}
 	delete tauriEnv.CARGO_TARGET_DIR
 	tauriEnv.CARGO_TARGET_DIR = cargoTargetDir
 	console.log('[build-appstore-macos] embedding GENESIS_NETWORK_ID at compile time')
 	console.log('[build-appstore-macos] embedding AVEN_RELAY_URL=%s at compile time', avenRelayUrl)
 	console.log('[build-appstore-macos] embedding AVENOS_DHT_BOOTSTRAP=%s at compile time', dhtBootstrap)
+	if (relayCfg.relayAddr) {
+		console.log(
+			'[build-appstore-macos] embedding blind-relay fallback AVENOS_HYPERSWARM_RELAY_ADDR=%s',
+			relayCfg.relayAddr,
+		)
+	}
 	for (const key of [
 		'APPLE_API_ISSUER',
 		'APPLE_API_KEY',

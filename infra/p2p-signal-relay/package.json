@@ -1,0 +1,10 @@
+{
+	"name": "@avenos/p2p-signal-relay",
+	"private": true,
+	"dependencies": {
+		"@noble/ed25519": "2.0.0",
+		"b4a": "1.6.7",
+		"blind-relay": "1.6.1",
+		"hyperdht": "6.32.0"
+	}
+}

@@ -25,15 +25,20 @@ Exercise **hyperswarm + UDP DHT bootstrap** on a **physical iPhone/iPad** from a
 
    - [ ] Trusted peers / pairing UI exposes **retry swarm** paths without “permission denied” from the **`peer_swarm_retry`** ACL (capabilities include `peer:default`).
 
-4. **P2P handshake + holepunch (with macOS or second iPhone)**
+4. **P2P handshake + connect (with macOS or second iPhone)**
 
-   - [ ] Invite and accept pairing; observe mesh progressing past searching when both devices share relay/genesis (Wi‑Fi LAN, or **5G via HyperDHT in-band handshake relay + NAT holepunch** when direct UDP fails).
+   - [ ] Invite and accept pairing; observe mesh progressing past searching when both devices share relay/genesis.
 
-   Diagnostics / success signals (Rust trace → `avenos_dht_trace_snapshot` when enabled):
+   **Hotspot tether (iPhone 5G + Mac on Personal Hotspot):** expect **LAN direct** on `172.20.10.x`, not carrier same-IP holepunch. Requires **build 21+** (handshake `addresses4` + LAN `match_address`).
 
-   - [ ] **`lastConnectRelayed === true`** and **`lastRemoteHolepunchable === true`** on the initiating side after Noise completes (proves swarm advertised `HolepunchInfo` relayed handshake path — avoids immediate UDX to the Fly bootstrap).
-   - [ ] Logs show **`PEER_HOLEPUNCH`** / holepunch rounds, not **`establishing UDX stream`** straight to the public DHT UDP address.
+   Diagnostics / success signals (Rust trace → `avenos_dht_trace_snapshot` when enabled; copy from both devices within ~60s):
+
+   - [ ] **`lastConnectRelayed === true`** and **`lastRemoteHolepunchable === true`** on the initiating side after Noise completes (relay advertised `HolepunchInfo` — client must not open UDX to Fly bootstrap).
+   - [ ] Log line **`connect path: post-handshake endpoint selection`** with **`lan_match=Some(...)`** and **`direct=172.20.10.x:…`** on hotspot tether (or holepunch on separate networks).
+   - [ ] On hotspot: **no** **`holepunch aborted`** if LAN direct succeeds first.
    - [ ] **`swarmPeerConnectedTotal >= 1`** and **`linkedCount >= 1`** after pairing settles.
+   - [ ] **`holepunchBlindRelayFallbackTotal === 0`** on **hotspot tether** (LAN direct should win before blind-relay).
+   - [ ] On **cross-network** pairs (different carriers / no shared LAN): **`holepunchBlindRelayFallbackTotal > 0`** is OK when holepunch fails but pairing still reaches **`linkedCount >= 1`** (build 21+ embeds blind-relay from Fly manifest).
 
 5. **Jazz + Sparks sanity**
 

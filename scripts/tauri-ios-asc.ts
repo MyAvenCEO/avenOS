@@ -23,13 +23,21 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { applyAppleEnvLocal, resolveGenesisNetworkId } from './apple-env'
-import { resolveAppStoreRelayConfig } from './relay-bootstrap.ts'
+import { resolveAppStoreRelayConfig, type AppStoreRelayConfig } from './relay-bootstrap.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 /** Production Hyperswarm bootstrap host — compile-time embed for App Store sandbox (no .env). */
 const IOS_APPSTORE_AVEN_RELAY_URL = 'relay.aven.ceo'
 const IOS_APPSTORE_DHT_UDP_PORT = 49737
+
+function hyperswarmRelayCompileEnv(relayCfg: AppStoreRelayConfig): Record<string, string> {
+	if (!relayCfg.relayPublicKeyHex || !relayCfg.relayAddr) return {}
+	return {
+		AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX: relayCfg.relayPublicKeyHex,
+		AVENOS_HYPERSWARM_RELAY_ADDR: relayCfg.relayAddr,
+	}
+}
 
 applyAppleEnvLocal(repoRoot)
 
@@ -202,14 +210,25 @@ function shellEscapeSingleQuoted(value: string): string {
 	return `'${value.replace(/'/g, `'\"'\"'`)}'`
 }
 
-function writeAvenIosCompileEnv(genesisNetworkId: string, avenRelayUrl: string, dhtBootstrap: string) {
+function writeAvenIosCompileEnv(
+	genesisNetworkId: string,
+	avenRelayUrl: string,
+	dhtBootstrap: string,
+	relayCfg: AppStoreRelayConfig,
+) {
 	mkdirSync(path.dirname(AVEN_IOS_COMPILE_ENV), { recursive: true })
 	const lines = [
 		`export GENESIS_NETWORK_ID=${shellEscapeSingleQuoted(genesisNetworkId)}`,
 		`export AVEN_RELAY_URL=${shellEscapeSingleQuoted(avenRelayUrl)}`,
 		`export AVENOS_DHT_BOOTSTRAP=${shellEscapeSingleQuoted(dhtBootstrap)}`,
-		'',
 	]
+	if (relayCfg.relayPublicKeyHex && relayCfg.relayAddr) {
+		lines.push(
+			`export AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX=${shellEscapeSingleQuoted(relayCfg.relayPublicKeyHex)}`,
+			`export AVENOS_HYPERSWARM_RELAY_ADDR=${shellEscapeSingleQuoted(relayCfg.relayAddr)}`,
+		)
+	}
+	lines.push('')
 	writeFileSync(AVEN_IOS_COMPILE_ENV, lines.join('\n'), 'utf8')
 	console.log('[tauri-ios-asc] wrote compile env → %s', AVEN_IOS_COMPILE_ENV)
 }
@@ -385,7 +404,7 @@ async function main() {
 
 	syncEntitlements()
 	generateIosIconsFromSource()
-	writeAvenIosCompileEnv(genesisNetworkId, avenRelayUrl, dhtBootstrap)
+	writeAvenIosCompileEnv(genesisNetworkId, avenRelayUrl, dhtBootstrap, relayCfg)
 	patchPodfile()
 	patchXcodeRustScript()
 
@@ -415,6 +434,7 @@ async function main() {
 		GENESIS_NETWORK_ID: genesisNetworkId,
 		AVEN_RELAY_URL: avenRelayUrl,
 		AVENOS_DHT_BOOTSTRAP: dhtBootstrap,
+		...hyperswarmRelayCompileEnv(relayCfg),
 		RUSTUP_TOOLCHAIN: '1.88',
 	}
 	console.log('[tauri-ios-asc] embedding GENESIS_NETWORK_ID at compile time')
