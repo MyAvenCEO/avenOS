@@ -1,15 +1,18 @@
-# iOS TestFlight upload via Transporter (AvenOS v1 — no P2P)
+# iOS TestFlight upload via Transporter (AvenOS — identity + Hyperswarm)
 
-iOS v1 builds omit Hyperswarm; they focus on Secure Enclave identity + Jazz/UI surfaces. **We do not test on the iOS Simulator** — Secure Enclave and store signing differ from device/TestFlight builds. Produce a signed **IPA**, upload via Transporter, and validate on **physical devices through TestFlight only**.
+Store IPAs embed **`AVENOS_DHT_BOOTSTRAP`** at build time via `scripts/tauri-ios-asc.ts` and `scripts/relay-bootstrap.ts` (HTTPS `/.well-known/aven-relay.json`, same helper as macOS App Store builds) together with **`AVEN_RELAY_URL`** / **`GENESIS_NETWORK_ID`**. Hyperswarm runs in production IPAs similarly to sandboxed macOS TrackFlight binaries; verify mesh flows with [iOS TestFlight P2P smoke](ios-testflight-p2p-smoke.md).
+
+We still **avoid the simulator** as the authoritative QA lane for AvenOS identity: Secure Enclave and store signing behave differently from lab simulators—produce a signed **IPA**, upload via Transporter, and validate on **physical devices through TestFlight**.
 
 ## 1. Prerequisites
 
 - Xcode + CocoaPods toolchain installed locally (the generated project uses XcodeGen + Pods).
 - **iOS device platform** installed in Xcode (**Settings → Components**). Simulator runtimes are not required for this workflow.
 - **`gen/apple/` is gitignored.** After clone / config updates, scaffold from **`lib/app`**: `CI=true bunx tauri ios init --ci`  
-  Entitlements are re-synced automatically by `build:app:ios:appstore` from **`lib/app/src-tauri/ios-template/`**.
+  Entitlements are re-synced automatically during `bun run release:app:ios` from **`lib/app/src-tauri/ios-template/`**.
 - `APPLE_DEVELOPMENT_TEAM` via **`<repo-root>/.env.apple.local`** (template **`scripts/apple-env.local.template`**, quotable paths, never commits with `.gitignore` **`.env.*`**), **`tauri.ios.conf.json`**, or your shell — **do not commit** secrets.
 - **`GENESIS_NETWORK_ID`** in repo **`.env`** (or shell) — embedded at compile time like macOS TestFlight builds.
+- Watch the Xcode prep logs for **`embedding AVENOS_DHT_BOOTSTRAP=`** (`scripts/tauri-ios-asc.ts`); mismatches often explain hyperswarm stalls on-device.
 
 If you enabled **Push** + **Associated Domains** on the App ID, read [iOS Associated Domains + Push](ios-associated-domains-and-push.md) (regenerate provisioning profile; replace entitlement placeholders).
 
@@ -20,7 +23,7 @@ Increment **`AVEN_IOS_CF_BUNDLE_VERSION`** (or **`bundle.iOS.bundleVersion`**) f
 From repo root:
 
 ```bash
-bun run build:app:ios:appstore
+bun run release:app:ios 14 --no-upload
 ```
 
 (or from `lib/app`: `bun run tauri:ios:build:asc`)
@@ -31,12 +34,27 @@ Output (copied by the script):
 
 `dist/ios-appstore/avenOS-<version>-build<N>.ipa`
 
-## 3. Upload with Transporter
+## 3. Upload to App Store Connect
 
-1. Drag the produced **`.ipa`** into **Transporter** → **Deliver**.
-2. Confirm processing in App Store Connect → **Apps → iOS** → **TestFlight**.
-3. Complete **encryption export** + **privacy** questionnaires if prompted.
-4. Add internal testers → install **TestFlight** on a physical iPhone/iPad → accept invite and test.
+**One command builds and uploads** — runs the Tauri iOS build, then `xcrun altool --upload-app` using the API key in `.env.apple.local`:
+
+```bash
+# build iOS with CFBundleVersion=14 and upload to TestFlight
+bun run release:app:ios 14
+
+# do both macOS .pkg AND iOS .ipa with the same build number
+bun run release:app:all 14
+```
+
+The trailing integer is the **CFBundleVersion / build number**. Apple rejects duplicates inside an app record — bump it for every upload.
+
+Requires **`APPLE_API_KEY`**, **`APPLE_API_ISSUER`**, and **`APPLE_API_KEY_PATH`** in `.env.apple.local` (App Store Connect → Users and Access → Keys). The script sets `API_PRIVATE_KEYS_DIR=$(dirname "$APPLE_API_KEY_PATH")` so the `.p8` can live anywhere on disk.
+
+Opt-out flags for the rare local-only cases:
+- `bun run release:app:ios 14 --no-upload` → build only, keep the IPA under `dist/ios-appstore/` for manual upload
+- `bun run release:app:ios --no-build` → upload the **newest** existing IPA (handy after a transient network failure)
+
+**GUI fallback** — same outcome, useful for one-offs: drag the produced `.ipa` into **Transporter** → **Deliver**.
 
 Do **not** use `tauri ios dev`, `tauri ios build --open`, or simulator targets for AvenOS iOS QA — TestFlight on hardware is the supported path.
 

@@ -34,6 +34,7 @@ pub struct PeerMeshStatusReply {
 	pub hyperswarm_start_error: Option<String>,
 	pub local_pk_prefix_hex: String,
 	pub pairing_code_pending: Option<String>,
+	pub p2p_diagnostics: tauri_plugin_peer::P2pDiagnostics,
 	pub peers: Vec<PeerMeshPeerState>,
 }
 
@@ -44,7 +45,7 @@ pub async fn publish_peer_mesh_snapshot(app: &tauri::AppHandle) {
 }
 
 /// Assemble UI snapshot from transport + bridge state and pre-fetched DB rows (no `conn` here).
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 pub(crate) async fn assemble_mesh_snapshot(
 	app: &tauri::AppHandle,
 	_jazz: &crate::jazz::ManagedJazz,
@@ -104,11 +105,12 @@ pub(crate) async fn assemble_mesh_snapshot(
 		hyperswarm_start_error: transport.hyperswarm_start_error,
 		local_pk_prefix_hex: transport.local_pk_prefix_hex,
 		pairing_code_pending: transport.pairing_code_pending,
+		p2p_diagnostics: transport.p2p_diagnostics,
 		peers: out,
 	})
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 fn phase_for_peer(
 	peer_did: &str,
 	db_status: &str,

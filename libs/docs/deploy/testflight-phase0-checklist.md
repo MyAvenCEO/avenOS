@@ -26,10 +26,12 @@ Under **Identifiers**, edit App ID `ceo.aven.os`:
 - [ ] Network: **Outbound (Client)**; add **Inbound (Server)** if Hyperswarm listens in the sandboxed build—validate against your entitlements (`Entitlements-appstore.plist`).
 - [ ] Keychain / other capabilities only if Xcode or signing validation requires them—enable only what you use.
 
-**iOS v1 (identity + Jazz UI, no Hyperswarm P2P)**
+**iOS (Secure Enclave + Jazz + Hyperswarm foreground parity)**
 
 - [ ] App Sandbox (default for iOS; ensure provisioning matches).
-- [ ] Network **client** for Jazz sync paths you actually use—avoid declaring caps you do not need.
+- [ ] Networking: **Outbound (Client)** for relay, HTTPS manifest fetch, Jazz—add **Inbound** only if tooling requires listens on device.
+- [ ] **Multicast / Bonjour** (or Associated Domains) only if Hyperswarm’s LAN discovery triggers review requirements—mirror what macOS sandbox entitlements declare.
+- [ ] **`NSLocalNetworkUsageDescription`** in `Info.ios.plist` stays accurate when editing discovery copy.
 
 ## 4. Certificates
 
@@ -82,4 +84,4 @@ Prepare in App Store Connect:
 | `APPLE_SIGNING_IDENTITY` | macOS Distribution identity passed through `build-appstore-macos.ts` into Tauri merge config. |
 | `AVEN_APP_STORE_PROVISIONING_PROFILE_MACOS` | Path to `.provisionprofile` for Mac App Store (script copies beside bundle). |
 
-See also: [macOS TestFlight sandbox smoke](macos-testflight-sandbox-smoke.md), [macOS upload via Transporter](macos-testflight-upload-transporter.md), [iOS upload](ios-testflight-upload-transporter.md).
+See also: [macOS TestFlight sandbox smoke](macos-testflight-sandbox-smoke.md), [iOS TestFlight P2P smoke](ios-testflight-p2p-smoke.md), [macOS upload via Transporter](macos-testflight-upload-transporter.md), [iOS upload](ios-testflight-upload-transporter.md).

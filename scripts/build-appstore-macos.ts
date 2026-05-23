@@ -10,7 +10,7 @@
  *   AVEN_PKG_INSTALLER_IDENTITY — `productbuild --sign` installer cert (e.g. "3rd Party Mac Developer Installer: …")
  *
  * Optional:
- *   AVEN_MAC_CF_BUNDLE_VERSION — CFBundleVersion for this upload (default "6")
+ *   AVEN_MAC_CF_BUNDLE_VERSION — CFBundleVersion for this upload (default "13")
  *   GENESIS_NETWORK_ID — optional override; else read from repo `.env` (see resolveGenesisNetworkId)
  *   AVEN_RELAY_URL — optional shell override; default hardcoded `relay.aven.ceo` (compile-time embed for P2P)
  *   AVEN_OUTPUT_PKG — output path for the pkg (default dist/macos-appstore/avenOS-<version>-b<build>.pkg)
@@ -21,11 +21,13 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { applyAppleEnvLocal, resolveGenesisNetworkId } from './apple-env'
+import { resolveAppStoreRelayConfig } from './relay-bootstrap.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 /** Production Hyperswarm bootstrap host — compile-time embed for App Store sandbox (no .env). */
 const MAC_APPSTORE_AVEN_RELAY_URL = 'relay.aven.ceo'
+const MAC_APPSTORE_DHT_UDP_PORT = 49737
 
 applyAppleEnvLocal(repoRoot)
 const appDir = path.join(repoRoot, 'lib/app')
@@ -92,14 +94,14 @@ function resolveBuiltAppPath(
 	process.exit(1)
 }
 
-function main() {
+async function main() {
 	const profileSrc = mustEnv('AVEN_APP_STORE_PROVISIONING_PROFILE_MACOS')
 	const signId = mustEnv('APPLE_SIGNING_IDENTITY')
 	const pkgSignId = mustEnv('AVEN_PKG_INSTALLER_IDENTITY')
-	const bundleVersion = process.env.AVEN_MAC_CF_BUNDLE_VERSION?.trim() || '6'
+	const bundleVersion = process.env.AVEN_MAC_CF_BUNDLE_VERSION?.trim() || '13'
 	const version = readPackageVersion()
 	console.log(
-		'[build-appstore-macos] CFBundleVersion=%s (AVEN_MAC_CF_BUNDLE_VERSION or default 6)',
+		'[build-appstore-macos] CFBundleVersion=%s (AVEN_MAC_CF_BUNDLE_VERSION or default 13)',
 		bundleVersion,
 	)
 
@@ -111,6 +113,10 @@ function main() {
 		process.exit(1)
 	}
 	const avenRelayUrl = process.env.AVEN_RELAY_URL?.trim() || MAC_APPSTORE_AVEN_RELAY_URL
+	const relayCfg = await resolveAppStoreRelayConfig(MAC_APPSTORE_AVEN_RELAY_URL, MAC_APPSTORE_DHT_UDP_PORT, {
+		warnLabel: 'build-appstore-macos',
+	})
+	const dhtBootstrap = relayCfg.dhtBootstrap
 
 	mkdirSync(path.dirname(profileDest), { recursive: true })
 	copyFileSync(profileSrc, profileDest)
@@ -120,6 +126,11 @@ function main() {
 	const mergeDir = mkdtempSync(path.join(repoRoot, 'dist', 'macos-appstore-tmp-'))
 	const mergePath = path.join(mergeDir, 'tauri.appstore.merge.json')
 	const merge = {
+		// Run `bun run build` once below — Tauri can invoke beforeBuildCommand more than once
+		// during a single `tauri build`, which races hashed SvelteKit chunks vs generate_context!.
+		build: {
+			beforeBuildCommand: '',
+		},
 		bundle: {
 			targets: ['app'],
 			category: 'Productivity',
@@ -159,11 +170,13 @@ function main() {
 		...process.env,
 		GENESIS_NETWORK_ID: genesisNetworkId,
 		AVEN_RELAY_URL: avenRelayUrl,
+		AVENOS_DHT_BOOTSTRAP: dhtBootstrap,
 	}
 	delete tauriEnv.CARGO_TARGET_DIR
 	tauriEnv.CARGO_TARGET_DIR = cargoTargetDir
 	console.log('[build-appstore-macos] embedding GENESIS_NETWORK_ID at compile time')
 	console.log('[build-appstore-macos] embedding AVEN_RELAY_URL=%s at compile time', avenRelayUrl)
+	console.log('[build-appstore-macos] embedding AVENOS_DHT_BOOTSTRAP=%s at compile time', dhtBootstrap)
 	for (const key of [
 		'APPLE_API_ISSUER',
 		'APPLE_API_KEY',
@@ -173,6 +186,16 @@ function main() {
 		'APPLE_TEAM_ID',
 	]) {
 		delete tauriEnv[key]
+	}
+
+	const frontendBuild = spawnSync('bun', ['run', 'build'], {
+		cwd: appDir,
+		stdio: 'inherit',
+		env: tauriEnv,
+	})
+	if (frontendBuild.status !== 0) {
+		console.error('build-appstore-macos: frontend build failed')
+		process.exit(frontendBuild.status ?? 1)
 	}
 
 	const br = spawnSync('bunx', ['--bun', ...tauriArgs], {
@@ -230,7 +253,12 @@ function main() {
 	}
 
 	console.log(`[build-appstore-macos] done → ${pkgOut}`)
-	console.log('[build-appstore-macos] Deliver this .pkg via Transporter to macOS App Store Connect / TestFlight.')
+	console.log(
+		'[build-appstore-macos] Upload preferred: bun run release:app:mac <N> — uses altool/App Store Connect API. Use Apple Transporter only as a GUI fallback if CLI upload fails.',
+	)
 }
 
-main()
+void main().catch((e: unknown) => {
+	console.error(e)
+	process.exit(1)
+})

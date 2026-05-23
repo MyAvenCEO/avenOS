@@ -1,30 +1,27 @@
 #!/usr/bin/env bun
 
 /**
- * AvenOS centralized P2P **discovery** stack (`aven-p2p-signal-dht` + blind-relay node).
+ * AvenOS centralized P2P **discovery** stack (Rust `aven-p2p-signal-dht` HyperDHT bootstrap only).
  *
- * Master switch: **`AVEN_RELAY`** defaults **on** (central DHT + relay node for pairing/lookup).
+ * Master switch: **`AVEN_RELAY`** defaults **on** (central DHT for pairing/lookup).
  * Set **`AVEN_RELAY=false`** (or **`AVENOS_RELAY=false`**) to use public Holepunch HyperDHT instead.
  *
- * **Data plane is always direct P2P** — we never inject `AVENOS_HYPERSWARM_RELAY_*` into peeroxide
- * (`relay_through` forces blind-relay transport; AvenOS forbids that path).
- *
- * **`AVEN_RELAY_URL`** (required when central): `127.0.0.1` / `localhost` → spawn local DHT+relay;
+ * **`AVEN_RELAY_URL`** (required when central): `127.0.0.1` / `localhost` → spawn local DHT;
  * any other host (e.g. `relay.aven.ceo`) → use that host for `AVENOS_DHT_BOOTSTRAP` only (no local subprocess).
+ *
+ * Data plane uses HyperDHT in-band handshake relay + holepunch (see peeroxide docs).
  */
 
 import { execFileSync } from 'node:child_process'
-import dns from 'node:dns'
-import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+import { resolveAppStoreRelayConfig } from './relay-bootstrap.ts'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 /** Default isolated HyperDHT bootstrap UDP (Rust). */
 export const P2P_DHT_UDP_PORT_DEFAULT = 49737
-/** Default blind-relay UDP (central signal infra; not wired into peeroxide swarm). */
-export const P2P_RELAY_UDP_PORT_DEFAULT = 49738
 
 const TRUTHY = new Set(['1', 'true', 'yes', 'on'])
 const FALSY = new Set(['0', 'false', 'no', 'off'])
@@ -78,10 +75,15 @@ export function isEmbeddedLocalRelayHost(host: string): boolean {
 
 function resolveIpv4Sync(hostname: string): string | undefined {
 	try {
-		return dns.lookupSync(hostname, { family: 4 })
+		const out = execFileSync('dig', ['+short', hostname, 'A'], { encoding: 'utf8' })
+		for (const line of out.split('\n')) {
+			const ip = line.trim()
+			if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) return ip
+		}
 	} catch {
-		return undefined
+		/* dig unavailable */
 	}
+	return undefined
 }
 
 /**
@@ -192,34 +194,11 @@ async function readFirstJsonLine(
 	throw new Error(`${label}: process ended before emitting ready JSON`)
 }
 
-function usableRelayNodeExe(): string | undefined {
-	for (const p of ['/usr/bin/node', '/usr/bin/nodejs']) {
-		if (existsSync(p)) return p
-	}
-	const nodeExe = Bun.which('node')
-	if (nodeExe && !nodeExe.includes('bun-node-fallback-bin')) return nodeExe
-	return undefined
-}
-
-function relaySpawnArgv(relayDir: string): string[] {
-	const script = path.join(relayDir, 'blind-relay-server.cjs')
-	if (process.env.AVENOS_P2P_SIGNAL_RELAY_WITH_BUN === '1') {
-		return ['bun', 'blind-relay-server.cjs']
-	}
-	const nodeExe = usableRelayNodeExe()
-	if (nodeExe && process.env.AVENOS_P2P_SIGNAL_RELAY_WITH_NODE !== '0') {
-		return [nodeExe, script]
-	}
-	return ['bun', 'blind-relay-server.cjs']
-}
-
-/** Env merged into Tauri children — direct data plane, no swarm relay injection. */
+/** Env merged into Tauri children — public Holepunch HyperDHT (no central relay). */
 export function p2pPublicModeEnvAugment(): Record<string, string> {
 	return {
 		AVEN_RELAY: '0',
 		AVENOS_DHT_PUBLIC: '1',
-		AVENOS_P2P_DIRECT_ONLY: '1',
-		AVENOS_P2P_IGNORE_RELAY_ENV: '1'
 	}
 }
 
@@ -258,38 +237,20 @@ export async function startP2pSignal(repoRoot = REPO_ROOT): Promise<P2pSignalHan
 	const dhtPort = Number(process.env.AVENOS_P2P_SIGNAL_PORT || P2P_DHT_UDP_PORT_DEFAULT)
 
 	if (!isEmbeddedLocalRelayHost(relayHostNorm)) {
-		const bootstrap = centralBootstrap(relayHostNorm, dhtPort)
+		const relayCfg = await resolveAppStoreRelayConfig(relayHostNorm, dhtPort, {
+			warnLabel: 'p2p-signal',
+		})
 		const envAugment: Record<string, string> = {
 			AVEN_RELAY: '1',
 			AVEN_RELAY_URL: relayUrlRaw,
 			AVENOS_DHT_ISOLATED: '1',
-			AVENOS_DHT_BOOTSTRAP: bootstrap,
-			AVENOS_P2P_DIRECT_ONLY: '1',
-			AVENOS_P2P_IGNORE_RELAY_ENV: '1'
+			AVENOS_DHT_BOOTSTRAP: relayCfg.dhtBootstrap,
 		}
-		console.log(
-			`[p2p-signal] central discovery (remote host) — bootstrap=${bootstrap} (no local subprocess; data plane direct P2P)`
-		)
+		console.log(`[p2p-signal] central discovery (remote host) — bootstrap=${relayCfg.dhtBootstrap}`)
 		return { envAugment, async dispose() {} }
 	}
 
-	const relayDir = path.join(repoRoot, 'infra/p2p-signal-relay')
-	if (!existsSync(path.join(relayDir, 'node_modules'))) {
-		console.warn('[p2p-signal] installing relay deps (`bun install` in infra/p2p-signal-relay)…')
-		const i = Bun.spawn(['bun', 'install'], { cwd: relayDir, stdout: 'inherit', stderr: 'inherit' })
-		const code = await i.exited
-		if (code !== 0) {
-			throw new Error(`p2p-signal relay: bun install exited ${code}`)
-		}
-	}
-
-	const relayUdpPort = Number(
-		process.env.AVENOS_P2P_SIGNAL_RELAY_PORT || P2P_RELAY_UDP_PORT_DEFAULT
-	)
 	freeUdpPort(dhtPort, 'DHT')
-	freeUdpPort(relayUdpPort, 'relay')
-
-	const keysDir = path.join(repoRoot, '.avenOS', 'dev', 'p2p-signal')
 
 	const dhtManifest = path.join(repoRoot, 'projects', 'aven-p2p-signal', 'Cargo.toml')
 	const baseEnv = { ...process.env } as Record<string, string>
@@ -318,63 +279,14 @@ export async function startP2pSignal(repoRoot = REPO_ROOT): Promise<P2pSignalHan
 		throw new Error(`aven-p2p-signal-dht invalid ready handshake: ${JSON.stringify(dhtLine)}`)
 	}
 
-	const relayArgv = relaySpawnArgv(relayDir)
-	const relayProc = Bun.spawn(relayArgv, {
-		cwd: relayDir,
-		stdout: 'pipe',
-		stderr: 'inherit',
-		stdin: 'ignore',
-		env: {
-			...process.env,
-			AVENOS_P2P_SIGNAL_BOOTSTRAP: bootstrap,
-			AVENOS_P2P_SIGNAL_KEYS_DIR: keysDir,
-			AVENOS_P2P_SIGNAL_RELAY_HOST: process.env.AVENOS_P2P_SIGNAL_RELAY_HOST ?? '127.0.0.1',
-			AVENOS_P2P_SIGNAL_RELAY_PORT: String(relayUdpPort)
-		}
-	})
-
-	let relayLine: Record<string, unknown>
-	try {
-		relayLine = await readFirstJsonLine(relayProc.stdout, 'blind-relay')
-	} catch (e) {
-		relayProc.kill('SIGKILL')
-		dht.kill('SIGKILL')
-		throw e
-	}
-
-	if (relayLine.ready !== true) {
-		relayProc.kill('SIGKILL')
-		dht.kill('SIGKILL')
-		throw new Error(`blind relay invalid ready: ${JSON.stringify(relayLine)}`)
-	}
-
-	const pkHex = typeof relayLine.publicKey === 'string' ? relayLine.publicKey.trim() : ''
-	const rHost =
-		typeof relayLine.host === 'string'
-			? relayLine.host
-			: (process.env.AVENOS_P2P_SIGNAL_RELAY_HOST ?? '127.0.0.1')
-	const rPort = typeof relayLine.port === 'number' ? relayLine.port : relayUdpPort
-	if (!pkHex || pkHex.length !== 64) {
-		relayProc.kill('SIGKILL')
-		dht.kill('SIGKILL')
-		throw new Error(`blind relay publicKey invalid (${pkHex.slice(0, 16)}…)`)
-	}
-
-	const relayAddr = `${rHost}:${rPort}`
-
 	const envAugment: Record<string, string> = {
 		AVEN_RELAY: '1',
 		AVEN_RELAY_URL: relayUrlRaw,
 		AVENOS_DHT_ISOLATED: '1',
 		AVENOS_DHT_BOOTSTRAP: bootstrap,
-		AVENOS_P2P_DIRECT_ONLY: '1',
-		AVENOS_P2P_IGNORE_RELAY_ENV: '1'
 	}
 
-	console.log(
-		`[p2p-signal] central discovery (local embedded) — bootstrap=${bootstrap} relayNode=${relayAddr} relayPk=${pkHex.slice(0, 16)}… ` +
-			'(signal-stack relay only; peeroxide data plane stays direct P2P)'
-	)
+	console.log(`[p2p-signal] central discovery (local embedded) — bootstrap=${bootstrap}`)
 
 	async function gracefulKill(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
 		if (proc.exitCode != null) return
@@ -394,7 +306,6 @@ export async function startP2pSignal(repoRoot = REPO_ROOT): Promise<P2pSignalHan
 	async function dispose(): Promise<void> {
 		if (disposed) return
 		disposed = true
-		await gracefulKill(relayProc)
 		await gracefulKill(dht)
 	}
 
@@ -408,7 +319,7 @@ async function foreground(): Promise<void> {
 		JSON.stringify(
 			{
 				...envAugment,
-				note: 'AVEN_RELAY=true + AVEN_RELAY_URL → embedded local subprocesses or remote-bootstrap env only (see script). Ctrl-C stops subprocesses when embedded. Data plane: direct P2P only.'
+				note: 'AVEN_RELAY=true + AVEN_RELAY_URL → embedded local Rust DHT or remote bootstrap env. Ctrl-C stops subprocess when embedded. Connectivity: HyperDHT in-band handshake relay + holepunch.',
 			},
 			null,
 			2

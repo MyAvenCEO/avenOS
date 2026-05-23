@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { grooveRuntime } from '$lib/runtime/groove-ipc'
+import type { P2pDiagnostics } from '$lib/peer/mesh-state'
 
 export type PeerTransportStatusReply = {
 	hyperswarmRunning: boolean
@@ -9,6 +10,7 @@ export type PeerTransportStatusReply = {
 	/** Live Hyperswarm links by `did:key` — matches `PeerRowReply.peerDid`. */
 	linkedPeerDids: string[]
 	pairingCodePending?: string | null
+	p2pDiagnostics: P2pDiagnostics
 }
 
 export type PeerInviteCreateReply = {
@@ -33,6 +35,56 @@ export async function peerInviteAccept(code: string): Promise<void> {
 
 export async function peerInviteCancel(): Promise<void> {
 	await invoke<void>('plugin:peer|peer_invite_cancel')
+}
+
+/**
+ * DHT-lifecycle counters scraped from peeroxide's `tracing` events.
+ *
+ * - `dhtBootstrapped` is `true` once peeroxide-dht receives a UDP reply from the bootstrap
+ *   node — on iOS we routinely see `false` here while `hyperswarmRunning` is `true`, which
+ *   proves the bootstrap UDP packets are being dropped by the network (router / carrier).
+ * - `lastAnnounceClosest === 0` means the announce committed to zero DHT nodes (same root cause).
+ * - `lastLookupPeerCount === 1` on a quiet topic = "only me" — peer pairing will never link
+ *   until the OTHER device's announce reaches the bootstrap too.
+ * - `handshakeRelayForwardTotal`: DHT forwarded `PEER_HANDSHAKE` between peers (CGNAT relay path).
+ * - `swarmPeerConnectedTotal`: outbound swarm established a UDX link.
+ * - `lastConnectRelayed` / `lastRemoteHolepunchable`: last HyperDHT “deciding connection path” scrape after Noise (~`relayed=` / `remote_holepunchable=`). Expect `true`/`true` on Fly-relay pairing when swarm holepunch metadata is wired.
+ * - `holepunchBlindRelayFallbackTotal`: holepunch failed and stack fell back to blind relay (`relay_through`).
+ */
+export type DhtTraceSnapshot = {
+	dhtBootstrapped: boolean
+	lastAnnounceClosest: number
+	lastLookupPeerCount: number
+	discoveredPeerTotal: number
+	handshakeRelayForwardTotal: number
+	swarmPeerConnectedTotal: number
+	/** Last `relayed` from Noise “deciding connection path” (`null` if not seen yet). */
+	lastConnectRelayed: boolean | null
+	/** Last `remote_holepunchable` from the same tracing line. */
+	lastRemoteHolepunchable: boolean | null
+	/** Times holepunch failed and the stack fell back to blind relay (`relays_through`). */
+	holepunchBlindRelayFallbackTotal: number
+}
+
+export async function avenosDhtTraceSnapshot(): Promise<DhtTraceSnapshot> {
+	return invoke<DhtTraceSnapshot>('avenos_dht_trace_snapshot')
+}
+
+/** One-shot HTTPS GET to the relay manifest URL. Proves TCP/443 reachability separately from UDP DHT. */
+export type RelayHttpsProbe = {
+	ok: boolean
+	status?: number
+	latencyMs?: number
+	error?: string
+	url?: string
+}
+
+export async function avenosRelayHttpsProbe(): Promise<RelayHttpsProbe> {
+	return invoke<RelayHttpsProbe>('avenos_relay_https_probe')
+}
+
+export async function avenosRecentRustLogs(): Promise<string[]> {
+	return invoke<string[]>('avenos_recent_rust_logs')
 }
 
 export type PeerRowReply = {

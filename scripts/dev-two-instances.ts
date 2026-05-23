@@ -14,7 +14,9 @@
  *
  * Prerequisites:
  *   - Run `bun run dev:app:mac` or `bun run dev:app:linux` once first so deps compile.
- *   - Alternatively, pre-build: `bun run build:app:mac` / `build:app:linux` (slower first build).
+ *   - Alternatively, pre-build a local unsigned release via `bun run --cwd lib/app tauri:build:macos`
+ *     or `tauri:build:linux` (slower first build). NOTE: `bun run release:app:mac` / `bun run release:app:ios`
+ *     now produce signed App Store artifacts AND upload them — not what you want for two-instance dev.
  *
  * Reset vaults during dev (destructive — removes all saved personas):
  *   rm -rf "<Documents>/.avenOS/vaults"  (see vaultsHint printed at startup)

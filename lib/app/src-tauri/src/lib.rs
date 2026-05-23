@@ -2,7 +2,8 @@ mod crypto;
 mod genesis;
 mod jazz;
 mod jazz_auth;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod log_ring;
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 mod peer_catchup;
 mod peer_mesh_state;
 mod peers;
@@ -420,6 +421,90 @@ async fn destroy_sandbox_webview(_window: Window, _label: String) -> Result<(), 
 	Err("sandbox webviews are unsupported on this platform.".into())
 }
 
+#[tauri::command]
+fn avenos_recent_rust_logs() -> Vec<String> {
+	log_ring::recent_lines()
+}
+
+/// DHT/announce lifecycle counters scraped from the `tracing` bridge in [`log_ring`].
+///
+/// Surfaced separately from `peer_transport_status` so the frontend can render them
+/// even if the Hyperswarm actor hasn't booted yet. Equivalent JSON shape on macOS and iOS.
+#[tauri::command]
+fn avenos_dht_trace_snapshot() -> serde_json::Value {
+	let s = log_ring::dht_trace_snapshot();
+	serde_json::json!({
+		"dhtBootstrapped": s.bootstrapped,
+		"lastAnnounceClosest": s.last_announce_closest,
+		"lastLookupPeerCount": s.last_lookup_peer_count,
+		"discoveredPeerTotal": s.discovered_peer_total,
+		"handshakeRelayForwardTotal": s.handshake_relay_forward_total,
+		"swarmPeerConnectedTotal": s.swarm_peer_connected_total,
+		"lastConnectRelayed": s.last_connect_relayed,
+		"lastRemoteHolepunchable": s.last_remote_holepunchable,
+		"holepunchBlindRelayFallbackTotal": s.holepunch_blind_relay_fallback_total,
+	})
+}
+
+/// One-shot HTTPS reachability probe to the configured relay host.
+///
+/// `peer_transport_status` shows whether `udp/<bootstrap>` is healthy (via DHT counters);
+/// this command shows whether the *same network path* reaches the relay over TCP/443.
+/// When TCP works and UDP doesn't, we know UDP is being dropped by the router / carrier
+/// (the classic iOS-on-locked-down-WiFi failure mode).
+#[tauri::command]
+async fn avenos_relay_https_probe() -> serde_json::Value {
+	let host = std::env::var("AVEN_RELAY_URL")
+		.ok()
+		.or_else(|| option_env!("AVEN_RELAY_URL").map(|s| s.to_string()))
+		.unwrap_or_default();
+	if host.trim().is_empty() {
+		return serde_json::json!({
+			"ok": false,
+			"error": "AVEN_RELAY_URL unset (no compile-time embed, no runtime override)",
+		});
+	}
+	let trimmed = host
+		.trim()
+		.trim_start_matches("https://")
+		.trim_start_matches("http://")
+		.trim_end_matches('/');
+	let url = format!("https://{trimmed}/.well-known/aven-relay.json");
+
+	let start = std::time::Instant::now();
+	let client = match reqwest::Client::builder()
+		.timeout(std::time::Duration::from_secs(6))
+		.build()
+	{
+		Ok(c) => c,
+		Err(e) => {
+			return serde_json::json!({
+				"ok": false,
+				"error": format!("client build failed: {e}"),
+				"url": url,
+			});
+		}
+	};
+	match client.get(&url).send().await {
+		Ok(res) => {
+			let status = res.status();
+			let elapsed = start.elapsed().as_millis();
+			serde_json::json!({
+				"ok": status.is_success(),
+				"status": status.as_u16(),
+				"latencyMs": elapsed as u64,
+				"url": url,
+			})
+		}
+		Err(e) => serde_json::json!({
+			"ok": false,
+			"error": format!("{e}"),
+			"latencyMs": start.elapsed().as_millis() as u64,
+			"url": url,
+		}),
+	}
+}
+
 /// Install the global `log` subscriber.
 ///
 /// Without this, every `log::debug!` / `log::warn!` in this crate is a no-op,
@@ -431,17 +516,76 @@ async fn destroy_sandbox_webview(_window: Window, _label: String) -> Result<(), 
 /// stays at `trace` (see `peer_sync_gate.rs`) so catch-up does not flood the terminal.
 /// Users can override via `RUST_LOG` (standard `env_logger` semantics), e.g.
 /// `RUST_LOG=avenos::peer_sync_gate=trace` or pipe to a file: `2>&1 | tee avenos.log`.
-fn init_logging() {
-	let _ = env_logger::Builder::from_env(
-		env_logger::Env::default().default_filter_or("info,avenos=debug,groove::sync_manager=debug"),
-	)
-	.format_timestamp_millis()
-	.try_init();
+///
+/// macOS/iOS TestFlight builds route through `os_log` (subsystem `ceo.aven.os`) and an in-app ring
+/// buffer (`avenos_recent_rust_logs`) because iPhone Console streaming is unreliable off-device.
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+struct AppleRingLogger {
+	subsystem: String,
+}
 
-	// Bridge `tracing` events emitted by vendored jazz-tools / groove into the `log` crate
-	// (env_logger). Without this, our `tracing::warn!` / `tracing::debug!` diagnostics inside
-	// `_published_groove/sync_manager/inbox.rs` are silently dropped.
-	let _ = tracing_log::LogTracer::init();
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+impl log::Log for AppleRingLogger {
+	fn enabled(&self, metadata: &log::Metadata) -> bool {
+		metadata.level() <= log::max_level()
+	}
+
+	fn log(&self, record: &log::Record) {
+		if !self.enabled(record.metadata()) {
+			return;
+		}
+		let message = format!("{}", record.args());
+		let line = format!("{} {}: {}", record.level(), record.target(), message);
+		log_ring::push_line(line.clone());
+		let oslog = oslog::OsLog::new(&self.subsystem, record.target());
+		oslog.with_level(record.level().into(), &message);
+	}
+
+	fn flush(&self) {}
+}
+
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+fn apple_os_log_raw(category: &str, message: &str) {
+	use oslog::Level;
+	log_ring::push_line(format!("FAULT {category}: {message}"));
+	oslog::OsLog::new("ceo.aven.os", category).with_level(Level::Fault, message);
+}
+
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+fn init_apple_os_logging() -> Result<(), log::SetLoggerError> {
+	use log::LevelFilter;
+	log::set_max_level(LevelFilter::Debug);
+	log::set_boxed_logger(Box::new(AppleRingLogger {
+		subsystem: "ceo.aven.os".to_string(),
+	}))
+}
+
+fn init_logging() {
+	#[cfg(any(target_os = "ios", target_os = "macos"))]
+	if let Err(e) = init_apple_os_logging() {
+		eprintln!("avenos: oslog init failed: {e}");
+	}
+
+	#[cfg(not(any(target_os = "ios", target_os = "macos")))]
+	{
+		let _ = env_logger::Builder::from_env(
+			env_logger::Env::default().default_filter_or("info,avenos=debug,groove::sync_manager=debug"),
+		)
+		.format_timestamp_millis()
+		.try_init();
+	}
+
+	// Forward `tracing::*` events from peeroxide / peeroxide-dht / groove into the `log`
+	// crate. Without this, the announce/lookup/connect lifecycle logs were silently
+	// dropped — leaving us blind during pairing rendezvous. The Apple `log::Log` impl
+	// then forwards into the in-app ring buffer + `os_log`. Replaces the previous
+	// `tracing_log::LogTracer::init()` call, which went the wrong direction (log → tracing).
+	log_ring::init_tracing_bridge();
+
+	log::info!(
+		target: "avenos",
+		"Rust logging ready (Console filter: subsystem:ceo.aven.os)",
+	);
 }
 
 /// Idempotently drain JazzClient + flush SurrealKV.
@@ -489,11 +633,18 @@ fn drain_jazz_blocking(app_handle: &AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+	#[cfg(any(target_os = "ios", target_os = "macos"))]
+	apple_os_log_raw("boot", "avenOS Rust runtime starting");
+
 	init_logging();
+
+	#[cfg(any(target_os = "ios", target_os = "macos"))]
+	apple_os_log_raw("boot", "avenOS Rust logging initialized");
 
 	tauri::Builder::default()
 		.plugin(tauri_plugin_self::init())
 		.plugin(tauri_plugin_peer::init())
+		.plugin(tauri_plugin_clipboard_manager::init())
 		.manage(genesis::GenesisState::default())
 		.manage(jazz::ManagedJazz::default())
 		.setup(|app| {
@@ -502,7 +653,7 @@ pub fn run() {
 			}
 
 			app.manage(jazz::runtime::spawn_groove_actor(app.handle().clone()));
-			#[cfg(any(target_os = "macos", target_os = "linux"))]
+			#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 			app.manage(peer_catchup::spawn_peer_catchup_worker(app.handle().clone()));
 
 			let state = app.state::<genesis::GenesisState>();
@@ -604,7 +755,7 @@ pub fn run() {
 			// time a peer is added/removed; mirror that into a mesh-refresh + an **adaptive** timer
 			// (fast tick right after startup, slower steady-state) so new swarm links register with
 			// Jazz sync without fixed 10s latency.
-			#[cfg(any(target_os = "macos", target_os = "linux"))]
+			#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 			{
 				use groove::sync_manager::ClientId;
 				use std::collections::HashSet;
@@ -650,6 +801,9 @@ pub fn run() {
 			serve_vibe_sandbox(ctx.app_handle(), &request)
 		})
 		.invoke_handler(tauri::generate_handler![
+			avenos_recent_rust_logs,
+			avenos_dht_trace_snapshot,
+			avenos_relay_https_probe,
 			create_sandbox_webview,
 			set_sandbox_webview_rect,
 			destroy_sandbox_webview,

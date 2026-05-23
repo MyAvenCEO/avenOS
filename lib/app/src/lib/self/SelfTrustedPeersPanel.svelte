@@ -4,6 +4,7 @@
 	import { listen } from '@tauri-apps/api/event'
 	import { jazzPeerMeshRefresh } from '$lib/jazz/api'
 	import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
+	import { copyToClipboard } from '$lib/runtime/clipboard'
 	import type { PeerRowReply } from '$lib/peer/api'
 	import {
 		peerInviteAccept,
@@ -12,6 +13,11 @@
 		peerList,
 		peerRevoke,
 		peerSwarmRetry,
+		avenosDhtTraceSnapshot,
+		avenosRelayHttpsProbe,
+		avenosRecentRustLogs,
+		type DhtTraceSnapshot,
+		type RelayHttpsProbe,
 	} from '$lib/peer/api'
 	import { deviceSession } from '$lib/self/device-session-store'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
@@ -35,6 +41,72 @@
 	let actionErr = $state<string | undefined>()
 	let actionBusy = $state(false)
 	let localPairingLabel = $state<string | undefined>(undefined)
+	let rustLogs = $state<string[]>([])
+	let diagnosticsCopied = $state(false)
+	let diagnosticsCopying = $state(false)
+	let diagnosticsCopyError = $state<string | undefined>(undefined)
+	let dhtTrace = $state<DhtTraceSnapshot | undefined>(undefined)
+	let httpsProbe = $state<RelayHttpsProbe | undefined>(undefined)
+	let httpsProbeBusy = $state(false)
+
+	function diagnosticsPayload() {
+		if (!mesh?.p2pDiagnostics) return null
+		return {
+			hyperswarmRunning: mesh.hyperswarmRunning,
+			hyperswarmStartError: mesh.hyperswarmStartError ?? null,
+			localPkPrefixHex: mesh.localPkPrefixHex || null,
+			pairingCodePending: mesh.pairingCodePending ?? null,
+			dhtTrace: dhtTrace ?? null,
+			relayHttpsProbe: httpsProbe ?? null,
+			recentRustLogs: rustLogs,
+			...mesh.p2pDiagnostics,
+		}
+	}
+
+	const diagnosticsJson = $derived.by(() => {
+		const payload = diagnosticsPayload()
+		return payload ? JSON.stringify(payload, null, 2) : ''
+	})
+
+	async function loadRustLogs(): Promise<void> {
+		if (!tauri) return
+		try {
+			rustLogs = await avenosRecentRustLogs()
+		} catch {
+			rustLogs = []
+		}
+		try {
+			dhtTrace = await avenosDhtTraceSnapshot()
+		} catch {
+			dhtTrace = undefined
+		}
+	}
+
+	async function runHttpsProbe(): Promise<void> {
+		if (!tauri || httpsProbeBusy) return
+		httpsProbeBusy = true
+		const startMs = Date.now()
+		try {
+			httpsProbe = await avenosRelayHttpsProbe()
+		} catch (e) {
+			httpsProbe = {
+				ok: false,
+				error: e instanceof Error ? e.message : String(e),
+				latencyMs: Date.now() - startMs,
+			}
+		} finally {
+			httpsProbeBusy = false
+		}
+	}
+
+	const httpsProbeSummary = $derived.by(() => {
+		if (httpsProbeBusy) return 'probing TCP/443…'
+		if (!httpsProbe) return 'TCP/443 probe not run yet'
+		if (httpsProbe.ok) {
+			return `TCP/443 ok · ${httpsProbe.status ?? '???'} · ${httpsProbe.latencyMs ?? '?'}ms`
+		}
+		return `TCP/443 FAILED · ${httpsProbe.error ?? 'unknown'}`
+	})
 
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
@@ -224,14 +296,57 @@
 	async function copyPairingCode(code: string): Promise<void> {
 		const normalized = code.trim()
 		if (!normalized) return
-		try {
-			await navigator.clipboard.writeText(normalized)
+		const ok = await copyToClipboard(normalized)
+		if (ok) {
 			copiedPairingCode = normalized
 			window.setTimeout(() => {
 				if (copiedPairingCode === normalized) copiedPairingCode = undefined
 			}, 2000)
-		} catch {
+		} else {
 			copiedPairingCode = undefined
+		}
+	}
+
+	/**
+	 * Single-shot "Copy diagnostics" — always re-fetches every diagnostic source first
+	 * (Rust logs, DHT trace counters, HTTPS reachability probe) so the clipboard payload
+	 * captures the CURRENT state of the box rather than whatever was lazy-loaded earlier.
+	 * On macOS App Sandbox the native clipboard plugin is required because
+	 * `navigator.clipboard.writeText()` silently fails — see `copyToClipboard`.
+	 */
+	async function copyDiagnostics(): Promise<void> {
+		if (!mesh?.p2pDiagnostics) return
+		diagnosticsCopying = true
+		diagnosticsCopyError = undefined
+		try {
+			if (tauri) {
+				const [logsResult, traceResult] = await Promise.allSettled([
+					avenosRecentRustLogs(),
+					avenosDhtTraceSnapshot(),
+				])
+				if (logsResult.status === 'fulfilled') rustLogs = logsResult.value
+				if (traceResult.status === 'fulfilled') dhtTrace = traceResult.value
+				await runHttpsProbe()
+			}
+			const payload = diagnosticsPayload()
+			if (!payload) {
+				diagnosticsCopyError = 'no diagnostics available'
+				return
+			}
+			const text = JSON.stringify(payload, null, 2)
+			const ok = await copyToClipboard(text)
+			if (ok) {
+				diagnosticsCopied = true
+				window.setTimeout(() => {
+					diagnosticsCopied = false
+				}, 2500)
+			} else {
+				diagnosticsCopyError = 'clipboard write failed (check OS permissions)'
+			}
+		} catch (e) {
+			diagnosticsCopyError = e instanceof Error ? e.message : String(e)
+		} finally {
+			diagnosticsCopying = false
 		}
 	}
 
@@ -340,6 +455,50 @@
 		</h3>
 
 		<div class="flex flex-col items-center gap-4 px-1 py-2 sm:py-4">
+			{#if mesh?.p2pDiagnostics}
+				<details
+					class="text-muted-foreground w-full max-w-md text-left text-[10px] leading-relaxed"
+					ontoggle={(e) => {
+						if ((e.currentTarget as HTMLDetailsElement).open) void loadRustLogs()
+					}}
+				>
+					<summary class="flex cursor-pointer list-none items-center justify-between gap-2 select-none font-medium [&::-webkit-details-marker]:hidden">
+						<span>P2P diagnostics</span>
+						<button
+							type="button"
+							class="text-primary hover:text-primary/80 shrink-0 text-[9px] font-semibold tracking-wide uppercase disabled:opacity-50"
+							disabled={diagnosticsCopying}
+							onclick={(e) => {
+								e.preventDefault()
+								e.stopPropagation()
+								void copyDiagnostics()
+							}}
+						>
+							{#if diagnosticsCopying}
+								copying…
+							{:else if diagnosticsCopied}
+								Copied
+							{:else}
+								Copy all
+							{/if}
+						</button>
+					</summary>
+					<div class="mt-2 space-y-1.5">
+						{#if diagnosticsCopyError}
+							<p class="text-destructive text-[10px]">{diagnosticsCopyError}</p>
+						{/if}
+						<p
+							class="text-muted-foreground/80 text-[10px] tracking-tight"
+							title="Set after the next Copy all click — runs an HTTPS GET against the relay's /.well-known/aven-relay.json"
+						>
+							{httpsProbeSummary}
+						</p>
+						<pre
+							class="overflow-x-auto rounded-lg border border-border/50 bg-muted/20 p-2 font-mono text-[10px] whitespace-pre-wrap select-text">{diagnosticsJson}</pre>
+					</div>
+				</details>
+			{/if}
+
 			{#if mesh?.hyperswarmStartError}
 				<div class="max-w-sm space-y-2 text-center">
 					<p class="text-destructive text-xs leading-relaxed">{mesh.hyperswarmStartError}</p>

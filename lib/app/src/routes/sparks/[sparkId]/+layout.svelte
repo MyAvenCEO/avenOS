@@ -2,8 +2,11 @@
 	import { goto } from '$app/navigation'
 	import { page } from '$app/state'
 	import { jazzStore } from '$lib/jazz/store.svelte'
+	import SlideAsideLayout from '$lib/ui/SlideAsideLayout.svelte'
 
-	let { children } = $props()
+	let { children: pageChildren } = $props()
+
+	let asideOpen = $state(false)
 
 	const sparkParam = $derived(String((page.params as { sparkId?: string }).sparkId ?? ''))
 	const decodedSparkId = $derived(decodeURIComponent(sparkParam))
@@ -40,18 +43,43 @@
 			match: (p: string) => p.startsWith(`${sparkBase}/gallery`),
 		},
 	])
+
+	const mainClass = $derived(
+		isTalkView
+			? 'relative flex min-h-0 min-w-0 flex-col overflow-hidden'
+			: 'relative min-h-0 min-w-0 overflow-y-auto',
+	)
+
+	const contentClass = $derived(
+		isTalkView ? 'flex min-h-0 flex-1 flex-col pb-20 md:pb-0' : 'pb-20 md:pb-0',
+	)
+
+	$effect(() => {
+		void path
+		asideOpen = false
+	})
+
+	function closeAsideOnNav() {
+		asideOpen = false
+	}
 </script>
 
 <svelte:head>
 	<title>{sparkMeta?.name ?? 'Spark'} · AvenOS</title>
 </svelte:head>
 
-<div class="grid h-full min-h-0 w-full grid-cols-[12rem_1fr]">
-	<aside
-		class="flex min-h-0 flex-col border-r border-border/60 bg-card/20 px-3 pt-3 pb-6"
-		aria-label="Spark views"
-	>
-		<div class="mb-3 space-y-2 px-2">
+<SlideAsideLayout
+	bind:open={asideOpen}
+	asideLabel="Spark views"
+	asideWidthClass="w-[min(85vw,12rem)] max-w-[12rem]"
+	desktopGridClass="md:grid-cols-[12rem_minmax(0,1fr)]"
+	class="min-h-0 flex-1"
+	{mainClass}
+	{contentClass}
+	children={main}
+>
+	{#snippet aside()}
+		<div class="mb-3 space-y-2 px-2 pt-2">
 			<button
 				type="button"
 				class="text-muted-foreground hover:text-foreground text-[10px] font-semibold uppercase tracking-wide"
@@ -72,6 +100,7 @@
 			<a
 				href="/self/workspaces?spark={encodeURIComponent(decodedSparkId)}"
 				class="text-primary hover:underline text-[10px] font-semibold uppercase tracking-wide"
+				onclick={closeAsideOnNav}
 			>
 				Share
 			</a>
@@ -89,22 +118,21 @@
 						? 'bg-accent/15 text-foreground font-medium'
 						: 'text-muted-foreground hover:bg-accent/10 hover:text-foreground'}"
 					aria-current={active ? 'page' : undefined}
+					onclick={closeAsideOnNav}
 				>
 					{tab.label}
 				</a>
 			{/each}
 		</nav>
-	</aside>
+	{/snippet}
 
-	<main
-		class="flex min-h-0 flex-col {isTalkView ? 'overflow-hidden' : 'overflow-y-auto'}"
-	>
+	{#snippet main()}
 		<div
 			class="mx-auto flex w-full flex-col px-4 sm:px-6
 				{isGalleryView ? 'max-w-5xl' : 'max-w-3xl'}
 				{isTalkView ? 'min-h-0 flex-1 py-4 sm:py-6' : 'py-6 sm:py-8'}"
 		>
-			{@render children()}
+			{@render pageChildren()}
 		</div>
-	</main>
-</div>
+	{/snippet}
+</SlideAsideLayout>

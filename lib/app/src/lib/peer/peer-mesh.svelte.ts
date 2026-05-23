@@ -2,7 +2,6 @@ import { browser } from '$app/environment'
 import { get } from 'svelte/store'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { deviceSession } from '$lib/self/device-session-store'
-import { isIosHostedTauriShell } from '$lib/tauri/tauri-shell-platform'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import type { PeerMeshStatusReply } from '$lib/peer/mesh-state'
 import {
@@ -22,7 +21,7 @@ let storeGeneration = 0
  * Initial hydrate + push events; `avenos:runtime` mesh is handled by `attachAvenosRuntimeBridge`.
  */
 export function startPeerMeshStore(): () => void {
-	if (!browser || !isTauriRuntime() || isIosHostedTauriShell()) {
+	if (!browser || !isTauriRuntime()) {
 		return () => {}
 	}
 

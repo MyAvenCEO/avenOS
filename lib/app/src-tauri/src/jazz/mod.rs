@@ -303,7 +303,7 @@ async fn with_connected_client(
 	self_state: &SelfState,
 ) -> Result<Arc<JazzClient>, String> {
 	if !self_state.is_unlocked() {
-		#[cfg(any(target_os = "macos", target_os = "linux"))]
+		#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 		crate::peer_catchup::notify_jazz_connection_teardown(app).await;
 		jazz.reset_connection().await;
 		return Err("locked: unlock AvenOS identity first".into());
@@ -338,7 +338,7 @@ async fn with_connected_client(
 				let old = jc.client.take();
 				jc.linked_identity = None;
 				jazz.shell.lock().await.take();
-				#[cfg(any(target_os = "macos", target_os = "linux"))]
+				#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 				crate::peer_catchup::notify_jazz_connection_teardown(app).await;
 				let _epoch = jazz.bump_conn_epoch();
 				jazz.reset_mesh_acl_catchup();
@@ -902,7 +902,7 @@ async fn jazz_connect(
 		admin_secret: None,
 	};
 
-	#[cfg(target_os = "macos")]
+	#[cfg(any(target_os = "macos", target_os = "ios"))]
 	{
 		use std::sync::Arc;
 
@@ -926,7 +926,7 @@ async fn jazz_connect(
 		return Ok(client);
 	}
 
-	#[cfg(not(target_os = "macos"))]
+	#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 	{
 		let client = JazzClient::connect(ctx).await.map_err(format_jazz_err)?;
 		crate::schema_migrations::stamp_current_vault_snapshot(&data_dir, &schema)?;
@@ -937,7 +937,7 @@ async fn jazz_connect(
 /// Flip shell gate + start allowlist/register sidecar exactly once per `conn_epoch`.
 fn mark_shell_local_ready_for_mesh(app: &tauri::AppHandle, mj: &ManagedJazz, client: &Arc<JazzClient>) {
 	mj.mesh_local_shell_gate.store(true, Ordering::Release);
-	#[cfg(target_os = "macos")]
+	#[cfg(any(target_os = "macos", target_os = "ios"))]
 	{
 		let epoch = mj.conn_epoch.load(Ordering::Acquire);
 		let prev = mj.mesh_sidecar_last_epoch.swap(epoch, Ordering::AcqRel);
@@ -948,7 +948,7 @@ fn mark_shell_local_ready_for_mesh(app: &tauri::AppHandle, mj: &ManagedJazz, cli
 }
 
 /// Hyperswarm allowlist + existing link registration — must not run under `conn` lock (blocks UI IPC).
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn spawn_initial_peer_mesh(app: &tauri::AppHandle, client: Arc<JazzClient>, epoch: u64) {
 	let app = app.clone();
 	tauri::async_runtime::spawn(async move {
@@ -1015,7 +1015,7 @@ fn spawn_initial_peer_mesh(app: &tauri::AppHandle, client: Arc<JazzClient>, epoc
 	});
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 fn spawn_initial_peer_mesh(_app: &tauri::AppHandle, _client: Arc<JazzClient>, _epoch: u64) {}
 
 async fn jazz_shell_ready(
@@ -1054,7 +1054,7 @@ async fn jazz_shell_ready(
 	// One catch-up rebroadcast per conn epoch — not on every vault-table invalidation reload.
 	let first_acl_catchup = !mj.mesh_acl_rebroadcast_done.swap(true, Ordering::AcqRel);
 	if first_acl_catchup {
-		#[cfg(any(target_os = "macos", target_os = "linux"))]
+		#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 		{
 			let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
 			let live_n = bridge.snapshot_remote_clients().await.len();
@@ -1079,12 +1079,12 @@ async fn jazz_shell_ready(
 	Ok(arc)
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 async fn publish_peer_mesh_after_acl(app: &tauri::AppHandle) {
 	crate::peer_mesh_state::publish_peer_mesh_snapshot(app).await;
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "ios")))]
 async fn publish_peer_mesh_after_acl(_app: &tauri::AppHandle) {}
 
 /// Load biscuit sync ACL once; mesh reconcile must not re-run full `hydrate_shell` every tick.
@@ -1112,7 +1112,7 @@ pub(crate) async fn groove_ipc_status(
 	self_state: &SelfState,
 ) -> Result<JazzStatusReply, String> {
 	if !self_state.is_unlocked() {
-		#[cfg(any(target_os = "macos", target_os = "linux"))]
+		#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 		crate::peer_catchup::notify_jazz_connection_teardown(app).await;
 		jazz.reset_connection().await;
 		return Ok(JazzStatusReply {
@@ -1128,7 +1128,7 @@ pub(crate) async fn groove_ipc_status(
 		let stale = jc.client.is_some() || jc.linked_identity.is_some();
 		drop(jc);
 		if stale {
-			#[cfg(any(target_os = "macos", target_os = "linux"))]
+			#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 			crate::peer_catchup::notify_jazz_connection_teardown(app).await;
 			jazz.reset_connection().await;
 		}
@@ -1180,7 +1180,7 @@ pub(crate) async fn groove_ipc_bootstrap(
 				"defaultSparkUrn": jazz_engine::spark_urn(shell.default_spark),
 				"tables": tables.clone(),
 			}));
-			#[cfg(any(target_os = "macos", target_os = "linux"))]
+			#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 			{
 				if let Err(e) = execute_mesh_refresh_full(app, jazz).await {
 					log::debug!(
@@ -1225,7 +1225,7 @@ pub(crate) async fn groove_ipc_session(
 }
 
 /// Re-register Groove P2P sync clients + Hyperswarm allowlist + per-pair topics after the peer table changes.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub(crate) async fn groove_ipc_peer_mesh_refresh(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -1243,7 +1243,7 @@ pub(crate) async fn groove_ipc_peer_mesh_refresh(
 	})
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 pub(crate) async fn groove_ipc_peer_mesh_refresh() -> Result<JazzPeerMeshRefreshReply, String> {
 	Ok(JazzPeerMeshRefreshReply {
 		registered_count: 0,
@@ -1411,7 +1411,7 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 	jazz.invalidate_vault_shell();
 	let _shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
 
-	#[cfg(target_os = "macos")]
+	#[cfg(any(target_os = "macos", target_os = "ios"))]
 	{
 		use tauri_plugin_peer::HyperswarmGrooveBridge;
 		let bridge = app.state::<HyperswarmGrooveBridge>();
@@ -1571,7 +1571,7 @@ pub(crate) async fn groove_ipc_jazz_create(
 
 		let _ = jazz.change_tx.send(table.clone());
 
-		#[cfg(target_os = "macos")]
+		#[cfg(any(target_os = "macos", target_os = "ios"))]
 		{
 			let _ = execute_mesh_refresh_full(app, jazz).await?;
 		}
@@ -1848,7 +1848,7 @@ pub(crate) async fn groove_ipc_jazz_unsubscribe(jazz: &ManagedJazz, table: Strin
 
 /// Groove Jazz sync registration + outbound catch-up (Hyperswarm allowlist/topics in [`PeerCtl`];
 /// coalesced flushes via [`crate::peer_catchup`]).
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 pub(crate) async fn refresh_peer_mesh_groove_register_primitives(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -1934,7 +1934,7 @@ pub(crate) async fn refresh_peer_mesh_groove_register_primitives(
 	Ok(n)
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "ios")))]
 pub(crate) async fn refresh_peer_mesh_groove_register_primitives(
 	_app: &tauri::AppHandle,
 	_jazz: &ManagedJazz,
@@ -1977,11 +1977,11 @@ pub(crate) async fn execute_mesh_snapshot(
 		vec![]
 	};
 
-	#[cfg(any(target_os = "macos", target_os = "linux"))]
+	#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 	{
 		crate::peer_mesh_state::assemble_mesh_snapshot(app, jazz, db_rows).await
 	}
-	#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+	#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "ios")))]
 	{
 		let _ = (app, jazz, db_rows);
 		Ok(crate::peer_mesh_state::PeerMeshStatusReply {
@@ -1989,13 +1989,24 @@ pub(crate) async fn execute_mesh_snapshot(
 			hyperswarm_start_error: None,
 			local_pk_prefix_hex: String::new(),
 			pairing_code_pending: None,
+			p2p_diagnostics: tauri_plugin_peer::P2pDiagnostics {
+				central_mode: false,
+				dht_bootstrap: String::new(),
+				joined_topic_count: 0,
+				allowlist_count: 0,
+				linked_count: 0,
+				pairing_session_active: false,
+				pairing_topic_hex: None,
+				relay_https_probe: None,
+				dht_bootstrap_closest_seen: None,
+			},
 			peers: vec![],
 		})
 	}
 }
 
 /// Actor-only: full Hyperswarm allowlist sync + Groove register path.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 pub(crate) async fn execute_mesh_refresh_full(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -2035,7 +2046,7 @@ pub(crate) async fn execute_mesh_refresh_full(
 	refresh_peer_mesh_groove_register_primitives(app, jazz, client, &allow, true).await
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "ios")))]
 pub(crate) async fn execute_mesh_refresh_full(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -2046,7 +2057,7 @@ pub(crate) async fn execute_mesh_refresh_full(
 }
 
 /// Actor-only: periodic reconcile tick (Groove register + optional DHT nudge).
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 pub(crate) async fn execute_mesh_reconcile(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -2093,7 +2104,7 @@ pub(crate) async fn execute_mesh_reconcile(
 	Ok(())
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "ios")))]
 pub(crate) async fn execute_mesh_reconcile(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -2109,12 +2120,12 @@ pub(crate) async fn refresh_peer_mesh_primitives(app: &tauri::AppHandle) -> Resu
 }
 
 /// Enqueue mesh reconcile on the Groove actor.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub(crate) async fn peer_mesh_reconcile_tick(app: &tauri::AppHandle) -> Result<(), String> {
 	runtime::groove_actor(app).mesh_reconcile().await
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 pub(crate) async fn peer_mesh_reconcile_tick(app: &tauri::AppHandle) -> Result<(), String> {
 	runtime::groove_actor(app).mesh_reconcile().await
 }
@@ -2153,7 +2164,7 @@ pub(crate) async fn execute_apply_peer_invite(
 	crate::peers::upsert_remote_peer_row(client.as_ref(), &p.remote_did, &device_label, "active")
 		.await?;
 
-	#[cfg(target_os = "macos")]
+	#[cfg(any(target_os = "macos", target_os = "ios"))]
 	{
 		use std::sync::Arc;
 		let ctl = app.state::<Arc<tauri_plugin_peer::PeerCtl>>();
@@ -2283,12 +2294,12 @@ pub(crate) async fn groove_runtime_dispatch(
 			groove_ipc_jazz_unsubscribe(mj, table).await?;
 			Ok(serde_json::Value::Null)
 		}
-		#[cfg(target_os = "macos")]
+		#[cfg(any(target_os = "macos", target_os = "ios"))]
 		"peermeshrefresh" => {
 			serde_json::to_value(groove_ipc_peer_mesh_refresh(app, mj, ss).await?)
 				.map_err(|e| e.to_string())
 		}
-		#[cfg(not(target_os = "macos"))]
+		#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 		"peermeshrefresh" => {
 			serde_json::to_value(groove_ipc_peer_mesh_refresh().await?).map_err(|e| e.to_string())
 		}
@@ -2366,7 +2377,7 @@ pub async fn self_clear_jazz_database(
 	app: tauri::AppHandle,
 	jazz: tauri::State<'_, ManagedJazz>,
 ) -> Result<(), String> {
-	#[cfg(any(target_os = "macos", target_os = "linux"))]
+	#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 	crate::peer_catchup::notify_jazz_connection_teardown(&app).await;
 	jazz.reset_connection().await;
 	let root = vault_user_root(&app)?;

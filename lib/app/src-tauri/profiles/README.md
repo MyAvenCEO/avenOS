@@ -6,4 +6,4 @@ Never commit provisioning profiles (`*.provisionprofile`). The macOS TrackFlight
 profiles/mac-app-store.provisionprofile
 ```
 
-…it copies from `AVEN_APP_STORE_PROVISIONING_PROFILE_MACOS` automatically when you run `bun run build:app:mac:appstore`.
+…it copies from `AVEN_APP_STORE_PROVISIONING_PROFILE_MACOS` automatically when you run `bun run release:app:mac <N>`.

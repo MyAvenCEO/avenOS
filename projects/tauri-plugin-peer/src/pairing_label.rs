@@ -1,6 +1,6 @@
 //! One-frame label exchange on new pairing connections so each side learns the remote display name.
 
-#![cfg(any(target_os = "macos", target_os = "linux"))]
+#![cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 
 use std::time::Duration;
 

@@ -1,5 +1,5 @@
 //! Hyperswarm secret-stream sockets → Jazz [`groove::peer_transport::PeerTransport`].
-#![cfg(target_os = "macos")]
+#![cfg(any(target_os = "macos", target_os = "ios"))]
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};

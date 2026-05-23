@@ -12,13 +12,15 @@ use std::sync::Arc;
 use libudx::{RuntimeHandle, UdxRuntime};
 use peeroxide_dht::crypto::hash;
 use peeroxide_dht::hyperdht::{
-    self, HyperDhtConfig, HyperDhtHandle, KeyPair, PeerConnection, ServerEvent,
+    self, handle_peer_holepunch_reply, HolepunchServerPeerState, HyperDhtConfig, HyperDhtHandle,
+    KeyPair, PeerConnection, ServerEvent,
 };
 use peeroxide_dht::hyperdht_messages::{
-    encode_handshake_to_bytes, HandshakeMessage, NoisePayload, RelayThroughInfo, SecretStreamInfo,
-    UdxInfo, MODE_REPLY,
+    encode_handshake_to_bytes, HandshakeMessage, HolepunchInfo, NoisePayload, RelayInfo,
+    RelayThroughInfo, SecretStreamInfo, UdxInfo, MODE_REPLY,
 };
 use peeroxide_dht::messages::Ipv4Peer;
+use peeroxide_dht::socket_pool::SocketPool;
 use peeroxide_dht::noise::Keypair as NoiseKeypair;
 use peeroxide_dht::noise_wrap::NoiseWrap;
 use peeroxide_dht::secret_stream::SecretStream;
@@ -32,6 +34,57 @@ static NEXT_STREAM_ID: AtomicU32 = AtomicU32::new(1);
 
 fn next_stream_id() -> u32 {
     NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed)
+}
+
+/// `127.0.0.0/8`, `0.0.0.0`, and IPv6 loopback never round-trip between machines — surfacing
+/// them in announce `relay_addresses` only wastes a connect attempt before falling back to the
+/// real Fly DHT relay.
+fn is_unroutable_relay_host(host: &str) -> bool {
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    if let Ok(ip) = host.parse::<std::net::Ipv4Addr>() {
+        return ip.is_loopback() || ip.is_unspecified() || ip.is_link_local();
+    }
+    if let Ok(ip) = host.parse::<std::net::Ipv6Addr>() {
+        return ip.is_loopback() || ip.is_unspecified();
+    }
+    false
+}
+
+/// Parse `suggestedIPv4@hostname:port` HyperDHT bootstrap lines into the UDP endpoint peers use
+/// for optimistic `PEER_HANDSHAKE` relay attempts. Skips non-IPv4 left sides.
+fn ipv4_peers_from_dht_bootstraps(lines: &[String]) -> Vec<Ipv4Peer> {
+    let mut out: Vec<Ipv4Peer> = Vec::new();
+    for line in lines {
+        let line = line.trim();
+        let Some(at) = line.find('@') else {
+            continue;
+        };
+        let ip = line[..at].trim();
+        if ip.parse::<std::net::Ipv4Addr>().is_err() {
+            continue;
+        }
+        let hp = line[at + 1..].trim();
+        let Some(port_s) = hp.rsplit(':').next() else {
+            continue;
+        };
+        let Ok(port) = port_s.parse::<u16>() else {
+            continue;
+        };
+        let p = Ipv4Peer {
+            host: ip.to_string(),
+            port,
+        };
+        if out.iter().any(|x| x.host == p.host && x.port == p.port) {
+            continue;
+        }
+        out.push(p);
+        if out.len() >= 3 {
+            break;
+        }
+    }
+    out
 }
 
 const DEFAULT_MAX_PEERS: usize = 64;
@@ -94,13 +147,13 @@ pub struct SwarmConfig {
     pub max_parallel: usize,
     /// Firewall value sent in handshakes (default 0).
     pub firewall: u64,
-    /// Public key of a relay node to force all server connections through.
-    /// When set, server handshake replies include `relay_through` info directing
-    /// clients to connect via the specified relay using the blind-relay protocol.
+    /// Public key of a relay node to force all server connections through (Hyperswarm blind-relay extension).
+    /// Unused in AvenOS-first-principles setups — prefer HyperDHT in-band handshake relay via bootstrap.
     pub relay_through: Option<[u8; 32]>,
-    /// Socket address of the relay node. When provided alongside `relay_through`,
-    /// the server connects to the relay directly instead of discovering it via DHT.
+    /// Socket address hints for Hyperswarm blind-relay wired mode (normally unused).
     pub relay_address: Option<std::net::SocketAddr>,
+    /// Extra UDP hints advertised in handshake `relay_addresses` (e.g. DHT bootstrap + blind-relay).
+    pub relay_address_hints: Vec<std::net::SocketAddr>,
 }
 
 impl Default for SwarmConfig {
@@ -113,6 +166,7 @@ impl Default for SwarmConfig {
             firewall: 0,
             relay_through: None,
             relay_address: None,
+            relay_address_hints: Vec::new(),
         }
     }
 }
@@ -325,6 +379,11 @@ struct ActorConfig {
     firewall: u64,
     relay_through: Option<[u8; 32]>,
     relay_address: Option<std::net::SocketAddr>,
+    relay_address_hints: Vec<std::net::SocketAddr>,
+    /// Public DHT bootstrap UDP addresses (`ip:port` from `ip@host:port` lines) — advertised
+    /// ahead of loopback in topic announces so remote peers can route handshakes via the same
+    /// bootstrap that already forwards `PEER_HANDSHAKE` relay traffic.
+    announce_bootstrap_relays: Vec<Ipv4Peer>,
 }
 
 struct SwarmActor {
@@ -332,6 +391,9 @@ struct SwarmActor {
     dht: HyperDhtHandle,
     config: ActorConfig,
     runtime_handle: Arc<RuntimeHandle>,
+
+    /// Last holepunch bookkeeping per initiating peer [`Noise`] session (parity with standalone HyperDHT).
+    holepunch_secrets: HashMap<[u8; 32], HolepunchServerPeerState>,
 
     topics: HashMap<[u8; 32], TopicState>,
     discovery_event_tx: mpsc::UnboundedSender<DiscoveryEvent>,
@@ -363,14 +425,27 @@ struct ConnectAttemptResult {
 pub async fn spawn(
     config: SwarmConfig,
 ) -> Result<(JoinHandle<()>, SwarmHandle, mpsc::Receiver<SwarmConnection>), SwarmError> {
-    let key_pair = config.key_pair.unwrap_or_else(KeyPair::generate);
+    let SwarmConfig {
+        key_pair: key_pair_opt,
+        dht,
+        max_peers,
+        max_parallel,
+        firewall,
+        relay_through,
+        relay_address,
+        relay_address_hints,
+    } = config;
+
+    let key_pair = key_pair_opt.unwrap_or_else(KeyPair::generate);
     let runtime = UdxRuntime::new()?;
 
-    let (dht_join, dht, server_rx) = hyperdht::spawn(&runtime, config.dht).await?;
+    let bootstrap_lines = dht.dht.bootstrap.clone();
+
+    let (dht_join, dht, server_rx) = hyperdht::spawn(&runtime, dht).await?;
     dht.bootstrapped().await?;
 
     let local_port = dht.dht().local_port().await?;
-    let relay_address = Ipv4Peer {
+    let local_relay_peer = Ipv4Peer {
         host: "127.0.0.1".to_string(),
         port: local_port,
     };
@@ -381,6 +456,8 @@ pub async fn spawn(
     let (conn_tx, conn_rx) = mpsc::channel(64);
     let (discovery_event_tx, discovery_event_rx) = mpsc::unbounded_channel();
 
+    let announce_bootstrap_relays = ipv4_peers_from_dht_bootstraps(&bootstrap_lines);
+
     let handle_dht = dht.clone();
     let handle_key_pair = key_pair.clone();
 
@@ -388,13 +465,16 @@ pub async fn spawn(
         key_pair,
         dht,
         config: ActorConfig {
-            max_peers: config.max_peers,
-            max_parallel: config.max_parallel,
-            firewall: config.firewall,
-            relay_through: config.relay_through,
-            relay_address: config.relay_address,
+            max_peers,
+            max_parallel,
+            firewall,
+            relay_through,
+            relay_address,
+            relay_address_hints,
+            announce_bootstrap_relays,
         },
         runtime_handle: runtime.handle(),
+        holepunch_secrets: HashMap::new(),
         topics: HashMap::new(),
         discovery_event_tx,
         peers: HashMap::new(),
@@ -402,7 +482,7 @@ pub async fn spawn(
         queue: Vec::new(),
         conn_tx,
         server_registered: false,
-        relay_address: Some(relay_address),
+        relay_address: Some(local_relay_peer),
         active_connects: 0,
         flush_waiters: Vec::new(),
     };
@@ -539,10 +619,23 @@ impl SwarmActor {
         }
 
         let (cancel_tx, cancel_rx) = oneshot::channel();
-        let relay_addresses = self
-            .relay_address
-            .as_ref()
-            .map_or_else(Vec::new, |a| vec![a.clone()]);
+
+        let mut relay_addrs = self.config.announce_bootstrap_relays.clone();
+        if relay_addrs.len() > 3 {
+            relay_addrs.truncate(3);
+        }
+        // Skip loopback / link-local: useless for remote peers and they waste a
+        // pre-connect retry slot before falling back to the real DHT bootstrap.
+        if let Some(local) = &self.relay_address {
+            if !is_unroutable_relay_host(&local.host) {
+                let dup = relay_addrs
+                    .iter()
+                    .any(|a| a.host == local.host && a.port == local.port);
+                if !dup && relay_addrs.len() < 3 {
+                    relay_addrs.push(local.clone());
+                }
+            }
+        }
 
         tokio::spawn(run_discovery(
             PeerDiscoveryConfig {
@@ -553,7 +646,7 @@ impl SwarmActor {
             },
             self.dht.clone(),
             self.key_pair.clone(),
-            relay_addresses,
+            relay_addrs,
             self.discovery_event_tx.clone(),
             cancel_rx,
         ));
@@ -798,10 +891,25 @@ impl SwarmActor {
             } => {
                 self.handle_server_handshake(msg, from, reply_tx);
             }
-            ServerEvent::PeerHolepunch { reply_tx, .. } => {
-                // Holepunch handling requires libudx incoming-stream support.
-                // Acknowledge without creating a connection.
-                let _ = reply_tx.send(None);
+            ServerEvent::PeerHolepunch {
+                msg,
+                peer_address,
+                reply_tx,
+                ..
+            } => {
+                let firewall = self.config.firewall;
+                let snapshots: Vec<HolepunchServerPeerState> =
+                    self.holepunch_secrets.values().cloned().collect();
+                let rh = self.runtime_handle.clone();
+                tokio::spawn(async move {
+                    let refs: Vec<&HolepunchServerPeerState> = snapshots.iter().collect();
+                    let pool = SocketPool::new("0.0.0.0".into());
+                    let runtime = UdxRuntime::shared(rh);
+                    let reply =
+                        handle_peer_holepunch_reply(firewall, &refs, &pool, &runtime, msg, &peer_address)
+                            .await;
+                    let _ = reply_tx.send(reply);
+                });
             }
             _ => {}
         }
@@ -836,6 +944,18 @@ impl SwarmActor {
 
         let local_stream_id = next_stream_id();
 
+        // When the handshake arrived via Fly/bootstrap relay, `msg.peer_address` is the initiator's
+        // UDP endpoint and `from` is the relay — mirror `hyperdht::handle_server_handshake` so the
+        // client runs `PEER_HOLEPUNCH` instead of opening UDX to the relay.
+        let relayed_via = msg.peer_address.clone();
+        let holepunch_info = relayed_via.as_ref().map(|client_addr| HolepunchInfo {
+            id: u64::from(local_stream_id),
+            relays: vec![RelayInfo {
+                relay_address: from.clone(),
+                peer_address: client_addr.clone(),
+            }],
+        });
+
         let (relay_token, relay_through_info) = if let Some(relay_pk) = self.config.relay_through {
             let token: [u8; 32] = rand::random();
             let info = RelayThroughInfo {
@@ -852,7 +972,7 @@ impl SwarmActor {
             version: 1,
             error: 0,
             firewall: self.config.firewall,
-            holepunch: None,
+            holepunch: holepunch_info,
             addresses4: vec![],
             addresses6: vec![],
             udx: Some(UdxInfo {
@@ -863,12 +983,37 @@ impl SwarmActor {
             }),
             secret_stream: Some(SecretStreamInfo { version: 1 }),
             relay_through: relay_through_info,
-            relay_addresses: self.config.relay_address.map(|addr| {
-                vec![peeroxide_dht::messages::Ipv4Peer {
-                    host: addr.ip().to_string(),
-                    port: addr.port(),
-                }]
-            }),
+            relay_addresses: {
+                let mut addrs: Vec<Ipv4Peer> = self
+                    .config
+                    .relay_address_hints
+                    .iter()
+                    .filter_map(|addr| {
+                        let host = addr.ip().to_string();
+                        if is_unroutable_relay_host(&host) {
+                            return None;
+                        }
+                        Some(Ipv4Peer {
+                            host,
+                            port: addr.port(),
+                        })
+                    })
+                    .collect();
+                if let Some(addr) = self.config.relay_address {
+                    let host = addr.ip().to_string();
+                    let port = addr.port();
+                    if !is_unroutable_relay_host(&host)
+                        && !addrs.iter().any(|a| a.host == host && a.port == port)
+                    {
+                        addrs.push(Ipv4Peer { host, port });
+                    }
+                }
+                if addrs.is_empty() {
+                    None
+                } else {
+                    Some(addrs)
+                }
+            },
         };
 
         let noise_reply = match nw.send(&reply_payload) {
@@ -889,10 +1034,23 @@ impl SwarmActor {
             }
         };
 
+        let client_address = relayed_via.clone().unwrap_or_else(|| from.clone());
+
+        self.holepunch_secrets.insert(
+            nw_result.remote_public_key,
+            HolepunchServerPeerState {
+                holepunch_secret: nw_result.holepunch_secret,
+                remote_public_key: nw_result.remote_public_key,
+                client_address,
+                local_stream_id,
+                remote_udx: remote_payload.udx.clone(),
+            },
+        );
+
         let reply_msg = HandshakeMessage {
             mode: MODE_REPLY,
             noise: noise_reply,
-            peer_address: None,
+            peer_address: relayed_via.as_ref().map(|_| from.clone()),
             relay_address: None,
         };
         let _ = reply_tx.send(encode_handshake_to_bytes(&reply_msg).ok());
@@ -903,6 +1061,15 @@ impl SwarmActor {
             tracing::debug!(pk = %short_hex(&remote_pk), "server: already connected");
             return;
         }
+
+        if relayed_via.is_some() {
+            tracing::debug!(
+                pk = %short_hex(&remote_pk),
+                "server: handshake relayed — waiting on holepunch + initiator stream (no eager server connect)",
+            );
+            return;
+        }
+
         if self.connections.len() >= self.config.max_peers {
             tracing::debug!("server: at max connections");
             return;
@@ -921,11 +1088,47 @@ impl SwarmActor {
 
         let conn_tx = self.conn_tx.clone();
 
+        {
+            let rh = self.runtime_handle.clone();
+            let dht = self.dht.clone();
+            let remote_udx_direct = remote_udx.clone();
+            let from_direct = from.clone();
+            let nw_result_direct = nw_result.clone();
+            tokio::spawn(async move {
+                match create_server_connection(
+                    rh,
+                    dht,
+                    local_stream_id,
+                    &remote_udx_direct,
+                    &from_direct,
+                    &nw_result_direct,
+                )
+                .await
+                {
+                    Ok((conn, runtime)) => {
+                        let swarm_conn = SwarmConnection {
+                            peer: conn,
+                            is_initiator: false,
+                            topics: vec![],
+                            _runtime: runtime,
+                        };
+                        if conn_tx.send(swarm_conn).await.is_err() {
+                            tracing::warn!("connection channel closed");
+                        }
+                    }
+                    Err(e) => {
+                        tracing::debug!(err = %e, "server: direct stream establishment failed");
+                    }
+                }
+            });
+        }
+
         if let (Some(relay_pk), Some(token)) = (self.config.relay_through, relay_token) {
             let dht = self.dht.clone();
             let key_pair = self.key_pair.clone();
             let relay_addr = self.config.relay_address;
             let rh = self.runtime_handle.clone();
+            let conn_tx = self.conn_tx.clone();
             tokio::spawn(async move {
                 match create_server_relay_connection(
                     rh,
@@ -952,29 +1155,6 @@ impl SwarmActor {
                     }
                     Err(e) => {
                         tracing::debug!(err = %e, "server: relay connection failed");
-                    }
-                }
-            });
-        } else {
-            let rh = self.runtime_handle.clone();
-            let dht = self.dht.clone();
-            tokio::spawn(async move {
-                match create_server_connection(rh, dht, local_stream_id, &remote_udx, &from, &nw_result)
-                    .await
-                {
-                    Ok((conn, runtime)) => {
-                        let swarm_conn = SwarmConnection {
-                            peer: conn,
-                            is_initiator: false,
-                            topics: vec![],
-                            _runtime: runtime,
-                        };
-                        if conn_tx.send(swarm_conn).await.is_err() {
-                            tracing::warn!("connection channel closed");
-                        }
-                    }
-                    Err(e) => {
-                        tracing::debug!(err = %e, "server: stream establishment failed");
                     }
                 }
             });

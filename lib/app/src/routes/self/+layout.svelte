@@ -4,18 +4,24 @@
 	import { deviceSession } from '$lib/self/device-session-store'
 	import { provideSelfContext } from '$lib/self/self-context.svelte'
 	import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/self/vault'
+	import SlideAsideLayout from '$lib/ui/SlideAsideLayout.svelte'
 	import { browser } from '$app/environment'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-	import { isIosHostedTauriShell } from '$lib/tauri/tauri-shell-platform'
 
-	let { children } = $props()
+	let { children: pageChildren } = $props()
 
 	const ctx = provideSelfContext()
 	const sessionKind = $derived($deviceSession.kind)
 
 	let vaults = $state<VaultListEntry[]>([])
+	let asideOpen = $state(false)
 
 	const path = $derived(page.url.pathname)
+
+	$effect(() => {
+		void path
+		asideOpen = false
+	})
 
 	$effect(() => {
 		void sessionKind
@@ -48,11 +54,7 @@
 
 	const profileDevice = $derived(activeVault?.deviceLabel?.trim() ?? '')
 
-	const peersHiddenMobile = $derived(
-		browser && isTauriRuntime() && isIosHostedTauriShell(),
-	)
-
-	const navSectionsAll: {
+	const navSections: {
 		title: string
 		items: { href: string; label: string; match: (p: string) => boolean }[]
 	}[] = [
@@ -90,20 +92,13 @@
 		},
 	]
 
-	const navSections = $derived.by(() => {
-		if (!peersHiddenMobile) return navSectionsAll
-		return navSectionsAll.map((section) => ({
-			...section,
-			items: section.items.filter((tab) => tab.href !== '/self/peers'),
-		}))
-	})
+	function closeAsideOnNav() {
+		asideOpen = false
+	}
 </script>
 
-<div class="grid h-full min-h-0 w-full grid-cols-[14rem_1fr]">
-	<aside
-		class="flex min-h-0 flex-col border-r border-border/60 bg-card/20 px-3 pt-1 pb-6"
-		aria-label="Self settings"
-	>
+<SlideAsideLayout bind:open={asideOpen} asideLabel="Self settings" class="min-h-0 flex-1" children={main}>
+	{#snippet aside()}
 		<div class="mb-3 space-y-0.5 px-3">
 			<h2 class="text-sm font-semibold tracking-tight">{profileName}</h2>
 			{#if profileDevice}
@@ -129,6 +124,7 @@
 								? 'bg-accent/15 text-foreground font-medium'
 								: 'text-muted-foreground/70 hover:bg-accent/10 hover:text-foreground'}"
 							aria-current={active ? 'page' : undefined}
+							onclick={closeAsideOnNav}
 						>
 							{tab.label}
 						</a>
@@ -136,11 +132,11 @@
 				</div>
 			{/each}
 		</nav>
-	</aside>
+	{/snippet}
 
-	<main class="min-h-0 overflow-y-auto">
-		<div class="mx-auto w-full max-w-3xl px-6 pt-4 pb-8 sm:px-8">
-			{@render children()}
+	{#snippet main()}
+		<div class="mx-auto w-full max-w-3xl px-4 pt-4 pb-8 sm:px-6 md:px-8">
+			{@render pageChildren()}
 		</div>
-	</main>
-</div>
+	{/snippet}
+</SlideAsideLayout>

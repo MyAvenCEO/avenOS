@@ -29,6 +29,7 @@
 	<title>Sparks · AvenOS</title>
 </svelte:head>
 
+<div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
 <div class="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-8 sm:px-6">
 	<header class="space-y-1.5">
 		<h1 class="text-2xl font-semibold tracking-tight">Sparks</h1>
@@ -68,4 +69,5 @@
 			{/each}
 		</ul>
 	{/if}
+</div>
 </div>

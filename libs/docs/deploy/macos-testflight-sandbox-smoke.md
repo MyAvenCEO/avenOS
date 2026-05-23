@@ -6,7 +6,7 @@ Run on a **physical Mac** against a release build produced for the **Mac App Sto
 
 ## Prerequisites
 
-- Build artifact from `bun run build:app:mac:appstore` at repo root (see `scripts/build-appstore-macos.ts`).
+- Build artifact from `bun run release:app:mac <N> --no-upload` at repo root (drop `--no-upload` to also push to TestFlight via altool; see `scripts/release-app.ts`).
 - Provision profile and signing identities matched to **Mac App Store** (not Developer ID-only).
 
 ## Smoke steps

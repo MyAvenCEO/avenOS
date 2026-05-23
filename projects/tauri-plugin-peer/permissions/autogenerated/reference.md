@@ -5,6 +5,7 @@ Default permissions for tauri-plugin-peer
 #### This default permission set includes the following:
 
 - `allow-peer-transport-status`
+- `allow-peer-swarm-retry`
 - `allow-peer-invite-create`
 - `allow-peer-invite-accept`
 - `allow-peer-invite-cancel`
@@ -170,6 +171,32 @@ Enables the peer_pair_start command without any pre-configured scope.
 <td>
 
 Denies the peer_pair_start command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`peer:allow-peer-swarm-retry`
+
+</td>
+<td>
+
+Enables the peer_swarm_retry command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`peer:deny-peer-swarm-retry`
+
+</td>
+<td>
+
+Denies the peer_swarm_retry command without any pre-configured scope.
 
 </td>
 </tr>

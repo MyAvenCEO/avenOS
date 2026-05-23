@@ -11,6 +11,7 @@ pub struct PeerTransportStatusReply {
 	pub linked_peer_ids: Vec<String>,
 	pub linked_peer_dids: Vec<String>,
 	pub pairing_code_pending: Option<String>,
+	pub p2p_diagnostics: crate::P2pDiagnostics,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -28,6 +29,20 @@ pub async fn peer_transport_status() -> Result<PeerTransportStatusReply, String>
 		linked_peer_ids: vec![],
 		linked_peer_dids: vec![],
 		pairing_code_pending: None,
+		p2p_diagnostics: crate::P2pDiagnostics {
+			central_mode: false,
+			relay_fallback: false,
+			dht_bootstrap: String::new(),
+			relay_addr: None,
+			relay_pk_prefix: None,
+			joined_topic_count: 0,
+			allowlist_count: 0,
+			linked_count: 0,
+			pairing_session_active: false,
+			pairing_topic_hex: None,
+			relay_https_probe: None,
+			dht_bootstrap_closest_seen: None,
+		},
 	})
 }
 

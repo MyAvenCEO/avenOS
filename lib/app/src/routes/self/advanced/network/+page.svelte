@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { useSelfContext } from '$lib/self/self-context.svelte'
+	import { copyToClipboard } from '$lib/runtime/clipboard'
 
 	const ctx = useSelfContext()
 
@@ -7,13 +8,13 @@
 
 	async function copyGenesis(): Promise<void> {
 		if (!ctx.genesisB64) return
-		try {
-			await navigator.clipboard.writeText(ctx.genesisB64)
+		const ok = await copyToClipboard(ctx.genesisB64)
+		if (ok) {
 			copyGenesisKey = 'genesis'
 			setTimeout(() => {
 				if (copyGenesisKey === 'genesis') copyGenesisKey = null
 			}, 1200)
-		} catch {
+		} else {
 			copyGenesisKey = null
 		}
 	}

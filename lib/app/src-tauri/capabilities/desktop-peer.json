@@ -1,8 +1,8 @@
 {
 	"$schema": "../gen/schemas/desktop-schema.json",
 	"identifier": "desktop-hyperswarm-peer",
-	"description": "Hyperswarm / peer invite commands (macOS + Linux only; iOS v1 uses stub plugin + no IPC scope).",
+	"description": "Hyperswarm / peer invite commands (macOS, Linux, iOS).",
 	"windows": ["main"],
-	"platforms": ["macOS", "linux"],
+	"platforms": ["macOS", "linux", "iOS"],
 	"permissions": ["peer:default"]
 }

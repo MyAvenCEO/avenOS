@@ -5,6 +5,7 @@
 	import SelfDidCard from '$lib/self/SelfDidCard.svelte'
 	import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/self/vault'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+	import { copyToClipboard } from '$lib/runtime/clipboard'
 	import { deviceSession } from '$lib/self/device-session-store'
 
 	const ctx = useSelfContext()
@@ -40,13 +41,13 @@
 
 	async function copy(label: string, value: string | undefined): Promise<void> {
 		if (!value) return
-		try {
-			await navigator.clipboard.writeText(value)
+		const ok = await copyToClipboard(value)
+		if (ok) {
 			copyKey = label
 			setTimeout(() => {
 				if (copyKey === label) copyKey = null
 			}, 1200)
-		} catch {
+		} else {
 			copyKey = null
 		}
 	}

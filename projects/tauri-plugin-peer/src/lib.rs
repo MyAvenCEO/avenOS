@@ -6,32 +6,32 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod did;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod pairing_label;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod hyperswarm_groove_bridge;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod commands_macos;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use hyperswarm_groove_bridge::HyperswarmGrooveBridge;
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 mod commands_stub;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 use tauri::generate_handler;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 use tauri::Listener;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 use tauri::Manager;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 use tauri::plugin::Builder;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 use groove::PeerTransport as _;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 use tauri::Emitter;
 
 struct PeerListenGuards {
@@ -41,7 +41,31 @@ struct PeerListenGuards {
 	_lock: tauri::EventId,
 }
 
-#[cfg(target_os = "macos")]
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct P2pDiagnostics {
+	pub central_mode: bool,
+	pub dht_bootstrap: String,
+	pub joined_topic_count: usize,
+	pub allowlist_count: usize,
+	pub linked_count: usize,
+	/// `true` while a 6-char invite code is active in this process (host or acceptor).
+	#[serde(default)]
+	pub pairing_session_active: bool,
+	/// Lowercase hex of the active short-lived pair topic (`hash(b"aven:pair:v1:" + CODE)`).
+	#[serde(default)]
+	pub pairing_topic_hex: Option<String>,
+	/// Result of an HTTPS GET to `https://<relay-host>/.well-known/aven-relay.json` from THIS device.
+	/// `"ok (<ms>ms)"` proves TCP/443 + DNS work even when UDP DHT bootstrap times out.
+	#[serde(default)]
+	pub relay_https_probe: Option<String>,
+	/// `Ok(N)` from peeroxide-dht's most recent bootstrap `find_node` query. `0` means no UDP reply
+	/// came back from the configured bootstrap node within the query timeout.
+	#[serde(default)]
+	pub dht_bootstrap_closest_seen: Option<usize>,
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PeerTransportStatusReply {
@@ -54,16 +78,17 @@ pub struct PeerTransportStatusReply {
 	/// `did:key` of each live link — use for UI row state (matches Jazz `peers.peer_did`).
 	pub linked_peer_dids: Vec<String>,
 	pub pairing_code_pending: Option<String>,
+	pub p2p_diagnostics: P2pDiagnostics,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PeerInviteCreateReply {
 	pub code: String,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 struct PairSession {
 	topic: [u8; 32],
 	code: String,
@@ -71,7 +96,7 @@ struct PairSession {
 	my_advertised_label: String,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 #[derive(Clone)]
 pub struct PeerCtl {
 	inner: Arc<tokio::sync::Mutex<Option<RunningSwarm>>>,
@@ -89,19 +114,21 @@ pub struct PeerCtl {
 	applied_peer_allow_sorted: Arc<tokio::sync::Mutex<Option<Vec<String>>>>,
 	/// Last `start_swarm` failure — surfaced to UI when buttons stay disabled.
 	swarm_start_error: Arc<tokio::sync::Mutex<Option<String>>>,
+	/// Last resolved P2P stack config — surfaced in UI for TestFlight diagnostics.
+	p2p_diagnostics: Arc<tokio::sync::RwLock<P2pDiagnostics>>,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 struct RunningSwarm {
 	swarm: peeroxide::SwarmHandle,
 	actor_join: tokio::task::JoinHandle<()>,
 	conns_worker: tokio::task::JoinHandle<()>,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 const PAIR_CODE_ALPHABET: &[u8] = b"23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn hex_pk_prefix(pk: &[u8]) -> String {
 	pk.iter().take(8).fold(String::new(), |acc, b| acc + &format!("{b:02x}"))
 }
@@ -119,11 +146,9 @@ fn hex_pk_prefix(pk: &[u8]) -> String {
 /// - `AVENOS_DHT_ISOLATED=1`: empty bootstrap table unless `AVENOS_DHT_BOOTSTRAP` fills it (set by central mode).
 /// - `AVENOS_DHT_PUBLIC=1`: public Holepunch roots (non-central mode).
 /// - `AVENOS_DHT_BOOTSTRAP`: comma-separated bootstrap strings (`ip@host:port` HyperDHT form).
-/// - `AVENOS_P2P_DIRECT_ONLY=1`: never apply **`AVENOS_HYPERSWARM_RELAY_*`** to the swarm (no blind-relay transport).
-/// - `AVENOS_P2P_IGNORE_RELAY_ENV=1`: same as direct-only for relay env vars (legacy alias).
-/// - `AVENOS_HYPERSWARM_RELAY_*`: ignored when direct-only or central mode is active.
+/// - Connectivity uses HyperDHT in-band handshake relay + holepunch (see peeroxide docs) — no separate blind-relay UDP.
 /// - `AVENOS_HYPERSWARM_MAX_PARALLEL` / `AVENOS_HYPERSWARM_MAX_PEERS`: positive integers.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn env_truthy_os(key: &str) -> bool {
 	std::env::var(key)
 		.map(|v| {
@@ -135,7 +160,7 @@ fn env_truthy_os(key: &str) -> bool {
 		.unwrap_or(false)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn env_falsy_os(key: &str) -> bool {
 	std::env::var(key)
 		.map(|v| {
@@ -147,7 +172,7 @@ fn env_falsy_os(key: &str) -> bool {
 		.unwrap_or(false)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn aven_relay_central_mode() -> bool {
 	if env_truthy_os("AVENOS_SKIP_P2P_SIGNAL") {
 		return false;
@@ -158,19 +183,12 @@ fn aven_relay_central_mode() -> bool {
 	true
 }
 
-#[cfg(target_os = "macos")]
-fn p2p_direct_data_plane_only() -> bool {
-	aven_relay_central_mode()
-		|| env_truthy_os("AVENOS_P2P_DIRECT_ONLY")
-		|| env_truthy_os("AVENOS_P2P_IGNORE_RELAY_ENV")
-}
-
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn base_swarm_config_from_env() -> peeroxide::SwarmConfig {
 	if aven_relay_central_mode() {
 		log::info!(
 			target: "avenos::peeroxide",
-			"AVEN_RELAY central discovery — isolated HyperDHT bootstrap (direct P2P data plane)"
+			"AVEN_RELAY central discovery — HyperDHT bootstrap (in-band handshake relay / holepunch)"
 		);
 		return peeroxide::SwarmConfig::default();
 	}
@@ -180,7 +198,7 @@ fn base_swarm_config_from_env() -> peeroxide::SwarmConfig {
 	peeroxide::SwarmConfig::default()
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn p2p_dht_udp_port_default() -> u16 {
 	std::env::var("AVENOS_P2P_SIGNAL_PORT")
 		.ok()
@@ -188,7 +206,7 @@ fn p2p_dht_udp_port_default() -> u16 {
 		.unwrap_or(49737)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn is_embedded_local_relay_host(host: &str) -> bool {
 	matches!(
 		host.to_ascii_lowercase().as_str(),
@@ -196,7 +214,7 @@ fn is_embedded_local_relay_host(host: &str) -> bool {
 	)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn resolve_ipv4(hostname: &str) -> Option<String> {
 	use std::net::ToSocketAddrs;
 	format!("{hostname}:0")
@@ -205,7 +223,7 @@ fn resolve_ipv4(hostname: &str) -> Option<String> {
 		.find_map(|a| a.is_ipv4().then(|| a.ip().to_string()))
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn central_bootstrap_line(hostname: &str, udp: u16) -> String {
 	if is_embedded_local_relay_host(hostname) {
 		format!("127.0.0.1@{hostname}:{udp}")
@@ -216,7 +234,7 @@ fn central_bootstrap_line(hostname: &str, udp: u16) -> String {
 	}
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn normalize_aven_relay_url_host(raw: &str) -> Result<String, String> {
 	fn trim_outer_quotes(mut s: &str) -> &str {
 		s = s.trim();
@@ -265,7 +283,7 @@ fn normalize_aven_relay_url_host(raw: &str) -> Result<String, String> {
 	Ok(h.to_string())
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn resolve_aven_relay_url() -> Result<String, String> {
 	if let Ok(v) = std::env::var("AVEN_RELAY_URL") {
 		let t = v.trim();
@@ -291,10 +309,8 @@ fn resolve_aven_relay_url() -> Result<String, String> {
 	Ok(PRODUCTION_RELAY_HOST.to_string())
 }
 
-#[cfg(target_os = "macos")]
-fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(), String> {
-	use std::str::FromStr;
-
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+async fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(), String> {
 	let central = aven_relay_central_mode();
 	let isolated = central
 		|| (env_truthy_os("AVENOS_DHT_ISOLATED") && !env_truthy_os("AVENOS_DHT_PUBLIC"));
@@ -303,7 +319,7 @@ fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(), Strin
 		resolve_aven_relay_url()?;
 	}
 
-	let env_bootstrap_entries: Vec<String> = match std::env::var("AVENOS_DHT_BOOTSTRAP") {
+	let mut env_bootstrap_entries: Vec<String> = match std::env::var("AVENOS_DHT_BOOTSTRAP") {
 		Ok(raw) => raw
 			.split(',')
 			.map(|s| s.trim().to_string())
@@ -311,6 +327,18 @@ fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(), Strin
 			.collect(),
 		Err(_) => Vec::new(),
 	};
+	if env_bootstrap_entries.is_empty() {
+		if let Some(baked) = option_env!("AVENOS_DHT_BOOTSTRAP") {
+			let t = baked.trim();
+			if !t.is_empty() {
+				log::info!(
+					target: "avenos::peeroxide",
+					"AVENOS_DHT_BOOTSTRAP from compile-time embed: {t}",
+				);
+				env_bootstrap_entries.push(t.to_string());
+			}
+		}
+	}
 
 	let mut bootstrap_nodes = env_bootstrap_entries.clone();
 	if isolated && central && bootstrap_nodes.is_empty() {
@@ -336,7 +364,8 @@ fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(), Strin
 		} else {
 			log::info!(
 				target: "avenos::peeroxide",
-				"custom DHT bootstrap only (isolated): {n} node(s)"
+				"custom DHT bootstrap only (isolated): {n} node(s) — {}",
+				bootstrap_nodes.join(", ")
 			);
 		}
 	} else {
@@ -349,30 +378,6 @@ fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(), Strin
 				target: "avenos::peeroxide",
 				"prepended {n} DHT bootstrap node(s) from AVENOS_DHT_BOOTSTRAP"
 			);
-		}
-	}
-
-	if p2p_direct_data_plane_only() {
-		log::info!(
-			target: "avenos::peeroxide",
-			"direct P2P data plane — AVENOS_HYPERSWARM_RELAY_* ignored (no blind-relay transport)"
-		);
-	} else {
-		if let Ok(hex_pk) = std::env::var("AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX") {
-			let bytes = hex::decode(hex_pk.trim())
-				.map_err(|e| format!("AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX: invalid hex ({e})"))?;
-			let arr: [u8; 32] = bytes.try_into().map_err(|_| {
-				"AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX: expected exactly 32 bytes (64 hex chars)".to_string()
-			})?;
-			cfg.relay_through = Some(arr);
-			log::info!(target: "avenos::peeroxide", "relay_through set from AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX");
-		}
-
-		if let Ok(addr_s) = std::env::var("AVENOS_HYPERSWARM_RELAY_ADDR") {
-			let addr = std::net::SocketAddr::from_str(addr_s.trim())
-				.map_err(|e| format!("AVENOS_HYPERSWARM_RELAY_ADDR: invalid address ({e})"))?;
-			cfg.relay_address = Some(addr);
-			log::info!(target: "avenos::peeroxide", "relay_address set from AVENOS_HYPERSWARM_RELAY_ADDR");
 		}
 	}
 
@@ -403,7 +408,27 @@ fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(), Strin
 	Ok(())
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn build_p2p_diagnostics(cfg: &peeroxide::SwarmConfig, linked_count: usize) -> P2pDiagnostics {
+	let dht_bootstrap = if cfg.dht.dht.bootstrap.is_empty() {
+		"(empty)".to_string()
+	} else {
+		cfg.dht.dht.bootstrap.join(", ")
+	};
+	P2pDiagnostics {
+		central_mode: aven_relay_central_mode(),
+		dht_bootstrap,
+		joined_topic_count: 0,
+		allowlist_count: 0,
+		linked_count,
+		pairing_session_active: false,
+		pairing_topic_hex: None,
+		relay_https_probe: None,
+		dht_bootstrap_closest_seen: None,
+	}
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn normalize_pair_code(raw: &str) -> Result<String, String> {
 	let mut s = raw.trim().to_ascii_uppercase();
 	s.retain(|c| !matches!(c, ' ' | '-' | '_'));
@@ -416,7 +441,7 @@ fn normalize_pair_code(raw: &str) -> Result<String, String> {
 	Ok(s)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn pair_topic_hash(normalized_code: &str) -> [u8; 32] {
 	let mut buf = Vec::with_capacity(b"aven:pair:v1:".len() + normalized_code.len());
 	buf.extend_from_slice(b"aven:pair:v1:");
@@ -425,7 +450,7 @@ fn pair_topic_hash(normalized_code: &str) -> [u8; 32] {
 }
 
 /// Per-pair durable sync topic: `discovery_key("aven:peer-pair:v1:" + sort(didA,didB))`.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub fn pair_topic_from_dids(local_did: &str, remote_did: &str) -> [u8; 32] {
 	let (a, b) = if local_did <= remote_did {
 		(local_did, remote_did)
@@ -440,7 +465,7 @@ pub fn pair_topic_from_dids(local_did: &str, remote_did: &str) -> [u8; 32] {
 	peeroxide::discovery_key(&buf)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn generate_pair_code() -> String {
 	use rand::Rng;
 	let mut rng = rand::thread_rng();
@@ -449,19 +474,19 @@ fn generate_pair_code() -> String {
 		.collect()
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn pairing_advertised_label(app: &tauri::AppHandle) -> String {
 	let vault = app.state::<tauri_plugin_self::vault::ActiveVault>();
 	tauri_plugin_self::vault::pairing_label_for_app(app, &*vault).unwrap_or_else(|| "Peer".into())
 }
 
 /// Short-lived invite topics: fast DHT refresh + capped connect backoff in vendored peeroxide.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn pairing_join_opts() -> peeroxide::JoinOpts {
 	peeroxide::JoinOpts::fast_refresh()
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 async fn join_topic(
 	swarm: &peeroxide::SwarmHandle,
 	topic: [u8; 32],
@@ -475,7 +500,7 @@ async fn join_topic(
 }
 
 /// Wait for the first announce/lookup cycle (can take many seconds on the public DHT).
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 async fn flush_swarm(swarm: &peeroxide::SwarmHandle) -> Result<(), String> {
 	swarm
 		.clone()
@@ -485,7 +510,7 @@ async fn flush_swarm(swarm: &peeroxide::SwarmHandle) -> Result<(), String> {
 }
 
 /// Return to the UI immediately; DHT flush continues without blocking other Tauri IPC.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn spawn_flush_background(swarm: peeroxide::SwarmHandle, label: &'static str) {
 	tokio::spawn(async move {
 		if let Err(e) = flush_swarm(&swarm).await {
@@ -495,7 +520,7 @@ fn spawn_flush_background(swarm: peeroxide::SwarmHandle, label: &'static str) {
 }
 
 /// Pairing **requires** at least one DHT announce/lookup cycle; background-only flush broke rendezvous.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 async fn flush_swarm_for_pairing(swarm: &peeroxide::SwarmHandle, label: &'static str) -> Result<(), String> {
 	const PAIRING_FLUSH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(4);
 	match tokio::time::timeout(PAIRING_FLUSH_TIMEOUT, flush_swarm(swarm)).await {
@@ -516,7 +541,7 @@ async fn flush_swarm_for_pairing(swarm: &peeroxide::SwarmHandle, label: &'static
 	}
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 async fn join_pairing_topic(
 	swarm: &peeroxide::SwarmHandle,
 	topic: [u8; 32],
@@ -526,7 +551,7 @@ async fn join_pairing_topic(
 	flush_swarm_for_pairing(swarm, flush_label).await
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 impl PeerCtl {
 	async fn start_swarm(&self, app: tauri::AppHandle) -> Result<(), String> {
 		loop {
@@ -566,10 +591,16 @@ impl PeerCtl {
 		let mut cfg = base_swarm_config_from_env();
 		cfg.key_pair = Some(kp);
 		cfg.max_parallel = 8;
-		if let Err(e) = apply_avensos_swarm_env(&mut cfg) {
+		if let Err(e) = apply_avensos_swarm_env(&mut cfg).await {
 			*self.swarm_start_error.lock().await = Some(e.clone());
 			return Err(e);
 		}
+
+		let linked_count = self.jazz_hyperswarm.snapshot_remote_clients().await.len();
+		let mut diag = build_p2p_diagnostics(&cfg, linked_count);
+		diag.joined_topic_count = self.joined_pair_topics.lock().await.len();
+		diag.allowlist_count = self.allowed_remote_dids.read().await.len();
+		*self.p2p_diagnostics.write().await = diag;
 
 		let (actor_join, swarm, mut conn_rx) = match peeroxide::spawn(cfg).await {
 			Ok(v) => v,
@@ -737,7 +768,20 @@ impl PeerCtl {
 			.as_ref()
 			.map(|s| s.code.clone());
 
+		let pairing_session_topic = self
+			.pairing_session
+			.lock()
+			.await
+			.as_ref()
+			.map(|s| s.topic);
+
 		let hyperswarm_start_error = self.swarm_start_error.lock().await.clone();
+		let mut p2p_diagnostics = self.p2p_diagnostics.read().await.clone();
+		p2p_diagnostics.linked_count = linked_peer_dids.len();
+		p2p_diagnostics.joined_topic_count = self.joined_pair_topics.lock().await.len();
+		p2p_diagnostics.allowlist_count = self.allowed_remote_dids.read().await.len();
+		p2p_diagnostics.pairing_session_active = pairing_code_pending.is_some();
+		p2p_diagnostics.pairing_topic_hex = pairing_session_topic.map(|t| hex::encode(t));
 
 		PeerTransportStatusReply {
 			hyperswarm_running,
@@ -746,6 +790,7 @@ impl PeerCtl {
 			linked_peer_ids,
 			linked_peer_dids,
 			pairing_code_pending,
+			p2p_diagnostics,
 		}
 	}
 
@@ -916,7 +961,7 @@ impl PeerCtl {
 	}
 
 	/// Join the durable per-DID sync topic as soon as pairing connects (before DB upsert).
-	#[cfg(target_os = "macos")]
+	#[cfg(any(target_os = "macos", target_os = "ios"))]
 	async fn ensure_durable_pair_topic_for_remote(&self, remote_did: &str) -> Result<(), String> {
 		let remote = remote_did.trim().to_string();
 		{
@@ -955,7 +1000,7 @@ impl PeerCtl {
 		Ok(())
 	}
 
-	#[cfg(target_os = "macos")]
+	#[cfg(any(target_os = "macos", target_os = "ios"))]
 	async fn local_peer_did(&self) -> Result<String, String> {
 		let guard = self.inner.lock().await;
 		let running = guard
@@ -995,7 +1040,8 @@ impl PeerCtl {
 
 		log::info!(
 			target: "avenos::peeroxide",
-			"peer_invite_create ready code={normalized} (DHT flushed — share with other device)"
+			"peer_invite_create ready code={normalized} topic={} (DHT flushed — share with other device)",
+			hex::encode(&topic[..8])
 		);
 
 		Ok(normalized)
@@ -1036,7 +1082,8 @@ impl PeerCtl {
 
 		log::info!(
 			target: "avenos::peeroxide",
-			"peer_invite_accept ready code={normalized} (DHT flushed — awaiting host)"
+			"peer_invite_accept ready code={normalized} topic={} (DHT flushed — awaiting host)",
+			hex::encode(&topic[..8])
 		);
 
 		Ok(())
@@ -1087,7 +1134,7 @@ impl PeerCtl {
 	}
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 	use tauri::{generate_handler, plugin::Builder};
 	Builder::new("peer")
@@ -1100,7 +1147,7 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 		.build()
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 	Builder::new("peer")
 		.invoke_handler(generate_handler![
@@ -1128,6 +1175,17 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 				pending_allowlist: Arc::new(tokio::sync::Mutex::new(None)),
 				applied_peer_allow_sorted: Arc::new(tokio::sync::Mutex::new(None)),
 				swarm_start_error: Arc::new(tokio::sync::Mutex::new(None)),
+				p2p_diagnostics: Arc::new(tokio::sync::RwLock::new(P2pDiagnostics {
+					central_mode: aven_relay_central_mode(),
+					dht_bootstrap: String::new(),
+					joined_topic_count: 0,
+					allowlist_count: 0,
+					linked_count: 0,
+					pairing_session_active: false,
+					pairing_topic_hex: None,
+					relay_https_probe: None,
+					dht_bootstrap_closest_seen: None,
+				})),
 			});
 
 			let h = app.clone();
@@ -1156,6 +1214,8 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 			});
 
 			app.manage(ctl.clone());
+
+			log::info!(target: "avenos::peeroxide", "peer plugin ready (Hyperswarm starts after unlock)");
 
 			if app.state::<tauri_plugin_self::state::SelfState>().is_unlocked() {
 				let hh = app.clone();

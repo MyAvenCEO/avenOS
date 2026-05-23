@@ -1,6 +1,7 @@
 fn main() {
 	const COMMANDS: &[&str] = &[
 		"peer_transport_status",
+		"peer_swarm_retry",
 		"peer_invite_create",
 		"peer_invite_accept",
 		"peer_invite_cancel",

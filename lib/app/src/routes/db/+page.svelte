@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SlideAsideLayout from '$lib/ui/SlideAsideLayout.svelte'
 	import { browser } from '$app/environment'
 	import {
 		jazzExplorerList,
@@ -22,6 +23,7 @@
 
 	let bootstrapErr = $state<string | undefined>()
 	let explorerErr = $state<string | undefined>()
+	let tablesAsideOpen = $state(false)
 
 	const unlocked = $derived(
 		$deviceSession.kind === 'unlocked',
@@ -202,7 +204,7 @@
 	<title>Database · AvenOS</title>
 </svelte:head>
 
-<div class="mx-auto flex h-full min-h-0 w-full max-w-[min(100%,88rem)] flex-1 flex-col gap-4 px-4 pb-6 pt-2 sm:px-6">
+<div class="mx-auto flex h-full min-h-0 w-full max-w-[min(100%,88rem)] flex-1 flex-col gap-4 overflow-y-auto px-4 pb-6 pt-2 sm:px-6 md:overflow-hidden">
 	<header class="shrink-0 space-y-1">
 		<h1 class="text-2xl font-semibold tracking-tight">Local database</h1>
 		<p class="text-muted-foreground max-w-xl text-sm leading-relaxed">
@@ -229,110 +231,123 @@
 			</p>
 		{/if}
 
-		<div class="flex min-h-0 min-w-0 flex-1 gap-4 overflow-hidden rounded-xl border border-border/60 bg-background">
-			<aside
-				class="border-border/60 flex w-52 shrink-0 flex-col gap-1 overflow-y-auto border-r px-3 py-3"
-				aria-label="Table names"
+		<div
+			class="flex min-h-[min(56dvh,28rem)] min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-background"
+		>
+			<SlideAsideLayout
+				bind:open={tablesAsideOpen}
+				asideLabel="Table names"
+				asideWidthClass="w-[min(85vw,13rem)] max-w-[13rem]"
+				desktopGridClass="md:grid-cols-[13rem_minmax(0,1fr)]"
+				class="min-h-0 flex-1"
 			>
-				<p class="text-muted-foreground mb-1 px-1 text-[10px] font-bold uppercase tracking-wider">
-					Tables
-				</p>
-				{#each tables as t (t)}
-					<button
-						type="button"
-						class="rounded-md px-2 py-2 text-left text-xs font-medium transition-colors {selectedTable === t
-							? 'bg-muted text-foreground'
-							: 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}"
-						aria-current={selectedTable === t ? 'page' : undefined}
-						onclick={() => {
-							selectedTable = t
-						}}
-					>
-						{t}
-					</button>
-				{:else}
-					{#if !bootstrapErr}
-						<p class="text-muted-foreground px-2 py-4 text-xs">No tables loaded.</p>
-					{/if}
-				{/each}
-			</aside>
-
-			<section class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-				<div class="border-border/60 flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-2">
-					{#if selectedTable}
-						<h2 class="font-mono text-sm font-semibold tracking-tight">{selectedTable}</h2>
-						<span class="text-muted-foreground text-xs"
-							>{explorerRows.length} row{explorerRows.length === 1 ? '' : 's'}</span>
-						{#if skippedUnauthorizedRows > 0}
-							<span
-								class="text-amber-600 dark:text-amber-500 rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium"
-								title="Rows skipped due to biscuit / spark gates (shown only until the next explorer fetch)"
-							>
-								{skippedUnauthorizedRows} gated (hidden)
-							</span>
-						{/if}
-					{/if}
-					<button
-						type="button"
-						class="text-muted-foreground hover:text-foreground ml-auto inline-flex rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-						disabled={!selectedTable || refreshBusy}
-						onclick={() => void refreshExplorer()}
-					>
-						{refreshBusy ? 'Refreshing…' : 'Refresh explorer'}
-					</button>
-				</div>
-
-				{#if explorerErr}
-					<p
-						class="text-destructive border-destructive/40 bg-destructive/10 m-4 shrink-0 rounded-lg border px-3 py-2 text-sm"
-						role="alert"
-					>
-						{explorerErr}
+				{#snippet aside()}
+					<p class="text-muted-foreground mb-1 px-1 text-[10px] font-bold uppercase tracking-wider">
+						Tables
 					</p>
-				{/if}
+					<div class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto py-1">
+						{#each tables as t (t)}
+							<button
+								type="button"
+								class="rounded-md px-2 py-2 text-left text-xs font-medium transition-colors {selectedTable === t
+									? 'bg-muted text-foreground'
+									: 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}"
+								aria-current={selectedTable === t ? 'page' : undefined}
+								onclick={() => {
+									selectedTable = t
+									tablesAsideOpen = false
+								}}
+							>
+								{t}
+							</button>
+						{:else}
+							{#if !bootstrapErr}
+								<p class="text-muted-foreground px-2 py-4 text-xs">No tables loaded.</p>
+							{/if}
+						{/each}
+					</div>
+				{/snippet}
 
-				<div class="min-h-0 flex-1 overflow-auto p-4">
-					{#if selectedTable === null || tables.length === 0}
-						<p class="text-muted-foreground text-sm">
-							Pick a table from the list to inspect rows.
-						</p>
-					{:else if explorerRows.length === 0}
-						<p class="text-muted-foreground text-sm">No readable rows for this table.</p>
-					{:else}
-						<div class="rounded-lg border border-border/60 shadow-sm">
-							<table class="w-max min-w-full border-collapse font-mono text-xs">
-								<thead class="sticky top-0 z-[1] bg-muted/95 backdrop-blur">
-									<tr>
-										{#each columns as col (col)}
-											<th
-												class="text-muted-foreground border-border/70 max-w-[20rem] border-b px-2 py-2 text-left align-bottom font-semibold whitespace-nowrap uppercase tracking-wide"
-												scope="col"
-											>
-												{col}
-											</th>
-										{/each}
-									</tr>
-								</thead>
-								<tbody>
-									{#each explorerRows as row, ix (typeof row.id === 'string' ? row.id : ix)}
-										<tr class="border-border/60 odd:bg-muted/40 hover:bg-muted/60 transition-colors border-b align-top">
-											{#each columns as col (col)}
-												{@const c = formatCell(col, row[col], row as Record<string, unknown>)}
-												<td
-													class="max-w-xl border-border/40 px-2 py-1.5 text-[11px] leading-snug break-all"
-													title={c.title}
-												>
-													{c.text}
-												</td>
-											{/each}
-										</tr>
-									{/each}
-								</tbody>
-							</table>
+				{#snippet children()}
+					<section class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+						<div class="border-border/60 flex shrink-0 flex-wrap items-center gap-3 border-b px-3 py-2 sm:px-4">
+							{#if selectedTable}
+								<h2 class="font-mono text-sm font-semibold tracking-tight">{selectedTable}</h2>
+								<span class="text-muted-foreground text-xs"
+									>{explorerRows.length} row{explorerRows.length === 1 ? '' : 's'}</span
+								>
+								{#if skippedUnauthorizedRows > 0}
+									<span
+										class="text-amber-600 dark:text-amber-500 rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium"
+										title="Rows skipped due to biscuit / spark gates (shown only until the next explorer fetch)"
+									>
+										{skippedUnauthorizedRows} gated (hidden)
+									</span>
+								{/if}
+							{/if}
+							<button
+								type="button"
+								class="text-muted-foreground hover:text-foreground ml-auto inline-flex rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+								disabled={!selectedTable || refreshBusy}
+								onclick={() => void refreshExplorer()}
+							>
+								{refreshBusy ? 'Refreshing…' : 'Refresh explorer'}
+							</button>
 						</div>
-					{/if}
-				</div>
-			</section>
+
+						{#if explorerErr}
+							<p
+								class="text-destructive border-destructive/40 bg-destructive/10 m-4 shrink-0 rounded-lg border px-3 py-2 text-sm"
+								role="alert"
+							>
+								{explorerErr}
+							</p>
+						{/if}
+
+						<div class="min-h-0 flex-1 overflow-auto p-3 sm:p-4">
+							{#if selectedTable === null || tables.length === 0}
+								<p class="text-muted-foreground text-sm">
+									Pick a table from the list to inspect rows.
+								</p>
+							{:else if explorerRows.length === 0}
+								<p class="text-muted-foreground text-sm">No readable rows for this table.</p>
+							{:else}
+								<div class="rounded-lg border border-border/60 shadow-sm">
+									<table class="w-max min-w-full border-collapse font-mono text-xs">
+										<thead class="sticky top-0 z-[1] bg-muted/95 backdrop-blur">
+											<tr>
+												{#each columns as col (col)}
+													<th
+														class="text-muted-foreground border-border/70 max-w-[20rem] border-b px-2 py-2 text-left align-bottom font-semibold whitespace-nowrap uppercase tracking-wide"
+														scope="col"
+													>
+														{col}
+													</th>
+												{/each}
+											</tr>
+										</thead>
+										<tbody>
+											{#each explorerRows as row, ix (typeof row.id === 'string' ? row.id : ix)}
+												<tr class="border-border/60 odd:bg-muted/40 hover:bg-muted/60 transition-colors border-b align-top">
+													{#each columns as col (col)}
+														{@const c = formatCell(col, row[col], row as Record<string, unknown>)}
+														<td
+															class="max-w-xl border-border/40 px-2 py-1.5 text-[11px] leading-snug break-all"
+															title={c.title}
+														>
+															{c.text}
+														</td>
+													{/each}
+												</tr>
+											{/each}
+										</tbody>
+									</table>
+								</div>
+							{/if}
+						</div>
+					</section>
+				{/snippet}
+			</SlideAsideLayout>
 		</div>
 	{/if}
 </div>

@@ -1,6 +1,18 @@
 /** Per trusted peer-pair — matches Rust `PeerMeshPhase`. */
 export type PeerMeshPhase = 'pairing' | 'offline' | 'searching' | 'syncing' | 'ready'
 
+export type P2pDiagnostics = {
+	centralMode: boolean
+	dhtBootstrap: string
+	joinedTopicCount: number
+	allowlistCount: number
+	linkedCount: number
+	/** `true` while a 6-char invite code is active on this device (host or acceptor). */
+	pairingSessionActive?: boolean
+	/** Lowercase hex of the active short-lived pair topic (matches across host + acceptor). */
+	pairingTopicHex?: string | null
+}
+
 export type PeerMeshPeerState = {
 	peerDid: string
 	deviceLabel: string
@@ -14,6 +26,7 @@ export type PeerMeshStatusReply = {
 	hyperswarmStartError?: string | null
 	localPkPrefixHex: string
 	pairingCodePending?: string | null
+	p2pDiagnostics: P2pDiagnostics
 	peers: PeerMeshPeerState[]
 }
 

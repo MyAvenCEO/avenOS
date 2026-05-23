@@ -15,7 +15,7 @@ export AVEN_APP_STORE_PROVISIONING_PROFILE_MACOS=/path/outside/repo/MacAppStore_
 export APPLE_SIGNING_IDENTITY="Apple Distribution: Your Org (XXXXXXXXXX)"
 export AVEN_PKG_INSTALLER_IDENTITY="3rd Party Mac Developer Installer: Your Org (XXXXXXXXXX)"
 export AVEN_OUTPUT_PKG="$PWD/dist/avenOS.pkg"
-bun run build:app:mac:appstore
+bun run release:app:mac 14 --no-upload
 ```
 
 Requirements:
@@ -27,12 +27,27 @@ Requirements:
 
 The script merges an App Store–specific Tauri overlay (`.app`-only bundles, entitlement path, hardened runtime defaults) and emits a reproducible PKG path into stdout/stderr banners.
 
-## 2. Deliver with Transporter (GUI)
+## 2. Upload to App Store Connect
 
-1. Install **Transporter** from the Mac App Store.
-2. Sign in with your App Store Connect team account (or authenticate with an API-backed workflow if configured).
-3. Drag **`avenOS…pkg`** into Transporter → **Deliver**.
-4. Wait for App Store Connect **processing** (often 10–60 minutes).
+**One command builds and uploads** — runs the Mac App Store build, then `xcrun altool --upload-app` using the API key in `.env.apple.local`:
+
+```bash
+# build macOS .pkg with CFBundleVersion=14 and upload to TestFlight
+bun run release:app:mac 14
+
+# do both macOS .pkg AND iOS .ipa with the same build number
+bun run release:app:all 14
+```
+
+The trailing integer is the **CFBundleVersion / build number**. Apple rejects duplicates inside an app record — bump it for every upload.
+
+Requires `APPLE_API_KEY` / `APPLE_API_ISSUER` / `APPLE_API_KEY_PATH` in `.env.apple.local` (App Store Connect → Users and Access → Keys → "Generate API Key").
+
+Opt-out flags:
+- `bun run release:app:mac 14 --no-upload` → build only, keep the `.pkg` for manual upload
+- `bun run release:app:mac --no-build` → upload the **newest** existing `.pkg`
+
+**GUI fallback (Transporter)** — drag the produced `.pkg` into the Transporter.app → Deliver. Same outcome, useful for one-offs.
 
 ## 3. App Store Connect
 
@@ -42,15 +57,4 @@ The script merges an App Store–specific Tauri overlay (`.app`-only bundles, en
 
 ## 4. Build number hygiene
 
-Increment **`bundle.macOS.bundleVersion`** in `tauri.conf.json` (merged overlay or base config) **before every upload**—Apple rejects duplicate **`CFBundleVersion`** pairs for the same app record.
-
-### Optional CLI parity
-
-Prefer Transporter CLI or `notarytool`-era upload flows only if your team standardized them:
-
-```bash
-xcrun altool --upload-app --type macos --file ./dist/path/to/avenOS.pkg \
-  --apiKey "$APPLE_API_KEY_ID" --apiIssuer "$APPLE_API_ISSUER"
-```
-
-Apple has been migrating uploads to Apple-transporter–compatible APIs—verify exact flags against `altool`/Transporter CLI help on your Xcode version before scripting.
+Increment **`AVEN_BUILD_NUMBER`** (applies to both macOS + iOS) **before every upload**—Apple rejects duplicate **`CFBundleVersion`** pairs for the same app record. Per-target overrides via `AVEN_MAC_CF_BUNDLE_VERSION` / `AVEN_IOS_CF_BUNDLE_VERSION` if the two tracks have diverged on App Store Connect.

@@ -26,6 +26,7 @@ serde_json = "1"
 sha2 = "0.10"
 tauri-plugin-peer = { path = "../../../projects/tauri-plugin-peer" }
 tauri-plugin-self = { path = "../../../projects/tauri-plugin-self" }
+tauri-plugin-clipboard-manager = "2"
 base64 = "0.22"
 hex = "0.4"
 p256 = "0.13"
@@ -46,6 +47,10 @@ x25519-dalek = { version = "2", features = ["static_secrets"] }
 zeroize = { version = "1", features = ["derive"] }
 env_logger = "0.11.10"
 tracing-log = "0.2.0"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
+[target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
+oslog = { version = "0.2", features = ["logger"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6", default-features = false }

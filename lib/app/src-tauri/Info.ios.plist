@@ -6,6 +6,8 @@
 	<false/>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Unlock your AvenOS device identity with Face ID or Touch ID.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>AvenOS uses the local network for Hyperswarm device discovery alongside direct sync with trusted peers.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

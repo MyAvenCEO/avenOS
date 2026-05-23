@@ -4,7 +4,6 @@ import { page } from '$app/state'
 import { browser } from '$app/environment'
 import { ensureComposerTauriShortcutBridge } from '$lib/intent-mock/composer-tauri-bridge'
 import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
-import { isIosHostedTauriShell } from '$lib/tauri/tauri-shell-platform'
 import P2pSyncBadge from '$lib/peer/P2pSyncBadge.svelte'
 import {
 	attachAvenosRuntimeBridge,
@@ -54,7 +53,7 @@ const sessionKind = $derived($deviceSession.kind)
 
 /** Mesh touches Groove ACL — defer until strict local-first bootstrap confirms shell hydrate. */
 const meshAllowed = $derived(
-	sessionKind === 'unlocked' && $grooveSessionReady && !isIosHostedTauriShell(),
+	sessionKind === 'unlocked' && $grooveSessionReady,
 )
 
 $effect(() => {

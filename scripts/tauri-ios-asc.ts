@@ -12,8 +12,9 @@
  * 2. **Automatic CI** — `APPLE_API_ISSUER` + `APPLE_API_KEY` + `APPLE_API_KEY_PATH` (+ team).
  *
  * Optional env:
- *   AVEN_IOS_CF_BUNDLE_VERSION — CFBundleVersion for this upload (default "1")
+ *   AVEN_IOS_CF_BUNDLE_VERSION — CFBundleVersion for this upload (default "13")
  *   GENESIS_NETWORK_ID — compile-time embed (else from repo `.env`; see resolveGenesisNetworkId)
+ *   AVEN_RELAY_URL — optional shell override; default hardcoded `relay.aven.ceo` (compile-time embed for P2P)
  *   AVEN_OUTPUT_IPA — output path (default dist/ios-appstore/avenOS-<version>-build<N>.ipa)
  */
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -22,14 +23,20 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { applyAppleEnvLocal, resolveGenesisNetworkId } from './apple-env'
+import { resolveAppStoreRelayConfig } from './relay-bootstrap.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+
+/** Production Hyperswarm bootstrap host — compile-time embed for App Store sandbox (no .env). */
+const IOS_APPSTORE_AVEN_RELAY_URL = 'relay.aven.ceo'
+const IOS_APPSTORE_DHT_UDP_PORT = 49737
 
 applyAppleEnvLocal(repoRoot)
 
 const appDir = path.join(repoRoot, 'lib/app')
 const tauriDir = path.join(appDir, 'src-tauri')
 const genApple = path.join(tauriDir, 'gen/apple')
+const AVEN_IOS_COMPILE_ENV = path.join(genApple, '.aven-ios-compile.env')
 const entitlementsDest = path.join(genApple, 'aven-os-app_iOS/aven-os-app_iOS.entitlements')
 const entitlementsSrc = path.join(tauriDir, 'ios-template/aven-os-app_iOS.entitlements')
 
@@ -191,11 +198,30 @@ function ensureIosDevicePlatform(workspace: string, scheme: string) {
 	process.exit(1)
 }
 
+function shellEscapeSingleQuoted(value: string): string {
+	return `'${value.replace(/'/g, `'\"'\"'`)}'`
+}
+
+function writeAvenIosCompileEnv(genesisNetworkId: string, avenRelayUrl: string, dhtBootstrap: string) {
+	mkdirSync(path.dirname(AVEN_IOS_COMPILE_ENV), { recursive: true })
+	const lines = [
+		`export GENESIS_NETWORK_ID=${shellEscapeSingleQuoted(genesisNetworkId)}`,
+		`export AVEN_RELAY_URL=${shellEscapeSingleQuoted(avenRelayUrl)}`,
+		`export AVENOS_DHT_BOOTSTRAP=${shellEscapeSingleQuoted(dhtBootstrap)}`,
+		'',
+	]
+	writeFileSync(AVEN_IOS_COMPILE_ENV, lines.join('\n'), 'utf8')
+	console.log('[tauri-ios-asc] wrote compile env → %s', AVEN_IOS_COMPILE_ENV)
+}
+
 function patchXcodeRustScript() {
 	const projectYml = path.join(genApple, 'project.yml')
 	const pbxproj = path.join(genApple, 'aven-os-app.xcodeproj/project.pbxproj')
 	const badForceColor = '${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}'
 	const goodArchs = '${CONFIGURATION:?} ${ARCHS:?}'
+	const compileEnvSource = 'set -a; source "${SRCROOT}/.aven-ios-compile.env"; set +a; '
+	const compileEnvSourcePbx = 'set -a; source \\"${SRCROOT}/.aven-ios-compile.env\\"; set +a; '
+	const rustToolchain = `${compileEnvSource}export RUSTUP_TOOLCHAIN=1.88; export PATH="\${HOME}/.cargo/bin:\${PATH}"; `
 
 	if (existsSync(projectYml)) {
 		let yml = readFileSync(projectYml, 'utf8')
@@ -204,10 +230,15 @@ function patchXcodeRustScript() {
 			yml = yml.replaceAll(badForceColor, goodArchs)
 			ymlChanged = true
 		}
-		if (!yml.includes('export RUSTUP_TOOLCHAIN=1.88')) {
+		const bareScript = '- script: bun tauri ios xcode-script'
+		const patchedScript = `- script: ${rustToolchain}bun tauri ios xcode-script`
+		if (yml.includes(bareScript)) {
+			yml = yml.replace(bareScript, patchedScript)
+			ymlChanged = true
+		} else if (yml.includes('bun tauri ios xcode-script') && !yml.includes('.aven-ios-compile.env')) {
 			yml = yml.replace(
-				'- script: bun tauri ios xcode-script',
 				'- script: export RUSTUP_TOOLCHAIN=1.88; export PATH="${HOME}/.cargo/bin:${PATH}"; bun tauri ios xcode-script',
+				patchedScript,
 			)
 			ymlChanged = true
 		}
@@ -220,10 +251,25 @@ function patchXcodeRustScript() {
 	if (existsSync(pbxproj)) {
 		let pbx = readFileSync(pbxproj, 'utf8')
 		let changed = false
-		const rustEnv = 'export RUSTUP_TOOLCHAIN=1.88; export PATH=\\"${HOME}/.cargo/bin:${PATH}\\"; '
-		if (pbx.includes('shellScript = "bun tauri ios xcode-script') && !pbx.includes('RUSTUP_TOOLCHAIN=1.88')) {
+		const rustEnv = `${compileEnvSourcePbx}export RUSTUP_TOOLCHAIN=1.88; export PATH=\\"\${HOME}/.cargo/bin:\${PATH}\\"; `
+		const brokenPbxCompileEnv = 'source "${SRCROOT}/.aven-ios-compile.env"'
+		const fixedPbxCompileEnv = 'source \\"${SRCROOT}/.aven-ios-compile.env\\"'
+		if (pbx.includes(brokenPbxCompileEnv)) {
+			pbx = pbx.replaceAll(brokenPbxCompileEnv, fixedPbxCompileEnv)
+			changed = true
+		}
+		if (pbx.includes('shellScript = "bun tauri ios xcode-script') && !pbx.includes('.aven-ios-compile.env')) {
 			pbx = pbx.replace(
 				'shellScript = "bun tauri ios xcode-script',
+				`shellScript = "${rustEnv}bun tauri ios xcode-script`,
+			)
+			changed = true
+		} else if (
+			pbx.includes('shellScript = "export RUSTUP_TOOLCHAIN=1.88') &&
+			!pbx.includes('.aven-ios-compile.env')
+		) {
+			pbx = pbx.replace(
+				'shellScript = "export RUSTUP_TOOLCHAIN=1.88; export PATH=\\"${HOME}/.cargo/bin:${PATH}\\"; bun tauri ios xcode-script',
 				`shellScript = "${rustEnv}bun tauri ios xcode-script`,
 			)
 			changed = true
@@ -318,8 +364,8 @@ function configureSigning(env: NodeJS.ProcessEnv): 'automatic' | 'manual' {
 	process.exit(1)
 }
 
-function main() {
-	const bundleVersion = process.env.AVEN_IOS_CF_BUNDLE_VERSION?.trim() || '1'
+async function main() {
+	const bundleVersion = process.env.AVEN_IOS_CF_BUNDLE_VERSION?.trim() || '13'
 	const version = readPackageVersion()
 
 	const genesisNetworkId = resolveGenesisNetworkId(repoRoot)
@@ -329,9 +375,17 @@ function main() {
 		)
 		process.exit(1)
 	}
+	const avenRelayUrl = process.env.AVEN_RELAY_URL?.trim() || IOS_APPSTORE_AVEN_RELAY_URL
+	const relayCfg = await resolveAppStoreRelayConfig(
+		IOS_APPSTORE_AVEN_RELAY_URL,
+		IOS_APPSTORE_DHT_UDP_PORT,
+		{ warnLabel: 'tauri-ios-asc' },
+	)
+	const dhtBootstrap = relayCfg.dhtBootstrap
 
 	syncEntitlements()
 	generateIosIconsFromSource()
+	writeAvenIosCompileEnv(genesisNetworkId, avenRelayUrl, dhtBootstrap)
 	patchPodfile()
 	patchXcodeRustScript()
 
@@ -343,7 +397,14 @@ function main() {
 	const mergePath = path.join(mergeDir, 'tauri.ios.merge.json')
 	writeFileSync(
 		mergePath,
-		JSON.stringify({ bundle: { iOS: { bundleVersion } } }, null, 2),
+		JSON.stringify(
+			{
+				build: { beforeBuildCommand: '' },
+				bundle: { iOS: { bundleVersion } },
+			},
+			null,
+			2,
+		),
 		'utf8',
 	)
 
@@ -352,12 +413,26 @@ function main() {
 		APPLE_DEVELOPMENT_TEAM: team,
 		CI: 'true',
 		GENESIS_NETWORK_ID: genesisNetworkId,
+		AVEN_RELAY_URL: avenRelayUrl,
+		AVENOS_DHT_BOOTSTRAP: dhtBootstrap,
 		RUSTUP_TOOLCHAIN: '1.88',
 	}
 	console.log('[tauri-ios-asc] embedding GENESIS_NETWORK_ID at compile time')
+	console.log('[tauri-ios-asc] embedding AVEN_RELAY_URL=%s at compile time', avenRelayUrl)
+	console.log('[tauri-ios-asc] embedding AVENOS_DHT_BOOTSTRAP=%s at compile time', dhtBootstrap)
 	const signingMode = configureSigning(tauriEnv)
 
 	console.log('[tauri-ios-asc] team=%s build=%s mode=%s target=arm64-device', team, bundleVersion, signingMode)
+
+	const frontendBuild = spawnSync('bun', ['run', 'build'], {
+		cwd: appDir,
+		stdio: 'inherit',
+		env: tauriEnv,
+	})
+	if (frontendBuild.status !== 0) {
+		console.error('tauri-ios-asc: frontend build failed')
+		process.exit(frontendBuild.status ?? 1)
+	}
 
 	const tauriArgs = [
 		'--bun',
@@ -415,7 +490,12 @@ function main() {
 	}
 
 	console.log(`[tauri-ios-asc] done → ${ipaOut}`)
-	console.log('[tauri-ios-asc] Deliver this .ipa via Transporter to iOS App Store Connect / TestFlight.')
+	console.log(
+		'[tauri-ios-asc] Upload preferred: bun run release:app:ios <N> — uses altool/App Store Connect API. Use Apple Transporter only as a GUI fallback if CLI upload fails.',
+	)
 }
 
-main()
+void main().catch((e: unknown) => {
+	console.error(e)
+	process.exit(1)
+})

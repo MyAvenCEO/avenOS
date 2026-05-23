@@ -107,3 +107,8 @@ features = [
 [dev-dependencies.tracing-subscriber]
 version = "0.3"
 features = ["env-filter"]
+
+# Local AvenOS patch: `Cargo.toml` upstream is crates.io-normalized; point at the vendored DHT
+# so `cargo test --lib` exercises the same tree as `aven-os-app`.
+[patch.crates-io]
+peeroxide-dht = { path = "../peeroxide-dht" }

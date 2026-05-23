@@ -23,10 +23,11 @@ use crate::hyperdht_messages::{
     decode_hyper_peer_from_bytes,
     decode_lookup_raw_reply_from_bytes, decode_mutable_get_response_from_bytes,
     encode_announce_to_bytes, encode_hyper_peer_to_bytes,
-    encode_mutable_put_request_to_bytes, AnnounceMessage, HandshakeMessage, HolepunchMessage,
-    HolepunchPayload, HyperPeer, MutablePutRequest, NoisePayload, RelayThroughInfo,
-    SecretStreamInfo, UdxInfo, ANNOUNCE, FIND_PEER, FIREWALL_OPEN, FIREWALL_UNKNOWN, IMMUTABLE_GET,
-    IMMUTABLE_PUT, LOOKUP, MUTABLE_GET, MUTABLE_PUT, PEER_HANDSHAKE, PEER_HOLEPUNCH, UNANNOUNCE,
+    encode_mutable_put_request_to_bytes, AnnounceMessage, HandshakeMessage, HolepunchInfo,
+    HolepunchMessage, HolepunchPayload, HyperPeer, MutablePutRequest, NoisePayload, RelayInfo,
+    RelayThroughInfo, SecretStreamInfo, UdxInfo, ANNOUNCE, FIND_PEER, FIREWALL_OPEN,
+    FIREWALL_UNKNOWN, IMMUTABLE_GET, IMMUTABLE_PUT, LOOKUP, MUTABLE_GET, MUTABLE_PUT,
+    PEER_HANDSHAKE, PEER_HOLEPUNCH, UNANNOUNCE,
 };
 use crate::messages::Ipv4Peer;
 use crate::noise::Keypair as NoiseKeypair;
@@ -1185,26 +1186,15 @@ impl HyperDhtHandle {
             return Err(HyperDhtError::FirewallRejected);
         }
 
-        // Check if the remote peer wants us to relay through a third node.
-        if let Some(ref relay_through) = remote_payload.relay_through {
-            let relay_addrs = remote_payload.relay_addresses.clone().unwrap_or_default();
+        // Blind-relay is a fallback after direct connect and holepunch (not the first path).
+        let relay_fallback = remote_payload.relay_through.clone();
+        let relay_addr_hints = remote_payload.relay_addresses.clone().unwrap_or_default();
+        if relay_fallback.is_some() {
             tracing::debug!(
-                relay_pk = ?&relay_through.public_key[..8],
-                relay_addr_hints = relay_addrs.len(),
-                "remote requested relay_through"
+                relay_pk = ?relay_fallback.as_ref().map(|r| &r.public_key[..8]),
+                relay_addr_hints = relay_addr_hints.len(),
+                "remote advertises relay_through — deferred until direct/holepunch fail"
             );
-            return Box::pin(
-                self.relay_connection(
-                    key_pair,
-                    relay_through,
-                    &relay_addrs,
-                    &nw_result,
-                    false,
-                    true,
-                    runtime,
-                ),
-            )
-            .await;
         }
 
         // Skip holepunching when the remote peer is directly reachable.
@@ -1225,11 +1215,23 @@ impl HyperDhtHandle {
             "handshake complete, deciding connection path"
         );
 
+        // When the handshake was proxied through a DHT relay, `HandshakeResult::client_address`
+        // is `resp.from` (the relay), and `server_address` is `reply.peer_address` (also the
+        // relay). Comparing those hosts always yields `same_host=true` and incorrectly skips
+        // holepunch — the client opens UDX to the bootstrap black hole instead of the peer.
+        let same_host = if hs_result.relayed {
+            remote_payload.addresses4.iter().any(|a| {
+                a.host == hs_result.server_address.host
+            })
+        } else {
+            hs_result.server_address.host == hs_result.client_address.host
+        };
+
         if should_direct_connect(
             hs_result.relayed,
             remote_payload.firewall,
             remote_holepunchable,
-            hs_result.server_address.host == hs_result.client_address.host,
+            same_host,
         ) {
             // Prefer first non-private address from the remote's advertised list,
             // falling back to the server address extracted from the handshake reply.
@@ -1245,17 +1247,22 @@ impl HyperDhtHandle {
                 server_address: connect_addr,
                 client_address: hs_result.client_address,
                 is_relayed: false,
-                noise: nw_result,
+                noise: nw_result.clone(),
                 local_stream_id,
                 remote_udx: remote_payload.udx.clone(),
             };
             let shared = self.server_socket().await?;
-            return establish_stream_with_socket(&direct, runtime, shared).await;
+            match establish_stream_with_socket(&direct, runtime, shared).await {
+                Ok(conn) => return Ok(conn),
+                Err(e) => {
+                    tracing::debug!(err = %e, "direct connect failed — trying holepunch");
+                }
+            }
         }
 
         // Phase 2: Holepunch rounds via PEER_HOLEPUNCH relay
         let server_address = hs_result.server_address.clone();
-        let hp_result = self
+        match self
             .run_holepunch_rounds(
                 &nw_result,
                 &remote_payload,
@@ -1265,9 +1272,33 @@ impl HyperDhtHandle {
                 runtime,
                 local_stream_id,
             )
-            .await?;
-        let shared = self.server_socket().await?;
-        establish_stream_with_socket(&hp_result, runtime, shared).await
+            .await
+        {
+            Ok(hp_result) => {
+                let shared = self.server_socket().await?;
+                establish_stream_with_socket(&hp_result, runtime, shared).await
+            }
+            Err(holepunch_err) => {
+                if let Some(ref relay_through) = relay_fallback {
+                    tracing::debug!(
+                        err = %holepunch_err,
+                        "holepunch failed — falling back to blind relay"
+                    );
+                    Box::pin(self.relay_connection(
+                        key_pair,
+                        relay_through,
+                        &relay_addr_hints,
+                        &nw_result,
+                        false,
+                        true,
+                        runtime,
+                    ))
+                    .await
+                } else {
+                    Err(holepunch_err)
+                }
+            }
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1615,16 +1646,23 @@ pub async fn establish_stream_with_socket(
 /// Per-server state for pending handshake and holepunch exchanges.
 pub struct ServerSession {
     /// Cached holepunch secrets indexed by remote public key.
-    holepunch_secrets: std::collections::HashMap<[u8; 32], ServerPeerState>,
+    holepunch_secrets: std::collections::HashMap<[u8; 32], HolepunchServerPeerState>,
 }
 
-#[allow(dead_code)]
-struct ServerPeerState {
-    holepunch_secret: [u8; 32],
-    remote_public_key: [u8; 32],
-    client_address: Ipv4Peer,
-    local_stream_id: u32,
-    remote_udx: Option<UdxInfo>,
+/// Server-side bookkeeping after Noise completes on an inbound handshake — reused by swarm and
+/// the standalone HyperDHT server loop (`run_server`).
+#[derive(Clone)]
+pub struct HolepunchServerPeerState {
+    /// Derived shared secret used to encrypt/decrypt [`HolepunchMessage`] payloads.
+    pub holepunch_secret: [u8; 32],
+    /// Remote Ed25519 public key (noise handshake).
+    pub remote_public_key: [u8; 32],
+    /// Client UDP endpoint as tracked for punching (relay path = initiator behind relay).
+    pub client_address: Ipv4Peer,
+    /// Stream id negotiated in the Noise handshake.
+    pub local_stream_id: u32,
+    /// Remote UDX parameters from their handshake Noise payload (parity with standalone server).
+    pub remote_udx: Option<UdxInfo>,
 }
 
 /// Run the server-side request loop for peer handshakes and holepunches.
@@ -1697,11 +1735,26 @@ fn handle_server_handshake(
 
     let local_stream_id = next_stream_id();
 
+    // When the handshake arrived via a relay (MODE_FROM_RELAY / MODE_FROM_SECOND_RELAY),
+    // `msg.peer_address` holds the original client's UDP address as seen by the relay and
+    // `from` holds the relay itself. We must advertise the relay as a holepunch-capable
+    // RelayInfo so the client attempts NAT traversal via the same Fly DHT node that
+    // already proxied the handshake — otherwise the client falls back to "direct connect
+    // to server_address" (which is the relay) and ships UDX packets into a black hole.
+    let relayed_via = msg.peer_address.clone();
+    let holepunch_info = relayed_via.as_ref().map(|client_addr| HolepunchInfo {
+        id: u64::from(local_stream_id),
+        relays: vec![RelayInfo {
+            relay_address: from.clone(),
+            peer_address: client_addr.clone(),
+        }],
+    });
+
     let reply_payload = NoisePayload {
         version: 1,
         error: 0,
         firewall: config.firewall,
-        holepunch: None,
+        holepunch: holepunch_info,
         addresses4: vec![],
         addresses6: vec![],
         udx: Some(UdxInfo {
@@ -1725,41 +1778,49 @@ fn handle_server_handshake(
         Err(_) => return None,
     };
 
+    // Track the true client address (from MODE_FROM_RELAY) so PEER_HOLEPUNCH bookkeeping
+    // matches the address the client will use for punching.
+    let client_address = relayed_via.clone().unwrap_or_else(|| from.clone());
+
     session.holepunch_secrets.insert(
         nw_result.remote_public_key,
-        ServerPeerState {
+        HolepunchServerPeerState {
             holepunch_secret: nw_result.holepunch_secret,
             remote_public_key: nw_result.remote_public_key,
-            client_address: from.clone(),
+            client_address,
             local_stream_id,
             remote_udx: remote_payload.udx.clone(),
         },
     );
 
+    // `peeroxide_dht::router::HandshakeResult::relayed` is `reply.peer_address.is_some()`.
+    // Direct handshake must keep `None` so the initiator skips spurious relay/holepunch paths.
     let reply_msg = HandshakeMessage {
         mode: crate::hyperdht_messages::MODE_REPLY,
         noise: noise_reply,
-        peer_address: Some(from.clone()),
+        peer_address: relayed_via.as_ref().map(|_| from.clone()),
         relay_address: None,
     };
 
     crate::hyperdht_messages::encode_handshake_to_bytes(&reply_msg).ok()
 }
 
-async fn handle_server_holepunch(
-    config: &ServerConfig,
-    session: &mut ServerSession,
+/// Shared implementation for answering `PEER_HOLEPUNCH` on the responder (standalone HyperDHT
+/// [`run_server`] loop and Hyperswarm, which consumes the same handshake state).
+pub async fn handle_peer_holepunch_reply(
+    firewall: u64,
+    holepunch_secrets: &[&HolepunchServerPeerState],
     pool: &SocketPool,
     runtime: &UdxRuntime,
     msg: HolepunchMessage,
     peer_address: &Ipv4Peer,
 ) -> Option<Vec<u8>> {
     // Find the matching session by trying each known peer's secret
-    let mut matched_state: Option<&ServerPeerState> = None;
-    for state in session.holepunch_secrets.values() {
+    let mut matched_state: Option<&HolepunchServerPeerState> = None;
+    for state in holepunch_secrets {
         let sp = SecurePayload::new(state.holepunch_secret);
         if sp.decrypt(&msg.payload).is_ok() {
-            matched_state = Some(state);
+            matched_state = Some(*state);
             break;
         }
     }
@@ -1771,7 +1832,7 @@ async fn handle_server_holepunch(
 
     let reply_hp = HolepunchPayload {
         error: 0,
-        firewall: config.firewall,
+        firewall,
         round: remote_hp.round,
         connected: false,
         punching: remote_hp.punching,
@@ -1822,6 +1883,26 @@ async fn handle_server_holepunch(
     };
 
     crate::hyperdht_messages::encode_holepunch_msg_to_bytes(&reply_msg).ok()
+}
+
+async fn handle_server_holepunch(
+    config: &ServerConfig,
+    session: &mut ServerSession,
+    pool: &SocketPool,
+    runtime: &UdxRuntime,
+    msg: HolepunchMessage,
+    peer_address: &Ipv4Peer,
+) -> Option<Vec<u8>> {
+    let refs: Vec<&HolepunchServerPeerState> = session.holepunch_secrets.values().collect();
+    handle_peer_holepunch_reply(
+        config.firewall,
+        &refs,
+        pool,
+        runtime,
+        msg,
+        peer_address,
+    )
+    .await
 }
 
 // ── Spawn ─────────────────────────────────────────────────────────────────────
@@ -2049,13 +2130,52 @@ fn handle_peer_handshake(
 
     match action {
         HandshakeAction::Relay { value, to } => {
+            // Proxy the relayed PEER_HANDSHAKE as a tracked request so the destination
+            // peer's MODE_REPLY (carried in the response value) is forwarded back to
+            // the original client. The previous `dht.relay()` + `req.reply(None)` path
+            // dropped the response — clients saw `HandshakeFailed("empty reply")` and
+            // pairing across NATs never completed.
             tracing::info!(
                 from = %format!("{}:{}", req.from.host, req.from.port),
                 to = %format!("{}:{}", to.host, to.port),
                 "handshake RELAY — forwarding between peers"
             );
-            let _ = dht.relay(PEER_HANDSHAKE, req.target, Some(value), &to);
-            req.reply(None);
+            let dht_clone = dht.clone();
+            let target = req.target;
+            let to_host = to.host.clone();
+            let to_port = to.port;
+            tokio::spawn(async move {
+                match dht_clone
+                    .request(
+                        UserRequestParams {
+                            token: None,
+                            command: PEER_HANDSHAKE,
+                            target,
+                            value: Some(value),
+                        },
+                        &to_host,
+                        to_port,
+                    )
+                    .await
+                {
+                    Ok(resp) => {
+                        if resp.error != 0 {
+                            tracing::debug!(
+                                err = resp.error,
+                                to = %format!("{}:{}", to_host, to_port),
+                                "handshake RELAY destination returned error"
+                            );
+                            req.error(resp.error);
+                        } else {
+                            req.reply(resp.value);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(err = %e, "handshake RELAY proxy failed");
+                        req.error(1);
+                    }
+                }
+            });
         }
         HandshakeAction::Reply(value) => {
             tracing::debug!(from = %format!("{}:{}", req.from.host, req.from.port), "handshake REPLY");
@@ -2128,22 +2248,85 @@ fn handle_peer_holepunch(
 
     match action {
         HolepunchAction::Relay { value, to } => {
+            // Proxy PEER_HOLEPUNCH the same way as PEER_HANDSHAKE so the client receives
+            // the destination peer's response. Fire-and-forget left holepunch rounds
+            // unanswered, which forced clients to time out before falling back.
             tracing::info!(
                 from = %format!("{}:{}", req.from.host, req.from.port),
                 to = %format!("{}:{}", to.host, to.port),
                 "holepunch RELAY — forwarding between peers"
             );
-            let _ = dht.relay(PEER_HOLEPUNCH, req.target, Some(value), &to);
-            req.reply(None);
+            let dht_clone = dht.clone();
+            let target = req.target;
+            let to_host = to.host.clone();
+            let to_port = to.port;
+            tokio::spawn(async move {
+                match dht_clone
+                    .request(
+                        UserRequestParams {
+                            token: None,
+                            command: PEER_HOLEPUNCH,
+                            target,
+                            value: Some(value),
+                        },
+                        &to_host,
+                        to_port,
+                    )
+                    .await
+                {
+                    Ok(resp) => {
+                        if resp.error != 0 {
+                            req.error(resp.error);
+                        } else {
+                            req.reply(resp.value);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(err = %e, "holepunch RELAY proxy failed");
+                        req.error(1);
+                    }
+                }
+            });
         }
         HolepunchAction::Reply { value, to } => {
+            // Same proxy treatment so the destination's reply makes it back to the
+            // original caller.
             tracing::debug!(
                 from = %format!("{}:{}", req.from.host, req.from.port),
                 to = %format!("{}:{}", to.host, to.port),
                 "holepunch REPLY"
             );
-            let _ = dht.relay(PEER_HOLEPUNCH, req.target, Some(value), &to);
-            req.reply(None);
+            let dht_clone = dht.clone();
+            let target = req.target;
+            let to_host = to.host.clone();
+            let to_port = to.port;
+            tokio::spawn(async move {
+                match dht_clone
+                    .request(
+                        UserRequestParams {
+                            token: None,
+                            command: PEER_HOLEPUNCH,
+                            target,
+                            value: Some(value),
+                        },
+                        &to_host,
+                        to_port,
+                    )
+                    .await
+                {
+                    Ok(resp) => {
+                        if resp.error != 0 {
+                            req.error(resp.error);
+                        } else {
+                            req.reply(resp.value);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(err = %e, "holepunch REPLY proxy failed");
+                        req.error(1);
+                    }
+                }
+            });
         }
         HolepunchAction::HandleLocally { msg, peer_address } => {
             tracing::debug!(

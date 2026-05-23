@@ -2,7 +2,10 @@
 #
 # Paths can include spaces — use quotes, e.g. "/Users/you/Desktop/Maia City/Apple/foo.provisionprofile"
 #
-# After editing: `bun run build:app:mac:appstore` and `cd lib/app && bun run tauri:ios:build:asc` load this automatically.
+# After editing: `bun run release:app:mac <N>` and `bun run release:app:ios <N>` load this automatically.
+
+# Upload path: CLI via `release:app:*` (altool / App Store Connect API) is preferred; Apple Transporter
+# is optional when API upload fails — not the primary QA workflow anymore.
 
 APPLE_DEVELOPMENT_TEAM=YOUR10CHARTEAMID
 

@@ -2,7 +2,6 @@
 	import { browser } from '$app/environment'
 	import { deviceSession } from '$lib/self/device-session-store'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-	import { isIosHostedTauriShell } from '$lib/tauri/tauri-shell-platform'
 	import PeerMeshPhaseBadge from '$lib/peer/PeerMeshPhaseBadge.svelte'
 	import { peerPersonName } from '$lib/peer/display-label'
 	import { peerMeshPhaseLabel, peerMeshPhaseUserLabel } from '$lib/peer/mesh-state'
@@ -11,8 +10,7 @@
 	const show = $derived(
 		browser &&
 			isTauriRuntime() &&
-			$deviceSession.kind === 'unlocked' &&
-			!isIosHostedTauriShell(),
+			$deviceSession.kind === 'unlocked',
 	)
 
 	const mesh = $derived($peerMeshSnapshot)

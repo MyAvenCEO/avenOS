@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
+use tracing;
 
 use crate::hyperdht_messages::{FIREWALL_CONSISTENT, FIREWALL_RANDOM, FIREWALL_UNKNOWN};
 use crate::messages::Ipv4Peer;
@@ -139,6 +140,20 @@ impl Holepuncher {
             return true;
         }
 
+        // NAT typing never ran (common on mobile / first relayed connect — both sides still
+        // FIREWALL_UNKNOWN in handshake). Node still probes; without this branch punch()
+        // returns false immediately after PEER_HOLEPUNCH address exchange.
+        if local == FIREWALL_UNKNOWN || remote == FIREWALL_UNKNOWN {
+            tracing::debug!(
+                local,
+                remote,
+                verified = %format!("{}:{}", verified_addr.host, verified_addr.port),
+                "holepunch: firewall unknown — consistent probe fallback"
+            );
+            self.consistent_probe().await;
+            return true;
+        }
+
         false
     }
 
@@ -149,13 +164,37 @@ impl Holepuncher {
         })
     }
 
+    fn drain_incoming_holepunches(&mut self) {
+        let mut incoming: Vec<(usize, SocketAddr)> = Vec::new();
+        for (idx, socket) in self.sockets.iter_mut().enumerate() {
+            loop {
+                match socket.holepunch_rx.try_recv() {
+                    Ok(ev) => incoming.push((idx, ev.addr)),
+                    Err(mpsc::error::TryRecvError::Empty) => break,
+                    Err(mpsc::error::TryRecvError::Disconnected) => break,
+                }
+            }
+        }
+        for (idx, addr) in incoming {
+            self.on_holepunch_message(addr, idx);
+            if self.connected {
+                return;
+            }
+        }
+    }
+
     async fn consistent_probe(&mut self) {
         if !self.is_initiator {
             sleep(Duration::from_secs(1)).await;
         }
 
         for tries in 0..10 {
-            if !self.punching {
+            if !self.punching || self.connected {
+                break;
+            }
+
+            self.drain_incoming_holepunches();
+            if self.connected {
                 break;
             }
 
@@ -172,8 +211,9 @@ impl Holepuncher {
                 }
             }
 
-            if self.punching {
+            if self.punching && !self.connected {
                 sleep(Duration::from_secs(1)).await;
+                self.drain_incoming_holepunches();
             }
         }
 
@@ -182,7 +222,12 @@ impl Holepuncher {
 
     async fn random_probes(&mut self, remote_addr: &Ipv4Peer) {
         for _ in 0..1750 {
-            if !self.punching {
+            if !self.punching || self.connected {
+                break;
+            }
+
+            self.drain_incoming_holepunches();
+            if self.connected {
                 break;
             }
 
@@ -195,7 +240,7 @@ impl Holepuncher {
                 let _ = socket.send_holepunch(target, false);
             }
 
-            if self.punching {
+            if self.punching && !self.connected {
                 sleep(Duration::from_millis(20)).await;
             }
         }
@@ -237,7 +282,12 @@ impl Holepuncher {
         let mut low_ttl_rounds: u32 = 1;
 
         for _ in 0..1750 {
-            if !self.punching {
+            if !self.punching || self.connected {
+                break;
+            }
+
+            self.drain_incoming_holepunches();
+            if self.connected {
                 break;
             }
 
