@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use libudx::{RuntimeHandle, UdxRuntime};
 use peeroxide_dht::crypto::hash;
+use peeroxide_dht::holepuncher::match_address;
 use peeroxide_dht::local_addresses::build_addresses4;
 use peeroxide_dht::hyperdht::{
     self, handle_peer_holepunch_reply, HolepunchServerPeerState, HyperDhtConfig, HyperDhtHandle,
@@ -869,12 +870,17 @@ impl SwarmActor {
             }
             Err(e) => {
                 tracing::debug!(pk = %short_hex(&result.public_key), err = %e, "connect failed");
-                if let Some(hook) = &self.connect_ui {
-                    hook(peeroxide_dht::connect_ui::ConnectUiEvent::Disconnected {
-                        remote_pk: result.public_key,
-                    });
+                if !matches!(
+                    e,
+                    SwarmError::Dht(peeroxide_dht::hyperdht::HyperDhtError::LanRelayedServerRole)
+                ) {
+                    if let Some(hook) = &self.connect_ui {
+                        hook(peeroxide_dht::connect_ui::ConnectUiEvent::Disconnected {
+                            remote_pk: result.public_key,
+                        });
+                    }
+                    self.schedule_retry(result.public_key);
                 }
-                self.schedule_retry(result.public_key);
             }
         }
 
@@ -1099,6 +1105,78 @@ impl SwarmActor {
         }
 
         if relayed_via.is_some() {
+            let local_addrs4 = build_addresses4(self.config.dht_listen_port);
+            if let Some(lan_peer) =
+                match_address(&local_addrs4, &remote_payload.addresses4)
+            {
+                if self.key_pair.public_key < remote_pk {
+                    if self.connections.len() >= self.config.max_peers {
+                        tracing::debug!("server: at max connections");
+                        return;
+                    }
+
+                    let Some(remote_udx) = remote_payload.udx.clone() else {
+                        tracing::debug!("server: relayed LAN but no UDX info in handshake");
+                        return;
+                    };
+
+                    self.connections
+                        .add(remote_pk, ConnectionInfo { is_initiator: false });
+
+                    let conn_tx = self.conn_tx.clone();
+                    let rh = self.runtime_handle.clone();
+                    let dht = self.dht.clone();
+                    let nw_result = nw_result.clone();
+                    let lan_peer = lan_peer.clone();
+
+                    tracing::debug!(
+                        pk = %short_hex(&remote_pk),
+                        lan = %format!("{}:{}", lan_peer.host, lan_peer.port),
+                        "server: relayed LAN — opening responder stream",
+                    );
+
+                    tokio::spawn(async move {
+                        match create_server_connection(
+                            rh,
+                            dht,
+                            local_stream_id,
+                            &remote_udx,
+                            &lan_peer,
+                            &nw_result,
+                        )
+                        .await
+                        {
+                            Ok((mut conn, runtime)) => {
+                                conn.transport_mode =
+                                    Some(peeroxide_dht::connect_ui::ConnectTransportMode::Lan);
+                                let swarm_conn = SwarmConnection {
+                                    peer: conn,
+                                    is_initiator: false,
+                                    topics: vec![],
+                                    _runtime: runtime,
+                                };
+                                if conn_tx.send(swarm_conn).await.is_err() {
+                                    tracing::warn!("connection channel closed");
+                                }
+                            }
+                            Err(e) => {
+                                tracing::debug!(
+                                    err = %e,
+                                    "server: relayed LAN responder stream failed",
+                                );
+                            }
+                        }
+                    });
+                    return;
+                }
+
+                tracing::debug!(
+                    pk = %short_hex(&remote_pk),
+                    "server: relayed LAN — waiting on dominant peer initiator stream",
+                );
+                return;
+            }
+
             tracing::debug!(
                 pk = %short_hex(&remote_pk),
                 "server: handshake relayed — waiting on holepunch + initiator stream (no eager server connect)",

@@ -248,6 +248,10 @@ pub enum HyperDhtError {
     /// Failed to establish a UDX stream.
     #[error("stream establishment failed: {0}")]
     StreamEstablishment(String),
+    /// Relayed handshake on a shared LAN: this node lost the key tie-break and must
+    /// complete the link via the server/responder path, not outbound direct connect.
+    #[error("relayed LAN connect: responder role (defer outbound)")]
+    LanRelayedServerRole,
     /// Error from the relay subsystem.
     #[error("relay error: {0}")]
     Relay(#[from] RelayError),
@@ -1401,14 +1405,26 @@ impl HyperDhtHandle {
             "connect path: post-handshake endpoint selection"
         );
 
+        let lan_match = match_address(&local_addresses4, &remote_payload.addresses4);
+
+        // Fly-relayed handshakes make both sides Noise initiators if each runs outbound
+        // direct LAN connect. Lower public key opens the responder half via
+        // `swarm::handle_server_handshake`; dominant key continues outbound below.
+        if hs_result.relayed && lan_match.is_some() && key_pair.public_key <= nw_result.remote_public_key
+        {
+            tracing::debug!(
+                "relayed LAN connect: deferring outbound to server/responder role (key tie-break)",
+            );
+            return Err(HyperDhtError::LanRelayedServerRole);
+        }
+
         if should_direct_connect(
             hs_result.relayed,
             remote_payload.firewall,
             remote_holepunchable,
             same_host,
         ) {
-            let transport_mode = if match_address(&local_addresses4, &remote_payload.addresses4)
-                .is_some()
+            let transport_mode = if lan_match.is_some()
             {
                 crate::connect_ui::ConnectTransportMode::Lan
             } else {
@@ -1424,7 +1440,14 @@ impl HyperDhtHandle {
                 remote_udx: remote_payload.udx.clone(),
                 transport_mode: Some(transport_mode),
             };
-            let shared = self.server_socket().await?;
+            // LAN/hotspot connects target the peer's advertised DHT listen port. When
+            // firewalled, `server_socket()` is the ephemeral client socket — packets would
+            // not match the responder's stream keyed to `listen_socket()` + addresses4.
+            let shared = if transport_mode == crate::connect_ui::ConnectTransportMode::Lan {
+                self.listen_socket().await?
+            } else {
+                self.server_socket().await?
+            };
             match establish_stream_with_socket(&direct, runtime, shared).await {
                 Ok(mut conn) => {
                     conn.transport_mode = Some(transport_mode);
