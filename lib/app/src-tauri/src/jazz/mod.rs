@@ -845,6 +845,8 @@ async fn emit_mesh_snapshot_from_rows(
 				last_path_change_at_ms: None,
 				last_foreground_heal_at_ms: None,
 				heal_in_progress: false,
+				prefer_lan: true,
+				network_interfaces: vec![],
 			},
 			peers: vec![],
 		}
@@ -1482,10 +1484,28 @@ async fn flush_spark_grant_to_peers(
 	h.on_spark_access_granted().await;
 
 	let bridge = app.state::<HyperswarmGrooveBridge>();
-	if bridge.snapshot_remote_clients().await.is_empty() {
+	let live = bridge.snapshot_remote_clients().await;
+	if live.is_empty() {
 		log::info!(
 			target: "avenos::jazz",
 			"spark_admin_add: grant saved for spark {spark_uuid}; catch-up queued for next live link",
+		);
+		return;
+	}
+	let send_ready = {
+		let mut ok = false;
+		for cid in &live {
+			if bridge.peer_send_ready(*cid).await {
+				ok = true;
+				break;
+			}
+		}
+		ok
+	};
+	if !send_ready {
+		log::info!(
+			target: "avenos::jazz",
+			"spark_admin_add: grant saved for spark {spark_uuid}; catch-up queued until Groove mux send-ready",
 		);
 		return;
 	}
@@ -2089,6 +2109,8 @@ pub(crate) async fn execute_mesh_snapshot(
 				last_path_change_at_ms: None,
 				last_foreground_heal_at_ms: None,
 				heal_in_progress: false,
+				prefer_lan: true,
+				network_interfaces: vec![],
 			},
 			peers: vec![],
 		})

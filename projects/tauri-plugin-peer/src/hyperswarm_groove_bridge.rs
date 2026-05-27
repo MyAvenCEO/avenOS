@@ -142,6 +142,14 @@ impl HyperswarmGrooveBridge {
 			.collect()
 	}
 
+	/// True when the mux worker is running and the outbound capsule channel is open.
+	pub async fn peer_send_ready(&self, client: ClientId) -> bool {
+		let workers = self.0.swarm_workers.lock().await;
+		let outbound = self.0.outbound_by_peer.lock().await;
+		let live = self.0.active_remote_clients.lock().await;
+		live.contains(&client) && workers.contains_key(&client) && outbound.contains_key(&client)
+	}
+
 	async fn wait_until_local_party(&self) -> ClientId {
 		loop {
 			if let Some(id) = *self.0.local_client_id.lock().await {

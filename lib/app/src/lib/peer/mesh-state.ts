@@ -14,6 +14,10 @@ export type P2pDiagnostics = {
 	lastPathChangeAtMs?: number | null
 	lastForegroundHealAtMs?: number | null
 	healInProgress?: boolean
+	/** LAN-first connect (false on cellular-only). */
+	preferLan?: boolean
+	/** Last NWPathMonitor interfaces (e.g. wifi, cellular). */
+	networkInterfaces?: string[]
 }
 
 export type PeerConnectSubstate =
@@ -37,6 +41,10 @@ export type PeerMeshPeerState = {
 	lastDisconnectAtMs?: number | null
 	lastDisconnectReason?: string | null
 	desiredTransport?: PeerTransportMode | null
+	/** Groove mux worker + outbound channel ready. */
+	grooveMuxReady?: boolean | null
+	/** Outbound catch-up finished for this peer. */
+	catchupReady?: boolean | null
 }
 
 /** Single source of truth for P2P mesh UI (header + Self → Peers). */
@@ -270,6 +278,12 @@ export function peerMeshDetailSubLabel(
 			return `${label} → ${peerTransportModeLabel(row.desiredTransport)}`
 		}
 		return label
+	}
+	if (phase === 'searching' || phase === 'syncing') {
+		const parts: string[] = []
+		if (row.grooveMuxReady === false) parts.push('mux pending')
+		if (row.grooveMuxReady === true && row.catchupReady === false) parts.push('catch-up pending')
+		if (parts.length > 0) return parts.join(' · ')
 	}
 	return null
 }

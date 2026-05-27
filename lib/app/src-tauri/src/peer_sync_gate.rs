@@ -74,6 +74,13 @@ impl BiscuitGatedPeerTransport {
 	}
 }
 
+fn is_sync_diag_table(tbl: &Option<String>) -> bool {
+	matches!(
+		tbl.as_deref(),
+		Some("sparks" | "keyshares" | "messages" | "files")
+	)
+}
+
 #[async_trait]
 impl PeerTransport for BiscuitGatedPeerTransport {
 	async fn send_to(&self, peer: ClientId, payload: SyncPayload) -> GrooveResult<()> {
@@ -87,19 +94,27 @@ impl PeerTransport for BiscuitGatedPeerTransport {
 		let variant = payload_variant(&payload);
 		let tbl = table_from_metadata(&payload);
 		if !should_forward(&self.acl, &dest_did, &payload) {
-			// Keep at debug: a dropped spark frame is the usual ACL / catch-up timing signal.
-			log::debug!(
-				target: "avenos::peer_sync_gate",
+			let log_line = format!(
 				"drop outbound peer={peer:?} did={dest_did} variant={variant} table={tbl:?}",
 			);
+			if is_sync_diag_table(&tbl) {
+				log::info!(target: "avenos::peer_sync_gate", "{log_line}");
+			} else {
+				log::debug!(target: "avenos::peer_sync_gate", "{log_line}");
+			}
 			return Ok(());
 		}
-		// Per-frame trace only — full catch-up can emit thousands/sec at `avenos=debug`.
-		// Enable with `RUST_LOG=avenos::peer_sync_gate=trace` when you need wire-level detail.
-		log::trace!(
-			target: "avenos::peer_sync_gate",
-			"forward outbound peer={peer:?} did={dest_did} variant={variant} table={tbl:?}",
-		);
+		if is_sync_diag_table(&tbl) {
+			log::info!(
+				target: "avenos::peer_sync_gate",
+				"forward outbound peer={peer:?} did={dest_did} variant={variant} table={tbl:?}",
+			);
+		} else {
+			log::trace!(
+				target: "avenos::peer_sync_gate",
+				"forward outbound peer={peer:?} did={dest_did} variant={variant} table={tbl:?}",
+			);
+		}
 		self.inner.send_to(peer, payload).await
 	}
 
@@ -125,6 +140,12 @@ impl PeerTransport for BiscuitGatedPeerTransport {
 		// `recv_inbound` returns, and the drain debounces ~50ms which is plenty
 		// of headroom for that apply to land before we re-query.
 		if let (Some(table), Some(tx)) = (tbl.as_ref(), self.change_tx.as_ref()) {
+			if is_sync_diag_table(&tbl) {
+				log::info!(
+					target: "avenos::peer_sync_gate",
+					"recv inbound src={src} variant={variant} table={table} commits={commits}",
+				);
+			}
 			let _ = tx.send(table.clone());
 		}
 		Some(entry)

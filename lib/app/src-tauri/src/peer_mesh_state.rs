@@ -39,6 +39,12 @@ pub struct PeerMeshPeerState {
 	pub last_disconnect_reason: Option<String>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub desired_transport: Option<tauri_plugin_peer::PeerTransportMode>,
+	/// Groove mux worker + outbound channel ready (can send spark/keyshare frames).
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub groove_mux_ready: Option<bool>,
+	/// Outbound catch-up finished for this peer (`PeerCatchupPhase::Ready`).
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub catchup_ready: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -86,9 +92,12 @@ pub(crate) async fn assemble_mesh_snapshot(
 	let cid_map = bridge.shared_client_id_to_did();
 
 	let mut catchup_done_by_did: HashMap<String, bool> = HashMap::new();
+	let mut groove_mux_ready_by_did: HashMap<String, bool> = HashMap::new();
 	for cid in &live {
-		if let Some(did) = cid_map.read().expect("cid map").get(cid).cloned() {
-			catchup_done_by_did.insert(did, mesh_catchup.contains(cid));
+		let did = cid_map.read().expect("cid map").get(cid).cloned();
+		if let Some(did) = did {
+			catchup_done_by_did.insert(did.clone(), mesh_catchup.contains(cid));
+			groove_mux_ready_by_did.insert(did, bridge.peer_send_ready(*cid).await);
 		}
 	}
 
@@ -103,6 +112,8 @@ pub(crate) async fn assemble_mesh_snapshot(
 			&catchup_done_by_did,
 		);
 		let ui = peer_ctl.connect_ui_row_for_did(&row.peer_did);
+		let catchup_ready = catchup_done_by_did.get(&row.peer_did).copied();
+		let groove_mux = groove_mux_ready_by_did.get(&row.peer_did).copied();
 		out.push(PeerMeshPeerState {
 			id: row.id,
 			peer_did: row.peer_did,
@@ -116,6 +127,8 @@ pub(crate) async fn assemble_mesh_snapshot(
 			last_disconnect_at_ms: ui.last_disconnect_at_ms,
 			last_disconnect_reason: ui.last_disconnect_reason,
 			desired_transport: ui.desired_transport,
+			groove_mux_ready: groove_mux,
+			catchup_ready: catchup_ready,
 		});
 	}
 

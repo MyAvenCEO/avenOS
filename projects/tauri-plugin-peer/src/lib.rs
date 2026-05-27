@@ -79,6 +79,16 @@ pub struct P2pDiagnostics {
 	pub last_foreground_heal_at_ms: Option<u64>,
 	#[serde(default)]
 	pub heal_in_progress: bool,
+	/// LAN-first connect paths (false on cellular-only).
+	#[serde(default = "default_prefer_lan")]
+	pub prefer_lan: bool,
+	/// Last reported network interfaces from NWPathMonitor (e.g. `wifi`, `cellular`).
+	#[serde(default)]
+	pub network_interfaces: Vec<String>,
+}
+
+fn default_prefer_lan() -> bool {
+	true
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -135,6 +145,9 @@ pub struct PeerCtl {
 	/// Last resolved P2P stack config — surfaced in UI for TestFlight diagnostics.
 	p2p_diagnostics: Arc<tokio::sync::RwLock<P2pDiagnostics>>,
 	connect_ui_tracker: Arc<peer_connect_ui::PeerConnectUiTracker>,
+	/// Shared with peeroxide/HyperDHT — toggled on network path changes.
+	prefer_lan: Arc<AtomicBool>,
+	last_network_interfaces: Arc<tokio::sync::RwLock<Vec<String>>>,
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -622,6 +635,8 @@ fn build_p2p_diagnostics(cfg: &peeroxide::SwarmConfig, linked_count: usize) -> P
 		last_path_change_at_ms: None,
 		last_foreground_heal_at_ms: None,
 		heal_in_progress: false,
+		prefer_lan: cfg.prefer_lan.load(Ordering::Relaxed),
+		network_interfaces: Vec::new(),
 	}
 }
 
@@ -793,6 +808,8 @@ impl PeerCtl {
 			return Err(e);
 		}
 		cfg.connect_ui = Some(self.connect_ui_tracker.hook());
+		cfg.prefer_lan = Arc::clone(&self.prefer_lan);
+		cfg.dht.prefer_lan = Arc::clone(&self.prefer_lan);
 
 		let linked_count = self.jazz_hyperswarm.snapshot_remote_clients().await.len();
 		let mut diag = build_p2p_diagnostics(&cfg, linked_count);
@@ -937,6 +954,14 @@ impl PeerCtl {
 			) {
 				log::warn!(target: "avenos::peeroxide", "emit peer:invite-paired failed: {e}");
 			}
+			// Pairing uses a short-lived topic — do not attach Jazz/Groove to this link.
+			// Durable per-pair topic reconnect establishes the mux used for spark sync.
+			log::debug!(
+				target: "avenos::peeroxide",
+				"pairing conn complete for {remote_did}; closing without Groove mux",
+			);
+			drop(conn);
+			return;
 		}
 
 		self.connect_ui_tracker
@@ -989,6 +1014,12 @@ impl PeerCtl {
 		p2p_diagnostics.last_path_change_at_ms = path_ms;
 		p2p_diagnostics.last_foreground_heal_at_ms = fg_ms;
 		p2p_diagnostics.heal_in_progress = heal_busy;
+		p2p_diagnostics.prefer_lan = self.prefer_lan.load(Ordering::Relaxed);
+		p2p_diagnostics.network_interfaces = self
+			.last_network_interfaces
+			.read()
+			.await
+			.clone();
 
 		PeerTransportStatusReply {
 			hyperswarm_running,
@@ -1132,6 +1163,7 @@ impl PeerCtl {
 	}
 
 	async fn soft_heal_inner(&self, reason: &str, prefer_lan: bool) -> Result<(), String> {
+		self.prefer_lan.store(prefer_lan, Ordering::Release);
 		let flush_label: &'static str = match reason {
 			"network path changed" => "network path changed",
 			"app foreground" => "app foreground",
@@ -1160,6 +1192,16 @@ impl PeerCtl {
 			r.swarm.clone()
 		};
 
+		swarm.set_prefer_lan(prefer_lan);
+		if !prefer_lan {
+			if let Err(e) = swarm.prepare_reconnect().await {
+				log::debug!(
+					target: "avenos::peeroxide",
+					"prepare_reconnect ({reason}, prefer_lan=false): {e}",
+				);
+			}
+		}
+
 		if let Err(e) = swarm.refresh_announce_relays().await {
 			log::debug!(
 				target: "avenos::peeroxide",
@@ -1177,6 +1219,7 @@ impl PeerCtl {
 		payload: &network_path::NetworkPathChangedPayload,
 	) -> Result<(), String> {
 		self.connect_ui_tracker.mark_path_change();
+		*self.last_network_interfaces.write().await = payload.interfaces.clone();
 		let prefer_lan = payload.satisfied
 			&& payload.interfaces.iter().any(|i| i == "wifi" || i == "wired");
 		log::info!(
@@ -1643,8 +1686,12 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 					last_path_change_at_ms: None,
 					last_foreground_heal_at_ms: None,
 					heal_in_progress: false,
+					prefer_lan: true,
+					network_interfaces: Vec::new(),
 				})),
 				connect_ui_tracker,
+				prefer_lan: Arc::new(AtomicBool::new(true)),
+				last_network_interfaces: Arc::new(tokio::sync::RwLock::new(Vec::new())),
 			});
 
 			let h = app.clone();

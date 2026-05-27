@@ -157,6 +157,8 @@ pub struct SwarmConfig {
     pub relay_address_hints: Vec<std::net::SocketAddr>,
     /// Optional connect UI progress callbacks (discovering + outbound connect path).
     pub connect_ui: Option<peeroxide_dht::connect_ui::ConnectUiHook>,
+    /// When false (cellular-only), skip LAN handshake paths and use holepunch/relay.
+    pub prefer_lan: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl Default for SwarmConfig {
@@ -171,6 +173,7 @@ impl Default for SwarmConfig {
             relay_address: None,
             relay_address_hints: Vec::new(),
             connect_ui: None,
+            prefer_lan: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
         }
     }
 }
@@ -384,6 +387,11 @@ impl SwarmHandle {
             .await
             .map_err(|_| SwarmError::Destroyed)
     }
+
+    /// Toggle LAN-first connect paths (off on cellular-only interfaces).
+    pub fn set_prefer_lan(&self, prefer: bool) {
+        self.dht.set_prefer_lan(prefer);
+    }
 }
 
 // ── Internal types ───────────────────────────────────────────────────────────
@@ -468,6 +476,8 @@ struct SwarmActor {
     active_connects: usize,
     flush_waiters: Vec<oneshot::Sender<Result<(), SwarmError>>>,
     connect_ui: Option<peeroxide_dht::connect_ui::ConnectUiHook>,
+    /// Shared with HyperDHT — updated by the host app on network path changes.
+    prefer_lan: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// Shared relay list for DHT announces — refreshed on network path change.
     announce_relay_addrs: Arc<std::sync::RwLock<Vec<Ipv4Peer>>>,
     /// Peers with an in-flight transport upgrade probe (bypasses connection dedup).
@@ -498,12 +508,14 @@ pub async fn spawn(
         relay_address,
         relay_address_hints,
         connect_ui,
+        prefer_lan,
     } = config;
 
     dht.connect_relay.relay_through = relay_through;
     dht.connect_relay.relay_address = relay_address;
     dht.connect_relay.relay_address_hints = relay_address_hints.clone();
     dht.connect_ui = connect_ui.clone();
+    dht.prefer_lan = prefer_lan.clone();
 
     let key_pair = key_pair_opt.unwrap_or_else(KeyPair::generate);
     let runtime = UdxRuntime::new()?;
@@ -570,6 +582,7 @@ pub async fn spawn(
         active_connects: 0,
         flush_waiters: Vec::new(),
         connect_ui,
+        prefer_lan,
         announce_relay_addrs,
         upgrade_probes: std::collections::HashSet::new(),
     };
@@ -741,6 +754,10 @@ impl SwarmActor {
                 info.connecting = false;
                 info.disconnected();
             }
+        }
+        for info in self.peers.values_mut() {
+            info.connecting = false;
+            info.set_waiting(false);
         }
         let to_retry: Vec<[u8; 32]> = self
             .peers
@@ -1356,7 +1373,8 @@ impl SwarmActor {
         // Subordinate on relayed LAN must begin UDX before MODE_REPLY reaches the dominant
         // peer — otherwise the initiator's first SecretStream frames race an unopened socket.
         let mut relayed_lan_responder_opened = false;
-        if relayed_via.is_some() && !self.connections.has(&remote_pk) {
+        let prefer_lan = self.prefer_lan.load(std::sync::atomic::Ordering::Relaxed);
+        if prefer_lan && relayed_via.is_some() && !self.connections.has(&remote_pk) {
             let local_addrs4 = build_addresses4(self.config.dht_listen_port);
             if let Some(lan_peer) = match_address(&local_addrs4, &remote_payload.addresses4) {
                 if self.key_pair.public_key < remote_pk {
@@ -1441,20 +1459,27 @@ impl SwarmActor {
         }
 
         if relayed_via.is_some() {
-            let local_addrs4 = build_addresses4(self.config.dht_listen_port);
-            if let Some(_lan_peer) =
-                match_address(&local_addrs4, &remote_payload.addresses4)
-            {
-                if self.key_pair.public_key < remote_pk {
+            if prefer_lan {
+                let local_addrs4 = build_addresses4(self.config.dht_listen_port);
+                if let Some(_lan_peer) =
+                    match_address(&local_addrs4, &remote_payload.addresses4)
+                {
+                    if self.key_pair.public_key < remote_pk {
+                        return;
+                    }
+
+                    tracing::debug!(
+                        pk = %short_hex(&remote_pk),
+                        "server: relayed LAN — waiting on dominant peer initiator stream",
+                    );
+                    self.nudge_peer_connect(remote_pk, connect_result_tx);
                     return;
                 }
-
+            } else {
                 tracing::debug!(
                     pk = %short_hex(&remote_pk),
-                    "server: relayed LAN — waiting on dominant peer initiator stream",
+                    "server: relayed handshake — prefer_lan=false, skipping LAN wait",
                 );
-                self.nudge_peer_connect(remote_pk, connect_result_tx);
-                return;
             }
 
             tracing::debug!(

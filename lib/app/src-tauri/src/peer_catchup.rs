@@ -376,6 +376,47 @@ pub(crate) fn spawn_peer_catchup_worker(app: AppHandle) -> PeerCatchupHandle {
 	PeerCatchupHandle { tx, reg }
 }
 
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+async fn all_peers_send_ready(app: &AppHandle, peers: &[ClientId]) -> bool {
+	if peers.is_empty() {
+		return false;
+	}
+	let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
+	for p in peers {
+		if !bridge.peer_send_ready(*p).await {
+			return false;
+		}
+	}
+	true
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+async fn all_peers_send_ready(_app: &AppHandle, _peers: &[ClientId]) -> bool {
+	true
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+async fn any_live_peer_send_ready(app: &AppHandle) -> bool {
+	let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
+	for cid in bridge.snapshot_remote_clients().await {
+		if bridge.peer_send_ready(cid).await {
+			return true;
+		}
+	}
+	false
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+async fn any_live_peer_send_ready(_app: &AppHandle) -> bool {
+	true
+}
+
+enum EitherPlan {
+	None,
+	Acl,
+	Peers(Vec<ClientId>),
+}
+
 async fn process_until_idle(reg: &Arc<Mutex<Registry>>, app: &AppHandle, rx: &mut mpsc::Receiver<Msg>) {
 	use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -406,6 +447,22 @@ async fn process_until_idle(reg: &Arc<Mutex<Registry>>, app: &AppHandle, rx: &mu
 					g.acl_bootstrap_pending = true;
 					break;
 				};
+				#[cfg(any(target_os = "macos", target_os = "ios"))]
+				{
+					let live = {
+						let g = reg.lock().await;
+						g.current_live.clone()
+					};
+					if !live.is_empty() && !any_live_peer_send_ready(app).await {
+						log::debug!(
+							target: "avenos::jazz",
+							"peer catch-up worker: acl bootstrap deferred — Groove mux not send-ready",
+						);
+						tokio::time::sleep(Duration::from_millis(400)).await;
+						drain_secondary_mailbox(reg, rx).await;
+						continue;
+					}
+				}
 				match client.rebroadcast_all_peer_clients_and_flush().await {
 					Ok(()) => {
 						if !jazz.groove_conn_epoch_is(epoch) {
@@ -449,6 +506,17 @@ async fn process_until_idle(reg: &Arc<Mutex<Registry>>, app: &AppHandle, rx: &mu
 			EitherPlan::Peers(peers) => {
 				let batch = IN_FLIGHT_ID.fetch_add(1, Ordering::AcqRel) + 1;
 				let peers = peers;
+					if !all_peers_send_ready(app, &peers).await {
+						log::info!(
+							target: "avenos::jazz",
+							"peer catch-up worker: defer batch {batch} {:?} — Groove mux not send-ready",
+							peers,
+						);
+					reg.lock().await.flushing_to_pending_no_incr(&peers);
+					tokio::time::sleep(Duration::from_millis(400)).await;
+					drain_secondary_mailbox(reg, rx).await;
+					continue;
+				}
 				let epoch = jazz.groove_conn_epoch();
 				let Some(client) = jazz.groove_clone_connected_client().await else {
 					reg.lock().await.flushing_to_pending_no_incr(&peers);
@@ -471,11 +539,22 @@ async fn process_until_idle(reg: &Arc<Mutex<Registry>>, app: &AppHandle, rx: &mu
 							drain_secondary_mailbox(reg, rx).await;
 							continue;
 						}
+						if !all_peers_send_ready(app, &peers).await {
+							log::debug!(
+								target: "avenos::jazz",
+								"peer catch-up worker: flush batch {batch} {:?} Ok but link dropped — retry",
+								peers,
+							);
+							reg.lock().await.flushing_to_pending_no_incr(&peers);
+							tokio::time::sleep(Duration::from_millis(400)).await;
+							drain_secondary_mailbox(reg, rx).await;
+							continue;
+						}
 						let mut g = reg.lock().await;
 						g.flushing_to_ready(&peers);
-						log::debug!(
+						log::info!(
 							target: "avenos::jazz",
-							"peer catch-up worker: peer flush batch {} {:?} Ok",
+							"peer catch-up worker: peer flush batch {} {:?} Ok (catch-up ready)",
 							batch,
 							peers
 						);
@@ -509,12 +588,6 @@ async fn process_until_idle(reg: &Arc<Mutex<Registry>>, app: &AppHandle, rx: &mu
 			}
 		}
 	}
-}
-
-enum EitherPlan {
-	None,
-	Acl,
-	Peers(Vec<ClientId>),
 }
 
 async fn drain_secondary_mailbox(reg: &Arc<Mutex<Registry>>, rx: &mut mpsc::Receiver<Msg>) {

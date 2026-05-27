@@ -2,7 +2,7 @@
 
 use std::fmt;
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use ed25519_dalek::SigningKey;
@@ -88,14 +88,17 @@ fn merge_holepunch_address_list(
     merged
 }
 
-/// Pick UDX endpoint after handshake — LAN match wins, then reflexive/public from `addresses4`.
+/// Pick UDX endpoint after handshake — LAN match wins when `prefer_lan`, else reflexive/public.
 pub(crate) fn pick_direct_connect_address4(
     local_addrs4: &[Ipv4Peer],
     remote: &NoisePayload,
     reflexive_fallback: &Ipv4Peer,
+    prefer_lan: bool,
 ) -> Ipv4Peer {
-    if let Some(ma) = match_address(local_addrs4, &remote.addresses4) {
-        return ma;
+    if prefer_lan {
+        if let Some(ma) = match_address(local_addrs4, &remote.addresses4) {
+            return ma;
+        }
     }
     remote
         .addresses4
@@ -737,6 +740,8 @@ pub struct HyperDhtConfig {
     pub connect_relay: ConnectRelayConfig,
     /// Optional UI progress / transport-mode callbacks (outbound connect path).
     pub connect_ui: Option<crate::connect_ui::ConnectUiHook>,
+    /// When false (e.g. cellular-only), skip LAN subnet matching and use holepunch/relay.
+    pub prefer_lan: Arc<AtomicBool>,
 }
 
 impl HyperDhtConfig {
@@ -754,6 +759,7 @@ impl HyperDhtConfig {
             persistent: PersistentConfig::default(),
             connect_relay: ConnectRelayConfig::default(),
             connect_ui: None,
+            prefer_lan: Arc::new(AtomicBool::new(true)),
         }
     }
 }
@@ -775,9 +781,15 @@ pub struct HyperDhtHandle {
     admin_tx: mpsc::UnboundedSender<AdminRequest>,
     connect_relay: ConnectRelayConfig,
     connect_ui: Option<crate::connect_ui::ConnectUiHook>,
+    prefer_lan: Arc<AtomicBool>,
 }
 
 impl HyperDhtHandle {
+    /// Toggle LAN-first connect paths (off on cellular-only interfaces).
+    pub fn set_prefer_lan(&self, prefer: bool) {
+        self.prefer_lan.store(prefer, Ordering::Release);
+    }
+
     fn emit_connect_ui(&self, event: crate::connect_ui::ConnectUiEvent) {
         if let Some(hook) = &self.connect_ui {
             hook(event);
@@ -1600,12 +1612,25 @@ impl HyperDhtHandle {
         // is `resp.from` (the relay), and `server_address` is `reply.peer_address` (also the
         // relay). Comparing those hosts always yields `same_host=true` and incorrectly skips
         // holepunch — the client opens UDX to the bootstrap black hole instead of the peer.
+        let prefer_lan = self.prefer_lan.load(Ordering::Relaxed);
+        let lan_match = if prefer_lan {
+            match_address(&local_addresses4, &remote_payload.addresses4)
+        } else {
+            None
+        };
         let same_host = if hs_result.relayed {
-            relayed_same_subnet_or_carrier_host(
-                &local_addresses4,
-                &remote_payload,
-                &hs_result.server_address.host,
-            )
+            if prefer_lan {
+                relayed_same_subnet_or_carrier_host(
+                    &local_addresses4,
+                    &remote_payload,
+                    &hs_result.server_address.host,
+                )
+            } else {
+                remote_payload
+                    .addresses4
+                    .iter()
+                    .any(|a| a.host == hs_result.server_address.host)
+            }
         } else {
             hs_result.server_address.host == hs_result.client_address.host
         };
@@ -1614,15 +1639,20 @@ impl HyperDhtHandle {
             &local_addresses4,
             &remote_payload,
             &hs_result.server_address,
+            prefer_lan,
         );
         tracing::debug!(
+            prefer_lan,
             same_host,
             direct = %format!("{}:{}", connect_addr.host, connect_addr.port),
-            lan_match = ?match_address(&local_addresses4, &remote_payload.addresses4),
+            lan_match = ?lan_match,
             "connect path: post-handshake endpoint selection"
         );
-
-        let lan_match = match_address(&local_addresses4, &remote_payload.addresses4);
+        if !prefer_lan && hs_result.relayed {
+            tracing::info!(
+                "connect path: prefer_lan=false — skipping LAN, holepunch/relay only",
+            );
+        }
 
         // Fly-relayed handshakes make both sides Noise initiators if each runs outbound
         // direct LAN connect. Lower public key opens the responder half via
@@ -2332,6 +2362,7 @@ pub async fn spawn(
     let persistent_config = config.persistent;
     let connect_relay = config.connect_relay.clone();
     let connect_ui = config.connect_ui.clone();
+    let prefer_lan = config.prefer_lan.clone();
 
     let request_rx = dht_handle
         .subscribe_requests()
@@ -2376,6 +2407,7 @@ pub async fn spawn(
         admin_tx,
         connect_relay,
         connect_ui,
+        prefer_lan,
     };
     Ok((join, handle, server_rx))
 }
@@ -2891,6 +2923,7 @@ mod tests {
             persistent: PersistentConfig::default(),
             connect_relay: ConnectRelayConfig::default(),
             connect_ui: None,
+            prefer_lan: Arc::new(AtomicBool::new(true)),
         };
         let (join, handle, _server_rx) = spawn(&runtime, config).await.expect("spawn");
         handle.destroy().await.expect("destroy");
@@ -2913,6 +2946,7 @@ mod tests {
             persistent: PersistentConfig::default(),
             connect_relay: ConnectRelayConfig::default(),
             connect_ui: None,
+            prefer_lan: Arc::new(AtomicBool::new(true)),
         };
         let (join, handle, _rx) = spawn(&runtime, config).await.expect("spawn");
         let (sent, received) = handle.wire_stats();
@@ -3191,7 +3225,7 @@ mod tests {
             host: "176.2.194.124".into(),
             port: 56596,
         };
-        let picked = pick_direct_connect_address4(&local, &remote, &reflex);
+        let picked = pick_direct_connect_address4(&local, &remote, &reflex, true);
         assert_eq!(picked.host, "172.20.10.2");
         assert_eq!(picked.port, 49737);
     }
