@@ -48,7 +48,8 @@ use crate::socket_pool::SocketPool;
 
 static NEXT_STREAM_ID: AtomicU32 = AtomicU32::new(1);
 
-fn next_stream_id() -> u32 {
+/// Process-global UDX stream id allocator (shared by all HyperDHT / relay paths on one runtime).
+pub fn next_stream_id() -> u32 {
     NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed)
 }
 
@@ -510,6 +511,192 @@ impl ServerConfig {
             noise_addresses_listen_udp_port: None,
         }
     }
+}
+
+/// Outcome of responder-side Noise IK finishing on `PEER_HANDSHAKE` (`handle_server_handshake`).
+///
+/// Bootstrap / relay binaries use this together with [`establish_responder_peer_connection`]
+/// to open the UDX + [`SecretStream`] control channel matching Hyperswarm.
+#[derive(Clone)]
+pub struct EstablishedNoiseIkSession {
+    /// IKNoise session keys and transcript (responder-side).
+    pub noise: crate::noise_wrap::NoiseWrapResult,
+    /// Local responder UDX stream id chosen for this session.
+    pub local_stream_id: u32,
+    /// Peer's advertised UDX info from the IK payload (their stream id etc.).
+    pub remote_udx: Option<UdxInfo>,
+    /// UDP endpoint to connect the responder UDX stream toward (relay path uses `MODE_FROM_RELAY` peer addr).
+    pub client_address: Ipv4Peer,
+}
+
+/// Wire reply plus session material after completing responder Noise IK (`PEER_HANDSHAKE`).
+#[non_exhaustive]
+pub struct ServerNoiseIkHandshakeOutcome {
+    /// Encoded `MODE_REPLY` message for `reply_tx`.
+    pub reply_wire: Vec<u8>,
+    /// Establish UDX + [`SecretStream`] responder path.
+    pub establish: EstablishedNoiseIkSession,
+}
+
+/// Run Noise IK responder logic for inbound `PEER_HANDSHAKE`; returns encoded reply plus session material.
+///
+/// Mirrors [`handle_server_handshake`] but callers can additionally call [`establish_responder_peer_connection`].
+pub fn finish_server_noise_ik_handshake(
+    config: &ServerConfig,
+    session: &mut ServerSession,
+    msg: HandshakeMessage,
+    from: &Ipv4Peer,
+    _target: Option<&NodeId>,
+) -> Option<ServerNoiseIkHandshakeOutcome> {
+    let mut nw =
+        NoiseWrap::new_responder(config.key_pair.to_noise_keypair());
+
+    let remote_payload = match nw.recv(&msg.noise) {
+        Ok(p) => p,
+        Err(_) => return None,
+    };
+
+    if remote_payload.error != 0 {
+        return None;
+    }
+
+    let local_stream_id = next_stream_id();
+
+    let relayed_via = msg.peer_address.clone();
+    let holepunch_info = relayed_via.as_ref().map(|client_addr| HolepunchInfo {
+        id: u64::from(local_stream_id),
+        relays: vec![RelayInfo {
+            relay_address: from.clone(),
+            peer_address: client_addr.clone(),
+        }],
+    });
+
+    let addresses4 = config
+        .noise_addresses_listen_udp_port
+        .map(|p| crate::local_addresses::build_addresses4(p))
+        .unwrap_or_default();
+
+    let reply_payload = NoisePayload {
+        version: 1,
+        error: 0,
+        firewall: config.firewall,
+        holepunch: holepunch_info,
+        addresses4,
+        addresses6: vec![],
+        udx: Some(UdxInfo {
+            version: 1,
+            reusable_socket: true,
+            id: u64::from(local_stream_id),
+            seq: 0,
+        }),
+        secret_stream: Some(SecretStreamInfo { version: 1 }),
+        relay_through: None,
+        relay_addresses: None,
+    };
+
+    let noise_reply = match nw.send(&reply_payload) {
+        Ok(b) => b,
+        Err(_) => return None,
+    };
+
+    let nw_result = match nw.finalize() {
+        Ok(r) => r,
+        Err(_) => return None,
+    };
+
+    let client_address = relayed_via.clone().unwrap_or_else(|| from.clone());
+
+    session.holepunch_secrets.insert(
+        nw_result.remote_public_key,
+        HolepunchServerPeerState {
+            holepunch_secret: nw_result.holepunch_secret,
+            remote_public_key: nw_result.remote_public_key,
+            client_address: client_address.clone(),
+            local_stream_id,
+            remote_udx: remote_payload.udx.clone(),
+        },
+    );
+
+    let reply_msg = HandshakeMessage {
+        mode: crate::hyperdht_messages::MODE_REPLY,
+        noise: noise_reply,
+        peer_address: relayed_via.as_ref().map(|_| from.clone()),
+        relay_address: None,
+    };
+    let reply_wire = crate::hyperdht_messages::encode_handshake_to_bytes(&reply_msg).ok()?;
+
+    Some(ServerNoiseIkHandshakeOutcome {
+        reply_wire,
+        establish: EstablishedNoiseIkSession {
+            noise: nw_result,
+            local_stream_id,
+            remote_udx: remote_payload.udx,
+            client_address,
+        },
+    })
+}
+
+/// Open responder UDX + [`SecretStream::from_session`] after [`finish_server_noise_ik_handshake`].
+///
+/// Equivalent to swarm `create_server_connection` for inbound IK.
+pub async fn establish_responder_peer_connection(
+    dht: &HyperDhtHandle,
+    runtime: &UdxRuntime,
+    est: &EstablishedNoiseIkSession,
+) -> Result<PeerConnection, HyperDhtError> {
+    let remote_udx = est
+        .remote_udx
+        .as_ref()
+        .ok_or_else(|| HyperDhtError::StreamEstablishment("noise payload missing UDX info".into()))?;
+
+    let remote_id = u32::try_from(remote_udx.id).map_err(|_| {
+        HyperDhtError::StreamEstablishment("remote UDX id out of u32 range".into())
+    })?;
+
+    let addr: SocketAddr = SocketAddr::new(
+        est
+            .client_address
+            .host
+            .parse()
+            .map_err(|e| HyperDhtError::StreamEstablishment(format!("invalid client UDP host: {e}")))?,
+        est.client_address.port,
+    );
+
+    let socket = dht
+        .listen_socket()
+        .await?
+        .ok_or_else(|| HyperDhtError::StreamEstablishment("DHT listen socket not available".into()))?;
+
+    let stream = runtime
+        .create_stream(est.local_stream_id)
+        .await
+        .map_err(|e| HyperDhtError::StreamEstablishment(e.to_string()))?;
+
+    stream
+        .connect(&socket, remote_id, addr)
+        .await
+        .map_err(|e| HyperDhtError::StreamEstablishment(e.to_string()))?;
+
+    let async_stream = stream.into_async_stream();
+    let ss = SecretStream::from_session(
+        false,
+        async_stream,
+        est.noise.tx,
+        est.noise.rx,
+        est.noise.handshake_hash,
+        est.noise.remote_public_key,
+    )
+    .await
+    .map_err(HyperDhtError::SecretStream)?;
+
+    Ok(PeerConnection {
+        remote_public_key: est.noise.remote_public_key,
+        stream: ss,
+        remote_addr: Some(addr),
+        socket,
+        _relay_task: None,
+        transport_mode: None,
+    })
 }
 
 // ── Bootstrap defaults ────────────────────────────────────────────────────────
@@ -1143,12 +1330,22 @@ impl HyperDhtHandle {
         });
         let mut last_err = HyperDhtError::NoRelayNodes;
         let mut tried: Vec<(String, u16)> = Vec::new();
+        let blind_relay_target = self
+            .connect_relay
+            .relay_through
+            .is_some_and(|pk| pk == remote_public_key);
 
         // Phase 1: Optimistic pre-connect through provided relay addresses.
         for relay in relay_addresses {
             tried.push((relay.host.clone(), relay.port));
             match self
-                .connect_through_node(key_pair, &remote_public_key, relay, runtime)
+                .connect_through_node(
+                    key_pair,
+                    &remote_public_key,
+                    relay,
+                    runtime,
+                    blind_relay_target,
+                )
                 .await
             {
                 Ok(result) => return Ok(result),
@@ -1200,7 +1397,13 @@ impl HyperDhtHandle {
             tried.push((candidate.host.clone(), candidate.port));
             tracing::debug!(candidate = %format!("{}:{}", candidate.host, candidate.port), "connect_with_nodes: trying node candidate");
             match self
-                .connect_through_node(key_pair, &remote_public_key, candidate, runtime)
+                .connect_through_node(
+                    key_pair,
+                    &remote_public_key,
+                    candidate,
+                    runtime,
+                    blind_relay_target,
+                )
                 .await
             {
                 Ok(result) => return Ok(result),
@@ -1222,7 +1425,13 @@ impl HyperDhtHandle {
                         }
                         tried.push((relay.host.clone(), relay.port));
                         match self
-                            .connect_through_node(key_pair, &remote_public_key, relay, runtime)
+                            .connect_through_node(
+                                key_pair,
+                                &remote_public_key,
+                                relay,
+                                runtime,
+                                blind_relay_target,
+                            )
                             .await
                         {
                             Ok(result) => return Ok(result),
@@ -1256,7 +1465,7 @@ impl HyperDhtHandle {
             host: target_addr.ip().to_string(),
             port: target_addr.port(),
         };
-        self.connect_through_node(key_pair, &remote_public_key, &relay, runtime)
+        self.connect_through_node(key_pair, &remote_public_key, &relay, runtime, true)
             .await
     }
 
@@ -1266,6 +1475,7 @@ impl HyperDhtHandle {
         remote_public_key: &[u8; 32],
         relay: &Ipv4Peer,
         runtime: &UdxRuntime,
+        direct_server: bool,
     ) -> Result<PeerConnection, HyperDhtError> {
         let target = hash(remote_public_key);
 
@@ -1310,8 +1520,15 @@ impl HyperDhtHandle {
         };
 
         let noise_bytes = nw.send(&local_payload)?;
+        // Direct server connect (blind-relay host or known server address) must
+        // include the destination in `relay_address` — see hyperdht_connect_interop.
+        let relay_hint = if direct_server {
+            Some(relay.clone())
+        } else {
+            None
+        };
         let handshake_value =
-            Router::encode_client_handshake(noise_bytes, None, None)?;
+            Router::encode_client_handshake(noise_bytes, None, relay_hint)?;
 
         let resp = self
             .dht
@@ -1448,6 +1665,11 @@ impl HyperDhtHandle {
             } else {
                 self.server_socket().await?
             };
+            // Brief yield so the subordinate peer's pre-reply LAN responder task can
+            // call UDX connect before we send the first SecretStream frame.
+            if transport_mode == crate::connect_ui::ConnectTransportMode::Lan && hs_result.relayed {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }
             match establish_stream_with_socket(&direct, runtime, shared).await {
                 Ok(mut conn) => {
                     conn.transport_mode = Some(transport_mode);
@@ -1728,10 +1950,25 @@ impl HyperDhtHandle {
         runtime: &UdxRuntime,
     ) -> Result<PeerConnection, HyperDhtError> {
         // 1. HyperDHT connection to the relay node.
-        // Try known addresses first (pre-connect), then fall back to DHT routing.
-        // Node.js does `dht.connect(publicKey)` — we enhance with address hints.
+        // Merge locally configured blind-relay hints with remote-advertised ones.
+        let mut relay_addr_hints: Vec<Ipv4Peer> = relay_addr_hints.to_vec();
+        if let Some(addrs) = noise_relay_addresses(
+            self.connect_relay.relay_address,
+            &self.connect_relay.relay_address_hints,
+        ) {
+            for addr in addrs {
+                if !relay_addr_hints
+                    .iter()
+                    .any(|h| h.host == addr.host && h.port == addr.port)
+                {
+                    relay_addr_hints.insert(0, addr);
+                }
+            }
+        }
+
+        // Try known addresses first (pre-connect with direct-server encoding), then DHT routing.
         let relay_conn = self
-            .connect_with_nodes(key_pair, relay_through.public_key, relay_addr_hints, runtime)
+            .connect_with_nodes(key_pair, relay_through.public_key, &relay_addr_hints, runtime)
             .await?;
 
         let relay_addr = relay_conn.remote_addr.ok_or_else(|| {
@@ -1878,6 +2115,26 @@ pub struct ServerSession {
     holepunch_secrets: std::collections::HashMap<[u8; 32], HolepunchServerPeerState>,
 }
 
+impl ServerSession {
+    /// Empty session (no pending holepunch state).
+    pub fn new() -> Self {
+        Self {
+            holepunch_secrets: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Active holepunch sessions for [`handle_peer_holepunch_reply`].
+    pub fn holepunch_peer_states(&self) -> impl Iterator<Item = &HolepunchServerPeerState> {
+        self.holepunch_secrets.values()
+    }
+}
+
+impl Default for ServerSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Server-side bookkeeping after Noise completes on an inbound handshake — reused by swarm and
 /// the standalone HyperDHT server loop (`run_server`).
 #[derive(Clone)]
@@ -1900,9 +2157,7 @@ pub async fn run_server(
     config: ServerConfig,
     runtime: UdxRuntime,
 ) {
-    let mut session = ServerSession {
-        holepunch_secrets: std::collections::HashMap::new(),
-    };
+    let mut session = ServerSession::new();
     let pool = SocketPool::new("0.0.0.0".into());
 
     while let Some(event) = event_rx.recv().await {
@@ -1949,94 +2204,9 @@ fn handle_server_handshake(
     session: &mut ServerSession,
     msg: HandshakeMessage,
     from: &Ipv4Peer,
-    _target: Option<&NodeId>,
+    target: Option<&NodeId>,
 ) -> Option<Vec<u8>> {
-    let mut nw = NoiseWrap::new_responder(config.key_pair.to_noise_keypair());
-
-    let remote_payload = match nw.recv(&msg.noise) {
-        Ok(p) => p,
-        Err(_) => return None,
-    };
-
-    if remote_payload.error != 0 {
-        return None;
-    }
-
-    let local_stream_id = next_stream_id();
-
-    // When the handshake arrived via a relay (MODE_FROM_RELAY / MODE_FROM_SECOND_RELAY),
-    // `msg.peer_address` holds the original client's UDP address as seen by the relay and
-    // `from` holds the relay itself. We must advertise the relay as a holepunch-capable
-    // RelayInfo so the client attempts NAT traversal via the same Fly DHT node that
-    // already proxied the handshake — otherwise the client falls back to "direct connect
-    // to server_address" (which is the relay) and ships UDX packets into a black hole.
-    let relayed_via = msg.peer_address.clone();
-    let holepunch_info = relayed_via.as_ref().map(|client_addr| HolepunchInfo {
-        id: u64::from(local_stream_id),
-        relays: vec![RelayInfo {
-            relay_address: from.clone(),
-            peer_address: client_addr.clone(),
-        }],
-    });
-
-    let addresses4 = config
-        .noise_addresses_listen_udp_port
-        .map(|p| crate::local_addresses::build_addresses4(p))
-        .unwrap_or_default();
-
-    let reply_payload = NoisePayload {
-        version: 1,
-        error: 0,
-        firewall: config.firewall,
-        holepunch: holepunch_info,
-        addresses4,
-        addresses6: vec![],
-        udx: Some(UdxInfo {
-            version: 1,
-            reusable_socket: true,
-            id: u64::from(local_stream_id),
-            seq: 0,
-        }),
-        secret_stream: Some(SecretStreamInfo { version: 1 }),
-        relay_through: None,
-        relay_addresses: None,
-    };
-
-    let noise_reply = match nw.send(&reply_payload) {
-        Ok(b) => b,
-        Err(_) => return None,
-    };
-
-    let nw_result = match nw.finalize() {
-        Ok(r) => r,
-        Err(_) => return None,
-    };
-
-    // Track the true client address (from MODE_FROM_RELAY) so PEER_HOLEPUNCH bookkeeping
-    // matches the address the client will use for punching.
-    let client_address = relayed_via.clone().unwrap_or_else(|| from.clone());
-
-    session.holepunch_secrets.insert(
-        nw_result.remote_public_key,
-        HolepunchServerPeerState {
-            holepunch_secret: nw_result.holepunch_secret,
-            remote_public_key: nw_result.remote_public_key,
-            client_address,
-            local_stream_id,
-            remote_udx: remote_payload.udx.clone(),
-        },
-    );
-
-    // `peeroxide_dht::router::HandshakeResult::relayed` is `reply.peer_address.is_some()`.
-    // Direct handshake must keep `None` so the initiator skips spurious relay/holepunch paths.
-    let reply_msg = HandshakeMessage {
-        mode: crate::hyperdht_messages::MODE_REPLY,
-        noise: noise_reply,
-        peer_address: relayed_via.as_ref().map(|_| from.clone()),
-        relay_address: None,
-    };
-
-    crate::hyperdht_messages::encode_handshake_to_bytes(&reply_msg).ok()
+    finish_server_noise_ik_handshake(config, session, msg, from, target).map(|o| o.reply_wire)
 }
 
 /// Shared implementation for answering `PEER_HOLEPUNCH` on the responder (standalone HyperDHT

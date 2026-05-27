@@ -20,4 +20,13 @@ After a vault is unlocked, **PeerCtl** rebuilds mesh transport against the persi
 
 **Jazz/Groove** layers register `register_peer_sync_client` **after** a live hyperswarm link appears (`groove_p2p link up` in logs); mesh ticks may **nudge** discovery while allowlisted peers have no links yet, without rebuilding the entire allowlist each tick.
 
+## Web mesh UI (`avenos:runtime`)
+
+The desktop/mobile shell exposes mesh state **only through one channel**:
+
+- **`avenos:runtime` payloads** `{ kind: "mesh", snapshot }` for transport phases, pairing pending code, diagnostics, and per-peer connect substates (`PeerMeshStatusReply`).
+- **`avenos:runtime`** `{ kind: "table", table: "peers", rows }` for trusted-device rows (`PeerRowReply[]`) after a ref-counted `subscribe` to the `peers` table.
+
+Groove actor mailboxes (`publish_mesh` vs full `mesh_refresh`) own when snapshots are built; the webview **does not poll** mesh IPC on a timer for normal UI. Prefer the shared Svelte stores fed by that channel over ad-hoc `peerList` / duplicate `peer:*` mesh events.
+
 This path uses **public HyperDHT** only; it does **not** require `AVENOS_DHT_BOOTSTRAP`, relay endpoints, or other custom infra for reconnect.

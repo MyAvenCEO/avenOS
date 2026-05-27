@@ -8,6 +8,10 @@ publish = false
 name = "test-remote-relay-dht"
 path = "main.rs"
 
+[[bin]]
+name = "test-remote-relay-blind"
+path = "blind_connect.rs"
+
 [dependencies]
 hex = "0.4"
 libudx = "1.3.1"

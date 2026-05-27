@@ -1,17 +1,14 @@
 #!/usr/bin/env bun
 /**
- * Container entry: Rust HyperDHT bootstrap + Node blind-relay (last-resort fallback).
+ * Container entry: Rust HyperDHT bootstrap + co-hosted blind-relay (single UDP 49737).
  * Bun is PID1. HTTP `:8080` serves `/.well-known/aven-relay.json`.
  */
 
 const DHT_BIN = Bun.env.P2P_SIGNAL_DHT_BINARY ?? '/usr/local/bin/aven-p2p-signal-dht'
-const RELAY_DIR = Bun.env.P2P_SIGNAL_RELAY_DIR ?? '/app/p2p-signal-relay'
 const MANIFEST_HTTP_PORT = Number(Bun.env.AVEN_RELAY_MANIFEST_HTTP_PORT ?? '8080')
-const RELAY_UDP_PORT_DEFAULT = 49738
+const DHT_UDP_PORT_DEFAULT = 49737
 
 import dns from 'node:dns/promises'
-import { existsSync } from 'node:fs'
-import path from 'node:path'
 
 /** Fly public UDP ingress requires the fly-global-services IPv4, not 0.0.0.0. */
 async function resolveFlyUdpBindHost(host: string): Promise<string> {
@@ -33,10 +30,9 @@ async function resolveFlyUdpBindHost(host: string): Promise<string> {
 }
 
 async function applyFlyUdpBindEnv(ev: Record<string, string | undefined>): Promise<void> {
-	for (const key of ['AVENOS_P2P_SIGNAL_HOST', 'AVENOS_P2P_SIGNAL_RELAY_HOST'] as const) {
-		const raw = ev[key]?.trim()
-		if (raw) ev[key] = await resolveFlyUdpBindHost(raw)
-	}
+	const key = 'AVENOS_P2P_SIGNAL_HOST'
+	const raw = ev[key]?.trim()
+	if (raw) ev[key] = await resolveFlyUdpBindHost(raw)
 }
 
 function tryHandshakeLine(
@@ -103,30 +99,6 @@ async function gracefulKill(proc: ReturnType<typeof Bun.spawn>) {
 	await proc.exited.catch(() => undefined)
 }
 
-function isRealNodeExe(exe: string): boolean {
-	return !exe.includes('bun-node-fallback')
-}
-
-function resolveNodeExe(): string | null {
-	const forced = Bun.env.AVENOS_P2P_SIGNAL_RELAY_NODE?.trim()
-	if (forced && existsSync(forced)) return forced
-	for (const candidate of ['/usr/bin/node', '/usr/local/bin/node']) {
-		if (existsSync(candidate)) return candidate
-	}
-	const pathEnv = `/usr/bin:/usr/local/bin:${process.env.PATH ?? ''}`
-	const found = Bun.which('node', { PATH: pathEnv })
-	if (found && isRealNodeExe(found)) return found
-	return null
-}
-
-function relaySpawnArgv(): string[] {
-	const script = path.join(RELAY_DIR, 'blind-relay-server.cjs')
-	const nodeExe = resolveNodeExe()
-	if (nodeExe) return [nodeExe, script]
-	console.warn('[p2p-fly] real Node not found — falling back to bun (hyperdht may crash)')
-	return ['bun', 'blind-relay-server.cjs']
-}
-
 async function main() {
 	let manifest: Record<string, unknown> | null = null
 	const server = Bun.serve({
@@ -138,7 +110,7 @@ async function main() {
 			if (u.pathname === '/health') return new Response('ok\n')
 			if (u.pathname === '/.well-known/aven-relay.json') {
 				if (manifest) return Response.json(manifest)
-				return Response.json({ ready: false, note: 'DHT + blind-relay starting' }, { status: 503 })
+				return Response.json({ ready: false, note: 'Rust DHT + blind-relay starting' }, { status: 503 })
 			}
 			return new Response('Not Found', { status: 404 })
 		},
@@ -148,9 +120,7 @@ async function main() {
 	const env: Record<string, string | undefined> = { ...process.env }
 	await applyFlyUdpBindEnv(env)
 
-	const relayUdpPort = Number(Bun.env.AVENOS_P2P_SIGNAL_RELAY_PORT ?? RELAY_UDP_PORT_DEFAULT)
-
-	console.log('[p2p-fly] starting Rust HyperDHT bootstrap:', DHT_BIN)
+	console.log('[p2p-fly] starting Rust HyperDHT + blind-relay:', DHT_BIN)
 	const rust = Bun.spawn([DHT_BIN], {
 		stdout: 'pipe',
 		stderr: 'inherit',
@@ -163,7 +133,10 @@ async function main() {
 		dhtHandshake = await readHandshakeLine(
 			rust.stdout,
 			'dht',
-			(o) => o.ready === true && typeof o.bootstrap === 'string',
+			(o) =>
+				o.ready === true &&
+				typeof o.bootstrap === 'string' &&
+				typeof o.relayPublicKeyHex === 'string',
 		)
 	} catch (e) {
 		await gracefulKill(rust)
@@ -174,53 +147,22 @@ async function main() {
 	const dhtPort =
 		typeof dhtHandshake.port === 'number'
 			? dhtHandshake.port
-			: Number(Bun.env.AVENOS_P2P_SIGNAL_PORT ?? '49737')
+			: Number(Bun.env.AVENOS_P2P_SIGNAL_PORT ?? DHT_UDP_PORT_DEFAULT)
+	const relayPublicKeyHex =
+		typeof dhtHandshake.relayPublicKeyHex === 'string'
+			? dhtHandshake.relayPublicKeyHex.trim()
+			: ''
+	const relayUdpPort =
+		typeof dhtHandshake.relayUdpPort === 'number'
+			? dhtHandshake.relayUdpPort
+			: dhtPort
 	const advertised =
 		Bun.env.AVENOS_P2P_ADVERTISED_HOST?.trim() ||
 		(typeof dhtHandshake.host === 'string' ? dhtHandshake.host : '')
 
-	console.log('[p2p-fly] DHT bootstrap string:', bootstrap)
-
-	const relayHost =
-		env.AVENOS_P2P_SIGNAL_RELAY_HOST?.trim() ||
-		env.AVENOS_P2P_SIGNAL_HOST?.trim() ||
-		'127.0.0.1'
-
-	console.log('[p2p-fly] starting blind-relay on', relayHost, relayUdpPort)
-	const relayArgv = relaySpawnArgv()
-	console.log('[p2p-fly] blind-relay spawn:', relayArgv.join(' '))
-	const relay = Bun.spawn(relayArgv, {
-		cwd: RELAY_DIR,
-		stdout: 'pipe',
-		stderr: 'inherit',
-		stdin: 'ignore',
-		env: {
-			...env,
-			AVENOS_P2P_SIGNAL_BOOTSTRAP: bootstrap,
-			AVENOS_P2P_SIGNAL_RELAY_HOST: relayHost,
-			AVENOS_P2P_SIGNAL_RELAY_PORT: String(relayUdpPort),
-		},
-	})
-
-	let relayHandshake: Record<string, unknown>
-	try {
-		relayHandshake = await readHandshakeLine(
-			relay.stdout,
-			'blind-relay',
-			(o) => o.ready === true && typeof o.publicKey === 'string',
-		)
-	} catch (e) {
-		await gracefulKill(relay)
-		await gracefulKill(rust)
-		throw e
-	}
-
-	const relayPublicKeyHex =
-		typeof relayHandshake.publicKey === 'string' ? relayHandshake.publicKey.trim() : ''
 	if (relayPublicKeyHex.length !== 64) {
-		await gracefulKill(relay)
 		await gracefulKill(rust)
-		throw new Error(`blind-relay invalid publicKey: ${relayPublicKeyHex.slice(0, 16)}…`)
+		throw new Error(`Rust relay invalid relayPublicKeyHex: ${relayPublicKeyHex.slice(0, 16)}…`)
 	}
 
 	manifest = {
@@ -229,20 +171,20 @@ async function main() {
 		dhtUdpPort: dhtPort,
 		relayPublicKeyHex,
 		relayUdpPort,
-		note:
-			'HyperDHT bootstrap (49737) + blind-relay fallback (49738). Connect order: LAN → holepunch → relay_through.',
+		note: 'Single Rust process: HyperDHT bootstrap + blind-relay on UDP 49737. Connect order: LAN → holepunch → relay_through.',
 	}
 	console.log(
 		'[p2p-fly] manifest ready — bootstrap=',
 		bootstrap,
 		'relayPk=',
 		relayPublicKeyHex.slice(0, 16) + '…',
+		'relayUdpPort=',
+		relayUdpPort,
 	)
 
 	async function shutdown(signal: NodeJS.Signals) {
 		console.warn(`[p2p-fly] ${signal} — stopping…`)
 		server.stop(false)
-		await gracefulKill(relay)
 		await gracefulKill(rust)
 		process.exit(0)
 	}

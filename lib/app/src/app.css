@@ -163,6 +163,14 @@
 	body {
 		@apply bg-background text-foreground font-sans tracking-tight;
 	}
+
+	@media (max-width: 639px) {
+		html {
+			touch-action: manipulation;
+			-webkit-text-size-adjust: 100%;
+			text-size-adjust: 100%;
+		}
+	}
 }
 
 @keyframes mock-bars {

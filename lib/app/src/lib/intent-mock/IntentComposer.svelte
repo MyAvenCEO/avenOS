@@ -5,6 +5,9 @@ import { onDestroy, tick } from 'svelte'
 /** Typing-mode textarea: grow with content up to this many text rows, then scroll. */
 const TYPING_TEXTAREA_MAX_ROWS = 12
 const BAR_COUNT = 24
+/** Matches {@link classifyIntentUploadFile} allowed types (layout drag-drop hint). */
+const FILE_INPUT_ACCEPT =
+	'application/pdf,image/jpeg,image/png,image/svg+xml,.pdf,.jpg,.jpeg,.png,.svg'
 
 type ComposerAttachment = {
 	file: File
@@ -50,13 +53,21 @@ let {
 	 * survives composer remounts (the page swaps which `IntentComposer` instance
 	 * is rendered as `mode` flips between `collapsed` and `typing`).
 	 */
-	command = $bindable<string | null>(null)
+	command = $bindable<string | null>(null),
+	placeholder = 'Describe an intent… (mock — not sent)',
+	submitBusy = false,
+	disabled = false,
+	enableAttachments = true
 }: {
 	onSubmitMessage?: (text: string, files: File[]) => void
 	onModeChange?: (mode: Mode) => void
 	onCommandSubmit?: (command: string, text: string, files: File[]) => void
 	rowCluster?: boolean
 	command?: string | null
+	placeholder?: string
+	submitBusy?: boolean
+	disabled?: boolean
+	enableAttachments?: boolean
 } = $props()
 
 /**
@@ -78,6 +89,7 @@ let mode = $state<Mode>(command != null ? 'typing' : 'collapsed')
 let text = $state('')
 let elapsed = $state(0)
 let textareaEl = $state<HTMLTextAreaElement | null>(null)
+let fileInputEl = $state<HTMLInputElement | null>(null)
 /** Files dropped or picked for this draft; previews shown above the textarea. */
 let attachments = $state<ComposerAttachment[]>([])
 /** Latest attachment list for teardown (avoids stale `onDestroy` reads). */
@@ -88,9 +100,131 @@ $effect(() => {
 })
 /** Skip the typing auto-collapse `$effect` while we drive `mode` + `text` after submit/stop (avoids reorder races). */
 let suppressTextEffect = false
+/** User explicitly opened typing (mobile tap) — keep open until blur even with empty text. */
+let keepTypingOpenUntilBlur = false
 
 /** Briefly suppress Space→mic while collapsed right after Space-to-submit avoids reopening listening. */
 let openMicCooldownUntilMs = 0
+
+/** Tailwind `sm` breakpoint — coarse/mobile composer interactions. */
+let isMobile = $state(false)
+
+/** Hold-to-record on mobile submits on pointer up (no send button). Stream / desktop keep the send control. */
+let listeningSubmitOnRelease = $state(false)
+
+	const MOBILE_MQ = '(max-width: 639px)'
+const LONG_PRESS_MS = 420
+const DOUBLE_TAP_MS = 220
+
+let lastTapAtMs = 0
+let holdActive = false
+let longPressTimer: ReturnType<typeof setTimeout> | null = null
+let pendingSingleTapTimer: ReturnType<typeof setTimeout> | null = null
+
+$effect(() => {
+	if (typeof window === 'undefined') return
+	const mq = window.matchMedia(MOBILE_MQ)
+	const sync = () => {
+		isMobile = mq.matches
+	}
+	sync()
+	mq.addEventListener('change', sync)
+	return () => mq.removeEventListener('change', sync)
+})
+
+function clearLongPressTimer() {
+	if (longPressTimer != null) {
+		clearTimeout(longPressTimer)
+		longPressTimer = null
+	}
+}
+
+function clearPendingSingleTapTimer() {
+	if (pendingSingleTapTimer != null) {
+		clearTimeout(pendingSingleTapTimer)
+		pendingSingleTapTimer = null
+	}
+}
+
+function openTyping() {
+	void focusShellWebview()
+	keepTypingOpenUntilBlur = true
+	mode = 'typing'
+}
+
+function openMobileFilePicker() {
+	void focusShellWebview()
+	fileInputEl?.click()
+}
+
+function onFileInputChange(e: Event) {
+	const input = e.currentTarget as HTMLInputElement
+	const files = input.files
+	if (files?.length) openWithFiles(files)
+	input.value = ''
+}
+
+function openStreamListening() {
+	listeningSubmitOnRelease = false
+	openListening()
+}
+
+function onMobileCollapsedPointerDown(e: PointerEvent) {
+	holdActive = false
+	clearLongPressTimer()
+	clearPendingSingleTapTimer()
+	const target = e.currentTarget as HTMLElement
+	target.setPointerCapture(e.pointerId)
+	longPressTimer = setTimeout(() => {
+		longPressTimer = null
+		clearPendingSingleTapTimer()
+		lastTapAtMs = 0
+		holdActive = true
+		listeningSubmitOnRelease = true
+		openListening()
+	}, LONG_PRESS_MS)
+}
+
+function onMobileCollapsedPointerUp(e: PointerEvent) {
+	clearLongPressTimer()
+	const target = e.currentTarget as HTMLElement
+	if (target.hasPointerCapture(e.pointerId)) {
+		target.releasePointerCapture(e.pointerId)
+	}
+
+	if (holdActive || (mode === 'listening' && listeningSubmitOnRelease)) {
+		holdActive = false
+		if (mode === 'listening') void commitVoiceNote()
+		return
+	}
+
+	const now = performance.now()
+	if (now - lastTapAtMs < DOUBLE_TAP_MS) {
+		clearPendingSingleTapTimer()
+		lastTapAtMs = 0
+		openStreamListening()
+		return
+	}
+
+	lastTapAtMs = now
+	pendingSingleTapTimer = setTimeout(() => {
+		pendingSingleTapTimer = null
+		if (mode === 'collapsed') openTyping()
+	}, DOUBLE_TAP_MS)
+}
+
+function onMobileCollapsedPointerCancel(e: PointerEvent) {
+	clearLongPressTimer()
+	clearPendingSingleTapTimer()
+	const target = e.currentTarget as HTMLElement
+	if (target.hasPointerCapture(e.pointerId)) {
+		target.releasePointerCapture(e.pointerId)
+	}
+	if (holdActive || (mode === 'listening' && listeningSubmitOnRelease)) {
+		holdActive = false
+		if (mode === 'listening') void commitVoiceNote()
+	}
+}
 
 $effect(() => {
 	onModeChange?.(mode)
@@ -187,6 +321,8 @@ function formatAttachmentSummary(): string {
 }
 
 onDestroy(() => {
+	clearLongPressTimer()
+	clearPendingSingleTapTimer()
 	for (const a of attachmentsUnmountSnapshot) revokeAttachmentPreview(a)
 })
 
@@ -223,9 +359,11 @@ $effect(() => {
 		const isSpace = e.key === ' ' || e.code === 'Space'
 
 		if (mode === 'collapsed') {
+			if (isMobile) return
 			if (isSpace) {
 				e.preventDefault()
 				if (performance.now() < openMicCooldownUntilMs) return
+				listeningSubmitOnRelease = false
 				openListening()
 				return
 			}
@@ -304,12 +442,16 @@ function openListening() {
 
 async function stopListening() {
 	suppressTextEffect = true
+	keepTypingOpenUntilBlur = false
+	listeningSubmitOnRelease = false
+	holdActive = false
 	mode = 'collapsed'
 	await tick()
 	suppressTextEffect = false
 }
 
 function collapseIfEmpty() {
+	keepTypingOpenUntilBlur = false
 	if (command != null) return
 	if (text.trim() === '' && attachments.length === 0) mode = 'collapsed'
 }
@@ -317,6 +459,7 @@ function collapseIfEmpty() {
 $effect(() => {
 	if (suppressTextEffect) return
 	if (mode !== 'typing') return
+	if (keepTypingOpenUntilBlur) return
 	if (command != null) return
 	if (text.trim() !== '') return
 	if (attachments.length > 0) return
@@ -331,12 +474,15 @@ async function finalizeSubmitCollapseAfterParent() {
 }
 
 async function commitVoiceNote() {
-	if (!onSubmitMessage) return
+	if (!onSubmitMessage || disabled || submitBusy) return
 	const body = VOICE_MOCK_TRANSCRIPTS[Math.floor(Math.random() * VOICE_MOCK_TRANSCRIPTS.length)]
 
 	suppressTextEffect = true
 	text = ''
 	clearAttachments()
+	keepTypingOpenUntilBlur = false
+	listeningSubmitOnRelease = false
+	holdActive = false
 	mode = 'collapsed'
 	openMicCooldownUntilMs = performance.now() + 280
 
@@ -345,6 +491,7 @@ async function commitVoiceNote() {
 }
 
 async function commitMessage() {
+	if (disabled || submitBusy) return
 	const raw = text.trim()
 	const activeCommand = command
 	const attachBlock = formatAttachmentSummary()
@@ -354,6 +501,7 @@ async function commitMessage() {
 		if (!raw && !attachBlock) return
 		const filesSnapshot = attachments.map((a) => a.file)
 		suppressTextEffect = true
+		keepTypingOpenUntilBlur = false
 		text = ''
 		command = null
 		mode = 'collapsed'
@@ -370,6 +518,7 @@ async function commitMessage() {
 
 	const filesSnapshot = attachments.map((a) => a.file)
 	suppressTextEffect = true
+	keepTypingOpenUntilBlur = false
 	text = ''
 	mode = 'collapsed'
 	textareaEl?.blur()
@@ -385,6 +534,7 @@ async function onTextareaKeydown(e: KeyboardEvent) {
 	if (e.key === 'Escape') {
 		e.preventDefault()
 		suppressTextEffect = true
+		keepTypingOpenUntilBlur = false
 		text = ''
 		command = null
 		clearAttachments()
@@ -418,9 +568,15 @@ const pillClass = $derived.by(() => {
 		return `${base} h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary p-0 text-primary-foreground shadow-[0_8px_24px_-8px_color-mix(in_srgb,var(--color-primary)_50%,transparent)]`
 	}
 	if (mode === 'listening') {
+		if (isMobile) {
+			if (listeningSubmitOnRelease) {
+				return `${base} h-14 w-[min(18rem,calc(100vw-5.5rem))] items-center gap-2 rounded-full border border-primary/25 bg-primary px-2.5 text-primary-foreground shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--color-primary)_45%,transparent)]`
+			}
+			return `${base} h-14 w-[min(20rem,calc(100vw-3rem))] items-center gap-2 rounded-full border border-primary/25 bg-primary px-2.5 text-primary-foreground shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--color-primary)_45%,transparent)]`
+		}
 		return `${base} h-14 w-[min(18rem,46vw)] items-center gap-2.5 rounded-full border border-primary/25 bg-primary px-3 text-primary-foreground shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--color-primary)_45%,transparent)] sm:gap-3 sm:px-3.5`
 	}
-	return `${base} tech-pill !max-w-[min(36rem,80vw)] !rounded-2xl mx-auto w-full items-center justify-center gap-2.5 border-border py-0 pl-3 pr-2 text-foreground shadow-none sm:gap-3 sm:pl-4 sm:pr-2`
+	return `${base} tech-pill !max-w-[min(36rem,80vw)] !rounded-2xl mx-auto w-full items-center justify-center gap-2 border-border py-0 pl-2 pr-2 text-foreground shadow-none sm:gap-3 sm:pl-4 sm:pr-2`
 })
 </script>
 
@@ -429,11 +585,15 @@ const pillClass = $derived.by(() => {
 		? 'flex shrink-0 flex-col items-center justify-center gap-2'
 		: 'flex w-full flex-col items-center justify-center gap-2'}
 >
-	{#if mode === 'typing' && attachments.length > 0}
+	{#if mode === 'typing' && enableAttachments && attachments.length > 0}
 		<div
-			class="flex w-full max-w-[min(36rem,80vw)] flex-wrap gap-1.5 px-0.5 sm:px-1"
+			class="flex w-full max-w-[min(36rem,80vw)] mx-auto gap-1.5 max-sm:gap-2 sm:px-1"
 			aria-label="Attached files"
 		>
+			{#if isMobile}
+				<div class="size-9 shrink-0" aria-hidden="true"></div>
+			{/if}
+			<div class="flex min-w-0 flex-1 flex-wrap gap-1.5 px-0.5 sm:px-0">
 			{#each attachments as a, i (`${a.file.name}-${a.file.size}-${a.file.lastModified}-${i}`)}
 				<div
 					class="group relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted/50 shadow-sm"
@@ -487,40 +647,65 @@ const pillClass = $derived.by(() => {
 					</button>
 				</div>
 			{/each}
+			</div>
 		</div>
 	{/if}
-	<div class={pillClass} role="group">
-		{#if mode === 'collapsed'}
+	{#if mode === 'collapsed'}
+		<div class={pillClass} role="group">
 			<button
 				type="button"
-				class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-				onpointerdown={() => void focusShellWebview()}
-				onclick={openListening}
-				aria-label="Start voice note (mock)"
+				class="flex h-14 w-14 shrink-0 touch-manipulation select-none items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
+				disabled={disabled}
+				onpointerdown={(e) => {
+					void focusShellWebview()
+					if (isMobile) onMobileCollapsedPointerDown(e)
+				}}
+				onpointerup={(e) => {
+					if (isMobile) onMobileCollapsedPointerUp(e)
+				}}
+				onpointercancel={(e) => {
+					if (isMobile) onMobileCollapsedPointerCancel(e)
+				}}
+				onclick={(e) => {
+					if (isMobile) {
+						e.preventDefault()
+						return
+					}
+					listeningSubmitOnRelease = false
+					openListening()
+				}}
+				aria-label={isMobile
+					? 'Tap to type, double-tap for voice stream, hold to record (mock)'
+					: 'Start voice note (mock)'}
 			>
 				<svg
 					class="size-6"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
+					xmlns="http://www.w3.org/2000/svg"
 					viewBox="0 0 24 24"
 					aria-hidden="true"
 				>
+					<path d="M0 0h24v24H0z" fill="none" />
 					<path
-						stroke-linecap="round"
+						fill="none"
+						stroke="currentColor"
 						stroke-linejoin="round"
-						d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"
+						stroke-width="2"
+						d="M15 19c1.2-3.678 2.526-5.005 6-6c-3.474-.995-4.8-2.322-6-6c-1.2 3.678-2.526 5.005-6 6c3.474.995 4.8 2.322 6 6Zm-8-9c.6-1.84 1.263-2.503 3-3c-1.737-.497-2.4-1.16-3-3c-.6 1.84-1.263 2.503-3 3c1.737.497 2.4 1.16 3 3Zm1.5 10c.3-.92.631-1.251 1.5-1.5c-.869-.249-1.2-.58-1.5-1.5c-.3.92-.631 1.251-1.5 1.5c.869.249 1.2.58 1.5 1.5Z"
 					/>
 				</svg>
 			</button>
-		{:else if mode === 'listening'}
-			<div class="flex w-[4.5rem] shrink-0 items-center justify-start">
+		</div>
+	{:else if mode === 'listening'}
+	<div class={pillClass} role="group">
+			<div
+				class={`flex shrink-0 items-center justify-start ${isMobile ? 'w-[2.75rem]' : 'w-[4.5rem]'}`}
+			>
 				<span class="font-mono text-[10px] font-bold tracking-wider opacity-80 tabular-nums"
 					>{timerLabel}</span
 				>
 			</div>
 			<div
-				class="flex min-h-7 min-w-0 flex-1 items-end justify-center gap-px px-2 py-1"
+				class="flex min-h-7 min-w-0 flex-1 items-end justify-center gap-px px-1 py-1 sm:px-2"
 				aria-hidden="true"
 			>
 				{#each barIndices as i (i)}
@@ -530,92 +715,143 @@ const pillClass = $derived.by(() => {
 					></span>
 				{/each}
 			</div>
-			<div class="flex w-[4.5rem] shrink-0 items-center justify-end gap-2">
-				<button
-					type="button"
-					class="flex size-8 shrink-0 items-center justify-center rounded-full border border-status-success/35 bg-status-success text-status-success-foreground shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] outline-none transition-colors hover:bg-status-success/90 focus-visible:ring-2 focus-visible:ring-status-success/40"
-					onclick={commitVoiceNote}
-					aria-label="Submit voice note as intent (mock)"
+			{#if !listeningSubmitOnRelease}
+				<div
+					class={`flex shrink-0 items-center justify-end ${isMobile ? 'gap-1.5 pl-1' : 'w-[4.5rem] gap-2'}`}
 				>
-					<svg
-						class="size-4"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						viewBox="0 0 24 24"
-						aria-hidden="true"
+					<button
+						type="button"
+						class="flex size-8 shrink-0 items-center justify-center rounded-full border border-status-success/35 bg-status-success text-status-success-foreground shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] outline-none transition-colors hover:bg-status-success/90 focus-visible:ring-2 focus-visible:ring-status-success/40"
+						onclick={commitVoiceNote}
+						aria-label="Submit voice note as intent (mock)"
 					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5L20 7" />
-					</svg>
-				</button>
-				<button
-					type="button"
-					class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15 text-primary-foreground transition-opacity hover:bg-primary-foreground/25"
-					onclick={() => void stopListening()}
-					aria-label="Stop listening"
-				>
-					<svg
-						class="size-4"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						viewBox="0 0 24 24"
-						aria-hidden="true"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</div>
-		{:else}
-			<div class="flex min-h-0 min-w-0 w-full items-center gap-2 py-1.5 sm:py-2">
-				<form
-					class="flex min-h-0 min-w-0 flex-1 items-center gap-2"
-					onsubmit={(e) => {
-						e.preventDefault()
-						commitMessage()
-					}}
-				>
-					{#if command}
-						<span
-							class="inline-flex shrink-0 items-center rounded-full border border-status-error/30 bg-status-error px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-status-error-foreground select-none"
-							aria-label={`Active command: ${command}`}
-							title="Backspace or Escape to remove"
+						<svg
+							class="size-4"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							viewBox="0 0 24 24"
+							aria-hidden="true"
 						>
-							{command.toUpperCase()}
-						</span>
-					{/if}
-					<textarea
-						bind:this={textareaEl}
-						bind:value={text}
-						placeholder={command
-							? 'Add feedback (optional)…'
-							: 'Describe an intent… (mock — not sent)'}
-						rows="1"
-						oninput={resizeComposer}
-						onkeydown={onTextareaKeydown}
-						onblur={collapseIfEmpty}
-						class="min-h-10 max-h-[min(24rem,calc(100vh-12rem))] w-full min-w-0 flex-1 resize-none overflow-hidden border-none bg-transparent py-2.5 px-0 text-lg leading-tight font-medium tracking-tight outline-none placeholder:opacity-20 focus:ring-0 sm:text-xl"
-					></textarea>
-				</form>
+							<path stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5L20 7" />
+						</svg>
+					</button>
+					<button
+						type="button"
+						class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15 text-primary-foreground transition-opacity hover:bg-primary-foreground/25"
+						onclick={() => void stopListening()}
+						aria-label="Stop listening"
+					>
+						<svg
+							class="size-4"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							viewBox="0 0 24 24"
+							aria-hidden="true"
+						>
+							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+						</svg>
+					</button>
+				</div>
+			{/if}
+	</div>
+	{:else}
+		<div
+			class="flex w-full max-w-[min(36rem,80vw)] mx-auto items-end gap-1.5 max-sm:gap-2 sm:items-center sm:gap-2.5"
+		>
+			{#if isMobile && enableAttachments}
 				<button
 					type="button"
-					onclick={commitMessage}
-					disabled={command == null && text.trim().length === 0 && attachments.length === 0}
-					aria-label="Send message"
-					class="flex size-9 shrink-0 self-center items-center justify-center rounded-full border border-primary/25 bg-primary text-primary-foreground shadow-[0_6px_18px_-8px_color-mix(in_srgb,var(--color-primary)_50%,transparent)] outline-none transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
+					class="mb-1 flex size-9 shrink-0 touch-manipulation items-center justify-center rounded-full border border-border/70 bg-muted/40 text-foreground/70 shadow-sm outline-none transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/35"
+					onclick={openMobileFilePicker}
+					aria-label="Attach image or file"
 				>
 					<svg
-						class="size-4"
+						class="size-[1.05rem]"
 						fill="none"
 						stroke="currentColor"
-						stroke-width="2"
+						stroke-width="1.75"
 						viewBox="0 0 24 24"
 						aria-hidden="true"
 					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M12 19V5m0 0-7 7m7-7 7 7" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z"
+						/>
 					</svg>
 				</button>
+			{/if}
+			<div class="{pillClass} min-w-0 flex-1 !mx-0 max-sm:!max-w-none" role="group">
+				<div class="flex min-h-0 min-w-0 w-full items-center gap-2 py-1 max-sm:py-1 sm:gap-2.5 sm:py-2">
+					<form
+						class="flex min-h-0 min-w-0 flex-1 items-center gap-2"
+						onsubmit={(e) => {
+							e.preventDefault()
+							commitMessage()
+						}}
+					>
+						{#if command}
+							<span
+								class="inline-flex shrink-0 items-center rounded-full border border-status-error/30 bg-status-error px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-status-error-foreground select-none"
+								aria-label={`Active command: ${command}`}
+								title="Backspace or Escape to remove"
+							>
+								{command.toUpperCase()}
+							</span>
+						{/if}
+						<textarea
+							bind:this={textareaEl}
+							bind:value={text}
+							placeholder={command ? 'Add feedback (optional)…' : placeholder}
+							rows="1"
+							disabled={disabled || submitBusy}
+							oninput={resizeComposer}
+							onkeydown={onTextareaKeydown}
+							onblur={collapseIfEmpty}
+							class="min-h-9 max-h-[min(24rem,calc(100vh-12rem))] w-full min-w-0 flex-1 resize-none overflow-hidden border-none bg-transparent py-2 px-0 text-sm leading-snug font-medium tracking-tight outline-none placeholder:opacity-20 focus:ring-0 sm:min-h-10 sm:py-2.5 sm:text-xl sm:leading-tight"
+						></textarea>
+					</form>
+					<button
+						type="button"
+						onclick={commitMessage}
+						disabled={
+							disabled ||
+							submitBusy ||
+							(command == null && text.trim().length === 0 && attachments.length === 0)
+						}
+						aria-label={submitBusy ? 'Sending…' : 'Send message'}
+						class="flex size-9 shrink-0 self-center items-center justify-center rounded-full border border-primary/25 bg-primary text-primary-foreground shadow-[0_6px_18px_-8px_color-mix(in_srgb,var(--color-primary)_50%,transparent)] outline-none transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
+					>
+						{#if submitBusy}
+							<span class="text-xs font-bold" aria-hidden="true">…</span>
+						{:else}
+							<svg
+								class="size-4"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								viewBox="0 0 24 24"
+								aria-hidden="true"
+							>
+								<path stroke-linecap="round" stroke-linejoin="round" d="M12 19V5m0 0-7 7m7-7 7 7" />
+							</svg>
+						{/if}
+					</button>
+				</div>
 			</div>
-		{/if}
-	</div>
+		</div>
+	{/if}
+	<input
+		bind:this={fileInputEl}
+		type="file"
+		class="sr-only"
+		multiple
+		accept={FILE_INPUT_ACCEPT}
+		onchange={onFileInputChange}
+		tabindex="-1"
+		aria-hidden="true"
+		disabled={!enableAttachments}
+	/>
 </div>

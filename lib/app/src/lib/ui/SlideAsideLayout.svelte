@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte'
+	import { mobileFabBottomClass } from '$lib/shell'
+	import { mobileChromeOverrides } from '$lib/shell/mobile-chrome.svelte'
 
 	type Props = {
 		asideLabel: string
@@ -24,13 +26,15 @@
 		desktopGridClass = 'md:grid-cols-[14rem_minmax(0,1fr)]',
 		class: className = '',
 		mainClass = 'relative flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-none',
-		contentClass = 'pb-20 md:pb-0',
+		contentClass = 'pb-16 md:pb-0',
 		open = $bindable(false),
 		aside,
 		children,
 	}: Props = $props()
 
 	const asideId = `slide-aside-${Math.random().toString(36).slice(2, 9)}`
+	const chrome = $derived(mobileChromeOverrides())
+	const showAsideFab = $derived(!chrome.hideAsideNav)
 
 	function close() {
 		open = false
@@ -76,30 +80,32 @@
 			{@render children()}
 		</div>
 
-		<button
-			type="button"
-			class="border-border bg-background/95 text-foreground hover:bg-background fixed bottom-4 left-4 z-30 inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full border shadow-md backdrop-blur-sm transition-colors md:hidden"
-			onclick={toggle}
-			aria-expanded={open}
-			aria-controls={asideId}
-			aria-label={open ? 'Close navigation' : 'Open navigation'}
-		>
-			<svg
-				viewBox="0 0 24 24"
-				class="size-5 shrink-0 opacity-80"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
+		{#if showAsideFab}
+			<button
+				type="button"
+				class="border-border bg-background/95 text-foreground hover:bg-background fixed z-30 inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full border shadow-md backdrop-blur-sm transition-colors max-sm:left-3 {mobileFabBottomClass} md:hidden"
+				onclick={toggle}
+				aria-expanded={open}
+				aria-controls={asideId}
+				aria-label={open ? 'Close navigation' : 'Open navigation'}
 			>
-				{#if open}
-					<path d="M18 6 6 18M6 6l12 12" />
-				{:else}
-					<path d="M4 6h16M4 12h16M4 18h16" />
-				{/if}
-			</svg>
-		</button>
+				<svg
+					viewBox="0 0 24 24"
+					class="size-5 shrink-0 opacity-80"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					{#if open}
+						<path d="M18 6 6 18M6 6l12 12" />
+					{:else}
+						<path d="M4 6h16M4 12h16M4 18h16" />
+					{/if}
+				</svg>
+			</button>
+		{/if}
 	</main>
 </div>

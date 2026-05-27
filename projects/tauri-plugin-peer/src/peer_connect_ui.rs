@@ -73,26 +73,45 @@ impl PeerConnectUiTracker {
 			},
 		};
 
-		{
+		let changed = {
 			let mut map = self.by_did.write().expect("peer connect ui poisoned");
 			let row = map.entry(did).or_default();
 			match event {
 				ConnectUiEvent::Progress { phase, .. } => {
-					row.connect_substate = Some(map_progress(phase));
+					let next = Some(map_progress(phase));
+					if row.connect_substate == next {
+						false
+					} else {
+						row.connect_substate = next;
+						true
+					}
 				}
 				ConnectUiEvent::Connected { mode, .. } => {
-					row.connect_substate = None;
-					row.transport_mode = Some(map_mode(mode));
+					let next_mode = Some(map_mode(mode));
+					if row.connect_substate.is_none() && row.transport_mode == next_mode {
+						false
+					} else {
+						row.connect_substate = None;
+						row.transport_mode = next_mode;
+						true
+					}
 				}
 				ConnectUiEvent::Disconnected { .. } => {
-					row.connect_substate = None;
-					row.transport_mode = None;
+					if row.connect_substate.is_none() && row.transport_mode.is_none() {
+						false
+					} else {
+						row.connect_substate = None;
+						row.transport_mode = None;
+						true
+					}
 				}
 			}
-		}
+		};
 
-		if let Some(cb) = &self.on_change {
-			cb();
+		if changed {
+			if let Some(cb) = &self.on_change {
+				cb();
+			}
 		}
 	}
 
@@ -100,11 +119,22 @@ impl PeerConnectUiTracker {
 		let Ok(did) = crate::did::peer_did_from_ed25519(remote_pk) else {
 			return;
 		};
-		let mut map = self.by_did.write().expect("peer connect ui poisoned");
-		let row = map.entry(did).or_default();
-		row.connect_substate = None;
-		if let Some(m) = mode {
-			row.transport_mode = Some(map_mode(m));
+		let changed = {
+			let mut map = self.by_did.write().expect("peer connect ui poisoned");
+			let row = map.entry(did).or_default();
+			let next_mode = mode.map(map_mode);
+			if row.connect_substate.is_none() && row.transport_mode == next_mode {
+				false
+			} else {
+				row.connect_substate = None;
+				row.transport_mode = next_mode;
+				true
+			}
+		};
+		if changed {
+			if let Some(cb) = &self.on_change {
+				cb();
+			}
 		}
 	}
 

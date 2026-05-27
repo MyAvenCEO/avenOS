@@ -1,24 +1,8 @@
 import { invoke } from '@tauri-apps/api/core'
 import { grooveRuntime } from '$lib/runtime/groove-ipc'
-import type { P2pDiagnostics } from '$lib/peer/mesh-state'
-
-export type PeerTransportStatusReply = {
-	hyperswarmRunning: boolean
-	hyperswarmStartError?: string | null
-	localPkPrefixHex: string
-	linkedPeerIds: string[]
-	/** Live Hyperswarm links by `did:key` — matches `PeerRowReply.peerDid`. */
-	linkedPeerDids: string[]
-	pairingCodePending?: string | null
-	p2pDiagnostics: P2pDiagnostics
-}
 
 export type PeerInviteCreateReply = {
 	code: string
-}
-
-export async function peerTransportStatus(): Promise<PeerTransportStatusReply> {
-	return invoke<PeerTransportStatusReply>('plugin:peer|peer_transport_status')
 }
 
 export async function peerSwarmRetry(): Promise<void> {

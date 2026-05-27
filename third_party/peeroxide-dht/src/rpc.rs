@@ -1258,6 +1258,29 @@ impl DhtNode {
 
         q.add_from_table();
 
+        // Isolated / bootstrap-only DHT (Aven Fly relay): seed bootstrap addresses on
+        // user queries the same way `start_bootstrap` does. On iOS cellular we often
+        // bootstrap successfully yet later announce/lookup return closest=0 because the
+        // sparse routing table did not populate pending for the topic target.
+        if !internal && !self.config.bootstrap.is_empty() {
+            let table_len = self
+                .table
+                .lock()
+                .map(|t| t.len())
+                .unwrap_or(0);
+            if table_len <= 3 {
+                let bootstrap_nodes: Vec<(String, u16)> = self
+                    .config
+                    .bootstrap
+                    .iter()
+                    .filter_map(|s| parse_bootstrap_str(s))
+                    .collect();
+                if !bootstrap_nodes.is_empty() {
+                    q.add_nodes(&bootstrap_nodes);
+                }
+            }
+        }
+
         let reqs = q.poll_requests();
         self.dispatch_query_requests(query_id, reqs);
         self.active_queries.insert(query_id, q);

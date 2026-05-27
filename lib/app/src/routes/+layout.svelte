@@ -9,12 +9,13 @@ import {
 	attachAvenosRuntimeBridge,
 	grooveSessionReady,
 } from '$lib/runtime/groove-runtime'
-import { startPeerMeshStore } from '$lib/peer/peer-mesh.svelte'
+import { startPeerMeshStore } from '$lib/peer/peer-mesh-store'
 import LockGate from '$lib/self/LockGate.svelte'
 import { attachSelfRustEventMirrors, deviceSession } from '$lib/self/device-session-store'
 import { displayTitleForSession } from '$lib/self/active-vault-ui'
 import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/self/vault'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+import MobileShellNav from '$lib/shell/MobileShellNav.svelte'
 import '../app.css'
 
 let { children: pageContent } = $props()
@@ -154,16 +155,16 @@ $effect(() => {
 <div class="box-border flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-background">
 	<LockGate />
 	{#if !shellLocked}
-		<header class="shrink-0 bg-background/90 px-4 pt-3 pb-2 backdrop-blur-sm sm:px-6">
+		<header class="shrink-0 bg-background/90 px-3 pt-1.5 pb-1 backdrop-blur-sm sm:px-6 sm:pt-3 sm:pb-2">
 			<div
-				class="mx-auto grid w-full max-w-[min(100%,88rem)] grid-cols-3 items-center gap-x-2 gap-y-2"
+				class="mx-auto grid w-full max-w-[min(100%,88rem)] grid-cols-1 items-center gap-x-2 gap-y-2 sm:grid-cols-3"
 			>
-				<div class="flex min-w-0 items-center justify-start justify-self-start">
+				<div class="flex min-w-0 items-center justify-start justify-self-start sm:justify-self-start">
 					<P2pSyncBadge />
 				</div>
 
 				<nav
-					class="flex flex-wrap items-center justify-center justify-self-center gap-x-2 gap-y-1 text-[10px] font-bold tracking-wider uppercase"
+					class="hidden flex-wrap items-center justify-center justify-self-center gap-x-2 gap-y-1 text-[10px] font-bold tracking-wider uppercase sm:flex"
 					aria-label="App sections"
 				>
 					<a
@@ -208,11 +209,11 @@ $effect(() => {
 				</nav>
 
 				<nav
-					class="flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 justify-self-end text-[10px] font-bold tracking-wider uppercase"
+					class="hidden min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 justify-self-end text-[10px] font-bold tracking-wider uppercase sm:flex"
 					aria-label="Device identity"
 				>
 					<a
-						href="/self"
+						href="/self/peers"
 						data-sveltekit-preload-data="hover"
 						class="normal-case max-w-[8rem] truncate text-[11px] font-semibold tracking-normal transition-opacity hover:opacity-80 sm:max-w-[10rem] {selfActive ? 'opacity-95' : 'opacity-40'}"
 						aria-current={selfActive ? 'page' : undefined}
@@ -256,5 +257,7 @@ $effect(() => {
 		>
 			{@render pageContent()}
 		</div>
+
+		<MobileShellNav {selfNavLabel} {selfActive} />
 	{/if}
 </div>

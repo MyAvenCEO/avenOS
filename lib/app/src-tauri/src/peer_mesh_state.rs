@@ -42,8 +42,6 @@ pub struct PeerMeshStatusReply {
 	pub peers: Vec<PeerMeshPeerState>,
 }
 
-pub const PEER_MESH_CHANGED_EVENT: &str = "peer:mesh-changed";
-
 pub async fn publish_peer_mesh_snapshot(app: &tauri::AppHandle) {
 	groove_actor(app).publish_mesh().await;
 }
@@ -145,16 +143,10 @@ fn phase_for_peer(
 	PeerMeshPhase::Searching
 }
 
-/// Emit mesh snapshot events (caller must already hold snapshot on the actor).
+/// Push mesh snapshot to the webview on `avenos:runtime` (single ingress).
 pub(crate) fn emit_mesh_snapshot_events(app: &tauri::AppHandle, snap: &PeerMeshStatusReply) {
 	use tauri::Emitter;
 
-	if let Err(e) = app.emit(PEER_MESH_CHANGED_EVENT, snap) {
-		log::debug!(
-			target: "avenos::jazz",
-			"emit {PEER_MESH_CHANGED_EVENT} failed: {e}",
-		);
-	}
 	if let Err(e) = app.emit(
 		"avenos:runtime",
 		&serde_json::json!({ "kind": "mesh", "snapshot": snap }),

@@ -4,10 +4,12 @@ Exercise **hyperswarm + UDP DHT bootstrap** on a **physical iPhone/iPad** from a
 
 **Goal:** After unlock, the app can retry/configure the swarm (`peer_swarm_retry`), subscribe to Jazz surfaces, and complete invite/pair flows similar to sandboxed macOS TestFlight builds when both ends run compatible betas.
 
+**UI:** Trusted peers / mesh chips refresh from **push-only** `avenos:runtime` (mesh + subscribed `peers` table)—no peers-screen polling smoke expectation.
+
 ## Prerequisites
 
 - iOS IPA from `bun run release:app:ios 13 --no-upload` (or pass without `--no-upload` to push to TestFlight; bump the build number for every upload).
-- Build logs from `scripts/tauri-ios-asc.ts` should show **`embedding AVENOS_DHT_BOOTSTRAP=`<host>@<relay>:49737** (HyperDHT bootstrap; manifest `.well-known/aven-relay.json` no longer advertises a second UDP relay port). Sanity-check `.aven-ios-compile.env` under **`lib/app/gen/apple/`** before Xcode runs if troubleshooting.
+- Build logs from `scripts/tauri-ios-asc.ts` should show **`embedding AVENOS_DHT_BOOTSTRAP=`<host>@<relay>:49737** and **`AVENOS_HYPERSWARM_RELAY_ADDR=`<host>:49737** (co-hosted blind-relay on the same UDP port as HyperDHT bootstrap). Sanity-check `.aven-ios-compile.env` under **`lib/app/gen/apple/`** before Xcode runs if troubleshooting.
 - Companion device: preferably **macOS TestFlight build** with matching relay/genesis assumptions (see [macOS TestFlight sandbox smoke](macos-testflight-sandbox-smoke.md)) for cross-platform mesh tests.
 
 ## Smoke steps
@@ -38,7 +40,7 @@ Exercise **hyperswarm + UDP DHT bootstrap** on a **physical iPhone/iPad** from a
    - [ ] On hotspot: **no** **`holepunch aborted`** if LAN direct succeeds first.
    - [ ] **`swarmPeerConnectedTotal >= 1`** and **`linkedCount >= 1`** after pairing settles.
    - [ ] **`holepunchBlindRelayFallbackTotal === 0`** on **hotspot tether** (LAN direct should win before blind-relay).
-   - [ ] On **cross-network** pairs (different carriers / no shared LAN): **`holepunchBlindRelayFallbackTotal > 0`** is OK when holepunch fails but pairing still reaches **`linkedCount >= 1`** (build 21+ embeds blind-relay from Fly manifest).
+   - [ ] On **cross-network** pairs (e.g. Mac on Wi‑Fi + iPhone on 5G): **`holepunchBlindRelayFallbackTotal > 0`** is OK when holepunch fails but pairing still reaches **`linkedCount >= 1`** with transport **Relay** or **Punched** (build 24+ embeds blind-relay at **`relay.aven.ceo:49737`**).
 
 5. **Jazz + Sparks sanity**
 

@@ -5,7 +5,7 @@
 	import PeerMeshPhaseBadge from '$lib/peer/PeerMeshPhaseBadge.svelte'
 	import { peerPersonName } from '$lib/peer/display-label'
 	import { peerMeshPhaseLabel, peerMeshPhaseUserLabel } from '$lib/peer/mesh-state'
-	import { peerMeshSnapshot } from '$lib/peer/peer-mesh.svelte'
+	import { peerMeshSnapshot } from '$lib/peer/peer-mesh-store'
 
 	const show = $derived(
 		browser &&

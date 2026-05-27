@@ -344,6 +344,30 @@ impl SwarmHandle {
         let _ = reply_rx.await;
         Ok(())
     }
+
+    /// Groove bridge reports an encrypted link is live — suppress parallel outbound connects.
+    pub async fn note_peer_connected(&self, public_key: [u8; 32]) -> Result<(), SwarmError> {
+        self.cmd_tx
+            .send(SwarmCommand::NotePeerConnected { public_key })
+            .await
+            .map_err(|_| SwarmError::Destroyed)
+    }
+
+    /// Groove bridge reports a link closed — clear stale bookkeeping and schedule reconnect.
+    pub async fn note_peer_disconnected(&self, public_key: [u8; 32]) -> Result<(), SwarmError> {
+        self.cmd_tx
+            .send(SwarmCommand::NotePeerDisconnected { public_key })
+            .await
+            .map_err(|_| SwarmError::Destroyed)
+    }
+
+    /// Clear all swarm connection slots and re-queue peers (Groove has no live links).
+    pub async fn prepare_reconnect(&self) -> Result<(), SwarmError> {
+        self.cmd_tx
+            .send(SwarmCommand::PrepareReconnect)
+            .await
+            .map_err(|_| SwarmError::Destroyed)
+    }
 }
 
 // ── Internal types ───────────────────────────────────────────────────────────
@@ -366,6 +390,13 @@ enum SwarmCommand {
     Destroy {
         reply_tx: oneshot::Sender<Result<(), SwarmError>>,
     },
+    NotePeerConnected {
+        public_key: [u8; 32],
+    },
+    NotePeerDisconnected {
+        public_key: [u8; 32],
+    },
+    PrepareReconnect,
 }
 
 #[allow(dead_code)] // Fields read during leave/unannounce (future)
@@ -546,7 +577,7 @@ impl SwarmActor {
                 }
                 event = server_rx.recv() => {
                     if let Some(event) = event {
-                        self.handle_server_event(event);
+                        self.handle_server_event(event, &connect_result_tx);
                     }
                 }
                 result = connect_result_rx.recv() => {
@@ -608,6 +639,70 @@ impl SwarmActor {
                 let _ = reply_tx.send(Ok(()));
                 true
             }
+            SwarmCommand::NotePeerConnected { public_key } => {
+                self.note_peer_connected(public_key);
+                false
+            }
+            SwarmCommand::NotePeerDisconnected { public_key } => {
+                self.note_peer_disconnected(public_key);
+                false
+            }
+            SwarmCommand::PrepareReconnect => {
+                self.prepare_stale_reconnect();
+                false
+            }
+        }
+    }
+
+    fn note_peer_connected(&mut self, pk: [u8; 32]) {
+        if !self.connections.has(&pk) {
+            self.connections
+                .add(pk, ConnectionInfo { is_initiator: false });
+        }
+        if let Some(info) = self.peers.get_mut(&pk) {
+            info.connecting = false;
+            info.queued = false;
+            info.set_waiting(false);
+            info.connected();
+        }
+        self.queue.retain(|queued| *queued != pk);
+    }
+
+    fn note_peer_disconnected(&mut self, pk: [u8; 32]) {
+        self.connections.remove(&pk);
+        if let Some(info) = self.peers.get_mut(&pk) {
+            info.connecting = false;
+            info.disconnected();
+        }
+        if let Some(info) = self.peers.get(&pk) {
+            if !info.banned && !info.topics.is_empty() && !info.is_waiting() && !info.queued {
+                self.schedule_retry(pk);
+            }
+        }
+    }
+
+    /// Groove bridge is authoritative for live links; clear stale swarm slots and re-queue.
+    fn prepare_stale_reconnect(&mut self) {
+        for pk in self.connections.drain_all() {
+            if let Some(info) = self.peers.get_mut(&pk) {
+                info.connecting = false;
+                info.disconnected();
+            }
+        }
+        let to_retry: Vec<[u8; 32]> = self
+            .peers
+            .iter()
+            .filter(|(_, info)| {
+                !info.banned
+                    && !info.topics.is_empty()
+                    && !info.connecting
+                    && !info.queued
+                    && !info.is_waiting()
+            })
+            .map(|(pk, _)| *pk)
+            .collect();
+        for pk in to_retry {
+            self.schedule_retry(pk);
         }
     }
 
@@ -913,7 +1008,11 @@ impl SwarmActor {
         });
     }
 
-    fn handle_server_event(&mut self, event: ServerEvent) {
+    fn handle_server_event(
+        &mut self,
+        event: ServerEvent,
+        connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
+    ) {
         match event {
             ServerEvent::PeerHandshake {
                 msg,
@@ -921,7 +1020,7 @@ impl SwarmActor {
                 target: _,
                 reply_tx,
             } => {
-                self.handle_server_handshake(msg, from, reply_tx);
+                self.handle_server_handshake(msg, from, reply_tx, connect_result_tx);
             }
             ServerEvent::PeerHolepunch {
                 msg,
@@ -956,11 +1055,38 @@ impl SwarmActor {
         }
     }
 
+    fn nudge_peer_connect(
+        &mut self,
+        pk: [u8; 32],
+        connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
+    ) {
+        let should_queue = if let Some(info) = self.peers.get_mut(&pk) {
+            if info.banned || info.connecting || info.queued || info.is_waiting() {
+                false
+            } else {
+                info.queued = true;
+                info.priority = info.get_priority();
+                true
+            }
+        } else {
+            false
+        };
+        if should_queue {
+            self.queue.push(pk);
+            tracing::debug!(
+                pk = %short_hex(&pk),
+                "server: nudging outbound connect (relayed LAN dominant half)",
+            );
+            self.attempt_connections(connect_result_tx);
+        }
+    }
+
     fn handle_server_handshake(
         &mut self,
         msg: HandshakeMessage,
         from: Ipv4Peer,
         reply_tx: oneshot::Sender<Option<Vec<u8>>>,
+        connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
     ) {
         let noise_kp = NoiseKeypair {
             public_key: self.key_pair.public_key,
@@ -1089,6 +1215,73 @@ impl SwarmActor {
             },
         );
 
+        let remote_pk = nw_result.remote_public_key;
+
+        // Subordinate on relayed LAN must begin UDX before MODE_REPLY reaches the dominant
+        // peer — otherwise the initiator's first SecretStream frames race an unopened socket.
+        let mut relayed_lan_responder_opened = false;
+        if relayed_via.is_some() && !self.connections.has(&remote_pk) {
+            let local_addrs4 = build_addresses4(self.config.dht_listen_port);
+            if let Some(lan_peer) = match_address(&local_addrs4, &remote_payload.addresses4) {
+                if self.key_pair.public_key < remote_pk {
+                    if self.connections.len() >= self.config.max_peers {
+                        tracing::debug!("server: at max connections");
+                    } else if let Some(remote_udx) = remote_payload.udx.clone() {
+                        self.connections
+                            .add(remote_pk, ConnectionInfo { is_initiator: false });
+
+                        let conn_tx = self.conn_tx.clone();
+                        let rh = self.runtime_handle.clone();
+                        let dht = self.dht.clone();
+                        let nw_result_spawn = nw_result.clone();
+                        let lan_peer = lan_peer.clone();
+
+                        tracing::debug!(
+                            pk = %short_hex(&remote_pk),
+                            lan = %format!("{}:{}", lan_peer.host, lan_peer.port),
+                            "server: relayed LAN — opening responder stream (pre-reply)",
+                        );
+
+                        tokio::spawn(async move {
+                            match create_server_connection(
+                                rh,
+                                dht,
+                                local_stream_id,
+                                &remote_udx,
+                                &lan_peer,
+                                &nw_result_spawn,
+                            )
+                            .await
+                            {
+                                Ok((mut conn, runtime)) => {
+                                    conn.transport_mode =
+                                        Some(peeroxide_dht::connect_ui::ConnectTransportMode::Lan);
+                                    let swarm_conn = SwarmConnection {
+                                        peer: conn,
+                                        is_initiator: false,
+                                        topics: vec![],
+                                        _runtime: runtime,
+                                    };
+                                    if conn_tx.send(swarm_conn).await.is_err() {
+                                        tracing::warn!("connection channel closed");
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::debug!(
+                                        err = %e,
+                                        "server: relayed LAN responder stream failed",
+                                    );
+                                }
+                            }
+                        });
+                        relayed_lan_responder_opened = true;
+                    } else {
+                        tracing::debug!("server: relayed LAN but no UDX info in handshake");
+                    }
+                }
+            }
+        }
+
         let reply_msg = HandshakeMessage {
             mode: MODE_REPLY,
             noise: noise_reply,
@@ -1097,7 +1290,9 @@ impl SwarmActor {
         };
         let _ = reply_tx.send(encode_handshake_to_bytes(&reply_msg).ok());
 
-        let remote_pk = nw_result.remote_public_key;
+        if relayed_lan_responder_opened {
+            return;
+        }
 
         if self.connections.has(&remote_pk) {
             tracing::debug!(pk = %short_hex(&remote_pk), "server: already connected");
@@ -1106,67 +1301,10 @@ impl SwarmActor {
 
         if relayed_via.is_some() {
             let local_addrs4 = build_addresses4(self.config.dht_listen_port);
-            if let Some(lan_peer) =
+            if let Some(_lan_peer) =
                 match_address(&local_addrs4, &remote_payload.addresses4)
             {
                 if self.key_pair.public_key < remote_pk {
-                    if self.connections.len() >= self.config.max_peers {
-                        tracing::debug!("server: at max connections");
-                        return;
-                    }
-
-                    let Some(remote_udx) = remote_payload.udx.clone() else {
-                        tracing::debug!("server: relayed LAN but no UDX info in handshake");
-                        return;
-                    };
-
-                    self.connections
-                        .add(remote_pk, ConnectionInfo { is_initiator: false });
-
-                    let conn_tx = self.conn_tx.clone();
-                    let rh = self.runtime_handle.clone();
-                    let dht = self.dht.clone();
-                    let nw_result = nw_result.clone();
-                    let lan_peer = lan_peer.clone();
-
-                    tracing::debug!(
-                        pk = %short_hex(&remote_pk),
-                        lan = %format!("{}:{}", lan_peer.host, lan_peer.port),
-                        "server: relayed LAN — opening responder stream",
-                    );
-
-                    tokio::spawn(async move {
-                        match create_server_connection(
-                            rh,
-                            dht,
-                            local_stream_id,
-                            &remote_udx,
-                            &lan_peer,
-                            &nw_result,
-                        )
-                        .await
-                        {
-                            Ok((mut conn, runtime)) => {
-                                conn.transport_mode =
-                                    Some(peeroxide_dht::connect_ui::ConnectTransportMode::Lan);
-                                let swarm_conn = SwarmConnection {
-                                    peer: conn,
-                                    is_initiator: false,
-                                    topics: vec![],
-                                    _runtime: runtime,
-                                };
-                                if conn_tx.send(swarm_conn).await.is_err() {
-                                    tracing::warn!("connection channel closed");
-                                }
-                            }
-                            Err(e) => {
-                                tracing::debug!(
-                                    err = %e,
-                                    "server: relayed LAN responder stream failed",
-                                );
-                            }
-                        }
-                    });
                     return;
                 }
 
@@ -1174,6 +1312,7 @@ impl SwarmActor {
                     pk = %short_hex(&remote_pk),
                     "server: relayed LAN — waiting on dominant peer initiator stream",
                 );
+                self.nudge_peer_connect(remote_pk, connect_result_tx);
                 return;
             }
 
@@ -1181,6 +1320,13 @@ impl SwarmActor {
                 pk = %short_hex(&remote_pk),
                 "server: handshake relayed — waiting on holepunch + initiator stream (no eager server connect)",
             );
+            if let Some(token) = relay_token {
+                self.spawn_server_blind_relay_fallback(
+                    remote_pk,
+                    token,
+                    nw_result,
+                );
+            }
             return;
         }
 
@@ -1237,42 +1383,67 @@ impl SwarmActor {
             });
         }
 
-        if let (Some(relay_pk), Some(token)) = (self.config.relay_through, relay_token) {
-            let dht = self.dht.clone();
-            let key_pair = self.key_pair.clone();
-            let relay_addr = self.config.relay_address;
-            let rh = self.runtime_handle.clone();
-            let conn_tx = self.conn_tx.clone();
-            tokio::spawn(async move {
-                match create_server_relay_connection(
-                    rh,
-                    dht,
-                    key_pair,
-                    relay_pk,
-                    relay_addr,
-                    token,
-                    local_stream_id,
-                    nw_result,
-                )
-                .await
-                {
-                    Ok((conn, runtime)) => {
-                        let swarm_conn = SwarmConnection {
-                            peer: conn,
-                            is_initiator: false,
-                            topics: vec![],
-                            _runtime: runtime,
-                        };
-                        if conn_tx.send(swarm_conn).await.is_err() {
-                            tracing::warn!("connection channel closed");
-                        }
-                    }
-                    Err(e) => {
-                        tracing::debug!(err = %e, "server: relay connection failed");
+        if let Some(token) = relay_token {
+            self.spawn_server_blind_relay_fallback(
+                remote_pk,
+                token,
+                nw_result,
+            );
+        }
+    }
+
+    /// When the Noise handshake completes on a relayed path, the outbound client
+    /// may fall back to blind-relay with `pair(false, remote_token)`. The server
+    /// must register the matching `pair(true, local_token)` on the same relay.
+    fn spawn_server_blind_relay_fallback(
+        &self,
+        remote_pk: [u8; 32],
+        token: [u8; 32],
+        nw_result: peeroxide_dht::noise_wrap::NoiseWrapResult,
+    ) {
+        let Some(relay_pk) = self.config.relay_through else {
+            return;
+        };
+
+        tracing::debug!(
+            pk = %short_hex(&remote_pk),
+            token = %format_args!("{:02x?}", &token[..4]),
+            "server: spawning blind-relay fallback (pair initiator)",
+        );
+
+        let dht = self.dht.clone();
+        let key_pair = self.key_pair.clone();
+        let relay_addr = self.config.relay_address;
+        let rh = self.runtime_handle.clone();
+        let conn_tx = self.conn_tx.clone();
+        tokio::spawn(async move {
+            match create_server_relay_connection(
+                rh,
+                dht,
+                key_pair,
+                relay_pk,
+                relay_addr,
+                token,
+                nw_result,
+            )
+            .await
+            {
+                Ok((conn, runtime)) => {
+                    let swarm_conn = SwarmConnection {
+                        peer: conn,
+                        is_initiator: false,
+                        topics: vec![],
+                        _runtime: runtime,
+                    };
+                    if conn_tx.send(swarm_conn).await.is_err() {
+                        tracing::warn!("connection channel closed");
                     }
                 }
-            });
-        }
+                Err(e) => {
+                    tracing::debug!(err = %e, "server: relay connection failed");
+                }
+            }
+        });
     }
 
     fn all_topics_refreshed(&self) -> bool {
@@ -1350,7 +1521,6 @@ async fn create_server_relay_connection(
     relay_pk: [u8; 32],
     relay_addr: Option<std::net::SocketAddr>,
     token: [u8; 32],
-    local_stream_id: u32,
     noise_result: peeroxide_dht::noise_wrap::NoiseWrapResult,
 ) -> Result<(PeerConnection, UdxRuntime), SwarmError> {
     use peeroxide_dht::blind_relay::BlindRelayClient;
@@ -1399,8 +1569,13 @@ async fn create_server_relay_connection(
         .await
         .map_err(|e| SwarmError::Dht(peeroxide_dht::hyperdht::HyperDhtError::Relay(e)))?;
 
+    // Fresh UDX id for relay data on the **same** runtime as `connect_to` above.
+    // Must use peeroxide-dht's allocator — peeroxide has a separate counter and both
+    // can return the same integer, colliding on one UdxRuntime (TestFlight build 30).
+    let data_stream_id = peeroxide_dht::hyperdht::next_stream_id();
+
     let pair_response = relay_client
-        .pair(true, &token, u64::from(local_stream_id))
+        .pair(true, &token, u64::from(data_stream_id))
         .await
         .map_err(|e| SwarmError::Dht(peeroxide_dht::hyperdht::HyperDhtError::Relay(e)))?;
 
@@ -1412,7 +1587,7 @@ async fn create_server_relay_connection(
 
     // 4. Connect data UDX stream through the relay, reusing the control
     //    channel's socket so the relay sees traffic from the same source address.
-    let data_stream = runtime.create_stream(local_stream_id).await?;
+    let data_stream = runtime.create_stream(data_stream_id).await?;
     data_stream
         .connect(&relay_conn.socket, remote_id, relay_addr)
         .await?;

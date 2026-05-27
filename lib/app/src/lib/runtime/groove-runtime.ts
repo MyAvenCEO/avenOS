@@ -9,7 +9,7 @@ import { grooveRuntime } from '$lib/runtime/groove-ipc'
 export { grooveRuntime } from '$lib/runtime/groove-ipc'
 
 /**
- * Live mesh snapshot — updated by `avenos:runtime` and (legacy) `peer:mesh-changed`.
+ * Live mesh snapshot — updated only by `avenos:runtime` `{ kind: 'mesh' }`.
  */
 export const peerMeshSnapshot = writable<PeerMeshStatusReply | undefined>(undefined)
 

@@ -102,8 +102,6 @@ pub struct ManagedJazz {
 	conn_epoch: AtomicU64,
 	/// Opens after [`jazz_shell_ready`] succeeds (cached or hydrated). Hyperswarm/mesh work must wait.
 	mesh_local_shell_gate: AtomicBool,
-	/// Last [`conn_epoch`] we spawned [`spawn_initial_peer_mesh`] sidecar for.
-	mesh_sidecar_last_epoch: AtomicU64,
 	/// One Groove catch-up rebroadcast per conn epoch (not per shell invalidation).
 	mesh_acl_rebroadcast_done: AtomicBool,
 	/// Shared with [`BiscuitGatedPeerTransport`] — spark biscuit snapshot for outbound sync policy.
@@ -115,6 +113,8 @@ pub struct ManagedJazz {
 	pub(crate) change_tx: tokio::sync::mpsc::UnboundedSender<String>,
 	/// Skip identical table snapshots so the webview does not repaint every drain tick.
 	last_table_snapshots: RwLock<HashMap<String, String>>,
+	/// Skip identical mesh snapshots so connect sub-states do not repaint the webview.
+	last_mesh_snapshot: RwLock<Option<String>>,
 	/// Receiver moved out of here by [`take_change_rx`] once at startup; afterwards this
 	/// stays `None`. Kept inside `std::sync::Mutex` so we can extract it from
 	/// `tauri::setup` without an async runtime.
@@ -136,11 +136,11 @@ impl Default for ManagedJazz {
 			mesh_groove_registered: Mutex::new(HashSet::new()),
 			conn_epoch: AtomicU64::new(0),
 			mesh_local_shell_gate: AtomicBool::new(false),
-			mesh_sidecar_last_epoch: AtomicU64::new(0),
 			mesh_acl_rebroadcast_done: AtomicBool::new(false),
 			sync_acl: Arc::new(RwLock::new(None)),
 			change_tx,
 			last_table_snapshots: RwLock::new(HashMap::new()),
+			last_mesh_snapshot: RwLock::new(None),
 			change_rx: std::sync::Mutex::new(Some(change_rx)),
 			connect_in_progress: Mutex::new(false),
 			connect_done: Notify::new(),
@@ -664,9 +664,9 @@ impl ManagedJazz {
 			self.shell_vault_stale.store(true, Ordering::Release);
 			self.mesh_groove_registered.lock().await.clear();
 			self.mesh_local_shell_gate.store(false, Ordering::Release);
-			self.mesh_sidecar_last_epoch.store(0, Ordering::Release);
 			*self.sync_acl.write().expect("sync_acl poisoned") = None;
 			self.last_table_snapshots.write().expect("last_table_snapshots poisoned").clear();
+			*self.last_mesh_snapshot.write().expect("last_mesh_snapshot poisoned") = None;
 			self.table_ui_refs.lock().await.clear();
 			*self.connect_in_progress.lock().await = false;
 			self.connect_done.notify_waiters();
@@ -934,89 +934,20 @@ async fn jazz_connect(
 	}
 }
 
-/// Flip shell gate + start allowlist/register sidecar exactly once per `conn_epoch`.
-fn mark_shell_local_ready_for_mesh(app: &tauri::AppHandle, mj: &ManagedJazz, client: &Arc<JazzClient>) {
+/// Flip shell gate; enqueue one mesh reconcile (same path as periodic tick — Hyperswarm allowlist + register).
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+fn mark_shell_local_ready_for_mesh(app: &tauri::AppHandle, mj: &ManagedJazz) {
 	mj.mesh_local_shell_gate.store(true, Ordering::Release);
-	#[cfg(any(target_os = "macos", target_os = "ios"))]
-	{
-		let epoch = mj.conn_epoch.load(Ordering::Acquire);
-		let prev = mj.mesh_sidecar_last_epoch.swap(epoch, Ordering::AcqRel);
-		if prev != epoch {
-			spawn_initial_peer_mesh(app, Arc::clone(client), epoch);
-		}
-	}
-}
-
-/// Hyperswarm allowlist + existing link registration — must not run under `conn` lock (blocks UI IPC).
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-fn spawn_initial_peer_mesh(app: &tauri::AppHandle, client: Arc<JazzClient>, epoch: u64) {
 	let app = app.clone();
 	tauri::async_runtime::spawn(async move {
-		let jazz = app.state::<ManagedJazz>();
-		if !jazz.conn_epoch_is(epoch) {
-			return;
-		}
-		let self_state = app.state::<SelfState>();
-		let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
-		let peer_ctl = app.state::<Arc<tauri_plugin_peer::PeerCtl>>();
-		let root = match self_state.with_root(|r| Ok(*r)) {
-			Ok(r) => r,
-			Err(_) => return,
-		};
-		let pk = match ed25519_public(&root) {
-			Ok(pk) => pk,
-			Err(_) => return,
-		};
-		let local_did = match crate::jazz_auth::peer_did_from_ed25519(&pk) {
-			Ok(d) => d,
-			Err(e) => {
-				log::warn!(target: "avenos::jazz", "post-connect local did: {e}");
-				return;
-			}
-		};
-		if !jazz.conn_epoch_is(epoch) {
-			return;
-		}
-		let allow = match crate::peers::list_active_peer_dids(client.as_ref()).await {
-			Ok(a) => a,
-			Err(e) => {
-				log::warn!(target: "avenos::jazz", "post-connect allowlist read: {e}");
-				return;
-			}
-		};
-		if let Err(e) = peer_ctl
-			.sync_allowlist_from_peer_table(&local_did, &allow)
-			.await
-		{
-			log::warn!(target: "avenos::jazz", "post-connect sync_allowlist: {e}");
-			return;
-		}
-		if !jazz.conn_epoch_is(epoch) {
-			return;
-		}
-		let bridge_cids = bridge.snapshot_remote_clients().await;
-		let m = bridge.shared_client_id_to_did();
-		for p in bridge_cids {
-			if !jazz.conn_epoch_is(epoch) {
-				return;
-			}
-			let did_opt = m.read().expect("cid map poisoned").get(&p).cloned();
-			if let Some(did) = did_opt {
-				if allow.iter().any(|a| a == &did) {
-					if let Err(e) = client.register_peer_sync_client(p) {
-						log::warn!(
-							target: "avenos::jazz",
-							"post-connect register_peer_sync_client: {e}",
-						);
-					}
-				}
-			}
-		}
+		let _ = peer_mesh_reconcile_tick(&app).await;
 	});
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-fn spawn_initial_peer_mesh(_app: &tauri::AppHandle, _client: Arc<JazzClient>, _epoch: u64) {}
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "ios")))]
+fn mark_shell_local_ready_for_mesh(_app: &tauri::AppHandle, mj: &ManagedJazz) {
+	mj.mesh_local_shell_gate.store(true, Ordering::Release);
+}
 
 async fn jazz_shell_ready(
 	app: &tauri::AppHandle,
@@ -1026,7 +957,7 @@ async fn jazz_shell_ready(
 ) -> Result<std::sync::Arc<jazz_engine::ShellState>, String> {
 	if !mj.shell_vault_stale.load(Ordering::Acquire) {
 		if let Some(cached) = mj.shell.lock().await.clone() {
-			mark_shell_local_ready_for_mesh(app, mj, &client);
+			mark_shell_local_ready_for_mesh(app, mj);
 			return Ok(cached);
 		}
 	}
@@ -1034,7 +965,7 @@ async fn jazz_shell_ready(
 	let _hydrate_guard = mj.shell_hydrate.lock().await;
 	if !mj.shell_vault_stale.load(Ordering::Acquire) {
 		if let Some(cached) = mj.shell.lock().await.clone() {
-			mark_shell_local_ready_for_mesh(app, mj, &client);
+			mark_shell_local_ready_for_mesh(app, mj);
 			return Ok(cached);
 		}
 	}
@@ -1075,7 +1006,7 @@ async fn jazz_shell_ready(
 		}
 		publish_peer_mesh_after_acl(app).await;
 	}
-	mark_shell_local_ready_for_mesh(app, mj, &client);
+	mark_shell_local_ready_for_mesh(app, mj);
 	Ok(arc)
 }
 
@@ -1945,14 +1876,33 @@ pub(crate) async fn refresh_peer_mesh_groove_register_primitives(
 	Ok(0)
 }
 
-/// Actor-only: assemble + emit mesh snapshot (no re-enqueue).
+/// Actor-only: assemble + emit mesh snapshot (no re-enqueue). Skips emit when JSON unchanged.
 pub(crate) async fn execute_publish_mesh(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
 	ss: &SelfState,
 ) {
 	match execute_mesh_snapshot(app, jazz, ss).await {
-		Ok(snap) => crate::peer_mesh_state::emit_mesh_snapshot_events(app, &snap),
+		Ok(snap) => {
+			let encoded = match serde_json::to_string(&snap) {
+				Ok(s) => s,
+				Err(e) => {
+					log::debug!(target: "avenos::jazz", "execute_publish_mesh encode: {e}");
+					return;
+				}
+			};
+			{
+				let mut last = jazz
+					.last_mesh_snapshot
+					.write()
+					.expect("last_mesh_snapshot poisoned");
+				if last.as_ref() == Some(&encoded) {
+					return;
+				}
+				*last = Some(encoded);
+			}
+			crate::peer_mesh_state::emit_mesh_snapshot_events(app, &snap);
+		}
 		Err(e) => log::debug!(
 			target: "avenos::jazz",
 			"execute_publish_mesh: {e}",
@@ -2096,11 +2046,22 @@ pub(crate) async fn execute_mesh_reconcile(
 
 	let allow = crate::peers::list_active_peer_dids(client.as_ref()).await?;
 
+	let root = self_state
+		.with_root(|r| Ok(*r))
+		.map_err(|_| "locked: unlock AvenOS identity first".to_string())?;
+	let pk = ed25519_public(&root)?;
+	let local_did = crate::jazz_auth::peer_did_from_ed25519(&pk)?;
+
+	peer_ctl
+		.sync_allowlist_from_peer_table(&local_did, &allow)
+		.await?;
+
 	if bridge.snapshot_remote_clients().await.is_empty() && !allow.is_empty() {
 		peer_ctl.nudge_allowlisted_discovery().await?;
 	}
 
 	let _ = refresh_peer_mesh_groove_register_primitives(app, jazz, client, &allow, false).await?;
+	execute_publish_mesh(app, jazz, self_state.inner()).await;
 	Ok(())
 }
 

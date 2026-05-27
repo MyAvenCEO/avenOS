@@ -21,6 +21,14 @@ use uuid::Uuid;
 
 use crate::did;
 
+/// Fired when the Groove bridge accepts or finishes a Hyperswarm encrypted link.
+pub enum GrooveLinkLifecycle {
+	Up([u8; 32]),
+	Down([u8; 32]),
+}
+
+type LinkLifecycleHook = Arc<dyn Fn(GrooveLinkLifecycle) + Send + Sync>;
+
 #[must_use]
 fn groove_client_uuid_from_pubkey(pubkey: &[u8; 32]) -> Uuid {
 	let mut digest = Sha256::new();
@@ -48,6 +56,7 @@ pub struct HyperswarmGrooveBridgeInner {
 	/// otherwise reconcile its peer mesh — the bridge itself has no JazzClient handle.
 	peer_set_changed: Arc<Notify>,
 	connect_ui_tracker: Mutex<Option<Arc<crate::peer_connect_ui::PeerConnectUiTracker>>>,
+	link_lifecycle: Mutex<Option<LinkLifecycleHook>>,
 }
 
 #[derive(Clone)]
@@ -69,6 +78,7 @@ impl HyperswarmGrooveBridge {
 			client_id_to_did: cid_map,
 			peer_set_changed: Arc::new(Notify::new()),
 			connect_ui_tracker: Mutex::new(None),
+			link_lifecycle: Mutex::new(None),
 		});
 		HyperswarmGrooveBridge(inner)
 	}
@@ -78,6 +88,16 @@ impl HyperswarmGrooveBridge {
 			.0
 			.connect_ui_tracker
 			.blocking_lock() = Some(tracker);
+	}
+
+	pub fn set_link_lifecycle_hook(&self, hook: LinkLifecycleHook) {
+		*self.0.link_lifecycle.blocking_lock() = Some(hook);
+	}
+
+	fn notify_link_lifecycle(&self, event: GrooveLinkLifecycle) {
+		if let Some(hook) = self.0.link_lifecycle.blocking_lock().as_ref() {
+			hook(event);
+		}
 	}
 
 	pub fn shared_client_id_to_did(&self) -> Arc<RwLock<HashMap<ClientId, String>>> {
@@ -248,6 +268,7 @@ impl HyperswarmGrooveBridge {
 		if let Some(tracker) = bridge.0.connect_ui_tracker.lock().await.as_ref() {
 			tracker.note_disconnected_pk(&remote_pk);
 		}
+		bridge.notify_link_lifecycle(GrooveLinkLifecycle::Down(remote_pk));
 		log::debug!(
 			target: "avenos::peeroxide",
 			"groove_p2p link closed peer={:?}",
@@ -262,6 +283,24 @@ impl HyperswarmGrooveBridge {
 
 		let remote_pk = *conn.remote_public_key();
 		let remote_client = ClientId(groove_client_uuid_from_pubkey(&remote_pk));
+
+		if self
+			.0
+			.active_remote_clients
+			.lock()
+			.await
+			.contains(&remote_client)
+		{
+			log::warn!(
+				target: "avenos::peeroxide",
+				"groove_p2p duplicate swarm link for {:?} — keeping existing, dropping new",
+				remote_client,
+			);
+			drop(conn);
+			self.notify_link_lifecycle(GrooveLinkLifecycle::Up(remote_pk));
+			return;
+		}
+
 		if let Ok(did) = did::peer_did_from_ed25519(&remote_pk) {
 			let mut m = self.0.client_id_to_did.write().expect("cid map poisoned");
 			m.insert(remote_client, did);
@@ -270,17 +309,11 @@ impl HyperswarmGrooveBridge {
 		}
 
 		let (caps_tx, caps_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-		let replace = {
-			let mut map = self.0.outbound_by_peer.lock().await;
-			map.insert(remote_client, caps_tx)
-		};
-		if replace.is_some() {
-			log::warn!(
-				target: "avenos::peeroxide",
-				"groove_p2p replacing duplicate swarm link {:?}",
-				remote_client,
-			);
-		}
+		self.0
+			.outbound_by_peer
+			.lock()
+			.await
+			.insert(remote_client, caps_tx);
 
 		self.0
 			.active_remote_clients
@@ -288,6 +321,7 @@ impl HyperswarmGrooveBridge {
 			.await
 			.insert(remote_client);
 		self.0.peer_set_changed.notify_waiters();
+		self.notify_link_lifecycle(GrooveLinkLifecycle::Up(remote_pk));
 		log::info!(
 			target: "avenos::peeroxide",
 			"groove_p2p link up peer={:?}",

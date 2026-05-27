@@ -2,15 +2,11 @@
 	import { browser } from '$app/environment'
 	import { get } from 'svelte/store'
 	import { listen } from '@tauri-apps/api/event'
-	import { jazzPeerMeshRefresh } from '$lib/jazz/api'
-	import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
 	import { copyToClipboard } from '$lib/runtime/clipboard'
-	import type { PeerRowReply } from '$lib/peer/api'
 	import {
 		peerInviteAccept,
 		peerInviteCancel,
 		peerInviteCreate,
-		peerList,
 		peerRevoke,
 		peerSwarmRetry,
 		avenosDhtTraceSnapshot,
@@ -25,7 +21,8 @@
 	import { peerPersonName } from '$lib/peer/display-label'
 	import PeerMeshPhaseBadge from '$lib/peer/PeerMeshPhaseBadge.svelte'
 	import { findPeerMeshPhase, peerMeshDetailSubLabel, peerMeshDetailSubTitle, peerMeshPhaseLabel } from '$lib/peer/mesh-state'
-	import { peerMeshSnapshot, refreshPeerMeshSnapshot } from '$lib/peer/peer-mesh.svelte'
+	import type { PeerRowReply } from '$lib/peer/api'
+	import { peerMeshSnapshot, peerRows } from '$lib/peer/peer-mesh-store'
 	import { vaultList } from '$lib/self/vault'
 
 	let err = $state<string | undefined>()
@@ -34,7 +31,7 @@
 	let loadGeneration = 0
 
 	const mesh = $derived($peerMeshSnapshot)
-	let rows = $state<PeerRowReply[]>([])
+	const rows = $derived($peerRows)
 	let inviteCode = $state<string | undefined>()
 	let copiedPairingCode = $state<string | undefined>()
 	let acceptCode = $state('')
@@ -192,54 +189,15 @@
 
 	function syncInviteCodeFromMesh(): void {
 		const pending = get(peerMeshSnapshot)?.pairingCodePending?.trim()
-		if (!pending || inviteCode) return
-		if (rows.some((r) => r.status === 'active')) return
-		inviteCode = pending
-	}
-
-	async function refreshPeersJazz(): Promise<void> {
-		if (!tauri || !unlocked) return
-		try {
-			await waitForGrooveSessionReady()
-			rows = await peerList()
-			void jazzPeerMeshRefresh().catch(() => {})
-		} catch (e) {
-			err = e instanceof Error ? e.message : String(e)
-		}
-	}
-
-	async function refreshPeersTransport(): Promise<void> {
-		syncInviteCodeFromMesh()
-		await refreshPeersJazz()
-		void refreshPeerMeshSnapshot()
-	}
-
-	async function loadPeersBlockFull(showSpinner: boolean): Promise<void> {
-		if (!tauri || !unlocked) {
-			rows = []
+		if (!pending) {
+			if (inviteCode) {
+				inviteCode = undefined
+				copiedPairingCode = undefined
+			}
 			return
 		}
-		const gen = ++loadGeneration
-		if (showSpinner) initialLoading = true
-		err = undefined
-		syncInviteCodeFromMesh()
-		const transportPromise = refreshPeerMeshSnapshot().then(() => undefined)
-		const spinnerMaxMs = 2500
-		if (showSpinner) {
-			await Promise.race([
-				transportPromise,
-				new Promise<void>((resolve) => window.setTimeout(resolve, spinnerMaxMs)),
-			])
-			if (gen === loadGeneration) initialLoading = false
-			void transportPromise.catch((e) => {
-				if (gen === loadGeneration) err = e instanceof Error ? e.message : String(e)
-			})
-		} else {
-			await transportPromise
-		}
-		if (gen === loadGeneration) {
-			void refreshPeersJazz()
-		}
+		if (!inviteCode) inviteCode = pending
+		if (get(peerRows).some((r) => r.status === 'active')) return
 	}
 
 	async function retryPeerNetwork(): Promise<void> {
@@ -247,7 +205,6 @@
 		actionErr = undefined
 		try {
 			await peerSwarmRetry()
-			await refreshPeerMeshSnapshot()
 		} catch (e) {
 			actionErr = e instanceof Error ? e.message : String(e)
 		} finally {
@@ -263,7 +220,6 @@
 			const r = await peerInviteCreate()
 			inviteCode = r.code.trim()
 			actionBusy = false
-			void refreshPeersTransport()
 		} catch (e) {
 			actionErr = e instanceof Error ? e.message : String(e)
 			actionBusy = false
@@ -276,9 +232,6 @@
 		const code = acceptCode.trim()
 		try {
 			if (!mesh?.hyperswarmRunning) {
-				await refreshPeerMeshSnapshot()
-			}
-			if (!mesh?.hyperswarmRunning) {
 				throw new Error(
 					'Peer network is still starting — wait a few seconds after unlock, then try again.',
 				)
@@ -286,7 +239,6 @@
 			await peerInviteAccept(code)
 			acceptCode = ''
 			actionBusy = false
-			void refreshPeersTransport()
 		} catch (e) {
 			actionErr = e instanceof Error ? e.message : String(e)
 			actionBusy = false
@@ -357,7 +309,6 @@
 			await peerInviteCancel()
 			inviteCode = undefined
 			copiedPairingCode = undefined
-			await refreshPeersTransport()
 		} catch (e) {
 			actionErr = e instanceof Error ? e.message : String(e)
 		} finally {
@@ -370,7 +321,6 @@
 		actionErr = undefined
 		try {
 			await peerRevoke(did)
-			await refreshPeersTransport()
 		} catch (e) {
 			actionErr = e instanceof Error ? e.message : String(e)
 		} finally {
@@ -380,12 +330,20 @@
 
 	$effect(() => {
 		if (!unlocked || !tauri) {
-			rows = []
 			inviteCode = undefined
 			initialLoading = false
 			return
 		}
-		void loadPeersBlockFull(true)
+		if (mesh !== undefined) {
+			initialLoading = false
+			return
+		}
+		initialLoading = true
+		const gen = ++loadGeneration
+		const t = window.setTimeout(() => {
+			if (gen === loadGeneration) initialLoading = false
+		}, 2500)
+		return () => window.clearTimeout(t)
 	})
 
 	$effect(() => {
@@ -394,7 +352,6 @@
 		const p = listen('peer:invite-paired', () => {
 			inviteCode = undefined
 			copiedPairingCode = undefined
-			void refreshPeersTransport()
 		})
 
 		return () => {
@@ -404,16 +361,6 @@
 
 	$effect(() => {
 		if (mesh) syncInviteCodeFromMesh()
-	})
-
-	/** While a code is live, poll transport + peer rows until `peer:invite-paired` lands. */
-	$effect(() => {
-		if (!browser || !tauri || !unlocked || !pairingPending) return
-		const id = window.setInterval(() => {
-			void refreshPeerMeshSnapshot()
-			void refreshPeersJazz()
-		}, 2500)
-		return () => window.clearInterval(id)
 	})
 
 	$effect(() => {

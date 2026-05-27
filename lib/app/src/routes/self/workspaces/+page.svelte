@@ -14,7 +14,7 @@
 	import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import type { PeerRowReply } from '$lib/peer/api'
-	import { peerList } from '$lib/peer/api'
+	import { peerRows } from '$lib/peer/peer-mesh-store'
 	import { peerDisplayLabel } from '$lib/peer/display-label'
 	import PeerPickerSelect from '$lib/peer/PeerPickerSelect.svelte'
 	import { pairingLabelForSession } from '$lib/self/active-vault-ui'
@@ -39,7 +39,6 @@
 	let session = $state<JazzSessionReply | undefined>()
 	let err = $state<string | undefined>()
 	let busy = $state(false)
-	let peersAllow = $state<PeerRowReply[]>([])
 	let adminDids = $state<string[]>([])
 	let adminErr = $state<string | undefined>()
 	let adminBusy = $state(false)
@@ -52,6 +51,11 @@
 		sessionKind === 'unlocked',
 	)
 	const tauri = $derived(browser && isTauriRuntime())
+
+	/** From `avenos:runtime` peers table subscription (same as Self → Peers). */
+	const peersAllow = $derived<PeerRowReply[]>(
+		!tauri || !unlocked || !sparkId.trim() ? [] : $peerRows,
+	)
 
 	const selectedSpark = $derived.by(() => {
 		if (!sparkId) return undefined
@@ -129,11 +133,9 @@
 
 					const sid = sparkId.trim()
 					if (sid) {
-						peersAllow = await peerList()
 						const a = await sparkAdminList(sid)
 						adminDids = a.adminDids
 					} else {
-						peersAllow = []
 						adminDids = []
 					}
 					addAdminDid = ''

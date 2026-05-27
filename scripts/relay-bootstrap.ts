@@ -4,7 +4,7 @@
  */
 import { execFileSync } from 'node:child_process'
 
-import { centralBootstrap, P2P_RELAY_UDP_PORT_DEFAULT } from './p2p-signal.ts'
+import { centralBootstrap } from './p2p-signal.ts'
 
 export type AppStoreRelayConfig = {
 	dhtBootstrap: string
@@ -46,7 +46,7 @@ function relayAddrFromManifest(j: AvenRelayManifest, host: string, dhtPort: numb
 	const relayPort =
 		typeof j.relayUdpPort === 'number' && j.relayUdpPort > 0
 			? j.relayUdpPort
-			: P2P_RELAY_UDP_PORT_DEFAULT
+			: dhtPort
 	const relayHost =
 		(typeof j.host === 'string' && j.host.trim()) || host
 	const ip = resolveIpv4Sync(relayHost)
@@ -84,7 +84,7 @@ export async function resolveAppStoreRelayConfig(
 			const relayUdpPort =
 				typeof j.relayUdpPort === 'number' && j.relayUdpPort > 0
 					? j.relayUdpPort
-					: P2P_RELAY_UDP_PORT_DEFAULT
+					: dhtPort
 			const relayHost = (typeof j.host === 'string' && j.host.trim()) || host
 			const relayAddr = relayPublicKeyHex
 				? relayAddrFromManifest(j, host, dhtPort) ?? `${host}:${relayUdpPort}`

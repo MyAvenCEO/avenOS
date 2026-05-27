@@ -34,6 +34,11 @@ impl ConnectionSet {
     pub fn len(&self) -> usize {
         self.by_public_key.len()
     }
+
+    /// Remove every tracked connection; returns cleared public keys.
+    pub fn drain_all(&mut self) -> Vec<[u8; 32]> {
+        self.by_public_key.drain().map(|(pk, _)| pk).collect()
+    }
 }
 
 #[cfg(test)]

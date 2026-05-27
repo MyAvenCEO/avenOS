@@ -51,7 +51,7 @@
 	)
 
 	const contentClass = $derived(
-		isTalkView ? 'flex min-h-0 flex-1 flex-col pb-20 md:pb-0' : 'pb-20 md:pb-0',
+		isTalkView ? 'flex min-h-0 flex-1 flex-col pb-0 md:pb-0' : 'pb-20 md:pb-0',
 	)
 
 	$effect(() => {
@@ -130,7 +130,7 @@
 		<div
 			class="mx-auto flex w-full flex-col px-4 sm:px-6
 				{isGalleryView ? 'max-w-5xl' : 'max-w-3xl'}
-				{isTalkView ? 'min-h-0 flex-1 py-4 sm:py-6' : 'py-6 sm:py-8'}"
+				{isTalkView ? 'min-h-0 flex-1 py-3 pb-0 sm:py-6' : 'py-6 sm:py-8'}"
 		>
 			{@render pageChildren()}
 		</div>

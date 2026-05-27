@@ -362,6 +362,91 @@ fn resolve_hyperswarm_relay_embed() -> Option<(String, String)> {
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
+fn parse_dht_bootstrap_udp_endpoints(lines: &[String]) -> Vec<std::net::SocketAddr> {
+	let mut out: Vec<std::net::SocketAddr> = Vec::new();
+	for line in lines {
+		let line = line.trim();
+		if line.is_empty() {
+			continue;
+		}
+		// `suggestedIPv4@hostname:port` or `host:port`
+		let host_port = line.rsplit('@').next().unwrap_or(line);
+		let Some((host, port_s)) = host_port.rsplit_once(':') else {
+			continue;
+		};
+		let Ok(port) = port_s.parse::<u16>() else {
+			continue;
+		};
+		let addr = if let Some(at) = line.find('@') {
+			let ip = line[..at].trim();
+			if let Ok(v4) = ip.parse::<std::net::Ipv4Addr>() {
+				std::net::SocketAddr::new(std::net::IpAddr::V4(v4), port)
+			} else if let Ok(v4) = host.parse::<std::net::Ipv4Addr>() {
+				std::net::SocketAddr::new(std::net::IpAddr::V4(v4), port)
+			} else {
+				continue;
+			}
+		} else if let Ok(v4) = host.parse::<std::net::Ipv4Addr>() {
+			std::net::SocketAddr::new(std::net::IpAddr::V4(v4), port)
+		} else {
+			continue;
+		};
+		if !out.contains(&addr) {
+			out.push(addr);
+		}
+		if out.len() >= 3 {
+			break;
+		}
+	}
+	out
+}
+
+/// Co-hosted blind-relay shares the DHT UDP port (49737). Older embeds still point at 49738.
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn coalesce_blind_relay_with_bootstrap(cfg: &mut peeroxide::SwarmConfig) {
+	if cfg.relay_through.is_none() {
+		return;
+	}
+	let bootstrap_endpoints = parse_dht_bootstrap_udp_endpoints(&cfg.dht.dht.bootstrap);
+	if bootstrap_endpoints.is_empty() {
+		return;
+	}
+
+	for addr in &bootstrap_endpoints {
+		if !cfg.relay_address_hints.contains(addr) {
+			cfg.relay_address_hints.push(*addr);
+		}
+	}
+
+	let Some(relay_addr) = cfg.relay_address else {
+		cfg.relay_address = Some(bootstrap_endpoints[0]);
+		log::info!(
+			target: "avenos::peeroxide",
+			"blind-relay addr unset — using DHT bootstrap UDP {}",
+			bootstrap_endpoints[0],
+		);
+		return;
+	};
+
+	let bootstrap_port = bootstrap_endpoints[0].port();
+	if relay_addr.port() != bootstrap_port {
+		let coalesced = std::net::SocketAddr::new(relay_addr.ip(), bootstrap_port);
+		log::info!(
+			target: "avenos::peeroxide",
+			"blind-relay addr port coalesced {relay_addr} → {coalesced} (DHT bootstrap UDP port)",
+		);
+		cfg.relay_address = Some(coalesced);
+	}
+
+	// Ensure hints include the coalesced addr (may differ from stale embed).
+	if let Some(addr) = cfg.relay_address {
+		if !cfg.relay_address_hints.contains(&addr) {
+			cfg.relay_address_hints.insert(0, addr);
+		}
+	}
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn apply_hyperswarm_blind_relay(cfg: &mut peeroxide::SwarmConfig) -> Result<(), String> {
 	let mut pk_hex: Option<String> = std::env::var("AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX")
 		.ok()
@@ -391,10 +476,13 @@ fn apply_hyperswarm_blind_relay(cfg: &mut peeroxide::SwarmConfig) -> Result<(), 
 	let relay_address = parse_relay_socket_addr(&addr_raw)?;
 	cfg.relay_through = Some(relay_through);
 	cfg.relay_address = Some(relay_address);
+	coalesce_blind_relay_with_bootstrap(cfg);
 	log::info!(
 		target: "avenos::peeroxide",
-		"blind-relay fallback configured relay_through={} relay_addr={relay_address}",
+		"blind-relay fallback configured relay_through={} relay_addr={} hints={}",
 		hex_pk_prefix(&relay_through),
+		cfg.relay_address.map(|a| a.to_string()).unwrap_or_default(),
+		cfg.relay_address_hints.len(),
 	);
 	Ok(())
 }
@@ -751,6 +839,7 @@ impl PeerCtl {
 		if let Err(e) = self.apply_pending_allowlist().await {
 			log::warn!(target: "avenos::peeroxide", "apply_pending_allowlist: {e}");
 		}
+		let _ = app.emit("peer:mesh-push", ());
 		Ok(())
 	}
 
@@ -951,7 +1040,44 @@ impl PeerCtl {
 			}
 			r.swarm.clone()
 		};
+		if let Err(e) = swarm.prepare_reconnect().await {
+			log::debug!(
+				target: "avenos::peeroxide",
+				"prepare_reconnect before nudge: {e}",
+			);
+		}
 		flush_swarm_for_pairing(&swarm, "nudge allowlisted discovery").await
+	}
+
+	async fn on_groove_link_lifecycle(
+		&self,
+		event: hyperswarm_groove_bridge::GrooveLinkLifecycle,
+	) {
+		let swarm = {
+			let guard = self.inner.lock().await;
+			guard.as_ref().map(|r| r.swarm.clone())
+		};
+		let Some(swarm) = swarm else {
+			return;
+		};
+		match event {
+			hyperswarm_groove_bridge::GrooveLinkLifecycle::Up(pk) => {
+				if let Err(e) = swarm.note_peer_connected(pk).await {
+					log::debug!(
+						target: "avenos::peeroxide",
+						"note_peer_connected: {e}",
+					);
+				}
+			}
+			hyperswarm_groove_bridge::GrooveLinkLifecycle::Down(pk) => {
+				if let Err(e) = swarm.note_peer_disconnected(pk).await {
+					log::debug!(
+						target: "avenos::peeroxide",
+						"note_peer_disconnected: {e}",
+					);
+				}
+			}
+		}
 	}
 
 	/// Update the set of remote DIDs allowed to connect on per-pair topics, then join those topics.
@@ -1141,6 +1267,7 @@ impl PeerCtl {
 			hex::encode(&topic[..8])
 		);
 
+		let _ = self.app_handle.emit("peer:mesh-push", ());
 		Ok(normalized)
 	}
 
@@ -1183,6 +1310,7 @@ impl PeerCtl {
 			hex::encode(&topic[..8])
 		);
 
+		let _ = self.app_handle.emit("peer:mesh-push", ());
 		Ok(())
 	}
 
@@ -1203,6 +1331,7 @@ impl PeerCtl {
 				.map_err(|e| format!("pair leave failed: {e}"))?;
 			log::debug!(target: "avenos::peeroxide", "peer_invite_cancel left pairing topic");
 		}
+		let _ = self.app_handle.emit("peer:mesh-push", ());
 		Ok(())
 	}
 
@@ -1322,6 +1451,16 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 			});
 
 			app.manage(ctl.clone());
+
+			let ctl_link = ctl.clone();
+			ctl.jazz_hyperswarm.set_link_lifecycle_hook(Arc::new(
+				move |event| {
+					let c = ctl_link.clone();
+					tauri::async_runtime::spawn(async move {
+						c.on_groove_link_lifecycle(event).await;
+					});
+				},
+			));
 
 			log::info!(target: "avenos::peeroxide", "peer plugin ready (Hyperswarm starts after unlock)");
 

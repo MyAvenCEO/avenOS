@@ -21,10 +21,18 @@
 //! The `bitfield(7)` from `compact-encoding-bitfield` is a single byte holding
 //! up to 7 boolean flags. Only bit 0 (`is_initiator`) is used.
 
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
+
 use crate::compact_encoding::{self as c, State};
 use crate::protomux::{self, Channel, ChannelEvent, Mux};
+use libudx::{UdxRuntime, UdxSocket};
 use thiserror::Error;
-use tracing::debug;
+use tokio::sync::{Mutex, oneshot};
+use tracing::{debug, warn};
 
 /// Pair message — requests relay pairing with a 32-byte token.
 #[derive(Debug, Clone, PartialEq)]
@@ -158,9 +166,21 @@ pub enum RelayError {
     #[error("relay client destroyed")]
     Destroyed,
 
-    /// A pair request with this token is already in flight.
-    #[error("already pairing with this token")]
-    AlreadyPairing,
+    /// Duplicate initiator/responder registration for same token while pending.
+    #[error("duplicate blind-relay pair side")]
+    DuplicatePairSide,
+
+    /// Could not notify peer pairing completion.
+    #[error("pair completion channel dropped")]
+    PairNotifyDropped,
+
+    /// Wrapped UDX error establishing relay data streams.
+    #[error("relay udx error: {0}")]
+    UdxRelay(#[from] libudx::UdxError),
+
+    /// Pending pair cancelled (e.g. unpair) before a match arrived.
+    #[error("blind relay pairing cancelled")]
+    PairingCancelled,
 }
 
 /// Response from a successful relay pairing.
@@ -263,10 +283,321 @@ impl BlindRelayClient {
     }
 }
 
+// ── Server (Hyperswarm wire-compatible pairing + UDX relay) ───────────────────
+
+#[derive(Default)]
+struct TokenSlots {
+    initiator: Option<HalfAwait>,
+    responder: Option<HalfAwait>,
+}
+
+struct HalfAwait {
+    peer_stream_id: u32,
+    peer_udp: SocketAddr,
+    reply: oneshot::Sender<Result<u64, RelayError>>,
+}
+
+/// Wired relay data streams kept alive until [`BlindRelayCoordinator::unpair_token`].
+struct ActiveRelayLink {
+    _s_a: libudx::UdxStream,
+    _s_b: libudx::UdxStream,
+}
+
+struct BlindInner {
+    rt: Arc<UdxRuntime>,
+    relay_sock: UdxSocket,
+    next_data_stream_id: AtomicU32,
+    pending: Mutex<HashMap<[u8; 32], TokenSlots>>,
+    active: Mutex<HashMap<[u8; 32], ActiveRelayLink>>,
+}
+
+/// Host-side Hyperswarm blind relay co-located with HyperDHT bootstrap (same UDP socket/runtime).
+///
+/// Pairs [`BlindRelayClient`] halves on a shared nonce; wires two [`relay_to`] streams like
+/// [`blind-relay`](https://github.com/holepunchto/blind-relay) `BlindRelayServer`.
+#[derive(Clone)]
+pub struct BlindRelayCoordinator {
+    inner: Arc<BlindInner>,
+}
+
+impl BlindRelayCoordinator {
+    /// Multiplex relay data through `relay_sock` (typically the bootstrap / DHT [`listen`] socket).
+    pub fn new(rt: Arc<UdxRuntime>, relay_sock: UdxSocket) -> Self {
+        Self {
+            inner: Arc::new(BlindInner {
+                rt,
+                relay_sock,
+                next_data_stream_id: AtomicU32::new(60_000),
+                pending: Mutex::new(HashMap::new()),
+                active: Mutex::new(HashMap::new()),
+            }),
+        }
+    }
+
+    fn notify_half_drop(half: HalfAwait, err: RelayError) {
+        let _ = half.reply.send(Err(err));
+    }
+
+    fn clear_token_waiters_locked(map: &mut HashMap<[u8; 32], TokenSlots>, token: &[u8; 32]) {
+        if let Some(slots) = map.remove(token) {
+            if let Some(h) = slots.initiator {
+                Self::notify_half_drop(h, RelayError::PairingCancelled);
+            }
+            if let Some(h) = slots.responder {
+                Self::notify_half_drop(h, RelayError::PairingCancelled);
+            }
+        }
+    }
+
+    /// Remove pending halves and tear down wired relay streams for `token`.
+    pub async fn unpair_token(&self, token: &[u8; 32]) {
+        let mut map = self.inner.pending.lock().await;
+        Self::clear_token_waiters_locked(&mut map, token);
+        drop(map);
+        self.inner.active.lock().await.remove(token);
+    }
+
+    async fn wire_paired_streams(
+        &self,
+        token: [u8; 32],
+        ini: HalfAwait,
+        rsp: HalfAwait,
+    ) -> Result<(), RelayError> {
+        let relay_a = self.inner.next_data_stream_id.fetch_add(1, Ordering::SeqCst);
+        let relay_b = self.inner.next_data_stream_id.fetch_add(1, Ordering::SeqCst);
+
+        let s_a = self
+            .inner
+            .rt
+            .create_stream(relay_a)
+            .await
+            .map_err(RelayError::UdxRelay)?;
+        let s_b = self
+            .inner
+            .rt
+            .create_stream(relay_b)
+            .await
+            .map_err(RelayError::UdxRelay)?;
+        s_a.relay_to(&s_b)?;
+        s_b.relay_to(&s_a)?;
+
+        s_a.connect(
+            &self.inner.relay_sock,
+            ini.peer_stream_id,
+            ini.peer_udp,
+        )
+        .await
+        .map_err(RelayError::UdxRelay)?;
+        s_b.connect(
+            &self.inner.relay_sock,
+            rsp.peer_stream_id,
+            rsp.peer_udp,
+        )
+        .await
+        .map_err(RelayError::UdxRelay)?;
+
+        if ini.reply.send(Ok(u64::from(relay_a))).is_err() {
+            return Err(RelayError::PairNotifyDropped);
+        }
+        if rsp.reply.send(Ok(u64::from(relay_b))).is_err() {
+            return Err(RelayError::PairNotifyDropped);
+        }
+
+        self.inner.active.lock().await.insert(
+            token,
+            ActiveRelayLink {
+                _s_a: s_a,
+                _s_b: s_b,
+            },
+        );
+        Ok(())
+    }
+
+    /// Register one control-session side until the counterpart arrives; returns relay-assigned UDX stream id.
+    ///
+    /// If the duplicate half arrives from the same token while that side slot is occupied, behaves like Node
+    /// `else if (pair.links[+isInitiator]) return` (no-op, caller must handle hang — client should not resend).
+    pub async fn register_pair_half(
+        &self,
+        token: [u8; 32],
+        is_initiator: bool,
+        peer_stream_id: u32,
+        peer_udp: SocketAddr,
+    ) -> Result<u64, RelayError> {
+        let (reply_tx, reply_rx) = oneshot::channel();
+
+        let to_wire = {
+            let mut map = self.inner.pending.lock().await;
+            let slots = match map.entry(token) {
+                Entry::Vacant(v) => v.insert(TokenSlots::default()),
+                Entry::Occupied(o) => o.into_mut(),
+            };
+
+            let side_occupied = if is_initiator {
+                slots.initiator.is_some()
+            } else {
+                slots.responder.is_some()
+            };
+            if side_occupied {
+                return Err(RelayError::DuplicatePairSide);
+            }
+
+            let half = HalfAwait {
+                peer_stream_id,
+                peer_udp,
+                reply: reply_tx,
+            };
+
+            if is_initiator {
+                slots.initiator = Some(half);
+            } else {
+                slots.responder = Some(half);
+            }
+
+            let paired_ready = slots.initiator.is_some() && slots.responder.is_some();
+            if paired_ready {
+                let ini = slots.initiator.take().expect("checked initiator occupied");
+                let rsp = slots.responder.take().expect("checked responder occupied");
+                map.remove(&token);
+                Some((ini, rsp))
+            } else {
+                None
+            }
+        };
+
+        if let Some((ini, rsp)) = to_wire {
+            if let Err(e) = self.wire_paired_streams(token, ini, rsp).await {
+                warn!(error = %e, "blind relay wire_paired_streams failed");
+                return Err(e);
+            }
+        }
+
+        reply_rx.await.map_err(|_| RelayError::PairNotifyDropped)?
+    }
+}
+
+/// Run a responder-side blind-relay protomux session (Ik over SecretStream → [`Mux`]).
+///
+/// - `peer_udp` comes from Noise `MODE_FROM_RELAY`/`client_address`; used by UDX `.connect(..., peer_stream_id, peer_udp)`
+///   like blind-relay `_onfirewall`.
+/// - Drops all pending halves for channels closed mid-wait elsewhere via [`BlindRelayCoordinator::unpair_token`] if needed by callers.
+///
+/// Matches Node `BlindRelaySession` channel id = remote static key (`socket.remotePublicKey`).
+pub fn spawn_blind_relay_control_session<S>(
+    coord: BlindRelayCoordinator,
+    stream: crate::secret_stream::SecretStream<S>,
+    peer_udp: SocketAddr,
+) -> tokio::task::JoinHandle<()>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
+    tokio::spawn(blind_relay_control_loop(coord, stream, peer_udp))
+}
+
+async fn blind_relay_control_loop<S>(
+    coord: BlindRelayCoordinator,
+    stream: crate::secret_stream::SecretStream<S>,
+    peer_udp: SocketAddr,
+) where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
+    let remote_pk = stream.remote_public_key().to_vec();
+    let (mux, mux_run) = Mux::new(stream);
+    tokio::spawn(mux_run);
+
+    let mut channel = match mux
+        .create_channel(PROTOCOL_NAME, Some(remote_pk.clone()), None)
+        .await
+    {
+        Ok(c) => c,
+        Err(e) => {
+            warn!(error = %e, "blind relay: create protomux channel failed");
+            return;
+        }
+    };
+
+    if let Err(e) = channel.wait_opened().await {
+        warn!(error = %e, "blind relay: channel wait_opened failed");
+        return;
+    }
+
+    loop {
+        match channel.recv().await {
+            Some(ChannelEvent::Message {
+                message_type,
+                data,
+            }) => {
+                if message_type == MSG_TYPE_PAIR {
+                    let pm = match decode_pair_from_slice(&data) {
+                        Ok(m) => m,
+                        Err(e) => {
+                            warn!(error = %e, "blind relay: decode pair failed");
+                            continue;
+                        }
+                    };
+
+                    let peer_sid = match u32::try_from(pm.id) {
+                        Ok(v) => v,
+                        Err(_) => {
+                            warn!(pair_id = pm.id, "blind relay: pair peer stream id overflows u32");
+                            channel.close();
+                            return;
+                        }
+                    };
+
+                    let assigned = match coord
+                        .register_pair_half(pm.token, pm.is_initiator, peer_sid, peer_udp)
+                        .await
+                    {
+                        Ok(id) => id,
+                        Err(RelayError::DuplicatePairSide) => {
+                            // Node ignores duplicate registrations for same side/token.
+                            continue;
+                        }
+                        Err(e) => {
+                            warn!(
+                                pair_id = pm.id,
+                                is_initiator = pm.is_initiator,
+                                error = %e,
+                                "blind relay pair failed",
+                            );
+                            channel.close();
+                            return;
+                        }
+                    };
+
+                    let reply = PairMessage {
+                        is_initiator: pm.is_initiator,
+                        token: pm.token,
+                        id: assigned,
+                        seq: 0,
+                    };
+                    if let Err(e) = channel.send(MSG_TYPE_PAIR, &encode_pair_to_vec(&reply)) {
+                        warn!(error = %e, "blind relay: send pair response failed");
+                        return;
+                    }
+                } else if message_type == MSG_TYPE_UNPAIR {
+                    match decode_unpair_from_slice(&data) {
+                        Ok(u) => {
+                            coord.unpair_token(&u.token).await;
+                        }
+                        Err(e) => warn!(error = %e, "blind relay: decode unpair failed"),
+                    }
+                }
+            }
+            Some(ChannelEvent::Closed { .. }) | None => break,
+            Some(ChannelEvent::Opened { .. }) => {}
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::protomux::{FramedStream, Mux};
+    use libudx::UdxRuntime;
+    use std::net::SocketAddr;
+    use std::sync::Arc;
     use tokio::sync::mpsc;
 
     struct MemStream {
@@ -481,5 +812,110 @@ mod tests {
         }
 
         client.close();
+    }
+
+    /// Single relay UDP socket — both relay legs and both peers (production-shaped topology).
+    #[tokio::test]
+    async fn single_relay_socket_udx_smoke() {
+        let relay_rt = UdxRuntime::new().expect("relay rt");
+        let relay_sock = relay_rt.create_socket().await.expect("relay sock");
+        relay_sock
+            .bind("127.0.0.1:0".parse::<SocketAddr>().unwrap())
+            .await
+            .expect("relay bind");
+        let relay_listen = relay_sock.local_addr().await.expect("relay local");
+
+        let peer_a = UdxRuntime::new().expect("rt a");
+        let peer_b = UdxRuntime::new().expect("rt b");
+
+        let sa_sock = peer_a.create_socket().await.expect("sock a");
+        sa_sock.bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
+        let pa = sa_sock.local_addr().await.unwrap();
+
+        let sb_sock = peer_b.create_socket().await.expect("sock b");
+        sb_sock.bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
+        let pb = sb_sock.local_addr().await.unwrap();
+
+        let r1 = relay_rt.create_stream(10).await.expect("r1");
+        let r2 = relay_rt.create_stream(20).await.expect("r2");
+        r1.relay_to(&r2).expect("relay");
+        r2.relay_to(&r1).expect("relay");
+        r1.connect(&relay_sock, 1, pa).await.expect("r1 connect");
+        r2.connect(&relay_sock, 2, pb).await.expect("r2 connect");
+
+        let s_a = peer_a.create_stream(1).await.expect("s a");
+        let mut s_b = peer_b.create_stream(2).await.expect("s b");
+        s_a.connect(&sa_sock, 10, relay_listen).await.expect("a");
+        s_b.connect(&sb_sock, 20, relay_listen).await.expect("b");
+
+        s_a.write(b"single-sock").await.expect("write");
+        let got = tokio::time::timeout(std::time::Duration::from_secs(5), s_b.read())
+            .await
+            .expect("timeout")
+            .expect("read")
+            .expect("bytes");
+        assert_eq!(got, b"single-sock");
+    }
+
+    /// Matches [`relay_encrypted`]: pairing through [`BlindRelayCoordinator`] relays opaque payloads.
+    #[tokio::test]
+    async fn coordinator_udx_wire_smoke() {
+        let relay_rt = Arc::new(UdxRuntime::new().expect("udx relay"));
+        let relay_sock = relay_rt.create_socket().await.expect("relay sock");
+        relay_sock
+            .bind("127.0.0.1:0".parse::<SocketAddr>().expect("relay bind addr"))
+            .await
+            .expect("relay bind");
+        let relay_listen = relay_sock.local_addr().await.expect("relay local");
+
+        let peer_a = UdxRuntime::new().expect("runtime a");
+        let peer_b = UdxRuntime::new().expect("runtime b");
+
+        let sa_sock = peer_a.create_socket().await.expect("sock a");
+        sa_sock
+            .bind("127.0.0.1:0".parse::<SocketAddr>().unwrap())
+            .await
+            .expect("bind a");
+        let pa = sa_sock.local_addr().await.expect("addr a");
+
+        let sb_sock = peer_b.create_socket().await.expect("sock b");
+        sb_sock
+            .bind("127.0.0.1:0".parse::<SocketAddr>().unwrap())
+            .await
+            .expect("bind b");
+        let pb = sb_sock.local_addr().await.expect("addr b");
+
+        let coord = BlindRelayCoordinator::new(relay_rt.clone(), relay_sock.clone());
+        let token = [0x11; 32];
+        let (ra, rb) = tokio::join!(
+            coord.register_pair_half(token, true, 1, pa),
+            coord.register_pair_half(token, false, 2, pb),
+        );
+        let ra = ra.expect("ini relay-assigned stream id");
+        let rb = rb.expect("rsp relay-assigned stream id");
+        assert_ne!(ra, rb);
+
+        let s_a = peer_a.create_stream(1).await.expect("stream a");
+        let mut s_b = peer_b.create_stream(2).await.expect("stream b");
+
+        let ra_u32 = u32::try_from(ra).expect("relay id fits u32");
+        let rb_u32 = u32::try_from(rb).expect("relay id fits u32");
+
+        // Peers use their bound UDP sockets; remote address is relay listen UDP (matches `relay_encrypted`).
+        s_a.connect(&sa_sock, ra_u32, relay_listen)
+            .await
+            .expect("a connect relay");
+        s_b.connect(&sb_sock, rb_u32, relay_listen)
+            .await
+            .expect("b connect relay");
+
+        let payload = b"through-blind-coordinator";
+        s_a.write(payload).await.expect("write");
+        let got = tokio::time::timeout(std::time::Duration::from_secs(5), s_b.read())
+            .await
+            .expect("test timed out")
+            .expect("read result")
+            .expect("received bytes");
+        assert_eq!(got, payload);
     }
 }

@@ -73,6 +73,25 @@ pub(crate) async fn run_discovery(
     }
 }
 
+async fn announce_with_retry(
+    dht: &HyperDhtHandle,
+    target: [u8; 32],
+    key_pair: &KeyPair,
+    relay_addresses: &[Ipv4Peer],
+    label: &'static str,
+) -> Result<peeroxide_dht::hyperdht::AnnounceResult, peeroxide_dht::hyperdht::HyperDhtError> {
+    let first = dht.announce(target, key_pair, relay_addresses).await?;
+    if !first.closest_nodes.is_empty() {
+        return Ok(first);
+    }
+    tracing::warn!(
+        label,
+        "announce returned closest=0 — retrying once (common on iOS cellular / sparse DHT)"
+    );
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    dht.announce(target, key_pair, relay_addresses).await
+}
+
 async fn do_refresh(
     config: &PeerDiscoveryConfig,
     dht: &HyperDhtHandle,
@@ -81,7 +100,7 @@ async fn do_refresh(
     event_tx: &mpsc::UnboundedSender<DiscoveryEvent>,
 ) {
     if config.is_server {
-        match dht.announce(config.topic, key_pair, relay_addresses).await {
+        match announce_with_retry(dht, config.topic, key_pair, relay_addresses, "topic").await {
             Ok(r) => {
                 tracing::debug!(
                     closest = r.closest_nodes.len(),
@@ -97,7 +116,8 @@ async fn do_refresh(
         // public key store a ForwardEntry.  This is how PEER_HANDSHAKE requests
         // get routed — Node.js does this in persistent.js announce().
         let pk_target = hash(&key_pair.public_key);
-        match dht.announce(pk_target, key_pair, relay_addresses).await {
+        match announce_with_retry(dht, pk_target, key_pair, relay_addresses, "self-announce").await
+        {
             Ok(r) => {
                 tracing::debug!(
                     closest = r.closest_nodes.len(),
@@ -113,6 +133,9 @@ async fn do_refresh(
     if config.is_client {
         match dht.lookup(config.topic).await {
             Ok(results) => {
+                if results.is_empty() {
+                    tracing::debug!("lookup result empty (no DHT replies — check announce/UDP path)");
+                }
                 for result in results {
                     tracing::debug!(
                         from = %format!("{}:{}", result.from.host, result.from.port),

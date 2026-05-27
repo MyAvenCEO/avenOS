@@ -23,7 +23,8 @@ use crate::routing_table::{RoutingTable, K};
 type Blake2bMac256 = Blake2bMac<U32>;
 
 const ERROR_INVALID_TOKEN: u64 = 2;
-const DEFAULT_TIMEOUT_MS: u64 = 1000;
+/// 2s accommodates iOS 5G / carrier NAT RTT; bootstrap still completes with retries.
+const DEFAULT_TIMEOUT_MS: u64 = 2000;
 const DEFAULT_RETRIES: u32 = 3;
 
 // ── Errors ────────────────────────────────────────────────────────────────────

@@ -1,19 +1,9 @@
 <script lang="ts">
 /**
- * Right aside (desktop only) — mirrored skills column for the selected
- * intent. Renders the SKILLS header, an optional ALL chip when a skill is
- * selected, the list of `displayedSkills` cards (mirrored variant of
- * `StatusCard`), and a collapsible "Workers" group bound to the selected
- * skill's worker pool.
+ * Right aside — skills + workers for the selected intent.
  *
- * Selection events bubble up via `onSelectSkill` / `onSelectWorker` callback
- * props; the page owns `selectedSkillId` + `selectedWorkerName` so the
- * activity log filter stays in sync. The Workers collapsible's open/closed
- * state is local — it auto-resets to expanded whenever `selectedSkillId`
- * changes via an internal `$effect`.
- *
- * Hidden on mobile (`max-sm:hidden`); the inline horizontal skills scroller
- * for mobile lives inside `MainPanel.svelte`.
+ * Desktop: mirrored column in the three-column grid.
+ * Mobile: slide-over drawer toggled from a bottom-right FAB on the page.
  */
 import {
 	type IntentRow,
@@ -31,6 +21,7 @@ let {
 	selectedSkillId,
 	selectedWorkerName,
 	nowMs,
+	mobileOpen = $bindable(false),
 	onSelectSkill,
 	onSelectWorker
 }: {
@@ -40,45 +31,40 @@ let {
 	selectedSkillId: string | null
 	selectedWorkerName: string | null
 	nowMs: number
+	mobileOpen?: boolean
 	onSelectSkill: (id: string | null) => void
 	onSelectWorker: (name: string | null) => void
 } = $props()
 
-/**
- * Local UI state for the "Workers" collapsible group. Resets to `true`
- * (expanded) every time `selectedSkillId` changes so the group always
- * shows on initial select; the user can still collapse it manually.
- */
 let workersGroupOpen = $state(true)
 
 $effect(() => {
-	// Reading `selectedSkillId` registers it as a reactive dependency so this
-	// effect re-runs (including on clear → null) and resets the workers UI
-	// state. The write inside doesn't read `workersGroupOpen`, so no loop.
 	void selectedSkillId
 	workersGroupOpen = true
 })
+
+$effect(() => {
+	if (!mobileOpen) return
+	const onKey = (e: KeyboardEvent) => {
+		if (e.key === 'Escape') mobileOpen = false
+	}
+	window.addEventListener('keydown', onKey)
+	return () => window.removeEventListener('keydown', onKey)
+})
+
+function closeMobileDrawer() {
+	mobileOpen = false
+}
 </script>
 
-<div
-	class="col-start-3 row-start-1 hidden min-h-[1.125rem] items-center gap-1.5 self-start sm:flex"
->
-	<span class="text-[8px] font-bold tracking-[0.22em] opacity-30 uppercase">
-		Skills
-		{#if intent && intent.skills.length > 0}
-			<span class="tabular-nums tracking-[0.18em]"> - {intent.skills.length}</span>
-		{/if}
-	</span>
-</div>
-
-<div
-	class="col-start-3 row-start-2 hidden min-h-0 min-w-0 flex-col gap-1 overflow-y-auto pr-0.5 sm:flex"
->
+{#snippet skillsBody(mirrorCards: boolean)}
 	{#if intent && intent.skills.length > 0}
 		{#if selectedSkillId}
 			<button
 				type="button"
-				class="inline-flex min-h-[2.5rem] shrink-0 cursor-pointer items-center justify-end rounded-[var(--radius-lg)] border-y-0 border-l-0 border-r-[4px] border-solid border-r-border bg-surface-card px-3 py-0 text-right text-[10px] font-semibold tracking-[0.2em] text-foreground/65 uppercase transition-colors duration-200 ease-out hover:bg-surface-card-hover"
+				class="inline-flex min-h-[2.5rem] shrink-0 cursor-pointer items-center {mirrorCards
+					? 'justify-end rounded-[var(--radius-lg)] border-y-0 border-l-0 border-r-[4px] border-solid border-r-border px-3 text-right'
+					: 'justify-start rounded-[var(--radius-lg)] border-y-0 border-r-0 border-l-[4px] border-solid border-l-border px-3 text-left'} bg-surface-card py-0 text-[10px] font-semibold tracking-[0.2em] text-foreground/65 uppercase transition-colors duration-200 ease-out hover:bg-surface-card-hover"
 				aria-label="Show all skill activity"
 				onclick={() => onSelectSkill(null)}
 			>
@@ -98,19 +84,10 @@ $effect(() => {
 				ariaPressed={isSelected}
 				ariaLabel={`${skill.name} — ${skillStatusLabel(skill.status)}`}
 				extraClass="w-full"
-				mirror
+				mirror={mirrorCards}
 			/>
 		{/each}
 
-		<!--
-			Workers collapsible group. Mirrors the Archived intents group on
-			the left aside: divider lines flanking a chevron+label toggle,
-			chevron on the LEFT of the label. Right-aligned content
-			(`text-right`) so the group reads as a visual mirror of the left
-			aside. Only rendered when a skill is selected and the skill has
-			at least one worker. State resets to expanded whenever the
-			selected skill changes (see effect above).
-		-->
 		{#if selectedSkillId && workers.length > 0}
 			<div class="mt-1 flex items-center gap-1.5 px-0.5 pt-1">
 				<div class="h-px flex-1 bg-border/50"></div>
@@ -143,7 +120,11 @@ $effect(() => {
 					{@const isWorkerSelected = selectedWorkerName === worker.name}
 					<button
 						type="button"
-						class="group flex w-full cursor-pointer items-center justify-end gap-2 overflow-hidden rounded-[var(--radius-lg)] border-y-0 border-l-0 border-r-[4px] border-solid border-r-driftwood px-2 py-1 text-right transition-colors duration-200 ease-out {isWorkerSelected
+						class="group flex w-full cursor-pointer items-center {mirrorCards
+							? 'justify-end text-right'
+							: 'justify-start text-left'} gap-2 overflow-hidden rounded-[var(--radius-lg)] border-y-0 {mirrorCards
+							? 'border-l-0 border-r-[4px] border-solid border-r-driftwood'
+							: 'border-r-0 border-l-[4px] border-solid border-l-driftwood'} px-2 py-1 transition-colors duration-200 ease-out {isWorkerSelected
 							? 'bg-surface-card-selected'
 							: 'bg-muted/12 hover:bg-surface-card-hover'}"
 						aria-pressed={isWorkerSelected}
@@ -171,4 +152,65 @@ $effect(() => {
 			{/if}
 		{/if}
 	{/if}
+{/snippet}
+
+<div
+	class="col-start-3 row-start-1 hidden min-h-[1.125rem] items-center gap-1.5 self-start sm:flex"
+>
+	<span class="text-[8px] font-bold tracking-[0.22em] opacity-30 uppercase">
+		Skills
+		{#if intent && intent.skills.length > 0}
+			<span class="tabular-nums tracking-[0.18em]"> - {intent.skills.length}</span>
+		{/if}
+	</span>
 </div>
+
+<div
+	class="col-start-3 row-start-2 hidden min-h-0 min-w-0 flex-col gap-1 overflow-y-auto pr-0.5 sm:flex"
+>
+	{@render skillsBody(true)}
+</div>
+
+{#if mobileOpen}
+	<button
+		type="button"
+		class="fixed inset-0 z-[44] bg-background/55 backdrop-blur-[2px] sm:hidden"
+		aria-label="Close skills panel"
+		onclick={closeMobileDrawer}
+	></button>
+	<aside
+		class="border-border/60 bg-card/98 fixed inset-y-0 right-0 z-[44] flex w-[min(85vw,16rem)] max-w-[16rem] flex-col border-l px-3 pt-4 pb-[calc(4.25rem+env(safe-area-inset-bottom))] shadow-xl backdrop-blur-md sm:hidden"
+		aria-label="Skills and workers"
+	>
+		<div class="mb-3 flex items-center justify-between gap-2">
+			<span class="text-[8px] font-bold tracking-[0.22em] opacity-30 uppercase">
+				Skills
+				{#if intent && intent.skills.length > 0}
+					<span class="tabular-nums tracking-[0.18em]"> - {intent.skills.length}</span>
+				{/if}
+			</span>
+			<button
+				type="button"
+				class="text-muted-foreground hover:text-foreground inline-flex size-8 items-center justify-center rounded-full border border-border/60"
+				aria-label="Close skills panel"
+				onclick={closeMobileDrawer}
+			>
+				<svg
+					class="size-4"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M18 6 6 18M6 6l12 12" />
+				</svg>
+			</button>
+		</div>
+		<div class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-0.5">
+			{@render skillsBody(false)}
+		</div>
+	</aside>
+{/if}

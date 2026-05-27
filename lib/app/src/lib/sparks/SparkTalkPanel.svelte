@@ -1,14 +1,22 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
 	import type { MessagesRow } from '@avenos/jazz-schema'
+	import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
+	import type { ComposerMode } from '$lib/intents/types'
 	import { jazzSession, type JazzSessionReply } from '$lib/jazz/api'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { pairingLabelForSession } from '$lib/self/active-vault-ui'
 	import { peerDisplayLabel } from '$lib/peer/display-label'
-	import { peerList, type PeerRowReply } from '$lib/peer/api'
+	import { peerRows } from '$lib/peer/peer-mesh-store'
+	import type { PeerRowReply } from '$lib/peer/api'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/self/device-session-store'
 	import { vaultList } from '$lib/self/vault'
+	import { contentMaxWidthClass, mobileActionVeilClass } from '$lib/shell'
+	import {
+		clearMobileChromeOverrides,
+		setMobileChromeOverrides
+	} from '$lib/shell/mobile-chrome.svelte'
 
 	type Props = {
 		sparkId: string
@@ -19,9 +27,8 @@
 
 	let session = $state<JazzSessionReply | undefined>()
 	let err = $state<string | undefined>()
-	let bodyDraft = $state('')
 	let sendBusy = $state(false)
-	let peersAllow = $state<PeerRowReply[]>([])
+	let composerMode = $state<ComposerMode>('collapsed')
 	let localPairingLabel = $state<string | undefined>(undefined)
 	let scrollEl = $state<HTMLDivElement | undefined>(undefined)
 
@@ -30,6 +37,11 @@
 
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
+	const composerDisabled = $derived(!session?.peerDid?.trim())
+
+	const peersAllow = $derived<PeerRowReply[]>(
+		!tauri || !unlocked ? [] : $peerRows,
+	)
 
 	function idsMatch(a: string, b: string): boolean {
 		return a.trim().toLowerCase() === b.trim().toLowerCase()
@@ -93,20 +105,6 @@
 	})
 
 	$effect(() => {
-		if (!tauri || !unlocked) {
-			peersAllow = []
-			return
-		}
-		void peerList()
-			.then((rows) => {
-				peersAllow = rows
-			})
-			.catch(() => {
-				peersAllow = []
-			})
-	})
-
-	$effect(() => {
 		if (!browser || !tauri || !unlocked) {
 			localPairingLabel = undefined
 			return
@@ -130,10 +128,19 @@
 		})
 	})
 
-	async function sendMessage(): Promise<void> {
-		const body = bodyDraft.trim()
+	$effect(() => {
+		const typing = composerMode === 'typing'
+		setMobileChromeOverrides({
+			hideProfile: typing,
+			hideAsideNav: typing
+		})
+		return () => clearMobileChromeOverrides()
+	})
+
+	async function handleComposerSubmit(message: string, _files: File[]): Promise<void> {
+		const body = message.trim()
 		const did = session?.peerDid?.trim()
-		if (!body || !did || !tauri || !unlocked || !canonicalSparkId) return
+		if (!body || !did || !tauri || !unlocked || !canonicalSparkId || sendBusy) return
 		sendBusy = true
 		err = undefined
 		try {
@@ -141,9 +148,8 @@
 				spark_id: canonicalSparkId,
 				created_at_ms: Date.now(),
 				author_did: did,
-				body,
+				body
 			})
-			bodyDraft = ''
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {
@@ -152,10 +158,10 @@
 	}
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col gap-3">
-	<header class="shrink-0 space-y-1">
+<div class="flex min-h-0 flex-1 flex-col">
+	<header class="shrink-0 space-y-1 pb-3 sm:pb-0 sm:space-y-1">
 		<h1 class="text-xl font-semibold tracking-tight">Talk</h1>
-		<p class="text-muted-foreground text-sm leading-relaxed">
+		<p class="text-muted-foreground hidden text-sm leading-relaxed sm:block">
 			Messages in <strong class="text-foreground font-medium">{displayName}</strong> — synced over Jazz when peers share this spark.
 		</p>
 	</header>
@@ -167,87 +173,72 @@
 	{:else if !canonicalSparkId}
 		<p class="text-muted-foreground text-sm">Missing spark id.</p>
 	{:else}
-		<div class="flex min-h-0 flex-1 flex-col gap-3">
-		{#if err}
-			<p
-				class="text-destructive border-destructive/40 bg-destructive/10 shrink-0 rounded-lg border px-3 py-2 text-sm leading-snug"
-				role="alert"
-			>
-				{err}
-			</p>
-		{/if}
-
-		<div class="flex min-h-0 flex-1 flex-col gap-2">
-		<div
-			bind:this={scrollEl}
-			class="border-border/60 bg-card/20 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-xl border px-3 py-3"
-			role="log"
-			aria-label="Messages"
-		>
-			{#if !messages.loaded && !err}
-				<p class="text-muted-foreground py-8 text-center text-sm">Loading messages…</p>
-			{:else if thread.length === 0}
-				<p class="text-muted-foreground py-8 text-center text-sm leading-relaxed">
-					No messages yet. Say hello — peers with access to this spark will see it after sync.
+		<div class="relative flex min-h-0 flex-1 flex-col">
+			{#if err}
+				<p
+					class="text-destructive border-destructive/40 bg-destructive/10 mb-2 shrink-0 rounded-lg border px-3 py-2 text-sm leading-snug"
+					role="alert"
+				>
+					{err}
 				</p>
-			{:else}
-				{#each thread as msg (msg.id)}
-					{@const own = isOwnMessage(msg)}
-					<article
-						class="flex flex-col gap-0.5 {own ? 'items-end' : 'items-start'}"
-						aria-label="{authorLabel(msg.author_did)} at {formatTime(msg.created_at_ms)}"
-					>
-						<div class="flex items-baseline gap-2 px-0.5 text-[10px]">
-							<span class="text-foreground font-medium">{authorLabel(msg.author_did)}</span>
-							<time class="text-muted-foreground" datetime={new Date(msg.created_at_ms).toISOString()}>
-								{formatTime(msg.created_at_ms)}
-							</time>
-						</div>
-						<p
-							class="max-w-[min(100%,36rem)] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words
-								{own
-								? 'bg-primary text-primary-foreground rounded-br-md'
-								: 'bg-muted text-foreground rounded-bl-md'}"
-						>
-							{msg.body}
-						</p>
-					</article>
-				{/each}
 			{/if}
-		</div>
 
-		<form
-			class="border-border/60 bg-background/95 supports-[backdrop-filter]:bg-background/80 flex shrink-0 flex-col gap-2 rounded-xl border p-3 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.15)] backdrop-blur sm:flex-row sm:items-end"
-			onsubmit={(e) => {
-				e.preventDefault()
-				void sendMessage()
-			}}
-		>
-			<label class="flex min-w-0 flex-1 flex-col gap-1">
-				<span class="text-muted-foreground text-[10px] font-semibold uppercase tracking-wider">Message</span>
-				<textarea
-					bind:value={bodyDraft}
-					rows={2}
-					placeholder="Write a message…"
-					class="border-input bg-background focus-visible:ring-ring max-h-32 min-h-[2.75rem] resize-y rounded-lg border px-3 py-2 text-sm outline-none focus-visible:ring-2"
-					disabled={sendBusy || !session}
-					onkeydown={(e) => {
-						if (e.key === 'Enter' && !e.shiftKey) {
-							e.preventDefault()
-							void sendMessage()
-						}
-					}}
-				></textarea>
-			</label>
-			<button
-				type="submit"
-				class="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-				disabled={sendBusy || !bodyDraft.trim() || !session}
+			<div
+				bind:this={scrollEl}
+				class="border-border/60 bg-card/20 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-xl border px-3 py-3 pb-24 sm:mb-2 sm:pb-3 md:pb-3"
+				role="log"
+				aria-label="Messages"
 			>
-				{sendBusy ? '…' : 'Send'}
-			</button>
-		</form>
-		</div>
+				{#if !messages.loaded && !err}
+					<p class="text-muted-foreground py-8 text-center text-sm">Loading messages…</p>
+				{:else if thread.length === 0}
+					<p class="text-muted-foreground py-8 text-center text-sm leading-relaxed">
+						No messages yet. Say hello — peers with access to this spark will see it after sync.
+					</p>
+				{:else}
+					{#each thread as msg (msg.id)}
+						{@const own = isOwnMessage(msg)}
+						<article
+							class="flex flex-col gap-0.5 {own ? 'items-end' : 'items-start'}"
+							aria-label="{authorLabel(msg.author_did)} at {formatTime(msg.created_at_ms)}"
+						>
+							<div class="flex items-baseline gap-2 px-0.5 text-[10px]">
+								<span class="text-foreground font-medium">{authorLabel(msg.author_did)}</span>
+								<time class="text-muted-foreground" datetime={new Date(msg.created_at_ms).toISOString()}>
+									{formatTime(msg.created_at_ms)}
+								</time>
+							</div>
+							<p
+								class="max-w-[min(100%,36rem)] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words
+									{own
+									? 'bg-primary text-primary-foreground rounded-br-md'
+									: 'bg-muted text-foreground rounded-bl-md'}"
+							>
+								{msg.body}
+							</p>
+						</article>
+					{/each}
+				{/if}
+			</div>
+
+			<div
+				class={`pointer-events-none fixed inset-x-0 bottom-0 z-[45] flex justify-center bg-gradient-to-t from-background via-background/88 to-transparent px-3 ${mobileActionVeilClass} sm:from-55% sm:px-5 sm:pt-3 sm:pb-5`}
+			>
+				<div
+					class={`pointer-events-auto relative flex w-full items-center justify-center ${contentMaxWidthClass} sm:pl-0 sm:pr-0 ${composerMode === 'typing' ? 'max-sm:px-1' : 'max-sm:pl-14 max-sm:pr-14'}`}
+				>
+					<IntentComposer
+						placeholder="Write a message…"
+						disabled={composerDisabled}
+						submitBusy={sendBusy}
+						enableAttachments={false}
+						onSubmitMessage={handleComposerSubmit}
+						onModeChange={(mode) => {
+							composerMode = mode
+						}}
+					/>
+				</div>
+			</div>
 		</div>
 	{/if}
 </div>

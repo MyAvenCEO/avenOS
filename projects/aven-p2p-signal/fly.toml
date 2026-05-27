@@ -1,4 +1,4 @@
-# relay-aven-ceo — central HyperDHT bootstrap (UDP) + HTTP manifest (:8080).
+# relay-aven-ceo — central HyperDHT bootstrap + co-hosted blind-relay (single UDP 49737) + HTTP manifest (:8080).
 # Deploy from repo root: `bun run deploy:relay-fly`
 #
 # Ingress UDP is mapped via [`[[services]]`]; the process must **`bind()` a parseable IP** (`0.0.0.0`, not `fly-global-services`).
@@ -22,19 +22,17 @@ primary_region = "fra"
 [env]
 	# Public Fly UDP ingress requires binding fly-global-services (resolved to IPv4 at runtime).
 	AVENOS_P2P_SIGNAL_HOST = "fly-global-services"
-	AVENOS_P2P_SIGNAL_RELAY_HOST = "fly-global-services"
 	AVENOS_P2P_ADVERTISED_HOST = "relay.aven.ceo"
 	AVEN_RELAY_MANIFEST_HTTP_PORT = "8080"
-	AVENOS_P2P_SIGNAL_RELAY_PORT = "49738"
 
 [http_service]
 	internal_port = 8080
 	force_https = true
 	auto_stop_machines = "stop"
 	auto_start_machines = true
-	min_machines_running = 0
+	min_machines_running = 1
 
-# Startup: DHT + blind-relay (Node) before manifest includes relayPublicKeyHex.
+# Startup: Rust DHT + blind-relay before manifest includes relayPublicKeyHex.
 [[http_service.checks]]
 	grace_period = "45s"
 	interval = "15s"
@@ -47,9 +45,3 @@ primary_region = "fra"
 	internal_port = 49737
 	[[services.ports]]
 		port = 49737
-
-[[services]]
-	protocol = "udp"
-	internal_port = 49738
-	[[services.ports]]
-		port = 49738

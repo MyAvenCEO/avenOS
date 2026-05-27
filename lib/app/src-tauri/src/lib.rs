@@ -751,12 +751,15 @@ pub fn run() {
 			let _connect_ui_mesh = app.listen("peer:connect-ui-changed", move |_event| {
 				let hh = h_connect_ui.clone();
 				tauri::async_runtime::spawn(async move {
-					if let Err(e) = jazz::refresh_peer_mesh_primitives(&hh).await {
-						log::debug!(
-							target: "avenos::jazz",
-							"peer:connect-ui-changed mesh refresh skipped: {e}",
-						);
-					}
+					crate::jazz::runtime::groove_actor(&hh).publish_mesh().await;
+				});
+			});
+
+			let h_mesh_push = app.handle().clone();
+			let _mesh_push = app.listen("peer:mesh-push", move |_event| {
+				let hh = h_mesh_push.clone();
+				tauri::async_runtime::spawn(async move {
+					crate::jazz::runtime::groove_actor(&hh).publish_mesh().await;
 				});
 			});
 

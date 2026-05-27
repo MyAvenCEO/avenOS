@@ -3,7 +3,7 @@ import { browser } from '$app/environment'
 import { listen } from '@tauri-apps/api/event'
 import { get, writable } from 'svelte/store'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-import { grooveSessionReady } from '$lib/runtime/groove-runtime'
+import { grooveSessionReady, peerMeshSnapshot } from '$lib/runtime/groove-runtime'
 import { resetAllTableRowStores } from '$lib/runtime/table-stores'
 export const DEVICE_PEER_SLOT = 'device_default'
 
@@ -35,6 +35,7 @@ export function setUnlockedWithIdentity(identity: ActiveVaultIdentity): void {
 export function applyLockedFrontendState(): void {
 	resetAllTableRowStores()
 	grooveSessionReady.set(false)
+	peerMeshSnapshot.set(undefined)
 	deviceSession.set({ kind: 'locked' })
 }
 

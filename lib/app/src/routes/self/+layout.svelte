@@ -5,6 +5,7 @@
 	import { provideSelfContext } from '$lib/self/self-context.svelte'
 	import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/self/vault'
 	import SlideAsideLayout from '$lib/ui/SlideAsideLayout.svelte'
+	import { selfNavSections } from '$lib/shell/self-nav'
 	import { browser } from '$app/environment'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 
@@ -54,43 +55,7 @@
 
 	const profileDevice = $derived(activeVault?.deviceLabel?.trim() ?? '')
 
-	const navSections: {
-		title: string
-		items: { href: string; label: string; match: (p: string) => boolean }[]
-	}[] = [
-		{
-			title: 'Identities',
-			items: [
-				{ href: '/self', label: 'Self', match: (p) => p === '/self' || p === '/self/' },
-				{
-					href: '/self/peers',
-					label: 'Peers',
-					match: (p) => p.startsWith('/self/peers'),
-				},
-			],
-		},
-		{
-			title: 'Sparks',
-			items: [
-				{
-					href: '/self/workspaces',
-					label: 'Share',
-					match: (p) => p.startsWith('/self/workspaces'),
-				},
-			],
-		},
-		{
-			title: 'Advanced',
-			items: [
-				{
-					href: '/self/advanced/network',
-					label: 'Network',
-					match: (p) => p.startsWith('/self/advanced/network'),
-				},
-				{ href: '/self/db', label: 'DB', match: (p) => p.startsWith('/self/db') },
-			],
-		},
-	]
+	const navSections = selfNavSections
 
 	function closeAsideOnNav() {
 		asideOpen = false

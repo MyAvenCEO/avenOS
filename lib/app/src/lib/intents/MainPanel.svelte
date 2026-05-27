@@ -10,18 +10,14 @@
  * the effect only fires on transition edges (not on every reactive tick).
  *
  * `activityTab` is `$bindable` so the parent can read the current tab if
- * needed; selection of the mobile skill chip rolls back up to the parent
- * via `onSelectSkill`.
+ * needed. Skill selection on mobile lives in the skills drawer (`SkillsAside`).
  */
 import {
 	type ActivityEntry,
 	type ActivityTab,
 	type IntentRow,
 	type SkillWorker,
-	skillLiveElapsedSeconds,
-	skillStatusLabel
 } from './types'
-import StatusCard from './StatusCard.svelte'
 import ActivityView from './ActivityView.svelte'
 import DisplayView from './DisplayView.svelte'
 import ConfigView from './ConfigView.svelte'
@@ -31,21 +27,15 @@ import SandboxTerminal from '$lib/sandbox/SandboxTerminal.svelte'
 let {
 	intent,
 	selectedSkill,
-	displayedSkills,
-	selectedSkillId,
 	filteredLogs,
 	nowMs,
 	activityTab = $bindable<ActivityTab>('activity'),
-	onSelectSkill
 }: {
 	intent: IntentRow | null
 	selectedSkill: SkillWorker | null
-	displayedSkills: SkillWorker[]
-	selectedSkillId: string | null
 	filteredLogs: ActivityEntry[]
 	nowMs: number
 	activityTab?: ActivityTab
-	onSelectSkill: (id: string | null) => void
 } = $props()
 
 /**
@@ -112,71 +102,15 @@ $effect(() => {
 </script>
 
 <!--
-	Skills label — MOBILE only. On desktop the SKILLS header lives in the
-	right aside (col 3, row 1) so this cell is `sm:hidden`. Mobile keeps
-	the inline label above the master/detail Activity area when an intent
-	is selected, matching the pre-three-column flow.
--->
-<div
-	class={`col-start-1 row-start-3 flex min-h-[1.125rem] items-center gap-1.5 self-start sm:hidden ${!intent ? 'max-sm:hidden' : ''}`}
->
-	<span class="text-[8px] font-bold tracking-[0.22em] opacity-30 uppercase">
-		Skills
-		{#if intent && intent.skills.length > 0}
-			<span class="tabular-nums tracking-[0.18em]"> - {intent.skills.length}</span>
-		{/if}
-	</span>
-</div>
-
-<!--
-	Center / main panel. On desktop it spans both grid rows (row 1 + 2)
-	of column 2 so the Activity / Display tab strip and body sit at the
-	top of the column instead of beneath what used to be a horizontal
-	skills row. On mobile we keep master/detail flow (row 4 in DOM, last
-	stacked item under flex-col).
+	Center / main panel. Desktop spans column 2 rows 1–2. Mobile: full-width
+	detail view when an intent is selected (skills live in the right drawer).
 -->
 <div
 	data-native-webview-scope
-	class={`col-start-1 row-start-4 flex min-h-0 min-w-0 flex-1 flex-col max-sm:items-start max-sm:justify-start sm:col-start-2 sm:row-start-1 sm:row-end-3 ${!intent ? 'max-sm:hidden' : 'max-sm:row-start-2'}`}
+	class={`col-start-1 row-start-4 flex min-h-0 min-w-0 flex-1 flex-col max-sm:items-stretch max-sm:justify-start sm:col-start-2 sm:row-start-1 sm:row-end-3 ${!intent ? 'max-sm:hidden' : 'max-sm:row-start-1 max-sm:w-full'}`}
 >
 	<div class="flex min-h-[12rem] min-w-0 flex-1 flex-col gap-2 sm:min-h-[18rem]">
 		{#if intent}
-			{#if intent.skills.length > 0}
-				<!--
-					Mobile-only horizontal skills scroller. On desktop the skills
-					render as a vertical list in the right aside (col 3) instead.
-				-->
-				<div
-					class="flex min-h-0 min-w-0 items-center gap-1.5 overflow-x-auto px-0.5 pb-0.5 sm:hidden"
-				>
-					{#if selectedSkillId}
-						<button
-							type="button"
-							class="inline-flex min-h-[2.5rem] shrink-0 cursor-pointer items-center justify-center self-stretch rounded-[var(--radius-lg)] border-y-0 border-r-0 border-l-[4px] border-solid border-l-border bg-surface-card px-3 py-0 text-[10px] font-semibold uppercase tracking-[0.2em] text-foreground/65 transition-colors duration-200 ease-out hover:bg-surface-card-hover"
-							aria-label="Show all skill activity"
-							onclick={() => onSelectSkill(null)}
-						>
-							All
-						</button>
-					{/if}
-					{#each displayedSkills as skill (skill.id)}
-						{@const isSelected = selectedSkillId === skill.id}
-						<StatusCard
-							status={skill.status}
-							totalSeconds={skillLiveElapsedSeconds(skill, nowMs)}
-							title={skill.name}
-							description={skill.description}
-							selected={isSelected}
-							onclick={() => onSelectSkill(selectedSkillId === skill.id ? null : skill.id)}
-							ariaPressed={isSelected}
-							ariaLabel={`${skill.name} — ${skillStatusLabel(skill.status)}`}
-							extraClass="w-[12.5rem] shrink-0"
-							skillRow
-						/>
-					{/each}
-				</div>
-			{/if}
-
 			<!--
 				Tab strip: when the selected intent (or the selected skill under
 				an in-flight intent) is in HITL — or the intent itself has

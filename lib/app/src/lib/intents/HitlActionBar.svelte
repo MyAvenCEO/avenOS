@@ -32,7 +32,8 @@ let {
 	onSubmitMessage,
 	onRetrain,
 	onArchive,
-	onAccept
+	onAccept,
+	composerMode = $bindable<ComposerMode>('collapsed')
 }: {
 	intent: IntentRow | null
 	onSubmitMessage: (text: string, files: File[]) => void | Promise<void>
@@ -42,10 +43,8 @@ let {
 	onArchive: () => void
 	/** Accept the currently selected HITL/error intent — mark it `success`. */
 	onAccept: () => void
+	composerMode?: ComposerMode
 } = $props()
-
-/** Mirrors `IntentComposer` mode for bottom-bar layout gating (not bindable in child). */
-let composerMode = $state<ComposerMode>('collapsed')
 
 /**
  * `$bindable` slash-command badge owned by the bar so it survives the
@@ -82,7 +81,65 @@ const isSuccess = $derived(intent?.status === 'success')
 const isHitlOrError = $derived(
 	intent != null && (intent.status === 'hitl' || intent.status === 'error')
 )
+
+const collapsedBarClass =
+	'w-full max-sm:grid max-sm:grid-cols-[1fr_auto_1fr] max-sm:items-center max-sm:gap-1 sm:flex sm:min-h-12 sm:items-center sm:justify-center sm:gap-3'
+const expandedBarClass =
+	'flex w-full min-w-0 max-sm:min-h-0 items-center justify-center gap-2 sm:min-h-12 sm:gap-3'
+const sideLeftClass = 'flex min-w-0 items-center justify-end gap-1 max-sm:justify-end sm:flex-1 sm:justify-end sm:gap-2'
+const sideRightClass = 'flex min-w-0 items-center justify-start gap-1 max-sm:justify-start sm:flex-1 sm:justify-start sm:gap-2'
+const composerWrapCollapsed = 'shrink-0 justify-self-center max-sm:col-start-2 max-sm:row-start-1'
+const composerWrapExpanded = 'flex min-w-0 flex-1 items-center justify-center'
+const mobileIconBtn =
+	'inline-flex h-10 w-10 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full sm:h-10 sm:min-h-10 sm:w-auto'
 </script>
+
+{#snippet archiveIcon()}
+	<svg
+		class="size-[1.05rem] shrink-0 sm:hidden"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+		viewBox="0 0 24 24"
+		aria-hidden="true"
+	>
+		<path
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0-3.75-3.75m3.75 3.75 3.75-3.75M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5a1.125 1.125 0 0 0-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z"
+		/>
+	</svg>
+{/snippet}
+
+{#snippet acceptIcon()}
+	<svg
+		class="size-[1.05rem] shrink-0 sm:hidden"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2.5"
+		viewBox="0 0 24 24"
+		aria-hidden="true"
+	>
+		<path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+	</svg>
+{/snippet}
+
+{#snippet retrainIcon()}
+	<svg
+		class="size-[1.05rem] shrink-0 sm:hidden"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+		viewBox="0 0 24 24"
+		aria-hidden="true"
+	>
+		<path
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+		/>
+	</svg>
+{/snippet}
 
 <div
 	role="group"
@@ -91,15 +148,11 @@ const isHitlOrError = $derived(
 	onpointerdown={() => void focusShellWebview()}
 >
 	{#if isSuccess}
-		<div class="flex min-h-12 w-full min-w-0 items-center justify-center gap-2 sm:gap-3">
+		<div class={composerMode === 'collapsed' ? collapsedBarClass : expandedBarClass}>
 			{#if composerMode === 'collapsed'}
-				<div class="flex flex-1 items-center justify-end gap-2"></div>
+				<div class="{sideLeftClass} max-sm:col-start-1"></div>
 			{/if}
-			<div
-				class={composerMode === 'collapsed'
-					? 'shrink-0'
-					: 'flex min-w-0 flex-1 items-center justify-center'}
-			>
+			<div class={composerMode === 'collapsed' ? composerWrapCollapsed : composerWrapExpanded}>
 				<IntentComposer
 					bind:this={composerRef}
 					rowCluster={composerMode === 'collapsed'}
@@ -110,38 +163,36 @@ const isHitlOrError = $derived(
 				/>
 			</div>
 			{#if composerMode === 'collapsed'}
-				<div class="flex flex-1 items-center justify-start gap-2">
+				<div class="{sideRightClass} max-sm:col-start-3">
 					<button
 						type="button"
-						class="inline-flex h-10 min-h-10 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border border-border bg-transparent px-3.5 text-[11px] font-semibold text-foreground/85 transition-colors hover:bg-foreground/5 sm:px-4"
+						class="{mobileIconBtn} border border-border bg-transparent text-foreground/85 transition-colors hover:bg-foreground/5 sm:border sm:px-3.5 sm:text-[11px] sm:font-semibold"
 						onclick={onArchive}
 						aria-label="Archive"
 						title="Archive intent"
 					>
-						Archive
+						{@render archiveIcon()}
+						<span class="hidden sm:inline">Archive</span>
 					</button>
 				</div>
 			{/if}
 		</div>
 	{:else if isHitlOrError}
-		<div class="flex min-h-12 w-full min-w-0 items-center justify-center gap-2 sm:gap-3">
+		<div class={composerMode === 'collapsed' ? collapsedBarClass : expandedBarClass}>
 			{#if composerMode === 'collapsed'}
-				<div class="flex flex-1 items-center justify-end gap-2">
+				<div class="{sideLeftClass} max-sm:col-start-1">
 					<button
 						type="button"
-						class="inline-flex h-10 min-h-10 max-w-full shrink-0 cursor-pointer touch-manipulation items-center justify-center truncate rounded-full border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-status-error border-r-status-error bg-surface-card px-3.5 text-[11px] font-semibold text-status-error transition-colors hover:bg-status-error hover:text-status-error-foreground sm:px-4"
+						class="{mobileIconBtn} max-w-full border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-status-error border-r-status-error bg-surface-card text-status-error transition-colors hover:bg-status-error hover:text-status-error-foreground sm:truncate sm:px-3.5 sm:text-[11px] sm:font-semibold"
 						onclick={() => composerRef?.openWithCommand('retrain')}
 						aria-label="Re-train intent — open composer with retrain command"
 					>
-						Re-train
+						{@render retrainIcon()}
+						<span class="hidden sm:inline">Re-train</span>
 					</button>
 				</div>
 			{/if}
-			<div
-				class={composerMode === 'collapsed'
-					? 'shrink-0'
-					: 'flex min-w-0 flex-1 items-center justify-center'}
-			>
+			<div class={composerMode === 'collapsed' ? composerWrapCollapsed : composerWrapExpanded}>
 				<IntentComposer
 					bind:this={composerRef}
 					bind:command={composerCommand}
@@ -154,34 +205,37 @@ const isHitlOrError = $derived(
 				/>
 			</div>
 			{#if composerMode === 'collapsed'}
-				<div class="flex flex-1 items-center justify-start gap-2">
+				<div class="{sideRightClass} max-sm:col-start-3">
 					{#if intent?.status === 'error'}
 						<button
 							type="button"
-							class="inline-flex h-10 min-h-10 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-border border-r-border bg-surface-card px-3.5 text-[11px] font-semibold text-foreground/70 transition-colors hover:bg-foreground/5 sm:px-4"
+							class="{mobileIconBtn} border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-border border-r-border bg-surface-card text-foreground/70 transition-colors hover:bg-foreground/5 sm:px-3.5 sm:text-[11px] sm:font-semibold"
 							onclick={onArchive}
 							aria-label="Archive intent — dismiss without resolving"
 							title="Archive intent"
 						>
-							Archive
+							{@render archiveIcon()}
+							<span class="hidden sm:inline">Archive</span>
 						</button>
 					{:else}
 						<button
 							type="button"
-							class="inline-flex h-10 min-h-10 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-status-success border-r-status-success bg-surface-card px-3.5 text-[11px] font-semibold text-status-success transition-colors hover:bg-status-success hover:text-status-success-foreground sm:px-4"
+							class="{mobileIconBtn} border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-status-success border-r-status-success bg-surface-card text-status-success transition-colors hover:bg-status-success hover:text-status-success-foreground sm:px-3.5 sm:text-[11px] sm:font-semibold"
 							onclick={onAccept}
 							aria-label="Accept intent — mark completed successfully"
 						>
-							Accept
+							{@render acceptIcon()}
+							<span class="hidden sm:inline">Accept</span>
 						</button>
 						<button
 							type="button"
-							class="inline-flex h-10 min-h-10 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-border border-r-border bg-surface-card px-3.5 text-[11px] font-semibold text-foreground/70 transition-colors hover:bg-foreground/5 sm:px-4"
+							class="{mobileIconBtn} border-y-0 border-l-[4px] border-r-[4px] border-solid border-l-border border-r-border bg-surface-card text-foreground/70 transition-colors hover:bg-foreground/5 sm:px-3.5 sm:text-[11px] sm:font-semibold"
 							onclick={onArchive}
 							aria-label="Archive intent — dismiss without resolving"
 							title="Archive intent"
 						>
-							Archive
+							{@render archiveIcon()}
+							<span class="hidden sm:inline">Archive</span>
 						</button>
 					{/if}
 				</div>
