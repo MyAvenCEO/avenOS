@@ -80,6 +80,20 @@ export type PeerRowReply = {
 	status: string
 }
 
+/** Table pushes use Groove column names (`peer_did`); IPC `peerList` uses camelCase. */
+export function normalizePeerRow(row: unknown): PeerRowReply {
+	const r = row as Record<string, unknown>
+	const added = r.addedAtMs ?? r.added_at_ms
+	return {
+		id: String(r.id ?? ''),
+		peerDid: String(r.peerDid ?? r.peer_did ?? ''),
+		deviceLabel: String(r.deviceLabel ?? r.device_label ?? ''),
+		kind: String(r.kind ?? ''),
+		addedAtMs: typeof added === 'number' ? added : Number(added ?? 0),
+		status: String(r.status ?? ''),
+	}
+}
+
 export async function peerList(): Promise<PeerRowReply[]> {
 	return grooveRuntime<PeerRowReply[]>('peerList', {})
 }

@@ -162,12 +162,16 @@ export function peerMeshRailClass(phase: PeerMeshPhase): string {
 	}
 }
 
+function normalizePeerDid(peerDid: string | undefined | null): string {
+	return typeof peerDid === 'string' ? peerDid.trim() : ''
+}
+
 export function findPeerMeshPhase(
 	status: PeerMeshStatusReply | undefined,
-	peerDid: string,
+	peerDid: string | undefined,
 	dbStatus?: string,
 ): PeerMeshPhase {
-	const did = peerDid.trim()
+	const did = normalizePeerDid(peerDid)
 	if (!did) return 'offline'
 	if (!status) {
 		// Snapshot not loaded yet — trusted row is reconnecting, not idle offline.
@@ -238,11 +242,12 @@ export function peerMeshDetailSubLabel(
 
 export function peerMeshDetailSubTitle(
 	status: PeerMeshStatusReply | undefined,
-	peerDid: string,
+	peerDid: string | undefined,
 	phase: PeerMeshPhase,
 ): string | null {
-	if (!status || !peerDid.trim()) return null
-	const row = status.peers.find((p) => p.peerDid === peerDid.trim())
+	const did = normalizePeerDid(peerDid)
+	if (!status || !did) return null
+	const row = status.peers.find((p) => p.peerDid === did)
 	if (!row?.transportMode) return null
 	if (phase === 'syncing' || phase === 'ready') {
 		return peerTransportModeTitle(row.transportMode)

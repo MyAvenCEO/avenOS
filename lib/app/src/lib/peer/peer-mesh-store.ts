@@ -2,7 +2,7 @@ import { browser } from '$app/environment'
 import { derived, get } from 'svelte/store'
 import { deviceSession } from '$lib/self/device-session-store'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-import type { PeerRowReply } from '$lib/peer/api'
+import { normalizePeerRow, type PeerRowReply } from '$lib/peer/api'
 import { grooveRuntime } from '$lib/runtime/groove-ipc'
 import {
 	grooveSessionReady,
@@ -14,7 +14,9 @@ import { getTableRowsStore } from '$lib/runtime/table-stores'
 export { peerMeshSnapshot } from '$lib/runtime/groove-runtime'
 
 /** Trusted peer rows — pushed via `avenos:runtime` `{ kind: 'table', table: 'peers' }`. */
-export const peerRows = derived(getTableRowsStore('peers'), ($rows) => $rows as PeerRowReply[])
+export const peerRows = derived(getTableRowsStore('peers'), ($rows) =>
+	($rows as unknown[]).map(normalizePeerRow),
+)
 
 let storeGeneration = 0
 let peersSubscribed = false

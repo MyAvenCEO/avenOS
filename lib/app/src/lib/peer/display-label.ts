@@ -1,6 +1,6 @@
 /** Truncate a `did:key:…` for compact UI. */
-export function shortPeerDid(did: string): string {
-	const t = did.trim()
+export function shortPeerDid(did: string | undefined): string {
+	const t = (did ?? '').trim()
 	return t.length > 32 ? `${t.slice(0, 18)}…${t.slice(-8)}` : t
 }
 
