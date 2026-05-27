@@ -76,7 +76,6 @@
 	class="min-h-0 flex-1"
 	{mainClass}
 	{contentClass}
-	children={main}
 >
 	{#snippet aside()}
 		<div class="mb-3 space-y-2 px-2 pt-2">
@@ -126,7 +125,7 @@
 		</nav>
 	{/snippet}
 
-	{#snippet main()}
+	{#snippet children()}
 		<div
 			class="mx-auto flex w-full flex-col px-4 sm:px-6
 				{isGalleryView ? 'max-w-5xl' : 'max-w-3xl'}

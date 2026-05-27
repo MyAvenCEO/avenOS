@@ -52,5 +52,6 @@ target/
 /dist/
 **/*.pkg
 
-# Repo-local P2p signal relay seed (<repo>/.avenOS/dev/p2p-signal)
+# Repo-local P2p signal relay keys (relay-hyperdht.seed, bootstrap-hyperdht.seed)
 /.avenOS/
+**/.avenOS/

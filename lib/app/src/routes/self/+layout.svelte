@@ -62,7 +62,7 @@
 	}
 </script>
 
-<SlideAsideLayout bind:open={asideOpen} asideLabel="Self settings" class="min-h-0 flex-1" children={main}>
+<SlideAsideLayout bind:open={asideOpen} asideLabel="Self settings" class="min-h-0 flex-1">
 	{#snippet aside()}
 		<div class="mb-3 space-y-0.5 px-3">
 			<h2 class="text-sm font-semibold tracking-tight">{profileName}</h2>
@@ -99,7 +99,7 @@
 		</nav>
 	{/snippet}
 
-	{#snippet main()}
+	{#snippet children()}
 		<div class="mx-auto w-full max-w-3xl px-4 pt-4 pb-8 sm:px-6 md:px-8">
 			{@render pageChildren()}
 		</div>
