@@ -11,15 +11,10 @@ let package = Package(
 	products: [
 		.library(name: "NetworkPathBridge", type: .static, targets: ["NetworkPathBridge"]),
 	],
-	dependencies: [
-		.package(url: "https://github.com/Brendonovich/swift-rs", from: "1.0.5"),
-	],
 	targets: [
 		.target(
 			name: "NetworkPathBridge",
-			dependencies: [
-				.product(name: "SwiftRs", package: "swift-rs"),
-			],
+			dependencies: [],
 			linkerSettings: [
 				.linkedFramework("Network"),
 			]

@@ -1,5 +1,7 @@
 //! NWPathMonitor + app foreground bridge (macOS/iOS).
 
+use std::ffi::CStr;
+use std::os::raw::c_char;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -15,7 +17,7 @@ pub struct NetworkPathChangedPayload {
 	pub interfaces: Vec<String>,
 }
 
-type PathCallback = extern "C" fn(u8, u8, u8, swift_rs::SRString, u64);
+type PathCallback = extern "C" fn(u8, u8, u8, *const c_char, u64);
 type ForegroundCallback = extern "C" fn(u64);
 
 struct MonitorContext {
@@ -27,12 +29,16 @@ extern "C" fn on_path_update(
 	satisfied: u8,
 	expensive: u8,
 	constrained: u8,
-	interfaces: swift_rs::SRString,
+	interfaces: *const c_char,
 	context: u64,
 ) {
 	let ctx = unsafe { &*(context as *const MonitorContext) };
-	let ifaces: Vec<String> = interfaces
-		.to_string()
+	let iface_str = if interfaces.is_null() {
+		String::new()
+	} else {
+		unsafe { CStr::from_ptr(interfaces).to_string_lossy().into_owned() }
+	};
+	let ifaces: Vec<String> = iface_str
 		.split(',')
 		.filter(|s| !s.is_empty())
 		.map(str::to_string)

@@ -1,6 +1,5 @@
 import Foundation
 import Network
-import SwiftRs
 #if os(iOS)
 import UIKit
 #elseif os(macOS)
@@ -10,7 +9,7 @@ import AppKit
 private final class BridgeState: @unchecked Sendable {
 	var pathMonitor: NWPathMonitor?
 	var pathQueue: DispatchQueue?
-	var pathCallback: (@convention(c) (UInt8, UInt8, UInt8, SRString, UInt64) -> Void)?
+	var pathCallback: (@convention(c) (UInt8, UInt8, UInt8, UnsafePointer<CChar>?, UInt64) -> Void)?
 	var pathContext: UInt64 = 0
 	var foregroundCallback: (@convention(c) (UInt64) -> Void)?
 	var foregroundContext: UInt64 = 0
@@ -33,7 +32,10 @@ private func emitPath(_ path: NWPath) {
 	let satisfied: UInt8 = path.status == .satisfied ? 1 : 0
 	let expensive: UInt8 = path.isExpensive ? 1 : 0
 	let constrained: UInt8 = path.isConstrained ? 1 : 0
-	cb(satisfied, expensive, constrained, SRString(interfaceNames(from: path)), state.pathContext)
+	let names = interfaceNames(from: path)
+	names.withCString { cstr in
+		cb(satisfied, expensive, constrained, cstr, state.pathContext)
+	}
 }
 
 private func registerForegroundObserver() {
@@ -58,7 +60,7 @@ private func registerForegroundObserver() {
 
 @_cdecl("network_path_start_monitor")
 public func network_path_start_monitor(
-	pathCb: @escaping @convention(c) (UInt8, UInt8, UInt8, SRString, UInt64) -> Void,
+	pathCb: @escaping @convention(c) (UInt8, UInt8, UInt8, UnsafePointer<CChar>?, UInt64) -> Void,
 	pathCtx: UInt64,
 	foregroundCb: @escaping @convention(c) (UInt64) -> Void,
 	foregroundCtx: UInt64
@@ -77,7 +79,10 @@ public func network_path_start_monitor(
 		emitPath(path)
 	}
 	monitor.start(queue: queue)
-	emitPath(monitor.currentPath)
+	// Avoid synchronous callback during Tauri plugin init — path handler runs on queue.
+	queue.async {
+		emitPath(monitor.currentPath)
+	}
 	registerForegroundObserver()
 }
 
