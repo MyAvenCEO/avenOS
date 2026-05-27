@@ -128,6 +128,16 @@ impl HyperswarmGrooveBridge {
 			.collect()
 	}
 
+	/// DIDs with an active Groove mux (authoritative live link set).
+	pub async fn snapshot_live_linked_dids(&self) -> std::collections::HashSet<String> {
+		let live = self.snapshot_remote_clients().await;
+		let cid_map = self.shared_client_id_to_did();
+		let guard = cid_map.read().expect("cid map poisoned");
+		live.iter()
+			.filter_map(|id| guard.get(id).cloned())
+			.collect()
+	}
+
 	async fn wait_until_local_party(&self) -> ClientId {
 		loop {
 			if let Some(id) = *self.0.local_client_id.lock().await {

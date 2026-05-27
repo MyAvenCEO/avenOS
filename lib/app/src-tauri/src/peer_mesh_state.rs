@@ -21,9 +21,11 @@ pub enum PeerMeshPhase {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PeerMeshPeerState {
+	pub id: String,
 	pub peer_did: String,
 	pub device_label: String,
 	pub db_status: String,
+	pub added_at_ms: i64,
 	pub phase: PeerMeshPhase,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub connect_substate: Option<tauri_plugin_peer::PeerConnectSubstate>,
@@ -94,9 +96,11 @@ pub(crate) async fn assemble_mesh_snapshot(
 		);
 		let ui = peer_ctl.connect_ui_row_for_did(&row.peer_did);
 		out.push(PeerMeshPeerState {
+			id: row.id,
 			peer_did: row.peer_did,
 			device_label: row.device_label,
 			db_status: row.status,
+			added_at_ms: row.added_at_ms,
 			phase,
 			connect_substate: ui.connect_substate,
 			transport_mode: ui.transport_mode,

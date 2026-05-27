@@ -20,7 +20,7 @@
 	import { pairingLabelForSession } from '$lib/self/active-vault-ui'
 	import { peerPersonName } from '$lib/peer/display-label'
 	import PeerMeshPhaseBadge from '$lib/peer/PeerMeshPhaseBadge.svelte'
-	import { findPeerMeshPhase, peerMeshDetailSubLabel, peerMeshDetailSubTitle, peerMeshPhaseLabel } from '$lib/peer/mesh-state'
+	import { meshPeerPhase, peerMeshDetailSubLabel, peerMeshDetailSubTitle, peerMeshPhaseLabel } from '$lib/peer/mesh-state'
 	import type { PeerRowReply } from '$lib/peer/api'
 	import { peerMeshSnapshot, peerRows } from '$lib/peer/peer-mesh-store'
 	import { navigateApp } from '$lib/shell'
@@ -161,7 +161,7 @@
 			mesh &&
 			savedActivePeers.length > 0 &&
 			savedActivePeers.every((r) => {
-				const ph = findPeerMeshPhase(mesh, r.peerDid, 'active')
+				const ph = meshPeerPhase(mesh, r.peerDid, r.status)
 				return ph === 'ready' || ph === 'syncing'
 			})
 		) {
@@ -543,7 +543,7 @@
 				{#each trustedRows as r (r.id)}
 					{@const rowPhase = r.placeholder
 						? 'pairing'
-						: findPeerMeshPhase(mesh, r.peerDid, r.status)}
+						: meshPeerPhase(mesh, r.peerDid, r.status)}
 					{@const rowSubLabel = r.placeholder || !r.peerDid
 						? null
 						: peerMeshDetailSubLabel(mesh, r.peerDid, rowPhase)}

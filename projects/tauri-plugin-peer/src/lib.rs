@@ -1024,11 +1024,34 @@ impl PeerCtl {
 		flush_swarm_for_pairing(&swarm, "nudge pairing discovery").await
 	}
 
-	/// Force one DHT announce/lookup round when paired but Hyperswarm has no live relay yet (`SEARCHING`).
-	pub async fn nudge_allowlisted_discovery(&self) -> Result<(), String> {
-		if !self.jazz_hyperswarm.snapshot_remote_clients().await.is_empty() {
+	/// Force DHT announce/lookup for allowlisted peers that lack a live Groove link.
+	///
+	/// When **all** links are down, clears stale swarm slots via `prepare_reconnect`.
+	/// When **some** peers stay linked, nudges only missing DIDs via per-peer
+	/// `note_peer_disconnected` so live connections are not torn down.
+	pub async fn nudge_allowlisted_discovery(
+		&self,
+		active_remote_dids: &[String],
+	) -> Result<(), String> {
+		let allow: Vec<String> = active_remote_dids
+			.iter()
+			.map(|s| s.trim().to_string())
+			.filter(|s| !s.is_empty())
+			.collect();
+		if allow.is_empty() {
 			return Ok(());
 		}
+
+		let live_dids = self.jazz_hyperswarm.snapshot_live_linked_dids().await;
+		let missing: Vec<String> = allow
+			.iter()
+			.filter(|d| !live_dids.contains(d.as_str()))
+			.cloned()
+			.collect();
+		if missing.is_empty() {
+			return Ok(());
+		}
+
 		let swarm = {
 			let guard = self.inner.lock().await;
 			let Some(r) = guard.as_ref() else {
@@ -1040,13 +1063,42 @@ impl PeerCtl {
 			}
 			r.swarm.clone()
 		};
-		if let Err(e) = swarm.prepare_reconnect().await {
-			log::debug!(
-				target: "avenos::peeroxide",
-				"prepare_reconnect before nudge: {e}",
-			);
+
+		if live_dids.is_empty() {
+			if let Err(e) = swarm.prepare_reconnect().await {
+				log::debug!(
+					target: "avenos::peeroxide",
+					"prepare_reconnect before nudge: {e}",
+				);
+			}
+		} else {
+			for did in &missing {
+				match crate::did::ed25519_public_from_peer_did(did) {
+					Ok(pk) => {
+						if let Err(e) = swarm.note_peer_disconnected(pk).await {
+							log::debug!(
+								target: "avenos::peeroxide",
+								"note_peer_disconnected nudge did={did}: {e}",
+							);
+						}
+					}
+					Err(e) => {
+						log::debug!(
+							target: "avenos::peeroxide",
+							"peer heal: skip nudge bad did={did}: {e}",
+						);
+					}
+				}
+			}
 		}
-		flush_swarm_for_pairing(&swarm, "nudge allowlisted discovery").await
+
+		log::info!(
+			target: "avenos::peeroxide",
+			"peer heal: nudge {} missing allowlisted peer(s) ({} live)",
+			missing.len(),
+			live_dids.len(),
+		);
+		flush_swarm_for_pairing(&swarm, "nudge missing allowlisted peer(s)").await
 	}
 
 	async fn on_groove_link_lifecycle(

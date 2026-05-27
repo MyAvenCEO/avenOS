@@ -877,6 +877,7 @@ pub fn run() {
 			jazz::groove_runtime,
 			jazz::self_storage_paths,
 			jazz::self_clear_jazz_database,
+			jazz::self_clear_aven_os_data,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application")

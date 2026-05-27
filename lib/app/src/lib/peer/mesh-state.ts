@@ -22,9 +22,11 @@ export type PeerConnectSubstate =
 export type PeerTransportMode = 'lan' | 'direct' | 'punched' | 'relay'
 
 export type PeerMeshPeerState = {
+	id: string
 	peerDid: string
 	deviceLabel: string
 	dbStatus: string
+	addedAtMs: number
 	phase: PeerMeshPhase
 	connectSubstate?: PeerConnectSubstate | null
 	transportMode?: PeerTransportMode | null
@@ -166,20 +168,34 @@ function normalizePeerDid(peerDid: string | undefined | null): string {
 	return typeof peerDid === 'string' ? peerDid.trim() : ''
 }
 
+/** Lookup a trusted peer row in the live mesh snapshot (canonical phase source). */
+export function meshPeerByDid(
+	mesh: PeerMeshStatusReply | undefined,
+	peerDid: string | undefined,
+): PeerMeshPeerState | undefined {
+	const did = normalizePeerDid(peerDid)
+	if (!mesh || !did) return undefined
+	return mesh.peers.find((p) => p.peerDid === did)
+}
+
+/** Phase for a trusted peer — prefer mesh snapshot, never re-derive transport state. */
+export function meshPeerPhase(
+	mesh: PeerMeshStatusReply | undefined,
+	peerDid: string | undefined,
+	dbStatus?: string,
+): PeerMeshPhase {
+	return (
+		meshPeerByDid(mesh, peerDid)?.phase ??
+		(dbStatus === 'pairing' ? 'pairing' : dbStatus === 'active' ? 'searching' : 'offline')
+	)
+}
+
 export function findPeerMeshPhase(
 	status: PeerMeshStatusReply | undefined,
 	peerDid: string | undefined,
 	dbStatus?: string,
 ): PeerMeshPhase {
-	const did = normalizePeerDid(peerDid)
-	if (!did) return 'offline'
-	if (!status) {
-		// Snapshot not loaded yet — trusted row is reconnecting, not idle offline.
-		return dbStatus === 'active' ? 'searching' : 'offline'
-	}
-	const row = status.peers.find((p) => p.peerDid === did)
-	if (row) return row.phase
-	return dbStatus === 'active' ? 'searching' : 'offline'
+	return meshPeerPhase(status, peerDid, dbStatus)
 }
 
 /** Granular connect sub-label while parent phase is `searching` (Connecting). */
@@ -225,11 +241,10 @@ export function peerTransportModeTitle(mode: PeerTransportMode): string {
 
 export function peerMeshDetailSubLabel(
 	status: PeerMeshStatusReply | undefined,
-	peerDid: string,
+	peerDid: string | undefined,
 	phase: PeerMeshPhase,
 ): string | null {
-	if (!status || !peerDid.trim()) return null
-	const row = status.peers.find((p) => p.peerDid === peerDid.trim())
+	const row = meshPeerByDid(status, peerDid)
 	if (!row) return null
 	if (phase === 'searching' && row.connectSubstate) {
 		return peerConnectSubstateLabel(row.connectSubstate)
@@ -245,9 +260,7 @@ export function peerMeshDetailSubTitle(
 	peerDid: string | undefined,
 	phase: PeerMeshPhase,
 ): string | null {
-	const did = normalizePeerDid(peerDid)
-	if (!status || !did) return null
-	const row = status.peers.find((p) => p.peerDid === did)
+	const row = meshPeerByDid(status, peerDid)
 	if (!row?.transportMode) return null
 	if (phase === 'syncing' || phase === 'ready') {
 		return peerTransportModeTitle(row.transportMode)
