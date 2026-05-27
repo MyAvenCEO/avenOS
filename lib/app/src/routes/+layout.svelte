@@ -173,6 +173,7 @@ $effect(() => {
 						data-sveltekit-preload-data="hover"
 						class="transition-opacity hover:opacity-80 {intentsActive ? 'opacity-95' : 'opacity-40'}"
 						aria-current={intentsActive ? 'page' : undefined}
+						onclick={(e) => navigateApp('/', e)}
 						>Intents</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
@@ -181,6 +182,7 @@ $effect(() => {
 						data-sveltekit-preload-data="hover"
 						class="transition-opacity hover:opacity-80 {sandboxActive ? 'opacity-95' : 'opacity-40'}"
 						aria-current={sandboxActive ? 'page' : undefined}
+						onclick={(e) => navigateApp('/sandbox', e)}
 						>Sandbox</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
@@ -189,6 +191,7 @@ $effect(() => {
 						data-sveltekit-preload-data="hover"
 						class="transition-opacity hover:opacity-80 {sparksNavActive ? 'opacity-95' : 'opacity-40'}"
 						aria-current={sparksNavActive ? 'page' : undefined}
+						onclick={(e) => navigateApp('/sparks', e)}
 						>Sparks</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
@@ -197,6 +200,7 @@ $effect(() => {
 						data-sveltekit-preload-data="hover"
 						class="transition-opacity hover:opacity-80 {dbActive ? 'opacity-95' : 'opacity-40'}"
 						aria-current={dbActive ? 'page' : undefined}
+						onclick={(e) => navigateApp('/db', e)}
 						>DB</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
@@ -205,6 +209,7 @@ $effect(() => {
 						data-sveltekit-preload-data="hover"
 						class="transition-opacity hover:opacity-80 {docsActive ? 'opacity-95' : 'opacity-40'}"
 						aria-current={docsActive ? 'page' : undefined}
+						onclick={(e) => navigateApp('/docs', e)}
 						>Docs</a
 					>
 				</nav>
@@ -257,7 +262,9 @@ $effect(() => {
 			class={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden${dragActive ? ' pointer-events-none select-none saturate-75 contrast-[0.85] brightness-90 blur-[3px]' : ''}`}
 			aria-hidden={dragActive ? true : undefined}
 		>
-			{@render pageContent()}
+			{#key path}
+				{@render pageContent()}
+			{/key}
 		</div>
 
 		<MobileShellNav {selfNavLabel} {selfActive} />

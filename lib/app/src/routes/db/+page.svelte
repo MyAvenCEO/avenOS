@@ -268,8 +268,7 @@
 					</div>
 				{/snippet}
 
-				{#snippet main()}
-					<section class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+				<section class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
 						<div class="border-border/60 flex shrink-0 flex-wrap items-center gap-3 border-b px-3 py-2 sm:px-4">
 							{#if selectedTable}
 								<h2 class="font-mono text-sm font-semibold tracking-tight">{selectedTable}</h2>
@@ -346,7 +345,6 @@
 							{/if}
 						</div>
 					</section>
-				{/snippet}
 			</SlideAsideLayout>
 		</div>
 	{/if}

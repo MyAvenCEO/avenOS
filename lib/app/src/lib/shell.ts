@@ -20,5 +20,5 @@ export function navigateApp(href: string, e?: MouseEvent): void {
 		return
 	}
 	e?.preventDefault()
-	void goto(href)
+	void goto(href, { keepFocus: true, noScroll: false })
 }

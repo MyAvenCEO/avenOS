@@ -5,7 +5,7 @@
 	import SlideAsideLayout from '$lib/ui/SlideAsideLayout.svelte'
 	import { navigateApp } from '$lib/shell'
 
-	let { children } = $props()
+	let { children: pageOutlet } = $props()
 
 	let asideOpen = $state(false)
 
@@ -129,15 +129,11 @@
 		</nav>
 	{/snippet}
 
-	{#snippet main()}
-		<div
-			class="mx-auto flex w-full flex-col px-4 sm:px-6
-				{isGalleryView ? 'max-w-5xl' : 'max-w-3xl'}
-				{isTalkView ? 'min-h-0 flex-1 py-3 pb-0 sm:py-6' : 'py-6 sm:py-8'}"
-		>
-			{#key path}
-				{@render children()}
-			{/key}
-		</div>
-	{/snippet}
+	<div
+		class="mx-auto flex w-full flex-col px-4 sm:px-6
+			{isGalleryView ? 'max-w-5xl' : 'max-w-3xl'}
+			{isTalkView ? 'min-h-0 flex-1 py-3 pb-0 sm:py-6' : 'py-6 sm:py-8'}"
+	>
+		{@render pageOutlet()}
+	</div>
 </SlideAsideLayout>

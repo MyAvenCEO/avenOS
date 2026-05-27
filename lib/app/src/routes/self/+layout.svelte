@@ -10,7 +10,7 @@
 	import { browser } from '$app/environment'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 
-	let { children } = $props()
+	let { children: pageOutlet } = $props()
 
 	const ctx = provideSelfContext()
 	const sessionKind = $derived($deviceSession.kind)
@@ -103,11 +103,7 @@
 		</nav>
 	{/snippet}
 
-	{#snippet main()}
-		<div class="mx-auto w-full max-w-3xl px-4 pt-4 pb-8 sm:px-6 md:px-8">
-			{#key path}
-				{@render children()}
-			{/key}
-		</div>
-	{/snippet}
+	<div class="mx-auto w-full max-w-3xl px-4 pt-4 pb-8 sm:px-6 md:px-8">
+		{@render pageOutlet()}
+	</div>
 </SlideAsideLayout>

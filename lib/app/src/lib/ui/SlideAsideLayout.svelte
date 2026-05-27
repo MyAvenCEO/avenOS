@@ -17,7 +17,8 @@
 		contentClass?: string
 		open?: boolean
 		aside: Snippet
-		main: Snippet
+		/** Main column content (SvelteKit page outlet or inline panel). */
+		children: Snippet
 	}
 
 	let {
@@ -29,7 +30,7 @@
 		contentClass = 'pb-16 md:pb-0',
 		open = $bindable(false),
 		aside,
-		main,
+		children,
 	}: Props = $props()
 
 	const asideId = `slide-aside-${Math.random().toString(36).slice(2, 9)}`
@@ -77,7 +78,7 @@
 
 	<main class={mainClass}>
 		<div class={contentClass}>
-			{@render main()}
+			{@render children()}
 		</div>
 
 		{#if showAsideFab}
