@@ -219,18 +219,16 @@ async function main() {
 
 	const br = spawnSync('bunx', ['--bun', ...tauriArgs], {
 		cwd: appDir,
-		encoding: 'utf8',
+		stdio: 'inherit',
 		env: tauriEnv,
 	})
-	if (br.stdout) process.stdout.write(br.stdout)
-	if (br.stderr) process.stderr.write(br.stderr)
 	if (br.status !== 0) {
 		console.error('build-appstore-macos: tauri build failed')
 		process.exit(br.status ?? 1)
 	}
 
-	const buildLog = `${br.stdout ?? ''}\n${br.stderr ?? ''}`
-	const appPath = resolveBuiltAppPath(buildLog, cargoTargetDir, tauriTarget, bundleVersion)
+	// Live stdio — artifact path comes from CARGO_TARGET_DIR + known bundle layout (see resolveBuiltAppPath).
+	const appPath = resolveBuiltAppPath('', cargoTargetDir, tauriTarget, bundleVersion)
 
 	const verify = spawnSync('codesign', ['--verify', '--deep', '--strict', appPath], {
 		stdio: 'inherit',

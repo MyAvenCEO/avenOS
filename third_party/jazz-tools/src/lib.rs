@@ -30,53 +30,52 @@ pub mod transport_protocol;
 #[cfg(feature = "transport")]
 pub use transport_protocol as jazz_transport;
 
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 mod client;
-#[cfg(feature = "client")]
+#[cfg(all(feature = "client-p2p", feature = "transport-http"))]
 mod transport;
-#[cfg(all(feature = "client", feature = "peer-transport"))]
+#[cfg(feature = "client-p2p")]
 mod peer_transport;
 
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 use std::path::PathBuf;
 
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 use thiserror::Error;
 
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 pub use client::{JazzClient, SessionClient};
 
-#[cfg(all(feature = "client", feature = "peer-transport"))]
+#[cfg(feature = "client-p2p")]
 pub use peer_transport::{PeerTransport, decode_length_prefixed, encode_length_prefixed};
-#[cfg(all(feature = "client", feature = "peer-transport"))]
+#[cfg(feature = "client-p2p")]
 pub use sync_manager::SyncPayload;
-#[cfg(all(feature = "client", feature = "peer-transport"))]
+#[cfg(feature = "client-p2p")]
 pub use sync_manager::{InboxEntry, Source};
 
-
-#[cfg(all(feature = "client", feature = "transport"))]
+#[cfg(all(feature = "client-p2p", feature = "transport-http"))]
 pub use jazz_transport::ServerEvent;
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 pub use object::ObjectId;
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 pub use query_manager::query::{Query, QueryBuilder};
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 pub use query_manager::session::Session;
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 pub use query_manager::types::{
     ColumnType, Row, RowDelta, Schema, SchemaBuilder, TableName, TableSchema, Value,
 };
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 pub use schema_manager::AppId;
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 pub use sync_manager::ClientId;
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 pub use sync_manager::PersistenceTier;
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 pub use sync_manager::ServerId;
 
 /// Configuration for connecting to Jazz.
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 #[derive(Debug, Clone)]
 pub struct AppContext {
     /// Application ID.
@@ -107,7 +106,7 @@ pub struct AppContext {
 }
 
 /// Errors from Jazz client operations.
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 #[derive(Error, Debug)]
 pub enum JazzError {
     #[error("Connection error: {0}")]
@@ -128,6 +127,7 @@ pub enum JazzError {
     #[error("Schema error: {0}")]
     Schema(String),
 
+    #[cfg(feature = "transport-http")]
     #[error("HTTP error: {0}")]
     Http(#[from] reqwest::Error),
 
@@ -142,21 +142,21 @@ pub enum JazzError {
 }
 
 /// Result type for Jazz operations.
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 pub type Result<T> = std::result::Result<T, JazzError>;
 
 /// Handle to a subscription.
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SubscriptionHandle(pub u64);
 
 /// Stream of row deltas from a subscription.
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 pub struct SubscriptionStream {
     receiver: tokio::sync::mpsc::Receiver<RowDelta>,
 }
 
-#[cfg(feature = "client")]
+#[cfg(feature = "client-p2p")]
 impl SubscriptionStream {
     /// Create a new subscription stream.
     pub(crate) fn new(receiver: tokio::sync::mpsc::Receiver<RowDelta>) -> Self {

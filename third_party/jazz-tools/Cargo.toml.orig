@@ -10,11 +10,6 @@ repository = "https://github.com/garden-co/jazz2"
 name = "groove"
 path = "src/lib.rs"
 
-[[bin]]
-name = "jazz-tools"
-path = "src/main.rs"
-required-features = ["cli"]
-
 [features]
 default = []
 surrealkv = ["dep:surrealkv", "dep:tokio"]
@@ -22,11 +17,23 @@ runtime-tokio = ["dep:tokio"]
 transport = []
 transport-http = ["transport", "dep:reqwest", "dep:base64", "dep:bytes"]
 peer-transport = ["dep:bincode", "dep:async-trait"]
-client = ["runtime-tokio", "transport-http", "surrealkv", "dep:thiserror", "dep:tokio"]
+# AvenOS Tauri: SurrealKV + P2P only (no HTTP Jazz server / reqwest).
+client-p2p = [
+  "runtime-tokio",
+  "surrealkv",
+  "peer-transport",
+  "dep:thiserror",
+  "dep:tokio",
+]
+# Full upstream client: client-p2p + HTTP sync/streaming to a Jazz server.
+client = ["client-p2p", "transport-http"]
+
+# CLI binary + HTTP server (upstream dev only; not shipped in AvenOS apps).
 cli = [
   "runtime-tokio",
   "transport",
   "surrealkv",
+  "transport-http",
   "dep:tokio",
   "dep:axum",
   "dep:clap",
@@ -38,8 +45,12 @@ cli = [
   "dep:bytes",
 ]
 
+[[bin]]
+name = "jazz-tools"
+path = "src/main.rs"
+required-features = ["cli"]
+
 [dependencies]
-opfs-btree = { path = "../opfs-btree", version = "0.1.0" }
 futures = "0.3"
 tracing = "0.1"
 uuid = { version = "1", features = ["v4", "v5", "v7", "serde"] }
@@ -57,22 +68,24 @@ bitvec = "1.0"
 ahash = "0.8"
 
 tokio = { version = "1", features = ["full"], optional = true }
-
 bincode = { version = "2.0", features = ["serde"], optional = true }
 async-trait = { version = "0.1", optional = true }
 surrealkv = { version = "0.19", optional = true }
+thiserror = { version = "1", optional = true }
+
+reqwest = { version = "0.12", features = ["json", "stream"], optional = true }
+bytes = { version = "1", optional = true }
+base64 = { version = "0.22", optional = true }
 
 axum = { version = "0.7", optional = true }
-bytes = { version = "1", optional = true }
 clap = { version = "4", features = ["derive", "env"], optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
 tower-http = { version = "0.5", features = ["cors", "trace"], optional = true }
 async-stream = { version = "0.3", optional = true }
 jsonwebtoken = { version = "9", optional = true }
-base64 = { version = "0.22", optional = true }
 
-reqwest = { version = "0.12", features = ["json", "stream"], optional = true }
-thiserror = { version = "1", optional = true }
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+opfs-btree = { path = "../jazz2-upstream/crates/opfs-btree", version = "0.1.0" }
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json", "stream"] }
@@ -83,3 +96,18 @@ serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 futures = "0.3"
 tokio = { version = "1", features = ["test-util", "full"] }
+
+[[test]]
+name = "auth_test"
+path = "tests/auth_test.rs"
+required-features = ["cli"]
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
+required-features = ["cli"]
+
+[[test]]
+name = "peer_transport_codec"
+path = "tests/peer_transport_codec.rs"
+required-features = ["client-p2p"]

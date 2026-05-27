@@ -9,7 +9,9 @@
 //! Storage instance. Cross-thread communication uses the sync protocol over
 //! postMessage, not shared mutable state.
 
+#[cfg(target_arch = "wasm32")]
 mod opfs_btree;
+#[cfg(target_arch = "wasm32")]
 pub use opfs_btree::OpfsBTreeStorage;
 #[cfg(all(feature = "surrealkv", not(target_arch = "wasm32")))]
 mod surrealkv;
