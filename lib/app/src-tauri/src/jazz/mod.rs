@@ -1094,7 +1094,8 @@ async fn jazz_shell_ready(
 	let arc = std::sync::Arc::new(hydrated);
 	let mut slot = mj.shell.lock().await;
 	*slot = Some(std::sync::Arc::clone(&arc));
-	let snap = peer_sync_gate::load_acl_snapshot(&arc.vault)?;
+	let object_spark_ids = jazz_engine::build_object_spark_id_map(client.as_ref()).await?;
+	let snap = peer_sync_gate::load_acl_snapshot(&arc.vault, object_spark_ids)?;
 	*mj.sync_acl.write().expect("sync_acl poisoned") = Some(snap);
 	// One catch-up rebroadcast per conn epoch — not on every vault-table invalidation reload.
 	let first_acl_catchup = !mj.mesh_acl_rebroadcast_done.swap(true, Ordering::AcqRel);

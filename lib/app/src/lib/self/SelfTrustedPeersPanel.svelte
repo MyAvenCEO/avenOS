@@ -18,7 +18,7 @@
 	import { deviceSession } from '$lib/self/device-session-store'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { pairingLabelForSession } from '$lib/self/active-vault-ui'
-	import { peerPersonName } from '$lib/peer/display-label'
+	import { peerPersonName, shortPeerDid } from '$lib/peer/display-label'
 	import PeerMeshPhaseBadge from '$lib/peer/PeerMeshPhaseBadge.svelte'
 	import { meshPeerPhase, peerMeshDetailSubLabel, peerMeshDetailSubTitle, peerMeshPhaseLabel } from '$lib/peer/mesh-state'
 	import type { PeerRowReply } from '$lib/peer/api'
@@ -606,9 +606,11 @@
 										</p>
 									{:else if r.peerDid}
 										<div
-											class="text-muted-foreground/65 hidden font-mono text-[11px] break-all sm:block"
+											class="text-muted-foreground/65 mt-0.5 font-mono text-[11px] break-all"
+											title={r.peerDid}
 										>
-											{r.peerDid}
+											<span class="sm:hidden">{shortPeerDid(r.peerDid)}</span>
+											<span class="hidden sm:inline">{r.peerDid}</span>
 										</div>
 									{/if}
 								{/if}

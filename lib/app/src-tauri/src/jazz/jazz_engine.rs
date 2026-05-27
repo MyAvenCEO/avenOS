@@ -331,6 +331,25 @@ pub(crate) async fn exec_list_rows(
 	client.query(q, None).await.map_err(super::format_jazz_err)
 }
 
+const SPARK_SCOPED_TABLES: &[&str] = &["sparks", "keyshares", "todos", "messages", "files"];
+
+/// Map Groove `(table, object_id)` → spark UUID for sync ACL on patch commits.
+pub(super) async fn build_object_spark_id_map(
+	client: &JazzClient,
+) -> Result<HashMap<(String, ObjectId), Uuid>, String> {
+	let mut out = HashMap::new();
+	for table in SPARK_SCOPED_TABLES {
+		let schema = resolved_table_schema(client, table).await?;
+		let spark_ix = col_ix(&schema, "spark_id")?;
+		for (oid, vals) in exec_list_rows(client, table).await? {
+			if let Ok(sid) = uuid_cell_at(vals.as_slice(), spark_ix) {
+				out.insert(((*table).to_string(), oid), sid);
+			}
+		}
+	}
+	Ok(out)
+}
+
 pub(super) async fn query_table_publish(
 	client: &JazzClient,
 	state: &ShellState,
