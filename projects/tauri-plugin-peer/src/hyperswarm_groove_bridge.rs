@@ -3,6 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use groove::sync_manager::{ClientId, InboxEntry, Source, SyncPayload};
@@ -28,6 +29,9 @@ pub enum GrooveLinkLifecycle {
 }
 
 type LinkLifecycleHook = Arc<dyn Fn(GrooveLinkLifecycle) + Send + Sync>;
+
+/// Tear down a half-dead mux when the peer reconnects or the read side goes idle.
+const LINK_READ_IDLE_TIMEOUT: Duration = Duration::from_secs(75);
 
 #[must_use]
 fn groove_client_uuid_from_pubkey(pubkey: &[u8; 32]) -> Uuid {
@@ -188,12 +192,23 @@ impl HyperswarmGrooveBridge {
 		let reader_handle = tokio::spawn({
 			let shutdown = Arc::clone(&shutdown);
 			async move {
+				let mut idle = tokio::time::interval(LINK_READ_IDLE_TIMEOUT);
+				idle.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+				idle.tick().await;
 				loop {
 					tokio::select! {
 						_ = shutdown.notified() => break,
+						_ = idle.tick() => {
+							log::info!(
+								target: "avenos::peeroxide",
+								"peer stream idle timeout peer={remote_client:?} — closing stale link",
+							);
+							break;
+						}
 						msg = reader.read() => {
 							match msg {
 								Ok(Some(plaintext)) => {
+									idle.reset();
 									match decode_length_prefixed(&plaintext) {
 										Ok((decoded_target, payload)) => {
 											if decoded_target != local_party_id {
@@ -261,29 +276,8 @@ impl HyperswarmGrooveBridge {
 		let _ = tokio::join!(reader_handle, writer_handle);
 
 		bridge
-			.0
-			.outbound_by_peer
-			.lock()
-			.await
-			.remove(&remote_client);
-		{
-			let mut peers = bridge.0.active_remote_clients.lock().await;
-			peers.remove(&remote_client);
-		}
-		{
-			let mut m = bridge.0.client_id_to_did.write().expect("cid map poisoned");
-			m.remove(&remote_client);
-		}
-		bridge.0.peer_set_changed.notify_waiters();
-		if let Some(tracker) = bridge.0.connect_ui_tracker.lock().await.as_ref() {
-			tracker.note_disconnected_pk(&remote_pk);
-		}
-		bridge.notify_link_lifecycle(GrooveLinkLifecycle::Down(remote_pk));
-		log::debug!(
-			target: "avenos::peeroxide",
-			"groove_p2p link closed peer={:?}",
-			remote_client
-		);
+			.cleanup_remote_link_state(remote_client, remote_pk, "link_down")
+			.await;
 	}
 
 	pub async fn on_swarm_connection(&self, conn: SwarmConnection) {
@@ -317,31 +311,20 @@ impl HyperswarmGrooveBridge {
 						.and_then(|d| t.row_for_did(&d).transport_mode)
 				});
 
-			if let (Some(new_m), Some(old_m)) = (new_mode, existing_mode) {
-				if crate::transport_rank::is_better(new_m, old_m) {
-					log::info!(
-						target: "avenos::peeroxide",
-						"peer_heal: upgrade {:?} {:?} -> {:?}",
-						remote_client,
-						old_m,
-						new_m,
-					);
-					self.abort_worker_for(remote_client).await;
-					self.0.outbound_by_peer.lock().await.remove(&remote_client);
-				} else {
-					log::debug!(
-						target: "avenos::peeroxide",
-						"groove_p2p duplicate swarm link for {:?} — keeping existing",
-						remote_client,
-					);
-					drop(conn);
-					self.notify_link_lifecycle(GrooveLinkLifecycle::Up(remote_pk));
-					return;
-				}
+			if crate::transport_rank::should_replace_link(new_mode, existing_mode) {
+				log::info!(
+					target: "avenos::peeroxide",
+					"peer_heal: replace stale link {:?} {:?} -> {:?}",
+					remote_client,
+					existing_mode,
+					new_mode,
+				);
+				self.teardown_remote_link(remote_client, remote_pk, "stale_replaced")
+					.await;
 			} else {
 				log::debug!(
 					target: "avenos::peeroxide",
-					"groove_p2p duplicate swarm link for {:?} — keeping existing",
+					"groove_p2p duplicate swarm link for {:?} — keeping existing (downgrade rejected)",
 					remote_client,
 				);
 				drop(conn);
@@ -407,6 +390,41 @@ impl HyperswarmGrooveBridge {
 			h.abort();
 			let _ = h.await;
 		}
+	}
+
+	/// Synchronously drop bridge bookkeeping for a remote peer (worker may already be gone).
+	async fn teardown_remote_link(
+		&self,
+		remote_client: ClientId,
+		remote_pk: [u8; 32],
+		reason: &str,
+	) {
+		self.abort_worker_for(remote_client).await;
+		self.cleanup_remote_link_state(remote_client, remote_pk, reason)
+			.await;
+	}
+
+	async fn cleanup_remote_link_state(
+		&self,
+		remote_client: ClientId,
+		remote_pk: [u8; 32],
+		reason: &str,
+	) {
+		self.0.swarm_workers.lock().await.remove(&remote_client);
+		self.0.outbound_by_peer.lock().await.remove(&remote_client);
+		{
+			let mut peers = self.0.active_remote_clients.lock().await;
+			peers.remove(&remote_client);
+		}
+		self.0.peer_set_changed.notify_waiters();
+		if let Some(tracker) = self.0.connect_ui_tracker.lock().await.as_ref() {
+			tracker.note_disconnected_pk_with_reason(&remote_pk, reason);
+		}
+		self.notify_link_lifecycle(GrooveLinkLifecycle::Down(remote_pk));
+		log::info!(
+			target: "avenos::peeroxide",
+			"groove_p2p link torn down peer={remote_client:?} reason={reason}",
+		);
 	}
 }
 

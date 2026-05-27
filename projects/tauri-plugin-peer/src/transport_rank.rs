@@ -17,6 +17,18 @@ pub fn is_better(a: PeerTransportMode, b: PeerTransportMode) -> bool {
 	transport_rank(a) < transport_rank(b)
 }
 
+/// Prefer a fresh inbound link unless it is a strict transport downgrade.
+#[must_use]
+pub fn should_replace_link(
+	new_mode: Option<PeerTransportMode>,
+	existing_mode: Option<PeerTransportMode>,
+) -> bool {
+	match (new_mode, existing_mode) {
+		(Some(new_m), Some(old_m)) => is_better(new_m, old_m) || new_m == old_m,
+		_ => true,
+	}
+}
+
 #[must_use]
 pub fn map_dht_mode(mode: peeroxide_dht::connect_ui::ConnectTransportMode) -> PeerTransportMode {
 	match mode {

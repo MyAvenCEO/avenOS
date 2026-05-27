@@ -311,6 +311,15 @@ impl PeerCatchupHandle {
 		self.enqueue(Msg::RequestWork).await;
 	}
 
+	/// Re-push sparks/keyshares after grant even when DB already reflects the admin.
+	pub(crate) async fn on_spark_access_granted(&self) {
+		{
+			let mut g = self.reg.lock().await;
+			g.requeue_all_live_allowlisted_pending_after_acl();
+		}
+		self.enqueue(Msg::RequestWork).await;
+	}
+
 	pub(crate) async fn mesh_catchup_ui_snapshot(&self) -> PeerMeshCatchupSnap {
 		let g = self.reg.lock().await;
 		PeerMeshCatchupSnap {
@@ -413,6 +422,12 @@ async fn process_until_idle(reg: &Arc<Mutex<Registry>>, app: &AppHandle, rx: &mu
 						g.acl_bootstrap_pending = false;
 						g.acl_reset_fail_round();
 						g.requeue_all_live_allowlisted_pending_after_acl();
+						drop(g);
+						let actor = app.state::<crate::jazz::runtime::GrooveActorHandle>();
+						let mut vault_tables = std::collections::HashSet::new();
+						vault_tables.insert("sparks".to_string());
+						vault_tables.insert("keyshares".to_string());
+						let _ = actor.enqueue_drain(vault_tables).await;
 					}
 					Err(e) => {
 						log::warn!(
@@ -464,6 +479,14 @@ async fn process_until_idle(reg: &Arc<Mutex<Registry>>, app: &AppHandle, rx: &mu
 							batch,
 							peers
 						);
+						drop(g);
+						// Peer may have received sparks/keyshares during catch-up — re-hydrate
+						// vault ACL and push table snapshots to any open UI subscribers.
+						let actor = app.state::<crate::jazz::runtime::GrooveActorHandle>();
+						let mut vault_tables = std::collections::HashSet::new();
+						vault_tables.insert("sparks".to_string());
+						vault_tables.insert("keyshares".to_string());
+						let _ = actor.enqueue_drain(vault_tables).await;
 					}
 					Err(e) => {
 						let delay = {

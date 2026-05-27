@@ -174,10 +174,14 @@ pub fn ingest_genesis_row(
 	Ok(())
 }
 
+fn peer_did_matches(a: &str, b: &str) -> bool {
+	a.trim() == b.trim()
+}
+
 pub fn spark_peer_is_owner(chain: &Biscuit, spark_id: Uuid, peer_did: &str) -> Result<bool, String> {
 	let spark_str = spark_urn_for(spark_id);
 	let admins = trusted_subject_dids(chain, &spark_str)?;
-	Ok(admins.contains(peer_did))
+	Ok(admins.iter().any(|a| peer_did_matches(a, peer_did)))
 }
 
 /// All admin (`owns`) DIDs for a spark per the biscuit chain.
@@ -239,7 +243,7 @@ pub fn authorize(
 	};
 
 	let admins = trusted_subject_dids(&chain.biscuit, &spark_str)?;
-	if !admins.contains(subject_did) {
+	if !admins.iter().any(|a| peer_did_matches(a, subject_did)) {
 		return Err("spark_acc:subject_not_owner".into());
 	}
 

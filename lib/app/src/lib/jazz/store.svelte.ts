@@ -87,9 +87,10 @@ function createTablePool<TName extends keyof SchemaTables>(table: TName): Intern
 			loaded = true
 			unlisten = u
 			void api.list().then((snap) => {
-				if (!alive || snap.length === 0) return
+				if (!alive) return
 				const incoming = snap as Row[]
-				if (rows.length === 0 && !rowsEqual(rows, incoming)) rows = incoming
+				if (!rowsEqual(rows, incoming)) rows = incoming
+				loaded = true
 			})
 		} catch (e) {
 			if (!alive) return

@@ -1431,8 +1431,13 @@ impl SwarmActor {
         }
 
         if self.connections.has(&remote_pk) {
-            tracing::debug!(pk = %short_hex(&remote_pk), "server: already connected");
-            return;
+            // Peer restarted or path changed — accept the fresh inbound handshake instead of
+            // keeping a half-dead slot that blocks reconnect on the other device.
+            tracing::info!(
+                pk = %short_hex(&remote_pk),
+                "server: inbound reconnect — clearing stale connection slot",
+            );
+            self.connections.remove(&remote_pk);
         }
 
         if relayed_via.is_some() {

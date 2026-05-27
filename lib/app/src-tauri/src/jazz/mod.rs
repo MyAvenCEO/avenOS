@@ -1379,6 +1379,11 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 		crate::spark_acc::spark_peer_is_owner(&bisc_spark.biscuit, spark_uuid, &peer_did)?;
 
 	if already_owner && ks_exists {
+		jazz.invalidate_vault_shell();
+		let _shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+		flush_spark_grant_to_peers(app, client.as_ref(), spark_uuid).await;
+		let _ = jazz.change_tx.send("sparks".to_string());
+		let _ = jazz.change_tx.send("keyshares".to_string());
 		return Ok(());
 	}
 
@@ -1457,28 +1462,51 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 	jazz.invalidate_vault_shell();
 	let _shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
 
-	#[cfg(any(target_os = "macos", target_os = "ios"))]
-	{
-		use tauri_plugin_peer::HyperswarmGrooveBridge;
-		let bridge = app.state::<HyperswarmGrooveBridge>();
-		if !bridge.snapshot_remote_clients().await.is_empty() {
-			match client.rebroadcast_all_peer_clients_and_flush().await {
-				Ok(()) => log::info!(
-					target: "avenos::jazz",
-					"spark_admin_add: ACL catch-up flushed to peer(s) for spark {spark_uuid}",
-				),
-				Err(e) => log::warn!(
-					target: "avenos::jazz",
-					"spark_admin_add: peer catch-up flush failed: {e}",
-				),
-			}
-		}
-	}
+	flush_spark_grant_to_peers(app, client.as_ref(), spark_uuid).await;
 
 	let _ = jazz.change_tx.send("sparks".to_string());
 	let _ = jazz.change_tx.send("keyshares".to_string());
 
 	Ok(())
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+async fn flush_spark_grant_to_peers(
+	app: &tauri::AppHandle,
+	client: &JazzClient,
+	spark_uuid: uuid::Uuid,
+) {
+	use tauri_plugin_peer::HyperswarmGrooveBridge;
+
+	let h = app.state::<crate::peer_catchup::PeerCatchupHandle>();
+	h.on_spark_access_granted().await;
+
+	let bridge = app.state::<HyperswarmGrooveBridge>();
+	if bridge.snapshot_remote_clients().await.is_empty() {
+		log::info!(
+			target: "avenos::jazz",
+			"spark_admin_add: grant saved for spark {spark_uuid}; catch-up queued for next live link",
+		);
+		return;
+	}
+	match client.rebroadcast_all_peer_clients_and_flush().await {
+		Ok(()) => log::info!(
+			target: "avenos::jazz",
+			"spark_admin_add: ACL catch-up flushed to peer(s) for spark {spark_uuid}",
+		),
+		Err(e) => log::warn!(
+			target: "avenos::jazz",
+			"spark_admin_add: peer catch-up flush failed: {e}",
+		),
+	}
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+async fn flush_spark_grant_to_peers(
+	_app: &tauri::AppHandle,
+	_client: &JazzClient,
+	_spark_uuid: uuid::Uuid,
+) {
 }
 
 #[derive(Clone, serde::Serialize)]
