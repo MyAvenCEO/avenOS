@@ -67,12 +67,14 @@ async function fileToBase64(file: File): Promise<string> {
 }
 
 /**
- * Persist composer attachments to Groove `files` table (Tauri + unlocked only).
- * `spark_id` is injected by the shell if omitted.
+ * Persist attachments to Groove `files` table (Tauri + unlocked only).
+ * `parentId` is stored in `intent_id` (intent row id from composer, or message id from talk).
+ * Pass `sparkId` when the file belongs to a non-default spark (e.g. talk threads).
  */
-export async function persistIntentFiles(
-	intentId: string,
+export async function persistSparkFiles(
+	parentId: string,
 	files: File[],
+	options?: { sparkId?: string },
 ): Promise<{ stored: number; errors: string[] }> {
 	const errors: string[] = []
 	if (!browser || !isTauriRuntime()) {
@@ -94,6 +96,7 @@ export async function persistIntentFiles(
 
 	const api = jazzTable('files')
 	const now = Date.now()
+	const sparkId = options?.sparkId?.trim()
 
 	for (const file of files) {
 		const classified = classifyIntentUploadFile(file)
@@ -104,7 +107,8 @@ export async function persistIntentFiles(
 		try {
 			const content_b64 = await fileToBase64(file)
 			await api.create({
-				intent_id: intentId,
+				...(sparkId ? { spark_id: sparkId } : {}),
+				intent_id: parentId,
 				filename: file.name,
 				mime_type: classified.mime,
 				size_bytes: file.size,
@@ -118,4 +122,15 @@ export async function persistIntentFiles(
 	}
 
 	return { stored, errors }
+}
+
+/**
+ * Persist composer attachments to Groove `files` table (Tauri + unlocked only).
+ * `spark_id` is injected by the shell if omitted.
+ */
+export async function persistIntentFiles(
+	intentId: string,
+	files: File[],
+): Promise<{ stored: number; errors: string[] }> {
+	return persistSparkFiles(intentId, files)
 }

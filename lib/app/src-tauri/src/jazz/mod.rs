@@ -842,6 +842,9 @@ async fn emit_mesh_snapshot_from_rows(
 				pairing_topic_hex: None,
 				relay_https_probe: None,
 				dht_bootstrap_closest_seen: None,
+				last_path_change_at_ms: None,
+				last_foreground_heal_at_ms: None,
+				heal_in_progress: false,
 			},
 			peers: vec![],
 		}
@@ -1956,6 +1959,7 @@ pub(crate) async fn refresh_peer_mesh_groove_register_primitives(
 		allow_live.insert(*p);
 
 		let mut registered = jazz.mesh_groove_registered.lock().await;
+		// Same ClientId (pubkey-derived) after transport upgrade — skip re-register / catch-up reset.
 		if !registered.contains(p) {
 			match client.register_peer_sync_client(*p) {
 				Ok(()) => {
@@ -2053,6 +2057,9 @@ pub(crate) async fn execute_mesh_snapshot(
 				pairing_topic_hex: None,
 				relay_https_probe: None,
 				dht_bootstrap_closest_seen: None,
+				last_path_change_at_ms: None,
+				last_foreground_heal_at_ms: None,
+				heal_in_progress: false,
 			},
 			peers: vec![],
 		})
@@ -2160,6 +2167,10 @@ pub(crate) async fn execute_mesh_reconcile(
 
 	if !allow.is_empty() {
 		peer_ctl.nudge_allowlisted_discovery(&allow).await?;
+	}
+
+	if let Err(e) = peer_ctl.maybe_probe_transport_upgrades().await {
+		log::debug!(target: "avenos::jazz", "transport upgrade probe: {e}");
 	}
 
 	let _ = refresh_peer_mesh_groove_register_primitives(app, jazz, client, &allow, false).await?;

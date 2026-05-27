@@ -11,6 +11,9 @@ export type P2pDiagnostics = {
 	pairingSessionActive?: boolean
 	/** Lowercase hex of the active short-lived pair topic (matches across host + acceptor). */
 	pairingTopicHex?: string | null
+	lastPathChangeAtMs?: number | null
+	lastForegroundHealAtMs?: number | null
+	healInProgress?: boolean
 }
 
 export type PeerConnectSubstate =
@@ -30,6 +33,10 @@ export type PeerMeshPeerState = {
 	phase: PeerMeshPhase
 	connectSubstate?: PeerConnectSubstate | null
 	transportMode?: PeerTransportMode | null
+	reconnectAttempt?: number | null
+	lastDisconnectAtMs?: number | null
+	lastDisconnectReason?: string | null
+	desiredTransport?: PeerTransportMode | null
 }
 
 /** Single source of truth for P2P mesh UI (header + Self → Peers). */
@@ -246,11 +253,23 @@ export function peerMeshDetailSubLabel(
 ): string | null {
 	const row = meshPeerByDid(status, peerDid)
 	if (!row) return null
-	if (phase === 'searching' && row.connectSubstate) {
-		return peerConnectSubstateLabel(row.connectSubstate)
+	if (phase === 'searching') {
+		if (row.connectSubstate) {
+			return peerConnectSubstateLabel(row.connectSubstate)
+		}
+		if (row.reconnectAttempt && row.reconnectAttempt > 0) {
+			const reason = row.lastDisconnectReason
+				? row.lastDisconnectReason.replace(/_/g, ' ')
+				: 'reconnecting'
+			return `Retry ${row.reconnectAttempt} (${reason})`
+		}
 	}
 	if ((phase === 'syncing' || phase === 'ready') && row.transportMode) {
-		return peerTransportModeLabel(row.transportMode)
+		const label = peerTransportModeLabel(row.transportMode)
+		if (row.desiredTransport && row.desiredTransport !== row.transportMode) {
+			return `${label} → ${peerTransportModeLabel(row.desiredTransport)}`
+		}
+		return label
 	}
 	return null
 }

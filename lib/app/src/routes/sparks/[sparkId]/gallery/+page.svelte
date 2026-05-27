@@ -7,6 +7,7 @@
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/self/device-session-store'
 	import GalleryPdfThumb from '$lib/gallery/GalleryPdfThumb.svelte'
+	import { formatBytes, imageDataUrl } from '$lib/gallery/file-preview'
 
 	const sparkParam = $derived(String((page.params as { sparkId?: string }).sparkId ?? ''))
 	const decodedSparkId = $derived(decodeURIComponent(sparkParam))
@@ -33,24 +34,6 @@
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
 
-	function isPreviewableImage(mime: string): boolean {
-		const m = mime.trim().toLowerCase()
-		return m === 'image/svg+xml' || m.startsWith('image/')
-	}
-
-	function imageDataUrl(row: FilesRow): string | null {
-		if (!isPreviewableImage(row.mime_type)) return null
-		const b64 = row.content_b64?.trim()
-		if (!b64) return null
-		return `data:${row.mime_type};base64,${b64}`
-	}
-
-	function formatBytes(n: number): string {
-		if (n < 1024) return `${n} B`
-		if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-		return `${(n / (1024 * 1024)).toFixed(1)} MB`
-	}
-
 	let brokenIds = $state<Set<string>>(new Set())
 
 	function markBroken(id: string): void {
@@ -66,7 +49,7 @@
 	<header class="space-y-1">
 		<h1 class="text-xl font-semibold tracking-tight">Gallery</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
-			Files attached to intents in this spark (from the home composer). Images and PDFs show a thumbnail (first
+			Files attached to intents or talk messages in this spark. Images and PDFs show a thumbnail (first
 			page for PDFs).
 		</p>
 	</header>
@@ -101,7 +84,7 @@
 				<p class="text-muted-foreground text-sm">Loading files…</p>
 			{:else if rows.length === 0}
 				<p class="text-muted-foreground rounded-xl border border-border/60 px-4 py-8 text-center text-sm">
-					No files for this spark yet. Attach a PDF or image on the home screen, then submit an intent.
+					No files for this spark yet. Attach a PDF or image from Intents or Talk.
 				</p>
 			{:else}
 				<ul

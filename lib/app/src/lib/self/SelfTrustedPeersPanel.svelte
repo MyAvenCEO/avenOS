@@ -139,12 +139,12 @@
 		if (hostWaiting) {
 			return {
 				title: '',
-				detail: 'Waiting for the other device — usually about 1–3 minutes.',
+				detail: 'Waiting for the other device — usually up to a minute.',
 			}
 		}
 		return {
 			title: 'Connecting to the other device…',
-			detail: 'Usually about 1–3 minutes on the open internet.',
+			detail: 'Usually up to a minute on the open internet.',
 		}
 	}
 
@@ -562,7 +562,7 @@
 								: peerMeshPhaseLabel(rowPhase)}
 						/>
 						<div
-							class="flex min-w-0 flex-1 flex-col gap-1.5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+							class="flex min-w-0 flex-1 flex-row items-start justify-between gap-2 px-3 py-2.5"
 						>
 							<div class="min-w-0 flex-1">
 								{#if r.placeholder && r.pairingCode}
@@ -605,7 +605,9 @@
 											{r.pairingDetail}
 										</p>
 									{:else if r.peerDid}
-										<div class="text-muted-foreground/65 font-mono text-[11px] break-all">
+										<div
+											class="text-muted-foreground/65 hidden font-mono text-[11px] break-all sm:block"
+										>
 											{r.peerDid}
 										</div>
 									{/if}
@@ -614,7 +616,7 @@
 							{#if r.placeholder && r.pairingCode}
 								<button
 									type="button"
-									class="text-muted-foreground border-border hover:bg-destructive/8 hover:border-destructive/45 hover:text-destructive shrink-0 self-center rounded-full border px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors"
+									class="text-muted-foreground border-border hover:bg-destructive/8 hover:border-destructive/45 hover:text-destructive shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors"
 									disabled={actionBusy}
 									aria-label="Cancel outgoing invite"
 									onclick={() => void cancelInvite()}
@@ -624,8 +626,9 @@
 							{:else if r.status === 'active' && !r.placeholder}
 								<button
 									type="button"
-									class="text-destructive border-destructive/40 hover:bg-destructive/10 shrink-0 rounded-md border px-3 py-1 text-xs"
+									class="text-destructive border-destructive/40 hover:bg-destructive/10 shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold whitespace-nowrap"
 									disabled={actionBusy}
+									title="Remove this peer — stops sync until you pair again"
 									onclick={() => void revoke(r.peerDid)}
 								>
 									Remove

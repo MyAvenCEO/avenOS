@@ -2,6 +2,8 @@
 	import { page } from '$app/state'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import SlideAsideLayout from '$lib/ui/SlideAsideLayout.svelte'
+	import MobileAsideNavLink from '$lib/ui/MobileAsideNavLink.svelte'
+	import MobileAsideSectionLabel from '$lib/ui/MobileAsideSectionLabel.svelte'
 	import { navigateApp } from '$lib/shell'
 
 	let { children: pageOutlet } = $props()
@@ -71,7 +73,6 @@
 <SlideAsideLayout
 	bind:open={asideOpen}
 	asideLabel="Spark views"
-	asideWidthClass="w-[min(85vw,12rem)] max-w-[12rem]"
 	desktopGridClass="md:grid-cols-[12rem_minmax(0,1fr)]"
 	class="min-h-0 flex-1"
 	{mainClass}
@@ -109,17 +110,13 @@
 			</a>
 		</div>
 
-		<nav class="flex flex-col gap-0.5">
-			<p class="text-muted-foreground mb-1 px-2 text-[9px] font-bold tracking-[0.2em] uppercase">View</p>
+		<nav class="flex flex-col gap-1 md:gap-0.5">
+			<MobileAsideSectionLabel class="px-0 md:px-2">View</MobileAsideSectionLabel>
 			{#each viewTabs as tab (tab.href)}
 				{@const active = tab.match(path)}
-				<a
+				<MobileAsideNavLink
 					href={tab.href}
-					data-sveltekit-preload-data="hover"
-					class="rounded-md px-3 py-1.5 text-[13px] transition-colors
-						{active
-						? 'bg-accent/15 text-foreground font-medium'
-						: 'text-muted-foreground hover:bg-accent/10 hover:text-foreground'}"
+					active={active}
 					aria-current={active ? 'page' : undefined}
 					onclick={(e) => {
 						closeAsideOnNav()
@@ -127,7 +124,7 @@
 					}}
 				>
 					{tab.label}
-				</a>
+				</MobileAsideNavLink>
 			{/each}
 		</nav>
 	{/snippet}

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import SlideAsideLayout from '$lib/ui/SlideAsideLayout.svelte'
+	import MobileAsideNavLink from '$lib/ui/MobileAsideNavLink.svelte'
+	import MobileAsideSectionLabel from '$lib/ui/MobileAsideSectionLabel.svelte'
 	import { browser } from '$app/environment'
 	import {
 		jazzExplorerList,
@@ -237,21 +239,16 @@
 			<SlideAsideLayout
 				bind:open={tablesAsideOpen}
 				asideLabel="Table names"
-				asideWidthClass="w-[min(85vw,13rem)] max-w-[13rem]"
 				desktopGridClass="md:grid-cols-[13rem_minmax(0,1fr)]"
 				class="min-h-0 flex-1"
 			>
 				{#snippet aside()}
-					<p class="text-muted-foreground mb-1 px-1 text-[10px] font-bold uppercase tracking-wider">
-						Tables
-					</p>
-					<div class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto py-1">
+					<MobileAsideSectionLabel class="px-0 md:px-1">Tables</MobileAsideSectionLabel>
+					<div class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto py-1 md:justify-start">
 						{#each tables as t (t)}
-							<button
-								type="button"
-								class="rounded-md px-2 py-2 text-left text-xs font-medium transition-colors {selectedTable === t
-									? 'bg-muted text-foreground'
-									: 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}"
+							<MobileAsideNavLink
+								active={selectedTable === t}
+								class="font-mono md:text-xs md:font-medium"
 								aria-current={selectedTable === t ? 'page' : undefined}
 								onclick={() => {
 									selectedTable = t
@@ -259,10 +256,10 @@
 								}}
 							>
 								{t}
-							</button>
+							</MobileAsideNavLink>
 						{:else}
 							{#if !bootstrapErr}
-								<p class="text-muted-foreground px-2 py-4 text-xs">No tables loaded.</p>
+								<p class="text-muted-foreground px-2 py-4 text-sm md:text-xs">No tables loaded.</p>
 							{/if}
 						{/each}
 					</div>

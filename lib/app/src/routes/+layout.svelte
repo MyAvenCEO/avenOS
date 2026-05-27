@@ -157,7 +157,7 @@ $effect(() => {
 <div class="box-border flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-background">
 	<LockGate />
 	{#if !shellLocked}
-		<header class="shrink-0 bg-background/90 px-3 pt-1.5 pb-1 backdrop-blur-sm sm:px-6 sm:pt-3 sm:pb-2">
+		<header class="shrink-0 bg-background/90 px-3 pt-[max(0.375rem,env(safe-area-inset-top))] pb-1 backdrop-blur-sm sm:px-6 sm:pt-3 sm:pb-2">
 			<div
 				class="mx-auto grid w-full max-w-[min(100%,88rem)] grid-cols-1 items-center gap-x-2 gap-y-2 sm:grid-cols-3"
 			>

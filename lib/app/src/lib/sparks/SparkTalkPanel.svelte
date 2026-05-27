@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
-	import type { MessagesRow } from '@avenos/jazz-schema'
+	import type { FilesRow, MessagesRow } from '@avenos/jazz-schema'
 	import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 	import type { ComposerMode } from '$lib/intents/types'
+	import { persistSparkFiles } from '$lib/jazz/intent-files'
 	import { jazzSession, type JazzSessionReply } from '$lib/jazz/api'
 	import { jazzStore } from '$lib/jazz/store.svelte'
+	import SparkMessageAttachments from '$lib/sparks/SparkMessageAttachments.svelte'
 	import { pairingLabelForSession } from '$lib/self/active-vault-ui'
 	import { peerDisplayLabel } from '$lib/peer/display-label'
 	import { peerRows } from '$lib/peer/peer-mesh-store'
@@ -34,6 +36,7 @@
 
 	const sparksStore = jazzStore('sparks')
 	const messages = jazzStore('messages')
+	const filesStore = jazzStore('files')
 
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
@@ -56,6 +59,22 @@
 			.filter((m) => idsMatch(m.spark_id, canonicalSparkId))
 			.sort((a, b) => a.created_at_ms - b.created_at_ms),
 	)
+
+	const filesByMessageId = $derived.by(() => {
+		const map = new Map<string, FilesRow[]>()
+		for (const row of filesStore.rows) {
+			if (!idsMatch(row.spark_id, canonicalSparkId)) continue
+			const parentId = row.intent_id?.trim()
+			if (!parentId) continue
+			const list = map.get(parentId) ?? []
+			list.push(row)
+			map.set(parentId, list)
+		}
+		for (const list of map.values()) {
+			list.sort((a, b) => a.created_at_ms - b.created_at_ms)
+		}
+		return map
+	})
 
 	const peersByDid = $derived(
 		new Map(peersAllow.map((p) => [p.peerDid.trim().toLowerCase(), p] as const)),
@@ -137,19 +156,33 @@
 		return () => clearMobileChromeOverrides()
 	})
 
-	async function handleComposerSubmit(message: string, _files: File[]): Promise<void> {
+	async function handleComposerSubmit(message: string, files: File[]): Promise<void> {
 		const body = message.trim()
 		const did = session?.peerDid?.trim()
-		if (!body || !did || !tauri || !unlocked || !canonicalSparkId || sendBusy) return
+		if ((!body && files.length === 0) || !did || !tauri || !unlocked || !canonicalSparkId || sendBusy) {
+			return
+		}
 		sendBusy = true
 		err = undefined
 		try {
-			await messages.create({
+			const row = await messages.create({
 				spark_id: canonicalSparkId,
 				created_at_ms: Date.now(),
 				author_did: did,
-				body
+				body,
 			})
+			if (files.length > 0) {
+				const { stored, errors } = await persistSparkFiles(row.id, files, {
+					sparkId: canonicalSparkId,
+				})
+				if (errors.length > 0) {
+					const suffix =
+						stored > 0
+							? `Message sent; ${stored} file(s) saved. ${errors.join('; ')}`
+							: `Message sent but files failed: ${errors.join('; ')}`
+					err = suffix
+				}
+			}
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {
@@ -198,6 +231,7 @@
 				{:else}
 					{#each thread as msg (msg.id)}
 						{@const own = isOwnMessage(msg)}
+						{@const attachments = filesByMessageId.get(msg.id) ?? []}
 						<article
 							class="flex flex-col gap-0.5 {own ? 'items-end' : 'items-start'}"
 							aria-label="{authorLabel(msg.author_did)} at {formatTime(msg.created_at_ms)}"
@@ -208,14 +242,21 @@
 									{formatTime(msg.created_at_ms)}
 								</time>
 							</div>
-							<p
-								class="max-w-[min(100%,36rem)] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words
+							<div
+								class="flex max-w-[min(100%,36rem)] flex-col gap-2 rounded-2xl px-3 py-2
 									{own
 									? 'bg-primary text-primary-foreground rounded-br-md'
 									: 'bg-muted text-foreground rounded-bl-md'}"
 							>
-								{msg.body}
-							</p>
+								{#if msg.body.trim()}
+									<p class="text-sm leading-relaxed whitespace-pre-wrap break-words">
+										{msg.body}
+									</p>
+								{/if}
+								{#if attachments.length > 0}
+									<SparkMessageAttachments files={attachments} inverted={own} />
+								{/if}
+							</div>
 						</article>
 					{/each}
 				{/if}
@@ -231,7 +272,8 @@
 						placeholder="Write a message…"
 						disabled={composerDisabled}
 						submitBusy={sendBusy}
-						enableAttachments={false}
+						enableAttachments={true}
+						embedAttachmentNamesInMessage={false}
 						onSubmitMessage={handleComposerSubmit}
 						onModeChange={(mode) => {
 							composerMode = mode

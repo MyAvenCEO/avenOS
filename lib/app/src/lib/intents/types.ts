@@ -93,7 +93,7 @@ export type ComposerMode = 'collapsed' | 'listening' | 'typing'
  * layout; `config` and `context` are always-on stubs that sit to the
  * right of the conditional Display/Error tab.
  */
-export type ActivityTab = 'activity' | 'display' | 'config' | 'context' | 'terminal'
+export type ActivityTab = 'activity' | 'display' | 'config' | 'context'
 
 /**
  * Nature-inspired status palette — colored 4px strokes on the card's outer

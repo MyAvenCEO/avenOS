@@ -5,6 +5,8 @@
 	import { provideSelfContext } from '$lib/self/self-context.svelte'
 	import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/self/vault'
 	import SlideAsideLayout from '$lib/ui/SlideAsideLayout.svelte'
+	import MobileAsideNavLink from '$lib/ui/MobileAsideNavLink.svelte'
+	import MobileAsideSectionLabel from '$lib/ui/MobileAsideSectionLabel.svelte'
 	import { navigateApp } from '$lib/shell'
 	import { selfNavSections } from '$lib/shell/self-nav'
 	import { browser } from '$app/environment'
@@ -72,23 +74,18 @@
 			{/if}
 		</div>
 
-		<nav class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+		<nav class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto md:gap-4">
 			{#each navSections as section (section.title)}
-				<div class="flex flex-col gap-0.5">
-					<p
-						class="text-muted-foreground/70 mb-1 px-3 text-[9px] font-bold tracking-[0.2em] uppercase"
-					>
+				<div class="flex flex-col gap-1 md:gap-0.5">
+					<MobileAsideSectionLabel class="px-0 md:px-3">
 						{section.title}
-					</p>
+					</MobileAsideSectionLabel>
 					{#each section.items as tab (tab.href)}
 						{@const active = tab.match(path)}
-						<a
+						<MobileAsideNavLink
 							href={tab.href}
-							data-sveltekit-preload-data="hover"
-							class="rounded-md px-3 py-1.5 text-[13px] transition-colors
-								{active
-								? 'bg-accent/15 text-foreground font-medium'
-								: 'text-muted-foreground/70 hover:bg-accent/10 hover:text-foreground'}"
+							active={active}
+							muted
 							aria-current={active ? 'page' : undefined}
 							onclick={(e) => {
 								closeAsideOnNav()
@@ -96,7 +93,7 @@
 							}}
 						>
 							{tab.label}
-						</a>
+						</MobileAsideNavLink>
 					{/each}
 				</div>
 			{/each}

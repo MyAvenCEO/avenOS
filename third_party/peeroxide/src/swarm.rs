@@ -368,6 +368,22 @@ impl SwarmHandle {
             .await
             .map_err(|_| SwarmError::Destroyed)
     }
+
+    /// Recompute DHT announce relay hints from current bootstrap/local relay and force refresh.
+    pub async fn refresh_announce_relays(&self) -> Result<(), SwarmError> {
+        self.cmd_tx
+            .send(SwarmCommand::RefreshAnnounceRelays)
+            .await
+            .map_err(|_| SwarmError::Destroyed)
+    }
+
+    /// Spawn a background outbound connect for an already-linked peer (transport upgrade probe).
+    pub async fn probe_transport_upgrade(&self, public_key: [u8; 32]) -> Result<(), SwarmError> {
+        self.cmd_tx
+            .send(SwarmCommand::ProbeTransportUpgrade { public_key })
+            .await
+            .map_err(|_| SwarmError::Destroyed)
+    }
 }
 
 // ── Internal types ───────────────────────────────────────────────────────────
@@ -397,6 +413,10 @@ enum SwarmCommand {
         public_key: [u8; 32],
     },
     PrepareReconnect,
+    RefreshAnnounceRelays,
+    ProbeTransportUpgrade {
+        public_key: [u8; 32],
+    },
 }
 
 #[allow(dead_code)] // Fields read during leave/unannounce (future)
@@ -405,6 +425,7 @@ struct TopicState {
     is_client: bool,
     fast_refresh: bool,
     cancel_tx: Option<oneshot::Sender<()>>,
+    force_refresh_tx: mpsc::UnboundedSender<()>,
     refreshed: bool,
 }
 
@@ -447,6 +468,10 @@ struct SwarmActor {
     active_connects: usize,
     flush_waiters: Vec<oneshot::Sender<Result<(), SwarmError>>>,
     connect_ui: Option<peeroxide_dht::connect_ui::ConnectUiHook>,
+    /// Shared relay list for DHT announces — refreshed on network path change.
+    announce_relay_addrs: Arc<std::sync::RwLock<Vec<Ipv4Peer>>>,
+    /// Peers with an in-flight transport upgrade probe (bypasses connection dedup).
+    upgrade_probes: std::collections::HashSet<[u8; 32]>,
 }
 
 struct ConnectAttemptResult {
@@ -502,6 +527,20 @@ pub async fn spawn(
 
     let announce_bootstrap_relays = ipv4_peers_from_dht_bootstraps(&bootstrap_lines);
 
+    let mut initial_relays = announce_bootstrap_relays.clone();
+    if initial_relays.len() > 3 {
+        initial_relays.truncate(3);
+    }
+    if !is_unroutable_relay_host(&local_relay_peer.host) && initial_relays.len() < 3 {
+        let dup = initial_relays
+            .iter()
+            .any(|a| a.host == local_relay_peer.host && a.port == local_relay_peer.port);
+        if !dup {
+            initial_relays.push(local_relay_peer.clone());
+        }
+    }
+    let announce_relay_addrs = Arc::new(std::sync::RwLock::new(initial_relays));
+
     let handle_dht = dht.clone();
     let handle_key_pair = key_pair.clone();
 
@@ -531,6 +570,8 @@ pub async fn spawn(
         active_connects: 0,
         flush_waiters: Vec::new(),
         connect_ui,
+        announce_relay_addrs,
+        upgrade_probes: std::collections::HashSet::new(),
     };
 
     // Keep the DHT runtime alive for the swarm's lifetime.
@@ -566,7 +607,7 @@ impl SwarmActor {
             tokio::select! {
                 cmd = cmd_rx.recv() => {
                     let Some(cmd) = cmd else { break };
-                    if self.handle_command(cmd) {
+                    if self.handle_command(cmd, &connect_result_tx) {
                         break;
                     }
                 }
@@ -604,7 +645,11 @@ impl SwarmActor {
     }
 
     /// Returns `true` when the actor should shut down.
-    fn handle_command(&mut self, cmd: SwarmCommand) -> bool {
+    fn handle_command(
+        &mut self,
+        cmd: SwarmCommand,
+        connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
+    ) -> bool {
         match cmd {
             SwarmCommand::Join {
                 topic,
@@ -649,6 +694,14 @@ impl SwarmActor {
             }
             SwarmCommand::PrepareReconnect => {
                 self.prepare_stale_reconnect();
+                false
+            }
+            SwarmCommand::RefreshAnnounceRelays => {
+                self.refresh_announce_relays();
+                false
+            }
+            SwarmCommand::ProbeTransportUpgrade { public_key } => {
+                self.probe_transport_upgrade(public_key, &connect_result_tx);
                 false
             }
         }
@@ -710,6 +763,80 @@ impl SwarmActor {
         self.topics.values().any(|t| t.fast_refresh)
     }
 
+    fn build_relay_addrs(&self) -> Vec<Ipv4Peer> {
+        let mut relay_addrs = self.config.announce_bootstrap_relays.clone();
+        if relay_addrs.len() > 3 {
+            relay_addrs.truncate(3);
+        }
+        if let Some(local) = &self.relay_address {
+            if !is_unroutable_relay_host(&local.host) {
+                let dup = relay_addrs
+                    .iter()
+                    .any(|a| a.host == local.host && a.port == local.port);
+                if !dup && relay_addrs.len() < 3 {
+                    relay_addrs.push(local.clone());
+                }
+            }
+        }
+        relay_addrs
+    }
+
+    fn refresh_announce_relays(&mut self) {
+        let addrs = self.build_relay_addrs();
+        if let Ok(mut guard) = self.announce_relay_addrs.write() {
+            *guard = addrs;
+        }
+        for state in self.topics.values() {
+            let _ = state.force_refresh_tx.send(());
+        }
+        tracing::debug!("announce relay addrs refreshed for {} topic(s)", self.topics.len());
+    }
+
+    fn probe_transport_upgrade(
+        &mut self,
+        pk: [u8; 32],
+        connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
+    ) {
+        if !self.connections.has(&pk) {
+            return;
+        }
+        if self.active_connects >= self.config.max_parallel {
+            return;
+        }
+        let relay_addrs = self
+            .peers
+            .get(&pk)
+            .map(|i| i.relay_addresses.clone())
+            .unwrap_or_default();
+        self.upgrade_probes.insert(pk);
+        self.active_connects += 1;
+        let dht = self.dht.clone();
+        let key_pair = self.key_pair.clone();
+        let result_tx = connect_result_tx.clone();
+        let rh = self.runtime_handle.clone();
+        tokio::spawn(async move {
+            let conn_runtime = UdxRuntime::shared(rh);
+            tracing::debug!(pk = %short_hex(&pk), "transport upgrade probe");
+            match dht
+                .connect_with_nodes(&key_pair, pk, &relay_addrs, &conn_runtime)
+                .await
+            {
+                Ok(conn) => {
+                    let _ = result_tx.send(ConnectAttemptResult {
+                        public_key: pk,
+                        result: Ok((conn, conn_runtime)),
+                    });
+                }
+                Err(e) => {
+                    let _ = result_tx.send(ConnectAttemptResult {
+                        public_key: pk,
+                        result: Err(SwarmError::Dht(e)),
+                    });
+                }
+            }
+        });
+    }
+
     fn do_join(
         &mut self,
         topic: [u8; 32],
@@ -729,23 +856,9 @@ impl SwarmActor {
         }
 
         let (cancel_tx, cancel_rx) = oneshot::channel();
+        let (force_refresh_tx, force_refresh_rx) = mpsc::unbounded_channel();
 
-        let mut relay_addrs = self.config.announce_bootstrap_relays.clone();
-        if relay_addrs.len() > 3 {
-            relay_addrs.truncate(3);
-        }
-        // Skip loopback / link-local: useless for remote peers and they waste a
-        // pre-connect retry slot before falling back to the real DHT bootstrap.
-        if let Some(local) = &self.relay_address {
-            if !is_unroutable_relay_host(&local.host) {
-                let dup = relay_addrs
-                    .iter()
-                    .any(|a| a.host == local.host && a.port == local.port);
-                if !dup && relay_addrs.len() < 3 {
-                    relay_addrs.push(local.clone());
-                }
-            }
-        }
+        let relay_addrs = Arc::clone(&self.announce_relay_addrs);
 
         tokio::spawn(run_discovery(
             PeerDiscoveryConfig {
@@ -758,6 +871,7 @@ impl SwarmActor {
             self.key_pair.clone(),
             relay_addrs,
             self.discovery_event_tx.clone(),
+            force_refresh_rx,
             cancel_rx,
         ));
 
@@ -768,6 +882,7 @@ impl SwarmActor {
                 is_client: client,
                 fast_refresh,
                 cancel_tx: Some(cancel_tx),
+                force_refresh_tx,
                 refreshed: false,
             },
         );
@@ -814,7 +929,7 @@ impl SwarmActor {
                 if public_key == self.key_pair.public_key {
                     return;
                 }
-                if self.connections.has(&public_key) {
+                if self.connections.has(&public_key) && !self.upgrade_probes.contains(&public_key) {
                     return;
                 }
                 if self.connections.len() >= self.config.max_peers {
@@ -930,6 +1045,26 @@ impl SwarmActor {
         match result.result {
             Ok((conn, runtime)) => {
                 let pk = result.public_key;
+                let is_upgrade_probe = self.upgrade_probes.remove(&pk);
+
+                // Upgrade probe: always forward to bridge for rank comparison.
+                if is_upgrade_probe && self.connections.has(&pk) {
+                    let topics = self
+                        .peers
+                        .get(&pk)
+                        .map(|i| i.topics.clone())
+                        .unwrap_or_default();
+                    let swarm_conn = SwarmConnection {
+                        peer: conn,
+                        is_initiator: true,
+                        topics,
+                        _runtime: runtime,
+                    };
+                    if self.conn_tx.try_send(swarm_conn).is_err() {
+                        tracing::warn!("connection channel full, dropping upgrade probe");
+                    }
+                    return;
+                }
 
                 // Dedup: compare public keys to decide tie-break
                 if self.connections.has(&pk) {
@@ -964,6 +1099,7 @@ impl SwarmActor {
                 }
             }
             Err(e) => {
+                self.upgrade_probes.remove(&result.public_key);
                 tracing::debug!(pk = %short_hex(&result.public_key), err = %e, "connect failed");
                 if !matches!(
                     e,

@@ -120,6 +120,13 @@ pub async fn list_peer_rows(client: &JazzClient) -> Result<Vec<PeerRowReply>, St
 		if kind != "remote" {
 			continue;
 		}
+		let status = vals
+			.get(status_ix)
+			.and_then(value_as_text)
+			.unwrap_or("");
+		if status == "revoked" {
+			continue;
+		}
 		out.push(PeerRowReply {
 			id: oid.uuid().to_string(),
 			peer_did: vals
@@ -270,6 +277,45 @@ pub async fn upsert_remote_peer_row(
 	Ok(())
 }
 
+async fn remove_peer_from_human(client: &JazzClient, peer_row: ObjectId) -> Result<(), String> {
+	let hum_oid = human_singleton_oid(client).await?;
+	let schema = jazz_engine::resolved_table_schema(client, "humans").await?;
+	let dev_ix = jazz_engine::col_ix(&schema, "my_devices")?;
+	let rows = jazz_engine::exec_list_rows(client, "humans").await?;
+	let vals = rows
+		.iter()
+		.find(|(o, _)| *o == hum_oid)
+		.map(|(_, v)| v.as_slice())
+		.ok_or_else(|| "humans singleton not found".to_string())?;
+	let cell = vals.get(dev_ix).ok_or_else(|| "humans: missing my_devices".to_string())?;
+	let list: Vec<Value> = match cell {
+		Value::Array(items) => items
+			.iter()
+			.filter(|v| match v {
+				Value::Uuid(oid) => *oid != peer_row,
+				Value::Text(s) => uuid::Uuid::parse_str(s.trim())
+					.ok()
+					.map(|u| ObjectId::from_uuid(u) != peer_row)
+					.unwrap_or(true),
+				_ => true,
+			})
+			.cloned()
+			.collect(),
+		_ => return Err("humans.my_devices: expected array".into()),
+	};
+	let mut patch = Map::new();
+	patch.insert(
+		"my_devices".into(),
+		JsonValue::Array(list.iter().map(value_to_json).collect()),
+	);
+	let ops = crate::jazz::patch_updates(&schema, patch)?;
+	client
+		.update(hum_oid, ops)
+		.await
+		.map_err(crate::jazz::format_jazz_err)?;
+	Ok(())
+}
+
 pub async fn set_peer_status(
 	client: &JazzClient,
 	peer_did: &str,
@@ -295,6 +341,9 @@ pub async fn set_peer_status(
 				.update(oid, ops)
 				.await
 				.map_err(crate::jazz::format_jazz_err)?;
+			if status == "revoked" {
+				remove_peer_from_human(client, oid).await?;
+			}
 			return Ok(());
 		}
 	}

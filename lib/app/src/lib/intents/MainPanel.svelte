@@ -22,7 +22,6 @@ import ActivityView from './ActivityView.svelte'
 import DisplayView from './DisplayView.svelte'
 import ConfigView from './ConfigView.svelte'
 import ContextView from './ContextView.svelte'
-import SandboxTerminal from '$lib/sandbox/SandboxTerminal.svelte'
 
 let {
 	intent,
@@ -188,18 +187,6 @@ $effect(() => {
 				>
 					Context
 				</button>
-				<button
-					type="button"
-					role="tab"
-					aria-selected={activityTab === 'terminal'}
-					onclick={() => (activityTab = 'terminal')}
-					class="cursor-pointer text-[8px] font-bold tracking-[0.22em] uppercase transition-opacity {activityTab ===
-					'terminal'
-						? 'text-foreground opacity-90'
-						: 'opacity-30 hover:opacity-60'}"
-				>
-					Terminal
-				</button>
 			</div>
 
 			{#if activityTab === 'display' && inDisplay && (isError || intent.hitlVibeAppId)}
@@ -208,12 +195,6 @@ $effect(() => {
 				<ConfigView {intent} skill={selectedSkill} />
 			{:else if activityTab === 'context'}
 				<ContextView {intent} skill={selectedSkill} />
-			{:else if activityTab === 'terminal'}
-				<div
-					class="flex min-h-[min(28rem,50dvh)] min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] border-2 border-dotted border-border/40 bg-black"
-				>
-					<SandboxTerminal />
-				</div>
 			{:else}
 				<ActivityView logs={filteredLogs} />
 			{/if}

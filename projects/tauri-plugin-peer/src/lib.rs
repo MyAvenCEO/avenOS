@@ -15,9 +15,11 @@ mod peer_connect_ui;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod hyperswarm_groove_bridge;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-mod commands_macos;
-
+mod network_path;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
+mod transport_rank;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+mod commands_macos;
 pub use hyperswarm_groove_bridge::HyperswarmGrooveBridge;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use peer_connect_ui::{PeerConnectSubstate, PeerConnectUiRow, PeerTransportMode};
@@ -43,6 +45,10 @@ struct PeerListenGuards {
 	_unlock: tauri::EventId,
 	#[allow(dead_code)]
 	_lock: tauri::EventId,
+	#[allow(dead_code)]
+	_path: tauri::EventId,
+	#[allow(dead_code)]
+	_foreground: tauri::EventId,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -67,6 +73,12 @@ pub struct P2pDiagnostics {
 	/// came back from the configured bootstrap node within the query timeout.
 	#[serde(default)]
 	pub dht_bootstrap_closest_seen: Option<usize>,
+	#[serde(default)]
+	pub last_path_change_at_ms: Option<u64>,
+	#[serde(default)]
+	pub last_foreground_heal_at_ms: Option<u64>,
+	#[serde(default)]
+	pub heal_in_progress: bool,
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -116,6 +128,8 @@ pub struct PeerCtl {
 	pending_allowlist: Arc<tokio::sync::Mutex<Option<(String, Vec<String>)>>>,
 	/// Last allowlist synced from `peers` table — skips redundant Hyperswarm `set_allowlist` on mesh ticks.
 	applied_peer_allow_sorted: Arc<tokio::sync::Mutex<Option<Vec<String>>>>,
+	/// Last transport upgrade probe per DID (ms since epoch).
+	last_upgrade_probe_at: Arc<tokio::sync::Mutex<std::collections::HashMap<String, u64>>>,
 	/// Last `start_swarm` failure — surfaced to UI when buttons stay disabled.
 	swarm_start_error: Arc<tokio::sync::Mutex<Option<String>>>,
 	/// Last resolved P2P stack config — surfaced in UI for TestFlight diagnostics.
@@ -605,6 +619,9 @@ fn build_p2p_diagnostics(cfg: &peeroxide::SwarmConfig, linked_count: usize) -> P
 		pairing_topic_hex: None,
 		relay_https_probe: None,
 		dht_bootstrap_closest_seen: None,
+		last_path_change_at_ms: None,
+		last_foreground_heal_at_ms: None,
+		heal_in_progress: false,
 	}
 }
 
@@ -968,6 +985,10 @@ impl PeerCtl {
 		p2p_diagnostics.allowlist_count = self.allowed_remote_dids.read().await.len();
 		p2p_diagnostics.pairing_session_active = pairing_code_pending.is_some();
 		p2p_diagnostics.pairing_topic_hex = pairing_session_topic.map(|t| hex::encode(t));
+		let (path_ms, fg_ms, heal_busy) = self.connect_ui_tracker.global_heal_snapshot();
+		p2p_diagnostics.last_path_change_at_ms = path_ms;
+		p2p_diagnostics.last_foreground_heal_at_ms = fg_ms;
+		p2p_diagnostics.heal_in_progress = heal_busy;
 
 		PeerTransportStatusReply {
 			hyperswarm_running,
@@ -1072,8 +1093,9 @@ impl PeerCtl {
 				);
 			}
 		} else {
-			for did in &missing {
-				match crate::did::ed25519_public_from_peer_did(did) {
+		for did in &missing {
+			self.connect_ui_tracker.bump_reconnect_attempt(did);
+			match crate::did::ed25519_public_from_peer_did(did) {
 					Ok(pk) => {
 						if let Err(e) = swarm.note_peer_disconnected(pk).await {
 							log::debug!(
@@ -1101,6 +1123,141 @@ impl PeerCtl {
 		flush_swarm_for_pairing(&swarm, "nudge missing allowlisted peer(s)").await
 	}
 
+	/// Soft heal after network path change or app foreground — refresh relays, flush, per-peer nudge.
+	pub async fn soft_heal(&self, reason: &str, prefer_lan: bool) -> Result<(), String> {
+		self.connect_ui_tracker.set_heal_in_progress(true);
+		let result = self.soft_heal_inner(reason, prefer_lan).await;
+		self.connect_ui_tracker.set_heal_in_progress(false);
+		result
+	}
+
+	async fn soft_heal_inner(&self, reason: &str, prefer_lan: bool) -> Result<(), String> {
+		let flush_label: &'static str = match reason {
+			"network path changed" => "network path changed",
+			"app foreground" => "app foreground",
+			_ => "soft heal",
+		};
+		let allow: Vec<String> = self.allowed_remote_dids.read().await.iter().cloned().collect();
+		if allow.is_empty() {
+			return Ok(());
+		}
+
+		let desired = if prefer_lan {
+			Some(peer_connect_ui::PeerTransportMode::Lan)
+		} else {
+			None
+		};
+		self.connect_ui_tracker.set_desired_transport_for_all(desired);
+		for did in &allow {
+			self.connect_ui_tracker.bump_reconnect_attempt(did);
+		}
+
+		let swarm = {
+			let guard = self.inner.lock().await;
+			let Some(r) = guard.as_ref() else {
+				return Ok(());
+			};
+			r.swarm.clone()
+		};
+
+		if let Err(e) = swarm.refresh_announce_relays().await {
+			log::debug!(
+				target: "avenos::peeroxide",
+				"refresh_announce_relays ({reason}): {e}",
+			);
+		}
+		flush_swarm_for_pairing(&swarm, flush_label).await?;
+		self.nudge_allowlisted_discovery(&allow).await?;
+		let _ = self.app_handle.emit("peer:mesh-push", ());
+		Ok(())
+	}
+
+	pub async fn on_network_path_changed(
+		&self,
+		payload: &network_path::NetworkPathChangedPayload,
+	) -> Result<(), String> {
+		self.connect_ui_tracker.mark_path_change();
+		let prefer_lan = payload.satisfied
+			&& payload.interfaces.iter().any(|i| i == "wifi" || i == "wired");
+		log::info!(
+			target: "avenos::peeroxide",
+			"peer_heal: path_change interfaces={:?} prefer_lan={prefer_lan}",
+			payload.interfaces,
+		);
+		self.soft_heal("network path changed", prefer_lan).await
+	}
+
+	pub async fn on_app_foreground(&self) -> Result<(), String> {
+		self.connect_ui_tracker.mark_foreground_heal();
+		self.soft_heal("app foreground", false).await
+	}
+
+	/// Periodic transport upgrade probes for linked peers on relay/punched paths.
+	pub async fn maybe_probe_transport_upgrades(&self) -> Result<(), String> {
+		use std::time::{SystemTime, UNIX_EPOCH};
+
+		const PROBE_INTERVAL_MS: u64 = 90_000;
+
+		let now_ms = SystemTime::now()
+			.duration_since(UNIX_EPOCH)
+			.map(|d| d.as_millis() as u64)
+			.unwrap_or(0);
+
+		let live_dids = self.jazz_hyperswarm.snapshot_live_linked_dids().await;
+		if live_dids.is_empty() {
+			return Ok(());
+		}
+
+		let swarm = {
+			let guard = self.inner.lock().await;
+			let Some(r) = guard.as_ref() else {
+				return Ok(());
+			};
+			r.swarm.clone()
+		};
+
+		for did in live_dids {
+			let ui = self.connect_ui_tracker.row_for_did(&did);
+			let Some(mode) = ui.transport_mode else {
+				continue;
+			};
+			if crate::transport_rank::transport_rank(mode) < 3 {
+				continue;
+			}
+			{
+				let mut probes = self.last_upgrade_probe_at.lock().await;
+				if probes
+					.get(&did)
+					.is_some_and(|t| now_ms.saturating_sub(*t) < PROBE_INTERVAL_MS)
+				{
+					continue;
+				}
+				probes.insert(did.clone(), now_ms);
+			}
+			match crate::did::ed25519_public_from_peer_did(&did) {
+				Ok(pk) => {
+					log::debug!(
+						target: "avenos::peeroxide",
+						"peer_heal: transport upgrade probe did={did} mode={mode:?}",
+					);
+					if let Err(e) = swarm.probe_transport_upgrade(pk).await {
+						log::debug!(
+							target: "avenos::peeroxide",
+							"probe_transport_upgrade did={did}: {e}",
+						);
+					}
+				}
+				Err(e) => {
+					log::debug!(
+						target: "avenos::peeroxide",
+						"probe skip bad did={did}: {e}",
+					);
+				}
+			}
+		}
+		Ok(())
+	}
+
 	async fn on_groove_link_lifecycle(
 		&self,
 		event: hyperswarm_groove_bridge::GrooveLinkLifecycle,
@@ -1122,6 +1279,14 @@ impl PeerCtl {
 				}
 			}
 			hyperswarm_groove_bridge::GrooveLinkLifecycle::Down(pk) => {
+				if let Ok(did) = crate::did::peer_did_from_ed25519(&pk) {
+					log::info!(
+						target: "avenos::peeroxide",
+						"peer_heal: link_down did={did}",
+					);
+					self.connect_ui_tracker
+						.note_disconnected_pk_with_reason(&pk, "link_down");
+				}
 				if let Err(e) = swarm.note_peer_disconnected(pk).await {
 					log::debug!(
 						target: "avenos::peeroxide",
@@ -1388,6 +1553,7 @@ impl PeerCtl {
 	}
 
 	async fn tear_down(&self) {
+		network_path::stop_network_path_monitor();
 		let _ = self.peer_invite_cancel().await;
 		*self.applied_peer_allow_sorted.lock().await = None;
 		{
@@ -1462,6 +1628,7 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 				joined_pair_topics: Arc::new(tokio::sync::Mutex::new(std::collections::HashSet::new())),
 				pending_allowlist: Arc::new(tokio::sync::Mutex::new(None)),
 				applied_peer_allow_sorted: Arc::new(tokio::sync::Mutex::new(None)),
+				last_upgrade_probe_at: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
 				swarm_start_error: Arc::new(tokio::sync::Mutex::new(None)),
 				p2p_diagnostics: Arc::new(tokio::sync::RwLock::new(P2pDiagnostics {
 					central_mode: aven_relay_central_mode(),
@@ -1473,6 +1640,9 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 					pairing_topic_hex: None,
 					relay_https_probe: None,
 					dht_bootstrap_closest_seen: None,
+					last_path_change_at_ms: None,
+					last_foreground_heal_at_ms: None,
+					heal_in_progress: false,
 				})),
 				connect_ui_tracker,
 			});
@@ -1497,13 +1667,6 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 				});
 			});
 
-			app.manage(PeerListenGuards {
-				_unlock: id_unlock,
-				_lock: id_lock,
-			});
-
-			app.manage(ctl.clone());
-
 			let ctl_link = ctl.clone();
 			ctl.jazz_hyperswarm.set_link_lifecycle_hook(Arc::new(
 				move |event| {
@@ -1513,6 +1676,46 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 					});
 				},
 			));
+
+			network_path::start_network_path_monitor(app.clone());
+
+			let ctl_path = ctl.clone();
+			let id_path = app.listen("peer:network-path-changed", move |event| {
+				let c = ctl_path.clone();
+				let payload: network_path::NetworkPathChangedPayload =
+					serde_json::from_str(event.payload()).unwrap_or(
+						network_path::NetworkPathChangedPayload {
+							satisfied: true,
+							expensive: false,
+							constrained: false,
+							interfaces: vec![],
+						},
+					);
+				tauri::async_runtime::spawn(async move {
+					if let Err(e) = c.on_network_path_changed(&payload).await {
+						log::debug!(target: "avenos::peeroxide", "path heal: {e}");
+					}
+				});
+			});
+
+			let ctl_fg = ctl.clone();
+			let id_fg = app.listen("peer:app-foreground", move |_event| {
+				let c = ctl_fg.clone();
+				tauri::async_runtime::spawn(async move {
+					if let Err(e) = c.on_app_foreground().await {
+						log::debug!(target: "avenos::peeroxide", "foreground heal: {e}");
+					}
+				});
+			});
+
+			app.manage(PeerListenGuards {
+				_unlock: id_unlock,
+				_lock: id_lock,
+				_path: id_path,
+				_foreground: id_fg,
+			});
+
+			app.manage(ctl.clone());
 
 			log::info!(target: "avenos::peeroxide", "peer plugin ready (Hyperswarm starts after unlock)");
 

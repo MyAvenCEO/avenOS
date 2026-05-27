@@ -31,6 +31,14 @@ pub struct PeerMeshPeerState {
 	pub connect_substate: Option<tauri_plugin_peer::PeerConnectSubstate>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub transport_mode: Option<tauri_plugin_peer::PeerTransportMode>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub reconnect_attempt: Option<u32>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub last_disconnect_at_ms: Option<u64>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub last_disconnect_reason: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub desired_transport: Option<tauri_plugin_peer::PeerTransportMode>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -104,6 +112,10 @@ pub(crate) async fn assemble_mesh_snapshot(
 			phase,
 			connect_substate: ui.connect_substate,
 			transport_mode: ui.transport_mode,
+			reconnect_attempt: ui.reconnect_attempt,
+			last_disconnect_at_ms: ui.last_disconnect_at_ms,
+			last_disconnect_reason: ui.last_disconnect_reason,
+			desired_transport: ui.desired_transport,
 		});
 	}
 

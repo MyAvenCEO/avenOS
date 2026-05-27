@@ -115,11 +115,16 @@
 
 	// `sparks` is driven by `jazzStore('sparks')` above — no manual loader.
 
+	let adminLoadGen = 0
+
 	async function loadSessionAndAdmins(): Promise<void> {
 		if (!tauri || !unlocked) {
 			session = undefined
+			adminDids = []
 			return
 		}
+		const sid = sparkId.trim()
+		const gen = ++adminLoadGen
 		busy = true
 		err = undefined
 		try {
@@ -130,11 +135,13 @@
 					if (!status.ready) {
 						throw new Error('Local Groove shell is not ready yet.')
 					}
-					session = await jazzSession()
+					const nextSession = await jazzSession()
+					if (gen !== adminLoadGen) return
+					session = nextSession
 
-					const sid = sparkId.trim()
 					if (sid) {
 						const a = await sparkAdminList(sid)
+						if (gen !== adminLoadGen) return
 						adminDids = a.adminDids
 					} else {
 						adminDids = []
@@ -147,9 +154,10 @@
 				'Share: loading session stalled',
 			)
 		} catch (e) {
+			if (gen !== adminLoadGen) return
 			err = e instanceof Error ? e.message : String(e)
 		} finally {
-			busy = false
+			if (gen === adminLoadGen) busy = false
 		}
 	}
 
@@ -157,19 +165,23 @@
 		const did = addAdminDid.trim()
 		const sid = sparkId
 		if (!did || !sid) return
+		const gen = adminLoadGen
 		adminBusy = true
 		adminErr = undefined
 		addNote = undefined
 		try {
 			await sparkAdminAdd({ sparkId: sid, peerDid: did })
+			if (gen !== adminLoadGen) return
 			addAdminDid = ''
 			addNote = 'Access granted — it may take a moment to show on their device.'
 			const a = await sparkAdminList(sid)
+			if (gen !== adminLoadGen) return
 			adminDids = a.adminDids
 		} catch (e) {
+			if (gen !== adminLoadGen) return
 			adminErr = e instanceof Error ? e.message : String(e)
 		} finally {
-			adminBusy = false
+			if (gen === adminLoadGen) adminBusy = false
 		}
 	}
 
@@ -190,9 +202,11 @@
 
 	$effect(() => {
 		sessionKind
-		sparkId
+		const sid = sparkId
 		unlocked
 		tauri
+		adminDids = []
+		addAdminDid = ''
 		void loadSessionAndAdmins()
 	})
 

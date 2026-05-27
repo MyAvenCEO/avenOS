@@ -57,7 +57,8 @@ let {
 	placeholder = 'Describe an intent… (mock — not sent)',
 	submitBusy = false,
 	disabled = false,
-	enableAttachments = true
+	enableAttachments = true,
+	embedAttachmentNamesInMessage = true
 }: {
 	onSubmitMessage?: (text: string, files: File[]) => void
 	onModeChange?: (mode: Mode) => void
@@ -68,6 +69,7 @@ let {
 	submitBusy?: boolean
 	disabled?: boolean
 	enableAttachments?: boolean
+	embedAttachmentNamesInMessage?: boolean
 } = $props()
 
 /**
@@ -523,7 +525,9 @@ async function commitMessage() {
 	mode = 'collapsed'
 	textareaEl?.blur()
 
-	const message = [attachBlock, raw].filter(Boolean).join('\n\n')
+	const message = embedAttachmentNamesInMessage
+		? [attachBlock, raw].filter(Boolean).join('\n\n')
+		: raw
 	clearAttachments()
 
 	onSubmitMessage(message, filesSnapshot)

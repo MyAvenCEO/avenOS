@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use rand::Rng;
@@ -49,11 +50,13 @@ pub(crate) async fn run_discovery(
     config: PeerDiscoveryConfig,
     dht: HyperDhtHandle,
     key_pair: KeyPair,
-    relay_addresses: Vec<Ipv4Peer>,
+    relay_addresses: Arc<RwLock<Vec<Ipv4Peer>>>,
     event_tx: mpsc::UnboundedSender<DiscoveryEvent>,
+    mut force_refresh_rx: mpsc::UnboundedReceiver<()>,
     mut cancel_rx: tokio::sync::oneshot::Receiver<()>,
 ) {
-    do_refresh(&config, &dht, &key_pair, &relay_addresses, &event_tx).await;
+    let initial = relay_addresses.read().map(|g| g.clone()).unwrap_or_default();
+    do_refresh(&config, &dht, &key_pair, &initial, &event_tx).await;
 
     loop {
         let (base, jitter_cap) = if config.fast_refresh {
@@ -66,7 +69,12 @@ pub(crate) async fn run_discovery(
 
         tokio::select! {
             _ = tokio::time::sleep(delay) => {
-                do_refresh(&config, &dht, &key_pair, &relay_addresses, &event_tx).await;
+                let addrs = relay_addresses.read().map(|g| g.clone()).unwrap_or_default();
+                do_refresh(&config, &dht, &key_pair, &addrs, &event_tx).await;
+            }
+            _ = force_refresh_rx.recv() => {
+                let addrs = relay_addresses.read().map(|g| g.clone()).unwrap_or_default();
+                do_refresh(&config, &dht, &key_pair, &addrs, &event_tx).await;
             }
             _ = &mut cancel_rx => break,
         }
@@ -146,7 +154,6 @@ async fn do_refresh(
                         tracing::debug!(
                             pk = %hex_short(&peer.public_key),
                             relay_count = peer.relay_addresses.len(),
-                            relays = ?peer.relay_addresses.iter().map(|a| format!("{}:{}", a.host, a.port)).collect::<Vec<_>>(),
                             "discovered peer"
                         );
                         let relay_addresses = if peer.relay_addresses.is_empty() {

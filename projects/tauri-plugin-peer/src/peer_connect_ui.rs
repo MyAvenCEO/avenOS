@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use peeroxide_dht::connect_ui::{
 	ConnectProgressPhase, ConnectTransportMode, ConnectUiEvent, ConnectUiHook,
@@ -32,17 +33,39 @@ pub struct PeerConnectUiRow {
 	pub connect_substate: Option<PeerConnectSubstate>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub transport_mode: Option<PeerTransportMode>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub reconnect_attempt: Option<u32>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub last_disconnect_at_ms: Option<u64>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub last_disconnect_reason: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub desired_transport: Option<PeerTransportMode>,
 }
 
 #[derive(Default)]
 struct Row {
 	connect_substate: Option<PeerConnectSubstate>,
 	transport_mode: Option<PeerTransportMode>,
+	reconnect_attempt: u32,
+	last_disconnect_at_ms: Option<u64>,
+	last_disconnect_reason: Option<String>,
+	desired_transport: Option<PeerTransportMode>,
+}
+
+fn now_ms() -> u64 {
+	SystemTime::now()
+		.duration_since(UNIX_EPOCH)
+		.map(|d| d.as_millis() as u64)
+		.unwrap_or(0)
 }
 
 pub struct PeerConnectUiTracker {
 	by_did: RwLock<HashMap<String, Row>>,
 	on_change: Option<Arc<dyn Fn() + Send + Sync>>,
+	last_path_change_at_ms: RwLock<Option<u64>>,
+	last_foreground_heal_at_ms: RwLock<Option<u64>>,
+	heal_in_progress: RwLock<bool>,
 }
 
 impl PeerConnectUiTracker {
@@ -50,6 +73,9 @@ impl PeerConnectUiTracker {
 		Self {
 			by_did: RwLock::new(HashMap::new()),
 			on_change,
+			last_path_change_at_ms: RwLock::new(None),
+			last_foreground_heal_at_ms: RwLock::new(None),
+			heal_in_progress: RwLock::new(false),
 		}
 	}
 
@@ -67,10 +93,12 @@ impl PeerConnectUiTracker {
 		let did = match &event {
 			ConnectUiEvent::Progress { remote_pk, .. }
 			| ConnectUiEvent::Connected { remote_pk, .. }
-			| ConnectUiEvent::Disconnected { remote_pk } => match crate::did::peer_did_from_ed25519(remote_pk) {
-				Ok(d) => d,
-				Err(_) => return,
-			},
+			| ConnectUiEvent::Disconnected { remote_pk } => {
+				match crate::did::peer_did_from_ed25519(remote_pk) {
+					Ok(d) => d,
+					Err(_) => return,
+				}
+			}
 		};
 
 		let changed = {
@@ -139,9 +167,81 @@ impl PeerConnectUiTracker {
 	}
 
 	pub fn note_disconnected_pk(&self, remote_pk: &[u8; 32]) {
-		self.apply(ConnectUiEvent::Disconnected {
-			remote_pk: *remote_pk,
-		});
+		self.note_disconnected_pk_with_reason(remote_pk, "link_down");
+	}
+
+	pub fn note_disconnected_pk_with_reason(&self, remote_pk: &[u8; 32], reason: &str) {
+		let Ok(did) = crate::did::peer_did_from_ed25519(remote_pk) else {
+			return;
+		};
+		let changed = {
+			let mut map = self.by_did.write().expect("peer connect ui poisoned");
+			let row = map.entry(did).or_default();
+			row.last_disconnect_at_ms = Some(now_ms());
+			row.last_disconnect_reason = Some(reason.to_string());
+			if row.connect_substate.is_none() && row.transport_mode.is_none() {
+				true
+			} else {
+				row.connect_substate = None;
+				row.transport_mode = None;
+				true
+			}
+		};
+		if changed {
+			if let Some(cb) = &self.on_change {
+				cb();
+			}
+		}
+	}
+
+	pub fn bump_reconnect_attempt(&self, did: &str) {
+		let mut map = self.by_did.write().expect("peer connect ui poisoned");
+		let row = map.entry(did.to_string()).or_default();
+		row.reconnect_attempt = row.reconnect_attempt.saturating_add(1);
+	}
+
+	pub fn set_desired_transport_for_all(&self, mode: Option<PeerTransportMode>) {
+		let mut map = self.by_did.write().expect("peer connect ui poisoned");
+		for row in map.values_mut() {
+			row.desired_transport = mode;
+		}
+	}
+
+	pub fn set_desired_transport(&self, did: &str, mode: Option<PeerTransportMode>) {
+		let mut map = self.by_did.write().expect("peer connect ui poisoned");
+		map.entry(did.to_string()).or_default().desired_transport = mode;
+	}
+
+	pub fn mark_path_change(&self) {
+		*self
+			.last_path_change_at_ms
+			.write()
+			.expect("path change poisoned") = Some(now_ms());
+	}
+
+	pub fn mark_foreground_heal(&self) {
+		*self
+			.last_foreground_heal_at_ms
+			.write()
+			.expect("foreground heal poisoned") = Some(now_ms());
+	}
+
+	pub fn set_heal_in_progress(&self, v: bool) {
+		*self.heal_in_progress.write().expect("heal poisoned") = v;
+	}
+
+	pub fn global_heal_snapshot(&self) -> (Option<u64>, Option<u64>, bool) {
+		(
+			*self
+				.last_path_change_at_ms
+				.read()
+				.expect("path change poisoned"),
+			*self
+				.last_foreground_heal_at_ms
+				.read()
+				.expect("foreground heal poisoned"),
+			*self.heal_in_progress.read().expect("heal poisoned"),
+		)
 	}
 
 	pub fn snapshot(&self) -> HashMap<String, PeerConnectUiRow> {
@@ -149,15 +249,7 @@ impl PeerConnectUiTracker {
 			.read()
 			.expect("peer connect ui poisoned")
 			.iter()
-			.map(|(did, row)| {
-				(
-					did.clone(),
-					PeerConnectUiRow {
-						connect_substate: row.connect_substate,
-						transport_mode: row.transport_mode,
-					},
-				)
-			})
+			.map(|(did, row)| (did.clone(), row_to_public(row)))
 			.collect()
 	}
 
@@ -166,11 +258,23 @@ impl PeerConnectUiTracker {
 			.read()
 			.expect("peer connect ui poisoned")
 			.get(peer_did)
-			.map(|row| PeerConnectUiRow {
-				connect_substate: row.connect_substate,
-				transport_mode: row.transport_mode,
-			})
+			.map(row_to_public)
 			.unwrap_or_default()
+	}
+}
+
+fn row_to_public(row: &Row) -> PeerConnectUiRow {
+	PeerConnectUiRow {
+		connect_substate: row.connect_substate,
+		transport_mode: row.transport_mode,
+		reconnect_attempt: if row.reconnect_attempt > 0 {
+			Some(row.reconnect_attempt)
+		} else {
+			None
+		},
+		last_disconnect_at_ms: row.last_disconnect_at_ms,
+		last_disconnect_reason: row.last_disconnect_reason.clone(),
+		desired_transport: row.desired_transport,
 	}
 }
 

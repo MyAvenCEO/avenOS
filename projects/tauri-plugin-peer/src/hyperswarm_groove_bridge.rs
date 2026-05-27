@@ -47,7 +47,7 @@ pub struct HyperswarmGrooveBridgeInner {
 	inbound_rx: Mutex<Option<mpsc::UnboundedReceiver<InboxEntry>>>,
 	outbound_by_peer: Mutex<HashMap<ClientId, mpsc::UnboundedSender<Vec<u8>>>>,
 	active_remote_clients: Mutex<HashSet<ClientId>>,
-	swarm_workers: Mutex<Vec<tokio::task::JoinHandle<()>>>,
+	swarm_workers: Mutex<HashMap<ClientId, tokio::task::JoinHandle<()>>>,
 	shutting_down: Mutex<bool>,
 	/// Groove [`ClientId`] → remote `did:key` (Noise static key), shared with biscuit outbound gate.
 	pub(crate) client_id_to_did: Arc<RwLock<HashMap<ClientId, String>>>,
@@ -73,7 +73,7 @@ impl HyperswarmGrooveBridge {
 			inbound_rx: Mutex::new(Some(recv)),
 			outbound_by_peer: Mutex::new(HashMap::new()),
 			active_remote_clients: Mutex::new(HashSet::new()),
-			swarm_workers: Mutex::new(Vec::new()),
+			swarm_workers: Mutex::new(HashMap::new()),
 			shutting_down: Mutex::new(false),
 			client_id_to_did: cid_map,
 			peer_set_changed: Arc::new(Notify::new()),
@@ -293,6 +293,10 @@ impl HyperswarmGrooveBridge {
 
 		let remote_pk = *conn.remote_public_key();
 		let remote_client = ClientId(groove_client_uuid_from_pubkey(&remote_pk));
+		let new_mode = conn
+			.peer
+			.transport_mode
+			.map(crate::transport_rank::map_dht_mode);
 
 		if self
 			.0
@@ -301,14 +305,49 @@ impl HyperswarmGrooveBridge {
 			.await
 			.contains(&remote_client)
 		{
-			log::warn!(
-				target: "avenos::peeroxide",
-				"groove_p2p duplicate swarm link for {:?} — keeping existing, dropping new",
-				remote_client,
-			);
-			drop(conn);
-			self.notify_link_lifecycle(GrooveLinkLifecycle::Up(remote_pk));
-			return;
+			let existing_mode = self
+				.0
+				.connect_ui_tracker
+				.lock()
+				.await
+				.as_ref()
+				.and_then(|t| {
+					did::peer_did_from_ed25519(&remote_pk)
+						.ok()
+						.and_then(|d| t.row_for_did(&d).transport_mode)
+				});
+
+			if let (Some(new_m), Some(old_m)) = (new_mode, existing_mode) {
+				if crate::transport_rank::is_better(new_m, old_m) {
+					log::info!(
+						target: "avenos::peeroxide",
+						"peer_heal: upgrade {:?} {:?} -> {:?}",
+						remote_client,
+						old_m,
+						new_m,
+					);
+					self.abort_worker_for(remote_client).await;
+					self.0.outbound_by_peer.lock().await.remove(&remote_client);
+				} else {
+					log::debug!(
+						target: "avenos::peeroxide",
+						"groove_p2p duplicate swarm link for {:?} — keeping existing",
+						remote_client,
+					);
+					drop(conn);
+					self.notify_link_lifecycle(GrooveLinkLifecycle::Up(remote_pk));
+					return;
+				}
+			} else {
+				log::debug!(
+					target: "avenos::peeroxide",
+					"groove_p2p duplicate swarm link for {:?} — keeping existing",
+					remote_client,
+				);
+				drop(conn);
+				self.notify_link_lifecycle(GrooveLinkLifecycle::Up(remote_pk));
+				return;
+			}
 		}
 
 		if let Ok(did) = did::peer_did_from_ed25519(&remote_pk) {
@@ -331,6 +370,9 @@ impl HyperswarmGrooveBridge {
 			.await
 			.insert(remote_client);
 		self.0.peer_set_changed.notify_waiters();
+		if let Some(tracker) = self.0.connect_ui_tracker.lock().await.as_ref() {
+			tracker.note_inbound_connected(&remote_pk, conn.peer.transport_mode);
+		}
 		self.notify_link_lifecycle(GrooveLinkLifecycle::Up(remote_pk));
 		log::info!(
 			target: "avenos::peeroxide",
@@ -340,9 +382,6 @@ impl HyperswarmGrooveBridge {
 
 		let groove_bridge = HyperswarmGrooveBridge(Arc::clone(&self.0));
 
-		// `multiplex_connection` internally splits the SecretStream and spawns
-		// independent reader + writer tasks — see its doc comment for the
-		// rationale (deadlock + cancel-safety hazards of the prior designs).
 		let h = tokio::spawn(async move {
 			let local_party_id = groove_bridge.wait_until_local_party().await;
 			HyperswarmGrooveBridge::multiplex_connection(
@@ -356,7 +395,18 @@ impl HyperswarmGrooveBridge {
 			.await;
 		});
 
-		self.0.swarm_workers.lock().await.push(h);
+		self.0
+			.swarm_workers
+			.lock()
+			.await
+			.insert(remote_client, h);
+	}
+
+	async fn abort_worker_for(&self, remote_client: ClientId) {
+		if let Some(h) = self.0.swarm_workers.lock().await.remove(&remote_client) {
+			h.abort();
+			let _ = h.await;
+		}
 	}
 }
 
@@ -394,7 +444,7 @@ impl GroovePeerTransport for HyperswarmGrooveBridge {
 		self.0.outbound_by_peer.lock().await.clear();
 
 		let mut workers = self.0.swarm_workers.lock().await;
-		for h in workers.drain(..) {
+		for (_, h) in workers.drain() {
 			h.abort();
 			let _ = h.await;
 		}

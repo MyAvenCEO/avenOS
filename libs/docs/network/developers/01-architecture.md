@@ -20,6 +20,20 @@ After a vault is unlocked, **PeerCtl** rebuilds mesh transport against the persi
 
 **Jazz/Groove** layers register `register_peer_sync_client` **after** a live hyperswarm link appears (`groove_p2p link up` in logs); mesh ticks may **nudge** discovery while allowlisted peers have no links yet, without rebuilding the entire allowlist each tick.
 
+## Auto-heal (link-down, path change, foreground)
+
+Trusted peers reconnect **without re-inviting** when links drop or the network changes:
+
+1. **Link-down** — when a Groove mux exits, `HyperswarmGrooveBridge` notifies peeroxide via `note_peer_disconnected`; proven peers get fast retry (≤2s with `fast_refresh` topics).
+2. **Per-peer nudge** — mesh reconcile (2s/8s tick) calls `nudge_allowlisted_discovery` for each allowlisted DID **missing** a live bridge link; live peers are not torn down.
+3. **Network path change** — `NWPathMonitor` (macOS/iOS Swift bridge) emits `peer:network-path-changed`; **PeerCtl** runs soft heal: `refresh_announce_relays` → flush → per-peer nudge. Wi‑Fi/wired paths set `desiredTransport: lan` in the mesh snapshot.
+4. **App foreground** — `UIApplication` / `NSApplication` `didBecomeActive` emits `peer:app-foreground`; same soft heal path without vault lock.
+5. **Transport upgrade** — while linked on relay/punched, mesh reconcile probes a better path every ~90s; if a new connect succeeds with a better rank (LAN > direct > punched > relay), the Groove bridge **migrates** the mux atomically (same `ClientId`, catch-up state preserved).
+
+Manual **`peer_swarm_retry`** remains a debug escape hatch (full swarm rebuild); normal operation does not require it.
+
+Structured logs use the `avenos::peeroxide` target with `peer_heal:` prefixes (`link_down`, `path_change`, `foreground`, `upgrade`, `nudge`).
+
 ## Web mesh UI (`avenos:runtime`)
 
 The desktop/mobile shell exposes mesh state **only through one channel**:
@@ -29,4 +43,18 @@ The desktop/mobile shell exposes mesh state **only through one channel**:
 
 Groove actor mailboxes (`publish_mesh` vs full `mesh_refresh`) own when snapshots are built; the webview **does not poll** mesh IPC on a timer for normal UI. Prefer the shared Svelte stores fed by that channel over ad-hoc `peerList` / duplicate `peer:*` mesh events.
 
-This path uses **public HyperDHT** only; it does **not** require `AVENOS_DHT_BOOTSTRAP`, relay endpoints, or other custom infra for reconnect.
+Per-peer heal fields in `PeerMeshPeerState`: `reconnectAttempt`, `lastDisconnectReason`, `desiredTransport` vs `transportMode`. Global diagnostics: `lastPathChangeAtMs`, `lastForegroundHealAtMs`, `healInProgress`.
+
+Central relay mode (`AVEN_RELAY`) uses the same heal pipeline; DHT bootstrap/relay hints are refreshed on path change so announces stay current.
+
+## TestFlight acceptance matrix
+
+| Scenario | Expected |
+| -------- | -------- |
+| Linked → kill remote app → reopen | Reconnect ≤15s, sync resumes |
+| Linked on relay → both join same Wi‑Fi | Stable reconnect; transport may upgrade to `lan` within ~90s |
+| Linked on LAN → iPhone to 5G | Downgrade to punched/relay, stay linked |
+| Mac reboot, iPhone stays open | Mac unlock → reconnect without invite |
+| Airplane mode toggle on one device | Heal after path satisfied |
+| iOS background 5+ min → foreground | Heal without manual retry |
+| Walk through relay → LAN → relay | No manual invite; transport mode updates in UI |

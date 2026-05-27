@@ -13,6 +13,9 @@ import {
 	skillStatusLabel
 } from './types'
 import StatusCard from './StatusCard.svelte'
+import MobileAsideDrawer from '$lib/ui/MobileAsideDrawer.svelte'
+import MobileAsideSectionLabel from '$lib/ui/MobileAsideSectionLabel.svelte'
+import { mobileAsideBottomPadClass } from '$lib/ui/mobile-aside'
 
 let {
 	intent,
@@ -43,18 +46,7 @@ $effect(() => {
 	workersGroupOpen = true
 })
 
-$effect(() => {
-	if (!mobileOpen) return
-	const onKey = (e: KeyboardEvent) => {
-		if (e.key === 'Escape') mobileOpen = false
-	}
-	window.addEventListener('keydown', onKey)
-	return () => window.removeEventListener('keydown', onKey)
-})
-
-function closeMobileDrawer() {
-	mobileOpen = false
-}
+const skillsBottomPad = `pb-[calc(4.25rem+env(safe-area-inset-bottom))] ${mobileAsideBottomPadClass}`
 </script>
 
 {#snippet skillsBody(mirrorCards: boolean)}
@@ -171,46 +163,25 @@ function closeMobileDrawer() {
 	{@render skillsBody(true)}
 </div>
 
-{#if mobileOpen}
-	<button
-		type="button"
-		class="fixed inset-0 z-[44] bg-background/55 backdrop-blur-[2px] sm:hidden"
-		aria-label="Close skills panel"
-		onclick={closeMobileDrawer}
-	></button>
-	<aside
-		class="border-border/60 bg-card/98 fixed inset-y-0 right-0 z-[44] flex w-[min(85vw,16rem)] max-w-[16rem] flex-col border-l px-3 pt-4 pb-[calc(4.25rem+env(safe-area-inset-bottom))] shadow-xl backdrop-blur-md sm:hidden"
-		aria-label="Skills and workers"
-	>
-		<div class="mb-3 flex items-center justify-between gap-2">
-			<span class="text-[8px] font-bold tracking-[0.22em] opacity-30 uppercase">
-				Skills
-				{#if intent && intent.skills.length > 0}
-					<span class="tabular-nums tracking-[0.18em]"> - {intent.skills.length}</span>
-				{/if}
-			</span>
-			<button
-				type="button"
-				class="text-muted-foreground hover:text-foreground inline-flex size-8 items-center justify-center rounded-full border border-border/60"
-				aria-label="Close skills panel"
-				onclick={closeMobileDrawer}
-			>
-				<svg
-					class="size-4"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M18 6 6 18M6 6l12 12" />
-				</svg>
-			</button>
+<MobileAsideDrawer
+	bind:open={mobileOpen}
+	side="right"
+	ariaLabel="Skills and workers"
+	hideFromClass="sm:hidden"
+	zIndex={44}
+	bottomPadClass={skillsBottomPad}
+>
+	{#snippet header()}
+		<MobileAsideSectionLabel align="right" class="mb-0 opacity-30">
+			Skills
+			{#if intent && intent.skills.length > 0}
+				<span class="tabular-nums tracking-[0.18em]"> · {intent.skills.length}</span>
+			{/if}
+		</MobileAsideSectionLabel>
+	{/snippet}
+	{#snippet children()}
+		<div class="flex flex-col gap-1 pr-0.5">
+			{@render skillsBody(true)}
 		</div>
-		<div class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-0.5">
-			{@render skillsBody(false)}
-		</div>
-	</aside>
-{/if}
+	{/snippet}
+</MobileAsideDrawer>
