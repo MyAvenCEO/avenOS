@@ -1,4 +1,6 @@
 import { goto } from '$app/navigation'
+import { browser } from '$app/environment'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 
 /** Max width aligned with Aven CEO orchestrator pages (composer + columns). */
 export const contentMaxWidthClass = 'mx-auto w-full max-w-[min(100%,88rem)]'
@@ -12,6 +14,15 @@ export const mobileMainBottomPadClass =
 	'max-sm:pb-[calc(4.25rem+env(safe-area-inset-bottom))]'
 
 /** In-app navigation — explicit `goto` so Tauri/WKWebView routes reliably (SvelteKit click delegation can miss). */
+export function navigateAppTo(href: string): void {
+	const tauri = browser && isTauriRuntime()
+	void goto(href, {
+		keepFocus: true,
+		noScroll: false,
+		...(tauri ? { invalidateAll: true } : {}),
+	})
+}
+
 export function navigateApp(href: string, e?: MouseEvent): void {
 	if (
 		e &&
@@ -20,5 +31,5 @@ export function navigateApp(href: string, e?: MouseEvent): void {
 		return
 	}
 	e?.preventDefault()
-	void goto(href, { keepFocus: true, noScroll: false })
+	navigateAppTo(href)
 }

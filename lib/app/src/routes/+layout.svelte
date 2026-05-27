@@ -26,6 +26,7 @@ $effect(() => {
 })
 
 const path = $derived(page.url.pathname)
+const routeKey = $derived(`${page.url.pathname}${page.url.search}`)
 const intentsActive = $derived(path === '/')
 const sandboxActive = $derived(path.startsWith('/sandbox'))
 const docsActive = $derived(path.startsWith('/docs'))
@@ -262,7 +263,7 @@ $effect(() => {
 			class={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden${dragActive ? ' pointer-events-none select-none saturate-75 contrast-[0.85] brightness-90 blur-[3px]' : ''}`}
 			aria-hidden={dragActive ? true : undefined}
 		>
-			{#key path}
+			{#key routeKey}
 				{@render pageContent()}
 			{/key}
 		</div>

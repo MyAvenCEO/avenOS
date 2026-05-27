@@ -34,7 +34,8 @@
 		{ href: '/sandbox', label: 'Sandbox', active: sandboxActive },
 		{ href: '/sparks', label: 'Sparks', active: sparksNavActive },
 		{ href: '/db', label: 'DB', active: dbActive },
-		{ href: '/docs', label: 'Docs', active: docsActive }
+		{ href: '/docs', label: 'Docs', active: docsActive },
+		{ href: '/self/peers', label: selfNavLabel, active: selfActive }
 	])
 
 	const showNavFab = $derived(!chrome.hideProfile)

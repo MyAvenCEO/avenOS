@@ -23,6 +23,7 @@
 	import { findPeerMeshPhase, peerMeshDetailSubLabel, peerMeshDetailSubTitle, peerMeshPhaseLabel } from '$lib/peer/mesh-state'
 	import type { PeerRowReply } from '$lib/peer/api'
 	import { peerMeshSnapshot, peerRows } from '$lib/peer/peer-mesh-store'
+	import { navigateApp } from '$lib/shell'
 	import { vaultList } from '$lib/self/vault'
 
 	let err = $state<string | undefined>()
@@ -531,7 +532,11 @@
 			<p class="text-muted-foreground px-1 text-xs leading-snug">
 				No trusted peers yet. Tap <span class="font-medium">Trust new peer</span> or enter a code
 				above, then share sparks under
-				<a href="/self/workspaces" class="text-primary font-medium underline">Self → Share</a>.
+				<a
+					href="/self/workspaces"
+					class="text-primary font-medium underline"
+					onclick={(e) => navigateApp('/self/workspaces', e)}
+				>Self → Share</a>.
 			</p>
 		{:else if trustedRows.length > 0 || hostingInvite}
 			<ul class="divide-border/60 divide-y overflow-hidden rounded-xl border border-border/60">

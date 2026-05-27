@@ -19,6 +19,8 @@
 		aside: Snippet
 		/** Main column content (SvelteKit page outlet or inline panel). */
 		children: Snippet
+		/** When set, remount main content on route change (Tauri/WKWebView outlet refresh). */
+		routeKey?: string
 	}
 
 	let {
@@ -31,6 +33,7 @@
 		open = $bindable(false),
 		aside,
 		children,
+		routeKey,
 	}: Props = $props()
 
 	const asideId = `slide-aside-${Math.random().toString(36).slice(2, 9)}`
@@ -78,7 +81,13 @@
 
 	<main class={mainClass}>
 		<div class={contentClass}>
-			{@render children()}
+			{#if routeKey !== undefined}
+				{#key routeKey}
+					{@render children()}
+				{/key}
+			{:else}
+				{@render children()}
+			{/if}
 		</div>
 
 		{#if showAsideFab}

@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { goto } from '$app/navigation'
+	import { navigateAppTo } from '$lib/shell'
 	import { browser } from '$app/environment'
 	import { onMount } from 'svelte'
 
 	onMount(() => {
 		if (!browser) return
-		void goto('/self/peers')
+		navigateAppTo('/self/peers')
 	})
 </script>

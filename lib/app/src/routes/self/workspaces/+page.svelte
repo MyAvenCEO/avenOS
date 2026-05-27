@@ -21,6 +21,7 @@
 	import { deviceSession } from '$lib/self/device-session-store'
 	import { vaultList } from '$lib/self/vault'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+	import { navigateApp } from '$lib/shell'
 
 	const sparksStore = jazzStore('sparks')
 
@@ -222,7 +223,11 @@
 		<h1 class="text-2xl font-semibold tracking-tight">Share</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
 			Choose who can access a spark. Pair a device under
-			<a href="/self/peers" class="text-primary font-medium underline">Self → Peers</a>, then pick a spark and add them.
+			<a
+				href="/self/peers"
+				class="text-primary font-medium underline"
+				onclick={(e) => navigateApp('/self/peers', e)}
+			>Self → Peers</a>, then pick a spark and add them.
 		</p>
 	</header>
 
@@ -342,7 +347,11 @@
 				{:else if activeAllowlistPeers.length === 0}
 					<p class="text-muted-foreground text-sm">
 						No paired peers yet — invite or accept under
-						<a href="/self/peers" class="text-primary underline">Self → Peers</a>, then reload this page if needed.
+						<a
+							href="/self/peers"
+							class="text-primary underline"
+							onclick={(e) => navigateApp('/self/peers', e)}
+						>Self → Peers</a>, then reload this page if needed.
 					</p>
 				{:else}
 					<p class="text-muted-foreground text-sm leading-relaxed">

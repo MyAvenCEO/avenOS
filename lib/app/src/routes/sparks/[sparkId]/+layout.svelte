@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { goto } from '$app/navigation'
 	import { page } from '$app/state'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import SlideAsideLayout from '$lib/ui/SlideAsideLayout.svelte'
@@ -77,13 +76,14 @@
 	class="min-h-0 flex-1"
 	{mainClass}
 	{contentClass}
+	routeKey={path}
 >
 	{#snippet aside()}
 		<div class="mb-3 space-y-2 px-2 pt-2">
 			<button
 				type="button"
 				class="text-muted-foreground hover:text-foreground text-[10px] font-semibold uppercase tracking-wide"
-				onclick={() => goto('/sparks')}
+				onclick={() => navigateApp('/sparks')}
 			>
 				← All sparks
 			</button>
@@ -100,7 +100,10 @@
 			<a
 				href="/self/workspaces?spark={encodeURIComponent(decodedSparkId)}"
 				class="text-primary hover:underline text-[10px] font-semibold uppercase tracking-wide"
-				onclick={closeAsideOnNav}
+				onclick={(e) => {
+					closeAsideOnNav()
+					navigateApp(`/self/workspaces?spark=${encodeURIComponent(decodedSparkId)}`, e)
+				}}
 			>
 				Share
 			</a>
@@ -129,11 +132,15 @@
 		</nav>
 	{/snippet}
 
-	<div
-		class="mx-auto flex w-full flex-col px-4 sm:px-6
-			{isGalleryView ? 'max-w-5xl' : 'max-w-3xl'}
-			{isTalkView ? 'min-h-0 flex-1 py-3 pb-0 sm:py-6' : 'py-6 sm:py-8'}"
-	>
-		{@render pageOutlet()}
-	</div>
+	{#snippet children()}
+		<div
+			class="mx-auto flex w-full flex-col px-4 sm:px-6
+				{isGalleryView ? 'max-w-5xl' : 'max-w-3xl'}
+				{isTalkView ? 'min-h-0 flex-1 py-3 pb-0 sm:py-6' : 'py-6 sm:py-8'}"
+		>
+			{#key path}
+				{@render pageOutlet()}
+			{/key}
+		</div>
+	{/snippet}
 </SlideAsideLayout>
