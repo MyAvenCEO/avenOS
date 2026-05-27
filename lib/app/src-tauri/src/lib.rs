@@ -446,6 +446,55 @@ fn avenos_dht_trace_snapshot() -> serde_json::Value {
 	})
 }
 
+/// Compile-time / runtime central relay constants (public key is not secret).
+#[tauri::command]
+fn avenos_relay_identity_snapshot() -> serde_json::Value {
+	fn first_non_empty(vars: &[&str]) -> Option<String> {
+		for key in vars {
+			if let Ok(v) = std::env::var(key) {
+				let t = v.trim();
+				if !t.is_empty() {
+					return Some(t.to_string());
+				}
+			}
+		}
+		None
+	}
+
+	let relay_url = first_non_empty(&["AVEN_RELAY_URL"]).or_else(|| {
+		option_env!("AVEN_RELAY_URL")
+			.map(str::trim)
+			.filter(|s| !s.is_empty())
+			.map(str::to_string)
+	});
+	let relay_public_key_hex = first_non_empty(&["AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX"])
+		.or_else(|| {
+			option_env!("AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX")
+				.map(str::trim)
+				.filter(|s| !s.is_empty())
+				.map(str::to_string)
+		});
+	let dht_bootstrap = first_non_empty(&["AVENOS_DHT_BOOTSTRAP"]).or_else(|| {
+		option_env!("AVENOS_DHT_BOOTSTRAP")
+			.map(str::trim)
+			.filter(|s| !s.is_empty())
+			.map(str::to_string)
+	});
+	let relay_addr = first_non_empty(&["AVENOS_HYPERSWARM_RELAY_ADDR"]).or_else(|| {
+		option_env!("AVENOS_HYPERSWARM_RELAY_ADDR")
+			.map(str::trim)
+			.filter(|s| !s.is_empty())
+			.map(str::to_string)
+	});
+
+	serde_json::json!({
+		"relayUrl": relay_url,
+		"relayPublicKeyHex": relay_public_key_hex,
+		"dhtBootstrap": dht_bootstrap,
+		"relayAddr": relay_addr,
+	})
+}
+
 /// One-shot HTTPS reachability probe to the configured relay host.
 ///
 /// `peer_transport_status` shows whether `udp/<bootstrap>` is healthy (via DHT counters);
@@ -819,6 +868,7 @@ pub fn run() {
 		.invoke_handler(tauri::generate_handler![
 			avenos_recent_rust_logs,
 			avenos_dht_trace_snapshot,
+			avenos_relay_identity_snapshot,
 			avenos_relay_https_probe,
 			create_sandbox_webview,
 			set_sandbox_webview_rect,

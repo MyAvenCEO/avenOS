@@ -17,6 +17,11 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { resolveAppStoreRelayConfig } from './relay-bootstrap.ts'
+import {
+	ensureRelayEnvReady,
+	RELAY_SEED_ENV,
+	resolveRelaySeedHex,
+} from './relay-env.ts'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -266,6 +271,7 @@ export async function startP2pSignal(repoRoot = REPO_ROOT): Promise<P2pSignalHan
 	if (!isEmbeddedLocalRelayHost(relayHostNorm)) {
 		const relayCfg = await resolveAppStoreRelayConfig(relayHostNorm, dhtPort, {
 			warnLabel: 'p2p-signal',
+			repoRoot: REPO_ROOT,
 		})
 		const envAugment: Record<string, string> = {
 			AVEN_RELAY: '1',
@@ -284,12 +290,17 @@ export async function startP2pSignal(repoRoot = REPO_ROOT): Promise<P2pSignalHan
 	}
 
 	const keysDir = path.join(repoRoot, '.avenOS', 'dev', 'p2p-signal')
+	ensureRelayEnvReady(repoRoot)
 	freeUdpPort(dhtPort, 'DHT+blind-relay')
 
 	const dhtManifest = path.join(repoRoot, 'projects', 'aven-p2p-signal', 'Cargo.toml')
 	const baseEnv = { ...process.env } as Record<string, string>
 	baseEnv.RUST_LOG ??= 'warn'
 	baseEnv.AVENOS_P2P_SIGNAL_KEYS_DIR = keysDir
+	const relaySeedHex = resolveRelaySeedHex(repoRoot)
+	if (relaySeedHex) baseEnv[RELAY_SEED_ENV] = relaySeedHex
+	// Local subprocess: seed only — pubkey verify env is for Fly/deploy when seed+pubkey are paired.
+	delete baseEnv[RELAY_PUBLIC_KEY_ENV]
 
 	const dht = Bun.spawn(['cargo', 'run', '-q', `--manifest-path=${dhtManifest}`], {
 		cwd: repoRoot,

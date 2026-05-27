@@ -38,7 +38,9 @@
 		"lint": "bunx biome check .",
 		"lint:fix": "bunx biome check --write .",
 		"format": "bunx biome format --write .",
-		"deploy:relay-fly": "bun ./scripts/deploy-relay-fly.ts"
+		"deploy:relay-fly": "bun ./scripts/deploy-relay-fly.ts",
+		"derive:relay-pubkey": "bun ./scripts/derive-relay-pubkey.ts",
+		"migrate:relay-env": "bun ./scripts/migrate-relay-seed-to-env.ts"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.14",

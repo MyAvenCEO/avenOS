@@ -15,8 +15,9 @@ use serde::Serialize;
 use libudx::UdxRuntime;
 
 use relay_host::{
-    bootstrap_server_config, keys_dir_from_env, relay_public_key_hex, relay_server_config,
-    run_signal_server, setup_relay_registration,
+    bootstrap_server_config, keys_dir_from_env, relay_public_key_hex,
+    relay_public_key_hex_from_seed_hex, relay_server_config, run_signal_server,
+    setup_relay_registration, RELAY_SEED_ENV,
 };
 
 #[derive(Serialize)]
@@ -92,6 +93,14 @@ async fn resolve_udp_bind_host(raw: Option<&str>) -> String {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if std::env::args().nth(1).as_deref() == Some("--derive-relay-public-key") {
+        let seed_hex = std::env::var(RELAY_SEED_ENV)
+            .map_err(|_| format!("{RELAY_SEED_ENV} unset"))?;
+        let pk = relay_public_key_hex_from_seed_hex(seed_hex.trim())?;
+        println!("{pk}");
+        return Ok(());
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -163,7 +172,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let local_port = handle.local_port().await.unwrap_or(port);
 
     let keys_dir = keys_dir_from_env();
-    let (relay_kp, relay_target) = setup_relay_registration(&handle, &keys_dir)?;
+    let (relay_kp, relay_target) = setup_relay_registration(&handle)?;
     let relay_pk_hex = relay_public_key_hex(&relay_kp);
     tracing::info!(
         relay_pk = %relay_pk_hex,

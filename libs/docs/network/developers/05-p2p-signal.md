@@ -103,7 +103,22 @@ Logs:
 
 No local subprocess; Tauri merges bootstrap + blind-relay from **`relay.aven.ceo`** manifest (`/.well-known/aven-relay.json` via `relay-bootstrap.ts`) or explicit **`AVENOS_DHT_BOOTSTRAP`** / **`AVENOS_HYPERSWARM_RELAY_*`**. Port overridable with **`AVENOS_P2P_SIGNAL_PORT`** when deriving from **`AVEN_RELAY_URL`**.
 
-Packaged builds compile-time embed: **`AVEN_RELAY_URL`**, **`AVENOS_DHT_BOOTSTRAP`**, **`AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX`**, **`AVENOS_HYPERSWARM_RELAY_ADDR`** — see [`projects/tauri-plugin-peer/src/lib.rs`](../../../../projects/tauri-plugin-peer/src/lib.rs).
+Packaged builds compile-time embed: **`AVEN_RELAY_URL`**, **`AVENOS_DHT_BOOTSTRAP`**, **`AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX`**, **`AVENOS_HYPERSWARM_RELAY_ADDR`** — sourced from repo **`.env`** (`AVENOS_RELAY_PUBLIC_KEY_HEX`) via [`scripts/relay-env.ts`](../../../../scripts/relay-env.ts), not live manifest fetch. See [`projects/tauri-plugin-peer/src/lib.rs`](../../../../projects/tauri-plugin-peer/src/lib.rs).
+
+---
+
+## Relay identity env (single source of truth)
+
+Set in repo-root **`.env`** (alongside **`GENESIS_NETWORK_ID`**). **`deploy:relay-fly`** pushes both to Fly secrets.
+
+| Env var | Role |
+|---------|------|
+| **`AVENOS_RELAY_SEED_HEX`** | 32-byte Ed25519 seed (64 hex). Server + Fly secret. **Never commit.** |
+| **`AVENOS_RELAY_PUBLIC_KEY_HEX`** | Blind-relay public key (64 hex). App Store compile embed + startup sanity check. |
+
+Priority on the relay server ([`relay_host.rs`](../../../../projects/aven-p2p-signal/src/relay_host.rs)): **env seed → volume file → auto-generate (local dev only)**. Fly requires env or mounted seed.
+
+Bootstrap HyperDHT node identity (`bootstrap-hyperdht.seed`) remains file/volume-backed (clients do not embed it).
 
 ---
 
@@ -125,7 +140,7 @@ Legacy: **`AVENOS_SKIP_P2P_SIGNAL=1`** also disables central mode.
 
 Orchestration: [`scripts/p2p-signal.ts`](../../../../scripts/p2p-signal.ts). Entrypoints [`scripts/dev-app-macos.ts`](../../../../scripts/dev-app-macos.ts), [`scripts/dev-app-linux.ts`](../../../../scripts/dev-app-linux.ts), [`scripts/dev-two-instances.ts`](../../../../scripts/dev-two-instances.ts) call **`startP2pSignal`** and merge **`envAugment`**.
 
-Persisted relay identity: **`$AVENOS_P2P_SIGNAL_KEYS_DIR/relay-hyperdht.seed`** (32 bytes; same path as legacy Node relay on Fly volume `/data/p2p-signal`).
+Relay blind-relay identity: **`AVENOS_RELAY_SEED_HEX`** + **`AVENOS_RELAY_PUBLIC_KEY_HEX`** in repo **`.env`** (see above). One-time migration from legacy `relay-hyperdht.seed`: **`bun run migrate:relay-env`**.
 
 **Central env (Tauri)**:
 

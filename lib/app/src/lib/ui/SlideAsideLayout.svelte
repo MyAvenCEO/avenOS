@@ -17,7 +17,7 @@
 		contentClass?: string
 		open?: boolean
 		aside: Snippet
-		children: Snippet
+		main: Snippet
 	}
 
 	let {
@@ -29,7 +29,7 @@
 		contentClass = 'pb-16 md:pb-0',
 		open = $bindable(false),
 		aside,
-		children,
+		main,
 	}: Props = $props()
 
 	const asideId = `slide-aside-${Math.random().toString(36).slice(2, 9)}`
@@ -54,7 +54,7 @@
 	})
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col md:grid md:h-full {desktopGridClass} {className}">
+<div class="flex h-full min-h-0 w-full flex-1 flex-col md:grid md:h-full {desktopGridClass} {className}">
 	{#if open}
 		<button
 			type="button"
@@ -77,7 +77,7 @@
 
 	<main class={mainClass}>
 		<div class={contentClass}>
-			{@render children()}
+			{@render main()}
 		</div>
 
 		{#if showAsideFab}

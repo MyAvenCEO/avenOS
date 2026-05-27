@@ -17,7 +17,7 @@ function stripQuotes(v: string): string {
 	return s.replace(/\\n/g, '\n')
 }
 
-function readEnvFileValue(filePath: string, key: string): string | undefined {
+export function readEnvFileValue(filePath: string, key: string): string | undefined {
 	if (!existsSync(filePath)) return undefined
 	const raw = readFileSync(filePath, 'utf8')
 	for (let line of raw.split(/\r?\n/)) {

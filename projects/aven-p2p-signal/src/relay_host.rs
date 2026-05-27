@@ -22,8 +22,70 @@ use rand::RngCore;
 use tokio::sync::mpsc;
 use tracing::warn;
 
-pub const RELAY_SEED_FILE: &str = "relay-hyperdht.seed";
 pub const BOOTSTRAP_SEED_FILE: &str = "bootstrap-hyperdht.seed";
+
+/// 32-byte Ed25519 seed (64 hex chars) — required relay identity (env / Fly secret).
+pub const RELAY_SEED_ENV: &str = "AVENOS_RELAY_SEED_HEX";
+/// Optional sanity check against [`RELAY_SEED_ENV`] (64 hex chars public key).
+pub const RELAY_PUBLIC_KEY_ENV: &str = "AVENOS_RELAY_PUBLIC_KEY_HEX";
+
+fn parse_32_byte_hex(raw: &str, label: &str) -> Result<[u8; 32], String> {
+    let t = raw.trim();
+    if t.len() != 64 {
+        return Err(format!("{label}: expected 64 hex chars, got {}", t.len()));
+    }
+    let bytes = hex::decode(t).map_err(|e| format!("{label}: hex decode: {e}"))?;
+    if bytes.len() != 32 {
+        return Err(format!("{label}: decoded {} bytes, want 32", bytes.len()));
+    }
+    let mut seed = [0u8; 32];
+    seed.copy_from_slice(&bytes);
+    Ok(seed)
+}
+
+fn relay_seed_from_env() -> Result<Option<[u8; 32]>, String> {
+    let Ok(raw) = std::env::var(RELAY_SEED_ENV) else {
+        return Ok(None);
+    };
+    let t = raw.trim();
+    if t.is_empty() {
+        return Ok(None);
+    }
+    parse_32_byte_hex(t, RELAY_SEED_ENV).map(Some)
+}
+
+fn verify_relay_public_key_hex(kp: &KeyPair) -> Result<(), String> {
+    let Ok(raw) = std::env::var(RELAY_PUBLIC_KEY_ENV) else {
+        return Ok(());
+    };
+    let t = raw.trim();
+    if t.is_empty() {
+        return Ok(());
+    }
+    let expect = parse_32_byte_hex(t, RELAY_PUBLIC_KEY_ENV)?;
+    if kp.public_key != expect {
+        return Err(format!(
+            "{RELAY_PUBLIC_KEY_ENV} does not match {RELAY_SEED_ENV} (got {}, expected {})",
+            relay_public_key_hex(kp),
+            t.to_ascii_lowercase()
+        ));
+    }
+    Ok(())
+}
+
+/// Load blind-relay seed from [`RELAY_SEED_ENV`] (required).
+pub fn load_relay_seed() -> Result<[u8; 32], Box<dyn std::error::Error + Send + Sync>> {
+    match relay_seed_from_env()? {
+        Some(seed) => {
+            tracing::info!(target: "avenos::p2p-signal", "relay seed from {RELAY_SEED_ENV}");
+            Ok(seed)
+        }
+        None => Err(format!(
+            "{RELAY_SEED_ENV} is required — set in repo .env or Fly secret (never commit the seed)"
+        )
+        .into()),
+    }
+}
 
 /// Load or create a 32-byte Ed25519 seed (Hyperswarm / HyperDHT layout).
 pub fn load_or_create_seed(keys_dir: &Path, filename: &str) -> std::io::Result<[u8; 32]> {
@@ -58,6 +120,12 @@ pub fn keys_dir_from_env() -> PathBuf {
 
 pub fn relay_public_key_hex(relay_kp: &KeyPair) -> String {
     relay_kp.public_key.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Derive blind-relay public key hex from a 64-char seed hex (for `.env` setup).
+pub fn relay_public_key_hex_from_seed_hex(seed_hex: &str) -> Result<String, String> {
+    let seed = parse_32_byte_hex(seed_hex, RELAY_SEED_ENV)?;
+    Ok(relay_public_key_hex(&KeyPair::from_seed(seed)))
 }
 
 fn ipv4_peer_to_socket_addr(peer: &Ipv4Peer) -> Result<SocketAddr, String> {
@@ -176,10 +244,11 @@ pub async fn run_signal_server(
     }
 }
 
-/// Load relay + bootstrap keypairs, register relay on the DHT router, return `(relay_kp, relay_target)`.
-pub fn setup_relay_registration(dht: &HyperDhtHandle, keys_dir: &Path) -> Result<(KeyPair, [u8; 32]), Box<dyn std::error::Error + Send + Sync>> {
-    let relay_seed = load_or_create_seed(keys_dir, RELAY_SEED_FILE)?;
+/// Load relay keypair, register relay on the DHT router, return `(relay_kp, relay_target)`.
+pub fn setup_relay_registration(dht: &HyperDhtHandle) -> Result<(KeyPair, [u8; 32]), Box<dyn std::error::Error + Send + Sync>> {
+    let relay_seed = load_relay_seed()?;
     let relay_kp = KeyPair::from_seed(relay_seed);
+    verify_relay_public_key_hex(&relay_kp)?;
     let relay_target = hash(&relay_kp.public_key);
     dht.register_server(&relay_target);
     Ok((relay_kp, relay_target))

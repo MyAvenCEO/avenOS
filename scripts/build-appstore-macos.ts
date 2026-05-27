@@ -21,26 +21,17 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { applyAppleEnvLocal, resolveGenesisNetworkId } from './apple-env'
+import { ensureRelayEnvReady } from './relay-env.ts'
 import { resolveAppStoreRelayConfig, type AppStoreRelayConfig } from './relay-bootstrap.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const appDir = path.join(repoRoot, 'lib/app')
+const tauriDir = path.join(appDir, 'src-tauri')
+const profileDest = path.join(tauriDir, 'profiles', 'mac-app-store.provisionprofile')
 
 /** Production Hyperswarm bootstrap host — compile-time embed for App Store sandbox (no .env). */
 const MAC_APPSTORE_AVEN_RELAY_URL = 'relay.aven.ceo'
 const MAC_APPSTORE_DHT_UDP_PORT = 49737
-
-function hyperswarmRelayCompileEnv(relayCfg: AppStoreRelayConfig): Record<string, string> {
-	if (!relayCfg.relayPublicKeyHex || !relayCfg.relayAddr) return {}
-	return {
-		AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX: relayCfg.relayPublicKeyHex,
-		AVENOS_HYPERSWARM_RELAY_ADDR: relayCfg.relayAddr,
-	}
-}
-
-applyAppleEnvLocal(repoRoot)
-const appDir = path.join(repoRoot, 'lib/app')
-const tauriDir = path.join(appDir, 'src-tauri')
-const profileDest = path.join(tauriDir, 'profiles', 'mac-app-store.provisionprofile')
 
 function mustEnv(name: string): string {
 	const v = process.env[name]?.trim()
@@ -49,6 +40,14 @@ function mustEnv(name: string): string {
 		process.exit(1)
 	}
 	return v
+}
+
+function hyperswarmRelayCompileEnv(relayCfg: AppStoreRelayConfig): Record<string, string> {
+	if (!relayCfg.relayPublicKeyHex || !relayCfg.relayAddr) return {}
+	return {
+		AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX: relayCfg.relayPublicKeyHex,
+		AVENOS_HYPERSWARM_RELAY_ADDR: relayCfg.relayAddr,
+	}
 }
 
 function readPackageVersion(): string {
@@ -103,6 +102,9 @@ function resolveBuiltAppPath(
 }
 
 async function main() {
+	applyAppleEnvLocal(repoRoot)
+	ensureRelayEnvReady(repoRoot)
+
 	const profileSrc = mustEnv('AVEN_APP_STORE_PROVISIONING_PROFILE_MACOS')
 	const signId = mustEnv('APPLE_SIGNING_IDENTITY')
 	const pkgSignId = mustEnv('AVEN_PKG_INSTALLER_IDENTITY')
@@ -123,6 +125,8 @@ async function main() {
 	const avenRelayUrl = process.env.AVEN_RELAY_URL?.trim() || MAC_APPSTORE_AVEN_RELAY_URL
 	const relayCfg = await resolveAppStoreRelayConfig(MAC_APPSTORE_AVEN_RELAY_URL, MAC_APPSTORE_DHT_UDP_PORT, {
 		warnLabel: 'build-appstore-macos',
+		repoRoot,
+		requireEnvPubkey: true,
 	})
 	const dhtBootstrap = relayCfg.dhtBootstrap
 

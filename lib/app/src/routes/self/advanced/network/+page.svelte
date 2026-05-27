@@ -6,13 +6,13 @@
 
 	let copyGenesisKey = $state<string | null>(null)
 
-	async function copyGenesis(): Promise<void> {
-		if (!ctx.genesisB64) return
-		const ok = await copyToClipboard(ctx.genesisB64)
+	async function copyText(value: string | undefined, key: string): Promise<void> {
+		if (!value) return
+		const ok = await copyToClipboard(value)
 		if (ok) {
-			copyGenesisKey = 'genesis'
+			copyGenesisKey = key
 			setTimeout(() => {
-				if (copyGenesisKey === 'genesis') copyGenesisKey = null
+				if (copyGenesisKey === key) copyGenesisKey = null
 			}, 1200)
 		} else {
 			copyGenesisKey = null
@@ -60,7 +60,7 @@
 			<button
 				type="button"
 				class="border-input hover:bg-accent hover:text-accent-foreground rounded-md border px-3 py-1.5 text-[11px] font-medium"
-				onclick={() => void copyGenesis()}
+				onclick={() => void copyText(ctx.genesisB64, 'genesis')}
 			>
 				{copyGenesisKey === 'genesis' ? 'Copied' : 'Copy'}
 			</button>
@@ -69,6 +69,45 @@
 			</p>
 		{:else}
 			<p class="text-muted-foreground text-xs">Loading…</p>
+		{/if}
+	</section>
+
+	<section class="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
+		<div class="flex items-baseline justify-between gap-3">
+			<div>
+				<h2 class="text-sm font-medium">Central relay (P2P)</h2>
+				<p class="text-muted-foreground text-xs leading-relaxed">
+					Blind-relay public key baked into this build. Same value as <code class="font-mono text-[10px]">AVENOS_RELAY_PUBLIC_KEY_HEX</code> in repo <code class="font-mono text-[10px]">.env</code>.
+				</p>
+			</div>
+			{#if ctx.relayUrl}
+				<span class="rounded-full border border-border/60 bg-background/60 px-2 py-1 font-mono text-[10px]">
+					{ctx.relayUrl}
+				</span>
+			{/if}
+		</div>
+
+		{#if ctx.relayPublicKeyHex}
+			<p class="break-all font-mono text-[11px] leading-snug select-text">{ctx.relayPublicKeyHex}</p>
+			<button
+				type="button"
+				class="border-input hover:bg-accent hover:text-accent-foreground rounded-md border px-3 py-1.5 text-[11px] font-medium"
+				onclick={() => void copyText(ctx.relayPublicKeyHex, 'relay-pk')}
+			>
+				{copyGenesisKey === 'relay-pk' ? 'Copied' : 'Copy'}
+			</button>
+			{#if ctx.dhtBootstrap}
+				<p class="text-muted-foreground text-[10px] leading-relaxed">
+					DHT bootstrap: <span class="font-mono select-text">{ctx.dhtBootstrap}</span>
+				</p>
+			{/if}
+			{#if ctx.relayAddr}
+				<p class="text-muted-foreground text-[10px] leading-relaxed">
+					Blind-relay UDP: <span class="font-mono select-text">{ctx.relayAddr}</span>
+				</p>
+			{/if}
+		{:else}
+			<p class="text-muted-foreground text-xs">Not embedded (public Hyperswarm mode or dev without relay env).</p>
 		{/if}
 	</section>
 </div>

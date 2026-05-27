@@ -12,6 +12,13 @@ import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import {
+	RELAY_PUBLIC_KEY_ENV,
+	RELAY_SEED_ENV,
+	requireRelayPublicKeyHex,
+	requireRelaySeedHex,
+} from './relay-env.ts'
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const SIGNAL_PROJECT = path.join(ROOT, 'projects', 'aven-p2p-signal')
 const FLY_TOML = path.join(SIGNAL_PROJECT, 'fly.toml')
@@ -260,6 +267,18 @@ function ensureIpv4(): void {
 	run(['ips', 'allocate-v4', '-a', APP], { inherit: true })
 }
 
+function syncRelaySecretsToFly(repoRoot: string): void {
+	const seed = requireRelaySeedHex(repoRoot, 'deploy-relay-fly')
+	const pub = requireRelayPublicKeyHex(repoRoot, 'deploy-relay-fly')
+	console.log(
+		`[deploy-relay-fly] syncing ${RELAY_SEED_ENV} + ${RELAY_PUBLIC_KEY_ENV} to Fly app ${APP}`,
+	)
+	run(
+		['secrets', 'set', `${RELAY_SEED_ENV}=${seed}`, `${RELAY_PUBLIC_KEY_ENV}=${pub}`, '-a', APP],
+		{ inherit: true },
+	)
+}
+
 async function main() {
 	process.chdir(ROOT)
 
@@ -270,6 +289,7 @@ async function main() {
 	ensureApp(org)
 	ensureVolume()
 	ensureIpv4()
+	syncRelaySecretsToFly(ROOT)
 
 	// First arg = Docker build context (repo root) — Dockerfile COPY infra/ … and projects/.
 	// Absolute --config/--dockerfile avoids Fly resolving relative to fly.toml dirname (double path segments).

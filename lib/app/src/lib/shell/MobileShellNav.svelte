@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state'
-	import { mobileFabBottomClass } from '$lib/shell'
+	import { mobileFabBottomClass, navigateApp } from '$lib/shell'
 	import { selfNavSections } from './self-nav'
 	import { mobileChromeOverrides } from './mobile-chrome.svelte'
 
@@ -89,7 +89,10 @@
 							? 'bg-accent/15 text-foreground'
 							: 'text-muted-foreground hover:bg-accent/10 hover:text-foreground'}"
 						aria-current={item.active ? 'page' : undefined}
-						onclick={closeNav}
+						onclick={(e) => {
+							closeNav()
+							navigateApp(item.href, e)
+						}}
 					>
 						{item.label}
 					</a>
@@ -122,7 +125,10 @@
 									? 'bg-accent/15 text-foreground'
 									: 'text-muted-foreground hover:bg-accent/10 hover:text-foreground'}"
 								aria-current={active ? 'page' : undefined}
-								onclick={closeNav}
+								onclick={(e) => {
+									closeNav()
+									navigateApp(tab.href, e)
+								}}
 							>
 								{tab.label}
 							</a>

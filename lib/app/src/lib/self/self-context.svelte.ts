@@ -41,6 +41,11 @@ function createSelfContext() {
 	let genesisB64 = $state<string | undefined>()
 	let genesisShort = $state<string | undefined>()
 
+	let relayUrl = $state<string | undefined>()
+	let relayPublicKeyHex = $state<string | undefined>()
+	let dhtBootstrap = $state<string | undefined>()
+	let relayAddr = $state<string | undefined>()
+
 	let peerPubB64 = $state<string | undefined>()
 
 	let signingPubB64 = $state<string | undefined>()
@@ -69,6 +74,24 @@ function createSelfContext() {
 			genesisB64 = undefined
 			genesisShort = undefined
 			statusErr = e instanceof Error ? e.message : String(e)
+		}
+
+		try {
+			const relay = await invoke<{
+				relayUrl?: string | null
+				relayPublicKeyHex?: string | null
+				dhtBootstrap?: string | null
+				relayAddr?: string | null
+			}>('avenos_relay_identity_snapshot')
+			relayUrl = relay.relayUrl?.trim() || undefined
+			relayPublicKeyHex = relay.relayPublicKeyHex?.trim().toLowerCase() || undefined
+			dhtBootstrap = relay.dhtBootstrap?.trim() || undefined
+			relayAddr = relay.relayAddr?.trim() || undefined
+		} catch {
+			relayUrl = undefined
+			relayPublicKeyHex = undefined
+			dhtBootstrap = undefined
+			relayAddr = undefined
 		}
 
 		if (status?.registered) {
@@ -122,6 +145,18 @@ function createSelfContext() {
 		},
 		get genesisShort() {
 			return genesisShort
+		},
+		get relayUrl() {
+			return relayUrl
+		},
+		get relayPublicKeyHex() {
+			return relayPublicKeyHex
+		},
+		get dhtBootstrap() {
+			return dhtBootstrap
+		},
+		get relayAddr() {
+			return relayAddr
 		},
 		get peerPubB64() {
 			return peerPubB64

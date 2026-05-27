@@ -23,6 +23,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { applyAppleEnvLocal, resolveGenesisNetworkId } from './apple-env'
+import { ensureRelayEnvReady } from './relay-env.ts'
 import { resolveAppStoreRelayConfig, type AppStoreRelayConfig } from './relay-bootstrap.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -384,6 +385,8 @@ function configureSigning(env: NodeJS.ProcessEnv): 'automatic' | 'manual' {
 }
 
 async function main() {
+	ensureRelayEnvReady(repoRoot)
+
 	const bundleVersion = process.env.AVEN_IOS_CF_BUNDLE_VERSION?.trim() || '13'
 	const version = readPackageVersion()
 
@@ -398,7 +401,7 @@ async function main() {
 	const relayCfg = await resolveAppStoreRelayConfig(
 		IOS_APPSTORE_AVEN_RELAY_URL,
 		IOS_APPSTORE_DHT_UDP_PORT,
-		{ warnLabel: 'tauri-ios-asc' },
+		{ warnLabel: 'tauri-ios-asc', repoRoot, requireEnvPubkey: true },
 	)
 	const dhtBootstrap = relayCfg.dhtBootstrap
 

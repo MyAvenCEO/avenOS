@@ -3,8 +3,9 @@
 	import { page } from '$app/state'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import SlideAsideLayout from '$lib/ui/SlideAsideLayout.svelte'
+	import { navigateApp } from '$lib/shell'
 
-	let { children: pageChildren } = $props()
+	let { children } = $props()
 
 	let asideOpen = $state(false)
 
@@ -117,7 +118,10 @@
 						? 'bg-accent/15 text-foreground font-medium'
 						: 'text-muted-foreground hover:bg-accent/10 hover:text-foreground'}"
 					aria-current={active ? 'page' : undefined}
-					onclick={closeAsideOnNav}
+					onclick={(e) => {
+						closeAsideOnNav()
+						navigateApp(tab.href, e)
+					}}
 				>
 					{tab.label}
 				</a>
@@ -125,13 +129,15 @@
 		</nav>
 	{/snippet}
 
-	{#snippet children()}
+	{#snippet main()}
 		<div
 			class="mx-auto flex w-full flex-col px-4 sm:px-6
 				{isGalleryView ? 'max-w-5xl' : 'max-w-3xl'}
 				{isTalkView ? 'min-h-0 flex-1 py-3 pb-0 sm:py-6' : 'py-6 sm:py-8'}"
 		>
-			{@render pageChildren()}
+			{#key path}
+				{@render children()}
+			{/key}
 		</div>
 	{/snippet}
 </SlideAsideLayout>

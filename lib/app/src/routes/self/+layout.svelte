@@ -5,11 +5,12 @@
 	import { provideSelfContext } from '$lib/self/self-context.svelte'
 	import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/self/vault'
 	import SlideAsideLayout from '$lib/ui/SlideAsideLayout.svelte'
+	import { navigateApp } from '$lib/shell'
 	import { selfNavSections } from '$lib/shell/self-nav'
 	import { browser } from '$app/environment'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 
-	let { children: pageChildren } = $props()
+	let { children } = $props()
 
 	const ctx = provideSelfContext()
 	const sessionKind = $derived($deviceSession.kind)
@@ -89,7 +90,10 @@
 								? 'bg-accent/15 text-foreground font-medium'
 								: 'text-muted-foreground/70 hover:bg-accent/10 hover:text-foreground'}"
 							aria-current={active ? 'page' : undefined}
-							onclick={closeAsideOnNav}
+							onclick={(e) => {
+								closeAsideOnNav()
+								navigateApp(tab.href, e)
+							}}
 						>
 							{tab.label}
 						</a>
@@ -99,9 +103,11 @@
 		</nav>
 	{/snippet}
 
-	{#snippet children()}
+	{#snippet main()}
 		<div class="mx-auto w-full max-w-3xl px-4 pt-4 pb-8 sm:px-6 md:px-8">
-			{@render pageChildren()}
+			{#key path}
+				{@render children()}
+			{/key}
 		</div>
 	{/snippet}
 </SlideAsideLayout>

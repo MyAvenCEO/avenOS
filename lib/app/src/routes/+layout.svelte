@@ -16,6 +16,7 @@ import { displayTitleForSession } from '$lib/self/active-vault-ui'
 import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/self/vault'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import MobileShellNav from '$lib/shell/MobileShellNav.svelte'
+import { navigateApp } from '$lib/shell'
 import '../app.css'
 
 let { children: pageContent } = $props()
@@ -218,6 +219,7 @@ $effect(() => {
 						class="normal-case max-w-[8rem] truncate text-[11px] font-semibold tracking-normal transition-opacity hover:opacity-80 sm:max-w-[10rem] {selfActive ? 'opacity-95' : 'opacity-40'}"
 						aria-current={selfActive ? 'page' : undefined}
 						title={selfNavLabel}
+						onclick={(e) => navigateApp('/self/peers', e)}
 						>{selfNavLabel}</a
 					>
 				</nav>

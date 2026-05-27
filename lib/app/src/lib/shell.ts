@@ -1,3 +1,5 @@
+import { goto } from '$app/navigation'
+
 /** Max width aligned with Aven CEO orchestrator pages (composer + columns). */
 export const contentMaxWidthClass = 'mx-auto w-full max-w-[min(100%,88rem)]'
 
@@ -8,3 +10,15 @@ export const mobileActionVeilClass =
 	'max-sm:pt-1 max-sm:pb-[max(0.5rem,env(safe-area-inset-bottom))] max-sm:from-35%'
 export const mobileMainBottomPadClass =
 	'max-sm:pb-[calc(4.25rem+env(safe-area-inset-bottom))]'
+
+/** In-app navigation — explicit `goto` so Tauri/WKWebView routes reliably (SvelteKit click delegation can miss). */
+export function navigateApp(href: string, e?: MouseEvent): void {
+	if (
+		e &&
+		(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0 || e.defaultPrevented)
+	) {
+		return
+	}
+	e?.preventDefault()
+	void goto(href)
+}
