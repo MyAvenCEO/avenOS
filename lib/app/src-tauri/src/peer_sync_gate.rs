@@ -261,51 +261,24 @@ pub fn load_acl_snapshot(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use groove::query_manager::types::{ColumnDescriptor, ColumnType, RowDescriptor};
 
 	#[test]
-	fn patch_commit_without_spark_id_resolves_via_object_map() {
+	fn object_map_resolves_spark_when_patch_commits_omit_spark_id() {
 		let spark = Uuid::new_v4();
 		let obj = ObjectId::new();
 		let mut object_spark_ids = std::collections::HashMap::new();
 		object_spark_ids.insert(("sparks".to_string(), obj), spark);
 
-		let desc = RowDescriptor {
-			columns: vec![
-				ColumnDescriptor::new("spark_id", ColumnType::Uuid),
-				ColumnDescriptor::new("genesis_b64", ColumnType::Text),
-			],
-		};
-		let schema = Schema::new(std::collections::HashMap::from([(
-			groove::query_manager::types::TableName::new("sparks"),
-			groove::query_manager::types::TableSchema {
-				descriptor: desc,
-				..Default::default()
-			},
-		)]));
 		let snap = SyncAclSnapshot {
-			schema: Arc::new(schema),
+			schema: Arc::new(
+				schema_manifest::load_jazz_schema_from_manifest().expect("manifest schema"),
+			),
 			sparks: std::collections::HashMap::new(),
 			object_spark_ids,
 		};
 
-		// Patch-only commit: genesis_b64 set, spark_id null.
-		let patch_row = groove::query_manager::encoding::encode_row(
-			&snap.schema.get(&groove::query_manager::types::TableName::new("sparks")).unwrap().descriptor,
-			&[Value::Null, Value::Text("updated-genesis".into())],
-		)
-		.unwrap();
-		let commit = Commit {
-			parents: smallvec::smallvec![],
-			content: patch_row,
-			timestamp: 1,
-			author: ObjectId::new(),
-			metadata: None,
-			stored_state: groove::commit::StoredState::Stored,
-			ack_state: Default::default(),
-		};
-
-		let resolved = resolve_spark_uuid(&snap, "sparks", std::slice::from_ref(&commit), &obj);
+		// Patch frames carry no inline spark_id — lookup must use object id map.
+		let resolved = resolve_spark_uuid(&snap, "sparks", &[], &obj);
 		assert_eq!(resolved, Some(spark));
 	}
 }
