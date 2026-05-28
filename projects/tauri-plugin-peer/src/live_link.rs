@@ -79,6 +79,38 @@ impl LiveLinkRegistry {
 		}
 	}
 
+	pub async fn demote_to_handshaking(&self, pk: [u8; 32]) {
+		if let Some(link) = self.by_pk.write().await.get_mut(&pk) {
+			link.phase = LinkPhase::Handshaking;
+			link.since_ms = now_ms();
+		}
+	}
+
+	pub async fn is_handshaking_by_pk(&self, pk: &[u8; 32]) -> bool {
+		self.by_pk
+			.read()
+			.await
+			.get(pk)
+			.is_some_and(|l| l.phase == LinkPhase::Handshaking)
+	}
+
+	pub async fn is_mux_ready_by_pk(&self, pk: &[u8; 32]) -> bool {
+		self.by_pk
+			.read()
+			.await
+			.get(pk)
+			.is_some_and(|l| l.phase == LinkPhase::MuxReady)
+	}
+
+	pub async fn transport_mode_for_pk(&self, pk: &[u8; 32]) -> Option<PeerTransportMode> {
+		self.by_pk
+			.read()
+			.await
+			.get(pk)
+			.map(|l| l.transport_mode)
+			.flatten()
+	}
+
 	pub async fn mux_ready_count(&self) -> usize {
 		self.by_pk
 			.read()
@@ -86,6 +118,25 @@ impl LiveLinkRegistry {
 			.values()
 			.filter(|l| l.phase == LinkPhase::MuxReady)
 			.count()
+	}
+
+	pub async fn handshaking_count(&self) -> usize {
+		self.by_pk
+			.read()
+			.await
+			.values()
+			.filter(|l| l.phase == LinkPhase::Handshaking)
+			.count()
+	}
+
+	/// DIDs with an in-flight or live link (Handshaking or MuxReady).
+	pub async fn snapshot_all_dids(&self) -> HashSet<String> {
+		self.by_pk
+			.read()
+			.await
+			.values()
+			.map(|l| l.remote_did.clone())
+			.collect()
 	}
 
 	pub async fn snapshot_mux_ready_dids(&self) -> HashSet<String> {
@@ -168,8 +219,33 @@ mod tests {
 		reg.set_handshaking(pk, cid, "did:key:z6Mkother".into())
 			.await;
 		assert_eq!(reg.mux_ready_count().await, 0);
+		assert_eq!(reg.handshaking_count().await, 1);
+		assert_eq!(
+			reg.snapshot_all_dids().await,
+			HashSet::from(["did:key:z6Mkother".to_string()])
+		);
 		reg.set_mux_ready(pk, None).await;
 		assert_eq!(reg.mux_ready_count().await, 1);
+		assert_eq!(reg.handshaking_count().await, 0);
 		assert!(reg.is_mux_ready_by_client(cid).await);
+	}
+
+	#[tokio::test]
+	async fn demote_mux_ready_back_to_handshaking() {
+		let reg = LiveLinkRegistry::new();
+		let pk = [3u8; 32];
+		let cid = ClientId(uuid::Uuid::new_v4());
+		reg.set_handshaking(pk, cid, "did:key:z6Mkdemote".into())
+			.await;
+		reg.set_mux_ready(pk, Some(PeerTransportMode::Relay)).await;
+		assert_eq!(reg.mux_ready_count().await, 1);
+		reg.demote_to_handshaking(pk).await;
+		assert_eq!(reg.mux_ready_count().await, 0);
+		assert_eq!(reg.handshaking_count().await, 1);
+		assert!(!reg.is_mux_ready_by_pk(&pk).await);
+		assert_eq!(
+			reg.transport_mode_for_pk(&pk).await,
+			Some(PeerTransportMode::Relay)
+		);
 	}
 }

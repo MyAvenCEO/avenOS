@@ -18,16 +18,22 @@ pub fn is_better(a: PeerTransportMode, b: PeerTransportMode) -> bool {
 }
 
 /// Prefer a fresh inbound link only when transport strictly improves (LAN > direct > punched > relay).
+///
+/// `existing_mux_ready` must be true — never tear down a link still handshaking or with unknown
+/// transport (deferred blind-relay often arrives with `None` mode while pairing mux is live).
 #[must_use]
 pub fn should_replace_link(
 	new_mode: Option<PeerTransportMode>,
 	existing_mode: Option<PeerTransportMode>,
+	existing_mux_ready: bool,
 ) -> bool {
+	if !existing_mux_ready {
+		return false;
+	}
 	match (new_mode, existing_mode) {
 		(Some(new_m), Some(old_m)) => is_better(new_m, old_m),
-		(Some(_), None) => true,
-		(None, Some(_)) => false,
-		(None, None) => true,
+		// Keep a live mux when we never recorded its path (pairing / relay race).
+		(Some(_), None) | (None, Some(_)) | (None, None) => false,
 	}
 }
 
@@ -88,10 +94,27 @@ mod tests {
 		assert!(should_replace_link(
 			Some(PeerTransportMode::Lan),
 			Some(PeerTransportMode::Relay),
+			true,
 		));
 		assert!(!should_replace_link(
 			Some(PeerTransportMode::Relay),
 			Some(PeerTransportMode::Relay),
+			true,
 		));
+	}
+
+	#[test]
+	fn replace_rejects_while_handshaking_or_unknown_mode() {
+		assert!(!should_replace_link(
+			Some(PeerTransportMode::Lan),
+			Some(PeerTransportMode::Relay),
+			false,
+		));
+		assert!(!should_replace_link(
+			Some(PeerTransportMode::Relay),
+			None,
+			true,
+		));
+		assert!(!should_replace_link(None, None, true));
 	}
 }

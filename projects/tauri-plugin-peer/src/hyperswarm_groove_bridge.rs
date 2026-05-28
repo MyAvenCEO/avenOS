@@ -2,6 +2,7 @@
 #![cfg(any(target_os = "macos", target_os = "ios"))]
 
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -11,7 +12,7 @@ use groove::{decode_length_prefixed, encode_length_prefixed, PeerTransport as Gr
 use groove::{JazzError, Result as GrooveResult};
 use peeroxide::SwarmConnection;
 use sha2::{Digest, Sha256};
-use tokio::sync::{mpsc, Mutex, Notify};
+use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 // `Mutex` is used only for the bridge's internal bookkeeping maps
 // (`outbound_by_peer`, `active_remote_clients`, …). The encrypted SecretStream
 // is *not* shared behind a mutex anywhere — `multiplex_connection` splits it
@@ -31,7 +32,9 @@ pub enum GrooveLinkLifecycle {
 type LinkLifecycleHook = Arc<dyn Fn(GrooveLinkLifecycle) + Send + Sync>;
 
 /// Tear down a half-dead mux when the peer reconnects or the read side goes idle.
-const LINK_READ_IDLE_TIMEOUT: Duration = Duration::from_secs(75);
+const LINK_READ_IDLE_TIMEOUT: Duration = Duration::from_secs(15);
+/// Abort mux promotion if the outbound writer never enters its recv loop.
+const MUX_WRITER_START_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[must_use]
 fn groove_client_uuid_from_pubkey(pubkey: &[u8; 32]) -> Uuid {
@@ -50,6 +53,8 @@ pub struct HyperswarmGrooveBridgeInner {
 	inbound_dispatch: mpsc::UnboundedSender<InboxEntry>,
 	inbound_rx: Mutex<Option<mpsc::UnboundedReceiver<InboxEntry>>>,
 	outbound_by_peer: Mutex<HashMap<ClientId, mpsc::UnboundedSender<Vec<u8>>>>,
+	/// Set when the mux writer task enters its recv loop — `peer_send_ready` gate.
+	writer_ready: Mutex<HashMap<ClientId, Arc<AtomicBool>>>,
 	active_remote_clients: Mutex<HashSet<ClientId>>,
 	swarm_workers: Mutex<HashMap<ClientId, tokio::task::JoinHandle<()>>>,
 	shutting_down: Mutex<bool>,
@@ -77,6 +82,7 @@ impl HyperswarmGrooveBridge {
 			inbound_dispatch: dispatch_tx,
 			inbound_rx: Mutex::new(Some(recv)),
 			outbound_by_peer: Mutex::new(HashMap::new()),
+			writer_ready: Mutex::new(HashMap::new()),
 			active_remote_clients: Mutex::new(HashSet::new()),
 			swarm_workers: Mutex::new(HashMap::new()),
 			shutting_down: Mutex::new(false),
@@ -160,8 +166,14 @@ impl HyperswarmGrooveBridge {
 		}
 		let workers = self.0.swarm_workers.lock().await;
 		let outbound = self.0.outbound_by_peer.lock().await;
+		let writer_ready = self.0.writer_ready.lock().await;
 		let live = self.0.active_remote_clients.lock().await;
-		live.contains(&client) && workers.contains_key(&client) && outbound.contains_key(&client)
+		live.contains(&client)
+			&& workers.contains_key(&client)
+			&& outbound.contains_key(&client)
+			&& writer_ready
+				.get(&client)
+				.is_some_and(|f| f.load(Ordering::Acquire))
 	}
 
 	/// Abort every mux worker and clear transport bookkeeping (pairing reset / allowlist clear).
@@ -175,9 +187,20 @@ impl HyperswarmGrooveBridge {
 			.copied()
 			.collect();
 		for cid in clients {
-			self.abort_worker_for(cid).await;
+			let pk = if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+				reg.pk_for_client(cid).await
+			} else {
+				None
+			};
+			if let Some(pk) = pk {
+				self.abort_worker_for(cid, pk, false).await;
+			} else if let Some(h) = self.0.swarm_workers.lock().await.remove(&cid) {
+				h.abort();
+				let _ = h.await;
+			}
 		}
 		self.0.outbound_by_peer.lock().await.clear();
+		self.0.writer_ready.lock().await.clear();
 		self.0.active_remote_clients.lock().await.clear();
 		if let Some(reg) = self.0.live_links.lock().await.as_ref() {
 			reg.clear_all().await;
@@ -216,6 +239,41 @@ impl HyperswarmGrooveBridge {
 	/// write halves own disjoint state — independent libsodium counters plus
 	/// the two halves of `tokio::io::split(raw_stream)` — so two tasks can run
 	/// concurrently with zero shared state and zero cancellation hazards.
+	async fn on_mux_send_lost(&self, remote_pk: [u8; 32]) {
+		if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+			if reg.is_mux_ready_by_pk(&remote_pk).await {
+				reg.demote_to_handshaking(remote_pk).await;
+			}
+		}
+		self.0.peer_set_changed.notify_waiters();
+	}
+
+	async fn promote_mux_ready(
+		&self,
+		remote_pk: [u8; 32],
+		remote_client: ClientId,
+		transport_mode: Option<crate::peer_connect_ui::PeerTransportMode>,
+		dht_mode: Option<peeroxide_dht::connect_ui::ConnectTransportMode>,
+	) {
+		self.0
+			.active_remote_clients
+			.lock()
+			.await
+			.insert(remote_client);
+		if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+			reg.set_mux_ready(remote_pk, transport_mode).await;
+		}
+		if let Some(tracker) = self.0.connect_ui_tracker.lock().await.as_ref() {
+			tracker.note_inbound_connected(&remote_pk, dht_mode);
+		}
+		self.notify_link_lifecycle(GrooveLinkLifecycle::Up(remote_pk));
+		log::info!(
+			target: "avenos::peeroxide",
+			"groove_p2p link up peer={remote_client:?} mode={}",
+			crate::transport_rank::format_mode(transport_mode),
+		);
+	}
+
 	async fn multiplex_connection(
 		bridge: HyperswarmGrooveBridge,
 		conn: SwarmConnection,
@@ -227,32 +285,15 @@ impl HyperswarmGrooveBridge {
 		let local_party_id = bridge.wait_until_local_party().await;
 		let dht_mode = conn.peer.transport_mode;
 
-		bridge
-			.0
-			.active_remote_clients
-			.lock()
-			.await
-			.insert(remote_client);
-		if let Some(reg) = bridge.0.live_links.lock().await.as_ref() {
-			reg.set_mux_ready(remote_pk, transport_mode).await;
-		}
-		bridge.0.peer_set_changed.notify_waiters();
-		if let Some(tracker) = bridge.0.connect_ui_tracker.lock().await.as_ref() {
-			tracker.note_inbound_connected(&remote_pk, dht_mode);
-		}
-		bridge.notify_link_lifecycle(GrooveLinkLifecycle::Up(remote_pk));
-		log::info!(
-			target: "avenos::peeroxide",
-			"groove_p2p link up peer={remote_client:?} mode={}",
-			crate::transport_rank::format_mode(transport_mode),
-		);
-
 		let (mut reader, mut writer) = conn.peer.stream.into_split();
 		let inbound = bridge.0.inbound_dispatch.clone();
 
 		// Notify both halves to tear down when either side dies, so we don't
 		// leak a half-task hanging on a dead socket.
 		let shutdown = Arc::new(Notify::new());
+		let peer_set_changed = Arc::clone(&bridge.0.peer_set_changed);
+		let bridge_for_writer = bridge.clone();
+		let (writer_ready_tx, writer_ready_rx) = oneshot::channel::<()>();
 
 		// Reader task: pure inbound — decode every frame, dispatch to Groove.
 		let reader_handle = tokio::spawn({
@@ -314,10 +355,21 @@ impl HyperswarmGrooveBridge {
 		// Writer task: pure outbound — pull capsules from the bridge's mpsc
 		// and encrypt-write them. No cancellation here either; we only stop
 		// on a write error or shutdown signal from the reader.
+		let writer_ready_flag = bridge
+			.0
+			.writer_ready
+			.lock()
+			.await
+			.get(&remote_client)
+			.cloned()
+			.expect("writer_ready flag installed before mux worker spawn");
 		let writer_handle = tokio::spawn({
 			let shutdown = Arc::clone(&shutdown);
 			let mut capsule_rx = capsule_rx;
 			async move {
+				writer_ready_flag.store(true, Ordering::Release);
+				let _ = writer_ready_tx.send(());
+				peer_set_changed.notify_waiters();
 				loop {
 					tokio::select! {
 						_ = shutdown.notified() => break,
@@ -333,10 +385,34 @@ impl HyperswarmGrooveBridge {
 						}
 					}
 				}
+				writer_ready_flag.store(false, Ordering::Release);
+				bridge_for_writer.on_mux_send_lost(remote_pk).await;
 				let _ = writer.shutdown().await;
 				shutdown.notify_waiters();
 			}
 		});
+
+		// MuxReady + Groove Up only after the outbound path is live — avoids
+		// linkedCount:1 while PeerTransport::send_to returns ChannelClosed.
+		match tokio::time::timeout(MUX_WRITER_START_TIMEOUT, writer_ready_rx).await {
+			Ok(Ok(())) => {
+				bridge
+					.promote_mux_ready(
+						remote_pk,
+						remote_client,
+						transport_mode,
+						dht_mode,
+					)
+					.await;
+			}
+			Ok(Err(_)) | Err(_) => {
+				log::warn!(
+					target: "avenos::peeroxide",
+					"peer mux writer never became ready peer={remote_client:?} — tearing down",
+				);
+				shutdown.notify_waiters();
+			}
+		}
 
 		// Park until both halves wind down.
 		let _ = tokio::join!(reader_handle, writer_handle);
@@ -360,7 +436,28 @@ impl HyperswarmGrooveBridge {
 
 		let mut transport_upgrade = false;
 		if self.0.swarm_workers.lock().await.contains_key(&remote_client) {
-			let existing_mode = self
+			let (handshaking, mux_ready, live_mode) = if let Some(reg) =
+				self.0.live_links.lock().await.as_ref()
+			{
+				let handshaking = reg.is_handshaking_by_pk(&remote_pk).await;
+				let mux_ready = reg.is_mux_ready_by_pk(&remote_pk).await;
+				let mode = reg.transport_mode_for_pk(&remote_pk).await;
+				(handshaking, mux_ready, mode)
+			} else {
+				(false, false, None)
+			};
+
+			if handshaking {
+				log::debug!(
+					target: "avenos::peeroxide",
+					"groove_p2p duplicate swarm link for {:?} — keeping handshaking mux",
+					remote_client,
+				);
+				drop(conn);
+				return;
+			}
+
+			let ui_mode = self
 				.0
 				.connect_ui_tracker
 				.lock()
@@ -371,8 +468,9 @@ impl HyperswarmGrooveBridge {
 						.ok()
 						.and_then(|d| t.row_for_did(&d).transport_mode)
 				});
+			let existing_mode = live_mode.or(ui_mode);
 
-			if crate::transport_rank::should_replace_link(new_mode, existing_mode) {
+			if crate::transport_rank::should_replace_link(new_mode, existing_mode, mux_ready) {
 				let upgraded = existing_mode.is_some_and(|old| {
 					new_mode.is_some_and(|new_m| crate::transport_rank::is_better(new_m, old))
 				});
@@ -386,8 +484,7 @@ impl HyperswarmGrooveBridge {
 					crate::transport_rank::format_mode(new_mode),
 				);
 				// In-place mux swap — avoid link_down/reconnect churn during upgrades.
-				self.abort_worker_for(remote_client).await;
-				self.0.outbound_by_peer.lock().await.remove(&remote_client);
+				self.abort_worker_for(remote_client, remote_pk, true).await;
 			} else {
 				log::debug!(
 					target: "avenos::peeroxide",
@@ -420,6 +517,11 @@ impl HyperswarmGrooveBridge {
 			.lock()
 			.await
 			.insert(remote_client, caps_tx);
+		self.0
+			.writer_ready
+			.lock()
+			.await
+			.insert(remote_client, Arc::new(AtomicBool::new(false)));
 
 		let groove_bridge = HyperswarmGrooveBridge(Arc::clone(&self.0));
 		let mode_for_mux = new_mode;
@@ -443,11 +545,29 @@ impl HyperswarmGrooveBridge {
 			.insert(remote_client, h);
 	}
 
-	async fn abort_worker_for(&self, remote_client: ClientId) {
+	async fn abort_worker_for(
+		&self,
+		remote_client: ClientId,
+		remote_pk: [u8; 32],
+		transport_upgrade: bool,
+	) {
 		if let Some(h) = self.0.swarm_workers.lock().await.remove(&remote_client) {
 			h.abort();
 			let _ = h.await;
 		}
+		self.0.outbound_by_peer.lock().await.remove(&remote_client);
+		self.0.writer_ready.lock().await.remove(&remote_client);
+		self.0
+			.active_remote_clients
+			.lock()
+			.await
+			.remove(&remote_client);
+		if transport_upgrade {
+			if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+				reg.demote_to_handshaking(remote_pk).await;
+			}
+		}
+		self.0.peer_set_changed.notify_waiters();
 	}
 
 	async fn cleanup_remote_link_state(
@@ -458,6 +578,7 @@ impl HyperswarmGrooveBridge {
 	) {
 		self.0.swarm_workers.lock().await.remove(&remote_client);
 		self.0.outbound_by_peer.lock().await.remove(&remote_client);
+		self.0.writer_ready.lock().await.remove(&remote_client);
 		{
 			let mut peers = self.0.active_remote_clients.lock().await;
 			peers.remove(&remote_client);
@@ -481,6 +602,9 @@ impl HyperswarmGrooveBridge {
 impl GroovePeerTransport for HyperswarmGrooveBridge {
 	async fn send_to(&self, peer: ClientId, payload: SyncPayload) -> GrooveResult<()> {
 		if *self.0.shutting_down.lock().await {
+			return Err(JazzError::ChannelClosed);
+		}
+		if !self.peer_send_ready(peer).await {
 			return Err(JazzError::ChannelClosed);
 		}
 		let capsule = encode_length_prefixed(peer, &payload).map_err(JazzError::Sync)?;
@@ -509,6 +633,7 @@ impl GroovePeerTransport for HyperswarmGrooveBridge {
 			*g = true;
 		}
 		self.0.outbound_by_peer.lock().await.clear();
+		self.0.writer_ready.lock().await.clear();
 
 		let mut workers = self.0.swarm_workers.lock().await;
 		for (_, h) in workers.drain() {

@@ -1071,22 +1071,49 @@ impl PeerCtl {
 		local_did: &str,
 		active_remote_dids: &[String],
 	) -> Result<(), String> {
-		let mut sorted: Vec<String> = active_remote_dids
+		let effective = self
+			.merge_effective_allowlist(active_remote_dids)
+			.await;
+		{
+			let guard = self.applied_peer_allow_sorted.lock().await;
+			if guard.as_ref() == Some(&effective) {
+				return Ok(());
+			}
+		}
+		self.set_allowlist_and_join_pair_topics(local_did, &effective)
+			.await?;
+		*self.applied_peer_allow_sorted.lock().await = Some(effective);
+		Ok(())
+	}
+
+	/// Union DB allowlist with in-flight pairing peers (early topic join / Groove mux handshaking)
+	/// so mesh reconcile cannot tear down a live link before `peers` row persist completes.
+	async fn merge_effective_allowlist(&self, active_remote_dids: &[String]) -> Vec<String> {
+		let mut effective: Vec<String> = active_remote_dids
 			.iter()
 			.map(|s| s.trim().to_string())
 			.filter(|s| !s.is_empty())
 			.collect();
-		sorted.sort();
-		sorted.dedup();
-		{
-			let guard = self.applied_peer_allow_sorted.lock().await;
-			if guard.as_ref() == Some(&sorted) {
-				return Ok(());
+
+		let pairing_active = self.pairing_session.lock().await.is_some();
+		if pairing_active {
+			let early = self.allowed_remote_dids.read().await;
+			for did in early.iter() {
+				if !effective.iter().any(|d| d == did) {
+					effective.push(did.clone());
+				}
 			}
 		}
-		self.set_allowlist_and_join_pair_topics(local_did, &sorted).await?;
-		*self.applied_peer_allow_sorted.lock().await = Some(sorted);
-		Ok(())
+
+		for did in self.live_links.snapshot_all_dids().await {
+			if !effective.iter().any(|d| d == &did) {
+				effective.push(did);
+			}
+		}
+
+		effective.sort();
+		effective.dedup();
+		effective
 	}
 
 	/// Force one DHT announce/lookup round while a 6-char invite code is active (pairing topic rendezvous).
@@ -1418,6 +1445,7 @@ impl PeerCtl {
 					);
 				}
 				self.schedule_post_link_upgrade_probe(pk);
+				let _ = self.app_handle.emit("peer:mesh-push", ());
 			}
 			hyperswarm_groove_bridge::GrooveLinkLifecycle::Down(pk) => {
 				if let Ok(did) = crate::did::peer_did_from_ed25519(&pk) {
@@ -1425,8 +1453,6 @@ impl PeerCtl {
 						target: "avenos::peeroxide",
 						"peer_heal: link_down did={did}",
 					);
-					self.connect_ui_tracker
-						.note_disconnected_pk_with_reason(&pk, "link_down");
 				}
 				if let Err(e) = swarm.note_peer_disconnected(pk).await {
 					log::debug!(
@@ -1434,6 +1460,7 @@ impl PeerCtl {
 						"note_peer_disconnected: {e}",
 					);
 				}
+				let _ = self.app_handle.emit("peer:mesh-push", ());
 			}
 		}
 	}
@@ -1510,7 +1537,7 @@ impl PeerCtl {
 		if want_count > 0 {
 			let _ =
 				flush_swarm_for_pairing(&swarm, "reconnect allowlisted peers").await;
-		} else if topics_changed {
+		} else if topics_changed && self.live_links.handshaking_count().await == 0 {
 			if let Err(e) = self.reset_transport_for_pairing().await {
 				log::debug!(
 					target: "avenos::peeroxide",
