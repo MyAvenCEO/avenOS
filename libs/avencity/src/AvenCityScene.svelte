@@ -3,9 +3,15 @@
 	import { Grid, OrbitControls } from '@threlte/extras'
 	import { Color, MOUSE } from 'three'
 	import AvenCityNode from './AvenCityNode.svelte'
+	import AvenCityPlotHex from './AvenCityPlotHex.svelte'
 	import { avencityBrand } from './brand-colors'
 
 	const { scene } = useThrelte()
+
+	let plotHovered = $state(false)
+	let nodeHighlighted = $state(false)
+
+	const plotActive = $derived(plotHovered || nodeHighlighted)
 
 	$effect(() => {
 		scene.background = new Color(avencityBrand.cream)
@@ -37,5 +43,9 @@
 		position={[0, 0, -0.02]}
 	/>
 
-	<AvenCityNode position={[0, 0, 0]} />
+	<AvenCityPlotHex active={plotActive} onhoverchange={(hovered) => (plotHovered = hovered)} />
+	<AvenCityNode
+		position={[0, 0, 0]}
+		onhighlightchange={(highlighted) => (nodeHighlighted = highlighted)}
+	/>
 </T.Group>

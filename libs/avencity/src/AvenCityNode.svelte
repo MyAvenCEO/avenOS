@@ -19,10 +19,12 @@
 
 	let {
 		position = [0, 0, 0] as [number, number, number],
-		initialUpgradeId = AVENCITY_UPGRADES[0].id
+		initialUpgradeId = AVENCITY_UPGRADES[0].id,
+		onhighlightchange
 	}: {
 		position?: [number, number, number]
 		initialUpgradeId?: string
+		onhighlightchange?: (highlighted: boolean) => void
 	} = $props()
 
 	const { camera, size } = useThrelte()
@@ -40,6 +42,10 @@
 	const isMarineStyle = $derived(
 		hovered || panelOpen || selectedUpgradeId !== initialUpgradeId
 	)
+
+	$effect(() => {
+		onhighlightchange?.(isMarineStyle)
+	})
 
 	const fillColor = $derived(isMarineStyle ? avencityBrand.marine : avencityBrand.surfaceSoft)
 	const borderColor = $derived(isMarineStyle ? avencityBrand.marine : avencityBrand.border)
