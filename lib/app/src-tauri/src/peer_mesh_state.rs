@@ -89,7 +89,7 @@ pub(crate) async fn assemble_mesh_snapshot(
 	let linked: HashSet<String> = transport.linked_peer_dids.iter().cloned().collect();
 	let catchup_pending = catchup.global_catchup_busy;
 	let mesh_catchup = catchup.ready_client_ids;
-	let live_links = app.state::<std::sync::Arc<tauri_plugin_peer::LiveLinkRegistry>>();
+	let live_links = app.state::<std::sync::Arc<tauri_plugin_peer::PeerLinkCoordinator>>();
 	let live: Vec<ClientId> = live_links.snapshot_mux_ready_clients().await;
 	let cid_map = bridge.shared_client_id_to_did();
 

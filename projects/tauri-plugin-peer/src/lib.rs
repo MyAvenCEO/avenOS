@@ -17,7 +17,9 @@ mod hyperswarm_groove_bridge;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod peer_link;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-mod live_link;
+mod peer_util;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+mod peer_reconnect;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod network_path;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -25,8 +27,6 @@ mod transport_rank;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod commands_macos;
 pub use hyperswarm_groove_bridge::HyperswarmGrooveBridge;
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-pub use live_link::LiveLinkRegistry;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use peer_link::{PeerLinkCoordinator, PeerLinkMeshRow, PeerLinkPhase};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -167,6 +167,10 @@ fn prefer_lan_from_path(interfaces: &[String], satisfied: bool) -> Option<bool> 
 impl PeerCtl {
 	pub fn connect_ui_row_for_did(&self, peer_did: &str) -> peer_connect_ui::PeerConnectUiRow {
 		self.connect_ui_tracker.row_for_did(peer_did)
+	}
+
+	pub fn emit_mesh_push(&self) {
+		let _ = self.app_handle.emit("peer:mesh-push", ());
 	}
 
 	pub async fn link_phase_for_did(&self, peer_did: &str) -> Option<PeerLinkPhase> {
@@ -750,7 +754,7 @@ fn spawn_flush_background(swarm: peeroxide::SwarmHandle, label: &'static str) {
 
 /// Pairing **requires** at least one DHT announce/lookup cycle; background-only flush broke rendezvous.
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-async fn flush_swarm_for_pairing(swarm: &peeroxide::SwarmHandle, label: &'static str) -> Result<(), String> {
+pub(crate) async fn flush_swarm_for_pairing(swarm: &peeroxide::SwarmHandle, label: &'static str) -> Result<(), String> {
 	const PAIRING_FLUSH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(4);
 	match tokio::time::timeout(PAIRING_FLUSH_TIMEOUT, flush_swarm(swarm)).await {
 		Ok(Ok(())) => {
@@ -988,20 +992,12 @@ impl PeerCtl {
 
 	/// Clear stale transport slots and mux workers before pairing or allowlist drain.
 	async fn reset_transport_for_pairing(&self) -> Result<(), String> {
-		let swarm = {
-			let guard = self.inner.lock().await;
-			guard.as_ref().map(|r| r.swarm.clone())
-		};
-		if let Some(swarm) = swarm {
-			if let Err(e) = swarm.prepare_reconnect().await {
-				log::debug!(
-					target: "avenos::peeroxide",
-					"prepare_reconnect before pairing reset: {e}",
-				);
-			}
-		}
-		self.jazz_hyperswarm.teardown_all_links().await;
-		Ok(())
+		self.reconnect_peers(
+			"pairing reset",
+			None,
+			peer_reconnect::ReconnectOpts::pairing_reset(),
+		)
+		.await
 	}
 
 	pub async fn peer_transport_status(&self) -> PeerTransportStatusReply {
@@ -1153,180 +1149,42 @@ impl PeerCtl {
 		if self.pairing_session.lock().await.is_none() {
 			return Ok(());
 		}
-		let swarm = {
-			let guard = self.inner.lock().await;
-			let Some(r) = guard.as_ref() else {
-				return Ok(());
-			};
-			r.swarm.clone()
-		};
-		flush_swarm_for_pairing(&swarm, "nudge pairing discovery").await
+		self.reconnect_peers("pairing discovery", None, peer_reconnect::ReconnectOpts::pairing())
+			.await
 	}
 
 	/// Force DHT announce/lookup for allowlisted peers that lack a live Groove link.
-	///
-	/// When **all** links are down, clears stale swarm slots via `prepare_reconnect`.
-	/// When **some** peers stay linked, nudges only missing DIDs via per-peer
-	/// `note_peer_disconnected` so live connections are not torn down.
 	pub async fn nudge_allowlisted_discovery(
 		&self,
 		active_remote_dids: &[String],
 	) -> Result<(), String> {
-		let allow: Vec<String> = active_remote_dids
-			.iter()
-			.map(|s| s.trim().to_string())
-			.filter(|s| !s.is_empty())
-			.collect();
-		if allow.is_empty() {
-			return Ok(());
-		}
-
-		let in_flight_dids = self.live_links.snapshot_in_flight_dids().await;
-		let missing: Vec<String> = allow
-			.iter()
-			.filter(|d| !in_flight_dids.contains(d.as_str()))
-			.cloned()
-			.collect();
-		if missing.is_empty() {
-			return Ok(());
-		}
-
-		let swarm = {
-			let guard = self.inner.lock().await;
-			let Some(r) = guard.as_ref() else {
-				return Ok(());
-			};
-			let joined = self.joined_pair_topics.lock().await;
-			if joined.is_empty() {
-				return Ok(());
-			}
-			r.swarm.clone()
-		};
-
-		let pairing_active = self.pairing_session.lock().await.is_some();
-		let any_in_flight = self.live_links.any_in_flight().await;
-		if !pairing_active && !any_in_flight {
-			if let Err(e) = swarm.prepare_reconnect().await {
-				log::debug!(
-					target: "avenos::peeroxide",
-					"prepare_reconnect before nudge: {e}",
-				);
-			}
-		} else {
-			for did in &missing {
-				self.connect_ui_tracker.bump_reconnect_attempt(did);
-				match crate::did::ed25519_public_from_peer_did(did) {
-					Ok(pk) => {
-						if let Err(e) = swarm.note_peer_disconnected(pk).await {
-							log::debug!(
-								target: "avenos::peeroxide",
-								"note_peer_disconnected nudge did={did}: {e}",
-							);
-						}
-					}
-					Err(e) => {
-						log::debug!(
-							target: "avenos::peeroxide",
-							"peer heal: skip nudge bad did={did}: {e}",
-						);
-					}
-				}
-			}
-		}
-
-		log::info!(
-			target: "avenos::peeroxide",
-			"peer heal: nudge {} missing allowlisted peer(s) ({} in-flight)",
-			missing.len(),
-			in_flight_dids.len(),
-		);
-		flush_swarm_for_pairing(&swarm, "nudge missing allowlisted peer(s)").await
+		self.reconnect_peers(
+			"mesh nudge",
+			Some(active_remote_dids.to_vec()),
+			peer_reconnect::ReconnectOpts::mesh_nudge(),
+		)
+		.await
 	}
 
 	/// Soft heal after network path change or app foreground — refresh relays, flush, per-peer nudge.
 	pub async fn soft_heal(&self, reason: &str, prefer_lan: Option<bool>) -> Result<(), String> {
 		self.connect_ui_tracker.set_heal_in_progress(true);
-		let result = self.soft_heal_inner(reason, prefer_lan).await;
-		self.connect_ui_tracker.set_heal_in_progress(false);
-		result
-	}
-
-	async fn soft_heal_inner(&self, reason: &str, prefer_lan: Option<bool>) -> Result<(), String> {
-		let pairing_active = self.pairing_session.lock().await.is_some();
-		let was_prefer_lan = self.prefer_lan.load(Ordering::Relaxed);
-		let prefer_lan = prefer_lan.unwrap_or(was_prefer_lan);
-
-		if prefer_lan != was_prefer_lan {
-			self.apply_prefer_lan(prefer_lan).await;
-			if was_prefer_lan && !prefer_lan && !pairing_active {
-				let swarm = {
-					let guard = self.inner.lock().await;
-					guard.as_ref().map(|r| r.swarm.clone())
-				};
-				if let Some(swarm) = swarm {
-					if let Err(e) = swarm.prepare_reconnect().await {
-						log::debug!(
-							target: "avenos::peeroxide",
-							"prepare_reconnect ({reason}, lan→non-lan): {e}",
-						);
-					}
-				}
-			}
-		}
-
-		if pairing_active {
-			log::debug!(
-				target: "avenos::peeroxide",
-				"soft heal ({reason}): pairing active — prefer_lan={prefer_lan}, nudge only",
-			);
-			return self.nudge_pairing_discovery().await;
-		}
-
-		let flush_label: &'static str = match reason {
+		let static_reason: &'static str = match reason {
 			"network path changed" => "network path changed",
 			"app foreground" => "app foreground",
 			_ => "soft heal",
 		};
-		let allow: Vec<String> = self.allowed_remote_dids.read().await.iter().cloned().collect();
-		if allow.is_empty() {
-			return Ok(());
-		}
-
-		let desired = if prefer_lan {
-			Some(peer_connect_ui::PeerTransportMode::Lan)
-		} else {
-			None
+		let opts = match reason {
+			"network path changed" => peer_reconnect::ReconnectOpts::path_change(prefer_lan),
+			"app foreground" => peer_reconnect::ReconnectOpts::foreground(prefer_lan),
+			_ => peer_reconnect::ReconnectOpts {
+				prefer_lan,
+				..Default::default()
+			},
 		};
-		self.connect_ui_tracker.set_desired_transport_for_all(desired);
-		for did in &allow {
-			self.connect_ui_tracker.bump_reconnect_attempt(did);
-		}
-
-		let swarm = {
-			let guard = self.inner.lock().await;
-			let Some(r) = guard.as_ref() else {
-				return Ok(());
-			};
-			r.swarm.clone()
-		};
-
-		if let Err(e) = swarm.refresh_announce_relays().await {
-			log::debug!(
-				target: "avenos::peeroxide",
-				"refresh_announce_relays ({reason}): {e}",
-			);
-		}
-		flush_swarm_for_pairing(&swarm, flush_label).await?;
-		self.nudge_allowlisted_discovery(&allow).await?;
-		let force_probe = prefer_lan && !was_prefer_lan;
-		if let Err(e) = self
-			.probe_transport_upgrades(force_probe, "soft heal")
-			.await
-		{
-			log::debug!(target: "avenos::peeroxide", "transport upgrade after heal: {e}");
-		}
-		let _ = self.app_handle.emit("peer:mesh-push", ());
-		Ok(())
+		let result = self.reconnect_peers(static_reason, None, opts).await;
+		self.connect_ui_tracker.set_heal_in_progress(false);
+		result
 	}
 
 	pub async fn on_network_path_changed(
@@ -1493,7 +1351,7 @@ impl PeerCtl {
 			if ctl.live_links.is_mux_ready_by_did(&remote_did).await {
 				let _ = ctl.flush_allowlisted_peers("post-pairing link live").await;
 			}
-			let _ = ctl.app_handle.emit("peer:mesh-push", ());
+			let _ = ctl.emit_mesh_push();
 		});
 	}
 
@@ -1523,7 +1381,7 @@ impl PeerCtl {
 						"post-link allowlist flush: {e}",
 					);
 				}
-				let _ = self.app_handle.emit("peer:mesh-push", ());
+				self.emit_mesh_push();
 			}
 			hyperswarm_groove_bridge::GrooveLinkLifecycle::Down(pk) => {
 				if let Ok(did) = crate::did::peer_did_from_ed25519(&pk) {
@@ -1538,7 +1396,20 @@ impl PeerCtl {
 						"note_peer_disconnected: {e}",
 					);
 				}
-				let _ = self.app_handle.emit("peer:mesh-push", ());
+				if self.pairing_session.lock().await.is_some() {
+					let ctl = self.clone();
+					tauri::async_runtime::spawn(async move {
+						let _ = ctl
+							.reconnect_peers(
+								"pairing link down",
+								None,
+								peer_reconnect::ReconnectOpts::link_down(),
+							)
+							.await;
+					});
+				} else {
+					self.emit_mesh_push();
+				}
 			}
 		}
 	}
@@ -1768,7 +1639,7 @@ impl PeerCtl {
 			hex::encode(&topic[..8])
 		);
 
-		let _ = self.app_handle.emit("peer:mesh-push", ());
+		self.emit_mesh_push();
 		Ok(normalized)
 	}
 
@@ -1813,7 +1684,7 @@ impl PeerCtl {
 			hex::encode(&topic[..8])
 		);
 
-		let _ = self.app_handle.emit("peer:mesh-push", ());
+		self.emit_mesh_push();
 		Ok(())
 	}
 
@@ -1834,7 +1705,7 @@ impl PeerCtl {
 				.map_err(|e| format!("pair leave failed: {e}"))?;
 			log::debug!(target: "avenos::peeroxide", "peer_invite_cancel left pairing topic");
 		}
-		let _ = self.app_handle.emit("peer:mesh-push", ());
+		self.emit_mesh_push();
 		Ok(())
 	}
 

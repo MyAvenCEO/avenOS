@@ -13,6 +13,7 @@ async fn pairing_to_live_then_clear() {
 
 	coord.set_transport_up(pk, cid, did.clone()).await;
 	assert_eq!(coord.phase_for_pk(&pk).await, Some(PeerLinkPhase::TransportUp));
+	coord.set_worker_active(pk, true).await;
 	assert!(coord.should_suppress_transport_sync(&pk));
 
 	coord.set_handshaking(pk, cid, did.clone()).await;
@@ -38,6 +39,7 @@ async fn in_flight_blocks_global_heal_drain_semantics() {
 	coord
 		.set_handshaking(pk, cid, "did:key:z6Mkinflight".into())
 		.await;
+	coord.set_worker_active(pk, true).await;
 	assert!(coord.any_in_flight().await);
 	assert_eq!(coord.snapshot_in_flight_dids().await.len(), 1);
 	assert_eq!(coord.mux_ready_count().await, 0);

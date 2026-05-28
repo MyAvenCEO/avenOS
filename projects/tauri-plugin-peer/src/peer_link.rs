@@ -27,15 +27,16 @@ pub enum PeerLinkPhase {
 pub type LinkPhase = PeerLinkPhase;
 
 impl PeerLinkPhase {
-	pub fn suppresses_transport(self) -> bool {
-		matches!(
-			self,
-			PeerLinkPhase::TransportUp | PeerLinkPhase::Handshaking | PeerLinkPhase::Live
-		)
+	pub fn suppresses_transport_with_worker(self, worker_active: bool) -> bool {
+		match self {
+			PeerLinkPhase::Live => true,
+			PeerLinkPhase::TransportUp | PeerLinkPhase::Handshaking => worker_active,
+			_ => false,
+		}
 	}
 
-	pub fn counts_as_in_flight(self) -> bool {
-		self.suppresses_transport()
+	pub fn counts_as_in_flight_with_worker(self, worker_active: bool) -> bool {
+		self.suppresses_transport_with_worker(worker_active)
 	}
 
 	pub fn counts_as_linked_for_sync(self) -> bool {
@@ -50,6 +51,26 @@ pub struct PeerLinkEntry {
 	pub remote_did: String,
 	pub transport_mode: Option<PeerTransportMode>,
 	pub since_ms: u64,
+	/// True while the bridge mux worker task is running for this pk.
+	pub worker_active: bool,
+}
+
+impl PeerLinkEntry {
+	fn suppresses_transport(&self) -> bool {
+		self.phase
+			.suppresses_transport_with_worker(self.worker_active)
+	}
+
+	fn counts_as_in_flight(&self) -> bool {
+		self.phase.counts_as_in_flight_with_worker(self.worker_active)
+	}
+
+	fn is_phantom(&self) -> bool {
+		matches!(
+			self.phase,
+			PeerLinkPhase::TransportUp | PeerLinkPhase::Handshaking
+		) && !self.worker_active
+	}
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -66,22 +87,17 @@ pub struct PeerLinkCoordinator {
 	suppress_pks: StdRwLock<HashSet<[u8; 32]>>,
 }
 
-pub type LiveLinkRegistry = PeerLinkCoordinator;
-
 #[allow(dead_code)]
 pub type LiveLink = PeerLinkEntry;
 
 fn now_ms() -> u64 {
-	std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.map(|d| d.as_millis() as u64)
-		.unwrap_or(0)
+	crate::peer_util::now_ms()
 }
 
 fn refresh_suppress_snapshot(by_pk: &HashMap<[u8; 32], PeerLinkEntry>, out: &StdRwLock<HashSet<[u8; 32]>>) {
 	let set: HashSet<[u8; 32]> = by_pk
 		.iter()
-		.filter(|(_, e)| e.phase.suppresses_transport())
+		.filter(|(_, e)| e.suppresses_transport())
 		.map(|(pk, _)| *pk)
 		.collect();
 	if let Ok(mut w) = out.write() {
@@ -137,6 +153,7 @@ impl PeerLinkCoordinator {
 			remote_did: remote_did.clone(),
 			transport_mode: None,
 			since_ms: now_ms(),
+			worker_active: false,
 		});
 		entry.phase = phase;
 		entry.client_id = client_id;
@@ -204,8 +221,25 @@ impl PeerLinkCoordinator {
 		let mut guard = self.by_pk.write().await;
 		if let Some(link) = guard.get_mut(&pk) {
 			link.phase = PeerLinkPhase::Backoff;
+			link.worker_active = false;
 			link.since_ms = now_ms();
 		}
+		refresh_suppress_snapshot(&guard, &self.suppress_pks);
+	}
+
+	pub async fn set_worker_active(&self, pk: [u8; 32], active: bool) {
+		let mut guard = self.by_pk.write().await;
+		if let Some(link) = guard.get_mut(&pk) {
+			link.worker_active = active;
+			link.since_ms = now_ms();
+		}
+		refresh_suppress_snapshot(&guard, &self.suppress_pks);
+	}
+
+	/// Drop coordinator rows stuck in TransportUp/Handshaking with no running mux worker.
+	pub async fn clear_phantom_entries(&self) {
+		let mut guard = self.by_pk.write().await;
+		guard.retain(|_, e| !e.is_phantom());
 		refresh_suppress_snapshot(&guard, &self.suppress_pks);
 	}
 
@@ -213,6 +247,7 @@ impl PeerLinkCoordinator {
 		let mut guard = self.by_pk.write().await;
 		if let Some(link) = guard.get_mut(&pk) {
 			link.phase = PeerLinkPhase::Handshaking;
+			link.worker_active = false;
 			link.since_ms = now_ms();
 		}
 		refresh_suppress_snapshot(&guard, &self.suppress_pks);
@@ -256,7 +291,16 @@ impl PeerLinkCoordinator {
 			.read()
 			.await
 			.values()
-			.filter(|l| l.phase.counts_as_in_flight())
+			.filter(|l| l.counts_as_in_flight())
+			.count()
+	}
+
+	pub async fn phantom_count(&self) -> usize {
+		self.by_pk
+			.read()
+			.await
+			.values()
+			.filter(|l| l.is_phantom())
 			.count()
 	}
 
@@ -305,7 +349,24 @@ impl PeerLinkCoordinator {
 			.read()
 			.await
 			.values()
-			.filter(|l| l.phase.counts_as_in_flight())
+			.filter(|l| l.counts_as_in_flight())
+			.map(|l| l.remote_did.clone())
+			.collect()
+	}
+
+	/// Peers with an active mux worker still handshaking (not yet Live).
+	pub async fn snapshot_connecting_dids(&self) -> HashSet<String> {
+		self.by_pk
+			.read()
+			.await
+			.values()
+			.filter(|l| {
+				l.worker_active
+					&& matches!(
+						l.phase,
+						PeerLinkPhase::TransportUp | PeerLinkPhase::Handshaking
+					)
+			})
 			.map(|l| l.remote_did.clone())
 			.collect()
 	}
@@ -366,6 +427,16 @@ impl PeerLinkCoordinator {
 			.map(|l| l.client_id)
 	}
 
+	pub async fn snapshot_non_live_entries(&self) -> Vec<(ClientId, [u8; 32])> {
+		self.by_pk
+			.read()
+			.await
+			.iter()
+			.filter(|(_, e)| !e.phase.counts_as_linked_for_sync())
+			.map(|(pk, e)| (e.client_id, *pk))
+			.collect()
+	}
+
 	pub async fn pk_for_client(&self, client: ClientId) -> Option<[u8; 32]> {
 		self.by_pk
 			.read()
@@ -403,6 +474,8 @@ mod tests {
 			.await;
 		assert_eq!(reg.mux_ready_count().await, 0);
 		assert_eq!(reg.handshaking_count().await, 1);
+		assert!(!reg.should_suppress_transport_sync(&pk));
+		reg.set_worker_active(pk, true).await;
 		assert!(reg.should_suppress_transport_sync(&pk));
 		assert_eq!(
 			reg.snapshot_all_dids().await,
@@ -412,6 +485,19 @@ mod tests {
 		assert_eq!(reg.mux_ready_count().await, 1);
 		assert_eq!(reg.handshaking_count().await, 0);
 		assert!(reg.is_mux_ready_by_client(cid).await);
+	}
+
+	#[tokio::test]
+	async fn phantom_handshaking_cleared_and_does_not_suppress() {
+		let reg = PeerLinkCoordinator::new();
+		let pk = [5u8; 32];
+		let cid = ClientId(uuid::Uuid::new_v4());
+		reg.set_handshaking(pk, cid, "did:key:z6Mkphantom".into())
+			.await;
+		assert_eq!(reg.phantom_count().await, 1);
+		reg.clear_phantom_entries().await;
+		assert!(reg.phase_for_pk(&pk).await.is_none());
+		assert!(!reg.should_suppress_transport_sync(&pk));
 	}
 
 	#[tokio::test]
@@ -427,6 +513,8 @@ mod tests {
 		assert_eq!(reg.mux_ready_count().await, 0);
 		assert_eq!(reg.handshaking_count().await, 1);
 		assert!(!reg.is_mux_ready_by_pk(&pk).await);
+		assert!(!reg.should_suppress_transport_sync(&pk));
+		reg.set_worker_active(pk, true).await;
 		assert!(reg.should_suppress_transport_sync(&pk));
 		assert_eq!(
 			reg.transport_mode_for_pk(&pk).await,
@@ -435,12 +523,14 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn in_flight_includes_transport_up_and_handshaking() {
+	async fn in_flight_requires_active_worker() {
 		let reg = PeerLinkCoordinator::new();
 		let pk = [4u8; 32];
 		let cid = ClientId(uuid::Uuid::new_v4());
 		reg.set_transport_up(pk, cid, "did:key:z6Mktransport".into())
 			.await;
+		assert_eq!(reg.in_flight_count().await, 0);
+		reg.set_worker_active(pk, true).await;
 		assert_eq!(reg.in_flight_count().await, 1);
 		assert!(reg.should_suppress_transport_sync(&pk));
 	}

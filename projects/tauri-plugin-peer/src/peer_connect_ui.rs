@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use peeroxide_dht::connect_ui::{
 	ConnectProgressPhase, ConnectTransportMode, ConnectUiEvent, ConnectUiHook,
@@ -54,10 +53,7 @@ struct Row {
 }
 
 fn now_ms() -> u64 {
-	SystemTime::now()
-		.duration_since(UNIX_EPOCH)
-		.map(|d| d.as_millis() as u64)
-		.unwrap_or(0)
+	crate::peer_util::now_ms()
 }
 
 pub struct PeerConnectUiTracker {

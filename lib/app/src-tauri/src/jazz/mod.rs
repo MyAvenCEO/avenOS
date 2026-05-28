@@ -1056,7 +1056,7 @@ fn mark_shell_local_ready_for_mesh(app: &tauri::AppHandle, mj: &ManagedJazz) {
 	mj.mesh_local_shell_gate.store(true, Ordering::Release);
 	let app = app.clone();
 	tauri::async_runtime::spawn(async move {
-		let _ = peer_mesh_reconcile_tick(&app).await;
+		let _ = peer_mesh_reconcile_tick(&app, true).await;
 	});
 }
 
@@ -1484,7 +1484,7 @@ async fn flush_spark_grant_to_peers(
 	h.on_spark_access_granted().await;
 
 	let bridge = app.state::<HyperswarmGrooveBridge>();
-	let live_links = app.state::<std::sync::Arc<tauri_plugin_peer::LiveLinkRegistry>>();
+	let live_links = app.state::<std::sync::Arc<tauri_plugin_peer::PeerLinkCoordinator>>();
 	let live = live_links.snapshot_mux_ready_clients().await;
 	if live.is_empty() {
 		log::info!(
@@ -1982,7 +1982,7 @@ pub(crate) async fn refresh_peer_mesh_groove_register_primitives(
 		return Ok(0);
 	}
 
-	let live_links = app.state::<std::sync::Arc<tauri_plugin_peer::LiveLinkRegistry>>();
+	let live_links = app.state::<std::sync::Arc<tauri_plugin_peer::PeerLinkCoordinator>>();
 	let live: HashSet<ClientId> = live_links
 		.snapshot_mux_ready_clients()
 		.await
@@ -2182,6 +2182,7 @@ pub(crate) async fn execute_mesh_refresh_full(
 pub(crate) async fn execute_mesh_reconcile(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
+	nudge_discovery: bool,
 ) -> Result<(), String> {
 	use std::sync::Arc;
 
@@ -2225,12 +2226,14 @@ pub(crate) async fn execute_mesh_reconcile(
 		.sync_allowlist_from_peer_table(&local_did, &allow)
 		.await?;
 
-	if !allow.is_empty() {
+	if nudge_discovery && !allow.is_empty() {
 		peer_ctl.nudge_allowlisted_discovery(&allow).await?;
 	}
 
-	if let Err(e) = peer_ctl.maybe_probe_transport_upgrades().await {
-		log::debug!(target: "avenos::jazz", "transport upgrade probe: {e}");
+	if nudge_discovery {
+		if let Err(e) = peer_ctl.maybe_probe_transport_upgrades().await {
+			log::debug!(target: "avenos::jazz", "transport upgrade probe: {e}");
+		}
 	}
 
 	let _ = refresh_peer_mesh_groove_register_primitives(app, jazz, client, &allow, false).await?;
@@ -2242,6 +2245,7 @@ pub(crate) async fn execute_mesh_reconcile(
 pub(crate) async fn execute_mesh_reconcile(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
+	_nudge_discovery: bool,
 ) -> Result<(), String> {
 	let ss = app.state::<SelfState>();
 	execute_publish_mesh(app, jazz, ss.inner()).await;
@@ -2255,13 +2259,23 @@ pub(crate) async fn refresh_peer_mesh_primitives(app: &tauri::AppHandle) -> Resu
 
 /// Enqueue mesh reconcile on the Groove actor.
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-pub(crate) async fn peer_mesh_reconcile_tick(app: &tauri::AppHandle) -> Result<(), String> {
-	runtime::groove_actor(app).mesh_reconcile().await
+pub(crate) async fn peer_mesh_reconcile_tick(
+	app: &tauri::AppHandle,
+	nudge_discovery: bool,
+) -> Result<(), String> {
+	runtime::groove_actor(app)
+		.mesh_reconcile(nudge_discovery)
+		.await
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
-pub(crate) async fn peer_mesh_reconcile_tick(app: &tauri::AppHandle) -> Result<(), String> {
-	runtime::groove_actor(app).mesh_reconcile().await
+pub(crate) async fn peer_mesh_reconcile_tick(
+	app: &tauri::AppHandle,
+	nudge_discovery: bool,
+) -> Result<(), String> {
+	runtime::groove_actor(app)
+		.mesh_reconcile(nudge_discovery)
+		.await
 }
 
 #[derive(serde::Deserialize)]

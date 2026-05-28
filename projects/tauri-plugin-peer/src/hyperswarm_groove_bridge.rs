@@ -41,10 +41,7 @@ const LINK_READ_IDLE_TIMEOUT: Duration = Duration::from_secs(15);
 const MUX_WRITER_START_TIMEOUT: Duration = Duration::from_secs(10);
 
 fn now_epoch_ms() -> u64 {
-	std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.map(|d| d.as_millis() as u64)
-		.unwrap_or(0)
+	crate::peer_util::now_ms()
 }
 
 fn is_mux_keepalive_frame(data: &[u8]) -> bool {
@@ -223,6 +220,23 @@ impl HyperswarmGrooveBridge {
 		self.0.peer_set_changed.notify_waiters();
 	}
 
+	/// Tear down in-flight or dead mux workers so a path change (e.g. LAN → cellular) can reconnect.
+	pub async fn teardown_non_live_links(&self) {
+		let stale: Vec<(ClientId, [u8; 32])> = if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+			reg.snapshot_non_live_entries().await
+		} else {
+			Vec::new()
+		};
+		for (cid, pk) in stale {
+			if self.0.swarm_workers.lock().await.contains_key(&cid) {
+				self.abort_worker_for(cid, pk, false).await;
+			} else if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+				reg.clear(&pk).await;
+			}
+		}
+		self.0.peer_set_changed.notify_waiters();
+	}
+
 	async fn wait_until_local_party(&self) -> ClientId {
 		loop {
 			if let Some(id) = *self.0.local_client_id.lock().await {
@@ -256,8 +270,11 @@ impl HyperswarmGrooveBridge {
 	/// concurrently with zero shared state and zero cancellation hazards.
 	async fn on_mux_send_lost(&self, remote_pk: [u8; 32]) {
 		if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+			reg.set_worker_active(remote_pk, false).await;
 			if reg.is_mux_ready_by_pk(&remote_pk).await {
-				reg.demote_to_handshaking(remote_pk).await;
+				// Backoff — not Handshaking — so peeroxide transport is not suppressed
+				// while the dead socket winds down and reconnect can start on cellular/relay.
+				reg.set_backoff(remote_pk).await;
 			}
 		}
 		self.0.peer_set_changed.notify_waiters();
@@ -590,6 +607,9 @@ impl HyperswarmGrooveBridge {
 			.lock()
 			.await
 			.insert(remote_client, h);
+		if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+			reg.set_worker_active(remote_pk, true).await;
+		}
 	}
 
 	async fn abort_worker_for(
@@ -613,6 +633,8 @@ impl HyperswarmGrooveBridge {
 			if let Some(reg) = self.0.live_links.lock().await.as_ref() {
 				reg.demote_to_handshaking(remote_pk).await;
 			}
+		} else if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+			reg.set_worker_active(remote_pk, false).await;
 		}
 		self.0.peer_set_changed.notify_waiters();
 	}

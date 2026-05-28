@@ -1,12 +1,12 @@
 //! Integration tests for LiveLinkRegistry (colocated per first-principles TDD).
 
 use groove::sync_manager::ClientId;
-use tauri_plugin_peer::LiveLinkRegistry;
+use tauri_plugin_peer::PeerLinkCoordinator;
 use uuid::Uuid;
 
 #[tokio::test]
 async fn mux_ready_count_tracks_phase_transitions() {
-	let reg = LiveLinkRegistry::new();
+	let reg = PeerLinkCoordinator::new();
 	let pk = [3u8; 32];
 	let cid = ClientId(Uuid::new_v4());
 	reg.set_handshaking(pk, cid, "did:key:z6Mkabc".into())

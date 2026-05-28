@@ -39,11 +39,14 @@ Mux **keepalive** (`avenos/mux-ping/v1`) runs every 5s; two missed rounds (~10s)
 
 ## Auto-heal (link-down, path change, foreground)
 
-1. **Link-down** — when a Groove mux exits, `HyperswarmGrooveBridge` notifies peeroxide via `note_peer_disconnected`; proven peers get fast retry (≤2s with `fast_refresh` topics).
-2. **Per-peer nudge** — mesh reconcile calls `nudge_allowlisted_discovery` for allowlisted DIDs **missing** an in-flight or live link (`TransportUp` ∪ `Handshaking` ∪ `Live`); global `prepare_reconnect` runs only when no peer is pairing or in-flight.
-3. **Network path change** — `NWPathMonitor` (macOS/iOS Swift bridge) emits `peer:network-path-changed`; **PeerCtl** runs soft heal: `refresh_announce_relays` → flush → per-peer nudge. Wi‑Fi/wired paths set `desiredTransport: lan` in the mesh snapshot.
-4. **App foreground** — `UIApplication` / `NSApplication` `didBecomeActive` emits `peer:app-foreground`; same soft heal path without vault lock.
-5. **Transport upgrade** — while linked on relay/punched, mesh reconcile probes a better path every ~90s; if a new connect succeeds with a better rank (LAN > direct > punched > relay), the Groove bridge **migrates** the mux atomically (same `ClientId`, catch-up state preserved).
+All heal triggers funnel through **`PeerCtl::reconnect_peers`** — one ritual: tear down stale non-live mux, refresh relays, `prepare_reconnect` or per-peer `note_peer_disconnected`, DHT flush.
+
+1. **Link-down** — mux exit → `note_peer_disconnected`; pairing sessions also run `reconnect_peers(link_down)`.
+2. **Mesh reconcile** — `nudge_allowlisted_discovery` → `reconnect_peers` for allowlisted DIDs missing a **Live** link and not actively connecting (mux worker running).
+3. **Transport suppress** — peeroxide suppresses inbound only when coordinator shows **Live**, or **Handshaking/TransportUp with an active mux worker**. Stale phantom rows are cleared before nudge.
+4. **Network path change** — `NWPathMonitor` → soft heal (`reconnect_peers` with teardown). Wi‑Fi/wired sets `desiredTransport: lan`.
+5. **App foreground** — same soft heal path without vault lock.
+6. **Transport upgrade** — while linked on relay/punched, mesh reconcile probes a better path every ~90s; Groove bridge migrates mux atomically (same `ClientId`).
 
 Manual **`peer_swarm_retry`** remains a debug escape hatch (full swarm rebuild); normal operation does not require it.
 

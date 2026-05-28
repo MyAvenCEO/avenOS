@@ -1,13 +1,13 @@
 //! LiveLinkRegistry phase is the single authority for linked/sync UI counts.
 
 use groove::sync_manager::ClientId;
-use tauri_plugin_peer::LiveLinkRegistry;
+use tauri_plugin_peer::PeerLinkCoordinator;
 use tauri_plugin_peer::PeerTransportMode;
 use uuid::Uuid;
 
 #[tokio::test]
 async fn handshaking_excluded_from_linked_snapshot() {
-	let reg = LiveLinkRegistry::new();
+	let reg = PeerLinkCoordinator::new();
 	let pk = [9u8; 32];
 	let cid = ClientId(Uuid::new_v4());
 	reg.set_handshaking(pk, cid, "did:key:z6Mkhandshake".into())
@@ -20,7 +20,7 @@ async fn handshaking_excluded_from_linked_snapshot() {
 
 #[tokio::test]
 async fn mux_ready_only_after_explicit_promotion() {
-	let reg = LiveLinkRegistry::new();
+	let reg = PeerLinkCoordinator::new();
 	let pk = [10u8; 32];
 	let cid = ClientId(Uuid::new_v4());
 	reg.set_handshaking(pk, cid, "did:key:z6Mkmux".into()).await;
@@ -32,7 +32,7 @@ async fn mux_ready_only_after_explicit_promotion() {
 
 #[tokio::test]
 async fn send_path_loss_demotes_without_full_clear() {
-	let reg = LiveLinkRegistry::new();
+	let reg = PeerLinkCoordinator::new();
 	let pk = [11u8; 32];
 	let cid = ClientId(Uuid::new_v4());
 	reg.set_handshaking(pk, cid, "did:key:z6Mksend".into()).await;

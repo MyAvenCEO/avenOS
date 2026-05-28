@@ -816,7 +816,7 @@ pub fn run() {
 			let _path_heal_mesh = app.listen("peer:network-path-changed", move |_event| {
 				let hh = h_path_heal.clone();
 				tauri::async_runtime::spawn(async move {
-					if let Err(e) = jazz::peer_mesh_reconcile_tick(&hh).await {
+					if let Err(e) = jazz::peer_mesh_reconcile_tick(&hh, false).await {
 						log::debug!(
 							target: "avenos::jazz",
 							"peer:network-path-changed mesh reconcile skipped: {e}",
@@ -829,7 +829,7 @@ pub fn run() {
 			let _fg_heal_mesh = app.listen("peer:app-foreground", move |_event| {
 				let hh = h_fg_heal.clone();
 				tauri::async_runtime::spawn(async move {
-					if let Err(e) = jazz::peer_mesh_reconcile_tick(&hh).await {
+					if let Err(e) = jazz::peer_mesh_reconcile_tick(&hh, false).await {
 						log::debug!(
 							target: "avenos::jazz",
 							"peer:app-foreground mesh reconcile skipped: {e}",
@@ -873,7 +873,7 @@ pub fn run() {
 							_ = tick => {}
 						};
 						let live_links =
-							h_mesh.state::<std::sync::Arc<tauri_plugin_peer::LiveLinkRegistry>>();
+							h_mesh.state::<std::sync::Arc<tauri_plugin_peer::PeerLinkCoordinator>>();
 						let live: HashSet<ClientId> = live_links
 							.snapshot_mux_ready_clients()
 							.await
@@ -881,7 +881,7 @@ pub fn run() {
 							.collect();
 						let h_catch = h_mesh.state::<crate::peer_catchup::PeerCatchupHandle>();
 						h_catch.live_clients_changed(live).await;
-						if let Err(e) = jazz::peer_mesh_reconcile_tick(&h_mesh).await {
+						if let Err(e) = jazz::peer_mesh_reconcile_tick(&h_mesh, true).await {
 							log::debug!(
 								target: "avenos::jazz",
 								"peer-mesh reconcile skipped: {e}"
