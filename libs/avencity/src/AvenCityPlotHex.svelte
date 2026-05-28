@@ -2,39 +2,35 @@
 	import { T, useTask, useThrelte } from '@threlte/core'
 	import { HTML } from '@threlte/extras'
 	import { avencityBrand } from './brand-colors'
-	import {
-		hexCircumradiusForViewport,
-		hexPolygonPointsAttr,
-		hexVerticalSpanPx,
-		hexViewBoxSize
-	} from './hex-utils'
+	import { hexPolygonPointsAttr, hexVerticalSpanPx, hexViewBoxSize } from './hex-utils'
 
 	let {
+		position = [0, 0, 0.005] as [number, number, number],
+		worldRadius,
 		active = false,
-		onhoverchange
+		preview = false,
+		onhoverchange,
+		onplace
 	}: {
+		position?: [number, number, number]
+		worldRadius: number
 		active?: boolean
+		preview?: boolean
 		onhoverchange?: (hovered: boolean) => void
+		onplace?: () => void
 	} = $props()
 
 	const { camera, size } = useThrelte()
 
-	/** Default fill on first render / viewport resize only — not re-applied on zoom. */
-	const initialScreenFill = 0.8
-
 	let plotHovered = $state(false)
-	let hexRadius = $state<number | null>(null)
 	let hexHeightPx = $state(400)
 	let hexWidthPx = $state(400)
-	let viewportKey = $state('')
 
-	const worldRadius = $derived(hexRadius ?? 1.2)
 	const isHighlighted = $derived(active || plotHovered)
 	const outlineColor = $derived(isHighlighted ? avencityBrand.marine : avencityBrand.border)
 	const polygonPoints = $derived(hexPolygonPointsAttr(worldRadius))
 	const viewBox = $derived(hexViewBoxSize(worldRadius))
 	const strokeWidth = $derived(worldRadius * 0.004)
-	/** Wider invisible edge band so entry from outside the hex still registers. */
 	const hitStrokeWidth = $derived(worldRadius * 0.04)
 	const dashLength = $derived(worldRadius * 0.028)
 	const gapLength = $derived(worldRadius * 0.022)
@@ -44,12 +40,6 @@
 		const cam = camera.current
 		const viewport = size.current
 		if (!cam || viewport.width <= 0 || viewport.height <= 0) return
-
-		const nextViewportKey = `${viewport.width}x${viewport.height}`
-		if (hexRadius === null || nextViewportKey !== viewportKey) {
-			hexRadius = hexCircumradiusForViewport(cam, viewport, initialScreenFill)
-			viewportKey = nextViewportKey
-		}
 
 		const box = hexViewBoxSize(worldRadius)
 		hexHeightPx = hexVerticalSpanPx(worldRadius, cam, viewport)
@@ -65,36 +55,47 @@
 		plotHovered = false
 		onhoverchange?.(false)
 	}
+
+	function onPlotClick(e: MouseEvent) {
+		if (!preview) return
+		e.stopPropagation()
+		e.stopImmediatePropagation()
+		onplace?.()
+	}
 </script>
 
-<T.Group>
-	<HTML center position={[0, 0, 0.005]} wrapperClass="avencity-plot-html" zIndexRange={[8_000_000, 7_900_000]}>
+<T.Group {position}>
+	<HTML center position={[0, 0, 0]} wrapperClass="avencity-plot-html" zIndexRange={[8_000_000, 7_900_000]}>
 		<svg
 			class="avencity-plot-svg"
+			class:avencity-plot-svg--preview={preview}
 			width={hexWidthPx}
 			height={hexHeightPx}
 			viewBox="{-viewBox.width / 2} {viewBox.minY} {viewBox.width} {viewBox.height}"
 		>
 			<polygon
 				class="avencity-plot-hit"
+				class:avencity-plot-hit--preview={preview}
 				role="button"
-				aria-label="Grundstück plot"
-				tabindex="-1"
+				aria-label={preview ? 'Place new Grundstück' : 'Grundstück plot'}
+				tabindex={preview ? 0 : -1}
 				points={polygonPoints}
 				fill="transparent"
 				stroke="transparent"
 				stroke-width={hitStrokeWidth}
 				onpointerenter={onPlotEnter}
 				onpointerleave={onPlotLeave}
+				onclick={onPlotClick}
 			/>
 			<polygon
 				class="avencity-plot-outline"
+				class:avencity-plot-outline--preview={preview}
 				points={polygonPoints}
 				aria-hidden="true"
 				fill="none"
 				stroke={outlineColor}
 				stroke-width={strokeWidth}
-				stroke-dasharray={isHighlighted ? undefined : dashPattern}
+				stroke-dasharray={preview || !isHighlighted ? dashPattern : undefined}
 				stroke-linejoin="round"
 			/>
 		</svg>
@@ -112,14 +113,25 @@
 		pointer-events: none;
 	}
 
+	.avencity-plot-svg--preview {
+		opacity: 0.92;
+	}
+
 	.avencity-plot-hit {
-		/* Hex-shaped hit area: interior + outline, not the SVG bounding box. */
 		pointer-events: painted !important;
 		cursor: pointer;
+	}
+
+	.avencity-plot-hit--preview {
+		cursor: copy;
 	}
 
 	.avencity-plot-outline {
 		pointer-events: none;
 		transition: stroke 160ms ease;
+	}
+
+	.avencity-plot-outline--preview {
+		opacity: 0.88;
 	}
 </style>

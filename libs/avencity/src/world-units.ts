@@ -1,6 +1,8 @@
 import type { Camera } from 'three'
 import { OrthographicCamera, Vector3 } from 'three'
 
+import { AVENCITY_UPGRADES } from './upgrades'
+
 const edgeLeft = new Vector3()
 const edgeRight = new Vector3()
 
@@ -36,10 +38,18 @@ export function circleIconPx(
 	return circleDiameterPx(radius, camera, viewport) * fillRatio
 }
 
-/** Target node radius per upgrade level (world units). */
+const MIN_DOME_M = AVENCITY_UPGRADES[0].domeDiameterM
+const MAX_DOME_M = AVENCITY_UPGRADES[AVENCITY_UPGRADES.length - 1].domeDiameterM
+const MIN_RADIUS = 0.11
+const MAX_RADIUS = 0.54
+const LOG_MIN = Math.log(MIN_DOME_M)
+const LOG_MAX = Math.log(MAX_DOME_M)
+
+/** Target node radius per upgrade level — scales with geodesic diameter. */
 export function radiusForUpgradeLevel(level: number): number {
-	const radii = [0.22, 0.3, 0.38, 0.46, 0.54, 0.62, 0.7, 0.78, 0.86]
-	return radii[Math.min(Math.max(level - 1, 0), radii.length - 1)]
+	const upgrade = AVENCITY_UPGRADES[Math.min(Math.max(level - 1, 0), AVENCITY_UPGRADES.length - 1)]
+	const t = (Math.log(upgrade.domeDiameterM) - LOG_MIN) / (LOG_MAX - LOG_MIN)
+	return MIN_RADIUS + t * (MAX_RADIUS - MIN_RADIUS)
 }
 
 export const CIRCLE_GROWTH_SPEED = 1.65
