@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte'
-	import { mobileFabBottomClass } from '$lib/shell'
+	import { mobileAsideFabZClass, mobileFabBottomClass } from '$lib/shell'
 	import { mobileChromeOverrides } from '$lib/shell/mobile-chrome.svelte'
 	import MobileAsideDrawer from './MobileAsideDrawer.svelte'
 
@@ -72,7 +72,7 @@
 		{#if showAsideFab}
 			<button
 				type="button"
-				class="border-border bg-background/95 text-foreground hover:bg-background fixed z-30 inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full border shadow-md backdrop-blur-sm transition-colors max-sm:left-3 {mobileFabBottomClass} md:hidden"
+				class="border-border bg-background/95 text-foreground hover:bg-background fixed {mobileAsideFabZClass} inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full border shadow-md backdrop-blur-sm transition-colors max-sm:left-3 {mobileFabBottomClass} md:hidden"
 				onclick={toggle}
 				aria-expanded={open}
 				aria-controls={asideId}

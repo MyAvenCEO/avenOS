@@ -32,11 +32,11 @@ pub enum GrooveLinkLifecycle {
 type LinkLifecycleHook = Arc<dyn Fn(GrooveLinkLifecycle) + Send + Sync>;
 
 /// Tear down a half-dead mux when the peer reconnects or keepalive misses.
-const MUX_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
-const MUX_KEEPALIVE_MISSED: u32 = 2;
+const MUX_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(8);
+const MUX_KEEPALIVE_MISSED: u32 = 4;
 const MUX_KEEPALIVE_FRAME: &[u8] = b"avenos/mux-ping/v1";
-/// Backstop if keepalive state stalls entirely.
-const LINK_READ_IDLE_TIMEOUT: Duration = Duration::from_secs(15);
+/// Backstop if keepalive state stalls entirely (relay/cellular can be quiet for stretches).
+const LINK_ACTIVITY_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 /// Abort mux promotion if the outbound writer never enters its recv loop.
 const MUX_WRITER_START_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -237,6 +237,28 @@ impl HyperswarmGrooveBridge {
 		self.0.peer_set_changed.notify_waiters();
 	}
 
+	/// Abort every mux worker — used when Groove has no live link but a stale worker still suppresses inbound handshakes.
+	pub async fn abort_all_swarm_workers(&self) {
+		let worker_ids: Vec<ClientId> = self.0.swarm_workers.lock().await.keys().copied().collect();
+		for cid in worker_ids {
+			let pk = if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+				reg.pk_for_client(cid).await
+			} else {
+				None
+			};
+			if let Some(pk) = pk {
+				self.abort_worker_for(cid, pk, false).await;
+			} else if let Some(h) = self.0.swarm_workers.lock().await.remove(&cid) {
+				h.abort();
+				let _ = h.await;
+			}
+		}
+		if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+			reg.clear_phantom_entries().await;
+		}
+		self.0.peer_set_changed.notify_waiters();
+	}
+
 	async fn wait_until_local_party(&self) -> ClientId {
 		loop {
 			if let Some(id) = *self.0.local_client_id.lock().await {
@@ -326,24 +348,35 @@ impl HyperswarmGrooveBridge {
 		let peer_set_changed = Arc::clone(&bridge.0.peer_set_changed);
 		let bridge_for_writer = bridge.clone();
 		let (writer_ready_tx, writer_ready_rx) = oneshot::channel::<()>();
-		let last_inbound_ms = Arc::new(AtomicU64::new(now_epoch_ms()));
+		let last_activity_ms = Arc::new(AtomicU64::new(now_epoch_ms()));
+		let mux_live_flag = Arc::new(AtomicBool::new(false));
 
 		// Reader task: pure inbound — decode every frame, dispatch to Groove.
 		let bridge_for_reader = bridge.clone();
 		let reader_handle = tokio::spawn({
 			let shutdown = Arc::clone(&shutdown);
-			let last_inbound_ms = Arc::clone(&last_inbound_ms);
+			let last_activity_ms = Arc::clone(&last_activity_ms);
+			let mux_live_flag = Arc::clone(&mux_live_flag);
 			async move {
-				let mut idle = tokio::time::interval(LINK_READ_IDLE_TIMEOUT);
+				let mut idle = tokio::time::interval(LINK_ACTIVITY_IDLE_TIMEOUT);
 				idle.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 				idle.tick().await;
 				loop {
 					tokio::select! {
 						_ = shutdown.notified() => break,
 						_ = idle.tick() => {
+							if !mux_live_flag.load(Ordering::Acquire) {
+								idle.reset();
+								continue;
+							}
+							let since = now_epoch_ms()
+								.saturating_sub(last_activity_ms.load(Ordering::Acquire));
+							if since < LINK_ACTIVITY_IDLE_TIMEOUT.as_millis() as u64 {
+								continue;
+							}
 							log::info!(
 								target: "avenos::peeroxide",
-								"peer stream idle timeout peer={remote_client:?} — closing stale link",
+								"peer stream idle timeout peer={remote_client:?} ({since}ms) — closing stale link",
 							);
 							bridge_for_reader.on_mux_send_lost(remote_pk).await;
 							break;
@@ -352,7 +385,9 @@ impl HyperswarmGrooveBridge {
 							match msg {
 								Ok(Some(plaintext)) => {
 									idle.reset();
-									last_inbound_ms.store(now_epoch_ms(), Ordering::Release);
+									if !is_mux_keepalive_frame(&plaintext) {
+										last_activity_ms.store(now_epoch_ms(), Ordering::Release);
+									}
 									if is_mux_keepalive_frame(&plaintext) {
 										continue;
 									}
@@ -409,7 +444,8 @@ impl HyperswarmGrooveBridge {
 			.expect("writer_ready flag installed before mux worker spawn");
 		let writer_handle = tokio::spawn({
 			let shutdown = Arc::clone(&shutdown);
-			let last_inbound_ms = Arc::clone(&last_inbound_ms);
+			let last_activity_ms = Arc::clone(&last_activity_ms);
+			let mux_live_flag = Arc::clone(&mux_live_flag);
 			let mut capsule_rx = capsule_rx;
 			let mut keepalive = tokio::time::interval(MUX_KEEPALIVE_INTERVAL);
 			keepalive.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -422,8 +458,11 @@ impl HyperswarmGrooveBridge {
 					tokio::select! {
 						_ = shutdown.notified() => break,
 						_ = keepalive.tick() => {
+							if !mux_live_flag.load(Ordering::Acquire) {
+								continue;
+							}
 							let since = now_epoch_ms()
-								.saturating_sub(last_inbound_ms.load(Ordering::Acquire));
+								.saturating_sub(last_activity_ms.load(Ordering::Acquire));
 							let miss_ms =
 								MUX_KEEPALIVE_INTERVAL.as_millis() as u64 * u64::from(MUX_KEEPALIVE_MISSED);
 							if since >= miss_ms {
@@ -439,8 +478,10 @@ impl HyperswarmGrooveBridge {
 									target: "avenos::peeroxide",
 									"peer mux keepalive write failed peer={remote_client:?}: {e:?}",
 								);
+								bridge_for_writer.on_mux_send_lost(remote_pk).await;
 								break;
 							}
+							last_activity_ms.store(now_epoch_ms(), Ordering::Release);
 						}
 						capsule_opt = capsule_rx.recv() => {
 							let Some(data) = capsule_opt else { break };
@@ -449,8 +490,10 @@ impl HyperswarmGrooveBridge {
 									target: "avenos::peeroxide",
 									"peer stream write failed peer={remote_client:?}: {e:?}",
 								);
+								bridge_for_writer.on_mux_send_lost(remote_pk).await;
 								break;
 							}
+							last_activity_ms.store(now_epoch_ms(), Ordering::Release);
 						}
 					}
 				}
@@ -465,6 +508,7 @@ impl HyperswarmGrooveBridge {
 		// linkedCount:1 while PeerTransport::send_to returns ChannelClosed.
 		match tokio::time::timeout(MUX_WRITER_START_TIMEOUT, writer_ready_rx).await {
 			Ok(Ok(())) => {
+				mux_live_flag.store(true, Ordering::Release);
 				bridge
 					.promote_mux_ready(
 						remote_pk,

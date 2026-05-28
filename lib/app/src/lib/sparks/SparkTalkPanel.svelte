@@ -14,7 +14,10 @@
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/self/device-session-store'
 	import { vaultList } from '$lib/self/vault'
-	import { contentMaxWidthClass, mobileActionVeilClass } from '$lib/shell'
+	import {
+		mobileActionVeilClass,
+		mobileComposerVeilZClass,
+	} from '$lib/shell'
 	import {
 		clearMobileChromeOverrides,
 		setMobileChromeOverrides
@@ -263,11 +266,12 @@
 			</div>
 
 			<div
-				class={`pointer-events-none fixed inset-x-0 bottom-0 z-[45] flex justify-center bg-gradient-to-t from-background via-background/88 to-transparent px-3 ${mobileActionVeilClass} sm:from-55% sm:px-5 sm:pt-3 sm:pb-5`}
+				class={`pointer-events-none fixed inset-x-0 bottom-0 ${mobileComposerVeilZClass} flex justify-center bg-gradient-to-t from-background via-background/88 to-transparent max-sm:px-2 sm:px-5 sm:from-55% sm:pt-3 sm:pb-5 ${mobileActionVeilClass}`}
 			>
 				<div
-					class={`pointer-events-auto relative flex w-full items-center justify-center ${contentMaxWidthClass} sm:pl-0 sm:pr-0 ${composerMode === 'typing' ? 'max-sm:px-1' : 'max-sm:pl-14 max-sm:pr-14'}`}
+					class="relative flex w-full max-w-none items-center justify-center max-sm:px-0 sm:pl-0 sm:pr-0"
 				>
+					<div class="pointer-events-auto w-full min-w-0">
 					<IntentComposer
 						placeholder="Write a message…"
 						disabled={composerDisabled}
@@ -279,6 +283,7 @@
 							composerMode = mode
 						}}
 					/>
+					</div>
 				</div>
 			</div>
 		</div>

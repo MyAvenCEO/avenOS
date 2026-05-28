@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state'
-	import { mobileFabBottomClass, navigateApp } from '$lib/shell'
+	import { mobileFabBottomClass, mobileProfileFabZClass, navigateApp } from '$lib/shell'
 	import MobileAsideDrawer from '$lib/ui/MobileAsideDrawer.svelte'
 	import MobileAsideNavLink from '$lib/ui/MobileAsideNavLink.svelte'
 	import MobileAsideSectionLabel from '$lib/ui/MobileAsideSectionLabel.svelte'
@@ -106,7 +106,7 @@
 {#if showNavFab}
 	<button
 		type="button"
-		class="border-border bg-background/95 text-foreground hover:bg-background fixed right-3 {mobileFabBottomClass} z-[47] inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full border shadow-md backdrop-blur-sm transition-colors sm:hidden
+		class="border-border bg-background/95 text-foreground hover:bg-background fixed right-3 {mobileFabBottomClass} {mobileProfileFabZClass} inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full border shadow-md backdrop-blur-sm transition-colors sm:hidden
 			{selfActive ? 'ring-2 ring-primary/30' : ''}"
 		onclick={toggleNav}
 		aria-expanded={navOpen}

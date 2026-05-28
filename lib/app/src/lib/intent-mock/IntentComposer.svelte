@@ -121,7 +121,6 @@ const DOUBLE_TAP_MS = 220
 let lastTapAtMs = 0
 let holdActive = false
 let longPressTimer: ReturnType<typeof setTimeout> | null = null
-let pendingSingleTapTimer: ReturnType<typeof setTimeout> | null = null
 
 $effect(() => {
 	if (typeof window === 'undefined') return
@@ -141,17 +140,31 @@ function clearLongPressTimer() {
 	}
 }
 
-function clearPendingSingleTapTimer() {
-	if (pendingSingleTapTimer != null) {
-		clearTimeout(pendingSingleTapTimer)
-		pendingSingleTapTimer = null
-	}
+function focusTypingInput() {
+	void tick().then(() => {
+		requestAnimationFrame(() => {
+			const el = textareaEl
+			if (!el || mode !== 'typing') return
+			el.focus({ preventScroll: false })
+			try {
+				const len = el.value.length
+				el.setSelectionRange(len, len)
+			} catch {
+				/* iOS may reject selection before focus settles */
+			}
+			resizeComposer()
+		})
+	})
 }
 
 function openTyping() {
-	void focusShellWebview()
 	keepTypingOpenUntilBlur = true
 	mode = 'typing'
+	void (async () => {
+		await focusShellWebview()
+		focusTypingInput()
+	})()
+	scheduleResizeForProgrammaticOpen()
 }
 
 function openMobileFilePicker() {
@@ -174,12 +187,10 @@ function openStreamListening() {
 function onMobileCollapsedPointerDown(e: PointerEvent) {
 	holdActive = false
 	clearLongPressTimer()
-	clearPendingSingleTapTimer()
 	const target = e.currentTarget as HTMLElement
 	target.setPointerCapture(e.pointerId)
 	longPressTimer = setTimeout(() => {
 		longPressTimer = null
-		clearPendingSingleTapTimer()
 		lastTapAtMs = 0
 		holdActive = true
 		listeningSubmitOnRelease = true
@@ -202,22 +213,22 @@ function onMobileCollapsedPointerUp(e: PointerEvent) {
 
 	const now = performance.now()
 	if (now - lastTapAtMs < DOUBLE_TAP_MS) {
-		clearPendingSingleTapTimer()
 		lastTapAtMs = 0
+		if (mode === 'typing' && text.trim() === '' && attachments.length === 0 && command == null) {
+			suppressTextEffect = true
+			mode = 'collapsed'
+			suppressTextEffect = false
+		}
 		openStreamListening()
 		return
 	}
 
 	lastTapAtMs = now
-	pendingSingleTapTimer = setTimeout(() => {
-		pendingSingleTapTimer = null
-		if (mode === 'collapsed') openTyping()
-	}, DOUBLE_TAP_MS)
+	if (mode === 'collapsed') openTyping()
 }
 
 function onMobileCollapsedPointerCancel(e: PointerEvent) {
 	clearLongPressTimer()
-	clearPendingSingleTapTimer()
 	const target = e.currentTarget as HTMLElement
 	if (target.hasPointerCapture(e.pointerId)) {
 		target.releasePointerCapture(e.pointerId)
@@ -243,13 +254,7 @@ $effect(() => {
 	if (mode !== 'typing') return
 	void textareaEl
 	void command
-	void tick().then(() => {
-		const el = textareaEl
-		if (!el || mode !== 'typing') return
-		el.focus()
-		const len = el.value.length
-		el.setSelectionRange(len, len)
-	})
+	focusTypingInput()
 })
 
 /**
@@ -292,14 +297,11 @@ export function openWithFiles(fileList: File[] | FileList) {
 		elapsed = 0
 	}
 	mode = 'typing'
-	void tick().then(() => {
+	void (async () => {
+		await focusShellWebview()
+		focusTypingInput()
 		suppressTextEffect = false
-		const el = textareaEl
-		if (!el || mode !== 'typing') return
-		el.focus()
-		const len = el.value.length
-		el.setSelectionRange(len, len)
-	})
+	})()
 	scheduleResizeForProgrammaticOpen()
 }
 
@@ -324,7 +326,6 @@ function formatAttachmentSummary(): string {
 
 onDestroy(() => {
 	clearLongPressTimer()
-	clearPendingSingleTapTimer()
 	for (const a of attachmentsUnmountSnapshot) revokeAttachmentPreview(a)
 })
 

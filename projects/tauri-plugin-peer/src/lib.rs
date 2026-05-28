@@ -4,7 +4,7 @@
 //! (`HKDFExpand` with info `ceo.aven.os/identity/ed25519/v1` over the device root secret).
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod did;
@@ -144,6 +144,8 @@ pub struct PeerCtl {
 	applied_peer_allow_sorted: Arc<tokio::sync::Mutex<Option<Vec<String>>>>,
 	/// Last transport upgrade probe per DID (ms since epoch).
 	last_upgrade_probe_at: Arc<tokio::sync::Mutex<std::collections::HashMap<String, u64>>>,
+	/// Coalesce adaptive mesh nudge storms while DHT lookup is in flight.
+	last_reconnect_at_ms: Arc<AtomicU64>,
 	/// Last `start_swarm` failure — surfaced to UI when buttons stay disabled.
 	swarm_start_error: Arc<tokio::sync::Mutex<Option<String>>>,
 	/// Last resolved P2P stack config — surfaced in UI for TestFlight diagnostics.
@@ -1174,6 +1176,13 @@ impl PeerCtl {
 		&self,
 		active_remote_dids: &[String],
 	) -> Result<(), String> {
+		let live = self.live_links.snapshot_mux_ready_dids().await;
+		let connecting = self.live_links.snapshot_connecting_dids().await;
+		let missing =
+			peer_reconnect::missing_reconnect_dids(active_remote_dids, &live, &connecting);
+		if missing.is_empty() {
+			return Ok(());
+		}
 		self.reconnect_peers(
 			"mesh nudge",
 			Some(active_remote_dids.to_vec()),
@@ -1207,6 +1216,15 @@ impl PeerCtl {
 		&self,
 		payload: &network_path::NetworkPathChangedPayload,
 	) -> Result<(), String> {
+		let prev = self.last_network_interfaces.read().await.clone();
+		let live = self.live_links.mux_ready_count().await;
+		if live > 0 && prev == payload.interfaces {
+			log::debug!(
+				target: "avenos::peeroxide",
+				"peer_heal: path_change noop — interfaces unchanged with {live} live link(s)",
+			);
+			return Ok(());
+		}
 		self.connect_ui_tracker.mark_path_change();
 		*self.last_network_interfaces.write().await = payload.interfaces.clone();
 		let prefer_lan = prefer_lan_from_path(&payload.interfaces, payload.satisfied);
@@ -1255,7 +1273,8 @@ impl PeerCtl {
 		for did in live_dids {
 			let ui = self.connect_ui_tracker.row_for_did(&did);
 			let mode = ui.transport_mode;
-			if !crate::transport_rank::should_probe_upgrade(mode) {
+			let prefer_lan = self.prefer_lan.load(Ordering::Relaxed);
+			if !crate::transport_rank::should_probe_upgrade(mode, prefer_lan) {
 				continue;
 			}
 			let interval = mode
@@ -1304,12 +1323,18 @@ impl PeerCtl {
 	fn schedule_post_link_upgrade_probe(&self, remote_pk: [u8; 32]) {
 		let ctl = self.clone();
 		tokio::spawn(async move {
-			tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+			if !ctl.prefer_lan.load(Ordering::Relaxed) {
+				return;
+			}
+			tokio::time::sleep(std::time::Duration::from_secs(30)).await;
 			let Ok(did) = crate::did::peer_did_from_ed25519(&remote_pk) else {
 				return;
 			};
+			if !ctl.live_links.is_mux_ready_by_did(&did).await {
+				return;
+			}
 			let ui = ctl.connect_ui_tracker.row_for_did(&did);
-			if !crate::transport_rank::should_probe_upgrade(ui.transport_mode) {
+			if !crate::transport_rank::should_probe_upgrade(ui.transport_mode, true) {
 				return;
 			}
 			let swarm = {
@@ -1816,6 +1841,7 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 				pending_allowlist: Arc::new(tokio::sync::Mutex::new(None)),
 				applied_peer_allow_sorted: Arc::new(tokio::sync::Mutex::new(None)),
 				last_upgrade_probe_at: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
+				last_reconnect_at_ms: Arc::new(AtomicU64::new(0)),
 				swarm_start_error: Arc::new(tokio::sync::Mutex::new(None)),
 				p2p_diagnostics: Arc::new(tokio::sync::RwLock::new(P2pDiagnostics {
 					central_mode: aven_relay_central_mode(),

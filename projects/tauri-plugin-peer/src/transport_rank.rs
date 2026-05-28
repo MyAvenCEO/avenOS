@@ -47,12 +47,19 @@ pub fn map_dht_mode(mode: peeroxide_dht::connect_ui::ConnectTransportMode) -> Pe
 	}
 }
 
-/// Whether an upgrade probe may find a better path (LAN is best — never probe).
+/// Whether an upgrade probe may find a better path.
+///
+/// Cross-network (`prefer_lan=false`): never probe — relay is the intended path.
+/// On LAN (`prefer_lan=true`): probe when not already on LAN.
 #[must_use]
-pub fn should_probe_upgrade(mode: Option<PeerTransportMode>) -> bool {
+pub fn should_probe_upgrade(mode: Option<PeerTransportMode>, prefer_lan: bool) -> bool {
+	if !prefer_lan {
+		return false;
+	}
 	match mode {
-		None => true,
-		Some(m) => transport_rank(m) > 1,
+		None => false,
+		Some(PeerTransportMode::Lan) => false,
+		Some(_) => true,
 	}
 }
 
@@ -83,10 +90,12 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn probe_upgrade_skips_lan() {
-		assert!(!should_probe_upgrade(Some(PeerTransportMode::Lan)));
-		assert!(should_probe_upgrade(Some(PeerTransportMode::Relay)));
-		assert!(should_probe_upgrade(None));
+	fn probe_upgrade_skips_lan_and_relay_when_not_prefer_lan() {
+		assert!(!should_probe_upgrade(Some(PeerTransportMode::Lan), true));
+		assert!(should_probe_upgrade(Some(PeerTransportMode::Relay), true));
+		assert!(!should_probe_upgrade(Some(PeerTransportMode::Relay), false));
+		assert!(!should_probe_upgrade(None, true));
+		assert!(!should_probe_upgrade(None, false));
 	}
 
 	#[test]

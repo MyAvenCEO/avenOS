@@ -7,6 +7,22 @@ use std::sync::atomic::Ordering;
 
 use crate::PeerCtl;
 
+/// Minimum gap between adaptive mesh nudge reconnects (DHT flush is expensive).
+pub const MESH_NUDGE_DEBOUNCE_MS: u64 = 12_000;
+
+/// What to tear down before a reconnect nudge — live and in-flight muxes are sacred.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TeardownPlan {
+	/// Refresh relays / DHT only.
+	None,
+	/// Drop phantom or non-live coordinator rows only.
+	NonLiveOnly,
+	/// Abort all mux workers (nothing live and nothing establishing).
+	AllWorkers,
+	/// Pairing reset — full mesh clear.
+	AllLinks,
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ReconnectOpts {
 	pub prefer_lan: Option<bool>,
@@ -23,8 +39,7 @@ impl ReconnectOpts {
 		Self {
 			prefer_lan,
 			path_changed: true,
-			force_teardown: true,
-			probe_transport: true,
+			probe_transport: prefer_lan.unwrap_or(false),
 			..Self::default()
 		}
 	}
@@ -91,6 +106,50 @@ pub fn use_allowlist_global_reset(live_count: usize, in_flight_count: usize) -> 
 	live_count == 0 && in_flight_count == 0
 }
 
+/// First-principles teardown: never abort a live or handshaking mux for soft heals.
+pub fn plan_teardown(
+	opts: ReconnectOpts,
+	mux_live: usize,
+	in_flight: usize,
+	phantom_count: usize,
+	missing_count: usize,
+	pairing_active: bool,
+) -> TeardownPlan {
+	if opts.teardown_all_links {
+		return TeardownPlan::AllLinks;
+	}
+	if mux_live > 0 || in_flight > 0 {
+		if phantom_count > 0 {
+			return TeardownPlan::NonLiveOnly;
+		}
+		return TeardownPlan::None;
+	}
+	if phantom_count > 0 {
+		return TeardownPlan::NonLiveOnly;
+	}
+	if opts.force_teardown
+		|| (missing_count > 0 && !pairing_active)
+		|| (pairing_active && opts.force_teardown)
+	{
+		return TeardownPlan::AllWorkers;
+	}
+	TeardownPlan::None
+}
+
+pub fn reconnect_debounce_exempt(reason: &'static str, opts: ReconnectOpts) -> bool {
+	opts.force_teardown
+		|| opts.path_changed
+		|| opts.teardown_all_links
+		|| matches!(
+			reason,
+			"network path changed"
+				| "link down"
+				| "pairing link down"
+				| "allowlist heal during pairing"
+				| "pairing reset"
+		)
+}
+
 impl PeerCtl {
 	/// Unified heal: refresh relays, tear down stale mux, nudge missing peers, flush DHT.
 	pub async fn reconnect_peers(
@@ -99,6 +158,19 @@ impl PeerCtl {
 		targets: Option<Vec<String>>,
 		opts: ReconnectOpts,
 	) -> Result<(), String> {
+		let now_ms = crate::peer_util::now_ms();
+		if reason == "mesh nudge" && !reconnect_debounce_exempt(reason, opts) {
+			let last = self.last_reconnect_at_ms.load(Ordering::Relaxed);
+			if now_ms.saturating_sub(last) < MESH_NUDGE_DEBOUNCE_MS {
+				log::debug!(
+					target: "avenos::peeroxide",
+					"reconnect_peers ({reason}): debounced ({}ms since last)",
+					now_ms.saturating_sub(last),
+				);
+				return Ok(());
+			}
+		}
+
 		let pairing_active = self.pairing_session.lock().await.is_some();
 		let was_prefer_lan = self.prefer_lan.load(Ordering::Relaxed);
 		let prefer_lan = opts.prefer_lan.unwrap_or(was_prefer_lan);
@@ -128,25 +200,64 @@ impl PeerCtl {
 		let mux_live = live_dids.len();
 		let allowlist_heal = !target_dids.is_empty();
 		let missing = missing_reconnect_dids(&target_dids, &live_dids, &connecting_dids);
+		let in_flight_count = self.live_links.in_flight_count().await;
 
-		let needs_teardown = opts.force_teardown
-			|| opts.path_changed
-			|| phantom_count > 0
-			|| (allowlist_heal && mux_live == 0 && !missing.is_empty())
-			|| (pairing_active && mux_live == 0 && (opts.path_changed || opts.force_teardown));
+		let teardown = plan_teardown(
+			opts,
+			mux_live,
+			in_flight_count,
+			phantom_count,
+			missing.len(),
+			pairing_active,
+		);
 
-		if needs_teardown {
-			if opts.teardown_all_links {
-				self.jazz_hyperswarm.teardown_all_links().await;
-			} else {
-				self.jazz_hyperswarm.teardown_non_live_links().await;
+		// Soft path/foreground heal while linked: refresh relays only — do not reset DHT.
+		if opts.path_changed && mux_live > 0 && missing.is_empty() && teardown == TeardownPlan::None
+		{
+			let swarm = {
+				let guard = self.inner.lock().await;
+				guard.as_ref().map(|r| r.swarm.clone())
+			};
+			if let Some(swarm) = swarm {
+				if let Err(e) = swarm.refresh_announce_relays().await {
+					log::debug!(
+						target: "avenos::peeroxide",
+						"refresh_announce_relays ({reason} soft): {e}",
+					);
+				}
 			}
+			if opts.probe_transport && prefer_lan && !was_prefer_lan {
+				if let Err(e) = self.probe_transport_upgrades(true, reason).await {
+					log::debug!(
+						target: "avenos::peeroxide",
+						"transport upgrade after reconnect: {e}",
+					);
+				}
+			}
+			log::info!(
+				target: "avenos::peeroxide",
+				"reconnect_peers ({reason}): soft skip live={} in_flight={}",
+				mux_live,
+				in_flight_count,
+			);
+			self.emit_mesh_push();
+			return Ok(());
+		}
+
+		match teardown {
+			TeardownPlan::AllLinks => self.jazz_hyperswarm.teardown_all_links().await,
+			TeardownPlan::AllWorkers => self.jazz_hyperswarm.abort_all_swarm_workers().await,
+			TeardownPlan::NonLiveOnly => self.jazz_hyperswarm.teardown_non_live_links().await,
+			TeardownPlan::None => {}
+		}
+		if teardown != TeardownPlan::None {
 			self.live_links.clear_phantom_entries().await;
 		}
 
 		let in_flight_count = self.live_links.in_flight_count().await;
 
-		if missing.is_empty() && !pairing_active && !needs_teardown && !opts.path_changed {
+		if missing.is_empty() && !pairing_active && teardown == TeardownPlan::None && !opts.path_changed
+		{
 			return Ok(());
 		}
 
@@ -189,6 +300,26 @@ impl PeerCtl {
 		} else {
 			use_global_prepare_reconnect(pairing_active, mux_live, in_flight_count)
 		};
+
+		for did in &missing {
+			match crate::did::ed25519_public_from_peer_did(did) {
+				Ok(pk) => {
+					if let Err(e) = swarm.note_peer_disconnected(pk).await {
+						log::debug!(
+							target: "avenos::peeroxide",
+							"note_peer_disconnected ({reason}) did={did}: {e}",
+						);
+					}
+				}
+				Err(e) => {
+					log::debug!(
+						target: "avenos::peeroxide",
+						"reconnect skip bad did={did}: {e}",
+					);
+				}
+			}
+		}
+
 		if global_reset {
 			if let Err(e) = swarm.prepare_reconnect().await {
 				log::debug!(
@@ -196,35 +327,16 @@ impl PeerCtl {
 					"prepare_reconnect ({reason}): {e}",
 				);
 			}
-		} else {
-			for did in &missing {
-				match crate::did::ed25519_public_from_peer_did(did) {
-					Ok(pk) => {
-						if let Err(e) = swarm.note_peer_disconnected(pk).await {
-							log::debug!(
-								target: "avenos::peeroxide",
-								"note_peer_disconnected ({reason}) did={did}: {e}",
-							);
-						}
-					}
-					Err(e) => {
-						log::debug!(
-							target: "avenos::peeroxide",
-							"reconnect skip bad did={did}: {e}",
-						);
-					}
-				}
-			}
 		}
 
 		log::info!(
 			target: "avenos::peeroxide",
-			"reconnect_peers ({reason}): missing={} live={} in_flight={} global_reset={} teardown={}",
+			"reconnect_peers ({reason}): missing={} live={} in_flight={} global_reset={} teardown={:?}",
 			missing.len(),
 			mux_live,
 			in_flight_count,
 			global_reset,
-			needs_teardown,
+			teardown,
 		);
 
 		crate::flush_swarm_for_pairing(&swarm, reason).await?;
@@ -239,6 +351,8 @@ impl PeerCtl {
 		}
 
 		self.emit_mesh_push();
+		self.last_reconnect_at_ms
+			.store(now_ms, Ordering::Relaxed);
 		Ok(())
 	}
 }
@@ -276,5 +390,52 @@ mod tests {
 		assert!(use_allowlist_global_reset(0, 0));
 		assert!(!use_allowlist_global_reset(0, 1));
 		assert!(!use_allowlist_global_reset(1, 0));
+	}
+
+	#[test]
+	fn mesh_nudge_debounce_exempt_for_path_and_link_down() {
+		assert!(reconnect_debounce_exempt(
+			"network path changed",
+			ReconnectOpts::path_change(Some(true)),
+		));
+		assert!(reconnect_debounce_exempt("link down", ReconnectOpts::link_down()));
+		assert!(!reconnect_debounce_exempt("mesh nudge", ReconnectOpts::mesh_nudge()));
+	}
+
+	#[test]
+	fn plan_teardown_preserves_live_and_in_flight() {
+		let path = ReconnectOpts::path_change(Some(false));
+		assert_eq!(
+			plan_teardown(path, 1, 0, 0, 0, false),
+			TeardownPlan::None,
+		);
+		assert_eq!(
+			plan_teardown(path, 0, 1, 0, 0, false),
+			TeardownPlan::None,
+		);
+		assert_eq!(
+			plan_teardown(path, 1, 1, 2, 0, false),
+			TeardownPlan::NonLiveOnly,
+		);
+	}
+
+	#[test]
+	fn plan_teardown_all_workers_when_down_and_missing() {
+		assert_eq!(
+			plan_teardown(ReconnectOpts::link_down(), 0, 0, 0, 1, false),
+			TeardownPlan::AllWorkers,
+		);
+		assert_eq!(
+			plan_teardown(ReconnectOpts::mesh_nudge(), 0, 0, 0, 1, false),
+			TeardownPlan::AllWorkers,
+		);
+	}
+
+	#[test]
+	fn plan_teardown_pairing_reset() {
+		assert_eq!(
+			plan_teardown(ReconnectOpts::pairing_reset(), 0, 0, 0, 0, true),
+			TeardownPlan::AllLinks,
+		);
 	}
 }

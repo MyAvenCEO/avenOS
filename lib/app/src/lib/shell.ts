@@ -6,6 +6,9 @@ import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 export const contentMaxWidthClass = 'mx-auto w-full max-w-[min(100%,88rem)]'
 
 /** Mobile bottom chrome — composer veil, corner FABs, and scroll clearance stay aligned. */
+export const mobileComposerVeilZClass = 'z-[45]'
+export const mobileAsideFabZClass = 'z-[46]'
+export const mobileProfileFabZClass = 'z-[47]'
 export const mobileFabBottomClass =
 	'max-sm:bottom-[max(0.5rem,env(safe-area-inset-bottom))]'
 export const mobileActionVeilClass =
