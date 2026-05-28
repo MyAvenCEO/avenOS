@@ -329,6 +329,7 @@ impl HyperswarmGrooveBridge {
 		let last_inbound_ms = Arc::new(AtomicU64::new(now_epoch_ms()));
 
 		// Reader task: pure inbound — decode every frame, dispatch to Groove.
+		let bridge_for_reader = bridge.clone();
 		let reader_handle = tokio::spawn({
 			let shutdown = Arc::clone(&shutdown);
 			let last_inbound_ms = Arc::clone(&last_inbound_ms);
@@ -344,6 +345,7 @@ impl HyperswarmGrooveBridge {
 								target: "avenos::peeroxide",
 								"peer stream idle timeout peer={remote_client:?} — closing stale link",
 							);
+							bridge_for_reader.on_mux_send_lost(remote_pk).await;
 							break;
 						}
 						msg = reader.read() => {
@@ -376,9 +378,13 @@ impl HyperswarmGrooveBridge {
 										}
 									}
 								}
-								Ok(None) => break,
+								Ok(None) => {
+									bridge_for_reader.on_mux_send_lost(remote_pk).await;
+									break;
+								}
 								Err(e) => {
 									log::debug!(target: "avenos::peeroxide", "peer stream read stopped: {e:?}");
+									bridge_for_reader.on_mux_send_lost(remote_pk).await;
 									break;
 								}
 							}
@@ -425,6 +431,7 @@ impl HyperswarmGrooveBridge {
 									target: "avenos::peeroxide",
 									"peer mux keepalive missed peer={remote_client:?} ({since}ms) — closing link",
 								);
+								bridge_for_writer.on_mux_send_lost(remote_pk).await;
 								break;
 							}
 							if let Err(e) = writer.write(MUX_KEEPALIVE_FRAME).await {

@@ -86,6 +86,11 @@ pub fn use_global_prepare_reconnect(
 	live_count == 0 && in_flight_count == 0
 }
 
+/// Allowlisted heal: global reset when nothing live and no active mux worker suppressing transport.
+pub fn use_allowlist_global_reset(live_count: usize, in_flight_count: usize) -> bool {
+	live_count == 0 && in_flight_count == 0
+}
+
 impl PeerCtl {
 	/// Unified heal: refresh relays, tear down stale mux, nudge missing peers, flush DHT.
 	pub async fn reconnect_peers(
@@ -119,13 +124,15 @@ impl PeerCtl {
 
 		let live_dids = self.live_links.snapshot_mux_ready_dids().await;
 		let connecting_dids = self.live_links.snapshot_connecting_dids().await;
-		let in_flight_count = self.live_links.in_flight_count().await;
 		let phantom_count = self.live_links.phantom_count().await;
 		let mux_live = live_dids.len();
+		let allowlist_heal = !target_dids.is_empty();
+		let missing = missing_reconnect_dids(&target_dids, &live_dids, &connecting_dids);
 
 		let needs_teardown = opts.force_teardown
 			|| opts.path_changed
 			|| phantom_count > 0
+			|| (allowlist_heal && mux_live == 0 && !missing.is_empty())
 			|| (pairing_active && mux_live == 0 && (opts.path_changed || opts.force_teardown));
 
 		if needs_teardown {
@@ -137,7 +144,8 @@ impl PeerCtl {
 			self.live_links.clear_phantom_entries().await;
 		}
 
-		let missing = missing_reconnect_dids(&target_dids, &live_dids, &connecting_dids);
+		let in_flight_count = self.live_links.in_flight_count().await;
+
 		if missing.is_empty() && !pairing_active && !needs_teardown && !opts.path_changed {
 			return Ok(());
 		}
@@ -176,7 +184,11 @@ impl PeerCtl {
 			);
 		}
 
-		let global_reset = use_global_prepare_reconnect(pairing_active, mux_live, in_flight_count);
+		let global_reset = if allowlist_heal {
+			use_allowlist_global_reset(mux_live, in_flight_count)
+		} else {
+			use_global_prepare_reconnect(pairing_active, mux_live, in_flight_count)
+		};
 		if global_reset {
 			if let Err(e) = swarm.prepare_reconnect().await {
 				log::debug!(
@@ -257,5 +269,12 @@ mod tests {
 		assert!(use_global_prepare_reconnect(false, 0, 0));
 		assert!(!use_global_prepare_reconnect(false, 0, 1));
 		assert!(!use_global_prepare_reconnect(false, 1, 0));
+	}
+
+	#[test]
+	fn allowlist_global_reset_ignores_pairing_in_flight() {
+		assert!(use_allowlist_global_reset(0, 0));
+		assert!(!use_allowlist_global_reset(0, 1));
+		assert!(!use_allowlist_global_reset(1, 0));
 	}
 }

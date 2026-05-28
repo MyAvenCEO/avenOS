@@ -5,20 +5,23 @@ todos:
   - id: qa-smoke-gate
     content: "Manual e2e on Mac+iPhone before further refactors: LAN pair → 5G → WiFi; kill remote app; airplane toggle; foreground after 5+ min background. Pass = reconnect ≤15s, sync resumes, logs show one reconnect_peers per path change."
     status: pending
+  - id: lan-5g-heal-fix
+    content: "Fix LAN→5G stuck state: early suppress clear on mux death, allowlist link-down reconnect, pairing nudge delegates to per-pair when allowlisted."
+    status: completed
   - id: unify-transport-probes
-    content: "Merge probe_transport_upgrades, schedule_post_link_upgrade_probe, maybe_probe_transport_upgrades into one internal probe_peers(force, reason) in tauri-plugin-peer; keep policy in transport_rank.rs"
+    content: Merge probe_transport_upgrades, schedule_post_link_upgrade_probe, maybe_probe_transport_upgrades into one internal probe_peers(force, reason) in tauri-plugin-peer; keep policy in transport_rank.rs
     status: pending
   - id: extract-pairing-module
-    content: "Extract pairing + invite flow from lib.rs (~350 lines) into pairing.rs; lib.rs keeps PeerCtl wiring and plugin init only"
+    content: Extract pairing + invite flow from lib.rs (~350 lines) into pairing.rs; lib.rs keeps PeerCtl wiring and plugin init only
     status: pending
   - id: extract-swarm-env
-    content: "Move env_truthy_os / build_p2p_diagnostics / relay config from lib.rs into swarm_env.rs (structural, no behavior change)"
+    content: Move env_truthy_os / build_p2p_diagnostics / relay config from lib.rs into swarm_env.rs (structural, no behavior change)
     status: pending
   - id: mesh-nudge-predicate
-    content: "Centralize 'should nudge discovery' in reconnect_peers / nudge_allowlisted_discovery — skip when all allowlisted DIDs are Live or actively connecting; document in 01-architecture.md"
+    content: Centralize 'should nudge discovery' in reconnect_peers / nudge_allowlisted_discovery — skip when all allowlisted DIDs are Live or actively connecting; document in 01-architecture.md
     status: pending
   - id: remove-bridge-fallback
-    content: "Remove snapshot_live_linked_dids cid-map fallback in hyperswarm_groove_bridge.rs once tests assert registry always attached at init"
+    content: Remove snapshot_live_linked_dids cid-map fallback in hyperswarm_groove_bridge.rs once tests assert registry always attached at init
     status: pending
   - id: shared-did-crate
     content: "Optional: dedupe did.rs (plugin) vs jazz_auth peer_did_from_ed25519 — single crate or re-export; low priority until heal stable"
@@ -57,6 +60,20 @@ Run on **Mac + iPhone** (TestFlight or dev builds):
 - `prepare_reconnect` only when `global_reset=true` in reconnect log line
 
 If LAN→5G fails: **stop refactoring** — debug coordinator suppress / stale ClientId / mesh register timing first.
+
+**QA gate failed (2026-05-28):** LAN pair → iOS 5G stuck at `linkedCount: 0` with endless `reconnect_peers (pairing discovery)` and `inbound reconnect suppressed`.
+
+**Fixes applied (lan-5g-heal-fix):**
+
+| Issue | Fix |
+| ----- | --- |
+| Phantom suppress after idle timeout | `on_mux_send_lost` at reader idle / read EOF / keepalive miss — clears Backoff before writer wind-down |
+| Link-down only healed during pairing | `on_groove_link_lifecycle(Down)` always `reconnect_peers` with allowlist + `link_down()` |
+| Pairing discovery when already paired | `nudge_pairing_discovery` delegates to allowlist heal when allowlist has missing peers |
+| `teardown=false` with live=0 | `needs_teardown` when allowlist heal and all peers missing |
+| `global_reset` stuck on stale in_flight | Re-read `in_flight_count` after teardown; allowlist uses `use_allowlist_global_reset` (ignores pairing) |
+
+Re-run QA gate before phase 2 refactors.
 
 ---
 

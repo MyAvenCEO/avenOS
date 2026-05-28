@@ -1149,6 +1149,22 @@ impl PeerCtl {
 		if self.pairing_session.lock().await.is_none() {
 			return Ok(());
 		}
+		let allow: Vec<String> = self.allowed_remote_dids.read().await.iter().cloned().collect();
+		if !allow.is_empty() {
+			let live = self.live_links.snapshot_mux_ready_dids().await;
+			let connecting = self.live_links.snapshot_connecting_dids().await;
+			let missing =
+				peer_reconnect::missing_reconnect_dids(&allow, &live, &connecting);
+			if !missing.is_empty() {
+				return self
+					.reconnect_peers(
+						"allowlist heal during pairing",
+						Some(allow),
+						peer_reconnect::ReconnectOpts::link_down(),
+					)
+					.await;
+			}
+		}
 		self.reconnect_peers("pairing discovery", None, peer_reconnect::ReconnectOpts::pairing())
 			.await
 	}
@@ -1396,9 +1412,19 @@ impl PeerCtl {
 						"note_peer_disconnected: {e}",
 					);
 				}
-				if self.pairing_session.lock().await.is_some() {
-					let ctl = self.clone();
-					tauri::async_runtime::spawn(async move {
+				let ctl = self.clone();
+				tauri::async_runtime::spawn(async move {
+					let allow: Vec<String> =
+						ctl.allowed_remote_dids.read().await.iter().cloned().collect();
+					if !allow.is_empty() {
+						let _ = ctl
+							.reconnect_peers(
+								"link down",
+								Some(allow),
+								peer_reconnect::ReconnectOpts::link_down(),
+							)
+							.await;
+					} else if ctl.pairing_session.lock().await.is_some() {
 						let _ = ctl
 							.reconnect_peers(
 								"pairing link down",
@@ -1406,10 +1432,10 @@ impl PeerCtl {
 								peer_reconnect::ReconnectOpts::link_down(),
 							)
 							.await;
-					});
-				} else {
-					self.emit_mesh_push();
-				}
+					} else {
+						ctl.emit_mesh_push();
+					}
+				});
 			}
 		}
 	}
