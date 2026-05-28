@@ -1,6 +1,6 @@
 # AvenOS vendored `jazz-tools` (Rust / `groove` alias)
 
-Tauri-native fork pinned at **2.0.0-alpha.0** snapshot + AvenOS patches. Target re-vendor: **jazz2 main alpha.50** → RocksDB only (see [`../jazz2-upstream/VENDOR_PIN.md`](../jazz2-upstream/VENDOR_PIN.md)).
+Tauri-native fork pinned at **2.0.0-alpha.0** snapshot + AvenOS patches. Target re-vendor: **jazz2 main alpha.50** → RocksDB only (pin + iOS spike: [`../jazz2-mirror-docs/`](../jazz2-mirror-docs/); local clone `../jazz2-upstream/`).
 
 ## AvenOS uses (`client-p2p` feature)
 
