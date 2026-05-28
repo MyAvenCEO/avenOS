@@ -139,7 +139,7 @@ In `nudge_allowlisted_discovery` / `reconnect_peers`: early return when every al
 
 ## Related docs
 
-- [01-architecture.md](../../libs/docs/network/developers/01-architecture.md)
+- Founders: [libs/docs/network/founders/](../../libs/docs/network/founders/)
+- Developers: [01-architecture.md](../../libs/docs/network/developers/01-architecture.md), [06-auto-heal-and-coordinator.md](../../libs/docs/network/developers/06-auto-heal-and-coordinator.md)
 - [p2p-mesh-compact.mdc](../rules/p2p-mesh-compact.mdc)
-- [compact-simplify-consoldiate.mdc](../rules/compact-simplify-consoldiate.mdc)
 - Prior work: `p2p_link_coordinator` commit, `p2p_mesh_resilience_d3c9fa61.plan.md`

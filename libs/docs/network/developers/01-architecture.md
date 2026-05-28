@@ -1,69 +1,58 @@
 ---
-title: Allowlist, topics, and transport
+title: Architecture overview
 ---
 
-# Architecture
+# Architecture overview
+
+User-facing concepts: start with [My Network](../founders/01-my-network.md). This page is the developer map.
+
+## Data model
 
 - **`peers` table** — local-only rows (`nosync` metadata); fields `peer_did`, `label`, `added_at_ms`, `status`.
 - **Per-pair topic** — `discovery_key("aven:peer-pair:v1:" || sort(didA, didB))`.
 - **Signalling topic** — `discovery_key("aven:pair:v1:" || code)` for the invite only.
 - **Inbound gate** — connections on pairing topics are always accepted until the row is written; per-pair topics require an **active** allowlist DID for the remote static key.
 
-## Reconnect ritual
+## Layer ownership
 
-After a vault is unlocked, **PeerCtl** rebuilds mesh transport against the persisted `peers` table (no second invite):
+| Layer | Crate / module | Responsibility |
+| ----- | -------------- | ---------------- |
+| DHT + Noise | `peeroxide`, `tauri-plugin-peer` | Topics, allowlist socket gate, connect UI hook |
+| Link phase | `PeerLinkCoordinator` | Single owner per remote static key; suppress transport |
+| Groove mux | `HyperswarmGrooveBridge` | SecretStream → Jazz sync; reader/writer split tasks |
+| Mesh UI | `peer_mesh_state.rs` | Assemble `PeerMeshStatusReply` → `avenos:runtime` |
+| Spark sync | `jazz/mod.rs`, Groove actor | Allowlist sync, `register_peer_sync_client`, catch-up |
 
-1. **Swarm identity** stays tied to the same local Ed25519 seed for that vault (`start_swarm` after unlock).
-2. For each active remote DID, join the **durable per-pair topic** (`discovery_key("aven:peer-pair:v1:" || sorted(dids))`) with **`fast_refresh`** pairing options (`pairing_join_opts()`).
-3. Run a **capped flush** on the swarm (about **four seconds**) so the next DHT round runs promptly — same pattern as the invite handshake; continuation work may finish in the background. Logs often mention **`reconnect allowlisted peers`** for this flush.
-4. Topics are **only left when a peer is revoked** or the allowlist shrinks; locking the vault **tears down** the swarm and clears in-memory pairing state for privacy — the **next unlock** repeats this ritual against the saved rows.
+Do **not** add a second webview channel for mesh payloads — see [Auto-heal & coordinator](06-auto-heal-and-coordinator.md#web-mesh-ui).
 
-**Jazz/Groove** layers register `register_peer_sync_client` **only after** coordinator **`Live`** (`groove_p2p link up` in logs). UI **`linkedCount`** and spark ACL catch-up read the same coordinator snapshot.
+## Cold-start reconnect
 
-- **Pairing / allowlist reset** — `prepare_reconnect` + `teardown_all_links` clears ghost slots before a new invite or empty allowlist (never while any peer is in-flight).
-- **Post-invite persist** — durable topic join runs without DHT flush until mux is **Live** or a short grace elapses, preserving the winning LAN pre-reply stream.
+After unlock, **PeerCtl** rebuilds transport from persisted `peers` rows (no second invite):
 
-## PeerLinkCoordinator (single link owner)
+1. **Swarm identity** from the vault Ed25519 seed (`start_swarm` after unlock).
+2. Join **durable per-pair topics** with `pairing_join_opts()` / `fast_refresh`.
+3. **Capped DHT flush** (~4s) — logs may say `reconnect allowlisted peers` or `reconnect_peers`.
+4. Topics leave only on **revoke** or allowlist shrink; **lock** tears down swarm + in-memory pairing.
 
-One encrypted Groove mux per remote static key. **PeerLinkCoordinator** owns phase for each peer; DHT discovery, LAN pre-reply, blind-relay, and heal nudges are subordinate to it.
+**Jazz** calls `register_peer_sync_client` only when coordinator phase is **`Live`** (`groove_p2p link up`). UI **`linkedCount`** reads the same snapshot.
 
-Phases:
+## PeerLinkCoordinator (summary)
 
-- **`Idle` / `Discovering` / `Backoff`** — no sync; UI shows searching.
-- **`TransportUp` / `Handshaking`** — Noise stream up, mux worker starting; transport actions suppressed in peeroxide (no blind-relay storm, no stale-slot clear).
-- **`Live`** — mux writer ready; **only phase that enables spark sync** and counts toward `linkedCount`.
+One encrypted Groove mux per remote static key. Phases: `Idle` → `Discovering` → `TransportUp` → `Handshaking` → `Live` → `Backoff`.
 
-peeroxide receives `should_suppress_transport(pk)` from the coordinator. When suppressed, deferred blind-relay tasks are cancelled per peer, dominant-side outbound nudges are skipped, and inbound reconnect does not clear an active slot.
+- Only **`Live`** enables spark sync and counts toward `linkedCount`.
+- **Transport suppress** in peeroxide: `Live`, or `TransportUp`/`Handshaking` **with an active mux worker** (`worker_active`).
+- Mux keepalive `avenos/mux-ping/v1` every 5s; two missed rounds (~10s) tear down stale links.
 
-Mux **keepalive** (`avenos/mux-ping/v1`) runs every 5s; two missed rounds (~10s) tear down the link so killed/airplane peers leave the UI promptly.
+Full heal pipeline: [Auto-heal & coordinator](06-auto-heal-and-coordinator.md).
 
-## Auto-heal (link-down, path change, foreground)
+## Related pages
 
-All heal triggers funnel through **`PeerCtl::reconnect_peers`** — one ritual: tear down stale non-live mux, refresh relays, `prepare_reconnect` or per-peer `note_peer_disconnected`, DHT flush.
-
-1. **Link-down** — mux exit → `note_peer_disconnected`; pairing sessions also run `reconnect_peers(link_down)`.
-2. **Mesh reconcile** — `nudge_allowlisted_discovery` → `reconnect_peers` for allowlisted DIDs missing a **Live** link and not actively connecting (mux worker running).
-3. **Transport suppress** — peeroxide suppresses inbound only when coordinator shows **Live**, or **Handshaking/TransportUp with an active mux worker**. Stale phantom rows are cleared before nudge.
-4. **Network path change** — `NWPathMonitor` → soft heal (`reconnect_peers` with teardown). Wi‑Fi/wired sets `desiredTransport: lan`.
-5. **App foreground** — same soft heal path without vault lock.
-6. **Transport upgrade** — while linked on relay/punched, mesh reconcile probes a better path every ~90s; Groove bridge migrates mux atomically (same `ClientId`).
-
-Manual **`peer_swarm_retry`** remains a debug escape hatch (full swarm rebuild); normal operation does not require it.
-
-Structured logs use the `avenos::peeroxide` target with `peer_heal:` prefixes (`link_down`, `path_change`, `foreground`, `upgrade`, `nudge`).
-
-## Web mesh UI (`avenos:runtime`)
-
-The desktop/mobile shell exposes mesh state **only through one channel**:
-
-- **`avenos:runtime` payloads** `{ kind: "mesh", snapshot }` for transport phases, pairing pending code, diagnostics, and per-peer connect substates (`PeerMeshStatusReply`).
-- **`avenos:runtime`** `{ kind: "table", table: "peers", rows }` for trusted-device rows (`PeerRowReply[]`) after a ref-counted `subscribe` to the `peers` table.
-
-Groove actor mailboxes (`publish_mesh` vs full `mesh_refresh`) own when snapshots are built; the webview **does not poll** mesh IPC on a timer for normal UI. Prefer the shared Svelte stores fed by that channel over ad-hoc `peerList` / duplicate `peer:*` mesh events.
-
-Per-peer heal fields in `PeerMeshPeerState`: `reconnectAttempt`, `lastDisconnectReason`, `desiredTransport` vs `transportMode`. Global diagnostics: `lastPathChangeAtMs`, `lastForegroundHealAtMs`, `healInProgress`.
-
-Central relay mode (`AVEN_RELAY`) uses the same heal pipeline; DHT bootstrap/relay hints are refreshed on path change so announces stay current.
+- [Invite protocol](02-invite-protocol.md)
+- [Allowlist storage](03-allowlist-storage.md)
+- [Two-instance harness](04-two-instance-harness.md)
+- [Central P2P signal](05-p2p-signal.md)
+- [Auto-heal & coordinator](06-auto-heal-and-coordinator.md)
 
 ## TestFlight acceptance matrix
 
@@ -76,3 +65,5 @@ Central relay mode (`AVEN_RELAY`) uses the same heal pipeline; DHT bootstrap/rel
 | Airplane mode toggle on one device | Heal after path satisfied |
 | iOS background 5+ min → foreground | Heal without manual retry |
 | Walk through relay → LAN → relay | No manual invite; transport mode updates in UI |
+
+User-facing expectations: [Staying connected](../founders/05-staying-connected.md).

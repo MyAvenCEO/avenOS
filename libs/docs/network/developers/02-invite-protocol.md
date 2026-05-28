@@ -4,6 +4,31 @@ title: Invite protocol
 
 # Invite protocol
 
-1. **Invite** — `peer_invite_create` generates a code; host joins the signalling topic; UI shows the code.
+User walkthrough: [Pair a device](../founders/02-pairing-a-device.md).
+
+## Flow
+
+1. **Invite** — `peer_invite_create` generates a six-character code; host joins the signalling topic; UI shows the code on the host chip.
 2. **Accept** — joiner calls `peer_invite_accept(code, label)` with a label for the host on their device.
-3. When a Noise connection lands on that topic, each side derives the remote `did:key` from the static key and emits `peer:invite-paired`. The shell **upserts** `peers` (`active`), **cancels** the signalling join, and enqueues a **full mesh refresh** on the Groove actor (Hyperswarm allowlist sync + durable per-pair joins + `register_peer_sync_client` for live links → then mesh snapshot publish). The pairing row and mesh chips update from **pushed** `avenos:runtime` mesh/table snapshots, not from a peers-screen poll loop.
+3. When a Noise connection lands on the signalling topic, each side derives the remote `did:key` from the static key and emits **`peer:invite-paired`**.
+4. The shell **upserts** `peers` (`active`), **cancels** the signalling join, and enqueues **full mesh refresh** on the Groove actor (allowlist sync + durable per-pair joins + `register_peer_sync_client` when **Live** → mesh snapshot publish).
+
+UI updates from **pushed** `avenos:runtime` mesh/table snapshots — not a peers-screen poll loop.
+
+## Transport reset before invite
+
+Starting a new invite runs **`reconnect_peers(pairing_reset)`**: global `prepare_reconnect` + **`teardown_all_links`** so ghost mux workers do not block the fresh pairing stream.
+
+## Post-pair persist
+
+Durable topic join may **defer DHT flush** until mux is **Live** or a short grace elapses — preserves a winning LAN pre-reply stream during invite persist.
+
+## Events (coarse)
+
+| Event | App action |
+| ----- | ----------- |
+| `peer:invite-paired` | Persist row, mesh refresh |
+| `peer:mesh-push` | Groove actor `publish_mesh` |
+| `peer:hyperswarm-ready` | Full mesh refresh |
+
+See [Auto-heal & coordinator](06-auto-heal-and-coordinator.md) for heal during active pairing (path change, link down).

@@ -51,4 +51,5 @@ Plugin emits coarse signals only (`peer:hyperswarm-ready`, `peer:invite-paired`,
 
 ## Docs
 
-See [libs/docs/network/developers/01-architecture.md](libs/docs/network/developers/01-architecture.md), [02-invite-protocol.md](libs/docs/network/developers/02-invite-protocol.md), [05-p2p-signal.md](libs/docs/network/developers/05-p2p-signal.md).
+- **Users:** [libs/docs/network/founders/](libs/docs/network/founders/) — My Network, pairing, status, auto-reconnect, troubleshooting
+- **Developers:** [01-architecture.md](libs/docs/network/developers/01-architecture.md), [06-auto-heal-and-coordinator.md](libs/docs/network/developers/06-auto-heal-and-coordinator.md), [02-invite-protocol.md](libs/docs/network/developers/02-invite-protocol.md), [05-p2p-signal.md](libs/docs/network/developers/05-p2p-signal.md)

@@ -2,7 +2,9 @@
 title: Central P2P signal (discovery)
 ---
 
-Centralized **discovery / pairing** for AvenOS desktop. **`AVEN_RELAY` defaults on** (alias **`AVENOS_RELAY`**). Set **`AVEN_RELAY=false`** for public Holepunch HyperDHT.
+Centralized **discovery / pairing** for AvenOS. User-facing transport modes: [Connection status](../founders/04-connection-status.md).
+
+**`AVEN_RELAY` defaults on** (alias **`AVENOS_RELAY`**). Set **`AVEN_RELAY=false`** for public Holepunch HyperDHT.
 
 When central mode is on, **`AVEN_RELAY_URL` is required** (no implicit default — set it in `.env`, launch env, or CI). It selects **embedded local** Rust HyperDHT vs **remote** bootstrap only.
 
@@ -29,14 +31,14 @@ Outbound **Jazz / Groove** mesh rows use a dedicated **peer catch-up worker** (s
 
 ### Mesh snapshot triggers (app shell)
 
-Rough split so transport/UI stay in sync without duplicate webview events:
-
 | Trigger | Groove actor path | Effect |
 |--------|-------------------|--------|
-| Hyperswarm ready, invite paired persisted, explicit retry | `mesh_refresh` (full) | `PeerCtl.sync_allowlist_from_peer_table` + Groove register primitives + publish |
-| Connect UI substate change, `peer:mesh-push`, pairing nudge, periodic reconcile tail | `publish_mesh` | Assemble + emit `avenos:runtime` mesh only (JSON-deduped); cheap |
+| Hyperswarm ready, invite paired persisted, explicit retry | `mesh_refresh` (full) | Allowlist sync + Groove register + publish |
+| Connect UI substate change, `peer:mesh-push`, pairing nudge | `publish_mesh` | Mesh snapshot only (JSON-deduped) |
+| Periodic reconcile tick | `mesh_reconcile(true)` | Nudge + register + probe + publish |
+| Path change / foreground (after plugin heal) | `mesh_reconcile(false)` | Register + publish only |
 
-Do **not** introduce a second mesh channel (legacy `peer:mesh-changed`-style duplicates); the web runtime listener is `avenos:runtime` only.
+Details: [Auto-heal & coordinator](06-auto-heal-and-coordinator.md).
 
 ---
 

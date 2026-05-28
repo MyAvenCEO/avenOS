@@ -4,6 +4,8 @@ title: Two-instance harness
 
 # Two-instance harness
 
+User pairing guide: [Pair a device](../founders/02-pairing-a-device.md). Troubleshooting: [Troubleshooting](../founders/06-troubleshooting.md).
+
 Use [`scripts/dev-two-instances.ts`](../../../../scripts/dev-two-instances.ts) (**`bun run dev:app2x:mac`** or **`dev:app2x:linux`**). **Central discovery is on by default** (`AVEN_RELAY`); with central mode **`AVEN_RELAY_URL` is required** (e.g. **`127.0.0.1`** for embedded local signal, or **`relay.aven.ceo`** against Fly — see that doc). Set **`AVEN_RELAY=false`** for public Holepunch HyperDHT. Data sync stays **direct P2P** — see [Central P2P signal](05-p2p-signal.md).
 
 The harness launches:
@@ -43,11 +45,13 @@ Exercise **native reconnect** — pairing + topics already saved; no new invite 
 2. Start both harness instances again (`bun run dev:app2x:mac` / `dev:app2x:linux` or equivalent), unlock **both** vaults.
 3. In the header / Self → peers, expect **Connecting…** briefly, then **Up to date** (often within **about 30–60 seconds** on the public DHT).
 
-**Logs to confirm** (`RUST_LOG=info,avenos::peeroxide=info,avenos::jazz=info` is a reasonable filter):
+**Logs to confirm** (`RUST_LOG=info,avenos::peeroxide=info,avenos::jazz=info`):
 
-- A capped flush tagged **`reconnect allowlisted peers`** — transport nudge after re-joining pair topics.
-- **`groove_p2p link up`** — swarm stream is live to the peer.
-- **`register_peer_sync_client`** (or equivalent Jazz Groove hook) — app attached sync/catch-up for that link.
+- `reconnect_peers` or capped flush after re-joining pair topics (transport nudge after cold start).
+- **`groove_p2p link up`** — swarm stream live; coordinator **Live**.
+- **`register_peer_sync_client`** — Groove sync attached for that link.
+
+See [Auto-heal & coordinator](06-auto-heal-and-coordinator.md) for heal log patterns.
 
 Repeat **lock one device → unlock**: the locked side should reconnect without a new pairing code once the swarm restarts post-unlock.
 
