@@ -425,6 +425,11 @@ enum SwarmCommand {
     ProbeTransportUpgrade {
         public_key: [u8; 32],
     },
+    /// Reserve a transport slot immediately before delivering an inbound connection.
+    ReserveTransportSlot {
+        public_key: [u8; 32],
+        is_initiator: bool,
+    },
 }
 
 #[allow(dead_code)] // Fields read during leave/unannounce (future)
@@ -469,6 +474,7 @@ struct SwarmActor {
     queue: Vec<[u8; 32]>,
 
     conn_tx: mpsc::Sender<SwarmConnection>,
+    cmd_tx: mpsc::Sender<SwarmCommand>,
 
     server_registered: bool,
     relay_address: Option<Ipv4Peer>,
@@ -577,6 +583,7 @@ pub async fn spawn(
         connections: ConnectionSet::new(),
         queue: Vec::new(),
         conn_tx,
+        cmd_tx: cmd_tx.clone(),
         server_registered: false,
         relay_address: Some(local_relay_peer),
         active_connects: 0,
@@ -715,6 +722,18 @@ impl SwarmActor {
             }
             SwarmCommand::ProbeTransportUpgrade { public_key } => {
                 self.probe_transport_upgrade(public_key, &connect_result_tx);
+                false
+            }
+            SwarmCommand::ReserveTransportSlot {
+                public_key,
+                is_initiator,
+            } => {
+                if !self.connections.has(&public_key) {
+                    self.connections.add(
+                        public_key,
+                        ConnectionInfo { is_initiator },
+                    );
+                }
                 false
             }
         }
@@ -1381,10 +1400,8 @@ impl SwarmActor {
                     if self.connections.len() >= self.config.max_peers {
                         tracing::debug!("server: at max connections");
                     } else if let Some(remote_udx) = remote_payload.udx.clone() {
-                        self.connections
-                            .add(remote_pk, ConnectionInfo { is_initiator: false });
-
                         let conn_tx = self.conn_tx.clone();
+                        let cmd_tx = self.cmd_tx.clone();
                         let rh = self.runtime_handle.clone();
                         let dht = self.dht.clone();
                         let nw_result_spawn = nw_result.clone();
@@ -1433,12 +1450,15 @@ impl SwarmActor {
                                         topics: vec![],
                                         _runtime: runtime,
                                     };
-                                    if conn_tx.send(swarm_conn).await.is_err() {
-                                        tracing::warn!("connection channel closed");
-                                        false
-                                    } else {
-                                        true
-                                    }
+                                    reserve_and_deliver_connection(
+                                        cmd_tx.clone(),
+                                        conn_tx.clone(),
+                                        remote_pk,
+                                        false,
+                                        swarm_conn,
+                                    )
+                                    .await;
+                                    true
                                 }
                                 Ok(Err(e)) => {
                                     tracing::debug!(
@@ -1456,7 +1476,12 @@ impl SwarmActor {
                             };
                             if !lan_ok {
                                 if let Some(fallback) = relay_fallback {
-                                    deliver_server_relay_connection(conn_tx, fallback).await;
+                                    deliver_server_relay_connection(
+                                        cmd_tx,
+                                        conn_tx,
+                                        fallback,
+                                    )
+                                    .await;
                                 }
                             }
                         });
@@ -1549,10 +1574,8 @@ impl SwarmActor {
             }
         };
 
-        self.connections
-            .add(remote_pk, ConnectionInfo { is_initiator: false });
-
         let conn_tx = self.conn_tx.clone();
+        let cmd_tx = self.cmd_tx.clone();
 
         {
             let rh = self.runtime_handle.clone();
@@ -1578,9 +1601,14 @@ impl SwarmActor {
                             topics: vec![],
                             _runtime: runtime,
                         };
-                        if conn_tx.send(swarm_conn).await.is_err() {
-                            tracing::warn!("connection channel closed");
-                        }
+                        reserve_and_deliver_connection(
+                            cmd_tx,
+                            conn_tx,
+                            remote_pk,
+                            false,
+                            swarm_conn,
+                        )
+                        .await;
                     }
                     Err(e) => {
                         tracing::debug!(err = %e, "server: direct stream establishment failed");
@@ -1618,6 +1646,7 @@ impl SwarmActor {
         );
 
         let conn_tx = self.conn_tx.clone();
+        let cmd_tx = self.cmd_tx.clone();
         let fallback = ServerRelayFallbackParams {
             remote_pk,
             token,
@@ -1629,7 +1658,7 @@ impl SwarmActor {
             runtime_handle: self.runtime_handle.clone(),
         };
         tokio::spawn(async move {
-            deliver_server_relay_connection(conn_tx, fallback).await;
+            deliver_server_relay_connection(cmd_tx, conn_tx, fallback).await;
         });
     }
 
@@ -1651,6 +1680,7 @@ impl SwarmActor {
         );
 
         let conn_tx = self.conn_tx.clone();
+        let cmd_tx = self.cmd_tx.clone();
         let fallback = ServerRelayFallbackParams {
             remote_pk,
             token,
@@ -1664,7 +1694,7 @@ impl SwarmActor {
         tokio::spawn(async move {
             const LAN_WAIT: std::time::Duration = std::time::Duration::from_secs(4);
             tokio::time::sleep(LAN_WAIT).await;
-            deliver_server_relay_connection(conn_tx, fallback).await;
+            deliver_server_relay_connection(cmd_tx, conn_tx, fallback).await;
         });
     }
 
@@ -1735,8 +1765,25 @@ async fn create_server_connection(
     Ok((conn, runtime))
 }
 
+async fn reserve_and_deliver_connection(
+    cmd_tx: mpsc::Sender<SwarmCommand>,
+    conn_tx: mpsc::Sender<SwarmConnection>,
+    public_key: [u8; 32],
+    is_initiator: bool,
+    swarm_conn: SwarmConnection,
+) {
+    let _ = cmd_tx
+        .send(SwarmCommand::ReserveTransportSlot {
+            public_key,
+            is_initiator,
+        })
+        .await;
+    if conn_tx.send(swarm_conn).await.is_err() {
+        tracing::warn!("connection channel closed");
+    }
+}
+
 struct ServerRelayFallbackParams {
-    #[allow(dead_code)]
     remote_pk: [u8; 32],
     token: [u8; 32],
     nw_result: peeroxide_dht::noise_wrap::NoiseWrapResult,
@@ -1748,6 +1795,7 @@ struct ServerRelayFallbackParams {
 }
 
 async fn deliver_server_relay_connection(
+    cmd_tx: mpsc::Sender<SwarmCommand>,
     conn_tx: mpsc::Sender<SwarmConnection>,
     params: ServerRelayFallbackParams,
 ) {
@@ -1769,9 +1817,14 @@ async fn deliver_server_relay_connection(
                 topics: vec![],
                 _runtime: runtime,
             };
-            if conn_tx.send(swarm_conn).await.is_err() {
-                tracing::warn!("connection channel closed");
-            }
+            reserve_and_deliver_connection(
+                cmd_tx,
+                conn_tx,
+                params.remote_pk,
+                false,
+                swarm_conn,
+            )
+            .await;
         }
         Err(e) => {
             tracing::debug!(err = %e, "server: relay connection failed");

@@ -147,9 +147,9 @@ const skillsBottomPad = `pb-[calc(4.25rem+env(safe-area-inset-bottom))] ${mobile
 {/snippet}
 
 <div
-	class="col-start-3 row-start-1 hidden min-h-[1.125rem] items-center gap-1.5 self-start sm:flex"
+	class="col-start-3 row-start-1 hidden min-h-[1.125rem] w-full items-center justify-end gap-1.5 self-start sm:flex"
 >
-	<span class="text-[8px] font-bold tracking-[0.22em] opacity-30 uppercase">
+	<span class="text-right text-[8px] font-bold tracking-[0.22em] opacity-30 uppercase">
 		Skills
 		{#if intent && intent.skills.length > 0}
 			<span class="tabular-nums tracking-[0.18em]"> - {intent.skills.length}</span>

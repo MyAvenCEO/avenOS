@@ -872,8 +872,13 @@ pub fn run() {
 							_ = n.notified() => {}
 							_ = tick => {}
 						};
-						let live: HashSet<ClientId> =
-							bridge.snapshot_remote_clients().await.into_iter().collect();
+						let live_links =
+							h_mesh.state::<std::sync::Arc<tauri_plugin_peer::LiveLinkRegistry>>();
+						let live: HashSet<ClientId> = live_links
+							.snapshot_mux_ready_clients()
+							.await
+							.into_iter()
+							.collect();
 						let h_catch = h_mesh.state::<crate::peer_catchup::PeerCatchupHandle>();
 						h_catch.live_clients_changed(live).await;
 						if let Err(e) = jazz::peer_mesh_reconcile_tick(&h_mesh).await {

@@ -61,6 +61,7 @@ pub struct HyperswarmGrooveBridgeInner {
 	peer_set_changed: Arc<Notify>,
 	connect_ui_tracker: Mutex<Option<Arc<crate::peer_connect_ui::PeerConnectUiTracker>>>,
 	link_lifecycle: Mutex<Option<LinkLifecycleHook>>,
+	live_links: Mutex<Option<Arc<crate::live_link::LiveLinkRegistry>>>,
 }
 
 #[derive(Clone)]
@@ -83,6 +84,7 @@ impl HyperswarmGrooveBridge {
 			peer_set_changed: Arc::new(Notify::new()),
 			connect_ui_tracker: Mutex::new(None),
 			link_lifecycle: Mutex::new(None),
+			live_links: Mutex::new(None),
 		});
 		HyperswarmGrooveBridge(inner)
 	}
@@ -96,6 +98,10 @@ impl HyperswarmGrooveBridge {
 
 	pub fn set_link_lifecycle_hook(&self, hook: LinkLifecycleHook) {
 		*self.0.link_lifecycle.blocking_lock() = Some(hook);
+	}
+
+	pub fn attach_live_link_registry(&self, registry: Arc<crate::live_link::LiveLinkRegistry>) {
+		*self.0.live_links.blocking_lock() = Some(registry);
 	}
 
 	fn notify_link_lifecycle(&self, event: GrooveLinkLifecycle) {
@@ -132,8 +138,11 @@ impl HyperswarmGrooveBridge {
 			.collect()
 	}
 
-	/// DIDs with an active Groove mux (authoritative live link set).
+	/// DIDs with mux-ready Groove links (authoritative for sync gating).
 	pub async fn snapshot_live_linked_dids(&self) -> std::collections::HashSet<String> {
+		if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+			return reg.snapshot_mux_ready_dids().await;
+		}
 		let live = self.snapshot_remote_clients().await;
 		let cid_map = self.shared_client_id_to_did();
 		let guard = cid_map.read().expect("cid map poisoned");
@@ -142,12 +151,38 @@ impl HyperswarmGrooveBridge {
 			.collect()
 	}
 
-	/// True when the mux worker is running and the outbound capsule channel is open.
+	/// True when the mux worker is running, outbound channel is open, and LiveLink is MuxReady.
 	pub async fn peer_send_ready(&self, client: ClientId) -> bool {
+		if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+			if !reg.is_mux_ready_by_client(client).await {
+				return false;
+			}
+		}
 		let workers = self.0.swarm_workers.lock().await;
 		let outbound = self.0.outbound_by_peer.lock().await;
 		let live = self.0.active_remote_clients.lock().await;
 		live.contains(&client) && workers.contains_key(&client) && outbound.contains_key(&client)
+	}
+
+	/// Abort every mux worker and clear transport bookkeeping (pairing reset / allowlist clear).
+	pub async fn teardown_all_links(&self) {
+		let clients: Vec<ClientId> = self
+			.0
+			.swarm_workers
+			.lock()
+			.await
+			.keys()
+			.copied()
+			.collect();
+		for cid in clients {
+			self.abort_worker_for(cid).await;
+		}
+		self.0.outbound_by_peer.lock().await.clear();
+		self.0.active_remote_clients.lock().await.clear();
+		if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+			reg.clear_all().await;
+		}
+		self.0.peer_set_changed.notify_waiters();
 	}
 
 	async fn wait_until_local_party(&self) -> ClientId {
@@ -187,8 +222,31 @@ impl HyperswarmGrooveBridge {
 		remote_client: ClientId,
 		remote_pk: [u8; 32],
 		capsule_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-		local_party_id: ClientId,
+		transport_mode: Option<crate::peer_connect_ui::PeerTransportMode>,
 	) {
+		let local_party_id = bridge.wait_until_local_party().await;
+		let dht_mode = conn.peer.transport_mode;
+
+		bridge
+			.0
+			.active_remote_clients
+			.lock()
+			.await
+			.insert(remote_client);
+		if let Some(reg) = bridge.0.live_links.lock().await.as_ref() {
+			reg.set_mux_ready(remote_pk, transport_mode).await;
+		}
+		bridge.0.peer_set_changed.notify_waiters();
+		if let Some(tracker) = bridge.0.connect_ui_tracker.lock().await.as_ref() {
+			tracker.note_inbound_connected(&remote_pk, dht_mode);
+		}
+		bridge.notify_link_lifecycle(GrooveLinkLifecycle::Up(remote_pk));
+		log::info!(
+			target: "avenos::peeroxide",
+			"groove_p2p link up peer={remote_client:?} mode={}",
+			crate::transport_rank::format_mode(transport_mode),
+		);
+
 		let (mut reader, mut writer) = conn.peer.stream.into_split();
 		let inbound = bridge.0.inbound_dispatch.clone();
 
@@ -301,13 +359,7 @@ impl HyperswarmGrooveBridge {
 			.map(crate::transport_rank::map_dht_mode);
 
 		let mut transport_upgrade = false;
-		if self
-			.0
-			.active_remote_clients
-			.lock()
-			.await
-			.contains(&remote_client)
-		{
+		if self.0.swarm_workers.lock().await.contains_key(&remote_client) {
 			let existing_mode = self
 				.0
 				.connect_ui_tracker
@@ -349,8 +401,14 @@ impl HyperswarmGrooveBridge {
 
 		if !transport_upgrade {
 			if let Ok(did) = did::peer_did_from_ed25519(&remote_pk) {
-				let mut m = self.0.client_id_to_did.write().expect("cid map poisoned");
-				m.insert(remote_client, did);
+				{
+					let mut m = self.0.client_id_to_did.write().expect("cid map poisoned");
+					m.insert(remote_client, did.clone());
+				}
+				if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+					reg.set_handshaking(remote_pk, remote_client, did)
+						.await;
+				}
 			} else {
 				log::warn!(target: "avenos::peeroxide", "groove_p2p: could not derive did:key for remote static key");
 			}
@@ -363,37 +421,17 @@ impl HyperswarmGrooveBridge {
 			.await
 			.insert(remote_client, caps_tx);
 
-		if !transport_upgrade {
-			self.0
-				.active_remote_clients
-				.lock()
-				.await
-				.insert(remote_client);
-			self.0.peer_set_changed.notify_waiters();
-		}
-		if let Some(tracker) = self.0.connect_ui_tracker.lock().await.as_ref() {
-			tracker.note_inbound_connected(&remote_pk, conn.peer.transport_mode);
-		}
-		self.notify_link_lifecycle(GrooveLinkLifecycle::Up(remote_pk));
-		log::info!(
-			target: "avenos::peeroxide",
-			"groove_p2p link {} peer={:?} mode={}",
-			if transport_upgrade { "upgraded" } else { "up" },
-			remote_client,
-			crate::transport_rank::format_mode(new_mode),
-		);
-
 		let groove_bridge = HyperswarmGrooveBridge(Arc::clone(&self.0));
+		let mode_for_mux = new_mode;
 
 		let h = tokio::spawn(async move {
-			let local_party_id = groove_bridge.wait_until_local_party().await;
 			HyperswarmGrooveBridge::multiplex_connection(
 				groove_bridge,
 				conn,
 				remote_client,
 				remote_pk,
 				caps_rx,
-				local_party_id,
+				mode_for_mux,
 			)
 			.await;
 		});
@@ -425,6 +463,9 @@ impl HyperswarmGrooveBridge {
 			peers.remove(&remote_client);
 		}
 		self.0.peer_set_changed.notify_waiters();
+		if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+			reg.clear(&remote_pk).await;
+		}
 		if let Some(tracker) = self.0.connect_ui_tracker.lock().await.as_ref() {
 			tracker.note_disconnected_pk_with_reason(&remote_pk, reason);
 		}

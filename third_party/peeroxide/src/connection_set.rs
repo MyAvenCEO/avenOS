@@ -66,11 +66,13 @@ mod tests {
     }
 
     #[test]
-    fn get_info() {
+    fn drain_all_enables_pairing_reset() {
         let mut set = ConnectionSet::new();
-        let pk = [3u8; 32];
-        set.add(pk, ConnectionInfo { is_initiator: true });
-        let info = set.get(&pk).expect("should exist");
-        assert!(info.is_initiator);
+        set.add([4u8; 32], ConnectionInfo { is_initiator: false });
+        set.add([5u8; 32], ConnectionInfo { is_initiator: true });
+        let cleared = set.drain_all();
+        assert_eq!(cleared.len(), 2);
+        assert!(!set.has(&[4u8; 32]));
+        assert_eq!(set.len(), 0);
     }
 }

@@ -381,8 +381,12 @@ async fn all_peers_send_ready(app: &AppHandle, peers: &[ClientId]) -> bool {
 	if peers.is_empty() {
 		return false;
 	}
+	let live_links = app.state::<std::sync::Arc<tauri_plugin_peer::LiveLinkRegistry>>();
 	let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
 	for p in peers {
+		if !live_links.is_mux_ready_by_client(*p).await {
+			return false;
+		}
 		if !bridge.peer_send_ready(*p).await {
 			return false;
 		}
@@ -397,8 +401,9 @@ async fn all_peers_send_ready(_app: &AppHandle, _peers: &[ClientId]) -> bool {
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 async fn any_live_peer_send_ready(app: &AppHandle) -> bool {
+	let live_links = app.state::<std::sync::Arc<tauri_plugin_peer::LiveLinkRegistry>>();
 	let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
-	for cid in bridge.snapshot_remote_clients().await {
+	for cid in live_links.snapshot_mux_ready_clients().await {
 		if bridge.peer_send_ready(cid).await {
 			return true;
 		}

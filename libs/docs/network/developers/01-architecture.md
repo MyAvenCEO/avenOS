@@ -18,7 +18,14 @@ After a vault is unlocked, **PeerCtl** rebuilds mesh transport against the persi
 3. Run a **capped flush** on the swarm (about **four seconds**) so the next DHT round runs promptly — same pattern as the invite handshake; continuation work may finish in the background. Logs often mention **`reconnect allowlisted peers`** for this flush.
 4. Topics are **only left when a peer is revoked** or the allowlist shrinks; locking the vault **tears down** the swarm and clears in-memory pairing state for privacy — the **next unlock** repeats this ritual against the saved rows.
 
-**Jazz/Groove** layers register `register_peer_sync_client` **after** a live hyperswarm link appears (`groove_p2p link up` in logs); mesh ticks may **nudge** discovery while allowlisted peers have no links yet, without rebuilding the entire allowlist each tick.
+**Jazz/Groove** layers register `register_peer_sync_client` **only after** a mux-ready link (`groove_p2p link up` in logs). UI **`linkedCount`** and spark ACL catch-up use the same **`LiveLinkRegistry`** phase (`MuxReady` only — handshaking transport slots do not count).
+
+## LiveLink (single connected definition)
+
+- **`Handshaking`** — transport stream accepted; label exchange (pairing) or mux worker starting.
+- **`MuxReady`** — Groove mux worker running with outbound channel; **only state that enables spark sync**.
+- **Pairing / allowlist reset** — `prepare_reconnect` + `teardown_all_links` clears ghost slots before a new invite or empty allowlist.
+- **Sequential transport** — peeroxide delivers one path per handshake (LAN pre-reply, then blind-relay fallback); `connections.add` runs immediately before `conn_tx.send`, not at handshake start.
 
 ## Auto-heal (link-down, path change, foreground)
 

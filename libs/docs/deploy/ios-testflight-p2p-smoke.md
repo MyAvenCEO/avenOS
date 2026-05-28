@@ -38,7 +38,9 @@ Exercise **hyperswarm + UDP DHT bootstrap** on a **physical iPhone/iPad** from a
    - [ ] **`lastConnectRelayed === true`** and **`lastRemoteHolepunchable === true`** on the initiating side after Noise completes (relay advertised `HolepunchInfo` — client must not open UDX to Fly bootstrap).
    - [ ] Log line **`connect path: post-handshake endpoint selection`** with **`lan_match=Some(...)`** and **`direct=172.20.10.x:…`** on hotspot tether (or holepunch on separate networks).
    - [ ] On hotspot: **no** **`holepunch aborted`** if LAN direct succeeds first.
-   - [ ] **`swarmPeerConnectedTotal >= 1`** and **`linkedCount >= 1`** after pairing settles.
+   - [ ] **`swarmPeerConnectedTotal >= 1`** and **`linkedCount >= 1`** after pairing settles — **`linkedCount` counts mux-ready links only** (must match on both devices; ghost transport slots no longer inflate this).
+   - [ ] Both sides log **`groove_p2p link up peer=… mode=Lan`** on same Wi‑Fi (or **`Relay`/`Punched`** cross-network).
+   - [ ] Within ~30s: **`peer catch-up worker: peer flush batch … Ok`** and admin-grant sparks appear without endless **`Groove mux not send-ready`**.
    - [ ] **`holepunchBlindRelayFallbackTotal === 0`** on **hotspot tether** (LAN direct should win before blind-relay).
    - [ ] On **cross-network** pairs (e.g. Mac on Wi‑Fi + iPhone on 5G): **`holepunchBlindRelayFallbackTotal > 0`** is OK when holepunch fails but pairing still reaches **`linkedCount >= 1`** with transport **Relay** or **Punched** (build 24+ embeds blind-relay at **`relay.aven.ceo:49737`**).
 

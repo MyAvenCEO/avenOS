@@ -1,14 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/state'
 	import { jazzStore } from '$lib/jazz/store.svelte'
-	import SlideAsideLayout from '$lib/ui/SlideAsideLayout.svelte'
-	import MobileAsideNavLink from '$lib/ui/MobileAsideNavLink.svelte'
-	import MobileAsideSectionLabel from '$lib/ui/MobileAsideSectionLabel.svelte'
 	import { navigateApp } from '$lib/shell'
+	import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
+	import { asideNavSectionsFromRoutes } from '$lib/ui/aside-nav'
 
 	let { children: pageOutlet } = $props()
-
-	let asideOpen = $state(false)
 
 	const sparkParam = $derived(String((page.params as { sparkId?: string }).sparkId ?? ''))
 	const decodedSparkId = $derived(decodeURIComponent(sparkParam))
@@ -28,23 +25,33 @@
 	const isTalkView = $derived(path.includes('/talk'))
 	const isGalleryView = $derived(path.includes('/gallery'))
 
-	const viewTabs = $derived([
-		{
-			href: `${sparkBase}/talk`,
-			label: 'Talk',
-			match: (p: string) => p.startsWith(`${sparkBase}/talk`),
-		},
-		{
-			href: `${sparkBase}/todos`,
-			label: 'Todos',
-			match: (p: string) => p.startsWith(`${sparkBase}/todos`),
-		},
-		{
-			href: `${sparkBase}/gallery`,
-			label: 'Gallery',
-			match: (p: string) => p.startsWith(`${sparkBase}/gallery`),
-		},
-	])
+	const navSections = $derived(
+		asideNavSectionsFromRoutes(
+			[
+				{
+					title: 'View',
+					items: [
+						{
+							href: `${sparkBase}/talk`,
+							label: 'Talk',
+							match: (p) => p.startsWith(`${sparkBase}/talk`),
+						},
+						{
+							href: `${sparkBase}/todos`,
+							label: 'Todos',
+							match: (p) => p.startsWith(`${sparkBase}/todos`),
+						},
+						{
+							href: `${sparkBase}/gallery`,
+							label: 'Gallery',
+							match: (p) => p.startsWith(`${sparkBase}/gallery`),
+						},
+					],
+				},
+			],
+			path,
+		),
+	)
 
 	const mainClass = $derived(
 		isTalkView
@@ -56,30 +63,30 @@
 		isTalkView ? 'flex min-h-0 flex-1 flex-col pb-0 md:pb-0' : 'pb-20 md:pb-0',
 	)
 
-	$effect(() => {
-		void path
-		asideOpen = false
-	})
-
-	function closeAsideOnNav() {
-		asideOpen = false
-	}
+	const innerContentClass = $derived(
+		[
+			'mx-auto flex w-full flex-col px-4 sm:px-6',
+			isGalleryView ? 'max-w-5xl' : 'max-w-3xl',
+			isTalkView ? 'min-h-0 flex-1 py-3 pb-0 sm:py-6' : 'py-6 sm:py-8',
+		].join(' '),
+	)
 </script>
 
 <svelte:head>
 	<title>{sparkMeta?.name ?? 'Spark'} · AvenOS</title>
 </svelte:head>
 
-<SlideAsideLayout
-	bind:open={asideOpen}
+<AsidePageLayout
 	asideLabel="Spark views"
+	sections={navSections}
 	desktopGridClass="md:grid-cols-[12rem_minmax(0,1fr)]"
-	class="min-h-0 flex-1"
+	sectionLabelClass="px-0 md:px-2"
 	{mainClass}
 	{contentClass}
+	{innerContentClass}
 	routeKey={path}
 >
-	{#snippet aside()}
+	{#snippet header()}
 		<div class="mb-3 space-y-2 px-2 pt-2">
 			<button
 				type="button"
@@ -101,43 +108,14 @@
 			<a
 				href="/self/workspaces?spark={encodeURIComponent(decodedSparkId)}"
 				class="text-primary hover:underline text-[10px] font-semibold uppercase tracking-wide"
-				onclick={(e) => {
-					closeAsideOnNav()
-					navigateApp(`/self/workspaces?spark=${encodeURIComponent(decodedSparkId)}`, e)
-				}}
+				onclick={(e) => navigateApp(`/self/workspaces?spark=${encodeURIComponent(decodedSparkId)}`, e)}
 			>
 				Share
 			</a>
 		</div>
-
-		<nav class="flex flex-col gap-1 md:gap-0.5">
-			<MobileAsideSectionLabel class="px-0 md:px-2">View</MobileAsideSectionLabel>
-			{#each viewTabs as tab (tab.href)}
-				{@const active = tab.match(path)}
-				<MobileAsideNavLink
-					href={tab.href}
-					active={active}
-					aria-current={active ? 'page' : undefined}
-					onclick={(e) => {
-						closeAsideOnNav()
-						navigateApp(tab.href, e)
-					}}
-				>
-					{tab.label}
-				</MobileAsideNavLink>
-			{/each}
-		</nav>
 	{/snippet}
 
 	{#snippet children()}
-		<div
-			class="mx-auto flex w-full flex-col px-4 sm:px-6
-				{isGalleryView ? 'max-w-5xl' : 'max-w-3xl'}
-				{isTalkView ? 'min-h-0 flex-1 py-3 pb-0 sm:py-6' : 'py-6 sm:py-8'}"
-		>
-			{#key path}
-				{@render pageOutlet()}
-			{/key}
-		</div>
+		{@render pageOutlet()}
 	{/snippet}
-</SlideAsideLayout>
+</AsidePageLayout>

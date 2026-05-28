@@ -35,6 +35,11 @@ sha2 = "0.10"
 swift-rs = { version = "1.0.5" }
 uuid = { version = "1", features = ["serde"] }
 
+[dev-dependencies]
+groove = { package = "jazz-tools", path = "../../third_party/jazz-tools", default-features = false, features = ["client-p2p"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+uuid = { version = "1", features = ["serde"] }
+
 [patch.crates-io]
 peeroxide = { path = "../../third_party/peeroxide" }
 peeroxide-dht = { path = "../../third_party/peeroxide-dht" }

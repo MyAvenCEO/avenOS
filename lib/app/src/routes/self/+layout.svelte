@@ -4,10 +4,8 @@
 	import { deviceSession } from '$lib/self/device-session-store'
 	import { provideSelfContext } from '$lib/self/self-context.svelte'
 	import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/self/vault'
-	import SlideAsideLayout from '$lib/ui/SlideAsideLayout.svelte'
-	import MobileAsideNavLink from '$lib/ui/MobileAsideNavLink.svelte'
-	import MobileAsideSectionLabel from '$lib/ui/MobileAsideSectionLabel.svelte'
-	import { navigateApp } from '$lib/shell'
+	import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
+	import { asideNavSectionsFromRoutes } from '$lib/ui/aside-nav'
 	import { selfNavSections } from '$lib/shell/self-nav'
 	import { browser } from '$app/environment'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
@@ -18,14 +16,10 @@
 	const sessionKind = $derived($deviceSession.kind)
 
 	let vaults = $state<VaultListEntry[]>([])
-	let asideOpen = $state(false)
 
 	const path = $derived(page.url.pathname)
 
-	$effect(() => {
-		void path
-		asideOpen = false
-	})
+	const navSections = $derived(asideNavSectionsFromRoutes(selfNavSections, path))
 
 	$effect(() => {
 		void sessionKind
@@ -57,54 +51,24 @@
 	})
 
 	const profileDevice = $derived(activeVault?.deviceLabel?.trim() ?? '')
-
-	const navSections = selfNavSections
-
-	function closeAsideOnNav() {
-		asideOpen = false
-	}
 </script>
 
-<SlideAsideLayout bind:open={asideOpen} asideLabel="Self settings" class="min-h-0 flex-1" routeKey={path}>
-	{#snippet aside()}
+<AsidePageLayout
+	asideLabel="Self settings"
+	sections={navSections}
+	muted
+	routeKey={path}
+>
+	{#snippet header()}
 		<div class="mb-3 space-y-0.5 px-3">
 			<h2 class="text-sm font-semibold tracking-tight">{profileName}</h2>
 			{#if profileDevice}
 				<p class="text-muted-foreground/70 text-xs leading-snug">{profileDevice}</p>
 			{/if}
 		</div>
-
-		<nav class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto md:gap-4">
-			{#each navSections as section (section.title)}
-				<div class="flex flex-col gap-1 md:gap-0.5">
-					<MobileAsideSectionLabel class="px-0 md:px-3">
-						{section.title}
-					</MobileAsideSectionLabel>
-					{#each section.items as tab (tab.href)}
-						{@const active = tab.match(path)}
-						<MobileAsideNavLink
-							href={tab.href}
-							active={active}
-							muted
-							aria-current={active ? 'page' : undefined}
-							onclick={(e) => {
-								closeAsideOnNav()
-								navigateApp(tab.href, e)
-							}}
-						>
-							{tab.label}
-						</MobileAsideNavLink>
-					{/each}
-				</div>
-			{/each}
-		</nav>
 	{/snippet}
 
 	{#snippet children()}
-		<div class="mx-auto w-full max-w-3xl px-4 pt-4 pb-8 sm:px-6 md:px-8">
-			{#key path}
-				{@render pageOutlet()}
-			{/key}
-		</div>
+		{@render pageOutlet()}
 	{/snippet}
-</SlideAsideLayout>
+</AsidePageLayout>

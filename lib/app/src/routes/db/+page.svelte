@@ -1,7 +1,7 @@
 <script lang="ts">
 	import SlideAsideLayout from '$lib/ui/SlideAsideLayout.svelte'
-	import MobileAsideNavLink from '$lib/ui/MobileAsideNavLink.svelte'
-	import MobileAsideSectionLabel from '$lib/ui/MobileAsideSectionLabel.svelte'
+	import AsideNav from '$lib/ui/AsideNav.svelte'
+	import type { AsideNavSection } from '$lib/ui/aside-nav'
 	import { browser } from '$app/environment'
 	import {
 		jazzExplorerList,
@@ -50,6 +50,22 @@
 	}
 
 	const columns = $derived(buildColumns(explorerRows))
+
+	const tableNavSections = $derived<AsideNavSection[]>([
+		{
+			title: 'Tables',
+			items: tables.map((t) => ({
+				label: t,
+				active: selectedTable === t,
+				class: 'font-mono md:text-xs md:font-medium',
+				onclick: () => {
+					selectedTable = t
+					tablesAsideOpen = false
+				},
+			})),
+			emptyMessage: bootstrapErr ? undefined : 'No tables loaded.',
+		},
+	])
 
 	const cellPreviewMax = 200
 
@@ -243,26 +259,11 @@
 				class="min-h-0 flex-1"
 			>
 				{#snippet aside()}
-					<MobileAsideSectionLabel class="px-0 md:px-1">Tables</MobileAsideSectionLabel>
-					<div class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto py-1 md:justify-start">
-						{#each tables as t (t)}
-							<MobileAsideNavLink
-								active={selectedTable === t}
-								class="font-mono md:text-xs md:font-medium"
-								aria-current={selectedTable === t ? 'page' : undefined}
-								onclick={() => {
-									selectedTable = t
-									tablesAsideOpen = false
-								}}
-							>
-								{t}
-							</MobileAsideNavLink>
-						{:else}
-							{#if !bootstrapErr}
-								<p class="text-muted-foreground px-2 py-4 text-sm md:text-xs">No tables loaded.</p>
-							{/if}
-						{/each}
-					</div>
+					<AsideNav
+						sections={tableNavSections}
+						sectionLabelClass="px-0 md:px-1"
+						navClass="md:justify-start"
+					/>
 				{/snippet}
 
 				<section class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">

@@ -88,7 +88,9 @@ pub(crate) async fn assemble_mesh_snapshot(
 	let linked: HashSet<String> = transport.linked_peer_dids.iter().cloned().collect();
 	let catchup_pending = catchup.global_catchup_busy;
 	let mesh_catchup = catchup.ready_client_ids;
-	let live: Vec<ClientId> = bridge.snapshot_remote_clients().await;
+	let _bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
+	let live_links = app.state::<std::sync::Arc<tauri_plugin_peer::LiveLinkRegistry>>();
+	let live: Vec<ClientId> = live_links.snapshot_mux_ready_clients().await;
 	let cid_map = bridge.shared_client_id_to_did();
 
 	let mut catchup_done_by_did: HashMap<String, bool> = HashMap::new();
@@ -97,7 +99,7 @@ pub(crate) async fn assemble_mesh_snapshot(
 		let did = cid_map.read().expect("cid map").get(cid).cloned();
 		if let Some(did) = did {
 			catchup_done_by_did.insert(did.clone(), mesh_catchup.contains(cid));
-			groove_mux_ready_by_did.insert(did, bridge.peer_send_ready(*cid).await);
+			groove_mux_ready_by_did.insert(did, true);
 		}
 	}
 

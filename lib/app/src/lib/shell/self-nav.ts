@@ -1,13 +1,7 @@
-export type SelfNavItem = {
-	href: string
-	label: string
-	match: (path: string) => boolean
-}
+import type { AsideRouteNavSection } from '$lib/ui/aside-nav'
 
-export type SelfNavSection = {
-	title: string
-	items: SelfNavItem[]
-}
+export type SelfNavItem = AsideRouteNavSection['items'][number]
+export type SelfNavSection = AsideRouteNavSection
 
 export const selfNavSections: SelfNavSection[] = [
 	{

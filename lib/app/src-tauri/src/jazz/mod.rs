@@ -1484,7 +1484,8 @@ async fn flush_spark_grant_to_peers(
 	h.on_spark_access_granted().await;
 
 	let bridge = app.state::<HyperswarmGrooveBridge>();
-	let live = bridge.snapshot_remote_clients().await;
+	let live_links = app.state::<std::sync::Arc<tauri_plugin_peer::LiveLinkRegistry>>();
+	let live = live_links.snapshot_mux_ready_clients().await;
 	if live.is_empty() {
 		log::info!(
 			target: "avenos::jazz",
@@ -1981,7 +1982,12 @@ pub(crate) async fn refresh_peer_mesh_groove_register_primitives(
 		return Ok(0);
 	}
 
-	let live: HashSet<ClientId> = bridge.snapshot_remote_clients().await.into_iter().collect();
+	let live_links = app.state::<std::sync::Arc<tauri_plugin_peer::LiveLinkRegistry>>();
+	let live: HashSet<ClientId> = live_links
+		.snapshot_mux_ready_clients()
+		.await
+		.into_iter()
+		.collect();
 
 	if nudge_discovery_if_no_live_links && !allow.is_empty() {
 		if let Err(e) = peer_ctl.nudge_allowlisted_discovery(allow).await {
@@ -2005,6 +2011,9 @@ pub(crate) async fn refresh_peer_mesh_groove_register_primitives(
 	let mut allow_live = HashSet::new();
 
 	for (p, did) in &per_live_did {
+		if !bridge.peer_send_ready(*p).await {
+			continue;
+		}
 		allow_live.insert(*p);
 
 		let mut registered = jazz.mesh_groove_registered.lock().await;

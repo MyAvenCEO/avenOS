@@ -15,12 +15,16 @@ mod peer_connect_ui;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod hyperswarm_groove_bridge;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
+mod live_link;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod network_path;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod transport_rank;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod commands_macos;
 pub use hyperswarm_groove_bridge::HyperswarmGrooveBridge;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub use live_link::LiveLinkRegistry;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use peer_connect_ui::{PeerConnectSubstate, PeerConnectUiRow, PeerTransportMode};
 
@@ -58,6 +62,7 @@ pub struct P2pDiagnostics {
 	pub dht_bootstrap: String,
 	pub joined_topic_count: usize,
 	pub allowlist_count: usize,
+	/// Groove mux-ready peer count (authoritative for sync/UI).
 	pub linked_count: usize,
 	/// `true` while a 6-char invite code is active in this process (host or acceptor).
 	#[serde(default)]
@@ -143,6 +148,7 @@ pub struct PeerCtl {
 	/// Shared with peeroxide/HyperDHT — toggled on network path changes.
 	prefer_lan: Arc<AtomicBool>,
 	last_network_interfaces: Arc<tokio::sync::RwLock<Vec<String>>>,
+	live_links: Arc<live_link::LiveLinkRegistry>,
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -814,7 +820,7 @@ impl PeerCtl {
 		cfg.prefer_lan = Arc::clone(&self.prefer_lan);
 		cfg.dht.prefer_lan = Arc::clone(&self.prefer_lan);
 
-		let linked_count = self.jazz_hyperswarm.snapshot_remote_clients().await.len();
+		let linked_count = self.live_links.mux_ready_count().await;
 		let mut diag = build_p2p_diagnostics(&cfg, linked_count);
 		diag.joined_topic_count = self.joined_pair_topics.lock().await.len();
 		diag.allowlist_count = self.allowed_remote_dids.read().await.len();
@@ -882,7 +888,7 @@ impl PeerCtl {
 
 	async fn handle_incoming_swarm_conn(&self, mut conn: peeroxide::SwarmConnection) {
 		let remote_pk = *conn.remote_public_key();
-		let transport_mode = conn.peer.transport_mode;
+		let _transport_mode = conn.peer.transport_mode;
 		let Ok(remote_did) = crate::did::peer_did_from_ed25519(&remote_pk) else {
 			log::warn!(target: "avenos::peeroxide", "reject swarm: invalid remote static key");
 			drop(conn);
@@ -963,16 +969,27 @@ impl PeerCtl {
 				target: "avenos::peeroxide",
 				"pairing conn complete for {remote_did}; attaching Groove mux on live link",
 			);
-			self.connect_ui_tracker
-				.note_inbound_connected(&remote_pk, transport_mode);
-			self.jazz_hyperswarm.on_swarm_connection(conn).await;
-			return;
 		}
 
-		self.connect_ui_tracker
-			.note_inbound_connected(&remote_pk, transport_mode);
-
 		self.jazz_hyperswarm.on_swarm_connection(conn).await;
+	}
+
+	/// Clear stale transport slots and mux workers before pairing or allowlist drain.
+	async fn reset_transport_for_pairing(&self) -> Result<(), String> {
+		let swarm = {
+			let guard = self.inner.lock().await;
+			guard.as_ref().map(|r| r.swarm.clone())
+		};
+		if let Some(swarm) = swarm {
+			if let Err(e) = swarm.prepare_reconnect().await {
+				log::debug!(
+					target: "avenos::peeroxide",
+					"prepare_reconnect before pairing reset: {e}",
+				);
+			}
+		}
+		self.jazz_hyperswarm.teardown_all_links().await;
+		Ok(())
 	}
 
 	pub async fn peer_transport_status(&self) -> PeerTransportStatusReply {
@@ -986,12 +1003,18 @@ impl PeerCtl {
 		};
 		drop(inner);
 
-		let live = self.jazz_hyperswarm.snapshot_remote_clients().await;
-		let linked_peer_ids: Vec<String> = live.iter().map(|id| id.to_string()).collect();
-		let cid_map = self.jazz_hyperswarm.shared_client_id_to_did();
-		let linked_peer_dids: Vec<String> = live
-			.iter()
-			.filter_map(|id| cid_map.read().expect("cid map").get(id).cloned())
+		let linked_peer_dids: Vec<String> = self
+			.live_links
+			.snapshot_mux_ready_dids()
+			.await
+			.into_iter()
+			.collect();
+		let linked_peer_ids: Vec<String> = self
+			.live_links
+			.snapshot_mux_ready_clients()
+			.await
+			.into_iter()
+			.map(|id| id.to_string())
 			.collect();
 
 		let pairing_code_pending = self
@@ -1487,6 +1510,13 @@ impl PeerCtl {
 		if want_count > 0 {
 			let _ =
 				flush_swarm_for_pairing(&swarm, "reconnect allowlisted peers").await;
+		} else if topics_changed {
+			if let Err(e) = self.reset_transport_for_pairing().await {
+				log::debug!(
+					target: "avenos::peeroxide",
+					"set_allowlist empty transport reset: {e}",
+				);
+			}
 		}
 		Ok(())
 	}
@@ -1602,6 +1632,8 @@ impl PeerCtl {
 			running.swarm.clone()
 		};
 
+		self.reset_transport_for_pairing().await?;
+
 		join_pairing_topic(&swarm, topic, "peer_invite_create").await?;
 
 		log::info!(
@@ -1644,6 +1676,8 @@ impl PeerCtl {
 			}
 			running.swarm.clone()
 		};
+
+		self.reset_transport_for_pairing().await?;
 
 		join_pairing_topic(&swarm, topic, "peer_invite_accept").await?;
 
@@ -1740,6 +1774,10 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 			)));
 			jazz_hyperswarm.attach_connect_ui(Arc::clone(&connect_ui_tracker));
 
+			let live_links = Arc::new(live_link::LiveLinkRegistry::new());
+			jazz_hyperswarm.attach_live_link_registry(Arc::clone(&live_links));
+			app.manage(live_links.clone());
+
 			app.manage(jazz_hyperswarm.clone());
 
 			let app_h = app.clone();
@@ -1775,6 +1813,7 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 				connect_ui_tracker,
 				prefer_lan: Arc::new(AtomicBool::new(true)),
 				last_network_interfaces: Arc::new(tokio::sync::RwLock::new(Vec::new())),
+				live_links,
 			});
 
 			let h = app.clone();
