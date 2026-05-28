@@ -68,16 +68,18 @@
 </script>
 
 <T.Group>
-	<HTML center position={[0, 0, 0.005]} wrapperClass="avencity-plot-html">
+	<HTML center position={[0, 0, 0.005]} wrapperClass="avencity-plot-html" zIndexRange={[8_000_000, 7_900_000]}>
 		<svg
 			class="avencity-plot-svg"
 			width={hexWidthPx}
 			height={hexHeightPx}
 			viewBox="{-viewBox.width / 2} {viewBox.minY} {viewBox.width} {viewBox.height}"
-			aria-hidden="true"
 		>
 			<polygon
 				class="avencity-plot-hit"
+				role="button"
+				aria-label="Grundstück plot"
+				tabindex="-1"
 				points={polygonPoints}
 				fill="transparent"
 				stroke="transparent"
@@ -88,6 +90,7 @@
 			<polygon
 				class="avencity-plot-outline"
 				points={polygonPoints}
+				aria-hidden="true"
 				fill="none"
 				stroke={outlineColor}
 				stroke-width={strokeWidth}

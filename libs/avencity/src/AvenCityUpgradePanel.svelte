@@ -1,6 +1,11 @@
 <script lang="ts">
 	import AvenCityUpgradeIcon from './AvenCityUpgradeIcon.svelte'
-	import { AVENCITY_UPGRADES, type AvenCityUpgrade } from './upgrades'
+	import {
+		AVENCITY_UPGRADES,
+		formatHeartCostShort,
+		isUpgradeLocked,
+		type AvenCityUpgrade
+	} from './upgrades'
 
 	let {
 		upgrade,
@@ -11,43 +16,51 @@
 		selectedId: string
 		onSelect: (id: string) => void
 	} = $props()
+
+	function stopWheelBubble(e: WheelEvent) {
+		e.stopPropagation()
+	}
+
+	function stopPointerBubble(e: PointerEvent) {
+		e.stopPropagation()
+	}
+
+	function selectItem(id: string, e: MouseEvent) {
+		e.stopPropagation()
+		if (id === selectedId) return
+		onSelect(id)
+	}
 </script>
 
-<div class="avencity-panel" role="dialog" aria-label="{upgrade.title} upgrade details">
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<div
+	class="avencity-panel"
+	role="dialog"
+	aria-label="{upgrade.title} upgrade details"
+	onwheel={stopWheelBubble}
+>
 	<div class="avencity-panel__body">
-		<section class="avencity-panel__select" aria-label="Select dome type">
-			<p class="avencity-panel__path-label">Dome type</p>
-			<ul class="avencity-panel__path" role="listbox" aria-label="Upgrade path">
+		<section class="avencity-panel__select" aria-label="Select level">
+			<p class="avencity-panel__path-label">Levels</p>
+			<ul class="avencity-panel__grid" role="listbox" aria-label="Upgrade levels">
 				{#each AVENCITY_UPGRADES as item (item.id)}
+					{@const locked = isUpgradeLocked(item)}
 					<li role="presentation">
 						<button
 							type="button"
-							class="avencity-panel__path-item"
-							class:avencity-panel__path-item--selected={item.id === selectedId}
-							class:avencity-panel__path-item--locked={item.locked}
+							class="avencity-panel__grid-item"
+							class:avencity-panel__grid-item--selected={item.id === selectedId}
+							class:avencity-panel__grid-item--locked={locked}
 							role="option"
 							aria-selected={item.id === selectedId}
-							aria-disabled={item.locked}
-							title={item.title}
-							onclick={() => onSelect(item.id)}
+							title="{item.title} · ♥ {formatHeartCostShort(item.heartCost)}{locked ? ' · Locked' : ''}"
+							onclick={(e) => selectItem(item.id, e)}
+							onpointerdown={stopPointerBubble}
 						>
-							<span class="avencity-panel__path-icon">
-								<AvenCityUpgradeIcon variant={item.icon} size={20} />
-							</span>
-							<span class="avencity-panel__path-copy">
-								<span class="avencity-panel__path-row">
-									<span class="avencity-panel__path-title">{item.title}</span>
-									<span class="avencity-panel__path-hearts">
-										<span class="avencity-panel__heart" aria-hidden="true">♥</span>
-										{item.heartCost.toLocaleString()}
-									</span>
-								</span>
-								<span class="avencity-panel__path-row">
-									<span class="avencity-panel__path-level">Level {item.level}</span>
-									{#if item.locked}
-										<span class="avencity-panel__path-lock">Locked</span>
-									{/if}
-								</span>
+							<span class="avencity-panel__grid-level">{item.level}</span>
+							<span class="avencity-panel__grid-price">
+								<span class="avencity-panel__heart" aria-hidden="true">♥</span>
+								{formatHeartCostShort(item.heartCost)}
 							</span>
 						</button>
 					</li>
@@ -71,11 +84,11 @@
 				</span>
 				<span
 					class="avencity-panel__badge avencity-panel__badge--hearts"
-					class:avencity-panel__badge--locked={upgrade.locked}
+					class:avencity-panel__badge--locked={isUpgradeLocked(upgrade)}
 				>
 					<span class="avencity-panel__heart" aria-hidden="true">♥</span>
 					{upgrade.heartCost.toLocaleString()}
-					{#if upgrade.locked}
+					{#if isUpgradeLocked(upgrade)}
 						<span class="avencity-panel__badge-lock">Locked</span>
 					{/if}
 				</span>
@@ -89,7 +102,9 @@
 <style>
 	.avencity-panel {
 		position: relative;
-		width: min(24rem, 92vw);
+		z-index: 1;
+		isolation: isolate;
+		width: min(26rem, 94vw);
 		background: var(--color-surface-card, #f6f1e2);
 		border: 1px solid var(--color-border, #d8dde4);
 		border-radius: var(--radius-lg, 1rem);
@@ -106,13 +121,16 @@
 
 	.avencity-panel__body {
 		display: grid;
-		grid-template-columns: minmax(0, 1.05fr) 1px minmax(0, 1fr);
+		grid-template-columns: 9.4rem 1px minmax(0, 1fr);
 		gap: 0.75rem;
 		align-items: stretch;
 	}
 
 	.avencity-panel__select {
+		display: flex;
+		flex-direction: column;
 		min-width: 0;
+		width: 9.4rem;
 	}
 
 	.avencity-panel__divider {
@@ -121,7 +139,7 @@
 	}
 
 	.avencity-panel__path-label {
-		margin: 0 0 0.45rem;
+		margin: 0 0 0.4rem;
 		font-size: 10px;
 		font-weight: 700;
 		letter-spacing: 0.16em;
@@ -129,120 +147,87 @@
 		opacity: 0.45;
 	}
 
-	.avencity-panel__path {
-		display: flex;
-		flex-direction: column;
+	.avencity-panel__grid {
+		display: grid;
+		flex: 1;
+		grid-template-columns: repeat(3, 1fr);
+		grid-template-rows: repeat(3, 1fr);
 		gap: 0.3rem;
+		aspect-ratio: 1;
 		margin: 0;
 		padding: 0;
 		list-style: none;
 	}
 
-	.avencity-panel__path-item {
+	.avencity-panel__grid-item {
 		display: flex;
+		flex-direction: column;
 		align-items: center;
-		gap: 0.5rem;
+		justify-content: center;
+		gap: 0.1rem;
 		width: 100%;
-		padding: 0.4rem 0.45rem;
+		height: 100%;
+		min-width: 0;
+		min-height: 0;
+		aspect-ratio: 1;
+		padding: 0.2rem;
 		border: 1px solid transparent;
-		border-radius: 0.65rem;
+		border-radius: 0.55rem;
 		background: transparent;
 		color: inherit;
 		cursor: pointer;
-		text-align: left;
+		pointer-events: auto;
+		text-align: center;
 		transition:
 			background-color 160ms ease,
 			border-color 160ms ease;
 	}
 
-	.avencity-panel__path-item:hover {
+	.avencity-panel__grid-item--locked {
+		opacity: 0.52;
+		border-style: dashed;
+		border-color: var(--color-border, #d8dde4);
+		cursor: pointer;
+	}
+
+	.avencity-panel__grid-item:hover {
 		background: var(--color-surface-card-hover, #f6f3e8);
 		border-color: var(--color-border, #d8dde4);
 	}
 
-	.avencity-panel__path-item--selected {
+	.avencity-panel__grid-item--selected {
 		background: var(--color-surface-card-selected, #efeada);
 		border-color: var(--color-border, #d8dde4);
 	}
 
-	.avencity-panel__path-item--locked {
-		opacity: 0.62;
-		border-style: dashed;
-		border-color: var(--color-border, #d8dde4);
-	}
-
-	.avencity-panel__path-item--locked.avencity-panel__path-item--selected {
-		opacity: 0.72;
-	}
-
-	.avencity-panel__path-icon {
-		display: grid;
-		place-items: center;
-		width: 1.75rem;
-		height: 1.75rem;
-		flex-shrink: 0;
-		border: 1px solid var(--color-border, #d8dde4);
-		border-radius: 9999px;
-		background: var(--color-surface-soft, #f9f5e6);
-		color: var(--color-brand-navy, #1e293b);
-	}
-
-	.avencity-panel__path-copy {
-		display: flex;
-		flex: 1;
-		flex-direction: column;
-		gap: 0.08rem;
-		min-width: 0;
-	}
-
-	.avencity-panel__path-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.4rem;
-		min-width: 0;
-	}
-
-	.avencity-panel__path-title {
-		font-size: 0.68rem;
-		font-weight: 600;
-		line-height: 1.2;
-		min-width: 0;
-	}
-
-	.avencity-panel__path-level {
-		font-size: 9px;
-		font-weight: 700;
-		letter-spacing: 0.12em;
-		text-transform: uppercase;
-		opacity: 0.45;
-		min-width: 0;
-	}
-
-	.avencity-panel__path-hearts {
-		display: inline-flex;
-		align-items: center;
-		flex-shrink: 0;
-		gap: 0.15rem;
-		font-size: 9px;
-		font-weight: 700;
-		font-variant-numeric: tabular-nums;
+	.avencity-panel__grid-item--locked.avencity-panel__grid-item--selected {
 		opacity: 0.65;
 	}
 
-	.avencity-panel__path-lock {
-		flex-shrink: 0;
-		font-size: 8px;
+	.avencity-panel__grid-level {
+		font-size: 1.05rem;
 		font-weight: 700;
-		letter-spacing: 0.12em;
-		text-transform: uppercase;
-		opacity: 0.7;
+		line-height: 1;
+		font-variant-numeric: tabular-nums;
+		letter-spacing: -0.03em;
+	}
+
+	.avencity-panel__grid-price {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.1rem;
+		font-size: 0.58rem;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+		line-height: 1.1;
+		opacity: 0.72;
 	}
 
 	.avencity-panel__detail {
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
+		justify-content: center;
 		min-width: 0;
 		padding-right: 0.15rem;
 	}
@@ -313,7 +298,7 @@
 
 	.avencity-panel__heart {
 		color: currentColor;
-		font-size: 10px;
+		font-size: 9px;
 		line-height: 1;
 		opacity: 0.75;
 	}

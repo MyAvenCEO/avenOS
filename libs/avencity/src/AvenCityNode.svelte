@@ -31,20 +31,24 @@
 
 	let hovered = $state(false)
 	let panelOpen = $state(false)
-	let selectedUpgradeId = $state(initialUpgradeId)
-	let circleRadius = $state(spawnRadiusForLevel(upgradeById(initialUpgradeId).level))
-	let dotPx = $state(40)
-	let iconPx = $state(30)
+	let selectedUpgradeId = $state<string | undefined>()
+	let circleRadius = $state<number | undefined>()
 
-	const activeUpgrade = $derived(upgradeById(selectedUpgradeId))
+	$effect.pre(() => {
+		selectedUpgradeId ??= initialUpgradeId
+		circleRadius ??= spawnRadiusForLevel(upgradeById(initialUpgradeId).level)
+	})
+
+	const activeUpgrade = $derived(upgradeById(selectedUpgradeId ?? initialUpgradeId))
 	const targetRadius = $derived(radiusForUpgradeLevel(activeUpgrade.level))
 
 	const isMarineStyle = $derived(
-		hovered || panelOpen || selectedUpgradeId !== initialUpgradeId
+		hovered || panelOpen || (selectedUpgradeId ?? initialUpgradeId) !== initialUpgradeId
 	)
 
 	$effect(() => {
-		onhighlightchange?.(isMarineStyle)
+		const highlighted = isMarineStyle
+		onhighlightchange?.(highlighted)
 	})
 
 	const fillColor = $derived(isMarineStyle ? avencityBrand.marine : avencityBrand.surfaceSoft)
@@ -53,7 +57,12 @@
 		isMarineStyle ? avencityBrand.marineForeground : avencityBrand.navy
 	)
 
+	let dotPx = $state(40)
+	let iconPx = $state(30)
+
 	useTask((delta) => {
+		if (circleRadius === undefined) return
+
 		const diff = targetRadius - circleRadius
 		if (Math.abs(diff) >= 0.0008) {
 			circleRadius += diff * Math.min(1, delta * CIRCLE_GROWTH_SPEED)
@@ -76,6 +85,7 @@
 	}
 
 	function onSelectUpgrade(id: string) {
+		if (id === selectedUpgradeId) return
 		selectedUpgradeId = id
 	}
 
@@ -93,10 +103,14 @@
 		e.stopPropagation()
 		e.stopImmediatePropagation()
 	}
+
+	function onPanelWheel(e: WheelEvent) {
+		e.stopPropagation()
+	}
 </script>
 
 <T.Group {position}>
-	<HTML center position={[0, 0, 0.01]} wrapperClass="avencity-node-html">
+	<HTML center position={[0, 0, 0.01]} wrapperClass="avencity-node-html" zIndexRange={[9_500_000, 9_400_000]}>
 		<button
 			type="button"
 			class="avencity-node-hit"
@@ -119,15 +133,20 @@
 	</HTML>
 
 	{#if panelOpen}
-		<HTML position={[0, circleRadius, 0.02]} wrapperClass="avencity-panel-html">
+		<HTML
+			position={[0, targetRadius, 0.08]}
+			wrapperClass="avencity-panel-html"
+			zIndexRange={[10_000_000, 9_900_000]}
+		>
 			<div
 				class="avencity-panel-anchor"
 				style:--panel-gap="{PANEL_POINTER_GAP_PX}px"
 				style:--panel-arrow="{panelArrowPx}px"
+				onwheel={onPanelWheel}
 			>
 				<AvenCityUpgradePanel
 					upgrade={activeUpgrade}
-					selectedId={selectedUpgradeId}
+					selectedId={selectedUpgradeId ?? initialUpgradeId}
 					onSelect={onSelectUpgrade}
 				/>
 			</div>
@@ -139,6 +158,7 @@
 	:global(.avencity-node-html),
 	:global(.avencity-panel-html) {
 		pointer-events: none !important;
+		z-index: 10_000_000 !important;
 	}
 
 	.avencity-node-hit {

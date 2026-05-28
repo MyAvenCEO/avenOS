@@ -1,4 +1,13 @@
-export type AvenCityUpgradeIcon = 'small-dome' | 'large-dome' | 'glamping-dome' | 'geo-lodge'
+export type AvenCityUpgradeIcon =
+	| 'small-dome'
+	| 'large-dome'
+	| 'glamping-dome'
+	| 'geo-lodge'
+	| 'gathering-dome'
+	| 'village-dome'
+	| 'settlement-dome'
+	| 'grand-lodge'
+	| 'apex-citadel'
 
 export type AvenCityUpgrade = {
 	id: string
@@ -48,8 +57,69 @@ export const AVENCITY_UPGRADES: AvenCityUpgrade[] = [
 		capacity: 6,
 		heartCost: 2500,
 		locked: true
+	},
+	{
+		id: 'gathering-dome',
+		level: 5,
+		title: 'Gathering Dome',
+		description: 'Double-height canvas hall for workshops, meals, and shared lounge space.',
+		icon: 'gathering-dome',
+		capacity: 8,
+		heartCost: 4000,
+		locked: true
+	},
+	{
+		id: 'village-dome',
+		level: 6,
+		title: 'Village Dome',
+		description: 'Clustered pods under one shell — private nooks and a central commons.',
+		icon: 'village-dome',
+		capacity: 12,
+		heartCost: 6500,
+		locked: true
+	},
+	{
+		id: 'settlement-dome',
+		level: 7,
+		title: 'Settlement Dome',
+		description: 'Climate-controlled megastructure with kitchen wing and maker bay.',
+		icon: 'settlement-dome',
+		capacity: 16,
+		heartCost: 10000,
+		locked: true
+	},
+	{
+		id: 'grand-lodge',
+		level: 8,
+		title: 'Grand Lodge',
+		description: 'Flagship geodesic campus with amphitheater, spa circuit, and event deck.',
+		icon: 'grand-lodge',
+		capacity: 24,
+		heartCost: 18000,
+		locked: true
+	},
+	{
+		id: 'apex-citadel',
+		level: 9,
+		title: 'Apex Citadel',
+		description: 'Continental-scale dome district — transit hub, gardens, and summit halls.',
+		icon: 'apex-citadel',
+		capacity: 32,
+		heartCost: 25000,
+		locked: true
 	}
 ]
+
+export function formatHeartCostShort(cost: number): string {
+	if (cost < 1000) return String(cost)
+	const thousands = cost / 1000
+	if (Number.isInteger(thousands)) return `${thousands}k`
+	return `${thousands.toFixed(1).replace(/\.0$/, '')}k`
+}
+
+export function isUpgradeLocked(upgrade: AvenCityUpgrade): boolean {
+	return upgrade.level >= 4
+}
 
 export function upgradeById(id: string): AvenCityUpgrade {
 	return AVENCITY_UPGRADES.find((u) => u.id === id) ?? AVENCITY_UPGRADES[0]

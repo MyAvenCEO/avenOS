@@ -36,17 +36,17 @@ export function circleIconPx(
 	return circleDiameterPx(radius, camera, viewport) * fillRatio
 }
 
-/** Target node radius per upgrade level (world units). Level 1 is 2× the prior base size. */
+/** Target node radius per upgrade level (world units). */
 export function radiusForUpgradeLevel(level: number): number {
-	const radii = [0.22, 0.32, 0.42, 0.54]
+	const radii = [0.22, 0.3, 0.38, 0.46, 0.54, 0.62, 0.7, 0.78, 0.86]
 	return radii[Math.min(Math.max(level - 1, 0), radii.length - 1)]
 }
 
-export const CIRCLE_GROWTH_SPEED = 2.8
+export const CIRCLE_GROWTH_SPEED = 1.65
 
-/** Spawn small, then grow into the level target radius. */
+/** Start at half the target size, then grow into the level radius. */
 export function spawnRadiusForLevel(level: number): number {
-	return radiusForUpgradeLevel(level) * 0.45
+	return radiusForUpgradeLevel(level) * 0.5
 }
 
 export const PANEL_POINTER_GAP_PX = 6
