@@ -2,7 +2,7 @@
 #![cfg(any(target_os = "macos", target_os = "ios"))]
 
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -31,10 +31,25 @@ pub enum GrooveLinkLifecycle {
 
 type LinkLifecycleHook = Arc<dyn Fn(GrooveLinkLifecycle) + Send + Sync>;
 
-/// Tear down a half-dead mux when the peer reconnects or the read side goes idle.
+/// Tear down a half-dead mux when the peer reconnects or keepalive misses.
+const MUX_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
+const MUX_KEEPALIVE_MISSED: u32 = 2;
+const MUX_KEEPALIVE_FRAME: &[u8] = b"avenos/mux-ping/v1";
+/// Backstop if keepalive state stalls entirely.
 const LINK_READ_IDLE_TIMEOUT: Duration = Duration::from_secs(15);
 /// Abort mux promotion if the outbound writer never enters its recv loop.
 const MUX_WRITER_START_TIMEOUT: Duration = Duration::from_secs(10);
+
+fn now_epoch_ms() -> u64 {
+	std::time::SystemTime::now()
+		.duration_since(std::time::UNIX_EPOCH)
+		.map(|d| d.as_millis() as u64)
+		.unwrap_or(0)
+}
+
+fn is_mux_keepalive_frame(data: &[u8]) -> bool {
+	data.starts_with(MUX_KEEPALIVE_FRAME)
+}
 
 #[must_use]
 fn groove_client_uuid_from_pubkey(pubkey: &[u8; 32]) -> Uuid {
@@ -66,7 +81,7 @@ pub struct HyperswarmGrooveBridgeInner {
 	peer_set_changed: Arc<Notify>,
 	connect_ui_tracker: Mutex<Option<Arc<crate::peer_connect_ui::PeerConnectUiTracker>>>,
 	link_lifecycle: Mutex<Option<LinkLifecycleHook>>,
-	live_links: Mutex<Option<Arc<crate::live_link::LiveLinkRegistry>>>,
+	live_links: Mutex<Option<Arc<crate::peer_link::PeerLinkCoordinator>>>,
 }
 
 #[derive(Clone)]
@@ -106,7 +121,7 @@ impl HyperswarmGrooveBridge {
 		*self.0.link_lifecycle.blocking_lock() = Some(hook);
 	}
 
-	pub fn attach_live_link_registry(&self, registry: Arc<crate::live_link::LiveLinkRegistry>) {
+	pub fn attach_live_link_registry(&self, registry: Arc<crate::peer_link::PeerLinkCoordinator>) {
 		*self.0.live_links.blocking_lock() = Some(registry);
 	}
 
@@ -294,10 +309,12 @@ impl HyperswarmGrooveBridge {
 		let peer_set_changed = Arc::clone(&bridge.0.peer_set_changed);
 		let bridge_for_writer = bridge.clone();
 		let (writer_ready_tx, writer_ready_rx) = oneshot::channel::<()>();
+		let last_inbound_ms = Arc::new(AtomicU64::new(now_epoch_ms()));
 
 		// Reader task: pure inbound — decode every frame, dispatch to Groove.
 		let reader_handle = tokio::spawn({
 			let shutdown = Arc::clone(&shutdown);
+			let last_inbound_ms = Arc::clone(&last_inbound_ms);
 			async move {
 				let mut idle = tokio::time::interval(LINK_READ_IDLE_TIMEOUT);
 				idle.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -316,6 +333,10 @@ impl HyperswarmGrooveBridge {
 							match msg {
 								Ok(Some(plaintext)) => {
 									idle.reset();
+									last_inbound_ms.store(now_epoch_ms(), Ordering::Release);
+									if is_mux_keepalive_frame(&plaintext) {
+										continue;
+									}
 									match decode_length_prefixed(&plaintext) {
 										Ok((decoded_target, payload)) => {
 											if decoded_target != local_party_id {
@@ -365,7 +386,11 @@ impl HyperswarmGrooveBridge {
 			.expect("writer_ready flag installed before mux worker spawn");
 		let writer_handle = tokio::spawn({
 			let shutdown = Arc::clone(&shutdown);
+			let last_inbound_ms = Arc::clone(&last_inbound_ms);
 			let mut capsule_rx = capsule_rx;
+			let mut keepalive = tokio::time::interval(MUX_KEEPALIVE_INTERVAL);
+			keepalive.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+			keepalive.tick().await;
 			async move {
 				writer_ready_flag.store(true, Ordering::Release);
 				let _ = writer_ready_tx.send(());
@@ -373,6 +398,26 @@ impl HyperswarmGrooveBridge {
 				loop {
 					tokio::select! {
 						_ = shutdown.notified() => break,
+						_ = keepalive.tick() => {
+							let since = now_epoch_ms()
+								.saturating_sub(last_inbound_ms.load(Ordering::Acquire));
+							let miss_ms =
+								MUX_KEEPALIVE_INTERVAL.as_millis() as u64 * u64::from(MUX_KEEPALIVE_MISSED);
+							if since >= miss_ms {
+								log::info!(
+									target: "avenos::peeroxide",
+									"peer mux keepalive missed peer={remote_client:?} ({since}ms) — closing link",
+								);
+								break;
+							}
+							if let Err(e) = writer.write(MUX_KEEPALIVE_FRAME).await {
+								log::warn!(
+									target: "avenos::peeroxide",
+									"peer mux keepalive write failed peer={remote_client:?}: {e:?}",
+								);
+								break;
+							}
+						}
 						capsule_opt = capsule_rx.recv() => {
 							let Some(data) = capsule_opt else { break };
 							if let Err(e) = writer.write(&data).await {
@@ -503,6 +548,8 @@ impl HyperswarmGrooveBridge {
 					m.insert(remote_client, did.clone());
 				}
 				if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+					reg.set_transport_up(remote_pk, remote_client, did.clone())
+						.await;
 					reg.set_handshaking(remote_pk, remote_client, did)
 						.await;
 				}

@@ -62,7 +62,7 @@ pub async fn publish_peer_mesh_snapshot(app: &tauri::AppHandle) {
 	groove_actor(app).publish_mesh().await;
 }
 
-/// Assemble UI snapshot from transport + bridge state and pre-fetched DB rows (no `conn` here).
+/// Assemble UI snapshot from transport + coordinator phase and pre-fetched DB rows (no `conn` here).
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 pub(crate) async fn assemble_mesh_snapshot(
 	app: &tauri::AppHandle,
@@ -73,6 +73,7 @@ pub(crate) async fn assemble_mesh_snapshot(
 	use std::sync::Arc;
 
 	use groove::sync_manager::ClientId;
+	use tauri_plugin_peer::PeerLinkPhase;
 
 	use tauri_plugin_peer::PeerCtl;
 
@@ -88,10 +89,14 @@ pub(crate) async fn assemble_mesh_snapshot(
 	let linked: HashSet<String> = transport.linked_peer_dids.iter().cloned().collect();
 	let catchup_pending = catchup.global_catchup_busy;
 	let mesh_catchup = catchup.ready_client_ids;
-	let _bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
 	let live_links = app.state::<std::sync::Arc<tauri_plugin_peer::LiveLinkRegistry>>();
 	let live: Vec<ClientId> = live_links.snapshot_mux_ready_clients().await;
 	let cid_map = bridge.shared_client_id_to_did();
+
+	let mut coordinator_phase_by_did: HashMap<String, PeerLinkPhase> = HashMap::new();
+	for row in live_links.snapshot_mesh_rows().await {
+		coordinator_phase_by_did.insert(row.remote_did, row.phase);
+	}
 
 	let mut catchup_done_by_did: HashMap<String, bool> = HashMap::new();
 	let mut groove_mux_ready_by_did: HashMap<String, bool> = HashMap::new();
@@ -105,15 +110,18 @@ pub(crate) async fn assemble_mesh_snapshot(
 
 	let mut out: Vec<PeerMeshPeerState> = Vec::new();
 	for row in db_rows {
+		let coordinator_phase = coordinator_phase_by_did.get(&row.peer_did).copied();
 		let phase = phase_for_peer(
 			&row.peer_did,
 			&row.status,
 			transport.hyperswarm_running,
+			coordinator_phase,
 			&linked,
 			catchup_pending,
 			&catchup_done_by_did,
 		);
 		let ui = peer_ctl.connect_ui_row_for_did(&row.peer_did);
+		let connect_substate = coordinator_connect_substate(coordinator_phase, ui.connect_substate);
 		let catchup_ready = catchup_done_by_did.get(&row.peer_did).copied();
 		let groove_mux = groove_mux_ready_by_did.get(&row.peer_did).copied();
 		out.push(PeerMeshPeerState {
@@ -123,7 +131,7 @@ pub(crate) async fn assemble_mesh_snapshot(
 			db_status: row.status,
 			added_at_ms: row.added_at_ms,
 			phase,
-			connect_substate: ui.connect_substate,
+			connect_substate,
 			transport_mode: ui.transport_mode,
 			reconnect_attempt: ui.reconnect_attempt,
 			last_disconnect_at_ms: ui.last_disconnect_at_ms,
@@ -147,14 +155,35 @@ pub(crate) async fn assemble_mesh_snapshot(
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+fn coordinator_connect_substate(
+	coordinator_phase: Option<tauri_plugin_peer::PeerLinkPhase>,
+	fallback: Option<tauri_plugin_peer::PeerConnectSubstate>,
+) -> Option<tauri_plugin_peer::PeerConnectSubstate> {
+	use tauri_plugin_peer::PeerLinkPhase;
+	match coordinator_phase {
+		Some(PeerLinkPhase::TransportUp | PeerLinkPhase::Handshaking) => {
+			Some(tauri_plugin_peer::PeerConnectSubstate::Handshaking)
+		}
+		Some(PeerLinkPhase::Discovering) => {
+			Some(tauri_plugin_peer::PeerConnectSubstate::Discovering)
+		}
+		Some(PeerLinkPhase::Live) => None,
+		_ => fallback,
+	}
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 fn phase_for_peer(
 	peer_did: &str,
 	db_status: &str,
 	hyperswarm_running: bool,
+	coordinator_phase: Option<tauri_plugin_peer::PeerLinkPhase>,
 	linked: &std::collections::HashSet<String>,
 	catchup_pending: bool,
 	catchup_done_by_did: &std::collections::HashMap<String, bool>,
 ) -> PeerMeshPhase {
+	use tauri_plugin_peer::PeerLinkPhase;
+
 	if db_status == "pairing" {
 		return PeerMeshPhase::Pairing;
 	}
@@ -163,6 +192,13 @@ fn phase_for_peer(
 	}
 	if !hyperswarm_running {
 		return PeerMeshPhase::Searching;
+	}
+	if let Some(PeerLinkPhase::Live) = coordinator_phase {
+		let catchup_done = catchup_done_by_did.get(peer_did).copied().unwrap_or(false);
+		if catchup_pending || !catchup_done {
+			return PeerMeshPhase::Syncing;
+		}
+		return PeerMeshPhase::Ready;
 	}
 	if linked.contains(peer_did) {
 		let catchup_done = catchup_done_by_did.get(peer_did).copied().unwrap_or(false);

@@ -159,6 +159,9 @@ pub struct SwarmConfig {
     pub connect_ui: Option<peeroxide_dht::connect_ui::ConnectUiHook>,
     /// When false (cellular-only), skip LAN handshake paths and use holepunch/relay.
     pub prefer_lan: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// When `true` for a remote static key, suppress blind-relay fallback, stale-slot
+    /// clearing, and dominant-side outbound nudges — the host app owns an in-flight link.
+    pub should_suppress_transport: Option<Arc<dyn Fn([u8; 32]) -> bool + Send + Sync>>,
 }
 
 impl Default for SwarmConfig {
@@ -174,6 +177,7 @@ impl Default for SwarmConfig {
             relay_address_hints: Vec::new(),
             connect_ui: None,
             prefer_lan: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            should_suppress_transport: None,
         }
     }
 }
@@ -488,6 +492,9 @@ struct SwarmActor {
     announce_relay_addrs: Arc<std::sync::RwLock<Vec<Ipv4Peer>>>,
     /// Peers with an in-flight transport upgrade probe (bypasses connection dedup).
     upgrade_probes: std::collections::HashSet<[u8; 32]>,
+    should_suppress_transport: Option<Arc<dyn Fn([u8; 32]) -> bool + Send + Sync>>,
+    /// Per-peer abort handles for deferred/eager blind-relay fallback tasks.
+    relay_fallback_abort: HashMap<[u8; 32], tokio::task::AbortHandle>,
 }
 
 struct ConnectAttemptResult {
@@ -515,6 +522,7 @@ pub async fn spawn(
         relay_address_hints,
         connect_ui,
         prefer_lan,
+        should_suppress_transport,
     } = config;
 
     dht.connect_relay.relay_through = relay_through;
@@ -592,6 +600,8 @@ pub async fn spawn(
         prefer_lan,
         announce_relay_addrs,
         upgrade_probes: std::collections::HashSet::new(),
+        should_suppress_transport,
+        relay_fallback_abort: HashMap::new(),
     };
 
     // Keep the DHT runtime alive for the swarm's lifetime.
@@ -1227,11 +1237,30 @@ impl SwarmActor {
         }
     }
 
+    fn transport_suppressed(&self, pk: [u8; 32]) -> bool {
+        self.should_suppress_transport
+            .as_ref()
+            .is_some_and(|f| f(pk))
+    }
+
+    fn cancel_relay_fallback(&mut self, pk: [u8; 32]) {
+        if let Some(h) = self.relay_fallback_abort.remove(&pk) {
+            h.abort();
+        }
+    }
+
     fn nudge_peer_connect(
         &mut self,
         pk: [u8; 32],
         connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
     ) {
+        if self.transport_suppressed(pk) {
+            tracing::debug!(
+                pk = %short_hex(&pk),
+                "server: skip outbound nudge — link handshaking/live",
+            );
+            return;
+        }
         let should_queue = if let Some(info) = self.peers.get_mut(&pk) {
             if info.banned || info.connecting || info.queued || info.is_waiting() {
                 false
@@ -1507,6 +1536,13 @@ impl SwarmActor {
         }
 
         if self.connections.has(&remote_pk) {
+            if self.transport_suppressed(remote_pk) {
+                tracing::debug!(
+                    pk = %short_hex(&remote_pk),
+                    "server: inbound reconnect suppressed — active link in progress",
+                );
+                return;
+            }
             // Peer restarted or path changed — accept the fresh inbound handshake instead of
             // keeping a half-dead slot that blocks reconnect on the other device.
             tracing::info!(
@@ -1630,7 +1666,7 @@ impl SwarmActor {
     /// may fall back to blind-relay with `pair(false, remote_token)`. The server
     /// must register the matching `pair(true, local_token)` on the same relay.
     fn spawn_server_blind_relay_fallback(
-        &self,
+        &mut self,
         remote_pk: [u8; 32],
         token: [u8; 32],
         nw_result: peeroxide_dht::noise_wrap::NoiseWrapResult,
@@ -1638,6 +1674,14 @@ impl SwarmActor {
         let Some(relay_pk) = self.config.relay_through else {
             return;
         };
+        if self.transport_suppressed(remote_pk) {
+            tracing::debug!(
+                pk = %short_hex(&remote_pk),
+                "server: skip blind-relay fallback — link handshaking/live",
+            );
+            return;
+        }
+        self.cancel_relay_fallback(remote_pk);
 
         tracing::debug!(
             pk = %short_hex(&remote_pk),
@@ -1647,6 +1691,7 @@ impl SwarmActor {
 
         let conn_tx = self.conn_tx.clone();
         let cmd_tx = self.cmd_tx.clone();
+        let suppress = self.should_suppress_transport.clone();
         let fallback = ServerRelayFallbackParams {
             remote_pk,
             token,
@@ -1657,14 +1702,23 @@ impl SwarmActor {
             dht: self.dht.clone(),
             runtime_handle: self.runtime_handle.clone(),
         };
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
+            if suppress.as_ref().is_some_and(|f| f(remote_pk)) {
+                tracing::debug!(
+                    pk = %short_hex(&remote_pk),
+                    "server: blind-relay fallback aborted — link active",
+                );
+                return;
+            }
             deliver_server_relay_connection(cmd_tx, conn_tx, fallback).await;
         });
+        self.relay_fallback_abort
+            .insert(remote_pk, handle.abort_handle());
     }
 
     /// Defer blind-relay so a same-LAN initiator stream can win without racing a second path.
     fn spawn_server_blind_relay_fallback_deferred(
-        &self,
+        &mut self,
         remote_pk: [u8; 32],
         token: [u8; 32],
         nw_result: peeroxide_dht::noise_wrap::NoiseWrapResult,
@@ -1672,6 +1726,14 @@ impl SwarmActor {
         let Some(relay_pk) = self.config.relay_through else {
             return;
         };
+        if self.transport_suppressed(remote_pk) {
+            tracing::debug!(
+                pk = %short_hex(&remote_pk),
+                "server: skip deferred blind-relay — link handshaking/live",
+            );
+            return;
+        }
+        self.cancel_relay_fallback(remote_pk);
 
         tracing::debug!(
             pk = %short_hex(&remote_pk),
@@ -1681,6 +1743,7 @@ impl SwarmActor {
 
         let conn_tx = self.conn_tx.clone();
         let cmd_tx = self.cmd_tx.clone();
+        let suppress = self.should_suppress_transport.clone();
         let fallback = ServerRelayFallbackParams {
             remote_pk,
             token,
@@ -1691,11 +1754,20 @@ impl SwarmActor {
             dht: self.dht.clone(),
             runtime_handle: self.runtime_handle.clone(),
         };
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             const LAN_WAIT: std::time::Duration = std::time::Duration::from_secs(4);
             tokio::time::sleep(LAN_WAIT).await;
+            if suppress.as_ref().is_some_and(|f| f(remote_pk)) {
+                tracing::debug!(
+                    pk = %short_hex(&remote_pk),
+                    "server: deferred blind-relay aborted — link active",
+                );
+                return;
+            }
             deliver_server_relay_connection(cmd_tx, conn_tx, fallback).await;
         });
+        self.relay_fallback_abort
+            .insert(remote_pk, handle.abort_handle());
     }
 
     fn all_topics_refreshed(&self) -> bool {

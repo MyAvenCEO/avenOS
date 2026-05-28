@@ -2301,11 +2301,27 @@ pub(crate) async fn execute_apply_peer_invite(
 	#[cfg(any(target_os = "macos", target_os = "ios"))]
 	{
 		use std::sync::Arc;
+
+		let self_state: tauri::State<'_, SelfState> = app.state();
+		let root = self_state
+			.with_root(|r| Ok(*r))
+			.map_err(|_| "locked: unlock identity first".to_string())?;
+		let pk = ed25519_public(&root)?;
+		let local_did = crate::jazz_auth::peer_did_from_ed25519(&pk)?;
+		let allow =
+			crate::peers::list_active_peer_dids(client.as_ref()).await?;
 		let ctl = app.state::<Arc<tauri_plugin_peer::PeerCtl>>();
 		let _ = ctl.peer_invite_cancel().await;
+		ctl.sync_allowlist_from_peer_table_deferred_flush(&local_did, &allow)
+			.await?;
+		ctl.schedule_post_pairing_mesh_refresh(p.remote_did.clone());
+		let _ = execute_publish_mesh(app, jazz, ss).await;
 	}
 
-	let _ = execute_mesh_refresh_full(app, jazz).await?;
+	#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+	{
+		let _ = execute_mesh_refresh_full(app, jazz).await?;
+	}
 	let _ = jazz.change_tx.send("peers".to_string());
 	log::info!(
 		target: "avenos::jazz",

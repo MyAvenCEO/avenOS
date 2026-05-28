@@ -15,6 +15,8 @@ mod peer_connect_ui;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod hyperswarm_groove_bridge;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
+mod peer_link;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod live_link;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod network_path;
@@ -25,6 +27,8 @@ mod commands_macos;
 pub use hyperswarm_groove_bridge::HyperswarmGrooveBridge;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use live_link::LiveLinkRegistry;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub use peer_link::{PeerLinkCoordinator, PeerLinkMeshRow, PeerLinkPhase};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use peer_connect_ui::{PeerConnectSubstate, PeerConnectUiRow, PeerTransportMode};
 
@@ -148,7 +152,7 @@ pub struct PeerCtl {
 	/// Shared with peeroxide/HyperDHT — toggled on network path changes.
 	prefer_lan: Arc<AtomicBool>,
 	last_network_interfaces: Arc<tokio::sync::RwLock<Vec<String>>>,
-	live_links: Arc<live_link::LiveLinkRegistry>,
+	live_links: Arc<peer_link::PeerLinkCoordinator>,
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -163,6 +167,10 @@ fn prefer_lan_from_path(interfaces: &[String], satisfied: bool) -> Option<bool> 
 impl PeerCtl {
 	pub fn connect_ui_row_for_did(&self, peer_did: &str) -> peer_connect_ui::PeerConnectUiRow {
 		self.connect_ui_tracker.row_for_did(peer_did)
+	}
+
+	pub async fn link_phase_for_did(&self, peer_did: &str) -> Option<PeerLinkPhase> {
+		self.live_links.phase_for_did(peer_did).await
 	}
 }
 
@@ -819,6 +827,10 @@ impl PeerCtl {
 		cfg.connect_ui = Some(self.connect_ui_tracker.hook());
 		cfg.prefer_lan = Arc::clone(&self.prefer_lan);
 		cfg.dht.prefer_lan = Arc::clone(&self.prefer_lan);
+		let links_for_suppress = Arc::clone(&self.live_links);
+		cfg.should_suppress_transport = Some(Arc::new(move |pk| {
+			links_for_suppress.should_suppress_transport_sync(&pk)
+		}));
 
 		let linked_count = self.live_links.mux_ready_count().await;
 		let mut diag = build_p2p_diagnostics(&cfg, linked_count);
@@ -1065,11 +1077,31 @@ impl PeerCtl {
 		*self.applied_peer_allow_sorted.lock().await = None;
 	}
 
-	/// One round trip: update in-memory DID allowset, join pair topics if needed, **capped** DHT flush — peeroxide reconnect pattern.
+	/// One round trip: update in-memory DID allowset, join pair topics if needed, optional DHT flush.
 	pub async fn sync_allowlist_from_peer_table(
 		&self,
 		local_did: &str,
 		active_remote_dids: &[String],
+	) -> Result<(), String> {
+		self.sync_allowlist_from_peer_table_inner(local_did, active_remote_dids, false)
+			.await
+	}
+
+	/// Join durable topics after invite persist without flushing while mux is still handshaking.
+	pub async fn sync_allowlist_from_peer_table_deferred_flush(
+		&self,
+		local_did: &str,
+		active_remote_dids: &[String],
+	) -> Result<(), String> {
+		self.sync_allowlist_from_peer_table_inner(local_did, active_remote_dids, true)
+			.await
+	}
+
+	async fn sync_allowlist_from_peer_table_inner(
+		&self,
+		local_did: &str,
+		active_remote_dids: &[String],
+		defer_flush: bool,
 	) -> Result<(), String> {
 		let effective = self
 			.merge_effective_allowlist(active_remote_dids)
@@ -1080,7 +1112,7 @@ impl PeerCtl {
 				return Ok(());
 			}
 		}
-		self.set_allowlist_and_join_pair_topics(local_did, &effective)
+		self.set_allowlist_and_join_pair_topics_inner(local_did, &effective, defer_flush)
 			.await?;
 		*self.applied_peer_allow_sorted.lock().await = Some(effective);
 		Ok(())
@@ -1149,10 +1181,10 @@ impl PeerCtl {
 			return Ok(());
 		}
 
-		let live_dids = self.jazz_hyperswarm.snapshot_live_linked_dids().await;
+		let in_flight_dids = self.live_links.snapshot_in_flight_dids().await;
 		let missing: Vec<String> = allow
 			.iter()
-			.filter(|d| !live_dids.contains(d.as_str()))
+			.filter(|d| !in_flight_dids.contains(d.as_str()))
 			.cloned()
 			.collect();
 		if missing.is_empty() {
@@ -1171,7 +1203,9 @@ impl PeerCtl {
 			r.swarm.clone()
 		};
 
-		if live_dids.is_empty() {
+		let pairing_active = self.pairing_session.lock().await.is_some();
+		let any_in_flight = self.live_links.any_in_flight().await;
+		if !pairing_active && !any_in_flight {
 			if let Err(e) = swarm.prepare_reconnect().await {
 				log::debug!(
 					target: "avenos::peeroxide",
@@ -1179,9 +1213,9 @@ impl PeerCtl {
 				);
 			}
 		} else {
-		for did in &missing {
-			self.connect_ui_tracker.bump_reconnect_attempt(did);
-			match crate::did::ed25519_public_from_peer_did(did) {
+			for did in &missing {
+				self.connect_ui_tracker.bump_reconnect_attempt(did);
+				match crate::did::ed25519_public_from_peer_did(did) {
 					Ok(pk) => {
 						if let Err(e) = swarm.note_peer_disconnected(pk).await {
 							log::debug!(
@@ -1202,9 +1236,9 @@ impl PeerCtl {
 
 		log::info!(
 			target: "avenos::peeroxide",
-			"peer heal: nudge {} missing allowlisted peer(s) ({} live)",
+			"peer heal: nudge {} missing allowlisted peer(s) ({} in-flight)",
 			missing.len(),
-			live_dids.len(),
+			in_flight_dids.len(),
 		);
 		flush_swarm_for_pairing(&swarm, "nudge missing allowlisted peer(s)").await
 	}
@@ -1425,6 +1459,44 @@ impl PeerCtl {
 		});
 	}
 
+	async fn flush_allowlisted_peers(&self, label: &'static str) -> Result<(), String> {
+		let swarm = {
+			let guard = self.inner.lock().await;
+			let Some(r) = guard.as_ref() else {
+				return Ok(());
+			};
+			if self.joined_pair_topics.lock().await.is_empty() {
+				return Ok(());
+			}
+			r.swarm.clone()
+		};
+		flush_swarm_for_pairing(&swarm, label).await
+	}
+
+	/// After invite persist, defer full mesh refresh until mux is live or grace elapses.
+	pub fn schedule_post_pairing_mesh_refresh(&self, remote_did: String) {
+		let ctl = self.clone();
+		tauri::async_runtime::spawn(async move {
+			const GRACE: std::time::Duration = std::time::Duration::from_secs(10);
+			let deadline = tokio::time::Instant::now() + GRACE;
+			loop {
+				if ctl.live_links.is_mux_ready_by_did(&remote_did).await {
+					break;
+				}
+				if ctl.pairing_session.lock().await.is_none()
+					&& tokio::time::Instant::now() >= deadline
+				{
+					break;
+				}
+				tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+			}
+			if ctl.live_links.is_mux_ready_by_did(&remote_did).await {
+				let _ = ctl.flush_allowlisted_peers("post-pairing link live").await;
+			}
+			let _ = ctl.app_handle.emit("peer:mesh-push", ());
+		});
+	}
+
 	async fn on_groove_link_lifecycle(
 		&self,
 		event: hyperswarm_groove_bridge::GrooveLinkLifecycle,
@@ -1445,6 +1517,12 @@ impl PeerCtl {
 					);
 				}
 				self.schedule_post_link_upgrade_probe(pk);
+				if let Err(e) = self.flush_allowlisted_peers("link live").await {
+					log::debug!(
+						target: "avenos::peeroxide",
+						"post-link allowlist flush: {e}",
+					);
+				}
 				let _ = self.app_handle.emit("peer:mesh-push", ());
 			}
 			hyperswarm_groove_bridge::GrooveLinkLifecycle::Down(pk) => {
@@ -1470,6 +1548,16 @@ impl PeerCtl {
 		&self,
 		local_did: &str,
 		active_remote_dids: &[String],
+	) -> Result<(), String> {
+		self.set_allowlist_and_join_pair_topics_inner(local_did, active_remote_dids, false)
+			.await
+	}
+
+	async fn set_allowlist_and_join_pair_topics_inner(
+		&self,
+		local_did: &str,
+		active_remote_dids: &[String],
+		defer_flush: bool,
 	) -> Result<(), String> {
 		{
 			let mut w = self.allowed_remote_dids.write().await;
@@ -1533,10 +1621,21 @@ impl PeerCtl {
 				"set_allowlist: joined {want_count} durable pair topic(s)",
 			);
 		}
-		// Capped mandatory round like invite pairing — background-only flush left session 2+ stuck.
+		// Capped mandatory round like invite pairing — skip while mux is handshaking so
+		// `prepare_reconnect`/flush does not clear the winning inbound stream.
 		if want_count > 0 {
-			let _ =
-				flush_swarm_for_pairing(&swarm, "reconnect allowlisted peers").await;
+			let skip_flush = defer_flush
+				|| self.live_links.any_in_flight().await
+				|| self.pairing_session.lock().await.is_some();
+			if skip_flush {
+				log::info!(
+					target: "avenos::peeroxide",
+					"set_allowlist: joined {want_count} topic(s); defer flush (link in-flight or pairing)",
+				);
+			} else {
+				let _ =
+					flush_swarm_for_pairing(&swarm, "reconnect allowlisted peers").await;
+			}
 		} else if topics_changed && self.live_links.handshaking_count().await == 0 {
 			if let Err(e) = self.reset_transport_for_pairing().await {
 				log::debug!(
@@ -1801,7 +1900,7 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 			)));
 			jazz_hyperswarm.attach_connect_ui(Arc::clone(&connect_ui_tracker));
 
-			let live_links = Arc::new(live_link::LiveLinkRegistry::new());
+			let live_links = Arc::new(peer_link::PeerLinkCoordinator::new());
 			jazz_hyperswarm.attach_live_link_registry(Arc::clone(&live_links));
 			app.manage(live_links.clone());
 
