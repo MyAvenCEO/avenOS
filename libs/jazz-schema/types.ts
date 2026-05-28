@@ -24,6 +24,7 @@ export type KeysharesRow = {
 	spark_id: string
 	dek_version: number
 	recipient_did: string
+	wrapper_did: string
 	wrapped_dek: string
 }
 

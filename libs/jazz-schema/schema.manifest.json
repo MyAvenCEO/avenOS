@@ -57,6 +57,12 @@
 				{ "name": "spark_id", "type": "uuid", "plaintext": true },
 				{ "name": "dek_version", "type": "bigint", "plaintext": true },
 				{ "name": "recipient_did", "type": "text", "plaintext": true },
+				{
+					"name": "wrapper_did",
+					"type": "text",
+					"plaintext": true,
+					"comment": "DID of the admin who wrapped this DEK (genesis issuer or delegated granter) — recipient derives KEK via DH(recipient, wrapper)"
+				},
 				{ "name": "wrapped_dek", "type": "text", "plaintext": true }
 			]
 		},

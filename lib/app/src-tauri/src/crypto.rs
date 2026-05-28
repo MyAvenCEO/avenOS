@@ -383,11 +383,35 @@ pub fn keyshare_wrap_aad(spark_urn: &str, recipient_did: &str, dek_version: i64)
 #[cfg(test)]
 mod tests {
 	use super::{
-		column_type_slug, dek_version_from_aad_bytes, groove_value_to_canonical_utf8, ipc_json_from_opened_sensitive_plaintext,
-		open_text_cell_payload, random_spark_dek, seal_text_cell_payload,
-		cell_seal_aad, ColumnType,
-		Value,
+		column_type_slug, decrypt_keyshare_payload, dek_version_from_aad_bytes,
+		derive_kek_x25519, encrypt_keyshare_payload, groove_value_to_canonical_utf8,
+		ipc_json_from_opened_sensitive_plaintext, keyshare_wrap_aad, open_text_cell_payload,
+		random_spark_dek, seal_text_cell_payload, cell_seal_aad, ColumnType, Value,
 	};
+	use ed25519_dalek::SigningKey;
+
+	#[test]
+	fn delegated_keyshare_wrap_unwrap() {
+		let granter = SigningKey::from_bytes(&[7u8; 32]);
+		let recipient = SigningKey::from_bytes(&[9u8; 32]);
+		let granter_pk = granter.verifying_key().to_bytes();
+		let recipient_pk = recipient.verifying_key().to_bytes();
+
+		let spark_id = uuid::Uuid::new_v4();
+		let urn = format!("spark:{spark_id}");
+		let recipient_did = "did:key:zRecipient";
+		let dek_ver = 1i64;
+		let dek_plain = random_spark_dek();
+
+		let kek_wrap = derive_kek_x25519(&granter, &recipient_pk).unwrap();
+		let aad = keyshare_wrap_aad(&urn, recipient_did, dek_ver);
+		let wrapped =
+			encrypt_keyshare_payload(&kek_wrap, dek_plain.expose(), &aad).unwrap();
+
+		let kek_unwrap = derive_kek_x25519(&recipient, &granter_pk).unwrap();
+		let opened = decrypt_keyshare_payload(&wrapped, &kek_unwrap, &aad).unwrap();
+		assert_eq!(opened, *dek_plain.expose());
+	}
 
 	#[test]
 	fn envelope_roundtrip() {

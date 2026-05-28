@@ -1448,6 +1448,10 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 			JsonValue::String(peer_did.clone()),
 		);
 		ks.insert(
+			"wrapper_did".into(),
+			JsonValue::String(shell.peer_did.clone()),
+		);
+		ks.insert(
 			"wrapped_dek".into(),
 			JsonValue::String(wrapped),
 		);
