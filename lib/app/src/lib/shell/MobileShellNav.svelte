@@ -4,7 +4,6 @@
 	import MobileAsideDrawer from '$lib/ui/MobileAsideDrawer.svelte'
 	import MobileAsideNavLink from '$lib/ui/MobileAsideNavLink.svelte'
 	import MobileAsideSectionLabel from '$lib/ui/MobileAsideSectionLabel.svelte'
-	import { selfNavSections } from './self-nav'
 	import { mobileChromeOverrides } from './mobile-chrome.svelte'
 
 	type NavItem = {
@@ -37,8 +36,7 @@
 		{ href: '/sandbox', label: 'Sandbox', active: sandboxActive },
 		{ href: '/sparks', label: 'Sparks', active: sparksNavActive },
 		{ href: '/db', label: 'DB', active: dbActive },
-		{ href: '/docs', label: 'Docs', active: docsActive },
-		{ href: '/self/peers', label: selfNavLabel, active: selfActive }
+		{ href: '/docs', label: 'Docs', active: docsActive }
 	])
 
 	const showNavFab = $derived(!chrome.hideProfile)
@@ -85,36 +83,20 @@
 	{/snippet}
 
 	{#snippet footer()}
-		<div class="mb-3 px-1">
-			<MobileAsideSectionLabel align="right">Self</MobileAsideSectionLabel>
-			<p class="truncate text-[15px] font-semibold tracking-tight" title={selfNavLabel}>
+		<MobileAsideSectionLabel align="right">Self</MobileAsideSectionLabel>
+		<nav class="flex flex-col gap-1" aria-label="Self">
+			<MobileAsideNavLink
+				href="/self/peers"
+				active={selfActive}
+				align="right"
+				aria-current={selfActive ? 'page' : undefined}
+				onclick={(e) => {
+					closeNav()
+					navigateApp('/self/peers', e)
+				}}
+			>
 				{selfNavLabel}
-			</p>
-		</div>
-		<nav class="flex max-h-[min(40vh,14rem)] flex-col gap-3 overflow-y-auto" aria-label="Self settings">
-			{#each selfNavSections as section (section.title)}
-				<div class="flex flex-col gap-1">
-					<MobileAsideSectionLabel align="right" class="mb-1 opacity-70">
-						{section.title}
-					</MobileAsideSectionLabel>
-					{#each section.items as tab (tab.href)}
-						{@const active = tab.match(path)}
-						<MobileAsideNavLink
-							href={tab.href}
-							active={active}
-							align="right"
-							muted
-							aria-current={active ? 'page' : undefined}
-							onclick={(e) => {
-								closeNav()
-								navigateApp(tab.href, e)
-							}}
-						>
-							{tab.label}
-						</MobileAsideNavLink>
-					{/each}
-				</div>
-			{/each}
+			</MobileAsideNavLink>
 		</nav>
 	{/snippet}
 </MobileAsideDrawer>

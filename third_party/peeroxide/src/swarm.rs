@@ -1389,6 +1389,18 @@ impl SwarmActor {
                         let dht = self.dht.clone();
                         let nw_result_spawn = nw_result.clone();
                         let lan_peer = lan_peer.clone();
+                        let relay_fallback = relay_token.zip(self.config.relay_through).map(
+                            |(token, relay_pk)| ServerRelayFallbackParams {
+                                remote_pk,
+                                token,
+                                nw_result: nw_result.clone(),
+                                relay_pk,
+                                relay_addr: self.config.relay_address,
+                                key_pair: self.key_pair.clone(),
+                                dht: self.dht.clone(),
+                                runtime_handle: self.runtime_handle.clone(),
+                            },
+                        );
 
                         tracing::debug!(
                             pk = %short_hex(&remote_pk),
@@ -1397,17 +1409,22 @@ impl SwarmActor {
                         );
 
                         tokio::spawn(async move {
-                            match create_server_connection(
-                                rh,
-                                dht,
-                                local_stream_id,
-                                &remote_udx,
-                                &lan_peer,
-                                &nw_result_spawn,
+                            const LAN_PRE_REPLY_TIMEOUT: std::time::Duration =
+                                std::time::Duration::from_secs(4);
+                            let lan_ok = match tokio::time::timeout(
+                                LAN_PRE_REPLY_TIMEOUT,
+                                create_server_connection(
+                                    rh,
+                                    dht,
+                                    local_stream_id,
+                                    &remote_udx,
+                                    &lan_peer,
+                                    &nw_result_spawn,
+                                ),
                             )
                             .await
                             {
-                                Ok((mut conn, runtime)) => {
+                                Ok(Ok((mut conn, runtime))) => {
                                     conn.transport_mode =
                                         Some(peeroxide_dht::connect_ui::ConnectTransportMode::Lan);
                                     let swarm_conn = SwarmConnection {
@@ -1418,13 +1435,28 @@ impl SwarmActor {
                                     };
                                     if conn_tx.send(swarm_conn).await.is_err() {
                                         tracing::warn!("connection channel closed");
+                                        false
+                                    } else {
+                                        true
                                     }
                                 }
-                                Err(e) => {
+                                Ok(Err(e)) => {
                                     tracing::debug!(
                                         err = %e,
                                         "server: relayed LAN responder stream failed",
                                     );
+                                    false
+                                }
+                                Err(_) => {
+                                    tracing::debug!(
+                                        "server: relayed LAN pre-reply timed out",
+                                    );
+                                    false
+                                }
+                            };
+                            if !lan_ok {
+                                if let Some(fallback) = relay_fallback {
+                                    deliver_server_relay_connection(conn_tx, fallback).await;
                                 }
                             }
                         });
@@ -1445,6 +1477,7 @@ impl SwarmActor {
         let _ = reply_tx.send(encode_handshake_to_bytes(&reply_msg).ok());
 
         if relayed_lan_responder_opened {
+            // LAN pre-reply is in flight; blind-relay fallback only runs if LAN fails (see spawn above).
             return;
         }
 
@@ -1473,6 +1506,13 @@ impl SwarmActor {
                         "server: relayed LAN — waiting on dominant peer initiator stream",
                     );
                     self.nudge_peer_connect(remote_pk, connect_result_tx);
+                    if let Some(token) = relay_token {
+                        self.spawn_server_blind_relay_fallback_deferred(
+                            remote_pk,
+                            token,
+                            nw_result.clone(),
+                        );
+                    }
                     return;
                 }
             } else {
@@ -1577,38 +1617,54 @@ impl SwarmActor {
             "server: spawning blind-relay fallback (pair initiator)",
         );
 
-        let dht = self.dht.clone();
-        let key_pair = self.key_pair.clone();
-        let relay_addr = self.config.relay_address;
-        let rh = self.runtime_handle.clone();
         let conn_tx = self.conn_tx.clone();
+        let fallback = ServerRelayFallbackParams {
+            remote_pk,
+            token,
+            nw_result,
+            relay_pk,
+            relay_addr: self.config.relay_address,
+            key_pair: self.key_pair.clone(),
+            dht: self.dht.clone(),
+            runtime_handle: self.runtime_handle.clone(),
+        };
         tokio::spawn(async move {
-            match create_server_relay_connection(
-                rh,
-                dht,
-                key_pair,
-                relay_pk,
-                relay_addr,
-                token,
-                nw_result,
-            )
-            .await
-            {
-                Ok((conn, runtime)) => {
-                    let swarm_conn = SwarmConnection {
-                        peer: conn,
-                        is_initiator: false,
-                        topics: vec![],
-                        _runtime: runtime,
-                    };
-                    if conn_tx.send(swarm_conn).await.is_err() {
-                        tracing::warn!("connection channel closed");
-                    }
-                }
-                Err(e) => {
-                    tracing::debug!(err = %e, "server: relay connection failed");
-                }
-            }
+            deliver_server_relay_connection(conn_tx, fallback).await;
+        });
+    }
+
+    /// Defer blind-relay so a same-LAN initiator stream can win without racing a second path.
+    fn spawn_server_blind_relay_fallback_deferred(
+        &self,
+        remote_pk: [u8; 32],
+        token: [u8; 32],
+        nw_result: peeroxide_dht::noise_wrap::NoiseWrapResult,
+    ) {
+        let Some(relay_pk) = self.config.relay_through else {
+            return;
+        };
+
+        tracing::debug!(
+            pk = %short_hex(&remote_pk),
+            token = %format_args!("{:02x?}", &token[..4]),
+            "server: deferring blind-relay fallback for LAN window",
+        );
+
+        let conn_tx = self.conn_tx.clone();
+        let fallback = ServerRelayFallbackParams {
+            remote_pk,
+            token,
+            nw_result,
+            relay_pk,
+            relay_addr: self.config.relay_address,
+            key_pair: self.key_pair.clone(),
+            dht: self.dht.clone(),
+            runtime_handle: self.runtime_handle.clone(),
+        };
+        tokio::spawn(async move {
+            const LAN_WAIT: std::time::Duration = std::time::Duration::from_secs(4);
+            tokio::time::sleep(LAN_WAIT).await;
+            deliver_server_relay_connection(conn_tx, fallback).await;
         });
     }
 
@@ -1677,6 +1733,50 @@ async fn create_server_connection(
 
     let conn = PeerConnection::with_remote_addr(ss, noise_result.remote_public_key, addr, socket, None);
     Ok((conn, runtime))
+}
+
+struct ServerRelayFallbackParams {
+    #[allow(dead_code)]
+    remote_pk: [u8; 32],
+    token: [u8; 32],
+    nw_result: peeroxide_dht::noise_wrap::NoiseWrapResult,
+    relay_pk: [u8; 32],
+    relay_addr: Option<std::net::SocketAddr>,
+    key_pair: KeyPair,
+    dht: HyperDhtHandle,
+    runtime_handle: Arc<RuntimeHandle>,
+}
+
+async fn deliver_server_relay_connection(
+    conn_tx: mpsc::Sender<SwarmConnection>,
+    params: ServerRelayFallbackParams,
+) {
+    match create_server_relay_connection(
+        params.runtime_handle,
+        params.dht,
+        params.key_pair,
+        params.relay_pk,
+        params.relay_addr,
+        params.token,
+        params.nw_result,
+    )
+    .await
+    {
+        Ok((conn, runtime)) => {
+            let swarm_conn = SwarmConnection {
+                peer: conn,
+                is_initiator: false,
+                topics: vec![],
+                _runtime: runtime,
+            };
+            if conn_tx.send(swarm_conn).await.is_err() {
+                tracing::warn!("connection channel closed");
+            }
+        }
+        Err(e) => {
+            tracing::debug!(err = %e, "server: relay connection failed");
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

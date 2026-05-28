@@ -300,6 +300,7 @@ impl HyperswarmGrooveBridge {
 			.transport_mode
 			.map(crate::transport_rank::map_dht_mode);
 
+		let mut transport_upgrade = false;
 		if self
 			.0
 			.active_remote_clients
@@ -320,15 +321,21 @@ impl HyperswarmGrooveBridge {
 				});
 
 			if crate::transport_rank::should_replace_link(new_mode, existing_mode) {
+				let upgraded = existing_mode.is_some_and(|old| {
+					new_mode.is_some_and(|new_m| crate::transport_rank::is_better(new_m, old))
+				});
+				transport_upgrade = upgraded;
 				log::info!(
 					target: "avenos::peeroxide",
-					"peer_heal: replace stale link {:?} {:?} -> {:?}",
+					"peer_heal: {} link {:?} {} -> {}",
+					if upgraded { "upgrade" } else { "replace" },
 					remote_client,
-					existing_mode,
-					new_mode,
+					crate::transport_rank::format_mode(existing_mode),
+					crate::transport_rank::format_mode(new_mode),
 				);
-				self.teardown_remote_link(remote_client, remote_pk, "stale_replaced")
-					.await;
+				// In-place mux swap — avoid link_down/reconnect churn during upgrades.
+				self.abort_worker_for(remote_client).await;
+				self.0.outbound_by_peer.lock().await.remove(&remote_client);
 			} else {
 				log::debug!(
 					target: "avenos::peeroxide",
@@ -336,16 +343,17 @@ impl HyperswarmGrooveBridge {
 					remote_client,
 				);
 				drop(conn);
-				self.notify_link_lifecycle(GrooveLinkLifecycle::Up(remote_pk));
 				return;
 			}
 		}
 
-		if let Ok(did) = did::peer_did_from_ed25519(&remote_pk) {
-			let mut m = self.0.client_id_to_did.write().expect("cid map poisoned");
-			m.insert(remote_client, did);
-		} else {
-			log::warn!(target: "avenos::peeroxide", "groove_p2p: could not derive did:key for remote static key");
+		if !transport_upgrade {
+			if let Ok(did) = did::peer_did_from_ed25519(&remote_pk) {
+				let mut m = self.0.client_id_to_did.write().expect("cid map poisoned");
+				m.insert(remote_client, did);
+			} else {
+				log::warn!(target: "avenos::peeroxide", "groove_p2p: could not derive did:key for remote static key");
+			}
 		}
 
 		let (caps_tx, caps_rx) = mpsc::unbounded_channel::<Vec<u8>>();
@@ -355,20 +363,24 @@ impl HyperswarmGrooveBridge {
 			.await
 			.insert(remote_client, caps_tx);
 
-		self.0
-			.active_remote_clients
-			.lock()
-			.await
-			.insert(remote_client);
-		self.0.peer_set_changed.notify_waiters();
+		if !transport_upgrade {
+			self.0
+				.active_remote_clients
+				.lock()
+				.await
+				.insert(remote_client);
+			self.0.peer_set_changed.notify_waiters();
+		}
 		if let Some(tracker) = self.0.connect_ui_tracker.lock().await.as_ref() {
 			tracker.note_inbound_connected(&remote_pk, conn.peer.transport_mode);
 		}
 		self.notify_link_lifecycle(GrooveLinkLifecycle::Up(remote_pk));
 		log::info!(
 			target: "avenos::peeroxide",
-			"groove_p2p link up peer={:?}",
-			remote_client
+			"groove_p2p link {} peer={:?} mode={}",
+			if transport_upgrade { "upgraded" } else { "up" },
+			remote_client,
+			crate::transport_rank::format_mode(new_mode),
 		);
 
 		let groove_bridge = HyperswarmGrooveBridge(Arc::clone(&self.0));
@@ -398,18 +410,6 @@ impl HyperswarmGrooveBridge {
 			h.abort();
 			let _ = h.await;
 		}
-	}
-
-	/// Synchronously drop bridge bookkeeping for a remote peer (worker may already be gone).
-	async fn teardown_remote_link(
-		&self,
-		remote_client: ClientId,
-		remote_pk: [u8; 32],
-		reason: &str,
-	) {
-		self.abort_worker_for(remote_client).await;
-		self.cleanup_remote_link_state(remote_client, remote_pk, reason)
-			.await;
 	}
 
 	async fn cleanup_remote_link_state(

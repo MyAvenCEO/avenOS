@@ -80,15 +80,10 @@ pub struct P2pDiagnostics {
 	#[serde(default)]
 	pub heal_in_progress: bool,
 	/// LAN-first connect paths (false on cellular-only).
-	#[serde(default = "default_prefer_lan")]
 	pub prefer_lan: bool,
 	/// Last reported network interfaces from NWPathMonitor (e.g. `wifi`, `cellular`).
 	#[serde(default)]
 	pub network_interfaces: Vec<String>,
-}
-
-fn default_prefer_lan() -> bool {
-	true
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -148,6 +143,14 @@ pub struct PeerCtl {
 	/// Shared with peeroxide/HyperDHT — toggled on network path changes.
 	prefer_lan: Arc<AtomicBool>,
 	last_network_interfaces: Arc<tokio::sync::RwLock<Vec<String>>>,
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn prefer_lan_from_path(interfaces: &[String], satisfied: bool) -> Option<bool> {
+	if interfaces.is_empty() {
+		return None;
+	}
+	Some(satisfied && interfaces.iter().any(|i| i == "wifi" || i == "wired"))
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -954,13 +957,15 @@ impl PeerCtl {
 			) {
 				log::warn!(target: "avenos::peeroxide", "emit peer:invite-paired failed: {e}");
 			}
-			// Pairing uses a short-lived topic — do not attach Jazz/Groove to this link.
-			// Durable per-pair topic reconnect establishes the mux used for spark sync.
-			log::debug!(
+			// Pairing topic is short-lived, but the blind-relay/direct stream is already up —
+			// attach Groove here. Durable-topic reconnect often fails to re-pair blind-relay.
+			log::info!(
 				target: "avenos::peeroxide",
-				"pairing conn complete for {remote_did}; closing without Groove mux",
+				"pairing conn complete for {remote_did}; attaching Groove mux on live link",
 			);
-			drop(conn);
+			self.connect_ui_tracker
+				.note_inbound_connected(&remote_pk, transport_mode);
+			self.jazz_hyperswarm.on_swarm_connection(conn).await;
 			return;
 		}
 
@@ -1155,15 +1160,44 @@ impl PeerCtl {
 	}
 
 	/// Soft heal after network path change or app foreground — refresh relays, flush, per-peer nudge.
-	pub async fn soft_heal(&self, reason: &str, prefer_lan: bool) -> Result<(), String> {
+	pub async fn soft_heal(&self, reason: &str, prefer_lan: Option<bool>) -> Result<(), String> {
 		self.connect_ui_tracker.set_heal_in_progress(true);
 		let result = self.soft_heal_inner(reason, prefer_lan).await;
 		self.connect_ui_tracker.set_heal_in_progress(false);
 		result
 	}
 
-	async fn soft_heal_inner(&self, reason: &str, prefer_lan: bool) -> Result<(), String> {
-		self.prefer_lan.store(prefer_lan, Ordering::Release);
+	async fn soft_heal_inner(&self, reason: &str, prefer_lan: Option<bool>) -> Result<(), String> {
+		let pairing_active = self.pairing_session.lock().await.is_some();
+		let was_prefer_lan = self.prefer_lan.load(Ordering::Relaxed);
+		let prefer_lan = prefer_lan.unwrap_or(was_prefer_lan);
+
+		if prefer_lan != was_prefer_lan {
+			self.apply_prefer_lan(prefer_lan).await;
+			if was_prefer_lan && !prefer_lan && !pairing_active {
+				let swarm = {
+					let guard = self.inner.lock().await;
+					guard.as_ref().map(|r| r.swarm.clone())
+				};
+				if let Some(swarm) = swarm {
+					if let Err(e) = swarm.prepare_reconnect().await {
+						log::debug!(
+							target: "avenos::peeroxide",
+							"prepare_reconnect ({reason}, lan→non-lan): {e}",
+						);
+					}
+				}
+			}
+		}
+
+		if pairing_active {
+			log::debug!(
+				target: "avenos::peeroxide",
+				"soft heal ({reason}): pairing active — prefer_lan={prefer_lan}, nudge only",
+			);
+			return self.nudge_pairing_discovery().await;
+		}
+
 		let flush_label: &'static str = match reason {
 			"network path changed" => "network path changed",
 			"app foreground" => "app foreground",
@@ -1192,16 +1226,6 @@ impl PeerCtl {
 			r.swarm.clone()
 		};
 
-		swarm.set_prefer_lan(prefer_lan);
-		if !prefer_lan {
-			if let Err(e) = swarm.prepare_reconnect().await {
-				log::debug!(
-					target: "avenos::peeroxide",
-					"prepare_reconnect ({reason}, prefer_lan=false): {e}",
-				);
-			}
-		}
-
 		if let Err(e) = swarm.refresh_announce_relays().await {
 			log::debug!(
 				target: "avenos::peeroxide",
@@ -1210,6 +1234,13 @@ impl PeerCtl {
 		}
 		flush_swarm_for_pairing(&swarm, flush_label).await?;
 		self.nudge_allowlisted_discovery(&allow).await?;
+		let force_probe = prefer_lan && !was_prefer_lan;
+		if let Err(e) = self
+			.probe_transport_upgrades(force_probe, "soft heal")
+			.await
+		{
+			log::debug!(target: "avenos::peeroxide", "transport upgrade after heal: {e}");
+		}
 		let _ = self.app_handle.emit("peer:mesh-push", ());
 		Ok(())
 	}
@@ -1220,26 +1251,30 @@ impl PeerCtl {
 	) -> Result<(), String> {
 		self.connect_ui_tracker.mark_path_change();
 		*self.last_network_interfaces.write().await = payload.interfaces.clone();
-		let prefer_lan = payload.satisfied
-			&& payload.interfaces.iter().any(|i| i == "wifi" || i == "wired");
+		let prefer_lan = prefer_lan_from_path(&payload.interfaces, payload.satisfied);
 		log::info!(
 			target: "avenos::peeroxide",
-			"peer_heal: path_change interfaces={:?} prefer_lan={prefer_lan}",
+			"peer_heal: path_change interfaces={:?} prefer_lan={:?}",
 			payload.interfaces,
+			prefer_lan,
 		);
 		self.soft_heal("network path changed", prefer_lan).await
 	}
 
 	pub async fn on_app_foreground(&self) -> Result<(), String> {
 		self.connect_ui_tracker.mark_foreground_heal();
-		self.soft_heal("app foreground", false).await
+		let ifaces = self.last_network_interfaces.read().await.clone();
+		let prefer_lan = if ifaces.is_empty() {
+			None
+		} else {
+			prefer_lan_from_path(&ifaces, true)
+		};
+		self.soft_heal("app foreground", prefer_lan).await
 	}
 
-	/// Periodic transport upgrade probes for linked peers on relay/punched paths.
-	pub async fn maybe_probe_transport_upgrades(&self) -> Result<(), String> {
+	/// Probe linked peers for a better transport (LAN/direct) and hot-swap the Groove mux.
+	pub async fn probe_transport_upgrades(&self, force: bool, reason: &str) -> Result<(), String> {
 		use std::time::{SystemTime, UNIX_EPOCH};
-
-		const PROBE_INTERVAL_MS: u64 = 90_000;
 
 		let now_ms = SystemTime::now()
 			.duration_since(UNIX_EPOCH)
@@ -1261,17 +1296,18 @@ impl PeerCtl {
 
 		for did in live_dids {
 			let ui = self.connect_ui_tracker.row_for_did(&did);
-			let Some(mode) = ui.transport_mode else {
-				continue;
-			};
-			if crate::transport_rank::transport_rank(mode) < 3 {
+			let mode = ui.transport_mode;
+			if !crate::transport_rank::should_probe_upgrade(mode) {
 				continue;
 			}
-			{
+			let interval = mode
+				.map(crate::transport_rank::probe_interval_ms)
+				.unwrap_or(15_000);
+			if !force {
 				let mut probes = self.last_upgrade_probe_at.lock().await;
 				if probes
 					.get(&did)
-					.is_some_and(|t| now_ms.saturating_sub(*t) < PROBE_INTERVAL_MS)
+					.is_some_and(|t| now_ms.saturating_sub(*t) < interval)
 				{
 					continue;
 				}
@@ -1279,9 +1315,10 @@ impl PeerCtl {
 			}
 			match crate::did::ed25519_public_from_peer_did(&did) {
 				Ok(pk) => {
-					log::debug!(
+					log::info!(
 						target: "avenos::peeroxide",
-						"peer_heal: transport upgrade probe did={did} mode={mode:?}",
+						"peer_heal: transport upgrade probe ({reason}) did={did} mode={:?}",
+						mode,
 					);
 					if let Err(e) = swarm.probe_transport_upgrade(pk).await {
 						log::debug!(
@@ -1299,6 +1336,43 @@ impl PeerCtl {
 			}
 		}
 		Ok(())
+	}
+
+	/// Periodic transport upgrade probes (mesh reconcile tick).
+	pub async fn maybe_probe_transport_upgrades(&self) -> Result<(), String> {
+		self.probe_transport_upgrades(false, "periodic").await
+	}
+
+	fn schedule_post_link_upgrade_probe(&self, remote_pk: [u8; 32]) {
+		let ctl = self.clone();
+		tokio::spawn(async move {
+			tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+			let Ok(did) = crate::did::peer_did_from_ed25519(&remote_pk) else {
+				return;
+			};
+			let ui = ctl.connect_ui_tracker.row_for_did(&did);
+			if !crate::transport_rank::should_probe_upgrade(ui.transport_mode) {
+				return;
+			}
+			let swarm = {
+				let guard = ctl.inner.lock().await;
+				guard.as_ref().map(|r| r.swarm.clone())
+			};
+			let Some(swarm) = swarm else {
+				return;
+			};
+			log::info!(
+				target: "avenos::peeroxide",
+				"peer_heal: post-link upgrade probe did={did} mode={:?}",
+				ui.transport_mode,
+			);
+			if let Err(e) = swarm.probe_transport_upgrade(remote_pk).await {
+				log::debug!(
+					target: "avenos::peeroxide",
+					"post-link probe_transport_upgrade did={did}: {e}",
+				);
+			}
+		});
 	}
 
 	async fn on_groove_link_lifecycle(
@@ -1320,6 +1394,7 @@ impl PeerCtl {
 						"note_peer_connected: {e}",
 					);
 				}
+				self.schedule_post_link_upgrade_probe(pk);
 			}
 			hyperswarm_groove_bridge::GrooveLinkLifecycle::Down(pk) => {
 				if let Ok(did) = crate::did::peer_did_from_ed25519(&pk) {
@@ -1491,6 +1566,14 @@ impl PeerCtl {
 			.ok_or_else(|| "Hyperswarm is not running".to_string())?;
 		let pk = running.swarm.key_pair().public_key;
 		crate::did::peer_did_from_ed25519(&pk)
+	}
+
+	async fn apply_prefer_lan(&self, prefer_lan: bool) {
+		self.prefer_lan.store(prefer_lan, Ordering::Release);
+		let guard = self.inner.lock().await;
+		if let Some(r) = guard.as_ref() {
+			r.swarm.set_prefer_lan(prefer_lan);
+		}
 	}
 
 	pub(crate) async fn peer_invite_create(&self) -> Result<String, String> {
