@@ -4,16 +4,16 @@ overview: "Tauri-native Rust only — RocksDB + peer-transport. No npm, OPFS, SQ
 todos:
   - id: refresh-upstream-mirror
     content: "git pull third_party/jazz2-upstream to origin/main (alpha.50 npm, SHA 232a9933+); record in UPSTREAM.md"
-    status: pending
+    status: completed
   - id: strip-vendored-fork
     content: "Phase A: delete/cfg-gate dead trees in third_party/jazz-tools (CLI/server/HTTP/wasm); document essential-Rust-only boundary; verify client-p2p macOS+iOS build"
-    status: pending
+    status: completed
   - id: strip-upstream-scope
     content: "Phase A: vendoring scope = crates/jazz-tools Rust + rocksdb only; explicitly exclude npm packages, OPFS, SQLite, TypeScript, starters, websocket, server, cli, otel"
     status: pending
   - id: ios-rocksdb-spike
     content: "Mandatory gate: cargo build --target aarch64-apple-ios with upstream jazz-tools rocksdb + full tauri ios build; fix toolchain until pass (no SQLite fallback)"
-    status: pending
+    status: completed
   - id: revendor-jazz-tools
     content: Replace third_party/jazz-tools with jazz2 main crate; add client-p2p feature (rocksdb + peer-transport, no websocket/sqlite); keep groove lib alias
     status: pending
