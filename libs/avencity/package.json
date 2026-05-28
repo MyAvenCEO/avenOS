@@ -1,0 +1,24 @@
+{
+	"name": "@avenos/avencity",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"description": "avenCITY — Threlte/Three.js city game for AvenOS.",
+	"main": "./src/index.ts",
+	"types": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"build": "bun -e \"console.log('@avenos/avencity: Svelte source, no build step')\""
+	},
+	"dependencies": {
+		"@threlte/core": "^8.0.0",
+		"@threlte/extras": "^9.0.0",
+		"three": "^0.175.0"
+	},
+	"devDependencies": {
+		"@types/three": "^0.175.0",
+		"typescript": "^6.0.2"
+	}
+}

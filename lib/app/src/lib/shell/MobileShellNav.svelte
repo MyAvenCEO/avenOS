@@ -30,12 +30,14 @@
 	const docsActive = $derived(path.startsWith('/docs'))
 	const sparksNavActive = $derived(path.startsWith('/sparks'))
 	const dbActive = $derived(path.startsWith('/db'))
+	const avencityActive = $derived(path.startsWith('/avencity'))
 
 	const navItems = $derived<NavItem[]>([
 		{ href: '/', label: 'Intents', active: intentsActive },
 		{ href: '/sandbox', label: 'Sandbox', active: sandboxActive },
 		{ href: '/sparks', label: 'Sparks', active: sparksNavActive },
 		{ href: '/db', label: 'DB', active: dbActive },
+		{ href: '/avencity', label: 'avenCITY', active: avencityActive },
 		{ href: '/docs', label: 'Docs', active: docsActive }
 	])
 
