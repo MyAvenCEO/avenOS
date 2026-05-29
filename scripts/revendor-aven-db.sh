@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-UPSTREAM="${ROOT}/third_party/jazz2-upstream/crates/jazz-tools"
+UPSTREAM="${ROOT}/tools/jazz2-upstream/crates/jazz-tools"
 DEST="${ROOT}/libs/aven-db"
 BACKUP="${ROOT}/.avenos-revendor-backup"
 

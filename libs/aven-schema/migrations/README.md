@@ -13,6 +13,22 @@ Docs: [jazz.tools/docs/schemas/migrations](https://jazz.tools/docs/schemas/migra
 
 Wipes still occur only for identity/lane mismatches (`client_id`, jazz lane), not for schema evolution.
 
+## Manifest column types
+
+Supported `"type"` values in `schema.manifest.json`:
+
+| Type | Notes |
+|------|--------|
+| `text`, `boolean`, `integer`, `bigint`, `uuid`, `uuid[]` | Scalars / uuid array |
+| `bytea` | Binary payload; IPC JSON uses base64 |
+| `double`, `timestamp`, `json`, `enum`, `batch_id` | Available for future tables |
+| `enum` | Requires `"variants": ["a", "b"]` on the column |
+| `json` | Optional `"schema": { ... }` JSON Schema on the column |
+
+**Not supported in manifest:** `Row` / nested row types (engine-only until IPC contract exists).
+
+**Clean-slate schema changes:** reset local Groove DB after hash change (no bundled lens for `content_b64` → `content`).
+
 ## When you change the manifest
 
 1. Edit `libs/aven-schema/schema.manifest.json`.

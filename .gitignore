@@ -45,11 +45,9 @@ vite.config.ts.timestamp-*
 /libs/vibe-apps/*/dist/
 
 # Upstream jazz2 mirror (local refresh only — never commit)
-/third_party/jazz2-upstream/
+/tools/jazz2-upstream/
 # Ephemeral overlay stash for scripts/revendor-aven-db.sh
 /.avenos-revendor-backup/
-# Legacy vendored path — use libs/aven-db instead
-/third_party/jazz-tools/
 target/
 **/target/
 

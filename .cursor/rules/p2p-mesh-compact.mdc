@@ -5,7 +5,7 @@ globs:
   - app/src-tauri/src/peer*.rs
   - app/src-tauri/src/jazz/**/*.rs
   - app/src/lib/peer/**/*.{ts,svelte}
-  - third_party/peeroxide/**/*.rs
+  - libs/aven-p2p/**/*.rs
 alwaysApply: false
 ---
 
@@ -29,7 +29,7 @@ Mesh snapshots go **only** via `avenos:runtime`. Do not add duplicate webview ev
 
 | Owner | Responsibility |
 |-------|----------------|
-| `peeroxide` / `tauri-plugin-peer` | DHT, topics, Noise links, pairing codes, allowlisted socket acceptance, connect-UI hooks |
+| `aven-p2p` / `tauri-plugin-peer` | DHT, topics, Noise links, pairing codes, allowlisted socket acceptance, connect-UI hooks |
 | `peer_mesh_state.rs` | Assemble `PeerMeshStatusReply` — no Jazz CRUD |
 | Groove actor (`jazz/runtime.rs`) | Serialize mesh_refresh / mesh_reconcile / publish_mesh; serial `conn` access |
 | `jazz/mod.rs` | Allowlist sync, `register_peer_sync_client`, catch-up primitives |

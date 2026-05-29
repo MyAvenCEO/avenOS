@@ -14,11 +14,11 @@ When central mode is on, **`AVEN_RELAY_URL` is required** (no implicit default �
 | **default / true** | e.g. `relay.aven.ceo` | Remote bootstrap + blind-relay from manifest (both **49737**) | No subprocess | Same — manifest serves `relayPublicKeyHex` + `relayUdpPort: 49737` |
 | **`false`** | (ignored) | Public Holepunch HyperDHT roots | No | Direct P2P + public relays |
 
-Connectivity matches [peeroxide’s documented stack](https://rightbracket.github.io/peeroxide/concepts/dht-and-routing.html): the DHT coordinates discovery, **in-band handshake relay**, holepunching, and blind-relay fallback. Fly runs **one Rust process** on UDP **49737** (HyperDHT bootstrap + `PEER_HANDSHAKE` / `PEER_HOLEPUNCH` + Hyperswarm blind-relay control/data).
+Connectivity matches [peeroxide’s documented stack](https://rightbracket.github.io/peeroxide/concepts/dht-and-routing.html) (vendored as `libs/aven-p2p`): the DHT coordinates discovery, **in-band handshake relay**, holepunching, and blind-relay fallback. Fly runs **one Rust process** on UDP **49737** (HyperDHT bootstrap + `PEER_HANDSHAKE` / `PEER_HOLEPUNCH` + Hyperswarm blind-relay control/data).
 
 ### Connect path (Hyperswarm / HyperDHT order)
 
-After Noise IK completes, peeroxide tries endpoints in this order (see `third_party/peeroxide-dht/src/hyperdht.rs`):
+After Noise IK completes, aven-p2p tries endpoints in this order (see `libs/aven-p2p/src/dht/hyperdht.rs`):
 
 1. **LAN direct** — both sides advertise local IPv4s in handshake `addresses4` (Personal Hotspot `172.20.10.x`, RFC1918, etc.). If `match_address` finds a shared subnet, UDX opens on the tether/Wi‑Fi LAN address (skips carrier same-IP holepunch).
 2. **Reflexive direct** — public address from the relayed handshake when firewall is open or not holepunchable.

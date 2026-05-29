@@ -204,7 +204,7 @@ impl PeerCtl {
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 struct RunningSwarm {
-	swarm: peeroxide::SwarmHandle,
+	swarm: aven_p2p::SwarmHandle,
 	actor_join: tokio::task::JoinHandle<()>,
 	conns_worker: tokio::task::JoinHandle<()>,
 }
@@ -267,18 +267,18 @@ fn aven_relay_central_mode() -> bool {
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-fn base_swarm_config_from_env() -> peeroxide::SwarmConfig {
+fn base_swarm_config_from_env() -> aven_p2p::SwarmConfig {
 	if aven_relay_central_mode() {
 		log::info!(
 			target: "avenos::peeroxide",
 			"AVEN_RELAY central discovery — HyperDHT bootstrap (in-band handshake relay / holepunch)"
 		);
-		return peeroxide::SwarmConfig::default();
+		return aven_p2p::SwarmConfig::default();
 	}
 	if env_truthy_os("AVENOS_DHT_PUBLIC") || !env_truthy_os("AVENOS_DHT_ISOLATED") {
-		return peeroxide::SwarmConfig::with_public_bootstrap();
+		return aven_p2p::SwarmConfig::with_public_bootstrap();
 	}
-	peeroxide::SwarmConfig::default()
+	aven_p2p::SwarmConfig::default()
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -472,7 +472,7 @@ fn parse_dht_bootstrap_udp_endpoints(lines: &[String]) -> Vec<std::net::SocketAd
 
 /// Co-hosted blind-relay shares the DHT UDP port (49737). Older embeds still point at 49738.
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-fn coalesce_blind_relay_with_bootstrap(cfg: &mut peeroxide::SwarmConfig) {
+fn coalesce_blind_relay_with_bootstrap(cfg: &mut aven_p2p::SwarmConfig) {
 	if cfg.relay_through.is_none() {
 		return;
 	}
@@ -516,7 +516,7 @@ fn coalesce_blind_relay_with_bootstrap(cfg: &mut peeroxide::SwarmConfig) {
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-fn apply_hyperswarm_blind_relay(cfg: &mut peeroxide::SwarmConfig) -> Result<(), String> {
+fn apply_hyperswarm_blind_relay(cfg: &mut aven_p2p::SwarmConfig) -> Result<(), String> {
 	let mut pk_hex: Option<String> = std::env::var("AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX")
 		.ok()
 		.map(|s| s.trim().to_string())
@@ -557,7 +557,7 @@ fn apply_hyperswarm_blind_relay(cfg: &mut peeroxide::SwarmConfig) -> Result<(), 
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-async fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(), String> {
+async fn apply_avensos_swarm_env(cfg: &mut aven_p2p::SwarmConfig) -> Result<(), String> {
 	let central = aven_relay_central_mode();
 	let isolated = central
 		|| (env_truthy_os("AVENOS_DHT_ISOLATED") && !env_truthy_os("AVENOS_DHT_PUBLIC"));
@@ -658,7 +658,7 @@ async fn apply_avensos_swarm_env(cfg: &mut peeroxide::SwarmConfig) -> Result<(),
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-fn build_p2p_diagnostics(cfg: &peeroxide::SwarmConfig, linked_count: usize) -> P2pDiagnostics {
+fn build_p2p_diagnostics(cfg: &aven_p2p::SwarmConfig, linked_count: usize) -> P2pDiagnostics {
 	let dht_bootstrap = if cfg.dht.dht.bootstrap.is_empty() {
 		"(empty)".to_string()
 	} else {
@@ -690,9 +690,9 @@ fn pairing_advertised_label(app: &tauri::AppHandle) -> String {
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 async fn join_topic(
-	swarm: &peeroxide::SwarmHandle,
+	swarm: &aven_p2p::SwarmHandle,
 	topic: [u8; 32],
-	opts: peeroxide::JoinOpts,
+	opts: aven_p2p::JoinOpts,
 ) -> Result<(), String> {
 	swarm
 		.clone()
@@ -703,7 +703,7 @@ async fn join_topic(
 
 /// Wait for the first announce/lookup cycle (can take many seconds on the public DHT).
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-async fn flush_swarm(swarm: &peeroxide::SwarmHandle) -> Result<(), String> {
+async fn flush_swarm(swarm: &aven_p2p::SwarmHandle) -> Result<(), String> {
 	swarm
 		.clone()
 		.flush()
@@ -713,7 +713,7 @@ async fn flush_swarm(swarm: &peeroxide::SwarmHandle) -> Result<(), String> {
 
 /// Return to the UI immediately; DHT flush continues without blocking other Tauri IPC.
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-fn spawn_flush_background(swarm: peeroxide::SwarmHandle, label: &'static str) {
+fn spawn_flush_background(swarm: aven_p2p::SwarmHandle, label: &'static str) {
 	tokio::spawn(async move {
 		if let Err(e) = flush_swarm(&swarm).await {
 			log::warn!(target: "avenos::peeroxide", "{label} background flush failed: {e}");
@@ -723,7 +723,7 @@ fn spawn_flush_background(swarm: peeroxide::SwarmHandle, label: &'static str) {
 
 /// Pairing **requires** at least one DHT announce/lookup cycle; background-only flush broke rendezvous.
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-pub(crate) async fn flush_swarm_for_pairing(swarm: &peeroxide::SwarmHandle, label: &'static str) -> Result<(), String> {
+pub(crate) async fn flush_swarm_for_pairing(swarm: &aven_p2p::SwarmHandle, label: &'static str) -> Result<(), String> {
 	const PAIRING_FLUSH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(4);
 	match tokio::time::timeout(PAIRING_FLUSH_TIMEOUT, flush_swarm(swarm)).await {
 		Ok(Ok(())) => {
@@ -745,7 +745,7 @@ pub(crate) async fn flush_swarm_for_pairing(swarm: &peeroxide::SwarmHandle, labe
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 async fn join_pairing_topic(
-	swarm: &peeroxide::SwarmHandle,
+	swarm: &aven_p2p::SwarmHandle,
 	topic: [u8; 32],
 	flush_label: &'static str,
 ) -> Result<(), String> {
@@ -789,7 +789,7 @@ impl PeerCtl {
 			.with_root(|root| derive_ed25519_seed(root))?;
 		let seed: [u8; 32] = *seed_z;
 
-		let kp = peeroxide::KeyPair::from_seed(seed);
+		let kp = aven_p2p::KeyPair::from_seed(seed);
 		let mut cfg = base_swarm_config_from_env();
 		cfg.key_pair = Some(kp);
 		cfg.max_parallel = 8;
@@ -811,7 +811,7 @@ impl PeerCtl {
 		diag.allowlist_count = self.allowed_remote_dids.read().await.len();
 		*self.p2p_diagnostics.write().await = diag;
 
-		let (actor_join, swarm, mut conn_rx) = match peeroxide::spawn(cfg).await {
+		let (actor_join, swarm, mut conn_rx) = match aven_p2p::spawn(cfg).await {
 			Ok(v) => v,
 			Err(e) => {
 				let msg = format!("peeroxide spawn: {e}");
@@ -871,7 +871,7 @@ impl PeerCtl {
 		Ok(())
 	}
 
-	async fn handle_incoming_swarm_conn(&self, mut conn: peeroxide::SwarmConnection) {
+	async fn handle_incoming_swarm_conn(&self, mut conn: aven_p2p::SwarmConnection) {
 		let remote_pk = *conn.remote_public_key();
 		let _transport_mode = conn.peer.transport_mode;
 		let Ok(remote_did) = crate::did::peer_did_from_ed25519(&remote_pk) else {

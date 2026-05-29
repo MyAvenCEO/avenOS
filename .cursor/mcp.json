@@ -1,8 +1,0 @@
-{
-	"mcpServers": {
-		"jazz-docs": {
-			"command": "bunx",
-			"args": ["jazz-tools@alpha", "mcp"]
-		}
-	}
-}

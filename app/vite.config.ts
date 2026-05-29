@@ -34,7 +34,13 @@ export default defineConfig(({ mode }) => {
 			port: 1420,
 			strictPort: true,
 			hmr: host ? { protocol: 'ws', host, port: 1421 } : undefined,
-			watch: { ignored: ['**/src-tauri/**'] },
+			watch: {
+				ignored: [
+					'**/src-tauri/**',
+					'**/build/**',
+					'**/.svelte-kit/**',
+				],
+			},
 			headers: crossOriginIsolationHeaders,
 			fs: { allow: [repoRoot] },
 		},

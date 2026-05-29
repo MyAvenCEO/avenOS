@@ -43,7 +43,7 @@
 					: 'border-border/40'}"
 			>
 				{#if isPdfMime(row.mime_type)}
-					<GalleryPdfThumb contentB64={row.content_b64 ?? ''} />
+					<GalleryPdfThumb contentB64={row.content ?? ''} />
 				{:else}
 					{@const src = imageDataUrl(row)}
 					{#if src && !brokenIds.has(row.id)}

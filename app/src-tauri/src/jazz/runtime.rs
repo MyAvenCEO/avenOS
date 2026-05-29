@@ -1,6 +1,5 @@
-//! Single-mailbox serialization for Groove: IPC, drain, mesh, and **all** `ManagedJazz::conn` access.
-
-use std::collections::HashSet;
+//! Single-mailbox serialization for Groove: IPC, mesh, and **all** `ManagedJazz::conn` access.
+//! UI table-change drains run on [`super::ui_drain::UiTableDrainHandle`] instead.
 
 use tauri::{AppHandle, Manager};
 use tauri_plugin_self::state::SelfState;
@@ -14,9 +13,6 @@ enum GrooveActorMsg {
 		window: tauri::Window,
 		envelope: GrooveRuntimeEnvelope,
 		reply: oneshot::Sender<Result<serde_json::Value, String>>,
-	},
-	Drain {
-		pending: HashSet<String>,
 	},
 	MeshRefresh {
 		reply: oneshot::Sender<Result<u32, String>>,
@@ -57,13 +53,6 @@ impl GrooveActorHandle {
 			.map_err(|_| "groove actor mailbox closed".to_string())?;
 		rx.await
 			.map_err(|_| "groove actor reply dropped".to_string())?
-	}
-
-	pub async fn enqueue_drain(&self, pending: HashSet<String>) -> Result<(), String> {
-		self.tx
-			.send(GrooveActorMsg::Drain { pending })
-			.await
-			.map_err(|_| "groove actor mailbox closed".to_string())
 	}
 
 	pub async fn mesh_refresh(&self) -> Result<u32, String> {
@@ -136,9 +125,6 @@ pub fn spawn_groove_actor(app: AppHandle) -> GrooveActorHandle {
 					let out =
 						groove_runtime_dispatch(&app_loop, window, &jazz, ss, envelope).await;
 					let _ = reply.send(out);
-				}
-				GrooveActorMsg::Drain { pending } => {
-					super::execute_drain_batch(&app_loop, &jazz, ss, pending).await;
 				}
 				GrooveActorMsg::MeshRefresh { reply } => {
 					let out = super::execute_mesh_refresh_full(&app_loop, &jazz).await;

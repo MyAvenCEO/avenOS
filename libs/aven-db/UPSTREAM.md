@@ -8,7 +8,7 @@ Internal crate at `libs/aven-db` (Cargo **`0.0.1`**, AvenOS-owned) — stripped 
 | npm `jazz-tools` | **2.0.0-alpha.50** |
 | Rust crate version | `2.0.0-alpha.0` (Cargo.toml label) |
 
-**Refresh source (local only, gitignored):** clone [garden-co/jazz2](https://github.com/garden-co/jazz2) to `third_party/jazz2-upstream/` (~115MB). AvenOS uses **only** `crates/jazz-tools` (Rust + RocksDB) — do not vendor npm, OPFS, SQLite, or TypeScript from that monorepo.
+**Refresh source (local only, gitignored):** clone [garden-co/jazz2](https://github.com/garden-co/jazz2) to `tools/jazz2-upstream/` (~115MB). AvenOS uses **only** `crates/jazz-tools` (Rust + RocksDB) — do not vendor npm, OPFS, SQLite, or TypeScript from that monorepo.
 
 ## AvenOS uses (`client-p2p` feature)
 
@@ -42,7 +42,7 @@ CLI binary, server routes, WebSocket client, benches, examples, SQLite, SurrealK
 ## Re-vendor
 
 ```bash
-cd third_party/jazz2-upstream && git fetch origin main && git checkout 232a9933
+cd tools/jazz2-upstream && git fetch origin main && git checkout 232a9933
 ./scripts/revendor-aven-db.sh
 bun run clean:app:rust
 ```

@@ -22,9 +22,9 @@ export async function peerInviteCancel(): Promise<void> {
 }
 
 /**
- * DHT-lifecycle counters scraped from peeroxide's `tracing` events.
+ * DHT-lifecycle counters scraped from aven-p2p `tracing` events.
  *
- * - `dhtBootstrapped` is `true` once peeroxide-dht receives a UDP reply from the bootstrap
+ * - `dhtBootstrapped` is `true` once aven-p2p DHT receives a UDP reply from the bootstrap
  *   node — on iOS we routinely see `false` here while `hyperswarmRunning` is `true`, which
  *   proves the bootstrap UDP packets are being dropped by the network (router / carrier).
  * - `lastAnnounceClosest === 0` means the announce committed to zero DHT nodes (same root cause).

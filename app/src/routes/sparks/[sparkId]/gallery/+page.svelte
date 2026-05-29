@@ -99,7 +99,7 @@
 								class="bg-muted/30 relative aspect-square w-full overflow-hidden border-b border-border/50"
 							>
 								{#if row.mime_type.trim().toLowerCase() === 'application/pdf'}
-									<GalleryPdfThumb contentB64={row.content_b64 ?? ''} />
+									<GalleryPdfThumb contentB64={row.content ?? ''} />
 								{:else}
 									{@const src = imageDataUrl(row)}
 									{#if src && !brokenIds.has(row.id)}

@@ -8,7 +8,7 @@
 	"types": "./src/index.ts",
 	"scripts": {
 		"build": "bun run build:proxy && bun run build:ext-apps",
-		"build:proxy": "bunx --bun vite build --config sandbox/vite.config.ts",
+		"build:proxy": "bun --bun x vite build --config sandbox/vite.config.ts",
 		"build:ext-apps": "bun build sandbox/ext-apps-entry.ts --outfile sandbox/dist/ext-apps.js --target browser --format esm --minify",
 		"serve": "bun --watch sandbox/serve.ts",
 		"dev": "bun run build && bun run serve"

@@ -93,7 +93,7 @@ pub fn pair_topic_hash(normalized_code: &str) -> [u8; 32] {
 	let mut buf = Vec::with_capacity(b"aven:pair:v1:".len() + normalized_code.len());
 	buf.extend_from_slice(b"aven:pair:v1:");
 	buf.extend_from_slice(normalized_code.as_bytes());
-	peeroxide::discovery_key(&buf)
+	aven_p2p::discovery_key(&buf)
 }
 
 pub fn pair_topic_from_dids(local_did: &str, remote_did: &str) -> [u8; 32] {
@@ -107,7 +107,7 @@ pub fn pair_topic_from_dids(local_did: &str, remote_did: &str) -> [u8; 32] {
 	buf.extend_from_slice(a.as_bytes());
 	buf.push(0);
 	buf.extend_from_slice(b.as_bytes());
-	peeroxide::discovery_key(&buf)
+	aven_p2p::discovery_key(&buf)
 }
 
 pub fn generate_pair_code() -> String {
@@ -133,8 +133,8 @@ pub fn normalize_pair_code(raw: &str) -> Result<String, String> {
 	Ok(s)
 }
 
-pub fn pairing_join_opts() -> peeroxide::JoinOpts {
-	peeroxide::JoinOpts::fast_refresh()
+pub fn pairing_join_opts() -> aven_p2p::JoinOpts {
+	aven_p2p::JoinOpts::fast_refresh()
 }
 
 #[cfg(test)]

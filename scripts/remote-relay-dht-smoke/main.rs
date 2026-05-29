@@ -4,10 +4,10 @@
 //!   ROLE=a BOOTSTRAP=relay.aven.ceo:49737 ... &
 //!   ROLE=b BOOTSTRAP=relay.aven.ceo:49737 ...
 
-use peeroxide_dht::crypto::hash;
-use peeroxide_dht::hyperdht::{spawn, HyperDhtConfig, KeyPair};
-use peeroxide_dht::messages::Ipv4Peer;
-use peeroxide_dht::rpc::DhtConfig;
+use aven_p2p::dht::crypto::hash;
+use aven_p2p::dht::hyperdht::{spawn, HyperDhtConfig, KeyPair};
+use aven_p2p::dht::messages::Ipv4Peer;
+use aven_p2p::dht::rpc::DhtConfig;
 use libudx::UdxRuntime;
 
 #[tokio::main]

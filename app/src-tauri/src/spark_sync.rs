@@ -86,6 +86,9 @@ pub fn spark_scoped_table_names() -> &'static [String] {
 /// Biscuit vault / trusted-peer tables — full shell re-hydrate on change.
 pub const VAULT_SHELL_TABLES: &[&str] = &["sparks", "keyshares", "peers"];
 
+/// Catalogue tables republished to the webview after vault shell re-hydrate (`peers` uses its own path).
+pub const VAULT_CATALOGUE_UI_TABLES: &[&str] = &["sparks", "keyshares"];
+
 /// Never forwarded over P2P (local trust graph only).
 pub const P2P_BLOCKED_TABLES: &[&str] = &["peers"];
 

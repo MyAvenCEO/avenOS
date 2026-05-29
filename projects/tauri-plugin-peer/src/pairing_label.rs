@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use peeroxide_dht::secret_stream::{SecretStream, SecretStreamError};
+use aven_p2p::dht::secret_stream::{SecretStream, SecretStreamError};
 use tokio::time::timeout;
 
 const PAIR_LABEL_MAGIC: &[u8] = b"avenos/pair-label/v1\0";

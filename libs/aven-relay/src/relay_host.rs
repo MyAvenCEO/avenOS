@@ -8,16 +8,16 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use libudx::UdxRuntime;
-use peeroxide_dht::blind_relay::{spawn_blind_relay_control_session, BlindRelayCoordinator};
-use peeroxide_dht::crypto::hash;
-use peeroxide_dht::hyperdht::{
+use aven_p2p::dht::blind_relay::{spawn_blind_relay_control_session, BlindRelayCoordinator};
+use aven_p2p::dht::crypto::hash;
+use aven_p2p::dht::hyperdht::{
     establish_responder_peer_connection, finish_server_noise_ik_handshake,
     handle_peer_holepunch_reply, EstablishedNoiseIkSession, HolepunchServerPeerState,
     HyperDhtHandle, KeyPair, ServerConfig, ServerEvent, ServerSession,
 };
-use peeroxide_dht::hyperdht_messages::FIREWALL_UNKNOWN;
-use peeroxide_dht::messages::Ipv4Peer;
-use peeroxide_dht::socket_pool::SocketPool;
+use aven_p2p::dht::hyperdht_messages::FIREWALL_UNKNOWN;
+use aven_p2p::dht::messages::Ipv4Peer;
+use aven_p2p::dht::socket_pool::SocketPool;
 use rand::RngCore;
 use tokio::sync::mpsc;
 use tracing::warn;

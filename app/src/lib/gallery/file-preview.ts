@@ -12,13 +12,13 @@ export function isPdfMime(mime: string): boolean {
 export function imageDataUrl(row: JazzRow): string | null {
 	const mime = String(row.mime_type ?? '')
 	if (!isPreviewableImage(mime)) return null
-	const b64 = String(row.content_b64 ?? '').trim()
+	const b64 = String(row.content ?? '').trim()
 	if (!b64) return null
 	return `data:${mime};base64,${b64}`
 }
 
 export function fileDownloadDataUrl(row: JazzRow): string | null {
-	const b64 = String(row.content_b64 ?? '').trim()
+	const b64 = String(row.content ?? '').trim()
 	if (!b64) return null
 	const mime = String(row.mime_type ?? '').trim() || 'application/octet-stream'
 	return `data:${mime};base64,${b64}`

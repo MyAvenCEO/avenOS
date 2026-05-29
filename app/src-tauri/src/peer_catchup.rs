@@ -501,11 +501,12 @@ async fn process_until_idle(reg: &Arc<Mutex<Registry>>, app: &AppHandle, rx: &mu
 						g.acl_reset_fail_round();
 						g.requeue_all_live_allowlisted_pending_after_acl();
 						drop(g);
-						let actor = app.state::<crate::jazz::runtime::GrooveActorHandle>();
+						let drain = app.state::<crate::jazz::ui_drain::UiTableDrainHandle>();
 						let mut vault_tables = std::collections::HashSet::new();
-						vault_tables.insert("sparks".to_string());
-						vault_tables.insert("keyshares".to_string());
-						let _ = actor.enqueue_drain(vault_tables).await;
+						for t in crate::spark_sync::VAULT_CATALOGUE_UI_TABLES {
+							vault_tables.insert(t.to_string());
+						}
+						let _ = drain.enqueue(vault_tables).await;
 					}
 					Err(e) => {
 						log::warn!(
@@ -581,16 +582,17 @@ async fn process_until_idle(reg: &Arc<Mutex<Registry>>, app: &AppHandle, rx: &mu
 						);
 						drop(g);
 						// Peer may have received sparks/keyshares/messages during catch-up.
-						let actor = app.state::<crate::jazz::runtime::GrooveActorHandle>();
+						let drain = app.state::<crate::jazz::ui_drain::UiTableDrainHandle>();
 						let mut drain_tables = std::collections::HashSet::new();
-						drain_tables.insert("sparks".to_string());
-						drain_tables.insert("keyshares".to_string());
+						for t in crate::spark_sync::VAULT_CATALOGUE_UI_TABLES {
+							drain_tables.insert(t.to_string());
+						}
 						for name in crate::spark_sync::spark_scoped_table_names() {
 							if crate::spark_sync::is_spark_data_table(name) {
 								drain_tables.insert(name.clone());
 							}
 						}
-						let _ = actor.enqueue_drain(drain_tables).await;
+						let _ = drain.enqueue(drain_tables).await;
 					}
 					Err(e) => {
 						let delay = {

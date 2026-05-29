@@ -1,9 +1,9 @@
 //! Smoke: Rust HyperDHT client → Fly co-hosted blind-relay (UDP 49737).
 //!
-//!   RUST_LOG=peeroxide_dht=debug cargo run -q --manifest-path scripts/remote-relay-dht-smoke/Cargo.toml --bin test-remote-relay-blind
+//!   RUST_LOG=aven_p2p=debug cargo run -q --manifest-path scripts/remote-relay-dht-smoke/Cargo.toml --bin test-remote-relay-blind
 
-use peeroxide_dht::hyperdht::{spawn, HyperDhtConfig, KeyPair};
-use peeroxide_dht::rpc::DhtConfig;
+use aven_p2p::dht::hyperdht::{spawn, HyperDhtConfig, KeyPair};
+use aven_p2p::dht::rpc::DhtConfig;
 use libudx::UdxRuntime;
 
 #[tokio::main]

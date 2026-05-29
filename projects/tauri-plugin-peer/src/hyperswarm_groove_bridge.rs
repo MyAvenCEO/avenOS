@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use groove::sync_manager::{ClientId, InboxEntry, Source, SyncPayload};
 use groove::{decode_length_prefixed, encode_length_prefixed, PeerTransport as GroovePeerTransport};
 use groove::{JazzError, Result as GrooveResult};
-use peeroxide::SwarmConnection;
+use aven_p2p::SwarmConnection;
 use sha2::{Digest, Sha256};
 use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 // `Mutex` is used only for the bridge's internal bookkeeping maps
@@ -122,8 +122,8 @@ impl HyperswarmGrooveBridge {
 		*self.0.live_links.blocking_lock() = Some(registry);
 	}
 
-	fn notify_link_lifecycle(&self, event: GrooveLinkLifecycle) {
-		if let Some(hook) = self.0.link_lifecycle.blocking_lock().as_ref() {
+	async fn notify_link_lifecycle(&self, event: GrooveLinkLifecycle) {
+		if let Some(hook) = self.0.link_lifecycle.lock().await.as_ref() {
 			hook(event);
 		}
 	}
@@ -311,7 +311,7 @@ impl HyperswarmGrooveBridge {
 		remote_pk: [u8; 32],
 		remote_client: ClientId,
 		transport_mode: Option<crate::peer_connect_ui::PeerTransportMode>,
-		dht_mode: Option<peeroxide_dht::connect_ui::ConnectTransportMode>,
+		dht_mode: Option<aven_p2p::dht::connect_ui::ConnectTransportMode>,
 	) {
 		self.0
 			.active_remote_clients
@@ -324,7 +324,8 @@ impl HyperswarmGrooveBridge {
 		if let Some(tracker) = self.0.connect_ui_tracker.lock().await.as_ref() {
 			tracker.note_inbound_connected(&remote_pk, dht_mode);
 		}
-		self.notify_link_lifecycle(GrooveLinkLifecycle::Up(remote_pk));
+		self.notify_link_lifecycle(GrooveLinkLifecycle::Up(remote_pk))
+			.await;
 		log::info!(
 			target: "avenos::peeroxide",
 			"groove_p2p link up peer={remote_client:?} mode={}",
@@ -715,7 +716,8 @@ impl HyperswarmGrooveBridge {
 		if let Some(tracker) = self.0.connect_ui_tracker.lock().await.as_ref() {
 			tracker.note_disconnected_pk_with_reason(&remote_pk, reason);
 		}
-		self.notify_link_lifecycle(GrooveLinkLifecycle::Down(remote_pk));
+		self.notify_link_lifecycle(GrooveLinkLifecycle::Down(remote_pk))
+			.await;
 		log::info!(
 			target: "avenos::peeroxide",
 			"groove_p2p link torn down peer={remote_client:?} reason={reason}",

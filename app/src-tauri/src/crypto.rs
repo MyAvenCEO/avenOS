@@ -359,7 +359,9 @@ fn groove_value_to_ipc_json(cell: &Value) -> JsonValue {
 			Number::from_f64(*d).unwrap_or_else(|| Number::from(0)),
 		),
 		Value::BatchId(id) => JsonValue::String(hex::encode(id)),
-		Value::Bytea(b) => JsonValue::String(BASE64_ENC.encode(b)),
+		Value::Bytea(b) => JsonValue::String(
+			base64::engine::general_purpose::STANDARD.encode(b),
+		),
 	}
 }
 

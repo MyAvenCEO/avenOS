@@ -2,6 +2,7 @@
 
 pub(crate) mod jazz_engine;
 pub mod runtime;
+pub mod ui_drain;
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -171,8 +172,8 @@ const TABLE_DRAIN_FOLLOW_UP: Duration = Duration::from_millis(120);
 fn schedule_table_drain_follow_up(app: tauri::AppHandle, tables: HashSet<String>) {
 	tauri::async_runtime::spawn(async move {
 		tokio::time::sleep(TABLE_DRAIN_FOLLOW_UP).await;
-		let actor = runtime::groove_actor(&app);
-		if let Err(e) = actor.enqueue_drain(tables).await {
+		let drain = ui_drain::ui_table_drain(&app);
+		if let Err(e) = drain.enqueue(tables).await {
 			log::trace!(
 				target: "avenos::jazz",
 				"table-change drain follow-up enqueue failed: {e}",
@@ -181,7 +182,7 @@ fn schedule_table_drain_follow_up(app: tauri::AppHandle, tables: HashSet<String>
 	});
 }
 
-/// Runs one coalesced drain batch on the Groove actor (serialization + shell hydrate + snapshots).
+/// Runs one coalesced UI drain batch (shell hydrate + snapshots). Never enqueued on the Groove actor.
 pub(crate) async fn execute_drain_batch(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -206,7 +207,12 @@ pub(crate) async fn execute_drain_batch(
 	}
 
 	let want_snapshots = !pending.is_empty() && jazz.any_ui_subscriber(&pending).await;
-	if !vault_shell_dirty && !want_snapshots {
+	// Keyshares-only grant batches re-hydrate the vault but the Sparks grid only subscribes to
+	// `sparks` — push the catalogue once after re-hydrate without widening the follow-up loop.
+	let push_sparks_catalogue = vault_shell_dirty
+		&& jazz.table_ui_ref_count("sparks").await > 0
+		&& !pending.contains("sparks");
+	if !vault_shell_dirty && !want_snapshots && !push_sparks_catalogue {
 		if !pending.is_empty() {
 			log::trace!(
 				target: "avenos::jazz",
@@ -224,13 +230,22 @@ pub(crate) async fn execute_drain_batch(
 
 	// Row-batch sync parks inbound frames until `batched_tick`; `recv_inbound` posts to this
 	// drain earlier. Flush first so re-hydrate / list queries see peer grant deltas.
-	if vault_shell_dirty || want_snapshots {
+	#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+	let pairing_active = pairing_session_active(app).await;
+	#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "ios")))]
+	let pairing_active = false;
+	if (vault_shell_dirty || want_snapshots) && !pairing_active {
 		if let Err(e) = client.flush_peer_sync().await {
 			log::debug!(
 				target: "avenos::jazz",
 				"table-change drain: flush_peer_sync before shell/snapshot: {e}",
 			);
 		}
+	} else if (vault_shell_dirty || want_snapshots) && pairing_active {
+		log::trace!(
+			target: "avenos::jazz",
+			"table-change drain: defer flush_peer_sync — pairing active",
+		);
 	}
 
 	if pending
@@ -246,7 +261,7 @@ pub(crate) async fn execute_drain_batch(
 	}
 
 	if vault_shell_dirty {
-		if let Err(e) = jazz_shell_ready(app, jazz, self_state, client.clone()).await {
+		if let Err(e) = jazz_shell_for_ui(app, jazz, self_state, client.clone()).await {
 			log::debug!(
 				target: "avenos::jazz",
 				"table-change drain: vault shell re-hydrate failed: {e}",
@@ -254,11 +269,11 @@ pub(crate) async fn execute_drain_batch(
 		}
 	}
 
-	if !want_snapshots {
+	if !want_snapshots && !push_sparks_catalogue {
 		return;
 	}
 
-	let shell = match jazz_shell_ready(app, jazz, self_state, client.clone()).await {
+	let shell = match jazz_shell_for_ui(app, jazz, self_state, client.clone()).await {
 		Ok(s) => s,
 		Err(e) => {
 			log::debug!(
@@ -295,6 +310,30 @@ pub(crate) async fn execute_drain_batch(
 			Err(e) => log::warn!(
 				target: "avenos::jazz",
 				"table-change drain: snapshot_broadcast({table}) failed: {e}",
+			),
+		}
+	}
+
+	if push_sparks_catalogue {
+		{
+			let mut last = jazz
+				.last_table_snapshots
+				.write()
+				.expect("last_table_snapshots poisoned");
+			last.remove("sparks");
+		}
+		match jazz
+			.snapshot_broadcast(app, client.as_ref(), shell.as_ref(), "sparks")
+			.await
+		{
+			Ok(true) => log::debug!(
+				target: "avenos::jazz",
+				"table-change drain: republished sparks (vault catalogue after grant)",
+			),
+			Ok(false) => {}
+			Err(e) => log::warn!(
+				target: "avenos::jazz",
+				"table-change drain: snapshot_broadcast(sparks) failed: {e}",
 			),
 		}
 	}
@@ -349,11 +388,11 @@ pub async fn run_table_change_drain(
 			}
 		}
 
-		let actor = app.state::<crate::jazz::runtime::GrooveActorHandle>();
-		if let Err(e) = actor.enqueue_drain(pending).await {
+		let drain = app.state::<ui_drain::UiTableDrainHandle>();
+		if let Err(e) = drain.enqueue(pending).await {
 			log::warn!(
 				target: "avenos::jazz",
-				"table-change drain: failed to enqueue batch on groove actor: {e}",
+				"table-change drain: failed to enqueue batch on ui drain: {e}",
 			);
 		}
 	}
@@ -956,39 +995,58 @@ async fn emit_mesh_snapshot_from_rows(
 	Ok(())
 }
 
+fn decode_json_bytea(s: &str) -> Result<Vec<u8>, String> {
+	use base64::engine::general_purpose::{STANDARD, URL_SAFE, URL_SAFE_NO_PAD};
+	use base64::Engine;
+
+	if s == PHASE1_SECRET_PLACEHOLDER || s.starts_with(crate::crypto::CELL_ENVELOPE_V1) {
+		return Ok(s.as_bytes().to_vec());
+	}
+	if let Ok(b) = URL_SAFE_NO_PAD.decode(s) {
+		return Ok(b);
+	}
+	if let Ok(b) = STANDARD.decode(s) {
+		return Ok(b);
+	}
+	if let Ok(b) = URL_SAFE.decode(s) {
+		return Ok(b);
+	}
+	Err("expected base64 bytea column".to_string())
+}
+
 pub(super) fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable: bool) -> Result<Value, String> {
 	if cell.is_null() || *cell == JsonValue::Null {
 		return nullable
 			.then(|| Ok(Value::Null))
-			.unwrap_or_else(|| Err("null not permitted".into()));
+			.unwrap_or_else(|| Err("null not permitted".to_string()));
 	}
 	match col_ty {
 		ColumnType::Text => cell
 			.as_str()
 			.map(|s| Value::Text(s.to_string()))
-			.ok_or_else(|| "expected JSON string column".into()),
+			.ok_or_else(|| "expected JSON string column".to_string()),
 		ColumnType::Boolean => cell
 			.as_bool()
 			.map(Value::Boolean)
-			.ok_or_else(|| "expected JSON boolean column".into()),
+			.ok_or_else(|| "expected JSON boolean column".to_string()),
 		ColumnType::Integer => cell
 			.as_i64()
 			.and_then(|n| i32::try_from(n).ok())
 			.map(Value::Integer)
-			.ok_or_else(|| "expected JSON i32-compatible integer column".into()),
+			.ok_or_else(|| "expected JSON i32-compatible integer column".to_string()),
 		ColumnType::BigInt => cell
 			.as_i64()
 			.map(Value::BigInt)
-			.ok_or_else(|| "expected JSON i64-compatible integer column".into()),
+			.ok_or_else(|| "expected JSON i64-compatible integer column".to_string()),
 		ColumnType::Timestamp => cell
 			.as_u64()
 			.map(Value::Timestamp)
-			.ok_or_else(|| "expected JSON u64 timestamp column".into()),
+			.ok_or_else(|| "expected JSON u64 timestamp column".to_string()),
 		ColumnType::Uuid => cell
 			.as_str()
 			.and_then(|s| Uuid::parse_str(s).ok())
 			.map(|u| Value::Uuid(ObjectId::from_uuid(u)))
-			.ok_or_else(|| "expected UUID string column".into()),
+			.ok_or_else(|| "expected UUID string column".to_string()),
 		ColumnType::Array { element: inner } => {
 			let arr = cell
 				.as_array()
@@ -999,14 +1057,43 @@ pub(super) fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable:
 			}
 			Ok(Value::Array(elems))
 		}
+		ColumnType::Bytea => cell
+			.as_str()
+			.ok_or_else(|| "expected JSON string bytea column".to_string())
+			.and_then(|s| decode_json_bytea(s).map(Value::Bytea)),
+		ColumnType::Double => cell
+			.as_f64()
+			.map(Value::Double)
+			.ok_or_else(|| "expected JSON number double column".to_string()),
+		ColumnType::Json { .. } => {
+			let s = serde_json::to_string(cell).map_err(|e| format!("json column encode: {e}"))?;
+			Ok(Value::Text(s))
+		}
+		ColumnType::Enum { variants } => {
+			let s = cell
+				.as_str()
+				.ok_or_else(|| "expected JSON string enum column".to_string())?;
+			if !variants.iter().any(|v| v == s) {
+				return Err(format!("enum variant `{s}` not in {variants:?}"));
+			}
+			Ok(Value::Text(s.to_string()))
+		}
+		ColumnType::BatchId => {
+			let s = cell
+				.as_str()
+				.ok_or_else(|| "expected JSON string batch_id column".to_string())?;
+			let bytes = hex::decode(s.trim()).map_err(|e| format!("batch_id hex: {e}"))?;
+			if bytes.len() != 16 {
+				return Err(format!("batch_id length {} (expected 16)", bytes.len()));
+			}
+			let mut arr = [0u8; 16];
+			arr.copy_from_slice(&bytes);
+			Ok(Value::BatchId(arr))
+		}
+		// Nested `Row` types are engine-only until a structured JSON IPC contract exists.
 		ColumnType::Row { .. } => Err(format!(
-			"row {:?} unsupported through JSON IPC for now",
-			col_ty,
-		)),
-		ColumnType::Double | ColumnType::Enum { .. } | ColumnType::Json { .. }
-		| ColumnType::Bytea | ColumnType::BatchId => Err(format!(
-			"column type {:?} unsupported through JSON IPC",
-			col_ty,
+			"row {col_ty:?} unsupported through JSON IPC (engine-only; use flat columns)",
+			col_ty = col_ty,
 		)),
 	}
 }
@@ -1021,7 +1108,7 @@ pub(super) fn loose_json_to_sealable_value(
 	if cell.is_null() || *cell == JsonValue::Null {
 		return nullable
 			.then(|| Ok(Value::Null))
-			.unwrap_or_else(|| Err("null not permitted".into()));
+			.unwrap_or_else(|| Err("null not permitted".to_string()));
 	}
 	match storage_ty {
 		ColumnType::Text => {
@@ -1040,7 +1127,7 @@ pub(super) fn loose_json_to_sealable_value(
 			if let Some(n) = cell.as_u64() {
 				return Ok(Value::Timestamp(n));
 			}
-			Err("expected JSON string, boolean, or integer for text-storage column".into())
+			Err("expected JSON string, boolean, or integer for text-storage column".to_string())
 		}
 		_ => json_cell_to_jazz(cell, storage_ty, nullable),
 	}
@@ -1165,15 +1252,50 @@ fn mark_shell_local_ready_for_mesh(_app: &tauri::AppHandle, mj: &ManagedJazz) {
 	mj.mesh_local_shell_gate.store(true, Ordering::Release);
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+async fn pairing_session_active(app: &tauri::AppHandle) -> bool {
+	use std::sync::Arc;
+
+	let ctl = app.state::<Arc<tauri_plugin_peer::PeerCtl>>();
+	ctl.is_pairing_active().await
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "ios")))]
+async fn pairing_session_active(_app: &tauri::AppHandle) -> bool {
+	false
+}
+
 async fn jazz_shell_ready(
 	app: &tauri::AppHandle,
 	mj: &ManagedJazz,
 	self_state: &SelfState,
 	client: Arc<JazzClient>,
 ) -> Result<std::sync::Arc<jazz_engine::ShellState>, String> {
+	jazz_shell_ready_inner(app, mj, self_state, client, false).await
+}
+
+/// Shell hydrate for UI table drains — no mesh reconcile, ACL bootstrap, or pairing-sensitive flush side effects.
+async fn jazz_shell_for_ui(
+	app: &tauri::AppHandle,
+	mj: &ManagedJazz,
+	self_state: &SelfState,
+	client: Arc<JazzClient>,
+) -> Result<std::sync::Arc<jazz_engine::ShellState>, String> {
+	jazz_shell_ready_inner(app, mj, self_state, client, true).await
+}
+
+async fn jazz_shell_ready_inner(
+	app: &tauri::AppHandle,
+	mj: &ManagedJazz,
+	self_state: &SelfState,
+	client: Arc<JazzClient>,
+	for_ui_drain: bool,
+) -> Result<std::sync::Arc<jazz_engine::ShellState>, String> {
 	if !mj.shell_vault_stale.load(Ordering::Acquire) {
 		if let Some(cached) = mj.shell.lock().await.clone() {
-			mark_shell_local_ready_for_mesh(app, mj);
+			if !for_ui_drain {
+				mark_shell_local_ready_for_mesh(app, mj);
+			}
 			return Ok(cached);
 		}
 	}
@@ -1181,7 +1303,9 @@ async fn jazz_shell_ready(
 	let _hydrate_guard = mj.shell_hydrate.lock().await;
 	if !mj.shell_vault_stale.load(Ordering::Acquire) {
 		if let Some(cached) = mj.shell.lock().await.clone() {
-			mark_shell_local_ready_for_mesh(app, mj);
+			if !for_ui_drain {
+				mark_shell_local_ready_for_mesh(app, mj);
+			}
 			return Ok(cached);
 		}
 	}
@@ -1199,31 +1323,45 @@ async fn jazz_shell_ready(
 	let object_spark_ids = jazz_engine::build_object_spark_id_map(client.as_ref()).await?;
 	let snap = spark_sync::load_acl_snapshot(&arc.vault, object_spark_ids)?;
 	*mj.sync_acl.write().expect("sync_acl poisoned") = Some(snap);
-	// One catch-up rebroadcast per conn epoch — not on every vault-table invalidation reload.
-	let first_acl_catchup = !mj.mesh_acl_rebroadcast_done.swap(true, Ordering::AcqRel);
-	if first_acl_catchup {
-		#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
-		{
-			let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
-			let live_n = bridge.snapshot_remote_clients().await.len();
-			let h = app.state::<crate::peer_catchup::PeerCatchupHandle>();
-			h.on_shell_acl_first_loaded_prepare_catchup().await;
-			if live_n == 0 {
-				log::debug!(
-					target: "avenos::jazz",
-					"sync_acl ready (catch-up deferred — no live P2P link yet)",
-				);
-			} else {
-				log::debug!(
-					target: "avenos::jazz",
-					"sync_acl ready (acl bootstrap queued for {live_n} live link(s))",
-				);
+	if !for_ui_drain {
+		// One catch-up rebroadcast per conn epoch — not on every vault-table invalidation reload.
+		let first_acl_catchup = !mj.mesh_acl_rebroadcast_done.swap(true, Ordering::AcqRel);
+		if first_acl_catchup {
+			#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+			{
+				let pairing = pairing_session_active(app).await;
+				if !pairing {
+					let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
+					let live_n = bridge.snapshot_remote_clients().await.len();
+					let h = app.state::<crate::peer_catchup::PeerCatchupHandle>();
+					h.on_shell_acl_first_loaded_prepare_catchup().await;
+					if live_n == 0 {
+						log::debug!(
+							target: "avenos::jazz",
+							"sync_acl ready (catch-up deferred — no live P2P link yet)",
+						);
+					} else {
+						log::debug!(
+							target: "avenos::jazz",
+							"sync_acl ready (acl bootstrap queued for {live_n} live link(s))",
+						);
+					}
+					bridge.peer_set_changed_notify().notify_waiters();
+					publish_peer_mesh_after_acl(app).await;
+				} else {
+					log::debug!(
+						target: "avenos::jazz",
+						"sync_acl ready (mesh bootstrap deferred — pairing active)",
+					);
+				}
 			}
-			bridge.peer_set_changed_notify().notify_waiters();
+			#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "ios")))]
+			{
+				publish_peer_mesh_after_acl(app).await;
+			}
 		}
-		publish_peer_mesh_after_acl(app).await;
+		mark_shell_local_ready_for_mesh(app, mj);
 	}
-	mark_shell_local_ready_for_mesh(app, mj);
 	Ok(arc)
 }
 
@@ -2740,4 +2878,54 @@ pub async fn self_clear_aven_os_data(
 		fs::remove_dir_all(&base).map_err(|e| format!("remove {}: {e}", base.display()))?;
 	}
 	Ok(())
+}
+
+#[cfg(test)]
+mod json_cell_tests {
+	use super::*;
+	use groove::query_manager::types::ColumnType;
+	use serde_json::json;
+
+	#[test]
+	fn json_cell_to_jazz_bytea_standard_base64() {
+		let cell = json!("aGVsbG8=");
+		let v = json_cell_to_jazz(&cell, &ColumnType::Bytea, false).unwrap();
+		assert_eq!(v, Value::Bytea(b"hello".to_vec()));
+	}
+
+	#[test]
+	fn json_cell_to_jazz_double_batch_id_enum() {
+		let d = json_cell_to_jazz(&json!(1.5), &ColumnType::Double, false).unwrap();
+		assert_eq!(d, Value::Double(1.5));
+
+		let bid = json_cell_to_jazz(
+			&json!("0102030405060708090a0b0c0d0e0f10"),
+			&ColumnType::BatchId,
+			false,
+		)
+		.unwrap();
+		assert_eq!(bid, Value::BatchId([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]));
+
+		let en = ColumnType::Enum {
+			variants: vec!["a".into(), "b".into()],
+		};
+		let v = json_cell_to_jazz(&json!("a"), &en, false).unwrap();
+		assert_eq!(v, Value::Text("a".into()));
+	}
+
+	#[test]
+	fn json_cell_to_jazz_json_column() {
+		let cell = json!({"k": 1});
+		let v = json_cell_to_jazz(&cell, &ColumnType::Json { schema: None }, false).unwrap();
+		assert_eq!(v, Value::Text(r#"{"k":1}"#.into()));
+	}
+
+	#[test]
+	fn json_cell_to_jazz_rejects_row_type() {
+		let row_ty = ColumnType::Row {
+			columns: Box::new(groove::query_manager::types::RowDescriptor::new(vec![])),
+		};
+		let err = json_cell_to_jazz(&json!([]), &row_ty, false).unwrap_err();
+		assert!(err.contains("engine-only"));
+	}
 }

@@ -8,8 +8,9 @@
 
 FROM rust:bookworm AS rust-builder
 WORKDIR /build
+COPY libs/aven-p2p/Cargo.toml libs/aven-p2p/Cargo.lock ./libs/aven-p2p/
+COPY libs/aven-p2p/src ./libs/aven-p2p/src
 COPY libs/aven-relay/Cargo.toml libs/aven-relay/Cargo.lock ./libs/aven-relay/
-COPY third_party/peeroxide-dht ./third_party/peeroxide-dht
 COPY libs/aven-relay/src ./libs/aven-relay/src
 RUN cargo build --release --manifest-path libs/aven-relay/Cargo.toml
 

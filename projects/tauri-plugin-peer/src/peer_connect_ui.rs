@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock, Weak};
 
-use peeroxide_dht::connect_ui::{
+use aven_p2p::dht::connect_ui::{
 	ConnectProgressPhase, ConnectTransportMode, ConnectUiEvent, ConnectUiHook,
 };
 

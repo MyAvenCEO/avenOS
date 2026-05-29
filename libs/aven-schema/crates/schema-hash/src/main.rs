@@ -16,6 +16,10 @@ struct ManifestColumn {
 	nullable: bool,
 	#[serde(default)]
 	plaintext: bool,
+	#[serde(default)]
+	variants: Option<Vec<String>>,
+	#[serde(default)]
+	schema: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -28,32 +32,45 @@ struct Manifest {
 	tables: BTreeMap<String, ManifestTable>,
 }
 
+fn column_type_from_manifest(col: &ManifestColumn) -> Result<ColumnType, String> {
+	match col.ty.as_str() {
+		"text" => Ok(ColumnType::Text),
+		"boolean" => Ok(ColumnType::Boolean),
+		"integer" => Ok(ColumnType::Integer),
+		"bigint" => Ok(ColumnType::BigInt),
+		"uuid" => Ok(ColumnType::Uuid),
+		"uuid[]" => Ok(ColumnType::Array {
+			element: Box::new(ColumnType::Uuid),
+		}),
+		"bytea" => Ok(ColumnType::Bytea),
+		"double" => Ok(ColumnType::Double),
+		"timestamp" => Ok(ColumnType::Timestamp),
+		"json" => Ok(ColumnType::Json {
+			schema: col.schema.clone(),
+		}),
+		"enum" => {
+			let variants = col.variants.clone().ok_or_else(|| {
+				format!("enum column `{}` missing `variants`", col.name)
+			})?;
+			if variants.is_empty() {
+				return Err(format!("enum column `{}` has empty `variants`", col.name));
+			}
+			Ok(ColumnType::Enum { variants })
+		}
+		"batch_id" => Ok(ColumnType::BatchId),
+		other => Err(format!(
+			"unknown column `{}` kind {other:?} (Row/nested array types are not supported in manifest)",
+			col.name,
+		)),
+	}
+}
+
 fn add_column(tb: TableSchemaBuilder, col: &ManifestColumn) -> Result<TableSchemaBuilder, String> {
-	let t = col.ty.as_str();
-	let n = col.nullable;
-	match (t, n) {
-		("text", false) => Ok(tb.column(&col.name, ColumnType::Text)),
-		("text", true) => Ok(tb.nullable_column(&col.name, ColumnType::Text)),
-		("boolean", false) => Ok(tb.column(&col.name, ColumnType::Boolean)),
-		("boolean", true) => Ok(tb.nullable_column(&col.name, ColumnType::Boolean)),
-		("integer", false) => Ok(tb.column(&col.name, ColumnType::Integer)),
-		("integer", true) => Ok(tb.nullable_column(&col.name, ColumnType::Integer)),
-		("bigint", false) => Ok(tb.column(&col.name, ColumnType::BigInt)),
-		("bigint", true) => Ok(tb.nullable_column(&col.name, ColumnType::BigInt)),
-		("uuid", false) => Ok(tb.column(&col.name, ColumnType::Uuid)),
-		("uuid", true) => Ok(tb.nullable_column(&col.name, ColumnType::Uuid)),
-		("uuid[]", false) => Ok(tb.column(
-			&col.name,
-			ColumnType::Array(Box::new(ColumnType::Uuid)),
-		)),
-		("uuid[]", true) => Ok(tb.nullable_column(
-			&col.name,
-			ColumnType::Array(Box::new(ColumnType::Uuid)),
-		)),
-		_ => Err(format!(
-			"unknown column `{}` kind {:?} nullable={}",
-			col.name, t, col.nullable,
-		)),
+	let ct = column_type_from_manifest(col)?;
+	if col.nullable {
+		Ok(tb.nullable_column(&col.name, ct))
+	} else {
+		Ok(tb.column(&col.name, ct))
 	}
 }
 

@@ -291,7 +291,7 @@ async function main() {
 	ensureIpv4()
 	syncRelaySecretsToFly(ROOT)
 
-	// First arg = Docker build context (repo root) — Dockerfile COPY libs/aven-relay/ … and third_party/.
+	// First arg = Docker build context (repo root) — Dockerfile COPY libs/aven-relay/ and libs/aven-p2p/.
 	// Absolute --config/--dockerfile avoids Fly resolving relative to fly.toml dirname (double path segments).
 	run(['deploy', ROOT, '--config', FLY_TOML, '--dockerfile', FLY_DOCKERFILE, '--wait-timeout', '5m'], {
 		inherit: true

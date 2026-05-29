@@ -159,7 +159,7 @@ function spawnTauri(label: 'A' | 'B', colour: string, env: Record<string, string
 	// Do NOT use `--` before --config — that routes it to cargo, not to the Tauri CLI.
 	const extraArgs = label === 'B' ? ['--config', TAURI_B_CONFIG] : []
 
-	return spawnLabelled(label, colour, 'bunx', ['--bun', 'tauri', 'dev', ...extraArgs], {
+	return spawnLabelled(label, colour, 'bun', ['--bun', 'x', 'tauri', 'dev', ...extraArgs], {
 		cwd: appDir,
 		env: instanceEnv,
 	})

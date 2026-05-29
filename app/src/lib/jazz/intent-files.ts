@@ -5,7 +5,7 @@ import { deviceSession } from '$lib/self/device-session-store'
 import { jazzTable } from '$lib/jazz/api'
 import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
 
-/** Max binary size before base64 (v1 single text column). */
+/** Max binary size before base64 encode (v1 single bytea column). */
 export const INTENT_FILE_MAX_BYTES = 15 * 1024 * 1024
 
 const ALLOWED_MIME = new Set([
@@ -105,7 +105,7 @@ export async function persistSparkFiles(
 			continue
 		}
 		try {
-			const content_b64 = await fileToBase64(file)
+			const content = await fileToBase64(file)
 			await api.create({
 				...(sparkId ? { spark_id: sparkId } : {}),
 				intent_id: parentId,
@@ -113,7 +113,7 @@ export async function persistSparkFiles(
 				mime_type: classified.mime,
 				size_bytes: file.size,
 				created_at_ms: now,
-				content_b64,
+				content,
 			})
 			stored += 1
 		} catch (e) {

@@ -11,7 +11,7 @@ Developer reference for transport healing and link-phase authority. User summary
 1. **`PeerLinkCoordinator` phase is law** — one predicate `may_global_reset()` gates `prepare_reconnect` and worker abort.
 2. **`HealIntent` selects policy** — rendezvous ≠ recover ≠ reset (`heal_intent.rs`).
 3. **`HealScheduler` coalesces triggers** — highest intent wins; debounce per intent (`heal_scheduler.rs`).
-4. **Transport layers only report** — peeroxide connect UI → coordinator; bridge → mux phases.
+4. **Transport layers only report** — aven-p2p connect UI → coordinator; bridge → mux phases.
 
 **Rule:** never call `prepare_reconnect` or abort workers while any peer is in `SwarmConnecting | Handshaking (worker) | Live`.
 
@@ -50,7 +50,7 @@ While **`PairingState`** is `Advertising | Joining | TransportUp | Persisting`, 
 | `Live` | yes | yes | yes |
 | `Backoff` | no | no | no |
 
-`SwarmConnecting` is set from peeroxide **connect UI** progress (handshake / holepunch / blind-relay) before the mux worker exists.
+`SwarmConnecting` is set from aven-p2p **connect UI** progress (handshake / holepunch / blind-relay) before the mux worker exists.
 
 `may_global_reset()` returns false when any peer is establishing or live.
 

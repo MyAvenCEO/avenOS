@@ -38,12 +38,12 @@ pub fn should_replace_link(
 }
 
 #[must_use]
-pub fn map_dht_mode(mode: peeroxide_dht::connect_ui::ConnectTransportMode) -> PeerTransportMode {
+pub fn map_dht_mode(mode: aven_p2p::dht::connect_ui::ConnectTransportMode) -> PeerTransportMode {
 	match mode {
-		peeroxide_dht::connect_ui::ConnectTransportMode::Lan => PeerTransportMode::Lan,
-		peeroxide_dht::connect_ui::ConnectTransportMode::Direct => PeerTransportMode::Direct,
-		peeroxide_dht::connect_ui::ConnectTransportMode::Punched => PeerTransportMode::Punched,
-		peeroxide_dht::connect_ui::ConnectTransportMode::Relay => PeerTransportMode::Relay,
+		aven_p2p::dht::connect_ui::ConnectTransportMode::Lan => PeerTransportMode::Lan,
+		aven_p2p::dht::connect_ui::ConnectTransportMode::Direct => PeerTransportMode::Direct,
+		aven_p2p::dht::connect_ui::ConnectTransportMode::Punched => PeerTransportMode::Punched,
+		aven_p2p::dht::connect_ui::ConnectTransportMode::Relay => PeerTransportMode::Relay,
 	}
 }
 

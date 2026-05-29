@@ -7,9 +7,9 @@ mod relay_host;
 
 use std::sync::Arc;
 
-use peeroxide_dht::blind_relay::BlindRelayCoordinator;
-use peeroxide_dht::hyperdht::{spawn, HyperDhtConfig};
-use peeroxide_dht::rpc::DhtConfig;
+use aven_p2p::dht::blind_relay::BlindRelayCoordinator;
+use aven_p2p::dht::hyperdht::{spawn, HyperDhtConfig};
+use aven_p2p::dht::rpc::DhtConfig;
 use serde::Serialize;
 
 use libudx::UdxRuntime;

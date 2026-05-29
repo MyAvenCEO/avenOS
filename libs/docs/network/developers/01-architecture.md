@@ -17,7 +17,7 @@ User-facing concepts: start with [My Network](../founders/01-my-network.md). Thi
 
 | Layer | Crate / module | Responsibility |
 | ----- | -------------- | ---------------- |
-| DHT + Noise | `peeroxide`, `tauri-plugin-peer` | Topics, allowlist socket gate, connect UI hook |
+| DHT + Noise | `aven-p2p`, `tauri-plugin-peer` | Topics, allowlist socket gate, connect UI hook |
 | Link phase | `PeerLinkCoordinator` | Single owner per remote static key; suppress transport |
 | Groove mux | `HyperswarmGrooveBridge` | SecretStream → Jazz sync; reader/writer split tasks |
 | Mesh UI | `peer_mesh_state.rs` | Assemble `PeerMeshStatusReply` → `avenos:runtime` |
@@ -41,7 +41,7 @@ After unlock, **PeerCtl** rebuilds transport from persisted `peers` rows (no sec
 One encrypted Groove mux per remote static key. Phases: `Idle` → `Discovering` → `TransportUp` → `Handshaking` → `Live` → `Backoff`.
 
 - Only **`Live`** enables spark sync and counts toward `linkedCount`.
-- **Transport suppress** in peeroxide: `Live`, or `TransportUp`/`Handshaking` **with an active mux worker** (`worker_active`).
+- **Transport suppress** in aven-p2p: `Live`, or `TransportUp`/`Handshaking` **with an active mux worker** (`worker_active`).
 - Mux keepalive `avenos/mux-ping/v1` every 5s; two missed rounds (~10s) tear down stale links.
 
 Full heal pipeline: [Auto-heal & coordinator](06-auto-heal-and-coordinator.md).

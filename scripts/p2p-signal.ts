@@ -9,7 +9,7 @@
  * **`AVEN_RELAY_URL`** (required when central): `127.0.0.1` / `localhost` → spawn local Rust signal;
  * any other host (e.g. `relay.aven.ceo`) → remote bootstrap + blind-relay from manifest (no local subprocess).
  *
- * Data plane (peeroxide order): LAN `addresses4` → holepunch → blind-relay fallback (`relay_through`).
+ * Data plane (aven-p2p order): LAN `addresses4` → holepunch → blind-relay fallback (`relay_through`).
  */
 
 import { execFileSync } from 'node:child_process'
@@ -95,7 +95,7 @@ function resolveIpv4Sync(hostname: string): string | undefined {
 
 /**
  * HyperDHT bootstrap string for central discovery.
- * Local embedded signal uses `127.0.0.1@host:port` (peeroxide connects to loopback).
+ * Local embedded signal uses `127.0.0.1@host:port` (aven-p2p connects to loopback).
  * Remote hosts use `{publicIp}@host:port` so node ids match Fly ingress (bind IP ≠ public IP).
  */
 export function centralBootstrap(hostname: string, dhtUdpPort: number): string {

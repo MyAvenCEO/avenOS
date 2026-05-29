@@ -59,10 +59,7 @@ fn jazz_cell_json(cell: &Value) -> JsonValue {
 			serde_json::Number::from_f64(*d).map(Into::into).unwrap_or(0.into()),
 		),
 		Value::BatchId(id) => JsonValue::String(hex::encode(id)),
-		Value::Bytea(b) => JsonValue::String(base64::Engine::encode(
-			&base64::engine::general_purpose::URL_SAFE_NO_PAD,
-			b,
-		)),
+		Value::Bytea(b) => JsonValue::String(base64::engine::general_purpose::STANDARD.encode(b)),
 	}
 }
 
@@ -295,14 +292,26 @@ pub(super) fn row_to_public_map(
 						s.as_str(),
 						&mut miss,
 					),
+					Value::Bytea(b) => {
+						let s = std::str::from_utf8(b.as_slice())
+							.map_err(|_| format!("secret_col_bytea_utf8:{name}"))?;
+						map_sensitive_storage_cell(
+							state,
+							name,
+							&desc.column_type,
+							spark,
+							s,
+							&mut miss,
+						)
+					}
 					Value::Null if desc.nullable => JsonValue::Null,
 					_ => return Err(format!("secret_col_bad_storage:{name}:{cell:?}")),
 				}
 			} else {
-				jazz_cell_json(&cell)
+				jazz_cell_json(cell)
 			}
 		} else {
-			jazz_cell_json(&cell)
+			jazz_cell_json(cell)
 		};
 		m.insert(name.to_string(), jv);
 	}

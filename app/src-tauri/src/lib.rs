@@ -625,7 +625,7 @@ fn init_logging() {
 		.try_init();
 	}
 
-	// Forward `tracing::*` events from peeroxide / peeroxide-dht / groove into the `log`
+	// Forward `tracing::*` events from aven-p2p / groove into the `log`
 	// crate. Without this, the announce/lookup/connect lifecycle logs were silently
 	// dropped — leaving us blind during pairing rendezvous. The Apple `log::Log` impl
 	// then forwards into the in-app ring buffer + `os_log`. Replaces the previous
@@ -703,6 +703,7 @@ pub fn run() {
 			}
 
 			app.manage(jazz::runtime::spawn_groove_actor(app.handle().clone()));
+			app.manage(jazz::ui_drain::spawn_ui_table_drain(app.handle().clone()));
 			#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 			app.manage(peer_catchup::spawn_peer_catchup_worker(app.handle().clone()));
 

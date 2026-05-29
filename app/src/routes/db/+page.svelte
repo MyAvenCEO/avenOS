@@ -74,7 +74,7 @@
 		value: unknown,
 		row: Record<string, unknown>,
 	): { text: string; title?: string } {
-		if (column === 'content_b64' && typeof value === 'string' && value.length > 0) {
+		if (column === 'content' && typeof value === 'string' && value.length > 0) {
 			const n = value.length
 			const sizeBytes = typeof row.size_bytes === 'number' ? row.size_bytes : undefined
 			const hint = sizeBytes != null ? ` · original ~${sizeBytes} B` : ''

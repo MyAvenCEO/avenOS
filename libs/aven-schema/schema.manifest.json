@@ -161,9 +161,9 @@
 					"plaintext": true
 				},
 				{
-					"name": "content_b64",
-					"type": "text",
-					"comment": "standard base64 file bytes — sealed at rest (v1; chunked file_parts later)"
+					"name": "content",
+					"type": "bytea",
+					"comment": "file bytes — sealed at rest (jpeg, png, svg, pdf); IPC JSON uses base64"
 				}
 			]
 		}
