@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Downloads webcm assets (webcm.mjs + webcm.wasm) into lib/app/static/webcm/.
+ * Downloads webcm assets (webcm.mjs + webcm.wasm) into app/static/webcm/.
  * Uses GitHub Pages so wasm resolves next to .mjs via import.meta.url.
  *
  * Usage: bun run scripts/fetch-webcm.ts
@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
-const outDir = path.join(repoRoot, 'lib/app/static/webcm')
+const outDir = path.join(repoRoot, 'app/static/webcm')
 
 const BASE = 'https://edubart.github.io/webcm'
 const FILES = [

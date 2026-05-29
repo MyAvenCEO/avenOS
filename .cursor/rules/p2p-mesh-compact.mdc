@@ -2,9 +2,9 @@
 description: P2P/mesh compact architecture — one roundtrip, push-only UI, layer ownership
 globs:
   - projects/tauri-plugin-peer/**/*.rs
-  - lib/app/src-tauri/src/peer*.rs
-  - lib/app/src-tauri/src/jazz/**/*.rs
-  - lib/app/src/lib/peer/**/*.{ts,svelte}
+  - app/src-tauri/src/peer*.rs
+  - app/src-tauri/src/jazz/**/*.rs
+  - app/src/lib/peer/**/*.{ts,svelte}
   - third_party/peeroxide/**/*.rs
 alwaysApply: false
 ---

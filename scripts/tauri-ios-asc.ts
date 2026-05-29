@@ -4,7 +4,7 @@
  * Does not target the iOS Simulator — validate on physical devices via TestFlight only.
  *
  * Loads `<repo-root>/.env.apple.local`, syncs iOS entitlements template, then runs
- * `tauri ios build --export-method app-store-connect --target aarch64` from lib/app.
+ * `tauri ios build --export-method app-store-connect --target aarch64` from app.
  *
  * Signing modes (first match wins):
  * 1. **Manual CI** — `AVEN_IOS_APP_STORE_MOBILEPROVISION`, `AVEN_IOS_CERTIFICATE_P12`, `AVEN_IOS_CERTIFICATE_PASSWORD`.
@@ -42,7 +42,7 @@ function hyperswarmRelayCompileEnv(relayCfg: AppStoreRelayConfig): Record<string
 
 applyAppleEnvLocal(repoRoot)
 
-const appDir = path.join(repoRoot, 'lib/app')
+const appDir = path.join(repoRoot, 'app')
 const tauriDir = path.join(appDir, 'src-tauri')
 const genApple = path.join(tauriDir, 'gen/apple')
 const AVEN_IOS_COMPILE_ENV = path.join(genApple, '.aven-ios-compile.env')
@@ -59,7 +59,7 @@ if (!team) {
 
 if (!existsSync(genApple)) {
 	console.error(
-		'tauri-ios-asc: missing src-tauri/gen/apple — run from lib/app: CI=true bunx tauri ios init --ci',
+		'tauri-ios-asc: missing src-tauri/gen/apple — run from app: CI=true bunx tauri ios init --ci',
 	)
 	process.exit(1)
 }
@@ -201,7 +201,7 @@ function ensureIosDevicePlatform(workspace: string, scheme: string) {
 			'tauri-ios-asc: Xcode cannot build for physical iOS (iphoneos) yet.',
 			'Install the matching iOS platform in Xcode → Settings → Platforms (Components).',
 			'Then run: xcodebuild -runFirstLaunch -checkForNewerComponents',
-			'Verify: xcodebuild -showdestinations -workspace lib/app/src-tauri/gen/apple/aven-os-app.xcodeproj/project.xcworkspace -scheme aven-os-app_iOS',
+			'Verify: xcodebuild -showdestinations -workspace app/src-tauri/gen/apple/aven-os-app.xcodeproj/project.xcworkspace -scheme aven-os-app_iOS',
 		].join('\n'),
 	)
 	process.exit(1)

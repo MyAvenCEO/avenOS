@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PIL import Image
 
-# Matches lib/app/src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/Contents.json
+# Matches app/src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/Contents.json
 IOS_ICON_SIZES: dict[str, int] = {
     "AppIcon-20x20@2x.png": 40,
     "AppIcon-20x20@3x.png": 60,
@@ -51,7 +51,7 @@ def generate(source: Path, out_dir: Path, bg: tuple[int, int, int] = (0, 0, 0)) 
 
 
 def sync_xcassets(ios_dir: Path, repo: Path) -> None:
-    xcassets = repo / "lib/app/src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset"
+    xcassets = repo / "app/src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset"
     if not xcassets.is_dir():
         return
     for name in IOS_ICON_SIZES:
@@ -63,9 +63,9 @@ def sync_xcassets(ios_dir: Path, repo: Path) -> None:
 
 def main() -> int:
     repo = Path(__file__).resolve().parents[1]
-    default_source = repo / "lib/app/src-tauri/icons/app-icon-source.png"
+    default_source = repo / "app/src-tauri/icons/app-icon-source.png"
     source = Path(sys.argv[1]) if len(sys.argv) > 1 else default_source
-    out_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else repo / "lib/app/src-tauri/icons/ios"
+    out_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else repo / "app/src-tauri/icons/ios"
     generate(source, out_dir)
     sync_xcassets(out_dir, repo)
     print(f"done → {out_dir}")

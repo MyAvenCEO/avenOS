@@ -10,6 +10,7 @@ Bun **monorepo** (layout inspired by [MaiaOS](https://github.com/)): workspace p
 | **`projects/tauri-plugin-passkey`** | Rust/Cargo Tauri 2 plugin (macOS passkey); plugin id **`tauri-plugin-passkey`** |
 | **`projects/ocr-example`** | Python Gemini OCR/JSON extract CLI (separate `pip` venv) |
 | **`projects/jaensen-bot`** | `@avenos/jaensen-bot` — [Flue](https://github.com/withastro/flue) agent server (`flue dev`, port 3583) |
+| **`app`** | `@AvenOS/app` — Tauri + SvelteKit shell (identity, P2P, docs, vibe-apps) |
 
 **`bun install`** also attaches **`../MaiaOS/libs/*`** as workspaces so `@MaiaOS/*` / `@AvenOS/db` resolve. Clone [MaiaOS](https://github.com/) **next to** this repo (`Development/MaiaOS` alongside `Development/AvenOS`), or edit root `package.json` `workspaces` if your layout differs.
 
@@ -29,7 +30,11 @@ Python OCR example (optional): `cd projects/ocr-example && python3 -m venv .venv
 bun run dev:aven-ceo      # SvelteKit (default: bun run dev)
 bun run dev:ocr-example    # prints CLI help (requires Python + venv above)
 bun run dev:jaensen-bot    # Flue dev server (Node target, loads repo-root .env)
+bun run dev:app:all        # Tauri desktop app (macOS or Linux — auto)
+bun run dev:app:mac        # Tauri desktop app on macOS
+bun run dev:app:ios        # Tauri in iOS Simulator — `tauri ios dev [device]` (macOS + Xcode; run ios init once)
 bun run dev:app:linux      # Tauri desktop app on Linux
+bun run dev:app            # SvelteKit only in browser (:1420), no Tauri shell
 
 # or from the package folder
 cd projects/aven-ceo && bun run dev

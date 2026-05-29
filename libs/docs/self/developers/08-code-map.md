@@ -13,10 +13,10 @@ title: Code map & audit anchors
 | Cross-platform commands (sign, verify, lock, signing_public_key) | `projects/tauri-plugin-self/src/commands.rs` |
 | Ed25519 derivation (HKDF-Expand from root) | `projects/tauri-plugin-self/src/derive.rs` |
 | Session root cache (SelfState) | `projects/tauri-plugin-self/src/state.rs` |
-| Plugin registration & Tauri app setup | `lib/app/src-tauri/src/lib.rs` |
-| Genesis anchor — env parsing, debug auto-seed, GenesisState | `lib/app/src-tauri/src/genesis.rs` |
-| Unlock UI sequence | `lib/app/src/lib/self/LockGate.svelte` |
-| Frontend session state (no key bytes) | `lib/app/src/lib/self/device-session-store.ts` |
+| Plugin registration & Tauri app setup | `app/src-tauri/src/lib.rs` |
+| Genesis anchor — env parsing, debug auto-seed, GenesisState | `app/src-tauri/src/genesis.rs` |
+| Unlock UI sequence | `app/src/lib/self/LockGate.svelte` |
+| Frontend session state (no key bytes) | `app/src/lib/self/device-session-store.ts` |
 
 ## Audit strings
 

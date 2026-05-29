@@ -157,7 +157,7 @@ for (let i = 0; i < candidates.length; i++) {
 		if (isAddrInUse(err)) {
 			const alt = port >= 65535 ? port - 1 : port + 1
 			console.error(
-				`[vibe-app-sandbox] Port ${port} in use — set VIBE_SANDBOX_PORT=${alt} in repo root .env and restart; update PUBLIC_VIBE_SANDBOX_URL for lib/app if needed.`
+				`[vibe-app-sandbox] Port ${port} in use — set VIBE_SANDBOX_PORT=${alt} in repo root .env and restart; update PUBLIC_VIBE_SANDBOX_URL for app if needed.`
 			)
 		}
 		throw err
@@ -170,7 +170,7 @@ const chosen = server.port
 const isNonDefault = chosen !== 8081
 if (isNonDefault) {
 	console.log(
-		`\n[vibe-app-sandbox] LISTENING ON PORT ${chosen} — set PUBLIC_VIBE_SANDBOX_URL=http://localhost:${chosen}/sandbox.html for lib/app if the iframe fails to load.\n`
+		`\n[vibe-app-sandbox] LISTENING ON PORT ${chosen} — set PUBLIC_VIBE_SANDBOX_URL=http://localhost:${chosen}/sandbox.html for app if the iframe fails to load.\n`
 	)
 }
 console.log(`[vibe-app-sandbox] serving http://localhost:${chosen}/sandbox.html`)

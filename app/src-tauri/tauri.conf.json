@@ -1,0 +1,57 @@
+{
+	"$schema": "https://schema.tauri.app/config/2",
+	"productName": "avenOS",
+	"mainBinaryName": "aven-os-app",
+	"version": "0.0.1",
+	"identifier": "ceo.aven.os",
+	"build": {
+		"beforeDevCommand": "bun run build:vibe-sandbox && bun run dev",
+		"devUrl": "http://127.0.0.1:1420",
+		"beforeBuildCommand": "bun run build",
+		"frontendDist": "../build"
+	},
+	"app": {
+		"macOSPrivateApi": true,
+		"windows": [
+			{
+				"label": "main",
+				"title": "avenOS",
+				"width": 1280,
+				"height": 800,
+				"minWidth": 960,
+				"minHeight": 600,
+				"dragDropEnabled": false
+			}
+		],
+		"security": {
+			"csp": null,
+			"headers": {
+				"Cross-Origin-Opener-Policy": "same-origin",
+				"Cross-Origin-Embedder-Policy": "require-corp",
+				"Cross-Origin-Resource-Policy": "same-origin"
+			}
+		}
+	},
+	"bundle": {
+		"active": true,
+		"category": "Productivity",
+		"targets": ["app", "dmg"],
+		"icon": [
+			"icons/32x32.png",
+			"icons/128x128.png",
+			"icons/128x128@2x.png",
+			"icons/icon.icns",
+			"icons/icon.ico"
+		],
+		"resources": {
+			"../../libs/vibe-app-sandbox/sandbox/dist/sandbox.html": "vibe-sandbox/sandbox.html",
+			"../../libs/vibe-app-sandbox/sandbox/dist/ext-apps.js": "vibe-sandbox/ext-apps.js",
+			"../../libs/jazz-schema/schema.manifest.json": "jazz-schema/schema.manifest.json",
+			"../../libs/jazz-schema/migrations/registry.json": "jazz-schema/migrations/registry.json",
+			"../../libs/jazz-schema/migrations/snapshots/before-files.manifest.json": "jazz-schema/migrations/snapshots/before-files.manifest.json"
+		},
+		"macOS": {
+			"minimumSystemVersion": "12.0"
+		}
+	}
+}

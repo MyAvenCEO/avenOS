@@ -4,7 +4,7 @@ title: Plugin command surface
 
 # Plugin command surface
 
-All commands are registered in `lib/app/src-tauri/src/lib.rs` and implemented across two files:
+All commands are registered in `app/src-tauri/src/lib.rs` and implemented across two files:
 
 - `projects/tauri-plugin-self/src/commands.rs` — cross-platform commands
 - `projects/tauri-plugin-self/src/macos/commands.rs` — macOS-only SE commands
@@ -54,4 +54,4 @@ Stateless Ed25519 verification. Does not require an unlocked session.
 ### `genesis_network_id` (app-level, not plugin)
 **Args:** none — **Returns:** `number[]` (65 bytes)
 
-Reads from `GenesisState`. Implemented in `lib/app/src-tauri/src/genesis.rs`.
+Reads from `GenesisState`. Implemented in `app/src-tauri/src/genesis.rs`.

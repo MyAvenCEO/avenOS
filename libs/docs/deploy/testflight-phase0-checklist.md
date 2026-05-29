@@ -2,7 +2,7 @@
 
 Complete this **once per team/account** before building macOS or iOS store artifacts. Paths and UI labels refer to developer.apple.com and App Store Connect as of May 2026.
 
-The AvenOS bundle ID is **`ceo.aven.os`** (see `lib/app/src-tauri/tauri.conf.json`). Do **not** commit `.p12`, `.p8`, or `.provisionprofile` files—keep them outside the repo (for example under `~/apple-certs/avenos/`).
+The AvenOS bundle ID is **`ceo.aven.os`** (see `app/src-tauri/tauri.conf.json`). Do **not** commit `.p12`, `.p8`, or `.provisionprofile` files—keep them outside the repo (for example under `~/apple-certs/avenos/`).
 
 ## 1. Program and team
 

@@ -5,7 +5,7 @@
 	"workspaces": [
 		"projects/*",
 		"libs/*",
-		"lib/*"
+		"app"
 	],
 	"scripts": {
 		"dev": "bun --env-file=.env run dev:aven-ceo",
@@ -13,18 +13,21 @@
 		"dev:tinfoil": "bun --env-file=.env run dev:aven-ceo",
 		"dev:aven-ceo": "bun --env-file=.env --filter @avenos/aven-ceo dev",
 		"dev:stack": "bun ./projects/dev-stack/run-dev.ts",
-		"dev:app": "bun --env-file=.env run --cwd lib/app dev",
+		"dev:app": "bun --env-file=.env run --cwd app dev",
+		"dev:app:all": "bun --env-file=.env ./scripts/dev-app-all.ts",
 		"dev:app:mac": "bun --env-file=.env ./scripts/dev-app-macos.ts",
+		"dev:app:ios": "bun --env-file=.env ./scripts/dev-app-ios.ts",
 		"dev:app:linux": "bun --env-file=.env ./scripts/dev-app-linux.ts",
+		"clean:app:rust": "bun ./scripts/clean-app-tauri-target.ts",
 		"dev:p2p-signal": "bun ./scripts/p2p-signal.ts --foreground",
 		"dev:app2x:mac": "bun --env-file=.env ./scripts/dev-two-instances.ts",
 		"dev:app2x:linux": "bun --env-file=.env ./scripts/dev-two-instances.ts",
-		"build:app:linux": "bun run --cwd lib/app tauri:build:linux",
+		"build:app:linux": "bun run --cwd app tauri:build:linux",
 		"release:app:all": "bun ./scripts/release-app.ts all",
 		"release:app:mac": "bun ./scripts/release-app.ts mac",
 		"release:app:ios": "bun ./scripts/release-app.ts ios",
 		"fetch:webcm": "bun run ./scripts/fetch-webcm.ts",
-		"dev:all": "concurrently -k -c auto -n backend,svelte-app \"bun run dev:stack\" \"bun run --cwd lib/app dev\"",
+		"dev:all": "concurrently -k -c auto -n backend,svelte-app \"bun run dev:stack\" \"bun run --cwd app dev\"",
 		"dev:jaensen-server": "bun --env-file=.env --filter @jaensen/web-api dev",
 		"dev:ocr-example": "bun --env-file=.env --filter @avenos/ocr-example dev",
 		"dev:jaensen-bot": "bun --env-file=.env --filter @avenos/jaensen-bot dev",

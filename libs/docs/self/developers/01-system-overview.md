@@ -8,7 +8,7 @@ title: System overview & IPC sequence
 
 ## Unlock sequence
 
-`lib/app/src/lib/self/LockGate.svelte` orchestrates the full unlock in three sequential Tauri invocations:
+`app/src/lib/self/LockGate.svelte` orchestrates the full unlock in three sequential Tauri invocations:
 
 ```
 invoke('plugin:self|register', { slot: 'device_default' })
@@ -23,11 +23,11 @@ invoke('plugin:self|unlock', { slot: 'device_default', genesisNetworkId })
 
 ## Frontend state
 
-`lib/app/src/lib/self/device-session-store.ts` holds a Svelte store with a discriminated union `{ kind: 'locked' | 'unlocked' | 'dev_bypass' }`. No key material, signatures, or derived bytes cross the IPC boundary into JavaScript — only operation results (e.g. signature bytes on demand).
+`app/src/lib/self/device-session-store.ts` holds a Svelte store with a discriminated union `{ kind: 'locked' | 'unlocked' | 'dev_bypass' }`. No key material, signatures, or derived bytes cross the IPC boundary into JavaScript — only operation results (e.g. signature bytes on demand).
 
 ## Plugin registration
 
-The plugin is registered in `lib/app/src-tauri/src/lib.rs` alongside `GenesisState` and `SelfState`. Commands exposed: `register`, `unlock`, `lock`, `peer_status`, `public_key`, `signing_public_key`, `sign`, `verify`.
+The plugin is registered in `app/src-tauri/src/lib.rs` alongside `GenesisState` and `SelfState`. Commands exposed: `register`, `unlock`, `lock`, `peer_status`, `public_key`, `signing_public_key`, `sign`, `verify`.
 
 ## Dev bypass
 

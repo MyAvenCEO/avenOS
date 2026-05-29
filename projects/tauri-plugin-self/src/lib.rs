@@ -1,14 +1,12 @@
 //! `tauri-plugin-self` — hardware-rooted device identity, plus all keys derived from it.
 //!
 //! Conceptually:
-//!     PEER_ID_<device>            P-256 keypair, private in Secure Enclave (macOS).
+//!     PEER_ID_<device>            P-256 keypair, private in Secure Enclave (macOS / iOS device).
 //!     device_root_secret          32 bytes, HKDF(ECDH(SE_priv, GENESIS_NETWORK_ID)). RAM only.
 //!     PEER_ID_<device>_ED25519    HKDF-expanded from root secret. Used for `sign` / `verify` /
 //!                                 future Jazz agent + peeroxide Noise XX static key.
 //!
-//! There is no separate "identity" plugin: everything visible from JS is a self primitive.
-//!
-//! **Linux / Windows debug builds** use [`dev_insecure`] (plain `peer-id-{slot}.dev-root-secret` on disk).
+//! **Linux / Windows debug** and **iOS Simulator debug** use [`dev_insecure`] (plain root secret on disk).
 
 pub mod commands;
 pub mod derive;
@@ -19,17 +17,28 @@ pub mod unlock;
 pub mod vault;
 mod vault_commands;
 
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+/// Plain on-disk root secret for local dev (Linux, iOS Simulator, etc.).
+#[cfg(any(
+	not(any(target_os = "macos", target_os = "ios")),
+	all(target_os = "ios", target_abi = "sim")
+))]
 mod dev_insecure;
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
+/// Secure Enclave + Swift bridge (macOS, physical iOS / TestFlight).
+#[cfg(any(
+	target_os = "macos",
+	all(target_os = "ios", not(target_abi = "sim"))
+))]
 mod macos;
 
 use vault::ActiveVault;
 
 use state::SelfState;
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[cfg(any(
+	target_os = "macos",
+	all(target_os = "ios", not(target_abi = "sim"))
+))]
 pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 	use tauri::{generate_handler, plugin::Builder};
 
@@ -62,7 +71,10 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 		.build()
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+#[cfg(any(
+	not(any(target_os = "macos", target_os = "ios")),
+	all(target_os = "ios", target_abi = "sim")
+))]
 pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 	use tauri::{generate_handler, plugin::Builder};
 

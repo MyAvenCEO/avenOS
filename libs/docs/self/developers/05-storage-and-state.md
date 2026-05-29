@@ -23,7 +23,7 @@ Holds `Option<[u8; 32]>` wrapped in a `Mutex`, zeroized on clear. Set by `unlock
 
 ## Frontend state
 
-**File:** `lib/app/src/lib/self/device-session-store.ts`
+**File:** `app/src/lib/self/device-session-store.ts`
 
 ```ts
 type DeviceSession =

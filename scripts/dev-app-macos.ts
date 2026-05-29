@@ -23,16 +23,20 @@ async function main() {
 	console.log(
 		'[dev:app:macos] AvenOS Tauri (macOS) · Host-UI: SvelteKit @ http://127.0.0.1:1420 (dev-only, embedded in WKWebView) · Vibe-Sandbox: native Child-WKWebView (vibe-sandbox://)\n'
 	)
+	if (process.env.AVENOS_DEV_CLEAN_RUST === '1') {
+		spawnSync('bun', ['./scripts/clean-app-tauri-target.ts'], { cwd: repoRoot, stdio: 'inherit' })
+	}
 
 	applyCentralRelayUrlDevDefault('dev-app:macos')
 	const p2 = await startP2pSignal(repoRoot)
 	const env = {
 		...process.env,
-		...p2.envAugment
+		...p2.envAugment,
+		CARGO_INCREMENTAL: '0'
 	} satisfies Record<string, string | undefined>
 
 	try {
-		const child = Bun.spawn(['bun', '--env-file=.env', 'run', '--cwd', 'lib/app', 'tauri:dev'], {
+		const child = Bun.spawn(['bun', '--env-file=.env', 'run', '--cwd', 'app', 'tauri:dev'], {
 			cwd: repoRoot,
 			stdout: 'inherit',
 			stderr: 'inherit',

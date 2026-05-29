@@ -1,8 +1,12 @@
-//! **Debug / non-macOS only.** Plain 32-byte `device_root_secret` on disk for local testing.
+//! **Debug only.** Plain 32-byte `device_root_secret` on disk for local testing.
 //!
-//! Never used in release macOS builds. Emits loud terminal warnings.
+//! Used on Linux/Windows debug builds and **iOS Simulator** (`target_abi = "sim"`).
+//! Never used on macOS desktop or physical iOS / TestFlight (Secure Enclave). Emits loud warnings.
 
-#![cfg(not(any(target_os = "macos", target_os = "ios")))]
+#![cfg(any(
+	not(any(target_os = "macos", target_os = "ios")),
+	all(target_os = "ios", target_abi = "sim")
+))]
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -25,6 +29,10 @@ pub fn enabled() -> bool {
 		.is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
 	{
 		return true;
+	}
+	#[cfg(all(target_os = "ios", target_abi = "sim"))]
+	{
+		return cfg!(debug_assertions);
 	}
 	cfg!(debug_assertions)
 }

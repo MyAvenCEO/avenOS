@@ -62,6 +62,14 @@
 		e.stopImmediatePropagation()
 		onplace?.()
 	}
+
+	function onPlotKeydown(e: KeyboardEvent) {
+		if (!preview) return
+		if (e.key !== 'Enter' && e.key !== ' ') return
+		e.preventDefault()
+		e.stopPropagation()
+		onplace?.()
+	}
 </script>
 
 <T.Group {position}>
@@ -73,20 +81,34 @@
 			height={hexHeightPx}
 			viewBox="{-viewBox.width / 2} {viewBox.minY} {viewBox.width} {viewBox.height}"
 		>
-			<polygon
-				class="avencity-plot-hit"
-				class:avencity-plot-hit--preview={preview}
-				role="button"
-				aria-label={preview ? 'Place new Grundstück' : 'Grundstück plot'}
-				tabindex={preview ? 0 : -1}
-				points={polygonPoints}
-				fill="transparent"
-				stroke="transparent"
-				stroke-width={hitStrokeWidth}
-				onpointerenter={onPlotEnter}
-				onpointerleave={onPlotLeave}
-				onclick={onPlotClick}
-			/>
+			{#if preview}
+				<polygon
+					class="avencity-plot-hit avencity-plot-hit--preview"
+					role="button"
+					aria-label="Place new Grundstück"
+					tabindex="0"
+					points={polygonPoints}
+					fill="transparent"
+					stroke="transparent"
+					stroke-width={hitStrokeWidth}
+					onpointerenter={onPlotEnter}
+					onpointerleave={onPlotLeave}
+					onclick={onPlotClick}
+					onkeydown={onPlotKeydown}
+				/>
+			{:else}
+				<polygon
+					class="avencity-plot-hit"
+					role="img"
+					aria-label="Grundstück plot"
+					points={polygonPoints}
+					fill="transparent"
+					stroke="transparent"
+					stroke-width={hitStrokeWidth}
+					onpointerenter={onPlotEnter}
+					onpointerleave={onPlotLeave}
+				/>
+			{/if}
 			<polygon
 				class="avencity-plot-outline"
 				class:avencity-plot-outline--preview={preview}

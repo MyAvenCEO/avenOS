@@ -21,19 +21,67 @@ xcrun simctl list devices available | rg '^-- iOS'
 
 **Devices under iOS 18.4** (examples): iPhone 16 Pro, iPhone 16, iPhone 16e, iPad Pro 11/13-inch (M4), iPad Air 11/13-inch (M3).
 
-## Future simulator dev (when we use it again)
+## Local simulator dev
 
-From `lib/app` after `gen/apple/` exists:
+**Tauri v2:** `tauri ios dev` takes an optional **simulator device name** as a positional argument. There is **no** `--target` on `dev` (use `--target aarch64-sim` only on `tauri ios build`).
+
+From the **repo root** (starts embedded P2P signal + Vite like desktop dev):
 
 ```bash
-# Simulator target — NOT used for TestFlight / App Store export
-bunx tauri ios dev --target aarch64-sim
-
-# Or open Xcode project for sim debugging
-bunx tauri ios build --open --target aarch64-sim
+bun run dev:app:ios
 ```
 
-**Limits:** Face ID / Touch ID / Secure Enclave flows need a real device or TestFlight build.
+One-time scaffold if `app/src-tauri/gen/apple` is missing:
+
+```bash
+cd app && CI=true bunx tauri ios init --ci
+```
+
+Optional: force a simulator by name (must match `xcrun simctl list devices available`):
+
+```bash
+AVEN_IOS_SIM_DEVICE="iPhone 16 Pro" bun run dev:app:ios
+```
+
+From `app` directly:
+
+```bash
+bun run tauri:ios:dev:sim
+# or with device: bunx tauri ios dev "iPhone 16 Pro"
+```
+
+Desktop Tauri on your current OS: `bun run dev:app:all` (macOS → `dev:app:mac`, Linux → `dev:app:linux`).
+
+Open Xcode for manual sim debugging:
+
+```bash
+cd app && bunx tauri ios build --open --target aarch64-sim
+```
+
+**Identity on Simulator:** Same **dev insecure** path as Linux (`peer-id-{slot}.dev-root-secret` on disk) — the Simulator cannot replace TestFlight Secure Enclave QA. `dev:app:ios` sets `AVENOS_DEV_INSECURE_IDENTITY=1`; physical iOS / App Store builds still use the Swift Secure Enclave bridge.
+
+**Limits:** Passkey / Face ID / real Secure Enclave behaviour needs a physical device or TestFlight build.
+
+## Simulator shows no avenOS icon / Spotlight empty
+
+Usually the **Simulator is booted but the app was never installed** — common if you opened the Simulator yourself or stopped `dev:app:ios` before Xcode finished.
+
+1. Keep `bun run dev:app:ios` running until **avenOS launches on its own** (first build: often 10–20+ minutes).
+2. Do not rely on Spotlight mid-build; the home-screen name is **avenOS** (`ceo.aven.os`).
+3. If the terminal shows an Xcode/Rust error, fix that and re-run.
+4. Stale empty build? From `app`:
+
+```bash
+rm -rf src-tauri/gen/apple/build
+rm -rf ~/Library/Developer/Xcode/DerivedData/aven-os-app-*
+bun run dev:app:ios
+```
+
+Check install (booted sim only):
+
+```bash
+xcrun simctl get_app_container booted ceo.aven.os
+```
 
 ## Related
 

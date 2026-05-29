@@ -25,7 +25,7 @@ import { ensureRelayEnvReady } from './relay-env.ts'
 import { resolveAppStoreRelayConfig, type AppStoreRelayConfig } from './relay-bootstrap.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const appDir = path.join(repoRoot, 'lib/app')
+const appDir = path.join(repoRoot, 'app')
 const tauriDir = path.join(appDir, 'src-tauri')
 const profileDest = path.join(tauriDir, 'profiles', 'mac-app-store.provisionprofile')
 

@@ -11,7 +11,7 @@ Exercise **hyperswarm + UDP DHT bootstrap** on a **physical iPhone/iPad** from a
 ## Prerequisites
 
 - iOS IPA from `bun run release:app:ios 13 --no-upload` (or pass without `--no-upload` to push to TestFlight; bump the build number for every upload).
-- Build logs from `scripts/tauri-ios-asc.ts` should show **`embedding AVENOS_DHT_BOOTSTRAP=`<host>@<relay>:49737** and **`AVENOS_HYPERSWARM_RELAY_ADDR=`<host>:49737** (co-hosted blind-relay on the same UDP port as HyperDHT bootstrap). Sanity-check `.aven-ios-compile.env` under **`lib/app/gen/apple/`** before Xcode runs if troubleshooting.
+- Build logs from `scripts/tauri-ios-asc.ts` should show **`embedding AVENOS_DHT_BOOTSTRAP=`<host>@<relay>:49737** and **`AVENOS_HYPERSWARM_RELAY_ADDR=`<host>:49737** (co-hosted blind-relay on the same UDP port as HyperDHT bootstrap). Sanity-check `.aven-ios-compile.env` under **`app/gen/apple/`** before Xcode runs if troubleshooting.
 - Companion device: preferably **macOS TestFlight build** with matching relay/genesis assumptions (see [macOS TestFlight sandbox smoke](macos-testflight-sandbox-smoke.md)) for cross-platform mesh tests.
 
 ## Smoke steps

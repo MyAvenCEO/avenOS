@@ -10,7 +10,7 @@ The genesis network ID is a **65-byte SEC1 uncompressed P-256 public point** tha
 
 ## Source
 
-**File:** `lib/app/src-tauri/src/genesis.rs`
+**File:** `app/src-tauri/src/genesis.rs`
 
 | Build mode | Env var read | Behaviour if unset |
 |------------|-------------|---------------------|

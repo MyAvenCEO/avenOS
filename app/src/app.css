@@ -1,0 +1,203 @@
+@import "tailwindcss";
+
+@font-face {
+	font-family: 'Ouroboros';
+	src: url('$lib/assets/fonts/ouroboros-regular.woff2') format('woff2');
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+.avenos-wordmark {
+	font-family: 'Ouroboros', ui-serif, Georgia, 'Iowan Old Style', 'Palatino Linotype', serif;
+	font-size: clamp(2.75rem, 9vw, 3.5rem);
+	font-weight: 400;
+	line-height: 1;
+	letter-spacing: -0.02em;
+	color: var(--color-brand-navy, #1e293b);
+}
+
+/*
+ * Brand & semantic status palette (documented hex):
+ * — Primary / brand navy: #1E293B
+ * — Success: #2F5D50
+ * — Working (sage): #A4B69A
+ * — Info / connectivity / connecting (sand): #D4A373
+ * — Pairing handshake (distinct from info): #7E6EAD — violet, reads as invitation flow
+ * — Error terracotta (chosen): #C15B40 — saturated, readable vs sage/cream surrounds
+ * — Cream page surface — slightly lighter near-white. The page reads as the
+ *   neutral base while card surfaces sit slightly warmer/darker on top:
+ *     · #F8F6EF  (--color-surface-cream)
+ * — Soft eggshell display surface — one notch lighter than the card rest tone,
+ *   used by the Activity log panel, the Display (vibe-app sandbox) iframe
+ *   wrapper, and the embedded vibe-app `<body>` so the inner display surface
+ *   sits visually BETWEEN the page cream and the card eggshell (cards still
+ *   anchor most-saturated; this surface reads as a softer step):
+ *     · #F9F5E6  (--color-surface-soft)
+ * — Eggshell card surface — three-step ladder shared by intent + skill cards, the
+ *   ALL filter chip, the cost cell at rest, the IntentComposer typing pill, and the
+ *   Re-train / Accept pill buttons. Rest is a warmer eggshell so cards anchor
+ *   slightly more saturated than the lighter page background; hover/selected
+ *   shift progressively into deeper eggshell territory:
+ *     · Rest:     #F6F1E2  (--color-surface-card)               — softened eggshell
+ *     · Hover:    #F6F3E8  (--color-surface-card-hover)         — sibling eggshell tone
+ *     · Selected: #EFEADA  (--color-surface-card-selected)      — slightly more saturated eggshell
+ */
+@theme {
+	--font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+	--font-serif: "Cormorant Upright", ui-serif, Georgia, serif;
+	--font-mono: "JetBrains Mono", monospace;
+
+	--color-brand-navy: #1e293b;
+	--color-status-success-base: #2f5d50;
+	--color-status-working-base: #a4b69a;
+	--color-status-pairing-base: #7e6ead;
+	--color-status-info-base: #d4a373;
+	/* Terracotta error: #C15B40 */
+	--color-status-error-base: #c15b40;
+	/* Cream page surface — slightly lighter near-white. The page background reads
+	 * as the lighter neutral base, with card surfaces anchoring slightly warmer
+	 * and more saturated on top. */
+	--color-surface-cream: #f8f6ef;
+	/* Soft eggshell display surface (#F9F5E6) — one notch lighter than the card
+	 * rest tone (#F6F1E2) and one notch warmer than the page cream (#F8F6EF).
+	 * Used by the Activity log panel, the Display panel iframe wrapper, and the
+	 * vibe-app `<body>` background so the inner display surface sits between the
+	 * page cream and the card eggshell. Vibe apps mirror this hex via their
+	 * `:root --bg-a` since they're bundled into the sandbox without access to
+	 * app's CSS variables. */
+	--color-surface-soft: #f9f5e6;
+	/* Eggshell card surface — three-step ladder. Rest is a warmer eggshell tone
+	 * so intent/skill cards, the IntentComposer typing pill, and the Re-train /
+	 * Accept HITL pill buttons anchor visually warmer than the lighter page
+	 * background. Hover and selected shift further into eggshell territory. */
+	/* Rest — softened eggshell (#F6F1E2), slightly more saturated than the page cream. */
+	--color-surface-card: #f6f1e2;
+	/* Hover — one notch warmer/darker than rest. */
+	--color-surface-card-hover: #f6f3e8;
+	/* Selected — slightly more saturated/darker eggshell for state emphasis. */
+	--color-surface-card-selected: #efeada;
+
+	--color-background: var(--color-surface-cream);
+	--color-foreground: oklch(0.33 0.02 265);
+	/* Preview host behind sandbox iframe — slight contrast vs. card surface */
+	--color-sandbox-host: color-mix(in srgb, var(--color-background) 94%, var(--color-foreground));
+
+	/* Legacy palette slots — hex values aligned to new semantic roles */
+	--color-palette-mercury: var(--color-surface-cream);
+	--color-palette-shadow: #57534e;
+	--color-palette-coffee: var(--color-brand-navy);
+	--color-palette-nutmeg: var(--color-status-error-base);
+	--color-palette-lunar-green: var(--color-status-success-base);
+
+	--color-primary: var(--color-brand-navy);
+	--color-primary-foreground: #f8fafc;
+	/* Lighter, slightly desaturated steel/slate blue derived from the brand navy
+	 * (#1E293B). Used for accent chrome (e.g. the mic button's 3px side borders)
+	 * where the deep navy fill would visually overpower the surrounding cream UI. */
+	--color-primary-soft: #5b6f8b;
+
+	--color-archive: var(--color-palette-mercury);
+	--color-archive-foreground: #3d3830;
+	--color-driftwood: var(--color-archive);
+	--color-driftwood-foreground: var(--color-archive-foreground);
+
+	--color-tuscan-sun: var(--color-palette-coffee);
+	--color-tuscan-sun-foreground: var(--color-primary-foreground);
+
+	--color-marine: var(--color-primary);
+	--color-marine-foreground: var(--color-primary-foreground);
+
+	--color-paradise-water: var(--color-palette-shadow);
+	--color-paradise-water-foreground: #fafaf9;
+
+	--color-moss: var(--color-palette-lunar-green);
+	--color-moss-foreground: var(--color-status-success-foreground);
+
+	--color-terracotta: var(--color-palette-nutmeg);
+	--color-terracotta-foreground: var(--color-status-error-foreground);
+
+	--color-coffee: var(--color-palette-coffee);
+	--color-coffee-foreground: var(--color-primary-foreground);
+
+	--color-status-success: var(--color-status-success-base);
+	--color-status-success-foreground: #f4faf8;
+
+	--color-status-working: var(--color-status-working-base);
+	--color-status-working-foreground: #1a2520;
+
+	--color-status-info: var(--color-status-info-base);
+	--color-status-info-foreground: #2b231c;
+
+	--color-status-pairing: var(--color-status-pairing-base);
+	--color-status-pairing-foreground: #f4f3fc;
+
+	--color-status-error: var(--color-status-error-base);
+	--color-status-error-foreground: #fffefb;
+	--color-status-error-muted: color-mix(in oklab, var(--color-status-error) 22%, white);
+	--color-status-error-strong: color-mix(in oklab, var(--color-status-error) 78%, black);
+
+	--color-card: #ffffff;
+	--color-card-foreground: var(--color-foreground);
+
+	--color-accent: var(--color-brand-navy);
+	--color-accent-foreground: var(--color-surface-cream);
+
+	--color-muted: color-mix(in srgb, var(--color-brand-navy) 6%, var(--color-surface-cream));
+	--color-muted-foreground: color-mix(in srgb, var(--color-brand-navy) 42%, transparent);
+
+	--color-border: color-mix(in srgb, var(--color-brand-navy) 14%, transparent);
+	--color-input: color-mix(in srgb, #ffffff 65%, var(--color-surface-cream));
+
+	--radius-lg: 1rem;
+	--radius-xl: 1.5rem;
+	--radius-2xl: 2rem;
+	--radius-full: 9999px;
+}
+
+@layer base {
+	html {
+		@apply scroll-smooth antialiased;
+	}
+
+	body {
+		@apply bg-background text-foreground font-sans tracking-tight;
+	}
+
+	@media (max-width: 639px) {
+		html {
+			touch-action: manipulation;
+			-webkit-text-size-adjust: 100%;
+			text-size-adjust: 100%;
+		}
+	}
+}
+
+@keyframes mock-bars {
+	0%,
+	100% {
+		transform: scaleY(0.2);
+	}
+	50% {
+		transform: scaleY(1);
+	}
+}
+
+@layer components {
+	.intent-mock-bar {
+		transform-origin: bottom center;
+		animation: mock-bars 1.05s ease-in-out infinite;
+	}
+
+	.tech-pill {
+		@apply border border-border rounded-full px-4 py-2 flex items-center gap-3 bg-surface-card;
+	}
+
+	.tech-card {
+		@apply border border-border rounded-2xl bg-white/10 transition-all hover:bg-white/20;
+	}
+
+	.tech-label {
+		@apply text-[10px] font-bold tracking-widest uppercase opacity-40;
+	}
+}

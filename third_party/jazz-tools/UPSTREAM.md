@@ -22,6 +22,6 @@ npm TypeScript SDK, OPFS, SQLite, starters, examples, WebSocket server stack.
 
 ## Consumers
 
-- `lib/app/src-tauri` — `features = ["client-p2p"]`
+- `app/src-tauri` — `features = ["client-p2p"]`
 - `projects/tauri-plugin-peer` — `features = ["client-p2p"]`
 - `tools/avenos-schema-hash` — `features = ["client-p2p"]`

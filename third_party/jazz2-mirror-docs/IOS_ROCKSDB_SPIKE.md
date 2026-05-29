@@ -20,8 +20,8 @@ Upstream `rust-toolchain.toml` pins **1.93.1** (AvenOS app workspace currently u
 
 | Check | Result | Notes |
 |---|---|---|
-| `cd lib/app/src-tauri && cargo check` | **PASS** | macOS host, stripped vendored fork |
-| `cd lib/app/src-tauri && cargo check --target aarch64-apple-ios` | **PASS** | ~2m 50s, dev profile |
+| `cd app/src-tauri && cargo check` | **PASS** | macOS host, stripped vendored fork |
+| `cd app/src-tauri && cargo check --target aarch64-apple-ios` | **PASS** | ~2m 50s, dev profile |
 
 ## Isolated upstream spike
 

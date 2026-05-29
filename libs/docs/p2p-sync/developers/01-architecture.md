@@ -9,7 +9,7 @@ AvenOS uses **pure peer-to-peer Groove replication**: every paired device is a *
 ## Stack (crates)
 
 ```
-lib/app/src-tauri         — host binary (Tauri shell)
+app/src-tauri         — host binary (Tauri shell)
   └─ jazz/mod.rs          — jazz_connect() wires PeerTransport into JazzClient
   └─ jazz_auth.rs         — deterministic ClientId from Ed25519 pubkey
 

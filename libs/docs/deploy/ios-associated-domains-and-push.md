@@ -14,13 +14,13 @@ Stale profiles are a common signing error after toggling capabilities.
 ## 2. Associated domains (source of truth in repo)
 
 Committed template (not under `gen/apple`):  
-[`lib/app/src-tauri/ios-template/aven-os-app_iOS.entitlements`](lib/app/src-tauri/ios-template/aven-os-app_iOS.entitlements)
+[`app/src-tauri/ios-template/aven-os-app_iOS.entitlements`](app/src-tauri/ios-template/aven-os-app_iOS.entitlements)
 
 Because **`gen/apple/` is gitignored**, after **`tauri ios init`** copy it into the Xcode tree:
 
 ```bash
-cp lib/app/src-tauri/ios-template/aven-os-app_iOS.entitlements \
-  lib/app/src-tauri/gen/apple/aven-os-app_iOS/aven-os-app_iOS.entitlements
+cp app/src-tauri/ios-template/aven-os-app_iOS.entitlements \
+  app/src-tauri/gen/apple/aven-os-app_iOS/aven-os-app_iOS.entitlements
 ```
 
 Defaults:
@@ -49,7 +49,7 @@ Production TestFlight uploads should ultimately use **`production`** with App St
 
 ## 4. Background remote notifications
 
-Merged via [`lib/app/src-tauri/Info.ios.plist`](lib/app/src-tauri/Info.ios.plist): **`UIBackgroundModes`** includes **`remote-notification`**.
+Merged via [`app/src-tauri/Info.ios.plist`](app/src-tauri/Info.ios.plist): **`UIBackgroundModes`** includes **`remote-notification`**.
 
 Rust/Tauri/Jazz still needs to **call `UIApplication.registerForRemoteNotifications`**, persist the device token to your backend/APNs helpers, etc.—this markdown only satisfies **capability + plist plumbing**. Wire app code when implementing push delivery/handler logic.
 

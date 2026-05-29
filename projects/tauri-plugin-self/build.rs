@@ -20,7 +20,9 @@ fn main() {
 	];
 
 	let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-	if matches!(target_os.as_str(), "macos" | "ios") {
+	let target_abi = std::env::var("CARGO_CFG_TARGET_ABI").unwrap_or_default();
+	let ios_sim = target_os == "ios" && target_abi == "sim";
+	if matches!(target_os.as_str(), "macos" | "ios") && !ios_sim {
 		let mut link = swift_rs::SwiftLinker::new("13").with_package("SelfBridge", "swift-lib");
 		if target_os == "ios" {
 			link = link.with_ios("14");
@@ -29,6 +31,10 @@ fn main() {
 			std::env::remove_var("SDKROOT");
 		}
 		link.link();
+	} else if ios_sim {
+		println!(
+			"cargo:warning=tauri-plugin-self: Swift bridge skipped (iOS Simulator uses dev_insecure identity)"
+		);
 	} else {
 		println!(
 			"cargo:warning=tauri-plugin-self: Swift bridge skipped (target_os not macos/ios)"

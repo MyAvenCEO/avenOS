@@ -44,7 +44,7 @@ async function main() {
 	}
 
 	try {
-		const child = Bun.spawn(['bun', '--env-file=.env', 'run', '--cwd', 'lib/app', 'tauri:dev'], {
+		const child = Bun.spawn(['bun', '--env-file=.env', 'run', '--cwd', 'app', 'tauri:dev'], {
 			cwd: repoRoot,
 			stdout: 'inherit',
 			stderr: 'inherit',

@@ -1,4 +1,4 @@
-/** Brand surface tokens — mirrors lib/app CSS variables for canvas + HTML UI. */
+/** Brand surface tokens — mirrors app CSS variables for canvas + HTML UI. */
 export const avencityBrand = {
 	cream: '#f8f6ef',
 	surfaceSoft: '#f9f5e6',

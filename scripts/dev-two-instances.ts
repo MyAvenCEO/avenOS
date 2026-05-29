@@ -14,7 +14,7 @@
  *
  * Prerequisites:
  *   - Run `bun run dev:app:mac` or `bun run dev:app:linux` once first so deps compile.
- *   - Alternatively, pre-build a local unsigned release via `bun run --cwd lib/app tauri:build:macos`
+ *   - Alternatively, pre-build a local unsigned release via `bun run --cwd app tauri:build:macos`
  *     or `tauri:build:linux` (slower first build). NOTE: `bun run release:app:mac` / `bun run release:app:ios`
  *     now produce signed App Store artifacts AND upload them — not what you want for two-instance dev.
  *
@@ -41,7 +41,7 @@ import { freeDevServerPort } from './free-dev-server-port.ts'
 import { applyCentralRelayUrlDevDefault, startP2pSignal } from './p2p-signal.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const appDir = path.join(repoRoot, 'lib/app')
+const appDir = path.join(repoRoot, 'app')
 function userDocumentsDir(): string {
 	const xdg = process.env.XDG_DOCUMENTS_DIR?.trim()
 	if (xdg) return xdg
@@ -228,7 +228,7 @@ async function main() {
 		await waitForFile(tauriBin, 300_000)
 	} catch {
 		console.error(
-			`${BOLD}${CYAN}[A]${RESET} Timed out waiting for ${tauriBin} — check [A] logs (disk full? run: cargo clean --manifest-path lib/app/src-tauri/Cargo.toml)`,
+			`${BOLD}${CYAN}[A]${RESET} Timed out waiting for ${tauriBin} — check [A] logs (disk full? run: cargo clean --manifest-path app/src-tauri/Cargo.toml)`,
 		)
 		tauriA.kill('SIGTERM')
 		viteB.kill('SIGTERM')

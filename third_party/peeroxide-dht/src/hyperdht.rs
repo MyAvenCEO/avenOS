@@ -1735,7 +1735,7 @@ impl HyperDhtHandle {
             .await
         {
             Ok(hp_result) => {
-                let shared = self.server_socket().await?;
+        let shared = self.server_socket().await?;
                 let mut conn =
                     establish_stream_with_socket(&hp_result, runtime, shared).await?;
                 conn.transport_mode = Some(crate::connect_ui::ConnectTransportMode::Punched);

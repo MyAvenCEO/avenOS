@@ -8,8 +8,8 @@ We still **avoid the simulator** as the authoritative QA lane for AvenOS identit
 
 - Xcode + CocoaPods toolchain installed locally (the generated project uses XcodeGen + Pods).
 - **iOS device platform** installed in Xcode (**Settings → Components**). Simulator runtimes are not required for this workflow.
-- **`gen/apple/` is gitignored.** After clone / config updates, scaffold from **`lib/app`**: `CI=true bunx tauri ios init --ci`  
-  Entitlements are re-synced automatically during `bun run release:app:ios` from **`lib/app/src-tauri/ios-template/`**.
+- **`gen/apple/` is gitignored.** After clone / config updates, scaffold from **`app`**: `CI=true bunx tauri ios init --ci`  
+  Entitlements are re-synced automatically during `bun run release:app:ios` from **`app/src-tauri/ios-template/`**.
 - `APPLE_DEVELOPMENT_TEAM` via **`<repo-root>/.env.apple.local`** (template **`scripts/apple-env.local.template`**, quotable paths, never commits with `.gitignore` **`.env.*`**), **`tauri.ios.conf.json`**, or your shell — **do not commit** secrets.
 - **`GENESIS_NETWORK_ID`** in repo **`.env`** (or shell) — embedded at compile time like macOS TestFlight builds.
 - Watch the Xcode prep logs for **`embedding AVENOS_DHT_BOOTSTRAP=`** (`scripts/tauri-ios-asc.ts`); mismatches often explain hyperswarm stalls on-device.
@@ -26,7 +26,7 @@ From repo root:
 bun run release:app:ios 14 --no-upload
 ```
 
-(or from `lib/app`: `bun run tauri:ios:build:asc`)
+(or from `app`: `bun run tauri:ios:build:asc`)
 
 This runs `tauri ios build --export-method app-store-connect --target aarch64 --ci` — **arm64 device**, not simulator.
 
