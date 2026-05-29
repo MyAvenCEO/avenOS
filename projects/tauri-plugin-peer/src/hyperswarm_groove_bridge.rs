@@ -159,14 +159,18 @@ impl HyperswarmGrooveBridge {
 	/// DIDs with mux-ready Groove links (authoritative for sync gating).
 	pub async fn snapshot_live_linked_dids(&self) -> std::collections::HashSet<String> {
 		if let Some(reg) = self.0.live_links.lock().await.as_ref() {
-			return reg.snapshot_mux_ready_dids().await;
+			reg.snapshot_mux_ready_dids().await
+		} else {
+			std::collections::HashSet::new()
 		}
-		let live = self.snapshot_remote_clients().await;
-		let cid_map = self.shared_client_id_to_did();
-		let guard = cid_map.read().expect("cid map poisoned");
-		live.iter()
-			.filter_map(|id| guard.get(id).cloned())
-			.collect()
+	}
+
+	/// DIDs with coordinator-tracked establishing phases (SwarmConnecting or mux handshaking).
+	pub async fn snapshot_establishing_dids(&self) -> std::collections::HashSet<String> {
+		if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+			return reg.snapshot_establishing_dids().await;
+		}
+		std::collections::HashSet::new()
 	}
 
 	/// True when the mux worker is running, outbound channel is open, and LiveLink is MuxReady.
@@ -616,6 +620,7 @@ impl HyperswarmGrooveBridge {
 					m.insert(remote_client, did.clone());
 				}
 				if let Some(reg) = self.0.live_links.lock().await.as_ref() {
+					reg.clear_swarm_connecting(&remote_pk).await;
 					reg.set_transport_up(remote_pk, remote_client, did.clone())
 						.await;
 					reg.set_handshaking(remote_pk, remote_client, did)
@@ -659,7 +664,7 @@ impl HyperswarmGrooveBridge {
 			.await
 			.insert(remote_client, h);
 		if let Some(reg) = self.0.live_links.lock().await.as_ref() {
-			reg.set_worker_active(remote_pk, true).await;
+			reg.register_worker(remote_pk, remote_client).await;
 		}
 	}
 
@@ -685,7 +690,7 @@ impl HyperswarmGrooveBridge {
 				reg.demote_to_handshaking(remote_pk).await;
 			}
 		} else if let Some(reg) = self.0.live_links.lock().await.as_ref() {
-			reg.set_worker_active(remote_pk, false).await;
+			reg.unregister_worker(&remote_pk).await;
 		}
 		self.0.peer_set_changed.notify_waiters();
 	}

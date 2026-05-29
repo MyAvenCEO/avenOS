@@ -4,7 +4,7 @@
 //! (`HKDFExpand` with info `ceo.aven.os/identity/ed25519/v1` over the device root secret).
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod did;
@@ -19,6 +19,12 @@ mod peer_link;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod peer_util;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
+mod heal_intent;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+mod heal_scheduler;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+mod pairing;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod peer_reconnect;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod network_path;
@@ -31,6 +37,12 @@ pub use hyperswarm_groove_bridge::HyperswarmGrooveBridge;
 pub use peer_link::{PeerLinkCoordinator, PeerLinkMeshRow, PeerLinkPhase};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use peer_connect_ui::{PeerConnectSubstate, PeerConnectUiRow, PeerTransportMode};
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub use pairing::pair_topic_from_dids;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub use heal_intent::HealIntent;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub use pairing::{PairSession, PairingState};
 
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
 mod commands_stub;
@@ -119,22 +131,14 @@ pub(crate) struct PeerInviteCreateReply {
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-struct PairSession {
-	topic: [u8; 32],
-	code: String,
-	/// This device's advertised pairing label (`first/device`).
-	my_advertised_label: String,
-}
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
 #[derive(Clone)]
 pub struct PeerCtl {
 	inner: Arc<tokio::sync::Mutex<Option<RunningSwarm>>>,
-	/// Coalesces concurrent `start_swarm` (setup + `self:did-unlock`) into one actor.
 	swarm_starting: Arc<AtomicBool>,
 	swarm_start_notify: Arc<tokio::sync::Notify>,
 	jazz_hyperswarm: HyperswarmGrooveBridge,
-	pairing_session: Arc<tokio::sync::Mutex<Option<PairSession>>>,
+	pairing_state: Arc<tokio::sync::Mutex<pairing::PairingState>>,
+	heal_scheduler: Arc<heal_scheduler::HealScheduler>,
 	app_handle: tauri::AppHandle,
 	allowed_remote_dids: Arc<tokio::sync::RwLock<std::collections::HashSet<String>>>,
 	joined_pair_topics: Arc<tokio::sync::Mutex<std::collections::HashSet<[u8; 32]>>>,
@@ -144,8 +148,6 @@ pub struct PeerCtl {
 	applied_peer_allow_sorted: Arc<tokio::sync::Mutex<Option<Vec<String>>>>,
 	/// Last transport upgrade probe per DID (ms since epoch).
 	last_upgrade_probe_at: Arc<tokio::sync::Mutex<std::collections::HashMap<String, u64>>>,
-	/// Coalesce adaptive mesh nudge storms while DHT lookup is in flight.
-	last_reconnect_at_ms: Arc<AtomicU64>,
 	/// Last `start_swarm` failure — surfaced to UI when buttons stay disabled.
 	swarm_start_error: Arc<tokio::sync::Mutex<Option<String>>>,
 	/// Last resolved P2P stack config — surfaced in UI for TestFlight diagnostics.
@@ -178,6 +180,26 @@ impl PeerCtl {
 	pub async fn link_phase_for_did(&self, peer_did: &str) -> Option<PeerLinkPhase> {
 		self.live_links.phase_for_did(peer_did).await
 	}
+
+	pub async fn accepts_heal_intent(&self, intent: heal_intent::HealIntent) -> bool {
+		self.pairing_state.lock().await.accepts_heal_intent(intent)
+	}
+
+	pub async fn is_pairing_active(&self) -> bool {
+		self.pairing_state.lock().await.is_active()
+	}
+
+	pub async fn transport_in_flight(&self) -> bool {
+		self.live_links.any_in_flight().await
+	}
+
+	pub async fn set_pairing_persisting(&self) {
+		self.pairing_state.lock().await.mark_persisting();
+	}
+
+	pub async fn set_pairing_done(&self) {
+		self.pairing_state.lock().await.clear();
+	}
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -186,9 +208,6 @@ struct RunningSwarm {
 	actor_join: tokio::task::JoinHandle<()>,
 	conns_worker: tokio::task::JoinHandle<()>,
 }
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-const PAIR_CODE_ALPHABET: &[u8] = b"23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 fn hex_pk_prefix(pk: &[u8]) -> String {
@@ -664,61 +683,9 @@ fn build_p2p_diagnostics(cfg: &peeroxide::SwarmConfig, linked_count: usize) -> P
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-fn normalize_pair_code(raw: &str) -> Result<String, String> {
-	let mut s = raw.trim().to_ascii_uppercase();
-	s.retain(|c| !matches!(c, ' ' | '-' | '_'));
-	if s.len() != 6 {
-		return Err("Pairing code must be exactly 6 characters.".into());
-	}
-	if !s.bytes().all(|b| PAIR_CODE_ALPHABET.contains(&b)) {
-		return Err("Pairing code contains invalid characters.".into());
-	}
-	Ok(s)
-}
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-fn pair_topic_hash(normalized_code: &str) -> [u8; 32] {
-	let mut buf = Vec::with_capacity(b"aven:pair:v1:".len() + normalized_code.len());
-	buf.extend_from_slice(b"aven:pair:v1:");
-	buf.extend_from_slice(normalized_code.as_bytes());
-	peeroxide::discovery_key(&buf)
-}
-
-/// Per-pair durable sync topic: `discovery_key("aven:peer-pair:v1:" + sort(didA,didB))`.
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-pub fn pair_topic_from_dids(local_did: &str, remote_did: &str) -> [u8; 32] {
-	let (a, b) = if local_did <= remote_did {
-		(local_did, remote_did)
-	} else {
-		(remote_did, local_did)
-	};
-	let mut buf = Vec::with_capacity(64 + a.len() + b.len());
-	buf.extend_from_slice(b"aven:peer-pair:v1:");
-	buf.extend_from_slice(a.as_bytes());
-	buf.push(0);
-	buf.extend_from_slice(b.as_bytes());
-	peeroxide::discovery_key(&buf)
-}
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-fn generate_pair_code() -> String {
-	use rand::Rng;
-	let mut rng = rand::thread_rng();
-	(0..6)
-		.map(|_| PAIR_CODE_ALPHABET[rng.gen_range(0..PAIR_CODE_ALPHABET.len())] as char)
-		.collect()
-}
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn pairing_advertised_label(app: &tauri::AppHandle) -> String {
 	let vault = app.state::<tauri_plugin_self::vault::ActiveVault>();
 	tauri_plugin_self::vault::pairing_label_for_app(app, &*vault).unwrap_or_else(|| "Peer".into())
-}
-
-/// Short-lived invite topics: fast DHT refresh + capped connect backoff in vendored peeroxide.
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-fn pairing_join_opts() -> peeroxide::JoinOpts {
-	peeroxide::JoinOpts::fast_refresh()
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -782,7 +749,7 @@ async fn join_pairing_topic(
 	topic: [u8; 32],
 	flush_label: &'static str,
 ) -> Result<(), String> {
-	join_topic(swarm, topic, pairing_join_opts()).await?;
+	join_topic(swarm, topic, pairing::pairing_join_opts()).await?;
 	flush_swarm_for_pairing(swarm, flush_label).await
 }
 
@@ -919,8 +886,8 @@ impl PeerCtl {
 		// Outbound/client paths may populate `topics` from discovery. During an active invite we
 		// must not require topic metadata, or pairing always fails on the server side.
 		let on_pairing = {
-			let pairing = self.pairing_session.lock().await;
-			pairing.as_ref().is_some_and(|s| {
+			let pairing = self.pairing_state.lock().await;
+			pairing.session.as_ref().is_some_and(|s| {
 				topics.is_empty() || topics.iter().any(|t| *t == s.topic)
 			})
 		};
@@ -952,8 +919,9 @@ impl PeerCtl {
 			}
 
 			let my_label = {
-				let pairing = self.pairing_session.lock().await;
+				let pairing = self.pairing_state.lock().await;
 				pairing
+					.session
 					.as_ref()
 					.map(|s| s.my_advertised_label.clone())
 					.unwrap_or_else(|| "Peer".into())
@@ -987,6 +955,7 @@ impl PeerCtl {
 				target: "avenos::peeroxide",
 				"pairing conn complete for {remote_did}; attaching Groove mux on live link",
 			);
+			self.pairing_state.lock().await.mark_transport_up();
 		}
 
 		self.jazz_hyperswarm.on_swarm_connection(conn).await;
@@ -1027,19 +996,9 @@ impl PeerCtl {
 			.map(|id| id.to_string())
 			.collect();
 
-		let pairing_code_pending = self
-			.pairing_session
-			.lock()
-			.await
-			.as_ref()
-			.map(|s| s.code.clone());
+		let pairing_code_pending = self.pairing_state.lock().await.code_pending();
 
-		let pairing_session_topic = self
-			.pairing_session
-			.lock()
-			.await
-			.as_ref()
-			.map(|s| s.topic);
+		let pairing_session_topic = self.pairing_state.lock().await.topic();
 
 		let hyperswarm_start_error = self.swarm_start_error.lock().await.clone();
 		let mut p2p_diagnostics = self.p2p_diagnostics.read().await.clone();
@@ -1125,7 +1084,7 @@ impl PeerCtl {
 			.filter(|s| !s.is_empty())
 			.collect();
 
-		let pairing_active = self.pairing_session.lock().await.is_some();
+		let pairing_active = self.pairing_state.lock().await.is_active();
 		if pairing_active {
 			let early = self.allowed_remote_dids.read().await;
 			for did in early.iter() {
@@ -1148,21 +1107,28 @@ impl PeerCtl {
 
 	/// Force one DHT announce/lookup round while a 6-char invite code is active (pairing topic rendezvous).
 	pub async fn nudge_pairing_discovery(&self) -> Result<(), String> {
-		if self.pairing_session.lock().await.is_none() {
+		if !self.pairing_state.lock().await.is_active() {
+			return Ok(());
+		}
+		if self.transport_in_flight().await {
+			log::debug!(
+				target: "avenos::peeroxide",
+				"pairing discovery nudge skipped — transport in flight",
+			);
 			return Ok(());
 		}
 		let allow: Vec<String> = self.allowed_remote_dids.read().await.iter().cloned().collect();
 		if !allow.is_empty() {
 			let live = self.live_links.snapshot_mux_ready_dids().await;
-			let connecting = self.live_links.snapshot_connecting_dids().await;
+			let establishing = self.live_links.snapshot_establishing_dids().await;
 			let missing =
-				peer_reconnect::missing_reconnect_dids(&allow, &live, &connecting);
+				peer_reconnect::missing_reconnect_dids(&allow, &live, &establishing);
 			if !missing.is_empty() {
 				return self
 					.reconnect_peers(
 						"allowlist heal during pairing",
 						Some(allow),
-						peer_reconnect::ReconnectOpts::link_down(),
+						peer_reconnect::ReconnectOpts::pairing(),
 					)
 					.await;
 			}
@@ -1177,9 +1143,9 @@ impl PeerCtl {
 		active_remote_dids: &[String],
 	) -> Result<(), String> {
 		let live = self.live_links.snapshot_mux_ready_dids().await;
-		let connecting = self.live_links.snapshot_connecting_dids().await;
+		let establishing = self.live_links.snapshot_establishing_dids().await;
 		let missing =
-			peer_reconnect::missing_reconnect_dids(active_remote_dids, &live, &connecting);
+			peer_reconnect::missing_reconnect_dids(active_remote_dids, &live, &establishing);
 		if missing.is_empty() {
 			return Ok(());
 		}
@@ -1382,7 +1348,7 @@ impl PeerCtl {
 				if ctl.live_links.is_mux_ready_by_did(&remote_did).await {
 					break;
 				}
-				if ctl.pairing_session.lock().await.is_none()
+				if !ctl.pairing_state.lock().await.is_active()
 					&& tokio::time::Instant::now() >= deadline
 				{
 					break;
@@ -1449,7 +1415,7 @@ impl PeerCtl {
 								peer_reconnect::ReconnectOpts::link_down(),
 							)
 							.await;
-					} else if ctl.pairing_session.lock().await.is_some() {
+					} else if ctl.pairing_state.lock().await.is_active() {
 						let _ = ctl
 							.reconnect_peers(
 								"pairing link down",
@@ -1513,7 +1479,7 @@ impl PeerCtl {
 
 		let want: std::collections::HashSet<[u8; 32]> = active_remote_dids
 			.iter()
-			.map(|r| pair_topic_from_dids(local_did, r.trim()))
+			.map(|r| pairing::pair_topic_from_dids(local_did, r.trim()))
 			.collect();
 
 		let mut joined = self.joined_pair_topics.lock().await;
@@ -1532,7 +1498,7 @@ impl PeerCtl {
 		for t in want {
 			if !joined.contains(&t) {
 				// Same fast connect backoff as invite pairing — previously paired DIDs should relink quickly.
-				join_topic(&swarm, t, pairing_join_opts()).await?;
+				join_topic(&swarm, t, pairing::pairing_join_opts()).await?;
 				joined.insert(t);
 				topics_changed = true;
 			}
@@ -1548,7 +1514,7 @@ impl PeerCtl {
 		if want_count > 0 {
 			let skip_flush = defer_flush
 				|| self.live_links.any_in_flight().await
-				|| self.pairing_session.lock().await.is_some();
+				|| self.pairing_state.lock().await.is_active();
 			if skip_flush {
 				log::info!(
 					target: "avenos::peeroxide",
@@ -1606,7 +1572,7 @@ impl PeerCtl {
 		}
 
 		let local_did = self.local_peer_did().await?;
-		let topic = pair_topic_from_dids(&local_did, &remote);
+		let topic = pairing::pair_topic_from_dids(&local_did, &remote);
 
 		if self.joined_pair_topics.lock().await.contains(&topic) {
 			return Ok(());
@@ -1621,7 +1587,7 @@ impl PeerCtl {
 			return Ok(());
 		};
 
-		join_topic(&running.swarm, topic, pairing_join_opts()).await?;
+		join_topic(&running.swarm, topic, pairing::pairing_join_opts()).await?;
 		let swarm = running.swarm.clone();
 		drop(guard);
 
@@ -1655,9 +1621,9 @@ impl PeerCtl {
 	}
 
 	pub(crate) async fn peer_invite_create(&self) -> Result<String, String> {
-		let code = generate_pair_code();
-		let normalized = normalize_pair_code(&code)?;
-		let topic = pair_topic_hash(&normalized);
+		let code = pairing::generate_pair_code();
+		let normalized = pairing::normalize_pair_code(&code)?;
+		let topic = pairing::pair_topic_hash(&normalized);
 
 		let advertised = pairing_advertised_label(&self.app_handle);
 
@@ -1667,12 +1633,11 @@ impl PeerCtl {
 				return Err("Hyperswarm is not running yet — unlock identity and wait a moment.".into());
 			};
 
-			let mut pairing = self.pairing_session.lock().await;
-			if let Some(prev) = pairing.take() {
+			let mut state = self.pairing_state.lock().await;
+			if let Some(prev) = state.session.take() {
 				let _ = running.swarm.leave(prev.topic).await;
 			}
-
-			*pairing = Some(PairSession {
+			state.start_advertising(pairing::PairSession {
 				topic,
 				code: normalized.clone(),
 				my_advertised_label: advertised,
@@ -1698,8 +1663,8 @@ impl PeerCtl {
 		&self,
 		raw_code: String,
 	) -> Result<(), String> {
-		let normalized = normalize_pair_code(&raw_code)?;
-		let topic = pair_topic_hash(&normalized);
+		let normalized = pairing::normalize_pair_code(&raw_code)?;
+		let topic = pairing::pair_topic_hash(&normalized);
 
 		let my_label = pairing_advertised_label(&self.app_handle);
 
@@ -1710,13 +1675,13 @@ impl PeerCtl {
 			};
 
 			{
-				let mut pairing = self.pairing_session.lock().await;
-				if let Some(prev) = pairing.take() {
+				let mut state = self.pairing_state.lock().await;
+				if let Some(prev) = state.session.take() {
 					if prev.topic != topic {
 						let _ = running.swarm.leave(prev.topic).await;
 					}
 				}
-				*pairing = Some(PairSession {
+				state.start_joining(pairing::PairSession {
 					topic,
 					code: normalized.clone(),
 					my_advertised_label: my_label,
@@ -1742,13 +1707,12 @@ impl PeerCtl {
 	pub async fn peer_invite_cancel(&self) -> Result<(), String> {
 		let mut inner = self.inner.lock().await;
 		let Some(running) = inner.as_mut() else {
-			let mut pairing = self.pairing_session.lock().await;
-			pairing.take();
+			self.pairing_state.lock().await.clear();
 			return Ok(());
 		};
 
-		let mut pairing = self.pairing_session.lock().await;
-		if let Some(prev) = pairing.take() {
+		let mut state = self.pairing_state.lock().await;
+		if let Some(prev) = state.session.take() {
 			running
 				.swarm
 				.leave(prev.topic)
@@ -1756,6 +1720,7 @@ impl PeerCtl {
 				.map_err(|e| format!("pair leave failed: {e}"))?;
 			log::debug!(target: "avenos::peeroxide", "peer_invite_cancel left pairing topic");
 		}
+		state.clear();
 		self.emit_mesh_push();
 		Ok(())
 	}
@@ -1824,9 +1789,12 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 
 			let live_links = Arc::new(peer_link::PeerLinkCoordinator::new());
 			jazz_hyperswarm.attach_live_link_registry(Arc::clone(&live_links));
+			connect_ui_tracker.attach_coordinator(Arc::clone(&live_links));
 			app.manage(live_links.clone());
 
 			app.manage(jazz_hyperswarm.clone());
+
+			let heal_scheduler = Arc::new(heal_scheduler::HealScheduler::new());
 
 			let app_h = app.clone();
 			let ctl = Arc::new(PeerCtl {
@@ -1834,14 +1802,14 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 				swarm_starting: Arc::new(AtomicBool::new(false)),
 				swarm_start_notify: Arc::new(tokio::sync::Notify::new()),
 				jazz_hyperswarm,
-				pairing_session: Arc::new(tokio::sync::Mutex::new(None)),
+				pairing_state: Arc::new(tokio::sync::Mutex::new(pairing::PairingState::default())),
+				heal_scheduler: Arc::clone(&heal_scheduler),
 				app_handle: app_h,
 				allowed_remote_dids: Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new())),
 				joined_pair_topics: Arc::new(tokio::sync::Mutex::new(std::collections::HashSet::new())),
 				pending_allowlist: Arc::new(tokio::sync::Mutex::new(None)),
 				applied_peer_allow_sorted: Arc::new(tokio::sync::Mutex::new(None)),
 				last_upgrade_probe_at: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
-				last_reconnect_at_ms: Arc::new(AtomicU64::new(0)),
 				swarm_start_error: Arc::new(tokio::sync::Mutex::new(None)),
 				p2p_diagnostics: Arc::new(tokio::sync::RwLock::new(P2pDiagnostics {
 					central_mode: aven_relay_central_mode(),
@@ -1864,6 +1832,8 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 				last_network_interfaces: Arc::new(tokio::sync::RwLock::new(Vec::new())),
 				live_links,
 			});
+
+			heal_scheduler.spawn_drain(Arc::clone(&ctl));
 
 			let h = app.clone();
 			let ctl_unlock = ctl.clone();

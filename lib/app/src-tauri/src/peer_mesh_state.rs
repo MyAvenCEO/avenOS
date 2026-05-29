@@ -161,6 +161,7 @@ fn coordinator_connect_substate(
 ) -> Option<tauri_plugin_peer::PeerConnectSubstate> {
 	use tauri_plugin_peer::PeerLinkPhase;
 	match coordinator_phase {
+		Some(PeerLinkPhase::SwarmConnecting) => fallback,
 		Some(PeerLinkPhase::TransportUp | PeerLinkPhase::Handshaking) => {
 			Some(tauri_plugin_peer::PeerConnectSubstate::Handshaking)
 		}

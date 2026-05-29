@@ -16,6 +16,8 @@ use crate::peer_connect_ui::PeerTransportMode;
 pub enum PeerLinkPhase {
 	Idle,
 	Discovering,
+	/// peeroxide handshake / blind-relay in progress (before mux worker).
+	SwarmConnecting,
 	TransportUp,
 	Handshaking,
 	Live,
@@ -30,13 +32,27 @@ impl PeerLinkPhase {
 	pub fn suppresses_transport_with_worker(self, worker_active: bool) -> bool {
 		match self {
 			PeerLinkPhase::Live => true,
+			PeerLinkPhase::Discovering | PeerLinkPhase::SwarmConnecting => true,
 			PeerLinkPhase::TransportUp | PeerLinkPhase::Handshaking => worker_active,
 			_ => false,
 		}
 	}
 
 	pub fn counts_as_in_flight_with_worker(self, worker_active: bool) -> bool {
-		self.suppresses_transport_with_worker(worker_active)
+		match self {
+			PeerLinkPhase::Live => true,
+			PeerLinkPhase::Discovering | PeerLinkPhase::SwarmConnecting => true,
+			PeerLinkPhase::TransportUp | PeerLinkPhase::Handshaking => worker_active,
+			_ => false,
+		}
+	}
+
+	pub fn counts_as_establishing_with_worker(self, worker_active: bool) -> bool {
+		match self {
+			PeerLinkPhase::Discovering | PeerLinkPhase::SwarmConnecting => true,
+			PeerLinkPhase::TransportUp | PeerLinkPhase::Handshaking => worker_active,
+			_ => false,
+		}
 	}
 
 	pub fn counts_as_linked_for_sync(self) -> bool {
@@ -174,6 +190,38 @@ impl PeerLinkCoordinator {
 			None,
 		)
 		.await;
+	}
+
+	pub async fn set_swarm_connecting(&self, pk: [u8; 32], remote_did: String) {
+		let cid = crate::peer_util::client_id_from_pubkey(&pk);
+		self.upsert(
+			pk,
+			PeerLinkPhase::SwarmConnecting,
+			cid,
+			remote_did,
+			None,
+		)
+		.await;
+	}
+
+	pub async fn set_swarm_connecting_by_pk(&self, pk: [u8; 32]) {
+		let Ok(did) = crate::did::peer_did_from_ed25519(&pk) else {
+			return;
+		};
+		self.set_swarm_connecting(pk, did).await;
+	}
+
+	pub async fn clear_swarm_connecting(&self, pk: &[u8; 32]) {
+		let mut guard = self.by_pk.write().await;
+		if let Some(link) = guard.get(pk) {
+			if matches!(
+				link.phase,
+				PeerLinkPhase::Discovering | PeerLinkPhase::SwarmConnecting
+			) {
+				guard.remove(pk);
+			}
+		}
+		refresh_suppress_snapshot(&guard, &self.suppress_pks);
 	}
 
 	pub async fn set_transport_up(&self, pk: [u8; 32], client_id: ClientId, remote_did: String) {
@@ -326,6 +374,74 @@ impl PeerLinkCoordinator {
 		self.in_flight_count().await > 0
 	}
 
+	pub async fn establishing_count(&self) -> usize {
+		self.by_pk
+			.read()
+			.await
+			.values()
+			.filter(|l| l.phase.counts_as_establishing_with_worker(l.worker_active))
+			.count()
+	}
+
+	pub async fn any_establishing_or_live(&self) -> bool {
+		self.by_pk
+			.read()
+			.await
+			.values()
+			.any(|l| {
+				l.phase.counts_as_linked_for_sync()
+					|| l.phase.counts_as_establishing_with_worker(l.worker_active)
+			})
+	}
+
+	/// Single predicate for global `prepare_reconnect` / worker abort authorization.
+	pub async fn may_global_reset(&self) -> bool {
+		!self.any_establishing_or_live().await
+	}
+
+	pub async fn snapshot_establishing_dids(&self) -> HashSet<String> {
+		self.by_pk
+			.read()
+			.await
+			.values()
+			.filter(|l| l.phase.counts_as_establishing_with_worker(l.worker_active))
+			.map(|l| l.remote_did.clone())
+			.collect()
+	}
+
+	pub async fn all_allowlisted_live_or_establishing(
+		&self,
+		allowlist: &[String],
+	) -> bool {
+		if allowlist.is_empty() {
+			return true;
+		}
+		let live = self.snapshot_mux_ready_dids().await;
+		let establishing = self.snapshot_establishing_dids().await;
+		allowlist
+			.iter()
+			.all(|d| live.contains(d) || establishing.contains(d))
+	}
+
+	pub async fn register_worker(&self, pk: [u8; 32], client_id: ClientId) {
+		let mut guard = self.by_pk.write().await;
+		if let Some(link) = guard.get_mut(&pk) {
+			link.client_id = client_id;
+			link.worker_active = true;
+			link.since_ms = now_ms();
+		}
+		refresh_suppress_snapshot(&guard, &self.suppress_pks);
+	}
+
+	pub async fn unregister_worker(&self, pk: &[u8; 32]) {
+		let mut guard = self.by_pk.write().await;
+		if let Some(link) = guard.get_mut(pk) {
+			link.worker_active = false;
+			link.since_ms = now_ms();
+		}
+		refresh_suppress_snapshot(&guard, &self.suppress_pks);
+	}
+
 	pub async fn snapshot_all_dids(&self) -> HashSet<String> {
 		self.by_pk
 			.read()
@@ -335,6 +451,7 @@ impl PeerLinkCoordinator {
 				matches!(
 					l.phase,
 					PeerLinkPhase::Discovering
+						| PeerLinkPhase::SwarmConnecting
 						| PeerLinkPhase::TransportUp
 						| PeerLinkPhase::Handshaking
 						| PeerLinkPhase::Live
@@ -520,6 +637,19 @@ mod tests {
 			reg.transport_mode_for_pk(&pk).await,
 			Some(PeerTransportMode::Relay)
 		);
+	}
+
+	#[tokio::test]
+	async fn swarm_connecting_blocks_global_reset() {
+		let reg = PeerLinkCoordinator::new();
+		let pk = [9u8; 32];
+		reg.set_swarm_connecting(pk, "did:key:z6Mkswarm".into())
+			.await;
+		assert!(reg.should_suppress_transport_sync(&pk));
+		assert_eq!(reg.establishing_count().await, 1);
+		assert!(!reg.may_global_reset().await);
+		reg.clear_swarm_connecting(&pk).await;
+		assert!(reg.may_global_reset().await);
 	}
 
 	#[tokio::test]

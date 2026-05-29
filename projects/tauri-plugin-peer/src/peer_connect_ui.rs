@@ -1,7 +1,7 @@
 //! Per-peer connect sub-states and established transport mode for mesh UI.
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, Weak};
 
 use peeroxide_dht::connect_ui::{
 	ConnectProgressPhase, ConnectTransportMode, ConnectUiEvent, ConnectUiHook,
@@ -59,6 +59,7 @@ fn now_ms() -> u64 {
 pub struct PeerConnectUiTracker {
 	by_did: RwLock<HashMap<String, Row>>,
 	on_change: Option<Arc<dyn Fn() + Send + Sync>>,
+	coordinator: RwLock<Option<Weak<crate::peer_link::PeerLinkCoordinator>>>,
 	last_path_change_at_ms: RwLock<Option<u64>>,
 	last_foreground_heal_at_ms: RwLock<Option<u64>>,
 	heal_in_progress: RwLock<bool>,
@@ -69,10 +70,15 @@ impl PeerConnectUiTracker {
 		Self {
 			by_did: RwLock::new(HashMap::new()),
 			on_change,
+			coordinator: RwLock::new(None),
 			last_path_change_at_ms: RwLock::new(None),
 			last_foreground_heal_at_ms: RwLock::new(None),
 			heal_in_progress: RwLock::new(false),
 		}
+	}
+
+	pub fn attach_coordinator(&self, coord: Arc<crate::peer_link::PeerLinkCoordinator>) {
+		*self.coordinator.write().expect("coord attach poisoned") = Some(Arc::downgrade(&coord));
 	}
 
 	pub fn hook(self: &Arc<Self>) -> ConnectUiHook {
@@ -86,16 +92,56 @@ impl PeerConnectUiTracker {
 	}
 
 	fn apply(&self, event: ConnectUiEvent) {
-		let did = match &event {
+		let (did, remote_pk) = match &event {
 			ConnectUiEvent::Progress { remote_pk, .. }
 			| ConnectUiEvent::Connected { remote_pk, .. }
 			| ConnectUiEvent::Disconnected { remote_pk } => {
-				match crate::did::peer_did_from_ed25519(remote_pk) {
-					Ok(d) => d,
-					Err(_) => return,
-				}
+				let Ok(d) = crate::did::peer_did_from_ed25519(remote_pk) else {
+					return;
+				};
+				(d, *remote_pk)
 			}
 		};
+
+		if let Some(coord) = self
+			.coordinator
+			.read()
+			.ok()
+			.and_then(|g| g.as_ref().and_then(Weak::upgrade))
+		{
+			let coord = coord.clone();
+			let pk = remote_pk;
+			match &event {
+				ConnectUiEvent::Progress { phase, .. } => {
+					let phase = *phase;
+					tauri::async_runtime::spawn(async move {
+						match phase {
+							ConnectProgressPhase::Discovering => {
+								let cid = crate::peer_util::client_id_from_pubkey(&pk);
+								if let Ok(did) = crate::did::peer_did_from_ed25519(&pk) {
+									coord.set_discovering(pk, cid, did).await;
+								}
+							}
+							ConnectProgressPhase::Handshaking
+							| ConnectProgressPhase::Holepunching
+							| ConnectProgressPhase::RelayFallback => {
+								coord.set_swarm_connecting_by_pk(pk).await;
+							}
+						}
+					});
+				}
+				ConnectUiEvent::Disconnected { .. } => {
+					tauri::async_runtime::spawn(async move {
+						coord.clear_swarm_connecting(&pk).await;
+					});
+				}
+				ConnectUiEvent::Connected { .. } => {
+					tauri::async_runtime::spawn(async move {
+						coord.clear_swarm_connecting(&pk).await;
+					});
+				}
+			}
+		}
 
 		let changed = {
 			let mut map = self.by_did.write().expect("peer connect ui poisoned");

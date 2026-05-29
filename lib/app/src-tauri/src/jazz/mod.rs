@@ -2197,14 +2197,14 @@ pub(crate) async fn execute_mesh_reconcile(
 
 	let peer_ctl = app.state::<Arc<tauri_plugin_peer::PeerCtl>>();
 
-	if peer_ctl
-		.peer_transport_status()
-		.await
-		.pairing_code_pending
-		.is_some()
-	{
+	if peer_ctl.is_pairing_active().await {
+		if peer_ctl.transport_in_flight().await {
+			execute_publish_mesh(app, jazz, self_state.inner()).await;
+			return Ok(());
+		}
 		let _ = peer_ctl.nudge_pairing_discovery().await;
 		execute_publish_mesh(app, jazz, self_state.inner()).await;
+		return Ok(());
 	}
 
 	if !jazz.mesh_local_shell_gate.load(Ordering::Acquire) {
@@ -2329,6 +2329,7 @@ pub(crate) async fn execute_apply_peer_invite(
 		let allow =
 			crate::peers::list_active_peer_dids(client.as_ref()).await?;
 		let ctl = app.state::<Arc<tauri_plugin_peer::PeerCtl>>();
+		ctl.set_pairing_persisting().await;
 		let _ = ctl.peer_invite_cancel().await;
 		ctl.sync_allowlist_from_peer_table_deferred_flush(&local_did, &allow)
 			.await?;
