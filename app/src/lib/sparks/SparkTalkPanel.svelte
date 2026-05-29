@@ -4,7 +4,7 @@
 	import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 	import type { ComposerMode } from '$lib/intents/types'
 	import { persistSparkFiles } from '$lib/jazz/intent-files'
-	import { jazzSession, type JazzSessionReply } from '$lib/jazz/api'
+	import { jazzShell } from '$lib/runtime/jazz-shell'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import SparkMessageAttachments from '$lib/sparks/SparkMessageAttachments.svelte'
 	import { pairingLabelForSession } from '$lib/self/active-vault-ui'
@@ -30,7 +30,7 @@
 
 	let { sparkId, sparkName }: Props = $props()
 
-	let session = $state<JazzSessionReply | undefined>()
+	const session = $derived($jazzShell.session)
 	let err = $state<string | undefined>()
 	let sendBusy = $state(false)
 	let composerMode = $state<ComposerMode>('collapsed')
@@ -108,22 +108,6 @@
 
 	$effect(() => {
 		if (storeError) err = storeError
-	})
-
-	$effect(() => {
-		if (!tauri || !unlocked) {
-			session = undefined
-			return
-		}
-		let cancelled = false
-		void jazzSession()
-			.then((s) => {
-				if (!cancelled) session = s
-			})
-			.catch(() => {})
-		return () => {
-			cancelled = true
-		}
 	})
 
 	$effect(() => {

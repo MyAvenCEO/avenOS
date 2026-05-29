@@ -3,6 +3,7 @@ import { browser } from '$app/environment'
 import { writable, get } from 'svelte/store'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import type { PeerMeshStatusReply } from '$lib/peer/mesh-state'
+import { applyRuntimeSession } from '$lib/runtime/jazz-shell'
 import { getTableRowsStore } from '$lib/runtime/table-stores'
 import { grooveRuntime } from '$lib/runtime/groove-ipc'
 
@@ -36,7 +37,15 @@ export function waitForGrooveSessionReady(): Promise<void> {
 }
 
 type AvenosRuntimePayload =
-	| { kind: 'session'; grooveReady?: boolean; phase?: string; message?: string }
+	| {
+			kind: 'session'
+			grooveReady?: boolean
+			phase?: string
+			message?: string
+			peerDid?: string
+			defaultSparkUrn?: string
+			tables?: string[]
+	  }
 	| { kind: 'mesh'; snapshot: PeerMeshStatusReply }
 	| { kind: 'table'; table?: string; rows?: unknown[] }
 	| { kind: string; [key: string]: unknown }
@@ -56,8 +65,11 @@ export function attachAvenosRuntimeBridge(): () => void {
 		const p = e.payload
 		if (!p || typeof p !== 'object') return
 		if (gen !== bridgeGeneration) return
-		if (p.kind === 'session' && typeof p.grooveReady === 'boolean') {
-			grooveSessionReady.set(p.grooveReady)
+		if (p.kind === 'session') {
+			applyRuntimeSession(p)
+			if (typeof p.grooveReady === 'boolean') {
+				grooveSessionReady.set(p.grooveReady)
+			}
 		}
 		if (p.kind === 'mesh' && p.snapshot && typeof p.snapshot === 'object') {
 			peerMeshSnapshot.set(p.snapshot as PeerMeshStatusReply)

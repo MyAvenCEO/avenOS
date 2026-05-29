@@ -8,6 +8,8 @@ export type JazzRow = Record<string, any> & { id: string }
 export type JazzStatusReply = {
 	ready: boolean
 	tables: string[]
+	session?: JazzSessionReply
+	message?: string
 }
 
 export type JazzSessionReply = {

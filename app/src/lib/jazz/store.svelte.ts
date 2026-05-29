@@ -5,6 +5,7 @@ import { withTimeoutMs } from '$lib/async-timeout'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import type { DeviceSession } from '$lib/self/device-session-store'
 import { deviceSession } from '$lib/self/device-session-store'
+import { jazzShell } from '$lib/runtime/jazz-shell'
 import { grooveSessionReady, waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
 import { type JazzRow, jazzTable } from './api'
 
@@ -59,9 +60,27 @@ function createTablePool(table: string): InternalPool {
 		const kind = get(deviceSession).kind
 		if (kind !== 'unlocked') return
 		try {
-			if (!get(grooveSessionReady)) {
+			if (!get(grooveSessionReady) || !get(jazzShell).ready) {
 				await withTimeoutMs(
-					waitForGrooveSessionReady(),
+					Promise.all([
+						waitForGrooveSessionReady(),
+						new Promise<void>((resolve) => {
+							if (get(jazzShell).ready) {
+								resolve()
+								return
+							}
+							const unsub = jazzShell.subscribe((shell) => {
+								if (shell.ready) {
+									unsub()
+									resolve()
+								}
+							})
+							if (get(jazzShell).ready) {
+								unsub()
+								resolve()
+							}
+						}),
+					]),
 					SUBSCRIBE_BUDGET_MS,
 					'Groove session ready',
 				)
@@ -69,6 +88,7 @@ function createTablePool(table: string): InternalPool {
 			const u = await withTimeoutMs(
 				api.subscribe((next) => {
 					if (!alive) return
+					if (next.length === 0 && rows.length > 0) return
 					if (!rowsEqual(rows, next)) rows = next
 					loaded = true
 				}),
@@ -83,6 +103,7 @@ function createTablePool(table: string): InternalPool {
 			unlisten = u
 			void api.list().then((snap) => {
 				if (!alive) return
+				if (snap.length === 0 && rows.length > 0) return
 				if (!rowsEqual(rows, snap)) rows = snap
 				loaded = true
 			})
@@ -125,11 +146,24 @@ function createTablePool(table: string): InternalPool {
 		get(id: string) {
 			return api.get(id)
 		},
-		create(values: Record<string, unknown>) {
-			return api.create(values)
+		async create(values: Record<string, unknown>) {
+			const row = await api.create(values)
+			if (!alive) return row
+			const ix = rows.findIndex((r) => r.id === row.id)
+			if (ix >= 0) {
+				rows = rows.map((r, i) => (i === ix ? row : r))
+			} else {
+				rows = [...rows, row]
+			}
+			loaded = true
+			return row
 		},
-		update(id: string, patch: Record<string, unknown>) {
-			return api.update(id, patch)
+		async update(id: string, patch: Record<string, unknown>) {
+			const row = await api.update(id, patch)
+			if (!alive) return row
+			rows = rows.map((r) => (r.id === id ? row : r))
+			loaded = true
+			return row
 		},
 		delete(id: string) {
 			return api.delete(id)

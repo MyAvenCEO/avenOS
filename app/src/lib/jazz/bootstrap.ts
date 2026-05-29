@@ -1,5 +1,6 @@
 import { browser } from '$app/environment'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+import { markJazzShellReadyAfterUnlock } from '$lib/runtime/jazz-shell'
 import { jazzBootstrap, type JazzStatusReply } from './api'
 
 /**
@@ -11,9 +12,13 @@ export async function bootstrapJazzStrict(): Promise<JazzStatusReply> {
 		throw new Error('Jazz bootstrap requires the AvenOS desktop runtime.')
 	}
 	const reply = await jazzBootstrap()
+	markJazzShellReadyAfterUnlock(reply)
 	if (!reply.ready) {
+		const detail = reply.message?.trim()
 		throw new Error(
-			'Local Groove vault did not finish loading — try again or restart the app.',
+			detail
+				? `Local Groove vault did not finish loading: ${detail}`
+				: 'Local Groove vault did not finish loading — try again or restart the app.',
 		)
 	}
 	return reply

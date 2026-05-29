@@ -3,7 +3,7 @@
 	import { browser } from '$app/environment'
 	import { page } from '$app/state'
 	import type { JazzRow } from '$lib/jazz/api'
-	import { jazzSession, type JazzSessionReply } from '$lib/jazz/api'
+	import { jazzShell } from '$lib/runtime/jazz-shell'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/self/device-session-store'
@@ -11,7 +11,7 @@
 	const sparkParam = $derived(String((page.params as { sparkId?: string }).sparkId ?? ''))
 	const decodedSparkId = $derived(decodeURIComponent(sparkParam))
 
-	let session = $state<JazzSessionReply | undefined>()
+	const session = $derived($jazzShell.session)
 	let err = $state<string | undefined>()
 	let titleDraft = $state('')
 	let addBusy = $state(false)
@@ -44,22 +44,6 @@
 
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
-
-	$effect(() => {
-		if (!tauri || !unlocked) {
-			session = undefined
-			return
-		}
-		let cancelled = false
-		void jazzSession()
-			.then((s) => {
-				if (!cancelled) session = s
-			})
-			.catch(() => {})
-		return () => {
-			cancelled = true
-		}
-	})
 
 	const storeError = $derived(sparksStore.error ?? todos.error)
 	$effect(() => {

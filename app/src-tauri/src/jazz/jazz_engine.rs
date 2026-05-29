@@ -98,6 +98,66 @@ pub(super) fn bigint_i64(v: &Value) -> Result<i64, String> {
 	}
 }
 
+fn open_sealed_text_for_spark(
+	deks: &HashMap<(Uuid, i64), Dek>,
+	spark: Uuid,
+	raw: &str,
+) -> Result<String, String> {
+	if !raw.starts_with(CELL_ENVELOPE_V1) {
+		return Ok(raw.to_string());
+	}
+	let mut vers: Vec<i64> = deks
+		.keys()
+		.filter(|(s, _)| *s == spark)
+		.map(|(_, v)| *v)
+		.collect();
+	vers.sort_unstable();
+	for dv in vers {
+		let Some(dek) = deks.get(&(spark, dv)) else {
+			continue;
+		};
+		if let Ok((opened, _)) = open_text_cell_payload(dek.expose(), raw) {
+			return Ok(opened);
+		}
+	}
+	Err(format!("hydrate_open_sealed:{spark}"))
+}
+
+fn hydrate_text_at(
+	deks: &HashMap<(Uuid, i64), Dek>,
+	spark: Uuid,
+	cell: &Value,
+) -> Result<String, String> {
+	match cell {
+		Value::Text(s) => open_sealed_text_for_spark(deks, spark, s.as_str()),
+		Value::Bytea(b) => {
+			let s = std::str::from_utf8(b.as_slice()).map_err(|_| "hydrate_bytea_utf8".to_string())?;
+			open_sealed_text_for_spark(deks, spark, s)
+		}
+		x => Err(format!("hydrate_text_bad:{x:?}")),
+	}
+}
+
+fn hydrate_i64_at(
+	deks: &HashMap<(Uuid, i64), Dek>,
+	spark: Uuid,
+	cell: &Value,
+	storage_ty: &ColumnType,
+) -> Result<i64, String> {
+	match cell {
+		Value::BigInt(i) => Ok(*i),
+		Value::Integer(i) => Ok(*i as i64),
+		Value::Text(_) | Value::Bytea(_) => {
+			let opened = hydrate_text_at(deks, spark, cell)?;
+			let ipc = ipc_json_from_opened_sensitive_plaintext(&opened, storage_ty)?;
+			ipc
+				.as_i64()
+				.ok_or_else(|| format!("hydrate_i64_not_number:{opened}"))
+		}
+		x => Err(format!("hydrate_i64_bad:{x:?}")),
+	}
+}
+
 pub(super) fn spark_uuid_row(schema: &TableSchema, vals: &[Value]) -> Result<Uuid, String> {
 	let ix = col_ix(schema, "spark_id")?;
 	uuid_cell_at(vals, ix)
@@ -484,26 +544,18 @@ pub(super) async fn hydrate_shell(
 
 	let mut spark_versions = HashMap::new();
 	let sparks_rows = exec_list_rows(client, "sparks").await?;
+	let ver_storage_ty = sparks_schema
+		.columns
+		.columns
+		.get(ver_ix)
+		.map(|d| d.column_type.clone())
+		.ok_or("sparks_ver_col")?;
 
 	let manifest_opt: Option<VaultManifest> = std::fs::read_to_string(
 		vault_files.join(VAULT_MANIFEST_FILENAME),
 	)
 	.ok()
 	.and_then(|raw| serde_json::from_str(&raw).ok());
-
-	for (_oid, vals) in &sparks_rows {
-		spark_acc::ingest_genesis_row(
-			&mut vault,
-			spark_id_ix,
-			issuer_ix,
-			genesis_ix,
-			vals.as_slice(),
-			biscuit_root_pub,
-		)?;
-		let sid = uuid_cell_at(vals.as_slice(), spark_id_ix)?;
-		let v = bigint_i64(vals.get(ver_ix).ok_or("sparks_missing_version")?)?;
-		spark_versions.insert(sid, v);
-	}
 
 	let mut deks: HashMap<(Uuid, i64), Dek> = HashMap::new();
 
@@ -558,6 +610,41 @@ pub(super) async fn hydrate_shell(
 				}
 			}
 		}
+
+		for (_oid, vals) in &sparks_rows {
+			let sid = uuid_cell_at(vals.as_slice(), spark_id_ix)?;
+			let genesis_b64 = hydrate_text_at(
+				&deks,
+				sid,
+				vals.get(genesis_ix).ok_or("sparks_missing_genesis")?,
+			)?;
+			let issuer_pk = match vals.get(issuer_ix) {
+				Some(cell) => {
+					let opened = hydrate_text_at(&deks, sid, cell)?;
+					if opened.trim().is_empty() {
+						biscuit_root_pub
+					} else {
+						spark_acc::decode_issuer_pubkey_b64(&opened)?
+					}
+				}
+				None => biscuit_root_pub,
+			};
+			let biscuit = spark_acc::biscuit_from_storage(&genesis_b64, issuer_pk)?;
+			vault.sparks.insert(
+				sid,
+				spark_acc::BiscuitSpark {
+					spark_id: sid,
+					biscuit,
+				},
+			);
+			let v = hydrate_i64_at(
+				&deks,
+				sid,
+				vals.get(ver_ix).ok_or("sparks_missing_version")?,
+				&ver_storage_ty,
+			)?;
+			spark_versions.insert(sid, v);
+		}
 	} else {
 		let first_name = manifest_opt
 			.as_ref()
@@ -588,7 +675,10 @@ pub(super) async fn hydrate_shell(
 				("peer_did".into(), JsonValue::String(vault.peer_did.clone())),
 				("device_label".into(), JsonValue::String(device_label.into())),
 				("kind".into(), JsonValue::String("local".into())),
-				("added_at_ms".into(), JsonValue::Number(now_unix_ms_i64().into())),
+				(
+					"added_at_ms".into(),
+					JsonValue::String(now_unix_ms_i64().to_string()),
+				),
 				("status".into(), JsonValue::String("active".into())),
 			]
 			.into_iter()
@@ -611,7 +701,7 @@ pub(super) async fn hydrate_shell(
 			),
 			(
 				"created_at_ms".into(),
-				JsonValue::Number(now_unix_ms_i64().into()),
+				JsonValue::String(now_unix_ms_i64().to_string()),
 			),
 		]
 		.into_iter()
@@ -646,13 +736,10 @@ pub(super) async fn hydrate_shell(
 			)),
 		);
 		row.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
-		row.insert(
-			"current_dek_version".into(),
-			JsonValue::Number(1.into()),
-		);
+		row.insert("current_dek_version".into(), JsonValue::String("1".into()));
 		row.insert(
 			"created_at_ms".into(),
-			JsonValue::Number(now_unix_ms_i64().into()),
+			JsonValue::String(now_unix_ms_i64().to_string()),
 		);
 		let sparks_vals = super::insert_values(&sparks_schema, row)?;
 		client

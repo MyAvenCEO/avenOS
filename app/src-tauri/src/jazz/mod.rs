@@ -48,6 +48,10 @@ pub(super) const ENCRYPTED_META: &str = "_encryptedColumns";
 pub struct JazzStatusReply {
 	pub ready: bool,
 	pub tables: Vec<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub session: Option<JazzSessionReply>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub message: Option<String>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -895,6 +899,46 @@ impl ManagedJazz {
 		);
 		Ok(true)
 	}
+
+	/// Bootstrap / subscribe initial paint — emits even when no `subscribe` ref yet.
+	pub async fn publish_table_snapshot_force(
+		&self,
+		app: &tauri::AppHandle,
+		client: &JazzClient,
+		shell: &jazz_engine::ShellState,
+		table: &str,
+	) -> Result<(), String> {
+		if table == "peers" {
+			let rows = crate::peers::list_peer_rows(client).await?;
+			let _ = emit_peers_table_snapshot(self, app, &rows)?;
+			return Ok(());
+		}
+		let (snap, _) =
+			jazz_engine::query_table_publish(client, shell, table, ENCRYPTED_META).await?;
+		if table == "sparks" && snap.is_empty() {
+			log::warn!(
+				target: "avenos::jazz",
+				"bootstrap: sparks table empty after hydrate — UI may seed on next write",
+			);
+		}
+		let encoded = serde_json::to_string(&snap).map_err(|e| e.to_string())?;
+		{
+			let mut last = self
+				.last_table_snapshots
+				.write()
+				.expect("last_table_snapshots poisoned");
+			last.insert(table.to_string(), encoded);
+		}
+		emit_avenos_runtime(
+			app,
+			serde_json::json!({
+				"kind": "table",
+				"table": table,
+				"rows": snap,
+			}),
+		);
+		Ok(())
+	}
 }
 
 /// Emit `{ kind: "table", table: "peers" }` from canonical allowlisted remote rows.
@@ -1014,11 +1058,20 @@ fn decode_json_bytea(s: &str) -> Result<Vec<u8>, String> {
 	Err("expected base64 bytea column".to_string())
 }
 
+fn is_sealed_or_phase1_storage_string(s: &str) -> bool {
+	s == PHASE1_SECRET_PLACEHOLDER || s.starts_with(crate::crypto::CELL_ENVELOPE_V1)
+}
+
 pub(super) fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable: bool) -> Result<Value, String> {
 	if cell.is_null() || *cell == JsonValue::Null {
 		return nullable
 			.then(|| Ok(Value::Null))
 			.unwrap_or_else(|| Err("null not permitted".to_string()));
+	}
+	if let Some(s) = cell.as_str() {
+		if is_sealed_or_phase1_storage_string(s) {
+			return Ok(Value::Text(s.to_string()));
+		}
 	}
 	match col_ty {
 		ColumnType::Text => cell
@@ -1142,7 +1195,13 @@ pub(super) fn insert_values(table_schema: &TableSchema, values: JsonRow) -> Resu
 		let val = match cv {
 			None if cd.nullable => Value::Null,
 			None => return Err(format!("missing column `{key}`")),
-			Some(js) => json_cell_to_jazz(js, &cd.column_type, cd.nullable)?,
+			Some(js) => {
+				if matches!(cd.column_type, ColumnType::Text) {
+					loose_json_to_sealable_value(js, &cd.column_type, cd.nullable)?
+				} else {
+					json_cell_to_jazz(js, &cd.column_type, cd.nullable)?
+				}
+			}
 		};
 		row.push(val);
 	}
@@ -1400,6 +1459,8 @@ pub(crate) async fn groove_ipc_status(
 		return Ok(JazzStatusReply {
 			ready: false,
 			tables: vec![],
+			session: None,
+			message: None,
 		});
 	}
 
@@ -1417,6 +1478,8 @@ pub(crate) async fn groove_ipc_status(
 		return Ok(JazzStatusReply {
 			ready: false,
 			tables: vec![],
+			session: None,
+			message: None,
 		});
 	}
 
@@ -1426,6 +1489,8 @@ pub(crate) async fn groove_ipc_status(
 			return Ok(JazzStatusReply {
 				ready: false,
 				tables: vec![],
+				session: None,
+				message: None,
 			});
 		}
 	};
@@ -1439,8 +1504,20 @@ pub(crate) async fn groove_ipc_status(
 	Ok(JazzStatusReply {
 		ready: shell_ready,
 		tables: names,
+		session: None,
+		message: None,
 	})
 }
+
+fn jazz_session_reply_from_shell(shell: &jazz_engine::ShellState) -> JazzSessionReply {
+	JazzSessionReply {
+		peer_did: shell.peer_did.clone(),
+		peer_did_short: jazz_engine::short_peer_did(&shell.peer_did),
+		default_spark_urn: jazz_engine::spark_urn(shell.default_spark),
+	}
+}
+
+const BOOTSTRAP_UI_TABLES: &[&str] = &["sparks", "humans", "peers", "messages", "todos", "files"];
 
 pub(crate) async fn groove_ipc_bootstrap(
 	app: &tauri::AppHandle,
@@ -1452,16 +1529,34 @@ pub(crate) async fn groove_ipc_bootstrap(
 	let mut tables: Vec<String> = sch.keys().map(|k| k.to_string()).collect();
 	tables.sort();
 
+	let client_arc = client.clone();
 	match jazz_shell_ready(app, jazz, self_state, client).await {
 		Ok(shell) => {
+			let session = jazz_session_reply_from_shell(shell.as_ref());
 			emit_avenos_runtime(app, serde_json::json!({
 				"kind": "session",
 				"phase": "ready",
 				"grooveReady": true,
-				"peerDid": shell.peer_did,
-				"defaultSparkUrn": jazz_engine::spark_urn(shell.default_spark),
+				"peerDid": session.peer_did,
+				"defaultSparkUrn": session.default_spark_urn,
 				"tables": tables.clone(),
 			}));
+			for table in BOOTSTRAP_UI_TABLES {
+				if let Err(e) = jazz
+					.publish_table_snapshot_force(
+						app,
+						client_arc.as_ref(),
+						shell.as_ref(),
+						table,
+					)
+					.await
+				{
+					log::warn!(
+						target: "avenos::jazz",
+						"bootstrap snapshot {table}: {e}",
+					);
+				}
+			}
 			#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 			{
 				if let Err(e) = execute_mesh_refresh_full(app, jazz).await {
@@ -1474,6 +1569,8 @@ pub(crate) async fn groove_ipc_bootstrap(
 			Ok(JazzStatusReply {
 				ready: true,
 				tables,
+				session: Some(session),
+				message: None,
 			})
 		}
 		Err(e) => {
@@ -1487,6 +1584,8 @@ pub(crate) async fn groove_ipc_bootstrap(
 			Ok(JazzStatusReply {
 				ready: false,
 				tables,
+				session: None,
+				message: Some(e),
 			})
 		}
 	}
@@ -2200,10 +2299,7 @@ pub(crate) async fn groove_ipc_jazz_subscribe(
 	self_state: &SelfState,
 	table: String,
 ) -> Result<(), String> {
-	let n = jazz.bump_table_ui_ref(&table).await;
-	if n != 1 {
-		return Ok(());
-	}
+	let _n = jazz.bump_table_ui_ref(&table).await;
 	if table == "peers" {
 		let client = with_connected_client(jazz, app, self_state).await?;
 		let rows = crate::peers::list_peer_rows(client.as_ref()).await?;
@@ -2923,5 +3019,20 @@ mod json_cell_tests {
 		};
 		let err = json_cell_to_jazz(&json!([]), &row_ty, false).unwrap_err();
 		assert!(err.contains("engine-only"));
+	}
+
+	#[test]
+	fn json_cell_to_jazz_sealed_bigint_stored_as_text() {
+		let sealed = format!("{}abc", crate::crypto::CELL_ENVELOPE_V1);
+		let v = json_cell_to_jazz(&json!(sealed), &ColumnType::Text, false).unwrap();
+		assert!(matches!(v, Value::Text(s) if s.starts_with(crate::crypto::CELL_ENVELOPE_V1)));
+	}
+
+	#[test]
+	fn sealed_bigint_canonical_roundtrip_ipc() {
+		use crate::crypto::{groove_value_to_canonical_utf8, ipc_json_from_opened_sensitive_plaintext};
+		let canon = groove_value_to_canonical_utf8(&Value::BigInt(1_704_000_000_000)).unwrap();
+		let ipc = ipc_json_from_opened_sensitive_plaintext(&canon, &ColumnType::Text).unwrap();
+		assert_eq!(ipc.as_i64(), Some(1_704_000_000_000));
 	}
 }

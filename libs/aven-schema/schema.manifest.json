@@ -14,9 +14,14 @@
 					"type": "uuid[]",
 					"plaintext": true,
 					"exposeTs": "string[]",
-					"comment": "ordered peer row IDs (Groove UUID object ids referencing peers)"
+					"comment": "routing — ordered peer row object ids"
 				},
-				{ "name": "created_at_ms", "type": "bigint", "plaintext": true }
+				{
+					"name": "created_at_ms",
+					"type": "text",
+					"exposeTs": "bigint",
+					"comment": "sealed at rest"
+				}
 			]
 		},
 		"peers": {
@@ -41,8 +46,9 @@
 				},
 				{
 					"name": "added_at_ms",
-					"type": "bigint",
-					"plaintext": true
+					"type": "text",
+					"exposeTs": "bigint",
+					"comment": "sealed at rest"
 				},
 				{
 					"name": "status",
@@ -54,31 +60,65 @@
 		},
 		"keyshares": {
 			"columns": [
-				{ "name": "spark_id", "type": "uuid", "plaintext": true },
-				{ "name": "dek_version", "type": "bigint", "plaintext": true },
-				{ "name": "recipient_did", "type": "text", "plaintext": true },
+				{
+					"name": "spark_id",
+					"type": "uuid",
+					"plaintext": true,
+					"comment": "routing — keyshare lookup"
+				},
+				{
+					"name": "dek_version",
+					"type": "bigint",
+					"plaintext": true,
+					"comment": "routing — DEK version line"
+				},
+				{
+					"name": "recipient_did",
+					"type": "text",
+					"plaintext": true,
+					"comment": "routing — recipient DID"
+				},
 				{
 					"name": "wrapper_did",
 					"type": "text",
 					"plaintext": true,
-					"comment": "DID of the admin who wrapped this DEK (genesis issuer or delegated granter) — recipient derives KEK via DH(recipient, wrapper)"
+					"comment": "routing — granter DID for KEK derivation"
 				},
-				{ "name": "wrapped_dek", "type": "text", "plaintext": true }
+				{
+					"name": "wrapped_dek",
+					"type": "text",
+					"plaintext": true,
+					"comment": "routing — wrapped DEK blob"
+				}
 			]
 		},
 		"sparks": {
 			"columns": [
-				{ "name": "spark_id", "type": "uuid", "plaintext": true },
-				{ "name": "name", "type": "text", "plaintext": true },
+				{
+					"name": "spark_id",
+					"type": "uuid",
+					"plaintext": true,
+					"comment": "routing — spark row identity"
+				},
+				{ "name": "name", "type": "text", "comment": "sealed at rest" },
 				{
 					"name": "issuer_pubkey_b64",
 					"type": "text",
-					"plaintext": true,
-					"comment": "biscuit root Ed25519 public key (URL-safe base64, 32 bytes) — verifier anchor for genesis + third-party delegation blocks"
+					"comment": "sealed — biscuit root Ed25519 public key (URL-safe base64)"
 				},
-				{ "name": "genesis_b64", "type": "text", "plaintext": true },
-				{ "name": "current_dek_version", "type": "bigint", "plaintext": true },
-				{ "name": "created_at_ms", "type": "bigint", "plaintext": true }
+				{ "name": "genesis_b64", "type": "text", "comment": "sealed — biscuit chain" },
+				{
+					"name": "current_dek_version",
+					"type": "text",
+					"exposeTs": "bigint",
+					"comment": "sealed at rest"
+				},
+				{
+					"name": "created_at_ms",
+					"type": "text",
+					"exposeTs": "bigint",
+					"comment": "sealed at rest"
+				}
 			]
 		},
 		"todos": {
@@ -87,7 +127,7 @@
 					"name": "spark_id",
 					"type": "uuid",
 					"plaintext": true,
-					"comment": "public linkage — ACC routing; ciphertext AAD binds rows to sparks"
+					"comment": "routing — ACC + sync"
 				},
 				{ "name": "title", "type": "text" },
 				{
@@ -104,24 +144,23 @@
 					"name": "spark_id",
 					"type": "uuid",
 					"plaintext": true,
-					"comment": "spark scope — biscuit + P2P sync routing"
+					"comment": "routing — biscuit + P2P sync"
 				},
 				{
 					"name": "created_at_ms",
-					"type": "bigint",
-					"plaintext": true,
-					"comment": "ordering in chat threads"
+					"type": "text",
+					"exposeTs": "bigint",
+					"comment": "sealed at rest"
 				},
 				{
 					"name": "author_did",
 					"type": "text",
-					"plaintext": true,
-					"comment": "did:key of sender — display without decrypting body"
+					"comment": "sealed at rest"
 				},
 				{
 					"name": "body",
 					"type": "text",
-					"comment": "message text — sealed at rest per spark DEK"
+					"comment": "sealed at rest"
 				}
 			]
 		},
@@ -131,39 +170,31 @@
 					"name": "spark_id",
 					"type": "uuid",
 					"plaintext": true,
-					"comment": "spark scope — ACC routing; ciphertext AAD binds rows to sparks"
+					"comment": "routing — ACC + sync"
 				},
-				{
-					"name": "intent_id",
-					"type": "text",
-					"plaintext": true,
-					"comment": "client intent row id when uploaded from composer"
-				},
-				{
-					"name": "filename",
-					"type": "text",
-					"plaintext": true
-				},
+				{ "name": "intent_id", "type": "text", "comment": "sealed at rest" },
+				{ "name": "filename", "type": "text", "comment": "sealed at rest" },
 				{
 					"name": "mime_type",
 					"type": "text",
-					"plaintext": true,
-					"comment": "application/pdf | image/jpeg | image/png | image/svg+xml"
+					"comment": "sealed at rest"
 				},
 				{
 					"name": "size_bytes",
-					"type": "bigint",
-					"plaintext": true
+					"type": "text",
+					"exposeTs": "bigint",
+					"comment": "sealed at rest"
 				},
 				{
 					"name": "created_at_ms",
-					"type": "bigint",
-					"plaintext": true
+					"type": "text",
+					"exposeTs": "bigint",
+					"comment": "sealed at rest"
 				},
 				{
 					"name": "content",
 					"type": "bytea",
-					"comment": "file bytes — sealed at rest (jpeg, png, svg, pdf); IPC JSON uses base64"
+					"comment": "sealed at rest — IPC JSON uses base64"
 				}
 			]
 		}

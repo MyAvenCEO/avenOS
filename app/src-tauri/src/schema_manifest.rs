@@ -40,7 +40,8 @@ struct ManifestColumn {
 	ty: String,
 	#[serde(default)]
 	nullable: bool,
-	/// When false (default): column is encrypted at rest and gated by biscuit on IPC paths.
+	/// When true: routing/sync metadata stored unsealed (e.g. `spark_id`). Not world-readable.
+	/// When false (default): column is sealed at rest and gated by biscuit on IPC paths.
 	#[serde(default)]
 	plaintext: bool,
 	/// Required for `"type": "enum"`.
@@ -186,7 +187,8 @@ fn read_manifest() -> Result<Manifest, String> {
 	serde_json::from_str(&raw).map_err(|e| format!("manifest JSON: {e}"))
 }
 
-/// Rows marked `plaintext` in the manifest are public; everything else is sealed + IPC-gated by default.
+/// Columns **without** `plaintext: true` are sealed at rest; IPC still requires biscuit admin for spark-scoped tables.
+/// `plaintext: true` marks routing metadata only (not a “public visibility” mode).
 pub fn manifest_sensitive_columns() -> Result<HashMap<String, HashSet<String>>, String> {
 	let m = read_manifest()?;
 	let mut out: HashMap<String, HashSet<String>> = HashMap::new();
