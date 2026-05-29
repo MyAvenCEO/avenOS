@@ -124,7 +124,7 @@ $effect(() => {
 				Security: VibeSandboxFrame (mounted inside DisplayView for the
 				HITL branch) embeds the chosen vibe view inside the
 				separate-origin sandbox proxy at PUBLIC_VIBE_SANDBOX_URL via
-				the `@avenos/vibe-app-sandbox` host bridge (same pattern used
+				the `@avenos/aven-vibe-sandbox` host bridge (same pattern used
 				by /docs/vibe-apps). All postMessage origin checks and iframe
 				`sandbox` attributes are owned by `VibeSandboxFrame`.
 			-->

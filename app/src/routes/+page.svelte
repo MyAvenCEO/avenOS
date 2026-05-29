@@ -19,7 +19,7 @@ import {
 	type ComposerMode,
 	secondsFromElapsedMs
 } from '$lib/intents/types'
-import type { VibeAppId } from '@avenos/vibe-apps'
+import type { VibeAppId } from '@avenos/aven-vibes'
 import { persistIntentFiles } from '$lib/jazz/intent-files'
 import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
 
@@ -27,7 +27,7 @@ import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
  * Pool of vibe-view apps used as live HITL placeholders inside the Activity
  * slot. All four registered apps are visually meaningful (data-view style),
  * so we expose the full set and pick one per HITL session at random. Mirrors
- * the IDs registered in `@avenos/vibe-apps` and listed by `/docs/vibe-apps`.
+ * the IDs registered in `@avenos/aven-vibes` and listed by `/docs/vibe-apps`.
  */
 const HITL_VIBE_APPS: VibeAppId[] = ['invoice', 'bank-statement', 'contract', 'todos']
 

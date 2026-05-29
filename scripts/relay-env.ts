@@ -69,18 +69,7 @@ export function requireRelaySeedHex(repoRoot: string, label: string): string {
 
 /** Legacy on-disk seed paths (repo dev + infra relay subtree). */
 export function findLegacyRelaySeedFiles(repoRoot: string): string[] {
-	const candidates = [
-		path.join(repoRoot, '.avenOS', 'dev', 'p2p-signal', LEGACY_RELAY_SEED_NAME),
-		path.join(
-			repoRoot,
-			'infra',
-			'p2p-signal-relay',
-			'.avenOS',
-			'dev',
-			'p2p-signal',
-			LEGACY_RELAY_SEED_NAME,
-		),
-	]
+	const candidates = [path.join(repoRoot, '.avenOS', 'dev', 'p2p-signal', LEGACY_RELAY_SEED_NAME)]
 	const keysDir = process.env.AVENOS_P2P_SIGNAL_KEYS_DIR?.trim()
 	if (keysDir) {
 		candidates.unshift(path.join(keysDir, LEGACY_RELAY_SEED_NAME))

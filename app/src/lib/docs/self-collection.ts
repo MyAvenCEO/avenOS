@@ -1,5 +1,5 @@
 /**
- * Build-time catalog of Markdown chapters under libs/docs/self/founders/ and self/developers/.
+ * Build-time catalog of Markdown chapters under docs/self/founders/ and self/developers/.
  * Each group is independently ordered. Slugs within a group are filename-stems (e.g. `01-your-identity-on-device`).
  */
 

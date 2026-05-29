@@ -36,7 +36,7 @@ CLI binary, server routes, WebSocket client, benches, examples, SQLite, SurrealK
 ## Consumers
 
 - `app/src-tauri` — `groove = { package = "aven-db", features = ["client-p2p"] }`
-- `projects/tauri-plugin-peer` — same
+- `libs/tauri-plugin-peer` — same
 - `libs/aven-schema/crates/schema-hash` — same
 
 ## Re-vendor

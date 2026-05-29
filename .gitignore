@@ -2,7 +2,7 @@ node_modules
 
 # Local second brain vault + upstream mirrors (never commit)
 /.data/
-/projects/aven-ceo/.data/
+/libs/aven-website/.data/
 /.repos/
 
 # Output
@@ -11,10 +11,10 @@ node_modules
 .netlify
 .wrangler
 /.svelte-kit
-/projects/*/.svelte-kit
+/ARCHIVE/*/.svelte-kit
 /app/.svelte-kit
 /build
-/projects/*/build
+/ARCHIVE/*/build
 /app/build
 
 # OS
@@ -41,8 +41,8 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
 # Vibe app sandbox + mini-app build outputs (rebuilt by `bun run build` per package).
-/libs/vibe-app-sandbox/sandbox/dist/
-/libs/vibe-apps/*/dist/
+/libs/aven-vibe-sandbox/sandbox/dist/
+/libs/aven-vibes/*/dist/
 
 # Upstream jazz2 mirror (local refresh only — never commit)
 /tools/jazz2-upstream/

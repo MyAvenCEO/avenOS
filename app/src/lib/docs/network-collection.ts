@@ -1,5 +1,5 @@
 /**
- * Markdown chapters under libs/docs/network/
+ * Markdown chapters under docs/network/
  */
 export type DocGroup = 'founders' | 'developers'
 

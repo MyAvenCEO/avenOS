@@ -2,7 +2,7 @@
 # Verification gates after jazz2 re-vendor (libs/aven-db). Requires Rust 1.93.1.
 #
 # Single Cargo target for the whole repo: AvenOS/.cargo/config.toml → target/rust/
-# Do not run parallel `cargo` on that directory — use scripts/kill-stuck-cargo.sh if stuck on file lock.
+# Do not run parallel `cargo` on that directory — if file-locked, stop other cargo processes first.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

@@ -1,5 +1,5 @@
 /**
- * Markdown chapters under libs/docs/sparks/
+ * Markdown chapters under docs/sparks/
  */
 export type DocGroup = 'founders' | 'developers'
 

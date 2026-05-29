@@ -1,5 +1,5 @@
 <script lang="ts">
-import { type VibeAppId, vibeAppList } from '@avenos/vibe-apps'
+import { type VibeAppId, vibeAppList } from '@avenos/aven-vibes'
 import VibeSandboxFrame from '$lib/vibe-apps/VibeSandboxFrame.svelte'
 
 let selectedId = $state<VibeAppId>('invoice')

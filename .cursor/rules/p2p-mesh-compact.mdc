@@ -1,7 +1,7 @@
 ---
 description: P2P/mesh compact architecture — one roundtrip, push-only UI, layer ownership
 globs:
-  - projects/tauri-plugin-peer/**/*.rs
+  - libs/tauri-plugin-peer/**/*.rs
   - app/src-tauri/src/peer*.rs
   - app/src-tauri/src/jazz/**/*.rs
   - app/src/lib/peer/**/*.{ts,svelte}
@@ -51,5 +51,5 @@ Plugin emits coarse signals only (`peer:hyperswarm-ready`, `peer:invite-paired`,
 
 ## Docs
 
-- **Users:** [libs/docs/network/founders/](libs/docs/network/founders/) — My Network, pairing, status, auto-reconnect, troubleshooting
-- **Developers:** [01-architecture.md](libs/docs/network/developers/01-architecture.md), [06-auto-heal-and-coordinator.md](libs/docs/network/developers/06-auto-heal-and-coordinator.md), [02-invite-protocol.md](libs/docs/network/developers/02-invite-protocol.md), [05-p2p-signal.md](libs/docs/network/developers/05-p2p-signal.md)
+- **Users:** [docs/network/founders/](docs/network/founders/) — My Network, pairing, status, auto-reconnect, troubleshooting
+- **Developers:** [01-architecture.md](docs/network/developers/01-architecture.md), [06-auto-heal-and-coordinator.md](docs/network/developers/06-auto-heal-and-coordinator.md), [02-invite-protocol.md](docs/network/developers/02-invite-protocol.md), [05-p2p-signal.md](docs/network/developers/05-p2p-signal.md)

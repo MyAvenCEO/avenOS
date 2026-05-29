@@ -93,7 +93,7 @@ fn sanitize_csp_domains(domains: &[String]) -> Vec<&str> {
 		.collect()
 }
 
-/// Mirrors `buildCspHeader` in `libs/vibe-app-sandbox/sandbox/serve.ts`.
+/// Mirrors `buildCspHeader` in `libs/aven-vibe-sandbox/sandbox/serve.ts`.
 fn build_csp_header(csp: &McpUiResourceCsp) -> String {
 	let resource_domains = sanitize_csp_domains(&csp.resource_domains).join(" ");
 	let connect_domains = sanitize_csp_domains(&csp.connect_domains).join(" ");
@@ -169,7 +169,7 @@ fn read_sandbox_asset(app: &AppHandle, relative: &str) -> std::io::Result<Vec<u8
 	if cfg!(debug_assertions) {
 		let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 		let live = manifest_dir.join(format!(
-			"../../libs/vibe-app-sandbox/sandbox/dist/{relative}"
+			"../../libs/aven-vibe-sandbox/sandbox/dist/{relative}"
 		));
 		if live.exists() {
 			return std::fs::read(live);
@@ -186,7 +186,7 @@ fn read_sandbox_asset(app: &AppHandle, relative: &str) -> std::io::Result<Vec<u8
 
 	let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 	let fallback = manifest_dir.join(format!(
-		"../../libs/vibe-app-sandbox/sandbox/dist/{relative}"
+		"../../libs/aven-vibe-sandbox/sandbox/dist/{relative}"
 	));
 	std::fs::read(fallback)
 }
@@ -238,7 +238,7 @@ fn serve_vibe_sandbox(
 			Err(_) => http::Response::builder()
 				.status(http::StatusCode::SERVICE_UNAVAILABLE)
 				.body(
-					b"Missing ext-apps.js; run `bun run build` in libs/vibe-app-sandbox."
+					b"Missing ext-apps.js; run `bun run build` in libs/aven-vibe-sandbox."
 						.to_vec(),
 				)
 				.unwrap(),
@@ -266,7 +266,7 @@ fn serve_vibe_sandbox(
 			Err(_) => http::Response::builder()
 				.status(http::StatusCode::SERVICE_UNAVAILABLE)
 				.body(
-					b"Missing sandbox.html; run `bun run build` in libs/vibe-app-sandbox."
+					b"Missing sandbox.html; run `bun run build` in libs/aven-vibe-sandbox."
 						.to_vec(),
 				)
 				.unwrap(),

@@ -44,8 +44,8 @@
 			"icons/icon.ico"
 		],
 		"resources": {
-			"../../libs/vibe-app-sandbox/sandbox/dist/sandbox.html": "vibe-sandbox/sandbox.html",
-			"../../libs/vibe-app-sandbox/sandbox/dist/ext-apps.js": "vibe-sandbox/ext-apps.js",
+			"../../libs/aven-vibe-sandbox/sandbox/dist/sandbox.html": "vibe-sandbox/sandbox.html",
+			"../../libs/aven-vibe-sandbox/sandbox/dist/ext-apps.js": "vibe-sandbox/ext-apps.js",
 			"../../libs/aven-schema/schema.manifest.json": "aven-schema/schema.manifest.json",
 			"../../libs/aven-schema/migrations/registry.json": "aven-schema/migrations/registry.json",
 			"../../libs/aven-schema/migrations/snapshots/before-files.manifest.json": "aven-schema/migrations/snapshots/before-files.manifest.json"

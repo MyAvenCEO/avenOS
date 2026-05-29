@@ -10,7 +10,7 @@
  * UI-layer concerns shared across the extracted components.
  */
 
-import type { VibeAppId } from '@avenos/vibe-apps'
+import type { VibeAppId } from '@avenos/aven-vibes'
 
 /** Human-in-the-loop wait, autonomous work, resolved success, archive, or terminal failure. */
 export type IntentStatus = 'hitl' | 'working' | 'success' | 'archived' | 'error'

@@ -1,5 +1,5 @@
 /**
- * Markdown chapters under libs/docs/content/{overview,sheet,production,storytelling,prompts}/
+ * Markdown chapters under docs/content/{overview,sheet,production,storytelling,prompts}/
  */
 export const contentDocSections = ['overview', 'sheet', 'production', 'storytelling', 'prompts'] as const
 

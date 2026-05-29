@@ -6,7 +6,7 @@
  * Set AVEN_IOS_SIM_DEVICE to force a simulator name; otherwise the CLI picks one.
  *
  * iOS Simulator uses the same **dev insecure identity** as Linux (plain root secret on disk).
- * TestFlight / device builds keep Secure Enclave — see libs/docs/deploy/ios-simulator-local.md.
+ * TestFlight / device builds keep Secure Enclave — see docs/deploy/ios-simulator-local.md.
  */
 import { existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
