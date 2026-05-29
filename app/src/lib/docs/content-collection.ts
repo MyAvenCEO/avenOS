@@ -1,7 +1,7 @@
 /**
- * Markdown chapters under libs/docs/content/{overview,sheet,storytelling}/
+ * Markdown chapters under libs/docs/content/{overview,sheet,production,storytelling}/
  */
-export const contentDocSections = ['overview', 'sheet', 'storytelling'] as const
+export const contentDocSections = ['overview', 'sheet', 'production', 'storytelling'] as const
 
 export type ContentDocSection = (typeof contentDocSections)[number]
 
@@ -25,6 +25,11 @@ const sectionModules: Record<ContentDocSection, Record<string, string>> = {
 		eager: true,
 	}) as Record<string, string>,
 	sheet: import.meta.glob('@avenos/docs/content/sheet/*.md', {
+		query: '?raw',
+		import: 'default',
+		eager: true,
+	}) as Record<string, string>,
+	production: import.meta.glob('@avenos/docs/content/production/*.md', {
 		query: '?raw',
 		import: 'default',
 		eager: true,
@@ -76,11 +81,13 @@ function buildSection(modules: Record<string, string>, section: ContentDocSectio
 
 export const overviewDocs = buildSection(sectionModules.overview, 'overview')
 export const sheetDocs = buildSection(sectionModules.sheet, 'sheet')
+export const productionDocs = buildSection(sectionModules.production, 'production')
 export const storytellingDocs = buildSection(sectionModules.storytelling, 'storytelling')
 
 export const docsBySection: Record<ContentDocSection, ContentDocMeta[]> = {
 	overview: overviewDocs,
 	sheet: sheetDocs,
+	production: productionDocs,
 	storytelling: storytellingDocs,
 }
 

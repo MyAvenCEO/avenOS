@@ -1,8 +1,6 @@
 ---
-title: Episode test
+title: The episode test
 ---
-
-## THE EPISODE TEST
 
 Every script must pass this:
 

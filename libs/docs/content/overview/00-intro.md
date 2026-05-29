@@ -10,9 +10,9 @@ title: Intro
 
 ## Overview
 
-*The World We Deserve* follows the first Sovereign Founder — Samuel — his son Momo, and AvenMaia, the first avenCEO, as they lay the literal bricks of MaiaCity from a dome tent on a campsite toward a city of 1.3 million opening in 2042. Every episode is one inch of movement from the anti-vision trap (work vs. people) toward a life where building and presence are the same act.
+*The World We Deserve* follows the first Sovereign Founder — Samuel — his son Momo, and AvenMaia, the first avenCEO, as they lay the literal bricks of MaiaCity from a dome tent at Schnitzmühle toward a city of 1.3 million opening in 2042. Every episode is one inch of movement from the anti-vision trap (work vs. people) toward a life where building and presence are the same act.
 
-The docs under **Identity Sheet** are the bible: exact vocabulary, the vision ↔ anti-vision gap, the burst–handoff–living rhythm, MaiaCity, and the characters. **Storytelling** holds the PAST framework — how every script is actually told. Read **Intro** once; keep the rest open while you write or produce.
+The docs under **Identity Sheet** are the bible: exact vocabulary, the vision ↔ anti-vision gap, the burst–handoff–living rhythm, MaiaCity, and the characters. **Production** covers format and camera language. **Storytelling** holds the PAST framework — how every script is actually told. Read **Intro** once; keep the rest open while you write or produce.
 
 ## avenMAIA — brand, handle, and myth
 

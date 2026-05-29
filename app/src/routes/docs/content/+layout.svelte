@@ -2,13 +2,14 @@
 	import { page } from '$app/state'
 	import DocsChapterLayout from '$lib/docs/DocsChapterLayout.svelte'
 	import { asideNavSectionsFromDocGroups } from '$lib/docs/docs-chapter-nav'
-	import { overviewDocs, sheetDocs, storytellingDocs } from '$lib/docs/content-collection'
+	import { overviewDocs, sheetDocs, productionDocs, storytellingDocs } from '$lib/docs/content-collection'
 
 	let { children } = $props()
 
 	const groups = [
 		{ label: 'Start here', docs: overviewDocs, base: '/docs/content/overview' },
 		{ label: 'Identity sheet', docs: sheetDocs, base: '/docs/content/sheet' },
+		{ label: 'Production', docs: productionDocs, base: '/docs/content/production' },
 		{ label: 'Storytelling', docs: storytellingDocs, base: '/docs/content/storytelling' },
 	] as const
 
@@ -20,7 +21,7 @@
 	<title>Storytelling — documentation · AvenOS</title>
 	<meta
 		name="description"
-		content="The World We Deserve bible — identity sheet, PAST storytelling, MaiaCity, and the episode test."
+		content="The World We Deserve bible — identity sheet, production, PAST storytelling, MaiaCity, and the episode test."
 	/>
 </svelte:head>
 

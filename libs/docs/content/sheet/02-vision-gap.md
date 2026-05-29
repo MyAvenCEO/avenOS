@@ -2,8 +2,6 @@
 title: Vision ↔ anti-vision
 ---
 
-## THE VISION ↔ ANTI-VISION GAP
-
 *The emotional engine of every single episode.*
 
 | | **THE ANTI-VISION** *(where the viewer is)* | **THE VISION** *(the Sovereign Founder)* |

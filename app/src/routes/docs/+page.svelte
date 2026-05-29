@@ -190,8 +190,8 @@
 					<div>
 						<p class="text-sm font-semibold tracking-tight text-foreground">Storytelling</p>
 						<p class="mt-0.5 text-xs leading-snug text-muted-foreground">
-							The World We Deserve bible — identity sheet, PAST storytelling, characters, and the
-							episode test.
+							The World We Deserve bible — identity sheet, production, PAST storytelling,
+							characters, and the episode test.
 						</p>
 					</div>
 					<span
