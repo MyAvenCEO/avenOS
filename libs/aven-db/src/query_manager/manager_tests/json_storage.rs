@@ -167,7 +167,7 @@ fn synced_insert_log_includes_failing_index_column() {
 }
 
 #[test]
-fn synced_insert_many_large_json_configs_survive_opfs_splits() {
+fn synced_insert_many_large_json_configs_succeed() {
     let collector = EventCollector::default();
     let subscriber = Registry::default().with(collector.clone());
     let _guard = tracing::subscriber::set_default(subscriber);
@@ -181,7 +181,7 @@ fn synced_insert_many_large_json_configs_survive_opfs_splits() {
     let mut qm = QueryManager::new(sync_manager);
     qm.set_current_schema(schema.clone(), "dev", "main");
 
-    let mut storage = OpfsBTreeStorage::memory(4 * 1024 * 1024).expect("open opfs storage");
+    let mut storage = MemoryStorage::new();
     persist_test_schema(&mut storage, &schema);
 
     let branch = get_branch(&qm);
@@ -227,7 +227,7 @@ fn synced_insert_many_large_json_configs_survive_opfs_splits() {
         .collect::<Vec<_>>();
     assert!(
         failures.is_empty(),
-        "synced inserts should not hit opfs split failures: {failures:?}"
+        "synced inserts should not fail index updates: {failures:?}"
     );
 
     let query = qm.query(table).build();

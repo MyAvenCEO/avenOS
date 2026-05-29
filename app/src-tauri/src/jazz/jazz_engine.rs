@@ -52,7 +52,17 @@ fn jazz_cell_json(cell: &Value) -> JsonValue {
 		Value::Uuid(oid) => JsonValue::String(oid.uuid().to_string()),
 		Value::Null => JsonValue::Null,
 		Value::Array(items) => JsonValue::Array(items.iter().map(jazz_cell_json).collect()),
-		Value::Row(items) => JsonValue::Array(items.iter().map(jazz_cell_json).collect()),
+		Value::Row { values: items, .. } => {
+			JsonValue::Array(items.iter().map(jazz_cell_json).collect())
+		}
+		Value::Double(d) => JsonValue::Number(
+			serde_json::Number::from_f64(*d).map(Into::into).unwrap_or(0.into()),
+		),
+		Value::BatchId(id) => JsonValue::String(hex::encode(id)),
+		Value::Bytea(b) => JsonValue::String(base64::Engine::encode(
+			&base64::engine::general_purpose::URL_SAFE_NO_PAD,
+			b,
+		)),
 	}
 }
 
@@ -63,12 +73,12 @@ pub(crate) fn secrets_for_table(table: &str) -> Option<&'static HashSet<String>>
 fn secret_manifest() -> &'static HashMap<String, HashSet<String>> {
 	static M: OnceLock<HashMap<String, HashSet<String>>> = OnceLock::new();
 	M.get_or_init(|| {
-		schema_manifest::manifest_secret_columns().expect("jazz-schema manifest secret columns")
+		schema_manifest::manifest_secret_columns().expect("aven-schema manifest secret columns")
 	})
 }
 
 pub(crate) fn col_ix(tbl: &TableSchema, name: &str) -> Result<usize, String> {
-	tbl.descriptor
+	tbl.columns
 		.columns
 		.iter()
 		.position(|c| c.name_str() == name)
@@ -132,7 +142,7 @@ pub(super) fn spark_uuid_from_json_row(
 	row: &Map<String, JsonValue>,
 ) -> Result<Uuid, String> {
 	let ix = col_ix(tbl, "spark_id")?;
-	let desc = tbl.descriptor.columns.get(ix).ok_or("spark_desc_ix")?;
+	let desc = tbl.columns.columns.get(ix).ok_or("spark_desc_ix")?;
 	let raw = row
 		.get("spark_id")
 		.ok_or_else(|| "missing_spark_id".to_string())?;
@@ -157,7 +167,7 @@ pub(super) fn place_secrets_for_insert(
 	let Some(secrets) = secret_manifest().get(table) else {
 		return Ok(());
 	};
-	for desc in tbl.descriptor.columns.iter() {
+	for desc in tbl.columns.columns.iter() {
 		let key = desc.name_str();
 		if !secrets.contains(key) {
 			continue;
@@ -269,7 +279,7 @@ pub(super) fn row_to_public_map(
 	let secrets = secret_manifest().get(table);
 	let spark = spark_uuid_row(schema, vals).unwrap_or(state.default_spark);
 	let mut miss = Vec::new();
-	let cols = &schema.descriptor.columns;
+	let cols = &schema.columns.columns;
 	let mut m = Map::new();
 	m.insert("id".into(), JsonValue::String(oid.uuid().to_string()));
 	for (desc, cell) in cols.iter().zip(vals.iter()) {
@@ -289,10 +299,10 @@ pub(super) fn row_to_public_map(
 					_ => return Err(format!("secret_col_bad_storage:{name}:{cell:?}")),
 				}
 			} else {
-				jazz_cell_json(cell)
+				jazz_cell_json(&cell)
 			}
 		} else {
-			jazz_cell_json(cell)
+			jazz_cell_json(&cell)
 		};
 		m.insert(name.to_string(), jv);
 	}
@@ -331,19 +341,17 @@ pub(crate) async fn exec_list_rows(
 	client.query(q, None).await.map_err(super::format_jazz_err)
 }
 
-const SPARK_SCOPED_TABLES: &[&str] = &["sparks", "keyshares", "todos", "messages", "files"];
-
 /// Map Groove `(table, object_id)` → spark UUID for sync ACL on patch commits.
 pub(super) async fn build_object_spark_id_map(
 	client: &JazzClient,
 ) -> Result<HashMap<(String, ObjectId), Uuid>, String> {
 	let mut out = HashMap::new();
-	for table in SPARK_SCOPED_TABLES {
+	for table in crate::spark_sync::spark_scoped_table_names() {
 		let schema = resolved_table_schema(client, table).await?;
 		let spark_ix = col_ix(&schema, "spark_id")?;
 		for (oid, vals) in exec_list_rows(client, table).await? {
 			if let Ok(sid) = uuid_cell_at(vals.as_slice(), spark_ix) {
-				out.insert(((*table).to_string(), oid), sid);
+				out.insert((table.clone(), oid), sid);
 			}
 		}
 	}

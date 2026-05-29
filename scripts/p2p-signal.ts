@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 /**
- * AvenOS centralized P2P **discovery** stack (Rust `aven-p2p-signal-dht`: HyperDHT bootstrap + co-hosted blind-relay on UDP **49737**).
+ * AvenOS centralized P2P **discovery** stack (Rust `aven-relay-dht`: HyperDHT bootstrap + co-hosted blind-relay on UDP **49737**).
  *
  * Master switch: **`AVEN_RELAY`** defaults **on** (central DHT for pairing/lookup).
  * Set **`AVEN_RELAY=false`** (or **`AVENOS_RELAY=false`**) to use public Holepunch HyperDHT instead.
@@ -293,7 +293,7 @@ export async function startP2pSignal(repoRoot = REPO_ROOT): Promise<P2pSignalHan
 	ensureRelayEnvReady(repoRoot)
 	freeUdpPort(dhtPort, 'DHT+blind-relay')
 
-	const dhtManifest = path.join(repoRoot, 'projects', 'aven-p2p-signal', 'Cargo.toml')
+	const dhtManifest = path.join(repoRoot, 'libs', 'aven-relay', 'Cargo.toml')
 	const baseEnv = { ...process.env } as Record<string, string>
 	baseEnv.RUST_LOG ??= 'warn'
 	baseEnv.AVENOS_P2P_SIGNAL_KEYS_DIR = keysDir
@@ -312,7 +312,7 @@ export async function startP2pSignal(repoRoot = REPO_ROOT): Promise<P2pSignalHan
 
 	let dhtLine: Record<string, unknown>
 	try {
-		dhtLine = await readFirstJsonLine(dht.stdout, 'aven-p2p-signal-dht')
+		dhtLine = await readFirstJsonLine(dht.stdout, 'aven-relay-dht')
 	} catch (e) {
 		dht.kill('SIGKILL')
 		throw e
@@ -322,7 +322,7 @@ export async function startP2pSignal(repoRoot = REPO_ROOT): Promise<P2pSignalHan
 	const bootstrap = typeof dhtLine.bootstrap === 'string' ? dhtLine.bootstrap : ''
 	if (!ready || !bootstrap) {
 		dht.kill('SIGKILL')
-		throw new Error(`aven-p2p-signal-dht invalid ready handshake: ${JSON.stringify(dhtLine)}`)
+		throw new Error(`aven-relay-dht invalid ready handshake: ${JSON.stringify(dhtLine)}`)
 	}
 
 	const { relayPublicKeyHex, relayAddr } = relayFromDhtReadyLine(

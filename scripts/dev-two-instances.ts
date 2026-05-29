@@ -42,6 +42,9 @@ import { applyCentralRelayUrlDevDefault, startP2pSignal } from './p2p-signal.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appDir = path.join(repoRoot, 'app')
+/** Repo-wide target — must match `.cargo/config.toml` at repo root. */
+const TAURI_DEBUG_BIN = path.join(repoRoot, 'target/rust/debug/aven-os-app')
+
 function userDocumentsDir(): string {
 	const xdg = process.env.XDG_DOCUMENTS_DIR?.trim()
 	if (xdg) return xdg
@@ -177,7 +180,7 @@ async function main() {
 			`  ${CYAN}[A]${RESET}  http://127.0.0.1:1420\n` +
 			`  ${MAGENTA}[B]${RESET}  http://127.0.0.1:1421\n\n` +
 			`Shared vault store: ${vaultsHint}\n` +
-			`${BOLD}${MAGENTA}WARNING:${RESET} Unlocking the same vault slug in [A] and [B] at once grabs the same SurrealKV files — Share/DB can stay on Loading indefinitely (not a vault-switch bug). Pick different people on each lock screen.\n\n` +
+			`${BOLD}${MAGENTA}WARNING:${RESET} Unlocking the same vault slug in [A] and [B] at once grabs the same RocksDB files (\`jazz.rocksdb\`) — Share/DB can stay on Loading indefinitely. Pick different people on each lock screen.\n\n` +
 			`${BOLD}Note:${RESET} AVENOS_DEV_INSTANCE is ${CYAN}A${RESET} / ${MAGENTA}B${RESET} for log prefixes only; it does not isolate vault dirs.\n\n` +
 			`Reset all dev personas: rm -rf ${vaultsHint}\n` +
 			`Press Ctrl-C to stop both.\n`,
@@ -221,21 +224,20 @@ async function main() {
 		await exitWithCode(1)
 	}
 
-	// Let instance A finish its Rust build first (shared target/ avoids lock + disk spike).
-	const tauriBin = path.join(appDir, 'src-tauri/target/debug/aven-os-app')
-	console.log(`${BOLD}${CYAN}[A]${RESET} Waiting for Rust build (aven-os-app)…`)
+	const tauriBin = TAURI_DEBUG_BIN
+	console.log(`${BOLD}${CYAN}[A]${RESET} Waiting for Rust build (${tauriBin})…`)
 	try {
 		await waitForFile(tauriBin, 300_000)
 	} catch {
 		console.error(
-			`${BOLD}${CYAN}[A]${RESET} Timed out waiting for ${tauriBin} — check [A] logs (disk full? run: cargo clean --manifest-path app/src-tauri/Cargo.toml)`,
+			`${BOLD}${CYAN}[A]${RESET} Timed out waiting for ${tauriBin} — check [A] logs (disk full? run: bun run clean:app:rust)`,
 		)
 		tauriA.kill('SIGTERM')
 		viteB.kill('SIGTERM')
 		await exitWithCode(1)
 	}
 
-	// Now launch instance B's Tauri (devUrl :1421 is ready)
+	console.log(`${BOLD}${MAGENTA}[B]${RESET} Starting Tauri (devUrl :1421)…`)
 	const tauriB = spawnTauri('B', MAGENTA, baseEnv)
 
 	const allProcs = [tauriA, viteB, tauriB]

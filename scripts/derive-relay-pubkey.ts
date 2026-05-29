@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 import { RELAY_PUBLIC_KEY_ENV, RELAY_SEED_ENV, resolveRelaySeedHex } from './relay-env.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const manifest = path.join(repoRoot, 'projects', 'aven-p2p-signal', 'Cargo.toml')
+const manifest = path.join(repoRoot, 'libs', 'aven-relay', 'Cargo.toml')
 
 const seedArg = process.argv[2]?.trim()
 const seed = seedArg ?? resolveRelaySeedHex(repoRoot)

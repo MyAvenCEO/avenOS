@@ -218,8 +218,16 @@ fn value_to_json(v: &Value) -> JsonValue {
 		Value::Uuid(oid) => JsonValue::String(oid.uuid().to_string()),
 		Value::Null => JsonValue::Null,
 		Value::Array(a) => JsonValue::Array(a.iter().map(value_to_json).collect()),
-		Value::Row(r) => JsonValue::Array(r.iter().map(value_to_json).collect()),
+		Value::Row { values: r, .. } => JsonValue::Array(r.iter().map(value_to_json).collect()),
 		Value::Timestamp(t) => JsonValue::Number((*t).into()),
+		Value::Double(d) => JsonValue::Number(
+			serde_json::Number::from_f64(*d).map(Into::into).unwrap_or(0.into()),
+		),
+		Value::BatchId(id) => JsonValue::String(hex::encode(id)),
+		Value::Bytea(b) => JsonValue::String(base64::Engine::encode(
+			&base64::engine::general_purpose::URL_SAFE_NO_PAD,
+			b,
+		)),
 	}
 }
 

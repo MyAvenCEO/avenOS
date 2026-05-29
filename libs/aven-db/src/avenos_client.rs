@@ -1,7 +1,7 @@
 //! AvenOS P2P JazzClient (RocksDB + Hyperswarm peer transport, no WebSocket server).
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use crate::groove_tokio::{SubscriptionHandle as RuntimeSubHandle, TokioRuntime};
@@ -57,25 +57,42 @@ struct SubscriptionState {
     runtime_handle: RuntimeSubHandle,
 }
 
-type PeerOutboundFn = Arc<dyn Fn(ClientId, SyncPayload) + Send + Sync + 'static>;
+/// Called after an inbound peer sync frame is parked on the runtime inbox (post-`push_sync_inbox`).
+pub type PeerInboundParkedHook = Arc<dyn Fn(&SyncPayload) + Send + Sync>;
 
-fn build_peer_bundle(layer: &MaybePeerTransport) -> PeerOutboundFn {
-    match layer {
-        MaybePeerTransport::Off => Arc::new(|_peer_runtime_id, _payload| {}),
-        MaybePeerTransport::Active(transport) => {
-            let transport = transport.clone();
-            Arc::new(move |peer_runtime_id, payload| {
-                let tt = transport.clone();
-                tokio::spawn(async move {
-                    if let Err(e) =
-                        crate::peer_transport::PeerTransport::send_to(&*tt, peer_runtime_id, payload)
-                            .await
-                    {
-                        tracing::warn!("PeerTransport::send_to failed: {e:?}");
-                    }
-                });
-            })
-        }
+fn peer_outbound_callback(
+    peer_transport: Option<Arc<dyn crate::peer_transport::PeerTransport>>,
+    runtime_ready: Arc<OnceLock<ClientRuntime>>,
+) -> impl Fn(OutboxEntry) + Send + Sync + 'static {
+    move |entry: OutboxEntry| {
+        let Destination::Client(peer_id) = entry.destination else {
+            return;
+        };
+        let Some(tt) = peer_transport.as_ref() else {
+            return;
+        };
+        let Some(rt) = runtime_ready.get() else {
+            tracing::warn!("peer outbound before runtime ready; dropping frame");
+            return;
+        };
+        let rt = rt.clone();
+        let tt = Arc::clone(tt);
+        let payload = entry.payload;
+        tokio::spawn(async move {
+            let outbound = OutboxEntry {
+                destination: Destination::Client(peer_id),
+                payload: payload.clone(),
+            };
+            if crate::peer_transport::PeerTransport::send_to(&*tt, peer_id, payload)
+                .await
+                .is_err()
+            {
+                tracing::debug!(?peer_id, "peer send failed; re-queueing outbox entry");
+                if let Err(e) = rt.prepend_outbox(outbound) {
+                    tracing::warn!("prepend_outbox after send failure: {e}");
+                }
+            }
+        });
     }
 }
 
@@ -168,18 +185,20 @@ async fn open_persistent_storage(data_dir: &std::path::Path) -> Result<DynStorag
 
 impl JazzClient {
     pub async fn connect(context: AppContext) -> Result<Self> {
-        let layer = MaybePeerTransport::Off;
-        let fwd = build_peer_bundle(&layer);
-        Self::do_connect(context, fwd, layer).await
+        Self::do_connect(context, MaybePeerTransport::Off, None).await
     }
 
     pub async fn connect_with_peer_transport(
         context: AppContext,
         peer_transport: Arc<dyn crate::peer_transport::PeerTransport>,
+        on_inbound_parked: Option<PeerInboundParkedHook>,
     ) -> Result<Self> {
-        let layer = MaybePeerTransport::Active(peer_transport);
-        let fwd = build_peer_bundle(&layer);
-        Self::do_connect(context, fwd, layer).await
+        Self::do_connect(
+            context,
+            MaybePeerTransport::Active(peer_transport),
+            on_inbound_parked,
+        )
+        .await
     }
 
     pub fn register_peer_sync_client(&self, peer_id: ClientId) -> Result<()> {
@@ -224,8 +243,8 @@ impl JazzClient {
 
     async fn do_connect(
         context: AppContext,
-        peer_forwarder: PeerOutboundFn,
         peer_layer: MaybePeerTransport,
+        on_inbound_parked: Option<PeerInboundParkedHook>,
     ) -> Result<Self> {
         std::fs::create_dir_all(&context.data_dir)?;
 
@@ -256,15 +275,17 @@ impl JazzClient {
         };
 
         let schema_manager = build_schema_manager(&storage, &context)?;
-        let peer_forward = peer_forwarder.clone();
-        let runtime = TokioRuntime::new(schema_manager, storage, move |entry: OutboxEntry| {
-            match &entry.destination {
-                Destination::Server(_) => {}
-                Destination::Client(peer_runtime_id) => {
-                    peer_forward(*peer_runtime_id, entry.payload.clone());
-                }
-            }
-        });
+        let peer_transport_for_fwd = match &peer_layer {
+            MaybePeerTransport::Active(t) => Some(Arc::clone(t)),
+            MaybePeerTransport::Off => None,
+        };
+        let runtime_ready: Arc<OnceLock<ClientRuntime>> = Arc::new(OnceLock::new());
+        let runtime = TokioRuntime::new(
+            schema_manager,
+            storage,
+            peer_outbound_callback(peer_transport_for_fwd, Arc::clone(&runtime_ready)),
+        );
+        let _ = runtime_ready.set(runtime.clone());
 
         runtime
             .persist_schema()
@@ -277,14 +298,18 @@ impl JazzClient {
             MaybePeerTransport::Off => (None, None),
             MaybePeerTransport::Active(t) => {
                 let inbound_runtime = runtime.clone();
+                let on_parked = on_inbound_parked.clone();
                 let tin = Arc::clone(&t);
                 let task = tokio::spawn(async move {
                     loop {
                         match crate::peer_transport::PeerTransport::recv_inbound(&*tin).await {
                             None => break,
                             Some(entry) => {
+                                let payload = entry.payload.clone();
                                 if let Err(err) = inbound_runtime.push_sync_inbox(entry) {
                                     tracing::warn!("push_sync_inbox (peer inbound): {err}");
+                                } else if let Some(hook) = on_parked.as_ref() {
+                                    hook(&payload);
                                 }
                             }
                         }
@@ -443,7 +468,8 @@ impl JazzClient {
 
         self.runtime
             .with_storage(|storage| storage.flush())
-            .map_err(|e| JazzError::Storage(e.to_string()))?;
+            .map_err(|e| JazzError::Storage(e.to_string()))
+            .and_then(|r| r.map_err(|e| JazzError::Storage(e.to_string())))?;
 
         Ok(())
     }

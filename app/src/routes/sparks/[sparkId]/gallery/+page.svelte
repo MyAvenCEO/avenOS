@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { browser } from '$app/environment'
 	import { page } from '$app/state'
-	import type { FilesRow } from '@avenos/jazz-schema'
+	import type { JazzRow } from '$lib/jazz/api'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/self/device-session-store'

@@ -1,4 +1,4 @@
-//! Print 32-byte hex Groove SchemaHash for a jazz-schema manifest JSON file.
+//! Print 32-byte hex Groove SchemaHash for an aven-schema manifest JSON file.
 use std::collections::BTreeMap;
 use std::env;
 use std::path::PathBuf;

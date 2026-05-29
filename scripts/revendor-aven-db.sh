@@ -8,7 +8,7 @@ DEST="${ROOT}/libs/aven-db"
 BACKUP="${ROOT}/.avenos-revendor-backup"
 
 if [[ ! -d "$UPSTREAM" ]]; then
-	echo "revendor: missing $UPSTREAM — clone jazz2-upstream first (see third_party/jazz2-mirror-docs/VENDOR_PIN.md)" >&2
+	echo "revendor: missing $UPSTREAM — clone jazz2-upstream first (see libs/aven-db/UPSTREAM.md)" >&2
 	exit 1
 fi
 

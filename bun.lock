@@ -13,9 +13,8 @@
       "name": "@AvenOS/app",
       "version": "0.0.1",
       "dependencies": {
-        "@avenos/avencity": "workspace:*",
+        "@avenos/aven-city": "workspace:*",
         "@avenos/docs": "workspace:*",
-        "@avenos/jazz-schema": "workspace:*",
         "@avenos/vibe-app-sandbox": "workspace:*",
         "@avenos/vibe-apps": "workspace:*",
         "@modelcontextprotocol/ext-apps": "^1.0.0",
@@ -45,8 +44,8 @@
         "vite": "^8.0.7",
       },
     },
-    "libs/avencity": {
-      "name": "@avenos/avencity",
+    "libs/aven-city": {
+      "name": "@avenos/aven-city",
       "version": "0.0.1",
       "dependencies": {
         "@threlte/core": "^8.0.0",
@@ -61,12 +60,6 @@
     "libs/docs": {
       "name": "@avenos/docs",
       "version": "0.0.1",
-    },
-    "libs/jazz-schema": {
-      "name": "@avenos/jazz-schema",
-      "devDependencies": {
-        "typescript": "^6.0.2",
-      },
     },
     "libs/vibe-app-sandbox": {
       "name": "@avenos/vibe-app-sandbox",
@@ -230,13 +223,11 @@
 
     "@avenos/aven-ceo": ["@avenos/aven-ceo@workspace:projects/aven-ceo"],
 
-    "@avenos/avencity": ["@avenos/avencity@workspace:libs/avencity"],
+    "@avenos/aven-city": ["@avenos/aven-city@workspace:libs/aven-city"],
 
     "@avenos/dev-stack": ["@avenos/dev-stack@workspace:projects/dev-stack"],
 
     "@avenos/docs": ["@avenos/docs@workspace:libs/docs"],
-
-    "@avenos/jazz-schema": ["@avenos/jazz-schema@workspace:libs/jazz-schema"],
 
     "@avenos/ocr-example": ["@avenos/ocr-example@workspace:projects/ocr-example"],
 

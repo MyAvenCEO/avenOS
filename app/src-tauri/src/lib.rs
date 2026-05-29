@@ -11,6 +11,7 @@ mod peer_sync_gate;
 mod schema_manifest;
 mod schema_migrations;
 mod spark_acc;
+mod spark_sync;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -698,7 +699,7 @@ pub fn run() {
 		.manage(jazz::ManagedJazz::default())
 		.setup(|app| {
 			if let Err(e) = schema_manifest::install_runtime_schema_files(app.handle()) {
-				log::error!("jazz-schema runtime install: {e}");
+				log::error!("aven-schema runtime install: {e}");
 			}
 
 			app.manage(jazz::runtime::spawn_groove_actor(app.handle().clone()));

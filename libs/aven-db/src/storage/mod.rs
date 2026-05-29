@@ -13,13 +13,9 @@
 pub mod conformance;
 mod key_codec;
 mod memory;
-#[cfg(target_arch = "wasm32")]
-mod opfs_btree;
 mod storage_core;
 mod storage_trait;
 pub use memory::MemoryStorage;
-#[cfg(target_arch = "wasm32")]
-pub use opfs_btree::OpfsBTreeStorage;
 pub use storage_trait::Storage;
 #[cfg(all(feature = "rocksdb", not(target_arch = "wasm32")))]
 mod rocksdb;
@@ -197,7 +193,6 @@ const STORAGE_KIND_CATALOGUE: &str = "catalogue";
 pub(crate) const SQLITE_STORE_KIND: &str = "sqlite";
 #[cfg(feature = "rocksdb")]
 pub(crate) const ROCKSDB_STORE_KIND: &str = "rocksdb";
-pub(crate) const OPFS_BTREE_STORE_KIND: &str = "opfs_btree";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct StoreManifest {

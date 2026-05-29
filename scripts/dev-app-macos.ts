@@ -32,8 +32,7 @@ async function main() {
 	const env = {
 		...process.env,
 		...p2.envAugment,
-		CARGO_INCREMENTAL: '0'
-	} satisfies Record<string, string | undefined>
+	}
 
 	try {
 		const child = Bun.spawn(['bun', '--env-file=.env', 'run', '--cwd', 'app', 'tauri:dev'], {

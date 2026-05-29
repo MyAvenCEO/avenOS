@@ -320,6 +320,22 @@ impl PeerCatchupHandle {
 		self.enqueue(Msg::RequestWork).await;
 	}
 
+	/// After a local spark-scoped write, nudge outbound catch-up for live allowlisted peers.
+	pub(crate) async fn on_spark_data_written(&self) {
+		{
+			let mut g = self.reg.lock().await;
+			let cids = g
+				.current_live
+				.intersection(&g.allowlisted_live)
+				.copied()
+				.collect::<Vec<_>>();
+			for cid in cids {
+				g.bump_to_pending_live_allowlisted(cid);
+			}
+		}
+		self.enqueue(Msg::RequestWork).await;
+	}
+
 	pub(crate) async fn mesh_catchup_ui_snapshot(&self) -> PeerMeshCatchupSnap {
 		let g = self.reg.lock().await;
 		PeerMeshCatchupSnap {
@@ -564,13 +580,17 @@ async fn process_until_idle(reg: &Arc<Mutex<Registry>>, app: &AppHandle, rx: &mu
 							peers
 						);
 						drop(g);
-						// Peer may have received sparks/keyshares during catch-up — re-hydrate
-						// vault ACL and push table snapshots to any open UI subscribers.
+						// Peer may have received sparks/keyshares/messages during catch-up.
 						let actor = app.state::<crate::jazz::runtime::GrooveActorHandle>();
-						let mut vault_tables = std::collections::HashSet::new();
-						vault_tables.insert("sparks".to_string());
-						vault_tables.insert("keyshares".to_string());
-						let _ = actor.enqueue_drain(vault_tables).await;
+						let mut drain_tables = std::collections::HashSet::new();
+						drain_tables.insert("sparks".to_string());
+						drain_tables.insert("keyshares".to_string());
+						for name in crate::spark_sync::spark_scoped_table_names() {
+							if crate::spark_sync::is_spark_data_table(name) {
+								drain_tables.insert(name.clone());
+							}
+						}
+						let _ = actor.enqueue_drain(drain_tables).await;
 					}
 					Err(e) => {
 						let delay = {

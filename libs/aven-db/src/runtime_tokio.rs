@@ -527,6 +527,13 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         Ok(())
     }
 
+    /// Re-queue a peer outbox entry after a transport send failure (mux not ready yet).
+    pub fn prepend_outbox(&self, entry: OutboxEntry) -> Result<(), RuntimeError> {
+        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        core.prepend_outbox(entry);
+        Ok(())
+    }
+
     /// Push multiple sync messages to the inbox under a single core lock.
     pub fn push_sync_inbox_batch(&self, entries: Vec<InboxEntry>) -> Result<(), RuntimeError> {
         if entries.is_empty() {

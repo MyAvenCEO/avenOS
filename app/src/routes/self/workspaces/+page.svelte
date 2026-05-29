@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { browser } from '$app/environment'
 	import { page } from '$app/state'
-	import type { SparksRow } from '@avenos/jazz-schema'
+	import type { JazzRow } from '$lib/jazz/api'
 	import { withTimeoutMs } from '$lib/async-timeout'
 	import {
 		jazzSession,
@@ -29,7 +29,7 @@
 
 	// Snapshot is reactive: peer-sync deltas refresh `sparksStore.rows` automatically,
 	// so granting another device admin appears here without a manual reload.
-	const sparks = $derived<SparksRow[]>(
+	const sparks = $derived<JazzRow[]>(
 		[...sparksStore.rows].sort((a, b) => a.name.localeCompare(b.name)),
 	)
 	const sparksErr = $derived(sparksStore.error)
@@ -63,7 +63,7 @@
 		return sparks.find((s) => s.spark_id.trim().toLowerCase() === sparkId.trim().toLowerCase())
 	})
 
-	function sparkUrn(row: SparksRow): string {
+	function sparkUrn(row: JazzRow): string {
 		return `spark:${row.spark_id.trim()}`
 	}
 

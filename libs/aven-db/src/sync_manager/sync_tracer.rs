@@ -362,7 +362,7 @@ impl SyncTracer {
     /// `stable_for` consecutive polls at 50ms intervals).
     ///
     /// Panics with the current tally if `timeout` expires before stabilising.
-    #[cfg(feature = "test")]
+    #[cfg(test)]
     pub async fn wait_until_settled(&self, timeout: std::time::Duration) {
         let stable_for_target = 3; // require 3 consecutive identical polls (~150ms quiet)
         let mut stable_count = 0u32;

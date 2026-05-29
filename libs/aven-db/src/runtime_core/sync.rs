@@ -442,4 +442,13 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
             self.rebroadcast_peer_catchup(peer_id);
         }
     }
+
+    /// Re-queue a peer outbox entry after transport send failure.
+    pub fn prepend_outbox(&mut self, entry: OutboxEntry) {
+        self.schema_manager
+            .query_manager_mut()
+            .sync_manager_mut()
+            .prepend_outbox(vec![entry]);
+        self.scheduler().schedule_batched_tick();
+    }
 }

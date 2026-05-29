@@ -177,7 +177,7 @@ async function main() {
 
 	// App Store `.app` is signed with Apple Distribution — notarization needs Developer ID and
 	// must not run here (Apple re-processes after Transporter upload). Strip API creds so Tauri skips it.
-	const cargoTargetDir = path.join(tauriDir, 'target')
+	const cargoTargetDir = path.join(repoRoot, 'target/rust')
 	const tauriEnv = {
 		...process.env,
 		GENESIS_NETWORK_ID: genesisNetworkId,
@@ -186,7 +186,6 @@ async function main() {
 		...hyperswarmRelayCompileEnv(relayCfg),
 	}
 	delete tauriEnv.CARGO_TARGET_DIR
-	tauriEnv.CARGO_TARGET_DIR = cargoTargetDir
 	console.log('[build-appstore-macos] embedding GENESIS_NETWORK_ID at compile time')
 	console.log('[build-appstore-macos] embedding AVEN_RELAY_URL=%s at compile time', avenRelayUrl)
 	console.log('[build-appstore-macos] embedding AVENOS_DHT_BOOTSTRAP=%s at compile time', dhtBootstrap)

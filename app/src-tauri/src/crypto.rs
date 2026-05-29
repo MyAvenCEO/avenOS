@@ -212,8 +212,13 @@ pub fn column_type_slug(ty: &ColumnType) -> &'static str {
 		ColumnType::BigInt => "bigint",
 		ColumnType::Timestamp => "timestamp",
 		ColumnType::Uuid => "uuid",
-		ColumnType::Array(_) => "array",
-		ColumnType::Row(_) => "row",
+		ColumnType::Double => "double",
+		ColumnType::Enum { .. } => "enum",
+		ColumnType::BatchId => "batch_id",
+		ColumnType::Bytea => "bytea",
+		ColumnType::Json { .. } => "json",
+		ColumnType::Array { .. } => "array",
+		ColumnType::Row { .. } => "row",
 	}
 }
 
@@ -244,7 +249,17 @@ pub fn groove_value_to_canonical_utf8(val: &Value) -> Result<String, String> {
 		Value::Uuid(oid) => {
 			json!({"schema_v": CELL_CANON_SCHEMA_V, "t": "uuid", "v": oid.uuid().to_string()})
 		}
-		Value::Array(_) | Value::Row(_) => return Err("canon_nested_unsupported".into()),
+		Value::Double(d) => {
+			let n = Number::from_f64(*d).ok_or_else(|| "canon_f64".to_string())?;
+			json!({"schema_v": CELL_CANON_SCHEMA_V, "t": "double", "v": n})
+		}
+		Value::BatchId(id) => {
+			json!({"schema_v": CELL_CANON_SCHEMA_V, "t": "batch_id", "v": hex::encode(id)})
+		}
+		Value::Bytea(b) => {
+			json!({"schema_v": CELL_CANON_SCHEMA_V, "t": "bytea", "v": BASE64_ENC.encode(b)})
+		}
+		Value::Array(_) | Value::Row { .. } => return Err("canon_nested_unsupported".into()),
 	};
 	Ok(j.to_string())
 }
@@ -295,6 +310,34 @@ fn canonical_json_to_grove(j: &JsonValue) -> Result<Value, String> {
 			let u = uuid::Uuid::parse_str(s).map_err(|_| "canon_uuid".to_string())?;
 			Value::Uuid(ObjectId::from_uuid(u))
 		}
+		"double" => {
+			let n = j
+				.get("v")
+				.and_then(JsonValue::as_f64)
+				.ok_or_else(|| "canon_v_f64".to_string())?;
+			Value::Double(n)
+		}
+		"batch_id" => {
+			let s = j
+				.get("v")
+				.and_then(JsonValue::as_str)
+				.ok_or_else(|| "canon_v_batch_id".to_string())?;
+			let raw = hex::decode(s).map_err(|_| "canon_batch_id_hex".to_string())?;
+			let id: [u8; 16] = raw
+				.try_into()
+				.map_err(|_| "canon_batch_id_len".to_string())?;
+			Value::BatchId(id)
+		}
+		"bytea" => {
+			let s = j
+				.get("v")
+				.and_then(JsonValue::as_str)
+				.ok_or_else(|| "canon_v_bytea".to_string())?;
+			let b = BASE64_ENC
+				.decode(s)
+				.map_err(|_| "canon_bytea_b64".to_string())?;
+			Value::Bytea(b)
+		}
 		_ => return Err(format!("canon_tag:{t}")),
 	})
 }
@@ -309,7 +352,14 @@ fn groove_value_to_ipc_json(cell: &Value) -> JsonValue {
 		Value::Uuid(oid) => JsonValue::String(oid.uuid().to_string()),
 		Value::Null => JsonValue::Null,
 		Value::Array(items) => JsonValue::Array(items.iter().map(groove_value_to_ipc_json).collect()),
-		Value::Row(items) => JsonValue::Array(items.iter().map(groove_value_to_ipc_json).collect()),
+		Value::Row { values: items, .. } => {
+			JsonValue::Array(items.iter().map(groove_value_to_ipc_json).collect())
+		}
+		Value::Double(d) => JsonValue::Number(
+			Number::from_f64(*d).unwrap_or_else(|| Number::from(0)),
+		),
+		Value::BatchId(id) => JsonValue::String(hex::encode(id)),
+		Value::Bytea(b) => JsonValue::String(BASE64_ENC.encode(b)),
 	}
 }
 
@@ -346,7 +396,20 @@ fn legacy_plain_to_ipc(opened_plain: &str, storage_ty: &ColumnType) -> Result<Js
 			let u = uuid::Uuid::parse_str(opened_plain.trim()).map_err(|_| "legacy_uuid".to_string())?;
 			Ok(JsonValue::String(u.to_string()))
 		}
-		ColumnType::Array(_) | ColumnType::Row(_) => Err("legacy_nested".into()),
+		ColumnType::Enum { .. } => Ok(JsonValue::String(opened_plain.into())),
+		ColumnType::Double => {
+			let n: f64 = opened_plain
+				.trim()
+				.parse()
+				.map_err(|_| "legacy_f64".to_string())?;
+			Ok(JsonValue::Number(
+				Number::from_f64(n).ok_or_else(|| "legacy_f64_nan".to_string())?,
+			))
+		}
+		ColumnType::BatchId => Ok(JsonValue::String(opened_plain.trim().to_string())),
+		ColumnType::Bytea => Ok(JsonValue::String(opened_plain.into())),
+		ColumnType::Json { .. } => serde_json::from_str(opened_plain).map_err(|_| "legacy_json".to_string()),
+		ColumnType::Array { .. } | ColumnType::Row { .. } => Err("legacy_nested".into()),
 	}
 }
 

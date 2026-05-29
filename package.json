@@ -19,6 +19,7 @@
 		"dev:app:ios": "bun --env-file=.env ./scripts/dev-app-ios.ts",
 		"dev:app:linux": "bun --env-file=.env ./scripts/dev-app-linux.ts",
 		"clean:app:rust": "bun ./scripts/clean-app-tauri-target.ts",
+		"verify:aven-db": "bash ./scripts/verify-aven-db-gates.sh",
 		"dev:p2p-signal": "bun ./scripts/p2p-signal.ts --foreground",
 		"dev:app2x:mac": "bun --env-file=.env ./scripts/dev-two-instances.ts",
 		"dev:app2x:linux": "bun --env-file=.env ./scripts/dev-two-instances.ts",

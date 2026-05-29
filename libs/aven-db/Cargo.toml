@@ -1,6 +1,6 @@
 [package]
 name = "aven-db"
-version = "2.0.0-alpha.50"
+version = "0.0.1"
 edition = "2024"
 description = "AvenOS local-first DB core (upstream jazz2 alpha.50, RocksDB + P2P; Rust import alias `groove`)."
 license = "MIT OR Apache-2.0"
@@ -12,6 +12,11 @@ path = "src/lib.rs"
 
 [features]
 default = []
+# Inert stubs for leftover upstream #[cfg(feature = ...)] (server/wasm paths stripped in this fork).
+transport = []
+transport-websocket = []
+sqlite = []
+test-utils = []
 rocksdb = ["dep:rocksdb"]
 runtime-tokio = ["dep:tokio"]
 peer-transport = ["dep:bincode", "dep:async-trait"]

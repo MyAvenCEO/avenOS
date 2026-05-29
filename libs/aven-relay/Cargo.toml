@@ -1,12 +1,12 @@
 [package]
-name = "aven-p2p-signal"
+name = "aven-relay"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "Isolated HyperDHT bootstrap node for local AvenOS P2p dev pairing."
+description = "Central HyperDHT bootstrap + blind-relay for AvenOS P2P discovery."
 
 [[bin]]
-name = "aven-p2p-signal-dht"
+name = "aven-relay-dht"
 path = "src/main.rs"
 
 [dependencies]

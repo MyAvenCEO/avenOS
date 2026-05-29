@@ -1,7 +1,9 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import type { SchemaTables } from '@avenos/jazz-schema'
 import { getTableRowsStore } from '$lib/runtime/table-stores'
 import { grooveRuntime } from '$lib/runtime/groove-ipc'
+
+/** Untyped Groove row from IPC — schema lives in Rust (`libs/aven-schema`). */
+export type JazzRow = Record<string, any> & { id: string }
 
 export type JazzStatusReply = {
 	ready: boolean
@@ -63,11 +65,10 @@ export async function sparkAdminRevoke(_payload: {
 
 /** Result of explorer list — rows omit unauthorized biscuit/spark gates; count is diagnostics-only. */
 export type JazzExplorerListReply = {
-	rows: Record<string, unknown>[]
+	rows: JazzRow[]
 	skippedUnauthorizedRows: number
 }
 
-/** List any manifest table without typing against `SchemaTables` (explorer / tooling). */
 export async function jazzExplorerList(table: string): Promise<JazzExplorerListReply> {
 	return grooveRuntime<JazzExplorerListReply>('explorerList', { table })
 }
@@ -76,12 +77,12 @@ export async function jazzExplorerList(table: string): Promise<JazzExplorerListR
  * Ref-counted subscribe on the Groove actor; row snapshots arrive on `avenos:runtime`
  * `{ kind: 'table', table, rows }` → [`getTableRowsStore`].
  */
-async function subscribeToTableSnapshot<T>(
+async function subscribeToTableSnapshot(
 	table: string,
-	handler: (rows: T[]) => void,
+	handler: (rows: JazzRow[]) => void,
 ): Promise<UnlistenFn> {
 	const st = getTableRowsStore(table)
-	const un = st.subscribe((rows) => handler(rows as T[]))
+	const un = st.subscribe((rows) => handler(rows as JazzRow[]))
 	await grooveRuntime('subscribe', { table })
 	return () => {
 		un()
@@ -89,52 +90,33 @@ async function subscribeToTableSnapshot<T>(
 	}
 }
 
-/** Explorer subscribe: untyped rows over the same single subscribe pipe. */
 export async function jazzExplorerSubscribe(
 	table: string,
-	handler: (rows: Record<string, unknown>[]) => void,
+	handler: (rows: JazzRow[]) => void,
 ): Promise<UnlistenFn> {
-	return subscribeToTableSnapshot<Record<string, unknown>>(table, handler)
+	return subscribeToTableSnapshot(table, handler)
 }
 
-export type DbRowExtraOmit<R> = 'spark_id' extends keyof R ? 'spark_id' : never
-
-/** Omit `id` (and `spark_id` when the row has one); shell may inject `spark_id`. */
-export type JazzCreatePayload<R extends { id: string }> = Omit<
-	R,
-	'id' | DbRowExtraOmit<R>
-> &
-	('spark_id' extends keyof R ? { spark_id?: string } : {})
-
-/** Table-parameterized IPC CRUD (`jazz-tools` runs in the Rust shell only). */
-export function jazzTable<TName extends keyof SchemaTables>(table: TName) {
-	type Row = SchemaTables[TName]
-
+/** Table CRUD over JSON IPC (`jazz-tools` runs in the Rust shell only). */
+export function jazzTable(table: string) {
 	return {
-		async list(): Promise<Row[]> {
-			return grooveRuntime<Row[]>('list', { table: String(table) })
+		async list(): Promise<JazzRow[]> {
+			return grooveRuntime<JazzRow[]>('list', { table })
 		},
-		async get(id: string): Promise<Row> {
-			return grooveRuntime<Row>('get', { table: String(table), id })
+		async get(id: string): Promise<JazzRow> {
+			return grooveRuntime<JazzRow>('get', { table, id })
 		},
-		async create(values: JazzCreatePayload<Row>): Promise<Row> {
-			const valuesPayload = values as Record<string, unknown>
-			return grooveRuntime<Row>('create', { table: String(table), values: valuesPayload })
+		async create(values: Record<string, unknown>): Promise<JazzRow> {
+			return grooveRuntime<JazzRow>('create', { table, values })
 		},
-		async update(id: string, patch: Partial<Omit<Row, 'id'>>): Promise<Row> {
-			const patchPayload = patch as Record<string, unknown>
-			return grooveRuntime<Row>('update', {
-				table: String(table),
-				id,
-				patch: patchPayload,
-			})
+		async update(id: string, patch: Record<string, unknown>): Promise<JazzRow> {
+			return grooveRuntime<JazzRow>('update', { table, id, patch })
 		},
 		async delete(id: string): Promise<void> {
-			await grooveRuntime('delete', { table: String(table), id })
+			await grooveRuntime('delete', { table, id })
 		},
-		/** Row snapshots via `avenos:runtime` `{ kind: 'table' }` (Groove actor). */
-		async subscribe(handler: (rows: Row[]) => void): Promise<UnlistenFn> {
-			return subscribeToTableSnapshot<Row>(String(table), handler)
+		async subscribe(handler: (rows: JazzRow[]) => void): Promise<UnlistenFn> {
+			return subscribeToTableSnapshot(table, handler)
 		},
 	}
 }

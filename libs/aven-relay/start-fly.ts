@@ -4,7 +4,7 @@
  * Bun is PID1. HTTP `:8080` serves `/.well-known/aven-relay.json`.
  */
 
-const DHT_BIN = Bun.env.P2P_SIGNAL_DHT_BINARY ?? '/usr/local/bin/aven-p2p-signal-dht'
+const DHT_BIN = Bun.env.P2P_SIGNAL_DHT_BINARY ?? '/usr/local/bin/aven-relay-dht'
 const MANIFEST_HTTP_PORT = Number(Bun.env.AVEN_RELAY_MANIFEST_HTTP_PORT ?? '8080')
 const DHT_UDP_PORT_DEFAULT = 49737
 

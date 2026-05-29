@@ -13,9 +13,9 @@ app/src-tauri         — host binary (Tauri shell)
   └─ jazz/mod.rs          — jazz_connect() wires PeerTransport into JazzClient
   └─ jazz_auth.rs         — deterministic ClientId from Ed25519 pubkey
 
-third_party/jazz-tools    — vendored fork of jazz-tools
+libs/aven-db    — AvenOS fork of jazz2 `crates/jazz-tools` (alpha.50, RocksDB + P2P)
   └─ peer_transport.rs    — PeerTransport trait + bincode framing helpers
-  └─ client.rs            — JazzClient::connect_with_peer_transport()
+  └─ avenos_client.rs     — JazzClient::connect_with_peer_transport()
 
 projects/tauri-plugin-peer  — Hyperswarm integration
   └─ lib.rs               — Tauri plugin: joins swarm on self:did-unlock
@@ -53,7 +53,7 @@ This matches `jazz_auth::client_uuid_from_ed_pubkey` used to derive the local `C
 
 ## Spark-scoped replication
 
-Rows in tables such as **`todos`** reference a plaintext **`spark_id`** UUID (`libs/jazz-schema/schema.manifest.json`). Peer sync carries arbitrary Groove commits for the schema — **authorization** (`authorize_gate`, biscuit vault) and **decryption** (Spark DEKs resolved via **`keyshares`**) apply **per `(device, spark_id)`**.
+Rows in tables such as **`todos`** reference a plaintext **`spark_id`** UUID (`libs/aven-schema/schema.manifest.json`). Peer sync carries arbitrary Groove commits for the schema — **authorization** (`authorize_gate`, biscuit vault) and **decryption** (Spark DEKs resolved via **`keyshares`**) apply **per `(device, spark_id)`**.
 
 Granting a paired peer **co-owner + DEK keyshare** for Spark **X** therefore unlocks policy-respecting read/write for **every manifest row carrying `spark_id = X`**, including todos today and future spark-linked tables. Transport registration (`jazz_sync_bridge_peers`) does not replace that cryptographic delegation.
 
@@ -88,8 +88,8 @@ The **Self → Sparks** route polls **`peer_transport_status`** (~2 s), exposes 
 
 | Type | Location | Role |
 |---|---|---|
-| `PeerTransport` trait | `third_party/jazz-tools/src/peer_transport.rs` | Async trait: `send_to`, `recv_inbound`, `shutdown` |
+| `PeerTransport` trait | `libs/aven-db/src/peer_transport.rs` | Async trait: `send_to`, `recv_inbound`, `shutdown` |
 | `HyperswarmGrooveBridge` | `projects/tauri-plugin-peer/src/hyperswarm_groove_bridge.rs` | Implements `PeerTransport`; owns per-peer writer channels and shared inbound queue |
-| `MaybePeerTransport` | `third_party/jazz-tools/src/client.rs` | `Off | Active(Arc<dyn PeerTransport>)` — guards cfg |
+| `MaybePeerTransport` | `libs/aven-db/src/avenos_client.rs` | `Off | Active(Arc<dyn PeerTransport>)` — guards cfg |
 | `encode_length_prefixed` / `decode_length_prefixed` | `peer_transport.rs` | u32-LE-length + bincode `SyncFrameV1` |
 | `InboxEntry` | `groove::sync_manager` | `{ source: Source::Client(ClientId), payload: SyncPayload }` |

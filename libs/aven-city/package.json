@@ -1,5 +1,5 @@
 {
-	"name": "@avenos/avencity",
+	"name": "@avenos/aven-city",
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",
@@ -10,7 +10,7 @@
 		".": "./src/index.ts"
 	},
 	"scripts": {
-		"build": "bun -e \"console.log('@avenos/avencity: Svelte source, no build step')\""
+		"build": "bun -e \"console.log('@avenos/aven-city: Svelte source, no build step')\""
 	},
 	"dependencies": {
 		"@threlte/core": "^8.0.0",

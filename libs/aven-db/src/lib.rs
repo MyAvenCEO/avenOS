@@ -41,7 +41,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 #[cfg(feature = "client-p2p")]
-pub use avenos_client::{JazzClient, SessionClient};
+pub use avenos_client::{JazzClient, PeerInboundParkedHook, SessionClient};
 #[cfg(feature = "client-p2p")]
 pub use peer_transport::{PeerTransport, decode_length_prefixed, encode_length_prefixed};
 #[cfg(feature = "client-p2p")]

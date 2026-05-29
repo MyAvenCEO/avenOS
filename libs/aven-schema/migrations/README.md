@@ -15,19 +15,19 @@ Wipes still occur only for identity/lane mismatches (`client_id`, jazz lane), no
 
 ## When you change the manifest
 
-1. Edit `libs/jazz-schema/schema.manifest.json` and run `bun run build` in `libs/jazz-schema`.
+1. Edit `libs/aven-schema/schema.manifest.json`.
 2. **Before** shipping, copy the current manifest to a snapshot (optional bundled fallback):
 
    ```bash
-   cp libs/jazz-schema/schema.manifest.json \
-      libs/jazz-schema/migrations/snapshots/before-<feature>.manifest.json
+   cp libs/aven-schema/schema.manifest.json \
+      libs/aven-schema/migrations/snapshots/before-<feature>.manifest.json
    ```
 
 3. Compute its hash (for `registry.json` or notes):
 
    ```bash
-   cargo run --manifest-path tools/avenos-schema-hash/Cargo.toml -- \
-     libs/jazz-schema/migrations/snapshots/before-<feature>.manifest.json
+   cargo run --manifest-path libs/aven-schema/crates/schema-hash/Cargo.toml -- \
+     libs/aven-schema/migrations/snapshots/before-<feature>.manifest.json
    ```
 
 4. Add an entry to `migrations/registry.json` if you want a **bundled** fallback for vaults that never stamped that hash (fresh installs upgrading from an old app build).

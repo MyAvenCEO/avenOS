@@ -20,9 +20,9 @@ import {
 } from './relay-env.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const SIGNAL_PROJECT = path.join(ROOT, 'projects', 'aven-p2p-signal')
-const FLY_TOML = path.join(SIGNAL_PROJECT, 'fly.toml')
-const FLY_DOCKERFILE = path.join(SIGNAL_PROJECT, 'Dockerfile')
+const RELAY_PROJECT = path.join(ROOT, 'libs', 'aven-relay')
+const FLY_TOML = path.join(RELAY_PROJECT, 'fly.toml')
+const FLY_DOCKERFILE = path.join(RELAY_PROJECT, 'Dockerfile')
 const APP = 'relay-aven-ceo'
 const REGION = 'fra'
 const VOL_NAME = 'p2p_signal_data'
@@ -291,7 +291,7 @@ async function main() {
 	ensureIpv4()
 	syncRelaySecretsToFly(ROOT)
 
-	// First arg = Docker build context (repo root) — Dockerfile COPY infra/ … and projects/.
+	// First arg = Docker build context (repo root) — Dockerfile COPY libs/aven-relay/ … and third_party/.
 	// Absolute --config/--dockerfile avoids Fly resolving relative to fly.toml dirname (double path segments).
 	run(['deploy', ROOT, '--config', FLY_TOML, '--dockerfile', FLY_DOCKERFILE, '--wait-timeout', '5m'], {
 		inherit: true

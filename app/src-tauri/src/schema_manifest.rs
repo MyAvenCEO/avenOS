@@ -1,7 +1,7 @@
-//! Loads `libs/jazz-schema/schema.manifest.json` — same file drives TS codegen (`types.ts`).
+//! Loads `libs/aven-schema/schema.manifest.json` (Rust / Groove source of truth).
 //!
 //! - **Debug**: read from the repo checkout when present (fast iteration).
-//! - **Release / sandbox**: compile-time embed + copy into `<Documents>/.avenOS/jazz-schema/` at startup
+//! - **Release / sandbox**: compile-time embed + copy into `<Documents>/.avenOS/aven-schema/` at startup
 //!   (App Store cannot read the developer machine path under `CARGO_MANIFEST_DIR`).
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -14,24 +14,24 @@ use groove::Schema;
 use serde::Deserialize;
 use tauri::AppHandle;
 
-/// Subdirectory under [`tauri_plugin_self::paths::aven_os_app_base`] for Jazz schema files.
-pub const JAZZ_SCHEMA_SUBDIR: &str = "jazz-schema";
+/// Subdirectory under [`tauri_plugin_self::paths::aven_os_app_base`] for Aven schema files.
+pub const AVEN_SCHEMA_SUBDIR: &str = "aven-schema";
 pub const SCHEMA_MANIFEST_FILENAME: &str = "schema.manifest.json";
 
 const EMBEDDED_MANIFEST: &str = include_str!(concat!(
 	env!("CARGO_MANIFEST_DIR"),
-	"/../../libs/jazz-schema/schema.manifest.json"
+	"/../../libs/aven-schema/schema.manifest.json"
 ));
 const EMBEDDED_REGISTRY: &str = include_str!(concat!(
 	env!("CARGO_MANIFEST_DIR"),
-	"/../../libs/jazz-schema/migrations/registry.json"
+	"/../../libs/aven-schema/migrations/registry.json"
 ));
 const EMBEDDED_SNAPSHOT_BEFORE_FILES: &str = include_str!(concat!(
 	env!("CARGO_MANIFEST_DIR"),
-	"/../../libs/jazz-schema/migrations/snapshots/before-files.manifest.json"
+	"/../../libs/aven-schema/migrations/snapshots/before-files.manifest.json"
 ));
 
-static RUNTIME_JAZZ_SCHEMA_ROOT: OnceLock<PathBuf> = OnceLock::new();
+static RUNTIME_AVEN_SCHEMA_ROOT: OnceLock<PathBuf> = OnceLock::new();
 
 #[derive(Debug, Deserialize)]
 struct ManifestColumn {
@@ -55,32 +55,32 @@ struct Manifest {
 	tables: BTreeMap<String, ManifestTable>,
 }
 
-fn dev_jazz_schema_root() -> PathBuf {
-	PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../libs/jazz-schema")
+fn dev_aven_schema_root() -> PathBuf {
+	PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../libs/aven-schema")
 }
 
-/// Root for manifest + migration registry (repo in debug when present, else `.avenOS/jazz-schema`).
-pub fn jazz_schema_root() -> PathBuf {
+/// Root for manifest + migration registry (repo in debug when present, else `.avenOS/aven-schema`).
+pub fn aven_schema_root() -> PathBuf {
 	if cfg!(debug_assertions) {
-		let dev = dev_jazz_schema_root();
+		let dev = dev_aven_schema_root();
 		if dev.join(SCHEMA_MANIFEST_FILENAME).is_file() {
 			return dev;
 		}
 	}
-	RUNTIME_JAZZ_SCHEMA_ROOT
+	RUNTIME_AVEN_SCHEMA_ROOT
 		.get()
 		.cloned()
-		.unwrap_or_else(dev_jazz_schema_root)
+		.unwrap_or_else(dev_aven_schema_root)
 }
 
-pub fn jazz_schema_manifest_path() -> PathBuf {
-	jazz_schema_root().join(SCHEMA_MANIFEST_FILENAME)
+pub fn aven_schema_manifest_path() -> PathBuf {
+	aven_schema_root().join(SCHEMA_MANIFEST_FILENAME)
 }
 
-/// Seed bundled schema files into `<Documents>/.avenOS/jazz-schema/` (macOS/iOS sandbox-safe).
+/// Seed bundled schema files into `<Documents>/.avenOS/aven-schema/` (macOS/iOS sandbox-safe).
 pub fn install_runtime_schema_files<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<(), String> {
 	let base = tauri_plugin_self::paths::aven_os_app_base(app)?;
-	let root = base.join(JAZZ_SCHEMA_SUBDIR);
+	let root = base.join(AVEN_SCHEMA_SUBDIR);
 	let snapshots = root.join("migrations/snapshots");
 	fs::create_dir_all(&snapshots)
 		.map_err(|e| format!("mkdir {}: {e}", snapshots.display()))?;
@@ -92,11 +92,11 @@ pub fn install_runtime_schema_files<R: tauri::Runtime>(app: &AppHandle<R>) -> Re
 		EMBEDDED_SNAPSHOT_BEFORE_FILES,
 	)?;
 
-	let _ = RUNTIME_JAZZ_SCHEMA_ROOT.set(root);
+	let _ = RUNTIME_AVEN_SCHEMA_ROOT.set(root);
 	log::info!(
 		target: "avenos::schema",
-		"installed jazz schema files under {}",
-		RUNTIME_JAZZ_SCHEMA_ROOT
+		"installed aven schema files under {}",
+		RUNTIME_AVEN_SCHEMA_ROOT
 			.get()
 			.map(|p| p.display().to_string())
 			.unwrap_or_default()
@@ -131,11 +131,15 @@ fn add_column(tb: TableSchemaBuilder, col: &ManifestColumn) -> Result<TableSchem
 		("uuid", true) => Ok(tb.nullable_column(&col.name, ColumnType::Uuid)),
 		("uuid[]", false) => Ok(tb.column(
 			&col.name,
-			ColumnType::Array(Box::new(ColumnType::Uuid)),
+			ColumnType::Array {
+				element: Box::new(ColumnType::Uuid),
+			},
 		)),
 		("uuid[]", true) => Ok(tb.nullable_column(
 			&col.name,
-			ColumnType::Array(Box::new(ColumnType::Uuid)),
+			ColumnType::Array {
+				element: Box::new(ColumnType::Uuid),
+			},
 		)),
 		_ => Err(format!(
 			"unknown column `{}` kind {:?} nullable={}",
@@ -146,13 +150,13 @@ fn add_column(tb: TableSchemaBuilder, col: &ManifestColumn) -> Result<TableSchem
 
 fn read_manifest_json() -> Result<String, String> {
 	if cfg!(debug_assertions) {
-		let path = dev_jazz_schema_root().join(SCHEMA_MANIFEST_FILENAME);
+		let path = dev_aven_schema_root().join(SCHEMA_MANIFEST_FILENAME);
 		if path.is_file() {
 			return fs::read_to_string(&path)
 				.map_err(|e| format!("read {}: {e}", path.display()));
 		}
 	}
-	if let Some(root) = RUNTIME_JAZZ_SCHEMA_ROOT.get() {
+	if let Some(root) = RUNTIME_AVEN_SCHEMA_ROOT.get() {
 		let path = root.join(SCHEMA_MANIFEST_FILENAME);
 		if path.is_file() {
 			return fs::read_to_string(&path)
@@ -190,6 +194,17 @@ pub fn manifest_secret_columns() -> Result<HashMap<String, HashSet<String>>, Str
 	manifest_sensitive_columns()
 }
 
+/// Table names that carry a `spark_id` column — the manifest is the single source of truth
+/// for which tables participate in biscuit-gated P2P sync and ACL object maps.
+pub fn manifest_spark_scoped_table_names() -> Result<Vec<String>, String> {
+	let m = read_manifest()?;
+	Ok(m.tables
+		.iter()
+		.filter(|(_, def)| def.columns.iter().any(|c| c.name == "spark_id"))
+		.map(|(name, _)| name.clone())
+		.collect())
+}
+
 /// Build a Jazz [`Schema`] from a manifest JSON file (e.g. migration snapshots).
 pub fn load_jazz_schema_from_manifest_path(path: &std::path::Path) -> Result<Schema, String> {
 	let raw =
@@ -210,7 +225,7 @@ fn manifest_to_schema(m: Manifest) -> Result<Schema, String> {
 	Ok(builder.build())
 }
 
-/// Build a Jazz [`Schema`] from the active manifest (repo, `.avenOS/jazz-schema`, or compile-time embed).
+/// Build a Jazz [`Schema`] from the active manifest (repo, `.avenOS/aven-schema`, or compile-time embed).
 pub fn load_jazz_schema_from_manifest() -> Result<Schema, String> {
 	let raw = read_manifest_json()?;
 	let m: Manifest = serde_json::from_str(&raw).map_err(|e| format!("manifest JSON: {e}"))?;

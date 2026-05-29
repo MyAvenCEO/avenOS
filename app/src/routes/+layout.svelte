@@ -33,7 +33,7 @@ const docsActive = $derived(path.startsWith('/docs'))
 const selfActive = $derived(path.startsWith('/self'))
 const sparksNavActive = $derived(path.startsWith('/sparks'))
 const dbActive = $derived(path.startsWith('/db'))
-const avencityActive = $derived(path.startsWith('/avencity'))
+const avenCityActive = $derived(path.startsWith('/aven-city'))
 
 const shellLocked = $derived(
 	browser && isTauriRuntime() && $deviceSession.kind === 'locked',
@@ -207,11 +207,11 @@ $effect(() => {
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a
-						href="/avencity"
+						href="/aven-city"
 						data-sveltekit-preload-data="hover"
-						class="transition-opacity hover:opacity-80 {avencityActive ? 'opacity-95' : 'opacity-40'}"
-						aria-current={avencityActive ? 'page' : undefined}
-						onclick={(e) => navigateApp('/avencity', e)}
+						class="transition-opacity hover:opacity-80 {avenCityActive ? 'opacity-95' : 'opacity-40'}"
+						aria-current={avenCityActive ? 'page' : undefined}
+						onclick={(e) => navigateApp('/aven-city', e)}
 						>avenCITY</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>

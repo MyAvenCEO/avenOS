@@ -50,7 +50,7 @@ Production bootstrap lives on Fly (**Frankfurt**) as app **`relay-aven-ceo`**. D
 bun run deploy:relay-fly
 ```
 
-Uses [`projects/aven-p2p-signal/fly.toml`](../../../../projects/aven-p2p-signal/fly.toml) + [`Dockerfile`](../../../../projects/aven-p2p-signal/Dockerfile). Org: set **`FLY_ORG`**, or the script infers a Maia/Aven-ish org by **slug or display name**.
+Uses [`libs/aven-relay/fly.toml`](../../../../libs/aven-relay/fly.toml) + [`Dockerfile`](../../../../libs/aven-relay/Dockerfile). Org: set **`FLY_ORG`**, or the script infers a Maia/Aven-ish org by **slug or display name**.
 
 Allocate **IPv4** (included in deploy flow), then DNS at **`aven.ceo`**:
 
@@ -118,7 +118,7 @@ Set in repo-root **`.env`** (alongside **`GENESIS_NETWORK_ID`**). **`deploy:rela
 | **`AVENOS_RELAY_SEED_HEX`** | 32-byte Ed25519 seed (64 hex). Server + Fly secret. **Never commit.** |
 | **`AVENOS_RELAY_PUBLIC_KEY_HEX`** | Blind-relay public key (64 hex). App Store compile embed + startup sanity check. |
 
-Priority on the relay server ([`relay_host.rs`](../../../../projects/aven-p2p-signal/src/relay_host.rs)): **env seed → volume file → auto-generate (local dev only)**. Fly requires env or mounted seed.
+Priority on the relay server ([`relay_host.rs`](../../../../libs/aven-relay/src/relay_host.rs)): **env seed → volume file → auto-generate (local dev only)**. Fly requires env or mounted seed.
 
 Bootstrap HyperDHT node identity (`bootstrap-hyperdht.seed`) remains file/volume-backed (clients do not embed it).
 
@@ -138,7 +138,7 @@ Legacy: **`AVENOS_SKIP_P2P_SIGNAL=1`** also disables central mode.
 
 ## What runs locally when `AVEN_RELAY=true` and URL is localhost
 
-1. **Rust** — [`projects/aven-p2p-signal`](../../../../projects/aven-p2p-signal): UDP **49737** HyperDHT bootstrap **and** co-hosted Hyperswarm blind-relay. Stdout JSON includes `bootstrap`, `relayPublicKeyHex`, `relayUdpPort`.
+1. **Rust** — [`libs/aven-relay`](../../../../libs/aven-relay): UDP **49737** HyperDHT bootstrap **and** co-hosted Hyperswarm blind-relay. Stdout JSON includes `bootstrap`, `relayPublicKeyHex`, `relayUdpPort`.
 
 Orchestration: [`scripts/p2p-signal.ts`](../../../../scripts/p2p-signal.ts). Entrypoints [`scripts/dev-app-macos.ts`](../../../../scripts/dev-app-macos.ts), [`scripts/dev-app-linux.ts`](../../../../scripts/dev-app-linux.ts), [`scripts/dev-two-instances.ts`](../../../../scripts/dev-two-instances.ts) call **`startP2pSignal`** and merge **`envAugment`**.
 

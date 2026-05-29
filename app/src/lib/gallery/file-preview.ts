@@ -1,4 +1,4 @@
-import type { FilesRow } from '@avenos/jazz-schema'
+import type { JazzRow } from '$lib/jazz/api'
 
 export function isPreviewableImage(mime: string): boolean {
 	const m = mime.trim().toLowerCase()
@@ -9,17 +9,18 @@ export function isPdfMime(mime: string): boolean {
 	return mime.trim().toLowerCase() === 'application/pdf'
 }
 
-export function imageDataUrl(row: FilesRow): string | null {
-	if (!isPreviewableImage(row.mime_type)) return null
-	const b64 = row.content_b64?.trim()
+export function imageDataUrl(row: JazzRow): string | null {
+	const mime = String(row.mime_type ?? '')
+	if (!isPreviewableImage(mime)) return null
+	const b64 = String(row.content_b64 ?? '').trim()
 	if (!b64) return null
-	return `data:${row.mime_type};base64,${b64}`
+	return `data:${mime};base64,${b64}`
 }
 
-export function fileDownloadDataUrl(row: FilesRow): string | null {
-	const b64 = row.content_b64?.trim()
+export function fileDownloadDataUrl(row: JazzRow): string | null {
+	const b64 = String(row.content_b64 ?? '').trim()
 	if (!b64) return null
-	const mime = row.mime_type.trim() || 'application/octet-stream'
+	const mime = String(row.mime_type ?? '').trim() || 'application/octet-stream'
 	return `data:${mime};base64,${b64}`
 }
 

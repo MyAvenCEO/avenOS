@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "aven-p2p-signal"
+name = "aven-relay"
 version = "0.1.0"
 dependencies = [
  "hex",

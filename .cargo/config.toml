@@ -1,0 +1,5 @@
+# AvenOS — single Cargo target for the whole repo (not overridable per crate).
+# All builds: app, aven-db, verify gates, dev 2x → target/rust/
+[build]
+target-dir = "target/rust"
+incremental = false

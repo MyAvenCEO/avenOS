@@ -97,7 +97,7 @@ export function readLegacyRelaySeedHex(filePath: string): string {
 }
 
 export function deriveRelayPublicKeyHexFromSeed(repoRoot: string, seedHex: string): string {
-	const manifest = path.join(repoRoot, 'projects', 'aven-p2p-signal', 'Cargo.toml')
+	const manifest = path.join(repoRoot, 'libs', 'aven-relay', 'Cargo.toml')
 	const pk = execFileSync(
 		'cargo',
 		['run', '-q', `--manifest-path=${manifest}`, '--', '--derive-relay-public-key'],

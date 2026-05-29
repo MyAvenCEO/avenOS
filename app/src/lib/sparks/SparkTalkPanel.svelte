@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
-	import type { FilesRow, MessagesRow } from '@avenos/jazz-schema'
+	import type { JazzRow } from '$lib/jazz/api'
 	import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 	import type { ComposerMode } from '$lib/intents/types'
 	import { persistSparkFiles } from '$lib/jazz/intent-files'
@@ -64,7 +64,7 @@
 	)
 
 	const filesByMessageId = $derived.by(() => {
-		const map = new Map<string, FilesRow[]>()
+		const map = new Map<string, JazzRow[]>()
 		for (const row of filesStore.rows) {
 			if (!idsMatch(row.spark_id, canonicalSparkId)) continue
 			const parentId = row.intent_id?.trim()
@@ -99,7 +99,7 @@
 		}
 	}
 
-	function isOwnMessage(row: MessagesRow): boolean {
+	function isOwnMessage(row: JazzRow): boolean {
 		const local = session?.peerDid?.trim().toLowerCase() ?? ''
 		return local !== '' && row.author_did.trim().toLowerCase() === local
 	}

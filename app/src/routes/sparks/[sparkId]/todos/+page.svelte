@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { browser } from '$app/environment'
 	import { page } from '$app/state'
-	import type { TodosRow } from '@avenos/jazz-schema'
+	import type { JazzRow } from '$lib/jazz/api'
 	import { jazzSession, type JazzSessionReply } from '$lib/jazz/api'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
@@ -81,7 +81,7 @@
 		}
 	}
 
-	function beginEdit(row: TodosRow): void {
+	function beginEdit(row: JazzRow): void {
 		if (!tauri || !unlocked || listBusy || editingId !== null) return
 		editingId = row.id
 		editDraft = row.title
@@ -92,7 +92,7 @@
 		editDraft = ''
 	}
 
-	async function finishTitleEdit(row: TodosRow, reason: 'blur' | 'enter'): Promise<void> {
+	async function finishTitleEdit(row: JazzRow, reason: 'blur' | 'enter'): Promise<void> {
 		if (!tauri || !unlocked || editingId !== row.id) return
 		const next = editDraft.trim()
 		if (!next) {
@@ -116,7 +116,7 @@
 		}
 	}
 
-	async function toggle(row: TodosRow): Promise<void> {
+	async function toggle(row: JazzRow): Promise<void> {
 		if (!tauri || !unlocked) return
 		listBusy = true
 		err = undefined
@@ -129,7 +129,7 @@
 		}
 	}
 
-	async function remove(row: TodosRow, ev: MouseEvent): Promise<void> {
+	async function remove(row: JazzRow, ev: MouseEvent): Promise<void> {
 		ev.stopPropagation()
 		if (!tauri || !unlocked) return
 		if (editingId === row.id) cancelEdit()

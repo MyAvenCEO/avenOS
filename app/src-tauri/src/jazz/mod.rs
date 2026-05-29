@@ -1,4 +1,4 @@
-//! Generic Jazz CRUD over Tauri IPC. Schema mirrors `libs/jazz-schema/schema.manifest.json`.
+//! Generic Jazz CRUD over Tauri IPC. Schema mirrors `libs/aven-schema/schema.manifest.json`.
 
 pub(crate) mod jazz_engine;
 pub mod runtime;
@@ -9,6 +9,7 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use groove::{
 	query_manager::types::{ColumnType, ComposedBranchName, SchemaHash, TableSchema},
@@ -18,9 +19,11 @@ use groove::{
 	JazzClient,
 	JazzError,
 	ObjectId,
+	PeerInboundParkedHook,
 	Value,
 };
-use crate::peer_sync_gate::{self, BiscuitGatedPeerTransport, PeerClientIdMap, SyncAclSnapshot};
+use crate::peer_sync_gate::{BiscuitGatedPeerTransport, PeerClientIdMap};
+use crate::spark_sync::{self, SyncAclSnapshot};
 use serde_json::{Map, Value as JsonValue};
 use tauri::{Emitter, Manager};
 use tauri_plugin_self::derive::ed25519_public;
@@ -83,9 +86,6 @@ impl Default for JazzConn {
 		}
 	}
 }
-
-/// Tables that change vault biscuits / P2P ACL; everything else can reuse a cached shell.
-const VAULT_SHELL_TABLES: &[&str] = &["sparks", "keyshares", "peers"];
 
 pub struct ManagedJazz {
 	conn: Mutex<JazzConn>,
@@ -165,6 +165,22 @@ impl ManagedJazz {
 	}
 }
 
+const TABLE_DRAIN_FOLLOW_UP: Duration = Duration::from_millis(120);
+
+/// Second drain pass after peer sync apply — row-batch frames can land after the first flush.
+fn schedule_table_drain_follow_up(app: tauri::AppHandle, tables: HashSet<String>) {
+	tauri::async_runtime::spawn(async move {
+		tokio::time::sleep(TABLE_DRAIN_FOLLOW_UP).await;
+		let actor = runtime::groove_actor(&app);
+		if let Err(e) = actor.enqueue_drain(tables).await {
+			log::trace!(
+				target: "avenos::jazz",
+				"table-change drain follow-up enqueue failed: {e}",
+			);
+		}
+	});
+}
+
 /// Runs one coalesced drain batch on the Groove actor (serialization + shell hydrate + snapshots).
 pub(crate) async fn execute_drain_batch(
 	app: &tauri::AppHandle,
@@ -172,10 +188,10 @@ pub(crate) async fn execute_drain_batch(
 	self_state: &SelfState,
 	mut pending: std::collections::HashSet<String>,
 ) {
-	if pending
+	let vault_shell_dirty = pending
 		.iter()
-		.any(|t| VAULT_SHELL_TABLES.contains(&t.as_str()))
-	{
+		.any(|t| spark_sync::is_vault_shell_table(t));
+	if vault_shell_dirty {
 		jazz.invalidate_vault_shell();
 	}
 
@@ -189,16 +205,15 @@ pub(crate) async fn execute_drain_batch(
 		}
 	}
 
-	if pending.is_empty() {
-		return;
-	}
-
-	if !jazz.any_ui_subscriber(&pending).await {
-		log::trace!(
-			target: "avenos::jazz",
-			"table-change drain: no UI subscribers for {} table(s), skip",
-			pending.len(),
-		);
+	let want_snapshots = !pending.is_empty() && jazz.any_ui_subscriber(&pending).await;
+	if !vault_shell_dirty && !want_snapshots {
+		if !pending.is_empty() {
+			log::trace!(
+				target: "avenos::jazz",
+				"table-change drain: no UI subscribers for {} table(s), skip",
+				pending.len(),
+			);
+		}
 		return;
 	}
 
@@ -206,6 +221,43 @@ pub(crate) async fn execute_drain_batch(
 		Ok(c) => c,
 		Err(_) => return,
 	};
+
+	// Row-batch sync parks inbound frames until `batched_tick`; `recv_inbound` posts to this
+	// drain earlier. Flush first so re-hydrate / list queries see peer grant deltas.
+	if vault_shell_dirty || want_snapshots {
+		if let Err(e) = client.flush_peer_sync().await {
+			log::debug!(
+				target: "avenos::jazz",
+				"table-change drain: flush_peer_sync before shell/snapshot: {e}",
+			);
+		}
+	}
+
+	if pending
+		.iter()
+		.any(|t| spark_sync::is_spark_data_table(t))
+	{
+		if let Err(e) = jazz.refresh_sync_acl_object_map(client.as_ref()).await {
+			log::debug!(
+				target: "avenos::jazz",
+				"table-change drain: refresh_sync_acl_object_map failed: {e}",
+			);
+		}
+	}
+
+	if vault_shell_dirty {
+		if let Err(e) = jazz_shell_ready(app, jazz, self_state, client.clone()).await {
+			log::debug!(
+				target: "avenos::jazz",
+				"table-change drain: vault shell re-hydrate failed: {e}",
+			);
+		}
+	}
+
+	if !want_snapshots {
+		return;
+	}
+
 	let shell = match jazz_shell_ready(app, jazz, self_state, client.clone()).await {
 		Ok(s) => s,
 		Err(e) => {
@@ -218,6 +270,18 @@ pub(crate) async fn execute_drain_batch(
 		}
 	};
 
+	let snapshot_tables: HashSet<String> = pending.iter().cloned().collect();
+	if want_snapshots {
+		{
+			let mut last = jazz
+				.last_table_snapshots
+				.write()
+				.expect("last_table_snapshots poisoned");
+			for t in &snapshot_tables {
+				last.remove(t);
+			}
+		}
+	}
 	for table in pending {
 		match jazz
 			.snapshot_broadcast(app, client.as_ref(), shell.as_ref(), &table)
@@ -233,6 +297,10 @@ pub(crate) async fn execute_drain_batch(
 				"table-change drain: snapshot_broadcast({table}) failed: {e}",
 			),
 		}
+	}
+
+	if !snapshot_tables.is_empty() {
+		schedule_table_drain_follow_up(app.clone(), snapshot_tables);
 	}
 }
 
@@ -255,7 +323,8 @@ pub async fn run_table_change_drain(
 	use std::collections::HashSet;
 	use std::time::Duration;
 
-	const COALESCE_WINDOW: Duration = Duration::from_millis(25);
+	// Headroom for peer `push_sync_inbox` → `batched_tick` apply before we flush + re-query.
+	const COALESCE_WINDOW: Duration = Duration::from_millis(50);
 
 	loop {
 		let Some(first) = rx.recv().await else {
@@ -669,6 +738,19 @@ impl ManagedJazz {
 		// Keep sync_acl until re-hydrate replaces it — clearing it re-triggers catch-up rebroadcast storms.
 	}
 
+	/// Refresh `(table, object_id) → spark_id` in the outbound sync gate without a full shell hydrate.
+	pub(crate) async fn refresh_sync_acl_object_map(
+		&self,
+		client: &JazzClient,
+	) -> Result<(), String> {
+		let object_spark_ids = jazz_engine::build_object_spark_id_map(client).await?;
+		let mut guard = self.sync_acl.write().expect("sync_acl poisoned");
+		if let Some(snap) = guard.as_mut() {
+			snap.object_spark_ids = object_spark_ids;
+		}
+		Ok(())
+	}
+
 	fn reset_mesh_acl_catchup(&self) {
 		self.mesh_acl_rebroadcast_done.store(false, Ordering::Release);
 	}
@@ -907,7 +989,7 @@ pub(super) fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable:
 			.and_then(|s| Uuid::parse_str(s).ok())
 			.map(|u| Value::Uuid(ObjectId::from_uuid(u)))
 			.ok_or_else(|| "expected UUID string column".into()),
-		ColumnType::Array(inner) => {
+		ColumnType::Array { element: inner } => {
 			let arr = cell
 				.as_array()
 				.ok_or_else(|| format!("expected JSON array column (inner={inner:?})"))?;
@@ -917,8 +999,13 @@ pub(super) fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable:
 			}
 			Ok(Value::Array(elems))
 		}
-		ColumnType::Row(_) => Err(format!(
+		ColumnType::Row { .. } => Err(format!(
 			"row {:?} unsupported through JSON IPC for now",
+			col_ty,
+		)),
+		ColumnType::Double | ColumnType::Enum { .. } | ColumnType::Json { .. }
+		| ColumnType::Bytea | ColumnType::BatchId => Err(format!(
+			"column type {:?} unsupported through JSON IPC",
 			col_ty,
 		)),
 	}
@@ -960,7 +1047,7 @@ pub(super) fn loose_json_to_sealable_value(
 }
 
 pub(super) fn insert_values(table_schema: &TableSchema, values: JsonRow) -> Result<Vec<Value>, String> {
-	let cols = &table_schema.descriptor.columns;
+	let cols = &table_schema.columns.columns;
 	let mut row = Vec::with_capacity(cols.len());
 	for cd in cols {
 		let key = cd.name_str();
@@ -977,13 +1064,13 @@ pub(super) fn insert_values(table_schema: &TableSchema, values: JsonRow) -> Resu
 
 pub(crate) fn patch_updates(table_schema: &TableSchema, patch: JsonRow) -> Result<Vec<(String, Value)>, String> {
 	let mut ops = Vec::new();
-	let desc = &table_schema.descriptor;
+	let row_desc = &table_schema.columns;
 
 	for (k, raw_js) in &patch {
 		if k == "id" {
 			continue;
 		}
-		let col = desc.column(k).ok_or_else(|| format!("unknown_column: {k}"))?;
+		let col = row_desc.column(k).ok_or_else(|| format!("unknown_column: {k}"))?;
 		let v = json_cell_to_jazz(raw_js, &col.column_type, col.nullable)?;
 		ops.push((k.clone(), v));
 	}
@@ -1039,10 +1126,16 @@ async fn jazz_connect(
 			inner_transport,
 			cid_map,
 			Arc::clone(&mj.sync_acl),
-			Some(mj.change_tx.clone()),
 		));
 
-		let client = JazzClient::connect_with_peer_transport(ctx, gated)
+		let change_tx = mj.change_tx.clone();
+		let on_inbound_parked: PeerInboundParkedHook = Arc::new(move |payload| {
+			for table in spark_sync::tables_to_notify(payload) {
+				let _ = change_tx.send(table);
+			}
+		});
+
+		let client = JazzClient::connect_with_peer_transport(ctx, gated, Some(on_inbound_parked))
 			.await
 			.map_err(format_jazz_err)?;
 		crate::schema_migrations::stamp_current_vault_snapshot(&data_dir, &schema)?;
@@ -1104,7 +1197,7 @@ async fn jazz_shell_ready(
 	let mut slot = mj.shell.lock().await;
 	*slot = Some(std::sync::Arc::clone(&arc));
 	let object_spark_ids = jazz_engine::build_object_spark_id_map(client.as_ref()).await?;
-	let snap = peer_sync_gate::load_acl_snapshot(&arc.vault, object_spark_ids)?;
+	let snap = spark_sync::load_acl_snapshot(&arc.vault, object_spark_ids)?;
 	*mj.sync_acl.write().expect("sync_acl poisoned") = Some(snap);
 	// One catch-up rebroadcast per conn epoch — not on every vault-table invalidation reload.
 	let first_acl_catchup = !mj.mesh_acl_rebroadcast_done.swap(true, Ordering::AcqRel);
@@ -1643,6 +1736,43 @@ pub(crate) async fn groove_ipc_jazz_get(
 	}
 }
 
+/// Flush outbound peer sync and nudge catch-up after a local spark-scoped row write.
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+async fn finish_spark_data_write(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	client: &JazzClient,
+	shell: &jazz_engine::ShellState,
+	table: &str,
+) {
+	if !spark_sync::is_spark_data_table(table) {
+		return;
+	}
+	if let Err(e) = client.flush_peer_sync().await {
+		log::debug!(
+			target: "avenos::jazz",
+			"spark-scoped write: flush_peer_sync failed table={table}: {e}",
+		);
+	}
+	app.state::<crate::peer_catchup::PeerCatchupHandle>()
+		.on_spark_data_written()
+		.await;
+	let _ = jazz
+		.snapshot_broadcast(app, client, shell, table)
+		.await;
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "ios")))]
+async fn finish_spark_data_write(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	client: &JazzClient,
+	shell: &jazz_engine::ShellState,
+	table: &str,
+) {
+	let _ = (app, jazz, client, shell, table);
+}
+
 pub(crate) async fn groove_ipc_jazz_create(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -1710,12 +1840,16 @@ pub(crate) async fn groove_ipc_jazz_create(
 		.await
 		.map_err(format_jazz_err)?;
 
+	if spark_sync::needs_acl_object_map_refresh_after_create(&table) {
+		let _ = jazz.refresh_sync_acl_object_map(client.as_ref()).await;
+	}
+
 	if !plaintext.is_empty() {
 		let spark = jazz_engine::spark_uuid_row(&tbl, &vals)?;
 		let mut ph = JsonRow::new();
 		for (col, pt) in plaintext {
 			let cd = tbl
-				.descriptor
+				.columns
 				.column(&col)
 				.ok_or_else(|| format!("manifest_missing_col:{col}"))?;
 			ph.insert(
@@ -1753,6 +1887,8 @@ pub(crate) async fn groove_ipc_jazz_create(
 	)?;
 
 	let _ = jazz.change_tx.send(table.clone());
+
+	finish_spark_data_write(app, jazz, client.as_ref(), shell.as_ref(), &table).await;
 
 	Ok(reply)
 }
@@ -1813,7 +1949,7 @@ pub(crate) async fn groove_ipc_jazz_update(
 					continue;
 				}
 				let cd = tbl
-					.descriptor
+					.columns
 					.column(col)
 					.ok_or_else(|| format!("unknown_sensitive_col:{col}"))?;
 				let gv = loose_json_to_sealable_value(&js, &cd.column_type, cd.nullable)?;
@@ -1853,6 +1989,8 @@ pub(crate) async fn groove_ipc_jazz_update(
 		})?;
 
 	let _ = jazz.change_tx.send(table.clone());
+
+	finish_spark_data_write(app, jazz, client.as_ref(), shell.as_ref(), &table).await;
 
 	groove_ipc_jazz_get(app, jazz, self_state, table, id.to_string()).await
 }

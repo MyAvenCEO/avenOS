@@ -1,6 +1,6 @@
 //! Jazz v2-style local schema migrations: lenses between schema hashes, no full DB wipe.
 //!
-//! See <https://jazz.tools/docs/schemas/migrations> and `libs/jazz-schema/migrations/`.
+//! See <https://jazz.tools/docs/schemas/migrations> and `libs/aven-schema/migrations/`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -25,7 +25,7 @@ struct RegistrySnapshot {
 }
 
 fn registry_path() -> PathBuf {
-	schema_manifest::jazz_schema_root().join("migrations/registry.json")
+	schema_manifest::aven_schema_root().join("migrations/registry.json")
 }
 
 pub fn schema_hash_bytes(schema: &Schema) -> [u8; 32] {
@@ -47,7 +47,7 @@ fn bundled_manifest_for_hash(hash: &[u8; 32]) -> Option<PathBuf> {
 	let want = hash_hex(hash);
 	for snap in reg.snapshots {
 		if snap.hash.trim().eq_ignore_ascii_case(&want) {
-			return Some(schema_manifest::jazz_schema_root().join(snap.manifest));
+			return Some(schema_manifest::aven_schema_root().join(snap.manifest));
 		}
 	}
 	None
@@ -105,7 +105,7 @@ pub fn live_schemas_for_stored_hash(
 	let lens = generate_lens(&old, current);
 	if lens.is_draft() {
 		return Err(format!(
-			"auto lens {} → {} is a draft (ambiguous rename?); add an explicit migration under libs/jazz-schema/migrations/",
+			"auto lens {} → {} is a draft (ambiguous rename?); add an explicit migration under libs/aven-schema/migrations/",
 			hex_short(stored_hash),
 			hex_short(&current_hash)
 		));
@@ -129,7 +129,7 @@ fn hex_short(bytes: &[u8]) -> String {
 /// After a successful connect, stamp the current manifest into the vault snapshot dir.
 pub fn stamp_current_vault_snapshot(data_dir: &Path, current: &Schema) -> Result<(), String> {
 	let hash = schema_hash_bytes(current);
-	let manifest = schema_manifest::jazz_schema_manifest_path();
+	let manifest = schema_manifest::aven_schema_manifest_path();
 	persist_vault_snapshot(data_dir, &hash, &manifest)
 }
 

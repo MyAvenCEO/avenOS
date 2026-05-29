@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { browser } from '$app/environment'
-	import type { SparksRow } from '@avenos/jazz-schema'
+	import type { JazzRow } from '$lib/jazz/api'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/self/device-session-store'
@@ -20,7 +20,7 @@
 	)
 	const loading = $derived(tauri && unlocked && !sparksStore.loaded && !sparksStore.error)
 
-	function sparkSubtitle(row: SparksRow): string {
+	function sparkSubtitle(row: JazzRow): string {
 		const id = row.spark_id
 		return id.length > 14 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id
 	}
