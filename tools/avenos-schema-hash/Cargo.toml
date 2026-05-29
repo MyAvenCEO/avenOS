@@ -5,9 +5,9 @@ edition = "2021"
 publish = false
 
 [dependencies]
-groove = { package = "jazz-tools", version = "2.0.0-alpha.0", default-features = false, features = ["client-p2p"] }
+groove = { package = "aven-db", version = "2.0.0-alpha.50", default-features = false, features = ["client-p2p"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [patch.crates-io]
-jazz-tools = { path = "../../third_party/jazz-tools" }
+aven-db = { path = "../../libs/aven-db" }

@@ -637,7 +637,7 @@ fn init_logging() {
 	);
 }
 
-/// Idempotently drain JazzClient + flush SurrealKV.
+/// Idempotently drain JazzClient + flush RocksDB.
 ///
 /// `JAZZ_EXIT_DRAINING` is a single-shot guard: if `Ok(false)` was previously
 /// observed, this is the first call and we run the drain. Otherwise we no-op

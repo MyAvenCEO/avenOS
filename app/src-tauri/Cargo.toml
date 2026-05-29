@@ -4,7 +4,7 @@ version = "0.0.1"
 description = "Aven OS desktop shell"
 authors = ["Aven"]
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.93"
 [lib]
 name = "aven_os_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
@@ -19,7 +19,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 http = "1"
 async-trait = "0.1"
-groove = { package = "jazz-tools", version = "2.0.0-alpha.0", default-features = false, features = ["client-p2p"] }
+groove = { package = "aven-db", version = "2.0.0-alpha.50", default-features = false, features = ["client-p2p"] }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -55,7 +55,7 @@ oslog = { version = "0.2", features = ["logger"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6", default-features = false }
 
-# Vendored jazz-tools@2.0.0-alpha.0 with a single AvenOS-local patch:
+# Vendored aven-db (jazz2 alpha.50) with AvenOS P2P patches:
 # `QueryManager` write paths used to `.map_err(|_| QueryError::ObjectNotFound(id))`,
 # which collapses BranchNotFound / ParentNotFound / StorageError into a single
 # misleading "ObjectNotFound" string. The vendored copy preserves the real
@@ -68,6 +68,6 @@ objc2 = { version = "0.6", default-features = false }
 # - `JoinOpts::fast_refresh` — 3s DHT refresh + 2s connect retry cap on invite topics.
 # Wire compatibility with Node.js Hypercore/Hyperswarm/protomux is preserved.
 [patch.crates-io]
-jazz-tools = { path = "../../third_party/jazz-tools" }
+aven-db = { path = "../../libs/aven-db" }
 peeroxide = { path = "../../third_party/peeroxide" }
 peeroxide-dht = { path = "../../third_party/peeroxide-dht" }

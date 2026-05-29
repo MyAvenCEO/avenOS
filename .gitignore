@@ -44,7 +44,8 @@ vite.config.ts.timestamp-*
 /libs/vibe-app-sandbox/sandbox/dist/
 /libs/vibe-apps/*/dist/
 
-# Rust / Cargo (all crates in repo)
+# Upstream jazz2 mirror (local refresh only — never commit)
+/third_party/jazz2-upstream/
 target/
 **/target/
 

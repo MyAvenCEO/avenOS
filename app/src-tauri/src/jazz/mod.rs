@@ -514,9 +514,16 @@ fn reconcile_jazz_identity_cache_dir(
 	let mut reason: Option<String> = None;
 
 	let client_path = jazz_dir.join("client_id");
-	let groove_db_path = jazz_dir.join("groove.surrealkv");
-	let has_prior_groove_data =
-		client_path.exists() || groove_db_path.exists();
+	let rocksdb_path = jazz_dir.join("jazz.rocksdb");
+	let legacy_surrealkv_path = jazz_dir.join("groove.surrealkv");
+	let has_prior_groove_data = client_path.exists()
+		|| rocksdb_path.exists()
+		|| legacy_surrealkv_path.exists();
+	if legacy_surrealkv_path.exists() && !rocksdb_path.exists() {
+		reason = Some(
+			"storage backend migration: SurrealKV (groove.surrealkv) → RocksDB (jazz.rocksdb); wiping local vault".into(),
+		);
+	}
 	match fs::read_to_string(&client_path) {
 		Ok(s) => {
 			if let Some(cid) = ClientId::parse(s.trim()) {

@@ -1,0 +1,512 @@
+//! AvenOS P2P JazzClient (RocksDB + Hyperswarm peer transport, no WebSocket server).
+
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
+
+use crate::groove_tokio::{SubscriptionHandle as RuntimeSubHandle, TokioRuntime};
+use crate::query_manager::manager::LocalUpdates;
+use crate::query_manager::query::Query;
+use crate::query_manager::session::Session;
+use crate::query_manager::types::{OrderedRowDelta, Schema, TableName, Value};
+use crate::runtime_core::ReadDurabilityOptions;
+use crate::schema_manager::{SchemaManager, rehydrate_schema_manager_from_catalogue};
+use crate::storage::{RocksDBStorage, Storage, StorageError};
+use crate::sync_manager::{
+    ClientId, Destination, DurabilityTier, InboxEntry, OutboxEntry, Source, SyncManager,
+    SyncPayload,
+};
+use tokio::sync::{RwLock, mpsc};
+
+use crate::{AppContext, JazzError, ObjectId, Result, SubscriptionHandle, SubscriptionStream};
+
+type DynStorage = Box<dyn Storage + Send>;
+type ClientRuntime = TokioRuntime<DynStorage>;
+
+#[derive(Clone)]
+enum MaybePeerTransport {
+    Off,
+    Active(Arc<dyn crate::peer_transport::PeerTransport>),
+}
+
+impl Default for MaybePeerTransport {
+    fn default() -> Self {
+        Self::Off
+    }
+}
+
+impl std::fmt::Debug for MaybePeerTransport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Off => f.write_str("Off"),
+            Self::Active(_) => f.write_str("Active(..)"),
+        }
+    }
+}
+
+pub struct JazzClient {
+    runtime: ClientRuntime,
+    subscriptions: Arc<RwLock<HashMap<SubscriptionHandle, SubscriptionState>>>,
+    subscription_senders: Arc<RwLock<HashMap<RuntimeSubHandle, mpsc::Sender<OrderedRowDelta>>>>,
+    next_handle: std::sync::atomic::AtomicU64,
+    peer_transport: Option<Arc<dyn crate::peer_transport::PeerTransport>>,
+    peer_inbound_task: Option<tokio::task::JoinHandle<()>>,
+}
+
+struct SubscriptionState {
+    runtime_handle: RuntimeSubHandle,
+}
+
+type PeerOutboundFn = Arc<dyn Fn(ClientId, SyncPayload) + Send + Sync + 'static>;
+
+fn build_peer_bundle(layer: &MaybePeerTransport) -> PeerOutboundFn {
+    match layer {
+        MaybePeerTransport::Off => Arc::new(|_peer_runtime_id, _payload| {}),
+        MaybePeerTransport::Active(transport) => {
+            let transport = transport.clone();
+            Arc::new(move |peer_runtime_id, payload| {
+                let tt = transport.clone();
+                tokio::spawn(async move {
+                    if let Err(e) =
+                        crate::peer_transport::PeerTransport::send_to(&*tt, peer_runtime_id, payload)
+                            .await
+                    {
+                        tracing::warn!("PeerTransport::send_to failed: {e:?}");
+                    }
+                });
+            })
+        }
+    }
+}
+
+fn build_schema_manager(storage: &DynStorage, context: &AppContext) -> Result<SchemaManager> {
+    let sync_manager = SyncManager::new();
+    let mut schema_manager = SchemaManager::new(
+        sync_manager,
+        context.schema.clone(),
+        context.app_id,
+        "client",
+        "main",
+    )
+    .map_err(|e| JazzError::Schema(format!("{e:?}")))?;
+
+    rehydrate_schema_manager_from_catalogue(&mut schema_manager, storage.as_ref(), context.app_id)
+        .map_err(JazzError::Storage)?;
+
+    for old in &context.live_schemas {
+        schema_manager
+            .add_live_schema(old.clone())
+            .map_err(|e| JazzError::Schema(format!("live_schema migration: {e:?}")))?;
+    }
+
+    Ok(schema_manager)
+}
+
+fn vec_values_to_map(
+    schema: &Schema,
+    table: &str,
+    values: Vec<Value>,
+) -> std::result::Result<HashMap<String, Value>, JazzError> {
+    let table_name = TableName::new(table);
+    let table_schema = schema
+        .get(&table_name)
+        .ok_or_else(|| JazzError::Schema(format!("table not found: {table}")))?;
+    if values.len() != table_schema.columns.columns.len() {
+        return Err(JazzError::Schema(format!(
+            "column count mismatch for {table}: expected {}, got {}",
+            table_schema.columns.columns.len(),
+            values.len()
+        )));
+    }
+    let mut map = HashMap::with_capacity(values.len());
+    for (col, value) in table_schema.columns.columns.iter().zip(values) {
+        map.insert(col.name.to_string(), value);
+    }
+    Ok(map)
+}
+
+async fn open_persistent_storage(data_dir: &std::path::Path) -> Result<DynStorage> {
+    const MAX_ATTEMPTS: usize = 100;
+    const RETRY_DELAY_MS: u64 = 25;
+
+    std::fs::create_dir_all(data_dir)?;
+    let db_path = data_dir.join("jazz.rocksdb");
+    let mut opened = None;
+    let mut last_err = None;
+
+    for attempt in 0..MAX_ATTEMPTS {
+        match RocksDBStorage::open(&db_path, 64 * 1024 * 1024) {
+            Ok(storage) => {
+                opened = Some(storage);
+                break;
+            }
+            Err(err) => {
+                let is_lock_error = matches!(
+                    &err,
+                    StorageError::IoError(msg)
+                        if msg.contains("lock") || msg.contains("Lock") || msg.contains("busy")
+                );
+                if !is_lock_error || attempt + 1 == MAX_ATTEMPTS {
+                    last_err = Some(err);
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
+            }
+        }
+    }
+
+    opened
+        .map(|s| Box::new(s) as DynStorage)
+        .ok_or_else(|| {
+            JazzError::Storage(format!(
+                "failed to open rocksdb storage '{}': {:?}",
+                db_path.display(),
+                last_err
+            ))
+        })
+}
+
+impl JazzClient {
+    pub async fn connect(context: AppContext) -> Result<Self> {
+        let layer = MaybePeerTransport::Off;
+        let fwd = build_peer_bundle(&layer);
+        Self::do_connect(context, fwd, layer).await
+    }
+
+    pub async fn connect_with_peer_transport(
+        context: AppContext,
+        peer_transport: Arc<dyn crate::peer_transport::PeerTransport>,
+    ) -> Result<Self> {
+        let layer = MaybePeerTransport::Active(peer_transport);
+        let fwd = build_peer_bundle(&layer);
+        Self::do_connect(context, fwd, layer).await
+    }
+
+    pub fn register_peer_sync_client(&self, peer_id: ClientId) -> Result<()> {
+        self.runtime
+            .ensure_client_as_peer(peer_id)
+            .map_err(|e| JazzError::Sync(format!("ensure_client_as_peer {peer_id}: {e}")))?;
+        self.runtime
+            .rebroadcast_peer_catchup(peer_id)
+            .map_err(|e| JazzError::Sync(format!("rebroadcast_peer_catchup {peer_id}: {e}")))?;
+        Ok(())
+    }
+
+    pub fn rebroadcast_peer_catchup(&self, peer_id: ClientId) -> Result<()> {
+        self.runtime
+            .rebroadcast_peer_catchup(peer_id)
+            .map_err(|e| JazzError::Sync(format!("rebroadcast_peer_catchup {peer_id}: {e}")))
+    }
+
+    pub async fn rebroadcast_all_peer_clients_and_flush(&self) -> Result<()> {
+        self.runtime
+            .rebroadcast_all_peer_clients_and_flush()
+            .await
+            .map_err(|e| JazzError::Sync(format!("rebroadcast_all_peer_clients_and_flush: {e}")))
+    }
+
+    pub async fn flush_peer_sync(&self) -> Result<()> {
+        self.runtime
+            .flush()
+            .await
+            .map_err(|e| JazzError::Sync(format!("flush: {e}")))
+    }
+
+    pub fn ingest_peer_sync(&self, from_peer_runtime_id: ClientId, payload: SyncPayload) -> Result<()> {
+        let entry = InboxEntry {
+            source: Source::Client(from_peer_runtime_id),
+            payload,
+        };
+        self.runtime
+            .push_sync_inbox(entry)
+            .map_err(|e| JazzError::Sync(format!("push_sync_inbox: {e}")))
+    }
+
+    async fn do_connect(
+        context: AppContext,
+        peer_forwarder: PeerOutboundFn,
+        peer_layer: MaybePeerTransport,
+    ) -> Result<Self> {
+        std::fs::create_dir_all(&context.data_dir)?;
+
+        let client_id_path = context.data_dir.join("client_id");
+        let client_id = if client_id_path.exists() {
+            let id_str = std::fs::read_to_string(&client_id_path)?;
+            ClientId::parse(id_str.trim()).unwrap_or_else(|| {
+                let id = context.client_id.unwrap_or_default();
+                let _ = std::fs::write(&client_id_path, id.to_string());
+                id
+            })
+        } else if let Some(id) = context.client_id {
+            std::fs::write(&client_id_path, id.to_string())?;
+            id
+        } else {
+            let id = ClientId::new();
+            std::fs::write(&client_id_path, id.to_string())?;
+            id
+        };
+
+        tracing::debug!(client_id = %client_id, "Groove client identity persisted (sync inbox / peers)");
+
+        let storage: DynStorage = if context.server_url.is_empty() {
+            open_persistent_storage(&context.data_dir).await?
+        } else {
+            // P2P-only AvenOS builds pass an empty server_url; keep memory fallback for tests.
+            open_persistent_storage(&context.data_dir).await?
+        };
+
+        let schema_manager = build_schema_manager(&storage, &context)?;
+        let peer_forward = peer_forwarder.clone();
+        let runtime = TokioRuntime::new(schema_manager, storage, move |entry: OutboxEntry| {
+            match &entry.destination {
+                Destination::Server(_) => {}
+                Destination::Client(peer_runtime_id) => {
+                    peer_forward(*peer_runtime_id, entry.payload.clone());
+                }
+            }
+        });
+
+        runtime
+            .persist_schema()
+            .map_err(|e| JazzError::Storage(e.to_string()))?;
+
+        let subscription_senders: Arc<RwLock<HashMap<RuntimeSubHandle, mpsc::Sender<OrderedRowDelta>>>> =
+            Arc::new(RwLock::new(HashMap::new()));
+
+        let (peer_transport_stored, peer_inbound_task) = match peer_layer {
+            MaybePeerTransport::Off => (None, None),
+            MaybePeerTransport::Active(t) => {
+                let inbound_runtime = runtime.clone();
+                let tin = Arc::clone(&t);
+                let task = tokio::spawn(async move {
+                    loop {
+                        match crate::peer_transport::PeerTransport::recv_inbound(&*tin).await {
+                            None => break,
+                            Some(entry) => {
+                                if let Err(err) = inbound_runtime.push_sync_inbox(entry) {
+                                    tracing::warn!("push_sync_inbox (peer inbound): {err}");
+                                }
+                            }
+                        }
+                    }
+                });
+                (Some(t), Some(task))
+            }
+        };
+
+        Ok(Self {
+            runtime,
+            subscriptions: Arc::new(RwLock::new(HashMap::new())),
+            subscription_senders,
+            next_handle: std::sync::atomic::AtomicU64::new(1),
+            peer_transport: peer_transport_stored,
+            peer_inbound_task,
+        })
+    }
+
+    pub async fn subscribe(&self, query: Query) -> Result<SubscriptionStream> {
+        self.subscribe_internal(query, None).await
+    }
+
+    async fn subscribe_internal(
+        &self,
+        query: Query,
+        session: Option<Session>,
+    ) -> Result<SubscriptionStream> {
+        let handle = SubscriptionHandle(
+            self.next_handle
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+        );
+
+        let (tx, rx) = mpsc::channel::<OrderedRowDelta>(64);
+        let senders = self.subscription_senders.clone();
+
+        let runtime_handle = self
+            .runtime
+            .subscribe(
+                query.clone(),
+                move |delta| {
+                    if let Ok(senders_guard) = senders.try_read()
+                        && let Some(sender) = senders_guard.get(&delta.handle)
+                    {
+                        let _ = sender.try_send(delta.ordered_delta);
+                    }
+                },
+                session,
+            )
+            .map_err(|e| JazzError::Query(e.to_string()))?;
+
+        {
+            let mut senders = self.subscription_senders.write().await;
+            senders.insert(runtime_handle, tx);
+        }
+
+        {
+            let mut subs = self.subscriptions.write().await;
+            subs.insert(handle, SubscriptionState { runtime_handle });
+        }
+
+        Ok(SubscriptionStream::new(rx))
+    }
+
+    pub async fn query(
+        &self,
+        query: Query,
+        durability_tier: Option<DurabilityTier>,
+    ) -> Result<Vec<(ObjectId, Vec<Value>)>> {
+        let future = self
+            .runtime
+            .query(
+                query,
+                None,
+                ReadDurabilityOptions {
+                    tier: durability_tier,
+                    local_updates: LocalUpdates::Immediate,
+                },
+            )
+            .map_err(|e| JazzError::Query(e.to_string()))?;
+        future
+            .await
+            .map_err(|e| JazzError::Query(format!("{e:?}")))
+    }
+
+    pub async fn create(&self, table: &str, values: Vec<Value>) -> Result<ObjectId> {
+        let schema = self
+            .runtime
+            .current_schema()
+            .map_err(|e| JazzError::Schema(e.to_string()))?;
+        let map = vec_values_to_map(&schema, table, values)?;
+        let (object_id, _, _) = self
+            .runtime
+            .insert(table, map, None)
+            .map_err(|e| JazzError::Write(e.to_string()))?;
+        Ok(object_id)
+    }
+
+    pub async fn update(&self, object_id: ObjectId, updates: Vec<(String, Value)>) -> Result<()> {
+        self.runtime
+            .update(object_id, updates, None)
+            .map_err(|e| JazzError::Write(e.to_string()))?;
+        Ok(())
+    }
+
+    pub async fn delete(&self, object_id: ObjectId) -> Result<()> {
+        self.runtime
+            .delete(object_id, None)
+            .map_err(|e| JazzError::Write(e.to_string()))?;
+        Ok(())
+    }
+
+    pub async fn unsubscribe(&self, handle: SubscriptionHandle) -> Result<()> {
+        let mut subs = self.subscriptions.write().await;
+        if let Some(state) = subs.remove(&handle) {
+            let mut senders = self.subscription_senders.write().await;
+            senders.remove(&state.runtime_handle);
+            let _ = self.runtime.unsubscribe(state.runtime_handle);
+        }
+        Ok(())
+    }
+
+    pub async fn schema(&self) -> Result<Schema> {
+        self.runtime
+            .current_schema()
+            .map_err(|e| JazzError::Query(e.to_string()))
+    }
+
+    pub fn is_connected(&self) -> bool {
+        false
+    }
+
+    pub fn for_session(&self, session: Session) -> SessionClient<'_> {
+        SessionClient {
+            client: self,
+            session,
+        }
+    }
+
+    pub async fn shutdown(mut self) -> Result<()> {
+        if let Some(h) = self.peer_inbound_task.take() {
+            h.abort();
+            let _ = h.await;
+        }
+
+        if let Some(t) = self.peer_transport.take() {
+            if let Err(err) = t.shutdown().await {
+                tracing::warn!("PeerTransport::shutdown failed: {err:?}");
+            }
+        }
+
+        self.runtime
+            .flush()
+            .await
+            .map_err(|e| JazzError::Connection(e.to_string()))?;
+
+        self.runtime
+            .with_storage(|storage| storage.flush())
+            .map_err(|e| JazzError::Storage(e.to_string()))?;
+
+        Ok(())
+    }
+}
+
+pub struct SessionClient<'a> {
+    client: &'a JazzClient,
+    session: Session,
+}
+
+impl<'a> SessionClient<'a> {
+    pub async fn create(&self, table: &str, values: Vec<Value>) -> Result<ObjectId> {
+        let schema = self.client.schema().await?;
+        let map = vec_values_to_map(&schema, table, values)?;
+        let (object_id, _, _) = self
+            .client
+            .runtime
+            .insert(table, map, Some(&self.session))
+            .map_err(|e| JazzError::Write(e.to_string()))?;
+        Ok(object_id)
+    }
+
+    pub async fn update(&self, object_id: ObjectId, updates: Vec<(String, Value)>) -> Result<()> {
+        self.client
+            .runtime
+            .update(object_id, updates, Some(&self.session))
+            .map_err(|e| JazzError::Write(e.to_string()))?;
+        Ok(())
+    }
+
+    pub async fn delete(&self, object_id: ObjectId) -> Result<()> {
+        self.client
+            .runtime
+            .delete(object_id, Some(&self.session))
+            .map_err(|e| JazzError::Write(e.to_string()))?;
+        Ok(())
+    }
+
+    pub async fn query(
+        &self,
+        query: Query,
+        durability_tier: Option<DurabilityTier>,
+    ) -> Result<Vec<(ObjectId, Vec<Value>)>> {
+        let future = self
+            .client
+            .runtime
+            .query(
+                query,
+                Some(self.session.clone()),
+                ReadDurabilityOptions {
+                    tier: durability_tier,
+                    local_updates: LocalUpdates::Immediate,
+                },
+            )
+            .map_err(|e| JazzError::Query(e.to_string()))?;
+        future
+            .await
+            .map_err(|e| JazzError::Query(format!("{e:?}")))
+    }
+
+    pub async fn subscribe(&self, query: Query) -> Result<SubscriptionStream> {
+        self.client
+            .subscribe_internal(query, Some(self.session.clone()))
+            .await
+    }
+}
