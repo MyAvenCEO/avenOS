@@ -7,7 +7,12 @@
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/self/device-session-store'
 	import GalleryPdfThumb from '$lib/gallery/GalleryPdfThumb.svelte'
-	import { formatBytes, imageDataUrl } from '$lib/gallery/file-preview'
+	import {
+		coerceByteCount,
+		coerceEpochMs,
+		formatBytes,
+		imageDataUrl,
+	} from '$lib/gallery/file-preview'
 
 	const sparkParam = $derived(String((page.params as { sparkId?: string }).sparkId ?? ''))
 	const decodedSparkId = $derived(decodeURIComponent(sparkParam))
@@ -28,7 +33,9 @@
 	const rows = $derived(
 		[...filesStore.rows]
 			.filter((r) => idsMatch(r.spark_id, canonicalSparkId))
-			.sort((a, b) => b.created_at_ms - a.created_at_ms),
+			.sort(
+				(a, b) => coerceEpochMs(b.created_at_ms) - coerceEpochMs(a.created_at_ms),
+			),
 	)
 
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
@@ -127,7 +134,7 @@
 								<p class="text-muted-foreground truncate text-[11px] leading-snug">
 									{row.mime_type}
 									<span class="mx-1 opacity-50">·</span>
-									{formatBytes(row.size_bytes)}
+									{formatBytes(coerceByteCount(row.size_bytes))}
 								</p>
 							</div>
 						</li>

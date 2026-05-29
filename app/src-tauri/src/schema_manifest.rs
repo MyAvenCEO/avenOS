@@ -50,6 +50,9 @@ struct ManifestColumn {
 	/// Optional JSON Schema constraint for `"type": "json"`.
 	#[serde(default)]
 	schema: Option<serde_json::Value>,
+	/// Logical IPC/TS type when Groove storage is `text` (sealed at rest). e.g. `"bigint"` for timestamps.
+	#[serde(default, rename = "exposeTs")]
+	expose_ts: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -185,6 +188,49 @@ fn read_manifest_json() -> Result<String, String> {
 fn read_manifest() -> Result<Manifest, String> {
 	let raw = read_manifest_json()?;
 	serde_json::from_str(&raw).map_err(|e| format!("manifest JSON: {e}"))
+}
+
+static EXPOSE_TS_MAP: OnceLock<HashMap<(String, String), ColumnType>> = OnceLock::new();
+
+fn column_type_from_expose_ts(slug: &str) -> Result<ColumnType, String> {
+	match slug {
+		"string" => Ok(ColumnType::Text),
+		"boolean" => Ok(ColumnType::Boolean),
+		"bigint" => Ok(ColumnType::BigInt),
+		"integer" => Ok(ColumnType::Integer),
+		"uuid" => Ok(ColumnType::Uuid),
+		"string[]" => Ok(ColumnType::Array {
+			element: Box::new(ColumnType::Text),
+		}),
+		other => Err(format!("unknown exposeTs {other:?}")),
+	}
+}
+
+fn expose_ts_map() -> &'static HashMap<(String, String), ColumnType> {
+	EXPOSE_TS_MAP.get_or_init(|| {
+		read_manifest()
+			.ok()
+			.map(|m| {
+				let mut map = HashMap::new();
+				for (table, def) in m.tables {
+					for col in def.columns {
+						let Some(slug) = col.expose_ts.as_deref() else {
+							continue;
+						};
+						if let Ok(ct) = column_type_from_expose_ts(slug) {
+							map.insert((table.clone(), col.name.clone()), ct);
+						}
+					}
+				}
+				map
+			})
+			.unwrap_or_default()
+	})
+}
+
+/// Logical Jazz/IPC type for a column (e.g. `bigint` for `text` + `exposeTs: bigint`).
+pub fn expose_ts_for(table: &str, column: &str) -> Option<&'static ColumnType> {
+	expose_ts_map().get(&(table.to_string(), column.to_string()))
 }
 
 /// Columns **without** `plaintext: true` are sealed at rest; IPC still requires biscuit admin for spark-scoped tables.

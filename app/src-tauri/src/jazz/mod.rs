@@ -211,11 +211,9 @@ pub(crate) async fn execute_drain_batch(
 	}
 
 	let want_snapshots = !pending.is_empty() && jazz.any_ui_subscriber(&pending).await;
-	// Keyshares-only grant batches re-hydrate the vault but the Sparks grid only subscribes to
-	// `sparks` — push the catalogue once after re-hydrate without widening the follow-up loop.
-	let push_sparks_catalogue = vault_shell_dirty
-		&& jazz.table_ui_ref_count("sparks").await > 0
-		&& !pending.contains("sparks");
+	// Vault-shell re-hydrate (e.g. keyshare before catalogue row) must republish `sparks` even
+	// when the batch only named `keyshares` — otherwise grantees stay on an empty grid.
+	let push_sparks_catalogue = vault_shell_dirty && !pending.contains("sparks");
 	if !vault_shell_dirty && !want_snapshots && !push_sparks_catalogue {
 		if !pending.is_empty() {
 			log::trace!(
@@ -264,13 +262,21 @@ pub(crate) async fn execute_drain_batch(
 		}
 	}
 
+	let mut shell_hydrate_ok = !vault_shell_dirty;
 	if vault_shell_dirty {
-		if let Err(e) = jazz_shell_for_ui(app, jazz, self_state, client.clone()).await {
-			log::debug!(
-				target: "avenos::jazz",
-				"table-change drain: vault shell re-hydrate failed: {e}",
-			);
+		match jazz_shell_for_ui(app, jazz, self_state, client.clone()).await {
+			Ok(_) => shell_hydrate_ok = true,
+			Err(e) => {
+				log::warn!(
+					target: "avenos::jazz",
+					"table-change drain: vault shell re-hydrate failed: {e}",
+				);
+			}
 		}
+	}
+
+	if !shell_hydrate_ok {
+		return;
 	}
 
 	if !want_snapshots && !push_sparks_catalogue {
@@ -1070,7 +1076,12 @@ pub(super) fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable:
 	}
 	if let Some(s) = cell.as_str() {
 		if is_sealed_or_phase1_storage_string(s) {
-			return Ok(Value::Text(s.to_string()));
+			// Keep Groove column types aligned with the manifest (e.g. `files.content` is bytea).
+			return if matches!(col_ty, ColumnType::Bytea) {
+				decode_json_bytea(s).map(Value::Bytea)
+			} else {
+				Ok(Value::Text(s.to_string()))
+			};
 		}
 	}
 	match col_ty {
@@ -1151,11 +1162,14 @@ pub(super) fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable:
 	}
 }
 
-/// Same as [`json_cell_to_jazz`] for non-`Text`. For `Text` storage, accepts bool/number payloads as well
-/// as strings so IPC can keep logical scalars (e.g. `done: true`) while Groove stores ciphertext in a `Text` cell.
-pub(super) fn loose_json_to_sealable_value(
+/// Encode IPC JSON into a Groove `Text` cell (storage is always `text` for sealed columns).
+///
+/// When the manifest sets `exposeTs`, the logical value is encoded as canonical JSON inside the
+/// text cell (then sealed on the write path). Plain `text` columns without `exposeTs` store UTF-8 strings.
+pub(super) fn json_to_text_storage_cell(
+	table: &str,
+	column: &str,
 	cell: &JsonValue,
-	storage_ty: &ColumnType,
 	nullable: bool,
 ) -> Result<Value, String> {
 	if cell.is_null() || *cell == JsonValue::Null {
@@ -1163,30 +1177,27 @@ pub(super) fn loose_json_to_sealable_value(
 			.then(|| Ok(Value::Null))
 			.unwrap_or_else(|| Err("null not permitted".to_string()));
 	}
-	match storage_ty {
-		ColumnType::Text => {
-			if let Some(s) = cell.as_str() {
-				return Ok(Value::Text(s.to_string()));
-			}
-			if let Some(b) = cell.as_bool() {
-				return Ok(Value::Boolean(b));
-			}
-			if let Some(n) = cell.as_i64() {
-				if let Ok(i) = i32::try_from(n) {
-					return Ok(Value::Integer(i));
-				}
-				return Ok(Value::BigInt(n));
-			}
-			if let Some(n) = cell.as_u64() {
-				return Ok(Value::Timestamp(n));
-			}
-			Err("expected JSON string, boolean, or integer for text-storage column".to_string())
-		}
-		_ => json_cell_to_jazz(cell, storage_ty, nullable),
+	if let Some(expose) = crate::schema_manifest::expose_ts_for(table, column) {
+		let gv = json_cell_to_jazz(cell, expose, nullable)?;
+		let canon = crate::crypto::groove_value_to_canonical_utf8(&gv)?;
+		return Ok(Value::Text(canon));
 	}
+	if let Some(s) = cell.as_str() {
+		if is_sealed_or_phase1_storage_string(s) {
+			return Ok(Value::Text(s.to_string()));
+		}
+		return Ok(Value::Text(s.to_string()));
+	}
+	Err(format!(
+		"column `{table}.{column}`: expected JSON string for text storage (or use exposeTs logical type)"
+	))
 }
 
-pub(super) fn insert_values(table_schema: &TableSchema, values: JsonRow) -> Result<Vec<Value>, String> {
+pub(super) fn insert_values(
+	table: &str,
+	table_schema: &TableSchema,
+	values: JsonRow,
+) -> Result<Vec<Value>, String> {
 	let cols = &table_schema.columns.columns;
 	let mut row = Vec::with_capacity(cols.len());
 	for cd in cols {
@@ -1197,7 +1208,7 @@ pub(super) fn insert_values(table_schema: &TableSchema, values: JsonRow) -> Resu
 			None => return Err(format!("missing column `{key}`")),
 			Some(js) => {
 				if matches!(cd.column_type, ColumnType::Text) {
-					loose_json_to_sealable_value(js, &cd.column_type, cd.nullable)?
+					json_to_text_storage_cell(table, key, js, cd.nullable)?
 				} else {
 					json_cell_to_jazz(js, &cd.column_type, cd.nullable)?
 				}
@@ -1376,7 +1387,7 @@ async fn jazz_shell_ready_inner(
 	let mut slot = mj.shell.lock().await;
 	*slot = Some(std::sync::Arc::clone(&arc));
 	let object_spark_ids = jazz_engine::build_object_spark_id_map(client.as_ref()).await?;
-	let snap = spark_sync::load_acl_snapshot(&arc.vault, object_spark_ids)?;
+	let snap = spark_sync::build_sync_acl_snapshot(&arc.vault, object_spark_ids)?;
 	*mj.sync_acl.write().expect("sync_acl poisoned") = Some(snap);
 	if !for_ui_drain {
 		// One catch-up rebroadcast per conn epoch — not on every vault-table invalidation reload.
@@ -1714,12 +1725,49 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 		crate::spark_acc::spark_peer_is_owner(&bisc_spark.biscuit, spark_uuid, &peer_did)?;
 
 	if already_owner && ks_exists {
-		jazz.invalidate_vault_shell();
-		let _shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
-		flush_spark_grant_to_peers(app, client.as_ref(), spark_uuid).await;
-		let _ = jazz.change_tx.send("sparks".to_string());
-		let _ = jazz.change_tx.send("keyshares".to_string());
+		finish_spark_admin_grant(app, jazz, self_state, client, spark_uuid).await?;
 		return Ok(());
+	}
+
+	// Drain outbound with pre-grant ACL so we do not queue sparks/keyshares frames that
+	// `peer_sync_gate` would drop for the new admin.
+	#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+	{
+		let _ = client.flush_peer_sync().await;
+	}
+
+	// Keyshare before genesis so peers often have the DEK before biscuit/catalogue rows land.
+	if !ks_exists {
+		let recipient_pk = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
+		let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recipient_pk)?;
+		let urn = jazz_engine::spark_urn(spark_uuid);
+		let aad = crate::crypto::keyshare_wrap_aad(&urn, &peer_did, dek_ver);
+		let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
+
+		let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
+		let mut ks = Map::new();
+		ks.insert(
+			"spark_id".into(),
+			JsonValue::String(spark_uuid.to_string()),
+		);
+		ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
+		ks.insert(
+			"recipient_did".into(),
+			JsonValue::String(peer_did.clone()),
+		);
+		ks.insert(
+			"wrapper_did".into(),
+			JsonValue::String(shell.peer_did.clone()),
+		);
+		ks.insert(
+			"wrapped_dek".into(),
+			JsonValue::String(wrapped),
+		);
+		let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
+		client
+			.create("keyshares", ks_vals)
+			.await
+			.map_err(format_jazz_err)?;
 	}
 
 	if !already_owner {
@@ -1762,109 +1810,99 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 			.map_err(format_jazz_err)?;
 	}
 
-	if !ks_exists {
-		let recipient_pk = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
-		let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recipient_pk)?;
-		let urn = jazz_engine::spark_urn(spark_uuid);
-		let aad = crate::crypto::keyshare_wrap_aad(&urn, &peer_did, dek_ver);
-		let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
-
-		let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
-		let mut ks = Map::new();
-		ks.insert(
-			"spark_id".into(),
-			JsonValue::String(spark_uuid.to_string()),
-		);
-		ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
-		ks.insert(
-			"recipient_did".into(),
-			JsonValue::String(peer_did.clone()),
-		);
-		ks.insert(
-			"wrapper_did".into(),
-			JsonValue::String(shell.peer_did.clone()),
-		);
-		ks.insert(
-			"wrapped_dek".into(),
-			JsonValue::String(wrapped),
-		);
-		let ks_vals = insert_values(&ks_schema, ks)?;
-		client
-			.create("keyshares", ks_vals)
-			.await
-			.map_err(format_jazz_err)?;
-	}
-
-	// Re-hydrate shell + refresh outbound sync ACL **before** Groove tries to push
-	// sparks/keyshares deltas — otherwise `peer_sync_gate` still sees the pre-grant
-	// biscuit and drops every frame to the new admin.
-	jazz.invalidate_vault_shell();
-	let _shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
-
-	flush_spark_grant_to_peers(app, client.as_ref(), spark_uuid).await;
-
-	let _ = jazz.change_tx.send("sparks".to_string());
-	let _ = jazz.change_tx.send("keyshares".to_string());
+	finish_spark_admin_grant(app, jazz, self_state, client, spark_uuid).await?;
 
 	Ok(())
 }
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-async fn flush_spark_grant_to_peers(
+/// Re-hydrate vault shell + sync ACL, push grant to peers, refresh sparks catalogue in the webview.
+async fn finish_spark_admin_grant(
 	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	self_state: &SelfState,
+	client: Arc<JazzClient>,
+	spark_uuid: uuid::Uuid,
+) -> Result<(), String> {
+	jazz.invalidate_vault_shell();
+	let shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+
+	#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+	push_vault_catalogue_to_peers(app, jazz, client.as_ref(), spark_uuid).await;
+
+	let _ = jazz
+		.publish_table_snapshot_force(app, client.as_ref(), shell.as_ref(), "sparks")
+		.await;
+
+	enqueue_vault_catalogue_drain(app).await;
+
+	Ok(())
+}
+
+/// After vault ACL changes (grant): replay sparks/keyshares to every live Groove peer.
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+async fn push_vault_catalogue_to_peers(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
 	client: &JazzClient,
 	spark_uuid: uuid::Uuid,
 ) {
+	use std::sync::Arc;
+
 	use tauri_plugin_peer::HyperswarmGrooveBridge;
 
-	let h = app.state::<crate::peer_catchup::PeerCatchupHandle>();
-	h.on_spark_access_granted().await;
-
+	let catchup = app.state::<crate::peer_catchup::PeerCatchupHandle>();
+	let live_links = app.state::<Arc<tauri_plugin_peer::PeerLinkCoordinator>>();
 	let bridge = app.state::<HyperswarmGrooveBridge>();
-	let live_links = app.state::<std::sync::Arc<tauri_plugin_peer::PeerLinkCoordinator>>();
 	let live = live_links.snapshot_mux_ready_clients().await;
+	catchup.on_spark_access_granted().await;
 	if live.is_empty() {
-		log::info!(
+		log::warn!(
 			target: "avenos::jazz",
-			"spark_admin_add: grant saved for spark {spark_uuid}; catch-up queued for next live link",
+			"spark_admin_add: grant saved for spark {spark_uuid}; no mux-ready peer — catch-up will retry",
 		);
+		let _ = execute_mesh_refresh_full(app, jazz).await;
 		return;
 	}
-	let send_ready = {
-		let mut ok = false;
-		for cid in &live {
-			if bridge.peer_send_ready(*cid).await {
-				ok = true;
-				break;
-			}
+	let mut send_ready = Vec::new();
+	for cid in &live {
+		if bridge.peer_send_ready(*cid).await {
+			send_ready.push(*cid);
 		}
-		ok
-	};
-	if !send_ready {
-		log::info!(
+	}
+	if send_ready.is_empty() {
+		log::warn!(
 			target: "avenos::jazz",
-			"spark_admin_add: grant saved for spark {spark_uuid}; catch-up queued until Groove mux send-ready",
+			"spark_admin_add: grant saved for spark {spark_uuid}; mux not send-ready — catch-up will retry",
 		);
 		return;
 	}
 	match client.rebroadcast_all_peer_clients_and_flush().await {
 		Ok(()) => log::info!(
 			target: "avenos::jazz",
-			"spark_admin_add: ACL catch-up flushed to peer(s) for spark {spark_uuid}",
+			"spark_admin_add: vault catalogue pushed to {} peer(s) for spark {spark_uuid}",
+			send_ready.len(),
 		),
 		Err(e) => log::warn!(
 			target: "avenos::jazz",
-			"spark_admin_add: peer catch-up flush failed: {e}",
+			"spark_admin_add: vault catalogue push failed for spark {spark_uuid}: {e}",
 		),
 	}
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-async fn flush_spark_grant_to_peers(
-	_app: &tauri::AppHandle,
-	_client: &JazzClient,
-	_spark_uuid: uuid::Uuid,
-) {
+async fn enqueue_vault_catalogue_drain(app: &tauri::AppHandle) {
+	use std::collections::HashSet;
+
+	let mut tables = HashSet::new();
+	for t in spark_sync::VAULT_CATALOGUE_UI_TABLES {
+		tables.insert(t.to_string());
+	}
+	let drain = ui_drain::ui_table_drain(app);
+	if let Err(e) = drain.enqueue(tables).await {
+		log::debug!(
+			target: "avenos::jazz",
+			"vault catalogue drain enqueue failed: {e}",
+		);
+	}
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -2018,7 +2056,7 @@ pub(crate) async fn groove_ipc_jazz_create(
 	let tbl = jazz_engine::resolved_table_schema(client.as_ref(), &table).await?;
 
 	if table == "peers" {
-		let vals = insert_values(&tbl, values)?;
+		let vals = insert_values("peers", &tbl, values)?;
 		let oid = client
 			.create(&table, vals.clone())
 			.await
@@ -2067,11 +2105,11 @@ pub(crate) async fn groove_ipc_jazz_create(
 		PHASE1_SECRET_PLACEHOLDER,
 	)?;
 
-	let vals = insert_values(&tbl, values)?;
-	let oid = client
-		.create(&table, vals.clone())
-		.await
-		.map_err(format_jazz_err)?;
+		let vals = insert_values(&table, &tbl, values)?;
+		let oid = client
+			.create(&table, vals.clone())
+			.await
+			.map_err(format_jazz_err)?;
 
 	if spark_sync::needs_acl_object_map_refresh_after_create(&table) {
 		let _ = jazz.refresh_sync_acl_object_map(client.as_ref()).await;
@@ -2185,7 +2223,13 @@ pub(crate) async fn groove_ipc_jazz_update(
 					.columns
 					.column(col)
 					.ok_or_else(|| format!("unknown_sensitive_col:{col}"))?;
-				let gv = loose_json_to_sealable_value(&js, &cd.column_type, cd.nullable)?;
+				let gv = if let Some(expose) =
+					crate::schema_manifest::expose_ts_for(&table, col)
+				{
+					json_cell_to_jazz(&js, expose, cd.nullable)?
+				} else {
+					json_cell_to_jazz(&js, &cd.column_type, cd.nullable)?
+				};
 				let canon = crate::crypto::groove_value_to_canonical_utf8(&gv)?;
 				let ct = jazz_engine::seal_column_plain(
 					&shell,
@@ -2983,6 +3027,33 @@ mod json_cell_tests {
 		let cell = json!("aGVsbG8=");
 		let v = json_cell_to_jazz(&cell, &ColumnType::Bytea, false).unwrap();
 		assert_eq!(v, Value::Bytea(b"hello".to_vec()));
+	}
+
+	#[test]
+	fn json_cell_to_jazz_phase1_and_sealed_bytea_stay_bytea() {
+		let phase1 = json!(PHASE1_SECRET_PLACEHOLDER);
+		let v = json_cell_to_jazz(&phase1, &ColumnType::Bytea, false).unwrap();
+		assert_eq!(v, Value::Bytea(PHASE1_SECRET_PLACEHOLDER.as_bytes().to_vec()));
+
+		let sealed = format!("{}abc", crate::crypto::CELL_ENVELOPE_V1);
+		let v = json_cell_to_jazz(&json!(sealed), &ColumnType::Bytea, false).unwrap();
+		assert!(matches!(v, Value::Bytea(b) if b.starts_with(crate::crypto::CELL_ENVELOPE_V1.as_bytes())));
+	}
+
+	#[test]
+	fn sealed_bytea_canonical_roundtrip_ipc() {
+		use base64::Engine;
+		use crate::crypto::{
+			groove_value_to_canonical_utf8, ipc_json_from_opened_sensitive_plaintext,
+		};
+		let payload = b"fake-image-bytes".to_vec();
+		let canon = groove_value_to_canonical_utf8(&Value::Bytea(payload.clone())).unwrap();
+		let ipc = ipc_json_from_opened_sensitive_plaintext(&canon, &ColumnType::Bytea).unwrap();
+		let b64 = ipc.as_str().expect("bytea ipc is base64 string");
+		assert_eq!(
+			base64::engine::general_purpose::STANDARD.decode(b64).unwrap(),
+			payload,
+		);
 	}
 
 	#[test]

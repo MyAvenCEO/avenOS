@@ -431,10 +431,22 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
 
     /// AvenOS: replay catch-up for every Peer client (caller should flush after).
     pub fn rebroadcast_all_peer_clients(&mut self) {
+        self.clear_all_peer_delivery_ledgers();
         let peer_ids = self.peer_client_ids();
         for peer_id in peer_ids {
             self.rebroadcast_peer_catchup(peer_id);
         }
+    }
+
+    /// Forget what we believe was already delivered to a peer (see [`SyncManager::clear_peer_delivery_ledger`]).
+    pub fn clear_peer_delivery_ledger(&mut self, client_id: ClientId) {
+        let sm = self.schema_manager.query_manager_mut().sync_manager_mut();
+        sm.clear_peer_delivery_ledger(client_id);
+    }
+
+    fn clear_all_peer_delivery_ledgers(&mut self) {
+        let sm = self.schema_manager.query_manager_mut().sync_manager_mut();
+        sm.clear_all_peer_delivery_ledgers();
     }
 
     /// Re-queue a peer outbox entry after transport send failure.

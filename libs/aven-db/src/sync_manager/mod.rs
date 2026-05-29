@@ -678,6 +678,30 @@ impl SyncManager {
         }
     }
 
+    /// Clear row-batch delivery bookkeeping for a peer so the next catch-up re-queues rows.
+    ///
+    /// Policy may have blocked outbound frames after they were marked sent; reset before replay.
+    pub fn clear_peer_delivery_ledger(&mut self, client_id: ClientId) {
+        let Some(client) = self.clients.get_mut(&client_id) else {
+            return;
+        };
+        if client.role != ClientRole::Peer {
+            return;
+        }
+        client.sent_batch_ids.clear();
+        client.sent_metadata.clear();
+    }
+
+    /// Reset delivery bookkeeping for every registered peer client.
+    pub fn clear_all_peer_delivery_ledgers(&mut self) {
+        for client in self.clients.values_mut() {
+            if client.role == ClientRole::Peer {
+                client.sent_batch_ids.clear();
+                client.sent_metadata.clear();
+            }
+        }
+    }
+
     /// Re-queue full catch-up for an existing Peer client (mesh reconnect / ACL hydration).
     pub fn rebroadcast_peer_catchup<H: Storage>(&mut self, storage: &H, client_id: ClientId) {
         if self

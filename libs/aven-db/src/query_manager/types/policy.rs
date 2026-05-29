@@ -1,7 +1,7 @@
 use super::*;
 use serde::{Deserialize, Serialize};
 
-/// AvenOS runs with permissive local policy only (Biscuit ACC lives in the app).
+/// Legacy Jazz row-policy knob. AvenOS keeps [`PermissiveLocal`] only; biscuit ACC in `app/src-tauri` gates spark data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum RowPolicyMode {
     #[default]
@@ -9,6 +9,7 @@ pub enum RowPolicyMode {
 }
 
 impl RowPolicyMode {
+    /// Always `false` on AvenOS — in-engine ReBAC is stripped; do not reintroduce deny-by-default here.
     pub fn denies_missing_explicit_policy(self) -> bool {
         false
     }

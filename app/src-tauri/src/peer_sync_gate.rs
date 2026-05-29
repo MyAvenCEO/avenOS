@@ -108,14 +108,15 @@ impl PeerTransport for BiscuitGatedPeerTransport {
 		let tbl = spark_sync::table_from_payload(&payload);
 		if !should_forward(&self.acl, &dest_did, &payload) {
 			let log_line = format!(
-				"drop outbound peer={peer:?} did={dest_did} variant={variant} table={tbl:?}",
+				"policy_drop peer={peer:?} did={dest_did} variant={variant} table={tbl:?}",
 			);
 			if tbl.as_deref().is_some_and(spark_sync::is_p2p_sync_diag_table) {
 				log::info!(target: "avenos::peer_sync_gate", "{log_line}");
 			} else {
 				log::debug!(target: "avenos::peer_sync_gate", "{log_line}");
 			}
-			return Ok(());
+			// Do not return Ok — sync must not treat undelivered frames as sent.
+			return Err(groove::JazzError::Sync(log_line));
 		}
 		if tbl.as_deref().is_some_and(spark_sync::is_p2p_sync_diag_table) {
 			log::info!(

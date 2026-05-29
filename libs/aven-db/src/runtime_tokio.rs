@@ -662,6 +662,7 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
     /// AvenOS: replay all syncable rows to a registered Peer client.
     pub fn rebroadcast_peer_catchup(&self, client_id: ClientId) -> Result<(), RuntimeError> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        core.clear_peer_delivery_ledger(client_id);
         core.rebroadcast_peer_catchup(client_id);
         Ok(())
     }

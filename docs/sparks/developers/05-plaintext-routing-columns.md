@@ -10,14 +10,27 @@ In [`libs/aven-schema/schema.manifest.json`](../../../libs/aven-schema/schema.ma
 
 | Table | Routing (`plaintext: true`) | Sealed (default) |
 | ----- | --------------------------- | ---------------- |
-| `sparks` | `spark_id` | `name`, `issuer_pubkey_b64`, `genesis_b64`, `current_dek_version`, `created_at_ms` |
+| `sparks` | `spark_id`, `current_dek_version`, `created_at_ms` | `name`, `issuer_pubkey_b64`, `genesis_b64` |
 | `keyshares` | `spark_id`, `dek_version`, `recipient_did`, `wrapper_did`, `wrapped_dek` | — |
 | `todos` | `spark_id` | `title`, `done`, `description` |
 | `messages` | `spark_id` | `created_at_ms`, `author_did`, `body` |
 | `files` | `spark_id` | `intent_id`, `filename`, `mime_type`, `size_bytes`, `created_at_ms`, `content` |
-| `peers`, `humans` | local graph fields (nosync / allowlist) | — |
+| `peers`, `humans` | local graph fields (nosync / allowlist), including native `bigint` timestamps | — |
 
 `spark_id` stays plaintext so biscuit gates, sync ACL maps, and spark-scoped queries can route without decrypting payloads.
+
+## Groove storage vs logical types
+
+Do **not** store everything as `text` in the manifest.
+
+| Layer | What it is |
+| ----- | ---------- |
+| **Groove column type** | Native `bigint`, `boolean`, `uuid`, `text`, `bytea` in [`schema.manifest.json`](../../../libs/aven-schema/schema.manifest.json) — this is what RocksDB encodes. |
+| **`plaintext: true`** | Column stays native type; used for routing / local graph / DEK lines. |
+| **Sealed (default)** | Payload is encrypted; today [`seal_text_cell_payload`](../../../app/src-tauri/src/crypto.rs) stores the `v1…` envelope in a **`text`** (or **`bytea`**) cell. Logical scalars use canonical JSON inside the ciphertext (`t: "bigint"`, etc.). |
+| **`exposeTs`** | Only when storage must stay `text`/`bytea` but IPC/TS needs another shape (e.g. `messages.created_at_ms`: `text` + `exposeTs: "bigint"`). Rust maps snapshots with [`expose_ts_for`](../../../app/src-tauri/src/schema_manifest.rs). |
+
+Example: `peers.added_at_ms` is **`bigint` + `plaintext: true`** (real `Value::BigInt` in Groove). `messages.created_at_ms` is **`text` + `exposeTs: bigint`** (ciphertext in a text cell; IPC returns a number after decrypt).
 
 ## Three gates (do not conflate)
 

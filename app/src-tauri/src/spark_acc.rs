@@ -8,8 +8,6 @@ use biscuit_auth::{
 	builder::{Algorithm, AuthorizerBuilder, BlockBuilder},
 	Biscuit, KeyPair, PublicKey,
 };
-use groove::query_manager::types::Value;
-
 use crate::jazz_auth;
 use uuid::Uuid;
 
@@ -143,27 +141,19 @@ pub fn attenuate_add_owner_third_party(
 		.map_err(|e| format!("tp_append:{e:?}"))
 }
 
-pub fn ingest_genesis_row(
+/// Ingest a spark biscuit after optional DEK unwrap (hydrate / migration paths).
+pub fn ingest_genesis_opened(
 	vault: &mut BiscuitVault,
-	spark_id_col: usize,
-	issuer_pubkey_ix: usize,
-	genesis_ix: usize,
-	vals: &[Value],
+	spark_id: Uuid,
+	genesis_b64: &str,
+	issuer_pubkey_b64: Option<&str>,
 	local_fallback_issuer_pk: PublicKey,
 ) -> Result<(), String> {
-	let sid_cell = vals.get(spark_id_col).ok_or("spark_missing_col")?;
-	let spark_id =
-		uuid_cell(sid_cell).ok_or_else(|| format!("spark_id_bad_cell:{sid_cell:?}"))?;
-	let genesis_cell = vals.get(genesis_ix).ok_or("genesis_missing_col")?;
-	let genesis_b64 = text_cell(genesis_cell).ok_or_else(|| format!("genesis_bad:{genesis_cell:?}"))?;
-
-	let issuer_pk = match vals.get(issuer_pubkey_ix) {
-		Some(Value::Text(s)) if !s.trim().is_empty() => decode_issuer_pubkey_b64(s)?,
+	let issuer_pk = match issuer_pubkey_b64 {
+		Some(s) if !s.trim().is_empty() => decode_issuer_pubkey_b64(s)?,
 		_ => local_fallback_issuer_pk,
 	};
-
 	let biscuit = biscuit_from_storage(genesis_b64, issuer_pk)?;
-
 	vault.sparks.insert(
 		spark_id,
 		BiscuitSpark {
@@ -188,21 +178,6 @@ pub fn spark_peer_is_owner(chain: &Biscuit, spark_id: Uuid, peer_did: &str) -> R
 pub fn spark_admins(chain: &Biscuit, spark_id: Uuid) -> Result<std::collections::HashSet<String>, String> {
 	let spark_str = spark_urn_for(spark_id);
 	trusted_subject_dids(chain, &spark_str)
-}
-
-fn uuid_cell(v: &Value) -> Option<Uuid> {
-	match v {
-		Value::Uuid(oid) => Some(*oid.uuid()),
-		Value::Text(s) => Uuid::parse_str(s.trim()).ok(),
-		_ => None,
-	}
-}
-
-fn text_cell(v: &Value) -> Option<&str> {
-	match v {
-		Value::Text(s) => Some(s.as_str()),
-		_ => None,
-	}
 }
 
 pub fn biscuit_from_storage(genesis_b64: &str, root: PublicKey) -> Result<Biscuit, String> {

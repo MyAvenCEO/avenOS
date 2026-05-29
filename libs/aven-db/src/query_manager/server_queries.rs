@@ -9,7 +9,7 @@ use crate::row_histories::BatchId;
 use crate::schema_manager::LensTransformer;
 use crate::storage::Storage;
 use crate::sync_manager::{
-    ClientId, ClientRole, DurabilityTier, PendingPermissionCheck, SyncPayload,
+    ClientId, ClientRole, DurabilityTier, PendingPermissionCheck,
 };
 
 use super::manager::{QueryManager, SchemaWarningAccumulator, ServerQuerySubscription};
@@ -47,15 +47,6 @@ pub(super) struct RowTransformContext<'a> {
         &'a std::collections::HashMap<String, crate::query_manager::types::SchemaHash>,
     pub(super) schema_context: &'a crate::schema_manager::SchemaContext,
     pub(super) schema_warnings: &'a mut SchemaWarningAccumulator,
-}
-
-struct UpdatePermissionRequest<'a> {
-    object_id: ObjectId,
-    branch_name: BranchName,
-    table_name: TableName,
-    branch_table_schema: &'a TableSchema,
-    auth_schema: &'a Schema,
-    auth_context: &'a crate::schema_manager::SchemaContext,
 }
 
 impl QueryManager {
@@ -107,15 +98,6 @@ impl QueryManager {
             &branch_schema_map,
         )?;
         Some(row.row_provenance())
-    }
-
-    fn payload_row_provenance(payload: &SyncPayload) -> Option<RowProvenance> {
-        match payload {
-            SyncPayload::RowBatchCreated { row, .. } | SyncPayload::RowBatchNeeded { row, .. } => {
-                Some(row.row_provenance())
-            }
-            _ => None,
-        }
     }
 
     pub(super) fn build_server_subscription_context(
@@ -263,55 +245,6 @@ impl QueryManager {
         None
     }
 
-    pub(super) fn evaluate_authorization_policy(&mut self) -> bool {
-        true
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(super) fn provenance_row_matches_current_select_policy(
-        &mut self,
-        storage: &dyn Storage,
-        settlement_eval_cache: &mut SettlementEvalCache,
-        object_id: ObjectId,
-        branch_name: BranchName,
-        session: Option<&Session>,
-        auth_schema: &Schema,
-        auth_context: &crate::schema_manager::SchemaContext,
-        source_branch_schema_map: &std::collections::HashMap<String, SchemaHash>,
-    ) -> bool {
-        let branches = vec![branch_name.as_str().to_string()];
-        let Some((table, row)) = self.load_best_visible_row_batch(
-            storage,
-            object_id,
-            &branches,
-            None,
-            auth_context,
-            source_branch_schema_map,
-        ) else {
-            return false;
-        };
-        if row.is_hard_deleted() {
-            return false;
-        }
-
-        let tip_content = row.data.clone();
-        let tip_provenance = row.row_provenance();
-
-        let table_name = TableName::new(&table);
-        let Some(select_policy) = auth_schema
-            .get(&table_name)
-            .and_then(|table_schema| table_schema.policies.select_policy())
-        else {
-            return !self.row_policy_mode.denies_missing_explicit_policy()
-                && auth_schema.contains_key(&table_name);
-        };
-        let Some(session) = session else {
-            return false;
-        };
-
-        self.evaluate_authorization_policy()
-    }
-
     fn authorized_tuples_from_graph_result(
         &mut self,
         storage: &dyn Storage,
@@ -334,45 +267,15 @@ impl QueryManager {
             return AuthorizedTuplesResult::PermissionsUnavailable;
         };
 
-        if !self.row_policy_mode.denies_missing_explicit_policy()
-            && auth_schema
-                .values()
-                .all(|table_schema| table_schema.policies.select.using.is_none())
-        {
-            return AuthorizedTuplesResult::Ready(graph.current_output_tuples());
-        }
-
-        let mut authorization_cache: HashMap<(ObjectId, BranchName), bool> = HashMap::new();
-
-        AuthorizedTuplesResult::Ready(
-            graph
-                .current_output_tuples()
-                .into_iter()
-                .filter_map(|tuple| {
-                    tuple
-                        .provenance()
-                        .iter()
-                        .copied()
-                        .all(|(object_id, branch_name)| {
-                            *authorization_cache
-                                .entry((object_id, branch_name))
-                                .or_insert_with(|| {
-                                    self.provenance_row_matches_current_select_policy(
-                                        storage,
-                                        settlement_eval_cache,
-                                        object_id,
-                                        branch_name,
-                                        session,
-                                        &auth_schema,
-                                        &auth_context,
-                                        source_branch_schema_map,
-                                    )
-                                })
-                        })
-                        .then_some(tuple)
-                })
-                .collect(),
-        )
+        let _ = (
+            storage,
+            settlement_eval_cache,
+            auth_schema,
+            auth_context,
+            source_branch_schema_map,
+            session,
+        );
+        AuthorizedTuplesResult::Ready(graph.current_output_tuples())
     }
 
     pub(super) fn authorized_tuples_from_graph_with_cache(
@@ -415,45 +318,15 @@ impl QueryManager {
             return None;
         };
 
-        if !self.row_policy_mode.denies_missing_explicit_policy()
-            && auth_schema
-                .values()
-                .all(|table_schema| table_schema.policies.select.using.is_none())
-        {
-            return Some(graph.sync_scope_object_ids());
-        }
-
-        let mut authorization_cache: HashMap<(ObjectId, BranchName), bool> = HashMap::new();
-
-        let authorized_scope_tuples = graph.filtered_sync_scope_tuples(|tuple| {
-            tuple
-                .provenance()
-                .iter()
-                .copied()
-                .all(|(object_id, branch_name)| {
-                    *authorization_cache
-                        .entry((object_id, branch_name))
-                        .or_insert_with(|| {
-                            self.provenance_row_matches_current_select_policy(
-                                storage,
-                                settlement_eval_cache,
-                                object_id,
-                                branch_name,
-                                session,
-                                &auth_schema,
-                                &auth_context,
-                                source_branch_schema_map,
-                            )
-                        })
-                })
-        });
-
-        Some(
-            authorized_scope_tuples
-                .into_iter()
-                .flat_map(|tuple| tuple.provenance().clone().into_iter())
-                .collect(),
-        )
+        let _ = (
+            storage,
+            settlement_eval_cache,
+            auth_schema,
+            auth_context,
+            source_branch_schema_map,
+            session,
+        );
+        Some(graph.sync_scope_object_ids())
     }
 
     pub(super) fn resolved_server_query_branches(
@@ -1381,62 +1254,41 @@ impl QueryManager {
             return;
         };
 
+        let _ = (&auth_schema, &auth_context, &auth_table_schema);
+
         if check.operation == Operation::Update {
-            self.evaluate_update_permission(
-                storage,
-                check,
-                UpdatePermissionRequest {
+            if let Some(new_content) = check.new_content.as_ref()
+                && let Err(err) =
+                    self.validate_json_for_content(&branch_table_schema.columns, new_content)
+            {
+                self.sync_manager
+                    .reject_permission_check(storage, check, err.to_string());
+                return;
+            }
+            if check
+                .old_content
+                .as_ref()
+                .is_none_or(|content| content.is_empty())
+                && let Ok(Some(previous_row)) = storage.load_visible_region_row(
+                    table_name.as_str(),
+                    branch_name.as_str(),
                     object_id,
-                    branch_name,
-                    table_name,
-                    branch_table_schema: &branch_table_schema,
-                    auth_schema: &auth_schema,
-                    auth_context: &auth_context,
-                },
-            );
+                )
+            {
+                check.old_content = Some(previous_row.data.to_vec());
+            }
+            self.sync_manager.approve_permission_check(storage, check);
             return;
         }
 
-        let policy = match check.operation {
-            Operation::Insert => auth_table_schema.policies.insert_policy(),
-            Operation::Update => unreachable!(),
-            Operation::Delete => auth_table_schema.policies.effective_delete_using(),
-            Operation::Select => {
-                self.sync_manager.approve_permission_check(storage, check);
-                return;
-            }
-        };
+        if check.operation == Operation::Insert {
+            self.sync_manager.approve_permission_check(storage, check);
+            return;
+        }
 
-        let policy = match policy {
-            Some(p) => p,
-            None => {
-                if self.row_policy_mode.denies_missing_explicit_policy() {
-                    let reason = format!(
-                        "{:?} denied on table {} - missing explicit policy",
-                        check.operation, table_name.0
-                    );
-                    self.sync_manager
-                        .reject_permission_check(storage, check, reason);
-                } else {
-                    self.sync_manager.approve_permission_check(storage, check);
-                }
-                return;
-            }
-        };
-
-        let content = match check.operation {
-            Operation::Insert => check.new_content.as_ref(),
-            Operation::Update => unreachable!(),
-            Operation::Delete => check.old_content.as_ref(),
-            Operation::Select => {
-                self.sync_manager.approve_permission_check(storage, check);
-                return;
-            }
-        };
-
-        let content = match content {
-            Some(content) if !content.is_empty() => content,
-            None => {
+        if check.operation == Operation::Delete {
+            let content = check.old_content.as_ref();
+            if content.is_none() || content.is_some_and(|c| c.is_empty()) {
                 let reason = format!(
                     "{:?} denied on table {} - missing row content",
                     check.operation, table_name.0
@@ -1445,190 +1297,20 @@ impl QueryManager {
                     .reject_permission_check(storage, check, reason);
                 return;
             }
-            Some(_) => {
+            if self
+                .current_row_provenance(storage, object_id, branch_name)
+                .is_none()
+            {
                 let reason = format!(
-                    "{:?} denied on table {} - empty row content",
+                    "{:?} denied on table {} - missing row provenance",
                     check.operation, table_name.0
                 );
                 self.sync_manager
                     .reject_permission_check(storage, check, reason);
                 return;
             }
-        };
-        let provenance = match check.operation {
-            Operation::Insert => Self::payload_row_provenance(&check.payload),
-            Operation::Delete => self.current_row_provenance(storage, object_id, branch_name),
-            Operation::Update | Operation::Select => None,
-        };
-        let Some(provenance) = provenance else {
-            let reason = format!(
-                "{:?} denied on table {} - missing row provenance",
-                check.operation, table_name.0
-            );
-            self.sync_manager
-                .reject_permission_check(storage, check, reason);
+            self.sync_manager.approve_permission_check(storage, check);
             return;
-        };
-        let source_branch_schema_map = self.branch_schema_map.clone();
-
-        if !self.evaluate_authorization_policy() {
-            let reason = format!(
-                "{:?} denied by policy on table {}",
-                check.operation, table_name.0
-            );
-            self.sync_manager
-                .reject_permission_check(storage, check, reason);
-            return;
-        }
-
-        self.sync_manager.approve_permission_check(storage, check);
-    }
-
-    /// Evaluate UPDATE permission with both USING (old row) and WITH CHECK (new row).
-    ///
-    /// For UPDATE, we need to check:
-    /// 1. USING policy against old_content - can the session see the row being updated?
-    /// 2. WITH CHECK policy against new_content - is the resulting row valid?
-    ///
-    /// Both must pass for the update to be allowed.
-    fn evaluate_update_permission<H: Storage>(
-        &mut self,
-        storage: &mut H,
-        mut check: PendingPermissionCheck,
-        request: UpdatePermissionRequest<'_>,
-    ) {
-        let UpdatePermissionRequest {
-            object_id,
-            branch_name,
-            table_name,
-            branch_table_schema,
-            auth_schema,
-            auth_context,
-        } = request;
-
-        if let Some(new_content) = check.new_content.as_ref()
-            && let Err(err) =
-                self.validate_json_for_content(&branch_table_schema.columns, new_content)
-        {
-            self.sync_manager
-                .reject_permission_check(storage, check, err.to_string());
-            return;
-        }
-
-        if check
-            .old_content
-            .as_ref()
-            .is_none_or(|content| content.is_empty())
-            && let Ok(Some(previous_row)) = storage.load_visible_region_row(
-                table_name.as_str(),
-                branch_name.as_str(),
-                object_id,
-            )
-        {
-            check.old_content = Some(previous_row.data.to_vec());
-        }
-
-        let Some(table_schema) = auth_schema.get(&table_name) else {
-            self.sync_manager.reject_permission_check(
-                storage,
-                check,
-                format!(
-                    "Update denied on table {} - table missing from current permission schema",
-                    table_name.0
-                ),
-            );
-            return;
-        };
-        let using_policy = table_schema.policies.update_using_policy();
-        let check_policy = table_schema.policies.update_check_policy();
-        let source_branch_schema_map = self.branch_schema_map.clone();
-        let old_provenance = self.current_row_provenance(storage, object_id, branch_name);
-        let new_provenance = Self::payload_row_provenance(&check.payload);
-
-        if using_policy.is_none() && check_policy.is_none() {
-            if self.row_policy_mode.denies_missing_explicit_policy() {
-                self.sync_manager.reject_permission_check(
-                    storage,
-                    check,
-                    format!(
-                        "Update denied on table {} - missing explicit update policy",
-                        table_name.0
-                    ),
-                );
-            } else {
-                self.sync_manager.approve_permission_check(storage, check);
-            }
-            return;
-        }
-
-        if let Some(using) = using_policy {
-            let old_content = match check.old_content.as_ref() {
-                Some(c) if !c.is_empty() => c,
-                _ => {
-                    let reason = format!(
-                        "Update denied by USING policy on table {} - no old content",
-                        table_name.0
-                    );
-                    self.sync_manager
-                        .reject_permission_check(storage, check, reason);
-                    return;
-                }
-            };
-            let Some(old_provenance) = old_provenance.as_ref() else {
-                let reason = format!(
-                    "Update denied by USING policy on table {} - missing old provenance",
-                    table_name.0
-                );
-                self.sync_manager
-                    .reject_permission_check(storage, check, reason);
-                return;
-            };
-
-            if !self.evaluate_authorization_policy() {
-                let reason = format!(
-                    "Update denied by USING policy on table {} - cannot see old row",
-                    table_name.0
-                );
-                self.sync_manager
-                    .reject_permission_check(storage, check, reason);
-                return;
-            }
-        }
-
-        if let Some(with_check) = check_policy {
-            let new_content = match check.new_content.as_ref() {
-                Some(c) => c,
-                None => {
-                    self.sync_manager.reject_permission_check(
-                        storage,
-                        check,
-                        format!(
-                            "Update denied by WITH CHECK policy on table {} - missing new content",
-                            table_name.0
-                        ),
-                    );
-                    return;
-                }
-            };
-            let Some(new_provenance) = new_provenance.as_ref() else {
-                let reason = format!(
-                    "Update denied by WITH CHECK policy on table {} - missing new provenance",
-                    table_name.0
-                );
-                self.sync_manager
-                    .reject_permission_check(storage, check, reason);
-                return;
-            };
-
-            if !self.evaluate_authorization_policy() {
-                let reason = format!(
-                    "Update denied by WITH CHECK policy on table {}",
-                    table_name.0
-                );
-                self.sync_manager
-                    .reject_permission_check(storage, check, reason);
-                return;
-            }
         }
 
         self.sync_manager.approve_permission_check(storage, check);

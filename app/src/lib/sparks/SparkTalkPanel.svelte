@@ -60,7 +60,7 @@
 	const thread = $derived(
 		[...messages.rows]
 			.filter((m) => idsMatch(m.spark_id, canonicalSparkId))
-			.sort((a, b) => a.created_at_ms - b.created_at_ms),
+			.sort((a, b) => coerceEpochMs(a.created_at_ms) - coerceEpochMs(b.created_at_ms)),
 	)
 
 	const filesByMessageId = $derived.by(() => {
@@ -74,7 +74,7 @@
 			map.set(parentId, list)
 		}
 		for (const list of map.values()) {
-			list.sort((a, b) => a.created_at_ms - b.created_at_ms)
+			list.sort((a, b) => coerceEpochMs(a.created_at_ms) - coerceEpochMs(b.created_at_ms))
 		}
 		return map
 	})
@@ -91,9 +91,18 @@
 		return peerDisplayLabel(authorDid, peer?.deviceLabel, localPairingLabel)
 	}
 
-	function formatTime(ms: number): string {
+	/** Groove IPC may send exposeTs bigint as number or legacy string. */
+	function coerceEpochMs(v: unknown): number {
+		if (typeof v === 'number' && Number.isFinite(v)) return v
+		if (typeof v === 'string' && /^\d+$/.test(v.trim())) return Number(v.trim())
+		return Number.NaN
+	}
+
+	function formatTime(ms: unknown): string {
+		const n = coerceEpochMs(ms)
+		if (!Number.isFinite(n)) return ''
 		try {
-			return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+			return new Date(n).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 		} catch {
 			return ''
 		}
@@ -225,7 +234,12 @@
 						>
 							<div class="flex items-baseline gap-2 px-0.5 text-[10px]">
 								<span class="text-foreground font-medium">{authorLabel(msg.author_did)}</span>
-								<time class="text-muted-foreground" datetime={new Date(msg.created_at_ms).toISOString()}>
+								<time
+									class="text-muted-foreground"
+									datetime={Number.isFinite(coerceEpochMs(msg.created_at_ms))
+										? new Date(coerceEpochMs(msg.created_at_ms)).toISOString()
+										: undefined}
+								>
 									{formatTime(msg.created_at_ms)}
 								</time>
 							</div>

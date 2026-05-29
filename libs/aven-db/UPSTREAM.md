@@ -22,7 +22,7 @@ Storage: **RocksDB only** (`data_dir/jazz.rocksdb`).
 | **Jazz ReBAC** | `aven-db` | **Stripped** — policy evaluation, `policy_graph`, graph `PolicyFilter` nodes, `publish_permissions_bundle` removed; `policy.rs` + `types/policy.rs` keep serde/catalogue wire types only |
 | **Jazz session/JWT** | `query_manager::session` | **Slim** — `Session` / `WriteContext` for batch authorship; no JWT client path in P2P `avenos_client` |
 
-Engine runs **`RowPolicyMode::PermissiveLocal` only**. AvenOS schema manifests have no `TablePolicies`; Biscuit ACC is the only row-level gate.
+Engine runs **`RowPolicyMode::PermissiveLocal` only**. In-engine permission checks approve after schema/JSON validation (no ReBAC evaluation). AvenOS schema manifests have no `TablePolicies`; **Biscuit ACC** in `app/src-tauri` is the only row-level gate.
 
 ## Stripped from fork (do not reintroduce)
 

@@ -142,7 +142,7 @@ pub async fn list_peer_rows(client: &JazzClient) -> Result<Vec<PeerRowReply>, St
 			kind: kind.to_string(),
 			added_at_ms: vals
 				.get(added_ix)
-				.and_then(value_bigint)
+				.and_then(peer_timestamp_ms)
 				.unwrap_or(0),
 			status: vals
 				.get(status_ix)
@@ -154,10 +154,11 @@ pub async fn list_peer_rows(client: &JazzClient) -> Result<Vec<PeerRowReply>, St
 	Ok(out)
 }
 
-fn value_bigint(v: &Value) -> Option<i64> {
+fn peer_timestamp_ms(v: &Value) -> Option<i64> {
 	match v {
 		Value::BigInt(i) => Some(*i),
 		Value::Integer(i) => Some(*i as i64),
+		Value::Text(s) => s.trim().parse().ok(),
 		_ => None,
 	}
 }
@@ -276,7 +277,7 @@ pub async fn upsert_remote_peer_row(
 	row.insert("kind".into(), JsonValue::String("remote".into()));
 	row.insert("added_at_ms".into(), JsonValue::Number(now_ms().into()));
 	row.insert("status".into(), JsonValue::String(status.to_string()));
-	let vals = crate::jazz::insert_values(&schema, row)?;
+	let vals = crate::jazz::insert_values("peers", &schema, row)?;
 	let oid = client
 		.create("peers", vals)
 		.await

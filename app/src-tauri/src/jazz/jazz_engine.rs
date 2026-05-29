@@ -149,10 +149,20 @@ fn hydrate_i64_at(
 		Value::Integer(i) => Ok(*i as i64),
 		Value::Text(_) | Value::Bytea(_) => {
 			let opened = hydrate_text_at(deks, spark, cell)?;
+			if let Ok(n) = opened.trim().parse::<i64>() {
+				return Ok(n);
+			}
 			let ipc = ipc_json_from_opened_sensitive_plaintext(&opened, storage_ty)?;
-			ipc
-				.as_i64()
-				.ok_or_else(|| format!("hydrate_i64_not_number:{opened}"))
+			if let Some(n) = ipc.as_i64() {
+				return Ok(n);
+			}
+			if let Some(s) = ipc.as_str() {
+				return s
+					.trim()
+					.parse::<i64>()
+					.map_err(|_| format!("hydrate_i64_not_number:{opened}"));
+			}
+			Err(format!("hydrate_i64_not_number:{opened}"))
 		}
 		x => Err(format!("hydrate_i64_bad:{x:?}")),
 	}
@@ -242,8 +252,13 @@ pub(super) fn place_secrets_for_insert(
 					}
 					continue;
 				}
-				let gv =
-					super::loose_json_to_sealable_value(raw, &desc.column_type, desc.nullable)?;
+				let gv = if let Some(expose) =
+					crate::schema_manifest::expose_ts_for(table, key)
+				{
+					super::json_cell_to_jazz(raw, expose, desc.nullable)?
+				} else {
+					super::json_cell_to_jazz(raw, &desc.column_type, desc.nullable)?
+				};
 				let canon = groove_value_to_canonical_utf8(&gv)?;
 				plaintext_out.insert(key.to_string(), canon);
 				*raw = JsonValue::String(phase1.into());
@@ -343,11 +358,13 @@ pub(super) fn row_to_public_map(
 		let name = desc.name_str();
 		let jv = if let Some(set) = secrets {
 			if set.contains(name) {
+				let ipc_ty = crate::schema_manifest::expose_ts_for(table, name)
+					.unwrap_or(&desc.column_type);
 				match cell {
 					Value::Text(s) => map_sensitive_storage_cell(
 						state,
 						name,
-						&desc.column_type,
+						ipc_ty,
 						spark,
 						s.as_str(),
 						&mut miss,
@@ -358,7 +375,7 @@ pub(super) fn row_to_public_map(
 						map_sensitive_storage_cell(
 							state,
 							name,
-							&desc.column_type,
+							ipc_ty,
 							spark,
 							s,
 							&mut miss,
@@ -612,37 +629,76 @@ pub(super) async fn hydrate_shell(
 		}
 
 		for (_oid, vals) in &sparks_rows {
-			let sid = uuid_cell_at(vals.as_slice(), spark_id_ix)?;
-			let genesis_b64 = hydrate_text_at(
-				&deks,
-				sid,
-				vals.get(genesis_ix).ok_or("sparks_missing_genesis")?,
-			)?;
-			let issuer_pk = match vals.get(issuer_ix) {
-				Some(cell) => {
-					let opened = hydrate_text_at(&deks, sid, cell)?;
-					if opened.trim().is_empty() {
-						biscuit_root_pub
-					} else {
-						spark_acc::decode_issuer_pubkey_b64(&opened)?
-					}
+			let sid = match uuid_cell_at(vals.as_slice(), spark_id_ix) {
+				Ok(s) => s,
+				Err(e) => {
+					log::warn!(target: "avenos::jazz", "hydrate_shell: skip spark row (spark_id): {e}");
+					continue;
 				}
-				None => biscuit_root_pub,
 			};
-			let biscuit = spark_acc::biscuit_from_storage(&genesis_b64, issuer_pk)?;
-			vault.sparks.insert(
-				sid,
-				spark_acc::BiscuitSpark {
-					spark_id: sid,
-					biscuit,
+			let genesis_cell = match vals.get(genesis_ix) {
+				Some(c) => c,
+				None => {
+					log::warn!(target: "avenos::jazz", "hydrate_shell: skip spark {sid} (missing genesis)");
+					continue;
+				}
+			};
+			let genesis_b64 = match hydrate_text_at(&deks, sid, genesis_cell) {
+				Ok(g) => g,
+				Err(e) => {
+					log::warn!(
+						target: "avenos::jazz",
+						"hydrate_shell: skip spark {sid} (genesis open): {e}",
+					);
+					continue;
+				}
+			};
+			let issuer_opened = match vals.get(issuer_ix) {
+				Some(cell) => match hydrate_text_at(&deks, sid, cell) {
+					Ok(s) => Some(s),
+					Err(e) => {
+						log::debug!(
+							target: "avenos::jazz",
+							"hydrate_shell: spark {sid} issuer open failed, using local biscuit root: {e}",
+						);
+						None
+					}
 				},
-			);
-			let v = hydrate_i64_at(
-				&deks,
+				None => None,
+			};
+			if let Err(e) = spark_acc::ingest_genesis_opened(
+				&mut vault,
 				sid,
-				vals.get(ver_ix).ok_or("sparks_missing_version")?,
-				&ver_storage_ty,
-			)?;
+				&genesis_b64,
+				issuer_opened.as_deref(),
+				biscuit_root_pub,
+			) {
+				log::warn!(
+					target: "avenos::jazz",
+					"hydrate_shell: skip spark {sid} (biscuit ingest): {e}",
+				);
+				continue;
+			}
+			let ver_cell = match vals.get(ver_ix) {
+				Some(c) => c,
+				None => {
+					log::warn!(
+						target: "avenos::jazz",
+						"hydrate_shell: skip spark {sid} (missing current_dek_version)",
+					);
+					continue;
+				}
+			};
+			let v = match hydrate_i64_at(&deks, sid, ver_cell, &ver_storage_ty) {
+				Ok(v) => v,
+				Err(e) => {
+					log::warn!(
+						target: "avenos::jazz",
+						"hydrate_shell: skip spark {sid} (dek version): {e}",
+					);
+					continue;
+				}
+			};
 			spark_versions.insert(sid, v);
 		}
 	} else {
@@ -670,6 +726,7 @@ pub(super) async fn hydrate_shell(
 
 		let peers_schema_seed = resolved_table_schema(client, "peers").await?;
 		let peer_vals = super::insert_values(
+			"peers",
 			&peers_schema_seed,
 			vec![
 				("peer_did".into(), JsonValue::String(vault.peer_did.clone())),
@@ -677,7 +734,7 @@ pub(super) async fn hydrate_shell(
 				("kind".into(), JsonValue::String("local".into())),
 				(
 					"added_at_ms".into(),
-					JsonValue::String(now_unix_ms_i64().to_string()),
+					JsonValue::Number(now_unix_ms_i64().into()),
 				),
 				("status".into(), JsonValue::String("active".into())),
 			]
@@ -701,12 +758,12 @@ pub(super) async fn hydrate_shell(
 			),
 			(
 				"created_at_ms".into(),
-				JsonValue::String(now_unix_ms_i64().to_string()),
+				JsonValue::Number(now_unix_ms_i64().into()),
 			),
 		]
 		.into_iter()
 		.collect();
-		let humans_vals = super::insert_values(&humans_schema_seed, human_vals_map)?;
+		let humans_vals = super::insert_values("humans", &humans_schema_seed, human_vals_map)?;
 		client
 			.create("humans", humans_vals)
 			.await
@@ -736,12 +793,12 @@ pub(super) async fn hydrate_shell(
 			)),
 		);
 		row.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
-		row.insert("current_dek_version".into(), JsonValue::String("1".into()));
+		row.insert("current_dek_version".into(), JsonValue::Number(1.into()));
 		row.insert(
 			"created_at_ms".into(),
-			JsonValue::String(now_unix_ms_i64().to_string()),
+			JsonValue::Number(now_unix_ms_i64().into()),
 		);
-		let sparks_vals = super::insert_values(&sparks_schema, row)?;
+		let sparks_vals = super::insert_values("sparks", &sparks_schema, row)?;
 		client
 				.create("sparks", sparks_vals)
 				.await
@@ -778,7 +835,7 @@ pub(super) async fn hydrate_shell(
 		);
 		ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 		let ks_schema = resolved_table_schema(client, "keyshares").await?;
-		let ks_vals = super::insert_values(&ks_schema, ks)?;
+		let ks_vals = super::insert_values("keyshares", &ks_schema, ks)?;
 		client
 				.create("keyshares", ks_vals)
 				.await
@@ -789,11 +846,15 @@ pub(super) async fn hydrate_shell(
 
 	let mut spark_keys: Vec<Uuid> = vault.sparks.keys().cloned().collect();
 	spark_keys.sort();
-	let default_spark =
-		spark_keys
-			.first()
-			.copied()
-			.ok_or_else(|| "shell_no_sparks".to_string())?;
+	let default_spark = if spark_keys.is_empty() {
+		log::warn!(
+			target: "avenos::jazz",
+			"hydrate_shell: no sparks ingested (check keyshares / genesis on disk)",
+		);
+		return Err("shell_no_sparks".into());
+	} else {
+		spark_keys[0]
+	};
 
 	log::debug!(
 		target: "avenos::jazz",

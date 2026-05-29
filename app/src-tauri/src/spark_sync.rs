@@ -30,7 +30,8 @@ pub struct SyncAclSnapshot {
 	pub object_spark_ids: std::collections::HashMap<(String, ObjectId), Uuid>,
 }
 
-pub fn load_acl_snapshot(
+/// Build the outbound P2P ACL snapshot from the hydrated vault shell (single source of truth).
+pub fn build_sync_acl_snapshot(
 	vault: &spark_acc::BiscuitVault,
 	object_spark_ids: std::collections::HashMap<(String, ObjectId), Uuid>,
 ) -> Result<SyncAclSnapshot, String> {
@@ -140,16 +141,30 @@ fn table_from_row_metadata(meta: &RowMetadata) -> Option<String> {
 /// Row-batch patch replay often omits payload metadata (`include_metadata=false` after the
 /// first frame per object). Without a fallback, grant/message/file deltas never wake the
 /// drain and peer UIs stay stale.
+/// Tables whose row batches should wake the UI drain (manifest spark-scoped set).
 pub fn tables_to_notify(payload: &SyncPayload) -> Vec<String> {
-	if let Some(table) = table_from_payload(payload) {
-		return vec![table];
-	}
-	match payload {
-		SyncPayload::RowBatchCreated { .. } | SyncPayload::RowBatchNeeded { .. } => {
-			spark_scoped_table_names().to_vec()
+	let mut tables = if let Some(table) = table_from_payload(payload) {
+		vec![table]
+	} else {
+		match payload {
+			SyncPayload::RowBatchCreated { .. } | SyncPayload::RowBatchNeeded { .. } => {
+				spark_scoped_table_names().to_vec()
+			}
+			_ => Vec::new(),
 		}
-		_ => Vec::new(),
+	};
+	// Vault catalogue rows (sparks + keyshares) share one shell re-hydrate path.
+	if tables
+		.iter()
+		.any(|t| VAULT_CATALOGUE_UI_TABLES.contains(&t.as_str()))
+	{
+		for t in VAULT_CATALOGUE_UI_TABLES {
+			if !tables.iter().any(|x| x == *t) {
+				tables.push((*t).to_string());
+			}
+		}
 	}
+	tables
 }
 
 /// Resolve table for outbound biscuit ACL when payload/row metadata is absent.
@@ -243,6 +258,40 @@ mod tests {
 			},
 		};
 		assert_eq!(tables_to_notify(&payload), spark_scoped_table_names().to_vec());
+	}
+
+	#[test]
+	fn vault_catalogue_row_notifies_both_tables() {
+		let payload = SyncPayload::RowBatchCreated {
+			metadata: Some(RowMetadata {
+				id: ObjectId::new(),
+				metadata: [(
+					MetadataKey::Table.as_str().to_string(),
+					"keyshares".to_string(),
+				)]
+				.into_iter()
+				.collect(),
+			}),
+			row: StoredRowBatch {
+				row_id: ObjectId::new(),
+				batch_id: groove::row_histories::BatchId::new(),
+				branch: "client/main".into(),
+				parents: Default::default(),
+				updated_at: 0,
+				created_by: "test".into(),
+				created_at: 0,
+				updated_by: "test".into(),
+				state: groove::row_histories::RowState::VisibleDirect,
+				confirmed_tier: None,
+				delete_kind: None,
+				is_deleted: false,
+				data: groove::query_manager::types::RowBytes::from(Vec::new()),
+				metadata: groove::row_histories::RowMetadata::from_entries(Vec::new()),
+			},
+		};
+		let tables = tables_to_notify(&payload);
+		assert!(tables.iter().any(|t| t == "keyshares"));
+		assert!(tables.iter().any(|t| t == "sparks"));
 	}
 
 	#[test]

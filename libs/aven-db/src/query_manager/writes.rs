@@ -710,15 +710,6 @@ impl QueryManager {
                         operation: Operation::Update,
                     });
                 };
-                if self.row_policy_mode.denies_missing_explicit_policy()
-                    && !auth_table_schema.policies.has_explicit_update_policy()
-                {
-                    return Err(QueryError::PolicyDenied {
-                        table: table_name,
-                        operation: Operation::Update,
-                    });
-                }
-
                 if let Some(policy) = auth_table_schema.policies.update_using_policy()
                     && !self.evaluate_current_authorization_policy_for_content(
                         storage,
@@ -761,15 +752,6 @@ impl QueryManager {
                     });
                 }
             } else {
-                if self.row_policy_mode.denies_missing_explicit_policy()
-                    && using_policy.is_none()
-                    && check_policy.is_none()
-                {
-                    return Err(QueryError::PolicyDenied {
-                        table: table_name,
-                        operation: Operation::Update,
-                    });
-                }
                 if let Some(policy) = &using_policy {
                     let mut visited = HashSet::new();
                     if !self.evaluate_policy_for_content_with_context_for_row(
@@ -1087,10 +1069,7 @@ impl QueryManager {
                             &auth_context,
                         )
                     })
-                    .unwrap_or_else(|| {
-                        !self.row_policy_mode.denies_missing_explicit_policy()
-                            && auth_schema.contains_key(&table_name)
-                    });
+                    .unwrap_or(true);
                 if !allowed {
                     return Err(QueryError::PolicyDenied {
                         table: table_name,
@@ -1098,13 +1077,6 @@ impl QueryManager {
                     });
                 }
             } else {
-                if self.row_policy_mode.denies_missing_explicit_policy() && insert_policy.is_none()
-                {
-                    return Err(QueryError::PolicyDenied {
-                        table: table_name,
-                        operation: Operation::Insert,
-                    });
-                }
                 if let Some(policy) = insert_policy {
                     let mut visited = HashSet::new();
                     if !self.evaluate_policy_for_content_with_context_for_row(
@@ -1326,7 +1298,7 @@ impl QueryManager {
             auth_schema,
             auth_context,
         );
-        self.evaluate_authorization_policy()
+        true
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1635,7 +1607,7 @@ impl QueryManager {
                     visited,
                 )
             })
-            .unwrap_or(!self.row_policy_mode.denies_missing_explicit_policy());
+            .unwrap_or(true);
 
         visited.remove(&(table_name, row_id, operation));
         local_allow
@@ -1966,18 +1938,6 @@ impl QueryManager {
                         operation: Operation::Delete,
                     });
                 };
-                if self.row_policy_mode.denies_missing_explicit_policy()
-                    && auth_table_schema
-                        .policies
-                        .effective_delete_using()
-                        .is_none()
-                {
-                    return Err(QueryError::PolicyDenied {
-                        table: table_name,
-                        operation: Operation::Delete,
-                    });
-                }
-
                 if let Some(policy) = auth_table_schema.policies.effective_delete_using()
                     && !self.evaluate_current_authorization_policy_for_content(
                         storage,
@@ -1999,12 +1959,6 @@ impl QueryManager {
                     });
                 }
             } else {
-                if self.row_policy_mode.denies_missing_explicit_policy() && using_policy.is_none() {
-                    return Err(QueryError::PolicyDenied {
-                        table: table_name,
-                        operation: Operation::Delete,
-                    });
-                }
                 if let Some(policy) = using_policy {
                     let mut visited = HashSet::new();
                     if !self.evaluate_policy_for_content_with_context_for_row(

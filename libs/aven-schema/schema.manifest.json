@@ -18,9 +18,9 @@
 				},
 				{
 					"name": "created_at_ms",
-					"type": "text",
-					"exposeTs": "bigint",
-					"comment": "sealed at rest"
+					"type": "bigint",
+					"plaintext": true,
+					"comment": "local singleton metadata"
 				}
 			]
 		},
@@ -46,9 +46,9 @@
 				},
 				{
 					"name": "added_at_ms",
-					"type": "text",
-					"exposeTs": "bigint",
-					"comment": "sealed at rest"
+					"type": "bigint",
+					"plaintext": true,
+					"comment": "local allowlist metadata"
 				},
 				{
 					"name": "status",
@@ -109,15 +109,15 @@
 				{ "name": "genesis_b64", "type": "text", "comment": "sealed — biscuit chain" },
 				{
 					"name": "current_dek_version",
-					"type": "text",
-					"exposeTs": "bigint",
-					"comment": "sealed at rest"
+					"type": "bigint",
+					"plaintext": true,
+					"comment": "routing — active DEK line for seal/hydrate"
 				},
 				{
 					"name": "created_at_ms",
-					"type": "text",
-					"exposeTs": "bigint",
-					"comment": "sealed at rest"
+					"type": "bigint",
+					"plaintext": true,
+					"comment": "spark row metadata"
 				}
 			]
 		},

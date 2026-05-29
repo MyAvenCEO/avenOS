@@ -22,6 +22,24 @@ function rowsEqual(prev: JazzRow[], next: JazzRow[]): boolean {
 	return JSON.stringify(prev) === JSON.stringify(next)
 }
 
+function sparkRowKey(row: JazzRow): string {
+	const sid = row.spark_id ?? row.sparkId
+	if (typeof sid === 'string' && sid.trim()) return sid.trim().toLowerCase()
+	return String(row.id ?? '')
+}
+
+/** Catalogue tables: ignore transient empty snapshots; merge sparks by `spark_id`. */
+function applySnapshotRows(table: string, prev: JazzRow[], next: JazzRow[]): JazzRow[] {
+	if (next.length === 0 && prev.length > 0) {
+		if (table === 'sparks' || table === 'keyshares') return prev
+	}
+	if (table !== 'sparks') return next
+	const byKey = new Map<string, JazzRow>()
+	for (const row of prev) byKey.set(sparkRowKey(row), row)
+	for (const row of next) byKey.set(sparkRowKey(row), row)
+	return [...byKey.values()]
+}
+
 export type JazzStore = {
 	readonly rows: JazzRow[]
 	readonly loaded: boolean
@@ -88,8 +106,8 @@ function createTablePool(table: string): InternalPool {
 			const u = await withTimeoutMs(
 				api.subscribe((next) => {
 					if (!alive) return
-					if (next.length === 0 && rows.length > 0) return
-					if (!rowsEqual(rows, next)) rows = next
+					const merged = applySnapshotRows(table, rows, next)
+					if (!rowsEqual(rows, merged)) rows = merged
 					loaded = true
 				}),
 				SUBSCRIBE_BUDGET_MS,
@@ -103,8 +121,8 @@ function createTablePool(table: string): InternalPool {
 			unlisten = u
 			void api.list().then((snap) => {
 				if (!alive) return
-				if (snap.length === 0 && rows.length > 0) return
-				if (!rowsEqual(rows, snap)) rows = snap
+				const merged = applySnapshotRows(table, rows, snap)
+				if (!rowsEqual(rows, merged)) rows = merged
 				loaded = true
 			})
 		} catch (e) {
