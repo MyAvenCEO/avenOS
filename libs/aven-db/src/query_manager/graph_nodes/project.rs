@@ -1,6 +1,6 @@
 use ahash::AHashSet;
 
-use crate::query_manager::encoding::{decode_column, encode_row};
+use crate::row_format::{decode_column, encode_row};
 use crate::query_manager::relation_ir::{ProjectColumn, ProjectExpr, RowIdRef};
 use crate::query_manager::types::{
     ColumnDescriptor, ColumnName, ColumnType, RowDescriptor, Tuple, TupleDelta, TupleDescriptor,
@@ -290,7 +290,7 @@ impl RowNode for ProjectNode {
 mod tests {
     use super::*;
     use crate::object::ObjectId;
-    use crate::query_manager::encoding::{decode_row, encode_row};
+    use crate::row_format::{decode_row, encode_row};
     use crate::query_manager::relation_ir::ColumnRef;
     use crate::query_manager::types::Value;
 

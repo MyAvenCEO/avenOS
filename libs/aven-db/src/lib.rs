@@ -4,7 +4,6 @@ pub mod batch_fate;
 pub mod catalogue;
 pub mod commit;
 pub mod digest;
-pub mod identity;
 pub mod metadata;
 pub mod object;
 pub mod query_manager;
@@ -18,14 +17,10 @@ pub mod sync_manager;
 pub mod test_support;
 pub mod wire_types;
 
-pub mod transport_protocol;
-pub mod transport_manager;
 pub use sync_manager::sync_tracer;
 
 #[cfg(feature = "runtime-tokio")]
 pub mod runtime_tokio;
-#[cfg(feature = "runtime-tokio")]
-pub use runtime_tokio as jazz_tokio;
 #[cfg(feature = "runtime-tokio")]
 pub use runtime_tokio as groove_tokio;
 
@@ -41,7 +36,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 #[cfg(feature = "client-p2p")]
-pub use avenos_client::{JazzClient, PeerInboundParkedHook, SessionClient};
+pub use avenos_client::{JazzClient, PeerInboundParkedHook};
 #[cfg(feature = "client-p2p")]
 pub use peer_transport::{PeerTransport, decode_length_prefixed, encode_length_prefixed};
 #[cfg(feature = "client-p2p")]
@@ -73,12 +68,7 @@ pub struct AppContext {
     pub app_id: AppId,
     pub client_id: Option<ClientId>,
     pub schema: Schema,
-    /// Unused in P2P-only mode; kept for API compatibility.
-    pub server_url: String,
     pub data_dir: PathBuf,
-    pub jwt_token: Option<String>,
-    pub backend_secret: Option<String>,
-    pub admin_secret: Option<String>,
     /// Older schema versions registered via Jazz lenses (local-first migrations).
     pub live_schemas: Vec<Schema>,
 }

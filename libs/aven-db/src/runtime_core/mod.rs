@@ -42,7 +42,7 @@ use crate::query_manager::manager::{QueryError, QueryUpdate};
 use crate::query_manager::query::Query;
 use crate::query_manager::session::{Session, WriteContext};
 use crate::query_manager::types::{
-    OrderedRowDelta, Schema, SchemaHash, TableName, TablePolicies, Value,
+    OrderedRowDelta, Schema, Value,
 };
 use crate::row_format::decode_row;
 use crate::row_histories::BatchId;
@@ -310,14 +310,7 @@ pub struct RuntimeCore<S: Storage, Sch: Scheduler> {
     storage_flush_retry_scheduled: bool,
     /// Last storage flush error recorded by a durability barrier.
     storage_flush_error: Option<StorageError>,
-    /// Transport handle for WebSocket sync.
-    pub(crate) transport: Option<crate::transport_manager::TransportHandle>,
-    /// True when an inbound catalogue sync changed local catalogue state and
-    /// the transport handshake hash must be refreshed after the tick applies it.
-    transport_catalogue_state_hash_dirty: bool,
-    /// Fallback outbox sender used when no `TransportHandle` is set (e.g. on
-    /// the server side, where the runtime fans out via `ConnectionEventHub`
-    /// instead of a WebSocket connection).
+    /// Fallback outbox sender (P2P peer transport, test harness, etc.).
     ///
     /// On wasm32 the bound is `dyn SyncSender` because WASM is single-threaded
     /// and the JS/web-sys types it holds (`JsValue`, `Function`, `Rc`) are
@@ -377,10 +370,6 @@ pub struct RuntimeCore<S: Storage, Sch: Scheduler> {
     /// Optional sync-message tracer used by tests to record outgoing/incoming
     /// payloads under a human-readable participant name. `None` in production.
     pub(crate) sync_tracer: Option<(crate::sync_tracer::SyncTracer, String)>,
-
-    /// Called when the transport rejects auth during the WS handshake.
-    /// The String argument is a human-readable reason (e.g. "Unauthorized").
-    pub(crate) auth_failure_callback: Option<Box<dyn Fn(String) + Send + 'static>>,
 }
 
 fn recover_pending_mutation_error_events<S: Storage>(
@@ -454,8 +443,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
             storage_write_pending_flush: false,
             storage_flush_retry_scheduled: false,
             storage_flush_error: None,
-            transport: None,
-            transport_catalogue_state_hash_dirty: false,
             sync_sender: None,
             parked_sync_messages: Vec::new(),
             parked_sync_messages_by_server_seq: HashMap::new(),
@@ -476,7 +463,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
             tier_label: "unknown",
             synthesize_direct_write_fate: true,
             sync_tracer: None,
-            auth_failure_callback: None,
         }
     }
 
@@ -489,13 +475,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
     /// durable until a tiered peer returns a `BatchFate`.
     pub fn set_non_durable_client_runtime(&mut self) {
         self.synthesize_direct_write_fate = false;
-    }
-
-    /// Register a callback that fires when the transport receives an auth failure
-    /// from the server during the WS handshake.  The callback receives a
-    /// human-readable reason string (e.g. "Unauthorized").
-    pub fn set_auth_failure_callback(&mut self, cb: impl Fn(String) + Send + 'static) {
-        self.auth_failure_callback = Some(Box::new(cb));
     }
 
     /// Attach a sync-message tracer. All outbox entries this runtime sends
@@ -661,7 +640,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
     pub fn persist_schema(&mut self) -> ObjectId {
         let id = self.schema_manager.persist_schema(&mut self.storage);
         self.mark_storage_write_pending_flush();
-        self.refresh_transport_catalogue_state_hash();
         info!(object_id = %id, "persisted schema to catalogue");
         id
     }
@@ -678,29 +656,8 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
             .schema_manager
             .persist_schema_object(&mut self.storage, &schema);
         self.mark_storage_write_pending_flush();
-        self.refresh_transport_catalogue_state_hash();
         self.immediate_tick();
         id
-    }
-
-    pub fn publish_permissions_bundle(
-        &mut self,
-        schema_hash: SchemaHash,
-        permissions: HashMap<TableName, TablePolicies>,
-        expected_parent_bundle_object_id: Option<ObjectId>,
-    ) -> Result<Option<ObjectId>, crate::schema_manager::SchemaError> {
-        let id = self.schema_manager.publish_permissions_bundle(
-            &mut self.storage,
-            schema_hash,
-            permissions,
-            expected_parent_bundle_object_id,
-        )?;
-        if id.is_some() {
-            self.mark_storage_write_pending_flush();
-            self.refresh_transport_catalogue_state_hash();
-        }
-        self.immediate_tick();
-        Ok(id)
     }
 
     /// Publish a reviewed lens edge to the active schema manager and catalogue.
@@ -710,7 +667,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
             .publish_lens(&mut self.storage, lens)
             .map_err(|error| RuntimeError::WriteError(error.to_string()))?;
         self.mark_storage_write_pending_flush();
-        self.refresh_transport_catalogue_state_hash();
         self.immediate_tick();
         Ok(id)
     }
@@ -737,7 +693,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
         self.schema_manager
             .persist_schema_object(&mut self.storage, &schema);
         self.schema_manager.persist_lens(&mut self.storage, &lens);
-        self.refresh_transport_catalogue_state_hash();
         Ok(())
     }
 
@@ -747,76 +702,8 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
     }
 }
 
-/// Create a `TransportManager`, seed it with the current catalogue state hash,
-/// install its handle on the given core, and return the manager for the caller
-/// to spawn on an appropriate executor.
-///
-/// Centralises the boilerplate that would otherwise be duplicated in every
-/// binding (Tokio, NAPI, RN, WASM).
-#[cfg(feature = "transport")]
-pub fn install_transport<S, Sch, W, T>(
-    core: &mut RuntimeCore<S, Sch>,
-    url: String,
-    auth: crate::transport_manager::AuthConfig,
-    tick: T,
-) -> crate::transport_manager::TransportManager<W, T>
-where
-    S: crate::storage::Storage,
-    Sch: Scheduler,
-    W: crate::transport_manager::StreamAdapter + 'static,
-    T: crate::transport_manager::TickNotifier + 'static,
-{
-    debug_assert!(
-        core.transport().is_none(),
-        "install_transport called while a transport is already installed; call clear_transport / disconnect first"
-    );
-    let (handle, manager) = crate::transport_manager::create::<W, T>(url, auth, tick);
-    handle.set_catalogue_state_hash(Some(core.schema_manager().catalogue_state_hash()));
-    handle.set_declared_schema_hash(
-        core.schema_manager()
-            .has_current_schema()
-            .then(|| core.schema_manager().current_hash().to_string()),
-    );
-    core.schema_manager
-        .query_manager_mut()
-        .sync_manager_mut()
-        .add_pending_server(handle.server_id);
-    core.set_transport(handle);
-    manager
-}
-
 impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
-    /// Attach a transport handle. Replaces any existing transport.
-    pub fn set_transport(&mut self, handle: crate::transport_manager::TransportHandle) {
-        self.transport = Some(handle);
-    }
-
-    pub(crate) fn mark_transport_catalogue_state_hash_dirty(&mut self) {
-        self.transport_catalogue_state_hash_dirty = true;
-    }
-
-    fn refresh_transport_catalogue_state_hash(&mut self) {
-        if let Some(handle) = self.transport.as_ref() {
-            handle.set_catalogue_state_hash(Some(self.schema_manager.catalogue_state_hash()));
-        }
-        self.transport_catalogue_state_hash_dirty = false;
-    }
-
-    /// Detach the transport handle and remove its server from sync state.
-    pub fn clear_transport(&mut self) {
-        if let Some(h) = self.transport.take() {
-            self.remove_server(h.server_id);
-        }
-    }
-
-    /// Returns a reference to the active transport handle, if any.
-    pub fn transport(&self) -> Option<&crate::transport_manager::TransportHandle> {
-        self.transport.as_ref()
-    }
-}
-
-impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
-    /// Install a fallback sync sender used when no `TransportHandle` is set.
+    /// Install a fallback sync sender for peer transport or test harnesses.
     /// On the server side, this is the bridge from the runtime's outbox into
     /// the per-connection `ConnectionEventHub` channels.
     #[cfg(target_arch = "wasm32")]

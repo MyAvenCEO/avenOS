@@ -1,7 +1,7 @@
 use ahash::{AHashMap, AHashSet};
 
 use crate::object::ObjectId;
-use crate::query_manager::encoding::{column_bytes, decode_column, encode_value};
+use crate::row_format::{column_bytes, decode_column, encode_value};
 use crate::query_manager::types::{
     ColumnType, RowDescriptor, Tuple, TupleDelta, TupleDescriptor, Value,
 };
@@ -559,7 +559,7 @@ impl JoinNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::query_manager::encoding::encode_row;
+    use crate::row_format::encode_row;
     use crate::query_manager::types::{ColumnDescriptor, ColumnType, TupleElement, Value};
 
     fn users_descriptor() -> RowDescriptor {

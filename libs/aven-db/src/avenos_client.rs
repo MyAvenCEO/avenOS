@@ -267,12 +267,7 @@ impl JazzClient {
 
         tracing::debug!(client_id = %client_id, "Groove client identity persisted (sync inbox / peers)");
 
-        let storage: DynStorage = if context.server_url.is_empty() {
-            open_persistent_storage(&context.data_dir).await?
-        } else {
-            // P2P-only AvenOS builds pass an empty server_url; keep memory fallback for tests.
-            open_persistent_storage(&context.data_dir).await?
-        };
+        let storage: DynStorage = open_persistent_storage(&context.data_dir).await?;
 
         let schema_manager = build_schema_manager(&storage, &context)?;
         let peer_transport_for_fwd = match &peer_layer {
@@ -442,13 +437,6 @@ impl JazzClient {
         false
     }
 
-    pub fn for_session(&self, session: Session) -> SessionClient<'_> {
-        SessionClient {
-            client: self,
-            session,
-        }
-    }
-
     pub async fn shutdown(mut self) -> Result<()> {
         if let Some(h) = self.peer_inbound_task.take() {
             h.abort();
@@ -472,67 +460,5 @@ impl JazzClient {
             .and_then(|r| r.map_err(|e| JazzError::Storage(e.to_string())))?;
 
         Ok(())
-    }
-}
-
-pub struct SessionClient<'a> {
-    client: &'a JazzClient,
-    session: Session,
-}
-
-impl<'a> SessionClient<'a> {
-    pub async fn create(&self, table: &str, values: Vec<Value>) -> Result<ObjectId> {
-        let schema = self.client.schema().await?;
-        let map = vec_values_to_map(&schema, table, values)?;
-        let (object_id, _, _) = self
-            .client
-            .runtime
-            .insert(table, map, Some(&self.session))
-            .map_err(|e| JazzError::Write(e.to_string()))?;
-        Ok(object_id)
-    }
-
-    pub async fn update(&self, object_id: ObjectId, updates: Vec<(String, Value)>) -> Result<()> {
-        self.client
-            .runtime
-            .update(object_id, updates, Some(&self.session))
-            .map_err(|e| JazzError::Write(e.to_string()))?;
-        Ok(())
-    }
-
-    pub async fn delete(&self, object_id: ObjectId) -> Result<()> {
-        self.client
-            .runtime
-            .delete(object_id, Some(&self.session))
-            .map_err(|e| JazzError::Write(e.to_string()))?;
-        Ok(())
-    }
-
-    pub async fn query(
-        &self,
-        query: Query,
-        durability_tier: Option<DurabilityTier>,
-    ) -> Result<Vec<(ObjectId, Vec<Value>)>> {
-        let future = self
-            .client
-            .runtime
-            .query(
-                query,
-                Some(self.session.clone()),
-                ReadDurabilityOptions {
-                    tier: durability_tier,
-                    local_updates: LocalUpdates::Immediate,
-                },
-            )
-            .map_err(|e| JazzError::Query(e.to_string()))?;
-        future
-            .await
-            .map_err(|e| JazzError::Query(format!("{e:?}")))
-    }
-
-    pub async fn subscribe(&self, query: Query) -> Result<SubscriptionStream> {
-        self.client
-            .subscribe_internal(query, Some(self.session.clone()))
-            .await
     }
 }

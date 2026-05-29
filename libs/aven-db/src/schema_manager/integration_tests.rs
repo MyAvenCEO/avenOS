@@ -7,7 +7,7 @@ mod tests {
 
     use crate::metadata::{MetadataKey, RowProvenance, row_provenance_metadata};
     use crate::object::{BranchName, ObjectId};
-    use crate::query_manager::encoding::{decode_row, encode_row};
+    use crate::row_format::{decode_row, encode_row};
     use crate::query_manager::manager::{LocalUpdates, QueryError};
     use crate::query_manager::session::WriteContext;
     use crate::query_manager::types::{

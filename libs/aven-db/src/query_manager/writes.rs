@@ -16,16 +16,16 @@ use crate::storage::{
 };
 use crate::sync_manager::RowBatchKey;
 
-use super::encoding::{decode_column, decode_row, encode_row};
+use crate::row_format::{decode_column, decode_row, encode_row};
 use super::manager::{
     DeleteHandle, InsertResult, QueryError, QueryManager, SchemaWarningAccumulator,
     WriteTableCacheEntry,
 };
 use super::policy::{ComplexClause, Operation, evaluate_simple_parts_with_row_id};
-use super::server_queries::{AuthorizationPolicyRequest, RowTransformContext};
+use super::server_queries::RowTransformContext;
 use super::session::{AuthMode, Session, WriteContext};
 use super::types::{
-    ColumnName, ColumnType, ComposedBranchName, LoadedRow, RowDescriptor, Schema, SchemaHash,
+    ColumnName, ColumnType, ComposedBranchName, RowDescriptor, Schema, SchemaHash,
     TableName, Value,
 };
 
@@ -1313,24 +1313,20 @@ impl QueryManager {
         auth_schema: &Schema,
         auth_context: &crate::schema_manager::SchemaContext,
     ) -> bool {
-        let source_branch_schema_map = self.branch_schema_map.clone();
-        self.evaluate_authorization_policy(
+        let _ = (
             storage,
-            AuthorizationPolicyRequest {
-                object_id,
-                branch_name: BranchName::new(branch),
-                table_name,
-                policy,
-                content,
-                provenance,
-                session,
-                auth_schema,
-                auth_context,
-                source_branch_schema_map: &source_branch_schema_map,
-                operation,
-                settlement_eval_cache: None,
-            },
-        )
+            object_id,
+            branch,
+            table_name,
+            policy,
+            content,
+            provenance,
+            session,
+            operation,
+            auth_schema,
+            auth_context,
+        );
+        self.evaluate_authorization_policy()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1427,62 +1423,15 @@ impl QueryManager {
             }
         }
 
-        if graph_clauses.is_empty() {
-            return true;
-        }
-
-        let Some(mut graphs) = self.create_policy_graphs_for_complex_clauses(
-            &graph_clauses,
+        let _ = (
+            graph_clauses,
             content,
             descriptor,
-            &table_name,
+            table_name,
             operation,
             session,
             branch,
-        ) else {
-            return false;
-        };
-        if graphs.is_empty() {
-            return true;
-        }
-
-        let storage_ref: &dyn Storage = storage;
-        let branch_schema_map = Self::branch_schema_map_for_context(&self.schema_context);
-        let mut row_loader = |id: ObjectId, table_hint: Option<TableName>| -> Option<LoadedRow> {
-            let (_, row) = Self::load_best_visible_row_batch_with_hint_or_locator(
-                storage_ref,
-                id,
-                table_hint.as_ref().map(TableName::as_str),
-                &[branch.to_string()],
-                None,
-                &self.schema_context,
-                &branch_schema_map,
-            )?;
-            if row.is_hard_deleted() {
-                return None;
-            }
-            let batch_id = row.batch_id;
-            let provenance = row.row_provenance();
-            let source_branch = BranchName::new(&row.branch);
-            Some(LoadedRow::new(
-                row.data,
-                provenance,
-                [(id, source_branch)].into_iter().collect(),
-                batch_id,
-            ))
-        };
-
-        for graph in &mut graphs {
-            for _ in 0..100 {
-                if graph.settle(storage_ref, &mut row_loader) {
-                    break;
-                }
-            }
-            if !graph.result() {
-                return false;
-            }
-        }
-
+        );
         true
     }
 

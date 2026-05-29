@@ -23,9 +23,6 @@ pub mod types;
 
 use clock::MonotonicClock;
 
-#[cfg(test)]
-mod tests;
-
 // Re-export all public types
 pub use types::*;
 

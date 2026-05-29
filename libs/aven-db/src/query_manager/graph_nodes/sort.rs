@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
 use crate::object::ObjectId;
-use crate::query_manager::encoding::compare_column;
+use crate::row_format::compare_column;
 use crate::query_manager::types::{RowDescriptor, Tuple, TupleDelta, TupleDescriptor};
 
 use super::RowNode;
@@ -260,7 +260,7 @@ impl RowNode for SortNode {
 mod tests {
     use super::*;
     use crate::object::ObjectId;
-    use crate::query_manager::encoding::encode_row;
+    use crate::row_format::encode_row;
     use crate::query_manager::types::{ColumnDescriptor, ColumnType, TupleElement, Value};
 
     fn test_descriptor() -> RowDescriptor {

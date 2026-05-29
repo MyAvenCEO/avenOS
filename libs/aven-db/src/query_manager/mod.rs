@@ -1,5 +1,4 @@
 pub mod bindings;
-pub mod encoding;
 pub mod graph;
 pub mod graph_nodes;
 pub mod index;
@@ -7,9 +6,6 @@ pub mod indices;
 pub mod magic_columns;
 pub mod manager;
 pub mod policy;
-pub mod policy_counters;
-pub mod policy_graph;
-pub mod policy_ir;
 pub mod query;
 mod query_to_relation_ir;
 pub mod query_wire;
@@ -24,8 +20,3 @@ pub mod writes;
 
 pub use graph_nodes::output::QuerySubscriptionId;
 pub use query_wire::{parse_query_json, parse_query_value};
-
-#[cfg(all(test, target_arch = "wasm32"))]
-mod manager_tests;
-#[cfg(test)]
-mod rebac_tests;

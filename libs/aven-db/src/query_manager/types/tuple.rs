@@ -6,7 +6,7 @@ use crate::metadata::RowProvenance;
 use crate::object::{BranchName, ObjectId};
 use crate::row_histories::BatchId;
 
-use super::encoding::{decode_row, encode_row};
+use crate::row_format::{decode_row, encode_row};
 use super::*;
 
 // ============================================================================

@@ -140,7 +140,7 @@ impl RowNode for AliasNode {
 mod tests {
     use super::*;
     use crate::object::ObjectId;
-    use crate::query_manager::encoding::encode_row;
+    use crate::row_format::encode_row;
     use crate::query_manager::types::{ColumnDescriptor, ColumnType, TupleElement, Value};
 
     fn test_descriptor() -> RowDescriptor {

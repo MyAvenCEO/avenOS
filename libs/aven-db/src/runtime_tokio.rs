@@ -300,20 +300,6 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         Ok(core.publish_schema(schema))
     }
 
-    pub fn publish_permissions_bundle(
-        &self,
-        schema_hash: crate::query_manager::types::SchemaHash,
-        permissions: std::collections::HashMap<
-            crate::query_manager::types::TableName,
-            crate::query_manager::types::TablePolicies,
-        >,
-        expected_parent_bundle_object_id: Option<ObjectId>,
-    ) -> Result<Option<ObjectId>, RuntimeError> {
-        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        core.publish_permissions_bundle(schema_hash, permissions, expected_parent_bundle_object_id)
-            .map_err(|error| RuntimeError::WriteError(error.to_string()))
-    }
-
     pub fn current_permissions_head(&self) -> Result<Option<PermissionsHeadSummary>, RuntimeError> {
         let core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
         Ok(core.schema_manager().current_permissions_head())
@@ -838,104 +824,8 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
     pub fn scheduler(&self) -> &TokioScheduler<S> {
         &self.scheduler
     }
-}
 
-// ============================================================================
-// NativeTickNotifier
-// ============================================================================
-
-/// `TickNotifier` implementation for the native (Tokio) runtime.
-///
-/// Holds a clone of the `TokioScheduler` and calls
-/// `schedule_batched_tick()` whenever the transport layer needs to wake
-/// up `batched_tick` (on connect, on incoming sync frames, on disconnect).
-#[derive(Clone)]
-pub struct NativeTickNotifier<S: Storage + Send + 'static> {
-    scheduler: TokioScheduler<S>,
-}
-
-impl<S: Storage + Send + 'static> crate::transport_manager::TickNotifier for NativeTickNotifier<S> {
-    fn notify(&self) {
-        self.scheduler.schedule_batched_tick();
-    }
-}
-
-// ============================================================================
-// TokioRuntime connect / disconnect (WebSocket transport)
-// ============================================================================
-
-#[cfg(feature = "transport-websocket")]
-impl<S: Storage + Send + 'static> TokioRuntime<S> {
-    /// Connect to a Jazz server over WebSocket.
-    ///
-    /// Creates a `TransportHandle` / `TransportManager` pair, wires the
-    /// handle into `RuntimeCore`, and spawns the manager loop as a Tokio
-    /// task. The manager drives the WebSocket connection, reconnecting on
-    /// failure until the handle is dropped.
-    pub fn connect(&self, url: String, auth: crate::transport_manager::AuthConfig) {
-        let tick = NativeTickNotifier {
-            scheduler: self.scheduler.clone(),
-        };
-        let manager = {
-            let mut core = self.core.lock().unwrap();
-            crate::runtime_core::install_transport::<_, _, crate::ws_stream::NativeWsStream, _>(
-                &mut core, url, auth, tick,
-            )
-        };
-        tokio::spawn(manager.run());
-    }
-
-    /// Disconnect from the Jazz server.
-    ///
-    /// Drops the `TransportHandle` from `RuntimeCore`. The spawned
-    /// `TransportManager` task detects the dropped handle and exits cleanly.
-    pub fn disconnect(&self) {
-        self.core.lock().unwrap().clear_transport();
-    }
-
-    /// Returns `true` once the WebSocket transport has completed at least one
-    /// successful handshake. Useful for callers that need to wait until the
-    /// initial connection is established before proceeding.
-    pub fn transport_ever_connected(&self) -> bool {
-        self.core
-            .lock()
-            .ok()
-            .and_then(|c| c.transport.as_ref().map(|h| h.has_ever_connected()))
-            .unwrap_or(false)
-    }
-
-    /// Async wait that resolves once the WebSocket transport has completed
-    /// its first successful handshake (or returns immediately if it already
-    /// has). Returns `false` when no transport is installed — callers should
-    /// either check `is_connected()`/`has_server` first or wrap this in a
-    /// timeout.
-    pub async fn transport_wait_until_connected(&self) -> bool {
-        let Some(mut rx) = self
-            .core
-            .lock()
-            .ok()
-            .and_then(|c| c.transport.as_ref().map(|h| h.connected_rx.clone()))
-        else {
-            return false;
-        };
-        if *rx.borrow() {
-            return true;
-        }
-        rx.wait_for(|connected| *connected).await.is_ok()
-    }
-
-    /// Returns the wire `ClientId` used by the active transport, if any.
-    ///
-    /// Tests use this to register the transport's client identity with a
-    /// `SyncTracer` so server-originated messages resolve to human names.
-    pub fn transport_client_id(&self) -> Option<ClientId> {
-        self.core
-            .lock()
-            .ok()
-            .and_then(|c| c.transport.as_ref().map(|h| h.client_id))
-    }
-
-    /// Attach a sync-message tracer to this runtime.
+    /// Attach a sync-message tracer for diagnostics/tests.
     pub fn set_sync_tracer(&self, tracer: crate::sync_tracer::SyncTracer, name: String) {
         if let Ok(mut core) = self.core.lock() {
             core.set_sync_tracer(tracer, name);

@@ -374,7 +374,7 @@ mod tests {
     use std::collections::HashMap;
 
     use super::*;
-    use crate::query_manager::encoding::decode_row;
+    use crate::row_format::decode_row;
     use crate::query_manager::graph::GraphNode;
     use crate::query_manager::manager::QueryManager;
     use crate::query_manager::policy::PolicyExpr;
@@ -448,7 +448,7 @@ mod tests {
         let template = SubgraphBuilder::new("posts")
             .correlate("author_id")
             .with_session(Session::new("alice"))
-            .with_row_policy_mode(RowPolicyMode::Enforcing)
+            .with_row_policy_mode(RowPolicyMode::PermissiveLocal)
             .build(&schema)
             .unwrap();
 
@@ -459,7 +459,7 @@ mod tests {
                 .map(|session| session.user_id.as_str()),
             Some("alice")
         );
-        assert_eq!(template.row_policy_mode, RowPolicyMode::Enforcing);
+        assert_eq!(template.row_policy_mode, RowPolicyMode::PermissiveLocal);
     }
 
     #[test]

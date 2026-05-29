@@ -2,12 +2,8 @@ use ahash::{AHashMap, AHashSet};
 use std::collections::HashSet;
 
 use crate::object::ObjectId;
-use crate::query_manager::encoding::{decode_row, encode_row};
-use crate::query_manager::graph_nodes::policy_eval::{
-    PolicyContextEvaluator, collect_policy_dependency_tables,
-};
+use crate::row_format::{decode_row, encode_row};
 use crate::query_manager::magic_columns::{MagicColumnKind, magic_column_descriptor};
-use crate::query_manager::policy::Operation;
 use crate::query_manager::session::Session;
 use crate::query_manager::types::{
     LoadedRow, Row, RowDescriptor, RowPolicyMode, Schema, TableName, Tuple, TupleDelta,
@@ -99,7 +95,7 @@ impl MagicColumnsNode {
         }
 
         let mut tables = Vec::with_capacity(input_tuple_descriptor.element_count());
-        let mut dependency_tables = HashSet::new();
+        let dependency_tables = HashSet::new();
 
         for (element_index, element) in input_tuple_descriptor.iter().enumerate() {
             let mut descriptor = element.descriptor.clone();
@@ -109,40 +105,6 @@ impl MagicColumnsNode {
                     descriptor.columns.push(magic_column_descriptor(*kind));
                 }
 
-                if session.is_some()
-                    && let Some(table_schema) = schema.get(&requests.table_name)
-                {
-                    for kind in &requests.kinds {
-                        if matches!(
-                            kind,
-                            MagicColumnKind::CanRead
-                                | MagicColumnKind::CanEdit
-                                | MagicColumnKind::CanDelete
-                        ) {
-                            let policy = match kind {
-                                MagicColumnKind::CanRead => {
-                                    table_schema.policies.select.using.as_ref()
-                                }
-                                MagicColumnKind::CanEdit => {
-                                    table_schema.policies.update.using.as_ref()
-                                }
-                                MagicColumnKind::CanDelete => {
-                                    table_schema.policies.effective_delete_using()
-                                }
-                                MagicColumnKind::CreatedBy
-                                | MagicColumnKind::CreatedAt
-                                | MagicColumnKind::UpdatedBy
-                                | MagicColumnKind::UpdatedAt => None,
-                            };
-                            if let Some(policy) = policy {
-                                dependency_tables.extend(collect_policy_dependency_tables(
-                                    policy,
-                                    &table_schema.columns,
-                                ));
-                            }
-                        }
-                    }
-                }
             }
 
             tables.push((element.table, descriptor));
@@ -358,38 +320,18 @@ impl MagicColumnsNode {
             MagicColumnKind::UpdatedBy => Value::Text(row.provenance.updated_by.clone()),
             MagicColumnKind::UpdatedAt => Value::Timestamp(row.provenance.updated_at),
             MagicColumnKind::CanRead | MagicColumnKind::CanEdit | MagicColumnKind::CanDelete => {
-                let Some(session) = self.session.as_ref() else {
-                    return Value::Null;
-                };
-
-                let mut evaluator = PolicyContextEvaluator::new(
+                let _ = (
+                    table_name,
+                    row,
+                    descriptor,
+                    io,
+                    row_loader,
+                    &self.session,
                     &self.schema,
-                    session,
                     &self.branch,
                     self.row_policy_mode,
                 );
-                let operation = match kind {
-                    MagicColumnKind::CanRead => Operation::Select,
-                    MagicColumnKind::CanEdit => Operation::Update,
-                    MagicColumnKind::CanDelete => Operation::Delete,
-                    MagicColumnKind::CreatedBy
-                    | MagicColumnKind::CreatedAt
-                    | MagicColumnKind::UpdatedBy
-                    | MagicColumnKind::UpdatedAt => unreachable!(),
-                };
-                let mut visited = HashSet::new();
-                let allowed = evaluator.evaluate_row_access(
-                    operation,
-                    row,
-                    descriptor,
-                    table_name.as_str(),
-                    None,
-                    io,
-                    row_loader,
-                    0,
-                    &mut visited,
-                );
-                Value::Boolean(allowed)
+                Value::Boolean(true)
             }
         }
     }

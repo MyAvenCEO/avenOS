@@ -1,16 +1,16 @@
 use super::*;
 use serde::{Deserialize, Serialize};
 
+/// AvenOS runs with permissive local policy only (Biscuit ACC lives in the app).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum RowPolicyMode {
     #[default]
     PermissiveLocal,
-    Enforcing,
 }
 
 impl RowPolicyMode {
     pub fn denies_missing_explicit_policy(self) -> bool {
-        matches!(self, Self::Enforcing)
+        false
     }
 }
 

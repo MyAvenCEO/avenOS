@@ -163,7 +163,7 @@ impl RowNode for SelectElementNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::query_manager::encoding::encode_row;
+    use crate::row_format::encode_row;
     use crate::query_manager::types::{
         ColumnDescriptor, ColumnType, RowDescriptor, TupleDescriptor, TupleElement, Value,
     };

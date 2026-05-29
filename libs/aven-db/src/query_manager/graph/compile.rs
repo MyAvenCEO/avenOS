@@ -18,7 +18,6 @@ use super::super::graph_nodes::limit_offset::LimitOffsetNode;
 use super::super::graph_nodes::magic_columns::{MagicColumnRequest, MagicColumnsNode};
 use super::super::graph_nodes::materialize::MaterializeNode;
 use super::super::graph_nodes::output::{OutputMode, OutputNode};
-use super::super::graph_nodes::policy_filter::PolicyFilterNode;
 use super::super::graph_nodes::project::ProjectNode;
 use super::super::graph_nodes::recursive_relation::{
     CorrelationSource, RecursiveHop, RecursiveRelationNode,
@@ -30,7 +29,6 @@ use super::super::graph_nodes::union::UnionNode;
 use super::super::graph_nodes::{NodeId, RowNode};
 use super::super::index::ScanCondition;
 use super::super::magic_columns::{MagicColumnKind, magic_column_descriptor, magic_column_kind};
-use super::super::policy::PolicyExpr;
 use super::super::query::{ArraySubquerySpec, Condition, Conjunction, Query, QueryBuilder};
 use super::super::relation_ir::{ProjectColumn, ProjectExpr, RelExpr};
 use super::super::relation_ir_query_plan::{ExecutionQueryPlan, lower_relation_to_execution_plan};
@@ -46,17 +44,6 @@ fn resolve_branch_schema_hash(schema_context: &SchemaContext, branch: &str) -> O
         .all_live_hashes()
         .into_iter()
         .find(|hash| hash.short() == composed.schema_hash.short())
-}
-
-fn effective_select_policy(
-    table_schema: &crate::query_manager::types::TableSchema,
-    row_policy_mode: RowPolicyMode,
-) -> Option<PolicyExpr> {
-    table_schema.policies.select_policy().cloned().or_else(|| {
-        row_policy_mode
-            .denies_missing_explicit_policy()
-            .then_some(PolicyExpr::False)
-    })
 }
 
 fn natural_row_projection_element_index(
@@ -306,12 +293,6 @@ impl QueryGraph {
                 .into_iter()
                 .map(|(id, table)| (remap(id), table)),
         );
-        self.policy_filter_tables.extend(
-            other
-                .policy_filter_tables
-                .into_iter()
-                .map(|(id, table)| (remap(id), table)),
-        );
         self.magic_column_tables.extend(
             other
                 .magic_column_tables
@@ -379,12 +360,7 @@ impl QueryGraph {
             branches,
             session,
             RelationCompileFeatures::default(),
-            if crate::query_manager::manager::QueryManager::schema_has_any_explicit_policies(schema)
-            {
-                RowPolicyMode::Enforcing
-            } else {
-                RowPolicyMode::PermissiveLocal
-            },
+            RowPolicyMode::PermissiveLocal,
         )
     }
 
@@ -574,7 +550,6 @@ impl QueryGraph {
 
         let table_schema = schema.get(&plan.table)?;
         let descriptor = table_schema.columns.clone();
-        let select_policy = effective_select_policy(table_schema, row_policy_mode);
         let mut graph = QueryGraph::new(plan.table, descriptor.clone());
         let table_str = plan.table.as_str();
 
@@ -685,34 +660,6 @@ impl QueryGraph {
             true,
         );
         let scope_table_map = HashMap::from([(plan.base_scope.clone(), plan.table)]);
-
-        // Policy filter node (if session provided and table has SELECT policy)
-        if let (Some(session), Some(policy)) = (&session, select_policy) {
-            let branch_for_policy = branches
-                .first()
-                .cloned()
-                .unwrap_or_else(|| "main".to_string());
-            let policy_node = PolicyFilterNode::new_with_branch_and_policy_mode(
-                current_descriptor.clone(),
-                policy,
-                session.clone(),
-                schema.clone(),
-                plan.table.as_str(),
-                branch_for_policy,
-                row_policy_mode,
-            );
-            let inherits_tables: Vec<TableName> = policy_node
-                .inherits_tables()
-                .iter()
-                .map(TableName::new)
-                .collect();
-            let policy_id = graph.add_node(GraphNode::PolicyFilter(policy_node));
-            graph.add_edge(policy_id, phase2_input);
-            for inherits_table in inherits_tables {
-                graph.policy_filter_tables.push((policy_id, inherits_table));
-            }
-            phase2_input = policy_id;
-        }
 
         // Array subqueries: insert ArraySubqueryNode for each array subquery
         for subquery_spec in &plan.array_subqueries {
@@ -1398,37 +1345,7 @@ impl QueryGraph {
             graph.add_edge(base_mat_id, base_scan_output);
 
             // Track current left side descriptor (accumulates columns from joins)
-            let mut left_id = base_mat_id;
-            if let (Some(session), Some(policy)) = (
-                &session,
-                effective_select_policy(base_table_schema, row_policy_mode),
-            ) {
-                let branch_for_policy = branches
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| "main".to_string());
-                let policy_node = PolicyFilterNode::new_with_branch_and_policy_mode(
-                    base_descriptor.clone(),
-                    policy,
-                    session.clone(),
-                    schema.clone(),
-                    plan.table.as_str(),
-                    branch_for_policy,
-                    row_policy_mode,
-                );
-                let inherits_tables: Vec<TableName> = policy_node
-                    .inherits_tables()
-                    .iter()
-                    .map(TableName::new)
-                    .collect();
-                let policy_id = graph.add_node(GraphNode::PolicyFilter(policy_node));
-                graph.add_edge(policy_id, left_id);
-                for inherits_table in inherits_tables {
-                    graph.policy_filter_tables.push((policy_id, inherits_table));
-                }
-                left_id = policy_id;
-            }
-            (left_id, base_descriptor.clone())
+            (base_mat_id, base_descriptor.clone())
         };
 
         if let Some(recursive_spec) = &plan.recursive
@@ -1508,36 +1425,7 @@ impl QueryGraph {
             let right_mat = MaterializeNode::new_all(right_tuple_desc);
             let right_mat_id = graph.add_node(GraphNode::Materialize(right_mat));
             graph.add_edge(right_mat_id, right_scan_output);
-            let mut right_input_id = right_mat_id;
-            if let (Some(session), Some(policy)) = (
-                &session,
-                effective_select_policy(right_table_schema, row_policy_mode),
-            ) {
-                let branch_for_policy = branches
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| "main".to_string());
-                let policy_node = PolicyFilterNode::new_with_branch_and_policy_mode(
-                    right_descriptor.clone(),
-                    policy,
-                    session.clone(),
-                    schema.clone(),
-                    join_spec.table.as_str(),
-                    branch_for_policy,
-                    row_policy_mode,
-                );
-                let inherits_tables: Vec<TableName> = policy_node
-                    .inherits_tables()
-                    .iter()
-                    .map(TableName::new)
-                    .collect();
-                let policy_id = graph.add_node(GraphNode::PolicyFilter(policy_node));
-                graph.add_edge(policy_id, right_input_id);
-                for inherits_table in inherits_tables {
-                    graph.policy_filter_tables.push((policy_id, inherits_table));
-                }
-                right_input_id = policy_id;
-            }
+            let right_input_id = right_mat_id;
 
             // Build tuple descriptors with table/alias labels so qualified ON refs can resolve.
             let left_tuple_desc = TupleDescriptor::from_tables(

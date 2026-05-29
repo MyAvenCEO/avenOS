@@ -104,29 +104,6 @@ impl QueryGraph {
             self.mark_downstream_dirty(node_id);
         }
 
-        // Mark PolicyFilter nodes whose policy dependency tables changed
-        let affected_policy_filters: Vec<NodeId> = self
-            .policy_filter_tables
-            .iter()
-            .filter_map(|(node_id, inherits_table)| {
-                if inherits_table.as_str() == table {
-                    Some(*node_id)
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        for node_id in affected_policy_filters {
-            self.mark_dirty(node_id);
-            // Mark the node as needing policy re-evaluation
-            if let Some(GraphNode::PolicyFilter(node)) = self.get_node_mut(node_id) {
-                node.mark_inherits_dirty();
-            }
-            // Propagate dirty marks to downstream nodes
-            self.mark_downstream_dirty(node_id);
-        }
-
         let affected_magic_columns: Vec<NodeId> = self
             .magic_column_tables
             .iter()
@@ -176,10 +153,6 @@ impl QueryGraph {
             .any(|(_, t, _)| t.as_str() == table)
             || self
                 .array_subquery_tables
-                .iter()
-                .any(|(_, t)| t.as_str() == table)
-            || self
-                .policy_filter_tables
                 .iter()
                 .any(|(_, t)| t.as_str() == table)
             || self
@@ -410,18 +383,6 @@ impl QueryGraph {
         self.settle_with_context(storage, local_overlay_rows, None, &mut row_loader)
     }
 
-    pub(crate) fn settle_with_settlement_eval_cache<F>(
-        &mut self,
-        storage: &dyn Storage,
-        settlement_eval_cache: Option<&mut SettlementEvalCache>,
-        row_loader: F,
-    ) -> RowDelta
-    where
-        F: FnMut(ObjectId, Option<TableName>) -> Option<LoadedRow>,
-    {
-        self.settle_with_context(storage, None, settlement_eval_cache, row_loader)
-    }
-
     fn settle_with_context<F>(
         &mut self,
         storage: &dyn Storage,
@@ -455,7 +416,6 @@ impl QueryGraph {
                 Some(GraphNode::RecursiveRelation(_)) => "RecursiveRelation",
                 Some(GraphNode::Materialize(_)) => "Materialize",
                 Some(GraphNode::Filter(_)) => "Filter",
-                Some(GraphNode::PolicyFilter(_)) => "PolicyFilter",
                 Some(GraphNode::Sort(_)) => "Sort",
                 Some(GraphNode::LimitOffset(_)) => "LimitOffset",
                 Some(GraphNode::ArraySubquery(_)) => "ArraySubquery",
@@ -674,34 +634,6 @@ impl QueryGraph {
 
                     if let Some(GraphNode::Filter(filter_node)) = self.get_node_mut(node_id) {
                         let delta = RowNode::process(filter_node, input_delta);
-                        tracing::debug!(
-                            node_id = node_id.0,
-                            node_type,
-                            added = delta.added.len(),
-                            removed = delta.removed.len(),
-                            "graph node evaluated"
-                        );
-                        tuple_deltas.insert(node_id, delta);
-                    }
-                }
-                Some(GraphNode::PolicyFilter(_)) => {
-                    let input_delta = self
-                        .get_inputs(node_id)
-                        .first()
-                        .and_then(|dep| tuple_deltas.get(dep).cloned())
-                        .unwrap_or_default();
-
-                    if let Some(GraphNode::PolicyFilter(policy_node)) = self.get_node_mut(node_id) {
-                        // Use process_with_context if the policy has INHERITS clauses
-                        let delta = if policy_node.has_inherits() {
-                            policy_node.process_with_context(
-                                input_delta,
-                                storage,
-                                &mut |id, hint| row_loader(id, hint),
-                            )
-                        } else {
-                            RowNode::process(policy_node, input_delta)
-                        };
                         tracing::debug!(
                             node_id = node_id.0,
                             node_type,

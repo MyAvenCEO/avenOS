@@ -1192,11 +1192,7 @@ async fn jazz_connect(
 		client_id: Some(ClientId(deterministic)),
 		schema: schema.clone(),
 		live_schemas,
-		server_url: String::new(),
 		data_dir: data_dir.clone(),
-		jwt_token: None,
-		backend_secret: None,
-		admin_secret: None,
 	};
 
 	#[cfg(any(target_os = "macos", target_os = "ios"))]

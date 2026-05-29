@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use crate::metadata::MetadataKey;
-use crate::query_manager::encoding::{decode_row, encode_row};
+use crate::row_format::{decode_row, encode_row};
 use crate::query_manager::types::{SchemaHash, TableName};
 use crate::row_histories::BatchId;
 

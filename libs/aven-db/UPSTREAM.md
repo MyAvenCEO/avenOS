@@ -1,50 +1,47 @@
 # AvenOS `aven-db` (Rust import alias: `groove`)
 
-Internal crate at `libs/aven-db` (Cargo **`0.0.1`**, AvenOS-owned) — stripped fork of jazz2 **`crates/jazz-tools`**. Storage: **RocksDB only** (`data_dir/jazz.rocksdb`).
+**Permanent AvenOS fork** at `libs/aven-db` (Cargo **`0.0.1`**, AvenOS-owned). Provenance: jazz2 **`crates/jazz-tools`** @ `232a9933c973f5b80ca9115e049706d9acd8fb77` (npm `jazz-tools` **2.0.0-alpha.50**). We do **not** re-vendor from upstream — evolve this tree in place.
 
-| Upstream pin | Value |
-|---|---|
-| Git SHA | `232a9933c973f5b80ca9115e049706d9acd8fb77` |
-| npm `jazz-tools` | **2.0.0-alpha.50** |
-| Rust crate version | `2.0.0-alpha.0` (Cargo.toml label) |
+Storage: **RocksDB only** (`data_dir/jazz.rocksdb`).
 
-**Refresh source (local only, gitignored):** clone [garden-co/jazz2](https://github.com/garden-co/jazz2) to `tools/jazz2-upstream/` (~115MB). AvenOS uses **only** `crates/jazz-tools` (Rust + RocksDB) — do not vendor npm, OPFS, SQLite, or TypeScript from that monorepo.
+## AvenOS runtime (`client-p2p` feature)
 
-## AvenOS uses (`client-p2p` feature)
-
-| Keep | Purpose |
-|---|---|
-| Upstream flat engine (`query_manager`, `sync_manager`, `schema_manager`, `storage`, `runtime_*`) | Row-batch sync model |
-| `avenos_client.rs`, `peer_transport.rs` | P2P JazzClient + Hyperswarm framing |
+| Component | Purpose |
+|-----------|---------|
+| `query_manager`, `sync_manager`, `schema_manager`, `storage`, `runtime_*` | Row-batch local-first engine |
+| `avenos_client.rs`, `peer_transport.rs` | P2P `JazzClient` + Hyperswarm framing (`SyncFrameV1` bincode) |
+| `row_format` | Binary row codec (single import path; no `query_manager::encoding` shim) |
 | AvenOS patches | Peer scope bypass, row-batch catch-up/rebroadcast, `QueryError::InternalError`, inbox unknown-client WARN |
-| `tests/peer_transport_codec.rs` | P2P framing unit test |
+| `tests/peer_transport_codec.rs` | P2P framing unit test (CI gate) |
 
-## Stripped (native Tauri scope)
+## Access control (AvenOS vs Jazz)
 
-CLI binary, server routes, WebSocket client, benches, examples, SQLite, SurrealKV, upstream integration tests.
+| Layer | Where | Status |
+|-------|-------|--------|
+| **AvenOS ACC** | `app/src-tauri` — Biscuit (`spark_acc.rs`), `BiscuitGatedPeerTransport` (`peer_sync_gate.rs`), `spark_sync.rs` | **Active** — outbound P2P sync gate and spark admin checks |
+| **Jazz ReBAC** | `aven-db` | **Stripped** — policy evaluation, `policy_graph`, graph `PolicyFilter` nodes, `publish_permissions_bundle` removed; `policy.rs` + `types/policy.rs` keep serde/catalogue wire types only |
+| **Jazz session/JWT** | `query_manager::session` | **Slim** — `Session` / `WriteContext` for batch authorship; no JWT client path in P2P `avenos_client` |
 
-## AvenOS overlays (re-apply after `scripts/revendor-aven-db.sh`)
+Engine runs **`RowPolicyMode::PermissiveLocal` only**. AvenOS schema manifests have no `TablePolicies`; Biscuit ACC is the only row-level gate.
 
-- `Cargo.toml` — package `aven-db`, lib name `groove`, `client-p2p` feature set
-- `src/lib.rs` — `extern crate self as groove`, client-p2p exports
-- `src/avenos_client.rs`, `src/peer_transport.rs`
-- `src/sync_manager/{forwarding.rs,sync_logic.rs,mod.rs,inbox.rs}`
-- `src/runtime_{core/sync.rs,tokio.rs}`
-- `src/query_manager/manager.rs` — `InternalError`
-- `tests/peer_transport_codec.rs`
+## Stripped from fork (do not reintroduce)
+
+- WebSocket stack: `transport_protocol`, `transport_manager`, `ws_stream`, `install_transport`
+- Upstream server/CLI, `client.rs` (WS JazzClient), `middleware/auth`, `otel`, `identity.rs`
+- Jazz ReBAC engine: `policy_graph`, `policy_filter` / `policy_eval` graph nodes, `policy_counters`, `publish_permissions_bundle` API
+- Legacy `tests/policies_integration`, `tests/support` — keep only `peer_transport_codec.rs`
+- In-crate upstream test trees: `rebac_tests`, `manager_tests`, `sync_manager/tests`, `install_transport_tests`
+
+## Verification
+
+```bash
+bash ./scripts/verify-aven-db-gates.sh
+```
+
+Requires **Rust 1.93.1** (`RUSTUP_TOOLCHAIN` in script).
 
 ## Consumers
 
 - `app/src-tauri` — `groove = { package = "aven-db", features = ["client-p2p"] }`
 - `libs/tauri-plugin-peer` — same
 - `libs/aven-schema/crates/schema-hash` — same
-
-## Re-vendor
-
-```bash
-cd tools/jazz2-upstream && git fetch origin main && git checkout 232a9933
-./scripts/revendor-aven-db.sh
-bun run clean:app:rust
-```
-
-The script backs up AvenOS overlays to `.avenos-revendor-backup/` and restores them after copy+strip.

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::query_manager::encoding::encode_value_with_type;
+use crate::row_format::encode_value_with_type;
 use crate::query_manager::graph_nodes::filter::Predicate;
 use crate::query_manager::graph_nodes::sort::{SortDirection, SortKey, SortTarget};
 use crate::query_manager::magic_columns::is_magic_column_name;

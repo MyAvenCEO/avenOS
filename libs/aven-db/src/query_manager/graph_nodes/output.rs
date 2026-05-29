@@ -2,7 +2,7 @@ use ahash::AHashSet;
 use std::collections::{HashMap, HashSet};
 
 use crate::object::{BranchName, ObjectId};
-use crate::query_manager::encoding::decode_row;
+use crate::row_format::decode_row;
 use crate::query_manager::types::{
     Row, RowDelta, RowDescriptor, Tuple, TupleDelta, TupleDescriptor, Value,
 };
@@ -277,7 +277,7 @@ impl RowNode for OutputNode {
 mod tests {
     use super::*;
     use crate::object::ObjectId;
-    use crate::query_manager::encoding::encode_row;
+    use crate::row_format::encode_row;
     use crate::query_manager::types::{ColumnDescriptor, ColumnType, TupleElement};
 
     fn test_descriptor() -> RowDescriptor {

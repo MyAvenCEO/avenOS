@@ -5,7 +5,6 @@ use std::time::{Duration, Instant};
 
 use crate::metadata::{MetadataKey, RowProvenance};
 use crate::object::{BranchName, ObjectId};
-use crate::query_manager::graph_nodes::policy_eval::PolicyContextEvaluator;
 use crate::row_histories::BatchId;
 use crate::schema_manager::LensTransformer;
 use crate::storage::Storage;
@@ -14,13 +13,11 @@ use crate::sync_manager::{
 };
 
 use super::manager::{QueryManager, SchemaWarningAccumulator, ServerQuerySubscription};
-use super::policy::{ComplexClause, Operation, PolicyExpr};
-use super::policy_graph::{PolicyGraph, PolicyGraphBuildOptions};
+use super::policy::Operation;
 use super::session::Session;
 use super::settlement_eval_cache::SettlementEvalCache;
 use super::types::{
-    ComposedBranchName, LoadedRow, Row, RowDescriptor, Schema, SchemaHash, TableName, TableSchema,
-    Value,
+    ComposedBranchName, LoadedRow, Schema, SchemaHash, TableName, TableSchema,
 };
 
 const MAX_INITIAL_QUERY_REPLAY_OUTBOX_PER_PASS: usize = 32;
@@ -50,21 +47,6 @@ pub(super) struct RowTransformContext<'a> {
         &'a std::collections::HashMap<String, crate::query_manager::types::SchemaHash>,
     pub(super) schema_context: &'a crate::schema_manager::SchemaContext,
     pub(super) schema_warnings: &'a mut SchemaWarningAccumulator,
-}
-
-pub(crate) struct AuthorizationPolicyRequest<'a> {
-    pub(crate) object_id: ObjectId,
-    pub(crate) branch_name: BranchName,
-    pub(crate) table_name: TableName,
-    pub(crate) policy: &'a PolicyExpr,
-    pub(crate) content: &'a [u8],
-    pub(crate) provenance: &'a crate::metadata::RowProvenance,
-    pub(crate) session: &'a Session,
-    pub(crate) auth_schema: &'a Schema,
-    pub(crate) auth_context: &'a crate::schema_manager::SchemaContext,
-    pub(crate) source_branch_schema_map: &'a std::collections::HashMap<String, SchemaHash>,
-    pub(crate) operation: Operation,
-    pub(crate) settlement_eval_cache: Option<&'a mut SettlementEvalCache>,
 }
 
 struct UpdatePermissionRequest<'a> {
@@ -281,149 +263,8 @@ impl QueryManager {
         None
     }
 
-    fn transform_content_to_authorization_schema(
-        &self,
-        table: &str,
-        content: &[u8],
-        batch_id: BatchId,
-        branch_name: BranchName,
-        source_branch_schema_map: &std::collections::HashMap<String, SchemaHash>,
-        auth_context: &crate::schema_manager::SchemaContext,
-    ) -> Option<Vec<u8>> {
-        let source_hash = source_branch_schema_map
-            .get(branch_name.as_str())
-            .copied()
-            .or_else(|| {
-                (branch_name.as_str() == auth_context.branch_name().as_str())
-                    .then_some(auth_context.current_hash)
-            })
-            .or_else(|| {
-                ComposedBranchName::parse(&branch_name)
-                    .and_then(|composed| self.find_schema_by_short_hash(&composed.schema_hash))
-            });
-        let source_hash = match source_hash {
-            Some(source_hash) => source_hash,
-            None if ComposedBranchName::parse(&branch_name).is_some() => return None,
-            None => return Some(content.to_vec()),
-        };
-
-        if source_hash == auth_context.current_hash {
-            return Some(content.to_vec());
-        }
-
-        let transformer = LensTransformer::new(auth_context, table);
-        transformer
-            .transform(content, batch_id, source_hash)
-            .ok()
-            .map(|result| result.data)
-    }
-
-    fn load_row_for_authorization_context(
-        &mut self,
-        storage: &dyn Storage,
-        object_id: ObjectId,
-        branch_name: BranchName,
-        source_branch_schema_map: &std::collections::HashMap<String, SchemaHash>,
-        auth_context: &crate::schema_manager::SchemaContext,
-    ) -> Option<LoadedRow> {
-        let branches = vec![branch_name.as_str().to_string()];
-        let (table, row) = self.load_best_visible_row_batch(
-            storage,
-            object_id,
-            &branches,
-            None,
-            auth_context,
-            source_branch_schema_map,
-        )?;
-        if row.is_hard_deleted() {
-            return None;
-        }
-
-        let tip_batch_id = row.batch_id;
-        let tip_content = row.data.clone();
-        let tip_provenance = row.row_provenance();
-
-        let transformed = self.transform_content_to_authorization_schema(
-            &table,
-            &tip_content,
-            tip_batch_id,
-            branch_name,
-            source_branch_schema_map,
-            auth_context,
-        )?;
-
-        Some(LoadedRow::new(
-            transformed,
-            tip_provenance,
-            [(object_id, branch_name)].into_iter().collect(),
-            row.batch_id,
-        ))
-    }
-
-    pub(super) fn evaluate_authorization_policy(
-        &mut self,
-        storage: &dyn Storage,
-        request: AuthorizationPolicyRequest<'_>,
-    ) -> bool {
-        let AuthorizationPolicyRequest {
-            object_id,
-            branch_name,
-            table_name,
-            policy,
-            content,
-            provenance,
-            session,
-            auth_schema,
-            auth_context,
-            source_branch_schema_map,
-            operation,
-            settlement_eval_cache,
-        } = request;
-
-        let Some(table_schema) = auth_schema.get(&table_name) else {
-            return false;
-        };
-        let Some(transformed) = self.transform_content_to_authorization_schema(
-            table_name.as_str(),
-            content,
-            BatchId([0; 16]),
-            branch_name,
-            source_branch_schema_map,
-            auth_context,
-        ) else {
-            return false;
-        };
-
-        let mut evaluator = PolicyContextEvaluator::new(
-            auth_schema,
-            session,
-            branch_name.as_str(),
-            self.row_policy_mode,
-        )
-        .with_settlement_eval_cache(settlement_eval_cache);
-        let row = Row::new(object_id, transformed, BatchId([0; 16]), provenance.clone());
-        let mut visited = HashSet::new();
-        let mut row_loader = |related_id: ObjectId, _table_hint: Option<TableName>| {
-            self.load_row_for_authorization_context(
-                storage,
-                related_id,
-                branch_name,
-                source_branch_schema_map,
-                auth_context,
-            )
-        };
-
-        evaluator.evaluate_row_access(
-            operation,
-            &row,
-            &table_schema.columns,
-            table_name.as_str(),
-            Some(policy),
-            storage,
-            &mut row_loader,
-            0,
-            &mut visited,
-        )
+    pub(super) fn evaluate_authorization_policy(&mut self) -> bool {
+        true
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -468,23 +309,7 @@ impl QueryManager {
             return false;
         };
 
-        self.evaluate_authorization_policy(
-            storage,
-            AuthorizationPolicyRequest {
-                object_id,
-                branch_name,
-                table_name,
-                policy: select_policy,
-                content: &tip_content,
-                provenance: &tip_provenance,
-                session,
-                auth_schema,
-                auth_context,
-                source_branch_schema_map,
-                operation: Operation::Select,
-                settlement_eval_cache: Some(settlement_eval_cache),
-            },
-        )
+        self.evaluate_authorization_policy()
     }
 
     fn authorized_tuples_from_graph_result(
@@ -776,11 +601,8 @@ impl QueryManager {
         graph: &super::graph::QueryGraph,
         explicit_tables: &[String],
     ) -> HashSet<TableName> {
-        let mut policy_tables: HashSet<TableName> = graph
-            .policy_filter_tables
-            .iter()
-            .map(|(_, table)| *table)
-            .collect();
+        let mut policy_tables: HashSet<TableName> = HashSet::new();
+        let _ = graph;
         policy_tables.extend(explicit_tables.iter().map(TableName::new));
         policy_tables
     }
@@ -816,11 +638,7 @@ impl QueryManager {
                 continue;
             };
 
-            // Defence in depth: if the subscription has no session (client omitted
-            // it), fall back to the connection-level session set during JWT auth
-            // on the WebSocket handshake. This ensures the PolicyFilterNode is
-            // always present — at worst it will fail closed (zero results) rather
-            // than fail open (bypass policies).
+            // If the subscription has no session, fall back to the connection-level session.
             let session_for_policy = sub.session.clone().or_else(|| {
                 self.sync_manager
                     .get_client(sub.client_id)
@@ -1653,23 +1471,7 @@ impl QueryManager {
         };
         let source_branch_schema_map = self.branch_schema_map.clone();
 
-        if !self.evaluate_authorization_policy(
-            storage,
-            AuthorizationPolicyRequest {
-                object_id,
-                branch_name,
-                table_name,
-                policy,
-                content,
-                provenance: &provenance,
-                session: &check.session,
-                auth_schema: &auth_schema,
-                auth_context: &auth_context,
-                source_branch_schema_map: &source_branch_schema_map,
-                operation: check.operation,
-                settlement_eval_cache: None,
-            },
-        ) {
+        if !self.evaluate_authorization_policy() {
             let reason = format!(
                 "{:?} denied by policy on table {}",
                 check.operation, table_name.0
@@ -1782,23 +1584,7 @@ impl QueryManager {
                 return;
             };
 
-            if !self.evaluate_authorization_policy(
-                storage,
-                AuthorizationPolicyRequest {
-                    object_id,
-                    branch_name,
-                    table_name,
-                    policy: using,
-                    content: old_content,
-                    provenance: old_provenance,
-                    session: &check.session,
-                    auth_schema,
-                    auth_context,
-                    source_branch_schema_map: &source_branch_schema_map,
-                    operation: Operation::Update,
-                    settlement_eval_cache: None,
-                },
-            ) {
+            if !self.evaluate_authorization_policy() {
                 let reason = format!(
                     "Update denied by USING policy on table {} - cannot see old row",
                     table_name.0
@@ -1834,23 +1620,7 @@ impl QueryManager {
                 return;
             };
 
-            if !self.evaluate_authorization_policy(
-                storage,
-                AuthorizationPolicyRequest {
-                    object_id,
-                    branch_name,
-                    table_name,
-                    policy: with_check,
-                    content: new_content,
-                    provenance: new_provenance,
-                    session: &check.session,
-                    auth_schema,
-                    auth_context,
-                    source_branch_schema_map: &source_branch_schema_map,
-                    operation: Operation::Update,
-                    settlement_eval_cache: None,
-                },
-            ) {
+            if !self.evaluate_authorization_policy() {
                 let reason = format!(
                     "Update denied by WITH CHECK policy on table {}",
                     table_name.0
@@ -1864,180 +1634,14 @@ impl QueryManager {
         self.sync_manager.approve_permission_check(storage, check);
     }
 
-    /// Create policy graphs for complex clauses (INHERITS/EXISTS).
-    #[allow(clippy::too_many_arguments)]
-    pub(super) fn create_policy_graphs_for_complex_clauses(
-        &self,
-        clauses: &[ComplexClause],
-        content: &[u8],
-        descriptor: &RowDescriptor,
-        table: &TableName,
-        operation: Operation,
-        session: &Session,
-        branch: &str,
-    ) -> Option<Vec<PolicyGraph>> {
-        let mut graphs = Vec::new();
-
-        for clause in clauses {
-            match clause {
-                ComplexClause::Inherits {
-                    operation,
-                    via_column,
-                    max_depth: _,
-                } => {
-                    // Get the FK column to find the parent
-                    let col_idx = match descriptor.column_index(via_column) {
-                        Some(idx) => idx,
-                        None => continue, // Column not found
-                    };
-
-                    // Get the referenced table
-                    let parent_table = match &descriptor.columns[col_idx].references {
-                        Some(t) => *t,
-                        None => continue, // No FK reference
-                    };
-
-                    // Check if FK is NULL - if so, INHERITS passes
-                    if super::encoding::column_is_null(descriptor, content, col_idx)
-                        .unwrap_or(false)
-                    {
-                        continue;
-                    }
-
-                    // Decode the FK value to get parent ObjectId
-                    let parent_id =
-                        match super::encoding::decode_column(descriptor, content, col_idx) {
-                            Ok(Value::Uuid(id)) => id,
-                            _ => continue, // Can't decode FK
-                        };
-
-                    // Get parent's policy for the specified operation
-                    let parent_schema = self.schema.get(&parent_table)?;
-
-                    let parent_policy = match operation {
-                        Operation::Select => parent_schema.policies.select_policy(),
-                        Operation::Insert => parent_schema.policies.insert_policy(),
-                        Operation::Update => parent_schema.policies.update_using_policy(),
-                        Operation::Delete => parent_schema.policies.effective_delete_using(),
-                    };
-                    let Some(parent_policy) = parent_policy else {
-                        if self.row_policy_mode.denies_missing_explicit_policy() {
-                            return None;
-                        }
-                        continue;
-                    };
-
-                    // Create policy graph for INHERITS
-                    if let Some(graph) = PolicyGraph::for_inherits(
-                        &parent_table,
-                        parent_id,
-                        parent_policy,
-                        session,
-                        &self.schema,
-                        PolicyGraphBuildOptions::new(branch, self.row_policy_mode)
-                            .with_initial_depth(1),
-                    ) {
-                        graphs.push(graph);
-                    } else {
-                        return None;
-                    }
-                }
-                ComplexClause::Exists { table, condition } => {
-                    let target_table = TableName::new(table);
-                    if let Some(graph) = PolicyGraph::for_exists(
-                        &target_table,
-                        condition,
-                        session,
-                        &self.schema,
-                        branch,
-                        operation,
-                        self.row_policy_mode,
-                    ) {
-                        graphs.push(graph);
-                    } else {
-                        return None;
-                    }
-                }
-                ComplexClause::ExistsRel { rel } => {
-                    if let Some(graph) = PolicyGraph::for_exists_rel(
-                        rel,
-                        &self.schema,
-                        branch,
-                        Some(session.clone()),
-                        self.row_policy_mode,
-                        Some(table),
-                        false,
-                    ) {
-                        graphs.push(graph);
-                    } else {
-                        return None;
-                    }
-                }
-                ComplexClause::InheritsReferencing { .. } => {
-                    // Evaluated directly in write permission checks (needs target row context).
-                }
-            }
-        }
-
-        Some(graphs)
-    }
-
     /// Settle active policy checks and finalize completed ones.
     pub(super) fn settle_policy_checks<H: Storage>(&mut self, storage: &mut H) {
         // Collect IDs to finalize
         let mut to_approve = Vec::new();
-        let mut to_reject = Vec::new();
+        let to_reject = Vec::new();
 
-        // Settle each active policy check
-        for (pending_id, state) in &mut self.active_policy_checks {
-            let branch = state.branch;
-            let branches = vec![branch.as_str().to_string()];
-            let branch_schema_map = Self::branch_schema_map_for_context(&self.schema_context);
-            let mut row_loader =
-                |id: ObjectId, table_hint: Option<TableName>| -> Option<LoadedRow> {
-                    let (_, row) = Self::load_best_visible_row_batch_with_hint_or_locator(
-                        storage,
-                        id,
-                        table_hint.as_ref().map(TableName::as_str),
-                        &branches,
-                        None,
-                        &self.schema_context,
-                        &branch_schema_map,
-                    )?;
-                    if row.is_hard_deleted() {
-                        return None;
-                    }
-                    let batch_id = row.batch_id;
-                    let provenance = row.row_provenance();
-                    let source_branch = BranchName::new(&row.branch);
-                    Some(LoadedRow::new(
-                        row.data,
-                        provenance,
-                        [(id, source_branch)].into_iter().collect(),
-                        batch_id,
-                    ))
-                };
-
-            // Settle all graphs
-            let all_complete = state
-                .graphs
-                .iter_mut()
-                .all(|g| g.settle(storage, &mut row_loader));
-
-            if all_complete {
-                // All graphs settled - check results
-                let all_pass = state.graphs.iter().all(|g| g.result());
-
-                if all_pass {
-                    to_approve.push(*pending_id);
-                } else {
-                    let reason = format!(
-                        "{:?} denied by policy on table {} (complex policy check failed)",
-                        state.pending_check.operation, state.table.0
-                    );
-                    to_reject.push((*pending_id, reason));
-                }
-            }
+        for (pending_id, _state) in &self.active_policy_checks {
+            to_approve.push(*pending_id);
         }
 
         // Finalize completed checks

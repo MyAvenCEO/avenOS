@@ -1433,17 +1433,6 @@ fn structural_session_exists_rel_teams_schema() -> Schema {
         .build()
 }
 
-fn users_insert_denied_authorization_schema() -> Schema {
-    SchemaBuilder::new()
-        .table(
-            TableSchema::builder("users")
-                .column("id", ColumnType::Uuid)
-                .column("name", ColumnType::Text)
-                .policies(TablePolicies::new().with_insert(PolicyExpr::False)),
-        )
-        .build()
-}
-
 fn defaulted_todos_schema() -> Schema {
     SchemaBuilder::new()
         .table(
@@ -2095,7 +2084,6 @@ fn noop_waker() -> std::task::Waker {
 
 mod basic;
 mod fk_remove_error;
-mod install_transport_tests;
 mod query_subscription;
 mod schema_catalogue;
 mod sync_replay;

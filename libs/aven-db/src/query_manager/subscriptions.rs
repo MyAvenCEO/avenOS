@@ -10,7 +10,7 @@ use crate::sync_manager::{DurabilityTier, QueryId, ServerId};
 use crate::sync_manager::{OutgoingQuerySubscription, QueryPropagation};
 
 #[cfg(test)]
-use super::encoding::decode_row;
+use crate::row_format::decode_row;
 use super::graph_nodes::output::QuerySubscriptionId;
 use super::manager::{
     CatalogueUpdate, LocalUpdates, QueryError, QueryManager, QuerySubscription,
@@ -38,15 +38,8 @@ pub(crate) struct SubscriptionExecutionOptions {
 }
 
 impl QueryManager {
-    pub(crate) fn policy_context_tables_for_graph(graph: &super::graph::QueryGraph) -> Vec<String> {
-        let mut tables: Vec<String> = graph
-            .policy_filter_tables
-            .iter()
-            .map(|(_, table)| table.as_str().to_string())
-            .collect();
-        tables.sort();
-        tables.dedup();
-        tables
+    pub(crate) fn policy_context_tables_for_graph(_graph: &super::graph::QueryGraph) -> Vec<String> {
+        Vec::new()
     }
 
     fn should_send_local_subscription_upstream(&self, propagation: QueryPropagation) -> bool {

@@ -1,45 +1,13 @@
 #!/usr/bin/env bash
-# Copy jazz2-upstream/crates/jazz-tools → libs/aven-db and strip native-Tauri dead weight.
+# DEPRECATED — aven-db is a permanent AvenOS fork; do not re-copy from jazz2-upstream.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-UPSTREAM="${ROOT}/tools/jazz2-upstream/crates/jazz-tools"
-DEST="${ROOT}/libs/aven-db"
-BACKUP="${ROOT}/.avenos-revendor-backup"
+cat >&2 <<'EOF'
+revendor-aven-db.sh is deprecated.
 
-if [[ ! -d "$UPSTREAM" ]]; then
-	echo "revendor: missing $UPSTREAM — clone jazz2-upstream first (see libs/aven-db/UPSTREAM.md)" >&2
-	exit 1
-fi
+libs/aven-db is a full AvenOS fork (see libs/aven-db/UPSTREAM.md).
+Edit libs/aven-db in place; do not rsync from tools/jazz2-upstream.
 
-mkdir -p "$BACKUP"
-for f in UPSTREAM.md Cargo.toml src/lib.rs src/peer_transport.rs src/avenos_client.rs tests/peer_transport_codec.rs; do
-	if [[ -f "$DEST/$f" ]]; then
-		backup_name="$(echo "$f" | tr '/' '_')"
-		cp -f "$DEST/$f" "$BACKUP/$backup_name"
-	fi
-done
-
-rm -rf "$DEST"
-mkdir -p "$DEST"
-rsync -a --exclude='.git' --exclude='target' "$UPSTREAM/" "$DEST/"
-
-rm -rf \
-	"$DEST/src/main.rs" \
-	"$DEST/src/commands" \
-	"$DEST/src/server" \
-	"$DEST/benches" \
-	"$DEST/examples" \
-	"$DEST/tests/rocksdb_storage_integration.rs" \
-	"$DEST/tests/sqlite_storage_integration.rs" \
-	"$DEST/tests/sync_telemetry_otel.rs"
-
-for f in UPSTREAM.md Cargo.toml src/lib.rs src/peer_transport.rs src/avenos_client.rs tests/peer_transport_codec.rs; do
-	backup_name="$(echo "$f" | tr '/' '_')"
-	if [[ -f "$BACKUP/$backup_name" ]]; then
-		mkdir -p "$DEST/$(dirname "$f")"
-		cp -f "$BACKUP/$backup_name" "$DEST/$f"
-	fi
-done
-
-echo "revendor: copied upstream jazz-tools → libs/aven-db (stripped server/cli/benches); AvenOS overlays restored from $BACKUP"
+Use: bash ./scripts/verify-aven-db-gates.sh
+EOF
+exit 1

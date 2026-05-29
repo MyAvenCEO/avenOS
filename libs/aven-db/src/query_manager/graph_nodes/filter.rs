@@ -2,7 +2,7 @@ use ahash::AHashSet;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 
-use crate::query_manager::encoding::{
+use crate::row_format::{
     column_bytes, column_is_null, compare_column_to_value, decode_column,
 };
 use crate::query_manager::types::{RowDescriptor, Tuple, TupleDelta, TupleDescriptor, Value};
@@ -430,7 +430,7 @@ mod tests {
     use super::*;
     use crate::metadata::RowProvenance;
     use crate::object::ObjectId;
-    use crate::query_manager::encoding::encode_row;
+    use crate::row_format::encode_row;
     use crate::query_manager::types::{ColumnDescriptor, ColumnType, Row, TupleElement, Value};
     use crate::row_histories::BatchId;
 

@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::metadata::{RowProvenance, SYSTEM_PRINCIPAL_ID};
 use crate::object::ObjectId;
-use crate::query_manager::encoding::{decode_row, encode_row};
+use crate::row_format::{decode_row, encode_row};
 use crate::query_manager::settlement_eval_cache::{RelationSubexprKey, SettlementEvalCache};
 use crate::query_manager::types::{
     LoadedRow, Row, RowDescriptor, Schema, TableName, Tuple, TupleBatchProvenance, TupleDelta,
@@ -461,17 +461,9 @@ impl RecursiveRelationNode {
         };
 
         if let Some(cached) = cache.relation_result_get(&key) {
-            crate::query_manager::policy_counters::increment(
-                "relation_subexpr_cache",
-                format!("hit kind=recursive_hop site={:016x}", key.site_fingerprint),
-            );
             return cached;
         }
 
-        crate::query_manager::policy_counters::increment(
-            "relation_subexpr_cache",
-            format!("miss kind=recursive_hop site={:016x}", key.site_fingerprint),
-        );
         let result = self.recompute_with_hop_uncached(io, row_loader);
         cache.relation_result_insert(key, result.clone());
         result
@@ -482,10 +474,6 @@ impl RecursiveRelationNode {
         io: &dyn Storage,
         row_loader: &mut dyn FnMut(ObjectId, Option<TableName>) -> Option<LoadedRow>,
     ) -> AHashSet<Tuple> {
-        crate::query_manager::policy_counters::increment(
-            "relation_subexpr_eval",
-            "kind=recursive_hop".to_string(),
-        );
         let Some(hop) = &self.hop else {
             return AHashSet::new();
         };

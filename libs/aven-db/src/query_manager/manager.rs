@@ -20,11 +20,10 @@ use crate::sync_manager::{
     RowBatchKey, SchemaWarning, SyncManager,
 };
 
-use super::encoding::decode_row;
+use crate::row_format::decode_row;
 use super::graph::{QueryCompileError, QueryGraph};
 use super::graph_nodes::output::QuerySubscriptionId;
 use super::policy::{Operation, PolicyExpr};
-use super::policy_graph::PolicyGraph;
 use super::query::Query;
 use super::session::Session;
 use super::settlement_eval_cache::SettlementEvalCache;
@@ -346,8 +345,6 @@ pub struct QuerySubscriptionFailure {
 /// State for an active policy check (graphs and associated data).
 #[derive(Debug)]
 pub(super) struct PolicyCheckState {
-    /// Policy graphs that need to settle.
-    pub(super) graphs: Vec<PolicyGraph>,
     /// Table name for error messages.
     pub(super) table: TableName,
     /// Branch the write is being evaluated on.
@@ -679,12 +676,12 @@ impl QueryManager {
     /// Must be called before queries. Can only be called once.
     /// Creates indices for the current schema's branch.
     pub fn set_current_schema(&mut self, schema: Schema, env: &str, user_branch: &str) {
-        let row_policy_mode = if Self::schema_has_any_explicit_policies(&schema) {
-            RowPolicyMode::Enforcing
-        } else {
-            RowPolicyMode::PermissiveLocal
-        };
-        self.set_current_schema_with_policy_mode(schema, env, user_branch, row_policy_mode);
+        self.set_current_schema_with_policy_mode(
+            schema,
+            env,
+            user_branch,
+            RowPolicyMode::PermissiveLocal,
+        );
     }
 
     pub fn set_current_schema_with_policy_mode(
@@ -698,11 +695,7 @@ impl QueryManager {
             .set_current(schema.clone(), env, user_branch);
         self.schema = Arc::new(schema.clone());
         self.row_policy_mode = row_policy_mode;
-        self.authorization_schema = if matches!(row_policy_mode, RowPolicyMode::Enforcing) {
-            Some(Arc::new(schema.clone()))
-        } else {
-            None
-        };
+        self.authorization_schema = None;
         self.authorization_context_cache.clear();
         self.authorization_schema_required = false;
         self.write_table_cache.clear();
@@ -717,19 +710,9 @@ impl QueryManager {
         self.mark_schema_catalogue_dirty(self.schema_context.current_hash);
     }
 
-    pub fn set_authorization_schema(&mut self, schema: Schema) {
-        self.authorization_schema = Some(Arc::new(schema));
-        self.authorization_context_cache.clear();
-        self.row_policy_mode = RowPolicyMode::Enforcing;
-        self.authorization_schema_required = true;
-        self.mark_subscriptions_for_recompile();
-    }
+    pub fn set_authorization_schema(&mut self, _schema: Schema) {}
 
-    pub fn require_authorization_schema(&mut self) {
-        self.row_policy_mode = RowPolicyMode::Enforcing;
-        self.authorization_schema_required = true;
-        self.authorization_context_cache.clear();
-    }
+    pub fn require_authorization_schema(&mut self) {}
 
     /// Add a live schema (one we can read from but don't write to).
     ///
@@ -835,12 +818,6 @@ impl QueryManager {
         } else {
             self.schema.as_ref().clone()
         }
-    }
-
-    pub(crate) fn schema_has_any_explicit_policies(schema: &Schema) -> bool {
-        schema
-            .values()
-            .any(|table_schema| table_schema.policies.has_any_explicit_policy())
     }
 
     /// Mark all subscriptions for recompilation.
@@ -2989,7 +2966,7 @@ impl QueryManager {
         let mut policy_checks = 0usize;
         for state in self.active_policy_checks.values() {
             policy_checks += 48; // HashMap entry
-            policy_checks += state.graphs.len() * 1024; // Rough estimate per PolicyGraph
+            policy_checks += 1024;
             policy_checks += state.table.0.len();
             policy_checks += state.branch.as_str().len();
         }

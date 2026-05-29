@@ -4,7 +4,7 @@ use crate::storage::{IndexMutation, Storage, StorageError, validate_index_value_
 
 use crate::row_format::CompiledRowLayout;
 
-use super::encoding::decode_column;
+use crate::row_format::decode_column;
 use super::manager::{QueryError, QueryManager};
 use super::types::{ColumnDescriptor, ColumnName, ColumnType, RowDescriptor, TableName, Value};
 

@@ -8,7 +8,7 @@
 use ahash::{AHashMap, AHashSet};
 
 use crate::object::ObjectId;
-use crate::query_manager::encoding::{decode_row, encode_row};
+use crate::row_format::{decode_row, encode_row};
 use crate::query_manager::query::ArraySubqueryRequirement;
 use crate::query_manager::types::{
     ColumnDescriptor, ColumnType, LoadedRow, RowDescriptor, Schema, TableName, Tuple,

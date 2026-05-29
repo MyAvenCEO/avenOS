@@ -452,63 +452,6 @@ fn test_batched_tick_keeps_outbox_when_no_transport_or_sync_sender_is_installed(
     );
 }
 
-#[test]
-fn test_publish_permissions_bundle_then_add_server_sends_head_and_bundle() {
-    let schema = test_schema();
-    let app_id = AppId::from_name("test-app");
-    let schema_hash = SchemaHash::compute(&schema);
-    let sync_manager = SyncManager::new();
-    let schema_manager = SchemaManager::new(sync_manager, schema, app_id, "dev", "main").unwrap();
-    let mut core = new_test_core(schema_manager, MemoryStorage::new(), NoopScheduler);
-
-    core.persist_schema();
-    core.publish_permissions_bundle(
-        schema_hash,
-        std::collections::HashMap::from([(
-            TableName::new("users"),
-            TablePolicies::new().with_select(PolicyExpr::True),
-        )]),
-        None,
-    )
-    .expect("publish permissions bundle");
-
-    let server_id = ServerId::new();
-    core.add_server(server_id);
-    core.batched_tick();
-
-    let messages = core.sync_sender().take();
-    let bundle_msg = messages.iter().find(|m| {
-        if let SyncPayload::CatalogueEntryUpdated { entry } = &m.payload {
-            entry
-                .metadata
-                .get(crate::metadata::MetadataKey::Type.as_str())
-                .map(|t| t == crate::metadata::ObjectType::CataloguePermissionsBundle.as_str())
-                .unwrap_or(false)
-        } else {
-            false
-        }
-    });
-    let head_msg = messages.iter().find(|m| {
-        if let SyncPayload::CatalogueEntryUpdated { entry } = &m.payload {
-            entry
-                .metadata
-                .get(crate::metadata::MetadataKey::Type.as_str())
-                .map(|t| t == crate::metadata::ObjectType::CataloguePermissionsHead.as_str())
-                .unwrap_or(false)
-        } else {
-            false
-        }
-    });
-
-    assert!(
-        bundle_msg.is_some(),
-        "Explicit permission publication should sync the immutable permissions bundle object"
-    );
-    assert!(
-        head_msg.is_some(),
-        "Explicit permission publication should sync the mutable permissions head object"
-    );
-}
 
 #[test]
 fn test_matching_catalogue_hash_skips_catalogue_replay_on_add_server() {

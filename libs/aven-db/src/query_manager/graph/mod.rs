@@ -27,7 +27,6 @@ use super::graph_nodes::limit_offset::LimitOffsetNode;
 use super::graph_nodes::magic_columns::MagicColumnsNode;
 use super::graph_nodes::materialize::MaterializeNode;
 use super::graph_nodes::output::OutputNode;
-use super::graph_nodes::policy_filter::PolicyFilterNode;
 use super::graph_nodes::project::ProjectNode;
 use super::graph_nodes::recursive_relation::RecursiveRelationNode;
 use super::graph_nodes::select_element::SelectElementNode;
@@ -73,7 +72,6 @@ pub enum GraphNode {
     SelectElement(SelectElementNode),
     RecursiveRelation(RecursiveRelationNode),
     Filter(FilterNode),
-    PolicyFilter(PolicyFilterNode),
     Sort(SortNode),
     LimitOffset(LimitOffsetNode),
     ArraySubquery(ArraySubqueryNode),
@@ -109,8 +107,6 @@ pub struct QueryGraph {
     pub index_scan_nodes: Vec<(NodeId, TableName, ColumnName)>, // (node_id, table, column)
     /// Array subquery nodes and their inner tables (for marking dirty on inner table updates).
     pub array_subquery_tables: Vec<(NodeId, TableName)>, // (node_id, inner_table)
-    /// PolicyFilter nodes and their INHERITS-referenced tables (for marking dirty on table updates).
-    pub policy_filter_tables: Vec<(NodeId, TableName)>, // (node_id, inherits_table)
     /// MagicColumns nodes and their policy dependency tables (for reactive re-evaluation).
     pub magic_column_tables: Vec<(NodeId, TableName)>, // (node_id, dependency_table)
     /// RecursiveRelation nodes and their step dependency tables (for marking dirty on table updates).
@@ -138,7 +134,6 @@ impl QueryGraph {
             table,
             index_scan_nodes: Vec::new(),
             array_subquery_tables: Vec::new(),
-            policy_filter_tables: Vec::new(),
             magic_column_tables: Vec::new(),
             recursive_relation_tables: Vec::new(),
             table_descriptors: vec![descriptor.clone()],
@@ -374,11 +369,6 @@ impl QueryGraph {
 
         // Array subquery tables
         for (_, table) in &self.array_subquery_tables {
-            size += std::mem::size_of::<NodeId>() + table.as_str().len();
-        }
-
-        // Policy filter tables
-        for (_, table) in &self.policy_filter_tables {
             size += std::mem::size_of::<NodeId>() + table.as_str().len();
         }
 

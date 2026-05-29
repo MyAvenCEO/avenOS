@@ -1,6 +1,3 @@
-// Re-export encoding module from parent for use by sub-modules
-pub(crate) use super::encoding;
-
 // Sub-modules
 pub mod branch;
 pub mod descriptor;

@@ -581,10 +581,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
             self.schema_manager.process(&mut self.storage);
         }
 
-        if self.transport_catalogue_state_hash_dirty {
-            self.refresh_transport_catalogue_state_hash();
-        }
-
         // 3. Collect subscription updates
         let subscription_updates = self.schema_manager.query_manager_mut().take_updates();
         let subscription_failures = self
@@ -701,8 +697,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
     pub fn batched_tick(&mut self) {
         let _span = debug_span!("batched_tick", tier = self.tier_label).entered();
 
-        self.handle_transport_messages();
-
         if !self.has_outbound()
             && self
                 .schema_manager
@@ -779,31 +773,11 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
             )
             .entered();
 
-            let handled_by_transport = self
-                .transport
-                .as_ref()
-                .is_some_and(|handle| matches!(msg.destination, crate::sync_manager::Destination::Server(server_id) if server_id == handle.server_id));
-            if handled_by_transport
-                && matches!(msg.payload, SyncPayload::CatalogueEntryUpdated { .. })
-            {
-                if let Some(handle) = self.transport.as_ref() {
-                    tracing::debug!(
-                        server_id = %handle.server_id,
-                        "dropping catalogue publish for transport; catalogue publication uses HTTP admin forwarding"
-                    );
-                }
-                continue;
-            }
-
             if let Some((ref tracer, ref name)) = self.sync_tracer {
                 tracer.record_outgoing(name, &msg.destination, &msg.payload);
             }
 
-            if handled_by_transport {
-                if let Some(handle) = self.transport.as_ref() {
-                    handle.send_outbox(msg);
-                }
-            } else if let Some(sync_sender) = self.sync_sender.as_ref() {
+            if let Some(sync_sender) = self.sync_sender.as_ref() {
                 sync_sender.send_sync_message(msg);
             } else {
                 unsent.push(msg);
@@ -815,64 +789,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
                 .query_manager_mut()
                 .sync_manager_mut()
                 .prepend_outbox(unsent);
-        }
-    }
-
-    fn handle_transport_messages(&mut self) {
-        let Some(server_id) = self.transport.as_ref().map(|handle| handle.server_id) else {
-            return;
-        };
-
-        let mut inbound = Vec::new();
-        if let Some(handle) = self.transport.as_mut() {
-            while let Some(message) = handle.try_recv_inbound() {
-                inbound.push(message);
-            }
-        }
-
-        for message in inbound {
-            match message {
-                crate::transport_manager::TransportInbound::Connected {
-                    catalogue_state_hash,
-                    next_sync_seq,
-                } => {
-                    if let Some(next_sync_seq) = next_sync_seq {
-                        self.set_next_expected_server_sequence(server_id, next_sync_seq);
-                    }
-                    self.add_server_with_catalogue_state_hash_and_permission(
-                        server_id,
-                        catalogue_state_hash.as_deref(),
-                        false,
-                    );
-                }
-                crate::transport_manager::TransportInbound::Sync { entry, sequence } => {
-                    if let Some(sequence) = sequence {
-                        self.park_sync_message_with_sequence(*entry, sequence);
-                    } else {
-                        self.park_sync_message(*entry);
-                    }
-                }
-                crate::transport_manager::TransportInbound::SyncBatch { entries } => {
-                    self.park_sync_message_batch(entries);
-                }
-                crate::transport_manager::TransportInbound::Disconnected => {
-                    self.remove_server(server_id);
-                }
-                crate::transport_manager::TransportInbound::ConnectFailed { reason } => {
-                    tracing::warn!(%server_id, %reason, "transport connect failed");
-                    self.schema_manager
-                        .query_manager_mut()
-                        .sync_manager_mut()
-                        .remove_pending_server(server_id);
-                }
-                crate::transport_manager::TransportInbound::AuthFailure { reason } => {
-                    tracing::warn!(%server_id, %reason, "transport auth failure");
-                    self.remove_server(server_id);
-                    if let Some(callback) = self.auth_failure_callback.as_ref() {
-                        callback(reason);
-                    }
-                }
-            }
         }
     }
 
@@ -1015,58 +931,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
         }
     }
 
-    fn park_sync_message_batch(
-        &mut self,
-        entries: Vec<crate::transport_manager::SequencedInboxEntry>,
-    ) {
-        let mut parked_any = false;
-        for crate::transport_manager::SequencedInboxEntry { entry, sequence } in entries {
-            if let Some(sequence) = sequence {
-                match entry.source {
-                    crate::sync_manager::Source::Server(server_id) => {
-                        let next_expected = self
-                            .next_expected_server_seq
-                            .entry(server_id)
-                            .or_insert(sequence);
-                        if sequence < *next_expected {
-                            trace!(
-                                ?server_id,
-                                sequence,
-                                next_expected = *next_expected,
-                                "dropping already-applied sequenced sync message"
-                            );
-                            continue;
-                        }
-
-                        if let Some((ref tracer, ref name)) = self.sync_tracer {
-                            tracer.record_incoming(&entry.source, name, &entry.payload);
-                        }
-
-                        self.parked_sync_messages_by_server_seq
-                            .entry(server_id)
-                            .or_default()
-                            .insert(sequence, entry);
-                        parked_any = true;
-                    }
-                    _ => {
-                        self.parked_sync_messages.push(entry);
-                        parked_any = true;
-                    }
-                }
-            } else {
-                if let Some((ref tracer, ref name)) = self.sync_tracer {
-                    tracer.record_incoming(&entry.source, name, &entry.payload);
-                }
-                self.parked_sync_messages.push(entry);
-                parked_any = true;
-            }
-        }
-
-        if parked_any {
-            self.scheduler.schedule_batched_tick();
-        }
-    }
-
     /// Set the next expected sequenced message for a server stream.
     pub fn set_next_expected_server_sequence(&mut self, server_id: ServerId, next_sequence: u64) {
         let next_sequence = next_sequence.max(1);
@@ -1076,67 +940,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
             .insert(server_id, next_sequence.saturating_sub(1));
         if let Some(buffered) = self.parked_sync_messages_by_server_seq.get_mut(&server_id) {
             buffered.retain(|seq, _| *seq >= next_sequence);
-        }
-    }
-
-    /// Test seam: directly dispatch a `TransportInbound` event as if it arrived
-    /// from `server_id`, exercising the same match arm as `batched_tick`.
-    #[cfg(test)]
-    #[cfg(feature = "transport-websocket")]
-    pub(crate) fn handle_transport_inbound_for_test(
-        &mut self,
-        server_id: ServerId,
-        event: crate::transport_manager::TransportInbound,
-    ) {
-        let mut released_server_hold = false;
-        match event {
-            crate::transport_manager::TransportInbound::Connected {
-                catalogue_state_hash,
-                next_sync_seq,
-            } => {
-                self.remove_server(server_id);
-                self.add_server_with_catalogue_state_hash_and_permission(
-                    server_id,
-                    catalogue_state_hash.as_deref(),
-                    false,
-                );
-                if let Some(seq) = next_sync_seq {
-                    self.set_next_expected_server_sequence(server_id, seq);
-                }
-            }
-            crate::transport_manager::TransportInbound::Sync { entry, sequence } => {
-                if let Some(seq) = sequence {
-                    self.park_sync_message_with_sequence(*entry, seq);
-                } else {
-                    self.park_sync_message(*entry);
-                }
-            }
-            crate::transport_manager::TransportInbound::SyncBatch { entries } => {
-                self.park_sync_message_batch(entries);
-            }
-            crate::transport_manager::TransportInbound::Disconnected => {
-                self.remove_server(server_id);
-                released_server_hold = true;
-            }
-            crate::transport_manager::TransportInbound::ConnectFailed { reason } => {
-                debug!(%reason, "transport connect failed; releasing pending-server hold");
-                self.schema_manager
-                    .query_manager_mut()
-                    .sync_manager_mut()
-                    .remove_pending_server(server_id);
-                released_server_hold = true;
-            }
-            crate::transport_manager::TransportInbound::AuthFailure { reason } => {
-                self.remove_server(server_id);
-                released_server_hold = true;
-                if let Some(ref cb) = self.auth_failure_callback {
-                    cb(reason);
-                }
-            }
-        }
-
-        if released_server_hold {
-            self.immediate_tick();
         }
     }
 

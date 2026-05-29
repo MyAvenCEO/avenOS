@@ -10,7 +10,7 @@
 use std::sync::{Arc, OnceLock};
 
 use groove::metadata::MetadataKey;
-use groove::query_manager::encoding::decode_row;
+use groove::row_format::decode_row;
 use groove::query_manager::types::Value;
 use groove::row_histories::StoredRowBatch;
 use groove::sync_manager::{RowMetadata, SyncPayload};
