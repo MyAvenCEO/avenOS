@@ -1,0 +1,130 @@
+{
+	"vendor": {
+		"name": "TechSupply GmbH",
+		"contact_name": "Maria Weber",
+		"street": "Industriepark 12",
+		"postal_code": "80331",
+		"city": "München",
+		"country": "Germany",
+		"email": "billing@techsupply.example",
+		"phone": "+49 89 12345678",
+		"identifiers": [
+			{ "category": "vat_id", "value": "DE123456789", "label_printed": "USt-IdNr." }
+		]
+	},
+	"buyer": {
+		"name": "Acme Consulting AG",
+		"contact_name": "Dr. Jonas Klein",
+		"street": "Hafenstraße 4",
+		"postal_code": "20354",
+		"city": "Hamburg",
+		"country": "Germany",
+		"email": "finance@acme.example"
+	},
+	"header": {
+		"document_kind": "invoice",
+		"currency": "EUR",
+		"issue_date": "2026-04-15",
+		"due_date": "2026-05-15",
+		"invoice_number": "R-2026-1842",
+		"order_number": "PO-77821",
+		"customer_number": "KD-9910",
+		"referenced_invoice_numbers": []
+	},
+	"statements": [
+		{
+			"section_title": "Professional services Q2",
+			"service_period": "01.04.2026 – 30.04.2026",
+			"line_items": [
+				{
+					"position": 1,
+					"title": "Platform subscription",
+					"description": "Enterprise tier — April 2026",
+					"quantity": 1,
+					"quantity_unit": "Mon.",
+					"unit_price": 890,
+					"tax_rate_percent": 19,
+					"amount": 890
+				},
+				{
+					"position": 2,
+					"title": "Implementation hours",
+					"description": "On-site integration (16h)\nTravel flat",
+					"quantity": 16,
+					"quantity_unit": "Std.",
+					"unit_price": 185,
+					"tax_rate_percent": 19,
+					"amount": 2960
+				},
+				{
+					"position": 3,
+					"title": "Volume discount",
+					"description": "Contract tier adjustment",
+					"line_kind": "discount",
+					"quantity": null,
+					"quantity_unit": null,
+					"unit_price": null,
+					"tax_rate_percent": 19,
+					"amount": -150
+				}
+			]
+		}
+	],
+	"totals": {
+		"subtotal": 3700,
+		"tax_breakdown": [
+			{
+				"tax_rate_percent": 19,
+				"tax_amount": 703,
+				"net_subtotal": 3700,
+				"tax_group_letter": "A"
+			}
+		],
+		"tax_total": 703,
+		"invoice_total": 4403
+	},
+	"payments": [
+		{
+			"date": "2026-04-20",
+			"amount": 2000,
+			"method": "SEPA-Überweisung",
+			"reference": "INV R-2026-1842"
+		}
+	],
+	"total_outstanding": 2403,
+	"payment_instructions": "Bitte überweisen Sie den offenen Betrag unter Angabe der Rechnungsnummer auf IBAN DE12 3456 7890 1234 5678 90 (BIC ABCDDEFFXXX) bei der Musterbank AG.",
+	"labels": {
+		"invoiceNumber": "Rechnungs-Nr.",
+		"grandTotal": "Gesamtbetrag",
+		"docKind": "Belegart",
+		"dueDate": "Fällig",
+		"issueDate": "Ausstellungsdatum",
+		"orderNumber": "Auftrag / Projekt",
+		"customerNumber": "Kundennr.",
+		"contactPerson": "Ansprechpartner",
+		"servicePeriod": "LEISTUNGSZEITRAUM",
+		"lineItemsAria": "Positionen",
+		"financialsAria": "Zahlungen und Summen",
+		"outstanding": "Offener Betrag",
+		"payments": "Zahlungen",
+		"paymentInfo": "Zahlungsinformationen",
+		"vendorRole": "Lieferant",
+		"buyerRole": "Käufer",
+		"paymentFallback": "(Zahlung)",
+		"subtotal": "Zwischensumme (netto)",
+		"taxTotal": "USt. gesamt",
+		"invoiceTotal": "Rechnungsbetrag",
+		"taxPrefix": "USt.",
+		"tableColumns": [
+			{ "label": "#", "class": "idx" },
+			{ "label": "Pos.", "class": "" },
+			{ "label": "Art.-Nr.", "class": "" },
+			{ "label": "Bezeichnung", "class": "" },
+			{ "label": "Menge", "class": "num" },
+			{ "label": "ME", "class": "" },
+			{ "label": "Einzelpreis", "class": "num" },
+			{ "label": "USt. %", "class": "num" },
+			{ "label": "Betrag", "class": "num" }
+		]
+	}
+}

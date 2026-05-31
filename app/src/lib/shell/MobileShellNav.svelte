@@ -28,6 +28,7 @@
 
 	const intentsActive = $derived(path === '/')
 	const sandboxActive = $derived(path.startsWith('/sandbox'))
+	const uiLabActive = $derived(path.startsWith('/ui-lab'))
 	const docsActive = $derived(path.startsWith('/docs'))
 	const sparksNavActive = $derived(path.startsWith('/sparks'))
 	const dbActive = $derived(path.startsWith('/db'))
@@ -37,6 +38,7 @@
 	const navItems = $derived<NavItem[]>([
 		{ href: '/', label: t('nav.intents'), active: intentsActive },
 		{ href: '/sandbox', label: t('nav.sandbox'), active: sandboxActive },
+		{ href: '/ui-lab', label: t('nav.uiLab'), active: uiLabActive },
 		{ href: '/sparks', label: t('nav.sparks'), active: sparksNavActive },
 		{ href: '/db', label: t('nav.db'), active: dbActive },
 		{ href: '/vault', label: t('nav.vault'), active: vaultNavActive },

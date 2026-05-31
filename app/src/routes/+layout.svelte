@@ -31,6 +31,7 @@ const path = $derived(page.url.pathname)
 const routeKey = $derived(`${page.url.pathname}${page.url.search}`)
 const intentsActive = $derived(path === '/')
 const sandboxActive = $derived(path.startsWith('/sandbox'))
+const uiLabActive = $derived(path.startsWith('/ui-lab'))
 const docsActive = $derived(path.startsWith('/docs'))
 const selfActive = $derived(path.startsWith('/settings'))
 const vaultActive = $derived(path.startsWith('/vault'))
@@ -223,6 +224,15 @@ $effect(() => {
 						aria-current={sandboxActive ? 'page' : undefined}
 						onclick={(e) => navigateApp('/sandbox', e)}
 						>{t('nav.sandbox')}</a
+					>
+					<span class="select-none opacity-25" aria-hidden="true">|</span>
+					<a
+						href="/ui-lab"
+						data-sveltekit-preload-data="hover"
+						class="transition-opacity hover:opacity-80 {uiLabActive ? 'opacity-95' : 'opacity-40'}"
+						aria-current={uiLabActive ? 'page' : undefined}
+						onclick={(e) => navigateApp('/ui-lab', e)}
+						>{t('nav.uiLab')}</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a

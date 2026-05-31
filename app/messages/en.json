@@ -72,6 +72,7 @@
     "self": "Self",
     "intents": "Intents",
     "sandbox": "Sandbox",
+    "uiLab": "UI Lab",
     "sparks": "Sparks",
     "db": "DB",
     "vault": "Vault",
@@ -419,6 +420,15 @@
         "share": "Share"
       }
     }
+  },
+  "uiLab": {
+    "pageTitle": "UI Lab",
+    "title": "UI Lab",
+    "subtitle": "JSON view / style / state engine demo — invoice vibe parity via @avenos/aven-ui.",
+    "panelRender": "Render",
+    "panelView": "View JSON",
+    "panelStyle": "Style JSON",
+    "panelState": "State JSON"
   },
   "sandbox": {
     "terminalAria": "webcm terminal",

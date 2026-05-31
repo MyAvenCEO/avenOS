@@ -16,14 +16,14 @@ mod spark_sync;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::path::BaseDirectory;
-use tauri::{
-	AppHandle, Listener, LogicalPosition, LogicalSize, Manager, Rect, Runtime, RunEvent, Webview,
-	WebviewUrl, Window,
-};
+use tauri::{AppHandle, Listener, Manager, RunEvent, Window};
+#[cfg(target_os = "macos")]
+use tauri::{LogicalPosition, LogicalSize, Rect, Runtime, Webview, WebviewUrl};
+#[cfg(target_os = "macos")]
+use url::Url;
 
 /// Prevents duplicated drain work when [`RunEvent::ExitRequested`] fires more than once.
 static JAZZ_EXIT_DRAINING: AtomicBool = AtomicBool::new(false);
-use url::Url;
 
 /// Child sandbox webview bounds in **logical/CSS pixels**, i.e. raw host `getBoundingClientRect()`
 /// (layout viewport). `PhysicalPosition` + JS `scaleFactor()` was able to disagree with wry’s
@@ -814,6 +814,7 @@ pub fn run() {
 			let _lock_listen = app.listen("self:did-lock", move |_event| {
 				let handle = handle_for_lock.clone();
 				tauri::async_runtime::spawn(async move {
+					#[cfg(target_os = "macos")]
 					if let Some(main) = handle.get_webview_window("main") {
 						for (label, w) in main.webviews() {
 							if label == VAULT_EMBED_LABEL {

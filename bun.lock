@@ -18,6 +18,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@avenos/aven-city": "workspace:*",
+        "@avenos/aven-ui": "workspace:*",
         "@avenos/aven-vibe-sandbox": "workspace:*",
         "@avenos/aven-vibes": "workspace:*",
         "@avenos/docs": "workspace:*",
@@ -87,6 +88,14 @@
         "vite": "^8.0.7",
       },
     },
+    "libs/aven-ui": {
+      "name": "@avenos/aven-ui",
+      "version": "0.0.1",
+      "dependencies": {
+        "dompurify": "^3.3.3",
+        "marked": "^15.0.12",
+      },
+    },
     "libs/aven-vibe-sandbox": {
       "name": "@avenos/aven-vibe-sandbox",
       "version": "0.0.1",
@@ -131,6 +140,8 @@
     "@avenos/aven-city": ["@avenos/aven-city@workspace:libs/aven-city"],
 
     "@avenos/aven-self": ["@avenos/aven-self@workspace:libs/aven-self"],
+
+    "@avenos/aven-ui": ["@avenos/aven-ui@workspace:libs/aven-ui"],
 
     "@avenos/aven-vibe-sandbox": ["@avenos/aven-vibe-sandbox@workspace:libs/aven-vibe-sandbox"],
 
