@@ -21,6 +21,10 @@ Repo-root automation for the **Tauri app**, **P2P relay**, **App Store releases*
 | `fetch:webcm` | `fetch-webcm.ts` | Download webcm into `app/static/webcm/` |
 | `release:app:*` | `release-app.ts` | macOS `.pkg` / iOS `.ipa` build + altool upload |
 | `deploy:relay-fly` | `deploy-relay-fly.ts` | Fly.io `relay-aven-ceo` deploy |
+| `dev:aven-self` | — | Local aven-self auth API (`libs/aven-self`, port 3000) |
+| `migrate:aven-self` | — | Better Auth DB migrate for aven-self |
+| `test:aven-self` | — | HTTP smoke test (server must be running) |
+| `test:aven-self:once` | — | Start aven-self, smoke test, stop |
 | `derive:relay-pubkey` | `derive-relay-pubkey.ts` | Pubkey from `AVENOS_RELAY_SEED_HEX` |
 | `migrate:relay-env` | `migrate-relay-seed-to-env.ts` | One-time: legacy seed file → `.env` |
 

@@ -36,6 +36,10 @@
 		"lint:fix": "bunx biome check --write .",
 		"format": "bunx biome format --write .",
 		"deploy:relay-fly": "bun ./scripts/deploy-relay-fly.ts",
+		"dev:aven-self": "bun --env-file=.env --cwd libs/aven-self dev",
+		"test:aven-self": "bun --env-file=.env --cwd libs/aven-self test",
+		"test:aven-self:once": "bun --env-file=.env --cwd libs/aven-self test:once",
+		"migrate:aven-self": "bun --env-file=.env --cwd libs/aven-self migrate",
 		"derive:relay-pubkey": "bun ./scripts/derive-relay-pubkey.ts",
 		"migrate:relay-env": "bun ./scripts/migrate-relay-seed-to-env.ts"
 	},
