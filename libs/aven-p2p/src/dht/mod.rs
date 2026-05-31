@@ -14,8 +14,7 @@ pub mod crypto;
 /// High-level HyperDHT node: peer discovery, announce/unannounce, mutable/immutable
 /// storage, and Noise-encrypted connections.
 pub mod hyperdht;
-/// Wire-format message types for HyperDHT peer handshake, holepunch, and relay
-/// operations.
+/// Wire-format message types for HyperDHT peer handshake and relay operations.
 pub mod hyperdht_messages;
 /// DHT RPC request/response message encoding and decoding.
 pub mod messages;
@@ -30,14 +29,10 @@ pub mod rpc;
 /// Noise-encrypted bidirectional byte stream over any `AsyncRead + AsyncWrite` transport.
 pub mod secret_stream;
 
-#[doc(hidden)]
-pub mod holepuncher;
 /// Local LAN IPv4 enumeration for Noise `addresses4`.
 pub mod local_addresses;
 #[doc(hidden)]
 pub mod io;
-#[doc(hidden)]
-pub mod nat;
 #[doc(hidden)]
 pub mod peer;
 #[doc(hidden)]
@@ -50,7 +45,3 @@ pub mod router;
 pub mod routing_table;
 #[doc(hidden)]
 pub mod secretstream;
-#[doc(hidden)]
-pub mod secure_payload;
-#[doc(hidden)]
-pub mod socket_pool;

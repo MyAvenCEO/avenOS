@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use super::hyperdht_messages::{
-    self, HandshakeMessage, HolepunchMessage, MODE_FROM_CLIENT, MODE_FROM_RELAY,
-    MODE_FROM_SECOND_RELAY, MODE_FROM_SERVER, MODE_REPLY,
+    self, HandshakeMessage, MODE_FROM_CLIENT, MODE_FROM_RELAY, MODE_FROM_SECOND_RELAY,
+    MODE_FROM_SERVER, MODE_REPLY,
 };
 use super::messages::Ipv4Peer;
 
@@ -14,8 +14,6 @@ const DEFAULT_FORWARD_TTL: Duration = Duration::from_secs(20 * 60);
 pub enum RouterError {
     #[error("bad handshake reply")]
     BadHandshakeReply,
-    #[error("bad holepunch reply")]
-    BadHolepunchReply,
     #[error("encoding error: {0}")]
     Encoding(#[from] super::compact_encoding::EncodingError),
 }
@@ -33,32 +31,11 @@ pub struct HandshakeResult {
 
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-pub struct HolepunchResult {
-    pub from: Ipv4Peer,
-    pub to: Ipv4Peer,
-    pub payload: Vec<u8>,
-    pub peer_address: Ipv4Peer,
-}
-
-#[derive(Debug, Clone)]
-#[non_exhaustive]
 pub enum HandshakeAction {
     Reply(Vec<u8>),
     Relay { value: Vec<u8>, to: Ipv4Peer },
     HandleLocally(HandshakeMessage),
     CloserNodes,
-    Drop,
-}
-
-#[derive(Debug, Clone)]
-#[non_exhaustive]
-pub enum HolepunchAction {
-    Reply { value: Vec<u8>, to: Ipv4Peer },
-    Relay { value: Vec<u8>, to: Ipv4Peer },
-    HandleLocally {
-        msg: HolepunchMessage,
-        peer_address: Ipv4Peer,
-    },
     Drop,
 }
 
@@ -136,33 +113,6 @@ impl Router {
         })
     }
 
-    pub fn validate_holepunch_reply(
-        &self,
-        reply_value: &[u8],
-        expected_from: &Ipv4Peer,
-        actual_from: &Ipv4Peer,
-        actual_to: &Ipv4Peer,
-    ) -> Result<HolepunchResult> {
-        let hp = hyperdht_messages::decode_holepunch_msg_from_bytes(reply_value)
-            .map_err(|_| RouterError::BadHolepunchReply)?;
-
-        if hp.mode != MODE_REPLY
-            || expected_from.host != actual_from.host
-            || expected_from.port != actual_from.port
-        {
-            return Err(RouterError::BadHolepunchReply);
-        }
-
-        let peer_address = hp.peer_address.unwrap_or_else(|| expected_from.clone());
-
-        Ok(HolepunchResult {
-            from: actual_from.clone(),
-            to: actual_to.clone(),
-            payload: hp.payload,
-            peer_address,
-        })
-    }
-
     pub fn encode_client_handshake(
         noise: Vec<u8>,
         peer_address: Option<Ipv4Peer>,
@@ -175,20 +125,6 @@ impl Router {
             relay_address,
         };
         Ok(hyperdht_messages::encode_handshake_to_bytes(&msg)?)
-    }
-
-    pub fn encode_client_holepunch(
-        id: u64,
-        payload: Vec<u8>,
-        peer_address: Option<Ipv4Peer>,
-    ) -> Result<Vec<u8>> {
-        let msg = HolepunchMessage {
-            mode: MODE_FROM_CLIENT,
-            id,
-            payload,
-            peer_address,
-        };
-        Ok(hyperdht_messages::encode_holepunch_msg_to_bytes(&msg)?)
     }
 
     pub fn route_handshake(
@@ -282,70 +218,6 @@ impl Router {
         }
     }
 
-    pub fn route_holepunch(
-        &self,
-        target: Option<&[u8; 32]>,
-        from: &Ipv4Peer,
-        value: &[u8],
-    ) -> Result<HolepunchAction> {
-        let hp = match hyperdht_messages::decode_holepunch_msg_from_bytes(value) {
-            Ok(h) => h,
-            Err(_) => return Ok(HolepunchAction::Drop),
-        };
-
-        let state = target.and_then(|t| self.get(t));
-        let is_server = state.is_some_and(|s| s.has_server);
-        let relay = state.and_then(|s| s.relay.clone());
-
-        match hp.mode {
-            MODE_FROM_CLIENT => {
-                let target_addr = hp.peer_address.or(relay);
-                let Some(to) = target_addr else {
-                    return Ok(HolepunchAction::Drop);
-                };
-                let relayed = HolepunchMessage {
-                    mode: MODE_FROM_RELAY,
-                    id: hp.id,
-                    payload: hp.payload,
-                    peer_address: Some(from.clone()),
-                };
-                let encoded = hyperdht_messages::encode_holepunch_msg_to_bytes(&relayed)?;
-                Ok(HolepunchAction::Relay {
-                    value: encoded,
-                    to,
-                })
-            }
-            MODE_FROM_RELAY => {
-                if !is_server {
-                    return Ok(HolepunchAction::Drop);
-                }
-                let Some(peer_address) = hp.peer_address.clone() else {
-                    return Ok(HolepunchAction::Drop);
-                };
-                Ok(HolepunchAction::HandleLocally {
-                    msg: hp,
-                    peer_address,
-                })
-            }
-            MODE_FROM_SERVER => {
-                let Some(peer_address) = hp.peer_address else {
-                    return Ok(HolepunchAction::Drop);
-                };
-                let reply = HolepunchMessage {
-                    mode: MODE_REPLY,
-                    id: hp.id,
-                    payload: hp.payload,
-                    peer_address: Some(from.clone()),
-                };
-                let encoded = hyperdht_messages::encode_holepunch_msg_to_bytes(&reply)?;
-                Ok(HolepunchAction::Reply {
-                    value: encoded,
-                    to: peer_address,
-                })
-            }
-            _ => Ok(HolepunchAction::Drop),
-        }
-    }
 }
 
 impl Default for Router {
@@ -886,104 +758,11 @@ mod tests {
     }
 
     #[test]
-    fn route_holepunch_client_to_relay() {
-        let mut router = Router::new();
-        let key = target_key();
-        router.set(
-            &key,
-            ForwardEntry {
-                relay: Some(peer("9.9.9.9", 5000)),
-                has_server: false,
-                inserted: Instant::now(),
-            },
-        );
-
-        let client_hp = HolepunchMessage {
-            mode: MODE_FROM_CLIENT,
-            id: 42,
-            payload: vec![0xaa, 0xbb],
-            peer_address: None,
-        };
-        let encoded = hyperdht_messages::encode_holepunch_msg_to_bytes(&client_hp).unwrap();
-
-        let action = router
-            .route_holepunch(Some(&key), &peer("2.3.4.5", 3000), &encoded)
-            .unwrap();
-        match action {
-            HolepunchAction::Relay { value, to } => {
-                assert_eq!(to.host, "9.9.9.9");
-                let decoded = hyperdht_messages::decode_holepunch_msg_from_bytes(&value).unwrap();
-                assert_eq!(decoded.mode, MODE_FROM_RELAY);
-                assert_eq!(decoded.id, 42);
-                assert_eq!(decoded.peer_address.unwrap().host, "2.3.4.5");
-            }
-            other => panic!("Expected Relay, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn route_holepunch_server_to_reply() {
-        let router = Router::new();
-
-        let server_hp = HolepunchMessage {
-            mode: MODE_FROM_SERVER,
-            id: 99,
-            payload: vec![0xcc],
-            peer_address: Some(peer("2.3.4.5", 3000)),
-        };
-        let encoded = hyperdht_messages::encode_holepunch_msg_to_bytes(&server_hp).unwrap();
-
-        let action = router
-            .route_holepunch(None, &peer("5.5.5.5", 7000), &encoded)
-            .unwrap();
-        match action {
-            HolepunchAction::Reply { value, to } => {
-                assert_eq!(to.host, "2.3.4.5");
-                let decoded = hyperdht_messages::decode_holepunch_msg_from_bytes(&value).unwrap();
-                assert_eq!(decoded.mode, MODE_REPLY);
-                assert_eq!(decoded.id, 99);
-            }
-            other => panic!("Expected Reply, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn validate_holepunch_reply_good() {
-        let reply_msg = HolepunchMessage {
-            mode: MODE_REPLY,
-            id: 1,
-            payload: vec![0xdd],
-            peer_address: None,
-        };
-        let encoded = hyperdht_messages::encode_holepunch_msg_to_bytes(&reply_msg).unwrap();
-        let from = peer("1.2.3.4", 1000);
-        let to = peer("5.6.7.8", 2000);
-
-        let router = Router::new();
-        let result = router
-            .validate_holepunch_reply(&encoded, &from, &from, &to)
-            .unwrap();
-        assert_eq!(result.payload, vec![0xdd]);
-        assert_eq!(result.peer_address.host, "1.2.3.4");
-    }
-
-    #[test]
     fn encode_client_handshake_roundtrip() {
         let encoded =
             Router::encode_client_handshake(vec![1, 2, 3], None, None).unwrap();
         let decoded = hyperdht_messages::decode_handshake_from_bytes(&encoded).unwrap();
         assert_eq!(decoded.mode, MODE_FROM_CLIENT);
         assert_eq!(decoded.noise, vec![1, 2, 3]);
-    }
-
-    #[test]
-    fn encode_client_holepunch_roundtrip() {
-        let encoded =
-            Router::encode_client_holepunch(42, vec![0xaa], Some(peer("1.2.3.4", 1000)))
-                .unwrap();
-        let decoded = hyperdht_messages::decode_holepunch_msg_from_bytes(&encoded).unwrap();
-        assert_eq!(decoded.mode, MODE_FROM_CLIENT);
-        assert_eq!(decoded.id, 42);
-        assert_eq!(decoded.peer_address.unwrap().host, "1.2.3.4");
     }
 }

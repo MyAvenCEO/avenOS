@@ -11,7 +11,7 @@ use tokio::time::{interval, Instant};
 
 use libudx::{UdxRuntime, UdxSocket};
 
-use super::io::{Io, IoConfig, IoEvent, ReplyContext, RequestParams, TimeoutEvent};
+use super::io::{Io, IoConfig, IoEvent, RequestParams, TimeoutEvent};
 use super::messages::{Command, Ipv4Peer};
 use super::peer::{peer_id, NodeId};
 use super::query::{
@@ -76,8 +76,6 @@ pub struct DhtConfig {
     pub bind_host: Option<String>,
     /// Whether to force ephemeral mode.
     pub ephemeral: Option<bool>,
-    /// Whether to advertise as firewalled.
-    pub firewalled: bool,
     /// Query concurrency limit.
     pub concurrency: usize,
     /// Maximum query window size.
@@ -92,7 +90,6 @@ impl Default for DhtConfig {
             host: "0.0.0.0".to_string(),
             bind_host: None,
             ephemeral: None,
-            firewalled: true,
             concurrency: 10,
             max_window: 80,
         }
@@ -242,9 +239,6 @@ enum DhtCommand {
     TableId {
         reply_tx: oneshot::Sender<Option<NodeId>>,
     },
-    ServerSocket {
-        reply_tx: oneshot::Sender<Option<UdxSocket>>,
-    },
     ListenSocket {
         reply_tx: oneshot::Sender<Option<UdxSocket>>,
     },
@@ -268,7 +262,6 @@ enum StandaloneRequest {
 
 struct DeferredReply {
     from: Ipv4Peer,
-    reply_ctx: ReplyContext,
     tid: u16,
     target: Option<NodeId>,
     error: u64,
@@ -430,16 +423,7 @@ impl DhtHandle {
         rx.await.map_err(|_| DhtError::ChannelClosed)
     }
 
-    /// Returns a shared reference to the DHT server socket for UDX stream multiplexing.
-    pub async fn server_socket(&self) -> Result<Option<UdxSocket>, DhtError> {
-        let (tx, rx) = oneshot::channel();
-        self.cmd_tx
-            .send(DhtCommand::ServerSocket { reply_tx: tx })
-            .map_err(|_| DhtError::ChannelClosed)?;
-        rx.await.map_err(|_| DhtError::ChannelClosed)
-    }
-
-    /// Returns the actual listen socket (the socket bound to the advertised port).
+    /// Returns the single reusable UDP socket (DHT + UDX multiplex).
     pub async fn listen_socket(&self) -> Result<Option<UdxSocket>, DhtError> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
@@ -712,7 +696,6 @@ impl DhtNode {
         let tx = self.deferred_reply_tx.clone();
         let reply = DeferredReply {
             from: req.from,
-            reply_ctx: req.reply_ctx,
             tid: req.tid,
             target: req.target,
             error: 0,
@@ -818,7 +801,6 @@ impl DhtNode {
         } else {
             let deferred_tx = self.deferred_reply_tx.clone();
             let from = req.from.clone();
-            let reply_ctx = req.reply_ctx;
             let tid = req.tid;
             let target = req.target;
             tokio::spawn(async move {
@@ -828,7 +810,6 @@ impl DhtNode {
                 };
                 let _ = deferred_tx.send(DeferredReply {
                     from,
-                    reply_ctx,
                     tid,
                     target,
                     error,
@@ -1203,13 +1184,8 @@ impl DhtNode {
                 let _ = reply_tx.send(id);
             }
 
-            DhtCommand::ServerSocket { reply_tx } => {
-                let socket = Some(self.io.primary_socket());
-                let _ = reply_tx.send(socket);
-            }
-
             DhtCommand::ListenSocket { reply_tx } => {
-                let socket = Some(self.io.server_socket());
+                let socket = Some(self.io.socket());
                 let _ = reply_tx.send(socket);
             }
         }
@@ -1468,7 +1444,6 @@ impl DhtNode {
     fn handle_deferred_reply(&mut self, reply: DeferredReply) {
         self.io.send_reply_deferred(
             &reply.from,
-            reply.reply_ctx,
             reply.tid,
             reply.target,
             reply.error,
@@ -1541,7 +1516,6 @@ pub async fn spawn(
             .bind_host
             .clone()
             .unwrap_or_else(|| config.host.clone()),
-        firewalled: config.firewalled,
         ephemeral,
     };
 
@@ -1612,7 +1586,6 @@ mod tests {
         assert_eq!(cfg.host, "0.0.0.0");
         assert_eq!(cfg.concurrency, 10);
         assert_eq!(cfg.max_window, 80);
-        assert!(cfg.firewalled);
         assert!(cfg.bootstrap.is_empty());
         assert!(cfg.ephemeral.is_none());
     }

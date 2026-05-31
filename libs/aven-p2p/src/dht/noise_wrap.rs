@@ -1,22 +1,14 @@
 //! NoiseWrap — IK-pattern handshake with typed payload encoding.
 //!
-//! Combines [`HandshakeIK`](super::noise::HandshakeIK) with [`NoisePayload`](super::hyperdht_messages::NoisePayload) encoding/decoding,
-//! and derives the `holepunch_secret` after finalisation.
+//! Combines [`HandshakeIK`](super::noise::HandshakeIK) with [`NoisePayload`](super::hyperdht_messages::NoisePayload) encoding/decoding.
 //!
 //! Reference: `hyperdht/lib/noise-wrap.js`.
 
-use blake2::digest::consts::U32;
-use blake2::digest::{KeyInit, Mac};
-use blake2::Blake2bMac;
-
 use super::crypto::NS_PEER_HANDSHAKE;
-use super::crypto::NS_PEER_HOLEPUNCH;
 use super::hyperdht_messages::{
     decode_noise_payload_from_bytes, encode_noise_payload_to_bytes, NoisePayload,
 };
 use super::noise::{HandshakeIK, Keypair};
-
-type Blake2bMac256 = Blake2bMac<U32>;
 
 // ─── Error type ──────────────────────────────────────────────────────────────
 
@@ -47,8 +39,6 @@ pub struct NoiseWrapResult {
     pub is_initiator: bool,
     /// Remote peer's static Ed25519 public key.
     pub remote_public_key: [u8; 32],
-    /// Holepunch secret: `BLAKE2b-256(key=handshake_hash, data=NS_PEER_HOLEPUNCH)`.
-    pub holepunch_secret: [u8; 32],
     /// Full handshake transcript hash (64 bytes).
     pub handshake_hash: [u8; 64],
     /// Session key for outbound encrypted messages.
@@ -59,8 +49,7 @@ pub struct NoiseWrapResult {
 
 // ─── NoiseWrap ───────────────────────────────────────────────────────────────
 
-/// Wraps a Noise IK handshake with [`NoisePayload`] encode/decode and
-/// `holepunch_secret` derivation.
+/// Wraps a Noise IK handshake with [`NoisePayload`] encode/decode.
 ///
 /// # Usage
 ///
@@ -123,27 +112,16 @@ impl NoiseWrap {
         Ok(payload)
     }
 
-    /// Finalise the handshake and derive the holepunch secret.
+    /// Finalise the handshake.
     ///
     /// Must be called after both `send` and `recv` have completed (in either
     /// order depending on role).
-    ///
-    /// The holepunch secret is derived as:
-    /// `BLAKE2b-256(key = handshake_hash[64], data = NS_PEER_HOLEPUNCH[32])`
-    ///
-    /// This matches Node.js `noise-wrap.js final()`:
-    /// ```js
-    /// crypto_generichash(out, NS.PEER_HOLEPUNCH, this.handshake.hash)
-    /// ```
-    /// where `crypto_generichash` with a key ≡ keyed BLAKE2b.
     pub fn finalize(self) -> Result<NoiseWrapResult, NoiseWrapError> {
         let hr = self.handshake.result().ok_or(NoiseWrapError::NotComplete)?;
-        let holepunch_secret = derive_holepunch_secret(&hr.handshake_hash);
 
         Ok(NoiseWrapResult {
             is_initiator: self.is_initiator,
             remote_public_key: hr.remote_public_key,
-            holepunch_secret,
             handshake_hash: hr.handshake_hash,
             tx: hr.tx,
             rx: hr.rx,
@@ -167,25 +145,6 @@ impl NoiseWrap {
     }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/// Derive the holepunch secret from the handshake hash.
-///
-/// `BLAKE2b-256(key = handshake_hash[64 bytes], data = NS_PEER_HOLEPUNCH[32 bytes])`
-///
-/// Matches libsodium `crypto_generichash(out, NS.PEER_HOLEPUNCH, hash)` — when
-/// a key is supplied, libsodium uses BLAKE2b in keyed MAC mode.
-fn derive_holepunch_secret(handshake_hash: &[u8; 64]) -> [u8; 32] {
-    let mut mac: Blake2bMac256 =
-        // SAFETY: BLAKE2b accepts keys from 1..=64 bytes; handshake_hash is always 64 bytes.
-        KeyInit::new_from_slice(handshake_hash).expect("64-byte key valid for BLAKE2b");
-    Mac::update(&mut mac, &*NS_PEER_HOLEPUNCH);
-    let output = mac.finalize().into_bytes();
-    let mut result = [0u8; 32];
-    result.copy_from_slice(&output);
-    result
-}
-
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -199,7 +158,6 @@ mod tests {
             version: 1,
             error: 0,
             firewall,
-            holepunch: None,
             addresses4: vec![],
             addresses6: vec![],
             udx: None,
@@ -244,13 +202,10 @@ mod tests {
         assert_eq!(init_result.rx, resp_result.tx);
 
         assert_eq!(init_result.handshake_hash, resp_result.handshake_hash);
-
-        assert_eq!(init_result.holepunch_secret, resp_result.holepunch_secret);
-        assert_ne!(init_result.holepunch_secret, [0u8; 32]);
     }
 
     #[test]
-    fn deterministic_holepunch_secret() {
+    fn deterministic_handshake_hash() {
         let seed_init = [0x11u8; 32];
         let seed_resp = [0x22u8; 32];
         let seed_e_init = [0x33u8; 32];
@@ -289,7 +244,6 @@ mod tests {
 
         let r2 = init2.finalize().unwrap();
 
-        assert_eq!(r1.holepunch_secret, r2.holepunch_secret);
         assert_eq!(r1.handshake_hash, r2.handshake_hash);
         assert_eq!(r1.tx, r2.tx);
         assert_eq!(r1.rx, r2.rx);
@@ -306,9 +260,7 @@ mod tests {
 
     #[test]
     fn payload_with_all_fields_roundtrips() {
-        use super::hyperdht_messages::{
-            HolepunchInfo, RelayThroughInfo, SecretStreamInfo, UdxInfo,
-        };
+        use super::hyperdht_messages::{RelayThroughInfo, SecretStreamInfo, UdxInfo};
         use super::messages::Ipv4Peer;
 
         let kp_init = generate_keypair();
@@ -321,10 +273,6 @@ mod tests {
             version: 1,
             error: 0,
             firewall: 2,
-            holepunch: Some(HolepunchInfo {
-                id: 42,
-                relays: vec![],
-            }),
             addresses4: vec![Ipv4Peer {
                 host: "192.168.1.100".to_string(),
                 port: 9999,
@@ -349,7 +297,6 @@ mod tests {
         let decoded = resp.recv(&m1).unwrap();
 
         assert_eq!(decoded.firewall, 2);
-        assert_eq!(decoded.holepunch.as_ref().unwrap().id, 42);
         assert_eq!(decoded.addresses4.len(), 1);
         assert_eq!(decoded.addresses4[0].port, 9999);
         assert_eq!(decoded.udx.as_ref().unwrap().id, 7);
@@ -358,24 +305,7 @@ mod tests {
     }
 
     #[test]
-    fn holepunch_secret_is_keyed_blake2b() {
-        // Manually verify the derivation matches the expected formula.
-        let hash = [0x55u8; 64];
-        let secret = derive_holepunch_secret(&hash);
-
-        // Recompute independently
-        let mut mac: Blake2bMac256 =
-            KeyInit::new_from_slice(&hash[..]).expect("64-byte key");
-        Mac::update(&mut mac, &*NS_PEER_HOLEPUNCH);
-        let expected = mac.finalize().into_bytes();
-        let mut expected_arr = [0u8; 32];
-        expected_arr.copy_from_slice(&expected);
-
-        assert_eq!(secret, expected_arr);
-    }
-
-    #[test]
-    fn different_keypairs_different_secrets() {
+    fn different_keypairs_different_session_keys() {
         let kp_init = generate_keypair();
 
         let kp_resp_a = generate_keypair();
@@ -400,7 +330,7 @@ mod tests {
         init_b.recv(&m2b).unwrap();
         let rb = init_b.finalize().unwrap();
 
-        // Different responders → different secrets
-        assert_ne!(ra.holepunch_secret, rb.holepunch_secret);
+        // Different responders → different handshake transcripts
+        assert_ne!(ra.handshake_hash, rb.handshake_hash);
     }
 }

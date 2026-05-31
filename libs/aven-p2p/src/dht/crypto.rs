@@ -74,9 +74,6 @@ pub static NS_MUTABLE_PUT: LazyLock<[u8; 32]> =
 /// Precomputed namespace hash for peer handshake operations.
 pub static NS_PEER_HANDSHAKE: LazyLock<[u8; 32]> =
     LazyLock::new(|| namespace("hyperswarm/dht", &[0])[0]);
-/// Precomputed namespace hash for peer holepunch operations.
-pub static NS_PEER_HOLEPUNCH: LazyLock<[u8; 32]> =
-    LazyLock::new(|| namespace("hyperswarm/dht", &[1])[0]);
 
 // ── Ed25519 sign / verify ───────────────────────────────────────────────────
 
@@ -173,17 +170,15 @@ mod tests {
         assert_ne!(*NS_UNANNOUNCE, [0u8; 32]);
         assert_ne!(*NS_MUTABLE_PUT, [0u8; 32]);
         assert_ne!(*NS_PEER_HANDSHAKE, [0u8; 32]);
-        assert_ne!(*NS_PEER_HOLEPUNCH, [0u8; 32]);
     }
 
     #[test]
     fn namespace_statics_match_inline() {
-        let ns = namespace("hyperswarm/dht", &[4, 5, 6, 0, 1]);
+        let ns = namespace("hyperswarm/dht", &[4, 5, 6, 0]);
         assert_eq!(*NS_ANNOUNCE, ns[0]);
         assert_eq!(*NS_UNANNOUNCE, ns[1]);
         assert_eq!(*NS_MUTABLE_PUT, ns[2]);
         assert_eq!(*NS_PEER_HANDSHAKE, ns[3]);
-        assert_eq!(*NS_PEER_HOLEPUNCH, ns[4]);
     }
 
     #[test]

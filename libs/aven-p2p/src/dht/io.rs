@@ -53,7 +53,6 @@ pub struct IoConfig {
     pub port: u16,
     /// UDP bind address (may differ from DHT identity host on NAT / Fly ingress).
     pub host: String,
-    pub firewalled: bool,
     pub ephemeral: bool,
 }
 
@@ -63,7 +62,6 @@ impl Default for IoConfig {
             max_window: 80,
             port: 0,
             host: "0.0.0.0".to_string(),
-            firewalled: true,
             ephemeral: true,
         }
     }
@@ -105,13 +103,6 @@ impl WireCounters {
     }
 }
 
-/// Which socket was used for a message.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SocketKind {
-    Client,
-    Server,
-}
-
 /// Info about an inflight request that was resolved by a response.
 #[derive(Debug, Clone)]
 pub struct ResolvedRequest {
@@ -150,7 +141,6 @@ pub struct IncomingRequest {
     pub command: u64,
     pub target: Option<NodeId>,
     pub value: Option<Vec<u8>>,
-    pub(crate) reply_ctx: ReplyContext,
 }
 
 /// Parameters for creating an outgoing request.
@@ -176,14 +166,8 @@ pub struct TimeoutEvent {
 
 // ── Private types ─────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct ReplyContext {
-    pub(crate) socket_kind: SocketKind,
-}
-
 /// Bundled parameters for `send_reply_internal` to stay under clippy's argument limit.
 struct ReplyInternalParams {
-    socket_kind: SocketKind,
     tid: u16,
     target: Option<NodeId>,
     error: u64,
@@ -199,7 +183,6 @@ struct InflightEntry {
     command: u64,
     target: Option<NodeId>,
     buffer: Vec<u8>,
-    socket_kind: SocketKind,
     sent: u32,
     retries: u32,
     deadline: Instant,
@@ -267,17 +250,14 @@ impl CongestionWindow {
 // ── Io ────────────────────────────────────────────────────────────────────────
 
 pub struct Io {
-    client_socket: UdxSocket,
-    server_socket: UdxSocket,
-    client_rx: tokio::sync::mpsc::UnboundedReceiver<Datagram>,
-    server_rx: tokio::sync::mpsc::UnboundedReceiver<Datagram>,
+    socket: UdxSocket,
+    rx: tokio::sync::mpsc::UnboundedReceiver<Datagram>,
     inflight: Vec<InflightEntry>,
     congestion: CongestionWindow,
     pending: VecDeque<PendingSend>,
     tid: u16,
     secrets: Option<[[u8; 32]; 2]>,
     rotate_countdown: u32,
-    firewalled: bool,
     pub ephemeral: bool,
     pub stats: IoStats,
     pub wire: WireCounters,
@@ -286,41 +266,36 @@ pub struct Io {
 }
 
 impl Io {
-    /// Create and bind the IO layer (two sockets).
+    /// Create and bind the IO layer on a single reusable UDP socket.
+    ///
+    /// DHT requests/replies and UDX streams (handshake + blind-relay data) all
+    /// multiplex on this one socket, so a peer's reflexive source address is the
+    /// same for the handshake and the stream — the invariant the blind-relay
+    /// coordinator depends on. This mirrors Node hyperdht's `reusableSocket`.
     pub async fn bind(
         runtime: &UdxRuntime,
         table: Arc<Mutex<RoutingTable>>,
         config: IoConfig,
     ) -> IoResult<Self> {
-        let server_addr: SocketAddr = format!("{}:{}", config.host, config.port)
-            .parse()
-            .map_err(IoError::AddrParse)?;
-        let client_addr: SocketAddr = format!("{}:0", config.host)
+        let addr: SocketAddr = format!("{}:{}", config.host, config.port)
             .parse()
             .map_err(IoError::AddrParse)?;
 
-        let server_socket = runtime.create_socket().await?;
-        server_socket.bind(server_addr).await?;
-        let server_rx = server_socket.recv_start()?;
-
-        let client_socket = runtime.create_socket().await?;
-        client_socket.bind(client_addr).await?;
-        let client_rx = client_socket.recv_start()?;
+        let socket = runtime.create_socket().await?;
+        socket.bind(addr).await?;
+        let rx = socket.recv_start()?;
 
         let tid: u16 = rand::random();
 
         Ok(Io {
-            client_socket,
-            server_socket,
-            client_rx,
-            server_rx,
+            socket,
+            rx,
             inflight: Vec::new(),
             congestion: CongestionWindow::new(config.max_window),
             pending: VecDeque::new(),
             tid,
             secrets: None,
             rotate_countdown: 10,
-            firewalled: config.firewalled,
             ephemeral: config.ephemeral,
             stats: IoStats::default(),
             wire: WireCounters::default(),
@@ -335,30 +310,19 @@ impl Io {
     }
 
     pub async fn server_local_addr(&self) -> IoResult<std::net::SocketAddr> {
-        self.server_socket.local_addr().await.map_err(IoError::from)
+        self.socket.local_addr().await.map_err(IoError::from)
     }
 
-    pub fn server_socket(&self) -> UdxSocket {
-        self.server_socket.clone()
+    /// The single reusable UDP socket (DHT + UDX + blind-relay multiplex).
+    pub fn socket(&self) -> UdxSocket {
+        self.socket.clone()
     }
 
-    pub fn primary_socket(&self) -> UdxSocket {
-        if self.firewalled {
-            self.client_socket.clone()
-        } else {
-            self.server_socket.clone()
-        }
-    }
-
-    /// Receive and decode the next message from either socket.
-    /// Returns None only if both channels are closed.
+    /// Receive and decode the next message from the socket.
+    /// Returns None only if the channel is closed.
     pub async fn recv(&mut self) -> Option<IoEvent> {
         loop {
-            let (datagram, socket_kind) = tokio::select! {
-                biased;
-                msg = self.client_rx.recv() => (msg?, SocketKind::Client),
-                msg = self.server_rx.recv() => (msg?, SocketKind::Server),
-            };
+            let datagram = self.rx.recv().await?;
             self.wire
                 .bytes_received
                 .fetch_add(datagram.data.len() as u64, Ordering::Relaxed);
@@ -366,10 +330,9 @@ impl Io {
                 from = %datagram.addr,
                 len = datagram.data.len(),
                 first_byte = datagram.data.first().copied().unwrap_or(0),
-                ?socket_kind,
                 "IO::recv raw datagram"
             );
-            if let Some(event) = self.process_datagram(datagram, socket_kind) {
+            if let Some(event) = self.process_datagram(datagram) {
                 return Some(event);
             }
         }
@@ -472,13 +435,7 @@ impl Io {
         let tid = self.tid;
         self.tid = self.tid.wrapping_add(1);
 
-        let socket_kind = if self.firewalled {
-            SocketKind::Client
-        } else {
-            SocketKind::Server
-        };
-
-        let include_id = !self.ephemeral && socket_kind == SocketKind::Server;
+        let include_id = !self.ephemeral;
         let id = if include_id {
             self.table.lock().ok().map(|t| *t.id())
         } else {
@@ -518,7 +475,6 @@ impl Io {
             command: params.command,
             target: params.target,
             buffer,
-            socket_kind,
             sent: 0,
             retries: DEFAULT_RETRIES,
             deadline: now + Duration::from_millis(DEFAULT_TIMEOUT_MS),
@@ -532,7 +488,6 @@ impl Io {
             tid,
             command = params.command,
             to = %to_str,
-            ?socket_kind,
             cong_full,
             inflight_count = self.inflight.len(),
             "create_request: new inflight"
@@ -550,12 +505,10 @@ impl Io {
 
     /// Send a reply to an incoming request.
     pub fn send_reply(&mut self, req: &IncomingRequest, error: u64, value: Option<&[u8]>) {
-        let socket_kind = req.reply_ctx.socket_kind;
         let include_token = error == 0;
         self.send_reply_internal(
             &req.from,
             ReplyInternalParams {
-                socket_kind,
                 tid: req.tid,
                 target: req.target,
                 error,
@@ -570,7 +523,6 @@ impl Io {
     pub(crate) fn send_reply_deferred(
         &mut self,
         to: &Ipv4Peer,
-        ctx: ReplyContext,
         tid: u16,
         target: Option<NodeId>,
         error: u64,
@@ -580,7 +532,6 @@ impl Io {
         self.send_reply_internal(
             to,
             ReplyInternalParams {
-                socket_kind: ctx.socket_kind,
                 tid,
                 target,
                 error,
@@ -618,8 +569,7 @@ impl Io {
     }
 
     /// Send a fire-and-forget relay request (no inflight tracking, no response).
-    /// Used by the Router to forward PEER_HANDSHAKE/PEER_HOLEPUNCH messages
-    /// to relay targets.
+    /// Used by the Router to forward PEER_HANDSHAKE messages to relay targets.
     pub fn relay(
         &mut self,
         command: u64,
@@ -639,13 +589,7 @@ impl Io {
         let tid = self.tid;
         self.tid = self.tid.wrapping_add(1);
 
-        let socket_kind = if self.firewalled {
-            SocketKind::Client
-        } else {
-            SocketKind::Server
-        };
-
-        let include_id = !self.ephemeral && socket_kind == SocketKind::Server;
+        let include_id = !self.ephemeral;
         let id = if include_id {
             self.table.lock().ok().map(|t| *t.id())
         } else {
@@ -671,13 +615,8 @@ impl Io {
             }
         };
 
-        let socket = match socket_kind {
-            SocketKind::Client => &self.client_socket,
-            SocketKind::Server => &self.server_socket,
-        };
-
         let buffer_len = buffer.len() as u64;
-        if let Err(e) = socket.send_to(&buffer, addr) {
+        if let Err(e) = self.socket.send_to(&buffer, addr) {
             tracing::warn!(err = %e, "relay: send_to failed");
             return false;
         }
@@ -686,7 +625,7 @@ impl Io {
         true
     }
 
-    /// Destroy the IO layer, closing both sockets.
+    /// Destroy the IO layer, closing the socket.
     pub async fn destroy(mut self) -> IoResult<()> {
         self.destroying = true;
         for entry in self.inflight.drain(..) {
@@ -694,8 +633,7 @@ impl Io {
             self.stats.active = self.stats.active.saturating_sub(1);
             tracing::debug!(tid = entry.tid, "destroy: dropping inflight request");
         }
-        self.client_socket.close().await?;
-        self.server_socket.close().await?;
+        self.socket.close().await?;
         Ok(())
     }
 
@@ -715,7 +653,7 @@ impl Io {
         to: &Ipv4Peer,
         params: ReplyInternalParams,
     ) {
-        let include_id = !self.ephemeral && params.socket_kind == SocketKind::Server;
+        let include_id = !self.ephemeral;
 
         let (id, closer_nodes) = match self.table.lock() {
             Ok(table) => {
@@ -770,13 +708,8 @@ impl Io {
             }
         };
 
-        let socket = match params.socket_kind {
-            SocketKind::Client => &self.client_socket,
-            SocketKind::Server => &self.server_socket,
-        };
-
         let bytes_len = bytes.len() as u64;
-        if let Err(e) = socket.send_to(&bytes, addr) {
+        if let Err(e) = self.socket.send_to(&bytes, addr) {
             tracing::warn!(err = %e, "send_reply_internal: send_to failed");
         } else {
             self.wire.bytes_sent.fetch_add(bytes_len, Ordering::Relaxed);
@@ -785,30 +718,25 @@ impl Io {
 
     /// Actually send the inflight entry at index `idx`.
     fn send_inflight_at(&mut self, idx: usize) {
-        let (buffer, addr, socket_kind) = {
+        let (buffer, addr) = {
             let entry = &mut self.inflight[idx];
             entry.sent += 1;
             entry.deadline = Instant::now() + Duration::from_millis(DEFAULT_TIMEOUT_MS);
-            (entry.buffer.clone(), entry.addr, entry.socket_kind)
+            (entry.buffer.clone(), entry.addr)
         };
 
         self.congestion.send();
 
-        let socket = match socket_kind {
-            SocketKind::Client => &self.client_socket,
-            SocketKind::Server => &self.server_socket,
-        };
-
         let buffer_len = buffer.len() as u64;
-        if let Err(e) = socket.send_to(&buffer, addr) {
+        if let Err(e) = self.socket.send_to(&buffer, addr) {
             tracing::warn!(err = %e, "send_inflight_at: send_to failed");
         } else {
             self.wire.bytes_sent.fetch_add(buffer_len, Ordering::Relaxed);
         }
     }
 
-    /// Decode and dispatch a datagram from either socket.
-    fn process_datagram(&mut self, datagram: Datagram, socket_kind: SocketKind) -> Option<IoEvent> {
+    /// Decode and dispatch a datagram.
+    fn process_datagram(&mut self, datagram: Datagram) -> Option<IoEvent> {
         if datagram.data.len() < 2 {
             return None;
         }
@@ -846,7 +774,6 @@ impl Io {
                         self.send_reply_internal(
                             &from_clone,
                             ReplyInternalParams {
-                                socket_kind,
                                 tid,
                                 target,
                                 error: ERROR_INVALID_TOKEN,
@@ -878,7 +805,6 @@ impl Io {
                     command: req.command,
                     target: req.target,
                     value: req.value,
-                    reply_ctx: ReplyContext { socket_kind },
                 }))
             }
 

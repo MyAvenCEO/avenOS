@@ -4,7 +4,7 @@
 
 //! AvenOS vendored Hyperswarm / HyperDHT stack (peeroxide@1.3.1 + AvenOS patches).
 //!
-//! - [`dht`] — HyperDHT, Noise, hole-punch, blind-relay (always available)
+//! - [`dht`] — HyperDHT, Noise, blind-relay (always available)
 //! - Swarm API (`spawn`, `SwarmConfig`, …) — enabled with the `swarm` feature (default)
 
 /// HyperDHT protocol stack.

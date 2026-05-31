@@ -12,12 +12,10 @@ use aven_p2p::dht::blind_relay::{spawn_blind_relay_control_session, BlindRelayCo
 use aven_p2p::dht::crypto::hash;
 use aven_p2p::dht::hyperdht::{
     establish_responder_peer_connection, finish_server_noise_ik_handshake,
-    handle_peer_holepunch_reply, EstablishedNoiseIkSession, HolepunchServerPeerState,
-    HyperDhtHandle, KeyPair, ServerConfig, ServerEvent, ServerSession,
+    EstablishedNoiseIkSession, HyperDhtHandle, KeyPair, ServerConfig, ServerEvent,
 };
 use aven_p2p::dht::hyperdht_messages::FIREWALL_UNKNOWN;
 use aven_p2p::dht::messages::Ipv4Peer;
-use aven_p2p::dht::socket_pool::SocketPool;
 use rand::RngCore;
 use tokio::sync::mpsc;
 use tracing::warn;
@@ -166,7 +164,7 @@ async fn accept_relay_control_session(
     }
 }
 
-/// Bootstrap holepunch + blind-relay IK accept loop (replaces dropping `server_rx`).
+/// Blind-relay IK accept loop (replaces dropping `server_rx`).
 pub async fn run_signal_server(
     mut server_rx: mpsc::UnboundedReceiver<ServerEvent>,
     dht: HyperDhtHandle,
@@ -176,10 +174,6 @@ pub async fn run_signal_server(
     relay_config: ServerConfig,
     relay_target: [u8; 32],
 ) {
-    let mut bootstrap_session = ServerSession::new();
-    let mut relay_session = ServerSession::new();
-    let pool = SocketPool::new("0.0.0.0".into());
-
     while let Some(event) = server_rx.recv().await {
         match event {
             ServerEvent::PeerHandshake {
@@ -192,7 +186,6 @@ pub async fn run_signal_server(
                 if is_relay {
                     match finish_server_noise_ik_handshake(
                         &relay_config,
-                        &mut relay_session,
                         msg,
                         &from,
                         target.as_ref(),
@@ -214,7 +207,6 @@ pub async fn run_signal_server(
                 } else {
                     let reply = finish_server_noise_ik_handshake(
                         &bootstrap_config,
-                        &mut bootstrap_session,
                         msg,
                         &from,
                         target.as_ref(),
@@ -222,27 +214,6 @@ pub async fn run_signal_server(
                     .map(|o| o.reply_wire);
                     let _ = reply_tx.send(reply);
                 }
-            }
-            ServerEvent::PeerHolepunch {
-                msg,
-                from: _,
-                peer_address,
-                target: _,
-                reply_tx,
-            } => {
-                let secrets: Vec<&HolepunchServerPeerState> =
-                    bootstrap_session.holepunch_peer_states().collect();
-                let reply = handle_peer_holepunch_reply(
-                    bootstrap_config.firewall,
-                    bootstrap_config.noise_addresses_listen_udp_port,
-                    &secrets,
-                    &pool,
-                    &runtime,
-                    msg,
-                    &peer_address,
-                )
-                .await;
-                let _ = reply_tx.send(reply);
             }
             _ => {}
         }

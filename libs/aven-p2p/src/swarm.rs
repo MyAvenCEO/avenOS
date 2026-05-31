@@ -1530,9 +1530,6 @@ impl SwarmActor {
             } => {
                 self.handle_server_handshake(msg, from, reply_tx, connect_result_tx);
             }
-            ServerEvent::PeerHolepunch { .. } => {
-                tracing::debug!("server: ignoring PEER_HOLEPUNCH — relay-only mode");
-            }
         }
     }
 
@@ -1615,7 +1612,6 @@ impl SwarmActor {
             version: 1,
             error: 0,
             firewall: self.config.firewall,
-            holepunch: None,
             addresses4: vec![],
             addresses6: vec![],
             udx: Some(UdxInfo {

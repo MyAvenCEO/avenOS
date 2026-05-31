@@ -158,7 +158,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if bind_host != identity_host {
         dht_cfg.bind_host = Some(bind_host.clone());
     }
-    dht_cfg.firewalled = false;
     dht_cfg.ephemeral = Some(false);
 
     let mut cfg = HyperDhtConfig::default();

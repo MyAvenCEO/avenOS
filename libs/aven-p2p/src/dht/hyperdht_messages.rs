@@ -11,8 +11,6 @@ pub type Result<T> = std::result::Result<T, EncodingError>;
 
 /// Command ID for peer handshake messages.
 pub const PEER_HANDSHAKE: u64 = 0;
-/// Command ID for peer hole-punch messages.
-pub const PEER_HOLEPUNCH: u64 = 1;
 /// Command ID for find-peer queries.
 pub const FIND_PEER: u64 = 2;
 /// Command ID for DHT lookup queries.
@@ -582,171 +580,6 @@ pub fn decode_handshake_from_bytes(buf: &[u8]) -> Result<HandshakeMessage> {
     decode_handshake(&mut state)
 }
 
-// ── HolepunchMessage (PEER_HOLEPUNCH wire format) ───────────────────────────
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-/// Wire message exchanged during the PEER_HOLEPUNCH phase.
-pub struct HolepunchMessage {
-    /// Routing mode for this holepunch message (one of the `MODE_*` constants).
-    pub mode: u64,
-    /// Session identifier for this holepunch attempt.
-    pub id: u64,
-    /// Encrypted holepunch payload bytes.
-    pub payload: Vec<u8>,
-    /// Optional IPv4 address of the peer involved in the holepunch.
-    pub peer_address: Option<Ipv4Peer>,
-}
-
-/// Pre-encodes a [`HolepunchMessage`] to calculate the required buffer size.
-pub fn preencode_holepunch_msg(state: &mut State, m: &HolepunchMessage) {
-    preencode_uint(state, 0); // flags
-    preencode_uint(state, m.mode);
-    preencode_uint(state, m.id);
-    compact_encoding::preencode_buffer(state, Some(&m.payload));
-    if m.peer_address.is_some() {
-        state.end += 6;
-    }
-}
-
-/// Encodes a [`HolepunchMessage`] into the compact-encoding buffer.
-pub fn encode_holepunch_msg(state: &mut State, m: &HolepunchMessage) -> Result<()> {
-    let flags: u64 = if m.peer_address.is_some() { 1 } else { 0 };
-    encode_uint(state, flags);
-    encode_uint(state, m.mode);
-    encode_uint(state, m.id);
-    compact_encoding::encode_buffer(state, Some(&m.payload));
-    if let Some(addr) = &m.peer_address {
-        compact_encoding::encode_ipv4_address(state, &addr.host, addr.port)?;
-    }
-    Ok(())
-}
-
-/// Decodes a [`HolepunchMessage`] from the compact-encoding buffer.
-pub fn decode_holepunch_msg(state: &mut State) -> Result<HolepunchMessage> {
-    let flags = decode_uint(state)?;
-    let mode = decode_uint(state)?;
-    let id = decode_uint(state)?;
-    let payload = compact_encoding::decode_buffer(state)?.unwrap_or_default();
-    let peer_address = if flags & 1 != 0 {
-        let (host, port) = compact_encoding::decode_ipv4_address(state)?;
-        Some(Ipv4Peer { host, port })
-    } else {
-        None
-    };
-    Ok(HolepunchMessage {
-        mode,
-        id,
-        payload,
-        peer_address,
-    })
-}
-
-/// Serializes a [`HolepunchMessage`] to a byte vector.
-pub fn encode_holepunch_msg_to_bytes(m: &HolepunchMessage) -> Result<Vec<u8>> {
-    let mut state = State::new();
-    preencode_holepunch_msg(&mut state, m);
-    state.alloc();
-    encode_holepunch_msg(&mut state, m)?;
-    Ok(state.buffer)
-}
-
-/// Deserializes a [`HolepunchMessage`] from bytes.
-pub fn decode_holepunch_msg_from_bytes(buf: &[u8]) -> Result<HolepunchMessage> {
-    let mut state = State::from_buffer(buf);
-    decode_holepunch_msg(&mut state)
-}
-
-// ── RelayInfo ───────────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-/// A pair of addresses describing a relay-assisted path between two peers.
-pub struct RelayInfo {
-    /// The IPv4 address of the relay node.
-    pub relay_address: Ipv4Peer,
-    /// The IPv4 address of the remote peer as seen by the relay.
-    pub peer_address: Ipv4Peer,
-}
-
-fn preencode_relay_info(_state: &mut State, _m: &RelayInfo) {
-    _state.end += 12; // 2 × ipv4 (4 bytes IP + 2 bytes port)
-}
-
-fn encode_relay_info(state: &mut State, m: &RelayInfo) -> Result<()> {
-    compact_encoding::encode_ipv4_address(state, &m.relay_address.host, m.relay_address.port)?;
-    compact_encoding::encode_ipv4_address(state, &m.peer_address.host, m.peer_address.port)?;
-    Ok(())
-}
-
-fn decode_relay_info(state: &mut State) -> Result<RelayInfo> {
-    let (rhost, rport) = compact_encoding::decode_ipv4_address(state)?;
-    let (phost, pport) = compact_encoding::decode_ipv4_address(state)?;
-    Ok(RelayInfo {
-        relay_address: Ipv4Peer {
-            host: rhost,
-            port: rport,
-        },
-        peer_address: Ipv4Peer {
-            host: phost,
-            port: pport,
-        },
-    })
-}
-
-fn preencode_relay_info_array(state: &mut State, arr: &[RelayInfo]) {
-    preencode_uint(state, arr.len() as u64);
-    for item in arr {
-        preencode_relay_info(state, item);
-    }
-}
-
-fn encode_relay_info_array(state: &mut State, arr: &[RelayInfo]) -> Result<()> {
-    encode_uint(state, arr.len() as u64);
-    for item in arr {
-        encode_relay_info(state, item)?;
-    }
-    Ok(())
-}
-
-fn decode_relay_info_array(state: &mut State) -> Result<Vec<RelayInfo>> {
-    let len = decode_uint(state)? as usize;
-    if len > 1_048_576 {
-        return Err(EncodingError::ArrayTooLarge(len));
-    }
-    let mut arr = Vec::with_capacity(len);
-    for _ in 0..len {
-        arr.push(decode_relay_info(state)?);
-    }
-    Ok(arr)
-}
-
-// ── HolepunchInfo ───────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-/// Metadata for an ongoing hole-punch session, including relay candidates.
-pub struct HolepunchInfo {
-    /// Unique session identifier for this hole-punch attempt.
-    pub id: u64,
-    /// List of relay-peer address pairs available for this hole-punch.
-    pub relays: Vec<RelayInfo>,
-}
-
-fn preencode_holepunch_info(state: &mut State, m: &HolepunchInfo) {
-    preencode_uint(state, m.id);
-    preencode_relay_info_array(state, &m.relays);
-}
-
-fn encode_holepunch_info(state: &mut State, m: &HolepunchInfo) -> Result<()> {
-    encode_uint(state, m.id);
-    encode_relay_info_array(state, &m.relays)?;
-    Ok(())
-}
-
-fn decode_holepunch_info(state: &mut State) -> Result<HolepunchInfo> {
-    let id = decode_uint(state)?;
-    let relays = decode_relay_info_array(state)?;
-    Ok(HolepunchInfo { id, relays })
-}
-
 // ── UdxInfo ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -862,8 +695,6 @@ pub struct NoisePayload {
     pub error: u64,
     /// Firewall type reported by the sender (one of the `FIREWALL_*` constants).
     pub firewall: u64,
-    /// Optional hole-punch session info, present when hole-punching is in progress.
-    pub holepunch: Option<HolepunchInfo>,
     /// IPv4 addresses the sender is reachable on.
     pub addresses4: Vec<Ipv4Peer>,
     /// IPv6 addresses the sender is reachable on.
@@ -878,7 +709,6 @@ pub struct NoisePayload {
     pub relay_addresses: Option<Vec<Ipv4Peer>>,
 }
 
-const NP_FLAG_HOLEPUNCH: u64 = 1;
 const NP_FLAG_ADDRESSES4: u64 = 2;
 const NP_FLAG_ADDRESSES6: u64 = 4;
 const NP_FLAG_UDX: u64 = 8;
@@ -889,9 +719,6 @@ const NP_FLAG_RELAY_ADDRESSES: u64 = 64;
 /// Pre-encodes a [`NoisePayload`] to calculate the required buffer size.
 pub fn preencode_noise_payload(state: &mut State, m: &NoisePayload) {
     state.end += 4; // version + flags + error + firewall (each 1 byte for small values)
-    if let Some(hp) = &m.holepunch {
-        preencode_holepunch_info(state, hp);
-    }
     if !m.addresses4.is_empty() {
         preencode_ipv4_peer_array(state, &m.addresses4);
     }
@@ -915,9 +742,6 @@ pub fn preencode_noise_payload(state: &mut State, m: &NoisePayload) {
 /// Encodes a [`NoisePayload`] into the compact-encoding buffer.
 pub fn encode_noise_payload(state: &mut State, m: &NoisePayload) -> Result<()> {
     let mut flags = 0u64;
-    if m.holepunch.is_some() {
-        flags |= NP_FLAG_HOLEPUNCH;
-    }
     if !m.addresses4.is_empty() {
         flags |= NP_FLAG_ADDRESSES4;
     }
@@ -942,9 +766,6 @@ pub fn encode_noise_payload(state: &mut State, m: &NoisePayload) -> Result<()> {
     encode_uint(state, m.error);
     encode_uint(state, m.firewall);
 
-    if let Some(hp) = &m.holepunch {
-        encode_holepunch_info(state, hp)?;
-    }
     if !m.addresses4.is_empty() {
         encode_ipv4_peer_array(state, &m.addresses4)?;
     }
@@ -974,7 +795,6 @@ pub fn decode_noise_payload(state: &mut State) -> Result<NoisePayload> {
             version,
             error: 0,
             firewall: 0,
-            holepunch: None,
             addresses4: vec![],
             addresses6: vec![],
             udx: None,
@@ -987,11 +807,6 @@ pub fn decode_noise_payload(state: &mut State) -> Result<NoisePayload> {
     let error = decode_uint(state)?;
     let firewall = decode_uint(state)?;
 
-    let holepunch = if flags & NP_FLAG_HOLEPUNCH != 0 {
-        Some(decode_holepunch_info(state)?)
-    } else {
-        None
-    };
     let addresses4 = if flags & NP_FLAG_ADDRESSES4 != 0 {
         decode_ipv4_peer_array(state)?
     } else {
@@ -1027,7 +842,6 @@ pub fn decode_noise_payload(state: &mut State) -> Result<NoisePayload> {
         version,
         error,
         firewall,
-        holepunch,
         addresses4,
         addresses6,
         udx,
@@ -1050,154 +864,6 @@ pub fn encode_noise_payload_to_bytes(m: &NoisePayload) -> Result<Vec<u8>> {
 pub fn decode_noise_payload_from_bytes(buf: &[u8]) -> Result<NoisePayload> {
     let mut state = State::from_buffer(buf);
     decode_noise_payload(&mut state)
-}
-
-// ── HolepunchPayload (encrypted, exchanged during hole-punch rounds) ────────
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-/// Encrypted payload exchanged between peers during each hole-punch round.
-pub struct HolepunchPayload {
-    /// Error code from the sender (one of the `ERROR_*` constants).
-    pub error: u64,
-    /// Firewall type reported by the sender (one of the `FIREWALL_*` constants).
-    pub firewall: u64,
-    /// Current hole-punch round number.
-    pub round: u64,
-    /// Whether the sender has already established a direct connection.
-    pub connected: bool,
-    /// Whether the sender is actively sending hole-punch packets.
-    pub punching: bool,
-    /// List of local IPv4 addresses the sender is reachable on, if present.
-    pub addresses: Option<Vec<Ipv4Peer>>,
-    /// The remote address the sender is trying to punch to, if known.
-    pub remote_address: Option<Ipv4Peer>,
-    /// A 32-byte token sent by the initiator to prove liveness.
-    pub token: Option<[u8; 32]>,
-    /// A 32-byte token sent by the remote peer to prove liveness.
-    pub remote_token: Option<[u8; 32]>,
-}
-
-const HP_FLAG_CONNECTED: u64 = 1;
-const HP_FLAG_PUNCHING: u64 = 2;
-const HP_FLAG_ADDRESSES: u64 = 4;
-const HP_FLAG_REMOTE_ADDRESS: u64 = 8;
-const HP_FLAG_TOKEN: u64 = 16;
-const HP_FLAG_REMOTE_TOKEN: u64 = 32;
-
-/// Pre-encodes a [`HolepunchPayload`] to calculate the required buffer size.
-pub fn preencode_holepunch_payload(state: &mut State, m: &HolepunchPayload) {
-    state.end += 4; // flags + error + firewall + round
-    if let Some(addrs) = &m.addresses {
-        preencode_ipv4_peer_array(state, addrs);
-    }
-    if m.remote_address.is_some() {
-        state.end += 6;
-    }
-    if m.token.is_some() {
-        state.end += 32;
-    }
-    if m.remote_token.is_some() {
-        state.end += 32;
-    }
-}
-
-/// Encodes a [`HolepunchPayload`] into the compact-encoding buffer.
-pub fn encode_holepunch_payload(state: &mut State, m: &HolepunchPayload) -> Result<()> {
-    let mut flags = 0u64;
-    if m.connected {
-        flags |= HP_FLAG_CONNECTED;
-    }
-    if m.punching {
-        flags |= HP_FLAG_PUNCHING;
-    }
-    if m.addresses.is_some() {
-        flags |= HP_FLAG_ADDRESSES;
-    }
-    if m.remote_address.is_some() {
-        flags |= HP_FLAG_REMOTE_ADDRESS;
-    }
-    if m.token.is_some() {
-        flags |= HP_FLAG_TOKEN;
-    }
-    if m.remote_token.is_some() {
-        flags |= HP_FLAG_REMOTE_TOKEN;
-    }
-
-    encode_uint(state, flags);
-    encode_uint(state, m.error);
-    encode_uint(state, m.firewall);
-    encode_uint(state, m.round);
-
-    if let Some(addrs) = &m.addresses {
-        encode_ipv4_peer_array(state, addrs)?;
-    }
-    if let Some(addr) = &m.remote_address {
-        compact_encoding::encode_ipv4_address(state, &addr.host, addr.port)?;
-    }
-    if let Some(token) = &m.token {
-        encode_fixed32(state, token);
-    }
-    if let Some(token) = &m.remote_token {
-        encode_fixed32(state, token);
-    }
-    Ok(())
-}
-
-/// Decodes a [`HolepunchPayload`] from the compact-encoding buffer.
-pub fn decode_holepunch_payload(state: &mut State) -> Result<HolepunchPayload> {
-    let flags = decode_uint(state)?;
-    let error = decode_uint(state)?;
-    let firewall = decode_uint(state)?;
-    let round = decode_uint(state)?;
-
-    let addresses = if flags & HP_FLAG_ADDRESSES != 0 {
-        Some(decode_ipv4_peer_array(state)?)
-    } else {
-        None
-    };
-    let remote_address = if flags & HP_FLAG_REMOTE_ADDRESS != 0 {
-        let (host, port) = compact_encoding::decode_ipv4_address(state)?;
-        Some(Ipv4Peer { host, port })
-    } else {
-        None
-    };
-    let token = if flags & HP_FLAG_TOKEN != 0 {
-        Some(decode_fixed32(state)?)
-    } else {
-        None
-    };
-    let remote_token = if flags & HP_FLAG_REMOTE_TOKEN != 0 {
-        Some(decode_fixed32(state)?)
-    } else {
-        None
-    };
-
-    Ok(HolepunchPayload {
-        error,
-        firewall,
-        round,
-        connected: (flags & HP_FLAG_CONNECTED) != 0,
-        punching: (flags & HP_FLAG_PUNCHING) != 0,
-        addresses,
-        remote_address,
-        token,
-        remote_token,
-    })
-}
-
-/// Serializes a [`HolepunchPayload`] to a byte vector.
-pub fn encode_holepunch_payload_to_bytes(m: &HolepunchPayload) -> Result<Vec<u8>> {
-    let mut state = State::new();
-    preencode_holepunch_payload(&mut state, m);
-    state.alloc();
-    encode_holepunch_payload(&mut state, m)?;
-    Ok(state.buffer)
-}
-
-/// Deserializes a [`HolepunchPayload`] from bytes.
-pub fn decode_holepunch_payload_from_bytes(buf: &[u8]) -> Result<HolepunchPayload> {
-    let mut state = State::from_buffer(buf);
-    decode_holepunch_payload(&mut state)
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────
@@ -1376,7 +1042,6 @@ mod tests {
     #[test]
     fn command_constants() {
         assert_eq!(PEER_HANDSHAKE, 0);
-        assert_eq!(PEER_HOLEPUNCH, 1);
         assert_eq!(FIND_PEER, 2);
         assert_eq!(LOOKUP, 3);
         assert_eq!(ANNOUNCE, 4);
@@ -1461,47 +1126,6 @@ mod tests {
         assert_eq!(decoded, m);
     }
 
-    // ── HolepunchMessage tests ──────────────────────────────────────────────
-
-    #[test]
-    fn holepunch_msg_no_peer_address() {
-        let m = HolepunchMessage {
-            mode: MODE_FROM_CLIENT,
-            id: 42,
-            payload: vec![0xaa; 24],
-            peer_address: None,
-        };
-        let bytes = encode_holepunch_msg_to_bytes(&m).unwrap();
-        let decoded = decode_holepunch_msg_from_bytes(&bytes).unwrap();
-        assert_eq!(decoded, m);
-    }
-
-    #[test]
-    fn holepunch_msg_with_peer_address() {
-        let m = HolepunchMessage {
-            mode: MODE_FROM_RELAY,
-            id: 9999,
-            payload: vec![0xbb; 48],
-            peer_address: Some(make_addr("10.0.0.5", 4000)),
-        };
-        let bytes = encode_holepunch_msg_to_bytes(&m).unwrap();
-        let decoded = decode_holepunch_msg_from_bytes(&bytes).unwrap();
-        assert_eq!(decoded, m);
-    }
-
-    #[test]
-    fn holepunch_msg_empty_payload() {
-        let m = HolepunchMessage {
-            mode: MODE_REPLY,
-            id: 0,
-            payload: vec![],
-            peer_address: None,
-        };
-        let bytes = encode_holepunch_msg_to_bytes(&m).unwrap();
-        let decoded = decode_holepunch_msg_from_bytes(&bytes).unwrap();
-        assert_eq!(decoded, m);
-    }
-
     // ── NoisePayload tests ──────────────────────────────────────────────────
 
     #[test]
@@ -1510,7 +1134,6 @@ mod tests {
             version: 1,
             error: ERROR_NONE,
             firewall: FIREWALL_UNKNOWN,
-            holepunch: None,
             addresses4: vec![],
             addresses6: vec![],
             udx: None,
@@ -1530,33 +1153,7 @@ mod tests {
             version: 1,
             error: ERROR_NONE,
             firewall: FIREWALL_OPEN,
-            holepunch: None,
             addresses4: vec![make_addr("1.2.3.4", 1000), make_addr("5.6.7.8", 2000)],
-            addresses6: vec![],
-            udx: None,
-            secret_stream: None,
-            relay_through: None,
-            relay_addresses: None,
-        };
-        let bytes = encode_noise_payload_to_bytes(&m).unwrap();
-        let decoded = decode_noise_payload_from_bytes(&bytes).unwrap();
-        assert_eq!(decoded, m);
-    }
-
-    #[test]
-    fn noise_payload_with_holepunch_info() {
-        let m = NoisePayload {
-            version: 1,
-            error: ERROR_NONE,
-            firewall: FIREWALL_CONSISTENT,
-            holepunch: Some(HolepunchInfo {
-                id: 7,
-                relays: vec![RelayInfo {
-                    relay_address: make_addr("10.0.0.1", 8080),
-                    peer_address: make_addr("192.168.1.1", 3000),
-                }],
-            }),
-            addresses4: vec![],
             addresses6: vec![],
             udx: None,
             secret_stream: None,
@@ -1574,7 +1171,6 @@ mod tests {
             version: 1,
             error: ERROR_NONE,
             firewall: FIREWALL_RANDOM,
-            holepunch: None,
             addresses4: vec![make_addr("1.2.3.4", 1000)],
             addresses6: vec![],
             udx: Some(UdxInfo {
@@ -1598,10 +1194,6 @@ mod tests {
             version: 1,
             error: ERROR_ABORTED,
             firewall: FIREWALL_CONSISTENT,
-            holepunch: Some(HolepunchInfo {
-                id: 42,
-                relays: vec![],
-            }),
             addresses4: vec![make_addr("1.2.3.4", 1000)],
             addresses6: vec![make_addr("2001:db8::1", 2000)],
             udx: Some(UdxInfo {
@@ -1631,7 +1223,6 @@ mod tests {
         assert_eq!(decoded.version, 2);
         assert_eq!(decoded.error, 0);
         assert_eq!(decoded.firewall, 0);
-        assert!(decoded.holepunch.is_none());
         assert!(decoded.addresses4.is_empty());
         assert!(decoded.udx.is_none());
     }
@@ -1642,7 +1233,6 @@ mod tests {
             version: 1,
             error: ERROR_NONE,
             firewall: FIREWALL_OPEN,
-            holepunch: None,
             addresses4: vec![],
             addresses6: vec![],
             udx: None,
@@ -1659,122 +1249,7 @@ mod tests {
         assert_eq!(decoded, m);
     }
 
-    // ── HolepunchPayload tests ──────────────────────────────────────────────
-
-    #[test]
-    fn holepunch_payload_minimal() {
-        let m = HolepunchPayload {
-            error: ERROR_NONE,
-            firewall: FIREWALL_UNKNOWN,
-            round: 0,
-            connected: false,
-            punching: false,
-            addresses: None,
-            remote_address: None,
-            token: None,
-            remote_token: None,
-        };
-        let bytes = encode_holepunch_payload_to_bytes(&m).unwrap();
-        assert_eq!(bytes, vec![0, 0, 0, 0]); // flags=0, error=0, firewall=0, round=0
-        let decoded = decode_holepunch_payload_from_bytes(&bytes).unwrap();
-        assert_eq!(decoded, m);
-    }
-
-    #[test]
-    fn holepunch_payload_connected_punching() {
-        let m = HolepunchPayload {
-            error: ERROR_NONE,
-            firewall: FIREWALL_CONSISTENT,
-            round: 3,
-            connected: true,
-            punching: true,
-            addresses: None,
-            remote_address: None,
-            token: None,
-            remote_token: None,
-        };
-        let bytes = encode_holepunch_payload_to_bytes(&m).unwrap();
-        let decoded = decode_holepunch_payload_from_bytes(&bytes).unwrap();
-        assert_eq!(decoded, m);
-        // flags should have bits 0 and 1 set (CONNECTED|PUNCHING = 3)
-        assert_eq!(bytes[0], 3);
-    }
-
-    #[test]
-    fn holepunch_payload_with_addresses() {
-        let m = HolepunchPayload {
-            error: ERROR_NONE,
-            firewall: FIREWALL_OPEN,
-            round: 1,
-            connected: false,
-            punching: true,
-            addresses: Some(vec![
-                make_addr("1.2.3.4", 1000),
-                make_addr("5.6.7.8", 2000),
-            ]),
-            remote_address: Some(make_addr("10.0.0.1", 8080)),
-            token: None,
-            remote_token: None,
-        };
-        let bytes = encode_holepunch_payload_to_bytes(&m).unwrap();
-        let decoded = decode_holepunch_payload_from_bytes(&bytes).unwrap();
-        assert_eq!(decoded, m);
-    }
-
-    #[test]
-    fn holepunch_payload_with_tokens() {
-        let m = HolepunchPayload {
-            error: ERROR_NONE,
-            firewall: FIREWALL_RANDOM,
-            round: 5,
-            connected: false,
-            punching: false,
-            addresses: None,
-            remote_address: None,
-            token: Some([0xaa; 32]),
-            remote_token: Some([0xbb; 32]),
-        };
-        let bytes = encode_holepunch_payload_to_bytes(&m).unwrap();
-        let decoded = decode_holepunch_payload_from_bytes(&bytes).unwrap();
-        assert_eq!(decoded, m);
-    }
-
-    #[test]
-    fn holepunch_payload_all_fields() {
-        let m = HolepunchPayload {
-            error: ERROR_ABORTED,
-            firewall: FIREWALL_CONSISTENT,
-            round: 10,
-            connected: true,
-            punching: true,
-            addresses: Some(vec![make_addr("192.168.1.1", 3000)]),
-            remote_address: Some(make_addr("10.0.0.5", 4000)),
-            token: Some([0xcc; 32]),
-            remote_token: Some([0xdd; 32]),
-        };
-        let bytes = encode_holepunch_payload_to_bytes(&m).unwrap();
-        let decoded = decode_holepunch_payload_from_bytes(&bytes).unwrap();
-        assert_eq!(decoded, m);
-        // flags = CONNECTED(1) | PUNCHING(2) | ADDRESSES(4) | REMOTE_ADDRESS(8) | TOKEN(16) | REMOTE_TOKEN(32) = 63
-        assert_eq!(bytes[0], 63);
-    }
-
     // ── Sub-type roundtrip tests ────────────────────────────────────────────
-
-    #[test]
-    fn relay_info_roundtrip() {
-        let ri = RelayInfo {
-            relay_address: make_addr("10.0.0.1", 8080),
-            peer_address: make_addr("192.168.1.1", 3000),
-        };
-        let mut state = State::new();
-        preencode_relay_info(&mut state, &ri);
-        state.alloc();
-        encode_relay_info(&mut state, &ri).unwrap();
-        let mut state2 = State::from_buffer(&state.buffer);
-        let decoded = decode_relay_info(&mut state2).unwrap();
-        assert_eq!(decoded, ri);
-    }
 
     #[test]
     fn udx_info_roundtrip() {
