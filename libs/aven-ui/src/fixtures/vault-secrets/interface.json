@@ -1,0 +1,30 @@
+{
+	"properties": {
+		"SET_NEW_ID": {
+			"properties": {
+				"text": {}
+			}
+		},
+		"SET_NEW_VALUE": {
+			"properties": {
+				"text": {}
+			}
+		},
+		"ADD_SECRET": {
+			"properties": {
+				"id": {},
+				"value": {}
+			}
+		},
+		"TOGGLE_REVEAL": {
+			"properties": {
+				"id": {}
+			}
+		},
+		"DELETE_SECRET": {
+			"properties": {
+				"id": {}
+			}
+		}
+	}
+}

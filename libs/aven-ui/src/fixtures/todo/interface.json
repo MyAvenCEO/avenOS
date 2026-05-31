@@ -1,0 +1,27 @@
+{
+	"properties": {
+		"SET_DRAFT": {
+			"properties": {
+				"text": {}
+			}
+		},
+		"ADD_ITEM": {
+			"properties": {
+				"text": {}
+			}
+		},
+		"TOGGLE_ITEM": {
+			"properties": {
+				"id": {}
+			}
+		},
+		"DELETE_ITEM": {
+			"properties": {
+				"id": {}
+			}
+		},
+		"CLEAR_DONE": {
+			"properties": {}
+		}
+	}
+}

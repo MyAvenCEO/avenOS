@@ -143,7 +143,8 @@
     "listTitle": "Stored secrets",
     "empty": "No secrets yet.",
     "reveal": "Reveal",
-    "hide": "Hide"
+    "hide": "Hide",
+    "needsDesktop": "Open the AvenOS desktop app to manage Stronghold secrets."
   },
   "preferences": {
     "title": "Language",
@@ -424,11 +425,21 @@
   "uiLab": {
     "pageTitle": "UI Lab",
     "title": "UI Lab",
-    "subtitle": "JSON view / style / state engine demo — invoice vibe parity via @avenos/aven-ui.",
+    "subtitle": "JSON view/style demos — QuickJS logic in Tauri, rendered by @avenos/aven-ui.",
+    "snippetCategory": "Snippets",
+    "fixtureTodo": "Todos",
+    "fixtureTodoDesc": "Interactive task list — toggle, add, and delete via QuickJS handleEvent.",
+    "fixtureInvoice": "Invoice",
+    "fixtureInvoiceDesc": "Read-only invoice — initState only, formatted from source JSON.",
+    "needsDesktop": "Open UI Lab in the AvenOS desktop app for interactive QuickJS sessions.",
     "panelRender": "Render",
     "panelView": "View JSON",
     "panelStyle": "Style JSON",
-    "panelState": "State JSON"
+    "panelState": "State JSON",
+    "panelLogic": "Logic JS",
+    "panelSource": "Source JSON",
+    "panelSourceHint": "Static seed data (domain JSON). QuickJS initState(source) maps this into the initial state object.",
+    "panelStateHint": "Live view-model returned by QuickJS — initState on mount, handleEvent after each interaction. The view binds to $fields here, not to source."
   },
   "sandbox": {
     "terminalAria": "webcm terminal",

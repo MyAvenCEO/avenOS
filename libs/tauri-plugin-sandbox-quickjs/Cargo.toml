@@ -1,0 +1,19 @@
+[package]
+name = "tauri-plugin-sandbox-quickjs"
+version = "0.1.0"
+description = "Tauri plugin: QuickJS sandbox for @avenos/aven-ui fixture logic."
+authors = ["Aven"]
+license = "MIT OR Apache-2.0"
+edition = "2021"
+links = "tauri-plugin-sandbox-quickjs"
+publish = false
+
+[dependencies]
+rquickjs = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+uuid = { version = "1", features = ["v4"] }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

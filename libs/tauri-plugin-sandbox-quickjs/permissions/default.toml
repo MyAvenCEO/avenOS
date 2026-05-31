@@ -1,0 +1,9 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Default permissions for tauri-plugin-sandbox-quickjs"
+permissions = [
+  "allow-session-mount",
+  "allow-session-dispatch",
+  "allow-session-unmount",
+]

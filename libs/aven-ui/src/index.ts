@@ -38,6 +38,10 @@ export class AvenUiEngine {
 		})
 	}
 
+	async replaceState(state: Record<string, unknown>): Promise<void> {
+		this.stateStore.set(state)
+	}
+
 	async updateState(partial: Record<string, unknown>): Promise<void> {
 		this.stateStore.patch(partial)
 	}
@@ -67,7 +71,7 @@ export class AvenUiEngine {
 }
 
 export { AvenUiEngine as default }
-export type { UiBundle, UiEvent, ViewDef, StyleDef, ViewNode, SlotRegistry } from './types.js'
+export type { UiBundle, UiEvent, ViewDef, StyleDef, ViewNode, SlotRegistry, UiFixtureShell, InterfaceDef } from './types.js'
 export { validateViewDef } from './view-validator.js'
 export { validateStyleDef } from './style-validator.js'
 export { StateStore } from './state-store.js'

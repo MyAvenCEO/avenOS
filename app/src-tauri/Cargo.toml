@@ -30,6 +30,7 @@ sha2 = "0.10"
 tauri-plugin-p2p = { path = "../../libs/tauri-plugin-p2p" }
 tauri-plugin-self = { path = "../../libs/tauri-plugin-self" }
 tauri-plugin-vault = { path = "../../libs/tauri-plugin-vault" }
+tauri-plugin-sandbox-quickjs = { path = "../../libs/tauri-plugin-sandbox-quickjs" }
 tauri-plugin-clipboard-manager = "2"
 base64 = "0.22"
 hex = "0.4"

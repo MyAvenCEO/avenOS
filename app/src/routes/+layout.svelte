@@ -35,7 +35,6 @@ const uiLabActive = $derived(path.startsWith('/ui-lab'))
 const docsActive = $derived(path.startsWith('/docs'))
 const selfActive = $derived(path.startsWith('/settings'))
 const vaultActive = $derived(path.startsWith('/vault'))
-const vaultEmbed = $derived(page.url.searchParams.get('vaultEmbed') === '1')
 const sparksNavActive = $derived(path.startsWith('/sparks'))
 const dbActive = $derived(path.startsWith('/db'))
 const avenCityActive = $derived(path.startsWith('/aven-city'))
@@ -187,13 +186,6 @@ $effect(() => {
 </svelte:head>
 
 <div class="box-border flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-background">
-	{#if vaultEmbed}
-		<div class="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-			{#key routeKey}
-				{@render pageContent()}
-			{/key}
-		</div>
-	{:else}
 	<LockGate />
 	{#if !shellLocked}
 		<header class="shrink-0 bg-background/90 px-3 pt-[max(0.375rem,env(safe-area-inset-top))] pb-1 backdrop-blur-sm sm:px-6 sm:pt-3 sm:pb-2">
@@ -334,6 +326,5 @@ $effect(() => {
 		</div>
 
 		<MobileShellNav {selfNavLabel} {selfActive} />
-	{/if}
 	{/if}
 </div>

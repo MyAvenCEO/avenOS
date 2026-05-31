@@ -25,6 +25,16 @@ export function isVaultEmbedMode(searchParams: URLSearchParams): boolean {
 	return searchParams.get('vaultEmbed') === '1'
 }
 
+/** Tear down a legacy vault-embed child webview if one is still attached. */
+export async function destroyVaultEmbedWebview(): Promise<void> {
+	if (!isTauriRuntime()) return
+	try {
+		await invoke('destroy_vault_embed_webview')
+	} catch {
+		/* no embed webview */
+	}
+}
+
 export interface VaultEmbedSession {
 	destroy: () => Promise<void>
 }

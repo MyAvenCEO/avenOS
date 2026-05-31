@@ -40,6 +40,19 @@ export type UiBundle = {
 	slots?: SlotRegistry
 }
 
+export type InterfaceDef = {
+	properties?: Record<string, Record<string, unknown>>
+}
+
+/** Fixture assets passed to sandbox-quickjs; state comes from QJS initState. */
+export type UiFixtureShell = {
+	view: ViewDef
+	style: StyleDef
+	source: Record<string, unknown>
+	interface: InterfaceDef
+	logic: string
+}
+
 export type RenderData = {
 	state: Record<string, unknown>
 	item?: unknown

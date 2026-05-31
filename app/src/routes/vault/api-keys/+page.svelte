@@ -1,5 +1,5 @@
 <script lang="ts">
-	import VaultSecretsPanel from '$lib/vault/VaultSecretsPanel.svelte'
+	import VaultSecretsAvenPanel from '$lib/vault/VaultSecretsAvenPanel.svelte'
 </script>
 
-<VaultSecretsPanel kind="api-keys" />
+<VaultSecretsAvenPanel kind="api-keys" />

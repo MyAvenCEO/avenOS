@@ -784,6 +784,7 @@ pub fn run() {
 		.plugin(tauri_plugin_self::init())
 		.plugin(tauri_plugin_vault::init())
 		.plugin(tauri_plugin_p2p::init())
+		.plugin(tauri_plugin_sandbox_quickjs::init())
 		.plugin(tauri_plugin_clipboard_manager::init())
 		.manage(jazz::ManagedJazz::default())
 		.setup(|app| {
