@@ -2,13 +2,10 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type { McpUiResourceCsp, McpUiResourcePermissions } from '@modelcontextprotocol/ext-apps/app-bridge'
 import { TauriSandboxTransport } from './tauri-webview-transport'
+export { isTauriRuntime, supportsNativeSandboxWebview } from './vibe-sandbox-strategy'
 
 const PROXY_READY = 'ui/notifications/sandbox-proxy-ready'
 const NATIVE_WEBVIEW_CLEARANCE_GAP_PX = 8
-
-export function isTauriRuntime(): boolean {
-	return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-}
 
 /**
  * Map host DOM rect → **logical/CSS** bounds for the native child webview (Tauri `Logical*`).

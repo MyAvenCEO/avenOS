@@ -9,7 +9,7 @@ import { buildAllowAttribute } from '@modelcontextprotocol/ext-apps/app-bridge'
  * - **Browser/iframe** (default): served from a separate origin, validated via `document.referrer`.
  * - **Tauri child WebView** (`?tauri=1&hostOrigin=…&vsLabel=…`): top-level page; bridge to host via Tauri events.
  */
-const ALLOWED_REFERRER_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/
+const ALLOWED_REFERRER_PATTERN = /^(https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)|tauri:\/\/|https?:\/\/tauri\.localhost(:|\/|$)|https?:\/\/ipc\.localhost(:|\/|$))/
 
 const params =
 	typeof globalThis.window !== 'undefined'

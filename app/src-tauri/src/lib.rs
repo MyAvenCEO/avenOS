@@ -338,6 +338,11 @@ async fn create_sandbox_webview(
 	)
 }
 
+#[tauri::command]
+async fn sandbox_native_webview_supported() -> bool {
+	cfg!(target_os = "macos")
+}
+
 #[cfg(target_os = "macos")]
 #[tauri::command]
 async fn set_sandbox_webview_rect(
@@ -893,6 +898,7 @@ pub fn run() {
 			avenos_relay_identity_snapshot,
 			avenos_relay_https_probe,
 			create_sandbox_webview,
+			sandbox_native_webview_supported,
 			set_sandbox_webview_rect,
 			destroy_sandbox_webview,
 			network::network_seed,

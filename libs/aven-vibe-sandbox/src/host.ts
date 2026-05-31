@@ -24,9 +24,14 @@ const DEFAULT_IMPLEMENTATION = { name: '@avenos/aven-vibe-sandbox host', version
 
 export const DEFAULT_SANDBOX_BASE = 'http://localhost:8081/sandbox.html'
 
+function isTauriRuntime(): boolean {
+	return typeof globalThis !== 'undefined' && '__TAURI_INTERNALS__' in globalThis
+}
+
 /** Resolve the sandbox proxy URL. Hosts can override per call or via Vite env (`PUBLIC_VIBE_SANDBOX_URL` must match the sandbox server port when non-default). */
 function resolveSandboxBase(explicit?: string): string {
 	if (explicit && explicit.length > 0) return explicit
+	if (isTauriRuntime()) return 'vibe-sandbox://localhost/sandbox.html'
 	const meta =
 		typeof import.meta !== 'undefined'
 			? (import.meta as unknown as { env?: Record<string, string | undefined> }).env
