@@ -50,6 +50,6 @@ declare module "$app/types" {
 		};
 		Pathname(): "/" | "/api/boring-avatar" | "/api/waitlist" | "/favicon.ico" | "/pricing" | "/skills" | `/skills/avenmaia/${string}` & {} | `/skills/avenmaia/${string}/` & {} | `/skills/aventin/${string}` & {} | `/skills/aventin/${string}/` & {} | "/waitlist";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
-		Asset(): "/hero.png" | "/samuel.jpg" | "/robots.txt" | "/daniel.png" | "/favicon.svg" | string & {};
+		Asset(): "/samuel.jpg" | "/hero.png" | "/robots.txt" | "/daniel.png" | "/favicon.svg" | string & {};
 	}
 }

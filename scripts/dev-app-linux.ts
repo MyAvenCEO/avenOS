@@ -16,12 +16,63 @@ import { applyCentralRelayUrlDevDefault, startP2pSignal } from './p2p-signal.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
+function hasCommand(command: string) {
+	const result = spawnSync('bash', ['-lc', `command -v ${command}`], { encoding: 'utf8' })
+	return result.status === 0
+}
+
+function findLibclangDir() {
+	const probes = [
+		'ldconfig -p | awk \'/libclang([-.].*)?\\.so/{print $NF}\' | head -n 1',
+		'find /usr/lib /lib -type f \\( -name "libclang.so" -o -name "libclang.so.*" -o -name "libclang-*.so" -o -name "libclang-*.so.*" \\) 2>/dev/null | head -n 1'
+	]
+
+	for (const probe of probes) {
+		const result = spawnSync('bash', ['-lc', probe], { encoding: 'utf8' })
+		const match = result.stdout.trim()
+		if (result.status === 0 && match) {
+			return path.dirname(match)
+		}
+	}
+
+	const llvmLibDir = spawnSync('bash', ['-lc', 'llvm-config --libdir 2>/dev/null || true'], {
+		encoding: 'utf8'
+	})
+	const dir = llvmLibDir.stdout.trim()
+	return dir || null
+}
+
+function ensureLinuxNativeBuildDeps() {
+	if (process.platform !== 'linux') return
+	const libclangDir = findLibclangDir()
+	if (libclangDir) {
+		process.env.LIBCLANG_PATH ??= libclangDir
+		return
+	}
+
+	const missing = [!hasCommand('clang') && 'clang', !hasCommand('llvm-config') && 'llvm'].filter(Boolean)
+	const extra = missing.length ? ` Missing tools: ${missing.join(', ')}.` : ''
+
+	console.error(
+		[
+			'dev:app:linux: missing libclang for Rust native dependencies (zstd-sys/rust-rocksdb via aven-db).',
+			'Install the LLVM/Clang development packages, then rerun:',
+			'  sudo apt update && sudo apt install -y libclang-dev clang llvm',
+			'If already installed, export LIBCLANG_PATH to the directory containing your libclang shared library.',
+			extra
+		].join('\n')
+	)
+	process.exit(1)
+}
+
 async function main() {
 	const cargo = spawnSync('cargo', ['--version'], { encoding: 'utf8' })
 	if (cargo.status !== 0) {
 		console.error('dev:app:linux: `cargo` not found. Install Rust from https://rustup.rs')
 		process.exit(1)
 	}
+
+	ensureLinuxNativeBuildDeps()
 
 	freeDevServerPort(1420)
 

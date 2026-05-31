@@ -3,7 +3,7 @@ mod network;
 mod jazz;
 mod jazz_auth;
 mod log_ring;
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod peer_catchup;
 mod peer_mesh_state;
 mod peers;
@@ -704,7 +704,7 @@ pub fn run() {
 
 			app.manage(jazz::runtime::spawn_groove_actor(app.handle().clone()));
 			app.manage(jazz::ui_drain::spawn_ui_table_drain(app.handle().clone()));
-			#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+			#[cfg(any(target_os = "macos", target_os = "ios"))]
 			app.manage(peer_catchup::spawn_peer_catchup_worker(app.handle().clone()));
 
 			// Start the table-change drain so peer-sync deltas reach the webview without
@@ -836,7 +836,7 @@ pub fn run() {
 			// time a peer is added/removed; mirror that into a mesh-refresh + an **adaptive** timer
 			// (fast tick right after startup, slower steady-state) so new swarm links register with
 			// Jazz sync without fixed 10s latency.
-			#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+			#[cfg(any(target_os = "macos", target_os = "ios"))]
 			{
 				use std::collections::HashSet;
 

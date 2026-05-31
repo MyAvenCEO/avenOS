@@ -31,10 +31,7 @@ pub async fn peer_transport_status() -> Result<PeerTransportStatusReply, String>
 		pairing_code_pending: None,
 		p2p_diagnostics: crate::P2pDiagnostics {
 			central_mode: false,
-			relay_fallback: false,
 			dht_bootstrap: String::new(),
-			relay_addr: None,
-			relay_pk_prefix: None,
 			joined_topic_count: 0,
 			allowlist_count: 0,
 			linked_count: 0,
@@ -42,6 +39,12 @@ pub async fn peer_transport_status() -> Result<PeerTransportStatusReply, String>
 			pairing_topic_hex: None,
 			relay_https_probe: None,
 			dht_bootstrap_closest_seen: None,
+			last_path_change_at_ms: None,
+			last_foreground_heal_at_ms: None,
+			heal_in_progress: false,
+			network_interfaces: vec![],
+			link_health: crate::LinkHealth::None,
+			prefer_relay_only: true,
 		},
 	})
 }

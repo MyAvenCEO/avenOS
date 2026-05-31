@@ -79,7 +79,7 @@ pub async fn publish_peer_mesh_snapshot(app: &tauri::AppHandle) {
 }
 
 /// Assemble UI snapshot from transport + coordinator phase and pre-fetched DB rows (no `conn` here).
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub(crate) async fn assemble_mesh_snapshot(
 	app: &tauri::AppHandle,
 	jazz: &crate::jazz::ManagedJazz,
@@ -209,7 +209,7 @@ pub(crate) async fn assemble_mesh_snapshot(
 	})
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn mesh_phase_hint_to_peer_phase(hint: tauri_plugin_p2p::MeshPhaseHint) -> PeerMeshPhase {
 	use tauri_plugin_p2p::MeshPhaseHint;
 	match hint {
@@ -221,7 +221,7 @@ fn mesh_phase_hint_to_peer_phase(hint: tauri_plugin_p2p::MeshPhaseHint) -> PeerM
 	}
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn sync_block_reason_for_usability(
 	usability: tauri_plugin_p2p::PeerUsability,
 	mux_ready: bool,
@@ -245,7 +245,7 @@ fn sync_block_reason_for_usability(
 	None
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn link_phase_connect_substate(
 	phase: Option<tauri_plugin_p2p::PeerLinkPhase>,
 ) -> Option<tauri_plugin_p2p::PeerConnectSubstate> {

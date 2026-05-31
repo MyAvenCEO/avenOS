@@ -28,9 +28,11 @@ mod pairing_transport;
 mod pairing_invite;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod network_path;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod peer_session;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod commands_macos;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use hyperswarm_groove_bridge::HyperswarmGrooveBridge;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use peer_link::{PeerLinkCoordinator, PeerLinkMeshRow, PeerLinkPhase};
@@ -43,6 +45,7 @@ pub use transport::{
 	missing_reconnect_dids, TeardownPlan, TickMode, PAIRING_DEBOUNCE_MS, MESH_DEBOUNCE_MS,
 	RELAY_STALE_SWARM_CONNECTING_MS, STALE_SWARM_CONNECTING_MS,
 };
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use pairing_transport::PairingNudgeMode;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use pairing::{PairSession, PairingState, PAIRING_TRANSPORT_GUARD_SECS};
@@ -51,6 +54,132 @@ pub use peer_session::{
 	derive_usability, mesh_phase_from_facts, MeshPhaseHint,
 	PeerSessionFacts, PeerUsability, SyncBootstrapPhase,
 };
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PeerConnectSubstate {
+	Discovering,
+	Handshaking,
+	RelayPairing,
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PeerTransportMode {
+	Lan,
+	Direct,
+	Punched,
+	Relay,
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PeerConnectUiRow {
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub connect_substate: Option<PeerConnectSubstate>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub transport_mode: Option<PeerTransportMode>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub reconnect_attempt: Option<u32>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub last_disconnect_at_ms: Option<u64>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub last_disconnect_reason: Option<String>,
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PeerLinkPhase {
+	Idle,
+	Discovering,
+	SwarmConnecting,
+	TransportUp,
+	Handshaking,
+	Live,
+	Backoff,
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum SyncBootstrapPhase {
+	#[default]
+	TransportPending,
+	ShellPending,
+	TrustPending,
+	Ready,
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PeerUsability {
+	Unavailable,
+	Connecting,
+	LiveSyncing,
+	Usable,
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MeshPhaseHint {
+	Pairing,
+	Offline,
+	Searching,
+	Syncing,
+	Ready,
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+#[derive(Debug, Clone)]
+pub struct PeerSessionFacts {
+	pub db_status: String,
+	pub hyperswarm_running: bool,
+	pub coordinator_phase: Option<PeerLinkPhase>,
+	pub mux_ready: bool,
+	pub sync_ready: bool,
+	pub catchup_ready: bool,
+	pub global_catchup_pending: bool,
+	pub bootstrap: SyncBootstrapPhase,
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+#[must_use]
+pub fn derive_usability(f: &PeerSessionFacts) -> PeerUsability {
+	if f.db_status != "active" {
+		return PeerUsability::Unavailable;
+	}
+	if !f.hyperswarm_running || !f.mux_ready {
+		return PeerUsability::Connecting;
+	}
+	if !f.sync_ready || f.global_catchup_pending || !f.catchup_ready {
+		return PeerUsability::LiveSyncing;
+	}
+	PeerUsability::Usable
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+#[must_use]
+pub fn mesh_phase_from_facts(f: &PeerSessionFacts) -> MeshPhaseHint {
+	if f.db_status == "pairing" {
+		return MeshPhaseHint::Pairing;
+	}
+	if f.db_status != "active" {
+		return MeshPhaseHint::Offline;
+	}
+	if !f.hyperswarm_running {
+		return MeshPhaseHint::Searching;
+	}
+	match derive_usability(f) {
+		PeerUsability::Unavailable | PeerUsability::Connecting => MeshPhaseHint::Searching,
+		PeerUsability::LiveSyncing => MeshPhaseHint::Syncing,
+		PeerUsability::Usable => MeshPhaseHint::Ready,
+	}
+}
 
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
 mod commands_stub;
@@ -284,6 +413,7 @@ fn hex_pk_prefix(pk: &[u8]) -> String {
 	pk.iter().take(8).fold(String::new(), |acc, b| acc + &format!("{b:02x}"))
 }
 
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub(crate) fn map_swarm_cmd_err(context: &str, e: aven_p2p::SwarmError) -> String {
 	match e {
 		aven_p2p::SwarmError::Destroyed => {
