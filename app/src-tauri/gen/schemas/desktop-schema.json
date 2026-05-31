@@ -2343,6 +2343,12 @@
           "markdownDescription": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-device-peer-did`\n- `allow-signing-peer-did`\n- `allow-signing-public-key`\n- `allow-sign`\n- `allow-verify`\n- `allow-lock`\n- `allow-host-device-label`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`\n- `allow-active-identity`\n- `allow-vault-ui-settings-get`\n- `allow-vault-ui-settings-set-locale`"
         },
         {
+          "description": "Read-only self IPC for the isolated vault webview\n#### This permission set includes:\n\n- `allow-peer-status`\n- `allow-active-identity`",
+          "type": "string",
+          "const": "self:vault-webview-self",
+          "markdownDescription": "Read-only self IPC for the isolated vault webview\n#### This permission set includes:\n\n- `allow-peer-status`\n- `allow-active-identity`"
+        },
+        {
           "description": "Enables the active_identity command without any pre-configured scope.",
           "type": "string",
           "const": "self:allow-active-identity",
@@ -2569,6 +2575,60 @@
           "type": "string",
           "const": "self:deny-verify",
           "markdownDescription": "Denies the verify command without any pre-configured scope."
+        },
+        {
+          "description": "Default permissions for tauri-plugin-vault\n#### This default permission set includes:\n\n- `allow-secrets-list`\n- `allow-secrets-set`\n- `allow-secrets-reveal`\n- `allow-secrets-delete`",
+          "type": "string",
+          "const": "vault:default",
+          "markdownDescription": "Default permissions for tauri-plugin-vault\n#### This default permission set includes:\n\n- `allow-secrets-list`\n- `allow-secrets-set`\n- `allow-secrets-reveal`\n- `allow-secrets-delete`"
+        },
+        {
+          "description": "Enables the secrets_delete command without any pre-configured scope.",
+          "type": "string",
+          "const": "vault:allow-secrets-delete",
+          "markdownDescription": "Enables the secrets_delete command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the secrets_list command without any pre-configured scope.",
+          "type": "string",
+          "const": "vault:allow-secrets-list",
+          "markdownDescription": "Enables the secrets_list command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the secrets_reveal command without any pre-configured scope.",
+          "type": "string",
+          "const": "vault:allow-secrets-reveal",
+          "markdownDescription": "Enables the secrets_reveal command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the secrets_set command without any pre-configured scope.",
+          "type": "string",
+          "const": "vault:allow-secrets-set",
+          "markdownDescription": "Enables the secrets_set command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the secrets_delete command without any pre-configured scope.",
+          "type": "string",
+          "const": "vault:deny-secrets-delete",
+          "markdownDescription": "Denies the secrets_delete command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the secrets_list command without any pre-configured scope.",
+          "type": "string",
+          "const": "vault:deny-secrets-list",
+          "markdownDescription": "Denies the secrets_list command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the secrets_reveal command without any pre-configured scope.",
+          "type": "string",
+          "const": "vault:deny-secrets-reveal",
+          "markdownDescription": "Denies the secrets_reveal command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the secrets_set command without any pre-configured scope.",
+          "type": "string",
+          "const": "vault:deny-secrets-set",
+          "markdownDescription": "Denies the secrets_set command without any pre-configured scope."
         }
       ]
     },

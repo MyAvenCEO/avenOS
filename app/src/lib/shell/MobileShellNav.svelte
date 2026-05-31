@@ -89,13 +89,13 @@
 		<MobileAsideSectionLabel align="right">{t('nav.self')}</MobileAsideSectionLabel>
 		<nav class="flex flex-col gap-1" aria-label={t('nav.self')}>
 			<MobileAsideNavLink
-				href="/self/peers"
+				href="/settings/peers"
 				active={selfActive}
 				align="right"
 				aria-current={selfActive ? 'page' : undefined}
 				onclick={(e) => {
 					closeNav()
-					navigateApp('/self/peers', e)
+					navigateApp('/settings/peers', e)
 				}}
 			>
 				{selfNavLabel}

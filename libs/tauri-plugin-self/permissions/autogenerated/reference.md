@@ -526,4 +526,17 @@ Denies the verify command without any pre-configured scope.
 
 </td>
 </tr>
+
+<tr>
+<td>
+
+`self:vault-webview-self`
+
+</td>
+<td>
+
+Read-only self IPC for the isolated vault webview
+
+</td>
+</tr>
 </table>

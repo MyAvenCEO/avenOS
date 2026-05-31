@@ -3,10 +3,7 @@
 /**
  * AvenOS centralized P2P **discovery** stack (Rust `aven-relay-dht`: HyperDHT bootstrap + co-hosted blind-relay on UDP **49737**).
  *
- * Master switch: **`AVEN_RELAY`** defaults **on** (central DHT for pairing/lookup).
- * Set **`AVEN_RELAY=false`** (or **`AVENOS_RELAY=false`**) to use public Holepunch HyperDHT instead.
- *
- * **`AVEN_RELAY_URL`** (required when central): `127.0.0.1` / `localhost` → spawn local Rust signal;
+ * **`AVEN_RELAY_URL`**: `127.0.0.1` / `localhost` → spawn local Rust signal;
  * any other host (e.g. `relay.aven.ceo`) → remote bootstrap + blind-relay from manifest (no local subprocess).
  *
  * Data plane: blind-relay only (`relay_through` on coordinator UDP 49737).
@@ -29,25 +26,6 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 export const P2P_DHT_UDP_PORT_DEFAULT = 49737
 /** Blind-relay shares the bootstrap UDP port (co-hosted on HyperDHT). */
 export const P2P_RELAY_UDP_PORT_DEFAULT = P2P_DHT_UDP_PORT_DEFAULT
-
-const TRUTHY = new Set(['1', 'true', 'yes', 'on'])
-const FALSY = new Set(['0', 'false', 'no', 'off'])
-
-export function envTruthy(
-	key: string,
-	env: Record<string, string | undefined> = process.env
-): boolean {
-	const v = env[key]?.trim().toLowerCase()
-	return v != null && v !== '' && TRUTHY.has(v)
-}
-
-export function envFalsy(
-	key: string,
-	env: Record<string, string | undefined> = process.env
-): boolean {
-	const v = env[key]?.trim().toLowerCase()
-	return v != null && v !== '' && FALSY.has(v)
-}
 
 /** Strip scheme/path/port; returns hostname (IPv6 without brackets). */
 export function normalizeAvenRelayUrlHost(raw: string): string {
@@ -112,23 +90,11 @@ export function remoteCentralBootstrap(hostname: string, dhtUdpPort: number): st
 	return centralBootstrap(hostname, dhtUdpPort)
 }
 
-/** Central discovery + pairing service (Rust DHT + co-hosted blind-relay). Default **on** unless explicitly false. */
-export function avenRelayCentralMode(
-	env: Record<string, string | undefined> = process.env
-): boolean {
-	if (env.AVENOS_SKIP_P2P_SIGNAL === '1') return false
-	for (const key of ['AVEN_RELAY', 'AVENOS_RELAY'] as const) {
-		if (envFalsy(key, env)) return false
-	}
-	return true
-}
-
 /**
- * Bun dev wrappers only (`dev-app-*`, `dev-two-instances`, `--foreground`): when central relay is on but
+ * Bun dev wrappers only (`dev-app-*`, `dev-two-instances`, `--foreground`): when
  * `AVEN_RELAY_URL` is empty, default to hosted alpha relay.
  */
 export function applyCentralRelayUrlDevDefault(launcherTag: string): void {
-	if (!avenRelayCentralMode()) return
 	if (process.env.AVEN_RELAY_URL?.trim()) return
 	process.env.AVEN_RELAY_URL = 'relay.aven.ceo'
 	console.warn(
@@ -226,36 +192,17 @@ function hyperswarmRelayEnv(relayPublicKeyHex: string, relayAddr: string): Recor
 	}
 }
 
-/** Env merged into Tauri children — public Holepunch HyperDHT (no central relay). */
-export function p2pPublicModeEnvAugment(): Record<string, string> {
-	return {
-		AVEN_RELAY: '0',
-		AVENOS_DHT_PUBLIC: '1',
-	}
-}
-
 export type P2pSignalHandles = {
 	envAugment: Record<string, string>
 	dispose(): Promise<void>
 }
 
-/**
- * When **`AVEN_RELAY=true`**: spawn isolated Rust DHT + co-hosted blind-relay (49737), or use remote manifest.
- * Otherwise return public-DHT env augment and no subprocesses.
- */
+/** Spawn isolated Rust DHT + co-hosted blind-relay (49737), or use remote manifest. */
 export async function startP2pSignal(repoRoot = REPO_ROOT): Promise<P2pSignalHandles> {
-	if (!avenRelayCentralMode()) {
-		console.log('[p2p-signal] off (AVEN_RELAY=false) — public Holepunch HyperDHT')
-		return {
-			envAugment: p2pPublicModeEnvAugment(),
-			async dispose() {}
-		}
-	}
-
 	const relayUrlRaw = process.env.AVEN_RELAY_URL?.trim()
 	if (!relayUrlRaw) {
 		throw new Error(
-			'[p2p-signal] AVEN_RELAY_URL is required when central relay is on (e.g. 127.0.0.1 for local subprocess, or relay.aven.ceo for Fly-hosted discovery)'
+			'[p2p-signal] AVEN_RELAY_URL is required (e.g. 127.0.0.1 for local subprocess, or relay.aven.ceo for Fly-hosted discovery)'
 		)
 	}
 	let relayHostNorm: string
@@ -274,7 +221,6 @@ export async function startP2pSignal(repoRoot = REPO_ROOT): Promise<P2pSignalHan
 			repoRoot: REPO_ROOT,
 		})
 		const envAugment: Record<string, string> = {
-			AVEN_RELAY: '1',
 			AVEN_RELAY_URL: relayUrlRaw,
 			AVENOS_DHT_ISOLATED: '1',
 			AVENOS_DHT_BOOTSTRAP: relayCfg.dhtBootstrap,
@@ -332,7 +278,6 @@ export async function startP2pSignal(repoRoot = REPO_ROOT): Promise<P2pSignalHan
 	)
 
 	const envAugment: Record<string, string> = {
-		AVEN_RELAY: '1',
 		AVEN_RELAY_URL: relayUrlRaw,
 		AVENOS_DHT_ISOLATED: '1',
 		AVENOS_DHT_BOOTSTRAP: bootstrap,
@@ -374,7 +319,7 @@ async function foreground(): Promise<void> {
 		JSON.stringify(
 			{
 				...envAugment,
-				note: 'AVEN_RELAY central stack: Rust DHT + co-hosted blind-relay on UDP 49737 (relay-only data plane).',
+				note: 'Central relay stack: Rust DHT + co-hosted blind-relay on UDP 49737 (relay-only data plane).',
 			},
 			null,
 			2

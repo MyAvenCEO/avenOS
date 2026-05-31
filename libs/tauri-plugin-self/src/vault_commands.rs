@@ -8,7 +8,7 @@ use tauri::{AppHandle, State};
 use crate::paths::{self, OVERRIDE_VAULT_SLUG};
 use crate::state::SelfState;
 use crate::vault::{
-	pairing_label_for_app, ActiveVault, VaultManifest, VAULT_MANIFEST_FILENAME,
+	pairing_label_for_app, ActiveVault, VaultManifest,
 };
 use crate::vault_settings;
 
@@ -34,7 +34,7 @@ fn vault_locale(vault_root: &std::path::Path) -> String {
 		.unwrap_or_else(|_| vault_settings::DEFAULT_UI_LOCALE.into())
 }
 
-fn self_dir_has_se_blob(dir: &std::path::Path) -> bool {
+fn crypto_dir_has_se_blob(dir: &std::path::Path) -> bool {
 	let Ok(rd) = fs::read_dir(dir) else {
 		return false;
 	};
@@ -48,19 +48,19 @@ fn self_dir_has_se_blob(dir: &std::path::Path) -> bool {
 	false
 }
 
-fn self_dir_has_identity(dir: &std::path::Path) -> bool {
-	if self_dir_has_se_blob(dir) {
+fn crypto_dir_has_identity(dir: &std::path::Path) -> bool {
+	if crypto_dir_has_se_blob(dir) {
 		return true;
 	}
 	#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 	{
-		return crate::dev_insecure::self_dir_has_dev_root(dir);
+		return crate::dev_insecure::crypto_dir_has_dev_root(dir);
 	}
 	#[cfg(any(target_os = "macos", target_os = "ios"))]
 	false
 }
 
-/// List vault folders under `<app-base>/vaults/`, or a synthetic entry when data-dir override is set.
+/// List identity folders under `<app-base>/identities/`, or a synthetic entry when data-dir override is set.
 #[tauri::command(rename_all = "camelCase")]
 pub async fn vault_list(app: AppHandle, _vault_state: State<'_, ActiveVault>) -> Result<Vec<VaultListEntry>, String> {
 	if paths::expand_override().is_some() {
@@ -70,16 +70,17 @@ pub async fn vault_list(app: AppHandle, _vault_state: State<'_, ActiveVault>) ->
 			username_slug: OVERRIDE_VAULT_SLUG.into(),
 			first_name: man.as_ref().map(|m| m.first_name.clone()),
 			device_label: man.as_ref().map(|m| m.device_label.clone()),
-			has_identity_blob: paths::vault_is_complete(&root) && self_dir_has_identity(&root.join("self")),
+			has_identity_blob: paths::vault_is_complete(&root)
+				&& crypto_dir_has_identity(&paths::identity_crypto_dir(&root)),
 			locale: vault_locale(&root),
 		}]);
 	}
 
-	let base = paths::vaults_dir(&app)?;
-	fs::create_dir_all(&base).map_err(|e| format!("create_dir_all vaults {}: {e}", base.display()))?;
+	let base = paths::identities_dir(&app)?;
+	fs::create_dir_all(&base).map_err(|e| format!("create_dir_all identities {}: {e}", base.display()))?;
 
 	let mut out = Vec::new();
-	let rd = fs::read_dir(&base).map_err(|e| format!("read_dir vaults {}: {e}", base.display()))?;
+	let rd = fs::read_dir(&base).map_err(|e| format!("read_dir identities {}: {e}", base.display()))?;
 
 	for ent in rd.flatten() {
 		let mt = ent.metadata().ok();
@@ -100,7 +101,7 @@ pub async fn vault_list(app: AppHandle, _vault_state: State<'_, ActiveVault>) ->
 			username_slug: name,
 			first_name: man.as_ref().map(|m| m.first_name.clone()),
 			device_label: man.as_ref().map(|m| m.device_label.clone()),
-			has_identity_blob: self_dir_has_identity(&vr.join("self")),
+			has_identity_blob: crypto_dir_has_identity(&paths::identity_crypto_dir(&vr)),
 			locale: vault_locale(&vr),
 		});
 	}
@@ -109,7 +110,7 @@ pub async fn vault_list(app: AppHandle, _vault_state: State<'_, ActiveVault>) ->
 }
 
 fn vault_root_manifest(vault_root: &std::path::Path) -> Option<VaultManifest> {
-	let p = vault_root.join(VAULT_MANIFEST_FILENAME);
+	let p = paths::manifest_path(vault_root);
 	let raw = fs::read_to_string(&p).ok()?;
 	serde_json::from_str(&raw).ok()
 }
@@ -127,7 +128,7 @@ pub async fn vault_select(
 	}
 
 	paths::validate_username_slug(&slug)?;
-	let vr = paths::vaults_dir(&app)?.join(&slug);
+	let vr = paths::identities_dir(&app)?.join(&slug);
 	if !paths::vault_is_complete(&vr) {
 		return Err(format!("vault_missing_or_incomplete: {}", vr.display()));
 	}
@@ -149,9 +150,9 @@ pub async fn vault_slug_preview(app: AppHandle, payload: VaultSlugPreviewPayload
 		return Ok(OVERRIDE_VAULT_SLUG.into());
 	}
 	let base = paths::slugify_first_name(&payload.first_name)?;
-	let vaults_base = paths::vaults_dir(&app)?;
-	fs::create_dir_all(&vaults_base).map_err(|e| format!("create_dir_all: {e}"))?;
-	allocate_username_slug(&vaults_base, &base)
+	let identities_base = paths::identities_dir(&app)?;
+	fs::create_dir_all(&identities_base).map_err(|e| format!("create_dir_all: {e}"))?;
+	allocate_username_slug(&identities_base, &base)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -172,8 +173,9 @@ pub async fn vault_create(
 
 	if paths::expand_override().is_some() {
 		let root = paths::aven_os_app_base(&app)?;
-		fs::create_dir_all(root.join("db")).map_err(|e| format!("mkdir db: {e}"))?;
-		fs::create_dir_all(root.join("self")).map_err(|e| format!("mkdir self: {e}"))?;
+		fs::create_dir_all(paths::db_dir(&root)).map_err(|e| format!("mkdir db: {e}"))?;
+		fs::create_dir_all(paths::identity_crypto_dir(&root))
+			.map_err(|e| format!("mkdir vault: {e}"))?;
 		crate::vault_settings::ensure_default_file(&root)?;
 		let now = unix_ms_i64();
 		let m = VaultManifest {
@@ -190,14 +192,15 @@ pub async fn vault_create(
 	}
 
 	let slug_base = paths::slugify_first_name(&first_name)?;
-	let vaults_base = paths::vaults_dir(&app)?;
-	fs::create_dir_all(&vaults_base).map_err(|e| format!("create_dir_all: {e}"))?;
+	let identities_base = paths::identities_dir(&app)?;
+	fs::create_dir_all(&identities_base).map_err(|e| format!("create_dir_all: {e}"))?;
 
-	let slug = allocate_username_slug(&vaults_base, &slug_base)?;
-	let vr = vaults_base.join(&slug);
+	let slug = allocate_username_slug(&identities_base, &slug_base)?;
+	let vr = identities_base.join(&slug);
 
-	fs::create_dir_all(vr.join("db")).map_err(|e| format!("mkdir vault db: {e}"))?;
-	fs::create_dir_all(vr.join("self")).map_err(|e| format!("mkdir vault self: {e}"))?;
+	fs::create_dir_all(paths::db_dir(&vr)).map_err(|e| format!("mkdir identity db: {e}"))?;
+	fs::create_dir_all(paths::identity_crypto_dir(&vr))
+		.map_err(|e| format!("mkdir identity vault: {e}"))?;
 	crate::vault_settings::ensure_default_file(&vr)?;
 
 	let now = unix_ms_i64();
@@ -270,8 +273,11 @@ fn hex_lower(bytes: &[u8; 32]) -> String {
 }
 
 fn write_manifest(dir: &std::path::Path, m: &VaultManifest) -> Result<(), String> {
-	let tmp = dir.join(format!(".{VAULT_MANIFEST_FILENAME}.tmp"));
-	let dst = dir.join(VAULT_MANIFEST_FILENAME);
+	let dst = paths::manifest_path(dir);
+	if let Some(parent) = dst.parent() {
+		fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+	}
+	let tmp = dst.with_extension("json.tmp");
 	let json =
 		serde_json::to_string_pretty(m).map_err(|e| format!("manifest json encode: {e}"))?;
 	fs::write(&tmp, json.as_bytes()).map_err(|e| format!("manifest write {}: {e}", tmp.display()))?;
@@ -286,10 +292,10 @@ fn unix_ms_i64() -> i64 {
 		.unwrap_or(0i64)
 }
 
-fn allocate_username_slug(vaults_base: &std::path::Path, base_name: &str) -> Result<String, String> {
+fn allocate_username_slug(identities_base: &std::path::Path, base_name: &str) -> Result<String, String> {
 	let mut candidate = base_name.to_string();
 	let mut n = 2u32;
-	while vaults_base.join(&candidate).exists() {
+	while identities_base.join(&candidate).exists() {
 		candidate = format!("{base_name}{n}");
 		n += 1;
 		if n > 10_000 {

@@ -4,15 +4,12 @@ title: Central P2P signal (discovery)
 
 Centralized **discovery / pairing** for AvenOS. User-facing transport modes: [Connection status](../founders/04-connection-status.md).
 
-**`AVEN_RELAY` defaults on** (alias **`AVENOS_RELAY`**). Set **`AVEN_RELAY=false`** for public Holepunch HyperDHT.
+**`AVEN_RELAY_URL`** selects **embedded local** Rust HyperDHT vs **remote** bootstrap (`relay.aven.ceo` on Fly). Dev wrappers default unset → `relay.aven.ceo`; set `127.0.0.1` for a local subprocess.
 
-When central mode is on, **`AVEN_RELAY_URL` is required** (no implicit default — set it in `.env`, launch env, or CI). It selects **embedded local** Rust HyperDHT vs **remote** bootstrap only.
-
-| `AVEN_RELAY` | `AVEN_RELAY_URL` (required if central) | Discovery | Dev scripts spawn signal? | Data plane |
-|--------------|----------------------------------------|-----------|---------------------------|------------|
-| **default / true** | `127.0.0.1`, `localhost`, or `::1` | Embedded **Rust HyperDHT + co-hosted blind-relay** (UDP **49737**) | Yes (`scripts/p2p-signal.ts`) | **Blind-relay only** (`prefer_relay_only`, `relay_through`) |
-| **default / true** | e.g. `relay.aven.ceo` | Remote bootstrap + blind-relay from manifest (both **49737**) | No subprocess | Same — manifest serves `relayPublicKeyHex` + `relayUdpPort: 49737` |
-| **`false`** | (ignored) | Public Holepunch HyperDHT roots | No | Direct P2P + public relays (non-vault builds) |
+| `AVEN_RELAY_URL` | Discovery | Dev scripts spawn signal? | Data plane |
+|------------------|-----------|---------------------------|------------|
+| `127.0.0.1`, `localhost`, or `::1` | Embedded **Rust HyperDHT + co-hosted blind-relay** (UDP **49737**) | Yes (`scripts/p2p-signal.ts`) | **Blind-relay only** (`prefer_relay_only`, `relay_through`) |
+| e.g. `relay.aven.ceo` | Remote bootstrap + blind-relay from manifest (both **49737**) | No subprocess | Same — manifest serves `relayPublicKeyHex` + `relayUdpPort: 49737` |
 
 Connectivity matches [peeroxide’s documented stack](https://rightbracket.github.io/peeroxide/concepts/dht-and-routing.html) (vendored as `libs/aven-p2p`): the DHT coordinates discovery and **in-band handshake relay** (`PEER_HANDSHAKE`). Production vault builds use a **relay-only profile**: peer data never uses LAN direct, reflexive direct, or UDP holepunch — only blind-relay after Noise IK. Fly runs **one Rust process** on UDP **49737** (HyperDHT bootstrap + `PEER_HANDSHAKE` + Hyperswarm blind-relay control/data).
 
@@ -22,7 +19,7 @@ After Noise IK completes via bootstrap relay, aven-p2p uses **blind-relay only**
 
 1. **DHT rendezvous** — per-pair topic announce/lookup (or single bootstrap candidate when `prefer_relay_only`).
 2. **Noise IK** — `PEER_HANDSHAKE` relayed through bootstrap; both sides exchange `relay_through` with a **deterministic pair token** derived from `(pair_topic, relay_pk)` (stable across heal retries).
-3. **Blind-relay pair** — dominant outbound half `pair(false, token)`; subordinate inbound half `pair(true, token)` on the co-hosted relay (UDP **49737**). Coordinator sends `unpair` on timeout or control-session drop.
+3. **Blind-relay pair** — dominant outbound half `pair(false, token)`; subordinate inbound half `pair(true, token)` on the co-hosted relay (UDP **49737**). Coordinator sends `unpair` on timeout or control-session drop. The coordinator **control-channel UDX** must target the same bootstrap relay (`host:49737`), not the client’s NAT reflexive `peer_address` from a relayed handshake reply (see `pick_relay_coordinator_udx_addr` in `hyperdht.rs`).
 4. **SecretStream + Groove mux** — end-to-end encrypted data plane; relay sees opaque UDX bytes only.
 
 **Dial authority:** higher ed25519 static key outbound-dials; subordinate waits for inbound pair. During invite, swarm stores **`active_pair_topic`** so both halves use the same blind-relay token. **One in-flight connect** per remote pk (`connect_epoch` cancels stale attempts); pairing retries bypass `waiting` deadlock.
@@ -86,7 +83,6 @@ Manifest includes `bootstrap`, `relayPublicKeyHex`, and **`relayUdpPort: 49737`*
 **.env**:
 
 ```bash
-AVEN_RELAY=true
 AVEN_RELAY_URL=127.0.0.1
 ```
 
@@ -126,19 +122,7 @@ Bootstrap HyperDHT node identity (`bootstrap-hyperdht.seed`) remains file/volume
 
 ---
 
-## Public Hyperswarm (opt out)
-
-```bash
-AVEN_RELAY=false bun run dev:app:mac
-```
-
-Or **`.env`**: `AVEN_RELAY=false`.
-
-Legacy: **`AVENOS_SKIP_P2P_SIGNAL=1`** also disables central mode.
-
----
-
-## What runs locally when `AVEN_RELAY=true` and URL is localhost
+## What runs locally when `AVEN_RELAY_URL` is localhost
 
 1. **Rust** — [`libs/aven-relay`](../../../../libs/aven-relay): UDP **49737** HyperDHT bootstrap **and** co-hosted Hyperswarm blind-relay. Stdout JSON includes `bootstrap`, `relayPublicKeyHex`, `relayUdpPort`.
 
@@ -146,9 +130,8 @@ Orchestration: [`scripts/p2p-signal.ts`](../../../../scripts/p2p-signal.ts). Ent
 
 Relay blind-relay identity: **`AVENOS_RELAY_SEED_HEX`** + **`AVENOS_RELAY_PUBLIC_KEY_HEX`** in repo **`.env`** (see above). One-time migration from legacy `relay-hyperdht.seed`: **`bun run migrate:relay-env`**.
 
-**Central env (Tauri)**:
+**Tauri env (merged by dev scripts)**:
 
-- `AVEN_RELAY=1`
 - `AVEN_RELAY_URL=<as given>`
 - `AVENOS_DHT_ISOLATED=1`
 - `AVENOS_DHT_BOOTSTRAP=…`
@@ -160,7 +143,7 @@ Relay blind-relay identity: **`AVENOS_RELAY_SEED_HEX`** + **`AVENOS_RELAY_PUBLIC
 ## Smoke test
 
 ```bash
-AVEN_RELAY=true AVEN_RELAY_URL=127.0.0.1 bun -e '
+AVEN_RELAY_URL=127.0.0.1 bun -e '
 import { startP2pSignal } from "./scripts/p2p-signal.ts"
 const h = await startP2pSignal()
 console.log(JSON.stringify(h.envAugment, null, 2))
@@ -171,7 +154,7 @@ await h.dispose()
 **Foreground**:
 
 ```bash
-AVEN_RELAY=true AVEN_RELAY_URL=127.0.0.1 bun run dev:p2p-signal
+AVEN_RELAY_URL=127.0.0.1 bun run dev:p2p-signal
 ```
 
 **Blind-relay reachability** (remote or local):

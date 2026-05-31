@@ -1,4 +1,4 @@
-//! Human-scoped vault selection — `vaults/<slug>/` under the AvenOS app base.
+//! Human-scoped identity selection — `identities/<slug>/` under the AvenOS app base.
 //!
 //! # State machine (the source of truth)
 //!
@@ -29,7 +29,7 @@ use tauri::{AppHandle, Runtime};
 
 use crate::paths;
 
-/// Pinned identity binding `<vaults/slug>` ↔ Ed25519 account public key (ppK).
+/// Pinned identity binding `<identities/slug>` ↔ Ed25519 account public key (ppK).
 /// Created only inside [`ActiveVault::pin_unlocked`], called from `unlock` after
 /// the root secret has been derived from biometry.
 #[derive(Clone)]
@@ -136,7 +136,7 @@ impl ActiveVault {
 }
 
 /// On-disk profile for onboarding copy (readable before Jazz/Groove).
-pub const VAULT_MANIFEST_FILENAME: &str = "vault_manifest.json";
+pub const VAULT_MANIFEST_FILENAME: &str = crate::paths::MANIFEST_FILENAME;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -158,7 +158,7 @@ impl VaultManifest {
 }
 
 pub fn pairing_label_from_manifest_path(vault_root: &std::path::Path) -> Option<String> {
-	let p = vault_root.join(VAULT_MANIFEST_FILENAME);
+	let p = crate::paths::manifest_path(vault_root);
 	let raw = std::fs::read_to_string(&p).ok()?;
 	let m: VaultManifest = serde_json::from_str(&raw).ok()?;
 	let s = m.pairing_display();

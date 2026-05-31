@@ -14,6 +14,9 @@ export default defineConfig(({ mode }) => {
 	}
 
 	const host = process.env.TAURI_DEV_HOST
+	// dev:app2x runs two Vite servers — separate cache dirs avoid .vite-temp races on restart.
+	const devInstance = (process.env.AVENOS_DEV_INSTANCE ?? 'A').toLowerCase()
+	const cacheDir = path.join(repoRoot, 'node_modules', `.vite-dev-${devInstance}`)
 
 	const crossOriginIsolationHeaders = {
 		'Cross-Origin-Opener-Policy': 'same-origin',
@@ -22,8 +25,10 @@ export default defineConfig(({ mode }) => {
 	}
 
 	return {
-		envDir: repoRoot,
+		// App-local env only — repo-root `.env` is Tauri/P2P; loadEnv below still merges it at startup.
+		envDir: __dirname,
 		envPrefix: ['VITE_', 'PUBLIC_', 'TAURI_ENV_'],
+		cacheDir,
 		clearScreen: false,
 		plugins: [tailwindcss(), sveltekit()],
 		preview: {
@@ -39,6 +44,9 @@ export default defineConfig(({ mode }) => {
 					'**/src-tauri/**',
 					'**/build/**',
 					'**/.svelte-kit/**',
+					// Relay/Tauri secrets — changing ../.env must not restart Vite (race on shared .vite-temp).
+					path.join(repoRoot, '.env'),
+					path.join(repoRoot, '.env.*'),
 				],
 			},
 			headers: crossOriginIsolationHeaders,

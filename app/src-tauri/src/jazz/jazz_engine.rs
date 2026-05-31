@@ -14,7 +14,8 @@ use groove::{
 	Value,
 };
 use serde_json::{json, Map, Value as JsonValue};
-use tauri_plugin_self::vault::{VaultManifest, VAULT_MANIFEST_FILENAME};
+use tauri_plugin_self::paths;
+use tauri_plugin_self::vault::VaultManifest;
 use uuid::Uuid;
 
 use crate::{
@@ -569,7 +570,7 @@ pub(super) async fn hydrate_shell(
 		.ok_or("sparks_ver_col")?;
 
 	let manifest_opt: Option<VaultManifest> = std::fs::read_to_string(
-		vault_files.join(VAULT_MANIFEST_FILENAME),
+		paths::manifest_path(vault_files),
 	)
 	.ok()
 	.and_then(|raw| serde_json::from_str(&raw).ok());

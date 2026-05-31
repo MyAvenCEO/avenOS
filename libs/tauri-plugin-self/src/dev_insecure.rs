@@ -72,7 +72,7 @@ fn warn_op(op: &str, path: &Path) {
 }
 
 fn slot_dir<R: Runtime>(app: &AppHandle<R>, vault: &ActiveVault) -> Result<PathBuf, String> {
-	let dir = paths::aven_os_user_root(app, vault)?.join("self");
+	let dir = paths::identity_crypto_dir(&paths::aven_os_user_root(app, vault)?);
 	fs::create_dir_all(&dir).map_err(|e| format!("create_dir_all({}): {e}", dir.display()))?;
 	Ok(dir)
 }
@@ -94,7 +94,7 @@ pub fn write_secure(path: &Path, data: &[u8]) -> Result<(), String> {
 	Ok(())
 }
 
-pub fn self_dir_has_dev_root(dir: &Path) -> bool {
+pub fn crypto_dir_has_dev_root(dir: &Path) -> bool {
 	let Ok(rd) = fs::read_dir(dir) else {
 		return false;
 	};
@@ -161,6 +161,7 @@ pub async fn unlock<R: Runtime>(
 	vault: State<'_, ActiveVault>,
 	slot: String,
 	state: State<'_, SelfState>,
+	stronghold: State<'_, crate::stronghold_vault::StrongholdSession>,
 ) -> Result<(), String> {
 	if !enabled() {
 		return Err("tauri-plugin-self: macOS only in v1".into());
@@ -176,7 +177,7 @@ pub async fn unlock<R: Runtime>(
 		.as_slice()
 		.try_into()
 		.map_err(|_| format!("dev root secret: expected 32 bytes, got {}", bytes.len()))?;
-	unlock::unlock_with_root_secret(&app, &vault, &state, root)
+	unlock::unlock_with_root_secret(&app, &vault, &state, &stronghold, root)
 }
 
 pub async fn peer_status<R: Runtime>(
@@ -187,7 +188,7 @@ pub async fn peer_status<R: Runtime>(
 ) -> Result<PeerStatus, String> {
 	let _ = slot;
 	let registered = match paths::aven_os_user_root(&app, &*vault) {
-		Ok(root) => self_dir_has_dev_root(&root.join("self")),
+		Ok(root) => crypto_dir_has_dev_root(&paths::identity_crypto_dir(&root)),
 		Err(_) => false,
 	};
 	Ok(PeerStatus {

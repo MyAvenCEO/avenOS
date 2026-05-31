@@ -7,6 +7,7 @@
 		"core:default",
 		"core:window:default",
 		"core:webview:default",
+		"core:webview:allow-create-webview-window",
 		"core:event:default",
 		"self:default",
 		"clipboard-manager:allow-write-text"

@@ -1,3 +1,6 @@
+[profile.dev.package.scrypt]
+opt-level = 3
+
 [package]
 name = "aven-os-app"
 version = "0.0.1"
@@ -26,6 +29,7 @@ serde_json = "1"
 sha2 = "0.10"
 tauri-plugin-p2p = { path = "../../libs/tauri-plugin-p2p" }
 tauri-plugin-self = { path = "../../libs/tauri-plugin-self" }
+tauri-plugin-vault = { path = "../../libs/tauri-plugin-vault" }
 tauri-plugin-clipboard-manager = "2"
 base64 = "0.22"
 hex = "0.4"

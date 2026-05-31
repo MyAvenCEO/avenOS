@@ -303,7 +303,7 @@ async function main() {
 	console.log(`\nDNS:  A  relay.aven.ceo  →  <IPv4 from fly ips list>
 Optional:  fly certs add ${DOMAIN} -a ${APP}
 Verify:     curl -s https://${DOMAIN}/.well-known/aven-relay.json
-Dev .env:   AVEN_RELAY=true  AVEN_RELAY_URL=${DOMAIN}\n`)
+Dev .env:   AVEN_RELAY_URL=${DOMAIN}\n`)
 
 	try {
 		execFileSync(flyExe(), ['certs', 'add', DOMAIN, '-a', APP], {

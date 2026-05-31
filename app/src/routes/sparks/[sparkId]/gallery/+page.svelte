@@ -6,7 +6,7 @@
 	import type { JazzRow } from '$lib/jazz/api'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-	import { deviceSession } from '$lib/self/device-session-store'
+	import { deviceSession } from '$lib/settings/device-session-store'
 	import GalleryPdfThumb from '$lib/gallery/GalleryPdfThumb.svelte'
 	import {
 		coerceByteCount,

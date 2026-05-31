@@ -6,14 +6,14 @@ title: Two-instance harness
 
 User pairing guide: [Pair a device](../founders/02-pairing-a-device.md). Troubleshooting: [Troubleshooting](../founders/06-troubleshooting.md).
 
-Use [`scripts/dev-two-instances.ts`](../../../../scripts/dev-two-instances.ts) (**`bun run dev:app2x:mac`** or **`dev:app2x:linux`**). **Central discovery is on by default** (`AVEN_RELAY`); with central mode **`AVEN_RELAY_URL` is required** (e.g. **`127.0.0.1`** for embedded local signal, or **`relay.aven.ceo`** against Fly — see that doc). Set **`AVEN_RELAY=false`** for public Holepunch HyperDHT. Data sync stays **direct P2P** — see [Central P2P signal](05-p2p-signal.md).
+Use [`scripts/dev-two-instances.ts`](../../../../scripts/dev-two-instances.ts) (**`bun run dev:app2x:mac`** or **`dev:app2x:linux`**). **`AVEN_RELAY_URL`** selects embedded local signal (`127.0.0.1`) or hosted bootstrap (`relay.aven.ceo` — see [Central P2P signal](05-p2p-signal.md)). Dev wrappers default unset → `relay.aven.ceo`.
 
 The harness launches:
 
 - **`[A]`** — dev server `http://127.0.0.1:1420`
 - **`[B]`** — dev server `http://127.0.0.1:1421` (second Tauri bundle id)
 
-Both processes use the layout under **`~/Documents/.avenOS/ceo.aven/testnet/abagana/vaults/<slug>/{db,self}`**. Do **not** rely on separate `AVENOS_DATA_DIR_OVERRIDE` trees for this harness: spawn two windows, then on **each** lock screen **pick or create a persona**.
+Both processes use the layout under **`~/Documents/.avenOS/ceo.aven/testnet/abagana/identities/<slug>/{db,vault}`**. Do **not** rely on separate `AVENOS_DATA_DIR_OVERRIDE` trees for this harness: spawn two windows, then on **each** lock screen **pick or create a persona**.
 
 ### Same slug in both windows breaks local-first UX
 

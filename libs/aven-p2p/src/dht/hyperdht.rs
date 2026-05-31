@@ -106,6 +106,46 @@ pub(crate) fn pick_direct_connect_address4(
         .unwrap_or_else(|| reflexive_fallback.clone())
 }
 
+/// Default co-hosted HyperDHT + blind-relay UDP port (see `AVENOS_P2P_SIGNAL_PORT`).
+const RELAY_SIGNAL_PORT: u16 = 49737;
+
+/// Prefer a routable relay hint, favouring the co-hosted signal port when present.
+fn pick_public_relay_hint(hints: &[Ipv4Peer]) -> Option<Ipv4Peer> {
+    hints
+        .iter()
+        .find(|a| a.port == RELAY_SIGNAL_PORT && !is_addr_private(&a.host))
+        .or_else(|| hints.iter().find(|a| !is_addr_private(&a.host)))
+        .cloned()
+}
+
+/// Pick UDX endpoint for blind-relay coordinator control channel (post `PEER_HANDSHAKE`).
+///
+/// Relayed coordinator handshakes often return `peer_address` = the client's NAT reflexive
+/// source — not the co-hosted relay on [`RELAY_SIGNAL_PORT`]. Prefer the bootstrap used for
+/// the handshake, then configured / advertised relay hints, then [`pick_direct_connect_address4`].
+pub fn pick_relay_coordinator_udx_addr(
+    handshake_relay: &Ipv4Peer,
+    local_addrs4: &[Ipv4Peer],
+    remote: &NoisePayload,
+    configured_hints: Option<&[Ipv4Peer]>,
+    reflexive_fallback: &Ipv4Peer,
+) -> Ipv4Peer {
+    if !is_addr_private(&handshake_relay.host)
+        && !crate::util::is_unroutable_relay_host(&handshake_relay.host)
+    {
+        return handshake_relay.clone();
+    }
+    if let Some(addr) = configured_hints.and_then(pick_public_relay_hint) {
+        return addr;
+    }
+    if let Some(ra) = remote.relay_addresses.as_ref() {
+        if let Some(addr) = pick_public_relay_hint(ra) {
+            return addr;
+        }
+    }
+    pick_direct_connect_address4(local_addrs4, remote, reflexive_fallback)
+}
+
 #[cfg(test)]
 fn relayed_same_subnet_or_carrier_host(
     local_addrs4: &[Ipv4Peer],
@@ -1571,12 +1611,32 @@ impl HyperDhtHandle {
 
         // Relay coordinator control channel: post-handshake UDX to the relay host.
         debug_assert!(relay_control_channel);
-        let connect_addr = pick_direct_connect_address4(
+        let configured_hints = noise_relay_addresses(
+            self.connect_relay.relay_address,
+            &self.connect_relay.relay_address_hints,
+        );
+        let connect_addr = pick_relay_coordinator_udx_addr(
+            relay,
             &listen_endpoints,
             &remote_payload,
+            configured_hints.as_deref(),
             &hs_result.server_address,
         );
-        tracing::debug!(
+        if hs_result.relayed
+            && (connect_addr.host != hs_result.server_address.host
+                || connect_addr.port != hs_result.server_address.port)
+        {
+            tracing::info!(
+                relayed_peer_address = %format!(
+                    "{}:{}",
+                    hs_result.server_address.host,
+                    hs_result.server_address.port
+                ),
+                udx_target = %format!("{}:{}", connect_addr.host, connect_addr.port),
+                "relay coordinator UDX: using bootstrap relay instead of relayed handshake peer_address",
+            );
+        }
+        tracing::info!(
             direct = %format!("{}:{}", connect_addr.host, connect_addr.port),
             "connect path: relay host post-handshake UDX"
         );
@@ -2825,6 +2885,40 @@ mod tests {
         let picked = pick_direct_connect_address4(&local, &remote, &reflex);
         assert_eq!(picked.host, "176.2.194.124");
         assert_eq!(picked.port, 56531);
+    }
+
+    #[test]
+    fn pick_relay_coordinator_ignores_relayed_client_reflexive() {
+        let handshake_relay = Ipv4Peer {
+            host: "137.66.21.59".into(),
+            port: RELAY_SIGNAL_PORT,
+        };
+        let client_reflexive = Ipv4Peer {
+            host: "176.2.213.40".into(),
+            port: 50638,
+        };
+        let remote = NoisePayload {
+            version: 1,
+            error: 0,
+            firewall: FIREWALL_UNKNOWN,
+            holepunch: None,
+            addresses4: vec![],
+            addresses6: vec![],
+            udx: None,
+            secret_stream: None,
+            relay_through: None,
+            relay_addresses: None,
+        };
+        let picked = pick_relay_coordinator_udx_addr(
+            &handshake_relay,
+            &[],
+            &remote,
+            None,
+            &client_reflexive,
+        );
+        assert_eq!(picked.host, "137.66.21.59");
+        assert_eq!(picked.port, RELAY_SIGNAL_PORT);
+        assert_ne!(picked.host, client_reflexive.host);
     }
 
     #[test]

@@ -2,7 +2,7 @@
 
 **Permanent AvenOS fork** at `libs/aven-db` (Cargo **`0.0.1`**, AvenOS-owned). Provenance: jazz2 **`crates/jazz-tools`** @ `232a9933c973f5b80ca9115e049706d9acd8fb77` (npm `jazz-tools` **2.0.0-alpha.50**). We do **not** re-vendor from upstream — evolve this tree in place.
 
-Storage: **RocksDB only** (`data_dir/jazz.rocksdb`).
+Storage: **RocksDB only** (`data_dir/storage.rocksdb`, legacy `jazz.rocksdb` migrated on open).
 
 ## AvenOS runtime (`client-p2p` feature)
 

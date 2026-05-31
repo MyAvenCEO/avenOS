@@ -1,6 +1,6 @@
 import { browser } from '$app/environment'
 import { derived, get } from 'svelte/store'
-import { deviceSession } from '$lib/self/device-session-store'
+import { deviceSession } from '$lib/settings/device-session-store'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import type { PeerRowReply } from '$lib/peer/api'
 import type { PeerMeshPeerState } from '$lib/peer/mesh-state'

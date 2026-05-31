@@ -23,7 +23,9 @@ pub struct PeerStatus {
 }
 
 fn slot_dir<R: Runtime>(app: &AppHandle<R>, vault: &ActiveVault) -> Result<PathBuf, String> {
-	let dir = crate::paths::aven_os_user_root(app, vault)?.join("self");
+	let dir = crate::paths::identity_crypto_dir(
+		&crate::paths::aven_os_user_root(app, vault)?,
+	);
 	fs::create_dir_all(&dir).map_err(|e| format!("create_dir_all({}): {e}", dir.display()))?;
 	Ok(dir)
 }
@@ -116,6 +118,7 @@ pub async fn unlock(
 	vault: State<'_, ActiveVault>,
 	slot: String,
 	state: State<'_, SelfState>,
+	stronghold: State<'_, crate::stronghold_vault::StrongholdSession>,
 ) -> Result<(), String> {
 	let blob_p = blob_path(&app, &*vault, &slot)?;
 	if !blob_p.exists() {
@@ -135,7 +138,7 @@ pub async fn unlock(
 		.as_slice()
 		.try_into()
 		.map_err(|_| format!("se_ecdh_hkdf produced {} bytes, expected 32", secret.len()))?;
-	crate::unlock::unlock_with_root_secret(&app, &vault, &state, bytes)
+	crate::unlock::unlock_with_root_secret(&app, &vault, &state, &stronghold, bytes)
 }
 
 #[tauri::command]
@@ -148,9 +151,9 @@ pub async fn peer_status(
 	// Before pick/create onboarding, no vault is selected — report status without error.
 	let registered = match crate::paths::aven_os_user_root(&app, &*vault) {
 		Ok(root) => {
-			let self_dir = root.join("self");
-			let pub_p = self_dir.join(format!("peer-id-{slot}.pub"));
-			let blob_p = self_dir.join(format!("peer-id-{slot}.se-blob"));
+			let crypto_dir = crate::paths::identity_crypto_dir(&root);
+			let pub_p = crypto_dir.join(format!("peer-id-{slot}.pub"));
+			let blob_p = crypto_dir.join(format!("peer-id-{slot}.se-blob"));
 			pub_p.exists() && blob_p.exists()
 		}
 		Err(_) => false,

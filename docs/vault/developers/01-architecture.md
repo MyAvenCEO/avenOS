@@ -70,7 +70,7 @@ Main shell links **Open Vault** → create/focus `WebviewWindow` labeled `vault`
 | Stronghold open/save | `libs/tauri-plugin-self/src/stronghold_vault.rs` |
 | Secrets IPC | `libs/tauri-plugin-vault/src/` |
 | Vault webview routes | `app/src/routes/vault/` |
-| Vault nav | `app/src/lib/shell/vault-nav.ts` |
+| Vault nav | `app/src/lib/vault/vault-nav.ts` |
 | Capabilities | `app/src-tauri/capabilities/vault-webview.json` |
 | Open vault window helper | `app/src/lib/vault/open-vault-window.ts` |
 

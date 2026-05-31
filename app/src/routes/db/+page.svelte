@@ -15,7 +15,7 @@
 	import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
 	import { withTimeoutMs } from '$lib/async-timeout'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-	import { deviceSession } from '$lib/self/device-session-store'
+	import { deviceSession } from '$lib/settings/device-session-store'
 
 	let session = $state<JazzSessionReply | undefined>()
 	let tables = $state<string[]>([])

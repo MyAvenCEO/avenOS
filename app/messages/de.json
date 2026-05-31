@@ -121,7 +121,24 @@
     "share": "Teilen",
     "advanced": "Erweitert",
     "network": "Netzwerk",
-    "db": "DB"
+    "db": "DB",
+    "openVault": "Tresor öffnen"
+  },
+  "vaultNav": {
+    "title": "Tresor",
+    "category": "Geheimnisse",
+    "secrets": "Geheimnisse",
+    "subtitle": "Stronghold-gesicherte Geheimnisse für diese Identität.",
+    "lockedHint": "Entsperre deine Identität im Hauptfenster, um Geheimnisse zu verwalten."
+  },
+  "vaultSecrets": {
+    "description": "Werte werden in strong.hold auf der Festplatte gespeichert. „Anzeigen“ kopiert einen Wert nur in dieses Fenster.",
+    "addTitle": "Geheimnis hinzufügen",
+    "idLabel": "ID",
+    "valueLabel": "Wert",
+    "listTitle": "Gespeicherte Geheimnisse",
+    "empty": "Noch keine Geheimnisse.",
+    "reveal": "Anzeigen"
   },
   "preferences": {
     "title": "Sprache",
@@ -427,7 +444,7 @@
     },
     "self": {
       "title": "Lokale Datenbank",
-      "subtitle": "AvenOS speichert dauerhafte Daten unter .avenOS/ceo.aven/testnet/abagana/ in deinem Documents-Ordner (z. B. ~/Documents/.avenOS unter macOS). Groove/SurrealKV liegt in vaults/<slug>/db/; Geräte-Identität in vaults/<slug>/self/.",
+      "subtitle": "AvenOS speichert dauerhafte Daten unter .avenOS/ceo.aven/testnet/abagana/ in deinem Documents-Ordner (z. B. ~/Documents/.avenOS unter macOS). Groove liegt in identities/<slug>/db/storage.rocksdb; Geräte-Identität in identities/<slug>/vault/.",
       "needsDesktop": "Open the AvenOS desktop app to manage local storage paths.",
       "paths": "Pfade",
       "appRoot": "App root",
@@ -435,7 +452,7 @@
       "database": "Database",
       "selfIdentity": "Self identity",
       "grooveStore": "Groove store",
-      "clearDescription": "Clearing removes the Groove/SurrealKV database for the active vault (todos, sparks, peers, etc.). Your hardware identity under self/ is unchanged. After clearing, unlock again and open Todos or DB so the store is recreated.",
+      "clearDescription": "Löschen entfernt die Groove-Datenbank für die aktive Identität (Todos, Sparks, Peers usw.). Die Hardware-Identität unter vault/ bleibt unverändert. Danach erneut entsperren und Todos oder DB öffnen, damit der Store neu angelegt wird.",
       "clearSuccess": "Local database cleared. Re-open Todos or trigger bootstrap to create a fresh store.",
       "confirmClearQuestion": "Delete everything under the database folder?",
       "clearResetButton": "Jazz-Datenbank löschen/zurücksetzen…",
@@ -466,7 +483,7 @@
     "dbJazzSessionStalled": "DB: Jazz session",
     "dbGrooveSessionStalled": "DB: Groove session",
     "dbJazzStatusStalled": "DB: Jazz status",
-    "useSelfContextMissing": "useSelfContext: provider missing — wrap pages in /self/+layout.svelte",
+    "useSelfContextMissing": "useSelfContext: provider missing — wrap pages in /settings/+layout.svelte",
     "titleCannotBeEmpty": "Title cannot be empty",
     "firstNameRequired": "First name is required",
     "deviceLabelRequired": "Device label is required"

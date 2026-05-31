@@ -4,10 +4,14 @@
 	import { navigateApp } from '$lib/shell'
 	import { firstFounderSlug as networkFirstSlug } from '$lib/docs/network-collection'
 	import { firstFounderSlug as sparksFirstSlug } from '$lib/docs/sparks-collection'
+	import { firstActorDocSlug } from '$lib/docs/actors-collection'
 
 	const selfHref = firstFounderSlug ? `/docs/self/founders/${firstFounderSlug}` : '/docs'
 	const networkHref = networkFirstSlug ? `/docs/network/founders/${networkFirstSlug}` : '/docs'
 	const sparksHref = sparksFirstSlug ? `/docs/sparks/founders/${sparksFirstSlug}` : '/docs'
+	const actorsHref = firstActorDocSlug
+		? `/docs/actors/developers/${firstActorDocSlug}`
+		: '/docs'
 	const contentHref = contentIntroHref
 </script>
 
@@ -192,6 +196,51 @@
 						<p class="mt-0.5 text-xs leading-snug text-muted-foreground">
 							The World We Deserve bible — identity sheet, production, PAST storytelling,
 							characters, and the episode test.
+						</p>
+					</div>
+					<span
+						class="mt-auto flex items-center gap-1 text-[10px] font-bold tracking-widest text-muted-foreground uppercase opacity-50 transition-opacity group-hover:opacity-100"
+					>
+						Open
+						<svg
+							class="size-3"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							aria-hidden="true"
+						>
+							<path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+						</svg>
+					</span>
+				</a>
+				<a
+					href={actorsHref}
+					data-sveltekit-preload-data="hover"
+					class="tech-card group flex flex-col gap-3 p-5 no-underline transition-all hover:bg-white/20"
+				>
+					<div
+						class="flex size-9 items-center justify-center rounded-xl border border-border/60 bg-white/20 text-foreground/60 transition-colors group-hover:border-[color:var(--color-tuscan-sun)]/50 group-hover:text-foreground"
+					>
+						<svg
+							class="size-4"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.75"
+							aria-hidden="true"
+						>
+							<circle cx="12" cy="5" r="2" />
+							<circle cx="5" cy="19" r="2" />
+							<circle cx="19" cy="19" r="2" />
+							<path d="M12 7v5M8.5 17.5L11 12M15.5 17.5L13 12" stroke-linecap="round" />
+						</svg>
+					</div>
+					<div>
+						<p class="text-sm font-semibold tracking-tight text-foreground">Actors</p>
+						<p class="mt-0.5 text-xs leading-snug text-muted-foreground">
+							TypeScript actor runtime — intents, tools, artifacts, schema, LLM gateway, and shell
+							boundaries.
 						</p>
 					</div>
 					<span

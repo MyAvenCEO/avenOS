@@ -8,13 +8,13 @@
 	import { jazzShell } from '$lib/runtime/jazz-shell'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import SparkMessageAttachments from '$lib/sparks/SparkMessageAttachments.svelte'
-	import { pairingLabelForSession } from '$lib/self/active-vault-ui'
+	import { pairingLabelForSession } from '$lib/settings/active-vault-ui'
 	import { peerDisplayLabel } from '$lib/peer/display-label'
 	import { peerRows } from '$lib/peer/peer-mesh-store'
 	import type { PeerRowReply } from '$lib/peer/api'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-	import { deviceSession } from '$lib/self/device-session-store'
-	import { vaultList } from '$lib/self/vault'
+	import { deviceSession } from '$lib/settings/device-session-store'
+	import { vaultList } from '$lib/settings/vault'
 	import {
 		mobileActionVeilClass,
 		mobileComposerVeilZClass,

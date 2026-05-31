@@ -175,7 +175,15 @@ async fn open_persistent_storage(data_dir: &std::path::Path) -> Result<DynStorag
     const RETRY_DELAY_MS: u64 = 25;
 
     std::fs::create_dir_all(data_dir)?;
-    let db_path = data_dir.join("jazz.rocksdb");
+    let db_path = data_dir.join("storage.rocksdb");
+    let legacy_path = data_dir.join("jazz.rocksdb");
+    if !db_path.exists() && legacy_path.is_file() {
+        std::fs::rename(&legacy_path, &db_path).map_err(|e| {
+            JazzError::Storage(format!(
+                "migrate jazz.rocksdb→storage.rocksdb: {e}"
+            ))
+        })?;
+    }
     let mut opened = None;
     let mut last_err = None;
 

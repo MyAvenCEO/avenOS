@@ -645,14 +645,24 @@ fn reconcile_jazz_identity_cache_dir(
 	let mut reason: Option<String> = None;
 
 	let client_path = jazz_dir.join("client_id");
-	let rocksdb_path = jazz_dir.join("jazz.rocksdb");
+	let rocksdb_path = jazz_dir.join("storage.rocksdb");
+	let legacy_rocksdb_path = jazz_dir.join("jazz.rocksdb");
 	let legacy_surrealkv_path = jazz_dir.join("groove.surrealkv");
+	if legacy_rocksdb_path.is_file() && !rocksdb_path.exists() {
+		if let Err(e) = fs::rename(&legacy_rocksdb_path, &rocksdb_path) {
+			log::warn!(
+				target: "avenos::jazz",
+				"migrate jazz.rocksdb→storage.rocksdb: {e}",
+			);
+		}
+	}
 	let has_prior_groove_data = client_path.exists()
 		|| rocksdb_path.exists()
+		|| legacy_rocksdb_path.exists()
 		|| legacy_surrealkv_path.exists();
 	if legacy_surrealkv_path.exists() && !rocksdb_path.exists() {
 		reason = Some(
-			"storage backend migration: SurrealKV (groove.surrealkv) → RocksDB (jazz.rocksdb); wiping local vault".into(),
+			"storage backend migration: SurrealKV (groove.surrealkv) → RocksDB (storage.rocksdb); wiping local vault".into(),
 		);
 	}
 	match fs::read_to_string(&client_path) {
@@ -2992,13 +3002,13 @@ pub async fn self_storage_paths(app: tauri::AppHandle) -> Result<SelfStoragePath
 	let app_base_str = app_base.to_string_lossy().into_owned();
 	match vault_user_root(&app) {
 		Ok(root) => {
-			let db_dir = root.join(AVEN_OS_GROOVE_DATA_DIR);
-			let self_identity_dir = root.join("self");
+			let db_dir = tauri_plugin_self::paths::db_dir(&root);
+			let crypto_dir = tauri_plugin_self::paths::identity_crypto_dir(&root);
 			Ok(SelfStoragePathsReply {
 				root: root.to_string_lossy().into_owned(),
 				app_base: app_base_str,
 				db_dir: db_dir.to_string_lossy().into_owned(),
-				self_identity_dir: self_identity_dir.to_string_lossy().into_owned(),
+				self_identity_dir: crypto_dir.to_string_lossy().into_owned(),
 			})
 		}
 		Err(_) => Ok(SelfStoragePathsReply {

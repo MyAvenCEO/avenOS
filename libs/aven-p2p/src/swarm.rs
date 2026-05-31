@@ -1372,7 +1372,7 @@ impl SwarmActor {
                     .await
                 {
                     Ok(conn) => {
-                        tracing::debug!(pk = %short_hex(&pk), "peer connected");
+                        tracing::info!(pk = %short_hex(&pk), "peer connected");
                         let _ = result_tx.send(ConnectAttemptResult {
                             public_key: pk,
                             epoch,

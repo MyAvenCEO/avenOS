@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
 	import { t } from '$lib/i18n'
-	import { deviceSession } from '$lib/self/device-session-store'
+	import { deviceSession } from '$lib/settings/device-session-store'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import PeerMeshPhaseBadge from '$lib/peer/PeerMeshPhaseBadge.svelte'
 	import { peerPersonName } from '$lib/peer/display-label'

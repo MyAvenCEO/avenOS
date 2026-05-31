@@ -386,68 +386,23 @@ fn spawn_swarm_lifecycle_watchdog(
 
 /// Optional Hyperswarm tuning from the process environment (lab / self-hosted relays).
 ///
-/// **Master switch — `AVEN_RELAY`** (alias **`AVENOS_RELAY`**): defaults **on** (central discovery).
-/// Set **`AVEN_RELAY=false`** for public Holepunch HyperDHT roots.
-///
-/// When **`AVEN_RELAY` is central**, **`AVEN_RELAY_URL` is required** (e.g. `127.0.0.1` for embedded
+/// AvenOS always uses **central discovery** via **`AVEN_RELAY_URL`** (e.g. `127.0.0.1` for embedded
 /// dev stacks, `relay.aven.ceo` for hosted Fly bootstrap). With **`AVENOS_DHT_BOOTSTRAP`** unset or
 /// blank, bootstrap is derived from **`AVEN_RELAY_URL`**: **`127.0.0.1@{host}:{dht_port}`** for local
 /// embedded signal, or **`{host}:{dht_port}`** for remote hosts (DNS-resolved — not loopback).
 ///
-/// - `AVENOS_DHT_ISOLATED=1`: empty bootstrap table unless `AVENOS_DHT_BOOTSTRAP` fills it (set by central mode).
-/// - `AVENOS_DHT_PUBLIC=1`: public Holepunch roots (non-central mode).
+/// - `AVENOS_DHT_ISOLATED=1`: empty bootstrap table unless `AVENOS_DHT_BOOTSTRAP` fills it (set by dev scripts).
 /// - `AVENOS_DHT_BOOTSTRAP`: comma-separated bootstrap strings (`ip@host:port` HyperDHT form).
 /// - Connectivity: HyperDHT in-band handshake relay + blind-relay pair on coordinator
 ///   (`relay_through`) — the sole peer data plane. Set via
 ///   `AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX` + `AVENOS_HYPERSWARM_RELAY_ADDR` (runtime or compile-time embed).
 /// - `AVENOS_HYPERSWARM_MAX_PARALLEL` / `AVENOS_HYPERSWARM_MAX_PEERS`: positive integers.
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-fn env_truthy_os(key: &str) -> bool {
-	std::env::var(key)
-		.map(|v| {
-			matches!(
-				v.trim(),
-				"1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON"
-			)
-		})
-		.unwrap_or(false)
-}
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-fn env_falsy_os(key: &str) -> bool {
-	std::env::var(key)
-		.map(|v| {
-			matches!(
-				v.trim(),
-				"0" | "false" | "FALSE" | "no" | "NO" | "off" | "OFF"
-			)
-		})
-		.unwrap_or(false)
-}
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-fn aven_relay_central_mode() -> bool {
-	if env_truthy_os("AVENOS_SKIP_P2P_SIGNAL") {
-		return false;
-	}
-	if env_falsy_os("AVEN_RELAY") || env_falsy_os("AVENOS_RELAY") {
-		return false;
-	}
-	true
-}
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn base_swarm_config_from_env() -> aven_p2p::SwarmConfig {
-	if aven_relay_central_mode() {
-		log::info!(
-			target: "avenos::peeroxide",
-			"AVEN_RELAY central discovery — HyperDHT bootstrap (in-band handshake relay / holepunch)"
-		);
-		return aven_p2p::SwarmConfig::default();
-	}
-	if env_truthy_os("AVENOS_DHT_PUBLIC") || !env_truthy_os("AVENOS_DHT_ISOLATED") {
-		return aven_p2p::SwarmConfig::with_public_bootstrap();
-	}
+	log::info!(
+		target: "avenos::peeroxide",
+		"central relay discovery — HyperDHT bootstrap (in-band handshake relay / holepunch)"
+	);
 	aven_p2p::SwarmConfig::default()
 }
 
@@ -728,13 +683,7 @@ fn apply_hyperswarm_blind_relay(cfg: &mut aven_p2p::SwarmConfig) -> Result<(), S
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 async fn apply_avensos_swarm_env(cfg: &mut aven_p2p::SwarmConfig) -> Result<(), String> {
-	let central = aven_relay_central_mode();
-	let isolated = central
-		|| (env_truthy_os("AVENOS_DHT_ISOLATED") && !env_truthy_os("AVENOS_DHT_PUBLIC"));
-
-	if central {
-		resolve_aven_relay_url()?;
-	}
+	resolve_aven_relay_url()?;
 
 	let mut env_bootstrap_entries: Vec<String> = match std::env::var("AVENOS_DHT_BOOTSTRAP") {
 		Ok(raw) => raw
@@ -758,7 +707,7 @@ async fn apply_avensos_swarm_env(cfg: &mut aven_p2p::SwarmConfig) -> Result<(), 
 	}
 
 	let mut bootstrap_nodes = env_bootstrap_entries.clone();
-	if isolated && central && bootstrap_nodes.is_empty() {
+	if bootstrap_nodes.is_empty() {
 		let relay_raw = resolve_aven_relay_url()?;
 		let hostname = normalize_aven_relay_url_host(&relay_raw)?;
 		let udp = p2p_dht_udp_port_default();
@@ -766,36 +715,23 @@ async fn apply_avensos_swarm_env(cfg: &mut aven_p2p::SwarmConfig) -> Result<(), 
 		bootstrap_nodes = vec![line.clone()];
 		log::info!(
 			target: "avenos::peeroxide",
-			"DHT bootstrap from AVEN_RELAY_URL (central, no AVENOS_DHT_BOOTSTRAP): {line}",
+			"DHT bootstrap from AVEN_RELAY_URL (no AVENOS_DHT_BOOTSTRAP): {line}",
 		);
 	}
 
-	if isolated {
-		cfg.dht.dht.bootstrap = bootstrap_nodes.clone();
-		let n = bootstrap_nodes.len();
-		if n == 0 {
-			log::warn!(
-				target: "avenos::peeroxide",
-				"isolated DHT but bootstrap list is empty — peers cannot bootstrap"
-			);
-		} else {
-			log::info!(
-				target: "avenos::peeroxide",
-				"custom DHT bootstrap only (isolated): {n} node(s) — {}",
-				bootstrap_nodes.join(", ")
-			);
-		}
+	cfg.dht.dht.bootstrap = bootstrap_nodes.clone();
+	let n = bootstrap_nodes.len();
+	if n == 0 {
+		log::warn!(
+			target: "avenos::peeroxide",
+			"isolated DHT but bootstrap list is empty — peers cannot bootstrap"
+		);
 	} else {
-		let n = env_bootstrap_entries.len();
-		for s in env_bootstrap_entries.into_iter().rev() {
-			cfg.dht.dht.bootstrap.insert(0, s);
-		}
-		if n > 0 {
-			log::info!(
-				target: "avenos::peeroxide",
-				"prepended {n} DHT bootstrap node(s) from AVENOS_DHT_BOOTSTRAP"
-			);
-		}
+		log::info!(
+			target: "avenos::peeroxide",
+			"custom DHT bootstrap only (isolated): {n} node(s) — {}",
+			bootstrap_nodes.join(", ")
+		);
 	}
 
 	if let Ok(v) = std::env::var("AVENOS_HYPERSWARM_MAX_PARALLEL") {
@@ -835,7 +771,7 @@ fn build_p2p_diagnostics(cfg: &aven_p2p::SwarmConfig, linked_count: usize) -> P2
 		cfg.dht.dht.bootstrap.join(", ")
 	};
 	P2pDiagnostics {
-		central_mode: aven_relay_central_mode(),
+		central_mode: true,
 		dht_bootstrap,
 		joined_topic_count: 0,
 		allowlist_count: 0,
@@ -1868,7 +1804,7 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 				applied_peer_allow_sorted: Arc::new(tokio::sync::Mutex::new(None)),
 				swarm_start_error: Arc::new(tokio::sync::Mutex::new(None)),
 				p2p_diagnostics: Arc::new(tokio::sync::RwLock::new(P2pDiagnostics {
-					central_mode: aven_relay_central_mode(),
+					central_mode: true,
 					dht_bootstrap: String::new(),
 					joined_topic_count: 0,
 					allowlist_count: 0,

@@ -693,6 +693,7 @@ pub fn run() {
 
 	tauri::Builder::default()
 		.plugin(tauri_plugin_self::init())
+		.plugin(tauri_plugin_vault::init())
 		.plugin(tauri_plugin_p2p::init())
 		.plugin(tauri_plugin_clipboard_manager::init())
 		.manage(jazz::ManagedJazz::default())
@@ -721,9 +722,12 @@ pub fn run() {
 			}
 
 			let handle_for_lock = app.handle().clone();
-			let _vault_lock_listen = app.listen("self:did-lock", move |_event| {
+			let _lock_listen = app.listen("self:did-lock", move |_event| {
 				let handle = handle_for_lock.clone();
 				tauri::async_runtime::spawn(async move {
+					if let Some(win) = handle.get_webview_window("vault") {
+						let _ = win.close();
+					}
 					jazz::runtime::groove_actor(&handle).reset_connection().await;
 				});
 			});

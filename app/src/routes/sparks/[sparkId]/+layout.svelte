@@ -107,9 +107,9 @@
 				{/if}
 			</div>
 			<a
-				href="/self/workspaces?spark={encodeURIComponent(decodedSparkId)}"
+				href="/settings/workspaces?spark={encodeURIComponent(decodedSparkId)}"
 				class="text-primary hover:underline text-[10px] font-semibold uppercase tracking-wide"
-				onclick={(e) => navigateApp(`/self/workspaces?spark=${encodeURIComponent(decodedSparkId)}`, e)}
+				onclick={(e) => navigateApp(`/settings/workspaces?spark=${encodeURIComponent(decodedSparkId)}`, e)}
 			>
 				{t('nav.share')}
 			</a>

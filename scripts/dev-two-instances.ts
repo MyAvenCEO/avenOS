@@ -5,7 +5,7 @@
  * Instance A → http://127.0.0.1:1420
  * Instance B → http://127.0.0.1:1421
  *
- * Both use the network layout: <Documents>/.avenOS/ceo.aven/testnet/abagana/vaults/<slug>/{db,self}.
+ * Both use the network layout: <Documents>/.avenOS/ceo.aven/testnet/abagana/identities/<slug>/{db,vault}.
  * **Do not** set AVENOS_DATA_DIR_OVERRIDE here — each window gets its own in-memory active vault via
  * the lock-screen picker, so two personas (e.g. alice + bob vaults) can run concurrently without two
  * separate override trees.
@@ -18,8 +18,8 @@
  *     or `tauri:build:linux` (slower first build). NOTE: `bun run release:app:mac` / `bun run release:app:ios`
  *     now produce signed App Store artifacts AND upload them — not what you want for two-instance dev.
  *
- * Reset vaults during dev (destructive — removes all saved personas):
- *   rm -rf "<Documents>/.avenOS/ceo.aven/testnet/abagana/vaults"  (see vaultsHint printed at startup)
+ * Reset identities during dev (destructive — removes all saved personas):
+ *   rm -rf "<Documents>/.avenOS/ceo.aven/testnet/abagana/identities"  (see identitiesHint printed at startup)
  *
  * For a fully isolated sandbox (single flat vault root, no multi-vault), set per-process
  * AVENOS_DATA_DIR_OVERRIDE yourself — not handled by this script.
@@ -51,7 +51,7 @@ function userDocumentsDir(): string {
 	return path.join(homedir(), 'Documents')
 }
 
-const vaultsHint = path.join(userDocumentsDir(), '.avenOS', 'ceo.aven', 'testnet', 'abagana', 'vaults')
+const identitiesHint = path.join(userDocumentsDir(), '.avenOS', 'ceo.aven', 'testnet', 'abagana', 'identities')
 
 /** Linux WebKitGTK defaults (same as dev-app-linux.ts). */
 function devBaseEnv(): Record<string, string> {
@@ -120,10 +120,16 @@ function spawnLabelled(
  * Instance A's Vite is started by Tauri's beforeDevCommand as usual.
  */
 function spawnViteB(colour: string, env: Record<string, string>) {
-	return spawnLabelled('B', colour, 'bun', ['--bun', 'x', 'vite', 'dev', '--port', '1421'], {
-		cwd: appDir,
-		env: { ...env, FORCE_COLOR: '1' },
-	})
+	return spawnLabelled(
+		'B',
+		colour,
+		'bun',
+		['--env-file=../.env', '--bun', 'x', 'vite', 'dev', '--port', '1421'],
+		{
+			cwd: appDir,
+			env: { ...env, FORCE_COLOR: '1', AVENOS_DEV_INSTANCE: 'B' },
+		},
+	)
 }
 
 // Inline config overlay for instance B passed directly to `tauri dev --config <json>`.
@@ -168,10 +174,10 @@ async function main() {
 		`\n${BOLD}AvenOS — P2P dev harness (${platLabel})${RESET}\n` +
 			`  ${CYAN}[A]${RESET}  http://127.0.0.1:1420\n` +
 			`  ${MAGENTA}[B]${RESET}  http://127.0.0.1:1421\n\n` +
-			`Shared vault store: ${vaultsHint}\n` +
-			`${BOLD}${MAGENTA}WARNING:${RESET} Unlocking the same vault slug in [A] and [B] at once grabs the same RocksDB files (\`jazz.rocksdb\`) — Share/DB can stay on Loading indefinitely. Pick different people on each lock screen.\n\n` +
-			`${BOLD}Note:${RESET} AVENOS_DEV_INSTANCE is ${CYAN}A${RESET} / ${MAGENTA}B${RESET} for log prefixes only; it does not isolate vault dirs.\n\n` +
-			`Reset all dev personas: rm -rf ${vaultsHint}\n` +
+			`Shared identity store: ${identitiesHint}\n` +
+			`${BOLD}${MAGENTA}WARNING:${RESET} Unlocking the same identity slug in [A] and [B] at once grabs the same RocksDB files (\`storage.rocksdb\`) — Share/DB can stay on Loading indefinitely. Pick different people on each lock screen.\n\n` +
+			`${BOLD}Note:${RESET} AVENOS_DEV_INSTANCE is ${CYAN}A${RESET} / ${MAGENTA}B${RESET} for log prefixes only; it does not isolate identity dirs.\n\n` +
+			`Reset all dev personas: rm -rf ${identitiesHint}\n` +
 			`Press Ctrl-C to stop both.\n`,
 	)
 

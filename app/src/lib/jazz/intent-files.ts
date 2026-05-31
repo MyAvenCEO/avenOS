@@ -1,7 +1,7 @@
 import { browser } from '$app/environment'
 import { get } from 'svelte/store'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-import { deviceSession } from '$lib/self/device-session-store'
+import { deviceSession } from '$lib/settings/device-session-store'
 import { jazzTable } from '$lib/jazz/api'
 import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
 

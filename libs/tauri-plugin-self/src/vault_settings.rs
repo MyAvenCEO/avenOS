@@ -1,13 +1,11 @@
-//! Per-vault settings in `<vault>/self/vault_settings.json` (device-local, not Groove-synced).
+//! Per-vault settings in `<identity>/vault/settings.json` (device-local, not Groove-synced).
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-
-pub const VAULT_SETTINGS_FILENAME: &str = "vault_settings.json";
 
 /// Default: relay-only paths (stable cross-network sync while LAN heuristics mature).
 pub const DEFAULT_PREFER_RELAY_ONLY: bool = true;
@@ -92,8 +90,8 @@ impl VaultP2pPrefs {
 	}
 }
 
-pub fn settings_path(vault_root: &Path) -> PathBuf {
-	vault_root.join("self").join(VAULT_SETTINGS_FILENAME)
+pub fn settings_path(vault_root: &Path) -> std::path::PathBuf {
+	crate::paths::settings_path(vault_root)
 }
 
 pub fn read_merged(vault_root: &Path) -> Result<VaultSettings, String> {
@@ -118,9 +116,9 @@ pub fn read_merged(vault_root: &Path) -> Result<VaultSettings, String> {
 }
 
 pub fn write_atomic(vault_root: &Path, settings: &VaultSettings) -> Result<(), String> {
-	let self_dir = vault_root.join("self");
-	fs::create_dir_all(&self_dir)
-		.map_err(|e| format!("mkdir {}: {e}", self_dir.display()))?;
+	let crypto_dir = crate::paths::identity_crypto_dir(vault_root);
+	fs::create_dir_all(&crypto_dir)
+		.map_err(|e| format!("mkdir {}: {e}", crypto_dir.display()))?;
 	let path = settings_path(vault_root);
 	let tmp = path.with_extension("json.tmp");
 	let json = serde_json::to_string_pretty(settings)

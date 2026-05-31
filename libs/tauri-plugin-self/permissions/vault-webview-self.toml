@@ -1,0 +1,9 @@
+"$schema" = "schemas/schema.json"
+
+[[set]]
+identifier = "vault-webview-self"
+description = "Read-only self IPC for the isolated vault webview"
+permissions = [
+  "allow-peer-status",
+  "allow-active-identity",
+]

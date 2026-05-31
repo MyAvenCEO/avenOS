@@ -14,6 +14,7 @@ pub mod derive;
 pub mod did;
 pub mod paths;
 pub mod state;
+pub mod stronghold_vault;
 pub mod unlock;
 pub mod vault;
 pub mod vault_settings;
@@ -23,6 +24,7 @@ mod vault_settings_commands;
 pub use vault_settings::VaultP2pPrefs;
 pub use vault_settings_commands::reload_vault_p2p_prefs;
 pub use network::{NETWORK_SEED, RELAY_URL};
+pub use stronghold_vault::StrongholdSession;
 
 /// Plain on-disk root secret for local dev (Linux, iOS Simulator, etc.).
 #[cfg(any(
@@ -52,8 +54,12 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 	Builder::new("self")
 		.setup(|app, _| {
 			use tauri::Manager;
+			if let Err(e) = paths::migrate_layout(app) {
+				log::warn!(target: "avenos::paths", "layout migration: {e}");
+			}
 			app.manage(SelfState::default());
 			app.manage(ActiveVault::default());
+			app.manage(StrongholdSession::default());
 			app.manage(VaultP2pPrefs::new());
 			Ok(())
 		})
@@ -92,8 +98,12 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 		.setup(|app, _| {
 			use tauri::Manager;
 			dev_insecure::log_startup_banner();
+			if let Err(e) = paths::migrate_layout(app) {
+				log::warn!(target: "avenos::paths", "layout migration: {e}");
+			}
 			app.manage(SelfState::default());
 			app.manage(ActiveVault::default());
+			app.manage(StrongholdSession::default());
 			app.manage(VaultP2pPrefs::new());
 			Ok(())
 		})

@@ -11,11 +11,11 @@ import {
 } from '$lib/runtime/groove-runtime'
 import { startPeerMeshStore } from '$lib/peer/peer-mesh-store'
 import { initLocale, normalizeLocale, setLocale, t } from '$lib/i18n'
-import LockGate from '$lib/self/LockGate.svelte'
-import { attachSelfRustEventMirrors, deviceSession } from '$lib/self/device-session-store'
-import { displayTitleForSession } from '$lib/self/active-vault-ui'
-import { vaultUiSettingsGet } from '$lib/self/vault-ui-settings'
-import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/self/vault'
+import LockGate from '$lib/settings/LockGate.svelte'
+import { attachSelfRustEventMirrors, deviceSession } from '$lib/settings/device-session-store'
+import { displayTitleForSession } from '$lib/settings/active-vault-ui'
+import { vaultUiSettingsGet } from '$lib/settings/vault-ui-settings'
+import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/settings/vault'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import MobileShellNav from '$lib/shell/MobileShellNav.svelte'
 import { navigateApp } from '$lib/shell'
@@ -32,7 +32,8 @@ const routeKey = $derived(`${page.url.pathname}${page.url.search}`)
 const intentsActive = $derived(path === '/')
 const sandboxActive = $derived(path.startsWith('/sandbox'))
 const docsActive = $derived(path.startsWith('/docs'))
-const selfActive = $derived(path.startsWith('/self'))
+const selfActive = $derived(path.startsWith('/settings'))
+const vaultChrome = $derived(path.startsWith('/vault'))
 const sparksNavActive = $derived(path.startsWith('/sparks'))
 const dbActive = $derived(path.startsWith('/db'))
 const avenCityActive = $derived(path.startsWith('/aven-city'))
@@ -184,6 +185,13 @@ $effect(() => {
 </svelte:head>
 
 <div class="box-border flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-background">
+	{#if vaultChrome}
+		<div class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+			{#key routeKey}
+				{@render pageContent()}
+			{/key}
+		</div>
+	{:else}
 	<LockGate />
 	{#if !shellLocked}
 		<header class="shrink-0 bg-background/90 px-3 pt-[max(0.375rem,env(safe-area-inset-top))] pb-1 backdrop-blur-sm sm:px-6 sm:pt-3 sm:pb-2">
@@ -258,12 +266,12 @@ $effect(() => {
 					aria-label={t('nav.deviceIdentity')}
 				>
 					<a
-						href="/self/peers"
+						href="/settings/peers"
 						data-sveltekit-preload-data="hover"
 						class="normal-case max-w-[8rem] truncate text-[11px] font-semibold tracking-normal transition-opacity hover:opacity-80 sm:max-w-[10rem] {selfActive ? 'opacity-95' : 'opacity-40'}"
 						aria-current={selfActive ? 'page' : undefined}
 						title={selfNavLabel}
-						onclick={(e) => navigateApp('/self/peers', e)}
+						onclick={(e) => navigateApp('/settings/peers', e)}
 						>{selfNavLabel}</a
 					>
 				</nav>
@@ -306,5 +314,6 @@ $effect(() => {
 		</div>
 
 		<MobileShellNav {selfNavLabel} {selfActive} />
+	{/if}
 	{/if}
 </div>

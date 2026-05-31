@@ -30,7 +30,7 @@ Returns:
 
 **File:** `libs/tauri-plugin-self/src/macos/commands.rs`
 
-`register` writes two files under `app.path().app_data_dir()/self/` atomically (write to `.tmp`, chmod `0600`, rename):
+`register` writes two files under `identities/<slug>/vault/` atomically (write to `.tmp`, chmod `0600`, rename):
 
 | File | Contents |
 |------|----------|

@@ -24,7 +24,7 @@ It replaces the former `GENESIS_NETWORK_ID` (external 65-byte P-256 public point
 | `RELAY_URL` | `relay.aven.ceo` |
 | Path segments | `ceo.aven` / `testnet` / `abagana` |
 
-The frontend reads the same string via Tauri command `network_seed` (mirrored in `app/src/lib/self/network.ts`).
+The frontend reads the same string via Tauri command `network_seed` (mirrored in `app/src/lib/settings/network.ts`).
 
 ## Derivation (v2)
 

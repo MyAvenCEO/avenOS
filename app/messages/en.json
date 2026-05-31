@@ -121,7 +121,24 @@
     "share": "Share",
     "advanced": "Advanced",
     "network": "Network",
-    "db": "DB"
+    "db": "DB",
+    "openVault": "Open vault"
+  },
+  "vaultNav": {
+    "title": "Vault",
+    "category": "Secrets",
+    "secrets": "Secrets",
+    "subtitle": "Stronghold-backed secrets for this identity.",
+    "lockedHint": "Unlock your identity in the main window to manage secrets."
+  },
+  "vaultSecrets": {
+    "description": "Values are stored in strong.hold on disk. Reveal copies a value into this window only.",
+    "addTitle": "Add secret",
+    "idLabel": "ID",
+    "valueLabel": "Value",
+    "listTitle": "Stored secrets",
+    "empty": "No secrets yet.",
+    "reveal": "Reveal"
   },
   "preferences": {
     "title": "Language",
@@ -427,7 +444,7 @@
     },
     "self": {
       "title": "Local database",
-      "subtitle": "AvenOS keeps durable state under your OS Documents folder in .avenOS/ceo.aven/testnet/abagana/ (e.g. ~/Documents/.avenOS on macOS). Groove/SurrealKV data lives in vaults/<slug>/db/; device identity material lives in vaults/<slug>/self/.",
+      "subtitle": "AvenOS keeps durable state under your OS Documents folder in .avenOS/ceo.aven/testnet/abagana/ (e.g. ~/Documents/.avenOS on macOS). Groove data lives in identities/<slug>/db/storage.rocksdb; device identity material lives in identities/<slug>/vault/.",
       "needsDesktop": "Open the AvenOS desktop app to manage local storage paths.",
       "paths": "Paths",
       "appRoot": "App root",
@@ -435,7 +452,7 @@
       "database": "Database",
       "selfIdentity": "Self identity",
       "grooveStore": "Groove store",
-      "clearDescription": "Clearing removes the Groove/SurrealKV database for the active vault (todos, sparks, peers, etc.). Your hardware identity under self/ is unchanged. After clearing, unlock again and open Todos or DB so the store is recreated.",
+      "clearDescription": "Clearing removes the Groove database for the active identity (todos, sparks, peers, etc.). Your hardware identity under vault/ is unchanged. After clearing, unlock again and open Todos or DB so the store is recreated.",
       "clearSuccess": "Local database cleared. Re-open Todos or trigger bootstrap to create a fresh store.",
       "confirmClearQuestion": "Delete everything under the database folder?",
       "clearResetButton": "Clear / reset Jazz database…",
@@ -466,7 +483,7 @@
     "dbJazzSessionStalled": "DB: Jazz session",
     "dbGrooveSessionStalled": "DB: Groove session",
     "dbJazzStatusStalled": "DB: Jazz status",
-    "useSelfContextMissing": "useSelfContext: provider missing — wrap pages in /self/+layout.svelte",
+    "useSelfContextMissing": "useSelfContext: provider missing — wrap pages in /settings/+layout.svelte",
     "titleCannotBeEmpty": "Title cannot be empty",
     "firstNameRequired": "First name is required",
     "deviceLabelRequired": "Device label is required"

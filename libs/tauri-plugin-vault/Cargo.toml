@@ -1,0 +1,17 @@
+[package]
+name = "tauri-plugin-vault"
+version = "0.1.0"
+description = "Tauri plugin: Stronghold secrets CRUD (borrows session from tauri-plugin-self)."
+authors = ["Aven"]
+license = "MIT OR Apache-2.0"
+edition = "2021"
+links = "tauri-plugin-vault"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = [] }
+tauri-plugin-self = { path = "../tauri-plugin-self" }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

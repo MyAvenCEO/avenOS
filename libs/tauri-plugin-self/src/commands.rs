@@ -4,11 +4,11 @@
 //! by `unlock` (macOS) or `unlock_with_root` (dev bypass / future platforms).
 
 use tauri::AppHandle;
-use tauri::Emitter;
 use tauri::State;
 
 use crate::derive;
 use crate::state::SelfState;
+use crate::stronghold_vault::StrongholdSession;
 use crate::vault::ActiveVault;
 
 /// Stable `did:key` for HKDF-derived **Ed25519** application signing (`PEER_ID_<device>_ED25519`).
@@ -99,9 +99,7 @@ pub async fn lock(
 	app: AppHandle,
 	state: State<'_, SelfState>,
 	vault: State<'_, ActiveVault>,
+	stronghold: State<'_, StrongholdSession>,
 ) -> Result<(), String> {
-	state.clear();
-	let _ = vault.clear();
-	let _ = app.emit("self:did-lock", ());
-	Ok(())
+	crate::unlock::lock_identity(&app, &state, &vault, &stronghold)
 }
