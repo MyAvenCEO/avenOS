@@ -1172,6 +1172,11 @@ impl SwarmActor {
         self.topics.values().any(|t| t.fast_refresh)
     }
 
+    /// True only during an active invite session (`set_active_pair_topic(Some(_))`).
+    fn invite_pairing_active(&self) -> bool {
+        self.active_pair_topic.is_some()
+    }
+
     fn build_relay_addrs(&self) -> Vec<Ipv4Peer> {
         let mut relay_addrs = self.config.announce_bootstrap_relays.clone();
         if relay_addrs.len() > 3 {
@@ -1358,19 +1363,19 @@ impl SwarmActor {
                 }
 
                 self.upsert_discovered_peer(public_key, relay_addresses, topic);
-                if self.any_fast_refresh_topic() {
+                if self.invite_pairing_active() {
                     if self.active_pair_topic != Some(topic) {
                         tracing::debug!(
                             pk = %short_hex(&public_key),
                             discovered_topic = %short_hex(&topic),
                             active = ?self.active_pair_topic.map(|t| short_hex(&t)),
-                            "pairing discovery — skip outbound (peer not on active invite topic)",
+                            "invite pairing — skip outbound (peer not on active invite topic)",
                         );
                         return;
                     }
                     tracing::info!(
                         pk = %short_hex(&public_key),
-                        "pairing discovery — dominant queue outbound",
+                        "invite pairing — dominant queue outbound",
                     );
                 }
                 self.try_queue_outbound(public_key, connect_result_tx);
@@ -1799,31 +1804,10 @@ impl SwarmActor {
             peer_address: relayed_via.as_ref().map(|_| from.clone()),
             relay_address: None,
         };
-        let _ = reply_tx.send(encode_handshake_to_bytes(&reply_msg).ok());
 
-        if self.connections.has(&remote_pk) {
-            if self.transport_suppressed(remote_pk) {
-                tracing::debug!(
-                    pk = %short_hex(&remote_pk),
-                    "server: inbound reconnect suppressed — active link in progress",
-                );
-                return;
-            }
-            tracing::info!(
-                pk = %short_hex(&remote_pk),
-                "server: inbound reconnect — clearing stale connection slot",
-            );
-            self.connections.remove(&remote_pk);
-        }
-
+        // Register subordinate `pair(true)` before the dominant reads our reply and
+        // sends `pair(false)` — never gate this on active_pair_topic (invite accept races).
         if let Some(token) = relay_token {
-            if self.any_fast_refresh_topic() && self.active_pair_topic.is_none() {
-                tracing::debug!(
-                    pk = %short_hex(&remote_pk),
-                    "server: defer blind-relay half — invite topic not armed",
-                );
-                return;
-            }
             tracing::info!(
                 pk = %short_hex(&remote_pk),
                 "server: blind-relay inbound half (pair initiator)",
@@ -1842,6 +1826,7 @@ impl SwarmActor {
                 key_pair: self.key_pair.clone(),
                 dht: self.dht.clone(),
                 runtime_handle: self.runtime_handle.clone(),
+                mandatory: true,
             });
         } else {
             tracing::debug!(
@@ -1849,6 +1834,23 @@ impl SwarmActor {
                 "server: no relay token — cannot connect",
             );
         }
+
+        if self.connections.has(&remote_pk) {
+            if self.transport_suppressed(remote_pk) {
+                tracing::debug!(
+                    pk = %short_hex(&remote_pk),
+                    "server: inbound reconnect suppressed — active link in progress",
+                );
+            } else {
+                tracing::info!(
+                    pk = %short_hex(&remote_pk),
+                    "server: inbound reconnect — clearing stale connection slot",
+                );
+                self.connections.remove(&remote_pk);
+            }
+        }
+
+        let _ = reply_tx.send(encode_handshake_to_bytes(&reply_msg).ok());
     }
 
     /// When the Noise handshake completes on a relayed path, the outbound client
@@ -1856,7 +1858,8 @@ impl SwarmActor {
     /// must register the matching `pair(true, local_token)` on the same relay.
     fn spawn_server_blind_relay_fallback_params(&mut self, params: ServerRelayFallbackParams) {
         let remote_pk = params.remote_pk;
-        if self.transport_suppressed(remote_pk) {
+        let mandatory = params.mandatory;
+        if !mandatory && self.transport_suppressed(remote_pk) {
             tracing::debug!(
                 pk = %short_hex(&remote_pk),
                 "server: skip blind-relay fallback — link handshaking/live",
@@ -1881,7 +1884,7 @@ impl SwarmActor {
         let cmd_tx = self.cmd_tx.clone();
         let suppress = self.should_suppress_transport.clone();
         let handle = tokio::spawn(async move {
-            if suppress.as_ref().is_some_and(|f| f(remote_pk)) {
+            if !mandatory && suppress.as_ref().is_some_and(|f| f(remote_pk)) {
                 tracing::debug!(
                     pk = %short_hex(&remote_pk),
                     "server: blind-relay fallback aborted — link active",
@@ -1942,6 +1945,8 @@ struct ServerRelayFallbackParams {
     key_pair: KeyPair,
     dht: HyperDhtHandle,
     runtime_handle: Arc<RuntimeHandle>,
+    /// Inbound PEER_HANDSHAKE half — always run (ignore transport suppress).
+    mandatory: bool,
 }
 
 async fn deliver_server_relay_connection(
