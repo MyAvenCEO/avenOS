@@ -74,6 +74,7 @@
     "sandbox": "Sandbox",
     "sparks": "Sparks",
     "db": "DB",
+    "vault": "Tresor",
     "avenCity": "avenCITY",
     "docs": "Docs",
     "backToIntentsList": "Zurück zur Intent-Liste",
@@ -127,6 +128,8 @@
   "vaultNav": {
     "title": "Tresor",
     "category": "Geheimnisse",
+    "passwords": "Passwörter",
+    "apiKeys": "API-Schlüssel",
     "secrets": "Geheimnisse",
     "subtitle": "Stronghold-gesicherte Geheimnisse für diese Identität.",
     "lockedHint": "Entsperre deine Identität im Hauptfenster, um Geheimnisse zu verwalten."
@@ -138,7 +141,8 @@
     "valueLabel": "Wert",
     "listTitle": "Gespeicherte Geheimnisse",
     "empty": "Noch keine Geheimnisse.",
-    "reveal": "Anzeigen"
+    "reveal": "Anzeigen",
+    "hide": "Verbergen"
   },
   "preferences": {
     "title": "Sprache",

@@ -422,6 +422,95 @@ async fn destroy_sandbox_webview(_window: Window, _label: String) -> Result<(), 
 	Err("sandbox webviews are unsupported on this platform.".into())
 }
 
+const VAULT_EMBED_LABEL: &str = "vault-embed";
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn create_vault_embed_webview(
+	window: Window,
+	rect: SandboxRect,
+	url: String,
+) -> Result<(), String> {
+	let rect = clamp_sandbox_rect(&window, rect);
+	let parsed: Url = url.parse().map_err(|e: url::ParseError| e.to_string())?;
+
+	for webview in window.webviews() {
+		if webview.label() == VAULT_EMBED_LABEL {
+			let _ = webview.close();
+		}
+	}
+
+	let webview = window
+		.add_child(
+			tauri::WebviewBuilder::new(
+				VAULT_EMBED_LABEL,
+				WebviewUrl::External(parsed),
+			),
+			LogicalPosition::new(rect.x, rect.y),
+			LogicalSize::new(rect.w, rect.h),
+		)
+		.map_err(|e| e.to_string())?;
+
+	macos_round_child_webview(&webview);
+	Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+async fn create_vault_embed_webview(
+	_window: Window,
+	_rect: SandboxRect,
+	_url: String,
+) -> Result<(), String> {
+	Err("Native vault embed webviews require macOS.".into())
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn set_vault_embed_webview_rect(window: Window, rect: SandboxRect) -> Result<(), String> {
+	let rect = clamp_sandbox_rect(&window, rect);
+	let webview = window
+		.webviews()
+		.into_iter()
+		.find(|w| w.label() == VAULT_EMBED_LABEL)
+		.ok_or_else(|| format!("vault embed webview not found: {VAULT_EMBED_LABEL}"))?;
+
+	webview
+		.set_bounds(Rect {
+			position: LogicalPosition::new(rect.x, rect.y).into(),
+			size: LogicalSize::new(rect.w, rect.h).into(),
+		})
+		.map_err(|e| e.to_string())?;
+	Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+async fn set_vault_embed_webview_rect(
+	_window: Window,
+	_rect: SandboxRect,
+) -> Result<(), String> {
+	Err("vault embed webview layout is unsupported on this platform.".into())
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn destroy_vault_embed_webview(window: Window) -> Result<(), String> {
+	let webview = window
+		.webviews()
+		.into_iter()
+		.find(|w| w.label() == VAULT_EMBED_LABEL)
+		.ok_or_else(|| format!("vault embed webview not found: {VAULT_EMBED_LABEL}"))?;
+
+	webview.close().map_err(|e| e.to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+async fn destroy_vault_embed_webview(_window: Window) -> Result<(), String> {
+	Ok(())
+}
+
 #[tauri::command]
 fn avenos_recent_rust_logs() -> Vec<String> {
 	log_ring::recent_lines()
@@ -725,8 +814,12 @@ pub fn run() {
 			let _lock_listen = app.listen("self:did-lock", move |_event| {
 				let handle = handle_for_lock.clone();
 				tauri::async_runtime::spawn(async move {
-					if let Some(win) = handle.get_webview_window("vault") {
-						let _ = win.close();
+					if let Some(main) = handle.get_webview_window("main") {
+						for (label, w) in main.webviews() {
+							if label == VAULT_EMBED_LABEL {
+								let _ = w.close();
+							}
+						}
 					}
 					jazz::runtime::groove_actor(&handle).reset_connection().await;
 				});
@@ -895,6 +988,9 @@ pub fn run() {
 			create_sandbox_webview,
 			set_sandbox_webview_rect,
 			destroy_sandbox_webview,
+			create_vault_embed_webview,
+			set_vault_embed_webview_rect,
+			destroy_vault_embed_webview,
 			network::network_seed,
 			jazz::groove_runtime,
 			jazz::self_storage_paths,

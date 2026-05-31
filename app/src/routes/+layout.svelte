@@ -33,7 +33,8 @@ const intentsActive = $derived(path === '/')
 const sandboxActive = $derived(path.startsWith('/sandbox'))
 const docsActive = $derived(path.startsWith('/docs'))
 const selfActive = $derived(path.startsWith('/settings'))
-const vaultChrome = $derived(path.startsWith('/vault'))
+const vaultActive = $derived(path.startsWith('/vault'))
+const vaultEmbed = $derived(page.url.searchParams.get('vaultEmbed') === '1')
 const sparksNavActive = $derived(path.startsWith('/sparks'))
 const dbActive = $derived(path.startsWith('/db'))
 const avenCityActive = $derived(path.startsWith('/aven-city'))
@@ -185,8 +186,8 @@ $effect(() => {
 </svelte:head>
 
 <div class="box-border flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-background">
-	{#if vaultChrome}
-		<div class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+	{#if vaultEmbed}
+		<div class="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
 			{#key routeKey}
 				{@render pageContent()}
 			{/key}
@@ -249,6 +250,15 @@ $effect(() => {
 						aria-current={avenCityActive ? 'page' : undefined}
 						onclick={(e) => navigateApp('/aven-city', e)}
 						>{t('nav.avenCity')}</a
+					>
+					<span class="select-none opacity-25" aria-hidden="true">|</span>
+					<a
+						href="/vault"
+						data-sveltekit-preload-data="hover"
+						class="transition-opacity hover:opacity-80 {vaultActive ? 'opacity-95' : 'opacity-40'}"
+						aria-current={vaultActive ? 'page' : undefined}
+						onclick={(e) => navigateApp('/vault', e)}
+						>{t('nav.vault')}</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a

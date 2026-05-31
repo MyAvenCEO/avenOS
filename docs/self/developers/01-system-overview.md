@@ -33,13 +33,13 @@ Network id: `ceo.aven/testnet/abagana` (`libs/tauri-plugin-self/src/network.rs`)
 
 `app/src/lib/settings/device-session-store.ts`: `{ kind: 'locked' | 'unlocked' }`. No key material crosses IPC into JavaScript.
 
-## Vault window
+## Vault embed (child webview)
 
-Opened from Settings nav → **Vault**. Loads `/vault/secrets` in `WebviewWindow` label `vault`. Only this window may call `plugin:vault|*`.
+**Vault** is a root nav item → `/vault` (redirects to `/vault/secrets`). The main window shows aside nav + an embed host; a child webview labeled `vault-embed` loads the same route with `?vaultEmbed=1`. Only that child may call `plugin:vault|*`.
 
 ## Plugin registration
 
-`app/src-tauri/src/lib.rs`: `tauri-plugin-self`, `tauri-plugin-vault`. Capabilities: `default.json` (main), `vault-webview.json` (vault).
+`app/src-tauri/src/lib.rs`: `tauri-plugin-self`, `tauri-plugin-vault`. Capabilities: `default.json` (main), `vault-webview.json` (`vault-embed` child).
 
 ## Related
 

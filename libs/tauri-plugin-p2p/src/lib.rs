@@ -192,6 +192,8 @@ pub struct PeerCtl {
 	swarm_auto_restart_used: Arc<AtomicBool>,
 	/// Serializes pairing nudge + lifecycle restart so two swarm actors never overlap.
 	pairing_transport_lock: Arc<tokio::sync::Mutex<()>>,
+	/// Blind-relay host static key (`AVENOS_HYPERSWARM_RELAY_*`) — not a Groove sync peer.
+	relay_host_pk: Arc<tokio::sync::RwLock<Option<[u8; 32]>>>,
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -210,6 +212,13 @@ impl PeerCtl {
 
 	pub async fn is_pairing_active(&self) -> bool {
 		self.pairing_state.lock().await.is_active()
+	}
+
+	async fn is_relay_host_pk(&self, pk: &[u8; 32]) -> bool {
+		self.relay_host_pk
+			.read()
+			.await
+			.is_some_and(|host| host == *pk)
 	}
 
 	/// Blind-relay-only device sync (always true).
@@ -960,6 +969,7 @@ impl PeerCtl {
 		diag.allowlist_count = self.allowed_remote_dids.read().await.len();
 		*self.p2p_diagnostics.write().await = diag;
 
+		let relay_host_pk = cfg.relay_through;
 		let (actor_join, swarm, mut conn_rx) = match aven_p2p::spawn(cfg).await {
 			Ok(v) => v,
 			Err(e) => {
@@ -1005,6 +1015,7 @@ impl PeerCtl {
 			&local_pk[..local_prefix_len],
 		);
 
+		*self.relay_host_pk.write().await = relay_host_pk;
 		*guard = Some(RunningSwarm { swarm });
 		drop(guard);
 
@@ -1040,6 +1051,15 @@ impl PeerCtl {
 
 	async fn handle_incoming_swarm_conn(&self, mut conn: aven_p2p::SwarmConnection) {
 		let remote_pk = *conn.remote_public_key();
+		if self.is_relay_host_pk(&remote_pk).await {
+			log::debug!(
+				target: "avenos::peeroxide",
+				"drop swarm conn to blind-relay host pk={} (coordinator only, not Groove peer)",
+				hex_pk_prefix(&remote_pk),
+			);
+			drop(conn);
+			return;
+		}
 		let _transport_mode = conn.peer.transport_mode;
 		let Ok(remote_did) = crate::did::peer_did_from_ed25519(&remote_pk) else {
 			log::warn!(target: "avenos::peeroxide", "reject swarm: invalid remote static key");
@@ -1353,6 +1373,13 @@ impl PeerCtl {
 		};
 		for remote in missing {
 			let pk = crate::did::ed25519_public_from_peer_did(remote)?;
+			if self.is_relay_host_pk(&pk).await {
+				log::debug!(
+					target: "avenos::peeroxide",
+					"steady reconcile skip blind-relay host did={remote}",
+				);
+				continue;
+			}
 			if self.prefer_relay_only() && local_pk < pk {
 				log::debug!(
 					target: "avenos::peeroxide",
@@ -1826,6 +1853,7 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 				pairing_transport_guard_until_ms,
 				swarm_auto_restart_used: Arc::new(AtomicBool::new(false)),
 				pairing_transport_lock: Arc::new(tokio::sync::Mutex::new(())),
+				relay_host_pk: Arc::new(tokio::sync::RwLock::new(None)),
 			});
 
 			transport_scheduler.spawn_drain(Arc::clone(&ctl));

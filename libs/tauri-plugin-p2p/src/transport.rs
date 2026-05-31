@@ -13,8 +13,8 @@ use crate::PeerCtl;
 
 /// Minimum gap between steady mesh reconnects.
 pub const MESH_DEBOUNCE_MS: u64 = 15_000;
-/// Pairing DHT flush debounce.
-pub const PAIRING_DEBOUNCE_MS: u64 = 8_000;
+/// Pairing DHT flush debounce — short for central relay (invite should converge in seconds).
+pub const PAIRING_DEBOUNCE_MS: u64 = 2_000;
 /// Stale SwarmConnecting rows block redial after this age (pairing + steady reconcile).
 pub const STALE_SWARM_CONNECTING_MS: u64 = 8_000;
 /// Alias for pairing policy tests.
@@ -456,12 +456,21 @@ impl PeerCtl {
 					"prepare_reconnect ({reason}): {e}",
 				);
 			}
-			if mode == TickMode::Reset {
+			// LinkDown must clear stale `connecting` slots (dominant redial deadlock).
+			if matches!(mode, TickMode::Reset | TickMode::LinkDown) {
 				if let Err(e) = swarm.reset_peer_dial_state(None).await {
 					log::debug!(
 						target: "avenos::peeroxide",
 						"reset_peer_dial_state ({reason}): {e}",
 					);
+				}
+			}
+		}
+
+		if mode == TickMode::LinkDown {
+			for did in &target_dids {
+				if let Ok(pk) = crate::did::ed25519_public_from_peer_did(did) {
+					self.live_links.reset_backoff(&pk).await;
 				}
 			}
 		}

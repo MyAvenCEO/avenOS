@@ -60,14 +60,14 @@ Main webview (/settings, /sparks)     Vault webview (/vault/*)
 
 ## Frontend surfaces
 
-| Surface | Window | Routes | Allowed IPC | Secret values in JS |
-| ------- | ------ | ------ | ----------- | ------------------- |
-| **Main** | `main` | `/settings/*`, `/sparks/*`, LockGate | `plugin:self\|*`, jazz, peer — **not** `plugin:vault\|*` | **Never** |
-| **Vault** | `vault` | `/vault/*` entire subtree | `plugin:vault\|secrets_*`, read-only `plugin:self\|peer_status`, `active_identity` | **Never persisted**; transient input on set only |
+| Surface | Window / webview | Routes | Allowed IPC | Secret values in JS |
+| ------- | ---------------- | ------ | ----------- | ------------------- |
+| **Main** | `main` | `/settings/*`, `/sparks/*`, `/vault/*` chrome (aside + embed host), LockGate | `plugin:self\|*`, jazz, peer — **not** `plugin:vault\|*` | **Never** |
+| **Vault** | `vault-embed` child in `main` | `/vault/*?vaultEmbed=1` (content only) | `plugin:vault\|secrets_*`, read-only `plugin:self\|peer_status`, `active_identity` | **Never persisted**; transient input on set only |
 
-Navigating to `/vault/*` from main **opens/focuses the vault child window** — vault routes do not render inside main (capability isolation).
+Navigating to `/vault/*` from main renders vault chrome in the main webview and loads secrets UI in the **`vault-embed` child** — same pattern as vibe sandbox `vibe-sb-*` embeds. Main never receives `vault:*` capabilities.
 
-LockGate runs on **main** and calls `plugin:self\|unlock`. On lock: `plugin:self\|lock`, Stronghold save, vault window closed.
+LockGate runs on **main** and calls `plugin:self\|unlock`. On lock: `plugin:self\|lock`, Stronghold save, `vault-embed` child destroyed.
 
 ---
 
@@ -99,7 +99,7 @@ Same *ideas* as Infisical or HashiCorp Vault (local-first, device-bound — not 
 1. User unlocks via Touch ID → `plugin:self\|unlock` → SE derives `device_root_secret`.
 2. `plugin:self` opens `identities/<slug>/vault/strong.hold` with  
    `stronghold_key = HKDF(device_root_secret, info="{NETWORK_SEED}/stronghold/v1")`.
-3. User opens **Vault** window (`/vault/secrets`). Main window cannot invoke `plugin:vault`.
+3. User opens **Vault** from main nav (`/vault/secrets`). The `vault-embed` child loads secrets UI; main cannot invoke `plugin:vault`.
 
 ### Store
 

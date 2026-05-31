@@ -31,6 +31,15 @@ use crate::util::{is_unroutable_relay_host, short_hex};
 
 static NEXT_STREAM_ID: AtomicU32 = AtomicU32::new(1);
 
+/// Cap hung outbound connect during invite pairing (central relay — expect ~3–8s happy path).
+const PEER_RELAY_PAIRING_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// Cap hung outbound connect for steady relink/heal on central relay.
+const PEER_RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Brief pause before dominant pairing redial so relay coordinator slots can drop.
+const PAIRING_OUTBOUND_RETRY_DELAY: Duration = Duration::from_millis(500);
+
 fn next_stream_id() -> u32 {
     NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed)
 }
@@ -473,6 +482,10 @@ enum SwarmCommand {
     PairingDialInFlight {
         reply_tx: oneshot::Sender<bool>,
     },
+    /// Delayed dominant outbound retry during invite pairing (coordinator cleanup slack).
+    RetryPairingOutbound {
+        public_key: [u8; 32],
+    },
 }
 
 #[allow(dead_code)] // Fields read during leave/unannounce (future)
@@ -515,6 +528,8 @@ struct SwarmActor {
     cmd_tx: mpsc::Sender<SwarmCommand>,
 
     server_registered: bool,
+    /// Keeps `register_server(hash(pk))` alive after invite topic `leave` until pairing ends.
+    pairing_server_hold: bool,
     relay_address: Option<Ipv4Peer>,
 
     active_connects: usize,
@@ -642,6 +657,7 @@ pub async fn spawn(
         relay_fallback_abort: HashMap::new(),
         connect_epoch: HashMap::new(),
         active_pair_topic: None,
+        pairing_server_hold: false,
     };
 
     // Keep the DHT runtime alive for the swarm's lifetime.
@@ -803,6 +819,13 @@ impl SwarmActor {
             }
             SwarmCommand::SetActivePairTopic { topic } => {
                 self.active_pair_topic = topic;
+                match topic {
+                    Some(_) => self.pairing_server_hold = true,
+                    None => {
+                        self.pairing_server_hold = false;
+                        self.try_unregister_server_if_idle();
+                    }
+                }
                 false
             }
             SwarmCommand::ResetPeerDialState { public_key } => {
@@ -826,6 +849,10 @@ impl SwarmActor {
             }
             SwarmCommand::PairingDialInFlight { reply_tx } => {
                 let _ = reply_tx.send(self.pairing_dial_in_flight());
+                false
+            }
+            SwarmCommand::RetryPairingOutbound { public_key } => {
+                self.try_queue_outbound(public_key, connect_result_tx);
                 false
             }
         }
@@ -865,7 +892,7 @@ impl SwarmActor {
         );
         let cmd_tx = self.cmd_tx.clone();
         tokio::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             let _ = cmd_tx
                 .send(SwarmCommand::RespawnRelayFallback { params })
                 .await;
@@ -1190,11 +1217,18 @@ impl SwarmActor {
             return Ok(());
         }
 
-        if server && !self.server_registered {
-            let target = hash(&self.key_pair.public_key);
-            self.dht.register_server(&target);
-            self.server_registered = true;
-            tracing::debug!(pk = %short_hex(&self.key_pair.public_key), "server registered");
+        if server {
+            // Durable allowlist topics use fast_refresh too — only hold server registration
+            // during an active invite (`set_active_pair_topic`), not steady-state reconnect.
+            if fast_refresh && self.active_pair_topic == Some(topic) {
+                self.pairing_server_hold = true;
+            }
+            if !self.server_registered {
+                let target = hash(&self.key_pair.public_key);
+                self.dht.register_server(&target);
+                self.server_registered = true;
+                tracing::debug!(pk = %short_hex(&self.key_pair.public_key), "server registered");
+            }
         }
 
         let (cancel_tx, cancel_rx) = oneshot::channel();
@@ -1240,21 +1274,43 @@ impl SwarmActor {
                 peer.topics.retain(|t| *t != topic);
             }
 
-            if state.is_server && self.server_registered {
-                let has_remaining_server_topics =
-                    self.topics.values().any(|t| t.is_server);
-                if !has_remaining_server_topics {
-                    let target = hash(&self.key_pair.public_key);
-                    self.dht.unregister_server(&target);
-                    self.server_registered = false;
-                    tracing::debug!(
-                        pk = %short_hex(&self.key_pair.public_key),
-                        "server unregistered (no remaining server topics)"
-                    );
-                }
+            if state.is_server {
+                self.try_unregister_server_if_idle();
             }
         }
         Ok(())
+    }
+
+    /// Drop server forward entry only when no invite topic needs it and pairing ended.
+    fn try_unregister_server_if_idle(&mut self) {
+        if !self.server_registered {
+            return;
+        }
+        if self.pairing_server_hold {
+            tracing::debug!(
+                pk = %short_hex(&self.key_pair.public_key),
+                "server unregister deferred — pairing session active"
+            );
+            return;
+        }
+        if !self.relay_fallback_abort.is_empty() {
+            tracing::debug!(
+                pk = %short_hex(&self.key_pair.public_key),
+                "server unregister deferred — blind-relay half in flight"
+            );
+            return;
+        }
+        let has_remaining_server_topics = self.topics.values().any(|t| t.is_server);
+        if has_remaining_server_topics {
+            return;
+        }
+        let target = hash(&self.key_pair.public_key);
+        self.dht.unregister_server(&target);
+        self.server_registered = false;
+        tracing::debug!(
+            pk = %short_hex(&self.key_pair.public_key),
+            "server unregistered (no remaining server topics)"
+        );
     }
 
     fn handle_discovery_event(
@@ -1303,6 +1359,15 @@ impl SwarmActor {
 
                 self.upsert_discovered_peer(public_key, relay_addresses, topic);
                 if self.any_fast_refresh_topic() {
+                    if self.active_pair_topic != Some(topic) {
+                        tracing::debug!(
+                            pk = %short_hex(&public_key),
+                            discovered_topic = %short_hex(&topic),
+                            active = ?self.active_pair_topic.map(|t| short_hex(&t)),
+                            "pairing discovery — skip outbound (peer not on active invite topic)",
+                        );
+                        return;
+                    }
                     tracing::info!(
                         pk = %short_hex(&public_key),
                         "pairing discovery — dominant queue outbound",
@@ -1359,19 +1424,25 @@ impl SwarmActor {
             let rh = self.runtime_handle.clone();
 
             let pair_topic = self.pair_topic_for_peer(&pk);
+            let pairing_connect = self.any_fast_refresh_topic();
             tokio::spawn(async move {
                 let conn_runtime = UdxRuntime::shared(rh);
+                let connect_timeout = if pairing_connect {
+                    PEER_RELAY_PAIRING_CONNECT_TIMEOUT
+                } else {
+                    PEER_RELAY_CONNECT_TIMEOUT
+                };
                 tracing::info!(
                     pk = %short_hex(&pk),
                     epoch,
                     pair_topic = ?pair_topic.map(|t| short_hex(&t)),
                     "connecting to peer (relay-only)"
                 );
-                match dht
-                    .connect_with_nodes(&key_pair, pk, &relay_addrs, pair_topic, &conn_runtime)
-                    .await
-                {
-                    Ok(conn) => {
+                let connect_fut =
+                    dht.connect_with_nodes(&key_pair, pk, &relay_addrs, pair_topic, &conn_runtime);
+                let outcome = tokio::time::timeout(connect_timeout, connect_fut).await;
+                match outcome {
+                    Ok(Ok(conn)) => {
                         tracing::info!(pk = %short_hex(&pk), "peer connected");
                         let _ = result_tx.send(ConnectAttemptResult {
                             public_key: pk,
@@ -1379,12 +1450,24 @@ impl SwarmActor {
                             result: Ok((conn, conn_runtime)),
                         });
                     }
-                    Err(e) => {
+                    Ok(Err(e)) => {
                         tracing::debug!(pk = %short_hex(&pk), err = %e, "peer connect failed");
                         let _ = result_tx.send(ConnectAttemptResult {
                             public_key: pk,
                             epoch,
                             result: Err(SwarmError::Dht(e)),
+                        });
+                    }
+                    Err(_) => {
+                        tracing::warn!(
+                            pk = %short_hex(&pk),
+                            timeout_secs = connect_timeout.as_secs(),
+                            "peer connect timed out"
+                        );
+                        let _ = result_tx.send(ConnectAttemptResult {
+                            public_key: pk,
+                            epoch,
+                            result: Err(SwarmError::ConnectTimeout),
                         });
                     }
                 }
@@ -1480,7 +1563,7 @@ impl SwarmActor {
     fn schedule_retry(
         &mut self,
         pk: [u8; 32],
-        connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
+        _connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
     ) {
         if !self.may_outbound_connect(pk) {
             return;
@@ -1494,7 +1577,13 @@ impl SwarmActor {
         }
 
         if cap_for_pairing {
-            self.try_queue_outbound(pk, connect_result_tx);
+            let cmd_tx = self.cmd_tx.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(PAIRING_OUTBOUND_RETRY_DELAY).await;
+                let _ = cmd_tx
+                    .send(SwarmCommand::RetryPairingOutbound { public_key: pk })
+                    .await;
+            });
             return;
         }
 
@@ -1545,6 +1634,47 @@ impl SwarmActor {
             .is_none_or(|gate| gate(remote_pk))
     }
 
+    /// Blind-relay pair token for an inbound handshake reply + subordinate half.
+    ///
+    /// Prefer the dominant peer's `relay_through.token` from the Noise payload so both
+    /// sides pair on the invite topic even before the joiner has `active_pair_topic`.
+    fn resolve_server_relay_token(
+        &self,
+        remote_pk: &[u8; 32],
+        remote_payload: &NoisePayload,
+    ) -> Option<([u8; 32], RelayThroughInfo)> {
+        let relay_pk = self.config.relay_through?;
+        let token = if let Some(remote_rt) = &remote_payload.relay_through {
+            if remote_rt.public_key == relay_pk {
+                remote_rt.token
+            } else {
+                let pair_topic = self.pair_topic_for_peer(remote_pk);
+                blind_relay::resolve_pair_token(
+                    pair_topic.as_ref(),
+                    &self.key_pair.public_key,
+                    remote_pk,
+                    &relay_pk,
+                )
+            }
+        } else {
+            let pair_topic = self.pair_topic_for_peer(remote_pk);
+            blind_relay::resolve_pair_token(
+                pair_topic.as_ref(),
+                &self.key_pair.public_key,
+                remote_pk,
+                &relay_pk,
+            )
+        };
+        Some((
+            token,
+            RelayThroughInfo {
+                version: 1,
+                public_key: relay_pk,
+                token,
+            },
+        ))
+    }
+
     fn cancel_relay_fallback(&mut self, pk: [u8; 32]) {
         if let Some(h) = self.relay_fallback_abort.remove(&pk) {
             h.abort();
@@ -1590,23 +1720,11 @@ impl SwarmActor {
 
         let local_stream_id = next_stream_id();
 
-        let (relay_token, relay_through_info) = if let Some(relay_pk) = self.config.relay_through {
-            let pair_topic = self.pair_topic_for_peer(&remote_pk);
-            let token = blind_relay::resolve_pair_token(
-                pair_topic.as_ref(),
-                &self.key_pair.public_key,
-                &remote_pk,
-                &relay_pk,
-            );
-            let info = RelayThroughInfo {
-                version: 1,
-                public_key: relay_pk,
-                token,
+        let (relay_token, relay_through_info) =
+            match self.resolve_server_relay_token(&remote_pk, &remote_payload) {
+                Some((token, info)) => (Some(token), Some(info)),
+                None => (None, None),
             };
-            (Some(token), Some(info))
-        } else {
-            (None, None)
-        };
 
         let reply_payload = NoisePayload {
             version: 1,
@@ -1699,6 +1817,13 @@ impl SwarmActor {
         }
 
         if let Some(token) = relay_token {
+            if self.any_fast_refresh_topic() && self.active_pair_topic.is_none() {
+                tracing::debug!(
+                    pk = %short_hex(&remote_pk),
+                    "server: defer blind-relay half — invite topic not armed",
+                );
+                return;
+            }
             tracing::info!(
                 pk = %short_hex(&remote_pk),
                 "server: blind-relay inbound half (pair initiator)",
@@ -1968,7 +2093,7 @@ mod tests {
     fn server_relay_link_timeout_covers_pair_budget() {
         use crate::dht::relay_link::{PAIR_TIMEOUT, SERVER_RELAY_LINK_TIMEOUT, SERVER_RELAY_LINK_TIMEOUT_SECS};
         assert!(SERVER_RELAY_LINK_TIMEOUT >= PAIR_TIMEOUT);
-        assert_eq!(SERVER_RELAY_LINK_TIMEOUT_SECS, 35);
+        assert_eq!(SERVER_RELAY_LINK_TIMEOUT_SECS, 25);
     }
 
     #[test]

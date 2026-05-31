@@ -54,6 +54,17 @@ fn pk_prefix(pk: &[u8; 32]) -> String {
     pk.iter().take(8).fold(String::new(), |acc, b| acc + &format!("{b:02x}"))
 }
 
+/// First discovered peer hint that is not the bootstrap relay we are dialing through.
+fn peer_handshake_destination(
+    bootstrap: &Ipv4Peer,
+    hints: &[Ipv4Peer],
+) -> Option<Ipv4Peer> {
+    hints
+        .iter()
+        .find(|h| h.host != bootstrap.host || h.port != bootstrap.port)
+        .cloned()
+}
+
 fn noise_relay_addresses(
     relay_address: Option<SocketAddr>,
     relay_address_hints: &[SocketAddr],
@@ -1236,6 +1247,7 @@ impl HyperDhtHandle {
                         runtime,
                         true,
                         None,
+                        &[],
                     )
                     .await
                 {
@@ -1265,6 +1277,7 @@ impl HyperDhtHandle {
             runtime,
             false,
             pair_topic,
+            &relays,
         )
         .await
     }
@@ -1286,7 +1299,7 @@ impl HyperDhtHandle {
             host: target_addr.ip().to_string(),
             port: target_addr.port(),
         };
-        self.connect_through_node(key_pair, &remote_public_key, &relay, runtime, true, None)
+        self.connect_through_node(key_pair, &remote_public_key, &relay, runtime, true, None, &[])
             .await
     }
 
@@ -1298,6 +1311,7 @@ impl HyperDhtHandle {
         runtime: &UdxRuntime,
         relay_control_channel: bool,
         pair_topic: Option<[u8; 32]>,
+        peer_destination_hints: &[Ipv4Peer],
     ) -> Result<PeerConnection, HyperDhtError> {
         let target = hash(remote_public_key);
 
@@ -1355,12 +1369,12 @@ impl HyperDhtHandle {
         };
 
         let noise_bytes = nw.send(&local_payload)?;
-        // Direct server connect (blind-relay host or known server address) must
-        // include the destination in `relay_address` — see hyperdht_connect_interop.
+        // Coordinator: relay_address = bootstrap. Peer dial: destination hint for the
+        // remote peer (from discovery), not LAN peer_address — see hyperdht_connect_interop.
         let relay_hint = if relay_control_channel {
             Some(relay.clone())
         } else {
-            None
+            peer_handshake_destination(relay, peer_destination_hints)
         };
         // Single reusable socket: the relay learns our UDX source from the handshake's
         // reflexive `from`, so we never advertise a (LAN) `peer_address`.
@@ -1838,6 +1852,10 @@ fn handle_peer_handshake(
     server_tx: &mpsc::UnboundedSender<ServerEvent>,
 ) {
     let Some(value) = &req.value else {
+        tracing::debug!(
+            from = %format!("{}:{}", req.from.host, req.from.port),
+            "handshake failed — PEER_HANDSHAKE missing value"
+        );
         req.error(1);
         return;
     };
@@ -1846,13 +1864,19 @@ fn handle_peer_handshake(
         let router = match router.lock() {
             Ok(r) => r,
             Err(_) => {
+                tracing::warn!("handshake failed — router lock poisoned");
                 req.error(1);
                 return;
             }
         };
         match router.route_handshake(req.target.as_ref(), &req.from, value) {
             Ok(a) => a,
-            Err(_) => {
+            Err(e) => {
+                tracing::debug!(
+                    from = %format!("{}:{}", req.from.host, req.from.port),
+                    err = %e,
+                    "handshake failed — route_handshake rejected payload"
+                );
                 req.error(1);
                 return;
             }
@@ -1891,10 +1915,10 @@ fn handle_peer_handshake(
                 {
                     Ok(resp) => {
                         if resp.error != 0 {
-                            tracing::debug!(
+                            tracing::warn!(
                                 err = resp.error,
                                 to = %format!("{}:{}", to_host, to_port),
-                                "handshake RELAY destination returned error"
+                                "handshake failed — RELAY destination returned error"
                             );
                             req.error(resp.error);
                         } else {
@@ -1902,7 +1926,11 @@ fn handle_peer_handshake(
                         }
                     }
                     Err(e) => {
-                        tracing::warn!(err = %e, "handshake RELAY proxy failed");
+                        tracing::warn!(
+                            err = %e,
+                            to = %format!("{}:{}", to_host, to_port),
+                            "handshake failed — RELAY proxy request failed"
+                        );
                         req.error(1);
                     }
                 }
@@ -1916,6 +1944,7 @@ fn handle_peer_handshake(
             tracing::debug!(from = %format!("{}:{}", req.from.host, req.from.port), "handshake HANDLE_LOCALLY");
             let (reply_tx, reply_rx) = oneshot::channel();
             let from = req.from.clone();
+            let from_log = format!("{}:{}", from.host, from.port);
             let target = req.target;
 
             let sent = server_tx
@@ -1931,10 +1960,20 @@ fn handle_peer_handshake(
                 tokio::spawn(async move {
                     match reply_rx.await {
                         Ok(value) => req.reply(value),
-                        Err(_) => req.error(1),
+                        Err(_) => {
+                            tracing::warn!(
+                                from = %from_log,
+                                "handshake failed — local handler reply timeout"
+                            );
+                            req.error(1);
+                        }
                     }
                 });
             } else {
+                tracing::debug!(
+                    from = %format!("{}:{}", req.from.host, req.from.port),
+                    "handshake failed — server event channel closed"
+                );
                 req.reply(None);
             }
         }
@@ -1973,6 +2012,24 @@ fn to_hex(bytes: impl AsRef<[u8]>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn peer_handshake_destination_skips_bootstrap_relay() {
+        let bootstrap = Ipv4Peer {
+            host: "137.66.21.59".into(),
+            port: 49737,
+        };
+        let hints = vec![
+            bootstrap.clone(),
+            Ipv4Peer {
+                host: "10.0.0.2".into(),
+                port: 4001,
+            },
+        ];
+        let dest = peer_handshake_destination(&bootstrap, &hints).unwrap();
+        assert_eq!(dest.host, "10.0.0.2");
+        assert_eq!(dest.port, 4001);
+    }
 
     #[test]
     fn hyperdht_config_defaults() {

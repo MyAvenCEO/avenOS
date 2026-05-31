@@ -37,6 +37,29 @@ fn invite_topic_differs_from_durable_pair_topic() {
 }
 
 #[test]
+fn server_relay_token_prefers_dominant_handshake_payload() {
+	use aven_p2p::dht::hyperdht_messages::RelayThroughInfo;
+
+	let relay_pk = [0x4e; 32];
+	let invite_topic = [0xAA; 32];
+	let other_topic = [0xBB; 32];
+	let dominant = [0xa1u8; 32];
+	let subordinate = [0x76u8; 32];
+
+	let invite_token = resolve_pair_token(Some(&invite_topic), &dominant, &subordinate, &relay_pk);
+	let other_token = resolve_pair_token(Some(&other_topic), &subordinate, &dominant, &relay_pk);
+
+	let remote_rt = RelayThroughInfo {
+		version: 1,
+		public_key: relay_pk,
+		token: invite_token,
+	};
+	// Subordinate without active_pair_topic would otherwise fall back to durable topic order.
+	assert_eq!(remote_rt.token, invite_token);
+	assert_ne!(other_token, invite_token);
+}
+
+#[test]
 fn pair_token_uses_explicit_active_topic_not_peer_list_order() {
 	let relay_pk = [0x4e; 32];
 	let alice = [0x5du8; 32];

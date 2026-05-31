@@ -23,4 +23,8 @@ pub enum SwarmError {
     /// An internal channel was closed unexpectedly.
     #[error("channel closed")]
     ChannelClosed,
+
+    /// Outbound peer connect did not complete within the relay dial budget.
+    #[error("connect timed out")]
+    ConnectTimeout,
 }

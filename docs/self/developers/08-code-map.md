@@ -24,8 +24,8 @@ title: Code map & audit anchors
 | Plugin registration | `app/src-tauri/src/lib.rs` |
 | Vault webview capabilities | `app/src-tauri/capabilities/vault-webview.json` |
 | Vault routes | `app/src/routes/vault/` |
+| Vault embed | `app/src/lib/vault/tauri-vault-embed.ts`, `VaultEmbedFrame.svelte` |
 | Settings / LockGate | `app/src/lib/settings/LockGate.svelte` |
-| Open vault window | `app/src/lib/vault/open-vault-window.ts` |
 
 ## Audit strings
 

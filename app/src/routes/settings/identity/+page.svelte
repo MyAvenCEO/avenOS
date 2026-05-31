@@ -8,7 +8,7 @@
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { copyToClipboard } from '$lib/runtime/clipboard'
 	import { deviceSession } from '$lib/settings/device-session-store'
-	import { openVaultWindow } from '$lib/vault/open-vault-window'
+	import { navigateApp } from '$lib/shell'
 
 	let vaultOpenErr = $state<string | null>(null)
 
@@ -56,12 +56,12 @@
 		}
 	}
 
-	async function openVault(): Promise<void> {
+	async function goToVault(e: MouseEvent): Promise<void> {
 		vaultOpenErr = null
 		try {
-			await openVaultWindow()
-		} catch (e) {
-			vaultOpenErr = e instanceof Error ? e.message : String(e)
+			await navigateApp('/vault', e)
+		} catch (err) {
+			vaultOpenErr = err instanceof Error ? err.message : String(err)
 		}
 	}
 </script>
@@ -77,13 +77,13 @@
 			{t('self.identity.subtitle', { device: deviceLabel })}
 		</p>
 		{#if sessionKind === 'unlocked' && isTauriRuntime()}
-			<button
-				type="button"
+			<a
+				href="/vault"
 				class="bg-primary text-primary-foreground mt-2 inline-flex rounded-md px-3 py-2 text-sm"
-				onclick={() => void openVault()}
+				onclick={(e) => void goToVault(e)}
 			>
 				{t('selfNav.openVault')}
-			</button>
+			</a>
 		{/if}
 		{#if vaultOpenErr}
 			<p class="text-destructive text-xs">{vaultOpenErr}</p>

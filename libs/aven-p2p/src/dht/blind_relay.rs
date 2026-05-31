@@ -197,6 +197,10 @@ pub enum RelayError {
     #[error("channel closed before pair response")]
     ChannelClosed,
 
+    /// Pair wait exceeded the local deadline (session may still close cleanly).
+    #[error("pair wait timed out")]
+    PairTimeout,
+
     /// The client was destroyed before the operation could complete.
     #[error("relay client destroyed")]
     Destroyed,
@@ -267,7 +271,8 @@ impl BlindRelayClient {
         self.pair_inner(is_initiator, token, stream_id).await
     }
 
-    /// Like [`Self::pair`] but cancels the pending half on timeout via unpair.
+    /// Like [`Self::pair`] with a local deadline. Does **not** send `unpair` on timeout —
+    /// the counterpart's coordinator slot must stay intact (see `drop_pair_half`).
     pub async fn pair_with_timeout(
         &mut self,
         is_initiator: bool,
@@ -278,10 +283,7 @@ impl BlindRelayClient {
         match tokio::time::timeout(timeout, self.pair_inner(is_initiator, token, stream_id)).await {
             Ok(Ok(resp)) => Ok(resp),
             Ok(Err(e)) => Err(e),
-            Err(_) => {
-                let _ = self.unpair(token);
-                Err(RelayError::ChannelClosed)
-            }
+            Err(_) => Err(RelayError::PairTimeout),
         }
     }
 
@@ -419,6 +421,28 @@ impl BlindRelayCoordinator {
         Self::clear_token_waiters_locked(&mut map, token);
         drop(map);
         self.inner.active.lock().await.remove(token);
+    }
+
+    /// Drop one pending half when a control session ends — leaves the counterpart slot intact.
+    ///
+    /// Matches Hyperswarm behaviour: one peer giving up must not cancel the other's pending half.
+    pub async fn drop_pair_half(&self, token: &[u8; 32], is_initiator: bool) {
+        let mut map = self.inner.pending.lock().await;
+        let Some(slots) = map.get_mut(token) else {
+            return;
+        };
+        let half = if is_initiator {
+            slots.initiator.take()
+        } else {
+            slots.responder.take()
+        };
+        if slots.initiator.is_none() && slots.responder.is_none() {
+            map.remove(token);
+        }
+        drop(map);
+        if let Some(h) = half {
+            Self::notify_half_drop(h, RelayError::PairingCancelled);
+        }
     }
 
     async fn wire_paired_streams(
@@ -593,7 +617,7 @@ async fn blind_relay_control_loop<S>(
         return;
     }
 
-    let mut pending_token: Option<[u8; 32]> = None;
+    let mut pending_half: Option<([u8; 32], bool)> = None;
 
     loop {
         match channel.recv().await {
@@ -620,18 +644,19 @@ async fn blind_relay_control_loop<S>(
                     };
 
                     let token = pm.token;
-                    pending_token = Some(token);
+                    let is_initiator = pm.is_initiator;
+                    pending_half.replace((token, is_initiator));
                     let assigned = match coord
-                        .register_pair_half(token, pm.is_initiator, peer_sid, peer_udp)
+                        .register_pair_half(token, is_initiator, peer_sid, peer_udp)
                         .await
                     {
                         Ok(id) => id,
                         Err(RelayError::DuplicatePairSide) => {
-                            pending_token = None;
+                            pending_half.take();
                             continue;
                         }
                         Err(e) => {
-                            pending_token = None;
+                            pending_half.take();
                             coord.unpair_token(&pm.token).await;
                             warn!(
                                 pair_id = pm.id,
@@ -652,17 +677,17 @@ async fn blind_relay_control_loop<S>(
                     };
                     if let Err(e) = channel.send(MSG_TYPE_PAIR, &encode_pair_to_vec(&reply)) {
                         warn!(error = %e, "blind relay: send pair response failed");
-                        coord.unpair_token(&pm.token).await;
-                        pending_token = None;
+                        coord.drop_pair_half(&pm.token, pm.is_initiator).await;
+                        pending_half.take();
                         break;
                     }
-                    let _ = pending_token.take();
+                    pending_half.take();
                 } else if message_type == MSG_TYPE_UNPAIR {
                     match decode_unpair_from_slice(&data) {
                         Ok(u) => {
                             coord.unpair_token(&u.token).await;
-                            if pending_token == Some(u.token) {
-                                pending_token = None;
+                            if pending_half.is_some_and(|(t, _)| t == u.token) {
+                                pending_half.take();
                             }
                         }
                         Err(e) => warn!(error = %e, "blind relay: decode unpair failed"),
@@ -674,8 +699,8 @@ async fn blind_relay_control_loop<S>(
         }
     }
 
-    if let Some(token) = pending_token {
-        coord.unpair_token(&token).await;
+    if let Some((token, is_initiator)) = pending_half {
+        coord.drop_pair_half(&token, is_initiator).await;
     }
 }
 
@@ -1038,6 +1063,41 @@ mod tests {
             .expect("read")
             .expect("bytes");
         assert_eq!(got, b"retry-after-unpair");
+    }
+
+    #[tokio::test]
+    async fn drop_pair_half_preserves_counterpart() {
+        let relay_rt = Arc::new(UdxRuntime::new().expect("udx relay"));
+        let relay_sock = relay_rt.create_socket().await.expect("relay sock");
+        relay_sock
+            .bind("127.0.0.1:0".parse().unwrap())
+            .await
+            .expect("relay bind");
+
+        let peer = UdxRuntime::new().expect("runtime");
+        let sock = peer.create_socket().await.expect("sock");
+        sock.bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
+        let addr = sock.local_addr().await.unwrap();
+
+        let coord = BlindRelayCoordinator::new(relay_rt, relay_sock);
+        let token = [0x44; 32];
+
+        let ini_wait = tokio::spawn({
+            let coord = coord.clone();
+            async move { coord.register_pair_half(token, true, 1, addr).await }
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        coord.drop_pair_half(&token, true).await;
+        let ini_wait = ini_wait.await.expect("join");
+        assert!(matches!(ini_wait, Err(RelayError::PairingCancelled)));
+
+        let rsp_wait = tokio::spawn({
+            let coord = coord.clone();
+            async move { coord.register_pair_half(token, false, 2, addr).await }
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        assert!(coord.register_pair_half(token, true, 3, addr).await.is_ok());
+        assert!(rsp_wait.await.expect("join").is_ok());
     }
 
     #[tokio::test]

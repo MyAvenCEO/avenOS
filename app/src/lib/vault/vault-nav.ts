@@ -9,9 +9,14 @@ export function vaultNavSections(): VaultNavSection[] {
 			title: t('vaultNav.category'),
 			items: [
 				{
-					href: '/vault/secrets',
-					label: t('vaultNav.secrets'),
-					match: (p) => p.startsWith('/vault/secrets'),
+					href: '/vault/passwords',
+					label: t('vaultNav.passwords'),
+					match: (p) => p.startsWith('/vault/passwords'),
+				},
+				{
+					href: '/vault/api-keys',
+					label: t('vaultNav.apiKeys'),
+					match: (p) => p.startsWith('/vault/api-keys'),
 				},
 			],
 		},

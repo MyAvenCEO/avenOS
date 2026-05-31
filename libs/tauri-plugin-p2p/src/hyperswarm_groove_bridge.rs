@@ -298,6 +298,26 @@ impl HyperswarmGrooveBridge {
 
 	async fn record_outbound_send_failure(&self, peer: ClientId) {
 		if !self.mux_ready_for_send_failure(peer).await {
+			// Mux already torn down but Groove still has a stale outbound capsule channel —
+			// heal immediately instead of spinning on ChannelClosed with no link_down.
+			let ghost = self.0.outbound_by_peer.lock().await.contains_key(&peer);
+			if ghost {
+				if let Some(pk) = match self.live_links_registry() {
+					Some(reg) => reg.pk_for_client(peer).await,
+					None => None,
+				} {
+					log::info!(
+						target: "avenos::peeroxide",
+						"ghost outbound channel peer={peer:?} — tearing down for recover",
+					);
+					let bridge = self.clone();
+					tokio::spawn(async move {
+						bridge
+							.teardown_peer_link_immediate(peer, pk, "ghost_channel")
+							.await;
+					});
+				}
+			}
 			return;
 		}
 		let n = {

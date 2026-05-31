@@ -35,8 +35,8 @@ fn relay_only_server_link_timeout_covers_pair_budget() {
         PAIR_TIMEOUT, PAIR_TIMEOUT_SECS, SERVER_RELAY_LINK_TIMEOUT, SERVER_RELAY_LINK_TIMEOUT_SECS,
     };
     assert!(SERVER_RELAY_LINK_TIMEOUT >= PAIR_TIMEOUT);
-    assert_eq!(PAIR_TIMEOUT_SECS, 20);
-    assert_eq!(SERVER_RELAY_LINK_TIMEOUT_SECS, 35);
+    assert_eq!(PAIR_TIMEOUT_SECS, 10);
+    assert_eq!(SERVER_RELAY_LINK_TIMEOUT_SECS, 25);
 }
 
 #[test]

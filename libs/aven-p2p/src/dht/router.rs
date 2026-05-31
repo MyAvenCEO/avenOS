@@ -584,6 +584,41 @@ mod tests {
     }
 
     #[test]
+    fn route_handshake_client_explicit_relay_address() {
+        let mut router = Router::new();
+        let key = target_key();
+        router.set(
+            &key,
+            ForwardEntry {
+                relay: Some(peer("9.9.9.9", 5000)),
+                has_server: false,
+                inserted: Instant::now(),
+            },
+        );
+
+        let dest = peer("11.11.11.11", 6000);
+        let client_hs = HandshakeMessage {
+            mode: MODE_FROM_CLIENT,
+            noise: vec![10, 20, 30],
+            peer_address: None,
+            relay_address: Some(dest.clone()),
+        };
+        let encoded = hyperdht_messages::encode_handshake_to_bytes(&client_hs).unwrap();
+        let from = peer("2.3.4.5", 3000);
+
+        let action = router.route_handshake(Some(&key), &from, &encoded).unwrap();
+        match action {
+            HandshakeAction::Relay { value, to } => {
+                assert_eq!(to.host, "11.11.11.11");
+                assert_eq!(to.port, 6000);
+                let decoded = hyperdht_messages::decode_handshake_from_bytes(&value).unwrap();
+                assert_eq!(decoded.mode, MODE_FROM_RELAY);
+            }
+            other => panic!("Expected Relay to explicit relay_address, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn route_handshake_local_server_handles_locally() {
         let mut router = Router::new();
         let key = target_key();

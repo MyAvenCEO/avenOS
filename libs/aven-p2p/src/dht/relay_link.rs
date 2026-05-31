@@ -1,4 +1,26 @@
 //! Blind-relay data plane — shared by dominant outbound and subordinate inbound halves.
+//!
+//! # Central-relay connect contract
+//!
+//! Both peers use the same co-hosted coordinator (`relay_through` pk @ bootstrap UDP port):
+//!
+//! 1. **Discovery** — topic announce/lookup on the central HyperDHT bootstrap.
+//! 2. **Noise IK** — `PEER_HANDSHAKE` via that bootstrap; both sides exchange the same
+//!    deterministic `relay_through.token` (pair topic + relay pk).
+//! 3. **Blind-relay pair** — subordinate registers `pair(true, token)` on the coordinator;
+//!    dominant registers `pair(false, token)`. The coordinator wires UDX data streams.
+//! 4. **SecretStream** — end-to-end encrypted peer link; coordinator only sees opaque bytes.
+//!
+//! ## Resilience rules (Hyperswarm-aligned)
+//!
+//! - **Patient pair wait** — [`BlindRelayClient::pair`] blocks until the coordinator responds
+//!   or the control channel closes. No local timeout that sends `unpair` (that poisoned the
+//!   counterpart's slot). Outer [`SERVER_RELAY_LINK_TIMEOUT`] / swarm connect caps bound hangs.
+//! - **Per-side slot cleanup** — when one control session ends, [`BlindRelayCoordinator::drop_pair_half`]
+//!   removes only that side's pending half so the counterpart can still match on retry.
+//! - **Explicit `unpair` only** — reserved for deliberate cancel, not timeout side-effects.
+//! - **Wired relay streams** — once matched, coordinator [`ActiveRelayLink`] keeps forwarding
+//!   until the token is unpired; peer mux keepalive maintains the app link above SecretStream.
 
 use libudx::UdxRuntime;
 
@@ -9,18 +31,19 @@ use super::noise_wrap::NoiseWrapResult;
 use super::protomux::Mux;
 use super::secret_stream::SecretStream;
 
-/// Blind-relay protomux pair wait on the coordinator control channel (seconds).
-pub const PAIR_TIMEOUT_SECS: u64 = 20;
+/// Outer cap for subordinate inbound half (coordinator connect + patient pair + SecretStream).
+/// Central relay happy path is a few seconds; this is the hung-connect ceiling only.
+pub const SERVER_RELAY_LINK_TIMEOUT_SECS: u64 = 25;
 
-/// Connect + pair budget for subordinate inbound half (`PAIR_TIMEOUT_SECS` + UDX connect slack).
-pub const SERVER_RELAY_LINK_TIMEOUT_SECS: u64 = PAIR_TIMEOUT_SECS + 15;
+/// Blind-relay protomux pair wait — documented for tests; pair itself has no inner deadline.
+pub const PAIR_TIMEOUT_SECS: u64 = 10;
 
-/// Blind-relay protomux pair wait on the coordinator control channel.
-pub const PAIR_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(PAIR_TIMEOUT_SECS);
-
-/// Connect + blind-relay pair — must cover full [`PAIR_TIMEOUT`] on the relay mux.
+/// Connect + blind-relay pair — must cover patient pair + UDX/Noise slack.
 pub const SERVER_RELAY_LINK_TIMEOUT: std::time::Duration =
     std::time::Duration::from_secs(SERVER_RELAY_LINK_TIMEOUT_SECS);
+
+/// Legacy alias — pair wait is bounded by [`SERVER_RELAY_LINK_TIMEOUT`], not a separate timer.
+pub const PAIR_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(PAIR_TIMEOUT_SECS);
 
 /// Parameters for upgrading a relay control-channel UDX session into an encrypted peer link.
 pub struct RelayLinkParams<'a> {
@@ -70,12 +93,7 @@ pub async fn establish(params: RelayLinkParams<'_>) -> Result<PeerConnection, Hy
 
     let data_stream_id = next_stream_id();
     let pair_response = match relay_client
-        .pair_with_timeout(
-            pair_is_initiator,
-            token,
-            u64::from(data_stream_id),
-            PAIR_TIMEOUT,
-        )
+        .pair(pair_is_initiator, token, u64::from(data_stream_id))
         .await
     {
         Ok(r) => r,

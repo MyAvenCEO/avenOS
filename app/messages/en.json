@@ -74,6 +74,7 @@
     "sandbox": "Sandbox",
     "sparks": "Sparks",
     "db": "DB",
+    "vault": "Vault",
     "avenCity": "avenCITY",
     "docs": "Docs",
     "backToIntentsList": "Back to intents list",
@@ -127,6 +128,8 @@
   "vaultNav": {
     "title": "Vault",
     "category": "Secrets",
+    "passwords": "Passwords",
+    "apiKeys": "API keys",
     "secrets": "Secrets",
     "subtitle": "Stronghold-backed secrets for this identity.",
     "lockedHint": "Unlock your identity in the main window to manage secrets."
@@ -138,7 +141,8 @@
     "valueLabel": "Value",
     "listTitle": "Stored secrets",
     "empty": "No secrets yet.",
-    "reveal": "Reveal"
+    "reveal": "Reveal",
+    "hide": "Hide"
   },
   "preferences": {
     "title": "Language",
