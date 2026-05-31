@@ -667,6 +667,14 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         Ok(())
     }
 
+    /// AvenOS: replay sparks/keyshares only (pairing bootstrap before spark data).
+    pub fn rebroadcast_peer_shell_catchup(&self, client_id: ClientId) -> Result<(), RuntimeError> {
+        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        core.clear_peer_delivery_ledger(client_id);
+        core.rebroadcast_peer_shell_catchup(client_id);
+        Ok(())
+    }
+
     /// AvenOS: replay catch-up for every Peer client, then flush outbound sync.
     pub async fn rebroadcast_all_peer_clients_and_flush(&self) -> Result<(), RuntimeError> {
         {

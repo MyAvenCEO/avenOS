@@ -5,7 +5,7 @@ Bun **monorepo** (layout inspired by [MaiaOS](https://github.com/)): active code
 | Package | Description |
 |---------|-------------|
 | **`libs/aven-website`** | `@avenos/aven-website` — SvelteKit marketing site — home, skills, pricing, waitlist |
-| **`libs/tauri-plugin-peer`** | P2P / Hyperswarm Tauri plugin |
+| **`libs/tauri-plugin-p2p`** | P2P / Hyperswarm Tauri plugin |
 | **`libs/tauri-plugin-self`** | Device identity Tauri plugin |
 | **`libs/aven-vibes`** | `@avenos/aven-vibes` — mini-app HTML catalog for intent HITL views |
 | **`libs/aven-vibe-sandbox`** | `@avenos/aven-vibe-sandbox` — MCP app sandbox host (iframe / Tauri WebView) |

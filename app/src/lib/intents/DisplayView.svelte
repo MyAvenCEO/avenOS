@@ -24,19 +24,15 @@
  */
 import type { IntentRow } from './types'
 import VibeSandboxFrame from '$lib/vibe-apps/VibeSandboxFrame.svelte'
+import { t } from '$lib/i18n'
 
 let { intent }: { intent: IntentRow } = $props()
 
-/**
- * Deterministic mock failure reasons for the inline error appshell.
- * Picked by hashing `intent.id` so the same intent shows the same reason
- * across reactive re-renders / page reloads.
- */
-const MOCK_ERROR_REASONS = [
-	'Approval policy unmatched',
-	'Vendor lookup failed',
-	'Validation rules violated',
-	'Network timeout'
+const MOCK_ERROR_REASON_KEYS = [
+	'approvalPolicy',
+	'vendorLookup',
+	'validationRules',
+	'networkTimeout',
 ] as const
 
 function hashIntentId(id: string): number {
@@ -48,7 +44,9 @@ function hashIntentId(id: string): number {
 }
 
 const errorReason = $derived(
-	MOCK_ERROR_REASONS[hashIntentId(intent.id) % MOCK_ERROR_REASONS.length]
+	t(
+		`intents.display.errorReasons.${MOCK_ERROR_REASON_KEYS[hashIntentId(intent.id) % MOCK_ERROR_REASON_KEYS.length]}`,
+	),
 )
 </script>
 
@@ -60,21 +58,19 @@ const errorReason = $derived(
 			<span
 				class="inline-flex items-center rounded-full border border-status-error/40 bg-status-error/10 px-2 py-0.5 text-[9px] font-semibold tracking-[0.18em] text-status-error uppercase"
 			>
-				System error
+				{t('intents.display.systemError')}
 			</span>
 		</div>
 		<div class="flex flex-col gap-1">
-			<p class="text-[8px] font-bold tracking-[0.22em] opacity-40 uppercase">Automation halted</p>
+			<p class="text-[8px] font-bold tracking-[0.22em] opacity-40 uppercase">{t('intents.display.automationHalted')}</p>
 			<h2 class="text-base leading-snug font-semibold text-foreground">{intent.title}</h2>
 		</div>
 		<p class="text-[12px] leading-relaxed text-status-error">
-			<span class="font-semibold">Reason:</span>
+			<span class="font-semibold">{t('intents.display.reason')}</span>
 			{errorReason}
 		</p>
 		<p class="mt-auto text-[11px] leading-relaxed opacity-65">
-			Use <span class="font-semibold text-status-error">Re-train</span> to restart this intent with
-			feedback, or <span class="font-semibold">Archive</span> to dismiss it — both available in the bottom
-			bar.
+			{t('intents.display.errorHint')}
 		</p>
 	</div>
 {:else if intent.hitlVibeAppId}

@@ -4,31 +4,44 @@ title: System overview & IPC sequence
 
 # System overview & IPC sequence
 
-`tauri-plugin-self` is a Tauri v2 plugin built from `libs/tauri-plugin-self/`. It exposes Secure Enclave operations to the Svelte frontend via Tauri's typed IPC. On macOS, the plugin calls into a Swift static library (`swift-lib/`) via C FFI; on other platforms the plugin surface exists but SE operations return errors (dev bypass is available in debug builds).
+Two Rust plugins and two webview surfaces:
+
+| Plugin | Role |
+| ------ | ---- |
+| **`tauri-plugin-self`** | SE unlock, sign, identity, opens `strong.hold` |
+| **`tauri-plugin-vault`** | Stronghold secrets CRUD (`plugin:vault\|secrets_*`) |
+
+| Webview | Routes |
+| ------- | ------ |
+| **main** | `/settings/*`, `/sparks/*`, LockGate |
+| **vault** | `/vault/*` (child window, isolated capabilities) |
 
 ## Unlock sequence
 
-`app/src/lib/self/LockGate.svelte` orchestrates the full unlock in three sequential Tauri invocations:
+`app/src/lib/settings/LockGate.svelte`:
 
 ```
 invoke('plugin:self|register', { slot: 'device_default' })
-  → creates SE key pair if absent; no biometric prompt; writes blob + pub files
-
-const genesisNetworkId = await invoke('genesis_network_id')
-  → returns GenesisState bytes (Vec<u8>, 65 bytes); sourced from genesis.rs
-
-invoke('plugin:self|unlock', { slot: 'device_default', genesisNetworkId })
-  → triggers Touch ID; runs ECDH + HKDF in Swift; deposits root into SelfState
+invoke('plugin:self|unlock', { slot: 'device_default' })
+  → Touch ID; ECDH + HKDF in Swift; root cached in SelfState
+  → strong.hold opened; identity pinned
 ```
 
-## Frontend state
+Network id: `ceo.aven/testnet/abagana` (`libs/tauri-plugin-self/src/network.rs`). UI reads via `network_seed` command.
 
-`app/src/lib/self/device-session-store.ts` holds a Svelte store with a discriminated union `{ kind: 'locked' | 'unlocked' | 'dev_bypass' }`. No key material, signatures, or derived bytes cross the IPC boundary into JavaScript — only operation results (e.g. signature bytes on demand).
+## Frontend session (main)
+
+`app/src/lib/settings/device-session-store.ts`: `{ kind: 'locked' | 'unlocked' }`. No key material crosses IPC into JavaScript.
+
+## Vault window
+
+Opened from Settings nav → **Vault**. Loads `/vault/secrets` in `WebviewWindow` label `vault`. Only this window may call `plugin:vault|*`.
 
 ## Plugin registration
 
-The plugin is registered in `app/src-tauri/src/lib.rs` alongside `GenesisState` and `SelfState`. Commands exposed: `register`, `unlock`, `lock`, `peer_status`, `public_key`, `signing_public_key`, `sign`, `verify`.
+`app/src-tauri/src/lib.rs`: `tauri-plugin-self`, `tauri-plugin-vault`. Capabilities: `default.json` (main), `vault-webview.json` (vault).
 
-## Dev bypass
+## Related
 
-In `import.meta.env.DEV` builds on non-macOS targets, `LockGate.svelte` shows a bypass button. `device-session-store.ts` exposes `devBypassUnlock()`, which sets state to `dev_bypass` without any Tauri call. No SE operations are performed.
+- [Trust boundaries & sensitive material](../../security/trust-boundaries-and-sensitive-material.md)
+- [Vault plugin architecture](../../vault/developers/01-architecture.md)

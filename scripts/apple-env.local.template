@@ -19,10 +19,10 @@ AVEN_PKG_INSTALLER_IDENTITY="3rd Party Mac Developer Installer: Your Org (YOURTE
 # AVEN_MAC_CF_BUNDLE_VERSION=5
 # AVEN_IOS_CF_BUNDLE_VERSION=1
 
-# Genesis anchor — embedded at compile time for App Store / TestFlight (else read from repo .env)
-# GENESIS_NETWORK_ID=base64-SEC1-uncompressed-P-256-public-point
+# Network identity is hardcoded in the app (`ceo.aven/testnet/abagana`) — no genesis env needed.
 
-# Optional: iOS manual CI signing (base64-encoded by tauri-ios-asc.ts from these paths).
+# Optional: override relay host (default dev scripts use relay.aven.ceo)
+# AVEN_RELAY_URL="relay.aven.ceo" (base64-encoded by tauri-ios-asc.ts from these paths).
 # If APPLE_API_* is set below, automatic CI signing is used instead (no p12/mobileprovision paths needed).
 # iOS manual signing — export a distribution-only .p12 (not the dev cert) from Keychain Access.
 # AVEN_IOS_CERTIFICATE_P12="/absolute/path/Apple_Distribution_Visioncreator_only.p12"

@@ -2,12 +2,13 @@
 //!
 //! Conceptually:
 //!     PEER_ID_<device>            P-256 keypair, private in Secure Enclave (macOS / iOS device).
-//!     device_root_secret          32 bytes, HKDF(ECDH(SE_priv, GENESIS_NETWORK_ID)). RAM only.
+//!     device_root_secret          32 bytes, HKDF(ECDH(SE_priv, network_anchor), salt/info = NETWORK_SEED). RAM only.
 //!     PEER_ID_<device>_ED25519    HKDF-expanded from root secret. Used for `sign` / `verify` /
 //!                                 future Jazz agent + peeroxide Noise XX static key.
 //!
 //! **Linux / Windows debug** and **iOS Simulator debug** use [`dev_insecure`] (plain root secret on disk).
 
+pub mod network;
 pub mod commands;
 pub mod derive;
 pub mod did;
@@ -15,7 +16,13 @@ pub mod paths;
 pub mod state;
 pub mod unlock;
 pub mod vault;
+pub mod vault_settings;
 mod vault_commands;
+mod vault_settings_commands;
+
+pub use vault_settings::VaultP2pPrefs;
+pub use vault_settings_commands::reload_vault_p2p_prefs;
+pub use network::{NETWORK_SEED, RELAY_URL};
 
 /// Plain on-disk root secret for local dev (Linux, iOS Simulator, etc.).
 #[cfg(any(
@@ -47,6 +54,7 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 			use tauri::Manager;
 			app.manage(SelfState::default());
 			app.manage(ActiveVault::default());
+			app.manage(VaultP2pPrefs::new());
 			Ok(())
 		})
 		.invoke_handler(generate_handler![
@@ -67,6 +75,8 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 			vault_commands::vault_create,
 			vault_commands::vault_selected_slug,
 			vault_commands::active_identity,
+			vault_settings_commands::vault_ui_settings_get,
+			vault_settings_commands::vault_ui_settings_set_locale,
 		])
 		.build()
 }
@@ -84,6 +94,7 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 			dev_insecure::log_startup_banner();
 			app.manage(SelfState::default());
 			app.manage(ActiveVault::default());
+			app.manage(VaultP2pPrefs::new());
 			Ok(())
 		})
 		.invoke_handler(generate_handler![
@@ -104,6 +115,8 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 			vault_commands::vault_create,
 			vault_commands::vault_selected_slug,
 			vault_commands::active_identity,
+			vault_settings_commands::vault_ui_settings_get,
+			vault_settings_commands::vault_ui_settings_set_locale,
 		])
 		.build()
 }

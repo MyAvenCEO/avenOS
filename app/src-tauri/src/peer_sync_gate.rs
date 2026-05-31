@@ -3,13 +3,15 @@
 //!
 //! Table classification + row-batch resolution live in [`crate::spark_sync`] (manifest-driven).
 
+use std::collections::HashMap;
+use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use groove::sync_manager::{ClientId, InboxEntry, Source, SyncPayload};
 use groove::{PeerTransport, Result as GrooveResult};
 
-use crate::spark_acc;
 use crate::spark_sync::{self, SyncAclSnapshot};
 
 /// Maps remote Groove [`ClientId`] → `did:key` for policy checks.
@@ -60,37 +62,33 @@ fn payload_variant(p: &SyncPayload) -> &'static str {
 }
 
 fn should_forward(acl: &Arc<RwLock<Option<SyncAclSnapshot>>>, dest_did: &str, payload: &SyncPayload) -> bool {
-	if payload.is_catalogue() {
-		return true;
-	}
 	let guard = acl.read().expect("acl");
 	let Some(snap) = guard.as_ref() else {
 		return false;
 	};
-	let Some(tbl) = spark_sync::resolve_table_for_acl(snap, payload) else {
-		return false;
-	};
-	if spark_sync::P2P_BLOCKED_TABLES.contains(&tbl.as_str()) {
-		return false;
-	}
-	if matches!(tbl.as_str(), "catalogue_schema" | "catalogue_lens") {
-		return true;
-	}
-	let (SyncPayload::RowBatchCreated { row, .. } | SyncPayload::RowBatchNeeded { row, .. }) =
-		payload
-	else {
-		return true;
-	};
-	let object_id = row.row_id;
-	let Some(spark) = spark_sync::resolve_spark_uuid(snap, &tbl, row, object_id) else {
-		return false;
-	};
-	let Some(entry) = snap.sparks.get(&spark) else {
-		return false;
-	};
-	match spark_acc::spark_peer_is_owner(&entry.biscuit, spark, dest_did) {
-		Ok(true) => true,
-		Ok(false) | Err(_) => false,
+	spark_sync::should_forward_p2p(snap, dest_did, payload)
+}
+
+fn now_ms() -> u64 {
+	SystemTime::now()
+		.duration_since(UNIX_EPOCH)
+		.map(|d| d.as_millis() as u64)
+		.unwrap_or(0)
+}
+
+static POLICY_DROP_LOG_LAST: Mutex<Option<HashMap<String, u64>>> = Mutex::new(None);
+const POLICY_LOG_INTERVAL_MS: u64 = 5_000;
+
+fn should_log_policy_drop(key: &str) -> bool {
+	let now = now_ms();
+	let mut slot = POLICY_DROP_LOG_LAST.lock().expect("policy log lock");
+	let map = slot.get_or_insert_with(HashMap::new);
+	let last = map.get(key).copied().unwrap_or(0);
+	if now.saturating_sub(last) >= POLICY_LOG_INTERVAL_MS {
+		map.insert(key.to_string(), now);
+		true
+	} else {
+		false
 	}
 }
 
@@ -107,16 +105,33 @@ impl PeerTransport for BiscuitGatedPeerTransport {
 		let variant = payload_variant(&payload);
 		let tbl = spark_sync::table_from_payload(&payload);
 		if !should_forward(&self.acl, &dest_did, &payload) {
+			let log_key = format!("{dest_did}:{tbl:?}");
 			let log_line = format!(
 				"policy_drop peer={peer:?} did={dest_did} variant={variant} table={tbl:?}",
 			);
-			if tbl.as_deref().is_some_and(spark_sync::is_p2p_sync_diag_table) {
-				log::info!(target: "avenos::peer_sync_gate", "{log_line}");
-			} else {
-				log::debug!(target: "avenos::peer_sync_gate", "{log_line}");
+			let bootstrap_hold = spark_sync::p2p_forward_drop_is_bootstrap_hold(&payload);
+			if should_log_policy_drop(&log_key) {
+				if bootstrap_hold {
+					log::info!(
+						target: "avenos::peer_sync_gate",
+						"{log_line} (bootstrap hold)",
+					);
+				} else if tbl.as_deref().is_some_and(spark_sync::is_p2p_sync_diag_table) {
+					log::info!(target: "avenos::peer_sync_gate", "{log_line}");
+				} else {
+					log::debug!(target: "avenos::peer_sync_gate", "{log_line}");
+				}
 			}
-			// Do not return Ok — sync must not treat undelivered frames as sent.
-			return Err(groove::JazzError::Sync(log_line));
+			if spark_sync::p2p_forward_drop_is_permanent(&payload) {
+				return Ok(());
+			}
+			// Transient / bootstrap hold — defer until shell + trust catch up.
+			let reason = if bootstrap_hold {
+				format!("bootstrap_hold {log_line}")
+			} else {
+				log_line
+			};
+			return Err(groove::JazzError::Sync(reason));
 		}
 		if tbl.as_deref().is_some_and(spark_sync::is_p2p_sync_diag_table) {
 			log::info!(
@@ -155,5 +170,39 @@ impl PeerTransport for BiscuitGatedPeerTransport {
 
 	async fn shutdown(&self) -> GrooveResult<()> {
 		self.inner.shutdown().await
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use groove::sync_manager::SyncPayload;
+
+	#[test]
+	fn spark_data_bootstrap_hold_is_not_permanent() {
+		let payload = SyncPayload::RowBatchCreated {
+			metadata: None,
+			row: groove::row_histories::StoredRowBatch {
+				row_id: groove::ObjectId::new(),
+				batch_id: groove::row_histories::BatchId::new(),
+				branch: "client/main".into(),
+				parents: Default::default(),
+				updated_at: 0,
+				created_by: "test".into(),
+				created_at: 0,
+				updated_by: "test".into(),
+				state: groove::row_histories::RowState::VisibleDirect,
+				confirmed_tier: None,
+				delete_kind: None,
+				is_deleted: false,
+				data: groove::query_manager::types::RowBytes::from(Vec::new()),
+				metadata: groove::row_histories::RowMetadata::from_entries(vec![(
+					groove::metadata::MetadataKey::Table.as_str().to_string(),
+					"messages".to_string(),
+				)]),
+			},
+		};
+		assert!(spark_sync::p2p_forward_drop_is_bootstrap_hold(&payload));
+		assert!(!spark_sync::p2p_forward_drop_is_permanent(&payload));
 	}
 }

@@ -43,5 +43,5 @@ Requires **Rust 1.93.1** (`RUSTUP_TOOLCHAIN` in script).
 ## Consumers
 
 - `app/src-tauri` — `groove = { package = "aven-db", features = ["client-p2p"] }`
-- `libs/tauri-plugin-peer` — same
+- `libs/tauri-plugin-p2p` — same
 - `libs/aven-schema/crates/schema-hash` — same

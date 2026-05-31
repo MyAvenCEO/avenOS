@@ -17,11 +17,19 @@ UI updates from **pushed** `avenos:runtime` mesh/table snapshots — not a peers
 
 ## Transport reset before invite
 
-Starting a new invite runs **`reconnect_peers(pairing_reset)`**: global `prepare_reconnect` + **`teardown_all_links`** so ghost mux workers do not block the fresh pairing stream.
+Starting a new invite runs **`transport_tick(Reset)`**: global `prepare_reconnect` + **`teardown_all_links`** + **`reset_peer_dial_state`** so ghost mux workers and stale swarm `waiting` state do not block the fresh pairing stream.
+
+Order: teardown links → `prepare_reconnect` → leave durable topics → join signalling topic → DHT flush.
+
+## Pairing dial authority
+
+After reset, **`arm_pairing_swarm`** sets **`active_pair_topic`** (invite topic hash) and clears dial state. The swarm uses this topic for **all** blind-relay pair tokens during `fast_refresh` — not `peers[pk].topics.first()`.
+
+**Dominant** (higher ed25519 static key) outbound-dials on discovery; **subordinate** defers outbound (`should_outbound_connect`). During pairing, dominant bypasses swarm `waiting` backoff via **`try_queue_outbound`**.
 
 ## Post-pair persist
 
-Durable topic join may **defer DHT flush** until mux is **Live** or a short grace elapses — preserves a winning LAN pre-reply stream during invite persist.
+Durable topic join may **defer DHT flush** until mux is **Live** or a short grace elapses.
 
 ## Events (coarse)
 

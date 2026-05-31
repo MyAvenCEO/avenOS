@@ -567,8 +567,8 @@ pub fn evaluate_simple_parts_with_row_id(
     _session: &super::session::Session,
     _row_id: Option<crate::object::ObjectId>,
 ) -> SimpleEvalResult {
-    SimpleEvalResult {
-        passed: true,
+            SimpleEvalResult {
+                passed: true,
         complex_clauses: vec![],
     }
 }

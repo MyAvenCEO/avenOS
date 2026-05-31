@@ -16,6 +16,7 @@ import StatusCard from './StatusCard.svelte'
 import MobileAsideDrawer from '$lib/ui/MobileAsideDrawer.svelte'
 import MobileAsideSectionLabel from '$lib/ui/MobileAsideSectionLabel.svelte'
 import { mobileAsideBottomPadClass } from '$lib/ui/mobile-aside'
+import { t } from '$lib/i18n'
 
 let {
 	intent,
@@ -57,10 +58,10 @@ const skillsBottomPad = `pb-[calc(4.25rem+env(safe-area-inset-bottom))] ${mobile
 				class="inline-flex min-h-[2.5rem] shrink-0 cursor-pointer items-center {mirrorCards
 					? 'justify-end rounded-[var(--radius-lg)] border-y-0 border-l-0 border-r-[4px] border-solid border-r-border px-3 text-right'
 					: 'justify-start rounded-[var(--radius-lg)] border-y-0 border-r-0 border-l-[4px] border-solid border-l-border px-3 text-left'} bg-surface-card py-0 text-[10px] font-semibold tracking-[0.2em] text-foreground/65 uppercase transition-colors duration-200 ease-out hover:bg-surface-card-hover"
-				aria-label="Show all skill activity"
+				aria-label={t('intents.showAllSkillActivity')}
 				onclick={() => onSelectSkill(null)}
 			>
-				All
+				{t('common.all')}
 			</button>
 		{/if}
 
@@ -103,7 +104,7 @@ const skillsBottomPad = `pb-[calc(4.25rem+env(safe-area-inset-bottom))] ${mobile
 					>
 						<path d="m9 18 6-6-6-6" />
 					</svg>
-					<span>Workers · {workers.length}</span>
+					<span>{t('intents.workersCount', { count: workers.length })}</span>
 				</button>
 				<div class="h-px flex-1 bg-border/50"></div>
 			</div>
@@ -120,7 +121,7 @@ const skillsBottomPad = `pb-[calc(4.25rem+env(safe-area-inset-bottom))] ${mobile
 							? 'bg-surface-card-selected'
 							: 'bg-muted/12 hover:bg-surface-card-hover'}"
 						aria-pressed={isWorkerSelected}
-						aria-label={`Filter activity by worker ${worker.name}`}
+						aria-label={t('intents.filterByWorker', { name: worker.name })}
 						onclick={() =>
 							onSelectWorker(selectedWorkerName === worker.name ? null : worker.name)}
 					>
@@ -150,7 +151,7 @@ const skillsBottomPad = `pb-[calc(4.25rem+env(safe-area-inset-bottom))] ${mobile
 	class="col-start-3 row-start-1 hidden min-h-[1.125rem] w-full items-center justify-end gap-1.5 self-start sm:flex"
 >
 	<span class="text-right text-[8px] font-bold tracking-[0.22em] opacity-30 uppercase">
-		Skills
+		{t('intents.skillsCount')}
 		{#if intent && intent.skills.length > 0}
 			<span class="tabular-nums tracking-[0.18em]"> - {intent.skills.length}</span>
 		{/if}
@@ -166,14 +167,14 @@ const skillsBottomPad = `pb-[calc(4.25rem+env(safe-area-inset-bottom))] ${mobile
 <MobileAsideDrawer
 	bind:open={mobileOpen}
 	side="right"
-	ariaLabel="Skills and workers"
+	ariaLabel={t('intents.skillsAndWorkers')}
 	hideFromClass="sm:hidden"
 	zIndex={44}
 	bottomPadClass={skillsBottomPad}
 >
 	{#snippet header()}
 		<MobileAsideSectionLabel align="right" class="mb-0 opacity-30">
-			Skills
+			{t('intents.skillsCount')}
 			{#if intent && intent.skills.length > 0}
 				<span class="tabular-nums tracking-[0.18em]"> · {intent.skills.length}</span>
 			{/if}

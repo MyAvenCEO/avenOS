@@ -32,7 +32,7 @@ use super::protomux::{self, Channel, ChannelEvent, Mux};
 use libudx::{UdxRuntime, UdxSocket};
 use thiserror::Error;
 use tokio::sync::{Mutex, oneshot};
-use tracing::{debug, warn};
+use tracing::warn;
 
 /// Pair message — requests relay pairing with a 32-byte token.
 #[derive(Debug, Clone, PartialEq)]
@@ -62,6 +62,41 @@ pub const MSG_TYPE_PAIR: u32 = 0;
 
 /// Protomux message type index for unpair.
 pub const MSG_TYPE_UNPAIR: u32 = 1;
+
+const PAIR_TOKEN_NS: &[u8] = b"aven:blind-relay-pair:topic:v1:";
+const PAIR_TOKEN_PK_NS: &[u8] = b"aven:blind-relay-pair:pk:v1:";
+
+/// Deterministic blind-relay pair token for a durable pair topic (same on both peers).
+pub fn derive_pair_token(pair_topic: &[u8; 32], relay_pk: &[u8; 32]) -> [u8; 32] {
+    super::crypto::hash_batch(&[PAIR_TOKEN_NS, pair_topic, relay_pk])
+}
+
+/// Fallback when the swarm has not yet tagged the peer with a topic (sorted ed25519 keys).
+pub fn derive_pair_token_from_pks(
+    local_pk: &[u8; 32],
+    remote_pk: &[u8; 32],
+    relay_pk: &[u8; 32],
+) -> [u8; 32] {
+    let (lo, hi) = if local_pk <= remote_pk {
+        (local_pk, remote_pk)
+    } else {
+        (remote_pk, local_pk)
+    };
+    super::crypto::hash_batch(&[PAIR_TOKEN_PK_NS, lo, hi, relay_pk])
+}
+
+/// Topic-first token when known; otherwise stable pk-derived token.
+pub fn resolve_pair_token(
+    pair_topic: Option<&[u8; 32]>,
+    local_pk: &[u8; 32],
+    remote_pk: &[u8; 32],
+    relay_pk: &[u8; 32],
+) -> [u8; 32] {
+    match pair_topic {
+        Some(topic) => derive_pair_token(topic, relay_pk),
+        None => derive_pair_token_from_pks(local_pk, remote_pk, relay_pk),
+    }
+}
 
 /// Pre-encodes a [`PairMessage`], advancing the state cursor.
 pub fn preencode_pair(state: &mut State, msg: &PairMessage) {
@@ -229,6 +264,33 @@ impl BlindRelayClient {
         token: &[u8; 32],
         stream_id: u64,
     ) -> Result<PairResponse, RelayError> {
+        self.pair_inner(is_initiator, token, stream_id).await
+    }
+
+    /// Like [`Self::pair`] but cancels the pending half on timeout via unpair.
+    pub async fn pair_with_timeout(
+        &mut self,
+        is_initiator: bool,
+        token: &[u8; 32],
+        stream_id: u64,
+        timeout: std::time::Duration,
+    ) -> Result<PairResponse, RelayError> {
+        match tokio::time::timeout(timeout, self.pair_inner(is_initiator, token, stream_id)).await {
+            Ok(Ok(resp)) => Ok(resp),
+            Ok(Err(e)) => Err(e),
+            Err(_) => {
+                let _ = self.unpair(token);
+                Err(RelayError::ChannelClosed)
+            }
+        }
+    }
+
+    async fn pair_inner(
+        &mut self,
+        is_initiator: bool,
+        token: &[u8; 32],
+        stream_id: u64,
+    ) -> Result<PairResponse, RelayError> {
         let msg = PairMessage {
             is_initiator,
             token: *token,
@@ -238,11 +300,11 @@ impl BlindRelayClient {
         self.channel
             .send(MSG_TYPE_PAIR, &encode_pair_to_vec(&msg))?;
 
-        debug!(
+        tracing::info!(
             is_initiator,
             token = %format_args!("{:02x?}", &token[..4]),
             stream_id,
-            "sent pair request"
+            "blind-relay: sent pair request",
         );
 
         loop {
@@ -251,9 +313,11 @@ impl BlindRelayClient {
                     if message_type == MSG_TYPE_PAIR {
                         let response = decode_pair_from_slice(&data)?;
                         if response.token == *token && response.is_initiator == is_initiator {
-                            debug!(
+                            tracing::info!(
+                                is_initiator,
                                 remote_id = response.id,
-                                "pair response received"
+                                token = %format_args!("{:02x?}", &token[..4]),
+                                "blind-relay: pair response received",
                             );
                             return Ok(PairResponse {
                                 remote_id: response.id,
@@ -467,9 +531,17 @@ impl BlindRelayCoordinator {
 
         if let Some((ini, rsp)) = to_wire {
             if let Err(e) = self.wire_paired_streams(token, ini, rsp).await {
-                warn!(error = %e, "blind relay wire_paired_streams failed");
+                tracing::info!(
+                    token = %format_args!("{:02x?}", &token[..4]),
+                    err = %e,
+                    "blind-relay: wire_paired_streams failed",
+                );
                 return Err(e);
             }
+            tracing::info!(
+                token = %format_args!("{:02x?}", &token[..4]),
+                "blind-relay: wire_paired_streams ok",
+            );
         }
 
         reply_rx.await.map_err(|_| RelayError::PairNotifyDropped)?
@@ -521,6 +593,8 @@ async fn blind_relay_control_loop<S>(
         return;
     }
 
+    let mut pending_token: Option<[u8; 32]> = None;
+
     loop {
         match channel.recv().await {
             Some(ChannelEvent::Message {
@@ -541,20 +615,24 @@ async fn blind_relay_control_loop<S>(
                         Err(_) => {
                             warn!(pair_id = pm.id, "blind relay: pair peer stream id overflows u32");
                             channel.close();
-                            return;
+                            break;
                         }
                     };
 
+                    let token = pm.token;
+                    pending_token = Some(token);
                     let assigned = match coord
-                        .register_pair_half(pm.token, pm.is_initiator, peer_sid, peer_udp)
+                        .register_pair_half(token, pm.is_initiator, peer_sid, peer_udp)
                         .await
                     {
                         Ok(id) => id,
                         Err(RelayError::DuplicatePairSide) => {
-                            // Node ignores duplicate registrations for same side/token.
+                            pending_token = None;
                             continue;
                         }
                         Err(e) => {
+                            pending_token = None;
+                            coord.unpair_token(&pm.token).await;
                             warn!(
                                 pair_id = pm.id,
                                 is_initiator = pm.is_initiator,
@@ -562,7 +640,7 @@ async fn blind_relay_control_loop<S>(
                                 "blind relay pair failed",
                             );
                             channel.close();
-                            return;
+                            break;
                         }
                     };
 
@@ -574,12 +652,18 @@ async fn blind_relay_control_loop<S>(
                     };
                     if let Err(e) = channel.send(MSG_TYPE_PAIR, &encode_pair_to_vec(&reply)) {
                         warn!(error = %e, "blind relay: send pair response failed");
-                        return;
+                        coord.unpair_token(&pm.token).await;
+                        pending_token = None;
+                        break;
                     }
+                    let _ = pending_token.take();
                 } else if message_type == MSG_TYPE_UNPAIR {
                     match decode_unpair_from_slice(&data) {
                         Ok(u) => {
                             coord.unpair_token(&u.token).await;
+                            if pending_token == Some(u.token) {
+                                pending_token = None;
+                            }
                         }
                         Err(e) => warn!(error = %e, "blind relay: decode unpair failed"),
                     }
@@ -588,6 +672,10 @@ async fn blind_relay_control_loop<S>(
             Some(ChannelEvent::Closed { .. }) | None => break,
             Some(ChannelEvent::Opened { .. }) => {}
         }
+    }
+
+    if let Some(token) = pending_token {
+        coord.unpair_token(&token).await;
     }
 }
 
@@ -725,6 +813,37 @@ mod tests {
         assert_eq!(PROTOCOL_NAME, "blind-relay");
     }
 
+    #[test]
+    fn derive_pair_token_stable() {
+        let topic = [0x01; 32];
+        let relay = [0x02; 32];
+        assert_eq!(derive_pair_token(&topic, &relay), derive_pair_token(&topic, &relay));
+        assert_ne!(derive_pair_token(&topic, &relay), derive_pair_token(&[0x03; 32], &relay));
+    }
+
+    #[test]
+    fn derive_pair_token_from_pks_order_invariant() {
+        let a = [0x01; 32];
+        let mut b = [0x02; 32];
+        let relay = [0x03; 32];
+        assert_eq!(
+            derive_pair_token_from_pks(&a, &b, &relay),
+            derive_pair_token_from_pks(&b, &a, &relay),
+        );
+    }
+
+    #[test]
+    fn resolve_pair_token_prefers_topic() {
+        let topic = [0x0a; 32];
+        let local = [0x01; 32];
+        let remote = [0x02; 32];
+        let relay = [0x03; 32];
+        assert_eq!(
+            resolve_pair_token(Some(&topic), &local, &remote, &relay),
+            derive_pair_token(&topic, &relay),
+        );
+    }
+
     #[tokio::test]
     async fn client_pair_with_fake_relay() {
         let (stream_a, stream_b) = mem_pair();
@@ -857,7 +976,101 @@ mod tests {
         assert_eq!(got, b"single-sock");
     }
 
-    /// Matches [`relay_encrypted`]: pairing through [`BlindRelayCoordinator`] relays opaque payloads.
+    #[tokio::test]
+    async fn coordinator_orphan_cleanup_allows_retry() {
+        let relay_rt = Arc::new(UdxRuntime::new().expect("udx relay"));
+        let relay_sock = relay_rt.create_socket().await.expect("relay sock");
+        relay_sock
+            .bind("127.0.0.1:0".parse::<SocketAddr>().expect("relay bind addr"))
+            .await
+            .expect("relay bind");
+        let relay_listen = relay_sock.local_addr().await.expect("relay local");
+
+        let peer_a = UdxRuntime::new().expect("runtime a");
+        let peer_b = UdxRuntime::new().expect("runtime b");
+
+        let sa_sock = peer_a.create_socket().await.expect("sock a");
+        sa_sock
+            .bind("127.0.0.1:0".parse::<SocketAddr>().unwrap())
+            .await
+            .expect("bind a");
+        let pa = sa_sock.local_addr().await.expect("addr a");
+
+        let sb_sock = peer_b.create_socket().await.expect("sock b");
+        sb_sock
+            .bind("127.0.0.1:0".parse::<SocketAddr>().unwrap())
+            .await
+            .expect("bind b");
+        let pb = sb_sock.local_addr().await.expect("addr b");
+
+        let coord = BlindRelayCoordinator::new(relay_rt.clone(), relay_sock.clone());
+        let token = [0x22; 32];
+
+        let first = tokio::spawn({
+            let coord = coord.clone();
+            async move { coord.register_pair_half(token, false, 1, pa).await }
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        coord.unpair_token(&token).await;
+        let first = first.await.expect("join");
+        assert!(first.is_err());
+
+        let (ra, rb) = tokio::join!(
+            coord.register_pair_half(token, true, 2, pb),
+            coord.register_pair_half(token, false, 1, pa),
+        );
+        let ra = ra.expect("ini relay-assigned stream id");
+        let rb = rb.expect("rsp relay-assigned stream id");
+        assert_ne!(ra, rb);
+
+        let s_a = peer_a.create_stream(1).await.expect("stream a");
+        let mut s_b = peer_b.create_stream(2).await.expect("stream b");
+        s_a.connect(&sa_sock, u32::try_from(rb).unwrap(), relay_listen)
+            .await
+            .expect("a connect relay");
+        s_b.connect(&sb_sock, u32::try_from(ra).unwrap(), relay_listen)
+            .await
+            .expect("b connect relay");
+        s_a.write(b"retry-after-unpair").await.expect("write");
+        let got = tokio::time::timeout(std::time::Duration::from_secs(5), s_b.read())
+            .await
+            .expect("timeout")
+            .expect("read")
+            .expect("bytes");
+        assert_eq!(got, b"retry-after-unpair");
+    }
+
+    #[tokio::test]
+    async fn duplicate_pair_side_after_unpair() {
+        let relay_rt = Arc::new(UdxRuntime::new().expect("udx relay"));
+        let relay_sock = relay_rt.create_socket().await.expect("relay sock");
+        relay_sock
+            .bind("127.0.0.1:0".parse().unwrap())
+            .await
+            .expect("relay bind");
+
+        let peer = UdxRuntime::new().expect("runtime");
+        let sock = peer.create_socket().await.expect("sock");
+        sock.bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
+        let addr = sock.local_addr().await.unwrap();
+
+        let coord = BlindRelayCoordinator::new(relay_rt, relay_sock);
+        let token = [0x33; 32];
+
+        let pending = tokio::spawn({
+            let coord = coord.clone();
+            async move { coord.register_pair_half(token, false, 1, addr).await }
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        assert!(matches!(
+            coord.register_pair_half(token, false, 2, addr).await,
+            Err(RelayError::DuplicatePairSide)
+        ));
+        coord.unpair_token(&token).await;
+        let _ = pending.await;
+        assert!(coord.register_pair_half(token, false, 3, addr).await.is_ok());
+    }
+
     #[tokio::test]
     async fn coordinator_udx_wire_smoke() {
         let relay_rt = Arc::new(UdxRuntime::new().expect("udx relay"));

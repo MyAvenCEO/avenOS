@@ -81,19 +81,21 @@ public func self_create_se_key_bridge(
 	}
 }
 
-/// Loads SE handle from blob and asks the SE to perform ECDH against `peerPub`, then HKDF-extracts 32 bytes.
+/// Loads SE handle from blob and asks the SE to perform ECDH against the network anchor, then HKDF-extracts 32 bytes.
 /// Exactly **one** Touch ID sheet via `LAContext.evaluatePolicy(...)`; the same authenticated context is reused for
 /// the SE key load + ECDH, so the SE does not re-prompt.
 @_cdecl("self_derive_root_secret_bridge")
 public func self_derive_root_secret_bridge(
 	blob: SRData,
 	peerPub: SRData,
+	networkSeed: SRString,
 	reason: SRString,
 	context: UInt64,
 	callback: @escaping SelfResultCallback
 ) {
 	let blobData = Data(blob.toArray())
 	let peerData = Data(peerPub.toArray())
+	let seedData = Data(networkSeed.toString().utf8)
 	let reasonStr = reason.toString()
 
 	if blobData.isEmpty {
@@ -101,7 +103,11 @@ public func self_derive_root_secret_bridge(
 		return
 	}
 	if peerData.isEmpty {
-		callback(nil, dupCString("missing_genesis_network_id"), context)
+		callback(nil, dupCString("missing_network_anchor"), context)
+		return
+	}
+	if seedData.isEmpty {
+		callback(nil, dupCString("missing_network_seed"), context)
 		return
 	}
 
@@ -128,8 +134,8 @@ public func self_derive_root_secret_bridge(
 
 			let sym = secret.hkdfDerivedSymmetricKey(
 				using: SHA256.self,
-				salt: peerData,
-				sharedInfo: Data("ceo.aven.os/root/v1".utf8),
+				salt: seedData,
+				sharedInfo: seedData,
 				outputByteCount: 32
 			)
 			let out = sym.withUnsafeBytes { Data($0) }

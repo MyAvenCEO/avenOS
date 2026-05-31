@@ -4,5 +4,5 @@
 	"description": "Hyperswarm / peer invite commands (macOS, Linux, iOS).",
 	"windows": ["main"],
 	"platforms": ["macOS", "linux", "iOS"],
-	"permissions": ["peer:default"]
+	"permissions": ["p2p:default"]
 }

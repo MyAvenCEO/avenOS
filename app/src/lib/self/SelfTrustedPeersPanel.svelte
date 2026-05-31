@@ -20,11 +20,18 @@
 	import { pairingLabelForSession } from '$lib/self/active-vault-ui'
 	import { peerPersonName, shortPeerDid } from '$lib/peer/display-label'
 	import PeerMeshPhaseBadge from '$lib/peer/PeerMeshPhaseBadge.svelte'
-	import { meshPeerPhase, peerMeshDetailSubLabel, peerMeshDetailSubTitle, peerMeshPhaseLabel } from '$lib/peer/mesh-state'
+	import {
+		meshPeerByDid,
+		meshPeerPhase,
+		peerMeshDetailSubLabel,
+		peerMeshDetailSubTitle,
+		peerMeshPhaseLabel,
+	} from '$lib/peer/mesh-state'
 	import type { PeerRowReply } from '$lib/peer/api'
 	import { peerMeshSnapshot, peerRows } from '$lib/peer/peer-mesh-store'
 	import { navigateApp } from '$lib/shell'
 	import { vaultList } from '$lib/self/vault'
+	import { t } from '$lib/i18n'
 
 	let err = $state<string | undefined>()
 	/** Full-panel spinner only for the first load — not background polls. */
@@ -98,12 +105,15 @@
 	}
 
 	const httpsProbeSummary = $derived.by(() => {
-		if (httpsProbeBusy) return 'probing TCP/443…'
-		if (!httpsProbe) return 'TCP/443 probe not run yet'
+		if (httpsProbeBusy) return t('peer.httpsProbeBusy')
+		if (!httpsProbe) return t('peer.httpsProbeNotRun')
 		if (httpsProbe.ok) {
-			return `TCP/443 ok · ${httpsProbe.status ?? '???'} · ${httpsProbe.latencyMs ?? '?'}ms`
+			return t('peer.httpsProbeOk', {
+				status: httpsProbe.status ?? '???',
+				latency: httpsProbe.latencyMs ?? '?',
+			})
 		}
-		return `TCP/443 FAILED · ${httpsProbe.error ?? 'unknown'}`
+		return t('peer.httpsProbeFailed', { error: httpsProbe.error ?? 'unknown' })
 	})
 
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
@@ -132,19 +142,19 @@
 	): { title: string; detail: string } {
 		if (linkedCount > 0) {
 			return {
-				title: 'Almost there…',
-				detail: 'Finishing pairing and saving your connection on this device.',
+				title: t('peer.almostThere'),
+				detail: t('peer.finishingPairing'),
 			}
 		}
 		if (hostWaiting) {
 			return {
 				title: '',
-				detail: 'Waiting for the other device — usually up to a minute.',
+				detail: t('peer.waitingForOtherDevice'),
 			}
 		}
 		return {
-			title: 'Connecting to the other device…',
-			detail: 'Usually up to a minute on the open internet.',
+			title: t('peer.connectingToOtherDevice'),
+			detail: t('peer.usuallyOneMinute'),
 		}
 	}
 
@@ -233,9 +243,7 @@
 		const code = acceptCode.trim()
 		try {
 			if (!mesh?.hyperswarmRunning) {
-				throw new Error(
-					'Peer network is still starting — wait a few seconds after unlock, then try again.',
-				)
+				throw new Error(t('errors.peerNetworkStartingAccept'))
 			}
 			await peerInviteAccept(code)
 			acceptCode = ''
@@ -283,7 +291,7 @@
 			}
 			const payload = diagnosticsPayload()
 			if (!payload) {
-				diagnosticsCopyError = 'no diagnostics available'
+				diagnosticsCopyError = t('errors.noDiagnosticsAvailable')
 				return
 			}
 			const text = JSON.stringify(payload, null, 2)
@@ -294,7 +302,7 @@
 					diagnosticsCopied = false
 				}, 2500)
 			} else {
-				diagnosticsCopyError = 'clipboard write failed (check OS permissions)'
+				diagnosticsCopyError = t('errors.clipboardWriteFailed')
 			}
 		} catch (e) {
 			diagnosticsCopyError = e instanceof Error ? e.message : String(e)
@@ -341,10 +349,10 @@
 		}
 		initialLoading = true
 		const gen = ++loadGeneration
-		const t = window.setTimeout(() => {
+		const loadTimeoutId = window.setTimeout(() => {
 			if (gen === loadGeneration) initialLoading = false
 		}, 2500)
-		return () => window.clearTimeout(t)
+		return () => window.clearTimeout(loadTimeoutId)
 	})
 
 	$effect(() => {
@@ -383,7 +391,7 @@
 
 <section class="space-y-4">
 	<h2 class="text-[11px] font-semibold tracking-wider uppercase text-muted-foreground/75">
-		Connect with peer
+		{t('peer.connectWithPeer')}
 	</h2>
 
 	{#if err}
@@ -393,13 +401,13 @@
 	{#if initialLoading}
 		<p class="text-muted-foreground flex items-center gap-2 text-sm">
 			<span class="peers-spinner shrink-0 opacity-60" aria-hidden="true"></span>
-			<span>Getting things ready…</span>
+			<span>{t('common.gettingReady')}</span>
 		</p>
 	{/if}
 
 	<div class="rounded-xl border border-border/60 bg-card/30 p-3 sm:p-4">
 		<h3 class="text-muted-foreground/75 mb-3 text-[10px] font-semibold tracking-wider uppercase">
-			Join
+			{t('peer.join')}
 		</h3>
 
 		<div class="flex flex-col items-center gap-4 px-1 py-2 sm:py-4">
@@ -411,7 +419,7 @@
 					}}
 				>
 					<summary class="flex cursor-pointer list-none items-center justify-between gap-2 select-none font-medium [&::-webkit-details-marker]:hidden">
-						<span>P2P diagnostics</span>
+						<span>{t('peer.p2pDiagnostics')}</span>
 						<button
 							type="button"
 							class="text-primary hover:text-primary/80 shrink-0 text-[9px] font-semibold tracking-wide uppercase disabled:opacity-50"
@@ -423,11 +431,11 @@
 							}}
 						>
 							{#if diagnosticsCopying}
-								copying…
+								{t('common.copying')}
 							{:else if diagnosticsCopied}
-								Copied
+								{t('common.copied')}
 							{:else}
-								Copy all
+								{t('common.copyAll')}
 							{/if}
 						</button>
 					</summary>
@@ -456,28 +464,28 @@
 						disabled={actionBusy}
 						onclick={() => void retryPeerNetwork()}
 					>
-						Retry peer network
+						{t('peer.retryPeerNetwork')}
 					</button>
 				</div>
 			{:else if !initialLoading && mesh && !mesh.hyperswarmRunning}
 				<p class="text-muted-foreground max-w-sm text-center text-xs leading-relaxed">
-					Peer network is still starting — wait a few seconds after unlock.
+					{t('peer.peerNetworkStarting')}
 				</p>
 			{/if}
 
 			<div class="mx-auto w-full max-w-md space-y-3">
 				<label class="flex flex-col gap-2 text-xs">
-					<span class="text-muted-foreground text-center font-medium">Code from other device</span>
+					<span class="text-muted-foreground text-center font-medium">{t('peer.codeFromOtherDevice')}</span>
 					<input
 						class="border-input bg-background placeholder:text-muted-foreground/35 h-14 w-full rounded-xl border px-4 text-center font-mono text-2xl font-semibold tracking-[0.35em] uppercase shadow-sm placeholder:tracking-normal"
-						placeholder="ABC12X"
+						placeholder={t('peer.inviteCodePlaceholder')}
 						maxlength={6}
 						bind:value={acceptCode}
 						autocomplete="off"
 						autocorrect="off"
 						spellcheck="false"
 						inputmode="text"
-						aria-label="Invite code from other device"
+						aria-label={t('peer.inviteCodeAria')}
 					/>
 				</label>
 
@@ -487,7 +495,7 @@
 					disabled={actionBusy || acceptCode.trim().length < 6 || !mesh?.hyperswarmRunning}
 					onclick={() => void acceptInvite()}
 				>
-					{actionBusy ? '…' : 'Accept'}
+					{actionBusy ? '…' : t('common.accept')}
 				</button>
 			</div>
 		</div>
@@ -499,14 +507,14 @@
 
 	<div class="space-y-2">
 		<h3 class="text-[10px] font-semibold tracking-wider uppercase text-muted-foreground/75">
-			Trusted peers
+			{t('peer.trustedPeers')}
 		</h3>
 
 		<button
 			type="button"
 			class="group border-border/70 hover:bg-muted/35 hover:border-border focus-visible:ring-ring flex w-full flex-col items-center gap-2 rounded-xl border border-dashed bg-card/15 px-4 py-4 text-center transition-[background-color,border-color] ring-offset-background focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45"
 			disabled={actionBusy || initialLoading || !mesh?.hyperswarmRunning || pairingPending}
-			title={hostingInvite ? 'Cancel the active invite first' : 'Generate a code for another device'}
+			title={hostingInvite ? t('peer.cancelActiveInviteTitle') : t('peer.generateCodeTitle')}
 			onclick={() => void trustNewPeer()}
 		>
 			<span
@@ -516,13 +524,13 @@
 			>
 			<span class="max-w-sm space-y-0.5">
 				<span class="text-muted-foreground/90 block text-sm font-medium tracking-tight"
-					>Trust new peer</span
+					>{t('peer.trustNewPeer')}</span
 				>
 				<span class="text-muted-foreground/65 block text-[11px] leading-snug">
 					{#if hostingInvite}
-						Share the code below — or cancel to start over.
+						{t('peer.trustNewPeerHintHosting')}
 					{:else}
-						Show a pairing code they can enter under Join.
+						{t('peer.trustNewPeerHintDefault')}
 					{/if}
 				</span>
 			</span>
@@ -530,17 +538,12 @@
 
 		{#if trustedRows.length === 0 && !hostingInvite}
 			<p class="text-muted-foreground px-1 text-xs leading-snug">
-				No trusted peers yet. Tap <span class="font-medium">Trust new peer</span> or enter a code
-				above, then share sparks under
-				<a
-					href="/self/workspaces"
-					class="text-primary font-medium underline"
-					onclick={(e) => navigateApp('/self/workspaces', e)}
-				>Self → Share</a>.
+				{t('peer.noTrustedPeersYet')}
 			</p>
 		{:else if trustedRows.length > 0 || hostingInvite}
 			<ul class="divide-border/60 divide-y overflow-hidden rounded-xl border border-border/60">
 				{#each trustedRows as r (r.id)}
+					{@const meshRow = r.placeholder ? undefined : meshPeerByDid(mesh, r.peerDid)}
 					{@const rowPhase = r.placeholder
 						? 'pairing'
 						: meshPeerPhase(mesh, r.peerDid, r.status)}
@@ -556,6 +559,8 @@
 					>
 						<PeerMeshPhaseBadge
 							phase={rowPhase}
+							usability={meshRow?.usability}
+							linkHealth={mesh?.p2pDiagnostics.linkHealth}
 							variant="rail"
 							title={r.peerDid
 								? `${r.peerDid} · ${peerMeshPhaseLabel(rowPhase)}`
@@ -569,7 +574,7 @@
 									<div class="flex flex-wrap items-center gap-2">
 										<span
 											class="font-mono text-base font-bold tracking-[0.18em] text-foreground uppercase sm:text-lg"
-											aria-label="Pairing code"
+											aria-label={t('peer.pairingCode')}
 										>
 											{r.pairingCode}
 										</span>
@@ -578,7 +583,7 @@
 											class="text-muted-foreground/80 border-border/70 hover:bg-muted/40 hover:text-foreground rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-[0.12em] uppercase transition-colors"
 											onclick={() => void copyPairingCode(r.pairingCode!)}
 										>
-											{copiedPairingCode === r.pairingCode ? 'Copied' : 'Copy'}
+											{copiedPairingCode === r.pairingCode ? t('common.copied') : t('common.copy')}
 										</button>
 									</div>
 									{#if r.pairingDetail}
@@ -589,7 +594,7 @@
 								{:else}
 									<div class="font-medium">
 										{r.placeholder
-											? r.deviceLabel || '(no label)'
+											? r.deviceLabel || t('peer.noLabel')
 											: peerPersonName(r.peerDid, r.deviceLabel, localPairingLabel)}
 									</div>
 									{#if rowSubLabel}
@@ -620,20 +625,20 @@
 									type="button"
 									class="text-muted-foreground border-border hover:bg-destructive/8 hover:border-destructive/45 hover:text-destructive shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors"
 									disabled={actionBusy}
-									aria-label="Cancel outgoing invite"
+									aria-label={t('peer.cancelOutgoingInvite')}
 									onclick={() => void cancelInvite()}
 								>
-									Cancel
+									{t('common.cancel')}
 								</button>
 							{:else if r.status === 'active' && !r.placeholder}
 								<button
 									type="button"
 									class="text-destructive border-destructive/40 hover:bg-destructive/10 shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold whitespace-nowrap"
 									disabled={actionBusy}
-									title="Remove this peer — stops sync until you pair again"
+									title={t('peer.removePeerTitle')}
 									onclick={() => void revoke(r.peerDid)}
 								>
-									Remove
+									{t('peer.removePeer')}
 								</button>
 							{/if}
 						</div>

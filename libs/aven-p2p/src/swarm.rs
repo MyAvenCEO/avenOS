@@ -10,48 +10,29 @@ use tokio::task::JoinHandle;
 use std::sync::Arc;
 
 use libudx::{RuntimeHandle, UdxRuntime};
+use crate::dht::blind_relay;
 use crate::dht::crypto::hash;
-use crate::dht::holepuncher::match_address;
-use crate::dht::local_addresses::build_addresses4;
 use crate::dht::hyperdht::{
-    self, handle_peer_holepunch_reply, HolepunchServerPeerState, HyperDhtConfig, HyperDhtHandle,
-    KeyPair, PeerConnection, ServerEvent,
+    self, HyperDhtConfig, HyperDhtHandle, KeyPair, PeerConnection, ServerEvent,
 };
 use crate::dht::hyperdht_messages::{
-    encode_handshake_to_bytes, HandshakeMessage, HolepunchInfo, NoisePayload, RelayInfo,
-    RelayThroughInfo, SecretStreamInfo, UdxInfo, MODE_REPLY,
+    encode_handshake_to_bytes, HandshakeMessage, NoisePayload, RelayThroughInfo,
+    SecretStreamInfo, UdxInfo, MODE_REPLY,
 };
 use crate::dht::messages::Ipv4Peer;
-use crate::dht::socket_pool::SocketPool;
 use crate::dht::noise::Keypair as NoiseKeypair;
 use crate::dht::noise_wrap::NoiseWrap;
-use crate::dht::secret_stream::SecretStream;
 
 use crate::connection_set::{ConnectionInfo, ConnectionSet};
 use crate::error::SwarmError;
 use crate::peer_discovery::{run_discovery, DiscoveryEvent, PeerDiscoveryConfig};
 use crate::peer_info::{PeerInfo, Priority};
+use crate::util::{is_unroutable_relay_host, short_hex};
 
 static NEXT_STREAM_ID: AtomicU32 = AtomicU32::new(1);
 
 fn next_stream_id() -> u32 {
     NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed)
-}
-
-/// `127.0.0.0/8`, `0.0.0.0`, and IPv6 loopback never round-trip between machines — surfacing
-/// them in announce `relay_addresses` only wastes a connect attempt before falling back to the
-/// real Fly DHT relay.
-fn is_unroutable_relay_host(host: &str) -> bool {
-    if host.eq_ignore_ascii_case("localhost") {
-        return true;
-    }
-    if let Ok(ip) = host.parse::<std::net::Ipv4Addr>() {
-        return ip.is_loopback() || ip.is_unspecified() || ip.is_link_local();
-    }
-    if let Ok(ip) = host.parse::<std::net::Ipv6Addr>() {
-        return ip.is_loopback() || ip.is_unspecified();
-    }
-    false
 }
 
 /// Parse `suggestedIPv4@hostname:port` HyperDHT bootstrap lines into the UDP endpoint peers use
@@ -92,9 +73,6 @@ fn ipv4_peers_from_dht_bootstraps(lines: &[String]) -> Vec<Ipv4Peer> {
 const DEFAULT_MAX_PEERS: usize = 64;
 const DEFAULT_MAX_PARALLEL: usize = 8;
 
-/// Max connect retry delay while any [`JoinOpts::fast_refresh`] topic is joined.
-const PAIRING_MAX_RETRY_DELAY: Duration = Duration::from_millis(2000);
-
 // ── Retry backoff tiers (matching Node.js lib/retry-timer.js) ────────────────
 // Each tier: [base_ms, jitter1, jitter2, jitter3]
 // Delay = base + rand(0..j1) + rand(0..j2) + rand(0..j3)
@@ -103,7 +81,7 @@ const BACKOFF_M: [u64; 4] = [5000, 1000, 500, 250];
 const BACKOFF_L: [u64; 4] = [15000, 5000, 2500, 1000];
 const BACKOFF_X: [u64; 4] = [600_000, 60_000, 30_000, 15_000];
 
-fn retry_delay(info: &PeerInfo, cap_for_pairing: bool) -> Duration {
+fn retry_delay(info: &PeerInfo) -> Duration {
     let idx = if info.proven {
         (info.attempts as usize).min(3)
     } else {
@@ -119,19 +97,7 @@ fn retry_delay(info: &PeerInfo, cap_for_pairing: bool) -> Duration {
     let jitter = rng.random_range(0..tier[1])
         + rng.random_range(0..tier[2])
         + rng.random_range(0..tier[3]);
-    let mut delay = Duration::from_millis(tier[0] + jitter);
-    if cap_for_pairing && delay > PAIRING_MAX_RETRY_DELAY {
-        delay = PAIRING_MAX_RETRY_DELAY;
-    }
-    delay
-}
-
-fn short_hex(bytes: &[u8]) -> String {
-    bytes.iter().take(4).fold(String::new(), |mut s, b| {
-        use fmt::Write;
-        write!(s, "{b:02x}").ok();
-        s
-    })
+    Duration::from_millis(tier[0] + jitter)
 }
 
 // ── Public types ─────────────────────────────────────────────────────────────
@@ -149,19 +115,21 @@ pub struct SwarmConfig {
     pub max_parallel: usize,
     /// Firewall value sent in handshakes (default 0).
     pub firewall: u64,
-    /// Public key of the hosted blind-relay node (`relay_through` in Noise; fallback after holepunch).
+    /// Public key of the hosted blind-relay node (`relay_through` in Noise).
     pub relay_through: Option<[u8; 32]>,
     /// Socket address hints for Hyperswarm blind-relay wired mode (normally unused).
     pub relay_address: Option<std::net::SocketAddr>,
     /// Extra UDP hints advertised in handshake `relay_addresses` (e.g. DHT bootstrap + blind-relay).
     pub relay_address_hints: Vec<std::net::SocketAddr>,
-    /// Optional connect UI progress callbacks (discovering + outbound connect path).
+    /// Optional connect UI progress callbacks (outbound connect path).
     pub connect_ui: Option<crate::dht::connect_ui::ConnectUiHook>,
-    /// When false (cellular-only), skip LAN handshake paths and use holepunch/relay.
-    pub prefer_lan: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// When true, outbound connects use blind-relay only (vault relay-only mode).
+    pub prefer_relay_only: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// When `true` for a remote static key, suppress blind-relay fallback, stale-slot
     /// clearing, and dominant-side outbound nudges — the host app owns an in-flight link.
     pub should_suppress_transport: Option<Arc<dyn Fn([u8; 32]) -> bool + Send + Sync>>,
+    /// When `false`, skip outbound DHT connect for this remote pk (relay-only subordinate half).
+    pub should_outbound_connect: Option<Arc<dyn Fn([u8; 32]) -> bool + Send + Sync>>,
 }
 
 impl Default for SwarmConfig {
@@ -176,8 +144,9 @@ impl Default for SwarmConfig {
             relay_address: None,
             relay_address_hints: Vec::new(),
             connect_ui: None,
-            prefer_lan: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            prefer_relay_only: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
             should_suppress_transport: None,
+            should_outbound_connect: None,
         }
     }
 }
@@ -384,17 +353,63 @@ impl SwarmHandle {
             .map_err(|_| SwarmError::Destroyed)
     }
 
-    /// Spawn a background outbound connect for an already-linked peer (transport upgrade probe).
-    pub async fn probe_transport_upgrade(&self, public_key: [u8; 32]) -> Result<(), SwarmError> {
+    /// When true, outbound connects use blind-relay only (relay-only cutover; always true in AvenOS).
+    pub fn set_prefer_relay_only(&self, _on: bool) {
+        self.dht.set_prefer_relay_only(true);
+    }
+
+    /// Queue outbound connect to a known peer pk (allowlist dial — no DHT discovery required).
+    pub async fn connect_known_peer(
+        &self,
+        public_key: [u8; 32],
+        topic: [u8; 32],
+        relay_addresses: Vec<Ipv4Peer>,
+    ) -> Result<(), SwarmError> {
         self.cmd_tx
-            .send(SwarmCommand::ProbeTransportUpgrade { public_key })
+            .send(SwarmCommand::ConnectKnownPeer {
+                public_key,
+                topic,
+                relay_addresses,
+            })
             .await
             .map_err(|_| SwarmError::Destroyed)
     }
 
-    /// Toggle LAN-first connect paths (off on cellular-only interfaces).
-    pub fn set_prefer_lan(&self, prefer: bool) {
-        self.dht.set_prefer_lan(prefer);
+    /// Invite/signalling topic for blind-relay pair tokens during fast_refresh pairing.
+    pub async fn set_active_pair_topic(&self, topic: Option<[u8; 32]>) -> Result<(), SwarmError> {
+        self.cmd_tx
+            .send(SwarmCommand::SetActivePairTopic { topic })
+            .await
+            .map_err(|_| SwarmError::Destroyed)
+    }
+
+    /// Clear retry/backoff state so pairing or heal can redial immediately.
+    pub async fn reset_peer_dial_state(
+        &self,
+        public_key: Option<[u8; 32]>,
+    ) -> Result<(), SwarmError> {
+        self.cmd_tx
+            .send(SwarmCommand::ResetPeerDialState { public_key })
+            .await
+            .map_err(|_| SwarmError::Destroyed)
+    }
+
+    /// Re-queue outbound dials for peers discovered on fast_refresh (pairing) topics.
+    pub async fn redial_pairing_peers(&self) -> Result<(), SwarmError> {
+        self.cmd_tx
+            .send(SwarmCommand::RedialPairingPeers)
+            .await
+            .map_err(|_| SwarmError::Destroyed)
+    }
+
+    /// True when a dominant outbound dial or subordinate blind-relay half is in flight during pairing.
+    pub async fn pairing_dial_in_flight(&self) -> Result<bool, SwarmError> {
+        let (tx, rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::PairingDialInFlight { reply_tx: tx })
+            .await
+            .map_err(|_| SwarmError::Destroyed)?;
+        rx.await.map_err(|_| SwarmError::Destroyed)
     }
 }
 
@@ -426,13 +441,37 @@ enum SwarmCommand {
     },
     PrepareReconnect,
     RefreshAnnounceRelays,
-    ProbeTransportUpgrade {
-        public_key: [u8; 32],
-    },
     /// Reserve a transport slot immediately before delivering an inbound connection.
     ReserveTransportSlot {
         public_key: [u8; 32],
         is_initiator: bool,
+    },
+    /// Dial a known allowlisted peer without waiting for DHT lookup (relay-only reconnect).
+    ConnectKnownPeer {
+        public_key: [u8; 32],
+        topic: [u8; 32],
+        relay_addresses: Vec<Ipv4Peer>,
+    },
+    SetActivePairTopic {
+        topic: Option<[u8; 32]>,
+    },
+    ResetPeerDialState {
+        public_key: Option<[u8; 32]>,
+    },
+    /// Dominant pairing redial — re-queue peers on fast_refresh topics (invite rendezvous).
+    RedialPairingPeers,
+    /// Subordinate blind-relay fallback task finished (success or failure).
+    NoteRelayFallbackComplete {
+        public_key: [u8; 32],
+        retry: Option<ServerRelayFallbackParams>,
+    },
+    /// Retry subordinate blind-relay half after a failed attempt during pairing.
+    RespawnRelayFallback {
+        params: ServerRelayFallbackParams,
+    },
+    /// Query whether pairing transport is busy (dominant dial or subordinate relay half).
+    PairingDialInFlight {
+        reply_tx: oneshot::Sender<bool>,
     },
 }
 
@@ -457,8 +496,6 @@ struct ActorConfig {
     /// ahead of loopback in topic announces so remote peers can route handshakes via the same
     /// bootstrap that already forwards `PEER_HANDSHAKE` relay traffic.
     announce_bootstrap_relays: Vec<Ipv4Peer>,
-    /// UDP port for this node's DHT — used with [`build_addresses4`] so peers can LAN/hotspot-connect.
-    dht_listen_port: u16,
 }
 
 struct SwarmActor {
@@ -466,9 +503,6 @@ struct SwarmActor {
     dht: HyperDhtHandle,
     config: ActorConfig,
     runtime_handle: Arc<RuntimeHandle>,
-
-    /// Last holepunch bookkeeping per initiating peer [`Noise`] session (parity with standalone HyperDHT).
-    holepunch_secrets: HashMap<[u8; 32], HolepunchServerPeerState>,
 
     topics: HashMap<[u8; 32], TopicState>,
     discovery_event_tx: mpsc::UnboundedSender<DiscoveryEvent>,
@@ -486,19 +520,23 @@ struct SwarmActor {
     active_connects: usize,
     flush_waiters: Vec<oneshot::Sender<Result<(), SwarmError>>>,
     connect_ui: Option<crate::dht::connect_ui::ConnectUiHook>,
-    /// Shared with HyperDHT — updated by the host app on network path changes.
-    prefer_lan: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Vault relay-only — blind-relay data plane only (owned by HyperDHT handle).
+    _prefer_relay_only: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// Shared relay list for DHT announces — refreshed on network path change.
     announce_relay_addrs: Arc<std::sync::RwLock<Vec<Ipv4Peer>>>,
-    /// Peers with an in-flight transport upgrade probe (bypasses connection dedup).
-    upgrade_probes: std::collections::HashSet<[u8; 32]>,
     should_suppress_transport: Option<Arc<dyn Fn([u8; 32]) -> bool + Send + Sync>>,
+    should_outbound_connect: Option<Arc<dyn Fn([u8; 32]) -> bool + Send + Sync>>,
     /// Per-peer abort handles for deferred/eager blind-relay fallback tasks.
     relay_fallback_abort: HashMap<[u8; 32], tokio::task::AbortHandle>,
+    /// Superseded outbound connect attempts (relay-only — one in-flight dial per pk).
+    connect_epoch: HashMap<[u8; 32], u64>,
+    /// Signalling topic for deterministic blind-relay tokens during invite pairing.
+    active_pair_topic: Option<[u8; 32]>,
 }
 
 struct ConnectAttemptResult {
     public_key: [u8; 32],
+    epoch: u64,
     result: Result<(PeerConnection, UdxRuntime), SwarmError>,
 }
 
@@ -521,15 +559,17 @@ pub async fn spawn(
         relay_address,
         relay_address_hints,
         connect_ui,
-        prefer_lan,
+        prefer_relay_only,
         should_suppress_transport,
+        should_outbound_connect,
     } = config;
 
     dht.connect_relay.relay_through = relay_through;
     dht.connect_relay.relay_address = relay_address;
     dht.connect_relay.relay_address_hints = relay_address_hints.clone();
     dht.connect_ui = connect_ui.clone();
-    dht.prefer_lan = prefer_lan.clone();
+    dht.prefer_relay_only = prefer_relay_only.clone();
+    prefer_relay_only.store(true, std::sync::atomic::Ordering::Release);
 
     let key_pair = key_pair_opt.unwrap_or_else(KeyPair::generate);
     let runtime = UdxRuntime::new()?;
@@ -581,10 +621,8 @@ pub async fn spawn(
             relay_address,
             relay_address_hints,
             announce_bootstrap_relays,
-            dht_listen_port: local_port,
         },
         runtime_handle: runtime.handle(),
-        holepunch_secrets: HashMap::new(),
         topics: HashMap::new(),
         discovery_event_tx,
         peers: HashMap::new(),
@@ -597,11 +635,13 @@ pub async fn spawn(
         active_connects: 0,
         flush_waiters: Vec::new(),
         connect_ui,
-        prefer_lan,
+        _prefer_relay_only: prefer_relay_only,
         announce_relay_addrs,
-        upgrade_probes: std::collections::HashSet::new(),
         should_suppress_transport,
+        should_outbound_connect,
         relay_fallback_abort: HashMap::new(),
+        connect_epoch: HashMap::new(),
+        active_pair_topic: None,
     };
 
     // Keep the DHT runtime alive for the swarm's lifetime.
@@ -659,6 +699,12 @@ impl SwarmActor {
             }
         }
 
+        tracing::info!(
+            pk = %short_hex(&self.key_pair.public_key),
+            topics = self.topics.len(),
+            "swarm actor shutting down"
+        );
+
         for (_, state) in self.topics.drain() {
             if let Some(cancel) = state.cancel_tx {
                 let _ = cancel.send(());
@@ -706,6 +752,11 @@ impl SwarmActor {
                 false
             }
             SwarmCommand::Destroy { reply_tx } => {
+                tracing::info!(
+                    pk = %short_hex(&self.key_pair.public_key),
+                    topics = self.topics.len(),
+                    "swarm destroy requested"
+                );
                 if self.server_registered {
                     let target = hash(&self.key_pair.public_key);
                     self.dht.unregister_server(&target);
@@ -719,19 +770,15 @@ impl SwarmActor {
                 false
             }
             SwarmCommand::NotePeerDisconnected { public_key } => {
-                self.note_peer_disconnected(public_key);
+                self.note_peer_disconnected(public_key, connect_result_tx);
                 false
             }
             SwarmCommand::PrepareReconnect => {
-                self.prepare_stale_reconnect();
+                self.prepare_stale_reconnect(connect_result_tx);
                 false
             }
             SwarmCommand::RefreshAnnounceRelays => {
                 self.refresh_announce_relays();
-                false
-            }
-            SwarmCommand::ProbeTransportUpgrade { public_key } => {
-                self.probe_transport_upgrade(public_key, &connect_result_tx);
                 false
             }
             SwarmCommand::ReserveTransportSlot {
@@ -746,6 +793,287 @@ impl SwarmActor {
                 }
                 false
             }
+            SwarmCommand::ConnectKnownPeer {
+                public_key,
+                topic,
+                relay_addresses,
+            } => {
+                self.connect_known_peer(public_key, topic, relay_addresses, connect_result_tx);
+                false
+            }
+            SwarmCommand::SetActivePairTopic { topic } => {
+                self.active_pair_topic = topic;
+                false
+            }
+            SwarmCommand::ResetPeerDialState { public_key } => {
+                self.reset_peer_dial_state(public_key, connect_result_tx);
+                false
+            }
+            SwarmCommand::RedialPairingPeers => {
+                self.redial_pairing_peers(connect_result_tx);
+                false
+            }
+            SwarmCommand::NoteRelayFallbackComplete { public_key, retry } => {
+                self.relay_fallback_abort.remove(&public_key);
+                if let Some(params) = retry {
+                    self.maybe_schedule_relay_fallback_retry(params);
+                }
+                false
+            }
+            SwarmCommand::RespawnRelayFallback { params } => {
+                self.spawn_server_blind_relay_fallback_params(params);
+                false
+            }
+            SwarmCommand::PairingDialInFlight { reply_tx } => {
+                let _ = reply_tx.send(self.pairing_dial_in_flight());
+                false
+            }
+        }
+    }
+
+    fn pairing_dial_in_flight(&self) -> bool {
+        if !self.any_fast_refresh_topic() {
+            return false;
+        }
+        let dominant_busy = self.peers.iter().any(|(pk, info)| {
+            *pk != self.key_pair.public_key
+                && self.may_outbound_connect(*pk)
+                && !info.banned
+                && !info.topics.is_empty()
+                && (info.connecting || info.queued)
+        });
+        dominant_busy || !self.relay_fallback_abort.is_empty()
+    }
+
+    fn maybe_schedule_relay_fallback_retry(&self, params: ServerRelayFallbackParams) {
+        if !self.any_fast_refresh_topic() {
+            return;
+        }
+        if self.connections.has(&params.remote_pk) {
+            return;
+        }
+        if self.relay_fallback_abort.contains_key(&params.remote_pk) {
+            return;
+        }
+        if self.transport_suppressed(params.remote_pk) {
+            return;
+        }
+        tracing::info!(
+            pk = %short_hex(&params.remote_pk),
+            token = %format_args!("{:02x?}", &params.token[..4]),
+            "server: scheduling blind-relay fallback retry",
+        );
+        let cmd_tx = self.cmd_tx.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            let _ = cmd_tx
+                .send(SwarmCommand::RespawnRelayFallback { params })
+                .await;
+        });
+    }
+
+    fn connect_known_peer(
+        &mut self,
+        public_key: [u8; 32],
+        topic: [u8; 32],
+        relay_addresses: Vec<Ipv4Peer>,
+        connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
+    ) {
+        if public_key == self.key_pair.public_key {
+            return;
+        }
+        let addrs = if relay_addresses.is_empty() {
+            self.build_relay_addrs()
+        } else {
+            relay_addresses
+        };
+        if !self.may_outbound_connect(public_key) {
+            tracing::debug!(
+                pk = %short_hex(&public_key),
+                "deferring outbound connect — subordinate relay-only half",
+            );
+            self.upsert_discovered_peer(public_key, addrs, topic);
+            return;
+        }
+        if self.connections.has(&public_key) {
+            return;
+        }
+        if self.connections.len() >= self.config.max_peers {
+            return;
+        }
+
+        if let Some(hook) = &self.connect_ui {
+            hook(crate::dht::connect_ui::ConnectUiEvent::Progress {
+                remote_pk: public_key,
+                phase: crate::dht::connect_ui::ConnectProgressPhase::Discovering,
+            });
+        }
+
+        self.upsert_discovered_peer(public_key, addrs, topic);
+        self.try_queue_outbound(public_key, connect_result_tx);
+    }
+
+    fn upsert_discovered_peer(
+        &mut self,
+        public_key: [u8; 32],
+        relay_addresses: Vec<Ipv4Peer>,
+        topic: [u8; 32],
+    ) {
+        let info = self
+            .peers
+            .entry(public_key)
+            .or_insert_with(|| PeerInfo::new(public_key, relay_addresses.clone()));
+        if !relay_addresses.is_empty() {
+            info.relay_addresses = relay_addresses;
+        }
+        if !info.topics.contains(&topic) {
+            info.topics.push(topic);
+        }
+    }
+
+    fn clear_peer_dial(&mut self, pk: [u8; 32], remove_slot: bool) {
+        self.cancel_relay_fallback(pk);
+        if let Some(epoch) = self.connect_epoch.get_mut(&pk) {
+            *epoch += 1;
+        }
+        if remove_slot {
+            self.connections.remove(&pk);
+        }
+        if let Some(info) = self.peers.get_mut(&pk) {
+            info.connecting = false;
+            info.queued = false;
+            info.set_waiting(false);
+        }
+        self.queue.retain(|queued| *queued != pk);
+    }
+
+    fn pair_topic_for_peer(&self, pk: &[u8; 32]) -> Option<[u8; 32]> {
+        if self.any_fast_refresh_topic() {
+            if let Some(topic) = self.active_pair_topic {
+                return Some(topic);
+            }
+        }
+        self.peers
+            .get(pk)
+            .and_then(|info| info.topics.first().copied())
+    }
+
+    /// Queue outbound dial when gates allow; clears retry backoff on discovery/redial.
+    fn try_queue_outbound(
+        &mut self,
+        public_key: [u8; 32],
+        connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
+    ) {
+        let pairing = self.any_fast_refresh_topic();
+        let Some(info) = self.peers.get_mut(&public_key) else {
+            return;
+        };
+        if info.banned {
+            tracing::debug!(pk = %short_hex(&public_key), "outbound skip — banned");
+            return;
+        }
+        if pairing {
+            info.set_waiting(false);
+        } else if info.is_waiting() {
+            info.set_waiting(false);
+        }
+        if info.queued {
+            tracing::debug!(pk = %short_hex(&public_key), "outbound skip — already queued");
+            return;
+        }
+        if info.connecting {
+            tracing::debug!(pk = %short_hex(&public_key), "outbound skip — connecting");
+            return;
+        }
+        if self.connections.has(&public_key) {
+            tracing::debug!(pk = %short_hex(&public_key), "outbound skip — connection slot");
+            return;
+        }
+        info.queued = true;
+        info.priority = info.get_priority();
+        self.queue.push(public_key);
+        self.attempt_connections(connect_result_tx);
+    }
+
+    fn reset_peer_dial_state(
+        &mut self,
+        public_key: Option<[u8; 32]>,
+        connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
+    ) {
+        let pks: Vec<[u8; 32]> = match public_key {
+            Some(pk) => vec![pk],
+            None => self.peers.keys().copied().collect(),
+        };
+        for pk in &pks {
+            self.clear_peer_dial(*pk, true);
+        }
+        for pk in pks {
+            if pk == self.key_pair.public_key {
+                continue;
+            }
+            let Some(info) = self.peers.get(&pk) else {
+                continue;
+            };
+            if info.banned || info.topics.is_empty() || !self.may_outbound_connect(pk) {
+                continue;
+            }
+            self.try_queue_outbound(pk, connect_result_tx);
+        }
+    }
+
+    /// Pairing rendezvous: dominant re-queues dials for all peers on invite topics.
+    fn redial_pairing_peers(
+        &mut self,
+        connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
+    ) {
+        if !self.any_fast_refresh_topic() {
+            return;
+        }
+        let pks: Vec<[u8; 32]> = self
+            .peers
+            .iter()
+            .filter(|(pk, info)| {
+                **pk != self.key_pair.public_key
+                    && !info.banned
+                    && !info.topics.is_empty()
+                    && self.may_outbound_connect(**pk)
+            })
+            .map(|(pk, _)| *pk)
+            .collect();
+        if pks.is_empty() {
+            let total = self.peers.len();
+            let subordinate_only = self
+                .peers
+                .keys()
+                .filter(|pk| **pk != self.key_pair.public_key && !self.may_outbound_connect(**pk))
+                .count();
+            tracing::info!(
+                peers_map = total,
+                subordinate_only,
+                "pairing redial — no dominant outbound peers (awaiting discovery or subordinate half)",
+            );
+            return;
+        }
+        for pk in pks {
+            if self
+                .peers
+                .get(&pk)
+                .is_some_and(|info| info.connecting || info.queued)
+            {
+                tracing::info!(
+                    pk = %short_hex(&pk),
+                    "pairing redial — skip (dial already in flight)",
+                );
+                continue;
+            }
+            if self.connections.has(&pk) {
+                self.clear_peer_dial(pk, true);
+            } else if let Some(info) = self.peers.get_mut(&pk) {
+                info.queued = false;
+                info.set_waiting(false);
+            }
+            tracing::info!(pk = %short_hex(&pk), "pairing redial — queue outbound");
+            self.try_queue_outbound(pk, connect_result_tx);
         }
     }
 
@@ -763,21 +1091,28 @@ impl SwarmActor {
         self.queue.retain(|queued| *queued != pk);
     }
 
-    fn note_peer_disconnected(&mut self, pk: [u8; 32]) {
+    fn note_peer_disconnected(
+        &mut self,
+        pk: [u8; 32],
+        connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
+    ) {
         self.connections.remove(&pk);
         if let Some(info) = self.peers.get_mut(&pk) {
             info.connecting = false;
             info.disconnected();
         }
         if let Some(info) = self.peers.get(&pk) {
-            if !info.banned && !info.topics.is_empty() && !info.is_waiting() && !info.queued {
-                self.schedule_retry(pk);
+            if !info.banned && !info.topics.is_empty() && !info.queued {
+                self.schedule_retry(pk, connect_result_tx);
             }
         }
     }
 
     /// Groove bridge is authoritative for live links; clear stale swarm slots and re-queue.
-    fn prepare_stale_reconnect(&mut self) {
+    fn prepare_stale_reconnect(
+        &mut self,
+        connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
+    ) {
         for pk in self.connections.drain_all() {
             if let Some(info) = self.peers.get_mut(&pk) {
                 info.connecting = false;
@@ -791,17 +1126,18 @@ impl SwarmActor {
         let to_retry: Vec<[u8; 32]> = self
             .peers
             .iter()
-            .filter(|(_, info)| {
-                !info.banned
+            .filter(|(pk, info)| {
+                **pk != self.key_pair.public_key
+                    && !info.banned
                     && !info.topics.is_empty()
                     && !info.connecting
                     && !info.queued
-                    && !info.is_waiting()
+                    && self.may_outbound_connect(**pk)
             })
             .map(|(pk, _)| *pk)
             .collect();
         for pk in to_retry {
-            self.schedule_retry(pk);
+            self.schedule_retry(pk, connect_result_tx);
         }
     }
 
@@ -832,55 +1168,11 @@ impl SwarmActor {
         if let Ok(mut guard) = self.announce_relay_addrs.write() {
             *guard = addrs;
         }
-        for state in self.topics.values() {
+        for state in self.topics.values_mut() {
+            state.refreshed = false;
             let _ = state.force_refresh_tx.send(());
         }
         tracing::debug!("announce relay addrs refreshed for {} topic(s)", self.topics.len());
-    }
-
-    fn probe_transport_upgrade(
-        &mut self,
-        pk: [u8; 32],
-        connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
-    ) {
-        if !self.connections.has(&pk) {
-            return;
-        }
-        if self.active_connects >= self.config.max_parallel {
-            return;
-        }
-        let relay_addrs = self
-            .peers
-            .get(&pk)
-            .map(|i| i.relay_addresses.clone())
-            .unwrap_or_default();
-        self.upgrade_probes.insert(pk);
-        self.active_connects += 1;
-        let dht = self.dht.clone();
-        let key_pair = self.key_pair.clone();
-        let result_tx = connect_result_tx.clone();
-        let rh = self.runtime_handle.clone();
-        tokio::spawn(async move {
-            let conn_runtime = UdxRuntime::shared(rh);
-            tracing::debug!(pk = %short_hex(&pk), "transport upgrade probe");
-            match dht
-                .connect_with_nodes(&key_pair, pk, &relay_addrs, &conn_runtime)
-                .await
-            {
-                Ok(conn) => {
-                    let _ = result_tx.send(ConnectAttemptResult {
-                        public_key: pk,
-                        result: Ok((conn, conn_runtime)),
-                    });
-                }
-                Err(e) => {
-                    let _ = result_tx.send(ConnectAttemptResult {
-                        public_key: pk,
-                        result: Err(SwarmError::Dht(e)),
-                    });
-                }
-            }
-        });
     }
 
     fn do_join(
@@ -890,7 +1182,11 @@ impl SwarmActor {
         client: bool,
         fast_refresh: bool,
     ) -> Result<(), SwarmError> {
-        if self.topics.contains_key(&topic) {
+        if let Some(state) = self.topics.get_mut(&topic) {
+            // Pairing nudge re-joins the same invite topic — force an immediate lookup
+            // so flush() waits for fresh PeerFound events before dominant redial.
+            state.refreshed = false;
+            let _ = state.force_refresh_tx.send(());
             return Ok(());
         }
 
@@ -975,10 +1271,26 @@ impl SwarmActor {
                 if public_key == self.key_pair.public_key {
                     return;
                 }
-                if self.connections.has(&public_key) && !self.upgrade_probes.contains(&public_key) {
+                if !self.may_outbound_connect(public_key) {
+                    tracing::debug!(
+                        pk = %short_hex(&public_key),
+                        "deferring outbound connect — subordinate relay-only half",
+                    );
+                    self.upsert_discovered_peer(public_key, relay_addresses, topic);
+                    return;
+                }
+                if self.connections.has(&public_key) {
+                    tracing::debug!(
+                        pk = %short_hex(&public_key),
+                        "discovery skip — connection slot",
+                    );
                     return;
                 }
                 if self.connections.len() >= self.config.max_peers {
+                    tracing::debug!(
+                        pk = %short_hex(&public_key),
+                        "discovery skip — max peers",
+                    );
                     return;
                 }
 
@@ -989,24 +1301,14 @@ impl SwarmActor {
                     });
                 }
 
-                let info = self
-                    .peers
-                    .entry(public_key)
-                    .or_insert_with(|| PeerInfo::new(public_key, relay_addresses.clone()));
-
-                if !relay_addresses.is_empty() {
-                    info.relay_addresses = relay_addresses;
+                self.upsert_discovered_peer(public_key, relay_addresses, topic);
+                if self.any_fast_refresh_topic() {
+                    tracing::info!(
+                        pk = %short_hex(&public_key),
+                        "pairing discovery — dominant queue outbound",
+                    );
                 }
-                if !info.topics.contains(&topic) {
-                    info.topics.push(topic);
-                }
-
-                if !info.queued && !info.connecting && !info.banned && !info.is_waiting() {
-                    info.queued = true;
-                    info.priority = info.get_priority();
-                    self.queue.push(public_key);
-                    self.attempt_connections(connect_result_tx);
-                }
+                self.try_queue_outbound(public_key, connect_result_tx);
             }
             DiscoveryEvent::RefreshComplete { topic } => {
                 if let Some(state) = self.topics.get_mut(&topic) {
@@ -1046,22 +1348,34 @@ impl SwarmActor {
             };
 
             self.active_connects += 1;
+            let epoch = {
+                let entry = self.connect_epoch.entry(pk).or_insert(0);
+                *entry += 1;
+                *entry
+            };
             let dht = self.dht.clone();
             let key_pair = self.key_pair.clone();
             let result_tx = connect_result_tx.clone();
             let rh = self.runtime_handle.clone();
 
+            let pair_topic = self.pair_topic_for_peer(&pk);
             tokio::spawn(async move {
                 let conn_runtime = UdxRuntime::shared(rh);
-                tracing::debug!(pk = %short_hex(&pk), "connecting to peer");
+                tracing::info!(
+                    pk = %short_hex(&pk),
+                    epoch,
+                    pair_topic = ?pair_topic.map(|t| short_hex(&t)),
+                    "connecting to peer (relay-only)"
+                );
                 match dht
-                    .connect_with_nodes(&key_pair, pk, &relay_addrs, &conn_runtime)
+                    .connect_with_nodes(&key_pair, pk, &relay_addrs, pair_topic, &conn_runtime)
                     .await
                 {
                     Ok(conn) => {
                         tracing::debug!(pk = %short_hex(&pk), "peer connected");
                         let _ = result_tx.send(ConnectAttemptResult {
                             public_key: pk,
+                            epoch,
                             result: Ok((conn, conn_runtime)),
                         });
                     }
@@ -1069,6 +1383,7 @@ impl SwarmActor {
                         tracing::debug!(pk = %short_hex(&pk), err = %e, "peer connect failed");
                         let _ = result_tx.send(ConnectAttemptResult {
                             public_key: pk,
+                            epoch,
                             result: Err(SwarmError::Dht(e)),
                         });
                     }
@@ -1084,6 +1399,18 @@ impl SwarmActor {
     ) {
         self.active_connects = self.active_connects.saturating_sub(1);
 
+        if self
+            .connect_epoch
+            .get(&result.public_key)
+            .is_some_and(|current| *current != result.epoch)
+        {
+            tracing::debug!(
+                pk = %short_hex(&result.public_key),
+                "connect result stale — superseded dial"
+            );
+            return;
+        }
+
         if let Some(info) = self.peers.get_mut(&result.public_key) {
             info.connecting = false;
         }
@@ -1091,26 +1418,6 @@ impl SwarmActor {
         match result.result {
             Ok((conn, runtime)) => {
                 let pk = result.public_key;
-                let is_upgrade_probe = self.upgrade_probes.remove(&pk);
-
-                // Upgrade probe: always forward to bridge for rank comparison.
-                if is_upgrade_probe && self.connections.has(&pk) {
-                    let topics = self
-                        .peers
-                        .get(&pk)
-                        .map(|i| i.topics.clone())
-                        .unwrap_or_default();
-                    let swarm_conn = SwarmConnection {
-                        peer: conn,
-                        is_initiator: true,
-                        topics,
-                        _runtime: runtime,
-                    };
-                    if self.conn_tx.try_send(swarm_conn).is_err() {
-                        tracing::warn!("connection channel full, dropping upgrade probe");
-                    }
-                    return;
-                }
 
                 // Dedup: compare public keys to decide tie-break
                 if self.connections.has(&pk) {
@@ -1145,33 +1452,39 @@ impl SwarmActor {
                 }
             }
             Err(e) => {
-                self.upgrade_probes.remove(&result.public_key);
-                tracing::debug!(pk = %short_hex(&result.public_key), err = %e, "connect failed");
-                let lan_subordinate_defer = matches!(
-                    e,
-                    SwarmError::Dht(crate::dht::hyperdht::HyperDhtError::LanRelayedServerRole)
-                );
-                if !lan_subordinate_defer {
-                    if let Some(hook) = &self.connect_ui {
-                        hook(crate::dht::connect_ui::ConnectUiEvent::Disconnected {
-                            remote_pk: result.public_key,
-                        });
-                    }
-                    self.schedule_retry(result.public_key);
-                } else if let Some(hook) = &self.connect_ui {
-                    // Subordinate deferred outbound — clear Discovering/SwarmConnecting so the
-                    // dominant peer's nudge is not blocked by stale coordinator state.
+                if self.any_fast_refresh_topic() {
+                    tracing::info!(
+                        pk = %short_hex(&result.public_key),
+                        err = %e,
+                        "connect failed during pairing",
+                    );
+                } else {
+                    tracing::debug!(
+                        pk = %short_hex(&result.public_key),
+                        err = %e,
+                        "connect failed",
+                    );
+                }
+                if let Some(hook) = &self.connect_ui {
                     hook(crate::dht::connect_ui::ConnectUiEvent::Disconnected {
                         remote_pk: result.public_key,
                     });
                 }
+                self.schedule_retry(result.public_key, connect_result_tx);
             }
         }
 
         self.attempt_connections(connect_result_tx);
     }
 
-    fn schedule_retry(&mut self, pk: [u8; 32]) {
+    fn schedule_retry(
+        &mut self,
+        pk: [u8; 32],
+        connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
+    ) {
+        if !self.may_outbound_connect(pk) {
+            return;
+        }
         let cap_for_pairing = self.any_fast_refresh_topic();
         let Some(info) = self.peers.get_mut(&pk) else {
             return;
@@ -1180,20 +1493,26 @@ impl SwarmActor {
             return;
         }
 
-        let delay = retry_delay(info, cap_for_pairing);
+        if cap_for_pairing {
+            self.try_queue_outbound(pk, connect_result_tx);
+            return;
+        }
+
+        if info.is_waiting() || info.queued || info.connecting {
+            return;
+        }
+
+        let delay = retry_delay(info);
         info.set_waiting(true);
 
-        let relay_addresses = info.relay_addresses.clone();
-        let topic = info.topics[0];
-        let event_tx = self.discovery_event_tx.clone();
-
+        let cmd_tx = self.cmd_tx.clone();
         tokio::spawn(async move {
             tokio::time::sleep(delay).await;
-            let _ = event_tx.send(DiscoveryEvent::PeerFound {
-                public_key: pk,
-                relay_addresses,
-                topic,
-            });
+            let _ = cmd_tx
+                .send(SwarmCommand::ResetPeerDialState {
+                    public_key: Some(pk),
+                })
+                .await;
         });
     }
 
@@ -1211,34 +1530,8 @@ impl SwarmActor {
             } => {
                 self.handle_server_handshake(msg, from, reply_tx, connect_result_tx);
             }
-            ServerEvent::PeerHolepunch {
-                msg,
-                peer_address,
-                reply_tx,
-                ..
-            } => {
-                let firewall = self.config.firewall;
-                let dht_port = self.config.dht_listen_port;
-                let snapshots: Vec<HolepunchServerPeerState> =
-                    self.holepunch_secrets.values().cloned().collect();
-                let rh = self.runtime_handle.clone();
-                tokio::spawn(async move {
-                    let refs: Vec<&HolepunchServerPeerState> = snapshots.iter().collect();
-                    let pool = SocketPool::new("0.0.0.0".into());
-                    let runtime = UdxRuntime::shared(rh);
-                    let reply =
-                        handle_peer_holepunch_reply(
-                            firewall,
-                            Some(dht_port),
-                            &refs,
-                            &pool,
-                            &runtime,
-                            msg,
-                            &peer_address,
-                        )
-                            .await;
-                    let _ = reply_tx.send(reply);
-                });
+            ServerEvent::PeerHolepunch { .. } => {
+                tracing::debug!("server: ignoring PEER_HOLEPUNCH — relay-only mode");
             }
         }
     }
@@ -1249,45 +1542,15 @@ impl SwarmActor {
             .is_some_and(|f| f(pk))
     }
 
+    fn may_outbound_connect(&self, remote_pk: [u8; 32]) -> bool {
+        self.should_outbound_connect
+            .as_ref()
+            .is_none_or(|gate| gate(remote_pk))
+    }
+
     fn cancel_relay_fallback(&mut self, pk: [u8; 32]) {
         if let Some(h) = self.relay_fallback_abort.remove(&pk) {
             h.abort();
-        }
-    }
-
-    fn nudge_peer_connect(
-        &mut self,
-        pk: [u8; 32],
-        connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
-    ) {
-        // Dominant half of relayed LAN tie-break must open outbound even when a stale
-        // Discovering/SwarmConnecting row suppresses transport for this pk.
-        let dominant_lan_half = self.key_pair.public_key > pk;
-        if !dominant_lan_half && self.transport_suppressed(pk) {
-            tracing::debug!(
-                pk = %short_hex(&pk),
-                "server: skip outbound nudge — link handshaking/live",
-            );
-            return;
-        }
-        let should_queue = if let Some(info) = self.peers.get_mut(&pk) {
-            if info.banned || info.connecting || info.queued || info.is_waiting() {
-                false
-            } else {
-                info.queued = true;
-                info.priority = info.get_priority();
-                true
-            }
-        } else {
-            false
-        };
-        if should_queue {
-            self.queue.push(pk);
-            tracing::debug!(
-                pk = %short_hex(&pk),
-                "server: nudging outbound connect (relayed LAN dominant half)",
-            );
-            self.attempt_connections(connect_result_tx);
         }
     }
 
@@ -1296,7 +1559,7 @@ impl SwarmActor {
         msg: HandshakeMessage,
         from: Ipv4Peer,
         reply_tx: oneshot::Sender<Option<Vec<u8>>>,
-        connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
+        _connect_result_tx: &mpsc::UnboundedSender<ConnectAttemptResult>,
     ) {
         let noise_kp = NoiseKeypair {
             public_key: self.key_pair.public_key,
@@ -1319,22 +1582,25 @@ impl SwarmActor {
             return;
         }
 
+        let remote_pk = match nw.remote_static_key() {
+            Some(pk) => pk,
+            None => {
+                tracing::debug!("server handshake: remote static key unknown after recv");
+                let _ = reply_tx.send(None);
+                return;
+            }
+        };
+
         let local_stream_id = next_stream_id();
 
-        // When the handshake arrived via Fly/bootstrap relay, `msg.peer_address` is the initiator's
-        // UDP endpoint and `from` is the relay — mirror `hyperdht::handle_server_handshake` so the
-        // client runs `PEER_HOLEPUNCH` instead of opening UDX to the relay.
-        let relayed_via = msg.peer_address.clone();
-        let holepunch_info = relayed_via.as_ref().map(|client_addr| HolepunchInfo {
-            id: u64::from(local_stream_id),
-            relays: vec![RelayInfo {
-                relay_address: from.clone(),
-                peer_address: client_addr.clone(),
-            }],
-        });
-
         let (relay_token, relay_through_info) = if let Some(relay_pk) = self.config.relay_through {
-            let token: [u8; 32] = rand::random();
+            let pair_topic = self.pair_topic_for_peer(&remote_pk);
+            let token = blind_relay::resolve_pair_token(
+                pair_topic.as_ref(),
+                &self.key_pair.public_key,
+                &remote_pk,
+                &relay_pk,
+            );
             let info = RelayThroughInfo {
                 version: 1,
                 public_key: relay_pk,
@@ -1345,13 +1611,12 @@ impl SwarmActor {
             (None, None)
         };
 
-        let addresses4_list = build_addresses4(self.config.dht_listen_port);
         let reply_payload = NoisePayload {
             version: 1,
             error: 0,
             firewall: self.config.firewall,
-            holepunch: holepunch_info,
-            addresses4: addresses4_list,
+            holepunch: None,
+            addresses4: vec![],
             addresses6: vec![],
             udx: Some(UdxInfo {
                 version: 1,
@@ -1412,124 +1677,7 @@ impl SwarmActor {
             }
         };
 
-        let client_address = relayed_via.clone().unwrap_or_else(|| from.clone());
-
-        self.holepunch_secrets.insert(
-            nw_result.remote_public_key,
-            HolepunchServerPeerState {
-                holepunch_secret: nw_result.holepunch_secret,
-                remote_public_key: nw_result.remote_public_key,
-                client_address,
-                local_stream_id,
-                remote_udx: remote_payload.udx.clone(),
-            },
-        );
-
-        let remote_pk = nw_result.remote_public_key;
-
-        // Subordinate on relayed LAN must begin UDX before MODE_REPLY reaches the dominant
-        // peer — otherwise the initiator's first SecretStream frames race an unopened socket.
-        let mut relayed_lan_responder_opened = false;
-        let prefer_lan = self.prefer_lan.load(std::sync::atomic::Ordering::Relaxed);
-        if prefer_lan && relayed_via.is_some() && !self.connections.has(&remote_pk) {
-            let local_addrs4 = build_addresses4(self.config.dht_listen_port);
-            if let Some(lan_peer) = match_address(&local_addrs4, &remote_payload.addresses4) {
-                if self.key_pair.public_key < remote_pk {
-                    if self.connections.len() >= self.config.max_peers {
-                        tracing::debug!("server: at max connections");
-                    } else if let Some(remote_udx) = remote_payload.udx.clone() {
-                        let conn_tx = self.conn_tx.clone();
-                        let cmd_tx = self.cmd_tx.clone();
-                        let rh = self.runtime_handle.clone();
-                        let dht = self.dht.clone();
-                        let nw_result_spawn = nw_result.clone();
-                        let lan_peer = lan_peer.clone();
-                        let relay_fallback = relay_token.zip(self.config.relay_through).map(
-                            |(token, relay_pk)| ServerRelayFallbackParams {
-                                remote_pk,
-                                token,
-                                nw_result: nw_result.clone(),
-                                relay_pk,
-                                relay_addr: self.config.relay_address,
-                                key_pair: self.key_pair.clone(),
-                                dht: self.dht.clone(),
-                                runtime_handle: self.runtime_handle.clone(),
-                            },
-                        );
-
-                        tracing::debug!(
-                            pk = %short_hex(&remote_pk),
-                            lan = %format!("{}:{}", lan_peer.host, lan_peer.port),
-                            "server: relayed LAN — opening responder stream (pre-reply)",
-                        );
-
-                        tokio::spawn(async move {
-                            const LAN_PRE_REPLY_TIMEOUT: std::time::Duration =
-                                std::time::Duration::from_secs(4);
-                            let lan_ok = match tokio::time::timeout(
-                                LAN_PRE_REPLY_TIMEOUT,
-                                create_server_connection(
-                                    rh,
-                                    dht,
-                                    local_stream_id,
-                                    &remote_udx,
-                                    &lan_peer,
-                                    &nw_result_spawn,
-                                ),
-                            )
-                            .await
-                            {
-                                Ok(Ok((mut conn, runtime))) => {
-                                    conn.transport_mode =
-                                        Some(crate::dht::connect_ui::ConnectTransportMode::Lan);
-                                    let swarm_conn = SwarmConnection {
-                                        peer: conn,
-                                        is_initiator: false,
-                                        topics: vec![],
-                                        _runtime: runtime,
-                                    };
-                                    reserve_and_deliver_connection(
-                                        cmd_tx.clone(),
-                                        conn_tx.clone(),
-                                        remote_pk,
-                                        false,
-                                        swarm_conn,
-                                    )
-                                    .await;
-                                    true
-                                }
-                                Ok(Err(e)) => {
-                                    tracing::debug!(
-                                        err = %e,
-                                        "server: relayed LAN responder stream failed",
-                                    );
-                                    false
-                                }
-                                Err(_) => {
-                                    tracing::debug!(
-                                        "server: relayed LAN pre-reply timed out",
-                                    );
-                                    false
-                                }
-                            };
-                            if !lan_ok {
-                                if let Some(fallback) = relay_fallback {
-                                    deliver_server_relay_connection(
-                                        cmd_tx,
-                                        conn_tx,
-                                        fallback,
-                                    )
-                                    .await;
-                                }
-                            }
-                        });
-                        relayed_lan_responder_opened = true;
-                    } else {
-                        tracing::debug!("server: relayed LAN but no UDX info in handshake");
-                    }
-                }
-            }
-        }
+        let relayed_via = msg.peer_address.clone();
 
         let reply_msg = HandshakeMessage {
             mode: MODE_REPLY,
@@ -1539,11 +1687,6 @@ impl SwarmActor {
         };
         let _ = reply_tx.send(encode_handshake_to_bytes(&reply_msg).ok());
 
-        if relayed_lan_responder_opened {
-            // LAN pre-reply is in flight; blind-relay fallback only runs if LAN fails (see spawn above).
-            return;
-        }
-
         if self.connections.has(&remote_pk) {
             if self.transport_suppressed(remote_pk) {
                 tracing::debug!(
@@ -1552,8 +1695,6 @@ impl SwarmActor {
                 );
                 return;
             }
-            // Peer restarted or path changed — accept the fresh inbound handshake instead of
-            // keeping a half-dead slot that blocks reconnect on the other device.
             tracing::info!(
                 pk = %short_hex(&remote_pk),
                 "server: inbound reconnect — clearing stale connection slot",
@@ -1561,112 +1702,30 @@ impl SwarmActor {
             self.connections.remove(&remote_pk);
         }
 
-        if relayed_via.is_some() {
-            if prefer_lan {
-                let local_addrs4 = build_addresses4(self.config.dht_listen_port);
-                if let Some(_lan_peer) =
-                    match_address(&local_addrs4, &remote_payload.addresses4)
-                {
-                    if self.key_pair.public_key < remote_pk {
-                        return;
-                    }
-
-                    tracing::debug!(
-                        pk = %short_hex(&remote_pk),
-                        "server: relayed LAN — waiting on dominant peer initiator stream",
-                    );
-                    self.nudge_peer_connect(remote_pk, connect_result_tx);
-                    if let Some(token) = relay_token {
-                        self.spawn_server_blind_relay_fallback_deferred(
-                            remote_pk,
-                            token,
-                            nw_result.clone(),
-                        );
-                    }
-                    return;
-                }
-            } else {
-                tracing::debug!(
-                    pk = %short_hex(&remote_pk),
-                    "server: relayed handshake — prefer_lan=false, skipping LAN wait",
-                );
-            }
-
-            tracing::debug!(
-                pk = %short_hex(&remote_pk),
-                "server: handshake relayed — waiting on holepunch + initiator stream (no eager server connect)",
-            );
-            if let Some(token) = relay_token {
-                self.spawn_server_blind_relay_fallback(
-                    remote_pk,
-                    token,
-                    nw_result,
-                );
-            }
-            return;
-        }
-
-        if self.connections.len() >= self.config.max_peers {
-            tracing::debug!("server: at max connections");
-            return;
-        }
-
-        let remote_udx = match remote_payload.udx {
-            Some(u) => u,
-            None => {
-                tracing::debug!("server: no UDX info in handshake");
-                return;
-            }
-        };
-
-        let conn_tx = self.conn_tx.clone();
-        let cmd_tx = self.cmd_tx.clone();
-
-        {
-            let rh = self.runtime_handle.clone();
-            let dht = self.dht.clone();
-            let remote_udx_direct = remote_udx.clone();
-            let from_direct = from.clone();
-            let nw_result_direct = nw_result.clone();
-            tokio::spawn(async move {
-                match create_server_connection(
-                    rh,
-                    dht,
-                    local_stream_id,
-                    &remote_udx_direct,
-                    &from_direct,
-                    &nw_result_direct,
-                )
-                .await
-                {
-                    Ok((conn, runtime)) => {
-                        let swarm_conn = SwarmConnection {
-                            peer: conn,
-                            is_initiator: false,
-                            topics: vec![],
-                            _runtime: runtime,
-                        };
-                        reserve_and_deliver_connection(
-                            cmd_tx,
-                            conn_tx,
-                            remote_pk,
-                            false,
-                            swarm_conn,
-                        )
-                        .await;
-                    }
-                    Err(e) => {
-                        tracing::debug!(err = %e, "server: direct stream establishment failed");
-                    }
-                }
-            });
-        }
-
         if let Some(token) = relay_token {
-            self.spawn_server_blind_relay_fallback(
+            tracing::info!(
+                pk = %short_hex(&remote_pk),
+                "server: blind-relay inbound half (pair initiator)",
+            );
+            self.spawn_server_blind_relay_fallback_params(ServerRelayFallbackParams {
                 remote_pk,
                 token,
                 nw_result,
+                topics: self
+                    .peers
+                    .get(&remote_pk)
+                    .map(|info| info.topics.clone())
+                    .unwrap_or_default(),
+                relay_pk: self.config.relay_through.expect("checked above"),
+                relay_addr: self.config.relay_address,
+                key_pair: self.key_pair.clone(),
+                dht: self.dht.clone(),
+                runtime_handle: self.runtime_handle.clone(),
+            });
+        } else {
+            tracing::debug!(
+                pk = %short_hex(&remote_pk),
+                "server: no relay token — cannot connect",
             );
         }
     }
@@ -1674,15 +1733,8 @@ impl SwarmActor {
     /// When the Noise handshake completes on a relayed path, the outbound client
     /// may fall back to blind-relay with `pair(false, remote_token)`. The server
     /// must register the matching `pair(true, local_token)` on the same relay.
-    fn spawn_server_blind_relay_fallback(
-        &mut self,
-        remote_pk: [u8; 32],
-        token: [u8; 32],
-        nw_result: crate::dht::noise_wrap::NoiseWrapResult,
-    ) {
-        let Some(relay_pk) = self.config.relay_through else {
-            return;
-        };
+    fn spawn_server_blind_relay_fallback_params(&mut self, params: ServerRelayFallbackParams) {
+        let remote_pk = params.remote_pk;
         if self.transport_suppressed(remote_pk) {
             tracing::debug!(
                 pk = %short_hex(&remote_pk),
@@ -1690,90 +1742,38 @@ impl SwarmActor {
             );
             return;
         }
-        self.cancel_relay_fallback(remote_pk);
+        if self.relay_fallback_abort.contains_key(&remote_pk) {
+            tracing::debug!(
+                pk = %short_hex(&remote_pk),
+                "server: blind-relay fallback already in flight",
+            );
+            return;
+        }
 
         tracing::debug!(
             pk = %short_hex(&remote_pk),
-            token = %format_args!("{:02x?}", &token[..4]),
+            token = %format_args!("{:02x?}", &params.token[..4]),
             "server: spawning blind-relay fallback (pair initiator)",
         );
 
         let conn_tx = self.conn_tx.clone();
         let cmd_tx = self.cmd_tx.clone();
         let suppress = self.should_suppress_transport.clone();
-        let fallback = ServerRelayFallbackParams {
-            remote_pk,
-            token,
-            nw_result,
-            relay_pk,
-            relay_addr: self.config.relay_address,
-            key_pair: self.key_pair.clone(),
-            dht: self.dht.clone(),
-            runtime_handle: self.runtime_handle.clone(),
-        };
         let handle = tokio::spawn(async move {
             if suppress.as_ref().is_some_and(|f| f(remote_pk)) {
                 tracing::debug!(
                     pk = %short_hex(&remote_pk),
                     "server: blind-relay fallback aborted — link active",
                 );
-                return;
+                let _ = cmd_tx
+                    .send(SwarmCommand::NoteRelayFallbackComplete {
+                        public_key: remote_pk,
+                        retry: None,
+                    })
+                    .await;
+            } else {
+                deliver_server_relay_connection(cmd_tx, conn_tx, params).await;
             }
-            deliver_server_relay_connection(cmd_tx, conn_tx, fallback).await;
-        });
-        self.relay_fallback_abort
-            .insert(remote_pk, handle.abort_handle());
-    }
-
-    /// Defer blind-relay so a same-LAN initiator stream can win without racing a second path.
-    fn spawn_server_blind_relay_fallback_deferred(
-        &mut self,
-        remote_pk: [u8; 32],
-        token: [u8; 32],
-        nw_result: crate::dht::noise_wrap::NoiseWrapResult,
-    ) {
-        let Some(relay_pk) = self.config.relay_through else {
-            return;
-        };
-        if self.transport_suppressed(remote_pk) {
-            tracing::debug!(
-                pk = %short_hex(&remote_pk),
-                "server: skip deferred blind-relay — link handshaking/live",
-            );
-            return;
-        }
-        self.cancel_relay_fallback(remote_pk);
-
-        tracing::debug!(
-            pk = %short_hex(&remote_pk),
-            token = %format_args!("{:02x?}", &token[..4]),
-            "server: deferring blind-relay fallback for LAN window",
-        );
-
-        let conn_tx = self.conn_tx.clone();
-        let cmd_tx = self.cmd_tx.clone();
-        let suppress = self.should_suppress_transport.clone();
-        let fallback = ServerRelayFallbackParams {
-            remote_pk,
-            token,
-            nw_result,
-            relay_pk,
-            relay_addr: self.config.relay_address,
-            key_pair: self.key_pair.clone(),
-            dht: self.dht.clone(),
-            runtime_handle: self.runtime_handle.clone(),
-        };
-        let handle = tokio::spawn(async move {
-            const LAN_WAIT: std::time::Duration = std::time::Duration::from_secs(4);
-            tokio::time::sleep(LAN_WAIT).await;
-            if suppress.as_ref().is_some_and(|f| f(remote_pk)) {
-                tracing::debug!(
-                    pk = %short_hex(&remote_pk),
-                    "server: deferred blind-relay aborted — link active",
-                );
-                return;
-            }
-            deliver_server_relay_connection(cmd_tx, conn_tx, fallback).await;
         });
         self.relay_fallback_abort
             .insert(remote_pk, handle.abort_handle());
@@ -1790,60 +1790,6 @@ impl SwarmActor {
             }
         }
     }
-}
-
-async fn create_server_connection(
-    runtime_handle: Arc<RuntimeHandle>,
-    dht: HyperDhtHandle,
-    local_stream_id: u32,
-    remote_udx: &UdxInfo,
-    client_address: &Ipv4Peer,
-    noise_result: &crate::dht::noise_wrap::NoiseWrapResult,
-) -> Result<(PeerConnection, UdxRuntime), SwarmError> {
-    let runtime = UdxRuntime::shared(runtime_handle);
-
-    let remote_id = u32::try_from(remote_udx.id).map_err(|_| {
-        SwarmError::Dht(crate::dht::hyperdht::HyperDhtError::StreamEstablishment(
-            "remote UDX id out of u32 range".into(),
-        ))
-    })?;
-
-    let addr: std::net::SocketAddr = std::net::SocketAddr::new(
-        client_address.host.parse().map_err(|_| {
-            SwarmError::Dht(crate::dht::hyperdht::HyperDhtError::StreamEstablishment(
-                "invalid client address".into(),
-            ))
-        })?,
-        client_address.port,
-    );
-
-    let socket = dht
-        .listen_socket()
-        .await
-        .map_err(SwarmError::Dht)?
-        .ok_or_else(|| {
-            SwarmError::Dht(crate::dht::hyperdht::HyperDhtError::StreamEstablishment(
-                "DHT listen socket not available".into(),
-            ))
-        })?;
-
-    let stream = runtime.create_stream(local_stream_id).await?;
-    stream.connect(&socket, remote_id, addr).await?;
-
-    let async_stream = stream.into_async_stream();
-    let ss = SecretStream::from_session(
-        false,
-        async_stream,
-        noise_result.tx,
-        noise_result.rx,
-        noise_result.handshake_hash,
-        noise_result.remote_public_key,
-    )
-    .await
-    .map_err(|e| SwarmError::Dht(crate::dht::hyperdht::HyperDhtError::SecretStream(e)))?;
-
-    let conn = PeerConnection::with_remote_addr(ss, noise_result.remote_public_key, addr, socket, None);
-    Ok((conn, runtime))
 }
 
 async fn reserve_and_deliver_connection(
@@ -1864,10 +1810,12 @@ async fn reserve_and_deliver_connection(
     }
 }
 
+#[derive(Clone)]
 struct ServerRelayFallbackParams {
     remote_pk: [u8; 32],
     token: [u8; 32],
     nw_result: crate::dht::noise_wrap::NoiseWrapResult,
+    topics: Vec<[u8; 32]>,
     relay_pk: [u8; 32],
     relay_addr: Option<std::net::SocketAddr>,
     key_pair: KeyPair,
@@ -1880,140 +1828,109 @@ async fn deliver_server_relay_connection(
     conn_tx: mpsc::Sender<SwarmConnection>,
     params: ServerRelayFallbackParams,
 ) {
-    match create_server_relay_connection(
-        params.runtime_handle,
-        params.dht,
-        params.key_pair,
-        params.relay_pk,
-        params.relay_addr,
-        params.token,
-        params.nw_result,
-    )
-    .await
-    {
+    let remote_pk = params.remote_pk;
+    let topics = params.topics.clone();
+    let retry_params = params.clone();
+    match create_server_relay_connection(params).await {
         Ok((conn, runtime)) => {
             let swarm_conn = SwarmConnection {
                 peer: conn,
                 is_initiator: false,
-                topics: vec![],
+                topics,
                 _runtime: runtime,
             };
-            reserve_and_deliver_connection(
-                cmd_tx,
-                conn_tx,
-                params.remote_pk,
-                false,
-                swarm_conn,
-            )
-            .await;
+            reserve_and_deliver_connection(cmd_tx.clone(), conn_tx, remote_pk, false, swarm_conn)
+                .await;
+            let _ = cmd_tx
+                .send(SwarmCommand::NoteRelayFallbackComplete {
+                    public_key: remote_pk,
+                    retry: None,
+                })
+                .await;
         }
         Err(e) => {
-            tracing::debug!(err = %e, "server: relay connection failed");
+            tracing::info!(
+                err = %e,
+                pk = %short_hex(&remote_pk),
+                token = %format_args!("{:02x?}", &retry_params.token[..4]),
+                "server: blind-relay inbound half failed",
+            );
+            let _ = cmd_tx
+                .send(SwarmCommand::NoteRelayFallbackComplete {
+                    public_key: remote_pk,
+                    retry: Some(retry_params),
+                })
+                .await;
         }
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 async fn create_server_relay_connection(
-    runtime_handle: Arc<RuntimeHandle>,
-    dht: HyperDhtHandle,
-    key_pair: KeyPair,
-    relay_pk: [u8; 32],
-    relay_addr: Option<std::net::SocketAddr>,
-    token: [u8; 32],
-    noise_result: crate::dht::noise_wrap::NoiseWrapResult,
+    params: ServerRelayFallbackParams,
 ) -> Result<(PeerConnection, UdxRuntime), SwarmError> {
-    use crate::dht::blind_relay::BlindRelayClient;
-    use crate::dht::protomux::Mux;
+    use crate::dht::relay_link;
 
-    let runtime = UdxRuntime::shared(runtime_handle);
-
-    // 1. HyperDHT connection to the relay node (control channel).
-    // Use direct address when available, fall back to DHT routing.
-    let connect_fut: std::pin::Pin<Box<dyn std::future::Future<Output = Result<PeerConnection, crate::dht::hyperdht::HyperDhtError>> + Send>> =
-        if let Some(addr) = relay_addr {
-            tracing::debug!(?addr, "server: connecting to relay at known address");
-            Box::pin(dht.connect_to(&key_pair, relay_pk, addr, &runtime))
-        } else {
-            Box::pin(dht.connect(&key_pair, relay_pk, &runtime))
-        };
-    let relay_conn = tokio::time::timeout(
-        std::time::Duration::from_secs(15),
-        connect_fut,
-    )
-    .await
-    .map_err(|_| {
-        SwarmError::Dht(crate::dht::hyperdht::HyperDhtError::HandshakeFailed(
-            "relay connect timeout".into(),
-        ))
-    })?
-    .map_err(SwarmError::Dht)?;
-
-    let relay_addr = relay_conn.remote_addr.ok_or_else(|| {
-        SwarmError::Dht(crate::dht::hyperdht::HyperDhtError::StreamEstablishment(
-            "relay connection has no remote_addr".into(),
-        ))
-    })?;
-
-    // 2. Protomux over the control channel.
-    let (mux, mux_run) = Mux::new(relay_conn.stream);
-    let mux_task = tokio::spawn(mux_run);
-
-    // 3. Open blind-relay client + pair as initiator (server initiates pairing).
-    // Channel id = our public key (must match relay server's `id: socket.remotePublicKey`).
-    let mut relay_client = BlindRelayClient::open(&mux, Some(key_pair.public_key.to_vec()))
-        .await
-        .map_err(|e| SwarmError::Dht(crate::dht::hyperdht::HyperDhtError::Relay(e)))?;
-    relay_client
-        .wait_opened()
-        .await
-        .map_err(|e| SwarmError::Dht(crate::dht::hyperdht::HyperDhtError::Relay(e)))?;
-
-    // Fresh UDX id for relay data on the **same** runtime as `connect_to` above.
-    // Must use peeroxide-dht's allocator — peeroxide has a separate counter and both
-    // can return the same integer, colliding on one UdxRuntime (TestFlight build 30).
-    let data_stream_id = crate::dht::hyperdht::next_stream_id();
-
-    let pair_response = relay_client
-        .pair(true, &token, u64::from(data_stream_id))
-        .await
-        .map_err(|e| SwarmError::Dht(crate::dht::hyperdht::HyperDhtError::Relay(e)))?;
-
-    let remote_id = u32::try_from(pair_response.remote_id).map_err(|_| {
-        SwarmError::Dht(crate::dht::hyperdht::HyperDhtError::StreamEstablishment(
-            "relay remote_id out of u32 range".into(),
-        ))
-    })?;
-
-    // 4. Connect data UDX stream through the relay, reusing the control
-    //    channel's socket so the relay sees traffic from the same source address.
-    let data_stream = runtime.create_stream(data_stream_id).await?;
-    data_stream
-        .connect(&relay_conn.socket, remote_id, relay_addr)
-        .await?;
-
-    // 5. Wrap with SecretStream using the original Noise keys.
-    // Server is responder (is_initiator=false) in the Noise handshake.
-    let async_stream = data_stream.into_async_stream();
-    let ss = SecretStream::from_session(
-        false,
-        async_stream,
-        noise_result.tx,
-        noise_result.rx,
-        noise_result.handshake_hash,
-        noise_result.remote_public_key,
-    )
-    .await
-    .map_err(|e| SwarmError::Dht(crate::dht::hyperdht::HyperDhtError::SecretStream(e)))?;
-
-    let conn = PeerConnection::with_remote_addr(
-        ss,
-        noise_result.remote_public_key,
+    let ServerRelayFallbackParams {
+        token,
+        nw_result,
+        relay_pk,
         relay_addr,
-        relay_conn.socket,
-        Some(mux_task),
-    );
-    Ok((conn, runtime))
+        key_pair,
+        dht,
+        runtime_handle,
+        ..
+    } = params;
+
+    let work = async move {
+        let runtime = UdxRuntime::shared(runtime_handle);
+        let relay_conn = if let Some(addr) = relay_addr {
+            tracing::debug!(?addr, "server: connecting to relay at known address");
+            dht.connect_to(&key_pair, relay_pk, addr, &runtime)
+                .await
+                .map_err(SwarmError::Dht)?
+        } else {
+            dht.connect(&key_pair, relay_pk, &runtime)
+                .await
+                .map_err(SwarmError::Dht)?
+        };
+
+        let conn = relay_link::establish(relay_link::RelayLinkParams {
+            key_pair: &key_pair,
+            token: &token,
+            pair_is_initiator: true,
+            noise_is_initiator: false,
+            noise_result: &nw_result,
+            relay_control: relay_conn,
+            runtime: &runtime,
+        })
+        .await
+        .map_err(|e| {
+            tracing::info!(
+                token = %format_args!("{:02x?}", &token[..4]),
+                err = %e,
+                "server: blind-relay pair failed",
+            );
+            SwarmError::Dht(e)
+        })?;
+
+        Ok::<_, SwarmError>((conn, runtime))
+    };
+
+    tokio::time::timeout(crate::dht::relay_link::SERVER_RELAY_LINK_TIMEOUT, work)
+        .await
+        .map_err(|_| {
+            SwarmError::Dht(crate::dht::hyperdht::HyperDhtError::HandshakeFailed(
+                "relay link timeout".into(),
+            ))
+        })?
+        .map_err(|e| {
+            tracing::info!(
+                err = %e,
+                "server: blind-relay inbound half failed (timeout or pair error)",
+            );
+            e
+        })
 }
 
 #[cfg(test)]
@@ -2024,7 +1941,7 @@ mod tests {
     fn retry_delay_first_attempt_unproven() {
         let mut info = PeerInfo::new([0u8; 32], vec![]);
         info.attempts = 0;
-        let d = retry_delay(&info, false);
+        let d = retry_delay(&info);
         // Tier M: 5000..6750 ms (unproven, idx = min(0+1, 3) = 1)
         assert!(d.as_millis() >= 5000);
         assert!(d.as_millis() < 7000);
@@ -2035,7 +1952,7 @@ mod tests {
         let mut info = PeerInfo::new([0u8; 32], vec![]);
         info.attempts = 0;
         info.proven = true;
-        let d = retry_delay(&info, false);
+        let d = retry_delay(&info);
         // Tier S: 1000..1400 ms (proven, idx = min(0, 3) = 0)
         assert!(d.as_millis() >= 1000);
         assert!(d.as_millis() < 1500);
@@ -2045,10 +1962,17 @@ mod tests {
     fn retry_delay_many_attempts() {
         let mut info = PeerInfo::new([0u8; 32], vec![]);
         info.attempts = 10;
-        let d = retry_delay(&info, false);
+        let d = retry_delay(&info);
         // Tier X: 600_000..705_000 ms (idx capped at 3)
         assert!(d.as_millis() >= 600_000);
         assert!(d.as_millis() < 710_000);
+    }
+
+    #[test]
+    fn server_relay_link_timeout_covers_pair_budget() {
+        use crate::dht::relay_link::{PAIR_TIMEOUT, SERVER_RELAY_LINK_TIMEOUT, SERVER_RELAY_LINK_TIMEOUT_SECS};
+        assert!(SERVER_RELAY_LINK_TIMEOUT >= PAIR_TIMEOUT);
+        assert_eq!(SERVER_RELAY_LINK_TIMEOUT_SECS, 35);
     }
 
     #[test]

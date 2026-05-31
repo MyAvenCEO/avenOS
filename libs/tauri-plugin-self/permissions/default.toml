@@ -20,4 +20,6 @@ permissions = [
   "allow-vault-create",
   "allow-vault-selected-slug",
   "allow-active-identity",
+  "allow-vault-ui-settings-get",
+  "allow-vault-ui-settings-set-locale",
 ]

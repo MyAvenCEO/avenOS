@@ -43,7 +43,7 @@ static LAST_HS_PATH_RELAYED: AtomicU8 = AtomicU8::new(0);
 static LAST_HS_REMOTE_HOLEPUNCHABLE: AtomicU8 = AtomicU8::new(0);
 
 /// Count of blind-relay fallbacks (`holepunch failed — falling back to blind relay`, DEBUG).
-static HOLEPUNCH_BLIND_RELAY_FALLBACK_TOTAL: AtomicU64 = AtomicU64::new(0);
+static BLIND_RELAY_FALLBACK_TOTAL: AtomicU64 = AtomicU64::new(0);
 
 const TRI_FALSE: u8 = 1;
 const TRI_TRUE: u8 = 2;
@@ -75,7 +75,7 @@ pub struct DhtTraceSnapshot {
 	/// Last `remote_holepunchable=` from the same line.
 	pub last_remote_holepunchable: Option<bool>,
 	/// How often we fell back to blind relay after holepunch failure.
-	pub holepunch_blind_relay_fallback_total: u64,
+	pub blind_relay_fallback_total: u64,
 }
 
 pub fn dht_trace_snapshot() -> DhtTraceSnapshot {
@@ -90,7 +90,7 @@ pub fn dht_trace_snapshot() -> DhtTraceSnapshot {
 		last_remote_holepunchable: tri_load_bool(
 			LAST_HS_REMOTE_HOLEPUNCHABLE.load(Ordering::Relaxed),
 		),
-		holepunch_blind_relay_fallback_total: HOLEPUNCH_BLIND_RELAY_FALLBACK_TOTAL
+		blind_relay_fallback_total: BLIND_RELAY_FALLBACK_TOTAL
 			.load(Ordering::Relaxed),
 	}
 }
@@ -255,8 +255,10 @@ impl Subscriber for LogForwardSubscriber {
 			if let Some(v) = visitor.remote_holepunchable {
 				tri_store_bool(&LAST_HS_REMOTE_HOLEPUNCHABLE, v);
 			}
-			if visitor.buf.contains("holepunch failed") && visitor.buf.contains("blind relay") {
-				HOLEPUNCH_BLIND_RELAY_FALLBACK_TOTAL.fetch_add(1, Ordering::Relaxed);
+			if visitor.buf.contains("blind-relay pair failed")
+				|| (visitor.buf.contains("holepunch failed") && visitor.buf.contains("blind relay"))
+			{
+				BLIND_RELAY_FALLBACK_TOTAL.fetch_add(1, Ordering::Relaxed);
 			}
 		}
 		if target == "aven_p2p::swarm" && visitor.buf.contains("peer connected") {

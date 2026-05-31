@@ -17,7 +17,7 @@ User-facing concepts: start with [My Network](../founders/01-my-network.md). Thi
 
 | Layer | Crate / module | Responsibility |
 | ----- | -------------- | ---------------- |
-| DHT + Noise | `aven-p2p`, `tauri-plugin-peer` | Topics, allowlist socket gate, connect UI hook |
+| DHT + Noise | `aven-p2p`, `tauri-plugin-p2p` | Topics, allowlist socket gate, connect UI hook |
 | Link phase | `PeerLinkCoordinator` | Single owner per remote static key; suppress transport |
 | Groove mux | `HyperswarmGrooveBridge` | SecretStream → Jazz sync; reader/writer split tasks |
 | Mesh UI | `peer_mesh_state.rs` | Assemble `PeerMeshStatusReply` → `avenos:runtime` |
@@ -35,6 +35,25 @@ After unlock, **PeerCtl** rebuilds transport from persisted `peers` rows (no sec
 4. Topics leave only on **revoke** or allowlist shrink; **lock** tears down swarm + in-memory pairing.
 
 **Jazz** calls `register_peer_sync_client` only when coordinator phase is **`Live`** (`groove_p2p link up`). UI **`linkedCount`** reads the same snapshot.
+
+## P2P sync policy (three axes)
+
+Keep transport, sync policy, and UI separate — do not infer “connected” from DHT alone.
+
+| Axis | Source of truth | User-visible |
+| ---- | ----------------- | ------------ |
+| **Transport** | `PeerLinkCoordinator` mux + `HyperswarmGrooveBridge::peer_send_ready` | `groove_mux_ready`, mode always **relay** (relay-only steady state) |
+| **Sync** | `spark_sync::should_forward_p2p` + `ManagedJazz::sync_acl` + Groove register | `sync_ready`, `syncBlockReason` |
+| **UI phase** | `PeerSessionFacts` / `derive_usability` only | mesh phase (`Ready` requires mux + ACL + catch-up) |
+
+**Outbound policy** (`spark_sync.rs`, enforced in `peer_sync_gate.rs`):
+
+- **`sparks` / `keyshares`** — forward to allowlisted peer after ACL snapshot loads (pairing bootstrap; no per-spark biscuit `owns` yet).
+- **`peers`** — never forwarded (permanent drop, no outbox retry storm).
+- **Spark data** (`messages`, `humans`, …) — `spark_peer_is_owner` for destination DID.
+- **`BatchFate`** and other control frames — forward when ACL is loaded.
+
+Pairing completes with `execute_mesh_refresh_full` (allowlist + discovery nudge + register), not UI-only mesh publish.
 
 ## PeerLinkCoordinator (summary)
 
@@ -59,11 +78,9 @@ Full heal pipeline: [Auto-heal & coordinator](06-auto-heal-and-coordinator.md).
 | Scenario | Expected |
 | -------- | -------- |
 | Linked → kill remote app → reopen | Reconnect ≤15s, sync resumes |
-| Linked on relay → both join same Wi‑Fi | Stable reconnect; transport may upgrade to `lan` within ~90s |
-| Linked on LAN → iPhone to 5G | Downgrade to punched/relay, stay linked |
+| Linked on relay → network change | Stays on blind relay; self-heal via `steady_reconcile` |
 | Mac reboot, iPhone stays open | Mac unlock → reconnect without invite |
 | Airplane mode toggle on one device | Heal after path satisfied |
-| iOS background 5+ min → foreground | Heal without manual retry |
-| Walk through relay → LAN → relay | No manual invite; transport mode updates in UI |
+| iOS background 5+ min → foreground | One Recover drain; no double DHT storm |
 
 User-facing expectations: [Staying connected](../founders/05-staying-connected.md).

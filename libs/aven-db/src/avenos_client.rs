@@ -1,7 +1,7 @@
 //! AvenOS P2P JazzClient (RocksDB + Hyperswarm peer transport, no WebSocket server).
 
 use std::collections::HashMap;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use crate::groove_tokio::{SubscriptionHandle as RuntimeSubHandle, TokioRuntime};
@@ -60,6 +60,28 @@ struct SubscriptionState {
 /// Called after an inbound peer sync frame is parked on the runtime inbox (post-`push_sync_inbox`).
 pub type PeerInboundParkedHook = Arc<dyn Fn(&SyncPayload) + Send + Sync>;
 
+fn peer_send_fail_streak() -> &'static Mutex<HashMap<ClientId, u32>> {
+	static SLOT: OnceLock<Mutex<HashMap<ClientId, u32>>> = OnceLock::new();
+	SLOT.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn peer_send_backoff(peer_id: ClientId) -> Duration {
+	let mut guard = peer_send_fail_streak()
+		.lock()
+		.expect("peer send backoff lock");
+	let streak = guard.entry(peer_id).or_insert(0);
+	*streak = streak.saturating_add(1).min(16);
+	let ms = 500u64.saturating_mul(1u64 << (*streak).min(5));
+	Duration::from_millis(ms.min(10_000))
+}
+
+fn peer_send_backoff_clear(peer_id: ClientId) {
+	let _ = peer_send_fail_streak()
+		.lock()
+		.expect("peer send backoff lock")
+		.remove(&peer_id);
+}
+
 fn peer_outbound_callback(
     peer_transport: Option<Arc<dyn crate::peer_transport::PeerTransport>>,
     runtime_ready: Arc<OnceLock<ClientRuntime>>,
@@ -83,13 +105,19 @@ fn peer_outbound_callback(
                 destination: Destination::Client(peer_id),
                 payload: payload.clone(),
             };
-            if crate::peer_transport::PeerTransport::send_to(&*tt, peer_id, payload)
-                .await
-                .is_err()
-            {
-                tracing::debug!(?peer_id, "peer send failed; re-queueing outbox entry");
-                if let Err(e) = rt.prepend_outbox(outbound) {
-                    tracing::warn!("prepend_outbox after send failure: {e}");
+            match crate::peer_transport::PeerTransport::send_to(&*tt, peer_id, payload).await {
+                Ok(()) => peer_send_backoff_clear(peer_id),
+                Err(e) => {
+                    let delay = peer_send_backoff(peer_id);
+                    tracing::debug!(
+                        ?peer_id,
+                        ?delay,
+                        "peer send failed ({e:?}); re-queueing outbox entry after backoff",
+                    );
+                    tokio::time::sleep(delay).await;
+                    if let Err(prepend_err) = rt.prepend_outbox(outbound) {
+                        tracing::warn!("prepend_outbox after send failure: {prepend_err}");
+                    }
                 }
             }
         });
@@ -215,6 +243,12 @@ impl JazzClient {
         self.runtime
             .rebroadcast_peer_catchup(peer_id)
             .map_err(|e| JazzError::Sync(format!("rebroadcast_peer_catchup {peer_id}: {e}")))
+    }
+
+    pub fn rebroadcast_peer_shell_catchup(&self, peer_id: ClientId) -> Result<()> {
+        self.runtime
+            .rebroadcast_peer_shell_catchup(peer_id)
+            .map_err(|e| JazzError::Sync(format!("rebroadcast_peer_shell_catchup {peer_id}: {e}")))
     }
 
     pub async fn rebroadcast_all_peer_clients_and_flush(&self) -> Result<()> {

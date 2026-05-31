@@ -1,5 +1,5 @@
 /**
- * Reactive view of the `/self` settings pages: peer status, active genesis, and derived
+ * Reactive view of the `/self` settings pages: peer status, network seed, and derived
  * public keys. Created in `/self/+layout.svelte` (via `provideSelfContext`) and consumed
  * by sibling pages (via `useSelfContext`) so data is fetched once and shared.
  */
@@ -9,6 +9,7 @@ import { browser } from '$app/environment'
 import { getContext, setContext } from 'svelte'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { DEVICE_PEER_SLOT } from '$lib/self/device-session-store'
+import { NETWORK_SEED as NETWORK_SEED_FALLBACK } from '$lib/self/network'
 
 export type PeerStatus = {
 	platformSupported: boolean
@@ -38,8 +39,7 @@ function createSelfContext() {
 	let status = $state<PeerStatus | undefined>()
 	let statusErr = $state<string | undefined>()
 
-	let genesisB64 = $state<string | undefined>()
-	let genesisShort = $state<string | undefined>()
+	let networkSeed = $state<string>(NETWORK_SEED_FALLBACK)
 
 	let relayUrl = $state<string | undefined>()
 	let relayPublicKeyHex = $state<string | undefined>()
@@ -59,21 +59,17 @@ function createSelfContext() {
 		signingPeerDid = undefined
 
 		try {
+			networkSeed = await invoke<string>('network_seed')
+		} catch {
+			networkSeed = NETWORK_SEED_FALLBACK
+		}
+
+		try {
 			status = await invoke<PeerStatus>('plugin:self|peer_status', { slot: DEVICE_PEER_SLOT })
 		} catch (e) {
 			status = undefined
 			statusErr = e instanceof Error ? e.message : String(e)
 			return
-		}
-
-		try {
-			const g = await invoke<number[]>('genesis_network_id')
-			genesisB64 = bytesToBase64(g)
-			genesisShort = `${genesisB64.slice(0, 6)}…${genesisB64.slice(-6)}`
-		} catch (e) {
-			genesisB64 = undefined
-			genesisShort = undefined
-			statusErr = e instanceof Error ? e.message : String(e)
 		}
 
 		try {
@@ -140,11 +136,8 @@ function createSelfContext() {
 		get statusErr() {
 			return statusErr
 		},
-		get genesisB64() {
-			return genesisB64
-		},
-		get genesisShort() {
-			return genesisShort
+		get networkSeed() {
+			return networkSeed
 		},
 		get relayUrl() {
 			return relayUrl

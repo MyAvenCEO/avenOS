@@ -149,6 +149,11 @@ async fn accept_relay_control_session(
             return;
         }
     };
+    tracing::info!(
+        peer_udp = %peer_udp,
+        pk = %est.noise.remote_public_key.iter().take(4).map(|b| format!("{b:02x}")).collect::<String>(),
+        "relay host: accepting blind-relay control session",
+    );
     match establish_responder_peer_connection(&dht, &runtime, &est).await {
         Ok(conn) => {
             let socket = conn.socket;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '$lib/i18n'
 	import SelfTrustedPeersPanel from '$lib/self/SelfTrustedPeersPanel.svelte'
 	import { useSelfContext } from '$lib/self/self-context.svelte'
 
@@ -6,14 +7,14 @@
 </script>
 
 <svelte:head>
-	<title>Peers · AvenOS</title>
+	<title>{t('self.peers.title')}{t('common.titleSuffix')}</title>
 </svelte:head>
 
 <div class="flex flex-col gap-8">
 	<header class="space-y-1.5">
-		<h1 class="text-2xl font-semibold tracking-tight">Peers</h1>
+		<h1 class="text-2xl font-semibold tracking-tight">{t('self.peers.title')}</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
-			Trust another device on your account, then share sparks with them.
+			{t('self.peers.subtitle')}
 		</p>
 	</header>
 

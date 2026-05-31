@@ -6,6 +6,7 @@
 	import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/self/vault'
 	import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
 	import { asideNavSectionsFromRoutes } from '$lib/ui/aside-nav'
+	import { t } from '$lib/i18n'
 	import { selfNavSections } from '$lib/shell/self-nav'
 	import { browser } from '$app/environment'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
@@ -19,7 +20,7 @@
 
 	const path = $derived(page.url.pathname)
 
-	const navSections = $derived(asideNavSectionsFromRoutes(selfNavSections, path))
+	const navSections = $derived(asideNavSectionsFromRoutes(selfNavSections(), path))
 
 	$effect(() => {
 		void sessionKind
@@ -46,7 +47,7 @@
 
 	const profileName = $derived.by(() => {
 		const v = activeVault
-		if (!v) return 'Self'
+		if (!v) return t('nav.self')
 		return vaultCardTitle(v)
 	})
 
@@ -54,7 +55,7 @@
 </script>
 
 <AsidePageLayout
-	asideLabel="Self settings"
+	asideLabel={t('nav.selfSettings')}
 	sections={navSections}
 	muted
 	routeKey={path}

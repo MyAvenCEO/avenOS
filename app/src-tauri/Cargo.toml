@@ -24,7 +24,7 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
-tauri-plugin-peer = { path = "../../libs/tauri-plugin-peer" }
+tauri-plugin-p2p = { path = "../../libs/tauri-plugin-p2p" }
 tauri-plugin-self = { path = "../../libs/tauri-plugin-self" }
 tauri-plugin-clipboard-manager = "2"
 base64 = "0.22"

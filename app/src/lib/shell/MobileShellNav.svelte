@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state'
+	import { t } from '$lib/i18n'
 	import { mobileFabBottomClass, mobileProfileFabZClass, navigateApp } from '$lib/shell'
 	import MobileAsideDrawer from '$lib/ui/MobileAsideDrawer.svelte'
 	import MobileAsideNavLink from '$lib/ui/MobileAsideNavLink.svelte'
@@ -33,12 +34,12 @@
 	const avenCityActive = $derived(path.startsWith('/aven-city'))
 
 	const navItems = $derived<NavItem[]>([
-		{ href: '/', label: 'Intents', active: intentsActive },
-		{ href: '/sandbox', label: 'Sandbox', active: sandboxActive },
-		{ href: '/sparks', label: 'Sparks', active: sparksNavActive },
-		{ href: '/db', label: 'DB', active: dbActive },
-		{ href: '/aven-city', label: 'avenCITY', active: avenCityActive },
-		{ href: '/docs', label: 'Docs', active: docsActive }
+		{ href: '/', label: t('nav.intents'), active: intentsActive },
+		{ href: '/sandbox', label: t('nav.sandbox'), active: sandboxActive },
+		{ href: '/sparks', label: t('nav.sparks'), active: sparksNavActive },
+		{ href: '/db', label: t('nav.db'), active: dbActive },
+		{ href: '/aven-city', label: t('nav.avenCity'), active: avenCityActive },
+		{ href: '/docs', label: t('nav.docs'), active: docsActive }
 	])
 
 	const showNavFab = $derived(!chrome.hideProfile)
@@ -60,13 +61,13 @@
 <MobileAsideDrawer
 	bind:open={navOpen}
 	side="right"
-	ariaLabel="App navigation"
+	ariaLabel={t('nav.appNavigation')}
 	hideFromClass="sm:hidden"
 	zIndex={49}
 >
 	{#snippet children()}
-		<MobileAsideSectionLabel align="right">Navigate</MobileAsideSectionLabel>
-		<nav class="flex flex-col gap-1" aria-label="App sections">
+		<MobileAsideSectionLabel align="right">{t('nav.navigate')}</MobileAsideSectionLabel>
+		<nav class="flex flex-col gap-1" aria-label={t('nav.appSections')}>
 			{#each navItems as item (item.href)}
 				<MobileAsideNavLink
 					href={item.href}
@@ -85,8 +86,8 @@
 	{/snippet}
 
 	{#snippet footer()}
-		<MobileAsideSectionLabel align="right">Self</MobileAsideSectionLabel>
-		<nav class="flex flex-col gap-1" aria-label="Self">
+		<MobileAsideSectionLabel align="right">{t('nav.self')}</MobileAsideSectionLabel>
+		<nav class="flex flex-col gap-1" aria-label={t('nav.self')}>
 			<MobileAsideNavLink
 				href="/self/peers"
 				active={selfActive}
@@ -110,7 +111,7 @@
 			{selfActive ? 'ring-2 ring-primary/30' : ''}"
 		onclick={toggleNav}
 		aria-expanded={navOpen}
-		aria-label={navOpen ? 'Close app navigation' : selfNavLabel}
+		aria-label={navOpen ? t('nav.closeAppNavigation') : selfNavLabel}
 		title={selfNavLabel}
 	>
 		<svg

@@ -17,6 +17,8 @@ fn main() {
 		"vault_create",
 		"vault_selected_slug",
 		"active_identity",
+		"vault_ui_settings_get",
+		"vault_ui_settings_set_locale",
 	];
 
 	let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();

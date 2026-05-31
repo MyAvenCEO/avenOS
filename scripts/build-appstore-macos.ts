@@ -11,7 +11,6 @@
  *
  * Optional:
  *   AVEN_MAC_CF_BUNDLE_VERSION — CFBundleVersion for this upload (default "13")
- *   GENESIS_NETWORK_ID — optional override; else read from repo `.env` (see resolveGenesisNetworkId)
  *   AVEN_RELAY_URL — optional shell override; default hardcoded `relay.aven.ceo` (compile-time embed for P2P)
  *   AVEN_OUTPUT_PKG — output path for the pkg (default dist/macos-appstore/avenOS-<version>-b<build>.pkg)
  */
@@ -20,7 +19,7 @@ import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { applyAppleEnvLocal, resolveGenesisNetworkId } from './apple-env'
+import { applyAppleEnvLocal } from './apple-env'
 import { ensureRelayEnvReady } from './relay-env.ts'
 import { resolveAppStoreRelayConfig, type AppStoreRelayConfig } from './relay-bootstrap.ts'
 
@@ -115,13 +114,6 @@ async function main() {
 		bundleVersion,
 	)
 
-	const genesisNetworkId = resolveGenesisNetworkId(repoRoot)
-	if (!genesisNetworkId) {
-		console.error(
-			'build-appstore-macos: missing GENESIS_NETWORK_ID — set in shell, .env.apple.local, or repo .env (GENESIS_NETWORK_ID or DEV_GENESIS_NETWORK_ID)',
-		)
-		process.exit(1)
-	}
 	const avenRelayUrl = process.env.AVEN_RELAY_URL?.trim() || MAC_APPSTORE_AVEN_RELAY_URL
 	const relayCfg = await resolveAppStoreRelayConfig(MAC_APPSTORE_AVEN_RELAY_URL, MAC_APPSTORE_DHT_UDP_PORT, {
 		warnLabel: 'build-appstore-macos',
@@ -180,13 +172,11 @@ async function main() {
 	const cargoTargetDir = path.join(repoRoot, 'target/rust')
 	const tauriEnv = {
 		...process.env,
-		GENESIS_NETWORK_ID: genesisNetworkId,
 		AVEN_RELAY_URL: avenRelayUrl,
 		AVENOS_DHT_BOOTSTRAP: dhtBootstrap,
 		...hyperswarmRelayCompileEnv(relayCfg),
 	}
 	delete tauriEnv.CARGO_TARGET_DIR
-	console.log('[build-appstore-macos] embedding GENESIS_NETWORK_ID at compile time')
 	console.log('[build-appstore-macos] embedding AVEN_RELAY_URL=%s at compile time', avenRelayUrl)
 	console.log('[build-appstore-macos] embedding AVENOS_DHT_BOOTSTRAP=%s at compile time', dhtBootstrap)
 	if (relayCfg.relayAddr) {

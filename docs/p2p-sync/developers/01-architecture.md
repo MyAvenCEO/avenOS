@@ -17,7 +17,7 @@ libs/aven-db    — AvenOS fork of jazz2 `crates/jazz-tools` (alpha.50, RocksDB 
   └─ peer_transport.rs    — PeerTransport trait + bincode framing helpers
   └─ avenos_client.rs     — JazzClient::connect_with_peer_transport()
 
-libs/tauri-plugin-peer  — Hyperswarm integration
+libs/tauri-plugin-p2p  — Hyperswarm integration
   └─ lib.rs               — Tauri plugin: joins swarm on self:did-unlock
   └─ hyperswarm_groove_bridge.rs  — implements PeerTransport over Noise streams
 ```
@@ -75,10 +75,10 @@ In a production Spark-scoped deployment the Groove topic would typically be deri
 
 | IPC command | Purpose |
 |---|---|
-| `plugin:peer|peer_transport_status` | Hyperswarm running flag, local key prefix, linked remote `ClientId`s (string form), pending pairing code if hosting |
-| `plugin:peer|peer_pair_start` | Generate code + join pairing discovery topic |
-| `plugin:peer|peer_pair_accept` `{ code }` | Join same pairing topic as joiner |
-| `plugin:peer|peer_pair_cancel` | Leave pairing topic / clear session |
+| `plugin:p2p|peer_transport_status` | Hyperswarm running flag, local key prefix, linked remote `ClientId`s (string form), pending pairing code if hosting |
+| `plugin:p2p|peer_pair_start` | Generate code + join pairing discovery topic |
+| `plugin:p2p|peer_pair_accept` `{ code }` | Join same pairing topic as joiner |
+| `plugin:p2p|peer_pair_cancel` | Leave pairing topic / clear session |
 | `jazz_sync_bridge_peers` | Re-run `register_peer_sync_client` for every Hyperswarm-linked peer (handles peers that appeared after Jazz bootstrap) |
 | `jazz_spark_grant_peer` `{ sparkId, peerDid }` | After unlock: biscuit third-party co-owner attenuation + DEK **keyshare** row for that Spark + snapshot broadcast (`sparks`, `keyshares`). Enables decrypt/sync for **all rows keyed to that spark** on the invitee once Groove merges |
 
@@ -89,7 +89,7 @@ The **Self → Sparks** route polls **`peer_transport_status`** (~2 s), exposes 
 | Type | Location | Role |
 |---|---|---|
 | `PeerTransport` trait | `libs/aven-db/src/peer_transport.rs` | Async trait: `send_to`, `recv_inbound`, `shutdown` |
-| `HyperswarmGrooveBridge` | `libs/tauri-plugin-peer/src/hyperswarm_groove_bridge.rs` | Implements `PeerTransport`; owns per-peer writer channels and shared inbound queue |
+| `HyperswarmGrooveBridge` | `libs/tauri-plugin-p2p/src/hyperswarm_groove_bridge.rs` | Implements `PeerTransport`; owns per-peer writer channels and shared inbound queue |
 | `MaybePeerTransport` | `libs/aven-db/src/avenos_client.rs` | `Off | Active(Arc<dyn PeerTransport>)` — guards cfg |
 | `encode_length_prefixed` / `decode_length_prefixed` | `peer_transport.rs` | u32-LE-length + bincode `SyncFrameV1` |
 | `InboxEntry` | `groove::sync_manager` | `{ source: Source::Client(ClientId), payload: SyncPayload }` |

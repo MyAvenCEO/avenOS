@@ -3,6 +3,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { Terminal } from '@xterm/xterm'
 import { onDestroy, onMount } from 'svelte'
+import { t } from '$lib/i18n'
 import { openpty } from 'xterm-pty'
 import { startWebcmWithPty } from './webcm-worker'
 import '@xterm/xterm/css/xterm.css'
@@ -35,7 +36,7 @@ onDestroy(() => {
 async function mountTerminal() {
 	if (!host || cancelled) return
 	overlay = 'booting'
-	overlayMsg = 'Preparing terminal…'
+	overlayMsg = t('sandbox.preparingTerminal')
 
 	try {
 		term = new Terminal({
@@ -75,7 +76,7 @@ async function mountTerminal() {
 		term.loadAddon(master)
 		term.focus()
 
-		term.writeln('\x1b[33mDownloading / booting webcm (Cartesi, Alpine)…\x1b[0m\r\n')
+		term.writeln(`\x1b[33m${t('sandbox.bootingWebcm')}\x1b[0m\r\n`)
 
 		const mjsUrl = `${webcmBase}/webcm.mjs`
 
@@ -94,7 +95,7 @@ async function mountTerminal() {
 		overlayMsg = e instanceof Error ? e.message : String(e)
 		term?.writeln(`\r\n\x1b[31m${overlayMsg}\x1b[0m\r\n`)
 		term?.writeln(
-			'\x1b[90mIf assets are missing, run from repo root:\x1b[0m bun run fetch:webcm\r\n'
+			`\x1b[90m${t('sandbox.fetchWebcmHint')}\x1b[0m\r\n`,
 		)
 	}
 }
@@ -104,7 +105,7 @@ async function mountTerminal() {
 	<div
 		bind:this={host}
 		class="box-border h-full min-h-0 w-full min-w-0"
-		aria-label="webcm terminal"
+		aria-label={t('sandbox.terminalAria')}
 	></div>
 	{#if overlay === 'booting' && host}
 		<div
@@ -117,14 +118,14 @@ async function mountTerminal() {
 		<div
 			class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 px-4 text-center text-xs text-red-200"
 		>
-			<p class="font-semibold">webcm failed to start</p>
+			<p class="font-semibold">{t('sandbox.failedToStart')}</p>
 			<p class="max-w-md text-white/70">{overlayMsg}</p>
 			<p class="text-white/50">
-				Cross-origin isolation:
+				{t('sandbox.crossOriginLabel')}
 				{typeof crossOriginIsolated !== 'undefined' &&
 				crossOriginIsolated === true
-					? 'yes (SharedArrayBuffer ok)'
-					: 'no — check COOP/COEP headers'}
+					? t('sandbox.crossOriginYes')
+					: t('sandbox.crossOriginNo')}
 			</p>
 		</div>
 	{/if}

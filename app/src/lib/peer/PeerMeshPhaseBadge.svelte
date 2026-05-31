@@ -10,8 +10,15 @@
 		type PeerMeshPhase,
 	} from '$lib/peer/mesh-state'
 
+	import type { LinkHealth, PeerUsability } from '$lib/peer/mesh-state'
+	import { peerMeshDisplayPhase } from '$lib/peer/mesh-state'
+	import { t } from '$lib/i18n'
+
 	type Props = {
 		phase: PeerMeshPhase
+		usability?: PeerUsability | null
+		/** Global or per-device link health — half/none downgrades “ready” chips. */
+		linkHealth?: LinkHealth | null
 		/** Person name shown in header chips — phase is color-only unless `rail`. */
 		displayName?: string
 		title?: string
@@ -23,33 +30,45 @@
 
 	let {
 		phase,
+		usability = null,
+		linkHealth = null,
 		displayName = '',
 		title = '',
 		monospaceName = false,
 		variant = 'header',
 	}: Props = $props()
 
-	const animating = $derived(peerMeshPhaseAnimating(phase))
-	const dotClass = $derived(peerMeshDotClass(phase))
-	const textClass = $derived(peerMeshTextClass(phase))
+	const displayPhase = $derived(peerMeshDisplayPhase(phase, usability, { linkHealth }))
+	const labelOpts = $derived({ linkHealth })
+	const animating = $derived(peerMeshPhaseAnimating(displayPhase))
+	const dotClass = $derived(peerMeshDotClass(displayPhase))
+	const textClass = $derived(peerMeshTextClass(displayPhase))
 	const headerName = $derived(displayName.trim())
 	const headerAriaLabel = $derived(
 		headerName
 			? monospaceName
-				? `Invite code ${headerName}: ${peerMeshPhaseUserLabel(phase)}`
-				: `${headerName}: ${peerMeshPhaseUserLabel(phase)}`
-			: peerMeshPhaseUserLabel(phase),
+				? t('peer.inviteCodeChip', {
+						code: headerName,
+						label: peerMeshPhaseUserLabel(phase, null, labelOpts),
+					})
+				: t('peer.peerChip', {
+						name: headerName,
+						label: peerMeshPhaseUserLabel(phase, usability, labelOpts),
+					})
+			: peerMeshPhaseUserLabel(phase, usability, labelOpts),
 	)
 </script>
 
 {#if variant === 'rail'}
 	<div
 		class="flex w-[4.5rem] shrink-0 flex-col items-center justify-center gap-1.5 border-r px-2 py-3 {peerMeshRailClass(
-			phase,
+			displayPhase,
 		)}"
 		role="status"
 		aria-live="polite"
-		aria-label="Peer sync: {peerMeshPhaseUserLabel(phase)}"
+		aria-label={t('peer.peerSyncStatus', {
+			label: peerMeshPhaseUserLabel(phase, usability, labelOpts),
+		})}
 		{title}
 	>
 		{#if animating}
@@ -72,17 +91,17 @@
 		<span
 			class="text-center text-[9px] font-bold leading-tight tracking-widest uppercase {textClass}"
 		>
-			{peerMeshShortLabel(phase)}
+			{peerMeshShortLabel(phase, { usability, linkHealth })}
 		</span>
 	</div>
 {:else}
 	<span
 		class="inline-flex min-w-0 max-w-full items-center gap-2 truncate rounded-full px-2 py-1 text-[11px] font-medium leading-tight tracking-tight text-foreground/90 transition-colors {peerMeshHeaderPillSurfaceClass(
-			phase,
+			displayPhase,
 		)}"
 		role="status"
 		aria-live="polite"
-		aria-label="Peer mesh: {headerAriaLabel}"
+		aria-label={t('peer.peerMeshChip', { label: headerAriaLabel })}
 		{title}
 	>
 		{#if animating}

@@ -13,7 +13,7 @@ The harness launches:
 - **`[A]`** — dev server `http://127.0.0.1:1420`
 - **`[B]`** — dev server `http://127.0.0.1:1421` (second Tauri bundle id)
 
-Both processes use the normal layout under **`~/Documents/.avenOS/vaults/<slug>/{db,self}`**. Do **not** rely on separate `AVENOS_DATA_DIR_OVERRIDE` trees (`avenAlice` / `avenBob`) for this harness anymore: spawn two windows, then on **each** lock screen **pick or create a persona**.
+Both processes use the layout under **`~/Documents/.avenOS/ceo.aven/testnet/abagana/vaults/<slug>/{db,self}`**. Do **not** rely on separate `AVENOS_DATA_DIR_OVERRIDE` trees for this harness: spawn two windows, then on **each** lock screen **pick or create a persona**.
 
 ### Same slug in both windows breaks local-first UX
 
@@ -24,7 +24,9 @@ Each process receives **`AVENOS_DEV_INSTANCE` = `A` or `B`** for log-line prefix
 Destructive reset of **all** local vaults:
 
 ```bash
-rm -rf ~/Documents/.avenOS/vaults
+rm -rf ~/Documents/.avenOS/ceo.aven/testnet/abagana/vaults
+# or full wipe:
+rm -rf ~/Documents/.avenOS
 ```
 
 On **each** instance:

@@ -10,9 +10,11 @@ import {
 	grooveSessionReady,
 } from '$lib/runtime/groove-runtime'
 import { startPeerMeshStore } from '$lib/peer/peer-mesh-store'
+import { initLocale, normalizeLocale, setLocale, t } from '$lib/i18n'
 import LockGate from '$lib/self/LockGate.svelte'
 import { attachSelfRustEventMirrors, deviceSession } from '$lib/self/device-session-store'
 import { displayTitleForSession } from '$lib/self/active-vault-ui'
+import { vaultUiSettingsGet } from '$lib/self/vault-ui-settings'
 import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/self/vault'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import MobileShellNav from '$lib/shell/MobileShellNav.svelte'
@@ -55,6 +57,46 @@ $effect(() => {
 
 const sessionKind = $derived($deviceSession.kind)
 
+$effect(() => {
+	if (!browser || !isTauriRuntime()) return
+	initLocale('en')
+})
+
+let vaults = $state<VaultListEntry[]>([])
+
+$effect(() => {
+	void sessionKind
+	if (!browser || !isTauriRuntime()) return
+	void (async () => {
+		try {
+			vaults = await vaultList()
+		} catch {
+			vaults = []
+		}
+	})()
+})
+
+$effect(() => {
+	if (!browser || !isTauriRuntime()) return
+	void sessionKind
+	void vaults
+	if (sessionKind === 'locked') {
+		if (vaults.length > 0) {
+			const entry = vaults.find((v) => v.hasIdentityBlob) ?? vaults[0]
+			if (entry?.locale) setLocale(normalizeLocale(entry.locale))
+		}
+		return
+	}
+	void (async () => {
+		try {
+			const settings = await vaultUiSettingsGet()
+			setLocale(settings.locale)
+		} catch {
+			/* keep current locale */
+		}
+	})()
+})
+
 /** Mesh touches Groove ACL — defer until strict local-first bootstrap confirms shell hydrate. */
 const meshAllowed = $derived(
 	sessionKind === 'unlocked' && $grooveSessionReady,
@@ -65,20 +107,6 @@ $effect(() => {
 	return startPeerMeshStore()
 })
 
-let vaults = $state<VaultListEntry[]>([])
-
-$effect(() => {
-	void sessionKind
-	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked') return
-	void (async () => {
-		try {
-			vaults = await vaultList()
-		} catch {
-			vaults = []
-		}
-	})()
-})
-
 const selfNavLabel = $derived.by(() => {
 	const ds = $deviceSession
 	const title =
@@ -86,7 +114,7 @@ const selfNavLabel = $derived.by(() => {
 			? displayTitleForSession(vaults, ds)
 			: vaults.length > 0
 				? vaultCardTitle(vaults[0])
-				: 'Self'
+				: t('nav.self')
 	return title
 })
 
@@ -168,7 +196,7 @@ $effect(() => {
 
 				<nav
 					class="hidden flex-wrap items-center justify-center justify-self-center gap-x-2 gap-y-1 text-[10px] font-bold tracking-wider uppercase sm:flex"
-					aria-label="App sections"
+					aria-label={t('nav.appSections')}
 				>
 					<a
 						href="/"
@@ -176,7 +204,7 @@ $effect(() => {
 						class="transition-opacity hover:opacity-80 {intentsActive ? 'opacity-95' : 'opacity-40'}"
 						aria-current={intentsActive ? 'page' : undefined}
 						onclick={(e) => navigateApp('/', e)}
-						>Intents</a
+						>{t('nav.intents')}</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a
@@ -185,7 +213,7 @@ $effect(() => {
 						class="transition-opacity hover:opacity-80 {sandboxActive ? 'opacity-95' : 'opacity-40'}"
 						aria-current={sandboxActive ? 'page' : undefined}
 						onclick={(e) => navigateApp('/sandbox', e)}
-						>Sandbox</a
+						>{t('nav.sandbox')}</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a
@@ -194,7 +222,7 @@ $effect(() => {
 						class="transition-opacity hover:opacity-80 {sparksNavActive ? 'opacity-95' : 'opacity-40'}"
 						aria-current={sparksNavActive ? 'page' : undefined}
 						onclick={(e) => navigateApp('/sparks', e)}
-						>Sparks</a
+						>{t('nav.sparks')}</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a
@@ -203,7 +231,7 @@ $effect(() => {
 						class="transition-opacity hover:opacity-80 {dbActive ? 'opacity-95' : 'opacity-40'}"
 						aria-current={dbActive ? 'page' : undefined}
 						onclick={(e) => navigateApp('/db', e)}
-						>DB</a
+						>{t('nav.db')}</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a
@@ -212,7 +240,7 @@ $effect(() => {
 						class="transition-opacity hover:opacity-80 {avenCityActive ? 'opacity-95' : 'opacity-40'}"
 						aria-current={avenCityActive ? 'page' : undefined}
 						onclick={(e) => navigateApp('/aven-city', e)}
-						>avenCITY</a
+						>{t('nav.avenCity')}</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a
@@ -221,13 +249,13 @@ $effect(() => {
 						class="transition-opacity hover:opacity-80 {docsActive ? 'opacity-95' : 'opacity-40'}"
 						aria-current={docsActive ? 'page' : undefined}
 						onclick={(e) => navigateApp('/docs', e)}
-						>Docs</a
+						>{t('nav.docs')}</a
 					>
 				</nav>
 
 				<nav
 					class="hidden min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 justify-self-end text-[10px] font-bold tracking-wider uppercase sm:flex"
-					aria-label="Device identity"
+					aria-label={t('nav.deviceIdentity')}
 				>
 					<a
 						href="/self/peers"
@@ -245,7 +273,7 @@ $effect(() => {
 			<div
 				class="pointer-events-auto fixed inset-0 z-[100] flex touch-none items-center justify-center bg-background/95 backdrop-blur-md"
 				role="region"
-				aria-label="Drop files to attach in composer"
+				aria-label={t('intents.fileDrop.region')}
 			>
 				<div class="mx-6 w-full max-w-md">
 					<div
@@ -255,14 +283,13 @@ $effect(() => {
 							class="rounded-[calc(var(--radius-lg)-8px)] border border-dotted border-primary/40 bg-muted/40 px-7 py-9 text-center"
 						>
 							<p class="text-xl font-semibold tracking-tight text-primary md:text-[1.3rem]">
-								Drop files here
+								{t('intents.fileDrop.title')}
 							</p>
 							<p class="mt-2.5 px-1 text-[12px] leading-relaxed opacity-85">
-								Release to open Intents with thumbnails and optional message.
+								{t('intents.fileDrop.subtitle')}
 							</p>
 							<p class="mt-1.5 px-1 text-[11px] leading-relaxed opacity-55">
-								PDF, JPEG, PNG, or SVG — on submit, allowed files sync to your local Groove
-								<code class="font-mono text-[10px]">files</code> table (unlock required).
+								{t('intents.fileDrop.hint')}
 							</p>
 						</div>
 					</div>

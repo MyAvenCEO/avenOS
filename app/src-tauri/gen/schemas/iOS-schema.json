@@ -2271,10 +2271,10 @@
           "markdownDescription": "Denies the unminimize command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for tauri-plugin-peer\n#### This default permission set includes:\n\n- `allow-peer-transport-status`\n- `allow-peer-swarm-retry`\n- `allow-peer-invite-create`\n- `allow-peer-invite-accept`\n- `allow-peer-invite-cancel`",
+          "description": "Default permissions for tauri-plugin-p2p\n#### This default permission set includes:\n\n- `allow-peer-transport-status`\n- `allow-peer-swarm-retry`\n- `allow-peer-invite-create`\n- `allow-peer-invite-accept`\n- `allow-peer-invite-cancel`",
           "type": "string",
-          "const": "peer:default",
-          "markdownDescription": "Default permissions for tauri-plugin-peer\n#### This default permission set includes:\n\n- `allow-peer-transport-status`\n- `allow-peer-swarm-retry`\n- `allow-peer-invite-create`\n- `allow-peer-invite-accept`\n- `allow-peer-invite-cancel`"
+          "const": "p2p:default",
+          "markdownDescription": "Default permissions for tauri-plugin-p2p\n#### This default permission set includes:\n\n- `allow-peer-transport-status`\n- `allow-peer-swarm-retry`\n- `allow-peer-invite-create`\n- `allow-peer-invite-accept`\n- `allow-peer-invite-cancel`"
         },
         {
           "description": "Enables the peer_invite_accept command without any pre-configured scope.",
@@ -2373,10 +2373,10 @@
           "markdownDescription": "Denies the peer_transport_status command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-device-peer-did`\n- `allow-signing-peer-did`\n- `allow-signing-public-key`\n- `allow-sign`\n- `allow-verify`\n- `allow-lock`\n- `allow-host-device-label`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`\n- `allow-active-identity`",
+          "description": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-device-peer-did`\n- `allow-signing-peer-did`\n- `allow-signing-public-key`\n- `allow-sign`\n- `allow-verify`\n- `allow-lock`\n- `allow-host-device-label`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`\n- `allow-active-identity`\n- `allow-vault-ui-settings-get`\n- `allow-vault-ui-settings-set-locale`",
           "type": "string",
           "const": "self:default",
-          "markdownDescription": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-device-peer-did`\n- `allow-signing-peer-did`\n- `allow-signing-public-key`\n- `allow-sign`\n- `allow-verify`\n- `allow-lock`\n- `allow-host-device-label`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`\n- `allow-active-identity`"
+          "markdownDescription": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-device-peer-did`\n- `allow-signing-peer-did`\n- `allow-signing-public-key`\n- `allow-sign`\n- `allow-verify`\n- `allow-lock`\n- `allow-host-device-label`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`\n- `allow-active-identity`\n- `allow-vault-ui-settings-get`\n- `allow-vault-ui-settings-set-locale`"
         },
         {
           "description": "Enables the active_identity command without any pre-configured scope.",
@@ -2473,6 +2473,18 @@
           "type": "string",
           "const": "self:allow-vault-slug-preview",
           "markdownDescription": "Enables the vault_slug_preview command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the vault_ui_settings_get command without any pre-configured scope.",
+          "type": "string",
+          "const": "self:allow-vault-ui-settings-get",
+          "markdownDescription": "Enables the vault_ui_settings_get command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the vault_ui_settings_set_locale command without any pre-configured scope.",
+          "type": "string",
+          "const": "self:allow-vault-ui-settings-set-locale",
+          "markdownDescription": "Enables the vault_ui_settings_set_locale command without any pre-configured scope."
         },
         {
           "description": "Enables the verify command without any pre-configured scope.",
@@ -2575,6 +2587,18 @@
           "type": "string",
           "const": "self:deny-vault-slug-preview",
           "markdownDescription": "Denies the vault_slug_preview command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the vault_ui_settings_get command without any pre-configured scope.",
+          "type": "string",
+          "const": "self:deny-vault-ui-settings-get",
+          "markdownDescription": "Denies the vault_ui_settings_get command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the vault_ui_settings_set_locale command without any pre-configured scope.",
+          "type": "string",
+          "const": "self:deny-vault-ui-settings-set-locale",
+          "markdownDescription": "Denies the vault_ui_settings_set_locale command without any pre-configured scope."
         },
         {
           "description": "Denies the verify command without any pre-configured scope.",

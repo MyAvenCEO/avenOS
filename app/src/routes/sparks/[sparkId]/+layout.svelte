@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state'
+	import { t } from '$lib/i18n'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { navigateApp } from '$lib/shell'
 	import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
@@ -29,21 +30,21 @@
 		asideNavSectionsFromRoutes(
 			[
 				{
-					title: 'View',
+					title: t('nav.viewSection'),
 					items: [
 						{
 							href: `${sparkBase}/talk`,
-							label: 'Talk',
+							label: t('nav.talk'),
 							match: (p) => p.startsWith(`${sparkBase}/talk`),
 						},
 						{
 							href: `${sparkBase}/todos`,
-							label: 'Todos',
+							label: t('nav.todos'),
 							match: (p) => p.startsWith(`${sparkBase}/todos`),
 						},
 						{
 							href: `${sparkBase}/gallery`,
-							label: 'Gallery',
+							label: t('nav.gallery'),
 							match: (p) => p.startsWith(`${sparkBase}/gallery`),
 						},
 					],
@@ -73,11 +74,11 @@
 </script>
 
 <svelte:head>
-	<title>{sparkMeta?.name ?? 'Spark'} · AvenOS</title>
+	<title>{sparkMeta?.name ?? t('sparks.sparkLabel')}{t('common.titleSuffix')}</title>
 </svelte:head>
 
 <AsidePageLayout
-	asideLabel="Spark views"
+	asideLabel={t('nav.sparkViews')}
 	sections={navSections}
 	desktopGridClass="md:grid-cols-[12rem_minmax(0,1fr)]"
 	sectionLabelClass="px-0 md:px-2"
@@ -93,11 +94,11 @@
 				class="text-muted-foreground hover:text-foreground text-[10px] font-semibold uppercase tracking-wide"
 				onclick={() => navigateApp('/sparks')}
 			>
-				← All sparks
+				{t('nav.allSparks')}
 			</button>
 			<div class="space-y-0.5">
 				<h2 class="text-sm font-semibold tracking-tight leading-snug">
-					{sparkMeta?.name ?? 'Spark'}
+					{sparkMeta?.name ?? t('sparks.sparkLabel')}
 				</h2>
 				{#if sparkMeta}
 					<p class="text-muted-foreground break-all font-mono text-[10px] leading-snug">
@@ -110,7 +111,7 @@
 				class="text-primary hover:underline text-[10px] font-semibold uppercase tracking-wide"
 				onclick={(e) => navigateApp(`/self/workspaces?spark=${encodeURIComponent(decodedSparkId)}`, e)}
 			>
-				Share
+				{t('nav.share')}
 			</a>
 		</div>
 	{/snippet}

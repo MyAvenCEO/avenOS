@@ -644,6 +644,10 @@ impl SyncManager {
 
         for (object_id, locator) in locators {
             let table = locator.table.as_str();
+            // Local identity / trust tables are never P2P-forwarded (see AvenOS spark_sync policy).
+            if matches!(table, "humans" | "peers") {
+                continue;
+            }
             let metadata = metadata_from_row_locator(&locator);
             if metadata
                 .get(crate::metadata::MetadataKey::NoSync.as_str())
@@ -702,6 +706,68 @@ impl SyncManager {
         }
     }
 
+    /// Tables replicated in the first bootstrap pass (biscuit shell before spark data).
+    pub const SHELL_CATCHUP_TABLES: &'static [&'static str] = &["sparks", "keyshares"];
+
+    /// AvenOS: replay catalogue + vault shell rows only (pairing bootstrap).
+    pub fn queue_shell_catchup_to_peer_with_storage<H: Storage>(
+        &mut self,
+        storage: &H,
+        client_id: ClientId,
+    ) {
+        if !self
+            .clients
+            .get(&client_id)
+            .is_some_and(|c| c.role == ClientRole::Peer)
+        {
+            return;
+        }
+
+        self.queue_catalogue_sync_to_client_from_storage(client_id, storage);
+
+        let Ok(locators) = storage.scan_row_locators() else {
+            return;
+        };
+
+        for (object_id, locator) in locators {
+            let table = locator.table.as_str();
+            if !Self::SHELL_CATCHUP_TABLES.contains(&table) {
+                continue;
+            }
+            let metadata = metadata_from_row_locator(&locator);
+            if metadata
+                .get(crate::metadata::MetadataKey::NoSync.as_str())
+                .map(|v| v == "true")
+                .unwrap_or(false)
+            {
+                continue;
+            }
+
+            let Ok(branches) =
+                crate::storage::scan_visible_region_row_batch_branches_with_storage(
+                    storage, table, object_id,
+                )
+            else {
+                continue;
+            };
+
+            for branch in branches {
+                let branch_name = BranchName::new(&branch);
+                if let Some(batch_id) = self.queue_initial_row_to_client_with_storage(
+                    storage,
+                    client_id,
+                    object_id,
+                    branch_name,
+                    true,
+                ) && let Some(fate) =
+                    self.load_batch_fate_by_batch_id_from_storage(storage, batch_id)
+                {
+                    self.queue_batch_fate_to_client(client_id, fate);
+                }
+            }
+        }
+    }
+
     /// Re-queue full catch-up for an existing Peer client (mesh reconnect / ACL hydration).
     pub fn rebroadcast_peer_catchup<H: Storage>(&mut self, storage: &H, client_id: ClientId) {
         if self
@@ -710,6 +776,17 @@ impl SyncManager {
             .is_some_and(|c| c.role == ClientRole::Peer)
         {
             self.queue_full_catchup_to_peer_with_storage(storage, client_id);
+        }
+    }
+
+    /// Shell-only catch-up (sparks/keyshares) before full spark-data replay.
+    pub fn rebroadcast_peer_shell_catchup<H: Storage>(&mut self, storage: &H, client_id: ClientId) {
+        if self
+            .clients
+            .get(&client_id)
+            .is_some_and(|c| c.role == ClientRole::Peer)
+        {
+            self.queue_shell_catchup_to_peer_with_storage(storage, client_id);
         }
     }
 

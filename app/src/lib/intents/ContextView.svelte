@@ -7,6 +7,7 @@
  * mocked summary line so the empty tab still feels intentional.
  */
 import { formatLogTime, type IntentRow, type SkillWorker } from './types'
+import { t } from '$lib/i18n'
 
 let {
 	intent,
@@ -22,8 +23,11 @@ const mockTimestamp = $derived(formatLogTime(Date.now()))
 
 const mockContextLine = $derived(
 	skill
-		? `Last skill transition at ${mockTimestamp} — depends on Intent ${intent?.title ?? '—'}`
-		: `Last intent transition at ${mockTimestamp} — depends on Skill X, Y, Z`
+		? t('intents.context.skillTransition', {
+				time: mockTimestamp,
+				intent: intent?.title ?? '—',
+			})
+		: t('intents.context.intentTransition', { time: mockTimestamp }),
 )
 </script>
 
@@ -31,8 +35,8 @@ const mockContextLine = $derived(
 	class="min-h-[5rem] flex-1 overflow-y-auto rounded-[var(--radius-lg)] border-2 border-dotted border-border/40 bg-white/10 p-4 text-[11px] leading-relaxed"
 >
 	<p class="text-[8px] font-bold tracking-[0.22em] opacity-40 uppercase">
-		Context for {actorName}
+		{t('intents.context.header', { actor: actorName })}
 	</p>
-	<p class="mt-2 text-foreground/50">Here is the context of the actor — placeholder.</p>
+	<p class="mt-2 text-foreground/50">{t('intents.context.placeholder')}</p>
 	<p class="mt-2 font-mono text-[10px] text-foreground/40">{mockContextLine}</p>
 </div>

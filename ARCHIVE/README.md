@@ -8,4 +8,4 @@ Legacy or optional packages not on the main app path.
 | `tauri-plugin-passkey/` | macOS passkey plugin — not linked from `app` today |
 | `mail/` | Empty stub |
 
-Active Tauri plugins live in **`libs/tauri-plugin-peer`** and **`libs/tauri-plugin-self`**.
+Active Tauri plugins live in **`libs/tauri-plugin-p2p`** and **`libs/tauri-plugin-self`**.

@@ -5,7 +5,7 @@
  * Instance A → http://127.0.0.1:1420
  * Instance B → http://127.0.0.1:1421
  *
- * Both use the normal user data layout: <Documents>/.avenOS/vaults/<slug>/{db,self}.
+ * Both use the network layout: <Documents>/.avenOS/ceo.aven/testnet/abagana/vaults/<slug>/{db,self}.
  * **Do not** set AVENOS_DATA_DIR_OVERRIDE here — each window gets its own in-memory active vault via
  * the lock-screen picker, so two personas (e.g. alice + bob vaults) can run concurrently without two
  * separate override trees.
@@ -19,7 +19,7 @@
  *     now produce signed App Store artifacts AND upload them — not what you want for two-instance dev.
  *
  * Reset vaults during dev (destructive — removes all saved personas):
- *   rm -rf "<Documents>/.avenOS/vaults"  (see vaultsHint printed at startup)
+ *   rm -rf "<Documents>/.avenOS/ceo.aven/testnet/abagana/vaults"  (see vaultsHint printed at startup)
  *
  * For a fully isolated sandbox (single flat vault root, no multi-vault), set per-process
  * AVENOS_DATA_DIR_OVERRIDE yourself — not handled by this script.
@@ -42,8 +42,8 @@ import { applyCentralRelayUrlDevDefault, startP2pSignal } from './p2p-signal.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appDir = path.join(repoRoot, 'app')
-/** Repo-wide target — must match `.cargo/config.toml` at repo root. */
-const TAURI_DEBUG_BIN = path.join(repoRoot, 'target/rust/debug/aven-os-app')
+/** Instance B — separate target so parallel `tauri dev` does not block on artifact dir lock. */
+const TAURI_B_TARGET_DIR = path.join(repoRoot, 'target/rust-dev-b')
 
 function userDocumentsDir(): string {
 	const xdg = process.env.XDG_DOCUMENTS_DIR?.trim()
@@ -51,7 +51,7 @@ function userDocumentsDir(): string {
 	return path.join(homedir(), 'Documents')
 }
 
-const vaultsHint = path.join(userDocumentsDir(), '.avenOS', 'vaults')
+const vaultsHint = path.join(userDocumentsDir(), '.avenOS', 'ceo.aven', 'testnet', 'abagana', 'vaults')
 
 /** Linux WebKitGTK defaults (same as dev-app-linux.ts). */
 function devBaseEnv(): Record<string, string> {
@@ -66,20 +66,6 @@ function devBaseEnv(): Record<string, string> {
 /**
  * Wait until a TCP port is accepting connections (or timeout).
  */
-async function waitForFile(filePath: string, timeoutMs = 60_000): Promise<void> {
-	const deadline = Date.now() + timeoutMs
-	const { access, constants } = await import('node:fs/promises')
-	while (Date.now() < deadline) {
-		try {
-			await access(filePath, constants.F_OK)
-			return
-		} catch {
-			await Bun.sleep(750)
-		}
-	}
-	throw new Error(`File ${filePath} did not appear within ${timeoutMs}ms`)
-}
-
 async function waitForPort(port: number, timeoutMs = 60_000): Promise<void> {
 	const deadline = Date.now() + timeoutMs
 	while (Date.now() < deadline) {
@@ -153,7 +139,10 @@ const TAURI_B_CONFIG = JSON.stringify({
 })
 
 function spawnTauri(label: 'A' | 'B', colour: string, env: Record<string, string>) {
-	const instanceEnv = { ...env, AVENOS_DEV_INSTANCE: label }
+	const instanceEnv: Record<string, string> = { ...env, AVENOS_DEV_INSTANCE: label }
+	if (label === 'B') {
+		instanceEnv.CARGO_TARGET_DIR = TAURI_B_TARGET_DIR
+	}
 
 	// For B: pass the overlay as inline JSON to `tauri dev --config '{...}'`.
 	// Do NOT use `--` before --config — that routes it to cargo, not to the Tauri CLI.
@@ -224,20 +213,7 @@ async function main() {
 		await exitWithCode(1)
 	}
 
-	const tauriBin = TAURI_DEBUG_BIN
-	console.log(`${BOLD}${CYAN}[A]${RESET} Waiting for Rust build (${tauriBin})…`)
-	try {
-		await waitForFile(tauriBin, 300_000)
-	} catch {
-		console.error(
-			`${BOLD}${CYAN}[A]${RESET} Timed out waiting for ${tauriBin} — check [A] logs (disk full? run: bun run clean:app:rust)`,
-		)
-		tauriA.kill('SIGTERM')
-		viteB.kill('SIGTERM')
-		await exitWithCode(1)
-	}
-
-	console.log(`${BOLD}${MAGENTA}[B]${RESET} Starting Tauri (devUrl :1421)…`)
+	console.log(`${BOLD}${MAGENTA}[B]${RESET} Starting Tauri (devUrl :1421, target ${TAURI_B_TARGET_DIR})…`)
 	const tauriB = spawnTauri('B', MAGENTA, baseEnv)
 
 	const allProcs = [tauriA, viteB, tauriB]

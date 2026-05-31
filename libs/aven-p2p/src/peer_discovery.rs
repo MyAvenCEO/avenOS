@@ -151,6 +151,9 @@ async fn do_refresh(
                         "lookup result"
                     );
                     for peer in result.peers {
+                        if peer.public_key == key_pair.public_key {
+                            continue;
+                        }
                         tracing::debug!(
                             pk = %hex_short(&peer.public_key),
                             relay_count = peer.relay_addresses.len(),

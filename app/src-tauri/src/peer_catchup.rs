@@ -18,10 +18,11 @@ pub(crate) enum PeerCatchupPhase {
 }
 
 struct Entry {
-	#[cfg_attr(not(test), allow(dead_code))] // For future transport-aware retries / debugging
 	link_epoch: u64,
 	phase: PeerCatchupPhase,
 	fail_count: u32,
+	/// Sparks/keyshares catch-up flushed before full spark-data replay.
+	shell_bootstrap_done: bool,
 }
 
 struct Registry {
@@ -78,6 +79,10 @@ impl Registry {
 		) {
 			return;
 		}
+		let shell_bootstrap_done = self
+			.peers
+			.get(&cid)
+			.is_some_and(|e| e.shell_bootstrap_done);
 		let le = self.assign_link_serial();
 		self.peers.insert(
 			cid,
@@ -85,12 +90,12 @@ impl Registry {
 				link_epoch: le,
 				phase: PeerCatchupPhase::Pending,
 				fail_count: 0,
+				shell_bootstrap_done,
 			},
 		);
 	}
 
-	/// After `rebroadcast_all_peer_clients_and_flush` for ACL hydration, force a per-peer outbound catch-up for every
-	/// live allowlisted Groove peer.
+	/// After ACL object-map refresh, force a per-peer outbound catch-up for every live allowlisted Groove peer.
 	fn requeue_all_live_allowlisted_pending_after_acl(&mut self) {
 		let cids = self
 			.current_live
@@ -98,6 +103,10 @@ impl Registry {
 			.copied()
 			.collect::<Vec<_>>();
 		for cid in cids {
+			let shell_bootstrap_done = self
+				.peers
+				.get(&cid)
+				.is_some_and(|e| e.shell_bootstrap_done);
 			let le = self.assign_link_serial();
 			self.peers.insert(
 				cid,
@@ -105,9 +114,39 @@ impl Registry {
 					link_epoch: le,
 					phase: PeerCatchupPhase::Pending,
 					fail_count: 0,
+					shell_bootstrap_done,
 				},
 			);
 		}
+	}
+
+	/// Queue full spark-data catch-up (shell phase already complete).
+	fn bump_to_full_catchup_pending(&mut self, cid: ClientId) {
+		if !self.current_live.contains(&cid) || !self.allowlisted_live.contains(&cid) {
+			return;
+		}
+		if matches!(
+			self.peers.get(&cid).map(|e| e.phase),
+			Some(PeerCatchupPhase::Flushing)
+		) {
+			return;
+		}
+		let le = self.assign_link_serial();
+		self.peers.insert(
+			cid,
+			Entry {
+				link_epoch: le,
+				phase: PeerCatchupPhase::Pending,
+				fail_count: 0,
+				shell_bootstrap_done: true,
+			},
+		);
+	}
+
+	fn shell_bootstrap_pending(&self, cid: ClientId) -> bool {
+		self.peers.get(&cid).is_some_and(|e| {
+			e.phase == PeerCatchupPhase::Pending && !e.shell_bootstrap_done
+		})
 	}
 
 	/// Called when Hyperswarm link set changes (`bridge.snapshot_remote_clients()`).
@@ -203,7 +242,7 @@ impl Registry {
 	fn flushing_to_ready(&mut self, targets: &[ClientId]) {
 		for cid in targets {
 			if let Some(e) = self.peers.get_mut(cid) {
-				if e.phase == PeerCatchupPhase::Flushing {
+				if e.phase == PeerCatchupPhase::Flushing && e.shell_bootstrap_done {
 					e.phase = PeerCatchupPhase::Ready;
 					e.fail_count = 0;
 				}
@@ -320,6 +359,27 @@ impl PeerCatchupHandle {
 		self.enqueue(Msg::RequestWork).await;
 	}
 
+	/// Shell rows replicated and biscuit trust is ready — retry full spark-data catch-up.
+	pub(crate) async fn on_trust_bootstrap_ready(&self, peers: HashSet<ClientId>) {
+		{
+			let mut g = self.reg.lock().await;
+			for cid in peers {
+				if !g.current_live.contains(&cid) {
+					continue;
+				}
+				// Trust nudge may arrive before the mesh tick updates allowlisted_live.
+				g.allowlisted_live.insert(cid);
+				match g.peers.get(&cid).map(|e| e.phase) {
+					Some(PeerCatchupPhase::Ready) | Some(PeerCatchupPhase::Flushing) => {}
+					Some(PeerCatchupPhase::Pending) | Some(PeerCatchupPhase::Idle) | None => {
+						g.bump_to_full_catchup_pending(cid);
+					}
+				}
+			}
+		}
+		self.enqueue(Msg::RequestWork).await;
+	}
+
 	/// After a local spark-scoped write, nudge outbound catch-up for live allowlisted peers.
 	pub(crate) async fn on_spark_data_written(&self) {
 		{
@@ -336,11 +396,23 @@ impl PeerCatchupHandle {
 		self.enqueue(Msg::RequestWork).await;
 	}
 
-	pub(crate) async fn mesh_catchup_ui_snapshot(&self) -> PeerMeshCatchupSnap {
+	pub(crate) async fn mesh_catchup_ui_snapshot(
+		&self,
+		bridge: &tauri_plugin_p2p::HyperswarmGrooveBridge,
+	) -> PeerMeshCatchupSnap {
 		let g = self.reg.lock().await;
+		let global_catchup_busy = g.catchup_busy_for_ui();
+		let raw_ready = g.ready_clients_for_ui();
+		drop(g);
+		let mut ready_client_ids = HashSet::new();
+		for cid in raw_ready {
+			if bridge.peer_send_ready(cid).await {
+				ready_client_ids.insert(cid);
+			}
+		}
 		PeerMeshCatchupSnap {
-			global_catchup_busy: g.catchup_busy_for_ui(),
-			ready_client_ids: g.ready_clients_for_ui(),
+			global_catchup_busy,
+			ready_client_ids,
 		}
 	}
 }
@@ -397,8 +469,8 @@ async fn all_peers_send_ready(app: &AppHandle, peers: &[ClientId]) -> bool {
 	if peers.is_empty() {
 		return false;
 	}
-	let live_links = app.state::<std::sync::Arc<tauri_plugin_peer::PeerLinkCoordinator>>();
-	let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
+	let live_links = app.state::<std::sync::Arc<tauri_plugin_p2p::PeerLinkCoordinator>>();
+	let bridge = app.state::<tauri_plugin_p2p::HyperswarmGrooveBridge>();
 	for p in peers {
 		if !live_links.is_mux_ready_by_client(*p).await {
 			return false;
@@ -417,8 +489,8 @@ async fn all_peers_send_ready(_app: &AppHandle, _peers: &[ClientId]) -> bool {
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 async fn any_live_peer_send_ready(app: &AppHandle) -> bool {
-	let live_links = app.state::<std::sync::Arc<tauri_plugin_peer::PeerLinkCoordinator>>();
-	let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
+	let live_links = app.state::<std::sync::Arc<tauri_plugin_p2p::PeerLinkCoordinator>>();
+	let bridge = app.state::<tauri_plugin_p2p::HyperswarmGrooveBridge>();
 	for cid in live_links.snapshot_mux_ready_clients().await {
 		if bridge.peer_send_ready(cid).await {
 			return true;
@@ -429,6 +501,38 @@ async fn any_live_peer_send_ready(app: &AppHandle) -> bool {
 
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
 async fn any_live_peer_send_ready(_app: &AppHandle) -> bool {
+	true
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+async fn peers_trust_ready_for_spark_data(
+	app: &AppHandle,
+	jazz: &crate::jazz::ManagedJazz,
+	peers: &[ClientId],
+) -> bool {
+	let snap = jazz
+		.sync_acl
+		.read()
+		.expect("sync_acl poisoned")
+		.clone();
+	let Some(snap) = snap else {
+		return false;
+	};
+	let bridge = app.state::<tauri_plugin_p2p::HyperswarmGrooveBridge>();
+	let cid_map = bridge.shared_client_id_to_did();
+	let g = cid_map.read().expect("cid map poisoned");
+	peers.iter().all(|p| {
+		g.get(p)
+			.is_some_and(|did| crate::spark_sync::remote_is_spark_admin(&snap, did))
+	})
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "ios")))]
+async fn peers_trust_ready_for_spark_data(
+	_app: &AppHandle,
+	_jazz: &crate::jazz::ManagedJazz,
+	_peers: &[ClientId],
+) -> bool {
 	true
 }
 
@@ -484,7 +588,7 @@ async fn process_until_idle(reg: &Arc<Mutex<Registry>>, app: &AppHandle, rx: &mu
 						continue;
 					}
 				}
-				match client.rebroadcast_all_peer_clients_and_flush().await {
+				match jazz.refresh_sync_acl_object_map(client.as_ref()).await {
 					Ok(()) => {
 						if !jazz.groove_conn_epoch_is(epoch) {
 							reg.lock().await.acl_bootstrap_pending = true;
@@ -494,7 +598,7 @@ async fn process_until_idle(reg: &Arc<Mutex<Registry>>, app: &AppHandle, rx: &mu
 						let mut g = reg.lock().await;
 						log::debug!(
 							target: "avenos::jazz",
-							"peer catch-up worker: acl bootstrap flushed (batch {})",
+							"peer catch-up worker: acl bootstrap refreshed (batch {})",
 							batch
 						);
 						g.acl_bootstrap_pending = false;
@@ -544,7 +648,28 @@ async fn process_until_idle(reg: &Arc<Mutex<Registry>>, app: &AppHandle, rx: &mu
 					reg.lock().await.flushing_to_pending_no_incr(&peers);
 					break;
 				};
+				if let Err(e) = jazz.refresh_sync_acl_object_map(client.as_ref()).await {
+					log::debug!(
+						target: "avenos::jazz",
+						"peer catch-up worker: refresh_sync_acl_object_map batch {batch} failed: {e}",
+					);
+				}
+
 				for p in &peers {
+					let shell_first = {
+						let g = reg.lock().await;
+						g.shell_bootstrap_pending(*p)
+					};
+					if shell_first {
+						if let Err(e) = client.rebroadcast_peer_shell_catchup(*p) {
+							log::warn!(
+								target: "avenos::jazz",
+								"peer catch-up worker: rebroadcast_peer_shell_catchup {:?} batch {} failed: {e}",
+								p,
+								batch
+							);
+						}
+					}
 					if let Err(e) = client.rebroadcast_peer_catchup(*p) {
 						log::warn!(
 							target: "avenos::jazz",
@@ -572,15 +697,48 @@ async fn process_until_idle(reg: &Arc<Mutex<Registry>>, app: &AppHandle, rx: &mu
 							drain_secondary_mailbox(reg, rx).await;
 							continue;
 						}
-						let mut g = reg.lock().await;
-						g.flushing_to_ready(&peers);
-						log::info!(
-							target: "avenos::jazz",
-							"peer catch-up worker: peer flush batch {} {:?} Ok (catch-up ready)",
-							batch,
-							peers
-						);
-						drop(g);
+						{
+							let mut g = reg.lock().await;
+							for p in &peers {
+								if let Some(e) = g.peers.get_mut(p) {
+									if e.phase == PeerCatchupPhase::Flushing {
+										e.shell_bootstrap_done = true;
+									}
+								}
+							}
+						}
+						if peers_trust_ready_for_spark_data(app, &*jazz, &peers).await {
+							let link_epoch = {
+								let g = reg.lock().await;
+								peers
+									.first()
+									.and_then(|p| g.peers.get(p).map(|e| e.link_epoch))
+									.unwrap_or(0)
+							};
+							let mut g = reg.lock().await;
+							g.flushing_to_ready(&peers);
+							log::info!(
+								target: "avenos::jazz",
+								"peer catch-up worker: peer flush batch {} {:?} Ok (catch-up ready, link_epoch={link_epoch})",
+								batch,
+								peers
+							);
+						} else {
+							let mut g = reg.lock().await;
+							for p in &peers {
+								if let Some(e) = g.peers.get_mut(p) {
+									if e.phase == PeerCatchupPhase::Flushing {
+										e.phase = PeerCatchupPhase::Pending;
+									}
+								}
+							}
+							log::info!(
+								target: "avenos::jazz",
+								"peer catch-up worker: flush batch {} {:?} Ok — trust pending, requeued",
+								batch,
+								peers
+							);
+						}
 						// Peer may have received sparks/keyshares/messages during catch-up.
 						let drain = app.state::<crate::jazz::ui_drain::UiTableDrainHandle>();
 						let mut drain_tables = std::collections::HashSet::new();
@@ -690,6 +848,7 @@ mod tests {
 				link_epoch: 1,
 				phase: PeerCatchupPhase::Ready,
 				fail_count: 0,
+				shell_bootstrap_done: true,
 			},
 		);
 		r.peer_registered_after_groove(cid(2));
@@ -697,6 +856,30 @@ mod tests {
 			r.peers.get(&cid(2)).map(|e| e.phase),
 			Some(PeerCatchupPhase::Pending)
 		);
+		assert!(r.peers.get(&cid(2)).is_some_and(|e| e.shell_bootstrap_done));
+	}
+
+	#[test]
+	fn bump_preserves_shell_bootstrap_done() {
+		let mut r = Registry::new();
+		r.allowlisted_live.insert(cid(6));
+		r.current_live.insert(cid(6));
+		r.peers.insert(
+			cid(6),
+			Entry {
+				link_epoch: 1,
+				phase: PeerCatchupPhase::Ready,
+				fail_count: 0,
+				shell_bootstrap_done: true,
+			},
+		);
+		r.bump_to_pending_live_allowlisted(cid(6));
+		assert_eq!(
+			r.peers.get(&cid(6)).map(|e| e.phase),
+			Some(PeerCatchupPhase::Pending)
+		);
+		assert!(r.peers.get(&cid(6)).is_some_and(|e| e.shell_bootstrap_done));
+		assert!(!r.shell_bootstrap_pending(cid(6)));
 	}
 
 	#[test]
@@ -708,6 +891,9 @@ mod tests {
 		let mut tgt = vec![];
 		assert!(r.pop_pending_into_flushing(&mut tgt));
 		assert!(tgt.contains(&cid(3)) && tgt.contains(&cid(4)));
+		if let Some(e) = r.peers.get_mut(&cid(3)) {
+			e.shell_bootstrap_done = true;
+		}
 		r.flushing_to_ready(&[cid(3)]);
 		r.peers.entry(cid(4)).and_modify(|e| {
 			e.phase = PeerCatchupPhase::Pending;
@@ -723,14 +909,46 @@ mod tests {
 	}
 
 	#[test]
-	fn allowlist_removed_idles_live_peer_record() {
+	fn trust_ready_queues_full_when_live_not_yet_allowlisted() {
 		let mut r = Registry::new();
-		r.allowlisted_live.insert(cid(5));
-		r.apply_live_clients_changed(HashSet::from([cid(5)]));
-		r.sync_allowlisted_live(HashSet::new());
+		r.current_live.insert(cid(8));
+		r.peers.insert(
+			cid(8),
+			Entry {
+				link_epoch: 1,
+				phase: PeerCatchupPhase::Pending,
+				fail_count: 0,
+				shell_bootstrap_done: true,
+			},
+		);
+		// Simulates on_trust_bootstrap_ready: mesh tick may not have synced allowlist yet.
+		r.allowlisted_live.insert(cid(8));
+		r.bump_to_full_catchup_pending(cid(8));
 		assert_eq!(
-			r.peers.get(&cid(5)).map(|e| e.phase),
-			Some(PeerCatchupPhase::Idle)
+			r.peers.get(&cid(8)).map(|e| e.phase),
+			Some(PeerCatchupPhase::Pending)
+		);
+		assert!(r.peers.get(&cid(8)).is_some_and(|e| e.shell_bootstrap_done));
+	}
+
+	#[test]
+	fn shell_done_trust_ready_marks_ready_after_flush() {
+		let mut r = Registry::new();
+		r.allowlisted_live.insert(cid(9));
+		r.current_live.insert(cid(9));
+		r.peers.insert(
+			cid(9),
+			Entry {
+				link_epoch: 1,
+				phase: PeerCatchupPhase::Flushing,
+				fail_count: 0,
+				shell_bootstrap_done: true,
+			},
+		);
+		r.flushing_to_ready(&[cid(9)]);
+		assert_eq!(
+			r.peers.get(&cid(9)).map(|e| e.phase),
+			Some(PeerCatchupPhase::Ready)
 		);
 	}
 }

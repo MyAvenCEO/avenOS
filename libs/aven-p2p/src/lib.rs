@@ -10,6 +10,8 @@
 /// HyperDHT protocol stack.
 pub mod dht;
 
+mod util;
+
 #[cfg(feature = "swarm")]
 mod connection_set;
 #[cfg(feature = "swarm")]

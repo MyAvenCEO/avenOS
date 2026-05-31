@@ -10,22 +10,24 @@ When central mode is on, **`AVEN_RELAY_URL` is required** (no implicit default �
 
 | `AVEN_RELAY` | `AVEN_RELAY_URL` (required if central) | Discovery | Dev scripts spawn signal? | Data plane |
 |--------------|----------------------------------------|-----------|---------------------------|------------|
-| **default / true** | `127.0.0.1`, `localhost`, or `::1` | Embedded **Rust HyperDHT + co-hosted blind-relay** (UDP **49737**) | Yes (`scripts/p2p-signal.ts`) | LAN → holepunch → **blind-relay fallback** (`relay_through`) |
+| **default / true** | `127.0.0.1`, `localhost`, or `::1` | Embedded **Rust HyperDHT + co-hosted blind-relay** (UDP **49737**) | Yes (`scripts/p2p-signal.ts`) | **Blind-relay only** (`prefer_relay_only`, `relay_through`) |
 | **default / true** | e.g. `relay.aven.ceo` | Remote bootstrap + blind-relay from manifest (both **49737**) | No subprocess | Same — manifest serves `relayPublicKeyHex` + `relayUdpPort: 49737` |
-| **`false`** | (ignored) | Public Holepunch HyperDHT roots | No | Direct P2P + public relays |
+| **`false`** | (ignored) | Public Holepunch HyperDHT roots | No | Direct P2P + public relays (non-vault builds) |
 
-Connectivity matches [peeroxide’s documented stack](https://rightbracket.github.io/peeroxide/concepts/dht-and-routing.html) (vendored as `libs/aven-p2p`): the DHT coordinates discovery, **in-band handshake relay**, holepunching, and blind-relay fallback. Fly runs **one Rust process** on UDP **49737** (HyperDHT bootstrap + `PEER_HANDSHAKE` / `PEER_HOLEPUNCH` + Hyperswarm blind-relay control/data).
+Connectivity matches [peeroxide’s documented stack](https://rightbracket.github.io/peeroxide/concepts/dht-and-routing.html) (vendored as `libs/aven-p2p`): the DHT coordinates discovery and **in-band handshake relay** (`PEER_HANDSHAKE`). Production vault builds use a **relay-only profile**: peer data never uses LAN direct, reflexive direct, or UDP holepunch — only blind-relay after Noise IK. Fly runs **one Rust process** on UDP **49737** (HyperDHT bootstrap + `PEER_HANDSHAKE` + Hyperswarm blind-relay control/data).
 
-### Connect path (Hyperswarm / HyperDHT order)
+### Connect path (relay-only profile)
 
-After Noise IK completes, aven-p2p tries endpoints in this order (see `libs/aven-p2p/src/dht/hyperdht.rs`):
+After Noise IK completes via bootstrap relay, aven-p2p uses **blind-relay only** (see `libs/aven-p2p/src/dht/hyperdht.rs`, `relay_link.rs`):
 
-1. **LAN direct** — both sides advertise local IPv4s in handshake `addresses4` (Personal Hotspot `172.20.10.x`, RFC1918, etc.). If `match_address` finds a shared subnet, UDX opens on the tether/Wi‑Fi LAN address (skips carrier same-IP holepunch).
-2. **Reflexive direct** — public address from the relayed handshake when firewall is open or not holepunchable.
-3. **UDP holepunch** — `PEER_HOLEPUNCH` rounds via the same bootstrap that relayed the handshake (fixes from build ~17–20: no eager UDX to Fly, recv-drain, `FIREWALL_UNKNOWN` probe fallback).
-4. **Blind relay (last resort)** — when both sides advertise `relay_through` in Noise (from `AVENOS_HYPERSWARM_RELAY_*` env / compile embed) and steps 1–3 fail. Peeroxide opens an encrypted stream to the co-hosted blind-relay on the **same UDP port (49737)**. Diagnostics: **`holepunchBlindRelayFallbackTotal > 0`** on cross-network pairs where holepunch could not complete.
+1. **DHT rendezvous** — per-pair topic announce/lookup (or single bootstrap candidate when `prefer_relay_only`).
+2. **Noise IK** — `PEER_HANDSHAKE` relayed through bootstrap; both sides exchange `relay_through` with a **deterministic pair token** derived from `(pair_topic, relay_pk)` (stable across heal retries).
+3. **Blind-relay pair** — dominant outbound half `pair(false, token)`; subordinate inbound half `pair(true, token)` on the co-hosted relay (UDP **49737**). Coordinator sends `unpair` on timeout or control-session drop.
+4. **SecretStream + Groove mux** — end-to-end encrypted data plane; relay sees opaque UDX bytes only.
 
-This preserves the **b76bec0** relayed-handshake fixes; we are not reintroducing legacy “always blind-relay” or “UDX straight to bootstrap” behaviour.
+**Dial authority:** higher ed25519 static key outbound-dials; subordinate waits for inbound pair. During invite, swarm stores **`active_pair_topic`** so both halves use the same blind-relay token. **One in-flight connect** per remote pk (`connect_epoch` cancels stale attempts); pairing retries bypass `waiting` deadlock.
+
+Transport heal is consolidated to **`PeerCtl::transport_tick(TickMode)`** — see [Auto-heal & coordinator](06-auto-heal-and-coordinator.md).
 
 Outbound **Jazz / Groove** mesh rows use a dedicated **peer catch-up worker** (see `aven-os-app`'s `peer_catchup` module): per Hyperswarm `ClientId` we track Idle / Pending / Flushing / Ready, coalesce **`rebroadcast_peer_catchup` + single `flush_peer_sync`** batches, bump state on link up/down rather than spawning unbounded reconcile flushes, and treat **Ready only after flush Ok** while the Jazz `conn_epoch` still matches — so reconnects replay catch-up reliably without starving table subscribe IPC.
 
@@ -105,13 +107,13 @@ Logs:
 
 No local subprocess; Tauri merges bootstrap + blind-relay from **`relay.aven.ceo`** manifest (`/.well-known/aven-relay.json` via `relay-bootstrap.ts`) or explicit **`AVENOS_DHT_BOOTSTRAP`** / **`AVENOS_HYPERSWARM_RELAY_*`**. Port overridable with **`AVENOS_P2P_SIGNAL_PORT`** when deriving from **`AVEN_RELAY_URL`**.
 
-Packaged builds compile-time embed: **`AVEN_RELAY_URL`**, **`AVENOS_DHT_BOOTSTRAP`**, **`AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX`**, **`AVENOS_HYPERSWARM_RELAY_ADDR`** — sourced from repo **`.env`** (`AVENOS_RELAY_PUBLIC_KEY_HEX`) via [`scripts/relay-env.ts`](../../../../scripts/relay-env.ts), not live manifest fetch. See [`libs/tauri-plugin-peer/src/lib.rs`](../../../../libs/tauri-plugin-peer/src/lib.rs).
+Packaged builds compile-time embed: **`AVEN_RELAY_URL`**, **`AVENOS_DHT_BOOTSTRAP`**, **`AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX`**, **`AVENOS_HYPERSWARM_RELAY_ADDR`** — sourced from repo **`.env`** (`AVENOS_RELAY_PUBLIC_KEY_HEX`) via [`scripts/relay-env.ts`](../../../../scripts/relay-env.ts), not live manifest fetch. See [`libs/tauri-plugin-p2p/src/lib.rs`](../../../../libs/tauri-plugin-p2p/src/lib.rs).
 
 ---
 
 ## Relay identity env (single source of truth)
 
-Set in repo-root **`.env`** (alongside **`GENESIS_NETWORK_ID`**). **`deploy:relay-fly`** pushes both to Fly secrets.
+Set in repo-root **`.env`** (relay seed + pubkey for deploy). **`deploy:relay-fly`** pushes secrets to Fly.
 
 | Env var | Role |
 |---------|------|

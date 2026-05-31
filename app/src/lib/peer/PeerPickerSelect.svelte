@@ -1,12 +1,13 @@
 <script lang="ts">
 	import type { PeerRowReply } from './api'
 	import { peerPickerLines } from './display-label'
+	import { t } from '$lib/i18n'
 
 	let {
 		peers,
 		value = $bindable(''),
 		localPairingLabel,
-		placeholder = 'Select a paired peer…',
+		placeholder = undefined,
 		disabled = false,
 	}: {
 		peers: PeerRowReply[]
@@ -15,6 +16,8 @@
 		placeholder?: string
 		disabled?: boolean
 	} = $props()
+
+	const resolvedPlaceholder = $derived(placeholder ?? t('peer.selectPairedPeer'))
 
 	let open = $state(false)
 	let rootEl = $state<HTMLDivElement | undefined>()
@@ -71,7 +74,7 @@
 					</span>
 				{/if}
 			{:else}
-				<span class="text-muted-foreground block truncate">{placeholder}</span>
+				<span class="text-muted-foreground block truncate">{resolvedPlaceholder}</span>
 			{/if}
 		</span>
 		<svg
@@ -93,7 +96,7 @@
 		<ul
 			class="border-border bg-background absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border py-1 shadow-md"
 			role="listbox"
-			aria-label={placeholder}
+			aria-label={resolvedPlaceholder}
 		>
 			{#each peers as peer (peer.id)}
 				{@const lines = peerPickerLines(peer.peerDid, peer.deviceLabel, localPairingLabel)}

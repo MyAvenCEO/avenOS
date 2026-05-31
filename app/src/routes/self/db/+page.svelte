@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
+	import { t } from '$lib/i18n'
 	import {
 		selfClearAvenOsData,
 		selfClearJazzDatabase,
@@ -81,23 +82,19 @@
 </script>
 
 <svelte:head>
-	<title>Database · AvenOS</title>
+	<title>{t('db.self.title')}{t('common.titleSuffix')}</title>
 </svelte:head>
 
 <div class="flex flex-col gap-8">
 	<header class="space-y-1.5">
-		<h1 class="text-2xl font-semibold tracking-tight">Local database</h1>
+		<h1 class="text-2xl font-semibold tracking-tight">{t('db.self.title')}</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
-			AvenOS keeps durable state under your OS <strong>Documents</strong> folder in
-			<code class="font-mono text-[11px]">.avenOS/</code> (e.g.
-			<code class="font-mono text-[11px]">~/Documents/.avenOS</code> on macOS, XDG Documents on Linux).
-			Groove/SurrealKV data lives in <code class="font-mono text-[11px]">vaults/&lt;slug&gt;/db/</code>; device
-			identity material lives in <code class="font-mono text-[11px]">vaults/&lt;slug&gt;/self/</code>.
+			{t('db.self.subtitle')}
 		</p>
 	</header>
 
 	{#if !tauri}
-		<p class="text-muted-foreground text-sm">Open the AvenOS desktop app to manage local storage paths.</p>
+		<p class="text-muted-foreground text-sm">{t('db.self.needsDesktop')}</p>
 	{:else if pathsErr}
 		<p
 			class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border px-3 py-2 text-sm leading-snug select-text"
@@ -107,33 +104,31 @@
 		</p>
 	{:else if paths}
 		<section class="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
-			<h2 class="text-[11px] font-semibold uppercase tracking-wider opacity-70">Paths</h2>
+			<h2 class="text-[11px] font-semibold uppercase tracking-wider opacity-70">{t('db.self.paths')}</h2>
 			<dl class="space-y-3 text-[13px]">
 				<div>
-					<dt class="text-muted-foreground mb-1 font-mono text-[10px] uppercase tracking-wide">App root</dt>
+					<dt class="text-muted-foreground mb-1 font-mono text-[10px] uppercase tracking-wide">{t('db.self.appRoot')}</dt>
 					<dd class="break-all font-mono text-[11px] leading-snug select-text">{paths.appBase}</dd>
 				</div>
 				<div>
-					<dt class="text-muted-foreground mb-1 font-mono text-[10px] uppercase tracking-wide">Active vault</dt>
+					<dt class="text-muted-foreground mb-1 font-mono text-[10px] uppercase tracking-wide">{t('db.self.activeVault')}</dt>
 					<dd class="break-all font-mono text-[11px] leading-snug select-text">{paths.root}</dd>
 				</div>
 				<div>
-					<dt class="text-muted-foreground mb-1 font-mono text-[10px] uppercase tracking-wide">Database</dt>
+					<dt class="text-muted-foreground mb-1 font-mono text-[10px] uppercase tracking-wide">{t('db.self.database')}</dt>
 					<dd class="break-all font-mono text-[11px] leading-snug select-text">{paths.dbDir}</dd>
 				</div>
 				<div>
-					<dt class="text-muted-foreground mb-1 font-mono text-[10px] uppercase tracking-wide">Self identity</dt>
+					<dt class="text-muted-foreground mb-1 font-mono text-[10px] uppercase tracking-wide">{t('db.self.selfIdentity')}</dt>
 					<dd class="break-all font-mono text-[11px] leading-snug select-text">{paths.selfIdentityDir}</dd>
 				</div>
 			</dl>
 		</section>
 
 		<section class="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
-			<h2 class="text-[11px] font-semibold uppercase tracking-wider opacity-70">Groove store</h2>
+			<h2 class="text-[11px] font-semibold uppercase tracking-wider opacity-70">{t('db.self.grooveStore')}</h2>
 			<p class="text-muted-foreground text-xs leading-relaxed">
-				Clearing removes the Groove/SurrealKV database for the active vault (todos, sparks, peers, etc.). Your
-				hardware identity under <code class="font-mono text-[11px]">self/</code> is unchanged. After clearing,
-				unlock again and open Todos or DB so the store is recreated.
+				{t('db.self.clearDescription')}
 			</p>
 
 			{#if clearErr}
@@ -143,13 +138,13 @@
 			{/if}
 			{#if clearDone}
 				<p class="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded-md border px-3 py-2 text-xs">
-					Local database cleared. Re-open Todos or trigger bootstrap to create a fresh store.
+					{t('db.self.clearSuccess')}
 				</p>
 			{/if}
 
 			{#if confirmOpen}
 				<div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-					<p class="text-sm font-medium">Delete everything under the database folder?</p>
+					<p class="text-sm font-medium">{t('db.self.confirmClearQuestion')}</p>
 					<div class="flex flex-wrap gap-2">
 						<button
 							type="button"
@@ -157,7 +152,7 @@
 							disabled={busy}
 							onclick={() => void clearDb()}
 						>
-							{busy ? 'Clearing…' : 'Confirm clear'}
+							{busy ? t('common.clearing') : t('common.confirmClear')}
 						</button>
 						<button
 							type="button"
@@ -165,7 +160,7 @@
 							disabled={busy}
 							onclick={() => (confirmOpen = false)}
 						>
-							Cancel
+							{t('common.cancel')}
 						</button>
 					</div>
 				</div>
@@ -179,7 +174,7 @@
 						confirmOpen = true
 					}}
 				>
-					Clear / reset Jazz database…
+					{t('db.self.clearResetButton')}
 				</button>
 			{/if}
 		</section>
@@ -187,12 +182,9 @@
 		<section
 			class="space-y-3 rounded-xl border border-destructive/35 bg-destructive/[0.04] p-4"
 		>
-			<h2 class="text-destructive text-[11px] font-semibold uppercase tracking-wider">Danger zone</h2>
+			<h2 class="text-destructive text-[11px] font-semibold uppercase tracking-wider">{t('db.self.dangerZone')}</h2>
 			<p class="text-muted-foreground text-xs leading-relaxed">
-				<strong class="text-foreground font-medium">Full reset</strong> deletes the entire
-				<code class="font-mono text-[11px]">.avenOS</code> folder — all vaults, device identity keychains,
-				trusted peers, sparks, and schema cache. You will return to the lock screen and must register or unlock
-				again. This cannot be undone.
+				{t('db.self.fullResetDescription')}
 			</p>
 
 			{#if fullResetErr}
@@ -202,14 +194,14 @@
 			{/if}
 			{#if fullResetDone}
 				<p class="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded-md border px-3 py-2 text-xs">
-					All AvenOS local data removed. Register or unlock to start fresh.
+					{t('db.self.fullResetSuccess')}
 				</p>
 			{/if}
 
 			{#if fullResetConfirmOpen}
 				<div class="flex flex-col gap-3">
 					<p class="text-destructive text-sm font-medium">
-						Delete <code class="font-mono text-[11px]">{paths.appBase}</code> and lock this device?
+						{t('db.self.fullResetConfirm', { path: paths.appBase })}
 					</p>
 					<div class="flex flex-wrap gap-2">
 						<button
@@ -218,7 +210,7 @@
 							disabled={busy}
 							onclick={() => void clearAllAvenOsData()}
 						>
-							{busy ? 'Deleting…' : 'Yes, delete everything'}
+							{busy ? t('common.deleting') : t('common.yesDeleteEverything')}
 						</button>
 						<button
 							type="button"
@@ -226,7 +218,7 @@
 							disabled={busy}
 							onclick={() => (fullResetConfirmOpen = false)}
 						>
-							Cancel
+							{t('common.cancel')}
 						</button>
 					</div>
 				</div>
@@ -240,11 +232,11 @@
 						fullResetConfirmOpen = true
 					}}
 				>
-					Delete entire .avenOS folder…
+					{t('db.self.fullResetButton')}
 				</button>
 			{/if}
 		</section>
 	{:else}
-		<p class="text-muted-foreground text-sm">Loading paths…</p>
+		<p class="text-muted-foreground text-sm">{t('common.loadingPaths')}</p>
 	{/if}
 </div>

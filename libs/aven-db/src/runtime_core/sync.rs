@@ -421,6 +421,13 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
         self.immediate_tick();
     }
 
+    /// AvenOS: shell-only catch-up (sparks/keyshares) for pairing bootstrap.
+    pub fn rebroadcast_peer_shell_catchup(&mut self, client_id: ClientId) {
+        let sm = self.schema_manager.query_manager_mut().sync_manager_mut();
+        sm.rebroadcast_peer_shell_catchup(&self.storage, client_id);
+        self.immediate_tick();
+    }
+
     /// AvenOS: peer client ids registered for P2P sync.
     pub fn peer_client_ids(&self) -> Vec<ClientId> {
         self.schema_manager

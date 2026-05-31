@@ -5,6 +5,7 @@ export type VaultListEntry = {
 	firstName?: string
 	deviceLabel?: string
 	hasIdentityBlob: boolean
+	locale?: string
 }
 
 export async function vaultList(): Promise<VaultListEntry[]> {

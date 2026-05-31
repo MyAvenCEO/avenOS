@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
+	import { t } from '$lib/i18n'
 	import { deviceSession } from '$lib/self/device-session-store'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import PeerMeshPhaseBadge from '$lib/peer/PeerMeshPhaseBadge.svelte'
@@ -41,7 +42,7 @@
 	<div
 		class="flex min-w-0 max-w-[min(100%,42rem)] flex-row flex-wrap items-center gap-x-3 gap-y-1"
 		role="status"
-		aria-label="Peer mesh status"
+		aria-label={t('peer.meshStatus')}
 		title={title}
 	>
 		{#if mesh.peers.length === 0 && pendingInviteCode}
@@ -50,6 +51,7 @@
 			<PeerMeshPhaseBadge
 				phase="pairing"
 				variant="header"
+				linkHealth={mesh.p2pDiagnostics.linkHealth}
 				displayName={pendingInviteCode}
 				monospaceName={true}
 				title={hostPairingChipTitle}
@@ -63,6 +65,8 @@
 					: `${p.peerDid} · ${peerMeshPhaseLabel(p.phase)}`}
 				<PeerMeshPhaseBadge
 					phase={p.phase}
+					usability={p.usability}
+					linkHealth={mesh.p2pDiagnostics.linkHealth}
 					variant="header"
 					displayName={showInviteInstead
 						? pendingInviteCode

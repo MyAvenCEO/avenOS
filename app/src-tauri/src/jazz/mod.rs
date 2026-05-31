@@ -159,6 +159,19 @@ pub(super) fn emit_avenos_runtime(app: &tauri::AppHandle, payload: serde_json::V
 }
 
 impl ManagedJazz {
+	/// Whether outbound P2P sync policy (biscuit ACL) is loaded for mesh usability.
+	pub(crate) fn sync_acl_ready(&self) -> bool {
+		self.sync_acl
+			.read()
+			.expect("sync_acl poisoned")
+			.is_some()
+	}
+
+	/// Whether Groove sync is registered for this live mux client.
+	pub(crate) async fn is_groove_peer_registered(&self, cid: ClientId) -> bool {
+		self.mesh_groove_registered.lock().await.contains(&cid)
+	}
+
 	/// Consumes the receiver once. Subsequent calls return `None`. Called from
 	/// `tauri::Builder::setup` so the drain task can own the receiver for the
 	/// lifetime of the process.
@@ -1010,7 +1023,7 @@ async fn emit_mesh_snapshot_from_rows(
 			hyperswarm_start_error: None,
 			local_pk_prefix_hex: String::new(),
 			pairing_code_pending: None,
-			p2p_diagnostics: tauri_plugin_peer::P2pDiagnostics {
+			p2p_diagnostics: tauri_plugin_p2p::P2pDiagnostics {
 				central_mode: false,
 				dht_bootstrap: String::new(),
 				joined_topic_count: 0,
@@ -1023,8 +1036,9 @@ async fn emit_mesh_snapshot_from_rows(
 				last_path_change_at_ms: None,
 				last_foreground_heal_at_ms: None,
 				heal_in_progress: false,
-				prefer_lan: true,
 				network_interfaces: vec![],
+				link_health: tauri_plugin_p2p::LinkHealth::None,
+				prefer_relay_only: true,
 			},
 			peers: vec![],
 		}
@@ -1269,7 +1283,7 @@ async fn jazz_connect(
 	{
 		use std::sync::Arc;
 
-		let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
+		let bridge = app.state::<tauri_plugin_p2p::HyperswarmGrooveBridge>();
 		let local_cid = ClientId(deterministic);
 		bridge.configure_local_party(local_cid).await;
 
@@ -1309,7 +1323,7 @@ fn mark_shell_local_ready_for_mesh(app: &tauri::AppHandle, mj: &ManagedJazz) {
 	mj.mesh_local_shell_gate.store(true, Ordering::Release);
 	let app = app.clone();
 	tauri::async_runtime::spawn(async move {
-		let _ = peer_mesh_reconcile_tick(&app, true).await;
+		let _ = peer_mesh_reconcile_tick(&app, false).await;
 	});
 }
 
@@ -1322,7 +1336,7 @@ fn mark_shell_local_ready_for_mesh(_app: &tauri::AppHandle, mj: &ManagedJazz) {
 async fn pairing_session_active(app: &tauri::AppHandle) -> bool {
 	use std::sync::Arc;
 
-	let ctl = app.state::<Arc<tauri_plugin_peer::PeerCtl>>();
+	let ctl = app.state::<Arc<tauri_plugin_p2p::PeerCtl>>();
 	ctl.is_pairing_active().await
 }
 
@@ -1389,6 +1403,8 @@ async fn jazz_shell_ready_inner(
 	let object_spark_ids = jazz_engine::build_object_spark_id_map(client.as_ref()).await?;
 	let snap = spark_sync::build_sync_acl_snapshot(&arc.vault, object_spark_ids)?;
 	*mj.sync_acl.write().expect("sync_acl poisoned") = Some(snap);
+	#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+	nudge_catchup_if_trust_ready(app, mj).await;
 	if !for_ui_drain {
 		// One catch-up rebroadcast per conn epoch — not on every vault-table invalidation reload.
 		let first_acl_catchup = !mj.mesh_acl_rebroadcast_done.swap(true, Ordering::AcqRel);
@@ -1397,7 +1413,7 @@ async fn jazz_shell_ready_inner(
 			{
 				let pairing = pairing_session_active(app).await;
 				if !pairing {
-					let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
+					let bridge = app.state::<tauri_plugin_p2p::HyperswarmGrooveBridge>();
 					let live_n = bridge.snapshot_remote_clients().await.len();
 					let h = app.state::<crate::peer_catchup::PeerCatchupHandle>();
 					h.on_shell_acl_first_loaded_prepare_catchup().await;
@@ -1434,6 +1450,60 @@ async fn jazz_shell_ready_inner(
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 async fn publish_peer_mesh_after_acl(app: &tauri::AppHandle) {
 	crate::peer_mesh_state::publish_peer_mesh_snapshot(app).await;
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+async fn mux_send_ready_client_ids(app: &tauri::AppHandle) -> std::collections::HashSet<groove::sync_manager::ClientId> {
+	use std::collections::HashSet;
+	use std::sync::Arc;
+
+	let live_links = app.state::<Arc<tauri_plugin_p2p::PeerLinkCoordinator>>();
+	let bridge = app.state::<tauri_plugin_p2p::HyperswarmGrooveBridge>();
+	let mut live = HashSet::new();
+	for cid in live_links.snapshot_mux_ready_clients().await {
+		if bridge.peer_send_ready(cid).await {
+			live.insert(cid);
+		}
+	}
+	live
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
+async fn nudge_catchup_if_trust_ready(app: &tauri::AppHandle, mj: &ManagedJazz) {
+	use std::collections::HashSet;
+
+	if pairing_session_active(app).await {
+		return;
+	}
+	let snap = mj
+		.sync_acl
+		.read()
+		.expect("sync_acl poisoned")
+		.clone();
+	let Some(snap) = snap else {
+		return;
+	};
+	let live = mux_send_ready_client_ids(app).await;
+	if live.is_empty() {
+		return;
+	}
+	let bridge = app.state::<tauri_plugin_p2p::HyperswarmGrooveBridge>();
+	let cid_map = bridge.shared_client_id_to_did();
+	let trust_ready: HashSet<_> = {
+		let g = cid_map.read().expect("cid map poisoned");
+		live.into_iter()
+			.filter(|cid| {
+				g.get(cid)
+					.is_some_and(|did| spark_sync::remote_is_spark_admin(&snap, did))
+			})
+			.collect()
+	};
+	if trust_ready.is_empty() {
+		return;
+	}
+	app.state::<crate::peer_catchup::PeerCatchupHandle>()
+		.on_trust_bootstrap_ready(trust_ready)
+		.await;
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "ios")))]
@@ -1843,50 +1913,29 @@ async fn finish_spark_admin_grant(
 async fn push_vault_catalogue_to_peers(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
-	client: &JazzClient,
+	_client: &JazzClient,
 	spark_uuid: uuid::Uuid,
 ) {
-	use std::sync::Arc;
-
-	use tauri_plugin_peer::HyperswarmGrooveBridge;
+	use tauri_plugin_p2p::HyperswarmGrooveBridge;
 
 	let catchup = app.state::<crate::peer_catchup::PeerCatchupHandle>();
-	let live_links = app.state::<Arc<tauri_plugin_peer::PeerLinkCoordinator>>();
 	let bridge = app.state::<HyperswarmGrooveBridge>();
-	let live = live_links.snapshot_mux_ready_clients().await;
+	let send_ready = mux_send_ready_client_ids(app).await;
 	catchup.on_spark_access_granted().await;
-	if live.is_empty() {
-		log::warn!(
-			target: "avenos::jazz",
-			"spark_admin_add: grant saved for spark {spark_uuid}; no mux-ready peer — catch-up will retry",
-		);
-		let _ = execute_mesh_refresh_full(app, jazz).await;
-		return;
-	}
-	let mut send_ready = Vec::new();
-	for cid in &live {
-		if bridge.peer_send_ready(*cid).await {
-			send_ready.push(*cid);
-		}
-	}
+	bridge.peer_set_changed_notify().notify_waiters();
 	if send_ready.is_empty() {
 		log::warn!(
 			target: "avenos::jazz",
-			"spark_admin_add: grant saved for spark {spark_uuid}; mux not send-ready — catch-up will retry",
+			"spark_admin_add: grant saved for spark {spark_uuid}; no mux-ready peer — mesh refresh will retry",
 		);
-		return;
-	}
-	match client.rebroadcast_all_peer_clients_and_flush().await {
-		Ok(()) => log::info!(
+	} else {
+		log::info!(
 			target: "avenos::jazz",
-			"spark_admin_add: vault catalogue pushed to {} peer(s) for spark {spark_uuid}",
+			"spark_admin_add: vault catalogue catch-up queued for spark {spark_uuid} ({} peer(s))",
 			send_ready.len(),
-		),
-		Err(e) => log::warn!(
-			target: "avenos::jazz",
-			"spark_admin_add: vault catalogue push failed for spark {spark_uuid}: {e}",
-		),
+		);
 	}
+	let _ = execute_mesh_refresh_full(app, jazz).await;
 }
 
 async fn enqueue_vault_catalogue_drain(app: &tauri::AppHandle) {
@@ -2385,13 +2434,11 @@ pub(crate) async fn refresh_peer_mesh_groove_register_primitives(
 	jazz: &ManagedJazz,
 	client: Arc<JazzClient>,
 	allow: &[String],
-	nudge_discovery_if_no_live_links: bool,
 ) -> Result<u32, String> {
 	use std::sync::Arc;
 
-	let peer_ctl = app.state::<Arc<tauri_plugin_peer::PeerCtl>>();
 	let self_state: tauri::State<'_, SelfState> = app.state();
-	let bridge = app.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
+	let bridge = app.state::<tauri_plugin_p2p::HyperswarmGrooveBridge>();
 	let peer_catchup = app.state::<crate::peer_catchup::PeerCatchupHandle>();
 
 	if ensure_sync_acl_for_mesh(app, jazz, &self_state, Arc::clone(&client))
@@ -2405,21 +2452,12 @@ pub(crate) async fn refresh_peer_mesh_groove_register_primitives(
 		return Ok(0);
 	}
 
-	let live_links = app.state::<std::sync::Arc<tauri_plugin_peer::PeerLinkCoordinator>>();
+	let live_links = app.state::<std::sync::Arc<tauri_plugin_p2p::PeerLinkCoordinator>>();
 	let live: HashSet<ClientId> = live_links
 		.snapshot_mux_ready_clients()
 		.await
 		.into_iter()
 		.collect();
-
-	if nudge_discovery_if_no_live_links && !allow.is_empty() {
-		if let Err(e) = peer_ctl.nudge_allowlisted_discovery(allow).await {
-			log::debug!(
-				target: "avenos::jazz",
-				"peer-mesh nudge discovery: {e}",
-			);
-		}
-	}
 
 	let mut n = 0u32;
 	let m = bridge.shared_client_id_to_did();
@@ -2480,7 +2518,6 @@ pub(crate) async fn refresh_peer_mesh_groove_register_primitives(
 	_jazz: &ManagedJazz,
 	_client: Arc<JazzClient>,
 	_allow: &[String],
-	_nudge_discovery_if_no_live_links: bool,
 ) -> Result<u32, String> {
 	Ok(0)
 }
@@ -2528,7 +2565,7 @@ pub(crate) async fn execute_mesh_snapshot(
 			hyperswarm_start_error: None,
 			local_pk_prefix_hex: String::new(),
 			pairing_code_pending: None,
-			p2p_diagnostics: tauri_plugin_peer::P2pDiagnostics {
+			p2p_diagnostics: tauri_plugin_p2p::P2pDiagnostics {
 				central_mode: false,
 				dht_bootstrap: String::new(),
 				joined_topic_count: 0,
@@ -2541,8 +2578,9 @@ pub(crate) async fn execute_mesh_snapshot(
 				last_path_change_at_ms: None,
 				last_foreground_heal_at_ms: None,
 				heal_in_progress: false,
-				prefer_lan: true,
 				network_interfaces: vec![],
+				link_health: tauri_plugin_p2p::LinkHealth::None,
+				prefer_relay_only: true,
 			},
 			peers: vec![],
 		})
@@ -2562,7 +2600,7 @@ pub(crate) async fn execute_mesh_refresh_full(
 		return Ok(0);
 	}
 
-	let peer_ctl = app.state::<Arc<tauri_plugin_peer::PeerCtl>>();
+	let peer_ctl = app.state::<Arc<tauri_plugin_p2p::PeerCtl>>();
 	let root = self_state
 		.with_root(|r| Ok(*r))
 		.map_err(|_| "locked: unlock identity first".to_string())?;
@@ -2587,7 +2625,7 @@ pub(crate) async fn execute_mesh_refresh_full(
 		return Ok(0);
 	}
 
-	refresh_peer_mesh_groove_register_primitives(app, jazz, client, &allow, true).await
+	refresh_peer_mesh_groove_register_primitives(app, jazz, client, &allow).await
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "ios")))]
@@ -2600,12 +2638,12 @@ pub(crate) async fn execute_mesh_refresh_full(
 	Ok(0)
 }
 
-/// Actor-only: periodic reconcile tick (Groove register + optional DHT nudge).
+/// Actor-only: periodic reconcile tick (Groove register + optional relay steady heal).
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 pub(crate) async fn execute_mesh_reconcile(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
-	nudge_discovery: bool,
+	skip_transport_heal: bool,
 ) -> Result<(), String> {
 	use std::sync::Arc;
 
@@ -2614,14 +2652,13 @@ pub(crate) async fn execute_mesh_reconcile(
 		return Ok(());
 	}
 
-	let peer_ctl = app.state::<Arc<tauri_plugin_peer::PeerCtl>>();
+	let peer_ctl = app.state::<Arc<tauri_plugin_p2p::PeerCtl>>();
 
 	if peer_ctl.is_pairing_active().await {
-		if peer_ctl.transport_in_flight().await {
-			execute_publish_mesh(app, jazz, self_state.inner()).await;
-			return Ok(());
-		}
-		let _ = peer_ctl.nudge_pairing_discovery().await;
+		peer_ctl.clear_stale_pairing_transport().await;
+		let _ = peer_ctl
+			.transport_tick(tauri_plugin_p2p::TickMode::Pairing, "pairing reconcile", None)
+			.await;
 		execute_publish_mesh(app, jazz, self_state.inner()).await;
 		return Ok(());
 	}
@@ -2649,17 +2686,13 @@ pub(crate) async fn execute_mesh_reconcile(
 		.sync_allowlist_from_peer_table(&local_did, &allow)
 		.await?;
 
-	if nudge_discovery && !allow.is_empty() {
-		peer_ctl.nudge_allowlisted_discovery(&allow).await?;
+	if !skip_transport_heal {
+		let _ = peer_ctl
+			.transport_tick(tauri_plugin_p2p::TickMode::MeshSteady, "steady reconcile", None)
+			.await;
 	}
 
-	if nudge_discovery {
-		if let Err(e) = peer_ctl.maybe_probe_transport_upgrades().await {
-			log::debug!(target: "avenos::jazz", "transport upgrade probe: {e}");
-		}
-	}
-
-	let _ = refresh_peer_mesh_groove_register_primitives(app, jazz, client, &allow, false).await?;
+	let _ = refresh_peer_mesh_groove_register_primitives(app, jazz, client, &allow).await?;
 	execute_publish_mesh(app, jazz, self_state.inner()).await;
 	Ok(())
 }
@@ -2668,7 +2701,7 @@ pub(crate) async fn execute_mesh_reconcile(
 pub(crate) async fn execute_mesh_reconcile(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
-	_nudge_discovery: bool,
+	_skip_transport_heal: bool,
 ) -> Result<(), String> {
 	let ss = app.state::<SelfState>();
 	execute_publish_mesh(app, jazz, ss.inner()).await;
@@ -2684,20 +2717,20 @@ pub(crate) async fn refresh_peer_mesh_primitives(app: &tauri::AppHandle) -> Resu
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub(crate) async fn peer_mesh_reconcile_tick(
 	app: &tauri::AppHandle,
-	nudge_discovery: bool,
+	skip_transport_heal: bool,
 ) -> Result<(), String> {
 	runtime::groove_actor(app)
-		.mesh_reconcile(nudge_discovery)
+		.mesh_reconcile(skip_transport_heal)
 		.await
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
 pub(crate) async fn peer_mesh_reconcile_tick(
 	app: &tauri::AppHandle,
-	nudge_discovery: bool,
+	skip_transport_heal: bool,
 ) -> Result<(), String> {
 	runtime::groove_actor(app)
-		.mesh_reconcile(nudge_discovery)
+		.mesh_reconcile(skip_transport_heal)
 		.await
 }
 
@@ -2745,15 +2778,18 @@ pub(crate) async fn execute_apply_peer_invite(
 			.map_err(|_| "locked: unlock identity first".to_string())?;
 		let pk = ed25519_public(&root)?;
 		let local_did = crate::jazz_auth::peer_did_from_ed25519(&pk)?;
-		let allow =
+		let mut allow =
 			crate::peers::list_active_peer_dids(client.as_ref()).await?;
-		let ctl = app.state::<Arc<tauri_plugin_peer::PeerCtl>>();
+		if !allow.iter().any(|d| d == &p.remote_did) {
+			allow.push(p.remote_did.clone());
+		}
+		let ctl = app.state::<Arc<tauri_plugin_p2p::PeerCtl>>();
 		ctl.set_pairing_persisting().await;
-		let _ = ctl.peer_invite_cancel().await;
 		ctl.sync_allowlist_from_peer_table_deferred_flush(&local_did, &allow)
 			.await?;
+		let _ = ctl.leave_pairing_signaling_topic().await;
 		ctl.schedule_post_pairing_mesh_refresh(p.remote_did.clone());
-		let _ = execute_publish_mesh(app, jazz, ss).await;
+		let _ = execute_mesh_refresh_full(app, jazz).await;
 	}
 
 	#[cfg(not(any(target_os = "macos", target_os = "ios")))]

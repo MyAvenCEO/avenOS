@@ -3,6 +3,7 @@
 	import AsideNav from '$lib/ui/AsideNav.svelte'
 	import type { AsideNavSection } from '$lib/ui/aside-nav'
 	import { browser } from '$app/environment'
+	import { t } from '$lib/i18n'
 	import {
 		jazzExplorerList,
 		jazzExplorerSubscribe,
@@ -53,17 +54,17 @@
 
 	const tableNavSections = $derived<AsideNavSection[]>([
 		{
-			title: 'Tables',
-			items: tables.map((t) => ({
-				label: t,
-				active: selectedTable === t,
+			title: t('db.explorer.tables'),
+			items: tables.map((tableName) => ({
+				label: tableName,
+				active: selectedTable === tableName,
 				class: 'font-mono md:text-xs md:font-medium',
 				onclick: () => {
-					selectedTable = t
+					selectedTable = tableName
 					tablesAsideOpen = false
 				},
 			})),
-			emptyMessage: bootstrapErr ? undefined : 'No tables loaded.',
+			emptyMessage: bootstrapErr ? undefined : t('db.explorer.noTablesLoaded'),
 		},
 	])
 
@@ -77,15 +78,15 @@
 		if (column === 'content' && typeof value === 'string' && value.length > 0) {
 			const n = value.length
 			const sizeBytes = typeof row.size_bytes === 'number' ? row.size_bytes : undefined
-			const hint = sizeBytes != null ? ` · original ~${sizeBytes} B` : ''
+			const hint = sizeBytes != null ? t('db.explorer.originalSize', { bytes: sizeBytes }) : ''
 			return {
-				text: `[sealed payload, ${n} base64 chars${hint}]`,
+				text: t('db.explorer.sealedPayload', { chars: n, sizeHint: hint }),
 				title: `${value.slice(0, 120)}…`,
 			}
 		}
 		if (value === null) return { text: '' }
 		if (value === undefined) return { text: '' }
-		if (typeof value === 'boolean') return { text: value ? 'true' : 'false' }
+		if (typeof value === 'boolean') return { text: value ? t('common.true') : t('common.false') }
 		if (typeof value === 'number') return { text: String(value) }
 		if (typeof value === 'string') {
 			const trimmed = value.length > cellPreviewMax ? `${value.slice(0, cellPreviewMax)}…` : value
@@ -112,7 +113,7 @@
 		let cancelled = false
 		void (async () => {
 			try {
-				session = await withTimeoutMs(jazzSession(), DB_IPC_BUDGET_MS, 'DB: Jazz session')
+				session = await withTimeoutMs(jazzSession(), DB_IPC_BUDGET_MS, t('errors.dbJazzSessionStalled'))
 			} catch {
 				if (!cancelled) session = undefined
 			}
@@ -131,19 +132,18 @@
 				await withTimeoutMs(
 					waitForGrooveSessionReady(),
 					DB_IPC_BUDGET_MS,
-					'DB: Groove session',
+					t('errors.dbGrooveSessionStalled'),
 				)
 				if (cancelled) return
 				const status = await withTimeoutMs(
 					jazzStatus(),
 					DB_IPC_BUDGET_MS,
-					'DB: Jazz status',
+					t('errors.dbJazzStatusStalled'),
 				)
 				if (cancelled) return
 				tables = status.tables ?? []
 				if (!status.ready) {
-					bootstrapErr =
-						'Local Groove shell did not report ready — the listing may be incomplete. Retry or reload.'
+					bootstrapErr = t('db.explorer.shellNotReady')
 				}
 			} catch (e) {
 				if (!cancelled) {
@@ -219,14 +219,14 @@
 </script>
 
 <svelte:head>
-	<title>Database · AvenOS</title>
+	<title>{t('db.explorer.title')}{t('common.titleSuffix')}</title>
 </svelte:head>
 
 <div class="mx-auto flex h-full min-h-0 w-full max-w-[min(100%,88rem)] flex-1 flex-col gap-4 overflow-y-auto px-4 pb-6 pt-2 sm:px-6 md:overflow-hidden">
 	<header class="shrink-0 space-y-1">
-		<h1 class="text-2xl font-semibold tracking-tight">Local database</h1>
+		<h1 class="text-2xl font-semibold tracking-tight">{t('db.explorer.title')}</h1>
 		<p class="text-muted-foreground max-w-xl text-sm leading-relaxed">
-			Grove-backed rows for this device identity via the Rust shell — read-only explorer.
+			{t('db.explorer.subtitle')}
 		</p>
 		{#if session}
 			<p class="text-muted-foreground font-mono text-xs leading-snug">
@@ -236,9 +236,9 @@
 	</header>
 
 	{#if !tauri}
-		<p class="text-muted-foreground text-sm">Open this screen in the AvenOS desktop app to inspect local Groove rows.</p>
+		<p class="text-muted-foreground text-sm">{t('db.explorer.needsDesktop')}</p>
 	{:else if !unlocked}
-		<p class="text-muted-foreground text-sm">Unlock with Touch ID to load your local database.</p>
+		<p class="text-muted-foreground text-sm">{t('db.explorer.unlockToLoad')}</p>
 	{:else}
 		{#if bootstrapErr}
 			<p
@@ -254,7 +254,7 @@
 		>
 			<SlideAsideLayout
 				bind:open={tablesAsideOpen}
-				asideLabel="Table names"
+				asideLabel={t('nav.tableNames')}
 				desktopGridClass="md:grid-cols-[13rem_minmax(0,1fr)]"
 				class="min-h-0 flex-1"
 			>
@@ -271,14 +271,16 @@
 							{#if selectedTable}
 								<h2 class="font-mono text-sm font-semibold tracking-tight">{selectedTable}</h2>
 								<span class="text-muted-foreground text-xs"
-									>{explorerRows.length} row{explorerRows.length === 1 ? '' : 's'}</span
+									>{explorerRows.length === 1
+										? t('common.rowCount', { count: explorerRows.length })
+										: t('common.rowCountPlural', { count: explorerRows.length })}</span
 								>
 								{#if skippedUnauthorizedRows > 0}
 									<span
 										class="text-amber-600 dark:text-amber-500 rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium"
-										title="Rows skipped due to biscuit / spark gates (shown only until the next explorer fetch)"
+										title={t('db.explorer.gatedHiddenTitle')}
 									>
-										{skippedUnauthorizedRows} gated (hidden)
+										{t('common.gatedHidden', { count: skippedUnauthorizedRows })}
 									</span>
 								{/if}
 							{/if}
@@ -288,7 +290,7 @@
 								disabled={!selectedTable || refreshBusy}
 								onclick={() => void refreshExplorer()}
 							>
-								{refreshBusy ? 'Refreshing…' : 'Refresh explorer'}
+								{refreshBusy ? t('common.refreshing') : t('db.explorer.refreshExplorer')}
 							</button>
 						</div>
 
@@ -304,10 +306,10 @@
 						<div class="min-h-0 flex-1 overflow-auto p-3 sm:p-4">
 							{#if selectedTable === null || tables.length === 0}
 								<p class="text-muted-foreground text-sm">
-									Pick a table from the list to inspect rows.
+									{t('db.explorer.pickTable')}
 								</p>
 							{:else if explorerRows.length === 0}
-								<p class="text-muted-foreground text-sm">No readable rows for this table.</p>
+								<p class="text-muted-foreground text-sm">{t('db.explorer.noReadableRows')}</p>
 							{:else}
 								<div class="rounded-lg border border-border/60 shadow-sm">
 									<table class="w-max min-w-full border-collapse font-mono text-xs">

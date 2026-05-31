@@ -2,6 +2,8 @@
 
 /// Blind relay for proxying encrypted traffic between peers behind restrictive NATs.
 pub mod blind_relay;
+/// Shared blind-relay data-plane establishment (dominant + subordinate halves).
+pub mod relay_link;
 /// Optional connect-progress hooks for UI surfaces.
 pub mod connect_ui;
 /// Compact binary encoding primitives compatible with the

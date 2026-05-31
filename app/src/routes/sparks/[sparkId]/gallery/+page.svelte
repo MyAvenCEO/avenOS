@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { browser } from '$app/environment'
 	import { page } from '$app/state'
+	import { t } from '$lib/i18n'
 	import type { JazzRow } from '$lib/jazz/api'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
@@ -49,24 +50,23 @@
 </script>
 
 <svelte:head>
-	<title>Gallery · AvenOS</title>
+	<title>{t('sparks.gallery.title')}{t('common.titleSuffix')}</title>
 </svelte:head>
 
 <div class="flex flex-col gap-6">
 	<header class="space-y-1">
-		<h1 class="text-xl font-semibold tracking-tight">Gallery</h1>
+		<h1 class="text-xl font-semibold tracking-tight">{t('sparks.gallery.title')}</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
-			Files attached to intents or talk messages in this spark. Images and PDFs show a thumbnail (first
-			page for PDFs).
+			{t('sparks.gallery.subtitle')}
 		</p>
 	</header>
 
 	{#if !tauri}
-		<p class="text-muted-foreground text-sm">Open this screen in the AvenOS desktop app.</p>
+		<p class="text-muted-foreground text-sm">{t('sparks.needsDesktop')}</p>
 	{:else if !unlocked}
-		<p class="text-muted-foreground text-sm">Unlock with Touch ID to load your database.</p>
+		<p class="text-muted-foreground text-sm">{t('sparks.gallery.unlockToLoad')}</p>
 	{:else if !decodedSparkId}
-		<p class="text-muted-foreground text-sm">Missing spark id.</p>
+		<p class="text-muted-foreground text-sm">{t('sparks.gallery.missingSparkId')}</p>
 	{:else}
 		{#if filesStore.error}
 			<p
@@ -78,25 +78,25 @@
 		{/if}
 
 		{#if !sparksResolved && !filesStore.error}
-			<p class="text-muted-foreground text-xs">Loading spark…</p>
+			<p class="text-muted-foreground text-xs">{t('common.loadingSpark')}</p>
 		{:else if sparksResolved && !sparkMeta && !filesStore.error}
 			<p class="text-muted-foreground text-sm">
-				No spark matches this id in your ledger —
-				<button type="button" class="underline" onclick={() => goto('/sparks')}>back to sparks</button>.
+				{t('sparks.gallery.notInLedger')}
+				<button type="button" class="underline" onclick={() => goto('/sparks')}>{t('sparks.gallery.backToSparks')}</button>.
 			</p>
 		{/if}
 
 		{#if sparkMeta}
 			{#if !filesStore.loaded && !filesStore.error}
-				<p class="text-muted-foreground text-sm">Loading files…</p>
+				<p class="text-muted-foreground text-sm">{t('common.loadingFiles')}</p>
 			{:else if rows.length === 0}
 				<p class="text-muted-foreground rounded-xl border border-border/60 px-4 py-8 text-center text-sm">
-					No files for this spark yet. Attach a PDF or image from Intents or Talk.
+					{t('sparks.gallery.noFilesYet')}
 				</p>
 			{:else}
 				<ul
 					class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4"
-					aria-label="Files in this spark"
+					aria-label={t('sparks.gallery.filesInSpark')}
 				>
 					{#each rows as row (row.id)}
 						<li
@@ -122,14 +122,14 @@
 										<div
 											class="text-muted-foreground flex h-full w-full items-center justify-center p-4 text-center text-xs"
 										>
-											No preview
+											{t('common.noPreview')}
 										</div>
 									{/if}
 								{/if}
 							</div>
 							<div class="flex min-w-0 flex-col gap-0.5 p-3">
 								<p class="truncate text-sm font-medium leading-snug" title={row.filename}>
-									{row.filename || 'Untitled'}
+									{row.filename || t('common.untitled')}
 								</p>
 								<p class="text-muted-foreground truncate text-[11px] leading-snug">
 									{row.mime_type}

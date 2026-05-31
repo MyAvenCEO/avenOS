@@ -18,7 +18,7 @@ enum GrooveActorMsg {
 		reply: oneshot::Sender<Result<u32, String>>,
 	},
 	MeshReconcile {
-		nudge_discovery: bool,
+		skip_transport_heal: bool,
 		reply: oneshot::Sender<Result<(), String>>,
 	},
 	PublishMesh,
@@ -65,11 +65,11 @@ impl GrooveActorHandle {
 			.map_err(|_| "groove actor reply dropped".to_string())?
 	}
 
-	pub async fn mesh_reconcile(&self, nudge_discovery: bool) -> Result<(), String> {
+	pub async fn mesh_reconcile(&self, skip_transport_heal: bool) -> Result<(), String> {
 		let (reply, rx) = oneshot::channel();
 		self.tx
 			.send(GrooveActorMsg::MeshReconcile {
-				nudge_discovery,
+				skip_transport_heal,
 				reply,
 			})
 			.await
@@ -131,11 +131,15 @@ pub fn spawn_groove_actor(app: AppHandle) -> GrooveActorHandle {
 					let _ = reply.send(out);
 				}
 				GrooveActorMsg::MeshReconcile {
-					nudge_discovery,
+					skip_transport_heal,
 					reply,
 				} => {
-					let out =
-						super::execute_mesh_reconcile(&app_loop, &jazz, nudge_discovery).await;
+					let out = super::execute_mesh_reconcile(
+						&app_loop,
+						&jazz,
+						skip_transport_heal,
+					)
+					.await;
 					let _ = reply.send(out);
 				}
 				GrooveActorMsg::PublishMesh => {

@@ -1,7 +1,7 @@
 [package]
 name = "tauri-plugin-self"
 version = "0.1.0"
-description = "Tauri plugin: Secure-Enclave P-256 PEER_ID device key + ECDH against GENESIS_NETWORK_ID."
+description = "Tauri plugin: Secure-Enclave P-256 PEER_ID device key + ECDH against hardcoded NETWORK_SEED."
 authors = ["Aven"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
@@ -24,9 +24,9 @@ shellexpand = "3"
 whoami = "1"
 dirs = "6"
 rand_core = { version = "0.6", features = ["getrandom"] }
+p256 = "0.13"
 
 [target.'cfg(any(target_os = "macos", all(target_os = "ios", not(target_abi = "sim"))))'.dependencies]
-p256 = "0.13"
 libc = "0.2"
 swift-rs = { version = "1.0.5" }
 tokio = { version = "1", features = ["sync"] }

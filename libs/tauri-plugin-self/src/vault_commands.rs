@@ -10,6 +10,7 @@ use crate::state::SelfState;
 use crate::vault::{
 	pairing_label_for_app, ActiveVault, VaultManifest, VAULT_MANIFEST_FILENAME,
 };
+use crate::vault_settings;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,12 +19,19 @@ pub struct VaultListEntry {
 	pub first_name: Option<String>,
 	pub device_label: Option<String>,
 	pub has_identity_blob: bool,
+	pub locale: String,
 }
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VaultCreateReply {
 	pub username_slug: String,
+}
+
+fn vault_locale(vault_root: &std::path::Path) -> String {
+	vault_settings::read_merged(vault_root)
+		.map(|s| s.ui.locale)
+		.unwrap_or_else(|_| vault_settings::DEFAULT_UI_LOCALE.into())
 }
 
 fn self_dir_has_se_blob(dir: &std::path::Path) -> bool {
@@ -63,6 +71,7 @@ pub async fn vault_list(app: AppHandle, _vault_state: State<'_, ActiveVault>) ->
 			first_name: man.as_ref().map(|m| m.first_name.clone()),
 			device_label: man.as_ref().map(|m| m.device_label.clone()),
 			has_identity_blob: paths::vault_is_complete(&root) && self_dir_has_identity(&root.join("self")),
+			locale: vault_locale(&root),
 		}]);
 	}
 
@@ -92,6 +101,7 @@ pub async fn vault_list(app: AppHandle, _vault_state: State<'_, ActiveVault>) ->
 			first_name: man.as_ref().map(|m| m.first_name.clone()),
 			device_label: man.as_ref().map(|m| m.device_label.clone()),
 			has_identity_blob: self_dir_has_identity(&vr.join("self")),
+			locale: vault_locale(&vr),
 		});
 	}
 	out.sort_by(|a, b| a.username_slug.cmp(&b.username_slug));
@@ -108,6 +118,7 @@ fn vault_root_manifest(vault_root: &std::path::Path) -> Option<VaultManifest> {
 pub async fn vault_select(
 	app: AppHandle,
 	vault_state: State<'_, ActiveVault>,
+	prefs: State<'_, crate::VaultP2pPrefs>,
 	slug: String,
 ) -> Result<(), String> {
 	if paths::expand_override().is_some() {
@@ -121,6 +132,7 @@ pub async fn vault_select(
 		return Err(format!("vault_missing_or_incomplete: {}", vr.display()));
 	}
 	vault_state.select(slug)?;
+	crate::vault_settings_commands::reload_vault_p2p_prefs(&app, &vault_state, &prefs)?;
 	Ok(())
 }
 
@@ -162,6 +174,7 @@ pub async fn vault_create(
 		let root = paths::aven_os_app_base(&app)?;
 		fs::create_dir_all(root.join("db")).map_err(|e| format!("mkdir db: {e}"))?;
 		fs::create_dir_all(root.join("self")).map_err(|e| format!("mkdir self: {e}"))?;
+		crate::vault_settings::ensure_default_file(&root)?;
 		let now = unix_ms_i64();
 		let m = VaultManifest {
 			first_name: first_name.clone(),
@@ -185,6 +198,7 @@ pub async fn vault_create(
 
 	fs::create_dir_all(vr.join("db")).map_err(|e| format!("mkdir vault db: {e}"))?;
 	fs::create_dir_all(vr.join("self")).map_err(|e| format!("mkdir vault self: {e}"))?;
+	crate::vault_settings::ensure_default_file(&vr)?;
 
 	let now = unix_ms_i64();
 	let m = VaultManifest {

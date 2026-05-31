@@ -9,22 +9,14 @@ pub enum ConnectProgressPhase {
 	Discovering,
 	/// Noise IK (+ optional DHT relay for handshake).
 	Handshaking,
-	/// Active UDP holepunch rounds.
-	Holepunching,
-	/// Holepunch failed; trying blind-relay fallback.
-	RelayFallback,
+	/// Blind-relay pair on coordinator control mux.
+	RelayPairing,
 }
 
-/// Established UDX data-path (shown when linked).
+/// Established UDX data-path (relay-only product).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnectTransportMode {
-	/// LAN direct (`addresses4` subnet match).
-	Lan,
-	/// Reflexive / public direct (no punch).
-	Direct,
-	/// UDP holepunch succeeded.
-	Punched,
-	/// Blind-relay fallback.
+	/// Blind-relay coordinator pair.
 	Relay,
 }
 

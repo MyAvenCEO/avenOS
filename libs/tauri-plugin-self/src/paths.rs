@@ -1,4 +1,4 @@
-//! Canonical layout: `<user Documents>/.avenOS/vaults/<slug>/{db,self}` (OS-localized Documents folder).
+//! Canonical layout: `<user Documents>/.avenOS/<network>/vaults/<slug>/{db,self}` (OS-localized Documents folder).
 //!
 //! **Override**: `AVENOS_DATA_DIR_OVERRIDE` points at a **full vault root** (directory that directly
 //! contains `db/` and `self/`) for tests and tooling — bypasses `vaults/` and [`ActiveVault`].
@@ -34,14 +34,19 @@ pub fn user_documents_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathB
 	}
 }
 
-/// `<Documents>/.avenOS` — parent of `vaults/` (not a vault root unless override).
+use crate::network::NETWORK_PATH_SEGMENTS;
+
+/// `<Documents>/.avenOS/<network>` — parent of `vaults/` (not a vault root unless override).
 pub fn aven_os_app_base<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
 	if let Some(root) = expand_override() {
 		fs::create_dir_all(&root).map_err(|e| format!("create_dir_all {}: {e}", root.display()))?;
 		return Ok(root);
 	}
 	let docs = user_documents_dir(app)?;
-	let base = docs.join(".avenOS");
+	let mut base = docs.join(".avenOS");
+	for seg in NETWORK_PATH_SEGMENTS {
+		base = base.join(seg);
+	}
 	fs::create_dir_all(&base).map_err(|e| format!("create_dir_all {}: {e}", base.display()))?;
 	Ok(base)
 }

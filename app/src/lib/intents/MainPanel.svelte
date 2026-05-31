@@ -22,6 +22,7 @@ import ActivityView from './ActivityView.svelte'
 import DisplayView from './DisplayView.svelte'
 import ConfigView from './ConfigView.svelte'
 import ContextView from './ContextView.svelte'
+import { t } from '$lib/i18n'
 
 let {
 	intent,
@@ -132,7 +133,7 @@ $effect(() => {
 				data-native-webview-clearance="activity-tabs"
 				class="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 				role="tablist"
-				aria-label="Activity panel tabs"
+				aria-label={t('intents.activityPanelTabs')}
 			>
 				<button
 					type="button"
@@ -144,7 +145,7 @@ $effect(() => {
 						? 'text-foreground opacity-90'
 						: 'opacity-30 hover:opacity-60'}"
 				>
-					Activity
+					{t('intents.activityTab')}
 					<span class="ml-0.5 tracking-wide opacity-70">· {filteredLogs.length}</span>
 				</button>
 				{#if inDisplay}
@@ -160,7 +161,7 @@ $effect(() => {
 								: 'text-status-info opacity-100'
 							: 'opacity-30 hover:opacity-60'}"
 					>
-						{isError ? 'Error' : 'Display'}
+						{isError ? t('intents.errorTab') : t('intents.displayTab')}
 					</button>
 				{/if}
 				<button
@@ -173,7 +174,7 @@ $effect(() => {
 						? 'text-foreground opacity-90'
 						: 'opacity-30 hover:opacity-60'}"
 				>
-					Config
+					{t('intents.configTab')}
 				</button>
 				<button
 					type="button"
@@ -185,7 +186,7 @@ $effect(() => {
 						? 'text-foreground opacity-90'
 						: 'opacity-30 hover:opacity-60'}"
 				>
-					Context
+					{t('intents.contextTab')}
 				</button>
 			</div>
 
@@ -201,16 +202,16 @@ $effect(() => {
 
 			{#if intent.status === 'success'}
 				<p class="text-[10px] leading-snug opacity-55">
-					This intent completed successfully. Archive when you are done reviewing.
+					{t('intents.successArchiveHint')}
 				</p>
 			{/if}
 		{:else}
 			<div
 				class="flex flex-1 flex-col items-center justify-center gap-2 px-1 text-center text-sm opacity-45"
 			>
-				<p class="font-medium">No intent selected</p>
+				<p class="font-medium">{t('intents.noIntentSelected')}</p>
 				<p class="max-w-xs text-xs leading-relaxed opacity-80">
-					Choose an example intent on the left to preview the main panel.
+					{t('intents.noIntentSelectedHint')}
 				</p>
 			</div>
 		{/if}

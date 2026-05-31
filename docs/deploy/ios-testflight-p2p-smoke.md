@@ -27,7 +27,7 @@ Exercise **hyperswarm + UDP DHT bootstrap** on a **physical iPhone/iPad** from a
 
 3. **Swarm lifecycle**
 
-   - [ ] **Retry swarm** (Self → peers) works without capability errors when needed (`peer:default`).
+   - [ ] **Retry swarm** (Self → peers) works without capability errors when needed (`p2p:default`).
 
 4. **P2P handshake + connect (with macOS or second iPhone)**
 
@@ -56,7 +56,7 @@ Exercise **hyperswarm + UDP DHT bootstrap** on a **physical iPhone/iPad** from a
 
 | Symptom | Next check |
 |---------|-------------|
-| `peer_swarm_retry` forbidden | Regenerate app schemas; confirm `peer:default` capability. |
+| `peer_swarm_retry` forbidden | Regenerate app schemas; confirm `p2p:default` capability. |
 | Swarm up but never **Connecting…** | Relay reachability, bootstrap embed, Local Network, firewall. |
 | **Connecting…** stuck >2 min on 5G | Logs for `reconnect_peers`; phantom suppress; try same Wi‑Fi to isolate relay. |
 | **Up to date** but empty spark | **Grant admin**, not pairing. |

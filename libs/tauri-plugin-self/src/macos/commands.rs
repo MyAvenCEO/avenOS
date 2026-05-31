@@ -115,23 +115,22 @@ pub async fn unlock(
 	app: AppHandle,
 	vault: State<'_, ActiveVault>,
 	slot: String,
-	genesis_network_id: Vec<u8>,
 	state: State<'_, SelfState>,
 ) -> Result<(), String> {
-	if genesis_network_id.len() != 65 {
-		return Err(format!(
-			"invalid_genesis_network_id: expected 65-byte SEC1 uncompressed P-256 point, got {}",
-			genesis_network_id.len()
-		));
-	}
-
 	let blob_p = blob_path(&app, &*vault, &slot)?;
 	if !blob_p.exists() {
 		return Err("not_registered: call register first".into());
 	}
 	let blob = fs::read(&blob_p).map_err(|e| format!("read {}: {e}", blob_p.display()))?;
 
-	let secret = crate::macos::derive_root_secret(&blob, &genesis_network_id, UNLOCK_REASON).await?;
+	let anchor = crate::network::network_anchor_pubkey();
+	let secret = crate::macos::derive_root_secret(
+		&blob,
+		anchor,
+		crate::network::NETWORK_SEED,
+		UNLOCK_REASON,
+	)
+	.await?;
 	let bytes: [u8; 32] = secret
 		.as_slice()
 		.try_into()

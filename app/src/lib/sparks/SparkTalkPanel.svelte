@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
+	import { t } from '$lib/i18n'
 	import type { JazzRow } from '$lib/jazz/api'
 	import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 	import type { ComposerMode } from '$lib/intents/types'
@@ -55,7 +56,7 @@
 
 	const sparkMeta = $derived(sparksStore.rows.find((s) => idsMatch(s.spark_id, sparkId)))
 	const canonicalSparkId = $derived(sparkMeta?.spark_id ?? sparkId)
-	const displayName = $derived(sparkName?.trim() || sparkMeta?.name || 'Spark')
+	const displayName = $derived(sparkName?.trim() || sparkMeta?.name || t('sparks.sparkLabel'))
 
 	const thread = $derived(
 		[...messages.rows]
@@ -86,7 +87,7 @@
 	function authorLabel(authorDid: string): string {
 		const local = session?.peerDid?.trim().toLowerCase() ?? ''
 		const norm = authorDid.trim().toLowerCase()
-		if (local && norm === local) return 'You'
+		if (local && norm === local) return t('common.you')
 		const peer = peersByDid.get(norm)
 		return peerDisplayLabel(authorDid, peer?.deviceLabel, localPairingLabel)
 	}
@@ -189,18 +190,18 @@
 
 <div class="flex min-h-0 flex-1 flex-col">
 	<header class="shrink-0 space-y-1 pb-3 sm:pb-0 sm:space-y-1">
-		<h1 class="text-xl font-semibold tracking-tight">Talk</h1>
+		<h1 class="text-xl font-semibold tracking-tight">{t('sparks.talk.title')}</h1>
 		<p class="text-muted-foreground hidden text-sm leading-relaxed sm:block">
-			Messages in <strong class="text-foreground font-medium">{displayName}</strong> — synced over Jazz when peers share this spark.
+			{t('sparks.talk.subtitle', { name: displayName })}
 		</p>
 	</header>
 
 	{#if !tauri}
-		<p class="text-muted-foreground text-sm">Open this screen in the AvenOS desktop app.</p>
+		<p class="text-muted-foreground text-sm">{t('sparks.needsDesktop')}</p>
 	{:else if !unlocked}
-		<p class="text-muted-foreground text-sm">Unlock to send and read messages.</p>
+		<p class="text-muted-foreground text-sm">{t('sparks.talk.unlockToSend')}</p>
 	{:else if !canonicalSparkId}
-		<p class="text-muted-foreground text-sm">Missing spark id.</p>
+		<p class="text-muted-foreground text-sm">{t('sparks.talk.missingSparkId')}</p>
 	{:else}
 		<div class="relative flex min-h-0 flex-1 flex-col">
 			{#if err}
@@ -216,13 +217,13 @@
 				bind:this={scrollEl}
 				class="border-border/60 bg-card/20 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-xl border px-3 py-3 pb-24 sm:mb-2 sm:pb-3 md:pb-3"
 				role="log"
-				aria-label="Messages"
+				aria-label={t('sparks.talk.messagesLog')}
 			>
 				{#if !messages.loaded && !err}
-					<p class="text-muted-foreground py-8 text-center text-sm">Loading messages…</p>
+					<p class="text-muted-foreground py-8 text-center text-sm">{t('common.loadingMessages')}</p>
 				{:else if thread.length === 0}
 					<p class="text-muted-foreground py-8 text-center text-sm leading-relaxed">
-						No messages yet. Say hello — peers with access to this spark will see it after sync.
+						{t('sparks.talk.noMessagesYet')}
 					</p>
 				{:else}
 					{#each thread as msg (msg.id)}
@@ -230,7 +231,10 @@
 						{@const attachments = filesByMessageId.get(msg.id) ?? []}
 						<article
 							class="flex flex-col gap-0.5 {own ? 'items-end' : 'items-start'}"
-							aria-label="{authorLabel(msg.author_did)} at {formatTime(msg.created_at_ms)}"
+							aria-label={t('sparks.talk.authorAtTime', {
+								author: authorLabel(msg.author_did),
+								time: formatTime(msg.created_at_ms),
+							})}
 						>
 							<div class="flex items-baseline gap-2 px-0.5 text-[10px]">
 								<span class="text-foreground font-medium">{authorLabel(msg.author_did)}</span>
@@ -271,7 +275,7 @@
 				>
 					<div class="pointer-events-auto w-full min-w-0">
 					<IntentComposer
-						placeholder="Write a message…"
+						placeholder={t('sparks.talk.messagePlaceholder')}
 						disabled={composerDisabled}
 						submitBusy={sendBusy}
 						enableAttachments={true}

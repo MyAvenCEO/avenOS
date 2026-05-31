@@ -22,9 +22,9 @@ No biometric prompt. Safe to call on mount to read current state.
 Creates the SE key pair for `slot` if it does not exist. No biometric prompt. Idempotent.
 
 ### `plugin:self|unlock`
-**Args:** `{ slot: string, genesisNetworkId: number[] }` — **Returns:** `()`
+**Args:** `{ slot: string }` — **Returns:** `()`
 
-Triggers one Touch ID sheet. On success, deposits 32-byte root into `SelfState`. Errors if `genesisNetworkId.length !== 65` or if `slot` is not registered.
+Triggers one Touch ID sheet. On success, deposits 32-byte root into `SelfState`. Uses hardcoded network seed `ceo.aven/testnet/abagana` internally. Errors if `slot` is not registered.
 
 ### `plugin:self|lock`
 **Args:** none — **Returns:** `()`
@@ -51,7 +51,7 @@ Signs arbitrary bytes with the Ed25519 signing key derived from the root. Requir
 
 Stateless Ed25519 verification. Does not require an unlocked session.
 
-### `genesis_network_id` (app-level, not plugin)
-**Args:** none — **Returns:** `number[]` (65 bytes)
+### `network_seed` (app-level, not plugin)
+**Args:** none — **Returns:** `string`
 
-Reads from `GenesisState`. Implemented in `app/src-tauri/src/genesis.rs`.
+Returns the hardcoded network id for this build (`ceo.aven/testnet/abagana`). Implemented in `app/src-tauri/src/network.rs`.

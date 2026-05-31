@@ -4,42 +4,62 @@ title: Storage layout & state machine
 
 # Storage layout & state machine
 
-## On-disk files
+## Network root
 
-All files live under `app.path().app_data_dir()/self/` (macOS: `~/Library/Application Support/ceo.aven.os/self/` or similar).
+```
+~/Documents/.avenOS/ceo.aven/testnet/abagana/
+├── identities/
+│   └── <slug>/
+│       ├── vault/          ← crypto + Stronghold (plugin:self + plugin:vault)
+│       └── db/             ← Jazz / Groove
+└── schema/                 ← network-level manifest cache
+```
 
-| File | Mode | Contents | Usable without this Mac? |
-|------|------|----------|--------------------------|
-| `peer-id-{slot}.se-blob` | `0600` | SE-wrapped opaque key handle | No |
-| `peer-id-{slot}.pub` | `0600` | 65-byte P-256 public point | Yes (public data) |
+Path segments match `NETWORK_PATH_SEGMENTS` in `libs/tauri-plugin-self/src/network.rs`.
 
-Files are written atomically: write to `{path}.tmp`, `chmod 0600`, then `rename`. The `.se-blob` is ciphertext from the Secure Enclave's perspective; `0600` is defence-in-depth only.
+## Per-identity `vault/` directory
 
-## SelfState (Rust)
+| File | Mode | Contents | Readable without this device? |
+| ---- | ---- | -------- | ------------------------------- |
+| `peer-id-{slot}.se-blob` | `0600` | SE-wrapped opaque P-256 handle | No |
+| `peer-id-{slot}.pub` | `0600` | 65-byte P-256 public point | Yes (public) |
+| `strong.hold` | `0600` | Stronghold snapshot (encrypted secrets) | Ciphertext only offline |
+| `manifest.json` | `0600` | Onboarding metadata (name, slug, device label) | Yes |
+| `settings.json` | `0600` | Non-secret UI / P2P prefs | Yes |
 
-**File:** `libs/tauri-plugin-self/src/state.rs`
+Atomic writes: temp file → `chmod 0600` → `rename`.
 
-Holds `Option<[u8; 32]>` wrapped in a `Mutex`, zeroized on clear. Set by `unlock`, cleared by `lock`. All commands that need the root call `state.with_root(|root| ...)` which returns `Err("locked")` if the root is absent.
+## Per-identity `db/` directory
+
+| File | Contents |
+| ---- | -------- |
+| `storage.rocksdb` | Groove row storage (sealed payload columns = ciphertext) |
+
+## Rust session state
+
+**`SelfState`** (`libs/tauri-plugin-self/src/state.rs`): `device_root_secret` in RAM until `plugin:self|lock`. Zeroized on clear.
+
+**`StrongholdSession`**: open `strong.hold` after unlock; saved on lock. Owned by self plugin; vault plugin borrows for secrets CRUD.
+
+**`ActiveVault`**: pins unlocked identity slug ↔ Ed25519 ppK.
 
 ## Frontend state
 
-**File:** `app/src/lib/self/device-session-store.ts`
+**Main webview** — `app/src/lib/settings/device-session-store.ts`:
 
 ```ts
-type DeviceSession =
-  | { kind: 'locked' }
-  | { kind: 'unlocked' }
-  | { kind: 'dev_bypass' }
+type DeviceSession = { kind: 'locked' } | { kind: 'unlocked' }
 ```
 
-`setUnlocked()`, `clearDeviceSession()`, and `devBypassUnlock()` are the only mutations. No key material is stored in the store or in any JavaScript variable.
+No key bytes in JS. LockGate calls `plugin:self|*`.
+
+**Vault webview** — `app/src/lib/vault/`: secret **names/tags** only in UI state; values never stored in Svelte stores.
 
 ## State transitions
 
 ```
-locked  ──register + unlock──▶  unlocked
-locked  ──devBypassUnlock──▶    dev_bypass
-unlocked / dev_bypass  ──lock / close window──▶  locked
+locked  ──register + unlock (plugin:self)──▶  unlocked
+unlocked  ──lock / close──▶  locked  (+ strong.hold save, vault window close)
 ```
 
-`peer_status` command (no biometric prompt) returns `{ platformSupported, registered, unlocked }`. `LockGate.svelte` reads this on mount to detect if a prior session is already unlocked (Rust state survives webview reloads within the same process).
+See [Trust boundaries & sensitive material](../../security/trust-boundaries-and-sensitive-material.md) for tier model and webview IPC split.

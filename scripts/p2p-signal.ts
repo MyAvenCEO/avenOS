@@ -9,7 +9,7 @@
  * **`AVEN_RELAY_URL`** (required when central): `127.0.0.1` / `localhost` → spawn local Rust signal;
  * any other host (e.g. `relay.aven.ceo`) → remote bootstrap + blind-relay from manifest (no local subprocess).
  *
- * Data plane (aven-p2p order): LAN `addresses4` → holepunch → blind-relay fallback (`relay_through`).
+ * Data plane: blind-relay only (`relay_through` on coordinator UDP 49737).
  */
 
 import { execFileSync } from 'node:child_process'
@@ -125,14 +125,14 @@ export function avenRelayCentralMode(
 
 /**
  * Bun dev wrappers only (`dev-app-*`, `dev-two-instances`, `--foreground`): when central relay is on but
- * `AVEN_RELAY_URL` is empty, assume embedded localhost signal so `.env` is not strictly required for local dev.
+ * `AVEN_RELAY_URL` is empty, default to hosted alpha relay.
  */
 export function applyCentralRelayUrlDevDefault(launcherTag: string): void {
 	if (!avenRelayCentralMode()) return
 	if (process.env.AVEN_RELAY_URL?.trim()) return
-	process.env.AVEN_RELAY_URL = '127.0.0.1'
+	process.env.AVEN_RELAY_URL = 'relay.aven.ceo'
 	console.warn(
-		`[${launcherTag}] AVEN_RELAY_URL unset — defaulting to 127.0.0.1 (embedded local signal). Set relay.aven.ceo in .env for Fly-hosted bootstrap.`
+		`[${launcherTag}] AVEN_RELAY_URL unset — defaulting to relay.aven.ceo (hosted alpha bootstrap). Set 127.0.0.1 for embedded local signal.`,
 	)
 }
 
@@ -374,7 +374,7 @@ async function foreground(): Promise<void> {
 		JSON.stringify(
 			{
 				...envAugment,
-				note: 'AVEN_RELAY central stack: Rust DHT + co-hosted blind-relay on UDP 49737. LAN → holepunch → relay_through.',
+				note: 'AVEN_RELAY central stack: Rust DHT + co-hosted blind-relay on UDP 49737 (relay-only data plane).',
 			},
 			null,
 			2

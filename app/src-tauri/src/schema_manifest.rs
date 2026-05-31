@@ -1,7 +1,7 @@
 //! Loads `libs/aven-schema/schema.manifest.json` (Rust / Groove source of truth).
 //!
 //! - **Debug**: read from the repo checkout when present (fast iteration).
-//! - **Release / sandbox**: compile-time embed + copy into `<Documents>/.avenOS/aven-schema/` at startup
+//! - **Release / sandbox**: compile-time embed + copy into `<network-root>/schema/` at startup
 //!   (App Store cannot read the developer machine path under `CARGO_MANIFEST_DIR`).
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -14,8 +14,8 @@ use groove::Schema;
 use serde::Deserialize;
 use tauri::AppHandle;
 
-/// Subdirectory under [`tauri_plugin_self::paths::aven_os_app_base`] for Aven schema files.
-pub const AVEN_SCHEMA_SUBDIR: &str = "aven-schema";
+/// Subdirectory under [`tauri_plugin_self::paths::aven_os_app_base`] for schema cache files.
+pub const SCHEMA_SUBDIR: &str = "schema";
 pub const SCHEMA_MANIFEST_FILENAME: &str = "schema.manifest.json";
 
 const EMBEDDED_MANIFEST: &str = include_str!(concat!(
@@ -69,7 +69,7 @@ fn dev_aven_schema_root() -> PathBuf {
 	PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../libs/aven-schema")
 }
 
-/// Root for manifest + migration registry (repo in debug when present, else `.avenOS/aven-schema`).
+/// Root for manifest + migration registry (repo in debug when present, else network `schema/`).
 pub fn aven_schema_root() -> PathBuf {
 	if cfg!(debug_assertions) {
 		let dev = dev_aven_schema_root();
@@ -87,10 +87,10 @@ pub fn aven_schema_manifest_path() -> PathBuf {
 	aven_schema_root().join(SCHEMA_MANIFEST_FILENAME)
 }
 
-/// Seed bundled schema files into `<Documents>/.avenOS/aven-schema/` (macOS/iOS sandbox-safe).
+/// Seed bundled schema files into `<network-root>/schema/` (macOS/iOS sandbox-safe).
 pub fn install_runtime_schema_files<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<(), String> {
 	let base = tauri_plugin_self::paths::aven_os_app_base(app)?;
-	let root = base.join(AVEN_SCHEMA_SUBDIR);
+	let root = base.join(SCHEMA_SUBDIR);
 	let snapshots = root.join("migrations/snapshots");
 	fs::create_dir_all(&snapshots)
 		.map_err(|e| format!("mkdir {}: {e}", snapshots.display()))?;
@@ -105,7 +105,7 @@ pub fn install_runtime_schema_files<R: tauri::Runtime>(app: &AppHandle<R>) -> Re
 	let _ = RUNTIME_AVEN_SCHEMA_ROOT.set(root);
 	log::info!(
 		target: "avenos::schema",
-		"installed aven schema files under {}",
+		"installed schema files under {}",
 		RUNTIME_AVEN_SCHEMA_ROOT
 			.get()
 			.map(|p| p.display().to_string())

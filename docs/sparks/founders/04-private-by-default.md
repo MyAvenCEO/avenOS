@@ -27,7 +27,7 @@ AvenOS treats every spark as **private by default**. There is no “public spark
 | **Local app reads** | Touch ID unlock → hydrated Jazz shell → IPC gates every list/create |
 | **P2P sync** | Outbound payloads only go to peers who are admins for that spark |
 
-Technical detail: [Plaintext routing columns](../developers/05-plaintext-routing-columns.md) and [Security threat model](../../../security/threat-model-private-default.md).
+Technical detail: [Plaintext routing columns](../developers/05-plaintext-routing-columns.md), [Security threat model](../../security/threat-model-private-default.md), and [Trust boundaries & sensitive material](../../security/trust-boundaries-and-sensitive-material.md).
 
 ## After schema changes
 

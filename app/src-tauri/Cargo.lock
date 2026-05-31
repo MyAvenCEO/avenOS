@@ -276,7 +276,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-clipboard-manager",
- "tauri-plugin-peer",
+ "tauri-plugin-p2p",
  "tauri-plugin-self",
  "tokio",
  "tracing",
@@ -5108,7 +5108,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tauri-plugin-peer"
+name = "tauri-plugin-p2p"
 version = "0.0.1"
 dependencies = [
  "async-trait",

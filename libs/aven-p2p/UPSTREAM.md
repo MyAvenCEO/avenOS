@@ -24,7 +24,7 @@ Internal crate at `libs/aven-p2p` — merged fork of **peeroxide@1.3.1** + **pee
 
 ## Consumers
 
-- `libs/tauri-plugin-peer` — full crate (`swarm` + `dht`)
+- `libs/tauri-plugin-p2p` — full crate (`swarm` + `dht`)
 - `libs/aven-relay` — `default-features = false` (DHT-only relay host)
 - `scripts/remote-relay-dht-smoke` — DHT smoke tests
 

@@ -2,4 +2,4 @@
 # All builds: app, aven-db, verify gates, dev 2x → target/rust/
 [build]
 target-dir = "target/rust"
-incremental = false
+incremental = true

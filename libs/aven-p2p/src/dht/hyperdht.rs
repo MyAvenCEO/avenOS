@@ -13,18 +13,18 @@ use tokio::task::JoinHandle;
 
 use libudx::{UdxAsyncStream, UdxRuntime, UdxSocket};
 
-use super::blind_relay::{BlindRelayClient, RelayError};
+use super::blind_relay::RelayError;
 use super::crypto::{
     ann_signable, hash, mutable_signable, sign_detached, verify_detached, NS_ANNOUNCE,
     NS_MUTABLE_PUT, NS_UNANNOUNCE,
 };
-use super::holepuncher::{match_address, Holepuncher, HolepunchEvent};
+use super::holepuncher::Holepuncher;
 use super::hyperdht_messages::{
     decode_hyper_peer_from_bytes,
     decode_lookup_raw_reply_from_bytes, decode_mutable_get_response_from_bytes,
     encode_announce_to_bytes, encode_hyper_peer_to_bytes,
-    encode_mutable_put_request_to_bytes, AnnounceMessage, HandshakeMessage, HolepunchInfo,
-    HolepunchMessage, HolepunchPayload, HyperPeer, MutablePutRequest, NoisePayload, RelayInfo,
+    encode_mutable_put_request_to_bytes, AnnounceMessage, HandshakeMessage,
+    HolepunchMessage, HolepunchPayload, HyperPeer, MutablePutRequest, NoisePayload,
     RelayThroughInfo, SecretStreamInfo, UdxInfo, ANNOUNCE, FIND_PEER, FIREWALL_OPEN,
     FIREWALL_UNKNOWN, IMMUTABLE_GET, IMMUTABLE_PUT, LOOKUP, MUTABLE_GET, MUTABLE_PUT,
     PEER_HANDSHAKE, PEER_HOLEPUNCH, UNANNOUNCE,
@@ -36,7 +36,7 @@ use super::peer::NodeId;
 use super::persistent::{
     HandlerReply, IncomingHyperRequest, Persistent, PersistentConfig, PersistentStats,
 };
-use super::protomux::Mux;
+use super::relay_link;
 use super::router::{ForwardEntry, HandshakeAction, HolepunchAction, Router};
 use super::query::QueryReply;
 use super::rpc::{DhtConfig, DhtError, DhtHandle, UserQueryParams, UserRequestParams};
@@ -51,6 +51,10 @@ static NEXT_STREAM_ID: AtomicU32 = AtomicU32::new(1);
 /// Process-global UDX stream id allocator (shared by all HyperDHT / relay paths on one runtime).
 pub fn next_stream_id() -> u32 {
     NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed)
+}
+
+fn pk_prefix(pk: &[u8; 32]) -> String {
+    pk.iter().take(8).fold(String::new(), |acc, b| acc + &format!("{b:02x}"))
 }
 
 /// Matches Node.js `isBogon` from the `bogon` package — returns true for
@@ -88,18 +92,12 @@ fn merge_holepunch_address_list(
     merged
 }
 
-/// Pick UDX endpoint after handshake — LAN match wins when `prefer_lan`, else reflexive/public.
+/// Pick UDX endpoint after handshake — reflexive/public address, else bootstrap reflexive.
 pub(crate) fn pick_direct_connect_address4(
-    local_addrs4: &[Ipv4Peer],
+    _local_addrs4: &[Ipv4Peer],
     remote: &NoisePayload,
     reflexive_fallback: &Ipv4Peer,
-    prefer_lan: bool,
 ) -> Ipv4Peer {
-    if prefer_lan {
-        if let Some(ma) = match_address(local_addrs4, &remote.addresses4) {
-            return ma;
-        }
-    }
     remote
         .addresses4
         .iter()
@@ -108,28 +106,17 @@ pub(crate) fn pick_direct_connect_address4(
         .unwrap_or_else(|| reflexive_fallback.clone())
 }
 
+#[cfg(test)]
 fn relayed_same_subnet_or_carrier_host(
     local_addrs4: &[Ipv4Peer],
     remote: &NoisePayload,
     reflexive_peer_host: &str,
 ) -> bool {
-    match_address(local_addrs4, &remote.addresses4).is_some()
+    super::holepuncher::match_address(local_addrs4, &remote.addresses4).is_some()
         || remote
             .addresses4
             .iter()
             .any(|a| a.host == reflexive_peer_host)
-}
-
-fn holepunch_local_addresses_payload(local_addrs4: &[Ipv4Peer]) -> Option<Vec<Ipv4Peer>> {
-    if local_addrs4.is_empty() {
-        None
-    } else {
-        Some(local_addrs4.to_vec())
-    }
-}
-
-fn is_unroutable_relay_host(host: &str) -> bool {
-    host == "0.0.0.0" || host == "::" || host == "[::]"
 }
 
 fn noise_relay_addresses(
@@ -140,7 +127,7 @@ fn noise_relay_addresses(
         .iter()
         .filter_map(|addr| {
             let host = addr.ip().to_string();
-            if is_unroutable_relay_host(&host) {
+            if crate::util::is_unroutable_relay_host(&host) {
                 return None;
             }
             Some(Ipv4Peer {
@@ -152,7 +139,7 @@ fn noise_relay_addresses(
     if let Some(addr) = relay_address {
         let host = addr.ip().to_string();
         let port = addr.port();
-        if !is_unroutable_relay_host(&host)
+        if !crate::util::is_unroutable_relay_host(&host)
             && !addrs.iter().any(|a| a.host == host && a.port == port)
         {
             addrs.push(Ipv4Peer { host, port });
@@ -165,12 +152,23 @@ fn noise_relay_addresses(
     }
 }
 
-fn noise_relay_through_info(relay_pk: [u8; 32]) -> RelayThroughInfo {
+fn noise_relay_through_info(relay_pk: [u8; 32], token: [u8; 32]) -> RelayThroughInfo {
     RelayThroughInfo {
         version: 1,
         public_key: relay_pk,
-        token: random(),
+        token,
     }
+}
+
+/// Outbound handshake `relay_through.token` — deterministic from pair topic + relay pk.
+fn outbound_relay_through_token(
+    relay_pk: [u8; 32],
+    pair_topic: Option<&[u8; 32]>,
+    local_pk: &[u8; 32],
+    remote_pk: &[u8; 32],
+    _relay_only_peer: bool,
+) -> [u8; 32] {
+    super::blind_relay::resolve_pair_token(pair_topic, local_pk, remote_pk, &relay_pk)
 }
 
 /// Determines whether a direct connection should be attempted instead of holepunching.
@@ -252,10 +250,6 @@ pub enum HyperDhtError {
     /// Failed to establish a UDX stream.
     #[error("stream establishment failed: {0}")]
     StreamEstablishment(String),
-    /// Relayed handshake on a shared LAN: this node lost the key tie-break and must
-    /// complete the link via the server/responder path, not outbound direct connect.
-    #[error("relayed LAN connect: responder role (defer outbound)")]
-    LanRelayedServerRole,
     /// Error from the relay subsystem.
     #[error("relay error: {0}")]
     Relay(#[from] RelayError),
@@ -566,13 +560,6 @@ pub fn finish_server_noise_ik_handshake(
     let local_stream_id = next_stream_id();
 
     let relayed_via = msg.peer_address.clone();
-    let holepunch_info = relayed_via.as_ref().map(|client_addr| HolepunchInfo {
-        id: u64::from(local_stream_id),
-        relays: vec![RelayInfo {
-            relay_address: from.clone(),
-            peer_address: client_addr.clone(),
-        }],
-    });
 
     let addresses4 = config
         .noise_addresses_listen_udp_port
@@ -583,7 +570,7 @@ pub fn finish_server_noise_ik_handshake(
         version: 1,
         error: 0,
         firewall: config.firewall,
-        holepunch: holepunch_info,
+        holepunch: None,
         addresses4,
         addresses6: vec![],
         udx: Some(UdxInfo {
@@ -740,8 +727,8 @@ pub struct HyperDhtConfig {
     pub connect_relay: ConnectRelayConfig,
     /// Optional UI progress / transport-mode callbacks (outbound connect path).
     pub connect_ui: Option<super::connect_ui::ConnectUiHook>,
-    /// When false (e.g. cellular-only), skip LAN subnet matching and use holepunch/relay.
-    pub prefer_lan: Arc<AtomicBool>,
+    /// When true, skip direct connect and holepunch — blind-relay only (vault relay-only mode).
+    pub prefer_relay_only: Arc<AtomicBool>,
 }
 
 impl HyperDhtConfig {
@@ -759,7 +746,7 @@ impl HyperDhtConfig {
             persistent: PersistentConfig::default(),
             connect_relay: ConnectRelayConfig::default(),
             connect_ui: None,
-            prefer_lan: Arc::new(AtomicBool::new(true)),
+            prefer_relay_only: Arc::new(AtomicBool::new(true)),
         }
     }
 }
@@ -781,13 +768,13 @@ pub struct HyperDhtHandle {
     admin_tx: mpsc::UnboundedSender<AdminRequest>,
     connect_relay: ConnectRelayConfig,
     connect_ui: Option<super::connect_ui::ConnectUiHook>,
-    prefer_lan: Arc<AtomicBool>,
+    prefer_relay_only: Arc<AtomicBool>,
 }
 
 impl HyperDhtHandle {
-    /// Toggle LAN-first connect paths (off on cellular-only interfaces).
-    pub fn set_prefer_lan(&self, prefer: bool) {
-        self.prefer_lan.store(prefer, Ordering::Release);
+    /// Relay-only steady state — always on; direct/holepunch/LAN peer paths are disabled.
+    pub fn set_prefer_relay_only(&self, _on: bool) {
+        self.prefer_relay_only.store(true, Ordering::Release);
     }
 
     fn emit_connect_ui(&self, event: super::connect_ui::ConnectUiEvent) {
@@ -1309,155 +1296,99 @@ impl HyperDhtHandle {
         &self.server_tx
     }
 
-    // ── CONNECT (client-side holepunch orchestration) ─────────────────────
+    // ── CONNECT (relay-only blind-relay) ───────────────────────────────────
 
-    /// Connect to a remote peer using the DHT and relay fallback.
+    /// Connect to a remote peer via bootstrap DHT relay + blind-relay pair.
     pub async fn connect(
         &self,
         key_pair: &KeyPair,
         remote_public_key: [u8; 32],
         runtime: &UdxRuntime,
     ) -> Result<PeerConnection, HyperDhtError> {
-        self.connect_with_nodes(key_pair, remote_public_key, &[], runtime)
+        self.connect_with_nodes(key_pair, remote_public_key, &[], None, runtime)
             .await
     }
 
-    /// Connect to a remote peer, optionally using known relay addresses first.
+    /// Connect to a remote peer via the configured bootstrap relay.
     ///
-    /// Connection strategy (matches Node.js `findAndConnect`):
-    /// 1. Try provided `relay_addresses` first (optimistic pre-connect).
-    /// 2. Run FIND_NODE to discover all DHT nodes close to the target,
-    ///    then try `connect_through_node` for each one.
-    /// 3. Try relay addresses found in peer records via FIND_PEER query.
+    /// Peer connects: single bootstrap → Noise handshake → blind-relay pair.
+    /// Relay-coordinator connects (`relay_through` pk): direct UDX control channel.
+    ///
+    /// `pair_topic` enables deterministic blind-relay pair tokens during invite pairing.
     pub async fn connect_with_nodes(
         &self,
         key_pair: &KeyPair,
         remote_public_key: [u8; 32],
         relay_addresses: &[Ipv4Peer],
+        pair_topic: Option<[u8; 32]>,
         runtime: &UdxRuntime,
     ) -> Result<PeerConnection, HyperDhtError> {
+        debug_assert!(
+            self.prefer_relay_only.load(Ordering::Relaxed),
+            "AvenOS is relay-only; prefer_relay_only must stay true"
+        );
         self.emit_connect_ui(super::connect_ui::ConnectUiEvent::Progress {
             remote_pk: remote_public_key,
             phase: super::connect_ui::ConnectProgressPhase::Handshaking,
         });
-        let mut last_err = HyperDhtError::NoRelayNodes;
-        let mut tried: Vec<(String, u16)> = Vec::new();
+
         let blind_relay_target = self
             .connect_relay
             .relay_through
             .is_some_and(|pk| pk == remote_public_key);
 
-        // Phase 1: Optimistic pre-connect through provided relay addresses.
-        for relay in relay_addresses {
-            tried.push((relay.host.clone(), relay.port));
-            match self
-                .connect_through_node(
-                    key_pair,
-                    &remote_public_key,
-                    relay,
-                    runtime,
-                    blind_relay_target,
-                )
-                .await
-            {
-                Ok(result) => return Ok(result),
-                Err(e) => {
-                    tracing::debug!(relay = %format!("{}:{}", relay.host, relay.port), err = %e, "pre-connect relay attempt failed");
-                    last_err = e;
-                }
+        let mut relays: Vec<Ipv4Peer> = relay_addresses.to_vec();
+        if relays.is_empty() {
+            if let Some(addrs) = noise_relay_addresses(
+                self.connect_relay.relay_address,
+                &self.connect_relay.relay_address_hints,
+            ) {
+                relays.extend(addrs);
             }
         }
 
-        // Phase 2: Walk the DHT to find nodes close to hash(remotePublicKey).
-        // Use FIND_NODE (internal command all DHT nodes handle) to ensure we
-        // discover the server's own node — FIND_PEER (user command) might not
-        // reach all nodes in small networks.
-        let target = hash(&remote_public_key);
-        let table_size = self.dht.table_size().await.unwrap_or(0);
-        tracing::debug!(table_size, "connect_with_nodes: routing table size before FIND_NODE");
-        let node_replies = self.dht.find_node(target).await
-            .map_err(HyperDhtError::Dht)?;
-        tracing::debug!(reply_count = node_replies.len(), "connect_with_nodes: FIND_NODE completed");
-
-        if relay_addresses.is_empty() && node_replies.is_empty() {
-            return Err(HyperDhtError::PeerNotFound);
-        }
-
-        // Collect all unique candidate addresses from replies AND their closer_nodes.
-        let mut candidates: Vec<Ipv4Peer> = Vec::new();
-        for reply in &node_replies {
-            candidates.push(reply.from.clone());
-            for cn in &reply.closer_nodes {
-                if !candidates.iter().any(|c| c.host == cn.host && c.port == cn.port) {
-                    candidates.push(cn.clone());
-                }
-            }
-        }
-        tracing::debug!(candidate_count = candidates.len(), "connect_with_nodes: total candidates (replies + closer_nodes)");
-
-        for (i, candidate) in candidates.iter().enumerate() {
-            let skip = tried.iter().any(|(h, p)| h == &candidate.host && *p == candidate.port);
-            tracing::debug!(
-                i,
-                candidate = %format!("{}:{}", candidate.host, candidate.port),
-                skip,
-                "connect_with_nodes: candidate check"
-            );
-            if skip {
-                continue;
-            }
-            tried.push((candidate.host.clone(), candidate.port));
-            tracing::debug!(candidate = %format!("{}:{}", candidate.host, candidate.port), "connect_with_nodes: trying node candidate");
-            match self
-                .connect_through_node(
-                    key_pair,
-                    &remote_public_key,
-                    candidate,
-                    runtime,
-                    blind_relay_target,
-                )
-                .await
-            {
-                Ok(result) => return Ok(result),
-                Err(e) => {
-                    tracing::debug!(relay = %format!("{}:{}", candidate.host, candidate.port), err = %e, "query relay attempt failed");
-                    last_err = e;
-                }
-            }
-        }
-
-        // Phase 3: Also try relay addresses from a FIND_PEER query (peer records).
-        let peer_replies = self.query_find_peer(target).await?;
-        for reply in &peer_replies {
-            if let Some(value) = &reply.value {
-                if let Ok(peer) = decode_hyper_peer_from_bytes(value) {
-                    for relay in &peer.relay_addresses {
-                        if tried.iter().any(|(h, p)| h == &relay.host && *p == relay.port) {
-                            continue;
-                        }
-                        tried.push((relay.host.clone(), relay.port));
-                        match self
-                            .connect_through_node(
-                                key_pair,
-                                &remote_public_key,
-                                relay,
-                                runtime,
-                                blind_relay_target,
-                            )
-                            .await
-                        {
-                            Ok(result) => return Ok(result),
-                            Err(e) => {
-                                tracing::debug!(relay = %format!("{}:{}", relay.host, relay.port), err = %e, "peer record relay attempt failed");
-                                last_err = e;
-                            }
-                        }
+        if blind_relay_target {
+            let mut last_err = HyperDhtError::NoRelayNodes;
+            for relay in &relays {
+                match self
+                    .connect_through_node(
+                        key_pair,
+                        &remote_public_key,
+                        relay,
+                        runtime,
+                        true,
+                        None,
+                    )
+                    .await
+                {
+                    Ok(result) => return Ok(result),
+                    Err(e) => {
+                        tracing::debug!(
+                            relay = %format!("{}:{}", relay.host, relay.port),
+                            err = %e,
+                            "relay coordinator connect attempt failed"
+                        );
+                        last_err = e;
                     }
                 }
             }
+            return Err(last_err);
         }
 
-        Err(last_err)
+        let relay = relays.first().ok_or(HyperDhtError::NoRelayNodes)?;
+        tracing::debug!(
+            relay = %format!("{}:{}", relay.host, relay.port),
+            "connect_with_nodes: relay-only single bootstrap attempt"
+        );
+        self.connect_through_node(
+            key_pair,
+            &remote_public_key,
+            relay,
+            runtime,
+            false,
+            pair_topic,
+        )
+        .await
     }
 
     /// Connect directly to a peer at a known address, bypassing DHT routing.
@@ -1477,7 +1408,7 @@ impl HyperDhtHandle {
             host: target_addr.ip().to_string(),
             port: target_addr.port(),
         };
-        self.connect_through_node(key_pair, &remote_public_key, &relay, runtime, true)
+        self.connect_through_node(key_pair, &remote_public_key, &relay, runtime, true, None)
             .await
     }
 
@@ -1487,9 +1418,18 @@ impl HyperDhtHandle {
         remote_public_key: &[u8; 32],
         relay: &Ipv4Peer,
         runtime: &UdxRuntime,
-        direct_server: bool,
+        relay_control_channel: bool,
+        pair_topic: Option<[u8; 32]>,
     ) -> Result<PeerConnection, HyperDhtError> {
         let target = hash(remote_public_key);
+
+        tracing::info!(
+            remote_pk = %pk_prefix(remote_public_key),
+            relay = %format!("{}:{}", relay.host, relay.port),
+            pair_topic = ?pair_topic.map(|t| pk_prefix(&t)),
+            relay_control_channel,
+            "connect_through_node — PEER_HANDSHAKE via bootstrap relay"
+        );
 
         self.emit_connect_ui(super::connect_ui::ConnectUiEvent::Progress {
             remote_pk: *remote_public_key,
@@ -1497,17 +1437,25 @@ impl HyperDhtHandle {
         });
 
         let listen_port = self.local_port().await?;
-        let local_addresses4 = super::local_addresses::build_addresses4(listen_port);
+        let listen_endpoints = super::local_addresses::build_addresses4(listen_port);
+        let local_addresses4: Vec<Ipv4Peer> = vec![];
 
         // Phase 1: Noise IK handshake via PEER_HANDSHAKE relay
         let mut nw = NoiseWrap::new_initiator(key_pair.to_noise_keypair(), *remote_public_key);
 
         let local_stream_id = next_stream_id();
 
-        let relay_through_info = self
-            .connect_relay
-            .relay_through
-            .map(noise_relay_through_info);
+        let relay_only_peer = !relay_control_channel;
+        let relay_through_info = self.connect_relay.relay_through.map(|relay_pk| {
+            let token = outbound_relay_through_token(
+                relay_pk,
+                pair_topic.as_ref(),
+                &key_pair.public_key,
+                remote_public_key,
+                relay_only_peer,
+            );
+            noise_relay_through_info(relay_pk, token)
+        });
         let relay_addresses = noise_relay_addresses(
             self.connect_relay.relay_address,
             &self.connect_relay.relay_address_hints,
@@ -1534,13 +1482,19 @@ impl HyperDhtHandle {
         let noise_bytes = nw.send(&local_payload)?;
         // Direct server connect (blind-relay host or known server address) must
         // include the destination in `relay_address` — see hyperdht_connect_interop.
-        let relay_hint = if direct_server {
+        let relay_hint = if relay_control_channel {
             Some(relay.clone())
         } else {
             None
         };
+        // Relay coordinator must learn our UDX listen endpoint for wire_paired_streams.
+        let client_peer_addr = if relay_control_channel {
+            listen_endpoints.first().cloned()
+        } else {
+            None
+        };
         let handshake_value =
-            Router::encode_client_handshake(noise_bytes, None, relay_hint)?;
+            Router::encode_client_handshake(noise_bytes, client_peer_addr, relay_hint)?;
 
         let resp = self
             .dht
@@ -1579,384 +1533,67 @@ impl HyperDhtHandle {
             return Err(HyperDhtError::FirewallRejected);
         }
 
-        // Blind-relay is a fallback after direct connect and holepunch (not the first path).
         let relay_fallback = remote_payload.relay_through.clone();
         let relay_addr_hints = remote_payload.relay_addresses.clone().unwrap_or_default();
-        if relay_fallback.is_some() {
-            tracing::debug!(
-                relay_pk = ?relay_fallback.as_ref().map(|r| &r.public_key[..8]),
-                relay_addr_hints = relay_addr_hints.len(),
-                "remote advertises relay_through — deferred until direct/holepunch fail"
-            );
-        }
-
-        // Skip holepunching when the remote peer is directly reachable.
-        // Node.js (connect.js) checks:
-        //   payload.firewall === FIREWALL.OPEN  -- server says it's open
-        //   (relayed && !remoteHolepunchable)   -- relayed but server has no HP relays
-        // In either case, connect directly using the server address from the handshake.
-        let remote_holepunchable = remote_payload
-            .holepunch
-            .as_ref()
-            .is_some_and(|hp| !hp.relays.is_empty());
 
         tracing::debug!(
             relayed = hs_result.relayed,
             firewall = remote_payload.firewall,
-            remote_holepunchable,
             server_address = %format!("{}:{}", hs_result.server_address.host, hs_result.server_address.port),
+            relay_control_channel,
             "handshake complete, deciding connection path"
         );
 
-        // When the handshake was proxied through a DHT relay, `HandshakeResult::client_address`
-        // is `resp.from` (the relay), and `server_address` is `reply.peer_address` (also the
-        // relay). Comparing those hosts always yields `same_host=true` and incorrectly skips
-        // holepunch — the client opens UDX to the bootstrap black hole instead of the peer.
-        let prefer_lan = self.prefer_lan.load(Ordering::Relaxed);
-        let lan_match = if prefer_lan {
-            match_address(&local_addresses4, &remote_payload.addresses4)
-        } else {
-            None
-        };
-        let same_host = if hs_result.relayed {
-            if prefer_lan {
-                relayed_same_subnet_or_carrier_host(
-                    &local_addresses4,
-                    &remote_payload,
-                    &hs_result.server_address.host,
-                )
-            } else {
-                remote_payload
-                    .addresses4
-                    .iter()
-                    .any(|a| a.host == hs_result.server_address.host)
-            }
-        } else {
-            hs_result.server_address.host == hs_result.client_address.host
-        };
+        if !relay_control_channel {
+            let relay_through = relay_fallback.ok_or(HyperDhtError::NoRelayNodes)?;
+            tracing::info!("connect path: blind-relay pair (relay-only)");
+            self.emit_connect_ui(super::connect_ui::ConnectUiEvent::Progress {
+                remote_pk: nw_result.remote_public_key,
+                phase: super::connect_ui::ConnectProgressPhase::RelayPairing,
+            });
+            let mut conn = Box::pin(self.relay_connection(
+                key_pair,
+                &relay_through,
+                &relay_addr_hints,
+                &nw_result,
+                false,
+                true,
+                runtime,
+            ))
+            .await?;
+            conn.transport_mode = Some(super::connect_ui::ConnectTransportMode::Relay);
+            self.emit_connect_ui(super::connect_ui::ConnectUiEvent::Connected {
+                remote_pk: nw_result.remote_public_key,
+                mode: super::connect_ui::ConnectTransportMode::Relay,
+            });
+            return Ok(conn);
+        }
 
+        // Relay coordinator control channel: post-handshake UDX to the relay host.
+        debug_assert!(relay_control_channel);
         let connect_addr = pick_direct_connect_address4(
-            &local_addresses4,
+            &listen_endpoints,
             &remote_payload,
             &hs_result.server_address,
-            prefer_lan,
         );
         tracing::debug!(
-            prefer_lan,
-            same_host,
             direct = %format!("{}:{}", connect_addr.host, connect_addr.port),
-            lan_match = ?lan_match,
-            "connect path: post-handshake endpoint selection"
+            "connect path: relay host post-handshake UDX"
         );
-        if !prefer_lan && hs_result.relayed {
-            tracing::info!(
-                "connect path: prefer_lan=false — skipping LAN, holepunch/relay only",
-            );
-        }
-
-        // Fly-relayed handshakes make both sides Noise initiators if each runs outbound
-        // direct LAN connect. Lower public key opens the responder half via
-        // `swarm::handle_server_handshake`; dominant key continues outbound below.
-        if hs_result.relayed && lan_match.is_some() && key_pair.public_key <= nw_result.remote_public_key
-        {
-            tracing::debug!(
-                "relayed LAN connect: deferring outbound to server/responder role (key tie-break)",
-            );
-            return Err(HyperDhtError::LanRelayedServerRole);
-        }
-
-        if should_direct_connect(
-            hs_result.relayed,
-            remote_payload.firewall,
-            remote_holepunchable,
-            same_host,
-        ) {
-            let transport_mode = if lan_match.is_some()
-            {
-                super::connect_ui::ConnectTransportMode::Lan
-            } else {
-                super::connect_ui::ConnectTransportMode::Direct
-            };
-            let direct = ConnectResult {
-                remote_public_key: nw_result.remote_public_key,
-                server_address: connect_addr,
-                client_address: hs_result.client_address,
-                is_relayed: false,
-                noise: nw_result.clone(),
-                local_stream_id,
-                remote_udx: remote_payload.udx.clone(),
-                transport_mode: Some(transport_mode),
-            };
-            // LAN/hotspot connects target the peer's advertised DHT listen port. When
-            // firewalled, `server_socket()` is the ephemeral client socket — packets would
-            // not match the responder's stream keyed to `listen_socket()` + addresses4.
-            let shared = if transport_mode == super::connect_ui::ConnectTransportMode::Lan {
-                self.listen_socket().await?
-            } else {
-                self.server_socket().await?
-            };
-            // Brief yield so the subordinate peer's pre-reply LAN responder task can
-            // call UDX connect before we send the first SecretStream frame.
-            if transport_mode == super::connect_ui::ConnectTransportMode::Lan && hs_result.relayed {
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            }
-            match establish_stream_with_socket(&direct, runtime, shared).await {
-                Ok(mut conn) => {
-                    conn.transport_mode = Some(transport_mode);
-                    self.emit_connect_ui(super::connect_ui::ConnectUiEvent::Connected {
-                        remote_pk: nw_result.remote_public_key,
-                        mode: transport_mode,
-                    });
-                    return Ok(conn);
-                }
-                Err(e) => {
-                    tracing::debug!(err = %e, "direct connect failed — trying holepunch");
-                }
-            }
-        }
-
-        // Phase 2: Holepunch rounds via PEER_HOLEPUNCH relay
-        self.emit_connect_ui(super::connect_ui::ConnectUiEvent::Progress {
-            remote_pk: nw_result.remote_public_key,
-            phase: super::connect_ui::ConnectProgressPhase::Holepunching,
-        });
-        let server_address = hs_result.server_address.clone();
-        match self
-            .run_holepunch_rounds(
-                &nw_result,
-                &remote_payload,
-                relay,
-                &target,
-                &server_address,
-                runtime,
-                local_stream_id,
-                &local_addresses4,
-            )
-            .await
-        {
-            Ok(hp_result) => {
-        let shared = self.server_socket().await?;
-                let mut conn =
-                    establish_stream_with_socket(&hp_result, runtime, shared).await?;
-                conn.transport_mode = Some(super::connect_ui::ConnectTransportMode::Punched);
-                self.emit_connect_ui(super::connect_ui::ConnectUiEvent::Connected {
-                    remote_pk: nw_result.remote_public_key,
-                    mode: super::connect_ui::ConnectTransportMode::Punched,
-                });
-                Ok(conn)
-            }
-            Err(holepunch_err) => {
-                if let Some(ref relay_through) = relay_fallback {
-                    self.emit_connect_ui(super::connect_ui::ConnectUiEvent::Progress {
-                        remote_pk: nw_result.remote_public_key,
-                        phase: super::connect_ui::ConnectProgressPhase::RelayFallback,
-                    });
-                    tracing::debug!(
-                        err = %holepunch_err,
-                        "holepunch failed — falling back to blind relay"
-                    );
-                    let mut conn = Box::pin(self.relay_connection(
-                        key_pair,
-                        relay_through,
-                        &relay_addr_hints,
-                        &nw_result,
-                        false,
-                        true,
-                        runtime,
-                    ))
-                    .await?;
-                    conn.transport_mode = Some(super::connect_ui::ConnectTransportMode::Relay);
-                    self.emit_connect_ui(super::connect_ui::ConnectUiEvent::Connected {
-                        remote_pk: nw_result.remote_public_key,
-                        mode: super::connect_ui::ConnectTransportMode::Relay,
-                    });
-                    Ok(conn)
-                } else {
-                    Err(holepunch_err)
-                }
-            }
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    async fn run_holepunch_rounds(
-        &self,
-        nw_result: &NoiseWrapResult,
-        remote_payload: &NoisePayload,
-        relay: &Ipv4Peer,
-        target: &[u8; 32],
-        server_address: &Ipv4Peer,
-        runtime: &UdxRuntime,
-        local_stream_id: u32,
-        local_addrs4: &[Ipv4Peer],
-    ) -> Result<ConnectResult, HyperDhtError> {
-        let sp = SecurePayload::new(nw_result.holepunch_secret);
-        let pool = SocketPool::new("0.0.0.0".into());
-        let (event_tx, mut event_rx) = mpsc::unbounded_channel();
-
-        let hp_id = remote_payload
-            .holepunch
-            .as_ref()
-            .map_or(0, |hp| hp.id);
-
-        let mut puncher = Holepuncher::new(
-            &pool,
-            runtime,
-            true,
-            true,
-            remote_payload.firewall,
-            event_tx,
-        )
-        .await
-        .map_err(|_| HyperDhtError::HolepunchFailed)?;
-
-        // Probe round: exchange addresses without punching
-        let probe_payload = HolepunchPayload {
-            error: 0,
-            firewall: puncher.nat.firewall,
-            round: 0,
-            connected: false,
-            punching: false,
-            addresses: holepunch_local_addresses_payload(local_addrs4),
-            remote_address: None,
-            token: Some(sp.token(&server_address.host)),
-            remote_token: None,
+        let direct = ConnectResult {
+            remote_public_key: nw_result.remote_public_key,
+            server_address: connect_addr.clone(),
+            client_address: hs_result.client_address,
+            is_relayed: hs_result.relayed,
+            noise: nw_result.clone(),
+            local_stream_id,
+            remote_udx: remote_payload.udx.clone(),
+            transport_mode: Some(super::connect_ui::ConnectTransportMode::Relay),
         };
-
-        let encrypted_probe = sp.encrypt(&probe_payload)?;
-        let hp_value = Router::encode_client_holepunch(hp_id, encrypted_probe, None)?;
-
-        let hp_resp = self
-            .dht
-            .request(
-                UserRequestParams {
-                    token: None,
-                    command: PEER_HOLEPUNCH,
-                    target: Some(*target),
-                    value: Some(hp_value),
-                },
-                &relay.host,
-                relay.port,
-            )
-            .await?;
-
-        if hp_resp.error != 0 {
-            puncher.destroy();
-            return Err(HyperDhtError::HolepunchFailed);
-        }
-
-        if let Some(reply_value) = &hp_resp.value {
-            let hp_result = {
-                let router = self
-                    .router
-                    .lock()
-                    .map_err(|_| HyperDhtError::ChannelClosed)?;
-                router.validate_holepunch_reply(reply_value, relay, &hp_resp.from, relay)?
-            };
-
-            if let Ok(remote_hp) = sp.decrypt(&hp_result.payload) {
-                let verified_host = Some(hp_result.peer_address.host.as_str());
-                if let Some(addrs) = &remote_hp.addresses {
-                    puncher.update_remote(
-                        remote_hp.punching,
-                        remote_hp.firewall,
-                        addrs,
-                        verified_host,
-                    );
-                }
-            }
-        }
-
-        // Punch round: send with punching=true, then initiate punch
-        let punch_payload = HolepunchPayload {
-            error: 0,
-            firewall: puncher.nat.firewall,
-            round: 1,
-            connected: false,
-            punching: true,
-            addresses: holepunch_local_addresses_payload(local_addrs4),
-            remote_address: None,
-            token: Some(sp.token(&server_address.host)),
-            remote_token: None,
-        };
-
-        let encrypted_punch = sp.encrypt(&punch_payload)?;
-        let hp_punch_value = Router::encode_client_holepunch(hp_id, encrypted_punch, None)?;
-
-        let punch_resp = self
-            .dht
-            .request(
-                UserRequestParams {
-                    token: None,
-                    command: PEER_HOLEPUNCH,
-                    target: Some(*target),
-                    value: Some(hp_punch_value),
-                },
-                &relay.host,
-                relay.port,
-            )
-            .await?;
-
-        if let Some(reply_value) = &punch_resp.value {
-            let hp_result = {
-                let router = self
-                    .router
-                    .lock()
-                    .map_err(|_| HyperDhtError::ChannelClosed)?;
-                router.validate_holepunch_reply(
-                    reply_value,
-                    relay,
-                    &punch_resp.from,
-                    relay,
-                )?
-            };
-
-            if let Ok(remote_hp) = sp.decrypt(&hp_result.payload) {
-                let verified_host = Some(hp_result.peer_address.host.as_str());
-                if let Some(addrs) = &remote_hp.addresses {
-                    puncher.update_remote(
-                        remote_hp.punching,
-                        remote_hp.firewall,
-                        addrs,
-                        verified_host,
-                    );
-                }
-            }
-        }
-
-        // Initiate the actual punch
-        let punched = puncher.punch(&pool, runtime).await;
-        if !punched {
-            puncher.destroy();
-            return Err(HyperDhtError::HolepunchFailed);
-        }
-
-        // Wait for the punch to connect
-        match tokio::time::timeout(std::time::Duration::from_secs(10), event_rx.recv()).await {
-            Ok(Some(HolepunchEvent::Connected { addr })) => {
-                let connected_addr = Ipv4Peer {
-                    host: addr.ip().to_string(),
-                    port: addr.port(),
-                };
-                Ok(ConnectResult {
-                    remote_public_key: nw_result.remote_public_key,
-                    server_address: connected_addr.clone(),
-                    client_address: connected_addr,
-                    is_relayed: true,
-                    noise: nw_result.clone(),
-                    local_stream_id,
-                    remote_udx: remote_payload.udx.clone(),
-                    transport_mode: Some(super::connect_ui::ConnectTransportMode::Punched),
-                })
-            }
-            Ok(Some(HolepunchEvent::Aborted)) | Ok(None) => {
-                Err(HyperDhtError::HolepunchAborted)
-            }
-            Err(_) => {
-                puncher.destroy();
-                Err(HyperDhtError::HolepunchFailed)
-            }
-        }
+        let shared = self.listen_socket().await?;
+        let mut conn = establish_stream_with_socket(&direct, runtime, shared).await?;
+        conn.transport_mode = Some(super::connect_ui::ConnectTransportMode::Relay);
+        Ok(conn)
     }
 
     /// Establish an encrypted connection to a peer via a relay node.
@@ -1998,65 +1635,25 @@ impl HyperDhtHandle {
 
         // Try known addresses first (pre-connect with direct-server encoding), then DHT routing.
         let relay_conn = self
-            .connect_with_nodes(key_pair, relay_through.public_key, &relay_addr_hints, runtime)
-            .await?;
-
-        let relay_addr = relay_conn.remote_addr.ok_or_else(|| {
-            HyperDhtError::StreamEstablishment("relay connection has no remote_addr".into())
-        })?;
-
-        // 2. Protomux over the control channel.
-        let (mux, mux_run) = Mux::new(relay_conn.stream);
-        let mux_task = tokio::spawn(mux_run);
-
-        // 3. Open blind-relay client with our public key as channel id.
-        // The relay server uses `id = socket.remotePublicKey` (our key).
-        let mut relay_client =
-            BlindRelayClient::open(&mux, Some(key_pair.public_key.to_vec())).await?;
-        relay_client.wait_opened().await?;
-
-        let data_stream_id = next_stream_id();
-
-        let pair_response = relay_client
-            .pair(
-                relay_is_initiator,
-                &relay_through.token,
-                u64::from(data_stream_id),
+            .connect_with_nodes(
+                key_pair,
+                relay_through.public_key,
+                &relay_addr_hints,
+                None,
+                runtime,
             )
             .await?;
 
-        let remote_id = u32::try_from(pair_response.remote_id).map_err(|_| {
-            HyperDhtError::StreamEstablishment("relay remote_id out of u32 range".into())
-        })?;
-
-        // 4. Connect data UDX stream through the relay, reusing the control
-        //    channel's socket so the relay sees traffic from the same source address.
-        let data_stream = runtime.create_stream(data_stream_id).await?;
-        data_stream
-            .connect(&relay_conn.socket, remote_id, relay_addr)
-            .await?;
-
-        // 5. Wrap with SecretStream::from_session using the original peer's
-        //    Noise keys (end-to-end encryption through the relay).
-        let async_stream = data_stream.into_async_stream();
-        let ss = SecretStream::from_session(
+        relay_link::establish(relay_link::RelayLinkParams {
+            key_pair,
+            token: &relay_through.token,
+            pair_is_initiator: relay_is_initiator,
             noise_is_initiator,
-            async_stream,
-            noise_result.tx,
-            noise_result.rx,
-            noise_result.handshake_hash,
-            noise_result.remote_public_key,
-        )
-        .await?;
-
-        Ok(PeerConnection {
-            stream: ss,
-            remote_public_key: noise_result.remote_public_key,
-            remote_addr: Some(relay_addr),
-            socket: relay_conn.socket,
-            _relay_task: Some(mux_task),
-            transport_mode: Some(super::connect_ui::ConnectTransportMode::Relay),
+            noise_result,
+            relay_control: relay_conn,
+            runtime,
         })
+        .await
     }
 }
 
@@ -2362,7 +1959,7 @@ pub async fn spawn(
     let persistent_config = config.persistent;
     let connect_relay = config.connect_relay.clone();
     let connect_ui = config.connect_ui.clone();
-    let prefer_lan = config.prefer_lan.clone();
+    let prefer_relay_only = config.prefer_relay_only.clone();
 
     let request_rx = dht_handle
         .subscribe_requests()
@@ -2407,7 +2004,7 @@ pub async fn spawn(
         admin_tx,
         connect_relay,
         connect_ui,
-        prefer_lan,
+        prefer_relay_only,
     };
     Ok((join, handle, server_rx))
 }
@@ -2923,7 +2520,7 @@ mod tests {
             persistent: PersistentConfig::default(),
             connect_relay: ConnectRelayConfig::default(),
             connect_ui: None,
-            prefer_lan: Arc::new(AtomicBool::new(true)),
+            prefer_relay_only: Arc::new(AtomicBool::new(true)),
         };
         let (join, handle, _server_rx) = spawn(&runtime, config).await.expect("spawn");
         handle.destroy().await.expect("destroy");
@@ -2946,7 +2543,7 @@ mod tests {
             persistent: PersistentConfig::default(),
             connect_relay: ConnectRelayConfig::default(),
             connect_ui: None,
-            prefer_lan: Arc::new(AtomicBool::new(true)),
+            prefer_relay_only: Arc::new(AtomicBool::new(true)),
         };
         let (join, handle, _rx) = spawn(&runtime, config).await.expect("spawn");
         let (sent, received) = handle.wire_stats();
@@ -3195,7 +2792,7 @@ mod tests {
     }
 
     #[test]
-    fn pick_direct_prefers_lan_subnet_over_carrier_reflexive() {
+    fn pick_direct_prefers_public_over_private_lan() {
         let local = vec![Ipv4Peer {
             host: "172.20.10.5".into(),
             port: 49737,
@@ -3225,9 +2822,9 @@ mod tests {
             host: "176.2.194.124".into(),
             port: 56596,
         };
-        let picked = pick_direct_connect_address4(&local, &remote, &reflex, true);
-        assert_eq!(picked.host, "172.20.10.2");
-        assert_eq!(picked.port, 49737);
+        let picked = pick_direct_connect_address4(&local, &remote, &reflex);
+        assert_eq!(picked.host, "176.2.194.124");
+        assert_eq!(picked.port, 56531);
     }
 
     #[test]
@@ -3237,5 +2834,21 @@ mod tests {
         assert!(!should_direct_connect(true, FIREWALL_RANDOM, true, false));
         // CGNAT peer with no holepunch support → direct connect fallback.
         assert!(should_direct_connect(true, FIREWALL_RANDOM, false, false));
+    }
+
+    #[test]
+    fn outbound_relay_token_deterministic_when_relay_only() {
+        use crate::dht::blind_relay;
+        let relay_pk = [0xaa; 32];
+        let local = [0x01; 32];
+        let remote = [0x02; 32];
+        let topic = [0xbb; 32];
+        let t1 = super::outbound_relay_through_token(relay_pk, Some(&topic), &local, &remote, true);
+        let t2 = super::outbound_relay_through_token(relay_pk, Some(&topic), &local, &remote, true);
+        assert_eq!(t1, t2);
+        assert_eq!(
+            t1,
+            blind_relay::resolve_pair_token(Some(&topic), &local, &remote, &relay_pk)
+        );
     }
 }

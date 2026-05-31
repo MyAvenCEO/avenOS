@@ -58,6 +58,7 @@ extern "C" {
 	fn self_derive_root_secret_bridge(
 		blob: SRData,
 		peer_pub: SRData,
+		network_seed: SRString,
 		reason: SRString,
 		context: u64,
 		callback: SelfResultCallback,
@@ -90,11 +91,12 @@ pub(crate) async fn create_se_key() -> Result<(Vec<u8>, Vec<u8>), String> {
 	}
 }
 
-/// Asks the SE to perform ECDH against `peer_pub` after a **single** `LAContext` biometric prompt.
+/// Asks the SE to perform ECDH against the network anchor after a **single** `LAContext` biometric prompt.
 /// `reason` is the string shown in the Touch ID sheet.
 pub(crate) async fn derive_root_secret(
 	blob: &[u8],
-	peer_pub: &[u8],
+	anchor_pub: &[u8],
+	network_seed: &str,
 	reason: &str,
 ) -> Result<Vec<u8>, String> {
 	let (sender, receiver) = oneshot::channel::<SelfCallbackResult>();
@@ -103,7 +105,8 @@ pub(crate) async fn derive_root_secret(
 	unsafe {
 		self_derive_root_secret_bridge(
 			SRData::from(blob),
-			SRData::from(peer_pub),
+			SRData::from(anchor_pub),
+			SRString::from(network_seed),
 			SRString::from(reason),
 			context,
 			self_result_callback,

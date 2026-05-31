@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-vault-ui-settings-set-locale"
+description = "Enables the vault_ui_settings_set_locale command without any pre-configured scope."
+commands.allow = ["vault_ui_settings_set_locale"]
+
+[[permission]]
+identifier = "deny-vault-ui-settings-set-locale"
+description = "Denies the vault_ui_settings_set_locale command without any pre-configured scope."
+commands.deny = ["vault_ui_settings_set_locale"]

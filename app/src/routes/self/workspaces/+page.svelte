@@ -22,6 +22,13 @@
 	import { vaultList } from '$lib/self/vault'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { navigateApp } from '$lib/shell'
+	import { t } from '$lib/i18n'
+
+	type SparkCapKey = 'owner' | 'admin' | 'read' | 'write' | 'delete' | 'share'
+
+	function sparkCapLabel(key: SparkCapKey): string {
+		return t(`sparks.share.capabilities.${key}`)
+	}
 
 	const sparksStore = jazzStore('sparks')
 
@@ -68,7 +75,7 @@
 	}
 
 	function peerAccessLabel(peerDid: string, storedLabel: string | undefined, isThisDevice: boolean): string {
-		if (isThisDevice) return 'This device'
+		if (isThisDevice) return t('common.thisDevice')
 		return peerDisplayLabel(peerDid, storedLabel, localPairingLabel)
 	}
 
@@ -76,7 +83,7 @@
 		did: string
 		label: string
 		isThisDevice: boolean
-		capabilities: string[]
+		capabilities: SparkCapKey[]
 	}
 
 	const accessEntries = $derived.by((): SparkAccessEntry[] => {
@@ -89,9 +96,9 @@
 			const peer = peersByDid.get(norm)
 			const isThisDevice = localDid !== '' && norm === localDid
 			const label = peerAccessLabel(did, peer?.deviceLabel, isThisDevice)
-			const capabilities = isThisDevice
-				? ['Owner', 'Read', 'Write', 'Delete', 'Share']
-				: ['Admin', 'Read', 'Write', 'Delete']
+			const capabilities: SparkCapKey[] = isThisDevice
+				? ['owner', 'read', 'write', 'delete', 'share']
+				: ['admin', 'read', 'write', 'delete']
 			return { did, label, isThisDevice, capabilities }
 		})
 	})
@@ -133,7 +140,7 @@
 					await waitForGrooveSessionReady()
 					const status = await jazzStatus()
 					if (!status.ready) {
-						throw new Error('Local Groove shell is not ready yet.')
+						throw new Error(t('errors.grooveShellNotReady'))
 					}
 					const nextSession = await jazzSession()
 					if (gen !== adminLoadGen) return
@@ -151,7 +158,7 @@
 					adminErr = undefined
 				})(),
 				LOCAL_IPC_BUDGET_MS,
-				'Share: loading session stalled',
+				t('errors.shareLoadingStalled'),
 			)
 		} catch (e) {
 			if (gen !== adminLoadGen) return
@@ -173,7 +180,7 @@
 			await sparkAdminAdd({ sparkId: sid, peerDid: did })
 			if (gen !== adminLoadGen) return
 			addAdminDid = ''
-			addNote = 'Access granted — it may take a moment to show on their device.'
+			addNote = t('sparks.share.accessGrantedNote')
 			const a = await sparkAdminList(sid)
 			if (gen !== adminLoadGen) return
 			adminDids = a.adminDids
@@ -229,29 +236,29 @@
 </script>
 
 <svelte:head>
-	<title>Share · AvenOS</title>
+	<title>{t('sparks.share.title')}{t('common.titleSuffix')}</title>
 </svelte:head>
 
 <div class="flex flex-col gap-8">
 	<header class="space-y-1.5">
-		<h1 class="text-2xl font-semibold tracking-tight">Share</h1>
+		<h1 class="text-2xl font-semibold tracking-tight">{t('sparks.share.title')}</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
-			Choose who can access a spark. Pair a device under
+			{t('sparks.share.subtitleLead')}
 			<a
 				href="/self/peers"
 				class="text-primary font-medium underline"
 				onclick={(e) => navigateApp('/self/peers', e)}
-			>Self → Peers</a>, then pick a spark and add them.
+			>{t('selfNav.self')} → {t('selfNav.peers')}</a>{t('sparks.share.subtitleTrail')}
 		</p>
 	</header>
 
 	{#if !tauri}
 		<p class="text-muted-foreground rounded-lg border border-border/60 bg-card/30 px-4 py-3 text-xs">
-			Sharing needs the AvenOS desktop app.
+			{t('sparks.share.needsDesktop')}
 		</p>
 	{:else if !unlocked}
 		<p class="text-muted-foreground rounded-lg border border-border/60 bg-card/30 px-4 py-3 text-xs leading-relaxed">
-			Unlock to manage sparks and sharing.
+			{t('sparks.share.unlockToManage')}
 		</p>
 	{/if}
 
@@ -261,7 +268,7 @@
 
 	{#if tauri && unlocked && sparksStore.loaded && busy && !session}
 		<p class="text-muted-foreground rounded-lg border border-border/40 bg-muted/20 px-4 py-3 text-xs leading-relaxed">
-			Still loading session details… If this lasts more than ~{LOCAL_IPC_BUDGET_MS / 1000}s, check logs or reload.
+			{t('sparks.share.loadingSessionStalled', { seconds: LOCAL_IPC_BUDGET_MS / 1000 })}
 		</p>
 	{/if}
 
@@ -270,11 +277,11 @@
 	{/if}
 
 	<section class="space-y-3">
-		<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">Sparks</h2>
+		<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">{t('sparks.share.sparksSection')}</h2>
 		{#if tauri && unlocked && !sparksStore.loaded && !sparksErr}
-			<p class="text-muted-foreground text-sm">Loading sparks…</p>
+			<p class="text-muted-foreground text-sm">{t('common.loadingSparks')}</p>
 		{:else if tauri && unlocked && sparks.length === 0}
-			<p class="text-muted-foreground text-sm">No sparks yet — bootstrap normally provisions one after unlock.</p>
+			<p class="text-muted-foreground text-sm">{t('sparks.share.noSparksBootstrap')}</p>
 		{:else if tauri && unlocked}
 			<ul class="grid gap-3 sm:grid-cols-2">
 				{#each sparks as row (row.spark_id)}
@@ -287,9 +294,9 @@
 						>
 							<span
 								class="text-[11px] font-semibold tracking-wider uppercase opacity-70 group-hover:text-accent-foreground/90"
-								>Spark</span
+								>{t('sparks.sparkLabel')}</span
 							>
-							<span class="text-base font-medium tracking-tight group-hover:text-accent-foreground">{row.name || 'Unnamed spark'}</span>
+							<span class="text-base font-medium tracking-tight group-hover:text-accent-foreground">{row.name || t('sparks.share.unnamedSpark')}</span>
 							<span class="text-muted-foreground break-all font-mono text-[11px] leading-snug group-hover:text-accent-foreground/85">{sparkUrn(row)}</span>
 						</button>
 					</li>
@@ -300,19 +307,19 @@
 
 	{#if tauri && unlocked && sparkId}
 		{#if busy}
-			<p class="text-muted-foreground text-sm">Loading admins…</p>
+			<p class="text-muted-foreground text-sm">{t('common.loadingAdmins')}</p>
 		{:else if !selectedSpark && sparks.length > 0}
-			<p class="text-muted-foreground text-sm">That spark id is not in your ledger.</p>
+			<p class="text-muted-foreground text-sm">{t('sparks.share.sparkNotInLedger')}</p>
 		{:else if selectedSpark}
 			<hr class="border-border/60" />
 
 			<section class="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
-				<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">Who has access</h2>
+				<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">{t('sparks.share.whoHasAccess')}</h2>
 				<p class="text-muted-foreground text-[11px] leading-relaxed">
-					Admins can read and change todos on this spark. Only this device can add or share access with others.
+					{t('sparks.share.adminsHint')}
 				</p>
 				{#if accessEntries.length === 0}
-					<p class="text-muted-foreground text-sm">No one listed yet.</p>
+					<p class="text-muted-foreground text-sm">{t('sparks.share.noOneListed')}</p>
 				{:else}
 					<ul class="divide-border/60 divide-y overflow-hidden rounded-lg border border-border/50">
 						{#each accessEntries as entry (entry.did)}
@@ -327,9 +334,9 @@
 									{#each entry.capabilities as cap (cap)}
 										<span
 											class="rounded-md px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase
-												{cap === 'Owner' || cap === 'Admin'
+												{cap === 'owner' || cap === 'admin'
 												? 'bg-primary/10 text-primary'
-												: 'bg-muted text-muted-foreground'}">{cap}</span
+												: 'bg-muted text-muted-foreground'}">{sparkCapLabel(cap)}</span
 										>
 									{/each}
 								</div>
@@ -340,7 +347,7 @@
 			</section>
 
 			<section class="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
-				<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">Give access</h2>
+				<h2 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">{t('sparks.share.giveAccess')}</h2>
 				{#if selectablePeers.length > 0}
 					<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
 						<PeerPickerSelect
@@ -355,22 +362,22 @@
 							disabled={adminBusy || !addAdminDid}
 							onclick={() => void addAdmin()}
 						>
-							{adminBusy ? '…' : 'Add as admin'}
+							{adminBusy ? '…' : t('sparks.share.addAsAdmin')}
 						</button>
 					</div>
 				{:else if activeAllowlistPeers.length === 0}
 					<p class="text-muted-foreground text-sm">
-						No paired peers yet — invite or accept under
+						{t('sparks.share.noPairedPeersLead')}
 						<a
 							href="/self/peers"
 							class="text-primary underline"
 							onclick={(e) => navigateApp('/self/peers', e)}
-						>Self → Peers</a>, then reload this page if needed.
+						>{t('selfNav.self')} → {t('selfNav.peers')}</a>{t('sparks.share.noPairedPeersTrail')}
 					</p>
 				{:else}
 					<p class="text-muted-foreground text-sm leading-relaxed">
-						<strong class="font-medium text-foreground">Nobody left to add:</strong>
-						everyone you paired already has access to this spark. Pair another device if you want to add someone else.
+						<strong class="font-medium text-foreground">{t('sparks.share.nobodyLeftToAdd')}</strong>
+						{t('sparks.share.everyoneHasAccess')}
 					</p>
 				{/if}
 				{#if adminErr}

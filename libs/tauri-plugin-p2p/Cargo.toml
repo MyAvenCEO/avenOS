@@ -1,0 +1,40 @@
+[package]
+name = "tauri-plugin-p2p"
+version = "0.0.1"
+edition = "2021"
+publish = false
+links = "tauri-plugin-p2p"
+
+[build-dependencies]
+swift-rs = { version = "1.0.5", features = ["build"] }
+tauri-plugin = { version = "2", features = ["build"] }
+
+[lib]
+name = "tauri_plugin_p2p"
+path = "src/lib.rs"
+
+[dependencies]
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tauri-plugin-self = { path = "../tauri-plugin-self" }
+
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+async-trait = "0.1"
+hex = "0.4"
+ed25519-dalek = { version = "2", features = ["zeroize"] }
+groove = { package = "aven-db", path = "../../libs/aven-db", default-features = false, features = ["client-p2p"] }
+libc = "0.2"
+multibase = "0.9"
+aven-p2p = { path = "../../libs/aven-p2p" }
+rand = "0.8"
+sha2 = "0.10"
+swift-rs = { version = "1.0.5" }
+uuid = { version = "1", features = ["serde"] }
+
+[dev-dependencies]
+groove = { package = "aven-db", path = "../../libs/aven-db", default-features = false, features = ["client-p2p"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+uuid = { version = "1", features = ["serde"] }

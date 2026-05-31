@@ -160,7 +160,6 @@ pub async fn unlock<R: Runtime>(
 	app: AppHandle<R>,
 	vault: State<'_, ActiveVault>,
 	slot: String,
-	_genesis_network_id: Vec<u8>,
 	state: State<'_, SelfState>,
 ) -> Result<(), String> {
 	if !enabled() {

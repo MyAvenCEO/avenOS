@@ -21,6 +21,8 @@ Default permissions for tauri-plugin-self
 - `allow-vault-create`
 - `allow-vault-selected-slug`
 - `allow-active-identity`
+- `allow-vault-ui-settings-get`
+- `allow-vault-ui-settings-set-locale`
 
 ## Permission Table
 
@@ -443,6 +445,58 @@ Enables the vault_slug_preview command without any pre-configured scope.
 <td>
 
 Denies the vault_slug_preview command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:allow-vault-ui-settings-get`
+
+</td>
+<td>
+
+Enables the vault_ui_settings_get command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:deny-vault-ui-settings-get`
+
+</td>
+<td>
+
+Denies the vault_ui_settings_get command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:allow-vault-ui-settings-set-locale`
+
+</td>
+<td>
+
+Enables the vault_ui_settings_set_locale command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`self:deny-vault-ui-settings-set-locale`
+
+</td>
+<td>
+
+Denies the vault_ui_settings_set_locale command without any pre-configured scope.
 
 </td>
 </tr>

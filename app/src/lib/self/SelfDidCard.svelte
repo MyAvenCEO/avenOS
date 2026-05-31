@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte'
+	import { t } from '$lib/i18n'
 	import TechnicalFold from '$lib/self/TechnicalFold.svelte'
 
 	let {
@@ -44,7 +45,7 @@
 				class="border-input hover:bg-accent hover:text-accent-foreground shrink-0 rounded-md border px-3 py-1.5 text-[11px] font-medium"
 				onclick={onCopy}
 			>
-				{copied ? 'Copied' : 'Copy DID'}
+				{copied ? t('common.copied') : t('common.copyDid')}
 			</button>
 		{/if}
 	</div>

@@ -155,6 +155,12 @@ impl NoiseWrap {
         self.handshake.complete()
     }
 
+    /// Remote static public key once the first IK message has been received (responder)
+    /// or at construction (initiator).
+    pub fn remote_static_key(&self) -> Option<[u8; 32]> {
+        self.handshake.remote_static_key().copied()
+    }
+
     /// Pre-set the ephemeral keypair (for deterministic testing only).
     pub fn set_ephemeral(&mut self, keypair: Keypair) {
         self.handshake.set_ephemeral(keypair);

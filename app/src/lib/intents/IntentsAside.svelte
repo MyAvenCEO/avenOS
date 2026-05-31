@@ -18,6 +18,7 @@ import {
 	statusLabel
 } from './types'
 import StatusCard from './StatusCard.svelte'
+import { t } from '$lib/i18n'
 
 const MOBILE_MQ = '(max-width: 639px)'
 
@@ -78,7 +79,7 @@ const mobileActiveIntents = $derived([...activeIntents].reverse())
 				>
 					<path d="m9 18 6-6-6-6" />
 				</svg>
-				<span>Archived · {archivedIntents.length}</span>
+				<span>{t('intents.archivedCount', { count: archivedIntents.length })}</span>
 			</button>
 			<div class="h-px flex-1 bg-border/50"></div>
 		</div>
@@ -122,7 +123,7 @@ const mobileActiveIntents = $derived([...activeIntents].reverse())
 <div
 	class={`col-start-1 row-start-1 flex min-h-[1.125rem] items-center gap-2 self-start ${selectedId ? 'max-sm:hidden' : ''}`}
 >
-	<span class="text-[8px] font-bold tracking-[0.22em] opacity-30 uppercase">Intents</span>
+	<span class="text-[8px] font-bold tracking-[0.22em] opacity-30 uppercase">{t('intents.title')}</span>
 </div>
 
 <div

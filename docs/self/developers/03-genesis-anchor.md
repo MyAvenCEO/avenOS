@@ -1,32 +1,53 @@
 ---
-title: Genesis anchor — sourcing & validation
+title: Network seed — sourcing & identity binding
 ---
 
-# Genesis anchor — sourcing & validation
+# Network seed — sourcing & identity binding
 
 ## What it is
 
-The genesis network ID is a **65-byte SEC1 uncompressed P-256 public point** that anchors all device identities on a network. It is the `peerPub` input to ECDH during unlock. Every device on the same network must use the same anchor to derive compatible session material.
+The **network seed** is a hardcoded string that binds every device identity on this build to one Aven network. For alpha testnet:
+
+```
+ceo.aven/testnet/abagana
+```
+
+It replaces the former `GENESIS_NETWORK_ID` (external 65-byte P-256 public point in `.env`). There is no env var and no user-facing crypto anchor.
 
 ## Source
 
-**File:** `app/src-tauri/src/genesis.rs`
+**File:** `libs/tauri-plugin-self/src/network.rs`
 
-| Build mode | Env var read | Behaviour if unset |
-|------------|-------------|---------------------|
-| Release (`--release`) | `GENESIS_NETWORK_ID` | Hard error at startup |
-| Debug (default) | `DEV_GENESIS_NETWORK_ID` | Auto-generate & persist |
+| Constant | Value |
+|----------|-------|
+| `NETWORK_SEED` | `ceo.aven/testnet/abagana` |
+| `RELAY_URL` | `relay.aven.ceo` |
+| Path segments | `ceo.aven` / `testnet` / `abagana` |
 
-Values must be **base64-encoded** (standard alphabet). Decoded length must be exactly **65 bytes**.
+The frontend reads the same string via Tauri command `network_seed` (mirrored in `app/src/lib/self/network.ts`).
 
-## Debug auto-seed
+## Derivation (v2)
 
-In debug builds with no `DEV_GENESIS_NETWORK_ID` set, `genesis.rs` generates a fresh P-256 keypair via `p256::SecretKey::random(&mut OsRng)`, encodes only the **public** point (65 bytes), writes `DEV_GENESIS_NETWORK_ID="<base64>"` to the repo-root `.env`, and discards the private scalar. The `.env` is located by walking up from `CARGO_MANIFEST_DIR` to find the workspace root.
+At unlock, the Secure Enclave performs ECDH against a **deterministic anchor pubkey** derived from `NETWORK_SEED`, then HKDF:
 
-## Runtime state
+```
+anchor = P-256 pubkey from HKDF(NETWORK_SEED, info="ceo.aven/network-anchor/v1")
+root   = HKDF(ECDH(SE_priv, anchor), salt=NETWORK_SEED, info=NETWORK_SEED)
+sign   = HKDF(root, info="{NETWORK_SEED}/identity/ed25519/v1")
+```
 
-Decoded bytes are stored in `GenesisState { pub_bytes: Mutex<Option<Vec<u8>>> }` and registered as Tauri managed state. The `genesis_network_id` Tauri command returns `Vec<u8>` (65 bytes) to the frontend.
+See [04-root-derivation.md](04-root-derivation.md).
 
-## Validation
+## On-disk layout
 
-`unlock` in `macos/commands.rs` rejects `genesis_network_id` inputs with length ≠ 65 with error `invalid_genesis_network_id: expected 65-byte SEC1 uncompressed P-256 point, got N`. Same constraint is applied during env var parsing in `genesis.rs`.
+```
+~/Documents/.avenOS/ceo.aven/testnet/abagana/
+├── identities/<slug>/{vault,db}
+└── schema/
+```
+
+See [Storage layout](05-storage-and-state.md).
+
+## UI
+
+**Settings → Advanced → Network** shows the current network seed as read-only (not switchable).

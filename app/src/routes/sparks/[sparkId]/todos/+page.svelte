@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { browser } from '$app/environment'
 	import { page } from '$app/state'
+	import { t } from '$lib/i18n'
 	import type { JazzRow } from '$lib/jazz/api'
 	import { jazzShell } from '$lib/runtime/jazz-shell'
 	import { jazzStore } from '$lib/jazz/store.svelte'
@@ -81,7 +82,7 @@
 		const next = editDraft.trim()
 		if (!next) {
 			if (reason === 'blur') cancelEdit()
-			else err = 'Title cannot be empty'
+			else err = t('errors.titleCannotBeEmpty')
 			return
 		}
 		if (next === row.title) {
@@ -130,24 +131,23 @@
 </script>
 
 <svelte:head>
-	<title>Todos · AvenOS</title>
+	<title>{t('sparks.todos.title')}{t('common.titleSuffix')}</title>
 </svelte:head>
 
 <div class="flex flex-col gap-6">
 	<header class="space-y-1">
-		<h1 class="text-xl font-semibold tracking-tight">Todos</h1>
+		<h1 class="text-xl font-semibold tracking-tight">{t('sparks.todos.title')}</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
-			Task list for this spark. Pair under <strong>Self → Peers</strong>, share access under
-			<strong>Self → Share</strong>.
+			{t('sparks.todos.subtitle')}
 		</p>
 	</header>
 
 	{#if !tauri}
-		<p class="text-muted-foreground text-sm">Open this screen in the AvenOS desktop app.</p>
+		<p class="text-muted-foreground text-sm">{t('sparks.needsDesktop')}</p>
 	{:else if !unlocked}
-		<p class="text-muted-foreground text-sm">Unlock with Touch ID to load your database.</p>
+		<p class="text-muted-foreground text-sm">{t('sparks.todos.unlockToLoad')}</p>
 	{:else if !decodedSparkId}
-		<p class="text-muted-foreground text-sm">Missing spark id.</p>
+		<p class="text-muted-foreground text-sm">{t('sparks.todos.missingSparkId')}</p>
 	{:else}
 		{#if session}
 			<p class="text-muted-foreground font-mono text-xs leading-snug">
@@ -167,11 +167,11 @@
 		{/if}
 
 		{#if !sparksResolved && !err}
-			<p class="text-muted-foreground text-xs">Loading spark…</p>
+			<p class="text-muted-foreground text-xs">{t('common.loadingSpark')}</p>
 		{:else if sparksResolved && !sparkMeta && !err}
 			<p class="text-muted-foreground text-sm">
-				No spark matches this id in your ledger —
-				<button type="button" class="underline" onclick={() => goto('/sparks')}>back to sparks</button>.
+				{t('sparks.todos.notInLedger')}
+				<button type="button" class="underline" onclick={() => goto('/sparks')}>{t('sparks.todos.backToSparks')}</button>.
 			</p>
 		{/if}
 
@@ -185,7 +185,7 @@
 			>
 				<input
 					bind:value={titleDraft}
-					placeholder="New todo…"
+					placeholder={t('sparks.todos.newTodoPlaceholder')}
 					class="border-input bg-background focus-visible:ring-ring flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus-visible:ring-2"
 					disabled={addBusy}
 				/>
@@ -194,7 +194,7 @@
 					class="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
 					disabled={addBusy || !titleDraft.trim()}
 				>
-					Add
+					{t('common.add')}
 				</button>
 			</form>
 
@@ -204,7 +204,7 @@
 						<div class="mt-0.5 flex shrink-0 items-center">
 							<input
 								type="checkbox"
-								aria-label="Toggle done"
+								aria-label={t('sparks.todos.toggleDone')}
 								checked={row.done}
 								class="accent-primary h-4 w-4 cursor-pointer disabled:opacity-40"
 								disabled={listBusy}
@@ -237,7 +237,7 @@
 										class:text-muted-foreground={row.done}
 										class="text-left text-sm hover:underline {row.done ? 'line-through' : ''}"
 										disabled={listBusy || editingId !== null}
-										title="Double-click to edit"
+										title={t('sparks.todos.doubleClickEdit')}
 										ondblclick={() => beginEdit(row)}
 									>
 										{row.title}
@@ -257,11 +257,11 @@
 							onmousedown={(ev) => ev.preventDefault()}
 							onclick={(e) => void remove(row, e)}
 						>
-							Delete
+							{t('common.delete')}
 						</button>
 					</li>
 				{:else}
-					<li class="text-muted-foreground px-3 py-6 text-center text-sm">No todos in this spark yet.</li>
+					<li class="text-muted-foreground px-3 py-6 text-center text-sm">{t('sparks.todos.noTodosYet')}</li>
 				{/each}
 			</ul>
 		{/if}

@@ -1,6 +1,6 @@
 # iOS TestFlight upload via Transporter (AvenOS — identity + Hyperswarm)
 
-Store IPAs embed **`AVENOS_DHT_BOOTSTRAP`** at build time via `scripts/tauri-ios-asc.ts` and `scripts/relay-bootstrap.ts` (HTTPS `/.well-known/aven-relay.json`, same helper as macOS App Store builds) together with **`AVEN_RELAY_URL`** / **`GENESIS_NETWORK_ID`**. Hyperswarm runs in production IPAs similarly to sandboxed macOS TrackFlight binaries; verify mesh flows with [iOS TestFlight P2P smoke](ios-testflight-p2p-smoke.md).
+Store IPAs embed **`AVENOS_DHT_BOOTSTRAP`** at build time via `scripts/tauri-ios-asc.ts` and `scripts/relay-bootstrap.ts` (HTTPS `/.well-known/aven-relay.json`, same helper as macOS App Store builds) together with **`AVEN_RELAY_URL`**. Network identity is hardcoded (`ceo.aven/testnet/abagana`). Hyperswarm runs in production IPAs similarly to sandboxed macOS TrackFlight binaries; verify mesh flows with [iOS TestFlight P2P smoke](ios-testflight-p2p-smoke.md).
 
 We still **avoid the simulator** as the authoritative QA lane for AvenOS identity: Secure Enclave and store signing behave differently from lab simulators—produce a signed **IPA**, upload via Transporter, and validate on **physical devices through TestFlight**.
 
@@ -11,7 +11,7 @@ We still **avoid the simulator** as the authoritative QA lane for AvenOS identit
 - **`gen/apple/` is gitignored.** After clone / config updates, scaffold from **`app`**: `CI=true bunx tauri ios init --ci`  
   Entitlements are re-synced automatically during `bun run release:app:ios` from **`app/src-tauri/ios-template/`**.
 - `APPLE_DEVELOPMENT_TEAM` via **`<repo-root>/.env.apple.local`** (template **`scripts/apple-env.local.template`**, quotable paths, never commits with `.gitignore` **`.env.*`**), **`tauri.ios.conf.json`**, or your shell — **do not commit** secrets.
-- **`GENESIS_NETWORK_ID`** in repo **`.env`** (or shell) — embedded at compile time like macOS TestFlight builds.
+- Network identity is hardcoded in the app binary (`ceo.aven/testnet/abagana`) — no genesis env required.
 - Watch the Xcode prep logs for **`embedding AVENOS_DHT_BOOTSTRAP=`** (`scripts/tauri-ios-asc.ts`); mismatches often explain hyperswarm stalls on-device.
 
 If you enabled **Push** + **Associated Domains** on the App ID, read [iOS Associated Domains + Push](ios-associated-domains-and-push.md) (regenerate provisioning profile; replace entitlement placeholders).

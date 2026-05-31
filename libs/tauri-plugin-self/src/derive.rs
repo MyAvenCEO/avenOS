@@ -1,7 +1,7 @@
 //! Pure-Rust derivation of "self" primitives from the SE-rooted `device_root_secret`.
 //!
 //! The SE has already produced a 32-byte `device_root_secret` via:
-//!   `HKDF-SHA256(ikm = ECDH(SE_priv, GENESIS_NETWORK_ID), salt = GENESIS_NETWORK_ID, info = "ceo.aven.os/root/v1")`
+//!   `HKDF-SHA256(ikm = ECDH(SE_priv, network_anchor), salt = NETWORK_SEED, info = NETWORK_SEED)`
 //!
 //! From that root we run a second HKDF-Expand per derived primitive, using disjoint `info` strings.
 //! Each branch is independent: compromise of a derived seed never reveals the root or its siblings.
@@ -14,16 +14,17 @@ use hkdf::Hkdf;
 use sha2::Sha256;
 use zeroize::Zeroizing;
 
-/// HKDF info tag for the Ed25519 signing seed. Bumping `vN` rotates the keypair without
-/// touching the SE root; until then this is stable across builds.
-pub const ED25519_INFO: &[u8] = b"ceo.aven.os/identity/ed25519/v1";
+/// HKDF info tag for the Ed25519 signing seed (network-scoped).
+pub fn ed25519_info_bytes() -> Vec<u8> {
+	crate::network::ed25519_identity_info().into_bytes()
+}
 
 /// Derive the Ed25519 seed from a 32-byte root secret using HKDF-Expand-SHA256.
 /// Caller is expected to hold `root` in zeroizable storage; the returned seed is wrapped too.
 pub fn derive_ed25519_seed(root: &[u8; 32]) -> Result<Zeroizing<[u8; SECRET_KEY_LENGTH]>, String> {
 	let hk = Hkdf::<Sha256>::from_prk(root).map_err(|e| format!("hkdf from_prk: {e}"))?;
 	let mut seed = Zeroizing::new([0u8; SECRET_KEY_LENGTH]);
-	hk.expand(ED25519_INFO, seed.as_mut_slice())
+	hk.expand(&ed25519_info_bytes(), seed.as_mut_slice())
 		.map_err(|e| format!("hkdf expand ed25519: {e}"))?;
 	Ok(seed)
 }

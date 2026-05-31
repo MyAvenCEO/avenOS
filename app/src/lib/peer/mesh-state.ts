@@ -1,5 +1,22 @@
 /** Per trusted peer-pair — matches Rust `PeerMeshPhase`. */
+import { t } from '$lib/i18n'
+
 export type PeerMeshPhase = 'pairing' | 'offline' | 'searching' | 'syncing' | 'ready'
+
+export type PeerUsability = 'unavailable' | 'connecting' | 'liveSyncing' | 'usable'
+
+export type PeerSyncBlockReason =
+	| 'muxPending'
+	| 'policyPending'
+	| 'catchupPending'
+
+export type SyncBootstrapPhase =
+	| 'transportPending'
+	| 'shellPending'
+	| 'trustPending'
+	| 'ready'
+
+export type LinkHealth = 'none' | 'half' | 'full'
 
 export type P2pDiagnostics = {
 	centralMode: boolean
@@ -14,17 +31,18 @@ export type P2pDiagnostics = {
 	lastPathChangeAtMs?: number | null
 	lastForegroundHealAtMs?: number | null
 	healInProgress?: boolean
-	/** LAN-first connect (false on cellular-only). */
-	preferLan?: boolean
 	/** Last NWPathMonitor interfaces (e.g. wifi, cellular). */
 	networkInterfaces?: string[]
+	/** Mux + outbound send path agreement (`none` | `half` | `full`). */
+	linkHealth?: LinkHealth
+	/** Relay-only data plane (always true). */
+	preferRelayOnly?: boolean
 }
 
 export type PeerConnectSubstate =
 	| 'discovering'
 	| 'handshaking'
-	| 'holepunching'
-	| 'relayFallback'
+	| 'relayPairing'
 
 export type PeerTransportMode = 'lan' | 'direct' | 'punched' | 'relay'
 
@@ -35,16 +53,22 @@ export type PeerMeshPeerState = {
 	dbStatus: string
 	addedAtMs: number
 	phase: PeerMeshPhase
+	usability?: PeerUsability | null
 	connectSubstate?: PeerConnectSubstate | null
 	transportMode?: PeerTransportMode | null
 	reconnectAttempt?: number | null
 	lastDisconnectAtMs?: number | null
 	lastDisconnectReason?: string | null
-	desiredTransport?: PeerTransportMode | null
 	/** Groove mux worker + outbound channel ready. */
 	grooveMuxReady?: boolean | null
+	/** Biscuit ACL loaded and Groove P2P client registered. */
+	syncReady?: boolean | null
 	/** Outbound catch-up finished for this peer. */
 	catchupReady?: boolean | null
+	/** Why phase is syncing (mux / policy / catch-up). */
+	syncBlockReason?: PeerSyncBlockReason | null
+	/** Shell/trust bootstrap before spark data may flow. */
+	bootstrap?: SyncBootstrapPhase | null
 }
 
 /** Single source of truth for P2P mesh UI (header + Self → Peers). */
@@ -73,18 +97,22 @@ export function peerMeshPhaseLabel(phase: PeerMeshPhase): string {
 }
 
 /** User-facing chip text (technical labels stay on `peerMeshPhaseLabel`). */
-export function peerMeshPhaseUserLabel(phase: PeerMeshPhase): string {
-	switch (phase) {
+export function peerMeshPhaseUserLabel(
+	phase: PeerMeshPhase,
+	usability?: PeerUsability | null,
+	opts?: { linkHealth?: LinkHealth | null },
+): string {
+	switch (peerMeshDisplayPhase(phase, usability, opts)) {
 		case 'pairing':
-			return 'Pairing…'
+			return t('peer.phaseUser.pairing')
 		case 'offline':
-			return 'Offline'
+			return t('peer.phaseUser.offline')
 		case 'searching':
-			return 'Connecting…'
+			return t('peer.phaseUser.searching')
 		case 'syncing':
-			return 'Syncing…'
+			return t('peer.phaseUser.syncing')
 		case 'ready':
-			return 'Up to date'
+			return t('peer.phaseUser.ready')
 	}
 }
 
@@ -92,9 +120,36 @@ export function peerMeshPhaseAnimating(phase: PeerMeshPhase): boolean {
 	return phase === 'pairing' || phase === 'searching' || phase === 'syncing'
 }
 
+/** Phase for chips — never show “up to date” unless backend says usable. */
+export function peerMeshDisplayPhase(
+	phase: PeerMeshPhase,
+	usability?: PeerUsability | null,
+	opts?: { linkHealth?: LinkHealth | null },
+): PeerMeshPhase {
+	if (opts?.linkHealth === 'half' || opts?.linkHealth === 'none') {
+		if (phase === 'ready') return 'searching'
+	}
+	if (usability && usability !== 'usable') {
+		if (phase === 'ready') {
+			return usability === 'connecting' ? 'searching' : 'syncing'
+		}
+	}
+	return phase
+}
+
 /** Compact label for the left rail badge in the peers list. */
-export function peerMeshShortLabel(phase: PeerMeshPhase): string {
-	switch (phase) {
+export function peerMeshShortLabel(
+	phase: PeerMeshPhase,
+	opts?: {
+		usability?: PeerUsability | null
+		syncBlockReason?: PeerSyncBlockReason | null
+		linkHealth?: LinkHealth | null
+	},
+): string {
+	const display = peerMeshDisplayPhase(phase, opts?.usability, {
+		linkHealth: opts?.linkHealth,
+	})
+	switch (display) {
 		case 'pairing':
 			return 'PAIR'
 		case 'offline':
@@ -217,41 +272,21 @@ export function findPeerMeshPhase(
 export function peerConnectSubstateLabel(sub: PeerConnectSubstate): string {
 	switch (sub) {
 		case 'discovering':
-			return 'Discovering'
+			return t('peer.connectSubstate.discovering')
 		case 'handshaking':
-			return 'Handshaking'
-		case 'holepunching':
-			return 'Holepunching'
-		case 'relayFallback':
-			return 'Relay fallback'
+			return t('peer.connectSubstate.handshaking')
+		case 'relayPairing':
+			return t('peer.connectSubstate.relayPairing')
 	}
 }
 
-/** Established transport sub-label while parent phase is `syncing` / `ready`. */
-export function peerTransportModeLabel(mode: PeerTransportMode): string {
-	switch (mode) {
-		case 'lan':
-			return 'LAN'
-		case 'direct':
-			return 'Direct'
-		case 'punched':
-			return 'Punched'
-		case 'relay':
-			return 'Relay'
-	}
+/** Established transport — relay-only steady state. */
+export function peerTransportModeLabel(_mode?: PeerTransportMode | null): string {
+	return t('peer.transport.relay')
 }
 
-export function peerTransportModeTitle(mode: PeerTransportMode): string {
-	switch (mode) {
-		case 'lan':
-			return 'Same local network (Wi‑Fi / hotspot)'
-		case 'direct':
-			return 'Internet, no NAT punch needed'
-		case 'punched':
-			return 'NAT traversal'
-		case 'relay':
-			return 'Fallback via Aven relay (encrypted)'
-	}
+export function peerTransportModeTitle(_mode?: PeerTransportMode | null): string {
+	return t('peer.transportTitle.relay')
 }
 
 export function peerMeshDetailSubLabel(
@@ -268,22 +303,29 @@ export function peerMeshDetailSubLabel(
 		if (row.reconnectAttempt && row.reconnectAttempt > 0) {
 			const reason = row.lastDisconnectReason
 				? row.lastDisconnectReason.replace(/_/g, ' ')
-				: 'reconnecting'
-			return `Retry ${row.reconnectAttempt} (${reason})`
+				: t('peer.syncBlock.reconnecting')
+			return t('peer.retryAttempt', { attempt: row.reconnectAttempt, reason })
 		}
 	}
-	if ((phase === 'syncing' || phase === 'ready') && row.transportMode) {
-		const label = peerTransportModeLabel(row.transportMode)
-		if (row.desiredTransport && row.desiredTransport !== row.transportMode) {
-			return `${label} → ${peerTransportModeLabel(row.desiredTransport)}`
-		}
-		return label
+	if ((phase === 'syncing' || phase === 'ready') && row) {
+		return peerTransportModeLabel(null)
 	}
 	if (phase === 'searching' || phase === 'syncing') {
+		const reason = row.syncBlockReason
+		if (reason === 'muxPending') return t('peer.syncBlock.muxPending')
+		if (reason === 'policyPending') return t('peer.syncBlock.policyPending')
+		if (reason === 'catchupPending') return t('peer.syncBlock.catchupPending')
 		const parts: string[] = []
 		if (row.grooveMuxReady === false) parts.push('mux pending')
+		if (row.grooveMuxReady === true && row.syncReady === false) parts.push('policy pending')
 		if (row.grooveMuxReady === true && row.catchupReady === false) parts.push('catch-up pending')
 		if (parts.length > 0) return parts.join(' · ')
+	}
+	if (
+		status?.p2pDiagnostics.linkHealth === 'half' &&
+		(phase === 'searching' || phase === 'syncing')
+	) {
+		return t('peer.syncBlock.halfLinked')
 	}
 	return null
 }
@@ -293,10 +335,8 @@ export function peerMeshDetailSubTitle(
 	peerDid: string | undefined,
 	phase: PeerMeshPhase,
 ): string | null {
-	const row = meshPeerByDid(status, peerDid)
-	if (!row?.transportMode) return null
 	if (phase === 'syncing' || phase === 'ready') {
-		return peerTransportModeTitle(row.transportMode)
+		return peerTransportModeTitle(null)
 	}
 	return null
 }

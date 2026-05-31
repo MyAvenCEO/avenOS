@@ -6,19 +6,19 @@ export type PeerInviteCreateReply = {
 }
 
 export async function peerSwarmRetry(): Promise<void> {
-	await invoke<void>('plugin:peer|peer_swarm_retry')
+	await invoke<void>('plugin:p2p|peer_swarm_retry')
 }
 
 export async function peerInviteCreate(): Promise<PeerInviteCreateReply> {
-	return invoke<PeerInviteCreateReply>('plugin:peer|peer_invite_create')
+	return invoke<PeerInviteCreateReply>('plugin:p2p|peer_invite_create')
 }
 
 export async function peerInviteAccept(code: string): Promise<void> {
-	await invoke<void>('plugin:peer|peer_invite_accept', { code })
+	await invoke<void>('plugin:p2p|peer_invite_accept', { code })
 }
 
 export async function peerInviteCancel(): Promise<void> {
-	await invoke<void>('plugin:peer|peer_invite_cancel')
+	await invoke<void>('plugin:p2p|peer_invite_cancel')
 }
 
 /**
@@ -33,7 +33,7 @@ export async function peerInviteCancel(): Promise<void> {
  * - `handshakeRelayForwardTotal`: DHT forwarded `PEER_HANDSHAKE` between peers (CGNAT relay path).
  * - `swarmPeerConnectedTotal`: outbound swarm established a UDX link.
  * - `lastConnectRelayed` / `lastRemoteHolepunchable`: last HyperDHT “deciding connection path” scrape after Noise (~`relayed=` / `remote_holepunchable=`). Expect `true`/`true` on Fly-relay pairing when swarm holepunch metadata is wired.
- * - `holepunchBlindRelayFallbackTotal`: holepunch failed and stack fell back to blind relay (`relay_through`).
+ * - `blindRelayFallbackTotal`: blind-relay pair failed or legacy holepunch→relay fallback.
  */
 export type DhtTraceSnapshot = {
 	dhtBootstrapped: boolean
@@ -46,8 +46,8 @@ export type DhtTraceSnapshot = {
 	lastConnectRelayed: boolean | null
 	/** Last `remote_holepunchable` from the same tracing line. */
 	lastRemoteHolepunchable: boolean | null
-	/** Times holepunch failed and the stack fell back to blind relay (`relays_through`). */
-	holepunchBlindRelayFallbackTotal: number
+	/** Blind-relay pair failures / fallback events (relay-only data plane). */
+	blindRelayFallbackTotal: number
 }
 
 export async function avenosDhtTraceSnapshot(): Promise<DhtTraceSnapshot> {

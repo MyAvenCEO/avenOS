@@ -1,5 +1,5 @@
 mod crypto;
-mod genesis;
+mod network;
 mod jazz;
 mod jazz_auth;
 mod log_ring;
@@ -443,7 +443,7 @@ fn avenos_dht_trace_snapshot() -> serde_json::Value {
 		"swarmPeerConnectedTotal": s.swarm_peer_connected_total,
 		"lastConnectRelayed": s.last_connect_relayed,
 		"lastRemoteHolepunchable": s.last_remote_holepunchable,
-		"holepunchBlindRelayFallbackTotal": s.holepunch_blind_relay_fallback_total,
+		"blindRelayFallbackTotal": s.blind_relay_fallback_total,
 	})
 }
 
@@ -693,24 +693,18 @@ pub fn run() {
 
 	tauri::Builder::default()
 		.plugin(tauri_plugin_self::init())
-		.plugin(tauri_plugin_peer::init())
+		.plugin(tauri_plugin_p2p::init())
 		.plugin(tauri_plugin_clipboard_manager::init())
-		.manage(genesis::GenesisState::default())
 		.manage(jazz::ManagedJazz::default())
 		.setup(|app| {
 			if let Err(e) = schema_manifest::install_runtime_schema_files(app.handle()) {
-				log::error!("aven-schema runtime install: {e}");
+				log::error!("schema runtime install: {e}");
 			}
 
 			app.manage(jazz::runtime::spawn_groove_actor(app.handle().clone()));
 			app.manage(jazz::ui_drain::spawn_ui_table_drain(app.handle().clone()));
 			#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 			app.manage(peer_catchup::spawn_peer_catchup_worker(app.handle().clone()));
-
-			let state = app.state::<genesis::GenesisState>();
-			if let Err(e) = genesis::bootstrap(&state) {
-				log::error!("GENESIS_NETWORK_ID bootstrap: {e}");
-			}
 
 			// Start the table-change drain so peer-sync deltas reach the webview without
 			// requiring a manual refresh. Local CRUD already calls `snapshot_broadcast`
@@ -818,12 +812,7 @@ pub fn run() {
 			let _path_heal_mesh = app.listen("peer:network-path-changed", move |_event| {
 				let hh = h_path_heal.clone();
 				tauri::async_runtime::spawn(async move {
-					if let Err(e) = jazz::peer_mesh_reconcile_tick(&hh, false).await {
-						log::debug!(
-							target: "avenos::jazz",
-							"peer:network-path-changed mesh reconcile skipped: {e}",
-						);
-					}
+					crate::jazz::runtime::groove_actor(&hh).publish_mesh().await;
 				});
 			});
 
@@ -831,12 +820,7 @@ pub fn run() {
 			let _fg_heal_mesh = app.listen("peer:app-foreground", move |_event| {
 				let hh = h_fg_heal.clone();
 				tauri::async_runtime::spawn(async move {
-					if let Err(e) = jazz::peer_mesh_reconcile_tick(&hh, false).await {
-						log::debug!(
-							target: "avenos::jazz",
-							"peer:app-foreground mesh reconcile skipped: {e}",
-						);
-					}
+					crate::jazz::runtime::groove_actor(&hh).publish_mesh().await;
 				});
 			});
 
@@ -850,14 +834,13 @@ pub fn run() {
 			// Jazz sync without fixed 10s latency.
 			#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 			{
-				use groove::sync_manager::ClientId;
 				use std::collections::HashSet;
 
 				let h_mesh = app.handle().clone();
 				tauri::async_runtime::spawn(async move {
 					use std::time::{Duration, Instant};
 
-					let bridge = h_mesh.state::<tauri_plugin_peer::HyperswarmGrooveBridge>();
+					let bridge = h_mesh.state::<tauri_plugin_p2p::HyperswarmGrooveBridge>();
 					let notify = bridge.peer_set_changed_notify();
 					let fast_until = Instant::now() + Duration::from_secs(90);
 					let mut in_fast_phase = true;
@@ -875,15 +858,17 @@ pub fn run() {
 							_ = tick => {}
 						};
 						let live_links =
-							h_mesh.state::<std::sync::Arc<tauri_plugin_peer::PeerLinkCoordinator>>();
-						let live: HashSet<ClientId> = live_links
-							.snapshot_mux_ready_clients()
-							.await
-							.into_iter()
-							.collect();
+							h_mesh.state::<std::sync::Arc<tauri_plugin_p2p::PeerLinkCoordinator>>();
+						let bridge = h_mesh.state::<tauri_plugin_p2p::HyperswarmGrooveBridge>();
+						let mut live = HashSet::new();
+						for cid in live_links.snapshot_mux_ready_clients().await {
+							if bridge.peer_send_ready(cid).await {
+								live.insert(cid);
+							}
+						}
 						let h_catch = h_mesh.state::<crate::peer_catchup::PeerCatchupHandle>();
 						h_catch.live_clients_changed(live).await;
-						if let Err(e) = jazz::peer_mesh_reconcile_tick(&h_mesh, true).await {
+						if let Err(e) = jazz::peer_mesh_reconcile_tick(&h_mesh, false).await {
 							log::debug!(
 								target: "avenos::jazz",
 								"peer-mesh reconcile skipped: {e}"
@@ -906,7 +891,7 @@ pub fn run() {
 			create_sandbox_webview,
 			set_sandbox_webview_rect,
 			destroy_sandbox_webview,
-			genesis::genesis_network_id,
+			network::network_seed,
 			jazz::groove_runtime,
 			jazz::self_storage_paths,
 			jazz::self_clear_jazz_database,

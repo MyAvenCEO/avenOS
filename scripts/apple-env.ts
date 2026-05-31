@@ -33,21 +33,6 @@ export function readEnvFileValue(filePath: string, key: string): string | undefi
 	return undefined
 }
 
-/**
- * Resolve `GENESIS_NETWORK_ID` for release/App Store builds (compile-time embed).
- * Order: shell → `.env.apple.local` (via `applyAppleEnvLocal`) → repo `.env` (`GENESIS_NETWORK_ID`, then `DEV_GENESIS_NETWORK_ID`).
- */
-export function resolveGenesisNetworkId(repoRoot: string): string | undefined {
-	const fromShell = process.env.GENESIS_NETWORK_ID?.trim()
-	if (fromShell) return fromShell
-
-	const repoEnv = path.join(repoRoot, '.env')
-	return (
-		readEnvFileValue(repoEnv, 'GENESIS_NETWORK_ID') ??
-		readEnvFileValue(repoEnv, 'DEV_GENESIS_NETWORK_ID')
-	)
-}
-
 /** Does not overwrite existing `process.env` keys. */
 export function applyAppleEnvLocal(repoRoot: string): void {
 	const p = path.join(repoRoot, '.env.apple.local')
