@@ -2,9 +2,9 @@ import { browser } from '$app/environment'
 import { derived, get } from 'svelte/store'
 import { deviceSession } from '$lib/settings/device-session-store'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-import { demoPeerRows, getDemoMeshStatus, type PeerRowReply } from '$lib/peer/api'
+import type { PeerRowReply } from '$lib/peer/api'
 import type { PeerMeshPeerState } from '$lib/peer/mesh-state'
-import { grooveSessionReady, peerMeshSnapshot } from '$lib/runtime/groove-runtime'
+import { grooveSessionReady, peerMeshSnapshot, peerMeshStatus } from '$lib/runtime/groove-runtime'
 
 export { peerMeshSnapshot } from '$lib/runtime/groove-runtime'
 
@@ -19,22 +19,27 @@ function meshPeerToRow(p: PeerMeshPeerState): PeerRowReply {
 	}
 }
 
-/** Trusted remote peers — demo mesh only. */
+/** Trusted remote peers — derived from the live mesh snapshot. */
 export const peerRows = derived(peerMeshSnapshot, ($mesh) =>
 	($mesh?.peers ?? []).map(meshPeerToRow),
 )
 
-/** Demo rows when mesh snapshot is not yet hydrated. */
-export const demoPeerRowsStore = derived([], () => demoPeerRows())
-
 let storeGeneration = 0
 
-function hydrateDemoMesh(): void {
-	peerMeshSnapshot.set(getDemoMeshStatus())
+/** Seed the snapshot from the real `meshStatus` IPC; the `avenos:runtime`
+ *  `{ kind: 'mesh' }` event keeps it fresh afterward. */
+async function hydrateMesh(gen: number): Promise<void> {
+	try {
+		const snap = await peerMeshStatus()
+		if (gen === storeGeneration) peerMeshSnapshot.set(snap)
+	} catch {
+		/* backend not ready yet — the runtime mesh event will populate it */
+	}
 }
 
 /**
- * Demo mesh store: hydrate once at unlock with hardcoded peers.
+ * Live mesh store: seed from `meshStatus` at unlock, then track the runtime
+ * `{ kind: 'mesh' }` events (real trusted-peer rows + transport registration).
  */
 export function startPeerMeshStore(): () => void {
 	if (!browser || !isTauriRuntime()) {
@@ -47,7 +52,7 @@ export function startPeerMeshStore(): () => void {
 		if (gen !== storeGeneration) return
 		if (get(deviceSession).kind !== 'unlocked') return
 		if (!get(grooveSessionReady)) return
-		hydrateDemoMesh()
+		void hydrateMesh(gen)
 	}
 
 	void boot()
