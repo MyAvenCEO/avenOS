@@ -34,7 +34,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::channel::oneshot;
-use tracing::{debug, debug_span, info, trace, trace_span};
+use tracing::{debug, debug_span, info, trace_span};
 
 use crate::object::{BranchName, ObjectId};
 use crate::query_manager::QuerySubscriptionId;
@@ -48,7 +48,7 @@ use crate::row_format::decode_row;
 use crate::row_histories::BatchId;
 use crate::schema_manager::{Lens, SchemaManager};
 use crate::storage::{Storage, StorageError};
-use crate::sync_manager::{PeerId, DurabilityTier, InboxEntry, OutboxEntry, ServerId};
+use crate::sync_manager::{PeerId, DurabilityTier, InboxEntry, OutboxEntry};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MutationErrorEvent {
@@ -323,12 +323,6 @@ pub struct RuntimeCore<S: Storage, Sch: Scheduler> {
 
     /// Parked sync messages (from network).
     parked_sync_messages: Vec<InboxEntry>,
-    /// Sequenced server messages buffered for in-order application.
-    parked_sync_messages_by_server_seq: HashMap<ServerId, BTreeMap<u64, InboxEntry>>,
-    /// Next expected per-server stream sequence.
-    next_expected_server_seq: HashMap<ServerId, u64>,
-    /// Highest per-server stream sequence already applied to the inbox.
-    last_applied_server_seq: HashMap<ServerId, u64>,
     /// Subscription tracking with callbacks.
     subscriptions: HashMap<SubscriptionHandle, SubscriptionState>,
     /// Reverse map for routing updates.
@@ -445,9 +439,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
             storage_flush_error: None,
             sync_sender: None,
             parked_sync_messages: Vec::new(),
-            parked_sync_messages_by_server_seq: HashMap::new(),
-            next_expected_server_seq: HashMap::new(),
-            last_applied_server_seq: HashMap::new(),
             subscriptions: HashMap::new(),
             subscription_reverse: HashMap::new(),
             next_subscription_handle: 0,

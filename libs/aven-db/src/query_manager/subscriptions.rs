@@ -6,8 +6,7 @@ use std::{
 use crate::object::ObjectId;
 use crate::row_histories::RowVisibilityChange;
 use crate::storage::Storage;
-use crate::sync_manager::{DurabilityTier, QueryId, ServerId};
-use crate::sync_manager::{OutgoingQuerySubscription, QueryPropagation};
+use crate::sync_manager::{DurabilityTier, QueryPropagation};
 
 #[cfg(test)]
 use crate::row_format::decode_row;
@@ -22,15 +21,6 @@ use super::session::Session;
 use super::types::Value;
 use super::types::{ComposedBranchName, Schema, SchemaHash};
 
-type ReplayableQuerySubscription = (
-    QueryId,
-    Query,
-    Option<Session>,
-    Option<DurabilityTier>,
-    QueryPropagation,
-    Vec<String>,
-);
-
 pub(crate) struct SubscriptionExecutionOptions {
     pub(crate) local_updates: LocalUpdates,
     pub(crate) propagation: QueryPropagation,
@@ -40,10 +30,6 @@ pub(crate) struct SubscriptionExecutionOptions {
 impl QueryManager {
     pub(crate) fn policy_context_tables_for_graph(_graph: &super::graph::QueryGraph) -> Vec<String> {
         Vec::new()
-    }
-
-    fn should_send_local_subscription_upstream(&self, propagation: QueryPropagation) -> bool {
-        propagation == QueryPropagation::Full || !self.sync_manager.has_durability_identity()
     }
 
     /// Create a query builder for a table.
@@ -150,12 +136,10 @@ impl QueryManager {
 
         let id = QuerySubscriptionId(self.next_subscription_id);
         self.next_subscription_id += 1;
-        let query_frontier_settled_tier = (durability_tier.is_none()
-            || durability_tier
-                .is_some_and(|tier| self.sync_manager.has_local_durability_at_least(tier))
-            || !self.should_send_local_subscription_upstream(propagation)
-            || !self.sync_manager.has_servers_or_pending_servers())
-        .then_some(DurabilityTier::GlobalServer);
+        // Peer-mesh mode has no upstream servers, so a subscription's frontier is
+        // always considered settled at the top tier — there is no remote tier to
+        // wait on.
+        let query_frontier_settled_tier = Some(DurabilityTier::GlobalServer);
         tracing::debug!(
             sub_id = id.0,
             ?branches,
@@ -360,7 +344,6 @@ impl QueryManager {
         options: SubscriptionExecutionOptions,
     ) -> Result<QuerySubscriptionId, QueryError> {
         let overlay_row_ids: HashSet<_> = options.local_overlay_rows.keys().copied().collect();
-        let propagation = options.propagation;
         let sub_id = self.subscribe_with_session_and_propagation(
             query.clone(),
             session.clone(),
@@ -383,153 +366,15 @@ impl QueryManager {
             }
         }
 
-        let sync_query = self.sync_query_payload_for_upstream(&query);
-
-        // Send QuerySubscription to connected servers/tiers.
-        // local-only still needs to reach the directly connected storage tier
-        // (e.g. worker OPFS), and will be prevented from forwarding upstream.
-        if self.should_send_local_subscription_upstream(propagation) {
-            let query_id = QueryId(sub_id.0);
-            let policy_context_tables = self
-                .subscriptions
-                .get(&sub_id)
-                .map(|subscription| subscription.policy_context_tables.clone())
-                .unwrap_or_default();
-            self.sync_manager.send_query_subscription_to_servers(
-                query_id,
-                sync_query,
-                session,
-                durability_tier,
-                propagation,
-                policy_context_tables,
-            );
-        }
-
         Ok(sub_id)
-    }
-
-    pub fn add_server_with_storage<H: Storage>(
-        &mut self,
-        storage: &H,
-        server_id: ServerId,
-        skip_catalogue_sync: bool,
-    ) {
-        self.sync_manager
-            .add_server_with_storage(server_id, skip_catalogue_sync, storage);
-        self.replay_active_query_subscriptions_to_server(server_id);
     }
 
     /// Unsubscribe from a synced query.
     ///
-    /// This method:
-    /// 1. Removes the local subscription
-    /// 2. Sends a QueryUnsubscription to all connected servers
+    /// Removes the local subscription. Peer-mesh mode has no upstream servers to
+    /// notify.
     pub fn unsubscribe_with_sync(&mut self, id: QuerySubscriptionId) {
-        let propagation = self
-            .subscriptions
-            .get(&id)
-            .map(|sub| sub.propagation)
-            .unwrap_or(QueryPropagation::Full);
         self.subscriptions.remove(&id);
-
-        if self.should_send_local_subscription_upstream(propagation) {
-            let query_id = QueryId(id.0);
-            self.sync_manager
-                .send_query_unsubscription_to_servers(query_id);
-        }
-    }
-
-    /// Build the sync payload query for upstream forwarding.
-    ///
-    /// If branches are not explicitly set, upstream expects the current write branch
-    /// to be included so it can resolve schema context correctly.
-    fn sync_query_payload_for_upstream(&self, query: &Query) -> Query {
-        let mut sync_query = query.clone();
-        if sync_query.branches.is_empty() && self.schema_context.is_initialized() {
-            sync_query.branches = vec![self.schema_context.branch_name().as_str().to_string()];
-        }
-        sync_query
-    }
-
-    /// Replay all currently active local and downstream query subscriptions
-    /// to a newly added upstream server.
-    fn replay_active_query_subscriptions_to_server(&mut self, server_id: ServerId) {
-        let local_subs: Vec<ReplayableQuerySubscription> = self
-            .subscriptions
-            .iter()
-            .map(|(sub_id, sub)| {
-                (
-                    QueryId(sub_id.0),
-                    self.sync_query_payload_for_upstream(&sub.query),
-                    sub.session.clone(),
-                    sub.durability_tier,
-                    sub.propagation,
-                    sub.policy_context_tables.clone(),
-                )
-            })
-            .collect();
-
-        for (query_id, query, session, required_tier, propagation, policy_context_tables) in
-            local_subs
-        {
-            if self
-                .sync_manager
-                .consume_pending_query_subscription_marker(server_id, query_id)
-            {
-                continue;
-            }
-            if self.should_send_local_subscription_upstream(propagation) {
-                self.sync_manager.send_query_subscription_to_server(
-                    server_id,
-                    OutgoingQuerySubscription {
-                        query_id,
-                        query,
-                        session,
-                        required_tier,
-                        propagation,
-                        policy_context_tables,
-                    },
-                );
-            }
-        }
-
-        let downstream_subs: Vec<ReplayableQuerySubscription> = self
-            .server_subscriptions
-            .iter()
-            .filter(|(_, sub)| sub.propagation == QueryPropagation::Full)
-            .map(|((_, query_id), sub)| {
-                (
-                    *query_id,
-                    sub.query.clone(),
-                    sub.session.clone(),
-                    sub.required_tier,
-                    sub.propagation,
-                    sub.policy_context_tables.clone(),
-                )
-            })
-            .collect();
-
-        for (query_id, query, session, required_tier, propagation, policy_context_tables) in
-            downstream_subs
-        {
-            if self
-                .sync_manager
-                .consume_pending_query_subscription_marker(server_id, query_id)
-            {
-                continue;
-            }
-            self.sync_manager.send_query_subscription_to_server(
-                server_id,
-                OutgoingQuerySubscription {
-                    query_id,
-                    query,
-                    session,
-                    required_tier,
-                    propagation,
-                    policy_context_tables,
-                },
-            );
-        }
     }
 
     /// Take pending query updates.

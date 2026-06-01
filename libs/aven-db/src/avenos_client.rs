@@ -89,9 +89,7 @@ fn peer_outbound_callback(
     use crate::sync_targets::SyncTargetId;
 
     move |entry: OutboxEntry| {
-        let Destination::Client(peer_id) = entry.destination else {
-            return;
-        };
+        let Destination::Client(peer_id) = entry.destination;
         let Some(tt) = peer_transport.as_ref() else {
             return;
         };

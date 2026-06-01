@@ -84,8 +84,6 @@ pub use schema_manager::AppId;
 pub use sync_manager::PeerId;
 #[cfg(feature = "client-p2p")]
 pub use sync_manager::DurabilityTier;
-#[cfg(feature = "client-p2p")]
-pub use sync_manager::ServerId;
 
 /// Configuration for connecting to Jazz (AvenOS P2P client).
 #[cfg(feature = "client-p2p")]

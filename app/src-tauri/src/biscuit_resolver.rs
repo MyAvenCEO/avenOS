@@ -44,7 +44,6 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 				Ok(did) => did,
 				Err(_) => return CapDecision::DenyPermanent,
 			},
-			SyncTargetId::Server(_) => return CapDecision::DenyPermanent,
 		};
 
 		// 2. Resource → spark. Missing map = not hydrated yet → DEFER (never drop).

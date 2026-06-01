@@ -1,12 +1,9 @@
 use super::*;
 use crate::catalogue::CatalogueEntry;
 use crate::object::{BranchName, ObjectId};
-use crate::query_manager::types::SharedString;
 use crate::row_histories::StoredRowBatch;
-use crate::storage::{RowLocator, metadata_from_row_locator};
+use crate::storage::metadata_from_row_locator;
 use std::collections::HashMap;
-
-type RowSyncData = (SharedString, HashMap<String, String>, StoredRowBatch);
 
 impl SyncManager {
     fn scope_delivery_row(mut row: StoredRowBatch) -> StoredRowBatch {
@@ -14,92 +11,6 @@ impl SyncManager {
             row.parents.clear();
         }
         row
-    }
-
-    pub(super) fn queue_catalogue_sync_to_server_from_storage<H: Storage>(
-        &mut self,
-        server_id: ServerId,
-        storage: &H,
-    ) {
-        let Ok(entries) = storage.scan_catalogue_entries() else {
-            return;
-        };
-        for entry in entries {
-            self.catalogue_entries
-                .insert(entry.object_id, entry.clone());
-            self.queue_catalogue_entry_to_server(server_id, entry);
-        }
-    }
-
-    /// Queue all existing objects to sync to a new server using storage as the
-    /// source of truth for row history and current state.
-    pub(super) fn queue_full_sync_to_server_from_storage<H: Storage>(
-        &mut self,
-        server_id: ServerId,
-        storage: &H,
-    ) {
-        let _span =
-            tracing::debug_span!("queue_full_sync_to_server_from_storage", %server_id).entered();
-        let Ok(row_locators) = storage.scan_row_locators() else {
-            return;
-        };
-
-        let mut row_sync: Vec<RowSyncData> = Vec::new();
-
-        for (object_id, row_locator) in row_locators {
-            self.collect_row_sync_versions(storage, object_id, &row_locator, &mut row_sync);
-        }
-
-        for (table, metadata, row) in row_sync {
-            let mut visiting = std::collections::HashSet::new();
-            self.queue_row_to_server_with_missing_parents(
-                storage,
-                table.as_str(),
-                server_id,
-                metadata,
-                row,
-                &mut visiting,
-            );
-        }
-    }
-
-    fn collect_row_sync_versions<H: Storage>(
-        &self,
-        storage: &H,
-        object_id: ObjectId,
-        row_locator: &RowLocator,
-        row_sync: &mut Vec<RowSyncData>,
-    ) {
-        let metadata = metadata_from_row_locator(row_locator);
-        let Ok(rows) = storage.scan_history_row_batches(row_locator.table.as_str(), object_id)
-        else {
-            return;
-        };
-        let my_max_tier = self.max_local_durability_tier();
-
-        for row in rows.into_iter() {
-            // Skip rows already confirmed above our own tier — an upstream
-            // server has them. Without this, a user-role client replays every
-            // stored row (including ones authored by other users that it only
-            // observed via subscription) on every reconnect, which the server
-            // rejects under row-level update policies.
-            let effective_confirmed_tier = row.confirmed_tier.or_else(|| {
-                storage
-                    .load_authoritative_batch_fate(row.batch_id)
-                    .ok()
-                    .flatten()
-                    .and_then(|fate| fate.confirmed_tier())
-            });
-            let already_upstream = match (effective_confirmed_tier, my_max_tier) {
-                (None, _) => false,
-                (Some(_), None) => true,
-                (Some(row_tier), Some(local_tier)) => row_tier > local_tier,
-            };
-            if already_upstream {
-                continue;
-            }
-            row_sync.push((row_locator.table.clone(), metadata.clone(), row));
-        }
     }
 
     pub(super) fn queue_catalogue_sync_to_client_from_storage<H: Storage>(
@@ -124,7 +35,6 @@ impl SyncManager {
             return;
         }
 
-        self.forward_catalogue_entry_to_servers(entry.clone());
         self.forward_catalogue_entry_to_clients(entry, None);
     }
 
@@ -156,25 +66,11 @@ impl SyncManager {
         true
     }
 
-    fn queue_catalogue_entry_to_server(&mut self, server_id: ServerId, entry: CatalogueEntry) {
-        self.outbox.push(OutboxEntry {
-            destination: Destination::Server(server_id),
-            payload: SyncPayload::CatalogueEntryUpdated { entry },
-        });
-    }
-
     fn queue_catalogue_entry_to_client(&mut self, client_id: PeerId, entry: CatalogueEntry) {
         self.outbox.push(OutboxEntry {
             destination: Destination::Client(client_id),
             payload: SyncPayload::CatalogueEntryUpdated { entry },
         });
-    }
-
-    pub(super) fn forward_catalogue_entry_to_servers(&mut self, entry: CatalogueEntry) {
-        let server_ids: Vec<_> = self.servers.keys().copied().collect();
-        for server_id in server_ids {
-            self.queue_catalogue_entry_to_server(server_id, entry.clone());
-        }
     }
 
     pub(super) fn forward_catalogue_entry_to_clients(
@@ -191,63 +87,6 @@ impl SyncManager {
         for client_id in client_ids {
             self.queue_catalogue_entry_to_client(client_id, entry.clone());
         }
-    }
-
-    pub(super) fn queue_row_to_server_with_metadata(
-        &mut self,
-        server_id: ServerId,
-        object_id: ObjectId,
-        metadata: HashMap<String, String>,
-        row: StoredRowBatch,
-        include_metadata: bool,
-    ) {
-        if metadata
-            .get(crate::metadata::MetadataKey::NoSync.as_str())
-            .map(|v| v == "true")
-            .unwrap_or(false)
-        {
-            return;
-        }
-
-        let branch_name = BranchName::new(&row.branch);
-        let batch_id = row.batch_id;
-        let already_sent = {
-            let Some(server) = self.servers.get(&server_id) else {
-                return;
-            };
-            server
-                .sent_batch_ids
-                .get(&(object_id, branch_name))
-                .cloned()
-                .unwrap_or_default()
-        };
-
-        if already_sent.contains(&batch_id) && !include_metadata {
-            return;
-        }
-
-        let Some(server) = self.servers.get_mut(&server_id) else {
-            return;
-        };
-        if include_metadata {
-            server.sent_metadata.insert(object_id);
-        }
-        server
-            .sent_batch_ids
-            .entry((object_id, branch_name))
-            .or_default()
-            .insert(batch_id);
-
-        self.outbox.push(OutboxEntry {
-            destination: Destination::Server(server_id),
-            payload: SyncPayload::RowBatchCreated {
-                metadata: include_metadata.then_some(RowMetadata {
-                    id: object_id,
-                    metadata,
-                }),
-                row,
-            },
-        });
     }
 
     pub(super) fn queue_initial_row_to_client_with_storage<H: Storage + ?Sized>(

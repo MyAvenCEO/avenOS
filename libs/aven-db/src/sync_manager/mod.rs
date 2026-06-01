@@ -1,12 +1,8 @@
 use std::collections::{HashMap, HashSet};
-use std::time::Duration;
 
-use web_time::Instant;
-
-use crate::batch_fate::{BatchFate, SealedBatchSubmission};
+use crate::batch_fate::BatchFate;
 use crate::catalogue::CatalogueEntry;
 use crate::object::{BranchName, ObjectId};
-use crate::query_manager::query::Query;
 use crate::query_manager::session::Session;
 use crate::query_manager::types::SchemaHash;
 use crate::row_histories::{BatchId, RowVisibilityChange};
@@ -25,19 +21,6 @@ use clock::MonotonicClock;
 // Re-export all public types
 pub use types::*;
 
-/// How long an installed transport may sit in `pending_servers` before callers
-/// treat it as offline.
-pub const PENDING_SERVER_TIMEOUT: Duration = Duration::from_secs(2);
-
-#[derive(Clone)]
-pub(crate) struct OutgoingQuerySubscription {
-    pub(crate) query_id: QueryId,
-    pub(crate) query: Query,
-    pub(crate) session: Option<Session>,
-    pub(crate) required_tier: Option<DurabilityTier>,
-    pub(crate) propagation: QueryPropagation,
-    pub(crate) policy_context_tables: Vec<String>,
-}
 
 // ============================================================================
 // SyncManager
@@ -54,9 +37,6 @@ pub struct SyncManager {
     pub(super) catalogue_entries: HashMap<ObjectId, CatalogueEntry>,
     pub(super) allow_unprivileged_schema_catalogue_writes: bool,
 
-    pub(super) servers: HashMap<ServerId, ServerState>,
-    pub(super) pending_servers: HashMap<ServerId, Instant>,
-    pub(super) pending_server_query_subscriptions: HashSet<(ServerId, QueryId)>,
     pub(super) clients: HashMap<PeerId, ClientState>,
 
     pub(super) inbox: Vec<InboxEntry>,
@@ -83,10 +63,6 @@ pub struct SyncManager {
 
     /// Tracks which clients originated each query (for relaying QuerySettled).
     pub(super) query_origin: HashMap<QueryId, HashSet<PeerId>>,
-    /// Latest remote scope snapshots keyed by upstream server and query id.
-    pub(super) remote_query_scopes: HashMap<(ServerId, QueryId), HashSet<(ObjectId, BranchName)>>,
-    /// Durability tier associated with each latest remote scope snapshot.
-    pub(super) remote_query_scope_tiers: HashMap<(ServerId, QueryId), DurabilityTier>,
     /// Query ids whose remote scope changed since the last QueryManager process.
     pub(super) remote_query_scope_dirty: HashSet<QueryId>,
     /// Pending QuerySettled notifications for QueryManager to process.
@@ -121,8 +97,6 @@ impl std::fmt::Debug for SyncManager {
                 "allow_unprivileged_schema_catalogue_writes",
                 &self.allow_unprivileged_schema_catalogue_writes,
             )
-            .field("servers", &self.servers)
-            .field("pending_servers", &self.pending_servers)
             .field("clients", &self.clients)
             .field("inbox", &self.inbox)
             .field("outbox", &self.outbox)
@@ -144,8 +118,6 @@ impl std::fmt::Debug for SyncManager {
             .field("row_batch_interest", &self.row_batch_interest)
             .field("batch_fate_interest", &self.batch_fate_interest)
             .field("query_origin", &self.query_origin)
-            .field("remote_query_scopes", &self.remote_query_scopes)
-            .field("remote_query_scope_tiers", &self.remote_query_scope_tiers)
             .field("pending_query_settled", &self.pending_query_settled)
             .field("pending_query_rejections", &self.pending_query_rejections)
             .field("pending_batch_fates", &self.pending_batch_fates)
@@ -188,53 +160,12 @@ pub(crate) fn log_schema_warning(
     );
 }
 
-pub(crate) fn log_connection_schema_diagnostics(
-    diagnostics: &ConnectionSchemaDiagnostics,
-    origin: Option<&str>,
-) {
-    let client_hash = short_hash(&diagnostics.client_schema_hash);
-
-    if let Some(permissions_hash) = diagnostics.disconnected_permissions_schema_hash {
-        let permissions_hash = short_hash(&permissions_hash);
-        tracing::error!(
-            origin = origin,
-            client_schema_hash = %client_hash,
-            permissions_schema_hash = %permissions_hash,
-            "Your declared schema {} is disconnected from the schema used to enforce permissions: {}. Reads and writes may fail until you add a migration. To recover, run `npx jazz-tools@alpha migrations create --fromHash {} --toHash {}`.",
-            client_hash,
-            permissions_hash,
-            permissions_hash,
-            client_hash,
-        );
-    }
-
-    if !diagnostics.unreachable_schema_hashes.is_empty() {
-        let unreachable_hashes: Vec<String> = diagnostics
-            .unreachable_schema_hashes
-            .iter()
-            .map(short_hash)
-            .collect();
-        tracing::trace!(
-            origin = origin,
-            client_schema_hash = %client_hash,
-            unreachable_schema_hashes = ?unreachable_hashes,
-            "Server knows schema branches that are unreachable from your declared schema {}: {}. Some data may be missing from reads until you add migrations. To recover, run `npx jazz-tools@alpha migrations create --fromHash <unreachableHash> --toHash {}` for each listed schema.",
-            client_hash,
-            unreachable_hashes.join(", "),
-            client_hash,
-        );
-    }
-}
-
 impl SyncManager {
     pub fn new() -> Self {
         Self {
             clock: MonotonicClock::new(),
             catalogue_entries: HashMap::new(),
             allow_unprivileged_schema_catalogue_writes: false,
-            servers: HashMap::new(),
-            pending_servers: HashMap::new(),
-            pending_server_query_subscriptions: HashSet::new(),
             clients: HashMap::new(),
             inbox: Vec::new(),
             outbox: Vec::new(),
@@ -247,8 +178,6 @@ impl SyncManager {
             row_batch_interest: HashMap::new(),
             batch_fate_interest: HashMap::new(),
             query_origin: HashMap::new(),
-            remote_query_scopes: HashMap::new(),
-            remote_query_scope_tiers: HashMap::new(),
             remote_query_scope_dirty: HashSet::new(),
             pending_query_settled: Vec::new(),
             pending_query_rejections: Vec::new(),
@@ -310,11 +239,6 @@ impl SyncManager {
         self.my_tiers.clone()
     }
 
-    /// True when this runtime currently has at least one upstream server.
-    pub fn has_connected_servers(&self) -> bool {
-        !self.servers.is_empty()
-    }
-
     /// Return the strongest durability tier this node can attest to locally.
     pub fn max_local_durability_tier(&self) -> Option<DurabilityTier> {
         self.my_tiers.iter().copied().max()
@@ -332,18 +256,6 @@ impl SyncManager {
         }
 
         let mut connections = 0usize;
-        for (server_id, state) in &self.servers {
-            connections += std::mem::size_of_val(server_id);
-            connections += std::mem::size_of_val(state);
-            connections += 48;
-            connections += state.sent_metadata.len() * std::mem::size_of::<ObjectId>();
-            for ((object_id, branch_name), batch_ids) in &state.sent_batch_ids {
-                connections += std::mem::size_of_val(object_id);
-                connections += std::mem::size_of_val(branch_name);
-                connections += batch_ids.len() * std::mem::size_of::<BatchId>();
-                connections += 48;
-            }
-        }
         for (client_id, state) in &self.clients {
             connections += std::mem::size_of_val(client_id);
             connections += std::mem::size_of_val(state);
@@ -381,11 +293,6 @@ impl SyncManager {
             subscriptions += clients.len() * std::mem::size_of::<PeerId>();
             subscriptions += 48;
         }
-        for (key, scope) in &self.remote_query_scopes {
-            subscriptions += std::mem::size_of_val(key);
-            subscriptions += scope.len() * std::mem::size_of::<(ObjectId, BranchName)>();
-            subscriptions += 48;
-        }
 
         let queues = self.inbox.len() * std::mem::size_of::<InboxEntry>()
             + self.outbox.len() * std::mem::size_of::<OutboxEntry>()
@@ -414,108 +321,6 @@ impl SyncManager {
     // ========================================================================
     // Connection Management
     // ========================================================================
-
-    /// Add a server connection using storage-backed current-state replay.
-    pub fn add_server_with_storage<H: Storage>(
-        &mut self,
-        server_id: ServerId,
-        skip_catalogue_sync: bool,
-        storage: &H,
-    ) {
-        self.pending_servers.remove(&server_id);
-        self.servers.insert(server_id, ServerState::default());
-        self.queue_full_sync_to_server_from_storage(server_id, storage);
-        if !skip_catalogue_sync {
-            self.queue_catalogue_sync_to_server_from_storage(server_id, storage);
-        }
-    }
-
-    pub fn add_pending_server(&mut self, server_id: ServerId) {
-        if self.servers.contains_key(&server_id) {
-            return;
-        }
-        self.pending_servers.insert(server_id, Instant::now());
-    }
-
-    pub fn remove_pending_server(&mut self, server_id: ServerId) {
-        self.pending_servers.remove(&server_id);
-        self.pending_server_query_subscriptions
-            .retain(|(id, _)| *id != server_id);
-    }
-
-    pub fn server_ids(&self) -> impl Iterator<Item = ServerId> + '_ {
-        self.servers.keys().copied()
-    }
-
-    pub fn has_servers_or_pending_servers(&self) -> bool {
-        if !self.servers.is_empty() {
-            return true;
-        }
-        let now = Instant::now();
-        self.pending_servers
-            .values()
-            .any(|since| now.duration_since(*since) < PENDING_SERVER_TIMEOUT)
-    }
-
-    pub fn request_batch_fates_from_server(
-        &mut self,
-        server_id: ServerId,
-        mut batch_ids: Vec<crate::row_histories::BatchId>,
-    ) {
-        if batch_ids.is_empty() {
-            return;
-        }
-        batch_ids.sort();
-        batch_ids.dedup();
-
-        self.outbox.push(OutboxEntry {
-            destination: Destination::Server(server_id),
-            payload: SyncPayload::BatchFateNeeded { batch_ids },
-        });
-    }
-
-    pub fn seal_batch_to_servers(&mut self, submission: SealedBatchSubmission) {
-        for server_id in self.outbound_server_ids() {
-            self.outbox.push(OutboxEntry {
-                destination: Destination::Server(server_id),
-                payload: SyncPayload::SealBatch {
-                    submission: submission.clone(),
-                },
-            });
-        }
-    }
-
-    fn outbound_server_ids(&self) -> Vec<ServerId> {
-        let now = Instant::now();
-        let mut server_ids: Vec<_> = self.servers.keys().copied().collect();
-        server_ids.extend(
-            self.pending_servers
-                .iter()
-                .filter(|(_, since)| now.duration_since(**since) < PENDING_SERVER_TIMEOUT)
-                .map(|(server_id, _)| *server_id),
-        );
-        server_ids
-    }
-
-    /// Remove a server connection.
-    pub fn remove_server(&mut self, server_id: ServerId) {
-        self.servers.remove(&server_id);
-        self.pending_servers.remove(&server_id);
-        self.pending_server_query_subscriptions
-            .retain(|(id, _)| *id != server_id);
-        let mut removed_query_ids = HashSet::new();
-        self.remote_query_scopes
-            .retain(|(remote_server_id, query_id), _| {
-                let keep = *remote_server_id != server_id;
-                if !keep {
-                    removed_query_ids.insert(*query_id);
-                }
-                keep
-            });
-        self.remote_query_scope_tiers
-            .retain(|(remote_server_id, _), _| *remote_server_id != server_id);
-        self.remote_query_scope_dirty.extend(removed_query_ids);
-    }
 
     /// Add a client connection without automatically replaying catalogue state.
     pub fn add_client(&mut self, client_id: PeerId) {
@@ -589,15 +394,6 @@ impl SyncManager {
         self.outbox
             .retain(|e| e.destination != Destination::Client(client_id));
         true
-    }
-
-    /// Get server state.
-    pub fn get_server(&self, server_id: ServerId) -> Option<&ServerState> {
-        self.servers.get(&server_id)
-    }
-
-    pub fn has_servers(&self) -> bool {
-        !self.servers.is_empty()
     }
 
     /// Get client state.
@@ -914,110 +710,6 @@ impl SyncManager {
         });
     }
 
-    /// Send a QuerySubscription to all connected servers.
-    ///
-    /// Called by QueryManager when a client creates a subscription that should
-    /// be forwarded upstream for server-side evaluation.
-    pub fn send_query_subscription_to_servers(
-        &mut self,
-        query_id: QueryId,
-        query: Query,
-        session: Option<Session>,
-        required_tier: Option<DurabilityTier>,
-        propagation: QueryPropagation,
-        policy_context_tables: Vec<String>,
-    ) {
-        let server_ids = self.outbound_server_ids();
-        tracing::trace!(
-            server_count = server_ids.len(),
-            query_id = query_id.0,
-            table = %query.table,
-            ?propagation,
-            "jazz trace send query subscription to servers"
-        );
-        for server_id in server_ids {
-            self.send_query_subscription_to_server(
-                server_id,
-                OutgoingQuerySubscription {
-                    query_id,
-                    query: query.clone(),
-                    session: session.clone(),
-                    required_tier,
-                    propagation,
-                    policy_context_tables: policy_context_tables.clone(),
-                },
-            );
-        }
-    }
-
-    /// Send a QuerySubscription to one specific server.
-    ///
-    /// Used when replaying existing subscriptions after a late server connect.
-    pub(crate) fn send_query_subscription_to_server(
-        &mut self,
-        server_id: ServerId,
-        subscription: OutgoingQuerySubscription,
-    ) {
-        let OutgoingQuerySubscription {
-            query_id,
-            query,
-            session,
-            required_tier,
-            propagation,
-            policy_context_tables,
-        } = subscription;
-        let is_connected = self.servers.contains_key(&server_id);
-        let is_pending = self.pending_servers.contains_key(&server_id);
-        if !is_connected && !is_pending {
-            return;
-        }
-
-        tracing::trace!(
-            %server_id,
-            query_id = query_id.0,
-            table = %query.table,
-            ?propagation,
-            "jazz trace sending query subscription upstream"
-        );
-        self.outbox.push(OutboxEntry {
-            destination: Destination::Server(server_id),
-            payload: SyncPayload::QuerySubscription {
-                query_id,
-                query: Box::new(query),
-                session,
-                required_tier,
-                propagation,
-                policy_context_tables,
-            },
-        });
-
-        if !is_connected && is_pending {
-            self.pending_server_query_subscriptions
-                .insert((server_id, query_id));
-        }
-    }
-
-    pub(crate) fn consume_pending_query_subscription_marker(
-        &mut self,
-        server_id: ServerId,
-        query_id: QueryId,
-    ) -> bool {
-        self.pending_server_query_subscriptions
-            .remove(&(server_id, query_id))
-    }
-
-    /// Send a QueryUnsubscription to all connected servers.
-    ///
-    /// Called by QueryManager when a client unsubscribes from a synced query.
-    pub fn send_query_unsubscription_to_servers(&mut self, query_id: QueryId) {
-        for server_id in self.outbound_server_ids() {
-            self.outbox.push(OutboxEntry {
-                destination: Destination::Server(server_id),
-                payload: SyncPayload::QueryUnsubscription { query_id },
-            });
-        }
-    }
-
     /// Take pending QuerySettled notifications for QueryManager to process.
     pub fn take_pending_query_settled(&mut self) -> Vec<PendingQuerySettled> {
         std::mem::take(&mut self.pending_query_settled)
@@ -1033,54 +725,34 @@ impl SyncManager {
         std::mem::take(&mut self.pending_query_rejections)
     }
 
-    /// Return the union of latest upstream scope snapshots for this query.
-    pub fn remote_query_scope(&self, query_id: QueryId) -> HashSet<(ObjectId, BranchName)> {
-        self.remote_query_scopes
-            .iter()
-            .filter(|((_, remote_query_id), _)| *remote_query_id == query_id)
-            .flat_map(|(_, scope)| scope.iter().copied())
-            .collect()
+    /// Peer-mesh mode has no upstream servers, so no remote scope snapshots ever
+    /// arrive — this is always empty.
+    pub fn remote_query_scope(&self, _query_id: QueryId) -> HashSet<(ObjectId, BranchName)> {
+        HashSet::new()
     }
 
-    /// Return the union of latest upstream scope snapshots at or above the
-    /// requested tier for this query.
+    /// Peer-mesh mode has no upstream servers, so no remote scope snapshots ever
+    /// arrive — this is always empty.
     pub fn remote_query_scope_at_least(
         &self,
-        query_id: QueryId,
-        requested_tier: DurabilityTier,
+        _query_id: QueryId,
+        _requested_tier: DurabilityTier,
     ) -> HashSet<(ObjectId, BranchName)> {
-        self.remote_query_scopes
-            .iter()
-            .filter(|((server_id, remote_query_id), _)| {
-                *remote_query_id == query_id
-                    && self
-                        .remote_query_scope_tiers
-                        .get(&(*server_id, *remote_query_id))
-                        .is_some_and(|tier| *tier >= requested_tier)
-            })
-            .flat_map(|(_, scope)| scope.iter().copied())
-            .collect()
+        HashSet::new()
     }
 
-    /// Whether we have received at least one upstream scope snapshot for this query.
-    pub fn has_remote_query_scope_snapshot(&self, query_id: QueryId) -> bool {
-        self.remote_query_scopes
-            .keys()
-            .any(|(_, remote_query_id)| *remote_query_id == query_id)
+    /// Peer-mesh mode has no upstream servers, so no remote scope snapshots ever arrive.
+    pub fn has_remote_query_scope_snapshot(&self, _query_id: QueryId) -> bool {
+        false
     }
 
-    /// Whether we have received at least one upstream scope snapshot for this
-    /// query at a tier that can authoritatively satisfy the requested tier.
+    /// Peer-mesh mode has no upstream servers, so no remote scope snapshots ever arrive.
     pub fn has_remote_query_scope_snapshot_at_least(
         &self,
-        query_id: QueryId,
-        requested_tier: DurabilityTier,
+        _query_id: QueryId,
+        _requested_tier: DurabilityTier,
     ) -> bool {
-        self.remote_query_scope_tiers
-            .iter()
-            .any(|((_, remote_query_id), tier)| {
-                *remote_query_id == query_id && *tier >= requested_tier
-            })
+        false
     }
 
     /// Take query ids whose upstream scope changed since the last process pass.
@@ -1144,28 +816,6 @@ impl SyncManager {
                 through_seq: 0,
             },
         });
-    }
-
-    pub(crate) fn relay_query_settled_to_origins(
-        &mut self,
-        server_id: ServerId,
-        query_id: QueryId,
-        tier: DurabilityTier,
-    ) {
-        let Some(scope) = self
-            .remote_query_scopes
-            .get(&(server_id, query_id))
-            .cloned()
-        else {
-            return;
-        };
-        let Some(clients) = self.query_origin.get(&query_id).cloned() else {
-            return;
-        };
-
-        for client_id in clients {
-            self.emit_query_settled(client_id, query_id, tier, &scope);
-        }
     }
 
     /// Emit a schema warning to a client.

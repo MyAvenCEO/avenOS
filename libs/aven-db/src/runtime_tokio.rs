@@ -32,9 +32,7 @@ use crate::runtime_core::{
 use crate::schema_manager::manager::{CurrentPermissionsSummary, PermissionsHeadSummary};
 use crate::schema_manager::{Lens, QuerySchemaContext, SchemaManager};
 use crate::storage::Storage;
-use crate::sync_manager::{
-    PeerId, DurabilityTier, InboxEntry, OutboxEntry, QueryPropagation, ServerId,
-};
+use crate::sync_manager::{PeerId, DurabilityTier, InboxEntry, OutboxEntry, QueryPropagation};
 
 // ============================================================================
 // TokioScheduler
@@ -545,52 +543,6 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         for entry in entries {
             core.park_sync_message(entry);
         }
-        Ok(())
-    }
-
-    /// Push a sync message with an explicit stream sequence (from network).
-    pub fn push_sync_inbox_with_sequence(
-        &self,
-        entry: InboxEntry,
-        sequence: u64,
-    ) -> Result<(), RuntimeError> {
-        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        core.park_sync_message_with_sequence(entry, sequence);
-        Ok(())
-    }
-
-    /// Set the next expected stream sequence for a server.
-    pub fn set_server_next_sequence(
-        &self,
-        server_id: ServerId,
-        next_sequence: u64,
-    ) -> Result<(), RuntimeError> {
-        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        core.set_next_expected_server_sequence(server_id, next_sequence);
-        Ok(())
-    }
-
-    /// Add a server connection.
-    pub fn add_server(&self, server_id: ServerId) -> Result<(), RuntimeError> {
-        self.add_server_with_catalogue_state_hash(server_id, None)
-    }
-
-    /// Add a server connection, optionally comparing the upstream catalogue
-    /// digest first so unchanged catalogue objects are not replayed.
-    pub fn add_server_with_catalogue_state_hash(
-        &self,
-        server_id: ServerId,
-        remote_catalogue_state_hash: Option<&str>,
-    ) -> Result<(), RuntimeError> {
-        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        core.add_server_with_catalogue_state_hash(server_id, remote_catalogue_state_hash);
-        Ok(())
-    }
-
-    /// Remove a server connection.
-    pub fn remove_server(&self, server_id: ServerId) -> Result<(), RuntimeError> {
-        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        core.remove_server(server_id);
         Ok(())
     }
 

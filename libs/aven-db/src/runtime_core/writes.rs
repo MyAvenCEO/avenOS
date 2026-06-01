@@ -885,10 +885,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
                 RuntimeError::WriteError(format!("persist sealed batch submission: {err}"))
             })?;
         self.local_batch_record_cache.insert(batch_id, record);
-        self.schema_manager
-            .query_manager_mut()
-            .sync_manager_mut()
-            .seal_batch_to_servers(submission);
         self.mark_storage_write_pending_flush();
         self.immediate_tick();
         Ok(())

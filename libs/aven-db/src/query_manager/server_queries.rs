@@ -698,25 +698,6 @@ impl QueryManager {
                 }
             }
 
-            // Forward QuerySubscription to upstream servers (multi-tier forwarding)
-            // This allows hub servers to know about the query and push matching data
-            if sub.propagation == crate::sync_manager::QueryPropagation::Full {
-                tracing::trace!(
-                    %sub.client_id,
-                    query_id = sub.query_id.0,
-                    table = %sub.query.table,
-                    "jazz trace forwarding downstream query subscription upstream"
-                );
-                self.sync_manager.send_query_subscription_to_servers(
-                    sub.query_id,
-                    sub.query.clone(),
-                    session_for_policy.clone(),
-                    None,
-                    sub.propagation,
-                    sub.policy_context_tables.clone(),
-                );
-            }
-
             // Store the server subscription for reactive updates
             self.server_subscriptions.insert(
                 (sub.client_id, sub.query_id),
@@ -768,17 +749,8 @@ impl QueryManager {
         let pending = self.sync_manager.take_pending_query_unsubscriptions();
 
         for unsub in pending {
-            let propagation = self
-                .server_subscriptions
-                .remove(&(unsub.client_id, unsub.query_id))
-                .map(|sub| sub.propagation)
-                .unwrap_or(crate::sync_manager::QueryPropagation::Full);
-
-            if propagation == crate::sync_manager::QueryPropagation::Full {
-                // Forward unsubscription to upstream servers
-                self.sync_manager
-                    .send_query_unsubscription_to_servers(unsub.query_id);
-            }
+            self.server_subscriptions
+                .remove(&(unsub.client_id, unsub.query_id));
         }
     }
 

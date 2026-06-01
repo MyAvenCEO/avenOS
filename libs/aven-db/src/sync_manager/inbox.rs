@@ -13,22 +13,21 @@ use crate::storage::{
 use std::collections::{HashMap, HashSet};
 
 struct AppliedRowBatch {
-    metadata: HashMap<String, String>,
     row: StoredRowBatch,
     visibility_change: Option<RowVisibilityChange>,
 }
 
-/// Whether applying a visible row should also record this server's
-/// authoritative fate for the row's batch.
+/// Whether applying a visible row should also record this node's authoritative
+/// fate for the row's batch. Peer-mesh mode never records fates on inbound apply,
+/// so `Skip` is the only variant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum AuthoritativeFateRecording {
     Skip,
-    AcceptedByLocalAuthority,
 }
 
 impl AuthoritativeFateRecording {
     fn should_record(self) -> bool {
-        matches!(self, Self::AcceptedByLocalAuthority)
+        matches!(self, Self::Skip if false)
     }
 }
 
@@ -375,7 +374,6 @@ impl SyncManager {
         }
 
         Some(AppliedRowBatch {
-            metadata,
             row,
             visibility_change,
         })
@@ -396,12 +394,6 @@ impl SyncManager {
             match destination {
                 Destination::Client(client_id) => {
                     self.queue_batch_fate_to_client_unfiltered(client_id, fate);
-                }
-                Destination::Server(_) => {
-                    self.outbox.push(OutboxEntry {
-                        destination: destination.clone(),
-                        payload: SyncPayload::BatchFate { fate },
-                    });
                 }
             }
         }
@@ -498,30 +490,6 @@ impl SyncManager {
         rows
     }
 
-    fn known_transactional_batch_rows_for_fate<H: Storage>(
-        &self,
-        storage: &H,
-        batch_id: crate::row_histories::BatchId,
-    ) -> Vec<(String, StoredRowBatch)> {
-        let mut object_ids = HashSet::new();
-        for scope in self.remote_query_scopes.values() {
-            object_ids.extend(scope.iter().map(|(object_id, _)| *object_id));
-        }
-        for key in self.row_batch_interest.keys() {
-            if key.batch_id == batch_id {
-                object_ids.insert(key.row_id);
-            }
-        }
-        if let Ok(Some(submission)) = storage.load_sealed_batch_submission(batch_id) {
-            object_ids.extend(submission.members.iter().map(|member| member.object_id));
-        }
-        self.transactional_batch_rows(
-            storage,
-            batch_id,
-            &object_ids.into_iter().collect::<Vec<_>>(),
-        )
-    }
-
     fn apply_transactional_batch_fate_to_rows<H: Storage>(
         &mut self,
         storage: &mut H,
@@ -529,7 +497,6 @@ impl SyncManager {
         fate: &BatchFate,
         batch_rows: &[(String, StoredRowBatch)],
     ) {
-        let server_ids: Vec<_> = self.servers.keys().copied().collect();
         match fate {
             BatchFate::DurableDirect { .. } => {
                 for (_table, row) in batch_rows {
@@ -542,27 +509,6 @@ impl SyncManager {
                         apply_row_batch(storage, row_id, &branch_name, direct_row.clone(), &[])
                             .ok();
 
-                    let metadata = storage
-                        .load_row_locator(row_id)
-                        .ok()
-                        .flatten()
-                        .map(|locator| metadata_from_row_locator(&locator));
-
-                    if let Some(metadata) = metadata {
-                        for server_id in &server_ids {
-                            self.outbox.push(OutboxEntry {
-                                destination: Destination::Server(*server_id),
-                                payload: SyncPayload::RowBatchNeeded {
-                                    metadata: Some(RowMetadata {
-                                        id: row_id,
-                                        metadata: metadata.clone(),
-                                    }),
-                                    row: direct_row.clone(),
-                                },
-                            });
-                        }
-                    }
-
                     if let Some(applied) = applied
                         && let Some(update) = applied.visibility_change
                     {
@@ -582,13 +528,6 @@ impl SyncManager {
                             );
                         }
                     }
-                }
-
-                for server_id in &server_ids {
-                    self.outbox.push(OutboxEntry {
-                        destination: Destination::Server(*server_id),
-                        payload: SyncPayload::BatchFate { fate: fate.clone() },
-                    });
                 }
             }
             BatchFate::AcceptedTransaction { confirmed_tier, .. } => {
@@ -600,27 +539,6 @@ impl SyncManager {
                         apply_row_batch(storage, row_id, &branch_name, accepted_row.clone(), &[])
                             .ok();
 
-                    let metadata = storage
-                        .load_row_locator(row_id)
-                        .ok()
-                        .flatten()
-                        .map(|locator| metadata_from_row_locator(&locator));
-
-                    if let Some(metadata) = metadata {
-                        for server_id in &server_ids {
-                            self.outbox.push(OutboxEntry {
-                                destination: Destination::Server(*server_id),
-                                payload: SyncPayload::RowBatchNeeded {
-                                    metadata: Some(RowMetadata {
-                                        id: row_id,
-                                        metadata: metadata.clone(),
-                                    }),
-                                    row: accepted_row.clone(),
-                                },
-                            });
-                        }
-                    }
-
                     if let Some(applied) = applied
                         && let Some(update) = applied.visibility_change
                     {
@@ -640,13 +558,6 @@ impl SyncManager {
                             );
                         }
                     }
-                }
-
-                for server_id in &server_ids {
-                    self.outbox.push(OutboxEntry {
-                        destination: Destination::Server(*server_id),
-                        payload: SyncPayload::BatchFate { fate: fate.clone() },
-                    });
                 }
             }
             BatchFate::Rejected { .. } => {
@@ -698,36 +609,6 @@ impl SyncManager {
                 payload: SyncPayload::BatchFate { fate: fate.clone() },
             });
         }
-    }
-
-    fn apply_authoritative_transaction_fate_for_row<H: Storage>(
-        &mut self,
-        storage: &mut H,
-        row: &StoredRowBatch,
-    ) {
-        let fate = match storage.load_authoritative_batch_fate(row.batch_id) {
-            Ok(Some(fate @ BatchFate::AcceptedTransaction { .. })) => fate,
-            Ok(Some(_)) | Ok(None) => return,
-            Err(error) => {
-                tracing::warn!(
-                    batch_id = ?row.batch_id,
-                    %error,
-                    "failed to load authoritative batch fate for received row"
-                );
-                return;
-            }
-        };
-
-        let rows = vec![(
-            storage
-                .load_row_locator(row.row_id)
-                .ok()
-                .flatten()
-                .map(|locator| locator.table.to_string())
-                .unwrap_or_default(),
-            row.clone(),
-        )];
-        self.apply_transactional_batch_fate_to_rows(storage, None, &fate, &rows);
     }
 
     fn reject_sealed_transactional_batch<H: Storage>(
@@ -1061,168 +942,9 @@ impl SyncManager {
     pub(super) fn process_inbox_entry<H: Storage>(&mut self, storage: &mut H, entry: InboxEntry) {
         tracing::trace!(source = ?entry.source, payload = entry.payload.variant_name(), "processing inbox entry");
         match entry.source {
-            Source::Server(server_id) => {
-                self.process_from_server(storage, server_id, entry.payload)
-            }
             Source::Client(client_id) => {
                 self.process_from_client(storage, client_id, entry.payload)
             }
-        }
-    }
-
-    /// Process a payload from a server.
-    pub(super) fn process_from_server<H: Storage>(
-        &mut self,
-        storage: &mut H,
-        server_id: ServerId,
-        payload: SyncPayload,
-    ) {
-        let _span = tracing::debug_span!("process_from_server", %server_id, payload = payload.variant_name()).entered();
-        match payload {
-            SyncPayload::CatalogueEntryUpdated { entry } => {
-                tracing::debug!(
-                    object_id = %entry.object_id,
-                    object_type = ?entry.object_type(),
-                    "server→CatalogueEntryUpdated"
-                );
-                if self.persist_catalogue_entry(storage, entry.clone()) {
-                    self.pending_catalogue_updates.push(entry.clone());
-                    self.forward_catalogue_entry_to_clients(entry, None);
-                }
-            }
-            SyncPayload::RowBatchCreated { metadata, row }
-            | SyncPayload::RowBatchNeeded { metadata, row } => {
-                let object_id = row.row_id;
-                let branch_name = BranchName::new(&row.branch);
-                tracing::debug!(
-                    %object_id,
-                    %branch_name,
-                    "server→row-batch payload"
-                );
-                if let Some(applied) = self.apply_row_updated(
-                    storage,
-                    metadata,
-                    row.clone(),
-                    AuthoritativeFateRecording::AcceptedByLocalAuthority,
-                ) {
-                    self.apply_authoritative_transaction_fate_for_row(storage, &applied.row);
-
-                    if let Some(update) = applied.visibility_change {
-                        self.pending_row_visibility_changes.push(update);
-                        self.forward_update_to_clients_with_storage(
-                            storage,
-                            object_id,
-                            branch_name,
-                        );
-                    }
-                }
-            }
-            SyncPayload::BatchFate { fate } => {
-                match self.persist_authoritative_batch_fate(storage, &fate) {
-                    Ok(_) => self.pending_batch_fates.push(fate.clone()),
-                    Err(_) => return,
-                }
-                if let BatchFate::AcceptedTransaction { batch_id, .. } = fate {
-                    let rows = self.known_transactional_batch_rows_for_fate(storage, batch_id);
-                    self.apply_transactional_batch_fate_to_rows(storage, None, &fate, &rows);
-                }
-                let interested = self.interested_clients_for_batch_fate(&fate);
-                for cid in interested {
-                    if let Some(fate) = self.batch_fate_for_client(cid, &fate) {
-                        self.outbox.push(OutboxEntry {
-                            destination: Destination::Client(cid),
-                            payload: SyncPayload::BatchFate { fate },
-                        });
-                    }
-                }
-            }
-            SyncPayload::BatchFateNeeded { batch_ids } => {
-                self.respond_to_batch_fate_request(
-                    storage,
-                    Destination::Server(server_id),
-                    batch_ids,
-                );
-            }
-            SyncPayload::QuerySettled {
-                query_id,
-                tier,
-                scope,
-                through_seq,
-            } => {
-                let scope_set: HashSet<(ObjectId, BranchName)> = scope.iter().copied().collect();
-                let scope_changed = self
-                    .remote_query_scopes
-                    .get(&(server_id, query_id))
-                    .is_none_or(|previous_scope| previous_scope != &scope_set);
-                let tier_changed = self
-                    .remote_query_scope_tiers
-                    .get(&(server_id, query_id))
-                    .is_none_or(|previous_tier| *previous_tier != tier);
-                self.remote_query_scopes
-                    .insert((server_id, query_id), scope_set);
-                self.remote_query_scope_tiers
-                    .insert((server_id, query_id), tier);
-                if scope_changed || tier_changed {
-                    self.remote_query_scope_dirty.insert(query_id);
-                }
-
-                tracing::debug!(?query_id, "server→QuerySettled");
-                // Queue for local QueryManager to process
-                self.pending_query_settled.push(PendingQuerySettled {
-                    server_id: Some(server_id),
-                    query_id,
-                    tier,
-                    through_seq,
-                });
-
-                // RuntimeCore relays this to interested clients once the
-                // upstream stream watermark proves the scope's rows are local.
-            }
-            SyncPayload::SchemaWarning(warning) => {
-                super::log_schema_warning(&warning, Some("server"), None);
-
-                if let Some(clients) = self.query_origin.get(&warning.query_id) {
-                    for &cid in clients {
-                        self.outbox.push(OutboxEntry {
-                            destination: Destination::Client(cid),
-                            payload: SyncPayload::SchemaWarning(warning.clone()),
-                        });
-                    }
-                }
-            }
-            SyncPayload::ConnectionSchemaDiagnostics(diagnostics) => {
-                super::log_connection_schema_diagnostics(&diagnostics, Some("server"));
-            }
-            SyncPayload::Error(err) => match err {
-                SyncError::QuerySubscriptionRejected {
-                    query_id,
-                    code,
-                    reason,
-                } => {
-                    tracing::warn!(
-                        ?server_id,
-                        query_id = query_id.0,
-                        code = %code,
-                        error = %reason,
-                        "server rejected query subscription"
-                    );
-                    self.pending_query_rejections.push(PendingQueryRejection {
-                        query_id,
-                        code: code.clone(),
-                        reason: reason.clone(),
-                    });
-                }
-                _ => {
-                    tracing::warn!(?server_id, error = ?err, "error from server");
-                }
-            },
-            // Servers shouldn't send these to us
-            SyncPayload::QuerySubscription { .. }
-            | SyncPayload::QueryUnsubscription { .. }
-            | SyncPayload::SealBatch { .. }
-            // Frontier anti-entropy is peer↔peer, never via the server tier.
-            | SyncPayload::FrontierAnnounce { .. }
-            | SyncPayload::FrontierNeed { .. } => {}
         }
     }
 
@@ -1419,7 +1141,6 @@ impl SyncManager {
             } => {
                 // Client relaying a QuerySettled from downstream
                 self.pending_query_settled.push(PendingQuerySettled {
-                    server_id: None,
                     query_id: *query_id,
                     tier: *tier,
                     through_seq: *through_seq,
@@ -1455,7 +1176,6 @@ impl SyncManager {
             SyncPayload::CatalogueEntryUpdated { entry } => {
                 if self.persist_catalogue_entry(storage, entry.clone()) {
                     self.pending_catalogue_updates.push(entry.clone());
-                    self.forward_catalogue_entry_to_servers(entry.clone());
                     self.forward_catalogue_entry_to_clients(entry, Some(client_id));
                 }
             }
@@ -1472,12 +1192,6 @@ impl SyncManager {
                 if let Some(applied) =
                     self.apply_row_updated(storage, metadata, row.clone(), fate_recording)
                 {
-                    self.forward_row_batch_to_servers(
-                        storage,
-                        object_id,
-                        applied.metadata.clone(),
-                        row,
-                    );
                     if !matches!(
                         applied.row.state,
                         RowState::StagingPending | RowState::Superseded
@@ -1543,7 +1257,6 @@ impl SyncManager {
                     );
                     return;
                 }
-                self.seal_batch_to_servers(submission.clone());
                 self.try_accept_completed_sealed_batch_from_client(
                     storage,
                     client_id,

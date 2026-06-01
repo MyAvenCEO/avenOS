@@ -29,28 +29,6 @@ pub enum DurabilityTier {
     GlobalServer,
 }
 
-/// Unique identifier for a server connection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ServerId(pub Uuid);
-
-impl ServerId {
-    pub fn new() -> Self {
-        Self(Uuid::now_v7())
-    }
-}
-
-impl Default for ServerId {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl std::fmt::Display for ServerId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
 /// A peer's identity = its Ed25519 public key (32 bytes), the same key the
 /// `did:key:` encodes. This is the **full, non-lossy** identity — not a derived
 /// UUID. Stays `Copy` (fixed-size), so no move-cascade. The app renders `did:key`
@@ -131,7 +109,6 @@ impl RowBatchKey {
 /// Deferred query settlement waiting for stream sequencing prerequisites.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PendingQuerySettled {
-    pub server_id: Option<ServerId>,
     pub query_id: QueryId,
     pub tier: DurabilityTier,
     pub through_seq: u64,
@@ -148,16 +125,6 @@ pub struct PendingQueryRejection {
 // ============================================================================
 // Connection State
 // ============================================================================
-
-/// Tracking state for a connected server.
-#[derive(Debug, Clone, Default)]
-pub struct ServerState {
-    /// What we've pushed to this server for row-history sync:
-    /// (row object, branch) -> set of known batch ids.
-    pub sent_batch_ids: HashMap<(ObjectId, BranchName), HashSet<BatchId>>,
-    /// Row IDs for which we've sent metadata.
-    pub sent_metadata: HashSet<ObjectId>,
-}
 
 /// A query's scope and session for policy filtering.
 #[derive(Debug, Clone, Default)]
@@ -516,14 +483,12 @@ trait PeerEnd {
 /// Destination for an outbox entry.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Destination {
-    Server(ServerId),
     Client(PeerId),
 }
 
 impl PeerEnd for Destination {
     fn descriptor(&self) -> (&'static str, String) {
         match self {
-            Destination::Server(id) => ("server", id.0.to_string()),
             Destination::Client(id) => ("client", id.to_string()),
         }
     }
@@ -542,14 +507,12 @@ impl Destination {
 /// Source of an inbox entry.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Source {
-    Server(ServerId),
     Client(PeerId),
 }
 
 impl PeerEnd for Source {
     fn descriptor(&self) -> (&'static str, String) {
         match self {
-            Source::Server(id) => ("server", id.0.to_string()),
             Source::Client(id) => ("client", id.to_string()),
         }
     }
@@ -605,28 +568,18 @@ mod tests {
 
     #[test]
     fn destination_exposes_peer_identity_for_telemetry() {
-        let server_id = ServerId::new();
         let client_id = PeerId::new();
-
-        let server = Destination::Server(server_id);
         let client = Destination::Client(client_id);
 
-        assert_eq!(server.peer_kind(), "server");
-        assert_eq!(server.peer_label(), server_id.0.to_string());
         assert_eq!(client.peer_kind(), "client");
         assert_eq!(client.peer_label(), client_id.to_string());
     }
 
     #[test]
     fn source_exposes_peer_identity_for_telemetry() {
-        let server_id = ServerId::new();
         let client_id = PeerId::new();
-
-        let server = Source::Server(server_id);
         let client = Source::Client(client_id);
 
-        assert_eq!(server.peer_kind(), "server");
-        assert_eq!(server.peer_label(), server_id.0.to_string());
         assert_eq!(client.peer_kind(), "client");
         assert_eq!(client.peer_label(), client_id.to_string());
     }

@@ -959,21 +959,12 @@ impl QueryManager {
         }
 
         for (sub_id, reason) in failed_local {
-            let propagation = self
-                .subscriptions
-                .remove(&sub_id)
-                .map(|sub| sub.propagation)
-                .unwrap_or(QueryPropagation::Full);
+            self.subscriptions.remove(&sub_id);
             self.failed_subscriptions.push(QuerySubscriptionFailure {
                 subscription_id: sub_id,
                 code: "query_recompile_failed".to_string(),
                 reason: reason.clone(),
             });
-            if propagation == QueryPropagation::Full {
-                // Keep upstream state in sync for subscriptions created via subscribe_with_sync.
-                self.sync_manager
-                    .send_query_unsubscription_to_servers(QueryId(sub_id.0));
-            }
         }
 
         let mut failed_server: Vec<(PeerId, QueryId, String, String, QueryPropagation)> =
@@ -1030,14 +1021,10 @@ impl QueryManager {
             }
         }
 
-        for (client_id, query_id, code, reason, propagation) in failed_server {
+        for (client_id, query_id, code, reason, _propagation) in failed_server {
             self.server_subscriptions.remove(&(client_id, query_id));
             self.sync_manager
                 .drop_client_query_subscription(client_id, query_id);
-            if propagation == QueryPropagation::Full {
-                self.sync_manager
-                    .send_query_unsubscription_to_servers(query_id);
-            }
             self.sync_manager.emit_query_subscription_rejected(
                 client_id,
                 query_id,
@@ -1348,13 +1335,6 @@ impl QueryManager {
             let mut blocked = Vec::new();
             for pending_settled in pending_query_settled {
                 if pending_settled.through_seq == 0 {
-                    if let Some(server_id) = pending_settled.server_id {
-                        self.sync_manager.relay_query_settled_to_origins(
-                            server_id,
-                            pending_settled.query_id,
-                            pending_settled.tier,
-                        );
-                    }
                     self.apply_query_settled(pending_settled.query_id, pending_settled.tier);
                 } else {
                     blocked.push(pending_settled);
@@ -1499,29 +1479,8 @@ impl QueryManager {
                 );
             }
 
-            if !subscription.settled_once
-                && !Self::subscription_query_frontier_satisfied(&subscription)
-                && self.sync_manager.has_servers_or_pending_servers()
-            {
-                // Graph state updated by settle(), but don't deliver until the
-                // initial upstream frontier has been replayed — or until every
-                // still-pending server has exceeded PENDING_SERVER_TIMEOUT,
-                // which means nothing upstream is going to replay.
-                tracing::trace!(
-                    sub_id = sub_id.0,
-                    table = %table,
-                    required_tier = ?subscription.durability_tier,
-                    settled_tier = ?subscription.query_frontier_settled_tier,
-                    dirty = subscription.graph.has_dirty_nodes(),
-                    needs_recompile = subscription.needs_recompile,
-                    needs_visibility_recompute = subscription.needs_visibility_recompute,
-                    pending_local_updates = subscription.has_pending_local_updates,
-                    has_servers_or_pending_servers = self.sync_manager.has_servers_or_pending_servers(),
-                    "jazz trace subscription waiting for initial frontier"
-                );
-                self.subscriptions.insert(sub_id, subscription);
-                continue;
-            }
+            // Peer-mesh mode has no upstream servers, so there is never an initial
+            // upstream frontier to wait on — subscriptions deliver immediately.
 
             let mut visible_tuples = if subscription.uses_explicit_authorization_filtering {
                 let auth_schema_context = self.schema_context.clone();

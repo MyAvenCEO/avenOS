@@ -242,7 +242,6 @@ impl SyncTracer {
     ) {
         let mut inner = self.inner.lock().unwrap();
         let to_name = match destination {
-            Destination::Server(_) => "server".to_string(),
             Destination::Client(cid) => inner
                 .client_names
                 .get(cid)
@@ -265,7 +264,6 @@ impl SyncTracer {
     pub fn record_incoming(&self, source: &Source, to_name: &str, payload: &SyncPayload) {
         let mut inner = self.inner.lock().unwrap();
         let from_name = match source {
-            Source::Server(_) => "server".to_string(),
             Source::Client(cid) => inner
                 .client_names
                 .get(cid)

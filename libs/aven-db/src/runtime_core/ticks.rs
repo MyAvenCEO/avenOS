@@ -265,8 +265,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
                     });
                 }
             }
-        } else if matches!(fate, crate::batch_fate::BatchFate::Missing { .. }) {
-            self.retransmit_local_batch_to_servers(batch_id);
         } else if matches!(
             fate,
             crate::batch_fate::BatchFate::AcceptedTransaction { .. }
@@ -432,37 +430,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
         }
     }
 
-    pub fn retransmit_local_batch_to_servers(&mut self, batch_id: crate::row_histories::BatchId) {
-        let sealed_submission = self
-            .storage
-            .load_sealed_batch_submission(batch_id)
-            .ok()
-            .flatten();
-
-        let local_rows = self.local_batch_rows(batch_id);
-        let rows_to_retransmit = local_rows
-            .iter()
-            .map(|(member, row_locator, row)| {
-                (
-                    member.object_id,
-                    metadata_from_row_locator(row_locator),
-                    row.clone(),
-                )
-            })
-            .collect::<Vec<_>>();
-        let sealed_submission = sealed_submission.or_else(|| {
-            Self::direct_sealed_submission_from_local_batch_rows(batch_id, &local_rows)
-        });
-
-        let sync_manager = self.schema_manager.query_manager_mut().sync_manager_mut();
-        for (row_id, metadata, row) in rows_to_retransmit {
-            sync_manager.force_row_batch_to_servers(row_id, metadata, row);
-        }
-        if let Some(submission) = sealed_submission {
-            sync_manager.seal_batch_to_servers(submission);
-        }
-    }
-
     // =========================================================================
     // Tick Methods
     // =========================================================================
@@ -494,72 +461,18 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
         //    was just processed and made the schema available).
         self.schema_manager.process(&mut self.storage);
 
-        // 2b. Release QuerySettled notifications whose upstream stream watermark
-        // has definitely been applied.
-        let ready_query_settled = {
-            let pending = self
-                .schema_manager
-                .query_manager_mut()
-                .sync_manager_mut()
-                .take_pending_query_settled();
-            let mut ready = Vec::new();
-            let mut blocked = Vec::new();
-
-            for pending_settled in pending {
-                let is_ready = pending_settled.server_id.is_none_or(|server_id| {
-                    self.last_applied_server_seq
-                        .get(&server_id)
-                        .copied()
-                        .unwrap_or(0)
-                        >= pending_settled.through_seq
-                });
-                if is_ready {
-                    tracing::trace!(
-                        server_id = ?pending_settled.server_id,
-                        query_id = pending_settled.query_id.0,
-                        tier = ?pending_settled.tier,
-                        through_seq = pending_settled.through_seq,
-                        "jazz trace query settled ready for query manager"
-                    );
-                    ready.push(pending_settled);
-                } else {
-                    tracing::trace!(
-                        server_id = ?pending_settled.server_id,
-                        query_id = pending_settled.query_id.0,
-                        tier = ?pending_settled.tier,
-                        through_seq = pending_settled.through_seq,
-                        last_applied = pending_settled.server_id.and_then(|server_id| {
-                            self.last_applied_server_seq.get(&server_id).copied()
-                        }),
-                        "jazz trace query settled blocked on stream sequence"
-                    );
-                    blocked.push(pending_settled);
-                }
-            }
-
-            if !blocked.is_empty() {
-                self.schema_manager
-                    .query_manager_mut()
-                    .sync_manager_mut()
-                    .requeue_pending_query_settled(blocked);
-            }
-
-            ready
-        };
+        // 2b. Release QuerySettled notifications. Peer-mesh mode has no upstream
+        // server stream to watermark against, so every settlement applies now.
+        let ready_query_settled = self
+            .schema_manager
+            .query_manager_mut()
+            .sync_manager_mut()
+            .take_pending_query_settled();
 
         if !ready_query_settled.is_empty() {
             {
                 let query_manager = self.schema_manager.query_manager_mut();
                 for pending_settled in ready_query_settled {
-                    if let Some(server_id) = pending_settled.server_id {
-                        query_manager
-                            .sync_manager_mut()
-                            .relay_query_settled_to_origins(
-                                server_id,
-                                pending_settled.query_id,
-                                pending_settled.tier,
-                            );
-                    }
                     query_manager
                         .apply_query_settled(pending_settled.query_id, pending_settled.tier);
                 }
@@ -811,53 +724,9 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
             applied_messages += 1;
         }
 
-        let server_ids: Vec<ServerId> = self
-            .parked_sync_messages_by_server_seq
-            .keys()
-            .copied()
-            .collect();
-        let mut applied_since_last_tick = applied_messages > 0;
-        for server_id in server_ids {
-            let mut next_expected = *self.next_expected_server_seq.get(&server_id).unwrap_or(&1);
-            let mut ready_messages = Vec::new();
-            let mut remove_buffer = false;
-            if let Some(buffered) = self.parked_sync_messages_by_server_seq.get_mut(&server_id) {
-                while let Some(msg) = buffered.remove(&next_expected) {
-                    ready_messages.push((next_expected, msg));
-                    next_expected += 1;
-                }
-
-                if buffered.is_empty() {
-                    remove_buffer = true;
-                }
-            }
-            let mut last_applied = self
-                .last_applied_server_seq
-                .get(&server_id)
-                .copied()
-                .unwrap_or(next_expected.saturating_sub(1));
-            for (sequence, msg) in ready_messages {
-                if msg.payload.writes_storage() {
-                    self.mark_storage_write_pending_flush();
-                }
-                self.push_sync_inbox(msg);
-                applied_messages += 1;
-                applied_since_last_tick = true;
-                last_applied = sequence;
-            }
-            self.next_expected_server_seq
-                .insert(server_id, next_expected);
-            self.last_applied_server_seq.insert(server_id, last_applied);
-            if remove_buffer {
-                self.parked_sync_messages_by_server_seq.remove(&server_id);
-            }
-        }
-
         if applied_messages > 0 {
             debug!(count = applied_messages, "applied parked sync messages");
-            if applied_since_last_tick {
-                self.immediate_tick();
-            }
+            self.immediate_tick();
         }
     }
 
@@ -887,60 +756,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
         }
         self.parked_sync_messages.push(message);
         self.scheduler.schedule_batched_tick();
-    }
-
-    /// Park a sequenced sync message for in-order processing in next batched_tick.
-    pub fn park_sync_message_with_sequence(&mut self, message: InboxEntry, sequence: u64) {
-        match message.source {
-            crate::sync_manager::Source::Server(server_id) => {
-                let _recv_span = debug_span!(
-                    "sync.recv",
-                    peer_kind = "server",
-                    peer_id = %server_id,
-                    payload = message.payload.variant_name(),
-                    payload_json = %serde_json::to_string(&message.payload).unwrap_or_default(),
-                    sequence = sequence,
-                    tier = self.tier_label,
-                )
-                .entered();
-                let next_expected = self
-                    .next_expected_server_seq
-                    .entry(server_id)
-                    .or_insert(sequence);
-                if sequence < *next_expected {
-                    trace!(
-                        ?server_id,
-                        sequence,
-                        next_expected = *next_expected,
-                        "dropping already-applied sequenced sync message"
-                    );
-                    return;
-                }
-
-                if let Some((ref tracer, ref name)) = self.sync_tracer {
-                    tracer.record_incoming(&message.source, name, &message.payload);
-                }
-
-                self.parked_sync_messages_by_server_seq
-                    .entry(server_id)
-                    .or_default()
-                    .insert(sequence, message);
-                self.scheduler.schedule_batched_tick();
-            }
-            _ => self.park_sync_message(message),
-        }
-    }
-
-    /// Set the next expected sequenced message for a server stream.
-    pub fn set_next_expected_server_sequence(&mut self, server_id: ServerId, next_sequence: u64) {
-        let next_sequence = next_sequence.max(1);
-        self.next_expected_server_seq
-            .insert(server_id, next_sequence);
-        self.last_applied_server_seq
-            .insert(server_id, next_sequence.saturating_sub(1));
-        if let Some(buffered) = self.parked_sync_messages_by_server_seq.get_mut(&server_id) {
-            buffered.retain(|seq, _| *seq >= next_sequence);
-        }
     }
 
     pub fn local_batch_replay_payloads(

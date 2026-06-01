@@ -6,13 +6,12 @@ use crate::metadata::{DeleteKind, RowProvenance, SYSTEM_PRINCIPAL_ID, row_proven
 use crate::object::{BranchName, ObjectId};
 use crate::row_format::compiled_row_layout;
 use crate::row_histories::{
-    ApplyRowBatchResult, ApplyRowBatchWithContext, BatchId, QueryRowBatch, RowHistoryError,
-    RowState, RowVisibilityChange, StoredRowBatch, apply_row_batch, apply_row_batch_with_context,
+    ApplyRowBatchWithContext, BatchId, QueryRowBatch, RowHistoryError, RowState,
+    RowVisibilityChange, StoredRowBatch, apply_row_batch, apply_row_batch_with_context,
 };
 use crate::schema_manager::{SchemaContext, resolve_current_table_name};
 use crate::storage::{
-    RowLocator, Storage, metadata_from_row_locator,
-    prepared_row_write_context_for_known_exact_locator,
+    RowLocator, Storage, prepared_row_write_context_for_known_exact_locator,
 };
 use crate::sync_manager::RowBatchKey;
 
@@ -413,31 +412,10 @@ impl QueryManager {
             self.persist_row_locator(storage, row_id, &row_locator);
         }
 
-        let forwarded_row = row.clone();
         let applied = apply_row_batch(storage, row_id, branch_name, row, index_mutations)
             .map_err(|error| Self::query_error_for_local_row_history_write(row_id, error))?;
 
-        self.finish_local_row_history_write(storage, table, row_id, forwarded_row, applied)
-    }
-
-    fn finish_local_row_history_write<H: Storage>(
-        &mut self,
-        storage: &mut H,
-        table: &str,
-        row_id: ObjectId,
-        forwarded_row: StoredRowBatch,
-        applied: ApplyRowBatchResult,
-    ) -> Result<(BatchId, Option<RowVisibilityChange>), QueryError> {
-        self.sync_manager.forward_row_batch_to_servers_with_storage(
-            storage,
-            table,
-            row_id,
-            metadata_from_row_locator(&applied.row_locator),
-            forwarded_row,
-        );
-
-        let batch_id = applied.batch_id;
-        Ok((batch_id, applied.visibility_change))
+        Ok((applied.batch_id, applied.visibility_change))
     }
 
     fn query_error_for_local_row_history_write(
@@ -482,7 +460,6 @@ impl QueryManager {
                 .map_err(|err| {
                     QueryError::EncodingError(format!("prepare row write context: {err}"))
                 })?;
-        let forwarded_row = row.clone();
         let applied = apply_row_batch_with_context(
             storage,
             ApplyRowBatchWithContext {
@@ -499,7 +476,7 @@ impl QueryManager {
         )
         .map_err(|error| Self::query_error_for_local_row_history_write(row_id, error))?;
 
-        self.finish_local_row_history_write(storage, table, row_id, forwarded_row, applied)
+        Ok((applied.batch_id, applied.visibility_change))
     }
 
     fn origin_schema_hash_for_branch(&self, branch: &str) -> Option<SchemaHash> {
