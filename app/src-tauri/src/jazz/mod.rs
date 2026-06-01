@@ -1394,7 +1394,19 @@ async fn jazz_connect(
 			let client = JazzClient::connect_with_sync_transport(ctx, transport, None)
 				.await
 				.map_err(format_jazz_err)?;
-			if let Err(e) = client.register_peer_sync_client(remote) {
+			// Don't re-register a peer the user has Forgotten (revoked) — that is
+			// what makes Forget persist across reconnect/restart. Unknown peers
+			// stay permissive (first-contact); only an explicit revoke is skipped.
+			let remote_did = crate::jazz_auth::peer_did_from_ed25519(&remote.0).ok();
+			let revoked = match &remote_did {
+				Some(did) => crate::peers::is_peer_revoked(&client, did)
+					.await
+					.unwrap_or(false),
+				None => false,
+			};
+			if revoked {
+				log::info!("dev peer {remote} is Forgotten (revoked); not registering for sync");
+			} else if let Err(e) = client.register_peer_sync_client(remote) {
 				log::warn!("register dev peer {remote}: {e}");
 			}
 			client
@@ -1910,11 +1922,20 @@ pub(crate) async fn groove_ipc_spark_admin_list(
 }
 
 /// Placeholder for v2 admin removal (requires key rotation).
+/// "Stop sharing" a spark from a peer. avenOS is peer-centric and biscuits are
+/// append-only, so genuine *per-spark* grant removal needs key rotation (v2).
+/// The honest, achievable action today is to stop syncing with that device:
+/// deregister its sync client and mark the peer revoked (stops new changes,
+/// keeps what it already received — matches the UI confirm copy). Granular
+/// per-spark revoke (keep other shared sparks) is the v2 follow-up.
 pub(crate) async fn groove_ipc_spark_admin_revoke(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	self_state: &SelfState,
 	_spark_id: String,
-	_peer_did: String,
+	peer_did: String,
 ) -> Result<(), String> {
-	Err("spark_admin_revoke is not implemented yet (planned: v2 key rotation).".into())
+	groove_ipc_peer_revoke(app, jazz, self_state, peer_did).await
 }
 
 pub(crate) async fn groove_ipc_jazz_list(
@@ -2404,7 +2425,20 @@ pub(crate) async fn groove_ipc_peer_add(
 	if peer_did == shell_arc.as_ref().peer_did {
 		return Err("cannot add your own DID as a peer".into());
 	}
-	crate::peers::add_remote_peer(client.as_ref(), &peer_did, &device_label).await
+	crate::peers::add_remote_peer(client.as_ref(), &peer_did, &device_label).await?;
+
+	// Resume sync immediately — e.g. re-adding a Forgotten peer. Idempotent with
+	// the connect-time registration; harmless (queues until a transport exists)
+	// when no live link to this peer is present yet.
+	if let Ok(pk) = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did) {
+		if let Err(e) = client.register_peer_sync_client(PeerId(pk)) {
+			log::warn!(target: "avenos::jazz", "peer_add register {peer_did}: {e}");
+		}
+	}
+
+	// Reflect the new/reactivated peer in the list + mesh immediately.
+	let _ = publish_trusted_peers_ui(app, jazz, self_state).await;
+	Ok(())
 }
 
 pub(crate) async fn groove_ipc_peer_revoke(
@@ -2415,7 +2449,24 @@ pub(crate) async fn groove_ipc_peer_revoke(
 ) -> Result<(), String> {
 	let client = with_connected_client(jazz, app, self_state).await?;
 	crate::peers::set_peer_status(client.as_ref(), &peer_did, "revoked").await?;
-	let _ = execute_mesh_refresh_full(app, jazz).await?;
+
+	// Actually stop syncing: drop the registered peer client so we no longer
+	// ship to it or accept its catch-up. Marking the row alone left the peer
+	// live in the mesh — Forget appeared to do nothing.
+	if let Ok(pk) = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did) {
+		match client.remove_peer_sync_client(PeerId(pk)) {
+			Ok(true) => {}
+			Ok(false) => log::warn!(
+				target: "avenos::jazz",
+				"peer_revoke {peer_did}: client had unprocessed inbox; deregister deferred"
+			),
+			Err(e) => log::warn!(target: "avenos::jazz", "peer_revoke {peer_did}: {e}"),
+		}
+	}
+
+	// Re-publish the trusted-peer list + mesh snapshot so the row and its chip
+	// disappear immediately (replaces the no-op execute_mesh_refresh_full).
+	let _ = publish_trusted_peers_ui(app, jazz, self_state).await;
 	let _ = jazz.change_tx.send("peers".to_string());
 	Ok(())
 }
@@ -2542,7 +2593,7 @@ pub(crate) async fn groove_runtime_dispatch(
 		"sparkadminrevoke" => {
 			let spark_id = pj_str(&pj, "sparkId")?;
 			let peer_did = pj_str(&pj, "peerDid")?;
-			groove_ipc_spark_admin_revoke(spark_id, peer_did).await?;
+			groove_ipc_spark_admin_revoke(app, mj, ss, spark_id, peer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		other => Err(format!(

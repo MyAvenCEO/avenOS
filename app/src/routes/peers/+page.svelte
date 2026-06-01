@@ -20,6 +20,7 @@
 	let addLabel = $state('')
 	let addBusy = $state(false)
 	let addErr = $state<string | undefined>()
+	let forgetting = $state<string | undefined>()
 	let copied = $state(false)
 	let debugCopied = $state(false)
 
@@ -81,12 +82,17 @@
 	}
 
 	async function forget(did: string): Promise<void> {
+		if (forgetting) return
 		if (browser && !confirm(t('peers.forgetConfirm', { did }))) return
+		forgetting = did
+		err = undefined
 		try {
 			await peerForget(did)
 			await load()
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
+		} finally {
+			forgetting = undefined
 		}
 	}
 
@@ -177,7 +183,7 @@
 				<ul class="flex flex-col gap-2">
 					{#each peers as p (p.id)}
 						{@const phase = meshPeerPhase($peerMeshSnapshot, p.peerDid, p.status)}
-						<li class="rounded-xl border border-border/50 bg-background/40 px-4 py-3">
+						<li class="rounded-xl border border-border/50 bg-background/40 px-4 py-3 transition-opacity" class:opacity-50={forgetting === p.peerDid}>
 							<div class="flex items-start justify-between gap-3">
 								<p class="min-w-0 text-sm font-semibold" title={p.deviceLabel}>{p.deviceLabel || t('peers.unnamed')}</p>
 								<span class="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-medium">
@@ -190,7 +196,8 @@
 								<button
 									type="button"
 									class="text-destructive hover:bg-destructive/10 rounded px-2 py-0.5 text-[11px] font-medium"
-									onclick={() => void forget(p.peerDid)}>{t('peers.forget')}</button
+									disabled={forgetting === p.peerDid}
+									onclick={() => void forget(p.peerDid)}>{forgetting === p.peerDid ? t('peers.forgetting') : t('peers.forget')}</button
 								>
 							</div>
 						</li>

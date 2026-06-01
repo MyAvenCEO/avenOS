@@ -289,6 +289,16 @@ impl JazzClient {
         Ok(())
     }
 
+    /// Deregister a peer from P2P sync (Forget / revoke). The frontier is
+    /// stateless, so dropping the client simply stops shipping to / accepting
+    /// catch-up for this peer — no per-peer ledger to unwind. Returns `false`
+    /// if the peer still has unprocessed inbound messages (caller may retry).
+    pub fn remove_peer_sync_client(&self, peer_id: PeerId) -> Result<bool> {
+        self.runtime
+            .remove_client(peer_id)
+            .map_err(|e| JazzError::Sync(format!("remove_client {peer_id}: {e}")))
+    }
+
     pub fn rebroadcast_peer_catchup(&self, peer_id: PeerId) -> Result<()> {
         self.runtime
             .rebroadcast_peer_catchup(peer_id)
