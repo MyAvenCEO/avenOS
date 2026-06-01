@@ -6,11 +6,19 @@
 		jazzStatus,
 		sparkAdminAdd,
 		sparkAdminList,
+		sparkAdminRevoke,
 		type JazzSessionReply,
 	} from '$lib/jazz/api'
 	import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
 	import type { PeerRowReply } from '$lib/peer/api'
-	import { peerRows } from '$lib/peer/peer-mesh-store'
+	import { peerRows, peerMeshSnapshot } from '$lib/peer/peer-mesh-store'
+	import {
+		meshPeerPhase,
+		peerMeshPhaseUserLabel,
+		peerMeshDotClass,
+		peerMeshTextClass,
+		type PeerMeshPhase,
+	} from '$lib/peer/mesh-state'
 	import { peerDisplayLabel } from '$lib/peer/display-label'
 	import PeerPickerSelect from '$lib/peer/PeerPickerSelect.svelte'
 	import { pairingLabelForSession } from '$lib/settings/active-vault-ui'
@@ -37,6 +45,9 @@
 	let adminBusy = $state(false)
 	let addAdminDid = $state('')
 	let addNote = $state<string | undefined>()
+	let revokeBusyDid = $state<string | undefined>(undefined)
+	let revokeErr = $state<string | undefined>()
+	let revokeNote = $state<string | undefined>()
 	let localPairingLabel = $state<string | undefined>(undefined)
 
 	const sessionKind = $derived($deviceSession.kind)
@@ -61,6 +72,7 @@
 		label: string
 		isThisDevice: boolean
 		capabilities: SparkCapKey[]
+		phase: PeerMeshPhase
 	}
 
 	const accessEntries = $derived.by((): SparkAccessEntry[] => {
@@ -68,6 +80,7 @@
 			peersAllow.map((p) => [p.peerDid.trim().toLowerCase(), p] as const),
 		)
 		const localDid = session?.peerDid?.trim().toLowerCase() ?? ''
+		const snapshot = $peerMeshSnapshot
 		return adminDids.map((did) => {
 			const norm = did.trim().toLowerCase()
 			const peer = peersByDid.get(norm)
@@ -76,9 +89,19 @@
 			const capabilities: SparkCapKey[] = isThisDevice
 				? ['owner', 'read', 'write', 'delete', 'share']
 				: ['admin', 'read', 'write', 'delete']
-			return { did, label, isThisDevice, capabilities }
+			// Sync chip (§7 V3): this device is always settled; remote members read
+			// their live phase from the mesh snapshot (never re-derived).
+			const phase: PeerMeshPhase = isThisDevice
+				? 'ready'
+				: meshPeerPhase(snapshot, did, peer?.status)
+			return { did, label, isThisDevice, capabilities, phase }
 		})
 	})
+
+	// §7 V3 — calm global status: "everyone up to date" vs "N still syncing".
+	const remoteEntries = $derived(accessEntries.filter((e) => !e.isThisDevice))
+	const pendingCount = $derived(remoteEntries.filter((e) => e.phase !== 'ready').length)
+	const allSynced = $derived(remoteEntries.length > 0 && pendingCount === 0)
 
 	const selectablePeers = $derived.by(() => {
 		const adminNorm = new Set(adminDids.map((d) => d.trim().toLowerCase()))
@@ -159,6 +182,32 @@
 		}
 	}
 
+	// §7 honest-design: revoke stops *future* changes; it never claws back what a
+	// peer already holds. Wording and confirm copy say exactly that — never "remove access".
+	async function revokeAdmin(did: string, label: string): Promise<void> {
+		const sid = sparkId.trim()
+		if (!did || !sid) return
+		if (browser && !confirm(t('sparks.share.revokeConfirm', { label }))) return
+		const gen = adminLoadGen
+		revokeBusyDid = did
+		revokeErr = undefined
+		revokeNote = undefined
+		addNote = undefined
+		try {
+			await sparkAdminRevoke({ sparkId: sid, peerDid: did })
+			if (gen !== adminLoadGen) return
+			revokeNote = t('sparks.share.revokedNote', { label })
+			const a = await sparkAdminList(sid)
+			if (gen !== adminLoadGen) return
+			adminDids = a.adminDids
+		} catch (e) {
+			if (gen !== adminLoadGen) return
+			revokeErr = e instanceof Error ? e.message : String(e)
+		} finally {
+			if (gen === adminLoadGen) revokeBusyDid = undefined
+		}
+	}
+
 	$effect(() => {
 		sessionKind
 		void sparkId
@@ -207,14 +256,26 @@
 				{:else if accessEntries.length === 0}
 					<p class="text-muted-foreground text-sm">{t('sparks.share.noOneListed')}</p>
 				{:else}
+					{#if remoteEntries.length > 0}
+						<p class="flex items-center gap-2 text-xs">
+							<span class="h-2 w-2 rounded-full {allSynced ? peerMeshDotClass('ready') : peerMeshDotClass('syncing')}"></span>
+							<span class="text-muted-foreground">{allSynced ? t('sparks.share.allSynced') : t('sparks.share.pending', { count: pendingCount })}</span>
+						</p>
+					{/if}
 					<ul class="flex flex-col gap-2">
 						{#each accessEntries as entry (entry.did)}
 							<li class="rounded-xl border border-border/50 bg-background/40 px-4 py-3">
-								<p class="text-sm font-semibold" title={entry.label}>{entry.label}</p>
+								<div class="flex items-start justify-between gap-3">
+									<p class="min-w-0 text-sm font-semibold" title={entry.label}>{entry.label}</p>
+									<span class="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-medium">
+										<span class="h-2 w-2 rounded-full {peerMeshDotClass(entry.phase)}"></span>
+										<span class={peerMeshTextClass(entry.phase)}>{entry.isThisDevice ? t('sparks.share.syncLabelThisDevice') : peerMeshPhaseUserLabel(entry.phase)}</span>
+									</span>
+								</div>
 								{#if !entry.isThisDevice}
 									<p class="text-muted-foreground mt-0.5 font-mono text-[11px] leading-snug select-text break-all" title={entry.did}>{entry.did}</p>
 								{/if}
-								<div class="mt-2 flex flex-wrap gap-1.5">
+								<div class="mt-2 flex flex-wrap items-center gap-1.5">
 									{#each entry.capabilities as cap (cap)}
 										<span
 											class="rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase
@@ -223,10 +284,27 @@
 												: 'bg-muted text-muted-foreground'}">{sparkCapLabel(cap)}</span
 										>
 									{/each}
+									{#if !entry.isThisDevice}
+										<button
+											type="button"
+											class="text-destructive hover:bg-destructive/10 ml-auto rounded px-2 py-0.5 text-[11px] font-medium disabled:opacity-50"
+											disabled={revokeBusyDid !== undefined}
+											onclick={() => void revokeAdmin(entry.did, entry.label)}
+											>{revokeBusyDid === entry.did
+												? t('sparks.share.revoking')
+												: t('sparks.share.revoke')}</button
+										>
+									{/if}
 								</div>
 							</li>
 						{/each}
 					</ul>
+					{#if revokeErr}
+						<p class="text-destructive text-sm">{t('sparks.share.revokeFailed')}: {revokeErr}</p>
+					{/if}
+					{#if revokeNote}
+						<p class="text-muted-foreground text-sm">{revokeNote}</p>
+					{/if}
 				{/if}
 			</section>
 

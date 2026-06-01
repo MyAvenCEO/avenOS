@@ -425,7 +425,16 @@
         "write": "Write",
         "delete": "Delete",
         "share": "Share"
-      }
+      },
+      "syncTitle": "Sync",
+      "revoke": "Teilen beenden",
+      "revoking": "Wird beendet…",
+      "revokeConfirm": "Teilen dieses Sparks mit {label} beenden? Sie erhalten keine neuen Änderungen mehr, behalten aber, was sie bereits erhalten haben.",
+      "revokeFailed": "Teilen konnte nicht beendet werden",
+      "revokedNote": "Es werden keine neuen Änderungen mehr mit {label} geteilt.",
+      "allSynced": "Alle sind auf dem neuesten Stand",
+      "pending": "{count} synchronisieren noch",
+      "syncLabelThisDevice": "Dieses Gerät"
     }
   },
   "uiLab": {

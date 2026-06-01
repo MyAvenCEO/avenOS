@@ -425,7 +425,16 @@
         "write": "Write",
         "delete": "Delete",
         "share": "Share"
-      }
+      },
+      "syncTitle": "Sync",
+      "revoke": "Stop sharing",
+      "revoking": "Stopping…",
+      "revokeConfirm": "Stop sharing this spark with {label}? They will stop receiving new changes, but keep whatever they already received.",
+      "revokeFailed": "Could not stop sharing",
+      "revokedNote": "Stopped sharing new changes with {label}.",
+      "allSynced": "Everyone is up to date",
+      "pending": "{count} still syncing",
+      "syncLabelThisDevice": "This device"
     }
   },
   "uiLab": {
