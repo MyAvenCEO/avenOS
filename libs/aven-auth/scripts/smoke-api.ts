@@ -27,7 +27,8 @@ async function keypair(): Promise<{ privKey: Uint8Array; did: string }> {
 	buf[0] = 0xed
 	buf[1] = 0x01
 	buf.set(pubKey, 2)
-	const did = `did:key:${bs58.encode(buf)}`
+	// Standard did:key multibase base58btc — leading 'z' — matching tauri-plugin-self.
+	const did = `did:key:z${bs58.encode(buf)}`
 	return { privKey, did }
 }
 
