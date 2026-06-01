@@ -19,7 +19,7 @@
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { t } from '$lib/i18n'
 
-	let { sparkId }: { sparkId: string } = $props()
+	let { sparkId, wide = false }: { sparkId: string; wide?: boolean } = $props()
 
 	type SparkCapKey = 'owner' | 'admin' | 'read' | 'write' | 'delete' | 'share'
 
@@ -187,7 +187,89 @@
 	})
 </script>
 
-{#if tauri && unlocked && sparkId.trim()}
+{#if wide}
+	<!-- Main-area / full-width layout -->
+	{#if !tauri || !unlocked}
+		<p class="text-muted-foreground text-sm">{t('sparks.needsDesktop')}</p>
+	{:else if !sparkId.trim()}
+		<p class="text-muted-foreground text-sm">{t('sparks.share.noOneListed')}</p>
+	{:else}
+		<div class="flex flex-col gap-8">
+			<!-- Who has access -->
+			<section class="flex flex-col gap-4">
+				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
+					{t('sparks.share.whoHasAccess')}
+				</h2>
+				{#if err}
+					<p class="text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm select-text">{err}</p>
+				{:else if busy && adminDids.length === 0}
+					<p class="text-muted-foreground text-sm">{t('common.loadingAdmins')}</p>
+				{:else if accessEntries.length === 0}
+					<p class="text-muted-foreground text-sm">{t('sparks.share.noOneListed')}</p>
+				{:else}
+					<ul class="flex flex-col gap-2">
+						{#each accessEntries as entry (entry.did)}
+							<li class="rounded-xl border border-border/50 bg-background/40 px-4 py-3">
+								<p class="text-sm font-semibold" title={entry.label}>{entry.label}</p>
+								{#if !entry.isThisDevice}
+									<p class="text-muted-foreground mt-0.5 font-mono text-[11px] leading-snug select-text break-all" title={entry.did}>{entry.did}</p>
+								{/if}
+								<div class="mt-2 flex flex-wrap gap-1.5">
+									{#each entry.capabilities as cap (cap)}
+										<span
+											class="rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase
+												{cap === 'owner' || cap === 'admin'
+												? 'bg-primary/10 text-primary'
+												: 'bg-muted text-muted-foreground'}">{sparkCapLabel(cap)}</span
+										>
+									{/each}
+								</div>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
+
+			<!-- Give access -->
+			<section class="flex flex-col gap-4">
+				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
+					{t('sparks.share.giveAccess')}
+				</h2>
+				{#if selectablePeers.length > 0}
+					<div class="flex flex-col gap-2 sm:flex-row sm:items-end">
+						<div class="min-w-0 flex-1">
+							<PeerPickerSelect
+								peers={selectablePeers}
+								bind:value={addAdminDid}
+								{localPairingLabel}
+								disabled={adminBusy}
+							/>
+						</div>
+						<button
+							type="button"
+							class="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+							disabled={adminBusy || !addAdminDid}
+							onclick={() => void addAdmin()}
+						>
+							{adminBusy ? '…' : t('sparks.share.addAsAdmin')}
+						</button>
+					</div>
+				{:else if activeAllowlistPeers.length === 0}
+					<p class="text-muted-foreground text-sm leading-relaxed">{t('sparks.share.noPairedPeersLead')}</p>
+				{:else}
+					<p class="text-muted-foreground text-sm leading-relaxed">{t('sparks.share.everyoneHasAccess')}</p>
+				{/if}
+				{#if adminErr}
+					<p class="text-destructive text-sm">{adminErr}</p>
+				{/if}
+				{#if addNote}
+					<p class="text-muted-foreground text-sm">{addNote}</p>
+				{/if}
+			</section>
+		</div>
+	{/if}
+{:else if tauri && unlocked && sparkId.trim()}
+	<!-- Compact aside layout (kept for any future reuse) -->
 	<section class="flex flex-col gap-2 px-0 md:px-2">
 		<h3 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">
 			{t('sparks.share.whoHasAccess')}
