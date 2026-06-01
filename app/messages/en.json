@@ -126,7 +126,8 @@
     "advanced": "Advanced",
     "network": "Network",
     "db": "DB",
-    "openVault": "Open vault"
+    "openVault": "Open vault",
+    "logout": "Log out"
   },
   "vaultNav": {
     "title": "Vault",

@@ -126,7 +126,8 @@
     "advanced": "Erweitert",
     "network": "Netzwerk",
     "db": "DB",
-    "openVault": "Tresor öffnen"
+    "openVault": "Tresor öffnen",
+    "logout": "Abmelden"
   },
   "vaultNav": {
     "title": "Tresor",
