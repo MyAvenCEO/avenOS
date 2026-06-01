@@ -617,6 +617,8 @@
     "none": "Noch keine Peers — oben per DID hinzufügen.",
     "unnamed": "Peer",
     "forget": "Entfernen",
-    "forgetConfirm": "Diesen Peer aus Meinem Netzwerk entfernen?\n\n{did}"
+    "forgetConfirm": "Diesen Peer aus Meinem Netzwerk entfernen?\n\n{did}",
+    "copyDebug": "Debug kopieren",
+    "copyDebugHint": "Aktuelle Logs + Peer-/Mesh-Status für Fehlerberichte in die Zwischenablage kopieren"
   }
 }

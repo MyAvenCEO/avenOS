@@ -6,6 +6,7 @@
 	import { meshPeerPhase, peerMeshDotClass, peerMeshTextClass, peerMeshPhaseUserLabel } from '$lib/peer/mesh-state'
 	import { deviceSession } from '$lib/settings/device-session-store'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+	import { formatDebugReport } from '$lib/debug/console-capture'
 	import { t } from '$lib/i18n'
 
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
@@ -20,6 +21,23 @@
 	let addBusy = $state(false)
 	let addErr = $state<string | undefined>()
 	let copied = $state(false)
+	let debugCopied = $state(false)
+
+	async function copyDebug(): Promise<void> {
+		if (!browser) return
+		const report = formatDebugReport({
+			ownDid,
+			peerRows: peers,
+			meshSnapshot: $peerMeshSnapshot,
+		})
+		try {
+			await navigator.clipboard.writeText(report)
+			debugCopied = true
+			setTimeout(() => (debugCopied = false), 1500)
+		} catch {
+			/* clipboard blocked */
+		}
+	}
 	let loadGen = 0
 
 	async function load(): Promise<void> {
@@ -91,7 +109,15 @@
 
 <div class="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-8">
 	<header class="flex flex-col gap-1">
-		<h1 class="text-lg font-semibold">{t('peers.title')}</h1>
+		<div class="flex items-start justify-between gap-2">
+			<h1 class="text-lg font-semibold">{t('peers.title')}</h1>
+			<button
+				type="button"
+				class="bg-muted hover:bg-muted/70 shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium"
+				title={t('peers.copyDebugHint')}
+				onclick={() => void copyDebug()}>{debugCopied ? t('peers.copied') : t('peers.copyDebug')}</button
+			>
+		</div>
 		<p class="text-muted-foreground text-sm">{t('peers.subtitle')}</p>
 	</header>
 

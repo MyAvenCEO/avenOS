@@ -17,7 +17,10 @@ import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/settings/va
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import MobileShellNav from '$lib/shell/MobileShellNav.svelte'
 import { navigateApp } from '$lib/shell'
+import { installConsoleCapture } from '$lib/debug/console-capture'
 import '../app.css'
+
+if (browser) installConsoleCapture()
 
 let { children: pageContent } = $props()
 
