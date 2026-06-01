@@ -1873,6 +1873,11 @@ async fn finish_spark_admin_grant(
 		.publish_table_snapshot_force(app, client.as_ref(), shell.as_ref(), "sparks")
 		.await;
 
+	// Republish the trusted-peer roster + mesh snapshot so the member's chip
+	// reflects the now-registered peer immediately (otherwise it stays stale on
+	// "Connecting" even though the peer is a live sync client).
+	let _ = publish_trusted_peers_ui(app, jazz, self_state).await;
+
 	enqueue_vault_catalogue_drain(app).await;
 
 	Ok(())

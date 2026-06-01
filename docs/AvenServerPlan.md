@@ -202,6 +202,8 @@ peeroxide provides topic + secret-stream; it has **no pairing module** (confirme
 
 The app's auth client ([`app/src/lib/self/network-auth.ts`](../app/src/lib/self/network-auth.ts)) consumes a **small, fixed slice** of Better-Auth. The Rust port must preserve that wire contract **byte-for-byte** so the app keeps working unchanged.
 
+> **Decision — auth keeps its own SQLite store** (not the RocksDB/groove engine). The two stores serve different masters: auth is transactional OLTP with **single-use** semantics (redeem-invite-once, unique `token_hash`, nonce-once) and must be **plaintext-readable**; the groove store is a replicated **DAG/CRDT** of **blind ciphertext**. Putting single-use tokens behind CRDT merge risks double-spend, and auth couldn't live in the blind mirror anyway. "Single source of truth" is satisfied by **one binary / one authority**, not one storage engine. *Revisit only if* multi-aven HA requires shared auth state — and then with a consensus design, not naive CRDT.
+
 ### 3.1 The contract to preserve (do not change)
 
 **Endpoints** (under `/api/auth/aven-auth/`), carried by **Bearer token** (the session token `verify` returns — cross-site cookies don't survive the webview hop):
@@ -237,7 +239,7 @@ Expiration Time: {expirationTime}
 ### 3.2 `aven-auth` (Rust) work items
 
 1. **HTTP server** — `axum` router exposing the 6 endpoints under `/api/auth/aven-auth/`, plus `GET /health`. `trustedOrigins` / CORS preserved (`tauri://localhost`, `localhost:1420`, the prod host).
-2. **Store** — `rusqlite` (or `sqlx`-sqlite) over the same logical schema. Keep `AVEN_AUTH_DB_PATH` so existing dev DBs migrate trivially (same table/column names → a one-shot data copy, or just re-bootstrap in dev).
+2. **Store** — **SQLite via `rusqlite`** (decided above) over the same logical schema. Keep `AVEN_AUTH_DB_PATH` so existing dev DBs migrate trivially (same table/column names → a one-shot data copy, or just re-bootstrap in dev). Sits beside the engine's RocksDB dir on one fly volume (§4.4).
 3. **Crypto** — `ed25519-dalek` verify; reuse the app's existing did:key codec (`jazz_auth::ed25519_public_from_peer_did` is the inverse already in-tree) so encode/decode is identical across app, device, and server.
 4. **Sessions** — issue an opaque bearer token on `verify`, validate it on the admin-only endpoints. (Replaces Better-Auth's `bearer()` plugin with ~30 lines.)
 5. **Config** — `AvenAuthConfig { auth_url, secret, db_path, domain, network_seed, invite_ttl, invite_scheme }` from env (same names as [`env.ts`](../libs/aven-auth/src/lib/env.ts)), so `.env` is unchanged.
@@ -310,6 +312,19 @@ async fn main() -> Result<()> {
 
 - **P3 (local):** `aven-server` runs on the dev machine, bootstrapped to the same local DHT as `dev:app2x`. Two non-overlapping devices (never online together) converge **through** the aven. The dev harness can optionally start it as a third process.
 - **P4 (hosted):** containerize the **same** binary → fly.io. Bootstrap against public HyperDHT; salted/rotating topics (blunt topic-metadata leakage). The auth endpoints move from `localhost:3000` to `auth.testnet.aven.ceo` — **same binary, config only.** The `Peer → Server` graduation is "same biscuit, same protocol, zero code change above bootstrap config."
+
+### 4.4 Persistence — the aven keeps two stores (same engine + storage as a device)
+
+The aven runs the **same `aven-db` (groove) engine a device runs**, whose backend is **RocksDB** (`RocksDBStorage::open`, behind the `rocksdb` feature `client-p2p` pulls in). So it persists replicated data exactly like a device — **just blind**:
+
+| Store | Tech | Path (default) | Holds | Readable by the aven? |
+|-------|------|----------------|-------|------------------------|
+| **Engine** (the mirror) | **RocksDB** (a *directory*) | `db/` (`AVEN_OS_GROOVE_DATA_DIR`) | every mirrored spark's batches as **ciphertext** + the frontier (`DurabilityTier::EdgeServer`) | **No** — no DEK, provably can't decrypt |
+| **Auth** | **SQLite** (a *file*) | `aven-auth.db` | invites · challenges · site-config / admin (§3) | n/a (its own metadata) |
+
+> Note on naming: there is no single `aven.db` engine file — the engine store is a **RocksDB directory**. The only `.db` *file* is the SQLite **auth** store. On fly (P4) both live on one persistent volume.
+
+This is the M3 graduation made literal: **device and aven are the same code over the same RocksDB storage**, differing only in *mode* (server vs client), *which biscuit* they hold (`replicate` vs `owns`/read/write), and *whether they hold a DEK* (the aven doesn't → blind). A self-hosted, fully-trusted hub that *should* read plaintext is the same binary **with** a DEK — a config/grant difference, not a code difference.
 
 ---
 
