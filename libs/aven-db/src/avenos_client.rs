@@ -275,6 +275,14 @@ impl JazzClient {
         self.runtime
             .ensure_client_as_peer(peer_id)
             .map_err(|e| JazzError::Sync(format!("ensure_client_as_peer {peer_id}: {e}")))?;
+        // Trust bootstrap FIRST: ship sparks/keyshares UNGATED so the peer can
+        // obtain the spark + biscuit chain (it cannot authorize gated data
+        // otherwise — chicken-and-egg). Then the gated frontier full catch-up.
+        self.runtime
+            .rebroadcast_peer_shell_catchup(peer_id)
+            .map_err(|e| {
+                JazzError::Sync(format!("rebroadcast_peer_shell_catchup {peer_id}: {e}"))
+            })?;
         self.runtime
             .rebroadcast_peer_catchup(peer_id)
             .map_err(|e| JazzError::Sync(format!("rebroadcast_peer_catchup {peer_id}: {e}")))?;
