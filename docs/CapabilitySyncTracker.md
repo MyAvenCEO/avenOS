@@ -238,3 +238,46 @@ Still wrap it in a thin `HyperswarmTransport: SyncTransport` adapter (good hygie
 - `Pending` never drops a frame — it defers; only `DenyPermanent` is terminal.
 - The ledger is keyed by DID, so it is meaningful for peers that have **never connected** and survives reconnects.
 - Adding a granularity level (spark → table → row) is a grant-minting + URN-building change only; the engine, trait, and `authorize()` are untouched.
+
+---
+
+## 8. UX model
+
+**Mental model:** the entire frontend reduces to *"manage who's in each spark"* — grant/revoke biscuits — and the network self-assembles (pair · sync · link · heal) in the background. Three seams where "magic" must be made honest in the UI:
+
+1. **First contact needs the peer's DID** → one unavoidable invite/scan step; **automatic forever after** for that contact.
+2. **Direct p2p only converges when both devices are online at once** → the per-spark **blind hub (§5.1)** is what makes *offline-friendly* sync real; surface it as *"add an always-on relay so this spark syncs even when devices are offline at different times."*
+3. **Revoke is not retroactive** → wording is *"stops sharing new changes; they may keep a copy of what they already received,"* never *"removes access to the data."*
+
+### 8.1 Two-layer separation (the key principle)
+
+Do **not** build one "peers" screen. It is two surfaces, and separating them is what makes it feel magical:
+
+```
+  PEOPLE / NETWORK            per-SPARK ACCESS
+  (who you know)              (what they can do)
+  ── one-time DID trust ──►   ── pure capability toggles ──►  background: pair · sync · link · heal
+  invite / scan once          grant / revoke biscuits
+```
+
+- **People/Network layer** — the *only* home for first-contact/pairing; reusable across all sparks. Successor to the removed "Connect with Peer" UI.
+- **Spark Access layer** — pure access control on *known* DIDs; contains **no networking concepts**. Sync is shown as a status consequence, never configured.
+
+### 8.2 The four views
+
+| View | Purpose | Key elements |
+|------|---------|--------------|
+| **V1 — Spark › People & Access** (primary) | who's in the spark + their access | member rows: name · **role** (Admin/Member/Viewer = capability bundles) · **sync chip** (Synced ● / Syncing ◌ / Waiting–offline ○ / via Relay ⇄) · revoke. **+ Add member** (pick contact / invite new). **+ Add relay/backup** (distinct; **Blind** by default, badge *"keeps a backup, cannot read"*). |
+| **V2 — First contact** | the one human step | invite link + QR (bundles the future biscuit + spark topic + your DID); acceptance returns their DID and completes the grant. Copy: *"They'll receive the full history of this spark."* |
+| **V3 — Sync status** | calm, ambient observability | per-member chips; optional disclosure (direct vs relayed, last synced, items pending). **Never** a diagnostics JSON dump (that was the old anti-pattern). One global "all synced / N pending" signal. |
+| **V4 — Network / People** | contacts registry | known DIDs (people + relays/hubs), each showing which sparks are shared; home for one-time pairings. |
+
+### 8.3 Honest-design rules
+
+- **Status must be visible** — invisible background sync is frightening when a peer is offline; a calm *"Waiting — Bob is offline"* chip turns silence into an understood state.
+- **Revoke wording** stops at "future changes," never implies remote deletion.
+- **Blind relay** badge: clearly **can't read** (trust comfort) yet **does store** ciphertext (privacy honesty).
+- **Adding = full history** — state it before confirm.
+- **Add relay = distinct affordance** from adding a person, framed by the offline-sync need.
+
+> Build order suggestion: **V1** first (the hub everything hangs off), then **V2** (first contact), then **V3** (status) layered in as the transport lands; **V4** can start as a thin list and grow.
