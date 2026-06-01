@@ -42,8 +42,8 @@ let {
  * HITL preview is active whenever the selected intent is paused for human
  * feedback (`hitl`) OR a selected skill is in its HITL-equivalent state
  * (`waiting`) under a parent intent that is still in flight (not already
- * resolved/archived). When active, the Activity log panel is replaced by a
- * sandboxed vibe-view app embedded via `VibeSandboxFrame`.
+ * resolved/archived). When active, the Activity log panel is replaced by the
+ * chosen aven-ui vibe view (rendered through `AvenUiView` in `DisplayView`).
  */
 const showHitlPreview = $derived.by(() => {
 	if (intent?.status === 'hitl') return true
@@ -72,7 +72,10 @@ const isError = $derived(intent?.status === 'error')
  * The tab label swaps between "Display" (HITL) and "Error" (error) based
  * on which branch is active.
  */
-const inDisplay = $derived(showHitlPreview || isError)
+/** Terminal success — the Display tab shows the aven-ui success screen. */
+const isSuccess = $derived(intent?.status === 'success')
+
+const inDisplay = $derived(showHitlPreview || isError || isSuccess)
 
 /**
  * Edge-detected display key (`<intent-id>:<display|other>`) used to
@@ -93,7 +96,8 @@ $effect(() => {
 		lastDisplayEdgeKey = null
 		return
 	}
-	const intentInDisplay = intent.status === 'hitl' || intent.status === 'error'
+	const intentInDisplay =
+		intent.status === 'hitl' || intent.status === 'error' || intent.status === 'success'
 	const key = `${intent.id}:${intentInDisplay ? 'display' : 'other'}`
 	if (key === lastDisplayEdgeKey) return
 	lastDisplayEdgeKey = key
@@ -106,31 +110,20 @@ $effect(() => {
 	detail view when an intent is selected (skills live in the right drawer).
 -->
 <div
-	data-native-webview-scope
 	class={`col-start-1 row-start-4 flex min-h-0 min-w-0 flex-1 flex-col max-sm:items-stretch max-sm:justify-start sm:col-start-2 sm:row-start-1 sm:row-end-3 ${!intent ? 'max-sm:hidden' : 'max-sm:row-start-1 max-sm:w-full'}`}
 >
 	<div class="flex min-h-[12rem] min-w-0 flex-1 flex-col gap-2 sm:min-h-[18rem]">
 		{#if intent}
 			<!--
 				Tab strip: when the selected intent (or the selected skill under
-				an in-flight intent) is in HITL — or the intent itself has
-				terminally errored — expose a second tab next to "Activity".
-				Its label is "Display" for HITL (vibe-view sandbox) and "Error"
-				for error (inline diagnostic appshell). DisplayView owns the
-				branch between iframe and inline error panel based on
-				`intent.status`. When neither is active, fall back to the
-				original static Activity label so the activity log section is
-				visually unchanged.
-
-				Security: VibeSandboxFrame (mounted inside DisplayView for the
-				HITL branch) embeds the chosen vibe view inside the
-				separate-origin sandbox proxy at PUBLIC_VIBE_SANDBOX_URL via
-				the `@avenos/aven-vibe-sandbox` host bridge (same pattern used
-				by /docs/vibe-apps). All postMessage origin checks and iframe
-				`sandbox` attributes are owned by `VibeSandboxFrame`.
+				an in-flight intent) is in HITL — or the intent has terminally
+				errored / succeeded — expose a second tab next to "Activity".
+				Its label is "Display" for HITL, "Error" for error, "Success"
+				for success. DisplayView renders the matching aven-ui vibe
+				(`AvenUiView`) based on `intent.status`. When none is active,
+				fall back to the static Activity label.
 			-->
 			<div
-				data-native-webview-clearance="activity-tabs"
 				class="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 				role="tablist"
 				aria-label={t('intents.activityPanelTabs')}
@@ -158,10 +151,12 @@ $effect(() => {
 						'display'
 							? isError
 								? 'text-status-error opacity-100'
-								: 'text-status-info opacity-100'
+								: isSuccess
+									? 'text-status-success opacity-100'
+									: 'text-status-info opacity-100'
 							: 'opacity-30 hover:opacity-60'}"
 					>
-						{isError ? t('intents.errorTab') : t('intents.displayTab')}
+						{isError ? t('intents.errorTab') : isSuccess ? t('intents.successTab') : t('intents.displayTab')}
 					</button>
 				{/if}
 				<button
@@ -190,7 +185,7 @@ $effect(() => {
 				</button>
 			</div>
 
-			{#if activityTab === 'display' && inDisplay && (isError || intent.hitlVibeAppId)}
+			{#if activityTab === 'display' && inDisplay && (isError || isSuccess || intent.hitlVibeAppId)}
 				<DisplayView {intent} />
 			{:else if activityTab === 'config'}
 				<ConfigView {intent} skill={selectedSkill} />
@@ -198,12 +193,6 @@ $effect(() => {
 				<ContextView {intent} skill={selectedSkill} />
 			{:else}
 				<ActivityView logs={filteredLogs} />
-			{/if}
-
-			{#if intent.status === 'success'}
-				<p class="text-[10px] leading-snug opacity-55">
-					{t('intents.successArchiveHint')}
-				</p>
 			{/if}
 		{:else}
 			<div

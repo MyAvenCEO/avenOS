@@ -1,8 +1,5 @@
 <script lang="ts">
-import { type VibeAppId, vibeAppList } from '@avenos/aven-vibes'
-import VibeSandboxFrame from '$lib/vibe-apps/VibeSandboxFrame.svelte'
-
-let selectedId = $state<VibeAppId>('invoice')
+import UiLabPanel from '$lib/aven-ui/UiLabPanel.svelte'
 </script>
 
 <svelte:head>
@@ -10,34 +7,18 @@ let selectedId = $state<VibeAppId>('invoice')
 </svelte:head>
 
 <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background font-sans text-foreground antialiased">
-	<div class="flex min-h-0 min-w-0 flex-1">
-		<aside
-			class="flex w-64 shrink-0 flex-col border-border border-r p-4"
-			aria-label="Vibe-View Library"
-		>
-			<p class="tech-label px-1 pb-2">Vibe-View Library</p>
-			<div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-				{#each vibeAppList as app}
-					<button
-						type="button"
-						onclick={() => {
-							selectedId = app.id
-						}}
-						class="min-w-0 rounded-xl border px-3 py-2.5 text-left transition-colors {selectedId === app.id
-							? 'border-[color:var(--color-tuscan-sun)] bg-white/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]'
-							: 'border-border bg-white/10 hover:bg-white/20'}"
-					>
-						<span class="block truncate text-sm font-medium tracking-tight">{app.label}</span>
-						<span
-							class="mt-0.5 block min-w-0 truncate text-xs text-muted-foreground"
-							title={app.description}>{app.description}</span
-						>
-					</button>
-				{/each}
+	<div class="flex min-h-0 min-w-0 flex-1 flex-col px-4 py-6 sm:px-6">
+		<header class="mb-4 flex shrink-0 items-baseline justify-between gap-3">
+			<div>
+				<p class="tech-label pb-1">Vibe-View Library</p>
+				<p class="max-w-prose text-xs leading-snug text-muted-foreground">
+					Alle aven-ui-Ansichten live — gerendert aus JSON View/Style/State, QuickJS-Logik in
+					Tauri. Tabs zeigen die zugrunde liegenden Konfigurationen.
+				</p>
 			</div>
 			<a
 				href="/docs"
-				class="mt-auto flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 pt-3 text-[11px] font-bold tracking-widest text-muted-foreground uppercase opacity-50 transition-opacity hover:opacity-100"
+				class="flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] font-bold tracking-widest text-muted-foreground uppercase opacity-50 transition-opacity hover:opacity-100"
 			>
 				<svg
 					class="size-3 shrink-0"
@@ -51,16 +32,10 @@ let selectedId = $state<VibeAppId>('invoice')
 				</svg>
 				Dokumentation
 			</a>
-		</aside>
+		</header>
 
-		<section
-			class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] bg-sandbox-host p-6"
-		>
-			<div class="flex min-h-0 min-w-0 flex-1 flex-col">
-				{#key selectedId}
-					<VibeSandboxFrame appId={selectedId} />
-				{/key}
-			</div>
-		</section>
+		<div class="flex min-h-0 min-w-0 flex-1 flex-col">
+			<UiLabPanel />
+		</div>
 	</div>
 </div>

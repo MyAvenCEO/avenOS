@@ -5,7 +5,7 @@
 	"version": "0.0.1",
 	"identifier": "ceo.aven.os",
 	"build": {
-		"beforeDevCommand": "bun run build:vibe-sandbox && bun run dev",
+		"beforeDevCommand": "bun run dev",
 		"devUrl": "http://127.0.0.1:1420",
 		"beforeBuildCommand": "bun run build",
 		"frontendDist": "../build"
@@ -44,8 +44,6 @@
 			"icons/icon.ico"
 		],
 		"resources": {
-			"../../libs/aven-vibe-sandbox/sandbox/dist/sandbox.html": "vibe-sandbox/sandbox.html",
-			"../../libs/aven-vibe-sandbox/sandbox/dist/ext-apps.js": "vibe-sandbox/ext-apps.js",
 			"../../libs/aven-schema/schema.manifest.json": "aven-schema/schema.manifest.json",
 			"../../libs/aven-schema/migrations/registry.json": "aven-schema/migrations/registry.json",
 			"../../libs/aven-schema/migrations/snapshots/before-files.manifest.json": "aven-schema/migrations/snapshots/before-files.manifest.json"

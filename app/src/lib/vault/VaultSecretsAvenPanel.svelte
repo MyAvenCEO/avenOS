@@ -1,19 +1,17 @@
 <script lang="ts">
-	import { browser } from '$app/environment'
-	import { onDestroy } from 'svelte'
-	import { AvenUiEngine, type UiEvent } from '@avenos/aven-ui'
-	import { createVaultSecretsShell } from '@avenos/aven-ui/fixtures/vault-secrets'
-	import {
-		listenSandboxQjsState,
-		mountRequestFromShell,
-		sessionDispatch,
-		sessionMount,
-		sessionUnmount,
-	} from '$lib/aven-ui/sandbox-qjs-session'
+	/**
+	 * Vault secrets panel — renders the `vault-secrets` aven-ui vibe through the
+	 * shared `AvenUiView`. View events (ADD / TOGGLE_REVEAL / DELETE) are
+	 * host-handled here against the Tauri vault commands; each mutation reloads
+	 * the secret list, which rebuilds `source` and re-mounts the view with fresh
+	 * state. Desktop-only (the QuickJS + vault plugins live in Tauri) — handled
+	 * by the `unlocked` gate and `AvenUiView`'s own guard.
+	 */
+	import type { UiEvent } from '@avenos/aven-ui'
+	import { createVaultSecretsShell } from '@avenos/aven-ui/vibes/vault-secrets'
+	import AvenUiView from '$lib/aven-ui/AvenUiView.svelte'
 	import { deviceSession } from '$lib/settings/device-session-store'
-	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { t } from '$lib/i18n'
-	import { destroyVaultEmbedWebview } from '$lib/vault/tauri-vault-embed'
 	import {
 		toStorageId,
 		vaultSecretTitleKey,
@@ -29,18 +27,13 @@
 
 	let { kind }: { kind: VaultSecretKind } = $props()
 
-	let hostNode: HTMLElement | null = null
-	let mountToken = 0
-	let engine: AvenUiEngine | null = null
-	let sessionId = $state<string | null>(null)
-	let runtimeState = $state<Record<string, unknown> | null>(null)
-	let revealed = $state<Record<string, string>>({})
-	let panelError = $state<string | null>(null)
-	let unlistenState: (() => void) | null = null
-
 	const shell = createVaultSecretsShell()
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
-	const inTauri = isTauriRuntime()
+
+	let secrets = $state<SecretListEntry[]>([])
+	let revealed = $state<Record<string, string>>({})
+	let panelError = $state<string | null>(null)
+	let loadedKind: string | null = null
 
 	function vaultLabels() {
 		return {
@@ -58,125 +51,30 @@
 		}
 	}
 
-	function buildSource(options: {
-		secrets: SecretListEntry[]
-		loading?: boolean
-		error?: string | null
-		busy?: boolean
-	}) {
-		return {
-			kind,
-			title: t(vaultSecretTitleKey(kind)),
-			secrets: options.secrets,
-			labels: vaultLabels(),
-			loading: options.loading ?? false,
-			error: options.error ?? '',
-			busy: options.busy ?? false,
-			newId: '',
-			newValue: '',
-			revealed,
-		}
-	}
+	const source = $derived({
+		kind,
+		title: t(vaultSecretTitleKey(kind)),
+		secrets,
+		labels: vaultLabels(),
+		loading: false,
+		error: panelError ?? '',
+		busy: false,
+		newId: '',
+		newValue: '',
+		revealed,
+	})
 
-	async function teardownSession(): Promise<void> {
-		unlistenState?.()
-		unlistenState = null
-		if (sessionId) {
-			try {
-				await sessionUnmount(sessionId)
-			} catch {
-				// ignore teardown errors
-			}
-		}
-		sessionId = null
-	}
-
-	async function teardownEngine(): Promise<void> {
-		await teardownSession()
-		await engine?.unmount()
-		engine = null
-	}
-
-	async function mountPanel(options: {
-		secrets: SecretListEntry[]
-		loading?: boolean
-		error?: string | null
-		busy?: boolean
-	}): Promise<void> {
-		if (!hostNode || !browser || !inTauri || !unlocked) return
-
-		const token = ++mountToken
-		const host = hostNode
-		const currentKind = kind
-		panelError = null
-
+	async function reload(): Promise<void> {
 		try {
-			await teardownEngine()
-			if (token !== mountToken || hostNode !== host || kind !== currentKind) return
-
-			const source = buildSource(options)
-			const mounted = await sessionMount({ ...mountRequestFromShell(shell), source })
-			if (token !== mountToken || hostNode !== host || kind !== currentKind) {
-				await sessionUnmount(mounted.sessionId).catch(() => {})
-				return
-			}
-
-			sessionId = mounted.sessionId
-			runtimeState = mounted.state
-
-			engine = new AvenUiEngine({
-				container: host,
-				containerName: 'aven-ui-vault-secrets',
-				onEvent: (event: UiEvent) => {
-					void handleEvent(event, token)
-				},
-			})
-			await engine.mount({
-				view: shell.view,
-				style: shell.style,
-				state: mounted.state,
-			})
-			if (token !== mountToken) {
-				await teardownEngine()
-				return
-			}
-
-			unlistenState = await listenSandboxQjsState((event) => {
-				if (event.sessionId !== sessionId || token !== mountToken) return
-				runtimeState = event.state
-				void engine?.replaceState(event.state)
-			})
+			secrets = await secretsList()
+			panelError = null
 		} catch (err) {
-			if (token !== mountToken) return
+			secrets = []
 			panelError = err instanceof Error ? err.message : String(err)
 		}
 	}
 
-	async function reloadSecrets(options: {
-		error?: string | null
-		busy?: boolean
-	}): Promise<void> {
-		try {
-			const secrets = await secretsList()
-			await mountPanel({
-				secrets,
-				loading: false,
-				error: options.error ?? null,
-				busy: options.busy ?? false,
-			})
-		} catch (err) {
-			await mountPanel({
-				secrets: [],
-				loading: false,
-				error: options.error ?? (err instanceof Error ? err.message : String(err)),
-				busy: false,
-			})
-		}
-	}
-
-	async function handleEvent(event: UiEvent, token: number): Promise<void> {
-		if (!sessionId || token !== mountToken) return
-
+	async function handleEvent(event: UiEvent): Promise<void> {
 		if (event.send === 'ADD_SECRET') {
 			const storageId = toStorageId(kind, String(event.payload.id ?? ''))
 			const value = String(event.payload.value ?? '')
@@ -184,9 +82,9 @@
 			try {
 				await secretsSet(storageId, value)
 				revealed = {}
-				await reloadSecrets({ error: null })
+				await reload()
 			} catch (err) {
-				await reloadSecrets({ error: err instanceof Error ? err.message : String(err) })
+				panelError = err instanceof Error ? err.message : String(err)
 			}
 			return
 		}
@@ -198,14 +96,12 @@
 				const next = { ...revealed }
 				delete next[id]
 				revealed = next
-				await reloadSecrets({ error: null })
 				return
 			}
 			try {
 				revealed = { ...revealed, [id]: await secretsReveal(id) }
-				await reloadSecrets({ error: null })
 			} catch (err) {
-				await reloadSecrets({ error: err instanceof Error ? err.message : String(err) })
+				panelError = err instanceof Error ? err.message : String(err)
 			}
 			return
 		}
@@ -218,32 +114,24 @@
 				const next = { ...revealed }
 				delete next[id]
 				revealed = next
-				await reloadSecrets({ error: null })
+				await reload()
 			} catch (err) {
-				await reloadSecrets({ error: err instanceof Error ? err.message : String(err) })
+				panelError = err instanceof Error ? err.message : String(err)
 			}
 		}
 	}
 
-	async function remountIfReady(): Promise<void> {
-		if (!hostNode || !browser || !inTauri || !unlocked) return
-		await destroyVaultEmbedWebview()
-		await reloadSecrets({ error: null })
-	}
-
-	function attachHost(element: HTMLElement) {
-		hostNode = element
-		void remountIfReady()
-		return () => {
-			if (hostNode === element) hostNode = null
-			mountToken += 1
-			void teardownEngine()
+	// Load (once) per unlocked kind; reset reveal state on kind switch.
+	$effect(() => {
+		const k = kind
+		if (!unlocked) {
+			loadedKind = null
+			return
 		}
-	}
-
-	onDestroy(() => {
-		mountToken += 1
-		void teardownEngine()
+		if (loadedKind === k) return
+		loadedKind = k
+		revealed = {}
+		void reload()
 	})
 </script>
 
@@ -251,11 +139,13 @@
 	{#if !unlocked}
 		<p class="text-muted-foreground py-8 text-sm">{t('vaultNav.lockedHint')}</p>
 	{:else}
-		{#if panelError}
-			<p class="text-destructive mb-4 shrink-0 text-sm" role="alert">{panelError}</p>
-		{/if}
 		{#key kind}
-			<div {@attach attachHost} class="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto"></div>
+			<AvenUiView
+				shell={shell}
+				source={source}
+				onEvent={handleEvent}
+				containerName="aven-ui-vault-secrets"
+			/>
 		{/key}
 	{/if}
 </section>

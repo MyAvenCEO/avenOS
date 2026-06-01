@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Tauri desktop dev: SvelteKit on :1420 (`beforeDevCommand`), vibe sandbox in child WKWebView (`vibe-sandbox://`).
+ * Tauri desktop dev: SvelteKit on :1420 (`beforeDevCommand`). Views render in-process via aven-ui + sandbox-quickjs.
  */
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
@@ -20,7 +20,7 @@ async function main() {
 	freeDevServerPort(1420)
 
 	console.log(
-		'[dev:app:macos] AvenOS Tauri (macOS) · Host-UI: SvelteKit @ http://127.0.0.1:1420 (dev-only, embedded in WKWebView) · Vibe-Sandbox: native Child-WKWebView (vibe-sandbox://)\n'
+		'[dev:app:macos] AvenOS Tauri (macOS) · Host-UI: SvelteKit @ http://127.0.0.1:1420 (dev-only, embedded in WKWebView)\n'
 	)
 	if (process.env.AVENOS_DEV_CLEAN_RUST === '1') {
 		spawnSync('bun', ['./scripts/clean-app-tauri-target.ts'], { cwd: repoRoot, stdio: 'inherit' })

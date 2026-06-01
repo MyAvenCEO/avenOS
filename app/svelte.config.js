@@ -17,11 +17,6 @@ const config = {
 		adapter: adapter({ fallback: 'index.html', strict: false }),
 		alias: {
 			'@avenos/aven-city': path.resolve(__dirname, '../libs/aven-city/src/index.ts'),
-			'@avenos/aven-vibe-sandbox': path.resolve(
-				__dirname,
-				'../libs/aven-vibe-sandbox/src/index.ts'
-			),
-			'@avenos/aven-vibes': path.resolve(__dirname, '../libs/aven-vibes/src/registry.ts'),
 			'@avenos/docs': path.resolve(__dirname, '../docs')
 		}
 	}
