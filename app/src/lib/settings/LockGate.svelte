@@ -212,9 +212,25 @@
 			if (!identity) {
 				throw new Error(t('lockGate.errIdentityAfterUnlock'))
 			}
-			await bootstrapJazzStrict()
+			// Forward into the app the moment identity is known; hydrate the
+			// Groove shell (RocksDB open, keyshare/biscuit hydrate, peer transport)
+			// in the BACKGROUND. Inside views gate their data on
+			// `grooveSessionReady`, so the unlock feels instant instead of blocking
+			// several seconds on bootstrap.
+			grooveSessionReady.set(false)
 			setUnlockedWithIdentity(identity)
-			grooveSessionReady.set(true)
+			loading = false
+			unlockingSlug = undefined
+			void bootstrapJazzStrict()
+				.then(() => grooveSessionReady.set(true))
+				.catch((e) => {
+					// Bootstrap failed after we already forwarded — re-lock and
+					// surface the error back on the lock screen.
+					err = e instanceof Error ? e.message : String(e)
+					void invoke('plugin:self|lock').catch(() => {})
+					applyLockedFrontendState()
+				})
+			return
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 			if (unlockedRust) {
@@ -225,7 +241,6 @@
 				}
 				applyLockedFrontendState()
 			}
-		} finally {
 			loading = false
 			unlockingSlug = undefined
 		}
