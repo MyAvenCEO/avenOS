@@ -38,6 +38,11 @@ pub struct SyncManager {
     pub(super) allow_unprivileged_schema_catalogue_writes: bool,
 
     pub(super) clients: HashMap<PeerId, ClientState>,
+    /// Peers whose last `ship_frontier_diff` found nothing owed (frontier
+    /// converged from our side). Cleared on any local change/announce. Drives the
+    /// "Up to date" mesh status (§10.2) — not a delivery ledger: it stores no
+    /// per-batch state and dropping it only forces a re-diff.
+    pub(super) converged_peers: HashSet<PeerId>,
 
     pub(super) inbox: Vec<InboxEntry>,
     pub(super) outbox: Vec<OutboxEntry>,
@@ -167,6 +172,7 @@ impl SyncManager {
             catalogue_entries: HashMap::new(),
             allow_unprivileged_schema_catalogue_writes: false,
             clients: HashMap::new(),
+            converged_peers: HashSet::new(),
             inbox: Vec::new(),
             outbox: Vec::new(),
             pending_query_subscriptions: Vec::new(),
@@ -514,6 +520,16 @@ impl SyncManager {
 
     pub fn peer_client_ids(&self) -> Vec<PeerId> {
         self.clients.keys().copied().collect()
+    }
+
+    /// Peers whose frontier is converged from our side (last diff was empty).
+    /// Drives the "Up to date" mesh status (§10.2).
+    pub fn converged_peer_ids(&self) -> Vec<PeerId> {
+        self.converged_peers
+            .iter()
+            .filter(|id| self.clients.contains_key(id))
+            .copied()
+            .collect()
     }
 
     // ========================================================================

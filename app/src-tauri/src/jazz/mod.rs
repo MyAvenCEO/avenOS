@@ -979,11 +979,15 @@ pub(crate) async fn publish_trusted_peers_ui(
 		let client = with_connected_client(jazz, app, ss).await?;
 		let rows = crate::peers::list_peer_rows(client.as_ref()).await?;
 		let registered = registered_peer_dids(client.as_ref());
+		let converged = converged_peer_dids(client.as_ref());
 		let local_pk_prefix = local_pk_prefix_hex(ss);
-		let snap = build_peer_mesh_status(&rows, &registered, local_pk_prefix);
+		let snap = build_peer_mesh_status(&rows, &registered, &converged, local_pk_prefix);
 		(rows, snap)
 	} else {
-		(vec![], build_peer_mesh_status(&[], &Default::default(), String::new()))
+		(
+			vec![],
+			build_peer_mesh_status(&[], &Default::default(), &Default::default(), String::new()),
+		)
 	};
 
 	if jazz.table_ui_ref_count("peers").await > 0 {
@@ -1003,6 +1007,16 @@ fn registered_peer_dids(client: &JazzClient) -> std::collections::HashSet<String
 		.collect()
 }
 
+/// did:key set for peers whose frontier is converged from our side ("Up to date").
+fn converged_peer_dids(client: &JazzClient) -> std::collections::HashSet<String> {
+	client
+		.converged_peer_ids()
+		.unwrap_or_default()
+		.iter()
+		.filter_map(|pid| crate::jazz_auth::peer_did_from_ed25519(&pid.0).ok())
+		.collect()
+}
+
 /// First 4 bytes of the local Ed25519 pubkey, hex — for the mesh diagnostics line.
 fn local_pk_prefix_hex(ss: &SelfState) -> String {
 	let Ok(root) = ss.with_root(|r| Ok(*r)) else {
@@ -1014,12 +1028,14 @@ fn local_pk_prefix_hex(ss: &SelfState) -> String {
 	}
 }
 
-/// Real mesh status from the trusted-peer rows + live transport registration.
-/// A peer with a registered sync link is `Syncing` (transport up, exchanging);
-/// otherwise `Searching` (no live link yet). No demo data.
+/// Real mesh status from the trusted-peer rows + live transport registration +
+/// frontier convergence (§10.2). A registered+converged peer is `Ready` (up to
+/// date); registered but still owed batches is `Syncing`; no live link is
+/// `Searching`. No demo data.
 fn build_peer_mesh_status(
 	rows: &[crate::peers::PeerRowReply],
 	registered_dids: &std::collections::HashSet<String>,
+	converged_dids: &std::collections::HashSet<String>,
 	local_pk_prefix: String,
 ) -> PeerMeshStatusReply {
 	let peers: Vec<PeerMeshPeerState> = rows
@@ -1027,7 +1043,14 @@ fn build_peer_mesh_status(
 		.filter(|r| r.status == "active")
 		.map(|r| {
 			let linked = registered_dids.contains(&r.peer_did);
-			let (phase, usability, bootstrap) = if linked {
+			let converged = linked && converged_dids.contains(&r.peer_did);
+			let (phase, usability, bootstrap) = if converged {
+				(
+					PeerMeshPhase::Ready,
+					PeerUsability::Usable,
+					SyncBootstrapPhase::Ready,
+				)
+			} else if linked {
 				(
 					PeerMeshPhase::Syncing,
 					PeerUsability::LiveSyncing,
@@ -2320,12 +2343,23 @@ pub(crate) async fn execute_mesh_snapshot(
 	ss: &SelfState,
 ) -> Result<PeerMeshStatusReply, String> {
 	if !ss.is_unlocked() {
-		return Ok(build_peer_mesh_status(&[], &Default::default(), String::new()));
+		return Ok(build_peer_mesh_status(
+			&[],
+			&Default::default(),
+			&Default::default(),
+			String::new(),
+		));
 	}
 	let client = with_connected_client(jazz, app, ss).await?;
 	let rows = crate::peers::list_peer_rows(client.as_ref()).await?;
 	let registered = registered_peer_dids(client.as_ref());
-	Ok(build_peer_mesh_status(&rows, &registered, local_pk_prefix_hex(ss)))
+	let converged = converged_peer_dids(client.as_ref());
+	Ok(build_peer_mesh_status(
+		&rows,
+		&registered,
+		&converged,
+		local_pk_prefix_hex(ss),
+	))
 }
 
 pub(crate) async fn execute_mesh_refresh_full(

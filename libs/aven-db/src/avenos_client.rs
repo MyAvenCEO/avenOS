@@ -264,6 +264,13 @@ impl JazzClient {
             .map_err(|e| JazzError::Sync(format!("peer_client_ids: {e}")))
     }
 
+    /// Peers whose frontier is converged from our side — "Up to date" (§10.2).
+    pub fn converged_peer_ids(&self) -> Result<Vec<PeerId>> {
+        self.runtime
+            .converged_peer_ids()
+            .map_err(|e| JazzError::Sync(format!("converged_peer_ids: {e}")))
+    }
+
     pub fn register_peer_sync_client(&self, peer_id: PeerId) -> Result<()> {
         self.runtime
             .ensure_client_as_peer(peer_id)

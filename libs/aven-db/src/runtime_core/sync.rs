@@ -135,6 +135,14 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
             .peer_client_ids()
     }
 
+    /// AvenOS: peers whose frontier is converged from our side (§10.2).
+    pub fn converged_peer_ids(&self) -> Vec<PeerId> {
+        self.schema_manager
+            .query_manager()
+            .sync_manager()
+            .converged_peer_ids()
+    }
+
     /// AvenOS: replay catch-up for every Peer client (caller should flush after).
     pub fn rebroadcast_all_peer_clients(&mut self) {
         self.clear_all_peer_delivery_ledgers();

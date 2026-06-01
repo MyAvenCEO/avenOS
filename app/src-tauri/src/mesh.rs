@@ -12,16 +12,15 @@ pub enum SyncBootstrapPhase {
     Ready,
 }
 
-/// States the backend can actually determine from transport registration.
-/// `Ready` (fully converged) is intentionally absent: the stateless frontier
-/// model keeps no per-peer head ledger, so "up to date" cannot be asserted
-/// cheaply. The webview defensively renders a linked peer as syncing until a
-/// future convergence signal lands. See `docs/CapabilitySyncTracker.md` §9.
+/// States the backend determines from transport registration + frontier
+/// convergence (§10.2): `Searching` (no live link), `Syncing` (linked,
+/// exchanging), `Ready` (linked + last frontier diff empty = up to date).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PeerMeshPhase {
     Searching,
     Syncing,
+    Ready,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -29,6 +28,7 @@ pub enum PeerMeshPhase {
 pub enum PeerUsability {
     Connecting,
     LiveSyncing,
+    Usable,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

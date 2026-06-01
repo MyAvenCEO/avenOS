@@ -96,6 +96,9 @@ impl SyncManager {
         if client_ids.is_empty() {
             return;
         }
+        // A local change means every peer may now be behind — they re-converge
+        // when they FrontierNeed and ship_frontier_diff comes up empty (§10.2).
+        self.converged_peers.clear();
         let heads = self.resource_frontier_heads(storage);
         for client_id in client_ids {
             self.outbox.push(OutboxEntry {
@@ -129,7 +132,14 @@ impl SyncManager {
         their_heads: &[BatchId],
     ) {
         let (dag, index) = self.build_sync_dag(storage);
-        for batch_id in crate::frontier::frontier_diff(&dag, their_heads) {
+        let diff = crate::frontier::frontier_diff(&dag, their_heads);
+        // Empty diff = the peer already holds all our heads → converged (§10.2).
+        if diff.is_empty() {
+            self.converged_peers.insert(client_id);
+        } else {
+            self.converged_peers.remove(&client_id);
+        }
+        for batch_id in diff {
             let Some((object_id, table, metadata, row)) = index.get(&batch_id) else {
                 continue;
             };

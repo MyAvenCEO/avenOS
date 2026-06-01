@@ -527,6 +527,12 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         Ok(core.peer_client_ids())
     }
 
+    /// Peers whose frontier is converged from our side (§10.2).
+    pub fn converged_peer_ids(&self) -> Result<Vec<PeerId>, RuntimeError> {
+        let core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        Ok(core.converged_peer_ids())
+    }
+
     /// Re-queue a peer outbox entry after a transport send failure (mux not ready yet).
     pub fn prepend_outbox(&self, entry: OutboxEntry) -> Result<(), RuntimeError> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
