@@ -144,7 +144,13 @@ const TAURI_B_CONFIG = JSON.stringify({
 })
 
 function spawnTauri(label: 'A' | 'B', colour: string, env: Record<string, string>) {
-	const instanceEnv: Record<string, string> = { ...env, AVENOS_DEV_INSTANCE: label }
+	const instanceEnv: Record<string, string> = {
+		...env,
+		AVENOS_DEV_INSTANCE: label,
+		// Enable the dev TCP peer transport (127.0.0.1) so A↔B converge a shared
+		// spark live. Single-instance `dev` omits this and stays local-only.
+		AVENOS_DEV_PEER_SYNC: '1',
+	}
 	if (label === 'B') {
 		instanceEnv.CARGO_TARGET_DIR = TAURI_B_TARGET_DIR
 	}

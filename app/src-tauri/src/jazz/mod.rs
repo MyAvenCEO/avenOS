@@ -17,9 +17,12 @@ use groove::{
 	AppContext,
 	AppId,
 	ClientId,
+	DevRole,
 	JazzClient,
 	JazzError,
 	ObjectId,
+	SyncTransport,
+	TcpSyncTransport,
 	Value,
 };
 use crate::demo_mesh::PeerMeshStatusReply;
@@ -1193,6 +1196,52 @@ pub(crate) fn patch_updates(table_schema: &TableSchema, patch: JsonRow) -> Resul
 	Ok(ops)
 }
 
+/// Dev-only (`dev:app2x`): when `AVENOS_DEV_PEER_SYNC=1`, establish a localhost
+/// TCP peer transport so two instances converge a shared spark live. Instance A
+/// listens, B dials (retrying until A is up). Returns the transport + remote peer
+/// id, or `None` to run local-only (single instance, or peer not reachable).
+async fn try_dev_peer_transport(local: ClientId) -> Option<(Arc<dyn SyncTransport>, ClientId)> {
+	if std::env::var("AVENOS_DEV_PEER_SYNC").is_err() {
+		return None;
+	}
+	const ADDR: &str = "127.0.0.1:14290";
+	let role = match std::env::var("AVENOS_DEV_INSTANCE").ok().as_deref() {
+		Some("A") => DevRole::Listen,
+		Some("B") => DevRole::Dial,
+		_ => return None,
+	};
+	let established = tokio::time::timeout(Duration::from_secs(30), async {
+		loop {
+			match TcpSyncTransport::connect(role, ADDR, local).await {
+				Ok(t) => return Some(t),
+				// Dialer retries until the listener binds; listener bind/accept
+				// failures fall through to local-only.
+				Err(_) if role == DevRole::Dial => {
+					tokio::time::sleep(Duration::from_millis(400)).await;
+				}
+				Err(e) => {
+					log::warn!("dev peer transport ({role:?}) failed: {e}");
+					return None;
+				}
+			}
+		}
+	})
+	.await
+	.ok()
+	.flatten();
+	match established {
+		Some(t) => {
+			let remote = t.remote_client_id();
+			log::info!("dev peer transport established (remote {remote})");
+			Some((Arc::new(t), remote))
+		}
+		None => {
+			log::warn!("dev peer transport not established; running local-only");
+			None
+		}
+	}
+}
+
 async fn jazz_connect(
 	app: &tauri::AppHandle,
 	self_state: &SelfState,
@@ -1222,7 +1271,18 @@ async fn jazz_connect(
 	};
 
 	let _ = (app, mj);
-	let client = JazzClient::connect(ctx).await.map_err(format_jazz_err)?;
+	let client = match try_dev_peer_transport(ClientId(deterministic)).await {
+		Some((transport, remote)) => {
+			let client = JazzClient::connect_with_sync_transport(ctx, transport, None)
+				.await
+				.map_err(format_jazz_err)?;
+			if let Err(e) = client.register_peer_sync_client(remote) {
+				log::warn!("register dev peer {remote}: {e}");
+			}
+			client
+		}
+		None => JazzClient::connect(ctx).await.map_err(format_jazz_err)?,
+	};
 	crate::schema_migrations::stamp_current_vault_snapshot(&data_dir, &schema)?;
 	Ok(client)
 }
