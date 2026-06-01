@@ -1,30 +1,20 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
-use crate::metadata::{MetadataKey, RowProvenance};
 use crate::object::{BranchName, ObjectId};
 use crate::row_histories::BatchId;
 use crate::schema_manager::LensTransformer;
 use crate::storage::Storage;
-use crate::sync_manager::{PeerId, DurabilityTier, PendingPermissionCheck};
+use crate::sync_manager::{PeerId, DurabilityTier};
 
 use super::manager::{QueryManager, SchemaWarningAccumulator, ServerQuerySubscription};
-use super::policy::Operation;
 use super::session::Session;
 use super::settlement_eval_cache::SettlementEvalCache;
-use super::types::{
-    ComposedBranchName, LoadedRow, Schema, SchemaHash, TableName, TableSchema,
-};
+use super::types::{ComposedBranchName, LoadedRow, Schema, SchemaHash, TableName};
 
 const MAX_INITIAL_QUERY_REPLAY_OUTBOX_PER_PASS: usize = 32;
 
-enum WriteSchemaResolution {
-    Resolved(Box<TableSchema>),
-    PendingSchema,
-    Unresolved,
-}
 
 enum AuthorizedTuplesResult {
     Ready(Vec<super::types::Tuple>),
@@ -36,8 +26,6 @@ pub(super) struct ResolvedSchemaRow {
     pub batch_id: BatchId,
     pub content: Vec<u8>,
 }
-
-const SCHEMA_RESOLUTION_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub(super) struct RowTransformContext<'a> {
     pub(super) table: &'a str,
@@ -73,29 +61,6 @@ impl QueryManager {
         }
 
         false
-    }
-
-    pub(super) fn missing_permissions_head_reason() -> &'static str {
-        "backend has no published permissions head; push permissions before running session-scoped queries or writes against this backend"
-    }
-
-    fn current_row_provenance(
-        &mut self,
-        storage: &dyn Storage,
-        object_id: ObjectId,
-        branch_name: BranchName,
-    ) -> Option<RowProvenance> {
-        let branches = vec![branch_name.as_str().to_string()];
-        let branch_schema_map = Self::branch_schema_map_for_context(&self.schema_context);
-        let (_, row) = self.load_best_visible_row_batch(
-            storage,
-            object_id,
-            &branches,
-            None,
-            &self.schema_context,
-            &branch_schema_map,
-        )?;
-        Some(row.row_provenance())
     }
 
     pub(super) fn build_server_subscription_context(
@@ -1017,319 +982,4 @@ impl QueryManager {
         }
     }
 
-    /// Pick up pending permission checks from SyncManager and evaluate them.
-    pub(super) fn pick_up_pending_permission_checks<H: Storage>(&mut self, storage: &mut H) {
-        let pending = self.sync_manager.take_pending_permission_checks();
-
-        for check in pending {
-            self.evaluate_write_permission(storage, check);
-        }
-    }
-
-    fn schema_for_write_hash(&self, schema_hash: super::types::SchemaHash) -> Option<&Schema> {
-        if self.schema_context.is_initialized() && schema_hash == self.schema_context.current_hash {
-            return Some(self.schema.as_ref());
-        }
-
-        self.schema_context
-            .get_schema(&schema_hash)
-            .or_else(|| self.known_schemas.get(&schema_hash))
-    }
-
-    fn resolve_write_table_schema(
-        &mut self,
-        table_name: TableName,
-        branch_name: BranchName,
-    ) -> WriteSchemaResolution {
-        let parsed_branch = ComposedBranchName::parse(&branch_name);
-        let schema_hash = self
-            .branch_schema_map
-            .get(branch_name.as_str())
-            .copied()
-            .or_else(|| {
-                parsed_branch
-                    .as_ref()
-                    .and_then(|composed| self.find_schema_by_short_hash(&composed.schema_hash))
-            });
-
-        if let Some(schema_hash) = schema_hash {
-            self.branch_schema_map
-                .insert(branch_name.as_str().to_string(), schema_hash);
-
-            let Some(schema) = self.schema_for_write_hash(schema_hash) else {
-                return WriteSchemaResolution::PendingSchema;
-            };
-
-            return schema
-                .get(&table_name)
-                .cloned()
-                .map(Box::new)
-                .map(WriteSchemaResolution::Resolved)
-                .unwrap_or(WriteSchemaResolution::Unresolved);
-        }
-
-        // When the write targets the current initialized branch, self.schema is authoritative.
-        if self.schema_context.is_initialized()
-            && branch_name.as_str() == self.schema_context.branch_name().as_str()
-        {
-            return self
-                .schema
-                .get(&table_name)
-                .cloned()
-                .map(Box::new)
-                .map(WriteSchemaResolution::Resolved)
-                .unwrap_or(WriteSchemaResolution::Unresolved);
-        }
-
-        // In pure local/client mode (no server-known schemas and a non-empty current schema),
-        // self.schema is still authoritative.
-        if self.known_schemas.is_empty() && !self.schema.is_empty() {
-            return self
-                .schema
-                .get(&table_name)
-                .cloned()
-                .map(Box::new)
-                .map(WriteSchemaResolution::Resolved)
-                .unwrap_or(WriteSchemaResolution::Unresolved);
-        }
-
-        if parsed_branch.is_some() {
-            return WriteSchemaResolution::PendingSchema;
-        }
-
-        WriteSchemaResolution::Unresolved
-    }
-
-    /// Evaluate a write permission check.
-    pub(super) fn evaluate_write_permission<H: Storage>(
-        &mut self,
-        storage: &mut H,
-        mut check: PendingPermissionCheck,
-    ) {
-        let table_name = match check.metadata.get(MetadataKey::Table.as_str()) {
-            Some(t) => TableName::new(t),
-            None => {
-                tracing::trace!(
-                    operation = ?check.operation,
-                    metadata_keys = ?check.metadata.keys().collect::<Vec<_>>(),
-                    "allowing write with no table metadata (non-row object)"
-                );
-                self.sync_manager.approve_permission_check(storage, check);
-                return;
-            }
-        };
-
-        let branch_name = check
-            .payload
-            .branch_name()
-            .unwrap_or_else(|| BranchName::new(self.current_branch()));
-        let object_id = check.payload.object_id().unwrap_or_default();
-
-        let branch_table_schema = match self.resolve_write_table_schema(table_name, branch_name) {
-            WriteSchemaResolution::Resolved(schema) => *schema,
-            WriteSchemaResolution::PendingSchema => {
-                let wait_started_at = check
-                    .schema_wait_started_at
-                    .get_or_insert_with(Instant::now);
-                let wait_elapsed = wait_started_at.elapsed();
-
-                if wait_elapsed >= SCHEMA_RESOLUTION_TIMEOUT {
-                    tracing::warn!(
-                        operation = ?check.operation,
-                        table = %table_name,
-                        branch = %branch_name,
-                        waited_ms = wait_elapsed.as_millis() as u64,
-                        "denying deferred write because schema did not become available in time"
-                    );
-                    let reason = format!(
-                        "{:?} denied on table {} - schema unavailable for branch {} after waiting {}s",
-                        check.operation,
-                        table_name.0,
-                        branch_name,
-                        SCHEMA_RESOLUTION_TIMEOUT.as_secs()
-                    );
-                    self.sync_manager
-                        .reject_permission_check(storage, check, reason);
-                    return;
-                }
-
-                tracing::debug!(
-                    operation = ?check.operation,
-                    table = %table_name,
-                    branch = %branch_name,
-                    waited_ms = wait_elapsed.as_millis() as u64,
-                    "deferring write permission check until schema becomes available"
-                );
-                self.sync_manager
-                    .requeue_pending_permission_checks(vec![check]);
-                return;
-            }
-            WriteSchemaResolution::Unresolved => {
-                tracing::warn!(
-                    operation = ?check.operation,
-                    table = %table_name,
-                    branch = %branch_name,
-                    "denying write because schema could not be resolved"
-                );
-                let reason = format!(
-                    "{:?} denied on table {} - schema unavailable for branch {}",
-                    check.operation, table_name.0, branch_name
-                );
-                self.sync_manager
-                    .reject_permission_check(storage, check, reason);
-                return;
-            }
-        };
-
-        if check.operation == Operation::Insert
-            && let Some(new_content) = check.new_content.as_ref()
-            && let Err(err) =
-                self.validate_json_for_content(&branch_table_schema.columns, new_content)
-        {
-            self.sync_manager
-                .reject_permission_check(storage, check, err.to_string());
-            return;
-        }
-
-        let (auth_schema, auth_context) = match self.authorization_schema_for_branch(&branch_name) {
-            Some(parts) => parts,
-            None => {
-                if !self.authorization_schema_required {
-                    self.sync_manager.approve_permission_check(storage, check);
-                    return;
-                }
-                if self.authorization_schema.is_none() {
-                    let reason = format!(
-                        "{:?} denied on table {} - {}",
-                        check.operation,
-                        table_name.0,
-                        Self::missing_permissions_head_reason()
-                    );
-                    self.sync_manager.reject_permission_check_with_code(
-                        storage,
-                        check,
-                        "permissions_head_missing".to_string(),
-                        reason,
-                    );
-                    return;
-                }
-                let wait_started_at = check
-                    .schema_wait_started_at
-                    .get_or_insert_with(Instant::now);
-                let wait_elapsed = wait_started_at.elapsed();
-
-                if wait_elapsed >= SCHEMA_RESOLUTION_TIMEOUT {
-                    let reason = format!(
-                        "{:?} denied on table {} - current permissions unavailable for branch {} after waiting {}s",
-                        check.operation,
-                        table_name.0,
-                        branch_name,
-                        SCHEMA_RESOLUTION_TIMEOUT.as_secs()
-                    );
-                    self.sync_manager
-                        .reject_permission_check(storage, check, reason);
-                } else {
-                    self.sync_manager
-                        .requeue_pending_permission_checks(vec![check]);
-                }
-                return;
-            }
-        };
-        let Some(auth_table_schema) = auth_schema.get(&table_name) else {
-            let reason = format!(
-                "{:?} denied on table {} - table missing from current permission schema",
-                check.operation, table_name.0
-            );
-            self.sync_manager
-                .reject_permission_check(storage, check, reason);
-            return;
-        };
-
-        let _ = (&auth_schema, &auth_context, &auth_table_schema);
-
-        if check.operation == Operation::Update {
-            if let Some(new_content) = check.new_content.as_ref()
-                && let Err(err) =
-                    self.validate_json_for_content(&branch_table_schema.columns, new_content)
-            {
-                self.sync_manager
-                    .reject_permission_check(storage, check, err.to_string());
-                return;
-            }
-            if check
-                .old_content
-                .as_ref()
-                .is_none_or(|content| content.is_empty())
-                && let Ok(Some(previous_row)) = storage.load_visible_region_row(
-                    table_name.as_str(),
-                    branch_name.as_str(),
-                    object_id,
-                )
-            {
-                check.old_content = Some(previous_row.data.to_vec());
-            }
-            self.sync_manager.approve_permission_check(storage, check);
-            return;
-        }
-
-        if check.operation == Operation::Insert {
-            self.sync_manager.approve_permission_check(storage, check);
-            return;
-        }
-
-        if check.operation == Operation::Delete {
-            let content = check.old_content.as_ref();
-            if content.is_none() || content.is_some_and(|c| c.is_empty()) {
-                let reason = format!(
-                    "{:?} denied on table {} - missing row content",
-                    check.operation, table_name.0
-                );
-                self.sync_manager
-                    .reject_permission_check(storage, check, reason);
-                return;
-            }
-            if self
-                .current_row_provenance(storage, object_id, branch_name)
-                .is_none()
-            {
-                let reason = format!(
-                    "{:?} denied on table {} - missing row provenance",
-                    check.operation, table_name.0
-                );
-                self.sync_manager
-                    .reject_permission_check(storage, check, reason);
-                return;
-            }
-            self.sync_manager.approve_permission_check(storage, check);
-            return;
-        }
-
-        self.sync_manager.approve_permission_check(storage, check);
-    }
-
-    /// Settle active policy checks and finalize completed ones.
-    pub(super) fn settle_policy_checks<H: Storage>(&mut self, storage: &mut H) {
-        // Collect IDs to finalize
-        let mut to_approve = Vec::new();
-        let to_reject = Vec::new();
-
-        for (pending_id, _state) in &self.active_policy_checks {
-            to_approve.push(*pending_id);
-        }
-
-        // Finalize completed checks
-        for id in to_approve {
-            if let Some(state) = self.active_policy_checks.remove(&id) {
-                self.sync_manager
-                    .approve_permission_check(storage, state.pending_check);
-            }
-        }
-
-        for (id, reason) in to_reject {
-            if let Some(state) = self.active_policy_checks.remove(&id) {
-                self.sync_manager
-                    .reject_permission_check(storage, state.pending_check, reason);
-            }
-        }
-    }
 }

@@ -16,7 +16,7 @@ use crate::schema_manager::{
 };
 use crate::storage::{RowLocator, Storage, StorageError};
 use crate::sync_manager::{
-    PeerId, DurabilityTier, PendingPermissionCheck, PendingUpdateId, QueryId, QueryPropagation,
+    PeerId, DurabilityTier, QueryId, QueryPropagation,
     RowBatchKey, SchemaWarning, SyncManager,
 };
 
@@ -342,17 +342,6 @@ pub struct QuerySubscriptionFailure {
     pub reason: String,
 }
 
-/// State for an active policy check (graphs and associated data).
-#[derive(Debug)]
-pub(super) struct PolicyCheckState {
-    /// Table name for error messages.
-    pub(super) table: TableName,
-    /// Branch the write is being evaluated on.
-    pub(super) branch: BranchName,
-    /// The original pending permission check.
-    pub(super) pending_check: PendingPermissionCheck,
-}
-
 #[derive(Debug)]
 pub(super) struct WriteTableCacheEntry {
     pub(super) descriptor: Arc<RowDescriptor>,
@@ -506,9 +495,6 @@ pub struct QueryManager {
     /// Terminal local subscription failures.
     pub(super) failed_subscriptions: Vec<QuerySubscriptionFailure>,
 
-    /// Active policy checks being evaluated.
-    pub(super) active_policy_checks: HashMap<PendingUpdateId, PolicyCheckState>,
-
     /// Server-side query subscriptions from downstream clients.
     /// Key is (client_id, query_id) to allow multiple queries per client.
     pub(super) server_subscriptions: HashMap<(PeerId, QueryId), ServerQuerySubscription>,
@@ -649,7 +635,6 @@ impl QueryManager {
             next_subscription_id: 0,
             update_outbox: Vec::new(),
             failed_subscriptions: Vec::new(),
-            active_policy_checks: HashMap::new(),
             server_subscriptions: HashMap::new(),
             schema_context: SchemaContext::empty(),
             branch_schema_map: HashMap::new(),
@@ -1276,8 +1261,6 @@ impl QueryManager {
         }
         self.server_subscriptions
             .retain(|&(cid, _), _| cid != client_id);
-        self.active_policy_checks
-            .retain(|_, state| state.pending_check.client_id != client_id);
         true
     }
 
@@ -1345,12 +1328,6 @@ impl QueryManager {
         // 3b. Process pending query subscriptions from downstream clients
         // (after indices are updated, so initial settle finds existing data)
         self.process_pending_query_subscriptions(storage);
-
-        // 4. Pick up new permission check intents from SyncManager
-        self.pick_up_pending_permission_checks(storage);
-
-        // 4b. Settle policy graphs and finalize completed checks
-        self.settle_policy_checks(storage);
 
         let post_permission_row_visibility_changes =
             self.sync_manager.take_pending_row_visibility_changes();
@@ -2962,14 +2939,8 @@ impl QueryManager {
         }
         subscriptions += self.update_outbox.len() * 256; // QueryUpdate overhead
 
-        // Active policy checks
-        let mut policy_checks = 0usize;
-        for state in self.active_policy_checks.values() {
-            policy_checks += 48; // HashMap entry
-            policy_checks += 1024;
-            policy_checks += state.table.0.len();
-            policy_checks += state.branch.as_str().len();
-        }
+        // Active policy checks (ReBAC removed — always zero, kept for tuple shape).
+        let policy_checks = 0usize;
 
         let total = indices + subscriptions + policy_checks;
         (indices, subscriptions, policy_checks, total)

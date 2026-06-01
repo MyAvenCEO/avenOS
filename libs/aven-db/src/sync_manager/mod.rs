@@ -16,7 +16,6 @@ use crate::storage::{metadata_from_row_locator, PreparedRowTableContext, Storage
 pub mod clock;
 pub mod forwarding;
 pub mod inbox;
-pub mod permissions;
 pub mod sync_logic;
 pub mod sync_tracer;
 pub mod types;
@@ -63,7 +62,6 @@ pub struct SyncManager {
     pub(super) inbox: Vec<InboxEntry>,
     pub(super) outbox: Vec<OutboxEntry>,
     /// Pending permission checks awaiting policy evaluation.
-    pub(super) pending_permission_checks: Vec<PendingPermissionCheck>,
     /// Pending query subscriptions awaiting QueryGraph building by QueryManager.
     pub(super) pending_query_subscriptions: Vec<PendingQuerySubscription>,
     /// Pending query unsubscriptions awaiting cleanup by QueryManager.
@@ -128,7 +126,6 @@ impl std::fmt::Debug for SyncManager {
             .field("clients", &self.clients)
             .field("inbox", &self.inbox)
             .field("outbox", &self.outbox)
-            .field("pending_permission_checks", &self.pending_permission_checks)
             .field(
                 "pending_query_subscriptions",
                 &self.pending_query_subscriptions,
@@ -241,7 +238,6 @@ impl SyncManager {
             clients: HashMap::new(),
             inbox: Vec::new(),
             outbox: Vec::new(),
-            pending_permission_checks: Vec::new(),
             pending_query_subscriptions: Vec::new(),
             pending_query_unsubscriptions: Vec::new(),
             pending_row_visibility_changes: Vec::new(),
@@ -393,7 +389,6 @@ impl SyncManager {
 
         let queues = self.inbox.len() * std::mem::size_of::<InboxEntry>()
             + self.outbox.len() * std::mem::size_of::<OutboxEntry>()
-            + self.pending_permission_checks.len() * std::mem::size_of::<PendingPermissionCheck>()
             + self.pending_query_subscriptions.len()
                 * std::mem::size_of::<PendingQuerySubscription>()
             + self.pending_query_unsubscriptions.len()
@@ -586,8 +581,6 @@ impl SyncManager {
             !clients.is_empty()
         });
         // Clean up pending queues
-        self.pending_permission_checks
-            .retain(|c| c.client_id != client_id);
         self.pending_query_subscriptions
             .retain(|s| s.client_id != client_id);
         self.pending_query_unsubscriptions

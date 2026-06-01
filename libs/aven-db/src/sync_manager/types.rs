@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -7,7 +6,6 @@ use uuid::Uuid;
 use crate::batch_fate::{BatchFate, SealedBatchSubmission};
 use crate::catalogue::CatalogueEntry;
 use crate::object::{BranchName, ObjectId};
-use crate::query_manager::policy::Operation;
 use crate::query_manager::query::Query;
 use crate::query_manager::session::Session;
 use crate::query_manager::types::SchemaHash;
@@ -598,27 +596,6 @@ pub struct PendingQuerySubscription {
 pub struct PendingQueryUnsubscription {
     pub client_id: PeerId,
     pub query_id: QueryId,
-}
-
-/// A write from a User client awaiting permission check (policy evaluation).
-///
-/// Row-level policy evaluation which may require async graph settling.
-#[derive(Debug, Clone)]
-pub struct PendingPermissionCheck {
-    pub id: PendingUpdateId,
-    pub client_id: PeerId,
-    pub payload: SyncPayload,
-    pub session: Session,
-    /// When schema resolution started deferring this check.
-    pub schema_wait_started_at: Option<Instant>,
-    /// Object metadata for policy evaluation.
-    pub metadata: HashMap<String, String>,
-    /// Old content for UPDATE/DELETE (None for INSERT).
-    pub old_content: Option<Vec<u8>>,
-    /// New content for INSERT/UPDATE (None for DELETE).
-    pub new_content: Option<Vec<u8>>,
-    /// Inferred operation type.
-    pub operation: Operation,
 }
 
 #[cfg(test)]
