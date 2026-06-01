@@ -18,6 +18,7 @@
 		"dev:app:linux": "bun --env-file=.env ./scripts/dev-app-linux.ts",
 		"clean:app:rust": "bun ./scripts/clean-app-tauri-target.ts",
 		"verify:aven-db": "bash ./scripts/verify-aven-db-gates.sh",
+		"dev:p2p-signal": "bun ./scripts/p2p-signal.ts --foreground",
 		"dev:app2x:mac": "bun --env-file=.env ./scripts/dev-two-instances.ts",
 		"dev:app2x:linux": "bun --env-file=.env ./scripts/dev-two-instances.ts",
 		"build:app:linux": "bun run --cwd app tauri:build:linux",
@@ -34,10 +35,13 @@
 		"lint": "bunx biome check .",
 		"lint:fix": "bunx biome check --write .",
 		"format": "bunx biome format --write .",
+		"deploy:relay-fly": "bun ./scripts/deploy-relay-fly.ts",
 		"dev:aven-self": "bun --env-file=.env --cwd libs/aven-self dev",
 		"test:aven-self": "bun --env-file=.env --cwd libs/aven-self test",
 		"test:aven-self:once": "bun --env-file=.env --cwd libs/aven-self test:once",
-		"migrate:aven-self": "bun --env-file=.env --cwd libs/aven-self migrate"
+		"migrate:aven-self": "bun --env-file=.env --cwd libs/aven-self migrate",
+		"derive:relay-pubkey": "bun ./scripts/derive-relay-pubkey.ts",
+		"migrate:relay-env": "bun ./scripts/migrate-relay-seed-to-env.ts"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.14",
