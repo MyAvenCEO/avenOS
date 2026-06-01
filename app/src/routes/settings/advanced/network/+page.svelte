@@ -68,43 +68,4 @@
 			{t('self.network.networkNotSwitchable')}
 		</p>
 	</section>
-
-	<section class="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
-		<div class="flex items-baseline justify-between gap-3">
-			<div>
-				<h2 class="text-sm font-medium">{t('self.network.centralRelay')}</h2>
-				<p class="text-muted-foreground text-xs leading-relaxed">
-					{t('self.network.relayDescription')}
-				</p>
-			</div>
-			{#if ctx.relayUrl}
-				<span class="rounded-full border border-border/60 bg-background/60 px-2 py-1 font-mono text-[10px]">
-					{ctx.relayUrl}
-				</span>
-			{/if}
-		</div>
-
-		{#if ctx.relayPublicKeyHex}
-			<p class="break-all font-mono text-[11px] leading-snug select-text">{ctx.relayPublicKeyHex}</p>
-			<button
-				type="button"
-				class="border-input hover:bg-accent hover:text-accent-foreground rounded-md border px-3 py-1.5 text-[11px] font-medium"
-				onclick={() => void copyText(ctx.relayPublicKeyHex, 'relay-pk')}
-			>
-				{copyKey === 'relay-pk' ? t('common.copied') : t('common.copy')}
-			</button>
-			{#if ctx.dhtBootstrap}
-				<p class="text-muted-foreground text-[10px] leading-relaxed">
-					{t('self.network.dhtBootstrap')} <span class="font-mono select-text">{ctx.dhtBootstrap}</span>
-				</p>
-			{/if}
-			{#if ctx.relayAddr}
-				<p class="text-muted-foreground text-[10px] leading-relaxed">
-					{t('self.network.relayUdp')} <span class="font-mono select-text">{ctx.relayAddr}</span>
-				</p>
-			{/if}
-		{:else}
-			<p class="text-muted-foreground text-xs">{t('self.network.relayNotEmbedded')}</p>
-		{/if}
-	</section>
 </div>

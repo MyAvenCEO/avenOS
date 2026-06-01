@@ -538,12 +538,7 @@
       "subtitle": "Which Aven network this app is bound to, and how it connects for P2P.",
       "currentNetwork": "Current network",
       "currentNetworkDescription": "Every device on this build uses the same network. Your vault data and identity are scoped to it.",
-      "networkNotSwitchable": "This device is bound to this network. Network switching is not available in this build.",
-      "centralRelay": "Central relay (P2P)",
-      "relayDescription": "Blind-relay public key baked into this build. Same value as AVENOS_RELAY_PUBLIC_KEY_HEX in repo .env.",
-      "dhtBootstrap": "DHT bootstrap:",
-      "relayUdp": "Blind-relay UDP:",
-      "relayNotEmbedded": "Not embedded (public Hyperswarm mode or dev without relay env)."
+      "networkNotSwitchable": "This device is bound to this network. Network switching is not available in this build."
     }
   }
 }

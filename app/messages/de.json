@@ -538,12 +538,7 @@
       "subtitle": "Welchem Aven-Netzwerk diese App zugeordnet ist und wie sie für P2P verbindet.",
       "currentNetwork": "Aktuelles Netzwerk",
       "currentNetworkDescription": "Jedes Gerät mit diesem Build nutzt dasselbe Netzwerk. Vault-Daten und Identität gehören dazu.",
-      "networkNotSwitchable": "Dieses Gerät ist an dieses Netzwerk gebunden. Ein Wechsel ist in diesem Build nicht möglich.",
-      "centralRelay": "Zentraler Relay (P2P)",
-      "relayDescription": "Blind-Relay-öffentlicher Schlüssel in diesem Build. Entspricht AVENOS_RELAY_PUBLIC_KEY_HEX in der Repo-.env.",
-      "dhtBootstrap": "DHT-Bootstrap:",
-      "relayUdp": "Blind-Relay UDP:",
-      "relayNotEmbedded": "Nicht eingebettet (öffentlicher Hyperswarm-Modus oder Dev ohne Relay-Env)."
+      "networkNotSwitchable": "Dieses Gerät ist an dieses Netzwerk gebunden. Ein Wechsel ist in diesem Build nicht möglich."
     }
   }
 }
