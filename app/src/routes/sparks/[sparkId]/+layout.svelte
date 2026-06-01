@@ -5,8 +5,6 @@
 	import { navigateApp } from '$lib/shell'
 	import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
 	import { asideNavSectionsFromRoutes } from '$lib/ui/aside-nav'
-	import SparkMembersPanel from '$lib/sparks/SparkMembersPanel.svelte'
-
 	let { children: pageOutlet } = $props()
 
 	const sparkParam = $derived(String((page.params as { sparkId?: string }).sparkId ?? ''))
@@ -47,6 +45,11 @@
 							href: `${sparkBase}/gallery`,
 							label: t('nav.gallery'),
 							match: (p) => p.startsWith(`${sparkBase}/gallery`),
+						},
+						{
+							href: `${sparkBase}/members`,
+							label: t('nav.members'),
+							match: (p) => p.startsWith(`${sparkBase}/members`),
 						},
 					],
 				},
@@ -107,15 +110,6 @@
 					</p>
 				{/if}
 			</div>
-		</div>
-	{/snippet}
-
-	{#snippet asideExtra()}
-		<div class="mt-4 flex flex-col gap-2 border-t border-border/50 pt-4">
-			<span class="px-0 text-[11px] font-semibold tracking-wider uppercase opacity-70 md:px-2">
-				{t('nav.members')}
-			</span>
-			<SparkMembersPanel sparkId={decodedSparkId} />
 		</div>
 	{/snippet}
 
