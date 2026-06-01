@@ -525,6 +525,7 @@
     "deviceLabelRequired": "Device label is required"
   },
   "invite": {
+    "settingsSubtitle": "Create and manage invites for your network.",
     "bootstrapTitle": "Set up this network",
     "bootstrapSubtitle": "You're the first one here. Registering now makes this device the network admin.",
     "bootstrapAction": "Become admin",

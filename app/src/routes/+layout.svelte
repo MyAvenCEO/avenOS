@@ -34,7 +34,6 @@ const vaultActive = $derived(path.startsWith('/vault'))
 const sparksNavActive = $derived(path.startsWith('/sparks'))
 const dbActive = $derived(path.startsWith('/db'))
 const avenCityActive = $derived(path.startsWith('/aven-city'))
-const inviteActive = $derived(path.startsWith('/invite'))
 
 const shellLocked = $derived(
 	browser && isTauriRuntime() && $deviceSession.kind === 'locked',
@@ -256,15 +255,6 @@ $effect(() => {
 						aria-current={docsActive ? 'page' : undefined}
 						onclick={(e) => navigateApp('/docs', e)}
 						>{t('nav.docs')}</a
-					>
-					<span class="select-none opacity-25" aria-hidden="true">|</span>
-					<a
-						href="/invite"
-						data-sveltekit-preload-data="hover"
-						class="transition-opacity hover:opacity-80 {inviteActive ? 'opacity-95' : 'opacity-40'}"
-						aria-current={inviteActive ? 'page' : undefined}
-						onclick={(e) => navigateApp('/invite', e)}
-						>{t('nav.invite')}</a
 					>
 				</nav>
 

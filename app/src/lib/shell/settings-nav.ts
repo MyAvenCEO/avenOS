@@ -19,6 +19,11 @@ export function settingsNavSections(): SettingsNavSection[] {
 					label: t('nav.peers'),
 					match: (p) => p.startsWith('/settings/network'),
 				},
+				{
+					href: '/settings/invite',
+					label: t('nav.invite'),
+					match: (p) => p.startsWith('/settings/invite'),
+				},
 			],
 		},
 		{

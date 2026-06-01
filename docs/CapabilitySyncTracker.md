@@ -1,6 +1,8 @@
 # Capability-driven sync — architecture & execution
 
-**Status:** spec · **Owner:** sync/aven-db · **Scope:** how AvenOS syncs spark data between peers, gated by biscuits, over a Hyperswarm-class transport.
+> **⚠️ Superseded for transport + server topics.** The **§4 (Transport)** and **M2/M3** milestones here are now driven by [`AvenServerPlan.md`](./AvenServerPlan.md), which (a) replaces the dev TCP transport with real peeroxide Hyperswarm, run locally, and (b) merges the dev TCP service, the `aven-auth` server, and the planned sync relay into **one Rust `aven-server` binary**. The capability/frontier **model** below (§0–§3, §6, §9) is unchanged and remains canonical — only the transport under it and the servers above it move.
+
+**Status:** spec (model) · superseded (transport/server, see AvenServerPlan.md) · **Owner:** sync/aven-db · **Scope:** how AvenOS syncs spark data between peers, gated by biscuits, over a Hyperswarm-class transport.
 
 **Thesis.** Every value syncs to exactly the peers a biscuit authorizes; the network self-assembles (discover · pair · sync · heal) in the background. The whole frontend reduces to *"manage who's in each spark."*
 

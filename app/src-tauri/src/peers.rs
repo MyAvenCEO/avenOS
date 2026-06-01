@@ -173,12 +173,18 @@ pub async fn set_peer_status(
 	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
 	let did_ix = jazz_engine::col_ix(&schema, "peer_did")?;
 	let peer_did = peer_did.trim();
+	// Update EVERY matching row, not just the first: earlier add/forget cycles can
+	// leave duplicate rows for one DID. A lingering `revoked` dup would otherwise
+	// keep is_peer_revoked() true after re-granting → the connect gate skips
+	// registration → the peer stays "Offline" and never syncs.
+	let mut matched = false;
 	for (oid, vals) in rows {
 		let existing = vals
 			.get(did_ix)
 			.and_then(value_as_text)
 			.unwrap_or("");
 		if existing.trim() == peer_did {
+			matched = true;
 			let mut patch = Map::new();
 			patch.insert(
 				"status".into(),
@@ -189,10 +195,13 @@ pub async fn set_peer_status(
 				.update(oid, ops)
 				.await
 				.map_err(crate::jazz::format_jazz_err)?;
-			return Ok(());
 		}
 	}
-	Err("peer_did not found in allowlist".into())
+	if matched {
+		Ok(())
+	} else {
+		Err("peer_did not found in allowlist".into())
+	}
 }
 
 /// Returns true if `did` is an active allowlisted remote peer.
@@ -202,21 +211,29 @@ pub async fn is_allowlisted(client: &JazzClient, did: &str) -> Result<bool, Stri
 	Ok(dids.iter().any(|x| x == t))
 }
 
-/// True if `did` has a peer row explicitly marked `revoked` (Forget). Distinct
-/// from "unknown" (no row) so first-contact stays permissive while a forgotten
-/// peer is NOT re-registered on reconnect — making Forget persist.
+/// True if `did` is Forgotten: it has a `revoked` row AND **no** active row.
+/// The "no active row" guard self-heals duplicate rows from earlier add/forget
+/// cycles — a lingering revoked dup alongside an active row must NOT keep the
+/// peer deregistered (that left it stuck "Offline"). Distinct from "unknown"
+/// (no row) so first-contact stays permissive while a true Forget persists.
 pub async fn is_peer_revoked(client: &JazzClient, did: &str) -> Result<bool, String> {
 	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
 	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
 	let did_ix = jazz_engine::col_ix(&schema, "peer_did")?;
 	let status_ix = jazz_engine::col_ix(&schema, "status")?;
 	let t = did.trim();
+	let mut has_revoked = false;
+	let mut has_active = false;
 	for (_oid, vals) in rows {
 		let row_did = vals.get(did_ix).and_then(value_as_text).unwrap_or("").trim();
-		let status = vals.get(status_ix).and_then(value_as_text).unwrap_or("");
-		if row_did == t && status == "revoked" {
-			return Ok(true);
+		if row_did != t {
+			continue;
+		}
+		match vals.get(status_ix).and_then(value_as_text).unwrap_or("") {
+			"revoked" => has_revoked = true,
+			"active" => has_active = true,
+			_ => {}
 		}
 	}
-	Ok(false)
+	Ok(has_revoked && !has_active)
 }
