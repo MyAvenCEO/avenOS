@@ -271,13 +271,17 @@ impl SyncManager {
         None
     }
 
+    /// Forward one owed row batch to a peer. Called only from `ship_frontier_diff`,
+    /// which has already computed (via `frontier_diff`) that the peer lacks this
+    /// batch — so there is no per-peer "already sent" ledger to consult. Metadata
+    /// is always attached; the receiver dedups by `BatchId`.
     pub(super) fn queue_row_to_client(
         &mut self,
         client_id: PeerId,
         object_id: ObjectId,
         metadata: HashMap<String, String>,
         row: StoredRowBatch,
-        force_resend: bool,
+        _force_resend: bool,
     ) {
         let row = Self::scope_delivery_row(row);
         if metadata
@@ -287,38 +291,12 @@ impl SyncManager {
         {
             return;
         }
+        if !self.clients.contains_key(&client_id) {
+            return;
+        }
 
         let branch_name = BranchName::new(&row.branch);
         let batch_id = row.batch_id;
-
-        let (include_metadata, already_sent) = {
-            let Some(client) = self.clients.get(&client_id) else {
-                return;
-            };
-            let include_metadata = !client.sent_metadata.contains(&object_id);
-            let already_sent = client
-                .sent_batch_ids
-                .get(&(object_id, branch_name))
-                .cloned()
-                .unwrap_or_default();
-            (include_metadata, already_sent)
-        };
-
-        if !force_resend && already_sent.contains(&batch_id) && !include_metadata {
-            return;
-        }
-
-        let Some(client) = self.clients.get_mut(&client_id) else {
-            return;
-        };
-        if include_metadata {
-            client.sent_metadata.insert(object_id);
-        }
-        client
-            .sent_batch_ids
-            .entry((object_id, branch_name))
-            .or_default()
-            .insert(batch_id);
         self.row_batch_interest
             .entry(RowBatchKey::new(object_id, branch_name, batch_id))
             .or_default()
@@ -327,7 +305,7 @@ impl SyncManager {
         self.outbox.push(OutboxEntry {
             destination: Destination::Client(client_id),
             payload: SyncPayload::RowBatchNeeded {
-                metadata: include_metadata.then_some(RowMetadata {
+                metadata: Some(RowMetadata {
                     id: object_id,
                     metadata,
                 }),

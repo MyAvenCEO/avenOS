@@ -171,17 +171,16 @@ pub struct QueryScope {
 }
 
 /// Tracking state for a connected peer client.
+///
+/// No per-peer delivery ledger: peer sync is frontier-driven (announce → need →
+/// `frontier_diff`), so "what have I sent to whom" is never tracked — dropping
+/// all of this forces a re-diff, never a re-send (§6 one-tracker invariant).
 #[derive(Debug, Clone, Default)]
 pub struct ClientState {
     /// Client's session for policy evaluation.
     pub session: Option<Session>,
     /// Active queries from this client.
     pub queries: HashMap<QueryId, QueryScope>,
-    /// What we've sent to this client for row-history sync:
-    /// (row object, branch) -> set of known batch ids.
-    pub sent_batch_ids: HashMap<(ObjectId, BranchName), HashSet<BatchId>>,
-    /// Row IDs for which we've sent metadata.
-    pub sent_metadata: HashSet<ObjectId>,
 }
 
 impl ClientState {

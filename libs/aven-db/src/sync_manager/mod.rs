@@ -352,15 +352,8 @@ impl SyncManager {
             connections += std::mem::size_of_val(client_id);
             connections += std::mem::size_of_val(state);
             connections += 48;
-            connections += state.sent_metadata.len() * std::mem::size_of::<ObjectId>();
             if let Some(session) = &state.session {
                 connections += session.user_id.len();
-            }
-            for ((object_id, branch_name), batch_ids) in &state.sent_batch_ids {
-                connections += std::mem::size_of_val(object_id);
-                connections += std::mem::size_of_val(branch_name);
-                connections += batch_ids.len() * std::mem::size_of::<BatchId>();
-                connections += 48;
             }
         }
         connections += self.my_tiers.len() * std::mem::size_of::<DurabilityTier>();
@@ -651,24 +644,12 @@ impl SyncManager {
         });
     }
 
-    /// Clear row-batch delivery bookkeeping for a peer so the next catch-up re-queues rows.
-    ///
-    /// Policy may have blocked outbound frames after they were marked sent; reset before replay.
-    pub fn clear_peer_delivery_ledger(&mut self, client_id: PeerId) {
-        let Some(client) = self.clients.get_mut(&client_id) else {
-            return;
-        };
-        client.sent_batch_ids.clear();
-        client.sent_metadata.clear();
-    }
+    /// No-op: peer sync is frontier-driven (no per-peer delivery ledger). Kept for
+    /// call-site compatibility — a re-catch-up just re-announces and re-diffs.
+    pub fn clear_peer_delivery_ledger(&mut self, _client_id: PeerId) {}
 
-    /// Reset delivery bookkeeping for every registered peer client.
-    pub fn clear_all_peer_delivery_ledgers(&mut self) {
-        for client in self.clients.values_mut() {
-            client.sent_batch_ids.clear();
-            client.sent_metadata.clear();
-        }
-    }
+    /// No-op: see [`Self::clear_peer_delivery_ledger`].
+    pub fn clear_all_peer_delivery_ledgers(&mut self) {}
 
     /// Tables replicated in the first bootstrap pass (biscuit shell before spark data).
     pub const SHELL_CATCHUP_TABLES: &'static [&'static str] = &["sparks", "keyshares"];
@@ -926,29 +907,18 @@ impl SyncManager {
             return;
         }
 
-        let mut removed_row_batches = Vec::new();
-        let Some(client) = self.clients.get_mut(&client_id) else {
+        if !self.clients.contains_key(&client_id) {
             return;
-        };
-
-        for &(object_id, branch_name) in removed_scope {
-            if let Some(batch_ids) = client.sent_batch_ids.remove(&(object_id, branch_name)) {
-                removed_row_batches.extend(
-                    batch_ids
-                        .into_iter()
-                        .map(|batch_id| RowBatchKey::new(object_id, branch_name, batch_id)),
-                );
-            }
         }
-
-        for key in removed_row_batches {
-            if let Some(clients) = self.row_batch_interest.get_mut(&key) {
+        // No per-peer ledger to consult: drop this client's interest directly for
+        // any batch under the removed (object, branch) scope.
+        let removed: HashSet<(ObjectId, BranchName)> = removed_scope.iter().copied().collect();
+        self.row_batch_interest.retain(|key, clients| {
+            if removed.contains(&(key.row_id, key.branch_name)) {
                 clients.remove(&client_id);
-                if clients.is_empty() {
-                    self.row_batch_interest.remove(&key);
-                }
             }
-        }
+            !clients.is_empty()
+        });
     }
 
     /// Send a QuerySubscription to all connected servers.

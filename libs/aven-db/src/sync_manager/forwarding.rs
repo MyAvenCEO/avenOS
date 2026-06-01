@@ -384,40 +384,28 @@ impl SyncManager {
         branch_name: BranchName,
         except: PeerId,
     ) {
+        // Frontier-driven delivery (§1.3): on a local change we announce our heads
+        // to each peer; the peer pulls exactly what it's owed via FrontierNeed →
+        // ship_frontier_diff. No row-targeted blanket push, no per-peer ledger.
+        let _ = (object_id, branch_name);
         let client_ids: Vec<PeerId> = self
             .clients
             .keys()
             .copied()
             .filter(|id| *id != except)
             .collect();
-
-        let _span = tracing::debug_span!("forward_update_to_clients", %object_id, %branch_name, client_count = client_ids.len()).entered();
-
-        let Some(row_locator) = storage.load_row_locator(object_id).ok().flatten() else {
+        if client_ids.is_empty() {
             return;
-        };
-        if let Some(row) =
-            self.load_current_row_from_storage(storage, object_id, &branch_name, &row_locator)
-        {
-            let metadata = metadata_from_row_locator(&row_locator);
-            for client_id in &client_ids {
-                tracing::trace!(%client_id, "queuing row update to client");
-                self.queue_row_to_client(
-                    *client_id,
-                    object_id,
-                    metadata.clone(),
-                    row.clone(),
-                    false,
-                );
-                if let Some(settlement) = self.load_current_batch_fate_from_storage(
-                    storage,
-                    object_id,
-                    &branch_name,
-                    &row_locator,
-                ) {
-                    self.queue_batch_fate_to_client(*client_id, settlement);
-                }
-            }
+        }
+        let heads = self.resource_frontier_heads(storage);
+        for client_id in client_ids {
+            self.outbox.push(OutboxEntry {
+                destination: Destination::Client(client_id),
+                payload: SyncPayload::FrontierAnnounce {
+                    resource: "all".to_string(),
+                    heads: heads.clone(),
+                },
+            });
         }
     }
 
