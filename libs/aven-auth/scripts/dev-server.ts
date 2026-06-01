@@ -14,7 +14,7 @@ const svelteKitBin = path.join(repoRoot, 'node_modules', '@sveltejs', 'kit', 'sv
 
 spawnSync('node', [svelteKitBin, 'sync'], { cwd: root, stdio: 'inherit', env: process.env })
 
-const child = spawn('node', [viteBin, 'dev', '--port', process.env.AVEN_SELF_DEV_PORT ?? '3000'], {
+const child = spawn('node', [viteBin, 'dev', '--port', process.env.AVEN_AUTH_DEV_PORT ?? '3000'], {
 	cwd: root,
 	stdio: 'inherit',
 	env: process.env,

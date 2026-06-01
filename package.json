@@ -34,10 +34,10 @@
 		"lint": "bunx biome check .",
 		"lint:fix": "bunx biome check --write .",
 		"format": "bunx biome format --write .",
-		"dev:aven-self": "bun --env-file=.env --cwd libs/aven-self dev",
-		"test:aven-self": "bun --env-file=.env --cwd libs/aven-self test",
-		"test:aven-self:once": "bun --env-file=.env --cwd libs/aven-self test:once",
-		"migrate:aven-self": "bun --env-file=.env --cwd libs/aven-self migrate"
+		"dev:aven-auth": "bun --env-file=.env --cwd libs/aven-auth dev",
+		"test:aven-auth": "bun --env-file=.env --cwd libs/aven-auth test",
+		"test:aven-auth:once": "bun --env-file=.env --cwd libs/aven-auth test:once",
+		"migrate:aven-auth": "bun --env-file=.env --cwd libs/aven-auth migrate"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.14",

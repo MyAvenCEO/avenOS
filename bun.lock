@@ -66,8 +66,8 @@
         "typescript": "^6.0.2",
       },
     },
-    "libs/aven-self": {
-      "name": "@avenos/aven-self",
+    "libs/aven-auth": {
+      "name": "@avenos/aven-auth",
       "version": "0.0.1",
       "dependencies": {
         "@noble/ed25519": "^2.2.3",
@@ -139,7 +139,7 @@
 
     "@avenos/aven-city": ["@avenos/aven-city@workspace:libs/aven-city"],
 
-    "@avenos/aven-self": ["@avenos/aven-self@workspace:libs/aven-self"],
+    "@avenos/aven-auth": ["@avenos/aven-auth@workspace:libs/aven-auth"],
 
     "@avenos/aven-ui": ["@avenos/aven-ui@workspace:libs/aven-ui"],
 

@@ -34,9 +34,10 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process'
+import { homedir, platform } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { homedir, platform } from 'node:os'
+import { startAvenAuthServer } from './dev-aven-auth.ts'
 import { freeDevServerPort } from './free-dev-server-port.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -50,7 +51,14 @@ function userDocumentsDir(): string {
 	return path.join(homedir(), 'Documents')
 }
 
-const identitiesHint = path.join(userDocumentsDir(), '.avenOS', 'ceo.aven', 'testnet', 'abagana', 'identities')
+const identitiesHint = path.join(
+	userDocumentsDir(),
+	'.avenOS',
+	'ceo.aven',
+	'testnet',
+	'abagana',
+	'identities'
+)
 
 /** Linux WebKitGTK defaults (same as dev-app-linux.ts). */
 function devBaseEnv(): Record<string, string> {
@@ -69,7 +77,11 @@ async function waitForPort(port: number, timeoutMs = 60_000): Promise<void> {
 	const deadline = Date.now() + timeoutMs
 	while (Date.now() < deadline) {
 		try {
-			const conn = await Bun.connect({ hostname: '127.0.0.1', port, socket: { data() {}, open() {}, close() {}, error() {} } })
+			const conn = await Bun.connect({
+				hostname: '127.0.0.1',
+				port,
+				socket: { data() {}, open() {}, close() {}, error() {} }
+			})
 			conn.end()
 			return
 		} catch {
@@ -99,12 +111,12 @@ function spawnLabelled(
 	colour: string,
 	cmd: string,
 	args: string[],
-	opts: { cwd: string; env: Record<string, string> },
+	opts: { cwd: string; env: Record<string, string> }
 ) {
 	const child = spawn(cmd, args, {
 		cwd: opts.cwd,
 		env: opts.env,
-		stdio: ['ignore', 'pipe', 'pipe'],
+		stdio: ['ignore', 'pipe', 'pipe']
 	})
 	child.stdout.on('data', (d: Buffer) => process.stdout.write(prefixLines(label, colour, d) + '\n'))
 	child.stderr.on('data', (d: Buffer) => process.stderr.write(prefixLines(label, colour, d) + '\n'))
@@ -126,8 +138,8 @@ function spawnViteB(colour: string, env: Record<string, string>) {
 		['--env-file=../.env', '--bun', 'x', 'vite', 'dev', '--port', '1421'],
 		{
 			cwd: appDir,
-			env: { ...env, FORCE_COLOR: '1', AVENOS_DEV_INSTANCE: 'B' },
-		},
+			env: { ...env, FORCE_COLOR: '1', AVENOS_DEV_INSTANCE: 'B' }
+		}
 	)
 }
 
@@ -139,8 +151,8 @@ const TAURI_B_CONFIG = JSON.stringify({
 	build: {
 		beforeDevCommand: '',
 		devUrl: 'http://127.0.0.1:1421',
-		beforeBuildCommand: '',
-	},
+		beforeBuildCommand: ''
+	}
 })
 
 function spawnTauri(label: 'A' | 'B', colour: string, env: Record<string, string>) {
@@ -161,7 +173,7 @@ function spawnTauri(label: 'A' | 'B', colour: string, env: Record<string, string
 
 	return spawnLabelled(label, colour, 'bun', ['--bun', 'x', 'tauri', 'dev', ...extraArgs], {
 		cwd: appDir,
-		env: instanceEnv,
+		env: instanceEnv
 	})
 }
 
@@ -183,11 +195,14 @@ async function main() {
 			`${BOLD}${MAGENTA}WARNING:${RESET} Unlocking the same identity slug in [A] and [B] at once grabs the same RocksDB files (\`storage.rocksdb\`) — Share/DB can stay on Loading indefinitely. Pick different people on each lock screen.\n\n` +
 			`${BOLD}Note:${RESET} AVENOS_DEV_INSTANCE is ${CYAN}A${RESET} / ${MAGENTA}B${RESET} for log prefixes only; it does not isolate identity dirs.\n\n` +
 			`Reset all dev personas: rm -rf ${identitiesHint}\n` +
-			`Press Ctrl-C to stop both.\n`,
+			`Press Ctrl-C to stop both.\n`
 	)
 
 	freeDevServerPort(1420)
 	freeDevServerPort(1421)
+
+	// Boot the invite-only auth backend (http://localhost:3000) once for both instances.
+	const auth = startAvenAuthServer()
 
 	const baseEnv = devBaseEnv()
 
@@ -217,18 +232,22 @@ async function main() {
 		process.exit(1)
 	}
 
-	console.log(`${BOLD}${MAGENTA}[B]${RESET} Starting Tauri (devUrl :1421, target ${TAURI_B_TARGET_DIR})…`)
+	console.log(
+		`${BOLD}${MAGENTA}[B]${RESET} Starting Tauri (devUrl :1421, target ${TAURI_B_TARGET_DIR})…`
+	)
 	const tauriB = spawnTauri('B', MAGENTA, baseEnv)
 
 	const allProcs = [tauriA, viteB, tauriB]
 
 	for (const sig of ['SIGINT', 'SIGTERM'] as const) {
 		process.on(sig, () => {
+			auth.stop()
 			for (const p of allProcs) p.kill(sig)
 		})
 	}
 
 	await Promise.all(allProcs.map((p) => new Promise((res) => p.on('exit', res))))
+	auth.stop()
 }
 
 void main()

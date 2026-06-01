@@ -19,10 +19,10 @@ Repo-root automation for the **Tauri app**, **App Store releases**, and **aven-d
 | `verify:aven-db` | `verify-aven-db-gates.sh` | Post–re-vendor Rust + `app` check gates |
 | `fetch:webcm` | `fetch-webcm.ts` | Download webcm into `app/static/webcm/` |
 | `release:app:*` | `release-app.ts` | macOS `.pkg` / iOS `.ipa` build + altool upload |
-| `dev:aven-self` | — | Local aven-self auth API (`libs/aven-self`, port 3000) |
-| `migrate:aven-self` | — | Better Auth DB migrate for aven-self |
-| `test:aven-self` | — | HTTP smoke test (server must be running) |
-| `test:aven-self:once` | — | Start aven-self, smoke test, stop |
+| `dev:aven-auth` | — | Local aven-auth auth API (`libs/aven-auth`, port 3000) |
+| `migrate:aven-auth` | — | Better Auth DB migrate for aven-auth |
+| `test:aven-auth` | — | HTTP smoke test (server must be running) |
+| `test:aven-auth:once` | — | Start aven-auth, smoke test, stop |
 
 ## Called indirectly (keep)
 

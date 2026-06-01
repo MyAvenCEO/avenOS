@@ -15,25 +15,25 @@ function requireEnv(name: string, fallback?: string): string {
 	return value.trim()
 }
 
-/** Resolve DB path relative to `libs/aven-self/` when not absolute. */
+/** Resolve DB path relative to `libs/aven-auth/` when not absolute. */
 export function resolveDbPath(raw: string): string {
 	if (path.isAbsolute(raw)) return raw
 	return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..', raw)
 }
 
-export function avenSelfEnv() {
-	const dbPath = resolveDbPath(process.env.AVEN_SELF_DB_PATH ?? './data/aven-self.db')
+export function avenAuthEnv() {
+	const dbPath = resolveDbPath(process.env.AVEN_AUTH_DB_PATH ?? './data/aven-auth.db')
 	fs.mkdirSync(path.dirname(dbPath), { recursive: true })
 
 	return {
 		authUrl: requireEnv('BETTER_AUTH_URL', 'http://localhost:3000'),
 		secret: requireEnv('BETTER_AUTH_SECRET'),
 		dbPath,
-		domain: process.env.AVEN_SELF_DOMAIN?.trim() || new URL(requireEnv('BETTER_AUTH_URL', 'http://localhost:3000')).host,
-		networkSeed: process.env.AVEN_SELF_NETWORK_SEED?.trim() || 'ceo.aven/testnet/abagana',
-		defaultInviteExpiresInSeconds: Number(process.env.AVEN_SELF_INVITE_TTL_SECONDS ?? 86_400),
-		inviteDeepLinkScheme: process.env.AVEN_SELF_INVITE_SCHEME?.trim() || 'avenos',
+		domain: process.env.AVEN_AUTH_DOMAIN?.trim() || new URL(requireEnv('BETTER_AUTH_URL', 'http://localhost:3000')).host,
+		networkSeed: process.env.AVEN_AUTH_NETWORK_SEED?.trim() || 'ceo.aven/testnet/abagana',
+		defaultInviteExpiresInSeconds: Number(process.env.AVEN_AUTH_INVITE_TTL_SECONDS ?? 86_400),
+		inviteDeepLinkScheme: process.env.AVEN_AUTH_INVITE_SCHEME?.trim() || 'avenos',
 	}
 }
 
-export type AvenSelfEnv = ReturnType<typeof avenSelfEnv>
+export type AvenAuthEnv = ReturnType<typeof avenAuthEnv>

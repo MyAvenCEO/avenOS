@@ -1,4 +1,4 @@
-export const avenSelfSchema = {
+export const avenAuthSchema = {
 	selfSiteConfig: {
 		modelName: 'self_site_config',
 		fields: {

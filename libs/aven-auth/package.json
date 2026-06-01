@@ -1,5 +1,5 @@
 {
-	"name": "@avenos/aven-self",
+	"name": "@avenos/aven-auth",
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",

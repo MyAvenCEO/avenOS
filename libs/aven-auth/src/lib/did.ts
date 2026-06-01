@@ -15,7 +15,9 @@ export function normalizeDid(did: string): string {
 export function ed25519PublicKeyFromDid(did: string): Uint8Array {
 	const normalized = normalizeDid(did)
 	const multibase = normalized.slice('did:key:'.length)
-	const decoded = bs58.decode(multibase)
+	// Standard did:key is multibase base58btc — a leading 'z' marks the encoding.
+	const base58 = multibase.startsWith('z') ? multibase.slice(1) : multibase
+	const decoded = bs58.decode(base58)
 	if (decoded.length !== ED25519_MULTICODEC_PREFIX.length + 32) {
 		throw new Error('invalid_did: unexpected length')
 	}
