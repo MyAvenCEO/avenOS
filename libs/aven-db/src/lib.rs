@@ -13,10 +13,6 @@ pub mod runtime_core;
 pub mod schema_manager;
 pub mod storage;
 pub mod sync_manager;
-#[cfg(feature = "client-p2p")]
-pub mod delivery_ledger;
-#[cfg(feature = "client-p2p")]
-pub mod sync_authorizer;
 pub mod capability;
 pub mod sync_targets;
 #[cfg(feature = "client-p2p")]
@@ -49,10 +45,7 @@ use thiserror::Error;
 
 #[cfg(feature = "client-p2p")]
 pub use avenos_client::{JazzClient, PeerInboundParkedHook};
-#[cfg(feature = "client-p2p")]
-pub use delivery_ledger::{DeliveryLedger, RowBatchKey};
-#[cfg(feature = "client-p2p")]
-pub use sync_authorizer::{AllowAllSyncAuthorizer, DenyAllSyncAuthorizer, SyncAuthorizer};
+pub use sync_manager::RowBatchKey;
 pub use capability::{
     AccOp, AllowAllResolver, CapDecision, CapabilityResolver, DenyAllResolver, ResourceCoord,
     gated_pull,
