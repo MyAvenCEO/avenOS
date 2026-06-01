@@ -638,48 +638,17 @@ impl SyncManager {
 
         self.queue_catalogue_sync_to_client_from_storage(client_id, storage);
 
-        let Ok(locators) = storage.scan_row_locators() else {
-            return;
-        };
-
-        for (object_id, locator) in locators {
-            let table = locator.table.as_str();
-            // Local identity / trust tables are never P2P-forwarded (see AvenOS spark_sync policy).
-            if matches!(table, "humans" | "peers") {
-                continue;
-            }
-            let metadata = metadata_from_row_locator(&locator);
-            if metadata
-                .get(crate::metadata::MetadataKey::NoSync.as_str())
-                .map(|v| v == "true")
-                .unwrap_or(false)
-            {
-                continue;
-            }
-
-            let Ok(branches) =
-                crate::storage::scan_visible_region_row_batch_branches_with_storage(
-                    storage, table, object_id,
-                )
-            else {
-                continue;
-            };
-
-            for branch in branches {
-                let branch_name = BranchName::new(&branch);
-                if let Some(batch_id) = self.queue_initial_row_to_client_with_storage(
-                    storage,
-                    client_id,
-                    object_id,
-                    branch_name,
-                    true,
-                ) && let Some(fate) =
-                    self.load_batch_fate_by_batch_id_from_storage(storage, batch_id)
-                {
-                    self.queue_batch_fate_to_client(client_id, fate);
-                }
-            }
-        }
+        // Frontier catch-up (§1.3): announce our heads; the peer pulls only what
+        // it's owed via FrontierNeed → ship_frontier_diff. No row-by-row blanket
+        // push, no per-peer ledger — the diff is the single delivery decision.
+        let heads = self.resource_frontier_heads(storage);
+        self.outbox.push(OutboxEntry {
+            destination: Destination::Client(client_id),
+            payload: SyncPayload::FrontierAnnounce {
+                resource: "all".to_string(),
+                heads,
+            },
+        });
     }
 
     /// Clear row-batch delivery bookkeeping for a peer so the next catch-up re-queues rows.
