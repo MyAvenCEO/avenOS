@@ -515,4 +515,84 @@ mod tests {
 		assert_eq!(j, serde_json::json!(true));
 		assert_eq!(dv, 2u64);
 	}
+
+	#[test]
+	fn dek_rotation_version_isolation() {
+		// Core of v2 revoke: data sealed under DEK v1 CANNOT be opened with the
+		// rotated DEK v2 (a revoked peer that only has v2-less/old keys cannot
+		// read across the rotation boundary; new data under v2 is unreadable
+		// without the v2 keyshare).
+		let dek_v1 = random_spark_dek();
+		let dek_v2 = random_spark_dek();
+		let spark = uuid::Uuid::new_v4();
+		let row = uuid::Uuid::new_v4();
+		let urn = format!("spark:{spark}");
+
+		// Old cell, sealed under v1.
+		let aad_v1 = cell_seal_aad(&urn, "messages", "body", row, 1, column_type_slug(&ColumnType::Text));
+		let old_cell = seal_text_cell_payload(dek_v1.expose(), &aad_v1, "before rotation").unwrap();
+
+		// New cell, sealed under the rotated v2 DEK.
+		let aad_v2 = cell_seal_aad(&urn, "messages", "body", row, 2, column_type_slug(&ColumnType::Text));
+		let new_cell = seal_text_cell_payload(dek_v2.expose(), &aad_v2, "after rotation").unwrap();
+
+		// Correct version opens; cross-version DEK fails (authenticated decryption).
+		assert_eq!(open_text_cell_payload(dek_v1.expose(), &old_cell).unwrap().0, "before rotation");
+		assert_eq!(open_text_cell_payload(dek_v2.expose(), &new_cell).unwrap().0, "after rotation");
+		assert!(
+			open_text_cell_payload(dek_v2.expose(), &old_cell).is_err(),
+			"v2 DEK must NOT open a v1 cell"
+		);
+		assert!(
+			open_text_cell_payload(dek_v1.expose(), &new_cell).is_err(),
+			"v1 DEK (all a revoked peer keeps) must NOT open a post-rotation v2 cell"
+		);
+	}
+
+	#[test]
+	fn rotation_full_flow_keyshare_excludes_revoked() {
+		// End-to-end rotation invariant (the crypto half of v2 revoke):
+		// after rotating to a new DEK and keysharing it to the REMAINING member
+		// only, that member can derive the new key and read new data, while the
+		// revoked peer — which never received the v+1 keyshare and keeps only the
+		// old DEK — cannot read anything sealed under the new key.
+		let owner = SigningKey::from_bytes(&[1u8; 32]); // wrapper (this device)
+		let carol = SigningKey::from_bytes(&[3u8; 32]); // remaining member
+		let owner_pk = owner.verifying_key().to_bytes();
+		let carol_pk = carol.verifying_key().to_bytes();
+
+		let spark = uuid::Uuid::new_v4();
+		let row = uuid::Uuid::new_v4();
+		let urn = format!("spark:{spark}");
+		let carol_did = "did:key:zCarol";
+
+		let old_dek = random_spark_dek(); // v1 — everyone (incl. revoked Bob) had this
+		let new_dek = random_spark_dek(); // v2 — minted at rotation
+
+		// Owner keyshares the NEW dek (v2) to Carol only.
+		let wrap_aad = keyshare_wrap_aad(&urn, carol_did, 2);
+		let kek_wrap = derive_kek_x25519(&owner, &carol_pk).unwrap();
+		let carol_keyshare = encrypt_keyshare_payload(&kek_wrap, new_dek.expose(), &wrap_aad).unwrap();
+
+		// Carol unwraps her v2 keyshare → recovers the new DEK.
+		let kek_unwrap = derive_kek_x25519(&carol, &owner_pk).unwrap();
+		let carol_new_dek = decrypt_keyshare_payload(&carol_keyshare, &kek_unwrap, &wrap_aad).unwrap();
+		assert_eq!(&carol_new_dek, new_dek.expose(), "Carol derives the rotated DEK");
+
+		// New data sealed under v2.
+		let v2_aad = cell_seal_aad(&urn, "messages", "body", row, 2, column_type_slug(&ColumnType::Text));
+		let new_cell = seal_text_cell_payload(new_dek.expose(), &v2_aad, "after rotation").unwrap();
+
+		// Carol (rotated key) reads it; Bob (only the old v1 DEK) cannot.
+		assert_eq!(open_text_cell_payload(&carol_new_dek, &new_cell).unwrap().0, "after rotation");
+		assert!(
+			open_text_cell_payload(old_dek.expose(), &new_cell).is_err(),
+			"revoked peer with only the old DEK cannot read post-rotation data"
+		);
+
+		// And old data (v1) remains readable to anyone holding the old DEK.
+		let v1_aad = cell_seal_aad(&urn, "messages", "body", row, 1, column_type_slug(&ColumnType::Text));
+		let old_cell = seal_text_cell_payload(old_dek.expose(), &v1_aad, "before rotation").unwrap();
+		assert_eq!(open_text_cell_payload(old_dek.expose(), &old_cell).unwrap().0, "before rotation");
+	}
 }

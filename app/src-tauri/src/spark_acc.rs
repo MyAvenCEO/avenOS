@@ -141,6 +141,38 @@ pub fn attenuate_add_owner_third_party(
 		.map_err(|e| format!("tp_append:{e:?}"))
 }
 
+/// Re-mint a spark biscuit granting every current admin EXCEPT `exclude_did`
+/// (v2 revoke). Genesis re-grants the owner (`vault.peer_did`); every other
+/// remaining admin is re-appended. The excluded DID is simply not re-granted, so
+/// the new chain's `owns` set no longer contains it → `authorize` denies it.
+/// Pair with DEK rotation so the revoked peer also cannot decrypt new data.
+///
+/// NOTE: must be called by the genesis owner — `mint_genesis_spark` re-roots the
+/// chain to `vault.biscuit_kp`, so a delegated (non-owner) admin cannot rebuild.
+pub fn rebuild_spark_biscuit_excluding(
+	vault: &BiscuitVault,
+	spark_id: Uuid,
+	exclude_did: &str,
+) -> Result<Biscuit, String> {
+	let chain = vault
+		.sparks
+		.get(&spark_id)
+		.ok_or_else(|| format!("unknown_spark:{spark_id}"))?;
+	let admins = spark_admins(&chain.biscuit, spark_id)?;
+	let mut biscuit = mint_genesis_spark(vault, spark_id)?;
+	// Genesis already grants the owner; re-append every other admin except the
+	// revoked one. Sort for deterministic order (HashSet iteration is unstable).
+	let mut remaining: Vec<String> = admins
+		.into_iter()
+		.filter(|d| !peer_did_matches(d, exclude_did) && !peer_did_matches(d, &vault.peer_did))
+		.collect();
+	remaining.sort();
+	for did in remaining {
+		biscuit = attenuate_add_owner_third_party(&vault.biscuit_kp, &biscuit, spark_id, &did)?;
+	}
+	Ok(biscuit)
+}
+
 /// Ingest a spark biscuit after optional DEK unwrap (hydrate / migration paths).
 pub fn ingest_genesis_opened(
 	vault: &mut BiscuitVault,
@@ -371,5 +403,43 @@ mod tests {
 		assert!(authorize(&bob_vault, sid, AccOp::Write, "todos", None, &other.peer_did).is_err());
 
 		let _ = issuer_pk;
+	}
+
+	#[test]
+	fn rebuild_excluding_revokes_one_admin_keeps_owner_and_rest() {
+		// Alice (owner) grants Bob and Carol, then revokes Bob via re-mint.
+		let alice = build_vault_from_root(&[1u8; 32]).unwrap();
+		let bob = build_vault_from_root(&[2u8; 32]).unwrap();
+		let carol = build_vault_from_root(&[3u8; 32]).unwrap();
+		let sid = uuid::Uuid::new_v4();
+
+		let mut chain = mint_genesis_spark(&alice, sid).unwrap();
+		chain = attenuate_add_owner_third_party(&alice.biscuit_kp, &chain, sid, &bob.peer_did).unwrap();
+		chain =
+			attenuate_add_owner_third_party(&alice.biscuit_kp, &chain, sid, &carol.peer_did).unwrap();
+
+		let mut v = alice;
+		v.sparks.insert(sid, BiscuitSpark { spark_id: sid, biscuit: chain });
+
+		// Sanity: all three authorized before revoke.
+		authorize(&v, sid, AccOp::Write, "todos", None, &v.peer_did.clone()).unwrap();
+		authorize(&v, sid, AccOp::Write, "todos", None, &bob.peer_did).unwrap();
+		authorize(&v, sid, AccOp::Write, "todos", None, &carol.peer_did).unwrap();
+
+		// Revoke Bob: re-mint excluding Bob.
+		let rebuilt = rebuild_spark_biscuit_excluding(&v, sid, &bob.peer_did).unwrap();
+		let admins = spark_admins(&rebuilt, sid).unwrap();
+		assert!(admins.iter().any(|d| peer_did_matches(d, &v.peer_did)), "owner kept");
+		assert!(admins.iter().any(|d| peer_did_matches(d, &carol.peer_did)), "carol kept");
+		assert!(!admins.iter().any(|d| peer_did_matches(d, &bob.peer_did)), "bob removed");
+
+		// Authorize against the rebuilt chain: owner + carol allowed, bob denied.
+		v.sparks.insert(sid, BiscuitSpark { spark_id: sid, biscuit: rebuilt });
+		authorize(&v, sid, AccOp::Write, "todos", None, &v.peer_did.clone()).unwrap();
+		authorize(&v, sid, AccOp::Write, "todos", None, &carol.peer_did).unwrap();
+		assert!(
+			authorize(&v, sid, AccOp::Write, "todos", None, &bob.peer_did).is_err(),
+			"revoked Bob must be denied on the rebuilt biscuit"
+		);
 	}
 }

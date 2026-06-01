@@ -1924,21 +1924,136 @@ pub(crate) async fn groove_ipc_spark_admin_list(
 	Ok(SparkAdminListReply { admin_dids })
 }
 
-/// Placeholder for v2 admin removal (requires key rotation).
-/// "Stop sharing" a spark from a peer. avenOS is peer-centric and biscuits are
-/// append-only, so genuine *per-spark* grant removal needs key rotation (v2).
-/// The honest, achievable action today is to stop syncing with that device:
-/// deregister its sync client and mark the peer revoked (stops new changes,
-/// keeps what it already received — matches the UI confirm copy). Granular
-/// per-spark revoke (keep other shared sparks) is the v2 follow-up.
+/// v2 per-spark revoke = **key rotation**. Removes `peer_did` from `spark_id`:
+///  1. re-mint the spark biscuit WITHOUT the peer (the gate now denies it new
+///     frames for this spark — it stays a peer for any OTHER shared sparks),
+///  2. rotate the DEK to v+1 and keyshare v+1 to the REMAINING members ONLY, so
+///     the revoked peer never receives the new key → cannot decrypt new data,
+///  3. delete the revoked peer's keyshare rows (cooperative cleanup of old keys),
+///  4. bump `sparks.current_dek_version` so future writes seal under v+1.
+///
+/// Old data stays readable to remaining members (they keep the old DEK); the
+/// revoked peer keeps only what it already decrypted (not retroactive — physics).
+/// Owner-scoped: the re-mint re-roots the chain to this device's biscuit key and
+/// updates the stored issuer (the common case is This device = OWNER).
 pub(crate) async fn groove_ipc_spark_admin_revoke(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
 	self_state: &SelfState,
-	_spark_id: String,
+	spark_id: String,
 	peer_did: String,
 ) -> Result<(), String> {
-	groove_ipc_peer_revoke(app, jazz, self_state, peer_did).await
+	use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+	use base64::Engine;
+
+	let spark_uuid =
+		Uuid::parse_str(spark_id.trim()).map_err(|e| format!("invalid spark_id UUID: {e}"))?;
+	let peer_did = peer_did.trim().to_string();
+	if peer_did.is_empty() {
+		return Err("peer_did is empty".into());
+	}
+
+	let client = with_connected_client(jazz, app, self_state).await?;
+	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+	let shell = shell_arc.as_ref();
+
+	if peer_did == shell.peer_did {
+		return Err("cannot revoke your own access".into());
+	}
+
+	// Must hold write on this spark to manage its members.
+	jazz_engine::authorize_gate(shell, "sparks", crate::spark_acc::AccOp::Write, spark_uuid, None)?;
+
+	let cur_v = shell
+		.spark_versions
+		.get(&spark_uuid)
+		.copied()
+		.ok_or_else(|| format!("missing dek version for spark {spark_uuid}"))?;
+	let new_v = cur_v + 1;
+
+	// 1. Re-mint biscuit excluding the revoked peer; the remaining members are
+	//    exactly the new chain's owners (owner + everyone except the revoked).
+	let new_biscuit =
+		crate::spark_acc::rebuild_spark_biscuit_excluding(&shell.vault, spark_uuid, &peer_did)?;
+	let remaining: Vec<String> = crate::spark_acc::spark_admins(&new_biscuit, spark_uuid)?
+		.into_iter()
+		.collect();
+
+	// 2. Rotate the DEK: fresh key at v+1, keyshared to the REMAINING members
+	//    only (incl. this device, so our own hydrate gets v+1).
+	let new_dek = crate::crypto::random_spark_dek();
+	let urn = jazz_engine::spark_urn(spark_uuid);
+	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
+	for recip_did in &remaining {
+		let recip_pk = crate::jazz_auth::ed25519_public_from_peer_did(recip_did)?;
+		let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recip_pk)?;
+		let aad = crate::crypto::keyshare_wrap_aad(&urn, recip_did, new_v);
+		let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, new_dek.expose(), &aad)?;
+		let mut ks = Map::new();
+		ks.insert("spark_id".into(), JsonValue::String(spark_uuid.to_string()));
+		ks.insert("dek_version".into(), JsonValue::Number(new_v.into()));
+		ks.insert("recipient_did".into(), JsonValue::String(recip_did.clone()));
+		ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
+		ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
+		let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
+		client
+			.create("keyshares", ks_vals)
+			.await
+			.map_err(format_jazz_err)?;
+	}
+
+	// 3. Update the sparks row: new biscuit + issuer + bumped current version.
+	let genesis_b64 = URL_SAFE_NO_PAD.encode(
+		new_biscuit
+			.to_vec()
+			.map_err(|e| format!("biscuit_encode:{e:?}"))?,
+	);
+	let issuer_b64 = crate::spark_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public());
+	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "sparks").await?;
+	let spark_id_ix = jazz_engine::col_ix(&sparks_schema, "spark_id")?;
+	let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "sparks").await?;
+	let mut sparks_oid: Option<ObjectId> = None;
+	for (oid, vals) in sparks_rows {
+		if jazz_engine::uuid_cell_at(vals.as_slice(), spark_id_ix)? == spark_uuid {
+			sparks_oid = Some(oid);
+			break;
+		}
+	}
+	let sparks_oid =
+		sparks_oid.ok_or_else(|| format!("no sparks row for spark_id={spark_uuid}"))?;
+	let mut patch = Map::new();
+	patch.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
+	patch.insert("issuer_pubkey_b64".into(), JsonValue::String(issuer_b64));
+	patch.insert("current_dek_version".into(), JsonValue::Number(new_v.into()));
+	let ops = patch_updates(&sparks_schema, patch)?;
+	client
+		.update(sparks_oid, ops)
+		.await
+		.map_err(format_jazz_err)?;
+
+	// 4. Cooperative cleanup: delete the revoked peer's keyshare rows (all
+	//    versions) so honest peers drop them. (The peer keeps only whatever it
+	//    already decrypted; it never gets v+1.)
+	let ks_spark_ix = jazz_engine::col_ix(&ks_schema, "spark_id")?;
+	let ks_recip_ix = jazz_engine::col_ix(&ks_schema, "recipient_did")?;
+	let ks_rows = jazz_engine::exec_list_rows(client.as_ref(), "keyshares").await?;
+	for (oid, vals) in ks_rows {
+		let sid = jazz_engine::uuid_cell_at(vals.as_slice(), ks_spark_ix)?;
+		let recip = match vals.get(ks_recip_ix) {
+			Some(Value::Text(s)) => s.as_str(),
+			_ => continue,
+		};
+		if sid == spark_uuid && recip == peer_did.as_str() {
+			let _ = client.delete(oid).await;
+		}
+	}
+
+	// Rehydrate (load v+1 DEK from our keyshare; spark_versions → v+1) and
+	// re-announce so remaining peers pull the new biscuit + v+1 keyshares; the
+	// revoked peer's gate now denies this spark. Reuses the grant finish path.
+	finish_spark_admin_grant(app, jazz, self_state, client, spark_uuid).await?;
+
+	Ok(())
 }
 
 pub(crate) async fn groove_ipc_jazz_list(
