@@ -45,9 +45,9 @@ async function create(): Promise<void> {
 	}
 }
 
-async function copyLink(): Promise<void> {
+async function copyCode(): Promise<void> {
 	if (!lastCreated) return
-	const ok = await copyToClipboard(lastCreated.inviteDeepLink)
+	const ok = await copyToClipboard(lastCreated.inviteToken)
 	copied = ok
 	if (ok) setTimeout(() => (copied = false), 1500)
 }
@@ -107,17 +107,17 @@ const statusClass: Record<InviteSummary['status'], string> = {
 	{#if lastCreated}
 		<div class="space-y-2 rounded-lg border border-green-500/30 bg-green-500/5 px-4 py-3">
 			<p class="text-[11px] leading-relaxed text-green-700 dark:text-green-400">
-				{t('invite.newLinkLabel')}
+				{t('invite.newCodeLabel')}
 			</p>
 			<pre
-				class="overflow-x-auto font-mono text-[11px] leading-snug select-text"
-			>{lastCreated.inviteDeepLink}</pre>
+				class="overflow-x-auto rounded-md border bg-background/60 px-3 py-2 font-mono text-sm tracking-wide select-text"
+			>{lastCreated.inviteToken}</pre>
 			<button
 				type="button"
-				onclick={() => void copyLink()}
+				onclick={() => void copyCode()}
 				class="border-input hover:bg-accent inline-flex h-8 items-center justify-center rounded-md border px-3 text-xs"
 			>
-				{copied ? t('invite.copied') : t('invite.copyLink')}
+				{copied ? t('invite.copied') : t('invite.copyCode')}
 			</button>
 		</div>
 	{/if}

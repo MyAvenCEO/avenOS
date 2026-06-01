@@ -26,6 +26,7 @@ let working = $state(false)
 let errorMsg = $state<string | undefined>()
 let inviteValid = $state<boolean | undefined>()
 let result = $state<RegisterResult | undefined>()
+let codeInput = $state('')
 
 const inviteToken = $derived(data.inviteToken)
 const sessionKind = $derived($deviceSession.kind)
@@ -91,6 +92,27 @@ async function becomeFounder(): Promise<void> {
 	errorMsg = undefined
 	try {
 		result = await register({ flow: 'bootstrap' })
+		phase = result.isAdmin ? 'admin' : 'member'
+	} catch (e) {
+		errorMsg = e instanceof Error ? e.message : String(e)
+	} finally {
+		working = false
+	}
+}
+
+/** Redeem a pasted invite code (no link/deep-link needed). */
+async function redeemCode(): Promise<void> {
+	const code = codeInput.trim()
+	if (!code || working) return
+	working = true
+	errorMsg = undefined
+	try {
+		const check = await checkInvite(code)
+		if (!check.valid) {
+			errorMsg = t('invite.invalidBody')
+			return
+		}
+		result = await register({ flow: 'invite', inviteToken: code })
 		phase = result.isAdmin ? 'admin' : 'member'
 	} catch (e) {
 		errorMsg = e instanceof Error ? e.message : String(e)
@@ -218,6 +240,40 @@ async function becomeFounder(): Promise<void> {
 		<p class="text-muted-foreground/70 border-l-2 pl-4 text-sm leading-relaxed italic">
 			{t('invite.inviteOnlyFootnote')}
 		</p>
+
+		<div class="mt-2 space-y-3 border-t pt-6">
+			<label for="invite-code" class="block text-sm font-medium"
+				>{t('invite.codeInputLabel')}</label
+			>
+			<input
+				id="invite-code"
+				bind:value={codeInput}
+				placeholder={t('invite.codePlaceholder')}
+				autocomplete="off"
+				autocapitalize="off"
+				autocorrect="off"
+				spellcheck="false"
+				onkeydown={(e) => {
+					if (e.key === 'Enter') void redeemCode()
+				}}
+				class="border-input bg-background focus:ring-ring h-11 w-full rounded-md border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
+			>
+			{#if errorMsg}
+				<p
+					class="text-destructive border-destructive/30 bg-destructive/5 rounded-lg border px-4 py-3 text-xs leading-relaxed select-text"
+				>
+					{errorMsg}
+				</p>
+			{/if}
+			<button
+				type="button"
+				disabled={working || !codeInput.trim()}
+				onclick={() => void redeemCode()}
+				class="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-11 w-full items-center justify-center rounded-md px-4 text-sm font-medium disabled:opacity-50"
+			>
+				{working ? t('invite.working') : t('invite.redeemCodeAction')}
+			</button>
+		</div>
 	</div>
 {:else}
 	<div class="mx-auto flex min-h-svh max-w-md flex-col justify-center gap-4 px-6 py-12">
