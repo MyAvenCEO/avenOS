@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { sveltekit } from '@sveltejs/kit/vite'
 import tailwindcss from '@tailwindcss/vite'
@@ -6,6 +7,13 @@ import { defineConfig, loadEnv } from 'vite'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
+
+// In a git worktree, `node_modules` is hoisted to the monorepo root (outside
+// `repoRoot`), so Vite's default fs allow-list rejects SvelteKit's runtime.
+// Resolve where deps actually live so this works from a worktree *or* the main
+// checkout without hardcoding paths.
+const require = createRequire(import.meta.url)
+const workspaceRoot = path.resolve(require.resolve('vite/package.json'), '../../..')
 
 export default defineConfig(({ mode }) => {
 	const loaded = loadEnv(mode, repoRoot, '')
@@ -50,7 +58,7 @@ export default defineConfig(({ mode }) => {
 				],
 			},
 			headers: crossOriginIsolationHeaders,
-			fs: { allow: [repoRoot] },
+			fs: { allow: [repoRoot, workspaceRoot] },
 		},
 	}
 })
