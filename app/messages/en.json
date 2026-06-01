@@ -494,16 +494,6 @@
       "fullResetButton": "Delete entire .avenOS folder…"
     }
   },
-  "inference": {
-    "settingUpVoice": "Setting up voice transcription",
-    "preparingVoice": "Preparing voice transcription…",
-    "preparingOnDeviceAi": "Preparing on-device AI…",
-    "downloadingModel": "Downloading on-device model…",
-    "loadingModel": "Loading model into memory…",
-    "modelSetupFailed": "Model setup failed",
-    "firstLaunchHint": "First launch downloads Gemma once. Text intents work immediately; voice notes unlock when ready.",
-    "mibProgress": "{downloaded} / {total} MiB"
-  },
   "errors": {
     "generic": "Something went wrong.",
     "clipboardWriteFailed": "clipboard write failed (check OS permissions)",
