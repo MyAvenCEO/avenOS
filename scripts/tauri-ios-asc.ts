@@ -13,7 +13,6 @@
  *
  * Optional env:
  *   AVEN_IOS_CF_BUNDLE_VERSION — CFBundleVersion for this upload (default "13")
- *   AVEN_RELAY_URL — optional shell override; default hardcoded `relay.aven.ceo` (compile-time embed for P2P)
  *   AVEN_OUTPUT_IPA — output path (default dist/ios-appstore/avenOS-<version>-build<N>.ipa)
  */
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -22,8 +21,6 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { applyAppleEnvLocal } from './apple-env'
-import { ensureRelayEnvReady } from './relay-env.ts'
-import { resolveAppStoreRelayConfig, type AppStoreRelayConfig } from './relay-bootstrap.ts'
 import {
 	readRustToolchainChannel,
 	rustToolchainShellExports,
@@ -32,18 +29,6 @@ import {
 } from './rust-toolchain.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-
-/** Production Hyperswarm bootstrap host — compile-time embed for App Store sandbox (no .env). */
-const IOS_APPSTORE_AVEN_RELAY_URL = 'relay.aven.ceo'
-const IOS_APPSTORE_DHT_UDP_PORT = 49737
-
-function hyperswarmRelayCompileEnv(relayCfg: AppStoreRelayConfig): Record<string, string> {
-	if (!relayCfg.relayPublicKeyHex || !relayCfg.relayAddr) return {}
-	return {
-		AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX: relayCfg.relayPublicKeyHex,
-		AVENOS_HYPERSWARM_RELAY_ADDR: relayCfg.relayAddr,
-	}
-}
 
 applyAppleEnvLocal(repoRoot)
 
@@ -216,23 +201,10 @@ function shellEscapeSingleQuoted(value: string): string {
 	return `'${value.replace(/'/g, `'\"'\"'`)}'`
 }
 
-function writeAvenIosCompileEnv(
-	avenRelayUrl: string,
-	dhtBootstrap: string,
-	relayCfg: AppStoreRelayConfig,
-) {
+function writeAvenIosCompileEnv() {
 	mkdirSync(path.dirname(AVEN_IOS_COMPILE_ENV), { recursive: true })
-	const lines = [
-		`export AVEN_RELAY_URL=${shellEscapeSingleQuoted(avenRelayUrl)}`,
-		`export AVENOS_DHT_BOOTSTRAP=${shellEscapeSingleQuoted(dhtBootstrap)}`,
-	]
-	if (relayCfg.relayPublicKeyHex && relayCfg.relayAddr) {
-		lines.push(
-			`export AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX=${shellEscapeSingleQuoted(relayCfg.relayPublicKeyHex)}`,
-			`export AVENOS_HYPERSWARM_RELAY_ADDR=${shellEscapeSingleQuoted(relayCfg.relayAddr)}`,
-		)
-	}
-	lines.push('')
+	const channel = readRustToolchainChannel(repoRoot)
+	const lines = [`export RUSTUP_TOOLCHAIN=${shellEscapeSingleQuoted(channel)}`, '']
 	writeFileSync(AVEN_IOS_COMPILE_ENV, lines.join('\n'), 'utf8')
 	console.log('[tauri-ios-asc] wrote compile env → %s', AVEN_IOS_COMPILE_ENV)
 }
@@ -441,22 +413,12 @@ function configureSigning(env: NodeJS.ProcessEnv): 'automatic' | 'manual' {
 }
 
 async function main() {
-	ensureRelayEnvReady(repoRoot)
-
 	const bundleVersion = process.env.AVEN_IOS_CF_BUNDLE_VERSION?.trim() || '13'
 	const version = readPackageVersion()
 
-	const avenRelayUrl = process.env.AVEN_RELAY_URL?.trim() || IOS_APPSTORE_AVEN_RELAY_URL
-	const relayCfg = await resolveAppStoreRelayConfig(
-		IOS_APPSTORE_AVEN_RELAY_URL,
-		IOS_APPSTORE_DHT_UDP_PORT,
-		{ warnLabel: 'tauri-ios-asc', repoRoot, requireEnvPubkey: true },
-	)
-	const dhtBootstrap = relayCfg.dhtBootstrap
-
 	syncEntitlements()
 	generateIosIconsFromSource()
-	writeAvenIosCompileEnv(avenRelayUrl, dhtBootstrap, relayCfg)
+	writeAvenIosCompileEnv()
 	patchPodfile()
 	ensureRustToolchainReady()
 	patchXcodeRustScript()
@@ -484,13 +446,8 @@ async function main() {
 		...process.env,
 		APPLE_DEVELOPMENT_TEAM: team,
 		CI: 'true',
-		AVEN_RELAY_URL: avenRelayUrl,
-		AVENOS_DHT_BOOTSTRAP: dhtBootstrap,
-		...hyperswarmRelayCompileEnv(relayCfg),
 		...rustupToolchainEnv(repoRoot),
 	}
-	console.log('[tauri-ios-asc] embedding AVEN_RELAY_URL=%s at compile time', avenRelayUrl)
-	console.log('[tauri-ios-asc] embedding AVENOS_DHT_BOOTSTRAP=%s at compile time', dhtBootstrap)
 	const signingMode = configureSigning(tauriEnv)
 
 	console.log('[tauri-ios-asc] team=%s build=%s mode=%s target=arm64-device', team, bundleVersion, signingMode)

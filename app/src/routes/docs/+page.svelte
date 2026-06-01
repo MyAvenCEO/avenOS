@@ -2,12 +2,12 @@
 	import { contentIntroHref } from '$lib/docs/content-collection'
 	import { firstFounderSlug } from '$lib/docs/self-collection'
 	import { navigateApp } from '$lib/shell'
-	import { firstFounderSlug as networkFirstSlug } from '$lib/docs/network-collection'
 	import { firstFounderSlug as sparksFirstSlug } from '$lib/docs/sparks-collection'
+	import { firstDeveloperSlug as syncFirstSlug } from '$lib/docs/sync-collection'
 	import { firstActorDocSlug } from '$lib/docs/actors-collection'
 
 	const selfHref = firstFounderSlug ? `/docs/self/founders/${firstFounderSlug}` : '/docs'
-	const networkHref = networkFirstSlug ? `/docs/network/founders/${networkFirstSlug}` : '/docs'
+	const syncHref = syncFirstSlug ? `/docs/sync/developers/${syncFirstSlug}` : '/docs'
 	const sparksHref = sparksFirstSlug ? `/docs/sparks/founders/${sparksFirstSlug}` : '/docs'
 	const actorsHref = firstActorDocSlug
 		? `/docs/actors/developers/${firstActorDocSlug}`
@@ -123,7 +123,7 @@
 					</span>
 				</a>
 				<a
-					href={networkHref}
+					href={syncHref}
 					data-sveltekit-preload-data="hover"
 					class="tech-card group flex flex-col gap-3 p-5 no-underline transition-all hover:bg-white/20"
 				>
@@ -138,16 +138,14 @@
 							stroke-width="1.75"
 							aria-hidden="true"
 						>
-							<circle cx="6" cy="12" r="2" />
-							<circle cx="18" cy="6" r="2" />
-							<circle cx="18" cy="18" r="2" />
-							<path d="M8 11.5l8-4M8 12.5l8 4" stroke-linecap="round" />
+							<path d="M4 12h16M4 6h8M4 18h12" stroke-linecap="round" />
+							<path d="M16 6l4 4-4 4" stroke-linecap="round" stroke-linejoin="round" />
 						</svg>
 					</div>
 					<div>
-						<p class="text-sm font-semibold tracking-tight text-foreground">My Network</p>
+						<p class="text-sm font-semibold tracking-tight text-foreground">Sync</p>
 						<p class="mt-0.5 text-xs leading-snug text-muted-foreground">
-							Invite-only peer allowlist, per-pair transport topics, share-nothing by default.
+							aven-db sync layer — SyncTarget, SyncAuthorizer, SyncTransport contract.
 						</p>
 					</div>
 					<span

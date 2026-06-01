@@ -2,13 +2,9 @@ import { browser } from '$app/environment'
 import { derived, get } from 'svelte/store'
 import { deviceSession } from '$lib/settings/device-session-store'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-import type { PeerRowReply } from '$lib/peer/api'
+import { demoPeerRows, getDemoMeshStatus, type PeerRowReply } from '$lib/peer/api'
 import type { PeerMeshPeerState } from '$lib/peer/mesh-state'
-import {
-	grooveSessionReady,
-	peerMeshSnapshot,
-	peerMeshStatus,
-} from '$lib/runtime/groove-runtime'
+import { grooveSessionReady, peerMeshSnapshot } from '$lib/runtime/groove-runtime'
 
 export { peerMeshSnapshot } from '$lib/runtime/groove-runtime'
 
@@ -23,24 +19,22 @@ function meshPeerToRow(p: PeerMeshPeerState): PeerRowReply {
 	}
 }
 
-/** Trusted remote peers — derived from mesh snapshot (same source as header badge). */
+/** Trusted remote peers — demo mesh only. */
 export const peerRows = derived(peerMeshSnapshot, ($mesh) =>
 	($mesh?.peers ?? []).map(meshPeerToRow),
 )
 
+/** Demo rows when mesh snapshot is not yet hydrated. */
+export const demoPeerRowsStore = derived([], () => demoPeerRows())
+
 let storeGeneration = 0
 
-async function hydrateMeshOnce(): Promise<void> {
-	if (get(deviceSession).kind !== 'unlocked') return
-	try {
-		peerMeshSnapshot.set(await peerMeshStatus())
-	} catch {
-		peerMeshSnapshot.set(undefined)
-	}
+function hydrateDemoMesh(): void {
+	peerMeshSnapshot.set(getDemoMeshStatus())
 }
 
 /**
- * Push-only peer mesh store: one hydrate at unlock, then `avenos:runtime` mesh updates only.
+ * Demo mesh store: hydrate once at unlock with hardcoded peers.
  */
 export function startPeerMeshStore(): () => void {
 	if (!browser || !isTauriRuntime()) {
@@ -49,10 +43,11 @@ export function startPeerMeshStore(): () => void {
 
 	const gen = ++storeGeneration
 
-	const boot = async () => {
+	const boot = () => {
 		if (gen !== storeGeneration) return
-		if (get(deviceSession).kind !== 'unlocked' || !get(grooveSessionReady)) return
-		await hydrateMeshOnce()
+		if (get(deviceSession).kind !== 'unlocked') return
+		if (!get(grooveSessionReady)) return
+		hydrateDemoMesh()
 	}
 
 	void boot()
@@ -63,12 +58,12 @@ export function startPeerMeshStore(): () => void {
 			peerMeshSnapshot.set(undefined)
 			return
 		}
-		if (get(grooveSessionReady)) void boot()
+		if (get(grooveSessionReady)) boot()
 	})
 
 	const stopReady = grooveSessionReady.subscribe((ready) => {
 		if (gen !== storeGeneration) return
-		if (ready && get(deviceSession).kind === 'unlocked') void boot()
+		if (ready && get(deviceSession).kind === 'unlocked') boot()
 	})
 
 	return () => {

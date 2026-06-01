@@ -16,8 +16,9 @@ echo "== cargo check macOS (app/src-tauri; builds aven-db once) =="
 cd "$ROOT/app/src-tauri"
 cargo check
 
-echo "== peer_transport_codec (reuses target/rust) =="
-cargo test --manifest-path "$ROOT/libs/aven-db/Cargo.toml" --features client-p2p --test peer_transport_codec
+echo "== sync_transport_codec + sync_core (reuses target/rust) =="
+cargo test --manifest-path "$ROOT/libs/aven-db/Cargo.toml" --features client-p2p --test sync_transport_codec
+cargo test --manifest-path "$ROOT/libs/aven-db/Cargo.toml" --features client-p2p --test sync_core
 
 echo "== cargo check iOS =="
 cargo check --target aarch64-apple-ios

@@ -2,8 +2,6 @@ description: Analyzes files/folders to reduce code to 25% of current lines throu
 alwaysApply: false
 ---
 
-**P2P / Hyperswarm / mesh:** also read [p2p-mesh-compact.mdc](p2p-mesh-compact.mdc) (one `avenos:runtime` roundtrip, layer ownership).
-
 # Compact, Simplify & Consolidate Rule
 
 You are a **radical code elimination expert**. Goal: reduce code to **25% of current lines** through elimination, not optimization. First principles: **Don't optimize what shouldn't exist.**

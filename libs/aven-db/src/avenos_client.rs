@@ -24,18 +24,18 @@ type DynStorage = Box<dyn Storage + Send>;
 type ClientRuntime = TokioRuntime<DynStorage>;
 
 #[derive(Clone)]
-enum MaybePeerTransport {
+enum MaybeSyncTransport {
     Off,
-    Active(Arc<dyn crate::peer_transport::PeerTransport>),
+    Active(Arc<dyn crate::sync_transport::SyncTransport>),
 }
 
-impl Default for MaybePeerTransport {
+impl Default for MaybeSyncTransport {
     fn default() -> Self {
         Self::Off
     }
 }
 
-impl std::fmt::Debug for MaybePeerTransport {
+impl std::fmt::Debug for MaybeSyncTransport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Off => f.write_str("Off"),
@@ -49,7 +49,7 @@ pub struct JazzClient {
     subscriptions: Arc<RwLock<HashMap<SubscriptionHandle, SubscriptionState>>>,
     subscription_senders: Arc<RwLock<HashMap<RuntimeSubHandle, mpsc::Sender<OrderedRowDelta>>>>,
     next_handle: std::sync::atomic::AtomicU64,
-    peer_transport: Option<Arc<dyn crate::peer_transport::PeerTransport>>,
+    peer_transport: Option<Arc<dyn crate::sync_transport::SyncTransport>>,
     peer_inbound_task: Option<tokio::task::JoinHandle<()>>,
 }
 
@@ -83,9 +83,11 @@ fn peer_send_backoff_clear(peer_id: ClientId) {
 }
 
 fn peer_outbound_callback(
-    peer_transport: Option<Arc<dyn crate::peer_transport::PeerTransport>>,
+    peer_transport: Option<Arc<dyn crate::sync_transport::SyncTransport>>,
     runtime_ready: Arc<OnceLock<ClientRuntime>>,
 ) -> impl Fn(OutboxEntry) + Send + Sync + 'static {
+    use crate::sync_targets::SyncTargetId;
+
     move |entry: OutboxEntry| {
         let Destination::Client(peer_id) = entry.destination else {
             return;
@@ -105,7 +107,8 @@ fn peer_outbound_callback(
                 destination: Destination::Client(peer_id),
                 payload: payload.clone(),
             };
-            match crate::peer_transport::PeerTransport::send_to(&*tt, peer_id, payload).await {
+            let target = SyncTargetId::Client(peer_id);
+            match crate::sync_transport::SyncTransport::send_to(&*tt, target, payload).await {
                 Ok(()) => peer_send_backoff_clear(peer_id),
                 Err(e) => {
                     let delay = peer_send_backoff(peer_id);
@@ -221,20 +224,29 @@ async fn open_persistent_storage(data_dir: &std::path::Path) -> Result<DynStorag
 
 impl JazzClient {
     pub async fn connect(context: AppContext) -> Result<Self> {
-        Self::do_connect(context, MaybePeerTransport::Off, None).await
+        Self::do_connect(context, MaybeSyncTransport::Off, None).await
     }
 
-    pub async fn connect_with_peer_transport(
+    pub async fn connect_with_sync_transport(
         context: AppContext,
-        peer_transport: Arc<dyn crate::peer_transport::PeerTransport>,
+        sync_transport: Arc<dyn crate::sync_transport::SyncTransport>,
         on_inbound_parked: Option<PeerInboundParkedHook>,
     ) -> Result<Self> {
         Self::do_connect(
             context,
-            MaybePeerTransport::Active(peer_transport),
+            MaybeSyncTransport::Active(sync_transport),
             on_inbound_parked,
         )
         .await
+    }
+
+    /// Back-compat alias — prefer [`Self::connect_with_sync_transport`].
+    pub async fn connect_with_peer_transport(
+        context: AppContext,
+        sync_transport: Arc<dyn crate::sync_transport::SyncTransport>,
+        on_inbound_parked: Option<PeerInboundParkedHook>,
+    ) -> Result<Self> {
+        Self::connect_with_sync_transport(context, sync_transport, on_inbound_parked).await
     }
 
     pub fn register_peer_sync_client(&self, peer_id: ClientId) -> Result<()> {
@@ -285,7 +297,7 @@ impl JazzClient {
 
     async fn do_connect(
         context: AppContext,
-        peer_layer: MaybePeerTransport,
+        peer_layer: MaybeSyncTransport,
         on_inbound_parked: Option<PeerInboundParkedHook>,
     ) -> Result<Self> {
         std::fs::create_dir_all(&context.data_dir)?;
@@ -313,8 +325,8 @@ impl JazzClient {
 
         let schema_manager = build_schema_manager(&storage, &context)?;
         let peer_transport_for_fwd = match &peer_layer {
-            MaybePeerTransport::Active(t) => Some(Arc::clone(t)),
-            MaybePeerTransport::Off => None,
+            MaybeSyncTransport::Active(t) => Some(Arc::clone(t)),
+            MaybeSyncTransport::Off => None,
         };
         let runtime_ready: Arc<OnceLock<ClientRuntime>> = Arc::new(OnceLock::new());
         let runtime = TokioRuntime::new(
@@ -332,14 +344,14 @@ impl JazzClient {
             Arc::new(RwLock::new(HashMap::new()));
 
         let (peer_transport_stored, peer_inbound_task) = match peer_layer {
-            MaybePeerTransport::Off => (None, None),
-            MaybePeerTransport::Active(t) => {
+            MaybeSyncTransport::Off => (None, None),
+            MaybeSyncTransport::Active(t) => {
                 let inbound_runtime = runtime.clone();
                 let on_parked = on_inbound_parked.clone();
                 let tin = Arc::clone(&t);
                 let task = tokio::spawn(async move {
                     loop {
-                        match crate::peer_transport::PeerTransport::recv_inbound(&*tin).await {
+                        match crate::sync_transport::SyncTransport::recv_inbound(&*tin).await {
                             None => break,
                             Some(entry) => {
                                 let payload = entry.payload.clone();

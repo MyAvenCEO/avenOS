@@ -66,7 +66,7 @@ pub fn normalize_ui_locale(raw: &str) -> String {
 	}
 }
 
-/// In-memory mirror of the active vault's P2P settings (read by `tauri-plugin-p2p`).
+/// In-memory mirror of the active vault's settings (legacy P2P prefs removed).
 #[derive(Clone)]
 pub struct VaultP2pPrefs(Arc<AtomicBool>);
 

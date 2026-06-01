@@ -84,4 +84,4 @@ Prepare in App Store Connect:
 | `APPLE_SIGNING_IDENTITY` | macOS Distribution identity passed through `build-appstore-macos.ts` into Tauri merge config. |
 | `AVEN_APP_STORE_PROVISIONING_PROFILE_MACOS` | Path to `.provisionprofile` for Mac App Store (script copies beside bundle). |
 
-See also: [macOS TestFlight sandbox smoke](macos-testflight-sandbox-smoke.md), [iOS TestFlight P2P smoke](ios-testflight-p2p-smoke.md), [macOS upload via Transporter](macos-testflight-upload-transporter.md), [iOS upload](ios-testflight-upload-transporter.md).
+See also: [macOS TestFlight sandbox smoke](macos-testflight-sandbox-smoke.md), [macOS upload via Transporter](macos-testflight-upload-transporter.md), [iOS upload](ios-testflight-upload-transporter.md).

@@ -11,7 +11,6 @@
  *
  * Optional:
  *   AVEN_MAC_CF_BUNDLE_VERSION — CFBundleVersion for this upload (default "13")
- *   AVEN_RELAY_URL — optional shell override; default hardcoded `relay.aven.ceo` (compile-time embed for P2P)
  *   AVEN_OUTPUT_PKG — output path for the pkg (default dist/macos-appstore/avenOS-<version>-b<build>.pkg)
  */
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -20,17 +19,11 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { applyAppleEnvLocal } from './apple-env'
-import { ensureRelayEnvReady } from './relay-env.ts'
-import { resolveAppStoreRelayConfig, type AppStoreRelayConfig } from './relay-bootstrap.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appDir = path.join(repoRoot, 'app')
 const tauriDir = path.join(appDir, 'src-tauri')
 const profileDest = path.join(tauriDir, 'profiles', 'mac-app-store.provisionprofile')
-
-/** Production Hyperswarm bootstrap host — compile-time embed for App Store sandbox (no .env). */
-const MAC_APPSTORE_AVEN_RELAY_URL = 'relay.aven.ceo'
-const MAC_APPSTORE_DHT_UDP_PORT = 49737
 
 function mustEnv(name: string): string {
 	const v = process.env[name]?.trim()
@@ -39,14 +32,6 @@ function mustEnv(name: string): string {
 		process.exit(1)
 	}
 	return v
-}
-
-function hyperswarmRelayCompileEnv(relayCfg: AppStoreRelayConfig): Record<string, string> {
-	if (!relayCfg.relayPublicKeyHex || !relayCfg.relayAddr) return {}
-	return {
-		AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX: relayCfg.relayPublicKeyHex,
-		AVENOS_HYPERSWARM_RELAY_ADDR: relayCfg.relayAddr,
-	}
 }
 
 function readPackageVersion(): string {
@@ -102,7 +87,6 @@ function resolveBuiltAppPath(
 
 async function main() {
 	applyAppleEnvLocal(repoRoot)
-	ensureRelayEnvReady(repoRoot)
 
 	const profileSrc = mustEnv('AVEN_APP_STORE_PROVISIONING_PROFILE_MACOS')
 	const signId = mustEnv('APPLE_SIGNING_IDENTITY')
@@ -113,14 +97,6 @@ async function main() {
 		'[build-appstore-macos] CFBundleVersion=%s (AVEN_MAC_CF_BUNDLE_VERSION or default 13)',
 		bundleVersion,
 	)
-
-	const avenRelayUrl = process.env.AVEN_RELAY_URL?.trim() || MAC_APPSTORE_AVEN_RELAY_URL
-	const relayCfg = await resolveAppStoreRelayConfig(MAC_APPSTORE_AVEN_RELAY_URL, MAC_APPSTORE_DHT_UDP_PORT, {
-		warnLabel: 'build-appstore-macos',
-		repoRoot,
-		requireEnvPubkey: true,
-	})
-	const dhtBootstrap = relayCfg.dhtBootstrap
 
 	mkdirSync(path.dirname(profileDest), { recursive: true })
 	copyFileSync(profileSrc, profileDest)
@@ -170,21 +146,8 @@ async function main() {
 	// App Store `.app` is signed with Apple Distribution — notarization needs Developer ID and
 	// must not run here (Apple re-processes after Transporter upload). Strip API creds so Tauri skips it.
 	const cargoTargetDir = path.join(repoRoot, 'target/rust')
-	const tauriEnv = {
-		...process.env,
-		AVEN_RELAY_URL: avenRelayUrl,
-		AVENOS_DHT_BOOTSTRAP: dhtBootstrap,
-		...hyperswarmRelayCompileEnv(relayCfg),
-	}
+	const tauriEnv = { ...process.env }
 	delete tauriEnv.CARGO_TARGET_DIR
-	console.log('[build-appstore-macos] embedding AVEN_RELAY_URL=%s at compile time', avenRelayUrl)
-	console.log('[build-appstore-macos] embedding AVENOS_DHT_BOOTSTRAP=%s at compile time', dhtBootstrap)
-	if (relayCfg.relayAddr) {
-		console.log(
-			'[build-appstore-macos] embedding blind-relay fallback AVENOS_HYPERSWARM_RELAY_ADDR=%s',
-			relayCfg.relayAddr,
-		)
-	}
 	for (const key of [
 		'APPLE_API_ISSUER',
 		'APPLE_API_KEY',

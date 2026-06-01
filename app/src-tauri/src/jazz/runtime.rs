@@ -14,20 +14,9 @@ enum GrooveActorMsg {
 		envelope: GrooveRuntimeEnvelope,
 		reply: oneshot::Sender<Result<serde_json::Value, String>>,
 	},
-	MeshRefresh {
-		reply: oneshot::Sender<Result<u32, String>>,
-	},
-	MeshReconcile {
-		skip_transport_heal: bool,
-		reply: oneshot::Sender<Result<(), String>>,
-	},
 	PublishMesh,
 	ResetConnection {
 		reply: oneshot::Sender<()>,
-	},
-	ApplyPeerInvite {
-		payload: String,
-		reply: oneshot::Sender<Result<(), String>>,
 	},
 }
 
@@ -55,29 +44,6 @@ impl GrooveActorHandle {
 			.map_err(|_| "groove actor reply dropped".to_string())?
 	}
 
-	pub async fn mesh_refresh(&self) -> Result<u32, String> {
-		let (reply, rx) = oneshot::channel();
-		self.tx
-			.send(GrooveActorMsg::MeshRefresh { reply })
-			.await
-			.map_err(|_| "groove actor mailbox closed".to_string())?;
-		rx.await
-			.map_err(|_| "groove actor reply dropped".to_string())?
-	}
-
-	pub async fn mesh_reconcile(&self, skip_transport_heal: bool) -> Result<(), String> {
-		let (reply, rx) = oneshot::channel();
-		self.tx
-			.send(GrooveActorMsg::MeshReconcile {
-				skip_transport_heal,
-				reply,
-			})
-			.await
-			.map_err(|_| "groove actor mailbox closed".to_string())?;
-		rx.await
-			.map_err(|_| "groove actor reply dropped".to_string())?
-	}
-
 	pub async fn publish_mesh(&self) {
 		let _ = self.tx.send(GrooveActorMsg::PublishMesh).await;
 	}
@@ -94,15 +60,6 @@ impl GrooveActorHandle {
 		}
 	}
 
-	pub async fn apply_peer_invite(&self, payload: String) -> Result<(), String> {
-		let (reply, rx) = oneshot::channel();
-		self.tx
-			.send(GrooveActorMsg::ApplyPeerInvite { payload, reply })
-			.await
-			.map_err(|_| "groove actor mailbox closed".to_string())?;
-		rx.await
-			.map_err(|_| "groove actor reply dropped".to_string())?
-	}
 }
 
 const ACTOR_CAPACITY: usize = 512;
@@ -126,34 +83,12 @@ pub fn spawn_groove_actor(app: AppHandle) -> GrooveActorHandle {
 						groove_runtime_dispatch(&app_loop, window, &jazz, ss, envelope).await;
 					let _ = reply.send(out);
 				}
-				GrooveActorMsg::MeshRefresh { reply } => {
-					let out = super::execute_mesh_refresh_full(&app_loop, &jazz).await;
-					let _ = reply.send(out);
-				}
-				GrooveActorMsg::MeshReconcile {
-					skip_transport_heal,
-					reply,
-				} => {
-					let out = super::execute_mesh_reconcile(
-						&app_loop,
-						&jazz,
-						skip_transport_heal,
-					)
-					.await;
-					let _ = reply.send(out);
-				}
 				GrooveActorMsg::PublishMesh => {
 					super::execute_publish_mesh(&app_loop, &jazz, ss).await;
 				}
 				GrooveActorMsg::ResetConnection { reply } => {
-					#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
-					crate::peer_catchup::notify_jazz_connection_teardown(&app_loop).await;
 					jazz.reset_connection().await;
 					let _ = reply.send(());
-				}
-				GrooveActorMsg::ApplyPeerInvite { payload, reply } => {
-					let out = super::execute_apply_peer_invite(&app_loop, &jazz, ss, &payload).await;
-					let _ = reply.send(out);
 				}
 			}
 		}

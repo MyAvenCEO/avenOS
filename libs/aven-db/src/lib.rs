@@ -13,6 +13,14 @@ pub mod runtime_core;
 pub mod schema_manager;
 pub mod storage;
 pub mod sync_manager;
+#[cfg(feature = "client-p2p")]
+pub mod delivery_ledger;
+#[cfg(feature = "client-p2p")]
+pub mod sync_authorizer;
+#[cfg(feature = "client-p2p")]
+pub mod sync_targets;
+#[cfg(feature = "client-p2p")]
+pub mod sync_transport;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_support;
 pub mod wire_types;
@@ -26,8 +34,6 @@ pub use runtime_tokio as groove_tokio;
 
 #[cfg(feature = "client-p2p")]
 mod avenos_client;
-#[cfg(feature = "client-p2p")]
-mod peer_transport;
 
 #[cfg(feature = "client-p2p")]
 use std::path::PathBuf;
@@ -38,7 +44,16 @@ use thiserror::Error;
 #[cfg(feature = "client-p2p")]
 pub use avenos_client::{JazzClient, PeerInboundParkedHook};
 #[cfg(feature = "client-p2p")]
-pub use peer_transport::{PeerTransport, decode_length_prefixed, encode_length_prefixed};
+pub use delivery_ledger::{DeliveryLedger, RowBatchKey};
+#[cfg(feature = "client-p2p")]
+pub use sync_authorizer::{AllowAllSyncAuthorizer, DenyAllSyncAuthorizer, SyncAuthorizer};
+#[cfg(feature = "client-p2p")]
+pub use sync_targets::SyncTargetId;
+#[cfg(feature = "client-p2p")]
+pub use sync_transport::{
+    decode_length_prefixed, decode_length_prefixed_client, encode_length_prefixed,
+    encode_length_prefixed_client, NullSyncTransport, PeerTransport, SyncTransport,
+};
 #[cfg(feature = "client-p2p")]
 pub use sync_manager::{InboxEntry, Source, SyncPayload};
 #[cfg(feature = "client-p2p")]

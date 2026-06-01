@@ -2337,6 +2337,48 @@
           "markdownDescription": "Denies the peer_transport_status command without any pre-configured scope."
         },
         {
+          "description": "Default permissions for tauri-plugin-sandbox-quickjs\n#### This default permission set includes:\n\n- `allow-session-mount`\n- `allow-session-dispatch`\n- `allow-session-unmount`",
+          "type": "string",
+          "const": "sandbox-quickjs:default",
+          "markdownDescription": "Default permissions for tauri-plugin-sandbox-quickjs\n#### This default permission set includes:\n\n- `allow-session-mount`\n- `allow-session-dispatch`\n- `allow-session-unmount`"
+        },
+        {
+          "description": "Enables the session_dispatch command without any pre-configured scope.",
+          "type": "string",
+          "const": "sandbox-quickjs:allow-session-dispatch",
+          "markdownDescription": "Enables the session_dispatch command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the session_mount command without any pre-configured scope.",
+          "type": "string",
+          "const": "sandbox-quickjs:allow-session-mount",
+          "markdownDescription": "Enables the session_mount command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the session_unmount command without any pre-configured scope.",
+          "type": "string",
+          "const": "sandbox-quickjs:allow-session-unmount",
+          "markdownDescription": "Enables the session_unmount command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the session_dispatch command without any pre-configured scope.",
+          "type": "string",
+          "const": "sandbox-quickjs:deny-session-dispatch",
+          "markdownDescription": "Denies the session_dispatch command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the session_mount command without any pre-configured scope.",
+          "type": "string",
+          "const": "sandbox-quickjs:deny-session-mount",
+          "markdownDescription": "Denies the session_mount command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the session_unmount command without any pre-configured scope.",
+          "type": "string",
+          "const": "sandbox-quickjs:deny-session-unmount",
+          "markdownDescription": "Denies the session_unmount command without any pre-configured scope."
+        },
+        {
           "description": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-device-peer-did`\n- `allow-signing-peer-did`\n- `allow-signing-public-key`\n- `allow-sign`\n- `allow-verify`\n- `allow-lock`\n- `allow-host-device-label`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`\n- `allow-active-identity`\n- `allow-vault-ui-settings-get`\n- `allow-vault-ui-settings-set-locale`",
           "type": "string",
           "const": "self:default",

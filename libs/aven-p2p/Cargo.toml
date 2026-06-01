@@ -1,40 +1,9 @@
 [package]
 name = "aven-p2p"
 version = "0.0.1"
-edition = "2024"
-rust-version = "1.85"
-publish = false
-description = "AvenOS vendored Hyperswarm / HyperDHT (peeroxide@1.3.1 + patches)"
+edition = "2021"
+description = "Placeholder for future AvenOS sync transport (Hyperswarm, LAN, relay, …)."
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/Rightbracket/peeroxide"
 
 [lib]
-name = "aven_p2p"
 path = "src/lib.rs"
-
-[features]
-default = ["swarm"]
-swarm = []
-
-[dependencies]
-libudx = "1.3.1"
-tokio = { version = "1", features = ["full"] }
-tracing = "0.1"
-thiserror = "2"
-blake2 = "0.10"
-ed25519-dalek = { version = "2", features = ["rand_core"] }
-curve25519-dalek = "4"
-sha2 = "0.10"
-chacha20poly1305 = "0.10"
-chacha20 = "0.9"
-poly1305 = "0.8"
-rand = "0.9"
-xsalsa20poly1305 = "0.9"
-if-addrs = "0.13"
-
-[dev-dependencies]
-hex = "0.4"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tokio = { version = "1", features = ["full", "test-util"] }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }

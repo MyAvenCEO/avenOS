@@ -5,12 +5,13 @@ Bun **monorepo** (layout inspired by [MaiaOS](https://github.com/)): active code
 | Package | Description |
 |---------|-------------|
 | **`libs/aven-website`** | `@avenos/aven-website` — SvelteKit marketing site — home, skills, pricing, waitlist |
-| **`libs/tauri-plugin-p2p`** | P2P / Hyperswarm Tauri plugin |
+| **`libs/aven-db`** | Local-first Groove core (RocksDB, sync layer) |
+| **`libs/aven-p2p`** | Placeholder for future sync transport |
 | **`libs/tauri-plugin-self`** | Device identity Tauri plugin |
 | **`libs/aven-vibes`** | `@avenos/aven-vibes` — mini-app HTML catalog for intent HITL views |
 | **`libs/aven-vibe-sandbox`** | `@avenos/aven-vibe-sandbox` — MCP app sandbox host (iframe / Tauri WebView) |
 | **`docs`** | `@avenos/docs` — Markdown for in-app docs (self, network, sparks, deploy, content) |
-| **`app`** | `@AvenOS/app` — Tauri + SvelteKit shell (identity, P2P, docs, vibe-apps) |
+| **`app`** | `@AvenOS/app` — Tauri + SvelteKit shell (identity, local Groove, docs, vibe-apps) |
 | **`ARCHIVE/ocr-example`** | Python Gemini OCR/JSON extract CLI (optional; separate `pip` venv) |
 | **`ARCHIVE/tauri-plugin-passkey`** | macOS passkey Tauri plugin (archived; not wired into `app` today) |
 

@@ -7,7 +7,6 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { freeDevServerPort } from './free-dev-server-port.ts'
-import { applyCentralRelayUrlDevDefault, startP2pSignal } from './p2p-signal.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -27,27 +26,16 @@ async function main() {
 		spawnSync('bun', ['./scripts/clean-app-tauri-target.ts'], { cwd: repoRoot, stdio: 'inherit' })
 	}
 
-	applyCentralRelayUrlDevDefault('dev-app:macos')
-	const p2 = await startP2pSignal(repoRoot)
-	const env = {
-		...process.env,
-		...p2.envAugment,
-	}
+	const child = Bun.spawn(['bun', '--env-file=.env', 'run', '--cwd', 'app', 'tauri:dev'], {
+		cwd: repoRoot,
+		stdout: 'inherit',
+		stderr: 'inherit',
+		stdin: 'inherit',
+		env: process.env,
+	})
 
-	try {
-		const child = Bun.spawn(['bun', '--env-file=.env', 'run', '--cwd', 'app', 'tauri:dev'], {
-			cwd: repoRoot,
-			stdout: 'inherit',
-			stderr: 'inherit',
-			stdin: 'inherit',
-			env
-		})
-
-		const code = await child.exited
-		process.exit(typeof code === 'number' ? code : 1)
-	} finally {
-		await p2.dispose()
-	}
+	const code = await child.exited
+	process.exit(typeof code === 'number' ? code : 1)
 }
 
 void main()

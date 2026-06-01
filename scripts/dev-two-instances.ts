@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * P2P dev harness: spawn two AvenOS Tauri instances side by side.
+ * Dev harness: spawn two AvenOS Tauri instances side by side (local UI testing).
  *
  * Instance A → http://127.0.0.1:1420
  * Instance B → http://127.0.0.1:1421
@@ -38,7 +38,6 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { homedir, platform } from 'node:os'
 import { freeDevServerPort } from './free-dev-server-port.ts'
-import { applyCentralRelayUrlDevDefault, startP2pSignal } from './p2p-signal.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appDir = path.join(repoRoot, 'app')
@@ -171,7 +170,7 @@ async function main() {
 	}
 
 	console.log(
-		`\n${BOLD}AvenOS — P2P dev harness (${platLabel})${RESET}\n` +
+		`\n${BOLD}AvenOS — two-instance dev harness (${platLabel})${RESET}\n` +
 			`  ${CYAN}[A]${RESET}  http://127.0.0.1:1420\n` +
 			`  ${MAGENTA}[B]${RESET}  http://127.0.0.1:1421\n\n` +
 			`Shared identity store: ${identitiesHint}\n` +
@@ -184,14 +183,7 @@ async function main() {
 	freeDevServerPort(1420)
 	freeDevServerPort(1421)
 
-	applyCentralRelayUrlDevDefault('dev-two-instances')
-	const p2 = await startP2pSignal(repoRoot)
-	async function exitWithCode(code: number): Promise<void> {
-		await p2.dispose()
-		process.exit(code)
-	}
-
-	const baseEnv = { ...devBaseEnv(), ...p2.envAugment }
+	const baseEnv = devBaseEnv()
 
 	// Instance A: Tauri handles the full lifecycle (beforeDevCommand starts Vite on :1420)
 	const tauriA = spawnTauri('A', CYAN, baseEnv)
@@ -203,7 +195,7 @@ async function main() {
 	} catch {
 		console.error(`${BOLD}${CYAN}[A]${RESET} Timed out waiting for :1420 — did instance A start?`)
 		tauriA.kill('SIGTERM')
-		await exitWithCode(1)
+		process.exit(1)
 	}
 
 	// Instance B: Vite on :1421 (no beforeDevCommand in tauri.conf.b.json)
@@ -216,7 +208,7 @@ async function main() {
 		console.error(`${BOLD}${MAGENTA}[B]${RESET} Timed out waiting for :1421`)
 		tauriA.kill('SIGTERM')
 		viteB.kill('SIGTERM')
-		await exitWithCode(1)
+		process.exit(1)
 	}
 
 	console.log(`${BOLD}${MAGENTA}[B]${RESET} Starting Tauri (devUrl :1421, target ${TAURI_B_TARGET_DIR})…`)
@@ -227,12 +219,10 @@ async function main() {
 	for (const sig of ['SIGINT', 'SIGTERM'] as const) {
 		process.on(sig, () => {
 			for (const p of allProcs) p.kill(sig)
-			void p2.dispose()
 		})
 	}
 
 	await Promise.all(allProcs.map((p) => new Promise((res) => p.on('exit', res))))
-	await p2.dispose()
 }
 
 void main()

@@ -2,7 +2,7 @@
 
 Run on a **physical Mac** against a release build produced for the **Mac App Store** path (sandbox entitlements embedded, hardened runtime signing). Typical flow: install the packaged `.app` from your signed `.pkg` or run the archived `.app` after `codesign ---verify`.
 
-**Goal:** Confirm Secure Enclave identity, Jazz/UI, Hyperswarm (if enabled), and WebView behave under **`com.apple.security.app-sandbox`**.
+**Goal:** Confirm Secure Enclave identity, Jazz/UI, and WebView behave under **`com.apple.security.app-sandbox`**.
 
 ## Prerequisites
 
@@ -26,18 +26,15 @@ Run on a **physical Mac** against a release build produced for the **Mac App Sto
    - [ ] After unlock, open `/sparks` (or your primary subscriber surface); confirm subscriptions complete without habitual ~30 s timeouts.
    - [ ] Sanity-check local persistence after restart (documents still visible).
 
-4. **P2P mesh (Hyperswarm — macOS TrackFlight build)**
+4. **Demo mesh UI**
 
-   - [ ] Pair two Macs running the **same sandboxed** beta (or Simulator + hardware if applicable for your QA setup).
-   - [ ] Invite / accept pairing; observe mesh badge progressing past “searching/syncing”.
-   - [ ] Confirm `com.apple.security.network.server` entitlement and App ID **inbound networking** capability if listens fail silently.
+   - [ ] Open Settings → Peers; confirm hardcoded demo peers show Connecting / Syncing / OK states (no live transport).
 
 ## If something fails
 
 | Symptom | Next check |
 |---------|-------------|
 | `codesign`/notary validation says sandbox missing | `--entitlements` not embedded → re-sign `.app` before `productbuild`. |
-| P2P never connects inside TestFlight build | App Store builds embed **`AVEN_RELAY_URL`** at compile time (default `relay.aven.ceo`). UI shows **`hyperswarmStartError`** if swarm failed to start. Console.app → filter **`avenos::peeroxide`** for `spawn_after_unlock_failed`. Confirm relay host is reachable and entitlements include **network.client** + **network.server**. |
 | Blank WebView post-install | Add JIT entitlement only after App Review risk assessment; reproduce with logging from Tauri/WebKit console. |
 
 When this checklist passes reliably, proceed to upload via Transporter (`macos-testflight-upload-transporter.md`).

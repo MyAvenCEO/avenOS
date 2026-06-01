@@ -1,13 +1,10 @@
 mod crypto;
+mod demo_mesh;
 mod network;
 mod jazz;
 mod jazz_auth;
 mod log_ring;
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
-mod peer_catchup;
-mod peer_mesh_state;
 mod peers;
-mod peer_sync_gate;
 mod schema_manifest;
 mod schema_migrations;
 mod spark_acc;
@@ -516,134 +513,6 @@ fn avenos_recent_rust_logs() -> Vec<String> {
 	log_ring::recent_lines()
 }
 
-/// DHT/announce lifecycle counters scraped from the `tracing` bridge in [`log_ring`].
-///
-/// Surfaced separately from `peer_transport_status` so the frontend can render them
-/// even if the Hyperswarm actor hasn't booted yet. Equivalent JSON shape on macOS and iOS.
-#[tauri::command]
-fn avenos_dht_trace_snapshot() -> serde_json::Value {
-	let s = log_ring::dht_trace_snapshot();
-	serde_json::json!({
-		"dhtBootstrapped": s.bootstrapped,
-		"lastAnnounceClosest": s.last_announce_closest,
-		"lastLookupPeerCount": s.last_lookup_peer_count,
-		"discoveredPeerTotal": s.discovered_peer_total,
-		"handshakeRelayForwardTotal": s.handshake_relay_forward_total,
-		"swarmPeerConnectedTotal": s.swarm_peer_connected_total,
-		"lastConnectRelayed": s.last_connect_relayed,
-		"lastRemoteHolepunchable": s.last_remote_holepunchable,
-		"blindRelayFallbackTotal": s.blind_relay_fallback_total,
-	})
-}
-
-/// Compile-time / runtime central relay constants (public key is not secret).
-#[tauri::command]
-fn avenos_relay_identity_snapshot() -> serde_json::Value {
-	fn first_non_empty(vars: &[&str]) -> Option<String> {
-		for key in vars {
-			if let Ok(v) = std::env::var(key) {
-				let t = v.trim();
-				if !t.is_empty() {
-					return Some(t.to_string());
-				}
-			}
-		}
-		None
-	}
-
-	let relay_url = first_non_empty(&["AVEN_RELAY_URL"]).or_else(|| {
-		option_env!("AVEN_RELAY_URL")
-			.map(str::trim)
-			.filter(|s| !s.is_empty())
-			.map(str::to_string)
-	});
-	let relay_public_key_hex = first_non_empty(&["AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX"])
-		.or_else(|| {
-			option_env!("AVENOS_HYPERSWARM_RELAY_PUBKEY_HEX")
-				.map(str::trim)
-				.filter(|s| !s.is_empty())
-				.map(str::to_string)
-		});
-	let dht_bootstrap = first_non_empty(&["AVENOS_DHT_BOOTSTRAP"]).or_else(|| {
-		option_env!("AVENOS_DHT_BOOTSTRAP")
-			.map(str::trim)
-			.filter(|s| !s.is_empty())
-			.map(str::to_string)
-	});
-	let relay_addr = first_non_empty(&["AVENOS_HYPERSWARM_RELAY_ADDR"]).or_else(|| {
-		option_env!("AVENOS_HYPERSWARM_RELAY_ADDR")
-			.map(str::trim)
-			.filter(|s| !s.is_empty())
-			.map(str::to_string)
-	});
-
-	serde_json::json!({
-		"relayUrl": relay_url,
-		"relayPublicKeyHex": relay_public_key_hex,
-		"dhtBootstrap": dht_bootstrap,
-		"relayAddr": relay_addr,
-	})
-}
-
-/// One-shot HTTPS reachability probe to the configured relay host.
-///
-/// `peer_transport_status` shows whether `udp/<bootstrap>` is healthy (via DHT counters);
-/// this command shows whether the *same network path* reaches the relay over TCP/443.
-/// When TCP works and UDP doesn't, we know UDP is being dropped by the router / carrier
-/// (the classic iOS-on-locked-down-WiFi failure mode).
-#[tauri::command]
-async fn avenos_relay_https_probe() -> serde_json::Value {
-	let host = std::env::var("AVEN_RELAY_URL")
-		.ok()
-		.or_else(|| option_env!("AVEN_RELAY_URL").map(|s| s.to_string()))
-		.unwrap_or_default();
-	if host.trim().is_empty() {
-		return serde_json::json!({
-			"ok": false,
-			"error": "AVEN_RELAY_URL unset (no compile-time embed, no runtime override)",
-		});
-	}
-	let trimmed = host
-		.trim()
-		.trim_start_matches("https://")
-		.trim_start_matches("http://")
-		.trim_end_matches('/');
-	let url = format!("https://{trimmed}/.well-known/aven-relay.json");
-
-	let start = std::time::Instant::now();
-	let client = match reqwest::Client::builder()
-		.timeout(std::time::Duration::from_secs(6))
-		.build()
-	{
-		Ok(c) => c,
-		Err(e) => {
-			return serde_json::json!({
-				"ok": false,
-				"error": format!("client build failed: {e}"),
-				"url": url,
-			});
-		}
-	};
-	match client.get(&url).send().await {
-		Ok(res) => {
-			let status = res.status();
-			let elapsed = start.elapsed().as_millis();
-			serde_json::json!({
-				"ok": status.is_success(),
-				"status": status.as_u16(),
-				"latencyMs": elapsed as u64,
-				"url": url,
-			})
-		}
-		Err(e) => serde_json::json!({
-			"ok": false,
-			"error": format!("{e}"),
-			"latencyMs": start.elapsed().as_millis() as u64,
-			"url": url,
-		}),
-	}
-}
-
 /// Install the global `log` subscriber.
 ///
 /// Without this, every `log::debug!` / `log::warn!` in this crate is a no-op,
@@ -651,10 +520,8 @@ async fn avenos_relay_https_probe() -> serde_json::Value {
 /// SurrealKV / ObjectManager state diverges and we ask the user for diagnostics.
 ///
 /// Default filter prints `info` everywhere plus `debug` for our own `avenos::*`
-/// targets so dev runs always show the Jazz lifecycle. Per-frame P2P gate traffic
-/// stays at `trace` (see `peer_sync_gate.rs`) so catch-up does not flood the terminal.
-/// Users can override via `RUST_LOG` (standard `env_logger` semantics), e.g.
-/// `RUST_LOG=avenos::peer_sync_gate=trace` or pipe to a file: `2>&1 | tee avenos.log`.
+/// targets so dev runs always show the Jazz lifecycle. Users can override via
+/// `RUST_LOG` (standard `env_logger` semantics).
 ///
 /// macOS/iOS TestFlight builds route through `os_log` (subsystem `ceo.aven.os`) and an in-app ring
 /// buffer (`avenos_recent_rust_logs`) because iPhone Console streaming is unreliable off-device.
@@ -714,11 +581,7 @@ fn init_logging() {
 		.try_init();
 	}
 
-	// Forward `tracing::*` events from aven-p2p / groove into the `log`
-	// crate. Without this, the announce/lookup/connect lifecycle logs were silently
-	// dropped — leaving us blind during pairing rendezvous. The Apple `log::Log` impl
-	// then forwards into the in-app ring buffer + `os_log`. Replaces the previous
-	// `tracing_log::LogTracer::init()` call, which went the wrong direction (log → tracing).
+	// Forward `tracing::*` events from groove into the `log` crate (Apple ring + os_log).
 	log_ring::init_tracing_bridge();
 
 	log::info!(
@@ -783,7 +646,6 @@ pub fn run() {
 	tauri::Builder::default()
 		.plugin(tauri_plugin_self::init())
 		.plugin(tauri_plugin_vault::init())
-		.plugin(tauri_plugin_p2p::init())
 		.plugin(tauri_plugin_sandbox_quickjs::init())
 		.plugin(tauri_plugin_clipboard_manager::init())
 		.manage(jazz::ManagedJazz::default())
@@ -794,8 +656,6 @@ pub fn run() {
 
 			app.manage(jazz::runtime::spawn_groove_actor(app.handle().clone()));
 			app.manage(jazz::ui_drain::spawn_ui_table_drain(app.handle().clone()));
-			#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
-			app.manage(peer_catchup::spawn_peer_catchup_worker(app.handle().clone()));
 
 			// Start the table-change drain so peer-sync deltas reach the webview without
 			// requiring a manual refresh. Local CRUD already calls `snapshot_broadcast`
@@ -862,121 +722,6 @@ pub fn run() {
 				});
 			}
 
-			let h_invite = app.handle().clone();
-			let _peer_invite_listen = app.listen("peer:invite-paired", move |event| {
-				let hh = h_invite.clone();
-				let payload = event.payload().to_string();
-				tauri::async_runtime::spawn(async move {
-					if let Err(e) = crate::jazz::apply_peer_invite_paired(&hh, &payload).await {
-						log::warn!(target: "avenos::jazz", "peer:invite-paired: {e}");
-					}
-				});
-			});
-
-			// Hyperswarm can finish spawning *after* the first Jazz connect + allowlist rebuild.
-			// In that narrow window `set_allowlist_and_join_pair_topics` returns early (no swarm
-			// handle) and durable per-pair topic joins stay pending until the next reconcile tick.
-			// The peer plugin emits this as soon as the swarm actor is alive so we eagerly re-run the
-			// same mesh refresh Groove expects after pairing.
-			let h_swarm_ready = app.handle().clone();
-			let _hyperswarm_ready_mesh = app.listen("peer:hyperswarm-ready", move |_event| {
-				let hh = h_swarm_ready.clone();
-				tauri::async_runtime::spawn(async move {
-					if let Err(e) = jazz::refresh_peer_mesh_primitives(&hh).await {
-						log::debug!(
-							target: "avenos::jazz",
-							"peer:hyperswarm-ready mesh refresh skipped: {e}",
-						);
-					}
-				});
-			});
-
-			let h_connect_ui = app.handle().clone();
-			let _connect_ui_mesh = app.listen("peer:connect-ui-changed", move |_event| {
-				let hh = h_connect_ui.clone();
-				tauri::async_runtime::spawn(async move {
-					crate::jazz::runtime::groove_actor(&hh).publish_mesh().await;
-				});
-			});
-
-			let h_mesh_push = app.handle().clone();
-			let _mesh_push = app.listen("peer:mesh-push", move |_event| {
-				let hh = h_mesh_push.clone();
-				tauri::async_runtime::spawn(async move {
-					crate::jazz::runtime::groove_actor(&hh).publish_mesh().await;
-				});
-			});
-
-			let h_path_heal = app.handle().clone();
-			let _path_heal_mesh = app.listen("peer:network-path-changed", move |_event| {
-				let hh = h_path_heal.clone();
-				tauri::async_runtime::spawn(async move {
-					crate::jazz::runtime::groove_actor(&hh).publish_mesh().await;
-				});
-			});
-
-			let h_fg_heal = app.handle().clone();
-			let _fg_heal_mesh = app.listen("peer:app-foreground", move |_event| {
-				let hh = h_fg_heal.clone();
-				tauri::async_runtime::spawn(async move {
-					crate::jazz::runtime::groove_actor(&hh).publish_mesh().await;
-				});
-			});
-
-			// Hyperswarm connections form **asynchronously** after pairing/grant: by the time
-			// `apply_peer_invite_paired` runs `refresh_peer_mesh_primitives`, the peer's
-			// `SwarmConnection` usually hasn't reached `HyperswarmGrooveBridge.on_swarm_connection`
-			// yet, so `register_peer_sync_client` is never called and Groove never replicates rows
-			// to that peer (and vice versa). The bridge now fires `peer_set_changed_notify` every
-			// time a peer is added/removed; mirror that into a mesh-refresh + an **adaptive** timer
-			// (fast tick right after startup, slower steady-state) so new swarm links register with
-			// Jazz sync without fixed 10s latency.
-			#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
-			{
-				use std::collections::HashSet;
-
-				let h_mesh = app.handle().clone();
-				tauri::async_runtime::spawn(async move {
-					use std::time::{Duration, Instant};
-
-					let bridge = h_mesh.state::<tauri_plugin_p2p::HyperswarmGrooveBridge>();
-					let notify = bridge.peer_set_changed_notify();
-					let fast_until = Instant::now() + Duration::from_secs(90);
-					let mut in_fast_phase = true;
-					loop {
-						let tick_dur = if in_fast_phase && Instant::now() < fast_until {
-							Duration::from_secs(2)
-						} else {
-							in_fast_phase = false;
-							Duration::from_secs(8)
-						};
-						let n = notify.clone();
-						let tick = tokio::time::sleep(tick_dur);
-						tokio::select! {
-							_ = n.notified() => {}
-							_ = tick => {}
-						};
-						let live_links =
-							h_mesh.state::<std::sync::Arc<tauri_plugin_p2p::PeerLinkCoordinator>>();
-						let bridge = h_mesh.state::<tauri_plugin_p2p::HyperswarmGrooveBridge>();
-						let mut live = HashSet::new();
-						for cid in live_links.snapshot_mux_ready_clients().await {
-							if bridge.peer_send_ready(cid).await {
-								live.insert(cid);
-							}
-						}
-						let h_catch = h_mesh.state::<crate::peer_catchup::PeerCatchupHandle>();
-						h_catch.live_clients_changed(live).await;
-						if let Err(e) = jazz::peer_mesh_reconcile_tick(&h_mesh, false).await {
-							log::debug!(
-								target: "avenos::jazz",
-								"peer-mesh reconcile skipped: {e}"
-							);
-						}
-					}
-				});
-			}
-
 			Ok(())
 		})
 		.register_uri_scheme_protocol("vibe-sandbox", |ctx, request| {
@@ -984,9 +729,7 @@ pub fn run() {
 		})
 		.invoke_handler(tauri::generate_handler![
 			avenos_recent_rust_logs,
-			avenos_dht_trace_snapshot,
-			avenos_relay_identity_snapshot,
-			avenos_relay_https_probe,
+			demo_mesh::demo_peer_mesh_status,
 			create_sandbox_webview,
 			set_sandbox_webview_rect,
 			destroy_sandbox_webview,

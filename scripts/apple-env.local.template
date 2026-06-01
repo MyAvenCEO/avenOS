@@ -21,8 +21,6 @@ AVEN_PKG_INSTALLER_IDENTITY="3rd Party Mac Developer Installer: Your Org (YOURTE
 
 # Network identity is hardcoded in the app (`ceo.aven/testnet/abagana`) — no genesis env needed.
 
-# Optional: override relay host (default dev scripts use relay.aven.ceo)
-# AVEN_RELAY_URL="relay.aven.ceo" (base64-encoded by tauri-ios-asc.ts from these paths).
 # If APPLE_API_* is set below, automatic CI signing is used instead (no p12/mobileprovision paths needed).
 # iOS manual signing — export a distribution-only .p12 (not the dev cert) from Keychain Access.
 # AVEN_IOS_CERTIFICATE_P12="/absolute/path/Apple_Distribution_Visioncreator_only.p12"

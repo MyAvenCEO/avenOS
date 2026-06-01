@@ -163,51 +163,12 @@ fn peer_timestamp_ms(v: &Value) -> Option<i64> {
 	}
 }
 
-pub fn now_ms() -> i64 {
-	std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
-		.unwrap_or(0)
-}
-
 async fn human_singleton_oid(client: &JazzClient) -> Result<ObjectId, String> {
 	let rows = jazz_engine::exec_list_rows(client, "humans").await?;
 	let (oid, _) = rows
 		.first()
 		.ok_or_else(|| "humans row missing: re-onboard this vault".to_string())?;
 	Ok(*oid)
-}
-
-async fn append_peer_to_human(client: &JazzClient, peer_row: ObjectId) -> Result<(), String> {
-	let hum_oid = human_singleton_oid(client).await?;
-	let schema = jazz_engine::resolved_table_schema(client, "humans").await?;
-	let dev_ix = jazz_engine::col_ix(&schema, "my_devices")?;
-	let rows = jazz_engine::exec_list_rows(client, "humans").await?;
-	let vals = rows
-		.iter()
-		.find(|(o, _)| *o == hum_oid)
-		.map(|(_, v)| v.as_slice())
-		.ok_or_else(|| "humans singleton not found".to_string())?;
-	let cell = vals.get(dev_ix).ok_or_else(|| "humans: missing my_devices".to_string())?;
-	let mut list: Vec<Value> = match cell {
-		Value::Array(items) => items.clone(),
-		_ => return Err("humans.my_devices: expected array".into()),
-	};
-	let needle = Value::Uuid(peer_row);
-	if !list.iter().any(|v| v == &needle) {
-		list.push(needle);
-	}
-	let mut patch = Map::new();
-	patch.insert(
-		"my_devices".into(),
-		JsonValue::Array(list.iter().map(value_to_json).collect()),
-	);
-	let ops = crate::jazz::patch_updates(&schema, patch)?;
-	client
-		.update(hum_oid, ops)
-		.await
-		.map_err(crate::jazz::format_jazz_err)?;
-	Ok(())
 }
 
 fn value_to_json(v: &Value) -> JsonValue {
@@ -230,60 +191,6 @@ fn value_to_json(v: &Value) -> JsonValue {
 			b,
 		)),
 	}
-}
-
-/// Upsert by `peer_did` for a **remote** peer; appends new row id to `humans.my_devices`.
-pub async fn upsert_remote_peer_row(
-	client: &JazzClient,
-	peer_did: &str,
-	device_label: &str,
-	status: &str,
-) -> Result<(), String> {
-	let peer_did = peer_did.trim();
-	crate::jazz_auth::ed25519_public_from_peer_did(peer_did)?;
-
-	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
-	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
-	let did_ix = jazz_engine::col_ix(&schema, "peer_did")?;
-
-	for (oid, vals) in rows {
-		let existing = vals
-			.get(did_ix)
-			.and_then(value_as_text)
-			.unwrap_or("");
-		if existing.trim() == peer_did {
-			let mut patch = Map::new();
-			patch.insert(
-				"device_label".into(),
-				JsonValue::String(device_label.to_string()),
-			);
-			patch.insert("status".into(), JsonValue::String(status.to_string()));
-			let ops = crate::jazz::patch_updates(&schema, patch)?;
-			client
-				.update(oid, ops)
-				.await
-				.map_err(crate::jazz::format_jazz_err)?;
-			append_peer_to_human(client, oid).await?;
-			return Ok(());
-		}
-	}
-
-	let mut row = Map::new();
-	row.insert("peer_did".into(), JsonValue::String(peer_did.to_string()));
-	row.insert(
-		"device_label".into(),
-		JsonValue::String(device_label.to_string()),
-	);
-	row.insert("kind".into(), JsonValue::String("remote".into()));
-	row.insert("added_at_ms".into(), JsonValue::Number(now_ms().into()));
-	row.insert("status".into(), JsonValue::String(status.to_string()));
-	let vals = crate::jazz::insert_values("peers", &schema, row)?;
-	let oid = client
-		.create("peers", vals)
-		.await
-		.map_err(crate::jazz::format_jazz_err)?;
-	append_peer_to_human(client, oid).await?;
-	Ok(())
 }
 
 async fn remove_peer_from_human(client: &JazzClient, peer_row: ObjectId) -> Result<(), String> {

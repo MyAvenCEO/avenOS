@@ -14,7 +14,6 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { freeDevServerPort } from './free-dev-server-port.ts'
-import { applyCentralRelayUrlDevDefault, startP2pSignal } from './p2p-signal.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -95,31 +94,24 @@ async function main() {
 		'[dev:app:ios] Until launch finishes, Spotlight/home will show no avenOS (that is normal).\n',
 	)
 
-	applyCentralRelayUrlDevDefault('dev-app:ios')
-	const p2 = await startP2pSignal(repoRoot)
 	const env = {
 		...process.env,
-		...p2.envAugment,
 		AVENOS_DEV_INSECURE_IDENTITY: '1',
 	} satisfies Record<string, string | undefined>
 
 	const tauriArgs = ['bun', '--env-file=.env', 'x', '--bun', 'tauri', 'ios', 'dev']
 	if (simDevice) tauriArgs.push(simDevice)
 
-	try {
-		const child = Bun.spawn(tauriArgs, {
-			cwd: path.join(repoRoot, 'app'),
-			stdout: 'inherit',
-			stderr: 'inherit',
-			stdin: 'inherit',
-			env,
-		})
+	const child = Bun.spawn(tauriArgs, {
+		cwd: path.join(repoRoot, 'app'),
+		stdout: 'inherit',
+		stderr: 'inherit',
+		stdin: 'inherit',
+		env,
+	})
 
-		const code = await child.exited
-		process.exit(typeof code === 'number' ? code : 1)
-	} finally {
-		await p2.dispose()
-	}
+	const code = await child.exited
+	process.exit(typeof code === 'number' ? code : 1)
 }
 
 void main()

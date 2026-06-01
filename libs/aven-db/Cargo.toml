@@ -2,7 +2,7 @@
 name = "aven-db"
 version = "0.0.1"
 edition = "2024"
-description = "AvenOS local-first DB core (upstream jazz2 alpha.50, RocksDB + P2P; Rust import alias `groove`)."
+description = "AvenOS local-first DB core (upstream jazz2 alpha.50, RocksDB; Rust import alias `groove`)."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/garden-co/jazz2"
 
@@ -70,5 +70,9 @@ tokio = { version = "1", features = ["test-util", "full"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [[test]]
-name = "peer_transport_codec"
+name = "sync_transport_codec"
+required-features = ["client-p2p"]
+
+[[test]]
+name = "sync_core"
 required-features = ["client-p2p"]
