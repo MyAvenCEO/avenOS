@@ -261,6 +261,14 @@ pub enum SyncPayload {
     /// Request current replayable fate for specific batch ids.
     BatchFateNeeded { batch_ids: Vec<BatchId> },
 
+    /// Anti-entropy: "here are my causal heads for `resource`" (sent on connect
+    /// and on local seal). The receiver replies `FrontierNeed` with its own heads.
+    FrontierAnnounce { resource: String, heads: Vec<BatchId> },
+
+    /// Anti-entropy pull: "my heads for `resource` are these — send what I'm
+    /// owed". The holder ships `frontier_diff(local, heads)`, gated by `may_sync`.
+    FrontierNeed { resource: String, heads: Vec<BatchId> },
+
     /// Explicitly seal a transactional batch so the authority can validate it.
     SealBatch { submission: SealedBatchSubmission },
 
@@ -489,6 +497,8 @@ impl SyncPayload {
             SyncPayload::RowBatchNeeded { .. } => "RowBatchNeeded",
             SyncPayload::BatchFate { .. } => "BatchFate",
             SyncPayload::BatchFateNeeded { .. } => "BatchFateNeeded",
+            SyncPayload::FrontierAnnounce { .. } => "FrontierAnnounce",
+            SyncPayload::FrontierNeed { .. } => "FrontierNeed",
             SyncPayload::SealBatch { .. } => "SealBatch",
             SyncPayload::QuerySubscription { .. } => "QuerySubscription",
             SyncPayload::QueryUnsubscription { .. } => "QueryUnsubscription",

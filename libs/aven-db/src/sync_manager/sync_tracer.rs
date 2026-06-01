@@ -879,6 +879,12 @@ impl<'a> Normalizer<'a> {
                     .join(", ");
                 format!("batch_ids:[{batches}]")
             }
+            SyncPayload::FrontierAnnounce { resource, heads } => {
+                format!("announce {resource} heads:{}", heads.len())
+            }
+            SyncPayload::FrontierNeed { resource, heads } => {
+                format!("need {resource} heads:{}", heads.len())
+            }
             SyncPayload::SealBatch { submission } => {
                 let members = submission
                     .members
@@ -1041,6 +1047,12 @@ fn format_payload_details(payload: &SyncPayload, names: &Names<'_>) -> String {
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("batch_ids:[{batches}]")
+        }
+        SyncPayload::FrontierAnnounce { resource, heads } => {
+            format!("announce {resource} heads:{}", heads.len())
+        }
+        SyncPayload::FrontierNeed { resource, heads } => {
+            format!("need {resource} heads:{}", heads.len())
         }
         SyncPayload::SealBatch { submission } => {
             let members = submission

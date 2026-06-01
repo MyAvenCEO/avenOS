@@ -1219,7 +1219,10 @@ impl SyncManager {
             // Servers shouldn't send these to us
             SyncPayload::QuerySubscription { .. }
             | SyncPayload::QueryUnsubscription { .. }
-            | SyncPayload::SealBatch { .. } => {}
+            | SyncPayload::SealBatch { .. }
+            // Frontier anti-entropy is peer↔peer, never via the server tier.
+            | SyncPayload::FrontierAnnounce { .. }
+            | SyncPayload::FrontierNeed { .. } => {}
         }
     }
 
@@ -1283,6 +1286,23 @@ impl SyncManager {
                     payload,
                     AuthoritativeFateRecording::Skip,
                 );
+            }
+            // Frontier anti-entropy (§1.3): peer announced its heads → reply with
+            // ours so it ships what we're owed. The diff is the only tracker.
+            SyncPayload::FrontierAnnounce { resource, heads: _ } => {
+                let my_heads = self.resource_frontier_heads(storage);
+                self.outbox.push(OutboxEntry {
+                    destination: Destination::Client(client_id),
+                    payload: SyncPayload::FrontierNeed {
+                        resource: resource.clone(),
+                        heads: my_heads,
+                    },
+                });
+            }
+            // Peer wants what it's owed → ship frontier_diff(our DAG, their heads),
+            // per-hop gated by may_sync. No per-peer ledger consulted.
+            SyncPayload::FrontierNeed { resource: _, heads } => {
+                self.ship_frontier_diff(storage, client_id, heads);
             }
             // Handle query subscription with full Query struct
             // Queue for QueryManager to process (SyncManager doesn't know about QueryGraph)

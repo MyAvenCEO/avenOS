@@ -3,7 +3,7 @@ use crate::batch_fate::BatchFate;
 use crate::object::{BranchName, ObjectId};
 use crate::row_histories::{BatchId, HistoryScan, StoredRowBatch};
 use crate::storage::{RowLocator, Storage, metadata_from_row_locator};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 impl SyncManager {
     fn object_has_upstream_confirmation<H: Storage>(
@@ -419,5 +419,79 @@ impl SyncManager {
                 }
             }
         }
+    }
+
+    // ========================================================================
+    // Frontier anti-entropy (§1.3) — the pure tracker. Storage IS the have-set;
+    // the DAG's heads are the frontier, the diff is the only delivery decision.
+    // ========================================================================
+
+    /// Causal heads of the syncable resource = heads of the DAG built from stored
+    /// row history. No separate tracker — storage is the single source of truth.
+    pub(super) fn resource_frontier_heads<H: Storage>(&self, storage: &H) -> Vec<BatchId> {
+        self.build_sync_dag(storage).0.heads()
+    }
+
+    /// Ship the batches a peer is owed: `frontier_diff(our DAG, their heads)`,
+    /// each forwarded only when `may_sync` Allows (per-hop gate, §6). Consults no
+    /// per-peer ledger — re-running with the same heads ships nothing new.
+    pub(super) fn ship_frontier_diff<H: Storage>(
+        &mut self,
+        storage: &H,
+        client_id: PeerId,
+        their_heads: &[BatchId],
+    ) {
+        let (dag, index) = self.build_sync_dag(storage);
+        for batch_id in crate::frontier::frontier_diff(&dag, their_heads) {
+            let Some((object_id, table, metadata, row)) = index.get(&batch_id) else {
+                continue;
+            };
+            let res = crate::capability::ResourceCoord::new(
+                format!("{table}:{object_id}"),
+                table.clone(),
+                *object_id,
+            );
+            if self.resolver.may_sync(
+                &crate::sync_targets::SyncTargetId::Client(client_id),
+                crate::capability::AccOp::Write,
+                &res,
+            ) == crate::capability::CapDecision::Allow
+            {
+                self.queue_row_to_client(client_id, *object_id, metadata.clone(), row.clone(), true);
+            }
+        }
+    }
+
+    /// Build a `FrontierDag` over all syncable rows + an index from `BatchId` to
+    /// the `(object, table, metadata, row)` needed to forward it.
+    #[allow(clippy::type_complexity)]
+    fn build_sync_dag<H: Storage>(
+        &self,
+        storage: &H,
+    ) -> (
+        crate::frontier::FrontierDag,
+        HashMap<BatchId, (ObjectId, String, HashMap<String, String>, StoredRowBatch)>,
+    ) {
+        let mut dag = crate::frontier::FrontierDag::new();
+        let mut index: HashMap<BatchId, (ObjectId, String, HashMap<String, String>, StoredRowBatch)> =
+            HashMap::new();
+        let Ok(locators) = storage.scan_row_locators() else {
+            return (dag, index);
+        };
+        for (object_id, locator) in locators {
+            let table = locator.table.to_string();
+            // Local identity / trust tables are never P2P-forwarded.
+            if matches!(table.as_str(), "humans" | "peers") {
+                continue;
+            }
+            let metadata = metadata_from_row_locator(&locator);
+            if let Ok(batches) = storage.scan_history_row_batches(&table, object_id) {
+                for row in batches {
+                    dag.insert(row.batch_id, row.parents.to_vec());
+                    index.insert(row.batch_id, (object_id, table.clone(), metadata.clone(), row));
+                }
+            }
+        }
+        (dag, index)
     }
 }
