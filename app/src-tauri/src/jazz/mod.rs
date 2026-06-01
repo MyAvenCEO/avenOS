@@ -1844,7 +1844,15 @@ async fn finish_spark_admin_grant(
 	jazz.invalidate_vault_shell();
 	let shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
 
-	let _ = execute_mesh_refresh_full(app, jazz).await;
+	// The grant just changed authorization (the peer is now `owns` in our
+	// biscuit). Re-announce our frontier to every peer so the newly-authorized
+	// peer re-pulls and the gate — now `Allow` — ships the spark's existing data
+	// (§1.4: grant routes through the one forwarding path, like revoke). Without
+	// this, data created before the grant was announced-and-denied and never
+	// re-ships. Generic: re-announce covers every spark/table, not just one type.
+	if let Err(e) = client.rebroadcast_all_peer_clients_and_flush().await {
+		log::warn!(target: "avenos::jazz", "post-grant peer re-announce failed: {e}");
+	}
 
 	let _ = jazz
 		.publish_table_snapshot_force(app, client.as_ref(), shell.as_ref(), "sparks")
