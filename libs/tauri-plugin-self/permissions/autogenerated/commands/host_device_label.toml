@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-host-device-label"
+description = "Enables the host_device_label command without any pre-configured scope."
+commands.allow = ["host_device_label"]
+
+[[permission]]
+identifier = "deny-host-device-label"
+description = "Denies the host_device_label command without any pre-configured scope."
+commands.deny = ["host_device_label"]

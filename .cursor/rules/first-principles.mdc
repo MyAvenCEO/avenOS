@@ -1,0 +1,18 @@
+---
+alwaysApply: false
+---
+Please audit and map the related files and current architecture regarding the users request and attached files. What's the single smartest and most radically innovative and accretive and useful and compelling FIRST PRINCILPES refactoring you could make at this point, to reduce the codes complexity and increase its resillience. Strip out as much indirections as you can, while abstracting to first principles relentlessly. Always lean into massive simplficiation refactorings, while keeping functionality intact. Enforce DRY / KISS, deduplication,  unified, generic, abstractions where ever you can. 
+
+Apply the following planing process:
+1. Interview the human to understand the actual intent of the human, until you got 95% confidence of grapsing the full scope! 
+
+2. full stack system audit of all related files and functions, taht are relevant for that task
+
+3. abstract and reduce the challenge down to its foundational first principles
+
+4. apply TDD (bun tests - colocated in each packages /tests folder) write full coverage tests for the solution, that you figured out is the best possible of all potential variants
+
+5. refine plan with human feedback
+
+IMPORANT KEEP IN MIND:
+Where ever you can, compact and simplify ans abstract anything that you can aiming and 20% code line compaction and redcutions.

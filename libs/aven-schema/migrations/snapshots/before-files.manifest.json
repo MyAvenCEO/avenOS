@@ -1,0 +1,123 @@
+{
+	"tables": {
+		"humans": {
+			"columns": [
+				{
+					"name": "first_name",
+					"type": "text",
+					"plaintext": true,
+					"comment": "singleton per vault — nosync Groove inserts (local-only identity graph)"
+				},
+				{ "name": "username_slug", "type": "text", "plaintext": true },
+				{
+					"name": "my_devices",
+					"type": "uuid[]",
+					"plaintext": true,
+					"exposeTs": "string[]",
+					"comment": "ordered peer row IDs (Groove UUID object ids referencing peers)"
+				},
+				{ "name": "created_at_ms", "type": "bigint", "plaintext": true }
+			]
+		},
+		"peers": {
+			"columns": [
+				{
+					"name": "peer_did",
+					"type": "text",
+					"plaintext": true,
+					"comment": "did:key — nosync peers table"
+				},
+				{
+					"name": "device_label",
+					"type": "text",
+					"plaintext": true,
+					"comment": "e.g. MacBook M1 — display for this peer"
+				},
+				{
+					"name": "kind",
+					"type": "text",
+					"plaintext": true,
+					"comment": "local | remote"
+				},
+				{
+					"name": "added_at_ms",
+					"type": "bigint",
+					"plaintext": true
+				},
+				{
+					"name": "status",
+					"type": "text",
+					"plaintext": true,
+					"comment": "pending | active | revoked"
+				}
+			]
+		},
+		"keyshares": {
+			"columns": [
+				{ "name": "spark_id", "type": "uuid", "plaintext": true },
+				{ "name": "dek_version", "type": "bigint", "plaintext": true },
+				{ "name": "recipient_did", "type": "text", "plaintext": true },
+				{ "name": "wrapped_dek", "type": "text", "plaintext": true }
+			]
+		},
+		"sparks": {
+			"columns": [
+				{ "name": "spark_id", "type": "uuid", "plaintext": true },
+				{ "name": "name", "type": "text", "plaintext": true },
+				{
+					"name": "issuer_pubkey_b64",
+					"type": "text",
+					"plaintext": true,
+					"comment": "biscuit root Ed25519 public key (URL-safe base64, 32 bytes) — verifier anchor for genesis + third-party delegation blocks"
+				},
+				{ "name": "genesis_b64", "type": "text", "plaintext": true },
+				{ "name": "current_dek_version", "type": "bigint", "plaintext": true },
+				{ "name": "created_at_ms", "type": "bigint", "plaintext": true }
+			]
+		},
+		"todos": {
+			"columns": [
+				{
+					"name": "spark_id",
+					"type": "uuid",
+					"plaintext": true,
+					"comment": "public linkage — ACC routing; ciphertext AAD binds rows to sparks"
+				},
+				{ "name": "title", "type": "text" },
+				{
+					"name": "done",
+					"type": "text",
+					"exposeTs": "boolean"
+				},
+				{ "name": "description", "type": "text", "nullable": true }
+			]
+		},
+		"messages": {
+			"columns": [
+				{
+					"name": "spark_id",
+					"type": "uuid",
+					"plaintext": true,
+					"comment": "spark scope — biscuit + P2P sync routing"
+				},
+				{
+					"name": "created_at_ms",
+					"type": "bigint",
+					"plaintext": true,
+					"comment": "ordering in chat threads"
+				},
+				{
+					"name": "author_did",
+					"type": "text",
+					"plaintext": true,
+					"comment": "did:key of sender — display without decrypting body"
+				},
+				{
+					"name": "body",
+					"type": "text",
+					"comment": "message text — sealed at rest per spark DEK"
+				}
+			]
+		}
+	}
+}

@@ -1,0 +1,10 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Default permissions for tauri-plugin-vault"
+permissions = [
+  "allow-secrets-list",
+  "allow-secrets-set",
+  "allow-secrets-reveal",
+  "allow-secrets-delete",
+]

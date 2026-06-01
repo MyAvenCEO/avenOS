@@ -2,7 +2,7 @@ node_modules
 
 # Local second brain vault + upstream mirrors (never commit)
 /.data/
-/projects/aven-ceo/.data/
+/libs/aven-website/.data/
 /.repos/
 
 # Output
@@ -11,9 +11,11 @@ node_modules
 .netlify
 .wrangler
 /.svelte-kit
-/projects/*/.svelte-kit
+/ARCHIVE/*/.svelte-kit
+/app/.svelte-kit
 /build
-/projects/*/build
+/ARCHIVE/*/build
+/app/build
 
 # OS
 .DS_Store
@@ -25,6 +27,10 @@ Thumbs.db
 !.env.example
 !.env.test
 
+# Jaensen local SQLite (do not commit)
+/.jaensen/state.db
+/.jaensen/state.db-*
+
 # Python
 __pycache__/
 *.py[cod]
@@ -33,3 +39,22 @@ __pycache__/
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Vibe app sandbox + mini-app build outputs (rebuilt by `bun run build` per package).
+/libs/aven-vibe-sandbox/sandbox/dist/
+/libs/aven-vibes/*/dist/
+
+# Upstream jazz2 mirror (local refresh only — never commit)
+/tools/jazz2-upstream/
+# Ephemeral overlay stash for scripts/revendor-aven-db.sh
+/.avenos-revendor-backup/
+target/
+**/target/
+
+# App Store / local packaging outputs (never commit)
+/dist/
+**/*.pkg
+
+# Repo-local P2p signal relay keys (relay-hyperdht.seed, bootstrap-hyperdht.seed)
+/.avenOS/
+**/.avenOS/

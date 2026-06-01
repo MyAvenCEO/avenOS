@@ -1,0 +1,25 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Default permissions for tauri-plugin-self"
+permissions = [
+  "allow-register",
+  "allow-public-key",
+  "allow-unlock",
+  "allow-peer-status",
+  "allow-device-peer-did",
+  "allow-signing-peer-did",
+  "allow-signing-public-key",
+  "allow-sign",
+  "allow-verify",
+  "allow-lock",
+  "allow-host-device-label",
+  "allow-vault-list",
+  "allow-vault-slug-preview",
+  "allow-vault-select",
+  "allow-vault-create",
+  "allow-vault-selected-slug",
+  "allow-active-identity",
+  "allow-vault-ui-settings-get",
+  "allow-vault-ui-settings-set-locale",
+]

@@ -1,0 +1,17 @@
+{
+	"$schema": "../gen/schemas/desktop-schema.json",
+	"identifier": "default",
+	"description": "Default permissions for the main window",
+	"windows": ["main"],
+	"permissions": [
+		"core:default",
+		"core:window:default",
+		"core:webview:default",
+		"core:webview:allow-create-webview-window",
+		"core:event:default",
+		"self:default",
+		"vault:default",
+		"sandbox-quickjs:default",
+		"clipboard-manager:allow-write-text"
+	]
+}

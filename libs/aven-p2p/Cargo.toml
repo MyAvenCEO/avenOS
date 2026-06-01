@@ -1,0 +1,9 @@
+[package]
+name = "aven-p2p"
+version = "0.0.1"
+edition = "2021"
+description = "Placeholder for future AvenOS sync transport (Hyperswarm, LAN, relay, …)."
+license = "MIT OR Apache-2.0"
+
+[lib]
+path = "src/lib.rs"

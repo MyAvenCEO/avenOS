@@ -1,0 +1,33 @@
+# ── Copy this file to:  <repo-root>/.env.apple.local   (already gitignored) ─────────
+#
+# Paths can include spaces — use quotes, e.g. "/Users/you/Desktop/Maia City/Apple/foo.provisionprofile"
+#
+# After editing: `bun run release:app:mac <N>` and `bun run release:app:ios <N>` load this automatically.
+
+# Upload path: CLI via `release:app:*` (altool / App Store Connect API) is preferred; Apple Transporter
+# is optional when API upload fails — not the primary QA workflow anymore.
+
+APPLE_DEVELOPMENT_TEAM=YOUR10CHARTEAMID
+
+# Mac App Store Connect profile (used by scripts/build-appstore-macos.ts)
+AVEN_APP_STORE_PROVISIONING_PROFILE_MACOS="/absolute/path/Mac App Store Connect_ceo_aven_os.provisionprofile"
+
+APPLE_SIGNING_IDENTITY="Apple Distribution: Your Org (YOURTEAMID)"
+AVEN_PKG_INSTALLER_IDENTITY="3rd Party Mac Developer Installer: Your Org (YOURTEAMID)"
+
+# Optional: bump before each Transporter upload (Apple rejects duplicate CFBundleVersion)
+# AVEN_MAC_CF_BUNDLE_VERSION=5
+# AVEN_IOS_CF_BUNDLE_VERSION=1
+
+# Network identity is hardcoded in the app (`ceo.aven/testnet/abagana`) — no genesis env needed.
+
+# If APPLE_API_* is set below, automatic CI signing is used instead (no p12/mobileprovision paths needed).
+# iOS manual signing — export a distribution-only .p12 (not the dev cert) from Keychain Access.
+# AVEN_IOS_CERTIFICATE_P12="/absolute/path/Apple_Distribution_Visioncreator_only.p12"
+# AVEN_IOS_CERTIFICATE_PASSWORD="your-p12-export-password"
+# AVEN_IOS_APP_STORE_MOBILEPROVISION="/absolute/path/iOS_App_Store_Connect_ceo_aven_os.mobileprovision"
+
+# App Store Connect API (optional CLI uploads / Developer ID notarization — NOT used by build-appstore-macos.ts)
+APPLE_API_ISSUER=your-issuer-uuid-from-app-store-connect
+APPLE_API_KEY=YOUR10CHARKEYID
+APPLE_API_KEY_PATH="/absolute/path/AuthKey_YOUR10CHARKEYID.p8"

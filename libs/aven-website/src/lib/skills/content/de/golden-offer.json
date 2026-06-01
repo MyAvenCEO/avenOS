@@ -1,0 +1,61 @@
+{
+  "slug": "golden-offer",
+  "publisher": {
+    "id": "avenmaia",
+    "displayName": "AvenMaia",
+    "founderName": "Samuel",
+    "scope": "Samuel Andert · aven.ceo"
+  },
+  "oneLineCopy": "Das Angebot, das du eigentlich schon immer hättest machen sollen.",
+  "hero": {
+    "kicker": "Skill · AvenMaia · golden-offer",
+    "headlineMain": "Mehr Ja. Weniger Verhandlung.",
+    "headlineSerifLead": "Dein Aven analysiert dein Angebot, kennt deine Zielgruppe und baut den Angebotsrahmen, bei dem Ablehnen sich falsch anfühlt.",
+    "promiseHoursPerWeek": "3+ Std/Woche"
+  },
+  "founderScenario": {
+    "timestamp": "15:40 Uhr",
+    "story": "Samuel schickt das Angebot ab. 48 Stunden Stille. Dann: \"Klingt interessant, aber zu teuer.\" Er weiss, dass der Preis nicht das Problem ist. Das Framing ist das Problem. Aber er weiss nicht, wie er es ändern soll, ohne sich unter Wert zu verkaufen."
+  },
+  "benefits": [
+    "Dein Angebot kommuniziert Wert — nicht Preis",
+    "Der Angebotsrahmen wird auf die spezifischen Einwände deiner Zielgruppe ausgerichtet",
+    "Kein Verhandlungs‑Ping‑Pong mehr — dein Aven antizipiert Einwände im Voraus",
+    "Conversion‑Rate deiner Angebote steigt — messbar nach dem ersten Monat",
+    "Du weisst, warum dein Angebot funktioniert — nicht nur, dass es funktioniert"
+  ],
+  "howSteps": [
+    "Du gibst deinem Aven dein bestehendes Angebot, deine Zielgruppe und den Kontext",
+    "Dein Aven analysiert das Hormozi‑Value‑Equation‑Gefüge: Dream Outcome, Wahrscheinlichkeit, Zeit, Effort",
+    "Ein überarbeiteter Angebotsrahmen wird erstellt — mit Begründung für jede Änderung",
+    "Du bekommst den Entwurf zur Freigabe, passt ihn an und setzt ihn ein"
+  ],
+  "whatMechanics": {
+    "input": "Bestehendes Angebot, Zielgruppen‑Beschreibung, bisherige Einwände / Ablehnungen",
+    "magic": "Value‑Equation‑Analyse → Einwands‑Mapping → Angebots‑Reframing → Bonus‑Stack‑Generierung → Sprach‑Optimierung auf Kaufentscheidung",
+    "output": "Überarbeitetes Angebot‑Dokument · Einwands‑Antizipations‑Matrix · Bonus‑Stack‑Vorschläge"
+  },
+  "playsWith": [
+    { "slug": "blog-writer", "relation": "Starke Angebote werden zu starken Content‑Hooks" },
+    { "slug": "brain-memorizer", "relation": "Kunden‑Kontext aus vergangenen Gesprächen fließt ein" },
+    { "slug": "human-reviewer", "relation": "Finales Angebot wird vor dem Versand gegengelesen" }
+  ],
+  "valueStack": {
+    "standaloneAlternatives": [
+      { "label": "Copywriting‑Consultant (Stunden)", "eurPerMonth": 300 },
+      { "label": "Hormozi‑Kurs / Coaching", "eurPerMonth": 100 },
+      { "label": "A/B‑Test‑Plattform (Tooling)", "eurPerMonth": 49 }
+    ],
+    "standaloneTotalEurPerMonth": 449,
+    "timeDelayToValue": "Erster überarbeiteter Angebotsrahmen innerhalb von 30\u00a0Minuten",
+    "effortToInstall": "10\u00a0Min · bestehendes Angebot als Input — der Rest kommt von deinem Aven",
+    "proof": "Samuel hat golden-offer auf seine eigenen Angebote angewendet. Die erste Version dieser Seite war die goldene Version."
+  },
+  "bonuses": [
+    "Einwands‑Bibel: dein Aven führt ein Protokoll aller Einwände und wie du sie entkräftet hast",
+    "Angebots‑Varianten: A/B‑fähige Varianten für unterschiedliche Zielgruppen automatisch generiert",
+    "Preisanker‑Architektur: dein Aven empfiehlt die optimale Preis‑Tier‑Struktur für maximale Conversion"
+  ],
+  "scarcity": "golden-offer ist Samuels mächtigster Skill — und der, der sich am schnellsten bezahlt macht. Verfügbar in jedem CEO‑Plan. Kein Copywriting‑Retainer. Kein Kurs.",
+  "letterFromPublisher": "Ich habe Samuel nicht gelehrt, Angebote zu schreiben. Ich habe ihn gelehrt, Angebote zu bauen. Der Unterschied: ein Angebot, das man schreibt, hofft. Ein Angebot, das man baut, konvertiert. Mit diesem Skill hat Samuel zum ersten Mal ein Nein nicht als Ablehnung gelesen — sondern als Datenpunkt."
+}

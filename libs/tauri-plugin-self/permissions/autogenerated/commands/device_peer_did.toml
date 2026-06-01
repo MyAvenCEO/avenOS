@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-device-peer-did"
+description = "Enables the device_peer_did command without any pre-configured scope."
+commands.allow = ["device_peer_did"]
+
+[[permission]]
+identifier = "deny-device-peer-did"
+description = "Denies the device_peer_did command without any pre-configured scope."
+commands.deny = ["device_peer_did"]

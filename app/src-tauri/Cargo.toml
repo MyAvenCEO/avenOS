@@ -1,0 +1,69 @@
+[profile.dev.package.scrypt]
+opt-level = 3
+
+[package]
+name = "aven-os-app"
+version = "0.0.1"
+description = "Aven OS desktop shell"
+authors = ["Aven"]
+edition = "2021"
+rust-version = "1.93"
+[lib]
+name = "aven_os_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "aven-os-app"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+http = "1"
+async-trait = "0.1"
+groove = { package = "aven-db", version = "0.0.1", default-features = false, features = ["client-p2p"] }
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tauri-plugin-self = { path = "../../libs/tauri-plugin-self" }
+tauri-plugin-vault = { path = "../../libs/tauri-plugin-vault" }
+tauri-plugin-sandbox-quickjs = { path = "../../libs/tauri-plugin-sandbox-quickjs" }
+tauri-plugin-clipboard-manager = "2"
+base64 = "0.22"
+hex = "0.4"
+p256 = "0.13"
+rand_core = { version = "0.6", features = ["getrandom"] }
+tauri = { version = "2", features = ["macos-private-api", "unstable"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync"] }
+tracing = "0.1"
+url = "2"
+urlencoding = "2"
+uuid = { version = "1", features = ["serde", "v4"] }
+biscuit-auth = { version = "6", features = ["datalog-macro"] }
+chacha20poly1305 = { version = "0.10", features = ["std"] }
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc"] }
+ed25519-dalek = { version = "2", features = ["zeroize"] }
+hkdf = "0.12"
+multibase = "0.9"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+zeroize = { version = "1", features = ["derive"] }
+env_logger = "0.11.10"
+tracing-log = "0.2.0"
+
+[target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
+oslog = { version = "0.2", features = ["logger"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "0.6", default-features = false }
+
+# Vendored aven-db (jazz2 alpha.50) with AvenOS P2P patches:
+# `QueryManager` write paths used to `.map_err(|_| QueryError::ObjectNotFound(id))`,
+# which collapses BranchNotFound / ParentNotFound / StorageError into a single
+# misleading "ObjectNotFound" string. The vendored copy preserves the real
+# upstream error via `QueryError::InternalError(format!("{:?}", e))` so we can
+# diagnose the "row visible on read, write fails" failure mode. Pin to local
+# path to keep dev iteration fast; review the diff before bumping versions.
+[patch.crates-io]
+aven-db = { path = "../../libs/aven-db" }

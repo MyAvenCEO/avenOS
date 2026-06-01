@@ -1,0 +1,24 @@
+{
+	"kind": "passwords",
+	"title": "Passwords",
+	"secrets": [],
+	"loading": false,
+	"error": "",
+	"busy": false,
+	"newId": "",
+	"newValue": "",
+	"revealed": {},
+	"labels": {
+		"description": "Values are stored in strong.hold on disk. Reveal copies a value into this window only.",
+		"addTitle": "Add secret",
+		"idLabel": "ID",
+		"valueLabel": "Value",
+		"listTitle": "Stored secrets",
+		"empty": "No secrets yet.",
+		"reveal": "Reveal",
+		"hide": "Hide",
+		"addButton": "Add",
+		"delete": "Delete",
+		"loading": "Loading…"
+	}
+}

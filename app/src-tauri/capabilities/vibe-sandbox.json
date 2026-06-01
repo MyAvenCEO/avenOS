@@ -1,0 +1,7 @@
+{
+	"$schema": "../gen/schemas/desktop-schema.json",
+	"identifier": "vibe-sandbox-webviews",
+	"description": "Tauri event bridge for vibe-sandbox child WebViews (postMessage shim).",
+	"webviews": ["vibe-sb-*"],
+	"permissions": ["core:event:default"]
+}

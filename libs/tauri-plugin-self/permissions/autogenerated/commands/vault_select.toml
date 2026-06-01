@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-vault-select"
+description = "Enables the vault_select command without any pre-configured scope."
+commands.allow = ["vault_select"]
+
+[[permission]]
+identifier = "deny-vault-select"
+description = "Denies the vault_select command without any pre-configured scope."
+commands.deny = ["vault_select"]

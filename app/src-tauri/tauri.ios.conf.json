@@ -1,0 +1,10 @@
+{
+	"$schema": "https://schema.tauri.app/config/2",
+	"bundle": {
+		"iOS": {
+			"bundleVersion": "1",
+			"minimumSystemVersion": "14.0",
+			"infoPlist": "Info.ios.plist"
+		}
+	}
+}

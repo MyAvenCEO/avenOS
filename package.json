@@ -3,25 +3,44 @@
 	"private": true,
 	"type": "module",
 	"workspaces": [
-		"projects/*",
-		"../MaiaOS/libs/*"
+		"ARCHIVE/*",
+		"libs/*",
+		"docs",
+		"app"
 	],
 	"scripts": {
-		"dev": "bun run dev:aven-ceo",
-		"dev:aven-ceo": "bun --filter @avenos/aven-ceo dev",
-		"dev:ocr-example": "bun --filter @avenos/ocr-example dev",
-		"dev:jaensen-bot": "bun --filter @avenos/jaensen-bot dev",
-		"test:mail": "bun --filter @avenos/mail test",
-		"test:self": "bun --filter @avenos/self test",
-		"build": "bun --filter @avenos/aven-ceo build",
-		"preview": "bun --filter @avenos/aven-ceo preview",
-		"check": "bun --filter @avenos/aven-ceo check",
-		"prepare": "bun --filter @avenos/aven-ceo prepare",
+		"dev": "bun --env-file=.env run dev:aven-website",
+		"dev:aven-website": "bun --env-file=.env --filter @avenos/aven-website dev",
+		"dev:app": "bun --env-file=.env run --cwd app dev",
+		"dev:app:all": "bun --env-file=.env ./scripts/dev-app-all.ts",
+		"dev:app:mac": "bun --env-file=.env ./scripts/dev-app-macos.ts",
+		"dev:app:ios": "bun --env-file=.env ./scripts/dev-app-ios.ts",
+		"dev:app:linux": "bun --env-file=.env ./scripts/dev-app-linux.ts",
+		"clean:app:rust": "bun ./scripts/clean-app-tauri-target.ts",
+		"verify:aven-db": "bash ./scripts/verify-aven-db-gates.sh",
+		"dev:app2x:mac": "bun --env-file=.env ./scripts/dev-two-instances.ts",
+		"dev:app2x:linux": "bun --env-file=.env ./scripts/dev-two-instances.ts",
+		"build:app:linux": "bun run --cwd app tauri:build:linux",
+		"release:app:all": "bun ./scripts/release-app.ts all",
+		"release:app:mac": "bun ./scripts/release-app.ts mac",
+		"release:app:ios": "bun ./scripts/release-app.ts ios",
+		"fetch:webcm": "bun run ./scripts/fetch-webcm.ts",
+		"dev:all": "concurrently -k -c auto -n site,app \"bun run dev:aven-website\" \"bun run --cwd app dev\"",
+		"dev:ocr-example": "bun --env-file=.env --filter @avenos/ocr-example dev",
+		"build": "bun --env-file=.env --filter @avenos/aven-website build",
+		"preview": "bun --env-file=.env --filter @avenos/aven-website preview",
+		"check": "bun --env-file=.env --filter @avenos/aven-website check",
+		"prepare": "bun --env-file=.env --filter @avenos/aven-website prepare",
 		"lint": "bunx biome check .",
 		"lint:fix": "bunx biome check --write .",
-		"format": "bunx biome format --write ."
+		"format": "bunx biome format --write .",
+		"dev:aven-self": "bun --env-file=.env --cwd libs/aven-self dev",
+		"test:aven-self": "bun --env-file=.env --cwd libs/aven-self test",
+		"test:aven-self:once": "bun --env-file=.env --cwd libs/aven-self test:once",
+		"migrate:aven-self": "bun --env-file=.env --cwd libs/aven-self migrate"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.4.14"
+		"@biomejs/biome": "^2.4.14",
+		"concurrently": "^9.2.1"
 	}
 }
