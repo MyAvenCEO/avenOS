@@ -118,6 +118,7 @@ pub struct PeerStatus {
 	pub unlocked: bool,
 }
 
+#[tauri::command]
 pub async fn register<R: Runtime>(
 	app: AppHandle<R>,
 	vault: State<'_, ActiveVault>,
@@ -144,6 +145,7 @@ pub async fn register<R: Runtime>(
 	Ok(())
 }
 
+#[tauri::command]
 pub async fn public_key<R: Runtime>(
 	app: AppHandle<R>,
 	vault: State<'_, ActiveVault>,
@@ -156,6 +158,7 @@ pub async fn public_key<R: Runtime>(
 	Err("dev_insecure_identity: no P-256 device pubkey (plain root secret only)".into())
 }
 
+#[tauri::command]
 pub async fn unlock<R: Runtime>(
 	app: AppHandle<R>,
 	vault: State<'_, ActiveVault>,
@@ -180,6 +183,7 @@ pub async fn unlock<R: Runtime>(
 	unlock::unlock_with_root_secret(&app, &vault, &state, &stronghold, root)
 }
 
+#[tauri::command]
 pub async fn peer_status<R: Runtime>(
 	app: AppHandle<R>,
 	vault: State<'_, ActiveVault>,
