@@ -24,6 +24,8 @@
 		/** When set, remount main content and close the mobile drawer on change. */
 		routeKey?: string
 		header?: Snippet
+		/** Rendered in the aside below the nav sections (e.g. a contextual panel). */
+		asideExtra?: Snippet
 		children: Snippet
 	}
 
@@ -39,6 +41,7 @@
 		sectionLabelClass,
 		routeKey,
 		header,
+		asideExtra,
 		children,
 	}: Props = $props()
 
@@ -69,6 +72,7 @@
 			{muted}
 			{sectionLabelClass}
 			{header}
+			footer={asideExtra}
 			onItemActivate={closeAsideOnNav}
 		/>
 	{/snippet}

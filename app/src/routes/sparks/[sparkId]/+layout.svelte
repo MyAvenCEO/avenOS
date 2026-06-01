@@ -5,6 +5,7 @@
 	import { navigateApp } from '$lib/shell'
 	import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
 	import { asideNavSectionsFromRoutes } from '$lib/ui/aside-nav'
+	import SparkMembersPanel from '$lib/sparks/SparkMembersPanel.svelte'
 
 	let { children: pageOutlet } = $props()
 
@@ -106,13 +107,15 @@
 					</p>
 				{/if}
 			</div>
-			<a
-				href="/settings/workspaces?spark={encodeURIComponent(decodedSparkId)}"
-				class="text-primary hover:underline text-[10px] font-semibold uppercase tracking-wide"
-				onclick={(e) => navigateApp(`/settings/workspaces?spark=${encodeURIComponent(decodedSparkId)}`, e)}
-			>
-				{t('nav.share')}
-			</a>
+		</div>
+	{/snippet}
+
+	{#snippet asideExtra()}
+		<div class="mt-4 flex flex-col gap-2 border-t border-border/50 pt-4">
+			<span class="px-0 text-[11px] font-semibold tracking-wider uppercase opacity-70 md:px-2">
+				{t('nav.members')}
+			</span>
+			<SparkMembersPanel sparkId={decodedSparkId} />
 		</div>
 	{/snippet}
 

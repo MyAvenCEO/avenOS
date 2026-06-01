@@ -10,11 +10,6 @@ export function settingsNavSections(): SettingsNavSection[] {
 			title: t('selfNav.identities'),
 			items: [
 				{
-					href: '/settings/peers',
-					label: t('selfNav.peers'),
-					match: (p) => p.startsWith('/settings/peers'),
-				},
-				{
 					href: '/settings/identity',
 					label: t('selfNav.self'),
 					match: (p) => p.startsWith('/settings/identity'),
@@ -28,16 +23,6 @@ export function settingsNavSections(): SettingsNavSection[] {
 					href: '/settings/preferences',
 					label: t('selfNav.language'),
 					match: (p) => p.startsWith('/settings/preferences'),
-				},
-			],
-		},
-		{
-			title: t('selfNav.sparks'),
-			items: [
-				{
-					href: '/settings/workspaces',
-					label: t('selfNav.share'),
-					match: (p) => p.startsWith('/settings/workspaces'),
 				},
 			],
 		},

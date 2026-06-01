@@ -4,7 +4,6 @@ import { page } from '$app/state'
 import { browser } from '$app/environment'
 import { ensureComposerTauriShortcutBridge } from '$lib/intent-mock/composer-tauri-bridge'
 import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
-import P2pSyncBadge from '$lib/peer/P2pSyncBadge.svelte'
 import {
 	attachAvenosRuntimeBridge,
 	grooveSessionReady,
@@ -192,9 +191,7 @@ $effect(() => {
 			<div
 				class="mx-auto grid w-full max-w-[min(100%,88rem)] grid-cols-1 items-center gap-x-2 gap-y-2 sm:grid-cols-3"
 			>
-				<div class="flex min-w-0 items-center justify-start justify-self-start sm:justify-self-start">
-					<P2pSyncBadge />
-				</div>
+				<div class="flex min-w-0 items-center justify-start justify-self-start sm:justify-self-start"></div>
 
 				<nav
 					class="hidden flex-wrap items-center justify-center justify-self-center gap-x-2 gap-y-1 text-[10px] font-bold tracking-wider uppercase sm:flex"
@@ -278,12 +275,12 @@ $effect(() => {
 					aria-label={t('nav.deviceIdentity')}
 				>
 					<a
-						href="/settings/peers"
+						href="/settings/identity"
 						data-sveltekit-preload-data="hover"
 						class="normal-case max-w-[8rem] truncate text-[11px] font-semibold tracking-normal transition-opacity hover:opacity-80 sm:max-w-[10rem] {selfActive ? 'opacity-95' : 'opacity-40'}"
 						aria-current={selfActive ? 'page' : undefined}
 						title={selfNavLabel}
-						onclick={(e) => navigateApp('/settings/peers', e)}
+						onclick={(e) => navigateApp('/settings/identity', e)}
 						>{selfNavLabel}</a
 					>
 				</nav>

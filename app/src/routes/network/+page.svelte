@@ -5,6 +5,6 @@
 
 	onMount(() => {
 		if (!browser) return
-		navigateAppTo('/settings/peers')
+		navigateAppTo('/settings/identity')
 	})
 </script>

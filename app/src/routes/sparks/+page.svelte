@@ -6,7 +6,6 @@
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/settings/device-session-store'
-	import { navigateApp } from '$lib/shell'
 
 	const sparksStore = jazzStore('sparks')
 
@@ -37,7 +36,6 @@
 		<h1 class="text-2xl font-semibold tracking-tight">{t('sparks.title')}</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
 			{t('sparks.subtitleLead')}
-			<a href="/settings/workspaces" class="text-primary underline" onclick={(e) => navigateApp('/settings/workspaces', e)}>{t('selfNav.self')} → {t('selfNav.share')}</a>{t('sparks.subtitleTrail')}
 		</p>
 		<p class="text-muted-foreground border-border/50 bg-card/20 rounded-lg border border-dashed px-3 py-2 text-[11px] leading-relaxed">
 			{t('sparks.onlyOneHint')}

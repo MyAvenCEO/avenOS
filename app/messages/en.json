@@ -87,6 +87,7 @@
     "selfSettings": "Self settings",
     "tableNames": "Table names",
     "viewSection": "View",
+    "members": "Members",
     "talk": "Talk",
     "todos": "Todos",
     "gallery": "Gallery"
@@ -348,7 +349,7 @@
   "sparks": {
     "title": "Sparks",
     "subtitle": "Your sparks on this device. Open one to talk or manage todos. To share with someone else, pair under Self → Share.",
-    "subtitleLead": "Your sparks on this device. Open one to talk or manage todos. To share with someone else, pair under ",
+    "subtitleLead": "Your sparks on this device. Open one to talk, manage todos, or choose who can access it under Members.",
     "subtitleTrail": ".",
     "onlyOneHint": "Only see one? Each device starts with its own. Another person's spark shows up after you share access there — keep both apps open for a moment after you allow it.",
     "needsDesktop": "Open this screen in the AvenOS desktop app.",

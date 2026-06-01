@@ -14,6 +14,8 @@
 		/** Extra classes on section labels (desktop horizontal padding). */
 		sectionLabelClass?: string
 		header?: Snippet
+		/** Rendered below the nav sections (e.g. a contextual panel). */
+		footer?: Snippet
 		/** Called after an item's own `onclick` (e.g. close mobile drawer). */
 		onItemActivate?: (e: MouseEvent) => void
 	}
@@ -24,6 +26,7 @@
 		navClass = '',
 		sectionLabelClass = 'px-0 md:px-3',
 		header,
+		footer,
 		onItemActivate,
 	}: Props = $props()
 </script>
@@ -70,3 +73,7 @@
 		</div>
 	{/each}
 </nav>
+
+{#if footer}
+	{@render footer()}
+{/if}
