@@ -81,7 +81,21 @@ impl StrongholdSession {
 		Ok(())
 	}
 
-	pub fn with_store<F, R>(&self, f: F) -> Result<R, String>
+	/// Read-only access to the open store. Does not mark dirty or touch disk.
+	fn with_store_read<F, R>(&self, f: F) -> Result<R, String>
+	where
+		F: FnOnce(&mut Stronghold) -> Result<R, String>,
+	{
+		let mut guard = self.inner.lock().map_err(|_| "stronghold poisoned".to_string())?;
+		let handle = guard.as_mut().ok_or("stronghold locked: unlock identity first")?;
+		f(&mut handle.stronghold)
+	}
+
+	/// Mutating access to the open store. Applies `f`, then flushes the snapshot
+	/// to disk immediately so the write survives an abrupt exit (window close,
+	/// Ctrl+C, crash) without waiting for an explicit lock. On a save failure the
+	/// handle is left `dirty` so a later `save_and_close` can retry.
+	fn with_store_write<F, R>(&self, f: F) -> Result<R, String>
 	where
 		F: FnOnce(&mut Stronghold) -> Result<R, String>,
 	{
@@ -89,23 +103,25 @@ impl StrongholdSession {
 		let handle = guard.as_mut().ok_or("stronghold locked: unlock identity first")?;
 		let out = f(&mut handle.stronghold)?;
 		handle.dirty = true;
+		save_stronghold(&handle.stronghold, &handle.path, &handle.snapshot_key)?;
+		handle.dirty = false;
 		Ok(out)
 	}
 
 	pub fn secrets_insert(&self, id: &str, value: &[u8]) -> Result<(), String> {
-		self.with_store(|sh| insert_secret(sh, id, value))
+		self.with_store_write(|sh| insert_secret(sh, id, value))
 	}
 
 	pub fn secrets_get(&self, id: &str) -> Result<Vec<u8>, String> {
-		self.with_store(|sh| get_secret(sh, id))
+		self.with_store_read(|sh| get_secret(sh, id))
 	}
 
 	pub fn secrets_remove(&self, id: &str) -> Result<(), String> {
-		self.with_store(|sh| remove_secret(sh, id))
+		self.with_store_write(|sh| remove_secret(sh, id))
 	}
 
 	pub fn secrets_list_ids(&self) -> Result<Vec<String>, String> {
-		self.with_store(|sh| list_secret_ids(sh))
+		self.with_store_read(|sh| list_secret_ids(sh))
 	}
 }
 
