@@ -10,7 +10,7 @@
  * UI-layer concerns shared across the extracted components.
  */
 
-import type { VibeAppId } from '@avenos/aven-vibes'
+import type { VibeViewId } from '$lib/aven-ui/vibe-views'
 
 /** Human-in-the-loop wait, autonomous work, resolved success, archive, or terminal failure. */
 export type IntentStatus = 'hitl' | 'working' | 'success' | 'archived' | 'error'
@@ -83,7 +83,7 @@ export type IntentRow = {
 	 * cached on the row so the embedded preview stays stable across reactive
 	 * ticks until the intent leaves HITL. Cleared on resume/accept.
 	 */
-	hitlVibeAppId?: VibeAppId
+	hitlVibeAppId?: VibeViewId
 }
 
 export type ComposerMode = 'collapsed' | 'listening' | 'typing'

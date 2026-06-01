@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
- * Tauri desktop dev (Linux): SvelteKit on :1420 (`beforeDevCommand`),
- * vibe sandbox in child WebKitGTK webview (`vibe-sandbox://`).
+ * Tauri desktop dev (Linux): SvelteKit on :1420 (`beforeDevCommand`).
+ * Views render in-process via aven-ui + sandbox-quickjs.
  *
  * Sets a couple of well-known WebKitGTK 2.x env defaults that fix common
  * rendering glitches on modern Linux desktops. Override by exporting them
@@ -31,7 +31,7 @@ async function main() {
 	env.WEBKIT_DISABLE_COMPOSITING_MODE ??= '1'
 
 	console.log(
-		'[dev:app:linux] AvenOS Tauri (Linux) · Host-UI: SvelteKit @ http://127.0.0.1:1420 (dev-only, embedded in WebKitGTK) · Vibe-Sandbox: native Child-WebKitGTK (vibe-sandbox://)\n'
+		'[dev:app:linux] AvenOS Tauri (Linux) · Host-UI: SvelteKit @ http://127.0.0.1:1420 (dev-only, embedded in WebKitGTK)\n'
 	)
 
 	const child = Bun.spawn(['bun', '--env-file=.env', 'run', '--cwd', 'app', 'tauri:dev'], {

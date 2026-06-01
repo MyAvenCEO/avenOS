@@ -1,8 +1,0 @@
-{
-	"title": "Arbeitsaufträge",
-	"items": [
-		{ "id": "1", "text": "Vibe-App-Sandbox ausliefern", "done": true },
-		{ "id": "2", "text": "Jazz-gestützte Artefakte anbinden", "done": false },
-		{ "id": "3", "text": "CSP für Produktion schärfen", "done": false }
-	]
-}

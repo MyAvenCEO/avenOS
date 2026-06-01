@@ -8,9 +8,13 @@
 	"types": "./src/index.ts",
 	"exports": {
 		".": "./src/index.ts",
-		"./fixtures/invoice": "./src/fixtures/invoice/index.ts",
-		"./fixtures/todo": "./src/fixtures/todo/index.ts",
-		"./fixtures/vault-secrets": "./src/fixtures/vault-secrets/index.ts"
+		"./vibes/invoice": "./src/vibes/invoice/index.ts",
+		"./vibes/bank-statement": "./src/vibes/bank-statement/index.ts",
+		"./vibes/contract": "./src/vibes/contract/index.ts",
+		"./vibes/todos": "./src/vibes/todos/index.ts",
+		"./vibes/vault-secrets": "./src/vibes/vault-secrets/index.ts",
+		"./vibes/error": "./src/vibes/error/index.ts",
+		"./vibes/success": "./src/vibes/success/index.ts"
 	},
 	"scripts": {
 		"test": "bun test ./tests"

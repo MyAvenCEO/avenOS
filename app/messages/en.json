@@ -260,6 +260,7 @@
     "activityCount": "Activity · {count}",
     "displayTab": "Display",
     "errorTab": "Error",
+    "successTab": "Success",
     "configTab": "Config",
     "contextTab": "Context",
     "noIntentSelected": "No intent selected",
@@ -314,7 +315,11 @@
         "validationRules": "Validation rules violated",
         "networkTimeout": "Network timeout"
       },
-      "errorHint": "Use Re-train to restart this intent with feedback, or Archive to dismiss it — both available in the bottom bar."
+      "errorHint": "Use Re-train to restart this intent with feedback, or Archive to dismiss it — both available in the bottom bar.",
+      "successBadge": "Success",
+      "automationComplete": "Automation complete",
+      "result": "Result:",
+      "successMessage": "All checks passed — the intent completed successfully."
     },
     "context": {
       "header": "Context for {actor}",

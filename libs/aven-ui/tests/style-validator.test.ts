@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { validateStyleDef } from '../src/style-validator.js'
-import { invoiceStyle } from '../src/fixtures/invoice/style.js'
+import { invoiceStyle } from '../src/vibes/invoice/style.js'
 
 describe('validateStyleDef', () => {
 	test('accepts structured invoice style', () => {

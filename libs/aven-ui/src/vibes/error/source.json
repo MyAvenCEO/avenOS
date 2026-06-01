@@ -1,0 +1,8 @@
+{
+	"badge": "Systemfehler",
+	"eyebrow": "Automatisierung gestoppt",
+	"title": "Lieferantenrechnung — Freigabe",
+	"messageLabel": "Grund:",
+	"message": "Die Freigaberichtlinie für diese Lieferantenstufe konnte nicht ermittelt werden.",
+	"hint": "Nutze die Steuerung «Neu trainieren» oder «Archivieren» unten, um fortzufahren."
+}

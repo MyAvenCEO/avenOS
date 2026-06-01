@@ -19,25 +19,17 @@ import {
 	type ComposerMode,
 	secondsFromElapsedMs
 } from '$lib/intents/types'
-import type { VibeAppId } from '@avenos/aven-vibes'
+import { HITL_VIEW_IDS, type VibeViewId } from '$lib/aven-ui/vibe-views'
 import { persistIntentFiles } from '$lib/jazz/intent-files'
 import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
 
 /**
- * Pool of vibe-view apps used as live HITL placeholders inside the Activity
- * slot. All four registered apps are visually meaningful (data-view style),
- * so we expose the full set and pick one per HITL session at random. Mirrors
- * the IDs registered in `@avenos/aven-vibes` and listed by `/docs/vibe-apps`.
+ * Random pick from `HITL_VIEW_IDS` (the aven-ui view catalog). Caller stores
+ * the result on `intent.hitlVibeAppId` so subsequent renders inside the same
+ * HITL session don't reshuffle the view.
  */
-const HITL_VIBE_APPS: VibeAppId[] = ['invoice', 'bank-statement', 'contract', 'todos']
-
-/**
- * Random pick from `HITL_VIBE_APPS`. Caller stores the result on
- * `intent.hitlVibeAppId` so subsequent renders inside the same HITL session
- * don't reshuffle the iframe.
- */
-function pickRandomHitlVibeAppId(): VibeAppId {
-	return HITL_VIBE_APPS[Math.floor(Math.random() * HITL_VIBE_APPS.length)]
+function pickRandomHitlVibeAppId(): VibeViewId {
+	return HITL_VIEW_IDS[Math.floor(Math.random() * HITL_VIEW_IDS.length)]
 }
 
 type IntentSeed = Pick<IntentRow, 'id' | 'title' | 'summary'> & { body?: string }

@@ -1,20 +1,14 @@
 <script lang="ts">
-	import { onMount } from 'svelte'
 	import { page } from '$app/state'
 	import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
 	import { asideNavSectionsFromRoutes } from '$lib/ui/aside-nav'
 	import { t } from '$lib/i18n'
-	import { destroyVaultEmbedWebview } from '$lib/vault/tauri-vault-embed'
 	import { vaultNavSections } from '$lib/vault/vault-nav'
 
 	let { children: pageOutlet } = $props()
 
 	const path = $derived(page.url.pathname)
 	const navSections = $derived(asideNavSectionsFromRoutes(vaultNavSections(), path))
-
-	onMount(() => {
-		void destroyVaultEmbedWebview()
-	})
 </script>
 
 <AsidePageLayout

@@ -1,29 +1,22 @@
 <script lang="ts">
 /**
- * "Display" tab body — branches on the parent intent's status:
+ * "Display" tab body — renders an aven-ui view in place, branching on the
+ * parent intent's status:
  *
- * - `error`: renders an inline appshell-style diagnostic panel (no iframe)
- *   matching the docs-card surface (`bg-white/10` over the cream page) plus
- *   the same dotted border treatment used by the activity log and the
- *   invoice/perforation feel. Surfaces the intent title, a deterministic
- *   mock failure reason, and a hint pointing at the bottom-bar Re-train /
- *   Archive controls. The reason is hashed from `intent.id` so the same
- *   intent always shows the same reason across re-renders.
+ * - `error`: the aven-ui **error** vibe (`vibes/error`), sourced from the
+ *   intent (title + a deterministic mock failure reason hashed from
+ *   `intent.id` so the same intent always shows the same reason).
+ * - `success`: the aven-ui **success** vibe (`vibes/success`).
+ * - HITL (any other state with a cached `hitlVibeAppId`): the chosen vibe view
+ *   via `vibeViewById`.
  *
- * - HITL (any non-error state with a cached `hitlVibeAppId`): wraps the
- *   cross-origin `VibeSandboxFrame` for the chosen vibe-view app. The
- *   shell mirrors the docs-card surface seen on `/docs`. Keyed on
- *   `intent.id:hitlVibeAppId` so resuming an intent or switching to a
- *   different intent re-mounts the frame with a fresh init.
- *
- * Border choice (error variant + activity log): `border-2 border-dotted
- * border-border/40` — visible enough to read as a deliberate frame around
- * the panel without competing with the warmer card-surface buttons next
- * to it. The HITL iframe variant intentionally omits the dotted border
- * because the iframe contents own the chrome inside.
+ * All three mount through the shared `AvenUiView` (QuickJS session +
+ * `AvenUiEngine`), keyed on `intent.id:branch` so switching intent/branch
+ * re-mounts with a fresh init.
  */
 import type { IntentRow } from './types'
-import VibeSandboxFrame from '$lib/vibe-apps/VibeSandboxFrame.svelte'
+import AvenUiView from '$lib/aven-ui/AvenUiView.svelte'
+import { vibeViewById } from '$lib/aven-ui/vibe-views'
 import { t } from '$lib/i18n'
 
 let { intent }: { intent: IntentRow } = $props()
@@ -48,37 +41,57 @@ const errorReason = $derived(
 		`intents.display.errorReasons.${MOCK_ERROR_REASON_KEYS[hashIntentId(intent.id) % MOCK_ERROR_REASON_KEYS.length]}`,
 	),
 )
+
+const errorView = vibeViewById('error')
+const successView = vibeViewById('success')
+
+const errorSource = $derived({
+	badge: t('intents.display.systemError'),
+	eyebrow: t('intents.display.automationHalted'),
+	title: intent.title,
+	messageLabel: t('intents.display.reason'),
+	message: errorReason,
+	hint: t('intents.display.errorHint'),
+})
+
+const successSource = $derived({
+	badge: t('intents.display.successBadge'),
+	eyebrow: t('intents.display.automationComplete'),
+	title: intent.title,
+	messageLabel: t('intents.display.result'),
+	message: t('intents.display.successMessage'),
+	hint: t('intents.successArchiveHint'),
+})
+
+const hitlView = $derived(intent.hitlVibeAppId ? vibeViewById(intent.hitlVibeAppId) : null)
 </script>
 
 {#if intent.status === 'error'}
 	<div
-		class="flex min-h-[400px] min-w-0 flex-1 flex-col gap-3 overflow-hidden rounded-[var(--radius-lg)] border-2 border-dotted border-border/40 bg-white/10 px-4 py-4"
+		class="flex min-h-[400px] min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] bg-white/10"
 	>
-		<div class="flex items-center gap-2">
-			<span
-				class="inline-flex items-center rounded-full border border-status-error/40 bg-status-error/10 px-2 py-0.5 text-[9px] font-semibold tracking-[0.18em] text-status-error uppercase"
-			>
-				{t('intents.display.systemError')}
-			</span>
-		</div>
-		<div class="flex flex-col gap-1">
-			<p class="text-[8px] font-bold tracking-[0.22em] opacity-40 uppercase">{t('intents.display.automationHalted')}</p>
-			<h2 class="text-base leading-snug font-semibold text-foreground">{intent.title}</h2>
-		</div>
-		<p class="text-[12px] leading-relaxed text-status-error">
-			<span class="font-semibold">{t('intents.display.reason')}</span>
-			{errorReason}
-		</p>
-		<p class="mt-auto text-[11px] leading-relaxed opacity-65">
-			{t('intents.display.errorHint')}
-		</p>
+		{#key `${intent.id}:error`}
+			<AvenUiView shell={errorView.shell} containerName={errorView.containerName} source={errorSource} />
+		{/key}
 	</div>
-{:else if intent.hitlVibeAppId}
+{:else if intent.status === 'success'}
+	<div
+		class="mt-5 flex min-h-[400px] min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] bg-white/10 sm:mt-6"
+	>
+		{#key `${intent.id}:success`}
+			<AvenUiView shell={successView.shell} containerName={successView.containerName} source={successSource} />
+		{/key}
+	</div>
+{:else if hitlView}
 	<div
 		class="mt-5 flex min-h-[400px] min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] bg-white/10 sm:mt-6"
 	>
 		{#key `${intent.id}:${intent.hitlVibeAppId}`}
-			<VibeSandboxFrame appId={intent.hitlVibeAppId} />
+			<AvenUiView
+				shell={hitlView.shell}
+				containerName={hitlView.containerName}
+				interactive={hitlView.interactive}
+			/>
 		{/key}
 	</div>
 {/if}
