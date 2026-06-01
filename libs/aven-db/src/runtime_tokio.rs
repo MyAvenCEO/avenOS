@@ -603,42 +603,7 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         Ok(())
     }
 
-    pub fn ensure_client_with_session_and_catalogue_state_hash(
-        &self,
-        client_id: ClientId,
-        session: Session,
-        remote_catalogue_state_hash: Option<&str>,
-    ) -> Result<(), RuntimeError> {
-        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        core.ensure_client_with_session_and_catalogue_state_hash(
-            client_id,
-            session,
-            remote_catalogue_state_hash,
-        );
-        Ok(())
-    }
-
-    /// Ensure a client exists and is marked as Backend without resetting state.
-    pub fn ensure_client_as_backend(&self, client_id: ClientId) -> Result<(), RuntimeError> {
-        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        core.ensure_client_as_backend(client_id);
-        Ok(())
-    }
-
-    pub fn ensure_client_as_backend_with_catalogue_state_hash(
-        &self,
-        client_id: ClientId,
-        remote_catalogue_state_hash: Option<&str>,
-    ) -> Result<(), RuntimeError> {
-        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        core.ensure_client_as_backend_with_catalogue_state_hash(
-            client_id,
-            remote_catalogue_state_hash,
-        );
-        Ok(())
-    }
-
-    /// Ensure a client exists and is marked as Peer without resetting state.
+    /// Ensure a peer client exists without resetting state.
     pub fn ensure_client_as_peer(&self, client_id: ClientId) -> Result<(), RuntimeError> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
         core.ensure_client_as_peer(client_id);
@@ -684,26 +649,6 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         self.flush().await
     }
 
-    /// Ensure a client exists and is marked as Admin without resetting state.
-    pub fn ensure_client_as_admin(&self, client_id: ClientId) -> Result<(), RuntimeError> {
-        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        core.ensure_client_as_admin(client_id);
-        Ok(())
-    }
-
-    pub fn ensure_client_as_admin_with_catalogue_state_hash(
-        &self,
-        client_id: ClientId,
-        remote_catalogue_state_hash: Option<&str>,
-    ) -> Result<(), RuntimeError> {
-        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        core.ensure_client_as_admin_with_catalogue_state_hash(
-            client_id,
-            remote_catalogue_state_hash,
-        );
-        Ok(())
-    }
-
     /// Remove a client connection.
     ///
     /// Returns `Ok(true)` if removed, `Ok(false)` if skipped due to
@@ -711,20 +656,6 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
     pub fn remove_client(&self, client_id: ClientId) -> Result<bool, RuntimeError> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
         Ok(core.remove_client(client_id))
-    }
-
-    /// Promote a client to Admin role (full access, no ReBAC).
-    pub fn set_client_admin(&self, client_id: ClientId) -> Result<(), RuntimeError> {
-        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        core.set_client_admin(client_id);
-        Ok(())
-    }
-
-    /// Promote a client to Backend role (row access, no catalogue writes).
-    pub fn set_client_backend(&self, client_id: ClientId) -> Result<(), RuntimeError> {
-        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        core.set_client_backend(client_id);
-        Ok(())
     }
 
     // =========================================================================

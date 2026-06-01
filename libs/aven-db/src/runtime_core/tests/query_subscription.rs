@@ -1683,13 +1683,7 @@ fn rc_transaction_visible_subscription_hides_partial_accepted_batch_until_scope_
 
     let d_client_of_b = ClientId::new();
     let b_server_for_d = ServerId::new();
-    {
-        s.b.add_client(d_client_of_b, None);
-        s.b.schema_manager_mut()
-            .query_manager_mut()
-            .sync_manager_mut()
-            .set_client_role(d_client_of_b, ClientRole::Peer);
-    }
+    s.b.add_client(d_client_of_b, None);
     d.add_server(b_server_for_d);
 
     d.immediate_tick();

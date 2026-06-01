@@ -971,17 +971,7 @@ fn create_two_client_transaction_harness(app_name: &str) -> TwoClientTransaction
     let bob_server_id = ServerId::new();
 
     server.add_client(alice_client_id, None);
-    server
-        .schema_manager_mut()
-        .query_manager_mut()
-        .sync_manager_mut()
-        .set_client_role(alice_client_id, ClientRole::Peer);
     server.add_client(bob_client_id, None);
-    server
-        .schema_manager_mut()
-        .query_manager_mut()
-        .sync_manager_mut()
-        .set_client_role(bob_client_id, ClientRole::Peer);
     alice.add_server(alice_server_id);
     bob.add_server(bob_server_id);
 

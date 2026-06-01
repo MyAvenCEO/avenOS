@@ -291,24 +291,18 @@ impl SyncManager {
         let branch_name = BranchName::new(&row.branch);
         let batch_id = row.batch_id;
 
-        let (in_scope, include_metadata, already_sent) = {
+        let (include_metadata, already_sent) = {
             let Some(client) = self.clients.get(&client_id) else {
                 return;
             };
-            let in_scope =
-                client.role == ClientRole::Peer || client.is_in_scope(object_id, &branch_name);
             let include_metadata = !client.sent_metadata.contains(&object_id);
             let already_sent = client
                 .sent_batch_ids
                 .get(&(object_id, branch_name))
                 .cloned()
                 .unwrap_or_default();
-            (in_scope, include_metadata, already_sent)
+            (include_metadata, already_sent)
         };
-
-        if !in_scope {
-            return;
-        }
 
         if !force_resend && already_sent.contains(&batch_id) && !include_metadata {
             return;

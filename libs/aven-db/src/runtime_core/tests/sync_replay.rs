@@ -36,13 +36,7 @@ fn rc_replays_downstream_query_when_upstream_added_late() {
     let b_client_of_c = ClientId::new();
     let c_server_for_b = ServerId::new();
 
-    {
-        b.add_client(a_client_of_b, None);
-        b.schema_manager_mut()
-            .query_manager_mut()
-            .sync_manager_mut()
-            .set_client_role(a_client_of_b, ClientRole::Peer);
-    }
+    b.add_client(a_client_of_b, None);
     a.add_server(b_server_for_a);
 
     // Clear any startup sync traffic.
@@ -75,13 +69,7 @@ fn rc_replays_downstream_query_when_upstream_added_late() {
     b.sync_sender().take();
 
     // Bring up B <-> C after B already has active downstream query state.
-    {
-        c.add_client(b_client_of_c, None);
-        c.schema_manager_mut()
-            .query_manager_mut()
-            .sync_manager_mut()
-            .set_client_role(b_client_of_c, ClientRole::Peer);
-    }
+    c.add_client(b_client_of_c, None);
     b.add_server(c_server_for_b);
     b.batched_tick();
 

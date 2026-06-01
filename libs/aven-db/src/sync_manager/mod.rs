@@ -615,24 +615,13 @@ impl SyncManager {
         }
     }
 
-    /// Set the role for a client.
-    pub fn set_client_role(&mut self, client_id: ClientId, role: ClientRole) {
-        if let Some(client) = self.clients.get_mut(&client_id) {
-            client.role = role;
-        }
-    }
-
     /// AvenOS: replay catalogue + all syncable visible rows to a Peer client.
     pub fn queue_full_catchup_to_peer_with_storage<H: Storage>(
         &mut self,
         storage: &H,
         client_id: ClientId,
     ) {
-        if !self
-            .clients
-            .get(&client_id)
-            .is_some_and(|c| c.role == ClientRole::Peer)
-        {
+        if self.clients.get(&client_id).is_none() {
             return;
         }
 
@@ -689,9 +678,6 @@ impl SyncManager {
         let Some(client) = self.clients.get_mut(&client_id) else {
             return;
         };
-        if client.role != ClientRole::Peer {
-            return;
-        }
         client.sent_batch_ids.clear();
         client.sent_metadata.clear();
     }
@@ -699,10 +685,8 @@ impl SyncManager {
     /// Reset delivery bookkeeping for every registered peer client.
     pub fn clear_all_peer_delivery_ledgers(&mut self) {
         for client in self.clients.values_mut() {
-            if client.role == ClientRole::Peer {
-                client.sent_batch_ids.clear();
-                client.sent_metadata.clear();
-            }
+            client.sent_batch_ids.clear();
+            client.sent_metadata.clear();
         }
     }
 
@@ -715,11 +699,7 @@ impl SyncManager {
         storage: &H,
         client_id: ClientId,
     ) {
-        if !self
-            .clients
-            .get(&client_id)
-            .is_some_and(|c| c.role == ClientRole::Peer)
-        {
+        if self.clients.get(&client_id).is_none() {
             return;
         }
 
@@ -770,32 +750,20 @@ impl SyncManager {
 
     /// Re-queue full catch-up for an existing Peer client (mesh reconnect / ACL hydration).
     pub fn rebroadcast_peer_catchup<H: Storage>(&mut self, storage: &H, client_id: ClientId) {
-        if self
-            .clients
-            .get(&client_id)
-            .is_some_and(|c| c.role == ClientRole::Peer)
-        {
+        if self.clients.contains_key(&client_id) {
             self.queue_full_catchup_to_peer_with_storage(storage, client_id);
         }
     }
 
     /// Shell-only catch-up (sparks/keyshares) before full spark-data replay.
     pub fn rebroadcast_peer_shell_catchup<H: Storage>(&mut self, storage: &H, client_id: ClientId) {
-        if self
-            .clients
-            .get(&client_id)
-            .is_some_and(|c| c.role == ClientRole::Peer)
-        {
+        if self.clients.contains_key(&client_id) {
             self.queue_shell_catchup_to_peer_with_storage(storage, client_id);
         }
     }
 
     pub fn peer_client_ids(&self) -> Vec<ClientId> {
-        self.clients
-            .iter()
-            .filter(|(_, client)| client.role == ClientRole::Peer)
-            .map(|(id, _)| *id)
-            .collect()
+        self.clients.keys().copied().collect()
     }
 
     // ========================================================================

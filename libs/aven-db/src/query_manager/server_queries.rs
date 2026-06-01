@@ -8,9 +8,7 @@ use crate::object::{BranchName, ObjectId};
 use crate::row_histories::BatchId;
 use crate::schema_manager::LensTransformer;
 use crate::storage::Storage;
-use crate::sync_manager::{
-    ClientId, ClientRole, DurabilityTier, PendingPermissionCheck,
-};
+use crate::sync_manager::{ClientId, DurabilityTier, PendingPermissionCheck};
 
 use super::manager::{QueryManager, SchemaWarningAccumulator, ServerQuerySubscription};
 use super::policy::Operation;
@@ -416,17 +414,10 @@ impl QueryManager {
     fn client_bypasses_authorization_filtering(
         &self,
         client_id: ClientId,
-        session: Option<&Session>,
+        _session: Option<&Session>,
     ) -> bool {
-        self.sync_manager
-            .get_client(client_id)
-            .map(|client| {
-                matches!(client.role, ClientRole::Peer | ClientRole::Admin)
-                    || matches!(client.role, ClientRole::Backend)
-                        && client.session.is_none()
-                        && session.is_none()
-            })
-            .unwrap_or(false)
+        // All mesh clients are peers and bypass downstream authorization filtering.
+        self.sync_manager.get_client(client_id).is_some()
     }
 
     fn scope_with_policy_context_rows_for_tables<H: Storage + ?Sized>(

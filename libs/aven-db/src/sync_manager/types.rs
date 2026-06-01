@@ -137,27 +137,6 @@ pub struct PendingQueryRejection {
 }
 
 // ============================================================================
-// Client Roles
-// ============================================================================
-
-/// Role-based access control for client connections.
-///
-/// Determines how incoming writes from a client are routed:
-/// - `User`: Requires session, ReBAC for rows, rejected for catalogue unless
-///   development-only schema auto-push is enabled
-/// - `Backend`: Trusted backend data access (rows only, no catalogue writes)
-/// - `Admin`: Full access (catalogue + data, no ReBAC)
-/// - `Peer`: Trusted relay (server-to-server), bypasses all auth
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ClientRole {
-    #[default]
-    User,
-    Backend,
-    Admin,
-    Peer,
-}
-
-// ============================================================================
 // Connection State
 // ============================================================================
 
@@ -180,11 +159,9 @@ pub struct QueryScope {
     pub session: Option<Session>,
 }
 
-/// Tracking state for a connected client.
+/// Tracking state for a connected peer client.
 #[derive(Debug, Clone, Default)]
 pub struct ClientState {
-    /// Client's role for access control.
-    pub role: ClientRole,
     /// Client's session for policy evaluation.
     pub session: Option<Session>,
     /// Active queries from this client.
@@ -203,13 +180,6 @@ impl ClientState {
             session,
             ..Default::default()
         }
-    }
-
-    /// Check if an object/branch is in any of this client's query scopes.
-    pub fn is_in_scope(&self, object_id: ObjectId, branch_name: &BranchName) -> bool {
-        self.queries
-            .values()
-            .any(|q| q.scope.contains(&(object_id, *branch_name)))
     }
 }
 

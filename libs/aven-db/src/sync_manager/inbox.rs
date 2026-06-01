@@ -1,8 +1,6 @@
 use super::*;
 use crate::batch_fate::{BatchFate, BatchMode, SealedBatchSubmission};
-use crate::metadata::MetadataKey;
 use crate::object::{BranchName, ObjectId};
-use crate::query_manager::policy::Operation;
 use crate::row_histories::{
     ApplyRowBatchWithContext, RowState, RowVisibilityChange, StoredRowBatch, apply_row_batch,
     apply_row_batch_with_context, patch_row_batch_state,
@@ -284,73 +282,6 @@ impl SyncManager {
         let write_context =
             prepared_row_write_context_from_table_context(table_context, needs_exact_locator);
         Some((row_locator, write_context))
-    }
-
-    fn matches_replayed_row_batch(existing: &StoredRowBatch, incoming: &StoredRowBatch) -> bool {
-        existing.row_id == incoming.row_id
-            && existing.batch_id == incoming.batch_id
-            && existing.branch == incoming.branch
-            && existing.parents == incoming.parents
-            && existing.updated_at == incoming.updated_at
-            && existing.created_by == incoming.created_by
-            && existing.created_at == incoming.created_at
-            && existing.updated_by == incoming.updated_by
-            && existing.state == incoming.state
-            && existing.delete_kind == incoming.delete_kind
-            && existing.is_deleted == incoming.is_deleted
-            && existing.data == incoming.data
-            && existing.metadata == incoming.metadata
-    }
-
-    fn pre_batch_visible_row<H: Storage>(
-        &self,
-        storage: &H,
-        table: &str,
-        row: &StoredRowBatch,
-    ) -> Option<StoredRowBatch> {
-        if row.parents.is_empty() {
-            return None;
-        }
-
-        let context =
-            crate::storage::resolve_history_row_write_context(storage, table, row).ok()?;
-        let history_rows = storage.scan_history_row_batches(table, row.row_id).ok()?;
-        let visible_rows = history_rows
-            .into_iter()
-            .filter(|candidate| {
-                candidate.branch.as_str() == row.branch.as_str()
-                    && candidate.batch_id != row.batch_id
-                    && candidate.state.is_visible()
-            })
-            .collect::<Vec<_>>();
-        let visible_rows_by_batch = visible_rows
-            .iter()
-            .cloned()
-            .map(|candidate| (candidate.batch_id(), candidate))
-            .collect::<HashMap<_, _>>();
-
-        let mut included_batch_ids = HashSet::new();
-        let mut frontier = row.parents.iter().copied().collect::<Vec<_>>();
-        while let Some(batch_id) = frontier.pop() {
-            if !included_batch_ids.insert(batch_id) {
-                continue;
-            }
-            if let Some(parent_row) = visible_rows_by_batch.get(&batch_id) {
-                frontier.extend(parent_row.parents.iter().copied());
-            }
-        }
-
-        let pre_batch_rows = visible_rows
-            .into_iter()
-            .filter(|candidate| included_batch_ids.contains(&candidate.batch_id()))
-            .collect::<Vec<_>>();
-        crate::row_histories::visible_row_preview_from_history_rows(
-            context.user_descriptor().as_ref(),
-            &pre_batch_rows,
-            None,
-        )
-        .ok()
-        .flatten()
     }
 
     fn apply_row_updated<H: Storage>(
@@ -1307,218 +1238,43 @@ impl SyncManager {
             );
             return;
         };
-        tracing::trace!(%client_id, role = ?client.role, payload = payload.variant_name(), "client→payload");
+        tracing::trace!(%client_id, payload = payload.variant_name(), "client→payload");
 
         match &payload {
             SyncPayload::CatalogueEntryUpdated { entry } => {
                 let object_id = entry.object_id;
                 let branch_name = BranchName::new("main");
-                match client.role {
-                    ClientRole::Peer | ClientRole::Backend => {
-                        self.outbox.push(OutboxEntry {
-                            destination: Destination::Client(client_id),
-                            payload: SyncPayload::Error(SyncError::CatalogueWriteDenied {
-                                object_id,
-                                branch_name,
-                            }),
-                        });
-                    }
-                    ClientRole::Admin => {
-                        self.apply_payload_from_client(
-                            storage,
-                            client_id,
-                            payload,
-                            AuthoritativeFateRecording::Skip,
-                        );
-                    }
-                    ClientRole::User => {
-                        let Some(_session) = &client.session else {
-                            self.outbox.push(OutboxEntry {
-                                destination: Destination::Client(client_id),
-                                payload: SyncPayload::Error(SyncError::SessionRequired {
-                                    object_id,
-                                    branch_name,
-                                }),
-                            });
-                            return;
-                        };
-                        if self.allow_unprivileged_schema_catalogue_writes
-                            && entry.is_structural_schema_catalogue()
-                        {
-                            self.apply_payload_from_client(
-                                storage,
-                                client_id,
-                                payload,
-                                AuthoritativeFateRecording::Skip,
-                            );
-                            return;
-                        }
-                        self.outbox.push(OutboxEntry {
-                            destination: Destination::Client(client_id),
-                            payload: SyncPayload::Error(SyncError::CatalogueWriteDenied {
-                                object_id,
-                                branch_name,
-                            }),
-                        });
-                    }
-                }
+                // Peers never author catalogue (schema) entries over the mesh.
+                self.outbox.push(OutboxEntry {
+                    destination: Destination::Client(client_id),
+                    payload: SyncPayload::Error(SyncError::CatalogueWriteDenied {
+                        object_id,
+                        branch_name,
+                    }),
+                });
             }
-            SyncPayload::RowBatchCreated { metadata, row }
-            | SyncPayload::RowBatchNeeded { metadata, row } => {
+            SyncPayload::RowBatchCreated { metadata: _, row }
+            | SyncPayload::RowBatchNeeded { metadata: _, row } => {
                 let object_id = row.row_id;
                 let branch_name = BranchName::new(&row.branch);
-                match client.role {
-                    ClientRole::Peer => {
-                        if payload.is_catalogue() {
-                            self.outbox.push(OutboxEntry {
-                                destination: Destination::Client(client_id),
-                                payload: SyncPayload::Error(SyncError::CatalogueWriteDenied {
-                                    object_id,
-                                    branch_name,
-                                }),
-                            });
-                            return;
-                        }
-                        self.apply_payload_from_client(
-                            storage,
-                            client_id,
-                            payload,
-                            AuthoritativeFateRecording::Skip,
-                        );
-                    }
-                    ClientRole::Admin => {
-                        self.apply_payload_from_client(
-                            storage,
-                            client_id,
-                            payload,
-                            AuthoritativeFateRecording::Skip,
-                        );
-                    }
-                    ClientRole::Backend => {
-                        if payload.is_catalogue() {
-                            self.outbox.push(OutboxEntry {
-                                destination: Destination::Client(client_id),
-                                payload: SyncPayload::Error(SyncError::CatalogueWriteDenied {
-                                    object_id,
-                                    branch_name,
-                                }),
-                            });
-                            return;
-                        }
-                        self.apply_payload_from_client(
-                            storage,
-                            client_id,
-                            payload,
-                            AuthoritativeFateRecording::Skip,
-                        );
-                    }
-                    ClientRole::User => {
-                        let Some(session) = &client.session else {
-                            self.outbox.push(OutboxEntry {
-                                destination: Destination::Client(client_id),
-                                payload: SyncPayload::Error(SyncError::SessionRequired {
-                                    object_id,
-                                    branch_name,
-                                }),
-                            });
-                            return;
-                        };
-                        if payload.is_catalogue() {
-                            if self.allow_unprivileged_schema_catalogue_writes
-                                && payload.is_structural_schema_catalogue()
-                            {
-                                self.apply_payload_from_client(
-                                    storage,
-                                    client_id,
-                                    payload,
-                                    AuthoritativeFateRecording::Skip,
-                                );
-                                return;
-                            }
-                            self.outbox.push(OutboxEntry {
-                                destination: Destination::Client(client_id),
-                                payload: SyncPayload::Error(SyncError::CatalogueWriteDenied {
-                                    object_id,
-                                    branch_name,
-                                }),
-                            });
-                            return;
-                        }
-
-                        let payload_metadata = metadata
-                            .as_ref()
-                            .map(|meta| meta.metadata.clone())
-                            .unwrap_or_default();
-                        let (stored_metadata, existing_history_row, pre_batch_visible_row) = self
-                            .row_metadata_from_payload(storage, row, metadata.as_ref())
-                            .and_then(|stored_metadata| {
-                                let table =
-                                    stored_metadata.get(MetadataKey::Table.as_str())?.clone();
-                                let existing_history_row = storage
-                                    .load_history_row_batch(
-                                        &table,
-                                        &row.branch,
-                                        row.row_id,
-                                        row.batch_id,
-                                    )
-                                    .ok()
-                                    .flatten();
-                                let pre_batch_visible_row =
-                                    self.pre_batch_visible_row(storage, &table, row);
-                                Some((stored_metadata, existing_history_row, pre_batch_visible_row))
-                            })
-                            .unwrap_or_else(|| (HashMap::new(), None, None));
-
-                        // Idempotent replay short-circuit: reconnect replays row
-                        // history, so only an exact stored row-batch match counts as
-                        // a true no-op. Same-batch corrections must still flow
-                        // through permission evaluation.
-                        if let Some(existing_history_row) = existing_history_row.as_ref()
-                            && Self::matches_replayed_row_batch(existing_history_row, row)
-                        {
-                            self.row_batch_interest
-                                .entry(RowBatchKey::from_row(row))
-                                .or_default()
-                                .insert(client_id);
-                            self.try_accept_completed_sealed_batch_from_client(
-                                storage,
-                                client_id,
-                                row.batch_id,
-                            );
-                            self.pending_client_batch_fates
-                                .entry(client_id)
-                                .or_default()
-                                .insert(row.batch_id);
-                            return;
-                        }
-
-                        let old_content = pre_batch_visible_row
-                            .as_ref()
-                            .map(|previous| previous.data.clone());
-                        let metadata = if old_content.is_none() && stored_metadata.is_empty() {
-                            payload_metadata
-                        } else {
-                            stored_metadata
-                        };
-                        let new_content = (!row.is_deleted).then_some(row.data.clone());
-                        let operation = if row.is_deleted {
-                            Operation::Delete
-                        } else if old_content.is_some() || !row.parents.is_empty() {
-                            Operation::Update
-                        } else {
-                            Operation::Insert
-                        };
-                        self.queue_for_permission_check(
-                            client_id,
-                            payload,
-                            session.clone(),
-                            metadata,
-                            old_content.map(|content| content.to_vec()),
-                            new_content.map(|content| content.to_vec()),
-                            operation,
-                        );
-                    }
+                // All mesh clients are peers: apply row writes directly (caps gate
+                // the wire, not ReBAC), but never accept catalogue writes from a peer.
+                if payload.is_catalogue() {
+                    self.outbox.push(OutboxEntry {
+                        destination: Destination::Client(client_id),
+                        payload: SyncPayload::Error(SyncError::CatalogueWriteDenied {
+                            object_id,
+                            branch_name,
+                        }),
+                    });
+                    return;
                 }
+                self.apply_payload_from_client(
+                    storage,
+                    client_id,
+                    payload,
+                    AuthoritativeFateRecording::Skip,
+                );
             }
             SyncPayload::SealBatch { .. } => {
                 self.apply_payload_from_client(

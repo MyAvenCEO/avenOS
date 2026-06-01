@@ -1,13 +1,11 @@
 use super::inbox::AuthoritativeFateRecording;
 use super::*;
 use crate::batch_fate::BatchFate;
-use crate::query_manager::policy::Operation;
-use crate::query_manager::session::Session;
 use crate::row_histories::{
     BatchId, RowState, RowVisibilityChange, StoredRowBatch, VisibleRowEntry, patch_row_batch_state,
 };
 use crate::storage::Storage;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 impl SyncManager {
     /// Take all pending permission checks for policy evaluation.
@@ -111,36 +109,6 @@ impl SyncManager {
                 reason,
             }),
         });
-    }
-
-    /// Queue a payload for permission checking.
-    ///
-    /// Called internally when a client write needs policy evaluation.
-    #[allow(clippy::too_many_arguments)]
-    pub(super) fn queue_for_permission_check(
-        &mut self,
-        client_id: ClientId,
-        payload: SyncPayload,
-        session: Session,
-        metadata: HashMap<String, String>,
-        old_content: Option<Vec<u8>>,
-        new_content: Option<Vec<u8>>,
-        operation: Operation,
-    ) -> PendingUpdateId {
-        let id = PendingUpdateId(self.next_pending_id);
-        self.next_pending_id += 1;
-        self.pending_permission_checks.push(PendingPermissionCheck {
-            id,
-            client_id,
-            payload,
-            session,
-            schema_wait_started_at: None,
-            metadata,
-            old_content,
-            new_content,
-            operation,
-        });
-        id
     }
 
     fn load_rejected_batch_fate<H: Storage>(

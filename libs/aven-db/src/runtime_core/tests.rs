@@ -13,8 +13,8 @@ use crate::storage::{
     MemoryStorage, RawTableKeys, RawTableRows, RowLocator, Storage, StorageError,
 };
 use crate::sync_manager::{
-    ClientId, ClientRole, Destination, DurabilityTier, InboxEntry, OutboxEntry, ServerId, Source,
-    SyncError, SyncManager, SyncPayload,
+    ClientId, Destination, DurabilityTier, InboxEntry, OutboxEntry, ServerId, Source, SyncError,
+    SyncManager, SyncPayload,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -1879,22 +1879,10 @@ fn create_3tier_rc_with_schema(schema: Schema) -> ThreeTierRC {
     let c_server_for_b = ServerId::new();
 
     // Topology: A ↔ B ↔ C
-    {
-        b.add_client(a_client_of_b, None);
-        b.schema_manager_mut()
-            .query_manager_mut()
-            .sync_manager_mut()
-            .set_client_role(a_client_of_b, ClientRole::Peer);
-    }
+    b.add_client(a_client_of_b, None);
     a.add_server(b_server_for_a);
 
-    {
-        c.add_client(b_client_of_c, None);
-        c.schema_manager_mut()
-            .query_manager_mut()
-            .sync_manager_mut()
-            .set_client_role(b_client_of_c, ClientRole::Peer);
-    }
+    c.add_client(b_client_of_c, None);
     b.add_server(c_server_for_b);
 
     // Initial tick + clear initial sync messages

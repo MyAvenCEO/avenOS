@@ -745,11 +745,6 @@ fn rc_worker_accepts_local_batch_replay_payloads_from_peer() {
 
     let client_id = ClientId::new();
     worker.add_client(client_id, None);
-    worker
-        .schema_manager_mut()
-        .query_manager_mut()
-        .sync_manager_mut()
-        .set_client_role(client_id, ClientRole::Peer);
 
     let ((row_id, _row_values), batch_id) = main
         .insert("users", user_insert_values(ObjectId::new(), "Alice"), None)

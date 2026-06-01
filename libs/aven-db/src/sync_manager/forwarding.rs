@@ -387,13 +387,9 @@ impl SyncManager {
     ) {
         let client_ids: Vec<ClientId> = self
             .clients
-            .iter()
-            .filter(|(id, client)| {
-                **id != except
-                    && (client.role == ClientRole::Peer
-                        || client.is_in_scope(object_id, &branch_name))
-            })
-            .map(|(id, _)| *id)
+            .keys()
+            .copied()
+            .filter(|id| *id != except)
             .collect();
 
         let _span = tracing::debug_span!("forward_update_to_clients", %object_id, %branch_name, client_count = client_ids.len()).entered();
