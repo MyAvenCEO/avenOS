@@ -6,6 +6,31 @@
 
 **Today:** the biscuit check is real and row-capable (`spark_acc::authorize`); the transport seam is real and DID-keyed (`SyncTransport`, `SyncTargetId::PeerDid`); but live peer forwarding has **no capability gate** and no real transport (`peer/api.ts` is demo, `aven-p2p` is a placeholder). This doc closes that gap with **one model** and ships it in three phases (§8).
 
+**Decision — radical cut.** We commit 100% to **biscuit caps + frontier sync** as avenOS's only auth + replication model, and delete the upstream-Groove multi-tier machinery avenOS never used: ReBAC/`ClientRole`, the server tier, and the peer delivery ledger. No coexistence, no backwards-compat shim. This is cheap because none of it has an avenOS consumer (§0) — it's deletion + test rewrite, not behavior migration. The cut runs as **M0 (de-jazz collapse)** then **M1 (frontier sync)** — see §0 for the kill-boundary and §8 for sequencing.
+
+---
+
+## 0. Scope — the kill-boundary (read this first)
+
+avenOS uses a **narrow slice** of upstream Groove: local `RuntimeCore` over RocksDB, the schema registry, and peer connections. It does **not** use Groove's multi-tier browser machinery — verified: the app instantiates **zero** `ClientRole::{User,Admin,Backend}`, never calls `add_server`, `forward_*_to_servers` is `#[cfg(test)]`, and the only client it registers is `ensure_client_as_peer`. ReBAC is already dead on this path (peers short-circuit `is_in_scope`; no non-peer client ever exercises it). Auth is **biscuit caps** (`spark_acc`), not ReBAC. So the cut is wide, not narrow.
+
+**CUT — no avenOS consumer; delete + rewrite the tests that encode them:**
+- **ReBAC central access control** — `ClientRole::{User,Admin,Backend}`, `is_in_scope`, the `permissions.rs` permission-check machinery, role-based row filtering. **Biscuit caps (`may_sync`) replace it wholesale.**
+- **Server tier** — `ServerId`, `add_server`, `forward_*_to_servers` (test-only), catalogue **sync-to-server**. avenOS has no WebSocket/server tier (`avenos_client.rs`: "no WebSocket server").
+- **Peer delivery ledger** — `ClientState.sent_batch_ids` / `DeliveryLedger` on the peer path → **stateless frontier reconciliation** (§1).
+- demo `peer/api.ts`, `app/src-tauri/src/demo_mesh.rs`, placeholder `aven-p2p` → real `HyperswarmTransport` + `peerMeshStatus`/`peerRevoke` IPC.
+
+**COLLAPSE — survives only in slimmed form:**
+- `ClientState` / `ClientId` → the **peer connection handle** only. The role enum dies (peer is the sole kind); state slims from `sent_batch_ids` to per-resource frontier cursors.
+
+**KEEP — the real avenOS engine:**
+- local `RuntimeCore` + RocksDB storage + **local query subscriptions** (the webview's reactive reads go straight through `RuntimeCore`, not as a Groove client).
+- schema/catalogue **registry** (validation, migrations). Only catalogue *sync-to-server* is cut, not the registry.
+
+**The single-source-of-truth invariant this creates:** after the cut there is **one** authorizer (biscuit caps) and **one** peer tracker (the per-resource frontier). No ReBAC second-guessing caps; no `sent_batch_ids` second-guessing the frontier. T6 locks the tracker half: drop all per-peer state, re-diff, **zero** resent.
+
+> One-line test of any future change: *"does this reintroduce a role check beside `may_sync`, a server beside the peer mesh, or a per-peer ledger beside the frontier?"* If yes, you've re-grown what M0 cut — stop.
+
 ---
 
 ## 1. The one model
@@ -48,7 +73,7 @@ The authoritative tracker is the **per-resource frontier**: causal heads over th
 - `frontier_diff(have, want) -> Vec<RowBatchKey>` — **pure, stateless, symmetric.** Because row-history is a **DAG** (not a linear log), this is a head-set diff **plus an ancestor reachability walk**, not a scalar length compare.
 - `SyncPayload::FrontierAnnounce { resource, heads }` / `FrontierNeed { resource, heads }` (the pull half — `RowBatchNeeded` / `BatchFateNeeded` — already exists).
 
-**No per-peer delivery ledger; nothing to persist.** Reconciliation is a stateless diff + `BatchId` dedup, so losing all cached/per-peer state forces a re-diff — never data loss, never an erroneous re-send. (The legacy `DeliveryLedger` / `ClientState.sent_batch_ids` stays confined to the old client/server path; the mesh path never touches it.)
+**No per-peer delivery ledger; nothing to persist.** Reconciliation is a stateless diff + `BatchId` dedup, so losing all cached/per-peer state forces a re-diff — never data loss, never an erroneous re-send. `DeliveryLedger` / `ClientState.sent_batch_ids` are **deleted** in M0 (§0); the frontier is the sole peer tracker.
 
 ### 1.4 Integration — one path
 
@@ -133,7 +158,7 @@ What Holepunch actually does → what it confirms / changes here:
 
 **Generic engine** — aven-db holds **zero** biscuit/spark knowledge; all policy is behind `CapabilityResolver`. Adding a granularity level (spark→table→row) is a grant + URN change only; engine/trait/`authorize()` untouched.
 
-**One tracker** — the per-resource frontier is the only authority; any per-peer/cached state is a derivable optimization, never truth. Mesh sync holds **no non-derivable state**: dropping it forces a re-diff, never loss or erroneous resend (T6). Rows travel as stored **ciphertext**.
+**One authorizer, one tracker** — after M0, biscuit caps (`may_sync`) is the **only** authorizer (ReBAC deleted) and the per-resource frontier is the **only** peer tracker (`sent_batch_ids` deleted, §0). Peer sync holds **no non-derivable state**: dropping it forces a re-diff, never loss or erroneous resend (T6). Rows travel as stored **ciphertext**.
 
 **Gate** — every outbound peer frame passes **exactly one** `may_sync`, **at every hop** (T8). `Pending` defers, never drops; only `DenyPermanent` is terminal (T1). Revoke is **not retroactive** — `reevaluate` stops *new* batches; it never deletes what a peer already holds (T8).
 
@@ -163,7 +188,30 @@ What Holepunch actually does → what it confirms / changes here:
 
 ---
 
-## 8. Execution — M1 / M2 / M3
+## 8. Execution — M0 / M1 / M2 / M3
+
+### M0 — de-jazz collapse (clean the base before building on it)
+*Goal: aven-db = local `RuntimeCore` + RocksDB + schema registry + peer connection handles, with **biscuit caps as the sole authorizer**. Delete the upstream multi-tier machinery avenOS never used (§0). Pure deletion + test rewrite — no behavior migration, because nothing in the avenOS path consumes it.*
+
+**Verified preconditions (the cut is safe):**
+- App consumes **none** of it: zero `ServerId` / `ClientRole` / `add_server` / `permission` refs in `app/src-tauri`, `aven-self`, `aven-city`.
+- Local reactive reads are **server-independent**: `immediate_tick` fires subscription callbacks straight from `query_manager.take_updates()`; the server-propagation path is gated behind `should_send_local_subscription_upstream(..) && has_servers_or_pending_servers()` — **always false** in avenOS. The server tier is already *inert*, so deletion is cleanup, not behavior change.
+- The only client avenOS registers is `ensure_client_as_peer`; ReBAC's `is_in_scope` branch is never exercised (peers short-circuit it).
+
+**Surface (what the trace found — the cut is wide, ~28 src + 13 test files):**
+- `ServerId` threads through: `sync_targets.rs`, `sync_manager/{types,mod,sync_logic,forwarding,sync_tracer,inbox}.rs`, `runtime_core/{ticks,mod,sync,writes}.rs`, `runtime_tokio.rs`, `query_manager/{subscriptions,server_queries,manager,writes}.rs`, `lib.rs`.
+- `ClientRole`/ReBAC: `sync_manager/{types,mod,forwarding,permissions,sync_logic,inbox}.rs`, `runtime_core/sync.rs`, `query_manager/{server_queries,manager}.rs`.
+- Tests to delete/rewrite: `runtime_core/tests/{sync_replay,basic,schema_catalogue,query_subscription,fk_remove_error,write_batch/*}.rs`, `schema_manager/integration_tests/tests/{query_subscription,sync,catalogue}.rs`.
+
+**Order (delete leaves first, then the trunk — compile + test gate after each step):**
+1. **Server tier** — delete `add_server`/`remove_server`, `forward_*_to_servers` (already `#[cfg(test)]`), `seal_batch_to_servers`/`force_row_batch_to_servers`, catalogue **sync-to-server** queue, `send_query_*_to_servers`, `ServerId`, the `*_server_seq` / `parked_sync_messages_by_server_seq` plumbing, `server_queries.rs`. Keep the schema/catalogue **registry** and local subscription delivery.
+2. **ReBAC** — delete `permissions.rs` permission-check machinery, `PendingPermissionCheck`, `is_in_scope`, role-based row filtering in `forward_update_to_clients`, and `ClientRole::{User,Admin,Backend}`. `may_sync` (caps) is the only authorizer left.
+3. **Collapse client→peer** — `ClientState` slims to a peer connection handle (drop role enum, drop session/ReBAC fields); `ensure_client_as_peer` becomes `add_peer`; `forward_update_to_clients` loses its role branch. Keep `sent_batch_ids` **for now** (M1 deletes it once the frontier replaces it — peers still need *a* delivery path until then).
+4. **Tests** — delete the multi-tier cases above; keep/rewrite local-query + schema-registry coverage. `cargo test -p groove` green before M1.
+
+**Risk & discipline:** this is the highest-blast-radius milestone (core query engine, hundreds of cascading compile errors). It is **pure cleanup of inert code**, not a fix — so it can be done in one focused pass but must gate on `cargo build -p groove` then `cargo test -p groove` after *each* of steps 1–3, never deleting ahead of a green compile. No app changes, no new features.
+
+> M0 makes the next three milestones land on a base with one authorizer and one connection kind. Skipping it means M1 grows the frontier *beside* dead ReBAC/server code instead of replacing it.
 
 ### M1 — local two-instance live sync (device ↔ device, no aven)
 *Goal: `bun dev:app2x:mac` → two devices discover by spark topic, biscuit-gate the Noise handshake, converge a spark's rows live, and heal across restart/reconnect. Proves transport + gate + frontier with zero server.*
@@ -171,12 +219,12 @@ What Holepunch actually does → what it confirms / changes here:
 **Build order (test-first):** §9 drives steps 1, 3, 5 red→green first (pure primitives on loopback); then 4 + 6 (reconcile loop + forwarding); then transport 7–9; then app 10–12. Each layer green before the next.
 
 **aven-db** (additive, behind `peer-transport`; `AllowAll`/`DenyAll` keep local-only + tests unaffected):
-1. `CapabilityResolver` + `AccOp`/`ResourceCoord`/`CapDecision` (§1.2) — the gate.
+1. ✅ **`CapabilityResolver` + `AccOp`/`ResourceCoord`/`CapDecision`** (§1.2) — the gate. *Landed* `src/capability.rs`; **T1 green** (`tests/capability_gate.rs`). The single authorizer; `may_sync(subject, op, res)` three-state.
 2. `resource_urn(spark)` → 32-byte `topic = hash("spark:S")`; peeroxide computes the `discovery_key()` (§4).
-3. **Frontier-diff tracker** (§1.3): `heads_for`, stateless `frontier_diff` (DAG ancestor walk), `FrontierAnnounce`/`FrontierNeed`.
-4. **Anti-entropy reconcile loop** — emit `FrontierAnnounce(S)` on connect + on local seal; on `FrontierNeed`, ship the diff as **stored ciphertext** batches (so M2's blind mirror needs zero wire change). Makes T5 pass.
-5. **`LoopbackTransport: SyncTransport`** in `test_support` → drive the §9 suite (A↔B and A↔H↔B) before any UDP.
-6. **Peer-mesh forwarding** = `frontier_diff` → per-hop `may_sync` → `BatchId` dedup. Wire **revoke** → `reevaluate` (stops new batches, never retro-deletes). Do **not** extend `DeliveryLedger`.
+3. **Frontier-diff tracker** (§1.3): ✅ `FrontierDag::heads` + pure stateless `frontier_diff` (DAG ancestor walk) *landed* `src/frontier.rs` (ungated, storage-free); **T2 + T6 green** (`tests/frontier_reconcile.rs`). *Remaining:* `FrontierAnnounce`/`FrontierNeed` payloads (couples to `SyncPayload`) + a storage adapter feeding the real DAG into `FrontierDag`.
+4. **Anti-entropy reconcile loop** — ✅ pure core landed as `FrontierDag::pull_from` (frontier_diff → transfer missing → converge; **T5 green**). *Remaining (wiring):* emit `FrontierAnnounce(S)` on connect + on local seal; on `FrontierNeed`, ship the diff as **stored ciphertext** batches (so M2's blind mirror needs zero wire change).
+5. ✅ **`LoopbackTransport: SyncTransport`** landed in `sync_transport.rs` (beside `NullSyncTransport`); **T4 green**. In-memory connected pair, drives the seam before any UDP.
+6. **Peer-mesh forwarding** = `frontier_diff` → per-hop `may_sync` → `BatchId` dedup. After M0 the only clients are peers, so `forward_update_to_clients` **becomes** the frontier path outright (no role branch, no `sent_batch_ids` — both deleted). Wire **revoke** → `reevaluate` (stops new batches, never retro-deletes).
 
 **aven-p2p** (fills the placeholder crate):
 7. `HyperswarmTransport: SyncTransport` over peeroxide — `KeyPair`=device key, `discovery_key()`=topic join. Devices join **client mode**, finite `maxPeers`, sparks multiplex over one connection (§5).
@@ -186,7 +234,7 @@ What Holepunch actually does → what it confirms / changes here:
 **app:**
 10. **First contact (V4) — the one manual step.** M1 dev shortcut: paste DID → `sparkAdminAdd`. Shipping target: **blind pairing** (§5/V2). Without this, M1 has no authorized peer to converge with.
 11. `BiscuitCapabilityResolver` (§1.2) — inject into `SyncManager`.
-12. **Members aside (V1):** grant UI **done**; remaining — **revoke** (`sparkAdminRemove` + button → `reevaluate`) and the **sync chip (V3)**; replace demo `peer/api.ts` with real `peerMeshStatus`/`peerRevoke` IPC.
+12. **Members (V1) + status (V3):** grant UI **done**; **revoke done** (`SparkMembersPanel.svelte` → `sparkAdminRevoke` IPC; honest confirm copy "stops new changes, keeps what they already received" per §7; backend wires `→ reevaluate`); **sync chip done** (per-member dot+label from the live `peerMeshSnapshot` via `meshPeerPhase`, never re-derived) and **global status done** ("everyone up to date" / "N still syncing"). i18n keys added (`sparks.share.{revoke,revoking,revokeConfirm,revokedNote,allSynced,pending,…}`, en+de). *Remaining:* once the live transport lands, replace the demo `peer/api.ts` + `demo_mesh.rs` snapshot source with real `peerMeshStatus` (the chip/store already consume the canonical `PeerMeshStatusReply` shape, so this is a source swap, not a UI change).
 
 *Post-M1 (no engine change):* table/row-scoped grant minting in `spark_acc` (new URN builders, §1.1).
 
@@ -207,14 +255,14 @@ Proof of the model with **zero networking**, on `LoopbackTransport` + N in-proce
 
 | # | Test | Locks |
 |---|------|-------|
-| T1 | `resolver_three_state` — Allow/DenyPermanent/Pending for granted/revoked/un-hydrated | three-state; Pending never drops |
-| T2 | `frontier_diff_is_pure` — exact missing batches; empty when equal; **DAG case** walks ancestors, not just head delta | stateless diff over a DAG |
-| T3 | `heads_for_matches_storage` — `heads_for` == union of `load_visible_region_frontier` | frontier == storage have-set |
-| T4 | `loopback_delivers_frame` — frame on A arrives at B's `recv_inbound` | the seam |
-| T5 | `a_to_b_converges` — row on A → one announce/need round → B's heads == A's | convergence |
-| T6 | `redirect_after_cache_loss_no_resend` — drop all per-peer state, re-diff → **zero** resent | no non-derivable state |
-| T7 | `multi_hop_via_hub` — no direct A↔B; A↔H↔B (blind H) converges; 2-path dedup by `BatchId` | multi-hop safe; blind relay |
-| T8 | `capability_gates_every_hop` — H relays to B iff B's biscuit grants S; revoke stops new, keeps old | per-hop gate; revoke wording |
-| T9 | `partition_heals_on_reconnect` — diverge offline, reconnect → frontier exchange heals | offline-first resilience |
+| T1 ✅ | `resolver_three_state` — Allow/DenyPermanent/Pending for granted/revoked/un-hydrated | three-state; Pending never drops |
+| T2 ✅ | `frontier_diff_is_pure` — exact missing batches; empty when equal; **DAG case** walks ancestors, not just head delta | stateless diff over a DAG |
+| T3 ✅ | `heads_for_matches_union_of_storage_frontiers` — `heads_for` == union of `load_visible_region_frontier` | frontier == storage have-set (`tests/frontier_reconcile.rs`) |
+| T4 ✅ | `loopback_delivers_frame` — frame on A arrives at B's `recv_inbound` | the seam (`tests/loopback_transport.rs`) |
+| T5 ✅ | `a_to_b_converges` — row on A → one announce/need round → B's heads == A's | convergence *(`FrontierDag::pull_from`)* |
+| T6 ✅ | `redirect_after_cache_loss_no_resend` — drop all per-peer state, re-diff → **zero** resent | no non-derivable state |
+| T7 ✅ | `multi_hop_via_hub` — no direct A↔B; A↔H↔B (blind H) converges; 2-path dedup by `BatchId` | multi-hop safe; blind relay |
+| T8 ✅ | `capability_gates_every_hop` — H relays to B iff B's biscuit grants S; revoke stops new, keeps old | per-hop gate; revoke wording (`gated_pull`, `tests/capability_gate.rs`) |
+| T9 ✅ | `partition_heals_on_reconnect` — diverge offline, reconnect → frontier exchange heals | offline-first resilience |
 
-**T6 + T7 are load-bearing** — exactly what a per-peer ledger *cannot* express and the frontier model makes trivial. Build T1–T5 (single hop, happy path) first, then T6–T9. If T6/T7 pass on loopback, peeroxide is just one more `impl SyncTransport` under an already-proven model.
+**9 of 9 green (T1–T9)** — every invariant of the model is proven (`tests/frontier_reconcile.rs`, `tests/capability_gate.rs`, `tests/loopback_transport.rs`). `FrontierDag::pull_from` is the anti-entropy reconcile step (§8 M1 step 4); `gated_pull` is the per-hop gate ⨯ tracker integration point (step 6) — both stateless, idempotent, dedup-by-`BatchId`, path/order-independent, revoke-not-retroactive. **T6 + T7 green is the proof that a per-peer ledger is unnecessary** — peeroxide is now just one more `impl SyncTransport` under an already-proven model. **The entire §9 harness is green.** What remains is purely the *production wiring* — swapping these proven primitives (`frontier_diff`, `pull_from`, `gated_pull`, `heads_for`, `may_sync`) into the live `forward_update_to_clients`, adding `FrontierAnnounce`/`FrontierNeed` to `SyncPayload`, and deleting `sent_batch_ids` — a mechanical change onto an already-green model, plus the (sandbox-blocked) peeroxide transport.
