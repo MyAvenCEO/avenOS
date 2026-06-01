@@ -528,7 +528,23 @@
     "successAdmin": "You're set up. This device is now the network admin.",
     "unlockFirst": "Unlock your identity first, then come back to continue.",
     "goToSettings": "Open settings to unlock",
-    "tauriOnly": "Registration is only available in the AvenOS app."
+    "tauriOnly": "Registration is only available in the AvenOS app.",
+    "manageTitle": "Invites",
+    "summary": "{open} open · {claimed} claimed",
+    "createAction": "Create invite link",
+    "creating": "Creating…",
+    "newLinkLabel": "New invite link — copy it now, it won't be shown again:",
+    "copyLink": "Copy link",
+    "copied": "Copied",
+    "openSection": "Open invites",
+    "claimedSection": "Claimed invites",
+    "noneOpen": "No open invites.",
+    "noneClaimed": "No claimed invites yet.",
+    "statusOpen": "Open",
+    "statusClaimed": "Claimed",
+    "statusExpired": "Expired",
+    "expiresLabel": "Expires {date}",
+    "createdLabel": "Created {date}"
   },
   "self": {
     "identity": {

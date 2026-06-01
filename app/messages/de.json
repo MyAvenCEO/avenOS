@@ -528,7 +528,23 @@
     "successAdmin": "Alles eingerichtet. Dieses Gerät ist jetzt der Netzwerk-Admin.",
     "unlockFirst": "Entsperre zuerst deine Identität und komm dann zurück.",
     "goToSettings": "Einstellungen zum Entsperren öffnen",
-    "tauriOnly": "Die Registrierung ist nur in der AvenOS-App verfügbar."
+    "tauriOnly": "Die Registrierung ist nur in der AvenOS-App verfügbar.",
+    "manageTitle": "Einladungen",
+    "summary": "{open} offen · {claimed} eingelöst",
+    "createAction": "Einladungslink erstellen",
+    "creating": "Wird erstellt…",
+    "newLinkLabel": "Neuer Einladungslink — jetzt kopieren, er wird nicht erneut angezeigt:",
+    "copyLink": "Link kopieren",
+    "copied": "Kopiert",
+    "openSection": "Offene Einladungen",
+    "claimedSection": "Eingelöste Einladungen",
+    "noneOpen": "Keine offenen Einladungen.",
+    "noneClaimed": "Noch keine eingelösten Einladungen.",
+    "statusOpen": "Offen",
+    "statusClaimed": "Eingelöst",
+    "statusExpired": "Abgelaufen",
+    "expiresLabel": "Läuft ab {date}",
+    "createdLabel": "Erstellt {date}"
   },
   "self": {
     "identity": {

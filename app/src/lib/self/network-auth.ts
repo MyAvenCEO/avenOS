@@ -25,6 +25,19 @@ export type RegisterResult = {
 	user: { id: string; did: string }
 }
 
+export type CreatedInvite = { inviteToken: string; inviteDeepLink: string; expiresAt: string }
+
+export type InviteStatus = 'open' | 'claimed' | 'expired'
+
+export type InviteSummary = {
+	id: string
+	createdAt: string
+	expiresAt: string
+	consumedAt: string | null
+	boundDid: string | null
+	status: InviteStatus
+}
+
 const LOCAL_DEFAULT = 'http://localhost:3000'
 const PROD_DEFAULT = 'https://auth.testnet.aven.ceo'
 
@@ -56,9 +69,9 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
 		credentials: 'include',
 		headers: {
 			'content-type': 'application/json',
-			origin: resolveAuthBaseUrl(),
+			origin: resolveAuthBaseUrl()
 		},
-		body: JSON.stringify(body),
+		body: JSON.stringify(body)
 	})
 	if (!res.ok) {
 		throw new Error(`${path} failed: ${res.status} ${await res.text()}`)
@@ -74,7 +87,7 @@ export async function siteStatus(): Promise<SiteStatus> {
 
 export async function checkInvite(token: string): Promise<InviteCheck> {
 	const res = await fetch(`${apiUrl('invite/check')}?token=${encodeURIComponent(token)}`, {
-		credentials: 'include',
+		credentials: 'include'
 	})
 	if (!res.ok) throw new Error(`invite/check failed: ${res.status}`)
 	return (await res.json()) as InviteCheck
@@ -84,13 +97,16 @@ export async function checkInvite(token: string): Promise<InviteCheck> {
  * Run the full nonce → sign → verify handshake for this device's signing identity.
  * Requires the identity to be unlocked (`signing_peer_did` / `sign` read the cached root secret).
  */
-export async function register(opts: { flow: AuthFlow; inviteToken?: string }): Promise<RegisterResult> {
+export async function register(opts: {
+	flow: AuthFlow
+	inviteToken?: string
+}): Promise<RegisterResult> {
 	const did = await invoke<string>('plugin:self|signing_peer_did')
 
 	const { message } = await postJson<{ nonce: string; message: string }>('nonce', {
 		did,
 		flow: opts.flow,
-		inviteToken: opts.inviteToken,
+		inviteToken: opts.inviteToken
 	})
 
 	const messageBytes = Array.from(new TextEncoder().encode(message))
@@ -102,6 +118,22 @@ export async function register(opts: { flow: AuthFlow; inviteToken?: string }): 
 		message,
 		signature,
 		flow: opts.flow,
-		inviteToken: opts.inviteToken,
+		inviteToken: opts.inviteToken
 	})
+}
+
+/** Admin only — mint a new single-use invite. Returns the redeemable link (shown once). */
+export async function createInvite(expiresInSeconds?: number): Promise<CreatedInvite> {
+	return await postJson<CreatedInvite>(
+		'invite/create',
+		expiresInSeconds ? { expiresInSeconds } : {}
+	)
+}
+
+/** Admin only — list all invites with their status (open / claimed / expired). */
+export async function listInvites(): Promise<InviteSummary[]> {
+	const res = await fetch(apiUrl('invite/list'), { credentials: 'include' })
+	if (!res.ok) throw new Error(`invite/list failed: ${res.status}`)
+	const data = (await res.json()) as { invites: InviteSummary[] }
+	return data.invites
 }

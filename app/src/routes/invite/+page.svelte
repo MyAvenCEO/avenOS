@@ -1,81 +1,90 @@
 <script lang="ts">
-	import { browser } from '$app/environment'
-	import { t } from '$lib/i18n'
-	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-	import { deviceSession } from '$lib/settings/device-session-store'
-	import {
-		checkInvite,
-		register,
-		resolveAuthBaseUrl,
-		siteStatus,
-		type AuthFlow,
-		type RegisterResult,
-	} from '$lib/self/network-auth'
+import { browser } from '$app/environment'
+import { t } from '$lib/i18n'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+import InviteAdminPanel from '$lib/self/InviteAdminPanel.svelte'
+import {
+	type AuthFlow,
+	checkInvite,
+	type RegisterResult,
+	register,
+	resolveAuthBaseUrl,
+	siteStatus
+} from '$lib/self/network-auth'
+import { deviceSession } from '$lib/settings/device-session-store'
 
-	// TODO(deep-link): register the `avenos://invite?invite=…` scheme via the Tauri deep-link
-	// plugin and route it to `goto('/invite?invite=…')`. Until then `/invite?invite=TOKEN` works
-	// in-app (query param read in +page.ts).
+// TODO(deep-link): register the `avenos://invite?invite=…` scheme via the Tauri deep-link
+// plugin and route it to `goto('/invite?invite=…')`. Until then `/invite?invite=TOKEN` works
+// in-app (query param read in +page.ts).
 
-	let { data } = $props<{ data: { inviteToken?: string } }>()
+let { data } = $props<{ data: { inviteToken?: string } }>()
 
-	type Phase = 'loading' | 'ready' | 'registering' | 'done' | 'error'
+type Phase = 'loading' | 'ready' | 'registering' | 'done' | 'error'
 
-	let phase = $state<Phase>('loading')
-	let errorMsg = $state<string | undefined>()
-	let bootstrapped = $state(false)
-	let inviteValid = $state<boolean | undefined>()
-	let inviteExpiresAt = $state<string | undefined>()
-	let result = $state<RegisterResult | undefined>()
+let phase = $state<Phase>('loading')
+let errorMsg = $state<string | undefined>()
+let bootstrapped = $state(false)
+let inviteValid = $state<boolean | undefined>()
+let inviteExpiresAt = $state<string | undefined>()
+let result = $state<RegisterResult | undefined>()
 
-	const inviteToken = $derived(data.inviteToken)
-	const sessionKind = $derived($deviceSession.kind)
-	const isLocked = $derived(sessionKind === 'locked')
+const inviteToken = $derived(data.inviteToken)
+const sessionKind = $derived($deviceSession.kind)
+const isLocked = $derived(sessionKind === 'locked')
 
-	/** Bootstrap when the site has no admin or no invite token is supplied; otherwise redeem. */
-	const flow = $derived<AuthFlow>(!bootstrapped || !inviteToken ? 'bootstrap' : 'invite')
+/** Bootstrap when the site has no admin or no invite token is supplied; otherwise redeem. */
+const flow = $derived<AuthFlow>(!bootstrapped || !inviteToken ? 'bootstrap' : 'invite')
 
-	$effect(() => {
-		if (!browser) return
-		void loadStatus()
-	})
+$effect(() => {
+	if (!browser) return
+	void loadStatus()
+})
 
-	async function loadStatus(): Promise<void> {
-		phase = 'loading'
-		errorMsg = undefined
-		try {
-			const status = await siteStatus()
-			bootstrapped = status.bootstrapped
-			if (inviteToken) {
-				const check = await checkInvite(inviteToken)
-				inviteValid = check.valid
-				inviteExpiresAt = check.expiresAt
-			}
-			phase = 'ready'
-		} catch (e) {
-			errorMsg = e instanceof Error ? e.message : String(e)
-			phase = 'error'
+async function loadStatus(): Promise<void> {
+	phase = 'loading'
+	errorMsg = undefined
+	try {
+		const status = await siteStatus()
+		bootstrapped = status.bootstrapped
+		if (inviteToken) {
+			const check = await checkInvite(inviteToken)
+			inviteValid = check.valid
+			inviteExpiresAt = check.expiresAt
 		}
+		phase = 'ready'
+	} catch (e) {
+		errorMsg = e instanceof Error ? e.message : String(e)
+		phase = 'error'
 	}
+}
 
-	async function submit(): Promise<void> {
-		phase = 'registering'
-		errorMsg = undefined
-		try {
-			result = await register({ flow, inviteToken: flow === 'invite' ? inviteToken : undefined })
-			phase = 'done'
-		} catch (e) {
-			errorMsg = e instanceof Error ? e.message : String(e)
-			phase = 'error'
-		}
+async function submit(): Promise<void> {
+	phase = 'registering'
+	errorMsg = undefined
+	try {
+		result = await register({ flow, inviteToken: flow === 'invite' ? inviteToken : undefined })
+		phase = 'done'
+	} catch (e) {
+		errorMsg = e instanceof Error ? e.message : String(e)
+		phase = 'error'
 	}
+}
 
-	const headline = $derived(
-		inviteToken ? t('invite.redeemTitle') : bootstrapped ? t('invite.signInTitle') : t('invite.bootstrapTitle'),
-	)
-	const subtitle = $derived(
-		inviteToken ? t('invite.redeemSubtitle') : bootstrapped ? t('invite.signInSubtitle') : t('invite.bootstrapSubtitle'),
-	)
-	const inviteUnusable = $derived(Boolean(inviteToken) && inviteValid === false)
+const headline = $derived(
+	inviteToken
+		? t('invite.redeemTitle')
+		: bootstrapped
+			? t('invite.signInTitle')
+			: t('invite.bootstrapTitle')
+)
+const subtitle = $derived(
+	inviteToken
+		? t('invite.redeemSubtitle')
+		: bootstrapped
+			? t('invite.signInSubtitle')
+			: t('invite.bootstrapSubtitle')
+)
+const inviteUnusable = $derived(Boolean(inviteToken) && inviteValid === false)
 </script>
 
 <svelte:head>
@@ -114,7 +123,12 @@
 			>
 				{result.isAdmin ? t('invite.successAdmin') : t('invite.success')}
 			</p>
-			<pre class="text-muted-foreground overflow-x-auto rounded-lg border px-4 py-3 font-mono text-[11px] leading-snug select-text">{result.user.did}</pre>
+			<pre
+				class="text-muted-foreground overflow-x-auto rounded-lg border px-4 py-3 font-mono text-[11px] leading-snug select-text"
+			>{result.user.did}</pre>
+			{#if result.isAdmin}
+				<InviteAdminPanel />
+			{/if}
 		</div>
 	{:else}
 		<div class="space-y-4">
