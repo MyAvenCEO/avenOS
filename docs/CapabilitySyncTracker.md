@@ -277,6 +277,22 @@ not architecture — it is **proving the live loop end-to-end** and tidying two
 loose ends. Each item names its **acceptance check**; gate on `cargo build`
 (lib default + `client-p2p`) + the §9 harness staying green.
 
+> **Status (current).** Code-complete + harness-verified (§9 now **14 green**):
+> - ✅ **10.2** convergence → "Up to date" (`3e1b362`).
+> - ✅ **10.4** dead-code (`DeliveryLedger`/`SyncAuthorizer`) removed (`cede88f`).
+> - ✅ **Live bug fixes landed:** shell-bootstrap on connect — the spark now
+>   crosses (`b2d1a2e`); grant → `rebroadcast_all_peer_clients_and_flush` so
+>   pre-grant data re-ships (`4521702`); per-row gate-verdict tracing (`e553f44`);
+>   **T10** test proving grant→reship (`6ba2e17`).
+> - ⏳ **10.1** the *live two-instance GUI* confirmation is the one thing that
+>   can't be automated here — mechanisms are harness-proven; a human runs the
+>   final `dev:app2x:mac` check (the `gate:` trace names any remaining withhold).
+> - ⛔ **10.3** real `HyperswarmTransport` — **environment-blocked** (peeroxide
+>   unavailable in sandbox), not a code gap. Dev-TCP is the working stand-in.
+> - ◻️ **UX (design choices, deferred to owner):** invite-code pairing (replace
+>   two-sided DID paste) + peer **name exchange** (peers table is local-only today,
+>   so a peer renders as "Peer"). Not bugs — product decisions.
+
 ### 10.1 Prove the live grant→sync loop (`bun dev:app2x:mac`)
 The whole point: *"select peers, then sync based on the admin biscuits of a spark
 member."* Verify the chain that the unit harness proves in-process actually fires
