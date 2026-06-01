@@ -104,6 +104,18 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
     // Sync Operations
     // =========================================================================
 
+    /// Inject the peer-sync capability gate (§6). The app provides its
+    /// biscuit-aware resolver; tests / local-only keep the `AllowAll` default.
+    pub fn set_resolver(
+        &mut self,
+        resolver: std::sync::Arc<dyn crate::capability::CapabilityResolver>,
+    ) {
+        self.schema_manager
+            .query_manager_mut()
+            .sync_manager_mut()
+            .set_resolver(resolver);
+    }
+
     /// Push a sync message to the inbox (from network).
     pub fn push_sync_inbox(&mut self, entry: InboxEntry) {
         if entry.payload.writes_storage() {

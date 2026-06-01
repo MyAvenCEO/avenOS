@@ -513,6 +513,16 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         Ok(())
     }
 
+    /// Inject the peer-sync capability gate (the app's biscuit-aware resolver).
+    pub fn set_resolver(
+        &self,
+        resolver: std::sync::Arc<dyn crate::capability::CapabilityResolver>,
+    ) -> Result<(), RuntimeError> {
+        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        core.set_resolver(resolver);
+        Ok(())
+    }
+
     /// Re-queue a peer outbox entry after a transport send failure (mux not ready yet).
     pub fn prepend_outbox(&self, entry: OutboxEntry) -> Result<(), RuntimeError> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;

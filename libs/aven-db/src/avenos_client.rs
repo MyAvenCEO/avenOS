@@ -249,6 +249,16 @@ impl JazzClient {
         Self::connect_with_sync_transport(context, sync_transport, on_inbound_parked).await
     }
 
+    /// Inject the peer-sync capability gate (the app's biscuit-aware resolver).
+    pub fn set_resolver(
+        &self,
+        resolver: std::sync::Arc<dyn crate::capability::CapabilityResolver>,
+    ) -> Result<()> {
+        self.runtime
+            .set_resolver(resolver)
+            .map_err(|e| JazzError::Sync(format!("set_resolver: {e}")))
+    }
+
     pub fn register_peer_sync_client(&self, peer_id: PeerId) -> Result<()> {
         self.runtime
             .ensure_client_as_peer(peer_id)

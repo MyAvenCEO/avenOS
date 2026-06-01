@@ -1,3 +1,4 @@
+mod biscuit_resolver;
 mod crypto;
 mod demo_mesh;
 mod network;

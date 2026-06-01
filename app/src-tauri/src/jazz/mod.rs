@@ -111,6 +111,10 @@ pub struct ManagedJazz {
 	mesh_acl_rebroadcast_done: AtomicBool,
 	/// Spark biscuit snapshot for outbound sync policy.
 	pub(crate) sync_acl: Arc<RwLock<Option<SyncAclSnapshot>>>,
+	/// Std-lock mirror of the hydrated shell (biscuit vault) for the sync gate.
+	/// `BiscuitCapabilityResolver` reads this synchronously on the engine tick
+	/// thread (the primary `shell` is a tokio Mutex, unusable from sync code).
+	pub(crate) sync_shell: Arc<RwLock<Option<std::sync::Arc<jazz_engine::ShellState>>>>,
 	/// MPSC sender for **all** UI-facing table deltas: paired peer inbound sync and local
 	/// IPC writes both post `(table)` here. The drain task [`run_table_change_drain`] is
 	/// the sole caller of [`ManagedJazz::snapshot_broadcast`], keeping one code path from
@@ -142,6 +146,7 @@ impl Default for ManagedJazz {
 			mesh_local_shell_gate: AtomicBool::new(false),
 			mesh_acl_rebroadcast_done: AtomicBool::new(false),
 			sync_acl: Arc::new(RwLock::new(None)),
+			sync_shell: Arc::new(RwLock::new(None)),
 			change_tx,
 			last_table_snapshots: RwLock::new(HashMap::new()),
 			last_mesh_snapshot: RwLock::new(None),
@@ -464,6 +469,7 @@ async fn with_connected_client(
 				let old = jc.client.take();
 				jc.linked_identity = None;
 				jazz.shell.lock().await.take();
+				*jazz.sync_shell.write().expect("sync_shell poisoned") = None;
 				let _epoch = jazz.bump_conn_epoch();
 				jazz.reset_mesh_acl_catchup();
 				drop(jc);
@@ -798,6 +804,7 @@ impl ManagedJazz {
 			let mut jc = self.conn.lock().await;
 			jc.linked_identity = None;
 			self.shell.lock().await.take();
+			*self.sync_shell.write().expect("sync_shell poisoned") = None;
 			self.shell_vault_stale.store(true, Ordering::Release);
 			self.mesh_local_shell_gate.store(false, Ordering::Release);
 			*self.sync_acl.write().expect("sync_acl poisoned") = None;
@@ -1269,7 +1276,7 @@ async fn jazz_connect(
 		data_dir: data_dir.clone(),
 	};
 
-	let _ = (app, mj);
+	let _ = app;
 	let client = match try_dev_peer_transport(peer_id).await {
 		Some((transport, remote)) => {
 			let client = JazzClient::connect_with_sync_transport(ctx, transport, None)
@@ -1282,6 +1289,18 @@ async fn jazz_connect(
 		}
 		None => JazzClient::connect(ctx).await.map_err(format_jazz_err)?,
 	};
+	// Install the biscuit-backed sync gate (replaces the `AllowAll` default).
+	// It reads the live shell vault + spark ACL handles, so it authorizes from
+	// real biscuits the moment the shell hydrates; until then it returns
+	// `Pending` (defer, never drop) and a later catch-up re-asks.
+	let resolver = std::sync::Arc::new(crate::biscuit_resolver::BiscuitCapabilityResolver::new(
+		mj.sync_shell.clone(),
+		mj.sync_acl.clone(),
+	));
+	if let Err(e) = client.set_resolver(resolver) {
+		log::warn!("install biscuit sync gate: {e}");
+	}
+
 	crate::schema_migrations::stamp_current_vault_snapshot(&data_dir, &schema)?;
 	Ok(client)
 }
@@ -1350,6 +1369,8 @@ async fn jazz_shell_ready_inner(
 	let arc = std::sync::Arc::new(hydrated);
 	let mut slot = mj.shell.lock().await;
 	*slot = Some(std::sync::Arc::clone(&arc));
+	// Mirror into the std-lock handle read by the biscuit sync gate.
+	*mj.sync_shell.write().expect("sync_shell poisoned") = Some(std::sync::Arc::clone(&arc));
 	let object_spark_ids = jazz_engine::build_object_spark_id_map(client.as_ref()).await?;
 	let snap = spark_sync::build_sync_acl_snapshot(object_spark_ids);
 	*mj.sync_acl.write().expect("sync_acl poisoned") = Some(snap);
