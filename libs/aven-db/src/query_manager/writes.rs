@@ -1224,16 +1224,6 @@ impl QueryManager {
         }
     }
 
-    pub(super) fn validate_json_for_content(
-        &self,
-        descriptor: &RowDescriptor,
-        content: &[u8],
-    ) -> Result<(), QueryError> {
-        let values = decode_row(descriptor, content)
-            .map_err(|e| QueryError::EncodingError(e.to_string()))?;
-        self.validate_json_for_values(descriptor, &values)
-    }
-
     fn local_write_authorization_context(
         &mut self,
         branch: &str,
