@@ -97,29 +97,6 @@ impl SyncManager {
             .max_by_key(|row| (row.updated_at, row.batch_id()))
     }
 
-    pub(super) fn load_current_batch_fate_from_storage<H: crate::storage::Storage + ?Sized>(
-        &self,
-        storage: &H,
-        object_id: ObjectId,
-        branch_name: &BranchName,
-        row_locator: &RowLocator,
-    ) -> Option<BatchFate> {
-        let row =
-            self.load_current_row_from_storage(storage, object_id, branch_name, row_locator)?;
-        if row.branch != branch_name.as_str() {
-            return None;
-        }
-        match row.state {
-            crate::row_histories::RowState::VisibleDirect
-            | crate::row_histories::RowState::VisibleTransactional => {
-                self.load_batch_fate_by_batch_id_from_storage(storage, row.batch_id)
-            }
-            crate::row_histories::RowState::StagingPending
-            | crate::row_histories::RowState::Superseded
-            | crate::row_histories::RowState::Rejected => None,
-        }
-    }
-
     pub(super) fn load_batch_fate_by_batch_id_from_storage<H: crate::storage::Storage + ?Sized>(
         &self,
         storage: &H,
