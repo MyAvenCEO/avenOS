@@ -2488,6 +2488,28 @@ fn pj_str(p: &serde_json::Value, key: &str) -> Result<String, String> {
 		.ok_or_else(|| format!("groove_runtime: missing or empty string field `{key}`"))
 }
 
+/// Announce our frontier to peers after a local spark-scoped write so they pull
+/// the change **live**. The engine seal publishes rows locally but does not
+/// announce to peers on its own — without this, peers only converge on the next
+/// reconnect/catch-up ("syncs on restart, not on the fly"). Idempotent: peers
+/// diff our heads and pull only what they're owed + authorized for.
+async fn announce_local_write_to_peers(
+	app: &tauri::AppHandle,
+	mj: &ManagedJazz,
+	ss: &SelfState,
+	table: &str,
+) {
+	if !spark_sync::is_spark_scoped_table(table) {
+		return; // local-only tables (peers/humans) are never P2P-forwarded
+	}
+	let Ok(client) = with_connected_client(mj, app, ss).await else {
+		return;
+	};
+	if let Err(e) = client.rebroadcast_all_peer_clients_and_flush().await {
+		log::debug!(target: "avenos::jazz", "announce local write to peers ({table}): {e}");
+	}
+}
+
 pub(crate) async fn groove_runtime_dispatch(
 	app: &tauri::AppHandle,
 	_window: tauri::Window,
@@ -2524,8 +2546,9 @@ pub(crate) async fn groove_runtime_dispatch(
 					.ok_or_else(|| "groove_runtime: missing `values`".to_string())?,
 			)
 			.map_err(|e| format!("groove_runtime: values: {e}"))?;
-			serde_json::to_value(groove_ipc_jazz_create(app, mj, ss, table, values).await?)
-				.map_err(|e| e.to_string())
+			let created = groove_ipc_jazz_create(app, mj, ss, table.clone(), values).await?;
+			announce_local_write_to_peers(app, mj, ss, &table).await;
+			serde_json::to_value(created).map_err(|e| e.to_string())
 		}
 		"update" => {
 			let table = pj_str(&pj, "table")?;
@@ -2536,13 +2559,15 @@ pub(crate) async fn groove_runtime_dispatch(
 					.ok_or_else(|| "groove_runtime: missing `patch`".to_string())?,
 			)
 			.map_err(|e| format!("groove_runtime: patch: {e}"))?;
-			serde_json::to_value(groove_ipc_jazz_update(app, mj, ss, table, id, patch).await?)
-				.map_err(|e| e.to_string())
+			let updated = groove_ipc_jazz_update(app, mj, ss, table.clone(), id, patch).await?;
+			announce_local_write_to_peers(app, mj, ss, &table).await;
+			serde_json::to_value(updated).map_err(|e| e.to_string())
 		}
 		"delete" => {
 			let table = pj_str(&pj, "table")?;
 			let id = pj_str(&pj, "id")?;
-			groove_ipc_jazz_delete(app, mj, ss, table, id).await?;
+			groove_ipc_jazz_delete(app, mj, ss, table.clone(), id).await?;
+			announce_local_write_to_peers(app, mj, ss, &table).await;
 			Ok(serde_json::Value::Null)
 		}
 		"subscribe" => {
