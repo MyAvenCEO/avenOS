@@ -23,6 +23,8 @@ pub mod capability;
 pub mod sync_targets;
 #[cfg(feature = "client-p2p")]
 pub mod sync_transport;
+#[cfg(feature = "client-p2p")]
+pub mod dev_transport;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_support;
 pub mod wire_types;
@@ -65,6 +67,8 @@ pub use sync_transport::{
     decode_length_prefixed, decode_length_prefixed_client, encode_length_prefixed,
     encode_length_prefixed_client, NullSyncTransport, PeerTransport, SyncTransport,
 };
+#[cfg(feature = "client-p2p")]
+pub use dev_transport::{DevRole, TcpSyncTransport};
 #[cfg(feature = "client-p2p")]
 pub use sync_manager::{InboxEntry, Source, SyncPayload};
 #[cfg(feature = "client-p2p")]

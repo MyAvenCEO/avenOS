@@ -84,3 +84,7 @@ required-features = ["client-p2p"]
 [[test]]
 name = "loopback_transport"
 required-features = ["client-p2p"]
+
+[[test]]
+name = "dev_transport"
+required-features = ["client-p2p"]
