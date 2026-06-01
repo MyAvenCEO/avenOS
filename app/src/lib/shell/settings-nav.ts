@@ -14,6 +14,11 @@ export function settingsNavSections(): SettingsNavSection[] {
 					label: t('selfNav.self'),
 					match: (p) => p.startsWith('/settings/identity'),
 				},
+				{
+					href: '/settings/network',
+					label: t('nav.peers'),
+					match: (p) => p.startsWith('/settings/network'),
+				},
 			],
 		},
 		{

@@ -1704,12 +1704,15 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 		return Err("cannot grant a spark to your own DID".into());
 	}
 
-	crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
+	let peer_pk = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
 
-	if !crate::peers::is_allowlisted(client.as_ref(), &peer_did).await? {
-		return Err(
-			"This DID is not in My Network — connect the peer first (invite flow).".into(),
-		);
+	// Biscuit-driven sharing: the grant IS the trust act — no separate pairing
+	// step or allowlist gate. Materialize the grantee in the local roster and
+	// register it for sync so the grant takes effect end-to-end. The roster
+	// ("synced with") is thus derived from grants, not hand-managed.
+	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "Peer").await?;
+	if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
+		log::warn!(target: "avenos::jazz", "spark_admin_add register {peer_did}: {e}");
 	}
 
 	jazz_engine::authorize_gate(

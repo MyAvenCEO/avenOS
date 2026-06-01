@@ -21,7 +21,6 @@
 		type PeerMeshPhase,
 	} from '$lib/peer/mesh-state'
 	import { peerDisplayLabel } from '$lib/peer/display-label'
-	import PeerPickerSelect from '$lib/peer/PeerPickerSelect.svelte'
 	import { pairingLabelForSession } from '$lib/settings/active-vault-ui'
 	import { deviceSession } from '$lib/settings/device-session-store'
 	import { vaultList } from '$lib/settings/vault'
@@ -106,14 +105,6 @@
 	const pendingCount = $derived(remoteEntries.filter((e) => e.phase !== 'ready').length)
 	const allSynced = $derived(remoteEntries.length > 0 && pendingCount === 0)
 
-	const selectablePeers = $derived.by(() => {
-		const adminNorm = new Set(adminDids.map((d) => d.trim().toLowerCase()))
-		return peersAllow.filter(
-			(p) => p.status === 'active' && !adminNorm.has(p.peerDid.trim().toLowerCase()),
-		)
-	})
-
-	const activeAllowlistPeers = $derived(peersAllow.filter((p) => p.status === 'active'))
 
 	let adminLoadGen = 0
 
@@ -330,30 +321,23 @@
 				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
 					{t('sparks.share.giveAccess')}
 				</h2>
-				{#if selectablePeers.length > 0}
-					<div class="flex flex-col gap-2 sm:flex-row sm:items-end">
-						<div class="min-w-0 flex-1">
-							<PeerPickerSelect
-								peers={selectablePeers}
-								bind:value={addAdminDid}
-								{localPairingLabel}
-								disabled={adminBusy}
-							/>
-						</div>
-						<button
-							type="button"
-							class="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-							disabled={adminBusy || !addAdminDid}
-							onclick={() => void addAdmin()}
-						>
-							{adminBusy ? '…' : t('sparks.share.addAsAdmin')}
-						</button>
-					</div>
-				{:else if activeAllowlistPeers.length === 0}
-					<p class="text-muted-foreground text-sm leading-relaxed">{t('sparks.share.noPairedPeersLead')}</p>
-				{:else}
-					<p class="text-muted-foreground text-sm leading-relaxed">{t('sparks.share.everyoneHasAccess')}</p>
-				{/if}
+				<div class="flex flex-col gap-2 sm:flex-row sm:items-end">
+					<input
+						class="border-border/60 bg-background/40 min-w-0 flex-1 rounded-lg border px-3 py-2 font-mono text-[12px]"
+						placeholder={t('sparks.share.didPlaceholder')}
+						bind:value={addAdminDid}
+						disabled={adminBusy}
+					/>
+					<button
+						type="button"
+						class="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+						disabled={adminBusy || !addAdminDid.trim()}
+						onclick={() => void addAdmin()}
+					>
+						{adminBusy ? '…' : t('sparks.share.addAsAdmin')}
+					</button>
+				</div>
+				<p class="text-muted-foreground text-xs leading-relaxed">{t('sparks.share.giveAccessHint')}</p>
 				{#if adminErr}
 					<p class="text-destructive text-sm">{adminErr}</p>
 				{/if}
@@ -403,26 +387,20 @@
 			<h3 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">
 				{t('sparks.share.giveAccess')}
 			</h3>
-			{#if selectablePeers.length > 0}
-				<PeerPickerSelect
-					peers={selectablePeers}
-					bind:value={addAdminDid}
-					{localPairingLabel}
-					disabled={adminBusy}
-				/>
-				<button
-					type="button"
-					class="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-					disabled={adminBusy || !addAdminDid}
-					onclick={() => void addAdmin()}
-				>
-					{adminBusy ? '…' : t('sparks.share.addAsAdmin')}
-				</button>
-			{:else if activeAllowlistPeers.length === 0}
-				<p class="text-muted-foreground text-xs leading-relaxed">{t('sparks.share.noPairedPeersLead')}</p>
-			{:else}
-				<p class="text-muted-foreground text-xs leading-relaxed">{t('sparks.share.everyoneHasAccess')}</p>
-			{/if}
+			<input
+				class="border-border/60 bg-background/40 w-full rounded-md border px-2.5 py-1.5 font-mono text-[11px]"
+				placeholder={t('sparks.share.didPlaceholder')}
+				bind:value={addAdminDid}
+				disabled={adminBusy}
+			/>
+			<button
+				type="button"
+				class="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+				disabled={adminBusy || !addAdminDid.trim()}
+				onclick={() => void addAdmin()}
+			>
+				{adminBusy ? '…' : t('sparks.share.addAsAdmin')}
+			</button>
 			{#if adminErr}
 				<p class="text-destructive text-[11px]">{adminErr}</p>
 			{/if}

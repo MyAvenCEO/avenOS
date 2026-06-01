@@ -32,7 +32,6 @@ const docsActive = $derived(path.startsWith('/docs'))
 const selfActive = $derived(path.startsWith('/settings'))
 const vaultActive = $derived(path.startsWith('/vault'))
 const sparksNavActive = $derived(path.startsWith('/sparks'))
-const peersNavActive = $derived(path.startsWith('/peers'))
 const dbActive = $derived(path.startsWith('/db'))
 const avenCityActive = $derived(path.startsWith('/aven-city'))
 const inviteActive = $derived(path.startsWith('/invite'))
@@ -221,15 +220,6 @@ $effect(() => {
 						aria-current={sparksNavActive ? 'page' : undefined}
 						onclick={(e) => navigateApp('/sparks', e)}
 						>{t('nav.sparks')}</a
-					>
-					<span class="select-none opacity-25" aria-hidden="true">|</span>
-					<a
-						href="/peers"
-						data-sveltekit-preload-data="hover"
-						class="transition-opacity hover:opacity-80 {peersNavActive ? 'opacity-95' : 'opacity-40'}"
-						aria-current={peersNavActive ? 'page' : undefined}
-						onclick={(e) => navigateApp('/peers', e)}
-						>{t('nav.peers')}</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a
