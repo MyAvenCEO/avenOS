@@ -1,29 +1,22 @@
-//! Human-owned peer allowlist (`peers` Groove table). Local-only via `nosync` metadata on inserts.
-
-use std::collections::HashSet;
+//! Trusted-peer list (`peers` Groove table, `kind=remote`). A flat set of device
+//! DIDs I'm P2P-connected with — the trust set + spark-grant allowlist. Local-only
+//! via `nosync` metadata; no `humans` coupling.
 
 use groove::query_manager::types::Value;
-use groove::{JazzClient, ObjectId};
+use groove::JazzClient;
 use serde_json::{Map, Value as JsonValue};
 
 use crate::jazz::jazz_engine;
 
 /// Load active remote peer DIDs referenced from the singleton `humans.my_devices` allowlist.
 pub async fn list_active_peer_dids(client: &JazzClient) -> Result<Vec<String>, String> {
-	let allowed = human_allowed_peer_object_ids(client).await?;
-	if allowed.is_empty() {
-		return Ok(Vec::new());
-	}
 	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
 	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
 	let did_ix = jazz_engine::col_ix(&schema, "peer_did")?;
 	let status_ix = jazz_engine::col_ix(&schema, "status")?;
 	let kind_ix = jazz_engine::col_ix(&schema, "kind")?;
 	let mut dids = Vec::new();
-	for (oid, vals) in rows {
-		if !allowed.contains(&oid) {
-			continue;
-		}
+	for (_oid, vals) in rows {
 		let kind = vals
 			.get(kind_ix)
 			.and_then(value_as_text)
@@ -47,39 +40,6 @@ pub async fn list_active_peer_dids(client: &JazzClient) -> Result<Vec<String>, S
 	Ok(dids)
 }
 
-async fn human_allowed_peer_object_ids(client: &JazzClient) -> Result<HashSet<ObjectId>, String> {
-	let rows = jazz_engine::exec_list_rows(client, "humans").await?;
-	if rows.is_empty() {
-		return Ok(HashSet::new());
-	}
-	let schema = jazz_engine::resolved_table_schema(client, "humans").await?;
-	let dev_ix = jazz_engine::col_ix(&schema, "my_devices")?;
-	let (_oid, vals) = rows
-		.first()
-		.ok_or_else(|| "humans: empty table".to_string())?;
-	let cell = vals.get(dev_ix).ok_or_else(|| "humans: missing my_devices".to_string())?;
-	let mut out = HashSet::new();
-	match cell {
-		Value::Array(items) => {
-			for v in items {
-				match v {
-					Value::Uuid(oid) => {
-						out.insert(*oid);
-					}
-					Value::Text(s) => {
-						let u = uuid::Uuid::parse_str(s.trim())
-							.map_err(|e| format!("humans.my_devices uuid parse: {e}"))?;
-						out.insert(ObjectId::from_uuid(u));
-					}
-					_ => {}
-				}
-			}
-		}
-		_ => return Err("humans.my_devices: expected array".into()),
-	}
-	Ok(out)
-}
-
 fn value_as_text(v: &Value) -> Option<&str> {
 	match v {
 		Value::Text(s) => Some(s.as_str()),
@@ -100,7 +60,6 @@ pub struct PeerRowReply {
 }
 
 pub async fn list_peer_rows(client: &JazzClient) -> Result<Vec<PeerRowReply>, String> {
-	let allowed = human_allowed_peer_object_ids(client).await?;
 	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
 	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
 	let did_ix = jazz_engine::col_ix(&schema, "peer_did")?;
@@ -110,9 +69,6 @@ pub async fn list_peer_rows(client: &JazzClient) -> Result<Vec<PeerRowReply>, St
 	let added_ix = jazz_engine::col_ix(&schema, "added_at_ms")?;
 	let mut out = Vec::new();
 	for (oid, vals) in rows {
-		if !allowed.contains(&oid) {
-			continue;
-		}
 		let kind = vals
 			.get(kind_ix)
 			.and_then(value_as_text)
@@ -163,70 +119,41 @@ fn peer_timestamp_ms(v: &Value) -> Option<i64> {
 	}
 }
 
-async fn human_singleton_oid(client: &JazzClient) -> Result<ObjectId, String> {
-	let rows = jazz_engine::exec_list_rows(client, "humans").await?;
-	let (oid, _) = rows
-		.first()
-		.ok_or_else(|| "humans row missing: re-onboard this vault".to_string())?;
-	Ok(*oid)
-}
-
-fn value_to_json(v: &Value) -> JsonValue {
-	match v {
-		Value::Text(s) => JsonValue::String(s.clone()),
-		Value::BigInt(i) => JsonValue::Number((*i).into()),
-		Value::Integer(i) => JsonValue::Number((*i).into()),
-		Value::Boolean(b) => JsonValue::Bool(*b),
-		Value::Uuid(oid) => JsonValue::String(oid.uuid().to_string()),
-		Value::Null => JsonValue::Null,
-		Value::Array(a) => JsonValue::Array(a.iter().map(value_to_json).collect()),
-		Value::Row { values: r, .. } => JsonValue::Array(r.iter().map(value_to_json).collect()),
-		Value::Timestamp(t) => JsonValue::Number((*t).into()),
-		Value::Double(d) => JsonValue::Number(
-			serde_json::Number::from_f64(*d).map(Into::into).unwrap_or(0.into()),
-		),
-		Value::BatchId(id) => JsonValue::String(hex::encode(id)),
-		Value::Bytea(b) => JsonValue::String(base64::Engine::encode(
-			&base64::engine::general_purpose::URL_SAFE_NO_PAD,
-			b,
-		)),
+/// Add a trusted peer (a device DID I'm P2P-connected with) to the local
+/// `peers` table (`kind=remote`, `status=active`). This flat list IS the trust
+/// set — no `humans` coupling. First-contact / pairing primitive (plan §8 step
+/// 10 — the dev paste-DID shortcut). Idempotent: re-adding active peer is a no-op.
+pub async fn add_remote_peer(
+	client: &JazzClient,
+	peer_did: &str,
+	device_label: &str,
+) -> Result<(), String> {
+	let peer_did = peer_did.trim();
+	if peer_did.is_empty() {
+		return Err("peer_did is empty".into());
 	}
-}
+	if is_allowlisted(client, peer_did).await? {
+		return Ok(());
+	}
 
-async fn remove_peer_from_human(client: &JazzClient, peer_row: ObjectId) -> Result<(), String> {
-	let hum_oid = human_singleton_oid(client).await?;
-	let schema = jazz_engine::resolved_table_schema(client, "humans").await?;
-	let dev_ix = jazz_engine::col_ix(&schema, "my_devices")?;
-	let rows = jazz_engine::exec_list_rows(client, "humans").await?;
-	let vals = rows
-		.iter()
-		.find(|(o, _)| *o == hum_oid)
-		.map(|(_, v)| v.as_slice())
-		.ok_or_else(|| "humans singleton not found".to_string())?;
-	let cell = vals.get(dev_ix).ok_or_else(|| "humans: missing my_devices".to_string())?;
-	let list: Vec<Value> = match cell {
-		Value::Array(items) => items
-			.iter()
-			.filter(|v| match v {
-				Value::Uuid(oid) => *oid != peer_row,
-				Value::Text(s) => uuid::Uuid::parse_str(s.trim())
-					.ok()
-					.map(|u| ObjectId::from_uuid(u) != peer_row)
-					.unwrap_or(true),
-				_ => true,
-			})
-			.cloned()
-			.collect(),
-		_ => return Err("humans.my_devices: expected array".into()),
+	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
+	let now_ms: i64 = std::time::SystemTime::now()
+		.duration_since(std::time::UNIX_EPOCH)
+		.map(|d| d.as_millis() as i64)
+		.unwrap_or(0);
+	let label = {
+		let l = device_label.trim();
+		if l.is_empty() { "Peer" } else { l }.to_string()
 	};
-	let mut patch = Map::new();
-	patch.insert(
-		"my_devices".into(),
-		JsonValue::Array(list.iter().map(value_to_json).collect()),
-	);
-	let ops = crate::jazz::patch_updates(&schema, patch)?;
+	let mut values: Map<String, JsonValue> = Map::new();
+	values.insert("peer_did".into(), JsonValue::String(peer_did.to_string()));
+	values.insert("device_label".into(), JsonValue::String(label));
+	values.insert("kind".into(), JsonValue::String("remote".into()));
+	values.insert("added_at_ms".into(), JsonValue::Number(now_ms.into()));
+	values.insert("status".into(), JsonValue::String("active".into()));
+	let row_vals = crate::jazz::insert_values("peers", &schema, values)?;
 	client
-		.update(hum_oid, ops)
+		.create("peers", row_vals)
 		.await
 		.map_err(crate::jazz::format_jazz_err)?;
 	Ok(())
@@ -257,9 +184,6 @@ pub async fn set_peer_status(
 				.update(oid, ops)
 				.await
 				.map_err(crate::jazz::format_jazz_err)?;
-			if status == "revoked" {
-				remove_peer_from_human(client, oid).await?;
-			}
 			return Ok(());
 		}
 	}

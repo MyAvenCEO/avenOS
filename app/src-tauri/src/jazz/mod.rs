@@ -2228,6 +2228,27 @@ pub(crate) async fn groove_ipc_peer_list(
 	crate::peers::list_peer_rows(client.as_ref()).await
 }
 
+/// First-contact / pairing: add a trusted peer (device DID) to My Network.
+pub(crate) async fn groove_ipc_peer_add(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	self_state: &SelfState,
+	peer_did: String,
+	device_label: String,
+) -> Result<(), String> {
+	let peer_did = peer_did.trim().to_string();
+	if peer_did.is_empty() {
+		return Err("peer_did is empty".into());
+	}
+	crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
+	let client = with_connected_client(jazz, app, self_state).await?;
+	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+	if peer_did == shell_arc.as_ref().peer_did {
+		return Err("cannot add your own DID as a peer".into());
+	}
+	crate::peers::add_remote_peer(client.as_ref(), &peer_did, &device_label).await
+}
+
 pub(crate) async fn groove_ipc_peer_revoke(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -2334,6 +2355,16 @@ pub(crate) async fn groove_runtime_dispatch(
 			serde_json::to_value(snap).map_err(|e| e.to_string())
 		}
 		"peerlist" => serde_json::to_value(groove_ipc_peer_list(app, mj, ss).await?).map_err(|e| e.to_string()),
+		"peeradd" => {
+			let peer_did = pj_str(&pj, "peerDid")?;
+			let label = pj
+				.get("label")
+				.and_then(|v| v.as_str())
+				.unwrap_or("")
+				.to_string();
+			groove_ipc_peer_add(app, mj, ss, peer_did, label).await?;
+			Ok(serde_json::Value::Null)
+		}
 		"peerrevoke" => {
 			let peer_did = pj_str(&pj, "peerDid")?;
 			groove_ipc_peer_revoke(app, mj, ss, peer_did).await?;
@@ -2357,7 +2388,7 @@ pub(crate) async fn groove_runtime_dispatch(
 			Ok(serde_json::Value::Null)
 		}
 		other => Err(format!(
-			"groove_runtime: unknown op `{other}` — valid ops: bootstrap, status, session, list, explorerList, get, create, update, delete, subscribe, unsubscribe, peerMeshRefresh, meshStatus, peerList, peerRevoke, sparkAdminAdd, sparkAdminList, sparkAdminRevoke"
+			"groove_runtime: unknown op `{other}` — valid ops: bootstrap, status, session, list, explorerList, get, create, update, delete, subscribe, unsubscribe, peerMeshRefresh, meshStatus, peerList, peerAdd, peerRevoke, sparkAdminAdd, sparkAdminList, sparkAdminRevoke"
 		)),
 	}
 }

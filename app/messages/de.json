@@ -90,7 +90,8 @@
     "members": "Mitglieder",
     "talk": "Talk",
     "todos": "Todos",
-    "gallery": "Galerie"
+    "gallery": "Galerie",
+    "peers": "Peers"
   },
   "lockGate": {
     "tagline": "Dein selbstbestimmtes Leben beginnt hier",
@@ -544,5 +545,22 @@
       "currentNetworkDescription": "Jedes Gerät mit diesem Build nutzt dasselbe Netzwerk. Vault-Daten und Identität gehören dazu.",
       "networkNotSwitchable": "Dieses Gerät ist an dieses Netzwerk gebunden. Ein Wechsel ist in diesem Build nicht möglich."
     }
+  },
+  "peers": {
+    "title": "Peers",
+    "subtitle": "Geräte, mit denen du verbunden bist. Teile deine ID, füge andere per DID hinzu.",
+    "yourId": "Deine Peer-ID",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "addPeer": "Peer hinzufügen",
+    "peerDidPlaceholder": "DID eines Peers einfügen (did:key:…)",
+    "labelPlaceholder": "Label (optional)",
+    "add": "Hinzufügen",
+    "trusted": "Vertraute Peers",
+    "loading": "Peers werden geladen…",
+    "none": "Noch keine Peers — oben per DID hinzufügen.",
+    "unnamed": "Peer",
+    "forget": "Entfernen",
+    "forgetConfirm": "Diesen Peer aus Meinem Netzwerk entfernen?\n\n{did}"
   }
 }

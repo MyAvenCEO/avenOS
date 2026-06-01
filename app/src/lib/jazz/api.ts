@@ -65,6 +65,31 @@ export async function sparkAdminRevoke(_payload: {
 	await grooveRuntime('sparkAdminRevoke', _payload)
 }
 
+/** A trusted peer device (My Network) — flat list, no humans coupling. */
+export type PeerRow = {
+	id: string
+	peerDid: string
+	deviceLabel: string
+	kind: string
+	addedAtMs: number
+	status: string
+}
+
+/** List trusted peers (devices I'm P2P-connected with). */
+export async function peerList(): Promise<PeerRow[]> {
+	return grooveRuntime<PeerRow[]>('peerList', {})
+}
+
+/** First contact: add a trusted peer by DID (dev paste-DID shortcut). */
+export async function peerAdd(payload: { peerDid: string; label?: string }): Promise<void> {
+	await grooveRuntime('peerAdd', { peerDid: payload.peerDid, label: payload.label ?? '' })
+}
+
+/** Remove a trusted peer from My Network. */
+export async function peerForget(peerDid: string): Promise<void> {
+	await grooveRuntime('peerRevoke', { peerDid })
+}
+
 /** Result of explorer list — rows omit unauthorized biscuit/spark gates; count is diagnostics-only. */
 export type JazzExplorerListReply = {
 	rows: JazzRow[]

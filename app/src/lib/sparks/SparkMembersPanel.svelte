@@ -7,11 +7,12 @@
 		sparkAdminAdd,
 		sparkAdminList,
 		sparkAdminRevoke,
+		peerList,
+		type PeerRow,
 		type JazzSessionReply,
 	} from '$lib/jazz/api'
 	import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
-	import type { PeerRowReply } from '$lib/peer/api'
-	import { peerRows, peerMeshSnapshot } from '$lib/peer/peer-mesh-store'
+	import { peerMeshSnapshot } from '$lib/peer/peer-mesh-store'
 	import {
 		meshPeerPhase,
 		peerMeshPhaseUserLabel,
@@ -54,8 +55,9 @@
 	const unlocked = $derived(sessionKind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
 
-	const peersAllow = $derived<PeerRowReply[]>(
-		!tauri || !unlocked || !sparkId.trim() ? [] : $peerRows,
+	let knownPeers = $state<PeerRow[]>([])
+	const peersAllow = $derived<PeerRow[]>(
+		!tauri || !unlocked || !sparkId.trim() ? [] : knownPeers,
 	)
 
 	function peerAccessLabel(
@@ -135,6 +137,9 @@
 					const nextSession = await jazzSession()
 					if (gen !== adminLoadGen) return
 					session = nextSession
+
+					knownPeers = (await peerList()).filter((p) => p.status === 'active')
+					if (gen !== adminLoadGen) return
 
 					if (sid) {
 						const a = await sparkAdminList(sid)

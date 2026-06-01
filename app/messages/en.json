@@ -90,7 +90,8 @@
     "members": "Members",
     "talk": "Talk",
     "todos": "Todos",
-    "gallery": "Gallery"
+    "gallery": "Gallery",
+    "peers": "Peers"
   },
   "lockGate": {
     "tagline": "Your self-sovereign life starts here",
@@ -544,5 +545,22 @@
       "currentNetworkDescription": "Every device on this build uses the same network. Your vault data and identity are scoped to it.",
       "networkNotSwitchable": "This device is bound to this network. Network switching is not available in this build."
     }
+  },
+  "peers": {
+    "title": "Peers",
+    "subtitle": "Devices you're connected with. Share your ID, add others by theirs.",
+    "yourId": "Your peer ID",
+    "copy": "Copy",
+    "copied": "Copied",
+    "addPeer": "Add a peer",
+    "peerDidPlaceholder": "Paste a peer's DID (did:key:…)",
+    "labelPlaceholder": "Label (optional)",
+    "add": "Add",
+    "trusted": "Trusted peers",
+    "loading": "Loading peers…",
+    "none": "No peers yet — add one by its DID above.",
+    "unnamed": "Peer",
+    "forget": "Forget",
+    "forgetConfirm": "Remove this peer from My Network?\n\n{did}"
   }
 }
