@@ -148,13 +148,34 @@ impl SyncManager {
                 table.clone(),
                 *object_id,
             );
-            if self.resolver.may_sync(
+            let decision = self.resolver.may_sync(
                 &crate::sync_targets::SyncTargetId::Client(client_id),
                 crate::capability::AccOp::Write,
                 &res,
-            ) == crate::capability::CapDecision::Allow
-            {
-                self.queue_row_to_client(client_id, *object_id, metadata.clone(), row.clone(), true);
+            );
+            match decision {
+                crate::capability::CapDecision::Allow => {
+                    tracing::debug!(%client_id, table = %table, %object_id, "gate: allow → ship");
+                    self.queue_row_to_client(
+                        client_id,
+                        *object_id,
+                        metadata.clone(),
+                        row.clone(),
+                        true,
+                    );
+                }
+                // Visible by default: this is why a row "won't sync". Deny =
+                // biscuit refused; Pending = vault/ACL not hydrated yet (will
+                // re-ship on the next announce after hydrate, §1.2).
+                other => {
+                    tracing::info!(
+                        %client_id,
+                        table = %table,
+                        %object_id,
+                        decision = ?other,
+                        "gate: withheld row from peer (not Allow)"
+                    );
+                }
             }
         }
     }
