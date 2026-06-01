@@ -544,7 +544,22 @@
     "statusClaimed": "Claimed",
     "statusExpired": "Expired",
     "expiresLabel": "Expires {date}",
-    "createdLabel": "Created {date}"
+    "createdLabel": "Created {date}",
+    "memberTitle": "Welcome inside",
+    "memberBody": "You're in. This device now carries your sovereign identity on the network — your key to everything built here. Welcome to the circle.",
+    "welcomeTitle": "You've been invited",
+    "welcomeBody": "Someone already inside chose to vouch for you. Accept to claim your place among the founders building what comes next — this device becomes your sovereign key to the network.",
+    "acceptAction": "Accept & step inside",
+    "invalidTitle": "This door has closed",
+    "invalidBody": "This invitation is no longer valid — it may have expired or already been claimed. Reach out to the founder who invited you for a fresh one.",
+    "founderTitle": "Found this network",
+    "founderBody": "No one is here yet. Claim the founding seat to become the first sovereign — the one who holds the door open for everyone after you.",
+    "founderAction": "Claim the founding seat",
+    "inviteOnlyKicker": "Invitation only",
+    "inviteOnlyTitle": "The new internet is built by sovereign founders.",
+    "inviteOnlyBody": "This is the backbone of a different internet — one owned by the people who build on it. A new breed of founders who hold their own identity, their own data, their own word. It isn't a product you sign up for. It's a circle you're welcomed into.",
+    "inviteOnlyHow": "Access is passed hand to hand, founder to founder. To step inside, find someone already here who will vouch for you and open the door.",
+    "inviteOnlyFootnote": "When a founder invites you, their link brings you straight back to this screen — and your place will be waiting."
   },
   "self": {
     "identity": {

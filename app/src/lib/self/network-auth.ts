@@ -7,8 +7,8 @@
  *   - `invite`    — a new identity redeeming a single-use invite token
  *
  * The device DID and signatures come from `tauri-plugin-self` (root secret must be unlocked).
- * The Better Auth session cookie set by `verify` is persisted by the webview cookie jar
- * (requests use `credentials: 'include'`).
+ * Auth is carried as a Bearer token (the session token `verify` returns), persisted in
+ * localStorage — cross-site cookies don't survive the Tauri webview → auth-server hop.
  */
 
 import { invoke } from '@tauri-apps/api/core'
@@ -23,6 +23,7 @@ export type RegisterResult = {
 	success: boolean
 	isAdmin: boolean
 	user: { id: string; did: string }
+	token?: string
 }
 
 export type CreatedInvite = { inviteToken: string; inviteDeepLink: string; expiresAt: string }
@@ -55,6 +56,40 @@ function apiUrl(path: string): string {
 	return `${resolveAuthBaseUrl()}/api/auth/aven-auth/${path.replace(/^\//, '')}`
 }
 
+// The session is carried as a Bearer token (the value verify returns), not a cookie —
+// cross-site cookies don't survive the Tauri webview → :3000 hop. Persisted so a reload
+// keeps the session.
+const TOKEN_KEY = 'aven-auth-session-token'
+
+function getSessionToken(): string | null {
+	try {
+		return localStorage.getItem(TOKEN_KEY)
+	} catch {
+		return null
+	}
+}
+
+function setSessionToken(token: string): void {
+	try {
+		localStorage.setItem(TOKEN_KEY, token)
+	} catch {
+		/* storage unavailable — token stays in this page session only */
+	}
+}
+
+export function clearSessionToken(): void {
+	try {
+		localStorage.removeItem(TOKEN_KEY)
+	} catch {
+		/* ignore */
+	}
+}
+
+function authHeaders(): Record<string, string> {
+	const token = getSessionToken()
+	return token ? { authorization: `Bearer ${token}` } : {}
+}
+
 /** Encode raw bytes as base64url (no padding) — the form `decodeSignature` on the server accepts. */
 function bytesToBase64Url(bytes: number[] | Uint8Array): string {
 	const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
@@ -63,13 +98,14 @@ function bytesToBase64Url(bytes: number[] | Uint8Array): string {
 	return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-async function postJson<T>(path: string, body: unknown): Promise<T> {
+async function postJson<T>(path: string, body: unknown, opts?: { auth?: boolean }): Promise<T> {
 	const res = await fetch(apiUrl(path), {
 		method: 'POST',
 		credentials: 'include',
 		headers: {
 			'content-type': 'application/json',
-			origin: resolveAuthBaseUrl()
+			origin: resolveAuthBaseUrl(),
+			...(opts?.auth ? authHeaders() : {})
 		},
 		body: JSON.stringify(body)
 	})
@@ -113,26 +149,34 @@ export async function register(opts: {
 	const signatureBytes = await invoke<number[]>('plugin:self|sign', { message: messageBytes })
 	const signature = bytesToBase64Url(signatureBytes)
 
-	return await postJson<RegisterResult>('verify', {
+	const result = await postJson<RegisterResult>('verify', {
 		did,
 		message,
 		signature,
 		flow: opts.flow,
 		inviteToken: opts.inviteToken
 	})
+	if (result.token) setSessionToken(result.token)
+	return result
 }
 
 /** Admin only — mint a new single-use invite. Returns the redeemable link (shown once). */
 export async function createInvite(expiresInSeconds?: number): Promise<CreatedInvite> {
 	return await postJson<CreatedInvite>(
 		'invite/create',
-		expiresInSeconds ? { expiresInSeconds } : {}
+		expiresInSeconds ? { expiresInSeconds } : {},
+		{
+			auth: true
+		}
 	)
 }
 
 /** Admin only — list all invites with their status (open / claimed / expired). */
 export async function listInvites(): Promise<InviteSummary[]> {
-	const res = await fetch(apiUrl('invite/list'), { credentials: 'include' })
+	const res = await fetch(apiUrl('invite/list'), {
+		credentials: 'include',
+		headers: authHeaders()
+	})
 	if (!res.ok) throw new Error(`invite/list failed: ${res.status}`)
 	const data = (await res.json()) as { invites: InviteSummary[] }
 	return data.invites

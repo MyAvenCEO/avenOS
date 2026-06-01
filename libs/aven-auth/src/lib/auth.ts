@@ -1,8 +1,8 @@
-import Database from 'better-sqlite3'
 import { betterAuth } from 'better-auth'
-
-import { avenAuthEnv } from '$lib/env'
+import { bearer } from 'better-auth/plugins'
+import Database from 'better-sqlite3'
 import { avenAuth } from '$lib/auth/plugins/aven-auth'
+import { avenAuthEnv } from '$lib/env'
 
 const env = avenAuthEnv()
 
@@ -17,17 +17,20 @@ export const auth = betterAuth({
 		'http://localhost:1420',
 		'http://127.0.0.1:1420',
 		'https://auth.testnet.aven.ceo',
-		'tauri://localhost',
+		'tauri://localhost'
 	],
 	plugins: [
+		// The Tauri app authenticates with a Bearer token (the session token returned by
+		// verify) — cross-site cookies don't survive the webview → :3000 hop.
+		bearer(),
 		avenAuth({
 			domain: env.domain,
 			networkSeed: env.networkSeed,
 			authUrl: env.authUrl,
 			defaultInviteExpiresInSeconds: env.defaultInviteExpiresInSeconds,
-			inviteDeepLinkScheme: env.inviteDeepLinkScheme,
-		}),
-	],
+			inviteDeepLinkScheme: env.inviteDeepLinkScheme
+		})
+	]
 })
 
 export type Auth = typeof auth
