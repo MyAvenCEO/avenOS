@@ -85,7 +85,7 @@ pub use query_manager::types::{
 #[cfg(feature = "client-p2p")]
 pub use schema_manager::AppId;
 #[cfg(feature = "client-p2p")]
-pub use sync_manager::ClientId;
+pub use sync_manager::PeerId;
 #[cfg(feature = "client-p2p")]
 pub use sync_manager::DurabilityTier;
 #[cfg(feature = "client-p2p")]
@@ -96,7 +96,7 @@ pub use sync_manager::ServerId;
 #[derive(Debug, Clone)]
 pub struct AppContext {
     pub app_id: AppId,
-    pub client_id: Option<ClientId>,
+    pub client_id: Option<PeerId>,
     pub schema: Schema,
     pub data_dir: PathBuf,
     /// Older schema versions registered via Jazz lenses (local-first migrations).

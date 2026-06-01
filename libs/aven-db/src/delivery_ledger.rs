@@ -16,7 +16,7 @@ pub struct RowBatchKey {
     pub batch_id: BatchId,
 }
 
-/// Per-target delivery state — keys by peer DID for mesh, ClientId for downstream clients.
+/// Per-target delivery state — keys by peer DID for mesh, PeerId for downstream clients.
 #[derive(Debug, Default)]
 pub struct DeliveryLedger {
     delivered: HashMap<SyncTargetId, HashSet<RowBatchKey>>,

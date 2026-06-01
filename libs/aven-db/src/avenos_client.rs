@@ -13,7 +13,7 @@ use crate::runtime_core::ReadDurabilityOptions;
 use crate::schema_manager::{SchemaManager, rehydrate_schema_manager_from_catalogue};
 use crate::storage::{RocksDBStorage, Storage, StorageError};
 use crate::sync_manager::{
-    ClientId, Destination, DurabilityTier, InboxEntry, OutboxEntry, Source, SyncManager,
+    PeerId, Destination, DurabilityTier, InboxEntry, OutboxEntry, Source, SyncManager,
     SyncPayload,
 };
 use tokio::sync::{RwLock, mpsc};
@@ -60,12 +60,12 @@ struct SubscriptionState {
 /// Called after an inbound peer sync frame is parked on the runtime inbox (post-`push_sync_inbox`).
 pub type PeerInboundParkedHook = Arc<dyn Fn(&SyncPayload) + Send + Sync>;
 
-fn peer_send_fail_streak() -> &'static Mutex<HashMap<ClientId, u32>> {
-	static SLOT: OnceLock<Mutex<HashMap<ClientId, u32>>> = OnceLock::new();
+fn peer_send_fail_streak() -> &'static Mutex<HashMap<PeerId, u32>> {
+	static SLOT: OnceLock<Mutex<HashMap<PeerId, u32>>> = OnceLock::new();
 	SLOT.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn peer_send_backoff(peer_id: ClientId) -> Duration {
+fn peer_send_backoff(peer_id: PeerId) -> Duration {
 	let mut guard = peer_send_fail_streak()
 		.lock()
 		.expect("peer send backoff lock");
@@ -75,7 +75,7 @@ fn peer_send_backoff(peer_id: ClientId) -> Duration {
 	Duration::from_millis(ms.min(10_000))
 }
 
-fn peer_send_backoff_clear(peer_id: ClientId) {
+fn peer_send_backoff_clear(peer_id: PeerId) {
 	let _ = peer_send_fail_streak()
 		.lock()
 		.expect("peer send backoff lock")
@@ -249,7 +249,7 @@ impl JazzClient {
         Self::connect_with_sync_transport(context, sync_transport, on_inbound_parked).await
     }
 
-    pub fn register_peer_sync_client(&self, peer_id: ClientId) -> Result<()> {
+    pub fn register_peer_sync_client(&self, peer_id: PeerId) -> Result<()> {
         self.runtime
             .ensure_client_as_peer(peer_id)
             .map_err(|e| JazzError::Sync(format!("ensure_client_as_peer {peer_id}: {e}")))?;
@@ -259,13 +259,13 @@ impl JazzClient {
         Ok(())
     }
 
-    pub fn rebroadcast_peer_catchup(&self, peer_id: ClientId) -> Result<()> {
+    pub fn rebroadcast_peer_catchup(&self, peer_id: PeerId) -> Result<()> {
         self.runtime
             .rebroadcast_peer_catchup(peer_id)
             .map_err(|e| JazzError::Sync(format!("rebroadcast_peer_catchup {peer_id}: {e}")))
     }
 
-    pub fn rebroadcast_peer_shell_catchup(&self, peer_id: ClientId) -> Result<()> {
+    pub fn rebroadcast_peer_shell_catchup(&self, peer_id: PeerId) -> Result<()> {
         self.runtime
             .rebroadcast_peer_shell_catchup(peer_id)
             .map_err(|e| JazzError::Sync(format!("rebroadcast_peer_shell_catchup {peer_id}: {e}")))
@@ -285,7 +285,7 @@ impl JazzClient {
             .map_err(|e| JazzError::Sync(format!("flush: {e}")))
     }
 
-    pub fn ingest_peer_sync(&self, from_peer_runtime_id: ClientId, payload: SyncPayload) -> Result<()> {
+    pub fn ingest_peer_sync(&self, from_peer_runtime_id: PeerId, payload: SyncPayload) -> Result<()> {
         let entry = InboxEntry {
             source: Source::Client(from_peer_runtime_id),
             payload,
@@ -305,7 +305,7 @@ impl JazzClient {
         let client_id_path = context.data_dir.join("client_id");
         let client_id = if client_id_path.exists() {
             let id_str = std::fs::read_to_string(&client_id_path)?;
-            ClientId::parse(id_str.trim()).unwrap_or_else(|| {
+            PeerId::parse(id_str.trim()).unwrap_or_else(|| {
                 let id = context.client_id.unwrap_or_default();
                 let _ = std::fs::write(&client_id_path, id.to_string());
                 id
@@ -314,7 +314,7 @@ impl JazzClient {
             std::fs::write(&client_id_path, id.to_string())?;
             id
         } else {
-            let id = ClientId::new();
+            let id = PeerId::new();
             std::fs::write(&client_id_path, id.to_string())?;
             id
         };

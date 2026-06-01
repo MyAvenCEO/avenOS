@@ -16,7 +16,7 @@ use crate::schema_manager::{
 };
 use crate::storage::{RowLocator, Storage, StorageError};
 use crate::sync_manager::{
-    ClientId, DurabilityTier, PendingPermissionCheck, PendingUpdateId, QueryId, QueryPropagation,
+    PeerId, DurabilityTier, PendingPermissionCheck, PendingUpdateId, QueryId, QueryPropagation,
     RowBatchKey, SchemaWarning, SyncManager,
 };
 
@@ -511,7 +511,7 @@ pub struct QueryManager {
 
     /// Server-side query subscriptions from downstream clients.
     /// Key is (client_id, query_id) to allow multiple queries per client.
-    pub(super) server_subscriptions: HashMap<(ClientId, QueryId), ServerQuerySubscription>,
+    pub(super) server_subscriptions: HashMap<(PeerId, QueryId), ServerQuerySubscription>,
     /// Schema context for multi-schema queries.
     /// Starts empty; initialized via set_current_schema().
     /// Enables lens transforms for rows from old schema branches.
@@ -991,7 +991,7 @@ impl QueryManager {
             }
         }
 
-        let mut failed_server: Vec<(ClientId, QueryId, String, String, QueryPropagation)> =
+        let mut failed_server: Vec<(PeerId, QueryId, String, String, QueryPropagation)> =
             Vec::new();
 
         // Recompile server-side subscriptions
@@ -1270,7 +1270,7 @@ impl QueryManager {
     ///
     /// Returns `false` if the client has unprocessed inbox entries.
     /// The caller should retry later.
-    pub fn remove_client(&mut self, client_id: ClientId) -> bool {
+    pub fn remove_client(&mut self, client_id: PeerId) -> bool {
         if !self.sync_manager.remove_client(client_id) {
             return false;
         }

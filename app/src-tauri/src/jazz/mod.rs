@@ -16,7 +16,7 @@ use groove::{
 	query_manager::types::{ColumnType, ComposedBranchName, SchemaHash, TableSchema},
 	AppContext,
 	AppId,
-	ClientId,
+	PeerId,
 	DevRole,
 	JazzClient,
 	JazzError,
@@ -81,7 +81,7 @@ pub struct JazzExplorerListReply {
 /// a stale SurrealKV view after `SelfState` changes.
 struct JazzConn {
 	client: Option<Arc<JazzClient>>,
-	/// Device root → Groove [`ClientId`](groove::ClientId) UUID; `Some` iff `client` is populated.
+	/// Device root → Groove [`PeerId`](groove::PeerId) UUID; `Some` iff `client` is populated.
 	linked_identity: Option<Uuid>,
 }
 
@@ -646,7 +646,7 @@ fn reconcile_jazz_identity_cache_dir(
 	}
 	match fs::read_to_string(&client_path) {
 		Ok(s) => {
-			if let Some(cid) = ClientId::parse(s.trim()) {
+			if let Some(cid) = PeerId::parse(s.trim()) {
 				if cid.0 != desired_uuid {
 					reason = Some(format!(
 						"persisted client_id {:?} != current identity {:?}",
@@ -1200,7 +1200,7 @@ pub(crate) fn patch_updates(table_schema: &TableSchema, patch: JsonRow) -> Resul
 /// TCP peer transport so two instances converge a shared spark live. Instance A
 /// listens, B dials (retrying until A is up). Returns the transport + remote peer
 /// id, or `None` to run local-only (single instance, or peer not reachable).
-async fn try_dev_peer_transport(local: ClientId) -> Option<(Arc<dyn SyncTransport>, ClientId)> {
+async fn try_dev_peer_transport(local: PeerId) -> Option<(Arc<dyn SyncTransport>, PeerId)> {
 	if std::env::var("AVENOS_DEV_PEER_SYNC").is_err() {
 		return None;
 	}
@@ -1264,14 +1264,14 @@ async fn jazz_connect(
 
 	let ctx = AppContext {
 		app_id: AppId::from_name("ceo.aven.os"),
-		client_id: Some(ClientId(deterministic)),
+		client_id: Some(PeerId(deterministic)),
 		schema: schema.clone(),
 		live_schemas,
 		data_dir: data_dir.clone(),
 	};
 
 	let _ = (app, mj);
-	let client = match try_dev_peer_transport(ClientId(deterministic)).await {
+	let client = match try_dev_peer_transport(PeerId(deterministic)).await {
 		Some((transport, remote)) => {
 			let client = JazzClient::connect_with_sync_transport(ctx, transport, None)
 				.await

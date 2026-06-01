@@ -33,7 +33,7 @@ use crate::schema_manager::manager::{CurrentPermissionsSummary, PermissionsHeadS
 use crate::schema_manager::{Lens, QuerySchemaContext, SchemaManager};
 use crate::storage::Storage;
 use crate::sync_manager::{
-    ClientId, DurabilityTier, InboxEntry, OutboxEntry, QueryPropagation, ServerId,
+    PeerId, DurabilityTier, InboxEntry, OutboxEntry, QueryPropagation, ServerId,
 };
 
 // ============================================================================
@@ -581,7 +581,7 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
     /// Add a client connection.
     pub fn add_client(
         &self,
-        client_id: ClientId,
+        client_id: PeerId,
         session: Option<Session>,
     ) -> Result<(), RuntimeError> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
@@ -595,7 +595,7 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
     /// registering a client.
     pub fn ensure_client_with_session(
         &self,
-        client_id: ClientId,
+        client_id: PeerId,
         session: Session,
     ) -> Result<(), RuntimeError> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
@@ -604,7 +604,7 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
     }
 
     /// Ensure a peer client exists without resetting state.
-    pub fn ensure_client_as_peer(&self, client_id: ClientId) -> Result<(), RuntimeError> {
+    pub fn ensure_client_as_peer(&self, client_id: PeerId) -> Result<(), RuntimeError> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
         core.ensure_client_as_peer(client_id);
         Ok(())
@@ -613,7 +613,7 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
     /// Ensure a peer client exists and replay catalogue only when its digest is stale.
     pub fn ensure_client_as_peer_with_catalogue_state_hash(
         &self,
-        client_id: ClientId,
+        client_id: PeerId,
         remote_catalogue_state_hash: Option<&str>,
     ) -> Result<(), RuntimeError> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
@@ -625,7 +625,7 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
     }
 
     /// AvenOS: replay all syncable rows to a registered Peer client.
-    pub fn rebroadcast_peer_catchup(&self, client_id: ClientId) -> Result<(), RuntimeError> {
+    pub fn rebroadcast_peer_catchup(&self, client_id: PeerId) -> Result<(), RuntimeError> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
         core.clear_peer_delivery_ledger(client_id);
         core.rebroadcast_peer_catchup(client_id);
@@ -633,7 +633,7 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
     }
 
     /// AvenOS: replay sparks/keyshares only (pairing bootstrap before spark data).
-    pub fn rebroadcast_peer_shell_catchup(&self, client_id: ClientId) -> Result<(), RuntimeError> {
+    pub fn rebroadcast_peer_shell_catchup(&self, client_id: PeerId) -> Result<(), RuntimeError> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
         core.clear_peer_delivery_ledger(client_id);
         core.rebroadcast_peer_shell_catchup(client_id);
@@ -653,7 +653,7 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
     ///
     /// Returns `Ok(true)` if removed, `Ok(false)` if skipped due to
     /// unprocessed inbox entries (caller should retry later).
-    pub fn remove_client(&self, client_id: ClientId) -> Result<bool, RuntimeError> {
+    pub fn remove_client(&self, client_id: PeerId) -> Result<bool, RuntimeError> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
         Ok(core.remove_client(client_id))
     }

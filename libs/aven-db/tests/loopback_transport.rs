@@ -3,13 +3,13 @@
 //! to end with zero networking, so the frontier protocol can run on it.
 
 use groove::sync_transport::{LoopbackTransport, SyncTransport};
-use groove::{ClientId, Source, SyncPayload};
+use groove::{PeerId, Source, SyncPayload};
 use groove::SyncTargetId;
 
 #[tokio::test]
 async fn loopback_delivers_frame() {
-    let a_source = Source::Client(ClientId::new());
-    let b_source = Source::Client(ClientId::new());
+    let a_source = Source::Client(PeerId::new());
+    let b_source = Source::Client(PeerId::new());
     let (a, b) = LoopbackTransport::pair(a_source.clone(), b_source);
 
     // B's inbox starts empty.
@@ -32,8 +32,8 @@ async fn loopback_delivers_frame() {
 
 #[tokio::test]
 async fn loopback_is_directional() {
-    let a_source = Source::Client(ClientId::new());
-    let b_source = Source::Client(ClientId::new());
+    let a_source = Source::Client(PeerId::new());
+    let b_source = Source::Client(PeerId::new());
     let (a, b) = LoopbackTransport::pair(a_source, b_source.clone());
 
     // B → A does not leak into B's own inbox.

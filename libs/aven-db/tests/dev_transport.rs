@@ -2,13 +2,13 @@
 //! delivery (plan §8 M1 step 7, the dev stand-in for peeroxide).
 
 use groove::sync_transport::SyncTransport;
-use groove::{ClientId, Source, SyncPayload, SyncTargetId, TcpSyncTransport};
+use groove::{PeerId, Source, SyncPayload, SyncTargetId, TcpSyncTransport};
 use tokio::net::TcpListener;
 
 #[tokio::test]
 async fn tcp_transport_handshakes_and_round_trips() {
-    let a_id = ClientId::new();
-    let b_id = ClientId::new();
+    let a_id = PeerId::new();
+    let b_id = PeerId::new();
 
     // Pre-bind an ephemeral port so the dialer knows where to connect.
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();

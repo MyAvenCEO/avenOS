@@ -26,7 +26,7 @@ use std::time::Instant;
 
 use crate::object::{BranchName, ObjectId};
 use crate::row_histories::BatchId;
-use crate::sync_manager::{ClientId, Destination, QueryId, Source, SyncPayload};
+use crate::sync_manager::{PeerId, Destination, QueryId, Source, SyncPayload};
 
 // ============================================================================
 // Types
@@ -167,8 +167,8 @@ struct Inner {
     messages: Vec<SyncMessage>,
     next_seq: usize,
     start: Instant,
-    /// ClientId -> human name mapping.
-    client_names: HashMap<ClientId, String>,
+    /// PeerId -> human name mapping.
+    client_names: HashMap<PeerId, String>,
     /// ObjectId -> human name mapping.
     object_names: HashMap<ObjectId, String>,
     /// BatchId -> human name mapping.
@@ -199,11 +199,11 @@ impl SyncTracer {
         }
     }
 
-    /// Register a ClientId -> human name mapping.
+    /// Register a PeerId -> human name mapping.
     ///
     /// Call this when a client connects so the tracer can display "alice"
     /// instead of a UUID.
-    pub fn register_client(&self, client_id: ClientId, name: impl Into<String>) {
+    pub fn register_client(&self, client_id: PeerId, name: impl Into<String>) {
         let mut inner = self.inner.lock().unwrap();
         inner.client_names.insert(client_id, name.into());
     }
@@ -1182,7 +1182,7 @@ mod tests {
         tracer.record_outgoing("alice", &Destination::Server(server_id), &payload);
         tracer.record_outgoing(
             "server",
-            &Destination::Client(ClientId::default()),
+            &Destination::Client(PeerId::default()),
             &payload,
         );
 
@@ -1255,7 +1255,7 @@ mod tests {
     #[test]
     fn client_name_resolution() {
         let tracer = SyncTracer::new();
-        let cid = ClientId::default();
+        let cid = PeerId::default();
         tracer.register_client(cid, "bob");
 
         let payload = SyncPayload::QueryUnsubscription {

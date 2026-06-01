@@ -189,7 +189,7 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
     }
 
     /// Add a client connection.
-    pub fn add_client(&mut self, client_id: ClientId, session: Option<Session>) {
+    pub fn add_client(&mut self, client_id: PeerId, session: Option<Session>) {
         info!(%client_id, has_session = session.is_some(), "adding client");
         let sm = self.schema_manager.query_manager_mut().sync_manager_mut();
         sm.add_client_with_storage(&self.storage, client_id);
@@ -207,7 +207,7 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
     ///
     /// A session is always required — callers must authenticate before
     /// registering a client.
-    pub fn ensure_client_with_session(&mut self, client_id: ClientId, session: Session) {
+    pub fn ensure_client_with_session(&mut self, client_id: PeerId, session: Session) {
         let sm = self.schema_manager.query_manager_mut().sync_manager_mut();
         if sm.get_client(client_id).is_some() {
             sm.set_client_session(client_id, session);
@@ -223,7 +223,7 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
     /// Returns `false` if the client has unprocessed messages — either
     /// parked in RuntimeCore (pre-inbox, from `push_sync_inbox`) or
     /// already in SyncManager's inbox. The caller should retry later.
-    pub fn remove_client(&mut self, client_id: ClientId) -> bool {
+    pub fn remove_client(&mut self, client_id: PeerId) -> bool {
         use crate::sync_manager::Source;
 
         let has_parked = self
@@ -244,7 +244,7 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
     }
 
     /// Ensure a peer client exists without resetting state.
-    pub fn ensure_client_as_peer(&mut self, client_id: ClientId) {
+    pub fn ensure_client_as_peer(&mut self, client_id: PeerId) {
         self.ensure_client_as_peer_with_catalogue_state_hash(client_id, None);
     }
 
@@ -252,7 +252,7 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
     /// the peer's catalogue digest is missing or stale.
     pub fn ensure_client_as_peer_with_catalogue_state_hash(
         &mut self,
-        client_id: ClientId,
+        client_id: PeerId,
         remote_catalogue_state_hash: Option<&str>,
     ) {
         let local_catalogue_state_hash = self.schema_manager.catalogue_state_hash();
@@ -274,21 +274,21 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
     }
 
     /// AvenOS: re-queue full row-batch catch-up for a Peer client.
-    pub fn rebroadcast_peer_catchup(&mut self, client_id: ClientId) {
+    pub fn rebroadcast_peer_catchup(&mut self, client_id: PeerId) {
         let sm = self.schema_manager.query_manager_mut().sync_manager_mut();
         sm.rebroadcast_peer_catchup(&self.storage, client_id);
         self.immediate_tick();
     }
 
     /// AvenOS: shell-only catch-up (sparks/keyshares) for pairing bootstrap.
-    pub fn rebroadcast_peer_shell_catchup(&mut self, client_id: ClientId) {
+    pub fn rebroadcast_peer_shell_catchup(&mut self, client_id: PeerId) {
         let sm = self.schema_manager.query_manager_mut().sync_manager_mut();
         sm.rebroadcast_peer_shell_catchup(&self.storage, client_id);
         self.immediate_tick();
     }
 
     /// AvenOS: peer client ids registered for P2P sync.
-    pub fn peer_client_ids(&self) -> Vec<ClientId> {
+    pub fn peer_client_ids(&self) -> Vec<PeerId> {
         self.schema_manager
             .query_manager()
             .sync_manager()
@@ -305,7 +305,7 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
     }
 
     /// Forget what we believe was already delivered to a peer (see [`SyncManager::clear_peer_delivery_ledger`]).
-    pub fn clear_peer_delivery_ledger(&mut self, client_id: ClientId) {
+    pub fn clear_peer_delivery_ledger(&mut self, client_id: PeerId) {
         let sm = self.schema_manager.query_manager_mut().sync_manager_mut();
         sm.clear_peer_delivery_ledger(client_id);
     }

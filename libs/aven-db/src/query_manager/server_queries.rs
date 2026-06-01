@@ -8,7 +8,7 @@ use crate::object::{BranchName, ObjectId};
 use crate::row_histories::BatchId;
 use crate::schema_manager::LensTransformer;
 use crate::storage::Storage;
-use crate::sync_manager::{ClientId, DurabilityTier, PendingPermissionCheck};
+use crate::sync_manager::{PeerId, DurabilityTier, PendingPermissionCheck};
 
 use super::manager::{QueryManager, SchemaWarningAccumulator, ServerQuerySubscription};
 use super::policy::Operation;
@@ -413,7 +413,7 @@ impl QueryManager {
 
     fn client_bypasses_authorization_filtering(
         &self,
-        client_id: ClientId,
+        client_id: PeerId,
         _session: Option<&Session>,
     ) -> bool {
         // All mesh clients are peers and bypass downstream authorization filtering.
@@ -823,7 +823,7 @@ impl QueryManager {
     /// a client's query subscription.
     #[allow(clippy::type_complexity)]
     pub(super) fn settle_server_subscriptions(&mut self, storage: &dyn Storage) {
-        let mut schema_warning_notifications: Vec<(ClientId, crate::sync_manager::SchemaWarning)> =
+        let mut schema_warning_notifications: Vec<(PeerId, crate::sync_manager::SchemaWarning)> =
             Vec::new();
 
         let subscription_keys: Vec<_> = self.server_subscriptions.keys().copied().collect();

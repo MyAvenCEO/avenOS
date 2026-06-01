@@ -1681,7 +1681,7 @@ fn rc_transaction_visible_subscription_hides_partial_accepted_batch_until_scope_
     let mgr_d = SchemaManager::new(SyncManager::new(), schema, app_id, "dev", "main").unwrap();
     let mut d = new_test_core(mgr_d, MemoryStorage::new(), NoopScheduler);
 
-    let d_client_of_b = ClientId::new();
+    let d_client_of_b = PeerId::new();
     let b_server_for_d = ServerId::new();
     s.b.add_client(d_client_of_b, None);
     d.add_server(b_server_for_d);

@@ -48,8 +48,8 @@ fn e2e_two_clients_server_schema_sync() {
 
     // === Network topology setup ===
     // Client A <-> Server <-> Client B
-    let client_a_id = ClientId::new();
-    let client_b_id = ClientId::new();
+    let client_a_id = PeerId::new();
+    let client_b_id = PeerId::new();
     let server_id = ServerId::new();
 
     // Server knows about both clients — Admin role for catalogue writes

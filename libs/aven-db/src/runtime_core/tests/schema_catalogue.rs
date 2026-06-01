@@ -494,7 +494,7 @@ fn test_matching_catalogue_hash_skips_catalogue_replay_on_add_server() {
     );
 }
 
-fn catalogue_replay_to_client_count(messages: &[OutboxEntry], client_id: ClientId) -> usize {
+fn catalogue_replay_to_client_count(messages: &[OutboxEntry], client_id: PeerId) -> usize {
     messages
         .iter()
         .filter(|message| {
@@ -511,7 +511,7 @@ fn catalogue_replay_to_client_count(messages: &[OutboxEntry], client_id: ClientI
 
 fn has_catalogue_replay_to_client(
     messages: &[OutboxEntry],
-    client_id: ClientId,
+    client_id: PeerId,
     object_id: ObjectId,
 ) -> bool {
     messages.iter().any(|message| {
@@ -538,7 +538,7 @@ fn peer_with_matching_catalogue_hash_skips_catalogue_replay() {
     core.sync_sender().take();
 
     let catalogue_state_hash = core.schema_manager().catalogue_state_hash();
-    let peer_id = ClientId::new();
+    let peer_id = PeerId::new();
 
     core.ensure_client_as_peer_with_catalogue_state_hash(peer_id, Some(&catalogue_state_hash));
     core.batched_tick();
@@ -563,7 +563,7 @@ fn peer_without_catalogue_hash_gets_full_catalogue_replay() {
     core.batched_tick();
     core.sync_sender().take();
 
-    let peer_id = ClientId::new();
+    let peer_id = PeerId::new();
 
     core.ensure_client_as_peer_with_catalogue_state_hash(peer_id, None);
     core.batched_tick();
@@ -584,7 +584,7 @@ fn existing_peer_with_stale_catalogue_hash_gets_full_catalogue_replay_on_reconne
     let mut core = new_test_core(schema_manager, MemoryStorage::new(), NoopScheduler);
 
     let catalogue_state_hash = core.schema_manager().catalogue_state_hash();
-    let peer_id = ClientId::new();
+    let peer_id = PeerId::new();
 
     core.ensure_client_as_peer_with_catalogue_state_hash(peer_id, Some(&catalogue_state_hash));
     core.batched_tick();

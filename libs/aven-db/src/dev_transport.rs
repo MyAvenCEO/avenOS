@@ -7,7 +7,7 @@
 //! and surface the remote peer identity — minus discovery/holepunch, which a
 //! fixed localhost address makes unnecessary for two side-by-side instances.
 //!
-//! Identity handshake: on connect each side sends its own 16-byte `ClientId`
+//! Identity handshake: on connect each side sends its own 16-byte `PeerId`
 //! (the engine's peer-connection handle) and learns the remote's. Inbound frames
 //! are tagged with `Source::Client(remote)` so the engine attributes them to the
 //! registered peer; the app reads [`TcpSyncTransport::remote_client_id`] to
@@ -22,7 +22,7 @@ use tokio::sync::{Mutex, mpsc};
 use uuid::Uuid;
 
 use crate::JazzError;
-use crate::sync_manager::{ClientId, InboxEntry, Source, SyncPayload};
+use crate::sync_manager::{PeerId, InboxEntry, Source, SyncPayload};
 use crate::sync_targets::SyncTargetId;
 use crate::sync_transport::{SyncTransport, decode_length_prefixed, encode_length_prefixed};
 
@@ -39,13 +39,13 @@ pub enum DevRole {
 pub struct TcpSyncTransport {
     writer: Arc<Mutex<OwnedWriteHalf>>,
     inbound: Mutex<mpsc::Receiver<InboxEntry>>,
-    remote: ClientId,
+    remote: PeerId,
 }
 
 impl TcpSyncTransport {
     /// Establish the TCP connection + identity handshake, then spawn the read
     /// pump. `local` is this instance's own Groove client id.
-    pub async fn connect(role: DevRole, addr: &str, local: ClientId) -> crate::Result<Self> {
+    pub async fn connect(role: DevRole, addr: &str, local: PeerId) -> crate::Result<Self> {
         match role {
             DevRole::Listen => {
                 let listener = TcpListener::bind(addr).await?;
@@ -56,26 +56,26 @@ impl TcpSyncTransport {
     }
 
     /// Dial a listener at `addr`.
-    pub async fn dial(addr: &str, local: ClientId) -> crate::Result<Self> {
+    pub async fn dial(addr: &str, local: PeerId) -> crate::Result<Self> {
         Self::from_stream(TcpStream::connect(addr).await?, local).await
     }
 
     /// Accept one peer on a pre-bound listener (lets callers pick an ephemeral port).
-    pub async fn accept(listener: TcpListener, local: ClientId) -> crate::Result<Self> {
+    pub async fn accept(listener: TcpListener, local: PeerId) -> crate::Result<Self> {
         let (stream, _peer) = listener.accept().await?;
         Self::from_stream(stream, local).await
     }
 
-    async fn from_stream(stream: TcpStream, local: ClientId) -> crate::Result<Self> {
+    async fn from_stream(stream: TcpStream, local: PeerId) -> crate::Result<Self> {
         stream.set_nodelay(true).ok();
         let (mut read_half, mut write_half) = stream.into_split();
 
-        // Identity handshake — exchange 16-byte ClientId both ways.
+        // Identity handshake — exchange 16-byte PeerId both ways.
         write_half.write_all(local.0.as_bytes()).await?;
         write_half.flush().await?;
         let mut remote_bytes = [0u8; 16];
         read_half.read_exact(&mut remote_bytes).await?;
-        let remote = ClientId(Uuid::from_bytes(remote_bytes));
+        let remote = PeerId(Uuid::from_bytes(remote_bytes));
 
         let (tx, rx) = mpsc::channel::<InboxEntry>(256);
         tokio::spawn(async move {
@@ -120,9 +120,9 @@ impl TcpSyncTransport {
         })
     }
 
-    /// The remote peer's `ClientId` learned during the handshake. The app must
+    /// The remote peer's `PeerId` learned during the handshake. The app must
     /// register this as a peer (`ensure_client_as_peer`) before sync flows.
-    pub fn remote_client_id(&self) -> ClientId {
+    pub fn remote_client_id(&self) -> PeerId {
         self.remote
     }
 }

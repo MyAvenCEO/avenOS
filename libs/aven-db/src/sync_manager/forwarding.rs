@@ -132,7 +132,7 @@ impl SyncManager {
             .flatten()
     }
 
-    pub(super) fn queue_batch_fate_to_client(&mut self, client_id: ClientId, fate: BatchFate) {
+    pub(super) fn queue_batch_fate_to_client(&mut self, client_id: PeerId, fate: BatchFate) {
         let Some(fate) = self.batch_fate_for_client(client_id, &fate) else {
             return;
         };
@@ -141,7 +141,7 @@ impl SyncManager {
 
     pub(super) fn queue_batch_fate_to_client_unfiltered(
         &mut self,
-        client_id: ClientId,
+        client_id: PeerId,
         fate: BatchFate,
     ) {
         self.outbox.push(OutboxEntry {
@@ -374,7 +374,7 @@ impl SyncManager {
             storage,
             object_id,
             branch_name,
-            ClientId(Uuid::nil()),
+            PeerId(Uuid::nil()),
         );
     }
 
@@ -383,9 +383,9 @@ impl SyncManager {
         storage: &H,
         object_id: ObjectId,
         branch_name: BranchName,
-        except: ClientId,
+        except: PeerId,
     ) {
-        let client_ids: Vec<ClientId> = self
+        let client_ids: Vec<PeerId> = self
             .clients
             .keys()
             .copied()

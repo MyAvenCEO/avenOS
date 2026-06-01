@@ -364,7 +364,7 @@ fn rc_transactional_insert_persisted_reconnect_reconciles_rejected_batch_from_se
 //         .set_authorization_schema(users_insert_denied_authorization_schema());
 
 //     let alice_session = Session::new("alice");
-//     let client_id = ClientId::new();
+//     let client_id = PeerId::new();
 //     let server_id = ServerId::new();
 //     worker.add_client(client_id, Some(alice_session.clone()));
 //     alice.add_server(server_id);
@@ -743,7 +743,7 @@ fn rc_worker_accepts_local_batch_replay_payloads_from_peer() {
         SyncManager::new().with_durability_tier(DurabilityTier::Local),
     );
 
-    let client_id = ClientId::new();
+    let client_id = PeerId::new();
     worker.add_client(client_id, None);
 
     let ((row_id, _row_values), batch_id) = main

@@ -947,9 +947,9 @@ struct TwoClientTransactionHarness {
     alice: TestCore,
     bob: TestCore,
     server: TestCore,
-    alice_client_id: ClientId,
+    alice_client_id: PeerId,
     alice_server_id: ServerId,
-    bob_client_id: ClientId,
+    bob_client_id: PeerId,
     bob_server_id: ServerId,
     row_id: ObjectId,
     base_batch_id: BatchId,
@@ -965,9 +965,9 @@ fn create_two_client_transaction_harness(app_name: &str) -> TwoClientTransaction
         SyncManager::new().with_durability_tier(DurabilityTier::Local),
     );
 
-    let alice_client_id = ClientId::new();
+    let alice_client_id = PeerId::new();
     let alice_server_id = ServerId::new();
-    let bob_client_id = ClientId::new();
+    let bob_client_id = PeerId::new();
     let bob_server_id = ServerId::new();
 
     server.add_client(alice_client_id, None);

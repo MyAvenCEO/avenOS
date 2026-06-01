@@ -13,7 +13,7 @@ use crate::storage::{
     MemoryStorage, RawTableKeys, RawTableRows, RowLocator, Storage, StorageError,
 };
 use crate::sync_manager::{
-    ClientId, Destination, DurabilityTier, InboxEntry, OutboxEntry, ServerId, Source, SyncError,
+    PeerId, Destination, DurabilityTier, InboxEntry, OutboxEntry, ServerId, Source, SyncError,
     SyncManager, SyncPayload,
 };
 use std::collections::HashMap;
@@ -1731,7 +1731,7 @@ fn pump_client_messages_to_server(
     client: &mut TestCore,
     server: &mut TestCore,
     server_id: ServerId,
-    client_id: ClientId,
+    client_id: PeerId,
 ) -> bool {
     let mut any_messages = false;
 
@@ -1754,7 +1754,7 @@ fn pump_client_messages_to_server(
 struct ClientForServer<'a> {
     core: &'a mut TestCore,
     server_id: ServerId,
-    client_id: ClientId,
+    client_id: PeerId,
 }
 
 fn pump_server_messages_to_clients(
@@ -1823,7 +1823,7 @@ fn sync_server_with_clients(
 
 fn outbox_has_object_update_for_client(
     entries: &[OutboxEntry],
-    client_id: ClientId,
+    client_id: PeerId,
     object_id: ObjectId,
 ) -> bool {
     entries.iter().any(|entry| {
@@ -1844,9 +1844,9 @@ struct ThreeTierRC {
     a: TestCore,
     b: TestCore,
     c: TestCore,
-    a_client_of_b: ClientId,
+    a_client_of_b: PeerId,
     b_server_for_a: ServerId,
-    b_client_of_c: ClientId,
+    b_client_of_c: PeerId,
     c_server_for_b: ServerId,
 }
 
@@ -1873,9 +1873,9 @@ fn create_3tier_rc_with_schema(schema: Schema) -> ThreeTierRC {
     let mgr_c = SchemaManager::new(sm_c, schema, app_id, "dev", "main").unwrap();
     let mut c = new_test_core(mgr_c, MemoryStorage::new(), NoopScheduler);
 
-    let a_client_of_b = ClientId::new();
+    let a_client_of_b = PeerId::new();
     let b_server_for_a = ServerId::new();
-    let b_client_of_c = ClientId::new();
+    let b_client_of_c = PeerId::new();
     let c_server_for_b = ServerId::new();
 
     // Topology: A ↔ B ↔ C

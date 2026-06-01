@@ -55,26 +55,26 @@ impl std::fmt::Display for ServerId {
 
 /// Unique identifier for a client connection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ClientId(pub Uuid);
+pub struct PeerId(pub Uuid);
 
-impl ClientId {
+impl PeerId {
     pub fn new() -> Self {
         Self(Uuid::now_v7())
     }
 
     /// Parse from UUID string.
     pub fn parse(s: &str) -> Option<Self> {
-        Uuid::parse_str(s).ok().map(ClientId)
+        Uuid::parse_str(s).ok().map(PeerId)
     }
 }
 
-impl Default for ClientId {
+impl Default for PeerId {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl std::fmt::Display for ClientId {
+impl std::fmt::Display for PeerId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -499,7 +499,7 @@ trait PeerEnd {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Destination {
     Server(ServerId),
-    Client(ClientId),
+    Client(PeerId),
 }
 
 impl PeerEnd for Destination {
@@ -525,7 +525,7 @@ impl Destination {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Source {
     Server(ServerId),
-    Client(ClientId),
+    Client(PeerId),
 }
 
 impl PeerEnd for Source {
@@ -564,7 +564,7 @@ pub struct InboxEntry {
 /// A pending query subscription that needs QueryGraph building.
 #[derive(Debug, Clone)]
 pub struct PendingQuerySubscription {
-    pub client_id: ClientId,
+    pub client_id: PeerId,
     pub query_id: QueryId,
     pub query: Query,
     pub session: Option<Session>,
@@ -576,7 +576,7 @@ pub struct PendingQuerySubscription {
 /// A pending query unsubscription that needs cleanup.
 #[derive(Debug, Clone)]
 pub struct PendingQueryUnsubscription {
-    pub client_id: ClientId,
+    pub client_id: PeerId,
     pub query_id: QueryId,
 }
 
@@ -586,7 +586,7 @@ pub struct PendingQueryUnsubscription {
 #[derive(Debug, Clone)]
 pub struct PendingPermissionCheck {
     pub id: PendingUpdateId,
-    pub client_id: ClientId,
+    pub client_id: PeerId,
     pub payload: SyncPayload,
     pub session: Session,
     /// When schema resolution started deferring this check.
@@ -609,7 +609,7 @@ mod tests {
     #[test]
     fn destination_exposes_peer_identity_for_telemetry() {
         let server_id = ServerId::new();
-        let client_id = ClientId::new();
+        let client_id = PeerId::new();
 
         let server = Destination::Server(server_id);
         let client = Destination::Client(client_id);
@@ -623,7 +623,7 @@ mod tests {
     #[test]
     fn source_exposes_peer_identity_for_telemetry() {
         let server_id = ServerId::new();
-        let client_id = ClientId::new();
+        let client_id = PeerId::new();
 
         let server = Source::Server(server_id);
         let client = Source::Client(client_id);

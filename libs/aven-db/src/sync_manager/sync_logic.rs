@@ -104,7 +104,7 @@ impl SyncManager {
 
     pub(super) fn queue_catalogue_sync_to_client_from_storage<H: Storage>(
         &mut self,
-        client_id: ClientId,
+        client_id: PeerId,
         storage: &H,
     ) {
         let Ok(entries) = storage.scan_catalogue_entries() else {
@@ -163,7 +163,7 @@ impl SyncManager {
         });
     }
 
-    fn queue_catalogue_entry_to_client(&mut self, client_id: ClientId, entry: CatalogueEntry) {
+    fn queue_catalogue_entry_to_client(&mut self, client_id: PeerId, entry: CatalogueEntry) {
         self.outbox.push(OutboxEntry {
             destination: Destination::Client(client_id),
             payload: SyncPayload::CatalogueEntryUpdated { entry },
@@ -180,7 +180,7 @@ impl SyncManager {
     pub(super) fn forward_catalogue_entry_to_clients(
         &mut self,
         entry: CatalogueEntry,
-        except: Option<ClientId>,
+        except: Option<PeerId>,
     ) {
         let client_ids: Vec<_> = self
             .clients
@@ -253,7 +253,7 @@ impl SyncManager {
     pub(super) fn queue_initial_row_to_client_with_storage<H: Storage + ?Sized>(
         &mut self,
         storage: &H,
-        client_id: ClientId,
+        client_id: PeerId,
         object_id: ObjectId,
         branch_name: BranchName,
         force_resend: bool,
@@ -273,7 +273,7 @@ impl SyncManager {
 
     pub(super) fn queue_row_to_client(
         &mut self,
-        client_id: ClientId,
+        client_id: PeerId,
         object_id: ObjectId,
         metadata: HashMap<String, String>,
         row: StoredRowBatch,

@@ -409,7 +409,7 @@ impl SyncManager {
 
     pub(super) fn batch_fate_for_client(
         &self,
-        client_id: ClientId,
+        client_id: PeerId,
         fate: &BatchFate,
     ) -> Option<BatchFate> {
         self.clients.get(&client_id)?;
@@ -430,7 +430,7 @@ impl SyncManager {
         }
     }
 
-    pub(super) fn interested_clients_for_batch_fate(&self, fate: &BatchFate) -> HashSet<ClientId> {
+    pub(super) fn interested_clients_for_batch_fate(&self, fate: &BatchFate) -> HashSet<PeerId> {
         match fate {
             BatchFate::DurableDirect { batch_id, .. }
             | BatchFate::AcceptedTransaction { batch_id, .. }
@@ -452,7 +452,7 @@ impl SyncManager {
 
     fn register_client_batch_fate_interest(
         &mut self,
-        client_id: ClientId,
+        client_id: PeerId,
         batch_ids: &[crate::row_histories::BatchId],
     ) {
         for batch_id in batch_ids {
@@ -525,7 +525,7 @@ impl SyncManager {
     fn apply_transactional_batch_fate_to_rows<H: Storage>(
         &mut self,
         storage: &mut H,
-        origin_client_id: Option<ClientId>,
+        origin_client_id: Option<PeerId>,
         fate: &BatchFate,
         batch_rows: &[(String, StoredRowBatch)],
     ) {
@@ -733,7 +733,7 @@ impl SyncManager {
     fn reject_sealed_transactional_batch<H: Storage>(
         &mut self,
         storage: &mut H,
-        origin_client_id: Option<ClientId>,
+        origin_client_id: Option<PeerId>,
         fate: BatchFate,
         batch_rows: &[(String, StoredRowBatch)],
     ) {
@@ -771,7 +771,7 @@ impl SyncManager {
     fn settle_sealed_batch<H: Storage>(
         &mut self,
         storage: &mut H,
-        origin_client_id: Option<ClientId>,
+        origin_client_id: Option<PeerId>,
         submission: SealedBatchSubmission,
         batch_rows: Vec<(String, StoredRowBatch)>,
         declared_rows: Vec<(String, StoredRowBatch)>,
@@ -870,7 +870,7 @@ impl SyncManager {
     pub(super) fn try_accept_completed_sealed_batch_from_client<H: Storage>(
         &mut self,
         storage: &mut H,
-        client_id: ClientId,
+        client_id: PeerId,
         batch_id: crate::row_histories::BatchId,
     ) {
         let submission = match storage.load_sealed_batch_submission(batch_id) {
@@ -1227,7 +1227,7 @@ impl SyncManager {
     pub(super) fn process_from_client<H: Storage>(
         &mut self,
         storage: &mut H,
-        client_id: ClientId,
+        client_id: PeerId,
         payload: SyncPayload,
     ) {
         let _span = tracing::debug_span!("process_from_client", %client_id, payload = payload.variant_name()).entered();
@@ -1427,7 +1427,7 @@ impl SyncManager {
     pub(super) fn apply_payload_from_client<H: Storage>(
         &mut self,
         storage: &mut H,
-        client_id: ClientId,
+        client_id: PeerId,
         payload: SyncPayload,
         fate_recording: AuthoritativeFateRecording,
     ) {

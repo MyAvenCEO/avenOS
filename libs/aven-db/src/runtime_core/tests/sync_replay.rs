@@ -31,9 +31,9 @@ fn rc_replays_downstream_query_when_upstream_added_late() {
     .unwrap();
     let mut c = new_test_core(mgr_c, MemoryStorage::new(), NoopScheduler);
 
-    let a_client_of_b = ClientId::new();
+    let a_client_of_b = PeerId::new();
     let b_server_for_a = ServerId::new();
-    let b_client_of_c = ClientId::new();
+    let b_client_of_c = PeerId::new();
     let c_server_for_b = ServerId::new();
 
     b.add_client(a_client_of_b, None);

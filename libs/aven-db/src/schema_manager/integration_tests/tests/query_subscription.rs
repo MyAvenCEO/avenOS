@@ -184,8 +184,8 @@ fn e2e_two_clients_query_subscriptions_through_server() {
     let mut io_server = MemoryStorage::new();
 
     // === Network topology ===
-    let client_a_id = ClientId::new();
-    let client_b_id = ClientId::new();
+    let client_a_id = PeerId::new();
+    let client_b_id = PeerId::new();
     let server_id = ServerId::new();
 
     // Server knows about clients
@@ -483,7 +483,7 @@ fn query_settled_direct() {
     let mut io_b = MemoryStorage::new();
 
     // === Network topology ===
-    let client_a_id = ClientId::new();
+    let client_a_id = PeerId::new();
     let server_b_id = ServerId::new();
 
     server_b
@@ -716,7 +716,7 @@ fn query_settled_holds_until_tier() {
 fn query_settled_relays_edge_tier_through_worker() {
     use crate::query_manager::manager::LocalUpdates;
     use crate::sync_manager::{
-        ClientId, ClientRole, Destination, InboxEntry, QueryId, ServerId, Source, SyncPayload,
+        PeerId, ClientRole, Destination, InboxEntry, QueryId, ServerId, Source, SyncPayload,
     };
 
     let schema = SchemaBuilder::new()
@@ -758,9 +758,9 @@ fn query_settled_relays_edge_tier_through_worker() {
     .unwrap();
     let mut io_c = MemoryStorage::new();
 
-    let a_id_on_b = ClientId::new();
+    let a_id_on_b = PeerId::new();
     let b_server_id_for_a = ServerId::new();
-    let b_id_on_c = ClientId::new();
+    let b_id_on_c = PeerId::new();
     let c_server_id_for_b = ServerId::new();
 
     worker_b

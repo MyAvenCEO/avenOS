@@ -48,7 +48,7 @@ use crate::row_format::decode_row;
 use crate::row_histories::BatchId;
 use crate::schema_manager::{Lens, SchemaManager};
 use crate::storage::{Storage, StorageError};
-use crate::sync_manager::{ClientId, DurabilityTier, InboxEntry, OutboxEntry, ServerId};
+use crate::sync_manager::{PeerId, DurabilityTier, InboxEntry, OutboxEntry, ServerId};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MutationErrorEvent {

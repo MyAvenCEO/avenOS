@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::sync_manager::{ClientId, ServerId};
+use crate::sync_manager::{PeerId, ServerId};
 
 /// Who may receive a replicated sync frame.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -12,7 +12,7 @@ pub enum SyncTargetId {
     /// Upstream edge/global server.
     Server(ServerId),
     /// Downstream client session (Groove role).
-    Client(ClientId),
+    Client(PeerId),
 }
 
 impl SyncTargetId {
@@ -27,7 +27,7 @@ impl SyncTargetId {
         }
     }
 
-    pub fn from_client_id(client: ClientId) -> Self {
+    pub fn from_client_id(client: PeerId) -> Self {
         Self::Client(client)
     }
 }

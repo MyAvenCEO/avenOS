@@ -58,7 +58,7 @@ pub struct SyncManager {
     pub(super) servers: HashMap<ServerId, ServerState>,
     pub(super) pending_servers: HashMap<ServerId, Instant>,
     pub(super) pending_server_query_subscriptions: HashSet<(ServerId, QueryId)>,
-    pub(super) clients: HashMap<ClientId, ClientState>,
+    pub(super) clients: HashMap<PeerId, ClientState>,
 
     pub(super) inbox: Vec<InboxEntry>,
     pub(super) outbox: Vec<OutboxEntry>,
@@ -78,13 +78,13 @@ pub struct SyncManager {
     /// This node's durability identities (empty = don't emit durability notifications).
     pub(super) my_tiers: HashSet<DurabilityTier>,
     /// Tracks which clients are interested in row batch-member state updates.
-    pub(super) row_batch_interest: HashMap<RowBatchKey, HashSet<ClientId>>,
+    pub(super) row_batch_interest: HashMap<RowBatchKey, HashSet<PeerId>>,
     /// Tracks clients that explicitly requested the current or next known fate
     /// for a batch whose row member state may not be present on this peer.
-    pub(super) batch_fate_interest: HashMap<BatchId, HashSet<ClientId>>,
+    pub(super) batch_fate_interest: HashMap<BatchId, HashSet<PeerId>>,
 
     /// Tracks which clients originated each query (for relaying QuerySettled).
-    pub(super) query_origin: HashMap<QueryId, HashSet<ClientId>>,
+    pub(super) query_origin: HashMap<QueryId, HashSet<PeerId>>,
     /// Latest remote scope snapshots keyed by upstream server and query id.
     pub(super) remote_query_scopes: HashMap<(ServerId, QueryId), HashSet<(ObjectId, BranchName)>>,
     /// Durability tier associated with each latest remote scope snapshot.
@@ -99,7 +99,7 @@ pub struct SyncManager {
     pub(super) pending_batch_fates: Vec<BatchFate>,
 
     /// Batch fates to send to clients after a full inbox batch has been processed.
-    pub(super) pending_client_batch_fates: HashMap<ClientId, HashSet<BatchId>>,
+    pub(super) pending_client_batch_fates: HashMap<PeerId, HashSet<BatchId>>,
     /// Per-sync-manager replay cache for table/schema row write context.
     ///
     /// Incoming sync rows usually carry table + origin schema metadata. Rows in
@@ -368,17 +368,17 @@ impl SyncManager {
         }
         for (row_batch_key, clients) in &self.row_batch_interest {
             subscriptions += std::mem::size_of_val(row_batch_key);
-            subscriptions += clients.len() * std::mem::size_of::<ClientId>();
+            subscriptions += clients.len() * std::mem::size_of::<PeerId>();
             subscriptions += 48;
         }
         for (batch_id, clients) in &self.batch_fate_interest {
             subscriptions += std::mem::size_of_val(batch_id);
-            subscriptions += clients.len() * std::mem::size_of::<ClientId>();
+            subscriptions += clients.len() * std::mem::size_of::<PeerId>();
             subscriptions += 48;
         }
         for (query_id, clients) in &self.query_origin {
             subscriptions += std::mem::size_of_val(query_id);
-            subscriptions += clients.len() * std::mem::size_of::<ClientId>();
+            subscriptions += clients.len() * std::mem::size_of::<PeerId>();
             subscriptions += 48;
         }
         for (key, scope) in &self.remote_query_scopes {
@@ -403,7 +403,7 @@ impl SyncManager {
                 .pending_client_batch_fates
                 .values()
                 .map(|batch_ids| {
-                    std::mem::size_of::<ClientId>()
+                    std::mem::size_of::<PeerId>()
                         + batch_ids.len() * std::mem::size_of::<BatchId>()
                 })
                 .sum::<usize>();
@@ -519,12 +519,12 @@ impl SyncManager {
     }
 
     /// Add a client connection without automatically replaying catalogue state.
-    pub fn add_client(&mut self, client_id: ClientId) {
+    pub fn add_client(&mut self, client_id: PeerId) {
         self.clients.insert(client_id, ClientState::default());
     }
 
     /// Add a client connection using storage-backed catalogue replay.
-    pub fn add_client_with_storage<H: Storage>(&mut self, storage: &H, client_id: ClientId) {
+    pub fn add_client_with_storage<H: Storage>(&mut self, storage: &H, client_id: PeerId) {
         self.add_client(client_id);
         self.queue_catalogue_sync_to_client_from_storage(client_id, storage);
     }
@@ -535,7 +535,7 @@ impl SyncManager {
     pub fn queue_catalogue_sync_to_client_if_hash_mismatch<H: Storage>(
         &mut self,
         storage: &H,
-        client_id: ClientId,
+        client_id: PeerId,
         remote_catalogue_state_hash: Option<&str>,
         local_catalogue_state_hash: &str,
     ) -> bool {
@@ -552,7 +552,7 @@ impl SyncManager {
     /// Returns `false` if the client has unprocessed inbox entries — the
     /// caller should retry later to avoid dropping data that hasn't been
     /// persisted to storage yet.
-    pub fn remove_client(&mut self, client_id: ClientId) -> bool {
+    pub fn remove_client(&mut self, client_id: PeerId) -> bool {
         let has_inbox = self
             .inbox
             .iter()
@@ -604,12 +604,12 @@ impl SyncManager {
     }
 
     /// Get client state.
-    pub fn get_client(&self, client_id: ClientId) -> Option<&ClientState> {
+    pub fn get_client(&self, client_id: PeerId) -> Option<&ClientState> {
         self.clients.get(&client_id)
     }
 
     /// Set the session for a client.
-    pub fn set_client_session(&mut self, client_id: ClientId, session: Session) {
+    pub fn set_client_session(&mut self, client_id: PeerId, session: Session) {
         if let Some(client) = self.clients.get_mut(&client_id) {
             client.session = Some(session);
         }
@@ -619,7 +619,7 @@ impl SyncManager {
     pub fn queue_full_catchup_to_peer_with_storage<H: Storage>(
         &mut self,
         storage: &H,
-        client_id: ClientId,
+        client_id: PeerId,
     ) {
         if self.clients.get(&client_id).is_none() {
             return;
@@ -674,7 +674,7 @@ impl SyncManager {
     /// Clear row-batch delivery bookkeeping for a peer so the next catch-up re-queues rows.
     ///
     /// Policy may have blocked outbound frames after they were marked sent; reset before replay.
-    pub fn clear_peer_delivery_ledger(&mut self, client_id: ClientId) {
+    pub fn clear_peer_delivery_ledger(&mut self, client_id: PeerId) {
         let Some(client) = self.clients.get_mut(&client_id) else {
             return;
         };
@@ -697,7 +697,7 @@ impl SyncManager {
     pub fn queue_shell_catchup_to_peer_with_storage<H: Storage>(
         &mut self,
         storage: &H,
-        client_id: ClientId,
+        client_id: PeerId,
     ) {
         if self.clients.get(&client_id).is_none() {
             return;
@@ -749,20 +749,20 @@ impl SyncManager {
     }
 
     /// Re-queue full catch-up for an existing Peer client (mesh reconnect / ACL hydration).
-    pub fn rebroadcast_peer_catchup<H: Storage>(&mut self, storage: &H, client_id: ClientId) {
+    pub fn rebroadcast_peer_catchup<H: Storage>(&mut self, storage: &H, client_id: PeerId) {
         if self.clients.contains_key(&client_id) {
             self.queue_full_catchup_to_peer_with_storage(storage, client_id);
         }
     }
 
     /// Shell-only catch-up (sparks/keyshares) before full spark-data replay.
-    pub fn rebroadcast_peer_shell_catchup<H: Storage>(&mut self, storage: &H, client_id: ClientId) {
+    pub fn rebroadcast_peer_shell_catchup<H: Storage>(&mut self, storage: &H, client_id: PeerId) {
         if self.clients.contains_key(&client_id) {
             self.queue_shell_catchup_to_peer_with_storage(storage, client_id);
         }
     }
 
-    pub fn peer_client_ids(&self) -> Vec<ClientId> {
+    pub fn peer_client_ids(&self) -> Vec<PeerId> {
         self.clients.keys().copied().collect()
     }
 
@@ -844,7 +844,7 @@ impl SyncManager {
     pub fn set_client_query_scope_with_storage<H: Storage + ?Sized>(
         &mut self,
         storage: &H,
-        client_id: ClientId,
+        client_id: PeerId,
         query_id: QueryId,
         scope: HashSet<(ObjectId, BranchName)>,
         session: Option<Session>,
@@ -911,7 +911,7 @@ impl SyncManager {
     /// Drop a client's query subscription state.
     ///
     /// Removes per-query scope and origin tracking.
-    pub fn drop_client_query_subscription(&mut self, client_id: ClientId, query_id: QueryId) {
+    pub fn drop_client_query_subscription(&mut self, client_id: PeerId, query_id: QueryId) {
         if let Some(client) = self.clients.get_mut(&client_id) {
             let old_scope: HashSet<(ObjectId, BranchName)> = client
                 .queries
@@ -939,7 +939,7 @@ impl SyncManager {
 
     fn prune_client_scope_tracking(
         &mut self,
-        client_id: ClientId,
+        client_id: PeerId,
         removed_scope: &HashSet<(ObjectId, BranchName)>,
     ) {
         if removed_scope.is_empty() {
@@ -1180,7 +1180,7 @@ impl SyncManager {
     /// Called by QueryManager when a server subscription settles for the first time.
     pub fn emit_query_settled(
         &mut self,
-        client_id: ClientId,
+        client_id: PeerId,
         query_id: QueryId,
         tier: DurabilityTier,
         scope: &HashSet<(ObjectId, BranchName)>,
@@ -1226,7 +1226,7 @@ impl SyncManager {
     }
 
     /// Emit a schema warning to a client.
-    pub fn emit_schema_warning(&mut self, client_id: ClientId, warning: SchemaWarning) {
+    pub fn emit_schema_warning(&mut self, client_id: PeerId, warning: SchemaWarning) {
         self.outbox.push(OutboxEntry {
             destination: Destination::Client(client_id),
             payload: SyncPayload::SchemaWarning(warning),
@@ -1236,7 +1236,7 @@ impl SyncManager {
     /// Emit a query subscription rejection error to a client.
     pub fn emit_query_subscription_rejected(
         &mut self,
-        client_id: ClientId,
+        client_id: PeerId,
         query_id: QueryId,
         code: impl Into<String>,
         reason: impl Into<String>,

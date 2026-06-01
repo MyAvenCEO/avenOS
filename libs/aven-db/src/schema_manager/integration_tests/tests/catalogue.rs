@@ -1112,7 +1112,7 @@ fn e2e_server_learns_schema_via_catalogue_sync() {
     let mut io_server = MemoryStorage::new();
 
     // === Network topology ===
-    let client_id = ClientId::new();
+    let client_id = PeerId::new();
     let server_id = ServerId::new();
 
     server

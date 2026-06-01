@@ -212,7 +212,7 @@ impl SyncManager {
     fn reject_permission_batch<H: Storage>(
         &mut self,
         storage: &mut H,
-        origin_client_id: ClientId,
+        origin_client_id: PeerId,
         fate: BatchFate,
         fallback_row: StoredRowBatch,
     ) {

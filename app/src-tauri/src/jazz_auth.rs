@@ -40,7 +40,7 @@ pub fn ed25519_public_from_peer_did(did: &str) -> Result<[u8; 32], String> {
 	Ok(pk)
 }
 
-/// Deterministic jazz `ClientId`-style fingerprint (not a JWT claim for ACC).
+/// Deterministic jazz `PeerId`-style fingerprint (not a JWT claim for ACC).
 #[must_use]
 pub fn client_uuid_from_ed_pubkey(pubkey: &[u8; 32]) -> uuid::Uuid {
 	use sha2::{Digest, Sha256};

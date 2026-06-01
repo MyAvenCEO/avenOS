@@ -144,7 +144,7 @@ fn remove_client_blocked_by_parked_sync_messages() {
     use crate::metadata::RowProvenance;
 
     let mut core = create_test_runtime();
-    let alice = ClientId::new();
+    let alice = PeerId::new();
     core.add_client(alice, None);
 
     // Park a message from alice (simulates push_sync_inbox before batched_tick)
@@ -189,7 +189,7 @@ fn remove_client_succeeds_after_parked_messages_drained() {
     use crate::metadata::RowProvenance;
 
     let mut core = create_test_runtime();
-    let alice = ClientId::new();
+    let alice = PeerId::new();
     core.add_client(alice, None);
 
     core.park_sync_message(InboxEntry {
@@ -236,8 +236,8 @@ fn remove_client_ignores_parked_messages_from_other_clients() {
     use crate::metadata::RowProvenance;
 
     let mut core = create_test_runtime();
-    let alice = ClientId::new();
-    let bob = ClientId::new();
+    let alice = PeerId::new();
+    let bob = PeerId::new();
     core.add_client(alice, None);
     core.add_client(bob, None);
 

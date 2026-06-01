@@ -394,7 +394,7 @@ mod tests {
     // ========================================================================
     // Multi-Client Server Schema Sync Tests
     // ========================================================================
-    use crate::sync_manager::{ClientId, ClientRole, Destination, DurabilityTier};
+    use crate::sync_manager::{PeerId, ClientRole, Destination, DurabilityTier};
 
     /// E2E test: Two clients with same schema, server with empty schema.
     ///
