@@ -4,7 +4,7 @@
 
 **Thesis.** Every value syncs to exactly the peers a biscuit authorizes; the network self-assembles (discover · pair · sync · heal) in the background. The whole frontend reduces to *"manage who's in each spark."*
 
-**Today:** the biscuit check is real and row-capable (`spark_acc::authorize`); the transport seam is real and DID-keyed (`SyncTransport`, `SyncTargetId::PeerDid`); but live peer forwarding has **no capability gate** and no real transport (`peer/api.ts` is demo, `aven-p2p` is a placeholder). This doc closes that gap with **one model** and ships it in three phases (§8).
+**Today (updated):** M0 (de-jazz collapse) and M1's engine are **landed**. Live peer forwarding now passes the real biscuit gate (`BiscuitCapabilityResolver` → `ship_frontier_diff`); the frontier engine + announce/need protocol are wired; the dev TCP transport (`dev_transport.rs`) converges two instances; the mesh UI + `peer/api.ts` are on real IPC (demo deleted); ReBAC and the server tier are removed (one authorizer, one tracker). **Remaining:** prove the live grant→sync loop end-to-end, surface convergence as "Up to date", tidy the legacy test graveyard, and — the one external blocker — the real `HyperswarmTransport` (peeroxide, sandbox-blocked). See **§10**.
 
 **Decision — radical cut.** We commit 100% to **biscuit caps + frontier sync** as avenOS's only auth + replication model, and delete the upstream-Groove multi-tier machinery avenOS never used: ReBAC/`ClientRole`, the server tier, and the peer delivery ledger. No coexistence, no backwards-compat shim. This is cheap because none of it has an avenOS consumer (§0) — it's deletion + test rewrite, not behavior migration. The cut runs as **M0 (de-jazz collapse)** then **M1 (frontier sync)** — see §0 for the kill-boundary and §8 for sequencing.
 
@@ -204,10 +204,10 @@ What Holepunch actually does → what it confirms / changes here:
 - Tests to delete/rewrite: `runtime_core/tests/{sync_replay,basic,schema_catalogue,query_subscription,fk_remove_error,write_batch/*}.rs`, `schema_manager/integration_tests/tests/{query_subscription,sync,catalogue}.rs`.
 
 **Order (delete leaves first, then the trunk — compile + test gate after each step):**
-1. **Server tier** — delete `add_server`/`remove_server`, `forward_*_to_servers` (already `#[cfg(test)]`), `seal_batch_to_servers`/`force_row_batch_to_servers`, catalogue **sync-to-server** queue, `send_query_*_to_servers`, `ServerId`, the `*_server_seq` / `parked_sync_messages_by_server_seq` plumbing, `server_queries.rs`. Keep the schema/catalogue **registry** and local subscription delivery.
-2. **ReBAC** — delete `permissions.rs` permission-check machinery, `PendingPermissionCheck`, `is_in_scope`, role-based row filtering in `forward_update_to_clients`, and `ClientRole::{User,Admin,Backend}`. `may_sync` (caps) is the only authorizer left.
-3. **Collapse client→peer** — `ClientState` slims to a peer connection handle (drop role enum, drop session/ReBAC fields); `ensure_client_as_peer` becomes `add_peer`; `forward_update_to_clients` loses its role branch. Keep `sent_batch_ids` **for now** (M1 deletes it once the frontier replaces it — peers still need *a* delivery path until then).
-4. **Tests** — delete the multi-tier cases above; keep/rewrite local-query + schema-registry coverage. `cargo test -p groove` green before M1.
+1. ✅ **Server tier** — *DONE* (commit `37df60f`, ~1850 lines / 18 files). Deleted `ServerId`, `ServerState`, the `Server` variants of `Source`/`Destination`/`SyncTargetId`, `add_server`/`remove_server` (RuntimeCore + TokioRuntime + SyncManager), `forward_*_to_servers`, `seal`/`force`/`retransmit_*_to_servers`, catalogue sync-to-server, `send_query_*_to_servers`, upstream subscription forwarding, and the `*_server_seq` / `parked_sync_messages_by_server_seq` ordering. `retained_batch_terminal_tier` rewritten local-only; **`DurabilityTier` enum kept** (batch_fate persistence). lib green both features; §9 harness 13/13; app green.
+2. ✅ **ReBAC** — *DONE* (commit `899eae1`). The write-permission/policy-graph path was already dead (nothing ever constructed `PendingPermissionCheck`/`PolicyCheckState`). Deleted `permissions.rs`, `PendingPermissionCheck`, `pending_permission_checks`, `active_policy_checks`, `pick_up_pending_permission_checks`/`evaluate_write_permission`/`settle_policy_checks` + helpers. `ClientRole`/`is_in_scope`/role row-filtering were already absent on this path. `may_sync` (caps) is the only authorizer.
+3. ✅ **Collapse client→peer** — *DONE incidentally*: `ClientState` is already a peer handle (`session` + `queries`, no role enum); `sent_batch_ids`/`sent_metadata` lived on the now-deleted `ServerState`; the peer path is frontier-driven (no per-peer ledger).
+4. ⏳ **Tests** — *pending (M0-C)*. The in-crate runtime_core/schema_manager test suite is a **pre-existing broken graveyard** (~154 compile errors from removed helpers, predates this work) and `tests/{sync_core,sync_transport_codec}.rs` encode the killed tiers. The live acceptance suite is the §9 harness (`tests/{capability_gate,frontier_reconcile,dev_transport,loopback_transport}.rs`), which is green. Close-out: delete the machinery-encoding legacy tests and `DeliveryLedger` (exported but never instantiated). See §10.
 
 **Risk & discipline:** this is the highest-blast-radius milestone (core query engine, hundreds of cascading compile errors). It is **pure cleanup of inert code**, not a fix — so it can be done in one focused pass but must gate on `cargo build -p groove` then `cargo test -p groove` after *each* of steps 1–3, never deleting ahead of a green compile. No app changes, no new features.
 
@@ -266,3 +266,71 @@ Proof of the model with **zero networking**, on `LoopbackTransport` + N in-proce
 | T9 ✅ | `partition_heals_on_reconnect` — diverge offline, reconnect → frontier exchange heals | offline-first resilience |
 
 **9 of 9 green (T1–T9)** — every invariant of the model is proven (`tests/frontier_reconcile.rs`, `tests/capability_gate.rs`, `tests/loopback_transport.rs`). `FrontierDag::pull_from` is the anti-entropy reconcile step (§8 M1 step 4); `gated_pull` is the per-hop gate ⨯ tracker integration point (step 6) — both stateless, idempotent, dedup-by-`BatchId`, path/order-independent, revoke-not-retroactive. **T6 + T7 green is the proof that a per-peer ledger is unnecessary** — peeroxide is now just one more `impl SyncTransport` under an already-proven model. **The entire §9 harness is green.** What remains is purely the *production wiring* — swapping these proven primitives (`frontier_diff`, `pull_from`, `gated_pull`, `heads_for`, `may_sync`) into the live `forward_update_to_clients`, adding `FrontierAnnounce`/`FrontierNeed` to `SyncPayload`, and deleting `sent_batch_ids` — a mechanical change onto an already-green model, plus the (sandbox-blocked) peeroxide transport.
+
+---
+
+## 10. Close-out — prove & finish the live loop
+
+M0 (de-jazz collapse) and M1's *engine* are landed: one authorizer (biscuit
+caps), one tracker (frontier), real dev transport, real mesh UI. What remains is
+not architecture — it is **proving the live loop end-to-end** and tidying two
+loose ends. Each item names its **acceptance check**; gate on `cargo build`
+(lib default + `client-p2p`) + the §9 harness staying green.
+
+### 10.1 Prove the live grant→sync loop (`bun dev:app2x:mac`)
+The whole point: *"select peers, then sync based on the admin biscuits of a spark
+member."* Verify the chain that the unit harness proves in-process actually fires
+across two real instances over the dev TCP transport.
+
+1. **Pair.** A & B each open the Peers screen, copy their DID, paste the other's,
+   Add. `AVENOS_DEV_PEER_SYNC` connects the dev TCP transport (A listens, B
+   dials `127.0.0.1:14290`). **Check:** each peer chip flips `Connecting →
+   Syncing` (real `peer_client_ids` registration), not stuck.
+2. **Bootstrap trust.** Shell catch-up (`SHELL_CATCHUP_TABLES` = sparks,
+   keyshares) ships **ungated** so B's vault receives the spark biscuit chain.
+   **Check:** B's `BiscuitVault.sparks` contains the spark after pairing.
+3. **Grant.** On A, Spark Members → add B's DID (`sparkAdminAdd`) → mints a
+   biscuit grant for B on spark S. **Check:** B's vault holds a grant whose
+   subject is B's did:key for `spark:S:`.
+4. **Gated convergence.** A writes a row in spark S → `FrontierAnnounce` →
+   B `FrontierNeed` → `ship_frontier_diff` → `may_sync(Client(B), Write,
+   spark:S:row)` → **Allow** → B converges. **Check (positive):** the row
+   appears on B. **Check (negative):** a row in a spark B is *not* a member of
+   → `DenyPermanent` → never reaches B (no leak).
+5. **Revoke not retroactive.** A `sparkAdminRevoke(B)` → `reevaluate` stops
+   *new* batches; B keeps what it already holds. **Check:** post-revoke writes
+   on A do not reach B; pre-revoke rows remain on B.
+
+*If a step fails, the fix is wiring/ordering (e.g. re-announce after vault
+hydrate so the resolver re-asks once it can authorize), not model change.*
+
+### 10.2 Convergence → `Ready`/`Usable` (deferred status)
+Today a linked peer shows `Syncing` forever — the stateless frontier keeps no
+per-peer head ledger, so "caught up" can't be asserted. Add the **one** cheap
+signal that does not reintroduce a ledger: after `ship_frontier_diff` computes an
+**empty** diff for a peer, record a single `bool` ("frontier converged for this
+peer") in `SyncManager`; clear it on any local seal/announce. Surface it through
+the mesh snapshot → re-add `PeerMeshPhase::Ready` / `PeerUsability::Usable`.
+**Check:** after convergence the chip reads "Up to date"; a new local write flips
+it back to `Syncing` until the next empty diff.
+
+### 10.3 Real transport (`aven-p2p` `HyperswarmTransport`) — external blocker
+Steps 7–9 (peeroxide `HyperswarmTransport` + local bootstrap DHT) are
+**sandbox-blocked** (peeroxide dependency). The seam is ready: it is "one more
+`impl SyncTransport`" under the already-proven model, and `dev_transport.rs`
+(TCP) is the working stand-in. **Action:** unblock peeroxide, then implement
+`HyperswarmTransport` and wire it from the app host exactly where
+`try_dev_peer_transport` wires the TCP one. No engine change.
+
+### 10.4 Legacy test graveyard + `DeliveryLedger` (M0-C cleanup)
+The in-crate `runtime_core`/`schema_manager` test modules (~154 pre-existing
+compile errors, removed helpers) and `tests/{sync_core,sync_transport_codec}.rs`
+encode the killed server/ReBAC tiers. Per §0 "delete + rewrite the tests that
+encode them": delete the machinery-encoding cases; keep/restore only
+local-query + schema-registry coverage if cheap. Also delete `DeliveryLedger` /
+`delivery_ledger.rs` (exported but never instantiated). **Check:**
+`cargo test -p aven-db` compiles and the surviving suite is green.
+
+**Definition of done:** §10.1 all checks pass live; §10.2 chip reaches "Up to
+date"; §10.4 `cargo test` green. §10.3 stays open until peeroxide is unblocked —
+the only thing standing between the dev-TCP proof and a real mesh.
