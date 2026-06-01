@@ -1,4 +1,4 @@
-import type { StyleDef } from '../../types.js'
+import type { StyleDef } from '../../engine/types.js'
 
 const tokens: StyleDef['tokens'] = {
 	'bg-a': '#FBFAF6',

@@ -1,4 +1,4 @@
-import type { InterfaceDef, StyleDef, UiFixtureShell, ViewDef } from '../types.js'
+import type { InterfaceDef, StyleDef, UiFixtureShell, ViewDef } from '../engine/types.js'
 
 export type { UiFixtureShell, InterfaceDef }
 

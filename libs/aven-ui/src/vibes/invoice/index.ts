@@ -1,6 +1,6 @@
-import type { UiFixtureShell } from '../../types.js'
+import type { UiFixtureShell } from '../../engine/types.js'
 import invoiceInterface from './interface.json'
-import { invoiceLogic } from './logic.ts'
+import invoiceLogic from './logic.js?raw'
 import invoiceSource from './source.json'
 import { invoiceStyle } from './style.js'
 import { invoiceView } from './view.js'
@@ -17,7 +17,7 @@ export function createInvoiceShell(): UiFixtureShell {
 	return invoiceShell
 }
 
-export { invoiceLogic } from './logic.ts'
+export { invoiceLogic }
 export { invoiceView } from './view.js'
 export { invoiceStyle } from './style.js'
 export { default as invoiceSource } from './source.json'

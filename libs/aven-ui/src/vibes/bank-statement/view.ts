@@ -1,4 +1,4 @@
-import type { ViewDef, ViewNode } from '../../types.js'
+import type { ViewDef, ViewNode } from '../../engine/types.js'
 
 function partyCard(prefix: string): ViewNode {
 	return {

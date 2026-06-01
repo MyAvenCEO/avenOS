@@ -1,6 +1,6 @@
-import type { UiFixtureShell } from '../../types.js'
+import type { UiFixtureShell } from '../../engine/types.js'
 import errorInterface from './interface.json'
-import { errorLogic } from './logic.ts'
+import errorLogic from './logic.js?raw'
 import errorSource from './source.json'
 import { errorStyle } from './style.js'
 import { errorView } from './view.js'
@@ -17,7 +17,7 @@ export function createErrorShell(): UiFixtureShell {
 	return errorShell
 }
 
-export { errorLogic } from './logic.ts'
+export { errorLogic }
 export { errorView } from './view.js'
 export { errorStyle } from './style.js'
 export { default as errorSource } from './source.json'

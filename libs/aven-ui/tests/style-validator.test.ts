@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { validateStyleDef } from '../src/style-validator.js'
+import { validateStyleDef } from '../src/engine/style-validator.js'
 import { invoiceStyle } from '../src/vibes/invoice/style.js'
 
 describe('validateStyleDef', () => {

@@ -1,7 +1,7 @@
-import type { StyleDef } from '../types.js'
-import { CSS_INJECTION_PATTERNS, FORBIDDEN_PATH_KEYS } from '../security.js'
-import { validateStyleDef } from '../style-validator.js'
-import { compileCSSProperties, toKebabCase } from '../utils.js'
+import type { StyleDef } from './types.js'
+import { CSS_INJECTION_PATTERNS, FORBIDDEN_PATH_KEYS } from './security.js'
+import { validateStyleDef } from './style-validator.js'
+import { compileCSSProperties, toKebabCase } from './utils.js'
 
 function assertSafePath(path: string, context = 'style token path'): void {
 	if (!path || typeof path !== 'string') return

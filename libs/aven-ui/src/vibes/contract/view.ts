@@ -1,4 +1,4 @@
-import type { ViewDef } from '../../types.js'
+import type { ViewDef } from '../../engine/types.js'
 
 /** Contract vibe — structure only; all copy/data bound from initState output. */
 export const contractView: ViewDef = {
