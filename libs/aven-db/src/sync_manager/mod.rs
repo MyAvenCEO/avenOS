@@ -108,6 +108,10 @@ pub struct SyncManager {
     /// from storage for every row.
     pub(super) replay_table_contexts:
         HashMap<(String, SchemaHash), std::sync::Arc<PreparedRowTableContext>>,
+
+    /// The single peer-sync authorizer (§6 gate). `AllowAll` by default
+    /// (local-only / tests); the app injects its biscuit-aware resolver.
+    pub(super) resolver: std::sync::Arc<dyn crate::capability::CapabilityResolver>,
 }
 
 impl std::fmt::Debug for SyncManager {
@@ -255,7 +259,14 @@ impl SyncManager {
             pending_batch_fates: Vec::new(),
             pending_client_batch_fates: HashMap::new(),
             replay_table_contexts: HashMap::new(),
+            resolver: std::sync::Arc::new(crate::capability::AllowAllResolver),
         }
+    }
+
+    /// Inject the peer-sync authorizer (§6 gate). The app provides its
+    /// biscuit-aware resolver; tests / local-only keep the `AllowAll` default.
+    pub fn set_resolver(&mut self, resolver: std::sync::Arc<dyn crate::capability::CapabilityResolver>) {
+        self.resolver = resolver;
     }
 
     pub fn reserve_timestamp(&mut self) -> u64 {
