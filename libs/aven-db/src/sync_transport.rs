@@ -2,8 +2,10 @@
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 
-use crate::sync_manager::{ClientId, InboxEntry, SyncPayload};
+use crate::sync_manager::{ClientId, InboxEntry, Source, SyncPayload};
 use crate::sync_targets::SyncTargetId;
 
 const BINCODE_PAYLOAD_LIMIT_BYTES: usize = 128 * 1024 * 1024;
@@ -122,3 +124,61 @@ impl SyncTransport for NullSyncTransport {
 
 /// Back-compat alias for code that still names the old trait.
 pub type PeerTransport = dyn SyncTransport;
+
+/// In-memory `SyncTransport` pair for in-process convergence tests (§9 T4/T5/T7).
+///
+/// A frame sent on one end lands in the other end's `recv_inbound`, tagged with
+/// the sender's `Source`. Two connected endpoints share a pair of queues — no
+/// UDP, no DHT — so the frontier protocol can be driven end-to-end before any
+/// real transport exists.
+pub struct LoopbackTransport {
+    inbound: Arc<Mutex<VecDeque<InboxEntry>>>,
+    outbound: Arc<Mutex<VecDeque<InboxEntry>>>,
+    as_source: Source,
+}
+
+impl LoopbackTransport {
+    /// Build a connected `(a, b)` pair. Each endpoint appears to the other as the
+    /// given `Source` (its peer identity).
+    pub fn pair(a_source: Source, b_source: Source) -> (Self, Self) {
+        let a_inbox: Arc<Mutex<VecDeque<InboxEntry>>> = Arc::new(Mutex::new(VecDeque::new()));
+        let b_inbox: Arc<Mutex<VecDeque<InboxEntry>>> = Arc::new(Mutex::new(VecDeque::new()));
+        let a = Self {
+            inbound: a_inbox.clone(),
+            outbound: b_inbox.clone(),
+            as_source: a_source,
+        };
+        let b = Self {
+            inbound: b_inbox,
+            outbound: a_inbox,
+            as_source: b_source,
+        };
+        (a, b)
+    }
+
+    /// Frames currently waiting in this endpoint's inbox.
+    pub fn pending(&self) -> usize {
+        self.inbound.lock().expect("loopback inbox lock").len()
+    }
+}
+
+#[async_trait]
+impl SyncTransport for LoopbackTransport {
+    async fn send_to(&self, _target: SyncTargetId, payload: SyncPayload) -> crate::Result<()> {
+        self.outbound
+            .lock()
+            .expect("loopback outbound lock")
+            .push_back(InboxEntry {
+                source: self.as_source.clone(),
+                payload,
+            });
+        Ok(())
+    }
+
+    async fn recv_inbound(&self) -> Option<InboxEntry> {
+        self.inbound
+            .lock()
+            .expect("loopback inbox lock")
+            .pop_front()
+    }
+}

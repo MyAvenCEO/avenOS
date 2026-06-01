@@ -18,12 +18,18 @@ pub mod delivery_ledger;
 #[cfg(feature = "client-p2p")]
 pub mod sync_authorizer;
 #[cfg(feature = "client-p2p")]
+pub mod capability;
+#[cfg(feature = "client-p2p")]
 pub mod sync_targets;
 #[cfg(feature = "client-p2p")]
 pub mod sync_transport;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_support;
 pub mod wire_types;
+
+/// The per-resource frontier — the only peer tracker (pure, storage-free core).
+pub mod frontier;
+pub use frontier::{frontier_diff, heads_for, FrontierDag};
 
 pub use sync_manager::sync_tracer;
 
@@ -47,6 +53,11 @@ pub use avenos_client::{JazzClient, PeerInboundParkedHook};
 pub use delivery_ledger::{DeliveryLedger, RowBatchKey};
 #[cfg(feature = "client-p2p")]
 pub use sync_authorizer::{AllowAllSyncAuthorizer, DenyAllSyncAuthorizer, SyncAuthorizer};
+#[cfg(feature = "client-p2p")]
+pub use capability::{
+    AccOp, AllowAllResolver, CapDecision, CapabilityResolver, DenyAllResolver, ResourceCoord,
+    gated_pull,
+};
 #[cfg(feature = "client-p2p")]
 pub use sync_targets::SyncTargetId;
 #[cfg(feature = "client-p2p")]
