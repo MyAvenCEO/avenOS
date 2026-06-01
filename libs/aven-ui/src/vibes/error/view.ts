@@ -1,4 +1,4 @@
-import type { ViewDef } from '../../types.js'
+import type { ViewDef } from '../../engine/types.js'
 
 /** Intent error screen — diagnostic panel; copy bound from initState output. */
 export const errorView: ViewDef = {

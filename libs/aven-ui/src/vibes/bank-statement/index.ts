@@ -1,6 +1,6 @@
-import type { UiFixtureShell } from '../../types.js'
+import type { UiFixtureShell } from '../../engine/types.js'
 import bankStatementInterface from './interface.json'
-import { bankStatementLogic } from './logic.ts'
+import bankStatementLogic from './logic.js?raw'
 import bankStatementSource from './source.json'
 import { bankStatementStyle } from './style.js'
 import { bankStatementView } from './view.js'
@@ -17,7 +17,7 @@ export function createBankStatementShell(): UiFixtureShell {
 	return bankStatementShell
 }
 
-export { bankStatementLogic } from './logic.ts'
+export { bankStatementLogic }
 export { bankStatementView } from './view.js'
 export { bankStatementStyle } from './style.js'
 export { default as bankStatementSource } from './source.json'

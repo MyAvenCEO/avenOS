@@ -1,6 +1,6 @@
-import type { UiFixtureShell } from '../../types.js'
+import type { UiFixtureShell } from '../../engine/types.js'
 import todoInterface from './interface.json'
-import { todoLogic } from './logic.ts'
+import todoLogic from './logic.js?raw'
 import todoSource from './source.json'
 import { todoStyle } from './style.js'
 import { todoView } from './view.js'
@@ -17,7 +17,7 @@ export function createTodosShell(): UiFixtureShell {
 	return todosShell
 }
 
-export { todoLogic } from './logic.ts'
+export { todoLogic }
 export { todoView } from './view.js'
 export { todoStyle } from './style.js'
 export { default as todoSource } from './source.json'

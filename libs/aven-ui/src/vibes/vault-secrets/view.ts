@@ -1,4 +1,4 @@
-import type { ViewDef } from '../../types.js'
+import type { ViewDef } from '../../engine/types.js'
 
 export const vaultSecretsView: ViewDef = {
 	content: {

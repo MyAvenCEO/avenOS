@@ -1,4 +1,4 @@
-import type { ViewDef } from '../../types.js'
+import type { ViewDef } from '../../engine/types.js'
 
 export const todoView: ViewDef = {
 	content: {

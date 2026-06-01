@@ -1,16 +1,16 @@
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
-import type { RenderData, SlotRegistry, UiEvent, UiEventDef, ViewDef, ViewNode } from '../types.js'
-import { Evaluator, validateViewDef } from '../view-validator.js'
+import type { RenderData, SlotRegistry, UiEvent, UiEventDef, ViewDef, ViewNode } from './types.js'
+import { Evaluator, validateViewDef } from './view-validator.js'
 import {
 	BOOLEAN_ATTRS,
 	SAFE_TAGS,
 	URL_ATTRS,
 	sanitizeAttributeWhitelist,
 	sanitizePayloadForValidation,
-} from '../security.js'
-import { toKebabCase } from '../utils.js'
-import { StyleEngine } from '../style/style-engine.js'
+} from './security.js'
+import { toKebabCase } from './utils.js'
+import { StyleEngine } from './style-engine.js'
 
 async function renderMarkdown(rawText: unknown): Promise<string> {
 	if (rawText == null || typeof rawText !== 'string') return ''

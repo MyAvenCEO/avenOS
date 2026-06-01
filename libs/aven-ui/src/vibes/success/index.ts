@@ -1,6 +1,6 @@
-import type { UiFixtureShell } from '../../types.js'
+import type { UiFixtureShell } from '../../engine/types.js'
 import successInterface from './interface.json'
-import { successLogic } from './logic.ts'
+import successLogic from './logic.js?raw'
 import successSource from './source.json'
 import { successStyle } from './style.js'
 import { successView } from './view.js'
@@ -17,7 +17,7 @@ export function createSuccessShell(): UiFixtureShell {
 	return successShell
 }
 
-export { successLogic } from './logic.ts'
+export { successLogic }
 export { successView } from './view.js'
 export { successStyle } from './style.js'
 export { default as successSource } from './source.json'
