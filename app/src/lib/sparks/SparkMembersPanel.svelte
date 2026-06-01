@@ -47,6 +47,7 @@
 	let addAdminDid = $state('')
 	let addNote = $state<string | undefined>()
 	let revokeBusyDid = $state<string | undefined>(undefined)
+	let confirmRevokeDid = $state<string | undefined>(undefined)
 	let revokeErr = $state<string | undefined>()
 	let revokeNote = $state<string | undefined>()
 	let localPairingLabel = $state<string | undefined>(undefined)
@@ -192,7 +193,16 @@
 	async function revokeAdmin(did: string, label: string): Promise<void> {
 		const sid = sparkId.trim()
 		if (!did || !sid) return
-		if (browser && !confirm(t('sparks.share.revokeConfirm', { label }))) return
+		if (revokeBusyDid) return
+		// Inline two-step confirm — native confirm() no-ops in the Tauri webview.
+		if (confirmRevokeDid !== did) {
+			confirmRevokeDid = did
+			setTimeout(() => {
+				if (confirmRevokeDid === did) confirmRevokeDid = undefined
+			}, 4000)
+			return
+		}
+		confirmRevokeDid = undefined
 		const gen = adminLoadGen
 		revokeBusyDid = did
 		revokeErr = undefined
@@ -297,7 +307,9 @@
 											onclick={() => void revokeAdmin(entry.did, entry.label)}
 											>{revokeBusyDid === entry.did
 												? t('sparks.share.revoking')
-												: t('sparks.share.revoke')}</button
+												: confirmRevokeDid === entry.did
+													? t('sparks.share.revokeConfirmInline')
+													: t('sparks.share.revoke')}</button
 										>
 									{/if}
 								</div>

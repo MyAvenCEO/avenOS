@@ -432,6 +432,7 @@
       "syncTitle": "Sync",
       "revoke": "Teilen beenden",
       "revoking": "Wird beendet…",
+      "revokeConfirmInline": "Zum Beenden erneut tippen",
       "revokeConfirm": "Teilen dieses Sparks mit {label} beenden? Sie erhalten keine neuen Änderungen mehr, behalten aber, was sie bereits erhalten haben.",
       "revokeFailed": "Teilen konnte nicht beendet werden",
       "revokedNote": "Es werden keine neuen Änderungen mehr mit {label} geteilt.",
@@ -618,6 +619,7 @@
     "unnamed": "Peer",
     "forget": "Entfernen",
     "forgetting": "Wird entfernt…",
+    "forgetConfirmInline": "Zum Entfernen erneut tippen",
     "forgetConfirm": "Diesen Peer aus Meinem Netzwerk entfernen?\n\nDie Synchronisierung mit diesem Gerät wird gestoppt. Bereits erhaltene Daten bleiben auf dem Gerät.\n\n{did}",
     "copyDebug": "Debug kopieren",
     "copyDebugHint": "Aktuelle Logs + Peer-/Mesh-Status für Fehlerberichte in die Zwischenablage kopieren"

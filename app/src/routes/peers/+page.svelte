@@ -21,6 +21,7 @@
 	let addBusy = $state(false)
 	let addErr = $state<string | undefined>()
 	let forgetting = $state<string | undefined>()
+	let confirmForget = $state<string | undefined>()
 	let copied = $state(false)
 	let debugCopied = $state(false)
 
@@ -83,7 +84,15 @@
 
 	async function forget(did: string): Promise<void> {
 		if (forgetting) return
-		if (browser && !confirm(t('peers.forgetConfirm', { did }))) return
+		// Inline two-step confirm — native confirm() no-ops in the Tauri webview.
+		if (confirmForget !== did) {
+			confirmForget = did
+			setTimeout(() => {
+				if (confirmForget === did) confirmForget = undefined
+			}, 4000)
+			return
+		}
+		confirmForget = undefined
 		forgetting = did
 		err = undefined
 		try {
@@ -197,7 +206,12 @@
 									type="button"
 									class="text-destructive hover:bg-destructive/10 rounded px-2 py-0.5 text-[11px] font-medium"
 									disabled={forgetting === p.peerDid}
-									onclick={() => void forget(p.peerDid)}>{forgetting === p.peerDid ? t('peers.forgetting') : t('peers.forget')}</button
+									onclick={() => void forget(p.peerDid)}
+									>{forgetting === p.peerDid
+										? t('peers.forgetting')
+										: confirmForget === p.peerDid
+											? t('peers.forgetConfirmInline')
+											: t('peers.forget')}</button
 								>
 							</div>
 						</li>
