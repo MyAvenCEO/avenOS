@@ -259,6 +259,13 @@ impl JazzClient {
             .map_err(|e| JazzError::Sync(format!("set_resolver: {e}")))
     }
 
+    /// Peer client ids with a live registered sync link (for mesh status UI).
+    pub fn peer_client_ids(&self) -> Result<Vec<PeerId>> {
+        self.runtime
+            .peer_client_ids()
+            .map_err(|e| JazzError::Sync(format!("peer_client_ids: {e}")))
+    }
+
     pub fn register_peer_sync_client(&self, peer_id: PeerId) -> Result<()> {
         self.runtime
             .ensure_client_as_peer(peer_id)

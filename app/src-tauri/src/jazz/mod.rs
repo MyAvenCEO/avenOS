@@ -25,7 +25,10 @@ use groove::{
 	TcpSyncTransport,
 	Value,
 };
-use crate::demo_mesh::PeerMeshStatusReply;
+use crate::mesh::{
+	LinkHealth, P2pDiagnostics, PeerMeshPeerState, PeerMeshPhase, PeerMeshStatusReply, PeerUsability,
+	SyncBootstrapPhase,
+};
 use crate::spark_sync::{self, SyncAclSnapshot};
 use serde_json::{Map, Value as JsonValue};
 use tauri::{Emitter, Manager};
@@ -972,26 +975,112 @@ pub(crate) async fn publish_trusted_peers_ui(
 	jazz: &ManagedJazz,
 	ss: &SelfState,
 ) -> Result<(), String> {
-	let rows = if ss.is_unlocked() {
+	let (rows, snap) = if ss.is_unlocked() {
 		let client = with_connected_client(jazz, app, ss).await?;
-		crate::peers::list_peer_rows(client.as_ref()).await?
+		let rows = crate::peers::list_peer_rows(client.as_ref()).await?;
+		let registered = registered_peer_dids(client.as_ref());
+		let local_pk_prefix = local_pk_prefix_hex(ss);
+		let snap = build_peer_mesh_status(&rows, &registered, local_pk_prefix);
+		(rows, snap)
 	} else {
-		vec![]
+		(vec![], build_peer_mesh_status(&[], &Default::default(), String::new()))
 	};
 
 	if jazz.table_ui_ref_count("peers").await > 0 {
 		let _ = emit_peers_table_snapshot(jazz, app, &rows);
 	}
 
-	emit_mesh_snapshot_from_rows(app, jazz, rows).await
+	emit_mesh_snapshot(app, jazz, snap)
 }
 
-async fn emit_mesh_snapshot_from_rows(
+/// did:key set for peer clients with a live registered sync link.
+fn registered_peer_dids(client: &JazzClient) -> std::collections::HashSet<String> {
+	client
+		.peer_client_ids()
+		.unwrap_or_default()
+		.iter()
+		.filter_map(|pid| crate::jazz_auth::peer_did_from_ed25519(&pid.0).ok())
+		.collect()
+}
+
+/// First 4 bytes of the local Ed25519 pubkey, hex — for the mesh diagnostics line.
+fn local_pk_prefix_hex(ss: &SelfState) -> String {
+	let Ok(root) = ss.with_root(|r| Ok(*r)) else {
+		return String::new();
+	};
+	match ed25519_public(&root) {
+		Ok(pk) => format!("{:02x}{:02x}{:02x}{:02x}", pk[0], pk[1], pk[2], pk[3]),
+		Err(_) => String::new(),
+	}
+}
+
+/// Real mesh status from the trusted-peer rows + live transport registration.
+/// A peer with a registered sync link is `Syncing` (transport up, exchanging);
+/// otherwise `Searching` (no live link yet). No demo data.
+fn build_peer_mesh_status(
+	rows: &[crate::peers::PeerRowReply],
+	registered_dids: &std::collections::HashSet<String>,
+	local_pk_prefix: String,
+) -> PeerMeshStatusReply {
+	let peers: Vec<PeerMeshPeerState> = rows
+		.iter()
+		.filter(|r| r.status == "active")
+		.map(|r| {
+			let linked = registered_dids.contains(&r.peer_did);
+			let (phase, usability, bootstrap) = if linked {
+				(
+					PeerMeshPhase::Syncing,
+					PeerUsability::LiveSyncing,
+					SyncBootstrapPhase::Ready,
+				)
+			} else {
+				(
+					PeerMeshPhase::Searching,
+					PeerUsability::Connecting,
+					SyncBootstrapPhase::TransportPending,
+				)
+			};
+			PeerMeshPeerState {
+				id: r.id.clone(),
+				peer_did: r.peer_did.clone(),
+				device_label: r.device_label.clone(),
+				db_status: r.status.clone(),
+				added_at_ms: r.added_at_ms.max(0) as u64,
+				phase,
+				usability: Some(usability),
+				bootstrap: Some(bootstrap),
+			}
+		})
+		.collect();
+
+	let linked_count = peers
+		.iter()
+		.filter(|p| p.bootstrap == Some(SyncBootstrapPhase::Ready))
+		.count() as u32;
+
+	PeerMeshStatusReply {
+		hyperswarm_running: !registered_dids.is_empty(),
+		hyperswarm_start_error: None,
+		local_pk_prefix_hex: local_pk_prefix,
+		p2p_diagnostics: P2pDiagnostics {
+			central_mode: false,
+			dht_bootstrap: "dev tcp transport".into(),
+			joined_topic_count: 0,
+			allowlist_count: peers.len() as u32,
+			linked_count,
+			pairing_session_active: Some(false),
+			prefer_relay_only: Some(false),
+			link_health: Some(LinkHealth::None),
+		},
+		peers,
+	}
+}
+
+fn emit_mesh_snapshot(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
-	_rows: Vec<crate::peers::PeerRowReply>,
+	snap: PeerMeshStatusReply,
 ) -> Result<(), String> {
-	let snap = crate::demo_mesh::demo_mesh_status_reply();
 	let encoded = serde_json::to_string(&snap).map_err(|e| e.to_string())?;
 	{
 		let mut last = jazz
@@ -2223,13 +2312,20 @@ pub(crate) async fn execute_publish_mesh(
 	}
 }
 
-/// Actor-only: demo mesh UI snapshot for `meshStatus` IPC.
+/// Actor-only: real mesh UI snapshot for `meshStatus` IPC — trusted-peer rows
+/// + live transport registration (same builder as the pushed snapshot).
 pub(crate) async fn execute_mesh_snapshot(
-	_app: &tauri::AppHandle,
-	_jazz: &ManagedJazz,
-	_ss: &SelfState,
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	ss: &SelfState,
 ) -> Result<PeerMeshStatusReply, String> {
-	Ok(crate::demo_mesh::demo_mesh_status_reply())
+	if !ss.is_unlocked() {
+		return Ok(build_peer_mesh_status(&[], &Default::default(), String::new()));
+	}
+	let client = with_connected_client(jazz, app, ss).await?;
+	let rows = crate::peers::list_peer_rows(client.as_ref()).await?;
+	let registered = registered_peer_dids(client.as_ref());
+	Ok(build_peer_mesh_status(&rows, &registered, local_pk_prefix_hex(ss)))
 }
 
 pub(crate) async fn execute_mesh_refresh_full(

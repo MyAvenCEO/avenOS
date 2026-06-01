@@ -1,6 +1,6 @@
 mod biscuit_resolver;
 mod crypto;
-mod demo_mesh;
+mod mesh;
 mod network;
 mod jazz;
 mod jazz_auth;
@@ -227,7 +227,6 @@ pub fn run() {
 		})
 		.invoke_handler(tauri::generate_handler![
 			avenos_recent_rust_logs,
-			demo_mesh::demo_peer_mesh_status,
 			network::network_seed,
 			jazz::groove_runtime,
 			jazz::self_storage_paths,

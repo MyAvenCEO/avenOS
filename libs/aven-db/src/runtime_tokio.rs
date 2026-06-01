@@ -523,6 +523,12 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         Ok(())
     }
 
+    /// Peer client ids currently registered for P2P sync (live transport links).
+    pub fn peer_client_ids(&self) -> Result<Vec<PeerId>, RuntimeError> {
+        let core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        Ok(core.peer_client_ids())
+    }
+
     /// Re-queue a peer outbox entry after a transport send failure (mux not ready yet).
     pub fn prepend_outbox(&self, entry: OutboxEntry) -> Result<(), RuntimeError> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
