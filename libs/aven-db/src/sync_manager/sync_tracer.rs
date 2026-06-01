@@ -247,7 +247,7 @@ impl SyncTracer {
                 .client_names
                 .get(cid)
                 .cloned()
-                .unwrap_or_else(|| short_uuid(&cid.0)),
+                .unwrap_or_else(|| hex::encode(&cid.0[..4])),
         };
         let msg = SyncMessage {
             seq: inner.next_seq,
@@ -270,7 +270,7 @@ impl SyncTracer {
                 .client_names
                 .get(cid)
                 .cloned()
-                .unwrap_or_else(|| short_uuid(&cid.0)),
+                .unwrap_or_else(|| hex::encode(&cid.0[..4])),
         };
         let msg = SyncMessage {
             seq: inner.next_seq,
@@ -1135,12 +1135,6 @@ fn short_batch_id(id: &BatchId) -> String {
 /// First 8 chars of an ObjectId UUID.
 fn short_object_id(id: &ObjectId) -> String {
     let s = id.to_string();
-    s[..8.min(s.len())].to_string()
-}
-
-/// First 8 chars of a UUID.
-fn short_uuid(uuid: &uuid::Uuid) -> String {
-    let s = uuid.to_string();
     s[..8.min(s.len())].to_string()
 }
 

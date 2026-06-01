@@ -19,7 +19,6 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::tcp::OwnedWriteHalf;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{Mutex, mpsc};
-use uuid::Uuid;
 
 use crate::JazzError;
 use crate::sync_manager::{PeerId, InboxEntry, Source, SyncPayload};
@@ -70,12 +69,12 @@ impl TcpSyncTransport {
         stream.set_nodelay(true).ok();
         let (mut read_half, mut write_half) = stream.into_split();
 
-        // Identity handshake — exchange 16-byte PeerId both ways.
-        write_half.write_all(local.0.as_bytes()).await?;
+        // Identity handshake — exchange the 32-byte peer pubkey both ways.
+        write_half.write_all(&local.0).await?;
         write_half.flush().await?;
-        let mut remote_bytes = [0u8; 16];
+        let mut remote_bytes = [0u8; 32];
         read_half.read_exact(&mut remote_bytes).await?;
-        let remote = PeerId(Uuid::from_bytes(remote_bytes));
+        let remote = PeerId(remote_bytes);
 
         let (tx, rx) = mpsc::channel::<InboxEntry>(256);
         tokio::spawn(async move {

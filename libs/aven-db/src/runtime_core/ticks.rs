@@ -761,7 +761,7 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
         let mut unsent = Vec::new();
         for msg in outbox {
             let peer_kind = msg.destination.peer_kind();
-            let peer_id = msg.destination.peer_uuid();
+            let peer_id = msg.destination.peer_label();
             let payload = msg.payload.variant_name();
             let _send_span = debug_span!(
                 "sync.send",
@@ -876,7 +876,7 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
         let _recv_span = debug_span!(
             "sync.recv",
             peer_kind = message.source.peer_kind(),
-            peer_id = %message.source.peer_uuid(),
+            peer_id = %message.source.peer_label(),
             payload = message.payload.variant_name(),
             payload_json = %serde_json::to_string(&message.payload).unwrap_or_default(),
             tier = self.tier_label,

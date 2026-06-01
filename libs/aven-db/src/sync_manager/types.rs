@@ -53,18 +53,29 @@ impl std::fmt::Display for ServerId {
     }
 }
 
-/// Unique identifier for a client connection.
+/// A peer's identity = its Ed25519 public key (32 bytes), the same key the
+/// `did:key:` encodes. This is the **full, non-lossy** identity — not a derived
+/// UUID. Stays `Copy` (fixed-size), so no move-cascade. The app renders `did:key`
+/// from these bytes; the wire/storage form is 64-char hex.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct PeerId(pub Uuid);
+pub struct PeerId(pub [u8; 32]);
 
 impl PeerId {
+    /// Synthetic unique id for tests / fallback. Real peers carry their pubkey.
     pub fn new() -> Self {
-        Self(Uuid::now_v7())
+        let mut bytes = [0u8; 32];
+        bytes[..16].copy_from_slice(Uuid::now_v7().as_bytes());
+        Self(bytes)
     }
 
-    /// Parse from UUID string.
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    /// Parse from the 64-char hex wire/storage form.
     pub fn parse(s: &str) -> Option<Self> {
-        Uuid::parse_str(s).ok().map(PeerId)
+        let bytes: [u8; 32] = hex::decode(s.trim()).ok()?.try_into().ok()?;
+        Some(Self(bytes))
     }
 }
 
@@ -76,7 +87,7 @@ impl Default for PeerId {
 
 impl std::fmt::Display for PeerId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", hex::encode(self.0))
     }
 }
 
@@ -492,7 +503,7 @@ impl SyncPayload {
 /// Either end of a peer relationship. `Source` and `Destination` are mirror
 /// images, and both expose the same peer identity fields for telemetry.
 trait PeerEnd {
-    fn descriptor(&self) -> (&'static str, Uuid);
+    fn descriptor(&self) -> (&'static str, String);
 }
 
 /// Destination for an outbox entry.
@@ -503,10 +514,10 @@ pub enum Destination {
 }
 
 impl PeerEnd for Destination {
-    fn descriptor(&self) -> (&'static str, Uuid) {
+    fn descriptor(&self) -> (&'static str, String) {
         match self {
-            Destination::Server(id) => ("server", id.0),
-            Destination::Client(id) => ("client", id.0),
+            Destination::Server(id) => ("server", id.0.to_string()),
+            Destination::Client(id) => ("client", id.to_string()),
         }
     }
 }
@@ -516,7 +527,7 @@ impl Destination {
         PeerEnd::descriptor(self).0
     }
 
-    pub fn peer_uuid(&self) -> Uuid {
+    pub fn peer_label(&self) -> String {
         PeerEnd::descriptor(self).1
     }
 }
@@ -529,10 +540,10 @@ pub enum Source {
 }
 
 impl PeerEnd for Source {
-    fn descriptor(&self) -> (&'static str, Uuid) {
+    fn descriptor(&self) -> (&'static str, String) {
         match self {
-            Source::Server(id) => ("server", id.0),
-            Source::Client(id) => ("client", id.0),
+            Source::Server(id) => ("server", id.0.to_string()),
+            Source::Client(id) => ("client", id.to_string()),
         }
     }
 }
@@ -542,7 +553,7 @@ impl Source {
         PeerEnd::descriptor(self).0
     }
 
-    pub fn peer_uuid(&self) -> Uuid {
+    pub fn peer_label(&self) -> String {
         PeerEnd::descriptor(self).1
     }
 }
@@ -615,9 +626,9 @@ mod tests {
         let client = Destination::Client(client_id);
 
         assert_eq!(server.peer_kind(), "server");
-        assert_eq!(server.peer_uuid(), server_id.0);
+        assert_eq!(server.peer_label(), server_id.0.to_string());
         assert_eq!(client.peer_kind(), "client");
-        assert_eq!(client.peer_uuid(), client_id.0);
+        assert_eq!(client.peer_label(), client_id.to_string());
     }
 
     #[test]
@@ -629,9 +640,9 @@ mod tests {
         let client = Source::Client(client_id);
 
         assert_eq!(server.peer_kind(), "server");
-        assert_eq!(server.peer_uuid(), server_id.0);
+        assert_eq!(server.peer_label(), server_id.0.to_string());
         assert_eq!(client.peer_kind(), "client");
-        assert_eq!(client.peer_uuid(), client_id.0);
+        assert_eq!(client.peer_label(), client_id.to_string());
     }
 
     #[test]

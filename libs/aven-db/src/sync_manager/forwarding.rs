@@ -4,7 +4,6 @@ use crate::object::{BranchName, ObjectId};
 use crate::row_histories::{BatchId, HistoryScan, StoredRowBatch};
 use crate::storage::{RowLocator, Storage, metadata_from_row_locator};
 use std::collections::HashSet;
-use uuid::Uuid;
 
 impl SyncManager {
     fn object_has_upstream_confirmation<H: Storage>(
@@ -374,7 +373,7 @@ impl SyncManager {
             storage,
             object_id,
             branch_name,
-            PeerId(Uuid::nil()),
+            PeerId([0u8; 32]),
         );
     }
 

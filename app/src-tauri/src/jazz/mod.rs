@@ -617,7 +617,7 @@ const CURRENT_JAZZ_LANE: &str = "lane-v1;env=client;user_branch=main";
 /// and remains readable/writable via composed lenses (see <https://jazz.tools/docs/schemas/migrations>).
 fn reconcile_jazz_identity_cache_dir(
 	jazz_dir: &Path,
-	desired_uuid: Uuid,
+	desired_peer: PeerId,
 	current_groove_hash: &[u8; 32],
 	current_schema: &groove::Schema,
 ) -> Result<Vec<groove::Schema>, String> {
@@ -647,10 +647,9 @@ fn reconcile_jazz_identity_cache_dir(
 	match fs::read_to_string(&client_path) {
 		Ok(s) => {
 			if let Some(cid) = PeerId::parse(s.trim()) {
-				if cid.0 != desired_uuid {
+				if cid != desired_peer {
 					reason = Some(format!(
-						"persisted client_id {:?} != current identity {:?}",
-						cid.0, desired_uuid
+						"persisted peer id {cid} != current identity {desired_peer}"
 					));
 				}
 			}
@@ -1253,25 +1252,25 @@ async fn jazz_connect(
 
 	let schema = crate::schema_manifest::load_jazz_schema_from_manifest()?;
 	let pk = ed25519_public(&root)?;
-	let deterministic = crate::jazz_auth::client_uuid_from_ed_pubkey(&pk);
+	let peer_id = PeerId(pk);
 	let groove_hash = *SchemaHash::compute(&schema).as_bytes();
 
 	let user_root = vault_user_root(app)?;
 	migrate_legacy_jazz_dir_to_db(&user_root)?;
 	let data_dir = user_root.join(AVEN_OS_GROOVE_DATA_DIR);
 	let live_schemas =
-		reconcile_jazz_identity_cache_dir(&data_dir, deterministic, &groove_hash, &schema)?;
+		reconcile_jazz_identity_cache_dir(&data_dir, peer_id, &groove_hash, &schema)?;
 
 	let ctx = AppContext {
 		app_id: AppId::from_name("ceo.aven.os"),
-		client_id: Some(PeerId(deterministic)),
+		client_id: Some(peer_id),
 		schema: schema.clone(),
 		live_schemas,
 		data_dir: data_dir.clone(),
 	};
 
 	let _ = (app, mj);
-	let client = match try_dev_peer_transport(PeerId(deterministic)).await {
+	let client = match try_dev_peer_transport(peer_id).await {
 		Some((transport, remote)) => {
 			let client = JazzClient::connect_with_sync_transport(ctx, transport, None)
 				.await
