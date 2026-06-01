@@ -1,4 +1,4 @@
-import type { AvenSelfEnv } from '$lib/env'
+import type { AvenAuthEnv } from '$lib/env'
 
 export type AuthFlow = 'bootstrap' | 'invite'
 
@@ -14,7 +14,7 @@ export type ChallengeFields = {
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000
 
-export function buildChallengeMessage(env: Pick<AvenSelfEnv, 'domain' | 'networkSeed' | 'authUrl'>, fields: Omit<ChallengeFields, 'domain' | 'uri' | 'network'>): string {
+export function buildChallengeMessage(env: Pick<AvenAuthEnv, 'domain' | 'networkSeed' | 'authUrl'>, fields: Omit<ChallengeFields, 'domain' | 'uri' | 'network'>): string {
 	const uri = env.authUrl.replace(/\/$/, '')
 	return `${env.domain} wants you to sign in with your Aven Self identity.
 

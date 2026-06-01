@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Apply Better Auth schema migrations for `libs/aven-self`.
+ * Apply Better Auth schema migrations for `libs/aven-auth`.
  * Uses repo-root `.env` via package script: `bun run migrate`.
  */
 import { execFileSync } from 'node:child_process'
@@ -15,4 +15,4 @@ execFileSync('bunx', ['auth', 'migrate', '-y', '--config', 'src/lib/auth.ts'], {
 	env: process.env,
 })
 
-console.log('[aven-self] migrations applied')
+console.log('[aven-auth] migrations applied')

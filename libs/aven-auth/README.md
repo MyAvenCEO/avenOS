@@ -1,4 +1,4 @@
-# aven-self
+# aven-auth
 
 Headless Better Auth API for Aven Self device registration (`did:key` ppK + invite links).
 
@@ -11,7 +11,7 @@ Required in repo-root `.env`:
 ```env
 BETTER_AUTH_URL=http://localhost:3000
 BETTER_AUTH_SECRET=   # openssl rand -base64 32
-AVEN_SELF_DB_PATH=./data/aven-self.db
+AVEN_AUTH_DB_PATH=./data/aven-auth.db
 ```
 
 See [`../../.env.example`](../../.env.example) and [`.env.example`](./.env.example).
@@ -20,8 +20,8 @@ See [`../../.env.example`](../../.env.example) and [`.env.example`](./.env.examp
 
 ```bash
 # from repo root
-bun run migrate:aven-self   # first time
-bun run dev:aven-self       # http://localhost:3000
+bun run migrate:aven-auth   # first time
+bun run dev:aven-auth       # http://localhost:3000
 ```
 
 Runs Vite under **Node** (`better-sqlite3` is not supported in Bun).
@@ -30,25 +30,25 @@ Runs Vite under **Node** (`better-sqlite3` is not supported in Bun).
 
 ```bash
 # terminal A
-bun run dev:aven-self
+bun run dev:aven-auth
 
 # terminal B
-bun run test:aven-self
+bun run test:aven-auth
 ```
 
 One-shot (starts server, runs smoke, exits):
 
 ```bash
-bun run --cwd libs/aven-self test:once
+bun run --cwd libs/aven-auth test:once
 ```
 
 ## API (under `/api/auth`)
 
 | Method | Path |
 |--------|------|
-| GET | `/aven-self/site/status` |
-| POST | `/aven-self/nonce` |
-| POST | `/aven-self/verify` |
-| POST | `/aven-self/invite/create` (admin session) |
-| GET | `/aven-self/invite/check?token=…` |
+| GET | `/aven-auth/site/status` |
+| POST | `/aven-auth/nonce` |
+| POST | `/aven-auth/verify` |
+| POST | `/aven-auth/invite/create` (admin session) |
+| GET | `/aven-auth/invite/check?token=…` |
 | GET | `/health` |

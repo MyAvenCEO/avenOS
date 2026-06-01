@@ -509,6 +509,26 @@
     "firstNameRequired": "First name is required",
     "deviceLabelRequired": "Device label is required"
   },
+  "invite": {
+    "bootstrapTitle": "Dieses Netzwerk einrichten",
+    "bootstrapSubtitle": "Du bist die erste Person hier. Wenn du dich jetzt registrierst, wird dieses Gerät zum Netzwerk-Admin.",
+    "bootstrapAction": "Admin werden",
+    "signInTitle": "Anmelden",
+    "signInSubtitle": "Melde dich mit der Identität dieses Geräts in diesem Netzwerk an.",
+    "signInAction": "Anmelden",
+    "redeemTitle": "Einladung annehmen",
+    "redeemSubtitle": "Tritt diesem Netzwerk mit deiner Einladung bei.",
+    "redeemAction": "Netzwerk beitreten",
+    "working": "Wird ausgeführt…",
+    "valid": "Diese Einladung ist gültig.",
+    "validUntil": "Diese Einladung ist gültig bis {date}.",
+    "invalid": "Diese Einladung ist ungültig oder abgelaufen.",
+    "success": "Geschafft. Dieses Gerät ist jetzt im Netzwerk registriert.",
+    "successAdmin": "Alles eingerichtet. Dieses Gerät ist jetzt der Netzwerk-Admin.",
+    "unlockFirst": "Entsperre zuerst deine Identität und komm dann zurück.",
+    "goToSettings": "Einstellungen zum Entsperren öffnen",
+    "tauriOnly": "Die Registrierung ist nur in der AvenOS-App verfügbar."
+  },
   "self": {
     "identity": {
       "title": "Self",

@@ -9,11 +9,11 @@ import { createAuthEndpoint } from '@better-auth/core/api'
 import type { BetterAuthPlugin, User } from 'better-auth'
 import * as z from 'zod'
 
-import type { AvenSelfEnv } from '$lib/env'
+import type { AvenAuthEnv } from '$lib/env'
 import { accountIdForDid, ed25519PublicKeyFromDid, providerIdForDid } from '$lib/did'
 import { buildChallengeMessage, challengeExpiry, parseChallengeMessage, type AuthFlow } from './challenge'
 import { decodeSignature, hashInviteToken, syntheticEmailForDid } from './crypto'
-import { avenSelfSchema } from './schema'
+import { avenAuthSchema } from './schema'
 
 const SITE_CONFIG_ID = 'site'
 const flowSchema = z.enum(['bootstrap', 'invite'])
@@ -77,24 +77,24 @@ function inviteIsValid(invite: InviteRow, now = new Date()): boolean {
 	return now <= invite.expiresAt
 }
 
-export type AvenSelfPluginOptions = Pick<
-	AvenSelfEnv,
+export type AvenAuthPluginOptions = Pick<
+	AvenAuthEnv,
 	'domain' | 'networkSeed' | 'authUrl' | 'defaultInviteExpiresInSeconds' | 'inviteDeepLinkScheme'
 >
 
-export function avenSelf(options: AvenSelfPluginOptions) {
+export function avenAuth(options: AvenAuthPluginOptions) {
 	return {
-		id: 'aven-self',
-		schema: mergeSchema(avenSelfSchema, undefined),
+		id: 'aven-auth',
+		schema: mergeSchema(avenAuthSchema, undefined),
 		endpoints: {
-			siteStatus: createAuthEndpoint('/aven-self/site/status', { method: 'GET' }, async (ctx) => {
+			siteStatus: createAuthEndpoint('/aven-auth/site/status', { method: 'GET' }, async (ctx) => {
 				const site = await getSiteConfig(ctx)
 				const bootstrapped = Boolean(site?.adminUserId)
 				return ctx.json({ bootstrapped, hasAdmin: bootstrapped })
 			}),
 
 			inviteCheck: createAuthEndpoint(
-				'/aven-self/invite/check',
+				'/aven-auth/invite/check',
 				{
 					method: 'GET',
 					query: z.object({ token: z.string().min(8) }),
@@ -112,7 +112,7 @@ export function avenSelf(options: AvenSelfPluginOptions) {
 			),
 
 			inviteCreate: createAuthEndpoint(
-				'/aven-self/invite/create',
+				'/aven-auth/invite/create',
 				{
 					method: 'POST',
 					body: z.object({
@@ -158,7 +158,7 @@ export function avenSelf(options: AvenSelfPluginOptions) {
 			),
 
 			nonce: createAuthEndpoint(
-				'/aven-self/nonce',
+				'/aven-auth/nonce',
 				{
 					method: 'POST',
 					body: z.object({
@@ -229,7 +229,7 @@ export function avenSelf(options: AvenSelfPluginOptions) {
 			),
 
 			verify: createAuthEndpoint(
-				'/aven-self/verify',
+				'/aven-auth/verify',
 				{
 					method: 'POST',
 					body: z.object({
@@ -323,7 +323,7 @@ export function avenSelf(options: AvenSelfPluginOptions) {
 							})
 						}
 
-						const emailDomain = options.domain.includes(':') ? 'self.testnet.aven.ceo' : options.domain
+						const emailDomain = options.domain.includes(':') ? 'auth.testnet.aven.ceo' : options.domain
 						user = await ctx.context.internalAdapter.createUser({
 							name: did,
 							email: syntheticEmailForDid(did, emailDomain),

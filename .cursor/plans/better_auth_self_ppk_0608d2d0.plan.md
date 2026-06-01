@@ -1,12 +1,12 @@
 ---
 name: Better Auth Self PPK
-overview: "Two milestones: M1 headless auth server in `libs/aven-self` (Better Auth + avenSelf plugin + SQLite, local dev). M2 Tauri `/invite` route + API client; end-to-end local test before Fly deploy."
+overview: "Two milestones: M1 headless auth server in `libs/aven-auth` (Better Auth + avenAuth plugin + SQLite, local dev). M2 Tauri `/invite` route + API client; end-to-end local test before Fly deploy."
 todos:
   - id: m1-scaffold
-    content: "M1: Scaffold `libs/aven-self/` — SvelteKit adapter-node, Better Auth, SQLite, `/api/auth/*`, `/health`"
+    content: "M1: Scaffold `libs/aven-auth/` — SvelteKit adapter-node, Better Auth, SQLite, `/api/auth/*`, `/health`"
     status: completed
   - id: m1-plugin
-    content: "M1: Implement `avenSelf` plugin — site/status, bootstrap admin, invite create/check, nonce/verify, Ed25519"
+    content: "M1: Implement `avenAuth` plugin — site/status, bootstrap admin, invite create/check, nonce/verify, Ed25519"
     status: completed
   - id: m1-local-dev
     content: "M1: Local dev script + `auth migrate` + API smoke tests (curl) — server runnable on localhost"
@@ -21,32 +21,32 @@ todos:
     content: "M2: E2E local test — server on localhost + Tauri `/invite` bootstrap → invite → redeem"
     status: pending
   - id: m2-fly-deploy
-    content: "M2 (after local E2E): Fly deploy to self.testnet.aven.ceo + DNS"
+    content: "M2 (after local E2E): Fly deploy to auth.testnet.aven.ceo + DNS"
     status: pending
 isProject: false
 ---
 
-# avenSelf — two-milestone plan
+# avenAuth — two-milestone plan
 
 ## Package name
 
-`**libs/aven-self/**` — headless auth server (not `aven-self-auth`).
+`**libs/aven-auth/**` — headless auth server (not `aven-auth-auth`).
 
 ```
-libs/aven-self/
-  package.json          # @avenos/aven-self
+libs/aven-auth/
+  package.json          # @avenos/aven-auth
   Dockerfile
   fly.toml
   src/
     lib/auth.ts
-    lib/auth/plugins/aven-self/
+    lib/auth/plugins/aven-auth/
     hooks.server.ts
     routes/
       api/auth/[...all]/+server.ts
       health/+server.ts
 ```
 
-Root script (M1): `"dev:aven-self": "bun --cwd libs/aven-self dev"`  
+Root script (M1): `"dev:aven-auth": "bun --cwd libs/aven-auth dev"`  
 Local default: `http://localhost:3000` — `BETTER_AUTH_URL` + Tauri client point here for M2 E2E before Fly.
 
 ---
@@ -55,7 +55,7 @@ Local default: `http://localhost:3000` — `BETTER_AUTH_URL` + Tauri client poin
 
 ```mermaid
 flowchart LR
-  M1["M1: libs/aven-self\nauth server only"]
+  M1["M1: libs/aven-auth\nauth server only"]
   M2["M2: app/ Tauri\n/invite + client"]
   Fly["Fly deploy\nafter local E2E"]
 
@@ -68,23 +68,23 @@ flowchart LR
 |                 | M1                              | M2                                                           |
 | --------------- | ------------------------------- | ------------------------------------------------------------ |
 | **Deliverable** | Runnable headless auth API      | Tauri registration UX                                        |
-| **Location**    | `libs/aven-self/`               | `app/src/routes/invite/`, `app/src/lib/self/network-auth.ts` |
+| **Location**    | `libs/aven-auth/`               | `app/src/routes/invite/`, `app/src/lib/self/network-auth.ts` |
 | **Test**        | curl / script against localhost | Tauri app → local server → full bootstrap + invite flow      |
-| **Deploy**      | —                               | Fly + `self.testnet.aven.ceo` after local E2E passes         |
+| **Deploy**      | —                               | Fly + `auth.testnet.aven.ceo` after local E2E passes         |
 
 
 ---
 
-# M1 — Auth server (`libs/aven-self`)
+# M1 — Auth server (`libs/aven-auth`)
 
 ## Goal
 
-Ship a **locally runnable** headless Better Auth service with the custom `**avenSelf`** plugin. No Tauri changes. No Fly yet.
+Ship a **locally runnable** headless Better Auth service with the custom `**avenAuth`** plugin. No Tauri changes. No Fly yet.
 
 ## Features
 
-- **SQLite** via `better-sqlite3` — `./data/aven-self.db` locally (gitignored)
-- `**avenSelf` plugin** endpoints under `/api/auth/aven-self/`:
+- **SQLite** via `better-sqlite3` — `./data/aven-auth.db` locally (gitignored)
+- `**avenAuth` plugin** endpoints under `/api/auth/aven-auth/`:
   - `GET site/status` — `{ bootstrapped, hasAdmin }`
   - `POST invite/create` — admin session only; default TTL **1 day**
   - `GET invite/check?token=…`
@@ -105,26 +105,26 @@ Ship a **locally runnable** headless Better Auth service with the custom `**aven
 
 ```bash
 # from repo root
-bun run dev:aven-self
+bun run dev:aven-auth
 # → http://localhost:3000
 ```
 
-Env (`.env` / `libs/aven-self/.env.example`):
+Env (`.env` / `libs/aven-auth/.env.example`):
 
 ```
 BETTER_AUTH_URL=http://localhost:3000
 BETTER_AUTH_SECRET=<openssl rand -base64 32>
-AVEN_SELF_DB_PATH=./data/aven-self.db
+AVEN_AUTH_DB_PATH=./data/aven-auth.db
 ```
 
 First run: `bunx auth migrate` (or migrate on server start).
 
 ## M1 smoke tests (curl only)
 
-Use a test Ed25519 keypair in a script under `libs/aven-self/tests/` or `scripts/`:
+Use a test Ed25519 keypair in a script under `libs/aven-auth/tests/` or `scripts/`:
 
 1. `GET /health` → 200
-2. `GET /api/auth/aven-self/site/status` → `{ bootstrapped: false }`
+2. `GET /api/auth/aven-auth/site/status` → `{ bootstrapped: false }`
 3. `nonce` + `verify` with `flow: bootstrap` → session cookie; user is admin
 4. `POST invite/create` with admin cookie → `{ inviteToken, inviteDeepLink: "avenos://invite?invite=…" }`
 5. Second keypair: `invite/check` → `nonce` → `verify` with `flow: invite`
@@ -138,7 +138,7 @@ Use a test Ed25519 keypair in a script under `libs/aven-self/tests/` or `scripts
 
 ## Goal
 
-Wire the native app to the auth server. **Run full flow against local `libs/aven-self` first.** Deploy to Fly only after local E2E works.
+Wire the native app to the auth server. **Run full flow against local `libs/aven-auth` first.** Deploy to Fly only after local E2E works.
 
 ## Deliverables
 
@@ -146,7 +146,7 @@ Wire the native app to the auth server. **Run full flow against local `libs/aven
 
 - Configurable base URL:
   - **Local (default in dev):** `http://localhost:3000`
-  - **Prod:** `https://self.testnet.aven.ceo`
+  - **Prod:** `https://auth.testnet.aven.ceo`
 - Persistent Better Auth session cookie (secure storage)
 - `siteStatus()`, `checkInvite(token)`, `register({ flow, inviteToken? })`
 - Uses `plugin:self|signing_peer_did` + `plugin:self|sign`
@@ -174,9 +174,9 @@ i18n: `invite.`* keys in `app/messages/en.json` + `de.json`.
 
 ## M2 local E2E test plan
 
-**Prereq:** M1 server running (`bun run dev:aven-self`).
+**Prereq:** M1 server running (`bun run dev:aven-auth`).
 
-1. Start Tauri app with `AVEN_SELF_AUTH_URL=http://localhost:3000` (or dev default).
+1. Start Tauri app with `AVEN_AUTH_AUTH_URL=http://localhost:3000` (or dev default).
 2. Open `/invite` → bootstrap → admin session stored.
 3. curl `invite/create` with admin cookie → copy token.
 4. Second instance / device: `/invite?invite=TOKEN` → registered.
@@ -188,11 +188,11 @@ i18n: `invite.`* keys in `app/messages/en.json` + `de.json`.
 
 Mirror `[scripts/deploy-relay-fly.ts](scripts/deploy-relay-fly.ts)`:
 
-- App: `self-testnet-aven-ceo`, region `fra`
-- Volume: `self_auth_data` → `/data/aven-self.db`
-- Script: `bun run deploy:aven-self-fly`
-- DNS: `A self.testnet.aven.ceo → Fly IPv4`
-- Switch Tauri prod config to `https://self.testnet.aven.ceo`
+- App: `auth-testnet-aven-ceo`, region `fra`
+- Volume: `auth_data` → `/data/aven-auth.db`
+- Script: `bun run deploy:aven-auth-fly`
+- DNS: `A auth.testnet.aven.ceo → Fly IPv4`
+- Switch Tauri prod config to `https://auth.testnet.aven.ceo`
 
 ---
 

@@ -1,10 +1,10 @@
 import Database from 'better-sqlite3'
 import { betterAuth } from 'better-auth'
 
-import { avenSelfEnv } from '$lib/env'
-import { avenSelf } from '$lib/auth/plugins/aven-self'
+import { avenAuthEnv } from '$lib/env'
+import { avenAuth } from '$lib/auth/plugins/aven-auth'
 
-const env = avenSelfEnv()
+const env = avenAuthEnv()
 
 export const auth = betterAuth({
 	database: new Database(env.dbPath),
@@ -16,11 +16,11 @@ export const auth = betterAuth({
 		'http://localhost:3000',
 		'http://localhost:1420',
 		'http://127.0.0.1:1420',
-		'https://self.testnet.aven.ceo',
+		'https://auth.testnet.aven.ceo',
 		'tauri://localhost',
 	],
 	plugins: [
-		avenSelf({
+		avenAuth({
 			domain: env.domain,
 			networkSeed: env.networkSeed,
 			authUrl: env.authUrl,

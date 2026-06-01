@@ -3,11 +3,11 @@
  * M1 API smoke test — HTTP against a running server (Node + better-sqlite3).
  *
  * Usage:
- *   Terminal A: bun run dev:aven-self
- *   Terminal B: bun run test:aven-self
+ *   Terminal A: bun run dev:aven-auth
+ *   Terminal B: bun run test:aven-auth
  *
  * Or one-shot (starts server, runs tests, stops):
- *   bun run test:aven-self:once
+ *   bun run test:aven-auth:once
  */
 import { getPublicKeyAsync, signAsync, utils } from '@noble/ed25519'
 import bs58 from 'bs58'
@@ -17,8 +17,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const BASE = process.env.AVEN_SELF_TEST_URL ?? 'http://localhost:3010'
-const DEV_PORT = process.env.AVEN_SELF_DEV_PORT ?? '3010'
+const BASE = process.env.AVEN_AUTH_TEST_URL ?? 'http://localhost:3010'
+const DEV_PORT = process.env.AVEN_AUTH_DEV_PORT ?? '3010'
 
 async function keypair(): Promise<{ privKey: Uint8Array; did: string }> {
 	const privKey = utils.randomPrivateKey()
@@ -41,7 +41,7 @@ async function registerFlow(
 	opts: { privKey: Uint8Array; did: string; inviteToken?: string; cookie?: string },
 ): Promise<{ cookie: string; body: Record<string, unknown> }> {
 	const { did, privKey } = opts
-	const nonceRes = await fetch(`${BASE}/api/auth/aven-self/nonce`, {
+	const nonceRes = await fetch(`${BASE}/api/auth/aven-auth/nonce`, {
 		method: 'POST',
 		headers: {
 			'content-type': 'application/json',
@@ -54,7 +54,7 @@ async function registerFlow(
 	const signatureBytes = await signAsync(new TextEncoder().encode(message), privKey)
 	const signature = Buffer.from(signatureBytes).toString('base64url')
 
-	const verifyRes = await fetch(`${BASE}/api/auth/aven-self/verify`, {
+	const verifyRes = await fetch(`${BASE}/api/auth/aven-auth/verify`, {
 		method: 'POST',
 		headers: {
 			'content-type': 'application/json',
@@ -88,7 +88,7 @@ async function runSmoke(): Promise<void> {
 	if (!health.ok) throw new Error(`/health ${health.status}`)
 	console.log('[smoke] /health ok')
 
-	const status0 = await fetch(`${BASE}/api/auth/aven-self/site/status`)
+	const status0 = await fetch(`${BASE}/api/auth/aven-auth/site/status`)
 	const s0 = (await status0.json()) as { bootstrapped: boolean }
 	if (s0.bootstrapped) throw new Error('expected fresh db (bootstrapped=false)')
 	console.log('[smoke] site/status bootstrapped=false')
@@ -98,7 +98,7 @@ async function runSmoke(): Promise<void> {
 	if (!admin.body.isAdmin) throw new Error('expected admin bootstrap')
 	console.log('[smoke] bootstrap admin ok')
 
-	const inviteRes = await fetch(`${BASE}/api/auth/aven-self/invite/create`, {
+	const inviteRes = await fetch(`${BASE}/api/auth/aven-auth/invite/create`, {
 		method: 'POST',
 		headers: { 'content-type': 'application/json', cookie: admin.cookie, origin: BASE },
 		body: JSON.stringify({}),
@@ -126,7 +126,7 @@ async function startServer(): Promise<ChildProcess> {
 	const child = spawn('bun', ['--env-file=../../.env', './scripts/dev-server.ts'], {
 		cwd: root,
 		stdio: 'inherit',
-		env: { ...process.env, AVEN_SELF_DEV_PORT: DEV_PORT },
+		env: { ...process.env, AVEN_AUTH_DEV_PORT: DEV_PORT },
 	})
 	return child
 }
@@ -135,11 +135,11 @@ const once = process.argv.includes('--once')
 
 async function main() {
 	if (once) {
-		const testDb = path.join(root, '.tmp', 'smoke-aven-self.db')
-		process.env.AVEN_SELF_DB_PATH = testDb
+		const testDb = path.join(root, '.tmp', 'smoke-aven-auth.db')
+		process.env.AVEN_AUTH_DB_PATH = testDb
 		process.env.BETTER_AUTH_SECRET ||= 'test-secret-must-be-at-least-32-chars-long'
 		process.env.BETTER_AUTH_URL = BASE
-		process.env.AVEN_SELF_DOMAIN = `localhost:${DEV_PORT}`
+		process.env.AVEN_AUTH_DOMAIN = `localhost:${DEV_PORT}`
 		fs.mkdirSync(path.dirname(testDb), { recursive: true })
 		if (fs.existsSync(testDb)) fs.unlinkSync(testDb)
 		const { execFileSync } = await import('node:child_process')
