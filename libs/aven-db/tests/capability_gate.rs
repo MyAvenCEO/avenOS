@@ -131,3 +131,49 @@ fn capability_gates_every_hop() {
         "already-held batch is kept — revoke is not retroactive"
     );
 }
+
+/// T10 — grant-then-re-announce (the live §10.1 / §1.4 path the app wires via
+/// `finish_spark_admin_grant` → `rebroadcast_all_peer_clients_and_flush`).
+///
+/// Before the grant the peer DEFERS (`Pending`) and receives nothing — but the
+/// data is **not dropped**. After the grant flips the verdict to `Allow`, a
+/// second pull (the re-announce) ships exactly the previously-withheld batches
+/// and converges. This is why a spark's pre-grant data must re-ship: the gate
+/// alone withholds it; only a re-evaluation after the grant delivers it.
+#[test]
+fn grant_then_reannounce_ships_previously_withheld() {
+    let mut hub = FrontierDag::new();
+    hub.insert(bid(1), vec![]);
+    hub.insert(bid(2), vec![bid(1)]);
+    let res = ResourceCoord::new("spark:S", "messages", ObjectId::new());
+    let peer = SyncTargetId::peer_did("did:key:newpeer");
+
+    // Before the grant: ACL not hydrated for this peer → Pending → withholds,
+    // never drops (the row stays available at the source).
+    let before = TestResolver {
+        granted: HashSet::new(),
+        revoked: HashSet::new(),
+        hydrated: false,
+    };
+    let mut peer_dag = FrontierDag::new();
+    assert_eq!(
+        gated_pull(&mut peer_dag, &hub, &before, &peer, &res),
+        0,
+        "pre-grant: gate withholds (Pending defers, never drops)"
+    );
+    assert_eq!(peer_dag.len(), 0, "peer has none of the spark data yet");
+
+    // Grant happens (peer now `owns` the spark in our biscuit), then the app
+    // re-announces. The same frontier, re-pulled, now ships everything.
+    let after = TestResolver {
+        granted: HashSet::from(["did:key:newpeer".to_string()]),
+        revoked: HashSet::new(),
+        hydrated: true,
+    };
+    assert_eq!(
+        gated_pull(&mut peer_dag, &hub, &after, &peer, &res),
+        2,
+        "post-grant re-announce ships the previously-withheld data"
+    );
+    assert_eq!(peer_dag.heads(), hub.heads(), "peer converges after grant");
+}
