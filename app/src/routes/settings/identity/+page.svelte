@@ -8,9 +8,6 @@
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { copyToClipboard } from '$lib/runtime/clipboard'
 	import { deviceSession } from '$lib/settings/device-session-store'
-	import { navigateApp } from '$lib/shell'
-
-	let vaultOpenErr = $state<string | null>(null)
 
 	const ctx = useSelfContext()
 
@@ -55,15 +52,6 @@
 			copyKey = null
 		}
 	}
-
-	async function goToVault(e: MouseEvent): Promise<void> {
-		vaultOpenErr = null
-		try {
-			await navigateApp('/vault', e)
-		} catch (err) {
-			vaultOpenErr = err instanceof Error ? err.message : String(err)
-		}
-	}
 </script>
 
 <svelte:head>
@@ -76,18 +64,6 @@
 		<p class="text-muted-foreground text-sm leading-relaxed">
 			{t('self.identity.subtitle', { device: deviceLabel })}
 		</p>
-		{#if sessionKind === 'unlocked' && isTauriRuntime()}
-			<a
-				href="/vault"
-				class="bg-primary text-primary-foreground mt-2 inline-flex rounded-md px-3 py-2 text-sm"
-				onclick={(e) => void goToVault(e)}
-			>
-				{t('selfNav.openVault')}
-			</a>
-		{/if}
-		{#if vaultOpenErr}
-			<p class="text-destructive text-xs">{vaultOpenErr}</p>
-		{/if}
 	</header>
 
 	{#if ctx.statusErr}
