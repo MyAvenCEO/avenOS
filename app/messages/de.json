@@ -494,16 +494,6 @@
       "fullResetButton": "Gesamten .avenOS-Ordner löschen…"
     }
   },
-  "inference": {
-    "settingUpVoice": "Sprachtranskription wird eingerichtet",
-    "preparingVoice": "Sprachtranskription wird vorbereitet…",
-    "preparingOnDeviceAi": "Preparing on-device AI…",
-    "downloadingModel": "On-Device-Modell wird heruntergeladen…",
-    "loadingModel": "Loading model into memory…",
-    "modelSetupFailed": "Modell-Einrichtung fehlgeschlagen",
-    "firstLaunchHint": "First launch downloads Gemma once. Text intents work immediately; voice notes unlock when ready.",
-    "mibProgress": "{downloaded} / {total} MiB"
-  },
   "errors": {
     "generic": "Etwas ist schiefgelaufen.",
     "clipboardWriteFailed": "Clipboard-Schreiben fehlgeschlagen (OS-Berechtigungen prüfen)",
