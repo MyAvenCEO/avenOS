@@ -159,6 +159,13 @@ export async function cancelDownload(): Promise<void> {
 	await invoke('asr_cancel_download')
 }
 
+/** (Re)start the voice-model download in the background. */
+export async function startDownload(): Promise<void> {
+	if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return
+	const { invoke } = await import('@tauri-apps/api/core')
+	await invoke('asr_start_download')
+}
+
 /** Delete a model's files from the on-device cache (cancels its download first). */
 export async function deleteModel(id: string): Promise<void> {
 	if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return

@@ -8,6 +8,7 @@
 		deleteModel,
 		downloadFraction,
 		listLocalModels,
+		startDownload,
 		type LocalModel,
 	} from '$lib/asr/model-download-store'
 	import { formatBytes, formatBytesPair } from '$lib/asr/format'
@@ -28,6 +29,10 @@
 	async function onStop() {
 		await cancelDownload()
 		await refreshLocal()
+	}
+
+	async function onStart() {
+		await startDownload()
 	}
 
 	async function onDelete(id: string) {
@@ -109,13 +114,21 @@
 					>
 						{t(`models.status.${statusKey}`)}
 					</span>
-					{#if statusKey === 'downloading' || statusKey === 'idle'}
+					{#if statusKey === 'downloading'}
 						<button
 							type="button"
 							class="rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-foreground/80 outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-primary/30"
 							onclick={onStop}
 						>
 							{t('models.stop')}
+						</button>
+					{:else if statusKey !== 'ready' && statusKey !== 'unavailable'}
+						<button
+							type="button"
+							class="rounded-full border border-primary/40 px-2.5 py-1 text-[11px] font-medium text-primary outline-none transition-colors hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/30"
+							onclick={onStart}
+						>
+							{t('models.download')}
 						</button>
 					{/if}
 					{#if activeOnDisk}
@@ -131,7 +144,7 @@
 				</div>
 			</div>
 
-			{#if statusKey === 'downloading' || statusKey === 'idle'}
+			{#if statusKey === 'downloading'}
 				<div class="space-y-1.5">
 					<div class="flex justify-end">
 						<span class="font-mono text-[10px] tabular-nums text-muted-foreground"

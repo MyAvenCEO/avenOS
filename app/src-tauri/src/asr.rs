@@ -158,10 +158,18 @@ pub async fn asr_local_models(app: AppHandle) -> Result<Vec<LocalModel>, String>
 }
 
 /// Stop the in-flight voice-model download and reset progress to idle. No-op in
-/// the stub build. Re-trigger a download by tapping the mic again.
+/// the stub build.
 #[tauri::command(rename_all = "camelCase")]
 pub async fn asr_cancel_download(app: AppHandle) -> Result<(), String> {
 	imp::cancel(&app);
+	Ok(())
+}
+
+/// (Re)start the voice-model download/load in the background. Used by the Models
+/// page's "Download" button after a stop, or for first-run on demand.
+#[tauri::command(rename_all = "camelCase")]
+pub async fn asr_start_download(app: AppHandle) -> Result<(), String> {
+	spawn_model_download(&app);
 	Ok(())
 }
 
@@ -312,11 +320,16 @@ mod imp {
 	#[derive(Clone)]
 	struct EmitProgress {
 		app: AppHandle,
+		/// When the up-front sized listing was unavailable, grow the total as each
+		/// file's download begins so the bar still reflects real progress.
+		accumulate_total: bool,
 	}
 
 	impl Progress for EmitProgress {
-		async fn init(&mut self, _size: usize, _filename: &str) {
-			// Total is computed up-front from the repo listing; nothing to do here.
+		async fn init(&mut self, size: usize, _filename: &str) {
+			if self.accumulate_total {
+				state().total.fetch_add(size as u64, Ordering::Relaxed);
+			}
 			emit(&self.app);
 		}
 
@@ -435,22 +448,46 @@ mod imp {
 		// Cache view for "is this file already downloaded?" checks.
 		let cache_repo = Cache::new(hub_cache_dir(hf_home)).repo(Repo::new(cfg.repo.to_string(), RepoType::Model));
 
-		let files = match list_repo_files(&repo, cfg.uqff_file).await {
-			Ok(files) => {
+		// Prefer the sized listing (exact total up-front). If it fails or comes
+		// back empty, fall back to the typed `info()` filenames and grow the total
+		// as each file downloads — so the bar always moves rather than sitting at 0.
+		let (files, accumulate_total) = match list_repo_files(&repo, cfg.uqff_file).await {
+			Ok(files) if !files.is_empty() => {
 				let total: u64 = files.iter().map(|f| f.size).sum();
 				if total > 0 {
 					state().total.store(total, Ordering::Relaxed);
 				}
 				emit(app);
-				files
+				(files, false)
 			}
-			Err(e) => {
-				log::warn!(target: "avenos::asr", "repo listing failed; skipping pre-download progress: {e}");
-				return Ok(());
+			other => {
+				if let Err(e) = &other {
+					log::warn!(target: "avenos::asr", "sized listing failed ({e}); falling back to info()");
+				}
+				match repo.info().await {
+					Ok(info) => {
+						let files: Vec<RepoFile> = info
+							.siblings
+							.into_iter()
+							.map(|s| s.rfilename)
+							.filter(|p| is_wanted(p, cfg.uqff_file))
+							.map(|path| RepoFile { path, size: 0 })
+							.collect();
+						emit(app);
+						(files, true)
+					}
+					Err(e) => {
+						log::warn!(target: "avenos::asr", "repo info() failed ({e}); build() will fetch without a progress bar");
+						return Ok(());
+					}
+				}
 			}
 		};
 
-		let progress = EmitProgress { app: app.clone() };
+		let progress = EmitProgress {
+			app: app.clone(),
+			accumulate_total,
+		};
 		for f in files {
 			if state().cancelled.load(Ordering::Relaxed) {
 				return Err(CANCELLED.into());

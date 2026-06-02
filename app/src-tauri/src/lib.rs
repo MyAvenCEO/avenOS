@@ -241,6 +241,7 @@ pub fn run() {
 			asr::transcribe_audio,
 			asr::asr_local_models,
 			asr::asr_cancel_download,
+			asr::asr_start_download,
 			asr::asr_delete_model,
 		])
 		.build(tauri::generate_context!())

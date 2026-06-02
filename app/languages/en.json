@@ -148,6 +148,7 @@
 		"active": "Voice",
 		"onDisk": "on disk",
 		"stop": "Stop",
+		"download": "Download",
 		"delete": "Delete",
 		"deleting": "Deleting…",
 		"modalities": {
