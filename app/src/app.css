@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Source-aliased workspace libs live outside app/ (see svelte.config.js),
+ * so Tailwind v4's automatic content detection never scans them. Register
+ * them explicitly — otherwise classes used ONLY in these libs (e.g. the
+ * board column's w-80) are silently dropped and layouts break. */
+@source "../../libs/aven-board/src";
+@source "../../libs/aven-city/src";
+
 @font-face {
 	font-family: 'Ouroboros';
 	src: url('$lib/assets/fonts/ouroboros-regular.woff2') format('woff2');
