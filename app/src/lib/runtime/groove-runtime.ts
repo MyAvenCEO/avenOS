@@ -66,7 +66,7 @@ export function attachAvenosRuntimeBridge(): () => void {
 		if (!p || typeof p !== 'object') return
 		if (gen !== bridgeGeneration) return
 		if (p.kind === 'session') {
-			applyRuntimeSession(p)
+			applyRuntimeSession(p as Extract<AvenosRuntimePayload, { kind: 'session' }>)
 			if (typeof p.grooveReady === 'boolean') {
 				grooveSessionReady.set(p.grooveReady)
 			}

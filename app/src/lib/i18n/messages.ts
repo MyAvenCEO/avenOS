@@ -1,5 +1,5 @@
-import en from '../../../messages/en.json'
-import de from '../../../messages/de.json'
+import en from '../../../languages/en.json'
+import de from '../../../languages/de.json'
 import { DEFAULT_LOCALE, normalizeLocale, type SupportedLocale } from './locales'
 
 type MessageTree = { [key: string]: string | MessageTree }
