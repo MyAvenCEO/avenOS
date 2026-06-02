@@ -25,6 +25,7 @@ export type IntentListProjection = {
   id: string
   title: string
   summary: string
+  resultMessage?: string
   status: IntentRuntimeStatus
   updatedAtMs: number
   lastWorkDurationMs?: number
@@ -63,12 +64,45 @@ function toUiStatus(status: IntentActorState['status']): IntentRuntimeStatus {
 }
 
 function summarize(intent: IntentActorState): string {
+  const resultMessage = successResultMessage(intent)
+  if (resultMessage) return resultMessage
   const lastEvent = intent.timeline[intent.timeline.length - 1]
   if (lastEvent?.summary) return lastEvent.summary
   const input = intent.input as Record<string, unknown> | undefined
   const message = typeof input?.message === 'string' ? input.message.trim() : ''
   if (message) return message.length > 96 ? `${message.slice(0, 96)}…` : message
   return intent.goal.length > 96 ? `${intent.goal.slice(0, 96)}…` : intent.goal
+}
+
+function shellStdoutResultMessage(intent: IntentActorState): string | undefined {
+  for (let index = intent.timeline.length - 1; index >= 0; index -= 1) {
+    const data = intent.timeline[index]?.data
+    if (!data || typeof data !== 'object' || Array.isArray(data)) continue
+    const record = data as Record<string, JsonValue>
+    if (record.toolId !== 'shell.execute') continue
+    const stdoutPreview = typeof record.stdoutPreview === 'string' ? record.stdoutPreview.trim() : ''
+    if (stdoutPreview) return stdoutPreview
+  }
+  return undefined
+}
+
+function successResultMessage(intent: IntentActorState): string | undefined {
+  if (intent.status !== 'completed') return undefined
+  const shellStdout = shellStdoutResultMessage(intent)
+  if (shellStdout) return shellStdout
+  const genericSummaries = new Set([
+    'Intent created',
+    'Intent started',
+    'Planner requested',
+    'complete',
+    'Intent completed',
+  ])
+  for (let index = intent.timeline.length - 1; index >= 0; index -= 1) {
+    const summary = intent.timeline[index]?.summary?.trim()
+    if (!summary || genericSummaries.has(summary) || summary.startsWith('toolrun~')) continue
+    return summary
+  }
+  return undefined
 }
 
 function bodyFromInput(intent: IntentActorState): string | undefined {
@@ -112,10 +146,12 @@ export function projectIntent(
 ): IntentProjection {
   const updatedAtMs = isoToMs(intent.timeline[intent.timeline.length - 1]?.createdAt)
   const openCommunication = openCommunicationProjection(human, intent.openCommunicationId)
+  const resultMessage = successResultMessage(intent)
   return {
     id: intent.intentId,
     title: intent.title,
     summary: summarize(intent),
+    ...(resultMessage === undefined ? {} : { resultMessage }),
     body: bodyFromInput(intent),
     status: toUiStatus(intent.status),
     updatedAtMs,
@@ -144,6 +180,7 @@ export function projectSnapshot(
         id: projection.id,
         title: projection.title,
         summary: projection.summary,
+        ...(projection.resultMessage === undefined ? {} : { resultMessage: projection.resultMessage }),
         status: projection.status,
         updatedAtMs: projection.updatedAtMs,
         openCommunicationCount: projection.openCommunicationCount,

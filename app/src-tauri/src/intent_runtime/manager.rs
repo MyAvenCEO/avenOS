@@ -45,6 +45,7 @@ impl IntentRuntimeManager {
 	async fn ensure_started(&self) -> Result<(), String> {
 		let mut guard = self.inner.lock().await;
 		if guard.is_some() {
+			log::debug!(target: "avenos::intent_runtime", "adapter already started");
 			return Ok(());
 		}
 		std::fs::create_dir_all(&self.state_dir)
@@ -59,6 +60,14 @@ impl IntentRuntimeManager {
 		let external_llm_config = PathBuf::from("/home/daniel/src/jaensen/aven-os-runtime-no-node-modules-20260522-012649/apps/tree-explorer/config/llm-providers.local.json");
 		let adapter_dist = repo_root.join("packages/tauri-intent-runtime-adapter/dist/main.mjs");
 		let adapter_src = repo_root.join("packages/tauri-intent-runtime-adapter/src/main.ts");
+		log::info!(
+			target: "avenos::intent_runtime",
+			"starting adapter repo_root={} state_dir={} llm_config={} dist_exists={}",
+			repo_root.display(),
+			self.state_dir.display(),
+			external_llm_config.display(),
+			adapter_dist.exists(),
+		);
 		let mut command = if adapter_dist.exists() {
 			let mut cmd = Command::new(&self.node_path);
 			cmd.arg(adapter_dist);
@@ -80,8 +89,18 @@ impl IntentRuntimeManager {
 			.map_err(|e| format!("spawn intent runtime adapter: {e}"))?;
 		let stdin = child.stdin.take().ok_or_else(|| "intent runtime stdin unavailable".to_string())?;
 		let stdout = child.stdout.take().ok_or_else(|| "intent runtime stdout unavailable".to_string())?;
+		let stderr = child.stderr.take().ok_or_else(|| "intent runtime stderr unavailable".to_string())?;
 		let app = self.app.clone();
 		let requests_for_reader = Arc::clone(&requests);
+		tauri::async_runtime::spawn(async move {
+			let mut lines = BufReader::new(stderr).lines();
+			while let Ok(Some(line)) = lines.next_line().await {
+				if line.trim().is_empty() {
+					continue;
+				}
+				log::warn!(target: "avenos::intent_runtime::adapter_stderr", "{line}");
+			}
+		});
 		tauri::async_runtime::spawn(async move {
 			let mut lines = BufReader::new(stdout).lines();
 			while let Ok(Some(line)) = lines.next_line().await {
@@ -92,10 +111,18 @@ impl IntentRuntimeManager {
 				match parsed {
 					Ok(message) => {
 						if let Some(event) = message.event {
+							log::debug!(target: "avenos::intent_runtime", "adapter event: {}", event);
 							let _ = app.emit("avenos:runtime", event);
 							continue;
 						}
 						if let Some(id) = message.id {
+							log::debug!(
+								target: "avenos::intent_runtime",
+								"adapter response id={} ok={:?} error={:?}",
+								id,
+								message.ok,
+								message.error,
+							);
 							if let Some(tx) = requests_for_reader.lock().await.remove(&id) {
 								let result = if message.ok.unwrap_or(false) {
 									Ok(message.result.unwrap_or(Value::Null))
@@ -113,6 +140,7 @@ impl IntentRuntimeManager {
 			}
 		});
 		*guard = Some(IntentRuntimeProcess { stdin, child, requests });
+		log::info!(target: "avenos::intent_runtime", "adapter started successfully");
 		Ok(())
 	}
 
@@ -126,8 +154,15 @@ impl IntentRuntimeManager {
 			op: op.to_string(),
 			payload,
 		};
+		log::info!(
+			target: "avenos::intent_runtime",
+			"sending request id={} op={} payload={}",
+			id,
+			op,
+			envelope.payload,
+		);
 		let (tx, rx) = oneshot::channel();
-		process.requests.lock().await.insert(id, tx);
+		process.requests.lock().await.insert(id.clone(), tx);
 		let line = format!("{}\n", serde_json::to_string(&envelope).map_err(|e| e.to_string())?);
 		process
 			.stdin
@@ -137,9 +172,21 @@ impl IntentRuntimeManager {
 		process.stdin.flush().await.map_err(|e| format!("intent runtime stdin flush: {e}"))?;
 		drop(guard);
 		match tokio::time::timeout(Duration::from_secs(30), rx).await {
-			Ok(Ok(result)) => result,
-			Ok(Err(_)) => Err("intent runtime response channel dropped".to_string()),
-			Err(_) => Err("intent runtime request timed out".to_string()),
+			Ok(Ok(result)) => {
+				match &result {
+					Ok(value) => log::info!(target: "avenos::intent_runtime", "request id={} op={} succeeded result={}", id, op, value),
+					Err(error) => log::warn!(target: "avenos::intent_runtime", "request id={} op={} failed error={}", id, op, error),
+				}
+				result
+			}
+			Ok(Err(_)) => {
+				log::warn!(target: "avenos::intent_runtime", "request id={} op={} response channel dropped", id, op);
+				Err("intent runtime response channel dropped".to_string())
+			}
+			Err(_) => {
+				log::warn!(target: "avenos::intent_runtime", "request id={} op={} timed out", id, op);
+				Err("intent runtime request timed out".to_string())
+			}
 		}
 	}
 }

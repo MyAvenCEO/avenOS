@@ -21,26 +21,8 @@ import { t } from '$lib/i18n'
 
 let { intent }: { intent: IntentRow } = $props()
 
-const MOCK_ERROR_REASON_KEYS = [
-	'approvalPolicy',
-	'vendorLookup',
-	'validationRules',
-	'networkTimeout',
-] as const
-
-function hashIntentId(id: string): number {
-	let h = 0
-	for (let i = 0; i < id.length; i++) {
-		h = (h * 31 + id.charCodeAt(i)) | 0
-	}
-	return Math.abs(h)
-}
-
-const errorReason = $derived(
-	t(
-		`intents.display.errorReasons.${MOCK_ERROR_REASON_KEYS[hashIntentId(intent.id) % MOCK_ERROR_REASON_KEYS.length]}`,
-	),
-)
+const fallbackErrorReason = $derived(t('intents.display.errorReasons.validationRules'))
+const errorReason = $derived(intent.errorMessage?.trim() || intent.summary?.trim() || fallbackErrorReason)
 
 const errorView = vibeViewById('error')
 const successView = vibeViewById('success')
@@ -59,7 +41,7 @@ const successSource = $derived({
 	eyebrow: t('intents.display.automationComplete'),
 	title: intent.title,
 	messageLabel: t('intents.display.result'),
-	message: t('intents.display.successMessage'),
+	message: intent.resultMessage?.trim() || intent.summary?.trim() || t('intents.display.successMessage'),
 	hint: t('intents.successArchiveHint'),
 })
 

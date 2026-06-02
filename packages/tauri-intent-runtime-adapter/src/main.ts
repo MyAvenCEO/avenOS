@@ -14,7 +14,13 @@ function emit(message: unknown) {
   process.stdout.write(`${JSON.stringify(message)}\n`)
 }
 
+function debug(message: string, extra?: unknown) {
+  const suffix = extra === undefined ? '' : ` ${JSON.stringify(extra)}`
+  process.stderr.write(`[intent-runtime-adapter] ${message}${suffix}\n`)
+}
+
 async function handle(request: RequestEnvelope) {
+  debug('handle request', { id: request.id, op: request.op })
   switch (request.op) {
     case 'intentStatus':
       return { result: await host.intentStatus() }
@@ -38,7 +44,9 @@ async function handle(request: RequestEnvelope) {
 }
 
 async function main() {
+  debug('startup', { argv: process.argv.slice(2), envConfig: process.env.AVEN_LLM_CONFIG ?? null })
   await host.start()
+  debug('host started')
   let buffer = ''
   process.stdin.setEncoding('utf8')
   process.stdin.on('data', async (chunk: string) => {
@@ -52,11 +60,14 @@ async function main() {
       try {
         const request = JSON.parse(line) as RequestEnvelope
         const response = await handle(request)
+        debug('request succeeded', { id: request.id, op: request.op })
         emit({ id: request.id, ok: true, result: response.result })
         for (const event of response.events ?? []) {
+          debug('emit event', event)
           emit({ event })
         }
       } catch (error) {
+        debug('request failed', { line, error: error instanceof Error ? error.message : String(error) })
         emit({
           id: (() => {
             try {
@@ -72,12 +83,14 @@ async function main() {
     }
   })
   process.stdin.on('end', async () => {
+    debug('stdin end received, stopping host')
     await host.stop()
     process.exit(0)
   })
 }
 
 void main().catch((error) => {
+  debug('startup failed', { error: error instanceof Error ? error.stack ?? error.message : String(error) })
   emit({ id: 'startup', ok: false, error: error instanceof Error ? error.stack ?? error.message : String(error) })
   process.exit(1)
 })

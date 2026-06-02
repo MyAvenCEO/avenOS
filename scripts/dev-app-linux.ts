@@ -34,7 +34,8 @@ async function main() {
 		'[dev:app:linux] AvenOS Tauri (Linux) · Host-UI: SvelteKit @ http://127.0.0.1:1420 (dev-only, embedded in WebKitGTK)\n'
 	)
 
-	const child = Bun.spawn(['bun', '--env-file=.env', 'run', '--cwd', 'app', 'tauri:dev'], {
+	const bunExecutable = process.execPath
+	const child = Bun.spawn([bunExecutable, '--env-file=.env', 'run', '--cwd', 'app', 'tauri:dev'], {
 		cwd: repoRoot,
 		stdout: 'inherit',
 		stderr: 'inherit',

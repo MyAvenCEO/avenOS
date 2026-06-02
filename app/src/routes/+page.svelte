@@ -725,6 +725,10 @@ function intentRowFromMessage(text: string): IntentRow {
 }
 
 async function handleComposerSubmit(message: string, files: File[]) {
+	console.info('[intent runtime] submit:start', {
+		messagePreview: message.slice(0, 120),
+		fileCount: files.length,
+	})
 	const draftId = `draft-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 	const { stored, errors } = await persistIntentFiles(draftId, files)
 	if (errors.length) console.warn('[intent files]', errors.join('; '))
@@ -732,6 +736,10 @@ async function handleComposerSubmit(message: string, files: File[]) {
 	try {
 		const detail = await intentStart(message, files)
 		if (!detail) return
+		console.info('[intent runtime] submit:success', {
+			intentId: detail.id,
+			status: detail.status,
+		})
 		const row = intentRowFromProjection(detail)
 		savedIntents = [row, ...savedIntents.filter((existing) => existing.id !== row.id)]
 		selectedId = row.id
@@ -753,11 +761,21 @@ async function handleRetrainCommand(feedback: string, files: File[]) {
 	const intent = selectedIntent
 	if (!intent) return
 	if (intent.runtimeBacked && intent.runtimeOpenCommunicationId) {
+		console.info('[intent runtime] retrain:start', {
+			intentId: intent.id,
+			communicationId: intent.runtimeOpenCommunicationId,
+			feedbackPreview: feedback.slice(0, 120),
+			fileCount: files.length,
+		})
 		const { errors } = await persistIntentFiles(intent.id, files)
 		if (errors.length) console.warn('[intent files]', errors.join('; '))
 		try {
 			const detail = await intentRetrain(intent.id, intent.runtimeOpenCommunicationId, feedback, files)
 			if (!detail) return
+			console.info('[intent runtime] retrain:success', {
+				intentId: detail.id,
+				status: detail.status,
+			})
 			const row = intentRowFromProjection(detail)
 			savedIntents = savedIntents.map((existing) => (existing.id === row.id ? row : existing))
 		} catch (error) {
@@ -795,6 +813,8 @@ function intentRowFromProjection(detail: IntentProjection): IntentRow {
 		title: detail.title,
 		summary: detail.summary,
 		body: detail.body,
+		errorMessage: detail.status === 'error' ? detail.summary : undefined,
+		resultMessage: detail.status === 'success' ? (detail.resultMessage ?? detail.summary) : undefined,
 		status: detail.status,
 		runtimeBacked: true,
 		runtimeOpenCommunicationId: detail.openCommunication?.open ? detail.openCommunication.communicationId : undefined,
@@ -819,6 +839,7 @@ function intentErrorRowFromFailure(message: string, error: unknown, existingId?:
 		title,
 		summary: reason,
 		body: text || reason,
+		errorMessage: reason,
 		status: 'error',
 		runtimeBacked: true,
 		skills: [],

@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { createAvenSystem, ActorKind } from 'runtime'
@@ -27,6 +27,62 @@ export type AttachmentInput = {
   bytesBase64: string
 }
 
+type PersistedActorRecord = {
+  id?: string
+  kind?: string
+  state?: Record<string, unknown>
+}
+
+function persistedActorById(sqlitePath: string, actorId: string): PersistedActorRecord | undefined {
+  if (!existsSync(sqlitePath)) return undefined
+  const db = openAvenSqliteDatabase(sqlitePath)
+  try {
+    const row = db.prepare('SELECT data FROM actors WHERE id = ?').get(actorId) as { data?: string } | undefined
+    if (!row?.data) return undefined
+    return JSON.parse(row.data) as PersistedActorRecord
+  } finally {
+    db.close()
+  }
+}
+
+function persistedLlmsChildCount(sqlitePath: string): number {
+  if (!existsSync(sqlitePath)) return 0
+  const db = openAvenSqliteDatabase(sqlitePath)
+  try {
+    const row = db
+      .prepare("SELECT COUNT(*) AS count FROM actors WHERE id LIKE '/aven/system/llms/%'")
+      .get() as { count?: number } | undefined
+    return typeof row?.count === 'number' ? row.count : 0
+  } finally {
+    db.close()
+  }
+}
+
+export function shouldResetPersistedIntentRuntimeState(stateDir: string): boolean {
+  const sqlitePath = join(stateDir, 'aven-runtime.db')
+  if (!existsSync(sqlitePath)) return false
+
+  try {
+    const intents = persistedActorById(sqlitePath, '/aven/intents')
+    const llms = persistedActorById(sqlitePath, '/aven/system/llms')
+    const llmChildCount = persistedLlmsChildCount(sqlitePath)
+
+    const runtimeConfig = intents?.state?.configuration
+      && typeof intents.state.configuration === 'object'
+      ? (intents.state.configuration as Record<string, unknown>).runtime
+      : undefined
+    const catalog = Array.isArray(llms?.state?.catalog) ? llms?.state?.catalog : undefined
+
+    return intents !== undefined
+      && llms !== undefined
+      && runtimeConfig === undefined
+      && catalog?.length === 0
+      && llmChildCount === 0
+  } catch {
+    return false
+  }
+}
+
 export class IntentRuntimeHost {
   private system!: AvenSystem
   private artifactStorage!: SqliteArtifactStorage
@@ -36,8 +92,19 @@ export class IntentRuntimeHost {
     this.stateDir = stateDir
   }
 
+  private debug(message: string, extra?: unknown) {
+    const suffix = extra === undefined ? '' : ` ${JSON.stringify(extra)}`
+    process.stderr.write(`[intent-runtime-host] ${message}${suffix}\n`)
+  }
+
   async start(): Promise<void> {
+    this.debug('start', { stateDir: this.stateDir, envConfig: process.env.AVEN_LLM_CONFIG ?? null })
     mkdirSync(this.stateDir, { recursive: true })
+    if (shouldResetPersistedIntentRuntimeState(this.stateDir)) {
+      this.debug('resetting broken persisted runtime state', { stateDir: this.stateDir })
+      rmSync(this.stateDir, { recursive: true, force: true })
+      mkdirSync(this.stateDir, { recursive: true })
+    }
     const sqlitePath = join(this.stateDir, 'aven-runtime.db')
     const sqliteDb = openAvenSqliteDatabase(sqlitePath)
     this.artifactStorage = new SqliteArtifactStorage(sqliteDb)
@@ -46,9 +113,11 @@ export class IntentRuntimeHost {
       artifactStorage: this.artifactStorage,
       persistence: new SqliteActorPersistence(sqliteDb),
     })
+    this.debug('system started')
   }
 
   async stop(): Promise<void> {
+    this.debug('stop requested')
     if (this.system) {
       await this.system.stop()
     }
@@ -128,6 +197,7 @@ export class IntentRuntimeHost {
     message: string
     attachments?: AttachmentInput[]
   }): Promise<{ result: JsonValue; events: AdapterEvent[] }> {
+    this.debug('intentStart', { message: payload.message, attachmentCount: payload.attachments?.length ?? 0 })
     const requestId = `tauri-intent-start~${randomUUID()}`
     const attachments = await this.buildAttachmentRefs(payload.attachments)
     await this.system.send(
@@ -167,6 +237,7 @@ export class IntentRuntimeHost {
     }
     const snapshot = await this.snapshot()
     const detail = intentId ? await this.intentDetail(intentId) : undefined
+    this.debug('intentStart completed', { requestId, intentId: intentId ?? null })
     return {
       result,
       events: [
@@ -182,6 +253,12 @@ export class IntentRuntimeHost {
     feedback: string
     attachments?: AttachmentInput[]
   }): Promise<{ result: JsonValue; events: AdapterEvent[] }> {
+    this.debug('intentRetrain', {
+      intentId: payload.intentId,
+      communicationId: payload.communicationId,
+      feedbackPreview: payload.feedback.slice(0, 120),
+      attachmentCount: payload.attachments?.length ?? 0,
+    })
     const requestId = `tauri-intent-retrain~${randomUUID()}`
     const attachments = await this.buildAttachmentRefs(payload.attachments)
     const answer: Record<string, unknown> = { text: payload.feedback }
@@ -201,6 +278,7 @@ export class IntentRuntimeHost {
     if (result.type === 'error') throw new Error(result.error.message)
     const snapshot = await this.snapshot()
     const detail = await this.intentDetail(payload.intentId)
+    this.debug('intentRetrain completed', { requestId, intentId: payload.intentId })
     return {
       result,
       events: [

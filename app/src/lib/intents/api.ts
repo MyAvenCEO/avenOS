@@ -27,6 +27,7 @@ export type IntentProjection = {
 	id: string
 	title: string
 	summary: string
+	resultMessage?: string
 	body?: string
 	status: 'working' | 'hitl' | 'success' | 'archived' | 'error'
 	updatedAtMs: number
@@ -42,6 +43,7 @@ export type IntentRuntimeSnapshot = {
 		id: string
 		title: string
 		summary: string
+		resultMessage?: string
 		status: 'working' | 'hitl' | 'success' | 'archived' | 'error'
 		updatedAtMs: number
 		lastWorkDurationMs?: number

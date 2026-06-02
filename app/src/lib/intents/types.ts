@@ -69,6 +69,8 @@ export type IntentRow = {
 	title: string
 	summary: string
 	body?: string
+	errorMessage?: string
+	resultMessage?: string
 	status: IntentStatus
 	runtimeBacked?: boolean
 	runtimeOpenCommunicationId?: string
