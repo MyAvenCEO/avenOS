@@ -20,6 +20,7 @@ use groove::{
 	DevRole,
 	JazzClient,
 	JazzError,
+	metadata::MetadataKey,
 	ObjectId,
 	PeerInboundParkedHook,
 	SyncPayload,
@@ -1502,10 +1503,16 @@ fn spawn_dev_peer_sync(
 		// restart (restart re-hydrates the shell from the already-synced rows). Map each
 		// inbound row batch to its table and post it to the drain, just like a local write.
 		let on_inbound: PeerInboundParkedHook = Arc::new(move |payload: &SyncPayload| {
+			// The table name lives in the payload-level `metadata` (built by
+			// `metadata_from_row_locator`), NOT in `row.metadata` — a row's own metadata is
+			// provenance only (`created_by`/`created_at`/`delete`) and never carries `table`.
+			// Reading `row.metadata` made this hook a silent no-op: no peer delta ever reached
+			// the drain, so remote sparks/keyshares grants only surfaced after restart.
 			let table = match payload {
-				SyncPayload::RowBatchCreated { row, .. } | SyncPayload::RowBatchNeeded { row, .. } => {
-					row.metadata.get("table").cloned()
-				}
+				SyncPayload::RowBatchCreated { metadata, .. }
+				| SyncPayload::RowBatchNeeded { metadata, .. } => metadata
+					.as_ref()
+					.and_then(|m| m.metadata.get(MetadataKey::Table.as_str()).cloned()),
 				_ => None,
 			};
 			if let Some(table) = table {
