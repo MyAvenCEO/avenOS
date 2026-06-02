@@ -44,13 +44,20 @@ impl std::fmt::Debug for MaybeSyncTransport {
     }
 }
 
+/// Slot holding the optional peer sync transport. Shared (not a plain field) so the
+/// transport can be attached *after* `connect` — the app opens Groove locally first
+/// and wires peer sync in the background, so sign-in never blocks on the transport.
+/// The outbound forwarding callback reads this slot on each frame.
+type SharedSyncTransport =
+    Arc<std::sync::RwLock<Option<Arc<dyn crate::sync_transport::SyncTransport>>>>;
+
 pub struct JazzClient {
     runtime: ClientRuntime,
     subscriptions: Arc<RwLock<HashMap<SubscriptionHandle, SubscriptionState>>>,
     subscription_senders: Arc<RwLock<HashMap<RuntimeSubHandle, mpsc::Sender<OrderedRowDelta>>>>,
     next_handle: std::sync::atomic::AtomicU64,
-    peer_transport: Option<Arc<dyn crate::sync_transport::SyncTransport>>,
-    peer_inbound_task: Option<tokio::task::JoinHandle<()>>,
+    peer_transport: SharedSyncTransport,
+    peer_inbound_task: std::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 struct SubscriptionState {
@@ -83,14 +90,19 @@ fn peer_send_backoff_clear(peer_id: PeerId) {
 }
 
 fn peer_outbound_callback(
-    peer_transport: Option<Arc<dyn crate::sync_transport::SyncTransport>>,
+    peer_transport: SharedSyncTransport,
     runtime_ready: Arc<OnceLock<ClientRuntime>>,
 ) -> impl Fn(OutboxEntry) + Send + Sync + 'static {
     use crate::sync_targets::SyncTargetId;
 
     move |entry: OutboxEntry| {
         let Destination::Client(peer_id) = entry.destination;
-        let Some(tt) = peer_transport.as_ref() else {
+        // Read the live transport slot — may be empty until one is attached.
+        let tt = peer_transport
+            .read()
+            .expect("peer_transport rwlock poisoned")
+            .clone();
+        let Some(tt) = tt else {
             return;
         };
         let Some(rt) = runtime_ready.get() else {
@@ -98,7 +110,6 @@ fn peer_outbound_callback(
             return;
         };
         let rt = rt.clone();
-        let tt = Arc::clone(tt);
         let payload = entry.payload;
         tokio::spawn(async move {
             let outbound = OutboxEntry {
@@ -123,6 +134,31 @@ fn peer_outbound_callback(
             }
         });
     }
+}
+
+/// Spawn the inbound pump that drains a peer transport into the runtime inbox.
+/// Used both at connect (when a transport is provided up front) and by
+/// [`JazzClient::attach_sync_transport`] (background attach after a local connect).
+fn spawn_peer_inbound(
+    inbound_runtime: ClientRuntime,
+    transport: Arc<dyn crate::sync_transport::SyncTransport>,
+    on_inbound_parked: Option<PeerInboundParkedHook>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        loop {
+            match crate::sync_transport::SyncTransport::recv_inbound(&*transport).await {
+                None => break,
+                Some(entry) => {
+                    let payload = entry.payload.clone();
+                    if let Err(err) = inbound_runtime.push_sync_inbox(entry) {
+                        tracing::warn!("push_sync_inbox (peer inbound): {err}");
+                    } else if let Some(hook) = on_inbound_parked.as_ref() {
+                        hook(&payload);
+                    }
+                }
+            }
+        }
+    })
 }
 
 fn build_schema_manager(storage: &DynStorage, context: &AppContext) -> Result<SchemaManager> {
@@ -271,6 +307,30 @@ impl JazzClient {
             .map_err(|e| JazzError::Sync(format!("converged_peer_ids: {e}")))
     }
 
+    /// Attach (or replace) the peer sync transport *after* a local [`Self::connect`].
+    /// This lets the app open Groove immediately and wire peer sync in the background,
+    /// so sign-in never blocks on establishing the transport. Outbound frames begin
+    /// flowing as soon as the slot is populated; the inbound pump is (re)spawned here.
+    pub fn attach_sync_transport(
+        &self,
+        sync_transport: Arc<dyn crate::sync_transport::SyncTransport>,
+        on_inbound_parked: Option<PeerInboundParkedHook>,
+    ) {
+        *self
+            .peer_transport
+            .write()
+            .expect("peer_transport rwlock poisoned") = Some(Arc::clone(&sync_transport));
+        let task = spawn_peer_inbound(self.runtime.clone(), sync_transport, on_inbound_parked);
+        if let Some(old) = self
+            .peer_inbound_task
+            .lock()
+            .expect("peer_inbound_task lock poisoned")
+            .replace(task)
+        {
+            old.abort();
+        }
+    }
+
     pub fn register_peer_sync_client(&self, peer_id: PeerId) -> Result<()> {
         self.runtime
             .ensure_client_as_peer(peer_id)
@@ -364,15 +424,15 @@ impl JazzClient {
         let storage: DynStorage = open_persistent_storage(&context.data_dir).await?;
 
         let schema_manager = build_schema_manager(&storage, &context)?;
-        let peer_transport_for_fwd = match &peer_layer {
+        let peer_transport: SharedSyncTransport = Arc::new(std::sync::RwLock::new(match &peer_layer {
             MaybeSyncTransport::Active(t) => Some(Arc::clone(t)),
             MaybeSyncTransport::Off => None,
-        };
+        }));
         let runtime_ready: Arc<OnceLock<ClientRuntime>> = Arc::new(OnceLock::new());
         let runtime = TokioRuntime::new(
             schema_manager,
             storage,
-            peer_outbound_callback(peer_transport_for_fwd, Arc::clone(&runtime_ready)),
+            peer_outbound_callback(Arc::clone(&peer_transport), Arc::clone(&runtime_ready)),
         );
         let _ = runtime_ready.set(runtime.clone());
 
@@ -383,28 +443,10 @@ impl JazzClient {
         let subscription_senders: Arc<RwLock<HashMap<RuntimeSubHandle, mpsc::Sender<OrderedRowDelta>>>> =
             Arc::new(RwLock::new(HashMap::new()));
 
-        let (peer_transport_stored, peer_inbound_task) = match peer_layer {
-            MaybeSyncTransport::Off => (None, None),
+        let peer_inbound_task = match peer_layer {
+            MaybeSyncTransport::Off => None,
             MaybeSyncTransport::Active(t) => {
-                let inbound_runtime = runtime.clone();
-                let on_parked = on_inbound_parked.clone();
-                let tin = Arc::clone(&t);
-                let task = tokio::spawn(async move {
-                    loop {
-                        match crate::sync_transport::SyncTransport::recv_inbound(&*tin).await {
-                            None => break,
-                            Some(entry) => {
-                                let payload = entry.payload.clone();
-                                if let Err(err) = inbound_runtime.push_sync_inbox(entry) {
-                                    tracing::warn!("push_sync_inbox (peer inbound): {err}");
-                                } else if let Some(hook) = on_parked.as_ref() {
-                                    hook(&payload);
-                                }
-                            }
-                        }
-                    }
-                });
-                (Some(t), Some(task))
+                Some(spawn_peer_inbound(runtime.clone(), t, on_inbound_parked))
             }
         };
 
@@ -413,8 +455,8 @@ impl JazzClient {
             subscriptions: Arc::new(RwLock::new(HashMap::new())),
             subscription_senders,
             next_handle: std::sync::atomic::AtomicU64::new(1),
-            peer_transport: peer_transport_stored,
-            peer_inbound_task,
+            peer_transport,
+            peer_inbound_task: std::sync::Mutex::new(peer_inbound_task),
         })
     }
 
@@ -531,13 +573,23 @@ impl JazzClient {
         false
     }
 
-    pub async fn shutdown(mut self) -> Result<()> {
-        if let Some(h) = self.peer_inbound_task.take() {
+    pub async fn shutdown(self) -> Result<()> {
+        let task = self
+            .peer_inbound_task
+            .lock()
+            .expect("peer_inbound_task lock poisoned")
+            .take();
+        if let Some(h) = task {
             h.abort();
             let _ = h.await;
         }
 
-        if let Some(t) = self.peer_transport.take() {
+        let transport = self
+            .peer_transport
+            .write()
+            .expect("peer_transport rwlock poisoned")
+            .take();
+        if let Some(t) = transport {
             if let Err(err) = t.shutdown().await {
                 tracing::warn!("PeerTransport::shutdown failed: {err:?}");
             }

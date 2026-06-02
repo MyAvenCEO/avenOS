@@ -58,7 +58,10 @@ pub async fn register(
 	let pub_p = pub_path(&app, &*vault, &slot)?;
 
 	if blob_p.exists() && pub_p.exists() {
-		// Already registered for this slot — no-op, no biometric prompt.
+		// Already registered for this slot — no biometric prompt. Still bind the folder
+		// to its identity in case a prior run was interrupted before the rename.
+		let pub_bytes = fs::read(&pub_p).map_err(|e| format!("read {}: {e}", pub_p.display()))?;
+		crate::vault_commands::finalize_identity_folder(&app, &vault, &pub_bytes)?;
 		return Ok(());
 	}
 
@@ -72,6 +75,9 @@ pub async fn register(
 
 	write_secure(&blob_p, &blob)?;
 	write_secure(&pub_p, &pub_bytes)?;
+
+	// Bind the on-disk folder to this SE identity (rename staging slug → key id).
+	crate::vault_commands::finalize_identity_folder(&app, &vault, &pub_bytes)?;
 
 	Ok(())
 }

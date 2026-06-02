@@ -142,6 +142,27 @@ pub fn validate_username_slug(slug: &str) -> Result<(), String> {
 	Ok(())
 }
 
+/// Canonical identity-folder id derived from a device public key — the Secure-Enclave
+/// P-256 pubkey on macOS, the Ed25519 account key in dev. Lowercase hex of a
+/// domain-separated SHA-256 truncated to 128 bits (passes [`validate_username_slug`]).
+///
+/// This is what binds the on-disk identity folder to its cryptographic identity instead
+/// of the human first-name slug, so two distinct identities can never resolve to (and
+/// therefore brick) the same folder.
+pub fn identity_folder_id(key_bytes: &[u8]) -> String {
+	use sha2::{Digest, Sha256};
+	let mut h = Sha256::new();
+	h.update(b"ceo.aven.os/identity-folder-id-v1");
+	h.update(key_bytes);
+	let digest = h.finalize();
+	let mut out = String::with_capacity(32);
+	for b in &digest[..16] {
+		out.push(char::from_digit(u32::from(b >> 4), 16).expect("hex nibble"));
+		out.push(char::from_digit(u32::from(b & 0x0f), 16).expect("hex nibble"));
+	}
+	out
+}
+
 pub fn vault_is_complete(root: &Path) -> bool {
 	identity_crypto_dir(root).is_dir() && db_dir(root).is_dir()
 }
@@ -169,6 +190,31 @@ pub fn migrate_layout<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<(), Strin
 		}
 	}
 	Ok(())
+}
+
+#[cfg(test)]
+mod identity_folder_id_tests {
+	use super::*;
+
+	#[test]
+	fn deterministic_and_valid_slug() {
+		let key = [7u8; 65];
+		let a = identity_folder_id(&key);
+		let b = identity_folder_id(&key);
+		assert_eq!(a, b, "same key must yield the same folder id");
+		assert_eq!(a.len(), 32, "128-bit hex id");
+		validate_username_slug(&a).expect("folder id must be a valid on-disk slug");
+	}
+
+	#[test]
+	fn distinct_keys_yield_distinct_ids() {
+		// The whole point: two different identities can never collide on one folder.
+		let id_se = identity_folder_id(&[1u8; 65]); // macOS SE P-256 pubkey shape
+		let id_ed = identity_folder_id(&[2u8; 32]); // dev Ed25519 account key shape
+		assert_ne!(id_se, identity_folder_id(&[2u8; 65]));
+		assert_ne!(id_ed, identity_folder_id(&[1u8; 32]));
+		assert_ne!(id_se, id_ed);
+	}
 }
 
 fn migrate_identity_root(root: &Path) -> Result<(), String> {

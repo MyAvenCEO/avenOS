@@ -419,8 +419,6 @@
 												{t('common.unlocking')}
 											{:else if v.deviceLabel}
 												{v.deviceLabel}
-											{:else}
-												{v.usernameSlug}
 											{/if}
 											{#if !v.hasIdentityBlob && unlockingSlug !== v.usernameSlug}
 												<span class="text-amber-600">{t('lockGate.finishSetupBelow')}</span>

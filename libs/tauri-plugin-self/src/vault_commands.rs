@@ -109,6 +109,62 @@ pub async fn vault_list(app: AppHandle, _vault_state: State<'_, ActiveVault>) ->
 	Ok(out)
 }
 
+/// Bind the active (staging) identity folder to its cryptographic identity: rename
+/// `identities/<staging-slug>` → `identities/<identity_folder_id(key)>` and re-point the
+/// pre-unlock selection at it. Called from each platform's `register` once device key
+/// material exists. Idempotent (no-op once the folder is already canonically named) and a
+/// no-op under the data-dir override sandbox (single shared root, no per-identity folder).
+///
+/// After this runs, an identity provably owns a folder no other identity can resolve to —
+/// the foundation the connect-time owner check in `jazz` relies on.
+pub(crate) fn finalize_identity_folder<R: tauri::Runtime>(
+	app: &AppHandle<R>,
+	vault: &ActiveVault,
+	key_bytes: &[u8],
+) -> Result<String, String> {
+	if paths::expand_override().is_some() {
+		return Ok(OVERRIDE_VAULT_SLUG.into());
+	}
+	let id = paths::identity_folder_id(key_bytes);
+	let current = vault.require_slug()?;
+	if current == id {
+		return Ok(id);
+	}
+
+	let identities = paths::identities_dir(app)?;
+	let from = identities.join(&current);
+	let to = identities.join(&id);
+
+	if to.exists() {
+		// This identity already has its canonical folder (e.g. re-register after a
+		// crash left a redundant staging dir). Adopt the canonical one; drop the dup.
+		if from != to && from.exists() {
+			let _ = fs::remove_dir_all(&from);
+		}
+	} else {
+		fs::rename(&from, &to).map_err(|e| {
+			format!(
+				"rename identity folder {} -> {}: {e}",
+				from.display(),
+				to.display()
+			)
+		})?;
+	}
+
+	// Keep the manifest's slug field consistent with the (new) folder name.
+	if let Some(mut m) = vault_root_manifest(&to) {
+		if m.username_slug != id {
+			m.username_slug = id.clone();
+			let _ = write_manifest(&to, &m);
+		}
+	}
+
+	// Re-point the pre-unlock selection at the canonical folder so the subsequent
+	// `unlock` resolves blob/db under it.
+	vault.select(&id)?;
+	Ok(id)
+}
+
 fn vault_root_manifest(vault_root: &std::path::Path) -> Option<VaultManifest> {
 	let p = paths::manifest_path(vault_root);
 	let raw = fs::read_to_string(&p).ok()?;

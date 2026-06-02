@@ -129,19 +129,24 @@ pub async fn register<R: Runtime>(
 	}
 	let dir = slot_dir(&app, &vault)?;
 	let path = dev_root_secret_path(&dir, &slot);
-	if path.is_file() {
-		if fs::metadata(&path).map(|m| m.len() == 32).unwrap_or(false) {
-			return Ok(());
-		}
-		return Err(format!(
-			"invalid dev root secret file (expected 32 bytes): {}",
-			path.display()
-		));
-	}
-	warn_op("register", &path);
-	let mut root = [0u8; 32];
-	OsRng.fill_bytes(&mut root);
-	write_secure(&path, &root)?;
+	let root: [u8; 32] = if path.is_file() {
+		let bytes = fs::read(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+		bytes.as_slice().try_into().map_err(|_| {
+			format!(
+				"invalid dev root secret file (expected 32 bytes): {}",
+				path.display()
+			)
+		})?
+	} else {
+		warn_op("register", &path);
+		let mut root = [0u8; 32];
+		OsRng.fill_bytes(&mut root);
+		write_secure(&path, &root)?;
+		root
+	};
+	// Dev has no SE device key — bind the folder to the Ed25519 account key instead.
+	let ppk = crate::derive::ed25519_public(&root)?;
+	crate::vault_commands::finalize_identity_folder(&app, &vault, &ppk)?;
 	Ok(())
 }
 

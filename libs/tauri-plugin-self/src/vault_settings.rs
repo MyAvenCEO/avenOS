@@ -159,7 +159,7 @@ mod tests {
 	}
 
 	#[test]
-	fn normalize_ui_locale() {
+	fn normalize_ui_locale_maps_to_supported() {
 		assert_eq!(normalize_ui_locale("de"), "de");
 		assert_eq!(normalize_ui_locale("DE"), "de");
 		assert_eq!(normalize_ui_locale("fr"), "en");

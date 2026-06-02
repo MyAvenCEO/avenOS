@@ -21,6 +21,8 @@ use groove::{
 	JazzClient,
 	JazzError,
 	ObjectId,
+	PeerInboundParkedHook,
+	SyncPayload,
 	SyncTransport,
 	TcpSyncTransport,
 	Value,
@@ -491,6 +493,9 @@ async fn with_connected_client(
 				let mut jc = jazz.conn.lock().await;
 				jc.client = Some(Arc::clone(&client));
 				jc.linked_identity = Some(desired);
+				drop(jc);
+				// Wire dev peer sync in the background — never blocks the connect path.
+				spawn_dev_peer_sync(self_state, Arc::clone(&client), jazz.change_tx.clone());
 				return Ok(client);
 			}
 			Err(e) => return Err(e),
@@ -620,6 +625,13 @@ fn migrate_legacy_jazz_dir_to_db(user_root: &Path) -> Result<(), String> {
 
 const CURRENT_JAZZ_LANE: &str = "lane-v1;env=client;user_branch=main";
 
+/// True when `AVENOS_DATA_DIR_OVERRIDE` collapses every identity into one shared
+/// sandbox root (dev/test only). In that mode the db dir is intentionally reset on
+/// identity mismatch; outside it, a mismatch is a hard refusal (never a wipe).
+fn data_dir_override_active() -> bool {
+	std::env::var_os("AVENOS_DATA_DIR_OVERRIDE").is_some_and(|v| !v.is_empty())
+}
+
 /// Re-stamp the Groove data dir. Wipes only when **identity** disagrees (`client_id` or lane).
 ///
 /// Schema hash changes use Jazz v2 lenses ([`schema_migrations`]) — data stays on older branches
@@ -657,9 +669,23 @@ fn reconcile_jazz_identity_cache_dir(
 		Ok(s) => {
 			if let Some(cid) = PeerId::parse(s.trim()) {
 				if cid != desired_peer {
-					reason = Some(format!(
-						"persisted peer id {cid} != current identity {desired_peer}"
-					));
+					// This db folder is owned by a *different* cryptographic identity.
+					// Historically we wiped it — which silently bricks the rightful
+					// owner's database when two app instances (or two accounts that
+					// collide on a folder) point at the same dir. Refuse instead: an
+					// identity may only ever open its own db folder. The lone exception
+					// is the data-dir override sandbox, whose single shared root is
+					// reset-on-mismatch *by design* for local dev.
+					if data_dir_override_active() {
+						reason = Some(format!(
+							"data-dir override sandbox: persisted peer id {cid} != current identity {desired_peer}; resetting shared sandbox db"
+						));
+					} else {
+						return Err(format!(
+							"identity_db_owner_mismatch: {} belongs to identity {cid}, but the unlocked identity is {desired_peer}. Refusing to open (this prevents bricking another identity's local database). If you intend to reset, delete this folder manually.",
+							jazz_dir.display()
+						));
+					}
 				}
 			}
 		}
@@ -1389,30 +1415,11 @@ async fn jazz_connect(
 	};
 
 	let _ = app;
-	let client = match try_dev_peer_transport(peer_id).await {
-		Some((transport, remote)) => {
-			let client = JazzClient::connect_with_sync_transport(ctx, transport, None)
-				.await
-				.map_err(format_jazz_err)?;
-			// Don't re-register a peer the user has Forgotten (revoked) — that is
-			// what makes Forget persist across reconnect/restart. Unknown peers
-			// stay permissive (first-contact); only an explicit revoke is skipped.
-			let remote_did = crate::jazz_auth::peer_did_from_ed25519(&remote.0).ok();
-			let revoked = match &remote_did {
-				Some(did) => crate::peers::is_peer_revoked(&client, did)
-					.await
-					.unwrap_or(false),
-				None => false,
-			};
-			if revoked {
-				log::info!("dev peer {remote} is Forgotten (revoked); not registering for sync");
-			} else if let Err(e) = client.register_peer_sync_client(remote) {
-				log::warn!("register dev peer {remote}: {e}");
-			}
-			client
-		}
-		None => JazzClient::connect(ctx).await.map_err(format_jazz_err)?,
-	};
+	// Connect Groove LOCALLY only — this is the sole thing sign-in waits on. The dev
+	// peer TCP transport is established and attached in the BACKGROUND (see
+	// `spawn_dev_peer_sync`), so bootstrap can never block waiting for the other
+	// instance to appear.
+	let client = JazzClient::connect(ctx).await.map_err(format_jazz_err)?;
 	// Install the biscuit-backed sync gate (replaces the `AllowAll` default).
 	// It reads the live shell vault + spark ACL handles, so it authorizes from
 	// real biscuits the moment the shell hydrates; until then it returns
@@ -1427,6 +1434,61 @@ async fn jazz_connect(
 
 	crate::schema_migrations::stamp_current_vault_snapshot(&data_dir, &schema)?;
 	Ok(client)
+}
+
+/// Establish the dev TCP peer transport in the BACKGROUND and attach it to an
+/// already-connected (local) client. Never blocks sign-in: Groove is connected locally
+/// first, and this only wires peer sync once the other instance appears. A no-op outside
+/// the dev peer-sync harness (`try_dev_peer_transport` returns `None` immediately).
+fn spawn_dev_peer_sync(
+	self_state: &SelfState,
+	client: Arc<JazzClient>,
+	change_tx: tokio::sync::mpsc::UnboundedSender<String>,
+) {
+	// Compute our own peer id up front (needs the unlocked root); bail if locked.
+	let peer_id = match self_state.with_root(|r| ed25519_public(r)) {
+		Ok(pk) => PeerId(pk),
+		Err(_) => return,
+	};
+	tokio::spawn(async move {
+		let Some((transport, remote)) = try_dev_peer_transport(peer_id).await else {
+			return;
+		};
+		// Inbound peer-sync deltas must drive the SAME drain that local IPC writes use
+		// (`change_tx` → `run_table_change_drain` → `execute_drain_batch`). Without this
+		// hook, a synced `sparks`/`keyshares` change — e.g. a spark-admin grant arriving
+		// from a peer — never invalidates the vault shell or refreshes the sync ACL, so
+		// the newly granted spark's data won't decrypt or live-sync until the next app
+		// restart (restart re-hydrates the shell from the already-synced rows). Map each
+		// inbound row batch to its table and post it to the drain, just like a local write.
+		let on_inbound: PeerInboundParkedHook = Arc::new(move |payload: &SyncPayload| {
+			let table = match payload {
+				SyncPayload::RowBatchCreated { row, .. } | SyncPayload::RowBatchNeeded { row, .. } => {
+					row.metadata.get("table").cloned()
+				}
+				_ => None,
+			};
+			if let Some(table) = table {
+				let _ = change_tx.send(table);
+			}
+		});
+		client.attach_sync_transport(transport, Some(on_inbound));
+		// Don't re-register a peer the user has Forgotten (revoked) — that is what makes
+		// Forget persist across reconnect/restart. Unknown peers stay permissive
+		// (first-contact); only an explicit revoke is skipped.
+		let remote_did = crate::jazz_auth::peer_did_from_ed25519(&remote.0).ok();
+		let revoked = match &remote_did {
+			Some(did) => crate::peers::is_peer_revoked(&client, did)
+				.await
+				.unwrap_or(false),
+			None => false,
+		};
+		if revoked {
+			log::info!("dev peer {remote} is Forgotten (revoked); not registering for sync");
+		} else if let Err(e) = client.register_peer_sync_client(remote) {
+			log::warn!("register dev peer {remote}: {e}");
+		}
+	});
 }
 
 /// Flip shell gate after local vault shell is ready (demo mesh — no live transport reconcile).
