@@ -30,6 +30,10 @@ pub enum AccOp {
 	Read,
 	Write,
 	Delete,
+	/// Blind store-and-forward (server avens added as replication peers). Holds a
+	/// `right("replicate", …)` grant but no keyshare → carries ciphertext, cannot
+	/// decrypt. Authorized without `trusted_admin` (a replica is not an admin).
+	Replicate,
 }
 
 impl AccOp {
@@ -38,6 +42,7 @@ impl AccOp {
 			AccOp::Read => "read",
 			AccOp::Write => "write",
 			AccOp::Delete => "delete",
+			AccOp::Replicate => "replicate",
 		}
 	}
 }
@@ -139,6 +144,51 @@ pub fn attenuate_add_owner_third_party(
 	chain
 		.append_third_party(delegating_kp.public(), block)
 		.map_err(|e| format!("tp_append:{e:?}"))
+}
+
+/// Append a third-party block granting `replica_did` a [`replicate`] right over
+/// this Spark's resource prefix, signed by `delegating_kp` (an admin's biscuit
+/// key). Unlike [`attenuate_add_owner_third_party`] this grants **no `owns`** and
+/// implies **no keyshare** — the holder may store & forward the spark's encrypted
+/// batches (blind relay / backup) but is not a member and cannot decrypt.
+pub fn attenuate_add_replicate_third_party(
+	delegating_kp: &KeyPair,
+	chain: &Biscuit,
+	spark_id: Uuid,
+	replica_did: &str,
+) -> Result<Biscuit, String> {
+	let req = chain
+		.third_party_request()
+		.map_err(|e| format!("tp_request:{e:?}"))?;
+	let prefix = format!("{}:", spark_urn_for(spark_id));
+	let rep_f = format!(
+		"replicate(\"{}\", \"{}\")",
+		replica_did.replace('\\', "\\\\").replace('"', "\\\""),
+		prefix.replace('\\', "\\\\").replace('"', "\\\"")
+	);
+	let bb = BlockBuilder::new()
+		.fact(rep_f.as_str())
+		.map_err(|e| format!("tp_rep_fact:{e}"))?;
+	let block = req
+		.create_block(&delegating_kp.private(), bb)
+		.map_err(|e| format!("tp_rep_create:{e:?}"))?;
+	chain
+		.append_third_party(delegating_kp.public(), block)
+		.map_err(|e| format!("tp_rep_append:{e:?}"))
+}
+
+/// All replication-peer DIDs granted on a spark per the biscuit chain.
+pub fn spark_replicas(chain: &Biscuit, spark_id: Uuid) -> Result<HashSet<String>, String> {
+	let prefix = format!("{}:", spark_urn_for(spark_id));
+	let mut authorizer = chain.authorizer().map_err(|e| format!("b-authorizer:{e}"))?;
+	let rule = format!(
+		r#"replicas($p) <- replicate($p, "{prefix}")"#,
+		prefix = prefix.replace('"', "\\\"")
+	);
+	let rows: Vec<(String,)> = authorizer
+		.query_all(rule.as_str())
+		.map_err(|e| format!("b-query-replicate:{e}"))?;
+	Ok(rows.into_iter().map(|x| x.0).collect())
 }
 
 /// Re-mint a spark biscuit granting every current admin EXCEPT `exclude_did`
@@ -249,6 +299,14 @@ pub fn authorize(
 		Some(r) => format!("{spark_str}:{table}:{r}"),
 	};
 
+	// Replication peers (server avens) are authorized by an explicit `replicate`
+	// grant, NOT by membership: they are not `owns`-admins and hold no keyshare, so
+	// they carry ciphertext blind. This path deliberately bypasses the owner check
+	// below — a replica must never need admin/membership to store-and-forward.
+	if matches!(op, AccOp::Replicate) {
+		return authorize_replicate(&chain.biscuit, &resource, subject_did);
+	}
+
 	let admins = trusted_subject_dids(&chain.biscuit, &spark_str)?;
 	if !admins.iter().any(|a| peer_did_matches(a, subject_did)) {
 		return Err("spark_acc:subject_not_owner".into());
@@ -295,6 +353,29 @@ deny if true;
 			"biscuit_deny:{}",
 			format_failed_logic_compact(&e)
 		)),
+	}
+}
+
+/// Authorize a blind replication peer: allowed iff the chain carries a
+/// `replicate($subject, $prefix)` grant whose prefix covers the resource. No
+/// `owns`/`trusted_admin` is required — a replica is not a member.
+///
+/// The grant lives in a third-party attenuation block, whose facts are NOT in
+/// scope for top-level authorizer `allow` rules — so (like `trusted_subject_dids`
+/// does for `owns`) we `query_all` the grants out and check prefix coverage in
+/// Rust rather than in datalog.
+fn authorize_replicate(chain: &Biscuit, resource: &str, subject_did: &str) -> Result<(), String> {
+	let mut authorizer = chain.authorizer().map_err(|e| format!("authz-rep-build:{e}"))?;
+	let grants: Vec<(String, String)> = authorizer
+		.query_all("granted($p, $pre) <- replicate($p, $pre)")
+		.map_err(|e| format!("authz-rep-query:{e}"))?;
+	let allowed = grants
+		.iter()
+		.any(|(did, prefix)| peer_did_matches(did, subject_did) && resource.starts_with(prefix));
+	if allowed {
+		Ok(())
+	} else {
+		Err("spark_acc:replicate_not_granted".into())
 	}
 }
 
@@ -403,6 +484,40 @@ mod tests {
 		assert!(authorize(&bob_vault, sid, AccOp::Write, "todos", None, &other.peer_did).is_err());
 
 		let _ = issuer_pk;
+	}
+
+	#[test]
+	fn replicate_grant_carries_ciphertext_without_membership() {
+		// Alice (owner) grants a server aven a `replicate` cap — NOT membership.
+		let alice = build_vault_from_root(&[1u8; 32]).unwrap();
+		let server = build_vault_from_root(&[7u8; 32]).unwrap();
+		let outsider = build_vault_from_root(&[8u8; 32]).unwrap();
+		let sid = uuid::Uuid::new_v4();
+		let rid = uuid::Uuid::new_v4();
+
+		let genesis = mint_genesis_spark(&alice, sid).unwrap();
+		let chain = attenuate_add_replicate_third_party(
+			&alice.biscuit_kp,
+			&genesis,
+			sid,
+			server.peer_did.as_str(),
+		)
+		.unwrap();
+		let mut v = alice;
+		v.sparks.insert(sid, BiscuitSpark { spark_id: sid, biscuit: chain });
+
+		// The replica IS authorized to store-and-forward (Replicate) the spark's rows…
+		authorize(&v, sid, AccOp::Replicate, "todos", Some(rid), &server.peer_did).unwrap();
+		// …but is NOT a member: it can neither read nor write (no decryption / no edits).
+		assert!(authorize(&v, sid, AccOp::Write, "todos", Some(rid), &server.peer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Read, "todos", Some(rid), &server.peer_did).is_err());
+		// A DID with no replicate grant cannot store-and-forward.
+		assert!(
+			authorize(&v, sid, AccOp::Replicate, "todos", Some(rid), &outsider.peer_did).is_err()
+		);
+		// And holding `replicate` does NOT confer membership to a real member check:
+		// the owner still works as a member.
+		authorize(&v, sid, AccOp::Write, "todos", Some(rid), &v.peer_did.clone()).unwrap();
 	}
 
 	#[test]

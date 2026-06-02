@@ -70,6 +70,7 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 			AccOp::Read => crate::spark_acc::AccOp::Read,
 			AccOp::Write => crate::spark_acc::AccOp::Write,
 			AccOp::Delete => crate::spark_acc::AccOp::Delete,
+			AccOp::Replicate => crate::spark_acc::AccOp::Replicate,
 		};
 		match crate::spark_acc::authorize(
 			&shell.vault,

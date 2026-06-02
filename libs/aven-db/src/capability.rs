@@ -18,6 +18,10 @@ pub enum AccOp {
     Read,
     Write,
     Delete,
+    /// Blind store-and-forward: the peer may **hold and relay** a resource's
+    /// (encrypted) batches without being a member — it never receives a keyshare,
+    /// so it cannot decrypt. Granted to server avens added as replication peers.
+    Replicate,
 }
 
 /// Gate decision.
