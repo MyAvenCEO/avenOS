@@ -1,5 +1,6 @@
 import type { UiFixtureShell } from '@avenos/aven-ui'
 import { createBankStatementShell } from '@avenos/aven-ui/vibes/bank-statement'
+import { createBankTransfersShell } from '@avenos/aven-ui/vibes/bank-transfers'
 import { createContractShell } from '@avenos/aven-ui/vibes/contract'
 import { createErrorShell } from '@avenos/aven-ui/vibes/error'
 import { createInvoiceShell } from '@avenos/aven-ui/vibes/invoice'
@@ -14,6 +15,7 @@ import { createTodosShell } from '@avenos/aven-ui/vibes/todos'
  */
 export type VibeViewId =
 	| 'invoice'
+	| 'bank-transfers'
 	| 'bank-statement'
 	| 'contract'
 	| 'todos'
@@ -37,6 +39,15 @@ export const vibeViewList: VibeView[] = [
 		shell: createInvoiceShell(),
 		containerName: 'aven-ui-invoice',
 		interactive: false,
+	},
+	{
+		id: 'bank-transfers',
+		label: 'Überweisungen',
+		description:
+			'Geteilte Ansicht: links die Liste der Überweisungen/Zahlungen mit Status-Indikator, rechts die Rechnung zur ausgewählten Transaktion.',
+		shell: createBankTransfersShell(),
+		containerName: 'aven-ui-bank-transfers',
+		interactive: true,
 	},
 	{
 		id: 'bank-statement',
@@ -81,7 +92,13 @@ export const vibeViewList: VibeView[] = [
 ]
 
 /** Views used as live HITL placeholders (excludes the error/success screens). */
-export const HITL_VIEW_IDS: VibeViewId[] = ['invoice', 'bank-statement', 'contract', 'todos']
+export const HITL_VIEW_IDS: VibeViewId[] = [
+	'invoice',
+	'bank-transfers',
+	'bank-statement',
+	'contract',
+	'todos',
+]
 
 export function vibeViewById(id: VibeViewId): VibeView {
 	const view = vibeViewList.find((v) => v.id === id)

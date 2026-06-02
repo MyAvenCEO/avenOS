@@ -1,0 +1,405 @@
+{
+	"title": "Überweisungen",
+	"labels": {
+		"listEyebrow": "Zahlungsausgänge",
+		"countLabel": "Vorgänge",
+		"emptyList": "Keine Überweisungen vorhanden",
+		"detailEyebrow": "Beleg",
+		"detailEmpty": "Wähle links eine Überweisung, um die zugehörige Rechnung anzuzeigen."
+	},
+	"transfers": [
+		{
+			"id": "tx-1842",
+			"status": "paid",
+			"direction": "out",
+			"payee": "TechSupply GmbH",
+			"reference": "R-2026-1842",
+			"date": "2026-04-20",
+			"amount": 4403,
+			"currency": "EUR",
+			"invoice": {
+				"vendor": {
+					"name": "TechSupply GmbH",
+					"contact_name": "Maria Weber",
+					"street": "Industriepark 12",
+					"postal_code": "80331",
+					"city": "München",
+					"country": "Germany",
+					"email": "billing@techsupply.example",
+					"phone": "+49 89 12345678",
+					"identifiers": [
+						{ "category": "vat_id", "value": "DE123456789", "label_printed": "USt-IdNr." }
+					]
+				},
+				"buyer": {
+					"name": "Acme Consulting AG",
+					"contact_name": "Dr. Jonas Klein",
+					"street": "Hafenstraße 4",
+					"postal_code": "20354",
+					"city": "Hamburg",
+					"country": "Germany",
+					"email": "finance@acme.example"
+				},
+				"header": {
+					"document_kind": "invoice",
+					"currency": "EUR",
+					"issue_date": "2026-04-15",
+					"due_date": "2026-05-15",
+					"invoice_number": "R-2026-1842",
+					"order_number": "PO-77821",
+					"customer_number": "KD-9910"
+				},
+				"statements": [
+					{
+						"section_title": "Professional services Q2",
+						"service_period": "01.04.2026 – 30.04.2026",
+						"line_items": [
+							{
+								"position": 1,
+								"title": "Platform subscription",
+								"description": "Enterprise tier — April 2026",
+								"quantity": 1,
+								"quantity_unit": "Mon.",
+								"unit_price": 890,
+								"tax_rate_percent": 19,
+								"amount": 890
+							},
+							{
+								"position": 2,
+								"title": "Implementation hours",
+								"description": "On-site integration (16h)",
+								"quantity": 16,
+								"quantity_unit": "Std.",
+								"unit_price": 185,
+								"tax_rate_percent": 19,
+								"amount": 2960
+							},
+							{
+								"position": 3,
+								"title": "Volume discount",
+								"description": "Contract tier adjustment",
+								"line_kind": "discount",
+								"quantity": null,
+								"quantity_unit": null,
+								"unit_price": null,
+								"tax_rate_percent": 19,
+								"amount": -150
+							}
+						]
+					}
+				],
+				"totals": {
+					"subtotal": 3700,
+					"tax_breakdown": [
+						{ "tax_rate_percent": 19, "tax_amount": 703, "net_subtotal": 3700, "tax_group_letter": "A" }
+					],
+					"tax_total": 703,
+					"invoice_total": 4403
+				},
+				"payments": [
+					{ "date": "2026-04-20", "amount": 4403, "method": "SEPA-Überweisung", "reference": "INV R-2026-1842" }
+				],
+				"total_outstanding": 0,
+				"payment_instructions": "Vollständig beglichen per SEPA-Überweisung auf IBAN DE12 3456 7890 1234 5678 90 (BIC ABCDDEFFXXX) bei der Musterbank AG."
+			}
+		},
+		{
+			"id": "tx-1990",
+			"status": "pending",
+			"direction": "out",
+			"payee": "CloudHost AG",
+			"reference": "R-2026-1990",
+			"date": "2026-05-02",
+			"amount": 1190,
+			"currency": "EUR",
+			"invoice": {
+				"vendor": {
+					"name": "CloudHost AG",
+					"contact_name": "Sven Albrecht",
+					"street": "Serverallee 8",
+					"postal_code": "60311",
+					"city": "Frankfurt am Main",
+					"country": "Germany",
+					"email": "ar@cloudhost.example",
+					"identifiers": [
+						{ "category": "vat_id", "value": "DE998877665", "label_printed": "USt-IdNr." }
+					]
+				},
+				"buyer": {
+					"name": "Acme Consulting AG",
+					"contact_name": "Dr. Jonas Klein",
+					"street": "Hafenstraße 4",
+					"postal_code": "20354",
+					"city": "Hamburg",
+					"country": "Germany",
+					"email": "finance@acme.example"
+				},
+				"header": {
+					"document_kind": "invoice",
+					"currency": "EUR",
+					"issue_date": "2026-05-01",
+					"due_date": "2026-05-31",
+					"invoice_number": "R-2026-1990",
+					"order_number": "PO-78002",
+					"customer_number": "KD-9910"
+				},
+				"statements": [
+					{
+						"section_title": "Managed hosting — Mai 2026",
+						"service_period": "01.05.2026 – 31.05.2026",
+						"line_items": [
+							{
+								"position": 1,
+								"title": "Compute cluster",
+								"description": "8 vCPU / 32 GB — monatlich",
+								"quantity": 1,
+								"quantity_unit": "Mon.",
+								"unit_price": 1000,
+								"tax_rate_percent": 19,
+								"amount": 1000
+							}
+						]
+					}
+				],
+				"totals": {
+					"subtotal": 1000,
+					"tax_breakdown": [
+						{ "tax_rate_percent": 19, "tax_amount": 190, "net_subtotal": 1000, "tax_group_letter": "A" }
+					],
+					"tax_total": 190,
+					"invoice_total": 1190
+				},
+				"payments": [],
+				"total_outstanding": 1190,
+				"payment_instructions": "Bitte überweisen Sie den Betrag bis zum 31.05.2026 auf IBAN DE44 5001 0517 0648 4898 90 (BIC INGDDEFFXXX) unter Angabe der Rechnungsnummer."
+			}
+		},
+		{
+			"id": "tx-1755",
+			"status": "overdue",
+			"direction": "out",
+			"payee": "Büro & Mehr GmbH",
+			"reference": "R-2026-1755",
+			"date": "2026-03-28",
+			"amount": 357,
+			"currency": "EUR",
+			"invoice": {
+				"vendor": {
+					"name": "Büro & Mehr GmbH",
+					"contact_name": "Petra Lindqvist",
+					"street": "Lagerweg 21",
+					"postal_code": "50667",
+					"city": "Köln",
+					"country": "Germany",
+					"email": "rechnung@bueroundmehr.example"
+				},
+				"buyer": {
+					"name": "Acme Consulting AG",
+					"contact_name": "Dr. Jonas Klein",
+					"street": "Hafenstraße 4",
+					"postal_code": "20354",
+					"city": "Hamburg",
+					"country": "Germany",
+					"email": "finance@acme.example"
+				},
+				"header": {
+					"document_kind": "invoice",
+					"currency": "EUR",
+					"issue_date": "2026-03-10",
+					"due_date": "2026-03-24",
+					"invoice_number": "R-2026-1755",
+					"order_number": "PO-77640",
+					"customer_number": "KD-9910"
+				},
+				"statements": [
+					{
+						"section_title": "Büromaterial",
+						"service_period": "März 2026",
+						"line_items": [
+							{
+								"position": 1,
+								"title": "Druckerpapier A4",
+								"description": "Karton à 2.500 Blatt",
+								"quantity": 4,
+								"quantity_unit": "Kart.",
+								"unit_price": 45,
+								"tax_rate_percent": 19,
+								"amount": 180
+							},
+							{
+								"position": 2,
+								"title": "Tonerkartuschen",
+								"description": "Schwarz, kompatibel",
+								"quantity": 2,
+								"quantity_unit": "Stk.",
+								"unit_price": 60,
+								"tax_rate_percent": 19,
+								"amount": 120
+							}
+						]
+					}
+				],
+				"totals": {
+					"subtotal": 300,
+					"tax_breakdown": [
+						{ "tax_rate_percent": 19, "tax_amount": 57, "net_subtotal": 300, "tax_group_letter": "A" }
+					],
+					"tax_total": 57,
+					"invoice_total": 357
+				},
+				"payments": [],
+				"total_outstanding": 357,
+				"payment_instructions": "Überfällig seit 24.03.2026. Bitte umgehend auf IBAN DE21 3702 0500 0001 2345 67 (BIC BFSWDE33XXX) begleichen."
+			}
+		},
+		{
+			"id": "tx-2011",
+			"status": "scheduled",
+			"direction": "out",
+			"payee": "Logistik Partner KG",
+			"reference": "R-2026-2011",
+			"date": "2026-05-20",
+			"amount": 2380,
+			"currency": "EUR",
+			"invoice": {
+				"vendor": {
+					"name": "Logistik Partner KG",
+					"contact_name": "Hannes Roth",
+					"street": "Frachtweg 5",
+					"postal_code": "28195",
+					"city": "Bremen",
+					"country": "Germany",
+					"email": "buchhaltung@logistikpartner.example",
+					"identifiers": [
+						{ "category": "vat_id", "value": "DE556644220", "label_printed": "USt-IdNr." }
+					]
+				},
+				"buyer": {
+					"name": "Acme Consulting AG",
+					"contact_name": "Dr. Jonas Klein",
+					"street": "Hafenstraße 4",
+					"postal_code": "20354",
+					"city": "Hamburg",
+					"country": "Germany",
+					"email": "finance@acme.example"
+				},
+				"header": {
+					"document_kind": "invoice",
+					"currency": "EUR",
+					"issue_date": "2026-05-06",
+					"due_date": "2026-05-20",
+					"invoice_number": "R-2026-2011",
+					"order_number": "PO-78110",
+					"customer_number": "KD-9910"
+				},
+				"statements": [
+					{
+						"section_title": "Spedition & Versand",
+						"service_period": "April 2026",
+						"line_items": [
+							{
+								"position": 1,
+								"title": "Palettenversand",
+								"description": "12 Paletten, national",
+								"quantity": 12,
+								"quantity_unit": "Pal.",
+								"unit_price": 150,
+								"tax_rate_percent": 19,
+								"amount": 1800
+							},
+							{
+								"position": 2,
+								"title": "Express-Zuschlag",
+								"description": "24h Lieferung",
+								"quantity": 1,
+								"quantity_unit": "Pausch.",
+								"unit_price": 200,
+								"tax_rate_percent": 19,
+								"amount": 200
+							}
+						]
+					}
+				],
+				"totals": {
+					"subtotal": 2000,
+					"tax_breakdown": [
+						{ "tax_rate_percent": 19, "tax_amount": 380, "net_subtotal": 2000, "tax_group_letter": "A" }
+					],
+					"tax_total": 380,
+					"invoice_total": 2380
+				},
+				"payments": [],
+				"total_outstanding": 2380,
+				"payment_instructions": "Zahlung terminiert auf den 20.05.2026 per SEPA-Lastschrift, Mandat M-2026-0042."
+			}
+		},
+		{
+			"id": "tx-1888",
+			"status": "failed",
+			"direction": "out",
+			"payee": "Marketing Studio",
+			"reference": "R-2026-1888",
+			"date": "2026-04-30",
+			"amount": 952,
+			"currency": "EUR",
+			"invoice": {
+				"vendor": {
+					"name": "Marketing Studio Berlin UG",
+					"contact_name": "Lena Vogt",
+					"street": "Kreativstraße 99",
+					"postal_code": "10437",
+					"city": "Berlin",
+					"country": "Germany",
+					"email": "invoice@marketingstudio.example"
+				},
+				"buyer": {
+					"name": "Acme Consulting AG",
+					"contact_name": "Dr. Jonas Klein",
+					"street": "Hafenstraße 4",
+					"postal_code": "20354",
+					"city": "Hamburg",
+					"country": "Germany",
+					"email": "finance@acme.example"
+				},
+				"header": {
+					"document_kind": "invoice",
+					"currency": "EUR",
+					"issue_date": "2026-04-22",
+					"due_date": "2026-05-06",
+					"invoice_number": "R-2026-1888",
+					"order_number": "PO-77955",
+					"customer_number": "KD-9910"
+				},
+				"statements": [
+					{
+						"section_title": "Kampagne Q2 Launch",
+						"service_period": "April 2026",
+						"line_items": [
+							{
+								"position": 1,
+								"title": "Creative concept",
+								"description": "Konzept & Design",
+								"quantity": 1,
+								"quantity_unit": "Pausch.",
+								"unit_price": 800,
+								"tax_rate_percent": 19,
+								"amount": 800
+							}
+						]
+					}
+				],
+				"totals": {
+					"subtotal": 800,
+					"tax_breakdown": [
+						{ "tax_rate_percent": 19, "tax_amount": 152, "net_subtotal": 800, "tax_group_letter": "A" }
+					],
+					"tax_total": 152,
+					"invoice_total": 952
+				},
+				"payments": [],
+				"total_outstanding": 952,
+				"payment_instructions": "Letzte Überweisung fehlgeschlagen (Konto nicht gedeckt). Bitte erneut anweisen auf IBAN DE89 1004 0000 0123 4567 00 (BIC COBADEFFXXX)."
+			}
+		}
+	]
+}
