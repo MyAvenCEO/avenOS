@@ -18,7 +18,7 @@ goal: <one measurable, transcript-verifiable completion condition>
 ## Context
 
 The problem and any constraints. Link related work items by id. Carry over the
-relevant parts of the inbox note so this doc stands alone.
+relevant parts of the idea note so this doc stands alone.
 
 ## Goal
 
@@ -84,4 +84,4 @@ Pick this up with the board command (resolves the item, loads it, drives it):
 
 Newest entry first.
 
-- `YYYY-MM-DD` — Planned. Moved inbox → plan.
+- `YYYY-MM-DD` — Planned. Moved idea → plan.

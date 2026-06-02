@@ -15,7 +15,7 @@ let {
 	columns,
 	base = '/board',
 	title = 'Board',
-	subtitle = 'Git-based work items flowing inbox → plan → test → done.',
+	subtitle = 'Git-based work items flowing idea → plan → test → done.',
 	emptyLabel = 'Nothing here yet.',
 	onOpen
 }: Props = $props()

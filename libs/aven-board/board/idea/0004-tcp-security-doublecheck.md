@@ -71,6 +71,6 @@ Each must be checkable from the transcript / a test run.
 
 ## Progress log
 
-- `2026-06-02` — Created in inbox. Captured alongside the spark-admin live-sync
+- `2026-06-02` — Created in idea. Captured alongside the spark-admin live-sync
   investigation; pairs with the TCP/TLS aven-server work that 0003 is deferred
   behind.

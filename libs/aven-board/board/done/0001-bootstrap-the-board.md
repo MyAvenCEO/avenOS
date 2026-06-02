@@ -24,7 +24,7 @@ it at the `/board` nav route.
 
 ## Acceptance criteria
 
-- [x] `inbox / plan / test / done` columns, each backed by a folder of `.md` files
+- [x] `idea / plan / test / done` columns, each backed by a folder of `.md` files
 - [x] Cards show a title + summary; clicking opens the full doc full-screen with a bottom-center back button
 - [x] `AGENTS.md` / `CLAUDE.md` explain the workflow
 - [x] Templates for plans and work items

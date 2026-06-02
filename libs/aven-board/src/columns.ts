@@ -12,9 +12,9 @@ export type BoardColumnMeta = {
  * The folder under `board/` matching `id` is the single source of truth for state.
  */
 export const BOARD_COLUMN_META: Record<BoardColumnId, BoardColumnMeta> = {
-	inbox: {
-		id: 'inbox',
-		label: 'Inbox',
+	idea: {
+		id: 'idea',
+		label: 'Idea',
 		aka: 'Backlog',
 		description: 'Raw ideas and tasks. Throw anything here — unrefined and unsorted.'
 	},

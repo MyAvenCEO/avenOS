@@ -3,7 +3,7 @@
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",
-	"description": "aven-board — git-based, markdown-first kanban board for AvenOS (inbox → plan → test → done).",
+	"description": "aven-board — git-based, markdown-first kanban board for AvenOS (idea → plan → test → done).",
 	"main": "./src/index.ts",
 	"types": "./src/index.ts",
 	"exports": {

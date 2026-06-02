@@ -5,11 +5,11 @@ single `.md` file; the folder it lives in is its state. No database — git is t
 single source of truth.
 
 ```
-inbox/ → plan/ → test/ → done/
+idea/ → plan/ → test/ → done/
 (idea)   (spec)   (verify) (archive)
 ```
 
-Throw any idea or task into `inbox`, spec it in `plan`, let an agent build it, and
+Throw any idea or task into `idea`, spec it in `plan`, let an agent build it, and
 verify it in `test` before it lands in `done`.
 
 ## Layout
@@ -17,7 +17,7 @@ verify it in `test` before it lands in `done`.
 ```
 aven-board/
 ├─ board/                 # the work items — single source of truth
-│  ├─ inbox/  (backlog)
+│  ├─ idea/  (backlog)
 │  ├─ plan/   (spec)
 │  ├─ test/   (review)
 │  └─ done/   (shipped)
@@ -69,7 +69,7 @@ and the full-screen doc view surfaces the goal with a one-click "Copy /goal".
 
 ## Working the board
 
-See **[AGENTS.md](./AGENTS.md)**. In short: create items in `inbox/` from
+See **[AGENTS.md](./AGENTS.md)**. In short: create items in `idea/` from
 `templates/work-item.md`, move them forward with `git mv`, keep frontmatter
 accurate (`title`, `summary`, `tags`, `owner`, `goal`, dates), and append to each
 item's `## Progress log`.

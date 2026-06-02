@@ -6,10 +6,10 @@ The full workflow lives in [`AGENTS.md`](./AGENTS.md). Read it before working th
 `board/<column>/`, and **the folder is its state**:
 
 ```
-inbox/ → plan/ → test/ → done/
+idea/ → plan/ → test/ → done/
 ```
 
-- **Capture** ideas as `board/inbox/NNNN-slug.md` from `templates/work-item.md`.
+- **Capture** ideas as `board/idea/NNNN-slug.md` from `templates/work-item.md`.
 - **Spec** them by `git mv` into `board/plan/` and filling out `templates/plan.md`
   (Approach, Acceptance criteria, Test plan).
 - **Build**, then `git mv` into `board/test/`.

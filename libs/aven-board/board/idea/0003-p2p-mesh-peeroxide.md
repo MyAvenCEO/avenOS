@@ -124,7 +124,7 @@ holepunch numbers.
 
 ## Progress log
 
-- `2026-06-02` — Created in inbox. P0 spike already DONE (peeroxide@1.3.1 API
+- `2026-06-02` — Created in idea. P0 spike already DONE (peeroxide@1.3.1 API
   pinned, protomux duplex solved, local-bootstrap recipe proven, `swarm_smoke`
   passing). Code preserved at commit `ef72581`. Deferred behind the TCP/TLS
   aven-server per direction change; this card is the revival spec.

@@ -7,7 +7,7 @@ there is no database. Git is the single source of truth.
 
 ```
 libs/aven-board/board/
-  inbox/   ← raw ideas & tasks (aka backlog)
+  idea/   ← raw ideas & tasks (aka backlog)
   plan/    ← specced, ready to build (aka spec)
   test/    ← built, awaiting verification (aka review)
   done/    ← verified & shipped
@@ -16,7 +16,7 @@ libs/aven-board/board/
 ## The lifecycle
 
 ```
-inbox  →  plan  →  test  →  done
+idea  →  plan  →  test  →  done
 (idea)   (spec)   (verify) (archive)
 ```
 
@@ -24,18 +24,18 @@ Moving a card forward (or back) means **moving the file** with `git mv` so histo
 is preserved:
 
 ```sh
-git mv libs/aven-board/board/inbox/0007-thing.md libs/aven-board/board/plan/0007-thing.md
+git mv libs/aven-board/board/idea/0007-thing.md libs/aven-board/board/plan/0007-thing.md
 ```
 
 Keep the numeric filename prefix stable across moves so the item keeps its id.
 
 ## How you (the agent) work the board
 
-### 1. Capture → `inbox/`
+### 1. Capture → `idea/`
 - Create `NNNN-short-slug.md` from `templates/work-item.md`.
 - Use the next free 4-digit number in the column. Lowercase, hyphenated slug.
 - Fill in frontmatter `title` + `summary` (the card shows these) and the Context.
-- Keep it short. The inbox is for capture, not specs.
+- Keep it short. The idea is for capture, not specs.
 
 ### 2. Spec → `plan/`
 - `git mv` the file into `plan/`.
@@ -110,13 +110,13 @@ meaningful step, newest first. This is how the next agent picks up cold:
 ```md
 ## Progress log
 - `2026-06-02` — Moved plan → test; implemented X in `app/src/...`.
-- `2026-06-02` — Planned; moved inbox → plan.
-- `2026-06-02` — Created in inbox.
+- `2026-06-02` — Planned; moved idea → plan.
+- `2026-06-02` — Created in idea.
 ```
 
 ## Rules of thumb
 
-- One item per file. If an inbox note hides two tasks, split it when planning.
+- One item per file. If an idea note hides two tasks, split it when planning.
 - Never delete a `done/` item to "clean up" — it's the shipped record. Archive instead.
 - Don't invent state outside the four folders. The folder is the truth.
 - Prefer `git mv` over delete+create so the item keeps its history and id.

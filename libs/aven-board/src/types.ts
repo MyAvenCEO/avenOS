@@ -1,5 +1,5 @@
 /** Canonical board states — the folder a work item lives in is the source of truth. */
-export const BOARD_COLUMN_IDS = ['inbox', 'plan', 'test', 'done'] as const
+export const BOARD_COLUMN_IDS = ['idea', 'plan', 'test', 'done'] as const
 
 export type BoardColumnId = (typeof BOARD_COLUMN_IDS)[number]
 
@@ -42,7 +42,7 @@ export type WorkItem = {
 /** A rendered column: metadata plus the work items currently inside it. */
 export type BoardColumn = {
 	id: BoardColumnId
-	/** Human label, e.g. "Inbox". */
+	/** Human label, e.g. "Idea". */
 	label: string
 	/** Alternate name, e.g. "Backlog". */
 	aka: string

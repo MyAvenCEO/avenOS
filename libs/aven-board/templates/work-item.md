@@ -5,7 +5,7 @@ owner: unassigned
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 tags: [area, kind]
-# goal — leave blank or rough in inbox; make it a single, measurable,
+# goal — leave blank or rough in idea; make it a single, measurable,
 # transcript-verifiable completion condition before this moves to `plan`.
 goal:
 ---
@@ -18,7 +18,7 @@ goal:
 ## Context
 
 Why this exists. The problem, the trigger, or the idea. Link related items by id
-(e.g. `0007-foo`). Keep it to a few sentences while this lives in **inbox**.
+(e.g. `0007-foo`). Keep it to a few sentences while this lives in **idea**.
 
 ## Goal
 
@@ -45,4 +45,4 @@ Each must be checkable from the transcript (a command + its output proves it).
 Newest entry first. One line per meaningful step. This is how an agent narrates
 what it did so the next agent (or human) can pick up cold.
 
-- `YYYY-MM-DD` — Created in inbox.
+- `YYYY-MM-DD` — Created in idea.
