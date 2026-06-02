@@ -34,7 +34,7 @@ export type AsrEvent = {
 	error?: string
 }
 
-export const ASR_MODEL_LABEL = 'Gemma 4 E4B'
+export const ASR_MODEL_LABEL = 'Voxtral Mini 3B'
 export const ASR_EVENT = 'asr:model-download'
 export const ASR_STATUS_COMMAND = 'asr_status'
 

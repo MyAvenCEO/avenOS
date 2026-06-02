@@ -1,4 +1,4 @@
-//! On-device voice-note transcription (Gemma 4 E4B via mistral.rs).
+//! On-device voice-note transcription (Voxtral Mini 3B via mistral.rs).
 //!
 //! Default builds ship only the command surface — `asr_status` reports
 //! `unavailable` and `transcribe_audio` errors — so CI / default `cargo check`
@@ -23,40 +23,35 @@ pub const DOWNLOAD_EVENT: &str = "asr:model-download";
 /// shared `residual.safetensors` (the unquantized audio/vision towers) — far
 /// smaller than the full BF16 safetensors, and no in-memory ISQ pass.
 pub struct ModelConfig {
-	/// Hugging Face UQFF repo id.
+	/// Hugging Face repo id (full-precision safetensors; quantized via ISQ).
 	pub repo: &'static str,
 	/// Friendly label shown in the UI.
 	pub label: &'static str,
 	/// Human-readable quantization/optimization, shown as model metadata.
 	pub quant: &'static str,
-	/// The `.uqff` file (first shard) to load for this platform's quant level.
+	/// Optional pre-quantized `.uqff` shard. Empty = load safetensors + ISQ.
 	pub uqff_file: &'static str,
 }
 
-/// - Apple Silicon macOS → E4B, AFQ4 (Metal-optimized affine quant).
-/// - iOS → E2B, AFQ4 (smallest that fits a phone's memory budget).
-/// - Linux / Windows / Intel Mac → E4B, Q4K (portable CPU/CUDA quant).
+/// Voxtral Mini 3B — a dedicated speech-to-text model (audio + text), small
+/// enough to run on-device on an 8 GB machine and iPhone. Loaded from the
+/// full-precision repo and quantized to 4-bit in-memory via ISQ (~3 GB RAM):
+/// - Apple Silicon (macOS/iOS) → AFQ4 (Metal-optimized affine quant).
+/// - Linux / Windows / Intel → Q4K (portable CPU/CUDA quant).
 pub fn model_config() -> ModelConfig {
-	#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+	#[cfg(any(all(target_os = "macos", target_arch = "aarch64"), target_os = "ios"))]
 	return ModelConfig {
-		repo: "mistralrs-community/gemma-4-E4B-it-UQFF",
-		label: "Gemma 4 E4B",
-		quant: "AFQ4 · Apple-optimized 4-bit",
-		uqff_file: "afq4-0.uqff",
-	};
-	#[cfg(target_os = "ios")]
-	return ModelConfig {
-		repo: "mistralrs-community/gemma-4-E2B-it-UQFF",
-		label: "Gemma 4 E2B",
-		quant: "AFQ4 · Apple-optimized 4-bit",
-		uqff_file: "afq4-0.uqff",
+		repo: "mistralai/Voxtral-Mini-3B-2507",
+		label: "Voxtral Mini 3B",
+		quant: "AFQ4 · Apple-optimized 4-bit (ISQ)",
+		uqff_file: "",
 	};
 	#[cfg(not(any(all(target_os = "macos", target_arch = "aarch64"), target_os = "ios")))]
 	return ModelConfig {
-		repo: "mistralrs-community/gemma-4-E4B-it-UQFF",
-		label: "Gemma 4 E4B",
-		quant: "Q4K · portable 4-bit",
-		uqff_file: "q4k-0.uqff",
+		repo: "mistralai/Voxtral-Mini-3B-2507",
+		label: "Voxtral Mini 3B",
+		quant: "Q4K · 4-bit (ISQ)",
+		uqff_file: "",
 	};
 }
 
@@ -245,7 +240,7 @@ mod imp {
 	use hf_hub::api::tokio::{ApiBuilder, ApiRepo, Progress};
 	use hf_hub::{Cache, Repo, RepoType};
 	use mistralrs::{
-		AudioInput, Model, MultimodalMessages, TextMessageRole, UqffMultimodalModelBuilder,
+		AudioInput, IsqType, Model, MultimodalMessages, MultimodalModelBuilder, TextMessageRole,
 	};
 	use tauri::{AppHandle, Emitter};
 
@@ -521,10 +516,16 @@ mod imp {
 				// Pre-download with real byte progress, then build from cache.
 				prefetch_weights(app, &dir).await?;
 
-				// UQFF is already quantized — load it directly (no in-memory ISQ).
+				// Load the safetensors and quantize to 4-bit in-memory (ISQ):
+				// AFQ4 on Apple Silicon (Metal), Q4K elsewhere.
+				#[cfg(any(all(target_os = "macos", target_arch = "aarch64"), target_os = "ios"))]
+				let isq = IsqType::AFQ4;
+				#[cfg(not(any(all(target_os = "macos", target_arch = "aarch64"), target_os = "ios")))]
+				let isq = IsqType::Q4K;
+
 				let cfg = model_config();
-				let model = UqffMultimodalModelBuilder::new(cfg.repo, vec![PathBuf::from(cfg.uqff_file)])
-					.into_inner()
+				let model = MultimodalModelBuilder::new(cfg.repo)
+					.with_isq(isq)
 					.with_logging()
 					.build()
 					.await

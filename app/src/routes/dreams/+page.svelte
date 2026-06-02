@@ -74,7 +74,7 @@ let nextUp = $state<Wish[]>([...SEED_NEXT_UP])
 let seq = $state(0)
 let metricCursor = $state(0)
 
-let composerMode = $state<'collapsed' | 'listening' | 'typing'>('collapsed')
+let composerMode = $state<'collapsed' | 'listening' | 'typing' | 'preparing'>('collapsed')
 
 /** Dummy-fill the Wishlist from a voice/text submission. */
 function handleSubmit(text: string, _files: File[]): void {

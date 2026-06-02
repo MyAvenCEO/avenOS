@@ -17,9 +17,9 @@
 	let local = $state<LocalModel[]>([])
 	let busyId = $state<string | null>(null)
 
-	// Gemma 4 E2B/E4B are multimodal (text + image + audio); AvenOS uses the
-	// audio capability for voice notes.
-	const MODALITIES = ['text', 'image', 'audio'] as const
+	// Voxtral Mini is a speech model: audio + text (no vision). AvenOS uses the
+	// audio capability for voice-note transcription.
+	const MODALITIES = ['audio', 'text'] as const
 
 	async function refreshLocal() {
 		if (!tauri) return
