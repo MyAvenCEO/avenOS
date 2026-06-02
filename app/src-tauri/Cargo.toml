@@ -17,8 +17,12 @@ name = "aven-os-app"
 path = "src/main.rs"
 
 [features]
-# On-device voice-note transcription (Gemma 4 E4B). Off by default to keep CI /
-# default builds light; enabling it pulls in the heavy `mistralrs` inference crate.
+# On-device voice-note transcription (Gemma 4 E4B) is ON by default, so the
+# normal `bun run dev:app` / `bun run release:app` flows ship the real model and
+# trigger the first-run weights download. Enabling it pulls in the heavy
+# `mistralrs` inference crate (~400MB+ build, longer first compile). Build with
+# `--no-default-features` to get the light stub build (CI / quick checks).
+default = ["local-asr"]
 local-asr = ["dep:mistralrs"]
 
 [build-dependencies]

@@ -16,8 +16,12 @@ use tauri::AppHandle;
 /// Friendly label shown in the download UI.
 pub const MODEL_LABEL: &str = "Gemma 4 E4B";
 /// Hugging Face model id (confirm exact casing/slug against the model card).
+/// Only referenced by the `local-asr` build; default builds never read it.
+#[cfg_attr(not(feature = "local-asr"), allow(dead_code))]
 pub const MODEL_ID: &str = "google/gemma-4-E4B-it";
 /// Tauri event the webview listens to for download progress / readiness.
+/// Only referenced by the `local-asr` build; default builds never read it.
+#[cfg_attr(not(feature = "local-asr"), allow(dead_code))]
 pub const DOWNLOAD_EVENT: &str = "asr:model-download";
 
 /// Reply for the `asr_status` command and the shape of `asr:model-download`
@@ -34,6 +38,8 @@ pub struct AsrStatus {
 }
 
 impl AsrStatus {
+	/// Only used by the stub (feature-off) build; `local-asr` builds never call it.
+	#[cfg_attr(feature = "local-asr", allow(dead_code))]
 	pub fn unavailable() -> Self {
 		Self {
 			status: "unavailable".into(),
@@ -90,9 +96,9 @@ mod imp {
 	use std::sync::{Arc, Mutex, OnceLock};
 
 	use mistralrs::{
-		AudioInput, IsqType, Model, MultimodalModelBuilder, TextMessageRole, TextMessages,
+		AudioInput, IsqType, Model, MultimodalMessages, MultimodalModelBuilder, TextMessageRole,
 	};
-	use tauri::{AppHandle, Emitter, Manager};
+	use tauri::{AppHandle, Emitter};
 
 	use super::{AsrStatus, DOWNLOAD_EVENT, MODEL_ID, MODEL_LABEL};
 
@@ -182,13 +188,16 @@ mod imp {
 	pub async fn transcribe(app: &AppHandle, pcm: Vec<f32>, sample_rate: u32) -> Result<String, String> {
 		let model = ensure_model(app).await?;
 
-		let audio = AudioInput::from_samples(pcm, sample_rate);
-		let messages = TextMessages::new()
-			.add_audio_message(
-				TextMessageRole::User,
-				"Transcribe this voice note verbatim. Return only the transcript text.",
-				audio,
-			);
+		let audio = AudioInput {
+			samples: pcm,
+			sample_rate,
+			channels: 1,
+		};
+		let messages = MultimodalMessages::new().add_audio_message(
+			TextMessageRole::User,
+			"Transcribe this voice note verbatim. Return only the transcript text.",
+			vec![audio],
+		);
 
 		let response = model
 			.send_chat_request(messages)
