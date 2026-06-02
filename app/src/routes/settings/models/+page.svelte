@@ -4,6 +4,8 @@
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import {
 		asrState,
+		cancelDownload,
+		deleteModel,
 		downloadFraction,
 		listLocalModels,
 		type LocalModel,
@@ -12,6 +14,31 @@
 
 	const tauri = $derived(browser && isTauriRuntime())
 	let local = $state<LocalModel[]>([])
+	let busyId = $state<string | null>(null)
+
+	// Gemma 4 E2B/E4B are multimodal (text + image + audio); AvenOS uses the
+	// audio capability for voice notes.
+	const MODALITIES = ['text', 'image', 'audio'] as const
+
+	async function refreshLocal() {
+		if (!tauri) return
+		local = await listLocalModels()
+	}
+
+	async function onStop() {
+		await cancelDownload()
+		await refreshLocal()
+	}
+
+	async function onDelete(id: string) {
+		busyId = id
+		try {
+			await deleteModel(id)
+			await refreshLocal()
+		} finally {
+			busyId = null
+		}
+	}
 
 	// Re-scan the on-disk listing whenever readiness flips (e.g. a download
 	// finishes), so freshly fetched weights show up without a manual refresh.
@@ -53,29 +80,52 @@
 		<section class="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
 			<div class="flex items-start justify-between gap-3">
 				<div class="min-w-0">
-					<div class="flex items-center gap-2">
+					<div class="flex flex-wrap items-center gap-1.5">
 						<h2 class="truncate text-sm font-semibold tracking-tight">{$asrState.model}</h2>
-						<span
-							class="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary"
-							>{t('models.active')}</span
-						>
+						{#each MODALITIES as m (m)}
+							<span
+								class="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary"
+								>{t(`models.modalities.${m}`)}</span
+							>
+						{/each}
 					</div>
 					{#if activeOnDisk}
-						<p class="text-muted-foreground mt-0.5 font-mono text-[11px]">
+						<p class="text-muted-foreground mt-1 font-mono text-[11px]">
 							{formatBytes(activeOnDisk.sizeBytes)}
 							{t('models.onDisk')}
 						</p>
 					{/if}
 				</div>
-				<span
-					class="shrink-0 text-xs font-medium {statusKey === 'ready'
-						? 'text-status-success'
-						: statusKey === 'error'
-							? 'text-status-error'
-							: 'text-muted-foreground'}"
-				>
-					{t(`models.status.${statusKey}`)}
-				</span>
+				<div class="flex shrink-0 items-center gap-2">
+					<span
+						class="text-xs font-medium {statusKey === 'ready'
+							? 'text-status-success'
+							: statusKey === 'error'
+								? 'text-status-error'
+								: 'text-muted-foreground'}"
+					>
+						{t(`models.status.${statusKey}`)}
+					</span>
+					{#if statusKey === 'downloading' || statusKey === 'idle'}
+						<button
+							type="button"
+							class="rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-foreground/80 outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-primary/30"
+							onclick={onStop}
+						>
+							{t('models.stop')}
+						</button>
+					{/if}
+					{#if activeOnDisk}
+						<button
+							type="button"
+							class="rounded-full border border-status-error/40 px-2.5 py-1 text-[11px] font-medium text-status-error outline-none transition-colors hover:bg-status-error/10 focus-visible:ring-2 focus-visible:ring-status-error/30 disabled:opacity-40"
+							disabled={busyId === activeOnDisk.id}
+							onclick={() => activeOnDisk && onDelete(activeOnDisk.id)}
+						>
+							{busyId === activeOnDisk.id ? t('models.deleting') : t('models.delete')}
+						</button>
+					{/if}
+				</div>
 			</div>
 
 			{#if statusKey === 'downloading' || statusKey === 'idle'}
@@ -113,9 +163,17 @@
 					{#each others as m (m.id)}
 						<li class="flex items-center justify-between gap-3 px-4 py-3">
 							<span class="truncate font-mono text-[12px] select-text">{m.id}</span>
-							<span class="text-muted-foreground shrink-0 font-mono text-[11px]"
-								>{formatBytes(m.sizeBytes)}</span
-							>
+							<div class="flex shrink-0 items-center gap-3">
+								<span class="text-muted-foreground font-mono text-[11px]">{formatBytes(m.sizeBytes)}</span>
+								<button
+									type="button"
+									class="rounded-full border border-status-error/40 px-2.5 py-1 text-[11px] font-medium text-status-error outline-none transition-colors hover:bg-status-error/10 focus-visible:ring-2 focus-visible:ring-status-error/30 disabled:opacity-40"
+									disabled={busyId === m.id}
+									onclick={() => onDelete(m.id)}
+								>
+									{busyId === m.id ? t('models.deleting') : t('models.delete')}
+								</button>
+							</div>
 						</li>
 					{/each}
 				</ul>

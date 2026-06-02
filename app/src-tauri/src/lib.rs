@@ -240,6 +240,8 @@ pub fn run() {
 			asr::asr_status,
 			asr::transcribe_audio,
 			asr::asr_local_models,
+			asr::asr_cancel_download,
+			asr::asr_delete_model,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application")

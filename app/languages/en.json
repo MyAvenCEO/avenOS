@@ -147,6 +147,14 @@
 		"empty": "No models downloaded yet. Open Talk and tap the mic to fetch the voice model.",
 		"active": "Voice",
 		"onDisk": "on disk",
+		"stop": "Stop",
+		"delete": "Delete",
+		"deleting": "Deleting…",
+		"modalities": {
+			"text": "Text",
+			"image": "Image",
+			"audio": "Audio"
+		},
 		"status": {
 			"idle": "Not started",
 			"downloading": "Downloading…",

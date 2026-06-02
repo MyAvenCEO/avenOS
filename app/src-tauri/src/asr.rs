@@ -1,4 +1,4 @@
-//! On-device voice-note transcription (Gemma 4 E2B via mistral.rs).
+//! On-device voice-note transcription (Gemma 4 E4B via mistral.rs).
 //!
 //! Default builds ship only the command surface — `asr_status` reports
 //! `unavailable` and `transcribe_audio` errors — so CI / default `cargo check`
@@ -14,12 +14,14 @@ use serde::Serialize;
 use tauri::AppHandle;
 
 /// Friendly label shown in the download UI.
-pub const MODEL_LABEL: &str = "Gemma 4 E2B";
-/// Hugging Face model id. E2B (the smaller Gemma 4 variant) keeps the first-run
-/// download and on-device footprint lighter than E4B.
+pub const MODEL_LABEL: &str = "Gemma 4 E4B";
+/// Hugging Face model id. NOTE: this is the full-precision (BF16) safetensors
+/// repo (~15 GB download). `with_isq(Q4K)` quantizes to 4-bit *in memory* at
+/// load (~3 GB RAM) but does NOT shrink the download — for a ~3 GB on-disk
+/// footprint we'd need a pre-quantized GGUF/UQFF repo instead.
 /// Only referenced by the `local-asr` build; default builds never read it.
 #[cfg_attr(not(feature = "local-asr"), allow(dead_code))]
-pub const MODEL_ID: &str = "google/gemma-4-E2B-it";
+pub const MODEL_ID: &str = "google/gemma-4-E4B-it";
 /// Tauri event the webview listens to for download progress / readiness.
 /// Only referenced by the `local-asr` build; default builds never read it.
 #[cfg_attr(not(feature = "local-asr"), allow(dead_code))]
@@ -78,7 +80,7 @@ pub fn spawn_model_download(app: &AppHandle) {
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalModel {
-	/// Hugging Face repo id, e.g. `google/gemma-4-E2B-it`.
+	/// Hugging Face repo id, e.g. `google/gemma-4-E4B-it`.
 	pub id: String,
 	/// Bytes occupied on disk (resolved blobs).
 	pub size_bytes: u64,
@@ -119,6 +121,41 @@ pub async fn asr_local_models(app: AppHandle) -> Result<Vec<LocalModel>, String>
 	Ok(out)
 }
 
+/// Stop the in-flight voice-model download and reset progress to idle. No-op in
+/// the stub build. Re-trigger a download by tapping the mic again.
+#[tauri::command(rename_all = "camelCase")]
+pub async fn asr_cancel_download(app: AppHandle) -> Result<(), String> {
+	imp::cancel(&app);
+	Ok(())
+}
+
+/// Delete a model directory from the on-device HF cache. If the active model is
+/// being downloaded, the download is cancelled first.
+#[tauri::command(rename_all = "camelCase")]
+pub async fn asr_delete_model(app: AppHandle, id: String) -> Result<(), String> {
+	if id.eq_ignore_ascii_case(MODEL_ID) {
+		imp::cancel(&app);
+	}
+	if id.contains("..") || id.starts_with('/') {
+		return Err("invalid model id".into());
+	}
+	let dir = tauri_plugin_self::paths::models_dir(&app)?;
+	let hub = std::env::var("HF_HUB_CACHE")
+		.ok()
+		.map(std::path::PathBuf::from)
+		.unwrap_or_else(|| dir.join("hub"));
+	let folder = format!("models--{}", id.replace('/', "--"));
+	let target = hub.join(&folder);
+	// Safety: only ever a single `models--*` directory directly under the cache.
+	if target.parent() != Some(hub.as_path()) {
+		return Err("invalid model id".into());
+	}
+	if target.exists() {
+		std::fs::remove_dir_all(&target).map_err(|e| format!("delete {id}: {e}"))?;
+	}
+	Ok(())
+}
+
 /// Recursively sum file sizes under `path`. `DirEntry::metadata` does not follow
 /// symlinks, so the cache's snapshot symlinks add negligible bytes — the real
 /// weight bytes live once in `blobs/`.
@@ -150,6 +187,8 @@ mod imp {
 	}
 
 	pub fn spawn_download(_app: &AppHandle) {}
+
+	pub fn cancel(_app: &AppHandle) {}
 }
 
 // ───────────────────────── on-device build (`local-asr`) ────────────────────────
@@ -160,7 +199,7 @@ mod imp {
 	use std::sync::{Arc, Mutex, OnceLock};
 
 	use hf_hub::api::tokio::{ApiBuilder, ApiRepo, Progress};
-	use hf_hub::{Repo, RepoType};
+	use hf_hub::{Cache, Repo, RepoType};
 	use mistralrs::{
 		AudioInput, IsqType, Model, MultimodalMessages, MultimodalModelBuilder, TextMessageRole,
 	};
@@ -177,6 +216,10 @@ mod imp {
 		total: AtomicU64,
 		/// Bytes at the last emitted progress event, for throttling.
 		last_emit: AtomicU64,
+		/// Handle to the in-flight download task, so `cancel()` can abort it.
+		download_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+		/// Set when the user cancels, so the progress reporter aborts the download.
+		cancelled: std::sync::atomic::AtomicBool,
 	}
 
 	fn state() -> &'static State {
@@ -218,6 +261,9 @@ mod imp {
 	/// ~4 MiB between progress emits, so the webview bar moves smoothly without
 	/// flooding the event channel on every socket read.
 	const EMIT_STEP: u64 = 4 * 1024 * 1024;
+
+	/// Error sentinel for a user-cancelled download (mapped to `idle`, not `error`).
+	const CANCELLED: &str = "download cancelled";
 
 	fn emit(app: &AppHandle) {
 		let _ = app.emit(DOWNLOAD_EVENT, snapshot());
@@ -344,6 +390,8 @@ mod imp {
 		}
 		let api = builder.build().map_err(|e| format!("hf api: {e}"))?;
 		let repo = api.repo(Repo::new(MODEL_ID.to_string(), RepoType::Model));
+		// Cache view for "is this file already downloaded?" checks.
+		let cache_repo = Cache::new(hub_cache_dir(hf_home)).repo(Repo::new(MODEL_ID.to_string(), RepoType::Model));
 
 		let files = match list_repo_files(&repo).await {
 			Ok(files) => {
@@ -362,6 +410,16 @@ mod imp {
 
 		let progress = EmitProgress { app: app.clone() };
 		for f in files {
+			if state().cancelled.load(Ordering::Relaxed) {
+				return Err(CANCELLED.into());
+			}
+			// Already in the cache → count its bytes and skip (no re-download, no
+			// lock contention). `download_with_progress` does NOT check the cache.
+			if cache_repo.get(&f.path).is_some() {
+				state().received.fetch_add(f.size, Ordering::Relaxed);
+				emit(app);
+				continue;
+			}
 			repo.download_with_progress(&f.path, progress.clone())
 				.await
 				.map_err(|e| format!("download {}: {e}", f.path))?;
@@ -378,6 +436,7 @@ mod imp {
 				let dir = tauri_plugin_self::paths::models_dir(app)?;
 				// hf-hub honours HF_HOME for its cache location.
 				std::env::set_var("HF_HOME", &dir);
+				state().cancelled.store(false, Ordering::Relaxed);
 				set_status(app, "downloading", None);
 
 				// Pre-download with real byte progress, then build from cache.
@@ -396,18 +455,45 @@ mod imp {
 			.await
 			.cloned()
 			.map_err(|e: String| {
-				set_status(app, "error", Some(e.clone()));
+				// A cancel resets to idle rather than surfacing a scary error.
+				if e == CANCELLED {
+					set_status(app, "idle", None);
+				} else {
+					set_status(app, "error", Some(e.clone()));
+				}
 				e
 			})
 	}
 
 	pub fn spawn_download(app: &AppHandle) {
 		let app = app.clone();
-		tauri::async_runtime::spawn(async move {
+		let handle = tauri::async_runtime::spawn(async move {
 			if let Err(e) = ensure_model(&app).await {
 				log::warn!(target: "avenos::asr", "voice model preload failed: {e}");
 			}
 		});
+		*state().download_task.lock().unwrap() = Some(handle);
+	}
+
+	/// Abort any in-flight download and reset progress to idle. The aborted task
+	/// drops its download future mid-file; cached bytes already on disk remain.
+	pub fn cancel(app: &AppHandle) {
+		let s = state();
+		s.cancelled.store(true, Ordering::Relaxed);
+		if let Some(h) = s.download_task.lock().unwrap().take() {
+			h.abort();
+		}
+		s.received.store(0, Ordering::Relaxed);
+		s.total.store(0, Ordering::Relaxed);
+		s.last_emit.store(0, Ordering::Relaxed);
+		*s.error.lock().unwrap() = None;
+		{
+			let mut st = s.status.lock().unwrap();
+			if *st != "ready" {
+				*st = "idle".into();
+			}
+		}
+		emit(app);
 	}
 
 	pub async fn transcribe(app: &AppHandle, pcm: Vec<f32>, sample_rate: u32) -> Result<String, String> {

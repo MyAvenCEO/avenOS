@@ -53,7 +53,7 @@
 	const tauri = $derived(browser && isTauriRuntime())
 	const composerDisabled = $derived(!session?.peerDid?.trim())
 
-	// On-device voice transcription readiness (Gemma 4 E2B via the Rust backend).
+	// On-device voice transcription readiness (Gemma 4 E4B via the Rust backend).
 	// The download/readiness wiring lives in the root layout; here we just read it.
 	const voiceUnavailableReason = $derived(tauri ? voiceUnavailableReasonOf($asrState) : null)
 

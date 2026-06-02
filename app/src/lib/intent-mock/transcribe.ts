@@ -1,6 +1,6 @@
 /**
  * Browser-side client for the on-device transcription command. Sends captured
- * PCM to the Tauri Rust backend (`transcribe_audio`, backed by Gemma 4 E2B via
+ * PCM to the Tauri Rust backend (`transcribe_audio`, backed by Gemma 4 E4B via
  * mistral.rs) and returns the transcript string.
  *
  * The `invoke` is injectable so this stays unit-testable without a Tauri runtime.

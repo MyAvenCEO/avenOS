@@ -3,12 +3,12 @@
  * PCM chunks, downsample to the model's expected rate, and convert between
  * Float32 and Int16. No DOM / no Web Audio objects here so it stays unit-testable.
  *
- * The on-device model (Gemma 4 E2B via mistral.rs) takes raw PCM + a sample
+ * The on-device model (Gemma 4 E4B via mistral.rs) takes raw PCM + a sample
  * rate; we capture at the `AudioContext` rate (often 44.1/48 kHz) and resample
  * to {@link TARGET_SAMPLE_RATE} before crossing the Tauri IPC boundary.
  */
 
-/** Gemma 4 E2B expects 16 kHz mono PCM (confirm against the model card). */
+/** Gemma 4 E4B expects 16 kHz mono PCM (confirm against the model card). */
 export const TARGET_SAMPLE_RATE = 16_000
 
 /** Concatenate captured Float32 chunks into one contiguous buffer. */
