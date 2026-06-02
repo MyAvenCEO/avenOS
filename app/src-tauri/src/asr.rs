@@ -1,4 +1,4 @@
-//! On-device voice-note transcription (Gemma 4 E4B via mistral.rs).
+//! On-device voice-note transcription (Gemma 4 E2B via mistral.rs).
 //!
 //! Default builds ship only the command surface — `asr_status` reports
 //! `unavailable` and `transcribe_audio` errors — so CI / default `cargo check`
@@ -14,11 +14,12 @@ use serde::Serialize;
 use tauri::AppHandle;
 
 /// Friendly label shown in the download UI.
-pub const MODEL_LABEL: &str = "Gemma 4 E4B";
-/// Hugging Face model id (confirm exact casing/slug against the model card).
+pub const MODEL_LABEL: &str = "Gemma 4 E2B";
+/// Hugging Face model id. E2B (the smaller Gemma 4 variant) keeps the first-run
+/// download and on-device footprint lighter than E4B.
 /// Only referenced by the `local-asr` build; default builds never read it.
 #[cfg_attr(not(feature = "local-asr"), allow(dead_code))]
-pub const MODEL_ID: &str = "google/gemma-4-E4B-it";
+pub const MODEL_ID: &str = "google/gemma-4-E2B-it";
 /// Tauri event the webview listens to for download progress / readiness.
 /// Only referenced by the `local-asr` build; default builds never read it.
 #[cfg_attr(not(feature = "local-asr"), allow(dead_code))]
@@ -77,7 +78,7 @@ pub fn spawn_model_download(app: &AppHandle) {
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalModel {
-	/// Hugging Face repo id, e.g. `google/gemma-3n-E4B-it`.
+	/// Hugging Face repo id, e.g. `google/gemma-4-E2B-it`.
 	pub id: String,
 	/// Bytes occupied on disk (resolved blobs).
 	pub size_bytes: u64,

@@ -1,6 +1,6 @@
 /**
  * Readiness + download-progress store for the on-device voice model
- * (Gemma 4 E4B). Fed by the Rust backend: an initial `asr_status` query plus
+ * (Gemma 4 E2B). Fed by the Rust backend: an initial `asr_status` query plus
  * streamed `asr:model-download` events. The UI uses this to drive the composer's
  * inline "preparing" pill and the Models settings page; `SparkTalkPanel`
  * derives `voiceUnavailableReason` and `voicePrep` from it.
@@ -14,7 +14,7 @@ export type AsrStatus = 'idle' | 'downloading' | 'ready' | 'error' | 'unavailabl
 
 export type AsrState = {
 	status: AsrStatus
-	/** Friendly model name for labels, e.g. "Gemma 4 E4B". */
+	/** Friendly model name for labels, e.g. "Gemma 4 E2B". */
 	model: string
 	receivedBytes: number
 	totalBytes: number
@@ -31,7 +31,7 @@ export type AsrEvent = {
 	error?: string
 }
 
-export const ASR_MODEL_LABEL = 'Gemma 4 E4B'
+export const ASR_MODEL_LABEL = 'Gemma 4 E2B'
 export const ASR_EVENT = 'asr:model-download'
 export const ASR_STATUS_COMMAND = 'asr_status'
 
@@ -123,7 +123,7 @@ export async function startAsrReadiness(): Promise<Unsubscriber> {
 
 /** A model directory found in the on-device HF cache (`asr_local_models`). */
 export type LocalModel = {
-	/** Hugging Face repo id, e.g. "google/gemma-3n-E4B-it". */
+	/** Hugging Face repo id, e.g. "google/gemma-4-E2B-it". */
 	id: string
 	/** Bytes occupied on disk. */
 	sizeBytes: number
