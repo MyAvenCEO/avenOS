@@ -1,9 +1,9 @@
 /**
  * Readiness + download-progress store for the on-device voice model
  * (Gemma 4 E4B). Fed by the Rust backend: an initial `asr_status` query plus
- * streamed `asr:model-download` events. The UI uses this to drive the ambient
- * top-left indicator and the click-triggered mini modal, and `SparkTalkPanel`
- * derives `voiceUnavailableReason` from it.
+ * streamed `asr:model-download` events. The UI uses this to drive the composer's
+ * inline "preparing" pill and the Models settings page; `SparkTalkPanel`
+ * derives `voiceUnavailableReason` and `voicePrep` from it.
  *
  * The reducer + `voiceUnavailableReason` are pure so they can be unit-tested
  * without a Tauri runtime.
@@ -119,4 +119,30 @@ export async function startAsrReadiness(): Promise<Unsubscriber> {
 		if (e.payload) applyAsrEvent(e.payload)
 	})
 	return () => unlisten()
+}
+
+/** A model directory found in the on-device HF cache (`asr_local_models`). */
+export type LocalModel = {
+	/** Hugging Face repo id, e.g. "google/gemma-3n-E4B-it". */
+	id: string
+	/** Bytes occupied on disk. */
+	sizeBytes: number
+	/** True for the model AvenOS manages for voice transcription. */
+	isActive: boolean
+}
+
+/**
+ * List models present on disk (the HF cache under `.avenOS/models`). Returns an
+ * empty list outside the Tauri runtime or when nothing has been downloaded yet.
+ */
+export async function listLocalModels(): Promise<LocalModel[]> {
+	if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
+		return []
+	}
+	const { invoke } = await import('@tauri-apps/api/core')
+	try {
+		return (await invoke<LocalModel[]>('asr_local_models')) ?? []
+	} catch {
+		return []
+	}
 }
