@@ -16,11 +16,18 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "aven-os-app"
 path = "src/main.rs"
 
+[features]
+# On-device voice-note transcription (Gemma 4 E4B). Off by default to keep CI /
+# default builds light; enabling it pulls in the heavy `mistralrs` inference crate.
+local-asr = ["dep:mistralrs"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
 async-trait = "0.1"
+# On-device ASR engine — optional, only compiled with the `local-asr` feature.
+mistralrs = { version = "0.8", optional = true }
 groove = { package = "aven-db", version = "0.0.1", default-features = false, features = ["client-p2p"] }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }

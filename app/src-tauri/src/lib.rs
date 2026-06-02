@@ -1,3 +1,4 @@
+mod asr;
 mod biscuit_resolver;
 mod crypto;
 mod mesh;
@@ -166,6 +167,10 @@ pub fn run() {
 			app.manage(jazz::runtime::spawn_groove_actor(app.handle().clone()));
 			app.manage(jazz::ui_drain::spawn_ui_table_drain(app.handle().clone()));
 
+			// Kick the on-device voice model's first-run download in the background
+			// (no-op unless built with the `local-asr` feature). Non-blocking.
+			asr::spawn_model_download(app.handle());
+
 			// Start the table-change drain so peer-sync deltas reach the webview without
 			// requiring a manual refresh. Local CRUD already calls `snapshot_broadcast`
 			// inline; this drain is what closes the loop for *remote* writes.
@@ -232,6 +237,8 @@ pub fn run() {
 			jazz::self_storage_paths,
 			jazz::self_clear_jazz_database,
 			jazz::self_clear_aven_os_data,
+			asr::asr_status,
+			asr::transcribe_audio,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application")
