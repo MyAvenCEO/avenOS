@@ -51,7 +51,6 @@ const errorSource = $derived({
 	title: intent.title,
 	messageLabel: t('intents.display.reason'),
 	message: errorReason,
-	hint: t('intents.display.errorHint'),
 })
 
 const successSource = $derived({
@@ -60,7 +59,6 @@ const successSource = $derived({
 	title: intent.title,
 	messageLabel: t('intents.display.result'),
 	message: t('intents.display.successMessage'),
-	hint: t('intents.successArchiveHint'),
 })
 
 const hitlView = $derived(intent.hitlVibeAppId ? vibeViewById(intent.hitlVibeAppId) : null)
@@ -68,7 +66,7 @@ const hitlView = $derived(intent.hitlVibeAppId ? vibeViewById(intent.hitlVibeApp
 
 {#if intent.status === 'error'}
 	<div
-		class="flex min-h-[400px] min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] bg-white/10"
+		class="flex min-h-0 min-w-0 flex-col overflow-y-auto rounded-[var(--radius-lg)] bg-white/10"
 	>
 		{#key `${intent.id}:error`}
 			<AvenUiView shell={errorView.shell} containerName={errorView.containerName} source={errorSource} />
@@ -76,7 +74,7 @@ const hitlView = $derived(intent.hitlVibeAppId ? vibeViewById(intent.hitlVibeApp
 	</div>
 {:else if intent.status === 'success'}
 	<div
-		class="mt-5 flex min-h-[400px] min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] bg-white/10 sm:mt-6"
+		class="mt-5 flex min-h-0 min-w-0 flex-col overflow-y-auto rounded-[var(--radius-lg)] bg-white/10 sm:mt-6"
 	>
 		{#key `${intent.id}:success`}
 			<AvenUiView shell={successView.shell} containerName={successView.containerName} source={successSource} />
@@ -84,7 +82,7 @@ const hitlView = $derived(intent.hitlVibeAppId ? vibeViewById(intent.hitlVibeApp
 	</div>
 {:else if hitlView}
 	<div
-		class="mt-5 flex min-h-[400px] min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] bg-white/10 sm:mt-6"
+		class="mt-5 flex min-h-0 min-w-0 flex-col overflow-y-auto rounded-[var(--radius-lg)] bg-white/10 sm:mt-6"
 	>
 		{#key `${intent.id}:${intent.hitlVibeAppId}`}
 			<AvenUiView

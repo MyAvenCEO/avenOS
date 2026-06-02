@@ -23,7 +23,6 @@ export const successView: ViewDef = {
 					{ tag: 'span', class: 'st-message-text', text: '$message' },
 				],
 			},
-			{ class: 'st-hint', text: '$hint' },
 		],
 	},
 }

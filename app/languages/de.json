@@ -276,7 +276,6 @@
 		"contextTab": "Context",
 		"noIntentSelected": "Kein Intent ausgewählt",
 		"noIntentSelectedHint": "Wähle links einen Beispiel-Intent, um das Hauptpanel anzuzeigen.",
-		"successArchiveHint": "This intent completed successfully. Archive when you are done reviewing.",
 		"noActivityYet": "Noch keine Aktivität.",
 		"voiceNotePlayback": "Voice note playback",
 		"status": {
@@ -326,7 +325,6 @@
 				"validationRules": "Validation rules violated",
 				"networkTimeout": "Network timeout"
 			},
-			"errorHint": "Use Re-train to restart this intent with feedback, or Archive to dismiss it — both available in the bottom bar.",
 			"successBadge": "Erfolg",
 			"automationComplete": "Automatisierung abgeschlossen",
 			"result": "Ergebnis:",

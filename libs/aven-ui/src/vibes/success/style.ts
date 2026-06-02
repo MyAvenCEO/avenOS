@@ -23,14 +23,13 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.st-panel': {
 		display: 'flex',
-		minHeight: '400px',
 		flexDirection: 'column',
-		gap: '12px',
+		gap: '8px',
 		overflow: 'hidden',
 		borderRadius: 'var(--radius-2xl)',
 		border: '2px dotted color-mix(in srgb, var(--border) 40%, transparent)',
 		background: 'var(--tech-fill)',
-		padding: '16px 18px',
+		padding: '12px 14px',
 	},
 	'.st-badge': {
 		display: 'inline-flex',
@@ -53,7 +52,7 @@ const selectors: StyleDef['selectors'] = {
 		opacity: '0.4',
 	},
 	'.st-title': {
-		margin: '4px 0 0',
+		margin: '2px 0 0',
 		fontSize: '1rem',
 		lineHeight: '1.35',
 		fontWeight: '600',
@@ -62,8 +61,7 @@ const selectors: StyleDef['selectors'] = {
 	'.st-message': { fontSize: '12px', lineHeight: '1.6', color: 'var(--text)' },
 	'.st-message-label': { fontWeight: '600', marginRight: '6px', color: 'var(--accent)' },
 	'.st-message-text': { whiteSpace: 'pre-line' },
-	'.st-message-text:empty, .st-hint:empty': { display: 'none' },
-	'.st-hint': { marginTop: 'auto', fontSize: '11px', lineHeight: '1.6', opacity: '0.65' },
+	'.st-message-text:empty': { display: 'none' },
 }
 
 export const successStyle: StyleDef = {
