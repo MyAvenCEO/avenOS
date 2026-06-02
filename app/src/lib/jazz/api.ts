@@ -50,6 +50,21 @@ export async function sparkAdminAdd(payload: {
 	})
 }
 
+/**
+ * Grant a server aven a blind `replicate` capability on this spark: it stores &
+ * forwards the spark's encrypted batches (durable backup / relay) but gets NO
+ * keyshare, so it cannot decrypt. Not membership — see `sparkAdminAdd` for that.
+ */
+export async function sparkReplicateAdd(payload: {
+	sparkId: string
+	peerDid: string
+}): Promise<void> {
+	await grooveRuntime('sparkReplicateAdd', {
+		sparkId: payload.sparkId,
+		peerDid: payload.peerDid,
+	})
+}
+
 export type SparkAdminListReply = {
 	adminDids: string[]
 }

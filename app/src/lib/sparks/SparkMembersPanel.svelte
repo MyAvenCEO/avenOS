@@ -7,6 +7,7 @@
 		sparkAdminAdd,
 		sparkAdminList,
 		sparkAdminRevoke,
+		sparkReplicateAdd,
 		peerList,
 		type PeerRow,
 		type JazzSessionReply,
@@ -47,6 +48,10 @@
 	let adminBusy = $state(false)
 	let addAdminDid = $state('')
 	let addNote = $state<string | undefined>()
+	let addReplicateDid = $state('')
+	let replicateBusy = $state(false)
+	let replicateErr = $state<string | undefined>()
+	let replicateNote = $state<string | undefined>()
 	let revokeBusyDid = $state<string | undefined>(undefined)
 	let confirmRevokeDid = $state<string | undefined>(undefined)
 	let revokeErr = $state<string | undefined>()
@@ -215,6 +220,27 @@
 			adminErr = e instanceof Error ? e.message : String(e)
 		} finally {
 			if (gen === adminLoadGen) adminBusy = false
+		}
+	}
+
+	// Grant a server aven a blind `replicate` cap (store-and-forward + durable
+	// backup). NOT membership: no keyshare is issued, so it carries ciphertext it
+	// cannot decrypt. The server's DID is printed in its logs / shown by the relay.
+	async function addReplicate(): Promise<void> {
+		const did = addReplicateDid.trim()
+		const sid = sparkId.trim()
+		if (!did || !sid) return
+		replicateBusy = true
+		replicateErr = undefined
+		replicateNote = undefined
+		try {
+			await sparkReplicateAdd({ sparkId: sid, peerDid: did })
+			addReplicateDid = ''
+			replicateNote = t('sparks.share.replicateGrantedNote')
+		} catch (e) {
+			replicateErr = e instanceof Error ? e.message : String(e)
+		} finally {
+			replicateBusy = false
 		}
 	}
 
@@ -436,6 +462,36 @@
 				{/if}
 				{#if addNote}
 					<p class="text-muted-foreground text-sm">{addNote}</p>
+				{/if}
+			</section>
+
+			<!-- Replication server: grant a server aven a blind store-and-forward cap (no keyshare) -->
+			<section class="flex flex-col gap-4">
+				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
+					{t('sparks.share.addReplica')}
+				</h2>
+				<div class="flex flex-col gap-2 sm:flex-row sm:items-end">
+					<input
+						class="border-border/60 bg-background/40 min-w-0 flex-1 rounded-lg border px-3 py-2 font-mono text-[12px]"
+						placeholder={t('sparks.share.replicaDidPlaceholder')}
+						bind:value={addReplicateDid}
+						disabled={replicateBusy}
+					/>
+					<button
+						type="button"
+						class="bg-muted hover:bg-muted/70 shrink-0 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+						disabled={replicateBusy || !addReplicateDid.trim()}
+						onclick={() => void addReplicate()}
+					>
+						{replicateBusy ? '…' : t('sparks.share.addReplicaButton')}
+					</button>
+				</div>
+				<p class="text-muted-foreground text-xs leading-relaxed">{t('sparks.share.replicaHint')}</p>
+				{#if replicateErr}
+					<p class="text-destructive text-sm">{replicateErr}</p>
+				{/if}
+				{#if replicateNote}
+					<p class="text-muted-foreground text-sm">{replicateNote}</p>
 				{/if}
 			</section>
 
