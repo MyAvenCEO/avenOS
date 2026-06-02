@@ -53,8 +53,23 @@ Items are loaded at build time via Vite `import.meta.glob`, so in dev the board
 hot-reloads as you add, edit, or `git mv` files, and a Tauri build bakes in the
 current board state.
 
+## Goal-driven hand-off
+
+Every `plan/` item carries a **`goal`** in its frontmatter: one measurable
+completion condition, provable from command output. That makes items compatible
+with Claude Code's built-in `/goal` loop, and with the project command:
+
+```
+/board-goal <item-ref>          # resolve the item, build + verify, move it across columns
+/goal <completion condition>    # or flip on the built-in cross-turn loop directly
+```
+
+The command lives at [`.claude/commands/board-goal.md`](../../.claude/commands/board-goal.md),
+and the full-screen doc view surfaces the goal with a one-click "Copy /goal".
+
 ## Working the board
 
 See **[AGENTS.md](./AGENTS.md)**. In short: create items in `inbox/` from
 `templates/work-item.md`, move them forward with `git mv`, keep frontmatter
-accurate, and append to each item's `## Progress log`.
+accurate (`title`, `summary`, `tags`, `owner`, `goal`, dates), and append to each
+item's `## Progress log`.

@@ -27,6 +27,12 @@ export type WorkItem = {
 	updated?: string
 	/** Free-form owner/assignee from frontmatter `owner`, if present. */
 	owner?: string
+	/**
+	 * Measurable, transcript-verifiable completion condition from frontmatter `goal`.
+	 * This is the single line handed to Claude Code's built-in `/goal` to drive the
+	 * item to done — e.g. "`bun run check` and `bun run lint` exit 0".
+	 */
+	goal?: string
 	/** Markdown body with frontmatter stripped. */
 	body: string
 	/** Original file contents including frontmatter. */

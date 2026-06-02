@@ -89,6 +89,7 @@ function buildWorkItem(path: string, raw: string, column: BoardColumnId): WorkIt
 		created: fields.created || undefined,
 		updated: fields.updated || undefined,
 		owner: fields.owner || undefined,
+		goal: fields.goal || undefined,
 		body: trimmedBody,
 		raw
 	}

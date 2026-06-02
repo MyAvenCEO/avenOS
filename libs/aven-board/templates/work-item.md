@@ -5,21 +5,28 @@ owner: unassigned
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 tags: [area, kind]
+# goal — leave blank or rough in inbox; make it a single, measurable,
+# transcript-verifiable completion condition before this moves to `plan`.
+goal:
 ---
 
 # Short, action-oriented title
 
 > Replace this whole file's contents. Keep the frontmatter above accurate — the
-> board card reads `title`, `summary`, `tags`, `owner`, and dates from it.
+> board card reads `title`, `summary`, `tags`, `owner`, `goal`, and dates from it.
 
 ## Context
 
 Why this exists. The problem, the trigger, or the idea. Link related items by id
 (e.g. `0007-foo`). Keep it to a few sentences while this lives in **inbox**.
 
-## Goal / Outcome
+## Goal
 
 What "good" looks like when this is done. Observable, not vague.
+
+When this moves to **plan**, sharpen this into a single **completion condition**
+that can be proven from command output, and copy it into the frontmatter `goal`
+so it can be handed to `/goal` / `/board-goal`. See `templates/plan.md`.
 
 ## Plan
 
@@ -28,8 +35,10 @@ spec shape — paste its sections here or keep the plan inline._
 
 ## Acceptance criteria
 
-- [ ] Concrete, checkable condition 1
-- [ ] Concrete, checkable condition 2
+Each must be checkable from the transcript (a command + its output proves it).
+
+- [ ] Condition 1 — proven by `…`
+- [ ] Condition 2 — proven by `…`
 
 ## Progress log
 

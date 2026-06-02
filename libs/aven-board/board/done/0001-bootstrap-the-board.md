@@ -5,6 +5,7 @@ owner: agent
 created: 2026-06-02
 updated: 2026-06-02
 tags: [meta, infra]
+goal: "`bun run check` and `bun run lint` exit 0, `/board` renders the four columns, and a card opens its full doc with a bottom-center back button"
 ---
 
 # Bootstrap aven-board

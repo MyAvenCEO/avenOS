@@ -40,7 +40,9 @@ Keep the numeric filename prefix stable across moves so the item keeps its id.
 ### 2. Spec → `plan/`
 - `git mv` the file into `plan/`.
 - Expand it using `templates/plan.md`: Approach, Steps, Files to touch,
-  **Acceptance criteria**, and a **Test plan**.
+  **Acceptance criteria**, and a **Verification** block.
+- Write a **measurable goal** — a single completion condition provable from
+  command output — into the frontmatter `goal` field (see "Goals" below).
 - A card in `plan/` must be buildable by another agent without asking questions.
 
 ### 3. Build → move to `test/`
@@ -65,11 +67,40 @@ owner: who-or-which-agent       # optional
 created: YYYY-MM-DD             # optional
 updated: YYYY-MM-DD             # bump when you touch it
 tags: [area, kind]              # optional, inline array
+goal: <completion condition>    # the line handed to `/goal` (see below)
 ---
 ```
 
 `title` falls back to the first `# H1`, then the humanized filename.
 `summary` falls back to the first body paragraph.
+
+## Goals — and handing work to Claude Code
+
+Every item promoted to `plan/` carries a **goal**: one measurable completion
+condition that Claude Code's built-in `/goal` loop can work toward. The `/goal`
+evaluator reads the **transcript only** — it never runs anything — so the goal
+must be provable from command output you actually produce.
+
+- **Good:** `` `bun run check` and `bun run lint` exit 0 and every Acceptance criterion is checked ``
+- **Bad:** `fix the board` / `handle all edge cases` (nothing to verify)
+
+Name three things: the **end state**, the **proof** (a command + its expected
+result), and the **constraints** that matter (e.g. "no other files changed").
+
+Hand an item to Claude Code with the project command (resolves the item, reads
+it, builds + verifies, moves it across columns):
+
+```
+/board-goal <item-ref>          # e.g. /board-goal plan/0001-example-spec
+```
+
+…or flip on the built-in cross-turn loop directly with the item's condition:
+
+```
+/goal <the item's completion condition>
+```
+
+The board's full-screen doc view surfaces the goal and a one-click "Copy /goal".
 
 ## The Progress log — always update it
 
