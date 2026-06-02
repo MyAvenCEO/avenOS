@@ -113,10 +113,9 @@ async function copyGoal(): Promise<void> {
 			</article>
 			</div>
 		</div>
-	</div>
 
-	<div
-		class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-background via-background/90 to-transparent pt-8 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+		<div
+			class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-background via-background/90 to-transparent pt-8 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
 	>
 		<a
 			href={backHref}
