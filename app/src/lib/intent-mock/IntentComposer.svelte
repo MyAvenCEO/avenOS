@@ -763,17 +763,17 @@ const pillClass = $derived.by(() => {
 	</div>
 	{:else}
 		<div
-			class="flex w-full max-w-[min(36rem,80vw)] mx-auto items-end gap-1.5 max-sm:gap-2 sm:items-center sm:gap-2.5"
+			class="flex w-full max-w-[min(36rem,80vw)] mx-auto items-end gap-1.5 max-sm:max-w-none max-sm:gap-[0.6rem] sm:items-center sm:gap-2.5"
 		>
 			{#if isMobile && enableAttachments}
 				<button
 					type="button"
-					class="mb-1 flex size-9 shrink-0 touch-manipulation items-center justify-center rounded-full border border-border/70 bg-muted/40 text-foreground/70 shadow-sm outline-none transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/35"
+					class="mb-1 flex size-9 max-sm:size-[2.7rem] shrink-0 touch-manipulation items-center justify-center rounded-full border border-border/70 bg-muted/40 text-foreground/70 shadow-sm outline-none transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/35"
 					onclick={openMobileFilePicker}
 					aria-label="Attach image or file"
 				>
 					<svg
-						class="size-[1.05rem]"
+						class="size-[1.05rem] max-sm:size-[1.26rem]"
 						fill="none"
 						stroke="currentColor"
 						stroke-width="1.75"
@@ -815,7 +815,7 @@ const pillClass = $derived.by(() => {
 							oninput={resizeComposer}
 							onkeydown={onTextareaKeydown}
 							onblur={collapseIfEmpty}
-							class="min-h-9 max-h-[min(24rem,calc(100vh-12rem))] w-full min-w-0 flex-1 resize-none overflow-hidden border-none bg-transparent py-2 px-0 text-sm leading-snug font-medium tracking-tight outline-none placeholder:opacity-20 focus:ring-0 sm:min-h-10 sm:py-2.5 sm:text-xl sm:leading-tight"
+							class="min-h-9 max-sm:min-h-[2.7rem] max-h-[min(24rem,calc(100vh-12rem))] w-full min-w-0 flex-1 resize-none overflow-hidden border-none bg-transparent py-2 max-sm:py-[0.6rem] px-0 text-sm max-sm:text-[1.05rem] leading-snug font-medium tracking-tight outline-none placeholder:opacity-20 focus:ring-0 sm:min-h-10 sm:py-2.5 sm:text-xl sm:leading-tight"
 						></textarea>
 					</form>
 					<button
@@ -827,13 +827,13 @@ const pillClass = $derived.by(() => {
 							(command == null && text.trim().length === 0 && attachments.length === 0)
 						}
 						aria-label={submitBusy ? 'Sending…' : 'Send message'}
-						class="flex size-9 shrink-0 self-center items-center justify-center rounded-full border border-primary/25 bg-primary text-primary-foreground shadow-[0_6px_18px_-8px_color-mix(in_srgb,var(--color-primary)_50%,transparent)] outline-none transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
+						class="flex size-9 max-sm:size-[2.7rem] shrink-0 self-center items-center justify-center rounded-full border border-primary/25 bg-primary text-primary-foreground shadow-[0_6px_18px_-8px_color-mix(in_srgb,var(--color-primary)_50%,transparent)] outline-none transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
 					>
 						{#if submitBusy}
 							<span class="text-xs font-bold" aria-hidden="true">…</span>
 						{:else}
 							<svg
-								class="size-4"
+								class="size-4 max-sm:size-[1.2rem]"
 								fill="none"
 								stroke="currentColor"
 								stroke-width="2"
