@@ -27,7 +27,6 @@ const intentsActive = $derived(path === '/')
 const sandboxActive = $derived(path.startsWith('/sandbox'))
 const docsActive = $derived(path.startsWith('/docs'))
 const selfActive = $derived(path.startsWith('/settings'))
-const vaultActive = $derived(path.startsWith('/vault'))
 const sparksNavActive = $derived(path.startsWith('/sparks'))
 const dbActive = $derived(path.startsWith('/db'))
 const avenCityActive = $derived(path.startsWith('/aven-city'))
@@ -244,15 +243,6 @@ $effect(() => {
 						aria-current={boardActive ? 'page' : undefined}
 						onclick={(e) => navigateApp('/board', e)}
 						>{t('nav.board')}</a
-					>
-					<span class="select-none opacity-25" aria-hidden="true">|</span>
-					<a
-						href="/vault"
-						data-sveltekit-preload-data="hover"
-						class="transition-opacity hover:opacity-80 {vaultActive ? 'opacity-95' : 'opacity-40'}"
-						aria-current={vaultActive ? 'page' : undefined}
-						onclick={(e) => navigateApp('/vault', e)}
-						>{t('nav.vault')}</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a

@@ -27,6 +27,21 @@ export function settingsNavSections(): SettingsNavSection[] {
 			],
 		},
 		{
+			title: t('vaultNav.title'),
+			items: [
+				{
+					href: '/settings/vault/passwords',
+					label: t('vaultNav.passwords'),
+					match: (p) => p.startsWith('/settings/vault/passwords'),
+				},
+				{
+					href: '/settings/vault/api-keys',
+					label: t('vaultNav.apiKeys'),
+					match: (p) => p.startsWith('/settings/vault/api-keys'),
+				},
+			],
+		},
+		{
 			title: t('selfNav.preferencesCategory'),
 			items: [
 				{
