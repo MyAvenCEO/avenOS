@@ -484,21 +484,46 @@ mod imp {
 			accumulate_total,
 		};
 		for f in files {
+			download_one(app, &repo, &cache_repo, &f, &progress).await?;
+		}
+		Ok(())
+	}
+
+	/// Download one file, tolerating transient blob-lock contention. hf-hub takes
+	/// an exclusive `flock` per blob; if another process (e.g. a stale dev
+	/// instance) holds it, we re-check the cache and retry a few times — the lock
+	/// frees when that process finishes or dies.
+	async fn download_one(
+		app: &AppHandle,
+		repo: &ApiRepo,
+		cache_repo: &hf_hub::CacheRepo,
+		f: &RepoFile,
+		progress: &EmitProgress,
+	) -> Result<(), String> {
+		for attempt in 0..15 {
 			if state().cancelled.load(Ordering::Relaxed) {
 				return Err(CANCELLED.into());
 			}
-			// Already in the cache → count its bytes and skip (no re-download, no
-			// lock contention). `download_with_progress` does NOT check the cache.
+			// Already cached (possibly just finished by another process) → count + skip.
 			if cache_repo.get(&f.path).is_some() {
 				state().received.fetch_add(f.size, Ordering::Relaxed);
 				emit(app);
-				continue;
+				return Ok(());
 			}
-			repo.download_with_progress(&f.path, progress.clone())
-				.await
-				.map_err(|e| format!("download {}: {e}", f.path))?;
+			match repo.download_with_progress(&f.path, progress.clone()).await {
+				Ok(_) => return Ok(()),
+				Err(e) => {
+					let msg = e.to_string();
+					if msg.contains("Lock acquisition") && attempt < 14 {
+						log::warn!(target: "avenos::asr", "blob locked ({}), retry {}/15", f.path, attempt + 1);
+						tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+						continue;
+					}
+					return Err(format!("download {}: {e}", f.path));
+				}
+			}
 		}
-		Ok(())
+		Err(format!("download {}: lock contention", f.path))
 	}
 
 	/// Build the model once, pointing the HF cache at `.avenOS/models/` so weights
@@ -548,6 +573,10 @@ mod imp {
 	}
 
 	pub fn spawn_download(app: &AppHandle) {
+		// Don't stack a second download on top of one already in flight.
+		if *state().status.lock().unwrap() == "downloading" {
+			return;
+		}
 		let app = app.clone();
 		let handle = tauri::async_runtime::spawn(async move {
 			if let Err(e) = ensure_model(&app).await {
