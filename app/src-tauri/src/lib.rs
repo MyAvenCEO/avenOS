@@ -239,6 +239,7 @@ pub fn run() {
 			jazz::self_clear_aven_os_data,
 			asr::asr_status,
 			asr::transcribe_audio,
+			asr::asr_local_models,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application")

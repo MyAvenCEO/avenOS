@@ -424,6 +424,7 @@ dependencies = [
  "ed25519-dalek",
  "env_logger",
  "hex",
+ "hf-hub",
  "hkdf",
  "log",
  "mistralrs",

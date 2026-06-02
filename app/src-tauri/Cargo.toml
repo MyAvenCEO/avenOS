@@ -23,7 +23,7 @@ path = "src/main.rs"
 # `mistralrs` inference crate (~400MB+ build, longer first compile). Build with
 # `--no-default-features` to get the light stub build (CI / quick checks).
 default = ["local-asr"]
-local-asr = ["dep:mistralrs"]
+local-asr = ["dep:mistralrs", "dep:hf-hub"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -32,6 +32,9 @@ tauri-build = { version = "2", features = [] }
 async-trait = "0.1"
 # On-device ASR engine — optional, only compiled with the `local-asr` feature.
 mistralrs = { version = "0.8", optional = true }
+# Weights download with byte-level progress; features matched to mistralrs-core
+# so cargo unifies them (no extra build). Only with `local-asr`.
+hf-hub = { version = "0.4", default-features = false, features = ["ureq", "tokio", "rustls-tls"], optional = true }
 groove = { package = "aven-db", version = "0.0.1", default-features = false, features = ["client-p2p"] }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
