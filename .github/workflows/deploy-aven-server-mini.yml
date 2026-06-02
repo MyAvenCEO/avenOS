@@ -1,0 +1,37 @@
+name: deploy-aven-server-mini
+
+# Manual (and tag-triggered) deploy of the headless, stateless aven-server mini
+# to fly.io. Requires a FLY_API_TOKEN repo secret. This does NOT run on every
+# push — deploying pushes a public service, so it is opt-in.
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why are you deploying?"
+        required: false
+        default: "manual deploy"
+  push:
+    tags:
+      - "aven-server-mini-v*"
+
+concurrency:
+  group: deploy-aven-server-mini
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: fly deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to fly
+        # Build context is the repo root; the fly config lives in libs/aven-server.
+        run: flyctl deploy --remote-only --config libs/aven-server/fly.toml --dockerfile libs/aven-server/Dockerfile .
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

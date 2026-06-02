@@ -1360,6 +1360,53 @@ async fn try_dev_peer_transport(local: PeerId) -> Option<(Arc<dyn SyncTransport>
 	}
 }
 
+/// When `AVENOS_SERVER_SYNC=1`, dial the hosted aven-server mini over
+/// authenticated TLS: the server cert is pinned via `AVENOS_SERVER_CERT_PIN`
+/// (hex DER) and the device proves its DID with a did:key challenge bound to the
+/// TLS session. Returns the transport + the server's authenticated peer id.
+async fn try_server_transport(
+	signing_key: ed25519_dalek::SigningKey,
+) -> Option<(Arc<dyn SyncTransport>, PeerId)> {
+	if std::env::var("AVENOS_SERVER_SYNC").is_err() {
+		return None;
+	}
+	let addr = std::env::var("AVENOS_SERVER_ADDR").ok()?;
+	let pin_hex = std::env::var("AVENOS_SERVER_CERT_PIN").ok()?;
+	let pinned = match hex::decode(pin_hex.trim()) {
+		Ok(bytes) => bytes,
+		Err(e) => {
+			log::warn!("AVENOS_SERVER_CERT_PIN is not valid hex: {e}");
+			return None;
+		}
+	};
+	let trust = aven_p2p::ServerTrust::Pinned(pinned);
+	match aven_p2p::ServerSyncTransport::dial(&addr, trust, signing_key).await {
+		Ok(t) => {
+			let server = t.server_peer_id();
+			log::info!("server transport established (aven {server})");
+			Some((Arc::new(t), server))
+		}
+		Err(e) => {
+			log::warn!("server transport dial failed: {e}");
+			None
+		}
+	}
+}
+
+/// Prefer the hosted aven-server (TLS) when configured; otherwise fall back to
+/// the dev 2-peer TCP path. Either yields `(transport, remote-peer-to-register)`.
+async fn try_any_peer_transport(
+	local: PeerId,
+	root: &[u8; 32],
+) -> Option<(Arc<dyn SyncTransport>, PeerId)> {
+	if let Ok(sk) = crate::jazz_auth::signing_key_from_device_root(root) {
+		if let Some(found) = try_server_transport(sk).await {
+			return Some(found);
+		}
+	}
+	try_dev_peer_transport(local).await
+}
+
 async fn jazz_connect(
 	app: &tauri::AppHandle,
 	self_state: &SelfState,
@@ -1389,7 +1436,7 @@ async fn jazz_connect(
 	};
 
 	let _ = app;
-	let client = match try_dev_peer_transport(peer_id).await {
+	let client = match try_any_peer_transport(peer_id, &root).await {
 		Some((transport, remote)) => {
 			let client = JazzClient::connect_with_sync_transport(ctx, transport, None)
 				.await

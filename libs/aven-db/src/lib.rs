@@ -14,6 +14,7 @@ pub mod schema_manager;
 pub mod storage;
 pub mod sync_manager;
 pub mod capability;
+pub mod did_key;
 pub mod sync_targets;
 #[cfg(feature = "client-p2p")]
 pub mod sync_transport;

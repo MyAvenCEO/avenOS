@@ -2,7 +2,7 @@
 name = "aven-server"
 version = "0.0.1"
 edition = "2021"
-description = "AvenOS unified always-on aven — auth + blind mirror + rendezvous + indexer over peeroxide (one fly deploy)."
+description = "AvenOS aven-server mini — headless, stateless rendezvous/relay over an authenticated TLS sync transport (one fly deploy)."
 license = "MIT OR Apache-2.0"
 
 [[bin]]
@@ -15,3 +15,6 @@ aven-p2p = { path = "../aven-p2p" }
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+hex = "0.4"
+rand = "0.8"
