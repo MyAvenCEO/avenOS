@@ -17,9 +17,12 @@ use groove::{
 	AppContext,
 	AppId,
 	PeerId,
+	DevRole,
 	JazzClient,
 	JazzError,
 	ObjectId,
+	SyncTransport,
+	TcpSyncTransport,
 	Value,
 };
 use crate::mesh::{
@@ -476,7 +479,7 @@ async fn with_connected_client(
 				shutdown_owned_client(old).await;
 			}
 			let client = jazz_connect(app, self_state, jazz).await?;
-			Ok(client)
+			Ok(Arc::new(client))
 		}
 		.await;
 
@@ -1311,69 +1314,57 @@ pub(crate) fn patch_updates(table_schema: &TableSchema, patch: JsonRow) -> Resul
 	Ok(ops)
 }
 
-/// The real peeroxide Hyperswarm transport (plan §2). When `AVENOS_DEV_PEER_SYNC=1`
-/// it joins a **local** bootstrap DHT (offline `dev:app2x`); otherwise the public
-/// HyperDHT. Both instances join the network rendezvous topic to discover each
-/// other; sparks then multiplex over the one connection per peer. Peers are
-/// discovered dynamically — the caller drains `next_peer()` to register them.
-/// Returns `None` to run local-only (env unset, or swarm failed to open).
-async fn try_peer_transport(root_seed: [u8; 32]) -> Option<Arc<aven_p2p::HyperswarmTransport>> {
+/// Dev-only (`dev:app2x`): when `AVENOS_DEV_PEER_SYNC=1`, establish a localhost
+/// TCP peer transport so two instances converge a shared spark live. Instance A
+/// listens, B dials (retrying until A is up). Returns the transport + remote peer
+/// id, or `None` to run local-only (single instance, or peer not reachable).
+async fn try_dev_peer_transport(local: PeerId) -> Option<(Arc<dyn SyncTransport>, PeerId)> {
 	if std::env::var("AVENOS_DEV_PEER_SYNC").is_err() {
 		return None;
 	}
-	// Offline dev mesh: a local bootstrap DHT both instances point at. Override
-	// the port with `AVENOS_DEV_BOOTSTRAP_PORT`; default matches the dev harness.
-	let bootstrap = match std::env::var("AVENOS_DEV_BOOTSTRAP_PORT") {
-		Ok(port) => vec![format!("127.0.0.1:{}", port.trim())],
-		Err(_) => vec!["127.0.0.1:49737".to_string()],
+	const ADDR: &str = "127.0.0.1:14290";
+	let role = match std::env::var("AVENOS_DEV_INSTANCE").ok().as_deref() {
+		Some("A") => DevRole::Listen,
+		Some("B") => DevRole::Dial,
+		_ => return None,
 	};
-	// Rendezvous topic = the network seed (not a spark) so a brand-new peer that
-	// holds no spark biscuit yet can still find us and receive the shell catch-up.
-	let network = std::env::var("AVENOS_DEV_NETWORK")
-		.unwrap_or_else(|_| "avenos/dev/testnet".to_string());
-	let topic = aven_p2p::spark_topic(&network);
-	let cfg = aven_p2p::member_config(root_seed, bootstrap);
-	match aven_p2p::HyperswarmTransport::join(cfg, vec![topic], false).await {
-		Ok(t) => {
-			log::info!("peeroxide transport joined network topic '{network}'");
-			Some(Arc::new(t))
+	let established = tokio::time::timeout(Duration::from_secs(30), async {
+		loop {
+			match TcpSyncTransport::connect(role, ADDR, local).await {
+				Ok(t) => return Some(t),
+				// Dialer retries until the listener binds; listener bind/accept
+				// failures fall through to local-only.
+				Err(_) if role == DevRole::Dial => {
+					tokio::time::sleep(Duration::from_millis(400)).await;
+				}
+				Err(e) => {
+					log::warn!("dev peer transport ({role:?}) failed: {e}");
+					return None;
+				}
+			}
 		}
-		Err(e) => {
-			log::warn!("peeroxide transport failed to open: {e}; running local-only");
+	})
+	.await
+	.ok()
+	.flatten();
+	match established {
+		Some(t) => {
+			let remote = t.remote_client_id();
+			log::info!("dev peer transport established (remote {remote})");
+			Some((Arc::new(t), remote))
+		}
+		None => {
+			log::warn!("dev peer transport not established; running local-only");
 			None
 		}
 	}
-}
-
-/// Drain newly-discovered, Noise-authenticated peers and register each for sync —
-/// unless the user has Forgotten (revoked) it. Runs for the life of `transport`.
-fn spawn_peer_registration(
-	client: Arc<JazzClient>,
-	transport: Arc<aven_p2p::HyperswarmTransport>,
-) {
-	tokio::spawn(async move {
-		while let Some(peer) = transport.next_peer().await {
-			let did = crate::jazz_auth::peer_did_from_ed25519(&peer.0).ok();
-			let revoked = match &did {
-				Some(d) => crate::peers::is_peer_revoked(&client, d).await.unwrap_or(false),
-				None => false,
-			};
-			if revoked {
-				log::info!("peer {peer} is Forgotten (revoked); not registering for sync");
-			} else if let Err(e) = client.register_peer_sync_client(peer) {
-				log::warn!("register peer {peer}: {e}");
-			} else {
-				log::info!("registered discovered peer {peer} for sync");
-			}
-		}
-	});
 }
 
 async fn jazz_connect(
 	app: &tauri::AppHandle,
 	self_state: &SelfState,
 	mj: &ManagedJazz,
-) -> Result<Arc<JazzClient>, String> {
+) -> Result<JazzClient, String> {
 	let root = self_state
 		.with_root(|r| Ok(*r))
 		.map_err(|_| "locked: unlock AvenOS identity first".to_string())?;
@@ -1398,12 +1389,27 @@ async fn jazz_connect(
 	};
 
 	let _ = app;
-	let peer_transport = try_peer_transport(root).await;
-	let client = match &peer_transport {
-		Some(transport) => {
-			JazzClient::connect_with_sync_transport(ctx, transport.clone(), None)
+	let client = match try_dev_peer_transport(peer_id).await {
+		Some((transport, remote)) => {
+			let client = JazzClient::connect_with_sync_transport(ctx, transport, None)
 				.await
-				.map_err(format_jazz_err)?
+				.map_err(format_jazz_err)?;
+			// Don't re-register a peer the user has Forgotten (revoked) — that is
+			// what makes Forget persist across reconnect/restart. Unknown peers
+			// stay permissive (first-contact); only an explicit revoke is skipped.
+			let remote_did = crate::jazz_auth::peer_did_from_ed25519(&remote.0).ok();
+			let revoked = match &remote_did {
+				Some(did) => crate::peers::is_peer_revoked(&client, did)
+					.await
+					.unwrap_or(false),
+				None => false,
+			};
+			if revoked {
+				log::info!("dev peer {remote} is Forgotten (revoked); not registering for sync");
+			} else if let Err(e) = client.register_peer_sync_client(remote) {
+				log::warn!("register dev peer {remote}: {e}");
+			}
+			client
 		}
 		None => JazzClient::connect(ctx).await.map_err(format_jazz_err)?,
 	};
@@ -1420,13 +1426,6 @@ async fn jazz_connect(
 	}
 
 	crate::schema_migrations::stamp_current_vault_snapshot(&data_dir, &schema)?;
-
-	let client = Arc::new(client);
-	// Peers are discovered dynamically over the swarm — register each as it
-	// connects (revoke-aware). Replaces the dev-TCP single-remote registration.
-	if let Some(transport) = peer_transport {
-		spawn_peer_registration(Arc::clone(&client), transport);
-	}
 	Ok(client)
 }
 
