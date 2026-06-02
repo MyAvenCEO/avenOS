@@ -52,6 +52,16 @@ export function settingsNavSections(): SettingsNavSection[] {
 			],
 		},
 		{
+			title: t('selfNav.models'),
+			items: [
+				{
+					href: '/settings/models',
+					label: t('selfNav.localModels'),
+					match: (p) => p.startsWith('/settings/models'),
+				},
+			],
+		},
+		{
 			title: t('selfNav.advanced'),
 			items: [
 				{

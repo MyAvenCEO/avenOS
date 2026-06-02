@@ -132,11 +132,37 @@
 		"self": "Self",
 		"sparks": "Sparks",
 		"share": "Teilen",
+		"models": "Modelle",
+		"localModels": "Lokale Modelle",
 		"advanced": "Erweitert",
 		"network": "Netzwerk",
 		"db": "DB",
 		"openVault": "Tresor öffnen",
 		"logout": "Abmelden"
+	},
+	"models": {
+		"title": "Modelle",
+		"subtitle": "On-Device-Modelle auf diesem Gerät. Das Sprachmodell wird einmal heruntergeladen und läuft danach vollständig offline — deine Audiodaten verlassen das Gerät nie.",
+		"needsDesktop": "On-Device-Modelle sind nur in der Desktop-App verfügbar.",
+		"empty": "Noch keine Modelle heruntergeladen. Öffne Talk und tippe auf das Mikrofon, um das Sprachmodell zu laden.",
+		"active": "Sprache",
+		"onDisk": "auf Festplatte",
+		"stop": "Stopp",
+		"download": "Laden",
+		"delete": "Löschen",
+		"deleting": "Wird gelöscht…",
+		"modalities": {
+			"text": "Text",
+			"image": "Bild",
+			"audio": "Audio"
+		},
+		"status": {
+			"idle": "Nicht gestartet",
+			"downloading": "Wird geladen…",
+			"ready": "Bereit",
+			"error": "Fehler",
+			"unavailable": "Nicht verfügbar"
+		}
 	},
 	"vaultNav": {
 		"title": "Tresor",

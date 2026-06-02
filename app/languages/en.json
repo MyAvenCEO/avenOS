@@ -144,11 +144,37 @@
 		"self": "Self",
 		"sparks": "Sparks",
 		"share": "Share",
+		"models": "Models",
+		"localModels": "Local models",
 		"advanced": "Advanced",
 		"network": "Network",
 		"db": "DB",
 		"openVault": "Open vault",
 		"logout": "Log out"
+	},
+	"models": {
+		"title": "Models",
+		"subtitle": "On-device models stored on this machine. The voice model downloads once and then runs fully offline — your audio never leaves the device.",
+		"needsDesktop": "On-device models are only available in the desktop app.",
+		"empty": "No models downloaded yet. Open Talk and tap the mic to fetch the voice model.",
+		"active": "Voice",
+		"onDisk": "on disk",
+		"stop": "Stop",
+		"download": "Download",
+		"delete": "Delete",
+		"deleting": "Deleting…",
+		"modalities": {
+			"text": "Text",
+			"image": "Image",
+			"audio": "Audio"
+		},
+		"status": {
+			"idle": "Not started",
+			"downloading": "Downloading…",
+			"ready": "Ready",
+			"error": "Error",
+			"unavailable": "Unavailable"
+		}
 	},
 	"vaultNav": {
 		"title": "Vault",

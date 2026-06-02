@@ -15,6 +15,7 @@ import { type VaultListEntry, vaultCardTitle, vaultList } from '$lib/settings/va
 import { vaultUiSettingsGet } from '$lib/settings/vault-ui-settings'
 import { navigateApp } from '$lib/shell'
 import MobileShellNav from '$lib/shell/MobileShellNav.svelte'
+import { startAsrReadiness } from '$lib/asr/model-download-store'
 import '../app.css'
 
 if (browser) installConsoleCapture()
@@ -47,6 +48,21 @@ $effect(() => {
 $effect(() => {
 	if (!browser || !isTauriRuntime()) return () => {}
 	return attachSelfRustEventMirrors()
+})
+
+// On-device voice model: track download/readiness for the ambient indicator.
+$effect(() => {
+	if (!browser || !isTauriRuntime()) return () => {}
+	let active = true
+	let unsub = () => {}
+	void startAsrReadiness().then((u) => {
+		if (active) unsub = u
+		else u()
+	})
+	return () => {
+		active = false
+		unsub()
+	}
 })
 
 const sessionKind = $derived($deviceSession.kind)

@@ -16,11 +16,25 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "aven-os-app"
 path = "src/main.rs"
 
+[features]
+# On-device voice-note transcription (Gemma 4 E4B) is ON by default, so the
+# normal `bun run dev:app` / `bun run release:app` flows ship the real model and
+# trigger the first-run weights download. Enabling it pulls in the heavy
+# `mistralrs` inference crate (~400MB+ build, longer first compile). Build with
+# `--no-default-features` to get the light stub build (CI / quick checks).
+default = ["local-asr"]
+local-asr = ["dep:mistralrs", "dep:hf-hub"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
 async-trait = "0.1"
+# On-device ASR engine — optional, only compiled with the `local-asr` feature.
+mistralrs = { version = "0.8", optional = true }
+# Weights download with byte-level progress; features matched to mistralrs-core
+# so cargo unifies them (no extra build). Only with `local-asr`.
+hf-hub = { version = "0.4", default-features = false, features = ["ureq", "tokio", "rustls-tls"], optional = true }
 groove = { package = "aven-db", version = "0.0.1", default-features = false, features = ["client-p2p"] }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
@@ -51,6 +65,9 @@ tracing-log = "0.2.0"
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
 oslog = { version = "0.2", features = ["logger"] }
+# Apple GPU backend — required for the AFQ4 (affine) quant we load on Apple
+# Silicon / iOS. Feature is unioned with the base `mistralrs` dep above.
+mistralrs = { version = "0.8", optional = true, features = ["metal"] }
 
 # Vendored aven-db (jazz2 alpha.50) with AvenOS P2P patches:
 # `QueryManager` write paths used to `.map_err(|_| QueryError::ObjectNotFound(id))`,

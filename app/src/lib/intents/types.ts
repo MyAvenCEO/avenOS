@@ -86,7 +86,7 @@ export type IntentRow = {
 	hitlVibeAppId?: VibeViewId
 }
 
-export type ComposerMode = 'collapsed' | 'listening' | 'typing'
+export type ComposerMode = 'collapsed' | 'listening' | 'typing' | 'preparing'
 
 /**
  * Center-panel tab union. `activity` and `display` predate the four-tab

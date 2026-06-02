@@ -1,5 +1,6 @@
 <script lang="ts">
 import { focusShellWebview } from '$lib/intent-mock/focus-shell-webview'
+import { encodeForModel } from '$lib/intent-mock/audio-encode'
 import { onDestroy, tick } from 'svelte'
 
 /** Typing-mode textarea: grow with content up to this many text rows, then scroll. */
@@ -34,7 +35,19 @@ const VOICE_MOCK_TRANSCRIPTS = [
 	'Capture: bundle the three expense PDFs into one intent for bookkeeping.'
 ]
 
-type Mode = 'collapsed' | 'listening' | 'typing'
+type Mode = 'collapsed' | 'listening' | 'typing' | 'preparing'
+
+/** Live voice-model readiness for the inline "preparing" pill (parent supplies). */
+type VoicePrep = {
+	model: string
+	status: 'idle' | 'downloading' | 'ready' | 'error' | 'unavailable'
+	/** Download fraction 0–1, or null when the total isn't known yet. */
+	fraction: number | null
+	/** Human-readable "312 MB / 4.1 GB". */
+	sizeLabel: string
+	/** Short note on what's happening. */
+	note: string
+}
 
 let {
 	onSubmitMessage,
@@ -58,7 +71,29 @@ let {
 	submitBusy = false,
 	disabled = false,
 	enableAttachments = true,
-	embedAttachmentNamesInMessage = true
+	embedAttachmentNamesInMessage = true,
+	/**
+	 * On-device transcription for voice notes. When provided, the composer
+	 * records real microphone audio and submits the returned transcript (never a
+	 * mock). When absent (e.g. the HITL demo composer), voice notes use a
+	 * `VOICE_MOCK_TRANSCRIPTS` placeholder.
+	 */
+	onTranscribeAudio,
+	/**
+	 * When set, the model isn't ready: the mic stays enabled but clicking it
+	 * fires `onVoiceUnavailableClick` (parent opens the download modal) instead
+	 * of recording.
+	 */
+	voiceUnavailableReason = null,
+	onVoiceUnavailableClick,
+	/**
+	 * Live download/readiness for the inline "preparing" pill. When the mic is
+	 * clicked before the model is ready, the composer morphs into this pill
+	 * (progress bar + note) in place rather than recording.
+	 */
+	voicePrep = null,
+	/** Surface a transcription/microphone error to the parent (no message is posted). */
+	onTranscribeError
 }: {
 	onSubmitMessage?: (text: string, files: File[]) => void
 	onModeChange?: (mode: Mode) => void
@@ -70,6 +105,11 @@ let {
 	disabled?: boolean
 	enableAttachments?: boolean
 	embedAttachmentNamesInMessage?: boolean
+	onTranscribeAudio?: (audio: { pcm: Float32Array; sampleRate: number }) => Promise<string>
+	voiceUnavailableReason?: string | null
+	onVoiceUnavailableClick?: () => void
+	voicePrep?: VoicePrep | null
+	onTranscribeError?: (message: string) => void
 } = $props()
 
 /**
@@ -326,6 +366,7 @@ function formatAttachmentSummary(): string {
 
 onDestroy(() => {
 	clearLongPressTimer()
+	teardownRecording()
 	for (const a of attachmentsUnmountSnapshot) revokeAttachmentPreview(a)
 })
 
@@ -438,12 +479,91 @@ $effect(() => {
 	void tick().then(() => resizeComposer())
 })
 
+/** Real microphone capture (only on the on-device path — `onTranscribeAudio` set). */
+let transcribing = $state(false)
+let recording = false
+let mediaStream: MediaStream | null = null
+let audioCtx: AudioContext | null = null
+let sourceNode: MediaStreamAudioSourceNode | null = null
+let processorNode: ScriptProcessorNode | null = null
+let muteNode: GainNode | null = null
+let pcmChunks: Float32Array[] = []
+let recordedSampleRate = 0
+
+async function startRecording() {
+	if (!onTranscribeAudio || recording) return
+	pcmChunks = []
+	try {
+		const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+		mediaStream = stream
+		const Ctx: typeof AudioContext =
+			window.AudioContext ??
+			(window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+		audioCtx = new Ctx()
+		recordedSampleRate = audioCtx.sampleRate
+		sourceNode = audioCtx.createMediaStreamSource(stream)
+		processorNode = audioCtx.createScriptProcessor(4096, 1, 1)
+		processorNode.onaudioprocess = (e) => {
+			pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)))
+		}
+		// Sink through a muted gain node so ScriptProcessor fires without feedback.
+		muteNode = audioCtx.createGain()
+		muteNode.gain.value = 0
+		sourceNode.connect(processorNode)
+		processorNode.connect(muteNode)
+		muteNode.connect(audioCtx.destination)
+		recording = true
+	} catch (e) {
+		teardownRecording()
+		onTranscribeError?.(e instanceof Error ? e.message : 'Microphone unavailable')
+	}
+}
+
+/** Stop capture and return the encoded PCM payload (or `null` if nothing usable). */
+function collectRecording(): { pcm: Float32Array; sampleRate: number } | null {
+	const chunks = pcmChunks
+	const sr = recordedSampleRate
+	teardownRecording()
+	return encodeForModel(chunks, sr)
+}
+
+function teardownRecording() {
+	recording = false
+	try {
+		if (processorNode) processorNode.onaudioprocess = null
+		processorNode?.disconnect()
+		sourceNode?.disconnect()
+		muteNode?.disconnect()
+	} catch {
+		/* nodes may already be detached */
+	}
+	for (const track of mediaStream?.getTracks() ?? []) track.stop()
+	void audioCtx?.close().catch(() => {})
+	processorNode = null
+	sourceNode = null
+	muteNode = null
+	mediaStream = null
+	audioCtx = null
+	pcmChunks = []
+	recordedSampleRate = 0
+}
+
 function openListening() {
+	// Model not ready → don't record; morph the pill into the inline download
+	// progress / note instead (the parent supplies `voicePrep`).
+	if (voiceUnavailableReason != null) {
+		void focusShellWebview()
+		onVoiceUnavailableClick?.()
+		mode = 'preparing'
+		return
+	}
 	void focusShellWebview()
+	void startRecording()
 	mode = 'listening'
 }
 
 async function stopListening() {
+	teardownRecording()
 	suppressTextEffect = true
 	keepTypingOpenUntilBlur = false
 	listeningSubmitOnRelease = false
@@ -477,8 +597,10 @@ async function finalizeSubmitCollapseAfterParent() {
 }
 
 async function commitVoiceNote() {
-	if (!onSubmitMessage || disabled || submitBusy) return
-	const body = VOICE_MOCK_TRANSCRIPTS[Math.floor(Math.random() * VOICE_MOCK_TRANSCRIPTS.length)]
+	if (disabled || submitBusy || transcribing) return
+
+	// Capture the audio before tearing down the listening UI (real path only).
+	const captured = onTranscribeAudio ? collectRecording() : null
 
 	suppressTextEffect = true
 	text = ''
@@ -489,7 +611,27 @@ async function commitVoiceNote() {
 	mode = 'collapsed'
 	openMicCooldownUntilMs = performance.now() + 280
 
-	onSubmitMessage(body, [])
+	if (onTranscribeAudio) {
+		// On-device transcription — never mock. Nothing captured → post nothing.
+		if (captured) {
+			transcribing = true
+			try {
+				const transcript = await onTranscribeAudio(captured)
+				if (transcript) onSubmitMessage?.(transcript, [])
+			} catch (e) {
+				onTranscribeError?.(e instanceof Error ? e.message : String(e))
+			} finally {
+				transcribing = false
+			}
+		}
+	} else if (onSubmitMessage) {
+		// Demo composer (no model wired) — placeholder transcript only.
+		onSubmitMessage(
+			VOICE_MOCK_TRANSCRIPTS[Math.floor(Math.random() * VOICE_MOCK_TRANSCRIPTS.length)],
+			[]
+		)
+	}
+
 	await finalizeSubmitCollapseAfterParent()
 }
 
@@ -580,6 +722,9 @@ const pillClass = $derived.by(() => {
 			return `${base} h-14 w-[min(20rem,calc(100vw-3rem))] items-center gap-2 rounded-full border border-primary/25 bg-primary px-2.5 text-primary-foreground shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--color-primary)_45%,transparent)]`
 		}
 		return `${base} h-14 w-[min(18rem,46vw)] items-center gap-2.5 rounded-full border border-primary/25 bg-primary px-3 text-primary-foreground shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--color-primary)_45%,transparent)] sm:gap-3 sm:px-3.5`
+	}
+	if (mode === 'preparing') {
+		return `${base} h-auto min-h-14 w-[min(22rem,calc(100vw-3rem))] flex-col items-stretch gap-1.5 rounded-2xl border border-border bg-card px-3 py-2.5 text-foreground shadow-[0_10px_28px_-10px_rgba(0,0,0,0.25)] sm:w-[min(24rem,60vw)]`
 	}
 	return `${base} tech-pill !max-w-[min(36rem,80vw)] !rounded-2xl mx-auto w-full items-center justify-center gap-2 border-border py-0 pl-2 pr-2 text-foreground shadow-none sm:gap-3 sm:pl-4 sm:pr-2`
 })
@@ -761,6 +906,60 @@ const pillClass = $derived.by(() => {
 				</div>
 			{/if}
 	</div>
+	{:else if mode === 'preparing'}
+		<div class={pillClass} role="status" aria-live="polite">
+			<div class="flex items-center justify-between gap-2">
+				<span class="truncate text-xs font-semibold tracking-tight">
+					{voicePrep?.status === 'ready' ? 'Voice model ready' : 'Preparing voice model'}
+				</span>
+				<button
+					type="button"
+					class="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/30"
+					onclick={() => (mode = 'collapsed')}
+					aria-label="Dismiss"
+				>
+					<svg class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</div>
+
+			{#if voicePrep && (voicePrep.status === 'downloading' || voicePrep.status === 'idle')}
+				<div class="flex items-center justify-between gap-2">
+					<span class="truncate text-[11px] font-medium text-foreground/80">{voicePrep.model}</span>
+					<span class="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground"
+						>{voicePrep.sizeLabel}</span
+					>
+				</div>
+				<div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+					{#if voicePrep.fraction == null}
+						<div class="h-full w-1/3 animate-pulse rounded-full bg-primary/70"></div>
+					{:else}
+						<div
+							class="h-full rounded-full bg-primary transition-[width] duration-300"
+							style={`width: ${Math.round(voicePrep.fraction * 100)}%`}
+						></div>
+					{/if}
+				</div>
+			{/if}
+
+			{#if voicePrep?.note}
+				<p class="text-[11px] leading-snug text-muted-foreground">{voicePrep.note}</p>
+			{/if}
+
+			{#if voicePrep?.status === 'ready'}
+				<button
+					type="button"
+					class="mt-0.5 inline-flex items-center justify-center gap-1.5 self-start rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground outline-none transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/35"
+					onclick={openListening}
+				>
+					<svg class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 18v3m0-3a4 4 0 0 0 4-4V7a4 4 0 1 0-8 0v7a4 4 0 0 0 4 4Z" />
+					</svg>
+					Tap to record
+				</button>
+			{/if}
+		</div>
 	{:else}
 		<div
 			class="flex w-full max-w-[min(36rem,80vw)] mx-auto items-end gap-1.5 max-sm:max-w-none max-sm:gap-[0.6rem] sm:items-center sm:gap-2.5"
