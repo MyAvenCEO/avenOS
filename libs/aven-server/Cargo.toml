@@ -1,0 +1,17 @@
+[package]
+name = "aven-server"
+version = "0.0.1"
+edition = "2021"
+description = "AvenOS unified always-on aven — auth + blind mirror + rendezvous + indexer over peeroxide (one fly deploy)."
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "aven-server"
+path = "src/main.rs"
+
+[dependencies]
+groove = { package = "aven-db", path = "../aven-db", features = ["client-p2p"] }
+aven-p2p = { path = "../aven-p2p" }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

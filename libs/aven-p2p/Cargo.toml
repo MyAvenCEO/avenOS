@@ -2,8 +2,21 @@
 name = "aven-p2p"
 version = "0.0.1"
 edition = "2021"
-description = "Placeholder for future AvenOS sync transport (Hyperswarm, LAN, relay, …)."
+description = "AvenOS peeroxide Hyperswarm SyncTransport — the mesh transport for spark sync."
 license = "MIT OR Apache-2.0"
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+groove = { package = "aven-db", path = "../aven-db", features = ["client-p2p"] }
+peeroxide = "1.3.1"
+peeroxide-dht = "1.3.1"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "time"] }
+async-trait = "0.1"
+tracing = "0.1"
+hex = "0.4"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
