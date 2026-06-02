@@ -41,7 +41,7 @@ async function copyGoal(): Promise<void> {
 >
 	<div class="min-h-0 flex-1 overflow-y-auto px-4 pt-6 pb-28 sm:px-6">
 		<div
-			class="mx-auto w-full max-w-6xl rounded-3xl border border-border bg-surface-card px-5 py-8 shadow-sm sm:px-8 sm:py-10 md:px-12"
+			class="mx-auto w-full max-w-3xl rounded-2xl border border-dashed border-border bg-surface-card px-5 py-8 shadow-sm sm:px-8 sm:py-10 md:px-10"
 		>
 			<header class="mb-8 border-b border-border/50 pb-6">
 				<div

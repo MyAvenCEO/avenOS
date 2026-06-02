@@ -43,9 +43,7 @@ const total = $derived(columns.reduce((sum, c) => sum + c.items.length, 0))
 	</header>
 
 	<div class="min-h-0 flex-1 overflow-y-auto overflow-x-auto px-4 pb-8 sm:px-6">
-		<div
-			class="mx-auto flex w-full max-w-[min(100%,84rem)] gap-4 sm:grid sm:grid-cols-2 sm:gap-5 lg:grid-cols-4"
-		>
+		<div class="mx-auto flex w-full max-w-[min(100%,72rem)] items-start gap-4 sm:gap-5">
 			{#each columns as column (column.id)}
 				<BoardColumn {column} {base} {emptyLabel} {onOpen} />
 			{/each}
