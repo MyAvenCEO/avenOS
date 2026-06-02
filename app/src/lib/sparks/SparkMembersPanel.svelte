@@ -26,6 +26,7 @@
 	import { deviceSession } from '$lib/settings/device-session-store'
 	import { vaultList } from '$lib/settings/vault'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+	import { formatDebugReport, recentRustLogs } from '$lib/debug/console-capture'
 	import { t } from '$lib/i18n'
 
 	let { sparkId, wide = false }: { sparkId: string; wide?: boolean } = $props()
@@ -51,6 +52,7 @@
 	let revokeErr = $state<string | undefined>()
 	let revokeNote = $state<string | undefined>()
 	let localPairingLabel = $state<string | undefined>(undefined)
+	let debugCopied = $state(false)
 
 	const sessionKind = $derived($deviceSession.kind)
 	const unlocked = $derived(sessionKind === 'unlocked')
@@ -299,6 +301,38 @@
 			}
 		})()
 	})
+
+	// Copy a debug report — the device's recent Rust sync log (forwarding gate +
+	// peer registration), the spark's admin roster, and live peer/mesh state — so
+	// sync problems between peers (incl. whether the server/replication peer
+	// received and forwarded a batch) can be pasted back when reporting an issue.
+	async function copyDebug(): Promise<void> {
+		if (!browser) return
+		let peerRows: PeerRow[] = []
+		try {
+			peerRows = await peerList()
+		} catch {
+			/* best-effort: state block still useful without the roster */
+		}
+		const rustLogs = await recentRustLogs()
+		const report = formatDebugReport(
+			{
+				sparkId,
+				ownDid: session?.peerDid ?? '',
+				adminDids,
+				peerRows,
+				meshSnapshot: $peerMeshSnapshot,
+			},
+			rustLogs,
+		)
+		try {
+			await navigator.clipboard.writeText(report)
+			debugCopied = true
+			setTimeout(() => (debugCopied = false), 1500)
+		} catch {
+			/* clipboard blocked */
+		}
+	}
 </script>
 
 {#if wide}
@@ -403,6 +437,16 @@
 				{#if addNote}
 					<p class="text-muted-foreground text-sm">{addNote}</p>
 				{/if}
+			</section>
+
+			<!-- Debug: copy the sync log (forwarding gate + peer/mesh state) to report issues -->
+			<section class="border-border/40 flex items-center justify-between gap-3 border-t pt-4">
+				<p class="text-muted-foreground text-xs leading-relaxed">{t('peers.copyDebugHint')}</p>
+				<button
+					type="button"
+					class="bg-muted hover:bg-muted/70 shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium"
+					onclick={() => void copyDebug()}>{debugCopied ? t('peers.copied') : t('peers.copyDebug')}</button
+				>
 			</section>
 		</div>
 	{/if}
