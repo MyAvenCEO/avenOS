@@ -14,7 +14,7 @@ let { item, href, onOpen }: Props = $props()
 <a
 	{href}
 	data-sveltekit-preload-data="hover"
-	class="tech-card group flex flex-col gap-2 p-3.5 no-underline"
+	class="group flex flex-col gap-2.5 rounded-2xl border border-border bg-surface-card p-4 no-underline shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:bg-surface-card-hover hover:shadow-md"
 	onclick={(e) => onOpen?.(item, e)}
 >
 	<p class="text-sm font-semibold leading-snug tracking-tight text-foreground">

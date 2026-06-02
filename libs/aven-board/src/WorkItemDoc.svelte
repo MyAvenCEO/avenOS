@@ -40,7 +40,10 @@ async function copyGoal(): Promise<void> {
 	class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background font-sans text-foreground antialiased"
 >
 	<div class="min-h-0 flex-1 overflow-y-auto">
-		<div class="mx-auto w-full max-w-[min(100%,90rem)] px-4 pt-6 pb-28 sm:px-8 md:px-12">
+		<div class="mx-auto w-full max-w-6xl px-4 pt-6 pb-28 sm:px-6 md:px-8">
+			<div
+				class="rounded-3xl border border-border bg-surface-card p-6 shadow-sm sm:p-8 md:p-10"
+			>
 			<header class="mb-8 border-b border-border/50 pb-6">
 				<div
 					class="mb-3 flex flex-wrap items-center gap-2 text-[10px] font-bold tracking-widest uppercase"
@@ -109,16 +112,17 @@ async function copyGoal(): Promise<void> {
 				<!-- {@html} is sanitized by renderWorkItemMarkdown (DOMPurify). -->
 				{@html rendered.html}
 			</article>
+			</div>
 		</div>
 	</div>
 
 	<div
-		class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-background via-background/90 to-transparent pt-8 pb-[max(1rem,env(safe-area-inset-bottom))]"
+		class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-background via-background/90 to-transparent pt-8 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
 	>
 		<a
 			href={backHref}
 			data-sveltekit-preload-data="hover"
-			class="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-border bg-background/95 px-5 py-2.5 text-xs font-bold tracking-widest uppercase text-foreground shadow-lg backdrop-blur-sm transition-colors hover:bg-white/10"
+			class="pointer-events-auto mb-2 inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-xs font-bold tracking-widest uppercase text-primary-foreground shadow-lg transition-colors hover:bg-primary-soft"
 			onclick={(e) => onBack?.(e)}
 		>
 			<svg class="size-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
