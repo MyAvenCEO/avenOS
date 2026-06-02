@@ -16,6 +16,8 @@ export type JazzSessionReply = {
 	peerDid: string
 	peerDidShort: string
 	defaultSparkUrn: string
+	/** did:key of the aven-server relay this device is synced through, if any. */
+	relayDid?: string | null
 }
 
 export async function jazzSession(): Promise<JazzSessionReply> {

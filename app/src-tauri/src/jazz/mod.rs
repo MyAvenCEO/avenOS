@@ -66,6 +66,9 @@ pub struct JazzSessionReply {
 	pub peer_did: String,
 	pub peer_did_short: String,
 	pub default_spark_urn: String,
+	/// did:key of the aven-server relay this device is synced through, if any —
+	/// lets the UI offer a one-click "replicate this spark to the relay".
+	pub relay_did: Option<String>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -119,6 +122,11 @@ pub struct ManagedJazz {
 	/// `BiscuitCapabilityResolver` reads this synchronously on the engine tick
 	/// thread (the primary `shell` is a tokio Mutex, unusable from sync code).
 	pub(crate) sync_shell: Arc<RwLock<Option<std::sync::Arc<jazz_engine::ShellState>>>>,
+	/// did:key of the aven-server relay this device is currently synced through
+	/// (the authenticated peer from the TLS handshake), or `None` when local-only.
+	/// Surfaced to the UI so a spark can grant it `replicate` with one click —
+	/// no copying the DID out of the server's logs.
+	pub(crate) connected_relay_did: Arc<RwLock<Option<String>>>,
 	/// MPSC sender for **all** UI-facing table deltas: paired peer inbound sync and local
 	/// IPC writes both post `(table)` here. The drain task [`run_table_change_drain`] is
 	/// the sole caller of [`ManagedJazz::snapshot_broadcast`], keeping one code path from
@@ -151,6 +159,7 @@ impl Default for ManagedJazz {
 			mesh_acl_rebroadcast_done: AtomicBool::new(false),
 			sync_acl: Arc::new(RwLock::new(None)),
 			sync_shell: Arc::new(RwLock::new(None)),
+			connected_relay_did: Arc::new(RwLock::new(None)),
 			change_tx,
 			last_table_snapshots: RwLock::new(HashMap::new()),
 			last_mesh_snapshot: RwLock::new(None),
@@ -523,7 +532,12 @@ async fn with_connected_client(
 				jc.linked_identity = Some(desired);
 				drop(jc);
 				// Wire dev peer sync in the background — never blocks the connect path.
-				spawn_dev_peer_sync(self_state, Arc::clone(&client), jazz.change_tx.clone());
+				spawn_dev_peer_sync(
+					self_state,
+					Arc::clone(&client),
+					jazz.change_tx.clone(),
+					jazz.connected_relay_did.clone(),
+				);
 				return Ok(client);
 			}
 			Err(e) => return Err(e),
@@ -1502,6 +1516,7 @@ fn spawn_dev_peer_sync(
 	self_state: &SelfState,
 	client: Arc<JazzClient>,
 	change_tx: tokio::sync::mpsc::UnboundedSender<String>,
+	relay_did_slot: Arc<RwLock<Option<String>>>,
 ) {
 	// Capture the unlocked root up front (the transport signs the did:key challenge
 	// with it); bail if locked.
@@ -1509,10 +1524,22 @@ fn spawn_dev_peer_sync(
 		Ok(r) => r,
 		Err(_) => return,
 	};
+	// Start clean: clear any stale relay until this attempt establishes one (so a
+	// local-only run correctly reports "no relay connected").
+	if let Ok(mut slot) = relay_did_slot.write() {
+		*slot = None;
+	}
 	tokio::spawn(async move {
 		let Some((transport, remote)) = try_any_peer_transport(&root).await else {
 			return;
 		};
+		// Record the authenticated relay DID so the UI can offer a one-click
+		// "replicate this spark to the connected relay" (no DID copy from logs).
+		if let Ok(did) = crate::jazz_auth::peer_did_from_ed25519(&remote.0) {
+			if let Ok(mut slot) = relay_did_slot.write() {
+				*slot = Some(did);
+			}
+		}
 		// Inbound peer-sync deltas must drive the SAME drain that local IPC writes use
 		// (`change_tx` → `run_table_change_drain` → `execute_drain_batch`). Without this
 		// hook, a synced `sparks`/`keyshares` change — e.g. a spark-admin grant arriving
@@ -1702,6 +1729,9 @@ fn jazz_session_reply_from_shell(shell: &jazz_engine::ShellState) -> JazzSession
 		peer_did: shell.peer_did.clone(),
 		peer_did_short: jazz_engine::short_peer_did(&shell.peer_did),
 		default_spark_urn: jazz_engine::spark_urn(shell.default_spark),
+		// This shell-only path has no relay handle; the live relay DID is filled
+		// by `groove_ipc_session` (which can read `ManagedJazz`).
+		relay_did: None,
 	}
 }
 
@@ -1794,10 +1824,16 @@ pub(crate) async fn groove_ipc_session(
 ) -> Result<JazzSessionReply, String> {
 	let client = with_connected_client(jazz, app, self_state).await?;
 	let shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+	let relay_did = jazz
+		.connected_relay_did
+		.read()
+		.ok()
+		.and_then(|slot| slot.clone());
 	Ok(JazzSessionReply {
 		peer_did: shell.peer_did.clone(),
 		peer_did_short: jazz_engine::short_peer_did(&shell.peer_did),
 		default_spark_urn: jazz_engine::spark_urn(shell.default_spark),
+		relay_did,
 	})
 }
 

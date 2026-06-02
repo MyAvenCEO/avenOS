@@ -226,8 +226,8 @@
 	// Grant a server aven a blind `replicate` cap (store-and-forward + durable
 	// backup). NOT membership: no keyshare is issued, so it carries ciphertext it
 	// cannot decrypt. The server's DID is printed in its logs / shown by the relay.
-	async function addReplicate(): Promise<void> {
-		const did = addReplicateDid.trim()
+	async function addReplicate(didArg?: string): Promise<void> {
+		const did = (didArg ?? addReplicateDid).trim()
 		const sid = sparkId.trim()
 		if (!did || !sid) return
 		replicateBusy = true
@@ -470,6 +470,22 @@
 				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
 					{t('sparks.share.addReplica')}
 				</h2>
+				{#if session?.relayDid}
+					<!-- One-click: the relay this device is synced through is already
+					     authenticated — grant it without copying a DID from logs. -->
+					<div class="border-border/50 bg-background/40 flex flex-col gap-2 rounded-xl border px-4 py-3">
+						<p class="text-xs font-medium">{t('sparks.share.connectedRelay')}</p>
+						<code class="text-muted-foreground font-mono text-[11px] break-all select-text" title={session.relayDid}>{session.relayDid}</code>
+						<button
+							type="button"
+							class="bg-primary text-primary-foreground hover:bg-primary/90 mt-1 self-start rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+							disabled={replicateBusy}
+							onclick={() => void addReplicate(session?.relayDid ?? undefined)}
+						>
+							{replicateBusy ? '…' : t('sparks.share.replicateToConnected')}
+						</button>
+					</div>
+				{/if}
 				<div class="flex flex-col gap-2 sm:flex-row sm:items-end">
 					<input
 						class="border-border/60 bg-background/40 min-w-0 flex-1 rounded-lg border px-3 py-2 font-mono text-[12px]"
