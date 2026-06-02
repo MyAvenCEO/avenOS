@@ -17,7 +17,6 @@ use groove::{
 	AppContext,
 	AppId,
 	PeerId,
-	DevRole,
 	JazzClient,
 	JazzError,
 	metadata::MetadataKey,
@@ -25,7 +24,6 @@ use groove::{
 	PeerInboundParkedHook,
 	SyncPayload,
 	SyncTransport,
-	TcpSyncTransport,
 	Value,
 };
 use crate::mesh::{
@@ -1381,56 +1379,15 @@ pub(crate) fn patch_updates(table_schema: &TableSchema, patch: JsonRow) -> Resul
 	Ok(ops)
 }
 
-/// Dev-only (`dev:app2x`): when `AVENOS_DEV_PEER_SYNC=1`, establish a localhost
-/// TCP peer transport so two instances converge a shared spark live. Instance A
-/// listens, B dials (retrying until A is up). Returns the transport + remote peer
-/// id, or `None` to run local-only (single instance, or peer not reachable).
-async fn try_dev_peer_transport(local: PeerId) -> Option<(Arc<dyn SyncTransport>, PeerId)> {
-	if std::env::var("AVENOS_DEV_PEER_SYNC").is_err() {
-		return None;
-	}
-	const ADDR: &str = "127.0.0.1:14290";
-	let role = match std::env::var("AVENOS_DEV_INSTANCE").ok().as_deref() {
-		Some("A") => DevRole::Listen,
-		Some("B") => DevRole::Dial,
-		_ => return None,
-	};
-	let established = tokio::time::timeout(Duration::from_secs(30), async {
-		loop {
-			match TcpSyncTransport::connect(role, ADDR, local).await {
-				Ok(t) => return Some(t),
-				// Dialer retries until the listener binds; listener bind/accept
-				// failures fall through to local-only.
-				Err(_) if role == DevRole::Dial => {
-					tokio::time::sleep(Duration::from_millis(400)).await;
-				}
-				Err(e) => {
-					log::warn!("dev peer transport ({role:?}) failed: {e}");
-					return None;
-				}
-			}
-		}
-	})
-	.await
-	.ok()
-	.flatten();
-	match established {
-		Some(t) => {
-			let remote = t.remote_client_id();
-			log::info!("dev peer transport established (remote {remote})");
-			Some((Arc::new(t), remote))
-		}
-		None => {
-			log::warn!("dev peer transport not established; running local-only");
-			None
-		}
-	}
-}
-
-/// When `AVENOS_SERVER_SYNC=1`, dial the hosted aven-server mini over
-/// authenticated TLS: the server cert is pinned via `AVENOS_SERVER_CERT_PIN`
-/// (hex DER) and the device proves its DID with a did:key challenge bound to the
-/// TLS session. Returns the transport + the server's authenticated peer id.
+/// When `AVENOS_SERVER_SYNC=1`, dial the aven-server mini over authenticated TLS:
+/// the server cert is pinned via `AVENOS_SERVER_CERT_PIN` (hex DER) and the device
+/// proves its DID with a did:key challenge bound to the TLS session. Returns the
+/// transport + the server's authenticated peer id.
+///
+/// This is the single sync transport — production points it at the hosted mini;
+/// `dev:app2x` boots a local `aven-server` on `127.0.0.1:4290` and points both
+/// instances at it (so A↔B converge a shared spark through the relay). The dial
+/// retries briefly so the app tolerates the relay coming up a beat late.
 async fn try_server_transport(
 	signing_key: ed25519_dalek::SigningKey,
 ) -> Option<(Arc<dyn SyncTransport>, PeerId)> {
@@ -1447,31 +1404,43 @@ async fn try_server_transport(
 		}
 	};
 	let trust = aven_p2p::ServerTrust::Pinned(pinned);
-	match aven_p2p::ServerSyncTransport::dial(&addr, trust, signing_key).await {
-		Ok(t) => {
+	let established = tokio::time::timeout(Duration::from_secs(30), async {
+		loop {
+			match aven_p2p::ServerSyncTransport::dial(&addr, trust.clone(), signing_key.clone())
+				.await
+			{
+				Ok(t) => return Some(t),
+				// The relay may not be listening yet (dev: server boots alongside
+				// the app). Retry until it is, or fall through to local-only.
+				Err(e) => {
+					log::debug!("server transport dial not ready ({addr}): {e}");
+					tokio::time::sleep(Duration::from_millis(400)).await;
+				}
+			}
+		}
+	})
+	.await
+	.ok()
+	.flatten();
+	match established {
+		Some(t) => {
 			let server = t.server_peer_id();
 			log::info!("server transport established (aven {server})");
 			Some((Arc::new(t), server))
 		}
-		Err(e) => {
-			log::warn!("server transport dial failed: {e}");
+		None => {
+			log::warn!("server transport dial timed out ({addr}); running local-only");
 			None
 		}
 	}
 }
 
-/// Prefer the hosted aven-server (TLS) when configured; otherwise fall back to
-/// the dev 2-peer TCP path. Either yields `(transport, remote-peer-to-register)`.
-async fn try_any_peer_transport(
-	local: PeerId,
-	root: &[u8; 32],
-) -> Option<(Arc<dyn SyncTransport>, PeerId)> {
-	if let Ok(sk) = crate::jazz_auth::signing_key_from_device_root(root) {
-		if let Some(found) = try_server_transport(sk).await {
-			return Some(found);
-		}
-	}
-	try_dev_peer_transport(local).await
+/// The sync transport for this client, or `None` to run local-only (no
+/// `AVENOS_SERVER_SYNC`, or the relay was unreachable). Yields
+/// `(transport, server-peer-to-register)`.
+async fn try_any_peer_transport(root: &[u8; 32]) -> Option<(Arc<dyn SyncTransport>, PeerId)> {
+	let sk = crate::jazz_auth::signing_key_from_device_root(root).ok()?;
+	try_server_transport(sk).await
 }
 
 async fn jazz_connect(
@@ -1524,22 +1493,24 @@ async fn jazz_connect(
 	Ok(client)
 }
 
-/// Establish the dev TCP peer transport in the BACKGROUND and attach it to an
-/// already-connected (local) client. Never blocks sign-in: Groove is connected locally
-/// first, and this only wires peer sync once the other instance appears. A no-op outside
-/// the dev peer-sync harness (`try_dev_peer_transport` returns `None` immediately).
+/// Establish the sync transport (the aven-server relay over TLS) in the BACKGROUND
+/// and attach it to an already-connected (local) client. Never blocks sign-in:
+/// Groove is connected locally first, and this only wires sync once the relay is
+/// reachable. A no-op when sync is unconfigured (`try_any_peer_transport` returns
+/// `None` immediately when `AVENOS_SERVER_SYNC` is unset).
 fn spawn_dev_peer_sync(
 	self_state: &SelfState,
 	client: Arc<JazzClient>,
 	change_tx: tokio::sync::mpsc::UnboundedSender<String>,
 ) {
-	// Compute our own peer id up front (needs the unlocked root); bail if locked.
-	let peer_id = match self_state.with_root(|r| ed25519_public(r)) {
-		Ok(pk) => PeerId(pk),
+	// Capture the unlocked root up front (the transport signs the did:key challenge
+	// with it); bail if locked.
+	let root = match self_state.with_root(|r| Ok(*r)) {
+		Ok(r) => r,
 		Err(_) => return,
 	};
 	tokio::spawn(async move {
-		let Some((transport, remote)) = try_dev_peer_transport(peer_id).await else {
+		let Some((transport, remote)) = try_any_peer_transport(&root).await else {
 			return;
 		};
 		// Inbound peer-sync deltas must drive the SAME drain that local IPC writes use

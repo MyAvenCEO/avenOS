@@ -298,11 +298,13 @@ loose ends. Each item names its **acceptance check**; gate on `cargo build`
 ### 10.1 Prove the live grant→sync loop (`bun dev:app2x:mac`)
 The whole point: *"select peers, then sync based on the admin biscuits of a spark
 member."* Verify the chain that the unit harness proves in-process actually fires
-across two real instances over the dev TCP transport.
+across two real instances, which converge through the local `aven-server` relay
+(authenticated TLS) that `dev:app2x` boots on `127.0.0.1:4290`.
 
 1. **Pair.** A & B each open the Peers screen, copy their DID, paste the other's,
-   Add. `AVENOS_DEV_PEER_SYNC` connects the dev TCP transport (A listens, B
-   dials `127.0.0.1:14290`). **Check:** each peer chip flips `Connecting →
+   Add. Both instances dial the relay over TLS (`AVENOS_SERVER_SYNC=1`, server
+   cert pinned, per-client did:key challenge) and register it as a sync peer; the
+   relay fans frames between them. **Check:** each peer chip flips `Connecting →
    Syncing` (real `peer_client_ids` registration), not stuck.
 2. **Bootstrap trust.** Shell catch-up (`SHELL_CATCHUP_TABLES` = sparks,
    keyshares) ships **ungated** so B's vault receives the spark biscuit chain.

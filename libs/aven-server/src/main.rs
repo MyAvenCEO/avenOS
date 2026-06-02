@@ -118,6 +118,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if cfg.tls_cert_path.is_none() {
         let pin: String = server_tls.cert_der.iter().map(|b| format!("{b:02x}")).collect();
         tracing::info!(cert_der_pin = %pin, "self-signed cert (pin this DER on the client)");
+        // Dev convenience: hand the freshly-generated pin to a harness via a file
+        // (the `dev:app2x` script reads it to set `AVENOS_SERVER_CERT_PIN`). Set
+        // only when self-signing; a real cert is pinned out of band.
+        if let Some(pin_file) = std::env::var("AVEN_SERVER_PIN_FILE").ok().filter(|s| !s.is_empty()) {
+            if let Err(e) = std::fs::write(&pin_file, &pin) {
+                tracing::warn!(%pin_file, "failed to write AVEN_SERVER_PIN_FILE: {e}");
+            } else {
+                tracing::info!(%pin_file, "wrote cert pin for the dev harness");
+            }
+        }
     }
 
     let params = ChallengeParams::new(cfg.domain.clone(), cfg.uri.clone(), cfg.network_seed.clone());

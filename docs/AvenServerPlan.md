@@ -114,7 +114,7 @@ The dev transport ([`dev_transport.rs`](../libs/aven-db/src/dev_transport.rs)) a
 
 - Add `try_server_transport` (TLS) replacing `try_dev_peer_transport`: read the aven's `host:port` + server cert (or trust anchor) + the device keypair, `ServerSyncTransport::dial`, register the server peer via the existing `register_peer_sync_client` path. The revoke-skip logic ([`jazz/mod.rs:1400-1411`](../app/src-tauri/src/jazz/mod.rs)) carries over unchanged.
 - [`scripts/dev-two-instances.ts`](../scripts/dev-two-instances.ts) starts **one local `aven-server`** (TLS on `127.0.0.1:PORT`) before the two Tauri instances; both dial it. Two devices that are *never online together* converge through it — the durable-backup property, proven locally.
-- The dev 2-peer TCP path (`AVENOS_DEV_PEER_SYNC` / `AVENOS_DEV_INSTANCE`) stays as a no-server loopback harness; it is **not** the production transport.
+- The old dev 2-peer TCP path (`AVENOS_DEV_PEER_SYNC`, `TcpSyncTransport`) is **removed** — `dev:app2x` now exercises the real TLS relay locally, so there is one sync transport everywhere. `AVENOS_DEV_INSTANCE` survives only to label logs and split the two instances' Vite cache dirs.
 
 ### 2.5 Acceptance ladder (each rung green before the next)
 

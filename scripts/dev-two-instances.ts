@@ -34,7 +34,8 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process'
-import { homedir, platform } from 'node:os'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { homedir, platform, tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startAvenAuthServer } from './dev-aven-auth.ts'
@@ -96,6 +97,16 @@ const RESET = '\x1b[0m'
 const BOLD = '\x1b[1m'
 const CYAN = '\x1b[36m'
 const MAGENTA = '\x1b[35m'
+const GREEN = '\x1b[32m'
+
+// Local aven-server "mini" relay: both instances dial it over authenticated TLS
+// (server cert pinned + per-client did:key challenge) instead of the old direct
+// A↔B TCP. One relay, N clients — the same transport prod uses.
+const SERVER_SYNC_PORT = 4290
+const SERVER_HEALTH_PORT = 8080
+const SERVER_ADDR = `127.0.0.1:${SERVER_SYNC_PORT}`
+/** Stable dev identity for the relay (32-byte hex) — keeps the aven's DID constant across runs. */
+const DEV_SERVER_SEED = 'a0b1c2d3e4f5060718293a4b5c6d7e8f00112233445566778899aabbccddeeff'
 
 function prefixLines(label: string, colour: string, data: Buffer | string) {
 	const text = typeof data === 'string' ? data : data.toString('utf8')
@@ -107,7 +118,7 @@ function prefixLines(label: string, colour: string, data: Buffer | string) {
 }
 
 function spawnLabelled(
-	label: 'A' | 'B',
+	label: string,
 	colour: string,
 	cmd: string,
 	args: string[],
@@ -156,12 +167,13 @@ const TAURI_B_CONFIG = JSON.stringify({
 })
 
 function spawnTauri(label: 'A' | 'B', colour: string, env: Record<string, string>) {
+	// `env` already carries AVENOS_SERVER_SYNC / _ADDR / _CERT_PIN (set in main once
+	// the local relay is up), so both instances dial the same aven-server and
+	// converge a shared spark through it. Single-instance `dev` omits those and
+	// stays local-only.
 	const instanceEnv: Record<string, string> = {
 		...env,
 		AVENOS_DEV_INSTANCE: label,
-		// Enable the dev TCP peer transport (127.0.0.1) so A↔B converge a shared
-		// spark live. Single-instance `dev` omits this and stays local-only.
-		AVENOS_DEV_PEER_SYNC: '1',
 	}
 	if (label === 'B') {
 		instanceEnv.CARGO_TARGET_DIR = TAURI_B_TARGET_DIR
@@ -177,6 +189,48 @@ function spawnTauri(label: 'A' | 'B', colour: string, env: Record<string, string
 	})
 }
 
+/**
+ * Build & run the local `aven-server` mini relay. It self-signs a TLS cert on
+ * boot and writes the cert's hex DER pin to `pinFile` (AVEN_SERVER_PIN_FILE) —
+ * the harness reads that pin and hands it to both app instances so they pin the
+ * relay's cert. Bound to 127.0.0.1 only (no firewall prompt); in-memory + stable
+ * dev seed.
+ */
+function spawnAvenServer(colour: string, env: Record<string, string>, pinFile: string) {
+	return spawnLabelled(
+		'S',
+		colour,
+		'cargo',
+		['run', '--manifest-path', 'libs/aven-server/Cargo.toml'],
+		{
+			cwd: repoRoot,
+			env: {
+				...env,
+				AVEN_SERVER_BIND: SERVER_ADDR,
+				AVEN_SERVER_HEALTH_BIND: `127.0.0.1:${SERVER_HEALTH_PORT}`,
+				AVEN_SERVER_SEED: DEV_SERVER_SEED,
+				AVEN_SERVER_PIN_FILE: pinFile,
+				RUST_LOG: env.RUST_LOG ?? 'info'
+			}
+		}
+	)
+}
+
+/** Poll for the relay's pin file (written once its self-signed cert is generated). */
+async function waitForPinFile(pinFile: string, timeoutMs: number): Promise<string> {
+	const deadline = Date.now() + timeoutMs
+	while (Date.now() < deadline) {
+		try {
+			const pin = readFileSync(pinFile, 'utf8').trim()
+			if (pin.length > 0) return pin
+		} catch {
+			// not written yet
+		}
+		await Bun.sleep(500)
+	}
+	throw new Error(`aven-server pin file not written within ${timeoutMs}ms (build or boot failed?)`)
+}
+
 async function main() {
 	const plat = platform()
 	const platLabel = plat === 'darwin' ? 'macOS' : plat === 'linux' ? 'Linux' : plat
@@ -189,22 +243,61 @@ async function main() {
 
 	console.log(
 		`\n${BOLD}AvenOS — two-instance dev harness (${platLabel})${RESET}\n` +
+			`  ${GREEN}[S]${RESET}  aven-server relay  tls://${SERVER_ADDR}\n` +
 			`  ${CYAN}[A]${RESET}  http://127.0.0.1:1420\n` +
 			`  ${MAGENTA}[B]${RESET}  http://127.0.0.1:1421\n\n` +
+			`${BOLD}Sync:${RESET} both instances dial the local ${GREEN}[S]${RESET} relay over authenticated TLS\n` +
+			`      (server cert pinned + per-client did:key challenge) — A↔B converge through it.\n\n` +
 			`Shared identity store: ${identitiesHint}\n` +
 			`${BOLD}${MAGENTA}WARNING:${RESET} Unlocking the same identity slug in [A] and [B] at once grabs the same RocksDB files (\`storage.rocksdb\`) — Share/DB can stay on Loading indefinitely. Pick different people on each lock screen.\n\n` +
-			`${BOLD}Note:${RESET} AVENOS_DEV_INSTANCE is ${CYAN}A${RESET} / ${MAGENTA}B${RESET} for log prefixes only; it does not isolate identity dirs.\n\n` +
+			`${BOLD}Note:${RESET} AVENOS_DEV_INSTANCE is ${CYAN}A${RESET} / ${MAGENTA}B${RESET} for log prefixes + Vite cache dirs; it does not isolate identity dirs.\n\n` +
 			`Reset all dev personas: rm -rf ${identitiesHint}\n` +
-			`Press Ctrl-C to stop both.\n`
+			`Press Ctrl-C to stop the relay and both instances.\n`
 	)
 
 	freeDevServerPort(1420)
 	freeDevServerPort(1421)
+	freeDevServerPort(SERVER_SYNC_PORT)
+	freeDevServerPort(SERVER_HEALTH_PORT)
 
 	// Boot the invite-only auth backend (http://localhost:3000) once for both instances.
 	const auth = startAvenAuthServer()
 
 	const baseEnv = devBaseEnv()
+
+	// Bring up the local relay first: the app instances need its (per-boot) cert
+	// pin in their env before they spawn, so this is on the critical path. The
+	// first build compiles the RocksDB backend and can take a few minutes; the
+	// binary is cached after that and subsequent boots are ~instant.
+	const pinFile = path.join(mkdtempSync(path.join(tmpdir(), 'aven-server-mini-')), 'cert.pin')
+	try {
+		rmSync(pinFile, { force: true })
+	} catch {
+		// nothing to clear
+	}
+	console.log(
+		`${BOLD}${GREEN}[S]${RESET} Building & starting local aven-server relay ` +
+			`(first build compiles RocksDB — may take a few minutes)…`
+	)
+	const server = spawnAvenServer(GREEN, baseEnv, pinFile)
+	let certPin: string
+	try {
+		certPin = await waitForPinFile(pinFile, 600_000)
+		await waitForPort(SERVER_SYNC_PORT, 30_000)
+	} catch (e) {
+		console.error(`${BOLD}${GREEN}[S]${RESET} ${(e as Error).message}`)
+		server.kill('SIGTERM')
+		auth.stop()
+		process.exit(1)
+	}
+	console.log(
+		`${BOLD}${GREEN}[S]${RESET} relay up on ${SERVER_ADDR} (cert pin ${certPin.slice(0, 16)}…)`
+	)
+
+	// Point both instances at the relay (read at runtime by `try_server_transport`).
+	baseEnv.AVENOS_SERVER_SYNC = '1'
+	baseEnv.AVENOS_SERVER_ADDR = SERVER_ADDR
+	baseEnv.AVENOS_SERVER_CERT_PIN = certPin
 
 	// Instance A: Tauri handles the full lifecycle (beforeDevCommand starts Vite on :1420)
 	const tauriA = spawnTauri('A', CYAN, baseEnv)
@@ -216,6 +309,8 @@ async function main() {
 	} catch {
 		console.error(`${BOLD}${CYAN}[A]${RESET} Timed out waiting for :1420 — did instance A start?`)
 		tauriA.kill('SIGTERM')
+		server.kill('SIGTERM')
+		auth.stop()
 		process.exit(1)
 	}
 
@@ -229,6 +324,8 @@ async function main() {
 		console.error(`${BOLD}${MAGENTA}[B]${RESET} Timed out waiting for :1421`)
 		tauriA.kill('SIGTERM')
 		viteB.kill('SIGTERM')
+		server.kill('SIGTERM')
+		auth.stop()
 		process.exit(1)
 	}
 
@@ -237,7 +334,7 @@ async function main() {
 	)
 	const tauriB = spawnTauri('B', MAGENTA, baseEnv)
 
-	const allProcs = [tauriA, viteB, tauriB]
+	const allProcs = [server, tauriA, viteB, tauriB]
 
 	for (const sig of ['SIGINT', 'SIGTERM'] as const) {
 		process.on(sig, () => {
