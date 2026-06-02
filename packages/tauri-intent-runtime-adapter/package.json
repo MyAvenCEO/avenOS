@@ -1,0 +1,24 @@
+{
+  "name": "tauri-intent-runtime-adapter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "types": "./src/main.ts",
+  "exports": {
+    ".": {
+      "types": "./src/main.ts",
+      "import": "./src/main.ts"
+    }
+  },
+  "scripts": {
+    "build": "bun build ./src/main.ts --target=node --format=esm --outfile=./dist/main.mjs",
+    "start": "node ./dist/main.mjs",
+    "dev": "bun ./src/main.ts"
+  },
+  "dependencies": {
+    "runtime": "workspace:*",
+    "typed-actors": "workspace:*",
+    "artifacts": "workspace:*",
+    "shared": "workspace:*"
+  }
+}

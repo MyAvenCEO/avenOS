@@ -1,0 +1,32 @@
+{
+  "id": "intent_route_decision",
+  "name": "Intent route decision",
+  "description": "Decision for routing a global human message to a durable intent, a new intent, or a human clarification.",
+  "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["decision", "intentId", "candidateIntentIds", "clarificationQuestion", "reason"],
+    "properties": {
+      "decision": {
+        "type": "string",
+        "enum": ["routeToIntent", "createNew", "askHuman"]
+      },
+      "intentId": {
+        "type": "string",
+        "description": "Candidate intent id to route to when decision is routeToIntent; otherwise empty string."
+      },
+      "candidateIntentIds": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Relevant candidate ids for clarification; empty unless decision is askHuman."
+      },
+      "clarificationQuestion": {
+        "type": "string",
+        "description": "Question to show the human when decision is askHuman; otherwise empty string."
+      },
+      "reason": {
+        "type": "string"
+      }
+    }
+  }
+}

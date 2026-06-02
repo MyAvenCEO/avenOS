@@ -1,0 +1,23 @@
+{
+  "name": "schema",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./domain": {
+      "types": "./src/domain.ts",
+      "import": "./src/domain.ts"
+    }
+  },
+  "dependencies": {
+    "schema-contracts": "workspace:*",
+    "shared": "workspace:*",
+    "typed-actors": "workspace:*",
+    "typed-actors-introspection": "workspace:*"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "note",
+  "name": "Note",
+  "description": "Simple freeform note payload.",
+  "schema": {
+    "type": "object",
+    "required": ["text"],
+    "properties": {
+      "text": { "type": "string" }
+    }
+  }
+}

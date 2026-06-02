@@ -1,0 +1,1 @@
+export type LlmInputModality = "text" | "image" | "audio" | "video" | "json" | "pdf";

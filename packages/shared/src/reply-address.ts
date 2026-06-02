@@ -1,0 +1,1 @@
+export { type ReplyAddress, toReplyAddress } from "../../actor-contracts/src/types/reply-address.ts";

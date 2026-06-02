@@ -1,0 +1,727 @@
+{
+  "id": "shipping_delivery",
+  "name": "Shipping / delivery",
+  "description": "Delivery notes, shipping labels, packing slips, waybills, bills of lading, and proof-of-delivery documents.",
+  "merge_spec": {
+    "strategy": "shipping_delivery"
+  },
+  "llm_model": null,
+  "system_prompt": "Extract shipment header, sender, recipient, addresses, carrier data, tracking numbers, packages, delivered items, proof of delivery, and references.",
+  "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "header": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "document_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "delivery_note",
+              "shipping_label",
+              "packing_slip",
+              "bill_of_lading",
+              "waybill",
+              "proof_of_delivery",
+              "other",
+              null
+            ]
+          },
+          "document_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "shipment_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tracking_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "order_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issue_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pickup_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expected_delivery_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "actual_delivery_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "carrier_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "service_level": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "document_kind"
+        ]
+      },
+      "sender": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "identity_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contact_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contact_identity_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "street": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "postal_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "country": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tax_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "recipient": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "identity_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contact_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contact_identity_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "street": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "postal_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "country": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tax_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "ship_from": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "address_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "registered",
+              "billing",
+              "shipping",
+              "residential",
+              "service",
+              "mailing",
+              "work",
+              "other",
+              null
+            ]
+          },
+          "label_printed": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recipient_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "care_of": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "street": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "street2": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "po_box": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "postal_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "region": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "country": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "country_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "formatted": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ship_to": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "address_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "registered",
+              "billing",
+              "shipping",
+              "residential",
+              "service",
+              "mailing",
+              "work",
+              "other",
+              null
+            ]
+          },
+          "label_printed": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recipient_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "care_of": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "street": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "street2": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "po_box": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "postal_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "region": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "country": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "country_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "formatted": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "packages": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tracking_number": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "package_number": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "package_count": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "weight": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "weight_unit": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "dimensions": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "contents_description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hazardous_goods_flag": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        },
+        "default": []
+      },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "position": {
+              "type": [
+                "string",
+                "number",
+                "null"
+              ]
+            },
+            "article_number": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sku": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "quantity": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "quantity_unit": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "unit_price": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "tax_rate_percent": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 100
+            },
+            "discount_amount": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "amount": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "notes": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "description",
+            "amount"
+          ]
+        },
+        "default": []
+      },
+      "proof_of_delivery": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "received_by_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "received_by_identity_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "delivery_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "delivery_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "signature_present": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "condition_notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "references": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "shipment_number",
+                "tracking_number",
+                "order_number",
+                "customs_reference",
+                "tax_id",
+                "vat_id",
+                "commercial_register_number",
+                "company_number",
+                "lei",
+                "duns",
+                "passport_number",
+                "national_id",
+                "driver_license_number",
+                "social_security_number",
+                "customer_number",
+                "supplier_number",
+                "employee_number",
+                "membership_number",
+                "account_number",
+                "iban",
+                "bic",
+                "contract_number",
+                "document_number",
+                "other",
+                null
+              ]
+            },
+            "label_printed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "issuing_authority": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "issuing_country": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "valid_from": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "valid_until": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        "default": []
+      },
+      "notes": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "header",
+      "sender",
+      "recipient"
+    ]
+  }
+}

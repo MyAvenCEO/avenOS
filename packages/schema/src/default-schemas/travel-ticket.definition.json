@@ -1,0 +1,1552 @@
+{
+  "id": "travel_ticket",
+  "name": "Travel ticket / boarding pass",
+  "description": "Passenger transport tickets, boarding passes, booking confirmations, reservations, and itineraries for flights, trains, buses, ferries, shuttles, and local transit.",
+  "merge_spec": {
+    "strategy": "travel_ticket"
+  },
+  "llm_model": null,
+  "system_prompt": "Extract travel ticket facts: booking references, issuer, carrier/operator, passengers, itinerary segments, origin/destination, dates/times/time zones, seats, fare, baggage, check-in/boarding details, validity, restrictions, and machine-readable codes. Preserve printed values and do not infer unprinted passenger identity details.",
+  "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "header": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "document_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "travel_ticket",
+              "boarding_pass",
+              "booking_confirmation",
+              "reservation_confirmation",
+              "itinerary",
+              "travel_voucher",
+              "rail_ticket",
+              "bus_ticket",
+              "flight_ticket",
+              "ferry_ticket",
+              "local_transit_ticket",
+              "other",
+              null
+            ]
+          },
+          "transport_mode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "flight",
+              "train",
+              "bus",
+              "coach",
+              "ferry",
+              "ship",
+              "metro",
+              "tram",
+              "shuttle",
+              "taxi",
+              "rideshare",
+              "mixed",
+              "other",
+              null
+            ]
+          },
+          "booking_reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pnr": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "record_locator": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ticket_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "document_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "order_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issue_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issue_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "issued",
+              "reserved",
+              "checked_in",
+              "cancelled",
+              "refunded",
+              "expired",
+              "used",
+              "unknown",
+              null
+            ]
+          },
+          "currency": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "document_kind"
+        ]
+      },
+      "issuer": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "identity_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contact_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contact_identity_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "street": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "postal_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "country": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tax_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "seller_or_agent": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "identity_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contact_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contact_identity_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "street": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "postal_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "country": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tax_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "primary_carrier_or_operator": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "identity_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contact_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contact_identity_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "street": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "postal_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "country": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tax_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "passengers": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "passenger_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "full_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "first_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "passenger_type": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "adult",
+                "child",
+                "infant",
+                "senior",
+                "student",
+                "youth",
+                "disabled",
+                "pet",
+                "unknown",
+                "other",
+                null
+              ]
+            },
+            "date_of_birth": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "email": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "phone": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "loyalty_program": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "loyalty_number": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "identity_document_number": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "special_service_requests": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "default": []
+            }
+          },
+          "required": [
+            "full_name"
+          ]
+        },
+        "default": []
+      },
+      "segments": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "segment_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sequence": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "transport_mode": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "flight",
+                "train",
+                "bus",
+                "coach",
+                "ferry",
+                "ship",
+                "metro",
+                "tram",
+                "shuttle",
+                "taxi",
+                "rideshare",
+                "other",
+                null
+              ]
+            },
+            "carrier_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "carrier_code": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operating_carrier_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "marketing_carrier_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "service_number": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "flight_number": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "train_number": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "bus_route_number": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "vessel_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "route_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "origin": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "location_kind": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "airport",
+                    "rail_station",
+                    "bus_station",
+                    "bus_stop",
+                    "ferry_terminal",
+                    "port",
+                    "metro_station",
+                    "tram_stop",
+                    "address",
+                    "zone",
+                    "platform",
+                    "gate",
+                    "other",
+                    null
+                  ]
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "code": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "code_system": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "IATA",
+                    "ICAO",
+                    "UIC",
+                    "UN_LOCODE",
+                    "GTFS",
+                    "carrier_specific",
+                    "other",
+                    null
+                  ]
+                },
+                "terminal": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "gate": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "platform": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "track": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "stop_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "street": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "city": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "region": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "country": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "country_code": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "timezone": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "as_printed": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "destination": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "location_kind": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "airport",
+                    "rail_station",
+                    "bus_station",
+                    "bus_stop",
+                    "ferry_terminal",
+                    "port",
+                    "metro_station",
+                    "tram_stop",
+                    "address",
+                    "zone",
+                    "platform",
+                    "gate",
+                    "other",
+                    null
+                  ]
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "code": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "code_system": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "IATA",
+                    "ICAO",
+                    "UIC",
+                    "UN_LOCODE",
+                    "GTFS",
+                    "carrier_specific",
+                    "other",
+                    null
+                  ]
+                },
+                "terminal": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "gate": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "platform": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "track": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "stop_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "street": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "city": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "region": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "country": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "country_code": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "timezone": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "as_printed": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "departure_date": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "departure_time": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "departure_datetime": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "arrival_date": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "arrival_time": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "arrival_datetime": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "duration": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "check_in_opens": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "check_in_deadline": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "boarding_date": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "boarding_time": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "gate_closes_time": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "travel_class": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "economy",
+                "premium_economy",
+                "business",
+                "first",
+                "standard",
+                "comfort",
+                "sleeper",
+                "second_class",
+                "first_class",
+                "unknown",
+                "other",
+                null
+              ]
+            },
+            "fare_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "fare_basis": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "status": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "scheduled",
+                "checked_in",
+                "boarded",
+                "completed",
+                "cancelled",
+                "changed",
+                "missed",
+                "unknown",
+                null
+              ]
+            },
+            "notes": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "origin",
+            "destination"
+          ]
+        },
+        "default": []
+      },
+      "seat_assignments": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "passenger_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "passenger_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "segment_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "seat_number": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "coach_or_carriage": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compartment": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "berth": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "deck": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "cabin": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "boarding_group": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "boarding_zone": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sequence_number": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "default": []
+      },
+      "baggage_allowances": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "passenger_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "passenger_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "segment_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "baggage_kind": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "carry_on",
+                "checked",
+                "personal_item",
+                "sports_equipment",
+                "pet",
+                "other",
+                null
+              ]
+            },
+            "pieces": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "weight": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "weight_unit": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "dimensions": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "included": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "price_amount": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "currency": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "notes": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "default": []
+      },
+      "fare": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "fare_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "one_way",
+              "round_trip",
+              "multi_city",
+              "day_pass",
+              "season_ticket",
+              "subscription",
+              "reservation_only",
+              "unknown",
+              "other",
+              null
+            ]
+          },
+          "currency": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "base_fare": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "taxes_and_fees_total": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "discount_total": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "total_amount": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "amount_paid": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "amount_due": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "payment_method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "line_amounts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "amount_kind": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "base_fare",
+                    "tax",
+                    "fee",
+                    "discount",
+                    "surcharge",
+                    "baggage_fee",
+                    "seat_fee",
+                    "service_fee",
+                    "total",
+                    "paid",
+                    "due",
+                    "refund",
+                    "other",
+                    null
+                  ]
+                },
+                "label_printed": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "amount": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "currency": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "description": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "amount_kind",
+                "amount"
+              ]
+            },
+            "default": []
+          }
+        }
+      },
+      "validity": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "valid_from_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "valid_from_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "valid_until_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "valid_until_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "timezone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "number_of_trips": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "zones": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "default": []
+          },
+          "route_restrictions": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "machine_readable_codes": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code_kind": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "qr_code",
+                "barcode",
+                "aztec",
+                "pdf417",
+                "data_matrix",
+                "nfc",
+                "magstripe",
+                "other",
+                null
+              ]
+            },
+            "label_printed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "raw_text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "page": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "code_kind"
+          ]
+        },
+        "default": []
+      },
+      "restrictions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "restriction_kind": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "refund",
+                "exchange",
+                "cancellation",
+                "validity",
+                "route",
+                "seat",
+                "baggage",
+                "id_required",
+                "check_in",
+                "boarding",
+                "other",
+                null
+              ]
+            },
+            "label_printed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "text"
+          ]
+        },
+        "default": []
+      },
+      "references": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "booking_reference",
+                "pnr",
+                "record_locator",
+                "ticket_number",
+                "document_number",
+                "order_number",
+                "invoice_number",
+                "receipt_number",
+                "loyalty_number",
+                "voucher_number",
+                "reservation_number",
+                "case_number",
+                "other",
+                null
+              ]
+            },
+            "label_printed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "issuer": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        "default": []
+      },
+      "customer_service_contacts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "contact_kind": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "phone",
+                "email",
+                "website",
+                "desk",
+                "app",
+                "other",
+                null
+              ]
+            },
+            "label_printed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "normalized_value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "contact_kind",
+            "value"
+          ]
+        },
+        "default": []
+      },
+      "notes": {
+        "type": "array",
+        "items": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "default": []
+      }
+    },
+    "required": [
+      "header",
+      "passengers",
+      "segments"
+    ]
+  }
+}

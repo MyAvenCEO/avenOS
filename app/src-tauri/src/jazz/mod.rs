@@ -2273,6 +2273,44 @@ pub(crate) async fn groove_runtime_dispatch(
 			let snap = execute_mesh_snapshot(app, mj, ss).await?;
 			serde_json::to_value(snap).map_err(|e| e.to_string())
 		}
+		"intentstatus" => {
+			let manager = app.state::<crate::intent_runtime::manager::IntentRuntimeManager>();
+			crate::intent_runtime::ipc::intent_status(manager.inner())
+				.await
+		}
+		"intentlist" => {
+			let manager = app.state::<crate::intent_runtime::manager::IntentRuntimeManager>();
+			crate::intent_runtime::ipc::intent_list(manager.inner())
+				.await
+		}
+		"intentget" => {
+			let intent_id = pj_str(&pj, "intentId")?;
+			let manager = app.state::<crate::intent_runtime::manager::IntentRuntimeManager>();
+			crate::intent_runtime::ipc::intent_get(manager.inner(), intent_id)
+				.await
+		}
+		"intentstart" => {
+			let message = pj_str(&pj, "message")?;
+			let attachments = pj.get("attachments").cloned().unwrap_or_else(|| serde_json::json!([]));
+			let manager = app.state::<crate::intent_runtime::manager::IntentRuntimeManager>();
+			crate::intent_runtime::ipc::intent_start(manager.inner(), message, attachments)
+				.await
+		}
+		"intentretrain" => {
+			let intent_id = pj_str(&pj, "intentId")?;
+			let communication_id = pj_str(&pj, "communicationId")?;
+			let feedback = pj_str(&pj, "feedback")?;
+			let attachments = pj.get("attachments").cloned().unwrap_or_else(|| serde_json::json!([]));
+			let manager = app.state::<crate::intent_runtime::manager::IntentRuntimeManager>();
+			crate::intent_runtime::ipc::intent_retrain(
+				manager.inner(),
+				intent_id,
+				communication_id,
+				feedback,
+				attachments,
+			)
+			.await
+		}
 		"peerlist" => serde_json::to_value(groove_ipc_peer_list(app, mj, ss).await?).map_err(|e| e.to_string()),
 		"peerrevoke" => {
 			let peer_did = pj_str(&pj, "peerDid")?;
@@ -2297,7 +2335,7 @@ pub(crate) async fn groove_runtime_dispatch(
 			Ok(serde_json::Value::Null)
 		}
 		other => Err(format!(
-			"groove_runtime: unknown op `{other}` — valid ops: bootstrap, status, session, list, explorerList, get, create, update, delete, subscribe, unsubscribe, peerMeshRefresh, meshStatus, peerList, peerRevoke, sparkAdminAdd, sparkAdminList, sparkAdminRevoke"
+			"groove_runtime: unknown op `{other}` — valid ops: bootstrap, status, session, list, explorerList, get, create, update, delete, subscribe, unsubscribe, peerMeshRefresh, meshStatus, intentStatus, intentList, intentGet, intentStart, intentRetrain, peerList, peerRevoke, sparkAdminAdd, sparkAdminList, sparkAdminRevoke"
 		)),
 	}
 }

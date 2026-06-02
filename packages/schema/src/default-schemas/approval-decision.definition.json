@@ -1,0 +1,14 @@
+{
+  "id": "approval-decision",
+  "name": "Approval decision",
+  "description": "Human approval or rejection payload.",
+  "schema": {
+    "type": "object",
+    "required": ["approved"],
+    "additionalProperties": false,
+    "properties": {
+      "approved": { "type": "boolean" },
+      "note": { "type": "string" }
+    }
+  }
+}

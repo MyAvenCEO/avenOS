@@ -1,0 +1,32 @@
+{
+  "id": "aven:shell-execution-context",
+  "name": "Shell execution context",
+  "description": "Metadata describing the execution context for a shell output artifact.",
+  "schema": {
+    "type": "object",
+    "required": [
+      "command",
+      "exitCode",
+      "stream",
+      "durationMs",
+      "timedOut",
+      "truncatedInline",
+      "totalSizeBytes",
+      "executedAt",
+      "cwd"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "command": { "type": "string" },
+      "exitCode": { "type": "integer" },
+      "stream": { "enum": ["stdout", "stderr"] },
+      "durationMs": { "type": "integer", "minimum": 0 },
+      "timedOut": { "type": "boolean" },
+      "truncatedInline": { "type": "boolean" },
+      "totalSizeBytes": { "type": "integer", "minimum": 0 },
+      "executedAt": { "type": "string" },
+      "cwd": { "type": "string" },
+      "intentId": { "type": "string" }
+    }
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "id": "intent_next_action",
+  "name": "Intent next action",
+  "description": "Planner output contract for intent orchestration.",
+  "schema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "required": ["kind", "toolId", "input"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "const": "callTool" },
+          "toolId": { "type": "string" },
+          "input": {},
+          "rationaleSummary": { "type": "string" }
+        }
+      },
+      {
+        "type": "object",
+        "required": ["kind", "title", "body"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "const": "askHuman" },
+          "title": { "type": "string" },
+          "body": { "type": "string" },
+          "rationaleSummary": { "type": "string" }
+        }
+      },
+      {
+        "type": "object",
+        "required": ["kind", "communicationKind", "title", "body"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "const": "notifyHuman" },
+          "communicationKind": {
+            "enum": ["showProgress", "showWarning", "showError", "showBlocked"]
+          },
+          "title": { "type": "string" },
+          "body": { "type": "string" },
+          "rationaleSummary": { "type": "string" }
+        }
+      },
+      {
+        "type": "object",
+        "required": ["kind", "title", "body"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "const": "awaitInput" },
+          "title": { "type": "string" },
+          "body": { "type": "string" },
+          "rationaleSummary": { "type": "string" }
+        }
+      },
+      {
+        "type": "object",
+        "required": ["kind", "result"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "const": "complete" },
+          "result": {},
+          "humanResult": {
+            "type": "object",
+            "required": ["title", "body"],
+            "additionalProperties": false,
+            "properties": {
+              "title": { "type": "string" },
+              "body": { "type": "string" }
+            }
+          },
+          "rationaleSummary": { "type": "string" }
+        }
+      },
+      {
+        "type": "object",
+        "required": ["kind", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "const": "fail" },
+          "reason": { "type": "string" },
+          "humanError": {
+            "type": "object",
+            "required": ["title", "body"],
+            "additionalProperties": false,
+            "properties": {
+              "title": { "type": "string" },
+              "body": { "type": "string" },
+              "communicationKind": { "enum": ["showError", "showBlocked"] }
+            }
+          },
+          "rationaleSummary": { "type": "string" }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,119 @@
+{
+  "id": "bank_statement",
+  "name": "Bank statement",
+  "description": "Account statements and periodic transaction listings for one account over a period.",
+  "merge_spec": {
+    "strategy": "bank_statement"
+  },
+  "llm_model": null,
+  "system_prompt": "This tool is for bank and payment-account statements, not supplier invoices. Fill account_holder, institution, account_overview, period dates, balances, and transactions.",
+  "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "statement_kind",
+      "currency",
+      "account_holder",
+      "institution",
+      "account_overview",
+      "period_start",
+      "period_end",
+      "transactions"
+    ],
+    "properties": {
+      "statement_kind": {
+        "type": ["string", "null"],
+        "enum": [
+          "periodic_account_statement",
+          "fee_or_service_statement",
+          "credit_card_statement",
+          "savings_account_statement",
+          "other",
+          null
+        ]
+      },
+      "statement_id": { "type": ["string", "null"] },
+      "statement_issue_date": { "type": ["string", "null"] },
+      "currency": { "type": ["string", "null"] },
+      "period_start": { "type": ["string", "null"] },
+      "period_end": { "type": ["string", "null"] },
+      "payment_due_date": { "type": ["string", "null"] },
+      "opening_balance": { "type": ["number", "null"] },
+      "closing_balance": { "type": ["number", "null"] },
+      "account_holder": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "identity_id": { "type": ["string", "null"] },
+          "name": { "type": ["string", "null"] },
+          "contact_name": { "type": ["string", "null"] },
+          "contact_identity_id": { "type": ["string", "null"] },
+          "street": { "type": ["string", "null"] },
+          "postal_code": { "type": ["string", "null"] },
+          "city": { "type": ["string", "null"] },
+          "country": { "type": ["string", "null"] },
+          "email": { "type": ["string", "null"] },
+          "phone": { "type": ["string", "null"] },
+          "tax_id": { "type": ["string", "null"] }
+        }
+      },
+      "institution": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "identity_id": { "type": ["string", "null"] },
+          "name": { "type": ["string", "null"] },
+          "contact_name": { "type": ["string", "null"] },
+          "contact_identity_id": { "type": ["string", "null"] },
+          "street": { "type": ["string", "null"] },
+          "postal_code": { "type": ["string", "null"] },
+          "city": { "type": ["string", "null"] },
+          "country": { "type": ["string", "null"] },
+          "email": { "type": ["string", "null"] },
+          "phone": { "type": ["string", "null"] },
+          "tax_id": { "type": ["string", "null"] }
+        }
+      },
+      "account_overview": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "branch_name": { "type": ["string", "null"] },
+          "iban": { "type": ["string", "null"] },
+          "bic": { "type": ["string", "null"] },
+          "account_number": { "type": ["string", "null"] },
+          "domestic_bank_code": { "type": ["string", "null"] },
+          "product_name": { "type": ["string", "null"] },
+          "card_last_four": { "type": ["string", "null"] }
+        }
+      },
+      "transactions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["description", "amount"],
+          "properties": {
+            "booking_date": { "type": ["string", "null"] },
+            "booking_date_as_printed": { "type": ["string", "null"] },
+            "value_date": { "type": ["string", "null"] },
+            "description": { "type": ["string", "null"] },
+            "counterparty_name": { "type": ["string", "null"] },
+            "transaction_id": { "type": ["string", "null"] },
+            "amount": { "type": ["number", "null"] },
+            "fx_surcharge_eur": { "type": ["number", "null"] },
+            "foreign_exchange_fee_percent": { "type": ["number", "null"] },
+            "original_amount": { "type": ["number", "null"] },
+            "original_currency": { "type": ["string", "null"] },
+            "exchange_rate": { "type": ["string", "null"] },
+            "balance_after": { "type": ["number", "null"] },
+            "title": { "type": ["string", "null"] }
+          }
+        }
+      },
+      "notes": { "type": ["string", "null"] }
+    }
+  }
+}

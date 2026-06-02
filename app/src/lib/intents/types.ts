@@ -70,6 +70,8 @@ export type IntentRow = {
 	summary: string
 	body?: string
 	status: IntentStatus
+	runtimeBacked?: boolean
+	runtimeOpenCommunicationId?: string
 	/** When `status === 'working'`, Unix ms when this work phase began. */
 	workingStartedAt?: number
 	/** When `status === 'working'`, random phase cap for mock completion (ms, 5–30s inclusive). */

@@ -1,0 +1,36 @@
+{
+  "name": "runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./aven-system": {
+      "types": "./src/actors/system/system.ts",
+      "import": "./src/actors/system/system.ts"
+    },
+    "./system": {
+      "types": "./src/system.ts",
+      "import": "./src/system.ts"
+    }
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "actor-contracts": "workspace:*",
+    "llm": "workspace:*",
+    "shared": "workspace:*",
+    "typed-actors": "workspace:*",
+    "typed-actors-introspection": "workspace:*",
+    "artifact-contracts": "workspace:*",
+    "human-contracts": "workspace:*",
+    "intents-contracts": "workspace:*",
+    "llm-contracts": "workspace:*",
+    "metadata-contracts": "workspace:*",
+    "schema-contracts": "workspace:*",
+    "shell-contracts": "workspace:*"
+  }
+}

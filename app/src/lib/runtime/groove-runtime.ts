@@ -6,6 +6,7 @@ import type { PeerMeshStatusReply } from '$lib/peer/mesh-state'
 import { applyRuntimeSession } from '$lib/runtime/jazz-shell'
 import { getTableRowsStore } from '$lib/runtime/table-stores'
 import { grooveRuntime } from '$lib/runtime/groove-ipc'
+import type { IntentProjection, IntentRuntimeSnapshot } from '$lib/intents/api'
 
 export { grooveRuntime } from '$lib/runtime/groove-ipc'
 
@@ -19,6 +20,8 @@ export const peerMeshSnapshot = writable<PeerMeshStatusReply | undefined>(undefi
  * Driven by `avenos:runtime` `{ kind: 'session', grooveReady }` and unlock/bootstrap paths.
  */
 export const grooveSessionReady = writable(false)
+export const intentRuntimeSnapshot = writable<IntentRuntimeSnapshot | undefined>(undefined)
+export const intentRuntimeDetails = writable<Record<string, IntentProjection>>({})
 
 /** Resolves when LockGate/bootstrap has hydrated the local Groove shell. */
 export function waitForGrooveSessionReady(): Promise<void> {
@@ -48,6 +51,8 @@ type AvenosRuntimePayload =
 	  }
 	| { kind: 'mesh'; snapshot: PeerMeshStatusReply }
 	| { kind: 'table'; table?: string; rows?: unknown[] }
+	| { kind: 'intents'; snapshot: IntentRuntimeSnapshot }
+	| { kind: 'intent'; intentId: string; detail: IntentProjection }
 	| { kind: string; [key: string]: unknown }
 
 let bridgeGeneration = 0
@@ -66,7 +71,8 @@ export function attachAvenosRuntimeBridge(): () => void {
 		if (!p || typeof p !== 'object') return
 		if (gen !== bridgeGeneration) return
 		if (p.kind === 'session') {
-			applyRuntimeSession(p)
+			const sessionPayload = p as Extract<AvenosRuntimePayload, { kind: 'session' }>
+			applyRuntimeSession(sessionPayload)
 			if (typeof p.grooveReady === 'boolean') {
 				grooveSessionReady.set(p.grooveReady)
 			}
@@ -77,6 +83,16 @@ export function attachAvenosRuntimeBridge(): () => void {
 		if (p.kind === 'table' && typeof p.table === 'string' && Array.isArray((p as { rows?: unknown }).rows)) {
 			const pl = p as { table: string; rows: unknown[] }
 			getTableRowsStore(pl.table).set(pl.rows)
+		}
+		if (p.kind === 'intents' && 'snapshot' in p) {
+			intentRuntimeSnapshot.set((p as { snapshot: IntentRuntimeSnapshot }).snapshot)
+		}
+		if (p.kind === 'intent' && typeof p.intentId === 'string' && 'detail' in p) {
+			const detailPayload = p as { intentId: string; detail: IntentProjection }
+			intentRuntimeDetails.update((current) => ({
+				...current,
+				[detailPayload.intentId]: detailPayload.detail,
+			}))
 		}
 	}).then((u) => unsubs.push(u))
 

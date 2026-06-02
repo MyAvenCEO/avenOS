@@ -1,0 +1,1874 @@
+{
+  "id": "calendar_event",
+  "name": "Calendar event / appointment / invitation",
+  "description": "Calendar entries, meeting invitations, appointments, reminders, reschedule/cancellation notices, event invitations, parties, save-the-dates, programs, and schedules.",
+  "merge_spec": {
+    "strategy": "calendar_event"
+  },
+  "llm_model": null,
+  "system_prompt": "Extract calendar and event facts: title, status, date/time/time zone, recurrence, organizer, invitees, RSVP state, locations, online meeting details, agenda, registration/ticketing, reminders, and instructions. Preserve printed values and distinguish invitations, confirmations, cancellations, reschedules, appointments, parties, and public events. Do not infer attendance or RSVP status unless explicitly shown.",
+  "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "header": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "document_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "calendar_entry",
+              "meeting_invitation",
+              "appointment_confirmation",
+              "appointment_reminder",
+              "event_invitation",
+              "party_invitation",
+              "save_the_date",
+              "event_announcement",
+              "event_program",
+              "schedule",
+              "agenda",
+              "reservation_confirmation",
+              "reminder",
+              "cancellation_notice",
+              "reschedule_notice",
+              "ics_calendar_file",
+              "other",
+              null
+            ]
+          },
+          "source_medium": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "email",
+              "calendar_app",
+              "ics_file",
+              "web_page",
+              "pdf",
+              "scanned_paper",
+              "sms",
+              "chat_message",
+              "letter",
+              "flyer",
+              "form",
+              "other",
+              null
+            ]
+          },
+          "source_system": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "calendar_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title_or_subject": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "document_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sent_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "received_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "calendar_uid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ical_uid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "invitation_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confirmation_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reference_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sequence_number": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "version_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "document_kind"
+        ]
+      },
+      "event": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "event_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "event_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "meeting",
+              "appointment",
+              "medical_appointment",
+              "service_appointment",
+              "interview",
+              "class",
+              "course",
+              "webinar",
+              "conference",
+              "workshop",
+              "seminar",
+              "party",
+              "celebration",
+              "ceremony",
+              "wedding",
+              "birthday",
+              "concert",
+              "performance",
+              "sports_event",
+              "exhibition",
+              "fundraiser",
+              "community_event",
+              "reservation",
+              "deadline",
+              "reminder",
+              "delivery_window",
+              "travel_connection",
+              "other",
+              null
+            ]
+          },
+          "category_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "scheduled",
+              "tentative",
+              "confirmed",
+              "rescheduled",
+              "cancelled",
+              "postponed",
+              "completed",
+              "unknown",
+              null
+            ]
+          },
+          "visibility": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "public",
+              "private",
+              "confidential",
+              "internal",
+              "unknown",
+              null
+            ]
+          },
+          "busy_status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "busy",
+              "free",
+              "tentative",
+              "out_of_office",
+              "unknown",
+              null
+            ]
+          },
+          "priority": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "low",
+              "normal",
+              "high",
+              "urgent",
+              "unknown",
+              null
+            ]
+          },
+          "all_day": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_datetime": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_timezone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "end_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "end_datetime": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "end_timezone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "date_as_printed": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "time_as_printed": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duration_minutes": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "doors_open_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "check_in_start_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "arrival_time_requested": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "event_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "public_listing_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "image_or_flyer_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cancellation_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reschedule_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "previous_event_time": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "previous_start_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "previous_start_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "previous_start_datetime": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "previous_end_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "previous_end_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "previous_end_datetime": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "previous_timezone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "previous_date_as_printed": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason_changed": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "organizer": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "identity_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "organization_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "website": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "parties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "party_kind": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "person",
+                "organization",
+                "group",
+                "government_body",
+                "department",
+                "venue",
+                "unknown",
+                null
+              ]
+            },
+            "identity_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "display_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "legal_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "organization_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "given_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "family_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "job_title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "department": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "role": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "organizer",
+                "host",
+                "co_host",
+                "owner",
+                "creator",
+                "sender",
+                "recipient",
+                "attendee",
+                "invitee",
+                "required_attendee",
+                "optional_attendee",
+                "guest",
+                "plus_one",
+                "speaker",
+                "presenter",
+                "performer",
+                "moderator",
+                "panelist",
+                "instructor",
+                "sponsor",
+                "vendor",
+                "venue",
+                "service_provider",
+                "requester",
+                "customer",
+                "patient",
+                "practitioner",
+                "interviewer",
+                "interviewee",
+                "celebrant",
+                "honoree",
+                "guardian",
+                "emergency_contact",
+                "unknown",
+                "other",
+                null
+              ]
+            },
+            "role_label_printed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "email": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "phone": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "website": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "rsvp_status": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "accepted",
+                "declined",
+                "tentative",
+                "needs_action",
+                "no_response",
+                "waitlisted",
+                "registered",
+                "cancelled",
+                "not_applicable",
+                "unknown",
+                null
+              ]
+            },
+            "attendance_status": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "expected",
+                "checked_in",
+                "attended",
+                "no_show",
+                "cancelled",
+                "unknown",
+                null
+              ]
+            },
+            "required": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "attendee_count": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "dietary_preferences": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "accessibility_needs": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "notes": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "role",
+            "display_name"
+          ]
+        },
+        "default": []
+      },
+      "locations": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "location_kind": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "physical",
+                "online",
+                "phone",
+                "hybrid",
+                "tbd",
+                "other",
+                null
+              ]
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "venue_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "room": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "floor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "seat_or_table": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "street": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "street2": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "postal_code": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "city": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "region": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "country": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "country_code": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "formatted_address": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "timezone": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "latitude": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "longitude": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "map_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "parking_info": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "access_instructions": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "platform": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "google_meet",
+                "zoom",
+                "microsoft_teams",
+                "webex",
+                "slack",
+                "discord",
+                "phone",
+                "custom",
+                "other",
+                "unknown",
+                null
+              ]
+            },
+            "online_meeting_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "meeting_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "meeting_passcode": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "dial_in_number": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "dial_in_pin": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "webinar_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "location_kind"
+          ]
+        },
+        "default": []
+      },
+      "recurrence": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "is_recurring": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "recurrence_summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rrule": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "frequency": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "daily",
+              "weekly",
+              "monthly",
+              "yearly",
+              "custom",
+              "unknown",
+              null
+            ]
+          },
+          "interval": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "days_of_week": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday",
+                "saturday",
+                "sunday",
+                null
+              ]
+            },
+            "default": []
+          },
+          "day_of_month": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "week_of_month": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "month_of_year": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "count": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "until_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "timezone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exception_dates": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "default": []
+          },
+          "additional_dates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label_printed": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "start_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "start_time": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "start_datetime": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "start_timezone": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "end_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "end_time": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "end_datetime": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "end_timezone": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "date_as_printed": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "time_as_printed": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "duration_minutes": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "all_day": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "certainty": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "explicit",
+                    "ambiguous",
+                    "inferred",
+                    "unknown",
+                    null
+                  ]
+                }
+              }
+            },
+            "default": []
+          }
+        }
+      },
+      "agenda_items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sequence": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "item_kind": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "agenda_item",
+                "session",
+                "break",
+                "meal",
+                "ceremony_part",
+                "performance",
+                "appointment_slot",
+                "other",
+                null
+              ]
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "start_date": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "start_time": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "start_datetime": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "end_date": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "end_time": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "end_datetime": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "timezone": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "speaker_or_owner_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "speaker_or_owner_identity_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "location_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "title"
+          ]
+        },
+        "default": []
+      },
+      "registration_or_ticketing": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "registration_required": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "registration_status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "not_required",
+              "required",
+              "registered",
+              "waitlisted",
+              "cancelled",
+              "unknown",
+              null
+            ]
+          },
+          "registration_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "registration_deadline_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "registration_deadline_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confirmation_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "booking_reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ticket_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "qr_code_value": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "barcode_value": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "price_amount": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "currency": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "payment_status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "unpaid",
+              "paid",
+              "partially_paid",
+              "refunded",
+              "free",
+              "unknown",
+              null
+            ]
+          },
+          "capacity": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "guest_limit": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "plus_one_allowed": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "check_in_required": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "age_restriction": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dress_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "accessibility_info": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "food_beverage_notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "amounts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "amount_kind": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "price",
+                "fee",
+                "deposit",
+                "refund",
+                "donation",
+                "minimum_spend",
+                "other",
+                null
+              ]
+            },
+            "label_printed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "amount": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "currency": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tax_included": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "amount"
+          ]
+        },
+        "default": []
+      },
+      "reminders": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "reminder_kind": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "before_event",
+                "at_time",
+                "follow_up",
+                "deadline",
+                "other",
+                null
+              ]
+            },
+            "method": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "popup",
+                "email",
+                "sms",
+                "phone",
+                "app_notification",
+                "printed",
+                "other",
+                "unknown",
+                null
+              ]
+            },
+            "offset_minutes": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "trigger_date": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "trigger_time": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "trigger_datetime": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "message": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "default": []
+      },
+      "requests_and_instructions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "instruction_kind": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "rsvp",
+                "bring",
+                "prepare",
+                "dress_code",
+                "dietary_preferences",
+                "accessibility",
+                "parking",
+                "security",
+                "id_required",
+                "payment",
+                "cancellation_policy",
+                "gift",
+                "plus_one",
+                "arrive_by",
+                "check_in",
+                "other",
+                null
+              ]
+            },
+            "label_printed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "due_date": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "due_time": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "contact_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "contact_email": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "contact_phone": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "instruction_kind",
+            "text"
+          ]
+        },
+        "default": []
+      },
+      "ical_fields": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "method": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "publish",
+              "request",
+              "reply",
+              "add",
+              "cancel",
+              "refresh",
+              "counter",
+              "declinecounter",
+              "unknown",
+              null
+            ]
+          },
+          "uid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sequence": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "dtstamp": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_modified": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "organizer_email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attendee_emails": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "default": []
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "transparency": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "classification": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "default": []
+          },
+          "rrule": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exdate": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "default": []
+          },
+          "geo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "attachments": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "attachment_kind": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "agenda",
+                "map",
+                "calendar_file",
+                "ticket",
+                "form",
+                "image",
+                "document",
+                "link",
+                "other",
+                null
+              ]
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "filename": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "mime_type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "notes": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "default": []
+      },
+      "source_mentions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "page": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "section": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "label_printed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "text"
+          ]
+        },
+        "default": []
+      }
+    },
+    "required": [
+      "header",
+      "event"
+    ]
+  }
+}

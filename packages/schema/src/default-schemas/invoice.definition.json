@@ -1,0 +1,279 @@
+{
+  "id": "invoice",
+  "name": "Invoice",
+  "description": "Payment requests: invoices, bills, receipts, and payment reminders. Header data, totals, payments, and statements with line items.",
+  "merge_spec": {
+    "strategy": "invoice"
+  },
+  "llm_model": null,
+  "system_prompt": "Extract the full invoice object for schema version 1.1.0. Always include top-level vendor, buyer, header, and statements. Do not use legacy invoice shapes. Use header.document_kind (not document_type), header.invoice_number (not document_number), and header.issue_date (not document_date). Put line items inside statements[*].line_items, not at the top level. Use totals.subtotal, totals.tax_total, and totals.invoice_total (not totals.tax, totals.total, or totals.currency). Emit numeric amounts as JSON numbers, not strings. When information is missing, still include the required objects/arrays and use null or empty arrays where allowed by the schema.",
+  "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "vendor",
+      "buyer",
+      "header",
+      "statements"
+    ],
+    "properties": {
+      "header": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "document_kind"
+        ],
+        "properties": {
+          "document_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "invoice",
+              "payment_reminder",
+              "consolidated_reminder",
+              "credit_note",
+              "receipt",
+              "other",
+              null
+            ]
+          },
+          "letter_date": { "type": ["string", "null"] },
+          "due_date": { "type": ["string", "null"] },
+          "referenced_invoice_numbers": {
+            "type": "array",
+            "items": { "type": "string" },
+            "default": []
+          },
+          "issue_date": { "type": ["string", "null"] },
+          "invoice_number": { "type": ["string", "null"] },
+          "order_number": { "type": ["string", "null"] },
+          "customer_number": { "type": ["string", "null"] },
+          "reference_entries": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "value"],
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "creditor_identifier",
+                    "billing_number",
+                    "customer_identifier",
+                    "order_reference",
+                    "your_reference",
+                    "vendor_internal_reference",
+                    "sheet_batch_or_icr_range",
+                    "carrier_product_service",
+                    "delivery_pickup_period",
+                    "party_name_and_address_note",
+                    "sepa_mandate_reference",
+                    "payment_scheme_identifier",
+                    "other"
+                  ]
+                },
+                "sub_kind": { "type": ["string", "null"] },
+                "label": { "type": ["string", "null"] },
+                "value": { "type": "string" },
+                "value_end": { "type": ["string", "null"] }
+              }
+            }
+          },
+          "currency": { "type": ["string", "null"] }
+        }
+      },
+      "vendor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "identity_id": { "type": ["string", "null"] },
+          "name": { "type": ["string", "null"] },
+          "contact_name": { "type": ["string", "null"] },
+          "contact_identity_id": { "type": ["string", "null"] },
+          "street": { "type": ["string", "null"] },
+          "postal_code": { "type": ["string", "null"] },
+          "city": { "type": ["string", "null"] },
+          "country": { "type": ["string", "null"] },
+          "email": { "type": ["string", "null"] },
+          "phone": { "type": ["string", "null"] },
+          "tax_id": { "type": ["string", "null"] },
+          "bank": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "properties": {
+              "bank_name": { "type": ["string", "null"] },
+              "iban": { "type": ["string", "null"] },
+              "bic": { "type": ["string", "null"] }
+            }
+          },
+          "banking_accounts": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "purpose": {
+                  "type": ["string", "null"],
+                  "enum": ["payment_reception", "direct_debit_collection", "salary_or_internal", "other", null]
+                },
+                "label_printed": { "type": ["string", "null"] },
+                "bank_name": { "type": ["string", "null"] },
+                "iban": { "type": ["string", "null"] },
+                "bic": { "type": ["string", "null"] },
+                "creditor_identifier": { "type": ["string", "null"] },
+                "sepa_mandate_reference": { "type": ["string", "null"] }
+              }
+            }
+          },
+          "org_public_record": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "properties": {
+              "locations": { "type": "array", "items": { "type": "object" }, "default": [] },
+              "identifiers": { "type": "array", "items": { "type": "object" }, "default": [] },
+              "contact_channels": { "type": "array", "items": { "type": "object" }, "default": [] },
+              "officer_groups": { "type": "array", "items": { "type": "object" }, "default": [] }
+            }
+          }
+        }
+      },
+      "buyer": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "identity_id": { "type": ["string", "null"] },
+          "name": { "type": ["string", "null"] },
+          "contact_name": { "type": ["string", "null"] },
+          "contact_identity_id": { "type": ["string", "null"] },
+          "street": { "type": ["string", "null"] },
+          "postal_code": { "type": ["string", "null"] },
+          "city": { "type": ["string", "null"] },
+          "country": { "type": ["string", "null"] },
+          "email": { "type": ["string", "null"] },
+          "phone": { "type": ["string", "null"] },
+          "tax_id": { "type": ["string", "null"] },
+          "banking_accounts": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "purpose": {
+                  "type": ["string", "null"],
+                  "enum": ["sepa_debit_debtor", "payment_credit", "other", null]
+                },
+                "label_printed": { "type": ["string", "null"] },
+                "bank_name": { "type": ["string", "null"] },
+                "iban": { "type": ["string", "null"] },
+                "bic": { "type": ["string", "null"] }
+              }
+            }
+          }
+        }
+      },
+      "payment_instructions": { "type": ["string", "null"] },
+      "totals": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "properties": {
+          "subtotal": { "type": ["number", "null"] },
+          "tax_breakdown": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["tax_rate_percent", "tax_amount"],
+              "properties": {
+                "tax_rate_percent": { "type": "number", "minimum": 0, "maximum": 100 },
+                "tax_group_letter": { "type": ["string", "null"] },
+                "tax_rate_text": { "type": ["string", "null"] },
+                "net_subtotal": { "type": ["number", "null"] },
+                "tax_amount": { "type": "number" },
+                "gross_subtotal": { "type": ["number", "null"] }
+              }
+            },
+            "default": []
+          },
+          "tax_total": { "type": ["number", "null"] },
+          "invoice_total": { "type": ["number", "null"] }
+        }
+      },
+      "payments": {
+        "type": "array",
+        "default": [],
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["amount"],
+          "properties": {
+            "date": { "type": ["string", "null"] },
+            "amount": { "type": ["number", "null"] },
+            "method": { "type": ["string", "null"] },
+            "reference": { "type": ["string", "null"] }
+          }
+        }
+      },
+      "total_outstanding": { "type": ["number", "null"] },
+      "statements": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["line_items"],
+          "properties": {
+            "section_title": { "type": ["string", "null"] },
+            "service_period": { "type": ["string", "null"] },
+            "line_items": {
+              "type": "array",
+              "minItems": 0,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["description", "amount"],
+                "properties": {
+                  "title": { "type": ["string", "null"] },
+                  "description": { "type": ["string", "null"] },
+                  "line_kind": {
+                    "type": ["string", "null"],
+                    "enum": ["detail", "discount", "subtotal", "header_amount", "note", "other", null]
+                  },
+                  "quantity": { "type": ["number", "null"] },
+                  "quantity_unit": { "type": ["string", "null"] },
+                  "quantity_measure": { "type": ["string", "null"] },
+                  "unit_price": { "type": ["number", "null"] },
+                  "tax_rate_percent": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+                  "tax_group_letter": { "type": ["string", "null"] },
+                  "tax_rate_text": { "type": ["string", "null"] },
+                  "amount": { "type": ["number", "null"] },
+                  "position": { "type": ["string", "number", "null"] },
+                  "article_number": { "type": ["string", "null"] }
+                }
+              }
+            },
+            "line_groups": { "type": "array", "items": { "type": "object" }, "default": [] },
+            "service_period_normalized": {
+              "type": ["object", "null"],
+              "additionalProperties": false,
+              "properties": {
+                "start_date": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+                "end_date": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+                "calendar_year": { "type": ["integer", "null"], "minimum": 1900, "maximum": 2200 },
+                "calendar_month": { "type": ["integer", "null"], "minimum": 1, "maximum": 12 },
+                "calendar_quarter": { "type": ["integer", "null"], "minimum": 1, "maximum": 4 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "invoice",
+  "name": "Invoice (core)",
+  "description": "Minimal pinned invoice schema used by runtime metadata and validation flows.",
+  "schema": {
+    "type": "object",
+    "required": ["invoiceNumber"],
+    "properties": {
+      "invoiceNumber": { "type": "string" }
+    }
+  }
+}

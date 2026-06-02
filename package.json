@@ -5,6 +5,7 @@
 	"workspaces": [
 		"ARCHIVE/*",
 		"libs/*",
+		"packages/*",
 		"docs",
 		"app"
 	],

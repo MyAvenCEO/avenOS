@@ -22,6 +22,7 @@ import {
 import { HITL_VIEW_IDS, type VibeViewId } from '$lib/aven-ui/vibe-views'
 import { persistIntentFiles } from '$lib/jazz/intent-files'
 import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
+import { intentRetrain, intentStart, type IntentProjection } from '$lib/intents/api'
 
 /**
  * Random pick from `HITL_VIEW_IDS` (the aven-ui view catalog). Caller stores
@@ -724,12 +725,22 @@ function intentRowFromMessage(text: string): IntentRow {
 }
 
 async function handleComposerSubmit(message: string, files: File[]) {
-	const row = intentRowFromMessage(message)
-	savedIntents = [row, ...savedIntents]
-	selectedId = row.id
-	const { stored, errors } = await persistIntentFiles(row.id, files)
+	const draftId = `draft-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+	const { stored, errors } = await persistIntentFiles(draftId, files)
 	if (errors.length) console.warn('[intent files]', errors.join('; '))
 	if (stored > 0) console.info(`[intent files] stored ${stored} file(s) in Groove`)
+	try {
+		const detail = await intentStart(message, files)
+		if (!detail) return
+		const row = intentRowFromProjection(detail)
+		savedIntents = [row, ...savedIntents.filter((existing) => existing.id !== row.id)]
+		selectedId = row.id
+	} catch (error) {
+		const row = intentErrorRowFromFailure(message, error)
+		savedIntents = [row, ...savedIntents.filter((existing) => existing.id !== row.id)]
+		selectedId = row.id
+		console.error('[intent runtime] intentStart failed', error)
+	}
 }
 
 /**
@@ -741,6 +752,21 @@ async function handleComposerSubmit(message: string, files: File[]) {
 async function handleRetrainCommand(feedback: string, files: File[]) {
 	const intent = selectedIntent
 	if (!intent) return
+	if (intent.runtimeBacked && intent.runtimeOpenCommunicationId) {
+		const { errors } = await persistIntentFiles(intent.id, files)
+		if (errors.length) console.warn('[intent files]', errors.join('; '))
+		try {
+			const detail = await intentRetrain(intent.id, intent.runtimeOpenCommunicationId, feedback, files)
+			if (!detail) return
+			const row = intentRowFromProjection(detail)
+			savedIntents = savedIntents.map((existing) => (existing.id === row.id ? row : existing))
+		} catch (error) {
+			const row = intentErrorRowFromFailure(feedback || intent.summary, error, intent.id)
+			savedIntents = savedIntents.map((existing) => (existing.id === row.id ? row : existing))
+			console.error('[intent runtime] intentRetrain failed', error)
+		}
+		return
+	}
 	const trimmed = feedback.trim()
 	console.log('[mock] Re-trained with feedback:', trimmed)
 	if (trimmed) {
@@ -761,6 +787,50 @@ async function handleRetrainCommand(feedback: string, files: File[]) {
 	const { errors } = await persistIntentFiles(intent.id, files)
 	if (errors.length) console.warn('[intent files]', errors.join('; '))
 	declineResumeWorkingPhase(intent.id)
+}
+
+function intentRowFromProjection(detail: IntentProjection): IntentRow {
+	return {
+		id: detail.id,
+		title: detail.title,
+		summary: detail.summary,
+		body: detail.body,
+		status: detail.status,
+		runtimeBacked: true,
+		runtimeOpenCommunicationId: detail.openCommunication?.open ? detail.openCommunication.communicationId : undefined,
+		lastWorkDurationMs: detail.lastWorkDurationMs,
+		skills: [],
+		logs: detail.logs.map((entry) => ({
+			id: entry.id,
+			at: entry.atMs,
+			skillName: entry.skillName,
+			text: entry.text,
+		})),
+	}
+}
+
+function intentErrorRowFromFailure(message: string, error: unknown, existingId?: string): IntentRow {
+	const text = message.trim()
+	const first = (text.split(/\n/)[0] ?? '').trim()
+	const title = first.length > 56 ? `${first.slice(0, 56).trimEnd()}…` : first || 'Intent failed'
+	const reason = error instanceof Error ? error.message : String(error)
+	return {
+		id: existingId ?? `intent-error-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+		title,
+		summary: reason,
+		body: text || reason,
+		status: 'error',
+		runtimeBacked: true,
+		skills: [],
+		logs: [
+			{
+				id: `log-${Date.now()}-runtime-error`,
+				at: Date.now(),
+				skillName: 'runtime',
+				text: reason,
+			},
+		],
+	}
 }
 
 function selectIntent(id: string) {

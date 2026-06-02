@@ -1,5 +1,6 @@
 mod crypto;
 mod demo_mesh;
+mod intent_runtime;
 mod network;
 mod jazz;
 mod jazz_auth;
@@ -158,6 +159,7 @@ pub fn run() {
 		.plugin(tauri_plugin_clipboard_manager::init())
 		.manage(jazz::ManagedJazz::default())
 		.setup(|app| {
+			app.manage(intent_runtime::manager::IntentRuntimeManager::new(app.handle()));
 			if let Err(e) = schema_manifest::install_runtime_schema_files(app.handle()) {
 				log::error!("schema runtime install: {e}");
 			}

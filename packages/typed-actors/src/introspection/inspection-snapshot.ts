@@ -1,0 +1,1 @@
+export type { ActorSystemInspectionSnapshot } from "./actor-inspector.js";
