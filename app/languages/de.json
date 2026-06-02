@@ -147,6 +147,7 @@
 		"empty": "Noch keine Modelle heruntergeladen. Öffne Talk und tippe auf das Mikrofon, um das Sprachmodell zu laden.",
 		"active": "Sprache",
 		"onDisk": "auf Festplatte",
+		"secondaryInstance": "Die Sprachtranskription läuft auf der primären Instanz. Dieses zweite Fenster teilt sich deren Modell und lädt keine eigene Kopie herunter.",
 		"stop": "Stopp",
 		"download": "Laden",
 		"delete": "Löschen",

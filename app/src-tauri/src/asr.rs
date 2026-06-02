@@ -85,9 +85,27 @@ impl AsrStatus {
 	}
 }
 
+/// The on-device voice feature runs on the PRIMARY instance only. The dev
+/// harness launches a second instance tagged `AVENOS_DEV_INSTANCE=B` (etc.) that
+/// shares the same `.avenOS/models` cache — it must not download or load the
+/// model (a duplicate multi-GB RAM load + download-lock contention). Enabled when
+/// the var is unset/empty (production) or "A" (primary dev instance).
+fn instance_enabled() -> bool {
+	match std::env::var("AVENOS_DEV_INSTANCE") {
+		Ok(v) => {
+			let v = v.trim();
+			v.is_empty() || v.eq_ignore_ascii_case("a")
+		}
+		Err(_) => true,
+	}
+}
+
 /// Current readiness/progress (used by `asr_status` and progress events).
 #[tauri::command(rename_all = "camelCase")]
 pub async fn asr_status(app: AppHandle) -> Result<AsrStatus, String> {
+	if !instance_enabled() {
+		return Ok(AsrStatus::unavailable());
+	}
 	Ok(imp::status(&app).await)
 }
 
@@ -98,12 +116,20 @@ pub async fn transcribe_audio(
 	pcm: Vec<f32>,
 	sample_rate: u32,
 ) -> Result<String, String> {
+	if !instance_enabled() {
+		return Err("on-device voice transcription runs on the primary instance only".into());
+	}
 	imp::transcribe(&app, pcm, sample_rate).await
 }
 
-/// Kick the first-run weights download in the background (no-op without `local-asr`).
-/// Called once from the Tauri `setup()` hook.
+/// Kick the first-run weights download in the background (no-op without
+/// `local-asr`, or on a secondary dev instance). Called once from the Tauri
+/// `setup()` hook.
 pub fn spawn_model_download(app: &AppHandle) {
+	if !instance_enabled() {
+		log::info!(target: "avenos::asr", "secondary instance — skipping voice-model download/load");
+		return;
+	}
 	imp::spawn_download(app);
 }
 

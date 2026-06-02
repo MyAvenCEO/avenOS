@@ -131,7 +131,7 @@
 							{t('models.download')}
 						</button>
 					{/if}
-					{#if activeOnDisk}
+					{#if activeOnDisk && statusKey !== 'unavailable'}
 						<button
 							type="button"
 							class="rounded-full border border-status-error/40 px-2.5 py-1 text-[11px] font-medium text-status-error outline-none transition-colors hover:bg-status-error/10 focus-visible:ring-2 focus-visible:ring-status-error/30 disabled:opacity-40"
@@ -166,6 +166,9 @@
 
 			{#if statusKey === 'error' && $asrState.error}
 				<p class="text-status-error select-text text-[11px] leading-snug">{$asrState.error}</p>
+			{/if}
+			{#if statusKey === 'unavailable'}
+				<p class="text-muted-foreground text-[11px] leading-snug">{t('models.secondaryInstance')}</p>
 			{/if}
 		</section>
 

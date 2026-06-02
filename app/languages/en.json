@@ -159,6 +159,7 @@
 		"empty": "No models downloaded yet. Open Talk and tap the mic to fetch the voice model.",
 		"active": "Voice",
 		"onDisk": "on disk",
+		"secondaryInstance": "Voice transcription runs on the primary instance. This second window shares its model and won't download or load its own copy.",
 		"stop": "Stop",
 		"download": "Download",
 		"delete": "Delete",
