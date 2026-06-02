@@ -35,7 +35,19 @@ const VOICE_MOCK_TRANSCRIPTS = [
 	'Capture: bundle the three expense PDFs into one intent for bookkeeping.'
 ]
 
-type Mode = 'collapsed' | 'listening' | 'typing'
+type Mode = 'collapsed' | 'listening' | 'typing' | 'preparing'
+
+/** Live voice-model readiness for the inline "preparing" pill (parent supplies). */
+type VoicePrep = {
+	model: string
+	status: 'idle' | 'downloading' | 'ready' | 'error' | 'unavailable'
+	/** Download fraction 0–1, or null when the total isn't known yet. */
+	fraction: number | null
+	/** Human-readable "312 MB / 4.1 GB". */
+	sizeLabel: string
+	/** Short note on what's happening. */
+	note: string
+}
 
 let {
 	onSubmitMessage,
@@ -74,6 +86,12 @@ let {
 	 */
 	voiceUnavailableReason = null,
 	onVoiceUnavailableClick,
+	/**
+	 * Live download/readiness for the inline "preparing" pill. When the mic is
+	 * clicked before the model is ready, the composer morphs into this pill
+	 * (progress bar + note) in place rather than recording.
+	 */
+	voicePrep = null,
 	/** Surface a transcription/microphone error to the parent (no message is posted). */
 	onTranscribeError
 }: {
@@ -90,6 +108,7 @@ let {
 	onTranscribeAudio?: (audio: { pcm: Float32Array; sampleRate: number }) => Promise<string>
 	voiceUnavailableReason?: string | null
 	onVoiceUnavailableClick?: () => void
+	voicePrep?: VoicePrep | null
 	onTranscribeError?: (message: string) => void
 } = $props()
 
@@ -530,9 +549,12 @@ function teardownRecording() {
 }
 
 function openListening() {
-	// Model not ready → don't record; let the parent show the download modal.
+	// Model not ready → don't record; morph the pill into the inline download
+	// progress / note instead (the parent supplies `voicePrep`).
 	if (voiceUnavailableReason != null) {
+		void focusShellWebview()
 		onVoiceUnavailableClick?.()
+		mode = 'preparing'
 		return
 	}
 	void focusShellWebview()
@@ -700,6 +722,9 @@ const pillClass = $derived.by(() => {
 			return `${base} h-14 w-[min(20rem,calc(100vw-3rem))] items-center gap-2 rounded-full border border-primary/25 bg-primary px-2.5 text-primary-foreground shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--color-primary)_45%,transparent)]`
 		}
 		return `${base} h-14 w-[min(18rem,46vw)] items-center gap-2.5 rounded-full border border-primary/25 bg-primary px-3 text-primary-foreground shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--color-primary)_45%,transparent)] sm:gap-3 sm:px-3.5`
+	}
+	if (mode === 'preparing') {
+		return `${base} h-auto min-h-14 w-[min(22rem,calc(100vw-3rem))] flex-col items-stretch gap-1.5 rounded-2xl border border-border bg-card px-3 py-2.5 text-foreground shadow-[0_10px_28px_-10px_rgba(0,0,0,0.25)] sm:w-[min(24rem,60vw)]`
 	}
 	return `${base} tech-pill !max-w-[min(36rem,80vw)] !rounded-2xl mx-auto w-full items-center justify-center gap-2 border-border py-0 pl-2 pr-2 text-foreground shadow-none sm:gap-3 sm:pl-4 sm:pr-2`
 })
@@ -881,6 +906,60 @@ const pillClass = $derived.by(() => {
 				</div>
 			{/if}
 	</div>
+	{:else if mode === 'preparing'}
+		<div class={pillClass} role="status" aria-live="polite">
+			<div class="flex items-center justify-between gap-2">
+				<span class="truncate text-xs font-semibold tracking-tight">
+					{voicePrep?.status === 'ready' ? 'Voice model ready' : 'Preparing voice model'}
+				</span>
+				<button
+					type="button"
+					class="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/30"
+					onclick={() => (mode = 'collapsed')}
+					aria-label="Dismiss"
+				>
+					<svg class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</div>
+
+			{#if voicePrep && (voicePrep.status === 'downloading' || voicePrep.status === 'idle')}
+				<div class="flex items-center justify-between gap-2">
+					<span class="truncate text-[11px] font-medium text-foreground/80">{voicePrep.model}</span>
+					<span class="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground"
+						>{voicePrep.sizeLabel}</span
+					>
+				</div>
+				<div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+					{#if voicePrep.fraction == null}
+						<div class="h-full w-1/3 animate-pulse rounded-full bg-primary/70"></div>
+					{:else}
+						<div
+							class="h-full rounded-full bg-primary transition-[width] duration-300"
+							style={`width: ${Math.round(voicePrep.fraction * 100)}%`}
+						></div>
+					{/if}
+				</div>
+			{/if}
+
+			{#if voicePrep?.note}
+				<p class="text-[11px] leading-snug text-muted-foreground">{voicePrep.note}</p>
+			{/if}
+
+			{#if voicePrep?.status === 'ready'}
+				<button
+					type="button"
+					class="mt-0.5 inline-flex items-center justify-center gap-1.5 self-start rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground outline-none transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/35"
+					onclick={openListening}
+				>
+					<svg class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 18v3m0-3a4 4 0 0 0 4-4V7a4 4 0 1 0-8 0v7a4 4 0 0 0 4 4Z" />
+					</svg>
+					Tap to record
+				</button>
+			{/if}
+		</div>
 	{:else}
 		<div
 			class="flex w-full max-w-[min(36rem,80vw)] mx-auto items-end gap-1.5 max-sm:max-w-none max-sm:gap-[0.6rem] sm:items-center sm:gap-2.5"

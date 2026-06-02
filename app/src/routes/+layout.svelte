@@ -15,7 +15,6 @@ import { type VaultListEntry, vaultCardTitle, vaultList } from '$lib/settings/va
 import { vaultUiSettingsGet } from '$lib/settings/vault-ui-settings'
 import { navigateApp } from '$lib/shell'
 import MobileShellNav from '$lib/shell/MobileShellNav.svelte'
-import ModelDownloadIndicator from '$lib/asr/ModelDownloadIndicator.svelte'
 import { startAsrReadiness } from '$lib/asr/model-download-store'
 import '../app.css'
 
@@ -193,7 +192,6 @@ $effect(() => {
 </svelte:head>
 
 <div class="box-border flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-background">
-	<ModelDownloadIndicator />
 	<LockGate />
 	{#if !shellLocked}
 		<header
