@@ -331,6 +331,12 @@ pub(crate) async fn execute_drain_batch(
 	}
 
 	if push_sparks_catalogue {
+		// A vault-shell table (keyshares/sparks/peers) changed — the shell was re-hydrated
+		// above and may now contain a newly granted spark the grantee has never seen.
+		// Use `publish_table_snapshot_force` (bypasses the subscriber-count gate) so the
+		// sparks catalogue lands in the frontend even when the user is NOT on the sparks
+		// page (ref-count = 0). Without this, the grantee only sees the new spark on
+		// restart (when bootstrap force-publishes all catalogue tables unconditionally).
 		{
 			let mut last = jazz
 				.last_table_snapshots
@@ -339,17 +345,16 @@ pub(crate) async fn execute_drain_batch(
 			last.remove("sparks");
 		}
 		match jazz
-			.snapshot_broadcast(app, client.as_ref(), shell.as_ref(), "sparks")
+			.publish_table_snapshot_force(app, client.as_ref(), shell.as_ref(), "sparks")
 			.await
 		{
-			Ok(true) => log::debug!(
+			Ok(()) => log::debug!(
 				target: "avenos::jazz",
-				"table-change drain: republished sparks (vault catalogue after grant)",
+				"table-change drain: force-published sparks (vault catalogue after shell re-hydrate)",
 			),
-			Ok(false) => {}
 			Err(e) => log::warn!(
 				target: "avenos::jazz",
-				"table-change drain: snapshot_broadcast(sparks) failed: {e}",
+				"table-change drain: publish_table_snapshot_force(sparks) failed: {e}",
 			),
 		}
 	}
