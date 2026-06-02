@@ -11,7 +11,13 @@
 import { type Unsubscriber, writable } from 'svelte/store'
 import { formatBytesPair } from '$lib/asr/format'
 
-export type AsrStatus = 'idle' | 'downloading' | 'ready' | 'error' | 'unavailable'
+export type AsrStatus =
+	| 'idle'
+	| 'downloading'
+	| 'loading'
+	| 'ready'
+	| 'error'
+	| 'unavailable'
 
 export type AsrState = {
 	status: AsrStatus
@@ -82,14 +88,27 @@ export function voiceUnavailableReason(state: AsrState): string | null {
 	switch (state.status) {
 		case 'ready':
 			return null
-		case 'downloading':
 		case 'idle':
+			return 'Voice model not set up'
+		case 'downloading':
 			return 'Voice model downloading…'
+		case 'loading':
+			return 'Voice model loading…'
 		case 'error':
 			return state.error ? `Voice model error: ${state.error}` : 'Voice model failed to load'
 		case 'unavailable':
 			return 'On-device voice transcription is not available in this build'
 	}
+}
+
+/** True while a download/load is actively in progress (vs. needing user setup). */
+export function voiceInProgress(status: AsrStatus): boolean {
+	return status === 'downloading' || status === 'loading'
+}
+
+/** True when the model needs an explicit setup step (Settings → Models). */
+export function voiceNeedsSetup(status: AsrStatus): boolean {
+	return status === 'idle' || status === 'error'
 }
 
 /** Live state for the composer's inline "preparing" pill. */
@@ -106,11 +125,15 @@ export function voicePrep(state: AsrState): VoicePrep {
 	const note =
 		state.status === 'ready'
 			? 'The voice model is ready — tap to record your note.'
-			: state.status === 'error'
-				? `Couldn't set up on-device transcription. ${state.error ?? ''}`.trim()
-				: state.status === 'unavailable'
-					? 'On-device voice transcription isn’t available in this build.'
-					: 'Setting up on-device voice transcription. This runs once and works offline afterwards — your audio never leaves the device.'
+			: state.status === 'downloading'
+				? 'Downloading the voice model. This runs once and works offline afterwards — your audio never leaves the device.'
+				: state.status === 'loading'
+					? 'Loading the voice model into memory…'
+					: state.status === 'error'
+						? `Couldn't set up on-device transcription. ${state.error ?? ''}`.trim()
+						: state.status === 'unavailable'
+							? 'On-device voice transcription isn’t available in this build.'
+							: 'Set up on-device voice transcription to record voice notes — your audio never leaves the device.'
 	return {
 		model: state.model,
 		status: state.status,

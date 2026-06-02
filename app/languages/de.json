@@ -149,7 +149,8 @@
 		"onDisk": "auf Festplatte",
 		"secondaryInstance": "Die Sprachtranskription läuft auf der primären Instanz. Dieses zweite Fenster teilt sich deren Modell und lädt keine eigene Kopie herunter.",
 		"stop": "Stopp",
-		"download": "Laden",
+		"download": "Herunterladen",
+		"load": "Laden",
 		"delete": "Löschen",
 		"deleting": "Wird gelöscht…",
 		"modalities": {
@@ -159,7 +160,8 @@
 		},
 		"status": {
 			"idle": "Nicht gestartet",
-			"downloading": "Wird geladen…",
+			"downloading": "Wird heruntergeladen…",
+			"loading": "Wird geladen…",
 			"ready": "Bereit",
 			"error": "Fehler",
 			"unavailable": "Nicht verfügbar"

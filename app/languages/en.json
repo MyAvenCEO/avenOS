@@ -162,6 +162,7 @@
 		"secondaryInstance": "Voice transcription runs on the primary instance. This second window shares its model and won't download or load its own copy.",
 		"stop": "Stop",
 		"download": "Download",
+		"load": "Load",
 		"delete": "Delete",
 		"deleting": "Deleting…",
 		"modalities": {
@@ -172,6 +173,7 @@
 		"status": {
 			"idle": "Not started",
 			"downloading": "Downloading…",
+			"loading": "Loading…",
 			"ready": "Ready",
 			"error": "Error",
 			"unavailable": "Unavailable"

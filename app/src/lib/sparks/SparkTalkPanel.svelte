@@ -3,13 +3,6 @@
 	import { t } from '$lib/i18n'
 	import type { JazzRow } from '$lib/jazz/api'
 	import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
-	import { transcribeAudio } from '$lib/intent-mock/transcribe'
-	import { formatBytesPair } from '$lib/asr/format'
-	import {
-		asrState,
-		downloadFraction,
-		voiceUnavailableReason as voiceUnavailableReasonOf,
-	} from '$lib/asr/model-download-store'
 	import type { ComposerMode } from '$lib/intents/types'
 	import { persistSparkFiles } from '$lib/jazz/intent-files'
 	import { jazzShell } from '$lib/runtime/jazz-shell'
@@ -53,31 +46,9 @@
 	const tauri = $derived(browser && isTauriRuntime())
 	const composerDisabled = $derived(!session?.peerDid?.trim())
 
-	// On-device voice transcription readiness (Gemma 4 E4B via the Rust backend).
-	// The download/readiness wiring lives in the root layout; here we just read it.
-	const voiceUnavailableReason = $derived(tauri ? voiceUnavailableReasonOf($asrState) : null)
-
-	// Live state for the composer's inline "preparing" pill (progress + note),
-	// shown when the mic is tapped before the model is ready.
-	const voicePrep = $derived.by(() => {
-		if (!tauri) return null
-		const s = $asrState
-		const note =
-			s.status === 'ready'
-				? 'The voice model is ready — tap to record your note.'
-				: s.status === 'error'
-					? `Couldn't set up on-device transcription. ${s.error ?? ''}`.trim()
-					: s.status === 'unavailable'
-						? 'On-device voice transcription isn’t available in this build.'
-						: 'Setting up on-device voice transcription. This runs once and works offline afterwards — your audio never leaves the device.'
-		return {
-			model: s.model,
-			status: s.status,
-			fraction: downloadFraction(s),
-			sizeLabel: formatBytesPair(s.receivedBytes, s.totalBytes),
-			note,
-		}
-	})
+	// On-device voice transcription: IntentComposer wires the real Voxtral path
+	// (and the download-progress / setup states) itself when running in Tauri, so
+	// nothing voice-specific needs to be passed here beyond surfacing errors.
 
 	const peersAllow = $derived<PeerRowReply[]>(
 		!tauri || !unlocked ? [] : $peerRows,
@@ -317,9 +288,6 @@
 						onModeChange={(mode) => {
 							composerMode = mode
 						}}
-						onTranscribeAudio={tauri ? transcribeAudio : undefined}
-						voiceUnavailableReason={voiceUnavailableReason}
-						voicePrep={voicePrep}
 						onTranscribeError={(message) => {
 							err = message
 						}}

@@ -122,13 +122,13 @@
 						>
 							{t('models.stop')}
 						</button>
-					{:else if statusKey !== 'ready' && statusKey !== 'unavailable'}
+					{:else if statusKey === 'idle' || statusKey === 'error'}
 						<button
 							type="button"
 							class="rounded-full border border-primary/40 px-2.5 py-1 text-[11px] font-medium text-primary outline-none transition-colors hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/30"
 							onclick={onStart}
 						>
-							{t('models.download')}
+							{activeOnDisk ? t('models.load') : t('models.download')}
 						</button>
 					{/if}
 					{#if activeOnDisk && statusKey !== 'unavailable'}
@@ -161,6 +161,10 @@
 							></div>
 						{/if}
 					</div>
+				</div>
+			{:else if statusKey === 'loading'}
+				<div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+					<div class="h-full w-1/3 animate-pulse rounded-full bg-primary/70"></div>
 				</div>
 			{/if}
 

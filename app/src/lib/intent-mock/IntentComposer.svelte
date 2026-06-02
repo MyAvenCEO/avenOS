@@ -6,6 +6,7 @@ import { transcribeAudio } from '$lib/intent-mock/transcribe'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import {
 	asrState,
+	type VoicePrep,
 	voicePrep as voicePrepOf,
 	voiceUnavailableReason as voiceUnavailableReasonOf
 } from '$lib/asr/model-download-store'
@@ -44,18 +45,6 @@ const VOICE_MOCK_TRANSCRIPTS = [
 ]
 
 type Mode = 'collapsed' | 'listening' | 'typing' | 'preparing'
-
-/** Live voice-model readiness for the inline "preparing" pill (parent supplies). */
-type VoicePrep = {
-	model: string
-	status: 'idle' | 'downloading' | 'ready' | 'error' | 'unavailable'
-	/** Download fraction 0–1, or null when the total isn't known yet. */
-	fraction: number | null
-	/** Human-readable "312 MB / 4.1 GB". */
-	sizeLabel: string
-	/** Short note on what's happening. */
-	note: string
-}
 
 let {
 	onSubmitMessage,
@@ -932,7 +921,12 @@ const pillClass = $derived.by(() => {
 		<div class={pillClass} role="status" aria-live="polite">
 			<div class="flex items-center justify-between gap-2">
 				<span class="truncate text-xs font-semibold tracking-tight">
-					{effectiveVoicePrep?.status === 'ready' ? 'Voice model ready' : 'Preparing voice model'}
+					{effectiveVoicePrep?.status === 'ready'
+						? 'Voice model ready'
+						: effectiveVoicePrep?.status === 'downloading' ||
+							  effectiveVoicePrep?.status === 'loading'
+							? 'Preparing voice model'
+							: 'Voice model not set up'}
 				</span>
 				<button
 					type="button"
@@ -946,7 +940,7 @@ const pillClass = $derived.by(() => {
 				</button>
 			</div>
 
-			{#if effectiveVoicePrep && (effectiveVoicePrep.status === 'downloading' || effectiveVoicePrep.status === 'idle')}
+			{#if effectiveVoicePrep && (effectiveVoicePrep.status === 'downloading' || effectiveVoicePrep.status === 'loading')}
 				<div class="flex items-center justify-between gap-2">
 					<span class="truncate text-[11px] font-medium text-foreground/80">{effectiveVoicePrep.model}</span>
 					<span class="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground"
@@ -980,6 +974,17 @@ const pillClass = $derived.by(() => {
 					</svg>
 					Tap to record
 				</button>
+			{:else if effectiveVoicePrep?.status === 'idle' || effectiveVoicePrep?.status === 'error'}
+				<a
+					href="/settings/models"
+					class="mt-0.5 inline-flex items-center justify-center gap-1.5 self-start rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground no-underline outline-none transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/35"
+					onclick={() => (mode = 'collapsed')}
+				>
+					<svg class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" />
+					</svg>
+					Set up in Settings
+				</a>
 			{/if}
 		</div>
 	{:else}

@@ -167,9 +167,10 @@ pub fn run() {
 			app.manage(jazz::runtime::spawn_groove_actor(app.handle().clone()));
 			app.manage(jazz::ui_drain::spawn_ui_table_drain(app.handle().clone()));
 
-			// Kick the on-device voice model's first-run download in the background
-			// (no-op unless built with the `local-asr` feature). Non-blocking.
-			asr::spawn_model_download(app.handle());
+			// NOTE: the on-device voice model is NOT auto-downloaded on launch. The
+			// user starts it explicitly from Self → Settings → Models (the multi-GB
+			// download shouldn't happen unprompted). `asr::spawn_model_download` is
+			// invoked on demand via the `asr_start_download` command.
 
 			// Start the table-change drain so peer-sync deltas reach the webview without
 			// requiring a manual refresh. Local CRUD already calls `snapshot_broadcast`

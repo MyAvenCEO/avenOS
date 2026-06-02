@@ -620,6 +620,9 @@ mod imp {
 				// Pre-download with real byte progress, then build from cache.
 				prefetch_weights(app, &dir).await?;
 
+				// Weights are local; loading + ISQ into RAM is the next (slower) phase.
+				set_status(app, "loading", None);
+
 				// Load the safetensors and quantize to 4-bit in-memory (ISQ):
 				// AFQ4 on Apple Silicon (Metal), Q4K elsewhere.
 				#[cfg(any(all(target_os = "macos", target_arch = "aarch64"), target_os = "ios"))]
