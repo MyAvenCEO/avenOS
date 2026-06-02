@@ -1,27 +1,30 @@
 ---
-title: Real voice-note transcription via Gemma on RedPill (Phala Cloud)
-summary: Replace the faked voice-note transcripts in the intent composer with real microphone capture (real Tauri mic caps) sent client-side to Gemma (google/gemma-4-31b-it) on RedPill/Phala Cloud, and stream the actual transcript into the /talk message stream.
+title: On-device voice-note transcription via Gemma 4 E4B (mistral.rs, in Tauri/Rust)
+summary: Replace the faked voice-note transcripts in the intent composer with real microphone capture transcribed fully on-device by Gemma 4 E4B running in the Tauri Rust backend via the mistral.rs crate, and stream the real transcript into the /talk message stream.
 owner: unassigned
 created: 2026-06-02
 updated: 2026-06-02
-tags: [intent, talk, ai, audio]
+tags: [intent, talk, ai, audio, tauri, rust, on-device]
 goal: >-
-  The composer voice-note path records real microphone audio and obtains its
-  transcript from a direct, client-side RedPill (OpenAI-compatible) call to
-  google/gemma-4-31b-it using REDPILL_API_KEY sourced from the repo-root .env;
-  the returned transcript is what gets submitted to the /talk stream via
-  onSubmitMessage, and VOICE_MOCK_TRANSCRIPTS is used only as an explicit
-  offline/error fallback. Proven from the transcript by: `bunx biome check .`
-  exits 0; from `app/`, `bun --bun x svelte-kit sync && bun --bun x svelte-check
-  --tsconfig ./tsconfig.json` exits 0; `bun test tests` (in `app/`) is green
-  including new unit tests for the audio-encode helper and the transcription
-  client; `rg "VOICE_MOCK_TRANSCRIPTS" app/src` shows it referenced only inside
-  the fallback branch, never as the default voice-note body; and `rg
-  "google/gemma-4-31b-it" app/src` shows the model wired into the RedPill call.
-  No files outside those listed in "Files to touch" are changed.
+  The composer voice-note path records real microphone audio, sends it over a
+  Tauri command to an on-device Gemma 4 E4B model loaded via the mistralrs crate
+  in src-tauri, and submits the returned transcript to the /talk stream via
+  onSubmitMessage; VOICE_MOCK_TRANSCRIPTS is used only as an explicit
+  non-Tauri/error fallback, and no network/API-key path is introduced. Proven
+  from the transcript by: `bunx biome check .` exits 0; from `app/`, `bun --bun x
+  svelte-kit sync && bun --bun x svelte-check --tsconfig ./tsconfig.json` exits
+  0; from `app/`, `bun test tests` is green including new unit tests for the
+  audio-encode helper and the transcribe client; from `app/src-tauri`, `cargo
+  check --features local-asr` and `cargo clippy --features local-asr -- -D
+  warnings` exit 0 (and `cargo check` with default features still exits 0); `rg
+  "google/gemma-4-E4B-it" app/src-tauri` shows the model wired into a mistralrs
+  call; `rg -i "redpill|REDPILL_API_KEY|dangerouslyAllowBrowser|api.redpill"
+  app/src .env.example` returns nothing; and `rg "VOICE_MOCK_TRANSCRIPTS"
+  app/src` shows it only in the fallback branch. No files outside "Files to
+  touch" are changed.
 ---
 
-# Real voice-note transcription via Gemma on RedPill (Phala Cloud)
+# On-device voice-note transcription via Gemma 4 E4B (mistral.rs, in Tauri/Rust)
 
 ## Context
 
@@ -39,319 +42,236 @@ Today the "voice note" is **faked**. In
 → `handleComposerSubmit(message, files)` → `messages.create({ spark_id,
 created_at_ms, author_did, body })` (the Groove-backed `jazz` store, persisted
 over Tauri IPC). The talk stream already accepts a string body; we only need the
-body to be a **real transcript** instead of a random mock.
+body to be a **real transcript**.
 
-We want to: capture the actual microphone audio, send it to **Gemma 4 31B**
-(`google/gemma-4-31b-it`) on **RedPill / Phala Cloud** — which exposes an
-OpenAI-compatible API and **accepts audio input** — and submit the returned
-transcript to the `/talk` stream. The key (`REDPILL_API_KEY`) lives in the
-**repo-root `.env`**.
+### Why on-device, and why E4B
+
+Earlier this item targeted a hosted RedPill (Phala) call to `gemma-4-31b-it`.
+That is dropped: **only the small Gemma 4 variants (E2B / E4B) accept audio
+input** — the large hosted model does not. The audio-capable model is small
+enough to **run locally**, so we transcribe **fully on-device** instead of over
+the network. That also retires the whole insecure-key story (no
+`REDPILL_API_KEY`, no `dangerouslyAllowBrowser`, no proxy) and works offline.
+
+**Engine:** [`mistralrs`](https://crates.io/crates/mistralrs) — a Rust-native
+inference engine with **day-0 Gemma 4 support across all modalities (text,
+image, video, audio)**, embeddable as a **library crate**. It takes audio as
+`AudioInput` (raw PCM samples + sample rate) and runs ISQ-quantized weights on
+CPU / CUDA / Metal. (Candle was the runner-up — lighter binary but no ready E4B
+audio path; llama.cpp/`llama-cpp-2` is text-only for these models today. See the
+research thread / Sources.)
+
+Inference belongs in the **Tauri Rust backend** (`app/src-tauri`), which already
+hosts the app's heavy lifting (the Groove engine, crypto, P2P) and registers
+`#[tauri::command]`s via `tauri::generate_handler!` in
+[`app/src-tauri/src/lib.rs`](../../../../app/src-tauri/src/lib.rs). The webview
+captures audio and calls a new command; Rust does the model work and returns the
+transcript.
 
 This item only touches the **voice-note** branch of the composer. The text and
-slash-command (`onCommandSubmit`) paths, and the `HitlActionBar` usages, must
-keep working unchanged (they rely on the mock fallback when no transcription
+slash-command (`onCommandSubmit`) paths and the `HitlActionBar` usages keep
+working unchanged (they rely on the mock fallback when no transcription
 implementation is supplied).
-
-### ⚠️ Premise risk: does Gemma-on-RedPill actually accept audio?
-
-RedPill's public docs confirm the base URL (`https://api.redpill.ai/v1`) and that
-it's OpenAI-SDK-compatible, but **the public docs I could reach describe Gemma 4
-as text + image multimodal and mention no audio input, and no
-`/audio/transcriptions` (Whisper) endpoint surfaced**. The phala model page that
-asserts audio support
-(`phala.com/de/models/google/gemma-4-31b-it`) is gated (HTTP 403) and could not
-be machine-read. So the core premise — "send the audio file to Gemma and get a
-transcript" — is **unverified against reachable docs**. Before building, confirm
-one of:
-
-1. Gemma on RedPill accepts an `input_audio` content part on `chat.completions`
-   (and the exact field/format), **or**
-2. RedPill exposes a speech-to-text endpoint (`/audio/transcriptions`) we route
-   the blob to instead, **or**
-3. a different RedPill model handles the audio→text step.
-
-If none holds, this item is **blocked on model capability** — do not ship a path
-that silently falls back to the mock and looks real. This is the first thing to
-de-risk; flag it in the Progress log when resolved.
-
-### Decided architecture: client-side, direct, insecure-first
-
-We are **not** building a server proxy for this item. The call to RedPill runs
-**directly from the Tauri webview (browser) client**, with the API key reaching
-the bundle. This is knowingly **insecure** (the key is exposed in the client) —
-it is the agreed first cut; a proper proxy lands later as a separate item.
-
-Consequences this plan accounts for:
-
-- The app ships as a **static SPA** (`@sveltejs/adapter-static`,
-  `fallback: index.html` in [`app/svelte.config.js`](../../../../app/svelte.config.js)),
-  so there is no SvelteKit server to call anyway — client-side fits.
-- Vite only exposes env vars matching `envPrefix` to the browser (see
-  [`app/vite.config.ts`](../../../../app/vite.config.ts), which already loads the
-  repo-root `.env` into `process.env`). Plain `REDPILL_API_KEY` is **not**
-  exposed by default, so we must opt it in (see Approach §3).
-- The OpenAI SDK refuses to run in a browser unless constructed with
-  `dangerouslyAllowBrowser: true` — required here, and the flag name documents
-  the trade-off.
 
 ## Goal
 
-When a user records a voice note in the composer, the app captures the audio,
-sends it from the client to `google/gemma-4-31b-it` on RedPill using the OpenAI
-SDK with the repo-root `REDPILL_API_KEY`, and posts the **real transcript** into
-the `/talk` message stream. The mock transcripts survive only as an
-offline/error fallback.
+When a user records a voice note, the app captures the audio, hands it to an
+on-device Gemma 4 E4B model running in the Rust backend (via `mistralrs`), and
+posts the **real transcript** into the `/talk` stream. Mock transcripts survive
+only as a non-Tauri / error fallback. No network or API key is introduced.
 
 **Completion condition** (identical to frontmatter `goal`):
 
-> The composer voice-note path records real microphone audio and obtains its
-> transcript from a direct, client-side RedPill (OpenAI-compatible) call to
-> `google/gemma-4-31b-it` using `REDPILL_API_KEY` sourced from the repo-root
-> `.env`; the returned transcript is what gets submitted to the `/talk` stream
-> via `onSubmitMessage`, and `VOICE_MOCK_TRANSCRIPTS` is used only as an explicit
-> offline/error fallback. Proven from the transcript by: `bunx biome check .`
-> exits 0; from `app/`, `bun --bun x svelte-kit sync && bun --bun x svelte-check
-> --tsconfig ./tsconfig.json` exits 0; `bun test tests` (in `app/`) is green
-> including new unit tests for the audio-encode helper and the transcription
-> client; `rg "VOICE_MOCK_TRANSCRIPTS" app/src` shows it referenced only inside
-> the fallback branch, never as the default voice-note body; and `rg
-> "google/gemma-4-31b-it" app/src` shows the model wired into the RedPill call.
-> No files outside "Files to touch" are changed.
+> The composer voice-note path records real microphone audio, sends it over a
+> Tauri command to an on-device Gemma 4 E4B model loaded via the `mistralrs`
+> crate in `src-tauri`, and submits the returned transcript to the `/talk` stream
+> via `onSubmitMessage`; `VOICE_MOCK_TRANSCRIPTS` is used only as an explicit
+> non-Tauri/error fallback, and no network/API-key path is introduced. Proven by
+> the lint/check/test/clippy/grep commands in the frontmatter `goal`. No files
+> outside "Files to touch" are changed.
 
-> Note: the live RedPill round-trip **cannot be verified in this environment**
-> (no API key, no microphone). The goal is deliberately written so every clause
-> is provable from `lint` / `check` / `bun test` output plus `rg` greps — the
-> network call is covered by unit tests against a mocked OpenAI client, and the
-> real call is exercised manually later with a key.
+> Note: an actual transcription run needs the **E4B weights + a real
+> microphone**, neither of which exists in CI. The goal is written so every
+> clause is provable from `cargo check`/`clippy`, `bun check`/`lint`/`test`, and
+> `rg` greps — the model call is compiled and unit-tested with the engine
+> mocked/feature-gated; a live transcript is a manual, post-build check.
 
 ## Approach
 
-Four pieces: **request mic capability (Tauri)**, **capture**, **transcribe
-(client-side, direct)**, **wire to /talk**.
+Four pieces: **mic caps**, **capture → PCM**, **Rust command + mistral.rs E4B**,
+**wire to /talk**.
 
 ### 0. Request the actual Tauri microphone capabilities
 
-`getUserMedia({ audio: true })` runs inside the Tauri **webview** (wry), which is
-sandboxed by the OS and currently grants **no** microphone access — today
-[`app/src-tauri/Info.plist`](../../../../app/src-tauri/Info.plist) holds only
-`ITSAppUsesNonExemptEncryption`, and
-[`app/src-tauri/capabilities/default.json`](../../../../app/src-tauri/capabilities/default.json)
-has no media grant. The Tauri capabilities ACL does **not** cover `getUserMedia`
-— this is an OS + native-webview concern, handled per platform (researched
-against the Tauri/wry issues linked in Sources):
+`getUserMedia({ audio: true })` runs in the Tauri **webview** (wry), which grants
+**no** mic access today — [`app/src-tauri/Info.plist`](../../../../app/src-tauri/Info.plist)
+holds only `ITSAppUsesNonExemptEncryption` and
+[`capabilities/default.json`](../../../../app/src-tauri/capabilities/default.json)
+has no media grant. The capabilities ACL does **not** cover `getUserMedia`; it's
+an OS + native-webview concern (researched against the Tauri/wry issues in
+Sources):
 
-- **macOS (WKWebView)** — add `NSMicrophoneUsageDescription` to
-  `app/src-tauri/Info.plist` (it is merged with Tauri's generated plist); without
-  it WKWebView refuses the mic. The native webview must also delegate
-  `requestMediaCapturePermissionForOrigin` — recent **wry** versions implement
-  this, so **bump the Tauri/wry deps** if the bundled version predates the fix
-  (older versions double-prompt or never prompt). If the macOS build uses the
-  **hardened runtime / app sandbox**, also add the
-  `com.apple.security.device.audio-input` entitlement via an `Entitlements.plist`
-  referenced from `tauri.conf.json` (`bundle.macOS.entitlements`).
-- **iOS** — add `NSMicrophoneUsageDescription` to the iOS plist
-  ([`tauri.ios.conf.json`](../../../../app/src-tauri/tauri.ios.conf.json)) and the
-  audio-input entitlement in
-  [`ios-template/aven-os-app_iOS.entitlements`](../../../../app/src-tauri/ios-template/aven-os-app_iOS.entitlements).
-- **Linux (WebKitGTK)** — ⚠️ **the heavy one, and this dev box is Linux**
-  (`dev:app:linux`). Stock WebKitGTK ships **without** media-stream/WebRTC, so
-  `getUserMedia` is simply unavailable unless WebKitGTK was built with
-  `-DENABLE_MEDIA_STREAM=ON -DENABLE_WEB_RTC=ON` plus the GStreamer plugins
-  (`gst-plugins-good/base/bad`). On the Rust side the webview must enable it and
-  grant the request:
+- **macOS (WKWebView)** — add `NSMicrophoneUsageDescription` to `Info.plist`
+  (merged with Tauri's generated plist). The webview must delegate
+  `requestMediaCapturePermissionForOrigin` — recent **wry** implements it, so
+  **bump Tauri/wry** if the pinned version predates the fix. Under hardened
+  runtime / sandbox, also add `com.apple.security.device.audio-input` via an
+  `Entitlements.plist` wired in `tauri.conf.json` (`bundle.macOS.entitlements`).
+- **iOS** — `NSMicrophoneUsageDescription` in the iOS plist
+  ([`tauri.ios.conf.json`](../../../../app/src-tauri/tauri.ios.conf.json)) +
+  audio-input entitlement
+  ([`ios-template/aven-os-app_iOS.entitlements`](../../../../app/src-tauri/ios-template/aven-os-app_iOS.entitlements)).
+- **Linux (WebKitGTK)** — ⚠️ **the heavy one, and this dev box is Linux**. Stock
+  WebKitGTK ships without media-stream/WebRTC, so `getUserMedia` is unavailable
+  unless WebKitGTK was built with `-DENABLE_MEDIA_STREAM=ON -DENABLE_WEB_RTC=ON`
+  (+ GStreamer `gst-plugins-good/base/bad`). On the Rust side the webview must
+  enable + grant it:
 
   ```rust
-  // WebKitGTK settings (via wry's Unix webview handle)
   settings.set_enable_webrtc(true);
   settings.set_enable_media_stream(true);
   settings.set_media_playback_requires_user_gesture(false);
-  // grant the permission-request instead of letting it auto-deny
   webview.connect_permission_request(|_, req| { req.allow(); true });
   ```
-- **Windows (WebView2)** — handle the `PermissionRequested` event and allow the
-  microphone kind (WebView2 is Chromium, so capture works once granted).
+- **Windows (WebView2)** — handle `PermissionRequested` → allow the microphone.
 
-The first device use still triggers the OS permission prompt (expected); the
-usage-description string is what that prompt shows. **Net:** macOS/iOS/Windows
-are config + a possible dep bump; **Linux needs a WebRTC-enabled WebKitGTK**,
-which may not be present in this environment — capture there is the riskiest part
-and should be validated first (see Open decisions / Risks).
+### 1. Capture audio → PCM in the webview
 
-### 1. Keep the composer dumb — inject transcription via a prop
+`mistralrs` wants **PCM samples + sample rate**, so the cleanest path is to
+capture raw PCM directly and skip container/codec decoding:
 
-`IntentComposer` lives under `intent-mock/` and is reused by `HitlActionBar`. Do
-**not** hardcode the SDK call in it. Add one optional prop:
+- On `openListening()`, `getUserMedia({ audio: true })` → Web Audio
+  (`AudioContext` + an `AudioWorkletNode` or `ScriptProcessor`) to accumulate
+  `Float32` PCM and record the `AudioContext.sampleRate`.
+- On commit, stop tracks and produce `{ pcm: Float32Array, sampleRate: number }`.
+  Downsample/convert to the model's expected rate (commonly 16 kHz) either here
+  or in Rust — decide in Open decisions.
+- Keep the existing timer/waveform UI. (Alternative: `MediaRecorder` → webm/opus
+  and decode in Rust with `symphonia`; rejected as the default because it adds a
+  Rust codec dependency for no benefit when Web Audio already yields PCM.)
 
-```ts
-onTranscribeAudio?: (audio: Blob) => Promise<string>
-```
+### 2. Keep the composer dumb — inject transcription via a prop
 
-- Real audio capture (getUserMedia + MediaRecorder) is added to the composer's
-  listening mode so a `Blob` actually exists on commit.
-- `commitVoiceNote()` becomes async: stop the recorder → get the `Blob` → if
-  `onTranscribeAudio` is provided, `await` it and submit the returned transcript
-  via `onSubmitMessage(transcript, [])`; otherwise (or on error / mic denied)
-  fall back to a random `VOICE_MOCK_TRANSCRIPTS` entry.
-- `SparkTalkPanel` passes a real `onTranscribeAudio` that calls the transcription
-  client. `HitlActionBar` passes nothing → keeps the mock, so retrain/HITL flows
-  are untouched.
-
-This keeps the mock a true fallback (satisfies the `rg` clause of the goal) and
-isolates the SDK/secret concern to one small client module.
-
-### 2. Transcription client — `openai` SDK pointed at RedPill, in the browser
-
-A browser-side module `app/src/lib/intent-mock/transcribe.ts`:
+`IntentComposer` (under `intent-mock/`, also used by `HitlActionBar`) must not
+hardcode the IPC call. Add one optional prop:
 
 ```ts
-import OpenAI from 'openai'
-
-const client = new OpenAI({
-  apiKey: import.meta.env.REDPILL_API_KEY,
-  baseURL: 'https://api.redpill.ai/v1', // confirmed: RedPill OpenAI-compatible base URL
-  dangerouslyAllowBrowser: true,         // intentional: insecure client-side first cut
-})
-
-export async function transcribeVoiceNote(audio: Blob): Promise<string> {
-  const { base64, format } = await encodeAudio(audio) // from audio-encode.ts
-  const res = await client.chat.completions.create({
-    model: 'google/gemma-4-31b-it', // CONFIRM exact RedPill model slug
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'text', text: 'Transcribe this voice note verbatim. Return only the transcript.' },
-        { type: 'input_audio', input_audio: { data: base64, format } },
-      ],
-    }],
-  })
-  return res.choices[0]?.message?.content?.trim() ?? ''
-}
+onTranscribeAudio?: (audio: { pcm: Float32Array; sampleRate: number }) => Promise<string>
 ```
 
-This assumes Gemma accepts an `input_audio` content part on `chat.completions`
-(base64). **That assumption is unverified against reachable RedPill docs** — see
-the Premise risk above. If RedPill instead offers a Whisper-style
-`client.audio.transcriptions.create({ file, model })` route, switch
-`transcribeVoiceNote` to that; the rest of the wiring is identical.
+`commitVoiceNote()` becomes async: assemble the PCM, and if `onTranscribeAudio`
+is provided, `await` it and submit the transcript via `onSubmitMessage(transcript,
+[])`; otherwise (no prop, non-Tauri, mic denied, or any error) fall back to a
+`VOICE_MOCK_TRANSCRIPTS` entry. Show the existing `submitBusy` affordance while
+transcribing. `SparkTalkPanel` passes a real `onTranscribeAudio`; `HitlActionBar`
+passes nothing → mock fallback preserved.
 
-### 3. Expose `REDPILL_API_KEY` to the client (insecure, by design)
+### 3. Rust command + on-device Gemma 4 E4B (mistral.rs)
 
-`app/vite.config.ts` already copies the repo-root `.env` into `process.env`. To
-make the key readable from the browser as `import.meta.env.REDPILL_API_KEY`, add
-`'REDPILL_'` to Vite's `envPrefix` (currently `['VITE_', 'PUBLIC_',
-'TAURI_ENV_']`). That exposes any `REDPILL_`-prefixed var to the bundle —
-intended here, and scoped narrowly to that prefix. Add a clear inline comment
-that this is the insecure first-cut path pending a proxy.
+Add a feature-gated module + Tauri command in `src-tauri`:
 
-- Add `REDPILL_API_KEY="your-redpill-api-key"` to
-  [`.env.example`](../../../../.env.example) with a one-line comment + the model
-  / base-URL reference and a "exposed to client; proxy later" warning.
-- The real `.env` already exists at repo root and is git-ignored; dev scripts
-  load it (`bun --env-file=../.env` + Vite `loadEnv`). No new env plumbing beyond
-  the `envPrefix` opt-in.
+- **Cargo:** add `mistralrs` behind a default-off feature `local-asr`
+  (`[features] local-asr = ["dep:mistralrs"]`), with per-platform accel features
+  (Metal on macOS, CUDA optional on Linux/Windows, plain CPU fallback). Gating
+  keeps default `cargo check`/CI light and the heavy ML dep opt-in.
+- **Command:** `#[tauri::command] async fn transcribe_audio(pcm: Vec<f32>,
+  sample_rate: u32, app: AppHandle) -> Result<String, String>`, registered in the
+  `tauri::generate_handler![…]` list in `lib.rs`. When `local-asr` is off it
+  returns `Err("local ASR not built")` so the JS side falls back to mock.
+- **Model lifecycle:** build the E4B model once (lazy `OnceCell` / Tauri managed
+  state), e.g. id `google/gemma-4-E4B-it` with ISQ 8-/4-bit quant; hold it in
+  `.manage(...)` alongside `ManagedJazz`. Run inference on a blocking thread
+  (`tokio::task::spawn_blocking`) so it never stalls the IPC/event loop.
+- **Inference:** wrap the PCM in mistral.rs `AudioInput { pcm, sample_rate }`, send
+  a message like *"Transcribe this voice note verbatim. Return only the
+  transcript."*, return the model's text. (Confirm exact `mistralrs` builder /
+  `AudioInput` API against the installed version — see Open decisions.)
+
+### 4. Wire to /talk
+
+`SparkTalkPanel` provides `onTranscribeAudio` = a small browser client
+`app/src/lib/intent-mock/transcribe.ts` that calls
+`invoke('transcribe_audio', { pcm, sampleRate })` and returns the string. The
+transcript flows through the unchanged `onSubmitMessage → handleComposerSubmit →
+messages.create` path into `/talk`.
 
 ### Out of scope
 
-- Any server/proxy for the key (explicitly deferred to a later item).
 - Streaming/partial transcripts (return the full string once).
-- Diarization, language selection UI, translation.
-- Audio transcoding (webm/opus → wav/mp3). Send the recorder's native container
-  and confirm RedPill accepts it; transcoding is a follow-up if it does not.
+- Diarization, language UI, translation, punctuation post-processing.
+- Mobile shipping of E4B (size/RAM likely prohibitive — see Risks); desktop first.
+- Bundling the weights in-repo (decide download-on-first-run vs bundle — Risks).
 
 ## Steps
 
-0. **Request Tauri mic caps.** Add `NSMicrophoneUsageDescription` to
-   `app/src-tauri/Info.plist` (+ iOS Info.plist/entitlements), and add the
-   webview permission-request grant on the Rust side for Linux/Windows. Verify a
-   real recording starts in `bun dev:app` (manual; OS prompt appears once).
-1. **Add real capture to the composer.** In `IntentComposer.svelte`, on
-   `openListening()` start `navigator.mediaDevices.getUserMedia({ audio: true })`
-   + `MediaRecorder`; collect chunks; on `stopListening()`/cancel, stop the
-   stream and tracks. Handle permission denial gracefully (fall back to mock).
-   Keep the existing timer/waveform UI.
-2. **Add the `onTranscribeAudio` prop** and rewrite `commitVoiceNote()` to be
-   async: assemble the `Blob`, call the prop if present, submit the resulting
-   transcript via `onSubmitMessage(transcript, [])`; on missing prop or any
-   error, fall back to a `VOICE_MOCK_TRANSCRIPTS` entry. Show the existing
-   `submitBusy` affordance while transcribing.
-3. **Add the encode helper** `app/src/lib/intent-mock/audio-encode.ts`
-   (Blob/ArrayBuffer → base64 + mime/format detection). Pure + unit-testable.
-4. **Create the transcription client** `app/src/lib/intent-mock/transcribe.ts`
-   using the `openai` SDK against RedPill with `dangerouslyAllowBrowser: true`
-   and `import.meta.env.REDPILL_API_KEY`. Keep the OpenAI client injectable so
-   tests can pass a fake.
-5. **Expose the key:** add `'REDPILL_'` to `envPrefix` in `app/vite.config.ts`
-   with an inline insecurity comment.
-6. **Wire `SparkTalkPanel`** to pass `onTranscribeAudio={transcribeVoiceNote}` to
-   its `IntentComposer`.
-7. **Add `openai`** to `app/package.json` dependencies; update lockfile.
-8. **Add `REDPILL_API_KEY`** to `.env.example`.
-9. **Tests** under `app/tests/`: encode helper round-trip; transcription client
-   against a mocked OpenAI client (assert model id, base URL, `dangerouslyAllowBrowser`,
-   key sourced from `import.meta.env`, transcript extraction, and error →
-   fallback signalling).
-10. **Run the verification block**; check off acceptance criteria; update the
-    Progress log; `git mv` to `test/`.
+0. **Mic caps.** Add `NSMicrophoneUsageDescription` (macOS/iOS) + entitlement;
+   add the Linux/Windows webview permission-grant on the Rust side.
+1. **PCM capture** in `IntentComposer.svelte` via Web Audio; stop/cleanup tracks.
+2. **`onTranscribeAudio` prop** + async `commitVoiceNote()` with mock-only-as-fallback.
+3. **`transcribe.ts`** browser client: `invoke('transcribe_audio', …)` → string.
+4. **Rust module** `app/src-tauri/src/asr.rs` (feature `local-asr`): mistralrs E4B
+   load + `transcribe_audio` command; register in `generate_handler!`; managed state.
+5. **Cargo:** add `mistralrs` behind `local-asr` (+ accel features); ensure default
+   `cargo check` stays green and `--features local-asr` compiles.
+6. **Wire `SparkTalkPanel`** to pass `onTranscribeAudio`.
+7. **Tests** (`app/tests/`): audio-encode/PCM helper round-trip; transcribe client
+   against a mocked `invoke` (Tauri present → returns transcript; absent/error →
+   signals fallback).
+8. **Run verification**; check off criteria; update Progress log; `git mv` to `test/`.
 
 ## Files to touch
 
-- `app/src-tauri/Info.plist` — add `NSMicrophoneUsageDescription` (macOS mic prompt).
-- `app/src-tauri/tauri.ios.conf.json` + `app/src-tauri/ios-template/aven-os-app_iOS.entitlements` — iOS mic usage description + audio-input entitlement.
-- `app/src-tauri/src/` (Rust) — Linux: `set_enable_webrtc(true)` / `set_enable_media_stream(true)` / `set_media_playback_requires_user_gesture(false)` + `connect_permission_request(|_, r| { r.allow(); true })`; Windows: WebView2 `PermissionRequested` → allow microphone; scoped to `main`.
-- `app/src-tauri/Cargo.toml` (+ `Cargo.lock`) — bump Tauri/wry if the bundled version predates the macOS `requestMediaCapturePermissionForOrigin` fix.
-- `app/src-tauri/Entitlements.plist` (**new**, macOS) + `app/src-tauri/tauri.conf.json` (`bundle.macOS.entitlements`) — only if the macOS build uses hardened runtime / sandbox (`com.apple.security.device.audio-input`); see Open decisions.
-- `app/src/lib/intent-mock/IntentComposer.svelte` — real MediaRecorder capture in
-  listening mode; new `onTranscribeAudio` prop; async `commitVoiceNote()` with
-  mock-only-as-fallback.
-- `app/src/lib/intent-mock/audio-encode.ts` — **new**: Blob → base64/format helper.
-- `app/src/lib/intent-mock/transcribe.ts` — **new**: client-side RedPill call via
-  `openai` SDK (`dangerouslyAllowBrowser`), returns the transcript.
-- `app/src/lib/sparks/SparkTalkPanel.svelte` — pass `onTranscribeAudio` to the composer.
-- `app/vite.config.ts` — add `'REDPILL_'` to `envPrefix` (insecure client exposure).
-- `app/package.json` (+ `bun.lock`) — add `openai`.
-- `.env.example` — add `REDPILL_API_KEY` with comment + model/base-URL note + insecurity warning.
+- `app/src-tauri/Info.plist` — `NSMicrophoneUsageDescription` (macOS).
+- `app/src-tauri/tauri.ios.conf.json` + `app/src-tauri/ios-template/aven-os-app_iOS.entitlements` — iOS mic usage + audio-input entitlement.
+- `app/src-tauri/Entitlements.plist` (**new**, macOS) + `app/src-tauri/tauri.conf.json` (`bundle.macOS.entitlements`) — only if hardened runtime/sandbox requires `com.apple.security.device.audio-input`.
+- `app/src-tauri/src/` (Rust webview wiring) — Linux `set_enable_webrtc/media_stream` + `connect_permission_request`; Windows WebView2 `PermissionRequested`; scoped to `main`.
+- `app/src-tauri/src/asr.rs` — **new**: `mistralrs` E4B load + `transcribe_audio` command (feature `local-asr`).
+- `app/src-tauri/src/lib.rs` — register `transcribe_audio` in `generate_handler!`; `.manage()` the model state; declare `mod asr`.
+- `app/src-tauri/Cargo.toml` (+ `Cargo.lock`) — add `mistralrs` behind `local-asr` + accel features; possible Tauri/wry bump for macOS mic.
+- `app/src/lib/intent-mock/IntentComposer.svelte` — Web Audio PCM capture; `onTranscribeAudio` prop; async `commitVoiceNote()` (mock = fallback only).
+- `app/src/lib/intent-mock/transcribe.ts` — **new**: `invoke('transcribe_audio', …)` client.
+- `app/src/lib/intent-mock/audio-encode.ts` — **new**: PCM accumulation / Float32↔Int16 / resample helper (pure, unit-testable).
+- `app/src/lib/sparks/SparkTalkPanel.svelte` — pass `onTranscribeAudio`.
 - `app/tests/transcribe.test.ts`, `app/tests/audio-encode.test.ts` — **new** unit tests.
+
+> Note: **no** `.env.example`, `vite.config.ts`, or `openai`/RedPill changes —
+> the network path is gone.
 
 ## Open decisions / risks (confirm before building)
 
-- **🔴 Gemma audio support (premise risk).** Reachable RedPill docs describe
-  Gemma 4 as text+image only and surface no audio input or `/audio/transcriptions`
-  endpoint; the phala model page asserting audio is gated (403). Confirm
-  `input_audio` support, a Whisper route, or pick a speech-capable model — else
-  the item is blocked. **De-risk this first.**
-- **🔴 Linux WebKitGTK WebRTC (capture risk).** Stock WebKitGTK has no
-  media-stream/WebRTC; `getUserMedia` won't work on this Linux dev box without a
-  WebKitGTK built with `-DENABLE_MEDIA_STREAM=ON -DENABLE_WEB_RTC=ON` + GStreamer
-  plugins. Verify what the environment ships before relying on live capture
-  there; macOS/iOS/Windows are config-only.
-- **macOS hardened runtime / sandbox.** Decides whether
-  `NSMicrophoneUsageDescription` alone suffices or the
-  `com.apple.security.device.audio-input` entitlement (+ `Entitlements.plist`
-  wired in `tauri.conf.json`) is also required. Confirm against the macOS
-  bundle/signing config.
-- **wry/Tauri version.** Confirm the bundled wry implements the macOS
-  `requestMediaCapturePermissionForOrigin` delegate; bump if not.
-- **Model slug.** Plan uses `google/gemma-4-31b-it` (from the user's phala link).
-  Note a related public listing is `google/gemma-4-26B-A4B-it` — confirm the exact
-  RedPill slug.
-- **Audio content-part shape & container.** If audio is supported, confirm the
-  exact field names (`input_audio { data, format }` vs `audio_url`) and that
-  RedPill accepts MediaRecorder's native `webm/opus`; otherwise add transcoding
-  (follow-up).
+- **🔴 Weights distribution.** E4B at 4-bit ISQ is multi-GB. Decide: bundle in the
+  app (huge installer) vs **download-on-first-run** from HF hub with a progress UI
+  and a cache dir. Recommend first-run download + cached; flag the offline-first
+  expectation this breaks until cached.
+- **🔴 Linux WebKitGTK WebRTC.** Stock WebKitGTK can't do `getUserMedia`; this dev
+  box is Linux. Verify the environment's WebKitGTK has media-stream/WebRTC before
+  relying on live capture here (macOS/iOS/Windows are config-only).
+- **🟠 `mistralrs` build weight & platform features.** Heavy dependency (long
+  compile, large binary, accel toolchains). Feature-gate behind `local-asr`
+  (default off) so CI/default builds stay light; pick the accel feature per
+  target. Confirm it builds in this toolchain (`rust 1.93`).
+- **mistral.rs API surface.** Confirm the installed `mistralrs` version's builder
+  + `AudioInput` (PCM + sample rate) signatures and the exact E4B model id
+  (`google/gemma-4-E4B-it` assumed from the day-0 docs; confirm casing/slug).
+- **Sample rate / format.** Confirm E4B's expected input rate (likely 16 kHz) and
+  resample in JS (Web Audio) or Rust.
+- **macOS hardened runtime / wry version** — as in Step 0.
+- **Mobile.** E4B may be too large for phones; treat mobile as out of scope until
+  a size/RAM check says otherwise.
 
 ## Acceptance criteria
 
 Each box must be checkable from the transcript (a command + its output proves it).
 
-- [ ] `bunx biome check .` exits 0 — proven by running it.
-- [ ] From `app/`: `bun --bun x svelte-kit sync && bun --bun x svelte-check --tsconfig ./tsconfig.json` exits 0 — proven by running it.
-- [ ] From `app/`: `bun test tests` is green, including the new `audio-encode` and `transcribe` unit tests — proven by the test output.
-- [ ] `rg "VOICE_MOCK_TRANSCRIPTS" app/src` shows the array referenced only inside the fallback branch of `commitVoiceNote()`, never as the default voice-note body — proven by the grep output + the surrounding diff.
-- [ ] `rg "google/gemma-4-31b-it" app/src` shows the model id wired into the RedPill `chat.completions` call — proven by the grep output.
-- [ ] `rg "REDPILL_API_KEY|REDPILL_" .env.example app/vite.config.ts app/src` shows the key in `.env.example`, the `REDPILL_` `envPrefix` opt-in in `vite.config.ts`, and client-side use via `import.meta.env.REDPILL_API_KEY` — proven by the grep output.
-- [ ] `rg "dangerouslyAllowBrowser" app/src` shows the OpenAI client constructed for the browser (the documented insecure-first decision) — proven by the grep output.
-- [ ] `rg "NSMicrophoneUsageDescription" app/src-tauri` shows the macOS/iOS mic usage description wired into the Tauri config — proven by the grep output. (The OS permission prompt itself is a manual, post-build check.)
-- [ ] `git status --porcelain` lists only the files in "Files to touch" (plus `bun.lock`) — proven by the status output.
+- [ ] `bunx biome check .` exits 0.
+- [ ] From `app/`: `bun --bun x svelte-kit sync && bun --bun x svelte-check --tsconfig ./tsconfig.json` exits 0.
+- [ ] From `app/`: `bun test tests` is green, including the new `audio-encode` and `transcribe` unit tests.
+- [ ] From `app/src-tauri`: `cargo check` (default features) exits 0 **and** `cargo check --features local-asr` + `cargo clippy --features local-asr -- -D warnings` exit 0.
+- [ ] `rg "google/gemma-4-E4B-it" app/src-tauri` shows the model id wired into a `mistralrs` call.
+- [ ] `rg -i "redpill|REDPILL_API_KEY|dangerouslyAllowBrowser|api.redpill" app/src .env.example` returns nothing (the network/key path is fully removed).
+- [ ] `rg "VOICE_MOCK_TRANSCRIPTS" app/src` shows the array referenced only inside the fallback branch of `commitVoiceNote()`.
+- [ ] `rg "NSMicrophoneUsageDescription" app/src-tauri` shows the mic usage description wired in.
+- [ ] `git status --porcelain` lists only the files in "Files to touch" (plus lockfiles).
 
 ## Verification
 
@@ -365,18 +285,23 @@ bun --bun x svelte-kit sync
 bun --bun x svelte-check --tsconfig ./tsconfig.json
 bun test tests
 
-# guard clauses (run from repo root)
+# rust backend
+cd src-tauri
+cargo check                              # default features stay green
+cargo check --features local-asr
+cargo clippy --features local-asr -- -D warnings
+
+# guard greps (from repo root)
+rg "google/gemma-4-E4B-it" app/src-tauri
+rg -i "redpill|REDPILL_API_KEY|dangerouslyAllowBrowser|api.redpill" app/src .env.example
 rg "VOICE_MOCK_TRANSCRIPTS" app/src
-rg "google/gemma-4-31b-it" app/src
-rg "REDPILL_API_KEY|REDPILL_" .env.example app/vite.config.ts app/src
-rg "dangerouslyAllowBrowser" app/src
 rg "NSMicrophoneUsageDescription" app/src-tauri
 git status --porcelain
 ```
 
-The live RedPill round-trip is **manual, post-merge** (needs `REDPILL_API_KEY` +
-a mic): set the key in repo-root `.env`, `bun dev:app`, open a spark's `/talk`,
-record a voice note, confirm the streamed message body is the real transcript.
+The live transcription is **manual, post-build** (needs the E4B weights + a mic):
+build with `--features local-asr`, run the app, open a spark's `/talk`, record a
+voice note, confirm the streamed body is the real transcript.
 
 ## Hand-off
 
@@ -394,41 +319,27 @@ record a voice note, confirm the streamed message body is the real transcript.
 
 Newest entry first.
 
-- `2026-06-02` — Researched RedPill + Tauri mic (Sources below). Confirmed base
-  URL `https://api.redpill.ai/v1` (OpenAI-compatible). **Could not confirm Gemma
-  audio input** — public docs show Gemma 4 as text+image only and no Whisper
-  route; the phala model page is 403-gated. Added a 🔴 premise-risk callout: this
-  must be de-risked first or the item is blocked. Replaced the hand-wavy mic
-  section with concrete per-platform mechanics: macOS plist + possible
-  hardened-runtime `audio-input` entitlement + wry version bump; **Linux
-  WebKitGTK needs a WebRTC-enabled build** (`-DENABLE_MEDIA_STREAM/-DENABLE_WEB_RTC`
-  + GStreamer) plus `set_enable_webrtc/media_stream` and a `connect_permission_request`
-  grant — flagged as a 🔴 capture risk since this dev box is Linux. Updated files,
-  open decisions, and acceptance criteria.
-- `2026-06-02` — Added the **Tauri microphone capability** request (per
-  direction): today `src-tauri` grants no mic access, so `getUserMedia` would
-  fail and never leave the mock. Plan now wires `NSMicrophoneUsageDescription`
-  (macOS/iOS) + audio-input entitlement, and a Rust-side webview
-  permission-request grant for Linux/Windows, as Step 0 with its own files,
-  open decisions, and acceptance criterion.
-- `2026-06-02` — Simplified per direction: **client-side, direct, insecure-first**
-  — dropped the SvelteKit/Rust server-proxy options entirely (proxy is a later
-  item). Treated Gemma audio input as given per direction (later walked back to a
-  risk once docs couldn't confirm it — see newest entry). Key now exposed to the
-  browser via a `REDPILL_` `envPrefix`
-  opt-in in `vite.config.ts` + `dangerouslyAllowBrowser` on the OpenAI client.
-  Updated Approach, Files to touch, goal, and acceptance criteria accordingly.
+- `2026-06-02` — **Re-specced to the on-device path.** Only Gemma 4 E2B/E4B accept
+  audio, so dropped the hosted RedPill call entirely (no key, no proxy, no
+  `dangerouslyAllowBrowser`) and moved inference into the Tauri **Rust** backend
+  via the **`mistralrs`** crate (day-0 Gemma 4 audio; `AudioInput` = PCM + sample
+  rate; ISQ; CPU/CUDA/Metal). New shape: Web Audio PCM capture in the webview → a
+  feature-gated (`local-asr`) `transcribe_audio` Tauri command loading
+  `google/gemma-4-E4B-it` → transcript → `/talk`. Added weights-distribution and
+  build-weight risks; kept the Tauri mic-caps work (still needed for `getUserMedia`).
+  Rewrote goal/criteria to add `cargo check`/`clippy` and a grep proving the
+  RedPill path is gone.
+- `2026-06-02` — Researched RedPill + Tauri mic; confirmed RedPill base URL but
+  could not confirm large-Gemma audio (phala page 403). Earlier client-side /
+  server iterations now superseded by the on-device path above.
 - `2026-06-02` — Planned and specced directly into `plan/`. Mapped the faked
-  voice-note path (`commitVoiceNote` → `VOICE_MOCK_TRANSCRIPTS`), the
+  voice-note path (`commitVoiceNote` → `VOICE_MOCK_TRANSCRIPTS`) and the
   `onSubmitMessage` → `SparkTalkPanel.handleComposerSubmit` → `messages.create`
-  flow into `/talk`, and the absence of any existing AI backend.
+  flow into `/talk`.
 
 ## Sources
 
-Research backing the RedPill + Tauri-mic facts above:
-
-- RedPill API (OpenAI-compatible, base URL): <https://docs.redpill.ai/get-started/how-to-use>, <https://www.redpill.ai/developer>
-- Tauri macOS mic / Info.plist + entitlements: <https://v2.tauri.app/distribute/macos-application-bundle/>, <https://github.com/tauri-apps/tauri/issues/11951>
-- wry macOS getUserMedia permission delegate: <https://github.com/tauri-apps/wry/issues/1195>
-- Tauri v2 mic/camera permission (no ACL coverage): <https://github.com/tauri-apps/tauri/issues/12547>, <https://github.com/tauri-apps/tauri/issues/10898>
-- Linux WebKitGTK WebRTC build + permission-request grant: <https://github.com/tauri-apps/tauri/discussions/8426>, <https://github.com/tauri-apps/wry/issues/85>
+- mistral.rs (Gemma 4 day-0, audio, Rust SDK): <https://github.com/EricLBuehler/mistral.rs>, <https://crates.io/crates/mistralrs>
+- Candle (runner-up): <https://github.com/huggingface/candle>, <https://github.com/huggingface/candle/tree/main/candle-examples/examples/gemma>
+- llama.cpp / `llama-cpp-2` (text-only for these models today): <https://crates.io/crates/llama-cpp-2>, <https://github.com/ggml-org/llama.cpp/discussions/15194>, <https://github.com/ggml-org/llama.cpp/issues/23688>
+- Tauri/wry mic: <https://v2.tauri.app/distribute/macos-application-bundle/>, <https://github.com/tauri-apps/wry/issues/1195>, <https://github.com/tauri-apps/tauri/issues/12547>, <https://github.com/tauri-apps/tauri/discussions/8426>
