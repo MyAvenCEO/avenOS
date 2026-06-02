@@ -12,6 +12,7 @@
 		type JazzSessionReply,
 	} from '$lib/jazz/api'
 	import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
+	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { peerMeshSnapshot } from '$lib/peer/peer-mesh-store'
 	import {
 		meshPeerPhase,
@@ -54,6 +55,21 @@
 	const sessionKind = $derived($deviceSession.kind)
 	const unlocked = $derived(sessionKind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
+
+	// The admin roster lives inside the spark's biscuit (`genesis_b64`). That field
+	// rides the reactive `sparks` table store, so a remote admin grant (e.g. the AI
+	// adds an admin on another device) lands here in realtime over TCP sync. We watch
+	// it below and re-read the admin list whenever it changes — without it, the panel
+	// only refreshed on local add/revoke and on a fresh mount (app restart).
+	const sparksStore = jazzStore('sparks')
+	const sparkBiscuit = $derived.by<string | undefined>(() => {
+		const sid = sparkId.trim().toLowerCase()
+		if (!sid) return undefined
+		const row = sparksStore.rows.find(
+			(r) => String(r.spark_id ?? '').trim().toLowerCase() === sid,
+		)
+		return typeof row?.genesis_b64 === 'string' ? row.genesis_b64 : undefined
+	})
 
 	let knownPeers = $state<PeerRow[]>([])
 	const peersAllow = $derived<PeerRow[]>(
@@ -155,6 +171,27 @@
 		}
 	}
 
+	// Lightweight re-read of just the admin roster (+ peer labels) — used when the
+	// spark biscuit changes under us via sync. Session is already loaded by the main
+	// effect, so we skip the heavier readiness checks done in loadSessionAndAdmins().
+	async function refreshAdminList(): Promise<void> {
+		const sid = sparkId.trim()
+		if (!tauri || !unlocked || !sid) return
+		const gen = ++adminLoadGen
+		try {
+			const peers = (await peerList()).filter((p) => p.status === 'active')
+			if (gen !== adminLoadGen) return
+			knownPeers = peers
+			const a = await sparkAdminList(sid)
+			if (gen !== adminLoadGen) return
+			adminDids = a.adminDids
+			adminErr = undefined
+		} catch (e) {
+			if (gen !== adminLoadGen) return
+			adminErr = e instanceof Error ? e.message : String(e)
+		}
+	}
+
 	async function addAdmin(): Promise<void> {
 		const did = addAdminDid.trim()
 		const sid = sparkId.trim()
@@ -222,6 +259,28 @@
 		adminDids = []
 		addAdminDid = ''
 		void loadSessionAndAdmins()
+	})
+
+	// Realtime reactivity: when the current spark's biscuit changes *without* a
+	// spark/session switch — i.e. a remote peer (or the AI) granted/revoked admin and
+	// it synced in over TCP — re-read the roster. We baseline-skip the first sighting
+	// and any spark switch (the main effect above owns those) so this fires only on a
+	// genuine in-place biscuit change, and never clobbers what the user is typing.
+	let adminWatchSpark: string | undefined = undefined
+	let adminWatchBiscuit: string | undefined = undefined
+	$effect(() => {
+		const sid = sparkId.trim()
+		const biscuit = sparkBiscuit
+		void unlocked
+		void tauri
+		if (!tauri || !unlocked || !sid || adminWatchSpark !== sid) {
+			adminWatchSpark = sid
+			adminWatchBiscuit = biscuit
+			return
+		}
+		if (adminWatchBiscuit === biscuit) return
+		adminWatchBiscuit = biscuit
+		void refreshAdminList()
 	})
 
 	$effect(() => {
