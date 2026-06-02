@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
-import type { RenderData, SlotRegistry, UiEvent, UiEventDef, ViewDef, ViewNode } from './types.js'
+import type { RenderData, SlotRegistry, StyleDef, UiEvent, UiEventDef, ViewDef, ViewNode } from './types.js'
 import { Evaluator, validateViewDef } from './view-validator.js'
 import {
 	BOOLEAN_ATTRS,
@@ -69,7 +69,7 @@ export class ViewEngine {
 		container: HTMLElement,
 		viewDef: ViewDef,
 		state: Record<string, unknown>,
-		style: import('../types.js').StyleDef,
+		style: StyleDef,
 	): Promise<ShadowRoot> {
 		validateViewDef(viewDef)
 		const shadowRoot = container.shadowRoot ?? container.attachShadow({ mode: 'open' })

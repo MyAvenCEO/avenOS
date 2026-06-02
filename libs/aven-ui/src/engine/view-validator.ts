@@ -109,13 +109,13 @@ export class Evaluator {
 		this.maxDepth = options.maxDepth ?? 50
 	}
 
-	async evaluate(expression: unknown, data: { state: Record<string, unknown>; item?: unknown }): Promise<unknown> {
+	async evaluate(expression: unknown, data: { state: Record<string, unknown>; item?: unknown; index?: number }): Promise<unknown> {
 		return this.evaluateInner(expression, data, 0)
 	}
 
 	private async evaluateInner(
 		expression: unknown,
-		data: { state: Record<string, unknown>; item?: unknown },
+		data: { state: Record<string, unknown>; item?: unknown; index?: number },
 		depth: number,
 	): Promise<unknown> {
 		if (depth > this.maxDepth) {

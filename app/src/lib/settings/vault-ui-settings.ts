@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { normalizeLocale, type SupportedLocale } from '$lib/i18n/locales'
 
 export type VaultUiSettings = {
-	locale: string
+	locale: SupportedLocale
 }
 
 export async function vaultUiSettingsGet(): Promise<VaultUiSettings> {

@@ -97,5 +97,27 @@
 				{@render footer()}
 			</div>
 		{/if}
+
+		<div class="flex shrink-0 justify-center pt-3 {mobileAsideBottomPadClass}">
+			<button
+				type="button"
+				class="border-border bg-background/95 text-foreground hover:bg-background flex size-11 touch-manipulation items-center justify-center rounded-full border shadow-md backdrop-blur-sm transition-colors"
+				onclick={close}
+				aria-label="Close panel"
+			>
+				<svg
+					viewBox="0 0 24 24"
+					class="size-5 shrink-0 opacity-85"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M18 6 6 18M6 6l12 12" />
+				</svg>
+			</button>
+		</div>
 	</div>
 </aside>
