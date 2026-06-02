@@ -1,0 +1,24 @@
+{
+	"name": "@avenos/aven-board",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"description": "aven-board — git-based, markdown-first kanban board for AvenOS (inbox → plan → test → done).",
+	"main": "./src/index.ts",
+	"types": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"build": "bun -e \"console.log('@avenos/aven-board: Svelte source, no build step')\""
+	},
+	"dependencies": {
+		"dompurify": "^3",
+		"github-slugger": "^2",
+		"marked": "^15"
+	},
+	"devDependencies": {
+		"svelte": "^5.55.2",
+		"typescript": "^6.0.2"
+	}
+}

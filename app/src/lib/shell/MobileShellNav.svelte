@@ -1,65 +1,67 @@
 <script lang="ts">
-	import { page } from '$app/state'
-	import { t } from '$lib/i18n'
-	import { mobileFabBottomClass, mobileProfileFabZClass, navigateApp } from '$lib/shell'
-	import MobileAsideDrawer from '$lib/ui/MobileAsideDrawer.svelte'
-	import MobileAsideNavLink from '$lib/ui/MobileAsideNavLink.svelte'
-	import MobileAsideSectionLabel from '$lib/ui/MobileAsideSectionLabel.svelte'
-	import { mobileChromeOverrides } from './mobile-chrome.svelte'
+import { page } from '$app/state'
+import { t } from '$lib/i18n'
+import { mobileFabBottomClass, mobileProfileFabZClass, navigateApp } from '$lib/shell'
+import MobileAsideDrawer from '$lib/ui/MobileAsideDrawer.svelte'
+import MobileAsideNavLink from '$lib/ui/MobileAsideNavLink.svelte'
+import MobileAsideSectionLabel from '$lib/ui/MobileAsideSectionLabel.svelte'
+import { mobileChromeOverrides } from './mobile-chrome.svelte'
 
-	type NavItem = {
-		href: string
-		label: string
-		active: boolean
-	}
+type NavItem = {
+	href: string
+	label: string
+	active: boolean
+}
 
-	let {
-		selfNavLabel,
-		selfActive
-	}: {
-		selfNavLabel: string
-		selfActive: boolean
-	} = $props()
+let {
+	selfNavLabel,
+	selfActive
+}: {
+	selfNavLabel: string
+	selfActive: boolean
+} = $props()
 
-	let navOpen = $state(false)
+let navOpen = $state(false)
 
-	const path = $derived(page.url.pathname)
-	const chrome = $derived(mobileChromeOverrides())
+const path = $derived(page.url.pathname)
+const chrome = $derived(mobileChromeOverrides())
 
-	const intentsActive = $derived(path === '/')
-	const sandboxActive = $derived(path.startsWith('/sandbox'))
-	const docsActive = $derived(path.startsWith('/docs'))
-	const sparksNavActive = $derived(path.startsWith('/sparks'))
-	const dbActive = $derived(path.startsWith('/db'))
-	const vaultNavActive = $derived(path.startsWith('/vault'))
-	const avenCityActive = $derived(path.startsWith('/aven-city'))
-	const inviteActive = $derived(path.startsWith('/invite'))
+const intentsActive = $derived(path === '/')
+const sandboxActive = $derived(path.startsWith('/sandbox'))
+const docsActive = $derived(path.startsWith('/docs'))
+const sparksNavActive = $derived(path.startsWith('/sparks'))
+const dbActive = $derived(path.startsWith('/db'))
+const vaultNavActive = $derived(path.startsWith('/vault'))
+const avenCityActive = $derived(path.startsWith('/aven-city'))
+const boardActive = $derived(path.startsWith('/board'))
+const inviteActive = $derived(path.startsWith('/invite'))
 
-	const navItems = $derived<NavItem[]>([
-		{ href: '/', label: t('nav.intents'), active: intentsActive },
-		{ href: '/sandbox', label: t('nav.sandbox'), active: sandboxActive },
-		{ href: '/sparks', label: t('nav.sparks'), active: sparksNavActive },
-		{ href: '/db', label: t('nav.db'), active: dbActive },
-		{ href: '/vault', label: t('nav.vault'), active: vaultNavActive },
-		{ href: '/aven-city', label: t('nav.avenCity'), active: avenCityActive },
-		{ href: '/docs', label: t('nav.docs'), active: docsActive },
-		{ href: '/invite', label: t('nav.invite'), active: inviteActive }
-	])
+const navItems = $derived<NavItem[]>([
+	{ href: '/', label: t('nav.intents'), active: intentsActive },
+	{ href: '/sandbox', label: t('nav.sandbox'), active: sandboxActive },
+	{ href: '/sparks', label: t('nav.sparks'), active: sparksNavActive },
+	{ href: '/db', label: t('nav.db'), active: dbActive },
+	{ href: '/vault', label: t('nav.vault'), active: vaultNavActive },
+	{ href: '/aven-city', label: t('nav.avenCity'), active: avenCityActive },
+	{ href: '/board', label: t('nav.board'), active: boardActive },
+	{ href: '/docs', label: t('nav.docs'), active: docsActive },
+	{ href: '/invite', label: t('nav.invite'), active: inviteActive }
+])
 
-	const showNavFab = $derived(!chrome.hideProfile)
+const showNavFab = $derived(!chrome.hideProfile)
 
-	$effect(() => {
-		void path
-		navOpen = false
-	})
+$effect(() => {
+	void path
+	navOpen = false
+})
 
-	function closeNav() {
-		navOpen = false
-	}
+function closeNav() {
+	navOpen = false
+}
 
-	function toggleNav() {
-		navOpen = !navOpen
-	}
+function toggleNav() {
+	navOpen = !navOpen
+}
 </script>
 
 <MobileAsideDrawer
