@@ -489,10 +489,16 @@ mod imp {
 		Ok(())
 	}
 
-	/// Download one file, tolerating transient blob-lock contention. hf-hub takes
-	/// an exclusive `flock` per blob; if another process (e.g. a stale dev
-	/// instance) holds it, we re-check the cache and retry a few times — the lock
-	/// frees when that process finishes or dies.
+	/// Max wall-clock to wait on a blob lock held by another process before giving
+	/// up (covers the dev harness's 2nd instance waiting for the 1st to finish a
+	/// multi-GB file). ~20 min at 2s/poll.
+	const LOCK_WAIT_ATTEMPTS: u32 = 600;
+
+	/// Download one file, coordinating with other processes via hf-hub's per-blob
+	/// `flock`. The shared root cache means the model is fetched ONCE: whichever
+	/// instance grabs the lock downloads it; the others re-check the cache and
+	/// wait here until it appears (the lock frees when the downloader finishes or
+	/// dies), then load from cache. No duplicate download, no hard error.
 	async fn download_one(
 		app: &AppHandle,
 		repo: &ApiRepo,
@@ -500,11 +506,11 @@ mod imp {
 		f: &RepoFile,
 		progress: &EmitProgress,
 	) -> Result<(), String> {
-		for attempt in 0..15 {
+		for attempt in 0..LOCK_WAIT_ATTEMPTS {
 			if state().cancelled.load(Ordering::Relaxed) {
 				return Err(CANCELLED.into());
 			}
-			// Already cached (possibly just finished by another process) → count + skip.
+			// Already cached (possibly just finished by another instance) → count + skip.
 			if cache_repo.get(&f.path).is_some() {
 				state().received.fetch_add(f.size, Ordering::Relaxed);
 				emit(app);
@@ -514,8 +520,11 @@ mod imp {
 				Ok(_) => return Ok(()),
 				Err(e) => {
 					let msg = e.to_string();
-					if msg.contains("Lock acquisition") && attempt < 14 {
-						log::warn!(target: "avenos::asr", "blob locked ({}), retry {}/15", f.path, attempt + 1);
+					if msg.contains("Lock acquisition") && attempt + 1 < LOCK_WAIT_ATTEMPTS {
+						// Another instance is fetching this file — wait for it.
+						if attempt % 15 == 0 {
+							log::info!(target: "avenos::asr", "waiting on another instance to fetch {} ({}s)", f.path, attempt * 2);
+						}
 						tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 						continue;
 					}
@@ -523,7 +532,7 @@ mod imp {
 				}
 			}
 		}
-		Err(format!("download {}: lock contention", f.path))
+		Err(format!("download {}: timed out waiting on another instance's lock", f.path))
 	}
 
 	/// Build the model once, pointing the HF cache at `.avenOS/models/` so weights
