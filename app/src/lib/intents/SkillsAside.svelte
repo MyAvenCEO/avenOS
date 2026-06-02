@@ -169,7 +169,7 @@ const skillsBottomPad = `pb-[calc(4.25rem+env(safe-area-inset-bottom))] ${mobile
 	side="right"
 	ariaLabel={t('intents.skillsAndWorkers')}
 	hideFromClass="sm:hidden"
-	zIndex={44}
+	zIndex={48}
 	bottomPadClass={skillsBottomPad}
 >
 	{#snippet header()}

@@ -11,6 +11,6 @@
 	let { align = 'left', class: className = '', children }: Props = $props()
 </script>
 
-<p class="{mobileAsideSectionLabelClass} {mobileAsideTextAlignClass(align)} {className}">
+<p class="{mobileAsideSectionLabelClass} max-md:text-center {mobileAsideTextAlignClass(align)} {className}">
 	{@render children()}
 </p>

@@ -36,7 +36,7 @@
 {/if}
 
 <nav
-	class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto md:gap-4 {navClass}"
+	class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto max-md:justify-end md:gap-4 {navClass}"
 	aria-label="Section navigation"
 >
 	{#each sections as section (section.title ?? section.items.map((i) => i.label).join('\0'))}
