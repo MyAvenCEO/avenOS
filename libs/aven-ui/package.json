@@ -9,6 +9,7 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./vibes/invoice": "./src/vibes/invoice/index.ts",
+		"./vibes/bank-transfers": "./src/vibes/bank-transfers/index.ts",
 		"./vibes/bank-statement": "./src/vibes/bank-statement/index.ts",
 		"./vibes/contract": "./src/vibes/contract/index.ts",
 		"./vibes/todos": "./src/vibes/todos/index.ts",
