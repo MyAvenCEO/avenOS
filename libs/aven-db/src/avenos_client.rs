@@ -274,6 +274,25 @@ impl JazzClient {
         .await
     }
 
+    /// Headless, **stateless** engine for the `aven-server` mini: an in-memory
+    /// store (no RocksDB directory, nothing survives a restart) wired to the
+    /// given sync transport. The `client_id` bookkeeping file still lives under
+    /// `context.data_dir`, but all replicated engine state is in `MemoryStorage`
+    /// — so the server is a live rendezvous/relay, not a durable mirror.
+    pub async fn connect_headless_in_memory(
+        context: AppContext,
+        sync_transport: Arc<dyn crate::sync_transport::SyncTransport>,
+    ) -> Result<Self> {
+        let storage: DynStorage = Box::new(crate::storage::MemoryStorage::new());
+        Self::do_connect_with_storage(
+            context,
+            storage,
+            MaybeSyncTransport::Active(sync_transport),
+            None,
+        )
+        .await
+    }
+
     /// Back-compat alias — prefer [`Self::connect_with_sync_transport`].
     pub async fn connect_with_peer_transport(
         context: AppContext,
@@ -400,6 +419,16 @@ impl JazzClient {
         peer_layer: MaybeSyncTransport,
         on_inbound_parked: Option<PeerInboundParkedHook>,
     ) -> Result<Self> {
+        let storage: DynStorage = open_persistent_storage(&context.data_dir).await?;
+        Self::do_connect_with_storage(context, storage, peer_layer, on_inbound_parked).await
+    }
+
+    async fn do_connect_with_storage(
+        context: AppContext,
+        storage: DynStorage,
+        peer_layer: MaybeSyncTransport,
+        on_inbound_parked: Option<PeerInboundParkedHook>,
+    ) -> Result<Self> {
         std::fs::create_dir_all(&context.data_dir)?;
 
         let client_id_path = context.data_dir.join("client_id");
@@ -420,8 +449,6 @@ impl JazzClient {
         };
 
         tracing::debug!(client_id = %client_id, "Groove client identity persisted (sync inbox / peers)");
-
-        let storage: DynStorage = open_persistent_storage(&context.data_dir).await?;
 
         let schema_manager = build_schema_manager(&storage, &context)?;
         let peer_transport: SharedSyncTransport = Arc::new(std::sync::RwLock::new(match &peer_layer {
