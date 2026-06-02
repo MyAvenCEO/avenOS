@@ -31,6 +31,7 @@ const sparksNavActive = $derived(path.startsWith('/sparks'))
 const dbActive = $derived(path.startsWith('/db'))
 const avenCityActive = $derived(path.startsWith('/aven-city'))
 const boardActive = $derived(path.startsWith('/board'))
+const dreamsActive = $derived(path.startsWith('/dreams'))
 
 const shellLocked = $derived(browser && isTauriRuntime() && $deviceSession.kind === 'locked')
 
@@ -243,6 +244,15 @@ $effect(() => {
 						aria-current={boardActive ? 'page' : undefined}
 						onclick={(e) => navigateApp('/board', e)}
 						>{t('nav.board')}</a
+					>
+					<span class="select-none opacity-25" aria-hidden="true">|</span>
+					<a
+						href="/dreams"
+						data-sveltekit-preload-data="hover"
+						class="transition-opacity hover:opacity-80 {dreamsActive ? 'opacity-95' : 'opacity-40'}"
+						aria-current={dreamsActive ? 'page' : undefined}
+						onclick={(e) => navigateApp('/dreams', e)}
+						>{t('nav.dreams')}</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a

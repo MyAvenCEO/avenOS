@@ -78,6 +78,7 @@
 		"vault": "Vault",
 		"avenCity": "avenCITY",
 		"board": "Board",
+		"dreams": "Dreams",
 		"docs": "Docs",
 		"invite": "Invite",
 		"backToIntentsList": "Back to intents list",
@@ -101,6 +102,17 @@
 		"empty": "Nothing here yet.",
 		"backToBoard": "Back to board",
 		"notFound": "Work item not found."
+	},
+	"dreams": {
+		"title": "Dreams",
+		"subtitle": "Founder-customer wishes — features, bugs, ideas & requests.",
+		"wishlist": "My Dreams",
+		"wishlistHint": "Captured wishes waiting to be triaged.",
+		"nextUp": "Next Up",
+		"nextUpHint": "Promoted wishes queued for delivery.",
+		"empty": "Nothing here yet — speak or type a wish below.",
+		"metricLabel": "Measurable outcome",
+		"composerPlaceholder": "Describe a wish — feature, bug, idea or request…"
 	},
 	"lockGate": {
 		"tagline": "Your self-sovereign life starts here",
