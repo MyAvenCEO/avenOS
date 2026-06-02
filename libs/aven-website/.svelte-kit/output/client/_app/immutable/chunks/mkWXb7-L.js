@@ -1,1 +1,0 @@
-var e=`mx-auto w-full max-w-6xl`,t=`mx-auto w-full max-w-[min(100%,88rem)]`;export{t as n,e as t};

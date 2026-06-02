@@ -1,1 +1,0 @@
-import{t as e}from"../chunks/CRWD5eUP.js";import{n as t}from"../chunks/uWNaHF83.js";var n=e({load:()=>r}),r=()=>t(307,`/talk`);export{n as universal};

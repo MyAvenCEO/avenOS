@@ -13,6 +13,7 @@ node_modules
 /.svelte-kit
 /ARCHIVE/*/.svelte-kit
 /app/.svelte-kit
+/libs/aven-website/.svelte-kit
 /build
 /ARCHIVE/*/build
 /app/build
