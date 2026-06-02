@@ -471,7 +471,8 @@
 				"read": "Read",
 				"write": "Write",
 				"delete": "Delete",
-				"share": "Share"
+				"share": "Share",
+				"replicate": "Replizieren"
 			},
 			"syncTitle": "Sync",
 			"revoke": "Teilen beenden",
@@ -668,7 +669,8 @@
 		"forgetting": "Wird entfernt…",
 		"forgetConfirmInline": "Zum Entfernen erneut tippen",
 		"forgetConfirm": "Diesen Peer aus Meinem Netzwerk entfernen?\n\nDie Synchronisierung mit diesem Gerät wird gestoppt. Bereits erhaltene Daten bleiben auf dem Gerät.\n\n{did}",
-		"copyDebug": "Debug kopieren",
+		"copyDebug": "Debug-Logs kopieren",
+		"copyFailed": "Kopieren fehlgeschlagen",
 		"copyDebugHint": "Aktuelle Logs + Peer-/Mesh-Status für Fehlerberichte in die Zwischenablage kopieren"
 	}
 }

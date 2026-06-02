@@ -69,6 +69,8 @@ export async function sparkReplicateAdd(payload: {
 
 export type SparkAdminListReply = {
 	adminDids: string[]
+	/** Server avens granted a blind `replicate` cap (store-and-forward backups). */
+	replicaDids: string[]
 }
 
 export async function sparkAdminList(sparkId: string): Promise<SparkAdminListReply> {

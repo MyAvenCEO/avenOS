@@ -28,11 +28,12 @@
 	import { vaultList } from '$lib/settings/vault'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { formatDebugReport, recentRustLogs } from '$lib/debug/console-capture'
+	import { copyToClipboard } from '$lib/runtime/clipboard'
 	import { t } from '$lib/i18n'
 
 	let { sparkId, wide = false }: { sparkId: string; wide?: boolean } = $props()
 
-	type SparkCapKey = 'owner' | 'admin' | 'read' | 'write' | 'delete' | 'share'
+	type SparkCapKey = 'owner' | 'admin' | 'read' | 'write' | 'delete' | 'share' | 'replicate'
 
 	function sparkCapLabel(key: SparkCapKey): string {
 		return t(`sparks.share.capabilities.${key}`)
@@ -44,6 +45,7 @@
 	let err = $state<string | undefined>()
 	let busy = $state(false)
 	let adminDids = $state<string[]>([])
+	let replicaDids = $state<string[]>([])
 	let adminErr = $state<string | undefined>()
 	let adminBusy = $state(false)
 	let addAdminDid = $state('')
@@ -58,6 +60,8 @@
 	let revokeNote = $state<string | undefined>()
 	let localPairingLabel = $state<string | undefined>(undefined)
 	let debugCopied = $state(false)
+	let debugCopyFailed = $state(false)
+	let didCopied = $state(false)
 
 	const sessionKind = $derived($deviceSession.kind)
 	const unlocked = $derived(sessionKind === 'unlocked')
@@ -106,7 +110,7 @@
 		)
 		const localDid = session?.peerDid?.trim().toLowerCase() ?? ''
 		const snapshot = $peerMeshSnapshot
-		return adminDids.map((did) => {
+		const adminEntries = adminDids.map((did): SparkAccessEntry => {
 			const norm = did.trim().toLowerCase()
 			const peer = peersByDid.get(norm)
 			const isThisDevice = localDid !== '' && norm === localDid
@@ -121,6 +125,25 @@
 				: meshPeerPhase(snapshot, did, peer?.status)
 			return { did, label, isThisDevice, capabilities, phase }
 		})
+		// Blind replication peers (server avens). Sourced from the spark biscuit, so
+		// they persist across reloads. They are NOT members — only a `replicate`
+		// cap, no keyshare — so they show a single REPLICATE badge.
+		const adminSet = new Set(adminDids.map((d) => d.trim().toLowerCase()))
+		const replicaEntries = replicaDids
+			.filter((did) => !adminSet.has(did.trim().toLowerCase()))
+			.map((did): SparkAccessEntry => {
+				const norm = did.trim().toLowerCase()
+				const peer = peersByDid.get(norm)
+				const label = peerAccessLabel(did, peer?.deviceLabel ?? t('sparks.share.addReplica'), false)
+				return {
+					did,
+					label,
+					isThisDevice: false,
+					capabilities: ['replicate'],
+					phase: meshPeerPhase(snapshot, did, peer?.status),
+				}
+			})
+		return [...adminEntries, ...replicaEntries]
 	})
 
 	// §7 V3 — calm global status: "everyone up to date" vs "N still syncing".
@@ -160,8 +183,10 @@
 						const a = await sparkAdminList(sid)
 						if (gen !== adminLoadGen) return
 						adminDids = a.adminDids
+						replicaDids = a.replicaDids ?? []
 					} else {
 						adminDids = []
+						replicaDids = []
 					}
 					addAdminDid = ''
 					addNote = undefined
@@ -192,6 +217,7 @@
 			const a = await sparkAdminList(sid)
 			if (gen !== adminLoadGen) return
 			adminDids = a.adminDids
+			replicaDids = a.replicaDids ?? []
 			adminErr = undefined
 		} catch (e) {
 			if (gen !== adminLoadGen) return
@@ -215,6 +241,7 @@
 			const a = await sparkAdminList(sid)
 			if (gen !== adminLoadGen) return
 			adminDids = a.adminDids
+			replicaDids = a.replicaDids ?? []
 		} catch (e) {
 			if (gen !== adminLoadGen) return
 			adminErr = e instanceof Error ? e.message : String(e)
@@ -237,6 +264,9 @@
 			await sparkReplicateAdd({ sparkId: sid, peerDid: did })
 			addReplicateDid = ''
 			replicateNote = t('sparks.share.replicateGrantedNote')
+			// Reflect the new replica in the access list immediately (it also lands
+			// via the biscuit-change watcher, but refresh now for instant feedback).
+			await refreshAdminList()
 		} catch (e) {
 			replicateErr = e instanceof Error ? e.message : String(e)
 		} finally {
@@ -346,17 +376,31 @@
 				sparkId,
 				ownDid: session?.peerDid ?? '',
 				adminDids,
+				replicaDids,
 				peerRows,
 				meshSnapshot: $peerMeshSnapshot,
 			},
 			rustLogs,
 		)
-		try {
-			await navigator.clipboard.writeText(report)
+		// `navigator.clipboard` silently fails in the macOS app sandbox — use the
+		// Tauri clipboard plugin (with navigator fallback). Surface success/failure.
+		debugCopyFailed = false
+		const ok = await copyToClipboard(report)
+		if (ok) {
 			debugCopied = true
 			setTimeout(() => (debugCopied = false), 1500)
-		} catch {
-			/* clipboard blocked */
+		} else {
+			debugCopyFailed = true
+			setTimeout(() => (debugCopyFailed = false), 2500)
+		}
+	}
+
+	async function copyOwnDid(): Promise<void> {
+		const did = session?.peerDid
+		if (!browser || !did) return
+		if (await copyToClipboard(did)) {
+			didCopied = true
+			setTimeout(() => (didCopied = false), 1500)
 		}
 	}
 </script>
@@ -404,12 +448,18 @@
 									{#each entry.capabilities as cap (cap)}
 										<span
 											class="rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase
-												{cap === 'owner' || cap === 'admin'
+												{cap === 'owner' || cap === 'admin' || cap === 'replicate'
 												? 'bg-primary/10 text-primary'
 												: 'bg-muted text-muted-foreground'}">{sparkCapLabel(cap)}</span
 										>
 									{/each}
-									{#if !entry.isThisDevice}
+									{#if entry.isThisDevice}
+										<button
+											type="button"
+											class="bg-muted hover:bg-muted/70 ml-auto rounded px-2 py-0.5 text-[11px] font-medium"
+											onclick={() => void copyOwnDid()}>{didCopied ? t('peers.copied') : t('common.copyDid')}</button
+										>
+									{:else}
 										<button
 											type="button"
 											class="text-destructive hover:bg-destructive/10 ml-auto rounded px-2 py-0.5 text-[11px] font-medium disabled:opacity-50"
@@ -516,8 +566,15 @@
 				<p class="text-muted-foreground text-xs leading-relaxed">{t('peers.copyDebugHint')}</p>
 				<button
 					type="button"
-					class="bg-muted hover:bg-muted/70 shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium"
-					onclick={() => void copyDebug()}>{debugCopied ? t('peers.copied') : t('peers.copyDebug')}</button
+					class="shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium {debugCopyFailed
+						? 'bg-destructive/10 text-destructive'
+						: 'bg-muted hover:bg-muted/70'}"
+					onclick={() => void copyDebug()}
+					>{debugCopyFailed
+						? t('peers.copyFailed')
+						: debugCopied
+							? t('peers.copied')
+							: t('peers.copyDebug')}</button
 				>
 			</section>
 		</div>

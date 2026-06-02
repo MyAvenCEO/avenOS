@@ -483,7 +483,8 @@
 				"read": "Read",
 				"write": "Write",
 				"delete": "Delete",
-				"share": "Share"
+				"share": "Share",
+				"replicate": "Replicate"
 			},
 			"syncTitle": "Sync",
 			"revoke": "Stop sharing",
@@ -680,7 +681,8 @@
 		"forgetting": "Forgetting…",
 		"forgetConfirmInline": "Tap again to remove",
 		"forgetConfirm": "Remove this peer from My Network?\n\nThey stop syncing with this device. What they already received stays on their device.\n\n{did}",
-		"copyDebug": "Copy debug",
+		"copyDebug": "Copy debug logs",
+		"copyFailed": "Copy failed",
 		"copyDebugHint": "Copy recent logs + peer/mesh state to clipboard for bug reports"
 	}
 }

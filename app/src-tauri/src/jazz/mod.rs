@@ -2176,9 +2176,14 @@ async fn enqueue_vault_catalogue_drain(app: &tauri::AppHandle) {
 #[serde(rename_all = "camelCase")]
 pub struct SparkAdminListReply {
 	pub admin_dids: Vec<String>,
+	/// Server avens granted a blind `replicate` cap on this spark (store-and-forward
+	/// backups; not members). Persisted in the spark biscuit, so they survive
+	/// reloads and surface alongside members in the access list.
+	pub replica_dids: Vec<String>,
 }
 
-/// Who can administer this spark (from biscuit `owns` facts).
+/// Who can access this spark: administrators (biscuit `owns`) + blind replication
+/// peers (biscuit `replicate`).
 pub(crate) async fn groove_ipc_spark_admin_list(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -2199,7 +2204,15 @@ pub(crate) async fn groove_ipc_spark_admin_list(
 		.into_iter()
 		.collect();
 	admin_dids.sort();
-	Ok(SparkAdminListReply { admin_dids })
+	let mut replica_dids: Vec<String> =
+		crate::spark_acc::spark_replicas(&bs.biscuit, spark_uuid)?
+			.into_iter()
+			.collect();
+	replica_dids.sort();
+	Ok(SparkAdminListReply {
+		admin_dids,
+		replica_dids,
+	})
 }
 
 /// v2 per-spark revoke = **key rotation**. Removes `peer_did` from `spark_id`:
