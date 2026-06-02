@@ -1,6 +1,14 @@
 <script lang="ts">
+import { browser } from '$app/environment'
 import { focusShellWebview } from '$lib/intent-mock/focus-shell-webview'
 import { encodeForModel } from '$lib/intent-mock/audio-encode'
+import { transcribeAudio } from '$lib/intent-mock/transcribe'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+import {
+	asrState,
+	voicePrep as voicePrepOf,
+	voiceUnavailableReason as voiceUnavailableReasonOf
+} from '$lib/asr/model-download-store'
 import { onDestroy, tick } from 'svelte'
 
 /** Typing-mode textarea: grow with content up to this many text rows, then scroll. */
@@ -105,12 +113,26 @@ let {
 	disabled?: boolean
 	enableAttachments?: boolean
 	embedAttachmentNamesInMessage?: boolean
-	onTranscribeAudio?: (audio: { pcm: Float32Array; sampleRate: number }) => Promise<string>
+	onTranscribeAudio?: (audio: {
+		pcm: Float32Array
+		sampleRate: number
+	}) => Promise<{ transcript: string; title: string; summary: string }>
 	voiceUnavailableReason?: string | null
 	onVoiceUnavailableClick?: () => void
 	voicePrep?: VoicePrep | null
 	onTranscribeError?: (message: string) => void
 } = $props()
+
+// On-device transcription is the default whenever we're in the Tauri runtime, so
+// EVERY composer (talk, dreams, HITL) uses the real wired model once it's ready —
+// the `VOICE_MOCK_TRANSCRIPTS` fallback only survives in non-Tauri (web) previews.
+// Callers may still override by passing the props explicitly.
+const tauriRuntime = $derived(browser && isTauriRuntime())
+const effectiveTranscribe = $derived(onTranscribeAudio ?? (tauriRuntime ? transcribeAudio : undefined))
+const effectiveVoiceReason = $derived(
+	voiceUnavailableReason ?? (tauriRuntime ? voiceUnavailableReasonOf($asrState) : null)
+)
+const effectiveVoicePrep = $derived(voicePrep ?? (tauriRuntime ? voicePrepOf($asrState) : null))
 
 /**
  * Composer mode is intentionally not `$bindable`: a parent-held bind can reconcile after clears and resurrect `typing`.
@@ -491,7 +513,7 @@ let pcmChunks: Float32Array[] = []
 let recordedSampleRate = 0
 
 async function startRecording() {
-	if (!onTranscribeAudio || recording) return
+	if (!effectiveTranscribe || recording) return
 	pcmChunks = []
 	try {
 		const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -551,7 +573,7 @@ function teardownRecording() {
 function openListening() {
 	// Model not ready → don't record; morph the pill into the inline download
 	// progress / note instead (the parent supplies `voicePrep`).
-	if (voiceUnavailableReason != null) {
+	if (effectiveVoiceReason != null) {
 		void focusShellWebview()
 		onVoiceUnavailableClick?.()
 		mode = 'preparing'
@@ -600,7 +622,7 @@ async function commitVoiceNote() {
 	if (disabled || submitBusy || transcribing) return
 
 	// Capture the audio before tearing down the listening UI (real path only).
-	const captured = onTranscribeAudio ? collectRecording() : null
+	const captured = effectiveTranscribe ? collectRecording() : null
 
 	suppressTextEffect = true
 	text = ''
@@ -611,13 +633,13 @@ async function commitVoiceNote() {
 	mode = 'collapsed'
 	openMicCooldownUntilMs = performance.now() + 280
 
-	if (onTranscribeAudio) {
+	if (effectiveTranscribe) {
 		// On-device transcription — never mock. Nothing captured → post nothing.
 		if (captured) {
 			transcribing = true
 			try {
-				const transcript = await onTranscribeAudio(captured)
-				if (transcript) onSubmitMessage?.(transcript, [])
+				const note = await effectiveTranscribe(captured)
+				if (note?.transcript) onSubmitMessage?.(note.transcript, [])
 			} catch (e) {
 				onTranscribeError?.(e instanceof Error ? e.message : String(e))
 			} finally {
@@ -625,7 +647,7 @@ async function commitVoiceNote() {
 			}
 		}
 	} else if (onSubmitMessage) {
-		// Demo composer (no model wired) — placeholder transcript only.
+		// No on-device model (non-Tauri web preview only) — placeholder transcript.
 		onSubmitMessage(
 			VOICE_MOCK_TRANSCRIPTS[Math.floor(Math.random() * VOICE_MOCK_TRANSCRIPTS.length)],
 			[]
@@ -910,7 +932,7 @@ const pillClass = $derived.by(() => {
 		<div class={pillClass} role="status" aria-live="polite">
 			<div class="flex items-center justify-between gap-2">
 				<span class="truncate text-xs font-semibold tracking-tight">
-					{voicePrep?.status === 'ready' ? 'Voice model ready' : 'Preparing voice model'}
+					{effectiveVoicePrep?.status === 'ready' ? 'Voice model ready' : 'Preparing voice model'}
 				</span>
 				<button
 					type="button"
@@ -924,30 +946,30 @@ const pillClass = $derived.by(() => {
 				</button>
 			</div>
 
-			{#if voicePrep && (voicePrep.status === 'downloading' || voicePrep.status === 'idle')}
+			{#if effectiveVoicePrep && (effectiveVoicePrep.status === 'downloading' || effectiveVoicePrep.status === 'idle')}
 				<div class="flex items-center justify-between gap-2">
-					<span class="truncate text-[11px] font-medium text-foreground/80">{voicePrep.model}</span>
+					<span class="truncate text-[11px] font-medium text-foreground/80">{effectiveVoicePrep.model}</span>
 					<span class="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground"
-						>{voicePrep.sizeLabel}</span
+						>{effectiveVoicePrep.sizeLabel}</span
 					>
 				</div>
 				<div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-					{#if voicePrep.fraction == null}
+					{#if effectiveVoicePrep.fraction == null}
 						<div class="h-full w-1/3 animate-pulse rounded-full bg-primary/70"></div>
 					{:else}
 						<div
 							class="h-full rounded-full bg-primary transition-[width] duration-300"
-							style={`width: ${Math.round(voicePrep.fraction * 100)}%`}
+							style={`width: ${Math.round(effectiveVoicePrep.fraction * 100)}%`}
 						></div>
 					{/if}
 				</div>
 			{/if}
 
-			{#if voicePrep?.note}
-				<p class="text-[11px] leading-snug text-muted-foreground">{voicePrep.note}</p>
+			{#if effectiveVoicePrep?.note}
+				<p class="text-[11px] leading-snug text-muted-foreground">{effectiveVoicePrep.note}</p>
 			{/if}
 
-			{#if voicePrep?.status === 'ready'}
+			{#if effectiveVoicePrep?.status === 'ready'}
 				<button
 					type="button"
 					class="mt-0.5 inline-flex items-center justify-center gap-1.5 self-start rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground outline-none transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/35"

@@ -109,13 +109,33 @@ pub async fn asr_status(app: AppHandle) -> Result<AsrStatus, String> {
 	Ok(imp::status(&app).await)
 }
 
-/// Transcribe captured PCM on-device. `pcm` is mono f32 samples at `sample_rate`.
+/// A transcribed voice note: the verbatim transcript plus a model-extracted
+/// title and summary. Produced in one constrained-decoding pass so the JSON is
+/// always schema-valid. `JsonSchema` (used to constrain the model) is only
+/// derived in the `local-asr` build.
+#[derive(Serialize, Clone)]
+// Derive from mistral.rs's re-exported schemars so the JsonSchema type matches
+// what `generate_structured` expects (avoids a second schemars version).
+#[cfg_attr(feature = "local-asr", derive(serde::Deserialize, mistralrs::schemars::JsonSchema))]
+#[cfg_attr(feature = "local-asr", schemars(crate = "mistralrs::schemars"))]
+#[serde(rename_all = "camelCase")]
+pub struct VoiceNote {
+	/// Verbatim transcript of what was said.
+	pub transcript: String,
+	/// Short headline (a few words).
+	pub title: String,
+	/// One- or two-sentence summary.
+	pub summary: String,
+}
+
+/// Transcribe captured PCM on-device into `{ transcript, title, summary }`.
+/// `pcm` is mono f32 samples at `sample_rate`.
 #[tauri::command(rename_all = "camelCase")]
 pub async fn transcribe_audio(
 	app: AppHandle,
 	pcm: Vec<f32>,
 	sample_rate: u32,
-) -> Result<String, String> {
+) -> Result<VoiceNote, String> {
 	if !instance_enabled() {
 		return Err("on-device voice transcription runs on the primary instance only".into());
 	}
@@ -241,13 +261,13 @@ fn dir_size(path: &std::path::Path) -> u64 {
 // ───────────────────────── default build (feature off) ─────────────────────────
 #[cfg(not(feature = "local-asr"))]
 mod imp {
-	use super::{AppHandle, AsrStatus};
+	use super::{AppHandle, AsrStatus, VoiceNote};
 
 	pub async fn status(_app: &AppHandle) -> AsrStatus {
 		AsrStatus::unavailable()
 	}
 
-	pub async fn transcribe(_app: &AppHandle, _pcm: Vec<f32>, _sr: u32) -> Result<String, String> {
+	pub async fn transcribe(_app: &AppHandle, _pcm: Vec<f32>, _sr: u32) -> Result<VoiceNote, String> {
 		Err("on-device transcription is not available in this build (enable the `local-asr` feature)".into())
 	}
 
@@ -270,7 +290,7 @@ mod imp {
 	};
 	use tauri::{AppHandle, Emitter};
 
-	use super::{model_config, AsrStatus, DOWNLOAD_EVENT};
+	use super::{model_config, AsrStatus, VoiceNote, DOWNLOAD_EVENT};
 
 	/// Shared readiness state, mirrored to the webview via `asr:model-download`.
 	#[derive(Default)]
@@ -666,7 +686,7 @@ mod imp {
 		emit(app);
 	}
 
-	pub async fn transcribe(app: &AppHandle, pcm: Vec<f32>, sample_rate: u32) -> Result<String, String> {
+	pub async fn transcribe(app: &AppHandle, pcm: Vec<f32>, sample_rate: u32) -> Result<VoiceNote, String> {
 		let model = ensure_model(app).await?;
 
 		let audio = AudioInput {
@@ -676,21 +696,15 @@ mod imp {
 		};
 		let messages = MultimodalMessages::new().add_audio_message(
 			TextMessageRole::User,
-			"Transcribe this voice note verbatim. Return only the transcript text.",
+			"Transcribe this voice note. Return the verbatim transcript, a short title \
+			 (a few words), and a one- or two-sentence summary.",
 			vec![audio],
 		);
 
-		let response = model
-			.send_chat_request(messages)
+		// Constrained JSON decoding → schema-valid { transcript, title, summary }.
+		model
+			.generate_structured::<VoiceNote>(messages)
 			.await
-			.map_err(|e| format!("transcribe: {e}"))?;
-
-		Ok(response
-			.choices
-			.first()
-			.and_then(|c| c.message.content.clone())
-			.unwrap_or_default()
-			.trim()
-			.to_string())
+			.map_err(|e| format!("transcribe: {e}"))
 	}
 }

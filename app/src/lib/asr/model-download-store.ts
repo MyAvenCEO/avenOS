@@ -9,6 +9,7 @@
  * without a Tauri runtime.
  */
 import { type Unsubscriber, writable } from 'svelte/store'
+import { formatBytesPair } from '$lib/asr/format'
 
 export type AsrStatus = 'idle' | 'downloading' | 'ready' | 'error' | 'unavailable'
 
@@ -88,6 +89,34 @@ export function voiceUnavailableReason(state: AsrState): string | null {
 			return state.error ? `Voice model error: ${state.error}` : 'Voice model failed to load'
 		case 'unavailable':
 			return 'On-device voice transcription is not available in this build'
+	}
+}
+
+/** Live state for the composer's inline "preparing" pill. */
+export type VoicePrep = {
+	model: string
+	status: AsrStatus
+	fraction: number | null
+	sizeLabel: string
+	note: string
+}
+
+/** Pure: derive the inline "preparing" pill state (progress + note) from `state`. */
+export function voicePrep(state: AsrState): VoicePrep {
+	const note =
+		state.status === 'ready'
+			? 'The voice model is ready — tap to record your note.'
+			: state.status === 'error'
+				? `Couldn't set up on-device transcription. ${state.error ?? ''}`.trim()
+				: state.status === 'unavailable'
+					? 'On-device voice transcription isn’t available in this build.'
+					: 'Setting up on-device voice transcription. This runs once and works offline afterwards — your audio never leaves the device.'
+	return {
+		model: state.model,
+		status: state.status,
+		fraction: downloadFraction(state),
+		sizeLabel: formatBytesPair(state.receivedBytes, state.totalBytes),
+		note
 	}
 }
 
