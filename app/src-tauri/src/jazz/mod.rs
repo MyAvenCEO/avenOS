@@ -220,10 +220,26 @@ pub(crate) async fn execute_drain_batch(
 	}
 
 	let want_snapshots = !pending.is_empty() && jazz.any_ui_subscriber(&pending).await;
-	// Vault-shell re-hydrate (e.g. keyshare before catalogue row) must republish `sparks` even
-	// when the batch only named `keyshares` — otherwise grantees stay on an empty grid.
-	let push_sparks_catalogue = vault_shell_dirty && !pending.contains("sparks");
-	if !vault_shell_dirty && !want_snapshots && !push_sparks_catalogue {
+	// A vault-shell re-hydrate can change row ACCESS for ANY table — a single spark grant
+	// unlocks the spark catalogue row AND every data row (todos / messages / files / …) it
+	// scopes. So after re-hydrate we refresh GENERICALLY, with no per-table special cases:
+	//   • the catalogue (`sparks`) ALWAYS — so the spark list updates even off-page, and
+	//   • every table the user is currently viewing — so the open page reflects new access.
+	// Tables the user is *not* viewing need no push: navigating to them re-`list()`s through
+	// the now-hydrated shell. This force-set bypasses the per-table subscriber gate.
+	let force_after_rehydrate: Vec<String> = if vault_shell_dirty {
+		let mut set: std::collections::HashSet<String> = jazz
+			.subscribed_tables()
+			.await
+			.into_iter()
+			.filter(|t| t != "peers") // peers has its own publish path (publish_trusted_peers_ui)
+			.collect();
+		set.insert("sparks".to_string());
+		set.into_iter().collect()
+	} else {
+		Vec::new()
+	};
+	if !vault_shell_dirty && !want_snapshots {
 		if !pending.is_empty() {
 			log::trace!(
 				target: "avenos::jazz",
@@ -285,7 +301,7 @@ pub(crate) async fn execute_drain_batch(
 		return;
 	}
 
-	if !want_snapshots && !push_sparks_catalogue {
+	if !want_snapshots && force_after_rehydrate.is_empty() {
 		return;
 	}
 
@@ -301,64 +317,72 @@ pub(crate) async fn execute_drain_batch(
 		}
 	};
 
-	let snapshot_tables: HashSet<String> = pending.iter().cloned().collect();
-	if want_snapshots {
+	// (1) Generic force-push after a shell re-hydrate: bypasses the per-table subscriber gate
+	// so newly-granted access surfaces immediately (the spark list + whatever page is open),
+	// for ANY table — no special cases.
+	for table in &force_after_rehydrate {
 		{
 			let mut last = jazz
 				.last_table_snapshots
 				.write()
 				.expect("last_table_snapshots poisoned");
-			for t in &snapshot_tables {
-				last.remove(t);
-			}
-		}
-	}
-	for table in pending {
-		match jazz
-			.snapshot_broadcast(app, client.as_ref(), shell.as_ref(), &table)
-			.await
-		{
-			Ok(true) => log::debug!(
-				target: "avenos::jazz",
-				"table-change drain: republished {table}",
-			),
-			Ok(false) => {}
-			Err(e) => log::warn!(
-				target: "avenos::jazz",
-				"table-change drain: snapshot_broadcast({table}) failed: {e}",
-			),
-		}
-	}
-
-	if push_sparks_catalogue {
-		// A vault-shell table (keyshares/sparks/peers) changed — the shell was re-hydrated
-		// above and may now contain a newly granted spark the grantee has never seen.
-		// Use `publish_table_snapshot_force` (bypasses the subscriber-count gate) so the
-		// sparks catalogue lands in the frontend even when the user is NOT on the sparks
-		// page (ref-count = 0). Without this, the grantee only sees the new spark on
-		// restart (when bootstrap force-publishes all catalogue tables unconditionally).
-		{
-			let mut last = jazz
-				.last_table_snapshots
-				.write()
-				.expect("last_table_snapshots poisoned");
-			last.remove("sparks");
+			last.remove(table);
 		}
 		match jazz
-			.publish_table_snapshot_force(app, client.as_ref(), shell.as_ref(), "sparks")
+			.publish_table_snapshot_force(app, client.as_ref(), shell.as_ref(), table)
 			.await
 		{
 			Ok(()) => log::debug!(
 				target: "avenos::jazz",
-				"table-change drain: force-published sparks (vault catalogue after shell re-hydrate)",
+				"table-change drain: force-published {table} after shell re-hydrate",
 			),
 			Err(e) => log::warn!(
 				target: "avenos::jazz",
-				"table-change drain: publish_table_snapshot_force(sparks) failed: {e}",
+				"table-change drain: publish_table_snapshot_force({table}) failed: {e}",
 			),
 		}
 	}
 
+	// (2) Ordinary row changes (no access change) for tables the user is viewing: subscriber-
+	// gated snapshot. Skip any table already force-pushed above (dedup would no-op it anyway).
+	if want_snapshots {
+		let to_broadcast: Vec<String> = pending
+			.iter()
+			.filter(|t| !force_after_rehydrate.contains(*t))
+			.cloned()
+			.collect();
+		{
+			let mut last = jazz
+				.last_table_snapshots
+				.write()
+				.expect("last_table_snapshots poisoned");
+			for t in &to_broadcast {
+				last.remove(t);
+			}
+		}
+		for table in to_broadcast {
+			match jazz
+				.snapshot_broadcast(app, client.as_ref(), shell.as_ref(), &table)
+				.await
+			{
+				Ok(true) => log::debug!(
+					target: "avenos::jazz",
+					"table-change drain: republished {table}",
+				),
+				Ok(false) => {}
+				Err(e) => log::warn!(
+					target: "avenos::jazz",
+					"table-change drain: snapshot_broadcast({table}) failed: {e}",
+				),
+			}
+		}
+	}
+
+	let snapshot_tables: HashSet<String> = pending
+		.iter()
+		.cloned()
+		.chain(force_after_rehydrate.iter().cloned())
+		.collect();
 	if !snapshot_tables.is_empty() {
 		schedule_table_drain_follow_up(app.clone(), snapshot_tables);
 	}
@@ -889,6 +913,17 @@ impl ManagedJazz {
 		tables
 			.iter()
 			.any(|t| m.get(t).copied().unwrap_or(0) > 0)
+	}
+
+	/// Tables with at least one active UI subscriber (ref-count > 0). Used to refresh exactly
+	/// the views the user is currently looking at after a vault-shell re-hydrate — generically,
+	/// independent of which table it is.
+	async fn subscribed_tables(&self) -> Vec<String> {
+		let m = self.table_ui_refs.lock().await;
+		m.iter()
+			.filter(|(_, &n)| n > 0)
+			.map(|(t, _)| t.clone())
+			.collect()
 	}
 
 	/// Re-query `table` and emit `avenos:runtime` `{ kind: "table", table, rows }` (deduped).
@@ -1645,7 +1680,9 @@ fn jazz_session_reply_from_shell(shell: &jazz_engine::ShellState) -> JazzSession
 	}
 }
 
-const BOOTSTRAP_UI_TABLES: &[&str] = &["sparks", "humans", "peers", "messages", "todos", "files"];
+/// Internal vault tables that carry no UI rows — skipped when force-publishing initial
+/// snapshots (their contents hydrate the shell, they are never painted directly).
+const NON_UI_TABLES: &[&str] = &["keyshares"];
 
 pub(crate) async fn groove_ipc_bootstrap(
 	app: &tauri::AppHandle,
@@ -1669,7 +1706,13 @@ pub(crate) async fn groove_ipc_bootstrap(
 				"defaultSparkUrn": session.default_spark_urn,
 				"tables": tables.clone(),
 			}));
-			for table in BOOTSTRAP_UI_TABLES {
+			// Generic: force-publish an initial snapshot for EVERY table in the connected
+			// schema (minus internal vault tables), so first paint is reactive for any
+			// present or future table without a hardcoded list to maintain.
+			for table in &tables {
+				if NON_UI_TABLES.contains(&table.as_str()) {
+					continue;
+				}
 				if let Err(e) = jazz
 					.publish_table_snapshot_force(
 						app,

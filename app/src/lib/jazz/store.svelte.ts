@@ -22,21 +22,38 @@ function rowsEqual(prev: JazzRow[], next: JazzRow[]): boolean {
 	return JSON.stringify(prev) === JSON.stringify(next)
 }
 
-function sparkRowKey(row: JazzRow): string {
-	const sid = row.spark_id ?? row.sparkId
-	if (typeof sid === 'string' && sid.trim()) return sid.trim().toLowerCase()
+/**
+ * How an incoming snapshot is reconciled with current rows.
+ *
+ * - `replace` (default): the snapshot IS the complete authoritative set of currently-visible
+ *   rows, so replacing reflects adds, updates AND deletes. Correct and fully reactive for any
+ *   table (todos, messages, files, humans, …) — no per-table code needed.
+ * - `catalogue`: defends a "gateway" table (the spark list) against a transient empty/partial
+ *   snapshot during a vault-shell re-hydrate (access flicker): ignore empties, merge by key.
+ *   Trade-off: catalogue-row *removals* (un-share) need a full reload, not a partial snapshot.
+ */
+type SnapshotPolicy = 'replace' | 'catalogue'
+
+const TABLE_POLICY: Record<string, SnapshotPolicy> = {
+	sparks: 'catalogue',
+	keyshares: 'catalogue',
+}
+
+/** Natural per-table key for merge dedup; falls back to the generic row `id`. */
+function rowKey(row: JazzRow): string {
+	const natural = row.spark_id ?? row.sparkId
+	if (typeof natural === 'string' && natural.trim()) return natural.trim().toLowerCase()
 	return String(row.id ?? '')
 }
 
-/** Catalogue tables: ignore transient empty snapshots; merge sparks by `spark_id`. */
 function applySnapshotRows(table: string, prev: JazzRow[], next: JazzRow[]): JazzRow[] {
-	if (next.length === 0 && prev.length > 0) {
-		if (table === 'sparks' || table === 'keyshares') return prev
-	}
-	if (table !== 'sparks') return next
+	const policy = TABLE_POLICY[table] ?? 'replace'
+	if (policy === 'replace') return next
+	// catalogue: ignore transient empties, merge by key (defensive against partial snapshots).
+	if (next.length === 0 && prev.length > 0) return prev
 	const byKey = new Map<string, JazzRow>()
-	for (const row of prev) byKey.set(sparkRowKey(row), row)
-	for (const row of next) byKey.set(sparkRowKey(row), row)
+	for (const row of prev) byKey.set(rowKey(row), row)
+	for (const row of next) byKey.set(rowKey(row), row)
 	return [...byKey.values()]
 }
 
