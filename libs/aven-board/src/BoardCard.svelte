@@ -14,7 +14,7 @@ let { item, href, onOpen }: Props = $props()
 <a
 	{href}
 	data-sveltekit-preload-data="hover"
-	class="tech-card group flex flex-col gap-2 p-3.5 no-underline"
+	class="group flex flex-col gap-2 rounded-2xl border border-border/70 bg-surface-card p-4 no-underline shadow-sm transition-all hover:border-border hover:bg-surface-card-hover hover:shadow-md"
 	onclick={(e) => onOpen?.(item, e)}
 >
 	<p class="text-sm font-semibold leading-snug tracking-tight text-foreground">
@@ -36,7 +36,7 @@ let { item, href, onOpen }: Props = $props()
 			{/if}
 			{#each item.tags as tag (tag)}
 				<span
-					class="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground"
+					class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground"
 				>
 					{tag}
 				</span>

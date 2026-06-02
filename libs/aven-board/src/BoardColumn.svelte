@@ -13,7 +13,7 @@ type Props = {
 let { column, base = '/board', emptyLabel = 'Nothing here yet.', onOpen }: Props = $props()
 </script>
 
-<section class="flex min-h-0 w-72 shrink-0 flex-col sm:w-full sm:min-w-0">
+<section class="flex min-h-0 w-72 shrink-0 flex-col sm:w-full sm:min-w-0 sm:max-w-[20rem]">
 	<header class="mb-2 flex items-baseline justify-between gap-2 px-0.5">
 		<div class="flex items-baseline gap-2">
 			<h2 class="text-sm font-semibold tracking-tight text-foreground">{column.label}</h2>
@@ -33,7 +33,7 @@ let { column, base = '/board', emptyLabel = 'Nothing here yet.', onOpen }: Props
 		{column.description}
 	</p>
 	<div
-		class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto rounded-2xl border border-border/50 bg-black/[0.02] p-2 dark:bg-white/[0.02]"
+		class="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-border/50 bg-black/[0.02] p-3 dark:bg-white/[0.02]"
 	>
 		{#if column.items.length === 0}
 			<p class="px-2 py-6 text-center text-xs text-muted-foreground opacity-60">
