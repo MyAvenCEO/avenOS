@@ -10,6 +10,5 @@ function initState(source) {
 		title: str(s.title),
 		messageLabel: str(s.messageLabel) || 'Grund:',
 		message: str(s.message),
-		hint: str(s.hint),
 	}
 }
