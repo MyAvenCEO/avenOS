@@ -25,7 +25,7 @@ function back(e: MouseEvent): void {
 		<a
 			href="/board"
 			data-sveltekit-preload-data="hover"
-			class="inline-flex items-center gap-2 rounded-full border border-border bg-background/95 px-5 py-2.5 text-xs font-bold tracking-widest uppercase text-foreground transition-colors hover:bg-white/10"
+			class="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-bold tracking-widest uppercase text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
 			onclick={back}
 		>
 			{t('board.backToBoard')}

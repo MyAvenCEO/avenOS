@@ -39,16 +39,15 @@ async function copyGoal(): Promise<void> {
 <div
 	class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background font-sans text-foreground antialiased"
 >
-	<div class="min-h-0 flex-1 overflow-y-auto">
-		<div class="mx-auto w-full max-w-6xl px-4 pt-6 pb-28 sm:px-6 md:px-8">
-			<div
-				class="rounded-3xl border border-border bg-surface-card p-6 shadow-sm sm:p-8 md:p-10"
-			>
+	<div class="min-h-0 flex-1 overflow-y-auto px-4 pt-6 pb-28 sm:px-6">
+		<div
+			class="mx-auto w-full max-w-6xl rounded-3xl border border-border bg-surface-card px-5 py-8 shadow-sm sm:px-8 sm:py-10 md:px-12"
+		>
 			<header class="mb-8 border-b border-border/50 pb-6">
 				<div
 					class="mb-3 flex flex-wrap items-center gap-2 text-[10px] font-bold tracking-widest uppercase"
 				>
-					<span class="rounded-full bg-white/10 px-2.5 py-1 text-foreground/70">
+					<span class="rounded-full bg-muted px-2.5 py-1 text-foreground/70">
 						{columnMeta.label}
 					</span>
 					<span class="text-muted-foreground opacity-50">{item.id}</span>
@@ -90,7 +89,7 @@ async function copyGoal(): Promise<void> {
 						<button
 							type="button"
 							onclick={copyGoal}
-							class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background/80 px-3 py-1 text-[10px] font-bold tracking-widest text-foreground uppercase transition-colors hover:bg-white/10"
+							class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background/80 px-3 py-1 text-[10px] font-bold tracking-widest text-foreground uppercase transition-colors hover:bg-muted"
 						>
 							{copied ? 'Copied' : 'Copy /goal'}
 						</button>

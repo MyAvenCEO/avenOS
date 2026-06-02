@@ -27,7 +27,7 @@ const total = $derived(columns.reduce((sum, c) => sum + c.items.length, 0))
 	class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background font-sans text-foreground antialiased"
 >
 	<header class="shrink-0 px-4 pt-4 pb-3 sm:px-6 sm:pt-6">
-		<div class="mx-auto w-full max-w-[min(100%,88rem)]">
+		<div class="mx-auto w-full max-w-[min(100%,84rem)]">
 			<p class="tech-label mb-2">Kanban</p>
 			<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
 				<h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
@@ -44,7 +44,7 @@ const total = $derived(columns.reduce((sum, c) => sum + c.items.length, 0))
 
 	<div class="min-h-0 flex-1 overflow-y-auto overflow-x-auto px-4 pb-8 sm:px-6">
 		<div
-			class="mx-auto flex w-full max-w-[min(100%,88rem)] gap-4 sm:gap-5"
+			class="mx-auto flex w-full max-w-[min(100%,84rem)] gap-4 sm:grid sm:grid-cols-2 sm:gap-5 lg:grid-cols-4"
 		>
 			{#each columns as column (column.id)}
 				<BoardColumn {column} {base} {emptyLabel} {onOpen} />

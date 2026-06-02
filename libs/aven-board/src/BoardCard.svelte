@@ -36,7 +36,7 @@ let { item, href, onOpen }: Props = $props()
 			{/if}
 			{#each item.tags as tag (tag)}
 				<span
-					class="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground"
+					class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground"
 				>
 					{tag}
 				</span>
