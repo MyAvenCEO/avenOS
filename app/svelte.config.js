@@ -12,11 +12,12 @@ const config = {
 	kit: {
 		prerender: {
 			// Dynamic app routes (e.g. /sparks/[sparkId]) are client-only; static shell uses fallback.
-			handleUnseenRoutes: 'ignore',
+			handleUnseenRoutes: 'ignore'
 		},
 		adapter: adapter({ fallback: 'index.html', strict: false }),
 		alias: {
 			'@avenos/aven-city': path.resolve(__dirname, '../libs/aven-city/src/index.ts'),
+			'@avenos/aven-board': path.resolve(__dirname, '../libs/aven-board/src/index.ts'),
 			'@avenos/docs': path.resolve(__dirname, '../docs')
 		}
 	}

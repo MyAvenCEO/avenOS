@@ -1,23 +1,20 @@
 <script lang="ts">
+import { browser } from '$app/environment'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
-import { browser } from '$app/environment'
-import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
-import {
-	attachAvenosRuntimeBridge,
-	grooveSessionReady,
-} from '$lib/runtime/groove-runtime'
-import { startPeerMeshStore } from '$lib/peer/peer-mesh-store'
-import { initLocale, normalizeLocale, setLocale, t } from '$lib/i18n'
-import LockGate from '$lib/settings/LockGate.svelte'
-import { attachSelfRustEventMirrors, deviceSession } from '$lib/settings/device-session-store'
-import { displayTitleForSession } from '$lib/settings/active-vault-ui'
-import { vaultUiSettingsGet } from '$lib/settings/vault-ui-settings'
-import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/settings/vault'
-import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-import MobileShellNav from '$lib/shell/MobileShellNav.svelte'
-import { navigateApp } from '$lib/shell'
 import { installConsoleCapture } from '$lib/debug/console-capture'
+import { initLocale, normalizeLocale, setLocale, t } from '$lib/i18n'
+import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
+import { startPeerMeshStore } from '$lib/peer/peer-mesh-store'
+import { attachAvenosRuntimeBridge, grooveSessionReady } from '$lib/runtime/groove-runtime'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+import { displayTitleForSession } from '$lib/settings/active-vault-ui'
+import { attachSelfRustEventMirrors, deviceSession } from '$lib/settings/device-session-store'
+import LockGate from '$lib/settings/LockGate.svelte'
+import { type VaultListEntry, vaultCardTitle, vaultList } from '$lib/settings/vault'
+import { vaultUiSettingsGet } from '$lib/settings/vault-ui-settings'
+import { navigateApp } from '$lib/shell'
+import MobileShellNav from '$lib/shell/MobileShellNav.svelte'
 import '../app.css'
 
 if (browser) installConsoleCapture()
@@ -34,10 +31,9 @@ const vaultActive = $derived(path.startsWith('/vault'))
 const sparksNavActive = $derived(path.startsWith('/sparks'))
 const dbActive = $derived(path.startsWith('/db'))
 const avenCityActive = $derived(path.startsWith('/aven-city'))
+const boardActive = $derived(path.startsWith('/board'))
 
-const shellLocked = $derived(
-	browser && isTauriRuntime() && $deviceSession.kind === 'locked',
-)
+const shellLocked = $derived(browser && isTauriRuntime() && $deviceSession.kind === 'locked')
 
 $effect(() => {
 	if (shellLocked) pendingIntentFileDrop.set(null)
@@ -96,9 +92,7 @@ $effect(() => {
 })
 
 /** Mesh touches Groove ACL — defer until strict local-first bootstrap confirms shell hydrate. */
-const meshAllowed = $derived(
-	sessionKind === 'unlocked' && $grooveSessionReady,
-)
+const meshAllowed = $derived(sessionKind === 'unlocked' && $grooveSessionReady)
 
 $effect(() => {
 	if (!browser || !isTauriRuntime() || !meshAllowed) return
@@ -184,11 +178,15 @@ $effect(() => {
 <div class="box-border flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-background">
 	<LockGate />
 	{#if !shellLocked}
-		<header class="shrink-0 bg-background/90 px-3 pt-[max(0.375rem,env(safe-area-inset-top))] pb-1 backdrop-blur-sm sm:px-6 sm:pt-3 sm:pb-2">
+		<header
+			class="shrink-0 bg-background/90 px-3 pt-[max(0.375rem,env(safe-area-inset-top))] pb-1 backdrop-blur-sm sm:px-6 sm:pt-3 sm:pb-2"
+		>
 			<div
 				class="mx-auto grid w-full max-w-[min(100%,88rem)] grid-cols-1 items-center gap-x-2 gap-y-2 sm:grid-cols-3"
 			>
-				<div class="flex min-w-0 items-center justify-start justify-self-start sm:justify-self-start"></div>
+				<div
+					class="flex min-w-0 items-center justify-start justify-self-start sm:justify-self-start"
+				></div>
 
 				<nav
 					class="hidden flex-wrap items-center justify-center justify-self-center gap-x-2 gap-y-1 text-[10px] font-bold tracking-wider uppercase sm:flex"
@@ -237,6 +235,15 @@ $effect(() => {
 						aria-current={avenCityActive ? 'page' : undefined}
 						onclick={(e) => navigateApp('/aven-city', e)}
 						>{t('nav.avenCity')}</a
+					>
+					<span class="select-none opacity-25" aria-hidden="true">|</span>
+					<a
+						href="/board"
+						data-sveltekit-preload-data="hover"
+						class="transition-opacity hover:opacity-80 {boardActive ? 'opacity-95' : 'opacity-40'}"
+						aria-current={boardActive ? 'page' : undefined}
+						onclick={(e) => navigateApp('/board', e)}
+						>{t('nav.board')}</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a
