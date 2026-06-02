@@ -9,8 +9,11 @@ goal: >-
   The composer voice-note path records real microphone audio, sends it over a
   Tauri command to an on-device Gemma 4 E4B model loaded via the mistralrs crate
   in src-tauri, and submits the returned transcript to the /talk stream via
-  onSubmitMessage; VOICE_MOCK_TRANSCRIPTS is used only as an explicit
-  non-Tauri/error fallback, and no network/API-key path is introduced. Proven
+  onSubmitMessage; while the model is downloading/unavailable the mic button stays
+  enabled but clicking it opens a mini modal with a download progress bar + short
+  description instead of recording (never mocked), plus an ambient top-left
+  download bar; VOICE_MOCK_TRANSCRIPTS survives only in the non-Tauri demo
+  composer (HitlActionBar), and no network/API-key path is introduced. Proven
   from the transcript by: `bunx biome check .` exits 0; from `app/`, `bun --bun x
   svelte-kit sync && bun --bun x svelte-check --tsconfig ./tsconfig.json` exits
   0; from `app/`, `bun test tests` is green including new unit tests for the
@@ -85,10 +88,13 @@ only as a non-Tauri / error fallback. No network or API key is introduced.
 > The composer voice-note path records real microphone audio, sends it over a
 > Tauri command to an on-device Gemma 4 E4B model loaded via the `mistralrs`
 > crate in `src-tauri`, and submits the returned transcript to the `/talk` stream
-> via `onSubmitMessage`; `VOICE_MOCK_TRANSCRIPTS` is used only as an explicit
-> non-Tauri/error fallback, and no network/API-key path is introduced. Proven by
-> the lint/check/test/clippy/grep commands in the frontmatter `goal`. No files
-> outside "Files to touch" are changed.
+> via `onSubmitMessage`; while the model is downloading/unavailable the mic button
+> stays enabled but clicking it opens a **mini modal** with a download progress
+> bar + short description instead of recording (never mocked), plus an ambient
+> top-left download bar; `VOICE_MOCK_TRANSCRIPTS` survives only in the non-Tauri
+> demo composer (`HitlActionBar`), and no network/API-key path is introduced.
+> Proven by the lint/check/test/clippy/grep commands in the frontmatter `goal`. No
+> files outside "Files to touch" are changed.
 
 > Note: an actual transcription run needs the **E4B weights + a real
 > microphone**, neither of which exists in CI. The goal is written so every
@@ -153,18 +159,37 @@ capture raw PCM directly and skip container/codec decoding:
 ### 2. Keep the composer dumb — inject transcription via a prop
 
 `IntentComposer` (under `intent-mock/`, also used by `HitlActionBar`) must not
-hardcode the IPC call. Add one optional prop:
+hardcode the IPC call. Add two optional props:
 
 ```ts
 onTranscribeAudio?: (audio: { pcm: Float32Array; sampleRate: number }) => Promise<string>
+/** When set, the mic stays enabled but routes to the mini modal instead of recording. */
+voiceUnavailableReason?: string | null
+/** Fired when the mic is clicked while voiceUnavailableReason is set (parent opens the modal). */
+onVoiceUnavailableClick?: () => void
 ```
 
-`commitVoiceNote()` becomes async: assemble the PCM, and if `onTranscribeAudio`
-is provided, `await` it and submit the transcript via `onSubmitMessage(transcript,
-[])`; otherwise (no prop, non-Tauri, mic denied, or any error) fall back to a
-`VOICE_MOCK_TRANSCRIPTS` entry. Show the existing `submitBusy` affordance while
-transcribing. `SparkTalkPanel` passes a real `onTranscribeAudio`; `HitlActionBar`
-passes nothing → mock fallback preserved.
+Behavior (the real `/talk` path — `onTranscribeAudio` provided):
+
+- **Button stays enabled. Model not ready → open a mini modal, don't record,
+  don't mock.** When `voiceUnavailableReason` is set (model downloading / not
+  built / load error), the mic button is **not** disabled — clicking it (or the
+  hold/double-tap gesture) does **not** start recording; instead the composer
+  fires `onVoiceUnavailableClick()` and the parent opens a **mini modal** showing
+  a **download progress bar + a short description** of what's happening (§3.5).
+  **No `VOICE_MOCK_TRANSCRIPTS` is used here.**
+- **Model ready →** `commitVoiceNote()` records as normal, then async: assemble
+  the PCM, `await onTranscribeAudio(...)`, submit the transcript via
+  `onSubmitMessage(transcript, [])`, showing the existing `submitBusy` affordance
+  while transcribing. On a transcription **error** (model present but inference
+  fails), surface a brief error (reuse `SparkTalkPanel`'s `err`); post nothing —
+  still no mock.
+
+`SparkTalkPanel` owns the readiness signal (from the model-download store, §3.5)
+and passes `voiceUnavailableReason` + `onVoiceUnavailableClick` + `onTranscribeAudio`.
+`HitlActionBar` passes none → it stays a pure UI demo and keeps
+`VOICE_MOCK_TRANSCRIPTS` as its only, non-Tauri mock. So the mock survives **only**
+in the demo composer, never as a substitute for the real on-device transcription.
 
 ### 3. Rust command + on-device Gemma 4 E4B (mistral.rs)
 
@@ -177,7 +202,8 @@ Add a feature-gated module + Tauri command in `src-tauri`:
 - **Command:** `#[tauri::command] async fn transcribe_audio(pcm: Vec<f32>,
   sample_rate: u32, app: AppHandle) -> Result<String, String>`, registered in the
   `tauri::generate_handler![…]` list in `lib.rs`. When `local-asr` is off it
-  returns `Err("local ASR not built")` so the JS side falls back to mock.
+  returns `Err("local ASR not built")` → readiness store = `unavailable` →
+  clicking the mic opens the mini modal (not mocked, not disabled).
 - **Model lifecycle:** build the E4B model once (lazy `OnceCell` / Tauri managed
   state), e.g. id `google/gemma-4-E4B-it` with ISQ 8-/4-bit quant; hold it in
   `.manage(...)` alongside `ManagedJazz`. Run inference on a blocking thread
@@ -203,35 +229,52 @@ background, without blocking app start or the IPC loop.
   App boot and every other command proceed normally while it runs. Stream to disk
   (HF hub or `reqwest` streaming) so memory stays flat; resume/overwrite-partial
   on restart.
-- **Readiness.** The `transcribe_audio` command checks model readiness: if the
-  weights aren't present yet, it returns `Err("model downloading")` and the JS
-  side **falls back to the mock** (no spinner-block). Once present, the model
-  loads lazily on first use and is cached in managed state.
+- **Readiness gates recording, not the button (no mock).** A small JS **readiness
+  store** derives availability from the `asr:model-download` events (+ an initial
+  `asr_status` command): `downloading | ready | error | unavailable` (the last =
+  `local-asr` not built). `SparkTalkPanel` maps anything other than `ready` to a
+  `voiceUnavailableReason` string passed to the composer; while set, clicking the
+  (still-enabled) mic opens the **mini modal** instead of recording (§2) — never
+  silently mocked. Once ready, the model loads lazily on first use and is cached
+  in managed state.
 - **Progress events.** Rust emits Tauri events as bytes arrive, e.g.
   `app.emit("asr:model-download", { name, receivedBytes, totalBytes, status })`
   (`status` ∈ `downloading | ready | error`) — mirroring the existing
   Rust→webview event pattern (`attachSelfRustEventMirrors`). Throttle to ~1–2/s.
-- **Top-left indicator (UI).** A new global component
+Two UI surfaces, both fed by the readiness store:
+
+- **Ambient top-left indicator.** A global component
   `app/src/lib/asr/ModelDownloadIndicator.svelte` rendered once in the **root
   layout** ([`app/src/routes/+layout.svelte`](../../../../app/src/routes/+layout.svelte),
   alongside the global drag overlay), positioned **fixed top-left**
-  (`fixed left-2 top-2 z-50`, `pointer-events-none`). It subscribes to the
-  `asr:model-download` events via a tiny store and renders:
-  - a thin determinate **progress bar** (`receivedBytes / totalBytes`),
-  - a **small model-name label** (e.g. `Gemma 4 E4B · 312 MB / 4.1 GB`).
-
-  It is **hidden** when there's no active download and auto-dismisses shortly
-  after `status: ready` (fade out). Only mounts under the Tauri runtime
-  (`isTauriRuntime()`), like the other shell effects. Keep it unobtrusive — it
-  must not overlap interactive top-left nav; it's a transient status chip.
+  (`fixed left-2 top-2 z-50`, `pointer-events-none`). While downloading it shows a
+  thin determinate **progress bar** + a **small model-name label** (e.g.
+  `Gemma 4 E4B · 312 MB / 4.1 GB`). **Hidden** when idle; auto-dismisses shortly
+  after `status: ready`; brief note on `status: error`. Tauri-runtime only;
+  unobtrusive, must not overlap interactive top-left nav.
+- **Click-triggered mini modal.** A new component
+  `app/src/lib/asr/VoiceModelDownloadModal.svelte` — a small, dismissible modal
+  opened when the user clicks the mic **before the model is ready** (§2). It
+  renders the same **progress bar** plus a **short description** of what's
+  happening and why voice notes aren't available yet, e.g. *"Setting up on-device
+  voice transcription. Gemma 4 E4B is downloading (312 MB / 4.1 GB) — this runs
+  once and works offline after."* Closes on backdrop/Esc; if the model becomes
+  `ready` while open, it can swap to a "ready — tap the mic to record" state.
 
 ### 4. Wire to /talk
 
-`SparkTalkPanel` provides `onTranscribeAudio` = a small browser client
-`app/src/lib/intent-mock/transcribe.ts` that calls
-`invoke('transcribe_audio', { pcm, sampleRate })` and returns the string. The
-transcript flows through the unchanged `onSubmitMessage → handleComposerSubmit →
-messages.create` path into `/talk`.
+`SparkTalkPanel` provides:
+- `onTranscribeAudio` = a small browser client
+  `app/src/lib/intent-mock/transcribe.ts` that calls
+  `invoke('transcribe_audio', { pcm, sampleRate })` and returns the string,
+- `voiceUnavailableReason` derived from the readiness store (§3.5) — `null` when
+  `ready`, else a short reason, and
+- `onVoiceUnavailableClick` = open the `VoiceModelDownloadModal` (§3.5).
+
+The transcript flows through the unchanged `onSubmitMessage → handleComposerSubmit
+→ messages.create` path into `/talk`. While not `ready`, the mic stays clickable
+but opens the mini modal instead of recording; the ambient top-left bar shows
+background download progress.
 
 ### Out of scope
 
@@ -254,16 +297,23 @@ messages.create` path into `/talk`.
 5. **Weights download (Rust):** `models_dir()` path helper → `.avenOS/models/`;
    background streaming download spawned in `setup()`; emit `asr:model-download`
    progress events; skip if present.
-6. **Top-left indicator (UI):** `ModelDownloadIndicator.svelte` + a small store
-   subscribing to `asr:model-download`; mount fixed top-left in the root layout
-   under the Tauri guard; hide when idle, fade after `ready`.
-7. **Cargo:** add `mistralrs` behind `local-asr` (+ accel features); ensure default
+6. **Readiness + click-routing:** `asr_status` command + `model-download-store.ts`
+   (status `downloading|ready|error|unavailable`); add `voiceUnavailableReason` +
+   `onVoiceUnavailableClick` props to `IntentComposer` — mic stays enabled but
+   routes to the modal when not ready; **no mock on the real path**.
+7. **UI surfaces:** `ModelDownloadIndicator.svelte` (ambient top-left bar) mounted
+   in the root layout under the Tauri guard; `VoiceModelDownloadModal.svelte` (mini
+   modal with progress bar + short description) opened by `SparkTalkPanel` on
+   `onVoiceUnavailableClick`. Both driven by the readiness store.
+8. **Cargo:** add `mistralrs` behind `local-asr` (+ accel features); ensure default
    `cargo check` stays green and `--features local-asr` compiles.
-8. **Wire `SparkTalkPanel`** to pass `onTranscribeAudio`.
-9. **Tests** (`app/tests/`): audio-encode/PCM helper round-trip; transcribe client
-   against a mocked `invoke` (Tauri present → transcript; `model downloading` /
-   error → signals fallback); download-progress store reduces events → bar state.
-10. **Run verification**; check off criteria; update Progress log; `git mv` to `test/`.
+9. **Wire `SparkTalkPanel`** to pass `onTranscribeAudio` + `voiceUnavailableReason`
+   + `onVoiceUnavailableClick`, and render the modal.
+10. **Tests** (`app/tests/`): audio-encode/PCM helper round-trip; transcribe client
+    against a mocked `invoke` (ready → transcript; error → surfaced, no message);
+    readiness store reduces `asr:model-download` events → `{progress, status,
+    voiceUnavailableReason}`.
+11. **Run verification**; check off criteria; update Progress log; `git mv` to `test/`.
 
 ## Files to touch
 
@@ -271,16 +321,18 @@ messages.create` path into `/talk`.
 - `app/src-tauri/tauri.ios.conf.json` + `app/src-tauri/ios-template/aven-os-app_iOS.entitlements` — iOS mic usage + audio-input entitlement.
 - `app/src-tauri/Entitlements.plist` (**new**, macOS) + `app/src-tauri/tauri.conf.json` (`bundle.macOS.entitlements`) — only if hardened runtime/sandbox requires `com.apple.security.device.audio-input`.
 - `app/src-tauri/src/` (Rust webview wiring) — Linux `set_enable_webrtc/media_stream` + `connect_permission_request`; Windows WebView2 `PermissionRequested`; scoped to `main`.
-- `app/src-tauri/src/asr.rs` — **new**: `mistralrs` E4B load + `transcribe_audio` command (readiness-gated) + background weights download into `.avenOS/models/` emitting `asr:model-download` progress events (feature `local-asr`).
-- `app/src-tauri/src/lib.rs` — register `transcribe_audio` in `generate_handler!`; `.manage()` the model state; declare `mod asr`; spawn the background download in `setup()`.
+- `app/src-tauri/src/asr.rs` — **new**: `mistralrs` E4B load + `transcribe_audio` + `asr_status` commands (readiness-gated) + background weights download into `.avenOS/models/` emitting `asr:model-download` progress events (feature `local-asr`).
+- `app/src-tauri/src/lib.rs` — register `transcribe_audio` + `asr_status` in `generate_handler!`; `.manage()` the model state; declare `mod asr`; spawn the background download in `setup()`.
 - `libs/tauri-plugin-self/` (paths) — add a `models_dir()` helper beside `db_dir`/`identity_crypto_dir` (`.avenOS/models/`).
-- `app/src/lib/asr/ModelDownloadIndicator.svelte` + `app/src/lib/asr/model-download-store.ts` — **new**: top-left progress bar + model-name label, fed by `asr:model-download` events.
+- `app/src/lib/asr/model-download-store.ts` — **new**: readiness store (`asr_status` + `asr:model-download` → `{ status, received, total, model, voiceUnavailableReason }`).
+- `app/src/lib/asr/ModelDownloadIndicator.svelte` — **new**: ambient top-left progress bar + model name, fed by the store.
+- `app/src/lib/asr/VoiceModelDownloadModal.svelte` — **new**: mini modal (progress bar + short description) shown when the mic is clicked before the model is ready.
 - `app/src/routes/+layout.svelte` — mount `<ModelDownloadIndicator />` once (Tauri-guarded), fixed top-left.
 - `app/src-tauri/Cargo.toml` (+ `Cargo.lock`) — add `mistralrs` behind `local-asr` + accel features; possible Tauri/wry bump for macOS mic.
-- `app/src/lib/intent-mock/IntentComposer.svelte` — Web Audio PCM capture; `onTranscribeAudio` prop; async `commitVoiceNote()` (mock = fallback only).
+- `app/src/lib/intent-mock/IntentComposer.svelte` — Web Audio PCM capture; `onTranscribeAudio` + `voiceUnavailableReason` + `onVoiceUnavailableClick` props; async `commitVoiceNote()`; mic stays enabled but routes to the modal when not ready (real path never mocks).
 - `app/src/lib/intent-mock/transcribe.ts` — **new**: `invoke('transcribe_audio', …)` client.
 - `app/src/lib/intent-mock/audio-encode.ts` — **new**: PCM accumulation / Float32↔Int16 / resample helper (pure, unit-testable).
-- `app/src/lib/sparks/SparkTalkPanel.svelte` — pass `onTranscribeAudio`.
+- `app/src/lib/sparks/SparkTalkPanel.svelte` — pass `onTranscribeAudio` + `voiceUnavailableReason` + `onVoiceUnavailableClick` (from the readiness store); render `<VoiceModelDownloadModal />`.
 - `app/tests/transcribe.test.ts`, `app/tests/audio-encode.test.ts` — **new** unit tests.
 
 > Note: **no** `.env.example`, `vite.config.ts`, or `openai`/RedPill changes —
@@ -290,9 +342,10 @@ messages.create` path into `/talk`.
 
 - **✅ Weights distribution — decided.** E4B at 4-bit ISQ is multi-GB. We
   **download on first run** into `.avenOS/models/`, **in the background and
-  non-blocking**, with a small top-left progress bar + model-name label. Fully
-  specced in Approach §3.5. (Trade-off accepted: voice notes fall back to the
-  mock until the first download finishes; offline-first holds once cached.)
+  non-blocking**, with an ambient top-left progress bar + a click-triggered mini
+  modal. Fully specced in Approach §3.5. (Trade-off accepted: until the first
+  download finishes, clicking the mic shows the mini modal instead of recording —
+  no mock; offline-first holds once cached.)
 - **🔴 Linux WebKitGTK WebRTC.** Stock WebKitGTK can't do `getUserMedia`; this dev
   box is Linux. Verify the environment's WebKitGTK has media-stream/WebRTC before
   relying on live capture here (macOS/iOS/Windows are config-only).
@@ -323,6 +376,7 @@ Each box must be checkable from the transcript (a command + its output proves it
 - [ ] `rg "NSMicrophoneUsageDescription" app/src-tauri` shows the mic usage description wired in.
 - [ ] `rg -n "models" libs/tauri-plugin-self app/src-tauri/src/asr.rs` shows the `.avenOS/models/` dir helper + first-run download target; `rg "tauri::async_runtime::spawn|spawn" app/src-tauri/src/lib.rs` shows the download kicked from `setup()` (non-blocking).
 - [ ] `rg "asr:model-download" app/src app/src-tauri` shows the progress event emitted (Rust) and consumed (store), and `rg -n "ModelDownloadIndicator" app/src/routes/+layout.svelte` shows the top-left indicator mounted.
+- [ ] `rg -n "VoiceModelDownloadModal|onVoiceUnavailableClick" app/src` shows the mini modal exists and the mic routes to it (not to recording) when the model isn't ready — i.e. the mic button is **not** disabled.
 - [ ] `git status --porcelain` lists only the files in "Files to touch" (plus lockfiles).
 
 ## Verification
@@ -350,6 +404,7 @@ rg "VOICE_MOCK_TRANSCRIPTS" app/src
 rg "NSMicrophoneUsageDescription" app/src-tauri
 rg "asr:model-download" app/src app/src-tauri
 rg -n "ModelDownloadIndicator" app/src/routes/+layout.svelte
+rg -n "VoiceModelDownloadModal|onVoiceUnavailableClick" app/src
 rg -n "models" libs/tauri-plugin-self app/src-tauri/src/asr.rs
 git status --porcelain
 ```
@@ -374,11 +429,17 @@ voice note, confirm the streamed body is the real transcript.
 
 Newest entry first.
 
+- `2026-06-02` — **Unavailable-model UX refined:** don't disable the mic. The
+  button stays enabled; clicking it before the model is ready opens a **mini
+  modal** (`VoiceModelDownloadModal.svelte`) with the download progress bar + a
+  short description, instead of recording (still no mock). Composer gains
+  `onVoiceUnavailableClick`; the ambient top-left bar remains for background
+  progress. Updated §2/§3.5/§4, goal, files, steps, and acceptance criteria.
 - `2026-06-02` — **Weights = first-run background download** (decided). Store under
   `.avenOS/models/` (new `models_dir()` helper in `tauri-plugin-self` paths),
   streamed non-blocking from a `setup()` background task; `transcribe_audio` is
-  readiness-gated and falls back to mock until ready. Added a global **top-left
-  progress indicator** (`ModelDownloadIndicator.svelte` + a store) mounted in the
+  readiness-gated (later refined: not-ready → mini modal, not mock — see newest
+  entry). Added a global **top-left progress indicator** (`ModelDownloadIndicator.svelte` + a store) mounted in the
   root layout, fed by `asr:model-download` Tauri events (progress bar + small
   model-name label, auto-hide when idle). Updated Approach (§3.5), Steps, Files,
   acceptance criteria, and verification greps.
