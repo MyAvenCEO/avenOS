@@ -70,10 +70,17 @@ pub fn vaults_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, Stri
 	identities_dir(app)
 }
 
-/// `…/.avenOS/models` — shared on-device model cache (e.g. the Gemma 4 E4B
-/// voice-transcription weights). Identity-independent; created if missing.
+/// `<Documents>/.avenOS/models` — shared on-device model cache (e.g. the Gemma 4
+/// voice-transcription weights). Lives at the `.avenOS` ROOT, not under the
+/// network/identity path, so the multi-GB weights are downloaded once and shared
+/// across every network and identity. Created if missing.
 pub fn models_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
-	let dir = aven_os_app_base(app)?.join("models");
+	let dir = if let Some(root) = expand_override() {
+		// Honour the data-dir override (dev instances / tests) at its root.
+		root.join("models")
+	} else {
+		user_documents_dir(app)?.join(".avenOS").join("models")
+	};
 	fs::create_dir_all(&dir).map_err(|e| format!("create_dir_all {}: {e}", dir.display()))?;
 	Ok(dir)
 }

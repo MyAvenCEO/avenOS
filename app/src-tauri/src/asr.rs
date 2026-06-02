@@ -27,6 +27,8 @@ pub struct ModelConfig {
 	pub repo: &'static str,
 	/// Friendly label shown in the UI.
 	pub label: &'static str,
+	/// Human-readable quantization/optimization, shown as model metadata.
+	pub quant: &'static str,
 	/// The `.uqff` file (first shard) to load for this platform's quant level.
 	pub uqff_file: &'static str,
 }
@@ -39,18 +41,21 @@ pub fn model_config() -> ModelConfig {
 	return ModelConfig {
 		repo: "mistralrs-community/gemma-4-E4B-it-UQFF",
 		label: "Gemma 4 E4B",
+		quant: "AFQ4 · Apple-optimized 4-bit",
 		uqff_file: "afq4-0.uqff",
 	};
 	#[cfg(target_os = "ios")]
 	return ModelConfig {
 		repo: "mistralrs-community/gemma-4-E2B-it-UQFF",
 		label: "Gemma 4 E2B",
+		quant: "AFQ4 · Apple-optimized 4-bit",
 		uqff_file: "afq4-0.uqff",
 	};
 	#[cfg(not(any(all(target_os = "macos", target_arch = "aarch64"), target_os = "ios")))]
 	return ModelConfig {
 		repo: "mistralrs-community/gemma-4-E4B-it-UQFF",
 		label: "Gemma 4 E4B",
+		quant: "Q4K · portable 4-bit",
 		uqff_file: "q4k-0.uqff",
 	};
 }
@@ -62,6 +67,7 @@ pub fn model_config() -> ModelConfig {
 pub struct AsrStatus {
 	pub status: String,
 	pub model: String,
+	pub quant: String,
 	pub received_bytes: u64,
 	pub total_bytes: u64,
 	#[serde(skip_serializing_if = "Option::is_none")]
@@ -72,9 +78,11 @@ impl AsrStatus {
 	/// Only used by the stub (feature-off) build; `local-asr` builds never call it.
 	#[cfg_attr(feature = "local-asr", allow(dead_code))]
 	pub fn unavailable() -> Self {
+		let cfg = model_config();
 		Self {
 			status: "unavailable".into(),
-			model: model_config().label.into(),
+			model: cfg.label.into(),
+			quant: cfg.quant.into(),
 			received_bytes: 0,
 			total_bytes: 0,
 			error: None,
@@ -266,9 +274,11 @@ mod imp {
 
 	fn snapshot() -> AsrStatus {
 		let s = state();
+		let cfg = model_config();
 		AsrStatus {
 			status: s.status.lock().unwrap().clone(),
-			model: model_config().label.into(),
+			model: cfg.label.into(),
+			quant: cfg.quant.into(),
 			received_bytes: s.received.load(Ordering::Relaxed),
 			total_bytes: s.total.load(Ordering::Relaxed),
 			error: s.error.lock().unwrap().clone(),
