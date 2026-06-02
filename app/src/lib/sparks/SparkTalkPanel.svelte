@@ -3,6 +3,12 @@
 	import { t } from '$lib/i18n'
 	import type { JazzRow } from '$lib/jazz/api'
 	import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
+	import { transcribeAudio } from '$lib/intent-mock/transcribe'
+	import VoiceModelDownloadModal from '$lib/asr/VoiceModelDownloadModal.svelte'
+	import {
+		asrState,
+		voiceUnavailableReason as voiceUnavailableReasonOf,
+	} from '$lib/asr/model-download-store'
 	import type { ComposerMode } from '$lib/intents/types'
 	import { persistSparkFiles } from '$lib/jazz/intent-files'
 	import { jazzShell } from '$lib/runtime/jazz-shell'
@@ -45,6 +51,11 @@
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
 	const composerDisabled = $derived(!session?.peerDid?.trim())
+
+	// On-device voice transcription readiness (Gemma 4 E4B via the Rust backend).
+	// The download/readiness wiring lives in the root layout; here we just read it.
+	let voiceModalOpen = $state(false)
+	const voiceUnavailableReason = $derived(tauri ? voiceUnavailableReasonOf($asrState) : null)
 
 	const peersAllow = $derived<PeerRowReply[]>(
 		!tauri || !unlocked ? [] : $peerRows,
@@ -284,10 +295,20 @@
 						onModeChange={(mode) => {
 							composerMode = mode
 						}}
+						onTranscribeAudio={tauri ? transcribeAudio : undefined}
+						voiceUnavailableReason={voiceUnavailableReason}
+						onVoiceUnavailableClick={() => {
+							voiceModalOpen = true
+						}}
+						onTranscribeError={(message) => {
+							err = message
+						}}
 					/>
 					</div>
 				</div>
 			</div>
 		</div>
 	{/if}
+
+	<VoiceModelDownloadModal bind:open={voiceModalOpen} />
 </div>

@@ -1,5 +1,6 @@
 <script lang="ts">
 import { focusShellWebview } from '$lib/intent-mock/focus-shell-webview'
+import { encodeForModel } from '$lib/intent-mock/audio-encode'
 import { onDestroy, tick } from 'svelte'
 
 /** Typing-mode textarea: grow with content up to this many text rows, then scroll. */
@@ -58,7 +59,23 @@ let {
 	submitBusy = false,
 	disabled = false,
 	enableAttachments = true,
-	embedAttachmentNamesInMessage = true
+	embedAttachmentNamesInMessage = true,
+	/**
+	 * On-device transcription for voice notes. When provided, the composer
+	 * records real microphone audio and submits the returned transcript (never a
+	 * mock). When absent (e.g. the HITL demo composer), voice notes use a
+	 * `VOICE_MOCK_TRANSCRIPTS` placeholder.
+	 */
+	onTranscribeAudio,
+	/**
+	 * When set, the model isn't ready: the mic stays enabled but clicking it
+	 * fires `onVoiceUnavailableClick` (parent opens the download modal) instead
+	 * of recording.
+	 */
+	voiceUnavailableReason = null,
+	onVoiceUnavailableClick,
+	/** Surface a transcription/microphone error to the parent (no message is posted). */
+	onTranscribeError
 }: {
 	onSubmitMessage?: (text: string, files: File[]) => void
 	onModeChange?: (mode: Mode) => void
@@ -70,6 +87,10 @@ let {
 	disabled?: boolean
 	enableAttachments?: boolean
 	embedAttachmentNamesInMessage?: boolean
+	onTranscribeAudio?: (audio: { pcm: Float32Array; sampleRate: number }) => Promise<string>
+	voiceUnavailableReason?: string | null
+	onVoiceUnavailableClick?: () => void
+	onTranscribeError?: (message: string) => void
 } = $props()
 
 /**
@@ -326,6 +347,7 @@ function formatAttachmentSummary(): string {
 
 onDestroy(() => {
 	clearLongPressTimer()
+	teardownRecording()
 	for (const a of attachmentsUnmountSnapshot) revokeAttachmentPreview(a)
 })
 
@@ -438,12 +460,88 @@ $effect(() => {
 	void tick().then(() => resizeComposer())
 })
 
+/** Real microphone capture (only on the on-device path — `onTranscribeAudio` set). */
+let transcribing = $state(false)
+let recording = false
+let mediaStream: MediaStream | null = null
+let audioCtx: AudioContext | null = null
+let sourceNode: MediaStreamAudioSourceNode | null = null
+let processorNode: ScriptProcessorNode | null = null
+let muteNode: GainNode | null = null
+let pcmChunks: Float32Array[] = []
+let recordedSampleRate = 0
+
+async function startRecording() {
+	if (!onTranscribeAudio || recording) return
+	pcmChunks = []
+	try {
+		const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+		mediaStream = stream
+		const Ctx: typeof AudioContext =
+			window.AudioContext ??
+			(window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+		audioCtx = new Ctx()
+		recordedSampleRate = audioCtx.sampleRate
+		sourceNode = audioCtx.createMediaStreamSource(stream)
+		processorNode = audioCtx.createScriptProcessor(4096, 1, 1)
+		processorNode.onaudioprocess = (e) => {
+			pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)))
+		}
+		// Sink through a muted gain node so ScriptProcessor fires without feedback.
+		muteNode = audioCtx.createGain()
+		muteNode.gain.value = 0
+		sourceNode.connect(processorNode)
+		processorNode.connect(muteNode)
+		muteNode.connect(audioCtx.destination)
+		recording = true
+	} catch (e) {
+		teardownRecording()
+		onTranscribeError?.(e instanceof Error ? e.message : 'Microphone unavailable')
+	}
+}
+
+/** Stop capture and return the encoded PCM payload (or `null` if nothing usable). */
+function collectRecording(): { pcm: Float32Array; sampleRate: number } | null {
+	const chunks = pcmChunks
+	const sr = recordedSampleRate
+	teardownRecording()
+	return encodeForModel(chunks, sr)
+}
+
+function teardownRecording() {
+	recording = false
+	try {
+		if (processorNode) processorNode.onaudioprocess = null
+		processorNode?.disconnect()
+		sourceNode?.disconnect()
+		muteNode?.disconnect()
+	} catch {
+		/* nodes may already be detached */
+	}
+	for (const track of mediaStream?.getTracks() ?? []) track.stop()
+	void audioCtx?.close().catch(() => {})
+	processorNode = null
+	sourceNode = null
+	muteNode = null
+	mediaStream = null
+	audioCtx = null
+	pcmChunks = []
+	recordedSampleRate = 0
+}
+
 function openListening() {
+	// Model not ready → don't record; let the parent show the download modal.
+	if (voiceUnavailableReason != null) {
+		onVoiceUnavailableClick?.()
+		return
+	}
 	void focusShellWebview()
+	void startRecording()
 	mode = 'listening'
 }
 
 async function stopListening() {
+	teardownRecording()
 	suppressTextEffect = true
 	keepTypingOpenUntilBlur = false
 	listeningSubmitOnRelease = false
@@ -477,8 +575,10 @@ async function finalizeSubmitCollapseAfterParent() {
 }
 
 async function commitVoiceNote() {
-	if (!onSubmitMessage || disabled || submitBusy) return
-	const body = VOICE_MOCK_TRANSCRIPTS[Math.floor(Math.random() * VOICE_MOCK_TRANSCRIPTS.length)]
+	if (disabled || submitBusy || transcribing) return
+
+	// Capture the audio before tearing down the listening UI (real path only).
+	const captured = onTranscribeAudio ? collectRecording() : null
 
 	suppressTextEffect = true
 	text = ''
@@ -489,7 +589,27 @@ async function commitVoiceNote() {
 	mode = 'collapsed'
 	openMicCooldownUntilMs = performance.now() + 280
 
-	onSubmitMessage(body, [])
+	if (onTranscribeAudio) {
+		// On-device transcription — never mock. Nothing captured → post nothing.
+		if (captured) {
+			transcribing = true
+			try {
+				const transcript = await onTranscribeAudio(captured)
+				if (transcript) onSubmitMessage?.(transcript, [])
+			} catch (e) {
+				onTranscribeError?.(e instanceof Error ? e.message : String(e))
+			} finally {
+				transcribing = false
+			}
+		}
+	} else if (onSubmitMessage) {
+		// Demo composer (no model wired) — placeholder transcript only.
+		onSubmitMessage(
+			VOICE_MOCK_TRANSCRIPTS[Math.floor(Math.random() * VOICE_MOCK_TRANSCRIPTS.length)],
+			[]
+		)
+	}
+
 	await finalizeSubmitCollapseAfterParent()
 }
 
