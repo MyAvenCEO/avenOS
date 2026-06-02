@@ -135,12 +135,22 @@ version = "0.0.1"
 dependencies = [
  "aven-db",
  "aven-p2p",
+ "avenos-schema-hash",
  "ed25519-dalek",
  "hex",
  "rand",
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "avenos-schema-hash"
+version = "0.0.1"
+dependencies = [
+ "aven-db",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

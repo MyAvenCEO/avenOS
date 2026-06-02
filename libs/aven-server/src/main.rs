@@ -1,17 +1,19 @@
-//! aven-server **mini** — a headless, stateless aven (plan §4, minus persistence
-//! + auth + the blind-relay capability).
+//! aven-server — a headless, durable **blind replica** aven (plan §4, minus auth).
 //!
 //! One process: an authenticated TLS [`ServerListener`] (server cert + per-client
-//! did:key challenge) feeding a headless groove engine on **in-memory** storage —
-//! a live rendezvous/relay for peers, with nothing durable on disk and no fly
-//! volume. A redeploy/restart starts blank. Config is all env; the TLS cert/key
-//! and identity seed come from fly secrets in production.
+//! did:key challenge) feeding a full groove engine on **RocksDB** with the real
+//! schema. A peer that holds a `replicate` grant ships this server its spark's
+//! encrypted batches; the server stores them durably and forwards them to other
+//! members — but it holds **no keyshares**, so everything it mirrors stays
+//! ciphertext it cannot decrypt (store-and-forward + durable backup, not a
+//! member). Config is all env; the TLS cert/key + identity seed come from fly
+//! secrets, and `AVEN_SERVER_DATA_DIR` is the (volume-backed) storage path.
 
 use std::sync::Arc;
 
 use aven_p2p::{generate_self_signed, ChallengeParams, ServerListener, ServerTls};
 use ed25519_dalek::SigningKey;
-use groove::{AppContext, AppId, JazzClient, PeerId, SchemaBuilder};
+use groove::{AppContext, AppId, JazzClient, PeerId};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 
@@ -135,18 +137,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ServerListener::serve(&cfg.sync_bind, server_tls, identity, params).await?;
     tracing::info!(bind = %cfg.sync_bind, "authenticated TLS sync transport listening");
 
-    // Headless, stateless engine: in-memory store, empty schema (blind relay).
-    let data_dir = std::env::temp_dir().join("aven-server-mini");
+    // Durable blind replica: a full RocksDB engine on the REAL schema, wired to
+    // the TLS listener. The real schema is required so the engine can persist &
+    // re-ship replicated row batches (inbound batches carry `origin_schema_hash`;
+    // an empty schema would reject them). It holds NO keyshares, so every batch it
+    // mirrors stays ciphertext it cannot decrypt — a blind store-and-forward
+    // mirror, not a member.
+    let schema =
+        avenos_schema_hash::embedded_schema().map_err(|e| format!("load schema: {e}"))?;
+    let data_dir = std::env::var("AVEN_SERVER_DATA_DIR")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join("aven-server-data"));
+    tracing::info!(data_dir = %data_dir.display(), "durable storage (RocksDB)");
     let ctx = AppContext {
         app_id: AppId::from_name("ceo.aven.os"),
         client_id: Some(server_peer),
-        schema: SchemaBuilder::new().build(),
+        schema,
         data_dir,
         live_schemas: vec![],
     };
     let engine: Arc<JazzClient> =
-        Arc::new(JazzClient::connect_headless_in_memory(ctx, listener.clone()).await?);
-    tracing::info!("headless in-memory engine connected (stateless — no fly volume)");
+        Arc::new(JazzClient::connect_with_sync_transport(ctx, listener.clone(), None).await?);
+    tracing::info!("blind replica engine connected (RocksDB, real schema)");
 
     // Register each newly-authenticated peer so the engine ships catch-up to it.
     let engine_for_peers = engine.clone();
