@@ -434,11 +434,33 @@ mod imp {
 				Some((path, size))
 			})
 			.collect();
-		Ok(all
+		Ok(drop_duplicate_weights(
+			all.into_iter()
+				.filter(|(p, _)| is_wanted(p, uqff_file))
+				.map(|(path, size)| RepoFile { path, size })
+				.collect(),
+		))
+	}
+
+	/// A HF-sharded weight file, e.g. `model-00001-of-00002.safetensors`.
+	fn is_sharded_safetensors(path: &str) -> bool {
+		path.starts_with("model-") && path.contains("-of-") && path.ends_with(".safetensors")
+	}
+
+	/// Drop duplicate weight formats. Mistral repos (e.g. Voxtral) ship the SAME
+	/// weights twice: HF-sharded `model-*.safetensors` AND `consolidated.safetensors`.
+	/// mistral.rs's loader prefers the shards (its `SAFETENSOR_MATCH` excludes
+	/// consolidated), so when shards are present we skip consolidated — otherwise
+	/// the first-run download is ~2× the model size.
+	fn drop_duplicate_weights(files: Vec<RepoFile>) -> Vec<RepoFile> {
+		let has_shards = files.iter().any(|f| is_sharded_safetensors(&f.path));
+		if !has_shards {
+			return files;
+		}
+		files
 			.into_iter()
-			.filter(|(p, _)| is_wanted(p, uqff_file))
-			.map(|(path, size)| RepoFile { path, size })
-			.collect())
+			.filter(|f| f.path != "consolidated.safetensors")
+			.collect()
 	}
 
 	/// Mirror mistral.rs's cache resolution (`HF_HUB_CACHE`, else `HF_HOME/hub`)
@@ -487,13 +509,15 @@ mod imp {
 				}
 				match repo.info().await {
 					Ok(info) => {
-						let files: Vec<RepoFile> = info
-							.siblings
-							.into_iter()
-							.map(|s| s.rfilename)
-							.filter(|p| is_wanted(p, cfg.uqff_file))
-							.map(|path| RepoFile { path, size: 0 })
-							.collect();
+						let files = drop_duplicate_weights(
+							info
+								.siblings
+								.into_iter()
+								.map(|s| s.rfilename)
+								.filter(|p| is_wanted(p, cfg.uqff_file))
+								.map(|path| RepoFile { path, size: 0 })
+								.collect(),
+						);
 						emit(app);
 						(files, true)
 					}
