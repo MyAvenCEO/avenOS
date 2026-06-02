@@ -47,7 +47,7 @@ pub use avenos_client::{JazzClient, PeerInboundParkedHook};
 pub use sync_manager::RowBatchKey;
 pub use capability::{
     AccOp, AllowAllResolver, CapDecision, CapabilityResolver, DenyAllResolver, ResourceCoord,
-    gated_pull,
+    gated_pull, may_hold,
 };
 pub use sync_targets::SyncTargetId;
 #[cfg(feature = "client-p2p")]

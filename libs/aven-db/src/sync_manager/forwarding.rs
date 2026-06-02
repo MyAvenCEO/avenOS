@@ -149,21 +149,10 @@ impl SyncManager {
                 *object_id,
             );
             let target = crate::sync_targets::SyncTargetId::Client(client_id);
-            // A peer may hold a resource's (encrypted) batches if it's a member
-            // (`Write`) OR a blind replication peer (`Replicate`). The latter is a
-            // server aven added as a replication peer: it stores & forwards
-            // ciphertext but holds no keyshare, so it cannot decrypt. We ship on
-            // either Allow; `Replicate` is only consulted when membership doesn't
-            // already authorize, so a member is never gated on the replicate grant.
-            let write = self
-                .resolver
-                .may_sync(&target, crate::capability::AccOp::Write, &res);
-            let decision = match write {
-                crate::capability::CapDecision::Allow => write,
-                _ => self
-                    .resolver
-                    .may_sync(&target, crate::capability::AccOp::Replicate, &res),
-            };
+            // Ship if the peer may HOLD this resource — a member (`Write`) or a
+            // blind replication peer (`Replicate`, a server aven that stores &
+            // forwards ciphertext without a keyshare). See `capability::may_hold`.
+            let decision = crate::capability::may_hold(self.resolver.as_ref(), &target, &res);
             match decision {
                 crate::capability::CapDecision::Allow => {
                     tracing::debug!(%client_id, table = %table, %object_id, "gate: allow → ship");
