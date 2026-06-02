@@ -89,8 +89,11 @@
 							>
 						{/each}
 					</div>
+					{#if $asrState.quant}
+						<p class="text-muted-foreground mt-1 text-[11px]">{$asrState.quant}</p>
+					{/if}
 					{#if activeOnDisk}
-						<p class="text-muted-foreground mt-1 font-mono text-[11px]">
+						<p class="text-muted-foreground mt-0.5 font-mono text-[11px]">
 							{formatBytes(activeOnDisk.sizeBytes)}
 							{t('models.onDisk')}
 						</p>

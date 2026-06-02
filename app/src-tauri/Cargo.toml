@@ -65,6 +65,9 @@ tracing-log = "0.2.0"
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
 oslog = { version = "0.2", features = ["logger"] }
+# Apple GPU backend — required for the AFQ4 (affine) quant we load on Apple
+# Silicon / iOS. Feature is unioned with the base `mistralrs` dep above.
+mistralrs = { version = "0.8", optional = true, features = ["metal"] }
 
 # Vendored aven-db (jazz2 alpha.50) with AvenOS P2P patches:
 # `QueryManager` write paths used to `.map_err(|_| QueryError::ObjectNotFound(id))`,

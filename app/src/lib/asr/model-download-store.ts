@@ -16,6 +16,8 @@ export type AsrState = {
 	status: AsrStatus
 	/** Friendly model name for labels, e.g. "Gemma 4 E4B". */
 	model: string
+	/** Selected quantization/optimization, e.g. "AFQ4 · Apple-optimized". */
+	quant: string
 	receivedBytes: number
 	totalBytes: number
 	error?: string
@@ -26,6 +28,7 @@ export type AsrEvent = {
 	status?: AsrStatus
 	name?: string
 	model?: string
+	quant?: string
 	receivedBytes?: number
 	totalBytes?: number
 	error?: string
@@ -38,6 +41,7 @@ export const ASR_STATUS_COMMAND = 'asr_status'
 export const initialAsrState: AsrState = {
 	status: 'idle',
 	model: ASR_MODEL_LABEL,
+	quant: '',
 	receivedBytes: 0,
 	totalBytes: 0
 }
@@ -47,6 +51,7 @@ export function reduceAsrEvent(state: AsrState, ev: AsrEvent): AsrState {
 	const next: AsrState = {
 		...state,
 		model: ev.model ?? ev.name ?? state.model,
+		quant: ev.quant ?? state.quant,
 		receivedBytes: ev.receivedBytes ?? state.receivedBytes,
 		totalBytes: ev.totalBytes ?? state.totalBytes
 	}

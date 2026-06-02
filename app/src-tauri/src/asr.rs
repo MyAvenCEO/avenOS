@@ -13,19 +13,47 @@
 use serde::Serialize;
 use tauri::AppHandle;
 
-/// Friendly label shown in the download UI.
-pub const MODEL_LABEL: &str = "Gemma 4 E4B";
-/// Hugging Face model id. NOTE: this is the full-precision (BF16) safetensors
-/// repo (~15 GB download). `with_isq(Q4K)` quantizes to 4-bit *in memory* at
-/// load (~3 GB RAM) but does NOT shrink the download — for a ~3 GB on-disk
-/// footprint we'd need a pre-quantized GGUF/UQFF repo instead.
-/// Only referenced by the `local-asr` build; default builds never read it.
-#[cfg_attr(not(feature = "local-asr"), allow(dead_code))]
-pub const MODEL_ID: &str = "google/gemma-4-E4B-it";
 /// Tauri event the webview listens to for download progress / readiness.
 /// Only referenced by the `local-asr` build; default builds never read it.
 #[cfg_attr(not(feature = "local-asr"), allow(dead_code))]
 pub const DOWNLOAD_EVENT: &str = "asr:model-download";
+
+/// Best-effort model + quantization for the host hardware. All variants are
+/// pre-quantized UQFF repos, so the download is the chosen `.uqff` shard plus the
+/// shared `residual.safetensors` (the unquantized audio/vision towers) — far
+/// smaller than the full BF16 safetensors, and no in-memory ISQ pass.
+pub struct ModelConfig {
+	/// Hugging Face UQFF repo id.
+	pub repo: &'static str,
+	/// Friendly label shown in the UI.
+	pub label: &'static str,
+	/// The `.uqff` file (first shard) to load for this platform's quant level.
+	pub uqff_file: &'static str,
+}
+
+/// - Apple Silicon macOS → E4B, AFQ4 (Metal-optimized affine quant).
+/// - iOS → E2B, AFQ4 (smallest that fits a phone's memory budget).
+/// - Linux / Windows / Intel Mac → E4B, Q4K (portable CPU/CUDA quant).
+pub fn model_config() -> ModelConfig {
+	#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+	return ModelConfig {
+		repo: "mistralrs-community/gemma-4-E4B-it-UQFF",
+		label: "Gemma 4 E4B",
+		uqff_file: "afq4-0.uqff",
+	};
+	#[cfg(target_os = "ios")]
+	return ModelConfig {
+		repo: "mistralrs-community/gemma-4-E2B-it-UQFF",
+		label: "Gemma 4 E2B",
+		uqff_file: "afq4-0.uqff",
+	};
+	#[cfg(not(any(all(target_os = "macos", target_arch = "aarch64"), target_os = "ios")))]
+	return ModelConfig {
+		repo: "mistralrs-community/gemma-4-E4B-it-UQFF",
+		label: "Gemma 4 E4B",
+		uqff_file: "q4k-0.uqff",
+	};
+}
 
 /// Reply for the `asr_status` command and the shape of `asr:model-download`
 /// event payloads. `status` ∈ `downloading | ready | error | unavailable`.
@@ -46,7 +74,7 @@ impl AsrStatus {
 	pub fn unavailable() -> Self {
 		Self {
 			status: "unavailable".into(),
-			model: MODEL_LABEL.into(),
+			model: model_config().label.into(),
 			received_bytes: 0,
 			total_bytes: 0,
 			error: None,
@@ -80,7 +108,7 @@ pub fn spawn_model_download(app: &AppHandle) {
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalModel {
-	/// Hugging Face repo id, e.g. `google/gemma-4-E4B-it`.
+	/// Hugging Face repo id, e.g. `mistralrs-community/gemma-4-E4B-it-UQFF`.
 	pub id: String,
 	/// Bytes occupied on disk (resolved blobs).
 	pub size_bytes: u64,
@@ -110,7 +138,7 @@ pub async fn asr_local_models(app: AppHandle) -> Result<Vec<LocalModel>, String>
 			continue;
 		};
 		let id = rest.replace("--", "/");
-		let is_active = id.eq_ignore_ascii_case(MODEL_ID);
+		let is_active = id.eq_ignore_ascii_case(model_config().repo);
 		out.push(LocalModel {
 			id,
 			size_bytes: dir_size(&entry.path()),
@@ -133,7 +161,7 @@ pub async fn asr_cancel_download(app: AppHandle) -> Result<(), String> {
 /// being downloaded, the download is cancelled first.
 #[tauri::command(rename_all = "camelCase")]
 pub async fn asr_delete_model(app: AppHandle, id: String) -> Result<(), String> {
-	if id.eq_ignore_ascii_case(MODEL_ID) {
+	if id.eq_ignore_ascii_case(model_config().repo) {
 		imp::cancel(&app);
 	}
 	if id.contains("..") || id.starts_with('/') {
@@ -201,11 +229,11 @@ mod imp {
 	use hf_hub::api::tokio::{ApiBuilder, ApiRepo, Progress};
 	use hf_hub::{Cache, Repo, RepoType};
 	use mistralrs::{
-		AudioInput, IsqType, Model, MultimodalMessages, MultimodalModelBuilder, TextMessageRole,
+		AudioInput, Model, MultimodalMessages, TextMessageRole, UqffMultimodalModelBuilder,
 	};
 	use tauri::{AppHandle, Emitter};
 
-	use super::{AsrStatus, DOWNLOAD_EVENT, MODEL_ID, MODEL_LABEL};
+	use super::{model_config, AsrStatus, DOWNLOAD_EVENT};
 
 	/// Shared readiness state, mirrored to the webview via `asr:model-download`.
 	#[derive(Default)]
@@ -240,7 +268,7 @@ mod imp {
 		let s = state();
 		AsrStatus {
 			status: s.status.lock().unwrap().clone(),
-			model: MODEL_LABEL.into(),
+			model: model_config().label.into(),
 			received_bytes: s.received.load(Ordering::Relaxed),
 			total_bytes: s.total.load(Ordering::Relaxed),
 			error: s.error.lock().unwrap().clone(),
@@ -304,13 +332,19 @@ mod imp {
 		size: u64,
 	}
 
-	/// Files mistral.rs won't load — skipped so the first-run download isn't
-	/// inflated by duplicate weight formats (e.g. Gemma's `original/` checkpoint
-	/// or parallel PyTorch `.bin` weights alongside safetensors).
-	fn is_wanted(path: &str, has_safetensors: bool) -> bool {
+	/// Which repo files to fetch. A UQFF repo ships ~11 quant levels; we keep only
+	/// the chosen quant's shards (e.g. `afq4-*.uqff`) plus the shared
+	/// `residual.safetensors` and config/tokenizer files — skipping the other
+	/// quants and foreign weight formats so the download stays small.
+	fn is_wanted(path: &str, uqff_file: &str) -> bool {
 		let p = path.to_ascii_lowercase();
 		if p.starts_with("original/") || p.starts_with(".git") {
 			return false;
+		}
+		if p.ends_with(".uqff") {
+			// Keep only the selected quant's shard(s): "afq4-0.uqff" → "afq4-".
+			let stem = uqff_file.split('-').next().unwrap_or(uqff_file);
+			return path.starts_with(&format!("{stem}-"));
 		}
 		if p.ends_with(".gguf")
 			|| p.ends_with(".pth")
@@ -318,10 +352,8 @@ mod imp {
 			|| p.ends_with(".h5")
 			|| p.ends_with(".msgpack")
 			|| p.ends_with(".tflite")
+			|| p.ends_with(".bin")
 		{
-			return false;
-		}
-		if has_safetensors && p.ends_with(".bin") {
 			return false;
 		}
 		true
@@ -331,7 +363,7 @@ mod imp {
 	/// `info_request` (so gated models work with `HF_TOKEN`). Reuses hf-hub's
 	/// reqwest client; parsed with `serde_json` to read the `size` field that the
 	/// typed `Siblings` struct drops.
-	async fn list_repo_files(repo: &ApiRepo) -> Result<Vec<RepoFile>, String> {
+	async fn list_repo_files(repo: &ApiRepo, uqff_file: &str) -> Result<Vec<RepoFile>, String> {
 		let body = repo
 			.info_request()
 			.query(&[("blobs", "true")])
@@ -358,10 +390,9 @@ mod imp {
 				Some((path, size))
 			})
 			.collect();
-		let has_safetensors = all.iter().any(|(p, _)| p.ends_with(".safetensors"));
 		Ok(all
 			.into_iter()
-			.filter(|(p, _)| is_wanted(p, has_safetensors))
+			.filter(|(p, _)| is_wanted(p, uqff_file))
 			.map(|(path, size)| RepoFile { path, size })
 			.collect())
 	}
@@ -389,11 +420,12 @@ mod imp {
 			builder = builder.with_token(Some(t));
 		}
 		let api = builder.build().map_err(|e| format!("hf api: {e}"))?;
-		let repo = api.repo(Repo::new(MODEL_ID.to_string(), RepoType::Model));
+		let cfg = model_config();
+		let repo = api.repo(Repo::new(cfg.repo.to_string(), RepoType::Model));
 		// Cache view for "is this file already downloaded?" checks.
-		let cache_repo = Cache::new(hub_cache_dir(hf_home)).repo(Repo::new(MODEL_ID.to_string(), RepoType::Model));
+		let cache_repo = Cache::new(hub_cache_dir(hf_home)).repo(Repo::new(cfg.repo.to_string(), RepoType::Model));
 
-		let files = match list_repo_files(&repo).await {
+		let files = match list_repo_files(&repo, cfg.uqff_file).await {
 			Ok(files) => {
 				let total: u64 = files.iter().map(|f| f.size).sum();
 				if total > 0 {
@@ -442,12 +474,14 @@ mod imp {
 				// Pre-download with real byte progress, then build from cache.
 				prefetch_weights(app, &dir).await?;
 
-				let model = MultimodalModelBuilder::new(MODEL_ID)
-					.with_isq(IsqType::Q4K)
+				// UQFF is already quantized — load it directly (no in-memory ISQ).
+				let cfg = model_config();
+				let model = UqffMultimodalModelBuilder::new(cfg.repo, vec![PathBuf::from(cfg.uqff_file)])
+					.into_inner()
 					.with_logging()
 					.build()
 					.await
-					.map_err(|e| format!("load {MODEL_ID}: {e}"))?;
+					.map_err(|e| format!("load {}: {e}", cfg.repo))?;
 
 				set_status(app, "ready", None);
 				Ok(Arc::new(model))
