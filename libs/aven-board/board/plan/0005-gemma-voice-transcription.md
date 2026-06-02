@@ -52,6 +52,28 @@ slash-command (`onCommandSubmit`) paths, and the `HitlActionBar` usages, must
 keep working unchanged (they rely on the mock fallback when no transcription
 implementation is supplied).
 
+### ⚠️ Premise risk: does Gemma-on-RedPill actually accept audio?
+
+RedPill's public docs confirm the base URL (`https://api.redpill.ai/v1`) and that
+it's OpenAI-SDK-compatible, but **the public docs I could reach describe Gemma 4
+as text + image multimodal and mention no audio input, and no
+`/audio/transcriptions` (Whisper) endpoint surfaced**. The phala model page that
+asserts audio support
+(`phala.com/de/models/google/gemma-4-31b-it`) is gated (HTTP 403) and could not
+be machine-read. So the core premise — "send the audio file to Gemma and get a
+transcript" — is **unverified against reachable docs**. Before building, confirm
+one of:
+
+1. Gemma on RedPill accepts an `input_audio` content part on `chat.completions`
+   (and the exact field/format), **or**
+2. RedPill exposes a speech-to-text endpoint (`/audio/transcriptions`) we route
+   the blob to instead, **or**
+3. a different RedPill model handles the audio→text step.
+
+If none holds, this item is **blocked on model capability** — do not ship a path
+that silently falls back to the mock and looks real. This is the first thing to
+de-risk; flag it in the Progress log when resolved.
+
 ### Decided architecture: client-side, direct, insecure-first
 
 We are **not** building a server proxy for this item. The call to RedPill runs
@@ -109,32 +131,51 @@ Four pieces: **request mic capability (Tauri)**, **capture**, **transcribe
 
 ### 0. Request the actual Tauri microphone capabilities
 
-`getUserMedia({ audio: true })` runs inside the Tauri **webview**, which is
+`getUserMedia({ audio: true })` runs inside the Tauri **webview** (wry), which is
 sandboxed by the OS and currently grants **no** microphone access — today
 [`app/src-tauri/Info.plist`](../../../../app/src-tauri/Info.plist) holds only
 `ITSAppUsesNonExemptEncryption`, and
 [`app/src-tauri/capabilities/default.json`](../../../../app/src-tauri/capabilities/default.json)
-has no media grant. Without the platform mic permission, `getUserMedia` rejects
-(or silently fails) and we'd never leave the mock path. Wire the real caps per
-platform:
+has no media grant. The Tauri capabilities ACL does **not** cover `getUserMedia`
+— this is an OS + native-webview concern, handled per platform (researched
+against the Tauri/wry issues linked in Sources):
 
-- **macOS** — add `NSMicrophoneUsageDescription` to `app/src-tauri/Info.plist`
-  (WKWebView refuses the mic without it). If the macOS build uses the hardened
-  runtime / app sandbox, also add the `com.apple.security.device.audio-input`
-  entitlement.
-- **iOS** — add `NSMicrophoneUsageDescription` to the iOS Info.plist /
-  [`tauri.ios.conf.json`](../../../../app/src-tauri/tauri.ios.conf.json) and the
+- **macOS (WKWebView)** — add `NSMicrophoneUsageDescription` to
+  `app/src-tauri/Info.plist` (it is merged with Tauri's generated plist); without
+  it WKWebView refuses the mic. The native webview must also delegate
+  `requestMediaCapturePermissionForOrigin` — recent **wry** versions implement
+  this, so **bump the Tauri/wry deps** if the bundled version predates the fix
+  (older versions double-prompt or never prompt). If the macOS build uses the
+  **hardened runtime / app sandbox**, also add the
+  `com.apple.security.device.audio-input` entitlement via an `Entitlements.plist`
+  referenced from `tauri.conf.json` (`bundle.macOS.entitlements`).
+- **iOS** — add `NSMicrophoneUsageDescription` to the iOS plist
+  ([`tauri.ios.conf.json`](../../../../app/src-tauri/tauri.ios.conf.json)) and the
   audio-input entitlement in
   [`ios-template/aven-os-app_iOS.entitlements`](../../../../app/src-tauri/ios-template/aven-os-app_iOS.entitlements).
-- **Linux (WebKitGTK) / Windows (WebView2)** — the webview emits a
-  permission-request the host must grant; handle it on the Rust side
-  (`on_webview_event` / WebView2 `PermissionRequested`) so the mic request is
-  approved instead of auto-denied. Scope this to the `main` window.
+- **Linux (WebKitGTK)** — ⚠️ **the heavy one, and this dev box is Linux**
+  (`dev:app:linux`). Stock WebKitGTK ships **without** media-stream/WebRTC, so
+  `getUserMedia` is simply unavailable unless WebKitGTK was built with
+  `-DENABLE_MEDIA_STREAM=ON -DENABLE_WEB_RTC=ON` plus the GStreamer plugins
+  (`gst-plugins-good/base/bad`). On the Rust side the webview must enable it and
+  grant the request:
+
+  ```rust
+  // WebKitGTK settings (via wry's Unix webview handle)
+  settings.set_enable_webrtc(true);
+  settings.set_enable_media_stream(true);
+  settings.set_media_playback_requires_user_gesture(false);
+  // grant the permission-request instead of letting it auto-deny
+  webview.connect_permission_request(|_, req| { req.allow(); true });
+  ```
+- **Windows (WebView2)** — handle the `PermissionRequested` event and allow the
+  microphone kind (WebView2 is Chromium, so capture works once granted).
 
 The first device use still triggers the OS permission prompt (expected); the
-usage-description string is what that prompt shows. Confirm the exact macOS
-hardened-runtime / sandbox situation before deciding whether the entitlement is
-required (see Open decisions).
+usage-description string is what that prompt shows. **Net:** macOS/iOS/Windows
+are config + a possible dep bump; **Linux needs a WebRTC-enabled WebKitGTK**,
+which may not be present in this environment — capture there is the riskiest part
+and should be validated first (see Open decisions / Risks).
 
 ### 1. Keep the composer dumb — inject transcription via a prop
 
@@ -167,7 +208,7 @@ import OpenAI from 'openai'
 
 const client = new OpenAI({
   apiKey: import.meta.env.REDPILL_API_KEY,
-  baseURL: 'https://api.redpill.ai/v1', // CONFIRM exact base URL
+  baseURL: 'https://api.redpill.ai/v1', // confirmed: RedPill OpenAI-compatible base URL
   dangerouslyAllowBrowser: true,         // intentional: insecure client-side first cut
 })
 
@@ -187,9 +228,11 @@ export async function transcribeVoiceNote(audio: Blob): Promise<string> {
 }
 ```
 
-Gemma is a multimodal chat model that **takes audio**, so transcription goes
-through `chat.completions` with an `input_audio` content part (base64) — not the
-Whisper-style `audio.transcriptions.*` route.
+This assumes Gemma accepts an `input_audio` content part on `chat.completions`
+(base64). **That assumption is unverified against reachable RedPill docs** — see
+the Premise risk above. If RedPill instead offers a Whisper-style
+`client.audio.transcriptions.create({ file, model })` route, switch
+`transcribeVoiceNote` to that; the rest of the wiring is identical.
 
 ### 3. Expose `REDPILL_API_KEY` to the client (insecure, by design)
 
@@ -254,7 +297,9 @@ that this is the insecure first-cut path pending a proxy.
 
 - `app/src-tauri/Info.plist` — add `NSMicrophoneUsageDescription` (macOS mic prompt).
 - `app/src-tauri/tauri.ios.conf.json` + `app/src-tauri/ios-template/aven-os-app_iOS.entitlements` — iOS mic usage description + audio-input entitlement.
-- `app/src-tauri/src/` (Rust) — grant the webview microphone permission-request on Linux/Windows (`on_webview_event` / WebView2 `PermissionRequested`), scoped to `main`. *(macOS entitlement in a `.entitlements`/`tauri.conf.json` bundle config only if hardened-runtime/sandbox requires it — see Open decisions.)*
+- `app/src-tauri/src/` (Rust) — Linux: `set_enable_webrtc(true)` / `set_enable_media_stream(true)` / `set_media_playback_requires_user_gesture(false)` + `connect_permission_request(|_, r| { r.allow(); true })`; Windows: WebView2 `PermissionRequested` → allow microphone; scoped to `main`.
+- `app/src-tauri/Cargo.toml` (+ `Cargo.lock`) — bump Tauri/wry if the bundled version predates the macOS `requestMediaCapturePermissionForOrigin` fix.
+- `app/src-tauri/Entitlements.plist` (**new**, macOS) + `app/src-tauri/tauri.conf.json` (`bundle.macOS.entitlements`) — only if the macOS build uses hardened runtime / sandbox (`com.apple.security.device.audio-input`); see Open decisions.
 - `app/src/lib/intent-mock/IntentComposer.svelte` — real MediaRecorder capture in
   listening mode; new `onTranscribeAudio` prop; async `commitVoiceNote()` with
   mock-only-as-fallback.
@@ -267,24 +312,32 @@ that this is the insecure first-cut path pending a proxy.
 - `.env.example` — add `REDPILL_API_KEY` with comment + model/base-URL note + insecurity warning.
 - `app/tests/transcribe.test.ts`, `app/tests/audio-encode.test.ts` — **new** unit tests.
 
-## Open decisions (confirm before building)
+## Open decisions / risks (confirm before building)
 
+- **🔴 Gemma audio support (premise risk).** Reachable RedPill docs describe
+  Gemma 4 as text+image only and surface no audio input or `/audio/transcriptions`
+  endpoint; the phala model page asserting audio is gated (403). Confirm
+  `input_audio` support, a Whisper route, or pick a speech-capable model — else
+  the item is blocked. **De-risk this first.**
+- **🔴 Linux WebKitGTK WebRTC (capture risk).** Stock WebKitGTK has no
+  media-stream/WebRTC; `getUserMedia` won't work on this Linux dev box without a
+  WebKitGTK built with `-DENABLE_MEDIA_STREAM=ON -DENABLE_WEB_RTC=ON` + GStreamer
+  plugins. Verify what the environment ships before relying on live capture
+  there; macOS/iOS/Windows are config-only.
 - **macOS hardened runtime / sandbox.** Decides whether
-  `NSMicrophoneUsageDescription` alone is enough or the
-  `com.apple.security.device.audio-input` entitlement is also required. Confirm
-  against the current macOS bundle/signing config before adding an entitlements
-  file.
-- **Webview permission-request hook.** Confirm the Tauri v2 API surface for
-  granting the mic permission-request on WebKitGTK (Linux) and WebView2
-  (Windows) in this app's Rust entrypoint.
-- **Exact RedPill base URL and model slug.** Plan assumes
-  `https://api.redpill.ai/v1` and `google/gemma-4-31b-it` (from the
-  phala.com/.../google/gemma-4-31b-it link). Confirm against RedPill docs.
-- **Audio content-part shape.** Plan assumes OpenAI-style `input_audio`
-  (`{ data: base64, format }`) on a `chat.completions` message. Confirm RedPill's
-  exact field names for Gemma audio input.
-- **Audio container.** MediaRecorder typically emits `webm/opus`. Confirm RedPill
-  accepts it; otherwise add transcoding (follow-up, out of scope here).
+  `NSMicrophoneUsageDescription` alone suffices or the
+  `com.apple.security.device.audio-input` entitlement (+ `Entitlements.plist`
+  wired in `tauri.conf.json`) is also required. Confirm against the macOS
+  bundle/signing config.
+- **wry/Tauri version.** Confirm the bundled wry implements the macOS
+  `requestMediaCapturePermissionForOrigin` delegate; bump if not.
+- **Model slug.** Plan uses `google/gemma-4-31b-it` (from the user's phala link).
+  Note a related public listing is `google/gemma-4-26B-A4B-it` — confirm the exact
+  RedPill slug.
+- **Audio content-part shape & container.** If audio is supported, confirm the
+  exact field names (`input_audio { data, format }` vs `audio_url`) and that
+  RedPill accepts MediaRecorder's native `webm/opus`; otherwise add transcoding
+  (follow-up).
 
 ## Acceptance criteria
 
@@ -341,6 +394,17 @@ record a voice note, confirm the streamed message body is the real transcript.
 
 Newest entry first.
 
+- `2026-06-02` — Researched RedPill + Tauri mic (Sources below). Confirmed base
+  URL `https://api.redpill.ai/v1` (OpenAI-compatible). **Could not confirm Gemma
+  audio input** — public docs show Gemma 4 as text+image only and no Whisper
+  route; the phala model page is 403-gated. Added a 🔴 premise-risk callout: this
+  must be de-risked first or the item is blocked. Replaced the hand-wavy mic
+  section with concrete per-platform mechanics: macOS plist + possible
+  hardened-runtime `audio-input` entitlement + wry version bump; **Linux
+  WebKitGTK needs a WebRTC-enabled build** (`-DENABLE_MEDIA_STREAM/-DENABLE_WEB_RTC`
+  + GStreamer) plus `set_enable_webrtc/media_stream` and a `connect_permission_request`
+  grant — flagged as a 🔴 capture risk since this dev box is Linux. Updated files,
+  open decisions, and acceptance criteria.
 - `2026-06-02` — Added the **Tauri microphone capability** request (per
   direction): today `src-tauri` grants no mic access, so `getUserMedia` would
   fail and never leave the mock. Plan now wires `NSMicrophoneUsageDescription`
@@ -349,11 +413,22 @@ Newest entry first.
   open decisions, and acceptance criterion.
 - `2026-06-02` — Simplified per direction: **client-side, direct, insecure-first**
   — dropped the SvelteKit/Rust server-proxy options entirely (proxy is a later
-  item). Confirmed Gemma takes audio input, so removed the "blocked if no audio
-  modality" risk. Key now exposed to the browser via a `REDPILL_` `envPrefix`
+  item). Treated Gemma audio input as given per direction (later walked back to a
+  risk once docs couldn't confirm it — see newest entry). Key now exposed to the
+  browser via a `REDPILL_` `envPrefix`
   opt-in in `vite.config.ts` + `dangerouslyAllowBrowser` on the OpenAI client.
   Updated Approach, Files to touch, goal, and acceptance criteria accordingly.
 - `2026-06-02` — Planned and specced directly into `plan/`. Mapped the faked
   voice-note path (`commitVoiceNote` → `VOICE_MOCK_TRANSCRIPTS`), the
   `onSubmitMessage` → `SparkTalkPanel.handleComposerSubmit` → `messages.create`
   flow into `/talk`, and the absence of any existing AI backend.
+
+## Sources
+
+Research backing the RedPill + Tauri-mic facts above:
+
+- RedPill API (OpenAI-compatible, base URL): <https://docs.redpill.ai/get-started/how-to-use>, <https://www.redpill.ai/developer>
+- Tauri macOS mic / Info.plist + entitlements: <https://v2.tauri.app/distribute/macos-application-bundle/>, <https://github.com/tauri-apps/tauri/issues/11951>
+- wry macOS getUserMedia permission delegate: <https://github.com/tauri-apps/wry/issues/1195>
+- Tauri v2 mic/camera permission (no ACL coverage): <https://github.com/tauri-apps/tauri/issues/12547>, <https://github.com/tauri-apps/tauri/issues/10898>
+- Linux WebKitGTK WebRTC build + permission-request grant: <https://github.com/tauri-apps/tauri/discussions/8426>, <https://github.com/tauri-apps/wry/issues/85>
