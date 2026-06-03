@@ -21,6 +21,7 @@ export type ActivityProjection = {
 	atMs: number
 	skillName: string
 	text: string
+	data?: unknown
 }
 
 export type IntentProjection = {

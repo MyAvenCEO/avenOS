@@ -1,4 +1,5 @@
 <script lang="ts">
+import { browser } from '$app/environment'
 import { contentMaxWidthClass, mobileActionVeilClass, mobileFabBottomClass, mobileMainBottomPadClass } from '$lib/shell'
 import {
 	clearMobileChromeOverrides,
@@ -22,7 +23,12 @@ import {
 import { HITL_VIEW_IDS, type VibeViewId } from '$lib/aven-ui/vibe-views'
 import { persistIntentFiles } from '$lib/jazz/intent-files'
 import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
-import { intentRetrain, intentStart, type IntentProjection } from '$lib/intents/api'
+import { intentRetrain, intentStart, intentGet, intentList, type IntentProjection, type IntentRuntimeSnapshot } from '$lib/intents/api'
+import {
+	intentRuntimeDetails as intentRuntimeDetailsStore,
+	intentRuntimeSnapshot as intentRuntimeSnapshotStore,
+} from '$lib/runtime/groove-runtime'
+import { onMount } from 'svelte'
 
 /**
  * Random pick from `HITL_VIEW_IDS` (the aven-ui view catalog). Caller stores
@@ -497,6 +503,7 @@ function alignSkillsWithParentAfterWorking(
 /** When simulated work phase reaches its cap: move to hitl OR error with configured split. */
 function completeWorkingPhaseIfDue(rows: IntentRow[], now: number): IntentRow[] {
 	return rows.map((row) => {
+		if (row.runtimeBacked) return row
 		if (row.status !== 'working') return row
 		if (row.workingStartedAt == null || row.workingPhaseDurationMs == null) return row
 		const elapsed = now - row.workingStartedAt
@@ -528,6 +535,7 @@ function completeWorkingPhaseIfDue(rows: IntentRow[], now: number): IntentRow[] 
 
 function appendLogsForWorking(rows: IntentRow[], now: number): IntentRow[] {
 	return rows.map((row) => {
+		if (row.runtimeBacked) return row
 		if (row.status !== 'working') return row
 		const running = row.skills.filter((s) => s.status === 'running')
 		if (running.length === 0) return row
@@ -724,6 +732,90 @@ function intentRowFromMessage(text: string): IntentRow {
 	return row
 }
 
+function runtimeSkillStatus(intentStatus: IntentProjection['status']): SkillStatus {
+	if (intentStatus === 'error') return 'error'
+	if (intentStatus === 'working' || intentStatus === 'hitl') return 'running'
+	return 'waiting'
+}
+
+function runtimeActorDescription(actorName: string): string {
+	switch (actorName) {
+		case 'orchestrator':
+			return 'Intent planner / coordinator'
+		case 'human':
+			return 'Human communication actor'
+		default:
+			return `Runtime actor: ${actorName}`
+	}
+}
+
+function runtimeActorSummary(actorName: string, logs: IntentProjection['logs']): string {
+	const actorLogs = logs.filter((entry) => entry.skillName === actorName)
+	const latest = actorLogs.at(-1)
+	if (!latest) return runtimeActorDescription(actorName)
+	if (actorName === 'shell.execute' && latest.data && typeof latest.data === 'object') {
+		const record = latest.data as Record<string, unknown>
+		const command = typeof record.command === 'string' ? record.command.trim() : ''
+		const stdout = typeof record.stdoutPreview === 'string' ? record.stdoutPreview.trim() : ''
+		if (stdout) return stdout.length > 96 ? `${stdout.slice(0, 96)}…` : stdout
+		if (command) return `Ran: ${command}`
+	}
+	return latest.text
+}
+
+function runtimeSkillsFromProjection(detail: IntentProjection): SkillWorker[] {
+	const seen = new Set<string>()
+	return detail.logs.flatMap((entry) => {
+		const actorName = entry.skillName.trim()
+		if (!actorName || seen.has(actorName)) return []
+		seen.add(actorName)
+		const actorLogs = detail.logs.filter((candidate) => candidate.skillName === actorName)
+		const latest = actorLogs.at(-1)
+		return [{
+			id: `runtime-actor:${actorName}`,
+			templateId: `runtime-actor:${actorName}`,
+			name: actorName,
+			description: runtimeActorDescription(actorName),
+			status: runtimeSkillStatus(detail.status),
+			runtimeSummary: runtimeActorSummary(actorName, detail.logs),
+			...(latest?.data === undefined ? {} : { runtimeData: latest.data }),
+			accumulatedSeconds: 0,
+			workers: [],
+		} satisfies SkillWorker]
+	})
+}
+
+function intentRowFromSnapshotItem(
+	item: IntentRuntimeSnapshot['intents'][number],
+	detail: IntentProjection | undefined,
+): IntentRow {
+	if (detail) return intentRowFromProjection(detail)
+	return {
+		id: item.id,
+		title: item.title,
+		summary: item.resultMessage ?? item.summary,
+		...(item.status === 'error' ? { errorMessage: item.summary } : {}),
+		...(item.status === 'success' ? { resultMessage: item.resultMessage ?? item.summary } : {}),
+		status: item.status,
+		runtimeBacked: true,
+		lastWorkDurationMs: item.lastWorkDurationMs,
+		skills: [],
+		logs: [],
+	}
+}
+
+function syncRuntimeBackedRows(
+	snapshot: IntentRuntimeSnapshot | undefined,
+	detailsById: Record<string, IntentProjection>,
+) {
+	if (!snapshot) return
+	const nextRows = snapshot.intents.map((item) => intentRowFromSnapshotItem(item, detailsById[item.id]))
+	savedIntents = nextRows
+	if (selectedId && !nextRows.some((row) => row.id === selectedId)) {
+		selectedId = nextRows[0]?.id ?? null
+	}
+}
+
 async function handleComposerSubmit(message: string, files: File[]) {
 	console.info('[intent runtime] submit:start', {
 		messagePreview: message.slice(0, 120),
@@ -819,12 +911,13 @@ function intentRowFromProjection(detail: IntentProjection): IntentRow {
 		runtimeBacked: true,
 		runtimeOpenCommunicationId: detail.openCommunication?.open ? detail.openCommunication.communicationId : undefined,
 		lastWorkDurationMs: detail.lastWorkDurationMs,
-		skills: [],
+		skills: runtimeSkillsFromProjection(detail),
 		logs: detail.logs.map((entry) => ({
 			id: entry.id,
 			at: entry.atMs,
 			skillName: entry.skillName,
 			text: entry.text,
+			...(entry.data === undefined ? {} : { data: entry.data }),
 		})),
 	}
 }
@@ -853,6 +946,42 @@ function intentErrorRowFromFailure(message: string, error: unknown, existingId?:
 		],
 	}
 }
+
+onMount(() => {
+	if (!browser) return
+	let snapshotState: IntentRuntimeSnapshot | undefined
+	let detailsState: Record<string, IntentProjection> = {}
+	const stopSnapshot = intentRuntimeSnapshotStore.subscribe((snapshot) => {
+		snapshotState = snapshot
+		syncRuntimeBackedRows(snapshotState, detailsState)
+	})
+	const stopDetails = intentRuntimeDetailsStore.subscribe((details) => {
+		detailsState = details
+		syncRuntimeBackedRows(snapshotState, detailsState)
+	})
+	void (async () => {
+		try {
+			const snapshot = await intentList()
+			snapshotState = snapshot
+			const details = await Promise.all(
+				snapshot.intents.map(async (item) => {
+					const detail = await intentGet(item.id)
+					return detail ? [item.id, detail] : undefined
+				}),
+			)
+			detailsState = Object.fromEntries(
+				details.filter((entry): entry is [string, IntentProjection] => entry !== undefined),
+			)
+			syncRuntimeBackedRows(snapshotState, detailsState)
+		} catch (error) {
+			console.warn('[intent runtime] startup hydration failed', error)
+		}
+	})()
+	return () => {
+		stopSnapshot()
+		stopDetails()
+	}
+})
 
 function selectIntent(id: string) {
 	selectedId = id

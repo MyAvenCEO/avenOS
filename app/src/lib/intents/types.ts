@@ -56,6 +56,7 @@ export type ActivityEntry = {
 	at: number
 	skillName: string
 	text: string
+	data?: unknown
 	/**
 	 * Optional worker-actor name that authored this entry. Logs emitted by
 	 * the orchestrator / operator omit this field and render without the

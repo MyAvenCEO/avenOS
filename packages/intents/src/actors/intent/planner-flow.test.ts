@@ -62,4 +62,15 @@ describe("planner structured extraction prompt and parsing", () => {
     expect(prompt).toContain("Do not repeat the same tool call after an error with the same input unless you have new evidence");
     expect(prompt).toContain("If a tool error is already human-visible via notifyHuman, do not emit another notifyHuman with the same underlying error");
   });
+
+	it("instructs the planner to use shell.execute for local machine facts like time and user identity", () => {
+		const prompt = buildPlannerPrompt(state(), {
+			sanitizeJson: (v) => v,
+			bounded: (v) => v,
+			listIntentToolCatalog: () => listIntentToolCatalog({ IntentToolRunKind: "intentToolRun", clone: structuredClone, sanitizeJson: (v) => v, bounded: (v) => v }),
+		});
+		expect(prompt).toContain("If the request depends on the current local machine")
+		expect(prompt).toContain("preferably shell.execute")
+		expect(prompt).toContain("For local factual questions like 'what time is it', 'who am I'")
+	});
 });

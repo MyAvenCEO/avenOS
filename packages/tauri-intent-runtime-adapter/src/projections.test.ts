@@ -57,5 +57,6 @@ describe('projectIntent', () => {
     const projection = projectIntent(intent)
     expect(projection.resultMessage).toBe('Tue Jun  2 04:47:15 CEST 2026')
     expect(projection.summary).toBe('Tue Jun  2 04:47:15 CEST 2026')
+    expect(projection.logs[3]?.skillName).toBe('shell.execute')
   })
 })

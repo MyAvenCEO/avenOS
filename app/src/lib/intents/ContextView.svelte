@@ -18,16 +18,18 @@ let {
 } = $props()
 
 const actorName = $derived(skill?.name ?? intent?.title ?? 'unknown actor')
+const actorLogs = $derived.by(() => {
+	if (!intent) return []
+	if (!skill) return intent.logs.slice(-5)
+	return intent.logs.filter((entry) => entry.skillName === skill.name).slice(-5)
+})
 
-const mockTimestamp = $derived(formatLogTime(Date.now()))
-
-const mockContextLine = $derived(
-	skill
-		? t('intents.context.skillTransition', {
-				time: mockTimestamp,
-				intent: intent?.title ?? '—',
-			})
-		: t('intents.context.intentTransition', { time: mockTimestamp }),
+const actorSummary = $derived(
+	skill?.runtimeSummary
+		?? actorLogs.at(-1)?.text
+		?? (skill
+			? t('intents.context.skillTransition', { time: formatLogTime(Date.now()), intent: intent?.title ?? '—' })
+			: t('intents.context.intentTransition', { time: formatLogTime(Date.now()) }))
 )
 </script>
 
@@ -37,6 +39,18 @@ const mockContextLine = $derived(
 	<p class="text-[8px] font-bold tracking-[0.22em] opacity-40 uppercase">
 		{t('intents.context.header', { actor: actorName })}
 	</p>
-	<p class="mt-2 text-foreground/50">{t('intents.context.placeholder')}</p>
-	<p class="mt-2 font-mono text-[10px] text-foreground/40">{mockContextLine}</p>
+	<p class="mt-2 text-foreground/70">{actorSummary}</p>
+	{#if skill?.runtimeData !== undefined}
+		<pre class="mt-3 whitespace-pre-wrap break-words rounded-[var(--radius-lg)] bg-black/5 p-3 font-mono text-[10px] text-foreground/70">{JSON.stringify(skill.runtimeData, null, 2)}</pre>
+	{/if}
+	{#if actorLogs.length > 0}
+		<ul class="mt-3 flex flex-col gap-1 border-t border-border/30 pt-3 font-mono text-[10px] text-foreground/50">
+			{#each actorLogs as log (log.id)}
+				<li>
+					<span class="opacity-40">{formatLogTime(log.at)}</span>
+					<span class="ml-2">{log.text}</span>
+				</li>
+			{/each}
+		</ul>
+	{/if}
 </div>

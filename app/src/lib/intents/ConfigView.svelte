@@ -20,12 +20,23 @@ let {
 	skill: SkillWorker | null
 } = $props()
 
-const sampleConfig = $derived({
-	actorId: skill?.id ?? intent?.id ?? 'none',
-	actorName: skill?.name ?? intent?.title ?? 'none',
-	runtime: { timeoutMs: 30000, maxRetries: 3, parallelism: 1 },
-	resources: { cpu: '500m', memory: '256Mi' },
-	featureFlags: { observability: true, smartRetry: false }
+const actorConfig = $derived.by(() => {
+	if (skill?.runtimeData !== undefined) {
+		return {
+			actorId: skill.id,
+			actorName: skill.name,
+			actorType: skill.templateId.startsWith('runtime-actor:') ? 'runtime-actor' : 'skill',
+			summary: skill.runtimeSummary,
+			data: skill.runtimeData,
+		}
+	}
+	return {
+		actorId: skill?.id ?? intent?.id ?? 'none',
+		actorName: skill?.name ?? intent?.title ?? 'none',
+		runtime: { timeoutMs: 30000, maxRetries: 3, parallelism: 1 },
+		resources: { cpu: '500m', memory: '256Mi' },
+		featureFlags: { observability: true, smartRetry: false }
+	}
 })
 </script>
 
@@ -33,7 +44,7 @@ const sampleConfig = $derived({
 	class="min-h-[5rem] flex-1 overflow-y-auto rounded-[var(--radius-lg)] border-2 border-dotted border-border/40 bg-white/10 p-4 font-mono text-[10px] leading-relaxed"
 >
 	<pre class="m-0 whitespace-pre-wrap break-words opacity-80">{JSON.stringify(
-			sampleConfig,
+			actorConfig,
 			null,
 			2
 		)}</pre>

@@ -19,6 +19,7 @@ export type ActivityProjection = {
   atMs: number
   skillName: string
   text: string
+  data?: JsonValue
 }
 
 export type IntentListProjection = {
@@ -117,12 +118,23 @@ function extractArtifactRefs(intent: IntentActorState): unknown[] {
   return Array.isArray(attachments) ? attachments : []
 }
 
+function actorNameFromTimelineEntry(entry: IntentActorState['timeline'][number]): string {
+  const data = entry.data
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const record = data as Record<string, JsonValue>
+    if (typeof record.toolId === 'string') return record.toolId
+    if (typeof record.communicationKind === 'string') return 'human'
+  }
+  return 'orchestrator'
+}
+
 function logsFromTimeline(intent: IntentActorState): ActivityProjection[] {
   return intent.timeline.map((entry) => ({
     id: entry.eventId,
     atMs: isoToMs(entry.createdAt),
-    skillName: 'orchestrator',
+    skillName: actorNameFromTimelineEntry(entry),
     text: entry.summary,
+    ...(entry.data === undefined ? {} : { data: entry.data }),
   }))
 }
 
