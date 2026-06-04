@@ -26,13 +26,10 @@ const path = $derived(page.url.pathname)
 const routeKey = $derived(`${page.url.pathname}${page.url.search}`)
 const intentsActive = $derived(path === '/')
 const sandboxActive = $derived(path.startsWith('/sandbox'))
-const docsActive = $derived(path.startsWith('/docs'))
 const selfActive = $derived(path.startsWith('/settings'))
 const sparksNavActive = $derived(path.startsWith('/sparks'))
 const dbActive = $derived(path.startsWith('/db'))
-const avenCityActive = $derived(path.startsWith('/aven-city'))
-const boardActive = $derived(path.startsWith('/board'))
-const dreamsActive = $derived(path.startsWith('/dreams'))
+const avensActive = $derived(path.startsWith('/avens'))
 
 const shellLocked = $derived(browser && isTauriRuntime() && $deviceSession.kind === 'locked')
 
@@ -245,39 +242,12 @@ $effect(() => {
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a
-						href="/aven-city"
+						href="/avens"
 						data-sveltekit-preload-data="hover"
-						class="transition-opacity hover:opacity-80 {avenCityActive ? 'opacity-95' : 'opacity-40'}"
-						aria-current={avenCityActive ? 'page' : undefined}
-						onclick={(e) => navigateApp('/aven-city', e)}
-						>{t('nav.avenCity')}</a
-					>
-					<span class="select-none opacity-25" aria-hidden="true">|</span>
-					<a
-						href="/board"
-						data-sveltekit-preload-data="hover"
-						class="transition-opacity hover:opacity-80 {boardActive ? 'opacity-95' : 'opacity-40'}"
-						aria-current={boardActive ? 'page' : undefined}
-						onclick={(e) => navigateApp('/board', e)}
-						>{t('nav.board')}</a
-					>
-					<span class="select-none opacity-25" aria-hidden="true">|</span>
-					<a
-						href="/dreams"
-						data-sveltekit-preload-data="hover"
-						class="transition-opacity hover:opacity-80 {dreamsActive ? 'opacity-95' : 'opacity-40'}"
-						aria-current={dreamsActive ? 'page' : undefined}
-						onclick={(e) => navigateApp('/dreams', e)}
-						>{t('nav.dreams')}</a
-					>
-					<span class="select-none opacity-25" aria-hidden="true">|</span>
-					<a
-						href="/docs"
-						data-sveltekit-preload-data="hover"
-						class="transition-opacity hover:opacity-80 {docsActive ? 'opacity-95' : 'opacity-40'}"
-						aria-current={docsActive ? 'page' : undefined}
-						onclick={(e) => navigateApp('/docs', e)}
-						>{t('nav.docs')}</a
+						class="transition-opacity hover:opacity-80 {avensActive ? 'opacity-95' : 'opacity-40'}"
+						aria-current={avensActive ? 'page' : undefined}
+						onclick={(e) => navigateApp('/avens', e)}
+						>{t('nav.avens')}</a
 					>
 				</nav>
 

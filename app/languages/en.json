@@ -94,7 +94,12 @@
 		"talk": "Talk",
 		"todos": "Todos",
 		"gallery": "Gallery",
-		"peers": "Peers"
+		"peers": "Peers",
+		"orders": "Orders",
+		"avens": "Avens",
+		"allAvens": "← All avens",
+		"avenViews": "Aven views",
+		"maiaCityGame": "Maia City - The Game"
 	},
 	"board": {
 		"title": "Board",
@@ -684,5 +689,17 @@
 		"copyDebug": "Copy debug logs",
 		"copyFailed": "Copy failed",
 		"copyDebugHint": "Copy recent logs + peer/mesh state to clipboard for bug reports"
+	},
+	"avens": {
+		"subtitle": "Hardcoded example avens. Open one to explore its sections.",
+		"orders": {
+			"subtitle": "Recent orders from the point-of-sale journal.",
+			"server": "Server",
+			"items": "items",
+			"total": "Total",
+			"paid": "Paid",
+			"open": "Open",
+			"toGo": "To go"
+		}
 	}
 }

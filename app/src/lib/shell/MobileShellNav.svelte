@@ -28,12 +28,9 @@ const chrome = $derived(mobileChromeOverrides())
 
 const intentsActive = $derived(path === '/')
 const sandboxActive = $derived(path.startsWith('/sandbox'))
-const docsActive = $derived(path.startsWith('/docs'))
 const sparksNavActive = $derived(path.startsWith('/sparks'))
 const dbActive = $derived(path.startsWith('/db'))
-const avenCityActive = $derived(path.startsWith('/aven-city'))
-const boardActive = $derived(path.startsWith('/board'))
-const dreamsActive = $derived(path.startsWith('/dreams'))
+const avensActive = $derived(path.startsWith('/avens'))
 const inviteActive = $derived(path.startsWith('/invite'))
 
 const navItems = $derived<NavItem[]>([
@@ -41,10 +38,7 @@ const navItems = $derived<NavItem[]>([
 	{ href: '/sandbox', label: t('nav.sandbox'), active: sandboxActive },
 	{ href: '/sparks', label: t('nav.sparks'), active: sparksNavActive },
 	{ href: '/db', label: t('nav.db'), active: dbActive },
-	{ href: '/aven-city', label: t('nav.avenCity'), active: avenCityActive },
-	{ href: '/board', label: t('nav.board'), active: boardActive },
-	{ href: '/dreams', label: t('nav.dreams'), active: dreamsActive },
-	{ href: '/docs', label: t('nav.docs'), active: docsActive },
+	{ href: '/avens', label: t('nav.avens'), active: avensActive },
 	{ href: '/invite', label: t('nav.invite'), active: inviteActive }
 ])
 

@@ -4,10 +4,11 @@ import { page } from '$app/state'
 import { t } from '$lib/i18n'
 import { navigateApp } from '$lib/shell'
 
+const BOARD_BASE = '/avens/avenCEO/board'
 const item = $derived(findWorkItem(page.params.state ?? '', page.params.slug ?? ''))
 
 function back(e: MouseEvent): void {
-	navigateApp('/board', e)
+	navigateApp(BOARD_BASE, e)
 }
 </script>
 
@@ -16,14 +17,14 @@ function back(e: MouseEvent): void {
 </svelte:head>
 
 {#if item}
-	<WorkItemDoc {item} backHref="/board" backLabel={t('board.backToBoard')} onBack={back} />
+	<WorkItemDoc {item} backHref={BOARD_BASE} backLabel={t('board.backToBoard')} onBack={back} />
 {:else}
 	<div
 		class="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-background px-6 text-center"
 	>
 		<p class="text-sm text-muted-foreground">{t('board.notFound')}</p>
 		<a
-			href="/board"
+			href={BOARD_BASE}
 			data-sveltekit-preload-data="hover"
 			class="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-bold tracking-widest uppercase text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
 			onclick={back}

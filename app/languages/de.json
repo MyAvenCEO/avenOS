@@ -93,7 +93,12 @@
 		"talk": "Talk",
 		"todos": "Todos",
 		"gallery": "Galerie",
-		"peers": "Peers"
+		"peers": "Peers",
+		"orders": "Bestellungen",
+		"avens": "Avens",
+		"allAvens": "← Alle Avens",
+		"avenViews": "Aven-Ansichten",
+		"maiaCityGame": "Maia City - The Game"
 	},
 	"board": {
 		"title": "Board",
@@ -672,5 +677,17 @@
 		"copyDebug": "Debug-Logs kopieren",
 		"copyFailed": "Kopieren fehlgeschlagen",
 		"copyDebugHint": "Aktuelle Logs + Peer-/Mesh-Status für Fehlerberichte in die Zwischenablage kopieren"
+	},
+	"avens": {
+		"subtitle": "Fest hinterlegte Beispiel-Avens. Öffne eines, um seine Bereiche zu erkunden.",
+		"orders": {
+			"subtitle": "Aktuelle Bestellungen aus dem Kassen-Journal.",
+			"server": "Bedienung",
+			"items": "Artikel",
+			"total": "Gesamt",
+			"paid": "Bezahlt",
+			"open": "Offen",
+			"toGo": "To Go"
+		}
 	}
 }
