@@ -109,7 +109,12 @@ impl WsServerListener {
                             }
                             Err(e) => { tracing::warn!("ws frame decode failed: {e}"); break }
                         },
-                        Some(Ok(_)) => {} // text/ping/pong after handshake
+                        // Reply to the client's keepalive Ping so its read-timeout
+                        // sees return traffic on a healthy link (axum does not
+                        // auto-pong). This is what lets the client distinguish a live
+                        // idle link from a dead one after a mobile network switch.
+                        Some(Ok(Message::Ping(p))) => if ws.send(Message::Pong(p)).await.is_err() { break },
+                        Some(Ok(_)) => {} // text/pong/close after handshake
                         Some(Err(_)) | None => break,
                     },
                 }

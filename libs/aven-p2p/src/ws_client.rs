@@ -37,6 +37,17 @@ type Ws = WebSocketStream<MaybeTlsStream<TcpStream>>;
 /// to the server nonce only. The server uses the same empty value.
 const NO_CHANNEL_BINDING: &str = "";
 
+/// Keepalive cadence: the writer sends a WS Ping this often; the server replies
+/// with a Pong, which keeps return traffic flowing on a healthy link.
+const PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// If the reader sees NO frame (not even a Pong) for this long, the link is
+/// presumed dead and we drop the connection so the supervisor re-dials. Must be a
+/// few × `PING_INTERVAL` to tolerate a lost pong. This is the mechanism that breaks
+/// the half-open "black-hole" socket left by a mobile Wi-Fi↔5G switch, where no
+/// FIN/RST ever arrives and a plain `stream.next()` would block until app restart.
+const READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
+
 /// The **client** WebSocket transport. One connection; `send_to` queues a binary
 /// frame, inbound is tagged as coming from the server peer (the star's single hop).
 pub struct WsClientTransport {
@@ -91,24 +102,50 @@ impl WsClientTransport {
         // supervisor awaits it to re-dial (network switch, hibernate, idle close).
         let disconnected = Arc::new(Notify::new());
 
-        // Writer task: drain out_tx → ws sink.
+        // Writer task: drain out_tx → ws sink, plus a periodic keepalive Ping. The
+        // Ping elicits a server Pong so the reader's read-timeout keeps seeing
+        // traffic on a healthy link; after a network switch the Ping just buffers
+        // into the dead socket (no error for a long time), so the actual detection
+        // is the reader's job below.
         let (out_tx, mut out_rx) = mpsc::channel::<Message>(256);
         let dc_writer = disconnected.clone();
         tokio::spawn(async move {
-            while let Some(msg) = out_rx.recv().await {
-                if sink.send(msg).await.is_err() {
-                    break;
+            let mut ping = tokio::time::interval(PING_INTERVAL);
+            ping.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {
+                    msg = out_rx.recv() => match msg {
+                        Some(m) => if sink.send(m).await.is_err() { break },
+                        None => break, // transport dropped by the supervisor
+                    },
+                    _ = ping.tick() => {
+                        if sink.send(Message::Ping(Default::default())).await.is_err() { break }
+                    }
                 }
             }
             let _ = sink.close().await;
             dc_writer.notify_one();
         });
 
-        // Reader task: ws stream → decode binary frames → inbound queue.
+        // Reader task: ws stream → decode binary frames → inbound queue. A read
+        // timeout converts a silently-dead link (mobile network switch leaves a
+        // half-open black-hole socket with no FIN/RST) into a disconnect so the
+        // supervisor re-dials, instead of blocking forever until app restart.
         let (in_tx, in_rx) = mpsc::channel::<InboxEntry>(256);
         let dc_reader = disconnected.clone();
         tokio::spawn(async move {
-            while let Some(next) = stream.next().await {
+            loop {
+                let next = match tokio::time::timeout(READ_TIMEOUT, stream.next()).await {
+                    Ok(n) => n,
+                    Err(_elapsed) => {
+                        tracing::warn!(
+                            "ws transport: no frame for {}s — assuming connection dead",
+                            READ_TIMEOUT.as_secs()
+                        );
+                        break;
+                    }
+                };
+                let Some(next) = next else { break }; // stream ended (clean close)
                 let Ok(msg) = next else { break };
                 if let Message::Binary(buf) = msg {
                     match decode_length_prefixed(buf.as_ref()) {
@@ -127,7 +164,8 @@ impl WsClientTransport {
                         }
                     }
                 }
-                // text/ping/pong/close after handshake are ignored
+                // text/ping/pong/close after handshake are ignored; a pong just
+                // resets the read timeout by virtue of being a received frame.
             }
             dc_reader.notify_one();
         });
