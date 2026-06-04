@@ -3,3 +3,8 @@
 [build]
 target-dir = "target/rust"
 incremental = true
+# NOTE: the shared compiler cache (sccache) is intentionally NOT configured here.
+# This file ships in the Sprite deploy source tarball and is read by CI / other
+# devs, none of which have sccache installed — a committed `rustc-wrapper` would
+# break those builds with "sccache not found". sccache lives in the per-machine
+# `~/.cargo/config.toml` instead (see docs/RustBuildEfficiency.md).

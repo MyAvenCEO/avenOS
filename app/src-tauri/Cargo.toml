@@ -1,6 +1,13 @@
 [profile.dev.package.scrypt]
 opt-level = 3
 
+# Release/store builds don't benefit from incremental (no iterative recompiles),
+# but the repo-wide `[build] incremental = true` (.cargo/config.toml, for fast dev)
+# would otherwise leak into them — that produced ~7.5 GB of dead incremental data
+# under the iOS/macOS release target triples. Turn it off for release explicitly.
+[profile.release]
+incremental = false
+
 [package]
 name = "aven-os-app"
 version = "0.0.1"

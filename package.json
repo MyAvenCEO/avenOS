@@ -17,6 +17,7 @@
 		"dev:app:ios": "bun --env-file=.env ./scripts/dev-app-ios.ts",
 		"dev:app:linux": "bun --env-file=.env ./scripts/dev-app-linux.ts",
 		"clean:app:rust": "bun ./scripts/clean-app-tauri-target.ts",
+		"gc:rust": "bash ./scripts/gc-rust-target.sh",
 		"verify:aven-db": "bash ./scripts/verify-aven-db-gates.sh",
 		"dev:app2x:mac": "bun --env-file=.env ./scripts/dev-two-instances.ts",
 		"dev:app2x:linux": "bun --env-file=.env ./scripts/dev-two-instances.ts",
