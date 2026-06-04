@@ -446,6 +446,11 @@ async function main() {
 		...process.env,
 		APPLE_DEVELOPMENT_TEAM: team,
 		CI: 'true',
+		// Bake the sync relay URL into the release binary (read at compile time via
+		// `option_env!("AVENOS_SERVER_WS_URL")` in app/src-tauri/src/jazz). Override
+		// by exporting AVENOS_SERVER_WS_URL; defaults to the hosted aven-ceo relay.
+		AVENOS_SERVER_WS_URL:
+			process.env.AVENOS_SERVER_WS_URL || 'wss://aven-ceo-bmrha.sprites.app/sync',
 		...rustupToolchainEnv(repoRoot),
 	}
 	const signingMode = configureSigning(tauriEnv)

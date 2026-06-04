@@ -159,6 +159,12 @@ async function main() {
 		delete tauriEnv[key]
 	}
 
+	// Bake the sync relay URL into the release binary (read at compile time via
+	// `option_env!("AVENOS_SERVER_WS_URL")` in app/src-tauri/src/jazz). Override by
+	// exporting AVENOS_SERVER_WS_URL; defaults to the hosted aven-ceo relay.
+	tauriEnv.AVENOS_SERVER_WS_URL =
+		process.env.AVENOS_SERVER_WS_URL || 'wss://aven-ceo-bmrha.sprites.app/sync'
+
 	const frontendBuild = spawnSync('bun', ['run', 'build'], {
 		cwd: appDir,
 		stdio: 'inherit',
