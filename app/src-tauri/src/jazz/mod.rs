@@ -1406,7 +1406,18 @@ pub(crate) fn patch_updates(table_schema: &TableSchema, patch: JsonRow) -> Resul
 async fn try_server_transport(
 	signing_key: ed25519_dalek::SigningKey,
 ) -> Option<(Arc<dyn SyncTransport>, PeerId)> {
-	let url = server_ws_url()?;
+	let url = match server_ws_url() {
+		Some(u) => {
+			log::info!("server sync URL resolved: {u} (dialing relay)");
+			u
+		}
+		None => {
+			log::info!(
+				"server sync URL unset (no AVENOS_SERVER_WS_URL baked or in env) — running local-only"
+			);
+			return None;
+		}
+	};
 	let established = tokio::time::timeout(Duration::from_secs(30), async {
 		loop {
 			match aven_p2p::WsClientTransport::connect(&url, signing_key.clone()).await {

@@ -204,9 +204,22 @@ function shellEscapeSingleQuoted(value: string): string {
 function writeAvenIosCompileEnv() {
 	mkdirSync(path.dirname(AVEN_IOS_COMPILE_ENV), { recursive: true })
 	const channel = readRustToolchainChannel(repoRoot)
-	const lines = [`export RUSTUP_TOOLCHAIN=${shellEscapeSingleQuoted(channel)}`, '']
+	// The iOS cargo compile (run inside xcodebuild) only sees env from THIS sourced
+	// file — not the parent process — so anything `option_env!`-baked must be set
+	// here. AVENOS_SERVER_WS_URL is read at compile time by app/src-tauri/src/jazz;
+	// without it the iOS binary runs local-only and never dials the relay.
+	const wsUrl = process.env.AVENOS_SERVER_WS_URL || 'wss://aven-ceo-bmrha.sprites.app/sync'
+	const lines = [
+		`export RUSTUP_TOOLCHAIN=${shellEscapeSingleQuoted(channel)}`,
+		`export AVENOS_SERVER_WS_URL=${shellEscapeSingleQuoted(wsUrl)}`,
+		'',
+	]
 	writeFileSync(AVEN_IOS_COMPILE_ENV, lines.join('\n'), 'utf8')
-	console.log('[tauri-ios-asc] wrote compile env → %s', AVEN_IOS_COMPILE_ENV)
+	console.log(
+		'[tauri-ios-asc] wrote compile env → %s (AVENOS_SERVER_WS_URL=%s)',
+		AVEN_IOS_COMPILE_ENV,
+		wsUrl
+	)
 }
 
 /** Legacy Xcode patches pinned Rust 1.88; upgrade whenever rust-toolchain.toml changes. */
