@@ -54,8 +54,10 @@
 		!tauri || !unlocked ? [] : $peerRows,
 	)
 
-	function idsMatch(a: string, b: string): boolean {
-		return a.trim().toLowerCase() === b.trim().toLowerCase()
+	function idsMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+		const na = (a ?? '').trim().toLowerCase()
+		const nb = (b ?? '').trim().toLowerCase()
+		return na !== '' && na === nb
 	}
 
 	const sparkMeta = $derived(sparksStore.rows.find((s) => idsMatch(s.spark_id, sparkId)))
@@ -88,12 +90,13 @@
 		new Map(peersAllow.map((p) => [p.peerDid.trim().toLowerCase(), p] as const)),
 	)
 
-	function authorLabel(authorDid: string): string {
+	function authorLabel(authorDid: string | null | undefined): string {
 		const local = session?.peerDid?.trim().toLowerCase() ?? ''
-		const norm = authorDid.trim().toLowerCase()
+		const did = (authorDid ?? '').trim()
+		const norm = did.toLowerCase()
 		if (local && norm === local) return t('common.you')
-		const peer = peersByDid.get(norm)
-		return peerDisplayLabel(authorDid, peer?.deviceLabel, localPairingLabel)
+		const peer = norm ? peersByDid.get(norm) : undefined
+		return peerDisplayLabel(did, peer?.deviceLabel, localPairingLabel)
 	}
 
 	/** Groove IPC may send exposeTs bigint as number or legacy string. */
@@ -115,7 +118,8 @@
 
 	function isOwnMessage(row: JazzRow): boolean {
 		const local = session?.peerDid?.trim().toLowerCase() ?? ''
-		return local !== '' && row.author_did.trim().toLowerCase() === local
+		const author = (row.author_did ?? '').trim().toLowerCase()
+		return local !== '' && author !== '' && author === local
 	}
 
 	const storeError = $derived(sparksStore.error ?? messages.error)
@@ -257,7 +261,7 @@
 									? 'bg-primary text-primary-foreground rounded-br-md'
 									: 'bg-muted text-foreground rounded-bl-md'}"
 							>
-								{#if msg.body.trim()}
+								{#if msg.body?.trim()}
 									<p class="text-sm leading-relaxed whitespace-pre-wrap break-words">
 										{msg.body}
 									</p>

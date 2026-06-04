@@ -16,6 +16,7 @@ use ed25519_dalek::SigningKey;
 use groove::{AppContext, AppId, JazzClient, PeerId};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
+use tokio::signal::unix::{signal, SignalKind};
 
 struct Config {
     sync_bind: String,
@@ -158,13 +159,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         data_dir,
         live_schemas: vec![],
     };
+    // Open the blind-replica engine. The local RocksDB is a *cache* of ciphertext
+    // that is fully re-pullable from peers, so if the store is ever unreadable
+    // (e.g. a hard crash — SIGKILL/OOM/power loss — that left an orphan WAL before
+    // the DB could be finalized) we reset it and re-open rather than crash-loop;
+    // the missing batches re-sync from devices on reconnect. A clean shutdown (the
+    // SIGTERM handler below) makes this self-heal path rare, not the normal case.
     let engine: Arc<JazzClient> =
-        Arc::new(JazzClient::connect_with_sync_transport(ctx, listener.clone(), None).await?);
+        match JazzClient::connect_with_sync_transport(ctx.clone(), listener.clone(), None).await {
+            Ok(engine) => Arc::new(engine),
+            Err(e) if store_is_corrupt(&e) => {
+                tracing::warn!(
+                    error = %e,
+                    data_dir = %ctx.data_dir.display(),
+                    "blind replica store unreadable — resetting and re-pulling from peers"
+                );
+                let _ = std::fs::remove_dir_all(&ctx.data_dir);
+                Arc::new(JazzClient::connect_with_sync_transport(ctx, listener.clone(), None).await?)
+            }
+            Err(e) => return Err(e.into()),
+        };
     tracing::info!("blind replica engine connected (RocksDB, real schema)");
 
     // Register each newly-authenticated peer so the engine ships catch-up to it.
+    // Hold the handle so we can stop it on shutdown and reclaim its engine clone
+    // (needed to take sole ownership of the engine and finalize RocksDB cleanly).
     let engine_for_peers = engine.clone();
-    tokio::spawn(async move {
+    let peer_task = tokio::spawn(async move {
         while let Some(peer) = new_peers.recv().await {
             if let Err(e) = engine_for_peers.register_peer_sync_client(peer) {
                 tracing::warn!(%peer, "register peer: {e}");
@@ -172,7 +193,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    // Block on the healthcheck loop (keeps the process alive).
-    run_healthcheck(cfg.health_bind).await?;
+    // Serve the health endpoint until a shutdown signal, then flush and RETURN.
+    // Sprites delivers SIGTERM on hibernate / service stop / redeploy. The default
+    // SIGTERM action kills the process immediately, *skipping Rust destructors* —
+    // so RocksDB's `Close` never runs and the next boot finds an unfinalized store
+    // (orphan WAL → "Corruption: wal_dir contains existing log file"). By catching
+    // the signal and returning from `main`, the tokio runtime is dropped, every
+    // `JazzClient` Arc is dropped, and the storage destructor runs `Close` — the DB
+    // is finalized cleanly and reopens with no recovery. We also flush first so any
+    // acknowledged writes are durable even if Close is interrupted.
+    let mut sigterm = signal(SignalKind::terminate())?;
+    let mut sigint = signal(SignalKind::interrupt())?;
+    tokio::select! {
+        r = run_healthcheck(cfg.health_bind) => r?,
+        _ = sigterm.recv() => tracing::info!("SIGTERM received — shutting down"),
+        _ = sigint.recv() => tracing::info!("SIGINT received — shutting down"),
+    }
+    // Stop the peer-registration task and await it so its engine clone is dropped;
+    // then we hold the only remaining `Arc<JazzClient>`. `Arc::try_unwrap` gives us
+    // owned `JazzClient`, and `shutdown(self)` flushes, closes the transport, and
+    // drops the runtime + storage — which runs RocksDB's `Close`, writing a valid
+    // CURRENT/MANIFEST. THAT is what makes the next boot reopen cleanly (a plain
+    // `drop` of one of several Arcs does not finalize the DB).
+    tracing::info!("shutting down — finalizing RocksDB store…");
+    peer_task.abort();
+    let _ = peer_task.await;
+    match Arc::try_unwrap(engine) {
+        Ok(client) => {
+            if let Err(e) = client.shutdown().await {
+                tracing::warn!("graceful shutdown: {e}");
+            }
+        }
+        Err(still_shared) => {
+            // Should not happen (we reclaimed the only other clone), but never block
+            // shutdown on it — flush the WAL so acknowledged writes are durable.
+            tracing::warn!("engine still shared at shutdown; flushing WAL only");
+            let _ = still_shared.flush_peer_sync().await;
+        }
+    }
+    tracing::info!("clean shutdown complete (RocksDB finalized)");
     Ok(())
+}
+
+/// A storage-open failure that a blind replica can recover from by resetting its
+/// (re-pullable) cache — chiefly a RocksDB store left unfinalized by a hard crash.
+fn store_is_corrupt(e: &impl std::fmt::Display) -> bool {
+    let m = e.to_string();
+    m.contains("Corruption") || m.contains("wal_dir") || m.contains("rocksdb open")
 }

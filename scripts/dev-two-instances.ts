@@ -108,6 +108,16 @@ const SERVER_ADDR = `127.0.0.1:${SERVER_SYNC_PORT}`
 /** Stable dev identity for the relay (32-byte hex) — keeps the aven's DID constant across runs. */
 const DEV_SERVER_SEED = 'a0b1c2d3e4f5060718293a4b5c6d7e8f00112233445566778899aabbccddeeff'
 
+// ── Remote relay mode (M1: test the Sprites-hosted aven-server) ───────────────
+// `AVEN_RELAY_SPRITE=aven-ceo bun run dev:app2x:mac` makes both instances dial the
+// Sprite-hosted relay instead of a local cargo build. `sprite proxy` opens a
+// TRANSPARENT byte tunnel (no TLS termination), so the device's end-to-end TLS +
+// did:key channel binding survive intact — the same transport, just reaching a
+// remote process. The relay's self-signed cert pin is fetched live from the Sprite.
+const RELAY_SPRITE = process.env.AVEN_RELAY_SPRITE?.trim() || ''
+/** Where the deployed aven-server writes its self-signed cert DER pin (AVEN_SERVER_PIN_FILE). */
+const REMOTE_PIN_FILE = '/home/sprite/server.pin'
+
 function prefixLines(label: string, colour: string, data: Buffer | string) {
 	const text = typeof data === 'string' ? data : data.toString('utf8')
 	const prefix = `${BOLD}${colour}[${label}]${RESET} `
@@ -208,7 +218,7 @@ function spawnAvenServer(colour: string, env: Record<string, string>, pinFile: s
 				...env,
 				AVEN_SERVER_BIND: SERVER_ADDR,
 				AVEN_SERVER_HEALTH_BIND: `127.0.0.1:${SERVER_HEALTH_PORT}`,
-				AVEN_SERVER_SEED: DEV_SERVER_SEED,
+				AVEN_SERVER_SEED: process.env.AVEN_SERVER_SEED?.trim() || DEV_SERVER_SEED,
 				AVEN_SERVER_PIN_FILE: pinFile,
 				RUST_LOG: env.RUST_LOG ?? 'info'
 			}
@@ -229,6 +239,38 @@ async function waitForPinFile(pinFile: string, timeoutMs: number): Promise<strin
 		await Bun.sleep(500)
 	}
 	throw new Error(`aven-server pin file not written within ${timeoutMs}ms (build or boot failed?)`)
+}
+
+/**
+ * Remote relay: open a `sprite proxy` byte tunnel so localhost:4290/8080 reach the
+ * Sprite-hosted aven-server. The tunnel is transparent (does not terminate TLS),
+ * preserving the device↔server end-to-end TLS + channel binding.
+ */
+function spawnSpriteProxy(colour: string) {
+	return spawnLabelled(
+		'S',
+		colour,
+		'sprite',
+		['proxy', '-s', RELAY_SPRITE, String(SERVER_SYNC_PORT), String(SERVER_HEALTH_PORT)],
+		{ cwd: repoRoot, env: process.env as Record<string, string> }
+	)
+}
+
+/** Read the deployed relay's self-signed cert DER pin off the Sprite. */
+function fetchRemotePin(): string {
+	const r = spawnSync(
+		'sprite',
+		['exec', '-s', RELAY_SPRITE, '--', 'cat', REMOTE_PIN_FILE],
+		{ encoding: 'utf8' }
+	)
+	if (r.status !== 0) {
+		throw new Error(
+			`could not read ${REMOTE_PIN_FILE} on sprite "${RELAY_SPRITE}": ${r.stderr || r.stdout || 'unknown error'}`
+		)
+	}
+	const pin = (r.stdout || '').trim()
+	if (!/^[0-9a-fA-F]{2,}$/.test(pin)) throw new Error(`remote pin not hex: "${pin.slice(0, 40)}"`)
+	return pin
 }
 
 async function main() {
@@ -269,30 +311,52 @@ async function main() {
 	// pin in their env before they spawn, so this is on the critical path. The
 	// first build compiles the RocksDB backend and can take a few minutes; the
 	// binary is cached after that and subsequent boots are ~instant.
-	const pinFile = path.join(mkdtempSync(path.join(tmpdir(), 'aven-server-mini-')), 'cert.pin')
-	try {
-		rmSync(pinFile, { force: true })
-	} catch {
-		// nothing to clear
-	}
-	console.log(
-		`${BOLD}${GREEN}[S]${RESET} Building & starting local aven-server relay ` +
-			`(first build compiles RocksDB — may take a few minutes)…`
-	)
-	const server = spawnAvenServer(GREEN, baseEnv, pinFile)
+	let server: ReturnType<typeof spawnLabelled>
 	let certPin: string
-	try {
-		certPin = await waitForPinFile(pinFile, 600_000)
-		await waitForPort(SERVER_SYNC_PORT, 30_000)
-	} catch (e) {
-		console.error(`${BOLD}${GREEN}[S]${RESET} ${(e as Error).message}`)
-		server.kill('SIGTERM')
-		auth.stop()
-		process.exit(1)
+	if (RELAY_SPRITE) {
+		// Remote: tunnel to the Sprite-hosted relay and fetch its live cert pin.
+		console.log(
+			`${BOLD}${GREEN}[S]${RESET} Connecting to Sprite-hosted relay "${RELAY_SPRITE}" via sprite proxy…`
+		)
+		server = spawnSpriteProxy(GREEN)
+		try {
+			await waitForPort(SERVER_SYNC_PORT, 30_000)
+			certPin = fetchRemotePin()
+		} catch (e) {
+			console.error(`${BOLD}${GREEN}[S]${RESET} ${(e as Error).message}`)
+			server.kill('SIGTERM')
+			auth.stop()
+			process.exit(1)
+		}
+		console.log(
+			`${BOLD}${GREEN}[S]${RESET} remote relay reachable on ${SERVER_ADDR} (cert pin ${certPin.slice(0, 16)}…)`
+		)
+	} else {
+		// Local: build & run the cargo relay; read its per-boot pin file.
+		const pinFile = path.join(mkdtempSync(path.join(tmpdir(), 'aven-server-mini-')), 'cert.pin')
+		try {
+			rmSync(pinFile, { force: true })
+		} catch {
+			// nothing to clear
+		}
+		console.log(
+			`${BOLD}${GREEN}[S]${RESET} Building & starting local aven-server relay ` +
+				`(first build compiles RocksDB — may take a few minutes)…`
+		)
+		server = spawnAvenServer(GREEN, baseEnv, pinFile)
+		try {
+			certPin = await waitForPinFile(pinFile, 600_000)
+			await waitForPort(SERVER_SYNC_PORT, 30_000)
+		} catch (e) {
+			console.error(`${BOLD}${GREEN}[S]${RESET} ${(e as Error).message}`)
+			server.kill('SIGTERM')
+			auth.stop()
+			process.exit(1)
+		}
+		console.log(
+			`${BOLD}${GREEN}[S]${RESET} relay up on ${SERVER_ADDR} (cert pin ${certPin.slice(0, 16)}…)`
+		)
 	}
-	console.log(
-		`${BOLD}${GREEN}[S]${RESET} relay up on ${SERVER_ADDR} (cert pin ${certPin.slice(0, 16)}…)`
-	)
 
 	// Point both instances at the relay (read at runtime by `try_server_transport`).
 	baseEnv.AVENOS_SERVER_SYNC = '1'
