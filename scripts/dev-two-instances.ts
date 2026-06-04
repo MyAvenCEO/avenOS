@@ -99,24 +99,19 @@ const CYAN = '\x1b[36m'
 const MAGENTA = '\x1b[35m'
 const GREEN = '\x1b[32m'
 
-// Local aven-server "mini" relay: both instances dial it over authenticated TLS
-// (server cert pinned + per-client did:key challenge) instead of the old direct
-// A↔B TCP. One relay, N clients — the same transport prod uses.
-const SERVER_SYNC_PORT = 4290
-const SERVER_HEALTH_PORT = 8080
-const SERVER_ADDR = `127.0.0.1:${SERVER_SYNC_PORT}`
+// Both instances dial an aven-server over a WebSocket (`/sync`, nonce-bound did:key
+// challenge) — one relay, N clients, the same transport prod uses.
+const SERVER_HTTP_PORT = 8080
 /** Stable dev identity for the relay (32-byte hex) — keeps the aven's DID constant across runs. */
 const DEV_SERVER_SEED = 'a0b1c2d3e4f5060718293a4b5c6d7e8f00112233445566778899aabbccddeeff'
 
-// ── Remote relay mode (M1: test the Sprites-hosted aven-server) ───────────────
-// `AVEN_RELAY_SPRITE=aven-ceo bun run dev:app2x:mac` makes both instances dial the
-// Sprite-hosted relay instead of a local cargo build. `sprite proxy` opens a
-// TRANSPARENT byte tunnel (no TLS termination), so the device's end-to-end TLS +
-// did:key channel binding survive intact — the same transport, just reaching a
-// remote process. The relay's self-signed cert pin is fetched live from the Sprite.
-const RELAY_SPRITE = process.env.AVEN_RELAY_SPRITE?.trim() || ''
-/** Where the deployed aven-server writes its self-signed cert DER pin (AVEN_SERVER_PIN_FILE). */
-const REMOTE_PIN_FILE = '/home/sprite/server.pin'
+// ── Sync relay endpoint ───────────────────────────────────────────────────────
+// Default: a LOCAL aven-server on ws://127.0.0.1:8080/sync (built & run here). To
+// instead test the Sprite-hosted relay over its PUBLIC url — the exact path a
+// TestFlight device takes, with NO `sprite proxy` and NO cert pin:
+//   AVENOS_SERVER_WS_URL=wss://aven-ceo-bmrha.sprites.app/sync bun run dev:app2x:mac
+const LOCAL_WS = `ws://127.0.0.1:${SERVER_HTTP_PORT}/sync`
+const EXTERNAL_WS = process.env.AVENOS_SERVER_WS_URL?.trim() || ''
 
 function prefixLines(label: string, colour: string, data: Buffer | string) {
 	const text = typeof data === 'string' ? data : data.toString('utf8')
@@ -200,13 +195,12 @@ function spawnTauri(label: 'A' | 'B', colour: string, env: Record<string, string
 }
 
 /**
- * Build & run the local `aven-server` mini relay. It self-signs a TLS cert on
- * boot and writes the cert's hex DER pin to `pinFile` (AVEN_SERVER_PIN_FILE) —
- * the harness reads that pin and hands it to both app instances so they pin the
- * relay's cert. Bound to 127.0.0.1 only (no firewall prompt); in-memory + stable
- * dev seed.
+ * Build & run the local `aven-server` relay — an HTTP+WebSocket server on
+ * 127.0.0.1:8080 serving `/health` + `/sync`. Both app instances dial
+ * ws://127.0.0.1:8080/sync. No TLS / no cert pin locally (plain ws). Stable dev
+ * seed keeps the relay DID constant across runs.
  */
-function spawnAvenServer(colour: string, env: Record<string, string>, pinFile: string) {
+function spawnAvenServer(colour: string, env: Record<string, string>) {
 	return spawnLabelled(
 		'S',
 		colour,
@@ -216,61 +210,12 @@ function spawnAvenServer(colour: string, env: Record<string, string>, pinFile: s
 			cwd: repoRoot,
 			env: {
 				...env,
-				AVEN_SERVER_BIND: SERVER_ADDR,
-				AVEN_SERVER_HEALTH_BIND: `127.0.0.1:${SERVER_HEALTH_PORT}`,
+				AVEN_SERVER_HEALTH_BIND: `127.0.0.1:${SERVER_HTTP_PORT}`,
 				AVEN_SERVER_SEED: process.env.AVEN_SERVER_SEED?.trim() || DEV_SERVER_SEED,
-				AVEN_SERVER_PIN_FILE: pinFile,
 				RUST_LOG: env.RUST_LOG ?? 'info'
 			}
 		}
 	)
-}
-
-/** Poll for the relay's pin file (written once its self-signed cert is generated). */
-async function waitForPinFile(pinFile: string, timeoutMs: number): Promise<string> {
-	const deadline = Date.now() + timeoutMs
-	while (Date.now() < deadline) {
-		try {
-			const pin = readFileSync(pinFile, 'utf8').trim()
-			if (pin.length > 0) return pin
-		} catch {
-			// not written yet
-		}
-		await Bun.sleep(500)
-	}
-	throw new Error(`aven-server pin file not written within ${timeoutMs}ms (build or boot failed?)`)
-}
-
-/**
- * Remote relay: open a `sprite proxy` byte tunnel so localhost:4290/8080 reach the
- * Sprite-hosted aven-server. The tunnel is transparent (does not terminate TLS),
- * preserving the device↔server end-to-end TLS + channel binding.
- */
-function spawnSpriteProxy(colour: string) {
-	return spawnLabelled(
-		'S',
-		colour,
-		'sprite',
-		['proxy', '-s', RELAY_SPRITE, String(SERVER_SYNC_PORT), String(SERVER_HEALTH_PORT)],
-		{ cwd: repoRoot, env: process.env as Record<string, string> }
-	)
-}
-
-/** Read the deployed relay's self-signed cert DER pin off the Sprite. */
-function fetchRemotePin(): string {
-	const r = spawnSync(
-		'sprite',
-		['exec', '-s', RELAY_SPRITE, '--', 'cat', REMOTE_PIN_FILE],
-		{ encoding: 'utf8' }
-	)
-	if (r.status !== 0) {
-		throw new Error(
-			`could not read ${REMOTE_PIN_FILE} on sprite "${RELAY_SPRITE}": ${r.stderr || r.stdout || 'unknown error'}`
-		)
-	}
-	const pin = (r.stdout || '').trim()
-	if (!/^[0-9a-fA-F]{2,}$/.test(pin)) throw new Error(`remote pin not hex: "${pin.slice(0, 40)}"`)
-	return pin
 }
 
 async function main() {
@@ -285,11 +230,11 @@ async function main() {
 
 	console.log(
 		`\n${BOLD}AvenOS — two-instance dev harness (${platLabel})${RESET}\n` +
-			`  ${GREEN}[S]${RESET}  aven-server relay  tls://${SERVER_ADDR}\n` +
+			`  ${GREEN}[S]${RESET}  aven-server relay  ${EXTERNAL_WS || LOCAL_WS}\n` +
 			`  ${CYAN}[A]${RESET}  http://127.0.0.1:1420\n` +
 			`  ${MAGENTA}[B]${RESET}  http://127.0.0.1:1421\n\n` +
-			`${BOLD}Sync:${RESET} both instances dial the local ${GREEN}[S]${RESET} relay over authenticated TLS\n` +
-			`      (server cert pinned + per-client did:key challenge) — A↔B converge through it.\n\n` +
+			`${BOLD}Sync:${RESET} both instances dial the ${GREEN}[S]${RESET} relay over a WebSocket\n` +
+			`      (nonce-bound did:key challenge) — A↔B converge through it.\n\n` +
 			`Shared identity store: ${identitiesHint}\n` +
 			`${BOLD}${MAGENTA}WARNING:${RESET} Unlocking the same identity slug in [A] and [B] at once grabs the same RocksDB files (\`storage.rocksdb\`) — Share/DB can stay on Loading indefinitely. Pick different people on each lock screen.\n\n` +
 			`${BOLD}Note:${RESET} AVENOS_DEV_INSTANCE is ${CYAN}A${RESET} / ${MAGENTA}B${RESET} for log prefixes + Vite cache dirs; it does not isolate identity dirs.\n\n` +
@@ -299,69 +244,43 @@ async function main() {
 
 	freeDevServerPort(1420)
 	freeDevServerPort(1421)
-	freeDevServerPort(SERVER_SYNC_PORT)
-	freeDevServerPort(SERVER_HEALTH_PORT)
+	if (!EXTERNAL_WS) freeDevServerPort(SERVER_HTTP_PORT)
 
 	// Boot the invite-only auth backend (http://localhost:3000) once for both instances.
 	const auth = startAvenAuthServer()
 
 	const baseEnv = devBaseEnv()
 
-	// Bring up the local relay first: the app instances need its (per-boot) cert
-	// pin in their env before they spawn, so this is on the critical path. The
-	// first build compiles the RocksDB backend and can take a few minutes; the
-	// binary is cached after that and subsequent boots are ~instant.
-	let server: ReturnType<typeof spawnLabelled>
-	let certPin: string
-	if (RELAY_SPRITE) {
-		// Remote: tunnel to the Sprite-hosted relay and fetch its live cert pin.
+	// Resolve the sync relay: a remote Sprite-hosted server over its public wss URL
+	// (no proxy, no pin — the exact path a device takes), else a LOCAL aven-server we
+	// build & run on ws://127.0.0.1:8080/sync.
+	let server: ReturnType<typeof spawnLabelled> | undefined
+	let wsUrl: string
+	if (EXTERNAL_WS) {
 		console.log(
-			`${BOLD}${GREEN}[S]${RESET} Connecting to Sprite-hosted relay "${RELAY_SPRITE}" via sprite proxy…`
+			`${BOLD}${GREEN}[S]${RESET} Using remote sync relay: ${EXTERNAL_WS} (no local relay, no proxy)`
 		)
-		server = spawnSpriteProxy(GREEN)
-		try {
-			await waitForPort(SERVER_SYNC_PORT, 30_000)
-			certPin = fetchRemotePin()
-		} catch (e) {
-			console.error(`${BOLD}${GREEN}[S]${RESET} ${(e as Error).message}`)
-			server.kill('SIGTERM')
-			auth.stop()
-			process.exit(1)
-		}
-		console.log(
-			`${BOLD}${GREEN}[S]${RESET} remote relay reachable on ${SERVER_ADDR} (cert pin ${certPin.slice(0, 16)}…)`
-		)
+		wsUrl = EXTERNAL_WS
 	} else {
-		// Local: build & run the cargo relay; read its per-boot pin file.
-		const pinFile = path.join(mkdtempSync(path.join(tmpdir(), 'aven-server-mini-')), 'cert.pin')
-		try {
-			rmSync(pinFile, { force: true })
-		} catch {
-			// nothing to clear
-		}
 		console.log(
 			`${BOLD}${GREEN}[S]${RESET} Building & starting local aven-server relay ` +
 				`(first build compiles RocksDB — may take a few minutes)…`
 		)
-		server = spawnAvenServer(GREEN, baseEnv, pinFile)
+		server = spawnAvenServer(GREEN, baseEnv)
 		try {
-			certPin = await waitForPinFile(pinFile, 600_000)
-			await waitForPort(SERVER_SYNC_PORT, 30_000)
+			await waitForPort(SERVER_HTTP_PORT, 600_000)
 		} catch (e) {
 			console.error(`${BOLD}${GREEN}[S]${RESET} ${(e as Error).message}`)
-			server.kill('SIGTERM')
+			server?.kill('SIGTERM')
 			auth.stop()
 			process.exit(1)
 		}
-		console.log(
-			`${BOLD}${GREEN}[S]${RESET} relay up on ${SERVER_ADDR} (cert pin ${certPin.slice(0, 16)}…)`
-		)
+		wsUrl = LOCAL_WS
+		console.log(`${BOLD}${GREEN}[S]${RESET} local relay up on ${wsUrl}`)
 	}
 
 	// Point both instances at the relay (read at runtime by `try_server_transport`).
-	baseEnv.AVENOS_SERVER_SYNC = '1'
-	baseEnv.AVENOS_SERVER_ADDR = SERVER_ADDR
-	baseEnv.AVENOS_SERVER_CERT_PIN = certPin
+	baseEnv.AVENOS_SERVER_WS_URL = wsUrl
 
 	// Instance A: Tauri handles the full lifecycle (beforeDevCommand starts Vite on :1420)
 	const tauriA = spawnTauri('A', CYAN, baseEnv)
@@ -373,7 +292,7 @@ async function main() {
 	} catch {
 		console.error(`${BOLD}${CYAN}[A]${RESET} Timed out waiting for :1420 — did instance A start?`)
 		tauriA.kill('SIGTERM')
-		server.kill('SIGTERM')
+		server?.kill('SIGTERM')
 		auth.stop()
 		process.exit(1)
 	}
@@ -388,7 +307,7 @@ async function main() {
 		console.error(`${BOLD}${MAGENTA}[B]${RESET} Timed out waiting for :1421`)
 		tauriA.kill('SIGTERM')
 		viteB.kill('SIGTERM')
-		server.kill('SIGTERM')
+		server?.kill('SIGTERM')
 		auth.stop()
 		process.exit(1)
 	}
@@ -398,7 +317,7 @@ async function main() {
 	)
 	const tauriB = spawnTauri('B', MAGENTA, baseEnv)
 
-	const allProcs = [server, tauriA, viteB, tauriB]
+	const allProcs = [server, tauriA, viteB, tauriB].filter(Boolean) as ReturnType<typeof spawnLabelled>[]
 
 	for (const sig of ['SIGINT', 'SIGTERM'] as const) {
 		process.on(sig, () => {

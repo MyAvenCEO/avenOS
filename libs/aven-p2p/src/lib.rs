@@ -20,10 +20,12 @@
 pub mod challenge;
 pub mod tls;
 pub mod transport;
+pub mod ws_client;
 
 pub use challenge::ChallengeParams;
 pub use tls::{generate_self_signed, ServerTls, ServerTrust};
 pub use transport::{ServerListener, ServerSyncTransport};
+pub use ws_client::WsClientTransport;
 
 /// Errors from the transport + handshake.
 #[derive(Debug, thiserror::Error)]

@@ -1,32 +1,38 @@
-//! aven-server — a headless, durable **blind replica** aven (plan §4, minus auth).
+//! aven-server — a headless, durable **blind replica** aven.
 //!
-//! One process: an authenticated TLS [`ServerListener`] (server cert + per-client
-//! did:key challenge) feeding a full groove engine on **RocksDB** with the real
-//! schema. A peer that holds a `replicate` grant ships this server its spark's
-//! encrypted batches; the server stores them durably and forwards them to other
-//! members — but it holds **no keyshares**, so everything it mirrors stays
-//! ciphertext it cannot decrypt (store-and-forward + durable backup, not a
-//! member). Config is all env; the TLS cert/key + identity seed come from fly
-//! secrets, and `AVEN_SERVER_DATA_DIR` is the (volume-backed) storage path.
+//! One process: an HTTP + WebSocket server on :8080 (TLS terminated at the Sprites
+//! proxy) serving `GET /health` and `GET /sync` — the nonce-bound did:key sync
+//! transport (`ws_server`) — feeding a full groove engine on **RocksDB** with the
+//! real schema. A peer holding a `replicate` grant ships this server its spark's
+//! encrypted batches; it stores them durably and forwards them, but holds **no
+//! keyshares**, so everything it mirrors stays ciphertext it cannot decrypt.
+//!
+//! Reachability: the public Sprite URL routes to :8080, so devices dial
+//! `wss://<sprite>.sprites.app/sync` with no `sprite proxy`. TLS is the proxy's;
+//! the challenge is nonce-bound (no channel binding). Config is all env; the
+//! identity seed is a Sprite secret; `AVEN_SERVER_DATA_DIR` is the persistent path.
+
+mod ws_server;
 
 use std::sync::Arc;
 
-use aven_p2p::{generate_self_signed, ChallengeParams, ServerListener, ServerTls};
+use aven_p2p::ChallengeParams;
+use axum::extract::{ws::WebSocketUpgrade, State};
+use axum::response::Response;
+use axum::routing::get;
+use axum::Router;
 use ed25519_dalek::SigningKey;
 use groove::{AppContext, AppId, JazzClient, PeerId};
-use tokio::io::AsyncWriteExt;
-use tokio::net::TcpListener;
 use tokio::signal::unix::{signal, SignalKind};
 
+use ws_server::WsServerListener;
+
 struct Config {
-    sync_bind: String,
-    health_bind: String,
+    http_bind: String,
     domain: String,
     uri: String,
     network_seed: String,
     seed: Option<[u8; 32]>,
-    tls_cert_path: Option<String>,
-    tls_key_path: Option<String>,
 }
 
 impl Config {
@@ -38,14 +44,12 @@ impl Config {
             Some(arr)
         });
         Self {
-            sync_bind: var("AVEN_SERVER_BIND").unwrap_or_else(|| "0.0.0.0:4290".into()),
-            health_bind: var("AVEN_SERVER_HEALTH_BIND").unwrap_or_else(|| "0.0.0.0:8080".into()),
+            // The HTTP+WS server binds the Sprites-routed port (8080).
+            http_bind: var("AVEN_SERVER_HEALTH_BIND").unwrap_or_else(|| "0.0.0.0:8080".into()),
             domain: var("AVEN_SERVER_DOMAIN").unwrap_or_else(|| "aven.local".into()),
             uri: var("AVEN_SERVER_URI").unwrap_or_else(|| "https://aven.local".into()),
             network_seed: var("AVEN_SERVER_NETWORK_SEED").unwrap_or_else(|| "testnet".into()),
             seed,
-            tls_cert_path: var("AVEN_SERVER_TLS_CERT"),
-            tls_key_path: var("AVEN_SERVER_TLS_KEY"),
         }
     }
 }
@@ -54,52 +58,24 @@ fn load_identity(cfg: &Config) -> SigningKey {
     match cfg.seed {
         Some(seed) => SigningKey::from_bytes(&seed),
         None => {
-            let sk = SigningKey::generate(&mut rand::rngs::OsRng);
             tracing::warn!(
-                "AVEN_SERVER_SEED unset — generated an ephemeral identity (set the seed in \
-                 fly secrets for a stable DID across restarts)"
+                "AVEN_SERVER_SEED unset — generated an ephemeral identity (set AVEN_SERVER_SEED \
+                 for a stable DID across restarts)"
             );
-            sk
+            SigningKey::generate(&mut rand::rngs::OsRng)
         }
     }
 }
 
-fn load_tls(cfg: &Config) -> Result<ServerTls, Box<dyn std::error::Error>> {
-    match (&cfg.tls_cert_path, &cfg.tls_key_path) {
-        (Some(cert), Some(key)) => {
-            let cert_pem = std::fs::read(cert)?;
-            let key_pem = std::fs::read(key)?;
-            Ok(ServerTls::from_pem(&cert_pem, &key_pem)?)
-        }
-        _ => {
-            tracing::warn!(
-                "AVEN_SERVER_TLS_CERT/KEY unset — generating a self-signed cert (dev). Clients \
-                 must pin its certificate; the cert fingerprint is logged below."
-            );
-            let mut sans = vec!["localhost".to_string(), cfg.domain.clone()];
-            sans.dedup();
-            Ok(generate_self_signed(sans)?)
-        }
-    }
+async fn health() -> &'static str {
+    "ok"
 }
 
-/// Minimal HTTP liveness endpoint for the fly + Docker healthcheck.
-async fn run_healthcheck(bind: String) -> std::io::Result<()> {
-    let listener = TcpListener::bind(&bind).await?;
-    tracing::info!(%bind, "healthcheck listening");
-    loop {
-        let (mut sock, _) = listener.accept().await?;
-        tokio::spawn(async move {
-            let body = "ok";
-            let resp = format!(
-                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{}",
-                body.len(),
-                body
-            );
-            let _ = sock.write_all(resp.as_bytes()).await;
-            let _ = sock.shutdown().await;
-        });
-    }
+async fn sync_handler(
+    ws: WebSocketUpgrade,
+    State(listener): State<Arc<WsServerListener>>,
+) -> Response {
+    ws.on_upgrade(move |socket| async move { listener.accept(socket).await })
 }
 
 #[tokio::main]
@@ -115,35 +91,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_peer = PeerId(identity.verifying_key().to_bytes());
     let server_did = groove::did_key::peer_did_from_ed25519(&server_peer.0)
         .map_err(|e| format!("server did: {e}"))?;
-    tracing::info!(%server_did, "aven-server mini identity");
-
-    let server_tls = load_tls(&cfg)?;
-    if cfg.tls_cert_path.is_none() {
-        let pin: String = server_tls.cert_der.iter().map(|b| format!("{b:02x}")).collect();
-        tracing::info!(cert_der_pin = %pin, "self-signed cert (pin this DER on the client)");
-        // Dev convenience: hand the freshly-generated pin to a harness via a file
-        // (the `dev:app2x` script reads it to set `AVENOS_SERVER_CERT_PIN`). Set
-        // only when self-signing; a real cert is pinned out of band.
-        if let Some(pin_file) = std::env::var("AVEN_SERVER_PIN_FILE").ok().filter(|s| !s.is_empty()) {
-            if let Err(e) = std::fs::write(&pin_file, &pin) {
-                tracing::warn!(%pin_file, "failed to write AVEN_SERVER_PIN_FILE: {e}");
-            } else {
-                tracing::info!(%pin_file, "wrote cert pin for the dev harness");
-            }
-        }
-    }
+    tracing::info!(%server_did, "aven-server identity");
 
     let params = ChallengeParams::new(cfg.domain.clone(), cfg.uri.clone(), cfg.network_seed.clone());
-    let (listener, mut new_peers) =
-        ServerListener::serve(&cfg.sync_bind, server_tls, identity, params).await?;
-    tracing::info!(bind = %cfg.sync_bind, "authenticated TLS sync transport listening");
+    let (listener, mut new_peers) = WsServerListener::new(params, server_did);
 
-    // Durable blind replica: a full RocksDB engine on the REAL schema, wired to
-    // the TLS listener. The real schema is required so the engine can persist &
-    // re-ship replicated row batches (inbound batches carry `origin_schema_hash`;
-    // an empty schema would reject them). It holds NO keyshares, so every batch it
-    // mirrors stays ciphertext it cannot decrypt — a blind store-and-forward
-    // mirror, not a member.
+    // Durable blind replica: a full RocksDB engine on the REAL schema, wired to the
+    // WS listener. The real schema is required so the engine can persist & re-ship
+    // replicated row batches; it holds NO keyshares, so every batch stays ciphertext.
     let schema =
         avenos_schema_hash::embedded_schema().map_err(|e| format!("load schema: {e}"))?;
     let data_dir = std::env::var("AVEN_SERVER_DATA_DIR")
@@ -159,12 +114,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         data_dir,
         live_schemas: vec![],
     };
-    // Open the blind-replica engine. The local RocksDB is a *cache* of ciphertext
-    // that is fully re-pullable from peers, so if the store is ever unreadable
-    // (e.g. a hard crash — SIGKILL/OOM/power loss — that left an orphan WAL before
-    // the DB could be finalized) we reset it and re-open rather than crash-loop;
-    // the missing batches re-sync from devices on reconnect. A clean shutdown (the
-    // SIGTERM handler below) makes this self-heal path rare, not the normal case.
+
+    // Self-healing open: the local RocksDB is a re-pullable ciphertext cache, so if
+    // it is ever unreadable (a hard crash that left it unfinalized) reset and re-open
+    // rather than crash-loop; missing batches re-sync from peers. The graceful
+    // shutdown below makes this path rare.
     let engine: Arc<JazzClient> =
         match JazzClient::connect_with_sync_transport(ctx.clone(), listener.clone(), None).await {
             Ok(engine) => Arc::new(engine),
@@ -181,9 +135,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
     tracing::info!("blind replica engine connected (RocksDB, real schema)");
 
-    // Register each newly-authenticated peer so the engine ships catch-up to it.
-    // Hold the handle so we can stop it on shutdown and reclaim its engine clone
-    // (needed to take sole ownership of the engine and finalize RocksDB cleanly).
+    // Register each newly-authenticated peer; hold the handle so we can stop it on
+    // shutdown and reclaim its engine clone (to finalize RocksDB via sole ownership).
     let engine_for_peers = engine.clone();
     let peer_task = tokio::spawn(async move {
         while let Some(peer) = new_peers.recv().await {
@@ -193,29 +146,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    // Serve the health endpoint until a shutdown signal, then flush and RETURN.
-    // Sprites delivers SIGTERM on hibernate / service stop / redeploy. The default
-    // SIGTERM action kills the process immediately, *skipping Rust destructors* —
-    // so RocksDB's `Close` never runs and the next boot finds an unfinalized store
-    // (orphan WAL → "Corruption: wal_dir contains existing log file"). By catching
-    // the signal and returning from `main`, the tokio runtime is dropped, every
-    // `JazzClient` Arc is dropped, and the storage destructor runs `Close` — the DB
-    // is finalized cleanly and reopens with no recovery. We also flush first so any
-    // acknowledged writes are durable even if Close is interrupted.
-    let mut sigterm = signal(SignalKind::terminate())?;
-    let mut sigint = signal(SignalKind::interrupt())?;
-    tokio::select! {
-        r = run_healthcheck(cfg.health_bind) => r?,
-        _ = sigterm.recv() => tracing::info!("SIGTERM received — shutting down"),
-        _ = sigint.recv() => tracing::info!("SIGINT received — shutting down"),
-    }
-    // Stop the peer-registration task and await it so its engine clone is dropped;
-    // then we hold the only remaining `Arc<JazzClient>`. `Arc::try_unwrap` gives us
-    // owned `JazzClient`, and `shutdown(self)` flushes, closes the transport, and
-    // drops the runtime + storage — which runs RocksDB's `Close`, writing a valid
-    // CURRENT/MANIFEST. THAT is what makes the next boot reopen cleanly (a plain
-    // `drop` of one of several Arcs does not finalize the DB).
-    tracing::info!("shutting down — finalizing RocksDB store…");
+    // One HTTP server on :8080: /health + /sync (WS). Devices reach /sync via the
+    // public Sprite URL (proxy-terminated TLS).
+    let app = Router::new()
+        .route("/health", get(health))
+        .route("/sync", get(sync_handler))
+        .with_state(listener.clone());
+    let tcp = tokio::net::TcpListener::bind(&cfg.http_bind).await?;
+    tracing::info!(bind = %cfg.http_bind, "http+ws sync server listening (/health, /sync)");
+
+    // Graceful shutdown: Sprites sends SIGTERM on hibernate/stop/redeploy. Catching
+    // it (rather than being killed) lets axum drain, then we finalize RocksDB so the
+    // next boot reopens cleanly (orphan-WAL corruption otherwise — see git history).
+    let shutdown = async {
+        let mut sigterm = signal(SignalKind::terminate()).expect("install SIGTERM handler");
+        let mut sigint = signal(SignalKind::interrupt()).expect("install SIGINT handler");
+        tokio::select! {
+            _ = sigterm.recv() => tracing::info!("SIGTERM received — shutting down"),
+            _ = sigint.recv() => tracing::info!("SIGINT received — shutting down"),
+        }
+    };
+    axum::serve(tcp, app).with_graceful_shutdown(shutdown).await?;
+
+    // Stop the peer task, take sole ownership, run RocksDB Close via shutdown(self).
+    tracing::info!("finalizing RocksDB store…");
     peer_task.abort();
     let _ = peer_task.await;
     match Arc::try_unwrap(engine) {
@@ -225,8 +179,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(still_shared) => {
-            // Should not happen (we reclaimed the only other clone), but never block
-            // shutdown on it — flush the WAL so acknowledged writes are durable.
             tracing::warn!("engine still shared at shutdown; flushing WAL only");
             let _ = still_shared.flush_peer_sync().await;
         }
@@ -235,7 +187,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// A storage-open failure that a blind replica can recover from by resetting its
+/// A storage-open failure a blind replica can recover from by resetting its
 /// (re-pullable) cache — chiefly a RocksDB store left unfinalized by a hard crash.
 fn store_is_corrupt(e: &impl std::fmt::Display) -> bool {
     let m = e.to_string();

@@ -1393,41 +1393,28 @@ pub(crate) fn patch_updates(table_schema: &TableSchema, patch: JsonRow) -> Resul
 	Ok(ops)
 }
 
-/// When `AVENOS_SERVER_SYNC=1`, dial the aven-server mini over authenticated TLS:
-/// the server cert is pinned via `AVENOS_SERVER_CERT_PIN` (hex DER) and the device
-/// proves its DID with a did:key challenge bound to the TLS session. Returns the
-/// transport + the server's authenticated peer id.
+/// Dial the hosted aven-server over a WebSocket and complete the nonce-bound
+/// did:key challenge. Returns the transport + the server's authenticated peer id.
 ///
-/// This is the single sync transport — production points it at the hosted mini;
-/// `dev:app2x` boots a local `aven-server` on `127.0.0.1:4290` and points both
-/// instances at it (so A↔B converge a shared spark through the relay). The dial
-/// retries briefly so the app tolerates the relay coming up a beat late.
+/// The endpoint is `AVENOS_SERVER_WS_URL` (e.g. `wss://aven-ceo-bmrha.sprites.app/sync`,
+/// or `ws://127.0.0.1:8080/sync` for a local relay). Reaching the hosted relay is
+/// just the public Sprite URL — no `sprite proxy` — and TLS is the Sprites proxy's,
+/// so there is no cert to pin. The URL is resolved from the runtime env (dev), else
+/// a value baked at build time via `option_env!` (release pipeline), else `None` →
+/// local-only. The dial retries briefly so the app tolerates the relay waking a
+/// beat late (the first request wakes a hibernated Sprite).
 async fn try_server_transport(
 	signing_key: ed25519_dalek::SigningKey,
 ) -> Option<(Arc<dyn SyncTransport>, PeerId)> {
-	if std::env::var("AVENOS_SERVER_SYNC").is_err() {
-		return None;
-	}
-	let addr = std::env::var("AVENOS_SERVER_ADDR").ok()?;
-	let pin_hex = std::env::var("AVENOS_SERVER_CERT_PIN").ok()?;
-	let pinned = match hex::decode(pin_hex.trim()) {
-		Ok(bytes) => bytes,
-		Err(e) => {
-			log::warn!("AVENOS_SERVER_CERT_PIN is not valid hex: {e}");
-			return None;
-		}
-	};
-	let trust = aven_p2p::ServerTrust::Pinned(pinned);
+	let url = server_ws_url()?;
 	let established = tokio::time::timeout(Duration::from_secs(30), async {
 		loop {
-			match aven_p2p::ServerSyncTransport::dial(&addr, trust.clone(), signing_key.clone())
-				.await
-			{
+			match aven_p2p::WsClientTransport::connect(&url, signing_key.clone()).await {
 				Ok(t) => return Some(t),
-				// The relay may not be listening yet (dev: server boots alongside
-				// the app). Retry until it is, or fall through to local-only.
+				// The relay may be waking / not listening yet — retry until it is,
+				// or fall through to local-only.
 				Err(e) => {
-					log::debug!("server transport dial not ready ({addr}): {e}");
+					log::debug!("server ws dial not ready ({url}): {e}");
 					tokio::time::sleep(Duration::from_millis(400)).await;
 				}
 			}
@@ -1443,9 +1430,25 @@ async fn try_server_transport(
 			Some((Arc::new(t), server))
 		}
 		None => {
-			log::warn!("server transport dial timed out ({addr}); running local-only");
+			log::warn!("server ws dial timed out ({url}); running local-only");
 			None
 		}
+	}
+}
+
+/// The sync server WebSocket URL: runtime `AVENOS_SERVER_WS_URL` (dev) →
+/// compile-time `option_env!` (baked by the release pipeline) → `None`
+/// (local-only). No connection is attempted when unset.
+fn server_ws_url() -> Option<String> {
+	if let Ok(u) = std::env::var("AVENOS_SERVER_WS_URL") {
+		let u = u.trim().to_string();
+		if !u.is_empty() {
+			return Some(u);
+		}
+	}
+	match option_env!("AVENOS_SERVER_WS_URL") {
+		Some(u) if !u.trim().is_empty() => Some(u.trim().to_string()),
+		_ => None,
 	}
 }
 
