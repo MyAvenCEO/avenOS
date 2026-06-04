@@ -60,14 +60,21 @@ Two questions must be answered:
 
 ## 3. Networking model on Sprites
 
-From the Sprites docs:
+From the Sprites docs (confirmed):
 
-- Every Sprite has its own **URL with automatic TLS**, proxied to whatever listens on
-  **port 8080**. A request to that URL **assigns new compute if the Sprite is inactive**
+- Every Sprite has its own **URL with automatic TLS**, routed to **port 8080** (or the first
+  HTTP port opened). A request to that URL **wakes the Sprite when paired with a Service**
   (cold start typically **< 1s**; warm resume a few hundred ms). **This is the documented,
-  reliable wake trigger.**
-- **Raw TCP** can be **tunneled directly** to a service inside the Sprite (for non-HTTP
-  protocols). TLS connections route by SNI.
+  reliable wake trigger.** Note this URL has **Sprites-terminated TLS**.
+- **Arbitrary TCP** is reached via the **Port Proxy**: *"after a brief WebSocket handshake the
+  connection becomes a transparent relay to any port."* Because it's a **transparent byte
+  relay**, our own TLS terminates **inside** the Sprite — channel binding is preserved (unlike
+  the 8080 URL, whose TLS is proxy-terminated).
+- **Staying awake / hibernating:** *"Your Sprite stays awake while there's activity. Activity
+  includes active exec/console commands, **open TCP connections**, running TTY sessions, and
+  active Services with open connections."* → **an open sync connection keeps the Sprite warm.**
+- **Services:** *"processes that auto-restart whenever your Sprite wakes up."* `aven-server`
+  **must be defined as a Sprites Service** so it is running and ready after a wake.
 
 `aven-server` already binds **two** ports (`libs/aven-server/src/main.rs`):
 
@@ -81,10 +88,15 @@ and uses as its wake trigger.**
 
 > **Why not just run sync on 8080 behind the Sprites TLS proxy?** Because our sync handshake
 > binds the did:key challenge to the *live TLS session* via exported keying material (channel
-> binding, `aven-p2p/src/challenge.rs` + `tls.rs`). If the Sprites proxy terminated TLS, the
-> device's TLS session would be with the proxy, not the server process, breaking channel
-> binding. We therefore keep **end-to-end TLS** to port 4290 over a raw-TCP tunnel, and use the
-> HTTP 8080 path only as the wake trigger.
+> binding, `aven-p2p/src/challenge.rs` + `tls.rs`). The 8080 URL has **Sprites-terminated TLS**,
+> so the device's TLS session would be with the proxy, not the server process — breaking channel
+> binding. We therefore keep **end-to-end TLS** to port 4290 over the **Port Proxy's transparent
+> byte tunnel** (which does *not* terminate our TLS), and use the HTTP 8080 path only as the
+> wake trigger.
+
+> **Reaching 4290 is not a plain `TcpStream::connect`.** The Port Proxy requires a brief
+> WebSocket-upgrade handshake before it relays bytes. So the device transport must run rustls
+> over a **proxy-tunneled stream**, not a raw socket — see §4.3 / §6.
 
 ---
 
@@ -127,38 +139,53 @@ succeeds within the cold-start window.
 ```text
 device wants to sync
    │
-   ├─ GET https://<sprite-url>/        ← wakes the Sprite (Sprites proxy → :8080 health)
+   ├─ GET https://<sprite-url>/        ← wakes the Sprite (Sprites URL → Service on :8080 health)
    │     (retry/backoff until 200, ~<1s cold)
    │
-   └─ ServerSyncTransport::dial(AVENOS_SERVER_ADDR :4290, pinned-cert, did-key)
+   ├─ open Port-Proxy WS tunnel → port 4290   (transparent byte relay into the Sprite)
+   │
+   └─ rustls + did:key challenge over the tunneled stream   (end-to-end TLS, channel binding intact)
          (existing 30s retry loop; succeeds once warm)
    │
    └─ FrontierAnnounce → frontier_diff → batches flow → converge
+         (the open tunnel connection now keeps the Sprite awake for the session)
 ```
 
-**Code change (small, localized to `try_server_transport`):**
+**Code changes:**
 
-- New env var `AVENOS_SERVER_WAKE_URL` (the Sprite's public `https://…` URL).
-- If set, before the dial loop: `GET` it with a short retry/backoff (e.g. up to ~10s, 500ms
-  steps) until a 2xx, then continue. If unset, behavior is unchanged (local dev / non-Sprite
-  hosting). This needs an HTTP client; `reqwest` (or a minimal `ureq`) added to
-  `app/src-tauri` only.
-- The existing 30s dial loop is kept as the safety net for the boot tail.
+1. **Wake poke (localized to `try_server_transport`, `app/src-tauri`):** new env var
+   `AVENOS_SERVER_WAKE_URL` (the Sprite's public `https://…` URL). If set, before the dial loop
+   `GET` it with a short retry/backoff (~10s, 500ms steps) until 2xx, then continue. If unset,
+   behavior is unchanged (local dev / non-Sprite hosting). Needs an HTTP client (`reqwest`/`ureq`)
+   in `app/src-tauri` only.
+2. **Tunneled dial (transport layer, `aven-p2p`):** `ServerSyncTransport::dial` currently does
+   `TcpStream::connect(addr)` then rustls over it. To reach 4290 through the Port Proxy, the
+   underlying stream must be the **WS-tunneled** byte stream. Parameterize `dial` over an
+   `AsyncRead + AsyncWrite` (instead of a hard `TcpStream`) and add a "connect via Sprites Port
+   Proxy" stream constructor (WS upgrade → tunneled duplex → wrap in rustls). The handshake and
+   protocol *above* rustls are unchanged; channel binding still uses the device↔server TLS
+   session, which is end-to-end through the transparent relay. The existing 30s retry loop is
+   kept as the boot-tail safety net.
 
-No change to the wire protocol, the transport crate, or the server.
+> If verification (§7.1) shows Sprites also exposes a **direct TCP ingress** for a port (no WS
+> tunnel), change #2 collapses to "point `AVENOS_SERVER_ADDR` at that address" with no transport
+> change. Build the wake poke (#1) first; gate #2 on that finding.
+
+No change to the wire protocol or the server's listener.
 
 ### 4.4 Keeping a session warm (optional, for active use)
 
-During an active session a device may want low-latency pushes rather than re-waking each time.
-Two cheap options, both client-side and optional for iteration 1:
+**Largely resolved by the docs:** an **open TCP connection counts as activity**, so while the
+device holds its sync connection open the Sprite **stays warm on its own** — no heartbeat needed
+during a session. A heartbeat is only relevant if we *deliberately* keep the connection open
+through long *silent* gaps and want to avoid even a reconnect; given §4.1 (reconnect is
+zero-cost) that is not worth doing in iteration 1.
 
-- **Heartbeat:** while a sync UI is foregrounded, the device sends a periodic lightweight
-  `FrontierAnnounce` (or hits the wake URL) inside the ~30s idle window to keep the Sprite warm.
-- **Re-wake on demand:** accept hibernation between bursts and rely on §4.3 to re-wake on the
-  next activity. This is the default and is correctness-safe by §4.1.
+- **Default:** hold the connection open during active use (keeps it warm for free); when the
+  device closes it and the Sprite idles out, §4.3 re-wakes on next activity. Correctness-safe by
+  §4.1.
 
-Recommendation: ship §4.3 only in iteration 1; add the heartbeat behind a flag if push latency
-proves annoying in practice.
+Recommendation: ship §4.3 only in iteration 1; no heartbeat.
 
 ---
 
@@ -174,6 +201,22 @@ is **self-correcting**: the device re-announces and re-ships the missing batches
 
 So we do not need a zero-loss durability guarantee from the host — "good enough, self-healing"
 is the bar, and Sprites clears it.
+
+**The boundary of self-healing (important).** Frontier resync copies missing batches *from a
+peer that still holds them*. It therefore heals any loss **as long as the batch lives on ≥2
+nodes.** The single non-recoverable case is **replication-factor-1 data**: a freshly authored
+batch that has reached *exactly one* node, whose sole holder is then **permanently** lost before
+a second peer copied it. This is exactly the failure the server exists to prevent — it is
+**copy #2** for device-authored data (`DurabilityTier::EdgeServer` = "confirmed at ≥2 nodes").
+Two consequences for this plan:
+- *Temporary* loss of the server (hibernate/reboot/crash) is benign — devices remain the source
+  of truth and the server re-pulls on wake (and on Sprites the FS is restored anyway, so usually
+  nothing to re-pull).
+- The thing worth protecting is the **window before a new batch reaches the server**. That is a
+  property of the device→server sync path being live, **not** of the server's own disk
+  durability — and §4 keeps that path healable across hibernation.
+- A fully wiped node re-pulling the entire DAG is a **bandwidth/latency** cost, not data loss;
+  Sprites' persistent FS makes it rare.
 
 ### 5.2 What Sprites gives us
 
@@ -199,13 +242,18 @@ is the bar, and Sprites clears it.
 
 ### Code
 - **`app/src-tauri/src/jazz/mod.rs` (`try_server_transport`)** — add `AVENOS_SERVER_WAKE_URL`
-  handling: HTTP-poke-then-dial (§4.3). Add an HTTP client dep to `app/src-tauri`.
+  handling: HTTP-poke-then-dial (§4.3 #1). Add an HTTP client dep to `app/src-tauri`.
+- **`libs/aven-p2p/src/transport.rs` (`ServerSyncTransport::dial`)** — parameterize over a
+  generic `AsyncRead + AsyncWrite` stream and add a Sprites **Port-Proxy WS-tunnel** connector
+  (§4.3 #2). *Gated on §7.1*: skipped entirely if a direct TCP ingress exists.
 - **`libs/aven-server/src/main.rs`** — add a `SIGTERM`/`SIGINT` handler that flushes RocksDB
-  (WAL + engine) before exit (§5.1). No storage-engine change; no new feature flag.
+  (WAL + engine) before exit (§5.3.1). No storage-engine change; no new feature flag.
 
 ### Deployment / ops (new files, no engine impact)
-- **Sprite image** for `aven-server`: build the binary, expose health on `8080` and the sync
-  TLS listener on `4290`, set the data dir on the persistent FS.
+- **`aven-server` as a Sprites Service** — define it as a Service so it **auto-restarts on wake**
+  (required for wake-on-request to work). Health/HTTP on `8080` (the routed/wake port), sync TLS
+  listener on `4290`, data dir on the persistent FS.
+- **Sprite image** for `aven-server`: build the binary; the Service runs it on boot/wake.
 - **Env mapping** (Sprite secrets/config):
   | Env | Value |
   |-----|-------|
@@ -229,19 +277,20 @@ is the bar, and Sprites clears it.
 
 ## 7. Open questions to verify before/while building
 
-1. **Raw-TCP exposure & wake.** Confirm the exact mechanism Sprites uses to expose a raw TCP
-   port (4290) to external clients (stable host:port vs. SDK tunnel), and whether a TCP-tunnel
-   connection *also* wakes a cold Sprite. The §4.3 HTTP-wake design is deliberately independent
-   of this (it uses the guaranteed 8080 path), but if TCP-tunnel wake is confirmed reliable we
-   can drop the HTTP poke and simplify to a plain dial.
-2. **Idle timeout vs. open connections.** Confirm whether an open-but-silent TLS connection
-   counts as activity (keeps the Sprite warm) or whether the ~30s idle timer hibernates it
-   despite the socket. Drives whether §4.4's heartbeat is needed.
+1. **Raw-TCP exposure mechanism.** Docs confirm arbitrary TCP is reached via the **Port Proxy**
+   (a WebSocket-tunnel transparent relay). **Open:** is there *also* a direct TCP ingress
+   (stable host:port) that avoids the WS tunnel? If yes, §4.3 #2 (transport change) is dropped.
+   Also confirm the proxy/tunnel itself wakes a cold Sprite — the §4.3 #1 HTTP poke is
+   deliberately independent of this (uses the guaranteed 8080/Service path).
+2. **~~Idle timeout vs. open connections.~~ RESOLVED** — docs: *open TCP connections count as
+   activity*, so an open sync connection keeps the Sprite warm. No heartbeat needed (§4.4).
 3. **Unclean-loss durability window.** Read the Fly "Design & Implementation of Sprites" post to
    quantify how recent an `fsync` is guaranteed durable on unclean compute reclaim — to decide
-   whether §5.3.2 periodic checkpoints are worth enabling.
-4. **Cold-start budget.** Measure real cold-start for our image; ensure it fits inside the
-   device's wake-poll + 30s dial window (it should, given < 1s documented).
+   whether §5.3.2 periodic checkpoints are worth enabling. (Bounded in impact by §5.1's
+   self-healing for any batch already replicated to a device.)
+4. **Cold-start budget.** Measure real cold-start for our image (Service auto-restart + RocksDB
+   open); ensure it fits inside the device's wake-poll + 30s dial window (should, given < 1s
+   documented).
 
 ---
 
@@ -261,12 +310,14 @@ is the bar, and Sprites clears it.
 
 ## 9. Milestones
 
-1. **M1 — host as-is:** Sprite image + env + device `AVENOS_SERVER_WAKE_URL`/`ADDR`/`PIN`;
-   manual cold-wake sync works. (Storage durability via Sprite ext4; no code change beyond the
-   wake poke.)
-2. **M2 — graceful flush:** `SIGTERM` WAL/engine flush in `aven-server`.
-3. **M3 — verify caveats (§7):** TCP exposure/wake, idle timeout, durability window; enable
-   periodic checkpoints only if needed.
-4. **M4 (deferred) — keep-warm heartbeat** if push latency warrants.
-5. **Later (separate plan) — server↔server mesh** (static roster dial + mutual `Replicate`),
+1. **M1 — host as-is:** `aven-server` as a Sprites **Service** + image + env; device wake poke
+   (`AVENOS_SERVER_WAKE_URL`) + dial (`ADDR`/`PIN`). Manual cold-wake sync works. (Storage
+   durability via Sprite ext4; minimal code beyond the wake poke.)
+2. **M1.5 — verify §7.1 (TCP ingress):** if only the Port Proxy is available, land the tunneled
+   `dial` (§4.3 #2); if a direct TCP ingress exists, skip it.
+3. **M2 — graceful flush:** `SIGTERM` WAL/engine flush in `aven-server`.
+4. **M3 — verify remaining caveats (§7):** durability window + cold-start budget; enable periodic
+   checkpoints only if needed.
+5. **~~M4 — keep-warm heartbeat~~ — dropped** (open connection keeps the Sprite warm; §4.4).
+6. **Later (separate plan) — server↔server mesh** (static roster dial + mutual `Replicate`),
    independent of this hosting change.
