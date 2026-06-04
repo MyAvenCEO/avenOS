@@ -1405,7 +1405,7 @@ pub(crate) fn patch_updates(table_schema: &TableSchema, patch: JsonRow) -> Resul
 /// beat late (the first request wakes a hibernated Sprite).
 async fn try_server_transport(
 	signing_key: ed25519_dalek::SigningKey,
-) -> Option<(Arc<dyn SyncTransport>, PeerId)> {
+) -> Option<(Arc<dyn SyncTransport>, PeerId, Arc<tokio::sync::Notify>)> {
 	let url = match server_ws_url() {
 		Some(u) => {
 			log::info!("server sync URL resolved: {u} (dialing relay)");
@@ -1418,31 +1418,24 @@ async fn try_server_transport(
 			return None;
 		}
 	};
-	let established = tokio::time::timeout(Duration::from_secs(30), async {
-		loop {
-			match aven_p2p::WsClientTransport::connect(&url, signing_key.clone()).await {
-				Ok(t) => return Some(t),
-				// The relay may be waking / not listening yet — retry until it is,
-				// or fall through to local-only.
-				Err(e) => {
-					log::debug!("server ws dial not ready ({url}): {e}");
-					tokio::time::sleep(Duration::from_millis(400)).await;
-				}
+	// Dial until connected — no give-up window. A hibernated relay wakes on the
+	// request; on a slow/just-coming-up network (e.g. cellular after a switch) we
+	// keep retrying with capped backoff instead of silently falling back to
+	// local-only. The caller (`spawn_dev_peer_sync`) re-enters this on disconnect.
+	let mut backoff = Duration::from_millis(400);
+	loop {
+		match aven_p2p::WsClientTransport::connect(&url, signing_key.clone()).await {
+			Ok(t) => {
+				let server = t.server_peer_id();
+				let disconnected = t.disconnected();
+				log::info!("server transport established (aven {server})");
+				return Some((Arc::new(t), server, disconnected));
 			}
-		}
-	})
-	.await
-	.ok()
-	.flatten();
-	match established {
-		Some(t) => {
-			let server = t.server_peer_id();
-			log::info!("server transport established (aven {server})");
-			Some((Arc::new(t), server))
-		}
-		None => {
-			log::warn!("server ws dial timed out ({url}); running local-only");
-			None
+			Err(e) => {
+				log::debug!("server ws dial not ready ({url}): {e}");
+				tokio::time::sleep(backoff).await;
+				backoff = (backoff * 2).min(Duration::from_secs(5));
+			}
 		}
 	}
 }
@@ -1466,7 +1459,9 @@ fn server_ws_url() -> Option<String> {
 /// The sync transport for this client, or `None` to run local-only (no
 /// `AVENOS_SERVER_SYNC`, or the relay was unreachable). Yields
 /// `(transport, server-peer-to-register)`.
-async fn try_any_peer_transport(root: &[u8; 32]) -> Option<(Arc<dyn SyncTransport>, PeerId)> {
+async fn try_any_peer_transport(
+	root: &[u8; 32],
+) -> Option<(Arc<dyn SyncTransport>, PeerId, Arc<tokio::sync::Notify>)> {
 	let sk = crate::jazz_auth::signing_key_from_device_root(root).ok()?;
 	try_server_transport(sk).await
 }
@@ -1543,56 +1538,64 @@ fn spawn_dev_peer_sync(
 	if let Ok(mut slot) = relay_did_slot.write() {
 		*slot = None;
 	}
-	tokio::spawn(async move {
-		let Some((transport, remote)) = try_any_peer_transport(&root).await else {
-			return;
+	// Inbound peer-sync deltas must drive the SAME drain that local IPC writes use
+	// (`change_tx` → `run_table_change_drain` → `execute_drain_batch`). Without this
+	// hook, a synced `sparks`/`keyshares` change — e.g. a spark-admin grant arriving
+	// from a peer — never invalidates the vault shell or refreshes the sync ACL, so
+	// the newly granted spark's data won't decrypt or live-sync until the next app
+	// restart. Built once and reused across reconnects.
+	let on_inbound: PeerInboundParkedHook = Arc::new(move |payload: &SyncPayload| {
+		// The table name lives in the payload-level `metadata` (built by
+		// `metadata_from_row_locator`), NOT in `row.metadata` — a row's own metadata is
+		// provenance only and never carries `table`.
+		let table = match payload {
+			SyncPayload::RowBatchCreated { metadata, .. }
+			| SyncPayload::RowBatchNeeded { metadata, .. } => metadata
+				.as_ref()
+				.and_then(|m| m.metadata.get(MetadataKey::Table.as_str()).cloned()),
+			_ => None,
 		};
-		// Record the authenticated relay DID so the UI can offer a one-click
-		// "replicate this spark to the connected relay" (no DID copy from logs).
-		if let Ok(did) = crate::jazz_auth::peer_did_from_ed25519(&remote.0) {
-			if let Ok(mut slot) = relay_did_slot.write() {
-				*slot = Some(did);
-			}
+		if let Some(table) = table {
+			let _ = change_tx.send(table);
 		}
-		// Inbound peer-sync deltas must drive the SAME drain that local IPC writes use
-		// (`change_tx` → `run_table_change_drain` → `execute_drain_batch`). Without this
-		// hook, a synced `sparks`/`keyshares` change — e.g. a spark-admin grant arriving
-		// from a peer — never invalidates the vault shell or refreshes the sync ACL, so
-		// the newly granted spark's data won't decrypt or live-sync until the next app
-		// restart (restart re-hydrates the shell from the already-synced rows). Map each
-		// inbound row batch to its table and post it to the drain, just like a local write.
-		let on_inbound: PeerInboundParkedHook = Arc::new(move |payload: &SyncPayload| {
-			// The table name lives in the payload-level `metadata` (built by
-			// `metadata_from_row_locator`), NOT in `row.metadata` — a row's own metadata is
-			// provenance only (`created_by`/`created_at`/`delete`) and never carries `table`.
-			// Reading `row.metadata` made this hook a silent no-op: no peer delta ever reached
-			// the drain, so remote sparks/keyshares grants only surfaced after restart.
-			let table = match payload {
-				SyncPayload::RowBatchCreated { metadata, .. }
-				| SyncPayload::RowBatchNeeded { metadata, .. } => metadata
-					.as_ref()
-					.and_then(|m| m.metadata.get(MetadataKey::Table.as_str()).cloned()),
-				_ => None,
+	});
+	// Supervisor: (re)dial → attach → register → wait for the connection to drop →
+	// repeat. This is what makes sync recover on the fly after a network switch,
+	// hibernate, or idle close — not only on app restart. Re-registering on each
+	// reconnect re-triggers the engine's frontier catch-up, so missed batches resync.
+	tokio::spawn(async move {
+		loop {
+			let Some((transport, remote, disconnected)) = try_any_peer_transport(&root).await
+			else {
+				return; // local-only (no relay URL) — nothing to supervise
 			};
-			if let Some(table) = table {
-				let _ = change_tx.send(table);
+			// Record the authenticated relay DID so the UI can offer a one-click
+			// "replicate this spark to the connected relay".
+			if let Ok(did) = crate::jazz_auth::peer_did_from_ed25519(&remote.0) {
+				if let Ok(mut slot) = relay_did_slot.write() {
+					*slot = Some(did);
+				}
 			}
-		});
-		client.attach_sync_transport(transport, Some(on_inbound));
-		// Don't re-register a peer the user has Forgotten (revoked) — that is what makes
-		// Forget persist across reconnect/restart. Unknown peers stay permissive
-		// (first-contact); only an explicit revoke is skipped.
-		let remote_did = crate::jazz_auth::peer_did_from_ed25519(&remote.0).ok();
-		let revoked = match &remote_did {
-			Some(did) => crate::peers::is_peer_revoked(&client, did)
-				.await
-				.unwrap_or(false),
-			None => false,
-		};
-		if revoked {
-			log::info!("dev peer {remote} is Forgotten (revoked); not registering for sync");
-		} else if let Err(e) = client.register_peer_sync_client(remote) {
-			log::warn!("register dev peer {remote}: {e}");
+			client.attach_sync_transport(transport, Some(on_inbound.clone()));
+			// Don't re-register a peer the user has Forgotten (revoked) — that is what
+			// makes Forget persist across reconnect/restart. Only an explicit revoke is
+			// skipped; unknown peers stay permissive (first-contact).
+			let remote_did = crate::jazz_auth::peer_did_from_ed25519(&remote.0).ok();
+			let revoked = match &remote_did {
+				Some(did) => crate::peers::is_peer_revoked(&client, did)
+					.await
+					.unwrap_or(false),
+				None => false,
+			};
+			if revoked {
+				log::info!("dev peer {remote} is Forgotten (revoked); not registering for sync");
+			} else if let Err(e) = client.register_peer_sync_client(remote) {
+				log::warn!("register dev peer {remote}: {e}");
+			}
+			// Block until the live connection drops, then loop to reconnect + resync.
+			disconnected.notified().await;
+			log::info!("relay connection lost — reconnecting to resync");
+			tokio::time::sleep(Duration::from_millis(500)).await;
 		}
 	});
 }

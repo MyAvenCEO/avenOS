@@ -94,7 +94,6 @@ impl WsServerListener {
 
         // One task owns the socket: outbound (engine → ws) and inbound (ws → engine).
         let inbound_tx = self.inbound_tx.clone();
-        let this = self.clone();
         tokio::spawn(async move {
             loop {
                 tokio::select! {
@@ -115,7 +114,13 @@ impl WsServerListener {
                     },
                 }
             }
-            this.registry.lock().await.remove(&peer);
+            // Intentionally NOT removing the registry entry here: on a network
+            // switch the client reconnects with a fresh connection that overwrites
+            // this peer's entry via `accept`'s insert. Removing on this (possibly
+            // long-lived half-open) reader could clobber that newer entry — so we
+            // leave it; a stale sender just fails `send_to` harmlessly until the
+            // reconnect replaces it. (Follow-up: generation-tag entries to prune
+            // peers that disconnect and never return.)
         });
         Ok(())
     }

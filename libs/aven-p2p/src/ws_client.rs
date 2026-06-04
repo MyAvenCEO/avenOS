@@ -22,8 +22,9 @@ use groove::{
     decode_length_prefixed, encode_length_prefixed, InboxEntry, JazzError, PeerId, Source,
     SyncPayload, SyncTargetId, SyncTransport,
 };
+use std::sync::Arc;
 use tokio::net::TcpStream;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex, Notify};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
@@ -42,6 +43,9 @@ pub struct WsClientTransport {
     out_tx: mpsc::Sender<Message>,
     inbound: Mutex<mpsc::Receiver<InboxEntry>>,
     server_peer: PeerId,
+    /// Fired once when the underlying WS connection drops (reader or writer ends).
+    /// The app's supervisor awaits this to re-dial + re-attach + re-register.
+    disconnected: Arc<Notify>,
 }
 
 impl WsClientTransport {
@@ -83,8 +87,13 @@ impl WsClientTransport {
                 .map_err(|e| P2pError::Handshake(format!("decode server did: {e}")))?,
         );
 
+        // Connection-drop signal: fired when either pump task ends. The app
+        // supervisor awaits it to re-dial (network switch, hibernate, idle close).
+        let disconnected = Arc::new(Notify::new());
+
         // Writer task: drain out_tx → ws sink.
         let (out_tx, mut out_rx) = mpsc::channel::<Message>(256);
+        let dc_writer = disconnected.clone();
         tokio::spawn(async move {
             while let Some(msg) = out_rx.recv().await {
                 if sink.send(msg).await.is_err() {
@@ -92,10 +101,12 @@ impl WsClientTransport {
                 }
             }
             let _ = sink.close().await;
+            dc_writer.notify_one();
         });
 
         // Reader task: ws stream → decode binary frames → inbound queue.
         let (in_tx, in_rx) = mpsc::channel::<InboxEntry>(256);
+        let dc_reader = disconnected.clone();
         tokio::spawn(async move {
             while let Some(next) = stream.next().await {
                 let Ok(msg) = next else { break };
@@ -118,12 +129,14 @@ impl WsClientTransport {
                 }
                 // text/ping/pong/close after handshake are ignored
             }
+            dc_reader.notify_one();
         });
 
         Ok(Self {
             out_tx,
             inbound: Mutex::new(in_rx),
             server_peer,
+            disconnected,
         })
     }
 
@@ -131,6 +144,12 @@ impl WsClientTransport {
     /// `JazzClient::register_peer_sync_client` before sync flows.
     pub fn server_peer_id(&self) -> PeerId {
         self.server_peer
+    }
+
+    /// A handle that is notified once the connection drops. The supervisor calls
+    /// `transport.disconnected().notified().await` to know when to reconnect.
+    pub fn disconnected(&self) -> Arc<Notify> {
+        self.disconnected.clone()
     }
 }
 
