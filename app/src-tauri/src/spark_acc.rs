@@ -177,6 +177,55 @@ pub fn attenuate_add_replicate_third_party(
 		.map_err(|e| format!("tp_rep_append:{e:?}"))
 }
 
+/// Append a third-party block granting `reader_did` a [`reads`] right over this
+/// Spark's resource prefix, signed by `delegating_kp` (an admin's biscuit key).
+/// Grants **no `owns`** — the reader is a member who may decrypt (pair this with
+/// a keyshare) but is **not** an admin and cannot write. This is the
+/// "membership credential" an onboarded peer holds on `admin-spark`: it lets the
+/// peer read the roster and marks it admitted (the server enumerates readers via
+/// [`spark_readers`] to gate admission).
+pub fn attenuate_add_reader_third_party(
+	delegating_kp: &KeyPair,
+	chain: &Biscuit,
+	spark_id: Uuid,
+	reader_did: &str,
+) -> Result<Biscuit, String> {
+	let req = chain
+		.third_party_request()
+		.map_err(|e| format!("tp_request:{e:?}"))?;
+	let prefix = format!("{}:", spark_urn_for(spark_id));
+	let read_f = format!(
+		"reads(\"{}\", \"{}\")",
+		reader_did.replace('\\', "\\\\").replace('"', "\\\""),
+		prefix.replace('\\', "\\\\").replace('"', "\\\"")
+	);
+	let bb = BlockBuilder::new()
+		.fact(read_f.as_str())
+		.map_err(|e| format!("tp_read_fact:{e}"))?;
+	let block = req
+		.create_block(&delegating_kp.private(), bb)
+		.map_err(|e| format!("tp_read_create:{e:?}"))?;
+	chain
+		.append_third_party(delegating_kp.public(), block)
+		.map_err(|e| format!("tp_read_append:{e:?}"))
+}
+
+/// All delegated-reader DIDs granted on a spark per the biscuit chain (members
+/// who hold a `reads` grant but are not owners). The server reads this on
+/// `admin-spark` to build its admission allowlist.
+pub fn spark_readers(chain: &Biscuit, spark_id: Uuid) -> Result<HashSet<String>, String> {
+	let prefix = format!("{}:", spark_urn_for(spark_id));
+	let mut authorizer = chain.authorizer().map_err(|e| format!("b-authorizer:{e}"))?;
+	let rule = format!(
+		r#"readers($p) <- reads($p, "{prefix}")"#,
+		prefix = prefix.replace('"', "\\\"")
+	);
+	let rows: Vec<(String,)> = authorizer
+		.query_all(rule.as_str())
+		.map_err(|e| format!("b-query-reads:{e}"))?;
+	Ok(rows.into_iter().map(|x| x.0).collect())
+}
+
 /// All replication-peer DIDs granted on a spark per the biscuit chain.
 pub fn spark_replicas(chain: &Biscuit, spark_id: Uuid) -> Result<HashSet<String>, String> {
 	let prefix = format!("{}:", spark_urn_for(spark_id));
@@ -309,6 +358,15 @@ pub fn authorize(
 
 	let admins = trusted_subject_dids(&chain.biscuit, &spark_str)?;
 	if !admins.iter().any(|a| peer_did_matches(a, subject_did)) {
+		// Non-owner subject: the only thing it may hold is a *delegated* right
+		// (admin-signed third-party block), not membership. A delegated `reads`
+		// grant authorizes Read without `owns` — the same generalization
+		// `authorize_replicate` makes for `replicate`. Any other op stays
+		// owner-only. This is what lets an onboarded member read `admin-spark`
+		// (the roster) without being an admin of it.
+		if matches!(op, AccOp::Read) {
+			return authorize_read_delegated(&chain.biscuit, &resource, subject_did);
+		}
 		return Err("spark_acc:subject_not_owner".into());
 	}
 
@@ -376,6 +434,28 @@ fn authorize_replicate(chain: &Biscuit, resource: &str, subject_did: &str) -> Re
 		Ok(())
 	} else {
 		Err("spark_acc:replicate_not_granted".into())
+	}
+}
+
+/// Authorize a delegated reader: allowed iff the chain carries a
+/// `reads($subject, $prefix)` grant whose prefix covers the resource. No
+/// `owns`/`trusted_admin` required — a reader is a member but not an admin.
+///
+/// Mirror of [`authorize_replicate`]: the grant lives in a third-party
+/// attenuation block (admin-signed), so we `query_all` it out and check prefix
+/// coverage in Rust rather than in the top-level authorizer `allow` rule.
+fn authorize_read_delegated(chain: &Biscuit, resource: &str, subject_did: &str) -> Result<(), String> {
+	let mut authorizer = chain.authorizer().map_err(|e| format!("authz-read-build:{e}"))?;
+	let grants: Vec<(String, String)> = authorizer
+		.query_all("granted($p, $pre) <- reads($p, $pre)")
+		.map_err(|e| format!("authz-read-query:{e}"))?;
+	let allowed = grants
+		.iter()
+		.any(|(did, prefix)| peer_did_matches(did, subject_did) && resource.starts_with(prefix));
+	if allowed {
+		Ok(())
+	} else {
+		Err("spark_acc:read_not_granted".into())
 	}
 }
 
@@ -518,6 +598,40 @@ mod tests {
 		// And holding `replicate` does NOT confer membership to a real member check:
 		// the owner still works as a member.
 		authorize(&v, sid, AccOp::Write, "todos", Some(rid), &v.peer_did.clone()).unwrap();
+	}
+
+	#[test]
+	fn reader_grant_allows_read_without_membership() {
+		// Alice (owner) grants a reader (an onboarded member) a `reads` cap — NOT
+		// membership/ownership. The reader may Read but not Write/Delete/Replicate.
+		let alice = build_vault_from_root(&[1u8; 32]).unwrap();
+		let reader = build_vault_from_root(&[5u8; 32]).unwrap();
+		let outsider = build_vault_from_root(&[8u8; 32]).unwrap();
+		let sid = uuid::Uuid::new_v4();
+		let rid = uuid::Uuid::new_v4();
+
+		let genesis = mint_genesis_spark(&alice, sid).unwrap();
+		let chain =
+			attenuate_add_reader_third_party(&alice.biscuit_kp, &genesis, sid, reader.peer_did.as_str())
+				.unwrap();
+		let mut v = alice;
+		v.sparks.insert(sid, BiscuitSpark { spark_id: sid, biscuit: chain });
+
+		// Enumerated as a reader.
+		let readers = spark_readers(&v.sparks.get(&sid).unwrap().biscuit, sid).unwrap();
+		assert!(readers.iter().any(|d| peer_did_matches(d, &reader.peer_did)), "reader listed");
+
+		// The reader IS authorized to Read…
+		authorize(&v, sid, AccOp::Read, "peers", Some(rid), &reader.peer_did).unwrap();
+		// …but is NOT a member/admin: no write, no delete, no replicate.
+		assert!(authorize(&v, sid, AccOp::Write, "peers", Some(rid), &reader.peer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Delete, "peers", Some(rid), &reader.peer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Replicate, "peers", Some(rid), &reader.peer_did).is_err());
+		// A DID with no reads grant cannot read.
+		assert!(authorize(&v, sid, AccOp::Read, "peers", Some(rid), &outsider.peer_did).is_err());
+		// The owner still reads + writes as a full member.
+		authorize(&v, sid, AccOp::Read, "peers", Some(rid), &v.peer_did.clone()).unwrap();
+		authorize(&v, sid, AccOp::Write, "peers", Some(rid), &v.peer_did.clone()).unwrap();
 	}
 
 	#[test]

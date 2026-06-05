@@ -67,6 +67,23 @@ export async function sparkReplicateAdd(payload: {
 	})
 }
 
+/**
+ * Grant a peer a delegated `reads` capability + DEK keyshare on this spark: it
+ * may decrypt and read the spark's rows but holds NO `owns`, so it cannot write.
+ * This is how a member is onboarded onto `admin-spark` (the `reads` grant is the
+ * membership credential; the keyshare lets it read the roster). Between
+ * `sparkReplicateAdd` (relay, blind) and `sparkAdminAdd` (full owner).
+ */
+export async function sparkReaderAdd(payload: {
+	sparkId: string
+	peerDid: string
+}): Promise<void> {
+	await grooveRuntime('sparkReaderAdd', {
+		sparkId: payload.sparkId,
+		peerDid: payload.peerDid,
+	})
+}
+
 export type SparkAdminListReply = {
 	adminDids: string[]
 	/** Server avens granted a blind `replicate` cap (store-and-forward backups). */

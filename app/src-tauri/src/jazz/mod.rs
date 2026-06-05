@@ -2204,6 +2204,141 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 	Ok(())
 }
 
+/// Append biscuit third-party `reads` for `peerDid`, wrap the spark DEK to its
+/// pubkey (a keyshare), and persist the updated `genesis_b64`. The grantee is a
+/// **delegated reader / member**: it may decrypt and read this spark's rows but
+/// holds **no `owns`** — it cannot write. This is how an onboarded peer is added
+/// to `admin-spark` (its `reads` grant is the membership credential; its keyshare
+/// lets it read the roster). Only a spark admin may grant it. Mirrors
+/// `groove_ipc_spark_admin_add` but grants `reads` instead of `owns`.
+pub(crate) async fn groove_ipc_spark_reader_add(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	self_state: &SelfState,
+	spark_id: String,
+	peer_did: String,
+) -> Result<(), String> {
+	use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+	use base64::Engine;
+
+	let spark_uuid =
+		Uuid::parse_str(spark_id.trim()).map_err(|e| format!("invalid spark_id UUID: {e}"))?;
+	let peer_did = peer_did.trim().to_string();
+	if peer_did.is_empty() {
+		return Err("peer_did is empty".into());
+	}
+
+	let client = with_connected_client(jazz, app, self_state).await?;
+	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+	let shell = shell_arc.as_ref();
+
+	if peer_did == shell.peer_did {
+		return Err("cannot grant read to your own DID".into());
+	}
+	let peer_pk = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
+
+	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "Member").await?;
+	if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
+		log::warn!(target: "avenos::jazz", "spark_reader_add register {peer_did}: {e}");
+	}
+
+	// Only a spark admin may grant read (same gate as admin/replicate add).
+	jazz_engine::authorize_gate(shell, "sparks", crate::spark_acc::AccOp::Write, spark_uuid, None)?;
+
+	let dek_ver = shell
+		.spark_versions
+		.get(&spark_uuid)
+		.copied()
+		.ok_or_else(|| format!("missing dek version for spark {spark_uuid}"))?;
+	let dek = shell
+		.deks
+		.get(&(spark_uuid, dek_ver))
+		.ok_or_else(|| format!("missing DEK for spark {spark_uuid} v{dek_ver}"))?;
+
+	let ks_schema_pre = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
+	let ks_spark_ix_pre = jazz_engine::col_ix(&ks_schema_pre, "spark_id")?;
+	let ks_ver_ix_pre = jazz_engine::col_ix(&ks_schema_pre, "dek_version")?;
+	let ks_recip_ix_pre = jazz_engine::col_ix(&ks_schema_pre, "recipient_did")?;
+	let ks_rows_pre = jazz_engine::exec_list_rows(client.as_ref(), "keyshares").await?;
+	let mut ks_exists = false;
+	for (_oid, vals) in ks_rows_pre {
+		let sid = jazz_engine::uuid_cell_at(vals.as_slice(), ks_spark_ix_pre)?;
+		let dv = jazz_engine::bigint_i64(vals.get(ks_ver_ix_pre).ok_or("ks_ver_missing")?)?;
+		let recip = match vals.get(ks_recip_ix_pre).ok_or("ks_recip_missing")? {
+			Value::Text(s) => s.as_str(),
+			_ => continue,
+		};
+		if sid == spark_uuid && dv == dek_ver && recip == peer_did.as_str() {
+			ks_exists = true;
+			break;
+		}
+	}
+
+	let bisc_spark = shell
+		.vault
+		.sparks
+		.get(&spark_uuid)
+		.ok_or_else(|| format!("spark {spark_uuid} not loaded in vault"))?;
+	let already_reader = crate::spark_acc::spark_readers(&bisc_spark.biscuit, spark_uuid)?
+		.iter()
+		.any(|d| d.trim() == peer_did.as_str());
+	if already_reader && ks_exists {
+		finish_spark_admin_grant(app, jazz, self_state, client, spark_uuid).await?;
+		return Ok(());
+	}
+
+	let _ = client.flush_peer_sync().await;
+
+	// Keyshare before genesis so the reader often has the DEK before the chain lands.
+	if !ks_exists {
+		let recipient_pk = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
+		let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recipient_pk)?;
+		let urn = jazz_engine::spark_urn(spark_uuid);
+		let aad = crate::crypto::keyshare_wrap_aad(&urn, &peer_did, dek_ver);
+		let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
+		let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
+		let mut ks = Map::new();
+		ks.insert("spark_id".into(), JsonValue::String(spark_uuid.to_string()));
+		ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
+		ks.insert("recipient_did".into(), JsonValue::String(peer_did.clone()));
+		ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
+		ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
+		let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
+		client.create("keyshares", ks_vals).await.map_err(format_jazz_err)?;
+	}
+
+	if !already_reader {
+		let new_biscuit = crate::spark_acc::attenuate_add_reader_third_party(
+			&shell.vault.biscuit_kp,
+			&bisc_spark.biscuit,
+			spark_uuid,
+			&peer_did,
+		)?;
+		let genesis_vec = new_biscuit.to_vec().map_err(|e| format!("biscuit_encode:{e:?}"))?;
+		let genesis_b64 = URL_SAFE_NO_PAD.encode(genesis_vec);
+
+		let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "sparks").await?;
+		let spark_id_ix = jazz_engine::col_ix(&sparks_schema, "spark_id")?;
+		let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "sparks").await?;
+		let mut sparks_oid: Option<ObjectId> = None;
+		for (oid, vals) in sparks_rows {
+			let sid = jazz_engine::uuid_cell_at(vals.as_slice(), spark_id_ix)?;
+			if sid == spark_uuid {
+				sparks_oid = Some(oid);
+				break;
+			}
+		}
+		let sparks_oid = sparks_oid.ok_or_else(|| format!("no sparks row for spark_id={spark_uuid}"))?;
+		let mut patch_sparks = Map::new();
+		patch_sparks.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
+		let sparks_ops = patch_updates(&sparks_schema, patch_sparks)?;
+		client.update(sparks_oid, sparks_ops).await.map_err(format_jazz_err)?;
+	}
+
+	finish_spark_admin_grant(app, jazz, self_state, client, spark_uuid).await?;
+	Ok(())
+}
+
 /// Re-hydrate vault shell + sync ACL, push grant to peers, refresh sparks catalogue in the webview.
 async fn finish_spark_admin_grant(
 	app: &tauri::AppHandle,
@@ -3108,6 +3243,12 @@ pub(crate) async fn groove_runtime_dispatch(
 			groove_ipc_spark_replicate_add(app, mj, ss, spark_id, peer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
+		"sparkreaderadd" => {
+			let spark_id = pj_str(&pj, "sparkId")?;
+			let peer_did = pj_str(&pj, "peerDid")?;
+			groove_ipc_spark_reader_add(app, mj, ss, spark_id, peer_did).await?;
+			Ok(serde_json::Value::Null)
+		}
 		"sparkadminlist" => {
 			let spark_id = pj_str(&pj, "sparkId")?;
 			serde_json::to_value(groove_ipc_spark_admin_list(app, mj, ss, spark_id).await?)
@@ -3120,7 +3261,7 @@ pub(crate) async fn groove_runtime_dispatch(
 			Ok(serde_json::Value::Null)
 		}
 		other => Err(format!(
-			"groove_runtime: unknown op `{other}` — valid ops: bootstrap, status, session, list, explorerList, get, create, update, delete, subscribe, unsubscribe, peerMeshRefresh, meshStatus, peerList, peerAdd, peerRevoke, sparkAdminAdd, sparkAdminList, sparkAdminRevoke, sparkReplicateAdd"
+			"groove_runtime: unknown op `{other}` — valid ops: bootstrap, status, session, list, explorerList, get, create, update, delete, subscribe, unsubscribe, peerMeshRefresh, meshStatus, peerList, peerAdd, peerRevoke, sparkAdminAdd, sparkAdminList, sparkAdminRevoke, sparkReplicateAdd, sparkReaderAdd"
 		)),
 	}
 }
