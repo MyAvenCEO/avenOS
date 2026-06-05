@@ -37,6 +37,11 @@ const navSections = $derived(
 						match: (p) => p.startsWith(`${avenBase}/turnover`)
 					},
 					{
+						href: `${avenBase}/products`,
+						label: t('nav.products'),
+						match: (p) => p.startsWith(`${avenBase}/products`)
+					},
+					{
 						href: `${avenBase}/ingest`,
 						label: t('nav.ingest'),
 						match: (p) => p.startsWith(`${avenBase}/ingest`)

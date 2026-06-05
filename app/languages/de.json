@@ -97,6 +97,7 @@
 		"orders": "Bestellungen",
 		"orderTable": "Bestelltabelle",
 		"turnover": "Umsatz",
+		"products": "Produkte",
 		"ingest": "Ingest",
 		"avens": "Avens",
 		"allAvens": "← Alle Avens",
@@ -724,6 +725,23 @@
 			"subtitle": "Brutto-Umsatz pro Monat akkumuliert.",
 			"grandTotal": "Gesamt",
 			"empty": "Noch keine Daten — importiere eine CSV, um den Monatsumsatz zu sehen."
+		},
+		"products": {
+			"subtitle": "Alle Positionen nach Einzelpreis — netto, brutto, Steuer und Gesamtumsatz.",
+			"empty": "Noch keine Daten — importiere eine CSV, um Produktumsätze zu sehen.",
+			"count": "{count} Positionen",
+			"grandTotal": "Gesamt",
+			"col": {
+				"product": "Produkt",
+				"vat": "MwSt",
+				"unitNetto": "Einzel netto",
+				"unitBrutto": "Einzel brutto",
+				"unitTax": "Einzel Steuer",
+				"qty": "Menge",
+				"sumNetto": "Summe netto",
+				"sumTax": "Summe Steuer",
+				"sumBrutto": "Summe brutto"
+			}
 		},
 		"ingest": {
 			"subtitle": "Beobachte die Import-Pipeline Schritt für Schritt, mit Logs.",
