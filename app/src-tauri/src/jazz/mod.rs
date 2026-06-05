@@ -13,7 +13,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use groove::{
-	query_manager::types::{ColumnType, ComposedBranchName, SchemaHash, TableSchema},
+	query_manager::types::{ColumnType, ComposedBranchName, SchemaHash, TableName, TableSchema},
 	AppContext,
 	AppId,
 	PeerId,
@@ -22,6 +22,7 @@ use groove::{
 	metadata::MetadataKey,
 	ObjectId,
 	PeerInboundParkedHook,
+	QueryBuilder,
 	SyncPayload,
 	SyncTransport,
 	Value,
@@ -136,6 +137,13 @@ pub struct ManagedJazz {
 	last_table_snapshots: RwLock<HashMap<String, String>>,
 	/// Skip identical mesh snapshots so connect sub-states do not repaint the webview.
 	last_mesh_snapshot: RwLock<Option<String>>,
+	/// Content fingerprint of the vault-shell tables (sparks/keyshares/peers) at the last
+	/// drain check. Inbound peer-sync re-delivers shell-table batches that are often no-ops
+	/// (frontier re-announce, non-converged blind relay), and each one used to invalidate +
+	/// re-hydrate the vault shell — a constant idle re-hydrate loop. We now re-hydrate only
+	/// when this digest actually changes, so a real change (e.g. a new spark-admin grant)
+	/// still re-hydrates but identical re-deliveries don't. `None` = unknown → treat as changed.
+	last_shell_digest: RwLock<Option<u64>>,
 	/// Receiver moved out of here by [`take_change_rx`] once at startup; afterwards this
 	/// stays `None`. Kept inside `std::sync::Mutex` so we can extract it from
 	/// `tauri::setup` without an async runtime.
@@ -163,6 +171,7 @@ impl Default for ManagedJazz {
 			change_tx,
 			last_table_snapshots: RwLock::new(HashMap::new()),
 			last_mesh_snapshot: RwLock::new(None),
+			last_shell_digest: RwLock::new(None),
 			change_rx: std::sync::Mutex::new(Some(change_rx)),
 			connect_in_progress: Mutex::new(false),
 			connect_done: Notify::new(),
@@ -210,12 +219,12 @@ pub(crate) async fn execute_drain_batch(
 	self_state: &SelfState,
 	mut pending: std::collections::HashSet<String>,
 ) {
-	let vault_shell_dirty = pending
+	// A pending vault-shell table (sparks/keyshares/peers) MIGHT mean the shell changed — but
+	// inbound peer-sync re-delivers these batches constantly as no-ops, so we confirm an actual
+	// content change below (after we have a client) before paying for a re-hydrate.
+	let vault_shell_maybe_dirty = pending
 		.iter()
 		.any(|t| spark_sync::is_vault_shell_table(t));
-	if vault_shell_dirty {
-		jazz.invalidate_vault_shell();
-	}
 
 	let peers_pending = pending.remove("peers");
 	if peers_pending {
@@ -228,6 +237,34 @@ pub(crate) async fn execute_drain_batch(
 	}
 
 	let want_snapshots = !pending.is_empty() && jazz.any_ui_subscriber(&pending).await;
+	if !vault_shell_maybe_dirty && !want_snapshots {
+		if !pending.is_empty() {
+			log::trace!(
+				target: "avenos::jazz",
+				"table-change drain: no UI subscribers for {} table(s), skip",
+				pending.len(),
+			);
+		}
+		return;
+	}
+
+	let client = match with_connected_client(jazz, app, self_state).await {
+		Ok(c) => c,
+		Err(_) => return,
+	};
+
+	// Only treat the vault shell as dirty when the shell tables' CONTENT actually changed.
+	// This is the fix for the constant idle re-hydrate loop: inbound shell-table re-deliveries
+	// (frontier re-announce, a non-converged blind relay) used to invalidate + re-hydrate the
+	// vault shell every time. A genuine change (new spark-admin grant, keyshare, peer) alters a
+	// row, so the content digest changes and we still invalidate + re-hydrate — reactivity is
+	// preserved; identical re-deliveries are now a no-op. On a query error we fail safe to dirty.
+	let vault_shell_dirty =
+		vault_shell_maybe_dirty && jazz.vault_shell_content_changed(client.as_ref()).await;
+	if vault_shell_dirty {
+		jazz.invalidate_vault_shell();
+	}
+
 	// A vault-shell re-hydrate can change row ACCESS for ANY table — a single spark grant
 	// unlocks the spark catalogue row AND every data row (todos / messages / files / …) it
 	// scopes. So after re-hydrate we refresh GENERICALLY, with no per-table special cases:
@@ -246,21 +283,6 @@ pub(crate) async fn execute_drain_batch(
 		set.into_iter().collect()
 	} else {
 		Vec::new()
-	};
-	if !vault_shell_dirty && !want_snapshots {
-		if !pending.is_empty() {
-			log::trace!(
-				target: "avenos::jazz",
-				"table-change drain: no UI subscribers for {} table(s), skip",
-				pending.len(),
-			);
-		}
-		return;
-	}
-
-	let client = match with_connected_client(jazz, app, self_state).await {
-		Ok(c) => c,
-		Err(_) => return,
 	};
 
 	// Row-batch sync parks inbound frames until `batched_tick`; `recv_inbound` posts to this
@@ -849,6 +871,49 @@ impl ManagedJazz {
 		// Keep sync_acl until re-hydrate replaces it — clearing it re-triggers catch-up rebroadcast storms.
 	}
 
+	/// Has the vault-shell content actually changed since the last check? Returns `true` (and
+	/// records the new fingerprint) only on a real change; identical inbound re-deliveries return
+	/// `false`. This gates the drain's re-hydrate so the constant idle re-hydrate loop stops while
+	/// a genuine change (new spark-admin grant, keyshare, peer) still re-hydrates.
+	///
+	/// Fully generic — no table or column is special-cased:
+	///   • it digests every table in `spark_sync::VAULT_SHELL_TABLES` (extend that list and this
+	///     follows automatically), and
+	///   • each row contributes a column/schema-agnostic hash of `(table, object_id, values)`,
+	///     so it works for any table of any shape.
+	/// Order-independent (rows summed), includes soft-deleted rows (a delete is a real change),
+	/// and fails safe to `true` on any query error so a real change is never suppressed.
+	async fn vault_shell_content_changed(&self, client: &JazzClient) -> bool {
+		use std::hash::{Hash, Hasher};
+		let mut acc: u64 = 0;
+		for table in spark_sync::VAULT_SHELL_TABLES {
+			let q = QueryBuilder::new(TableName::new(*table))
+				.include_deleted()
+				.build();
+			let rows = match client.query(q, None).await {
+				Ok(rows) => rows,
+				Err(_) => return true, // fail safe: re-hydrate rather than risk missing a change
+			};
+			for (oid, vals) in rows {
+				let mut h = std::collections::hash_map::DefaultHasher::new();
+				(*table).hash(&mut h);
+				oid.uuid().as_bytes().hash(&mut h);
+				format!("{vals:?}").hash(&mut h);
+				acc = acc.wrapping_add(h.finish()); // order-independent fold
+			}
+		}
+		let mut last = self
+			.last_shell_digest
+			.write()
+			.expect("last_shell_digest poisoned");
+		if *last == Some(acc) {
+			false
+		} else {
+			*last = Some(acc);
+			true
+		}
+	}
+
 	/// Refresh `(table, object_id) → spark_id` in the outbound sync gate without a full shell hydrate.
 	pub(crate) async fn refresh_sync_acl_object_map(
 		&self,
@@ -881,6 +946,7 @@ impl ManagedJazz {
 			*self.sync_acl.write().expect("sync_acl poisoned") = None;
 			self.last_table_snapshots.write().expect("last_table_snapshots poisoned").clear();
 			*self.last_mesh_snapshot.write().expect("last_mesh_snapshot poisoned") = None;
+			*self.last_shell_digest.write().expect("last_shell_digest poisoned") = None;
 			self.table_ui_refs.lock().await.clear();
 			*self.connect_in_progress.lock().await = false;
 			self.connect_done.notify_waiters();
