@@ -35,6 +35,8 @@ interface OrderLine {
 	vat: string
 	price: number
 	qty: number
+	note?: string | null
+	toGo?: boolean
 	_source: SourceRef
 }
 
@@ -73,6 +75,11 @@ describe('victorio POS ingest', () => {
 		expect(helles?.price).toBeCloseTo(4.9, 5)
 		expect(helles?.qty).toBe(1)
 		expect(helles?.category).toBe('Bier')
+		expect(helles?.toGo).toBe(false)
+
+		// To-Go "Ja" → true on the Pommes line in order 20612.
+		const pommes = o12?.lines.find((l) => l.positionId === 43636)
+		expect(pommes?.toGo).toBe(true)
 	})
 
 	test('every target row carries source provenance', async () => {
@@ -140,5 +147,37 @@ describe('victorio POS ingest', () => {
 		expect(report.fileId.startsWith('groove:')).toBe(true)
 		const orders = report.output.orders as unknown as Order[]
 		expect(orders[0]._source.fileId).toBe(report.fileId)
+	})
+
+	test('auto-detects a tab-delimited source', async () => {
+		const cols = [
+			'Id;Rechnungs-Nr;Bezahldatum;ID Bestellung;ID Bestellposition;Bestelldatum',
+			'Ort;Nach;Mitarbeiter;ID Bezahlposition;Produktname;Kategorie;MwSt;Preis;Anzahl'
+		]
+			.join(';')
+			.split(';')
+		const vals = [
+			'8836;#008836;30.05.2026 23:37:06;20613;43643;30.05.2026 22:46:14',
+			'Service 2;Mitarbeiter;Service 1;40890;Helles 0,5l;Bier;19 %;4,90;1'
+		]
+			.join(';')
+			.split(';')
+		const tab = `${cols.join('\t')}\n${vals.join('\t')}`
+		const ing = createIngestor(config)
+		const r = await ing.ingest(textSource('tab.csv', tab))
+		const orders = r.output.orders as unknown as Order[]
+		expect(orders).toHaveLength(1)
+		expect(orders[0].lines[0].price).toBeCloseTo(4.9, 5)
+	})
+
+	test('emits stage lifecycle events in pipeline order', async () => {
+		const done: string[] = []
+		const ing = createIngestor(config, {
+			onStageEvent: (e) => {
+				if (e.phase === 'done') done.push(e.stage)
+			}
+		})
+		await ing.ingest(base())
+		expect(done).toEqual(['ingest', 'parse', 'transform', 'dedup', 'assemble'])
 	})
 })

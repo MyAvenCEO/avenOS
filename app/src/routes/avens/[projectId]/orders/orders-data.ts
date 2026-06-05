@@ -51,11 +51,39 @@ export const ORDERS: Order[] = [
 		paidAt: '2026-05-30T23:37:06',
 		status: 'paid',
 		lines: [
-			{ positionId: 43643, product: 'Helles 0,5l', category: 'Bier', vat: '19%', price: 4.9, qty: 1 },
-			{ positionId: 43642, product: 'Helles klein 0,3l', category: 'Bier', vat: '19%', price: 3.9, qty: 1 },
-			{ positionId: 43645, product: 'Schorle Apfel 0,4l', category: 'Saftschorle', vat: '19%', price: 3.6, qty: 1 },
-			{ positionId: 43644, product: 'Hausgemachte Limo Basilikum Limette', category: 'AFG', vat: '19%', price: 4.2, qty: 1 },
-		],
+			{
+				positionId: 43643,
+				product: 'Helles 0,5l',
+				category: 'Bier',
+				vat: '19%',
+				price: 4.9,
+				qty: 1
+			},
+			{
+				positionId: 43642,
+				product: 'Helles klein 0,3l',
+				category: 'Bier',
+				vat: '19%',
+				price: 3.9,
+				qty: 1
+			},
+			{
+				positionId: 43645,
+				product: 'Schorle Apfel 0,4l',
+				category: 'Saftschorle',
+				vat: '19%',
+				price: 3.6,
+				qty: 1
+			},
+			{
+				positionId: 43644,
+				product: 'Hausgemachte Limo Basilikum Limette',
+				category: 'AFG',
+				vat: '19%',
+				price: 4.2,
+				qty: 1
+			}
+		]
 	},
 	{
 		id: 20612,
@@ -67,15 +95,71 @@ export const ORDERS: Order[] = [
 		paidAt: '2026-05-30T23:37:06',
 		status: 'paid',
 		lines: [
-			{ positionId: 43635, product: 'Helles 0,5l', category: 'Bier', vat: '19%', price: 4.9, qty: 1 },
-			{ positionId: 43634, product: 'Helles klein 0,3l', category: 'Bier', vat: '19%', price: 3.9, qty: 1 },
-			{ positionId: 43641, product: 'Schorle Rhabarber 0,4l', category: 'Saftschorle', vat: '19%', price: 3.6, qty: 1 },
-			{ positionId: 43640, product: 'Schorle Maracuja 0,4l', category: 'Saftschorle', vat: '19%', price: 3.6, qty: 1 },
-			{ positionId: 43639, product: 'Weinschorle weiss 0,2', category: 'Wein weiss', vat: '19%', price: 4.5, qty: 1 },
-			{ positionId: 43638, product: 'Cafe Creme', category: 'Heissgetränke', vat: '19%', price: 2.8, qty: 1 },
-			{ positionId: 43637, product: 'Paulaner Spezi 0,4l', category: 'AFG', vat: '19%', price: 3.9, qty: 1 },
-			{ positionId: 43636, product: 'Radler 0,5l', category: 'Bier', vat: '19%', price: 4.9, qty: 1 },
-		],
+			{
+				positionId: 43635,
+				product: 'Helles 0,5l',
+				category: 'Bier',
+				vat: '19%',
+				price: 4.9,
+				qty: 1
+			},
+			{
+				positionId: 43634,
+				product: 'Helles klein 0,3l',
+				category: 'Bier',
+				vat: '19%',
+				price: 3.9,
+				qty: 1
+			},
+			{
+				positionId: 43641,
+				product: 'Schorle Rhabarber 0,4l',
+				category: 'Saftschorle',
+				vat: '19%',
+				price: 3.6,
+				qty: 1
+			},
+			{
+				positionId: 43640,
+				product: 'Schorle Maracuja 0,4l',
+				category: 'Saftschorle',
+				vat: '19%',
+				price: 3.6,
+				qty: 1
+			},
+			{
+				positionId: 43639,
+				product: 'Weinschorle weiss 0,2',
+				category: 'Wein weiss',
+				vat: '19%',
+				price: 4.5,
+				qty: 1
+			},
+			{
+				positionId: 43638,
+				product: 'Cafe Creme',
+				category: 'Heissgetränke',
+				vat: '19%',
+				price: 2.8,
+				qty: 1
+			},
+			{
+				positionId: 43637,
+				product: 'Paulaner Spezi 0,4l',
+				category: 'AFG',
+				vat: '19%',
+				price: 3.9,
+				qty: 1
+			},
+			{
+				positionId: 43636,
+				product: 'Radler 0,5l',
+				category: 'Bier',
+				vat: '19%',
+				price: 4.9,
+				qty: 1
+			}
+		]
 	},
 	{
 		id: 20615,
@@ -87,10 +171,31 @@ export const ORDERS: Order[] = [
 		paidAt: '2026-05-30T23:36:43',
 		status: 'paid',
 		lines: [
-			{ positionId: 43647, product: 'Helles klein 0,3l', category: 'Bier', vat: '19%', price: 3.9, qty: 1 },
-			{ positionId: 43648, product: 'Spitzkohl', category: 'Herzhaftes', vat: '7%', price: 14.5, qty: 1 },
-			{ positionId: 43649, product: 'Süsse Versuchung', category: 'Dessert', vat: '7%', price: 7.5, qty: 2 },
-		],
+			{
+				positionId: 43647,
+				product: 'Helles klein 0,3l',
+				category: 'Bier',
+				vat: '19%',
+				price: 3.9,
+				qty: 1
+			},
+			{
+				positionId: 43648,
+				product: 'Spitzkohl',
+				category: 'Herzhaftes',
+				vat: '7%',
+				price: 14.5,
+				qty: 1
+			},
+			{
+				positionId: 43649,
+				product: 'Süsse Versuchung',
+				category: 'Dessert',
+				vat: '7%',
+				price: 7.5,
+				qty: 2
+			}
+		]
 	},
 	{
 		id: 20591,
@@ -102,12 +207,40 @@ export const ORDERS: Order[] = [
 		paidAt: '2026-05-30T21:05:12',
 		status: 'paid',
 		lines: [
-			{ positionId: 43589, product: 'Spitzkohl', category: 'Herzhaftes', vat: '7%', price: 14.5, qty: 1 },
-			{ positionId: 43590, product: 'Wiener Schnitzel', category: 'Herzhaftes', vat: '7%', price: 19.5, qty: 2 },
+			{
+				positionId: 43589,
+				product: 'Spitzkohl',
+				category: 'Herzhaftes',
+				vat: '7%',
+				price: 14.5,
+				qty: 1
+			},
+			{
+				positionId: 43590,
+				product: 'Wiener Schnitzel',
+				category: 'Herzhaftes',
+				vat: '7%',
+				price: 19.5,
+				qty: 2
+			},
 			{ positionId: 43591, product: 'Pommes', category: 'Beilagen', vat: '7%', price: 4.5, qty: 2 },
-			{ positionId: 43592, product: 'Helles 0,5l', category: 'Bier', vat: '19%', price: 4.9, qty: 3 },
-			{ positionId: 43593, product: 'Weinschorle weiss 0,2', category: 'Wein weiss', vat: '19%', price: 4.5, qty: 1 },
-		],
+			{
+				positionId: 43592,
+				product: 'Helles 0,5l',
+				category: 'Bier',
+				vat: '19%',
+				price: 4.9,
+				qty: 3
+			},
+			{
+				positionId: 43593,
+				product: 'Weinschorle weiss 0,2',
+				category: 'Wein weiss',
+				vat: '19%',
+				price: 4.5,
+				qty: 1
+			}
+		]
 	},
 	{
 		id: 20620,
@@ -119,9 +252,25 @@ export const ORDERS: Order[] = [
 		paidAt: null,
 		status: 'open',
 		lines: [
-			{ positionId: 43660, product: 'Helles 0,5l', category: 'Bier', vat: '19%', price: 0, qty: 2, note: 'Personal 100%' },
-			{ positionId: 43661, product: 'Cafe Creme', category: 'Heissgetränke', vat: '19%', price: 0, qty: 2, note: 'Personal 100%' },
-		],
+			{
+				positionId: 43660,
+				product: 'Helles 0,5l',
+				category: 'Bier',
+				vat: '19%',
+				price: 0,
+				qty: 2,
+				note: 'Personal 100%'
+			},
+			{
+				positionId: 43661,
+				product: 'Cafe Creme',
+				category: 'Heissgetränke',
+				vat: '19%',
+				price: 0,
+				qty: 2,
+				note: 'Personal 100%'
+			}
+		]
 	},
 	{
 		id: 20622,
@@ -133,12 +282,41 @@ export const ORDERS: Order[] = [
 		paidAt: null,
 		status: 'open',
 		lines: [
-			{ positionId: 43671, product: 'Schorle Apfel 0,4l', category: 'Saftschorle', vat: '19%', price: 3.6, qty: 2 },
-			{ positionId: 43672, product: 'Paulaner Spezi 0,4l', category: 'AFG', vat: '19%', price: 3.9, qty: 1 },
-			{ positionId: 43673, product: 'Wiener Schnitzel', category: 'Herzhaftes', vat: '7%', price: 19.5, qty: 1 },
-			{ positionId: 43674, product: 'Pommes', category: 'Beilagen', vat: '7%', price: 4.5, qty: 1, toGo: true },
-		],
-	},
+			{
+				positionId: 43671,
+				product: 'Schorle Apfel 0,4l',
+				category: 'Saftschorle',
+				vat: '19%',
+				price: 3.6,
+				qty: 2
+			},
+			{
+				positionId: 43672,
+				product: 'Paulaner Spezi 0,4l',
+				category: 'AFG',
+				vat: '19%',
+				price: 3.9,
+				qty: 1
+			},
+			{
+				positionId: 43673,
+				product: 'Wiener Schnitzel',
+				category: 'Herzhaftes',
+				vat: '7%',
+				price: 19.5,
+				qty: 1
+			},
+			{
+				positionId: 43674,
+				product: 'Pommes',
+				category: 'Beilagen',
+				vat: '7%',
+				price: 4.5,
+				qty: 1,
+				toGo: true
+			}
+		]
+	}
 ]
 
 export function orderTotal(order: Order): number {

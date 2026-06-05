@@ -95,6 +95,8 @@
 		"gallery": "Galerie",
 		"peers": "Peers",
 		"orders": "Bestellungen",
+		"orderTable": "Bestelltabelle",
+		"ingest": "Ingest",
 		"avens": "Avens",
 		"allAvens": "← Alle Avens",
 		"avenViews": "Aven-Ansichten",
@@ -694,7 +696,52 @@
 			"importDuplicate": "Bereits importiert — nichts Neues hinzuzufügen.",
 			"importEmpty": "Keine Zeilen in dieser Datei gefunden.",
 			"importError": "Import fehlgeschlagen: {message}",
-			"importedBadge": "Importiert"
+			"importedBadge": "Importiert",
+			"importing": "Importiere…",
+			"summary": "{orders} Bestellungen · {lines} Positionen.",
+			"showingCapped": "Zeige {shown} von {total}."
+		},
+		"orderTable": {
+			"subtitle": "Importierte Bestellpositionen als flache Tabelle.",
+			"empty": "Noch keine Daten — importiere eine CSV, um die Tabelle zu füllen.",
+			"col": {
+				"time": "Zeit",
+				"invoice": "Rechnung",
+				"order": "Bestellung",
+				"location": "Ort",
+				"server": "Bedienung",
+				"product": "Produkt",
+				"category": "Kategorie",
+				"qty": "Menge",
+				"price": "Preis",
+				"total": "Gesamt",
+				"vat": "MwSt",
+				"note": "Notiz"
+			}
+		},
+		"ingest": {
+			"subtitle": "Beobachte die Import-Pipeline Schritt für Schritt, mit Logs.",
+			"sourceFile": "Quelldatei",
+			"result": "Ergebnis",
+			"runId": "Lauf-ID",
+			"fileId": "Datei-ID",
+			"hash": "Inhalts-Hash",
+			"duplicate": "Doppelte Datei",
+			"logs": "Logs",
+			"noLogs": "Noch keine Logs — importiere eine CSV, um die Pipeline zu sehen.",
+			"stage": {
+				"ingest": "Ingest (Hash + Upload)",
+				"parse": "Parsen (Schema + Zeilen)",
+				"transform": "Transformieren (Map → Targets)",
+				"dedup": "Dedup (in Store mergen)",
+				"assemble": "Assemblieren (Bestellungen verschachteln)"
+			},
+			"status": {
+				"pending": "Ausstehend",
+				"running": "Läuft",
+				"done": "Fertig",
+				"error": "Fehler"
+			}
 		}
 	}
 }

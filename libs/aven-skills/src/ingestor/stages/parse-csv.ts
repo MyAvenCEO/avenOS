@@ -15,6 +15,21 @@ export interface ParsedSource extends SourceDoc {
 
 const decoder = new TextDecoder('utf-8')
 
+/** Sniff the most likely delimiter from the header line (`;`, tab, `,`, or `|`). */
+function detectDelimiter(firstLine: string): string {
+	const candidates = [';', '\t', ',', '|']
+	let best = ','
+	let bestCount = -1
+	for (const d of candidates) {
+		const count = firstLine.split(d).length - 1
+		if (count > bestCount) {
+			best = d
+			bestCount = count
+		}
+	}
+	return best
+}
+
 /** Minimal RFC-4180-ish CSV reader: honors quotes, escaped quotes, CRLF, and a configurable delimiter. */
 function parseCsv(text: string, delimiter: string): string[][] {
 	const rows: string[][] = []
@@ -81,12 +96,14 @@ function parseCsv(text: string, delimiter: string): string[][] {
  * ref id used for provenance.
  */
 export function makeParseCsvStage(source: SourceConfig): Stage<SourceDoc, ParsedSource> {
-	const delimiter = source.delimiter ?? ','
+	const configured = source.delimiter && source.delimiter !== 'auto' ? source.delimiter : null
 	const headerRow = source.headerRow !== false
 	const nullValues = new Set(source.nullValues ?? [''])
 
 	return stage('parse', (input, ctx) => {
 		const text = decoder.decode(input.bytes)
+		const firstLine = text.slice(0, text.indexOf('\n') === -1 ? text.length : text.indexOf('\n'))
+		const delimiter = configured ?? detectDelimiter(firstLine)
 		const grid = parseCsv(text, delimiter).filter((r) => !(r.length === 1 && r[0] === ''))
 		if (grid.length === 0) {
 			return { ...input, columns: [], rows: [], rowRefs: [] }
@@ -104,9 +121,13 @@ export function makeParseCsvStage(source: SourceConfig): Stage<SourceDoc, Parsed
 			rows.push(rec)
 		}
 		const rowRefs = rows.map((r) => keyFromRow(r, source.rowRef))
-		ctx.logger.log('info', 'parse', `parsed ${rows.length} rows × ${columns.length} cols`, {
-			columns
-		})
+		const delimLabel = delimiter === '\t' ? '\\t' : delimiter
+		ctx.logger.log(
+			'info',
+			'parse',
+			`parsed ${rows.length} rows × ${columns.length} cols (delimiter "${delimLabel}")`,
+			{ columns, rows: rows.length, delimiter: delimLabel }
+		)
 		return { ...input, columns, rows, rowRefs }
 	})
 }

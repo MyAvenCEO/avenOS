@@ -1,5 +1,5 @@
 import { runStage } from '../pipeline/run'
-import { type Logger, type PipelineContext, silentLogger } from '../pipeline/types'
+import { type Logger, type PipelineContext, type StageEvent, silentLogger } from '../pipeline/types'
 import { type IngestConfig, validateConfig } from './config'
 import { defaultPorts, type IngestorPorts } from './ports'
 import { makeAssembleStage } from './stages/assemble'
@@ -22,9 +22,17 @@ export interface IngestReport {
 	output: Record<string, Record<string, unknown>[]>
 }
 
+/** Ordered names of the pipeline stages — handy for pre-rendering a flow UI. */
+export const INGEST_STAGES = ['ingest', 'parse', 'transform', 'dedup', 'assemble'] as const
+export type IngestStageName = (typeof INGEST_STAGES)[number]
+
 export interface IngestorOptions {
 	ports?: Partial<IngestorPorts>
 	logger?: Logger
+	/** Per-stage lifecycle callback (start/done/error) for live progress UIs. */
+	onStageEvent?: (event: StageEvent) => void
+	/** Cooperative yield awaited after each stage, so a host UI can repaint. */
+	yield?: () => Promise<void>
 }
 
 export interface Ingestor {
@@ -65,7 +73,12 @@ export function createIngestor(rawConfig: IngestConfig, options: IngestorOptions
 		// We need the content hash to form the runId before the rest of the pipeline.
 		const contentSha256 = await ports.hash.sha256Hex(raw.bytes)
 		const runId = `${config.id}@${contentSha256.slice(0, 12)}`
-		const ctx: PipelineContext = { runId, logger }
+		const ctx: PipelineContext = {
+			runId,
+			logger,
+			onStageEvent: options.onStageEvent,
+			yield: options.yield
+		}
 
 		const emptyStats: DedupStats = Object.fromEntries(
 			config.targets.map((t) => [t.name, { added: 0, skipped: 0 }])

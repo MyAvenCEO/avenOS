@@ -1,12 +1,12 @@
 {
 	"id": "victorio-pos-orders",
-	"version": 1,
+	"version": 2,
 	"skipDuplicateFiles": true,
 	"source": {
 		"format": "csv",
-		"delimiter": ";",
+		"delimiter": "auto",
 		"headerRow": true,
-		"nullValues": ["—", ""],
+		"nullValues": ["—", "-", ""],
 		"rowRef": ["ID Bezahlposition"]
 	},
 	"targets": [
@@ -46,8 +46,10 @@
 				"product": { "from": "Produktname", "type": "text" },
 				"category": { "from": "Kategorie", "type": "text" },
 				"vat": { "from": "MwSt", "type": "text" },
-				"price": { "from": "Einzelpreis", "type": "number", "decimal": ",", "default": 0 },
-				"qty": { "from": "Anzahl", "type": "int", "default": 1 }
+				"price": { "from": "Preis", "type": "number", "decimal": ",", "default": 0 },
+				"qty": { "from": "Anzahl", "type": "int", "default": 1 },
+				"note": { "from": "Notiz", "type": "text", "nullable": true },
+				"toGo": { "from": "To-Go", "type": "bool", "default": false }
 			}
 		}
 	]

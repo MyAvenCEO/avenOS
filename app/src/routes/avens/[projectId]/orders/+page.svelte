@@ -1,6 +1,7 @@
 <script lang="ts">
 import { t } from '$lib/i18n'
-import { ingestOrdersCsv } from '$lib/ingestor/victorio-orders'
+import ImportCsvButton from '$lib/ingestor/ImportCsvButton.svelte'
+import { ordersFlow } from '$lib/ingestor/orders-store.svelte'
 import {
 	formatDate,
 	formatEur,
@@ -11,47 +12,16 @@ import {
 	orderTotal
 } from './orders-data'
 
-// Imported orders replace the hardcoded sample once the first CSV is ingested.
-let imported = $state<Order[] | null>(null)
-let importMsg = $state<string | null>(null)
-let importing = $state(false)
+// Cap rendered cards — a real export has tens of thousands of orders.
+const MAX_CARDS = 100
 
-const orders = $derived(
-	[...(imported ?? ORDERS)].sort((a, b) => b.orderedAt.localeCompare(a.orderedAt))
-)
-const isImported = $derived(imported !== null)
+const isImported = $derived(ordersFlow.hasImport && ordersFlow.orderCount > 0)
+const source = $derived(isImported ? ordersFlow.orders : ORDERS)
+const sorted = $derived([...source].sort((a, b) => b.orderedAt.localeCompare(a.orderedAt)))
+const shown = $derived(sorted.slice(0, MAX_CARDS))
 
 function statusLabel(o: Order): string {
 	return o.status === 'paid' ? t('avens.orders.paid') : t('avens.orders.open')
-}
-
-async function onPickFile(event: Event): Promise<void> {
-	const input = event.currentTarget as HTMLInputElement
-	const file = input.files?.[0]
-	if (!file) return
-	importing = true
-	importMsg = null
-	try {
-		const { orders: next, report } = await ingestOrdersCsv(file)
-		imported = next
-		if (report.duplicateFile) {
-			importMsg = t('avens.orders.importDuplicate')
-		} else {
-			const added = Object.values(report.stats).reduce((s, x) => s + x.added, 0)
-			const skipped = Object.values(report.stats).reduce((s, x) => s + x.skipped, 0)
-			importMsg =
-				next.length === 0
-					? t('avens.orders.importEmpty')
-					: t('avens.orders.imported', { added, skipped })
-		}
-	} catch (e) {
-		importMsg = t('avens.orders.importError', {
-			message: e instanceof Error ? e.message : String(e)
-		})
-	} finally {
-		importing = false
-		input.value = ''
-	}
 }
 </script>
 
@@ -66,25 +36,32 @@ async function onPickFile(event: Event): Promise<void> {
 					{t('avens.orders.importedBadge')}
 				</span>
 			{/if}
-			<label
-				class="border-input bg-card/40 hover:bg-card/70 ml-auto cursor-pointer rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors {importing
-					? 'pointer-events-none opacity-60'
-					: ''}"
-			>
-				{t('avens.orders.import')}
-				<input type="file" accept=".csv,text/csv" class="hidden" onchange={onPickFile}>
-			</label>
+			<div class="ml-auto"><ImportCsvButton compact /></div>
 		</div>
 		<p class="text-muted-foreground text-sm">{t('avens.orders.subtitle')}</p>
-		{#if importMsg}
-			<p class="text-muted-foreground text-xs">{importMsg}</p>
+		{#if ordersFlow.error}
+			<p class="text-xs text-red-600 dark:text-red-400">
+				{t('avens.orders.importError', { message: ordersFlow.error })}
+			</p>
+		{:else if ordersFlow.duplicate}
+			<p class="text-muted-foreground text-xs">{t('avens.orders.importDuplicate')}</p>
+		{:else if isImported}
+			<p class="text-muted-foreground text-xs">
+				{t('avens.orders.summary', { orders: ordersFlow.orderCount, lines: ordersFlow.lineCount })}
+			</p>
 		{:else}
 			<p class="text-muted-foreground/70 text-[11px]">{t('avens.orders.importHint')}</p>
 		{/if}
 	</header>
 
+	{#if shown.length < sorted.length}
+		<p class="text-muted-foreground/70 text-[11px]">
+			{t('avens.orders.showingCapped', { shown: shown.length, total: sorted.length })}
+		</p>
+	{/if}
+
 	<ul class="flex flex-col gap-3">
-		{#each orders as order (order.id)}
+		{#each shown as order (order.id)}
 			<li class="border-input overflow-hidden rounded-xl border bg-card/40">
 				<div
 					class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/60 px-4 py-3"
