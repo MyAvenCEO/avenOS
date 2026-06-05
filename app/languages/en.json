@@ -98,6 +98,7 @@
 		"orders": "Orders",
 		"orderTable": "Order Table",
 		"turnover": "Turnover",
+		"products": "Products",
 		"ingest": "Ingest",
 		"avens": "Avens",
 		"allAvens": "← All avens",
@@ -736,6 +737,23 @@
 			"subtitle": "Gross turnover (brutto Umsatz) accumulated per month.",
 			"grandTotal": "Total",
 			"empty": "No data yet — import a CSV to see monthly turnover."
+		},
+		"products": {
+			"subtitle": "Every position by unit price — net, gross, tax, and total sales.",
+			"empty": "No data yet — import a CSV to see product sales.",
+			"count": "{count} positions",
+			"grandTotal": "Total",
+			"col": {
+				"product": "Product",
+				"vat": "VAT",
+				"unitNetto": "Unit net",
+				"unitBrutto": "Unit gross",
+				"unitTax": "Unit tax",
+				"qty": "Qty",
+				"sumNetto": "Sum net",
+				"sumTax": "Sum tax",
+				"sumBrutto": "Sum gross"
+			}
 		},
 		"ingest": {
 			"subtitle": "Watch the import pipeline run, stage by stage, with logs.",
