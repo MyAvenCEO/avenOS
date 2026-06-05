@@ -9,9 +9,8 @@
 	import { deviceSession } from '$lib/settings/device-session-store'
 	import GalleryPdfThumb from '$lib/gallery/GalleryPdfThumb.svelte'
 	import {
-		coerceByteCount,
 		coerceEpochMs,
-		formatBytes,
+		fileTypeLabel,
 		imageDataUrl,
 	} from '$lib/gallery/file-preview'
 
@@ -120,21 +119,23 @@
 										/>
 									{:else}
 										<div
-											class="text-muted-foreground flex h-full w-full items-center justify-center p-4 text-center text-xs"
+											class="text-muted-foreground flex h-full w-full items-center justify-center p-4 text-center"
 										>
-											{t('common.noPreview')}
+											<span
+												class="bg-background/80 text-foreground rounded px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-wider"
+											>
+												{fileTypeLabel(row)}
+											</span>
 										</div>
 									{/if}
 								{/if}
 							</div>
 							<div class="flex min-w-0 flex-col gap-0.5 p-3">
-								<p class="truncate text-sm font-medium leading-snug" title={row.filename}>
-									{row.filename || t('common.untitled')}
-								</p>
-								<p class="text-muted-foreground truncate text-[11px] leading-snug">
-									{row.mime_type}
-									<span class="mx-1 opacity-50">·</span>
-									{formatBytes(coerceByteCount(row.size_bytes))}
+								<p
+									class="text-muted-foreground truncate font-mono text-[11px] leading-snug"
+									title={row.id}
+								>
+									{row.id}
 								</p>
 							</div>
 						</li>

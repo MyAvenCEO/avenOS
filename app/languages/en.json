@@ -93,7 +93,7 @@
 		"members": "Members",
 		"talk": "Talk",
 		"todos": "Todos",
-		"gallery": "Gallery",
+		"gallery": "Files",
 		"peers": "Peers",
 		"orders": "Orders",
 		"orderTable": "Order Table",
@@ -445,8 +445,8 @@
 			"noTodosYet": "No todos in this spark yet."
 		},
 		"gallery": {
-			"title": "Gallery",
-			"subtitle": "Files attached to intents or talk messages in this spark. Images and PDFs show a thumbnail (first page for PDFs).",
+			"title": "Files",
+			"subtitle": "All files attached to intents or talk messages in this spark. Images and PDFs render a thumbnail; other formats show their file type.",
 			"unlockToLoad": "Unlock with Touch ID to load your database.",
 			"missingSparkId": "Missing spark id.",
 			"notInLedger": "No spark matches this id in your ledger —",

@@ -13,6 +13,11 @@ const ALLOWED_MIME = new Set([
 	'image/jpeg',
 	'image/png',
 	'image/svg+xml',
+	'text/csv',
+	'text/plain',
+	'text/rtf',
+	'application/rtf',
+	'text/markdown',
 ])
 
 function inferMimeFromFilename(name: string): string | null {
@@ -21,6 +26,10 @@ function inferMimeFromFilename(name: string): string | null {
 	if (base.endsWith('.jpg') || base.endsWith('.jpeg')) return 'image/jpeg'
 	if (base.endsWith('.png')) return 'image/png'
 	if (base.endsWith('.svg')) return 'image/svg+xml'
+	if (base.endsWith('.csv')) return 'text/csv'
+	if (base.endsWith('.txt')) return 'text/plain'
+	if (base.endsWith('.rtf')) return 'application/rtf'
+	if (base.endsWith('.md') || base.endsWith('.markdown')) return 'text/markdown'
 	return null
 }
 
@@ -46,7 +55,7 @@ export function classifyIntentUploadFile(file: File): { ok: true; mime: string }
 		} else {
 			return {
 				ok: false,
-				err: `${file.name}: type not allowed (need PDF, JPEG, PNG, or SVG; got ${mime || 'unknown'})`,
+				err: `${file.name}: type not allowed (need PDF, image, CSV, TXT, RTF, or Markdown; got ${mime || 'unknown'})`,
 			}
 		}
 	}
