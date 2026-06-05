@@ -97,6 +97,7 @@
 		"peers": "Peers",
 		"orders": "Orders",
 		"orderTable": "Order Table",
+		"turnover": "Turnover",
 		"ingest": "Ingest",
 		"avens": "Avens",
 		"allAvens": "← All avens",
@@ -730,6 +731,11 @@
 				"vat": "VAT",
 				"note": "Note"
 			}
+		},
+		"turnover": {
+			"subtitle": "Gross turnover (brutto Umsatz) accumulated per month.",
+			"grandTotal": "Total",
+			"empty": "No data yet — import a CSV to see monthly turnover."
 		},
 		"ingest": {
 			"subtitle": "Watch the import pipeline run, stage by stage, with logs.",

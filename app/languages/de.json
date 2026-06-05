@@ -96,6 +96,7 @@
 		"peers": "Peers",
 		"orders": "Bestellungen",
 		"orderTable": "Bestelltabelle",
+		"turnover": "Umsatz",
 		"ingest": "Ingest",
 		"avens": "Avens",
 		"allAvens": "← Alle Avens",
@@ -718,6 +719,11 @@
 				"vat": "MwSt",
 				"note": "Notiz"
 			}
+		},
+		"turnover": {
+			"subtitle": "Brutto-Umsatz pro Monat akkumuliert.",
+			"grandTotal": "Gesamt",
+			"empty": "Noch keine Daten — importiere eine CSV, um den Monatsumsatz zu sehen."
 		},
 		"ingest": {
 			"subtitle": "Beobachte die Import-Pipeline Schritt für Schritt, mit Logs.",

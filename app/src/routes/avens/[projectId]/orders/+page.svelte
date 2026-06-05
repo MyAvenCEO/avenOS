@@ -2,6 +2,7 @@
 import { t } from '$lib/i18n'
 import ImportCsvButton from '$lib/ingestor/ImportCsvButton.svelte'
 import { ordersFlow } from '$lib/ingestor/orders-store.svelte'
+import VirtualList from '$lib/ingestor/VirtualList.svelte'
 import {
 	formatDate,
 	formatEur,
@@ -12,20 +13,16 @@ import {
 	orderTotal
 } from './orders-data'
 
-// Cap rendered cards — a real export has tens of thousands of orders.
-const MAX_CARDS = 100
-
 const isImported = $derived(ordersFlow.hasImport && ordersFlow.orderCount > 0)
 const source = $derived(isImported ? ordersFlow.orders : ORDERS)
 const sorted = $derived([...source].sort((a, b) => b.orderedAt.localeCompare(a.orderedAt)))
-const shown = $derived(sorted.slice(0, MAX_CARDS))
 
 function statusLabel(o: Order): string {
 	return o.status === 'paid' ? t('avens.orders.paid') : t('avens.orders.open')
 }
 </script>
 
-<div class="flex flex-col gap-5">
+<div class="flex min-h-0 flex-1 flex-col gap-4">
 	<header class="space-y-2">
 		<div class="flex flex-wrap items-center gap-x-3 gap-y-1">
 			<h1 class="text-xl font-semibold tracking-tight">{t('nav.orders')}</h1>
@@ -54,15 +51,9 @@ function statusLabel(o: Order): string {
 		{/if}
 	</header>
 
-	{#if shown.length < sorted.length}
-		<p class="text-muted-foreground/70 text-[11px]">
-			{t('avens.orders.showingCapped', { shown: shown.length, total: sorted.length })}
-		</p>
-	{/if}
-
-	<ul class="flex flex-col gap-3">
-		{#each shown as order (order.id)}
-			<li class="border-input overflow-hidden rounded-xl border bg-card/40">
+	<VirtualList items={sorted} estimate={160} class="pr-1">
+		{#snippet row(order: Order)}
+			<div class="border-input mb-3 overflow-hidden rounded-xl border bg-card/40">
 				<div
 					class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/60 px-4 py-3"
 				>
@@ -120,7 +111,7 @@ function statusLabel(o: Order): string {
 					<span>{t('avens.orders.total')}</span>
 					<span class="tabular-nums">{formatEur(orderTotal(order))}</span>
 				</div>
-			</li>
-		{/each}
-	</ul>
+			</div>
+		{/snippet}
+	</VirtualList>
 </div>
