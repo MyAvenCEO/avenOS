@@ -238,10 +238,15 @@ Dependency-ordered. **Gate on every task:** `cargo check`/`cargo test` green for
 | Design doc + breakdown | ✅ | `234050d` |
 | **T0.2** non-owner delegated `reads` in `authorize()` (+ `attenuate_add_reader_third_party`, `spark_readers`, unit test) | ✅ verified — `cargo test … spark_acc::` 6 passed | `f1d4099` |
 | **T0.3** `sparkReaderAdd` (reads + offline keyshare, no `owns`) — IPC handler + dispatch + `api.ts` binding | ✅ compiles clean, wired | `f1d4099` |
-| **T0.1** caps-only sync / `peers` spark-scoped | ⬜ specified below — needs live `dev:app2x` verification | — |
+| **T0.1-core** `peers` spark-scoped (nullable `spark_id`, populated at create) | 🟡 implemented, compiling — **needs live `dev:app2x` verification** | _pending_ |
+| **T0.1-rest** remove the UI-publish/insert special-cases (path unification) | ⬜ deferred follow-up (sync-orthogonal) | — |
 | A–E | ⬜ | — |
 
-> **Why T0.1 is handed off, not blasted out.** It is a 13-site change across `aven-db` + `app/src-tauri` *plus* a bootstrap reorder, and the only thing that proves it (does bootstrap still build a valid shell; do `peers` rows converge through the biscuit gate) is a **live two-device run**, which an autonomous build session can't perform. Shipping it compile-only would look done while being unverified — worse than a precise guide.
+> **T0.1 split into `core` + `rest`.** The full 13-site removal entangles the `peers` **UI-render** path (`list_peer_rows`/`emit_peers_table_snapshot`) with sync, and the explore's line numbers had already drifted after the T0.3 edits — ripping it out blind risks breaking the trusted-peers UI *and* sync at once, untested. So **T0.1-core** does only what unblocks the admin-spark roster: `peers` becomes a spark-scoped table (`spark_id` column, populated at the two real create sites), so roster rows (Phase A, `spark_id = admin-spark`) sync via caps. The trust-set rows go in the device's default spark (sync across your own devices; invisible to a paired peer who doesn't hold it). `peers` is all-`plaintext`, so **no DEK/seal** is involved — that's what keeps it safe. The special-case **removal** (unifying the UI path) is sync-orthogonal and deferred to **T0.1-rest**.
+>
+> **Still needs a live run.** `cargo check` + the `aven-db` harness prove compilation, but only `dev:app2x` proves bootstrap still builds a valid shell and pairing/spark-sync still converge with `peers` now spark-scoped.
+
+**Implemented in T0.1-core:** nullable `spark_id` first column on `peers` ([`schema.manifest.json`](../libs/aven-schema/schema.manifest.json)); `default_spark_id()` helper + `add_remote_peer` populates it ([`peers.rs`](../app/src-tauri/src/peers.rs)); bootstrap patches the local device row's `spark_id` after the genesis spark is minted ([`jazz_engine.rs`](../app/src-tauri/src/jazz/jazz_engine.rs)). `insert_values` already maps a missing nullable column → `Value::Null` ([`mod.rs:1429`](../app/src-tauri/src/jazz/mod.rs)), so legacy/pre-spark inserts are safe.
 
 ### 11.1 — T0.1 site-by-site execution guide
 

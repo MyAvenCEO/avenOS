@@ -27,10 +27,17 @@
 		"peers": {
 			"columns": [
 				{
+					"name": "spark_id",
+					"type": "uuid",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "routing — caps-only sync. null = device-local trust-set row (not synced); admin-spark id = network roster row (syncs to admin-spark members)"
+				},
+				{
 					"name": "peer_did",
 					"type": "text",
 					"plaintext": true,
-					"comment": "did:key — nosync peers table"
+					"comment": "did:key — peer/member identity"
 				},
 				{
 					"name": "device_label",
