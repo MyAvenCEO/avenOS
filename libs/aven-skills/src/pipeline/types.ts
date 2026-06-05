@@ -26,10 +26,23 @@ export const consoleLogger: Logger = {
 	}
 }
 
+export type StagePhase = 'start' | 'done' | 'error'
+
+export interface StageEvent {
+	stage: string
+	phase: StagePhase
+	durationMs?: number
+	error?: string
+}
+
 export interface PipelineContext {
 	/** Stable id for one pipeline run (derived from content — deterministic). */
 	readonly runId: string
 	readonly logger: Logger
+	/** Lifecycle callback per stage — lets a host render live flow progress. */
+	readonly onStageEvent?: (event: StageEvent) => void
+	/** Cooperative yield awaited after each stage, so a host UI can repaint. */
+	readonly yield?: () => Promise<void>
 }
 
 /** A single deterministic step: typed input → typed output. */

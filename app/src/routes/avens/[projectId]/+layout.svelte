@@ -1,37 +1,47 @@
 <script lang="ts">
-	import { page } from '$app/state'
-	import { t } from '$lib/i18n'
-	import { navigateApp } from '$lib/shell'
-	import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
-	import { asideNavSectionsFromRoutes } from '$lib/ui/aside-nav'
-	import { avenById } from '../avens-data'
+import { page } from '$app/state'
+import { t } from '$lib/i18n'
+import { navigateApp } from '$lib/shell'
+import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
+import { asideNavSectionsFromRoutes } from '$lib/ui/aside-nav'
+import { avenById } from '../avens-data'
 
-	let { children: pageOutlet } = $props()
+let { children: pageOutlet } = $props()
 
-	const projectParam = $derived(String((page.params as { projectId?: string }).projectId ?? ''))
-	const decodedProjectId = $derived(decodeURIComponent(projectParam))
-	const avenBase = $derived(`/avens/${encodeURIComponent(decodedProjectId)}`)
-	const aven = $derived(avenById(decodedProjectId))
+const projectParam = $derived(String((page.params as { projectId?: string }).projectId ?? ''))
+const decodedProjectId = $derived(decodeURIComponent(projectParam))
+const avenBase = $derived(`/avens/${encodeURIComponent(decodedProjectId)}`)
+const aven = $derived(avenById(decodedProjectId))
 
-	const path = $derived(page.url.pathname)
+const path = $derived(page.url.pathname)
 
-	const navSections = $derived(
-		asideNavSectionsFromRoutes(
-			[
-				{
-					title: t('nav.viewSection'),
-					items: [
-						{
-							href: `${avenBase}/orders`,
-							label: t('nav.orders'),
-							match: (p) => p.startsWith(`${avenBase}/orders`),
-						},
-					],
-				},
-			],
-			path,
-		),
+const navSections = $derived(
+	asideNavSectionsFromRoutes(
+		[
+			{
+				title: t('nav.viewSection'),
+				items: [
+					{
+						href: `${avenBase}/orders`,
+						label: t('nav.orders'),
+						match: (p) => p.startsWith(`${avenBase}/orders`)
+					},
+					{
+						href: `${avenBase}/table`,
+						label: t('nav.orderTable'),
+						match: (p) => p.startsWith(`${avenBase}/table`)
+					},
+					{
+						href: `${avenBase}/ingest`,
+						label: t('nav.ingest'),
+						match: (p) => p.startsWith(`${avenBase}/ingest`)
+					}
+				]
+			}
+		],
+		path
 	)
+)
 </script>
 
 <svelte:head>

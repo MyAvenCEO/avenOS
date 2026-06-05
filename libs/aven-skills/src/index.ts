@@ -22,9 +22,11 @@ export {
 } from './ingestor/config'
 export {
 	createIngestor,
+	INGEST_STAGES,
 	type Ingestor,
 	type IngestorOptions,
-	type IngestReport
+	type IngestReport,
+	type IngestStageName
 } from './ingestor/ingestor'
 export {
 	defaultPorts,
@@ -47,6 +49,8 @@ export {
 	type LogLevel,
 	type PipelineContext,
 	type Stage,
+	type StageEvent,
+	type StagePhase,
 	silentLogger,
 	stage
 } from './pipeline/types'

@@ -1,17 +1,14 @@
 /**
- * App-side wiring for the generic @avenos/aven-skills ingestor: binds the
- * `victorio-pos-orders` config to browser ports (Web Crypto hash + a Groove
- * `files`-backed uploader) and exposes a single `ingestOrdersCsv` entry point that
- * returns the nested `Order[]` for the avenVICTORIO orders page.
- *
- * The ingestor instance is module-scoped, so re-importing the same (or an
- * overlapping) CSV during a session is idempotent — only genuinely new rows land.
+ * App-side binding for the generic @avenos/aven-skills ingestor: it pairs the
+ * `victorio-pos-orders` config with browser ports (Web Crypto hash + a Groove
+ * `files`-backed uploader) and exposes a factory so the reactive store can wire in
+ * live stage events / logging per run.
  */
 
 import {
 	createIngestor,
 	type IngestConfig,
-	type IngestReport,
+	type IngestorOptions,
 	type UploaderPort,
 	webCryptoHashPort
 } from '@avenos/aven-skills'
@@ -22,7 +19,8 @@ import { jazzTable } from '$lib/jazz/api'
 import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { deviceSession } from '$lib/settings/device-session-store'
-import type { Order } from '../../routes/avens/[projectId]/orders/orders-data'
+
+export const ingestConfig = config as unknown as IngestConfig
 
 function bytesToBase64(bytes: Uint8Array): string {
 	let binary = ''
@@ -38,7 +36,7 @@ function bytesToBase64(bytes: Uint8Array): string {
  * upload service uses) when running in an unlocked Tauri session; otherwise return a
  * content-addressed in-memory id so the import still works in the web preview.
  */
-const grooveUploader: UploaderPort = {
+export const grooveUploader: UploaderPort = {
 	async upload({ filename, mimeType, bytes, contentSha256 }) {
 		const memId = `mem:${contentSha256.slice(0, 16)}`
 		if (!browser || !isTauriRuntime() || get(deviceSession).kind !== 'unlocked') {
@@ -47,7 +45,7 @@ const grooveUploader: UploaderPort = {
 		try {
 			await waitForGrooveSessionReady()
 			const row = await jazzTable('files').create({
-				intent_id: `ingest:${config.id}`,
+				intent_id: `ingest:${ingestConfig.id}`,
 				filename,
 				mime_type: mimeType,
 				size_bytes: bytes.length,
@@ -62,27 +60,12 @@ const grooveUploader: UploaderPort = {
 	}
 }
 
-const ingestor = createIngestor(config as unknown as IngestConfig, {
-	ports: { hash: webCryptoHashPort, uploader: grooveUploader }
-})
-
-export interface OrdersImportResult {
-	orders: Order[]
-	report: IngestReport
-}
-
-/** Ingest one POS CSV file and return the full nested order list (all imports so far). */
-export async function ingestOrdersCsv(file: File): Promise<OrdersImportResult> {
-	const bytes = new Uint8Array(await file.arrayBuffer())
-	const report = await ingestor.ingest({
-		filename: file.name,
-		mimeType: file.type || 'text/csv',
-		bytes
+/** Build an ingestor bound to the Victorio config + browser ports, with optional run hooks. */
+export function createOrdersIngestor(
+	hooks: Pick<IngestorOptions, 'logger' | 'onStageEvent' | 'yield'> = {}
+) {
+	return createIngestor(ingestConfig, {
+		ports: { hash: webCryptoHashPort, uploader: grooveUploader },
+		...hooks
 	})
-	return { orders: report.output.orders as unknown as Order[], report }
-}
-
-/** Current nested orders without ingesting anything new. */
-export function currentOrders(): Order[] {
-	return ingestor.output().orders as unknown as Order[]
 }

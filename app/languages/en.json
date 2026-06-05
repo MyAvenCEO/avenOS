@@ -96,6 +96,8 @@
 		"gallery": "Gallery",
 		"peers": "Peers",
 		"orders": "Orders",
+		"orderTable": "Order Table",
+		"ingest": "Ingest",
 		"avens": "Avens",
 		"allAvens": "← All avens",
 		"avenViews": "Aven views",
@@ -706,7 +708,52 @@
 			"importDuplicate": "Already imported — nothing new to add.",
 			"importEmpty": "No rows found in this file.",
 			"importError": "Import failed: {message}",
-			"importedBadge": "Imported"
+			"importedBadge": "Imported",
+			"importing": "Importing…",
+			"summary": "{orders} orders · {lines} line items.",
+			"showingCapped": "Showing {shown} of {total}."
+		},
+		"orderTable": {
+			"subtitle": "Imported order line items as a flat table.",
+			"empty": "No data yet — import a CSV to populate the table.",
+			"col": {
+				"time": "Time",
+				"invoice": "Invoice",
+				"order": "Order",
+				"location": "Location",
+				"server": "Server",
+				"product": "Product",
+				"category": "Category",
+				"qty": "Qty",
+				"price": "Price",
+				"total": "Total",
+				"vat": "VAT",
+				"note": "Note"
+			}
+		},
+		"ingest": {
+			"subtitle": "Watch the import pipeline run, stage by stage, with logs.",
+			"sourceFile": "Source file",
+			"result": "Result",
+			"runId": "Run id",
+			"fileId": "File id",
+			"hash": "Content hash",
+			"duplicate": "Duplicate file",
+			"logs": "Logs",
+			"noLogs": "No logs yet — import a CSV to see the pipeline run.",
+			"stage": {
+				"ingest": "Ingest (hash + upload)",
+				"parse": "Parse (extract schema + rows)",
+				"transform": "Transform (map → targets)",
+				"dedup": "Dedup (merge into store)",
+				"assemble": "Assemble (nest orders)"
+			},
+			"status": {
+				"pending": "Pending",
+				"running": "Running",
+				"done": "Done",
+				"error": "Error"
+			}
 		}
 	}
 }
