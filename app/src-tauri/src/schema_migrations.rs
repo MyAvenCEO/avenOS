@@ -143,4 +143,35 @@ mod tests {
 		let h = schema_hash_bytes(&schema);
 		assert_eq!(hash_hex(&h).len(), 64);
 	}
+
+	/// Every bundled snapshot in `registry.json` must lens cleanly to the current
+	/// manifest (no draft = no ambiguous rename). This catches a manifest change
+	/// that would force a wipe/error on existing vaults *at test time*, not at the
+	/// user's unlock. Add a `before-<feature>` snapshot + registry entry for each
+	/// shippable schema change (see `libs/aven-schema/migrations/README.md`).
+	#[test]
+	fn registry_snapshots_lens_cleanly_to_current() {
+		let reg = load_registry().expect("load registry.json");
+		let current = schema_manifest::load_jazz_schema_from_manifest().expect("current manifest");
+		let root = schema_manifest::aven_schema_root();
+		for snap in &reg.snapshots {
+			let path = root.join(&snap.manifest);
+			let old = schema_manifest::load_jazz_schema_from_manifest_path(&path)
+				.unwrap_or_else(|e| panic!("load snapshot {}: {e}", snap.manifest));
+			// The registry hash must actually match the snapshot it points at.
+			assert_eq!(
+				hash_hex(&schema_hash_bytes(&old)),
+				snap.hash.to_lowercase(),
+				"registry hash mismatch for {}",
+				snap.manifest
+			);
+			let lens = generate_lens(&old, &current);
+			assert!(
+				!lens.is_draft(),
+				"snapshot {} → current is a draft lens (ambiguous rename?); make the change add-only \
+				 or add an explicit migration",
+				snap.manifest
+			);
+		}
+	}
 }

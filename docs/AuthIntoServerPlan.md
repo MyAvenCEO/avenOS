@@ -248,6 +248,13 @@ Dependency-ordered. **Gate on every task:** `cargo check`/`cargo test` green for
 
 **Implemented in T0.1-core:** nullable `spark_id` first column on `peers` ([`schema.manifest.json`](../libs/aven-schema/schema.manifest.json)); `default_spark_id()` helper + `add_remote_peer` populates it ([`peers.rs`](../app/src-tauri/src/peers.rs)); bootstrap patches the local device row's `spark_id` after the genesis spark is minted ([`jazz_engine.rs`](../app/src-tauri/src/jazz/jazz_engine.rs)). `insert_values` already maps a missing nullable column → `Value::Null` ([`mod.rs:1429`](../app/src-tauri/src/jazz/mod.rs)), so legacy/pre-spark inserts are safe.
 
+**Schema migration (NOT a wipe).** avenOS uses Jazz-v2 lenses ([`schema_migrations.rs`](../app/src-tauri/src/schema_migrations.rs), [`libs/aven-schema/migrations/README.md`](../libs/aven-schema/migrations/README.md)): on unlock, `live_schemas_for_stored_hash` diffs the on-disk hash vs the manifest, loads the old schema (per-vault stamp under `db/schema_snapshots/` or bundled `registry.json`), runs `generate_lens(old, current)`, and registers it as a live schema — existing data **migrates, it is not wiped**. A draft lens (ambiguous rename) errors loudly instead. This change is **add-only** (one nullable column), so it lenses cleanly. Per the README "When you change the manifest" steps, T0.1-core also:
+- snapshots the pre-change manifest → [`migrations/snapshots/before-peers-spark-id.manifest.json`](../libs/aven-schema/migrations/snapshots/before-peers-spark-id.manifest.json),
+- registers it in [`registry.json`](../libs/aven-schema/migrations/registry.json) (old hash `d50733a3…` → snapshot) as a bundled fallback for vaults that never stamped,
+- adds a `cargo test` guard `registry_snapshots_lens_cleanly_to_current` that fails if any registered snapshot would draft-lens (catches a wipe-forcing manifest change at test time, not at the user's unlock).
+
+Single source of truth confirmed: `schema.manifest.json` is `include_str!`-embedded and parsed by one path (`avenos_schema_hash::load_schema`) for the app, `aven-server`, and the hash CLI — no second copy. Old hash `d50733a3…` → new `26e6e336…`.
+
 ### 11.1 — T0.1 site-by-site execution guide
 
 **Schema** ([`schema.manifest.json`](../libs/aven-schema/schema.manifest.json)): add `{ "name": "spark_id", "type": "uuid", "plaintext": true, "comment": "routing — ACC + sync" }` as the **first** column of `peers`. This alone flips `peers` into `manifest_spark_scoped_table_names()` ([`schema_manifest.rs:262`](../app/src-tauri/src/schema_manifest.rs)).

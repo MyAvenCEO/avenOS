@@ -1,4 +1,10 @@
 {
 	"description": "Optional bundled schema snapshots (hash → manifest) when a vault has no copy under db/schema_snapshots/. Most migrations rely on per-vault stamps written at connect.",
-	"snapshots": []
+	"snapshots": [
+		{
+			"hash": "d50733a3063465c353a9f5dbd074247225172396416ae0d39d7c7c14243277dc",
+			"manifest": "migrations/snapshots/before-peers-spark-id.manifest.json",
+			"comment": "pre-peers.spark_id (T0.1-core). add-only nullable column → auto lens to current; no wipe."
+		}
+	]
 }
