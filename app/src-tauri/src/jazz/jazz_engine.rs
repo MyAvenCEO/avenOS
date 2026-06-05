@@ -429,6 +429,15 @@ pub(crate) async fn exec_list_rows(
 }
 
 /// Map Groove `(table, object_id)` → spark UUID for sync ACL on patch commits.
+///
+/// MUST include soft-deleted rows. This map is the resource→spark lookup the peer-sync
+/// gate (`BiscuitCapabilityResolver::may_sync`) uses to authorize shipping a batch. A
+/// soft-deleted object still belongs to its spark and its DELETE batch still needs to be
+/// shipped to peers. Building the map from visible rows only (the default list excludes
+/// `_id_deleted`) dropped deleted objects out of scope, so `may_sync` returned `Pending`
+/// and the delete batch was withheld forever — that was the "deletes never sync across
+/// devices, even after reconnect" bug. Soft-delete keeps the row's data, so `spark_id` is
+/// still readable for a deleted row.
 pub(super) async fn build_object_spark_id_map(
 	client: &JazzClient,
 ) -> Result<HashMap<(String, ObjectId), Uuid>, String> {
@@ -436,7 +445,11 @@ pub(super) async fn build_object_spark_id_map(
 	for table in crate::spark_sync::spark_scoped_table_names() {
 		let schema = resolved_table_schema(client, table).await?;
 		let spark_ix = col_ix(&schema, "spark_id")?;
-		for (oid, vals) in exec_list_rows(client, table).await? {
+		let q = QueryBuilder::new(TableName::new(table))
+			.include_deleted()
+			.build();
+		let rows = client.query(q, None).await.map_err(super::format_jazz_err)?;
+		for (oid, vals) in rows {
 			if let Ok(sid) = uuid_cell_at(vals.as_slice(), spark_ix) {
 				out.insert((table.clone(), oid), sid);
 			}
