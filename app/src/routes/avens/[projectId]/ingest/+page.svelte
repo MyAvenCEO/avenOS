@@ -44,7 +44,7 @@ function fmtData(data: unknown): string {
 }
 </script>
 
-<div class="flex min-h-0 flex-col gap-5">
+<div class="flex min-h-0 flex-1 flex-col gap-5 overflow-auto pr-1">
 	<header class="space-y-2">
 		<div class="flex flex-wrap items-center gap-x-3 gap-y-1">
 			<h1 class="text-xl font-semibold tracking-tight">{t('nav.ingest')}</h1>

@@ -32,6 +32,11 @@ const navSections = $derived(
 						match: (p) => p.startsWith(`${avenBase}/table`)
 					},
 					{
+						href: `${avenBase}/turnover`,
+						label: t('nav.turnover'),
+						match: (p) => p.startsWith(`${avenBase}/turnover`)
+					},
+					{
 						href: `${avenBase}/ingest`,
 						label: t('nav.ingest'),
 						match: (p) => p.startsWith(`${avenBase}/ingest`)
@@ -53,6 +58,9 @@ const navSections = $derived(
 	sections={navSections}
 	desktopGridClass="md:grid-cols-[12rem_minmax(0,1fr)]"
 	sectionLabelClass="px-0 md:px-2"
+	mainClass="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+	contentClass="flex min-h-0 flex-1 flex-col"
+	innerContentClass="flex min-h-0 min-w-0 flex-1 flex-col"
 	routeKey={path}
 >
 	{#snippet header()}
