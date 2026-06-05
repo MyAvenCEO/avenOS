@@ -699,7 +699,14 @@
 			"total": "Total",
 			"paid": "Paid",
 			"open": "Open",
-			"toGo": "To go"
+			"toGo": "To go",
+			"import": "Import CSV",
+			"importHint": "POS journal export (Journal_Zahlungen…csv)",
+			"imported": "Imported {added} new, skipped {skipped} existing.",
+			"importDuplicate": "Already imported — nothing new to add.",
+			"importEmpty": "No rows found in this file.",
+			"importError": "Import failed: {message}",
+			"importedBadge": "Imported"
 		}
 	}
 }

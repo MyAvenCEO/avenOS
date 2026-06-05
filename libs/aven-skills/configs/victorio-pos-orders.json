@@ -1,0 +1,54 @@
+{
+	"id": "victorio-pos-orders",
+	"version": 1,
+	"skipDuplicateFiles": true,
+	"source": {
+		"format": "csv",
+		"delimiter": ";",
+		"headerRow": true,
+		"nullValues": ["—", ""],
+		"rowRef": ["ID Bezahlposition"]
+	},
+	"targets": [
+		{
+			"name": "orders",
+			"key": ["ID Bestellung"],
+			"fields": {
+				"id": { "from": "ID Bestellung", "type": "int" },
+				"invoiceNo": { "from": "Rechnungs-Nr", "type": "text" },
+				"location": { "from": "Ort", "type": "text" },
+				"server": { "from": "Nach", "type": "text" },
+				"cashier": { "from": "Mitarbeiter", "type": "text" },
+				"orderedAt": {
+					"from": "Bestelldatum",
+					"type": "datetime",
+					"format": "DD.MM.YYYY HH:mm:ss"
+				},
+				"paidAt": {
+					"from": "Bezahldatum",
+					"type": "datetime",
+					"format": "DD.MM.YYYY HH:mm:ss",
+					"nullable": true
+				},
+				"status": { "const": "paid" }
+			}
+		},
+		{
+			"name": "order_lines",
+			"key": ["ID Bezahlposition"],
+			"parent": {
+				"target": "orders",
+				"match": { "ID Bestellung": "ID Bestellung" },
+				"as": "lines"
+			},
+			"fields": {
+				"positionId": { "from": "ID Bestellposition", "type": "int" },
+				"product": { "from": "Produktname", "type": "text" },
+				"category": { "from": "Kategorie", "type": "text" },
+				"vat": { "from": "MwSt", "type": "text" },
+				"price": { "from": "Einzelpreis", "type": "number", "decimal": ",", "default": 0 },
+				"qty": { "from": "Anzahl", "type": "int", "default": 1 }
+			}
+		}
+	]
+}

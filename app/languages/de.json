@@ -687,7 +687,14 @@
 			"total": "Gesamt",
 			"paid": "Bezahlt",
 			"open": "Offen",
-			"toGo": "To Go"
+			"toGo": "To Go",
+			"import": "CSV importieren",
+			"importHint": "Kassen-Journal-Export (Journal_Zahlungen…csv)",
+			"imported": "{added} neu importiert, {skipped} bereits vorhanden übersprungen.",
+			"importDuplicate": "Bereits importiert — nichts Neues hinzuzufügen.",
+			"importEmpty": "Keine Zeilen in dieser Datei gefunden.",
+			"importError": "Import fehlgeschlagen: {message}",
+			"importedBadge": "Importiert"
 		}
 	}
 }
