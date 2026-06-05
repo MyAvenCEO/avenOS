@@ -6,7 +6,9 @@
  */
 
 export type OrderLine = {
-	/** ID Bestellposition */
+	/** ID Bezahlposition — unique per source row (payment line). */
+	lineId?: number
+	/** ID Bestellposition (menu line; may repeat across split payments). */
 	positionId: number
 	product: string
 	category: string

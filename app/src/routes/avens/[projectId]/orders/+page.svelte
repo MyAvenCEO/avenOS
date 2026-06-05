@@ -88,7 +88,7 @@ function statusLabel(o: Order): string {
 				</div>
 
 				<ul class="divide-border/40 mt-1 divide-y px-4 pb-1">
-					{#each order.lines as line (line.positionId)}
+					{#each order.lines as line, li (line.lineId ?? `${line.positionId}-${li}`)}
 						<li class="flex items-baseline gap-3 py-1.5 text-sm">
 							<span class="text-muted-foreground w-6 shrink-0 text-right tabular-nums"
 								>{line.qty}×</span
