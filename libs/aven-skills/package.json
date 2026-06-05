@@ -1,0 +1,17 @@
+{
+	"name": "@avenos/aven-skills",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"description": "Generic, config-driven data-ingestor skills (source → map → target) for AvenOS.",
+	"main": "./src/index.ts",
+	"types": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts",
+		"./configs/*": "./configs/*"
+	},
+	"scripts": {
+		"test": "bun test ./test",
+		"check": "tsc -p tsconfig.json --noEmit"
+	}
+}

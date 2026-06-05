@@ -1,0 +1,10 @@
+Id;Rechnungs-Nr;Bezahldatum;ID Bestellung;ID Bestellposition;Bestelldatum;Ort;Nach;Mitarbeiter;ID Bezahlposition;Produktname;Kategorie;MwSt;Einzelpreis;Anzahl
+8836;#008836;30.05.2026 23:37:06;20613;43643;30.05.2026 22:46:14;Service 2;Mitarbeiter;Service 1;40890;Helles 0,5l;Bier;19%;4,90;1
+8836;#008836;30.05.2026 23:37:06;20613;43642;30.05.2026 22:46:14;Service 2;Mitarbeiter;Service 1;40888;Helles klein 0,3l;Bier;19%;3,90;1
+8836;#008836;30.05.2026 23:37:06;20613;43645;30.05.2026 22:46:14;Service 2;Mitarbeiter;Service 1;40886;Schorle Apfel 0,4l;Saftschorle;19%;3,60;1
+8836;#008836;30.05.2026 23:37:06;20613;43644;30.05.2026 22:46:14;Service 2;Mitarbeiter;Service 1;40885;Hausgemachte Limo Basilikum Limette;AFG;19%;4,20;1
+8836;#008836;30.05.2026 23:37:06;20612;43635;30.05.2026 22:42:04;Service 2;Mitarbeiter;Service 1;40889;Helles 0,5l;Bier;19%;4,90;1
+8836;#008836;30.05.2026 23:37:06;20612;43634;30.05.2026 22:42:04;Service 2;Mitarbeiter;Service 1;40887;Helles klein 0,3l;Bier;19%;3,90;1
+8836;#008836;30.05.2026 23:37:06;20612;43636;30.05.2026 22:42:04;Service 2;Mitarbeiter;Service 1;40879;Radler 0,5l;Bier;19%;4,90;1
+8835;#008835;30.05.2026 23:36:43;20615;43647;30.05.2026 23:07:30;Service 2;304;Service 1;40877;Helles klein 0,3l;Bier;19%;3,90;1
+8835;#008835;30.05.2026 23:36:43;20615;43648;30.05.2026 23:07:30;Service 2;304;Service 1;40878;Spitzkohl;Herzhaftes;7%;14,50;1

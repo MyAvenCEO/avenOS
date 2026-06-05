@@ -36,6 +36,7 @@
 		"@avenos/aven-ui": "workspace:*",
 		"@avenos/aven-city": "workspace:*",
 		"@avenos/aven-board": "workspace:*",
+		"@avenos/aven-skills": "workspace:*",
 		"@avenos/docs": "workspace:*",
 		"@tauri-apps/api": "^2",
 		"@tauri-apps/plugin-clipboard-manager": "^2.3.2",
