@@ -51,6 +51,67 @@ fn spark_urn_for(spark_id: Uuid) -> String {
 	format!("spark:{spark_id}")
 }
 
+/// The rights a spark **owner** holds, minted into the genesis biscuit. THE single
+/// source of truth for the rights vocabulary: [`mint_genesis_spark`] grants exactly
+/// these, and [`spark_cap_report`] reports exactly these for an owner, so genesis
+/// and the UI cap display can never drift.
+pub const OWNER_RIGHTS: &[&str] = &["read", "write", "delete", "admit", "rotate_dek"];
+
+/// Effective caps for a grant kind (`owns`/`reads`/`replicate`). Single mapping
+/// from "how a subject is attached" → "what it may do". Owner = all OWNER_RIGHTS;
+/// reader = read; replica = blind replicate (store-and-forward, no read).
+pub fn grant_kind_caps(grant: &str) -> Vec<&'static str> {
+	match grant {
+		"owns" => OWNER_RIGHTS.to_vec(),
+		"reads" => vec!["read"],
+		"replicate" => vec!["replicate"],
+		_ => vec![],
+	}
+}
+
+/// One subject's effective caps on a spark, derived purely from the biscuit chain.
+pub struct SubjectCaps {
+	pub did: String,
+	/// `owns` | `reads` | `replicate`
+	pub grant: &'static str,
+	pub caps: Vec<&'static str>,
+}
+
+/// THE single source of truth for "who holds what cap on this spark": read the
+/// biscuit chain (`owns`/`reads`/`replicate` grants) and report each subject's
+/// grant + effective caps. Owners take precedence — a DID that is both an owner
+/// and a reader/replica shows once, as owner. Sorted by grant then DID.
+pub fn spark_cap_report(chain: &Biscuit, spark_id: Uuid) -> Result<Vec<SubjectCaps>, String> {
+	let owners = spark_admins(chain, spark_id)?;
+	let owner_set: HashSet<String> = owners.iter().map(|d| d.trim().to_string()).collect();
+	let mut out: Vec<SubjectCaps> = Vec::new();
+
+	let mut owners_sorted: Vec<String> = owners.into_iter().collect();
+	owners_sorted.sort();
+	for did in owners_sorted {
+		out.push(SubjectCaps { did, grant: "owns", caps: grant_kind_caps("owns") });
+	}
+
+	let mut readers: Vec<String> = spark_readers(chain, spark_id)?
+		.into_iter()
+		.filter(|d| !owner_set.contains(d.trim()))
+		.collect();
+	readers.sort();
+	for did in readers {
+		out.push(SubjectCaps { did, grant: "reads", caps: grant_kind_caps("reads") });
+	}
+
+	let mut replicas: Vec<String> = spark_replicas(chain, spark_id)?
+		.into_iter()
+		.filter(|d| !owner_set.contains(d.trim()))
+		.collect();
+	replicas.sort();
+	for did in replicas {
+		out.push(SubjectCaps { did, grant: "replicate", caps: grant_kind_caps("replicate") });
+	}
+	Ok(out)
+}
+
 pub fn biscuit_keypair_from_ed25519_signing(secret32: &[u8; 32]) -> Result<KeyPair, String> {
 	KeyPair::from_bytes(secret32, Algorithm::Ed25519.into()).map_err(|e| format!("biscuit-kp-from-bytes:{e:?}"))
 }
@@ -103,7 +164,7 @@ pub fn mint_genesis_spark(
 		);
 	let mut bb = Biscuit::builder().fact(own_f.as_str()).map_err(|e| format!("genesis-own-fact:{e}"))?;
 
-	for op in ["read", "write", "delete", "admit", "rotate_dek"] {
+	for op in OWNER_RIGHTS {
 		let rf = format!(
 				"right(\"{op}\", \"{}\")",
 				prefix_lit.replace('"', "\\\"")
@@ -632,6 +693,30 @@ mod tests {
 		// The owner still reads + writes as a full member.
 		authorize(&v, sid, AccOp::Read, "peers", Some(rid), &v.peer_did.clone()).unwrap();
 		authorize(&v, sid, AccOp::Write, "peers", Some(rid), &v.peer_did.clone()).unwrap();
+	}
+
+	#[test]
+	fn cap_report_reflects_biscuit_grants() {
+		let owner = build_vault_from_root(&[1u8; 32]).unwrap();
+		let reader = build_vault_from_root(&[5u8; 32]).unwrap();
+		let replica = build_vault_from_root(&[7u8; 32]).unwrap();
+		let sid = uuid::Uuid::new_v4();
+
+		let mut chain = mint_genesis_spark(&owner, sid).unwrap();
+		chain = attenuate_add_reader_third_party(&owner.biscuit_kp, &chain, sid, &reader.peer_did).unwrap();
+		chain = attenuate_add_replicate_third_party(&owner.biscuit_kp, &chain, sid, &replica.peer_did).unwrap();
+
+		let report = spark_cap_report(&chain, sid).unwrap();
+		// Single source: owner caps == OWNER_RIGHTS, reader == [read], replica == [replicate].
+		let o = report.iter().find(|s| peer_did_matches(&s.did, &owner.peer_did)).unwrap();
+		assert_eq!(o.grant, "owns");
+		assert_eq!(o.caps, OWNER_RIGHTS.to_vec());
+		let r = report.iter().find(|s| peer_did_matches(&s.did, &reader.peer_did)).unwrap();
+		assert_eq!(r.grant, "reads");
+		assert_eq!(r.caps, vec!["read"]);
+		let p = report.iter().find(|s| peer_did_matches(&s.did, &replica.peer_did)).unwrap();
+		assert_eq!(p.grant, "replicate");
+		assert_eq!(p.caps, vec!["replicate"]);
 	}
 
 	#[test]

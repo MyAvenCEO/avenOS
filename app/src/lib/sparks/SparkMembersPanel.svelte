@@ -11,6 +11,8 @@
 		peerList,
 		type PeerRow,
 		type JazzSessionReply,
+		type SparkSubjectCaps,
+		type SparkGrant,
 	} from '$lib/jazz/api'
 	import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
 	import { jazzStore } from '$lib/jazz/store.svelte'
@@ -33,11 +35,17 @@
 
 	let { sparkId, wide = false }: { sparkId: string; wide?: boolean } = $props()
 
-	type SparkCapKey = 'owner' | 'admin' | 'read' | 'write' | 'delete' | 'share' | 'replicate'
-
-	function sparkCapLabel(key: SparkCapKey): string {
+	// Caps come from the backend (`spark_cap_report` → the spark biscuit). This
+	// component defines NO cap vocabulary of its own — it labels whatever grant/cap
+	// strings Rust returns. Single source of truth = the biscuit chain.
+	function capLabel(key: string): string {
 		return t(`sparks.share.capabilities.${key}`)
 	}
+	/// Display order for the Capabilities tab; any unknown cap falls in after these.
+	const CAP_ORDER = ['read', 'write', 'delete', 'admit', 'rotate_dek', 'replicate']
+
+	type MembersTab = 'members' | 'caps'
+	let activeTab = $state<MembersTab>('members')
 
 	const LOCAL_IPC_BUDGET_MS = 12_000
 
@@ -46,6 +54,9 @@
 	let busy = $state(false)
 	let adminDids = $state<string[]>([])
 	let replicaDids = $state<string[]>([])
+	// THE caps source for the UI: every subject + grant + effective caps, from the
+	// biscuit (`spark_cap_report`). Both tabs derive from this; nothing is hardcoded.
+	let subjects = $state<SparkSubjectCaps[]>([])
 	let adminErr = $state<string | undefined>()
 	let adminBusy = $state(false)
 	let addAdminDid = $state('')
@@ -100,50 +111,48 @@
 		did: string
 		label: string
 		isThisDevice: boolean
-		capabilities: SparkCapKey[]
+		grant: SparkGrant
+		capabilities: string[]
 		phase: PeerMeshPhase
 	}
 
+	// Member-centric view: each subject from the biscuit (`subjects`), enriched with
+	// the peer label + live sync phase. Caps are whatever Rust reported — never
+	// re-derived here.
 	const accessEntries = $derived.by((): SparkAccessEntry[] => {
 		const peersByDid = new Map(
 			peersAllow.map((p) => [p.peerDid.trim().toLowerCase(), p] as const),
 		)
 		const localDid = session?.peerDid?.trim().toLowerCase() ?? ''
 		const snapshot = $peerMeshSnapshot
-		const adminEntries = adminDids.map((did): SparkAccessEntry => {
-			const norm = did.trim().toLowerCase()
+		return subjects.map((s): SparkAccessEntry => {
+			const norm = s.did.trim().toLowerCase()
 			const peer = peersByDid.get(norm)
 			const isThisDevice = localDid !== '' && norm === localDid
-			const label = peerAccessLabel(did, peer?.deviceLabel, isThisDevice)
-			const capabilities: SparkCapKey[] = isThisDevice
-				? ['owner', 'read', 'write', 'delete', 'share']
-				: ['admin', 'read', 'write', 'delete']
-			// Sync chip (§7 V3): this device is always settled; remote members read
+			const fallback = s.grant === 'replicate' ? t('sparks.share.addReplica') : undefined
+			const label = peerAccessLabel(s.did, peer?.deviceLabel ?? fallback, isThisDevice)
+			// Sync chip (§7 V3): this device is always settled; remote subjects read
 			// their live phase from the mesh snapshot (never re-derived).
 			const phase: PeerMeshPhase = isThisDevice
 				? 'ready'
-				: meshPeerPhase(snapshot, did, peer?.status)
-			return { did, label, isThisDevice, capabilities, phase }
+				: meshPeerPhase(snapshot, s.did, peer?.status)
+			return { did: s.did, label, isThisDevice, grant: s.grant, capabilities: s.caps, phase }
 		})
-		// Blind replication peers (server avens). Sourced from the spark biscuit, so
-		// they persist across reloads. They are NOT members — only a `replicate`
-		// cap, no keyshare — so they show a single REPLICATE badge.
-		const adminSet = new Set(adminDids.map((d) => d.trim().toLowerCase()))
-		const replicaEntries = replicaDids
-			.filter((did) => !adminSet.has(did.trim().toLowerCase()))
-			.map((did): SparkAccessEntry => {
-				const norm = did.trim().toLowerCase()
-				const peer = peersByDid.get(norm)
-				const label = peerAccessLabel(did, peer?.deviceLabel ?? t('sparks.share.addReplica'), false)
-				return {
-					did,
-					label,
-					isThisDevice: false,
-					capabilities: ['replicate'],
-					phase: meshPeerPhase(snapshot, did, peer?.status),
-				}
-			})
-		return [...adminEntries, ...replicaEntries]
+	})
+
+	// Cap-centric view (Tab 2): invert subjects → for each actual cap, who holds it.
+	// Pure projection of the same single source — guarantees the two tabs agree.
+	type CapHolders = { cap: string; holders: SparkAccessEntry[] }
+	const capabilityRows = $derived.by((): CapHolders[] => {
+		const map = new Map<string, SparkAccessEntry[]>()
+		for (const e of accessEntries)
+			for (const cap of e.capabilities) {
+				const list = map.get(cap) ?? []
+				list.push(e)
+				map.set(cap, list)
+			}
+		const ordered = [...CAP_ORDER.filter((c) => map.has(c)), ...[...map.keys()].filter((c) => !CAP_ORDER.includes(c))]
+		return ordered.map((cap) => ({ cap, holders: map.get(cap) ?? [] }))
 	})
 
 	// §7 V3 — calm global status: "everyone up to date" vs "N still syncing".
@@ -184,9 +193,11 @@
 						if (gen !== adminLoadGen) return
 						adminDids = a.adminDids
 						replicaDids = a.replicaDids ?? []
+						subjects = a.subjects ?? []
 					} else {
 						adminDids = []
 						replicaDids = []
+						subjects = []
 					}
 					addAdminDid = ''
 					addNote = undefined
@@ -218,6 +229,7 @@
 			if (gen !== adminLoadGen) return
 			adminDids = a.adminDids
 			replicaDids = a.replicaDids ?? []
+			subjects = a.subjects ?? []
 			adminErr = undefined
 		} catch (e) {
 			if (gen !== adminLoadGen) return
@@ -242,6 +254,7 @@
 			if (gen !== adminLoadGen) return
 			adminDids = a.adminDids
 			replicaDids = a.replicaDids ?? []
+			subjects = a.subjects ?? []
 		} catch (e) {
 			if (gen !== adminLoadGen) return
 			adminErr = e instanceof Error ? e.message : String(e)
@@ -301,6 +314,8 @@
 			const a = await sparkAdminList(sid)
 			if (gen !== adminLoadGen) return
 			adminDids = a.adminDids
+			replicaDids = a.replicaDids ?? []
+			subjects = a.subjects ?? []
 		} catch (e) {
 			if (gen !== adminLoadGen) return
 			revokeErr = e instanceof Error ? e.message : String(e)
@@ -315,6 +330,7 @@
 		void unlocked
 		void tauri
 		adminDids = []
+		subjects = []
 		addAdminDid = ''
 		void loadSessionAndAdmins()
 	})
@@ -413,6 +429,27 @@
 		<p class="text-muted-foreground text-sm">{t('sparks.share.noOneListed')}</p>
 	{:else}
 		<div class="flex flex-col gap-8">
+			<!-- Sub-tabs (top-centered): Members (member→caps) vs Capabilities (cap→holders) -->
+			<div class="flex justify-center">
+				<div class="bg-muted/40 inline-flex rounded-xl p-1 text-sm">
+					<button
+						type="button"
+						class="rounded-lg px-4 py-1.5 font-medium {activeTab === 'members'
+							? 'bg-background shadow-sm'
+							: 'text-muted-foreground hover:text-foreground'}"
+						onclick={() => (activeTab = 'members')}>{t('sparks.share.tabMembers')}</button
+					>
+					<button
+						type="button"
+						class="rounded-lg px-4 py-1.5 font-medium {activeTab === 'caps'
+							? 'bg-background shadow-sm'
+							: 'text-muted-foreground hover:text-foreground'}"
+						onclick={() => (activeTab = 'caps')}>{t('sparks.share.tabCapabilities')}</button
+					>
+				</div>
+			</div>
+
+			{#if activeTab === 'members'}
 			<!-- Who has access -->
 			<section class="flex flex-col gap-4">
 				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
@@ -445,13 +482,10 @@
 									<p class="text-muted-foreground mt-0.5 font-mono text-[11px] leading-snug select-text break-all" title={entry.did}>{entry.did}</p>
 								{/if}
 								<div class="mt-2 flex flex-wrap items-center gap-1.5">
+									<!-- Grant kind (owns/reads/replicate) — primary; effective caps — muted. All from the biscuit. -->
+									<span class="bg-primary/10 text-primary rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase">{capLabel(entry.grant)}</span>
 									{#each entry.capabilities as cap (cap)}
-										<span
-											class="rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase
-												{cap === 'owner' || cap === 'admin' || cap === 'replicate'
-												? 'bg-primary/10 text-primary'
-												: 'bg-muted text-muted-foreground'}">{sparkCapLabel(cap)}</span
-										>
+										<span class="bg-muted text-muted-foreground rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase">{capLabel(cap)}</span>
 									{/each}
 									{#if entry.isThisDevice}
 										<button
@@ -577,6 +611,45 @@
 							: t('peers.copyDebug')}</button
 				>
 			</section>
+			{/if}
+
+			{#if activeTab === 'caps'}
+			<!-- Capability-centric: every actual cap on this spark (from the biscuit) + who holds it. -->
+			<section class="flex flex-col gap-4">
+				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
+					{t('sparks.share.tabCapabilities')}
+				</h2>
+				<p class="text-muted-foreground text-xs leading-relaxed">{t('sparks.share.capabilitiesIntro')}</p>
+				{#if err}
+					<p class="text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm select-text">{err}</p>
+				{:else if capabilityRows.length === 0}
+					<p class="text-muted-foreground text-sm">{t('sparks.share.noOneListed')}</p>
+				{:else}
+					<ul class="flex flex-col gap-3">
+						{#each capabilityRows as row (row.cap)}
+							<li class="rounded-xl border border-border/50 bg-background/40 px-4 py-3">
+								<div class="flex items-center justify-between gap-3">
+									<span class="bg-primary/10 text-primary rounded px-2 py-0.5 text-[11px] font-bold tracking-wider uppercase">{capLabel(row.cap)}</span>
+									<span class="text-muted-foreground text-[11px]">{t('sparks.share.heldBy')}: {row.holders.length}</span>
+								</div>
+								{#if row.holders.length === 0}
+									<p class="text-muted-foreground mt-2 text-xs">{t('sparks.share.noHolders')}</p>
+								{:else}
+									<ul class="mt-2 flex flex-col gap-1.5">
+										{#each row.holders as h (h.did)}
+											<li class="flex items-center justify-between gap-2">
+												<span class="min-w-0 truncate text-sm" title={h.did}>{h.label}</span>
+												<span class="text-muted-foreground shrink-0 font-mono text-[10px] tracking-wider uppercase">{capLabel(h.grant)}</span>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
+			{/if}
 		</div>
 	{/if}
 {:else if tauri && unlocked && sparkId.trim()}
@@ -601,13 +674,9 @@
 							<p class="text-muted-foreground truncate font-mono text-[10px] leading-snug select-text" title={entry.did}>{entry.did}</p>
 						{/if}
 						<div class="mt-1 flex flex-wrap gap-1">
+							<span class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase">{capLabel(entry.grant)}</span>
 							{#each entry.capabilities as cap (cap)}
-								<span
-									class="rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase
-										{cap === 'owner' || cap === 'admin'
-										? 'bg-primary/10 text-primary'
-										: 'bg-muted text-muted-foreground'}">{sparkCapLabel(cap)}</span
-								>
+								<span class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase">{capLabel(cap)}</span>
 							{/each}
 						</div>
 					</li>

@@ -489,7 +489,11 @@
 				"write": "Write",
 				"delete": "Delete",
 				"share": "Share",
-				"replicate": "Replicate"
+				"replicate": "Replicate",
+				"owns": "Owner",
+				"reads": "Member",
+				"admit": "Admit",
+				"rotate_dek": "Rotate key"
 			},
 			"syncTitle": "Sync",
 			"revoke": "Stop sharing",
@@ -500,7 +504,13 @@
 			"revokedNote": "Stopped sharing new changes with {label}.",
 			"allSynced": "Everyone is up to date",
 			"pending": "{count} still syncing",
-			"syncLabelThisDevice": "This device"
+			"syncLabelThisDevice": "This device",
+			"tabMembers": "Members",
+			"tabCapabilities": "Capabilities",
+			"capabilitiesIntro": "Every capability on this spark and who holds it — read straight from the biscuit.",
+			"heldBy": "Held by",
+			"noHolders": "No one",
+			"grantLabel": "Grant"
 		}
 	},
 	"uiLab": {

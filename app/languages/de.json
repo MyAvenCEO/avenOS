@@ -477,7 +477,11 @@
 				"write": "Write",
 				"delete": "Delete",
 				"share": "Share",
-				"replicate": "Replizieren"
+				"replicate": "Replizieren",
+				"owns": "Eigentümer",
+				"reads": "Mitglied",
+				"admit": "Zulassen",
+				"rotate_dek": "Schlüssel rotieren"
 			},
 			"syncTitle": "Sync",
 			"revoke": "Teilen beenden",
@@ -488,7 +492,13 @@
 			"revokedNote": "Es werden keine neuen Änderungen mehr mit {label} geteilt.",
 			"allSynced": "Alle sind auf dem neuesten Stand",
 			"pending": "{count} synchronisieren noch",
-			"syncLabelThisDevice": "Dieses Gerät"
+			"syncLabelThisDevice": "Dieses Gerät",
+			"tabMembers": "Mitglieder",
+			"tabCapabilities": "Fähigkeiten",
+			"capabilitiesIntro": "Jede Fähigkeit dieses Sparks und wer sie hält — direkt aus dem Biscuit gelesen.",
+			"heldBy": "Gehalten von",
+			"noHolders": "Niemand",
+			"grantLabel": "Zuteilung"
 		}
 	},
 	"uiLab": {

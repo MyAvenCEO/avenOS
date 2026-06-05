@@ -2390,6 +2390,18 @@ async fn enqueue_vault_catalogue_drain(app: &tauri::AppHandle) {
 	}
 }
 
+/// One subject's caps on a spark, read straight from the biscuit — the single
+/// source of truth the UI renders (no hardcoded cap lists client-side).
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubjectCapsDto {
+	pub did: String,
+	/// `owns` | `reads` | `replicate`
+	pub grant: String,
+	/// Effective caps (e.g. `read`, `write`, `delete`, `admit`, `rotate_dek`, `replicate`).
+	pub caps: Vec<String>,
+}
+
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SparkAdminListReply {
@@ -2398,6 +2410,10 @@ pub struct SparkAdminListReply {
 	/// backups; not members). Persisted in the spark biscuit, so they survive
 	/// reloads and surface alongside members in the access list.
 	pub replica_dids: Vec<String>,
+	/// THE cap source of truth: every subject (owner/reader/replica) with its grant
+	/// and effective caps, derived from the biscuit by `spark_acc::spark_cap_report`.
+	/// The Members UI renders these directly; it defines no cap vocabulary of its own.
+	pub subjects: Vec<SubjectCapsDto>,
 }
 
 /// Who can access this spark: administrators (biscuit `owns`) + blind replication
@@ -2427,9 +2443,19 @@ pub(crate) async fn groove_ipc_spark_admin_list(
 			.into_iter()
 			.collect();
 	replica_dids.sort();
+	// Single source of truth: derive every subject's caps from the biscuit chain.
+	let subjects = crate::spark_acc::spark_cap_report(&bs.biscuit, spark_uuid)?
+		.into_iter()
+		.map(|s| SubjectCapsDto {
+			did: s.did,
+			grant: s.grant.to_string(),
+			caps: s.caps.iter().map(|c| c.to_string()).collect(),
+		})
+		.collect();
 	Ok(SparkAdminListReply {
 		admin_dids,
 		replica_dids,
+		subjects,
 	})
 }
 

@@ -84,10 +84,25 @@ export async function sparkReaderAdd(payload: {
 	})
 }
 
+/** A subject's grant kind, read from the spark biscuit. Single source of truth — the
+ *  set of cap strings is defined in Rust (`spark_acc`), never hardcoded client-side. */
+export type SparkGrant = 'owns' | 'reads' | 'replicate'
+
+/** One subject's caps on a spark, derived from the biscuit by `spark_cap_report`. */
+export type SparkSubjectCaps = {
+	did: string
+	grant: SparkGrant
+	/** Effective caps, e.g. read, write, delete, admit, rotate_dek, replicate. */
+	caps: string[]
+}
+
 export type SparkAdminListReply = {
 	adminDids: string[]
 	/** Server avens granted a blind `replicate` cap (store-and-forward backups). */
 	replicaDids: string[]
+	/** THE cap source of truth: every subject + grant + effective caps from the
+	 *  biscuit. The Members UI renders these directly and defines no caps itself. */
+	subjects: SparkSubjectCaps[]
 }
 
 export async function sparkAdminList(sparkId: string): Promise<SparkAdminListReply> {
