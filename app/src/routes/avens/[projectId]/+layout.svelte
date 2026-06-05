@@ -60,7 +60,7 @@ const navSections = $derived(
 	sectionLabelClass="px-0 md:px-2"
 	mainClass="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
 	contentClass="flex min-h-0 flex-1 flex-col"
-	innerContentClass="flex min-h-0 min-w-0 flex-1 flex-col"
+	innerContentClass="flex min-h-0 min-w-0 w-full flex-1 flex-col px-4 pt-4 pb-4 sm:px-6 md:px-8"
 	routeKey={path}
 >
 	{#snippet header()}
