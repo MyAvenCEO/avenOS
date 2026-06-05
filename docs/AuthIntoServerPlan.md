@@ -228,3 +228,37 @@ Dependency-ordered. **Gate on every task:** `cargo check`/`cargo test` green for
 - A first admin bootstraps `admin-spark`, the server is enrolled as a read-only replica, and a second device is onboarded by **DID-push** (paste the candidate's DID; no token), receiving its membership credential via **server handoff** even with all admins offline.
 - The server **admits only members** of `admin-spark` and blind-relays each member's own sparks (`replicate`, no keyshare) — a member's content stays ciphertext the server cannot read.
 - One Rust binary: open did:key handshake + membership admission + biscuit gate, no separate auth service anywhere.
+
+---
+
+## 11. Build progress (branch `feat/aven-auth-into-server`)
+
+| Task | State | Commit |
+|---|---|---|
+| Design doc + breakdown | ✅ | `234050d` |
+| **T0.2** non-owner delegated `reads` in `authorize()` (+ `attenuate_add_reader_third_party`, `spark_readers`, unit test) | ✅ verified — `cargo test … spark_acc::` 6 passed | `f1d4099` |
+| **T0.3** `sparkReaderAdd` (reads + offline keyshare, no `owns`) — IPC handler + dispatch + `api.ts` binding | ✅ compiles clean, wired | `f1d4099` |
+| **T0.1** caps-only sync / `peers` spark-scoped | ⬜ specified below — needs live `dev:app2x` verification | — |
+| A–E | ⬜ | — |
+
+> **Why T0.1 is handed off, not blasted out.** It is a 13-site change across `aven-db` + `app/src-tauri` *plus* a bootstrap reorder, and the only thing that proves it (does bootstrap still build a valid shell; do `peers` rows converge through the biscuit gate) is a **live two-device run**, which an autonomous build session can't perform. Shipping it compile-only would look done while being unverified — worse than a precise guide.
+
+### 11.1 — T0.1 site-by-site execution guide
+
+**Schema** ([`schema.manifest.json`](../libs/aven-schema/schema.manifest.json)): add `{ "name": "spark_id", "type": "uuid", "plaintext": true, "comment": "routing — ACC + sync" }` as the **first** column of `peers`. This alone flips `peers` into `manifest_spark_scoped_table_names()` ([`schema_manifest.rs:262`](../app/src-tauri/src/schema_manifest.rs)).
+
+**Bootstrap reorder** ([`jazz_engine.rs:741`](../app/src-tauri/src/jazz/jazz_engine.rs)): the local `peers` row is created *before* the genesis spark (line 786) and its OID feeds the `humans` row (line 770). Reorder to **mint spark → create `peers` row with `spark_id = spark_id` → create `humans` row**. The device's own spark becomes the home of its trust-set.
+
+**`add_remote_peer`** ([`peers.rs:126`](../app/src-tauri/src/peers.rs)): take a `spark_id` (the caller's `default_spark`) and write it on the row. Update the three callers (`sparkAdminAdd`/`sparkReplicateAdd`/`sparkReaderAdd`) to pass it.
+
+**Remove the `peers` special-cases (13 sites mapped):**
+- Publish/snapshot hardcodes → delete the `if table == "peers"` branches: [`mod.rs:1021`, `1056`, `2812`](../app/src-tauri/src/jazz/mod.rs); let `peers` flow through the standard `query_table_publish` + biscuit gate.
+- Insert bypass → [`mod.rs:2523`](../app/src-tauri/src/jazz/mod.rs): drop the `peers` short-circuit so it hits `inject_default_spark` + `authorize_gate`.
+- P2P forward suppression → [`mod.rs:2994`](../app/src-tauri/src/jazz/mod.rs): remove the `is_spark_scoped_table` early-return for `peers`.
+- Drain special-case → [`mod.rs:229`](../app/src-tauri/src/jazz/mod.rs): fold `peers` into the standard drain.
+- Vault-shell list → [`spark_sync.rs:51`](../app/src-tauri/src/spark_sync.rs) `VAULT_SHELL_TABLES`: keep `peers` *out* of the shell-digest re-hydrate trigger now that it's ordinary spark data (or accept re-hydrate on roster change — decide during impl).
+- Shell-catchup → [`sync_manager/mod.rs:450`](../libs/aven-db/src/sync_manager/mod.rs) `SHELL_CATCHUP_TABLES`: leave as `["sparks","keyshares"]` — `peers` now catches up as normal spark rows, not shell.
+- ACL map → [`jazz_engine.rs:441`](../app/src-tauri/src/jazz/jazz_engine.rs) `build_object_spark_id_map`: automatically includes `peers` once it has `spark_id` (no change beyond the column).
+- Test filter → [`delete_frontier_repro.rs:30`](../libs/aven-db/tests/delete_frontier_repro.rs): drop `peers` from the skip list.
+
+**Verification ladder:** (1) `cargo check -p aven-os-app` + `cargo check -p aven-db`; (2) `cargo test -p aven-db` (the §9 harness, incl. `delete_frontier_repro`); (3) **live** `bun dev:app2x:mac` — a fresh device bootstraps (valid shell, trust-set present), pastes a peer DID, and a shared spark + the trust-set converge. Only (3) closes the task.
