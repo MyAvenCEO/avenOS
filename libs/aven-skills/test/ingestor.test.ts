@@ -29,6 +29,7 @@ interface Order {
 	_source: SourceRef
 }
 interface OrderLine {
+	lineId: number
 	positionId: number
 	product: string
 	category: string
@@ -72,6 +73,10 @@ describe('victorio POS ingest', () => {
 		expect(o13?.orderedAt).toBe('2026-05-30T22:46:14')
 		expect(o13?.paidAt).toBe('2026-05-30T23:37:06')
 		const helles = o13?.lines.find((l) => l.positionId === 43643)
+		expect(helles?.lineId).toBe(40890)
+		// lineId (ID Bezahlposition) is unique per source row — the safe render key.
+		const lineIds = (o13?.lines ?? []).map((l) => l.lineId)
+		expect(new Set(lineIds).size).toBe(lineIds.length)
 		expect(helles?.price).toBeCloseTo(4.9, 5)
 		expect(helles?.qty).toBe(1)
 		expect(helles?.category).toBe('Bier')

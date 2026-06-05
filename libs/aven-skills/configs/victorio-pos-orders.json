@@ -42,6 +42,7 @@
 				"as": "lines"
 			},
 			"fields": {
+				"lineId": { "from": "ID Bezahlposition", "type": "int" },
 				"positionId": { "from": "ID Bestellposition", "type": "int" },
 				"product": { "from": "Produktname", "type": "text" },
 				"category": { "from": "Kategorie", "type": "text" },

@@ -7,6 +7,7 @@ import { formatDate, formatEur, formatTime } from '../orders/orders-data'
 const MAX_ROWS = 500
 
 interface Row {
+	lineId: number | string
 	orderedAt: string
 	invoiceNo: string
 	orderId: number
@@ -24,9 +25,11 @@ interface Row {
 
 const rows = $derived.by<Row[]>(() => {
 	const out: Row[] = []
+	let n = 0
 	for (const o of ordersFlow.orders) {
 		for (const l of o.lines) {
 			out.push({
+				lineId: l.lineId ?? `${o.id}-${n++}`,
 				orderedAt: o.orderedAt,
 				invoiceNo: o.invoiceNo,
 				orderId: o.id,
@@ -89,7 +92,7 @@ const shown = $derived(rows.slice(0, MAX_ROWS))
 					</tr>
 				</thead>
 				<tbody>
-					{#each shown as r (`${r.orderId}-${r.product}-${r.price}-${r.qty}-${r.note}`)}
+					{#each shown as r (r.lineId)}
 						<tr
 							class="border-border/40 hover:bg-muted/30 border-t [&>td]:px-3 [&>td]:py-1.5 [&>td]:whitespace-nowrap"
 						>
