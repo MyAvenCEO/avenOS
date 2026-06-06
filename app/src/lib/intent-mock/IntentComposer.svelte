@@ -6,7 +6,9 @@ import { transcribeAudio } from '$lib/intent-mock/transcribe'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import {
 	asrState,
+	startDownload as startAsrDownload,
 	type VoicePrep,
+	voiceNeedsSetup,
 	voicePrep as voicePrepOf,
 	voiceUnavailableReason as voiceUnavailableReasonOf
 } from '$lib/asr/model-download-store'
@@ -564,6 +566,14 @@ function openListening() {
 	// progress / note instead (the parent supplies `voicePrep`).
 	if (effectiveVoiceReason != null) {
 		void focusShellWebview()
+		// Auto-start the download+load on first entry into audio mode (mirrors the
+		// LFM model auto-starting on first generate). When the model still needs
+		// setup (idle/error, not already in flight, real wired runtime), kick it so
+		// the same "preparing" pill shows live progress instead of stalling on a
+		// "set it up in Settings" note. A no-op for secondary instances (unavailable).
+		if (tauriRuntime && voiceNeedsSetup($asrState.status)) {
+			void startAsrDownload()
+		}
 		onVoiceUnavailableClick?.()
 		mode = 'preparing'
 		return
