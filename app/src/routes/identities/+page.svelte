@@ -27,14 +27,24 @@
 
 	let creating = $state(false)
 	let createErr = $state<string | undefined>(undefined)
-	async function createNewIdentity(type: 'human' | 'aven'): Promise<void> {
-		const promptKey = type === 'human' ? 'identities.namePromptHuman' : 'identities.namePromptAven'
-		const name = (typeof prompt === 'function' ? prompt(t(promptKey)) : '')?.trim()
-		if (!name) return
+	// Inline create — Tauri's webview blocks window.prompt(), so use a real input.
+	let creatingType = $state<'human' | 'aven' | null>(null)
+	let newName = $state('')
+
+	function startCreate(type: 'human' | 'aven'): void {
+		creatingType = type
+		newName = ''
+		createErr = undefined
+	}
+	async function submitCreate(): Promise<void> {
+		const name = newName.trim()
+		if (!name || !creatingType) return
 		creating = true
 		createErr = undefined
 		try {
-			const id = await createIdentity(name, type)
+			const id = await createIdentity(name, creatingType)
+			creatingType = null
+			newName = ''
 			await goto(`/identities/${encodeURIComponent(id)}/talk`)
 		} catch (e) {
 			createErr = e instanceof Error ? e.message : String(e)
@@ -64,21 +74,49 @@
 			</li>
 		{/each}
 		<li>
-			<button
-				type="button"
-				class="text-muted-foreground hover:text-foreground hover:border-border flex min-h-[5.5rem] w-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-input bg-card/20 px-4 py-4 text-center transition-colors disabled:opacity-50"
-				onclick={() => void createNewIdentity(type)}
-				disabled={creating}
-			>
-				<span class="text-2xl leading-none">+</span>
-				<span class="text-sm font-medium"
-					>{creating
-						? t('identities.creating')
-						: type === 'human'
-							? t('identities.createHuman')
-							: t('identities.createAven')}</span
+			{#if creatingType === type}
+				<form
+					class="flex min-h-[5.5rem] w-full flex-col gap-2 rounded-xl border border-dashed border-input bg-card/20 px-3 py-3"
+					onsubmit={(e) => {
+						e.preventDefault()
+						void submitCreate()
+					}}
 				>
-			</button>
+					<!-- svelte-ignore a11y_autofocus -->
+					<input
+						bind:value={newName}
+						placeholder={type === 'human' ? t('identities.namePromptHuman') : t('identities.namePromptAven')}
+						class="border-input bg-background w-full rounded-md border px-2 py-1.5 text-sm"
+						autofocus
+						onkeydown={(e) => {
+							if (e.key === 'Escape') creatingType = null
+						}}
+					/>
+					<div class="flex items-center gap-2">
+						<button
+							type="submit"
+							class="bg-foreground text-background rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+							disabled={creating || !newName.trim()}>{creating ? t('identities.creating') : t('common.create')}</button
+						>
+						<button
+							type="button"
+							class="text-muted-foreground hover:text-foreground px-2 py-1.5 text-xs"
+							onclick={() => (creatingType = null)}>{t('common.cancel')}</button
+						>
+					</div>
+				</form>
+			{:else}
+				<button
+					type="button"
+					class="text-muted-foreground hover:text-foreground hover:border-border flex min-h-[5.5rem] w-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-input bg-card/20 px-4 py-4 text-center transition-colors"
+					onclick={() => startCreate(type)}
+				>
+					<span class="text-2xl leading-none">+</span>
+					<span class="text-sm font-medium"
+						>{type === 'human' ? t('identities.createHuman') : t('identities.createAven')}</span
+					>
+				</button>
+			{/if}
 		</li>
 	</ul>
 {/snippet}

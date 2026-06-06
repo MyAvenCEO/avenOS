@@ -61,7 +61,8 @@
 		"rowCount": "{count} row",
 		"rowCountPlural": "{count} rows",
 		"gatedHidden": "{count} gated (hidden)",
-		"titleSuffix": " · AvenOS"
+		"titleSuffix": " · AvenOS",
+		"create": "Create"
 	},
 	"nav": {
 		"appSections": "App sections",
