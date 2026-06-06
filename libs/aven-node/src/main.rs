@@ -158,6 +158,17 @@ impl groove::CapabilityResolver for ServerApplyGate {
             Err(_) => groove::CapDecision::DenyPermanent,
         }
     }
+
+    /// M7-3: per-identity relay storage quota — the "Sync & Backup" bound. Maps a row's
+    /// owner-binding → (owner-id key, 10 MiB). The engine accumulates distinct-row bytes
+    /// per identity and **rejects** (never deletes) inbound writes over the limit, so one
+    /// identity can't make this aven an unbounded sink. Unsigned/bindingless rows → no key.
+    fn quota_for(&self, proof: Option<&[u8]>) -> Option<(String, u64)> {
+        const AVEN_IDENTITY_QUOTA_BYTES: u64 = 10 * 1024 * 1024;
+        let meta = std::str::from_utf8(proof?).ok()?;
+        let binding = aven_caps::ownership::OwnerBinding::from_meta_str(meta).ok()?;
+        Some((binding.owner.to_string(), AVEN_IDENTITY_QUOTA_BYTES))
+    }
 }
 
 #[tokio::main]

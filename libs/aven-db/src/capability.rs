@@ -92,6 +92,15 @@ pub trait CapabilityResolver: Send + Sync {
         let _ = (subject, op, res, digest, proof);
         CapDecision::Allow
     }
+
+    /// Per-resource **inbound storage quota** (an aven-node relay policy; clients return
+    /// `None`). Given a row's metadata, returns `(quota_key, limit_bytes)` — the engine
+    /// accumulates **distinct-row** bytes per key and **rejects** (never deletes) inbound
+    /// writes that would push a key over its limit. Default `None` = unbounded (unchanged).
+    fn quota_for(&self, proof: Option<&[u8]>) -> Option<(String, u64)> {
+        let _ = proof;
+        None
+    }
 }
 
 /// Permissive default — local-only mode and tests.

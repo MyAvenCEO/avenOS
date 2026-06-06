@@ -73,6 +73,14 @@ pub struct SyncManager {
     /// inbound payloads dropped until its window rolls.
     pub(super) inbound_rate: HashMap<PeerId, InboundRate>,
 
+    /// Per-identity storage accounting for the relay quota (M7-3 "Sync & Backup"
+    /// bound). `quota_row_bytes` maps a stored object → (quota_key, bytes) so a
+    /// re-delivered row updates rather than double-counts; `quota_owner_bytes` is
+    /// the running per-key total checked against the resolver's limit. Empty/unused
+    /// unless the resolver returns a `quota_for` key (the aven-node policy).
+    pub(super) quota_row_bytes: HashMap<ObjectId, (String, u64)>,
+    pub(super) quota_owner_bytes: HashMap<String, u64>,
+
     pub(super) inbox: Vec<InboxEntry>,
     pub(super) outbox: Vec<OutboxEntry>,
     /// Pending permission checks awaiting policy evaluation.
@@ -203,6 +211,8 @@ impl SyncManager {
             clients: HashMap::new(),
             converged_peers: HashSet::new(),
             inbound_rate: HashMap::new(),
+            quota_row_bytes: HashMap::new(),
+            quota_owner_bytes: HashMap::new(),
             inbox: Vec::new(),
             outbox: Vec::new(),
             pending_query_subscriptions: Vec::new(),

@@ -1008,6 +1008,27 @@ impl SyncManager {
         rate.batches > super::INBOUND_MAX_BATCHES_PER_WINDOW
     }
 
+    /// M7-3 per-identity relay storage quota. Account `bytes` for `object_id` under
+    /// quota `key`; return `false` (reject) if it would push the key over `limit`.
+    /// Distinct-row: a re-delivered `object_id` replaces its prior size (no double-
+    /// count on re-sync); a rejected write mutates nothing. Reject = withhold, never
+    /// delete — the inbound row is simply not applied/forwarded.
+    fn quota_admits(&mut self, object_id: ObjectId, key: String, bytes: u64, limit: u64) -> bool {
+        let prev = self
+            .quota_row_bytes
+            .get(&object_id)
+            .map(|(_, b)| *b)
+            .unwrap_or(0);
+        let owner_total = self.quota_owner_bytes.get(&key).copied().unwrap_or(0);
+        let new_total = owner_total.saturating_sub(prev).saturating_add(bytes);
+        if new_total > limit {
+            return false;
+        }
+        self.quota_owner_bytes.insert(key.clone(), new_total);
+        self.quota_row_bytes.insert(object_id, (key, bytes));
+        true
+    }
+
     /// Process a payload from a client.
     pub(super) fn process_from_client<H: Storage>(
         &mut self,
@@ -1028,6 +1049,25 @@ impl SyncManager {
             if row.data.len() > super::MAX_INBOUND_ROW_BYTES {
                 tracing::warn!(%client_id, bytes = row.data.len(), "M5: oversized inbound row — dropping");
                 return;
+            }
+        }
+        // M7-3: per-identity relay storage quota. The resolver (aven-node policy) maps
+        // the row's owner-binding → (quota_key, limit); over-quota writes are rejected
+        // (withheld, never deleted). Clients return None → unbounded, unchanged.
+        if let SyncPayload::RowBatchCreated { row, .. } | SyncPayload::RowBatchNeeded { row, .. } =
+            &payload
+        {
+            let proof = row
+                .metadata
+                .get(crate::capability::OWNER_BINDING_META_KEY)
+                .map(|s| s.as_bytes());
+            if let Some((key, limit)) = self.resolver.quota_for(proof) {
+                let oid = row.row_id;
+                let bytes = row.data.len() as u64;
+                if !self.quota_admits(oid, key, bytes, limit) {
+                    tracing::warn!(%client_id, object = %oid, "M7-3: identity over relay storage quota — rejecting inbound row");
+                    return;
+                }
             }
         }
         let Some(client) = self.clients.get(&client_id) else {
