@@ -187,11 +187,22 @@ pub fn identity_cap_report(chain: &Biscuit, owner: Uuid) -> Result<Vec<SubjectCa
 		add(&mut acc, &did, "replicate", "rate_limit");
 	}
 	// Granular grants (row/table-scoped) — fold the op into the subject's caps.
-	for (did, op, _prefix) in identity_grants(chain, owner)? {
+	for (did, op, prefix) in identity_grants(chain, owner)? {
 		if owner_set.contains(did.trim()) {
 			continue;
 		}
-		add(&mut acc, &did, "member", &op);
+		// Honesty: a read SCOPED to the registry tables (`identities:` / `peers:`) is the
+		// SYNC peer's directory access — it reads the member directory, NOT the identity's
+		// data. Report it as the distinct cap `directory` so the badge can never imply broad
+		// read access (a full-identity read is still reported as `read`).
+		let cap: &str = if op == "read"
+			&& (prefix.ends_with(":identities:") || prefix.ends_with(":peers:"))
+		{
+			"directory"
+		} else {
+			op.as_str()
+		};
+		add(&mut acc, &did, "member", cap);
 	}
 
 	Ok(acc

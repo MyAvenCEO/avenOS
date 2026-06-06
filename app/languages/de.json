@@ -487,6 +487,7 @@
 				"owner": "Owner",
 				"admin": "Admin",
 				"read": "Read",
+				"directory": "Verzeichnis",
 				"write": "Write",
 				"delete": "Delete",
 				"share": "Share",
