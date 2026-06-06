@@ -1,0 +1,12 @@
+[package]
+name = "aven-brain"
+version = "0.0.1"
+edition = "2021"
+description = "AvenOS local-first AI memory brain — engrams, concepts, facts, links over aven-db (CRDT, vector + BM25 retrieval). One brain per identity."
+license = "MIT OR Apache-2.0"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+groove = { package = "aven-db", path = "../aven-db", features = ["client-p2p"] }
