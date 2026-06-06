@@ -272,6 +272,15 @@ pub async fn maybe_grant_first_admin(
 		.await
 		.map_err(|e| format!("create keyshares:{e:?}"))?;
 
+	// Re-announce our frontier so the just-authorized peer re-pulls avenCEO. The
+	// spark's genesis + keyshare batches were announced-and-DENIED before this
+	// grant (the peer held no cap), so without a re-announce they never re-ship and
+	// the device stays stuck at the invite gate even though it is now an owner.
+	// Mirrors the device-side grant path (`finish_spark_admin_grant`).
+	if let Err(e) = engine.rebroadcast_all_peer_clients_and_flush().await {
+		tracing::warn!(%peer_did, "avenCEO post-grant re-announce failed: {e}");
+	}
+
 	tracing::info!(%peer_did, %avenceo_id, "auto-granted FIRST peer admin on avenCEO (server-signed)");
 	Ok(())
 }
