@@ -93,6 +93,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| format!("server did: {e}"))?;
     tracing::info!(%server_did, "aven-server identity");
 
+    // S.2 — a biscuit capability vault rooted in the server's key. The server is
+    // the sole author/owner of the well-known avenCEO control spark; it will mint
+    // its genesis (S.3) and auto-grant the first connecting peer admin (S.4). See
+    // docs/ServerRootedAvenCeoPlan.md.
+    let server_vault = aven_caps::caps::build_vault_from_signing_key(&identity)
+        .map_err(|e| format!("server cap vault: {e}"))?;
+    let avenceo_id = aven_caps::caps::aven_ceo_spark_id(&cfg.network_seed);
+    tracing::info!(
+        %avenceo_id,
+        owner_did = %server_vault.peer_did,
+        "avenCEO control spark — server is the owner"
+    );
+
     let params = ChallengeParams::new(cfg.domain.clone(), cfg.uri.clone(), cfg.network_seed.clone());
     let (listener, mut new_peers) = WsServerListener::new(params, server_did);
 
