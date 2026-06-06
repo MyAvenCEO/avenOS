@@ -17,7 +17,7 @@ const TYPING_TEXTAREA_MAX_ROWS = 12
 const BAR_COUNT = 24
 /** Matches {@link classifyIntentUploadFile} allowed types (layout drag-drop hint). */
 const FILE_INPUT_ACCEPT =
-	'application/pdf,image/jpeg,image/png,image/svg+xml,.pdf,.jpg,.jpeg,.png,.svg'
+	'application/pdf,image/jpeg,image/png,image/svg+xml,text/csv,text/plain,text/rtf,application/rtf,text/markdown,.pdf,.jpg,.jpeg,.png,.svg,.csv,.txt,.rtf,.md,.markdown'
 
 type ComposerAttachment = {
 	file: File

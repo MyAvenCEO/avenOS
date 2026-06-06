@@ -9,6 +9,27 @@ export function isPdfMime(mime: string): boolean {
 	return mime.trim().toLowerCase() === 'application/pdf'
 }
 
+/**
+ * Short uppercase format label for a file row (e.g. "CSV", "JPEG", "PDF").
+ * Prefers the filename extension, falls back to the mime subtype, then "FILE".
+ * Used as the preview-tile fallback when no thumbnail can be rendered.
+ */
+export function fileTypeLabel(row: JazzRow): string {
+	const name = String(row.filename ?? '').trim()
+	const dot = name.lastIndexOf('.')
+	if (dot >= 0 && dot < name.length - 1) {
+		const ext = name.slice(dot + 1).trim()
+		if (ext && ext.length <= 5 && /^[a-z0-9]+$/i.test(ext)) return ext.toUpperCase()
+	}
+	const mime = String(row.mime_type ?? '').trim().toLowerCase()
+	if (mime) {
+		const sub = mime.includes('/') ? mime.slice(mime.indexOf('/') + 1) : mime
+		const cleaned = (sub.replace(/^x-/, '').replace(/\+.*$/, '').split('.').pop() ?? sub).trim()
+		if (cleaned) return cleaned.toUpperCase()
+	}
+	return 'FILE'
+}
+
 export function imageDataUrl(row: JazzRow): string | null {
 	const mime = String(row.mime_type ?? '')
 	if (!isPreviewableImage(mime)) return null

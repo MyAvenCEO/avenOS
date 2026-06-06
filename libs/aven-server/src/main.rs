@@ -33,6 +33,11 @@ struct Config {
     domain: String,
     uri: String,
     network_seed: String,
+    /// On-disk identity slug for THIS server (default `avenCEO`). The server is
+    /// just another peer identity, stored under the same layout as devices:
+    /// `<Documents>/.avenOS/<network…>/identities/<server_name>/db`.
+    server_name: String,
+    data_dir: std::path::PathBuf,
     seed: Option<[u8; 32]>,
 }
 
@@ -44,15 +49,46 @@ impl Config {
             let arr: [u8; 32] = bytes.try_into().ok()?;
             Some(arr)
         });
+        // MUST equal the device's `tauri_plugin_self::network::NETWORK_SEED`: the
+        // avenCEO spark id is `sha256("avenos:avenCEO:v1:" + network_seed)`, so a
+        // mismatch makes the server mint avenCEO under a different id than devices
+        // look for — they'd never converge and every device stays at the invite gate.
+        let network_seed =
+            var("AVEN_SERVER_NETWORK_SEED").unwrap_or_else(|| "ceo.aven/testnet/abagana".into());
+        let server_name = var("AVEN_SERVER_NAME").unwrap_or_else(|| "avenCEO".into());
+        // Explicit override (headless/Sprite) wins; otherwise place the server's
+        // store as a sibling of the device identities, derived from the network seed.
+        let data_dir = var("AVEN_SERVER_DATA_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| derive_identity_db_dir(&network_seed, &server_name));
         Self {
             // The HTTP+WS server binds the Sprites-routed port (8080).
             http_bind: var("AVEN_SERVER_HEALTH_BIND").unwrap_or_else(|| "0.0.0.0:8080".into()),
             domain: var("AVEN_SERVER_DOMAIN").unwrap_or_else(|| "aven.local".into()),
             uri: var("AVEN_SERVER_URI").unwrap_or_else(|| "https://aven.local".into()),
-            network_seed: var("AVEN_SERVER_NETWORK_SEED").unwrap_or_else(|| "testnet".into()),
+            network_seed,
+            server_name,
+            data_dir,
             seed,
         }
     }
+}
+
+/// `<Documents>/.avenOS/<network split on '/'>/identities/<server_name>/db` — the
+/// same on-disk layout devices use (`paths.rs`), with the server as one more
+/// identity. The network seed doubles as the path: `ceo.aven/testnet/abagana`
+/// → `…/.avenOS/ceo.aven/testnet/abagana/identities/<server_name>/db`. Falls back
+/// to the home dir then the temp dir when no Documents dir is resolvable (headless
+/// boxes set `AVEN_SERVER_DATA_DIR` explicitly and never reach this path).
+fn derive_identity_db_dir(network_seed: &str, server_name: &str) -> std::path::PathBuf {
+    let docs = dirs::document_dir()
+        .or_else(|| dirs::home_dir().map(|h| h.join("Documents")))
+        .unwrap_or_else(std::env::temp_dir);
+    let mut base = docs.join(".avenOS");
+    for seg in network_seed.split('/').filter(|s| !s.is_empty()) {
+        base = base.join(seg);
+    }
+    base.join("identities").join(server_name).join("db")
 }
 
 fn load_identity(cfg: &Config) -> SigningKey {
@@ -148,6 +184,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let avenceo_id = aven_caps::caps::aven_ceo_spark_id(&cfg.network_seed);
     tracing::info!(
         %avenceo_id,
+        server_name = %cfg.server_name,
+        network_seed = %cfg.network_seed,
         owner_did = %server_vault.peer_did,
         "avenCEO control spark — server is the owner"
     );
@@ -160,11 +198,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // replicated row batches; it holds NO keyshares, so every batch stays ciphertext.
     let schema =
         avenos_schema_hash::embedded_schema().map_err(|e| format!("load schema: {e}"))?;
-    let data_dir = std::env::var("AVEN_SERVER_DATA_DIR")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::env::temp_dir().join("aven-server-data"));
+    let data_dir = cfg.data_dir.clone();
     tracing::info!(data_dir = %data_dir.display(), "durable storage (RocksDB)");
     let ctx = AppContext {
         app_id: AppId::from_name("ceo.aven.os"),

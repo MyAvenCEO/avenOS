@@ -91,12 +91,19 @@
 		"members": "Mitglieder",
 		"talk": "Talk",
 		"todos": "Todos",
-		"gallery": "Galerie",
+		"gallery": "Dateien",
 		"peers": "Peers",
+		"banking": "Banking",
+		"dashboard": "Meine Ziele",
 		"orders": "Bestellungen",
+		"orderTable": "Bestelltabelle",
+		"turnover": "Umsatz",
+		"products": "Produkte",
+		"ingest": "Ingest",
 		"avens": "Avens",
 		"allAvens": "← Alle Avens",
 		"avenViews": "Aven-Ansichten",
+		"backToSparks": "← {aven} Sparks",
 		"maiaCityGame": "Maia City - The Game"
 	},
 	"board": {
@@ -109,7 +116,6 @@
 	"lockGate": {
 		"tagline": "Dein selbstbestimmtes Leben beginnt hier",
 		"chooseLanguage": "Wähle deine Sprache",
-		"chooseLanguageHint": "Du kannst das später unter Self → Einstellungen ändern.",
 		"chooseYourselfList": "Wähle dich aus",
 		"finishSetupBelow": " · Einrichtung unten abschließen",
 		"createNewSelf": "Neues Self erstellen",
@@ -428,14 +434,20 @@
 			"noTodosYet": "Noch keine Todos in diesem Spark."
 		},
 		"gallery": {
-			"title": "Galerie",
-			"subtitle": "Files attached to intents or talk messages in this spark. Images and PDFs show a thumbnail (first page for PDFs).",
+			"title": "Dateien",
+			"subtitle": "Alle Dateien, die an Intents oder Talk-Nachrichten in diesem Spark angehängt sind. Bilder und PDFs zeigen eine Vorschau; andere Formate zeigen ihren Dateityp.",
 			"unlockToLoad": "Entsperre mit Touch ID, um deine Datenbank zu laden.",
 			"missingSparkId": "Missing spark id.",
 			"notInLedger": "No spark matches this id in your ledger —",
 			"backToSparks": "back to sparks",
 			"filesInSpark": "Files in this spark",
-			"noFilesYet": "Noch keine Dateien für diesen Spark. Hänge ein PDF oder Bild aus Intents oder Talk an."
+			"noFilesYet": "Noch keine Dateien für diesen Spark. Hänge ein PDF oder Bild aus Intents oder Talk an.",
+			"deleteFile": "Datei löschen",
+			"confirmDelete": "Diese Datei löschen?",
+			"confirmDeleteYes": "Löschen",
+			"confirmDeleteNo": "Abbrechen",
+			"deleting": "Wird gelöscht…",
+			"deleteFailed": "Datei konnte nicht gelöscht werden."
 		},
 		"share": {
 			"title": "Teilen",
@@ -508,14 +520,7 @@
 			"grantDescOwns": "Volle Kontrolle — lesen, schreiben und Mitglieder verwalten.",
 			"grantDescReads": "Nur-Lese-Mitglied.",
 			"grantDescReplicate": "Blindes Backup / Relay — speichert verschlüsselte Daten, kann sie nicht lesen.",
-			"quickRelay": "Zum verbundenen Relay replizieren",
-			"selfPublishTitle": "Dein Profil",
-			"selfPublishHint": "Selbst veröffentlicht in deine eigene Zeile im Netzwerkverzeichnis — nur du kannst sie bearbeiten.",
-			"accountNamePlaceholder": "Dein Name",
-			"deviceLabelPlaceholder": "Dieses Gerät (z. B. MacBook)",
-			"publish": "Veröffentlichen",
-			"publishing": "Veröffentliche…",
-			"publishedNote": "Profil veröffentlicht."
+			"quickRelay": "Zum verbundenen Relay replizieren"
 		},
 		"avenCeoTitle": "avenCEO",
 		"avenCeoClaimedSub": "Verzeichnis & Mitglieder dieses Netzwerks",
@@ -657,6 +662,36 @@
 	},
 	"avens": {
 		"subtitle": "Fest hinterlegte Beispiel-Avens. Öffne eines, um seine Bereiche zu erkunden.",
+		"sparksSubtitle": "Sparks, auf die dieses Aven Zugriff hat. Öffne einen, um darin zu arbeiten.",
+		"noSparksYet": "Noch keine Sparks für dieses Aven.",
+		"dashboard": {
+			"subtitle": "Wie viel Cash du pro gearbeiteter Stunde ziehst — und der nächste Schritt zum Level-up.",
+			"ratio": "Cashflow pro gearbeiteter Stunde",
+			"perWeekSuffix": " /Wo",
+			"ladderTitle": "Dein Aufstieg",
+			"ladderCleared": "{count} Level geschafft",
+			"founder": {
+				"perHour": "Cashflow / Stunde",
+				"perHourUnit": "/h",
+				"lvlShort": "Lvl",
+				"toNext": "{pct}% bis Level {n}",
+				"easiest": "am einfachsten",
+				"now": "jetzt",
+				"next": "nächstes",
+				"hours": "Arbeitsstunden",
+				"hoursUnit": "h/Wo",
+				"draw": "Founder-Cashflow"
+			}
+		},
+		"banking": {
+			"subtitle": "Salden und Transaktionen über alle Zahlungs- & Bankanbieter — rechts nach Anbieter filtern.",
+			"providerCount": "{count} Anbieter",
+			"totalBalance": "Gesamtsaldo",
+			"filterTitle": "Anbieter",
+			"allProviders": "Alle Anbieter",
+			"txnCount": "{count} Transaktionen",
+			"net": "netto"
+		},
 		"orders": {
 			"subtitle": "Aktuelle Bestellungen aus dem Kassen-Journal.",
 			"server": "Bedienung",
@@ -664,7 +699,81 @@
 			"total": "Gesamt",
 			"paid": "Bezahlt",
 			"open": "Offen",
-			"toGo": "To Go"
+			"toGo": "To Go",
+			"import": "CSV importieren",
+			"importHint": "Kassen-Journal-Export (Journal_Zahlungen…csv)",
+			"imported": "{added} neu importiert, {skipped} bereits vorhanden übersprungen.",
+			"importDuplicate": "Bereits importiert — nichts Neues hinzuzufügen.",
+			"importEmpty": "Keine Zeilen in dieser Datei gefunden.",
+			"importError": "Import fehlgeschlagen: {message}",
+			"importedBadge": "Importiert",
+			"importing": "Importiere…",
+			"summary": "{orders} Bestellungen · {lines} Positionen.",
+			"showingCapped": "Zeige {shown} von {total}."
+		},
+		"orderTable": {
+			"subtitle": "Importierte Bestellpositionen als flache Tabelle.",
+			"empty": "Noch keine Daten — importiere eine CSV, um die Tabelle zu füllen.",
+			"col": {
+				"time": "Zeit",
+				"invoice": "Rechnung",
+				"order": "Bestellung",
+				"location": "Ort",
+				"server": "Bedienung",
+				"product": "Produkt",
+				"category": "Kategorie",
+				"qty": "Menge",
+				"price": "Preis",
+				"total": "Gesamt",
+				"vat": "MwSt",
+				"note": "Notiz"
+			}
+		},
+		"turnover": {
+			"subtitle": "Brutto-Umsatz pro Monat akkumuliert.",
+			"grandTotal": "Gesamt",
+			"empty": "Noch keine Daten — importiere eine CSV, um den Monatsumsatz zu sehen."
+		},
+		"products": {
+			"subtitle": "Alle Positionen nach Einzelpreis — netto, brutto, Steuer und Gesamtumsatz.",
+			"empty": "Noch keine Daten — importiere eine CSV, um Produktumsätze zu sehen.",
+			"count": "{count} Positionen",
+			"grandTotal": "Gesamt",
+			"col": {
+				"product": "Produkt",
+				"vat": "MwSt",
+				"unitNetto": "Einzel netto",
+				"unitBrutto": "Einzel brutto",
+				"unitTax": "Einzel Steuer",
+				"qty": "Menge",
+				"sumNetto": "Summe netto",
+				"sumTax": "Summe Steuer",
+				"sumBrutto": "Summe brutto"
+			}
+		},
+		"ingest": {
+			"subtitle": "Beobachte die Import-Pipeline Schritt für Schritt, mit Logs.",
+			"sourceFile": "Quelldatei",
+			"result": "Ergebnis",
+			"runId": "Lauf-ID",
+			"fileId": "Datei-ID",
+			"hash": "Inhalts-Hash",
+			"duplicate": "Doppelte Datei",
+			"logs": "Logs",
+			"noLogs": "Noch keine Logs — importiere eine CSV, um die Pipeline zu sehen.",
+			"stage": {
+				"ingest": "Ingest (Hash + Upload)",
+				"parse": "Parsen (Schema + Zeilen)",
+				"transform": "Transformieren (Map → Targets)",
+				"dedup": "Dedup (in Store mergen)",
+				"assemble": "Assemblieren (Bestellungen verschachteln)"
+			},
+			"status": {
+				"pending": "Ausstehend",
+				"running": "Läuft",
+				"done": "Fertig",
+				"error": "Fehler"
+			}
 		}
 	},
 	"networkGate": {

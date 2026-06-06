@@ -3,15 +3,14 @@
 	import { browser } from '$app/environment'
 	import { page } from '$app/state'
 	import { t } from '$lib/i18n'
-	import type { JazzRow } from '$lib/jazz/api'
+	import { jazzTable, type JazzRow } from '$lib/jazz/api'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/settings/device-session-store'
 	import GalleryPdfThumb from '$lib/gallery/GalleryPdfThumb.svelte'
 	import {
-		coerceByteCount,
 		coerceEpochMs,
-		formatBytes,
+		fileTypeLabel,
 		imageDataUrl,
 	} from '$lib/gallery/file-preview'
 
@@ -46,6 +45,34 @@
 
 	function markBroken(id: string): void {
 		brokenIds = new Set(brokenIds).add(id)
+	}
+
+	let pendingDeleteId = $state<string | null>(null)
+	let deletingId = $state<string | null>(null)
+	let deleteError = $state<string | null>(null)
+
+	function requestDelete(id: string): void {
+		deleteError = null
+		pendingDeleteId = id
+	}
+
+	function cancelDelete(): void {
+		if (deletingId) return
+		pendingDeleteId = null
+	}
+
+	async function confirmDelete(id: string): Promise<void> {
+		if (deletingId) return
+		deletingId = id
+		deleteError = null
+		try {
+			await jazzTable('files').delete(id)
+			pendingDeleteId = null
+		} catch (e) {
+			deleteError = e instanceof Error ? e.message : String(e)
+		} finally {
+			deletingId = null
+		}
 	}
 </script>
 
@@ -100,11 +127,67 @@
 				>
 					{#each rows as row (row.id)}
 						<li
-							class="border-input bg-card/40 flex flex-col overflow-hidden rounded-xl border shadow-sm"
+							class="border-input bg-card/40 group relative flex flex-col overflow-hidden rounded-xl border shadow-sm"
 						>
+							<button
+								type="button"
+								class="absolute right-2 top-2 z-10 flex size-7 items-center justify-center rounded-full border border-border bg-background/90 text-foreground opacity-0 shadow-sm backdrop-blur-sm transition-opacity hover:bg-destructive hover:text-white focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40 group-hover:opacity-100"
+								aria-label={t('sparks.gallery.deleteFile')}
+								title={t('sparks.gallery.deleteFile')}
+								onclick={() => requestDelete(row.id)}
+							>
+								<svg
+									class="size-3.5"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									viewBox="0 0 24 24"
+									aria-hidden="true"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M6 7h12M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-7 0v12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V7"
+									/>
+								</svg>
+							</button>
 							<div
 								class="bg-muted/30 relative aspect-square w-full overflow-hidden border-b border-border/50"
 							>
+								{#if pendingDeleteId === row.id}
+									<div
+										class="bg-background/95 absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 p-3 text-center backdrop-blur-sm"
+									>
+										<p class="text-foreground text-xs font-medium leading-snug">
+											{t('sparks.gallery.confirmDelete')}
+										</p>
+										<div class="flex gap-2">
+											<button
+												type="button"
+												class="rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+												disabled={deletingId === row.id}
+												onclick={() => void confirmDelete(row.id)}
+											>
+												{deletingId === row.id
+													? t('sparks.gallery.deleting')
+													: t('sparks.gallery.confirmDeleteYes')}
+											</button>
+											<button
+												type="button"
+												class="border-input rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent/10 disabled:opacity-60"
+												disabled={deletingId === row.id}
+												onclick={cancelDelete}
+											>
+												{t('sparks.gallery.confirmDeleteNo')}
+											</button>
+										</div>
+										{#if deleteError}
+											<p class="text-destructive text-[10px] leading-snug">
+												{t('sparks.gallery.deleteFailed')}
+											</p>
+										{/if}
+									</div>
+								{/if}
 								{#if row.mime_type.trim().toLowerCase() === 'application/pdf'}
 									<GalleryPdfThumb contentB64={row.content ?? ''} />
 								{:else}
@@ -120,21 +203,23 @@
 										/>
 									{:else}
 										<div
-											class="text-muted-foreground flex h-full w-full items-center justify-center p-4 text-center text-xs"
+											class="text-muted-foreground flex h-full w-full items-center justify-center p-4 text-center"
 										>
-											{t('common.noPreview')}
+											<span
+												class="bg-background/80 text-foreground rounded px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-wider"
+											>
+												{fileTypeLabel(row)}
+											</span>
 										</div>
 									{/if}
 								{/if}
 							</div>
 							<div class="flex min-w-0 flex-col gap-0.5 p-3">
-								<p class="truncate text-sm font-medium leading-snug" title={row.filename}>
-									{row.filename || t('common.untitled')}
-								</p>
-								<p class="text-muted-foreground truncate text-[11px] leading-snug">
-									{row.mime_type}
-									<span class="mx-1 opacity-50">·</span>
-									{formatBytes(coerceByteCount(row.size_bytes))}
+								<p
+									class="text-muted-foreground truncate font-mono text-[11px] leading-snug"
+									title={row.id}
+								>
+									{row.id}
 								</p>
 							</div>
 						</li>

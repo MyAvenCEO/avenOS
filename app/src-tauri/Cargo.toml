@@ -1,6 +1,14 @@
 [profile.dev.package.scrypt]
 opt-level = 3
 
+# Strip heavy debuginfo from third-party deps in dev builds. The dev default is
+# full debuginfo (`debug = 2`) embedded into every dep's artifacts in deps/, which
+# — multiplied across the Tauri dep tree and each target triple — was the bulk of a
+# 57 GB target/rust/. `line-tables-only` keeps file:line in panic backtraces but
+# drops variable/type debug data. Our own workspace crates keep full debug.
+[profile.dev.package."*"]
+debug = "line-tables-only"
+
 # Release/store builds don't benefit from incremental (no iterative recompiles),
 # but the repo-wide `[build] incremental = true` (.cargo/config.toml, for fast dev)
 # would otherwise leak into them — that produced ~7.5 GB of dead incremental data

@@ -92,12 +92,19 @@
 		"members": "Members",
 		"talk": "Talk",
 		"todos": "Todos",
-		"gallery": "Gallery",
+		"gallery": "Files",
 		"peers": "Peers",
+		"banking": "Banking",
+		"dashboard": "My Goals",
 		"orders": "Orders",
+		"orderTable": "Order Table",
+		"turnover": "Turnover",
+		"products": "Products",
+		"ingest": "Ingest",
 		"avens": "Avens",
 		"allAvens": "← All avens",
 		"avenViews": "Aven views",
+		"backToSparks": "← {aven} sparks",
 		"maiaCityGame": "Maia City - The Game"
 	},
 	"board": {
@@ -121,7 +128,6 @@
 	"lockGate": {
 		"tagline": "Your self-sovereign life starts here",
 		"chooseLanguage": "Choose your language",
-		"chooseLanguageHint": "You can change this later under Self → Preferences.",
 		"chooseYourselfList": "Choose yourself",
 		"finishSetupBelow": " · Finish setup below",
 		"createNewSelf": "Create new self",
@@ -440,14 +446,20 @@
 			"noTodosYet": "No todos in this spark yet."
 		},
 		"gallery": {
-			"title": "Gallery",
-			"subtitle": "Files attached to intents or talk messages in this spark. Images and PDFs show a thumbnail (first page for PDFs).",
+			"title": "Files",
+			"subtitle": "All files attached to intents or talk messages in this spark. Images and PDFs render a thumbnail; other formats show their file type.",
 			"unlockToLoad": "Unlock with Touch ID to load your database.",
 			"missingSparkId": "Missing spark id.",
 			"notInLedger": "No spark matches this id in your ledger —",
 			"backToSparks": "back to sparks",
 			"filesInSpark": "Files in this spark",
-			"noFilesYet": "No files for this spark yet. Attach a PDF or image from Intents or Talk."
+			"noFilesYet": "No files for this spark yet. Attach a PDF or image from Intents or Talk.",
+			"deleteFile": "Delete file",
+			"confirmDelete": "Delete this file?",
+			"confirmDeleteYes": "Delete",
+			"confirmDeleteNo": "Cancel",
+			"deleting": "Deleting…",
+			"deleteFailed": "Could not delete the file."
 		},
 		"share": {
 			"title": "Share",
@@ -520,14 +532,7 @@
 			"grantDescOwns": "Full control — read, write, and manage members.",
 			"grantDescReads": "Read-only member.",
 			"grantDescReplicate": "Blind backup / relay — stores encrypted data it cannot read.",
-			"quickRelay": "Replicate to the connected relay",
-			"selfPublishTitle": "Your profile",
-			"selfPublishHint": "Self-published into your own row in this network roster — only you can edit it.",
-			"accountNamePlaceholder": "Your name",
-			"deviceLabelPlaceholder": "This device (e.g. MacBook)",
-			"publish": "Publish",
-			"publishing": "Publishing…",
-			"publishedNote": "Profile published."
+			"quickRelay": "Replicate to the connected relay"
 		},
 		"avenCeoTitle": "avenCEO",
 		"avenCeoClaimedSub": "This network's roster & members",
@@ -669,6 +674,36 @@
 	},
 	"avens": {
 		"subtitle": "Hardcoded example avens. Open one to explore its sections.",
+		"sparksSubtitle": "Sparks this aven has access to. Open one to work inside it.",
+		"noSparksYet": "No sparks yet for this aven.",
+		"dashboard": {
+			"subtitle": "How much cash you pull out per hour worked — and the next move to level it up.",
+			"ratio": "Cashflow per hour worked",
+			"perWeekSuffix": " /wk",
+			"ladderTitle": "Your climb",
+			"ladderCleared": "{count} levels cleared",
+			"founder": {
+				"perHour": "Cashflow / hour",
+				"perHourUnit": "/h",
+				"lvlShort": "Lvl",
+				"toNext": "{pct}% to Level {n}",
+				"easiest": "easiest",
+				"now": "now",
+				"next": "next",
+				"hours": "Work hours",
+				"hoursUnit": "h/wk",
+				"draw": "Founder cashflow"
+			}
+		},
+		"banking": {
+			"subtitle": "Balances and transactions across every payment & bank provider — filter by provider on the right.",
+			"providerCount": "{count} providers",
+			"totalBalance": "Total balance",
+			"filterTitle": "Provider",
+			"allProviders": "All providers",
+			"txnCount": "{count} transactions",
+			"net": "net"
+		},
 		"orders": {
 			"subtitle": "Recent orders from the point-of-sale journal.",
 			"server": "Server",
@@ -676,7 +711,81 @@
 			"total": "Total",
 			"paid": "Paid",
 			"open": "Open",
-			"toGo": "To go"
+			"toGo": "To go",
+			"import": "Import CSV",
+			"importHint": "POS journal export (Journal_Zahlungen…csv)",
+			"imported": "Imported {added} new, skipped {skipped} existing.",
+			"importDuplicate": "Already imported — nothing new to add.",
+			"importEmpty": "No rows found in this file.",
+			"importError": "Import failed: {message}",
+			"importedBadge": "Imported",
+			"importing": "Importing…",
+			"summary": "{orders} orders · {lines} line items.",
+			"showingCapped": "Showing {shown} of {total}."
+		},
+		"orderTable": {
+			"subtitle": "Imported order line items as a flat table.",
+			"empty": "No data yet — import a CSV to populate the table.",
+			"col": {
+				"time": "Time",
+				"invoice": "Invoice",
+				"order": "Order",
+				"location": "Location",
+				"server": "Server",
+				"product": "Product",
+				"category": "Category",
+				"qty": "Qty",
+				"price": "Price",
+				"total": "Total",
+				"vat": "VAT",
+				"note": "Note"
+			}
+		},
+		"turnover": {
+			"subtitle": "Gross turnover (brutto Umsatz) accumulated per month.",
+			"grandTotal": "Total",
+			"empty": "No data yet — import a CSV to see monthly turnover."
+		},
+		"products": {
+			"subtitle": "Every position by unit price — net, gross, tax, and total sales.",
+			"empty": "No data yet — import a CSV to see product sales.",
+			"count": "{count} positions",
+			"grandTotal": "Total",
+			"col": {
+				"product": "Product",
+				"vat": "VAT",
+				"unitNetto": "Unit net",
+				"unitBrutto": "Unit gross",
+				"unitTax": "Unit tax",
+				"qty": "Qty",
+				"sumNetto": "Sum net",
+				"sumTax": "Sum tax",
+				"sumBrutto": "Sum gross"
+			}
+		},
+		"ingest": {
+			"subtitle": "Watch the import pipeline run, stage by stage, with logs.",
+			"sourceFile": "Source file",
+			"result": "Result",
+			"runId": "Run id",
+			"fileId": "File id",
+			"hash": "Content hash",
+			"duplicate": "Duplicate file",
+			"logs": "Logs",
+			"noLogs": "No logs yet — import a CSV to see the pipeline run.",
+			"stage": {
+				"ingest": "Ingest (hash + upload)",
+				"parse": "Parse (extract schema + rows)",
+				"transform": "Transform (map → targets)",
+				"dedup": "Dedup (merge into store)",
+				"assemble": "Assemble (nest orders)"
+			},
+			"status": {
+				"pending": "Pending",
+				"running": "Running",
+				"done": "Done",
+				"error": "Error"
+			}
 		}
 	},
 	"networkGate": {
