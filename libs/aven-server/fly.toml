@@ -16,7 +16,9 @@ primary_region = "iad"
   AVEN_SERVER_HEALTH_BIND = "0.0.0.0:8080"
   AVEN_SERVER_DOMAIN = "mini.testnet.aven.ceo"
   AVEN_SERVER_URI = "https://mini.testnet.aven.ceo"
-  AVEN_SERVER_NETWORK_SEED = "testnet"
+  # MUST equal the device's NETWORK_SEED (tauri-plugin-self) — the avenCEO spark id
+  # is derived from it, so a mismatch leaves every device stuck at the invite gate.
+  AVEN_SERVER_NETWORK_SEED = "ceo.aven/testnet/abagana"
   RUST_LOG = "info"
 
 # Raw-TCP passthrough for the sync port: TLS is terminated IN-PROCESS by rustls
