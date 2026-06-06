@@ -1100,6 +1100,18 @@ impl SyncManager {
             SyncPayload::FrontierNeed { resource: _, heads } => {
                 self.ship_frontier_diff(storage, client_id, heads);
             }
+            SyncPayload::EvictResource { resource } => {
+                // Best-effort eviction notice (M2). The receiver-drop (resolver-enumerate
+                // the resource's rows → local hard-delete via delete_with_metadata(Hard +
+                // NoSync)) and the sender trigger (revoke flow) are the focused completion
+                // — see SSOT M2. Logged-only here so a stray/forged notice can NEVER delete
+                // data before that wiring + its live revoke→evict test exist.
+                tracing::info!(
+                    %client_id,
+                    %resource,
+                    "EvictResource notice received (drop wiring pending — see SSOT M2; no-op for safety)"
+                );
+            }
             // Handle query subscription with full Query struct
             // Queue for QueryManager to process (SyncManager doesn't know about QueryGraph)
             SyncPayload::QuerySubscription {

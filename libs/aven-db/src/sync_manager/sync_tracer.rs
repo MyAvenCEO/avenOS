@@ -883,6 +883,9 @@ impl<'a> Normalizer<'a> {
             SyncPayload::FrontierNeed { resource, heads } => {
                 format!("need {resource} heads:{}", heads.len())
             }
+            SyncPayload::EvictResource { resource } => {
+                format!("evict {resource}")
+            }
             SyncPayload::SealBatch { submission } => {
                 let members = submission
                     .members
@@ -1051,6 +1054,9 @@ fn format_payload_details(payload: &SyncPayload, names: &Names<'_>) -> String {
         }
         SyncPayload::FrontierNeed { resource, heads } => {
             format!("need {resource} heads:{}", heads.len())
+        }
+        SyncPayload::EvictResource { resource } => {
+            format!("evict {resource}")
         }
         SyncPayload::SealBatch { submission } => {
             let members = submission
