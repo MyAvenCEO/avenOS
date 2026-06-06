@@ -503,6 +503,7 @@ const TYPE_DOUBLE: u8 = 10;
 const TYPE_BYTEA: u8 = 11;
 const TYPE_JSON: u8 = 12;
 const TYPE_BATCH_ID: u8 = 13;
+const TYPE_VECTOR: u8 = 14;
 
 fn encode_column_type_with_version(
     buf: &mut Vec<u8>,
@@ -519,6 +520,10 @@ fn encode_column_type_with_version(
         ColumnType::Uuid => buf.push(TYPE_UUID),
         ColumnType::BatchId => buf.push(TYPE_BATCH_ID),
         ColumnType::Bytea => buf.push(TYPE_BYTEA),
+        ColumnType::Vector { dim } => {
+            buf.push(TYPE_VECTOR);
+            write_u32(buf, *dim as u32);
+        }
         ColumnType::Json { schema } => {
             buf.push(TYPE_JSON);
             match schema {
@@ -568,6 +573,10 @@ fn decode_column_type_with_version(
         TYPE_UUID => Ok(ColumnType::Uuid),
         TYPE_BATCH_ID => Ok(ColumnType::BatchId),
         TYPE_BYTEA => Ok(ColumnType::Bytea),
+        TYPE_VECTOR => {
+            let dim = read_u32(data, offset)? as usize;
+            Ok(ColumnType::Vector { dim })
+        }
         TYPE_JSON => {
             let has_schema = read_u8(data, offset)? != 0;
             if has_schema {
@@ -621,6 +630,10 @@ fn skip_column_type_with_version(
     match tag {
         TYPE_INTEGER | TYPE_BIGINT | TYPE_DOUBLE | TYPE_BOOLEAN | TYPE_TEXT | TYPE_TIMESTAMP
         | TYPE_UUID | TYPE_BATCH_ID | TYPE_BYTEA => Ok(()),
+        TYPE_VECTOR => {
+            read_u32(data, offset)?; // skip dim
+            Ok(())
+        }
         TYPE_JSON => {
             let has_schema = read_u8(data, offset)? != 0;
             if has_schema {
@@ -1746,6 +1759,7 @@ const VALUE_ROW: u8 = 8;
 const VALUE_DOUBLE: u8 = 10;
 const VALUE_BYTEA: u8 = 11;
 const VALUE_BATCH_ID: u8 = 12;
+const VALUE_VECTOR: u8 = 13;
 
 fn encode_value(buf: &mut Vec<u8>, value: &Value) {
     match value {
@@ -1786,6 +1800,13 @@ fn encode_value(buf: &mut Vec<u8>, value: &Value) {
             buf.push(VALUE_BYTEA);
             write_u32(buf, bytes.len() as u32);
             buf.extend_from_slice(bytes);
+        }
+        Value::Vector(v) => {
+            buf.push(VALUE_VECTOR);
+            write_u32(buf, v.len() as u32);
+            for f in v {
+                buf.extend_from_slice(&f.to_le_bytes());
+            }
         }
         Value::Array(elements) => {
             buf.push(VALUE_ARRAY);
@@ -1853,6 +1874,15 @@ fn decode_value(data: &[u8], offset: &mut usize) -> Result<Value, CatalogueEncod
             let bytes = read_bytes(data, offset, len)?;
             Ok(Value::Bytea(bytes.to_vec()))
         }
+        VALUE_VECTOR => {
+            let count = read_u32(data, offset)? as usize;
+            let bytes = read_bytes(data, offset, count * 4)?;
+            let v = bytes
+                .chunks_exact(4)
+                .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                .collect();
+            Ok(Value::Vector(v))
+        }
         VALUE_ARRAY => {
             let count = read_u32(data, offset)?;
             let mut elements = Vec::with_capacity(count as usize);
@@ -1888,6 +1918,10 @@ fn skip_value(data: &[u8], offset: &mut usize) -> Result<(), CatalogueEncodingEr
         VALUE_BYTEA => {
             let len = read_u32(data, offset)? as usize;
             read_bytes(data, offset, len).map(|_| ())
+        }
+        VALUE_VECTOR => {
+            let count = read_u32(data, offset)? as usize;
+            read_bytes(data, offset, count * 4).map(|_| ())
         }
         VALUE_ARRAY | VALUE_ROW => {
             let count = read_u32(data, offset)?;
