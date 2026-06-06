@@ -3242,6 +3242,16 @@ pub(crate) async fn groove_ipc_jazz_update(
 	let uuid =
 		uuid::Uuid::parse_str(&id).map_err(|e| format!("invalid id UUID parse: {e}"))?;
 
+	// Owner is write-once. The signed owner-binding pins a row's spark and
+	// `verify_on_apply` rejects any relabel at every peer (relay-proof). Refuse a
+	// local relabel too, so the field is truly immutable: a user-data update must
+	// never carry the owning-spark column.
+	if patch.contains_key("spark_id") {
+		return Err(
+			"owner is immutable: a row's owning spark cannot be changed via update".into(),
+		);
+	}
+
 	// `find_row_snapshot` reads without `.branch()` so jazz-tools auto-loads the
 	// row's `Object` on **every** known schema-version branch into ObjectManager.
 	// Important: keep using `oid` from the query result — `ObjectId::from_uuid`
