@@ -286,19 +286,23 @@
 				if (isAvenCeo) await avenCeoAddMember(did)
 				else await sparkReaderAdd({ identityId: sid, peerDid: did })
 			else await sparkReplicateAdd({ identityId: sid, peerDid: did })
-			if (gen !== adminLoadGen) return
+			// The grant SUCCEEDED — always clear the input + show the note, even though a
+			// concurrent re-hydration (the grant triggers a sync, which reloads the roster)
+			// may have bumped adminLoadGen. Only the roster-state write below is gen-guarded,
+			// so a stale grant can't clobber a newer load.
 			if (!opts?.did) addAdminDid = ''
 			addNote = t('identities.share.accessGrantedNote')
 			const a = await sparkAdminList(sid)
-			if (gen !== adminLoadGen) return
-			adminDids = a.adminDids
-			replicaDids = a.replicaDids ?? []
-			subjects = a.subjects ?? []
+			if (gen === adminLoadGen) {
+				adminDids = a.adminDids
+				replicaDids = a.replicaDids ?? []
+				subjects = a.subjects ?? []
+			}
 		} catch (e) {
-			if (gen !== adminLoadGen) return
 			adminErr = e instanceof Error ? e.message : String(e)
 		} finally {
-			if (gen === adminLoadGen) adminBusy = false
+			// Always re-enable the form — `adminBusy` reflects THIS operation, not a load gen.
+			adminBusy = false
 		}
 	}
 
