@@ -244,6 +244,7 @@ pub fn column_type_slug(ty: &ColumnType) -> &'static str {
 		ColumnType::Json { .. } => "json",
 		ColumnType::Array { .. } => "array",
 		ColumnType::Row { .. } => "row",
+		ColumnType::Vector { .. } => "vector",
 	}
 }
 
@@ -284,7 +285,9 @@ pub fn groove_value_to_canonical_utf8(val: &Value) -> Result<String, String> {
 		Value::Bytea(b) => {
 			json!({"schema_v": CELL_CANON_SCHEMA_V, "t": "bytea", "v": BASE64_ENC.encode(b)})
 		}
-		Value::Array(_) | Value::Row { .. } => return Err("canon_nested_unsupported".into()),
+		Value::Array(_) | Value::Row { .. } | Value::Vector(_) => {
+			return Err("canon_nested_unsupported".into())
+		}
 	};
 	Ok(j.to_string())
 }
@@ -387,6 +390,15 @@ fn groove_value_to_ipc_json(cell: &Value) -> JsonValue {
 		Value::Bytea(b) => JsonValue::String(
 			base64::engine::general_purpose::STANDARD.encode(b),
 		),
+		Value::Vector(v) => JsonValue::Array(
+			v.iter()
+				.map(|f| {
+					Number::from_f64(*f as f64)
+						.map(JsonValue::Number)
+						.unwrap_or(JsonValue::Null)
+				})
+				.collect(),
+		),
 	}
 }
 
@@ -436,7 +448,9 @@ fn legacy_plain_to_ipc(opened_plain: &str, storage_ty: &ColumnType) -> Result<Js
 		ColumnType::BatchId => Ok(JsonValue::String(opened_plain.trim().to_string())),
 		ColumnType::Bytea => Ok(JsonValue::String(opened_plain.into())),
 		ColumnType::Json { .. } => serde_json::from_str(opened_plain).map_err(|_| "legacy_json".to_string()),
-		ColumnType::Array { .. } | ColumnType::Row { .. } => Err("legacy_nested".into()),
+		ColumnType::Array { .. } | ColumnType::Row { .. } | ColumnType::Vector { .. } => {
+			Err("legacy_nested".into())
+		}
 	}
 }
 
