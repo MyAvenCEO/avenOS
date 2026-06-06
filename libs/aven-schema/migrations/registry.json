@@ -10,6 +10,11 @@
 			"hash": "26e6e336591120892913a0d2ce4490912b14f467ee860a9b826b6dba1c4d514c",
 			"manifest": "migrations/snapshots/before-account-name.manifest.json",
 			"comment": "pre-peers.account_name (admin-spark roster, Phase A.1). add-only nullable column → auto lens; no wipe."
+		},
+		{
+			"hash": "e395f88b94605cfc1f7a003378cda22a6af00e919f8666adf64ed494a1f2e26d",
+			"manifest": "migrations/snapshots/before-message-role.manifest.json",
+			"comment": "pre-messages.role (LFM2 agent replies). add-only enum column → auto lens; legacy rows null (treated as user); no wipe."
 		}
 	]
 }

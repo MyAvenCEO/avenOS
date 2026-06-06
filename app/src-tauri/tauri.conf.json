@@ -46,7 +46,8 @@
 		"resources": {
 			"../../libs/aven-schema/schema.manifest.json": "aven-schema/schema.manifest.json",
 			"../../libs/aven-schema/migrations/registry.json": "aven-schema/migrations/registry.json",
-			"../../libs/aven-schema/migrations/snapshots/before-files.manifest.json": "aven-schema/migrations/snapshots/before-files.manifest.json"
+			"../../libs/aven-schema/migrations/snapshots/before-files.manifest.json": "aven-schema/migrations/snapshots/before-files.manifest.json",
+			"onnxruntime/libonnxruntime.dylib": "onnxruntime/libonnxruntime.dylib"
 		},
 		"macOS": {
 			"minimumSystemVersion": "12.0"

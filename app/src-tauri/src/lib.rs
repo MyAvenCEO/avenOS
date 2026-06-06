@@ -1,4 +1,5 @@
 mod asr;
+mod llm;
 mod biscuit_resolver;
 mod crypto;
 mod mesh;
@@ -245,6 +246,12 @@ pub fn run() {
 			asr::asr_cancel_download,
 			asr::asr_start_download,
 			asr::asr_delete_model,
+			llm::llm_status,
+			llm::llm_generate,
+			llm::llm_local_models,
+			llm::llm_cancel_download,
+			llm::llm_start_download,
+			llm::llm_delete_model,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application")

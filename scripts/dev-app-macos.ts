@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { freeDevServerPort } from './free-dev-server-port.ts'
+import { ensureOnnxruntimeDylib } from './fetch-onnxruntime.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -17,6 +18,16 @@ async function main() {
 	}
 
 	freeDevServerPort(1420)
+
+	// On-device LLM runtime: ensure the matching onnxruntime dylib is present and
+	// point `ort` (load-dynamic) at it. Best-effort — a failure here only disables
+	// the LLM path, not the rest of the app.
+	let ortDylib: string | undefined
+	try {
+		ortDylib = ensureOnnxruntimeDylib()
+	} catch (e) {
+		console.warn(`[dev:app:macos] onnxruntime provisioning skipped: ${e instanceof Error ? e.message : e}`)
+	}
 
 	console.log(
 		'[dev:app:macos] AvenOS Tauri (macOS) · Host-UI: SvelteKit @ http://127.0.0.1:1420 (dev-only, embedded in WKWebView)\n'
@@ -30,7 +41,7 @@ async function main() {
 		stdout: 'inherit',
 		stderr: 'inherit',
 		stdin: 'inherit',
-		env: process.env
+		env: ortDylib ? { ...process.env, AVENOS_ORT_DYLIB: ortDylib } : process.env
 	})
 
 	const code = await child.exited

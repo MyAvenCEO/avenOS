@@ -429,7 +429,9 @@
 			"messagesLog": "Messages",
 			"noMessagesYet": "No messages yet. Say hello — peers with access to this identity will see it after sync.",
 			"messagePlaceholder": "Write a message…",
-			"authorAtTime": "{author} at {time}"
+			"authorAtTime": "{author} at {time}",
+			"agentLabel": "Aven · LFM2.5",
+			"agentThinking": "Aven is thinking…"
 		},
 		"todos": {
 			"title": "Todos",

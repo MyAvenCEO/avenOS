@@ -59,3 +59,8 @@ target/
 # Repo-local P2p signal relay keys (relay-hyperdht.seed, bootstrap-hyperdht.seed)
 /.avenOS/
 **/.avenOS/
+
+# Provisioned onnxruntime dylib for the on-device LLM (`ort` load-dynamic).
+# Fetched by scripts/fetch-onnxruntime.ts (matches the version ort targets); a
+# ~35MB binary — not committed, re-downloaded on demand / at packaging.
+/app/src-tauri/onnxruntime/

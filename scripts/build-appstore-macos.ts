@@ -19,6 +19,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { applyAppleEnvLocal } from './apple-env'
+import { ensureOnnxruntimeDylib } from './fetch-onnxruntime.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appDir = path.join(repoRoot, 'app')
@@ -101,6 +102,13 @@ async function main() {
 	mkdirSync(path.dirname(profileDest), { recursive: true })
 	copyFileSync(profileSrc, profileDest)
 	console.log(`[build-appstore-macos] copied provisioning profile → ${profileDest}`)
+
+	// On-device LLM runtime: the onnxruntime dylib is bundled as a Tauri resource
+	// (see tauri.conf.json `resources`). Ensure it's present before `tauri build`,
+	// else generate_context! fails on the missing resource. NOTE: the codesign
+	// `--deep` pass below signs nested resources, which covers this dylib too.
+	ensureOnnxruntimeDylib('arm64')
+	console.log('[build-appstore-macos] onnxruntime dylib provisioned')
 
 	mkdirSync(path.join(repoRoot, 'dist'), { recursive: true })
 	const mergeDir = mkdtempSync(path.join(repoRoot, 'dist', 'macos-appstore-tmp-'))
