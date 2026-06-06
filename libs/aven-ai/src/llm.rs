@@ -525,13 +525,39 @@ impl CacheData {
 	}
 
 	fn to_value(&self, shape: &[i64]) -> Result<ort::session::SessionInputValue<'static>, String> {
+		// Elements the shape declares. A step-0 cache is provided EMPTY (`Vec::new()`), which
+		// only matches caches whose initial state has 0 elements — the attention KV-caches
+		// (a 0-length sequence axis → product 0). A hybrid model (LFM2) ALSO has conv/SSM
+		// state caches whose initial state is a FIXED-size zero buffer (e.g. [1, 2048, 3] =
+		// 6144 elements); for those, the empty vec is too short. So zero-fill an empty cache
+		// to the declared length. This is resilient to ANY cache family — attention, conv,
+		// SSM — with no per-model special-casing: the data is always made to match the shape.
+		let want: usize = shape.iter().map(|&d| d.max(0) as usize).product();
 		match self {
-			CacheData::F16(v) => Tensor::from_array((shape.to_vec(), v.clone()))
-				.map(Into::into)
-				.map_err(|e| format!("cache f16: {e}")),
-			CacheData::F32(v) => Tensor::from_array((shape.to_vec(), v.clone()))
-				.map(Into::into)
-				.map_err(|e| format!("cache f32: {e}")),
+			CacheData::F16(v) => {
+				let data: Vec<f16> = if v.len() == want {
+					v.clone()
+				} else if v.is_empty() {
+					vec![f16::ZERO; want]
+				} else {
+					return Err(format!("cache f16: data len {} != shape product {want}", v.len()));
+				};
+				Tensor::from_array((shape.to_vec(), data))
+					.map(Into::into)
+					.map_err(|e| format!("cache f16: {e}"))
+			}
+			CacheData::F32(v) => {
+				let data: Vec<f32> = if v.len() == want {
+					v.clone()
+				} else if v.is_empty() {
+					vec![0.0f32; want]
+				} else {
+					return Err(format!("cache f32: data len {} != shape product {want}", v.len()));
+				};
+				Tensor::from_array((shape.to_vec(), data))
+					.map(Into::into)
+					.map_err(|e| format!("cache f32: {e}"))
+			}
 		}
 	}
 
