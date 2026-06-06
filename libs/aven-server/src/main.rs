@@ -12,6 +12,7 @@
 //! the challenge is nonce-bound (no channel binding). Config is all env; the
 //! identity seed is a Sprite secret; `AVEN_SERVER_DATA_DIR` is the persistent path.
 
+mod aven_ceo;
 mod ws_server;
 
 use std::sync::Arc;
@@ -147,6 +148,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err(e) => return Err(e.into()),
         };
     tracing::info!("blind replica engine connected (RocksDB, real schema)");
+
+    // S.3 — the server is the avenCEO owner: mint its genesis on startup (idempotent).
+    if let Err(e) = aven_ceo::ensure_avenceo_owned(&engine, &server_vault, &identity, avenceo_id).await {
+        tracing::warn!("avenCEO mint: {e}");
+    }
 
     // Register each newly-authenticated peer; hold the handle so we can stop it on
     // shutdown and reclaim its engine clone (to finalize RocksDB via sole ownership).
