@@ -438,7 +438,7 @@ pub(crate) async fn exec_list_rows(
 /// and the delete batch was withheld forever — that was the "deletes never sync across
 /// devices, even after reconnect" bug. Soft-delete keeps the row's data, so `owner` is
 /// still readable for a deleted row.
-pub(super) async fn build_object_spark_id_map(
+pub(super) async fn build_object_owner_map(
 	client: &JazzClient,
 ) -> Result<HashMap<(String, ObjectId), Uuid>, String> {
 	let mut out = HashMap::new();

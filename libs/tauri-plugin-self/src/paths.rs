@@ -1,4 +1,4 @@
-//! Canonical layout: `<Documents>/.avenOS/<network>/identities/<slug>/{vault,db}`.
+//! Canonical layout: `<Documents>/.avenOS/<network>/peers/<slug>/{vault,db}`.
 //!
 //! **Override**: `AVENOS_DATA_DIR_OVERRIDE` points at a **full identity root** (directory that directly
 //! contains `vault/` and `db/`) for tests and tooling.
@@ -62,7 +62,7 @@ pub fn identities_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, 
 	if expand_override().is_some() {
 		return Err("identities_dir_unavailable_under_data_dir_override".into());
 	}
-	Ok(aven_os_app_base(app)?.join("identities"))
+	Ok(aven_os_app_base(app)?.join("peers"))
 }
 
 /// Legacy name — prefer [`identities_dir`].
@@ -189,7 +189,7 @@ pub fn migrate_layout<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<(), Strin
 	}
 	let base = aven_os_app_base(app)?;
 	let legacy_vaults = base.join("vaults");
-	let identities = base.join("identities");
+	let identities = base.join("peers");
 	if legacy_vaults.is_dir() && !identities.exists() {
 		fs::rename(&legacy_vaults, &identities)
 			.map_err(|e| format!("migrate vaults→identities: {e}"))?;

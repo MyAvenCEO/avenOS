@@ -35,7 +35,7 @@ struct Config {
     network_seed: String,
     /// On-disk identity slug for THIS server (default `avenCEO`). The server is
     /// just another peer identity, stored under the same layout as devices:
-    /// `<Documents>/.avenOS/<network…>/identities/<server_name>/db`.
+    /// `<Documents>/.avenOS/<network…>/peers/<server_name>/db`.
     server_name: String,
     data_dir: std::path::PathBuf,
     seed: Option<[u8; 32]>,
@@ -74,10 +74,10 @@ impl Config {
     }
 }
 
-/// `<Documents>/.avenOS/<network split on '/'>/identities/<server_name>/db` — the
+/// `<Documents>/.avenOS/<network split on '/'>/peers/<server_name>/db` — the
 /// same on-disk layout devices use (`paths.rs`), with the server as one more
 /// identity. The network seed doubles as the path: `ceo.aven/testnet/abagana`
-/// → `…/.avenOS/ceo.aven/testnet/abagana/identities/<server_name>/db`. Falls back
+/// → `…/.avenOS/ceo.aven/testnet/abagana/peers/<server_name>/db`. Falls back
 /// to the home dir then the temp dir when no Documents dir is resolvable (headless
 /// boxes set `AVEN_SERVER_DATA_DIR` explicitly and never reach this path).
 fn derive_identity_db_dir(network_seed: &str, server_name: &str) -> std::path::PathBuf {
@@ -88,7 +88,7 @@ fn derive_identity_db_dir(network_seed: &str, server_name: &str) -> std::path::P
     for seg in network_seed.split('/').filter(|s| !s.is_empty()) {
         base = base.join(seg);
     }
-    base.join("identities").join(server_name).join("db")
+    base.join("peers").join(server_name).join("db")
 }
 
 fn load_identity(cfg: &Config) -> SigningKey {
