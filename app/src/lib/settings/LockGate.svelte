@@ -446,9 +446,6 @@
 						<p class="text-muted-foreground text-sm leading-relaxed">
 							{t('lockGate.chooseLanguage')}
 						</p>
-						<p class="text-muted-foreground text-xs leading-relaxed">
-							{t('lockGate.chooseLanguageHint')}
-						</p>
 					</div>
 					<div class="flex flex-col gap-2">
 						<button
