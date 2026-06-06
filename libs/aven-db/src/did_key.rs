@@ -52,7 +52,12 @@ mod tests {
 
     #[test]
     fn roundtrips_ed25519_did_key() {
-        let pk = [7u8; 32];
+        // Derive a *valid* Ed25519 public key from a seed: any 32 bytes are a
+        // valid signing-key seed, but a raw [7u8; 32] is not a valid curve point
+        // and now fails the decode-side `VerifyingKey::from_bytes` validation.
+        let pk = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32])
+            .verifying_key()
+            .to_bytes();
         let did = peer_did_from_ed25519(&pk).expect("encode");
         assert!(did.starts_with("did:key:z"));
         let back = ed25519_public_from_peer_did(&did).expect("decode");
