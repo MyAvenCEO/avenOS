@@ -725,7 +725,7 @@
 	},
 	"networkGate": {
 		"checking": "Prüfe Netzwerk-Mitgliedschaft…",
-		"title": "Du bist noch in keinem Netzwerk",
+		"title": "Du bist noch nicht Teil des avenCEO-Netzwerks",
 		"needInvite": "Dies ist ein Netzwerk nur mit Einladung. Sende deine DID an einen Admin — komm dann zurück.",
 		"yourDid": "Deine DID",
 		"copyDid": "DID kopieren",

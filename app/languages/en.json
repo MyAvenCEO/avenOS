@@ -737,7 +737,7 @@
 	},
 	"networkGate": {
 		"checking": "Checking network membership…",
-		"title": "You're not part of a network yet",
+		"title": "You're not part of the avenCEO network yet",
 		"needInvite": "This is an invite-only network. Send your DID to an admin to be added — then come back.",
 		"yourDid": "Your DID",
 		"copyDid": "Copy DID",

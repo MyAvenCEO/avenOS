@@ -2361,10 +2361,23 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 
 	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "sparks").await?;
 	let spark_id_ix = jazz_engine::col_ix(&sparks_schema, "spark_id")?;
+	let issuer_ix = jazz_engine::col_ix(&sparks_schema, "issuer_pubkey_b64")?;
 	let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "sparks").await?;
+	let my_issuer = crate::spark_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public());
 	for (_oid, vals) in &sparks_rows {
 		if jazz_engine::uuid_cell_at(vals.as_slice(), spark_id_ix)? == spark_uuid {
-			return Err("avenCEO spark already claimed".into());
+			let issuer = match vals.get(issuer_ix) {
+				Some(Value::Text(s)) => s.clone(),
+				_ => String::new(),
+			};
+			if issuer == my_issuer {
+				// Already claimed BY THIS DEVICE (e.g. after a restart) — idempotent:
+				// ensure the owner roster row + re-hydrate so the app shows. NOT an error.
+				ensure_aven_ceo_owner_row(client.as_ref(), &shell.peer_did, spark_uuid).await?;
+				finish_spark_admin_grant(app, jazz, self_state, client, spark_uuid).await?;
+				return Ok(spark_uuid.to_string());
+			}
+			return Err("avenCEO is already claimed by another identity".into());
 		}
 	}
 
@@ -2409,14 +2422,43 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 	let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
 	client.create("keyshares", ks_vals).await.map_err(format_jazz_err)?;
 
-	// The owner is the first member: give it a roster row with its self-published
-	// profile (name + device label from this device's identity), so it appears in
-	// the roster like everyone else and the profile is set without a manual step.
-	let (name, label) = read_own_profile(client.as_ref(), &shell.peer_did).await;
-	let peers_schema = jazz_engine::resolved_table_schema(client.as_ref(), "peers").await?;
+	// The owner is the first member: give it a roster row (populated from identity).
+	ensure_aven_ceo_owner_row(client.as_ref(), &shell.peer_did, spark_uuid).await?;
+
+	finish_spark_admin_grant(app, jazz, self_state, client, spark_uuid).await?;
+	Ok(spark_uuid.to_string())
+}
+
+/// Idempotently ensure THIS device has its own avenCEO roster row, populated from
+/// identity (name from `humans`, device label from the local peer). No-op if the
+/// row already exists. Used at claim and idempotent re-claim.
+async fn ensure_aven_ceo_owner_row(
+	client: &JazzClient,
+	peer_did: &str,
+	spark_uuid: Uuid,
+) -> Result<(), String> {
+	let peers_schema = jazz_engine::resolved_table_schema(client, "peers").await?;
+	let spark_ix = jazz_engine::col_ix(&peers_schema, "spark_id")?;
+	let did_ix = jazz_engine::col_ix(&peers_schema, "peer_did")?;
+	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
+	for (_o, vals) in &rows {
+		let sid = jazz_engine::uuid_cell_at(vals.as_slice(), spark_ix).ok();
+		let d = match vals.get(did_ix) {
+			Some(Value::Text(s)) => s.as_str(),
+			_ => "",
+		};
+		if sid == Some(spark_uuid) && d == peer_did {
+			return Ok(());
+		}
+	}
+	let (name, label) = read_own_profile(client, peer_did).await;
+	let now_ms: i64 = std::time::SystemTime::now()
+		.duration_since(std::time::UNIX_EPOCH)
+		.map(|d| d.as_millis() as i64)
+		.unwrap_or(0);
 	let mut prow = Map::new();
 	prow.insert("spark_id".into(), JsonValue::String(spark_uuid.to_string()));
-	prow.insert("peer_did".into(), JsonValue::String(shell.peer_did.clone()));
+	prow.insert("peer_did".into(), JsonValue::String(peer_did.to_string()));
 	prow.insert("kind".into(), JsonValue::String("member".into()));
 	prow.insert("status".into(), JsonValue::String("active".into()));
 	prow.insert("account_name".into(), JsonValue::String(name));
@@ -2424,9 +2466,7 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 	prow.insert("added_at_ms".into(), JsonValue::Number(now_ms.into()));
 	let prow_vals = insert_values("peers", &peers_schema, prow)?;
 	client.create("peers", prow_vals).await.map_err(format_jazz_err)?;
-
-	finish_spark_admin_grant(app, jazz, self_state, client, spark_uuid).await?;
-	Ok(spark_uuid.to_string())
+	Ok(())
 }
 
 /// Read this device's self profile for auto-publishing into the roster: display
