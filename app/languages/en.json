@@ -547,7 +547,8 @@
 				"rate_limit": "Inbound writes are rate-limited so one identity can't flood the aven.",
 				"owns": "Full control — read, write, delete, and manage members.",
 				"reads": "Read-only member — can decrypt and read, but not write."
-			}
+			},
+			"syncRelay": "Sync relay"
 		},
 		"avenCeoTitle": "avenCEO",
 		"avenCeoClaimedSub": "This network's roster & members",

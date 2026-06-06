@@ -534,7 +534,8 @@
 				"rate_limit": "Eingehende Schreibvorgänge sind ratenbegrenzt, damit keine Identität den Aven flutet.",
 				"owns": "Volle Kontrolle — lesen, schreiben, löschen und Mitglieder verwalten.",
 				"reads": "Nur-Lese-Mitglied — kann entschlüsseln und lesen, aber nicht schreiben."
-			}
+			},
+			"syncRelay": "Sync-Relay"
 		},
 		"avenCeoTitle": "avenCEO",
 		"avenCeoClaimedSub": "Verzeichnis & Mitglieder dieses Netzwerks",

@@ -159,7 +159,11 @@
 			const norm = s.did.trim().toLowerCase()
 			const peer = peersByDid.get(norm)
 			const isThisDevice = localDid !== '' && norm === localDid
-			const fallback = s.grant === 'replicate' ? t('identities.share.addReplica') : undefined
+			// D1: real names. Prefer the roster device label (Admina/Bobo); the connected
+			// aven relay is labelled as such; otherwise fall through to the short DID —
+			// never a misleading hardcoded "Replication Server".
+			const isRelay = norm !== '' && norm === (session?.relayDid?.trim().toLowerCase() ?? '\0')
+			const fallback = isRelay ? t('identities.share.syncRelay') : undefined
 			const label = peerAccessLabel(s.did, peer?.deviceLabel ?? fallback, isThisDevice)
 			return { did: s.did, label, isThisDevice, grant: s.grant, capabilities: s.caps }
 		})
