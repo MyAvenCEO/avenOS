@@ -431,7 +431,8 @@
 			"messagePlaceholder": "Write a message…",
 			"authorAtTime": "{author} at {time}",
 			"agentLabel": "Aven · LFM2.5",
-			"agentThinking": "Aven is thinking…"
+			"agentThinking": "Aven is thinking…",
+			"agentNoReply": "(no reply)"
 		},
 		"todos": {
 			"title": "Todos",

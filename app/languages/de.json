@@ -418,7 +418,8 @@
 			"messagePlaceholder": "Nachricht schreiben…",
 			"authorAtTime": "{author} at {time}",
 			"agentLabel": "Aven · LFM2.5",
-			"agentThinking": "Aven denkt nach…"
+			"agentThinking": "Aven denkt nach…",
+			"agentNoReply": "(keine Antwort)"
 		},
 		"todos": {
 			"title": "Todos",
