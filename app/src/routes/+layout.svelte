@@ -31,7 +31,6 @@ const intentsActive = $derived(path === '/')
 const sandboxActive = $derived(path.startsWith('/sandbox'))
 const selfActive = $derived(path.startsWith('/settings'))
 const sparksNavActive = $derived(path.startsWith('/identities'))
-const dbActive = $derived(path.startsWith('/db'))
 const avensActive = $derived(path.startsWith('/avens'))
 
 const shellLocked = $derived(browser && isTauriRuntime() && $deviceSession.kind === 'locked')
@@ -270,15 +269,6 @@ $effect(() => {
 						aria-current={sparksNavActive ? 'page' : undefined}
 						onclick={(e) => navigateApp('/identities', e)}
 						>{t('nav.identities')}</a
-					>
-					<span class="select-none opacity-25" aria-hidden="true">|</span>
-					<a
-						href="/db"
-						data-sveltekit-preload-data="hover"
-						class="transition-opacity hover:opacity-80 {dbActive ? 'opacity-95' : 'opacity-40'}"
-						aria-current={dbActive ? 'page' : undefined}
-						onclick={(e) => navigateApp('/db', e)}
-						>{t('nav.db')}</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a

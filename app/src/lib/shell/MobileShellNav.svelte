@@ -29,14 +29,12 @@ const chrome = $derived(mobileChromeOverrides())
 const intentsActive = $derived(path === '/')
 const sandboxActive = $derived(path.startsWith('/sandbox'))
 const sparksNavActive = $derived(path.startsWith('/identities'))
-const dbActive = $derived(path.startsWith('/db'))
 const avensActive = $derived(path.startsWith('/avens'))
 
 const navItems = $derived<NavItem[]>([
 	{ href: '/', label: t('nav.intents'), active: intentsActive },
 	{ href: '/sandbox', label: t('nav.sandbox'), active: sandboxActive },
 	{ href: '/identities', label: t('nav.identities'), active: sparksNavActive },
-	{ href: '/db', label: t('nav.db'), active: dbActive },
 	{ href: '/avens', label: t('nav.avens'), active: avensActive }
 ])
 
