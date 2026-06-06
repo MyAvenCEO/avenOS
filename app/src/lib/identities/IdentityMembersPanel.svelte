@@ -42,13 +42,35 @@
 	function capLabel(key: string): string {
 		return t(`identities.share.capabilities.${key}`)
 	}
+	// Human-readable "what this cap does under the hood" — H2 transparency.
+	function capDescription(key: string): string {
+		return t(`identities.share.capDesc.${key}`)
+	}
+	// The SYNC (replicate) role carries aven-node POLICY caps that aren't in the biscuit:
+	// a per-identity 10 MB storage quota + inbound rate-limiting. Surface them as badges
+	// too so the effective caps are 100% transparent (H1).
+	const SYNC_POLICY_CAPS = ['quota', 'rate_limit']
+	function effectiveCaps(grant: IdentityGrant, caps: string[]): string[] {
+		return grant === 'replicate' ? [...caps, ...SYNC_POLICY_CAPS] : caps
+	}
 	// Role/grant label (Owner/Member/Relay) — distinct from cap labels so a relay
 	// shows "Relay" (grant) + "Replicate" (cap), not two "Replicate" badges.
 	function grantLabel(grant: IdentityGrant): string {
 		return t(`identities.share.grants.${grant}`)
 	}
 	/// Display order for the Capabilities tab; any unknown cap falls in after these.
-	const CAP_ORDER = ['read', 'write', 'delete', 'admit', 'rotate_dek', 'replicate']
+	const CAP_ORDER = ['read', 'write', 'delete', 'admit', 'rotate_dek', 'replicate', 'quota', 'rate_limit']
+
+	// Distinct effective caps across all access holders (incl. synthesized SYNC policy
+	// caps), ordered — drives the "how these permissions work" legend (H2).
+	const capsInUse = $derived.by((): string[] => {
+		const set = new Set<string>()
+		for (const e of accessEntries) for (const c of effectiveCaps(e.grant, e.capabilities)) set.add(c)
+		return [
+			...CAP_ORDER.filter((c) => set.has(c)),
+			...[...set].filter((c) => !CAP_ORDER.includes(c)),
+		]
+	})
 
 	type MembersTab = 'members' | 'caps'
 	let activeTab = $state<MembersTab>('members')
@@ -491,10 +513,10 @@
 									<p class="text-muted-foreground mt-0.5 font-mono text-[11px] leading-snug select-text break-all" title={entry.did}>{entry.did}</p>
 								{/if}
 								<div class="mt-2 flex flex-wrap items-center gap-1.5">
-									<!-- Grant kind (owns/reads/replicate) — primary; effective caps — muted. All from the biscuit. -->
+									<!-- Grant kind (owns/reads/replicate) — primary; effective caps — muted. Biscuit caps + synthesized SYNC policy caps (10 MB / rate). Hover/legend = description. -->
 									<span class="bg-primary/10 text-primary rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase">{grantLabel(entry.grant)}</span>
-									{#each entry.capabilities as cap (cap)}
-										<span class="bg-muted text-muted-foreground rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase">{capLabel(cap)}</span>
+									{#each effectiveCaps(entry.grant, entry.capabilities) as cap (cap)}
+										<span class="bg-muted text-muted-foreground rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase" title={capDescription(cap)}>{capLabel(cap)}</span>
 									{/each}
 									{#if entry.isThisDevice}
 										<button
@@ -520,6 +542,19 @@
 					{/if}
 					{#if revokeNote}
 						<p class="text-muted-foreground text-sm">{revokeNote}</p>
+					{/if}
+					{#if capsInUse.length > 0}
+						<details class="border-border/40 mt-1 rounded-lg border bg-background/30 px-3 py-2">
+							<summary class="text-muted-foreground hover:text-foreground cursor-pointer text-[11px] font-medium select-none">{t('identities.share.capsLegendTitle')}</summary>
+							<ul class="mt-2 flex flex-col gap-1.5">
+								{#each capsInUse as cap (cap)}
+									<li class="flex items-start gap-2">
+										<span class="bg-muted text-muted-foreground mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wider uppercase">{capLabel(cap)}</span>
+										<span class="text-muted-foreground text-[11px] leading-snug">{capDescription(cap)}</span>
+									</li>
+								{/each}
+							</ul>
+						</details>
 					{/if}
 				{/if}
 			</section>
@@ -566,8 +601,8 @@
 						{/if}
 						<div class="mt-1 flex flex-wrap gap-1">
 							<span class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase">{grantLabel(entry.grant)}</span>
-							{#each entry.capabilities as cap (cap)}
-								<span class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase">{capLabel(cap)}</span>
+							{#each effectiveCaps(entry.grant, entry.capabilities) as cap (cap)}
+								<span class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase" title={capDescription(cap)}>{capLabel(cap)}</span>
 							{/each}
 						</div>
 					</li>
