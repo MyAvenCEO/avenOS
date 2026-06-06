@@ -76,6 +76,25 @@ only if explicitly wanted.
 - [ ] `author_sig`/`author_did` on `SealedBatchSubmission` (persisted codec change).
 - [ ] Verify at `SealBatch` apply.
 
+## ☐ Milestone 4 — Retire `AllowAll` engine default (hardening)
+
+The engine's default `CapabilityResolver` is `AllowAll`; enforcement depends on every
+peer *installing* the real resolver (app + server do today). A peer running the engine
+without one = an open gate. **Fail-closed instead.**
+- [ ] Engine: default resolver **denies** spark-scoped ops (or require an explicit resolver — no silent permissive default).
+- [ ] Audit: every peer entrypoint installs the real resolver.
+- [ ] Test: an un-configured engine rejects spark-scoped sync (fail-closed).
+
+## ☐ Milestone 5 — Relay/sync abuse caps (future idea)
+
+Blind relays accept authenticity-valid-but-*unauthorized* rows (rejected at members, but
+stored/forwarded = a spam/DoS sink, since a relay holds no biscuit to authorize). Add
+protective caps at the sync/relay layer so a relay isn't an unbounded sink.
+- [ ] **Rate limiting** per peer (inbound batches/sec, bytes/sec) with backpressure.
+- [ ] **Per-identity storage quota** — max DB size/value-count per identity; reject or evict over-quota writes.
+- [ ] Optional: require a **minimal cap to relay at all** (drop pure-forgery spam at the relay edge, before storage).
+- [ ] Fair-share across identities so one identity can't starve others on a shared relay.
+
 ---
 
 ## Architecture reference (terse)
@@ -86,3 +105,22 @@ only if explicitly wanted.
 - **Revocation:** re-mint biscuit + rotate DEK (forward) + evict on reconnect (M2). Backward plaintext is not recallable — accepted (no E2EE system can).
 - **Out of scope:** content-addressed ids; forward-secret ratchet / sender-keys.
 - **History:** the server-rooted avenCEO control identity, the `aven-caps` extraction, and the biscuit sync gate shipped via the auth-into-server merge (design in git history).
+
+## Threat model & residual slippage
+
+**Enforced E2E, relay-proof (✅):** content confidentiality (AEAD under the identity
+DEK), write-authorization (per-kind caps verified on every peer), and relabel-resistance
+(write-once owner). A relay can't forge (forgeries die at the first member) and can't read
+(no DEK).
+
+**Residual slippage — known boundary:**
+- **Accepted (cryptographically unsolvable):** *backward reads* — a member who already
+  decrypted keeps that plaintext after revocation. No E2EE system solves this.
+- **Pending (roadmap):** *eviction* — a revoked peer keeps local rows until **M2**;
+  *engine default `AllowAll`* — enforcement depends on resolver install until **M4**.
+- **Inherent:** *blind-relay spam* — authenticity-valid-but-unauthorized rows are stored
+  by relays (rejected at members; no breach, but a sink) → **M5** mitigates; *member DEK
+  leak* — a member can leak the DEK out-of-band (unavoidable).
+- **Out of scope today:** *metadata privacy* — the `owner` id, table name, row size, and
+  timing are **plaintext** to relays (only data cells are sealed). The ownership/social
+  graph is visible. If metadata privacy is required, it must be designed in (new milestone).
