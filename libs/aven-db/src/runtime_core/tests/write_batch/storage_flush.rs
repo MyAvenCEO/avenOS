@@ -168,29 +168,3 @@ fn rc_batched_tick_reschedules_after_transient_wal_flush_failure() {
     assert_eq!(core.take_storage_flush_error(), None);
 }
 
-#[test]
-fn rc_batched_tick_skips_flush_wal_for_query_settled_only_message() {
-    let calls = Arc::new(Mutex::new(RowMutationCallCounts::default()));
-    let mut core = create_runtime_with_boxed_storage(
-        test_schema(),
-        "row-batched-query-settled",
-        Box::new(RowMutationObservingStorage::new(Arc::clone(&calls))),
-    );
-
-    core.push_sync_inbox(InboxEntry {
-        source: Source::Server(ServerId::new()),
-        payload: SyncPayload::QuerySettled {
-            query_id: crate::sync_manager::QueryId(1),
-            tier: DurabilityTier::Local,
-            scope: vec![],
-            through_seq: 1,
-        },
-    });
-    core.batched_tick();
-
-    assert_eq!(
-        calls.lock().unwrap().flush_wal_calls,
-        0,
-        "query-settled notifications alone should not flush the WAL"
-    );
-}

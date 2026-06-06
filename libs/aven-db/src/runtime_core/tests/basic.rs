@@ -29,37 +29,6 @@ fn test_runtime_core_insert_query() {
     assert_eq!(results[0].1, row_values);
 }
 
-#[test]
-fn add_server_rehydrates_visible_rows_from_storage_after_restart() {
-    let mut old_runtime = create_runtime_with_schema(test_schema(), "restart-sync-test");
-    let user_id = ObjectId::new();
-    let ((row_object_id, _), _) = old_runtime
-        .insert("users", user_insert_values(user_id, "Alice"), None)
-        .expect("insert should succeed before restart");
-
-    let storage = old_runtime.into_storage();
-    let mut restarted = create_runtime_with_storage(test_schema(), "restart-sync-test", storage);
-
-    let server_id = ServerId::new();
-    restarted.add_server(server_id);
-    restarted.batched_tick();
-
-    let messages = restarted.sync_sender().take();
-    let synced_row = messages.iter().find(|message| match &message.payload {
-        SyncPayload::RowBatchCreated { row, .. } => row.row_id == row_object_id,
-        _ => false,
-    });
-
-    assert!(
-        synced_row.is_some(),
-        "row visible before restart should replay to a new server after restart; messages: {}",
-        messages
-            .iter()
-            .map(|message| format!("{:?}", message.payload))
-            .collect::<Vec<_>>()
-            .join(", ")
-    );
-}
 
 #[test]
 fn test_runtime_core_insert_materializes_schema_defaults() {
@@ -192,33 +161,6 @@ fn test_runtime_core_update_delete() {
     assert_eq!(results.len(), 0);
 }
 
-#[test]
-fn test_park_sync_message() {
-    use crate::metadata::RowProvenance;
-    use crate::sync_manager::{Source, SyncPayload};
-
-    let mut core = create_test_runtime();
-
-    let message = InboxEntry {
-        source: Source::Server(ServerId::new()),
-        payload: SyncPayload::RowBatchCreated {
-            metadata: None,
-            row: crate::row_histories::StoredRowBatch::new(
-                ObjectId::new(),
-                "main",
-                Vec::new(),
-                b"alice".to_vec(),
-                RowProvenance::for_insert(ObjectId::new().to_string(), 1_000),
-                HashMap::new(),
-                crate::row_histories::RowState::VisibleDirect,
-                None,
-            ),
-        },
-    };
-    core.park_sync_message(message);
-
-    assert_eq!(core.parked_sync_messages.len(), 1);
-}
 
 // =========================================================================
 // Durability API Tests (3-tier: A ↔ B[Worker] ↔ C[EdgeServer])

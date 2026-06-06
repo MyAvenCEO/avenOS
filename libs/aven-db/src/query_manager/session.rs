@@ -331,6 +331,7 @@ mod tests {
             batch_mode: None,
             batch_id: None,
             target_branch_name: None,
+            extra_metadata: None,
         };
 
         assert_eq!(context.author_principal(), "attributed-user");
