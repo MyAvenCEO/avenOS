@@ -525,14 +525,14 @@
 			"grants": {
 				"owns": "Owner",
 				"reads": "Member",
-				"replicate": "Sync & Backup"
+				"replicate": "Sync"
 			},
 			"accessLevel": "Access level",
 			"grantAccess": "Grant access",
 			"grantDescOwns": "Full control — read, write, and manage members.",
 			"grantDescReads": "Read-only member.",
-			"grantDescReplicate": "Blind sync & backup — the aven stores this identity's encrypted data it cannot read (up to 10 MB) and forwards it to your other devices.",
-			"quickRelay": "Sync & back up on the connected aven"
+			"grantDescReplicate": "Blind sync — the aven relays this identity's encrypted data it cannot read (up to 10 MB) to your other devices. It holds no key, so it is not a readable backup.",
+			"quickRelay": "Sync on the connected aven"
 		},
 		"avenCeoTitle": "avenCEO",
 		"avenCeoClaimedSub": "This network's roster & members",

@@ -513,14 +513,14 @@
 			"grants": {
 				"owns": "Eigentümer",
 				"reads": "Mitglied",
-				"replicate": "Sync & Backup"
+				"replicate": "Sync"
 			},
 			"accessLevel": "Zugriffsstufe",
 			"grantAccess": "Zugriff gewähren",
 			"grantDescOwns": "Volle Kontrolle — lesen, schreiben und Mitglieder verwalten.",
 			"grantDescReads": "Nur-Lese-Mitglied.",
-			"grantDescReplicate": "Blindes Sync & Backup — der Aven speichert die verschlüsselten Daten dieser Identität (bis 10 MB), die er nicht lesen kann, und leitet sie an deine anderen Geräte weiter.",
-			"quickRelay": "Auf dem verbundenen Aven sichern & sync"
+			"grantDescReplicate": "Blindes Sync — der Aven leitet die verschlüsselten Daten dieser Identität (bis 10 MB), die er nicht lesen kann, an deine anderen Geräte weiter. Er hält keinen Schlüssel, ist also kein lesbares Backup.",
+			"quickRelay": "Auf dem verbundenen Aven synchronisieren"
 		},
 		"avenCeoTitle": "avenCEO",
 		"avenCeoClaimedSub": "Verzeichnis & Mitglieder dieses Netzwerks",
