@@ -733,158 +733,48 @@ pub(super) async fn hydrate_shell(
 			identity_versions.insert(sid, v);
 		}
 	} else {
-		let first_name = manifest_opt
-			.as_ref()
-			.map(|m| m.first_name.trim())
-			.filter(|s| !s.is_empty())
-			.unwrap_or("Friend");
-		let username_slug = manifest_opt
-			.as_ref()
-			.and_then(|m| {
-				let u = m.username_slug.trim();
-				if u.is_empty() {
-					None
-				} else {
-					Some(u.to_string())
-				}
-			})
-			.unwrap_or_else(|| ascii_slug_fallback(first_name));
-		let device_label = manifest_opt
-			.as_ref()
-			.map(|m| m.device_label.trim().to_string())
-			.filter(|s| !s.is_empty())
-			.unwrap_or_else(system_device_name);
-
+		// No bootstrap identity: the app works with zero identities. The user creates
+		// one (+ New) or is added via caps after the network invite; avenCEO is minted
+		// on the aven-node, never defaulted on a device. We only ensure this device
+		// has its own local `peers` row (presence + auto device label), idempotently —
+		// this branch re-runs every hydrate until the first identity exists.
 		let peers_schema_seed = resolved_table_schema(client, "peers").await?;
-		let peer_vals = super::insert_values(
-			"peers",
-			&peers_schema_seed,
-			vec![
-				("peer_did".into(), JsonValue::String(vault.peer_did.clone())),
-				("device_label".into(), JsonValue::String(device_label.into())),
-				("kind".into(), JsonValue::String("local".into())),
-				(
-					"added_at_ms".into(),
-					JsonValue::Number(now_unix_ms_i64().into()),
-				),
-				("status".into(), JsonValue::String("active".into())),
-			]
-			.into_iter()
-			.collect(),
-		)?;
-		let local_peer_oid = client
-			.create("peers", peer_vals)
-			.await
-			.map_err(super::format_jazz_err)?;
-
-		// The human's profile lives on their own (human-typed) identity row — no
-		// separate `humans` table, no `my_devices` allowlist (device access is the
-		// `peers` roster + biscuit caps now). `local_peer_oid` is just the roster row.
-		let _ = local_peer_oid;
-		let owner = Uuid::new_v4();
-		let biscuit_gen = identity_acc::mint_genesis_identity(&vault, owner)?;
-		let genesis_b64 = URL_SAFE_NO_PAD.encode(
-			biscuit_gen
-				.to_vec()
-				.map_err(|e| format!("genesis_encode:{e:?}"))?,
-		);
-
-		let mut row = Map::new();
-		row.insert(
-			"owner".into(),
-			JsonValue::String(owner.to_string()),
-		);
-		// This is the device owner's own identity → type=human, profile on the row.
-		row.insert("type".into(), JsonValue::String("human".into()));
-		row.insert("username_slug".into(), JsonValue::String(username_slug));
-		row.insert(
-			"name".into(),
-			JsonValue::String(first_name.to_string()),
-		);
-		row.insert(
-			"issuer_pubkey_b64".into(),
-			JsonValue::String(identity_acc::encode_issuer_pubkey_b64(
-				&vault.biscuit_kp.public(),
-			)),
-		);
-		row.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
-		row.insert("current_dek_version".into(), JsonValue::Number(1.into()));
-		row.insert(
-			"created_at_ms".into(),
-			JsonValue::Number(now_unix_ms_i64().into()),
-		);
-		let sparks_vals = super::insert_values("identities", &sparks_schema, row)?;
-		let sparks_oid = ObjectId::new();
-		let sparks_meta = super::owner_binding_meta(&signing_key, sparks_oid, owner)?;
-		client
-				.create_with_id_and_metadata("identities", sparks_oid, sparks_vals, sparks_meta)
+		let did_ix = col_ix(&peers_schema_seed, "peer_did")?;
+		let existing_peers = exec_list_rows(client, "peers").await.unwrap_or_default();
+		let has_local = existing_peers
+			.iter()
+			.any(|(_o, vals)| matches!(vals.get(did_ix), Some(Value::Text(s)) if s == &vault.peer_did));
+		if !has_local {
+			let device_label = manifest_opt
+				.as_ref()
+				.map(|m| m.device_label.trim().to_string())
+				.filter(|s| !s.is_empty())
+				.unwrap_or_else(system_device_name);
+			let peer_vals = super::insert_values(
+				"peers",
+				&peers_schema_seed,
+				vec![
+					("peer_did".into(), JsonValue::String(vault.peer_did.clone())),
+					("device_label".into(), JsonValue::String(device_label)),
+					("kind".into(), JsonValue::String("local".into())),
+					("added_at_ms".into(), JsonValue::Number(now_unix_ms_i64().into())),
+					("status".into(), JsonValue::String("active".into())),
+				]
+				.into_iter()
+				.collect(),
+			)?;
+			client
+				.create("peers", peer_vals)
 				.await
 				.map_err(super::format_jazz_err)?;
-
-		vault.identities.insert(
-			owner,
-			identity_acc::BiscuitIdentity {
-				owner,
-				biscuit: biscuit_gen.clone(),
-			},
-		);
-
-		let dek_ver = 1i64;
-		identity_versions.insert(owner, dek_ver);
-
-		let urn = identity_urn(owner);
-		let kek = derive_kek_x25519(&signing_key, &vault.ed25519_public)?;
-		let aad_enc = keyshare_wrap_aad(&urn, &vault.peer_did, dek_ver);
-		let dek_plain = random_identity_dek();
-		let wrapped =
-			encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad_enc)?;
-
-		let mut ks = Map::new();
-		ks.insert("owner".into(), JsonValue::String(owner.to_string()));
-		ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
-		ks.insert(
-			"recipient_did".into(),
-			JsonValue::String(vault.peer_did.clone()),
-		);
-		ks.insert(
-			"wrapper_did".into(),
-			JsonValue::String(vault.peer_did.clone()),
-		);
-		ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
-		let ks_schema = resolved_table_schema(client, "keyshares").await?;
-		let ks_vals = super::insert_values("keyshares", &ks_schema, ks)?;
-		let ks_oid = ObjectId::new();
-		let ks_meta = super::owner_binding_meta(&signing_key, ks_oid, owner)?;
-		client
-				.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
-				.await
-				.map_err(super::format_jazz_err)?;
-
-		deks.insert((owner, dek_ver), dek_plain);
-
-		// `peers` is now identity-scoped (caps-only sync). The local device row was
-		// created above before this identity existed; scope it to the default identity
-		// now so it is valid identity data (and syncs across the user's own devices).
-		let mut peer_patch = Map::new();
-		peer_patch.insert("owner".into(), JsonValue::String(owner.to_string()));
-		let peer_ops = super::patch_updates(&peers_schema_seed, peer_patch)?;
-		client
-			.update(local_peer_oid, peer_ops)
-			.await
-			.map_err(super::format_jazz_err)?;
+		}
 	}
 
 	let mut identity_keys: Vec<Uuid> = vault.identities.keys().cloned().collect();
 	identity_keys.sort();
-	let default_identity = if identity_keys.is_empty() {
-		log::warn!(
-			target: "avenos::jazz",
-			"hydrate_shell: no identities ingested (check keyshares / genesis on disk)",
-		);
-		return Err("shell_no_sparks".into());
-	} else {
-		identity_keys[0]
-	};
+	// Zero identities is valid: the user creates one (+ New) or is added via caps after
+	// the invite. `default_identity` is a nil sentinel until then (no fallback owner).
+	let default_identity = identity_keys.first().copied().unwrap_or_else(Uuid::nil);
 
 	log::debug!(
 		target: "avenos::jazz",
