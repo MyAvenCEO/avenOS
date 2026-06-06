@@ -5,7 +5,6 @@
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { startAvenAuthServer } from './dev-aven-auth.ts'
 import { freeDevServerPort } from './free-dev-server-port.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -26,12 +25,6 @@ async function main() {
 		spawnSync('bun', ['./scripts/clean-app-tauri-target.ts'], { cwd: repoRoot, stdio: 'inherit' })
 	}
 
-	// Boot the invite-only auth backend (http://localhost:3000) for the /invite flow.
-	const auth = startAvenAuthServer()
-	for (const sig of ['SIGINT', 'SIGTERM'] as const) {
-		process.on(sig, () => auth.stop())
-	}
-
 	const child = Bun.spawn(['bun', '--env-file=.env', 'run', '--cwd', 'app', 'tauri:dev'], {
 		cwd: repoRoot,
 		stdout: 'inherit',
@@ -41,7 +34,6 @@ async function main() {
 	})
 
 	const code = await child.exited
-	auth.stop()
 	process.exit(typeof code === 'number' ? code : 1)
 }
 

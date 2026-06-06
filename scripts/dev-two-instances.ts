@@ -38,7 +38,6 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { homedir, platform, tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { startAvenAuthServer } from './dev-aven-auth.ts'
 import { freeDevServerPort } from './free-dev-server-port.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -246,9 +245,6 @@ async function main() {
 	freeDevServerPort(1421)
 	if (!EXTERNAL_WS) freeDevServerPort(SERVER_HTTP_PORT)
 
-	// Boot the invite-only auth backend (http://localhost:3000) once for both instances.
-	const auth = startAvenAuthServer()
-
 	const baseEnv = devBaseEnv()
 
 	// Resolve the sync relay: a remote Sprite-hosted server over its public wss URL
@@ -272,7 +268,6 @@ async function main() {
 		} catch (e) {
 			console.error(`${BOLD}${GREEN}[S]${RESET} ${(e as Error).message}`)
 			server?.kill('SIGTERM')
-			auth.stop()
 			process.exit(1)
 		}
 		wsUrl = LOCAL_WS
@@ -293,7 +288,6 @@ async function main() {
 		console.error(`${BOLD}${CYAN}[A]${RESET} Timed out waiting for :1420 — did instance A start?`)
 		tauriA.kill('SIGTERM')
 		server?.kill('SIGTERM')
-		auth.stop()
 		process.exit(1)
 	}
 
@@ -308,7 +302,6 @@ async function main() {
 		tauriA.kill('SIGTERM')
 		viteB.kill('SIGTERM')
 		server?.kill('SIGTERM')
-		auth.stop()
 		process.exit(1)
 	}
 
@@ -321,13 +314,11 @@ async function main() {
 
 	for (const sig of ['SIGINT', 'SIGTERM'] as const) {
 		process.on(sig, () => {
-			auth.stop()
 			for (const p of allProcs) p.kill(sig)
 		})
 	}
 
 	await Promise.all(allProcs.map((p) => new Promise((res) => p.on('exit', res))))
-	auth.stop()
 }
 
 void main()

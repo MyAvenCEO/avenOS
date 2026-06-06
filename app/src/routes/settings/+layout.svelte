@@ -3,7 +3,6 @@ import { browser } from '$app/environment'
 import { page } from '$app/state'
 import { t } from '$lib/i18n'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-import { clearSessionToken } from '$lib/self/network-auth'
 import { pickVaultRowForIdentity } from '$lib/settings/active-vault-ui'
 import { clearDeviceSession, deviceSession } from '$lib/settings/device-session-store'
 import { provideSelfContext } from '$lib/settings/self-context.svelte'
@@ -54,10 +53,9 @@ const profileName = $derived.by(() => {
 
 const profileDevice = $derived(activeVault?.deviceLabel?.trim() ?? '')
 
-/** Lock the identity (back to the picker) and drop the auth-server session — lets you switch
- * accounts within one app run for testing. */
+/** Lock the identity (back to the picker) — lets you switch accounts within one
+ * app run for testing. */
 async function logout(): Promise<void> {
-	clearSessionToken()
 	await clearDeviceSession()
 }
 </script>
