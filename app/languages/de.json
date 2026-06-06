@@ -94,6 +94,8 @@
 		"todos": "Todos",
 		"gallery": "Dateien",
 		"peers": "Peers",
+		"banking": "Banking",
+		"dashboard": "Meine Ziele",
 		"orders": "Bestellungen",
 		"orderTable": "Bestelltabelle",
 		"turnover": "Umsatz",
@@ -684,6 +686,33 @@
 	},
 	"avens": {
 		"subtitle": "Fest hinterlegte Beispiel-Avens. Öffne eines, um seine Bereiche zu erkunden.",
+		"dashboard": {
+			"subtitle": "Wie viel Cash du pro gearbeiteter Stunde ziehst — und der nächste Schritt zum Level-up.",
+			"perWeekSuffix": " /Wo",
+			"ladderTitle": "Dein Aufstieg",
+			"ladderCleared": "{count} Level geschafft",
+			"founder": {
+				"perHour": "Cashflow / Stunde",
+				"perHourUnit": "/h",
+				"lvlShort": "Lvl",
+				"toNext": "{pct}% bis Level {n}",
+				"easiest": "am einfachsten",
+				"now": "jetzt",
+				"next": "nächstes",
+				"hours": "Arbeitsstunden",
+				"hoursUnit": "h/Wo",
+				"draw": "Founder-Cashflow"
+			}
+		},
+		"banking": {
+			"subtitle": "Salden und Transaktionen über alle Zahlungs- & Bankanbieter — rechts nach Anbieter filtern.",
+			"providerCount": "{count} Anbieter",
+			"totalBalance": "Gesamtsaldo",
+			"filterTitle": "Anbieter",
+			"allProviders": "Alle Anbieter",
+			"txnCount": "{count} Transaktionen",
+			"net": "netto"
+		},
 		"orders": {
 			"subtitle": "Aktuelle Bestellungen aus dem Kassen-Journal.",
 			"server": "Bedienung",

@@ -95,6 +95,8 @@
 		"todos": "Todos",
 		"gallery": "Files",
 		"peers": "Peers",
+		"banking": "Banking",
+		"dashboard": "My Goals",
 		"orders": "Orders",
 		"orderTable": "Order Table",
 		"turnover": "Turnover",
@@ -696,6 +698,33 @@
 	},
 	"avens": {
 		"subtitle": "Hardcoded example avens. Open one to explore its sections.",
+		"dashboard": {
+			"subtitle": "How much cash you pull out per hour worked — and the next move to level it up.",
+			"perWeekSuffix": " /wk",
+			"ladderTitle": "Your climb",
+			"ladderCleared": "{count} levels cleared",
+			"founder": {
+				"perHour": "Cashflow / hour",
+				"perHourUnit": "/h",
+				"lvlShort": "Lvl",
+				"toNext": "{pct}% to Level {n}",
+				"easiest": "easiest",
+				"now": "now",
+				"next": "next",
+				"hours": "Work hours",
+				"hoursUnit": "h/wk",
+				"draw": "Founder cashflow"
+			}
+		},
+		"banking": {
+			"subtitle": "Balances and transactions across every payment & bank provider — filter by provider on the right.",
+			"providerCount": "{count} providers",
+			"totalBalance": "Total balance",
+			"filterTitle": "Provider",
+			"allProviders": "All providers",
+			"txnCount": "{count} transactions",
+			"net": "net"
+		},
 		"orders": {
 			"subtitle": "Recent orders from the point-of-sale journal.",
 			"server": "Server",
