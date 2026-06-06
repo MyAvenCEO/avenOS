@@ -63,6 +63,43 @@ pub struct Relation {
     pub access_count: i64,
 }
 
+/// A compact "card" for an entity: compiled-truth (kind + strongest relations) plus the
+/// timeline of memories that mention it. The closet/index layer, derived on demand
+/// (gBrain's "compiled-truth + timeline" idea).
+#[derive(Debug, Clone)]
+pub struct EntityCard {
+    pub name: String,
+    pub kind: String,
+    /// Related entities by descending relation strength.
+    pub relations: Vec<(String, f64)>,
+    /// Memories mentioning this entity (the timeline).
+    pub recent_memories: Vec<Memory>,
+}
+
+impl EntityCard {
+    /// Render the card as a compact text block.
+    pub fn render(&self) -> String {
+        let mut out = format!("# {} ({})\n", self.name, self.kind);
+        if !self.relations.is_empty() {
+            let rels: Vec<String> = self
+                .relations
+                .iter()
+                .map(|(n, s)| format!("{n} ({s:.2})"))
+                .collect();
+            out.push_str("related: ");
+            out.push_str(&rels.join(", "));
+            out.push('\n');
+        }
+        out.push_str("timeline:\n");
+        for m in &self.recent_memories {
+            out.push_str("- ");
+            out.push_str(&truncate(&m.content, 200));
+            out.push('\n');
+        }
+        out
+    }
+}
+
 // ── Dynamics constants (MemPalace-tuned) ────────────────────────────────────
 const POTENTIATION_INCREMENT: f64 = 0.05;
 const MAX_STRENGTH: f64 = 5.0;
@@ -225,6 +262,187 @@ impl<E: Embedder> Brain<E> {
             stability: f64_at(v, 3),
             access_count: i64_at(v, 4),
         }))
+    }
+
+    // ── Context assembly (L0 identity · L1 summary · L2 recall · entity cards) ─
+
+    /// Set the brain's L0 identity ("self") — stored as a single `self`-tagged memory,
+    /// replacing any previous one.
+    pub async fn set_self(&self, text: &str) -> Result<(), BrainError> {
+        for m in self.memories_tagged("self").await? {
+            self.client
+                .delete(m.id)
+                .await
+                .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+        }
+        self.remember(text, &["self"]).await?;
+        Ok(())
+    }
+
+    /// Assemble the wake-up context: L0 identity + L1 summary (the `gist_n` most-recent
+    /// non-self memories, compactly rendered). The block an agent loads on start.
+    pub async fn wake(&self, gist_n: usize) -> Result<String, BrainError> {
+        let self_text = self
+            .memories_tagged("self")
+            .await?
+            .into_iter()
+            .next()
+            .map(|m| m.content)
+            .unwrap_or_else(|| "(self not set)".to_string());
+
+        let recent = self.recent_memories(gist_n + 16).await?;
+        let mut out = String::from("# Self\n");
+        out.push_str(&self_text);
+        out.push_str("\n\n# Recent memories\n");
+        for m in recent
+            .iter()
+            .filter(|m| !m.tags.iter().any(|t| t == "self"))
+            .take(gist_n)
+        {
+            out.push_str("- ");
+            out.push_str(&truncate(&m.content, 200));
+            out.push('\n');
+        }
+        Ok(out)
+    }
+
+    /// L2 recall: the `n` most-recent memories carrying all of `tags` (no query text).
+    pub async fn recall(&self, tags: &[&str], n: usize) -> Result<Vec<Memory>, BrainError> {
+        let mut qb = QueryBuilder::new(MEMORIES);
+        for t in tags {
+            qb = qb.filter_contains("tags", Value::Text(t.to_string()));
+        }
+        let rows = self
+            .client
+            .query(qb.order_by_desc("created_at").limit(n).build(), None)
+            .await
+            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+        Ok(rows.iter().map(|(id, v)| memory_from_row(*id, v)).collect())
+    }
+
+    /// Memories that mention the named entity (entity-scoped recall).
+    pub async fn memories_about(&self, name: &str) -> Result<Vec<Memory>, BrainError> {
+        let Some(eid) = self.entity_id_by_name(name).await? else {
+            return Ok(Vec::new());
+        };
+        let mention_rows = self
+            .client
+            .query(
+                QueryBuilder::new(MENTIONS)
+                    .filter_eq("entity", Value::Uuid(eid))
+                    .build(),
+                None,
+            )
+            .await
+            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+        let memory_ids: std::collections::HashSet<ObjectId> = mention_rows
+            .iter()
+            .filter_map(|(_, v)| as_uuid(v.first()))
+            .collect();
+        if memory_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        // Small-scale fetch: scan memories and keep the mentioned ones. (A join / `_id`
+        // filter is the scale optimization.)
+        let all = self
+            .client
+            .query(QueryBuilder::new(MEMORIES).build(), None)
+            .await
+            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+        Ok(all
+            .into_iter()
+            .filter(|(id, _)| memory_ids.contains(id))
+            .map(|(id, v)| memory_from_row(id, &v))
+            .collect())
+    }
+
+    /// A compact card for an entity: compiled-truth (kind + strongest relations) + the
+    /// timeline of memories mentioning it.
+    pub async fn entity_card(&self, name: &str) -> Result<Option<EntityCard>, BrainError> {
+        let entity_rows = self
+            .client
+            .query(
+                QueryBuilder::new(ENTITIES)
+                    .filter_eq("name", Value::Text(name.to_string()))
+                    .build(),
+                None,
+            )
+            .await
+            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+        let Some((eid, ev)) = entity_rows.first() else {
+            return Ok(None);
+        };
+        let kind = text_at(ev, 1);
+
+        // Relations involving this entity (either side): collect (other_id, strength).
+        let mut weighted: Vec<(ObjectId, f64)> = Vec::new();
+        for (self_col, other_idx) in [("a", 1usize), ("b", 0usize)] {
+            let rows = self
+                .client
+                .query(
+                    QueryBuilder::new(RELATIONS)
+                        .filter_eq(self_col, Value::Uuid(*eid))
+                        .build(),
+                    None,
+                )
+                .await
+                .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+            for (_, v) in rows {
+                if let Some(other) = as_uuid(v.get(other_idx)) {
+                    weighted.push((other, f64_at(&v, 2)));
+                }
+            }
+        }
+        let names: std::collections::HashMap<ObjectId, String> = self
+            .entities()
+            .await?
+            .into_iter()
+            .map(|e| (e.id, e.name))
+            .collect();
+        let mut relations: Vec<(String, f64)> = weighted
+            .into_iter()
+            .filter_map(|(id, s)| names.get(&id).map(|n| (n.clone(), s)))
+            .collect();
+        relations.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        let recent_memories = self.memories_about(name).await?;
+        Ok(Some(EntityCard {
+            name: name.to_string(),
+            kind,
+            relations,
+            recent_memories,
+        }))
+    }
+
+    /// The `n` most-recent memories (any tags).
+    async fn recent_memories(&self, n: usize) -> Result<Vec<Memory>, BrainError> {
+        let rows = self
+            .client
+            .query(
+                QueryBuilder::new(MEMORIES)
+                    .order_by_desc("created_at")
+                    .limit(n)
+                    .build(),
+                None,
+            )
+            .await
+            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+        Ok(rows.iter().map(|(id, v)| memory_from_row(*id, v)).collect())
+    }
+
+    /// Memories carrying a given tag.
+    async fn memories_tagged(&self, tag: &str) -> Result<Vec<Memory>, BrainError> {
+        let rows = self
+            .client
+            .query(
+                QueryBuilder::new(MEMORIES)
+                    .filter_contains("tags", Value::Text(tag.to_string()))
+                    .build(),
+                None,
+            )
+            .await
+            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+        Ok(rows.iter().map(|(id, v)| memory_from_row(*id, v)).collect())
     }
 
     /// Build the graph for a new memory: upsert entities for each wikilink, record a
@@ -444,6 +662,21 @@ fn u64_at(v: &[Value], i: usize) -> u64 {
         _ => 0,
     }
 }
+fn as_uuid(v: Option<&Value>) -> Option<ObjectId> {
+    match v {
+        Some(Value::Uuid(id)) => Some(*id),
+        _ => None,
+    }
+}
+/// Truncate to at most `max` chars, appending an ellipsis when cut.
+fn truncate(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_string()
+    } else {
+        let head: String = s.chars().take(max).collect();
+        format!("{head}…")
+    }
+}
 
 /// Stable, deterministic content hash (FNV-1a 64-bit) — identical across devices.
 fn content_hash(content: &str) -> [u8; 8] {
@@ -564,5 +797,53 @@ mod tests {
             "co-mention should potentiate strength above the seed, got {}",
             r.strength
         );
+    }
+
+    #[tokio::test]
+    async fn wake_includes_self_and_recent_memories() {
+        let brain = Brain::open_in_memory("test-wake", StubEmbedder::new(EMBED_DIM))
+            .await
+            .unwrap();
+        brain.set_self("I am Atlas, Alice's assistant.").await.unwrap();
+        brain.remember("bought oat milk at the store", &[]).await.unwrap();
+        brain.remember("finished the quarterly report", &[]).await.unwrap();
+
+        let ctx = brain.wake(5).await.unwrap();
+        assert!(ctx.contains("Atlas"), "wake should include the self block:\n{ctx}");
+        assert!(
+            ctx.contains("oat milk") && ctx.contains("quarterly report"),
+            "wake should include recent memories:\n{ctx}"
+        );
+        // self memory is tagged `self`, so it must not also appear under recent memories
+        assert_eq!(
+            ctx.matches("Atlas").count(),
+            1,
+            "self must appear once (in the Self block), not duplicated in the gist:\n{ctx}"
+        );
+    }
+
+    #[tokio::test]
+    async fn entity_card_shows_relations_and_timeline() {
+        let brain = Brain::open_in_memory("test-card", StubEmbedder::new(EMBED_DIM))
+            .await
+            .unwrap();
+        brain.remember("[[Alice]] and [[Bob]] launched [[Acme]]", &[]).await.unwrap();
+        brain.remember("[[Alice]] emailed [[Bob]] about the roadmap", &[]).await.unwrap();
+
+        let card = brain.entity_card("Alice").await.unwrap().expect("Alice card");
+        assert_eq!(card.name, "Alice");
+
+        let names: Vec<&str> = card.relations.iter().map(|(n, _)| n.as_str()).collect();
+        assert!(names.contains(&"Bob") && names.contains(&"Acme"), "relations: {names:?}");
+
+        // Bob is co-mentioned with Alice in both memories, Acme in one → Bob ranks first.
+        assert_eq!(card.relations.first().map(|(n, _)| n.as_str()), Some("Bob"));
+        let bob = card.relations.iter().find(|(n, _)| n == "Bob").unwrap().1;
+        let acme = card.relations.iter().find(|(n, _)| n == "Acme").unwrap().1;
+        assert!(bob >= acme, "Bob ({bob}) should be at least as strong as Acme ({acme})");
+
+        // timeline = the two memories mentioning Alice
+        assert_eq!(card.recent_memories.len(), 2, "timeline: {:?}", card.recent_memories);
+        assert!(card.render().contains("Bob"));
     }
 }
