@@ -114,8 +114,29 @@ identities are created on demand** via a **"+" grid item** on the identities lis
 - [ ] Backend: a `create_identity(name, type)` IPC — mint genesis biscuit + DEK +
   self-keyshare + stamped `identities` row (factor the onboard path into a reusable fn).
 - [ ] Frontend: a "+" card in the identities grid → name → create → route to it.
-- [ ] Keep the human identity auto on onboard (the person must exist); "+" creates
-  group/aven identities.
+- [x] Frontend "+" + typed `create_identity(name, type)` done (`517fcef`; inline input `1d61f39`).
+- [x] **Superseded:** no auto human identity — onboard now tolerates **zero** identities
+  (`f0fa682`); the user creates one (+ New human/aven) or is added via caps after the invite.
+
+---
+
+## ☐ Milestone 7 — Federated avens: per-aven default identity, registry-via-identities, invite cap
+
+**Model (decided):** no global network. Many independent **avens**; each = an **aven-node**
+that enforces its own rights + **one default identity named after itself** (avenCEO / avenMAIA
+/ …, from the aven's config/seed). The **`identities` list IS the registry** (no new table):
+readable by every invited member of that aven, writeable only on one's **own** row (already
+enforced by owner-binding + write-once). A device can belong to many avens, each granting its
+own independent allowance. Per-identity Owner/Member/Relay sharing stays as-is (orthogonal).
+
+- [ ] **(1) Generalize the `avenCEO` name** → per-aven configured name (env/config on the
+  aven-node); the deterministic id stays per-seed. Drop hardcoded `avenCEO` literals.
+- [ ] **(2) Shared-read of the `identities` registry** for aven members (a `reads` on that
+  aven's identities list) — members see the directory; own-row-write already enforced.
+- [ ] **(3) `replicate(quota)` cap primitive** + per-identity **10 MB** quota enforced on the
+  aven-node (M5's per-identity quota lands here) + per-grant rate limit.
+- [ ] **(4) "Invite to Sync & Backup" UI** — any admin of that aven grants `reads` +
+  `replicate(quota)` to a DID. Invite = registry row (visibility) + bounded relay.
 
 ---
 
