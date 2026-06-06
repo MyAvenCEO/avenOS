@@ -140,6 +140,7 @@ pub async fn ensure_avenceo_owned(
 		sparks_tbl,
 		&[
 			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
+			("type", Value::Text("aven".into())),
 			("name", Value::Text("avenCEO".into())),
 			("issuer_pubkey_b64", Value::Text(issuer_b64)),
 			("genesis_b64", Value::Text(genesis_b64)),

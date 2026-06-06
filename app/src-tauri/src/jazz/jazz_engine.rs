@@ -539,6 +539,20 @@ fn ascii_slug_fallback(name: &str) -> String {
 	}
 }
 
+/// System-extracted device name for the local peer's `device_label`. Device
+/// membership is governed by biscuit caps + the `peers` roster now (no `my_devices`
+/// allowlist), so each device just self-publishes its OS name into the roster.
+pub(super) fn system_device_name() -> String {
+	std::process::Command::new("scutil")
+		.args(["--get", "ComputerName"])
+		.output()
+		.ok()
+		.and_then(|o| String::from_utf8(o.stdout).ok())
+		.map(|s| s.trim().to_string())
+		.filter(|s| !s.is_empty())
+		.unwrap_or_else(|| "This Device".to_string())
+}
+
 fn possessive_identity_title(first_name_for_identity: &str) -> String {
 	let n = first_name_for_identity.trim();
 	if n.is_empty() {
@@ -734,9 +748,9 @@ pub(super) async fn hydrate_shell(
 			.unwrap_or_else(|| ascii_slug_fallback(first_name));
 		let device_label = manifest_opt
 			.as_ref()
-			.map(|m| m.device_label.trim())
+			.map(|m| m.device_label.trim().to_string())
 			.filter(|s| !s.is_empty())
-			.unwrap_or("This Mac");
+			.unwrap_or_else(system_device_name);
 
 		let peers_schema_seed = resolved_table_schema(client, "peers").await?;
 		let peer_vals = super::insert_values(
@@ -760,29 +774,10 @@ pub(super) async fn hydrate_shell(
 			.await
 			.map_err(super::format_jazz_err)?;
 
-		let humans_schema_seed = resolved_table_schema(client, "humans").await?;
-		let human_vals_map: Map<String, JsonValue> = vec![
-			("first_name".into(), JsonValue::String(first_name.to_string())),
-			("username_slug".into(), JsonValue::String(username_slug)),
-			(
-				"my_devices".into(),
-				JsonValue::Array(vec![JsonValue::String(
-					local_peer_oid.uuid().to_string(),
-				)]),
-			),
-			(
-				"created_at_ms".into(),
-				JsonValue::Number(now_unix_ms_i64().into()),
-			),
-		]
-		.into_iter()
-		.collect();
-		let humans_vals = super::insert_values("humans", &humans_schema_seed, human_vals_map)?;
-		client
-			.create("humans", humans_vals)
-			.await
-			.map_err(super::format_jazz_err)?;
-
+		// The human's profile lives on their own (human-typed) identity row — no
+		// separate `humans` table, no `my_devices` allowlist (device access is the
+		// `peers` roster + biscuit caps now). `local_peer_oid` is just the roster row.
+		let _ = local_peer_oid;
 		let owner = Uuid::new_v4();
 		let biscuit_gen = identity_acc::mint_genesis_identity(&vault, owner)?;
 		let genesis_b64 = URL_SAFE_NO_PAD.encode(
@@ -796,9 +791,12 @@ pub(super) async fn hydrate_shell(
 			"owner".into(),
 			JsonValue::String(owner.to_string()),
 		);
+		// This is the device owner's own identity → type=human, profile on the row.
+		row.insert("type".into(), JsonValue::String("human".into()));
+		row.insert("username_slug".into(), JsonValue::String(username_slug));
 		row.insert(
 			"name".into(),
-			JsonValue::String(possessive_identity_title(first_name)),
+			JsonValue::String(first_name.to_string()),
 		);
 		row.insert(
 			"issuer_pubkey_b64".into(),

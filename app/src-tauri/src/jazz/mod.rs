@@ -2401,6 +2401,7 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 
 	let mut row = Map::new();
 	row.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
+	row.insert("type".into(), JsonValue::String("aven".into()));
 	row.insert(
 		"name".into(),
 		JsonValue::String(crate::identity_acc::AVEN_CEO_IDENTITY_NAME.to_string()),
@@ -2489,14 +2490,23 @@ async fn ensure_aven_ceo_owner_row(
 async fn read_own_profile(client: &JazzClient, peer_did: &str) -> (String, String) {
 	let mut name = String::new();
 	let mut label = String::new();
-	if let Ok(schema) = jazz_engine::resolved_table_schema(client, "humans").await {
-		if let Ok(ix) = jazz_engine::col_ix(&schema, "first_name") {
-			if let Ok(rows) = jazz_engine::exec_list_rows(client, "humans").await {
+	// Display name from this device's own (human-typed) identity. `name` is sealed,
+	// so the roster uses the plaintext `username_slug` handle (best-effort).
+	if let Ok(schema) = jazz_engine::resolved_table_schema(client, "identities").await {
+		if let (Ok(type_ix), Ok(slug_ix)) = (
+			jazz_engine::col_ix(&schema, "type"),
+			jazz_engine::col_ix(&schema, "username_slug"),
+		) {
+			if let Ok(rows) = jazz_engine::exec_list_rows(client, "identities").await {
 				for (_o, vals) in rows {
-					if let Some(Value::Text(s)) = vals.get(ix) {
-						if !s.trim().is_empty() {
-							name = s.trim().to_string();
-							break;
+					let is_human =
+						matches!(vals.get(type_ix), Some(Value::Text(t)) if t.trim() == "human");
+					if is_human {
+						if let Some(Value::Text(s)) = vals.get(slug_ix) {
+							if !s.trim().is_empty() {
+								name = s.trim().to_string();
+								break;
+							}
 						}
 					}
 				}

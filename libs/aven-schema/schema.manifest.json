@@ -1,29 +1,5 @@
 {
 	"tables": {
-		"humans": {
-			"columns": [
-				{
-					"name": "first_name",
-					"type": "text",
-					"plaintext": true,
-					"comment": "singleton per vault — nosync Groove inserts (local-only identity graph)"
-				},
-				{ "name": "username_slug", "type": "text", "plaintext": true },
-				{
-					"name": "my_devices",
-					"type": "uuid[]",
-					"plaintext": true,
-					"exposeTs": "string[]",
-					"comment": "routing — ordered peer row object ids"
-				},
-				{
-					"name": "created_at_ms",
-					"type": "bigint",
-					"plaintext": true,
-					"comment": "local singleton metadata"
-				}
-			]
-		},
 		"peers": {
 			"columns": [
 				{
@@ -112,7 +88,21 @@
 					"name": "owner",
 					"type": "uuid",
 					"plaintext": true,
-					"comment": "routing — identity row identity"
+					"comment": "routing — identity row identity (self-owned)"
+				},
+				{
+					"name": "type",
+					"type": "text",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "human | aven — the kind of identity"
+				},
+				{
+					"name": "username_slug",
+					"type": "text",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "human-identity profile handle (null for aven)"
 				},
 				{ "name": "name", "type": "text", "comment": "sealed at rest" },
 				{
