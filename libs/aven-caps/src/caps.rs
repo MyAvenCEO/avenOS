@@ -544,7 +544,55 @@ fn trusted_subject_dids(b: &Biscuit, identity_urn: &str) -> Result<HashSet<Strin
 	Ok(admins.into_iter().map(|x| x.0).collect())
 }
 
+/// Maximum group-extension chain depth (cycle / runaway guard).
+const MAX_GROUP_DEPTH: u32 = 8;
+
+/// Authorize `subject_did` for `op` on `owner`'s `table[:row]`. **M9 group inheritance:**
+/// if the owner group's biscuit denies AND the group `extends(parent)`, a member of the
+/// parent inherits the SAME authority here — re-checked against the parent group, bounded
+/// by [`MAX_GROUP_DEPTH`]. A root group (no `extends` fact) behaves exactly as before, so
+/// every existing identity is unaffected.
 pub fn authorize(
+	vault: &BiscuitVault,
+	owner: Uuid,
+	op: AccOp,
+	table: &str,
+	row_id: Option<Uuid>,
+	subject_did: &str,
+) -> Result<(), String> {
+	authorize_with_depth(vault, owner, op, table, row_id, subject_did, 0)
+}
+
+fn authorize_with_depth(
+	vault: &BiscuitVault,
+	owner: Uuid,
+	op: AccOp,
+	table: &str,
+	row_id: Option<Uuid>,
+	subject_did: &str,
+	depth: u32,
+) -> Result<(), String> {
+	match authorize_local(vault, owner, op, table, row_id, subject_did) {
+		Ok(()) => Ok(()),
+		Err(e) => {
+			// Inheritance: a member of the parent group is a member here too.
+			if depth < MAX_GROUP_DEPTH {
+				if let Some(chain) = vault.identities.get(&owner) {
+					if let Ok(Some(parent)) = group_extends_parent(&chain.biscuit) {
+						if authorize_with_depth(vault, parent, op, table, row_id, subject_did, depth + 1)
+							.is_ok()
+						{
+							return Ok(());
+						}
+					}
+				}
+			}
+			Err(e)
+		}
+	}
+}
+
+fn authorize_local(
 	vault: &BiscuitVault,
 	owner: Uuid,
 	op: AccOp,
@@ -969,6 +1017,31 @@ mod tests {
 		let id = uuid::Uuid::new_v4();
 		let plain = mint_genesis_identity(&v, id).unwrap();
 		assert_eq!(group_extends_parent(&plain).unwrap(), None);
+	}
+
+	#[test]
+	fn group_inherits_parent_members() {
+		let mut v = vault(&[11u8; 32]); // creator / admin
+		let reader = vault(&[12u8; 32]); // a parent member (delegated reader)
+		let outsider = vault(&[13u8; 32]); // member of neither
+
+		// Parent identity owned by `v`, with `reader` added as a delegated reader.
+		let parent = uuid::Uuid::new_v4();
+		let mut pb = mint_genesis_identity(&v, parent).unwrap();
+		pb = attenuate_add_reader_third_party(&v.biscuit_kp, &pb, parent, &reader.peer_did).unwrap();
+		v.identities.insert(parent, BiscuitIdentity { owner: parent, biscuit: pb });
+
+		// A sub-group (collection-level) that EXTENDS the parent.
+		let group = derive_subgroup_id(parent, "todos");
+		let gb = mint_group_genesis_extending(&v, group, parent).unwrap();
+		v.identities.insert(group, BiscuitIdentity { owner: group, biscuit: gb });
+
+		// Inheritance: the parent's reader may READ the sub-group with NO per-group grant.
+		authorize(&v, group, AccOp::Read, "todos", Some(uuid::Uuid::new_v4()), &reader.peer_did).unwrap();
+		// The creator (parent owner) may WRITE the sub-group (its own `owns`).
+		authorize(&v, group, AccOp::Write, "todos", None, &v.peer_did.clone()).unwrap();
+		// An outsider (member of neither parent nor group) is DENIED — inheritance is bounded.
+		assert!(authorize(&v, group, AccOp::Read, "todos", Some(uuid::Uuid::new_v4()), &outsider.peer_did).is_err());
 	}
 
 	#[test]
