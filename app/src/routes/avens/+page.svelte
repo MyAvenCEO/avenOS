@@ -26,10 +26,6 @@
 						onclick={() => goto(aven.href)}
 					>
 						<span
-							class="text-[11px] font-semibold tracking-wider uppercase opacity-70 group-hover:text-accent-foreground/90"
-							>{aven.kind}</span
-						>
-						<span
 							class="text-base font-medium tracking-tight group-hover:text-accent-foreground"
 							>{aven.name}</span
 						>
