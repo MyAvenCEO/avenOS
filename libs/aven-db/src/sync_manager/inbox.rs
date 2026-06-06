@@ -990,6 +990,24 @@ impl SyncManager {
         }
     }
 
+    /// M5 abuse cap: true if `client_id` has exceeded its inbound batch budget for
+    /// the current window (payload should be dropped). Fixed window — the count
+    /// resets when the window rolls. Generous bound: only a pathological flood
+    /// trips it, never legitimate catch-up.
+    fn inbound_rate_exceeded(&mut self, client_id: PeerId) -> bool {
+        let now_us = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .map(|d| d.as_micros() as u64)
+            .unwrap_or(0);
+        let rate = self.inbound_rate.entry(client_id).or_default();
+        if now_us.saturating_sub(rate.window_start_us) > super::INBOUND_RATE_WINDOW_US {
+            rate.window_start_us = now_us;
+            rate.batches = 0;
+        }
+        rate.batches = rate.batches.saturating_add(1);
+        rate.batches > super::INBOUND_MAX_BATCHES_PER_WINDOW
+    }
+
     /// Process a payload from a client.
     pub(super) fn process_from_client<H: Storage>(
         &mut self,
@@ -998,6 +1016,11 @@ impl SyncManager {
         payload: SyncPayload,
     ) {
         let _span = tracing::debug_span!("process_from_client", %client_id, payload = payload.variant_name()).entered();
+        // M5: drop floods at the sync edge before any processing.
+        if self.inbound_rate_exceeded(client_id) {
+            tracing::warn!(%client_id, payload = payload.variant_name(), "M5: inbound rate limit exceeded — dropping payload");
+            return;
+        }
         let Some(client) = self.clients.get(&client_id) else {
             tracing::warn!(
                 %client_id,
