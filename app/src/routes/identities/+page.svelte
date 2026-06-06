@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { browser } from '$app/environment'
 	import { t } from '$lib/i18n'
-	import { type JazzRow } from '$lib/jazz/api'
+	import { createIdentity, type JazzRow } from '$lib/jazz/api'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/settings/device-session-store'
@@ -25,6 +25,23 @@
 	function sparkSubtitle(row: JazzRow): string {
 		const id = row.owner
 		return id.length > 14 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id
+	}
+
+	let creating = $state(false)
+	let createErr = $state<string | undefined>(undefined)
+	async function createNewIdentity(): Promise<void> {
+		const name = (typeof prompt === 'function' ? prompt(t('identities.namePrompt')) : '')?.trim()
+		if (!name) return
+		creating = true
+		createErr = undefined
+		try {
+			const id = await createIdentity(name)
+			await goto(`/identities/${encodeURIComponent(id)}/talk`)
+		} catch (e) {
+			createErr = e instanceof Error ? e.message : String(e)
+		} finally {
+			creating = false
+		}
 	}
 </script>
 
@@ -49,9 +66,10 @@
 		<p class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border px-3 py-2 text-sm" role="alert">{identitiesStore.error}</p>
 	{:else if loading}
 		<p class="text-muted-foreground text-sm">{t('common.loadingSparks')}</p>
-	{:else if identities.length === 0}
-		<p class="text-muted-foreground text-sm">{t('identities.noSparksYet')}</p>
 	{:else}
+		{#if createErr}
+			<p class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border px-3 py-2 text-sm" role="alert">{createErr}</p>
+		{/if}
 		<ul class="grid gap-3 sm:grid-cols-2">
 			{#each identities as row (row.owner)}
 				<li>
@@ -66,6 +84,17 @@
 					</button>
 				</li>
 			{/each}
+			<li>
+				<button
+					type="button"
+					class="text-muted-foreground hover:text-foreground hover:border-border flex min-h-[5.5rem] w-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-input bg-card/20 px-4 py-4 text-center transition-colors disabled:opacity-50"
+					onclick={() => void createNewIdentity()}
+					disabled={creating}
+				>
+					<span class="text-2xl leading-none">+</span>
+					<span class="text-sm font-medium">{creating ? t('identities.creating') : t('identities.createNew')}</span>
+				</button>
+			</li>
 		</ul>
 	{/if}
 </div>

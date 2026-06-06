@@ -26,6 +26,12 @@ export async function avenCeoPublishProfile(accountName: string, deviceLabel: st
 	await grooveRuntime('avenCeoPublishProfile', { accountName, deviceLabel })
 }
 
+/** Create a new user-owned identity (`type=aven` — a group/workspace). This device
+ *  mints its genesis biscuit (→ owner) + DEK + self-keyshare. Returns the new id. */
+export async function createIdentity(name: string): Promise<string> {
+	return grooveRuntime<string>('createIdentity', { name })
+}
+
 /** Untyped Groove row from IPC — schema lives in Rust (`libs/aven-schema`). */
 export type JazzRow = Record<string, any> & { id: string }
 

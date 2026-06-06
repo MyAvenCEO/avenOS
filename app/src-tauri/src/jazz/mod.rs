@@ -2441,6 +2441,82 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 	Ok(identity_uuid.to_string())
 }
 
+/// Create a new user-owned identity (`type=aven` — a group/workspace). This device
+/// mints a fresh genesis biscuit (→ owner) + DEK + self-keyshare + stamped `identities`
+/// row + owner roster row, then re-hydrates. Backs the "+ create identity" grid action.
+pub(crate) async fn groove_ipc_create_identity(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	self_state: &SelfState,
+	name: String,
+) -> Result<String, String> {
+	use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+	use base64::Engine;
+
+	let name = name.trim().to_string();
+	if name.is_empty() {
+		return Err("identity name required".into());
+	}
+	let client = with_connected_client(jazz, app, self_state).await?;
+	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+	let shell = shell_arc.as_ref();
+
+	let identity_uuid = uuid::Uuid::new_v4();
+	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
+
+	let genesis = crate::identity_acc::mint_genesis_identity(&shell.vault, identity_uuid)?;
+	let genesis_b64 =
+		URL_SAFE_NO_PAD.encode(genesis.to_vec().map_err(|e| format!("genesis_encode:{e:?}"))?);
+	let issuer_b64 = crate::identity_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public());
+	let now_ms: i64 = std::time::SystemTime::now()
+		.duration_since(std::time::UNIX_EPOCH)
+		.map(|d| d.as_millis() as i64)
+		.unwrap_or(0);
+	let dek_ver = 1i64;
+
+	let mut row = Map::new();
+	row.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
+	row.insert("type".into(), JsonValue::String("aven".into()));
+	row.insert("name".into(), JsonValue::String(name.clone()));
+	row.insert("issuer_pubkey_b64".into(), JsonValue::String(issuer_b64));
+	row.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
+	row.insert("current_dek_version".into(), JsonValue::Number(dek_ver.into()));
+	row.insert("created_at_ms".into(), JsonValue::Number(now_ms.into()));
+	let sparks_vals = insert_values("identities", &sparks_schema, row)?;
+	let sparks_oid = ObjectId::new();
+	let sparks_meta = owner_binding_meta(&shell.signing_key, sparks_oid, identity_uuid)?;
+	client
+		.create_with_id_and_metadata("identities", sparks_oid, sparks_vals, sparks_meta)
+		.await
+		.map_err(format_jazz_err)?;
+
+	// Self keyshare: wrap a fresh DEK to this device so the owner can read sealed columns.
+	let dek_plain = crate::crypto::random_identity_dek();
+	let urn = jazz_engine::identity_urn(identity_uuid);
+	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
+	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, dek_ver);
+	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
+	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
+	let mut ks = Map::new();
+	ks.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
+	ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
+	ks.insert("recipient_did".into(), JsonValue::String(shell.peer_did.clone()));
+	ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
+	ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
+	let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
+	let ks_oid = ObjectId::new();
+	let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity_uuid)?;
+	client
+		.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+		.await
+		.map_err(format_jazz_err)?;
+
+	ensure_aven_ceo_owner_row(client.as_ref(), &shell.peer_did, &shell.signing_key, identity_uuid)
+		.await?;
+	finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
+	Ok(identity_uuid.to_string())
+}
+
 /// Idempotently ensure THIS device has its own avenCEO roster row, populated from
 /// identity (name from `humans`, device label from the local peer). No-op if the
 /// row already exists. Used at claim and idempotent re-claim.
@@ -3737,6 +3813,11 @@ pub(crate) async fn groove_runtime_dispatch(
 		}
 		"avenceoclaim" => {
 			let id = groove_ipc_aven_ceo_claim(app, mj, ss).await?;
+			Ok(serde_json::Value::String(id))
+		}
+		"createidentity" => {
+			let name = pj_str(&pj, "name")?;
+			let id = groove_ipc_create_identity(app, mj, ss, name).await?;
 			Ok(serde_json::Value::String(id))
 		}
 		"avenceoaddmember" => {

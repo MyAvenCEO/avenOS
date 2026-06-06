@@ -152,7 +152,6 @@
 		"preferencesCategory": "Preferences",
 		"language": "Language",
 		"self": "Self",
-		"identities": "Identities",
 		"share": "Share",
 		"models": "Models",
 		"localModels": "Local models",
@@ -538,7 +537,10 @@
 		"avenCeoClaimedSub": "This network's roster & members",
 		"avenCeoUnclaimedSub": "Unclaimed — claim it to become this network's admin/owner.",
 		"avenCeoClaim": "Claim — become network admin",
-		"avenCeoClaiming": "Claiming…"
+		"avenCeoClaiming": "Claiming…",
+		"createNew": "Create identity",
+		"creating": "Creating…",
+		"namePrompt": "Name your new identity"
 	},
 	"uiLab": {
 		"pageTitle": "UI Lab",
