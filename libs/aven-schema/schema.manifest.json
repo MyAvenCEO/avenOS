@@ -169,9 +169,9 @@
 				},
 				{
 					"name": "role",
-					"type": "enum",
-					"variants": ["user", "agent"],
-					"comment": "sealed at rest; author kind (user vs on-device agent). add-only → null on legacy rows, treated as user"
+					"type": "text",
+					"nullable": true,
+					"comment": "sealed at rest; author kind: \"user\" | \"agent\" (null/absent on legacy rows = user). Plain text, NOT enum: the add-only migration lens fills a generic Text default that an enum's variant gate rejects (`expected Enum, got Some(Text)`)."
 				}
 			]
 		},
