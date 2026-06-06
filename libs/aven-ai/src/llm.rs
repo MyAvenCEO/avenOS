@@ -356,6 +356,12 @@ impl Generator {
 
 		let mut session = self.session.lock().map_err(|_| "session lock poisoned")?;
 
+		// The graph's declared input names — feed ONLY what the model actually accepts. LFM2
+		// (and other exports) may omit `position_ids` and/or `attention_mask`; passing an
+		// undeclared input fails with "Invalid input name". Resilient to any export.
+		let model_input_names: std::collections::HashSet<String> =
+			session.inputs().iter().map(|i| i.name().to_string()).collect();
+
 		// Owned caches keyed by INPUT name; start empty (past length 0).
 		let mut cache_vals: BTreeMap<String, (Vec<i64>, CacheData)> = self
 			.caches
@@ -376,22 +382,23 @@ impl Generator {
 			let cur = step_tokens.len() as i64;
 			let total = past_len + cur;
 
-			// Static inputs for this step.
+			// Static inputs for this step — ONLY those the graph declares (see above).
 			let input_ids = Tensor::from_array((vec![1i64, cur], step_tokens.clone()))
 				.map_err(|e| format!("input_ids: {e}"))?;
-			let attention_mask = Tensor::from_array((vec![1i64, total], vec![1i64; total as usize]))
-				.map_err(|e| format!("attention_mask: {e}"))?;
-			let position_ids = Tensor::from_array((
-				vec![1i64, cur],
-				(past_len..total).collect::<Vec<i64>>(),
-			))
-			.map_err(|e| format!("position_ids: {e}"))?;
-
-			let mut inputs: Vec<(String, ort::session::SessionInputValue)> = vec![
-				("input_ids".to_string(), input_ids.into()),
-				("attention_mask".to_string(), attention_mask.into()),
-				("position_ids".to_string(), position_ids.into()),
-			];
+			let mut inputs: Vec<(String, ort::session::SessionInputValue)> =
+				vec![("input_ids".to_string(), input_ids.into())];
+			if model_input_names.contains("attention_mask") {
+				let attention_mask =
+					Tensor::from_array((vec![1i64, total], vec![1i64; total as usize]))
+						.map_err(|e| format!("attention_mask: {e}"))?;
+				inputs.push(("attention_mask".to_string(), attention_mask.into()));
+			}
+			if model_input_names.contains("position_ids") {
+				let position_ids =
+					Tensor::from_array((vec![1i64, cur], (past_len..total).collect::<Vec<i64>>()))
+						.map_err(|e| format!("position_ids: {e}"))?;
+				inputs.push(("position_ids".to_string(), position_ids.into()));
+			}
 			for (name, (shape, data)) in &cache_vals {
 				inputs.push((name.clone(), data.to_value(shape)?));
 			}
