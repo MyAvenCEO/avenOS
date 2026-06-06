@@ -22,6 +22,16 @@ const navSections = $derived(
 				title: t('nav.viewSection'),
 				items: [
 					{
+						href: `${avenBase}/dashboard`,
+						label: t('nav.dashboard'),
+						match: (p) => p.startsWith(`${avenBase}/dashboard`)
+					},
+					{
+						href: `${avenBase}/banking`,
+						label: t('nav.banking'),
+						match: (p) => p.startsWith(`${avenBase}/banking`)
+					},
+					{
 						href: `${avenBase}/orders`,
 						label: t('nav.orders'),
 						match: (p) => p.startsWith(`${avenBase}/orders`)
