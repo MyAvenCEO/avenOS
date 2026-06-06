@@ -85,8 +85,14 @@ const EMIT_STEP: u64 = 8 * 1024 * 1024;
 
 /// Download each file in `spec` into `<root>/<spec.dir>/`. Blocking — run on a
 /// dedicated thread. `cancelled()` is polled every chunk; `on_progress(received,
-/// total)` reports cumulative bytes across all files (`total` is the sum of the
-/// per-file `Content-Length`s discovered so far, so it climbs as files start).
+/// total)` reports cumulative bytes across all files.
+///
+/// **Resilient**: each file streams to `<local>.part` and is renamed only when
+/// complete, so finished files are never re-fetched. A partial `.part` resumes
+/// via an HTTP `Range` request (the body continues where it left off); if the
+/// server ignores the range (`200`) that one file restarts cleanly, and a `416`
+/// means the `.part` is already complete (finalize it). Cancelling keeps the
+/// `.part` so the next attempt continues — a 4.7 GB pull survives app restarts.
 pub fn download_files(
 	spec: &LlmModelSpec,
 	root: &Path,
@@ -97,48 +103,80 @@ pub fn download_files(
 	let dir = spec.model_dir(root);
 	fs::create_dir_all(&dir).map_err(|e| fail(format!("create model dir: {e}")))?;
 
-	// First pass: discover total size via HEAD-ish GETs would be wasteful for
-	// multi-GB files, so we sum lengths lazily as each file's response arrives and
-	// keep a running cumulative `received`. `total` therefore only becomes exact
-	// once the last file's headers are in — good enough for a climbing progress bar.
+	// Pre-account finished files (named `<local>`, .part renamed on completion) so
+	// progress reflects real overall state across restarts — completed files are
+	// skipped below, never re-fetched.
 	let mut received: u64 = 0;
 	let mut total: u64 = 0;
+	for &(_, local) in spec.files.iter() {
+		if let Ok(meta) = dir.join(local).metadata() {
+			received += meta.len();
+			total += meta.len();
+		}
+	}
+	on_progress(received, total);
 
-	for (idx, (remote, local)) in spec.files.iter().enumerate() {
+	for &(remote, local) in spec.files.iter() {
 		let dest = dir.join(local);
 		if dest.is_file() {
-			// Already downloaded (resume across restarts); count it toward progress.
-			let len = dest.metadata().map(|m| m.len()).unwrap_or(0);
-			received += len;
-			total += len;
-			on_progress(received, total);
-			continue;
+			continue; // already counted above
 		}
 		if cancelled() {
 			return Err(DownloadError::Cancelled);
 		}
 
+		let tmp = dir.join(format!("{local}.part"));
+		// Resume point: bytes of this file already on disk from a prior attempt.
+		let resume_from = tmp.metadata().map(|m| m.len()).unwrap_or(0);
+
 		let url = format!("{}{}", spec.base_url, remote);
-		let resp = ureq::get(&url)
-			.call()
-			.map_err(|e| fail(format!("download {local}: {e}")))?;
-		let this_total = resp
+		let mut req = ureq::get(&url);
+		if resume_from > 0 {
+			req = req.set("Range", &format!("bytes={resume_from}-"));
+		}
+		let resp = match req.call() {
+			Ok(r) => r,
+			// 416: the byte range is past EOF → the .part is already complete but
+			// wasn't renamed (crash between flush and rename). Finalize it.
+			Err(ureq::Error::Status(416, _)) if resume_from > 0 => {
+				fs::rename(&tmp, &dest).map_err(|e| fail(format!("finalize {local}: {e}")))?;
+				received += resume_from;
+				total += resume_from;
+				on_progress(received, total);
+				continue;
+			}
+			Err(e) => return Err(fail(format!("download {local}: {e}"))),
+		};
+
+		let content_len = resp
 			.header("Content-Length")
 			.and_then(|s| s.parse::<u64>().ok())
 			.unwrap_or(0);
-		total += this_total;
+
+		// 206 Partial Content → the body continues from `resume_from`; append to the
+		// .part. Anything else (200, or the server/redirect dropped our Range) → start
+		// this one file over from scratch (truncate). Either way: no corruption.
+		let resuming = resp.status() == 206 && resume_from > 0;
+		let mut file = if resuming {
+			received += resume_from; // already-on-disk bytes count toward progress
+			total += resume_from + content_len;
+			std::fs::OpenOptions::new()
+				.append(true)
+				.open(&tmp)
+				.map_err(|e| fail(format!("open {}: {e}", tmp.display())))?
+		} else {
+			total += content_len;
+			File::create(&tmp).map_err(|e| fail(format!("create {}: {e}", tmp.display())))?
+		};
 		on_progress(received, total);
 
-		let tmp = dir.join(format!("{local}.part"));
 		let mut reader = resp.into_reader();
-		let mut file =
-			File::create(&tmp).map_err(|e| fail(format!("create {}: {e}", tmp.display())))?;
 		let mut buf = vec![0u8; 1024 * 1024];
 		let mut last_emit = received;
 		loop {
 			if cancelled() {
-				drop(file);
-				let _ = fs::remove_file(&tmp);
+				// Keep the .part so the next attempt resumes from here (don't delete).
+				file.flush().ok();
 				return Err(DownloadError::Cancelled);
 			}
 			let n = reader.read(&mut buf).map_err(|e| fail(format!("read {local}: {e}")))?;
@@ -156,7 +194,6 @@ pub fn download_files(
 		drop(file);
 		fs::rename(&tmp, &dest).map_err(|e| fail(format!("finalize {local}: {e}")))?;
 		on_progress(received, total);
-		let _ = idx;
 	}
 
 	if !spec.files_present(root) {
