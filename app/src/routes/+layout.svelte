@@ -139,6 +139,17 @@ const appAccessState = $derived.by<'app' | 'gate' | 'checking'>(() => {
 	return membership === 'none' ? 'gate' : 'app'
 })
 
+// After the invite gate opens, land on /identities (not /intents) — the user
+// creates an identity (+ New) or opens ones shared with them via caps.
+let landedPostInvite = $state(false)
+$effect(() => {
+	if (!browser || !isTauriRuntime()) return
+	if (appAccessState === 'app' && !landedPostInvite && page.url.pathname === '/') {
+		landedPostInvite = true
+		void goto('/identities')
+	}
+})
+
 $effect(() => {
 	if (!browser || !isTauriRuntime() || !meshAllowed) return
 	return startPeerMeshStore()
