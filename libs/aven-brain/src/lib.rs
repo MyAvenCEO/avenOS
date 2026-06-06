@@ -26,11 +26,11 @@
 //! - **fact** — a *typed, temporal* subject→predicate→object assertion between entities,
 //!   with a validity window (`valid_from`/`valid_to`); MemPalace's *triple*. Stored in
 //!   [`schema::FACTS`].
-//! - **relationship** — a *weighted, associative* entity↔entity edge carrying **salience**
+//! - **relation** — a *weighted, associative* entity↔entity edge carrying **dynamics**
 //!   (strength/stability/decay). Distinct from a `fact`: a fact is a typed assertion, a
-//!   relationship is "how strongly these two are associated." Unifies MemPalace's
-//!   `hallway` (intra) and `tunnel` (cross). Stored in [`schema::RELATIONSHIPS`].
-//! - **dynamics** — how strongly a relationship is held (its `strength`/`stability` and
+//!   relation is "how strongly these two are associated." Unifies MemPalace's
+//!   `hallway` (intra) and `tunnel` (cross). Stored in [`schema::RELATIONS`].
+//! - **dynamics** — how strongly a relation is held (its `strength`/`stability` and
 //!   decay): grows on co-access (Hebbian), decays over time (Ebbinghaus). MemPalace's term,
 //!   kept.
 //!
@@ -54,7 +54,7 @@
 //!
 //! ## Ownership & sync
 //!
-//! Every memory/entity/fact/relationship is a CRDT row in the identity's store:
+//! Every memory/entity/fact/relation is a CRDT row in the identity's store:
 //! owner-bound, edit-signed, per-identity DEK-sealed, and capability-gated on sync.
 //! Embeddings are computed where the key lives (on-device); nothing is stored in the clear.
 

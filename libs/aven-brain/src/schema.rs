@@ -1,7 +1,7 @@
 //! The aven-brain data model as an aven-db [`Schema`].
 //!
 //! Five tables map 1:1 to the vocabulary (see crate docs): `memories`, `entities`,
-//! `memory_entities` (mentions), `facts`, `relationships`. Embeddings use the first-class
+//! `memory_entities` (mentions), `facts`, `relations`. Embeddings use the first-class
 //! [`ColumnType::Vector`] so `nearest` works directly; memory bodies are `Text` so
 //! `text_search` (BM25) works directly; `content_hash` uses native `Bytea`.
 
@@ -16,7 +16,7 @@ pub const MEMORIES: &str = "memories";
 pub const ENTITIES: &str = "entities";
 pub const MEMORY_ENTITIES: &str = "memory_entities";
 pub const FACTS: &str = "facts";
-pub const RELATIONSHIPS: &str = "relationships";
+pub const RELATIONS: &str = "relations";
 
 /// Build the aven-brain schema for a given embedding dimensionality.
 ///
@@ -54,7 +54,7 @@ pub fn brain_schema(embed_dim: usize) -> Schema {
                 .column("created_at", ColumnType::Timestamp)
                 .index_only(["source", "content_hash"]),
         )
-        // ── entities: named nodes; scoping + graph primitive ────────────────────
+        // ── entities: named nodes; the semantic graph primitive ─────────────────
         .table(
             TableSchema::builder(ENTITIES)
                 .column("name", ColumnType::Text)
@@ -62,7 +62,7 @@ pub fn brain_schema(embed_dim: usize) -> Schema {
                 .nullable_column("properties", ColumnType::Json { schema: None })
                 .index_only(["name", "kind"]),
         )
-        // ── memory_entities: "mention" edges (memory is about entity) = scope ────
+        // ── memory_entities: "mention" edges (which entities a memory references) ─
         .table(
             TableSchema::builder(MEMORY_ENTITIES)
                 .fk_column("memory", MEMORIES)
@@ -79,13 +79,13 @@ pub fn brain_schema(embed_dim: usize) -> Schema {
                 .column_with_default("confidence", ColumnType::Double, Value::Double(1.0))
                 .nullable_fk_column("source_memory", MEMORIES),
         )
-        // ── relationships: weighted entity↔entity associations carrying dynamics ─
+        // ── relations: weighted entity↔entity associations carrying dynamics ─
         //    (strength / stability / decay — Hebbian potentiation + Ebbinghaus decay)
         // NOTE: `access_count` should use a Counter merge strategy so co-access sums
         // across devices (Phase 3); the TableSchemaBuilder doesn't expose merge
         // strategies yet, so it is plain LWW for now.
         .table(
-            TableSchema::builder(RELATIONSHIPS)
+            TableSchema::builder(RELATIONS)
                 .fk_column("a", ENTITIES)
                 .fk_column("b", ENTITIES)
                 .column_with_default("strength", ColumnType::Double, Value::Double(1.0))
@@ -104,7 +104,7 @@ mod tests {
     #[test]
     fn brain_schema_has_all_five_tables() {
         let schema = brain_schema(EMBED_DIM);
-        for table in [MEMORIES, ENTITIES, MEMORY_ENTITIES, FACTS, RELATIONSHIPS] {
+        for table in [MEMORIES, ENTITIES, MEMORY_ENTITIES, FACTS, RELATIONS] {
             assert!(
                 schema.contains_key(&TableName::new(table)),
                 "schema must contain table `{table}`"
