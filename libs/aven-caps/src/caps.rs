@@ -279,6 +279,58 @@ pub fn mint_genesis_identity(
 		.map_err(|e| format!("genesis-build:{e}"))
 }
 
+/// Mint a **sub-group** genesis biscuit (M9 group-owned values). Like
+/// [`mint_genesis_identity`] — the creating vault is the group's `owns` admin with full
+/// [`OWNER_RIGHTS`] over the group's resource prefix — but it also records
+/// `extends("identity:<parent>")`. That fact makes the group **inherit** the parent
+/// group's members: the live authorizer, on a local deny, consults the parent chain, so a
+/// member of the parent is a member here with no per-group re-grant (cheap fine
+/// granularity). Granularity is purely the `group_id` you pass — identity-level (the
+/// identity itself), collection-level (`derive_subgroup_id(id, "todos")`), or row-level
+/// (`derive_subgroup_id(id, row_id)`). The data model is identical at every level.
+pub fn mint_group_genesis_extending(
+	vault: &BiscuitVault,
+	group_id: Uuid,
+	parent_id: Uuid,
+) -> Result<Biscuit, String> {
+	let group_urn = identity_urn_for(group_id);
+	let prefix_lit = format!("{group_urn}:");
+	let parent_urn = identity_urn_for(parent_id);
+	let own_f = format!(
+		"owns(\"{}\", \"{}\")",
+		vault.peer_did.replace('"', "\\\""),
+		group_urn.replace('"', "\\\"")
+	);
+	let mut bb = Biscuit::builder()
+		.fact(own_f.as_str())
+		.map_err(|e| format!("group-own-fact:{e}"))?;
+	for op in OWNER_RIGHTS {
+		let rf = format!("right(\"{op}\", \"{}\")", prefix_lit.replace('"', "\\\""));
+		bb = bb.fact(rf.as_str()).map_err(|e| format!("group-right:{e}"))?;
+	}
+	// Inheritance link: the live authorizer, on a deny, consults `parent`'s chain.
+	let ext_f = format!("extends(\"{}\")", parent_urn.replace('"', "\\\""));
+	bb = bb.fact(ext_f.as_str()).map_err(|e| format!("group-extends:{e}"))?;
+	bb.build(&vault.biscuit_kp).map_err(|e| format!("group-build:{e}"))
+}
+
+/// The parent group this group `extends`, if any (M9 inheritance). `None` = a root group
+/// (e.g. an identity's default group). Read straight from the genesis chain.
+pub fn group_extends_parent(chain: &Biscuit) -> Result<Option<Uuid>, String> {
+	let mut authorizer = chain.authorizer().map_err(|e| format!("b-authorizer:{e}"))?;
+	let rows: Vec<(String,)> = authorizer
+		.query_all("parent($u) <- extends($u)")
+		.map_err(|e| format!("b-query-extends:{e}"))?;
+	for (urn,) in rows {
+		if let Some(rest) = urn.strip_prefix("identity:") {
+			if let Ok(u) = Uuid::parse_str(rest.trim()) {
+				return Ok(Some(u));
+			}
+		}
+	}
+	Ok(None)
+}
+
 /// Append a third-party biscuit block granting `new_peer_did` an [`owns`] fact on this Identity,
 /// signed by `delegating_kp` (typically the device's biscuit [`KeyPair`], i.e. same key that
 /// anchored the genesis or a prior delegated admin's key — see biscuit third-party semantics).
@@ -899,6 +951,24 @@ mod tests {
 		let other = aven_ceo_identity("ceo.aven/mainnet/other");
 		assert_ne!(derive_subgroup_id(ceo, "registry"), derive_subgroup_id(other, "registry"));
 		assert_ne!(aven_ceo_registry_group(seed), Uuid::nil());
+	}
+
+	#[test]
+	fn group_genesis_extends_parent_and_grants_owner() {
+		let root = [7u8; 32];
+		let mut v = vault(&root);
+		let parent = aven_ceo_identity("ceo.aven/testnet/abagana");
+		let group = derive_subgroup_id(parent, "registry");
+		let biscuit = mint_group_genesis_extending(&v, group, parent).unwrap();
+		// The genesis records the parent it extends (the inheritance link).
+		assert_eq!(group_extends_parent(&biscuit).unwrap(), Some(parent));
+		// The creator is the group's owner — full rights over the GROUP's own prefix.
+		v.identities.insert(group, BiscuitIdentity { owner: group, biscuit });
+		authorize(&v, group, AccOp::Write, "todos", None, &v.peer_did.clone()).unwrap();
+		// A plain identity genesis has no parent (it is a root group).
+		let id = uuid::Uuid::new_v4();
+		let plain = mint_genesis_identity(&v, id).unwrap();
+		assert_eq!(group_extends_parent(&plain).unwrap(), None);
 	}
 
 	#[test]

@@ -222,24 +222,44 @@ the key is the boundary, at whatever granularity you choose.
   per-row group. Same primitive, cost dial per need.
 - **Forward secrecy preserved:** per-group DEK rotation on member-remove (as today).
 
-**Phases (each ships value; nothing breaks):**
+**Granularity spectrum (ONE mechanism — only the `group_id` assigned per row differs):**
 
-- [ ] **M9-1 — Group primitive (foundation, additive).** `aven-caps`: deterministic
-  `derive_subgroup_id(parent,label)`; the registry-group id constant; group DEK + keyshare
-  reuse the per-owner machinery; `attenuate_extend_group` (biscuit delegation to a parent).
-  Unit tests. **No live-flow change** — the default group_id stays the identity id.
-- [ ] **M9-2 — Registry group (first real split).** Mint avenCEO with a `registry` sub-group
-  (identities/peers) that **extends** avenCEO; registry rows sealed under `DEK_registry`. The
-  SYNC grant keyshares **`DEK_registry` only** → the SYNC peer is **cryptographically** blind
-  to any avenCEO data (not merely authorization-filtered). Fresh-mint (wipe); no row
-  migration.
-- [ ] **M9-3 — Per-collection groups.** Each collection (messages/todos/files) owned by its
-  own group extending the identity group; sharing a collection = sharing its group key.
-  Default stays the identity group (backward-compatible).
-- [ ] **M9-4 — Per-row groups (opt-in).** Per-row group for max isolation where needed.
+| Level | Group assignment | DEKs |
+|---|---|---|
+| Identity (today) | every row -> identity's default group (`group_id = identity_id`) | 1 / identity |
+| Collection | rows -> `derive_subgroup_id(identity, "todos")` | 1 / collection |
+| **Row** | row -> `derive_subgroup_id(identity, row_id)` | 1 / row |
 
-**Delivers:** per-row crypto granularity becomes a **config choice**; the SYNC/registry
-boundary becomes **key-enforced**, not assumed; the default path is unchanged.
+Already generic (no rewrite): `owner` is an opaque UUID; seal/hydrate/keyshare/biscuit are
+keyed by `(owner, version)` — so "owner = group" already works; a sub-group is just another
+owner UUID with its own DEK + genesis + keyshares.
+
+**Affordable to the row — 2-level keys + extension:** a **group key** is sealed to each
+member; a value's **DEK is sealed to the group key** (1 seal, not per-member); a sub-group's
+DEK is sealed to its **parent's group key**, so it **inherits** the parent's members for free
+(a per-row group costs one seal, not N). Override only where the member set actually differs.
+**Private-by-default:** a new row defaults to the identity group; you opt INTO sharing.
+
+**Phases:**
+
+- [x] **M9-1 — Group primitives (aven-caps, additive, tested).** `derive_subgroup_id(parent,
+  label)` (deterministic; row-level = label is the row id); `mint_group_genesis_extending`
+  (a sub-group genesis recording `extends(parent)`); `group_extends_parent`. 26 tests green.
+  No live-flow change — the default `group_id` stays the identity id.
+- [ ] **M9-2 — 2-level keying + extension wiring.** A group key with value DEKs sealed under
+  it; the live authorizer consults the `extends` parent on a deny -> a sub-group's members =
+  the parent's members. The piece that makes fine groups affordable + live-inherited.
+- [ ] **M9-3 — Per-collection groups (first real use).** A collection owned by its own group
+  extending the identity group; share one collection without the others. Subsumes the aven
+  directory/control split (directory = a group all members join; private control = the
+  identity group). Default stays the identity group (backward-compatible).
+- [ ] **M9-4 — Per-row groups (opt-in).** Row -> its own group for maximum isolation.
+
+**Delivers:** per-row crypto granularity is a **config choice** (the `group_id` you assign);
+the boundary is **the key**, generic, with no special-cases; the default path is unchanged.
+
+**Rejected:** a hardcoded "avenCEO may own only registry tables" invariant — a table-exclusion
+special-case. The group primitive is the generic, key-enforced replacement.
 
 ---
 
