@@ -151,10 +151,11 @@ identities) · **T3 managed API** (opt-in, minimal context).
 | **Schema** | `memories/entities/mentions/facts/relations` | ✅ done, tested |
 | **Pipeline v1** | `Brain` + `Embedder` + `remember`/`search` (RRF) | ✅ done, tested |
 | **Store round-out** | idempotent `remember` (content_hash dedup), `tags` on write, **scoped `search`** (tag/entity filter) | ☐ next |
-| **Knowledge graph** | `Extractor` trait → entities + facts + mentions; relations + dynamics (potentiate/decay) | ☐ |
-| **Context assembly** | `wake` (L0 identity + L1 summary), `recall` (L2 scoped), entity index cards | ☐ |
-| **Real models** | EmbeddingGemma behind `Embedder`; LLM `Extractor` | ☐ |
-| **Agent surface** | MCP server (search/remember/kg/wake) | ☐ |
+| **Knowledge graph** | **deterministic** wikilink/ref → mentions + typed edges (zero-LLM, on write); optional LLM `Extractor` for facts (*off* the write path); relations + dynamics | ☐ |
+| **Context assembly** | `wake` (L0+L1); `recall` (L2 scoped); **entity cards = compiled-truth summary + append-only timeline** (gBrain) | ☐ |
+| **Real models** | EmbeddingGemma behind `Embedder`; LLM `Extractor` (off write path) | ☐ |
+| **Agent surface** | MCP server (search/remember/kg/wake), scoped read/write/admin | ☐ |
+| **Consolidation (dream cycle)** | background pass: dynamics decay, dedup, **CRDT entity-merge**, contradiction detection, recompute compiled-truth | ☐ |
 | **Scale & sync** | usearch HNSW + `_score` surfacing + weighted fusion; Counter-merge dynamics; sparks/identity sharing + multi-device | ☐ |
 | **Honest eval** | LongMemEval/LoCoMo harness against aven-brain (held-out numbers only) | ☐ |
 
@@ -171,8 +172,41 @@ wing/room hierarchy (subsumed by entities+tags, which add multi-membership).
 **Honest bar**: their real numbers are 98.4% R@5 (LongMemEval held-out), 60.3%→88.9% LoCoMo —
 we benchmark on held-out only.
 
-### gBrain (Garry Tan)
-_Background deep-research in progress; lessons will be folded into this section on completion._
+### gBrain (Garry Tan) — `github.com/garrytan/gbrain` (MIT, Apr 2026)
+A self-built personal "memex": **git-markdown files as source of truth + Postgres/pgvector
+(PGLite locally) as a rebuildable index**, a self-wiring entity graph, hybrid retrieval, and an
+MCP surface. Real and substantive (discount the YC-halo virality and its self-published synthetic
+benchmark of P@5 49.1 / R@5 97.9 — small, not BEAM-comparable).
+
+**Validates what we already built (independent convergence):**
+- **RRF hybrid fusion** — gBrain uses the *exact* `Σ 1/(60+rank)` we shipped (vector + BM25 → RRF).
+- **Index = disposable derived cache** (truth lives elsewhere) — matches our "derived index, never synced."
+- Graph as a retrieval **boost**, not the core; **pluggable local embeddings** (Ollama/llama.cpp);
+  **MCP scoped read/write/admin**; **typed predicates** (`works_at`/`founded`/`attended`/…).
+
+**New ideas to adopt:**
+1. **"Compiled-truth + append-only timeline" per entity.** Each entity = a recomputed current-state
+   summary atop an immutable dated log. Ideal for CRDT: the timeline is an append-only (conflict-free)
+   set; "compiled truth" is a periodically-recomputed materialized view. → Sharpens our **entity
+   index cards** (L1/L2): *card = compiled-truth summary + timeline of the entity's facts/mentions.*
+2. **Deterministic, zero-LLM edge extraction on write** (wikilinks/explicit refs → typed edges).
+   Free, offline, and — crucially — **reproducible across devices** (same input → same edges =
+   clean CRDT merges). → **Make deterministic mention/edge extraction the primary write path; keep
+   the LLM `Extractor` optional and *off* the write path** (run it in the dream cycle).
+3. **The "dream cycle" — a nightly background consolidator** (dedup/merge entities, fix citations,
+   score salience, detect contradictions, recompute compiled-truth). → Names and structures our
+   maintenance phase: the natural home for **dynamics decay**, **CRDT entity-merge** (two offline
+   devices both create "Alice"), **contradiction detection**, and **summary recompute**.
+4. **Compiled-truth + contradiction detection answers our "conflicting facts" question** — keep both
+   facts, let the dream cycle flag contradictions and recompute the entity's compiled truth, rather
+   than hard LWW.
+
+**Avoid:**
+- **Schema burden** — gBrain makes the operator hand-author a skill per new fact-shape (its biggest
+  wart). Keep loose structure (free predicates + tags); any schema synthesis stays off the write path.
+- **Single-operator assumption** — gBrain explicitly punts on multi-tenant/sync; that is exactly our
+  CRDT differentiator — design merge + isolation from day one.
+- Don't over-trust self-published synthetic benchmarks; evaluate engineering on its merits.
 
 ---
 
@@ -187,8 +221,9 @@ aven-brain: scaffold+schema (1b92f72), strengths restored (d195345), vocabulary 
 
 ## 10. Open decisions & risks
 
-1. **Conflicting facts** across devices (same subject/predicate, different object): LWW vs
-   multi-value-keep-both? Decide with the KG phase.
+1. **Conflicting facts** across devices (same subject/predicate, different object): lean
+   **gBrain-style** — keep both, let the **dream cycle** detect the contradiction and recompute the
+   entity's compiled-truth, rather than hard LWW. Confirm with the KG phase.
 2. **Embedding-dim lock-in**: changing the model ⇒ re-embed + reindex (lens-driven).
 3. **Counter-merge for `relations.access_count`**: needs a `TableSchemaBuilder` merge-strategy hook
    (currently LWW) so co-access sums across devices.
