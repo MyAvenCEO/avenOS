@@ -2449,6 +2449,7 @@ pub(crate) async fn groove_ipc_create_identity(
 	jazz: &ManagedJazz,
 	self_state: &SelfState,
 	name: String,
+	kind: String,
 ) -> Result<String, String> {
 	use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 	use base64::Engine;
@@ -2457,6 +2458,7 @@ pub(crate) async fn groove_ipc_create_identity(
 	if name.is_empty() {
 		return Err("identity name required".into());
 	}
+	let kind = if kind.trim() == "human" { "human" } else { "aven" };
 	let client = with_connected_client(jazz, app, self_state).await?;
 	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
 	let shell = shell_arc.as_ref();
@@ -2476,8 +2478,18 @@ pub(crate) async fn groove_ipc_create_identity(
 
 	let mut row = Map::new();
 	row.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
-	row.insert("type".into(), JsonValue::String("aven".into()));
+	row.insert("type".into(), JsonValue::String(kind.into()));
 	row.insert("name".into(), JsonValue::String(name.clone()));
+	if kind == "human" {
+		let slug: String = name
+			.to_lowercase()
+			.chars()
+			.map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+			.collect::<String>()
+			.trim_matches('-')
+			.to_string();
+		row.insert("username_slug".into(), JsonValue::String(slug));
+	}
 	row.insert("issuer_pubkey_b64".into(), JsonValue::String(issuer_b64));
 	row.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
 	row.insert("current_dek_version".into(), JsonValue::Number(dek_ver.into()));
@@ -3817,7 +3829,8 @@ pub(crate) async fn groove_runtime_dispatch(
 		}
 		"createidentity" => {
 			let name = pj_str(&pj, "name")?;
-			let id = groove_ipc_create_identity(app, mj, ss, name).await?;
+			let kind = pj_str(&pj, "type").unwrap_or_else(|_| "aven".to_string());
+			let id = groove_ipc_create_identity(app, mj, ss, name, kind).await?;
 			Ok(serde_json::Value::String(id))
 		}
 		"avenceoaddmember" => {

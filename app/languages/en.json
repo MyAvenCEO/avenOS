@@ -540,7 +540,13 @@
 		"avenCeoClaiming": "Claiming…",
 		"createNew": "Create identity",
 		"creating": "Creating…",
-		"namePrompt": "Name your new identity"
+		"namePrompt": "Name your new identity",
+		"humansSection": "Humans",
+		"avensSection": "Avens",
+		"createHuman": "New human",
+		"createAven": "New aven",
+		"namePromptHuman": "Name this human identity",
+		"namePromptAven": "Name this aven identity"
 	},
 	"uiLab": {
 		"pageTitle": "UI Lab",
