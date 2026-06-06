@@ -271,8 +271,11 @@ mod tests {
         content: Vec<u8>,
         timestamp: u64,
     ) {
-        // Fresh `SyncManager::new()` is fail-closed (DenyAllResolver, M4 hardening);
-        // opt into AllowAll so inbound rows aren't rejected at the apply gate.
+        // A fresh `SyncManager::new()` drops inbound messages from unknown clients
+        // and is fail-closed (DenyAllResolver, M4 hardening). Register the sending
+        // peer and open the apply gate so the synced row is admitted and applied.
+        let peer = PeerId::new();
+        qm.sync_manager_mut().add_client(peer);
         qm.sync_manager_mut()
             .set_resolver(std::sync::Arc::new(crate::capability::AllowAllResolver));
         let mut metadata = HashMap::new();
@@ -286,33 +289,10 @@ mod tests {
         let commit = stored_row_commit(content, timestamp, object_id.to_string());
         let row = commit.to_row(object_id, branch);
         qm.sync_manager_mut().push_inbox(InboxEntry {
-            source: Source::Client(PeerId::new()),
+            source: Source::Client(peer),
             payload: SyncPayload::RowBatchCreated {
                 metadata: None,
                 row,
-            },
-        });
-    }
-
-    /// Ingest a remote catalogue object on the `main` branch through sync path.
-    fn ingest_remote_catalogue_object(
-        qm: &mut QueryManager,
-        _storage: &mut MemoryStorage,
-        object_id: ObjectId,
-        metadata: HashMap<String, String>,
-        content: Vec<u8>,
-        _timestamp: u64,
-    ) {
-        qm.sync_manager_mut()
-            .set_resolver(std::sync::Arc::new(crate::capability::AllowAllResolver));
-        qm.sync_manager_mut().push_inbox(InboxEntry {
-            source: Source::Client(PeerId::new()),
-            payload: SyncPayload::CatalogueEntryUpdated {
-                entry: crate::catalogue::CatalogueEntry {
-                    object_id,
-                    metadata,
-                    content,
-                },
             },
         });
     }

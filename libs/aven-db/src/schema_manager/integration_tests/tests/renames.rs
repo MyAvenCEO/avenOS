@@ -68,7 +68,6 @@ fn column_rename_lens() {
 }
 
 #[test]
-#[ignore = "dormant since jazz2 fork: pre-existing schema-evolution behavioral gap, not server-tier (triage follow-up)"]
 fn end_to_end_multi_hop_chained_renames() {
     // v1: users(id, email)
     // v2: users(id, email_address) - renamed
@@ -176,7 +175,6 @@ fn end_to_end_multi_hop_chained_renames() {
 }
 
 #[test]
-#[ignore = "dormant since jazz2 fork: pre-existing schema-evolution behavioral gap, not server-tier (triage follow-up)"]
 fn end_to_end_column_rename_index_translation() {
     // Schema v1: users(id, email)
     let v1 = SchemaBuilder::new()
@@ -263,7 +261,6 @@ fn end_to_end_column_rename_index_translation() {
 }
 
 #[test]
-#[ignore = "dormant since jazz2 fork: pre-existing schema-evolution behavioral gap, not server-tier (triage follow-up)"]
 fn end_to_end_table_rename_translation() {
     // v1 branch: users(id, email)
     //            |
@@ -347,7 +344,6 @@ fn end_to_end_table_rename_translation() {
 }
 
 #[test]
-#[ignore = "dormant since jazz2 fork: pre-existing schema-evolution behavioral gap, not server-tier (triage follow-up)"]
 fn table_rename_subscription_reacts_to_old_branch_updates() {
     let v1 = SchemaBuilder::new()
         .table(
@@ -430,7 +426,6 @@ fn table_rename_subscription_reacts_to_old_branch_updates() {
 }
 
 #[test]
-#[ignore = "dormant since jazz2 fork: pre-existing schema-evolution behavioral gap, not server-tier (triage follow-up)"]
 fn table_rename_subscription_reacts_to_new_branch_updates_after_schema_evolution() {
     // v1 current: users(id, email) -- subscribe(users on v1 branch)
     //                                |
@@ -519,7 +514,6 @@ fn table_rename_subscription_reacts_to_new_branch_updates_after_schema_evolution
 }
 
 #[test]
-#[ignore = "dormant since jazz2 fork: pre-existing schema-evolution behavioral gap, not server-tier (triage follow-up)"]
 fn table_rename_update_and_delete_copy_on_write() {
     let v1 = SchemaBuilder::new()
         .table(
@@ -740,7 +734,6 @@ fn transactional_insert_uses_frozen_target_branch_renamed_table_schema() {
 }
 
 #[test]
-#[ignore = "dormant since jazz2 fork: pre-existing schema-evolution behavioral gap, not server-tier (triage follow-up)"]
 fn table_rename_join_query_translates_join_target_on_old_branch() {
     // v1 branch: posts.author_id -> users.id
     //                            |
@@ -859,7 +852,6 @@ fn table_rename_join_query_translates_join_target_on_old_branch() {
 }
 
 #[test]
-#[ignore = "dormant since jazz2 fork: pre-existing schema-evolution behavioral gap, not server-tier (triage follow-up)"]
 fn table_rename_fk_array_lookup_finds_related_rows_on_old_branch() {
     // v1 branch: users <- posts.author_id
     //            |
@@ -986,7 +978,6 @@ fn table_rename_fk_array_lookup_finds_related_rows_on_old_branch() {
 }
 
 #[test]
-#[ignore = "dormant since jazz2 fork: pre-existing schema-evolution behavioral gap, not server-tier (triage follow-up)"]
 fn multi_hop_table_renames_and_column_rename() {
     // v1: users(id, email)
     //      |

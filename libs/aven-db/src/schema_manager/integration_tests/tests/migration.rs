@@ -150,7 +150,6 @@ fn multi_table_migration() {
 }
 
 #[test]
-#[ignore = "dormant since jazz2 fork: pre-existing schema-evolution behavioral gap, not server-tier (triage follow-up)"]
 fn end_to_end_lens_transform_on_query() {
     // Schema v1: users(id, name)
     let v1 = SchemaBuilder::new()
@@ -275,7 +274,6 @@ fn end_to_end_lens_transform_on_query() {
 }
 
 #[test]
-#[ignore = "dormant since jazz2 fork: pre-existing schema-evolution behavioral gap, not server-tier (triage follow-up)"]
 fn end_to_end_multi_hop_transform() {
     // Schema v1: users(id, name)
     let v1 = SchemaBuilder::new()
@@ -519,7 +517,6 @@ fn materialize_nodes_carry_concrete_table_name() {
 /// `TableNotFound("")`, and the row was silently dropped — exactly the
 /// user-visible "data disappears after a schema migration" symptom.
 #[test]
-#[ignore = "dormant since jazz2 fork: pre-existing schema-evolution behavioral gap, not server-tier (triage follow-up)"]
 fn locator_only_storage_returns_old_branch_rows_through_lens() {
     use super::locator_only_storage::LocatorOnlyStorage;
     use crate::metadata::MetadataKey;
@@ -553,6 +550,13 @@ fn locator_only_storage_returns_old_branch_rows_through_lens() {
     qm.add_live_schema(v1.clone());
     qm.register_lens(lens);
 
+    // Register the sending peer and open the apply gate (fresh SyncManager::new()
+    // drops unknown-client messages and is fail-closed under M4).
+    let peer = PeerId::new();
+    qm.sync_manager_mut().add_client(peer);
+    qm.sync_manager_mut()
+        .set_resolver(std::sync::Arc::new(crate::capability::AllowAllResolver));
+
     let mut storage = LocatorOnlyStorage::new();
 
     let v1_branch = format!("dev-{}-main", v1_hash.short());
@@ -579,7 +583,7 @@ fn locator_only_storage_returns_old_branch_rows_through_lens() {
     put_test_row_metadata(&mut storage, alice_id, alice_metadata);
     let alice_commit = stored_row_commit(alice_v1_data, 1_000, alice_id.to_string());
     qm.sync_manager_mut().push_inbox(InboxEntry {
-        source: Source::Client(PeerId::new()),
+        source: Source::Client(peer),
         payload: SyncPayload::RowBatchCreated {
             metadata: None,
             row: alice_commit.to_row(alice_id, &v1_branch),

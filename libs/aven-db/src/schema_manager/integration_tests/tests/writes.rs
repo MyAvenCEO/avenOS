@@ -1,7 +1,6 @@
 use super::*;
 
 #[test]
-#[ignore = "dormant since jazz2 fork: pre-existing schema-evolution behavioral gap, not server-tier (triage follow-up)"]
 fn schema_manager_update_uses_visible_row_after_legacy_commit_history_is_removed() {
     let v1 = SchemaBuilder::new()
         .table(
@@ -326,7 +325,6 @@ fn transactional_insert_rejects_target_branch_outside_current_family() {
 }
 
 #[test]
-#[ignore = "dormant since jazz2 fork: pre-existing schema-evolution behavioral gap, not server-tier (triage follow-up)"]
 fn transactional_update_uses_frozen_target_branch_schema() {
     // current branch: v2 users(id, email_address)
     //                  |
@@ -441,7 +439,6 @@ fn transactional_update_uses_frozen_target_branch_schema() {
 }
 
 #[test]
-#[ignore = "dormant since jazz2 fork: pre-existing schema-evolution behavioral gap, not server-tier (triage follow-up)"]
 fn transactional_delete_uses_frozen_target_branch_schema() {
     // current branch: v2 users(id, email_address)
     //                  |
@@ -556,7 +553,6 @@ fn transactional_delete_uses_frozen_target_branch_schema() {
 }
 
 #[test]
-#[ignore = "dormant since jazz2 fork: pre-existing schema-evolution behavioral gap, not server-tier (triage follow-up)"]
 fn e2e_rows_buffered_until_schema_activates() {
     // Schema v1: users(id, name)
     let v1 = SchemaBuilder::new()
