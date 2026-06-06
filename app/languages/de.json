@@ -440,7 +440,13 @@
 			"notInLedger": "No spark matches this id in your ledger —",
 			"backToSparks": "back to sparks",
 			"filesInSpark": "Files in this spark",
-			"noFilesYet": "Noch keine Dateien für diesen Spark. Hänge ein PDF oder Bild aus Intents oder Talk an."
+			"noFilesYet": "Noch keine Dateien für diesen Spark. Hänge ein PDF oder Bild aus Intents oder Talk an.",
+			"deleteFile": "Datei löschen",
+			"confirmDelete": "Diese Datei löschen?",
+			"confirmDeleteYes": "Löschen",
+			"confirmDeleteNo": "Abbrechen",
+			"deleting": "Wird gelöscht…",
+			"deleteFailed": "Datei konnte nicht gelöscht werden."
 		},
 		"share": {
 			"title": "Teilen",

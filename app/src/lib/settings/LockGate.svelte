@@ -31,6 +31,7 @@
 		type VaultListEntry,
 	} from '$lib/settings/vault'
 	import { NETWORK_SEED } from '$lib/settings/network'
+	import LanguageIcon from '$lib/i18n/LanguageIcon.svelte'
 
 	type PeerStatus = {
 		platformSupported: boolean
@@ -441,6 +442,7 @@
 			{:else if createStep === 'locale'}
 				<div class="flex w-full max-w-md flex-col gap-4">
 					<div class="space-y-3 text-center">
+						<LanguageIcon class="text-foreground mx-auto size-12" />
 						<p class="text-muted-foreground text-sm leading-relaxed">
 							{t('lockGate.chooseLanguage')}
 						</p>

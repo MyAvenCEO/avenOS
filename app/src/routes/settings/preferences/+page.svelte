@@ -4,6 +4,7 @@
 	import { deviceSession } from '$lib/settings/device-session-store'
 	import { vaultUiSettingsGet, vaultUiSettingsSetLocale } from '$lib/settings/vault-ui-settings'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+	import LanguageIcon from '$lib/i18n/LanguageIcon.svelte'
 
 	let locale = $state<SupportedLocale>('en')
 	let loading = $state(true)
@@ -64,7 +65,10 @@
 
 <div class="flex flex-col gap-8">
 	<header class="space-y-1.5">
-		<h1 class="text-2xl font-semibold tracking-tight">{t('preferences.title')}</h1>
+		<div class="flex items-center gap-3">
+			<LanguageIcon class="text-foreground size-7 shrink-0" />
+			<h1 class="text-2xl font-semibold tracking-tight">{t('preferences.title')}</h1>
+		</div>
 		<p class="text-muted-foreground text-sm leading-relaxed">
 			{t('preferences.subtitle')}
 		</p>
