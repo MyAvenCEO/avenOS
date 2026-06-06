@@ -375,7 +375,7 @@ before, despite the new `type` field.
 - `lib/jazz/api.ts` (38), `store.svelte.ts` (3), `intent-files.ts` (7) — `jazzStore('sparks')`→`('identities')`, types, `human` fields.
 - `routes/+layout.svelte` (10), `lib/shell/MobileShellNav.svelte` (2), `lib/ui/aside-nav.ts` (3) — nav labels/links.
 - `lib/i18n/locales.ts` — `sparks.*`/`nav.*` keys → identities.
-- **Open Q — `routes/avens/**`:** the `avens/[projectId]/[sparkId]` routes reference `sparkId`. Decide if "aven (project)" == "aven identity" or a separate feature; do **not** blind-rename until reconciled.
+- **`routes/avens/**` (resolved):** fold into the identities vocabulary too — there is **no** separate "spark" concept anywhere. Swap `sparkId` → identity id; keep the `avens`/`projectId` grouping as-is for now (no deeper restructure this pass). Avens are aven-typed identities.
 - Docs routes (`routes/docs/sparks/**`, `lib/docs/sparks-collection.ts`) — content; rename paths or leave (lowest priority).
 
 ### 12.3 On-disk folder rename — `identities/` → `peers/`
