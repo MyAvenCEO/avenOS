@@ -315,3 +315,86 @@ read caps (as `peers.account_name` does today).
 **Status:** spec locked; execution pending as one focused push. The validated
 private-by-default core + the spark-scoped DB viewer + write-once owner guard are
 committed and are the clean checkpoint this builds on.
+
+### 12.1 First-principles audit — *eliminate*, don't just rename
+
+Per the compact/first-principles rules this is a **consolidation**, not a vocabulary
+pass. What we **delete** (root-cause, not symptom):
+
+1. **Two tables → one** (`humans` + `sparks` → `identities`). The dual-table split is
+   the duplication: "a person" and "a spark" were two representations of *an owner*.
+   One typed table = **SSOT for who owns/acts**; the humans↔spark reconciliation
+   (separate profile vs. owner records) disappears.
+2. **The entire migration/lens layer** (clean slate). Delete
+   `libs/aven-schema/migrations/{registry.json,snapshots/*}` **and** the
+   load-previous-manifest / `generate_lens` / snapshot-stamping paths in
+   `schema_manifest.rs`. On greenfield there is no prior hash to evolve from — the
+   layer solves a problem we no longer have.
+3. **Shim modules.** `app/src-tauri/src/spark_acc.rs` (17 lines) and `spark_sync.rs`
+   (74) are thin re-export/glue over `aven-caps`. Where they only re-export, **delete
+   and import `aven-caps` directly** (DRY: one source). Otherwise fold into a single
+   `identity` module — no per-concept shim pair.
+4. **`spark_id` column → the `owner` header.** One authenticated owner field; the
+   gate/hydration read it. No mutable per-table duplicate of ownership.
+
+Net: the remodel should *remove* code, not add it. Target: fewer lines after than
+before, despite the new `type` field.
+
+### 12.2 Complete file map (every site)
+
+**Schema — SSOT (`libs/aven-schema/`):**
+- `schema.manifest.json` — rewrite: `identities` (merge + `type`, +human fields nullable), `spark_id`→`owner` on `messages`/`todos`/`files`/`peers`/`keyshares`, drop `humans`+`sparks`.
+- `migrations/**` (registry + 3 snapshots) — **DELETE** (clean slate, §12.1.2).
+
+**`aven-caps` — crypto/caps SSOT (`libs/aven-caps/src/`):**
+- `caps.rs` (132) — `spark`→`identity` across genesis/biscuit/`BiscuitSpark`→`BiscuitIdentity`/`mint_genesis_spark`→`mint_genesis_identity`; `AccOp` unchanged.
+- `ownership.rs` (45) — field `owner_spark`→`owner` (binding already says "owner").
+- `crypto.rs` (27) — `spark_urn`→`identity_urn`, keyshare AAD wording.
+- `lib.rs` (1).
+
+**App backend (`app/src-tauri/src/`):**
+- `jazz/mod.rs` (360) — the bulk: IPCs, owner-binding stamping, hydration, `self_identity_dir`, the on-disk path (§12.3).
+- `jazz/jazz_engine.rs` (118) — hydration; `build_object_spark_id_map`→`build_object_owner_map`; default-identity bootstrap; **fold `humans` profile into the human-typed identity** row.
+- `biscuit_resolver.rs` (32) — `spark_id`→`owner`; `object_spark_ids`→`object_owner`.
+- `spark_acc.rs` (2) + `spark_sync.rs` (24) — eliminate or rename→`identity_*` per §12.1.3.
+- `peers.rs` (14) — `peers` table stays (roster of devices), `spark_id`→`owner`.
+- `schema_manifest.rs` (5) — table consts; **delete migration-load paths** (§12.1.2).
+- `network.rs` (4), `lib.rs` (3), `crypto.rs` (1).
+
+**Always-on peer (`libs/aven-server/src/`):**
+- `aven_ceo.rs` (40) — avenCEO = an `aven`-typed identity.
+- `main.rs` (6) — `derive_identity_db_dir`: **the folder rename** (§12.3) + docs.
+
+**Frontend (`app/src/`):**
+- `lib/sparks/` → `lib/identities/`: `SparkMembersPanel.svelte` (90), `SparkTalkPanel.svelte` (27), `SparkMessageAttachments.svelte` → `Identity*`.
+- `routes/sparks/[sparkId]/**` → `routes/identities/[id]/**`: `+layout` (23), `talk` (7), `todos` (29), `gallery` (30), `members` (8), `db` (12, just added), `settings`, `+page.ts`.
+- `routes/sparks/+page.svelte` (22), `routes/settings/sparks/` → identities.
+- `lib/jazz/api.ts` (38), `store.svelte.ts` (3), `intent-files.ts` (7) — `jazzStore('sparks')`→`('identities')`, types, `human` fields.
+- `routes/+layout.svelte` (10), `lib/shell/MobileShellNav.svelte` (2), `lib/ui/aside-nav.ts` (3) — nav labels/links.
+- `lib/i18n/locales.ts` — `sparks.*`/`nav.*` keys → identities.
+- **Open Q — `routes/avens/**`:** the `avens/[projectId]/[sparkId]` routes reference `sparkId`. Decide if "aven (project)" == "aven identity" or a separate feature; do **not** blind-rename until reconciled.
+- Docs routes (`routes/docs/sparks/**`, `lib/docs/sparks-collection.ts`) — content; rename paths or leave (lowest priority).
+
+### 12.3 On-disk folder rename — `identities/` → `peers/`
+
+Concept clarity: the on-disk per-device keystore directory is a **network peer**
+(a device's keypair/db), which is a *different concept* from the `identities` data
+table (owners). Renaming removes the collision:
+- `libs/aven-server/src/main.rs:91` — `base.join("identities")` → `base.join("peers")` (+ the doc comments at :38/:77/:80).
+- App-side — the `crypto_dir` / `self_identity_dir` derivation in `jazz/mod.rs` (~:3785–3800): rename the `.avenOS/<network>/identities/` segment to `peers/`. *(Locate the exact `join` during execution.)*
+- Clean slate: `.avenOS` is wiped, so no stale `identities/` dir remains.
+
+### 12.4 Atomic execution order (one push, red until green)
+1. **Schema** — rewrite manifest; delete `migrations/**`.
+2. **`aven-caps`** — rename primitives; `cargo check -p aven-caps` green.
+3. **App backend** — `jazz/*`, `biscuit_resolver`, `spark_acc`/`spark_sync` (eliminate/rename), `peers`, `schema_manifest` (drop migration paths), fold `humans`→identity; on-disk path.
+4. **`aven-server`** — `aven_ceo`, `main` (folder rename); `cargo build` green.
+5. **Frontend** — move `lib/sparks`→`lib/identities`, `routes/sparks`→`routes/identities`, stores/api/i18n/nav; `svelte-check` 0 errors.
+6. **Wipe + live test** — `.avenOS` wiped; onboard (human identity, typed), create/share, identity-scoped DB viewer, members, sync A↔B via relay.
+
+### 12.5 Verification (done = all true)
+- `cargo check` (app) + `cargo build` (server) green; `svelte-check` 0 errors.
+- `grep -rin "spark" app/src-tauri/src app/src libs/aven-caps libs/aven-server` → **only** doc/comment prose, **zero** code identifiers; `grep -rn "spark_id"` → none.
+- `humans` and `sparks` table names gone from the manifest; `identities` + `owner` present.
+- Live: human identity auto-created on onboard with `type=human`; avenCEO is `type=aven`; sharing + the per-identity DB viewer work; A↔B converge through the relay.
+- Net line count **≤** pre-remodel (elimination ≥ additions, §12.1).
