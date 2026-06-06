@@ -30,7 +30,8 @@ use std::sync::{Mutex, OnceLock};
 
 use half::f16;
 use ort::session::{builder::GraphOptimizationLevel, Session};
-use ort::value::{Tensor, TensorElementType, ValueType};
+use ort::memory::Allocator;
+use ort::value::{DynTensor, Tensor, TensorElementType, ValueType};
 use tokenizers::Tokenizer;
 
 /// A downloadable ONNX LLM: a set of files fetched individually from a HF repo
@@ -525,39 +526,30 @@ impl CacheData {
 	}
 
 	fn to_value(&self, shape: &[i64]) -> Result<ort::session::SessionInputValue<'static>, String> {
-		// Elements the shape declares. A step-0 cache is provided EMPTY (`Vec::new()`), which
-		// only matches caches whose initial state has 0 elements — the attention KV-caches
-		// (a 0-length sequence axis → product 0). A hybrid model (LFM2) ALSO has conv/SSM
-		// state caches whose initial state is a FIXED-size zero buffer (e.g. [1, 2048, 3] =
-		// 6144 elements); for those, the empty vec is too short. So zero-fill an empty cache
-		// to the declared length. This is resilient to ANY cache family — attention, conv,
-		// SSM — with no per-model special-casing: the data is always made to match the shape.
-		let want: usize = shape.iter().map(|&d| d.max(0) as usize).product();
+		// An EMPTY (step-0) cache is initialized by ALLOCATING a zero tensor of the exact shape
+		// via DynTensor::new (ORT's CreateTensorAsOrtValue, which zero-fills). Unlike from_array
+		// ("from raw data"), it ALLOWS 0-length dims — the empty attention KV-cache [1,h,0,d] —
+		// AND fixed-size conv/SSM state [1,2048,3]; from_array rejects BOTH with "all dimensions
+		// must be >= 1". One generic, resilient init for ANY hybrid cache family — no
+		// per-model/per-layer special-casing, the shape alone drives it.
+		let (is_empty, ty) = match self {
+			CacheData::F16(v) => (v.is_empty(), TensorElementType::Float16),
+			CacheData::F32(v) => (v.is_empty(), TensorElementType::Float32),
+		};
+		if is_empty {
+			return DynTensor::new(&Allocator::default(), ty, shape.to_vec())
+				.map(Into::into)
+				.map_err(|e| format!("cache {ty:?} alloc: {e}"));
+		}
+		// Subsequent steps: real cache data from the model's present_* output — it already
+		// matches the (now non-empty) shape, so from_array is correct.
 		match self {
-			CacheData::F16(v) => {
-				let data: Vec<f16> = if v.len() == want {
-					v.clone()
-				} else if v.is_empty() {
-					vec![f16::ZERO; want]
-				} else {
-					return Err(format!("cache f16: data len {} != shape product {want}", v.len()));
-				};
-				Tensor::from_array((shape.to_vec(), data))
-					.map(Into::into)
-					.map_err(|e| format!("cache f16: {e}"))
-			}
-			CacheData::F32(v) => {
-				let data: Vec<f32> = if v.len() == want {
-					v.clone()
-				} else if v.is_empty() {
-					vec![0.0f32; want]
-				} else {
-					return Err(format!("cache f32: data len {} != shape product {want}", v.len()));
-				};
-				Tensor::from_array((shape.to_vec(), data))
-					.map(Into::into)
-					.map_err(|e| format!("cache f32: {e}"))
-			}
+			CacheData::F16(v) => Tensor::from_array((shape.to_vec(), v.clone()))
+				.map(Into::into)
+				.map_err(|e| format!("cache f16: {e}")),
+			CacheData::F32(v) => Tensor::from_array((shape.to_vec(), v.clone()))
+				.map(Into::into)
+				.map_err(|e| format!("cache f32: {e}")),
 		}
 	}
 
