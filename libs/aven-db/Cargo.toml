@@ -75,10 +75,6 @@ name = "sync_transport_codec"
 required-features = ["client-p2p"]
 
 [[test]]
-name = "sync_core"
-required-features = ["client-p2p"]
-
-[[test]]
 name = "capability_gate"
 required-features = ["client-p2p"]
 

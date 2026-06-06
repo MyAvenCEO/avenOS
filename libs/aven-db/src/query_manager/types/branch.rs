@@ -219,6 +219,13 @@ fn hash_value(hasher: &mut blake3::Hasher, value: &Value) {
             hasher.update(&(v.len() as u64).to_le_bytes());
             hasher.update(v);
         }
+        Value::Vector(v) => {
+            hasher.update(&[14]);
+            hasher.update(&(v.len() as u64).to_le_bytes());
+            for f in v {
+                hasher.update(&f.to_le_bytes());
+            }
+        }
         Value::Array(values) => {
             hasher.update(&[7]);
             hasher.update(&(values.len() as u64).to_le_bytes());
@@ -280,6 +287,10 @@ fn hash_column_type(hasher: &mut blake3::Hasher, col_type: &ColumnType) {
         }
         ColumnType::Bytea => {
             hasher.update(&[10]);
+        }
+        ColumnType::Vector { dim } => {
+            hasher.update(&[14]);
+            hasher.update(&(*dim as u64).to_le_bytes());
         }
         ColumnType::Json { schema } => {
             hasher.update(&[11]);

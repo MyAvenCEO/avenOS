@@ -552,6 +552,7 @@ fn value_matches_column_type(value: &Value, column_type: &ColumnType) -> bool {
         }
         ColumnType::Text => matches!(value, Value::Text(_)),
         ColumnType::Bytea => matches!(value, Value::Bytea(_)),
+        ColumnType::Vector { dim } => matches!(value, Value::Vector(v) if v.len() == *dim),
         ColumnType::Json { schema: _ } => matches!(value, Value::Text(_)),
         ColumnType::Enum { variants } => match value {
             Value::Text(s) => variants.contains(s),
@@ -691,6 +692,7 @@ fn encode_fixed_value(buf: &mut Vec<u8>, col: &ColumnDescriptor, val: &Value) {
         }
         Value::Text(_) => unreachable!("Text is not fixed-size"),
         Value::Bytea(_) => unreachable!("Bytea is not fixed-size"),
+        Value::Vector(_) => unreachable!("Vector is not fixed-size"),
         Value::Array(_) => unreachable!("Array is not fixed-size"),
         Value::Row { .. } => unreachable!("Row is not fixed-size"),
     }
@@ -868,6 +870,19 @@ fn decode_non_null_value(
             Ok(Value::BatchId(data[..16].try_into().unwrap()))
         }
         ColumnType::Bytea => Ok(Value::Bytea(data.to_vec())),
+        ColumnType::Vector { dim } => {
+            let expected = dim * 4;
+            if data.len() < expected {
+                return Err(EncodingError::MalformedData {
+                    message: context.too_short_message("vector"),
+                });
+            }
+            let v = data[..expected]
+                .chunks_exact(4)
+                .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                .collect();
+            Ok(Value::Vector(v))
+        }
         ColumnType::Text | ColumnType::Json { schema: _ } => decode_text_value(data, None),
         ColumnType::Enum { variants } => decode_enum_value(data, variants),
         ColumnType::Array {
@@ -1209,6 +1224,11 @@ pub fn compare_column(
             column_type: col.column_type.clone(),
             operation: "ordering".to_string(),
         }),
+        ColumnType::Vector { .. } => Err(EncodingError::UnsupportedComparison {
+            column: col.name_str().to_string(),
+            column_type: col.column_type.clone(),
+            operation: "ordering".to_string(),
+        }),
         ColumnType::Text
         | ColumnType::Json { schema: _ }
         | ColumnType::Enum { variants: _ }
@@ -1268,6 +1288,11 @@ pub fn compare_column_to_value(
             column_type: col.column_type.clone(),
             operation: "ordering".to_string(),
         }),
+        ColumnType::Vector { .. } => Err(EncodingError::UnsupportedComparison {
+            column: col.name_str().to_string(),
+            column_type: col.column_type.clone(),
+            operation: "ordering".to_string(),
+        }),
         ColumnType::Uuid
         | ColumnType::Text
         | ColumnType::Json { schema: _ }
@@ -1316,6 +1341,7 @@ pub fn encode_value(value: &Value) -> Vec<u8> {
         Value::BatchId(bytes) => bytes.to_vec(),
         Value::Text(s) => s.as_bytes().to_vec(),
         Value::Bytea(bytes) => bytes.clone(),
+        Value::Vector(v) => v.iter().flat_map(|f| f.to_le_bytes()).collect(),
         Value::Array(elements) => encode_array_simple(elements),
         Value::Row { .. } => panic!("Row values require a descriptor - use encode_value_with_type"),
         Value::Null => vec![],

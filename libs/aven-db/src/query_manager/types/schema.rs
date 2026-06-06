@@ -95,6 +95,9 @@ pub enum ColumnType {
     BatchId,
     /// Variable-length binary payload.
     Bytea,
+    /// Dense embedding vector of `dim` f32 components. Powers vector-similarity
+    /// search (`nearest`); stored as length-prefixed packed little-endian f32.
+    Vector { dim: usize },
     /// JSON payload stored as UTF-8 text, optionally constrained by JSON Schema.
     Json {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -120,6 +123,7 @@ impl ColumnType {
             ColumnType::BatchId => Some(16),
             ColumnType::Text => None,
             ColumnType::Bytea => None,
+            ColumnType::Vector { .. } => None, // variable-length (length-prefixed packed f32)
             ColumnType::Json { .. } => None,
             ColumnType::Enum { variants } if variants.len() <= u8::MAX as usize + 1 => Some(1),
             ColumnType::Enum { .. } => None,

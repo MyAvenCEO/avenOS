@@ -2942,6 +2942,16 @@ pub(crate) fn encode_value(value: &Value) -> Vec<u8> {
             bytes
         }
 
+        Value::Vector(v) => {
+            // Vectors are not range-indexed (ANN handles similarity); encode a
+            // tagged packed-f32 blob for exact-match index-key semantics only.
+            let mut bytes = vec![0x0B];
+            for f in v {
+                bytes.extend_from_slice(&f.to_le_bytes());
+            }
+            bytes
+        }
+
         Value::Array(_) => {
             // Arrays use serialized bytes for equality semantics.
             // The durable key codec hashes oversized segments if needed.
