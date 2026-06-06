@@ -43,27 +43,19 @@ create sites), human profile folded onto the human identity, `device_label`
 auto-extracted (scutil). App+server build green, svelte-check 0 errors. **Pending:
 wipe + live-test** (harness building). Original task breakdown below (all done):
 
-Unify `humans` + `sparks` → one typed `identities` table; `spark`→`identity`,
-`spark_id`→`owner` everywhere (incl. `avens`); fresh schema baseline.
-**First-principles: eliminate** — net lines ≤ before. ~1,200 sites, red-until-green;
-the engine (`groove`) is schema-agnostic → this is a rename+merge, **not** a rewrite.
+**Done:** schema (identities + `type` + `username_slug`, `owner` everywhere, `humans`
+dropped) · aven-caps + backend + server + frontend rename (files/dirs moved) ·
+humans→identity merge · typed identities · auto device-name · apps build + launch green.
 
-**Model — `identities` (replaces `humans`+`sparks`):** `id` · `type`(human|aven) ·
-`owner` · `name` · `username_slug?` · `my_devices?` · `issuer_pubkey_b64` ·
-`genesis_b64` · `current_dek_version` · `created_at_ms`. Human identity absorbs the old
-`humans` profile; aven identity = avenCEO/agents. Every identity carries a biscuit.
-
-**Tasks (in order, each builds green before the next):**
-- [ ] **Schema** — rewrite `libs/aven-schema/schema.manifest.json`: add `identities` (merge + `type`), `spark_id`→`owner` on `messages`/`todos`/`files`/`peers`/`keyshares`, drop `humans`+`sparks`. Delete legacy `migrations/snapshots/before-*.json` + their `registry.json` entries (**keep** the migration mechanism).
-- [ ] **`aven-caps`** — `caps.rs`(132) `BiscuitSpark`→`BiscuitIdentity`, `mint_genesis_spark`→`mint_genesis_identity`; `ownership.rs`(45) `owner_spark`→`owner`; `crypto.rs`(27) `spark_urn`→`identity_urn`. → `cargo check -p aven-caps` green.
-- [ ] **App backend** (`app/src-tauri/src/`) — `jazz/mod.rs`(360, IPCs/stamping/hydration), `jazz/jazz_engine.rs`(118, `build_object_spark_id_map`→`build_object_owner_map`, **fold `humans` profile → human identity**), `biscuit_resolver.rs`(32, `object_spark_ids`→`object_owner`), `peers.rs`(14), `schema_manifest.rs`(5, consts only — keep lens paths), `network.rs`/`lib.rs`/`crypto.rs`. **Eliminate** `spark_acc.rs`+`spark_sync.rs` shims → import `aven-caps` direct.
-- [ ] **Ownership from the immutable header** — mint the binding first; **derive** the `owner` column from `binding.owner` (never written independently); `verify_on_apply` roots authenticity in the binding; the gate reads `owner` as the binding's digest-covered, write-once value. (Binding = single root of trust; column = its queryable derived projection — the engine stays schema-agnostic.)
-- [ ] **On-disk folder `identities/`→`peers/`** — `libs/aven-server/src/main.rs:91` `base.join("identities")` + app `crypto_dir`/`self_identity_dir` derivation (`jazz/mod.rs` ~:3785).
-- [ ] **`aven-server`** — `aven_ceo.rs`(40, avenCEO = `aven` identity), `main.rs`(6). → `cargo build` green.
-- [ ] **Frontend** (`app/src/`) — move `lib/sparks/`→`lib/identities/` (`Spark*`→`Identity*`), `routes/sparks/[sparkId]/**`→`routes/identities/[id]/**`, `routes/avens/**` (`sparkId`→id, keep grouping), `lib/jazz/{api.ts,store.svelte.ts,intent-files.ts}` (`jazzStore('sparks')`→`('identities')`), nav (`routes/+layout.svelte`, `lib/shell/MobileShellNav.svelte`, `lib/ui/aside-nav.ts`), `lib/i18n/locales.ts`. → `svelte-check` 0 errors.
-- [ ] **Wipe + live test** — `.avenOS` wiped; onboard (human identity, `type=human`), create/share, per-identity DB viewer, members, A↔B converge via relay.
-
-**Done =** `cargo check` + `cargo build` + `svelte-check` green · `grep -rin spark` → only prose, zero identifiers · `humans`/`sparks` gone from manifest, `identities`+`owner` present · net lines ≤ before.
+**Still pending polish (small, non-blocking):**
+- [ ] On-disk folder `identities/`→`peers/` (`aven-server/src/main.rs:91`
+  `base.join("identities")` + app `crypto_dir` derivation) — concept-clarity rename so
+  the on-disk per-device keystore (a network *peer*) doesn't collide with the
+  `identities` *table*.
+- [ ] Cosmetic: `build_object_spark_id_map` → `build_object_owner_map` (word-boundary
+  missed it; compiles consistently, just an inconsistent name) + ~263 `spark` mentions
+  left in doc comments.
+- [ ] **Runtime live-test** (apps launched green — verifying onboard/share/DB-viewer).
 
 ---
 
@@ -105,6 +97,25 @@ protective caps at the sync/relay layer so a relay isn't an unbounded sink.
 - [ ] **Per-identity storage quota** — max DB size/value-count per identity; reject or evict over-quota writes. *(needs per-owner storage accounting — app-resolver layer.)*
 - [ ] Optional: require a **minimal cap to relay at all** (drop pure-forgery spam at the relay edge, before storage).
 - [ ] Fair-share across identities so one identity can't starve others on a shared relay.
+
+**Cap-model note (confirmed):** grantable caps today = **Owner** (`owns` =
+read/write/delete/admit/rotate_dek) · **Member/Reader** (`reads`) · **Relay**
+(`replicate` = blind store-and-forward = the sync-relay allowance). There is **no
+"invite cap"** bundling relay-allowance **with per-grant rate-limit/quota** —
+rate-limiting (M5) is **global per-peer**, not carried in a biscuit cap. A
+`relay(quota)` cap primitive (relay allowance + embedded rate/size limits, grantable
+per identity) is a **future enhancement** (extends M5 + the cap vocabulary).
+
+## ☐ Milestone 6 — Identity creation UX (no auto-default + "+" grid)
+
+Today onboarding **auto-creates** the human's default identity. Change: onboard
+establishes only the **human identity** (`type=human`, the person); **additional
+identities are created on demand** via a **"+" grid item** on the identities list.
+- [ ] Backend: a `create_identity(name, type)` IPC — mint genesis biscuit + DEK +
+  self-keyshare + stamped `identities` row (factor the onboard path into a reusable fn).
+- [ ] Frontend: a "+" card in the identities grid → name → create → route to it.
+- [ ] Keep the human identity auto on onboard (the person must exist); "+" creates
+  group/aven identities.
 
 ---
 
