@@ -246,14 +246,19 @@ DEK is sealed to its **parent's group key**, so it **inherits** the parent's mem
   label)` (deterministic; row-level = label is the row id); `mint_group_genesis_extending`
   (a sub-group genesis recording `extends(parent)`); `group_extends_parent`. 26 tests green.
   No live-flow change — the default `group_id` stays the identity id.
-- [ ] **M9-2 — 2-level keying + extension wiring.** A group key with value DEKs sealed under
-  it; the live authorizer consults the `extends` parent on a deny -> a sub-group's members =
-  the parent's members. The piece that makes fine groups affordable + live-inherited.
-- [ ] **M9-3 — Per-collection groups (first real use).** A collection owned by its own group
-  extending the identity group; share one collection without the others. Subsumes the aven
-  directory/control split (directory = a group all members join; private control = the
-  identity group). Default stays the identity group (backward-compatible).
-- [ ] **M9-4 — Per-row groups (opt-in).** Row -> its own group for maximum isolation.
+- [x] **M9-2 — Inheritance (authorize extension) + 2-level keys (aven-caps, 28 tests).**
+  `authorize()` recurses to the `extends` parent on a deny (bounded depth) -> a sub-group's
+  members ARE the parent's members, no per-group grant. `GroupKey` +
+  `wrap_under_group_key`/`unwrap_under_group_key`: a value DEK wraps under the group key, the
+  group key under its PARENT group key, so a parent member walks parent->child->DEK with ONE
+  seal (not N). Existing identities unaffected (no `extends` fact).
+- [ ] **M9-3 — Per-collection groups (app integration; library now complete).** Additive app
+  step: a `create_collection_group(identity, label)` IPC (mint the sub-group genesis extending
+  the identity + its DEK + keyshare, write its `identities` row) + assign a collection's rows
+  to that group id on write. Seal/hydrate/authorize are already generic over the owner, so a
+  sub-group hydrates like any identity. Default stays the identity group (backward-compatible).
+- [ ] **M9-4 — Per-row groups (opt-in, app).** The same flow with `label = row_id` -> one
+  group per row, for maximum isolation where wanted.
 
 **Delivers:** per-row crypto granularity is a **config choice** (the `group_id` you assign);
 the boundary is **the key**, generic, with no special-cases; the default path is unchanged.
