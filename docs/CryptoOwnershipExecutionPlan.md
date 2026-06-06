@@ -77,13 +77,18 @@ out → never learns it's revoked), and a global tombstone would propagate a fal
 - [ ] Receiver: drop local rows for that identity (local-only, not a tombstone).
 - [ ] Live test: revoke → reconnect → data evicted from the honest peer.
 
-## ☐ Milestone 3 — Edit-sig over `batch_digest` (optional hardening)
+## ✅ Milestone 3 — Edit-sig (satisfied by equivalence)
 
-Redundant with owner-binding (authenticates the writer) + AEAD (authenticates data). Do
-only if explicitly wanted.
-- [ ] `BatchSigner` injected into the engine (mirror `set_resolver`); sign at seal.
-- [ ] `author_sig`/`author_did` on `SealedBatchSubmission` (persisted codec change).
-- [ ] Verify at `SealBatch` apply.
+**The goal — "every edit signed + verified on apply" — is already met**, so adding a
+separate `batch_digest` signature would be redundant complexity (first-principles:
+don't add what you don't need):
+- **Author authentication per write:** the owner-binding is **re-minted and signed by
+  the author** on every create/update/delete, and `verify_on_apply` checks it on every
+  peer. That *is* a signed, verified-on-apply edit.
+- **Data integrity:** AEAD authenticates each sealed cell on decrypt.
+- Together = the Phase-1 intent without a persisted-codec change. (If a distinct
+  whole-batch signature is ever wanted for non-repudiation over the digest specifically,
+  the `BatchSigner` injection is the path — deferred as unnecessary.)
 
 ## ✅ Milestone 4 — Retire `AllowAll` engine default (DONE — `125eabc`)
 
