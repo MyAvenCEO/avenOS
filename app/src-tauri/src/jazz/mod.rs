@@ -2409,8 +2409,70 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 	let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
 	client.create("keyshares", ks_vals).await.map_err(format_jazz_err)?;
 
+	// The owner is the first member: give it a roster row with its self-published
+	// profile (name + device label from this device's identity), so it appears in
+	// the roster like everyone else and the profile is set without a manual step.
+	let (name, label) = read_own_profile(client.as_ref(), &shell.peer_did).await;
+	let peers_schema = jazz_engine::resolved_table_schema(client.as_ref(), "peers").await?;
+	let mut prow = Map::new();
+	prow.insert("spark_id".into(), JsonValue::String(spark_uuid.to_string()));
+	prow.insert("peer_did".into(), JsonValue::String(shell.peer_did.clone()));
+	prow.insert("kind".into(), JsonValue::String("member".into()));
+	prow.insert("status".into(), JsonValue::String("active".into()));
+	prow.insert("account_name".into(), JsonValue::String(name));
+	prow.insert("device_label".into(), JsonValue::String(label));
+	prow.insert("added_at_ms".into(), JsonValue::Number(now_ms.into()));
+	let prow_vals = insert_values("peers", &peers_schema, prow)?;
+	client.create("peers", prow_vals).await.map_err(format_jazz_err)?;
+
 	finish_spark_admin_grant(app, jazz, self_state, client, spark_uuid).await?;
 	Ok(spark_uuid.to_string())
+}
+
+/// Read this device's self profile for auto-publishing into the roster: display
+/// name from the singleton `humans.first_name`, device label from this device's
+/// own (`kind=local`/own-DID) `peers` row. Both best-effort (empty if unset).
+async fn read_own_profile(client: &JazzClient, peer_did: &str) -> (String, String) {
+	let mut name = String::new();
+	let mut label = String::new();
+	if let Ok(schema) = jazz_engine::resolved_table_schema(client, "humans").await {
+		if let Ok(ix) = jazz_engine::col_ix(&schema, "first_name") {
+			if let Ok(rows) = jazz_engine::exec_list_rows(client, "humans").await {
+				for (_o, vals) in rows {
+					if let Some(Value::Text(s)) = vals.get(ix) {
+						if !s.trim().is_empty() {
+							name = s.trim().to_string();
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+	if let Ok(schema) = jazz_engine::resolved_table_schema(client, "peers").await {
+		if let (Ok(did_ix), Ok(label_ix)) = (
+			jazz_engine::col_ix(&schema, "peer_did"),
+			jazz_engine::col_ix(&schema, "device_label"),
+		) {
+			if let Ok(rows) = jazz_engine::exec_list_rows(client, "peers").await {
+				for (_o, vals) in rows {
+					let d = match vals.get(did_ix) {
+						Some(Value::Text(s)) => s.as_str(),
+						_ => "",
+					};
+					if d == peer_did {
+						if let Some(Value::Text(s)) = vals.get(label_ix) {
+							if !s.trim().is_empty() {
+								label = s.trim().to_string();
+							}
+						}
+						break;
+					}
+				}
+			}
+		}
+	}
+	(name, label)
 }
 
 /// Add a member to the avenCEO roster — the inverted-invite / DID-push onboarding.
@@ -2577,15 +2639,23 @@ pub(crate) async fn groove_ipc_aven_ceo_publish_profile(
 		Some(*own_oid.uuid()),
 	)?;
 
+	// Auto-publish from this device's identity when the caller passes blanks
+	// (name from humans.first_name, label from the local device peer row).
+	let (def_name, def_label) = read_own_profile(client.as_ref(), &shell.peer_did).await;
+	let name = if account_name.trim().is_empty() {
+		def_name
+	} else {
+		account_name.trim().to_string()
+	};
+	let label = if device_label.trim().is_empty() {
+		def_label
+	} else {
+		device_label.trim().to_string()
+	};
+
 	let mut patch = Map::new();
-	patch.insert(
-		"account_name".into(),
-		JsonValue::String(account_name.trim().to_string()),
-	);
-	patch.insert(
-		"device_label".into(),
-		JsonValue::String(device_label.trim().to_string()),
-	);
+	patch.insert("account_name".into(), JsonValue::String(name));
+	patch.insert("device_label".into(), JsonValue::String(label));
 	let ops = patch_updates(&peers_schema, patch)?;
 	client.update(own_oid, ops).await.map_err(format_jazz_err)?;
 	Ok(())

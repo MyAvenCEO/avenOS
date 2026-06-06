@@ -93,44 +93,63 @@ pub fn grant_kind_caps(grant: &str) -> Vec<&'static str> {
 /// One subject's effective caps on a spark, derived purely from the biscuit chain.
 pub struct SubjectCaps {
 	pub did: String,
-	/// `owns` | `reads` | `replicate`
-	pub grant: &'static str,
-	pub caps: Vec<&'static str>,
+	/// `owns` | `reads` | `replicate` | `member` (a subject with only granular grants)
+	pub grant: String,
+	pub caps: Vec<String>,
 }
 
 /// THE single source of truth for "who holds what cap on this spark": read the
-/// biscuit chain (`owns`/`reads`/`replicate` grants) and report each subject's
-/// grant + effective caps. Owners take precedence — a DID that is both an owner
-/// and a reader/replica shows once, as owner. Sorted by grant then DID.
+/// biscuit chain (`owns`/`reads`/`replicate` + granular `grant(did,op,prefix)`)
+/// and report each subject's role + effective caps, MERGED per DID. Owner role
+/// takes precedence; granular ops (e.g. a member's row-scoped `write`) fold into
+/// that subject's cap set so they surface in the UI. Sorted by DID.
 pub fn spark_cap_report(chain: &Biscuit, spark_id: Uuid) -> Result<Vec<SubjectCaps>, String> {
+	use std::collections::BTreeMap;
 	let owners = spark_admins(chain, spark_id)?;
 	let owner_set: HashSet<String> = owners.iter().map(|d| d.trim().to_string()).collect();
-	let mut out: Vec<SubjectCaps> = Vec::new();
-
-	let mut owners_sorted: Vec<String> = owners.into_iter().collect();
-	owners_sorted.sort();
-	for did in owners_sorted {
-		out.push(SubjectCaps { did, grant: "owns", caps: grant_kind_caps("owns") });
+	// did → (role, ordered unique caps)
+	let mut acc: BTreeMap<String, (String, Vec<String>)> = BTreeMap::new();
+	fn add(acc: &mut BTreeMap<String, (String, Vec<String>)>, did: &str, role: &str, cap: &str) {
+		let e = acc.entry(did.to_string()).or_insert_with(|| (role.to_string(), Vec::new()));
+		// Role precedence: owns > reads > replicate > member.
+		let rank = |r: &str| match r { "owns" => 3, "reads" => 2, "replicate" => 1, _ => 0 };
+		if rank(role) > rank(&e.0) {
+			e.0 = role.to_string();
+		}
+		if !cap.is_empty() && !e.1.iter().any(|x| x == cap) {
+			e.1.push(cap.to_string());
+		}
 	}
 
-	let mut readers: Vec<String> = spark_readers(chain, spark_id)?
+	for did in &owners {
+		for c in OWNER_RIGHTS {
+			add(&mut acc, did, "owns", c);
+		}
+	}
+	for did in spark_readers(chain, spark_id)? {
+		if owner_set.contains(did.trim()) {
+			continue;
+		}
+		add(&mut acc, &did, "reads", "read");
+	}
+	for did in spark_replicas(chain, spark_id)? {
+		if owner_set.contains(did.trim()) {
+			continue;
+		}
+		add(&mut acc, &did, "replicate", "replicate");
+	}
+	// Granular grants (row/table-scoped) — fold the op into the subject's caps.
+	for (did, op, _prefix) in spark_grants(chain, spark_id)? {
+		if owner_set.contains(did.trim()) {
+			continue;
+		}
+		add(&mut acc, &did, "member", &op);
+	}
+
+	Ok(acc
 		.into_iter()
-		.filter(|d| !owner_set.contains(d.trim()))
-		.collect();
-	readers.sort();
-	for did in readers {
-		out.push(SubjectCaps { did, grant: "reads", caps: grant_kind_caps("reads") });
-	}
-
-	let mut replicas: Vec<String> = spark_replicas(chain, spark_id)?
-		.into_iter()
-		.filter(|d| !owner_set.contains(d.trim()))
-		.collect();
-	replicas.sort();
-	for did in replicas {
-		out.push(SubjectCaps { did, grant: "replicate", caps: grant_kind_caps("replicate") });
-	}
-	Ok(out)
+		.map(|(did, (grant, caps))| SubjectCaps { did, grant, caps })
+		.collect())
 }
 
 pub fn biscuit_keypair_from_ed25519_signing(secret32: &[u8; 32]) -> Result<KeyPair, String> {
@@ -847,15 +866,16 @@ mod tests {
 
 		let report = spark_cap_report(&chain, sid).unwrap();
 		// Single source: owner caps == OWNER_RIGHTS, reader == [read], replica == [replicate].
+		let owner_rights: Vec<String> = OWNER_RIGHTS.iter().map(|s| s.to_string()).collect();
 		let o = report.iter().find(|s| peer_did_matches(&s.did, &owner.peer_did)).unwrap();
 		assert_eq!(o.grant, "owns");
-		assert_eq!(o.caps, OWNER_RIGHTS.to_vec());
+		assert_eq!(o.caps, owner_rights);
 		let r = report.iter().find(|s| peer_did_matches(&s.did, &reader.peer_did)).unwrap();
 		assert_eq!(r.grant, "reads");
-		assert_eq!(r.caps, vec!["read"]);
+		assert_eq!(r.caps, vec!["read".to_string()]);
 		let p = report.iter().find(|s| peer_did_matches(&s.did, &replica.peer_did)).unwrap();
 		assert_eq!(p.grant, "replicate");
-		assert_eq!(p.caps, vec!["replicate"]);
+		assert_eq!(p.caps, vec!["replicate".to_string()]);
 	}
 
 	#[test]
