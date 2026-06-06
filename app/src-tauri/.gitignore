@@ -1,5 +1,9 @@
 target/
 
+# Locally-built sherpa-onnx iOS static libs + source tree (scripts/build-sherpa-ios.sh).
+# Large arm64 .a archives — regenerate per machine, never commit.
+vendor/sherpa-ios/
+
 # Xcode / iOS scaffolding: regenerate locally (`CI=true bunx tauri ios init --ci` from `app`).
 gen/*
 !gen/schemas/
