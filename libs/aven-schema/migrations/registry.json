@@ -5,6 +5,11 @@
 			"hash": "d50733a3063465c353a9f5dbd074247225172396416ae0d39d7c7c14243277dc",
 			"manifest": "migrations/snapshots/before-peers-spark-id.manifest.json",
 			"comment": "pre-peers.spark_id (T0.1-core). add-only nullable column → auto lens to current; no wipe."
+		},
+		{
+			"hash": "26e6e336591120892913a0d2ce4490912b14f467ee860a9b826b6dba1c4d514c",
+			"manifest": "migrations/snapshots/before-account-name.manifest.json",
+			"comment": "pre-peers.account_name (admin-spark roster, Phase A.1). add-only nullable column → auto lens; no wipe."
 		}
 	]
 }

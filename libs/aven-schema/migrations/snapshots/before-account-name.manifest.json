@@ -43,14 +43,7 @@
 					"name": "device_label",
 					"type": "text",
 					"plaintext": true,
-					"comment": "e.g. MacBook M1 — self-published device label (admin-spark roster) / local label (trust-set)"
-				},
-				{
-					"name": "account_name",
-					"type": "text",
-					"plaintext": true,
-					"nullable": true,
-					"comment": "self-published member display name in the admin-spark roster (null for plain trust-set rows). TODO(privacy): seal this + device_label so a blind replica can't read names — see board idea 0009."
+					"comment": "e.g. MacBook M1 — display for this peer"
 				},
 				{
 					"name": "kind",
