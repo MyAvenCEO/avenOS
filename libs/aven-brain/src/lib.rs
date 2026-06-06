@@ -9,8 +9,11 @@
 //!
 //! - **brain** — the memory store of one identity (`identity.brain`). There is no separate
 //!   "palace" noun; an identity *has* a brain.
-//! - **engram** — one atomic memory: verbatim content + its embedding + free tags
-//!   (MemPalace's *drawer*). Stored in [`schema::ENGRAMS`].
+//! - **engram** — one atomic memory: verbatim content + its embedding + free tags, plus
+//!   provenance that preserves MemPalace's strengths — `source`+`seq` (neighbor
+//!   expansion), `line_start`/`line_end` (surgical citations), `content_date` (temporal
+//!   boost / `as_of`), and `content_hash`/`source_version` (idempotent + incremental
+//!   ingest). MemPalace's *drawer*. Stored in [`schema::ENGRAMS`].
 //! - **concept** — a named node (person, project, topic, thing). Concepts are the scoping
 //!   *and* graph primitive — they subsume MemPalace's `wing`/`room` hierarchy *and* its
 //!   `entity` layer. Stored in [`schema::CONCEPTS`].

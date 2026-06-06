@@ -35,8 +35,27 @@ pub fn brain_schema(embed_dim: usize) -> Schema {
                         element: Box::new(ColumnType::Text),
                     },
                 )
+                // ── Provenance + ordering (preserved MemPalace strengths) ───────
+                // `source` + `seq` enable neighbor expansion (fetch ±1 sibling
+                // engrams from the same source, in order).
                 .nullable_column("source", ColumnType::Text)
-                .column("created_at", ColumnType::Timestamp),
+                .nullable_column("seq", ColumnType::Integer)
+                // Surgical line-range citations (MemPalace Tier 6a).
+                .nullable_column("line_start", ColumnType::Integer)
+                .nullable_column("line_end", ColumnType::Integer)
+                // The memory's own time (for temporal-proximity boost + `as_of`),
+                // distinct from `created_at` (when it was filed).
+                .nullable_column("content_date", ColumnType::Timestamp)
+                // Idempotent re-ingest / dedup: a content/source-derived key so the
+                // same chunk re-ingested overwrites instead of duplicating.
+                .nullable_column("content_hash", ColumnType::Bytea)
+                // Incremental ingest: source revision (mtime/etag) to skip unchanged,
+                // and a pipeline version to trigger silent rebuilds.
+                .nullable_column("source_version", ColumnType::BigInt)
+                .column_with_default("normalize_version", ColumnType::Integer, Value::Integer(1))
+                .column("created_at", ColumnType::Timestamp)
+                // Indexed for cheap dedup lookup + per-source neighbor/incremental scans.
+                .index_only(["source", "content_hash"]),
         )
         // ── concepts: named nodes; scoping + graph primitive ────────────────────
         .table(
@@ -118,5 +137,28 @@ mod tests {
         let engrams = schema.get(&TableName::new(ENGRAMS)).unwrap();
         let content = engrams.columns.column("content").unwrap();
         assert!(matches!(content.column_type, ColumnType::Text));
+    }
+
+    #[test]
+    fn engram_carries_provenance_for_neighbors_citations_and_idempotency() {
+        // Restored MemPalace strengths: neighbor expansion (source+seq), surgical
+        // citations (line_start/end), content-time, and idempotent dedup (content_hash).
+        let schema = brain_schema(EMBED_DIM);
+        let engrams = schema.get(&TableName::new(ENGRAMS)).unwrap();
+        for col in [
+            "source",
+            "seq",
+            "line_start",
+            "line_end",
+            "content_date",
+            "content_hash",
+            "source_version",
+            "normalize_version",
+        ] {
+            assert!(
+                engrams.columns.column(col).is_some(),
+                "engram must carry `{col}` provenance/ordering column"
+            );
+        }
     }
 }
