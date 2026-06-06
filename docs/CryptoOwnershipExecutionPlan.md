@@ -197,6 +197,52 @@ Live testing surfaced dead-end errors + missing UI. **Done & on `main`:**
 
 ---
 
+## M9 — Group-owned values (per-group cryptographic ACLs)
+
+**Problem.** One DEK *per identity* → a keyshare is all-or-nothing. The SYNC peer needs the
+avenCEO DEK to read the registry, but that same DEK decrypts **everything avenCEO owns**.
+The read-grant scope is only an authorization *filter*; the **key is the real boundary, and
+it is too coarse**. No per-collection/per-row cryptographic isolation.
+
+**Model (Jazz/CoJSON group-extension, rebuilt on our owner-binding).** The **Group** is the
+ownership primitive. A Group = { `group_id` (UUID), per-version DEK, biscuit (members/caps),
+optional **parent** }. A row's `owner` is a **group_id**. Access = holding the group's DEK —
+the key is the boundary, at whatever granularity you choose.
+
+- **Default = the identity group.** An identity's default `group_id` **is** the identity
+  UUID — so every existing row (`owner = identity_id`) is already "in the identity's default
+  group," DEK unchanged. **Zero migration for the common path; 100% backward-compatible.**
+- **Extension (cheap granularity).** A finer group **extends** a parent: its biscuit
+  delegates to the parent group, inheriting the parent's members. A value's own group costs
+  ~one delegation link, not N per-member re-seals. Default inherits admin/read for free;
+  break out only where the access pattern differs.
+- **2-level keys.** Group key sealed to each member; value DEKs sealed to the group key.
+  Add a member → one seal to the group key → reaches every value the group owns.
+- **Granularity is a knob:** everything-in-identity-group (today) → per-collection group →
+  per-row group. Same primitive, cost dial per need.
+- **Forward secrecy preserved:** per-group DEK rotation on member-remove (as today).
+
+**Phases (each ships value; nothing breaks):**
+
+- [ ] **M9-1 — Group primitive (foundation, additive).** `aven-caps`: deterministic
+  `derive_subgroup_id(parent,label)`; the registry-group id constant; group DEK + keyshare
+  reuse the per-owner machinery; `attenuate_extend_group` (biscuit delegation to a parent).
+  Unit tests. **No live-flow change** — the default group_id stays the identity id.
+- [ ] **M9-2 — Registry group (first real split).** Mint avenCEO with a `registry` sub-group
+  (identities/peers) that **extends** avenCEO; registry rows sealed under `DEK_registry`. The
+  SYNC grant keyshares **`DEK_registry` only** → the SYNC peer is **cryptographically** blind
+  to any avenCEO data (not merely authorization-filtered). Fresh-mint (wipe); no row
+  migration.
+- [ ] **M9-3 — Per-collection groups.** Each collection (messages/todos/files) owned by its
+  own group extending the identity group; sharing a collection = sharing its group key.
+  Default stays the identity group (backward-compatible).
+- [ ] **M9-4 — Per-row groups (opt-in).** Per-row group for max isolation where needed.
+
+**Delivers:** per-row crypto granularity becomes a **config choice**; the SYNC/registry
+boundary becomes **key-enforced**, not assumed; the default path is unchanged.
+
+---
+
 ## Architecture reference (terse)
 
 - **Write:** mint owner-binding `Sign_author(value_id ‖ owner)` → row metadata; data cell-sealed under the identity DEK.
