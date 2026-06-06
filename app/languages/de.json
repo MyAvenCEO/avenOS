@@ -135,12 +135,11 @@
 		"errFinishStepsFirst": "Schließe zuerst die Schritte oben ab."
 	},
 	"selfNav": {
-		"identities": "Identitäten",
+		"identities": "Identities",
 		"peers": "Peers",
 		"preferencesCategory": "Einstellungen",
 		"language": "Sprache",
 		"self": "Self",
-		"identities": "Identities",
 		"share": "Teilen",
 		"models": "Modelle",
 		"localModels": "Lokale Modelle",
@@ -494,7 +493,9 @@
 				"owns": "Eigentümer",
 				"reads": "Mitglied",
 				"admit": "Zulassen",
-				"rotate_dek": "Schlüssel rotieren"
+				"rotate_dek": "Schlüssel rotieren",
+				"quota": "10 MB",
+				"rate_limit": "Ratenlimit"
 			},
 			"syncTitle": "Sync",
 			"revoke": "Teilen beenden",
@@ -522,7 +523,21 @@
 			"grantDescOwns": "Volle Kontrolle — lesen, schreiben und Mitglieder verwalten.",
 			"grantDescReads": "Nur-Lese-Mitglied.",
 			"grantDescReplicate": "Blindes Sync — der Aven leitet die verschlüsselten Daten dieser Identität (bis 10 MB), die er nicht lesen kann, an deine anderen Geräte weiter. Er hält keinen Schlüssel, ist also kein lesbares Backup.",
-			"quickRelay": "Auf dem verbundenen Aven synchronisieren"
+			"quickRelay": "Auf dem verbundenen Aven synchronisieren",
+			"capsLegendTitle": "Wie diese Berechtigungen funktionieren",
+			"capDesc": {
+				"read": "Hält den Schlüssel — kann die Daten dieser Identität entschlüsseln und lesen.",
+				"write": "Kann Daten dieser Identität hinzufügen und bearbeiten.",
+				"delete": "Kann Daten dieser Identität löschen.",
+				"admit": "Kann Mitglieder hinzufügen oder entfernen (Roster verwalten).",
+				"rotate_dek": "Kann den Schlüssel rotieren — so wird Zugriff entzogen.",
+				"replicate": "Blindes Sync: speichert & leitet die verschlüsselten Daten ohne Schlüssel weiter, kann sie also nie lesen.",
+				"quota": "Speicher auf diesem Aven ist auf 10 MB pro Identität begrenzt.",
+				"rate_limit": "Eingehende Schreibvorgänge sind ratenbegrenzt, damit keine Identität den Aven flutet.",
+				"owns": "Volle Kontrolle — lesen, schreiben, löschen und Mitglieder verwalten.",
+				"reads": "Nur-Lese-Mitglied — kann entschlüsseln und lesen, aber nicht schreiben."
+			},
+			"syncRelay": "Sync-Relay"
 		},
 		"avenCeoTitle": "avenCEO",
 		"avenCeoClaimedSub": "Verzeichnis & Mitglieder dieses Netzwerks",

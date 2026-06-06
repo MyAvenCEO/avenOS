@@ -42,13 +42,30 @@
 	function capLabel(key: string): string {
 		return t(`identities.share.capabilities.${key}`)
 	}
+	// Human-readable "what this cap does under the hood" — H2 transparency. The caps
+	// themselves (incl. a relay's quota + rate_limit) come from `identity_cap_report` in
+	// Rust — the single biscuit-derived source — so this panel synthesizes NOTHING.
+	function capDescription(key: string): string {
+		return t(`identities.share.capDesc.${key}`)
+	}
 	// Role/grant label (Owner/Member/Relay) — distinct from cap labels so a relay
 	// shows "Relay" (grant) + "Replicate" (cap), not two "Replicate" badges.
 	function grantLabel(grant: IdentityGrant): string {
 		return t(`identities.share.grants.${grant}`)
 	}
 	/// Display order for the Capabilities tab; any unknown cap falls in after these.
-	const CAP_ORDER = ['read', 'write', 'delete', 'admit', 'rotate_dek', 'replicate']
+	const CAP_ORDER = ['read', 'write', 'delete', 'admit', 'rotate_dek', 'replicate', 'quota', 'rate_limit']
+
+	// Distinct effective caps across all access holders (incl. synthesized SYNC policy
+	// caps), ordered — drives the "how these permissions work" legend (H2).
+	const capsInUse = $derived.by((): string[] => {
+		const set = new Set<string>()
+		for (const e of accessEntries) for (const c of e.capabilities) set.add(c)
+		return [
+			...CAP_ORDER.filter((c) => set.has(c)),
+			...[...set].filter((c) => !CAP_ORDER.includes(c)),
+		]
+	})
 
 	type MembersTab = 'members' | 'caps'
 	let activeTab = $state<MembersTab>('members')
@@ -142,11 +159,20 @@
 			const norm = s.did.trim().toLowerCase()
 			const peer = peersByDid.get(norm)
 			const isThisDevice = localDid !== '' && norm === localDid
-			const fallback = s.grant === 'replicate' ? t('identities.share.addReplica') : undefined
+			// D1: real names. Prefer the roster device label (Admina/Bobo); the connected
+			// aven relay is labelled as such; otherwise fall through to the short DID —
+			// never a misleading hardcoded "Replication Server".
+			const isRelay = norm !== '' && norm === (session?.relayDid?.trim().toLowerCase() ?? '\0')
+			const fallback = isRelay ? t('identities.share.syncRelay') : undefined
 			const label = peerAccessLabel(s.did, peer?.deviceLabel ?? fallback, isThisDevice)
 			return { did: s.did, label, isThisDevice, grant: s.grant, capabilities: s.caps }
 		})
 	})
+
+	// Owner-only management: only a holder of `owns` may grant/revoke. A read-only
+	// member sees the roster but NO manage controls — so it can't hit the
+	// `subject_not_owner` dead-end (members are read-only by design).
+	const amOwner = $derived(accessEntries.some((e) => e.isThisDevice && e.grant === 'owns'))
 
 	// Cap-centric view (Tab 2): invert subjects → for each actual cap, who holds it.
 	// Pure projection of the same single source — guarantees the two tabs agree.
@@ -411,28 +437,10 @@
 		<p class="text-muted-foreground text-sm">{t('identities.share.noOneListed')}</p>
 	{:else}
 		<div class="flex flex-col gap-8">
-			<!-- Sub-tabs (top-centered): Members (member→caps) vs Capabilities (cap→holders) -->
-			<div class="flex justify-center">
-				<div class="bg-muted/40 inline-flex rounded-xl p-1 text-sm">
-					<button
-						type="button"
-						class="rounded-lg px-4 py-1.5 font-medium {activeTab === 'members'
-							? 'bg-background shadow-sm'
-							: 'text-muted-foreground hover:text-foreground'}"
-						onclick={() => (activeTab = 'members')}>{t('identities.share.tabMembers')}</button
-					>
-					<button
-						type="button"
-						class="rounded-lg px-4 py-1.5 font-medium {activeTab === 'caps'
-							? 'bg-background shadow-sm'
-							: 'text-muted-foreground hover:text-foreground'}"
-						onclick={() => (activeTab = 'caps')}>{t('identities.share.tabCapabilities')}</button
-					>
-				</div>
-			</div>
 
 			{#if activeTab === 'members'}
-			<!-- Give access (unified: DID + grant kind), placed ABOVE the member list -->
+			{#if amOwner}
+			<!-- Give access (owner-only): a read-only member sees the roster, not this form. -->
 			<section class="border-border/50 bg-background/40 flex flex-col gap-3 rounded-xl border p-4">
 				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
 					{t('identities.share.giveAccess')}
@@ -489,6 +497,7 @@
 				{/if}
 				<p class="text-muted-foreground text-xs leading-relaxed">{t('identities.share.giveAccessHint')}</p>
 			</section>
+			{/if}
 
 			<!-- Who has access -->
 			<section class="flex flex-col gap-4">
@@ -510,10 +519,10 @@
 									<p class="text-muted-foreground mt-0.5 font-mono text-[11px] leading-snug select-text break-all" title={entry.did}>{entry.did}</p>
 								{/if}
 								<div class="mt-2 flex flex-wrap items-center gap-1.5">
-									<!-- Grant kind (owns/reads/replicate) — primary; effective caps — muted. All from the biscuit. -->
+									<!-- Grant kind (owns/reads/replicate) — primary; effective caps — muted. Biscuit caps + synthesized SYNC policy caps (10 MB / rate). Hover/legend = description. -->
 									<span class="bg-primary/10 text-primary rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase">{grantLabel(entry.grant)}</span>
 									{#each entry.capabilities as cap (cap)}
-										<span class="bg-muted text-muted-foreground rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase">{capLabel(cap)}</span>
+										<span class="bg-muted text-muted-foreground rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase" title={capDescription(cap)}>{capLabel(cap)}</span>
 									{/each}
 									{#if entry.isThisDevice}
 										<button
@@ -521,7 +530,7 @@
 											class="bg-muted hover:bg-muted/70 ml-auto rounded-md px-2.5 py-1 text-[11px] font-medium"
 											onclick={() => void copyOwnDid()}>{didCopied ? t('peers.copied') : t('common.copyDid')}</button
 										>
-									{:else}
+									{:else if amOwner}
 										<button
 											type="button"
 											class="border-destructive/40 text-destructive hover:bg-destructive/10 ml-auto rounded-md border px-2.5 py-1 text-[11px] font-medium disabled:opacity-50"
@@ -539,6 +548,19 @@
 					{/if}
 					{#if revokeNote}
 						<p class="text-muted-foreground text-sm">{revokeNote}</p>
+					{/if}
+					{#if capsInUse.length > 0}
+						<details class="border-border/40 mt-1 rounded-lg border bg-background/30 px-3 py-2">
+							<summary class="text-muted-foreground hover:text-foreground cursor-pointer text-[11px] font-medium select-none">{t('identities.share.capsLegendTitle')}</summary>
+							<ul class="mt-2 flex flex-col gap-1.5">
+								{#each capsInUse as cap (cap)}
+									<li class="flex items-start gap-2">
+										<span class="bg-muted text-muted-foreground mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wider uppercase">{capLabel(cap)}</span>
+										<span class="text-muted-foreground text-[11px] leading-snug">{capDescription(cap)}</span>
+									</li>
+								{/each}
+							</ul>
+						</details>
 					{/if}
 				{/if}
 			</section>
@@ -560,43 +582,6 @@
 			</section>
 			{/if}
 
-			{#if activeTab === 'caps'}
-			<!-- Capability-centric: every actual cap on this identity (from the biscuit) + who holds it. -->
-			<section class="flex flex-col gap-4">
-				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
-					{t('identities.share.tabCapabilities')}
-				</h2>
-				<p class="text-muted-foreground text-xs leading-relaxed">{t('identities.share.capabilitiesIntro')}</p>
-				{#if err}
-					<p class="text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm select-text">{err}</p>
-				{:else if capabilityRows.length === 0}
-					<p class="text-muted-foreground text-sm">{t('identities.share.noOneListed')}</p>
-				{:else}
-					<ul class="flex flex-col gap-3">
-						{#each capabilityRows as row (row.cap)}
-							<li class="rounded-xl border border-border/50 bg-background/40 px-4 py-3">
-								<div class="flex items-center justify-between gap-3">
-									<span class="bg-primary/10 text-primary rounded px-2 py-0.5 text-[11px] font-bold tracking-wider uppercase">{capLabel(row.cap)}</span>
-									<span class="text-muted-foreground text-[11px]">{t('identities.share.heldBy')}: {row.holders.length}</span>
-								</div>
-								{#if row.holders.length === 0}
-									<p class="text-muted-foreground mt-2 text-xs">{t('identities.share.noHolders')}</p>
-								{:else}
-									<ul class="mt-2 flex flex-col gap-1.5">
-										{#each row.holders as h (h.did)}
-											<li class="flex items-center justify-between gap-2">
-												<span class="min-w-0 truncate text-sm" title={h.did}>{h.label}</span>
-												<span class="text-muted-foreground shrink-0 font-mono text-[10px] tracking-wider uppercase">{capLabel(h.grant)}</span>
-											</li>
-										{/each}
-									</ul>
-								{/if}
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</section>
-			{/if}
 		</div>
 	{/if}
 {:else if tauri && unlocked && identityId.trim()}
@@ -623,7 +608,7 @@
 						<div class="mt-1 flex flex-wrap gap-1">
 							<span class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase">{grantLabel(entry.grant)}</span>
 							{#each entry.capabilities as cap (cap)}
-								<span class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase">{capLabel(cap)}</span>
+								<span class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase" title={capDescription(cap)}>{capLabel(cap)}</span>
 							{/each}
 						</div>
 					</li>

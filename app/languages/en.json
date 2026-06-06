@@ -506,7 +506,9 @@
 				"owns": "Owner",
 				"reads": "Member",
 				"admit": "Admit",
-				"rotate_dek": "Rotate key"
+				"rotate_dek": "Rotate key",
+				"quota": "10 MB",
+				"rate_limit": "Rate limit"
 			},
 			"syncTitle": "Sync",
 			"revoke": "Stop sharing",
@@ -534,7 +536,21 @@
 			"grantDescOwns": "Full control — read, write, and manage members.",
 			"grantDescReads": "Read-only member.",
 			"grantDescReplicate": "Blind sync — the aven relays this identity's encrypted data it cannot read (up to 10 MB) to your other devices. It holds no key, so it is not a readable backup.",
-			"quickRelay": "Sync on the connected aven"
+			"quickRelay": "Sync on the connected aven",
+			"capsLegendTitle": "How these permissions work",
+			"capDesc": {
+				"read": "Holds the key — can decrypt and read this identity's data.",
+				"write": "Can add and edit this identity's data.",
+				"delete": "Can delete this identity's data.",
+				"admit": "Can add or remove members (manage the roster).",
+				"rotate_dek": "Can rotate the encryption key — this is how access is revoked.",
+				"replicate": "Blind sync: stores & forwards this identity's encrypted data without the key, so it can never read it.",
+				"quota": "Storage on this aven is capped at 10 MB for this identity.",
+				"rate_limit": "Inbound writes are rate-limited so one identity can't flood the aven.",
+				"owns": "Full control — read, write, delete, and manage members.",
+				"reads": "Read-only member — can decrypt and read, but not write."
+			},
+			"syncRelay": "Sync relay"
 		},
 		"avenCeoTitle": "avenCEO",
 		"avenCeoClaimedSub": "This network's roster & members",

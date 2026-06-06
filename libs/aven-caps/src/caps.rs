@@ -148,7 +148,15 @@ pub fn identity_cap_report(chain: &Biscuit, owner: Uuid) -> Result<Vec<SubjectCa
 		if owner_set.contains(did.trim()) {
 			continue;
 		}
+		// A blind relay's effective caps = `replicate` (the biscuit grant) + the bounds
+		// that grant implies on the aven that holds it: a per-identity 10 MB storage
+		// `quota` + inbound `rate_limit`. We report them HERE (the single biscuit-reading
+		// cap source the UI consumes) so they are NOT synthesized client-side and the
+		// displayed caps can never drift from the grant. The node still ENFORCES the
+		// resource bounds (it owns its storage); the report makes them transparent.
 		add(&mut acc, &did, "replicate", "replicate");
+		add(&mut acc, &did, "replicate", "quota");
+		add(&mut acc, &did, "replicate", "rate_limit");
 	}
 	// Granular grants (row/table-scoped) — fold the op into the subject's caps.
 	for (did, op, _prefix) in identity_grants(chain, owner)? {
@@ -894,7 +902,16 @@ mod tests {
 		assert_eq!(r.caps, vec!["read".to_string()]);
 		let p = report.iter().find(|s| peer_did_matches(&s.did, &replica.peer_did)).unwrap();
 		assert_eq!(p.grant, "replicate");
-		assert_eq!(p.caps, vec!["replicate".to_string()]);
+		// A relay's effective caps now report the bounds its grant implies on the aven:
+		// the blind `replicate` + a per-identity 10 MB `quota` + inbound `rate_limit`.
+		assert_eq!(
+			p.caps,
+			vec![
+				"replicate".to_string(),
+				"quota".to_string(),
+				"rate_limit".to_string()
+			]
+		);
 	}
 
 	#[test]
