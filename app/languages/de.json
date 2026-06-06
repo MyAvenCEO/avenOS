@@ -666,6 +666,8 @@
 		"noSparksYet": "Noch keine Sparks für dieses Aven.",
 		"dashboard": {
 			"subtitle": "Wie viel Cash du pro gearbeiteter Stunde ziehst — und der nächste Schritt zum Level-up.",
+			"ratio": "Cashflow pro gearbeiteter Stunde",
+			"ctaLabel": "Einfachster nächster Schritt",
 			"perWeekSuffix": " /Wo",
 			"ladderTitle": "Dein Aufstieg",
 			"ladderCleared": "{count} Level geschafft",
