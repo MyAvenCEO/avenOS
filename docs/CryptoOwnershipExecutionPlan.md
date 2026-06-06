@@ -76,22 +76,19 @@ only if explicitly wanted.
 - [ ] `author_sig`/`author_did` on `SealedBatchSubmission` (persisted codec change).
 - [ ] Verify at `SealBatch` apply.
 
-## ☐ Milestone 4 — Retire `AllowAll` engine default (hardening)
+## ✅ Milestone 4 — Retire `AllowAll` engine default (DONE — `125eabc`)
 
-The engine's default `CapabilityResolver` is `AllowAll`; enforcement depends on every
-peer *installing* the real resolver (app + server do today). A peer running the engine
-without one = an open gate. **Fail-closed instead.**
-- [ ] Engine: default resolver **denies** spark-scoped ops (or require an explicit resolver — no silent permissive default).
-- [ ] Audit: every peer entrypoint installs the real resolver.
-- [ ] Test: an un-configured engine rejects spark-scoped sync (fail-closed).
+- [x] Engine default flipped `AllowAll`→`DenyAllResolver`; `DenyAll` now also denies `verify_on_apply` (fail-closed inbound).
+- [x] Audited: app (`jazz/mod.rs:1577`) + server (`main.rs:233`) install real resolvers unconditionally; nothing relies on `AllowAll` in production.
+- [x] Builds green (app + server); codec test passes; tests opt into `AllowAll` explicitly.
 
-## ☐ Milestone 5 — Relay/sync abuse caps (future idea)
+## ◑ Milestone 5 — Relay/sync abuse caps (1/4 — `dc5bae2`)
 
 Blind relays accept authenticity-valid-but-*unauthorized* rows (rejected at members, but
 stored/forwarded = a spam/DoS sink, since a relay holds no biscuit to authorize). Add
 protective caps at the sync/relay layer so a relay isn't an unbounded sink.
-- [ ] **Rate limiting** per peer (inbound batches/sec, bytes/sec) with backpressure.
-- [ ] **Per-identity storage quota** — max DB size/value-count per identity; reject or evict over-quota writes.
+- [x] **Rate limiting** per peer — fixed-window inbound batch budget at `process_from_client` (50k/s, generous; only floods trip it). *(bytes/sec + backpressure: later.)*
+- [ ] **Per-identity storage quota** — max DB size/value-count per identity; reject or evict over-quota writes. *(needs per-owner storage accounting — app-resolver layer.)*
 - [ ] Optional: require a **minimal cap to relay at all** (drop pure-forgery spam at the relay edge, before storage).
 - [ ] Fair-share across identities so one identity can't starve others on a shared relay.
 
