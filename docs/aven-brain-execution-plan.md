@@ -150,12 +150,12 @@ identities) · **T3 managed API** (opt-in, minimal context).
 | **Engine** | `Vector` + `nearest` + `text_search` in aven-db | ✅ done, tested |
 | **Schema** | `memories/entities/mentions/facts/relations` | ✅ done, tested |
 | **Pipeline v1** | `Brain` + `Embedder` + `remember`/`search` (RRF) | ✅ done, tested |
-| **Store round-out** | idempotent `remember` (content_hash dedup), `tags` on write, **scoped `search`** (tag/entity filter) | ☐ next |
-| **Knowledge graph** | **deterministic** wikilink/ref → mentions + typed edges (zero-LLM, on write); optional LLM `Extractor` for facts (*off* the write path); relations + dynamics | ☐ |
+| **Store round-out** | idempotent `remember` (content_hash dedup), `tags` on write, **scoped `search`** (tag filter) | ✅ done, tested |
+| **Knowledge graph** | **deterministic** wikilink/ref → mentions + typed edges (zero-LLM, on write); optional LLM `Extractor` for facts (*off* the write path); relations + dynamics | ☐ next |
 | **Context assembly** | `wake` (L0+L1); `recall` (L2 scoped); **entity cards = compiled-truth summary + append-only timeline** (gBrain) | ☐ |
 | **Real models** | EmbeddingGemma behind `Embedder`; LLM `Extractor` (off write path) | ☐ |
-| **Agent surface** | MCP server (search/remember/kg/wake), scoped read/write/admin | ☐ |
-| **Consolidation (dream cycle)** | background pass: dynamics decay, dedup, **CRDT entity-merge**, contradiction detection, recompute compiled-truth | ☐ |
+| **Brain interface** | **Rust-native IPC bridge** (search/remember/kg/wake) — no MCP; an in-process/IPC API agents call directly | ☐ |
+| **Dreaming** | background consolidation pass: dynamics decay, dedup, **CRDT entity-merge**, contradiction detection, recompute compiled-truth | ☐ |
 | **Scale & sync** | usearch HNSW + `_score` surfacing + weighted fusion; Counter-merge dynamics; sparks/identity sharing + multi-device | ☐ |
 | **Honest eval** | LongMemEval/LoCoMo harness against aven-brain (held-out numbers only) | ☐ |
 
@@ -194,8 +194,8 @@ benchmark of P@5 49.1 / R@5 97.9 — small, not BEAM-comparable).
    clean CRDT merges). → **Make deterministic mention/edge extraction the primary write path; keep
    the LLM `Extractor` optional and *off* the write path** (run it in the dream cycle).
 3. **The "dream cycle" — a nightly background consolidator** (dedup/merge entities, fix citations,
-   score salience, detect contradictions, recompute compiled-truth). → Names and structures our
-   maintenance phase: the natural home for **dynamics decay**, **CRDT entity-merge** (two offline
+   score salience, detect contradictions, recompute compiled-truth). → We adopt this as our
+   **dreaming** phase: the natural home for **dynamics decay**, **CRDT entity-merge** (two offline
    devices both create "Alice"), **contradiction detection**, and **summary recompute**.
 4. **Compiled-truth + contradiction detection answers our "conflicting facts" question** — keep both
    facts, let the dream cycle flag contradictions and recompute the entity's compiled truth, rather
@@ -215,14 +215,15 @@ benchmark of P@5 49.1 / R@5 97.9 — small, not BEAM-comparable).
 aven-db: `Vector` (dcc2162), `nearest` (4579152), `text_search` (7ca0387); suite restored
 266-errors→green (0aa32b9, d03d058), `Vector` lib tests + nearest/text_search tests pass.
 aven-brain: scaffold+schema (1b92f72), strengths restored (d195345), vocabulary finalized
-(bbb188b, 39cc31f, 525f27c, de8c8aa), pipeline (199f080). **aven-brain: 6 tests pass.**
+(bbb188b, 39cc31f, 525f27c, de8c8aa), pipeline (199f080), store round-out — idempotent
+remember + tags + scoped search (dfb3701). **aven-brain: 8 tests pass.**
 
 ---
 
 ## 10. Open decisions & risks
 
 1. **Conflicting facts** across devices (same subject/predicate, different object): lean
-   **gBrain-style** — keep both, let the **dream cycle** detect the contradiction and recompute the
+   **gBrain-style** — keep both, let **dreaming** detect the contradiction and recompute the
    entity's compiled-truth, rather than hard LWW. Confirm with the KG phase.
 2. **Embedding-dim lock-in**: changing the model ⇒ re-embed + reindex (lens-driven).
 3. **Counter-merge for `relations.access_count`**: needs a `TableSchemaBuilder` merge-strategy hook
