@@ -680,16 +680,14 @@
 		}
 	},
 	"networkGate": {
-		"checking": "Checking network membership…",
-		"title": "You're not part of the avenCEO network yet",
-		"needInvite": "Otherwise, share your DID with an admin to be invited — the gate opens once you are.",
+		"kicker": "Invitation only",
+		"title": "The new internet is built by sovereign founders.",
+		"body": "This is the backbone of a different internet — one owned by the people who build on it. A new breed of founders who hold their own identity, their own data, their own word. It isn't a product you sign up for. It's a circle you're welcomed into.",
+		"how": "Access is passed hand to hand, founder to founder. To step inside, find someone already here who will vouch for you and open the door.",
+		"footnote": "When a founder invites you, your place will be waiting — and if you're the very first here, you'll be welcomed in automatically.",
 		"yourDid": "Your DID",
 		"copyDid": "Copy DID",
 		"copied": "Copied",
-		"firstTitle": "Starting a new network?",
-		"firstHint": "If no one has claimed this network yet, you can become its first admin.",
-		"claim": "Claim — become admin",
-		"claiming": "Claiming…",
-		"connectingHint": "Connecting… if you're the first to join, you'll be admitted automatically."
+		"checking": "Checking network membership…"
 	}
 }
