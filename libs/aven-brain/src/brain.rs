@@ -6,13 +6,15 @@
 //! needs only the rank positions (not raw scores), so it works today without engine-side
 //! score surfacing; weighted fusion (`0.6·vec + 0.4·bm25`) can replace it once a
 //! `_distance`/`_score` column is surfaced.
+//!
+//! `remember` is **idempotent**: identical content re-ingested returns the existing memory
+//! (dedup by `content_hash`) instead of creating a duplicate. `search` can be **scoped** by
+//! tags — the filter runs before ranking, so it stays cheap.
 
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use groove::{
-    AppContext, AppId, JazzClient, NullSyncTransport, ObjectId, QueryBuilder, Value,
-};
+use groove::{AppContext, AppId, JazzClient, NullSyncTransport, ObjectId, QueryBuilder, Value};
 
 use crate::embedder::Embedder;
 use crate::schema::{brain_schema, MEMORIES};
@@ -42,6 +44,7 @@ impl std::error::Error for BrainError {}
 pub struct Memory {
     pub id: ObjectId,
     pub content: String,
+    pub tags: Vec<String>,
 }
 
 /// The memory brain of one identity.
@@ -65,32 +68,44 @@ impl<E: Embedder> Brain<E> {
             data_dir,
             live_schemas: Vec::new(),
         };
-        let client =
-            JazzClient::connect_headless_in_memory(context, Arc::new(NullSyncTransport))
-                .await
-                .map_err(|e| BrainError::Open(format!("{e:?}")))?;
+        let client = JazzClient::connect_headless_in_memory(context, Arc::new(NullSyncTransport))
+            .await
+            .map_err(|e| BrainError::Open(format!("{e:?}")))?;
         Ok(Self { client, embedder })
     }
 
-    /// Store a memory (verbatim content + its embedding). Returns the memory id.
-    pub async fn remember(&self, content: &str) -> Result<ObjectId, BrainError> {
+    /// Store a memory (verbatim content + embedding + optional tags). **Idempotent**:
+    /// identical content returns the existing memory id instead of duplicating.
+    pub async fn remember(&self, content: &str, tags: &[&str]) -> Result<ObjectId, BrainError> {
+        let hash = content_hash(content);
+
+        // Idempotent dedup: if this exact content is already stored, return it.
+        if let Some(existing) = self.find_by_content_hash(&hash).await? {
+            return Ok(existing);
+        }
+
         let embedding = self.embedder.embed(content);
+        let tags_value = if tags.is_empty() {
+            Value::Null
+        } else {
+            Value::Array(tags.iter().map(|t| Value::Text(t.to_string())).collect())
+        };
         // Positional values MUST match the `memories` column order in `schema.rs`:
         // content, embedding, tags, source, seq, line_start, line_end, content_date,
         // content_hash, source_version, normalize_version, created_at.
         let values = vec![
             Value::Text(content.to_string()),
             Value::Vector(embedding),
-            Value::Null,                   // tags
-            Value::Null,                   // source
-            Value::Null,                   // seq
-            Value::Null,                   // line_start
-            Value::Null,                   // line_end
-            Value::Null,                   // content_date
-            Value::Null,                   // content_hash
-            Value::Null,                   // source_version
-            Value::Integer(1),             // normalize_version
-            Value::Timestamp(now_micros()), // created_at
+            tags_value,
+            Value::Null,                     // source
+            Value::Null,                     // seq
+            Value::Null,                     // line_start
+            Value::Null,                     // line_end
+            Value::Null,                     // content_date
+            Value::Bytea(hash.to_vec()),     // content_hash
+            Value::Null,                     // source_version
+            Value::Integer(1),               // normalize_version
+            Value::Timestamp(now_micros()),  // created_at
         ];
         self.client
             .create(MEMORIES, values)
@@ -98,24 +113,38 @@ impl<E: Embedder> Brain<E> {
             .map_err(|e| BrainError::Write(format!("{e:?}")))
     }
 
-    /// Hybrid retrieval: top-`k` memories by RRF over `nearest` (vector) + `text_search`
-    /// (BM25). Each retriever over-fetches so the fusion has room to reorder.
+    /// Hybrid retrieval: top-`k` memories by RRF over `nearest` (vector) + `text_search` (BM25).
     pub async fn search(&self, query: &str, k: usize) -> Result<Vec<Memory>, BrainError> {
+        self.search_scoped(query, k, &[]).await
+    }
+
+    /// Like [`search`](Self::search), but restricted to memories carrying **all** of `tags`.
+    /// The tag filter runs before ranking (cheap scope), then hybrid rank + RRF.
+    pub async fn search_scoped(
+        &self,
+        query: &str,
+        k: usize,
+        tags: &[&str],
+    ) -> Result<Vec<Memory>, BrainError> {
         let over = (k * 4).max(8);
         let qvec = self.embedder.embed(query);
 
-        let vector_q = QueryBuilder::new(MEMORIES)
-            .nearest("embedding", qvec, over)
-            .build();
+        let mut vector_qb = QueryBuilder::new(MEMORIES);
+        for t in tags {
+            vector_qb = vector_qb.filter_contains("tags", Value::Text(t.to_string()));
+        }
+        let vector_q = vector_qb.nearest("embedding", qvec, over).build();
         let vector_rows = self
             .client
             .query(vector_q, None)
             .await
             .map_err(|e| BrainError::Read(format!("{e:?}")))?;
 
-        let text_q = QueryBuilder::new(MEMORIES)
-            .text_search("content", query, over)
-            .build();
+        let mut text_qb = QueryBuilder::new(MEMORIES);
+        for t in tags {
+            text_qb = text_qb.filter_contains("tags", Value::Text(t.to_string()));
+        }
+        let text_q = text_qb.text_search("content", query, over).build();
         let text_rows = self
             .client
             .query(text_q, None)
@@ -123,6 +152,19 @@ impl<E: Embedder> Brain<E> {
             .map_err(|e| BrainError::Read(format!("{e:?}")))?;
 
         Ok(rrf_fuse(&vector_rows, &text_rows, k))
+    }
+
+    /// Look up an existing memory by its content hash (idempotency / dedup).
+    async fn find_by_content_hash(&self, hash: &[u8]) -> Result<Option<ObjectId>, BrainError> {
+        let q = QueryBuilder::new(MEMORIES)
+            .filter_eq("content_hash", Value::Bytea(hash.to_vec()))
+            .build();
+        let rows = self
+            .client
+            .query(q, None)
+            .await
+            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+        Ok(rows.first().map(|(id, _)| *id))
     }
 }
 
@@ -134,15 +176,12 @@ fn rrf_fuse(
 ) -> Vec<Memory> {
     use std::collections::HashMap;
     let mut score: HashMap<ObjectId, f32> = HashMap::new();
-    let mut content: HashMap<ObjectId, String> = HashMap::new();
+    let mut mem: HashMap<ObjectId, Memory> = HashMap::new();
 
     for list in [vector_rows, text_rows] {
         for (rank, (id, vals)) in list.iter().enumerate() {
             *score.entry(*id).or_insert(0.0) += 1.0 / (RRF_K + rank as f32 + 1.0);
-            content.entry(*id).or_insert_with(|| match vals.first() {
-                Some(Value::Text(s)) => s.clone(), // `content` is column 0
-                _ => String::new(),
-            });
+            mem.entry(*id).or_insert_with(|| memory_from_row(*id, vals));
         }
     }
 
@@ -151,11 +190,39 @@ fn rrf_fuse(
     ranked.truncate(k);
     ranked
         .into_iter()
-        .map(|(id, _)| Memory {
-            id,
-            content: content.remove(&id).unwrap_or_default(),
-        })
+        .filter_map(|(id, _)| mem.remove(&id))
         .collect()
+}
+
+/// Build a `Memory` from a `memories` row (column order per `schema.rs`).
+fn memory_from_row(id: ObjectId, vals: &[Value]) -> Memory {
+    let content = match vals.first() {
+        Some(Value::Text(s)) => s.clone(), // column 0
+        _ => String::new(),
+    };
+    let tags = match vals.get(2) {
+        // column 2
+        Some(Value::Array(items)) => items
+            .iter()
+            .filter_map(|v| match v {
+                Value::Text(s) => Some(s.clone()),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    Memory { id, content, tags }
+}
+
+/// Stable, deterministic content hash (FNV-1a 64-bit). Deterministic across devices so
+/// identical content dedups consistently under CRDT merge.
+fn content_hash(content: &str) -> [u8; 8] {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in content.bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    h.to_le_bytes()
 }
 
 fn now_micros() -> u64 {
@@ -177,13 +244,13 @@ mod tests {
             .await
             .expect("open brain");
 
-        brain.remember("the cat sat on the mat").await.unwrap();
+        brain.remember("the cat sat on the mat", &[]).await.unwrap();
         brain
-            .remember("rust is a systems programming language")
+            .remember("rust is a systems programming language", &[])
             .await
             .unwrap();
         let beach = brain
-            .remember("we went to the beach and swam in the ocean")
+            .remember("we went to the beach and swam in the ocean", &[])
             .await
             .unwrap();
 
@@ -196,5 +263,43 @@ mod tests {
             hits[0].content
         );
         assert!(hits[0].content.contains("beach"));
+    }
+
+    #[tokio::test]
+    async fn remember_is_idempotent_on_identical_content() {
+        let brain = Brain::open_in_memory("test-idempotent", StubEmbedder::new(EMBED_DIM))
+            .await
+            .unwrap();
+
+        let first = brain.remember("the same exact memory", &[]).await.unwrap();
+        let second = brain.remember("the same exact memory", &[]).await.unwrap();
+        assert_eq!(first, second, "re-remembering identical content must return the same id");
+
+        // And it must not have created a duplicate row.
+        let hits = brain.search("the same exact memory", 10).await.unwrap();
+        assert_eq!(hits.len(), 1, "identical content must dedup to one memory, got {hits:?}");
+    }
+
+    #[tokio::test]
+    async fn scoped_search_filters_by_tag() {
+        let brain = Brain::open_in_memory("test-scoped", StubEmbedder::new(EMBED_DIM))
+            .await
+            .unwrap();
+
+        let work = brain
+            .remember("quarterly revenue planning meeting", &["work"])
+            .await
+            .unwrap();
+        brain
+            .remember("planning the family holiday trip", &["personal"])
+            .await
+            .unwrap();
+
+        // Scope to "work": only the work memory is eligible, even though both mention "planning".
+        let hits = brain.search_scoped("planning", 5, &["work"]).await.unwrap();
+
+        assert_eq!(hits.len(), 1, "tag scope should yield only the work memory, got {hits:?}");
+        assert_eq!(hits[0].id, work);
+        assert!(hits[0].tags.iter().any(|t| t == "work"));
     }
 }
