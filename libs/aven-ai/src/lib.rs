@@ -6,13 +6,23 @@
 //!   and passes in a models-root path, a cancel predicate, and a progress sink.
 //! - [`llm`] (feature `llm`): on-device text generation via onnxruntime (`ort`)
 //!   for LFM2.5-8B-A1B ONNX — model download + a streaming greedy generate loop.
+//! - [`tts`] (feature `tts`): on-device text-to-speech via onnxruntime (`ort`) for
+//!   MOSS-TTS-Nano — model download + a streaming synth loop emitting 48 kHz PCM.
+//! - [`onnx`] (features `llm`/`tts`): shared onnxruntime primitives (dylib init,
+//!   resilient multi-file download, KV-cache wiring) used by both ONNX engines.
 //! - `gemma` (feature `gemma`, future): on-device LLM via mistralrs.
 //!
-//! The app (`app/src-tauri/src/asr.rs`, `app/src-tauri/src/llm.rs`) provides thin
-//! Tauri adapters over this crate.
+//! The app (`app/src-tauri/src/{asr,llm,tts}.rs`) provides thin Tauri adapters
+//! over this crate.
 
 #[cfg(feature = "stt")]
 pub mod stt;
 
+#[cfg(any(feature = "llm", feature = "tts"))]
+pub mod onnx;
+
 #[cfg(feature = "llm")]
 pub mod llm;
+
+#[cfg(feature = "tts")]
+pub mod tts;

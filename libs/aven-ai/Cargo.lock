@@ -272,6 +272,7 @@ dependencies = [
  "log",
  "mistralrs",
  "ort",
+ "serde",
  "serde_json",
  "sherpa-onnx",
  "tar",

@@ -19,6 +19,10 @@ stt = ["dep:sherpa-onnx", "dep:ureq", "dep:tar", "dep:bzip2"]
 # and stays App-Store/TestFlight-safe (the dylib ships signed in the app bundle;
 # only model *weights* download at first run).
 llm = ["dep:ort", "dep:half", "dep:tokenizers", "dep:ureq", "dep:serde_json", "dep:log"]
+# On-device text-to-speech (MOSS-TTS-Nano ONNX) via onnxruntime (`ort`). Shares the
+# `onnx` module (dylib init, download, KV-cache wiring) and the `load-dynamic`
+# bundled-dylib path with `llm`; same deps. Streams 48 kHz PCM frames.
+tts = ["dep:ort", "dep:half", "dep:tokenizers", "dep:ureq", "dep:serde", "dep:serde_json", "dep:log"]
 # Future on-device LLM path (Gemma, etc.) via mistralrs. Heavy; off by default.
 gemma = ["dep:mistralrs"]
 
@@ -35,6 +39,7 @@ bzip2 = { version = "0.4", optional = true }
 ort = { version = "2.0.0-rc.12", optional = true, default-features = false, features = ["std", "ndarray", "half", "load-dynamic", "api-24"] }
 half = { version = "2", optional = true }
 tokenizers = { version = "0.20", optional = true, default-features = false, features = ["onig"] }
+serde = { version = "1", optional = true, features = ["derive"] }
 serde_json = { version = "1", optional = true }
 log = { version = "0.4", optional = true }
 # Future on-device LLM engine.
