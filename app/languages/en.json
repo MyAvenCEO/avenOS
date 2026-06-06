@@ -127,7 +127,6 @@
 	"lockGate": {
 		"tagline": "Your self-sovereign life starts here",
 		"chooseLanguage": "Choose your language",
-		"chooseLanguageHint": "You can change this later under Self → Preferences.",
 		"chooseYourselfList": "Choose yourself",
 		"finishSetupBelow": " · Finish setup below",
 		"createNewSelf": "Create new self",
