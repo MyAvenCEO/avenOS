@@ -6,7 +6,7 @@
  */
 
 import { INGEST_STAGES, type IngestReport, type Logger } from '@avenos/aven-skills'
-import type { Order } from '../../routes/avens/[projectId]/orders/orders-data'
+import type { Order } from '../../routes/avens/[projectId]/[sparkId]/orders/orders-data'
 import { createOrdersIngestor } from './victorio-orders'
 
 export type StageStatus = 'pending' | 'running' | 'done' | 'error'
