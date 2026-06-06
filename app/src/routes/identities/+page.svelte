@@ -60,7 +60,7 @@
 						class="group border-input hover:bg-accent hover:text-accent-foreground hover:border-border flex w-full flex-col gap-1 rounded-xl border bg-card/40 px-4 py-4 text-left transition-colors"
 						onclick={() => goto(`/identities/${encodeURIComponent(row.owner)}/talk`)}
 					>
-						<span class="text-[11px] font-semibold tracking-wider uppercase opacity-70 group-hover:text-accent-foreground/90">{t('identities.sparkLabel')}</span>
+						<span class="text-[11px] font-semibold tracking-wider uppercase opacity-70 group-hover:text-accent-foreground/90">{t('identities.identityLabel')}</span>
 						<span class="text-base font-medium tracking-tight group-hover:text-accent-foreground">{row.name || t('common.unnamed')}</span>
 						<span class="text-muted-foreground font-mono text-[11px] group-hover:text-accent-foreground/85">{sparkSubtitle(row)}</span>
 					</button>

@@ -66,7 +66,7 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 		};
 
 		// 4. Biscuit decision.
-		let spark_op = match op {
+		let identity_op = match op {
 			AccOp::Read => crate::identity_acc::AccOp::Read,
 			AccOp::Write => crate::identity_acc::AccOp::Write,
 			AccOp::Delete => crate::identity_acc::AccOp::Delete,
@@ -75,7 +75,7 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 		match crate::identity_acc::authorize(
 			&shell.vault,
 			owner,
-			spark_op,
+			identity_op,
 			&res.table,
 			Some(*res.row_id.uuid()),
 			&peer_did,

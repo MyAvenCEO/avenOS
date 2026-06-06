@@ -99,7 +99,7 @@ pub(super) fn bigint_i64(v: &Value) -> Result<i64, String> {
 	}
 }
 
-fn open_sealed_text_for_spark(
+fn open_sealed_text_for_identity(
 	deks: &HashMap<(Uuid, i64), Dek>,
 	identity: Uuid,
 	raw: &str,
@@ -130,10 +130,10 @@ fn hydrate_text_at(
 	cell: &Value,
 ) -> Result<String, String> {
 	match cell {
-		Value::Text(s) => open_sealed_text_for_spark(deks, identity, s.as_str()),
+		Value::Text(s) => open_sealed_text_for_identity(deks, identity, s.as_str()),
 		Value::Bytea(b) => {
 			let s = std::str::from_utf8(b.as_slice()).map_err(|_| "hydrate_bytea_utf8".to_string())?;
-			open_sealed_text_for_spark(deks, identity, s)
+			open_sealed_text_for_identity(deks, identity, s)
 		}
 		x => Err(format!("hydrate_text_bad:{x:?}")),
 	}
@@ -210,7 +210,7 @@ pub(super) fn identity_uuid_from_json_row(
 	row: &Map<String, JsonValue>,
 ) -> Result<Uuid, String> {
 	let ix = col_ix(tbl, "owner")?;
-	let desc = tbl.columns.columns.get(ix).ok_or("spark_desc_ix")?;
+	let desc = tbl.columns.columns.get(ix).ok_or("identity_desc_ix")?;
 	let raw = row
 		.get("owner")
 		.ok_or_else(|| "missing_spark_id".to_string())?;
@@ -269,7 +269,7 @@ pub(super) fn place_secrets_for_insert(
 	Ok(())
 }
 
-pub(super) fn inject_default_spark(
+pub(super) fn inject_default_identity(
 	values: &mut Map<String, JsonValue>,
 	tbl: &TableSchema,
 	default: Uuid,
@@ -442,15 +442,15 @@ pub(super) async fn build_object_spark_id_map(
 	client: &JazzClient,
 ) -> Result<HashMap<(String, ObjectId), Uuid>, String> {
 	let mut out = HashMap::new();
-	for table in crate::identity_sync::spark_scoped_table_names() {
+	for table in crate::identity_sync::identity_scoped_table_names() {
 		let schema = resolved_table_schema(client, table).await?;
-		let spark_ix = col_ix(&schema, "owner")?;
+		let identity_ix = col_ix(&schema, "owner")?;
 		let q = QueryBuilder::new(TableName::new(table))
 			.include_deleted()
 			.build();
 		let rows = client.query(q, None).await.map_err(super::format_jazz_err)?;
 		for (oid, vals) in rows {
-			if let Ok(sid) = uuid_cell_at(vals.as_slice(), spark_ix) {
+			if let Ok(sid) = uuid_cell_at(vals.as_slice(), identity_ix) {
 				out.insert((table.clone(), oid), sid);
 			}
 		}
@@ -469,8 +469,8 @@ pub(super) async fn query_table_publish(
 	let mut out = Vec::with_capacity(rows.len());
 	let mut skipped_unauthorized_rows = 0usize;
 	for (oid, vals) in rows {
-		let spark_row = identity_uuid_row(&table_schema, &vals).unwrap_or(state.default_identity);
-		match authorize_gate(state, table, AccOp::Read, spark_row, Some(*oid.uuid())) {
+		let identity_row = identity_uuid_row(&table_schema, &vals).unwrap_or(state.default_identity);
+		match authorize_gate(state, table, AccOp::Read, identity_row, Some(*oid.uuid())) {
 			Ok(()) => {}
 			Err(_) => {
 				skipped_unauthorized_rows = skipped_unauthorized_rows.saturating_add(1);
@@ -539,8 +539,8 @@ fn ascii_slug_fallback(name: &str) -> String {
 	}
 }
 
-fn possessive_identity_title(first_name_for_spark: &str) -> String {
-	let n = first_name_for_spark.trim();
+fn possessive_identity_title(first_name_for_identity: &str) -> String {
+	let n = first_name_for_identity.trim();
 	if n.is_empty() {
 		return "My identity".into();
 	}
@@ -568,7 +568,7 @@ pub(super) async fn hydrate_shell(
 	}
 
 	let sparks_schema = resolved_table_schema(client, "identities").await?;
-	let spark_id_ix = col_ix(&sparks_schema, "owner")?;
+	let identity_id_ix = col_ix(&sparks_schema, "owner")?;
 	let issuer_ix = col_ix(&sparks_schema, "issuer_pubkey_b64")?;
 	let genesis_ix = col_ix(&sparks_schema, "genesis_b64")?;
 	let ver_ix = col_ix(&sparks_schema, "current_dek_version")?;
@@ -643,7 +643,7 @@ pub(super) async fn hydrate_shell(
 		}
 
 		for (_oid, vals) in &sparks_rows {
-			let sid = match uuid_cell_at(vals.as_slice(), spark_id_ix) {
+			let sid = match uuid_cell_at(vals.as_slice(), identity_id_ix) {
 				Ok(s) => s,
 				Err(e) => {
 					log::warn!(target: "avenos::jazz", "hydrate_shell: skip identity row (owner): {e}");
@@ -873,16 +873,16 @@ pub(super) async fn hydrate_shell(
 			.map_err(super::format_jazz_err)?;
 	}
 
-	let mut spark_keys: Vec<Uuid> = vault.identities.keys().cloned().collect();
-	spark_keys.sort();
-	let default_identity = if spark_keys.is_empty() {
+	let mut identity_keys: Vec<Uuid> = vault.identities.keys().cloned().collect();
+	identity_keys.sort();
+	let default_identity = if identity_keys.is_empty() {
 		log::warn!(
 			target: "avenos::jazz",
 			"hydrate_shell: no identities ingested (check keyshares / genesis on disk)",
 		);
 		return Err("shell_no_sparks".into());
 	} else {
-		spark_keys[0]
+		identity_keys[0]
 	};
 
 	log::debug!(

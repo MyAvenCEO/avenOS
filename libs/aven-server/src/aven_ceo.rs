@@ -185,7 +185,7 @@ pub async fn ensure_avenceo_owned(
 }
 
 /// The avenCEO `identities` row: `(object id, genesis_b64, issuer_pubkey_b64, dek_version)`.
-async fn read_avenceo_spark(
+async fn read_avenceo_identity(
 	engine: &JazzClient,
 	avenceo_id: Uuid,
 ) -> Result<Option<(ObjectId, String, String, i64)>, String> {
@@ -250,7 +250,7 @@ pub async fn maybe_grant_first_admin(
 	if peer_did == vault.peer_did {
 		return Ok(());
 	}
-	let Some((sparks_oid, genesis_b64, issuer_b64, dek_ver)) = read_avenceo_spark(engine, avenceo_id).await? else {
+	let Some((sparks_oid, genesis_b64, issuer_b64, dek_ver)) = read_avenceo_identity(engine, avenceo_id).await? else {
 		return Ok(());
 	};
 	let issuer_pk = decode_issuer_pubkey_b64(&issuer_b64)?;

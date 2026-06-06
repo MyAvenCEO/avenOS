@@ -83,11 +83,11 @@
 </script>
 
 <svelte:head>
-	<title>{identityMeta?.name ?? t('identities.sparkLabel')}{t('common.titleSuffix')}</title>
+	<title>{identityMeta?.name ?? t('identities.identityLabel')}{t('common.titleSuffix')}</title>
 </svelte:head>
 
 <AsidePageLayout
-	asideLabel={t('nav.sparkViews')}
+	asideLabel={t('nav.identityViews')}
 	sections={navSections}
 	desktopGridClass="md:grid-cols-[12rem_minmax(0,1fr)]"
 	sectionLabelClass="px-0 md:px-2"
@@ -103,11 +103,11 @@
 				class="text-muted-foreground hover:text-foreground text-[10px] font-semibold uppercase tracking-wide"
 				onclick={() => navigateApp('/identities')}
 			>
-				{t('nav.allSparks')}
+				{t('nav.allIdentities')}
 			</button>
 			<div class="space-y-0.5">
 				<h2 class="text-sm font-semibold tracking-tight leading-snug">
-					{identityMeta?.name ?? t('identities.sparkLabel')}
+					{identityMeta?.name ?? t('identities.identityLabel')}
 				</h2>
 				{#if identityMeta}
 					<p class="text-muted-foreground break-all font-mono text-[10px] leading-snug">

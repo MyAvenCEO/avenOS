@@ -1966,7 +1966,7 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 	// ("synced with") is thus derived from grants, not hand-managed.
 	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "Peer").await?;
 	if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
-		log::warn!(target: "avenos::jazz", "spark_admin_add register {peer_did}: {e}");
+		log::warn!(target: "avenos::jazz", "identity_admin_add register {peer_did}: {e}");
 	}
 
 	jazz_engine::authorize_gate(
@@ -2007,14 +2007,14 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 		}
 	}
 
-	let bisc_spark = shell
+	let bisc_identity = shell
 		.vault
 		.identities
 		.get(&identity_uuid)
 		.ok_or_else(|| format!("identity {identity_uuid} not loaded in vault"))?;
 
 	let already_owner =
-		crate::identity_acc::identity_peer_is_owner(&bisc_spark.biscuit, identity_uuid, &peer_did)?;
+		crate::identity_acc::identity_peer_is_owner(&bisc_identity.biscuit, identity_uuid, &peer_did)?;
 
 	if already_owner && ks_exists {
 		finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
@@ -2062,7 +2062,7 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 	if !already_owner {
 		let new_biscuit = crate::identity_acc::attenuate_add_owner_third_party(
 			&shell.vault.biscuit_kp,
-			&bisc_spark.biscuit,
+			&bisc_identity.biscuit,
 			identity_uuid,
 			&peer_did,
 		)?;
@@ -2073,12 +2073,12 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 		let genesis_b64 = URL_SAFE_NO_PAD.encode(genesis_vec);
 
 		let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
-		let spark_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
+		let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
 
 		let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "identities").await?;
 		let mut sparks_oid: Option<ObjectId> = None;
 		for (oid, vals) in sparks_rows {
-			let sid = jazz_engine::uuid_cell_at(vals.as_slice(), spark_id_ix)?;
+			let sid = jazz_engine::uuid_cell_at(vals.as_slice(), identity_id_ix)?;
 			if sid == identity_uuid {
 				sparks_oid = Some(oid);
 				break;
@@ -2139,7 +2139,7 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 	// Register the replica as a sync peer so the grant takes effect end-to-end.
 	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "Replication Server").await?;
 	if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
-		log::warn!(target: "avenos::jazz", "spark_replicate_add register {peer_did}: {e}");
+		log::warn!(target: "avenos::jazz", "identity_replicate_add register {peer_did}: {e}");
 	}
 
 	// Only a identity admin may grant replication (same gate as admin-add: the local
@@ -2152,13 +2152,13 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 		None,
 	)?;
 
-	let bisc_spark = shell
+	let bisc_identity = shell
 		.vault
 		.identities
 		.get(&identity_uuid)
 		.ok_or_else(|| format!("identity {identity_uuid} not loaded in vault"))?;
 
-	let already_replica = crate::identity_acc::identity_replicas(&bisc_spark.biscuit, identity_uuid)?
+	let already_replica = crate::identity_acc::identity_replicas(&bisc_identity.biscuit, identity_uuid)?
 		.iter()
 		.any(|d| d.trim() == peer_did.as_str());
 	if already_replica {
@@ -2171,7 +2171,7 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 	// Grant `replicate` (no `owns`, NO keyshare) and persist the updated chain.
 	let new_biscuit = crate::identity_acc::attenuate_add_replicate_third_party(
 		&shell.vault.biscuit_kp,
-		&bisc_spark.biscuit,
+		&bisc_identity.biscuit,
 		identity_uuid,
 		&peer_did,
 	)?;
@@ -2181,11 +2181,11 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 	let genesis_b64 = URL_SAFE_NO_PAD.encode(genesis_vec);
 
 	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
-	let spark_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
+	let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
 	let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "identities").await?;
 	let mut sparks_oid: Option<ObjectId> = None;
 	for (oid, vals) in sparks_rows {
-		let sid = jazz_engine::uuid_cell_at(vals.as_slice(), spark_id_ix)?;
+		let sid = jazz_engine::uuid_cell_at(vals.as_slice(), identity_id_ix)?;
 		if sid == identity_uuid {
 			sparks_oid = Some(oid);
 			break;
@@ -2243,7 +2243,7 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 
 	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "Member").await?;
 	if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
-		log::warn!(target: "avenos::jazz", "spark_reader_add register {peer_did}: {e}");
+		log::warn!(target: "avenos::jazz", "identity_reader_add register {peer_did}: {e}");
 	}
 
 	// Only a identity admin may grant read (same gate as admin/replicate add).
@@ -2278,12 +2278,12 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 		}
 	}
 
-	let bisc_spark = shell
+	let bisc_identity = shell
 		.vault
 		.identities
 		.get(&identity_uuid)
 		.ok_or_else(|| format!("identity {identity_uuid} not loaded in vault"))?;
-	let already_reader = crate::identity_acc::identity_readers(&bisc_spark.biscuit, identity_uuid)?
+	let already_reader = crate::identity_acc::identity_readers(&bisc_identity.biscuit, identity_uuid)?
 		.iter()
 		.any(|d| d.trim() == peer_did.as_str());
 	if already_reader && ks_exists {
@@ -2316,7 +2316,7 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 	if !already_reader {
 		let new_biscuit = crate::identity_acc::attenuate_add_reader_third_party(
 			&shell.vault.biscuit_kp,
-			&bisc_spark.biscuit,
+			&bisc_identity.biscuit,
 			identity_uuid,
 			&peer_did,
 		)?;
@@ -2324,11 +2324,11 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 		let genesis_b64 = URL_SAFE_NO_PAD.encode(genesis_vec);
 
 		let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
-		let spark_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
+		let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
 		let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "identities").await?;
 		let mut sparks_oid: Option<ObjectId> = None;
 		for (oid, vals) in sparks_rows {
-			let sid = jazz_engine::uuid_cell_at(vals.as_slice(), spark_id_ix)?;
+			let sid = jazz_engine::uuid_cell_at(vals.as_slice(), identity_id_ix)?;
 			if sid == identity_uuid {
 				sparks_oid = Some(oid);
 				break;
@@ -2367,12 +2367,12 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 	let identity_uuid = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
 
 	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
-	let spark_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
+	let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
 	let issuer_ix = jazz_engine::col_ix(&sparks_schema, "issuer_pubkey_b64")?;
 	let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "identities").await?;
 	let my_issuer = crate::identity_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public());
 	for (_oid, vals) in &sparks_rows {
-		if jazz_engine::uuid_cell_at(vals.as_slice(), spark_id_ix)? == identity_uuid {
+		if jazz_engine::uuid_cell_at(vals.as_slice(), identity_id_ix)? == identity_uuid {
 			let issuer = match vals.get(issuer_ix) {
 				Some(Value::Text(s)) => s.clone(),
 				_ => String::new(),
@@ -2450,11 +2450,11 @@ async fn ensure_aven_ceo_owner_row(
 	identity_uuid: Uuid,
 ) -> Result<(), String> {
 	let peers_schema = jazz_engine::resolved_table_schema(client, "peers").await?;
-	let spark_ix = jazz_engine::col_ix(&peers_schema, "owner")?;
+	let identity_ix = jazz_engine::col_ix(&peers_schema, "owner")?;
 	let did_ix = jazz_engine::col_ix(&peers_schema, "peer_did")?;
 	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
 	for (_o, vals) in &rows {
-		let sid = jazz_engine::uuid_cell_at(vals.as_slice(), spark_ix).ok();
+		let sid = jazz_engine::uuid_cell_at(vals.as_slice(), identity_ix).ok();
 		let d = match vals.get(did_ix) {
 			Some(Value::Text(s)) => s.as_str(),
 			_ => "",
@@ -2634,11 +2634,11 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 		URL_SAFE_NO_PAD.encode(chain.to_vec().map_err(|e| format!("biscuit_encode:{e:?}"))?);
 
 	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
-	let spark_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
+	let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
 	let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "identities").await?;
 	let mut sparks_oid: Option<ObjectId> = None;
 	for (oid, vals) in sparks_rows {
-		if jazz_engine::uuid_cell_at(vals.as_slice(), spark_id_ix)? == identity_uuid {
+		if jazz_engine::uuid_cell_at(vals.as_slice(), identity_id_ix)? == identity_uuid {
 			sparks_oid = Some(oid);
 			break;
 		}
@@ -2671,12 +2671,12 @@ pub(crate) async fn groove_ipc_aven_ceo_publish_profile(
 	let identity_uuid = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
 
 	let peers_schema = jazz_engine::resolved_table_schema(client.as_ref(), "peers").await?;
-	let spark_ix = jazz_engine::col_ix(&peers_schema, "owner")?;
+	let identity_ix = jazz_engine::col_ix(&peers_schema, "owner")?;
 	let did_ix = jazz_engine::col_ix(&peers_schema, "peer_did")?;
 	let rows = jazz_engine::exec_list_rows(client.as_ref(), "peers").await?;
 	let mut own_oid: Option<ObjectId> = None;
 	for (oid, vals) in rows {
-		let sid = jazz_engine::uuid_cell_at(vals.as_slice(), spark_ix).ok();
+		let sid = jazz_engine::uuid_cell_at(vals.as_slice(), identity_ix).ok();
 		let did = match vals.get(did_ix) {
 			Some(Value::Text(s)) => s.as_str(),
 			_ => "",
@@ -2954,11 +2954,11 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 	);
 	let issuer_b64 = crate::identity_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public());
 	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
-	let spark_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
+	let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
 	let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "identities").await?;
 	let mut sparks_oid: Option<ObjectId> = None;
 	for (oid, vals) in sparks_rows {
-		if jazz_engine::uuid_cell_at(vals.as_slice(), spark_id_ix)? == identity_uuid {
+		if jazz_engine::uuid_cell_at(vals.as_slice(), identity_id_ix)? == identity_uuid {
 			sparks_oid = Some(oid);
 			break;
 		}
@@ -3045,12 +3045,12 @@ pub(crate) async fn groove_ipc_jazz_get(
 	let tbl = jazz_engine::resolved_table_schema(client.as_ref(), &table).await?;
 	match jazz_engine::find_row_snapshot(client.as_ref(), &table, &tbl, uuid).await? {
 		Some((oid, vals)) => {
-			let spark_row = jazz_engine::identity_uuid_row(&tbl, &vals).unwrap_or(shell.default_identity);
+			let identity_row = jazz_engine::identity_uuid_row(&tbl, &vals).unwrap_or(shell.default_identity);
 			jazz_engine::authorize_gate(
 				&shell,
 				&table,
 				crate::identity_acc::AccOp::Read,
-				spark_row,
+				identity_row,
 				Some(*oid.uuid()),
 			)?;
 			jazz_engine::row_to_public_map(
@@ -3147,13 +3147,13 @@ pub(crate) async fn groove_ipc_jazz_create(
 
 	let mut plaintext = std::collections::HashMap::new();
 
-	jazz_engine::inject_default_spark(&mut values, &tbl, shell.default_identity)?;
-	let spark_gate = jazz_engine::identity_uuid_from_json_row(&tbl, &values)?;
+	jazz_engine::inject_default_identity(&mut values, &tbl, shell.default_identity)?;
+	let identity_gate = jazz_engine::identity_uuid_from_json_row(&tbl, &values)?;
 	jazz_engine::authorize_gate(
 		&shell,
 		&table,
 		crate::identity_acc::AccOp::Write,
-		spark_gate,
+		identity_gate,
 		None,
 	)?;
 	jazz_engine::place_secrets_for_insert(
@@ -3168,7 +3168,7 @@ pub(crate) async fn groove_ipc_jazz_create(
 		// Stamp a signed owner-binding (digest-covered) so every peer verifies it on
 		// apply; the id is fixed up-front so the binding's value_id == the row id.
 		let oid = ObjectId::new();
-		let extra_meta = owner_binding_meta(&shell.signing_key, oid, spark_gate)?;
+		let extra_meta = owner_binding_meta(&shell.signing_key, oid, identity_gate)?;
 		let oid = client
 			.create_with_id_and_metadata(&table, oid, vals.clone(), extra_meta)
 			.await

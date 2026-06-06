@@ -19,10 +19,10 @@ pub fn build_sync_acl_snapshot(
 	SyncAclSnapshot { object_owner }
 }
 
-static SPARK_SCOPED_TABLES: OnceLock<Vec<String>> = OnceLock::new();
+static IDENTITY_SCOPED_TABLES: OnceLock<Vec<String>> = OnceLock::new();
 
-fn spark_scoped_tables_cached() -> &'static [String] {
-	SPARK_SCOPED_TABLES.get_or_init(|| {
+fn identity_scoped_tables_cached() -> &'static [String] {
+	IDENTITY_SCOPED_TABLES.get_or_init(|| {
 		let mut names = crate::schema_manifest::manifest_spark_scoped_table_names()
 			.unwrap_or_else(|e| {
 				log::warn!(
@@ -43,8 +43,8 @@ fn spark_scoped_tables_cached() -> &'static [String] {
 }
 
 /// Tables whose rows include `owner` per the active Jazz manifest.
-pub fn spark_scoped_table_names() -> &'static [String] {
-	spark_scoped_tables_cached()
+pub fn identity_scoped_table_names() -> &'static [String] {
+	identity_scoped_tables_cached()
 }
 
 /// Biscuit vault / trusted-peer tables — full shell re-hydrate on change.
@@ -63,7 +63,7 @@ pub fn is_vault_shell_table(name: &str) -> bool {
 }
 
 pub fn is_spark_scoped_table(name: &str) -> bool {
-	spark_scoped_table_names()
+	identity_scoped_table_names()
 		.iter()
 		.any(|t| t.as_str() == name)
 }

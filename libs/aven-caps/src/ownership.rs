@@ -223,7 +223,7 @@ mod tests {
 		SigningKey::from_bytes(&[seed; 32])
 	}
 
-	fn owner_vault_with_spark(seed: u8, identity: Uuid) -> BiscuitVault {
+	fn owner_vault_with_identity(seed: u8, identity: Uuid) -> BiscuitVault {
 		let mut v = build_vault_from_signing_key(&sk(seed)).unwrap();
 		let genesis = mint_genesis_identity(&v, identity).unwrap();
 		v.identities.insert(identity, BiscuitIdentity { owner: identity, biscuit: genesis });
@@ -253,7 +253,7 @@ mod tests {
 	}
 
 	#[test]
-	fn owner_binding_rejects_relabel_to_another_spark() {
+	fn owner_binding_rejects_relabel_to_another_identity() {
 		let mut b = mint_owner_binding(&sk(1), Uuid::from_u128(0x1111), Uuid::from_u128(0x2222)).unwrap();
 		b.owner = Uuid::from_u128(0x9999); // attacker relabels owner
 		assert!(verify_owner_binding(&b).is_err(), "relabel must break the signature");
@@ -283,7 +283,7 @@ mod tests {
 	#[test]
 	fn authorize_signed_edit_owner_writes_own_value() {
 		let identity = Uuid::from_u128(0xABCD);
-		let v = owner_vault_with_spark(1, identity);
+		let v = owner_vault_with_identity(1, identity);
 		let value = Uuid::from_u128(0x55);
 		let binding = mint_owner_binding(&sk(1), value, identity).unwrap();
 		let digest = [9u8; 32];
@@ -295,7 +295,7 @@ mod tests {
 	#[test]
 	fn authorize_signed_edit_rejects_nonmember_even_with_valid_signature() {
 		let identity = Uuid::from_u128(0xABCD);
-		let v = owner_vault_with_spark(1, identity); // owner = sk(1)
+		let v = owner_vault_with_identity(1, identity); // owner = sk(1)
 		let digest = [9u8; 32];
 		let es = sign_batch(&sk(2), &digest).unwrap(); // stranger, validly signed
 		let r = authorize_signed_edit(&v, identity, AccOp::Write, "todos", None, &es, &digest, None);
@@ -303,10 +303,10 @@ mod tests {
 	}
 
 	#[test]
-	fn authorize_signed_edit_rejects_owner_binding_for_wrong_spark() {
+	fn authorize_signed_edit_rejects_owner_binding_for_wrong_identity() {
 		let identity = Uuid::from_u128(0xABCD);
 		let other = Uuid::from_u128(0xBEEF);
-		let v = owner_vault_with_spark(1, identity);
+		let v = owner_vault_with_identity(1, identity);
 		let binding = mint_owner_binding(&sk(1), Uuid::from_u128(0x55), other).unwrap(); // binds to a different identity
 		let digest = [9u8; 32];
 		let es = sign_batch(&sk(1), &digest).unwrap();

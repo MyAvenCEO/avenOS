@@ -22,7 +22,7 @@
 
 	// Tables that carry an owning-identity column (manifest-aligned). Device-local,
 	// non-identity tables (e.g. `humans`) never appear in a identity's data view.
-	const SPARK_SCOPED_TABLES = ['identities', 'messages', 'todos', 'files', 'peers', 'keyshares']
+	const IDENTITY_SCOPED_TABLES = ['identities', 'messages', 'todos', 'files', 'peers', 'keyshares']
 
 	let tables = $state<string[]>([])
 	let selectedTable = $state<string | null>(null)
@@ -109,7 +109,7 @@
 				if (cancelled) return
 				const status = await withTimeoutMs(jazzStatus(), DB_IPC_BUDGET_MS, t('errors.dbJazzStatusStalled'))
 				if (cancelled) return
-				tables = (status.tables ?? []).filter((tbl) => SPARK_SCOPED_TABLES.includes(tbl))
+				tables = (status.tables ?? []).filter((tbl) => IDENTITY_SCOPED_TABLES.includes(tbl))
 				if (!status.ready) bootstrapErr = t('db.explorer.shellNotReady')
 			} catch (e) {
 				if (!cancelled) {

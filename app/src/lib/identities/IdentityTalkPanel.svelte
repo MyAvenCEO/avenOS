@@ -62,7 +62,7 @@
 
 	const identityMeta = $derived(identitiesStore.rows.find((s) => idsMatch(s.owner, identityId)))
 	const canonicalSparkId = $derived(identityMeta?.owner ?? identityId)
-	const displayName = $derived(sparkName?.trim() || identityMeta?.name || t('identities.sparkLabel'))
+	const displayName = $derived(sparkName?.trim() || identityMeta?.name || t('identities.identityLabel'))
 
 	const thread = $derived(
 		[...messages.rows]

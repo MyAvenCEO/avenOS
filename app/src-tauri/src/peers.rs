@@ -55,10 +55,10 @@ fn value_as_text(v: &Value) -> Option<&str> {
 pub async fn default_spark_id(client: &JazzClient) -> Result<Option<uuid::Uuid>, String> {
 	let rows = jazz_engine::exec_list_rows(client, "identities").await?;
 	let schema = jazz_engine::resolved_table_schema(client, "identities").await?;
-	let spark_ix = jazz_engine::col_ix(&schema, "owner")?;
+	let identity_ix = jazz_engine::col_ix(&schema, "owner")?;
 	let mut ids: Vec<uuid::Uuid> = Vec::new();
 	for (_oid, vals) in rows {
-		if let Ok(sid) = jazz_engine::uuid_cell_at(vals.as_slice(), spark_ix) {
+		if let Ok(sid) = jazz_engine::uuid_cell_at(vals.as_slice(), identity_ix) {
 			ids.push(sid);
 		}
 	}
