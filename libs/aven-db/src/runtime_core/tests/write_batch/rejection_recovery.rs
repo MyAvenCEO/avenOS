@@ -289,6 +289,7 @@ fn rc_transactional_insert_persisted_reconnect_reconciles_rejected_batch_from_se
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: None,
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     s.a.remove_server(s.b_server_for_a);

@@ -2,13 +2,13 @@
 	import { page } from '$app/state'
 	import DocsChapterLayout from '$lib/docs/DocsChapterLayout.svelte'
 	import { asideNavSectionsFromDocGroups } from '$lib/docs/docs-chapter-nav'
-	import { founderDocs, developerDocs } from '$lib/docs/sparks-collection'
+	import { founderDocs, developerDocs } from '$lib/docs/identities-collection'
 
 	let { children } = $props()
 
 	const groups = [
-		{ label: 'Concepts', docs: founderDocs, base: '/docs/sparks/founders' },
-		{ label: 'Developers', docs: developerDocs, base: '/docs/sparks/developers' },
+		{ label: 'Concepts', docs: founderDocs, base: '/docs/identities/founders' },
+		{ label: 'Developers', docs: developerDocs, base: '/docs/identities/developers' },
 	] as const
 
 	const path = $derived(page.url.pathname)
@@ -16,9 +16,9 @@
 </script>
 
 <svelte:head>
-	<title>Sparks — documentation · AvenOS</title>
+	<title>Identities — documentation · AvenOS</title>
 </svelte:head>
 
-<DocsChapterLayout chapterTitle="Sparks" sections={navSections} routeKey={path}>
+<DocsChapterLayout chapterTitle="Identities" sections={navSections} routeKey={path}>
 	{@render children()}
 </DocsChapterLayout>

@@ -67,7 +67,7 @@ export type PeerMeshPeerState = {
 	catchupReady?: boolean | null
 	/** Why phase is syncing (mux / policy / catch-up). */
 	syncBlockReason?: PeerSyncBlockReason | null
-	/** Shell/trust bootstrap before spark data may flow. */
+	/** Shell/trust bootstrap before identity data may flow. */
 	bootstrap?: SyncBootstrapPhase | null
 }
 

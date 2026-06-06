@@ -286,6 +286,7 @@ impl SyncManager {
     fn apply_row_updated<H: Storage>(
         &mut self,
         storage: &mut H,
+        subject_client: PeerId,
         metadata: Option<RowMetadata>,
         mut row: StoredRowBatch,
         fate_recording: AuthoritativeFateRecording,
@@ -297,6 +298,7 @@ impl SyncManager {
             (None, None) => None,
         };
         row.confirmed_tier = None;
+        let resolver = std::sync::Arc::clone(&self.resolver);
 
         let metadata = self.row_metadata_from_payload(storage, &row, metadata.as_ref())?;
         let (is_newly_located_object, needs_exact_locator) =
@@ -307,6 +309,46 @@ impl SyncManager {
                 Some((row_locator, context)) => {
                     let table = row_locator.table.to_string();
                     let branch = row.branch.clone();
+
+                    // Phase 2 — inbound apply gate. Verify a received batch BEFORE
+                    // persisting it, so a forged/relabeled batch from a peer is rejected
+                    // (not merely withheld outbound). The engine stays crypto-agnostic:
+                    // it passes the sender, the op, the resource, the digest IT computed,
+                    // and the opaque proof carried with the batch (`None` until later
+                    // phases put the author signature + owner-binding on the wire). The
+                    // default resolver Allows; production denies unless the proof verifies.
+                    let res = crate::capability::ResourceCoord::new(
+                        format!("{table}:{}", row.row_id),
+                        table.clone(),
+                        row.row_id,
+                    );
+                    let subject = crate::sync_targets::SyncTargetId::Client(subject_client);
+                    let digest = row.content_digest();
+                    // The owner-binding (and later the edit signature) ride in the row's
+                    // metadata, base64-encoded; hand them to the resolver as opaque bytes.
+                    let proof = row
+                        .metadata
+                        .get(crate::capability::OWNER_BINDING_META_KEY)
+                        .map(|s| s.as_bytes());
+                    match resolver.verify_on_apply(
+                        &subject,
+                        crate::capability::AccOp::Write,
+                        &res,
+                        &digest.0,
+                        proof,
+                    ) {
+                        crate::capability::CapDecision::Allow => {}
+                        other => {
+                            tracing::warn!(
+                                row_id = %row.row_id,
+                                table = %table,
+                                decision = ?other,
+                                "apply gate: rejected inbound batch (verify_on_apply)"
+                            );
+                            return None;
+                        }
+                    }
+
                     match apply_row_batch_with_context(
                         storage,
                         ApplyRowBatchWithContext {
@@ -948,6 +990,45 @@ impl SyncManager {
         }
     }
 
+    /// M5 abuse cap: true if `client_id` has exceeded its inbound batch budget for
+    /// the current window (payload should be dropped). Fixed window — the count
+    /// resets when the window rolls. Generous bound: only a pathological flood
+    /// trips it, never legitimate catch-up.
+    fn inbound_rate_exceeded(&mut self, client_id: PeerId) -> bool {
+        let now_us = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .map(|d| d.as_micros() as u64)
+            .unwrap_or(0);
+        let rate = self.inbound_rate.entry(client_id).or_default();
+        if now_us.saturating_sub(rate.window_start_us) > super::INBOUND_RATE_WINDOW_US {
+            rate.window_start_us = now_us;
+            rate.batches = 0;
+        }
+        rate.batches = rate.batches.saturating_add(1);
+        rate.batches > super::INBOUND_MAX_BATCHES_PER_WINDOW
+    }
+
+    /// M7-3 per-identity relay storage quota. Account `bytes` for `object_id` under
+    /// quota `key`; return `false` (reject) if it would push the key over `limit`.
+    /// Distinct-row: a re-delivered `object_id` replaces its prior size (no double-
+    /// count on re-sync); a rejected write mutates nothing. Reject = withhold, never
+    /// delete — the inbound row is simply not applied/forwarded.
+    fn quota_admits(&mut self, object_id: ObjectId, key: String, bytes: u64, limit: u64) -> bool {
+        let prev = self
+            .quota_row_bytes
+            .get(&object_id)
+            .map(|(_, b)| *b)
+            .unwrap_or(0);
+        let owner_total = self.quota_owner_bytes.get(&key).copied().unwrap_or(0);
+        let new_total = owner_total.saturating_sub(prev).saturating_add(bytes);
+        if new_total > limit {
+            return false;
+        }
+        self.quota_owner_bytes.insert(key.clone(), new_total);
+        self.quota_row_bytes.insert(object_id, (key, bytes));
+        true
+    }
+
     /// Process a payload from a client.
     pub(super) fn process_from_client<H: Storage>(
         &mut self,
@@ -956,6 +1037,39 @@ impl SyncManager {
         payload: SyncPayload,
     ) {
         let _span = tracing::debug_span!("process_from_client", %client_id, payload = payload.variant_name()).entered();
+        // M5: drop floods at the sync edge before any processing.
+        if self.inbound_rate_exceeded(client_id) {
+            tracing::warn!(%client_id, payload = payload.variant_name(), "M5: inbound rate limit exceeded — dropping payload");
+            return;
+        }
+        // M5: reject a pathologically oversized value (max db-value-size cap).
+        if let SyncPayload::RowBatchCreated { row, .. } | SyncPayload::RowBatchNeeded { row, .. } =
+            &payload
+        {
+            if row.data.len() > super::MAX_INBOUND_ROW_BYTES {
+                tracing::warn!(%client_id, bytes = row.data.len(), "M5: oversized inbound row — dropping");
+                return;
+            }
+        }
+        // M7-3: per-identity relay storage quota. The resolver (aven-node policy) maps
+        // the row's owner-binding → (quota_key, limit); over-quota writes are rejected
+        // (withheld, never deleted). Clients return None → unbounded, unchanged.
+        if let SyncPayload::RowBatchCreated { row, .. } | SyncPayload::RowBatchNeeded { row, .. } =
+            &payload
+        {
+            let proof = row
+                .metadata
+                .get(crate::capability::OWNER_BINDING_META_KEY)
+                .map(|s| s.as_bytes());
+            if let Some((key, limit)) = self.resolver.quota_for(proof) {
+                let oid = row.row_id;
+                let bytes = row.data.len() as u64;
+                if !self.quota_admits(oid, key, bytes, limit) {
+                    tracing::warn!(%client_id, object = %oid, "M7-3: identity over relay storage quota — rejecting inbound row");
+                    return;
+                }
+            }
+        }
         let Some(client) = self.clients.get(&client_id) else {
             tracing::warn!(
                 %client_id,
@@ -1025,6 +1139,18 @@ impl SyncManager {
             // per-hop gated by may_sync. No per-peer ledger consulted.
             SyncPayload::FrontierNeed { resource: _, heads } => {
                 self.ship_frontier_diff(storage, client_id, heads);
+            }
+            SyncPayload::EvictResource { resource } => {
+                // Best-effort eviction notice (M2). The receiver-drop (resolver-enumerate
+                // the resource's rows → local hard-delete via delete_with_metadata(Hard +
+                // NoSync)) and the sender trigger (revoke flow) are the focused completion
+                // — see SSOT M2. Logged-only here so a stray/forged notice can NEVER delete
+                // data before that wiring + its live revoke→evict test exist.
+                tracing::info!(
+                    %client_id,
+                    %resource,
+                    "EvictResource notice received (drop wiring pending — see SSOT M2; no-op for safety)"
+                );
             }
             // Handle query subscription with full Query struct
             // Queue for QueryManager to process (SyncManager doesn't know about QueryGraph)
@@ -1190,7 +1316,7 @@ impl SyncManager {
                     .insert(client_id);
 
                 if let Some(applied) =
-                    self.apply_row_updated(storage, metadata, row.clone(), fate_recording)
+                    self.apply_row_updated(storage, client_id, metadata, row.clone(), fate_recording)
                 {
                     if !matches!(
                         applied.row.state,

@@ -1,4 +1,4 @@
-//! Per-spark DEK envelopes — X25519 ECDH unwrap + HKDF-SHA256 + XChaCha20-Poly1305.
+//! Per-identity DEK envelopes — X25519 ECDH unwrap + HKDF-SHA256 + XChaCha20-Poly1305.
 
 use base64::Engine;
 
@@ -15,7 +15,7 @@ use sha2::{Digest, Sha256, Sha512};
 use x25519_dalek::{PublicKey as XPub, StaticSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-const KEYSHARE_INFO: &[u8] = b"ceo.aven.os/spark/keyshare/v1";
+const KEYSHARE_INFO: &[u8] = b"ceo.aven.os/identity/keyshare/v1";
 pub const CELL_ENVELOPE_V1: &str = "v1";
 pub const CELL_CANON_SCHEMA_V: u64 = 2;
 pub const CELL_PAYLOAD_MSV: u32 = 2;
@@ -39,7 +39,7 @@ impl Dek {
 }
 
 #[must_use]
-pub fn random_spark_dek() -> Dek {
+pub fn random_identity_dek() -> Dek {
 	let mut b = [0u8; 32];
 	OsRng.fill_bytes(&mut b);
 	Dek(b)
@@ -224,7 +224,7 @@ pub fn column_type_slug(ty: &ColumnType) -> &'static str {
 
 #[must_use]
 pub fn cell_seal_aad(
-	spark_urn: &str,
+	identity_urn: &str,
 	table: &str,
 	column: &str,
 	row: uuid::Uuid,
@@ -232,7 +232,7 @@ pub fn cell_seal_aad(
 	storage_ty_slug: &str,
 ) -> Vec<u8> {
 	format!(
-		"{spark_urn}|{table}|{column}|{row}|{dek_version_line}|ty:{storage_ty_slug}|msv:{}",
+		"{identity_urn}|{table}|{column}|{row}|{dek_version_line}|ty:{storage_ty_slug}|msv:{}",
 		CELL_PAYLOAD_MSV
 	)
 	.into_bytes()
@@ -441,8 +441,8 @@ pub fn dek_version_from_aad_bytes(aad_plain: &[u8]) -> Result<u64, String> {
 }
 
 #[must_use]
-pub fn keyshare_wrap_aad(spark_urn: &str, recipient_did: &str, dek_version: i64) -> Vec<u8> {
-	format!("keyshare|{spark_urn}|{recipient_did}|{dek_version}").into_bytes()
+pub fn keyshare_wrap_aad(identity_urn: &str, recipient_did: &str, dek_version: i64) -> Vec<u8> {
+	format!("keyshare|{identity_urn}|{recipient_did}|{dek_version}").into_bytes()
 }
 
 #[cfg(test)]
@@ -451,7 +451,7 @@ mod tests {
 		column_type_slug, decrypt_keyshare_payload, dek_version_from_aad_bytes,
 		derive_kek_x25519, encrypt_keyshare_payload, groove_value_to_canonical_utf8,
 		ipc_json_from_opened_sensitive_plaintext, keyshare_wrap_aad, open_text_cell_payload,
-		random_spark_dek, seal_text_cell_payload, cell_seal_aad, ColumnType, Value,
+		random_identity_dek, seal_text_cell_payload, cell_seal_aad, ColumnType, Value,
 	};
 	use ed25519_dalek::SigningKey;
 
@@ -462,11 +462,11 @@ mod tests {
 		let granter_pk = granter.verifying_key().to_bytes();
 		let recipient_pk = recipient.verifying_key().to_bytes();
 
-		let spark_id = uuid::Uuid::new_v4();
-		let urn = format!("spark:{spark_id}");
+		let owner = uuid::Uuid::new_v4();
+		let urn = format!("identity:{owner}");
 		let recipient_did = "did:key:zRecipient";
 		let dek_ver = 1i64;
-		let dek_plain = random_spark_dek();
+		let dek_plain = random_identity_dek();
 
 		let kek_wrap = derive_kek_x25519(&granter, &recipient_pk).unwrap();
 		let aad = keyshare_wrap_aad(&urn, recipient_did, dek_ver);
@@ -480,11 +480,11 @@ mod tests {
 
 	#[test]
 	fn envelope_roundtrip() {
-		let dek = random_spark_dek();
-		let spark = uuid::Uuid::nil();
+		let dek = random_identity_dek();
+		let identity = uuid::Uuid::nil();
 		let row = uuid::Uuid::nil();
-		let spark_urn = format!("spark:{spark}");
-		let aad_plain = format!("{spark_urn}|todos|title|{row}|1").into_bytes();
+		let identity_urn = format!("identity:{identity}");
+		let aad_plain = format!("{identity_urn}|todos|title|{row}|1").into_bytes();
 
 		let enc = seal_text_cell_payload(dek.expose(), &aad_plain, "hello").unwrap();
 		let (out, dv) = open_text_cell_payload(dek.expose(), &enc).unwrap();
@@ -495,11 +495,11 @@ mod tests {
 
 	#[test]
 	fn envelope_roundtrip_extended_aad() {
-		let dek = random_spark_dek();
-		let spark = uuid::Uuid::nil();
+		let dek = random_identity_dek();
+		let identity = uuid::Uuid::nil();
 		let row = uuid::Uuid::nil();
-		let spark_urn = format!("spark:{spark}");
-		let aad_plain = cell_seal_aad(&spark_urn, "todos", "done", row, 2, column_type_slug(&ColumnType::Text));
+		let identity_urn = format!("identity:{identity}");
+		let aad_plain = cell_seal_aad(&identity_urn, "todos", "done", row, 2, column_type_slug(&ColumnType::Text));
 		assert_eq!(
 			dek_version_from_aad_bytes(&aad_plain).unwrap(),
 			2u64
@@ -522,11 +522,11 @@ mod tests {
 		// rotated DEK v2 (a revoked peer that only has v2-less/old keys cannot
 		// read across the rotation boundary; new data under v2 is unreadable
 		// without the v2 keyshare).
-		let dek_v1 = random_spark_dek();
-		let dek_v2 = random_spark_dek();
-		let spark = uuid::Uuid::new_v4();
+		let dek_v1 = random_identity_dek();
+		let dek_v2 = random_identity_dek();
+		let identity = uuid::Uuid::new_v4();
 		let row = uuid::Uuid::new_v4();
-		let urn = format!("spark:{spark}");
+		let urn = format!("identity:{identity}");
 
 		// Old cell, sealed under v1.
 		let aad_v1 = cell_seal_aad(&urn, "messages", "body", row, 1, column_type_slug(&ColumnType::Text));
@@ -561,13 +561,13 @@ mod tests {
 		let owner_pk = owner.verifying_key().to_bytes();
 		let carol_pk = carol.verifying_key().to_bytes();
 
-		let spark = uuid::Uuid::new_v4();
+		let identity = uuid::Uuid::new_v4();
 		let row = uuid::Uuid::new_v4();
-		let urn = format!("spark:{spark}");
+		let urn = format!("identity:{identity}");
 		let carol_did = "did:key:zCarol";
 
-		let old_dek = random_spark_dek(); // v1 — everyone (incl. revoked Bob) had this
-		let new_dek = random_spark_dek(); // v2 — minted at rotation
+		let old_dek = random_identity_dek(); // v1 — everyone (incl. revoked Bob) had this
+		let new_dek = random_identity_dek(); // v2 — minted at rotation
 
 		// Owner keyshares the NEW dek (v2) to Carol only.
 		let wrap_aad = keyshare_wrap_aad(&urn, carol_did, 2);

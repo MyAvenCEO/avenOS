@@ -21,7 +21,7 @@
 		"verify:aven-db": "bash ./scripts/verify-aven-db-gates.sh",
 		"dev:app2x:mac": "bun --env-file=.env ./scripts/dev-two-instances.ts",
 		"dev:app2x:linux": "bun --env-file=.env ./scripts/dev-two-instances.ts",
-		"deploy:server:sprite": "bun --env-file=.env ./scripts/deploy-aven-server-sprite.ts",
+		"deploy:server:sprite": "bun --env-file=.env ./scripts/deploy-aven-node-sprite.ts",
 		"build:app:linux": "bun run --cwd app tauri:build:linux",
 		"release:app:all": "bun ./scripts/release-app.ts all",
 		"release:app:mac": "bun ./scripts/release-app.ts mac",

@@ -1,0 +1,29 @@
+[package]
+name = "aven-node"
+version = "0.0.1"
+edition = "2021"
+description = "AvenOS aven-node — headless durable blind replica over an authenticated TLS sync transport: stores & forwards encrypted spark batches it cannot decrypt (one fly deploy)."
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "aven-node"
+path = "src/main.rs"
+
+[dependencies]
+groove = { package = "aven-db", path = "../aven-db", features = ["client-p2p"] }
+aven-caps = { path = "../aven-caps" }
+aven-p2p = { path = "../aven-p2p" }
+avenos-schema-hash = { path = "../aven-schema/crates/schema-hash" }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+base64 = "0.22"
+uuid = { version = "1", features = ["v4"] }
+hex = "0.4"
+rand = "0.8"
+axum = { version = "0.7", features = ["ws"] }
+async-trait = "0.1"
+serde = "1"
+serde_json = "1"
+dirs = "6"

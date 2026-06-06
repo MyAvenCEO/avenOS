@@ -98,14 +98,14 @@ const CYAN = '\x1b[36m'
 const MAGENTA = '\x1b[35m'
 const GREEN = '\x1b[32m'
 
-// Both instances dial an aven-server over a WebSocket (`/sync`, nonce-bound did:key
+// Both instances dial an aven-node over a WebSocket (`/sync`, nonce-bound did:key
 // challenge) — one relay, N clients, the same transport prod uses.
 const SERVER_HTTP_PORT = 8080
 /** Stable dev identity for the relay (32-byte hex) — keeps the aven's DID constant across runs. */
 const DEV_SERVER_SEED = 'a0b1c2d3e4f5060718293a4b5c6d7e8f00112233445566778899aabbccddeeff'
 
 // ── Sync relay endpoint ───────────────────────────────────────────────────────
-// Default: a LOCAL aven-server on ws://127.0.0.1:8080/sync (built & run here). To
+// Default: a LOCAL aven-node on ws://127.0.0.1:8080/sync (built & run here). To
 // instead test the Sprite-hosted relay over its PUBLIC url — the exact path a
 // TestFlight device takes, with NO `sprite proxy` and NO cert pin:
 //   AVENOS_SERVER_WS_URL=wss://aven-ceo-bmrha.sprites.app/sync bun run dev:app2x:mac
@@ -172,7 +172,7 @@ const TAURI_B_CONFIG = JSON.stringify({
 
 function spawnTauri(label: 'A' | 'B', colour: string, env: Record<string, string>) {
 	// `env` already carries AVENOS_SERVER_SYNC / _ADDR / _CERT_PIN (set in main once
-	// the local relay is up), so both instances dial the same aven-server and
+	// the local relay is up), so both instances dial the same aven-node and
 	// converge a shared spark through it. Single-instance `dev` omits those and
 	// stays local-only.
 	const instanceEnv: Record<string, string> = {
@@ -181,6 +181,9 @@ function spawnTauri(label: 'A' | 'B', colour: string, env: Record<string, string
 	}
 	if (label === 'B') {
 		instanceEnv.CARGO_TARGET_DIR = TAURI_B_TARGET_DIR
+		// Same physical device → same auto peer-name; suffix B so each peer is
+		// distinguishable by name at sign-in.
+		instanceEnv.AVEN_PEER_SUFFIX = ' (B)'
 	}
 
 	// For B: pass the overlay as inline JSON to `tauri dev --config '{...}'`.
@@ -194,7 +197,7 @@ function spawnTauri(label: 'A' | 'B', colour: string, env: Record<string, string
 }
 
 /**
- * Build & run the local `aven-server` relay — an HTTP+WebSocket server on
+ * Build & run the local `aven-node` relay — an HTTP+WebSocket server on
  * 127.0.0.1:8080 serving `/health` + `/sync`. Both app instances dial
  * ws://127.0.0.1:8080/sync. No TLS / no cert pin locally (plain ws). Stable dev
  * seed keeps the relay DID constant across runs.
@@ -204,7 +207,7 @@ function spawnAvenServer(colour: string, env: Record<string, string>) {
 		'S',
 		colour,
 		'cargo',
-		['run', '--manifest-path', 'libs/aven-server/Cargo.toml'],
+		['run', '--manifest-path', 'libs/aven-node/Cargo.toml'],
 		{
 			cwd: repoRoot,
 			env: {
@@ -229,7 +232,7 @@ async function main() {
 
 	console.log(
 		`\n${BOLD}AvenOS — two-instance dev harness (${platLabel})${RESET}\n` +
-			`  ${GREEN}[S]${RESET}  aven-server relay  ${EXTERNAL_WS || LOCAL_WS}\n` +
+			`  ${GREEN}[S]${RESET}  aven-node relay  ${EXTERNAL_WS || LOCAL_WS}\n` +
 			`  ${CYAN}[A]${RESET}  http://127.0.0.1:1420\n` +
 			`  ${MAGENTA}[B]${RESET}  http://127.0.0.1:1421\n\n` +
 			`${BOLD}Sync:${RESET} both instances dial the ${GREEN}[S]${RESET} relay over a WebSocket\n` +
@@ -248,7 +251,7 @@ async function main() {
 	const baseEnv = devBaseEnv()
 
 	// Resolve the sync relay: a remote Sprite-hosted server over its public wss URL
-	// (no proxy, no pin — the exact path a device takes), else a LOCAL aven-server we
+	// (no proxy, no pin — the exact path a device takes), else a LOCAL aven-node we
 	// build & run on ws://127.0.0.1:8080/sync.
 	let server: ReturnType<typeof spawnLabelled> | undefined
 	let wsUrl: string
@@ -259,7 +262,7 @@ async function main() {
 		wsUrl = EXTERNAL_WS
 	} else {
 		console.log(
-			`${BOLD}${GREEN}[S]${RESET} Building & starting local aven-server relay ` +
+			`${BOLD}${GREEN}[S]${RESET} Building & starting local aven-node relay ` +
 				`(first build compiles RocksDB — may take a few minutes)…`
 		)
 		server = spawnAvenServer(GREEN, baseEnv)

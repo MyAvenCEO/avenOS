@@ -1,7 +1,7 @@
 //! Parse an aven-schema manifest JSON into a Groove [`Schema`] — the single
 //! source of truth for the canonical schema (and its [`SchemaHash`]).
 //!
-//! Both the `avenos-schema-hash` binary and `aven-server` use this so the server
+//! Both the `avenos-schema-hash` binary and `aven-node` use this so the server
 //! builds **exactly** the same schema (same hash) the device app does — inbound
 //! row batches carry `origin_schema_hash`, so a divergent parse would make the
 //! server reject every replicated row.

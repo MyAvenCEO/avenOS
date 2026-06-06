@@ -56,6 +56,8 @@ struct RowBatchAuthoring<'a> {
     delete_kind: Option<DeleteKind>,
     row_state: RowState,
     batch_id: Option<BatchId>,
+    /// Extra metadata to merge into the committed row (e.g. the owner-binding).
+    extra_metadata: Option<std::collections::HashMap<String, String>>,
 }
 
 struct PreparedLocalRowHistoryWrite<'a> {
@@ -224,6 +226,7 @@ impl QueryManager {
             delete_kind,
             row_state: Self::resolve_write_row_state(write_context),
             batch_id: write_context.and_then(WriteContext::batch_id),
+            extra_metadata: write_context.and_then(|c| c.extra_metadata.clone()),
         }
     }
 
@@ -235,9 +238,15 @@ impl QueryManager {
         data: Vec<u8>,
         authoring: RowBatchAuthoring<'_>,
     ) -> StoredRowBatch {
-        let metadata = Self::row_commit_metadata(authoring.provenance, authoring.delete_kind)
-            .into_iter()
-            .collect();
+        let mut metadata: std::collections::HashMap<String, String> =
+            Self::row_commit_metadata(authoring.provenance, authoring.delete_kind)
+                .into_iter()
+                .collect();
+        if let Some(extra) = &authoring.extra_metadata {
+            for (key, value) in extra {
+                metadata.insert(key.clone(), value.clone());
+            }
+        }
 
         if let Some(batch_id) = authoring.batch_id {
             StoredRowBatch::new_with_batch_id(

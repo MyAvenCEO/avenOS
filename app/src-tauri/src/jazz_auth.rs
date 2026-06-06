@@ -5,7 +5,7 @@ use ed25519_dalek::SigningKey;
 
 /// The `did:key` ↔ Ed25519 codec now has a single source of truth in
 /// `groove::did_key` (so the app, the device engine, and the `aven-p2p` transport
-/// handshake all decode the same bytes — see board `0004-aven-server-mini`).
+/// handshake all decode the same bytes — see board `0004-aven-node-mini`).
 /// Re-exported here so existing `crate::jazz_auth::…` call sites are unchanged.
 pub use groove::did_key::{ed25519_public_from_peer_did, peer_did_from_ed25519};
 

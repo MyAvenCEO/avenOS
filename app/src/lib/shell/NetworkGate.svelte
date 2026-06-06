@@ -5,7 +5,7 @@
 	import { copyToClipboard } from '$lib/runtime/clipboard'
 
 	// Shown full-screen when this device is unlocked but NOT yet a member of the
-	// network's avenCEO spark. Invitation-only: the aven-server auto-grants the
+	// network's avenCEO identity. Invitation-only: the aven-node auto-grants the
 	// first peer; everyone else shares their DID with a founder to be vouched in.
 	let ownDid = $state('')
 	let didCopied = $state(false)

@@ -1,4 +1,4 @@
-//! WebSocket **client** transport — dials a Sprites-hosted aven-server over
+//! WebSocket **client** transport — dials a Sprites-hosted aven-node over
 //! `wss://<host>/sync` (or `ws://` for local dev) and completes the nonce-bound
 //! did:key challenge.
 //!

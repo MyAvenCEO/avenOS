@@ -183,6 +183,10 @@ pub struct WriteContext {
     pub batch_id: Option<BatchId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_branch_name: Option<String>,
+    /// Extra entries merged into the committed row's metadata map (e.g. the
+    /// owner-binding header stamped at create). Covered by the row digest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extra_metadata: Option<std::collections::HashMap<String, String>>,
 }
 
 impl WriteContext {
@@ -194,7 +198,13 @@ impl WriteContext {
             batch_mode: None,
             batch_id: None,
             target_branch_name: None,
+            extra_metadata: None,
         }
+    }
+
+    pub fn with_extra_metadata(mut self, extra: std::collections::HashMap<String, String>) -> Self {
+        self.extra_metadata = Some(extra);
+        self
     }
 
     pub fn with_updated_at(mut self, updated_at: u64) -> Self {

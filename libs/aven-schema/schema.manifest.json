@@ -1,37 +1,13 @@
 {
 	"tables": {
-		"humans": {
-			"columns": [
-				{
-					"name": "first_name",
-					"type": "text",
-					"plaintext": true,
-					"comment": "singleton per vault — nosync Groove inserts (local-only identity graph)"
-				},
-				{ "name": "username_slug", "type": "text", "plaintext": true },
-				{
-					"name": "my_devices",
-					"type": "uuid[]",
-					"plaintext": true,
-					"exposeTs": "string[]",
-					"comment": "routing — ordered peer row object ids"
-				},
-				{
-					"name": "created_at_ms",
-					"type": "bigint",
-					"plaintext": true,
-					"comment": "local singleton metadata"
-				}
-			]
-		},
 		"peers": {
 			"columns": [
 				{
-					"name": "spark_id",
+					"name": "owner",
 					"type": "uuid",
 					"plaintext": true,
 					"nullable": true,
-					"comment": "routing — caps-only sync. null = device-local trust-set row (not synced); admin-spark id = network roster row (syncs to admin-spark members)"
+					"comment": "routing — caps-only sync. null = device-local trust-set row (not synced); admin-identity id = network roster row (syncs to admin-identity members)"
 				},
 				{
 					"name": "peer_did",
@@ -43,14 +19,14 @@
 					"name": "device_label",
 					"type": "text",
 					"plaintext": true,
-					"comment": "e.g. MacBook M1 — self-published device label (admin-spark roster) / local label (trust-set)"
+					"comment": "e.g. MacBook M1 — self-published device label (admin-identity roster) / local label (trust-set)"
 				},
 				{
 					"name": "account_name",
 					"type": "text",
 					"plaintext": true,
 					"nullable": true,
-					"comment": "self-published member display name in the admin-spark roster (null for plain trust-set rows). TODO(privacy): seal this + device_label so a blind replica can't read names — see board idea 0009."
+					"comment": "self-published member display name in the admin-identity roster (null for plain trust-set rows). TODO(privacy): seal this + device_label so a blind replica can't read names — see board idea 0009."
 				},
 				{
 					"name": "kind",
@@ -75,7 +51,7 @@
 		"keyshares": {
 			"columns": [
 				{
-					"name": "spark_id",
+					"name": "owner",
 					"type": "uuid",
 					"plaintext": true,
 					"comment": "routing — keyshare lookup"
@@ -106,13 +82,27 @@
 				}
 			]
 		},
-		"sparks": {
+		"identities": {
 			"columns": [
 				{
-					"name": "spark_id",
+					"name": "owner",
 					"type": "uuid",
 					"plaintext": true,
-					"comment": "routing — spark row identity"
+					"comment": "routing — identity row identity (self-owned)"
+				},
+				{
+					"name": "type",
+					"type": "text",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "human | aven — the kind of identity"
+				},
+				{
+					"name": "username_slug",
+					"type": "text",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "human-identity profile handle (null for aven)"
 				},
 				{ "name": "name", "type": "text", "comment": "sealed at rest" },
 				{
@@ -131,14 +121,14 @@
 					"name": "created_at_ms",
 					"type": "bigint",
 					"plaintext": true,
-					"comment": "spark row metadata"
+					"comment": "identity row metadata"
 				}
 			]
 		},
 		"todos": {
 			"columns": [
 				{
-					"name": "spark_id",
+					"name": "owner",
 					"type": "uuid",
 					"plaintext": true,
 					"comment": "routing — ACC + sync"
@@ -155,7 +145,7 @@
 		"messages": {
 			"columns": [
 				{
-					"name": "spark_id",
+					"name": "owner",
 					"type": "uuid",
 					"plaintext": true,
 					"comment": "routing — biscuit + P2P sync"
@@ -181,7 +171,7 @@
 		"files": {
 			"columns": [
 				{
-					"name": "spark_id",
+					"name": "owner",
 					"type": "uuid",
 					"plaintext": true,
 					"comment": "routing — ACC + sync"

@@ -1,4 +1,4 @@
-# Keep the aven-server build context small: the Dockerfile only needs
+# Keep the aven-node build context small: the Dockerfile only needs
 # libs/, .cargo/, and rust-toolchain.toml.
 target
 **/target

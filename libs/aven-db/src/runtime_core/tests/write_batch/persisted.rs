@@ -797,6 +797,7 @@ fn rc_add_server_requests_pending_batch_fate_reconciliation() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: None,
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     s.a.remove_server(s.b_server_for_a);
@@ -846,6 +847,7 @@ fn rc_missing_batch_fate_retransmits_original_captured_frontier() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: None,
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     let ((existing_row_id, _), _) =

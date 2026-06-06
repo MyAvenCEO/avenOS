@@ -274,7 +274,7 @@ impl JazzClient {
         .await
     }
 
-    /// Headless, **stateless** engine for the `aven-server` mini: an in-memory
+    /// Headless, **stateless** engine for the `aven-node` mini: an in-memory
     /// store (no RocksDB directory, nothing survives a restart) wired to the
     /// given sync transport. The `client_id` bookkeeping file still lives under
     /// `context.data_dir`, but all replicated engine state is in `MemoryStorage`
@@ -566,6 +566,28 @@ impl JazzClient {
         Ok(object_id)
     }
 
+    /// Create a row with a caller-supplied id and extra row metadata (e.g. the
+    /// owner-binding header). Used by the app to stamp a signed binding whose
+    /// `value_id` equals this row id, verified on apply by every peer.
+    pub async fn create_with_id_and_metadata(
+        &self,
+        table: &str,
+        object_id: ObjectId,
+        values: Vec<Value>,
+        extra_metadata: std::collections::HashMap<String, String>,
+    ) -> Result<ObjectId> {
+        let schema = self
+            .runtime
+            .current_schema()
+            .map_err(|e| JazzError::Schema(e.to_string()))?;
+        let map = vec_values_to_map(&schema, table, values)?;
+        let (oid, _, _) = self
+            .runtime
+            .insert_with_id_and_metadata(table, map, Some(object_id), None, extra_metadata)
+            .map_err(|e| JazzError::Write(e.to_string()))?;
+        Ok(oid)
+    }
+
     pub async fn update(&self, object_id: ObjectId, updates: Vec<(String, Value)>) -> Result<()> {
         self.runtime
             .update(object_id, updates, None)
@@ -573,9 +595,36 @@ impl JazzClient {
         Ok(())
     }
 
+    /// Update a row, stamping extra row metadata (e.g. a re-minted owner-binding) into
+    /// the edit's batch — so every write is authenticated on apply, not just creates.
+    pub async fn update_with_metadata(
+        &self,
+        object_id: ObjectId,
+        updates: Vec<(String, Value)>,
+        extra_metadata: std::collections::HashMap<String, String>,
+    ) -> Result<()> {
+        self.runtime
+            .update_with_metadata(object_id, updates, None, extra_metadata)
+            .map_err(|e| JazzError::Write(e.to_string()))?;
+        Ok(())
+    }
+
     pub async fn delete(&self, object_id: ObjectId) -> Result<()> {
         self.runtime
             .delete(object_id, None)
+            .map_err(|e| JazzError::Write(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Delete a row, stamping a re-minted owner-binding into the tombstone batch so the
+    /// delete is authenticated on apply.
+    pub async fn delete_with_metadata(
+        &self,
+        object_id: ObjectId,
+        extra_metadata: std::collections::HashMap<String, String>,
+    ) -> Result<()> {
+        self.runtime
+            .delete_with_metadata(object_id, None, extra_metadata)
             .map_err(|e| JazzError::Write(e.to_string()))?;
         Ok(())
     }

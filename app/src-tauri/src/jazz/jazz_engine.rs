@@ -22,21 +22,21 @@ use crate::{
 	crypto::{
 		cell_seal_aad, column_type_slug, groove_value_to_canonical_utf8, ipc_json_from_opened_sensitive_plaintext,
 		decrypt_keyshare_payload, derive_kek_x25519, encrypt_keyshare_payload, open_text_cell_payload,
-		keyshare_wrap_aad, random_spark_dek, seal_text_cell_payload, Dek, CELL_ENVELOPE_V1,
+		keyshare_wrap_aad, random_identity_dek, seal_text_cell_payload, Dek, CELL_ENVELOPE_V1,
 	},
 	jazz_auth,
 	schema_manifest,
-	spark_acc::{self, AccOp},
+	identity_acc::{self, AccOp},
 };
 
 pub(crate) struct ShellState {
 	pub(crate) peer_did: String,
-	pub(crate) vault: spark_acc::BiscuitVault,
+	pub(crate) vault: identity_acc::BiscuitVault,
 	#[allow(dead_code)]
 	pub(crate) signing_key: ed25519_dalek::SigningKey,
-	pub(crate) default_spark: Uuid,
+	pub(crate) default_identity: Uuid,
 	pub(crate) deks: HashMap<(Uuid, i64), Dek>,
-	pub(crate) spark_versions: HashMap<Uuid, i64>,
+	pub(crate) identity_versions: HashMap<Uuid, i64>,
 	/// Groove write branch (`JazzClient` uses SchemaManager `"client"` / `"main"`). List queries must
 	/// use this branch only; empty `Query.branches` expands to **all live schema branches**, so merged
 	/// reads can expose rows whose tips are not writable on `current_branch()` (ObjectNotFound).
@@ -99,9 +99,9 @@ pub(super) fn bigint_i64(v: &Value) -> Result<i64, String> {
 	}
 }
 
-fn open_sealed_text_for_spark(
+fn open_sealed_text_for_identity(
 	deks: &HashMap<(Uuid, i64), Dek>,
-	spark: Uuid,
+	identity: Uuid,
 	raw: &str,
 ) -> Result<String, String> {
 	if !raw.starts_with(CELL_ENVELOPE_V1) {
@@ -109,31 +109,31 @@ fn open_sealed_text_for_spark(
 	}
 	let mut vers: Vec<i64> = deks
 		.keys()
-		.filter(|(s, _)| *s == spark)
+		.filter(|(s, _)| *s == identity)
 		.map(|(_, v)| *v)
 		.collect();
 	vers.sort_unstable();
 	for dv in vers {
-		let Some(dek) = deks.get(&(spark, dv)) else {
+		let Some(dek) = deks.get(&(identity, dv)) else {
 			continue;
 		};
 		if let Ok((opened, _)) = open_text_cell_payload(dek.expose(), raw) {
 			return Ok(opened);
 		}
 	}
-	Err(format!("hydrate_open_sealed:{spark}"))
+	Err(format!("hydrate_open_sealed:{identity}"))
 }
 
 fn hydrate_text_at(
 	deks: &HashMap<(Uuid, i64), Dek>,
-	spark: Uuid,
+	identity: Uuid,
 	cell: &Value,
 ) -> Result<String, String> {
 	match cell {
-		Value::Text(s) => open_sealed_text_for_spark(deks, spark, s.as_str()),
+		Value::Text(s) => open_sealed_text_for_identity(deks, identity, s.as_str()),
 		Value::Bytea(b) => {
 			let s = std::str::from_utf8(b.as_slice()).map_err(|_| "hydrate_bytea_utf8".to_string())?;
-			open_sealed_text_for_spark(deks, spark, s)
+			open_sealed_text_for_identity(deks, identity, s)
 		}
 		x => Err(format!("hydrate_text_bad:{x:?}")),
 	}
@@ -141,7 +141,7 @@ fn hydrate_text_at(
 
 fn hydrate_i64_at(
 	deks: &HashMap<(Uuid, i64), Dek>,
-	spark: Uuid,
+	identity: Uuid,
 	cell: &Value,
 	storage_ty: &ColumnType,
 ) -> Result<i64, String> {
@@ -149,7 +149,7 @@ fn hydrate_i64_at(
 		Value::BigInt(i) => Ok(*i),
 		Value::Integer(i) => Ok(*i as i64),
 		Value::Text(_) | Value::Bytea(_) => {
-			let opened = hydrate_text_at(deks, spark, cell)?;
+			let opened = hydrate_text_at(deks, identity, cell)?;
 			if let Ok(n) = opened.trim().parse::<i64>() {
 				return Ok(n);
 			}
@@ -169,8 +169,8 @@ fn hydrate_i64_at(
 	}
 }
 
-pub(super) fn spark_uuid_row(schema: &TableSchema, vals: &[Value]) -> Result<Uuid, String> {
-	let ix = col_ix(schema, "spark_id")?;
+pub(super) fn identity_uuid_row(schema: &TableSchema, vals: &[Value]) -> Result<Uuid, String> {
+	let ix = col_ix(schema, "owner")?;
 	uuid_cell_at(vals, ix)
 }
 
@@ -178,10 +178,10 @@ pub(super) fn authorize_gate(
 	state: &ShellState,
 	table: &str,
 	op: AccOp,
-	spark_id: Uuid,
+	owner: Uuid,
 	row_uuid: Option<Uuid>,
 ) -> Result<(), String> {
-	spark_acc::authorize(&state.vault, spark_id, op, table, row_uuid, &state.peer_did)
+	identity_acc::authorize(&state.vault, owner, op, table, row_uuid, &state.peer_did)
 }
 
 fn now_unix_ms_i64() -> i64 {
@@ -201,18 +201,18 @@ pub(super) fn short_peer_did(did: &str) -> String {
 	}
 }
 
-pub(super) fn spark_urn(id: Uuid) -> String {
-	format!("spark:{id}")
+pub(super) fn identity_urn(id: Uuid) -> String {
+	format!("identity:{id}")
 }
 
-pub(super) fn spark_uuid_from_json_row(
+pub(super) fn identity_uuid_from_json_row(
 	tbl: &TableSchema,
 	row: &Map<String, JsonValue>,
 ) -> Result<Uuid, String> {
-	let ix = col_ix(tbl, "spark_id")?;
-	let desc = tbl.columns.columns.get(ix).ok_or("spark_desc_ix")?;
+	let ix = col_ix(tbl, "owner")?;
+	let desc = tbl.columns.columns.get(ix).ok_or("identity_desc_ix")?;
 	let raw = row
-		.get("spark_id")
+		.get("owner")
 		.ok_or_else(|| "missing_spark_id".to_string())?;
 	let v =
 		super::json_cell_to_jazz(raw, &desc.column_type, desc.nullable)?;
@@ -269,30 +269,30 @@ pub(super) fn place_secrets_for_insert(
 	Ok(())
 }
 
-pub(super) fn inject_default_spark(
+pub(super) fn inject_default_identity(
 	values: &mut Map<String, JsonValue>,
 	tbl: &TableSchema,
 	default: Uuid,
 ) -> Result<(), String> {
-	if col_ix(tbl, "spark_id").is_err() {
+	if col_ix(tbl, "owner").is_err() {
 		return Ok(());
 	}
-	if values.contains_key("spark_id") {
+	if values.contains_key("owner") {
 		return Ok(());
 	}
 	values.insert(
-		"spark_id".into(),
+		"owner".into(),
 		JsonValue::String(default.to_string()),
 	);
 	Ok(())
 }
 
-fn current_dek_version(state: &ShellState, spark: Uuid) -> Result<i64, String> {
+fn current_dek_version(state: &ShellState, identity: Uuid) -> Result<i64, String> {
 	state
-		.spark_versions
-		.get(&spark)
+		.identity_versions
+		.get(&identity)
 		.cloned()
-		.ok_or_else(|| format!("unknown_spark_version:{spark}"))
+		.ok_or_else(|| format!("unknown_spark_version:{identity}"))
 }
 
 pub(super) fn seal_column_plain(
@@ -300,16 +300,16 @@ pub(super) fn seal_column_plain(
 	table: &str,
 	col_name: &str,
 	storage_ty: &ColumnType,
-	spark: Uuid,
+	identity: Uuid,
 	row: Uuid,
 	canonical_plaintext_utf8: &str,
 ) -> Result<String, String> {
-	let v = current_dek_version(state, spark)?;
+	let v = current_dek_version(state, identity)?;
 	let dek_entry = state
 		.deks
-		.get(&(spark, v))
-		.ok_or_else(|| format!("missing_dek_cached:{spark}|{v}"))?;
-	let urn = spark_urn(spark);
+		.get(&(identity, v))
+		.ok_or_else(|| format!("missing_dek_cached:{identity}|{v}"))?;
+	let urn = identity_urn(identity);
 	let slug = column_type_slug(storage_ty);
 	let aad = cell_seal_aad(&urn, table, col_name, row, v, slug);
 	seal_text_cell_payload(dek_entry.expose(), &aad, canonical_plaintext_utf8)
@@ -319,7 +319,7 @@ fn map_sensitive_storage_cell(
 	state: &ShellState,
 	col: &str,
 	storage_ty: &ColumnType,
-	spark: Uuid,
+	identity: Uuid,
 	raw: &str,
 	miss: &mut Vec<String>,
 ) -> JsonValue {
@@ -328,7 +328,7 @@ fn map_sensitive_storage_cell(
 			.unwrap_or_else(|_| JsonValue::String(raw.into()));
 	}
 	for ((sp, _dv), dek) in &state.deks {
-		if *sp != spark {
+		if *sp != identity {
 			continue;
 		}
 		if let Ok((opened, _ver)) = open_text_cell_payload(dek.expose(), raw) {
@@ -350,7 +350,7 @@ pub(super) fn row_to_public_map(
 	meta_key: &str,
 ) -> Result<Map<String, JsonValue>, String> {
 	let secrets = secret_manifest().get(table);
-	let spark = spark_uuid_row(schema, vals).unwrap_or(state.default_spark);
+	let identity = identity_uuid_row(schema, vals).unwrap_or(state.default_identity);
 	let mut miss = Vec::new();
 	let cols = &schema.columns.columns;
 	let mut m = Map::new();
@@ -366,7 +366,7 @@ pub(super) fn row_to_public_map(
 						state,
 						name,
 						ipc_ty,
-						spark,
+						identity,
 						s.as_str(),
 						&mut miss,
 					),
@@ -377,7 +377,7 @@ pub(super) fn row_to_public_map(
 							state,
 							name,
 							ipc_ty,
-							spark,
+							identity,
 							s,
 							&mut miss,
 						)
@@ -428,29 +428,29 @@ pub(crate) async fn exec_list_rows(
 	client.query(q, None).await.map_err(super::format_jazz_err)
 }
 
-/// Map Groove `(table, object_id)` → spark UUID for sync ACL on patch commits.
+/// Map Groove `(table, object_id)` → identity UUID for sync ACL on patch commits.
 ///
-/// MUST include soft-deleted rows. This map is the resource→spark lookup the peer-sync
+/// MUST include soft-deleted rows. This map is the resource→identity lookup the peer-sync
 /// gate (`BiscuitCapabilityResolver::may_sync`) uses to authorize shipping a batch. A
-/// soft-deleted object still belongs to its spark and its DELETE batch still needs to be
+/// soft-deleted object still belongs to its identity and its DELETE batch still needs to be
 /// shipped to peers. Building the map from visible rows only (the default list excludes
 /// `_id_deleted`) dropped deleted objects out of scope, so `may_sync` returned `Pending`
 /// and the delete batch was withheld forever — that was the "deletes never sync across
-/// devices, even after reconnect" bug. Soft-delete keeps the row's data, so `spark_id` is
+/// devices, even after reconnect" bug. Soft-delete keeps the row's data, so `owner` is
 /// still readable for a deleted row.
-pub(super) async fn build_object_spark_id_map(
+pub(super) async fn build_object_owner_map(
 	client: &JazzClient,
 ) -> Result<HashMap<(String, ObjectId), Uuid>, String> {
 	let mut out = HashMap::new();
-	for table in crate::spark_sync::spark_scoped_table_names() {
+	for table in crate::identity_sync::identity_scoped_table_names() {
 		let schema = resolved_table_schema(client, table).await?;
-		let spark_ix = col_ix(&schema, "spark_id")?;
+		let identity_ix = col_ix(&schema, "owner")?;
 		let q = QueryBuilder::new(TableName::new(table))
 			.include_deleted()
 			.build();
 		let rows = client.query(q, None).await.map_err(super::format_jazz_err)?;
 		for (oid, vals) in rows {
-			if let Ok(sid) = uuid_cell_at(vals.as_slice(), spark_ix) {
+			if let Ok(sid) = uuid_cell_at(vals.as_slice(), identity_ix) {
 				out.insert((table.clone(), oid), sid);
 			}
 		}
@@ -469,8 +469,8 @@ pub(super) async fn query_table_publish(
 	let mut out = Vec::with_capacity(rows.len());
 	let mut skipped_unauthorized_rows = 0usize;
 	for (oid, vals) in rows {
-		let spark_row = spark_uuid_row(&table_schema, &vals).unwrap_or(state.default_spark);
-		match authorize_gate(state, table, AccOp::Read, spark_row, Some(*oid.uuid())) {
+		let identity_row = identity_uuid_row(&table_schema, &vals).unwrap_or(state.default_identity);
+		match authorize_gate(state, table, AccOp::Read, identity_row, Some(*oid.uuid())) {
 			Ok(()) => {}
 			Err(_) => {
 				skipped_unauthorized_rows = skipped_unauthorized_rows.saturating_add(1);
@@ -539,12 +539,29 @@ fn ascii_slug_fallback(name: &str) -> String {
 	}
 }
 
-fn possessive_spark_title(first_name_for_spark: &str) -> String {
-	let n = first_name_for_spark.trim();
+/// System-extracted device name for the local peer's `device_label`. Device
+/// membership is governed by biscuit caps + the `peers` roster now (no `my_devices`
+/// allowlist), so each device just self-publishes its OS name into the roster.
+pub(super) fn system_device_name() -> String {
+	let base = std::process::Command::new("scutil")
+		.args(["--get", "ComputerName"])
+		.output()
+		.ok()
+		.and_then(|o| String::from_utf8(o.stdout).ok())
+		.map(|s| s.trim().to_string())
+		.filter(|s| !s.is_empty())
+		.unwrap_or_else(|| "This Device".to_string());
+	// Dev A/B harness disambiguation (see host_device_label_inner). Empty in prod.
+	let suffix = std::env::var("AVEN_PEER_SUFFIX").unwrap_or_default();
+	format!("{base}{suffix}")
+}
+
+fn possessive_identity_title(first_name_for_identity: &str) -> String {
+	let n = first_name_for_identity.trim();
 	if n.is_empty() {
-		return "My spark".into();
+		return "My identity".into();
 	}
-	format!("{n}'s spark")
+	format!("{n}'s identity")
 }
 
 pub(super) async fn hydrate_shell(
@@ -552,7 +569,7 @@ pub(super) async fn hydrate_shell(
 	root: &[u8; 32],
 	vault_files: &Path,
 ) -> Result<ShellState, String> {
-	let mut vault = spark_acc::build_vault_from_root(root)?;
+	let mut vault = identity_acc::build_vault_from_root(root)?;
 	let signing_key = jazz_auth::signing_key_from_device_root(root)?;
 	let biscuit_root_pub = vault.biscuit_kp.public();
 
@@ -567,14 +584,14 @@ pub(super) async fn hydrate_shell(
 		}
 	}
 
-	let sparks_schema = resolved_table_schema(client, "sparks").await?;
-	let spark_id_ix = col_ix(&sparks_schema, "spark_id")?;
+	let sparks_schema = resolved_table_schema(client, "identities").await?;
+	let identity_id_ix = col_ix(&sparks_schema, "owner")?;
 	let issuer_ix = col_ix(&sparks_schema, "issuer_pubkey_b64")?;
 	let genesis_ix = col_ix(&sparks_schema, "genesis_b64")?;
 	let ver_ix = col_ix(&sparks_schema, "current_dek_version")?;
 
-	let mut spark_versions = HashMap::new();
-	let sparks_rows = exec_list_rows(client, "sparks").await?;
+	let mut identity_versions = HashMap::new();
+	let sparks_rows = exec_list_rows(client, "identities").await?;
 	let ver_storage_ty = sparks_schema
 		.columns
 		.columns
@@ -592,7 +609,7 @@ pub(super) async fn hydrate_shell(
 
 	if !sparks_rows.is_empty() {
 		let ks_schema = resolved_table_schema(client, "keyshares").await?;
-		let ks_spark_ix = col_ix(&ks_schema, "spark_id")?;
+		let ks_spark_ix = col_ix(&ks_schema, "owner")?;
 		let ks_ver_ix = col_ix(&ks_schema, "dek_version")?;
 		let ks_recip_ix = col_ix(&ks_schema, "recipient_did")?;
 		let ks_wrapper_ix = col_ix(&ks_schema, "wrapper_did")?;
@@ -616,7 +633,7 @@ pub(super) async fn hydrate_shell(
 				_ => {
 					log::debug!(
 						target: "avenos::jazz",
-						"skip keyshare missing wrapper_did: spark_id={sid}",
+						"skip keyshare missing wrapper_did: owner={sid}",
 					);
 					continue;
 				}
@@ -625,7 +642,7 @@ pub(super) async fn hydrate_shell(
 				Value::Text(s) => s.as_str(),
 				_ => return Err("ks_wrap_bad".into()),
 			};
-			let urn = spark_urn(sid);
+			let urn = identity_urn(sid);
 			let wrapper_pk = jazz_auth::ed25519_public_from_peer_did(wrapper_did)?;
 			let kek = derive_kek_x25519(&signing_key, &wrapper_pk)?;
 			let aad = keyshare_wrap_aad(&urn, recipient, dv);
@@ -636,24 +653,24 @@ pub(super) async fn hydrate_shell(
 				Err(e) => {
 					log::warn!(
 						target: "avenos::jazz",
-						"skip keyshare unwrap_fail spark_id={sid} wrapper={wrapper_did}: {e}",
+						"skip keyshare unwrap_fail owner={sid} wrapper={wrapper_did}: {e}",
 					);
 				}
 			}
 		}
 
 		for (_oid, vals) in &sparks_rows {
-			let sid = match uuid_cell_at(vals.as_slice(), spark_id_ix) {
+			let sid = match uuid_cell_at(vals.as_slice(), identity_id_ix) {
 				Ok(s) => s,
 				Err(e) => {
-					log::warn!(target: "avenos::jazz", "hydrate_shell: skip spark row (spark_id): {e}");
+					log::warn!(target: "avenos::jazz", "hydrate_shell: skip identity row (owner): {e}");
 					continue;
 				}
 			};
 			let genesis_cell = match vals.get(genesis_ix) {
 				Some(c) => c,
 				None => {
-					log::warn!(target: "avenos::jazz", "hydrate_shell: skip spark {sid} (missing genesis)");
+					log::warn!(target: "avenos::jazz", "hydrate_shell: skip identity {sid} (missing genesis)");
 					continue;
 				}
 			};
@@ -662,7 +679,7 @@ pub(super) async fn hydrate_shell(
 				Err(e) => {
 					log::warn!(
 						target: "avenos::jazz",
-						"hydrate_shell: skip spark {sid} (genesis open): {e}",
+						"hydrate_shell: skip identity {sid} (genesis open): {e}",
 					);
 					continue;
 				}
@@ -673,14 +690,14 @@ pub(super) async fn hydrate_shell(
 					Err(e) => {
 						log::debug!(
 							target: "avenos::jazz",
-							"hydrate_shell: spark {sid} issuer open failed, using local biscuit root: {e}",
+							"hydrate_shell: identity {sid} issuer open failed, using local biscuit root: {e}",
 						);
 						None
 					}
 				},
 				None => None,
 			};
-			if let Err(e) = spark_acc::ingest_genesis_opened(
+			if let Err(e) = identity_acc::ingest_genesis_opened(
 				&mut vault,
 				sid,
 				&genesis_b64,
@@ -689,7 +706,7 @@ pub(super) async fn hydrate_shell(
 			) {
 				log::warn!(
 					target: "avenos::jazz",
-					"hydrate_shell: skip spark {sid} (biscuit ingest): {e}",
+					"hydrate_shell: skip identity {sid} (biscuit ingest): {e}",
 				);
 				continue;
 			}
@@ -698,7 +715,7 @@ pub(super) async fn hydrate_shell(
 				None => {
 					log::warn!(
 						target: "avenos::jazz",
-						"hydrate_shell: skip spark {sid} (missing current_dek_version)",
+						"hydrate_shell: skip identity {sid} (missing current_dek_version)",
 					);
 					continue;
 				}
@@ -708,191 +725,69 @@ pub(super) async fn hydrate_shell(
 				Err(e) => {
 					log::warn!(
 						target: "avenos::jazz",
-						"hydrate_shell: skip spark {sid} (dek version): {e}",
+						"hydrate_shell: skip identity {sid} (dek version): {e}",
 					);
 					continue;
 				}
 			};
-			spark_versions.insert(sid, v);
+			identity_versions.insert(sid, v);
 		}
 	} else {
-		let first_name = manifest_opt
-			.as_ref()
-			.map(|m| m.first_name.trim())
-			.filter(|s| !s.is_empty())
-			.unwrap_or("Friend");
-		let username_slug = manifest_opt
-			.as_ref()
-			.and_then(|m| {
-				let u = m.username_slug.trim();
-				if u.is_empty() {
-					None
-				} else {
-					Some(u.to_string())
-				}
-			})
-			.unwrap_or_else(|| ascii_slug_fallback(first_name));
-		let device_label = manifest_opt
-			.as_ref()
-			.map(|m| m.device_label.trim())
-			.filter(|s| !s.is_empty())
-			.unwrap_or("This Mac");
-
+		// No bootstrap identity: the app works with zero identities. The user creates
+		// one (+ New) or is added via caps after the network invite; avenCEO is minted
+		// on the aven-node, never defaulted on a device. We only ensure this device
+		// has its own local `peers` row (presence + auto device label), idempotently —
+		// this branch re-runs every hydrate until the first identity exists.
 		let peers_schema_seed = resolved_table_schema(client, "peers").await?;
-		let peer_vals = super::insert_values(
-			"peers",
-			&peers_schema_seed,
-			vec![
-				("peer_did".into(), JsonValue::String(vault.peer_did.clone())),
-				("device_label".into(), JsonValue::String(device_label.into())),
-				("kind".into(), JsonValue::String("local".into())),
-				(
-					"added_at_ms".into(),
-					JsonValue::Number(now_unix_ms_i64().into()),
-				),
-				("status".into(), JsonValue::String("active".into())),
-			]
-			.into_iter()
-			.collect(),
-		)?;
-		let local_peer_oid = client
-			.create("peers", peer_vals)
-			.await
-			.map_err(super::format_jazz_err)?;
-
-		let humans_schema_seed = resolved_table_schema(client, "humans").await?;
-		let human_vals_map: Map<String, JsonValue> = vec![
-			("first_name".into(), JsonValue::String(first_name.to_string())),
-			("username_slug".into(), JsonValue::String(username_slug)),
-			(
-				"my_devices".into(),
-				JsonValue::Array(vec![JsonValue::String(
-					local_peer_oid.uuid().to_string(),
-				)]),
-			),
-			(
-				"created_at_ms".into(),
-				JsonValue::Number(now_unix_ms_i64().into()),
-			),
-		]
-		.into_iter()
-		.collect();
-		let humans_vals = super::insert_values("humans", &humans_schema_seed, human_vals_map)?;
-		client
-			.create("humans", humans_vals)
-			.await
-			.map_err(super::format_jazz_err)?;
-
-		let spark_id = Uuid::new_v4();
-		let biscuit_gen = spark_acc::mint_genesis_spark(&vault, spark_id)?;
-		let genesis_b64 = URL_SAFE_NO_PAD.encode(
-			biscuit_gen
-				.to_vec()
-				.map_err(|e| format!("genesis_encode:{e:?}"))?,
-		);
-
-		let mut row = Map::new();
-		row.insert(
-			"spark_id".into(),
-			JsonValue::String(spark_id.to_string()),
-		);
-		row.insert(
-			"name".into(),
-			JsonValue::String(possessive_spark_title(first_name)),
-		);
-		row.insert(
-			"issuer_pubkey_b64".into(),
-			JsonValue::String(spark_acc::encode_issuer_pubkey_b64(
-				&vault.biscuit_kp.public(),
-			)),
-		);
-		row.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
-		row.insert("current_dek_version".into(), JsonValue::Number(1.into()));
-		row.insert(
-			"created_at_ms".into(),
-			JsonValue::Number(now_unix_ms_i64().into()),
-		);
-		let sparks_vals = super::insert_values("sparks", &sparks_schema, row)?;
-		client
-				.create("sparks", sparks_vals)
+		let did_ix = col_ix(&peers_schema_seed, "peer_did")?;
+		let existing_peers = exec_list_rows(client, "peers").await.unwrap_or_default();
+		let has_local = existing_peers
+			.iter()
+			.any(|(_o, vals)| matches!(vals.get(did_ix), Some(Value::Text(s)) if s == &vault.peer_did));
+		if !has_local {
+			let device_label = manifest_opt
+				.as_ref()
+				.map(|m| m.device_label.trim().to_string())
+				.filter(|s| !s.is_empty())
+				.unwrap_or_else(system_device_name);
+			let peer_vals = super::insert_values(
+				"peers",
+				&peers_schema_seed,
+				vec![
+					("peer_did".into(), JsonValue::String(vault.peer_did.clone())),
+					("device_label".into(), JsonValue::String(device_label)),
+					("kind".into(), JsonValue::String("local".into())),
+					("added_at_ms".into(), JsonValue::Number(now_unix_ms_i64().into())),
+					("status".into(), JsonValue::String("active".into())),
+				]
+				.into_iter()
+				.collect(),
+			)?;
+			client
+				.create("peers", peer_vals)
 				.await
 				.map_err(super::format_jazz_err)?;
-
-		vault.sparks.insert(
-			spark_id,
-			spark_acc::BiscuitSpark {
-				spark_id,
-				biscuit: biscuit_gen.clone(),
-			},
-		);
-
-		let dek_ver = 1i64;
-		spark_versions.insert(spark_id, dek_ver);
-
-		let urn = spark_urn(spark_id);
-		let kek = derive_kek_x25519(&signing_key, &vault.ed25519_public)?;
-		let aad_enc = keyshare_wrap_aad(&urn, &vault.peer_did, dek_ver);
-		let dek_plain = random_spark_dek();
-		let wrapped =
-			encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad_enc)?;
-
-		let mut ks = Map::new();
-		ks.insert("spark_id".into(), JsonValue::String(spark_id.to_string()));
-		ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
-		ks.insert(
-			"recipient_did".into(),
-			JsonValue::String(vault.peer_did.clone()),
-		);
-		ks.insert(
-			"wrapper_did".into(),
-			JsonValue::String(vault.peer_did.clone()),
-		);
-		ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
-		let ks_schema = resolved_table_schema(client, "keyshares").await?;
-		let ks_vals = super::insert_values("keyshares", &ks_schema, ks)?;
-		client
-				.create("keyshares", ks_vals)
-				.await
-				.map_err(super::format_jazz_err)?;
-
-		deks.insert((spark_id, dek_ver), dek_plain);
-
-		// `peers` is now spark-scoped (caps-only sync). The local device row was
-		// created above before this spark existed; scope it to the default spark
-		// now so it is valid spark data (and syncs across the user's own devices).
-		let mut peer_patch = Map::new();
-		peer_patch.insert("spark_id".into(), JsonValue::String(spark_id.to_string()));
-		let peer_ops = super::patch_updates(&peers_schema_seed, peer_patch)?;
-		client
-			.update(local_peer_oid, peer_ops)
-			.await
-			.map_err(super::format_jazz_err)?;
+		}
 	}
 
-	let mut spark_keys: Vec<Uuid> = vault.sparks.keys().cloned().collect();
-	spark_keys.sort();
-	let default_spark = if spark_keys.is_empty() {
-		log::warn!(
-			target: "avenos::jazz",
-			"hydrate_shell: no sparks ingested (check keyshares / genesis on disk)",
-		);
-		return Err("shell_no_sparks".into());
-	} else {
-		spark_keys[0]
-	};
+	let mut identity_keys: Vec<Uuid> = vault.identities.keys().cloned().collect();
+	identity_keys.sort();
+	// Zero identities is valid: the user creates one (+ New) or is added via caps after
+	// the invite. `default_identity` is a nil sentinel until then (no fallback owner).
+	let default_identity = identity_keys.first().copied().unwrap_or_else(Uuid::nil);
 
 	log::debug!(
 		target: "avenos::jazz",
-		"hydrate_shell ready groove_write_branch={groove_write_branch} default_spark={default_spark}"
+		"hydrate_shell ready groove_write_branch={groove_write_branch} default_identity={default_identity}"
 	);
 
 	Ok(ShellState {
 		peer_did: vault.peer_did.clone(),
 		vault,
 		signing_key,
-		default_spark,
+		default_identity,
 		deks,
-		spark_versions,
+		identity_versions,
 		groove_write_branch,
 	})
 }

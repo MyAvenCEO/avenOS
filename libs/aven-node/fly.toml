@@ -1,0 +1,53 @@
+# fly.toml — aven-node mini (headless, stateless TLS sync relay).
+#
+# STATELESS BY DESIGN: there is intentionally no volume / no persistent mount.
+# The engine runs on in-memory storage; a redeploy/restart starts blank. TLS
+# cert/key + the identity seed are supplied via `fly secrets`, not the image.
+# See docs/deploy/aven-node-mini.md for the deploy runbook.
+
+app = "aven-node-mini"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  AVEN_SERVER_BIND = "0.0.0.0:4290"
+  AVEN_SERVER_HEALTH_BIND = "0.0.0.0:8080"
+  AVEN_SERVER_DOMAIN = "mini.testnet.aven.ceo"
+  AVEN_SERVER_URI = "https://mini.testnet.aven.ceo"
+  # MUST equal the device's NETWORK_SEED (tauri-plugin-self) — the avenCEO spark id
+  # is derived from it, so a mismatch leaves every device stuck at the invite gate.
+  AVEN_SERVER_NETWORK_SEED = "ceo.aven/testnet/abagana"
+  RUST_LOG = "info"
+
+# Raw-TCP passthrough for the sync port: TLS is terminated IN-PROCESS by rustls
+# (no fly "tls" handler), so the did:key channel binding sees the real session.
+[[services]]
+  internal_port = 4290
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 4290
+    handlers = []
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "10s"
+
+# HTTP liveness on a second port for the platform healthcheck.
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 8080
+    handlers = ["http"]
+
+  [[services.http_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "10s"
+    method = "get"
+    path = "/healthz"

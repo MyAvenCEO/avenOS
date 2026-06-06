@@ -21,6 +21,30 @@ use clock::MonotonicClock;
 // Re-export all public types
 pub use types::*;
 
+// ============================================================================
+// M5 — relay/sync abuse caps: per-peer inbound rate limiting
+// ============================================================================
+
+/// Rate-limit window length, microseconds (1s).
+const INBOUND_RATE_WINDOW_US: u64 = 1_000_000;
+/// Max inbound payloads accepted from one peer per window before throttling.
+/// Deliberately generous — only catches a pathological flood, never legitimate
+/// catch-up bursts. A malicious peer can't turn a relay into an unbounded sink.
+const INBOUND_MAX_BATCHES_PER_WINDOW: u32 = 50_000;
+
+/// Max size of a single inbound row value (M5 "max db-value size" abuse cap).
+/// Generous (64 MiB) — only rejects a pathologically huge value, not legitimate
+/// files; bounds how much one write can cost a relay's storage.
+const MAX_INBOUND_ROW_BYTES: usize = 64 * 1024 * 1024;
+
+/// Per-peer inbound rate window (M5). A fixed window: count resets when the
+/// window rolls; over-budget payloads in a window are dropped at the sync edge.
+#[derive(Debug, Clone, Default)]
+pub(super) struct InboundRate {
+    window_start_us: u64,
+    batches: u32,
+}
+
 
 // ============================================================================
 // SyncManager
@@ -43,6 +67,19 @@ pub struct SyncManager {
     /// "Up to date" mesh status (§10.2) — not a delivery ledger: it stores no
     /// per-batch state and dropping it only forces a re-diff.
     pub(super) converged_peers: HashSet<PeerId>,
+
+    /// Per-peer inbound rate-limit windows (M5 abuse caps). Flood/DoS protection
+    /// at the sync edge: a peer exceeding the per-window batch budget has further
+    /// inbound payloads dropped until its window rolls.
+    pub(super) inbound_rate: HashMap<PeerId, InboundRate>,
+
+    /// Per-identity storage accounting for the relay quota (M7-3 "Sync & Backup"
+    /// bound). `quota_row_bytes` maps a stored object → (quota_key, bytes) so a
+    /// re-delivered row updates rather than double-counts; `quota_owner_bytes` is
+    /// the running per-key total checked against the resolver's limit. Empty/unused
+    /// unless the resolver returns a `quota_for` key (the aven-node policy).
+    pub(super) quota_row_bytes: HashMap<ObjectId, (String, u64)>,
+    pub(super) quota_owner_bytes: HashMap<String, u64>,
 
     pub(super) inbox: Vec<InboxEntry>,
     pub(super) outbox: Vec<OutboxEntry>,
@@ -173,6 +210,9 @@ impl SyncManager {
             allow_unprivileged_schema_catalogue_writes: false,
             clients: HashMap::new(),
             converged_peers: HashSet::new(),
+            inbound_rate: HashMap::new(),
+            quota_row_bytes: HashMap::new(),
+            quota_owner_bytes: HashMap::new(),
             inbox: Vec::new(),
             outbox: Vec::new(),
             pending_query_subscriptions: Vec::new(),
@@ -190,12 +230,16 @@ impl SyncManager {
             pending_batch_fates: Vec::new(),
             pending_client_batch_fates: HashMap::new(),
             replay_table_contexts: HashMap::new(),
-            resolver: std::sync::Arc::new(crate::capability::AllowAllResolver),
+            // Fail-closed by default (M4): a peer that never installs a real
+            // resolver denies all sync rather than silently running open. Production
+            // peers (app + server) always `set_resolver`; tests that need sync opt
+            // into `AllowAllResolver` explicitly.
+            resolver: std::sync::Arc::new(crate::capability::DenyAllResolver),
         }
     }
 
     /// Inject the peer-sync authorizer (§6 gate). The app provides its
-    /// biscuit-aware resolver; tests / local-only keep the `AllowAll` default.
+    /// biscuit-aware resolver; tests / local-only opt into `AllowAll` explicitly.
     pub fn set_resolver(&mut self, resolver: std::sync::Arc<dyn crate::capability::CapabilityResolver>) {
         self.resolver = resolver;
     }

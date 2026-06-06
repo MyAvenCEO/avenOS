@@ -28,20 +28,20 @@ function rowsEqual(prev: JazzRow[], next: JazzRow[]): boolean {
  * - `replace` (default): the snapshot IS the complete authoritative set of currently-visible
  *   rows, so replacing reflects adds, updates AND deletes. Correct and fully reactive for any
  *   table (todos, messages, files, humans, …) — no per-table code needed.
- * - `catalogue`: defends a "gateway" table (the spark list) against a transient empty/partial
+ * - `catalogue`: defends a "gateway" table (the identity list) against a transient empty/partial
  *   snapshot during a vault-shell re-hydrate (access flicker): ignore empties, merge by key.
  *   Trade-off: catalogue-row *removals* (un-share) need a full reload, not a partial snapshot.
  */
 type SnapshotPolicy = 'replace' | 'catalogue'
 
 const TABLE_POLICY: Record<string, SnapshotPolicy> = {
-	sparks: 'catalogue',
+	identities: 'catalogue',
 	keyshares: 'catalogue',
 }
 
 /** Natural per-table key for merge dedup; falls back to the generic row `id`. */
 function rowKey(row: JazzRow): string {
-	const natural = row.spark_id ?? row.sparkId
+	const natural = row.owner ?? row.identityId
 	if (typeof natural === 'string' && natural.trim()) return natural.trim().toLowerCase()
 	return String(row.id ?? '')
 }

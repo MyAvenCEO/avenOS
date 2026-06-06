@@ -30,8 +30,7 @@ const routeKey = $derived(`${page.url.pathname}${page.url.search}`)
 const intentsActive = $derived(path === '/')
 const sandboxActive = $derived(path.startsWith('/sandbox'))
 const selfActive = $derived(path.startsWith('/settings'))
-const sparksNavActive = $derived(path.startsWith('/sparks'))
-const dbActive = $derived(path.startsWith('/db'))
+const sparksNavActive = $derived(path.startsWith('/identities'))
 const avensActive = $derived(path.startsWith('/avens'))
 
 const shellLocked = $derived(browser && isTauriRuntime() && $deviceSession.kind === 'locked')
@@ -111,17 +110,17 @@ $effect(() => {
 const meshAllowed = $derived(sessionKind === 'unlocked' && $grooveSessionReady)
 
 // Global invite-only gate: the app is locked behind membership of the network's
-// avenCEO spark. Membership = "do I hold an avenCEO cap in my vault?" (a local
-// vault check via the membership IPC) — the aven-server is the authority that
+// avenCEO identity. Membership = "do I hold an avenCEO cap in my vault?" (a local
+// vault check via the membership IPC) — the aven-node is the authority that
 // grants caps (auto-grants the first peer, invites the rest). We re-check when
-// sparks sync, so the gate opens automatically once the server's grant + keyshare
+// identities sync, so the gate opens automatically once the server's grant + keyshare
 // land and hydrate avenCEO into the vault. Sandbox (non-tauri) is never gated.
-const sparksStore = jazzStore('sparks')
+const identitiesStore = jazzStore('identities')
 let membership = $state<'owner' | 'member' | 'none' | 'unknown'>('unknown')
 $effect(() => {
 	void sessionKind
 	void $grooveSessionReady
-	void sparksStore.rows
+	void identitiesStore.rows
 	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked' || !$grooveSessionReady) {
 		membership = 'unknown'
 		return
@@ -138,6 +137,17 @@ const appAccessState = $derived.by<'app' | 'gate' | 'checking'>(() => {
 	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked') return 'app'
 	if (membership === 'unknown') return 'checking'
 	return membership === 'none' ? 'gate' : 'app'
+})
+
+// After the invite gate opens, land on /identities (not /intents) — the user
+// creates an identity (+ New) or opens ones shared with them via caps.
+let landedPostInvite = $state(false)
+$effect(() => {
+	if (!browser || !isTauriRuntime()) return
+	if (appAccessState === 'app' && !landedPostInvite && page.url.pathname === '/') {
+		landedPostInvite = true
+		void goto('/identities')
+	}
 })
 
 $effect(() => {
@@ -264,21 +274,12 @@ $effect(() => {
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a
-						href="/sparks"
+						href="/identities"
 						data-sveltekit-preload-data="hover"
 						class="transition-opacity hover:opacity-80 {sparksNavActive ? 'opacity-95' : 'opacity-40'}"
 						aria-current={sparksNavActive ? 'page' : undefined}
-						onclick={(e) => navigateApp('/sparks', e)}
-						>{t('nav.sparks')}</a
-					>
-					<span class="select-none opacity-25" aria-hidden="true">|</span>
-					<a
-						href="/db"
-						data-sveltekit-preload-data="hover"
-						class="transition-opacity hover:opacity-80 {dbActive ? 'opacity-95' : 'opacity-40'}"
-						aria-current={dbActive ? 'page' : undefined}
-						onclick={(e) => navigateApp('/db', e)}
-						>{t('nav.db')}</a
+						onclick={(e) => navigateApp('/identities', e)}
+						>{t('nav.identities')}</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a
