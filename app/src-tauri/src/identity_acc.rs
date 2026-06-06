@@ -1,8 +1,8 @@
-//! Offline capability gates (biscuit) for spark-scoped IPC.
+//! Offline capability gates (biscuit) for identity-scoped IPC.
 //!
 //! The cap logic moved to the shared [`aven_caps::caps`] crate (single source of
 //! truth, also used by the `aven-server`). Re-exported here so existing
-//! `crate::spark_acc::…` call sites are unchanged. Only the **device-specific**
+//! `crate::identity_acc::…` call sites are unchanged. Only the **device-specific**
 //! vault builder stays here (it derives the signing key from the device root via
 //! tauri, which the shared crate must not depend on). See
 //! `docs/ServerRootedAvenCeoPlan.md`.

@@ -5,18 +5,18 @@ import { navigateApp } from '$lib/shell'
 import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
 import { asideNavSectionsFromRoutes } from '$lib/ui/aside-nav'
 import { avenById } from '../../avens-data'
-import { avenSparkById } from '../sparks-data'
+import { avenSparkById } from '../identities-data'
 
 let { children: pageOutlet } = $props()
 
 const projectParam = $derived(String((page.params as { projectId?: string }).projectId ?? ''))
-const sparkParam = $derived(String((page.params as { sparkId?: string }).sparkId ?? ''))
+const identityParam = $derived(String((page.params as { identityId?: string }).identityId ?? ''))
 const decodedProjectId = $derived(decodeURIComponent(projectParam))
-const decodedSparkId = $derived(decodeURIComponent(sparkParam))
+const decodedIdentityId = $derived(decodeURIComponent(identityParam))
 const avenBase = $derived(`/avens/${encodeURIComponent(decodedProjectId)}`)
-const sparkBase = $derived(`${avenBase}/${encodeURIComponent(decodedSparkId)}`)
+const identityBase = $derived(`${avenBase}/${encodeURIComponent(decodedIdentityId)}`)
 const aven = $derived(avenById(decodedProjectId))
-const spark = $derived(avenSparkById(decodedProjectId, decodedSparkId))
+const identity = $derived(avenSparkById(decodedProjectId, decodedIdentityId))
 
 const path = $derived(page.url.pathname)
 
@@ -27,34 +27,34 @@ const navSections = $derived(
 				title: t('nav.viewSection'),
 				items: [
 					{
-						href: `${sparkBase}/banking`,
+						href: `${identityBase}/banking`,
 						label: t('nav.banking'),
-						match: (p) => p.startsWith(`${sparkBase}/banking`)
+						match: (p) => p.startsWith(`${identityBase}/banking`)
 					},
 					{
-						href: `${sparkBase}/orders`,
+						href: `${identityBase}/orders`,
 						label: t('nav.orders'),
-						match: (p) => p.startsWith(`${sparkBase}/orders`)
+						match: (p) => p.startsWith(`${identityBase}/orders`)
 					},
 					{
-						href: `${sparkBase}/table`,
+						href: `${identityBase}/table`,
 						label: t('nav.orderTable'),
-						match: (p) => p.startsWith(`${sparkBase}/table`)
+						match: (p) => p.startsWith(`${identityBase}/table`)
 					},
 					{
-						href: `${sparkBase}/turnover`,
+						href: `${identityBase}/turnover`,
 						label: t('nav.turnover'),
-						match: (p) => p.startsWith(`${sparkBase}/turnover`)
+						match: (p) => p.startsWith(`${identityBase}/turnover`)
 					},
 					{
-						href: `${sparkBase}/products`,
+						href: `${identityBase}/products`,
 						label: t('nav.products'),
-						match: (p) => p.startsWith(`${sparkBase}/products`)
+						match: (p) => p.startsWith(`${identityBase}/products`)
 					},
 					{
-						href: `${sparkBase}/ingest`,
+						href: `${identityBase}/ingest`,
 						label: t('nav.ingest'),
-						match: (p) => p.startsWith(`${sparkBase}/ingest`)
+						match: (p) => p.startsWith(`${identityBase}/ingest`)
 					}
 				]
 			}
@@ -65,7 +65,7 @@ const navSections = $derived(
 </script>
 
 <svelte:head>
-	<title>{spark?.name ?? aven?.name ?? t('nav.avens')}{t('common.titleSuffix')}</title>
+	<title>{identity?.name ?? aven?.name ?? t('nav.avens')}{t('common.titleSuffix')}</title>
 </svelte:head>
 
 <AsidePageLayout
@@ -89,10 +89,10 @@ const navSections = $derived(
 			</button>
 			<div class="space-y-0.5">
 				<h2 class="text-sm font-semibold leading-snug tracking-tight">
-					{spark?.name ?? decodedSparkId}
+					{identity?.name ?? decodedIdentityId}
 				</h2>
-				{#if spark}
-					<p class="text-muted-foreground text-[10px] leading-snug">{spark.subtitle}</p>
+				{#if identity}
+					<p class="text-muted-foreground text-[10px] leading-snug">{identity.subtitle}</p>
 				{/if}
 			</div>
 		</div>

@@ -1,22 +1,22 @@
-//! Spark-scoped sync policy — table classification and UI drain notifications.
+//! Identity-scoped sync policy — table classification and UI drain notifications.
 
 use std::sync::OnceLock;
 
 use groove::ObjectId;
 use uuid::Uuid;
 
-/// Snapshot of object→spark mappings used to gate outbound sync (updated on every shell hydrate).
+/// Snapshot of object→identity mappings used to gate outbound sync (updated on every shell hydrate).
 #[derive(Clone)]
 pub struct SyncAclSnapshot {
-	/// Patch rows may omit spark_id — map `(table, object_id)` → spark scope for ACL.
-	pub object_spark_ids: std::collections::HashMap<(String, ObjectId), Uuid>,
+	/// Patch rows may omit owner — map `(table, object_id)` → identity scope for ACL.
+	pub object_owner: std::collections::HashMap<(String, ObjectId), Uuid>,
 }
 
 /// Build the outbound sync ACL snapshot from the hydrated vault shell.
 pub fn build_sync_acl_snapshot(
-	object_spark_ids: std::collections::HashMap<(String, ObjectId), Uuid>,
+	object_owner: std::collections::HashMap<(String, ObjectId), Uuid>,
 ) -> SyncAclSnapshot {
-	SyncAclSnapshot { object_spark_ids }
+	SyncAclSnapshot { object_owner }
 }
 
 static SPARK_SCOPED_TABLES: OnceLock<Vec<String>> = OnceLock::new();
@@ -26,11 +26,11 @@ fn spark_scoped_tables_cached() -> &'static [String] {
 		let mut names = crate::schema_manifest::manifest_spark_scoped_table_names()
 			.unwrap_or_else(|e| {
 				log::warn!(
-					target: "avenos::spark_sync",
-					"manifest spark-scoped tables unavailable ({e}); using compile-time fallback",
+					target: "avenos::identity_sync",
+					"manifest identity-scoped tables unavailable ({e}); using compile-time fallback",
 				);
 				vec![
-					"sparks".into(),
+					"identities".into(),
 					"keyshares".into(),
 					"todos".into(),
 					"messages".into(),
@@ -42,20 +42,20 @@ fn spark_scoped_tables_cached() -> &'static [String] {
 	})
 }
 
-/// Tables whose rows include `spark_id` per the active Jazz manifest.
+/// Tables whose rows include `owner` per the active Jazz manifest.
 pub fn spark_scoped_table_names() -> &'static [String] {
 	spark_scoped_tables_cached()
 }
 
 /// Biscuit vault / trusted-peer tables — full shell re-hydrate on change.
-pub const VAULT_SHELL_TABLES: &[&str] = &["sparks", "keyshares", "peers"];
+pub const VAULT_SHELL_TABLES: &[&str] = &["identities", "keyshares", "peers"];
 
 /// Catalogue tables republished to the webview after vault shell re-hydrate (`peers` uses its own path).
-pub const VAULT_CATALOGUE_UI_TABLES: &[&str] = &["sparks", "keyshares"];
+pub const VAULT_CATALOGUE_UI_TABLES: &[&str] = &["identities", "keyshares"];
 
-/// Manifest `spark_id` tables except vault shell catalogue rows (`sparks`, `keyshares`).
+/// Manifest `owner` tables except vault shell catalogue rows (`identities`, `keyshares`).
 pub fn is_spark_data_table(name: &str) -> bool {
-	is_spark_scoped_table(name) && !matches!(name, "sparks" | "keyshares")
+	is_spark_scoped_table(name) && !matches!(name, "identities" | "keyshares")
 }
 
 pub fn is_vault_shell_table(name: &str) -> bool {

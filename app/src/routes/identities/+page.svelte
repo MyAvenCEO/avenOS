@@ -7,60 +7,60 @@
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/settings/device-session-store'
 
-	const sparksStore = jazzStore('sparks')
+	const identitiesStore = jazzStore('identities')
 
 	const unlocked = $derived(
 		$deviceSession.kind === 'unlocked',
 	)
 	const tauri = $derived(browser && isTauriRuntime())
 
-	// Snapshot is reactive: peer-sync deltas land in `sparksStore.rows` automatically.
-	// avenCEO (the network roster spark, now server-owned) appears as a normal spark
+	// Snapshot is reactive: peer-sync deltas land in `identitiesStore.rows` automatically.
+	// avenCEO (the network roster identity, now server-owned) appears as a normal identity
 	// in the list once this device is a member; the app-shell gate handles access.
-	const sparks = $derived(
-		[...sparksStore.rows].sort((a, b) => a.name.localeCompare(b.name)),
+	const identities = $derived(
+		[...identitiesStore.rows].sort((a, b) => a.name.localeCompare(b.name)),
 	)
-	const loading = $derived(tauri && unlocked && !sparksStore.loaded && !sparksStore.error)
+	const loading = $derived(tauri && unlocked && !identitiesStore.loaded && !identitiesStore.error)
 
 	function sparkSubtitle(row: JazzRow): string {
-		const id = row.spark_id
+		const id = row.owner
 		return id.length > 14 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id
 	}
 </script>
 
 <svelte:head>
-	<title>{t('sparks.title')}{t('common.titleSuffix')}</title>
+	<title>{t('identities.title')}{t('common.titleSuffix')}</title>
 </svelte:head>
 
 <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
 <div class="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-8 sm:px-6">
 	<header class="space-y-1.5">
-		<h1 class="text-2xl font-semibold tracking-tight">{t('sparks.title')}</h1>
+		<h1 class="text-2xl font-semibold tracking-tight">{t('identities.title')}</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
-			{t('sparks.subtitleLead')}
+			{t('identities.subtitleLead')}
 		</p>
 	</header>
 
 	{#if !tauri}
-		<p class="text-muted-foreground text-sm">{t('sparks.needsDesktop')}</p>
+		<p class="text-muted-foreground text-sm">{t('identities.needsDesktop')}</p>
 	{:else if !unlocked}
-		<p class="text-muted-foreground text-sm">{t('sparks.unlockToSee')}</p>
-	{:else if sparksStore.error}
-		<p class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border px-3 py-2 text-sm" role="alert">{sparksStore.error}</p>
+		<p class="text-muted-foreground text-sm">{t('identities.unlockToSee')}</p>
+	{:else if identitiesStore.error}
+		<p class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border px-3 py-2 text-sm" role="alert">{identitiesStore.error}</p>
 	{:else if loading}
 		<p class="text-muted-foreground text-sm">{t('common.loadingSparks')}</p>
-	{:else if sparks.length === 0}
-		<p class="text-muted-foreground text-sm">{t('sparks.noSparksYet')}</p>
+	{:else if identities.length === 0}
+		<p class="text-muted-foreground text-sm">{t('identities.noSparksYet')}</p>
 	{:else}
 		<ul class="grid gap-3 sm:grid-cols-2">
-			{#each sparks as row (row.spark_id)}
+			{#each identities as row (row.owner)}
 				<li>
 					<button
 						type="button"
 						class="group border-input hover:bg-accent hover:text-accent-foreground hover:border-border flex w-full flex-col gap-1 rounded-xl border bg-card/40 px-4 py-4 text-left transition-colors"
-						onclick={() => goto(`/sparks/${encodeURIComponent(row.spark_id)}/talk`)}
+						onclick={() => goto(`/identities/${encodeURIComponent(row.owner)}/talk`)}
 					>
-						<span class="text-[11px] font-semibold tracking-wider uppercase opacity-70 group-hover:text-accent-foreground/90">{t('sparks.sparkLabel')}</span>
+						<span class="text-[11px] font-semibold tracking-wider uppercase opacity-70 group-hover:text-accent-foreground/90">{t('identities.sparkLabel')}</span>
 						<span class="text-base font-medium tracking-tight group-hover:text-accent-foreground">{row.name || t('common.unnamed')}</span>
 						<span class="text-muted-foreground font-mono text-[11px] group-hover:text-accent-foreground/85">{sparkSubtitle(row)}</span>
 					</button>

@@ -2,7 +2,7 @@
  * Readiness + download-progress store for the on-device voice model
  * (Gemma 4 E4B). Fed by the Rust backend: an initial `asr_status` query plus
  * streamed `asr:model-download` events. The UI uses this to drive the composer's
- * inline "preparing" pill and the Models settings page; `SparkTalkPanel`
+ * inline "preparing" pill and the Models settings page; `IdentityTalkPanel`
  * derives `voiceUnavailableReason` and `voicePrep` from it.
  *
  * The reducer + `voiceUnavailableReason` are pure so they can be unit-tested
@@ -81,7 +81,7 @@ export function downloadFraction(state: AsrState): number | null {
 
 /**
  * Pure: the short reason the voice feature isn't ready, or `null` when ready.
- * `SparkTalkPanel` passes this to the composer; while non-null, clicking the mic
+ * `IdentityTalkPanel` passes this to the composer; while non-null, clicking the mic
  * opens the mini modal instead of recording.
  */
 export function voiceUnavailableReason(state: AsrState): string | null {

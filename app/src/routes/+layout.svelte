@@ -30,7 +30,7 @@ const routeKey = $derived(`${page.url.pathname}${page.url.search}`)
 const intentsActive = $derived(path === '/')
 const sandboxActive = $derived(path.startsWith('/sandbox'))
 const selfActive = $derived(path.startsWith('/settings'))
-const sparksNavActive = $derived(path.startsWith('/sparks'))
+const sparksNavActive = $derived(path.startsWith('/identities'))
 const dbActive = $derived(path.startsWith('/db'))
 const avensActive = $derived(path.startsWith('/avens'))
 
@@ -111,17 +111,17 @@ $effect(() => {
 const meshAllowed = $derived(sessionKind === 'unlocked' && $grooveSessionReady)
 
 // Global invite-only gate: the app is locked behind membership of the network's
-// avenCEO spark. Membership = "do I hold an avenCEO cap in my vault?" (a local
+// avenCEO identity. Membership = "do I hold an avenCEO cap in my vault?" (a local
 // vault check via the membership IPC) — the aven-server is the authority that
 // grants caps (auto-grants the first peer, invites the rest). We re-check when
-// sparks sync, so the gate opens automatically once the server's grant + keyshare
+// identities sync, so the gate opens automatically once the server's grant + keyshare
 // land and hydrate avenCEO into the vault. Sandbox (non-tauri) is never gated.
-const sparksStore = jazzStore('sparks')
+const identitiesStore = jazzStore('identities')
 let membership = $state<'owner' | 'member' | 'none' | 'unknown'>('unknown')
 $effect(() => {
 	void sessionKind
 	void $grooveSessionReady
-	void sparksStore.rows
+	void identitiesStore.rows
 	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked' || !$grooveSessionReady) {
 		membership = 'unknown'
 		return
@@ -264,12 +264,12 @@ $effect(() => {
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a
-						href="/sparks"
+						href="/identities"
 						data-sveltekit-preload-data="hover"
 						class="transition-opacity hover:opacity-80 {sparksNavActive ? 'opacity-95' : 'opacity-40'}"
 						aria-current={sparksNavActive ? 'page' : undefined}
-						onclick={(e) => navigateApp('/sparks', e)}
-						>{t('nav.sparks')}</a
+						onclick={(e) => navigateApp('/identities', e)}
+						>{t('nav.identities')}</a
 					>
 					<span class="select-none opacity-25" aria-hidden="true">|</span>
 					<a

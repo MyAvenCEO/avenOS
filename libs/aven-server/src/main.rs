@@ -3,7 +3,7 @@
 //! One process: an HTTP + WebSocket server on :8080 (TLS terminated at the Sprites
 //! proxy) serving `GET /health` and `GET /sync` — the nonce-bound did:key sync
 //! transport (`ws_server`) — feeding a full groove engine on **RocksDB** with the
-//! real schema. A peer holding a `replicate` grant ships this server its spark's
+//! real schema. A peer holding a `replicate` grant ships this server its identity's
 //! encrypted batches; it stores them durably and forwards them, but holds **no
 //! keyshares**, so everything it mirrors stays ciphertext it cannot decrypt.
 //!
@@ -50,7 +50,7 @@ impl Config {
             Some(arr)
         });
         // MUST equal the device's `tauri_plugin_self::network::NETWORK_SEED`: the
-        // avenCEO spark id is `sha256("avenos:avenCEO:v1:" + network_seed)`, so a
+        // avenCEO identity id is `sha256("avenos:avenCEO:v1:" + network_seed)`, so a
         // mismatch makes the server mint avenCEO under a different id than devices
         // look for — they'd never converge and every device stays at the invite gate.
         let network_seed =
@@ -116,7 +116,7 @@ async fn sync_handler(
 }
 
 /// The always-on relay peer's inbound apply gate: relay-proof **authenticity**. The
-/// server holds no content-spark biscuits, so it cannot check membership — but it CAN
+/// server holds no content-identity biscuits, so it cannot check membership — but it CAN
 /// reject a forged or relabeled row whose owner-binding signature is invalid, before
 /// storing or forwarding it (members enforce membership on their side). Outbound stays
 /// permissive: the relay stores & forwards ciphertext for everyone.
@@ -176,18 +176,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!(%server_did, "aven-server identity");
 
     // S.2 — a biscuit capability vault rooted in the server's key. The server is
-    // the sole author/owner of the well-known avenCEO control spark; it will mint
+    // the sole author/owner of the well-known avenCEO control identity; it will mint
     // its genesis (S.3) and auto-grant the first connecting peer admin (S.4). See
     // docs/ServerRootedAvenCeoPlan.md.
     let server_vault = aven_caps::caps::build_vault_from_signing_key(&identity)
         .map_err(|e| format!("server cap vault: {e}"))?;
-    let avenceo_id = aven_caps::caps::aven_ceo_spark_id(&cfg.network_seed);
+    let avenceo_id = aven_caps::caps::aven_ceo_identity(&cfg.network_seed);
     tracing::info!(
         %avenceo_id,
         server_name = %cfg.server_name,
         network_seed = %cfg.network_seed,
         owner_did = %server_vault.peer_did,
-        "avenCEO control spark — server is the owner"
+        "avenCEO control identity — server is the owner"
     );
 
     let params = ChallengeParams::new(cfg.domain.clone(), cfg.uri.clone(), cfg.network_seed.clone());

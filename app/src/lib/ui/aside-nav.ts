@@ -1,4 +1,4 @@
-/** Shared left-aside navigation model (Self, Sparks detail, DB explorer, …). */
+/** Shared left-aside navigation model (Self, Identities detail, DB explorer, …). */
 
 export type AsideNavItem = {
 	label: string
@@ -44,10 +44,10 @@ export function asideNavSectionsFromRoutes(
 	}))
 }
 
-/** Default inner main column for aside-backed app pages (Self, Sparks detail, …). */
+/** Default inner main column for aside-backed app pages (Self, Identities detail, …). */
 export const asidePageContentClass =
 	'mx-auto w-full max-w-3xl px-4 pt-4 pb-8 sm:px-6 md:px-8'
 
-/** Wider variant (e.g. Sparks gallery). */
+/** Wider variant (e.g. Identities gallery). */
 export const asidePageContentWideClass =
 	'mx-auto flex w-full max-w-5xl flex-col px-4 sm:px-6'

@@ -9,8 +9,8 @@ mod log_ring;
 mod peers;
 mod schema_manifest;
 mod schema_migrations;
-mod spark_acc;
-mod spark_sync;
+mod identity_acc;
+mod identity_sync;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Listener, Manager, RunEvent};
@@ -234,7 +234,7 @@ pub fn run() {
 		.invoke_handler(tauri::generate_handler![
 			avenos_recent_rust_logs,
 			network::network_seed,
-			network::aven_ceo_spark_id,
+			network::aven_ceo_identity,
 			jazz::groove_runtime,
 			jazz::self_storage_paths,
 			jazz::self_clear_jazz_database,

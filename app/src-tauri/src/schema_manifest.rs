@@ -40,7 +40,7 @@ struct ManifestColumn {
 	ty: String,
 	#[serde(default)]
 	nullable: bool,
-	/// When true: routing/sync metadata stored unsealed (e.g. `spark_id`). Not world-readable.
+	/// When true: routing/sync metadata stored unsealed (e.g. `owner`). Not world-readable.
 	/// When false (default): column is sealed at rest and gated by biscuit on IPC paths.
 	#[serde(default)]
 	plaintext: bool,
@@ -233,7 +233,7 @@ pub fn expose_ts_for(table: &str, column: &str) -> Option<&'static ColumnType> {
 	expose_ts_map().get(&(table.to_string(), column.to_string()))
 }
 
-/// Columns **without** `plaintext: true` are sealed at rest; IPC still requires biscuit admin for spark-scoped tables.
+/// Columns **without** `plaintext: true` are sealed at rest; IPC still requires biscuit admin for identity-scoped tables.
 /// `plaintext: true` marks routing metadata only (not a “public visibility” mode).
 pub fn manifest_sensitive_columns() -> Result<HashMap<String, HashSet<String>>, String> {
 	let m = read_manifest()?;
@@ -257,13 +257,13 @@ pub fn manifest_secret_columns() -> Result<HashMap<String, HashSet<String>>, Str
 	manifest_sensitive_columns()
 }
 
-/// Table names that carry a `spark_id` column — the manifest is the single source of truth
+/// Table names that carry a `owner` column — the manifest is the single source of truth
 /// for which tables participate in biscuit-gated P2P sync and ACL object maps.
 pub fn manifest_spark_scoped_table_names() -> Result<Vec<String>, String> {
 	let m = read_manifest()?;
 	Ok(m.tables
 		.iter()
-		.filter(|(_, def)| def.columns.iter().any(|c| c.name == "spark_id"))
+		.filter(|(_, def)| def.columns.iter().any(|c| c.name == "owner"))
 		.map(|(name, _)| name.clone())
 		.collect())
 }

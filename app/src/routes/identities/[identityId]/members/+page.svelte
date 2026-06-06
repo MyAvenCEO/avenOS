@@ -2,12 +2,12 @@
 	import { browser } from '$app/environment'
 	import { page } from '$app/state'
 	import { avenCeoSparkId } from '$lib/jazz/api'
-	import SparkMembersPanel from '$lib/sparks/SparkMembersPanel.svelte'
+	import IdentityMembersPanel from '$lib/identities/IdentityMembersPanel.svelte'
 
-	const sparkParam = $derived(String((page.params as { sparkId?: string }).sparkId ?? ''))
-	const sparkId = $derived(decodeURIComponent(sparkParam))
+	const identityParam = $derived(String((page.params as { identityId?: string }).identityId ?? ''))
+	const identityId = $derived(decodeURIComponent(identityParam))
 
-	// Is this the well-known avenCEO control spark? If so, onboarding uses the
+	// Is this the well-known avenCEO control identity? If so, onboarding uses the
 	// membership bundle (reads + keyshare + row-scoped self-publish write) and the
 	// self-publish UI is shown.
 	let avenCeoId = $state<string | undefined>(undefined)
@@ -21,7 +21,7 @@
 			}
 		})()
 	})
-	const isAvenCeo = $derived(!!avenCeoId && sparkId === avenCeoId)
+	const isAvenCeo = $derived(!!avenCeoId && identityId === avenCeoId)
 </script>
 
-<SparkMembersPanel {sparkId} {isAvenCeo} wide />
+<IdentityMembersPanel {identityId} {isAvenCeo} wide />

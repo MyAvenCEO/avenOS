@@ -4,5 +4,5 @@ export const ssr = false
 
 /** Previous route; bookmarks still hit `/jazz/todos`. */
 export function load() {
-	throw redirect(307, '/sparks')
+	throw redirect(307, '/identities')
 }

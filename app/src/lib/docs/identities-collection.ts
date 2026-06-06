@@ -1,5 +1,5 @@
 /**
- * Markdown chapters under docs/sparks/
+ * Markdown chapters under docs/identities/
  */
 export type DocGroup = 'founders' | 'developers'
 
@@ -11,13 +11,13 @@ export type SparksDocMeta = {
 	raw: string
 }
 
-const founderModules = import.meta.glob('@avenos/docs/sparks/founders/*.md', {
+const founderModules = import.meta.glob('@avenos/docs/identities/founders/*.md', {
 	query: '?raw',
 	import: 'default',
 	eager: true,
 }) as Record<string, string>
 
-const developerModules = import.meta.glob('@avenos/docs/sparks/developers/*.md', {
+const developerModules = import.meta.glob('@avenos/docs/identities/developers/*.md', {
 	query: '?raw',
 	import: 'default',
 	eager: true,

@@ -9,8 +9,8 @@
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/settings/device-session-store'
 
-	const sparkParam = $derived(String((page.params as { sparkId?: string }).sparkId ?? ''))
-	const decodedSparkId = $derived(decodeURIComponent(sparkParam))
+	const identityParam = $derived(String((page.params as { identityId?: string }).identityId ?? ''))
+	const decodedIdentityId = $derived(decodeURIComponent(identityParam))
 
 	const session = $derived($jazzShell.session)
 	let err = $state<string | undefined>()
@@ -21,19 +21,19 @@
 	let editingId = $state<string | null>(null)
 	let editDraft = $state('')
 
-	const sparksStore = jazzStore('sparks')
+	const identitiesStore = jazzStore('identities')
 	const todos = jazzStore('todos')
 
 	function idsMatch(a: string, b: string): boolean {
 		return a.trim().toLowerCase() === b.trim().toLowerCase()
 	}
 
-	const sparkMeta = $derived(
-		sparksStore.rows.find((s) => idsMatch(s.spark_id, decodedSparkId)),
+	const identityMeta = $derived(
+		identitiesStore.rows.find((s) => idsMatch(s.owner, decodedIdentityId)),
 	)
-	const sparksResolved = $derived(sparksStore.loaded)
-	const canonicalSparkId = $derived(sparkMeta?.spark_id ?? decodedSparkId)
-	const rows = $derived(todos.rows.filter((r) => idsMatch(r.spark_id, canonicalSparkId)))
+	const sparksResolved = $derived(identitiesStore.loaded)
+	const canonicalSparkId = $derived(identityMeta?.owner ?? decodedIdentityId)
+	const rows = $derived(todos.rows.filter((r) => idsMatch(r.owner, canonicalSparkId)))
 
 	function focusEditable(node: HTMLInputElement) {
 		queueMicrotask(() => {
@@ -46,7 +46,7 @@
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
 
-	const storeError = $derived(sparksStore.error ?? todos.error)
+	const storeError = $derived(identitiesStore.error ?? todos.error)
 	$effect(() => {
 		if (storeError) err = storeError
 	})
@@ -57,7 +57,7 @@
 		addBusy = true
 		err = undefined
 		try {
-			await todos.create({ title, done: false, spark_id: canonicalSparkId })
+			await todos.create({ title, done: false, owner: canonicalSparkId })
 			titleDraft = ''
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
@@ -131,29 +131,29 @@
 </script>
 
 <svelte:head>
-	<title>{t('sparks.todos.title')}{t('common.titleSuffix')}</title>
+	<title>{t('identities.todos.title')}{t('common.titleSuffix')}</title>
 </svelte:head>
 
 <div class="flex flex-col gap-6">
 	<header class="space-y-1">
-		<h1 class="text-xl font-semibold tracking-tight">{t('sparks.todos.title')}</h1>
+		<h1 class="text-xl font-semibold tracking-tight">{t('identities.todos.title')}</h1>
 		<p class="text-muted-foreground text-sm leading-relaxed">
-			{t('sparks.todos.subtitle')}
+			{t('identities.todos.subtitle')}
 		</p>
 	</header>
 
 	{#if !tauri}
-		<p class="text-muted-foreground text-sm">{t('sparks.needsDesktop')}</p>
+		<p class="text-muted-foreground text-sm">{t('identities.needsDesktop')}</p>
 	{:else if !unlocked}
-		<p class="text-muted-foreground text-sm">{t('sparks.todos.unlockToLoad')}</p>
-	{:else if !decodedSparkId}
-		<p class="text-muted-foreground text-sm">{t('sparks.todos.missingSparkId')}</p>
+		<p class="text-muted-foreground text-sm">{t('identities.todos.unlockToLoad')}</p>
+	{:else if !decodedIdentityId}
+		<p class="text-muted-foreground text-sm">{t('identities.todos.missingSparkId')}</p>
 	{:else}
 		{#if session}
 			<p class="text-muted-foreground font-mono text-xs leading-snug">
 				{session.peerDidShort}
 				<span class="mx-2 text-border">·</span>
-				<span>spark:{canonicalSparkId}</span>
+				<span>identity:{canonicalSparkId}</span>
 			</p>
 		{/if}
 
@@ -168,14 +168,14 @@
 
 		{#if !sparksResolved && !err}
 			<p class="text-muted-foreground text-xs">{t('common.loadingSpark')}</p>
-		{:else if sparksResolved && !sparkMeta && !err}
+		{:else if sparksResolved && !identityMeta && !err}
 			<p class="text-muted-foreground text-sm">
-				{t('sparks.todos.notInLedger')}
-				<button type="button" class="underline" onclick={() => goto('/sparks')}>{t('sparks.todos.backToSparks')}</button>.
+				{t('identities.todos.notInLedger')}
+				<button type="button" class="underline" onclick={() => goto('/identities')}>{t('identities.todos.backToSparks')}</button>.
 			</p>
 		{/if}
 
-		{#if sparkMeta}
+		{#if identityMeta}
 			<form
 				class="flex flex-col gap-2 sm:flex-row sm:items-center"
 				onsubmit={(e) => {
@@ -185,7 +185,7 @@
 			>
 				<input
 					bind:value={titleDraft}
-					placeholder={t('sparks.todos.newTodoPlaceholder')}
+					placeholder={t('identities.todos.newTodoPlaceholder')}
 					class="border-input bg-background focus-visible:ring-ring flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus-visible:ring-2"
 					disabled={addBusy}
 				/>
@@ -204,7 +204,7 @@
 						<div class="mt-0.5 flex shrink-0 items-center">
 							<input
 								type="checkbox"
-								aria-label={t('sparks.todos.toggleDone')}
+								aria-label={t('identities.todos.toggleDone')}
 								checked={row.done}
 								class="accent-primary h-4 w-4 cursor-pointer disabled:opacity-40"
 								disabled={listBusy}
@@ -237,7 +237,7 @@
 										class:text-muted-foreground={row.done}
 										class="text-left text-sm hover:underline {row.done ? 'line-through' : ''}"
 										disabled={listBusy || editingId !== null}
-										title={t('sparks.todos.doubleClickEdit')}
+										title={t('identities.todos.doubleClickEdit')}
 										ondblclick={() => beginEdit(row)}
 									>
 										{row.title}
@@ -261,7 +261,7 @@
 						</button>
 					</li>
 				{:else}
-					<li class="text-muted-foreground px-3 py-6 text-center text-sm">{t('sparks.todos.noTodosYet')}</li>
+					<li class="text-muted-foreground px-3 py-6 text-center text-sm">{t('identities.todos.noTodosYet')}</li>
 				{/each}
 			</ul>
 		{/if}

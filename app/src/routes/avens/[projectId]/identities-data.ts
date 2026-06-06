@@ -1,8 +1,8 @@
 /**
- * Hardcoded "sparks" sub-grid for an aven (no peer-sync / ACL wiring yet).
+ * Hardcoded "identities" sub-grid for an aven (no peer-sync / ACL wiring yet).
  *
- * Conceptually each aven exposes the sparks it has access to (admin / owner /
- * any AC). For now we hardcode a single "H&H" spark; the existing aven views
+ * Conceptually each aven exposes the identities it has access to (admin / owner /
+ * any AC). For now we hardcode a single "H&H" identity; the existing aven views
  * (orders, banking, …) are scoped underneath it.
  */
 
@@ -16,7 +16,7 @@ export type AvenSparkMeta = {
 	subtitle: string
 }
 
-/** Sparks each aven has access to. Hardcoded for now. */
+/** Identities each aven has access to. Hardcoded for now. */
 const SPARKS_BY_AVEN: Record<string, AvenSparkMeta[]> = {
 	avenvictorio: [
 		{
@@ -32,7 +32,7 @@ export function sparksForAven(avenId: string): AvenSparkMeta[] {
 	return SPARKS_BY_AVEN[avenId.trim().toLowerCase()] ?? []
 }
 
-export function avenSparkById(avenId: string, sparkId: string): AvenSparkMeta | undefined {
-	const norm = sparkId.trim().toLowerCase()
+export function avenSparkById(avenId: string, identityId: string): AvenSparkMeta | undefined {
+	const norm = identityId.trim().toLowerCase()
 	return sparksForAven(avenId).find((s) => s.id.toLowerCase() === norm)
 }

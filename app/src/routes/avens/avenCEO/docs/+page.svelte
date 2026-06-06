@@ -2,13 +2,13 @@
 	import { contentIntroHref } from '$lib/docs/content-collection'
 	import { firstFounderSlug } from '$lib/docs/self-collection'
 	import { navigateApp } from '$lib/shell'
-	import { firstFounderSlug as sparksFirstSlug } from '$lib/docs/sparks-collection'
+	import { firstFounderSlug as sparksFirstSlug } from '$lib/docs/identities-collection'
 	import { firstDeveloperSlug as syncFirstSlug } from '$lib/docs/sync-collection'
 	import { firstActorDocSlug } from '$lib/docs/actors-collection'
 
 	const selfHref = firstFounderSlug ? `/docs/self/founders/${firstFounderSlug}` : '/docs'
 	const syncHref = syncFirstSlug ? `/docs/sync/developers/${syncFirstSlug}` : '/docs'
-	const sparksHref = sparksFirstSlug ? `/docs/sparks/founders/${sparksFirstSlug}` : '/docs'
+	const sparksHref = sparksFirstSlug ? `/docs/identities/founders/${sparksFirstSlug}` : '/docs'
 	const actorsHref = firstActorDocSlug
 		? `/docs/actors/developers/${firstActorDocSlug}`
 		: '/docs'
@@ -278,7 +278,7 @@
 						</svg>
 					</div>
 					<div>
-						<p class="text-sm font-semibold tracking-tight text-foreground">Sparks</p>
+						<p class="text-sm font-semibold tracking-tight text-foreground">Identities</p>
 						<p class="mt-0.5 text-xs leading-snug text-muted-foreground">
 							Workspaces, biscuit admins, and biscuit-gated sync for encrypted data.
 						</p>

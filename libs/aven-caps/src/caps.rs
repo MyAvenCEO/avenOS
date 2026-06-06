@@ -1,4 +1,4 @@
-//! Offline capability gates (biscuit) for spark-scoped IPC.
+//! Offline capability gates (biscuit) for identity-scoped IPC.
 
 use std::collections::HashSet;
 
@@ -12,9 +12,9 @@ use ed25519_dalek::SigningKey;
 use uuid::Uuid;
 
 #[derive(Clone)]
-pub struct BiscuitSpark {
+pub struct BiscuitIdentity {
 	#[allow(dead_code)]
-	pub spark_id: Uuid,
+	pub owner: Uuid,
 	pub biscuit: Biscuit,
 }
 
@@ -22,7 +22,7 @@ pub struct BiscuitVault {
 	pub biscuit_kp: KeyPair,
 	pub peer_did: String,
 	pub ed25519_public: [u8; 32],
-	pub sparks: std::collections::HashMap<Uuid, BiscuitSpark>,
+	pub identities: std::collections::HashMap<Uuid, BiscuitIdentity>,
 }
 
 #[derive(Clone, Copy)]
@@ -56,21 +56,21 @@ impl AccOp {
 	}
 }
 
-fn spark_urn_for(spark_id: Uuid) -> String {
-	format!("spark:{spark_id}")
+fn identity_urn_for(owner: Uuid) -> String {
+	format!("identity:{owner}")
 }
 
-/// Display name of the well-known network control spark.
-pub const AVEN_CEO_SPARK_NAME: &str = "avenCEO";
+/// Display name of the well-known network control identity.
+pub const AVEN_CEO_IDENTITY_NAME: &str = "avenCEO";
 
-/// Deterministic id of the well-known network control spark (**`avenCEO`**, the
-/// roster/membership spark), derived from the network seed. Every device in a
-/// network computes the **same** id, so the spark can be shown by default and
+/// Deterministic id of the well-known network control identity (**`avenCEO`**, the
+/// roster/membership identity), derived from the network seed. Every device in a
+/// network computes the **same** id, so the identity can be shown by default and
 /// **claimed** before anyone has synced: the first device to mint its genesis
 /// becomes the owner (claim-once). Per-network (the seed scopes it), so distinct
 /// networks don't collide on one id. Uses SHA-256 (the `uuid` crate's `v5` feature
 /// isn't enabled) — stable across builds for a given seed.
-pub fn aven_ceo_spark_id(network_seed: &str) -> Uuid {
+pub fn aven_ceo_identity(network_seed: &str) -> Uuid {
 	use sha2::{Digest, Sha256};
 	let mut h = Sha256::new();
 	h.update(b"avenos:avenCEO:v1:");
@@ -81,9 +81,9 @@ pub fn aven_ceo_spark_id(network_seed: &str) -> Uuid {
 	Uuid::from_bytes(bytes)
 }
 
-/// The rights a spark **owner** holds, minted into the genesis biscuit. THE single
-/// source of truth for the rights vocabulary: [`mint_genesis_spark`] grants exactly
-/// these, and [`spark_cap_report`] reports exactly these for an owner, so genesis
+/// The rights a identity **owner** holds, minted into the genesis biscuit. THE single
+/// source of truth for the rights vocabulary: [`mint_genesis_identity`] grants exactly
+/// these, and [`identity_cap_report`] reports exactly these for an owner, so genesis
 /// and the UI cap display can never drift.
 pub const OWNER_RIGHTS: &[&str] = &["read", "write", "delete", "admit", "rotate_dek"];
 
@@ -99,7 +99,7 @@ pub fn grant_kind_caps(grant: &str) -> Vec<&'static str> {
 	}
 }
 
-/// One subject's effective caps on a spark, derived purely from the biscuit chain.
+/// One subject's effective caps on a identity, derived purely from the biscuit chain.
 pub struct SubjectCaps {
 	pub did: String,
 	/// `owns` | `reads` | `replicate` | `member` (a subject with only granular grants)
@@ -107,14 +107,14 @@ pub struct SubjectCaps {
 	pub caps: Vec<String>,
 }
 
-/// THE single source of truth for "who holds what cap on this spark": read the
+/// THE single source of truth for "who holds what cap on this identity": read the
 /// biscuit chain (`owns`/`reads`/`replicate` + granular `grant(did,op,prefix)`)
 /// and report each subject's role + effective caps, MERGED per DID. Owner role
 /// takes precedence; granular ops (e.g. a member's row-scoped `write`) fold into
 /// that subject's cap set so they surface in the UI. Sorted by DID.
-pub fn spark_cap_report(chain: &Biscuit, spark_id: Uuid) -> Result<Vec<SubjectCaps>, String> {
+pub fn identity_cap_report(chain: &Biscuit, owner: Uuid) -> Result<Vec<SubjectCaps>, String> {
 	use std::collections::BTreeMap;
-	let owners = spark_admins(chain, spark_id)?;
+	let owners = identity_admins(chain, owner)?;
 	let owner_set: HashSet<String> = owners.iter().map(|d| d.trim().to_string()).collect();
 	// did → (role, ordered unique caps)
 	let mut acc: BTreeMap<String, (String, Vec<String>)> = BTreeMap::new();
@@ -135,20 +135,20 @@ pub fn spark_cap_report(chain: &Biscuit, spark_id: Uuid) -> Result<Vec<SubjectCa
 			add(&mut acc, did, "owns", c);
 		}
 	}
-	for did in spark_readers(chain, spark_id)? {
+	for did in identity_readers(chain, owner)? {
 		if owner_set.contains(did.trim()) {
 			continue;
 		}
 		add(&mut acc, &did, "reads", "read");
 	}
-	for did in spark_replicas(chain, spark_id)? {
+	for did in identity_replicas(chain, owner)? {
 		if owner_set.contains(did.trim()) {
 			continue;
 		}
 		add(&mut acc, &did, "replicate", "replicate");
 	}
 	// Granular grants (row/table-scoped) — fold the op into the subject's caps.
-	for (did, op, _prefix) in spark_grants(chain, spark_id)? {
+	for (did, op, _prefix) in identity_grants(chain, owner)? {
 		if owner_set.contains(did.trim()) {
 			continue;
 		}
@@ -169,7 +169,7 @@ pub fn encode_issuer_pubkey_b64(pubkey: &PublicKey) -> String {
 	URL_SAFE_NO_PAD.encode(pubkey.to_bytes())
 }
 
-/// Decode verifier root pubkey stored in [`sparks.issuer_pubkey_b64`].
+/// Decode verifier root pubkey stored in [`identities.issuer_pubkey_b64`].
 pub fn decode_issuer_pubkey_b64(b64: &str) -> Result<PublicKey, String> {
 	let trimmed = b64.trim();
 	if trimmed.is_empty() {
@@ -198,20 +198,20 @@ pub fn build_vault_from_signing_key(sk_ed: &SigningKey) -> Result<BiscuitVault, 
 		biscuit_kp,
 		peer_did,
 		ed25519_public: pk_arr,
-		sparks: std::collections::HashMap::new(),
+		identities: std::collections::HashMap::new(),
 	})
 }
 
-pub fn mint_genesis_spark(
+pub fn mint_genesis_identity(
 	vault: &BiscuitVault,
-	spark_id: Uuid,
+	owner: Uuid,
 ) -> Result<Biscuit, String> {
-	let spark_urn = spark_urn_for(spark_id);
-	let prefix_lit = format!("{spark_urn}:");
+	let identity_urn = identity_urn_for(owner);
+	let prefix_lit = format!("{identity_urn}:");
 	let own_f = format!(
 			"owns(\"{}\", \"{}\")",
 			vault.peer_did.replace('"', "\\\""),
-			spark_urn.replace('"', "\\\"")
+			identity_urn.replace('"', "\\\"")
 		);
 	let mut bb = Biscuit::builder().fact(own_f.as_str()).map_err(|e| format!("genesis-own-fact:{e}"))?;
 
@@ -229,23 +229,23 @@ pub fn mint_genesis_spark(
 		.map_err(|e| format!("genesis-build:{e}"))
 }
 
-/// Append a third-party biscuit block granting `new_peer_did` an [`owns`] fact on this Spark,
+/// Append a third-party biscuit block granting `new_peer_did` an [`owns`] fact on this Identity,
 /// signed by `delegating_kp` (typically the device's biscuit [`KeyPair`], i.e. same key that
 /// anchored the genesis or a prior delegated admin's key — see biscuit third-party semantics).
 pub fn attenuate_add_owner_third_party(
 	delegating_kp: &KeyPair,
 	chain: &Biscuit,
-	spark_id: Uuid,
+	owner: Uuid,
 	new_peer_did: &str,
 ) -> Result<Biscuit, String> {
 	let req = chain
 		.third_party_request()
 		.map_err(|e| format!("tp_request:{e:?}"))?;
-	let spark_str = spark_urn_for(spark_id);
+	let identity_str = identity_urn_for(owner);
 	let own_f = format!(
 		"owns(\"{}\", \"{}\")",
 		new_peer_did.replace('\\', "\\\\").replace('"', "\\\""),
-		spark_str.replace('\\', "\\\\").replace('"', "\\\"")
+		identity_str.replace('\\', "\\\\").replace('"', "\\\"")
 	);
 	let bb = BlockBuilder::new()
 		.fact(own_f.as_str())
@@ -259,20 +259,20 @@ pub fn attenuate_add_owner_third_party(
 }
 
 /// Append a third-party block granting `replica_did` a [`replicate`] right over
-/// this Spark's resource prefix, signed by `delegating_kp` (an admin's biscuit
+/// this Identity's resource prefix, signed by `delegating_kp` (an admin's biscuit
 /// key). Unlike [`attenuate_add_owner_third_party`] this grants **no `owns`** and
-/// implies **no keyshare** — the holder may store & forward the spark's encrypted
+/// implies **no keyshare** — the holder may store & forward the identity's encrypted
 /// batches (blind relay / backup) but is not a member and cannot decrypt.
 pub fn attenuate_add_replicate_third_party(
 	delegating_kp: &KeyPair,
 	chain: &Biscuit,
-	spark_id: Uuid,
+	owner: Uuid,
 	replica_did: &str,
 ) -> Result<Biscuit, String> {
 	let req = chain
 		.third_party_request()
 		.map_err(|e| format!("tp_request:{e:?}"))?;
-	let prefix = format!("{}:", spark_urn_for(spark_id));
+	let prefix = format!("{}:", identity_urn_for(owner));
 	let rep_f = format!(
 		"replicate(\"{}\", \"{}\")",
 		replica_did.replace('\\', "\\\\").replace('"', "\\\""),
@@ -290,22 +290,22 @@ pub fn attenuate_add_replicate_third_party(
 }
 
 /// Append a third-party block granting `reader_did` a [`reads`] right over this
-/// Spark's resource prefix, signed by `delegating_kp` (an admin's biscuit key).
+/// Identity's resource prefix, signed by `delegating_kp` (an admin's biscuit key).
 /// Grants **no `owns`** — the reader is a member who may decrypt (pair this with
 /// a keyshare) but is **not** an admin and cannot write. This is the
-/// "membership credential" an onboarded peer holds on `admin-spark`: it lets the
+/// "membership credential" an onboarded peer holds on `admin-identity`: it lets the
 /// peer read the roster and marks it admitted (the server enumerates readers via
-/// [`spark_readers`] to gate admission).
+/// [`identity_readers`] to gate admission).
 pub fn attenuate_add_reader_third_party(
 	delegating_kp: &KeyPair,
 	chain: &Biscuit,
-	spark_id: Uuid,
+	owner: Uuid,
 	reader_did: &str,
 ) -> Result<Biscuit, String> {
 	let req = chain
 		.third_party_request()
 		.map_err(|e| format!("tp_request:{e:?}"))?;
-	let prefix = format!("{}:", spark_urn_for(spark_id));
+	let prefix = format!("{}:", identity_urn_for(owner));
 	let read_f = format!(
 		"reads(\"{}\", \"{}\")",
 		reader_did.replace('\\', "\\\\").replace('"', "\\\""),
@@ -322,11 +322,11 @@ pub fn attenuate_add_reader_third_party(
 		.map_err(|e| format!("tp_read_append:{e:?}"))
 }
 
-/// All delegated-reader DIDs granted on a spark per the biscuit chain (members
+/// All delegated-reader DIDs granted on a identity per the biscuit chain (members
 /// who hold a `reads` grant but are not owners). The server reads this on
-/// `admin-spark` to build its admission allowlist.
-pub fn spark_readers(chain: &Biscuit, spark_id: Uuid) -> Result<HashSet<String>, String> {
-	let prefix = format!("{}:", spark_urn_for(spark_id));
+/// `admin-identity` to build its admission allowlist.
+pub fn identity_readers(chain: &Biscuit, owner: Uuid) -> Result<HashSet<String>, String> {
+	let prefix = format!("{}:", identity_urn_for(owner));
 	let mut authorizer = chain.authorizer().map_err(|e| format!("b-authorizer:{e}"))?;
 	let rule = format!(
 		r#"readers($p) <- reads($p, "{prefix}")"#,
@@ -338,9 +338,9 @@ pub fn spark_readers(chain: &Biscuit, spark_id: Uuid) -> Result<HashSet<String>,
 	Ok(rows.into_iter().map(|x| x.0).collect())
 }
 
-/// All replication-peer DIDs granted on a spark per the biscuit chain.
-pub fn spark_replicas(chain: &Biscuit, spark_id: Uuid) -> Result<HashSet<String>, String> {
-	let prefix = format!("{}:", spark_urn_for(spark_id));
+/// All replication-peer DIDs granted on a identity per the biscuit chain.
+pub fn identity_replicas(chain: &Biscuit, owner: Uuid) -> Result<HashSet<String>, String> {
+	let prefix = format!("{}:", identity_urn_for(owner));
 	let mut authorizer = chain.authorizer().map_err(|e| format!("b-authorizer:{e}"))?;
 	let rule = format!(
 		r#"replicas($p) <- replicate($p, "{prefix}")"#,
@@ -352,25 +352,25 @@ pub fn spark_replicas(chain: &Biscuit, spark_id: Uuid) -> Result<HashSet<String>
 	Ok(rows.into_iter().map(|x| x.0).collect())
 }
 
-/// Re-mint a spark biscuit granting every current admin EXCEPT `exclude_did`
+/// Re-mint a identity biscuit granting every current admin EXCEPT `exclude_did`
 /// (v2 revoke). Genesis re-grants the owner (`vault.peer_did`); every other
 /// remaining admin is re-appended. The excluded DID is simply not re-granted, so
 /// the new chain's `owns` set no longer contains it → `authorize` denies it.
 /// Pair with DEK rotation so the revoked peer also cannot decrypt new data.
 ///
-/// NOTE: must be called by the genesis owner — `mint_genesis_spark` re-roots the
+/// NOTE: must be called by the genesis owner — `mint_genesis_identity` re-roots the
 /// chain to `vault.biscuit_kp`, so a delegated (non-owner) admin cannot rebuild.
-pub fn rebuild_spark_biscuit_excluding(
+pub fn rebuild_identity_biscuit_excluding(
 	vault: &BiscuitVault,
-	spark_id: Uuid,
+	owner: Uuid,
 	exclude_did: &str,
 ) -> Result<Biscuit, String> {
 	let chain = vault
-		.sparks
-		.get(&spark_id)
-		.ok_or_else(|| format!("unknown_spark:{spark_id}"))?;
-	let admins = spark_admins(&chain.biscuit, spark_id)?;
-	let mut biscuit = mint_genesis_spark(vault, spark_id)?;
+		.identities
+		.get(&owner)
+		.ok_or_else(|| format!("unknown_identity:{owner}"))?;
+	let admins = identity_admins(&chain.biscuit, owner)?;
+	let mut biscuit = mint_genesis_identity(vault, owner)?;
 	// Genesis already grants the owner; re-append every other admin except the
 	// revoked one. Sort for deterministic order (HashSet iteration is unstable).
 	let mut remaining: Vec<String> = admins
@@ -379,15 +379,15 @@ pub fn rebuild_spark_biscuit_excluding(
 		.collect();
 	remaining.sort();
 	for did in remaining {
-		biscuit = attenuate_add_owner_third_party(&vault.biscuit_kp, &biscuit, spark_id, &did)?;
+		biscuit = attenuate_add_owner_third_party(&vault.biscuit_kp, &biscuit, owner, &did)?;
 	}
 	Ok(biscuit)
 }
 
-/// Ingest a spark biscuit after optional DEK unwrap (hydrate / migration paths).
+/// Ingest a identity biscuit after optional DEK unwrap (hydrate / migration paths).
 pub fn ingest_genesis_opened(
 	vault: &mut BiscuitVault,
-	spark_id: Uuid,
+	owner: Uuid,
 	genesis_b64: &str,
 	issuer_pubkey_b64: Option<&str>,
 	local_fallback_issuer_pk: PublicKey,
@@ -397,10 +397,10 @@ pub fn ingest_genesis_opened(
 		_ => local_fallback_issuer_pk,
 	};
 	let biscuit = biscuit_from_storage(genesis_b64, issuer_pk)?;
-	vault.sparks.insert(
-		spark_id,
-		BiscuitSpark {
-			spark_id,
+	vault.identities.insert(
+		owner,
+		BiscuitIdentity {
+			owner,
 			biscuit,
 		},
 	);
@@ -411,16 +411,16 @@ fn peer_did_matches(a: &str, b: &str) -> bool {
 	a.trim() == b.trim()
 }
 
-pub fn spark_peer_is_owner(chain: &Biscuit, spark_id: Uuid, peer_did: &str) -> Result<bool, String> {
-	let spark_str = spark_urn_for(spark_id);
-	let admins = trusted_subject_dids(chain, &spark_str)?;
+pub fn identity_peer_is_owner(chain: &Biscuit, owner: Uuid, peer_did: &str) -> Result<bool, String> {
+	let identity_str = identity_urn_for(owner);
+	let admins = trusted_subject_dids(chain, &identity_str)?;
 	Ok(admins.iter().any(|a| peer_did_matches(a, peer_did)))
 }
 
-/// All admin (`owns`) DIDs for a spark per the biscuit chain.
-pub fn spark_admins(chain: &Biscuit, spark_id: Uuid) -> Result<std::collections::HashSet<String>, String> {
-	let spark_str = spark_urn_for(spark_id);
-	trusted_subject_dids(chain, &spark_str)
+/// All admin (`owns`) DIDs for a identity per the biscuit chain.
+pub fn identity_admins(chain: &Biscuit, owner: Uuid) -> Result<std::collections::HashSet<String>, String> {
+	let identity_str = identity_urn_for(owner);
+	trusted_subject_dids(chain, &identity_str)
 }
 
 pub fn biscuit_from_storage(genesis_b64: &str, root: PublicKey) -> Result<Biscuit, String> {
@@ -432,10 +432,10 @@ pub fn biscuit_from_storage(genesis_b64: &str, root: PublicKey) -> Result<Biscui
 	Biscuit::from(raw.as_slice(), root).map_err(|e| format!("biscuit-from:{e:?}"))
 }
 
-fn trusted_subject_dids(b: &Biscuit, spark_urn: &str) -> Result<HashSet<String>, String> {
+fn trusted_subject_dids(b: &Biscuit, identity_urn: &str) -> Result<HashSet<String>, String> {
 	let mut authorizer =
 		b.authorizer().map_err(|e| format!("b-authorizer:{e}"))?;
-	let rule = format!(r#"peers($p) <- owns($p, "{spark}")"#, spark = spark_urn);
+	let rule = format!(r#"peers($p) <- owns($p, "{identity}")"#, identity = identity_urn);
 	let admins: Vec<(String,)> = authorizer
 		.query_all(rule.as_str())
 		.map_err(|e| format!("b-query-own:{e}"))?;
@@ -444,20 +444,20 @@ fn trusted_subject_dids(b: &Biscuit, spark_urn: &str) -> Result<HashSet<String>,
 
 pub fn authorize(
 	vault: &BiscuitVault,
-	spark_id: Uuid,
+	owner: Uuid,
 	op: AccOp,
 	table: &str,
 	row_id: Option<Uuid>,
 	subject_did: &str,
 ) -> Result<(), String> {
 	let chain = vault
-		.sparks
-		.get(&spark_id)
-		.ok_or_else(|| format!("unknown_spark:{spark_id}"))?;
-	let spark_str = spark_urn_for(spark_id);
+		.identities
+		.get(&owner)
+		.ok_or_else(|| format!("unknown_identity:{owner}"))?;
+	let identity_str = identity_urn_for(owner);
 	let resource = match row_id {
-		None => format!("{spark_str}:{table}"),
-		Some(r) => format!("{spark_str}:{table}:{r}"),
+		None => format!("{identity_str}:{table}"),
+		Some(r) => format!("{identity_str}:{table}:{r}"),
 	};
 
 	// Replication peers (server avens) are authorized by an explicit `replicate`
@@ -468,13 +468,13 @@ pub fn authorize(
 		return authorize_replicate(&chain.biscuit, &resource, subject_did);
 	}
 
-	let admins = trusted_subject_dids(&chain.biscuit, &spark_str)?;
+	let admins = trusted_subject_dids(&chain.biscuit, &identity_str)?;
 	if !admins.iter().any(|a| peer_did_matches(a, subject_did)) {
 		// Non-owner subject: the only thing it may hold is a *delegated* right
 		// (admin-signed third-party block), not membership. A delegated `reads`
 		// grant authorizes Read without `owns` — the same generalization
 		// `authorize_replicate` makes for `replicate`. Any other op stays
-		// owner-only. This is what lets an onboarded member read `admin-spark`
+		// owner-only. This is what lets an onboarded member read `admin-identity`
 		// (the roster) without being an admin of it.
 		// General granular grant: a subject-scoped `grant(did, op, prefix)` fact
 		// authorizes ANY op on resources under `prefix` (e.g. a member's row-scoped
@@ -486,7 +486,7 @@ pub fn authorize(
 		if matches!(op, AccOp::Read) {
 			return authorize_read_delegated(&chain.biscuit, &resource, subject_did);
 		}
-		return Err("spark_acc:subject_not_owner".into());
+		return Err("identity_acc:subject_not_owner".into());
 	}
 
 	let trusted_body = admins
@@ -552,7 +552,7 @@ fn authorize_replicate(chain: &Biscuit, resource: &str, subject_did: &str) -> Re
 	if allowed {
 		Ok(())
 	} else {
-		Err("spark_acc:replicate_not_granted".into())
+		Err("identity_acc:replicate_not_granted".into())
 	}
 }
 
@@ -574,16 +574,16 @@ fn authorize_read_delegated(chain: &Biscuit, resource: &str, subject_did: &str) 
 	if allowed {
 		Ok(())
 	} else {
-		Err("spark_acc:read_not_granted".into())
+		Err("identity_acc:read_not_granted".into())
 	}
 }
 
 /// Append a third-party block granting `did` a **granular** right: it may perform
 /// `op` on any resource under `prefix` (e.g. `op="write"`,
-/// `prefix="spark:S:peers:ROWID"` = write only that one row). Signed by an admin
+/// `prefix="identity:S:peers:ROWID"` = write only that one row). Signed by an admin
 /// key. This is the unified delegated-right primitive — `owns`/`reads`/`replicate`
 /// are the coarse special cases; this expresses any op at any resource scope
-/// (per-spark, per-table, or per-row via the prefix).
+/// (per-identity, per-table, or per-row via the prefix).
 pub fn attenuate_add_grant_third_party(
 	delegating_kp: &KeyPair,
 	chain: &Biscuit,
@@ -621,22 +621,22 @@ fn authorize_granted_op(chain: &Biscuit, op: &str, resource: &str, subject_did: 
 	if allowed {
 		Ok(())
 	} else {
-		Err(format!("spark_acc:op_not_granted:{op}"))
+		Err(format!("identity_acc:op_not_granted:{op}"))
 	}
 }
 
-/// All granular grants on a spark per the biscuit chain — `(did, op, prefix)` for
-/// every `grant(...)` whose prefix is under this spark. Feeds the per-subject cap
+/// All granular grants on a identity per the biscuit chain — `(did, op, prefix)` for
+/// every `grant(...)` whose prefix is under this identity. Feeds the per-subject cap
 /// report (so row-scoped/table-scoped grants surface in the UI).
-pub fn spark_grants(chain: &Biscuit, spark_id: Uuid) -> Result<Vec<(String, String, String)>, String> {
-	let spark_prefix = spark_urn_for(spark_id);
+pub fn identity_grants(chain: &Biscuit, owner: Uuid) -> Result<Vec<(String, String, String)>, String> {
+	let identity_prefix = identity_urn_for(owner);
 	let mut authorizer = chain.authorizer().map_err(|e| format!("b-authorizer:{e}"))?;
 	let rows: Vec<(String, String, String)> = authorizer
 		.query_all("granted($p, $op, $pre) <- grant($p, $op, $pre)")
 		.map_err(|e| format!("b-query-grant:{e}"))?;
 	Ok(rows
 		.into_iter()
-		.filter(|(_, _, pre)| pre.starts_with(&spark_prefix))
+		.filter(|(_, _, pre)| pre.starts_with(&identity_prefix))
 		.collect())
 }
 
@@ -667,11 +667,11 @@ mod tests {
 		let root = [9u8; 32];
 		let mut v = vault(&root);
 		let sid = uuid::Uuid::new_v4();
-		let biscuit = mint_genesis_spark(&v, sid).unwrap();
-		v.sparks.insert(
+		let biscuit = mint_genesis_identity(&v, sid).unwrap();
+		v.identities.insert(
 			sid,
-			BiscuitSpark {
-				spark_id: sid,
+			BiscuitIdentity {
+				owner: sid,
 				biscuit,
 			},
 		);
@@ -692,11 +692,11 @@ mod tests {
 		let root = [9u8; 32];
 		let mut v = vault(&root);
 		let sid = uuid::Uuid::new_v4();
-		let biscuit = mint_genesis_spark(&v, sid).unwrap();
-		v.sparks.insert(
+		let biscuit = mint_genesis_identity(&v, sid).unwrap();
+		v.identities.insert(
 			sid,
-			BiscuitSpark {
-				spark_id: sid,
+			BiscuitIdentity {
+				owner: sid,
 				biscuit,
 			},
 		);
@@ -712,7 +712,7 @@ mod tests {
 		let bob = vault(&root_bob);
 
 		let sid = uuid::Uuid::new_v4();
-		let genesis = mint_genesis_spark(&alice, sid).unwrap();
+		let genesis = mint_genesis_identity(&alice, sid).unwrap();
 		let issuer_pk = alice.biscuit_kp.public();
 
 		let chain = attenuate_add_owner_third_party(
@@ -723,10 +723,10 @@ mod tests {
 		)
 		.unwrap();
 
-		alice.sparks.insert(
+		alice.identities.insert(
 			sid,
-			BiscuitSpark {
-				spark_id: sid,
+			BiscuitIdentity {
+				owner: sid,
 				biscuit: chain.clone(),
 			},
 		);
@@ -734,12 +734,12 @@ mod tests {
 			biscuit_kp: bob.biscuit_kp,
 			peer_did: bob.peer_did.clone(),
 			ed25519_public: bob.ed25519_public,
-			sparks: std::collections::HashMap::new(),
+			identities: std::collections::HashMap::new(),
 		};
-		bob_vault.sparks.insert(
+		bob_vault.identities.insert(
 			sid,
-			BiscuitSpark {
-				spark_id: sid,
+			BiscuitIdentity {
+				owner: sid,
 				biscuit: chain,
 			},
 		);
@@ -761,7 +761,7 @@ mod tests {
 		let sid = uuid::Uuid::new_v4();
 		let rid = uuid::Uuid::new_v4();
 
-		let genesis = mint_genesis_spark(&alice, sid).unwrap();
+		let genesis = mint_genesis_identity(&alice, sid).unwrap();
 		let chain = attenuate_add_replicate_third_party(
 			&alice.biscuit_kp,
 			&genesis,
@@ -770,9 +770,9 @@ mod tests {
 		)
 		.unwrap();
 		let mut v = alice;
-		v.sparks.insert(sid, BiscuitSpark { spark_id: sid, biscuit: chain });
+		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
 
-		// The replica IS authorized to store-and-forward (Replicate) the spark's rows…
+		// The replica IS authorized to store-and-forward (Replicate) the identity's rows…
 		authorize(&v, sid, AccOp::Replicate, "todos", Some(rid), &server.peer_did).unwrap();
 		// …but is NOT a member: it can neither read nor write (no decryption / no edits).
 		assert!(authorize(&v, sid, AccOp::Write, "todos", Some(rid), &server.peer_did).is_err());
@@ -796,15 +796,15 @@ mod tests {
 		let sid = uuid::Uuid::new_v4();
 		let rid = uuid::Uuid::new_v4();
 
-		let genesis = mint_genesis_spark(&alice, sid).unwrap();
+		let genesis = mint_genesis_identity(&alice, sid).unwrap();
 		let chain =
 			attenuate_add_reader_third_party(&alice.biscuit_kp, &genesis, sid, reader.peer_did.as_str())
 				.unwrap();
 		let mut v = alice;
-		v.sparks.insert(sid, BiscuitSpark { spark_id: sid, biscuit: chain });
+		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
 
 		// Enumerated as a reader.
-		let readers = spark_readers(&v.sparks.get(&sid).unwrap().biscuit, sid).unwrap();
+		let readers = identity_readers(&v.identities.get(&sid).unwrap().biscuit, sid).unwrap();
 		assert!(readers.iter().any(|d| peer_did_matches(d, &reader.peer_did)), "reader listed");
 
 		// The reader IS authorized to Read…
@@ -821,10 +821,10 @@ mod tests {
 	}
 
 	#[test]
-	fn aven_ceo_spark_id_is_deterministic_per_seed() {
-		let a = aven_ceo_spark_id("ceo.aven/testnet/abagana");
-		let b = aven_ceo_spark_id("ceo.aven/testnet/abagana");
-		let c = aven_ceo_spark_id("ceo.aven/mainnet/other");
+	fn aven_ceo_identity_is_deterministic_per_seed() {
+		let a = aven_ceo_identity("ceo.aven/testnet/abagana");
+		let b = aven_ceo_identity("ceo.aven/testnet/abagana");
+		let c = aven_ceo_identity("ceo.aven/mainnet/other");
 		assert_eq!(a, b, "same seed → same avenCEO id (every device agrees)");
 		assert_ne!(a, c, "different network seed → different avenCEO id (no cross-network collision)");
 		assert_ne!(a, Uuid::nil());
@@ -839,8 +839,8 @@ mod tests {
 		let own_row = uuid::Uuid::from_u128(0x1111_2222);
 		let other_row = uuid::Uuid::from_u128(0x3333_4444);
 
-		let genesis = mint_genesis_spark(&owner, sid).unwrap();
-		let prefix = format!("spark:{sid}:peers:{own_row}");
+		let genesis = mint_genesis_identity(&owner, sid).unwrap();
+		let prefix = format!("identity:{sid}:peers:{own_row}");
 		let chain = attenuate_add_grant_third_party(
 			&owner.biscuit_kp,
 			&genesis,
@@ -850,7 +850,7 @@ mod tests {
 		)
 		.unwrap();
 		let mut v = owner;
-		v.sparks.insert(sid, BiscuitSpark { spark_id: sid, biscuit: chain });
+		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
 
 		// Member may write its OWN row…
 		authorize(&v, sid, AccOp::Write, "peers", Some(own_row), &member.peer_did).unwrap();
@@ -862,8 +862,8 @@ mod tests {
 		// Owner keeps full access (the granular grant doesn't shadow ownership).
 		authorize(&v, sid, AccOp::Write, "peers", Some(other_row), &v.peer_did.clone()).unwrap();
 
-		// Enumerated by spark_grants for the cap report.
-		let grants = spark_grants(&v.sparks.get(&sid).unwrap().biscuit, sid).unwrap();
+		// Enumerated by identity_grants for the cap report.
+		let grants = identity_grants(&v.identities.get(&sid).unwrap().biscuit, sid).unwrap();
 		assert!(grants
 			.iter()
 			.any(|(d, o, p)| peer_did_matches(d, &member.peer_did) && o == "write" && p == &prefix));
@@ -876,11 +876,11 @@ mod tests {
 		let replica = vault(&[7u8; 32]);
 		let sid = uuid::Uuid::new_v4();
 
-		let mut chain = mint_genesis_spark(&owner, sid).unwrap();
+		let mut chain = mint_genesis_identity(&owner, sid).unwrap();
 		chain = attenuate_add_reader_third_party(&owner.biscuit_kp, &chain, sid, &reader.peer_did).unwrap();
 		chain = attenuate_add_replicate_third_party(&owner.biscuit_kp, &chain, sid, &replica.peer_did).unwrap();
 
-		let report = spark_cap_report(&chain, sid).unwrap();
+		let report = identity_cap_report(&chain, sid).unwrap();
 		// Single source: owner caps == OWNER_RIGHTS, reader == [read], replica == [replicate].
 		let owner_rights: Vec<String> = OWNER_RIGHTS.iter().map(|s| s.to_string()).collect();
 		let o = report.iter().find(|s| peer_did_matches(&s.did, &owner.peer_did)).unwrap();
@@ -902,13 +902,13 @@ mod tests {
 		let carol = vault(&[3u8; 32]);
 		let sid = uuid::Uuid::new_v4();
 
-		let mut chain = mint_genesis_spark(&alice, sid).unwrap();
+		let mut chain = mint_genesis_identity(&alice, sid).unwrap();
 		chain = attenuate_add_owner_third_party(&alice.biscuit_kp, &chain, sid, &bob.peer_did).unwrap();
 		chain =
 			attenuate_add_owner_third_party(&alice.biscuit_kp, &chain, sid, &carol.peer_did).unwrap();
 
 		let mut v = alice;
-		v.sparks.insert(sid, BiscuitSpark { spark_id: sid, biscuit: chain });
+		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
 
 		// Sanity: all three authorized before revoke.
 		authorize(&v, sid, AccOp::Write, "todos", None, &v.peer_did.clone()).unwrap();
@@ -916,14 +916,14 @@ mod tests {
 		authorize(&v, sid, AccOp::Write, "todos", None, &carol.peer_did).unwrap();
 
 		// Revoke Bob: re-mint excluding Bob.
-		let rebuilt = rebuild_spark_biscuit_excluding(&v, sid, &bob.peer_did).unwrap();
-		let admins = spark_admins(&rebuilt, sid).unwrap();
+		let rebuilt = rebuild_identity_biscuit_excluding(&v, sid, &bob.peer_did).unwrap();
+		let admins = identity_admins(&rebuilt, sid).unwrap();
 		assert!(admins.iter().any(|d| peer_did_matches(d, &v.peer_did)), "owner kept");
 		assert!(admins.iter().any(|d| peer_did_matches(d, &carol.peer_did)), "carol kept");
 		assert!(!admins.iter().any(|d| peer_did_matches(d, &bob.peer_did)), "bob removed");
 
 		// Authorize against the rebuilt chain: owner + carol allowed, bob denied.
-		v.sparks.insert(sid, BiscuitSpark { spark_id: sid, biscuit: rebuilt });
+		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: rebuilt });
 		authorize(&v, sid, AccOp::Write, "todos", None, &v.peer_did.clone()).unwrap();
 		authorize(&v, sid, AccOp::Write, "todos", None, &carol.peer_did).unwrap();
 		assert!(

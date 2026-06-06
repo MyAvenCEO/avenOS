@@ -7,7 +7,7 @@
 </script>
 
 <svelte:head>
-	<title>{data.doc.title} — Sparks · AvenOS</title>
+	<title>{data.doc.title} — Identities · AvenOS</title>
 </svelte:head>
 
 <article

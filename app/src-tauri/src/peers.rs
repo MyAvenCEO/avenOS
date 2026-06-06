@@ -1,5 +1,5 @@
 //! Trusted-peer list (`peers` Groove table, `kind=remote`). A flat set of device
-//! DIDs I'm P2P-connected with — the trust set + spark-grant allowlist. Local-only
+//! DIDs I'm P2P-connected with — the trust set + identity-grant allowlist. Local-only
 //! via `nosync` metadata; no `humans` coupling.
 
 use groove::query_manager::types::Value;
@@ -47,15 +47,15 @@ fn value_as_text(v: &Value) -> Option<&str> {
 	}
 }
 
-/// The device's default spark id (lowest `spark_id`, matching `hydrate_shell`'s
-/// `default_spark` selection). `peers` is now a spark-scoped table (caps-only
-/// sync): trust-set rows live in the device's own default spark, so they sync
+/// The device's default identity id (lowest `owner`, matching `hydrate_shell`'s
+/// `default_identity` selection). `peers` is now a identity-scoped table (caps-only
+/// sync): trust-set rows live in the device's own default identity, so they sync
 /// across the user's own devices but stay invisible to a paired peer who doesn't
-/// hold that spark. Returns `None` before any spark exists (pre-bootstrap).
+/// hold that identity. Returns `None` before any identity exists (pre-bootstrap).
 pub async fn default_spark_id(client: &JazzClient) -> Result<Option<uuid::Uuid>, String> {
-	let rows = jazz_engine::exec_list_rows(client, "sparks").await?;
-	let schema = jazz_engine::resolved_table_schema(client, "sparks").await?;
-	let spark_ix = jazz_engine::col_ix(&schema, "spark_id")?;
+	let rows = jazz_engine::exec_list_rows(client, "identities").await?;
+	let schema = jazz_engine::resolved_table_schema(client, "identities").await?;
+	let spark_ix = jazz_engine::col_ix(&schema, "owner")?;
 	let mut ids: Vec<uuid::Uuid> = Vec::new();
 	for (_oid, vals) in rows {
 		if let Ok(sid) = jazz_engine::uuid_cell_at(vals.as_slice(), spark_ix) {
@@ -170,10 +170,10 @@ pub async fn add_remote_peer(
 		if l.is_empty() { "Peer" } else { l }.to_string()
 	};
 	let mut values: Map<String, JsonValue> = Map::new();
-	// Scope the trust-set row to the device's default spark so it syncs across the
-	// user's own devices (caps-only). If no spark exists yet it stays null = local.
+	// Scope the trust-set row to the device's default identity so it syncs across the
+	// user's own devices (caps-only). If no identity exists yet it stays null = local.
 	if let Some(sid) = default_spark_id(client).await? {
-		values.insert("spark_id".into(), JsonValue::String(sid.to_string()));
+		values.insert("owner".into(), JsonValue::String(sid.to_string()));
 	}
 	values.insert("peer_did".into(), JsonValue::String(peer_did.to_string()));
 	values.insert("device_label".into(), JsonValue::String(label));

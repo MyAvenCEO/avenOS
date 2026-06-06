@@ -13,16 +13,16 @@
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/settings/device-session-store'
 
-	// Spark-scoped DB viewer: the global explorer, narrowed to THIS spark's rows.
-	// Because every row provably belongs to exactly one spark (the signed owner
-	// binding, gate-enforced), "show only this spark's data" is trustworthy — you
+	// Identity-scoped DB viewer: the global explorer, narrowed to THIS identity's rows.
+	// Because every row provably belongs to exactly one identity (the signed owner
+	// binding, gate-enforced), "show only this identity's data" is trustworthy — you
 	// cannot see rows you don't hold a read cap for anyway.
-	const sparkParam = $derived(String((page.params as { sparkId?: string }).sparkId ?? ''))
-	const decodedSparkId = $derived(decodeURIComponent(sparkParam))
+	const identityParam = $derived(String((page.params as { identityId?: string }).identityId ?? ''))
+	const decodedIdentityId = $derived(decodeURIComponent(identityParam))
 
-	// Tables that carry an owning-spark column (manifest-aligned). Device-local,
-	// non-spark tables (e.g. `humans`) never appear in a spark's data view.
-	const SPARK_SCOPED_TABLES = ['sparks', 'messages', 'todos', 'files', 'peers', 'keyshares']
+	// Tables that carry an owning-identity column (manifest-aligned). Device-local,
+	// non-identity tables (e.g. `humans`) never appear in a identity's data view.
+	const SPARK_SCOPED_TABLES = ['identities', 'messages', 'todos', 'files', 'peers', 'keyshares']
 
 	let tables = $state<string[]>([])
 	let selectedTable = $state<string | null>(null)
@@ -40,9 +40,9 @@
 		return typeof a === 'string' && a.trim().toLowerCase() === b.trim().toLowerCase()
 	}
 
-	// Only this spark's rows. The `sparks` table matches on its own identity; every
-	// other table matches on its owning-spark column (both are named `spark_id`).
-	const explorerRows = $derived(allRows.filter((r) => idsMatch(r.spark_id, decodedSparkId)))
+	// Only this identity's rows. The `identities` table matches on its own identity; every
+	// other table matches on its owning-identity column (both are named `owner`).
+	const explorerRows = $derived(allRows.filter((r) => idsMatch(r.owner, decodedIdentityId)))
 
 	function buildColumns(rows: Record<string, unknown>[]): string[] {
 		const s = new Set<string>()

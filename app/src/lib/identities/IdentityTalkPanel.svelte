@@ -7,7 +7,7 @@
 	import { persistSparkFiles } from '$lib/jazz/intent-files'
 	import { jazzShell } from '$lib/runtime/jazz-shell'
 	import { jazzStore } from '$lib/jazz/store.svelte'
-	import SparkMessageAttachments from '$lib/sparks/SparkMessageAttachments.svelte'
+	import IdentityMessageAttachments from '$lib/identities/IdentityMessageAttachments.svelte'
 	import { pairingLabelForSession } from '$lib/settings/active-vault-ui'
 	import { peerDisplayLabel } from '$lib/peer/display-label'
 	import { peerRows } from '$lib/peer/peer-mesh-store'
@@ -25,11 +25,11 @@
 	} from '$lib/shell/mobile-chrome.svelte'
 
 	type Props = {
-		sparkId: string
+		identityId: string
 		sparkName?: string
 	}
 
-	let { sparkId, sparkName }: Props = $props()
+	let { identityId, sparkName }: Props = $props()
 
 	const session = $derived($jazzShell.session)
 	let err = $state<string | undefined>()
@@ -38,7 +38,7 @@
 	let localPairingLabel = $state<string | undefined>(undefined)
 	let scrollEl = $state<HTMLDivElement | undefined>(undefined)
 
-	const sparksStore = jazzStore('sparks')
+	const identitiesStore = jazzStore('identities')
 	const messages = jazzStore('messages')
 	const filesStore = jazzStore('files')
 
@@ -60,20 +60,20 @@
 		return na !== '' && na === nb
 	}
 
-	const sparkMeta = $derived(sparksStore.rows.find((s) => idsMatch(s.spark_id, sparkId)))
-	const canonicalSparkId = $derived(sparkMeta?.spark_id ?? sparkId)
-	const displayName = $derived(sparkName?.trim() || sparkMeta?.name || t('sparks.sparkLabel'))
+	const identityMeta = $derived(identitiesStore.rows.find((s) => idsMatch(s.owner, identityId)))
+	const canonicalSparkId = $derived(identityMeta?.owner ?? identityId)
+	const displayName = $derived(sparkName?.trim() || identityMeta?.name || t('identities.sparkLabel'))
 
 	const thread = $derived(
 		[...messages.rows]
-			.filter((m) => idsMatch(m.spark_id, canonicalSparkId))
+			.filter((m) => idsMatch(m.owner, canonicalSparkId))
 			.sort((a, b) => coerceEpochMs(a.created_at_ms) - coerceEpochMs(b.created_at_ms)),
 	)
 
 	const filesByMessageId = $derived.by(() => {
 		const map = new Map<string, JazzRow[]>()
 		for (const row of filesStore.rows) {
-			if (!idsMatch(row.spark_id, canonicalSparkId)) continue
+			if (!idsMatch(row.owner, canonicalSparkId)) continue
 			const parentId = row.intent_id?.trim()
 			if (!parentId) continue
 			const list = map.get(parentId) ?? []
@@ -122,7 +122,7 @@
 		return local !== '' && author !== '' && author === local
 	}
 
-	const storeError = $derived(sparksStore.error ?? messages.error)
+	const storeError = $derived(identitiesStore.error ?? messages.error)
 
 	$effect(() => {
 		if (storeError) err = storeError
@@ -171,14 +171,14 @@
 		err = undefined
 		try {
 			const row = await messages.create({
-				spark_id: canonicalSparkId,
+				owner: canonicalSparkId,
 				created_at_ms: Date.now(),
 				author_did: did,
 				body,
 			})
 			if (files.length > 0) {
 				const { stored, errors } = await persistSparkFiles(row.id, files, {
-					sparkId: canonicalSparkId,
+					identityId: canonicalSparkId,
 				})
 				if (errors.length > 0) {
 					const suffix =
@@ -198,18 +198,18 @@
 
 <div class="flex min-h-0 flex-1 flex-col">
 	<header class="shrink-0 space-y-1 pb-3 sm:pb-0 sm:space-y-1">
-		<h1 class="text-xl font-semibold tracking-tight">{t('sparks.talk.title')}</h1>
+		<h1 class="text-xl font-semibold tracking-tight">{t('identities.talk.title')}</h1>
 		<p class="text-muted-foreground hidden text-sm leading-relaxed sm:block">
-			{t('sparks.talk.subtitle', { name: displayName })}
+			{t('identities.talk.subtitle', { name: displayName })}
 		</p>
 	</header>
 
 	{#if !tauri}
-		<p class="text-muted-foreground text-sm">{t('sparks.needsDesktop')}</p>
+		<p class="text-muted-foreground text-sm">{t('identities.needsDesktop')}</p>
 	{:else if !unlocked}
-		<p class="text-muted-foreground text-sm">{t('sparks.talk.unlockToSend')}</p>
+		<p class="text-muted-foreground text-sm">{t('identities.talk.unlockToSend')}</p>
 	{:else if !canonicalSparkId}
-		<p class="text-muted-foreground text-sm">{t('sparks.talk.missingSparkId')}</p>
+		<p class="text-muted-foreground text-sm">{t('identities.talk.missingSparkId')}</p>
 	{:else}
 		<div class="relative flex min-h-0 flex-1 flex-col">
 			{#if err}
@@ -225,13 +225,13 @@
 				bind:this={scrollEl}
 				class="border-border/60 bg-card/20 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-xl border px-3 py-3 pb-24 sm:mb-2 sm:pb-3 md:pb-3"
 				role="log"
-				aria-label={t('sparks.talk.messagesLog')}
+				aria-label={t('identities.talk.messagesLog')}
 			>
 				{#if !messages.loaded && !err}
 					<p class="text-muted-foreground py-8 text-center text-sm">{t('common.loadingMessages')}</p>
 				{:else if thread.length === 0}
 					<p class="text-muted-foreground py-8 text-center text-sm leading-relaxed">
-						{t('sparks.talk.noMessagesYet')}
+						{t('identities.talk.noMessagesYet')}
 					</p>
 				{:else}
 					{#each thread as msg (msg.id)}
@@ -239,7 +239,7 @@
 						{@const attachments = filesByMessageId.get(msg.id) ?? []}
 						<article
 							class="flex flex-col gap-0.5 {own ? 'items-end' : 'items-start'}"
-							aria-label={t('sparks.talk.authorAtTime', {
+							aria-label={t('identities.talk.authorAtTime', {
 								author: authorLabel(msg.author_did),
 								time: formatTime(msg.created_at_ms),
 							})}
@@ -267,7 +267,7 @@
 									</p>
 								{/if}
 								{#if attachments.length > 0}
-									<SparkMessageAttachments files={attachments} inverted={own} />
+									<IdentityMessageAttachments files={attachments} inverted={own} />
 								{/if}
 							</div>
 						</article>
@@ -283,7 +283,7 @@
 				>
 					<div class="pointer-events-auto w-full min-w-0">
 					<IntentComposer
-						placeholder={t('sparks.talk.messagePlaceholder')}
+						placeholder={t('identities.talk.messagePlaceholder')}
 						disabled={composerDisabled}
 						submitBusy={sendBusy}
 						enableAttachments={true}

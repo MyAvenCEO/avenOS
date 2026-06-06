@@ -78,12 +78,12 @@ async function fileToBase64(file: File): Promise<string> {
 /**
  * Persist attachments to Groove `files` table (Tauri + unlocked only).
  * `parentId` is stored in `intent_id` (intent row id from composer, or message id from talk).
- * Pass `sparkId` when the file belongs to a non-default spark (e.g. talk threads).
+ * Pass `identityId` when the file belongs to a non-default identity (e.g. talk threads).
  */
 export async function persistSparkFiles(
 	parentId: string,
 	files: File[],
-	options?: { sparkId?: string },
+	options?: { identityId?: string },
 ): Promise<{ stored: number; errors: string[] }> {
 	const errors: string[] = []
 	if (!browser || !isTauriRuntime()) {
@@ -105,7 +105,7 @@ export async function persistSparkFiles(
 
 	const api = jazzTable('files')
 	const now = Date.now()
-	const sparkId = options?.sparkId?.trim()
+	const identityId = options?.identityId?.trim()
 
 	for (const file of files) {
 		const classified = classifyIntentUploadFile(file)
@@ -116,7 +116,7 @@ export async function persistSparkFiles(
 		try {
 			const content = await fileToBase64(file)
 			await api.create({
-				...(sparkId ? { spark_id: sparkId } : {}),
+				...(identityId ? { owner: identityId } : {}),
 				intent_id: parentId,
 				filename: file.name,
 				mime_type: classified.mime,
@@ -135,7 +135,7 @@ export async function persistSparkFiles(
 
 /**
  * Persist composer attachments to Groove `files` table (Tauri + unlocked only).
- * `spark_id` is injected by the shell if omitted.
+ * `owner` is injected by the shell if omitted.
  */
 export async function persistIntentFiles(
 	intentId: string,

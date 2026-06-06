@@ -7,18 +7,18 @@
 	import { asideNavSectionsFromRoutes } from '$lib/ui/aside-nav'
 	let { children: pageOutlet } = $props()
 
-	const sparkParam = $derived(String((page.params as { sparkId?: string }).sparkId ?? ''))
-	const decodedSparkId = $derived(decodeURIComponent(sparkParam))
-	const sparkBase = $derived(`/sparks/${encodeURIComponent(decodedSparkId)}`)
+	const identityParam = $derived(String((page.params as { identityId?: string }).identityId ?? ''))
+	const decodedIdentityId = $derived(decodeURIComponent(identityParam))
+	const identityBase = $derived(`/identities/${encodeURIComponent(decodedIdentityId)}`)
 
-	const sparksStore = jazzStore('sparks')
+	const identitiesStore = jazzStore('identities')
 
 	function idsMatch(a: string, b: string): boolean {
 		return a.trim().toLowerCase() === b.trim().toLowerCase()
 	}
 
-	const sparkMeta = $derived(
-		sparksStore.rows.find((s) => idsMatch(s.spark_id, decodedSparkId)),
+	const identityMeta = $derived(
+		identitiesStore.rows.find((s) => idsMatch(s.owner, decodedIdentityId)),
 	)
 
 	const path = $derived(page.url.pathname)
@@ -32,29 +32,29 @@
 					title: t('nav.viewSection'),
 					items: [
 						{
-							href: `${sparkBase}/talk`,
+							href: `${identityBase}/talk`,
 							label: t('nav.talk'),
-							match: (p) => p.startsWith(`${sparkBase}/talk`),
+							match: (p) => p.startsWith(`${identityBase}/talk`),
 						},
 						{
-							href: `${sparkBase}/todos`,
+							href: `${identityBase}/todos`,
 							label: t('nav.todos'),
-							match: (p) => p.startsWith(`${sparkBase}/todos`),
+							match: (p) => p.startsWith(`${identityBase}/todos`),
 						},
 						{
-							href: `${sparkBase}/gallery`,
+							href: `${identityBase}/gallery`,
 							label: t('nav.gallery'),
-							match: (p) => p.startsWith(`${sparkBase}/gallery`),
+							match: (p) => p.startsWith(`${identityBase}/gallery`),
 						},
 						{
-							href: `${sparkBase}/members`,
+							href: `${identityBase}/members`,
 							label: t('nav.members'),
-							match: (p) => p.startsWith(`${sparkBase}/members`),
+							match: (p) => p.startsWith(`${identityBase}/members`),
 						},
 						{
-							href: `${sparkBase}/db`,
+							href: `${identityBase}/db`,
 							label: t('nav.db'),
-							match: (p) => p.startsWith(`${sparkBase}/db`),
+							match: (p) => p.startsWith(`${identityBase}/db`),
 						},
 					],
 				},
@@ -83,7 +83,7 @@
 </script>
 
 <svelte:head>
-	<title>{sparkMeta?.name ?? t('sparks.sparkLabel')}{t('common.titleSuffix')}</title>
+	<title>{identityMeta?.name ?? t('identities.sparkLabel')}{t('common.titleSuffix')}</title>
 </svelte:head>
 
 <AsidePageLayout
@@ -101,17 +101,17 @@
 			<button
 				type="button"
 				class="text-muted-foreground hover:text-foreground text-[10px] font-semibold uppercase tracking-wide"
-				onclick={() => navigateApp('/sparks')}
+				onclick={() => navigateApp('/identities')}
 			>
 				{t('nav.allSparks')}
 			</button>
 			<div class="space-y-0.5">
 				<h2 class="text-sm font-semibold tracking-tight leading-snug">
-					{sparkMeta?.name ?? t('sparks.sparkLabel')}
+					{identityMeta?.name ?? t('identities.sparkLabel')}
 				</h2>
-				{#if sparkMeta}
+				{#if identityMeta}
 					<p class="text-muted-foreground break-all font-mono text-[10px] leading-snug">
-						spark:{sparkMeta.spark_id}
+						identity:{identityMeta.owner}
 					</p>
 				{/if}
 			</div>

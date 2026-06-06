@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit'
 import type { PageLoad } from './$types'
-import { getSparksDoc } from '$lib/docs/sparks-collection'
+import { getSparksDoc } from '$lib/docs/identities-collection'
 
 export const ssr = false
 export const prerender = false

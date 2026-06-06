@@ -13,8 +13,8 @@
 		peerList,
 		type PeerRow,
 		type JazzSessionReply,
-		type SparkSubjectCaps,
-		type SparkGrant,
+		type IdentitySubjectCaps,
+		type IdentityGrant,
 	} from '$lib/jazz/api'
 	import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
 	import { jazzStore } from '$lib/jazz/store.svelte'
@@ -31,21 +31,21 @@
 	import { t } from '$lib/i18n'
 
 	let {
-		sparkId,
+		identityId,
 		wide = false,
 		isAvenCeo = false,
-	}: { sparkId: string; wide?: boolean; isAvenCeo?: boolean } = $props()
+	}: { identityId: string; wide?: boolean; isAvenCeo?: boolean } = $props()
 
-	// Caps come from the backend (`spark_cap_report` → the spark biscuit). This
+	// Caps come from the backend (`identity_cap_report` → the identity biscuit). This
 	// component defines NO cap vocabulary of its own — it labels whatever grant/cap
 	// strings Rust returns. Single source of truth = the biscuit chain.
 	function capLabel(key: string): string {
-		return t(`sparks.share.capabilities.${key}`)
+		return t(`identities.share.capabilities.${key}`)
 	}
 	// Role/grant label (Owner/Member/Relay) — distinct from cap labels so a relay
 	// shows "Relay" (grant) + "Replicate" (cap), not two "Replicate" badges.
-	function grantLabel(grant: SparkGrant): string {
-		return t(`sparks.share.grants.${grant}`)
+	function grantLabel(grant: IdentityGrant): string {
+		return t(`identities.share.grants.${grant}`)
 	}
 	/// Display order for the Capabilities tab; any unknown cap falls in after these.
 	const CAP_ORDER = ['read', 'write', 'delete', 'admit', 'rotate_dek', 'replicate']
@@ -56,14 +56,14 @@
 	// Unified "Give access": one DID + a grant kind. The biscuit model has three
 	// grant bundles (owns/reads/replicate); the actual caps each confers come from
 	// the backend and show on the resulting member card (no caps hardcoded here).
-	const GRANT_KINDS: SparkGrant[] = ['owns', 'reads', 'replicate']
-	let grantKind = $state<SparkGrant>('owns')
-	function grantDescKey(grant: SparkGrant): string {
+	const GRANT_KINDS: IdentityGrant[] = ['owns', 'reads', 'replicate']
+	let grantKind = $state<IdentityGrant>('owns')
+	function grantDescKey(grant: IdentityGrant): string {
 		return grant === 'owns'
-			? 'sparks.share.grantDescOwns'
+			? 'identities.share.grantDescOwns'
 			: grant === 'reads'
-				? 'sparks.share.grantDescReads'
-				: 'sparks.share.grantDescReplicate'
+				? 'identities.share.grantDescReads'
+				: 'identities.share.grantDescReplicate'
 	}
 
 	const LOCAL_IPC_BUDGET_MS = 12_000
@@ -74,8 +74,8 @@
 	let adminDids = $state<string[]>([])
 	let replicaDids = $state<string[]>([])
 	// THE caps source for the UI: every subject + grant + effective caps, from the
-	// biscuit (`spark_cap_report`). Both tabs derive from this; nothing is hardcoded.
-	let subjects = $state<SparkSubjectCaps[]>([])
+	// biscuit (`identity_cap_report`). Both tabs derive from this; nothing is hardcoded.
+	let subjects = $state<IdentitySubjectCaps[]>([])
 	let adminErr = $state<string | undefined>()
 	let adminBusy = $state(false)
 	let addAdminDid = $state('')
@@ -92,24 +92,24 @@
 	const unlocked = $derived(sessionKind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
 
-	// The admin roster lives inside the spark's biscuit (`genesis_b64`). That field
-	// rides the reactive `sparks` table store, so a remote admin grant (e.g. the AI
+	// The admin roster lives inside the identity's biscuit (`genesis_b64`). That field
+	// rides the reactive `identities` table store, so a remote admin grant (e.g. the AI
 	// adds an admin on another device) lands here in realtime over TCP sync. We watch
 	// it below and re-read the admin list whenever it changes — without it, the panel
 	// only refreshed on local add/revoke and on a fresh mount (app restart).
-	const sparksStore = jazzStore('sparks')
+	const identitiesStore = jazzStore('identities')
 	const sparkBiscuit = $derived.by<string | undefined>(() => {
-		const sid = sparkId.trim().toLowerCase()
+		const sid = identityId.trim().toLowerCase()
 		if (!sid) return undefined
-		const row = sparksStore.rows.find(
-			(r) => String(r.spark_id ?? '').trim().toLowerCase() === sid,
+		const row = identitiesStore.rows.find(
+			(r) => String(r.owner ?? '').trim().toLowerCase() === sid,
 		)
 		return typeof row?.genesis_b64 === 'string' ? row.genesis_b64 : undefined
 	})
 
 	let knownPeers = $state<PeerRow[]>([])
 	const peersAllow = $derived<PeerRow[]>(
-		!tauri || !unlocked || !sparkId.trim() ? [] : knownPeers,
+		!tauri || !unlocked || !identityId.trim() ? [] : knownPeers,
 	)
 
 	function peerAccessLabel(
@@ -121,11 +121,11 @@
 		return peerDisplayLabel(peerDid, storedLabel, localPairingLabel)
 	}
 
-	type SparkAccessEntry = {
+	type IdentityAccessEntry = {
 		did: string
 		label: string
 		isThisDevice: boolean
-		grant: SparkGrant
+		grant: IdentityGrant
 		capabilities: string[]
 	}
 
@@ -133,16 +133,16 @@
 	// the peer label. Caps are whatever Rust reported — never re-derived here.
 	// (Per-peer connection state is intentionally NOT shown — it didn't reflect the
 	// real sync logic; revisit with proper transport state later.)
-	const accessEntries = $derived.by((): SparkAccessEntry[] => {
+	const accessEntries = $derived.by((): IdentityAccessEntry[] => {
 		const peersByDid = new Map(
 			peersAllow.map((p) => [p.peerDid.trim().toLowerCase(), p] as const),
 		)
 		const localDid = session?.peerDid?.trim().toLowerCase() ?? ''
-		return subjects.map((s): SparkAccessEntry => {
+		return subjects.map((s): IdentityAccessEntry => {
 			const norm = s.did.trim().toLowerCase()
 			const peer = peersByDid.get(norm)
 			const isThisDevice = localDid !== '' && norm === localDid
-			const fallback = s.grant === 'replicate' ? t('sparks.share.addReplica') : undefined
+			const fallback = s.grant === 'replicate' ? t('identities.share.addReplica') : undefined
 			const label = peerAccessLabel(s.did, peer?.deviceLabel ?? fallback, isThisDevice)
 			return { did: s.did, label, isThisDevice, grant: s.grant, capabilities: s.caps }
 		})
@@ -150,9 +150,9 @@
 
 	// Cap-centric view (Tab 2): invert subjects → for each actual cap, who holds it.
 	// Pure projection of the same single source — guarantees the two tabs agree.
-	type CapHolders = { cap: string; holders: SparkAccessEntry[] }
+	type CapHolders = { cap: string; holders: IdentityAccessEntry[] }
 	const capabilityRows = $derived.by((): CapHolders[] => {
-		const map = new Map<string, SparkAccessEntry[]>()
+		const map = new Map<string, IdentityAccessEntry[]>()
 		for (const e of accessEntries)
 			for (const cap of e.capabilities) {
 				const list = map.get(cap) ?? []
@@ -171,7 +171,7 @@
 			adminDids = []
 			return
 		}
-		const sid = sparkId.trim()
+		const sid = identityId.trim()
 		const gen = ++adminLoadGen
 		busy = true
 		err = undefined
@@ -217,10 +217,10 @@
 	}
 
 	// Lightweight re-read of just the admin roster (+ peer labels) — used when the
-	// spark biscuit changes under us via sync. Session is already loaded by the main
+	// identity biscuit changes under us via sync. Session is already loaded by the main
 	// effect, so we skip the heavier readiness checks done in loadSessionAndAdmins().
 	async function refreshAdminList(): Promise<void> {
-		const sid = sparkId.trim()
+		const sid = identityId.trim()
 		if (!tauri || !unlocked || !sid) return
 		const gen = ++adminLoadGen
 		try {
@@ -243,26 +243,26 @@
 	// biscuit minter. `opts` lets a quick-action (e.g. the connected relay) grant
 	// without touching the shared input. Each kind maps to its own IPC:
 	//   owns → admin (full)   reads → read-only member   replicate → blind backup.
-	async function grantAccess(opts?: { did?: string; kind?: SparkGrant }): Promise<void> {
+	async function grantAccess(opts?: { did?: string; kind?: IdentityGrant }): Promise<void> {
 		const did = (opts?.did ?? addAdminDid).trim()
 		const kind = opts?.kind ?? grantKind
-		const sid = sparkId.trim()
+		const sid = identityId.trim()
 		if (!did || !sid) return
 		const gen = adminLoadGen
 		adminBusy = true
 		adminErr = undefined
 		addNote = undefined
 		try {
-			if (kind === 'owns') await sparkAdminAdd({ sparkId: sid, peerDid: did })
+			if (kind === 'owns') await sparkAdminAdd({ identityId: sid, peerDid: did })
 			else if (kind === 'reads')
 				// On avenCEO, "Member" is the full membership bundle (reads + keyshare +
 				// row-scoped self-publish write); elsewhere it's a plain read grant.
 				if (isAvenCeo) await avenCeoAddMember(did)
-				else await sparkReaderAdd({ sparkId: sid, peerDid: did })
-			else await sparkReplicateAdd({ sparkId: sid, peerDid: did })
+				else await sparkReaderAdd({ identityId: sid, peerDid: did })
+			else await sparkReplicateAdd({ identityId: sid, peerDid: did })
 			if (gen !== adminLoadGen) return
 			if (!opts?.did) addAdminDid = ''
-			addNote = t('sparks.share.accessGrantedNote')
+			addNote = t('identities.share.accessGrantedNote')
 			const a = await sparkAdminList(sid)
 			if (gen !== adminLoadGen) return
 			adminDids = a.adminDids
@@ -281,7 +281,7 @@
 	// Single-click stop-sharing. Revoke is not destructive of what a peer already
 	// holds (it only stops *future* changes), so no confirm step — see revokedNote.
 	async function revokeAdmin(did: string, label: string): Promise<void> {
-		const sid = sparkId.trim()
+		const sid = identityId.trim()
 		if (!did || !sid) return
 		if (revokeBusyDid) return
 		const gen = adminLoadGen
@@ -290,9 +290,9 @@
 		revokeNote = undefined
 		addNote = undefined
 		try {
-			await sparkAdminRevoke({ sparkId: sid, peerDid: did })
+			await sparkAdminRevoke({ identityId: sid, peerDid: did })
 			if (gen !== adminLoadGen) return
-			revokeNote = t('sparks.share.revokedNote', { label })
+			revokeNote = t('identities.share.revokedNote', { label })
 			const a = await sparkAdminList(sid)
 			if (gen !== adminLoadGen) return
 			adminDids = a.adminDids
@@ -308,7 +308,7 @@
 
 	$effect(() => {
 		sessionKind
-		void sparkId
+		void identityId
 		void unlocked
 		void tauri
 		adminDids = []
@@ -317,15 +317,15 @@
 		void loadSessionAndAdmins()
 	})
 
-	// Realtime reactivity: when the current spark's biscuit changes *without* a
-	// spark/session switch — i.e. a remote peer (or the AI) granted/revoked admin and
+	// Realtime reactivity: when the current identity's biscuit changes *without* a
+	// identity/session switch — i.e. a remote peer (or the AI) granted/revoked admin and
 	// it synced in over TCP — re-read the roster. We baseline-skip the first sighting
-	// and any spark switch (the main effect above owns those) so this fires only on a
+	// and any identity switch (the main effect above owns those) so this fires only on a
 	// genuine in-place biscuit change, and never clobbers what the user is typing.
 	let adminWatchSpark: string | undefined = undefined
 	let adminWatchBiscuit: string | undefined = undefined
 	$effect(() => {
-		const sid = sparkId.trim()
+		const sid = identityId.trim()
 		const biscuit = sparkBiscuit
 		void unlocked
 		void tauri
@@ -357,7 +357,7 @@
 	})
 
 	// Copy a debug report — the device's recent Rust sync log (forwarding gate +
-	// peer registration), the spark's admin roster, and live peer/mesh state — so
+	// peer registration), the identity's admin roster, and live peer/mesh state — so
 	// sync problems between peers (incl. whether the server/replication peer
 	// received and forwarded a batch) can be pasted back when reporting an issue.
 	async function copyDebug(): Promise<void> {
@@ -371,7 +371,7 @@
 		const rustLogs = await recentRustLogs()
 		const report = formatDebugReport(
 			{
-				sparkId,
+				identityId,
 				ownDid: session?.peerDid ?? '',
 				adminDids,
 				replicaDids,
@@ -406,9 +406,9 @@
 {#if wide}
 	<!-- Main-area / full-width layout -->
 	{#if !tauri || !unlocked}
-		<p class="text-muted-foreground text-sm">{t('sparks.needsDesktop')}</p>
-	{:else if !sparkId.trim()}
-		<p class="text-muted-foreground text-sm">{t('sparks.share.noOneListed')}</p>
+		<p class="text-muted-foreground text-sm">{t('identities.needsDesktop')}</p>
+	{:else if !identityId.trim()}
+		<p class="text-muted-foreground text-sm">{t('identities.share.noOneListed')}</p>
 	{:else}
 		<div class="flex flex-col gap-8">
 			<!-- Sub-tabs (top-centered): Members (member→caps) vs Capabilities (cap→holders) -->
@@ -419,14 +419,14 @@
 						class="rounded-lg px-4 py-1.5 font-medium {activeTab === 'members'
 							? 'bg-background shadow-sm'
 							: 'text-muted-foreground hover:text-foreground'}"
-						onclick={() => (activeTab = 'members')}>{t('sparks.share.tabMembers')}</button
+						onclick={() => (activeTab = 'members')}>{t('identities.share.tabMembers')}</button
 					>
 					<button
 						type="button"
 						class="rounded-lg px-4 py-1.5 font-medium {activeTab === 'caps'
 							? 'bg-background shadow-sm'
 							: 'text-muted-foreground hover:text-foreground'}"
-						onclick={() => (activeTab = 'caps')}>{t('sparks.share.tabCapabilities')}</button
+						onclick={() => (activeTab = 'caps')}>{t('identities.share.tabCapabilities')}</button
 					>
 				</div>
 			</div>
@@ -435,18 +435,18 @@
 			<!-- Give access (unified: DID + grant kind), placed ABOVE the member list -->
 			<section class="border-border/50 bg-background/40 flex flex-col gap-3 rounded-xl border p-4">
 				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
-					{t('sparks.share.giveAccess')}
+					{t('identities.share.giveAccess')}
 				</h2>
 				<input
 					class="border-border/60 bg-background/40 w-full rounded-lg border px-3 py-2 font-mono text-[12px]"
-					placeholder={t('sparks.share.didPlaceholder')}
+					placeholder={t('identities.share.didPlaceholder')}
 					bind:value={addAdminDid}
 					disabled={adminBusy}
 				/>
 				<!-- Grant kind: the biscuit's three bundles (owns/reads/replicate). The
 				     actual caps each confers show on the member card after granting. -->
 				<div class="flex flex-col gap-1.5">
-					<span class="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">{t('sparks.share.accessLevel')}</span>
+					<span class="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">{t('identities.share.accessLevel')}</span>
 					<div class="flex flex-wrap gap-2">
 						{#each GRANT_KINDS as gk (gk)}
 							<button
@@ -467,7 +467,7 @@
 						disabled={adminBusy || !addAdminDid.trim()}
 						onclick={() => void grantAccess()}
 					>
-						{adminBusy ? '…' : t('sparks.share.grantAccess')}
+						{adminBusy ? '…' : t('identities.share.grantAccess')}
 					</button>
 					{#if session?.relayDid}
 						<!-- Quick action: grant the already-connected relay a blind replicate cap -->
@@ -477,7 +477,7 @@
 							title={session.relayDid}
 							disabled={adminBusy}
 							onclick={() => void grantAccess({ did: session?.relayDid ?? undefined, kind: 'replicate' })}
-						>⚡ {t('sparks.share.quickRelay')}</button
+						>⚡ {t('identities.share.quickRelay')}</button
 						>
 					{/if}
 				</div>
@@ -487,20 +487,20 @@
 				{#if addNote}
 					<p class="text-muted-foreground text-sm">{addNote}</p>
 				{/if}
-				<p class="text-muted-foreground text-xs leading-relaxed">{t('sparks.share.giveAccessHint')}</p>
+				<p class="text-muted-foreground text-xs leading-relaxed">{t('identities.share.giveAccessHint')}</p>
 			</section>
 
 			<!-- Who has access -->
 			<section class="flex flex-col gap-4">
 				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
-					{t('sparks.share.whoHasAccess')}
+					{t('identities.share.whoHasAccess')}
 				</h2>
 				{#if err}
 					<p class="text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm select-text">{err}</p>
 				{:else if busy && adminDids.length === 0}
 					<p class="text-muted-foreground text-sm">{t('common.loadingAdmins')}</p>
 				{:else if accessEntries.length === 0}
-					<p class="text-muted-foreground text-sm">{t('sparks.share.noOneListed')}</p>
+					<p class="text-muted-foreground text-sm">{t('identities.share.noOneListed')}</p>
 				{:else}
 					<ul class="flex flex-col gap-2">
 						{#each accessEntries as entry (entry.did)}
@@ -527,7 +527,7 @@
 											class="border-destructive/40 text-destructive hover:bg-destructive/10 ml-auto rounded-md border px-2.5 py-1 text-[11px] font-medium disabled:opacity-50"
 											disabled={revokeBusyDid !== undefined}
 											onclick={() => void revokeAdmin(entry.did, entry.label)}
-											>{revokeBusyDid === entry.did ? t('sparks.share.revoking') : t('sparks.share.revoke')}</button
+											>{revokeBusyDid === entry.did ? t('identities.share.revoking') : t('identities.share.revoke')}</button
 										>
 									{/if}
 								</div>
@@ -535,7 +535,7 @@
 						{/each}
 					</ul>
 					{#if revokeErr}
-						<p class="text-destructive text-sm">{t('sparks.share.revokeFailed')}: {revokeErr}</p>
+						<p class="text-destructive text-sm">{t('identities.share.revokeFailed')}: {revokeErr}</p>
 					{/if}
 					{#if revokeNote}
 						<p class="text-muted-foreground text-sm">{revokeNote}</p>
@@ -561,26 +561,26 @@
 			{/if}
 
 			{#if activeTab === 'caps'}
-			<!-- Capability-centric: every actual cap on this spark (from the biscuit) + who holds it. -->
+			<!-- Capability-centric: every actual cap on this identity (from the biscuit) + who holds it. -->
 			<section class="flex flex-col gap-4">
 				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
-					{t('sparks.share.tabCapabilities')}
+					{t('identities.share.tabCapabilities')}
 				</h2>
-				<p class="text-muted-foreground text-xs leading-relaxed">{t('sparks.share.capabilitiesIntro')}</p>
+				<p class="text-muted-foreground text-xs leading-relaxed">{t('identities.share.capabilitiesIntro')}</p>
 				{#if err}
 					<p class="text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm select-text">{err}</p>
 				{:else if capabilityRows.length === 0}
-					<p class="text-muted-foreground text-sm">{t('sparks.share.noOneListed')}</p>
+					<p class="text-muted-foreground text-sm">{t('identities.share.noOneListed')}</p>
 				{:else}
 					<ul class="flex flex-col gap-3">
 						{#each capabilityRows as row (row.cap)}
 							<li class="rounded-xl border border-border/50 bg-background/40 px-4 py-3">
 								<div class="flex items-center justify-between gap-3">
 									<span class="bg-primary/10 text-primary rounded px-2 py-0.5 text-[11px] font-bold tracking-wider uppercase">{capLabel(row.cap)}</span>
-									<span class="text-muted-foreground text-[11px]">{t('sparks.share.heldBy')}: {row.holders.length}</span>
+									<span class="text-muted-foreground text-[11px]">{t('identities.share.heldBy')}: {row.holders.length}</span>
 								</div>
 								{#if row.holders.length === 0}
-									<p class="text-muted-foreground mt-2 text-xs">{t('sparks.share.noHolders')}</p>
+									<p class="text-muted-foreground mt-2 text-xs">{t('identities.share.noHolders')}</p>
 								{:else}
 									<ul class="mt-2 flex flex-col gap-1.5">
 										{#each row.holders as h (h.did)}
@@ -599,11 +599,11 @@
 			{/if}
 		</div>
 	{/if}
-{:else if tauri && unlocked && sparkId.trim()}
+{:else if tauri && unlocked && identityId.trim()}
 	<!-- Compact aside layout (kept for any future reuse) -->
 	<section class="flex flex-col gap-2 px-0 md:px-2">
 		<h3 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">
-			{t('sparks.share.whoHasAccess')}
+			{t('identities.share.whoHasAccess')}
 		</h3>
 
 		{#if err}
@@ -611,7 +611,7 @@
 		{:else if busy && adminDids.length === 0}
 			<p class="text-muted-foreground text-xs">{t('common.loadingAdmins')}</p>
 		{:else if accessEntries.length === 0}
-			<p class="text-muted-foreground text-xs">{t('sparks.share.noOneListed')}</p>
+			<p class="text-muted-foreground text-xs">{t('identities.share.noOneListed')}</p>
 		{:else}
 			<ul class="flex flex-col gap-1.5">
 				{#each accessEntries as entry (entry.did)}
@@ -633,11 +633,11 @@
 
 		<div class="mt-1 flex flex-col gap-1.5">
 			<h3 class="text-[11px] font-semibold tracking-wider uppercase opacity-70">
-				{t('sparks.share.giveAccess')}
+				{t('identities.share.giveAccess')}
 			</h3>
 			<input
 				class="border-border/60 bg-background/40 w-full rounded-md border px-2.5 py-1.5 font-mono text-[11px]"
-				placeholder={t('sparks.share.didPlaceholder')}
+				placeholder={t('identities.share.didPlaceholder')}
 				bind:value={addAdminDid}
 				disabled={adminBusy}
 			/>
@@ -647,7 +647,7 @@
 				disabled={adminBusy || !addAdminDid.trim()}
 				onclick={() => void grantAccess()}
 			>
-				{adminBusy ? '…' : t('sparks.share.addAsAdmin')}
+				{adminBusy ? '…' : t('identities.share.addAsAdmin')}
 			</button>
 			{#if adminErr}
 				<p class="text-destructive text-[11px]">{adminErr}</p>

@@ -60,10 +60,10 @@
 	</header>
 
 	{#if !tauri || !unlocked}
-		<p class="text-muted-foreground text-sm">{t('sparks.needsDesktop')}</p>
+		<p class="text-muted-foreground text-sm">{t('identities.needsDesktop')}</p>
 	{:else}
-		<!-- Your peer ID (share so others can add you to a spark). Access itself is
-		     spark-scoped — manage members in each spark's Members page. -->
+		<!-- Your peer ID (share so others can add you to a identity). Access itself is
+		     identity-scoped — manage members in each identity's Members page. -->
 		<section class="flex flex-col gap-2">
 			<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">{t('peers.yourId')}</h2>
 			<div class="flex items-center gap-2">
