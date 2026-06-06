@@ -425,6 +425,13 @@ pub fn authorize(
 		// `authorize_replicate` makes for `replicate`. Any other op stays
 		// owner-only. This is what lets an onboarded member read `admin-spark`
 		// (the roster) without being an admin of it.
+		// General granular grant: a subject-scoped `grant(did, op, prefix)` fact
+		// authorizes ANY op on resources under `prefix` (e.g. a member's row-scoped
+		// `write` on its own roster row). This is the unified delegated-right
+		// mechanism — `reads`/`replicate` are the older specific forms kept below.
+		if authorize_granted_op(&chain.biscuit, op.as_op_str(), &resource, subject_did).is_ok() {
+			return Ok(());
+		}
 		if matches!(op, AccOp::Read) {
 			return authorize_read_delegated(&chain.biscuit, &resource, subject_did);
 		}
@@ -518,6 +525,68 @@ fn authorize_read_delegated(chain: &Biscuit, resource: &str, subject_did: &str) 
 	} else {
 		Err("spark_acc:read_not_granted".into())
 	}
+}
+
+/// Append a third-party block granting `did` a **granular** right: it may perform
+/// `op` on any resource under `prefix` (e.g. `op="write"`,
+/// `prefix="spark:S:peers:ROWID"` = write only that one row). Signed by an admin
+/// key. This is the unified delegated-right primitive — `owns`/`reads`/`replicate`
+/// are the coarse special cases; this expresses any op at any resource scope
+/// (per-spark, per-table, or per-row via the prefix).
+pub fn attenuate_add_grant_third_party(
+	delegating_kp: &KeyPair,
+	chain: &Biscuit,
+	grantee_did: &str,
+	op: &str,
+	prefix: &str,
+) -> Result<Biscuit, String> {
+	let req = chain
+		.third_party_request()
+		.map_err(|e| format!("tp_request:{e:?}"))?;
+	let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
+	let f = format!("grant(\"{}\", \"{}\", \"{}\")", esc(grantee_did), esc(op), esc(prefix));
+	let bb = BlockBuilder::new()
+		.fact(f.as_str())
+		.map_err(|e| format!("tp_grant_fact:{e}"))?;
+	let block = req
+		.create_block(&delegating_kp.private(), bb)
+		.map_err(|e| format!("tp_grant_create:{e:?}"))?;
+	chain
+		.append_third_party(delegating_kp.public(), block)
+		.map_err(|e| format!("tp_grant_append:{e:?}"))
+}
+
+/// Authorize a non-owner via a granular `grant($did, $op, $prefix)` fact whose op
+/// matches and whose prefix covers the resource. Mirror of [`authorize_replicate`]
+/// / [`authorize_read_delegated`] but op-generic (the grant carries its own op).
+fn authorize_granted_op(chain: &Biscuit, op: &str, resource: &str, subject_did: &str) -> Result<(), String> {
+	let mut authorizer = chain.authorizer().map_err(|e| format!("authz-grant-build:{e}"))?;
+	let grants: Vec<(String, String, String)> = authorizer
+		.query_all("granted($p, $op, $pre) <- grant($p, $op, $pre)")
+		.map_err(|e| format!("authz-grant-query:{e}"))?;
+	let allowed = grants.iter().any(|(did, gop, prefix)| {
+		peer_did_matches(did, subject_did) && gop == op && resource.starts_with(prefix)
+	});
+	if allowed {
+		Ok(())
+	} else {
+		Err(format!("spark_acc:op_not_granted:{op}"))
+	}
+}
+
+/// All granular grants on a spark per the biscuit chain — `(did, op, prefix)` for
+/// every `grant(...)` whose prefix is under this spark. Feeds the per-subject cap
+/// report (so row-scoped/table-scoped grants surface in the UI).
+pub fn spark_grants(chain: &Biscuit, spark_id: Uuid) -> Result<Vec<(String, String, String)>, String> {
+	let spark_prefix = spark_urn_for(spark_id);
+	let mut authorizer = chain.authorizer().map_err(|e| format!("b-authorizer:{e}"))?;
+	let rows: Vec<(String, String, String)> = authorizer
+		.query_all("granted($p, $op, $pre) <- grant($p, $op, $pre)")
+		.map_err(|e| format!("b-query-grant:{e}"))?;
+	Ok(rows
+		.into_iter()
+		.filter(|(_, _, pre)| pre.starts_with(&spark_prefix))
+		.collect())
 }
 
 fn format_failed_logic_compact(e: &biscuit_auth::error::Token) -> String {
@@ -693,6 +762,45 @@ mod tests {
 		// The owner still reads + writes as a full member.
 		authorize(&v, sid, AccOp::Read, "peers", Some(rid), &v.peer_did.clone()).unwrap();
 		authorize(&v, sid, AccOp::Write, "peers", Some(rid), &v.peer_did.clone()).unwrap();
+	}
+
+	#[test]
+	fn granular_row_scoped_write_grant() {
+		// The self-publish primitive: a member gets write ONLY on its own roster row.
+		let owner = build_vault_from_root(&[1u8; 32]).unwrap();
+		let member = build_vault_from_root(&[5u8; 32]).unwrap();
+		let sid = uuid::Uuid::new_v4();
+		let own_row = uuid::Uuid::from_u128(0x1111_2222);
+		let other_row = uuid::Uuid::from_u128(0x3333_4444);
+
+		let genesis = mint_genesis_spark(&owner, sid).unwrap();
+		let prefix = format!("spark:{sid}:peers:{own_row}");
+		let chain = attenuate_add_grant_third_party(
+			&owner.biscuit_kp,
+			&genesis,
+			&member.peer_did,
+			"write",
+			&prefix,
+		)
+		.unwrap();
+		let mut v = owner;
+		v.sparks.insert(sid, BiscuitSpark { spark_id: sid, biscuit: chain });
+
+		// Member may write its OWN row…
+		authorize(&v, sid, AccOp::Write, "peers", Some(own_row), &member.peer_did).unwrap();
+		// …but NOT another row, NOT another table, NOT read, NOT delete.
+		assert!(authorize(&v, sid, AccOp::Write, "peers", Some(other_row), &member.peer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Write, "todos", Some(own_row), &member.peer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Read, "peers", Some(own_row), &member.peer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Delete, "peers", Some(own_row), &member.peer_did).is_err());
+		// Owner keeps full access (the granular grant doesn't shadow ownership).
+		authorize(&v, sid, AccOp::Write, "peers", Some(other_row), &v.peer_did.clone()).unwrap();
+
+		// Enumerated by spark_grants for the cap report.
+		let grants = spark_grants(&v.sparks.get(&sid).unwrap().biscuit, sid).unwrap();
+		assert!(grants
+			.iter()
+			.any(|(d, o, p)| peer_did_matches(d, &member.peer_did) && o == "write" && p == &prefix));
 	}
 
 	#[test]
