@@ -235,7 +235,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // S.3 — the server is the avenCEO owner: mint its genesis on startup (idempotent).
-    if let Err(e) = aven_ceo::ensure_avenceo_owned(&engine, &server_vault, &identity, avenceo_id).await {
+    if let Err(e) =
+        aven_ceo::ensure_avenceo_owned(&engine, &server_vault, &identity, avenceo_id, &cfg.server_name)
+            .await
+    {
         tracing::warn!("avenCEO mint: {e}");
     }
 

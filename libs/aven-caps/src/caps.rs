@@ -60,7 +60,10 @@ fn identity_urn_for(owner: Uuid) -> String {
 	format!("identity:{owner}")
 }
 
-/// Display name of the well-known network control identity.
+/// **Default** display name of an aven's control identity. Each aven names its
+/// default identity after **itself** (`AVEN_SERVER_NAME` on the aven-node, e.g.
+/// `avenCEO` / `avenMAIA`); the aven-node's minted row is authoritative. This
+/// constant is only the fallback/placeholder used by the first-admin client claim.
 pub const AVEN_CEO_IDENTITY_NAME: &str = "avenCEO";
 
 /// Deterministic id of the well-known network control identity (**`avenCEO`**, the

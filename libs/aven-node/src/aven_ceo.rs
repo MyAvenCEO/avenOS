@@ -122,6 +122,7 @@ pub async fn ensure_avenceo_owned(
 	vault: &BiscuitVault,
 	signing: &SigningKey,
 	avenceo_id: Uuid,
+	aven_name: &str,
 ) -> Result<(), String> {
 	if avenceo_genesis_b64(engine, avenceo_id).await?.is_some() {
 		tracing::info!(%avenceo_id, "avenCEO already minted (server-owned)");
@@ -141,7 +142,9 @@ pub async fn ensure_avenceo_owned(
 		&[
 			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 			("type", Value::Text("aven".into())),
-			("name", Value::Text("avenCEO".into())),
+			// The aven's default identity is named after the aven itself (per-aven
+			// config, e.g. avenCEO / avenMAIA) — not a hardcoded constant.
+			("name", Value::Text(aven_name.into())),
 			("issuer_pubkey_b64", Value::Text(issuer_b64)),
 			("genesis_b64", Value::Text(genesis_b64)),
 			("current_dek_version", Value::BigInt(dek_ver)),
