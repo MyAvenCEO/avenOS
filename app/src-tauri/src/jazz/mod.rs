@@ -3014,9 +3014,23 @@ pub(crate) async fn groove_ipc_aven_ceo_membership(
 		return Ok("none".to_string());
 	};
 	if crate::identity_acc::identity_peer_is_owner(&bisc.biscuit, identity_uuid, &shell.peer_did)? {
-		Ok("owner".to_string())
-	} else {
+		return Ok("owner".to_string());
+	}
+	// Merely HYDRATING the avenCEO genesis is NOT membership — the genesis syncs widely, so a
+	// device can hold the identity in its vault with no grant at all. Membership requires an
+	// actual cap to THIS device (a `reads` or `replicate` grant). Without one, the device has
+	// only *seen* avenCEO and must stay on the invite gate — no auto-progress without caps.
+	let did = shell.peer_did.trim();
+	let is_reader = crate::identity_acc::identity_readers(&bisc.biscuit, identity_uuid)?
+		.iter()
+		.any(|d| d.trim() == did);
+	let is_replica = crate::identity_acc::identity_replicas(&bisc.biscuit, identity_uuid)?
+		.iter()
+		.any(|d| d.trim() == did);
+	if is_reader || is_replica {
 		Ok("member".to_string())
+	} else {
+		Ok("none".to_string())
 	}
 }
 
