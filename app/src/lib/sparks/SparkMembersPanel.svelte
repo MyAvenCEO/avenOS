@@ -9,6 +9,8 @@
 		sparkAdminRevoke,
 		sparkReplicateAdd,
 		sparkReaderAdd,
+		avenCeoAddMember,
+		avenCeoPublishProfile,
 		peerList,
 		type PeerRow,
 		type JazzSessionReply,
@@ -29,7 +31,32 @@
 	import { copyToClipboard } from '$lib/runtime/clipboard'
 	import { t } from '$lib/i18n'
 
-	let { sparkId, wide = false }: { sparkId: string; wide?: boolean } = $props()
+	let {
+		sparkId,
+		wide = false,
+		isAvenCeo = false,
+	}: { sparkId: string; wide?: boolean; isAvenCeo?: boolean } = $props()
+
+	// Self-publish (avenCEO members write their own roster row).
+	let profileName = $state('')
+	let profileLabel = $state('')
+	let publishBusy = $state(false)
+	let publishNote = $state<string | undefined>(undefined)
+	let publishErr = $state<string | undefined>(undefined)
+	async function publishProfile(): Promise<void> {
+		publishBusy = true
+		publishErr = undefined
+		publishNote = undefined
+		try {
+			await avenCeoPublishProfile(profileName.trim(), profileLabel.trim())
+			publishNote = t('sparks.share.publishedNote')
+			await refreshAdminList()
+		} catch (e) {
+			publishErr = e instanceof Error ? e.message : String(e)
+		} finally {
+			publishBusy = false
+		}
+	}
 
 	// Caps come from the backend (`spark_cap_report` → the spark biscuit). This
 	// component defines NO cap vocabulary of its own — it labels whatever grant/cap
@@ -249,7 +276,11 @@
 		addNote = undefined
 		try {
 			if (kind === 'owns') await sparkAdminAdd({ sparkId: sid, peerDid: did })
-			else if (kind === 'reads') await sparkReaderAdd({ sparkId: sid, peerDid: did })
+			else if (kind === 'reads')
+				// On avenCEO, "Member" is the full membership bundle (reads + keyshare +
+				// row-scoped self-publish write); elsewhere it's a plain read grant.
+				if (isAvenCeo) await avenCeoAddMember(did)
+				else await sparkReaderAdd({ sparkId: sid, peerDid: did })
 			else await sparkReplicateAdd({ sparkId: sid, peerDid: did })
 			if (gen !== adminLoadGen) return
 			if (!opts?.did) addAdminDid = ''
@@ -480,6 +511,36 @@
 				{/if}
 				<p class="text-muted-foreground text-xs leading-relaxed">{t('sparks.share.giveAccessHint')}</p>
 			</section>
+
+			{#if isAvenCeo}
+			<!-- Self-publish: a member writes its OWN roster row (row-scoped write cap). -->
+			<section class="border-border/50 bg-background/40 flex flex-col gap-3 rounded-xl border p-4">
+				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">{t('sparks.share.selfPublishTitle')}</h2>
+				<div class="flex flex-col gap-2 sm:flex-row">
+					<input
+						class="border-border/60 bg-background/40 min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm"
+						placeholder={t('sparks.share.accountNamePlaceholder')}
+						bind:value={profileName}
+						disabled={publishBusy}
+					/>
+					<input
+						class="border-border/60 bg-background/40 min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm"
+						placeholder={t('sparks.share.deviceLabelPlaceholder')}
+						bind:value={profileLabel}
+						disabled={publishBusy}
+					/>
+					<button
+						type="button"
+						class="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+						disabled={publishBusy || (!profileName.trim() && !profileLabel.trim())}
+						onclick={() => void publishProfile()}>{publishBusy ? t('sparks.share.publishing') : t('sparks.share.publish')}</button
+					>
+				</div>
+				<p class="text-muted-foreground text-xs leading-relaxed">{t('sparks.share.selfPublishHint')}</p>
+				{#if publishErr}<p class="text-destructive text-sm">{publishErr}</p>{/if}
+				{#if publishNote}<p class="text-muted-foreground text-sm">{publishNote}</p>{/if}
+			</section>
+			{/if}
 
 			<!-- Who has access -->
 			<section class="flex flex-col gap-4">
