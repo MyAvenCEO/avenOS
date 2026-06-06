@@ -7,6 +7,9 @@ import { initLocale, normalizeLocale, setLocale, t } from '$lib/i18n'
 import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
 import { startPeerMeshStore } from '$lib/peer/peer-mesh-store'
 import { attachAvenosRuntimeBridge, grooveSessionReady } from '$lib/runtime/groove-runtime'
+import { avenCeoMembership } from '$lib/jazz/api'
+import { jazzStore } from '$lib/jazz/store.svelte'
+import NetworkGate from '$lib/shell/NetworkGate.svelte'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { displayTitleForSession } from '$lib/settings/active-vault-ui'
 import { attachSelfRustEventMirrors, deviceSession } from '$lib/settings/device-session-store'
@@ -107,6 +110,36 @@ $effect(() => {
 /** Mesh touches Groove ACL — defer until strict local-first bootstrap confirms shell hydrate. */
 const meshAllowed = $derived(sessionKind === 'unlocked' && $grooveSessionReady)
 
+// Global invite-only gate: the app is locked behind membership of the network's
+// avenCEO spark. Membership = "do I hold an avenCEO cap in my vault?" (a local
+// vault check via the membership IPC) — the aven-server is the authority that
+// grants caps (auto-grants the first peer, invites the rest). We re-check when
+// sparks sync, so the gate opens automatically once the server's grant + keyshare
+// land and hydrate avenCEO into the vault. Sandbox (non-tauri) is never gated.
+const sparksStore = jazzStore('sparks')
+let membership = $state<'owner' | 'member' | 'none' | 'unknown'>('unknown')
+$effect(() => {
+	void sessionKind
+	void $grooveSessionReady
+	void sparksStore.rows
+	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked' || !$grooveSessionReady) {
+		membership = 'unknown'
+		return
+	}
+	void (async () => {
+		try {
+			membership = await avenCeoMembership()
+		} catch {
+			membership = 'unknown'
+		}
+	})()
+})
+const appAccessState = $derived.by<'app' | 'gate' | 'checking'>(() => {
+	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked') return 'app'
+	if (membership === 'unknown') return 'checking'
+	return membership === 'none' ? 'gate' : 'app'
+})
+
 $effect(() => {
 	if (!browser || !isTauriRuntime() || !meshAllowed) return
 	return startPeerMeshStore()
@@ -191,6 +224,13 @@ $effect(() => {
 <div class="box-border flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-background">
 	<LockGate />
 	{#if !shellLocked}
+		{#if appAccessState === 'checking'}
+			<div class="flex min-h-0 flex-1 items-center justify-center p-6">
+				<p class="text-muted-foreground text-sm">{t('networkGate.checking')}</p>
+			</div>
+		{:else if appAccessState === 'gate'}
+			<NetworkGate />
+		{:else}
 		<header
 			class="shrink-0 bg-background/90 px-3 pt-[max(0.375rem,env(safe-area-inset-top))] pb-1 backdrop-blur-sm sm:px-6 sm:pt-3 sm:pb-2"
 		>
@@ -304,5 +344,6 @@ $effect(() => {
 		</div>
 
 		<MobileShellNav {selfNavLabel} {selfActive} />
+		{/if}
 	{/if}
 </div>

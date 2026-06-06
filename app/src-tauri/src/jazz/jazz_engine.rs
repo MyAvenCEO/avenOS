@@ -83,7 +83,7 @@ pub(crate) fn col_ix(tbl: &TableSchema, name: &str) -> Result<usize, String> {
 		.ok_or_else(|| format!("manifest_missing_col:{name}"))
 }
 
-pub(super) fn uuid_cell_at(vals: &[Value], ix: usize) -> Result<Uuid, String> {
+pub(crate) fn uuid_cell_at(vals: &[Value], ix: usize) -> Result<Uuid, String> {
 	match vals.get(ix).ok_or("col_ix_oob")? {
 		Value::Uuid(oid) => Ok(*oid.uuid()),
 		Value::Text(s) => Uuid::parse_str(s.trim()).map_err(|e| format!("uuid_parse:{e}")),
@@ -856,6 +856,17 @@ pub(super) async fn hydrate_shell(
 				.map_err(super::format_jazz_err)?;
 
 		deks.insert((spark_id, dek_ver), dek_plain);
+
+		// `peers` is now spark-scoped (caps-only sync). The local device row was
+		// created above before this spark existed; scope it to the default spark
+		// now so it is valid spark data (and syncs across the user's own devices).
+		let mut peer_patch = Map::new();
+		peer_patch.insert("spark_id".into(), JsonValue::String(spark_id.to_string()));
+		let peer_ops = super::patch_updates(&peers_schema_seed, peer_patch)?;
+		client
+			.update(local_peer_oid, peer_ops)
+			.await
+			.map_err(super::format_jazz_err)?;
 	}
 
 	let mut spark_keys: Vec<Uuid> = vault.sparks.keys().cloned().collect();

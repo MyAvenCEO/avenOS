@@ -35,11 +35,7 @@
 		"prepare": "bun --env-file=.env --filter @avenos/aven-website prepare",
 		"lint": "bunx biome check .",
 		"lint:fix": "bunx biome check --write .",
-		"format": "bunx biome format --write .",
-		"dev:aven-auth": "bun --env-file=.env --cwd libs/aven-auth dev",
-		"test:aven-auth": "bun --env-file=.env --cwd libs/aven-auth test",
-		"test:aven-auth:once": "bun --env-file=.env --cwd libs/aven-auth test:once",
-		"migrate:aven-auth": "bun --env-file=.env --cwd libs/aven-auth migrate"
+		"format": "bunx biome format --write ."
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.14",

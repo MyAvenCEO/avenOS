@@ -234,6 +234,7 @@ pub fn run() {
 		.invoke_handler(tauri::generate_handler![
 			avenos_recent_rust_logs,
 			network::network_seed,
+			network::aven_ceo_spark_id,
 			jazz::groove_runtime,
 			jazz::self_storage_paths,
 			jazz::self_clear_jazz_database,

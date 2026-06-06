@@ -1,6 +1,0 @@
-.data/
-.tmp/
-data/
-node_modules/
-.svelte-kit/
-build/

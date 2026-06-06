@@ -1,6 +1,30 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
+import { invoke } from '@tauri-apps/api/core'
 import { getTableRowsStore } from '$lib/runtime/table-stores'
 import { grooveRuntime } from '$lib/runtime/groove-ipc'
+
+/** The well-known avenCEO control-spark id for this network (deterministic from
+ *  the network seed — every device computes the same one). */
+export async function avenCeoSparkId(): Promise<string> {
+	return invoke<string>('aven_ceo_spark_id')
+}
+
+/** Network membership for the invite-only gate: 'owner' | 'member' | 'none'.
+ *  A local vault check — the server grants caps; this reads what we hold. */
+export async function avenCeoMembership(): Promise<'owner' | 'member' | 'none'> {
+	return grooveRuntime<'owner' | 'member' | 'none'>('avenCeoMembership', {})
+}
+
+/** Onboard a member to the avenCEO roster by DID (the inverted invite): grants the
+ *  membership bundle — read the roster + write only their own profile row. Owner-only. */
+export async function avenCeoAddMember(peerDid: string): Promise<void> {
+	await grooveRuntime('avenCeoAddMember', { peerDid })
+}
+
+/** Self-publish this device's profile into its own avenCEO roster row. */
+export async function avenCeoPublishProfile(accountName: string, deviceLabel: string): Promise<void> {
+	await grooveRuntime('avenCeoPublishProfile', { accountName, deviceLabel })
+}
 
 /** Untyped Groove row from IPC — schema lives in Rust (`libs/aven-schema`). */
 export type JazzRow = Record<string, any> & { id: string }
@@ -67,10 +91,42 @@ export async function sparkReplicateAdd(payload: {
 	})
 }
 
+/**
+ * Grant a peer a delegated `reads` capability + DEK keyshare on this spark: it
+ * may decrypt and read the spark's rows but holds NO `owns`, so it cannot write.
+ * This is how a member is onboarded onto `admin-spark` (the `reads` grant is the
+ * membership credential; the keyshare lets it read the roster). Between
+ * `sparkReplicateAdd` (relay, blind) and `sparkAdminAdd` (full owner).
+ */
+export async function sparkReaderAdd(payload: {
+	sparkId: string
+	peerDid: string
+}): Promise<void> {
+	await grooveRuntime('sparkReaderAdd', {
+		sparkId: payload.sparkId,
+		peerDid: payload.peerDid,
+	})
+}
+
+/** A subject's grant kind, read from the spark biscuit. Single source of truth — the
+ *  set of cap strings is defined in Rust (`spark_acc`), never hardcoded client-side. */
+export type SparkGrant = 'owns' | 'reads' | 'replicate'
+
+/** One subject's caps on a spark, derived from the biscuit by `spark_cap_report`. */
+export type SparkSubjectCaps = {
+	did: string
+	grant: SparkGrant
+	/** Effective caps, e.g. read, write, delete, admit, rotate_dek, replicate. */
+	caps: string[]
+}
+
 export type SparkAdminListReply = {
 	adminDids: string[]
 	/** Server avens granted a blind `replicate` cap (store-and-forward backups). */
 	replicaDids: string[]
+	/** THE cap source of truth: every subject + grant + effective caps from the
+	 *  biscuit. The Members UI renders these directly and defines no caps itself. */
+	subjects: SparkSubjectCaps[]
 }
 
 export async function sparkAdminList(sparkId: string): Promise<SparkAdminListReply> {

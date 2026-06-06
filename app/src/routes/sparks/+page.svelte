@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { browser } from '$app/environment'
 	import { t } from '$lib/i18n'
-	import type { JazzRow } from '$lib/jazz/api'
+	import { type JazzRow } from '$lib/jazz/api'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/settings/device-session-store'
@@ -15,6 +15,8 @@
 	const tauri = $derived(browser && isTauriRuntime())
 
 	// Snapshot is reactive: peer-sync deltas land in `sparksStore.rows` automatically.
+	// avenCEO (the network roster spark, now server-owned) appears as a normal spark
+	// in the list once this device is a member; the app-shell gate handles access.
 	const sparks = $derived(
 		[...sparksStore.rows].sort((a, b) => a.name.localeCompare(b.name)),
 	)

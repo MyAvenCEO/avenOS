@@ -47,6 +47,25 @@ fn value_as_text(v: &Value) -> Option<&str> {
 	}
 }
 
+/// The device's default spark id (lowest `spark_id`, matching `hydrate_shell`'s
+/// `default_spark` selection). `peers` is now a spark-scoped table (caps-only
+/// sync): trust-set rows live in the device's own default spark, so they sync
+/// across the user's own devices but stay invisible to a paired peer who doesn't
+/// hold that spark. Returns `None` before any spark exists (pre-bootstrap).
+pub async fn default_spark_id(client: &JazzClient) -> Result<Option<uuid::Uuid>, String> {
+	let rows = jazz_engine::exec_list_rows(client, "sparks").await?;
+	let schema = jazz_engine::resolved_table_schema(client, "sparks").await?;
+	let spark_ix = jazz_engine::col_ix(&schema, "spark_id")?;
+	let mut ids: Vec<uuid::Uuid> = Vec::new();
+	for (_oid, vals) in rows {
+		if let Ok(sid) = jazz_engine::uuid_cell_at(vals.as_slice(), spark_ix) {
+			ids.push(sid);
+		}
+	}
+	ids.sort();
+	Ok(ids.into_iter().next())
+}
+
 /// One row for IPC — mirrors `peers` table (remote rows only for trusted-device UI).
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -151,6 +170,11 @@ pub async fn add_remote_peer(
 		if l.is_empty() { "Peer" } else { l }.to_string()
 	};
 	let mut values: Map<String, JsonValue> = Map::new();
+	// Scope the trust-set row to the device's default spark so it syncs across the
+	// user's own devices (caps-only). If no spark exists yet it stays null = local.
+	if let Some(sid) = default_spark_id(client).await? {
+		values.insert("spark_id".into(), JsonValue::String(sid.to_string()));
+	}
 	values.insert("peer_did".into(), JsonValue::String(peer_did.to_string()));
 	values.insert("device_label".into(), JsonValue::String(label));
 	values.insert("kind".into(), JsonValue::String("remote".into()));

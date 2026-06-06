@@ -12,6 +12,7 @@
 //! the challenge is nonce-bound (no channel binding). Config is all env; the
 //! identity seed is a Sprite secret; `AVEN_SERVER_DATA_DIR` is the persistent path.
 
+mod aven_ceo;
 mod ws_server;
 
 use std::sync::Arc;
@@ -93,6 +94,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| format!("server did: {e}"))?;
     tracing::info!(%server_did, "aven-server identity");
 
+    // S.2 — a biscuit capability vault rooted in the server's key. The server is
+    // the sole author/owner of the well-known avenCEO control spark; it will mint
+    // its genesis (S.3) and auto-grant the first connecting peer admin (S.4). See
+    // docs/ServerRootedAvenCeoPlan.md.
+    let server_vault = aven_caps::caps::build_vault_from_signing_key(&identity)
+        .map_err(|e| format!("server cap vault: {e}"))?;
+    let avenceo_id = aven_caps::caps::aven_ceo_spark_id(&cfg.network_seed);
+    tracing::info!(
+        %avenceo_id,
+        owner_did = %server_vault.peer_did,
+        "avenCEO control spark — server is the owner"
+    );
+
     let params = ChallengeParams::new(cfg.domain.clone(), cfg.uri.clone(), cfg.network_seed.clone());
     let (listener, mut new_peers) = WsServerListener::new(params, server_did);
 
@@ -135,13 +149,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
     tracing::info!("blind replica engine connected (RocksDB, real schema)");
 
+    // S.3 — the server is the avenCEO owner: mint its genesis on startup (idempotent).
+    if let Err(e) = aven_ceo::ensure_avenceo_owned(&engine, &server_vault, &identity, avenceo_id).await {
+        tracing::warn!("avenCEO mint: {e}");
+    }
+
     // Register each newly-authenticated peer; hold the handle so we can stop it on
     // shutdown and reclaim its engine clone (to finalize RocksDB via sole ownership).
     let engine_for_peers = engine.clone();
+    let grant_signing = identity.clone();
     let peer_task = tokio::spawn(async move {
         while let Some(peer) = new_peers.recv().await {
             if let Err(e) = engine_for_peers.register_peer_sync_client(peer) {
                 tracing::warn!(%peer, "register peer: {e}");
+            }
+            // S.4 — the first peer to connect is auto-granted admin on avenCEO.
+            if let Err(e) =
+                aven_ceo::maybe_grant_first_admin(&engine_for_peers, &grant_signing, avenceo_id, peer).await
+            {
+                tracing::warn!(%peer, "avenCEO auto-grant: {e}");
             }
         }
     });

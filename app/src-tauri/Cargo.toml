@@ -51,6 +51,7 @@ mistralrs = { version = "0.8", optional = true }
 # so cargo unifies them (no extra build). Only with `local-asr`.
 hf-hub = { version = "0.4", default-features = false, features = ["ureq", "tokio", "rustls-tls"], optional = true }
 groove = { package = "aven-db", version = "0.0.1", default-features = false, features = ["client-p2p"] }
+aven-caps = { path = "../../libs/aven-caps" }
 aven-p2p = { path = "../../libs/aven-p2p" }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
