@@ -531,14 +531,7 @@
 			"grantDescOwns": "Full control — read, write, and manage members.",
 			"grantDescReads": "Read-only member.",
 			"grantDescReplicate": "Blind backup / relay — stores encrypted data it cannot read.",
-			"quickRelay": "Replicate to the connected relay",
-			"selfPublishTitle": "Your profile",
-			"selfPublishHint": "Self-published into your own row in this network roster — only you can edit it.",
-			"accountNamePlaceholder": "Your name",
-			"deviceLabelPlaceholder": "This device (e.g. MacBook)",
-			"publish": "Publish",
-			"publishing": "Publishing…",
-			"publishedNote": "Profile published."
+			"quickRelay": "Replicate to the connected relay"
 		},
 		"avenCeoTitle": "avenCEO",
 		"avenCeoClaimedSub": "This network's roster & members",
