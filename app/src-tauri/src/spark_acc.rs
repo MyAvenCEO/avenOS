@@ -51,6 +51,27 @@ fn spark_urn_for(spark_id: Uuid) -> String {
 	format!("spark:{spark_id}")
 }
 
+/// Display name of the well-known network control spark.
+pub const AVEN_CEO_SPARK_NAME: &str = "avenCEO";
+
+/// Deterministic id of the well-known network control spark (**`avenCEO`**, the
+/// roster/membership spark), derived from the network seed. Every device in a
+/// network computes the **same** id, so the spark can be shown by default and
+/// **claimed** before anyone has synced: the first device to mint its genesis
+/// becomes the owner (claim-once). Per-network (the seed scopes it), so distinct
+/// networks don't collide on one id. Uses SHA-256 (the `uuid` crate's `v5` feature
+/// isn't enabled) — stable across builds for a given seed.
+pub fn aven_ceo_spark_id(network_seed: &str) -> Uuid {
+	use sha2::{Digest, Sha256};
+	let mut h = Sha256::new();
+	h.update(b"avenos:avenCEO:v1:");
+	h.update(network_seed.trim().as_bytes());
+	let digest = h.finalize();
+	let mut bytes = [0u8; 16];
+	bytes.copy_from_slice(&digest[..16]);
+	Uuid::from_bytes(bytes)
+}
+
 /// The rights a spark **owner** holds, minted into the genesis biscuit. THE single
 /// source of truth for the rights vocabulary: [`mint_genesis_spark`] grants exactly
 /// these, and [`spark_cap_report`] reports exactly these for an owner, so genesis
@@ -762,6 +783,16 @@ mod tests {
 		// The owner still reads + writes as a full member.
 		authorize(&v, sid, AccOp::Read, "peers", Some(rid), &v.peer_did.clone()).unwrap();
 		authorize(&v, sid, AccOp::Write, "peers", Some(rid), &v.peer_did.clone()).unwrap();
+	}
+
+	#[test]
+	fn aven_ceo_spark_id_is_deterministic_per_seed() {
+		let a = aven_ceo_spark_id("ceo.aven/testnet/abagana");
+		let b = aven_ceo_spark_id("ceo.aven/testnet/abagana");
+		let c = aven_ceo_spark_id("ceo.aven/mainnet/other");
+		assert_eq!(a, b, "same seed → same avenCEO id (every device agrees)");
+		assert_ne!(a, c, "different network seed → different avenCEO id (no cross-network collision)");
+		assert_ne!(a, Uuid::nil());
 	}
 
 	#[test]
