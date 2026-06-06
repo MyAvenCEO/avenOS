@@ -22,7 +22,7 @@
 //! - **mention** — a memory→entity edge ("this memory references entity X"). Powers
 //!   semantic "about X" retrieval and graph traversal; populated by extraction —
 //!   *enriching*, not required for basic scoping (that's `tag`). Many-to-many. Stored in
-//!   [`schema::MEMORY_ENTITIES`].
+//!   [`schema::MENTIONS`].
 //! - **fact** — a *typed, temporal* subject→predicate→object assertion between entities,
 //!   with a validity window (`valid_from`/`valid_to`); MemPalace's *triple*. Stored in
 //!   [`schema::FACTS`].

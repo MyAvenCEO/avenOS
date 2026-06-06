@@ -1,7 +1,7 @@
 //! The aven-brain data model as an aven-db [`Schema`].
 //!
 //! Five tables map 1:1 to the vocabulary (see crate docs): `memories`, `entities`,
-//! `memory_entities` (mentions), `facts`, `relations`. Embeddings use the first-class
+//! `mentions`, `facts`, `relations`. Embeddings use the first-class
 //! [`ColumnType::Vector`] so `nearest` works directly; memory bodies are `Text` so
 //! `text_search` (BM25) works directly; `content_hash` uses native `Bytea`.
 
@@ -14,7 +14,7 @@ pub const EMBED_DIM: usize = 768;
 /// Table names (single source of truth, shared by the schema and the pipeline).
 pub const MEMORIES: &str = "memories";
 pub const ENTITIES: &str = "entities";
-pub const MEMORY_ENTITIES: &str = "memory_entities";
+pub const MENTIONS: &str = "mentions";
 pub const FACTS: &str = "facts";
 pub const RELATIONS: &str = "relations";
 
@@ -62,9 +62,9 @@ pub fn brain_schema(embed_dim: usize) -> Schema {
                 .nullable_column("properties", ColumnType::Json { schema: None })
                 .index_only(["name", "kind"]),
         )
-        // ── memory_entities: "mention" edges (which entities a memory references) ─
+        // ── mentions: "mention" edges (which entities a memory references) ─
         .table(
-            TableSchema::builder(MEMORY_ENTITIES)
+            TableSchema::builder(MENTIONS)
                 .fk_column("memory", MEMORIES)
                 .fk_column("entity", ENTITIES),
         )
@@ -104,7 +104,7 @@ mod tests {
     #[test]
     fn brain_schema_has_all_five_tables() {
         let schema = brain_schema(EMBED_DIM);
-        for table in [MEMORIES, ENTITIES, MEMORY_ENTITIES, FACTS, RELATIONS] {
+        for table in [MEMORIES, ENTITIES, MENTIONS, FACTS, RELATIONS] {
             assert!(
                 schema.contains_key(&TableName::new(table)),
                 "schema must contain table `{table}`"
