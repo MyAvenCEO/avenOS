@@ -157,10 +157,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Register each newly-authenticated peer; hold the handle so we can stop it on
     // shutdown and reclaim its engine clone (to finalize RocksDB via sole ownership).
     let engine_for_peers = engine.clone();
+    let grant_signing = identity.clone();
     let peer_task = tokio::spawn(async move {
         while let Some(peer) = new_peers.recv().await {
             if let Err(e) = engine_for_peers.register_peer_sync_client(peer) {
                 tracing::warn!(%peer, "register peer: {e}");
+            }
+            // S.4 — the first peer to connect is auto-granted admin on avenCEO.
+            if let Err(e) =
+                aven_ceo::maybe_grant_first_admin(&engine_for_peers, &grant_signing, avenceo_id, peer).await
+            {
+                tracing::warn!(%peer, "avenCEO auto-grant: {e}");
             }
         }
     });
