@@ -51,6 +51,11 @@
 							label: t('nav.members'),
 							match: (p) => p.startsWith(`${sparkBase}/members`),
 						},
+						{
+							href: `${sparkBase}/db`,
+							label: t('nav.db'),
+							match: (p) => p.startsWith(`${sparkBase}/db`),
+						},
 					],
 				},
 			],
