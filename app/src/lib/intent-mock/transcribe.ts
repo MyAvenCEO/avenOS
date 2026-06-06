@@ -1,7 +1,7 @@
 /**
  * Browser-side client for the on-device transcription command. Sends captured
- * PCM to the Tauri Rust backend (`transcribe_audio`, backed by Voxtral Mini 3B
- * via mistral.rs) and returns the transcript plus an extracted title + summary.
+ * PCM to the Tauri Rust backend (`transcribe_audio`, backed by Parakeet-TDT-0.6b-v3
+ * via sherpa-onnx) and returns the transcript plus a derived title (summary empty).
  *
  * The `invoke` is injectable so this stays unit-testable without a Tauri runtime.
  */

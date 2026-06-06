@@ -32,24 +32,27 @@ name = "aven-os-app"
 path = "src/main.rs"
 
 [features]
-# On-device voice-note transcription (Gemma 4 E4B) is ON by default, so the
-# normal `bun run dev:app` / `bun run release:app` flows ship the real model and
-# trigger the first-run weights download. Enabling it pulls in the heavy
-# `mistralrs` inference crate (~400MB+ build, longer first compile). Build with
-# `--no-default-features` to get the light stub build (CI / quick checks).
-default = ["local-asr"]
-local-asr = ["dep:mistralrs", "dep:hf-hub"]
+# On-device voice-note transcription (NVIDIA Parakeet-TDT-0.6b-v3 via the
+# `sherpa-onnx` crate, ONNX/int8) is ON by default. The `sherpa-onnx-sys` build
+# script downloads prebuilt static libs (incl. onnxruntime) — no CMake needed.
+# Build with `--no-default-features` to get the light stub build (CI / quick
+# checks). The first-run model download (~640 MB tarball) is user-initiated.
+default = ["local-voice"]
+local-voice = ["dep:aven-ai", "aven-ai/stt"]
+# Kept for the future on-device Gemma path. OFF by default — enabling pulls in
+# the heavy `mistralrs` inference crate (~400MB+ build). Re-enable with
+# `--features gemma` once that path is wired up.
+gemma = ["dep:aven-ai", "aven-ai/gemma"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
 async-trait = "0.1"
-# On-device ASR engine — optional, only compiled with the `local-asr` feature.
-mistralrs = { version = "0.8", optional = true }
-# Weights download with byte-level progress; features matched to mistralrs-core
-# so cargo unifies them (no extra build). Only with `local-asr`.
-hf-hub = { version = "0.4", default-features = false, features = ["ureq", "tokio", "rustls-tls"], optional = true }
+# On-device AI core (Tauri-free): STT via sherpa-onnx + model download/cache, and
+# the future Gemma/LLM path. The heavy native deps live here, gated by its
+# `stt` / `gemma` features. Only compiled with `local-voice` / `gemma`.
+aven-ai = { path = "../../libs/aven-ai", optional = true, default-features = false }
 groove = { package = "aven-db", version = "0.0.1", default-features = false, features = ["client-p2p"] }
 aven-caps = { path = "../../libs/aven-caps" }
 aven-p2p = { path = "../../libs/aven-p2p" }
@@ -82,9 +85,6 @@ tracing-log = "0.2.0"
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
 oslog = { version = "0.2", features = ["logger"] }
-# Apple GPU backend — required for the AFQ4 (affine) quant we load on Apple
-# Silicon / iOS. Feature is unioned with the base `mistralrs` dep above.
-mistralrs = { version = "0.8", optional = true, features = ["metal"] }
 
 # Vendored aven-db (jazz2 alpha.50) with AvenOS P2P patches:
 # `QueryManager` write paths used to `.map_err(|_| QueryError::ObjectNotFound(id))`,

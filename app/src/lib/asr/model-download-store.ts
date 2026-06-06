@@ -1,6 +1,6 @@
 /**
  * Readiness + download-progress store for the on-device voice model
- * (Gemma 4 E4B). Fed by the Rust backend: an initial `asr_status` query plus
+ * (Parakeet TDT 0.6b v3 via sherpa-onnx). Fed by the Rust backend: an initial `asr_status` query plus
  * streamed `asr:model-download` events. The UI uses this to drive the composer's
  * inline "preparing" pill and the Models settings page; `SparkTalkPanel`
  * derives `voiceUnavailableReason` and `voicePrep` from it.
@@ -21,7 +21,7 @@ export type AsrStatus =
 
 export type AsrState = {
 	status: AsrStatus
-	/** Friendly model name for labels, e.g. "Gemma 4 E4B". */
+	/** Friendly model name for labels, e.g. "Parakeet TDT 0.6b v3". */
 	model: string
 	/** Selected quantization/optimization, e.g. "AFQ4 · Apple-optimized". */
 	quant: string
@@ -41,7 +41,7 @@ export type AsrEvent = {
 	error?: string
 }
 
-export const ASR_MODEL_LABEL = 'Voxtral Mini 3B'
+export const ASR_MODEL_LABEL = 'Parakeet TDT 0.6b v3'
 export const ASR_EVENT = 'asr:model-download'
 export const ASR_STATUS_COMMAND = 'asr_status'
 
@@ -180,7 +180,7 @@ export async function startAsrReadiness(): Promise<Unsubscriber> {
 
 /** A model directory found in the on-device HF cache (`asr_local_models`). */
 export type LocalModel = {
-	/** Hugging Face repo id, e.g. "google/gemma-4-E4B-it". */
+	/** Model directory id, e.g. "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8". */
 	id: string
 	/** Bytes occupied on disk. */
 	sizeBytes: number

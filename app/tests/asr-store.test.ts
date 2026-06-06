@@ -14,7 +14,7 @@ describe('asr readiness reducer', () => {
 			status: 'downloading',
 			receivedBytes: 100,
 			totalBytes: 400,
-			model: 'Gemma 4 E4B'
+			model: 'Parakeet TDT 0.6b v3'
 		})
 		expect(s.status).toBe('downloading')
 		expect(s.receivedBytes).toBe(100)
