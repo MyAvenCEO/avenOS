@@ -32,6 +32,11 @@ const INBOUND_RATE_WINDOW_US: u64 = 1_000_000;
 /// catch-up bursts. A malicious peer can't turn a relay into an unbounded sink.
 const INBOUND_MAX_BATCHES_PER_WINDOW: u32 = 50_000;
 
+/// Max size of a single inbound row value (M5 "max db-value size" abuse cap).
+/// Generous (64 MiB) — only rejects a pathologically huge value, not legitimate
+/// files; bounds how much one write can cost a relay's storage.
+const MAX_INBOUND_ROW_BYTES: usize = 64 * 1024 * 1024;
+
 /// Per-peer inbound rate window (M5). A fixed window: count resets when the
 /// window rolls; over-budget payloads in a window are dropped at the sync edge.
 #[derive(Debug, Clone, Default)]

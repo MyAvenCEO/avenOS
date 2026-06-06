@@ -1021,6 +1021,15 @@ impl SyncManager {
             tracing::warn!(%client_id, payload = payload.variant_name(), "M5: inbound rate limit exceeded — dropping payload");
             return;
         }
+        // M5: reject a pathologically oversized value (max db-value-size cap).
+        if let SyncPayload::RowBatchCreated { row, .. } | SyncPayload::RowBatchNeeded { row, .. } =
+            &payload
+        {
+            if row.data.len() > super::MAX_INBOUND_ROW_BYTES {
+                tracing::warn!(%client_id, bytes = row.data.len(), "M5: oversized inbound row — dropping");
+                return;
+            }
+        }
         let Some(client) = self.clients.get(&client_id) else {
             tracing::warn!(
                 %client_id,
