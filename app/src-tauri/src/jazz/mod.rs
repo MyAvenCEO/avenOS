@@ -1616,13 +1616,28 @@ fn spawn_dev_peer_sync(
 		// provenance only and never carries `table`.
 		let table = match payload {
 			SyncPayload::RowBatchCreated { metadata, .. }
-			| SyncPayload::RowBatchNeeded { metadata, .. } => metadata
-				.as_ref()
-				.and_then(|m| m.metadata.get(MetadataKey::Table.as_str()).cloned()),
+			| SyncPayload::RowBatchNeeded { metadata, .. } => Some(
+				metadata
+					.as_ref()
+					.and_then(|m| m.metadata.get(MetadataKey::Table.as_str()).cloned()),
+			),
 			_ => None,
 		};
-		if let Some(table) = table {
-			let _ = change_tx.send(table);
+		// Peer-synced deltas forwarded by a blind relay don't always preserve the
+		// payload-level table; then a synced grant/keyshare only re-hydrates after an app
+		// restart (M8 B2/B3: subject_not_owner + missing_dek_cached). When a RowBatch has
+		// no table, poke the vault-shell tables so a re-hydrate is CONSIDERED; the content-
+		// digest guard makes identical re-deliveries a no-op (no re-hydrate loop).
+		match table {
+			Some(Some(table)) => {
+				let _ = change_tx.send(table);
+			}
+			Some(None) => {
+				for t in ["identities", "keyshares", "peers"] {
+					let _ = change_tx.send(t.to_string());
+				}
+			}
+			None => {}
 		}
 	});
 	// Supervisor: (re)dial → attach → register → wait for the connection to drop →
