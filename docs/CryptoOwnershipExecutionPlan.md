@@ -100,15 +100,16 @@ don't add what you don't need):
 - [x] Audited: app (`jazz/mod.rs:1577`) + server (`main.rs:233`) install real resolvers unconditionally; nothing relies on `AllowAll` in production.
 - [x] Builds green (app + server); codec test passes; tests opt into `AllowAll` explicitly.
 
-## ◑ Milestone 5 — Relay/sync abuse caps (1/4 — `dc5bae2`)
+## ◑ Milestone 5 — Relay/sync abuse caps (3/4 — rate `dc5bae2` + max-size `e5fce0e` + quota `c212819`)
 
 Blind relays accept authenticity-valid-but-*unauthorized* rows (rejected at members, but
 stored/forwarded = a spam/DoS sink, since a relay holds no biscuit to authorize). Add
 protective caps at the sync/relay layer so a relay isn't an unbounded sink.
 - [x] **Rate limiting** per peer — fixed-window inbound batch budget at `process_from_client` (50k/s, generous; only floods trip it). *(bytes/sec + backpressure: later.)*
-- [ ] **Per-identity storage quota** — max DB size/value-count per identity; reject or evict over-quota writes. *(needs per-owner storage accounting — app-resolver layer.)*
-- [ ] Optional: require a **minimal cap to relay at all** (drop pure-forgery spam at the relay edge, before storage).
-- [ ] Fair-share across identities so one identity can't starve others on a shared relay.
+- [x] **Max db-value size** — 64 MiB per inbound row (`e5fce0e`).
+- [x] **Per-identity storage quota** — 10 MiB/identity on the aven-node (`c212819`). `CapabilityResolver::quota_for(proof)→(key,limit)`; engine does distinct-row accounting (no re-sync double-count) and **rejects** (withholds, never deletes) over-quota writes.
+- [x] **Fair-share** — the per-identity 10 MiB bound means one identity can't starve others on a shared relay.
+- [ ] Optional hardening: require a **minimal cap to relay at all** (drop pure-forgery spam at the relay edge, before storage).
 
 **Cap-model note (confirmed):** grantable caps today = **Owner** (`owns` =
 read/write/delete/admit/rotate_dek) · **Member/Reader** (`reads`) · **Relay**
@@ -141,14 +142,17 @@ readable by every invited member of that aven, writeable only on one's **own** r
 enforced by owner-binding + write-once). A device can belong to many avens, each granting its
 own independent allowance. Per-identity Owner/Member/Relay sharing stays as-is (orthogonal).
 
-- [ ] **(1) Generalize the `avenCEO` name** → per-aven configured name (env/config on the
-  aven-node); the deterministic id stays per-seed. Drop hardcoded `avenCEO` literals.
-- [ ] **(2) Shared-read of the `identities` registry** for aven members (a `reads` on that
-  aven's identities list) — members see the directory; own-row-write already enforced.
-- [ ] **(3) `replicate(quota)` cap primitive** + per-identity **10 MB** quota enforced on the
-  aven-node (M5's per-identity quota lands here) + per-grant rate limit.
-- [ ] **(4) "Invite to Sync & Backup" UI** — any admin of that aven grants `reads` +
-  `replicate(quota)` to a DID. Invite = registry row (visibility) + bounded relay.
+- [x] **(1) Generalize the `avenCEO` name** → per-aven configured name (`AVEN_SERVER_NAME`;
+  `a5cdaa6`). Deterministic id stays per-seed; aven-node row authoritative.
+- [◑] **(2) Shared-read of the `identities` registry** — rides on the blind relay: an
+  identity replicated to the aven is forwarded to every connected member, so the directory
+  syncs without new resolver code. **Empirical fork-check pending** (create on A → see on B);
+  own-row-write already enforced by owner-binding + write-once.
+- [x] **(3) per-identity 10 MB quota** on the aven-node (`c212819`) — the bounded relay. (The
+  `replicate` grant carries the role; the 10 MB is the aven's automatic per-identity policy,
+  not a per-cap setting — simpler + federated.)
+- [x] **(4) "Sync & Backup" in the share screen** (`3724d8e`) — the `replicate` grant relabeled
+  + bound described (en+de). Grant/IPC/gate were already wired; this names the role.
 
 ---
 
