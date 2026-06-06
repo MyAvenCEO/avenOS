@@ -3009,22 +3009,36 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 		.get(&identity_uuid)
 		.copied()
 		.ok_or_else(|| format!("missing dek version for identity {identity_uuid}"))?;
-	let new_v = cur_v + 1;
 
-	// 1. Re-mint biscuit excluding the revoked peer; the remaining members are
-	//    exactly the new chain's owners (owner + everyone except the revoked).
+	// Who actually HOLDS the DEK for this identity = keyshare recipients (owner +
+	// readers + admins). A blind `replicate` relay is NOT here — it never got a keyshare.
+	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
+	let ks_spark_ix = jazz_engine::col_ix(&ks_schema, "owner")?;
+	let ks_recip_ix = jazz_engine::col_ix(&ks_schema, "recipient_did")?;
+	let ks_rows_now = jazz_engine::exec_list_rows(client.as_ref(), "keyshares").await?;
+	let mut prior_holders: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+	for (_oid, vals) in &ks_rows_now {
+		if jazz_engine::uuid_cell_at(vals.as_slice(), ks_spark_ix)? == identity_uuid {
+			if let Some(Value::Text(s)) = vals.get(ks_recip_ix) {
+				prior_holders.insert(s.clone());
+			}
+		}
+	}
+	// 1. Re-mint biscuit excluding the revoked peer (drops its grant from the chain).
 	let new_biscuit =
 		crate::identity_acc::rebuild_identity_biscuit_excluding(&shell.vault, identity_uuid, &peer_did)?;
-	let remaining: Vec<String> = crate::identity_acc::identity_admins(&new_biscuit, identity_uuid)?
-		.into_iter()
-		.collect();
 
-	// 2. Rotate the DEK: fresh key at v+1, keyshared to the REMAINING members
-	//    only (incl. this device, so our own hydrate gets v+1).
+	// 2. ALWAYS rotate the DEK — revoke = remove + rotate (forward secrecy by default,
+	//    no per-peer special-casing). Re-wrap the fresh v+1 key to every remaining
+	//    keyshare-holder (owner + readers + admins) MINUS the revoked peer — NOT just
+	//    admins (the prior bug dropped `reads`-members from v+1, so their follow-up
+	//    messages stopped decrypting). A blind `replicate` relay isn't a holder, so it's
+	//    simply never re-wrapped; the rotated ciphertext still flows through it and
+	//    members decrypt at v+1.
+	let new_v = cur_v + 1;
 	let new_dek = crate::crypto::random_identity_dek();
 	let urn = jazz_engine::identity_urn(identity_uuid);
-	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
-	for recip_did in &remaining {
+	for recip_did in prior_holders.iter().filter(|d| d.as_str() != peer_did.as_str()) {
 		let recip_pk = crate::jazz_auth::ed25519_public_from_peer_did(recip_did)?;
 		let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recip_pk)?;
 		let aad = crate::crypto::keyshare_wrap_aad(&urn, recip_did, new_v);
