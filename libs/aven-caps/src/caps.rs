@@ -84,6 +84,34 @@ pub fn aven_ceo_identity(network_seed: &str) -> Uuid {
 	Uuid::from_bytes(bytes)
 }
 
+/// Deterministic id of a **sub-group** of `parent` (the group-owned-values model, M9).
+/// Every value can be owned by its own group; a group's id is derived from its parent +
+/// a stable `label`, so all peers compute the SAME id with no coordination. The **default**
+/// group of an identity is the identity id itself — so existing `owner = identity_id` rows
+/// need no migration — while finer groups (e.g. the registry) get a derived sub-id that
+/// **extends** the parent. Same SHA-256 domain-separated scheme as [`aven_ceo_identity`].
+pub fn derive_subgroup_id(parent: Uuid, label: &str) -> Uuid {
+	use sha2::{Digest, Sha256};
+	let mut h = Sha256::new();
+	h.update(b"avenos:group:v1:");
+	h.update(parent.as_bytes());
+	h.update(b":");
+	h.update(label.trim().as_bytes());
+	let digest = h.finalize();
+	let mut bytes = [0u8; 16];
+	bytes.copy_from_slice(&digest[..16]);
+	Uuid::from_bytes(bytes)
+}
+
+/// The **registry group** of an aven's control identity (M9-2): the sub-group that owns the
+/// member directory (`identities` + `peers` rows). A SYNC peer is keyshared THIS group's DEK
+/// (to read the directory) but never the control identity's main DEK — so it is
+/// **cryptographically** blind to any data the control identity owns, not merely
+/// authorization-filtered. `= derive_subgroup_id(aven_ceo_identity(seed), "registry")`.
+pub fn aven_ceo_registry_group(network_seed: &str) -> Uuid {
+	derive_subgroup_id(aven_ceo_identity(network_seed), "registry")
+}
+
 /// The rights a identity **owner** holds, minted into the genesis biscuit. THE single
 /// source of truth for the rights vocabulary: [`mint_genesis_identity`] grants exactly
 /// these, and [`identity_cap_report`] reports exactly these for an owner, so genesis
@@ -839,6 +867,27 @@ mod tests {
 		assert_eq!(a, b, "same seed → same avenCEO id (every device agrees)");
 		assert_ne!(a, c, "different network seed → different avenCEO id (no cross-network collision)");
 		assert_ne!(a, Uuid::nil());
+	}
+
+	#[test]
+	fn subgroup_id_is_deterministic_and_isolated() {
+		let seed = "ceo.aven/testnet/abagana";
+		let ceo = aven_ceo_identity(seed);
+		// Deterministic — every peer derives the same registry-group id with no coordination.
+		assert_eq!(aven_ceo_registry_group(seed), aven_ceo_registry_group(seed));
+		assert_eq!(aven_ceo_registry_group(seed), derive_subgroup_id(ceo, "registry"));
+		// A sub-group is its OWN key boundary: distinct from the parent identity...
+		assert_ne!(aven_ceo_registry_group(seed), ceo, "registry group != identity (own DEK boundary)");
+		// ...and from sibling labels (registry vs a future data group).
+		assert_ne!(
+			derive_subgroup_id(ceo, "registry"),
+			derive_subgroup_id(ceo, "messages"),
+			"distinct labels -> distinct groups"
+		);
+		// Parent-scoped: same label under a different parent → different group (no collision).
+		let other = aven_ceo_identity("ceo.aven/mainnet/other");
+		assert_ne!(derive_subgroup_id(ceo, "registry"), derive_subgroup_id(other, "registry"));
+		assert_ne!(aven_ceo_registry_group(seed), Uuid::nil());
 	}
 
 	#[test]
