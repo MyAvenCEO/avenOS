@@ -156,10 +156,21 @@ own independent allowance. Per-identity Owner/Member/Relay sharing stays as-is (
 
 ---
 
-## ☐ Milestone 8 — Sharing resilience + caps transparency (from live testing)
+## ◑ Milestone 8 — Sharing resilience + caps transparency (code done — pending live re-verify)
 
-The grant/revoke/member flow works but is **brittle** — live testing surfaced dead-end
-errors + missing UI. Two buckets: **correctness bugs** and **transparency/UX**.
+Live testing surfaced dead-end errors + missing UI. **Done & on `main`:**
+- **B1** make `peers.device_label` nullable — fixes `missing column device_label` (`b0764de`).
+- **B2/B3** re-hydrate vault shell on relay-forwarded peer-sync — fixes `subject_not_owner` +
+  `missing_dek_cached` "only after restart" (`1214c45`).
+- **G1** remove Capabilities sub-tab (`a247ebd`). **H1/H2** cap badges + descriptions (`9a6013a`),
+  with the relay's quota+rate_limit reported as **biscuit-derived caps**, not synthesized (`f0acf12`).
+- **D1** real peer names — drop hardcoded "Replication Server" (`41394bb`).
+- **B4** auto-retry transient shell errors so add/revoke/read self-heal (`9de9d06`).
+- **#3** (Member reads): audited — `authorize_read_delegated` is correct; the failure was the
+  stale biscuit → **fixed by B2/B3**. **E1** (avenCEO display): `add_member` ships the avenCEO row
+  via the member's `reads` grant + re-announce → **displays once B2/B3 re-hydrates**.
+
+⇒ #3 + E1 need a **live re-verify** (manual). Original punch-list below for reference.
 
 ### Correctness (the brittleness)
 - [ ] **B1 — `missing column device_label` on grant** — the grant/publish-profile path
