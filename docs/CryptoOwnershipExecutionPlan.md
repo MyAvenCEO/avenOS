@@ -325,11 +325,14 @@ pass. What we **delete** (root-cause, not symptom):
    the duplication: "a person" and "a spark" were two representations of *an owner*.
    One typed table = **SSOT for who owns/acts**; the humans↔spark reconciliation
    (separate profile vs. owner records) disappears.
-2. **The entire migration/lens layer** (clean slate). Delete
-   `libs/aven-schema/migrations/{registry.json,snapshots/*}` **and** the
-   load-previous-manifest / `generate_lens` / snapshot-stamping paths in
-   `schema_manifest.rs`. On greenfield there is no prior hash to evolve from — the
-   layer solves a problem we no longer have.
+2. **Legacy migration *snapshots* only** (NOT the mechanism). The new `identities`
+   manifest is a **fresh baseline**; the migration/lens *system* stays intact (it is
+   reusable infra for *future* schema evolution — ripping it out would force a wipe
+   on every future change). Drop only the dead evolution chain of the abandoned
+   schema: `migrations/snapshots/before-{account-name,files,peers-spark-id}.json` +
+   their `registry.json` entries (they reference dropped `humans`/`sparks` tables and
+   nobody migrates from them on a clean-slate wipe). **Keep** the `generate_lens` /
+   load-previous-manifest / snapshot-stamping paths in `schema_manifest.rs`.
 3. **Shim modules.** `app/src-tauri/src/spark_acc.rs` (17 lines) and `spark_sync.rs`
    (74) are thin re-export/glue over `aven-caps`. Where they only re-export, **delete
    and import `aven-caps` directly** (DRY: one source). Otherwise fold into a single
@@ -344,7 +347,7 @@ before, despite the new `type` field.
 
 **Schema — SSOT (`libs/aven-schema/`):**
 - `schema.manifest.json` — rewrite: `identities` (merge + `type`, +human fields nullable), `spark_id`→`owner` on `messages`/`todos`/`files`/`peers`/`keyshares`, drop `humans`+`sparks`.
-- `migrations/**` (registry + 3 snapshots) — **DELETE** (clean slate, §12.1.2).
+- `migrations/snapshots/before-*.json` + their `registry.json` entries — drop (dead chain for dropped `humans`/`sparks`). **Keep the migration mechanism** (§12.1.2).
 
 **`aven-caps` — crypto/caps SSOT (`libs/aven-caps/src/`):**
 - `caps.rs` (132) — `spark`→`identity` across genesis/biscuit/`BiscuitSpark`→`BiscuitIdentity`/`mint_genesis_spark`→`mint_genesis_identity`; `AccOp` unchanged.
@@ -358,7 +361,7 @@ before, despite the new `type` field.
 - `biscuit_resolver.rs` (32) — `spark_id`→`owner`; `object_spark_ids`→`object_owner`.
 - `spark_acc.rs` (2) + `spark_sync.rs` (24) — eliminate or rename→`identity_*` per §12.1.3.
 - `peers.rs` (14) — `peers` table stays (roster of devices), `spark_id`→`owner`.
-- `schema_manifest.rs` (5) — table consts; **delete migration-load paths** (§12.1.2).
+- `schema_manifest.rs` (5) — table-name consts only; **KEEP** the migration-load/lens paths (future evolution, §12.1.2).
 - `network.rs` (4), `lib.rs` (3), `crypto.rs` (1).
 
 **Always-on peer (`libs/aven-server/src/`):**
@@ -385,7 +388,7 @@ table (owners). Renaming removes the collision:
 - Clean slate: `.avenOS` is wiped, so no stale `identities/` dir remains.
 
 ### 12.4 Atomic execution order (one push, red until green)
-1. **Schema** — rewrite manifest; delete `migrations/**`.
+1. **Schema** — rewrite manifest (fresh baseline); drop legacy `before-*` snapshots; **keep the migration mechanism**.
 2. **`aven-caps`** — rename primitives; `cargo check -p aven-caps` green.
 3. **App backend** — `jazz/*`, `biscuit_resolver`, `spark_acc`/`spark_sync` (eliminate/rename), `peers`, `schema_manifest` (drop migration paths), fold `humans`→identity; on-disk path.
 4. **`aven-server`** — `aven_ceo`, `main` (folder rename); `cargo build` green.
