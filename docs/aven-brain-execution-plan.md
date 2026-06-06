@@ -155,7 +155,7 @@ identities) · **T3 managed API** (opt-in, minimal context).
 | **Context assembly** | `wake` (L0+L1); `recall`/`memories_about` (L2 scoped); **entity cards = compiled-truth + timeline** (gBrain) | ✅ done, tested |
 | **Real models** | EmbeddingGemma behind `Embedder`; LLM `Extractor` (off write path) | ☐ next |
 | **Brain interface** | **Rust-native IPC bridge** (search/remember/kg/wake) — no MCP; an in-process/IPC API agents call directly | ☐ |
-| **Dreaming** | background consolidation pass: dynamics decay, dedup, **CRDT entity-merge**, contradiction detection, recompute compiled-truth | ☐ |
+| **Dreaming** | relation **decay** + **CRDT entity-merge** (by normalized name) + relation dedup ✅; contradiction detection + summary recompute ☐ | ◑ decay+merge done |
 | **Scale & sync** | usearch HNSW + `_score` surfacing + weighted fusion; Counter-merge dynamics; sparks/identity sharing + multi-device | ☐ |
 | **Honest eval** | LongMemEval/LoCoMo harness against aven-brain (held-out numbers only) | ☐ |
 
@@ -217,7 +217,8 @@ aven-db: `Vector` (dcc2162), `nearest` (4579152), `text_search` (7ca0387); suite
 aven-brain: scaffold+schema (1b92f72), strengths restored (d195345), vocabulary finalized
 (bbb188b, 39cc31f, 525f27c, de8c8aa), pipeline (199f080), store round-out — idempotent
 remember + tags + scoped search (dfb3701), deterministic knowledge graph
-(3be5cec), context assembly — wake/recall/entity-cards (d758142). **aven-brain: 12 tests pass.**
+(3be5cec), context assembly — wake/recall/entity-cards (d758142), dreaming — decay + CRDT
+entity-merge (ab66f2b). **aven-brain: 13 tests pass.**
 
 ---
 
