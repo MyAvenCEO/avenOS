@@ -522,7 +522,12 @@
 			"grantDescReads": "Read-only member.",
 			"grantDescReplicate": "Blind backup / relay — stores encrypted data it cannot read.",
 			"quickRelay": "Replicate to the connected relay"
-		}
+		},
+		"avenCeoTitle": "avenCEO",
+		"avenCeoClaimedSub": "This network's roster & members",
+		"avenCeoUnclaimedSub": "Unclaimed — claim it to become this network's admin/owner.",
+		"avenCeoClaim": "Claim — become network admin",
+		"avenCeoClaiming": "Claiming…"
 	},
 	"uiLab": {
 		"pageTitle": "UI Lab",
