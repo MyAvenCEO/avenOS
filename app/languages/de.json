@@ -722,5 +722,17 @@
 			"open": "Offen",
 			"toGo": "To Go"
 		}
+	},
+	"networkGate": {
+		"checking": "Prüfe Netzwerk-Mitgliedschaft…",
+		"title": "Du bist noch in keinem Netzwerk",
+		"needInvite": "Dies ist ein Netzwerk nur mit Einladung. Sende deine DID an einen Admin — komm dann zurück.",
+		"yourDid": "Deine DID",
+		"copyDid": "DID kopieren",
+		"copied": "Kopiert",
+		"firstTitle": "Neues Netzwerk starten?",
+		"firstHint": "Wenn dieses Netzwerk noch niemand beansprucht hat, kannst du der erste Admin werden.",
+		"claim": "Beanspruchen — Admin werden",
+		"claiming": "Beanspruche…"
 	}
 }

@@ -7,6 +7,9 @@ import { initLocale, normalizeLocale, setLocale, t } from '$lib/i18n'
 import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
 import { startPeerMeshStore } from '$lib/peer/peer-mesh-store'
 import { attachAvenosRuntimeBridge, grooveSessionReady } from '$lib/runtime/groove-runtime'
+import { avenCeoSparkId } from '$lib/jazz/api'
+import { jazzStore } from '$lib/jazz/store.svelte'
+import NetworkGate from '$lib/shell/NetworkGate.svelte'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { displayTitleForSession } from '$lib/settings/active-vault-ui'
 import { attachSelfRustEventMirrors, deviceSession } from '$lib/settings/device-session-store'
@@ -107,6 +110,31 @@ $effect(() => {
 /** Mesh touches Groove ACL — defer until strict local-first bootstrap confirms shell hydrate. */
 const meshAllowed = $derived(sessionKind === 'unlocked' && $grooveSessionReady)
 
+// Global invite-only gate: the app is locked behind membership of the network's
+// well-known avenCEO spark. A device is a "member" iff it has the avenCEO spark
+// locally (only members/owner sync its genesis). Non-members see NetworkGate
+// (invite prompt / claim). Sandbox (non-tauri) is never gated.
+const sparksStore = jazzStore('sparks')
+let avenCeoId = $state<string | undefined>(undefined)
+$effect(() => {
+	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked') return
+	void (async () => {
+		try {
+			avenCeoId = await avenCeoSparkId()
+		} catch {
+			avenCeoId = undefined
+		}
+	})()
+})
+const isNetworkMember = $derived(
+	!!avenCeoId && sparksStore.rows.some((r) => String(r.spark_id) === avenCeoId),
+)
+const appAccessState = $derived.by<'app' | 'gate' | 'checking'>(() => {
+	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked') return 'app'
+	if (!$grooveSessionReady || avenCeoId === undefined || !sparksStore.loaded) return 'checking'
+	return isNetworkMember ? 'app' : 'gate'
+})
+
 $effect(() => {
 	if (!browser || !isTauriRuntime() || !meshAllowed) return
 	return startPeerMeshStore()
@@ -191,6 +219,13 @@ $effect(() => {
 <div class="box-border flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-background">
 	<LockGate />
 	{#if !shellLocked}
+		{#if appAccessState === 'checking'}
+			<div class="flex min-h-0 flex-1 items-center justify-center p-6">
+				<p class="text-muted-foreground text-sm">{t('networkGate.checking')}</p>
+			</div>
+		{:else if appAccessState === 'gate'}
+			<NetworkGate />
+		{:else}
 		<header
 			class="shrink-0 bg-background/90 px-3 pt-[max(0.375rem,env(safe-area-inset-top))] pb-1 backdrop-blur-sm sm:px-6 sm:pt-3 sm:pb-2"
 		>
@@ -304,5 +339,6 @@ $effect(() => {
 		</div>
 
 		<MobileShellNav {selfNavLabel} {selfActive} />
+		{/if}
 	{/if}
 </div>

@@ -734,5 +734,17 @@
 			"open": "Open",
 			"toGo": "To go"
 		}
+	},
+	"networkGate": {
+		"checking": "Checking network membership…",
+		"title": "You're not part of a network yet",
+		"needInvite": "This is an invite-only network. Send your DID to an admin to be added — then come back.",
+		"yourDid": "Your DID",
+		"copyDid": "Copy DID",
+		"copied": "Copied",
+		"firstTitle": "Starting a new network?",
+		"firstHint": "If no one has claimed this network yet, you can become its first admin.",
+		"claim": "Claim — become admin",
+		"claiming": "Claiming…"
 	}
 }
