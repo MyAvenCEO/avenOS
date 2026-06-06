@@ -1381,6 +1381,20 @@ pub(super) fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable:
 			"row {col_ty:?} unsupported through JSON IPC (engine-only; use flat columns)",
 			col_ty = col_ty,
 		)),
+		// Vector (embedding) column: a JSON array of numbers -> packed f32.
+		ColumnType::Vector { .. } => {
+			let arr = cell
+				.as_array()
+				.ok_or_else(|| "expected JSON array column for vector".to_string())?;
+			let mut v = Vec::with_capacity(arr.len());
+			for item in arr {
+				let f = item
+					.as_f64()
+					.ok_or_else(|| "expected JSON number in vector column".to_string())?;
+				v.push(f as f32);
+			}
+			Ok(Value::Vector(v))
+		}
 	}
 }
 

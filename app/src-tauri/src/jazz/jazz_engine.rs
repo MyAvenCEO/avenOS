@@ -60,6 +60,15 @@ fn jazz_cell_json(cell: &Value) -> JsonValue {
 		),
 		Value::BatchId(id) => JsonValue::String(hex::encode(id)),
 		Value::Bytea(b) => JsonValue::String(base64::engine::general_purpose::STANDARD.encode(b)),
+		Value::Vector(v) => JsonValue::Array(
+			v.iter()
+				.map(|f| {
+					serde_json::Number::from_f64(*f as f64)
+						.map(Into::into)
+						.unwrap_or(JsonValue::Null)
+				})
+				.collect(),
+		),
 	}
 }
 
