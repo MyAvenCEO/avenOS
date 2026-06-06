@@ -375,6 +375,7 @@ fn heuristic_default_for_type(ct: &ColumnType, nullable: bool) -> Value {
         ColumnType::Uuid => Value::Null, // Can't generate a sensible default
         ColumnType::BatchId => Value::BatchId([0; 16]),
         ColumnType::Bytea => Value::Bytea(vec![]),
+        ColumnType::Vector { dim } => Value::Vector(vec![0.0; *dim]),
         ColumnType::Json { schema: _ } => Value::Null,
         ColumnType::Array { element: _ } => Value::Array(vec![]),
         ColumnType::Row { columns: _ } => Value::Null,

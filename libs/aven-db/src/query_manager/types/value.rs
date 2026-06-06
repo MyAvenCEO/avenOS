@@ -23,6 +23,9 @@ pub enum Value {
     Uuid(ObjectId),
     BatchId([u8; 16]),
     Bytea(Vec<u8>),
+    /// Dense embedding vector of f32 components. Powers vector-similarity
+    /// search; encoded compactly (4 bytes/dim) in the row format.
+    Vector(Vec<f32>),
     /// Homogeneous array of values.
     Array(Vec<Value>),
     /// Heterogeneous row/tuple of values (for nested rows in arrays).
@@ -49,6 +52,7 @@ enum ValueHuman {
     Uuid(ObjectId),
     BatchId([u8; 16]),
     Bytea(Vec<u8>),
+    Vector(Vec<f32>),
     Array(Vec<ValueHuman>),
     Row(RowHuman),
     Null,
@@ -73,6 +77,7 @@ enum ValueBinary {
     Uuid(ObjectId),
     BatchId([u8; 16]),
     Bytea(Vec<u8>),
+    Vector(Vec<f32>),
     Array(Vec<ValueBinary>),
     Row(Vec<ValueBinary>),
     Null,
@@ -139,6 +144,7 @@ impl From<&Value> for ValueHuman {
             Value::Uuid(v) => ValueHuman::Uuid(*v),
             Value::BatchId(v) => ValueHuman::BatchId(*v),
             Value::Bytea(v) => ValueHuman::Bytea(v.clone()),
+            Value::Vector(v) => ValueHuman::Vector(v.clone()),
             Value::Array(v) => ValueHuman::Array(v.iter().map(ValueHuman::from).collect()),
             Value::Row { id, values } => ValueHuman::Row(RowHuman {
                 id: *id,
@@ -161,6 +167,7 @@ impl From<ValueHuman> for Value {
             ValueHuman::Uuid(v) => Value::Uuid(v),
             ValueHuman::BatchId(v) => Value::BatchId(v),
             ValueHuman::Bytea(v) => Value::Bytea(v),
+            ValueHuman::Vector(v) => Value::Vector(v),
             ValueHuman::Array(v) => Value::Array(v.into_iter().map(Value::from).collect()),
             ValueHuman::Row(r) => Value::Row {
                 id: r.id,
@@ -183,6 +190,7 @@ impl From<&Value> for ValueBinary {
             Value::Uuid(v) => ValueBinary::Uuid(*v),
             Value::BatchId(v) => ValueBinary::BatchId(*v),
             Value::Bytea(v) => ValueBinary::Bytea(v.clone()),
+            Value::Vector(v) => ValueBinary::Vector(v.clone()),
             Value::Array(v) => ValueBinary::Array(v.iter().map(ValueBinary::from).collect()),
             Value::Row { values, .. } => {
                 ValueBinary::Row(values.iter().map(ValueBinary::from).collect())
@@ -204,6 +212,7 @@ impl From<ValueBinary> for Value {
             ValueBinary::Uuid(v) => Value::Uuid(v),
             ValueBinary::BatchId(v) => Value::BatchId(v),
             ValueBinary::Bytea(v) => Value::Bytea(v),
+            ValueBinary::Vector(v) => Value::Vector(v),
             ValueBinary::Array(v) => Value::Array(v.into_iter().map(Value::from).collect()),
             ValueBinary::Row(v) => Value::Row {
                 id: None,
@@ -252,6 +261,9 @@ impl PartialEq for Value {
             (Value::Uuid(a), Value::Uuid(b)) => a == b,
             (Value::BatchId(a), Value::BatchId(b)) => a == b,
             (Value::Bytea(a), Value::Bytea(b)) => a == b,
+            (Value::Vector(a), Value::Vector(b)) => {
+                a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.to_bits() == y.to_bits())
+            }
             (Value::Array(a), Value::Array(b)) => a == b,
             (
                 Value::Row {
@@ -285,6 +297,7 @@ impl Value {
             Value::Uuid(_) => Some(ColumnType::Uuid),
             Value::BatchId(_) => Some(ColumnType::BatchId),
             Value::Bytea(_) => Some(ColumnType::Bytea),
+            Value::Vector(v) => Some(ColumnType::Vector { dim: v.len() }),
             Value::Array(elements) => {
                 // Infer element type from first element; empty arrays have no inferable type
                 elements
