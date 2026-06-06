@@ -678,6 +678,8 @@
 		"noSparksYet": "No sparks yet for this aven.",
 		"dashboard": {
 			"subtitle": "How much cash you pull out per hour worked — and the next move to level it up.",
+			"ratio": "Cashflow per hour worked",
+			"ctaLabel": "Easiest next move",
 			"perWeekSuffix": " /wk",
 			"ladderTitle": "Your climb",
 			"ladderCleared": "{count} levels cleared",
