@@ -17,14 +17,9 @@
 	} from '$lib/jazz/api'
 	import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
 	import { jazzStore } from '$lib/jazz/store.svelte'
+	// Mesh snapshot kept ONLY for the copyable debug report (diagnostics), not for
+	// any UI display — per-peer connection state is intentionally not shown.
 	import { peerMeshSnapshot } from '$lib/peer/peer-mesh-store'
-	import {
-		meshPeerPhase,
-		peerMeshPhaseUserLabel,
-		peerMeshDotClass,
-		peerMeshTextClass,
-		type PeerMeshPhase,
-	} from '$lib/peer/mesh-state'
 	import { peerDisplayLabel } from '$lib/peer/display-label'
 	import { pairingLabelForSession } from '$lib/settings/active-vault-ui'
 	import { deviceSession } from '$lib/settings/device-session-store'
@@ -81,7 +76,6 @@
 	let addAdminDid = $state('')
 	let addNote = $state<string | undefined>()
 	let revokeBusyDid = $state<string | undefined>(undefined)
-	let confirmRevokeDid = $state<string | undefined>(undefined)
 	let revokeErr = $state<string | undefined>()
 	let revokeNote = $state<string | undefined>()
 	let localPairingLabel = $state<string | undefined>(undefined)
@@ -128,30 +122,24 @@
 		isThisDevice: boolean
 		grant: SparkGrant
 		capabilities: string[]
-		phase: PeerMeshPhase
 	}
 
 	// Member-centric view: each subject from the biscuit (`subjects`), enriched with
-	// the peer label + live sync phase. Caps are whatever Rust reported — never
-	// re-derived here.
+	// the peer label. Caps are whatever Rust reported — never re-derived here.
+	// (Per-peer connection state is intentionally NOT shown — it didn't reflect the
+	// real sync logic; revisit with proper transport state later.)
 	const accessEntries = $derived.by((): SparkAccessEntry[] => {
 		const peersByDid = new Map(
 			peersAllow.map((p) => [p.peerDid.trim().toLowerCase(), p] as const),
 		)
 		const localDid = session?.peerDid?.trim().toLowerCase() ?? ''
-		const snapshot = $peerMeshSnapshot
 		return subjects.map((s): SparkAccessEntry => {
 			const norm = s.did.trim().toLowerCase()
 			const peer = peersByDid.get(norm)
 			const isThisDevice = localDid !== '' && norm === localDid
 			const fallback = s.grant === 'replicate' ? t('sparks.share.addReplica') : undefined
 			const label = peerAccessLabel(s.did, peer?.deviceLabel ?? fallback, isThisDevice)
-			// Sync chip (§7 V3): this device is always settled; remote subjects read
-			// their live phase from the mesh snapshot (never re-derived).
-			const phase: PeerMeshPhase = isThisDevice
-				? 'ready'
-				: meshPeerPhase(snapshot, s.did, peer?.status)
-			return { did: s.did, label, isThisDevice, grant: s.grant, capabilities: s.caps, phase }
+			return { did: s.did, label, isThisDevice, grant: s.grant, capabilities: s.caps }
 		})
 	})
 
@@ -169,12 +157,6 @@
 		const ordered = [...CAP_ORDER.filter((c) => map.has(c)), ...[...map.keys()].filter((c) => !CAP_ORDER.includes(c))]
 		return ordered.map((cap) => ({ cap, holders: map.get(cap) ?? [] }))
 	})
-
-	// §7 V3 — calm global status: "everyone up to date" vs "N still syncing".
-	const remoteEntries = $derived(accessEntries.filter((e) => !e.isThisDevice))
-	const pendingCount = $derived(remoteEntries.filter((e) => e.phase !== 'ready').length)
-	const allSynced = $derived(remoteEntries.length > 0 && pendingCount === 0)
-
 
 	let adminLoadGen = 0
 
@@ -287,19 +269,12 @@
 
 	// §7 honest-design: revoke stops *future* changes; it never claws back what a
 	// peer already holds. Wording and confirm copy say exactly that — never "remove access".
+	// Single-click stop-sharing. Revoke is not destructive of what a peer already
+	// holds (it only stops *future* changes), so no confirm step — see revokedNote.
 	async function revokeAdmin(did: string, label: string): Promise<void> {
 		const sid = sparkId.trim()
 		if (!did || !sid) return
 		if (revokeBusyDid) return
-		// Inline two-step confirm — native confirm() no-ops in the Tauri webview.
-		if (confirmRevokeDid !== did) {
-			confirmRevokeDid = did
-			setTimeout(() => {
-				if (confirmRevokeDid === did) confirmRevokeDid = undefined
-			}, 4000)
-			return
-		}
-		confirmRevokeDid = undefined
 		const gen = adminLoadGen
 		revokeBusyDid = did
 		revokeErr = undefined
@@ -518,22 +493,10 @@
 				{:else if accessEntries.length === 0}
 					<p class="text-muted-foreground text-sm">{t('sparks.share.noOneListed')}</p>
 				{:else}
-					{#if remoteEntries.length > 0}
-						<p class="flex items-center gap-2 text-xs">
-							<span class="h-2 w-2 rounded-full {allSynced ? peerMeshDotClass('ready') : peerMeshDotClass('syncing')}"></span>
-							<span class="text-muted-foreground">{allSynced ? t('sparks.share.allSynced') : t('sparks.share.pending', { count: pendingCount })}</span>
-						</p>
-					{/if}
 					<ul class="flex flex-col gap-2">
 						{#each accessEntries as entry (entry.did)}
 							<li class="rounded-xl border border-border/50 bg-background/40 px-4 py-3">
-								<div class="flex items-start justify-between gap-3">
-									<p class="min-w-0 text-sm font-semibold" title={entry.label}>{entry.label}</p>
-									<span class="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-medium">
-										<span class="h-2 w-2 rounded-full {peerMeshDotClass(entry.phase)}"></span>
-										<span class={peerMeshTextClass(entry.phase)}>{entry.isThisDevice ? t('sparks.share.syncLabelThisDevice') : peerMeshPhaseUserLabel(entry.phase)}</span>
-									</span>
-								</div>
+								<p class="min-w-0 text-sm font-semibold" title={entry.label}>{entry.label}</p>
 								{#if !entry.isThisDevice}
 									<p class="text-muted-foreground mt-0.5 font-mono text-[11px] leading-snug select-text break-all" title={entry.did}>{entry.did}</p>
 								{/if}
@@ -546,20 +509,16 @@
 									{#if entry.isThisDevice}
 										<button
 											type="button"
-											class="bg-muted hover:bg-muted/70 ml-auto rounded px-2 py-0.5 text-[11px] font-medium"
+											class="bg-muted hover:bg-muted/70 ml-auto rounded-md px-2.5 py-1 text-[11px] font-medium"
 											onclick={() => void copyOwnDid()}>{didCopied ? t('peers.copied') : t('common.copyDid')}</button
 										>
 									{:else}
 										<button
 											type="button"
-											class="text-destructive hover:bg-destructive/10 ml-auto rounded px-2 py-0.5 text-[11px] font-medium disabled:opacity-50"
+											class="border-destructive/40 text-destructive hover:bg-destructive/10 ml-auto rounded-md border px-2.5 py-1 text-[11px] font-medium disabled:opacity-50"
 											disabled={revokeBusyDid !== undefined}
 											onclick={() => void revokeAdmin(entry.did, entry.label)}
-											>{revokeBusyDid === entry.did
-												? t('sparks.share.revoking')
-												: confirmRevokeDid === entry.did
-													? t('sparks.share.revokeConfirmInline')
-													: t('sparks.share.revoke')}</button
+											>{revokeBusyDid === entry.did ? t('sparks.share.revoking') : t('sparks.share.revoke')}</button
 										>
 									{/if}
 								</div>
