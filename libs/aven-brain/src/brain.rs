@@ -100,12 +100,22 @@ impl EntityCard {
     }
 }
 
+/// What a `dream` consolidation pass did.
+#[derive(Debug, Clone, Default)]
+pub struct DreamReport {
+    pub relations_decayed: usize,
+    pub entities_merged: usize,
+}
+
 // ── Dynamics constants (MemPalace-tuned) ────────────────────────────────────
 const POTENTIATION_INCREMENT: f64 = 0.05;
 const MAX_STRENGTH: f64 = 5.0;
 const STABILITY_INCREMENT: f64 = 0.1;
+/// Lower bound on relation strength — connections fade toward this, never to zero.
+const STRENGTH_FLOOR: f64 = 0.05;
 /// Min gap to count a potentiation as "spaced" (1 hour, in microseconds).
 const SPACED_INTERVAL_MICROS: u64 = 3_600_000_000;
+const MICROS_PER_DAY: u64 = 86_400_000_000;
 /// RRF constant (standard default).
 const RRF_K: f32 = 60.0;
 
@@ -445,6 +455,193 @@ impl<E: Embedder> Brain<E> {
         Ok(rows.iter().map(|(id, v)| memory_from_row(*id, v)).collect())
     }
 
+    // ── Dreaming (background consolidation) ──────────────────────────────────
+
+    /// Run a consolidation pass at the current time.
+    pub async fn dream(&self) -> Result<DreamReport, BrainError> {
+        self.dream_at(now_micros()).await
+    }
+
+    /// Consolidation as of `now` (micros): merge duplicate entities (by normalized name),
+    /// then apply Ebbinghaus decay to relation strength. Deterministic v1 — contradiction
+    /// detection and LLM summary recompute are future additions.
+    pub async fn dream_at(&self, now: u64) -> Result<DreamReport, BrainError> {
+        let entities_merged = self.merge_duplicate_entities().await?;
+        let relations_decayed = self.decay_relations(now).await?;
+        Ok(DreamReport {
+            relations_decayed,
+            entities_merged,
+        })
+    }
+
+    /// Ebbinghaus decay: `strength · exp(-days/stability)`, floored at `STRENGTH_FLOOR`.
+    async fn decay_relations(&self, now: u64) -> Result<usize, BrainError> {
+        let rows = self
+            .client
+            .query(QueryBuilder::new(RELATIONS).build(), None)
+            .await
+            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+        let mut decayed = 0;
+        for (id, v) in rows {
+            let strength = f64_at(&v, 2);
+            let stability = f64_at(&v, 3).max(1e-4);
+            let last = u64_at(&v, 5);
+            let days = now.saturating_sub(last) as f64 / MICROS_PER_DAY as f64;
+            if days <= 0.0 {
+                continue;
+            }
+            let new_strength = (strength * (-days / stability).exp()).max(STRENGTH_FLOOR);
+            if (new_strength - strength).abs() > 1e-9 {
+                self.client
+                    .update(id, vec![("strength".to_string(), Value::Double(new_strength))])
+                    .await
+                    .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+                decayed += 1;
+            }
+        }
+        Ok(decayed)
+    }
+
+    /// Merge entities sharing a normalized (trimmed/lowercased) name into one, repointing
+    /// mentions and relations — the CRDT-dedup story (two devices both create "Alice").
+    async fn merge_duplicate_entities(&self) -> Result<usize, BrainError> {
+        use std::collections::HashMap;
+        let mut groups: HashMap<String, Vec<Entity>> = HashMap::new();
+        for e in self.entities().await? {
+            groups.entry(normalize_name(&e.name)).or_default().push(e);
+        }
+        let mut merged = 0;
+        for (_, group) in groups {
+            if group.len() < 2 {
+                continue;
+            }
+            let canon = group[0].id;
+            for dup in &group[1..] {
+                self.merge_entity(dup.id, canon).await?;
+                merged += 1;
+            }
+        }
+        if merged > 0 {
+            self.dedup_relations().await?;
+        }
+        Ok(merged)
+    }
+
+    /// Repoint `dup`'s mentions and relations onto `canon`, then delete `dup`.
+    async fn merge_entity(&self, dup: ObjectId, canon: ObjectId) -> Result<(), BrainError> {
+        let mentions = self
+            .client
+            .query(
+                QueryBuilder::new(MENTIONS)
+                    .filter_eq("entity", Value::Uuid(dup))
+                    .build(),
+                None,
+            )
+            .await
+            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+        for (mid, _) in mentions {
+            self.client
+                .update(mid, vec![("entity".to_string(), Value::Uuid(canon))])
+                .await
+                .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+        }
+        for (self_col, other_idx) in [("a", 1usize), ("b", 0usize)] {
+            let rels = self
+                .client
+                .query(
+                    QueryBuilder::new(RELATIONS)
+                        .filter_eq(self_col, Value::Uuid(dup))
+                        .build(),
+                    None,
+                )
+                .await
+                .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+            for (rid, v) in rels {
+                let other = as_uuid(v.get(other_idx)).unwrap_or(canon);
+                if other == canon {
+                    // would become a self-relation — drop it.
+                    self.client
+                        .delete(rid)
+                        .await
+                        .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+                    continue;
+                }
+                let (na, nb) = canonical_pair(canon, other);
+                self.client
+                    .update(
+                        rid,
+                        vec![
+                            ("a".to_string(), Value::Uuid(na)),
+                            ("b".to_string(), Value::Uuid(nb)),
+                        ],
+                    )
+                    .await
+                    .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+            }
+        }
+        self.client
+            .delete(dup)
+            .await
+            .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+        Ok(())
+    }
+
+    /// Collapse duplicate / self relations (max strength, summed access_count).
+    async fn dedup_relations(&self) -> Result<(), BrainError> {
+        use std::collections::HashMap;
+        let rows = self
+            .client
+            .query(QueryBuilder::new(RELATIONS).build(), None)
+            .await
+            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+        let mut by_pair: HashMap<(ObjectId, ObjectId), (ObjectId, f64, i64, bool)> = HashMap::new();
+        let mut to_delete: Vec<ObjectId> = Vec::new();
+        for (id, v) in &rows {
+            let (Some(a), Some(b)) = (as_uuid(v.first()), as_uuid(v.get(1))) else {
+                continue;
+            };
+            if a == b {
+                to_delete.push(*id);
+                continue;
+            }
+            let key = canonical_pair(a, b);
+            let strength = f64_at(v, 2);
+            let count = i64_at(v, 4);
+            match by_pair.get_mut(&key) {
+                None => {
+                    by_pair.insert(key, (*id, strength, count, false));
+                }
+                Some(entry) => {
+                    entry.1 = entry.1.max(strength);
+                    entry.2 += count;
+                    entry.3 = true;
+                    to_delete.push(*id);
+                }
+            }
+        }
+        for (_, (keep, strength, count, dirty)) in by_pair {
+            if dirty {
+                self.client
+                    .update(
+                        keep,
+                        vec![
+                            ("strength".to_string(), Value::Double(strength)),
+                            ("access_count".to_string(), Value::BigInt(count)),
+                        ],
+                    )
+                    .await
+                    .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+            }
+        }
+        for id in to_delete {
+            self.client
+                .delete(id)
+                .await
+                .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+        }
+        Ok(())
+    }
+
     /// Build the graph for a new memory: upsert entities for each wikilink, record a
     /// mention per entity, and potentiate a relation for each co-mentioned pair.
     async fn write_graph(&self, memory_id: ObjectId, content: &str) -> Result<(), BrainError> {
@@ -677,6 +874,10 @@ fn truncate(s: &str, max: usize) -> String {
         format!("{head}…")
     }
 }
+/// Canonical form for entity-name dedup (trim + lowercase).
+fn normalize_name(name: &str) -> String {
+    name.trim().to_lowercase()
+}
 
 /// Stable, deterministic content hash (FNV-1a 64-bit) — identical across devices.
 fn content_hash(content: &str) -> [u8; 8] {
@@ -845,5 +1046,43 @@ mod tests {
         // timeline = the two memories mentioning Alice
         assert_eq!(card.recent_memories.len(), 2, "timeline: {:?}", card.recent_memories);
         assert!(card.render().contains("Bob"));
+    }
+
+    #[tokio::test]
+    async fn dream_decays_relations_and_merges_duplicate_entities() {
+        let brain = Brain::open_in_memory("test-dream", StubEmbedder::new(EMBED_DIM))
+            .await
+            .unwrap();
+        brain.remember("[[Alice]] and [[Bob]] shipped the release", &[]).await.unwrap();
+        brain.remember("[[alice]] thanked [[Bob]] afterwards", &[]).await.unwrap();
+
+        // Before: Alice, alice (case variant), Bob → 3 entities.
+        assert_eq!(brain.entities().await.unwrap().len(), 3);
+
+        // Dream 10 days in the future to force decay.
+        let future = now_micros() + 10 * MICROS_PER_DAY;
+        let report = brain.dream_at(future).await.unwrap();
+        assert!(report.entities_merged >= 1, "alice should merge into Alice");
+        assert!(report.relations_decayed >= 1, "the relation should decay");
+
+        let entities = brain.entities().await.unwrap();
+        assert_eq!(entities.len(), 2, "merged to Alice + Bob, got {entities:?}");
+
+        // The survivor (normalized "alice") still relates to Bob, now decayed to the floor.
+        let survivor = entities
+            .into_iter()
+            .find(|e| normalize_name(&e.name) == "alice")
+            .expect("survivor");
+        let r = brain
+            .relation(&survivor.name, "Bob")
+            .await
+            .unwrap()
+            .expect("survivor↔Bob relation");
+        assert!(r.strength < 1.0, "10 days decay should drop below the seed, got {}", r.strength);
+        assert!(
+            r.strength >= STRENGTH_FLOOR - 1e-9,
+            "decay is floored at {STRENGTH_FLOOR}, got {}",
+            r.strength
+        );
     }
 }
