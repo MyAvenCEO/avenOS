@@ -27,11 +27,6 @@ const navSections = $derived(
 				title: t('nav.viewSection'),
 				items: [
 					{
-						href: `${sparkBase}/dashboard`,
-						label: t('nav.dashboard'),
-						match: (p) => p.startsWith(`${sparkBase}/dashboard`)
-					},
-					{
 						href: `${sparkBase}/banking`,
 						label: t('nav.banking'),
 						match: (p) => p.startsWith(`${sparkBase}/banking`)

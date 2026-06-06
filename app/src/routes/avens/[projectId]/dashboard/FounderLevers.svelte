@@ -1,7 +1,6 @@
 <script lang="ts">
 import { t } from '$lib/i18n'
-import { formatEur } from '../orders/orders-data'
-import type { FounderStatus } from './dashboard-data'
+import { formatEur, type FounderStatus } from './dashboard-data'
 
 let { s }: { s: FounderStatus } = $props()
 const magPct = (v: number) => `${Math.abs(v * 100).toFixed(0)}%`
