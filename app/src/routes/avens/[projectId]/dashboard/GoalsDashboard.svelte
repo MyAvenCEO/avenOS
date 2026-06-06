@@ -1,63 +1,23 @@
 <script lang="ts">
 import { t } from '$lib/i18n'
 import { levelLadder } from '$lib/leveling'
-import { formatEur, founderStatus } from './dashboard-data'
+import { founderStatus } from './dashboard-data'
 import FounderLevers from './FounderLevers.svelte'
 
 const s = founderStatus()
-const nextLevel = s.level.level + 1
-const progressPct = Math.round(s.level.progress * 100)
 
 // Full level history: cleared levels behind, current, next, and locked ahead.
 const ladder = levelLadder(s.perHour, { direction: 'up', lookahead: 5 })
 const cleared = ladder.filter((c) => c.state === 'cleared').length
 const chip = (v: number) => `€${v}`
-
-// Progress-ring geometry.
-const R = 26
-const C = 2 * Math.PI * R
-const dashOffset = C * (1 - s.level.progress)
 </script>
 
-<div class="flex flex-col gap-4">
-	<header class="space-y-1">
-		<h2 class="text-lg font-semibold tracking-tight">{t('nav.dashboard')}</h2>
-		<p class="text-muted-foreground text-sm">{t('avens.dashboard.subtitle')}</p>
-	</header>
-
-	<section class="border-input rounded-xl border bg-card/40 p-5">
-		<!-- Score + level ring -->
-		<div class="flex items-start justify-between gap-4">
-			<div class="min-w-0">
-				<p class="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">{t('avens.dashboard.founder.perHour')}</p>
-				<p class="mt-1 flex items-baseline gap-1.5">
-					<span class="text-4xl font-semibold tabular-nums">{formatEur(s.perHour)}</span>
-					<span class="text-muted-foreground text-sm">{t('avens.dashboard.founder.perHourUnit')}</span>
-				</p>
-				<p class="text-muted-foreground mt-1.5 text-xs tabular-nums">
-					{t('avens.dashboard.founder.toNext', { pct: progressPct, n: nextLevel })} · {formatEur(s.next.rate)}{t('avens.dashboard.founder.perHourUnit')}
-				</p>
-			</div>
-			<div class="relative h-16 w-16 shrink-0">
-				<svg viewBox="0 0 64 64" class="h-16 w-16 -rotate-90">
-					<circle cx="32" cy="32" r={R} fill="none" stroke="currentColor" stroke-width="6" class="text-border/50" />
-					<circle cx="32" cy="32" r={R} fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" class="text-emerald-500" stroke-dasharray={C} stroke-dashoffset={dashOffset} />
-				</svg>
-				<span class="absolute inset-0 flex flex-col items-center justify-center leading-none">
-					<span class="text-muted-foreground text-[8px] font-medium uppercase">{t('avens.dashboard.founder.lvlShort')}</span>
-					<span class="text-lg font-semibold tabular-nums">{s.level.level}</span>
-				</span>
-			</div>
-		</div>
-
-		<!-- The two levers: current state + the move to the next level -->
-		<div class="mt-4 border-t border-border/50 pt-3">
-			<FounderLevers {s} />
-		</div>
-	</section>
+<section class="border-input flex flex-col gap-5 rounded-xl border bg-card/40 p-5">
+	<!-- The two levers: current state + the move to the next level -->
+	<FounderLevers {s} />
 
 	<!-- Level history: how far you've climbed, and what's ahead -->
-	<section class="border-input rounded-xl border bg-card/40 p-4">
+	<div class="border-t border-border/50 pt-4">
 		<div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
 			<h2 class="text-sm font-semibold tracking-tight">{t('avens.dashboard.ladderTitle')}</h2>
 			<span class="text-muted-foreground text-xs tabular-nums">{t('avens.dashboard.ladderCleared', { count: cleared })}</span>
@@ -98,5 +58,5 @@ const dashOffset = C * (1 - s.level.progress)
 				</div>
 			{/each}
 		</div>
-	</section>
-</div>
+	</div>
+</section>
