@@ -59,15 +59,27 @@ humans→identity merge · typed identities · auto device-name · apps build + 
 
 ---
 
-## ☐ Milestone 2 — Eviction-notice protocol
+## ◑ Milestone 2 — Revoke DONE (forward-secrecy complete); eviction-notice = optional cleanup
 
-Revoke (re-mint biscuit + DEK rotate + delete revoked keyshares) **exists**. Missing: a
-**peer-specific eviction notice** — self-eviction can't trigger (a revoked peer is gated
-out → never learns it's revoked), and a global tombstone would propagate a false delete.
-- [ ] New peer-scoped eviction-notice sync payload (`sync_manager`).
-- [ ] Sender: on a revoked peer's `FrontierNeed` for a now-denied identity → emit notice.
-- [ ] Receiver: drop local rows for that identity (local-only, not a tombstone).
-- [ ] Live test: revoke → reconnect → data evicted from the honest peer.
+**Revoke is fully implemented and security-complete** (verified in code):
+- [x] Re-mint the identity biscuit **excluding** the revoked peer (`mod.rs:3017`, `caps.rs:376-387`).
+- [x] **Rotate the DEK** to a new version, re-wrapped to remaining members only (`mod.rs:3012,3024-3045,3069`).
+- [x] **Delete the revoked peer's keyshare rows** so honest peers drop them (`mod.rs:3077-3093`).
+- ⇒ The revoked peer is gated out + never receives v+1 → **no future reads. Forward secrecy ✅.**
+
+The **only** remainder is a best-effort **eviction notice** to drop the OLD, *already-decrypted*
+rows from an honest revoked peer's local store. **Not security-critical** — the threat model
+accepts backward reads as cryptographically unsolvable (the peer already saw that plaintext).
+- [x] **Scaffolded** (`c1a27c5`): `SyncPayload::EvictResource { resource }` + **safe logged-only
+  receiver** (a stray/forged notice can't delete data) + tracer/variant_name arms; aven-db green.
+- [ ] **Completion (focused, needs live revoke→evict test):** sender = the revoke flow emits
+  `EvictResource(identity_urn)` to the revoked peer; receiver = resolver-enumerate the resource's
+  **data** rows → `delete_with_metadata(Hard + NoSync)` (local-only, no false tombstone).
+- **3 data-loss traps the design must avoid** (found in code): (1) the keyshare hard-delete NULLs
+  its own id columns → can't post-hoc detect "my keyshare for X was deleted"; (2) "has X's data
+  but no keyshare" *also* matches blind relays/transit peers holding ciphertext → never blanket-
+  drop; (3) a member mid-sync (data before v+1 keyshare) looks transiently revoked. The
+  **revoke-direct** payload (admin→revoked-peer, drop DATA rows only) sidesteps all three.
 
 ## ✅ Milestone 3 — Edit-sig (satisfied by equivalence)
 
