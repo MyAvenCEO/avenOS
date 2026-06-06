@@ -2597,6 +2597,100 @@ pub(crate) async fn groove_ipc_create_identity(
 	Ok(identity_uuid.to_string())
 }
 
+/// **M9-3/M9-4** — create (idempotently) a **sub-group** of `identity` labeled `label`: a
+/// collection group (`label = "todos"`) or a row group (`label = <row_id>`). The group is a
+/// hydratable owner with its OWN DEK and a genesis that **extends** the parent, so the
+/// parent's members inherit access (authorize recurses to the parent) while its rows seal
+/// under the group's own key. Granularity is purely the `label` you pass — the data model is
+/// identical to an identity. Only the parent's owner may create it. Returns the deterministic
+/// group id (`derive_subgroup_id(identity, label)`). Additive: existing rows are untouched
+/// and still default to the identity group.
+pub(crate) async fn groove_ipc_create_collection_group(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	self_state: &SelfState,
+	identity: String,
+	label: String,
+) -> Result<String, String> {
+	use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+	use base64::Engine;
+
+	let parent_id =
+		Uuid::parse_str(identity.trim()).map_err(|e| format!("invalid identity UUID: {e}"))?;
+	let label = label.trim().to_string();
+	if label.is_empty() {
+		return Err("group label required".into());
+	}
+	let client = with_connected_client(jazz, app, self_state).await?;
+	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+	let shell = shell_arc.as_ref();
+
+	// Only the parent identity's owner may carve out a sub-group.
+	jazz_engine::authorize_gate(shell, "identities", crate::identity_acc::AccOp::Write, parent_id, None)?;
+
+	let group_id = crate::identity_acc::derive_subgroup_id(parent_id, &label);
+
+	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
+	let id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
+	// Idempotent: if the group's row already exists, return it (deterministic id).
+	for (_oid, vals) in jazz_engine::exec_list_rows(client.as_ref(), "identities").await? {
+		if jazz_engine::uuid_cell_at(vals.as_slice(), id_ix)? == group_id {
+			return Ok(group_id.to_string());
+		}
+	}
+
+	let genesis = crate::identity_acc::mint_group_genesis_extending(&shell.vault, group_id, parent_id)?;
+	let genesis_b64 =
+		URL_SAFE_NO_PAD.encode(genesis.to_vec().map_err(|e| format!("genesis_encode:{e:?}"))?);
+	let issuer_b64 = crate::identity_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public());
+	let now_ms: i64 = std::time::SystemTime::now()
+		.duration_since(std::time::UNIX_EPOCH)
+		.map(|d| d.as_millis() as i64)
+		.unwrap_or(0);
+	let dek_ver = 1i64;
+
+	let mut row = Map::new();
+	row.insert("owner".into(), JsonValue::String(group_id.to_string()));
+	row.insert("type".into(), JsonValue::String("group".into()));
+	row.insert("name".into(), JsonValue::String(label.clone()));
+	row.insert("issuer_pubkey_b64".into(), JsonValue::String(issuer_b64));
+	row.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
+	row.insert("current_dek_version".into(), JsonValue::Number(dek_ver.into()));
+	row.insert("created_at_ms".into(), JsonValue::Number(now_ms.into()));
+	let sparks_vals = insert_values("identities", &sparks_schema, row)?;
+	let sparks_oid = ObjectId::new();
+	let sparks_meta = owner_binding_meta(&shell.signing_key, sparks_oid, group_id)?;
+	client
+		.create_with_id_and_metadata("identities", sparks_oid, sparks_vals, sparks_meta)
+		.await
+		.map_err(format_jazz_err)?;
+
+	// The group's OWN DEK, keyshared to the creator. Parent members inherit it via the
+	// 2-level key hierarchy (the group key wrapped under the parent group key).
+	let dek_plain = crate::crypto::random_identity_dek();
+	let urn = jazz_engine::identity_urn(group_id);
+	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
+	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, dek_ver);
+	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
+	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
+	let mut ks = Map::new();
+	ks.insert("owner".into(), JsonValue::String(group_id.to_string()));
+	ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
+	ks.insert("recipient_did".into(), JsonValue::String(shell.peer_did.clone()));
+	ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
+	ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
+	let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
+	let ks_oid = ObjectId::new();
+	let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, group_id)?;
+	client
+		.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+		.await
+		.map_err(format_jazz_err)?;
+
+	finish_spark_admin_grant(app, jazz, self_state, client, group_id).await?;
+	Ok(group_id.to_string())
+}
+
 /// Idempotently ensure THIS device has its own avenCEO roster row, populated from
 /// identity (name from `humans`, device label from the local peer). No-op if the
 /// row already exists. Used at claim and idempotent re-claim.
@@ -3913,6 +4007,12 @@ pub(crate) async fn groove_runtime_dispatch(
 			let name = pj_str(&pj, "name")?;
 			let kind = pj_str(&pj, "type").unwrap_or_else(|_| "aven".to_string());
 			let id = groove_ipc_create_identity(app, mj, ss, name, kind).await?;
+			Ok(serde_json::Value::String(id))
+		}
+		"creategroup" => {
+			let identity = pj_str(&pj, "identityId")?;
+			let label = pj_str(&pj, "label")?;
+			let id = groove_ipc_create_collection_group(app, mj, ss, identity, label).await?;
 			Ok(serde_json::Value::String(id))
 		}
 		"avenceoaddmember" => {
