@@ -738,13 +738,14 @@
 	"networkGate": {
 		"checking": "Checking network membership…",
 		"title": "You're not part of the avenCEO network yet",
-		"needInvite": "This is an invite-only network. Send your DID to an admin to be added — then come back.",
+		"needInvite": "Otherwise, share your DID with an admin to be invited — the gate opens once you are.",
 		"yourDid": "Your DID",
 		"copyDid": "Copy DID",
 		"copied": "Copied",
 		"firstTitle": "Starting a new network?",
 		"firstHint": "If no one has claimed this network yet, you can become its first admin.",
 		"claim": "Claim — become admin",
-		"claiming": "Claiming…"
+		"claiming": "Claiming…",
+		"connectingHint": "Connecting… if you're the first to join, you'll be admitted automatically."
 	}
 }

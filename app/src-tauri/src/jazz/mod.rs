@@ -2701,6 +2701,31 @@ pub(crate) async fn groove_ipc_aven_ceo_publish_profile(
 	Ok(())
 }
 
+/// Network membership for the invite-only gate: does this device hold an avenCEO
+/// cap in its **vault**? Returns `owner` | `member` | `none`. A pure local vault
+/// check (no sync/store dependency) — the server is the authority that grants
+/// caps (auto-grants the first peer, invites the rest); this just reads what the
+/// device already holds. The gate flips to `owner`/`member` once the server's
+/// grant + keyshare have synced and hydrated avenCEO into the vault.
+pub(crate) async fn groove_ipc_aven_ceo_membership(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	self_state: &SelfState,
+) -> Result<String, String> {
+	let client = with_connected_client(jazz, app, self_state).await?;
+	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+	let shell = shell_arc.as_ref();
+	let spark_uuid = crate::spark_acc::aven_ceo_spark_id(tauri_plugin_self::network::NETWORK_SEED);
+	let Some(bisc) = shell.vault.sparks.get(&spark_uuid) else {
+		return Ok("none".to_string());
+	};
+	if crate::spark_acc::spark_peer_is_owner(&bisc.biscuit, spark_uuid, &shell.peer_did)? {
+		Ok("owner".to_string())
+	} else {
+		Ok("member".to_string())
+	}
+}
+
 /// Re-hydrate vault shell + sync ACL, push grant to peers, refresh sparks catalogue in the webview.
 async fn finish_spark_admin_grant(
 	app: &tauri::AppHandle,
@@ -3651,6 +3676,10 @@ pub(crate) async fn groove_runtime_dispatch(
 			let device_label = pj_str(&pj, "deviceLabel")?;
 			groove_ipc_aven_ceo_publish_profile(app, mj, ss, account_name, device_label).await?;
 			Ok(serde_json::Value::Null)
+		}
+		"avenceomembership" => {
+			let m = groove_ipc_aven_ceo_membership(app, mj, ss).await?;
+			Ok(serde_json::Value::String(m))
 		}
 		"sparkadminlist" => {
 			let spark_id = pj_str(&pj, "sparkId")?;

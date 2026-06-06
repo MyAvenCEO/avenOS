@@ -9,10 +9,10 @@ export async function avenCeoSparkId(): Promise<string> {
 	return invoke<string>('aven_ceo_spark_id')
 }
 
-/** Claim the avenCEO spark: mint its genesis and become the network owner/admin.
- *  Claim-once (errors if already claimed). Returns the avenCEO spark id. */
-export async function avenCeoClaim(): Promise<string> {
-	return grooveRuntime<string>('avenCeoClaim', {})
+/** Network membership for the invite-only gate: 'owner' | 'member' | 'none'.
+ *  A local vault check — the server grants caps; this reads what we hold. */
+export async function avenCeoMembership(): Promise<'owner' | 'member' | 'none'> {
+	return grooveRuntime<'owner' | 'member' | 'none'>('avenCeoMembership', {})
 }
 
 /** Onboard a member to the avenCEO roster by DID (the inverted invite): grants the

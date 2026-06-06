@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { browser } from '$app/environment'
 	import { t } from '$lib/i18n'
-	import { avenCeoSparkId, avenCeoClaim, type JazzRow } from '$lib/jazz/api'
+	import { type JazzRow } from '$lib/jazz/api'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/settings/device-session-store'
@@ -14,44 +14,11 @@
 	)
 	const tauri = $derived(browser && isTauriRuntime())
 
-	// The well-known avenCEO control spark (deterministic id) is shown by default in
-	// every account — claimed (→ its members/roster) or claimable (first opener
-	// becomes the network admin).
-	let avenCeoId = $state<string | undefined>(undefined)
-	let claimBusy = $state(false)
-	let claimErr = $state<string | undefined>(undefined)
-	$effect(() => {
-		if (!browser || !tauri || !unlocked) return
-		void (async () => {
-			try {
-				avenCeoId = await avenCeoSparkId()
-			} catch {
-				avenCeoId = undefined
-			}
-		})()
-	})
-	const avenCeoClaimed = $derived(
-		!!avenCeoId && sparksStore.rows.some((r) => String(r.spark_id) === avenCeoId),
-	)
-	async function claimAvenCeo(): Promise<void> {
-		claimBusy = true
-		claimErr = undefined
-		try {
-			const id = await avenCeoClaim()
-			await goto(`/sparks/${encodeURIComponent(id)}/members`)
-		} catch (e) {
-			claimErr = e instanceof Error ? e.message : String(e)
-		} finally {
-			claimBusy = false
-		}
-	}
-
 	// Snapshot is reactive: peer-sync deltas land in `sparksStore.rows` automatically.
-	// The avenCEO spark gets its own card above, so exclude it from the normal list.
+	// avenCEO (the network roster spark, now server-owned) appears as a normal spark
+	// in the list once this device is a member; the app-shell gate handles access.
 	const sparks = $derived(
-		[...sparksStore.rows]
-			.filter((r) => !avenCeoId || String(r.spark_id) !== avenCeoId)
-			.sort((a, b) => a.name.localeCompare(b.name)),
+		[...sparksStore.rows].sort((a, b) => a.name.localeCompare(b.name)),
 	)
 	const loading = $derived(tauri && unlocked && !sparksStore.loaded && !sparksStore.error)
 
@@ -73,39 +40,6 @@
 			{t('sparks.subtitleLead')}
 		</p>
 	</header>
-
-	{#if tauri && unlocked && avenCeoId}
-		<!-- avenCEO: the network's well-known roster spark, shown by default. -->
-		<section class="border-primary/30 bg-primary/5 flex flex-col gap-2 rounded-xl border px-4 py-4">
-			<div class="flex items-center justify-between gap-3">
-				<div class="flex flex-col">
-					<span class="text-[11px] font-semibold tracking-wider uppercase opacity-70">{t('sparks.avenCeoTitle')}</span>
-					<span class="text-muted-foreground text-xs">
-						{avenCeoClaimed ? t('sparks.avenCeoClaimedSub') : t('sparks.avenCeoUnclaimedSub')}
-					</span>
-				</div>
-				{#if avenCeoClaimed}
-					<button
-						type="button"
-						class="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 rounded-lg px-4 py-2 text-sm font-medium"
-						onclick={() => goto(`/sparks/${encodeURIComponent(avenCeoId ?? '')}/members`)}
-						>{t('nav.members')}</button
-					>
-				{:else}
-					<button
-						type="button"
-						class="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-						disabled={claimBusy}
-						onclick={() => void claimAvenCeo()}
-						>{claimBusy ? t('sparks.avenCeoClaiming') : t('sparks.avenCeoClaim')}</button
-					>
-				{/if}
-			</div>
-			{#if claimErr}
-				<p class="text-destructive text-sm">{claimErr}</p>
-			{/if}
-		</section>
-	{/if}
 
 	{#if !tauri}
 		<p class="text-muted-foreground text-sm">{t('sparks.needsDesktop')}</p>

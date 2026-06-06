@@ -7,7 +7,7 @@ import { initLocale, normalizeLocale, setLocale, t } from '$lib/i18n'
 import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
 import { startPeerMeshStore } from '$lib/peer/peer-mesh-store'
 import { attachAvenosRuntimeBridge, grooveSessionReady } from '$lib/runtime/groove-runtime'
-import { avenCeoSparkId } from '$lib/jazz/api'
+import { avenCeoMembership } from '$lib/jazz/api'
 import { jazzStore } from '$lib/jazz/store.svelte'
 import NetworkGate from '$lib/shell/NetworkGate.svelte'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
@@ -111,28 +111,33 @@ $effect(() => {
 const meshAllowed = $derived(sessionKind === 'unlocked' && $grooveSessionReady)
 
 // Global invite-only gate: the app is locked behind membership of the network's
-// well-known avenCEO spark. A device is a "member" iff it has the avenCEO spark
-// locally (only members/owner sync its genesis). Non-members see NetworkGate
-// (invite prompt / claim). Sandbox (non-tauri) is never gated.
+// avenCEO spark. Membership = "do I hold an avenCEO cap in my vault?" (a local
+// vault check via the membership IPC) — the aven-server is the authority that
+// grants caps (auto-grants the first peer, invites the rest). We re-check when
+// sparks sync, so the gate opens automatically once the server's grant + keyshare
+// land and hydrate avenCEO into the vault. Sandbox (non-tauri) is never gated.
 const sparksStore = jazzStore('sparks')
-let avenCeoId = $state<string | undefined>(undefined)
+let membership = $state<'owner' | 'member' | 'none' | 'unknown'>('unknown')
 $effect(() => {
-	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked') return
+	void sessionKind
+	void $grooveSessionReady
+	void sparksStore.rows
+	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked' || !$grooveSessionReady) {
+		membership = 'unknown'
+		return
+	}
 	void (async () => {
 		try {
-			avenCeoId = await avenCeoSparkId()
+			membership = await avenCeoMembership()
 		} catch {
-			avenCeoId = undefined
+			membership = 'unknown'
 		}
 	})()
 })
-const isNetworkMember = $derived(
-	!!avenCeoId && sparksStore.rows.some((r) => String(r.spark_id) === avenCeoId),
-)
 const appAccessState = $derived.by<'app' | 'gate' | 'checking'>(() => {
 	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked') return 'app'
-	if (!$grooveSessionReady || avenCeoId === undefined || !sparksStore.loaded) return 'checking'
-	return isNetworkMember ? 'app' : 'gate'
+	if (membership === 'unknown') return 'checking'
+	return membership === 'none' ? 'gate' : 'app'
 })
 
 $effect(() => {
