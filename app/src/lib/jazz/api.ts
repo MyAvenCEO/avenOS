@@ -1,6 +1,30 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
+import { invoke } from '@tauri-apps/api/core'
 import { getTableRowsStore } from '$lib/runtime/table-stores'
 import { grooveRuntime } from '$lib/runtime/groove-ipc'
+
+/** The well-known avenCEO control-spark id for this network (deterministic from
+ *  the network seed — every device computes the same one). */
+export async function avenCeoSparkId(): Promise<string> {
+	return invoke<string>('aven_ceo_spark_id')
+}
+
+/** Claim the avenCEO spark: mint its genesis and become the network owner/admin.
+ *  Claim-once (errors if already claimed). Returns the avenCEO spark id. */
+export async function avenCeoClaim(): Promise<string> {
+	return grooveRuntime<string>('avenCeoClaim', {})
+}
+
+/** Onboard a member to the avenCEO roster by DID (the inverted invite): grants the
+ *  membership bundle — read the roster + write only their own profile row. Owner-only. */
+export async function avenCeoAddMember(peerDid: string): Promise<void> {
+	await grooveRuntime('avenCeoAddMember', { peerDid })
+}
+
+/** Self-publish this device's profile into its own avenCEO roster row. */
+export async function avenCeoPublishProfile(accountName: string, deviceLabel: string): Promise<void> {
+	await grooveRuntime('avenCeoPublishProfile', { accountName, deviceLabel })
+}
 
 /** Untyped Groove row from IPC — schema lives in Rust (`libs/aven-schema`). */
 export type JazzRow = Record<string, any> & { id: string }
