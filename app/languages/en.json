@@ -104,6 +104,7 @@
 		"avens": "Avens",
 		"allAvens": "← All avens",
 		"avenViews": "Aven views",
+		"backToSparks": "← {aven} sparks",
 		"maiaCityGame": "Maia City - The Game"
 	},
 	"board": {
@@ -673,6 +674,8 @@
 	},
 	"avens": {
 		"subtitle": "Hardcoded example avens. Open one to explore its sections.",
+		"sparksSubtitle": "Sparks this aven has access to. Open one to work inside it.",
+		"noSparksYet": "No sparks yet for this aven.",
 		"dashboard": {
 			"subtitle": "How much cash you pull out per hour worked — and the next move to level it up.",
 			"perWeekSuffix": " /wk",

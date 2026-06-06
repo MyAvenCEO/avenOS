@@ -103,6 +103,7 @@
 		"avens": "Avens",
 		"allAvens": "← Alle Avens",
 		"avenViews": "Aven-Ansichten",
+		"backToSparks": "← {aven} Sparks",
 		"maiaCityGame": "Maia City - The Game"
 	},
 	"board": {
@@ -661,6 +662,8 @@
 	},
 	"avens": {
 		"subtitle": "Fest hinterlegte Beispiel-Avens. Öffne eines, um seine Bereiche zu erkunden.",
+		"sparksSubtitle": "Sparks, auf die dieses Aven Zugriff hat. Öffne einen, um darin zu arbeiten.",
+		"noSparksYet": "Noch keine Sparks für dieses Aven.",
 		"dashboard": {
 			"subtitle": "Wie viel Cash du pro gearbeiteter Stunde ziehst — und der nächste Schritt zum Level-up.",
 			"perWeekSuffix": " /Wo",
