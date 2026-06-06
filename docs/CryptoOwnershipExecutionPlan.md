@@ -156,6 +156,36 @@ own independent allowance. Per-identity Owner/Member/Relay sharing stays as-is (
 
 ---
 
+## ☐ Milestone 8 — Sharing resilience + caps transparency (from live testing)
+
+The grant/revoke/member flow works but is **brittle** — live testing surfaced dead-end
+errors + missing UI. Two buckets: **correctness bugs** and **transparency/UX**.
+
+### Correctness (the brittleness)
+- [ ] **B1 — `missing column device_label` on grant** — the grant/publish-profile path
+  reads/writes a stale `device_label` column on a table that no longer has it (post-remodel).
+  Find + fix the reference; profile/device-label now lives on the peer's own identity row.
+- [ ] **B2 — Member (`reads`) can't read/write** — Talk shows `identity_acc:subject_not_owner`;
+  a `reads`-member's cap isn't authorizing read (and write should stay denied, but read must
+  work). Audit `identity_acc::authorize` for the `reads` grant on data tables.
+- [ ] **B3 — `missing_dek_cached:<id>|<ver>`** — after DEK rotation (revoke), a device lacks
+  the DEK for the current version: its v+N keyshare isn't hydrated into the live shell. Re-hydrate
+  on grant/revoke + on keyshare arrival; never dead-end on a transient missing DEK.
+- [ ] **B4 — Resilience pass** — add/revoke shouldn't leave the UI in a broken state; surface
+  recoverable states (syncing/decrypting) instead of raw error strings.
+
+### Transparency / UX
+- [ ] **D1 — Real peer names** — show each peer's name (Admina / Bobo) in "Who has access",
+  not a hardcoded "Replication Server".
+- [ ] **E1 — Display avenCEO registry** on member devices (M7-2 sync + display).
+- [ ] **G1 — Remove the "Capabilities" sub-tab** (redundant — caps are badges per row now).
+- [ ] **H1 — SYNC role cap badges** — render its real caps (replicate + **10 MB** + **rate
+  limit**) as badges, like READ/WRITE.
+- [ ] **H2 — Per-cap human-readable description** — collapsible "how this cap works under the
+  hood" for every badge → 100% always-on transparency of effective caps.
+
+---
+
 ## Architecture reference (terse)
 
 - **Write:** mint owner-binding `Sign_author(value_id ‖ owner)` → row metadata; data cell-sealed under the identity DEK.
