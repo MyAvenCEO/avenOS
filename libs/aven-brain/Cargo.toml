@@ -10,3 +10,6 @@ path = "src/lib.rs"
 
 [dependencies]
 groove = { package = "aven-db", path = "../aven-db", features = ["client-p2p"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

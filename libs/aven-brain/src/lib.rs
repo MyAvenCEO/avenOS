@@ -58,6 +58,10 @@
 //! owner-bound, edit-signed, per-identity DEK-sealed, and capability-gated on sync.
 //! Embeddings are computed where the key lives (on-device); nothing is stored in the clear.
 
+pub mod brain;
+pub mod embedder;
 pub mod schema;
 
+pub use brain::{Brain, BrainError, Memory};
+pub use embedder::{Embedder, StubEmbedder};
 pub use schema::{brain_schema, EMBED_DIM};
