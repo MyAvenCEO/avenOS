@@ -145,7 +145,7 @@ fn remove_client_blocked_by_parked_sync_messages() {
 
     let mut core = create_test_runtime();
     let alice = PeerId::new();
-    core.add_client(alice, None);
+    core.ensure_client_as_peer(alice);
 
     // Park a message from alice (simulates push_sync_inbox before batched_tick)
     core.park_sync_message(InboxEntry {
@@ -190,7 +190,7 @@ fn remove_client_succeeds_after_parked_messages_drained() {
 
     let mut core = create_test_runtime();
     let alice = PeerId::new();
-    core.add_client(alice, None);
+    core.ensure_client_as_peer(alice);
 
     core.park_sync_message(InboxEntry {
         source: Source::Client(alice),
@@ -238,8 +238,8 @@ fn remove_client_ignores_parked_messages_from_other_clients() {
     let mut core = create_test_runtime();
     let alice = PeerId::new();
     let bob = PeerId::new();
-    core.add_client(alice, None);
-    core.add_client(bob, None);
+    core.ensure_client_as_peer(alice);
+    core.ensure_client_as_peer(bob);
 
     // Park a message from bob
     core.park_sync_message(InboxEntry {

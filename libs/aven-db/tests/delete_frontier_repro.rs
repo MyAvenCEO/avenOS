@@ -118,9 +118,10 @@ fn delete_batch_is_in_the_announced_frontier() {
 /// Does it actually STORE the delete (so its own frontier advances and it re-forwards)?
 #[test]
 fn peer_receiving_the_delete_actually_stores_it() {
+    use groove::capability::AllowAllResolver;
     use groove::metadata::MetadataKey;
     use groove::sync_manager::types::RowMetadata;
-    use groove::{InboxEntry, PeerId, Source, SyncPayload};
+    use groove::sync_manager::{InboxEntry, PeerId, Source, SyncPayload};
 
     // --- Engine A: create + delete; capture both batches and the row metadata. ---
     let mut io_a = MemoryStorage::new();
@@ -187,6 +188,13 @@ fn peer_receiving_the_delete_actually_stores_it() {
         "main",
     )
     .unwrap();
+    // B is a fresh peer: `SyncManager::new()` is fail-closed (DenyAllResolver, M4
+    // hardening), so it would reject every inbound batch at the `verify_on_apply`
+    // gate. Opt into AllowAll so this test exercises the receive/store path itself
+    // rather than the capability gate.
+    b.query_manager_mut()
+        .sync_manager_mut()
+        .set_resolver(std::sync::Arc::new(AllowAllResolver));
     let peer_a = PeerId::new();
     b.query_manager_mut()
         .sync_manager_mut()

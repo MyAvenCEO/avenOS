@@ -1,8 +1,6 @@
 use super::*;
-use crate::batch_fate::{LocalBatchMember, SealedBatchMember, SealedBatchSubmission};
+use crate::batch_fate::LocalBatchMember;
 use crate::row_histories::{RowState, patch_row_batch_state};
-use crate::storage::metadata_from_row_locator;
-use crate::sync_manager::{RowMetadata, SyncPayload};
 
 impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
     fn local_batch_row_was_insert(
@@ -191,41 +189,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
             },
         );
         rows
-    }
-
-    pub(crate) fn direct_sealed_submission_from_local_batch_rows(
-        batch_id: crate::row_histories::BatchId,
-        rows: &[(
-            LocalBatchMember,
-            crate::storage::RowLocator,
-            crate::row_histories::StoredRowBatch,
-        )],
-    ) -> Option<SealedBatchSubmission> {
-        let first_branch = rows.first()?.0.branch_name;
-        if rows
-            .iter()
-            .any(|(member, _, _)| member.branch_name != first_branch)
-        {
-            return None;
-        }
-        if rows
-            .iter()
-            .any(|(_, _, row)| !matches!(row.state, crate::row_histories::RowState::VisibleDirect))
-        {
-            return None;
-        }
-        Some(SealedBatchSubmission::new(
-            batch_id,
-            crate::batch_fate::BatchMode::Direct,
-            first_branch,
-            rows.iter()
-                .map(|(member, _, _)| SealedBatchMember {
-                    object_id: member.object_id,
-                    row_digest: member.row_digest,
-                })
-                .collect(),
-            Vec::new(),
-        ))
     }
 
     fn apply_received_batch_fate(&mut self, fate: crate::batch_fate::BatchFate) {
@@ -756,30 +719,5 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
         }
         self.parked_sync_messages.push(message);
         self.scheduler.schedule_batched_tick();
-    }
-
-    pub fn local_batch_replay_payloads(
-        &self,
-        batch_id: crate::row_histories::BatchId,
-    ) -> Vec<SyncPayload> {
-        let local_rows = self.local_batch_rows(batch_id);
-        let mut payloads = local_rows
-            .iter()
-            .map(|(member, row_locator, row)| SyncPayload::RowBatchCreated {
-                metadata: Some(RowMetadata {
-                    id: member.object_id,
-                    metadata: metadata_from_row_locator(row_locator),
-                }),
-                row: row.clone(),
-            })
-            .collect::<Vec<_>>();
-
-        if let Some(submission) =
-            Self::direct_sealed_submission_from_local_batch_rows(batch_id, &local_rows)
-        {
-            payloads.push(SyncPayload::SealBatch { submission });
-        }
-
-        payloads
     }
 }

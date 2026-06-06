@@ -609,17 +609,6 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         Ok(())
     }
 
-    /// Add a client connection.
-    pub fn add_client(
-        &self,
-        client_id: PeerId,
-        session: Option<Session>,
-    ) -> Result<(), RuntimeError> {
-        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        core.add_client(client_id, session);
-        Ok(())
-    }
-
     /// Ensure a client exists with the given session.
     ///
     /// A session is always required — callers must authenticate before
