@@ -87,7 +87,11 @@ fn host_device_label_inner() -> String {
 	{
 		return String::new();
 	}
-	label.to_string()
+	// Dev A/B harness: both instances run on the same physical device → same auto
+	// name. `AVEN_PEER_SUFFIX` (e.g. " (B)") disambiguates so each peer is selectable
+	// by name at sign-in. Empty in production.
+	let suffix = std::env::var("AVEN_PEER_SUFFIX").unwrap_or_default();
+	format!("{label}{suffix}")
 }
 
 /// Zeroize the cached root secret. Frontend should call this on window close / explicit re-lock.

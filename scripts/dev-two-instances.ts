@@ -181,6 +181,9 @@ function spawnTauri(label: 'A' | 'B', colour: string, env: Record<string, string
 	}
 	if (label === 'B') {
 		instanceEnv.CARGO_TARGET_DIR = TAURI_B_TARGET_DIR
+		// Same physical device → same auto peer-name; suffix B so each peer is
+		// distinguishable by name at sign-in.
+		instanceEnv.AVEN_PEER_SUFFIX = ' (B)'
 	}
 
 	// For B: pass the overlay as inline JSON to `tauri dev --config '{...}'`.

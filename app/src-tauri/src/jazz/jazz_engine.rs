@@ -543,14 +543,17 @@ fn ascii_slug_fallback(name: &str) -> String {
 /// membership is governed by biscuit caps + the `peers` roster now (no `my_devices`
 /// allowlist), so each device just self-publishes its OS name into the roster.
 pub(super) fn system_device_name() -> String {
-	std::process::Command::new("scutil")
+	let base = std::process::Command::new("scutil")
 		.args(["--get", "ComputerName"])
 		.output()
 		.ok()
 		.and_then(|o| String::from_utf8(o.stdout).ok())
 		.map(|s| s.trim().to_string())
 		.filter(|s| !s.is_empty())
-		.unwrap_or_else(|| "This Device".to_string())
+		.unwrap_or_else(|| "This Device".to_string());
+	// Dev A/B harness disambiguation (see host_device_label_inner). Empty in prod.
+	let suffix = std::env::var("AVEN_PEER_SUFFIX").unwrap_or_default();
+	format!("{base}{suffix}")
 }
 
 fn possessive_identity_title(first_name_for_identity: &str) -> String {
