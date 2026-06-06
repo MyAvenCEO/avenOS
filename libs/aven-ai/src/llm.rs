@@ -103,23 +103,36 @@ pub fn download_files(
 	let dir = spec.model_dir(root);
 	fs::create_dir_all(&dir).map_err(|e| fail(format!("create model dir: {e}")))?;
 
-	// Pre-account finished files (named `<local>`, .part renamed on completion) so
-	// progress reflects real overall state across restarts — completed files are
-	// skipped below, never re-fetched.
+	// Pass 1 — compute the FULL grand total (and bytes already on disk) up front so
+	// the progress bar has a stable denominator. Without this, `total` grew as each
+	// file's Content-Length arrived, so the bar filled to one sidecar (~2 GB) then
+	// jumped as the next started. Finished files (renamed) count toward both; a
+	// partial `.part` counts toward `received`; the rest comes from a cheap HEAD
+	// (which follows the HF redirect and returns the final Content-Length).
 	let mut received: u64 = 0;
 	let mut total: u64 = 0;
-	for &(_, local) in spec.files.iter() {
+	for &(remote, local) in spec.files.iter() {
 		if let Ok(meta) = dir.join(local).metadata() {
 			received += meta.len();
 			total += meta.len();
+			continue;
 		}
+		let have = dir
+			.join(format!("{local}.part"))
+			.metadata()
+			.map(|m| m.len())
+			.unwrap_or(0);
+		received += have;
+		total += head_content_length(&format!("{}{}", spec.base_url, remote)).max(have);
 	}
 	on_progress(received, total);
 
+	// Pass 2 — fetch each missing file, resuming a partial `.part` where possible.
+	// `total` is already final; only newly-read bytes are added to `received`.
 	for &(remote, local) in spec.files.iter() {
 		let dest = dir.join(local);
 		if dest.is_file() {
-			continue; // already counted above
+			continue; // already on disk + counted in pass 1
 		}
 		if cancelled() {
 			return Err(DownloadError::Cancelled);
@@ -137,38 +150,32 @@ pub fn download_files(
 		let resp = match req.call() {
 			Ok(r) => r,
 			// 416: the byte range is past EOF → the .part is already complete but
-			// wasn't renamed (crash between flush and rename). Finalize it.
+			// wasn't renamed (crash between flush and rename). Finalize it; its bytes
+			// were already counted in pass 1.
 			Err(ureq::Error::Status(416, _)) if resume_from > 0 => {
 				fs::rename(&tmp, &dest).map_err(|e| fail(format!("finalize {local}: {e}")))?;
-				received += resume_from;
-				total += resume_from;
-				on_progress(received, total);
 				continue;
 			}
 			Err(e) => return Err(fail(format!("download {local}: {e}"))),
 		};
 
-		let content_len = resp
-			.header("Content-Length")
-			.and_then(|s| s.parse::<u64>().ok())
-			.unwrap_or(0);
-
 		// 206 Partial Content → the body continues from `resume_from`; append to the
 		// .part. Anything else (200, or the server/redirect dropped our Range) → start
-		// this one file over from scratch (truncate). Either way: no corruption.
+		// this one file over from scratch: drop the `resume_from` bytes we counted in
+		// pass 1 so we don't double-count as they're re-received. Either way: no corruption.
 		let resuming = resp.status() == 206 && resume_from > 0;
 		let mut file = if resuming {
-			received += resume_from; // already-on-disk bytes count toward progress
-			total += resume_from + content_len;
 			std::fs::OpenOptions::new()
 				.append(true)
 				.open(&tmp)
 				.map_err(|e| fail(format!("open {}: {e}", tmp.display())))?
 		} else {
-			total += content_len;
+			if resume_from > 0 {
+				received = received.saturating_sub(resume_from);
+				on_progress(received, total);
+			}
 			File::create(&tmp).map_err(|e| fail(format!("create {}: {e}", tmp.display())))?
 		};
-		on_progress(received, total);
 
 		let mut reader = resp.into_reader();
 		let mut buf = vec![0u8; 1024 * 1024];
@@ -200,6 +207,17 @@ pub fn download_files(
 		return Err(fail("model files missing after download".into()));
 	}
 	Ok(())
+}
+
+/// HEAD a URL and return its `Content-Length` (ureq follows the redirect to the
+/// CDN, so this is the final file's size). `0` when unavailable — the caller then
+/// falls back to whatever bytes are already on disk.
+fn head_content_length(url: &str) -> u64 {
+	ureq::head(url)
+		.call()
+		.ok()
+		.and_then(|r| r.header("Content-Length").and_then(|s| s.parse::<u64>().ok()))
+		.unwrap_or(0)
 }
 
 /// Initialize the onnxruntime backend from a specific dylib path. Must be called
