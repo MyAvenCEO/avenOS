@@ -14,13 +14,15 @@
 //!   expansion), `line_start`/`line_end` (surgical citations), `content_date` (temporal
 //!   boost / `as_of`), `content_hash`/`source_version` (idempotent + incremental ingest).
 //!   MemPalace's *drawer*. Stored in [`schema::MEMORIES`].
-//! - **entity** — a named node (person, project, topic, thing). Entities are the scoping
-//!   *and* graph primitive — they subsume MemPalace's `wing`/`room` hierarchy. Stored in
-//!   [`schema::ENTITIES`].
-//! - **mention** — a memory→entity edge ("this memory is about entity X"); the scope
-//!   mechanism, replacing the rigid wing/room tree. Many-to-many (a memory can mention
-//!   several entities). Stored in [`schema::MEMORY_ENTITIES`].
-//! - **tag** — a free-form label on a memory for ad-hoc grouping (MemPalace's `hall`).
+//! - **tag** — a free-form label on a memory: the **primary, cheap, deterministic scope**
+//!   (subsumes MemPalace's `wing`/`room`/`hall`). Assignable from source/heuristics with
+//!   no extraction; filtered directly on the memory row (no join).
+//! - **entity** — a named node (person, project, topic, thing): the **semantic graph**
+//!   primitive — traversal, facts, "memories about X". Stored in [`schema::ENTITIES`].
+//! - **mention** — a memory→entity edge ("this memory references entity X"). Powers
+//!   semantic "about X" retrieval and graph traversal; populated by extraction —
+//!   *enriching*, not required for basic scoping (that's `tag`). Many-to-many. Stored in
+//!   [`schema::MEMORY_ENTITIES`].
 //! - **fact** — a *typed, temporal* subject→predicate→object assertion between entities,
 //!   with a validity window (`valid_from`/`valid_to`); MemPalace's *triple*. Stored in
 //!   [`schema::FACTS`].
@@ -28,8 +30,9 @@
 //!   (strength/stability/decay). Distinct from a `fact`: a fact is a typed assertion, a
 //!   relationship is "how strongly these two are associated." Unifies MemPalace's
 //!   `hallway` (intra) and `tunnel` (cross). Stored in [`schema::RELATIONSHIPS`].
-//! - **salience** — how strongly a relationship is held: grows on co-access (Hebbian),
-//!   decays over time (Ebbinghaus). MemPalace's `dynamics`.
+//! - **dynamics** — how strongly a relationship is held (its `strength`/`stability` and
+//!   decay): grows on co-access (Hebbian), decays over time (Ebbinghaus). MemPalace's term,
+//!   kept.
 //!
 //! ## Context assembly (MemPalace's L0–L3 layers)
 //!

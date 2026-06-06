@@ -79,7 +79,8 @@ pub fn brain_schema(embed_dim: usize) -> Schema {
                 .column_with_default("confidence", ColumnType::Double, Value::Double(1.0))
                 .nullable_fk_column("source_memory", MEMORIES),
         )
-        // ── relationships: weighted entity↔entity associations carrying salience ─
+        // ── relationships: weighted entity↔entity associations carrying dynamics ─
+        //    (strength / stability / decay — Hebbian potentiation + Ebbinghaus decay)
         // NOTE: `access_count` should use a Counter merge strategy so co-access sums
         // across devices (Phase 3); the TableSchemaBuilder doesn't expose merge
         // strategies yet, so it is plain LWW for now.
