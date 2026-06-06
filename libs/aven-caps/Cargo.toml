@@ -1,0 +1,25 @@
+[package]
+name = "aven-caps"
+version = "0.0.1"
+edition = "2021"
+description = "AvenOS capability + keyshare primitives — biscuit caps (mint/grant/authorize/report) + per-spark DEK keyshare crypto. Single source of truth shared by the app and the aven-server."
+license = "MIT OR Apache-2.0"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+groove = { package = "aven-db", path = "../aven-db", features = ["client-p2p"] }
+biscuit-auth = { version = "6", features = ["datalog-macro"] }
+base64 = "0.22"
+uuid = { version = "1", features = ["serde", "v4"] }
+chacha20poly1305 = { version = "0.10", features = ["std"] }
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc"] }
+ed25519-dalek = { version = "2", features = ["zeroize"] }
+hex = "0.4"
+hkdf = "0.12"
+rand_core = { version = "0.6", features = ["getrandom"] }
+serde_json = "1"
+sha2 = "0.10"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+zeroize = { version = "1", features = ["derive"] }
