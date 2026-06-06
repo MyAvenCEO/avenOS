@@ -3119,8 +3119,22 @@ pub(crate) async fn groove_ipc_jazz_create(
 	)?;
 
 		let vals = insert_values(&table, &tbl, values)?;
+		// Mint a signed owner-binding for this value and stamp it into the row's
+		// metadata header (digest-covered). The id is fixed up-front so the binding's
+		// `value_id` equals the row id; every peer verifies it on apply (Phase 3).
+		let oid = ObjectId::new();
+		let binding = aven_caps::ownership::mint_owner_binding(
+			&shell.signing_key,
+			*oid.uuid(),
+			spark_gate,
+		)?;
+		let mut extra_meta = std::collections::HashMap::new();
+		extra_meta.insert(
+			aven_caps::ownership::OWNER_BINDING_META_KEY.to_string(),
+			binding.to_meta_string(),
+		);
 		let oid = client
-			.create(&table, vals.clone())
+			.create_with_id_and_metadata(&table, oid, vals.clone(), extra_meta)
 			.await
 			.map_err(format_jazz_err)?;
 

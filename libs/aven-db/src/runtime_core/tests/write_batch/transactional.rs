@@ -13,6 +13,7 @@ fn rc_transactional_insert_stays_local_until_authority_receives_it() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: None,
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     let ((row_id, _row_values), _) =
@@ -62,6 +63,7 @@ fn rc_transactional_insert_is_accepted_when_replayed_to_reconnected_upstream() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: None,
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     s.a.remove_server(s.b_server_for_a);
@@ -130,6 +132,7 @@ fn rc_transactional_insert_is_accepted_by_first_durable_upstream() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: None,
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     let ((row_id, _row_values), _) =
@@ -198,6 +201,7 @@ fn rc_transactional_insert_is_accepted_only_after_batch_is_sealed() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: None,
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     let ((row_id, _row_values), mut receiver) = insert_and_wait_for_batch(
@@ -270,6 +274,7 @@ fn rc_transactional_update_can_modify_row_inserted_earlier_in_same_batch() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: Some(batch_id),
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     let inserted_user_id = ObjectId::new();
@@ -343,6 +348,7 @@ fn rc_transactional_same_row_same_batch_collapses_to_one_live_staged_member() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: Some(batch_id),
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     core.update(
@@ -409,6 +415,7 @@ fn rc_transactional_batch_rejects_writes_after_local_seal() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: None,
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     let ((row_id, _row_values), _receiver) = insert_and_wait_for_batch(
@@ -436,6 +443,7 @@ fn rc_transactional_batch_rejects_writes_after_local_seal() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: Some(batch_id),
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     let insert_err =
@@ -511,6 +519,7 @@ fn rc_transactional_insert_persisted_tracks_local_batch_record_and_settlement() 
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: None,
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     let ((row_id, _row_values), mut receiver) = insert_and_wait_for_batch(
@@ -568,6 +577,7 @@ fn rc_wait_for_batch_resolves_transactional_accepted_settlement() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: None,
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     let ((row_id, _row_values), _receiver) = insert_and_wait_for_batch(
@@ -614,6 +624,7 @@ fn rc_transactional_insert_persisted_reconnect_reconciles_pending_batch_from_ser
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: None,
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     let ((row_id, _row_values), mut receiver) = insert_and_wait_for_batch(
@@ -773,6 +784,7 @@ fn rc_missing_batch_fate_retransmits_local_transactional_rows() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: None,
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     let ((row_id, _row_values), _receiver) = insert_and_wait_for_batch(
@@ -886,6 +898,7 @@ fn rc_missing_batch_fate_retransmits_local_transactional_rows_without_row_locato
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: None,
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     let ((row_id, _row_values), _receiver) = insert_and_wait_for_batch(

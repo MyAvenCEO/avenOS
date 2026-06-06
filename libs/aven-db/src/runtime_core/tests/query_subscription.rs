@@ -296,6 +296,7 @@ fn rc_query_local_transaction_overlay_shows_only_the_requested_staged_insert() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: Some(alice_batch),
         target_branch_name: None,
+        extra_metadata: None,
     };
     let bob_context = WriteContext {
         session: None,
@@ -304,6 +305,7 @@ fn rc_query_local_transaction_overlay_shows_only_the_requested_staged_insert() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: Some(bob_batch),
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     let ((alice_id, _), _) = core
@@ -365,6 +367,7 @@ fn rc_query_local_transaction_overlay_keeps_same_row_updates_isolated_by_batch()
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: Some(alice_batch),
         target_branch_name: None,
+        extra_metadata: None,
     };
     let bob_context = WriteContext {
         session: None,
@@ -373,6 +376,7 @@ fn rc_query_local_transaction_overlay_keeps_same_row_updates_isolated_by_batch()
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: Some(bob_batch),
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     core.update(
@@ -437,6 +441,7 @@ fn rc_query_local_transaction_overlay_handles_indexed_insert_filters() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: Some(batch_id),
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     let ((row_id, _), _) = core
@@ -494,6 +499,7 @@ fn rc_query_local_transaction_overlay_handles_indexed_update_filters() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: Some(batch_id),
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     core.update(
@@ -584,6 +590,7 @@ fn rc_query_local_transaction_overlay_keeps_indexed_deletes_isolated() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: Some(batch_id),
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     core.delete(row_id, Some(&write_context)).unwrap();
@@ -646,6 +653,7 @@ fn rc_query_local_transaction_overlay_include_deleted_returns_staged_delete() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: Some(batch_id),
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     core.delete(row_id, Some(&write_context)).unwrap();
@@ -1524,6 +1532,7 @@ fn rc_transaction_visible_subscription_can_overlay_local_pending_batch() {
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: None,
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     let ((row_id, _row_values), _) =
@@ -1618,6 +1627,7 @@ fn rc_transaction_visible_subscription_removes_local_pending_overlay_when_reject
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: None,
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     let ((row_id, _row_values), _) =
@@ -1701,6 +1711,7 @@ fn rc_transaction_visible_subscription_hides_partial_accepted_batch_until_scope_
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: Some(batch_id),
         target_branch_name: None,
+        extra_metadata: None,
     };
 
     let ((first_id, _row_values), _) =

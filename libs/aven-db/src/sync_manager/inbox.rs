@@ -286,6 +286,7 @@ impl SyncManager {
     fn apply_row_updated<H: Storage>(
         &mut self,
         storage: &mut H,
+        subject_client: PeerId,
         metadata: Option<RowMetadata>,
         mut row: StoredRowBatch,
         fate_recording: AuthoritativeFateRecording,
@@ -297,6 +298,7 @@ impl SyncManager {
             (None, None) => None,
         };
         row.confirmed_tier = None;
+        let resolver = std::sync::Arc::clone(&self.resolver);
 
         let metadata = self.row_metadata_from_payload(storage, &row, metadata.as_ref())?;
         let (is_newly_located_object, needs_exact_locator) =
@@ -307,6 +309,46 @@ impl SyncManager {
                 Some((row_locator, context)) => {
                     let table = row_locator.table.to_string();
                     let branch = row.branch.clone();
+
+                    // Phase 2 — inbound apply gate. Verify a received batch BEFORE
+                    // persisting it, so a forged/relabeled batch from a peer is rejected
+                    // (not merely withheld outbound). The engine stays crypto-agnostic:
+                    // it passes the sender, the op, the resource, the digest IT computed,
+                    // and the opaque proof carried with the batch (`None` until later
+                    // phases put the author signature + owner-binding on the wire). The
+                    // default resolver Allows; production denies unless the proof verifies.
+                    let res = crate::capability::ResourceCoord::new(
+                        format!("{table}:{}", row.row_id),
+                        table.clone(),
+                        row.row_id,
+                    );
+                    let subject = crate::sync_targets::SyncTargetId::Client(subject_client);
+                    let digest = row.content_digest();
+                    // The owner-binding (and later the edit signature) ride in the row's
+                    // metadata, base64-encoded; hand them to the resolver as opaque bytes.
+                    let proof = row
+                        .metadata
+                        .get(crate::capability::OWNER_BINDING_META_KEY)
+                        .map(|s| s.as_bytes());
+                    match resolver.verify_on_apply(
+                        &subject,
+                        crate::capability::AccOp::Write,
+                        &res,
+                        &digest.0,
+                        proof,
+                    ) {
+                        crate::capability::CapDecision::Allow => {}
+                        other => {
+                            tracing::warn!(
+                                row_id = %row.row_id,
+                                table = %table,
+                                decision = ?other,
+                                "apply gate: rejected inbound batch (verify_on_apply)"
+                            );
+                            return None;
+                        }
+                    }
+
                     match apply_row_batch_with_context(
                         storage,
                         ApplyRowBatchWithContext {
@@ -1190,7 +1232,7 @@ impl SyncManager {
                     .insert(client_id);
 
                 if let Some(applied) =
-                    self.apply_row_updated(storage, metadata, row.clone(), fate_recording)
+                    self.apply_row_updated(storage, client_id, metadata, row.clone(), fate_recording)
                 {
                     if !matches!(
                         applied.row.state,

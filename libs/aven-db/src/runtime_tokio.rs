@@ -343,6 +343,27 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         Ok((row_id, row_values, batch_id))
     }
 
+    /// Insert with an explicit id AND extra row metadata (e.g. an owner-binding header)
+    /// merged into the committed row's metadata map — covered by the row digest.
+    pub fn insert_with_id_and_metadata(
+        &self,
+        table: &str,
+        values: HashMap<String, Value>,
+        object_id: Option<ObjectId>,
+        session: Option<&Session>,
+        extra_metadata: HashMap<String, String>,
+    ) -> Result<DirectInsertResult, RuntimeError> {
+        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        let ctx = session
+            .cloned()
+            .map(WriteContext::from_session)
+            .unwrap_or_default()
+            .with_extra_metadata(extra_metadata);
+        let ((row_id, row_values), batch_id) =
+            core.insert_with_id(table, values, object_id, Some(&ctx))?;
+        Ok((row_id, row_values, batch_id))
+    }
+
     /// Update a row (partial update by column name).
     pub fn update(
         &self,

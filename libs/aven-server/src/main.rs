@@ -79,6 +79,51 @@ async fn sync_handler(
     ws.on_upgrade(move |socket| async move { listener.accept(socket).await })
 }
 
+/// The always-on relay peer's inbound apply gate: relay-proof **authenticity**. The
+/// server holds no content-spark biscuits, so it cannot check membership — but it CAN
+/// reject a forged or relabeled row whose owner-binding signature is invalid, before
+/// storing or forwarding it (members enforce membership on their side). Outbound stays
+/// permissive: the relay stores & forwards ciphertext for everyone.
+struct ServerApplyGate;
+
+impl groove::CapabilityResolver for ServerApplyGate {
+    fn may_sync(
+        &self,
+        _subject: &groove::SyncTargetId,
+        _op: groove::AccOp,
+        _res: &groove::ResourceCoord,
+    ) -> groove::CapDecision {
+        groove::CapDecision::Allow
+    }
+
+    fn verify_on_apply(
+        &self,
+        _subject: &groove::SyncTargetId,
+        _op: groove::AccOp,
+        res: &groove::ResourceCoord,
+        _digest: &[u8; 32],
+        proof: Option<&[u8]>,
+    ) -> groove::CapDecision {
+        let Some(proof) = proof else {
+            return groove::CapDecision::Allow;
+        };
+        let Ok(meta) = std::str::from_utf8(proof) else {
+            return groove::CapDecision::DenyPermanent;
+        };
+        let binding = match aven_caps::ownership::OwnerBinding::from_meta_str(meta) {
+            Ok(b) => b,
+            Err(_) => return groove::CapDecision::DenyPermanent,
+        };
+        if binding.value_id != *res.row_id.uuid() {
+            return groove::CapDecision::DenyPermanent;
+        }
+        match aven_caps::ownership::verify_owner_binding(&binding) {
+            Ok(()) => groove::CapDecision::Allow,
+            Err(_) => groove::CapDecision::DenyPermanent,
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
@@ -148,6 +193,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err(e) => return Err(e.into()),
         };
     tracing::info!("blind replica engine connected (RocksDB, real schema)");
+
+    // Phase 2 — every peer verifies. Install the relay-proof apply gate so a forged or
+    // relabeled row is rejected on apply even in transit through the server.
+    if let Err(e) = engine.set_resolver(std::sync::Arc::new(ServerApplyGate)) {
+        tracing::warn!("install server apply gate: {e}");
+    }
 
     // S.3 — the server is the avenCEO owner: mint its genesis on startup (idempotent).
     if let Err(e) = aven_ceo::ensure_avenceo_owned(&engine, &server_vault, &identity, avenceo_id).await {

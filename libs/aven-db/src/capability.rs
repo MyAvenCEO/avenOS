@@ -57,9 +57,41 @@ impl ResourceCoord {
     }
 }
 
+/// Row-metadata key the **owner-binding** travels under (base64), read back as opaque
+/// `proof` bytes by [`CapabilityResolver::verify_on_apply`] on the inbound apply path.
+/// Must match `aven_caps::ownership::OWNER_BINDING_META_KEY` — the engine cannot depend
+/// on `aven-caps` (the dependency points the other way), so the literal is duplicated and
+/// kept in sync by this note.
+pub const OWNER_BINDING_META_KEY: &str = "_owner_binding";
+
 /// The one gate. Every outbound peer frame passes exactly one `may_sync`, at every hop.
 pub trait CapabilityResolver: Send + Sync {
     fn may_sync(&self, subject: &SyncTargetId, op: AccOp, res: &ResourceCoord) -> CapDecision;
+
+    /// Inbound apply gate (§Phase 2 of the Ownership & Caps master plan): verify a
+    /// received batch **before it is persisted**, so a forged or relabeled batch from a
+    /// malicious peer is rejected — not merely withheld outbound. The engine stays
+    /// crypto-agnostic: it passes the sender `subject`, the `op`, the `res`ource, the
+    /// content `digest` **it computed itself**, and the opaque `proof` bytes that
+    /// travelled with the batch (the app's serialized author edit-signature + signed
+    /// owner-binding). The app's `BiscuitCapabilityResolver` deserializes + verifies them
+    /// via `aven-caps` (`authorize_signed_edit`).
+    ///
+    /// Three-state like [`may_sync`]: `Allow` → persist; `DenyPermanent` → reject;
+    /// `Pending` → defer (vault/ACL not hydrated yet), never drop. **Default is `Allow`**
+    /// so permissive/local engines and tests are unchanged; production installs a
+    /// resolver that denies by default and only allows on a valid proof.
+    fn verify_on_apply(
+        &self,
+        subject: &SyncTargetId,
+        op: AccOp,
+        res: &ResourceCoord,
+        digest: &[u8; 32],
+        proof: Option<&[u8]>,
+    ) -> CapDecision {
+        let _ = (subject, op, res, digest, proof);
+        CapDecision::Allow
+    }
 }
 
 /// Permissive default — local-only mode and tests.
