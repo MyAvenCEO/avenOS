@@ -519,14 +519,7 @@
 			"grantDescOwns": "Volle Kontrolle — lesen, schreiben und Mitglieder verwalten.",
 			"grantDescReads": "Nur-Lese-Mitglied.",
 			"grantDescReplicate": "Blindes Backup / Relay — speichert verschlüsselte Daten, kann sie nicht lesen.",
-			"quickRelay": "Zum verbundenen Relay replizieren",
-			"selfPublishTitle": "Dein Profil",
-			"selfPublishHint": "Selbst veröffentlicht in deine eigene Zeile im Netzwerkverzeichnis — nur du kannst sie bearbeiten.",
-			"accountNamePlaceholder": "Dein Name",
-			"deviceLabelPlaceholder": "Dieses Gerät (z. B. MacBook)",
-			"publish": "Veröffentlichen",
-			"publishing": "Veröffentliche…",
-			"publishedNote": "Profil veröffentlicht."
+			"quickRelay": "Zum verbundenen Relay replizieren"
 		},
 		"avenCeoTitle": "avenCEO",
 		"avenCeoClaimedSub": "Verzeichnis & Mitglieder dieses Netzwerks",
