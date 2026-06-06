@@ -813,8 +813,10 @@ pub(super) async fn hydrate_shell(
 			JsonValue::Number(now_unix_ms_i64().into()),
 		);
 		let sparks_vals = super::insert_values("sparks", &sparks_schema, row)?;
+		let sparks_oid = ObjectId::new();
+		let sparks_meta = super::owner_binding_meta(&signing_key, sparks_oid, spark_id)?;
 		client
-				.create("sparks", sparks_vals)
+				.create_with_id_and_metadata("sparks", sparks_oid, sparks_vals, sparks_meta)
 				.await
 				.map_err(super::format_jazz_err)?;
 
@@ -850,8 +852,10 @@ pub(super) async fn hydrate_shell(
 		ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 		let ks_schema = resolved_table_schema(client, "keyshares").await?;
 		let ks_vals = super::insert_values("keyshares", &ks_schema, ks)?;
+		let ks_oid = ObjectId::new();
+		let ks_meta = super::owner_binding_meta(&signing_key, ks_oid, spark_id)?;
 		client
-				.create("keyshares", ks_vals)
+				.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
 				.await
 				.map_err(super::format_jazz_err)?;
 

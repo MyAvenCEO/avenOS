@@ -3070,7 +3070,7 @@ pub(crate) async fn groove_ipc_jazz_get(
 /// row-metadata entry to stamp at create. EVERY spark-scoped create (data AND
 /// control-plane) routes a binding through this, so the row carries its proof on the
 /// wire and is verified on apply — the basis for deny-by-default (private by default).
-fn owner_binding_meta(
+pub(crate) fn owner_binding_meta(
 	signing_key: &ed25519_dalek::SigningKey,
 	row_id: ObjectId,
 	owner_spark: Uuid,
