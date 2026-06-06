@@ -183,6 +183,15 @@ pub enum RelExpr {
         input: Box<RelExpr>,
         limit: usize,
     },
+    /// Order ascending by cosine distance from the query vector to the `Vector`
+    /// value in `column`, for exact-cosine `nearest` top-k. The vector is stored
+    /// as f32 bits (`query_vector_bits`) so the enum keeps `Eq`/`Hash` (f32 isn't `Eq`).
+    VectorNearest {
+        input: Box<RelExpr>,
+        column: ColumnRef,
+        query_vector_bits: Vec<u32>,
+        k: usize,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -291,6 +300,17 @@ pub fn canonicalize_rel_expr(expr: RelExpr) -> Result<RelExpr, RelationIrError> 
         RelExpr::Limit { input, limit } => Ok(RelExpr::Limit {
             input: Box::new(canonicalize_rel_expr(*input)?),
             limit,
+        }),
+        RelExpr::VectorNearest {
+            input,
+            column,
+            query_vector_bits,
+            k,
+        } => Ok(RelExpr::VectorNearest {
+            input: Box::new(canonicalize_rel_expr(*input)?),
+            column,
+            query_vector_bits,
+            k,
         }),
     }
 }

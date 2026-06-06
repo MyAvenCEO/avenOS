@@ -81,7 +81,17 @@ pub(crate) fn normalize_query_to_rel_expr(query: &Query) -> Option<RelExpr> {
         };
     }
 
-    if !query.order_by.is_empty() {
+    if let Some(spec) = query.nearest.as_ref() {
+        relation = RelExpr::VectorNearest {
+            input: Box::new(relation),
+            column: ColumnRef::unscoped(spec.column.clone()),
+            query_vector_bits: spec.query_vector.iter().map(|f| f.to_bits()).collect(),
+            k: spec.k,
+        };
+    }
+
+    // `nearest` owns ordering (ascending cosine distance), so skip ORDER BY when set.
+    if query.nearest.is_none() && !query.order_by.is_empty() {
         relation = RelExpr::OrderBy {
             input: Box::new(relation),
             terms: query

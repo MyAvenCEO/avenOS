@@ -561,6 +561,32 @@ pub struct RecursiveSpec {
     pub max_depth: usize,
 }
 
+/// Vector-similarity search spec for `nearest` (exact-cosine top-k).
+///
+/// `PartialEq`/`Eq` are manual (bitwise on the `f32` vector) because `f32` is not
+/// `Eq`, mirroring `Value`'s storage-identity semantics, so `Query` stays `Eq`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NearestSpec {
+    pub column: String,
+    pub query_vector: Vec<f32>,
+    pub k: usize,
+}
+
+impl PartialEq for NearestSpec {
+    fn eq(&self, other: &Self) -> bool {
+        self.column == other.column
+            && self.k == other.k
+            && self.query_vector.len() == other.query_vector.len()
+            && self
+                .query_vector
+                .iter()
+                .zip(&other.query_vector)
+                .all(|(a, b)| a.to_bits() == b.to_bits())
+    }
+}
+
+impl Eq for NearestSpec {}
+
 /// A query specification (DNF: disjunction of conjunctions).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Query {
@@ -605,6 +631,11 @@ pub struct Query {
     /// instead of returning flattened combined rows.
     #[serde(default)]
     pub result_element_index: Option<usize>,
+    /// Optional vector-similarity search (exact-cosine top-k). When set, results are
+    /// the `k` rows nearest to `query_vector` by ascending cosine distance; it owns
+    /// ordering (any `order_by` is ignored) and caps the row count to `k`.
+    #[serde(default)]
+    pub nearest: Option<NearestSpec>,
     /// Relation IR payload used for query/policy planning.
     ///
     /// Query compilation executes through this IR. The builder DSL fields are
@@ -668,6 +699,7 @@ impl Query {
             array_subqueries: Vec::new(),
             recursive: None,
             result_element_index: None,
+            nearest: None,
             relation_ir: crate::query_manager::relation_ir::RelExpr::TableScan { table },
         }
     }
@@ -933,6 +965,22 @@ impl QueryBuilder {
     /// Set a limit.
     pub fn limit(mut self, n: usize) -> Self {
         self.query.limit = Some(n);
+        self
+    }
+
+    /// Return the `k` rows nearest (ascending cosine distance) to `query_vector` in
+    /// `column` (must be a `Vector` column). Owns ordering and caps the result to `k`.
+    pub fn nearest(
+        mut self,
+        column: impl Into<String>,
+        query_vector: Vec<f32>,
+        k: usize,
+    ) -> Self {
+        self.query.nearest = Some(NearestSpec {
+            column: column.into(),
+            query_vector,
+            k,
+        });
         self
     }
 

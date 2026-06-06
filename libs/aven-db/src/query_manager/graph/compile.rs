@@ -766,14 +766,37 @@ impl QueryGraph {
             phase2_input = filter_id;
         }
 
-        // Sort node (default: id ASC when order_by is omitted)
-        let sort_keys = sort_keys_from_order_by(&plan.order_by, &current_descriptor);
-        if !sort_keys.is_empty() {
-            let sort_node =
-                SortNode::with_tuple_descriptor(current_tuple_descriptor.clone(), sort_keys);
+        // Sort node. `nearest` (ascending cosine distance) takes precedence over
+        // ORDER BY; the result is a Sort -> LimitOffset(k) pair, reusing the existing
+        // ordered-pagination fast path. Falls back to ORDER BY (default id ASC) when
+        // there is no nearest spec or its column is absent from the descriptor.
+        let nearest_sort = plan
+            .nearest
+            .as_ref()
+            .and_then(|n| current_descriptor.column_index(&n.column).map(|idx| (idx, n)));
+        if let Some((column_idx, nearest)) = nearest_sort {
+            let query_vector: Vec<f32> = nearest
+                .query_vector_bits
+                .iter()
+                .map(|bits| f32::from_bits(*bits))
+                .collect();
+            let sort_node = SortNode::with_vector_nearest(
+                current_tuple_descriptor.clone(),
+                column_idx,
+                query_vector,
+            );
             let sort_id = graph.add_node(GraphNode::Sort(sort_node));
             graph.add_edge(sort_id, phase2_input);
             phase2_input = sort_id;
+        } else {
+            let sort_keys = sort_keys_from_order_by(&plan.order_by, &current_descriptor);
+            if !sort_keys.is_empty() {
+                let sort_node =
+                    SortNode::with_tuple_descriptor(current_tuple_descriptor.clone(), sort_keys);
+                let sort_id = graph.add_node(GraphNode::Sort(sort_node));
+                graph.add_edge(sort_id, phase2_input);
+                phase2_input = sort_id;
+            }
         }
 
         // LimitOffset node (if limit or offset specified)
@@ -1708,7 +1731,8 @@ fn ensure_relation_tables_exist(
         | RelExpr::Distinct { input, .. }
         | RelExpr::OrderBy { input, .. }
         | RelExpr::Offset { input, .. }
-        | RelExpr::Limit { input, .. } => ensure_relation_tables_exist(input, schema),
+        | RelExpr::Limit { input, .. }
+        | RelExpr::VectorNearest { input, .. } => ensure_relation_tables_exist(input, schema),
         RelExpr::Join { left, right, .. } => {
             ensure_relation_tables_exist(left, schema)?;
             ensure_relation_tables_exist(right, schema)

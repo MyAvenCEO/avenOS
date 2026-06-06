@@ -3,10 +3,32 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
 use crate::object::ObjectId;
-use crate::row_format::compare_column;
-use crate::query_manager::types::{RowDescriptor, Tuple, TupleDelta, TupleDescriptor};
+use crate::row_format::{compare_column, decode_column};
+use crate::query_manager::types::{RowDescriptor, Tuple, TupleDelta, TupleDescriptor, Value};
 
 use super::RowNode;
+
+/// Cosine distance (`1 - cosine_similarity`) between two equal-length vectors.
+/// Returns `+inf` for length mismatch and `1.0` for a zero-norm operand so that
+/// well-formed candidates always sort ahead of degenerate ones.
+pub(crate) fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() {
+        return f32::INFINITY;
+    }
+    let mut dot = 0.0f32;
+    let mut na = 0.0f32;
+    let mut nb = 0.0f32;
+    for (x, y) in a.iter().zip(b.iter()) {
+        dot += x * y;
+        na += x * x;
+        nb += y * y;
+    }
+    let denom = na.sqrt() * nb.sqrt();
+    if denom <= 0.0 {
+        return 1.0;
+    }
+    1.0 - (dot / denom).clamp(-1.0, 1.0)
+}
 
 /// Sort direction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -31,6 +53,10 @@ pub enum SortTarget {
     /// This is needed because object ID is not part of row payload columns,
     /// but query semantics allow `ORDER BY id|_id` (including desc and mixed keys).
     RowId,
+    /// Virtual sort key for vector similarity: order ascending by cosine distance
+    /// from the node's `nearest_query` to the `Vector` value in this column.
+    /// Powers `nearest` (exact-cosine top-k). The query vector lives on the node.
+    VectorDistance { column: usize },
 }
 
 /// Threshold: when adding more than this many tuples, use bulk append + sort
@@ -44,6 +70,7 @@ const BULK_ADD_THRESHOLD: usize = 16;
 fn compare_tuples_with(
     sort_keys: &[SortKey],
     descriptor: &RowDescriptor,
+    nearest_query: Option<&[f32]>,
     a: &Tuple,
     b: &Tuple,
 ) -> Ordering {
@@ -62,6 +89,20 @@ fn compare_tuples_with(
                 (None, None) => Ordering::Equal,
             },
             SortTarget::RowId => compare_all_ids(a, b),
+            SortTarget::VectorDistance { column } => {
+                let dist = |content: Option<&[u8]>| -> f32 {
+                    match (content, nearest_query) {
+                        (Some(data), Some(q)) => match decode_column(descriptor, data, column) {
+                            Ok(Value::Vector(v)) => cosine_distance(&v, q),
+                            _ => f32::INFINITY,
+                        },
+                        _ => f32::INFINITY,
+                    }
+                };
+                dist(a_content)
+                    .partial_cmp(&dist(b_content))
+                    .unwrap_or(Ordering::Equal)
+            }
         };
 
         let ord = match key.direction {
@@ -101,6 +142,8 @@ pub struct SortNode {
     /// Output tuple descriptor (same as input - pass-through).
     output_tuple_descriptor: TupleDescriptor,
     sort_keys: Vec<SortKey>,
+    /// Query vector for any `SortTarget::VectorDistance` key (exact-cosine `nearest`).
+    nearest_query: Option<Vec<f32>>,
     /// Current sorted tuples.
     sorted_tuples: Vec<Tuple>,
     /// HashSet view of current tuples (for trait requirement).
@@ -119,6 +162,29 @@ impl SortNode {
             descriptor,
             output_tuple_descriptor: tuple_descriptor,
             sort_keys,
+            nearest_query: None,
+            sorted_tuples: Vec::new(),
+            current_tuples: AHashSet::new(),
+            dirty: true,
+        }
+    }
+
+    /// Create a SortNode that orders by ascending cosine distance from `query_vector`
+    /// to the `Vector` value in `column` (exact-cosine `nearest`). Pass-through descriptor.
+    pub fn with_vector_nearest(
+        tuple_descriptor: TupleDescriptor,
+        column: usize,
+        query_vector: Vec<f32>,
+    ) -> Self {
+        let descriptor = tuple_descriptor.combined_descriptor();
+        Self {
+            descriptor,
+            output_tuple_descriptor: tuple_descriptor,
+            sort_keys: vec![SortKey {
+                target: SortTarget::VectorDistance { column },
+                direction: SortDirection::Ascending,
+            }],
+            nearest_query: Some(query_vector),
             sorted_tuples: Vec::new(),
             current_tuples: AHashSet::new(),
             dirty: true,
@@ -134,8 +200,9 @@ impl SortNode {
     fn find_tuple_position(&self, tuple: &Tuple) -> usize {
         let sort_keys = &self.sort_keys;
         let descriptor = &self.descriptor;
+        let nearest_query = self.nearest_query.as_deref();
         self.sorted_tuples
-            .binary_search_by(|t| compare_tuples_with(sort_keys, descriptor, t, tuple))
+            .binary_search_by(|t| compare_tuples_with(sort_keys, descriptor, nearest_query, t, tuple))
             .unwrap_or_else(|pos| pos)
     }
 
@@ -196,8 +263,10 @@ impl RowNode for SortNode {
                 }
                 let sort_keys = &self.sort_keys;
                 let descriptor = &self.descriptor;
-                self.sorted_tuples
-                    .sort_unstable_by(|a, b| compare_tuples_with(sort_keys, descriptor, a, b));
+                let nearest_query = self.nearest_query.as_deref();
+                self.sorted_tuples.sort_unstable_by(|a, b| {
+                    compare_tuples_with(sort_keys, descriptor, nearest_query, a, b)
+                });
             } else {
                 // Incremental path: binary search + insert for small batches.
                 for tuple in input

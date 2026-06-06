@@ -481,6 +481,7 @@ fn estimated_variable_value_len(col: &ColumnDescriptor, val: &Value) -> usize {
         + match val {
             Value::Text(s) => s.len(),
             Value::Bytea(bytes) => bytes.len(),
+            Value::Vector(v) => v.len() * size_of::<f32>(),
             Value::Array(elements) => estimated_array_len(elements, &col.column_type),
             Value::Row { id, values } => {
                 let id_len = 1 + id.map(|_| 16).unwrap_or(0);
@@ -712,6 +713,11 @@ fn encode_variable_value(buf: &mut Vec<u8>, col: &ColumnDescriptor, val: &Value)
     match val {
         Value::Text(s) => buf.extend_from_slice(s.as_bytes()),
         Value::Bytea(bytes) => buf.extend_from_slice(bytes),
+        Value::Vector(v) => {
+            for f in v {
+                buf.extend_from_slice(&f.to_le_bytes());
+            }
+        }
         Value::Array(elements) => encode_array_into(buf, elements, &col.column_type),
         Value::Row { id, values } => {
             // Encode row using its descriptor from the column type
