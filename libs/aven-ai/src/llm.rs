@@ -464,8 +464,25 @@ fn pair_caches(session: &Session) -> Vec<CacheSpec> {
 		let ValueType::Tensor { ty, shape, .. } = input.dtype() else {
 			continue;
 		};
-		// Pin every dynamic axis (-1) to 0 → an empty cache for step 0.
-		let empty_shape: Vec<i64> = shape.iter().map(|&d| if d < 0 { 0 } else { d }).collect();
+		// Empty cache for step 0. A statically-known axis keeps its size. A dynamic axis
+		// (-1) is either the BATCH axis (axis 0 → 1: we always run exactly one sequence) or
+		// a length/cache axis (→ 0: empty at step 0). The old code pinned EVERY dynamic axis
+		// to 0, so the batch axis became 0 → a 0-row tensor, which ORT rejects with
+		// "all dimensions must be >= 1 when creating a tensor from raw data" (the cache-f16
+		// error). Keeping batch = 1 fixes it while leaving the length axis empty.
+		let empty_shape: Vec<i64> = shape
+			.iter()
+			.enumerate()
+			.map(|(axis, &d)| {
+				if d >= 0 {
+					d
+				} else if axis == 0 {
+					1
+				} else {
+					0
+				}
+			})
+			.collect();
 
 		let candidate = name
 			.replacen("past_key_values", "present", 1)
