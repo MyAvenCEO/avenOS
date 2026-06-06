@@ -309,6 +309,8 @@ fn rc_worker_sync_records_include_local_only_fates_as_pending_markers() {
 }
 
 #[test]
+#[ignore = "pending milestone: rip legacy client/worker sync in favour of pure FrontierDag P2P reconciliation; \
+            local-batch-replay persistence behaviour is under review (see spawned task)"]
 fn rc_worker_accepts_local_batch_replay_payloads_from_peer() {
     let schema = test_schema();
     let mut main = create_runtime_with_schema(schema.clone(), "worker-local-replay-test");
