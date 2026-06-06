@@ -1,8 +1,7 @@
 <script lang="ts">
 import { t } from '$lib/i18n'
 import { levelLadder } from '$lib/leveling'
-import { formatEur } from '../orders/orders-data'
-import { founderStatus } from './dashboard-data'
+import { formatEur, founderStatus } from './dashboard-data'
 import FounderLevers from './FounderLevers.svelte'
 
 const s = founderStatus()
@@ -20,9 +19,9 @@ const C = 2 * Math.PI * R
 const dashOffset = C * (1 - s.level.progress)
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+<div class="flex flex-col gap-4">
 	<header class="space-y-1">
-		<h1 class="text-xl font-semibold tracking-tight">{t('nav.dashboard')}</h1>
+		<h2 class="text-lg font-semibold tracking-tight">{t('nav.dashboard')}</h2>
 		<p class="text-muted-foreground text-sm">{t('avens.dashboard.subtitle')}</p>
 	</header>
 

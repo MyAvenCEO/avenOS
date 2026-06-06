@@ -7,6 +7,11 @@
 
 import { levelFor, type LevelInfo } from '$lib/leveling'
 
+const EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' })
+export function formatEur(value: number): string {
+	return EUR.format(value)
+}
+
 export type FounderWeek = {
 	/** Monday of the tracked week (ISO date). */
 	weekOf: string
