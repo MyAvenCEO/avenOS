@@ -112,6 +112,18 @@ impl CapabilityResolver for DenyAllResolver {
     fn may_sync(&self, _subject: &SyncTargetId, _op: AccOp, _res: &ResourceCoord) -> CapDecision {
         CapDecision::DenyPermanent
     }
+    /// Fail-closed on inbound apply too: a peer with no real resolver installed
+    /// rejects every inbound batch rather than silently accepting (M4 hardening).
+    fn verify_on_apply(
+        &self,
+        _subject: &SyncTargetId,
+        _op: AccOp,
+        _res: &ResourceCoord,
+        _digest: &[u8; 32],
+        _proof: Option<&[u8]>,
+    ) -> CapDecision {
+        CapDecision::DenyPermanent
+    }
 }
 
 /// May a peer **hold** (store/receive) a resource's batches? True for a member

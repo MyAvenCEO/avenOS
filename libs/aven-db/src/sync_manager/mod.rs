@@ -190,12 +190,16 @@ impl SyncManager {
             pending_batch_fates: Vec::new(),
             pending_client_batch_fates: HashMap::new(),
             replay_table_contexts: HashMap::new(),
-            resolver: std::sync::Arc::new(crate::capability::AllowAllResolver),
+            // Fail-closed by default (M4): a peer that never installs a real
+            // resolver denies all sync rather than silently running open. Production
+            // peers (app + server) always `set_resolver`; tests that need sync opt
+            // into `AllowAllResolver` explicitly.
+            resolver: std::sync::Arc::new(crate::capability::DenyAllResolver),
         }
     }
 
     /// Inject the peer-sync authorizer (§6 gate). The app provides its
-    /// biscuit-aware resolver; tests / local-only keep the `AllowAll` default.
+    /// biscuit-aware resolver; tests / local-only opt into `AllowAll` explicitly.
     pub fn set_resolver(&mut self, resolver: std::sync::Arc<dyn crate::capability::CapabilityResolver>) {
         self.resolver = resolver;
     }
