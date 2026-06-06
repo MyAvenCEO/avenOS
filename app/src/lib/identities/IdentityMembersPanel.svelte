@@ -42,16 +42,11 @@
 	function capLabel(key: string): string {
 		return t(`identities.share.capabilities.${key}`)
 	}
-	// Human-readable "what this cap does under the hood" — H2 transparency.
+	// Human-readable "what this cap does under the hood" — H2 transparency. The caps
+	// themselves (incl. a relay's quota + rate_limit) come from `identity_cap_report` in
+	// Rust — the single biscuit-derived source — so this panel synthesizes NOTHING.
 	function capDescription(key: string): string {
 		return t(`identities.share.capDesc.${key}`)
-	}
-	// The SYNC (replicate) role carries aven-node POLICY caps that aren't in the biscuit:
-	// a per-identity 10 MB storage quota + inbound rate-limiting. Surface them as badges
-	// too so the effective caps are 100% transparent (H1).
-	const SYNC_POLICY_CAPS = ['quota', 'rate_limit']
-	function effectiveCaps(grant: IdentityGrant, caps: string[]): string[] {
-		return grant === 'replicate' ? [...caps, ...SYNC_POLICY_CAPS] : caps
 	}
 	// Role/grant label (Owner/Member/Relay) — distinct from cap labels so a relay
 	// shows "Relay" (grant) + "Replicate" (cap), not two "Replicate" badges.
@@ -65,7 +60,7 @@
 	// caps), ordered — drives the "how these permissions work" legend (H2).
 	const capsInUse = $derived.by((): string[] => {
 		const set = new Set<string>()
-		for (const e of accessEntries) for (const c of effectiveCaps(e.grant, e.capabilities)) set.add(c)
+		for (const e of accessEntries) for (const c of e.capabilities) set.add(c)
 		return [
 			...CAP_ORDER.filter((c) => set.has(c)),
 			...[...set].filter((c) => !CAP_ORDER.includes(c)),
@@ -515,7 +510,7 @@
 								<div class="mt-2 flex flex-wrap items-center gap-1.5">
 									<!-- Grant kind (owns/reads/replicate) — primary; effective caps — muted. Biscuit caps + synthesized SYNC policy caps (10 MB / rate). Hover/legend = description. -->
 									<span class="bg-primary/10 text-primary rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase">{grantLabel(entry.grant)}</span>
-									{#each effectiveCaps(entry.grant, entry.capabilities) as cap (cap)}
+									{#each entry.capabilities as cap (cap)}
 										<span class="bg-muted text-muted-foreground rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase" title={capDescription(cap)}>{capLabel(cap)}</span>
 									{/each}
 									{#if entry.isThisDevice}
@@ -601,7 +596,7 @@
 						{/if}
 						<div class="mt-1 flex flex-wrap gap-1">
 							<span class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase">{grantLabel(entry.grant)}</span>
-							{#each effectiveCaps(entry.grant, entry.capabilities) as cap (cap)}
+							{#each entry.capabilities as cap (cap)}
 								<span class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase" title={capDescription(cap)}>{capLabel(cap)}</span>
 							{/each}
 						</div>
