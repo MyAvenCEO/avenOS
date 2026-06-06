@@ -4,7 +4,6 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::OnceLock;
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use groove::{
 	query_manager::types::{ColumnType, TableName, TableSchema},
@@ -21,8 +20,8 @@ use uuid::Uuid;
 use crate::{
 	crypto::{
 		cell_seal_aad, column_type_slug, groove_value_to_canonical_utf8, ipc_json_from_opened_sensitive_plaintext,
-		decrypt_keyshare_payload, derive_kek_x25519, encrypt_keyshare_payload, open_text_cell_payload,
-		keyshare_wrap_aad, random_identity_dek, seal_text_cell_payload, Dek, CELL_ENVELOPE_V1,
+		decrypt_keyshare_payload, derive_kek_x25519, open_text_cell_payload,
+		keyshare_wrap_aad, seal_text_cell_payload, Dek, CELL_ENVELOPE_V1,
 	},
 	jazz_auth,
 	schema_manifest,
@@ -525,20 +524,6 @@ pub(super) async fn find_row_snapshot(
 	Ok(None)
 }
 
-fn ascii_slug_fallback(name: &str) -> String {
-	let s: String = name
-		.chars()
-		.filter(|c| c.is_ascii_alphanumeric())
-		.map(|c| c.to_ascii_lowercase())
-		.take(48)
-		.collect();
-	if s.is_empty() {
-		"you".into()
-	} else {
-		s
-	}
-}
-
 /// System-extracted device name for the local peer's `device_label`. Device
 /// membership is governed by biscuit caps + the `peers` roster now (no `my_devices`
 /// allowlist), so each device just self-publishes its OS name into the roster.
@@ -554,14 +539,6 @@ pub(super) fn system_device_name() -> String {
 	// Dev A/B harness disambiguation (see host_device_label_inner). Empty in prod.
 	let suffix = std::env::var("AVEN_PEER_SUFFIX").unwrap_or_default();
 	format!("{base}{suffix}")
-}
-
-fn possessive_identity_title(first_name_for_identity: &str) -> String {
-	let n = first_name_for_identity.trim();
-	if n.is_empty() {
-		return "My identity".into();
-	}
-	format!("{n}'s identity")
 }
 
 pub(super) async fn hydrate_shell(
