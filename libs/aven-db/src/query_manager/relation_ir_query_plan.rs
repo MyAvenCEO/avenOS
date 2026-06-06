@@ -15,6 +15,7 @@ struct QueryEnvelope<'a> {
     offset: usize,
     limit: Option<usize>,
     nearest: Option<NearestPlan>,
+    text_search: Option<TextSearchPlan>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,6 +56,7 @@ pub(crate) struct ExecutionQueryPlan {
     pub array_subqueries: Vec<ArraySubquerySpec>,
     pub project_columns: Option<Vec<ProjectColumn>>,
     pub nearest: Option<NearestPlan>,
+    pub text_search: Option<TextSearchPlan>,
 }
 
 /// Lowered vector-similarity spec. The query vector is stored as f32 bits so the
@@ -63,6 +65,14 @@ pub(crate) struct ExecutionQueryPlan {
 pub(crate) struct NearestPlan {
     pub column: String,
     pub query_vector_bits: Vec<u32>,
+    pub k: usize,
+}
+
+/// Lowered lexical (BM25) full-text search spec.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TextSearchPlan {
+    pub column: String,
+    pub query: String,
     pub k: usize,
 }
 
@@ -882,6 +892,7 @@ fn unwrap_query_envelope(expr: &RelExpr) -> QueryEnvelope<'_> {
     let mut offset = 0;
     let mut limit = None;
     let mut nearest = None;
+    let mut text_search = None;
 
     loop {
         match current {
@@ -895,6 +906,21 @@ fn unwrap_query_envelope(expr: &RelExpr) -> QueryEnvelope<'_> {
                     nearest = Some(NearestPlan {
                         column: to_runtime_column(&column.column),
                         query_vector_bits: query_vector_bits.clone(),
+                        k: *k,
+                    });
+                }
+                current = input;
+            }
+            RelExpr::TextSearch {
+                input,
+                column,
+                query,
+                k,
+            } => {
+                if text_search.is_none() {
+                    text_search = Some(TextSearchPlan {
+                        column: to_runtime_column(&column.column),
+                        query: query.clone(),
                         k: *k,
                     });
                 }
@@ -932,6 +958,7 @@ fn unwrap_query_envelope(expr: &RelExpr) -> QueryEnvelope<'_> {
                     offset,
                     limit,
                     nearest,
+                    text_search,
                 };
             }
         }
@@ -955,14 +982,18 @@ pub(crate) fn lower_relation_to_execution_plan(
         .project_columns
         .or_else(|| select_columns.map(builder_select_columns_to_project_columns));
 
-    // `nearest` owns ordering (ascending cosine distance) and caps rows to `k`.
-    let nearest_k = envelope.nearest.as_ref().map(|n| n.k);
-    let order_by = if nearest_k.is_some() {
+    // A ranking op (`nearest` cosine / `text_search` BM25) owns ordering and caps rows to `k`.
+    let ranking_k = envelope
+        .nearest
+        .as_ref()
+        .map(|n| n.k)
+        .or_else(|| envelope.text_search.as_ref().map(|t| t.k));
+    let order_by = if ranking_k.is_some() {
         Vec::new()
     } else {
         envelope.order_by
     };
-    let limit = match (nearest_k, envelope.limit) {
+    let limit = match (ranking_k, envelope.limit) {
         (Some(k), Some(l)) => Some(l.min(k)),
         (Some(k), None) => Some(k),
         (None, l) => l,
@@ -984,6 +1015,7 @@ pub(crate) fn lower_relation_to_execution_plan(
         array_subqueries,
         project_columns,
         nearest: envelope.nearest,
+        text_search: envelope.text_search,
     })
 }
 

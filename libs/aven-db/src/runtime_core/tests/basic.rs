@@ -94,6 +94,73 @@ fn rc_nearest_returns_top_k_by_cosine_distance() {
     );
 }
 
+#[test]
+fn rc_text_search_returns_top_k_by_bm25() {
+    let schema = SchemaBuilder::new()
+        .table(
+            TableSchema::builder("memories")
+                .column("id", ColumnType::Uuid)
+                .column("body", ColumnType::Text),
+        )
+        .build();
+    let mut core = create_runtime_with_schema(schema, "text-search-bm25-test");
+
+    // Query "quick fox":
+    //   a = both terms, long doc  -> moderate BM25
+    //   b = both terms, short doc -> highest BM25 (length normalization)
+    //   c = no query terms        -> 0, excluded
+    let ((a, _), _) = core
+        .insert(
+            "memories",
+            HashMap::from([
+                ("id".to_string(), Value::Uuid(ObjectId::new())),
+                (
+                    "body".to_string(),
+                    Value::Text("the quick brown fox jumps over things".to_string()),
+                ),
+            ]),
+            None,
+        )
+        .unwrap();
+    let ((b, _), _) = core
+        .insert(
+            "memories",
+            HashMap::from([
+                ("id".to_string(), Value::Uuid(ObjectId::new())),
+                ("body".to_string(), Value::Text("quick fox".to_string())),
+            ]),
+            None,
+        )
+        .unwrap();
+    let ((c, _), _) = core
+        .insert(
+            "memories",
+            HashMap::from([
+                ("id".to_string(), Value::Uuid(ObjectId::new())),
+                ("body".to_string(), Value::Text("the lazy dog sleeps".to_string())),
+            ]),
+            None,
+        )
+        .unwrap();
+
+    core.immediate_tick();
+    core.batched_tick();
+
+    let query = QueryBuilder::new("memories")
+        .text_search("body", "quick fox", 2)
+        .build();
+    let results = execute_query(&mut core, query);
+
+    let ids: Vec<ObjectId> = results.iter().map(|(id, _)| *id).collect();
+    assert_eq!(ids.len(), 2, "k=2 should return 2 rows, got {results:?}");
+    assert_eq!(ids[0], b, "shortest doc with both query terms ranks first (BM25)");
+    assert_eq!(ids[1], a, "longer doc with both terms ranks second");
+    assert!(
+        !ids.contains(&c),
+        "doc with no query terms must be excluded by k=2"
+    );
+}
+
 
 #[test]
 fn test_runtime_core_insert_materializes_schema_defaults() {

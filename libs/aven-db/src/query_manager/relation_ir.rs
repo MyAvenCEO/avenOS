@@ -192,6 +192,14 @@ pub enum RelExpr {
         query_vector_bits: Vec<u32>,
         k: usize,
     },
+    /// Order by descending BM25 relevance of `query` against the `Text` value in
+    /// `column`, for lexical `text_search` top-k.
+    TextSearch {
+        input: Box<RelExpr>,
+        column: ColumnRef,
+        query: String,
+        k: usize,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -310,6 +318,17 @@ pub fn canonicalize_rel_expr(expr: RelExpr) -> Result<RelExpr, RelationIrError> 
             input: Box::new(canonicalize_rel_expr(*input)?),
             column,
             query_vector_bits,
+            k,
+        }),
+        RelExpr::TextSearch {
+            input,
+            column,
+            query,
+            k,
+        } => Ok(RelExpr::TextSearch {
+            input: Box::new(canonicalize_rel_expr(*input)?),
+            column,
+            query,
             k,
         }),
     }

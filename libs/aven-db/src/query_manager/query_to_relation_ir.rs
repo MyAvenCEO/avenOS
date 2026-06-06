@@ -88,10 +88,17 @@ pub(crate) fn normalize_query_to_rel_expr(query: &Query) -> Option<RelExpr> {
             query_vector_bits: spec.query_vector.iter().map(|f| f.to_bits()).collect(),
             k: spec.k,
         };
+    } else if let Some(spec) = query.text_search.as_ref() {
+        relation = RelExpr::TextSearch {
+            input: Box::new(relation),
+            column: ColumnRef::unscoped(spec.column.clone()),
+            query: spec.query.clone(),
+            k: spec.k,
+        };
     }
 
-    // `nearest` owns ordering (ascending cosine distance), so skip ORDER BY when set.
-    if query.nearest.is_none() && !query.order_by.is_empty() {
+    // A ranking op (`nearest`/`text_search`) owns ordering, so skip ORDER BY when set.
+    if query.nearest.is_none() && query.text_search.is_none() && !query.order_by.is_empty() {
         relation = RelExpr::OrderBy {
             input: Box::new(relation),
             terms: query

@@ -587,6 +587,14 @@ impl PartialEq for NearestSpec {
 
 impl Eq for NearestSpec {}
 
+/// Lexical (BM25) full-text search spec for `text_search` (top-k by relevance).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TextSearchSpec {
+    pub column: String,
+    pub query: String,
+    pub k: usize,
+}
+
 /// A query specification (DNF: disjunction of conjunctions).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Query {
@@ -636,6 +644,10 @@ pub struct Query {
     /// ordering (any `order_by` is ignored) and caps the row count to `k`.
     #[serde(default)]
     pub nearest: Option<NearestSpec>,
+    /// Optional lexical (BM25) full-text search. When set, results are the `k` rows
+    /// most relevant to `query`; it owns ordering and caps the row count to `k`.
+    #[serde(default)]
+    pub text_search: Option<TextSearchSpec>,
     /// Relation IR payload used for query/policy planning.
     ///
     /// Query compilation executes through this IR. The builder DSL fields are
@@ -700,6 +712,7 @@ impl Query {
             recursive: None,
             result_element_index: None,
             nearest: None,
+            text_search: None,
             relation_ir: crate::query_manager::relation_ir::RelExpr::TableScan { table },
         }
     }
@@ -979,6 +992,22 @@ impl QueryBuilder {
         self.query.nearest = Some(NearestSpec {
             column: column.into(),
             query_vector,
+            k,
+        });
+        self
+    }
+
+    /// Return the `k` rows most relevant (BM25) to `query` in `column` (a `Text`
+    /// column). Owns ordering and caps the result to `k`.
+    pub fn text_search(
+        mut self,
+        column: impl Into<String>,
+        query: impl Into<String>,
+        k: usize,
+    ) -> Self {
+        self.query.text_search = Some(TextSearchSpec {
+            column: column.into(),
+            query: query.into(),
             k,
         });
         self

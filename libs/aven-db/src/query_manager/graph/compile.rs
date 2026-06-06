@@ -788,6 +788,19 @@ impl QueryGraph {
             let sort_id = graph.add_node(GraphNode::Sort(sort_node));
             graph.add_edge(sort_id, phase2_input);
             phase2_input = sort_id;
+        } else if let Some((column_idx, text)) = plan
+            .text_search
+            .as_ref()
+            .and_then(|t| current_descriptor.column_index(&t.column).map(|idx| (idx, t)))
+        {
+            let sort_node = SortNode::with_text_search(
+                current_tuple_descriptor.clone(),
+                column_idx,
+                &text.query,
+            );
+            let sort_id = graph.add_node(GraphNode::Sort(sort_node));
+            graph.add_edge(sort_id, phase2_input);
+            phase2_input = sort_id;
         } else {
             let sort_keys = sort_keys_from_order_by(&plan.order_by, &current_descriptor);
             if !sort_keys.is_empty() {
@@ -1732,7 +1745,8 @@ fn ensure_relation_tables_exist(
         | RelExpr::OrderBy { input, .. }
         | RelExpr::Offset { input, .. }
         | RelExpr::Limit { input, .. }
-        | RelExpr::VectorNearest { input, .. } => ensure_relation_tables_exist(input, schema),
+        | RelExpr::VectorNearest { input, .. }
+        | RelExpr::TextSearch { input, .. } => ensure_relation_tables_exist(input, schema),
         RelExpr::Join { left, right, .. } => {
             ensure_relation_tables_exist(left, schema)?;
             ensure_relation_tables_exist(right, schema)
