@@ -595,9 +595,36 @@ impl JazzClient {
         Ok(())
     }
 
+    /// Update a row, stamping extra row metadata (e.g. a re-minted owner-binding) into
+    /// the edit's batch — so every write is authenticated on apply, not just creates.
+    pub async fn update_with_metadata(
+        &self,
+        object_id: ObjectId,
+        updates: Vec<(String, Value)>,
+        extra_metadata: std::collections::HashMap<String, String>,
+    ) -> Result<()> {
+        self.runtime
+            .update_with_metadata(object_id, updates, None, extra_metadata)
+            .map_err(|e| JazzError::Write(e.to_string()))?;
+        Ok(())
+    }
+
     pub async fn delete(&self, object_id: ObjectId) -> Result<()> {
         self.runtime
             .delete(object_id, None)
+            .map_err(|e| JazzError::Write(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Delete a row, stamping a re-minted owner-binding into the tombstone batch so the
+    /// delete is authenticated on apply.
+    pub async fn delete_with_metadata(
+        &self,
+        object_id: ObjectId,
+        extra_metadata: std::collections::HashMap<String, String>,
+    ) -> Result<()> {
+        self.runtime
+            .delete_with_metadata(object_id, None, extra_metadata)
             .map_err(|e| JazzError::Write(e.to_string()))?;
         Ok(())
     }

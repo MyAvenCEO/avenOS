@@ -2051,8 +2051,10 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 			JsonValue::String(wrapped),
 		);
 		let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
+		let ks_oid = ObjectId::new();
+		let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, spark_uuid)?;
 		client
-			.create("keyshares", ks_vals)
+			.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
 			.await
 			.map_err(format_jazz_err)?;
 	}
@@ -2091,8 +2093,9 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 			JsonValue::String(genesis_b64),
 		);
 		let sparks_ops = patch_updates(&sparks_schema, patch_sparks)?;
+		let upd_meta = owner_binding_meta(&shell.signing_key, sparks_oid, spark_uuid)?;
 		client
-			.update(sparks_oid, sparks_ops)
+			.update_with_metadata(sparks_oid, sparks_ops, upd_meta)
 			.await
 			.map_err(format_jazz_err)?;
 	}
@@ -2194,8 +2197,9 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 	let mut patch_sparks = Map::new();
 	patch_sparks.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
 	let sparks_ops = patch_updates(&sparks_schema, patch_sparks)?;
+	let upd_meta = owner_binding_meta(&shell.signing_key, sparks_oid, spark_uuid)?;
 	client
-		.update(sparks_oid, sparks_ops)
+		.update_with_metadata(sparks_oid, sparks_ops, upd_meta)
 		.await
 		.map_err(format_jazz_err)?;
 
@@ -2304,7 +2308,9 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 		ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
 		ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 		let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
-		client.create("keyshares", ks_vals).await.map_err(format_jazz_err)?;
+		let ks_oid = ObjectId::new();
+		let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, spark_uuid)?;
+		client.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta).await.map_err(format_jazz_err)?;
 	}
 
 	if !already_reader {
@@ -2332,7 +2338,8 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 		let mut patch_sparks = Map::new();
 		patch_sparks.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
 		let sparks_ops = patch_updates(&sparks_schema, patch_sparks)?;
-		client.update(sparks_oid, sparks_ops).await.map_err(format_jazz_err)?;
+		let upd_meta = owner_binding_meta(&shell.signing_key, sparks_oid, spark_uuid)?;
+		client.update_with_metadata(sparks_oid, sparks_ops, upd_meta).await.map_err(format_jazz_err)?;
 	}
 
 	finish_spark_admin_grant(app, jazz, self_state, client, spark_uuid).await?;
@@ -2373,7 +2380,7 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 			if issuer == my_issuer {
 				// Already claimed BY THIS DEVICE (e.g. after a restart) — idempotent:
 				// ensure the owner roster row + re-hydrate so the app shows. NOT an error.
-				ensure_aven_ceo_owner_row(client.as_ref(), &shell.peer_did, spark_uuid).await?;
+				ensure_aven_ceo_owner_row(client.as_ref(), &shell.peer_did, &shell.signing_key, spark_uuid).await?;
 				finish_spark_admin_grant(app, jazz, self_state, client, spark_uuid).await?;
 				return Ok(spark_uuid.to_string());
 			}
@@ -2403,7 +2410,9 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 	row.insert("current_dek_version".into(), JsonValue::Number(dek_ver.into()));
 	row.insert("created_at_ms".into(), JsonValue::Number(now_ms.into()));
 	let sparks_vals = insert_values("sparks", &sparks_schema, row)?;
-	client.create("sparks", sparks_vals).await.map_err(format_jazz_err)?;
+	let sparks_oid = ObjectId::new();
+	let sparks_meta = owner_binding_meta(&shell.signing_key, sparks_oid, spark_uuid)?;
+	client.create_with_id_and_metadata("sparks", sparks_oid, sparks_vals, sparks_meta).await.map_err(format_jazz_err)?;
 
 	// Self keyshare: wrap a fresh DEK to this device so the owner can read sealed
 	// columns later (the roster is plaintext today, but keep the shape consistent).
@@ -2420,10 +2429,12 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 	ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
 	ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 	let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
-	client.create("keyshares", ks_vals).await.map_err(format_jazz_err)?;
+	let ks_oid = ObjectId::new();
+	let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, spark_uuid)?;
+	client.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta).await.map_err(format_jazz_err)?;
 
 	// The owner is the first member: give it a roster row (populated from identity).
-	ensure_aven_ceo_owner_row(client.as_ref(), &shell.peer_did, spark_uuid).await?;
+	ensure_aven_ceo_owner_row(client.as_ref(), &shell.peer_did, &shell.signing_key, spark_uuid).await?;
 
 	finish_spark_admin_grant(app, jazz, self_state, client, spark_uuid).await?;
 	Ok(spark_uuid.to_string())
@@ -2435,6 +2446,7 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 async fn ensure_aven_ceo_owner_row(
 	client: &JazzClient,
 	peer_did: &str,
+	signing_key: &ed25519_dalek::SigningKey,
 	spark_uuid: Uuid,
 ) -> Result<(), String> {
 	let peers_schema = jazz_engine::resolved_table_schema(client, "peers").await?;
@@ -2465,7 +2477,9 @@ async fn ensure_aven_ceo_owner_row(
 	prow.insert("device_label".into(), JsonValue::String(label));
 	prow.insert("added_at_ms".into(), JsonValue::Number(now_ms.into()));
 	let prow_vals = insert_values("peers", &peers_schema, prow)?;
-	client.create("peers", prow_vals).await.map_err(format_jazz_err)?;
+	let prow_oid = ObjectId::new();
+	let prow_meta = owner_binding_meta(signing_key, prow_oid, spark_uuid)?;
+	client.create_with_id_and_metadata("peers", prow_oid, prow_vals, prow_meta).await.map_err(format_jazz_err)?;
 	Ok(())
 }
 
@@ -2575,7 +2589,9 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 	prow.insert("status".into(), JsonValue::String("active".into()));
 	prow.insert("added_at_ms".into(), JsonValue::Number(now_ms.into()));
 	let prow_vals = insert_values("peers", &peers_schema, prow)?;
-	let member_oid = client.create("peers", prow_vals).await.map_err(format_jazz_err)?;
+	let member_oid = ObjectId::new();
+	let prow_meta = owner_binding_meta(&shell.signing_key, member_oid, spark_uuid)?;
+	client.create_with_id_and_metadata("peers", member_oid, prow_vals, prow_meta).await.map_err(format_jazz_err)?;
 
 	// 2. Keyshare: wrap the avenCEO DEK to the member (decrypt sealed roster fields).
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &peer_pk)?;
@@ -2590,7 +2606,9 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 	ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
 	ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 	let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
-	client.create("keyshares", ks_vals).await.map_err(format_jazz_err)?;
+	let ks_oid = ObjectId::new();
+	let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, spark_uuid)?;
+	client.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta).await.map_err(format_jazz_err)?;
 
 	// 3. Membership bundle in the biscuit: reads (whole roster) + write (own row only).
 	let bisc = shell
@@ -2629,7 +2647,8 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 	let mut patch = Map::new();
 	patch.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
 	let ops = patch_updates(&sparks_schema, patch)?;
-	client.update(sparks_oid, ops).await.map_err(format_jazz_err)?;
+	let upd_meta = owner_binding_meta(&shell.signing_key, sparks_oid, spark_uuid)?;
+	client.update_with_metadata(sparks_oid, ops, upd_meta).await.map_err(format_jazz_err)?;
 
 	finish_spark_admin_grant(app, jazz, self_state, client, spark_uuid).await?;
 	Ok(())
@@ -2697,7 +2716,8 @@ pub(crate) async fn groove_ipc_aven_ceo_publish_profile(
 	patch.insert("account_name".into(), JsonValue::String(name));
 	patch.insert("device_label".into(), JsonValue::String(label));
 	let ops = patch_updates(&peers_schema, patch)?;
-	client.update(own_oid, ops).await.map_err(format_jazz_err)?;
+	let upd_meta = owner_binding_meta(&shell.signing_key, own_oid, spark_uuid)?;
+	client.update_with_metadata(own_oid, ops, upd_meta).await.map_err(format_jazz_err)?;
 	Ok(())
 }
 
@@ -2918,8 +2938,10 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 		ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
 		ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 		let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
+		let ks_oid = ObjectId::new();
+		let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, spark_uuid)?;
 		client
-			.create("keyshares", ks_vals)
+			.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
 			.await
 			.map_err(format_jazz_err)?;
 	}
@@ -2948,8 +2970,9 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 	patch.insert("issuer_pubkey_b64".into(), JsonValue::String(issuer_b64));
 	patch.insert("current_dek_version".into(), JsonValue::Number(new_v.into()));
 	let ops = patch_updates(&sparks_schema, patch)?;
+	let upd_meta = owner_binding_meta(&shell.signing_key, sparks_oid, spark_uuid)?;
 	client
-		.update(sparks_oid, ops)
+		.update_with_metadata(sparks_oid, ops, upd_meta)
 		.await
 		.map_err(format_jazz_err)?;
 
@@ -2966,7 +2989,8 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 			_ => continue,
 		};
 		if sid == spark_uuid && recip == peer_did.as_str() {
-			let _ = client.delete(oid).await;
+			let del_meta = owner_binding_meta(&shell.signing_key, oid, spark_uuid)?;
+			let _ = client.delete_with_metadata(oid, del_meta).await;
 		}
 	}
 
@@ -3042,6 +3066,25 @@ pub(crate) async fn groove_ipc_jazz_get(
 	}
 }
 
+/// Mint a signed owner-binding for a freshly generated `row_id` and return it as the
+/// row-metadata entry to stamp at create. EVERY spark-scoped create (data AND
+/// control-plane) routes a binding through this, so the row carries its proof on the
+/// wire and is verified on apply — the basis for deny-by-default (private by default).
+fn owner_binding_meta(
+	signing_key: &ed25519_dalek::SigningKey,
+	row_id: ObjectId,
+	owner_spark: Uuid,
+) -> Result<std::collections::HashMap<String, String>, String> {
+	let binding =
+		aven_caps::ownership::mint_owner_binding(signing_key, *row_id.uuid(), owner_spark)?;
+	let mut meta = std::collections::HashMap::new();
+	meta.insert(
+		aven_caps::ownership::OWNER_BINDING_META_KEY.to_string(),
+		binding.to_meta_string(),
+	);
+	Ok(meta)
+}
+
 async fn finish_spark_data_write(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -3069,9 +3112,12 @@ pub(crate) async fn groove_ipc_jazz_create(
 	let tbl = jazz_engine::resolved_table_schema(client.as_ref(), &table).await?;
 
 	if table == "peers" {
+		let spark = jazz_engine::spark_uuid_from_json_row(&tbl, &values)?;
 		let vals = insert_values("peers", &tbl, values)?;
-		let oid = client
-			.create(&table, vals.clone())
+		let oid = ObjectId::new();
+		let prow_meta = owner_binding_meta(&shell.signing_key, oid, spark)?;
+		client
+			.create_with_id_and_metadata(&table, oid, vals.clone(), prow_meta)
 			.await
 			.map_err(format_jazz_err)?;
 
@@ -3119,20 +3165,10 @@ pub(crate) async fn groove_ipc_jazz_create(
 	)?;
 
 		let vals = insert_values(&table, &tbl, values)?;
-		// Mint a signed owner-binding for this value and stamp it into the row's
-		// metadata header (digest-covered). The id is fixed up-front so the binding's
-		// `value_id` equals the row id; every peer verifies it on apply (Phase 3).
+		// Stamp a signed owner-binding (digest-covered) so every peer verifies it on
+		// apply; the id is fixed up-front so the binding's value_id == the row id.
 		let oid = ObjectId::new();
-		let binding = aven_caps::ownership::mint_owner_binding(
-			&shell.signing_key,
-			*oid.uuid(),
-			spark_gate,
-		)?;
-		let mut extra_meta = std::collections::HashMap::new();
-		extra_meta.insert(
-			aven_caps::ownership::OWNER_BINDING_META_KEY.to_string(),
-			binding.to_meta_string(),
-		);
+		let extra_meta = owner_binding_meta(&shell.signing_key, oid, spark_gate)?;
 		let oid = client
 			.create_with_id_and_metadata(&table, oid, vals.clone(), extra_meta)
 			.await
@@ -3164,8 +3200,9 @@ pub(crate) async fn groove_ipc_jazz_create(
 			);
 		}
 		let ops = patch_updates(&tbl, ph)?;
+		let upd_meta = owner_binding_meta(&shell.signing_key, oid, spark)?;
 		client
-			.update(oid, ops)
+			.update_with_metadata(oid, ops, upd_meta)
 			.await
 			.map_err(format_jazz_err)?;
 	}
@@ -3274,8 +3311,9 @@ pub(crate) async fn groove_ipc_jazz_update(
 
 	let ops = patch_updates(&tbl, sealed_patch)?;
 
+	let upd_meta = owner_binding_meta(&shell.signing_key, oid, spark)?;
 	client
-		.update(oid, ops)
+		.update_with_metadata(oid, ops, upd_meta)
 		.await
 		.map_err(|e| {
 			let msg = format_jazz_err(e);
@@ -3343,8 +3381,9 @@ pub(crate) async fn groove_ipc_jazz_delete(
 		Some(uuid),
 	)?;
 
+	let del_meta = owner_binding_meta(&shell.signing_key, oid, spark)?;
 	client
-		.delete(oid)
+		.delete_with_metadata(oid, del_meta)
 		.await
 		.map_err(|e| {
 			let msg = format_jazz_err(e);

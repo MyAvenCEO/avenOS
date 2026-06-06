@@ -100,6 +100,23 @@ pub async fn avenceo_genesis_b64(engine: &JazzClient, avenceo_id: Uuid) -> Resul
 
 /// Ensure the server owns avenCEO: mint its genesis (server = owner) + a self
 /// keyshare if not already present. Idempotent — safe to call on every boot.
+/// Mint a signed owner-binding for a freshly generated server row id, as the metadata
+/// entry to stamp at create — so the server's avenCEO control rows carry a binding and
+/// pass the same verify-on-apply gate as everything else (no exclusions).
+fn owner_binding_meta(
+	signing: &SigningKey,
+	row_id: ObjectId,
+	owner_spark: Uuid,
+) -> Result<std::collections::HashMap<String, String>, String> {
+	let binding = aven_caps::ownership::mint_owner_binding(signing, *row_id.uuid(), owner_spark)?;
+	let mut meta = std::collections::HashMap::new();
+	meta.insert(
+		aven_caps::ownership::OWNER_BINDING_META_KEY.to_string(),
+		binding.to_meta_string(),
+	);
+	Ok(meta)
+}
+
 pub async fn ensure_avenceo_owned(
 	engine: &JazzClient,
 	vault: &BiscuitVault,
@@ -130,8 +147,10 @@ pub async fn ensure_avenceo_owned(
 			("created_at_ms", Value::BigInt(now_ms())),
 		],
 	);
+	let sparks_oid = ObjectId::new();
+	let sparks_meta = owner_binding_meta(signing, sparks_oid, avenceo_id)?;
 	engine
-		.create("sparks", sparks_row)
+		.create_with_id_and_metadata("sparks", sparks_oid, sparks_row, sparks_meta)
 		.await
 		.map_err(|e| format!("create sparks:{e:?}"))?;
 
@@ -154,8 +173,10 @@ pub async fn ensure_avenceo_owned(
 			("wrapped_dek", Value::Text(wrapped)),
 		],
 	);
+	let ks_oid = ObjectId::new();
+	let ks_meta = owner_binding_meta(signing, ks_oid, avenceo_id)?;
 	engine
-		.create("keyshares", ks_row)
+		.create_with_id_and_metadata("keyshares", ks_oid, ks_row, ks_meta)
 		.await
 		.map_err(|e| format!("create keyshares:{e:?}"))?;
 
@@ -244,8 +265,13 @@ pub async fn maybe_grant_first_admin(
 	let new_chain = attenuate_add_owner_third_party(&vault.biscuit_kp, &chain, avenceo_id, &peer_did)?;
 	let new_genesis_b64 =
 		URL_SAFE_NO_PAD.encode(new_chain.to_vec().map_err(|e| format!("genesis_encode:{e:?}"))?);
+	let upd_meta = owner_binding_meta(signing, sparks_oid, avenceo_id)?;
 	engine
-		.update(sparks_oid, vec![("genesis_b64".to_string(), Value::Text(new_genesis_b64))])
+		.update_with_metadata(
+			sparks_oid,
+			vec![("genesis_b64".to_string(), Value::Text(new_genesis_b64))],
+			upd_meta,
+		)
 		.await
 		.map_err(|e| format!("update genesis:{e:?}"))?;
 
@@ -267,8 +293,10 @@ pub async fn maybe_grant_first_admin(
 			("wrapped_dek", Value::Text(wrapped)),
 		],
 	);
+	let ks_oid = ObjectId::new();
+	let ks_meta = owner_binding_meta(signing, ks_oid, avenceo_id)?;
 	engine
-		.create("keyshares", ks_row)
+		.create_with_id_and_metadata("keyshares", ks_oid, ks_row, ks_meta)
 		.await
 		.map_err(|e| format!("create keyshares:{e:?}"))?;
 

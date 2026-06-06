@@ -34,6 +34,13 @@ pub enum AccOp {
 	/// `right("replicate", …)` grant but no keyshare → carries ciphertext, cannot
 	/// decrypt. Authorized without `trusted_admin` (a replica is not an admin).
 	Replicate,
+	/// Admit/modify a roster member — the `admit` right. Required to write a `peers`
+	/// (roster) row, so membership changes are cap-gated like any other write rather
+	/// than excluded from verification.
+	Admit,
+	/// Create or rotate a DEK keyshare — the `rotate_dek` right. Required to write a
+	/// `keyshares` row, so key distribution is cap-gated uniformly.
+	RotateDek,
 }
 
 impl AccOp {
@@ -43,6 +50,8 @@ impl AccOp {
 			AccOp::Write => "write",
 			AccOp::Delete => "delete",
 			AccOp::Replicate => "replicate",
+			AccOp::Admit => "admit",
+			AccOp::RotateDek => "rotate_dek",
 		}
 	}
 }
