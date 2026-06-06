@@ -168,7 +168,7 @@ pub fn run() {
 			app.manage(jazz::ui_drain::spawn_ui_table_drain(app.handle().clone()));
 
 			// NOTE: the on-device voice model is NOT auto-downloaded on launch. The
-			// user starts it explicitly from Self → Settings → Models (the multi-GB
+			// user starts it explicitly from Self → Settings → Models (the ~640 MB
 			// download shouldn't happen unprompted). `asr::spawn_model_download` is
 			// invoked on demand via the `asr_start_download` command.
 

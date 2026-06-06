@@ -17,8 +17,8 @@
 	let local = $state<LocalModel[]>([])
 	let busyId = $state<string | null>(null)
 
-	// Voxtral Mini is a speech model: audio + text (no vision). AvenOS uses the
-	// audio capability for voice-note transcription.
+	// Parakeet is a speech-to-text model (audio in → text out). AvenOS uses it for
+	// voice-note transcription.
 	const MODALITIES = ['audio', 'text'] as const
 
 	async function refreshLocal() {

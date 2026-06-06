@@ -46,9 +46,9 @@
 	const tauri = $derived(browser && isTauriRuntime())
 	const composerDisabled = $derived(!session?.peerDid?.trim())
 
-	// On-device voice transcription: IntentComposer wires the real Voxtral path
-	// (and the download-progress / setup states) itself when running in Tauri, so
-	// nothing voice-specific needs to be passed here beyond surfacing errors.
+	// On-device voice transcription: IntentComposer wires the real on-device STT
+	// path (and the download-progress / setup states) itself when running in Tauri,
+	// so nothing voice-specific needs to be passed here beyond surfacing errors.
 
 	const peersAllow = $derived<PeerRowReply[]>(
 		!tauri || !unlocked ? [] : $peerRows,

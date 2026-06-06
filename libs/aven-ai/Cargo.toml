@@ -1,0 +1,30 @@
+[package]
+name = "aven-ai"
+version = "0.0.1"
+edition = "2021"
+description = "AvenOS on-device AI core (Tauri-free): speech-to-text via sherpa-onnx (Parakeet), model download/cache primitives, and a future on-device LLM path. Shared by the app."
+license = "MIT OR Apache-2.0"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = []
+# On-device speech-to-text via sherpa-onnx. The `sherpa-onnx-sys` build script
+# downloads a prebuilt static sherpa-onnx + onnxruntime (no CMake needed).
+stt = ["dep:sherpa-onnx", "dep:ureq", "dep:tar", "dep:bzip2"]
+# Future on-device LLM path (Gemma, etc.) via mistralrs. Heavy; off by default.
+gemma = ["dep:mistralrs"]
+
+[dependencies]
+# STT engine + first-run model download (tar.bz2 from GitHub releases) + extract.
+sherpa-onnx = { version = "1.13", optional = true }
+ureq = { version = "2", optional = true }
+tar = { version = "0.4", optional = true }
+bzip2 = { version = "0.4", optional = true }
+# Future on-device LLM engine.
+mistralrs = { version = "0.8", optional = true }
+
+[target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
+# Apple GPU backend for the future mistralrs/Gemma path (only with `gemma`).
+mistralrs = { version = "0.8", optional = true, features = ["metal"] }
