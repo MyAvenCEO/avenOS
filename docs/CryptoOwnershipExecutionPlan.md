@@ -32,7 +32,16 @@
 
 ---
 
-## ☐ Milestone 1 — Identities remodel (atomic push, NEXT)
+## ✅ Milestone 1 — Identities remodel (DONE — `f9e11be`/`5f017a3`/`8018ac8`)
+
+**Done in 2 green steps:** (1) full mechanical rename `spark`→`identity` /
+`spark_id`→`owner` (uniform owner model — an identity row self-owns) across
+aven-caps + backend + server + frontend (routes/components/stores/i18n, files+dirs
+moved); (2) `humans` table + `my_devices` allowlist **dropped** (device access =
+`peers` roster + biscuit caps), identities **typed** (`human`|`aven`, set at all 3
+create sites), human profile folded onto the human identity, `device_label`
+auto-extracted (scutil). App+server build green, svelte-check 0 errors. **Pending:
+wipe + live-test** (harness building). Original task breakdown below (all done):
 
 Unify `humans` + `sparks` → one typed `identities` table; `spark`→`identity`,
 `spark_id`→`owner` everywhere (incl. `avens`); fresh schema baseline.
