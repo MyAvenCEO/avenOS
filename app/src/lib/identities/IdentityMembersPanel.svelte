@@ -411,25 +411,6 @@
 		<p class="text-muted-foreground text-sm">{t('identities.share.noOneListed')}</p>
 	{:else}
 		<div class="flex flex-col gap-8">
-			<!-- Sub-tabs (top-centered): Members (member→caps) vs Capabilities (cap→holders) -->
-			<div class="flex justify-center">
-				<div class="bg-muted/40 inline-flex rounded-xl p-1 text-sm">
-					<button
-						type="button"
-						class="rounded-lg px-4 py-1.5 font-medium {activeTab === 'members'
-							? 'bg-background shadow-sm'
-							: 'text-muted-foreground hover:text-foreground'}"
-						onclick={() => (activeTab = 'members')}>{t('identities.share.tabMembers')}</button
-					>
-					<button
-						type="button"
-						class="rounded-lg px-4 py-1.5 font-medium {activeTab === 'caps'
-							? 'bg-background shadow-sm'
-							: 'text-muted-foreground hover:text-foreground'}"
-						onclick={() => (activeTab = 'caps')}>{t('identities.share.tabCapabilities')}</button
-					>
-				</div>
-			</div>
 
 			{#if activeTab === 'members'}
 			<!-- Give access (unified: DID + grant kind), placed ABOVE the member list -->
@@ -560,43 +541,6 @@
 			</section>
 			{/if}
 
-			{#if activeTab === 'caps'}
-			<!-- Capability-centric: every actual cap on this identity (from the biscuit) + who holds it. -->
-			<section class="flex flex-col gap-4">
-				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
-					{t('identities.share.tabCapabilities')}
-				</h2>
-				<p class="text-muted-foreground text-xs leading-relaxed">{t('identities.share.capabilitiesIntro')}</p>
-				{#if err}
-					<p class="text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm select-text">{err}</p>
-				{:else if capabilityRows.length === 0}
-					<p class="text-muted-foreground text-sm">{t('identities.share.noOneListed')}</p>
-				{:else}
-					<ul class="flex flex-col gap-3">
-						{#each capabilityRows as row (row.cap)}
-							<li class="rounded-xl border border-border/50 bg-background/40 px-4 py-3">
-								<div class="flex items-center justify-between gap-3">
-									<span class="bg-primary/10 text-primary rounded px-2 py-0.5 text-[11px] font-bold tracking-wider uppercase">{capLabel(row.cap)}</span>
-									<span class="text-muted-foreground text-[11px]">{t('identities.share.heldBy')}: {row.holders.length}</span>
-								</div>
-								{#if row.holders.length === 0}
-									<p class="text-muted-foreground mt-2 text-xs">{t('identities.share.noHolders')}</p>
-								{:else}
-									<ul class="mt-2 flex flex-col gap-1.5">
-										{#each row.holders as h (h.did)}
-											<li class="flex items-center justify-between gap-2">
-												<span class="min-w-0 truncate text-sm" title={h.did}>{h.label}</span>
-												<span class="text-muted-foreground shrink-0 font-mono text-[10px] tracking-wider uppercase">{capLabel(h.grant)}</span>
-											</li>
-										{/each}
-									</ul>
-								{/if}
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</section>
-			{/if}
 		</div>
 	{/if}
 {:else if tauri && unlocked && identityId.trim()}
