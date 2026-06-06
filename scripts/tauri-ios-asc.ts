@@ -212,8 +212,24 @@ function writeAvenIosCompileEnv() {
 	const lines = [
 		`export RUSTUP_TOOLCHAIN=${shellEscapeSingleQuoted(channel)}`,
 		`export AVENOS_SERVER_WS_URL=${shellEscapeSingleQuoted(wsUrl)}`,
-		'',
 	]
+
+	// On-device voice (Parakeet via sherpa-onnx) needs the iOS arm64 static libs.
+	// `sherpa-onnx-sys` has no iOS auto-download — point it at the libs staged by
+	// scripts/build-sherpa-ios.sh. Without this the `local-voice` build fails with
+	// "Unsupported target for sherpa-onnx prebuilt libs". If the dir is missing we
+	// warn but still write the env (so the cargo error is the clear next signal).
+	const sherpaLibDir = path.join(tauriDir, 'vendor/sherpa-ios/lib')
+	if (existsSync(sherpaLibDir)) {
+		lines.push(`export SHERPA_ONNX_LIB_DIR=${shellEscapeSingleQuoted(sherpaLibDir)}`)
+	} else {
+		console.warn(
+			'[tauri-ios-asc] sherpa-onnx iOS libs not found at %s — run scripts/build-sherpa-ios.sh first, ' +
+				'or build with `--no-default-features` (no on-device voice).',
+			sherpaLibDir
+		)
+	}
+	lines.push('')
 	writeFileSync(AVEN_IOS_COMPILE_ENV, lines.join('\n'), 'utf8')
 	console.log(
 		'[tauri-ios-asc] wrote compile env → %s (AVENOS_SERVER_WS_URL=%s)',
