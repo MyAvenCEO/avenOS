@@ -252,13 +252,20 @@ DEK is sealed to its **parent's group key**, so it **inherits** the parent's mem
   `wrap_under_group_key`/`unwrap_under_group_key`: a value DEK wraps under the group key, the
   group key under its PARENT group key, so a parent member walks parent->child->DEK with ONE
   seal (not N). Existing identities unaffected (no `extends` fact).
-- [ ] **M9-3 — Per-collection groups (app integration; library now complete).** Additive app
-  step: a `create_collection_group(identity, label)` IPC (mint the sub-group genesis extending
-  the identity + its DEK + keyshare, write its `identities` row) + assign a collection's rows
-  to that group id on write. Seal/hydrate/authorize are already generic over the owner, so a
-  sub-group hydrates like any identity. Default stays the identity group (backward-compatible).
-- [ ] **M9-4 — Per-row groups (opt-in, app).** The same flow with `label = row_id` -> one
-  group per row, for maximum isolation where wanted.
+- [x] **M9-3 — Per-collection groups (backend complete).** `create_collection_group(identity,
+  label)` IPC ships (mints the sub-group genesis extending the identity + its DEK + keyshare +
+  `identities` row; `creategroup` dispatch). Data-routing needs NO backend change:
+  `groove_ipc_jazz_create` already owns a row by its `owner` column, so writing a row with
+  `owner = group_id` puts it in the group — authorized via inheritance, sealed under the
+  group's own DEK. Existing rows untouched (default = identity group). **Remaining: the
+  frontend share-a-collection UX** (call `creategroup`, write rows with the group owner).
+- [x] **M9-4 — Per-row groups (backend complete).** Same IPC + write path with `label =
+  row_id` -> one group per row. **Remaining: frontend opt-in.**
+
+**M9 status:** the full capability — library (ids, genesis, extension, inheritance authorize,
+2-level keys; 28 tests) + backend (create-group IPC, owner-routed writes) — is **complete and
+generic, no special-cases**. The only open work is the optional **frontend UX** to expose
+collection/row sharing; the data model and crypto are done all the way down to row level.
 
 **Delivers:** per-row crypto granularity is a **config choice** (the `group_id` you assign);
 the boundary is **the key**, generic, with no special-cases; the default path is unchanged.
