@@ -4,7 +4,7 @@
 //! Same `.gguf` runs on macOS and iOS. This is the spike entry point.
 
 use std::num::NonZeroU32;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use llama_cpp_2::context::params::LlamaContextParams;
@@ -13,6 +13,55 @@ use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::{AddBos, LlamaModel, Special};
 use llama_cpp_2::sampling::LlamaSampler;
+
+pub use crate::download::DownloadError;
+
+/// A downloadable llama.cpp GGUF model: a single file fetched from a HF repo into
+/// `<root>/<dir>/<file>`. Mirrors [`crate::llm::LlmModelSpec`] but for one GGUF — llama.cpp
+/// embeds the tokenizer + chat template, so there are no sidecar files.
+#[derive(Clone, Copy, Debug)]
+pub struct LlamaModelSpec {
+	/// Directory under the models root the GGUF downloads into.
+	pub dir: &'static str,
+	/// Base URL the `file` is resolved against (a HF `.../resolve/main/`).
+	pub base_url: &'static str,
+	/// The GGUF filename (also its remote subpath under `base_url`).
+	pub file: &'static str,
+}
+
+/// LFM2.5-8B-A1B, Q4_K_M GGUF (LiquidAI official). Run on Metal via llama.cpp.
+pub const LFM2_5_8B_A1B: LlamaModelSpec = LlamaModelSpec {
+	dir: "lfm2.5-8b-a1b-gguf",
+	base_url: "https://huggingface.co/LiquidAI/LFM2.5-8B-A1B-GGUF/resolve/main/",
+	file: "LFM2.5-8B-A1B-Q4_K_M.gguf",
+};
+
+impl LlamaModelSpec {
+	pub fn model_path(&self, root: &Path) -> PathBuf {
+		root.join(self.dir).join(self.file)
+	}
+	pub fn is_present(&self, root: &Path) -> bool {
+		self.model_path(root).is_file()
+	}
+}
+
+/// Download the GGUF into `<root>/<dir>/` via the SAME resumable + progress downloader the
+/// ONNX and STT model paths use — so the model-download UI behaves identically (resumable
+/// across restarts, smooth bar). Blocking; run on a thread. `cancelled()` is polled per
+/// chunk; `on_progress(received, total)` drives the UI bar.
+pub fn download(
+	spec: &LlamaModelSpec,
+	root: &Path,
+	cancelled: impl Fn() -> bool,
+	on_progress: impl FnMut(u64, u64),
+) -> Result<(), DownloadError> {
+	let dir = root.join(spec.dir);
+	crate::download::download_files(&dir, spec.base_url, &[(spec.file, spec.file)], cancelled, on_progress)?;
+	if !spec.is_present(root) {
+		return Err(DownloadError::Failed("GGUF missing after download".into()));
+	}
+	Ok(())
+}
 
 /// Outcome of a generation run — the decoded text plus the decode throughput.
 pub struct GenStats {

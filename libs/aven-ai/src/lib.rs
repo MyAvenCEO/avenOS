@@ -15,6 +15,11 @@
 #[cfg(feature = "stt")]
 pub mod stt;
 
+/// Shared resumable model downloader (the ONNX + llama.cpp paths reuse it for one identical
+/// download/progress UX, the same shape as the STT path).
+#[cfg(any(feature = "llm", feature = "llama"))]
+pub mod download;
+
 #[cfg(feature = "llm")]
 pub mod llm;
 
