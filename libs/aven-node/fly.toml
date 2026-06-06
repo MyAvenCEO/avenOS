@@ -1,11 +1,11 @@
-# fly.toml — aven-server mini (headless, stateless TLS sync relay).
+# fly.toml — aven-node mini (headless, stateless TLS sync relay).
 #
 # STATELESS BY DESIGN: there is intentionally no volume / no persistent mount.
 # The engine runs on in-memory storage; a redeploy/restart starts blank. TLS
 # cert/key + the identity seed are supplied via `fly secrets`, not the image.
-# See docs/deploy/aven-server-mini.md for the deploy runbook.
+# See docs/deploy/aven-node-mini.md for the deploy runbook.
 
-app = "aven-server-mini"
+app = "aven-node-mini"
 primary_region = "iad"
 
 [build]

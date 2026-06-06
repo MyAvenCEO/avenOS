@@ -111,7 +111,7 @@ const meshAllowed = $derived(sessionKind === 'unlocked' && $grooveSessionReady)
 
 // Global invite-only gate: the app is locked behind membership of the network's
 // avenCEO identity. Membership = "do I hold an avenCEO cap in my vault?" (a local
-// vault check via the membership IPC) — the aven-server is the authority that
+// vault check via the membership IPC) — the aven-node is the authority that
 // grants caps (auto-grants the first peer, invites the rest). We re-check when
 // identities sync, so the gate opens automatically once the server's grant + keyshare
 // land and hydrate avenCEO into the vault. Sandbox (non-tauri) is never gated.

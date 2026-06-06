@@ -1,8 +1,8 @@
-# aven-server mini — headless, stateless TLS sync relay.
+# aven-node mini — headless, stateless TLS sync relay.
 #
-# Build context is the REPO ROOT (the crates are path-linked: aven-server →
+# Build context is the REPO ROOT (the crates are path-linked: aven-node →
 # ../aven-db, ../aven-p2p, with no cargo workspace). Build from the repo root:
-#   docker build -f libs/aven-server/Dockerfile -t aven-server-mini .
+#   docker build -f libs/aven-node/Dockerfile -t aven-node-mini .
 
 # ── builder ──────────────────────────────────────────────────────────────────
 FROM rust:1.93-bookworm AS builder
@@ -21,8 +21,8 @@ COPY rust-toolchain.toml ./
 COPY .cargo ./.cargo
 COPY libs ./libs
 
-RUN cargo build --release --manifest-path libs/aven-server/Cargo.toml \
- && cp target/rust/release/aven-server /usr/local/bin/aven-server
+RUN cargo build --release --manifest-path libs/aven-node/Cargo.toml \
+ && cp target/rust/release/aven-node /usr/local/bin/aven-node
 
 # ── runtime ──────────────────────────────────────────────────────────────────
 FROM debian:bookworm-slim AS runtime
@@ -32,11 +32,11 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --system --uid 10001 --no-create-home aven
 
-COPY --from=builder /usr/local/bin/aven-server /usr/local/bin/aven-server
+COPY --from=builder /usr/local/bin/aven-node /usr/local/bin/aven-node
 
 USER aven
 ENV AVEN_SERVER_BIND=0.0.0.0:4290 \
     AVEN_SERVER_HEALTH_BIND=0.0.0.0:8080
 EXPOSE 4290 8080
 
-ENTRYPOINT ["/usr/local/bin/aven-server"]
+ENTRYPOINT ["/usr/local/bin/aven-node"]

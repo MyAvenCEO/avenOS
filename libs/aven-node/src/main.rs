@@ -1,4 +1,4 @@
-//! aven-server — a headless, durable **blind replica** aven.
+//! aven-node — a headless, durable **blind replica** aven.
 //!
 //! One process: an HTTP + WebSocket server on :8080 (TLS terminated at the Sprites
 //! proxy) serving `GET /health` and `GET /sync` — the nonce-bound did:key sync
@@ -173,7 +173,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_peer = PeerId(identity.verifying_key().to_bytes());
     let server_did = groove::did_key::peer_did_from_ed25519(&server_peer.0)
         .map_err(|e| format!("server did: {e}"))?;
-    tracing::info!(%server_did, "aven-server identity");
+    tracing::info!(%server_did, "aven-node identity");
 
     // S.2 — a biscuit capability vault rooted in the server's key. The server is
     // the sole author/owner of the well-known avenCEO control identity; it will mint

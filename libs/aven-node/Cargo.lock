@@ -146,29 +146,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "aven-p2p"
-version = "0.0.1"
-dependencies = [
- "async-trait",
- "aven-db",
- "base64 0.22.1",
- "ed25519-dalek",
- "futures-util",
- "rand",
- "rcgen",
- "rustls",
- "rustls-pemfile",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tokio-rustls",
- "tokio-tungstenite",
- "tracing",
-]
-
-[[package]]
-name = "aven-server"
+name = "aven-node"
 version = "0.0.1"
 dependencies = [
  "async-trait",
@@ -188,6 +166,28 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "aven-p2p"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "aven-db",
+ "base64 0.22.1",
+ "ed25519-dalek",
+ "futures-util",
+ "rand",
+ "rcgen",
+ "rustls",
+ "rustls-pemfile",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-rustls",
+ "tokio-tungstenite",
+ "tracing",
 ]
 
 [[package]]

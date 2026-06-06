@@ -60,7 +60,7 @@ impl WsServerListener {
     /// Drive one upgraded WS connection: handshake → register → pump (until close).
     pub async fn accept(self: Arc<Self>, ws: WebSocket) {
         if let Err(e) = self.accept_inner(ws).await {
-            tracing::warn!("aven-server ws connection dropped: {e}");
+            tracing::warn!("aven-node ws connection dropped: {e}");
         }
     }
 
@@ -90,7 +90,7 @@ impl WsServerListener {
         let (out_tx, mut out_rx) = mpsc::channel::<Message>(256);
         self.registry.lock().await.insert(peer, out_tx);
         let _ = self.peers_tx.send(peer).await;
-        tracing::info!(%peer, "aven-server ws peer authenticated");
+        tracing::info!(%peer, "aven-node ws peer authenticated");
 
         // One task owns the socket: outbound (engine → ws) and inbound (ws → engine).
         let inbound_tx = self.inbound_tx.clone();

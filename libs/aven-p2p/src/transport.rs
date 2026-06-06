@@ -23,7 +23,7 @@ use crate::{P2pError, Result};
 
 /// SNI name used on dial — irrelevant to trust (we pin the cert, §tls), but TLS
 /// requires a syntactically valid name.
-const SNI: &str = "aven-server";
+const SNI: &str = "aven-node";
 /// Max handshake-message size (the sync frames have their own larger limit).
 const MAX_HANDSHAKE_BYTES: usize = 64 * 1024;
 
@@ -218,7 +218,7 @@ impl ServerListener {
                 let (tcp, addr) = match listener.accept().await {
                     Ok(pair) => pair,
                     Err(e) => {
-                        tracing::warn!("aven-server accept failed: {e}");
+                        tracing::warn!("aven-node accept failed: {e}");
                         continue;
                     }
                 };
@@ -234,7 +234,7 @@ impl ServerListener {
                         accept_one(tcp, acceptor, registry, inbound_tx, peers_tx, params, server_did)
                             .await
                     {
-                        tracing::warn!("aven-server connection {addr} dropped: {e}");
+                        tracing::warn!("aven-node connection {addr} dropped: {e}");
                     }
                 });
             }
@@ -295,7 +295,7 @@ async fn accept_one(
         .insert(peer, Arc::new(Mutex::new(write_half)));
     spawn_read_pump(read_half, inbound_tx, peer);
     let _ = peers_tx.send(peer).await;
-    tracing::info!(%peer, "aven-server peer authenticated");
+    tracing::info!(%peer, "aven-node peer authenticated");
     Ok(())
 }
 

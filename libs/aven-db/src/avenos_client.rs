@@ -274,7 +274,7 @@ impl JazzClient {
         .await
     }
 
-    /// Headless, **stateless** engine for the `aven-server` mini: an in-memory
+    /// Headless, **stateless** engine for the `aven-node` mini: an in-memory
     /// store (no RocksDB directory, nothing survives a restart) wired to the
     /// given sync transport. The `client_id` bookkeeping file still lives under
     /// `context.data_dir`, but all replicated engine state is in `MemoryStorage`

@@ -67,7 +67,7 @@ pub struct JazzSessionReply {
 	pub peer_did: String,
 	pub peer_did_short: String,
 	pub default_spark_urn: String,
-	/// did:key of the aven-server relay this device is synced through, if any —
+	/// did:key of the aven-node relay this device is synced through, if any —
 	/// lets the UI offer a one-click "replicate this identity to the relay".
 	pub relay_did: Option<String>,
 }
@@ -123,7 +123,7 @@ pub struct ManagedJazz {
 	/// `BiscuitCapabilityResolver` reads this synchronously on the engine tick
 	/// thread (the primary `shell` is a tokio Mutex, unusable from sync code).
 	pub(crate) sync_shell: Arc<RwLock<Option<std::sync::Arc<jazz_engine::ShellState>>>>,
-	/// did:key of the aven-server relay this device is currently synced through
+	/// did:key of the aven-node relay this device is currently synced through
 	/// (the authenticated peer from the TLS handshake), or `None` when local-only.
 	/// Surfaced to the UI so a identity can grant it `replicate` with one click —
 	/// no copying the DID out of the server's logs.
@@ -1459,7 +1459,7 @@ pub(crate) fn patch_updates(table_schema: &TableSchema, patch: JsonRow) -> Resul
 	Ok(ops)
 }
 
-/// Dial the hosted aven-server over a WebSocket and complete the nonce-bound
+/// Dial the hosted aven-node over a WebSocket and complete the nonce-bound
 /// did:key challenge. Returns the transport + the server's authenticated peer id.
 ///
 /// The endpoint is `AVENOS_SERVER_WS_URL` (e.g. `wss://aven-ceo-bmrha.sprites.app/sync`,
@@ -1562,7 +1562,7 @@ async fn jazz_connect(
 
 	let _ = app;
 	// Connect Groove LOCALLY only — this is the sole thing sign-in waits on. The
-	// sync transport (the aven-server relay over TLS) is established and attached
+	// sync transport (the aven-node relay over TLS) is established and attached
 	// in the BACKGROUND (see `spawn_dev_peer_sync`), so bootstrap can never block
 	// waiting for the relay to appear.
 	let client = JazzClient::connect(ctx).await.map_err(format_jazz_err)?;
@@ -1582,7 +1582,7 @@ async fn jazz_connect(
 	Ok(client)
 }
 
-/// Establish the sync transport (the aven-server relay over TLS) in the BACKGROUND
+/// Establish the sync transport (the aven-node relay over TLS) in the BACKGROUND
 /// and attach it to an already-connected (local) client. Never blocks sign-in:
 /// Groove is connected locally first, and this only wires sync once the relay is
 /// reachable. A no-op when sync is unconfigured (`try_any_peer_transport` returns

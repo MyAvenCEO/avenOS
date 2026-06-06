@@ -1,12 +1,12 @@
 [package]
-name = "aven-server"
+name = "aven-node"
 version = "0.0.1"
 edition = "2021"
-description = "AvenOS aven-server — headless durable blind replica over an authenticated TLS sync transport: stores & forwards encrypted spark batches it cannot decrypt (one fly deploy)."
+description = "AvenOS aven-node — headless durable blind replica over an authenticated TLS sync transport: stores & forwards encrypted spark batches it cannot decrypt (one fly deploy)."
 license = "MIT OR Apache-2.0"
 
 [[bin]]
-name = "aven-server"
+name = "aven-node"
 path = "src/main.rs"
 
 [dependencies]

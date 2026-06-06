@@ -1,6 +1,6 @@
 //! Server-owned **avenCEO** control identity — the network's root of trust.
 //!
-//! The aven-server is the sole author/owner of the well-known avenCEO identity: it
+//! The aven-node is the sole author/owner of the well-known avenCEO identity: it
 //! mints the genesis with its own biscuit key (S.3) and auto-grants the first
 //! connecting peer admin (S.4, `ws_server`). No client ever mints avenCEO, so
 //! there is no claim race. See `docs/ServerRootedAvenCeoPlan.md`.

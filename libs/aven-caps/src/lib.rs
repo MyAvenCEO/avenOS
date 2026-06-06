@@ -2,7 +2,7 @@
 //!
 //! The single source of truth for biscuit-based capabilities ([`caps`]) and the
 //! per-identity DEK keyshare crypto ([`crypto`]), shared by the device app
-//! (`app/src-tauri`) and the `aven-server` so both mint/verify caps and wrap
+//! (`app/src-tauri`) and the `aven-node` so both mint/verify caps and wrap
 //! keyshares with **one** implementation (DRY). See
 //! `docs/CryptoOwnershipExecutionPlan.md`.
 
