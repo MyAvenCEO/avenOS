@@ -169,6 +169,11 @@
 		})
 	})
 
+	// Owner-only management: only a holder of `owns` may grant/revoke. A read-only
+	// member sees the roster but NO manage controls — so it can't hit the
+	// `subject_not_owner` dead-end (members are read-only by design).
+	const amOwner = $derived(accessEntries.some((e) => e.isThisDevice && e.grant === 'owns'))
+
 	// Cap-centric view (Tab 2): invert subjects → for each actual cap, who holds it.
 	// Pure projection of the same single source — guarantees the two tabs agree.
 	type CapHolders = { cap: string; holders: IdentityAccessEntry[] }
@@ -434,7 +439,8 @@
 		<div class="flex flex-col gap-8">
 
 			{#if activeTab === 'members'}
-			<!-- Give access (unified: DID + grant kind), placed ABOVE the member list -->
+			{#if amOwner}
+			<!-- Give access (owner-only): a read-only member sees the roster, not this form. -->
 			<section class="border-border/50 bg-background/40 flex flex-col gap-3 rounded-xl border p-4">
 				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
 					{t('identities.share.giveAccess')}
@@ -491,6 +497,7 @@
 				{/if}
 				<p class="text-muted-foreground text-xs leading-relaxed">{t('identities.share.giveAccessHint')}</p>
 			</section>
+			{/if}
 
 			<!-- Who has access -->
 			<section class="flex flex-col gap-4">
@@ -523,7 +530,7 @@
 											class="bg-muted hover:bg-muted/70 ml-auto rounded-md px-2.5 py-1 text-[11px] font-medium"
 											onclick={() => void copyOwnDid()}>{didCopied ? t('peers.copied') : t('common.copyDid')}</button
 										>
-									{:else}
+									{:else if amOwner}
 										<button
 											type="button"
 											class="border-destructive/40 text-destructive hover:bg-destructive/10 ml-auto rounded-md border px-2.5 py-1 text-[11px] font-medium disabled:opacity-50"

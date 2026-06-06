@@ -133,6 +133,27 @@ $effect(() => {
 		}
 	})()
 })
+// Gate reactivity: while the invite gate is up (membership none/unknown), poll so it
+// opens the moment the avenCEO admission syncs in + re-hydrates — without a reload.
+$effect(() => {
+	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked') return
+	if (membership !== 'none' && membership !== 'unknown') return
+	let active = true
+	const id = setInterval(() => {
+		void (async () => {
+			try {
+				const m = await avenCeoMembership()
+				if (active) membership = m
+			} catch {
+				/* keep polling */
+			}
+		})()
+	}, 3000)
+	return () => {
+		active = false
+		clearInterval(id)
+	}
+})
 const appAccessState = $derived.by<'app' | 'gate' | 'checking'>(() => {
 	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked') return 'app'
 	if (membership === 'unknown') return 'checking'
