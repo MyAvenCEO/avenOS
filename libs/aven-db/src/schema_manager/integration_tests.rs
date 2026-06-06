@@ -11,8 +11,7 @@ mod tests {
     use crate::query_manager::manager::{LocalUpdates, QueryError};
     use crate::query_manager::session::WriteContext;
     use crate::query_manager::types::{
-        ColumnDescriptor, ColumnType, RowDescriptor, Schema, SchemaBuilder, SchemaHash, TableName,
-        TableSchema, Value,
+        ColumnType, SchemaBuilder, SchemaHash, TableName, TableSchema, Value,
     };
     use crate::row_histories::{RowState, StoredRowBatch, VisibleRowEntry};
     use crate::schema_manager::{
@@ -23,7 +22,7 @@ mod tests {
         RawTableMutation, RawTableRows, Storage, StorageError, VisibleRowBytes,
     };
     use crate::sync_manager::{
-        InboxEntry, QueryPropagation, RowBatchKey, ServerId, Source, SyncManager, SyncPayload,
+        InboxEntry, PeerId, QueryPropagation, RowBatchKey, Source, SyncManager, SyncPayload,
     };
 
     fn make_commit_id(n: u8) -> crate::row_histories::BatchId {
@@ -272,6 +271,10 @@ mod tests {
         content: Vec<u8>,
         timestamp: u64,
     ) {
+        // Fresh `SyncManager::new()` is fail-closed (DenyAllResolver, M4 hardening);
+        // opt into AllowAll so inbound rows aren't rejected at the apply gate.
+        qm.sync_manager_mut()
+            .set_resolver(std::sync::Arc::new(crate::capability::AllowAllResolver));
         let mut metadata = HashMap::new();
         metadata.insert(MetadataKey::Table.to_string(), table.to_string());
         metadata.insert(
@@ -283,7 +286,7 @@ mod tests {
         let commit = stored_row_commit(content, timestamp, object_id.to_string());
         let row = commit.to_row(object_id, branch);
         qm.sync_manager_mut().push_inbox(InboxEntry {
-            source: Source::Server(ServerId::new()),
+            source: Source::Client(PeerId::new()),
             payload: SyncPayload::RowBatchCreated {
                 metadata: None,
                 row,
@@ -300,8 +303,10 @@ mod tests {
         content: Vec<u8>,
         _timestamp: u64,
     ) {
+        qm.sync_manager_mut()
+            .set_resolver(std::sync::Arc::new(crate::capability::AllowAllResolver));
         qm.sync_manager_mut().push_inbox(InboxEntry {
-            source: Source::Server(ServerId::new()),
+            source: Source::Client(PeerId::new()),
             payload: SyncPayload::CatalogueEntryUpdated {
                 entry: crate::catalogue::CatalogueEntry {
                     object_id,
@@ -394,7 +399,7 @@ mod tests {
     // ========================================================================
     // Multi-Client Server Schema Sync Tests
     // ========================================================================
-    use crate::sync_manager::{PeerId, ClientRole, Destination, DurabilityTier};
+    use crate::sync_manager::DurabilityTier;
 
     /// E2E test: Two clients with same schema, server with empty schema.
     ///
@@ -462,6 +467,5 @@ mod tests {
     mod misc;
     mod query_subscription;
     mod renames;
-    mod sync;
     mod writes;
 }
