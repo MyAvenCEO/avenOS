@@ -152,8 +152,8 @@ identities) · **T3 managed API** (opt-in, minimal context).
 | **Pipeline v1** | `Brain` + `Embedder` + `remember`/`search` (RRF) | ✅ done, tested |
 | **Store round-out** | idempotent `remember` (content_hash dedup), `tags` on write, **scoped `search`** (tag filter) | ✅ done, tested |
 | **Knowledge graph** | **deterministic** `[[wikilink]]` → entities + mentions + relations w/ dynamics (zero-LLM, on write) ✅; typed `facts` via off-write-path LLM `Extractor` ☐ | ◑ graph done; facts pending |
-| **Context assembly** | `wake` (L0+L1); `recall` (L2 scoped); **entity cards = compiled-truth summary + append-only timeline** (gBrain) | ☐ next |
-| **Real models** | EmbeddingGemma behind `Embedder`; LLM `Extractor` (off write path) | ☐ |
+| **Context assembly** | `wake` (L0+L1); `recall`/`memories_about` (L2 scoped); **entity cards = compiled-truth + timeline** (gBrain) | ✅ done, tested |
+| **Real models** | EmbeddingGemma behind `Embedder`; LLM `Extractor` (off write path) | ☐ next |
 | **Brain interface** | **Rust-native IPC bridge** (search/remember/kg/wake) — no MCP; an in-process/IPC API agents call directly | ☐ |
 | **Dreaming** | background consolidation pass: dynamics decay, dedup, **CRDT entity-merge**, contradiction detection, recompute compiled-truth | ☐ |
 | **Scale & sync** | usearch HNSW + `_score` surfacing + weighted fusion; Counter-merge dynamics; sparks/identity sharing + multi-device | ☐ |
@@ -217,7 +217,7 @@ aven-db: `Vector` (dcc2162), `nearest` (4579152), `text_search` (7ca0387); suite
 aven-brain: scaffold+schema (1b92f72), strengths restored (d195345), vocabulary finalized
 (bbb188b, 39cc31f, 525f27c, de8c8aa), pipeline (199f080), store round-out — idempotent
 remember + tags + scoped search (dfb3701), deterministic knowledge graph
-(3be5cec). **aven-brain: 10 tests pass.**
+(3be5cec), context assembly — wake/recall/entity-cards (d758142). **aven-brain: 12 tests pass.**
 
 ---
 
