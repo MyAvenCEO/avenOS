@@ -498,7 +498,18 @@
 			"capabilitiesIntro": "Jede Fähigkeit dieses Sparks und wer sie hält — direkt aus dem Biscuit gelesen.",
 			"heldBy": "Gehalten von",
 			"noHolders": "Niemand",
-			"grantLabel": "Zuteilung"
+			"grantLabel": "Zuteilung",
+			"grants": {
+				"owns": "Eigentümer",
+				"reads": "Mitglied",
+				"replicate": "Relay"
+			},
+			"accessLevel": "Zugriffsstufe",
+			"grantAccess": "Zugriff gewähren",
+			"grantDescOwns": "Volle Kontrolle — lesen, schreiben und Mitglieder verwalten.",
+			"grantDescReads": "Nur-Lese-Mitglied.",
+			"grantDescReplicate": "Blindes Backup / Relay — speichert verschlüsselte Daten, kann sie nicht lesen.",
+			"quickRelay": "Zum verbundenen Relay replizieren"
 		}
 	},
 	"uiLab": {

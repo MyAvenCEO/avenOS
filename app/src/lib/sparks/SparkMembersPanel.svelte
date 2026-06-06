@@ -8,6 +8,7 @@
 		sparkAdminList,
 		sparkAdminRevoke,
 		sparkReplicateAdd,
+		sparkReaderAdd,
 		peerList,
 		type PeerRow,
 		type JazzSessionReply,
@@ -41,11 +42,29 @@
 	function capLabel(key: string): string {
 		return t(`sparks.share.capabilities.${key}`)
 	}
+	// Role/grant label (Owner/Member/Relay) — distinct from cap labels so a relay
+	// shows "Relay" (grant) + "Replicate" (cap), not two "Replicate" badges.
+	function grantLabel(grant: SparkGrant): string {
+		return t(`sparks.share.grants.${grant}`)
+	}
 	/// Display order for the Capabilities tab; any unknown cap falls in after these.
 	const CAP_ORDER = ['read', 'write', 'delete', 'admit', 'rotate_dek', 'replicate']
 
 	type MembersTab = 'members' | 'caps'
 	let activeTab = $state<MembersTab>('members')
+
+	// Unified "Give access": one DID + a grant kind. The biscuit model has three
+	// grant bundles (owns/reads/replicate); the actual caps each confers come from
+	// the backend and show on the resulting member card (no caps hardcoded here).
+	const GRANT_KINDS: SparkGrant[] = ['owns', 'reads', 'replicate']
+	let grantKind = $state<SparkGrant>('owns')
+	function grantDescKey(grant: SparkGrant): string {
+		return grant === 'owns'
+			? 'sparks.share.grantDescOwns'
+			: grant === 'reads'
+				? 'sparks.share.grantDescReads'
+				: 'sparks.share.grantDescReplicate'
+	}
 
 	const LOCAL_IPC_BUDGET_MS = 12_000
 
@@ -61,10 +80,6 @@
 	let adminBusy = $state(false)
 	let addAdminDid = $state('')
 	let addNote = $state<string | undefined>()
-	let addReplicateDid = $state('')
-	let replicateBusy = $state(false)
-	let replicateErr = $state<string | undefined>()
-	let replicateNote = $state<string | undefined>()
 	let revokeBusyDid = $state<string | undefined>(undefined)
 	let confirmRevokeDid = $state<string | undefined>(undefined)
 	let revokeErr = $state<string | undefined>()
@@ -237,8 +252,13 @@
 		}
 	}
 
-	async function addAdmin(): Promise<void> {
-		const did = addAdminDid.trim()
+	// Unified grant: one DID + one grant kind (owns/reads/replicate) → the matching
+	// biscuit minter. `opts` lets a quick-action (e.g. the connected relay) grant
+	// without touching the shared input. Each kind maps to its own IPC:
+	//   owns → admin (full)   reads → read-only member   replicate → blind backup.
+	async function grantAccess(opts?: { did?: string; kind?: SparkGrant }): Promise<void> {
+		const did = (opts?.did ?? addAdminDid).trim()
+		const kind = opts?.kind ?? grantKind
 		const sid = sparkId.trim()
 		if (!did || !sid) return
 		const gen = adminLoadGen
@@ -246,9 +266,11 @@
 		adminErr = undefined
 		addNote = undefined
 		try {
-			await sparkAdminAdd({ sparkId: sid, peerDid: did })
+			if (kind === 'owns') await sparkAdminAdd({ sparkId: sid, peerDid: did })
+			else if (kind === 'reads') await sparkReaderAdd({ sparkId: sid, peerDid: did })
+			else await sparkReplicateAdd({ sparkId: sid, peerDid: did })
 			if (gen !== adminLoadGen) return
-			addAdminDid = ''
+			if (!opts?.did) addAdminDid = ''
 			addNote = t('sparks.share.accessGrantedNote')
 			const a = await sparkAdminList(sid)
 			if (gen !== adminLoadGen) return
@@ -260,30 +282,6 @@
 			adminErr = e instanceof Error ? e.message : String(e)
 		} finally {
 			if (gen === adminLoadGen) adminBusy = false
-		}
-	}
-
-	// Grant a server aven a blind `replicate` cap (store-and-forward + durable
-	// backup). NOT membership: no keyshare is issued, so it carries ciphertext it
-	// cannot decrypt. The server's DID is printed in its logs / shown by the relay.
-	async function addReplicate(didArg?: string): Promise<void> {
-		const did = (didArg ?? addReplicateDid).trim()
-		const sid = sparkId.trim()
-		if (!did || !sid) return
-		replicateBusy = true
-		replicateErr = undefined
-		replicateNote = undefined
-		try {
-			await sparkReplicateAdd({ sparkId: sid, peerDid: did })
-			addReplicateDid = ''
-			replicateNote = t('sparks.share.replicateGrantedNote')
-			// Reflect the new replica in the access list immediately (it also lands
-			// via the biscuit-change watcher, but refresh now for instant feedback).
-			await refreshAdminList()
-		} catch (e) {
-			replicateErr = e instanceof Error ? e.message : String(e)
-		} finally {
-			replicateBusy = false
 		}
 	}
 
@@ -450,6 +448,64 @@
 			</div>
 
 			{#if activeTab === 'members'}
+			<!-- Give access (unified: DID + grant kind), placed ABOVE the member list -->
+			<section class="border-border/50 bg-background/40 flex flex-col gap-3 rounded-xl border p-4">
+				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
+					{t('sparks.share.giveAccess')}
+				</h2>
+				<input
+					class="border-border/60 bg-background/40 w-full rounded-lg border px-3 py-2 font-mono text-[12px]"
+					placeholder={t('sparks.share.didPlaceholder')}
+					bind:value={addAdminDid}
+					disabled={adminBusy}
+				/>
+				<!-- Grant kind: the biscuit's three bundles (owns/reads/replicate). The
+				     actual caps each confers show on the member card after granting. -->
+				<div class="flex flex-col gap-1.5">
+					<span class="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">{t('sparks.share.accessLevel')}</span>
+					<div class="flex flex-wrap gap-2">
+						{#each GRANT_KINDS as gk (gk)}
+							<button
+								type="button"
+								class="rounded-lg border px-3 py-1.5 text-sm font-medium {grantKind === gk
+									? 'border-primary bg-primary/10 text-primary'
+									: 'border-border/60 text-muted-foreground hover:text-foreground'}"
+								onclick={() => (grantKind = gk)}>{grantLabel(gk)}</button
+							>
+						{/each}
+					</div>
+					<p class="text-muted-foreground text-xs leading-relaxed">{t(grantDescKey(grantKind))}</p>
+				</div>
+				<div class="flex flex-wrap items-center gap-2">
+					<button
+						type="button"
+						class="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+						disabled={adminBusy || !addAdminDid.trim()}
+						onclick={() => void grantAccess()}
+					>
+						{adminBusy ? '…' : t('sparks.share.grantAccess')}
+					</button>
+					{#if session?.relayDid}
+						<!-- Quick action: grant the already-connected relay a blind replicate cap -->
+						<button
+							type="button"
+							class="bg-muted hover:bg-muted/70 ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium disabled:opacity-50"
+							title={session.relayDid}
+							disabled={adminBusy}
+							onclick={() => void grantAccess({ did: session?.relayDid ?? undefined, kind: 'replicate' })}
+						>⚡ {t('sparks.share.quickRelay')}</button
+						>
+					{/if}
+				</div>
+				{#if adminErr}
+					<p class="text-destructive text-sm">{adminErr}</p>
+				{/if}
+				{#if addNote}
+					<p class="text-muted-foreground text-sm">{addNote}</p>
+				{/if}
+				<p class="text-muted-foreground text-xs leading-relaxed">{t('sparks.share.giveAccessHint')}</p>
+			</section>
+
 			<!-- Who has access -->
 			<section class="flex flex-col gap-4">
 				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
@@ -483,7 +539,7 @@
 								{/if}
 								<div class="mt-2 flex flex-wrap items-center gap-1.5">
 									<!-- Grant kind (owns/reads/replicate) — primary; effective caps — muted. All from the biscuit. -->
-									<span class="bg-primary/10 text-primary rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase">{capLabel(entry.grant)}</span>
+									<span class="bg-primary/10 text-primary rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase">{grantLabel(entry.grant)}</span>
 									{#each entry.capabilities as cap (cap)}
 										<span class="bg-muted text-muted-foreground rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase">{capLabel(cap)}</span>
 									{/each}
@@ -518,83 +574,6 @@
 					{/if}
 				{/if}
 			</section>
-
-			<!-- Give access -->
-			<section class="flex flex-col gap-4">
-				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
-					{t('sparks.share.giveAccess')}
-				</h2>
-				<div class="flex flex-col gap-2 sm:flex-row sm:items-end">
-					<input
-						class="border-border/60 bg-background/40 min-w-0 flex-1 rounded-lg border px-3 py-2 font-mono text-[12px]"
-						placeholder={t('sparks.share.didPlaceholder')}
-						bind:value={addAdminDid}
-						disabled={adminBusy}
-					/>
-					<button
-						type="button"
-						class="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-						disabled={adminBusy || !addAdminDid.trim()}
-						onclick={() => void addAdmin()}
-					>
-						{adminBusy ? '…' : t('sparks.share.addAsAdmin')}
-					</button>
-				</div>
-				<p class="text-muted-foreground text-xs leading-relaxed">{t('sparks.share.giveAccessHint')}</p>
-				{#if adminErr}
-					<p class="text-destructive text-sm">{adminErr}</p>
-				{/if}
-				{#if addNote}
-					<p class="text-muted-foreground text-sm">{addNote}</p>
-				{/if}
-			</section>
-
-			<!-- Replication server: grant a server aven a blind store-and-forward cap (no keyshare) -->
-			<section class="flex flex-col gap-4">
-				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
-					{t('sparks.share.addReplica')}
-				</h2>
-				{#if session?.relayDid}
-					<!-- One-click: the relay this device is synced through is already
-					     authenticated — grant it without copying a DID from logs. -->
-					<div class="border-border/50 bg-background/40 flex flex-col gap-2 rounded-xl border px-4 py-3">
-						<p class="text-xs font-medium">{t('sparks.share.connectedRelay')}</p>
-						<code class="text-muted-foreground font-mono text-[11px] break-all select-text" title={session.relayDid}>{session.relayDid}</code>
-						<button
-							type="button"
-							class="bg-primary text-primary-foreground hover:bg-primary/90 mt-1 self-start rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-							disabled={replicateBusy}
-							onclick={() => void addReplicate(session?.relayDid ?? undefined)}
-						>
-							{replicateBusy ? '…' : t('sparks.share.replicateToConnected')}
-						</button>
-					</div>
-				{/if}
-				<div class="flex flex-col gap-2 sm:flex-row sm:items-end">
-					<input
-						class="border-border/60 bg-background/40 min-w-0 flex-1 rounded-lg border px-3 py-2 font-mono text-[12px]"
-						placeholder={t('sparks.share.replicaDidPlaceholder')}
-						bind:value={addReplicateDid}
-						disabled={replicateBusy}
-					/>
-					<button
-						type="button"
-						class="bg-muted hover:bg-muted/70 shrink-0 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-						disabled={replicateBusy || !addReplicateDid.trim()}
-						onclick={() => void addReplicate()}
-					>
-						{replicateBusy ? '…' : t('sparks.share.addReplicaButton')}
-					</button>
-				</div>
-				<p class="text-muted-foreground text-xs leading-relaxed">{t('sparks.share.replicaHint')}</p>
-				{#if replicateErr}
-					<p class="text-destructive text-sm">{replicateErr}</p>
-				{/if}
-				{#if replicateNote}
-					<p class="text-muted-foreground text-sm">{replicateNote}</p>
-				{/if}
-			</section>
-
 			<!-- Debug: copy the sync log (forwarding gate + peer/mesh state) to report issues -->
 			<section class="border-border/40 flex items-center justify-between gap-3 border-t pt-4">
 				<p class="text-muted-foreground text-xs leading-relaxed">{t('peers.copyDebugHint')}</p>
@@ -674,7 +653,7 @@
 							<p class="text-muted-foreground truncate font-mono text-[10px] leading-snug select-text" title={entry.did}>{entry.did}</p>
 						{/if}
 						<div class="mt-1 flex flex-wrap gap-1">
-							<span class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase">{capLabel(entry.grant)}</span>
+							<span class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase">{grantLabel(entry.grant)}</span>
 							{#each entry.capabilities as cap (cap)}
 								<span class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase">{capLabel(cap)}</span>
 							{/each}
@@ -698,7 +677,7 @@
 				type="button"
 				class="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
 				disabled={adminBusy || !addAdminDid.trim()}
-				onclick={() => void addAdmin()}
+				onclick={() => void grantAccess()}
 			>
 				{adminBusy ? '…' : t('sparks.share.addAsAdmin')}
 			</button>

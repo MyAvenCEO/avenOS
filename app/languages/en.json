@@ -510,7 +510,18 @@
 			"capabilitiesIntro": "Every capability on this spark and who holds it — read straight from the biscuit.",
 			"heldBy": "Held by",
 			"noHolders": "No one",
-			"grantLabel": "Grant"
+			"grantLabel": "Grant",
+			"grants": {
+				"owns": "Owner",
+				"reads": "Member",
+				"replicate": "Relay"
+			},
+			"accessLevel": "Access level",
+			"grantAccess": "Grant access",
+			"grantDescOwns": "Full control — read, write, and manage members.",
+			"grantDescReads": "Read-only member.",
+			"grantDescReplicate": "Blind backup / relay — stores encrypted data it cannot read.",
+			"quickRelay": "Replicate to the connected relay"
 		}
 	},
 	"uiLab": {
