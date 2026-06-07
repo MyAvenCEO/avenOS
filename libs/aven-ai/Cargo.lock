@@ -32,6 +32,7 @@ dependencies = [
  "llama-cpp-2",
  "log",
  "ort",
+ "serde",
  "serde_json",
  "sherpa-onnx",
  "tar",

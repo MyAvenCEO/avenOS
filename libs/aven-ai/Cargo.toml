@@ -22,6 +22,10 @@ llm = ["dep:ort", "dep:half", "dep:tokenizers", "dep:ureq", "dep:serde_json", "d
 # On-device LLM via llama.cpp (LFM2.5-8B-A1B GGUF). Statically linked (no dylib to bundle or
 # sign), Metal on Apple. Same GGUF runs on macOS AND iOS. Replaces the ONNX `llm` path.
 llama = ["dep:llama-cpp-2", "dep:ureq", "dep:log"]
+# On-device text-to-speech (MOSS-TTS-Nano ONNX) via onnxruntime (`ort`). Reuses the
+# shared `download` module + the ort `load-dynamic` bundled-dylib path; the `onnx`
+# module supplies the ort KV-cache/init helpers. Streams 48 kHz PCM frames.
+tts = ["dep:ort", "dep:half", "dep:tokenizers", "dep:ureq", "dep:serde", "dep:serde_json", "dep:log"]
 
 [dependencies]
 # STT engine + first-run model download (tar.bz2 from GitHub releases) + extract.
@@ -36,6 +40,7 @@ bzip2 = { version = "0.4", optional = true }
 ort = { version = "2.0.0-rc.12", optional = true, default-features = false, features = ["std", "ndarray", "half", "load-dynamic", "api-24"] }
 half = { version = "2", optional = true }
 tokenizers = { version = "0.20", optional = true, default-features = false, features = ["onig"] }
+serde = { version = "1", optional = true, features = ["derive"] }
 serde_json = { version = "1", optional = true }
 log = { version = "0.4", optional = true }
 # On-device LLM engine: llama.cpp (GGUF). Built static from source (in the executable — no

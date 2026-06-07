@@ -432,7 +432,10 @@
 			"authorAtTime": "{author} at {time}",
 			"agentLabel": "Aven · LFM2.5",
 			"agentThinking": "Aven is thinking…",
-			"agentNoReply": "(no reply)"
+			"agentNoReply": "(no reply)",
+			"speak": "Speak",
+			"speaking": "Speaking…",
+			"voice": "Voice"
 		},
 		"todos": {
 			"title": "Todos",

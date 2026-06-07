@@ -6,6 +6,7 @@
 	import type { ComposerMode } from '$lib/intents/types'
 	import { persistSparkFiles } from '$lib/jazz/intent-files'
 	import { streamReply } from '$lib/llm/generate'
+	import { speak, listVoices, type Voice } from '$lib/tts/speak'
 	import {
 		agentUnavailableReason,
 		llmDownloadFraction,
@@ -51,6 +52,17 @@
 	// we don't write a Jazz row per token.
 	let streamingId = $state<string | undefined>()
 	let streaming = $state<Record<string, string>>({})
+	// Row id of the agent reply currently being spoken on-device (or undefined).
+	let speakingId = $state<string | undefined>()
+	// On-device TTS voices (multilingual female voices) + the selected one.
+	let ttsVoices = $state<Voice[]>([])
+	let selectedVoice = $state<string | undefined>(undefined)
+	onMount(() => {
+		void listVoices().then((vs) => {
+			ttsVoices = vs
+			if (!selectedVoice && vs.length) selectedVoice = vs[0].id
+		})
+	})
 	let composerMode = $state<ComposerMode>('collapsed')
 	let localPairingLabel = $state<string | undefined>(undefined)
 	let scrollEl = $state<HTMLDivElement | undefined>(undefined)
@@ -281,11 +293,46 @@
 			streamingId = undefined
 		}
 	}
+
+	/**
+	 * Speak an agent message on-device (MOSS-TTS-Nano). Streams `tts:audio-chunk`
+	 * PCM and plays it via Web Audio. Surfaces backend errors (e.g. model not yet
+	 * downloaded) inline rather than throwing.
+	 */
+	async function speakMessage(id: string, body: string): Promise<void> {
+		const text = body.trim()
+		if (!text || speakingId) return
+		speakingId = id
+		try {
+			await speak(text, id, selectedVoice)
+		} catch (e) {
+			err = e instanceof Error ? e.message : String(e)
+		} finally {
+			speakingId = undefined
+		}
+	}
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col">
 	<header class="shrink-0 space-y-1 pb-3 sm:pb-0 sm:space-y-1">
-		<h1 class="text-xl font-semibold tracking-tight">{t('identities.talk.title')}</h1>
+		<div class="flex items-start justify-between gap-2">
+			<h1 class="text-xl font-semibold tracking-tight">{t('identities.talk.title')}</h1>
+			{#if tauri && ttsVoices.length > 0}
+				<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+					<span class="hidden sm:inline">{t('identities.talk.voice')}</span>
+					<span aria-hidden="true">🔊</span>
+					<select
+						bind:value={selectedVoice}
+						class="border-border/60 bg-card/40 rounded-md border px-1.5 py-0.5 text-xs"
+						aria-label={t('identities.talk.voice')}
+					>
+						{#each ttsVoices as v (v.id)}
+							<option value={v.id}>{v.label}</option>
+						{/each}
+					</select>
+				</label>
+			{/if}
+		</div>
 		<p class="text-muted-foreground hidden text-sm leading-relaxed sm:block">
 			{t('identities.talk.subtitle', { name: displayName })}
 		</p>
@@ -379,6 +426,19 @@
 									<p class="text-sm leading-relaxed whitespace-pre-wrap break-words">
 										{liveBody}
 									</p>
+									{#if isAgent && streamingId !== msg.id}
+										<button
+											type="button"
+											class="text-muted-foreground hover:text-primary -mb-0.5 -ml-1 flex w-fit items-center gap-1 rounded px-1 py-0.5 text-xs transition-colors disabled:opacity-60"
+											onclick={() => speakMessage(msg.id, liveBody)}
+											disabled={speakingId != null}
+											aria-label={t('identities.talk.speak')}
+											title={t('identities.talk.speak')}
+										>
+											<span aria-hidden="true">{speakingId === msg.id ? '⏵' : '🔊'}</span>
+											<span>{speakingId === msg.id ? t('identities.talk.speaking') : t('identities.talk.speak')}</span>
+										</button>
+									{/if}
 								{:else if isAgent}
 									<p class="text-sm italic text-muted-foreground">{t('identities.talk.agentNoReply')}</p>
 								{/if}

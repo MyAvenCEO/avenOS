@@ -8,20 +8,30 @@
 //!   for LFM2.5-8B-A1B ONNX — model download + a streaming greedy generate loop.
 //! - [`llama`] (feature `llama`): on-device text generation via **llama.cpp** (GGUF) with
 //!   Metal on Apple — statically linked (no dylib). The replacement for the ONNX `llm` path.
+//! - [`tts`] (feature `tts`): on-device text-to-speech via onnxruntime (`ort`) for
+//!   MOSS-TTS-Nano — model download + a streaming synth loop emitting 48 kHz PCM.
+//! - [`onnx`] (feature `tts`): ort KV-cache/init helpers shared by the ONNX synth loop.
 //!
-//! The app (`app/src-tauri/src/asr.rs`, `app/src-tauri/src/llm.rs`) provides thin
-//! Tauri adapters over this crate.
+//! The app (`app/src-tauri/src/{asr,llm,tts}.rs`) provides thin Tauri adapters
+//! over this crate.
 
 #[cfg(feature = "stt")]
 pub mod stt;
 
-/// Shared resumable model downloader (the ONNX + llama.cpp paths reuse it for one identical
-/// download/progress UX, the same shape as the STT path).
-#[cfg(any(feature = "llm", feature = "llama"))]
+/// Shared resumable model downloader (the ONNX `llm`, llama.cpp, and `tts` paths reuse it
+/// for one identical download/progress UX, the same shape as the STT path).
+#[cfg(any(feature = "llm", feature = "llama", feature = "tts"))]
 pub mod download;
+
+/// ort-specific helpers (dylib init, KV-cache wiring) for the ONNX `tts` synth loop.
+#[cfg(feature = "tts")]
+pub mod onnx;
 
 #[cfg(feature = "llm")]
 pub mod llm;
 
 #[cfg(feature = "llama")]
 pub mod llama;
+
+#[cfg(feature = "tts")]
+pub mod tts;
