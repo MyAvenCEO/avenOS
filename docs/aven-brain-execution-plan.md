@@ -141,6 +141,11 @@ retrieve + rerank on-device; only minimal decrypted context goes to a no-train/Z
 Deployment tiers: **T1 edge** (phone/8GB) · **T2 household node** (own GPU box, syncs via
 identities) · **T3 managed API** (opt-in, minimal context).
 
+**Runtime split (in `aven-ai`):** encoder work on **onnxruntime** (`ort`, load-dynamic) —
+EmbeddingGemma embeddings + Parakeet STT; generation work on **llama.cpp** — LFM2.5-8B
+(GGUF, Metal) for the `Extractor`. aven-brain stays light by default (`StubEmbedder`); real
+models are behind its `models` feature.
+
 ---
 
 ## 7. Roadmap
@@ -153,8 +158,8 @@ identities) · **T3 managed API** (opt-in, minimal context).
 | **Store round-out** | idempotent `remember` (content_hash dedup), `tags` on write, **scoped `search`** (tag filter) | ✅ done, tested |
 | **Knowledge graph** | **deterministic** `[[wikilink]]` → entities + mentions + relations w/ dynamics (zero-LLM, on write) ✅; typed `facts` via off-write-path LLM `Extractor` ☐ | ◑ graph done; facts pending |
 | **Context assembly** | `wake` (L0+L1); `recall`/`memories_about` (L2 scoped); **entity cards = compiled-truth + timeline** (gBrain) | ✅ done, tested |
-| **Real models** | EmbeddingGemma behind `Embedder`; LLM `Extractor` (off write path) | ☐ next |
-| **Brain interface** | **Rust-native IPC bridge** (search/remember/kg/wake) — no MCP; an in-process/IPC API agents call directly | ☐ |
+| **Real models** | **EmbeddingGemma-300m ONNX** behind `Embedder` (aven-ai `embed`/ort, async + spawn_blocking) ✅; LFM2.5 `Extractor` via llama.cpp (off write path) ☐ | ◑ embedder done |
+| **Brain interface** | **Rust-native IPC bridge** (search/remember/kg/wake) — no MCP; an in-process/IPC API agents call directly | ☐ next |
 | **Dreaming** | relation **decay** + **CRDT entity-merge** (by normalized name) + relation dedup ✅; contradiction detection + summary recompute ☐ | ◑ decay+merge done |
 | **Scale & sync** | usearch HNSW + `_score` surfacing + weighted fusion; Counter-merge dynamics; sparks/identity sharing + multi-device | ☐ |
 | **Honest eval** | LongMemEval/LoCoMo harness against aven-brain (held-out numbers only) | ☐ |
@@ -218,7 +223,9 @@ aven-brain: scaffold+schema (1b92f72), strengths restored (d195345), vocabulary 
 (bbb188b, 39cc31f, 525f27c, de8c8aa), pipeline (199f080), store round-out — idempotent
 remember + tags + scoped search (dfb3701), deterministic knowledge graph
 (3be5cec), context assembly — wake/recall/entity-cards (d758142), dreaming — decay + CRDT
-entity-merge (ab66f2b). **aven-brain: 13 tests pass.**
+entity-merge (ab66f2b), async Embedder (6fa24c7), EmbeddingGemma ONNX encoder
+behind `models` (9e3e1c2). Merged main's llama.cpp LFM2.5 path (bbf3646).
+**aven-brain: 13 tests pass (default); `--features models` compiles.**
 
 ---
 
