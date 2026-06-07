@@ -49,6 +49,8 @@ local-llama = ["dep:aven-ai", "aven-ai/llama"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# Rewrite ggml static archives on iOS (dedupe colliding object basenames) — see build.rs.
+ar = "0.9"
 
 [dependencies]
 async-trait = "0.1"
