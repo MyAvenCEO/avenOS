@@ -11,7 +11,7 @@ use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::{AddBos, LlamaModel, Special};
+use llama_cpp_2::model::{AddBos, LlamaModel};
 use llama_cpp_2::sampling::LlamaSampler;
 
 pub use crate::download::DownloadError;
@@ -138,9 +138,11 @@ impl LlamaEngine {
 			if self.model.is_eog_token(token) {
 				break;
 			}
+			// Non-deprecated detok: explicit buffer (64 is ample for a single token's bytes),
+			// `special = false` (render plain text), no left-strip.
 			let bytes = self
 				.model
-				.token_to_bytes(token, Special::Plaintext)
+				.token_to_piece_bytes(token, 64, false, None)
 				.map_err(|e| format!("detok: {e}"))?;
 			let piece = String::from_utf8_lossy(&bytes);
 			on_token(piece.as_ref());
