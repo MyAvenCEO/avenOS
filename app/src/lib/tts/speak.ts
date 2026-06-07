@@ -33,7 +33,7 @@ function audioContext(): AudioContext {
  * signals end-of-stream. Throws outside Tauri or if the backend errors (e.g.
  * model not downloaded / runtime missing).
  */
-export async function speak(text: string, replyId: string): Promise<void> {
+export async function speak(text: string, replyId: string, voice?: string): Promise<void> {
 	if (!isTauri()) throw new Error('on-device TTS requires the desktop app')
 	const [{ invoke }, { listen }] = await Promise.all([
 		import('@tauri-apps/api/core'),
@@ -61,8 +61,22 @@ export async function speak(text: string, replyId: string): Promise<void> {
 		playhead = startAt + buffer.duration
 	})
 	try {
-		await invoke('tts_synthesize', { text, replyId })
+		await invoke('tts_synthesize', { text, replyId, voice })
 	} finally {
 		unlisten()
+	}
+}
+
+/** A selectable on-device voice (see `app/src-tauri/src/tts.rs`). */
+export type Voice = { id: string; label: string }
+
+/** Fetch the selectable voices for the picker. Returns `[]` outside Tauri. */
+export async function listVoices(): Promise<Voice[]> {
+	if (!isTauri()) return []
+	const { invoke } = await import('@tauri-apps/api/core')
+	try {
+		return await invoke<Voice[]>('tts_voices')
+	} catch {
+		return []
 	}
 }

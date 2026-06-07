@@ -89,18 +89,49 @@ pub async fn tts_status(app: AppHandle) -> Result<TtsStatus, String> {
 	Ok(imp::status(&app).await)
 }
 
-/// Synthesize `text` into speech, streaming PCM to the webview via `tts:audio-chunk`
-/// events tagged with `reply_id`. Resolves once the full clip has been emitted.
+/// A selectable on-device voice. The voices are multilingual speaker timbres — each
+/// speaks whatever language the input `text` is in (German, English, …).
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Voice {
+	/// Manifest voice id passed back to `tts_synthesize` (e.g. `"Ava"`).
+	pub id: &'static str,
+	/// Human label for the picker.
+	pub label: &'static str,
+}
+
+/// The female voices wired into the UI. Both are multilingual (speak German +
+/// English); the prebuilt manifest has no German-native speaker, so these English
+/// Female timbres cover both languages. `Ava` is the default.
+pub const VOICES: &[Voice] = &[
+	Voice { id: "Ava", label: "Ava — female (EN/DE)" },
+	Voice { id: "Bella", label: "Bella — female (EN/DE)" },
+];
+
+/// Default voice id when the caller doesn't pick one.
+pub const DEFAULT_VOICE: &str = "Ava";
+
+/// List the selectable voices for the picker (works in any build).
+#[tauri::command(rename_all = "camelCase")]
+pub async fn tts_voices() -> Result<Vec<Voice>, String> {
+	Ok(VOICES.to_vec())
+}
+
+/// Synthesize `text` into speech with `voice` (defaults to [`DEFAULT_VOICE`]),
+/// streaming PCM to the webview via `tts:audio-chunk` events tagged with `reply_id`.
+/// Resolves once the full clip has been emitted.
 #[tauri::command(rename_all = "camelCase")]
 pub async fn tts_synthesize(
 	app: AppHandle,
 	text: String,
 	reply_id: String,
+	voice: Option<String>,
 ) -> Result<(), String> {
 	if !instance_enabled() {
 		return Err("on-device synthesis runs on the primary instance only".into());
 	}
-	imp::synthesize(&app, text, reply_id).await
+	let voice = voice.filter(|v| !v.is_empty()).unwrap_or_else(|| DEFAULT_VOICE.to_string());
+	imp::synthesize(&app, text, reply_id, voice).await
 }
 
 pub fn spawn_model_download(app: &AppHandle) {
@@ -184,7 +215,7 @@ mod imp {
 		TtsStatus::unavailable()
 	}
 
-	pub async fn synthesize(_app: &AppHandle, _text: String, _reply_id: String) -> Result<(), String> {
+	pub async fn synthesize(_app: &AppHandle, _text: String, _reply_id: String, _voice: String) -> Result<(), String> {
 		Err("on-device synthesis is not available in this build (enable the `local-tts` feature)".into())
 	}
 
@@ -497,7 +528,7 @@ mod imp {
 		reset(app, true);
 	}
 
-	pub async fn synthesize(app: &AppHandle, text: String, reply_id: String) -> Result<(), String> {
+	pub async fn synthesize(app: &AppHandle, text: String, reply_id: String, voice: String) -> Result<(), String> {
 		let model = ensure_model(app).await?;
 		let sample_rate = model.sample_rate();
 		let app2 = app.clone();
@@ -505,7 +536,7 @@ mod imp {
 		let res = tokio::task::spawn_blocking(move || {
 			model.synthesize(
 				&text,
-				SynthOptions::default(),
+				SynthOptions { voice: Some(voice), ..SynthOptions::default() },
 				|pcm| {
 					let _ = app2.emit(
 						CHUNK_EVENT,

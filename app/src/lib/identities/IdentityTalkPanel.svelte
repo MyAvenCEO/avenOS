@@ -6,7 +6,7 @@
 	import type { ComposerMode } from '$lib/intents/types'
 	import { persistSparkFiles } from '$lib/jazz/intent-files'
 	import { streamReply } from '$lib/llm/generate'
-	import { speak } from '$lib/tts/speak'
+	import { speak, listVoices, type Voice } from '$lib/tts/speak'
 	import {
 		agentUnavailableReason,
 		llmDownloadFraction,
@@ -54,6 +54,15 @@
 	let streaming = $state<Record<string, string>>({})
 	// Row id of the agent reply currently being spoken on-device (or undefined).
 	let speakingId = $state<string | undefined>()
+	// On-device TTS voices (multilingual female voices) + the selected one.
+	let ttsVoices = $state<Voice[]>([])
+	let selectedVoice = $state<string | undefined>(undefined)
+	onMount(() => {
+		void listVoices().then((vs) => {
+			ttsVoices = vs
+			if (!selectedVoice && vs.length) selectedVoice = vs[0].id
+		})
+	})
 	let composerMode = $state<ComposerMode>('collapsed')
 	let localPairingLabel = $state<string | undefined>(undefined)
 	let scrollEl = $state<HTMLDivElement | undefined>(undefined)
@@ -295,7 +304,7 @@
 		if (!text || speakingId) return
 		speakingId = id
 		try {
-			await speak(text, id)
+			await speak(text, id, selectedVoice)
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {
@@ -306,7 +315,24 @@
 
 <div class="flex min-h-0 flex-1 flex-col">
 	<header class="shrink-0 space-y-1 pb-3 sm:pb-0 sm:space-y-1">
-		<h1 class="text-xl font-semibold tracking-tight">{t('identities.talk.title')}</h1>
+		<div class="flex items-start justify-between gap-2">
+			<h1 class="text-xl font-semibold tracking-tight">{t('identities.talk.title')}</h1>
+			{#if tauri && ttsVoices.length > 0}
+				<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+					<span class="hidden sm:inline">{t('identities.talk.voice')}</span>
+					<span aria-hidden="true">🔊</span>
+					<select
+						bind:value={selectedVoice}
+						class="border-border/60 bg-card/40 rounded-md border px-1.5 py-0.5 text-xs"
+						aria-label={t('identities.talk.voice')}
+					>
+						{#each ttsVoices as v (v.id)}
+							<option value={v.id}>{v.label}</option>
+						{/each}
+					</select>
+				</label>
+			{/if}
+		</div>
 		<p class="text-muted-foreground hidden text-sm leading-relaxed sm:block">
 			{t('identities.talk.subtitle', { name: displayName })}
 		</p>

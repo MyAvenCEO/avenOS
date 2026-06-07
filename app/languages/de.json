@@ -421,7 +421,8 @@
 			"agentThinking": "Aven denkt nach…",
 			"agentNoReply": "(keine Antwort)",
 			"speak": "Vorlesen",
-			"speaking": "Liest vor…"
+			"speaking": "Liest vor…",
+			"voice": "Stimme"
 		},
 		"todos": {
 			"title": "Todos",
