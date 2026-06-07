@@ -19,15 +19,27 @@ use serde::Serialize;
 use tauri::AppHandle;
 
 /// Progress/readiness event (download + load). Mirrors `asr:model-download`.
-#[cfg_attr(not(feature = "local-llm"), allow(dead_code))]
+#[cfg_attr(not(any(feature = "local-llm", feature = "local-llama")), allow(dead_code))]
 pub const DOWNLOAD_EVENT: &str = "llm:model-download";
 /// Per-token streaming event emitted during `llm_generate`.
-#[cfg_attr(not(feature = "local-llm"), allow(dead_code))]
+#[cfg_attr(not(any(feature = "local-llm", feature = "local-llama")), allow(dead_code))]
 pub const TOKEN_EVENT: &str = "llm:token";
 
 const MODEL_LABEL: &str = "LFM2.5 8B A1B";
+
+// Backend-dependent label + on-disk dir. `local-llama` (llama.cpp GGUF on Metal) is the
+// default; the ONNX/onnxruntime path stays behind `local-llm` for the reuse branch.
+#[cfg(feature = "local-llama")]
+const MODEL_QUANT: &str = "GGUF · Q4_K_M (llama.cpp · Metal)";
+/// Directory under `.avenOS/models/` the GGUF downloads to (also the delete id). Must match
+/// `aven_ai::llama::LFM2_5_8B_A1B.dir`.
+#[cfg(feature = "local-llama")]
+const MODEL_DIR: &str = "lfm2.5-8b-a1b-gguf";
+
+#[cfg(not(feature = "local-llama"))]
 const MODEL_QUANT: &str = "ONNX · q4f16 (onnxruntime)";
 /// Directory under `.avenOS/models/` the model downloads to (also the delete id).
+#[cfg(not(feature = "local-llama"))]
 const MODEL_DIR: &str = "lfm2.5-8b-a1b-onnx-q4f16";
 
 /// Status reply + `llm:model-download` payload shape.
@@ -45,7 +57,7 @@ pub struct LlmStatus {
 }
 
 impl LlmStatus {
-	#[cfg_attr(feature = "local-llm", allow(dead_code))]
+	#[cfg_attr(any(feature = "local-llm", feature = "local-llama"), allow(dead_code))]
 	pub fn unavailable() -> Self {
 		Self {
 			status: "unavailable".into(),
@@ -175,8 +187,8 @@ fn dir_size(path: &std::path::Path) -> u64 {
 	total
 }
 
-// ───────────────────────── default build (feature off) ─────────────────────────
-#[cfg(not(feature = "local-llm"))]
+// ───────────────────────── default build (no engine) ─────────────────────────
+#[cfg(not(any(feature = "local-llm", feature = "local-llama")))]
 mod imp {
 	use super::{AppHandle, LlmStatus};
 
@@ -193,8 +205,8 @@ mod imp {
 	pub fn unload(_app: &AppHandle) {}
 }
 
-// ───────────────────────── on-device build (`local-llm`) ────────────────────────
-#[cfg(feature = "local-llm")]
+// ─────────────────── ONNX/onnxruntime build (`local-llm` — reuse branch) ───────────────────
+#[cfg(all(feature = "local-llm", not(feature = "local-llama")))]
 mod imp {
 	use std::path::PathBuf;
 	use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -470,5 +482,232 @@ mod imp {
 			LlmToken { reply_id, token: String::new(), done: true },
 		);
 		text
+	}
+}
+
+// ─────────────── llama.cpp / GGUF build (`local-llama` — Metal, default) ───────────────
+// Same status/epoch/cancel state machine as the ONNX imp, but the engine is `aven_ai::llama`
+// (LFM2.5-8B-A1B GGUF on Metal, statically linked — no dylib to resolve/sign). The model is
+// loaded once into a resident `LlamaEngine` and reused; each generate streams tokens.
+#[cfg(feature = "local-llama")]
+mod imp {
+	use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+	use std::sync::{Arc, Mutex, OnceLock};
+
+	use aven_ai::llama::{self, DownloadError, LlamaEngine};
+	use tauri::{AppHandle, Emitter};
+
+	use super::{LlmStatus, LlmToken, DOWNLOAD_EVENT, MODEL_LABEL, MODEL_QUANT, TOKEN_EVENT};
+
+	/// The GGUF spec (download URL + on-disk dir); `super::MODEL_DIR` mirrors `spec.dir`.
+	fn spec() -> llama::LlamaModelSpec {
+		llama::LFM2_5_8B_A1B
+	}
+
+	const CANCELLED: &str = "download cancelled";
+	/// Cap on one reply's decode length.
+	const MAX_NEW_TOKENS: usize = 512;
+
+	#[derive(Default)]
+	struct State {
+		status: Mutex<String>,
+		error: Mutex<Option<String>>,
+		received: AtomicU64,
+		total: AtomicU64,
+		download_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+		cancelled: AtomicBool,
+		epoch: AtomicU64,
+	}
+
+	fn state() -> &'static State {
+		static STATE: OnceLock<State> = OnceLock::new();
+		STATE.get_or_init(|| {
+			let s = State::default();
+			*s.status.lock().unwrap() = "idle".into();
+			s
+		})
+	}
+
+	fn model_slot() -> &'static tokio::sync::Mutex<Option<Arc<LlamaEngine>>> {
+		static MODEL: OnceLock<tokio::sync::Mutex<Option<Arc<LlamaEngine>>>> = OnceLock::new();
+		MODEL.get_or_init(|| tokio::sync::Mutex::new(None))
+	}
+
+	fn build_lock() -> &'static tokio::sync::Mutex<()> {
+		static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+		LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+	}
+
+	fn snapshot() -> LlmStatus {
+		let s = state();
+		LlmStatus {
+			status: s.status.lock().unwrap().clone(),
+			model: MODEL_LABEL.into(),
+			quant: MODEL_QUANT.into(),
+			received_bytes: s.received.load(Ordering::Relaxed),
+			total_bytes: s.total.load(Ordering::Relaxed),
+			error: s.error.lock().unwrap().clone(),
+		}
+	}
+
+	fn emit(app: &AppHandle) {
+		let _ = app.emit(DOWNLOAD_EVENT, snapshot());
+	}
+
+	fn set_status(app: &AppHandle, status: &str, error: Option<String>) {
+		let s = state();
+		*s.status.lock().unwrap() = status.into();
+		*s.error.lock().unwrap() = error;
+		emit(app);
+	}
+
+	pub async fn status(_app: &AppHandle) -> LlmStatus {
+		snapshot()
+	}
+
+	async fn build_model(app: &AppHandle) -> Result<LlamaEngine, String> {
+		let root = tauri_plugin_self::paths::models_dir(app)?;
+		state().cancelled.store(false, Ordering::Relaxed);
+		let s = spec();
+
+		if !s.is_present(&root) {
+			set_status(app, "downloading", None);
+			let app2 = app.clone();
+			let root2 = root.clone();
+			let res = tokio::task::spawn_blocking(move || {
+				llama::download(
+					&s,
+					&root2,
+					|| state().cancelled.load(Ordering::Relaxed),
+					|received, total| {
+						state().received.store(received, Ordering::Relaxed);
+						state().total.store(total, Ordering::Relaxed);
+						emit(&app2);
+					},
+				)
+			})
+			.await
+			.map_err(|e| format!("download task: {e}"))?;
+			match res {
+				Ok(()) => {}
+				Err(DownloadError::Cancelled) => return Err(CANCELLED.into()),
+				Err(DownloadError::Failed(e)) => return Err(e),
+			}
+		}
+
+		set_status(app, "loading", None);
+		let path = s.model_path(&root);
+		tokio::task::spawn_blocking(move || LlamaEngine::load(&path))
+			.await
+			.map_err(|e| format!("load task: {e}"))?
+	}
+
+	async fn ensure_model(app: &AppHandle) -> Result<Arc<LlamaEngine>, String> {
+		if let Some(m) = model_slot().lock().await.clone() {
+			return Ok(m);
+		}
+		let _build = build_lock().lock().await;
+		if let Some(m) = model_slot().lock().await.clone() {
+			return Ok(m);
+		}
+
+		let my_epoch = state().epoch.load(Ordering::SeqCst);
+		match build_model(app).await {
+			Ok(g) => {
+				if state().epoch.load(Ordering::SeqCst) != my_epoch {
+					set_status(app, "idle", None);
+					return Err(CANCELLED.into());
+				}
+				let arc = Arc::new(g);
+				*model_slot().lock().await = Some(arc.clone());
+				set_status(app, "ready", None);
+				Ok(arc)
+			}
+			Err(e) => {
+				if e == CANCELLED || state().epoch.load(Ordering::SeqCst) != my_epoch {
+					set_status(app, "idle", None);
+					Err(CANCELLED.into())
+				} else {
+					set_status(app, "error", Some(e.clone()));
+					Err(e)
+				}
+			}
+		}
+	}
+
+	pub fn spawn_download(app: &AppHandle) {
+		{
+			let st = state().status.lock().unwrap();
+			if *st == "downloading" || *st == "loading" {
+				return;
+			}
+		}
+		let app = app.clone();
+		let handle = tauri::async_runtime::spawn(async move {
+			if let Err(e) = ensure_model(&app).await {
+				log::warn!(target: "avenos::llm", "LLM model preload failed: {e}");
+			}
+		});
+		*state().download_task.lock().unwrap() = Some(handle);
+	}
+
+	fn reset(app: &AppHandle, drop_loaded: bool) {
+		let s = state();
+		s.epoch.fetch_add(1, Ordering::SeqCst);
+		s.cancelled.store(true, Ordering::Relaxed);
+		if let Some(h) = s.download_task.lock().unwrap().take() {
+			h.abort();
+		}
+		if drop_loaded {
+			if let Ok(mut slot) = model_slot().try_lock() {
+				*slot = None;
+			}
+		}
+		s.received.store(0, Ordering::Relaxed);
+		s.total.store(0, Ordering::Relaxed);
+		*s.error.lock().unwrap() = None;
+		{
+			let mut st = s.status.lock().unwrap();
+			if drop_loaded || *st != "ready" {
+				*st = "idle".into();
+			}
+		}
+		emit(app);
+	}
+
+	pub fn cancel(app: &AppHandle) {
+		reset(app, false);
+	}
+
+	pub fn unload(app: &AppHandle) {
+		reset(app, true);
+	}
+
+	pub async fn generate(app: &AppHandle, prompt: String, reply_id: String) -> Result<String, String> {
+		let engine = ensure_model(app).await?;
+		let app2 = app.clone();
+		let reply = reply_id.clone();
+		let stats = tokio::task::spawn_blocking(move || {
+			engine.generate(
+				&prompt,
+				MAX_NEW_TOKENS,
+				|piece| {
+					let _ = app2.emit(
+						TOKEN_EVENT,
+						LlmToken { reply_id: reply.clone(), token: piece.to_string(), done: false },
+					);
+				},
+				|| false,
+			)
+		})
+		.await
+		.map_err(|e| format!("generate task: {e}"))?;
+
+		// End-of-stream marker (also sent on error so the UI can stop the spinner).
+		let _ = app.emit(
+			TOKEN_EVENT,
+			LlmToken { reply_id, token: String::new(), done: true },
+		);
+		stats.map(|s| s.text)
 	}
 }

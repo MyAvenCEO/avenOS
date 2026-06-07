@@ -18,12 +18,13 @@ fn main() {
 
 	eprintln!("[spike] loading {} (Metal — all layers on GPU)…", model.display());
 	let t = Instant::now();
-	match aven_ai::llama::generate(&model, &prompt, 64) {
-		Ok(s) => {
-			eprintln!("[spike] load + generate in {:.1}s", t.elapsed().as_secs_f64());
-			println!("--- output ---\n{}\n--------------", s.text);
-			println!("[spike] {} tokens @ {:.1} tok/s", s.tokens, s.tokens_per_sec);
-		}
+	let engine = aven_ai::llama::LlamaEngine::load(&model).unwrap_or_else(|e| {
+		eprintln!("[spike] load ERROR: {e}");
+		std::process::exit(1);
+	});
+	eprintln!("[spike] loaded in {:.1}s; generating…", t.elapsed().as_secs_f64());
+	match engine.generate(&prompt, 64, |p| print!("{p}"), || false) {
+		Ok(s) => println!("\n[spike] {} tokens @ {:.1} tok/s", s.tokens, s.tokens_per_sec),
 		Err(e) => {
 			eprintln!("[spike] ERROR: {e}");
 			std::process::exit(1);
