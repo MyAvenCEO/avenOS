@@ -2,14 +2,23 @@
 name = "aven-brain"
 version = "0.0.1"
 edition = "2021"
-description = "AvenOS local-first AI memory brain — engrams, concepts, facts, links over aven-db (CRDT, vector + BM25 retrieval). One brain per identity."
+description = "AvenOS local-first AI memory brain — memories, entities, facts, relations over aven-db (CRDT, vector + BM25 retrieval). One brain per identity."
 license = "MIT OR Apache-2.0"
 
 [lib]
 path = "src/lib.rs"
 
+[features]
+default = []
+# Real on-device models: EmbeddingGemma-300m (ONNX) via aven-ai. Pulls ort + tokio.
+# The default build uses StubEmbedder and stays dependency-light.
+models = ["dep:aven-ai", "dep:tokio", "dep:log"]
+
 [dependencies]
 groove = { package = "aven-db", path = "../aven-db", features = ["client-p2p"] }
+aven-ai = { path = "../aven-ai", optional = true, features = ["embed"] }
+tokio = { version = "1", optional = true, features = ["rt"] }
+log = { version = "0.4", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

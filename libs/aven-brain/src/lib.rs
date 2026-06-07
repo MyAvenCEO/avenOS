@@ -65,3 +65,9 @@ pub mod schema;
 pub use brain::{Brain, BrainError, Memory};
 pub use embedder::{Embedder, StubEmbedder};
 pub use schema::{brain_schema, EMBED_DIM};
+
+/// Real on-device EmbeddingGemma embedder (ONNX via aven-ai). Behind the `models` feature.
+#[cfg(feature = "models")]
+pub mod gemma;
+#[cfg(feature = "models")]
+pub use gemma::GemmaEmbedder;
