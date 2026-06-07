@@ -60,10 +60,12 @@
 
 pub mod brain;
 pub mod embedder;
+pub mod extractor;
 pub mod schema;
 
 pub use brain::{Brain, BrainError, Memory};
 pub use embedder::{Embedder, StubEmbedder};
+pub use extractor::{ExtractedFact, ExtractionInput, Extractor};
 pub use schema::{brain_schema, EMBED_DIM};
 
 /// Real on-device EmbeddingGemma embedder (ONNX via aven-ai). Behind the `models` feature.

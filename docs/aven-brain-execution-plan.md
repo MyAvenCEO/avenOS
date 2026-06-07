@@ -128,23 +128,87 @@ forbids handing plaintext memory to a third-party embedder. This makes "embeddin
 
 ## 6. Model stack (privacy-first, behind traits)
 
-Pluggable via traits (`Embedder` built; `Reranker`/`Extractor` to come). Principle: **embed +
-retrieve + rerank on-device; only minimal decrypted context goes to a no-train/ZDR remote LLM.**
+Pluggable via traits (`Embedder` built; `Extractor` seam prepared — TODO, §6b; `Reranker` to
+come). Principle: **embed + retrieve + rerank on-device; personal memory leaves the device only
+to an attested TEE (preferred) or a ZDR remote.**
 
 | Role | On-device default (≤8GB) | Optional upgrade |
 |---|---|---|
 | Embedding | **EmbeddingGemma-300m** (q4, ~0.2GB, 768-d Matryoshka) | voyage-4 (opted-out) |
 | Rerank | skip / **Qwen3-Reranker-0.6B** on demand | Voyage rerank-2.5 |
-| Extraction (entities/facts) | **Granite 4.0 Micro 3B** (q4, native JSON) | Claude Haiku 4.5 (batch) |
-| Synthesis | — (retrieval-only) | household node (Gemma 4 31B) → Claude Opus 4.8 (ZDR) |
+| Extraction (typed facts) | deterministic `[[wikilink]]` graph (zero-LLM) ✅ | **GLM-5.3 on Phala RedPill TEE** — batch dreaming, attested (§6b, *TODO*) |
+| Synthesis / dreaming reasoning | — (retrieval-only) | self-host GLM/Gemma-31B on T2 node → **GLM-5.3 RedPill TEE** (attested) |
 
 Deployment tiers: **T1 edge** (phone/8GB) · **T2 household node** (own GPU box, syncs via
 identities) · **T3 managed API** (opt-in, minimal context).
 
 **Runtime split (in `aven-ai`):** encoder work on **onnxruntime** (`ort`, load-dynamic) —
 EmbeddingGemma embeddings + Parakeet STT; generation work on **llama.cpp** — LFM2.5-8B
-(GGUF, Metal) for the `Extractor`. aven-brain stays light by default (`StubEmbedder`); real
-models are behind its `models` feature.
+(GGUF, Metal) for **local tool-calling**. The dreaming `Extractor` is **not** LFM2.5 — it is
+remote **GLM-5.3 in a Phala RedPill TEE** (§6b, TODO). aven-brain stays light by default
+(`StubEmbedder`); real models are behind its `models` feature.
+
+---
+
+## 6b. Extractor — GLM-5.3 on Phala Cloud RedPill TEE (board plan)
+
+**Status: TODO — seam only.** `extractor.rs` defines the `Extractor` trait +
+`ExtractedFact`/`ExtractionInput`; there is **no implementation and no fallback**. With no
+extractor configured, `dream()` runs only its deterministic passes. The model-assisted layer
+(typed facts; later contradiction + compiled-truth) is purely **additive**.
+
+### Why this shape
+- The deterministic `[[wikilink]]` graph is load-bearing + zero-model; the Extractor only
+  *adds* typed temporal facts → remote calls are optional, batched, off the write path.
+- Personal memory leaves the device only to an **attested TEE** — hardware confidentiality +
+  *verifiable* attestation beats policy-only ZDR. **GLM-5.3** (open-weights) in a Phala RedPill
+  **GPU-TEE** gives confidentiality + verifiability + an ownership path (self-host the same
+  weights on the T2 node later — zero trait change).
+
+### Target flow
+```
+dream() (batch, off-path)
+  1. collect deltas      new/changed memories since last dream (content_hash + normalize_version)
+  2. redact / minimize   send the least context that yields facts — never the whole brain
+  3. Extractor::extract → RedPillExtractor (TEE-first):
+        a. ATTEST [gate]  fetch Intel TDX + NVIDIA GPU-CC quote → verify chain to vendor roots
+                          → pin expected measurement + model id; REFUSE to send if unverified
+        b. CALL           OpenAI-compatible /chat/completions, model=glm-5.3,
+                          JSON-schema / tool-call-constrained extraction
+        c. PARSE          → Vec<ExtractedFact>
+  4. write-back          facts → CRDT `facts` rows w/ provenance:
+                         source_memory, confidence, model id, attestation digest
+```
+
+### Phases
+- **P0 — Seam** ✅ trait + types, flagged TODO, no impl / no fallback.
+- **P1 — Transport** OpenAI-compatible client (`aven-ai`, `redpill` feature): GLM-5.3 model id,
+  schema-constrained extraction prompt, parse → `ExtractedFact`. Plain HTTPS, dev-only, **never on
+  real memory** until P2.
+- **P2 — Attestation (security core)** fetch + verify the RedPill TEE quote (TDX + GPU-CC), pin
+  measurement + model hash, **hard-gate transmission on a verified quote**, capture the
+  attestation digest. This is what makes "remote" acceptable for personal memory.
+- **P3 — Dreaming integration** delta batching, redaction, schedule (idle/overnight), idempotent
+  re-extraction, write facts back with provenance + attestation digest; per-dream report.
+- **P4 — Hardening** biscuit-gated `remote-extract` capability (explicit user grant, off by
+  default), cost/rate caps, response signing / verifiable-log capture, observability.
+
+### Placement & config
+- `aven-ai` (`redpill` feature) = transport + attestation; `aven-brain` (`extract` feature) = the
+  `Extractor` adapter. Same one-way dep + feature-gating as the embedder.
+- Per-identity, user-owned config: `endpoint` (RedPill base URL), `model` (`glm-5.3`), `api_key`
+  (secure store), `expected_measurements` (pinned enclave/model digests), `enabled` (default off).
+
+### Security invariants
+- **No plaintext to a non-attested endpoint. No silent fallback.**
+- Facts carry the **attestation digest** → auditable provenance; dreaming can re-verify / prune.
+- Off by default; enabled only via an explicit biscuit-gated capability.
+
+### Verify before P1
+- Exact RedPill **model id** for GLM-5.3 + GPU-TEE availability.
+- RedPill **attestation API** shape + a Rust path to verify TDX / GPU quotes.
+- GLM-5.3 **structured-output** support (JSON schema / tool calls).
+- Phala Cloud **auth + billing** + ZDR posture.
 
 ---
 
@@ -156,9 +220,9 @@ models are behind its `models` feature.
 | **Schema** | `memories/entities/mentions/facts/relations` | ✅ done, tested |
 | **Pipeline v1** | `Brain` + `Embedder` + `remember`/`search` (RRF) | ✅ done, tested |
 | **Store round-out** | idempotent `remember` (content_hash dedup), `tags` on write, **scoped `search`** (tag filter) | ✅ done, tested |
-| **Knowledge graph** | **deterministic** `[[wikilink]]` → entities + mentions + relations w/ dynamics (zero-LLM, on write) ✅; typed `facts` via off-write-path LLM `Extractor` ☐ | ◑ graph done; facts pending |
+| **Knowledge graph** | **deterministic** `[[wikilink]]` → entities + mentions + relations w/ dynamics (zero-LLM, on write) ✅; typed `facts` via the `Extractor` (GLM-5.3 on RedPill TEE — seam prepared, §6b) ☐ | ◑ graph done; facts pending |
 | **Context assembly** | `wake` (L0+L1); `recall`/`memories_about` (L2 scoped); **entity cards = compiled-truth + timeline** (gBrain) | ✅ done, tested |
-| **Real models** | **EmbeddingGemma-300m ONNX** behind `Embedder` (aven-ai `embed`/ort, async + spawn_blocking) ✅; LFM2.5 `Extractor` via llama.cpp (off write path) ☐ | ◑ embedder done |
+| **Real models** | **EmbeddingGemma-300m ONNX** behind `Embedder` (aven-ai `embed`/ort, async + spawn_blocking) ✅; `Extractor` seam prepared (TODO) — **GLM-5.3 on Phala RedPill TEE** planned (§6b) ☐ | ◑ embedder done |
 | **Brain interface** | **Rust-native IPC bridge** (search/remember/kg/wake) — no MCP; an in-process/IPC API agents call directly | ☐ next |
 | **Dreaming** | relation **decay** + **CRDT entity-merge** (by normalized name) + relation dedup ✅; contradiction detection + summary recompute ☐ | ◑ decay+merge done |
 | **Scale & sync** | usearch HNSW + `_score` surfacing + weighted fusion; Counter-merge dynamics; sparks/identity sharing + multi-device | ☐ |
@@ -224,7 +288,8 @@ aven-brain: scaffold+schema (1b92f72), strengths restored (d195345), vocabulary 
 remember + tags + scoped search (dfb3701), deterministic knowledge graph
 (3be5cec), context assembly — wake/recall/entity-cards (d758142), dreaming — decay + CRDT
 entity-merge (ab66f2b), async Embedder (6fa24c7), EmbeddingGemma ONNX encoder
-behind `models` (9e3e1c2). Merged main's llama.cpp LFM2.5 path (bbf3646).
+behind `models` (9e3e1c2), `Extractor` seam (trait + types, flagged TODO, no impl/fallback).
+Merged main's llama.cpp LFM2.5 path (bbf3646).
 **aven-brain: 13 tests pass (default); `--features models` compiles.**
 
 ---
