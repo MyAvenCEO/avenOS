@@ -43,7 +43,7 @@ pub fn user_documents_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathB
 
 use crate::network::NETWORK_PATH_SEGMENTS;
 
-/// `<Documents>/.avenOS/<network>` — parent of `identities/`.
+/// `<Documents>/.avenOS/<network>` — parent of `peers/`.
 pub fn aven_os_app_base<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
 	if let Some(root) = expand_override() {
 		fs::create_dir_all(&root).map_err(|e| format!("create_dir_all {}: {e}", root.display()))?;
@@ -58,16 +58,18 @@ pub fn aven_os_app_base<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf
 	Ok(base)
 }
 
-pub fn identities_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+/// `<Documents>/.avenOS/<network>/peers/` — the container of one `<slug>/` dir per
+/// peer (every client device AND server node is a peer). On-disk name is `peers`.
+pub fn peers_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
 	if expand_override().is_some() {
-		return Err("identities_dir_unavailable_under_data_dir_override".into());
+		return Err("peers_dir_unavailable_under_data_dir_override".into());
 	}
 	Ok(aven_os_app_base(app)?.join("peers"))
 }
 
-/// Legacy name — prefer [`identities_dir`].
+/// Legacy name — prefer [`peers_dir`].
 pub fn vaults_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
-	identities_dir(app)
+	peers_dir(app)
 }
 
 /// `<Documents>/.avenOS/models` — shared on-device model cache (e.g. the Gemma 4
@@ -85,7 +87,7 @@ pub fn models_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, Stri
 	Ok(dir)
 }
 
-/// Resolves the active identity directory (`…/identities/<slug>` or override root).
+/// Resolves the active peer's directory (`…/peers/<slug>` or override root).
 pub fn aven_os_user_root<R: tauri::Runtime>(
 	app: &AppHandle<R>,
 	vault: &ActiveVault,
@@ -94,10 +96,10 @@ pub fn aven_os_user_root<R: tauri::Runtime>(
 		return Ok(root);
 	}
 	let slug = vault.require_slug()?;
-	Ok(identities_dir(app)?.join(&slug))
+	Ok(peers_dir(app)?.join(&slug))
 }
 
-/// `…/identities/<slug>/vault` — SE blobs, strong.hold, manifest, settings.
+/// `…/peers/<slug>/vault` — SE blobs, strong.hold, manifest, settings.
 pub fn identity_crypto_dir(identity_root: &Path) -> PathBuf {
 	identity_root.join(IDENTITY_CRYPTO_DIR)
 }
@@ -182,23 +184,23 @@ pub fn vault_is_complete(root: &Path) -> bool {
 	identity_crypto_dir(root).is_dir() && db_dir(root).is_dir()
 }
 
-/// One-time migration: `vaults/` → `identities/`, `self/` → `vault/`, legacy filenames.
+/// One-time migration: `vaults/` → `peers/`, `self/` → `vault/`, legacy filenames.
 pub fn migrate_layout<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<(), String> {
 	if expand_override().is_some() {
 		return migrate_identity_root(&aven_os_app_base(app)?);
 	}
 	let base = aven_os_app_base(app)?;
 	let legacy_vaults = base.join("vaults");
-	let identities = base.join("peers");
-	if legacy_vaults.is_dir() && !identities.exists() {
-		fs::rename(&legacy_vaults, &identities)
-			.map_err(|e| format!("migrate vaults→identities: {e}"))?;
-		log::info!(target: "avenos::paths", "migrated {} → {}", legacy_vaults.display(), identities.display());
+	let peers = base.join("peers");
+	if legacy_vaults.is_dir() && !peers.exists() {
+		fs::rename(&legacy_vaults, &peers)
+			.map_err(|e| format!("migrate vaults→peers: {e}"))?;
+		log::info!(target: "avenos::paths", "migrated {} → {}", legacy_vaults.display(), peers.display());
 	}
-	if !identities.is_dir() {
-		fs::create_dir_all(&identities).map_err(|e| format!("mkdir identities: {e}"))?;
+	if !peers.is_dir() {
+		fs::create_dir_all(&peers).map_err(|e| format!("mkdir peers: {e}"))?;
 	}
-	let rd = fs::read_dir(&identities).map_err(|e| format!("read_dir identities: {e}"))?;
+	let rd = fs::read_dir(&peers).map_err(|e| format!("read_dir peers: {e}"))?;
 	for ent in rd.flatten() {
 		if ent.metadata().map(|m| m.is_dir()).unwrap_or(false) {
 			migrate_identity_root(&ent.path())?;

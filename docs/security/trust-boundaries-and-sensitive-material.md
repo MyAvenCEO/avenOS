@@ -12,7 +12,7 @@ Developer handoff: where secrets live, what each webview can reach, and how user
 | ---- | ----- | ------- |
 | **`tauri-plugin-self`** | Rust | Biometric SE unlock, `device_root_secret`, Ed25519 **self-signer**, DIDs. IPC: `plugin:self\|*` |
 | **`tauri-plugin-vault`** | Rust | Stronghold secrets CRUD inside `strong.hold`. IPC: `plugin:vault\|secrets_*` |
-| **`identities/<slug>/vault/`** | Disk | SE blobs, `strong.hold`, `manifest.json`, `settings.json` |
+| **`peers/<slug>/vault/`** | Disk | SE blobs, `strong.hold`, `manifest.json`, `settings.json` |
 | **`/vault/*`** | Frontend | Isolated child webview for secrets UI only |
 | **`/settings/*`** | Frontend | Main webview — peers, prefs, identity display, share, db viewer |
 
@@ -97,7 +97,7 @@ Same *ideas* as Infisical or HashiCorp Vault (local-first, device-bound — not 
 ### Prerequisites
 
 1. User unlocks via Touch ID → `plugin:self\|unlock` → SE derives `device_root_secret`.
-2. `plugin:self` opens `identities/<slug>/vault/strong.hold` with  
+2. `plugin:self` opens `peers/<slug>/vault/strong.hold` with  
    `stronghold_key = HKDF(device_root_secret, info="{NETWORK_SEED}/stronghold/v1")`.
 3. User opens **Vault** from main nav (`/vault/secrets`). The `vault-embed` child loads secrets UI; main cannot invoke `plugin:vault`.
 
