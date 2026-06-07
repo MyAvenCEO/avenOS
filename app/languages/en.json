@@ -434,8 +434,7 @@
 			"agentThinking": "Aven is thinking…",
 			"agentNoReply": "(no reply)",
 			"speak": "Speak",
-			"speaking": "Speaking…",
-			"voice": "Voice"
+			"speaking": "Speaking…"
 		},
 		"todos": {
 			"title": "Todos",
