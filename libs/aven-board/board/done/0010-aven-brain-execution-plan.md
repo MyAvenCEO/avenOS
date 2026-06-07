@@ -1,4 +1,22 @@
+---
+title: aven-brain execution plan (archived)
+summary: The original aven-brain execution plan. Shipped + tested layers — engine (Vector/nearest/text_search in aven-db), the 5-table schema, the remember/search pipeline (RRF), the deterministic [[wikilink]] knowledge graph, context assembly (wake/recall/entity-cards), dreaming (decay + CRDT entity-merge), and the EmbeddingGemma-300m ONNX encoder. Archived to the board as a legacy reference; the forward design (integration + UX) now lives in the brain-as-context-manager idea (0009).
+owner: agent
+created: 2026-06-06
+updated: 2026-06-07
+tags: [aven-brain, memory, archived, legacy]
+goal:
+---
+
 # aven-brain — Execution Plan
+
+> **📦 ARCHIVED — legacy reference.** Moved into the board's `done` column on 2026-06-07.
+> The shipped layers below (engine, schema, pipeline, knowledge graph, context assembly,
+> dreaming, EmbeddingGemma encoder) are **done + tested**. The forward design — making the brain
+> the per-identity **context manager** with transparent recall — now lives in the
+> **brain-as-context-manager** idea card (`board/idea/0009-brain-as-context-manager.md`).
+> Still-pending items here (Extractor impl, brain interface/UI, scale & sync, honest eval) carry
+> over to that card and §7 below. Kept verbatim for historical context.
 
 > A **local-first, user-owned, CRDT-synced AI memory brain** — one **brain** per avenOS
 > **identity**, built natively on **aven-db**. Verbatim memories + a living entity graph,
