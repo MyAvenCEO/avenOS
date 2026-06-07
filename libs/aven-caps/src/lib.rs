@@ -4,7 +4,7 @@
 //! per-identity DEK keyshare crypto ([`crypto`]), shared by the device app
 //! (`app/src-tauri`) and the `aven-node` so both mint/verify caps and wrap
 //! keyshares with **one** implementation (DRY). See
-//! `docs/CryptoOwnershipExecutionPlan.md`.
+//! `libs/aven-board/board/CryptoOwnershipExecutionPlan.md`.
 
 pub mod caps;
 pub mod crypto;

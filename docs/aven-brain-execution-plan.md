@@ -376,7 +376,7 @@ Qwen3-Reranker; if remote, GLM-4.7 Flash ($0.06/$0.40) or DeepSeek V3.2.
 aven-brain stores nothing in the clear and trusts no peer. It inherits avenOS's cryptographic
 ownership + capability model **verbatim** — every memory row is owned, signed, encrypted, and
 capability-gated. This is a hard requirement, not a feature flag. (Ref:
-`docs/CryptoOwnershipExecutionPlan.md` — "Ownership & Identities", invariants locked.)
+`libs/aven-board/board/CryptoOwnershipExecutionPlan.md` — "Ownership & Identities", invariants locked.)
 
 | Layer | Mechanism (actual merged code) | What aven-brain must do |
 |---|---|---|

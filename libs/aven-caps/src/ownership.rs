@@ -1,5 +1,5 @@
 //! Per-value cryptographic ownership primitives — Phase 1 of the Ownership & Caps
-//! master plan (`docs/CryptoOwnershipExecutionPlan.md`).
+//! master plan (`libs/aven-board/board/CryptoOwnershipExecutionPlan.md`).
 //!
 //! Two signed artifacts, both verified **on apply by every peer** (interactive or
 //! always-on — there is no client/server split):
