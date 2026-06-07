@@ -19,7 +19,7 @@ title: Vault plugin & Stronghold architecture
 
 ```
 ~/Documents/.avenOS/ceo.aven/testnet/abagana/
-├── identities/<slug>/
+├── peers/<slug>/
 │   ├── vault/
 │   │   ├── peer-id-{slot}.se-blob    ← plugin:self / SE
 │   │   ├── peer-id-{slot}.pub

@@ -60,7 +60,7 @@ fn crypto_dir_has_identity(dir: &std::path::Path) -> bool {
 	false
 }
 
-/// List identity folders under `<app-base>/identities/`, or a synthetic entry when data-dir override is set.
+/// List identity folders under `<app-base>/peers/`, or a synthetic entry when data-dir override is set.
 #[tauri::command(rename_all = "camelCase")]
 pub async fn vault_list(app: AppHandle, _vault_state: State<'_, ActiveVault>) -> Result<Vec<VaultListEntry>, String> {
 	if paths::expand_override().is_some() {
@@ -76,11 +76,11 @@ pub async fn vault_list(app: AppHandle, _vault_state: State<'_, ActiveVault>) ->
 		}]);
 	}
 
-	let base = paths::identities_dir(&app)?;
-	fs::create_dir_all(&base).map_err(|e| format!("create_dir_all identities {}: {e}", base.display()))?;
+	let base = paths::peers_dir(&app)?;
+	fs::create_dir_all(&base).map_err(|e| format!("create_dir_all peers {}: {e}", base.display()))?;
 
 	let mut out = Vec::new();
-	let rd = fs::read_dir(&base).map_err(|e| format!("read_dir identities {}: {e}", base.display()))?;
+	let rd = fs::read_dir(&base).map_err(|e| format!("read_dir peers {}: {e}", base.display()))?;
 
 	for ent in rd.flatten() {
 		let mt = ent.metadata().ok();
@@ -110,7 +110,7 @@ pub async fn vault_list(app: AppHandle, _vault_state: State<'_, ActiveVault>) ->
 }
 
 /// Bind the active (staging) identity folder to its cryptographic identity: rename
-/// `identities/<staging-slug>` → `identities/<identity_folder_id(key)>` and re-point the
+/// `peers/<staging-slug>` → `peers/<identity_folder_id(key)>` and re-point the
 /// pre-unlock selection at it. Called from each platform's `register` once device key
 /// material exists. Idempotent (no-op once the folder is already canonically named) and a
 /// no-op under the data-dir override sandbox (single shared root, no per-identity folder).
@@ -131,9 +131,9 @@ pub(crate) fn finalize_identity_folder<R: tauri::Runtime>(
 		return Ok(id);
 	}
 
-	let identities = paths::identities_dir(app)?;
-	let from = identities.join(&current);
-	let to = identities.join(&id);
+	let peers = paths::peers_dir(app)?;
+	let from = peers.join(&current);
+	let to = peers.join(&id);
 
 	if to.exists() {
 		// This identity already has its canonical folder (e.g. re-register after a
@@ -184,7 +184,7 @@ pub async fn vault_select(
 	}
 
 	paths::validate_username_slug(&slug)?;
-	let vr = paths::identities_dir(&app)?.join(&slug);
+	let vr = paths::peers_dir(&app)?.join(&slug);
 	if !paths::vault_is_complete(&vr) {
 		return Err(format!("vault_missing_or_incomplete: {}", vr.display()));
 	}
@@ -206,9 +206,9 @@ pub async fn vault_slug_preview(app: AppHandle, payload: VaultSlugPreviewPayload
 		return Ok(OVERRIDE_VAULT_SLUG.into());
 	}
 	let base = paths::slugify_first_name(&payload.first_name)?;
-	let identities_base = paths::identities_dir(&app)?;
-	fs::create_dir_all(&identities_base).map_err(|e| format!("create_dir_all: {e}"))?;
-	allocate_username_slug(&identities_base, &base)
+	let peers_base = paths::peers_dir(&app)?;
+	fs::create_dir_all(&peers_base).map_err(|e| format!("create_dir_all: {e}"))?;
+	allocate_username_slug(&peers_base, &base)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -248,11 +248,11 @@ pub async fn vault_create(
 	}
 
 	let slug_base = paths::slugify_first_name(&first_name)?;
-	let identities_base = paths::identities_dir(&app)?;
-	fs::create_dir_all(&identities_base).map_err(|e| format!("create_dir_all: {e}"))?;
+	let peers_base = paths::peers_dir(&app)?;
+	fs::create_dir_all(&peers_base).map_err(|e| format!("create_dir_all: {e}"))?;
 
-	let slug = allocate_username_slug(&identities_base, &slug_base)?;
-	let vr = identities_base.join(&slug);
+	let slug = allocate_username_slug(&peers_base, &slug_base)?;
+	let vr = peers_base.join(&slug);
 
 	fs::create_dir_all(paths::db_dir(&vr)).map_err(|e| format!("mkdir identity db: {e}"))?;
 	fs::create_dir_all(paths::identity_crypto_dir(&vr))
@@ -348,10 +348,10 @@ fn unix_ms_i64() -> i64 {
 		.unwrap_or(0i64)
 }
 
-fn allocate_username_slug(identities_base: &std::path::Path, base_name: &str) -> Result<String, String> {
+fn allocate_username_slug(peers_base: &std::path::Path, base_name: &str) -> Result<String, String> {
 	let mut candidate = base_name.to_string();
 	let mut n = 2u32;
-	while identities_base.join(&candidate).exists() {
+	while peers_base.join(&candidate).exists() {
 		candidate = format!("{base_name}{n}");
 		n += 1;
 		if n > 10_000 {

@@ -42,7 +42,7 @@ See [04-root-derivation.md](04-root-derivation.md).
 
 ```
 ~/Documents/.avenOS/ceo.aven/testnet/abagana/
-├── identities/<slug>/{vault,db}
+├── peers/<slug>/{vault,db}
 └── schema/
 ```
 

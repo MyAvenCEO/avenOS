@@ -5,7 +5,7 @@
  * Instance A → http://127.0.0.1:1420
  * Instance B → http://127.0.0.1:1421
  *
- * Both use the network layout: <Documents>/.avenOS/ceo.aven/testnet/abagana/identities/<slug>/{db,vault}.
+ * Both use the network layout: <Documents>/.avenOS/ceo.aven/testnet/abagana/peers/<slug>/{db,vault}.
  * **Do not** set AVENOS_DATA_DIR_OVERRIDE here — each window gets its own in-memory active vault via
  * the lock-screen picker, so two personas (e.g. alice + bob vaults) can run concurrently without two
  * separate override trees.
@@ -18,8 +18,12 @@
  *     or `tauri:build:linux` (slower first build). NOTE: `bun run release:app:mac` / `bun run release:app:ios`
  *     now produce signed App Store artifacts AND upload them — not what you want for two-instance dev.
  *
- * Reset identities during dev (destructive — removes all saved personas):
- *   rm -rf "<Documents>/.avenOS/ceo.aven/testnet/abagana/identities"  (see identitiesHint printed at startup)
+ * Reset the network during dev (destructive — removes all saved personas AND the
+ * server node, so the next signup is auto-admitted as the first admin again):
+ *   rm -rf "<Documents>/.avenOS/ceo.aven/testnet/abagana/peers"  (see peersHint printed at startup)
+ *   The on-disk dir is `peers/` — it holds one `<slug>/` per peer: every client
+ *   device AND the aven-node server. Deleting only some sub-dirs leaves the server's
+ *   avenCEO genesis (which names the old admin), so first-admin never re-arms.
  *
  * For a fully isolated sandbox (single flat vault root, no multi-vault), set per-process
  * AVENOS_DATA_DIR_OVERRIDE yourself — not handled by this script.
@@ -51,13 +55,13 @@ function userDocumentsDir(): string {
 	return path.join(homedir(), 'Documents')
 }
 
-const identitiesHint = path.join(
+const peersHint = path.join(
 	userDocumentsDir(),
 	'.avenOS',
 	'ceo.aven',
 	'testnet',
 	'abagana',
-	'identities'
+	'peers'
 )
 
 /** Linux WebKitGTK defaults (same as dev-app-linux.ts). */
@@ -237,10 +241,10 @@ async function main() {
 			`  ${MAGENTA}[B]${RESET}  http://127.0.0.1:1421\n\n` +
 			`${BOLD}Sync:${RESET} both instances dial the ${GREEN}[S]${RESET} relay over a WebSocket\n` +
 			`      (nonce-bound did:key challenge) — A↔B converge through it.\n\n` +
-			`Shared identity store: ${identitiesHint}\n` +
+			`Shared peers store: ${peersHint}\n` +
 			`${BOLD}${MAGENTA}WARNING:${RESET} Unlocking the same identity slug in [A] and [B] at once grabs the same RocksDB files (\`storage.rocksdb\`) — Share/DB can stay on Loading indefinitely. Pick different people on each lock screen.\n\n` +
-			`${BOLD}Note:${RESET} AVENOS_DEV_INSTANCE is ${CYAN}A${RESET} / ${MAGENTA}B${RESET} for log prefixes + Vite cache dirs; it does not isolate identity dirs.\n\n` +
-			`Reset all dev personas: rm -rf ${identitiesHint}\n` +
+			`${BOLD}Note:${RESET} AVENOS_DEV_INSTANCE is ${CYAN}A${RESET} / ${MAGENTA}B${RESET} for log prefixes + Vite cache dirs; it does not isolate peer dirs.\n\n` +
+			`Reset the whole network (personas + server → re-arms first-admin): rm -rf ${peersHint}\n` +
 			`Press Ctrl-C to stop the relay and both instances.\n`
 	)
 
