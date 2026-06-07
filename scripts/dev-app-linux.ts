@@ -11,6 +11,7 @@ import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { freeDevServerPort } from './free-dev-server-port.ts'
+import { startSyncRelay } from './aven-server.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -33,6 +34,11 @@ async function main() {
 		'[dev:app:linux] AvenOS Tauri (Linux) · Host-UI: SvelteKit @ http://127.0.0.1:1420 (dev-only, embedded in WebKitGTK)\n'
 	)
 
+	// Start the local sync relay (aven-node) so the app has a server to dial — it
+	// mints avenCEO and auto-grants the first peer admin, opening the invite gate.
+	const { server, wsUrl } = await startSyncRelay(env as Record<string, string>)
+	env.AVENOS_SERVER_WS_URL = wsUrl
+
 	const child = Bun.spawn(['bun', '--env-file=.env', 'run', '--cwd', 'app', 'tauri:dev'], {
 		cwd: repoRoot,
 		stdout: 'inherit',
@@ -41,7 +47,12 @@ async function main() {
 		env
 	})
 
+	const shutdown = () => server?.kill('SIGTERM')
+	process.on('SIGINT', shutdown)
+	process.on('SIGTERM', shutdown)
+
 	const code = await child.exited
+	shutdown()
 	process.exit(typeof code === 'number' ? code : 1)
 }
 

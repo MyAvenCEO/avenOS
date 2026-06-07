@@ -43,6 +43,7 @@ import { homedir, platform, tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { freeDevServerPort } from './free-dev-server-port.ts'
+import { DEV_SERVER_SEED, LOCAL_WS, SERVER_HTTP_PORT, waitForPort } from './aven-server.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appDir = path.join(repoRoot, 'app')
@@ -74,27 +75,6 @@ function devBaseEnv(): Record<string, string> {
 	return env
 }
 
-/**
- * Wait until a TCP port is accepting connections (or timeout).
- */
-async function waitForPort(port: number, timeoutMs = 60_000): Promise<void> {
-	const deadline = Date.now() + timeoutMs
-	while (Date.now() < deadline) {
-		try {
-			const conn = await Bun.connect({
-				hostname: '127.0.0.1',
-				port,
-				socket: { data() {}, open() {}, close() {}, error() {} }
-			})
-			conn.end()
-			return
-		} catch {
-			await Bun.sleep(500)
-		}
-	}
-	throw new Error(`Port ${port} did not become available within ${timeoutMs}ms`)
-}
-
 // Colour codes (ansi)
 const RESET = '\x1b[0m'
 const BOLD = '\x1b[1m'
@@ -104,16 +84,14 @@ const GREEN = '\x1b[32m'
 
 // Both instances dial an aven-node over a WebSocket (`/sync`, nonce-bound did:key
 // challenge) — one relay, N clients, the same transport prod uses.
-const SERVER_HTTP_PORT = 8080
-/** Stable dev identity for the relay (32-byte hex) — keeps the aven's DID constant across runs. */
-const DEV_SERVER_SEED = 'a0b1c2d3e4f5060718293a4b5c6d7e8f00112233445566778899aabbccddeeff'
-
+// SERVER_HTTP_PORT / DEV_SERVER_SEED / LOCAL_WS come from ./aven-server.ts (shared
+// with the single-instance dev launchers so the relay identity never drifts).
+//
 // ── Sync relay endpoint ───────────────────────────────────────────────────────
 // Default: a LOCAL aven-node on ws://127.0.0.1:8080/sync (built & run here). To
 // instead test the Sprite-hosted relay over its PUBLIC url — the exact path a
 // TestFlight device takes, with NO `sprite proxy` and NO cert pin:
 //   AVENOS_SERVER_WS_URL=wss://aven-ceo-bmrha.sprites.app/sync bun run dev:app2x:mac
-const LOCAL_WS = `ws://127.0.0.1:${SERVER_HTTP_PORT}/sync`
 const EXTERNAL_WS = process.env.AVENOS_SERVER_WS_URL?.trim() || ''
 
 function prefixLines(label: string, colour: string, data: Buffer | string) {
