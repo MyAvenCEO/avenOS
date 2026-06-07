@@ -7,6 +7,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { freeDevServerPort } from './free-dev-server-port.ts'
 import { ensureOnnxruntimeDylib } from './fetch-onnxruntime.ts'
+import { startSyncRelay } from './aven-server.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -36,15 +37,28 @@ async function main() {
 		spawnSync('bun', ['./scripts/clean-app-tauri-target.ts'], { cwd: repoRoot, stdio: 'inherit' })
 	}
 
+	// Start the local sync relay (aven-node) so the app has a server to dial — the
+	// server mints avenCEO and auto-grants the first peer admin, so the invite gate
+	// opens. Without it the app is local-only and stays stuck on the gate.
+	const { server, wsUrl } = await startSyncRelay()
+
+	const env: Record<string, string> = { ...process.env, AVENOS_SERVER_WS_URL: wsUrl }
+	if (ortDylib) env.AVENOS_ORT_DYLIB = ortDylib
+
 	const child = Bun.spawn(['bun', '--env-file=.env', 'run', '--cwd', 'app', 'tauri:dev'], {
 		cwd: repoRoot,
 		stdout: 'inherit',
 		stderr: 'inherit',
 		stdin: 'inherit',
-		env: ortDylib ? { ...process.env, AVENOS_ORT_DYLIB: ortDylib } : process.env
+		env
 	})
 
+	const shutdown = () => server?.kill('SIGTERM')
+	process.on('SIGINT', shutdown)
+	process.on('SIGTERM', shutdown)
+
 	const code = await child.exited
+	shutdown()
 	process.exit(typeof code === 'number' ? code : 1)
 }
 
