@@ -152,7 +152,7 @@ impl<E: Embedder> Brain<E> {
             return Ok(existing);
         }
 
-        let embedding = self.embedder.embed(content);
+        let embedding = self.embedder.embed(content).await;
         let tags_value = if tags.is_empty() {
             Value::Null
         } else {
@@ -199,7 +199,7 @@ impl<E: Embedder> Brain<E> {
         tags: &[&str],
     ) -> Result<Vec<Memory>, BrainError> {
         let over = (k * 4).max(8);
-        let qvec = self.embedder.embed(query);
+        let qvec = self.embedder.embed(query).await;
 
         let mut vector_qb = QueryBuilder::new(MEMORIES);
         for t in tags {

@@ -10,11 +10,16 @@
 /// Embeddings are computed where the decryption key lives (on-device); see the crate
 /// docs' ownership note. Implementations must be deterministic for a given input so
 /// idempotent re-ingest produces stable vectors.
+///
+/// `embed` is async so a real model implementation can offload blocking ONNX inference
+/// to a worker thread (`spawn_blocking`) instead of stalling the async runtime; the
+/// stub computes synchronously and returns immediately.
+#[allow(async_fn_in_trait)]
 pub trait Embedder: Send + Sync {
     /// Embedding dimensionality (must match the brain's schema `embedding` column).
     fn dim(&self) -> usize;
     /// Embed `text` into a `dim()`-length vector.
-    fn embed(&self, text: &str) -> Vec<f32>;
+    async fn embed(&self, text: &str) -> Vec<f32>;
 }
 
 /// Deterministic hashed bag-of-words embedder for tests/dev (no model runtime).
@@ -37,7 +42,7 @@ impl Embedder for StubEmbedder {
         self.dim
     }
 
-    fn embed(&self, text: &str) -> Vec<f32> {
+    async fn embed(&self, text: &str) -> Vec<f32> {
         let mut v = vec![0.0f32; self.dim];
         for tok in text
             .split(|c: char| !c.is_alphanumeric())
