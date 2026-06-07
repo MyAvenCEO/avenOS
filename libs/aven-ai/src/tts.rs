@@ -28,11 +28,14 @@ use ort::value::Tensor;
 use serde::Deserialize;
 use tokenizers::Tokenizer;
 
-use crate::onnx::{self, CacheData};
+use crate::onnx::CacheData;
 
 // Re-export shared primitives so the Tauri adapter mirrors the llm one:
-// `aven_ai::tts::{init_runtime, DownloadError}`.
-pub use crate::onnx::{init_runtime, DownloadError};
+// `aven_ai::tts::{init_runtime, DownloadError}`. Downloads reuse the shared,
+// engine-agnostic `crate::download` module (also used by `llm`/`llama`); the ort
+// dylib init comes from `crate::onnx`.
+pub use crate::download::DownloadError;
+pub use crate::onnx::init_runtime;
 
 /// A downloadable ONNX TTS model: the four `.onnx` graphs (+ any `.onnx_data`
 /// sidecars), the `browser_poc_manifest.json` config, and the `tokenizer.json`,
@@ -67,19 +70,26 @@ impl TtsModelSpec {
 
 	/// True when every required file is present on disk.
 	pub fn files_present(&self, root: &Path) -> bool {
-		onnx::files_present(root, self.dir, self.files)
+		let d = self.model_dir(root);
+		self.files.iter().all(|(_, name)| d.join(name).is_file())
 	}
 }
 
 /// Download each file in `spec` into `<root>/<spec.dir>/`. Thin wrapper over the
-/// shared [`crate::onnx::download_files`]. Blocking — run on a dedicated thread.
+/// shared [`crate::download::download_files`]. Blocking — run on a dedicated thread.
 pub fn download_files(
 	spec: &TtsModelSpec,
 	root: &Path,
 	cancelled: impl Fn() -> bool,
 	on_progress: impl FnMut(u64, u64),
 ) -> Result<(), DownloadError> {
-	onnx::download_files(root, spec.dir, spec.base_url, spec.files, cancelled, on_progress)
+	crate::download::download_files(
+		&spec.model_dir(root),
+		spec.base_url,
+		spec.files,
+		cancelled,
+		on_progress,
+	)
 }
 
 // ---- Manifest (`browser_poc_manifest.json`) -------------------------------------

@@ -37,20 +37,19 @@ path = "src/main.rs"
 # script downloads prebuilt static libs (incl. onnxruntime) — no CMake needed.
 # Build with `--no-default-features` to get the light stub build (CI / quick
 # checks). The first-run model download (~640 MB tarball) is user-initiated.
-default = ["local-voice", "local-llm", "local-tts"]
+default = ["local-voice", "local-llama", "local-tts"]
 local-voice = ["dep:aven-ai", "aven-ai/stt"]
-# On-device text LLM (LFM2.5-8B-A1B ONNX via onnxruntime/`ort`). ON by default.
-# `ort` uses `load-dynamic`, so the build is light (no static onnxruntime); the
-# onnxruntime dylib ships in the app bundle and model weights download on demand.
+# On-device text LLM (LFM2.5-8B-A1B ONNX via onnxruntime/`ort`). OFF by default —
+# superseded by `local-llama` (llama.cpp). `ort` uses `load-dynamic`, so the build
+# is light; the onnxruntime dylib ships in the app bundle (still needed for TTS).
 local-llm = ["dep:aven-ai", "aven-ai/llm"]
+# On-device text LLM via llama.cpp (LFM2.5-8B-A1B GGUF, Metal, statically linked — no dylib).
+# The replacement for `local-llm` (ONNX). ON by default.
+local-llama = ["dep:aven-ai", "aven-ai/llama"]
 # On-device text-to-speech (MOSS-TTS-Nano ONNX via onnxruntime/`ort`). ON by
-# default. Shares the `ort` load-dynamic dylib with `local-llm`; the tiny
-# (0.1B + 20M) weights download on demand. Model artifacts await the export track.
+# default. Uses the same `ort` load-dynamic onnxruntime dylib (bundled in the app);
+# the tiny (0.1B + 20M) weights download on demand. Artifacts await the export track.
 local-tts = ["dep:aven-ai", "aven-ai/tts"]
-# Kept for the future on-device Gemma path. OFF by default — enabling pulls in
-# the heavy `mistralrs` inference crate (~400MB+ build). Re-enable with
-# `--features gemma` once that path is wired up.
-gemma = ["dep:aven-ai", "aven-ai/gemma"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

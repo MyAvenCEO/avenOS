@@ -23,19 +23,16 @@
 //! wiring so it can be verified/hardened on the first real device run.
 
 use std::collections::BTreeMap;
+use std::fs::{self, File};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use half::f16;
 use ort::session::{builder::GraphOptimizationLevel, Session};
-use ort::value::Tensor;
+use ort::memory::Allocator;
+use ort::value::{DynTensor, Tensor, TensorElementType, ValueType};
 use tokenizers::Tokenizer;
-
-use crate::onnx::{self, pair_caches, CacheData, CacheSpec};
-
-// Re-export the shared onnxruntime primitives so the Tauri adapter keeps using
-// `aven_ai::llm::{init_runtime, DownloadError}` unchanged.
-pub use crate::onnx::{init_runtime, DownloadError};
 
 /// A downloadable ONNX LLM: a set of files fetched individually from a HF repo
 /// (the `.onnx` graph + its external-weight `.onnx_data` sidecars + tokenizer/
@@ -62,19 +59,205 @@ impl LlmModelSpec {
 
 	/// True when every required file is present on disk.
 	pub fn files_present(&self, root: &Path) -> bool {
-		onnx::files_present(root, self.dir, self.files)
+		let d = self.model_dir(root);
+		self.files.iter().all(|(_, name)| d.join(name).is_file())
 	}
 }
 
-/// Download each file in `spec` into `<root>/<spec.dir>/`. Thin wrapper over the
-/// shared [`crate::onnx::download_files`]. Blocking — run on a dedicated thread.
+/// Outcome of a model download (mirrors [`crate::stt::DownloadError`]).
+#[derive(Debug)]
+pub enum DownloadError {
+	Cancelled,
+	Failed(String),
+}
+
+impl std::fmt::Display for DownloadError {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			DownloadError::Cancelled => write!(f, "download cancelled"),
+			DownloadError::Failed(e) => write!(f, "{e}"),
+		}
+	}
+}
+
+impl std::error::Error for DownloadError {}
+
+const EMIT_STEP: u64 = 8 * 1024 * 1024;
+
+/// Download each file in `spec` into `<root>/<spec.dir>/`. Blocking — run on a
+/// dedicated thread. `cancelled()` is polled every chunk; `on_progress(received,
+/// total)` reports cumulative bytes across all files.
+///
+/// **Resilient**: each file streams to `<local>.part` and is renamed only when
+/// complete, so finished files are never re-fetched. A partial `.part` resumes
+/// via an HTTP `Range` request (the body continues where it left off); if the
+/// server ignores the range (`200`) that one file restarts cleanly, and a `416`
+/// means the `.part` is already complete (finalize it). Cancelling keeps the
+/// `.part` so the next attempt continues — a 4.7 GB pull survives app restarts.
 pub fn download_files(
 	spec: &LlmModelSpec,
 	root: &Path,
 	cancelled: impl Fn() -> bool,
-	on_progress: impl FnMut(u64, u64),
+	mut on_progress: impl FnMut(u64, u64),
 ) -> Result<(), DownloadError> {
-	onnx::download_files(root, spec.dir, spec.base_url, spec.files, cancelled, on_progress)
+	let fail = |e: String| DownloadError::Failed(e);
+	let dir = spec.model_dir(root);
+	fs::create_dir_all(&dir).map_err(|e| fail(format!("create model dir: {e}")))?;
+
+	// Pass 1 — compute the FULL grand total (and bytes already on disk) up front so
+	// the progress bar has a stable denominator. Without this, `total` grew as each
+	// file's Content-Length arrived, so the bar filled to one sidecar (~2 GB) then
+	// jumped as the next started. Finished files (renamed) count toward both; a
+	// partial `.part` counts toward `received`; the rest comes from a cheap HEAD
+	// (which follows the HF redirect and returns the final Content-Length).
+	let mut received: u64 = 0;
+	let mut total: u64 = 0;
+	for &(remote, local) in spec.files.iter() {
+		if let Ok(meta) = dir.join(local).metadata() {
+			received += meta.len();
+			total += meta.len();
+			continue;
+		}
+		let have = dir
+			.join(format!("{local}.part"))
+			.metadata()
+			.map(|m| m.len())
+			.unwrap_or(0);
+		received += have;
+		total += head_content_length(&format!("{}{}", spec.base_url, remote)).max(have);
+	}
+	on_progress(received, total);
+
+	// Pass 2 — fetch each missing file, resuming a partial `.part` where possible.
+	// `total` is already final; only newly-read bytes are added to `received`.
+	for &(remote, local) in spec.files.iter() {
+		let dest = dir.join(local);
+		if dest.is_file() {
+			continue; // already on disk + counted in pass 1
+		}
+		if cancelled() {
+			return Err(DownloadError::Cancelled);
+		}
+
+		let tmp = dir.join(format!("{local}.part"));
+		// Resume point: bytes of this file already on disk from a prior attempt.
+		let resume_from = tmp.metadata().map(|m| m.len()).unwrap_or(0);
+
+		let url = format!("{}{}", spec.base_url, remote);
+		let mut req = ureq::get(&url);
+		if resume_from > 0 {
+			req = req.set("Range", &format!("bytes={resume_from}-"));
+		}
+		let resp = match req.call() {
+			Ok(r) => r,
+			// 416: the byte range is past EOF → the .part is already complete but
+			// wasn't renamed (crash between flush and rename). Finalize it; its bytes
+			// were already counted in pass 1.
+			Err(ureq::Error::Status(416, _)) if resume_from > 0 => {
+				fs::rename(&tmp, &dest).map_err(|e| fail(format!("finalize {local}: {e}")))?;
+				continue;
+			}
+			Err(e) => return Err(fail(format!("download {local}: {e}"))),
+		};
+
+		// 206 Partial Content → the body continues from `resume_from`; append to the
+		// .part. Anything else (200, or the server/redirect dropped our Range) → start
+		// this one file over from scratch: drop the `resume_from` bytes we counted in
+		// pass 1 so we don't double-count as they're re-received. Either way: no corruption.
+		let resuming = resp.status() == 206 && resume_from > 0;
+		let mut file = if resuming {
+			std::fs::OpenOptions::new()
+				.append(true)
+				.open(&tmp)
+				.map_err(|e| fail(format!("open {}: {e}", tmp.display())))?
+		} else {
+			if resume_from > 0 {
+				received = received.saturating_sub(resume_from);
+				on_progress(received, total);
+			}
+			File::create(&tmp).map_err(|e| fail(format!("create {}: {e}", tmp.display())))?
+		};
+
+		let mut reader = resp.into_reader();
+		let mut buf = vec![0u8; 1024 * 1024];
+		let mut last_emit = received;
+		loop {
+			if cancelled() {
+				// Keep the .part so the next attempt resumes from here (don't delete).
+				file.flush().ok();
+				return Err(DownloadError::Cancelled);
+			}
+			let n = reader.read(&mut buf).map_err(|e| fail(format!("read {local}: {e}")))?;
+			if n == 0 {
+				break;
+			}
+			file.write_all(&buf[..n]).map_err(|e| fail(format!("write {local}: {e}")))?;
+			received += n as u64;
+			if received - last_emit >= EMIT_STEP {
+				last_emit = received;
+				on_progress(received, total);
+			}
+		}
+		file.flush().ok();
+		drop(file);
+		fs::rename(&tmp, &dest).map_err(|e| fail(format!("finalize {local}: {e}")))?;
+		on_progress(received, total);
+	}
+
+	if !spec.files_present(root) {
+		return Err(fail("model files missing after download".into()));
+	}
+	Ok(())
+}
+
+/// HEAD a URL and return its `Content-Length` (ureq follows the redirect to the
+/// CDN, so this is the final file's size). `0` when unavailable — the caller then
+/// falls back to whatever bytes are already on disk.
+fn head_content_length(url: &str) -> u64 {
+	ureq::head(url)
+		.call()
+		.ok()
+		.and_then(|r| r.header("Content-Length").and_then(|s| s.parse::<u64>().ok()))
+		.unwrap_or(0)
+}
+
+/// Initialize the onnxruntime backend from a specific dylib path. Must be called
+/// once, before the first [`Generator::load`]. Idempotent: subsequent calls (or a
+/// call after the env is already committed) are a no-op `Ok`.
+///
+/// `dylib_path` is the onnxruntime shared library bundled in the app (e.g.
+/// `…/Frameworks/onnxruntime.framework/onnxruntime` on Apple, `libonnxruntime.dylib`
+/// on a dev Mac). Passing it here (rather than relying on the `ORT_DYLIB_PATH`
+/// env var) keeps the path resolution in Rust where the app knows its bundle layout.
+pub fn init_runtime(dylib_path: &Path) -> Result<(), String> {
+	static INIT: OnceLock<Result<(), String>> = OnceLock::new();
+	INIT.get_or_init(|| {
+		// `init_from` loads the dylib (the fallible part); `commit` just registers
+		// the env options globally and returns whether it took effect (false if a
+		// prior commit already won the race — harmless here).
+		ort::init_from(dylib_path)
+			.map_err(|e| format!("onnxruntime load {}: {e}", dylib_path.display()))?
+			.with_name("avenos-llm")
+			.commit();
+		Ok(())
+	})
+	.clone()
+}
+
+/// How a single cache tensor is shaped and typed, captured from the session's
+/// input metadata at load so we can synthesize an empty (past-length 0) tensor and
+/// know which element type to round-trip.
+#[derive(Clone, Debug)]
+struct CacheSpec {
+	/// The model input name (e.g. `past_key_values.2.key`, `past_conv.0`).
+	input_name: String,
+	/// The matching output name that produces its next-step value.
+	output_name: String,
+	/// Static dims with the dynamic sequence/cache-length axis pinned to 0 for the
+	/// initial empty cache. Other dynamic axes (rare) are also pinned to 0.
+	empty_shape: Vec<i64>,
+	/// Element type (almost always f16 for the q4f16 export).
+	ty: TensorElementType,
 }
 
 /// A loaded ONNX text generator. `Send + Sync` (the session lives behind a
@@ -270,6 +453,126 @@ fn lfm2_chat_prompt(user: &str) -> String {
 	format!(
 		"<|startoftext|><|im_start|>system\nYou are Aven, a concise and helpful on-device assistant.<|im_end|>\n<|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n"
 	)
+}
+
+/// Pair every `past_*` session input with the `present*` output that feeds it next
+/// step, and capture the static (cache-length-0) shape + element type. Heuristic
+/// name matching (logged at load); the dominant optimum/transformers.js convention
+/// is `past_key_values.{i}.{key,value}` ↔ `present.{i}.{key,value}` and
+/// `past_conv.{i}` ↔ `present_conv.{i}`.
+fn pair_caches(session: &Session) -> Vec<CacheSpec> {
+	let output_names: Vec<String> = session.outputs().iter().map(|o| o.name().to_string()).collect();
+
+	let mut out = Vec::new();
+	for input in session.inputs() {
+		let name = input.name();
+		if !name.starts_with("past") {
+			continue;
+		}
+		let ValueType::Tensor { ty, shape, .. } = input.dtype() else {
+			continue;
+		};
+		// Empty cache for step 0. A statically-known axis keeps its size. A dynamic axis
+		// (-1) is either the BATCH axis (axis 0 → 1: we always run exactly one sequence) or
+		// a length/cache axis (→ 0: empty at step 0). The old code pinned EVERY dynamic axis
+		// to 0, so the batch axis became 0 → a 0-row tensor, which ORT rejects with
+		// "all dimensions must be >= 1 when creating a tensor from raw data" (the cache-f16
+		// error). Keeping batch = 1 fixes it while leaving the length axis empty.
+		let empty_shape: Vec<i64> = shape
+			.iter()
+			.enumerate()
+			.map(|(axis, &d)| {
+				if d >= 0 {
+					d
+				} else if axis == 0 {
+					1
+				} else {
+					0
+				}
+			})
+			.collect();
+
+		let candidate = name
+			.replacen("past_key_values", "present", 1)
+			.replacen("past_conv", "present_conv", 1)
+			.replacen("past", "present", 1);
+		let output_name = output_names
+			.iter()
+			.find(|o| **o == candidate)
+			.or_else(|| {
+				// Fallback: match by trailing dotted suffix (".{i}.key", ".{i}").
+				let suffix = name.splitn(2, '.').nth(1);
+				suffix.and_then(|s| output_names.iter().find(|o| o.ends_with(s)))
+			})
+			.cloned()
+			.unwrap_or_else(|| candidate.clone());
+
+		out.push(CacheSpec {
+			input_name: name.to_string(),
+			output_name,
+			empty_shape,
+			ty: *ty,
+		});
+	}
+	out
+}
+
+/// Owned cache data in whichever element type the graph uses (f16 for q4f16, with
+/// an f32 fallback for safety on other exports).
+enum CacheData {
+	F16(Vec<f16>),
+	F32(Vec<f32>),
+}
+
+impl CacheData {
+	fn empty(ty: TensorElementType) -> Self {
+		match ty {
+			TensorElementType::Float32 => CacheData::F32(Vec::new()),
+			_ => CacheData::F16(Vec::new()),
+		}
+	}
+
+	fn to_value(&self, shape: &[i64]) -> Result<ort::session::SessionInputValue<'static>, String> {
+		// An EMPTY (step-0) cache is initialized by ALLOCATING a zero tensor of the exact shape
+		// via DynTensor::new (ORT's CreateTensorAsOrtValue, which zero-fills). Unlike from_array
+		// ("from raw data"), it ALLOWS 0-length dims — the empty attention KV-cache [1,h,0,d] —
+		// AND fixed-size conv/SSM state [1,2048,3]; from_array rejects BOTH with "all dimensions
+		// must be >= 1". One generic, resilient init for ANY hybrid cache family — no
+		// per-model/per-layer special-casing, the shape alone drives it.
+		let (is_empty, ty) = match self {
+			CacheData::F16(v) => (v.is_empty(), TensorElementType::Float16),
+			CacheData::F32(v) => (v.is_empty(), TensorElementType::Float32),
+		};
+		if is_empty {
+			return DynTensor::new(&Allocator::default(), ty, shape.to_vec())
+				.map(Into::into)
+				.map_err(|e| format!("cache {ty:?} alloc: {e}"));
+		}
+		// Subsequent steps: real cache data from the model's present_* output — it already
+		// matches the (now non-empty) shape, so from_array is correct.
+		match self {
+			CacheData::F16(v) => Tensor::from_array((shape.to_vec(), v.clone()))
+				.map(Into::into)
+				.map_err(|e| format!("cache f16: {e}")),
+			CacheData::F32(v) => Tensor::from_array((shape.to_vec(), v.clone()))
+				.map(Into::into)
+				.map_err(|e| format!("cache f32: {e}")),
+		}
+	}
+
+	fn extract(
+		outputs: &ort::session::SessionOutputs,
+		name: &str,
+	) -> Result<(Vec<i64>, CacheData), String> {
+		let value = &outputs[name];
+		if let Ok((shape, data)) = value.try_extract_tensor::<f16>() {
+			return Ok((shape.iter().copied().collect(), CacheData::F16(data.to_vec())));
+		}
+		let (shape, data) = value
+			.try_extract_tensor::<f32>()
+			.map_err(|e| format!("extract {name}: {e}"))?;
+		Ok((shape.iter().copied().collect(), CacheData::F32(data.to_vec())))
+	}
 }
 
 /// Argmax over the vocab axis of the final position of `logits` (`[1, seq, vocab]`).
