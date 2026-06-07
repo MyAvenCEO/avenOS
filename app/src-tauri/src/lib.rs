@@ -255,7 +255,6 @@ pub fn run() {
 			llm::llm_delete_model,
 			tts::tts_status,
 			tts::tts_synthesize,
-			tts::tts_voices,
 			tts::tts_local_models,
 			tts::tts_cancel_download,
 			tts::tts_start_download,
