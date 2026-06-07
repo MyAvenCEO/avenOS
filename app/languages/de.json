@@ -416,7 +416,10 @@
 			"messagesLog": "Messages",
 			"noMessagesYet": "Noch keine Nachrichten. Sag Hallo — Peers mit Zugriff auf diesen Identity sehen es nach dem Sync.",
 			"messagePlaceholder": "Nachricht schreiben…",
-			"authorAtTime": "{author} at {time}"
+			"authorAtTime": "{author} at {time}",
+			"agentLabel": "Aven · LFM2.5",
+			"agentThinking": "Aven denkt nach…",
+			"agentNoReply": "(keine Antwort)"
 		},
 		"todos": {
 			"title": "Todos",
@@ -484,6 +487,7 @@
 				"owner": "Owner",
 				"admin": "Admin",
 				"read": "Read",
+				"directory": "Verzeichnis",
 				"write": "Write",
 				"delete": "Delete",
 				"share": "Share",
@@ -534,7 +538,8 @@
 				"rate_limit": "Eingehende Schreibvorgänge sind ratenbegrenzt, damit keine Identität den Aven flutet.",
 				"owns": "Volle Kontrolle — lesen, schreiben, löschen und Mitglieder verwalten.",
 				"reads": "Nur-Lese-Mitglied — kann entschlüsseln und lesen, aber nicht schreiben."
-			}
+			},
+			"syncRelay": "Sync-Relay"
 		},
 		"avenCeoTitle": "avenCEO",
 		"avenCeoClaimedSub": "Verzeichnis & Mitglieder dieses Netzwerks",
@@ -792,8 +797,8 @@
 	},
 	"networkGate": {
 		"kicker": "Nur mit Einladung",
-		"title": "Das neue Internet wird von souveränen Gründern gebaut.",
-		"body": "Dies ist das Rückgrat eines anderen Internets — eines, das den Menschen gehört, die darauf bauen. Eine neue Generation von Gründern, die ihre eigene Identität, ihre eigenen Daten, ihr eigenes Wort besitzen. Es ist kein Produkt, für das man sich anmeldet. Es ist ein Kreis, in den man aufgenommen wird.",
+		"title": "Die neue Welt wird von souveränen Gründern gebaut.",
+		"body": "Dies ist das Rückgrat einer anderen Welt — einer, die den Menschen gehört, die darauf bauen. Eine neue Generation von Gründern, die ihre eigene Identität, ihre eigenen Daten, ihr eigenes Wort besitzen. Es ist kein Produkt, für das man sich anmeldet. Es ist ein Kreis, in den man aufgenommen wird.",
 		"how": "Zugang wird von Hand zu Hand weitergegeben, von Gründer zu Gründer. Um einzutreten, finde jemanden, der bereits hier ist, der sich für dich verbürgt und dir die Tür öffnet.",
 		"footnote": "Wenn ein Gründer dich einlädt, wird dein Platz auf dich warten — und wenn du die/der Allererste bist, wirst du automatisch aufgenommen.",
 		"yourDid": "Deine DID",

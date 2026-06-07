@@ -28,17 +28,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
             .push_inbox(entry);
     }
 
-    /// Add a client connection.
-    pub fn add_client(&mut self, client_id: PeerId, session: Option<Session>) {
-        info!(%client_id, has_session = session.is_some(), "adding client");
-        let sm = self.schema_manager.query_manager_mut().sync_manager_mut();
-        sm.add_client_with_storage(&self.storage, client_id);
-        if let Some(s) = session {
-            sm.set_client_session(client_id, s);
-        }
-        self.immediate_tick();
-    }
-
     /// Ensure a client exists with the given session.
     ///
     /// If the client already exists, updates the session. This is idempotent —

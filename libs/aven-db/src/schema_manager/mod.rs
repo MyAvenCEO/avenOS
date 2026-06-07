@@ -49,7 +49,7 @@ pub mod rehydrate;
 pub mod transformer;
 pub mod types;
 
-#[cfg(all(test, target_arch = "wasm32"))]
+#[cfg(test)]
 mod integration_tests;
 
 // Re-exports

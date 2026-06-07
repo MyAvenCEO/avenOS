@@ -429,7 +429,10 @@
 			"messagesLog": "Messages",
 			"noMessagesYet": "No messages yet. Say hello — peers with access to this identity will see it after sync.",
 			"messagePlaceholder": "Write a message…",
-			"authorAtTime": "{author} at {time}"
+			"authorAtTime": "{author} at {time}",
+			"agentLabel": "Aven · LFM2.5",
+			"agentThinking": "Aven is thinking…",
+			"agentNoReply": "(no reply)"
 		},
 		"todos": {
 			"title": "Todos",
@@ -497,6 +500,7 @@
 				"owner": "Owner",
 				"admin": "Admin",
 				"read": "Read",
+				"directory": "Directory",
 				"write": "Write",
 				"delete": "Delete",
 				"share": "Share",
@@ -537,17 +541,19 @@
 			"quickRelay": "Sync on the connected aven",
 			"capsLegendTitle": "How these permissions work",
 			"capDesc": {
-				"read": "Holds the key — can decrypt and read this identity's data.",
-				"write": "Can add and edit this identity's data.",
-				"delete": "Can delete this identity's data.",
-				"admit": "Can add or remove members (manage the roster).",
-				"rotate_dek": "Can rotate the encryption key — this is how access is revoked.",
-				"replicate": "Blind sync: stores & forwards this identity's encrypted data without the key, so it can never read it.",
-				"quota": "Storage on this aven is capped at 10 MB for this identity.",
-				"rate_limit": "Inbound writes are rate-limited so one identity can't flood the aven.",
+				"read": "Holds the key — can decrypt and read all of this identity's data.",
+				"directory": "Reads only the member directory (who belongs to the aven) — NOT your data. A sync peer holds no data key, so this is all it can ever see.",
+				"write": "Can add and edit the rows this grant covers.",
+				"delete": "Can delete the rows this grant covers.",
+				"admit": "Can add or remove members (write the roster).",
+				"rotate_dek": "Can rotate the encryption key — how access is revoked; the old key can't read new data.",
+				"replicate": "Blind relay — stores & forwards this identity's encrypted data with NO key, so it can never read it.",
+				"quota": "Storage for this identity on this aven is capped at 10 MB — enforced by the aven-node, not bypassable.",
+				"rate_limit": "Inbound writes are rate-limited by the aven-node so one identity can't flood it.",
 				"owns": "Full control — read, write, delete, and manage members.",
-				"reads": "Read-only member — can decrypt and read, but not write."
-			}
+				"reads": "Read-only member — holds the key to decrypt and read, but cannot write."
+			},
+			"syncRelay": "Sync relay"
 		},
 		"avenCeoTitle": "avenCEO",
 		"avenCeoClaimedSub": "This network's roster & members",
@@ -814,8 +820,8 @@
 	},
 	"networkGate": {
 		"kicker": "Invitation only",
-		"title": "The new internet is built by sovereign founders.",
-		"body": "This is the backbone of a different internet — one owned by the people who build on it. A new breed of founders who hold their own identity, their own data, their own word. It isn't a product you sign up for. It's a circle you're welcomed into.",
+		"title": "The new world is built by sovereign founders.",
+		"body": "This is the backbone of a different world — one owned by the people who build on it. A new breed of founders who hold their own identity, their own data, their own word. It isn't a product you sign up for. It's a circle you're welcomed into.",
 		"how": "Access is passed hand to hand, founder to founder. To step inside, find someone already here who will vouch for you and open the door.",
 		"footnote": "When a founder invites you, your place will be waiting — and if you're the very first here, you'll be welcomed in automatically.",
 		"yourDid": "Your DID",

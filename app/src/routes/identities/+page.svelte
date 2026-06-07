@@ -17,7 +17,8 @@
 		[...identitiesStore.rows].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '')),
 	)
 	const humans = $derived(identities.filter((i) => i.type === 'human'))
-	const avens = $derived(identities.filter((i) => i.type !== 'human'))
+	// `group` rows are internal M9 sub-groups (collection/row crypto groups), not displayed identities.
+	const avens = $derived(identities.filter((i) => i.type !== 'human' && i.type !== 'group'))
 	const loading = $derived(tauri && unlocked && !identitiesStore.loaded && !identitiesStore.error)
 
 	function sparkSubtitle(row: JazzRow): string {

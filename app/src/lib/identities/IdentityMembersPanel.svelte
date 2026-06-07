@@ -159,11 +159,20 @@
 			const norm = s.did.trim().toLowerCase()
 			const peer = peersByDid.get(norm)
 			const isThisDevice = localDid !== '' && norm === localDid
-			const fallback = s.grant === 'replicate' ? t('identities.share.addReplica') : undefined
+			// D1: real names. Prefer the roster device label (Admina/Bobo); the connected
+			// aven relay is labelled as such; otherwise fall through to the short DID —
+			// never a misleading hardcoded "Replication Server".
+			const isRelay = norm !== '' && norm === (session?.relayDid?.trim().toLowerCase() ?? '\0')
+			const fallback = isRelay ? t('identities.share.syncRelay') : undefined
 			const label = peerAccessLabel(s.did, peer?.deviceLabel ?? fallback, isThisDevice)
 			return { did: s.did, label, isThisDevice, grant: s.grant, capabilities: s.caps }
 		})
 	})
+
+	// Owner-only management: only a holder of `owns` may grant/revoke. A read-only
+	// member sees the roster but NO manage controls — so it can't hit the
+	// `subject_not_owner` dead-end (members are read-only by design).
+	const amOwner = $derived(accessEntries.some((e) => e.isThisDevice && e.grant === 'owns'))
 
 	// Cap-centric view (Tab 2): invert subjects → for each actual cap, who holds it.
 	// Pure projection of the same single source — guarantees the two tabs agree.
@@ -277,19 +286,23 @@
 				if (isAvenCeo) await avenCeoAddMember(did)
 				else await sparkReaderAdd({ identityId: sid, peerDid: did })
 			else await sparkReplicateAdd({ identityId: sid, peerDid: did })
-			if (gen !== adminLoadGen) return
+			// The grant SUCCEEDED — always clear the input + show the note, even though a
+			// concurrent re-hydration (the grant triggers a sync, which reloads the roster)
+			// may have bumped adminLoadGen. Only the roster-state write below is gen-guarded,
+			// so a stale grant can't clobber a newer load.
 			if (!opts?.did) addAdminDid = ''
 			addNote = t('identities.share.accessGrantedNote')
 			const a = await sparkAdminList(sid)
-			if (gen !== adminLoadGen) return
-			adminDids = a.adminDids
-			replicaDids = a.replicaDids ?? []
-			subjects = a.subjects ?? []
+			if (gen === adminLoadGen) {
+				adminDids = a.adminDids
+				replicaDids = a.replicaDids ?? []
+				subjects = a.subjects ?? []
+			}
 		} catch (e) {
-			if (gen !== adminLoadGen) return
 			adminErr = e instanceof Error ? e.message : String(e)
 		} finally {
-			if (gen === adminLoadGen) adminBusy = false
+			// Always re-enable the form — `adminBusy` reflects THIS operation, not a load gen.
+			adminBusy = false
 		}
 	}
 
@@ -430,7 +443,8 @@
 		<div class="flex flex-col gap-8">
 
 			{#if activeTab === 'members'}
-			<!-- Give access (unified: DID + grant kind), placed ABOVE the member list -->
+			{#if amOwner}
+			<!-- Give access (owner-only): a read-only member sees the roster, not this form. -->
 			<section class="border-border/50 bg-background/40 flex flex-col gap-3 rounded-xl border p-4">
 				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
 					{t('identities.share.giveAccess')}
@@ -487,6 +501,7 @@
 				{/if}
 				<p class="text-muted-foreground text-xs leading-relaxed">{t('identities.share.giveAccessHint')}</p>
 			</section>
+			{/if}
 
 			<!-- Who has access -->
 			<section class="flex flex-col gap-4">
@@ -519,7 +534,7 @@
 											class="bg-muted hover:bg-muted/70 ml-auto rounded-md px-2.5 py-1 text-[11px] font-medium"
 											onclick={() => void copyOwnDid()}>{didCopied ? t('peers.copied') : t('common.copyDid')}</button
 										>
-									{:else}
+									{:else if amOwner}
 										<button
 											type="button"
 											class="border-destructive/40 text-destructive hover:bg-destructive/10 ml-auto rounded-md border px-2.5 py-1 text-[11px] font-medium disabled:opacity-50"

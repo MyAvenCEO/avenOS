@@ -133,6 +133,28 @@ function exportArchiveManually(profileName: string, exportDir: string): string {
 `,
 		'utf8',
 	)
+
+	// Apple rejects standalone dylibs in an app bundle (STATE_ERROR.VALIDATION_ERROR:
+	// "binary file is not permitted … standalone executables or libraries"). We bundle the
+	// on-device AI libs (onnxruntime, sherpa-onnx) as bare `.dylib` for desktop, but they are
+	// the macOS binaries — they can't load on iOS anyway (on-device AI on iOS is not yet
+	// wired). Strip them from the archived .app BEFORE export so the re-signed .ipa validates.
+	const archivedApp = path.join(ARCHIVE_PATH, 'Products', 'Applications', 'avenOS.app')
+	if (existsSync(archivedApp)) {
+		// onnxruntime is loaded dynamically (`ort` load-dynamic = lazy dlopen) and the bundled
+		// copy is the macOS binary — it can't load on iOS, so removing it is safe and the only
+		// way past Apple's check.
+		rmSync(path.join(archivedApp, 'assets', 'onnxruntime'), { recursive: true, force: true })
+		console.log('[tauri-ios-asc] stripped assets/onnxruntime (standalone dylib not permitted on iOS)')
+		// Diagnostic only: surface any OTHER stray standalone .dylib (it would also be rejected)
+		// WITHOUT deleting — a linked lib must be repackaged as a framework, not silently dropped.
+		const left = spawnSync('find', [archivedApp, '-type', 'f', '-name', '*.dylib'], { encoding: 'utf8' })
+		const stray = (left.stdout ?? '').trim()
+		if (stray) {
+			console.warn(`[tauri-ios-asc] WARNING — other standalone .dylib still in bundle (will fail App Store validation):\n${stray}`)
+		}
+	}
+
 	console.log('[tauri-ios-asc] xcodebuild -exportArchive profile=%s', profileName)
 	const r = spawnSync(
 		'xcodebuild',

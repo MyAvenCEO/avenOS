@@ -136,6 +136,31 @@ pub fn decrypt_keyshare_payload(
 	Ok(o)
 }
 
+/// M9 group key — a 32-byte symmetric key forming the **2-level key hierarchy**. A group's
+/// value DEKs are wrapped UNDER its group key; the group key is wrapped once to each member
+/// AND to the group's PARENT group key. So a parent member, holding only the parent group
+/// key, unwraps the child group key, then any value DEK beneath it — inheriting the whole
+/// subtree with no per-value seal. A per-row group therefore costs ONE seal (to its parent),
+/// not N (one per member). Built on the same AEAD envelope as the keyshare wrap.
+pub type GroupKey = [u8; 32];
+
+#[must_use]
+pub fn random_group_key() -> GroupKey {
+	let mut b = [0u8; 32];
+	OsRng.fill_bytes(&mut b);
+	b
+}
+
+/// Wrap a 32-byte secret (a value DEK, or a child group key) under `group_key`.
+pub fn wrap_under_group_key(group_key: &GroupKey, inner32: &[u8; 32], aad: &[u8]) -> Result<String, String> {
+	encrypt_keyshare_payload(group_key, inner32, aad)
+}
+
+/// Unwrap a secret previously wrapped with [`wrap_under_group_key`].
+pub fn unwrap_under_group_key(group_key: &GroupKey, wrapped: &str, aad: &[u8]) -> Result<[u8; 32], String> {
+	decrypt_keyshare_payload(wrapped, group_key, aad)
+}
+
 #[must_use]
 pub fn seal_text_cell_payload(
 	dek32: &[u8; 32],
@@ -219,6 +244,7 @@ pub fn column_type_slug(ty: &ColumnType) -> &'static str {
 		ColumnType::Json { .. } => "json",
 		ColumnType::Array { .. } => "array",
 		ColumnType::Row { .. } => "row",
+		ColumnType::Vector { .. } => "vector",
 	}
 }
 
@@ -259,7 +285,9 @@ pub fn groove_value_to_canonical_utf8(val: &Value) -> Result<String, String> {
 		Value::Bytea(b) => {
 			json!({"schema_v": CELL_CANON_SCHEMA_V, "t": "bytea", "v": BASE64_ENC.encode(b)})
 		}
-		Value::Array(_) | Value::Row { .. } => return Err("canon_nested_unsupported".into()),
+		Value::Array(_) | Value::Row { .. } | Value::Vector(_) => {
+			return Err("canon_nested_unsupported".into())
+		}
 	};
 	Ok(j.to_string())
 }
@@ -362,6 +390,15 @@ fn groove_value_to_ipc_json(cell: &Value) -> JsonValue {
 		Value::Bytea(b) => JsonValue::String(
 			base64::engine::general_purpose::STANDARD.encode(b),
 		),
+		Value::Vector(v) => JsonValue::Array(
+			v.iter()
+				.map(|f| {
+					Number::from_f64(*f as f64)
+						.map(JsonValue::Number)
+						.unwrap_or(JsonValue::Null)
+				})
+				.collect(),
+		),
 	}
 }
 
@@ -411,7 +448,9 @@ fn legacy_plain_to_ipc(opened_plain: &str, storage_ty: &ColumnType) -> Result<Js
 		ColumnType::BatchId => Ok(JsonValue::String(opened_plain.trim().to_string())),
 		ColumnType::Bytea => Ok(JsonValue::String(opened_plain.into())),
 		ColumnType::Json { .. } => serde_json::from_str(opened_plain).map_err(|_| "legacy_json".to_string()),
-		ColumnType::Array { .. } | ColumnType::Row { .. } => Err("legacy_nested".into()),
+		ColumnType::Array { .. } | ColumnType::Row { .. } | ColumnType::Vector { .. } => {
+			Err("legacy_nested".into())
+		}
 	}
 }
 
@@ -451,9 +490,35 @@ mod tests {
 		column_type_slug, decrypt_keyshare_payload, dek_version_from_aad_bytes,
 		derive_kek_x25519, encrypt_keyshare_payload, groove_value_to_canonical_utf8,
 		ipc_json_from_opened_sensitive_plaintext, keyshare_wrap_aad, open_text_cell_payload,
-		random_identity_dek, seal_text_cell_payload, cell_seal_aad, ColumnType, Value,
+		random_group_key, random_identity_dek, seal_text_cell_payload, cell_seal_aad,
+		unwrap_under_group_key, wrap_under_group_key, ColumnType, Value,
 	};
 	use ed25519_dalek::SigningKey;
+
+	#[test]
+	fn group_key_two_level_inheritance() {
+		// The 2-level hierarchy that makes per-row groups affordable:
+		// parent group key -> child group key -> a value DEK.
+		let parent_gk = random_group_key();
+		let child_gk = random_group_key();
+		let value_dek = random_identity_dek();
+		let aad = b"m9-group-key";
+
+		// Wrap downward: the child group key under the parent; the value DEK under the child.
+		let child_wrapped = wrap_under_group_key(&parent_gk, &child_gk, aad).unwrap();
+		let dek_wrapped = wrap_under_group_key(&child_gk, value_dek.expose(), aad).unwrap();
+
+		// A PARENT member holds ONLY `parent_gk` and walks the chain to the value DEK —
+		// inheriting the whole subtree with no per-value seal.
+		let child_recovered = unwrap_under_group_key(&parent_gk, &child_wrapped, aad).unwrap();
+		assert_eq!(child_recovered, child_gk, "parent key -> child group key");
+		let dek_recovered = unwrap_under_group_key(&child_recovered, &dek_wrapped, aad).unwrap();
+		assert_eq!(dek_recovered, *value_dek.expose(), "child key -> value DEK (inherited)");
+
+		// A NON-member (a different key) cannot even start the chain.
+		let outsider = random_group_key();
+		assert!(unwrap_under_group_key(&outsider, &child_wrapped, aad).is_err());
+	}
 
 	#[test]
 	fn delegated_keyshare_wrap_unwrap() {

@@ -84,6 +84,34 @@ pub fn aven_ceo_identity(network_seed: &str) -> Uuid {
 	Uuid::from_bytes(bytes)
 }
 
+/// Deterministic id of a **sub-group** of `parent` (the group-owned-values model, M9).
+/// Every value can be owned by its own group; a group's id is derived from its parent +
+/// a stable `label`, so all peers compute the SAME id with no coordination. The **default**
+/// group of an identity is the identity id itself — so existing `owner = identity_id` rows
+/// need no migration — while finer groups (e.g. the registry) get a derived sub-id that
+/// **extends** the parent. Same SHA-256 domain-separated scheme as [`aven_ceo_identity`].
+pub fn derive_subgroup_id(parent: Uuid, label: &str) -> Uuid {
+	use sha2::{Digest, Sha256};
+	let mut h = Sha256::new();
+	h.update(b"avenos:group:v1:");
+	h.update(parent.as_bytes());
+	h.update(b":");
+	h.update(label.trim().as_bytes());
+	let digest = h.finalize();
+	let mut bytes = [0u8; 16];
+	bytes.copy_from_slice(&digest[..16]);
+	Uuid::from_bytes(bytes)
+}
+
+/// The **registry group** of an aven's control identity (M9-2): the sub-group that owns the
+/// member directory (`identities` + `peers` rows). A SYNC peer is keyshared THIS group's DEK
+/// (to read the directory) but never the control identity's main DEK — so it is
+/// **cryptographically** blind to any data the control identity owns, not merely
+/// authorization-filtered. `= derive_subgroup_id(aven_ceo_identity(seed), "registry")`.
+pub fn aven_ceo_registry_group(network_seed: &str) -> Uuid {
+	derive_subgroup_id(aven_ceo_identity(network_seed), "registry")
+}
+
 /// The rights a identity **owner** holds, minted into the genesis biscuit. THE single
 /// source of truth for the rights vocabulary: [`mint_genesis_identity`] grants exactly
 /// these, and [`identity_cap_report`] reports exactly these for an owner, so genesis
@@ -159,11 +187,22 @@ pub fn identity_cap_report(chain: &Biscuit, owner: Uuid) -> Result<Vec<SubjectCa
 		add(&mut acc, &did, "replicate", "rate_limit");
 	}
 	// Granular grants (row/table-scoped) — fold the op into the subject's caps.
-	for (did, op, _prefix) in identity_grants(chain, owner)? {
+	for (did, op, prefix) in identity_grants(chain, owner)? {
 		if owner_set.contains(did.trim()) {
 			continue;
 		}
-		add(&mut acc, &did, "member", &op);
+		// Honesty: a read SCOPED to the registry tables (`identities:` / `peers:`) is the
+		// SYNC peer's directory access — it reads the member directory, NOT the identity's
+		// data. Report it as the distinct cap `directory` so the badge can never imply broad
+		// read access (a full-identity read is still reported as `read`).
+		let cap: &str = if op == "read"
+			&& (prefix.ends_with(":identities:") || prefix.ends_with(":peers:"))
+		{
+			"directory"
+		} else {
+			op.as_str()
+		};
+		add(&mut acc, &did, "member", cap);
 	}
 
 	Ok(acc
@@ -238,6 +277,58 @@ pub fn mint_genesis_identity(
 
 	bb.build(&vault.biscuit_kp)
 		.map_err(|e| format!("genesis-build:{e}"))
+}
+
+/// Mint a **sub-group** genesis biscuit (M9 group-owned values). Like
+/// [`mint_genesis_identity`] — the creating vault is the group's `owns` admin with full
+/// [`OWNER_RIGHTS`] over the group's resource prefix — but it also records
+/// `extends("identity:<parent>")`. That fact makes the group **inherit** the parent
+/// group's members: the live authorizer, on a local deny, consults the parent chain, so a
+/// member of the parent is a member here with no per-group re-grant (cheap fine
+/// granularity). Granularity is purely the `group_id` you pass — identity-level (the
+/// identity itself), collection-level (`derive_subgroup_id(id, "todos")`), or row-level
+/// (`derive_subgroup_id(id, row_id)`). The data model is identical at every level.
+pub fn mint_group_genesis_extending(
+	vault: &BiscuitVault,
+	group_id: Uuid,
+	parent_id: Uuid,
+) -> Result<Biscuit, String> {
+	let group_urn = identity_urn_for(group_id);
+	let prefix_lit = format!("{group_urn}:");
+	let parent_urn = identity_urn_for(parent_id);
+	let own_f = format!(
+		"owns(\"{}\", \"{}\")",
+		vault.peer_did.replace('"', "\\\""),
+		group_urn.replace('"', "\\\"")
+	);
+	let mut bb = Biscuit::builder()
+		.fact(own_f.as_str())
+		.map_err(|e| format!("group-own-fact:{e}"))?;
+	for op in OWNER_RIGHTS {
+		let rf = format!("right(\"{op}\", \"{}\")", prefix_lit.replace('"', "\\\""));
+		bb = bb.fact(rf.as_str()).map_err(|e| format!("group-right:{e}"))?;
+	}
+	// Inheritance link: the live authorizer, on a deny, consults `parent`'s chain.
+	let ext_f = format!("extends(\"{}\")", parent_urn.replace('"', "\\\""));
+	bb = bb.fact(ext_f.as_str()).map_err(|e| format!("group-extends:{e}"))?;
+	bb.build(&vault.biscuit_kp).map_err(|e| format!("group-build:{e}"))
+}
+
+/// The parent group this group `extends`, if any (M9 inheritance). `None` = a root group
+/// (e.g. an identity's default group). Read straight from the genesis chain.
+pub fn group_extends_parent(chain: &Biscuit) -> Result<Option<Uuid>, String> {
+	let mut authorizer = chain.authorizer().map_err(|e| format!("b-authorizer:{e}"))?;
+	let rows: Vec<(String,)> = authorizer
+		.query_all("parent($u) <- extends($u)")
+		.map_err(|e| format!("b-query-extends:{e}"))?;
+	for (urn,) in rows {
+		if let Some(rest) = urn.strip_prefix("identity:") {
+			if let Ok(u) = Uuid::parse_str(rest.trim()) {
+				return Ok(Some(u));
+			}
+		}
+	}
+	Ok(None)
 }
 
 /// Append a third-party biscuit block granting `new_peer_did` an [`owns`] fact on this Identity,
@@ -453,7 +544,55 @@ fn trusted_subject_dids(b: &Biscuit, identity_urn: &str) -> Result<HashSet<Strin
 	Ok(admins.into_iter().map(|x| x.0).collect())
 }
 
+/// Maximum group-extension chain depth (cycle / runaway guard).
+const MAX_GROUP_DEPTH: u32 = 8;
+
+/// Authorize `subject_did` for `op` on `owner`'s `table[:row]`. **M9 group inheritance:**
+/// if the owner group's biscuit denies AND the group `extends(parent)`, a member of the
+/// parent inherits the SAME authority here — re-checked against the parent group, bounded
+/// by [`MAX_GROUP_DEPTH`]. A root group (no `extends` fact) behaves exactly as before, so
+/// every existing identity is unaffected.
 pub fn authorize(
+	vault: &BiscuitVault,
+	owner: Uuid,
+	op: AccOp,
+	table: &str,
+	row_id: Option<Uuid>,
+	subject_did: &str,
+) -> Result<(), String> {
+	authorize_with_depth(vault, owner, op, table, row_id, subject_did, 0)
+}
+
+fn authorize_with_depth(
+	vault: &BiscuitVault,
+	owner: Uuid,
+	op: AccOp,
+	table: &str,
+	row_id: Option<Uuid>,
+	subject_did: &str,
+	depth: u32,
+) -> Result<(), String> {
+	match authorize_local(vault, owner, op, table, row_id, subject_did) {
+		Ok(()) => Ok(()),
+		Err(e) => {
+			// Inheritance: a member of the parent group is a member here too.
+			if depth < MAX_GROUP_DEPTH {
+				if let Some(chain) = vault.identities.get(&owner) {
+					if let Ok(Some(parent)) = group_extends_parent(&chain.biscuit) {
+						if authorize_with_depth(vault, parent, op, table, row_id, subject_did, depth + 1)
+							.is_ok()
+						{
+							return Ok(());
+						}
+					}
+				}
+			}
+			Err(e)
+		}
+	}
+}
+
+fn authorize_local(
 	vault: &BiscuitVault,
 	owner: Uuid,
 	op: AccOp,
@@ -839,6 +978,70 @@ mod tests {
 		assert_eq!(a, b, "same seed → same avenCEO id (every device agrees)");
 		assert_ne!(a, c, "different network seed → different avenCEO id (no cross-network collision)");
 		assert_ne!(a, Uuid::nil());
+	}
+
+	#[test]
+	fn subgroup_id_is_deterministic_and_isolated() {
+		let seed = "ceo.aven/testnet/abagana";
+		let ceo = aven_ceo_identity(seed);
+		// Deterministic — every peer derives the same registry-group id with no coordination.
+		assert_eq!(aven_ceo_registry_group(seed), aven_ceo_registry_group(seed));
+		assert_eq!(aven_ceo_registry_group(seed), derive_subgroup_id(ceo, "registry"));
+		// A sub-group is its OWN key boundary: distinct from the parent identity...
+		assert_ne!(aven_ceo_registry_group(seed), ceo, "registry group != identity (own DEK boundary)");
+		// ...and from sibling labels (registry vs a future data group).
+		assert_ne!(
+			derive_subgroup_id(ceo, "registry"),
+			derive_subgroup_id(ceo, "messages"),
+			"distinct labels -> distinct groups"
+		);
+		// Parent-scoped: same label under a different parent → different group (no collision).
+		let other = aven_ceo_identity("ceo.aven/mainnet/other");
+		assert_ne!(derive_subgroup_id(ceo, "registry"), derive_subgroup_id(other, "registry"));
+		assert_ne!(aven_ceo_registry_group(seed), Uuid::nil());
+	}
+
+	#[test]
+	fn group_genesis_extends_parent_and_grants_owner() {
+		let root = [7u8; 32];
+		let mut v = vault(&root);
+		let parent = aven_ceo_identity("ceo.aven/testnet/abagana");
+		let group = derive_subgroup_id(parent, "registry");
+		let biscuit = mint_group_genesis_extending(&v, group, parent).unwrap();
+		// The genesis records the parent it extends (the inheritance link).
+		assert_eq!(group_extends_parent(&biscuit).unwrap(), Some(parent));
+		// The creator is the group's owner — full rights over the GROUP's own prefix.
+		v.identities.insert(group, BiscuitIdentity { owner: group, biscuit });
+		authorize(&v, group, AccOp::Write, "todos", None, &v.peer_did.clone()).unwrap();
+		// A plain identity genesis has no parent (it is a root group).
+		let id = uuid::Uuid::new_v4();
+		let plain = mint_genesis_identity(&v, id).unwrap();
+		assert_eq!(group_extends_parent(&plain).unwrap(), None);
+	}
+
+	#[test]
+	fn group_inherits_parent_members() {
+		let mut v = vault(&[11u8; 32]); // creator / admin
+		let reader = vault(&[12u8; 32]); // a parent member (delegated reader)
+		let outsider = vault(&[13u8; 32]); // member of neither
+
+		// Parent identity owned by `v`, with `reader` added as a delegated reader.
+		let parent = uuid::Uuid::new_v4();
+		let mut pb = mint_genesis_identity(&v, parent).unwrap();
+		pb = attenuate_add_reader_third_party(&v.biscuit_kp, &pb, parent, &reader.peer_did).unwrap();
+		v.identities.insert(parent, BiscuitIdentity { owner: parent, biscuit: pb });
+
+		// A sub-group (collection-level) that EXTENDS the parent.
+		let group = derive_subgroup_id(parent, "todos");
+		let gb = mint_group_genesis_extending(&v, group, parent).unwrap();
+		v.identities.insert(group, BiscuitIdentity { owner: group, biscuit: gb });
+
+		// Inheritance: the parent's reader may READ the sub-group with NO per-group grant.
+		authorize(&v, group, AccOp::Read, "todos", Some(uuid::Uuid::new_v4()), &reader.peer_did).unwrap();
+		// The creator (parent owner) may WRITE the sub-group (its own `owns`).
+		authorize(&v, group, AccOp::Write, "todos", None, &v.peer_did.clone()).unwrap();
+		// An outsider (member of neither parent nor group) is DENIED — inheritance is bounded.
+		assert!(authorize(&v, group, AccOp::Read, "todos", Some(uuid::Uuid::new_v4()), &outsider.peer_did).is_err());
 	}
 
 	#[test]

@@ -6,7 +6,9 @@ import { transcribeAudio } from '$lib/intent-mock/transcribe'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import {
 	asrState,
+	startDownload as startAsrDownload,
 	type VoicePrep,
+	voiceNeedsSetup,
 	voicePrep as voicePrepOf,
 	voiceUnavailableReason as voiceUnavailableReasonOf
 } from '$lib/asr/model-download-store'
@@ -246,6 +248,18 @@ function onMobileCollapsedPointerDown(e: PointerEvent) {
 		holdActive = true
 		listeningSubmitOnRelease = true
 		openListening()
+		// Opening the listening viewer replaces the element that captured this pointer, so its
+		// pointerup never fires on it — catch the release at the window level so hold-to-record
+		// still submits on release. The on-screen submit/cancel buttons are the visible fallback.
+		const onHoldRelease = () => {
+			window.removeEventListener('pointerup', onHoldRelease)
+			window.removeEventListener('pointercancel', onHoldRelease)
+			if (!holdActive) return
+			holdActive = false
+			if (mode === 'listening') void commitVoiceNote()
+		}
+		window.addEventListener('pointerup', onHoldRelease)
+		window.addEventListener('pointercancel', onHoldRelease)
 	}, LONG_PRESS_MS)
 }
 
@@ -564,6 +578,14 @@ function openListening() {
 	// progress / note instead (the parent supplies `voicePrep`).
 	if (effectiveVoiceReason != null) {
 		void focusShellWebview()
+		// Auto-start the download+load on first entry into audio mode (mirrors the
+		// LFM model auto-starting on first generate). When the model still needs
+		// setup (idle/error, not already in flight, real wired runtime), kick it so
+		// the same "preparing" pill shows live progress instead of stalling on a
+		// "set it up in Settings" note. A no-op for secondary instances (unavailable).
+		if (tauriRuntime && voiceNeedsSetup($asrState.status)) {
+			void startAsrDownload()
+		}
 		onVoiceUnavailableClick?.()
 		mode = 'preparing'
 		return
@@ -876,10 +898,11 @@ const pillClass = $derived.by(() => {
 					></span>
 				{/each}
 			</div>
-			{#if !listeningSubmitOnRelease}
-				<div
-					class={`flex shrink-0 items-center justify-end ${isMobile ? 'gap-1.5 pl-1' : 'w-[4.5rem] gap-2'}`}
-				>
+			<!-- Always show submit/cancel — incl. hold-to-record (long-press) mode, so there is
+			     always a visible way to commit or stop even if release-to-submit doesn't fire. -->
+			<div
+				class={`flex shrink-0 items-center justify-end ${isMobile ? 'gap-1.5 pl-1' : 'w-[4.5rem] gap-2'}`}
+			>
 					<button
 						type="button"
 						class="flex size-8 shrink-0 items-center justify-center rounded-full border border-status-success/35 bg-status-success text-status-success-foreground shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] outline-none transition-colors hover:bg-status-success/90 focus-visible:ring-2 focus-visible:ring-status-success/40"
@@ -915,7 +938,6 @@ const pillClass = $derived.by(() => {
 						</svg>
 					</button>
 				</div>
-			{/if}
 	</div>
 	{:else if mode === 'preparing'}
 		<div class={pillClass} role="status" aria-live="polite">

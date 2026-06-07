@@ -5,6 +5,15 @@
 	import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 	import type { ComposerMode } from '$lib/intents/types'
 	import { persistSparkFiles } from '$lib/jazz/intent-files'
+	import { streamReply } from '$lib/llm/generate'
+	import {
+		agentUnavailableReason,
+		llmDownloadFraction,
+		llmState,
+		startLlmReadiness,
+	} from '$lib/llm/model-download-store'
+	import { formatBytesPair } from '$lib/asr/format'
+	import { onMount } from 'svelte'
 	import { jazzShell } from '$lib/runtime/jazz-shell'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import IdentityMessageAttachments from '$lib/identities/IdentityMessageAttachments.svelte'
@@ -31,9 +40,17 @@
 
 	let { identityId, sparkName }: Props = $props()
 
+	// Deterministic author DID for on-device agent replies (role-tagged in the row).
+	const AGENT_DID = 'did:aven:agent:lfm2'
+
 	const session = $derived($jazzShell.session)
 	let err = $state<string | undefined>()
 	let sendBusy = $state(false)
+	// Row id of the agent reply currently streaming (or undefined). The live text
+	// is held in `streaming` and only persisted to the row once the stream ends, so
+	// we don't write a Jazz row per token.
+	let streamingId = $state<string | undefined>()
+	let streaming = $state<Record<string, string>>({})
 	let composerMode = $state<ComposerMode>('collapsed')
 	let localPairingLabel = $state<string | undefined>(undefined)
 	let scrollEl = $state<HTMLDivElement | undefined>(undefined)
@@ -45,6 +62,33 @@
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
 	const composerDisabled = $derived(!session?.peerDid?.trim())
+
+	// Keep the on-device LLM status live so a pending agent bubble can explain WHY
+	// it's waiting (downloading the multi-GB model, loading it, not set up, error)
+	// instead of showing an opaque infinite spinner.
+	onMount(() => {
+		let unlisten: (() => void) | undefined
+		void startLlmReadiness().then((u) => (unlisten = u))
+		return () => unlisten?.()
+	})
+
+	/** Status line shown inside a pending agent bubble (before any token arrives). */
+	const agentPendingLabel = $derived.by(() => {
+		const s = $llmState
+		if (s.status === 'ready') return t('identities.talk.agentThinking')
+		const reason = agentUnavailableReason(s) ?? t('identities.talk.agentThinking')
+		if (s.status === 'downloading' && s.totalBytes > 0) {
+			return `${reason} ${formatBytesPair(s.receivedBytes, s.totalBytes)}`
+		}
+		return reason
+	})
+	const agentDownloadFraction = $derived(llmDownloadFraction($llmState))
+	/** While pending, show animated dots only when actively generating/loading. */
+	const agentPendingBusy = $derived(
+		$llmState.status === 'ready' ||
+			$llmState.status === 'loading' ||
+			$llmState.status === 'downloading',
+	)
 
 	// On-device voice transcription: IntentComposer wires the real on-device STT
 	// path (and the download-progress / setup states) itself when running in Tauri,
@@ -174,6 +218,7 @@
 				owner: canonicalSparkId,
 				created_at_ms: Date.now(),
 				author_did: did,
+				role: 'user',
 				body,
 			})
 			if (files.length > 0) {
@@ -188,10 +233,52 @@
 					err = suffix
 				}
 			}
+			// Fire the on-device agent reply (text-only prompts for now).
+			if (body) void replyWithAgent(body)
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {
 			sendBusy = false
+		}
+	}
+
+	/**
+	 * Create an empty agent message row, then stream LFM2.5 tokens into it live.
+	 * Tokens accumulate in `streaming[id]` (rendered as the bubble body); the final
+	 * text is persisted to the row once on completion.
+	 */
+	async function replyWithAgent(prompt: string): Promise<void> {
+		if (!canonicalSparkId) return
+		let replyId: string | undefined
+		try {
+			const reply = await messages.create({
+				owner: canonicalSparkId,
+				created_at_ms: Date.now(),
+				author_did: AGENT_DID,
+				role: 'agent',
+				body: '',
+			})
+			replyId = reply.id
+			streamingId = reply.id
+			streaming = { ...streaming, [reply.id]: '' }
+			const full = await streamReply(prompt, reply.id, (piece) => {
+				// Reassign (not mutate) so the {#each} liveBody const re-derives reliably.
+				streaming = { ...streaming, [reply.id]: (streaming[reply.id] ?? '') + piece }
+			})
+			await messages.update(reply.id, { body: full || (streaming[reply.id] ?? '') })
+		} catch (e) {
+			const msg = e instanceof Error ? e.message : String(e)
+			if (replyId) {
+				await messages.update(replyId, { body: `⚠️ ${msg}` }).catch(() => {})
+			} else {
+				err = msg
+			}
+		} finally {
+			if (replyId) {
+				const { [replyId]: _drop, ...rest } = streaming
+				streaming = rest
+			}
+			streamingId = undefined
 		}
 	}
 </script>
@@ -236,16 +323,20 @@
 				{:else}
 					{#each thread as msg (msg.id)}
 						{@const own = isOwnMessage(msg)}
+						{@const isAgent = msg.role === 'agent'}
+						{@const label = isAgent ? t('identities.talk.agentLabel') : authorLabel(msg.author_did)}
+						{@const liveBody = streaming[msg.id] ?? msg.body}
+						{@const pending = streamingId === msg.id && !liveBody?.trim()}
 						{@const attachments = filesByMessageId.get(msg.id) ?? []}
 						<article
 							class="flex flex-col gap-0.5 {own ? 'items-end' : 'items-start'}"
 							aria-label={t('identities.talk.authorAtTime', {
-								author: authorLabel(msg.author_did),
+								author: label,
 								time: formatTime(msg.created_at_ms),
 							})}
 						>
 							<div class="flex items-baseline gap-2 px-0.5 text-[10px]">
-								<span class="text-foreground font-medium">{authorLabel(msg.author_did)}</span>
+								<span class="text-foreground font-medium {isAgent ? 'text-primary' : ''}">{label}</span>
 								<time
 									class="text-muted-foreground"
 									datetime={Number.isFinite(coerceEpochMs(msg.created_at_ms))
@@ -259,12 +350,37 @@
 								class="flex max-w-[min(100%,36rem)] flex-col gap-2 rounded-2xl px-3 py-2
 									{own
 									? 'bg-primary text-primary-foreground rounded-br-md'
-									: 'bg-muted text-foreground rounded-bl-md'}"
+									: isAgent
+										? 'bg-muted/70 text-foreground rounded-bl-md ring-1 ring-primary/20'
+										: 'bg-muted text-foreground rounded-bl-md'}"
 							>
-								{#if msg.body?.trim()}
+								{#if pending}
+									<div class="flex flex-col gap-1.5 py-0.5" aria-live="polite">
+										<span class="flex items-center gap-2 text-xs text-muted-foreground">
+											{#if agentPendingBusy}
+												<span class="flex gap-1" aria-hidden="true">
+													<span class="size-1.5 animate-bounce rounded-full bg-foreground/40 [animation-delay:-0.3s]"></span>
+													<span class="size-1.5 animate-bounce rounded-full bg-foreground/40 [animation-delay:-0.15s]"></span>
+													<span class="size-1.5 animate-bounce rounded-full bg-foreground/40"></span>
+												</span>
+											{/if}
+											<span>{agentPendingLabel}</span>
+										</span>
+										{#if $llmState.status === 'downloading' && agentDownloadFraction != null}
+											<div class="h-1 w-40 overflow-hidden rounded-full bg-muted">
+												<div
+													class="h-full rounded-full bg-primary transition-[width] duration-300"
+													style={`width: ${Math.round(agentDownloadFraction * 100)}%`}
+												></div>
+											</div>
+										{/if}
+									</div>
+								{:else if liveBody?.trim()}
 									<p class="text-sm leading-relaxed whitespace-pre-wrap break-words">
-										{msg.body}
+										{liveBody}
 									</p>
+								{:else if isAgent}
+									<p class="text-sm italic text-muted-foreground">{t('identities.talk.agentNoReply')}</p>
 								{/if}
 								{#if attachments.length > 0}
 									<IdentityMessageAttachments files={attachments} inverted={own} />

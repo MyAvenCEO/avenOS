@@ -19,6 +19,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { applyAppleEnvLocal } from './apple-env'
+import { ensureOnnxruntimeDylib } from './fetch-onnxruntime.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appDir = path.join(repoRoot, 'app')
@@ -101,6 +102,29 @@ async function main() {
 	mkdirSync(path.dirname(profileDest), { recursive: true })
 	copyFileSync(profileSrc, profileDest)
 	console.log(`[build-appstore-macos] copied provisioning profile → ${profileDest}`)
+
+	// On-device LLM runtime: the onnxruntime dylib is bundled as a Tauri resource
+	// (see tauri.conf.json `resources`). Ensure it's present before `tauri build`, else
+	// generate_context! fails on the missing resource.
+	const onnxDylib = ensureOnnxruntimeDylib('arm64')
+	console.log('[build-appstore-macos] onnxruntime dylib provisioned')
+	// Re-sign it with OUR distribution identity. It ships signed by Microsoft, and Tauri's
+	// macOS signing is SHALLOW (it signs the main executable + the .app bundle, NOT nested
+	// dylibs), so without this the dylib keeps Microsoft's signature and App Store Connect
+	// rejects the build: "90238 Invalid signature … libonnxruntime.dylib: code failed to
+	// satisfy specified code requirement(s)". Sign the SOURCE binary with hardened runtime
+	// (to match the app) so Tauri copies the correctly-signed dylib into the bundle BEFORE it
+	// seals the .app (which then hashes this signed dylib into a valid seal).
+	const onnxSign = spawnSync(
+		'codesign',
+		['--force', '--options', 'runtime', '--timestamp', '--sign', signId, onnxDylib],
+		{ stdio: 'inherit' },
+	)
+	if (onnxSign.status !== 0) {
+		console.error('[build-appstore-macos] failed to codesign onnxruntime dylib')
+		process.exit(onnxSign.status ?? 1)
+	}
+	console.log('[build-appstore-macos] re-signed onnxruntime dylib → distribution identity')
 
 	mkdirSync(path.join(repoRoot, 'dist'), { recursive: true })
 	const mergeDir = mkdtempSync(path.join(repoRoot, 'dist', 'macos-appstore-tmp-'))

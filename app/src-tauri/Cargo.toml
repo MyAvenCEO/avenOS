@@ -37,12 +37,15 @@ path = "src/main.rs"
 # script downloads prebuilt static libs (incl. onnxruntime) — no CMake needed.
 # Build with `--no-default-features` to get the light stub build (CI / quick
 # checks). The first-run model download (~640 MB tarball) is user-initiated.
-default = ["local-voice"]
+default = ["local-voice", "local-llama"]
 local-voice = ["dep:aven-ai", "aven-ai/stt"]
-# Kept for the future on-device Gemma path. OFF by default — enabling pulls in
-# the heavy `mistralrs` inference crate (~400MB+ build). Re-enable with
-# `--features gemma` once that path is wired up.
-gemma = ["dep:aven-ai", "aven-ai/gemma"]
+# On-device text LLM (LFM2.5-8B-A1B ONNX via onnxruntime/`ort`). ON by default.
+# `ort` uses `load-dynamic`, so the build is light (no static onnxruntime); the
+# onnxruntime dylib ships in the app bundle and model weights download on demand.
+local-llm = ["dep:aven-ai", "aven-ai/llm"]
+# On-device text LLM via llama.cpp (LFM2.5-8B-A1B GGUF, Metal, statically linked — no dylib).
+# The replacement for `local-llm` (ONNX). OFF by default during the spike: `--features local-llama`.
+local-llama = ["dep:aven-ai", "aven-ai/llama"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

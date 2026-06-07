@@ -13,8 +13,15 @@ default = []
 # On-device speech-to-text via sherpa-onnx. The `sherpa-onnx-sys` build script
 # downloads a prebuilt static sherpa-onnx + onnxruntime (no CMake needed).
 stt = ["dep:sherpa-onnx", "dep:ureq", "dep:tar", "dep:bzip2"]
-# Future on-device LLM path (Gemma, etc.) via mistralrs. Heavy; off by default.
-gemma = ["dep:mistralrs"]
+# On-device text LLM (LFM2.5-8B-A1B ONNX) via onnxruntime (`ort`). `load-dynamic`
+# loads a bundled `libonnxruntime` at runtime so it never statically links a
+# second onnxruntime alongside the one `sherpa-onnx-sys` embeds (no symbol clash),
+# and stays App-Store/TestFlight-safe (the dylib ships signed in the app bundle;
+# only model *weights* download at first run).
+llm = ["dep:ort", "dep:half", "dep:tokenizers", "dep:ureq", "dep:serde_json", "dep:log"]
+# On-device LLM via llama.cpp (LFM2.5-8B-A1B GGUF). Statically linked (no dylib to bundle or
+# sign), Metal on Apple. Same GGUF runs on macOS AND iOS. Replaces the ONNX `llm` path.
+llama = ["dep:llama-cpp-2", "dep:ureq", "dep:log"]
 
 [dependencies]
 # STT engine + first-run model download (tar.bz2 from GitHub releases) + extract.
@@ -22,9 +29,19 @@ sherpa-onnx = { version = "1.13", optional = true }
 ureq = { version = "2", optional = true }
 tar = { version = "0.4", optional = true }
 bzip2 = { version = "0.4", optional = true }
-# Future on-device LLM engine.
-mistralrs = { version = "0.8", optional = true }
+# LLM engine: onnxruntime bindings (runtime-loaded dylib) + HF tokenizer + JSON.
+# `half` → f16 cache/logit tensors (the q4f16 export is fp16); `std` for the std runtime.
+# `api-24` matches ort's own default API level (its EP modules reference that API
+# surface unconditionally); the bundled onnxruntime must be ≥ the matching release.
+ort = { version = "2.0.0-rc.12", optional = true, default-features = false, features = ["std", "ndarray", "half", "load-dynamic", "api-24"] }
+half = { version = "2", optional = true }
+tokenizers = { version = "0.20", optional = true, default-features = false, features = ["onig"] }
+serde_json = { version = "1", optional = true }
+log = { version = "0.4", optional = true }
+# On-device LLM engine: llama.cpp (GGUF). Built static from source (in the executable — no
+# dylib), so the App-Store dylib codesign/strip saga goes away on both macOS and iOS.
+llama-cpp-2 = { version = "0.1.146", optional = true }
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
-# Apple GPU backend for the future mistralrs/Gemma path (only with `gemma`).
-mistralrs = { version = "0.8", optional = true, features = ["metal"] }
+# Apple GPU backend (Metal) for the llama.cpp LLM path; Metal shaders embed into the binary.
+llama-cpp-2 = { version = "0.1.146", optional = true, features = ["metal"] }

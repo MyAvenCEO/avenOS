@@ -156,10 +156,21 @@ own independent allowance. Per-identity Owner/Member/Relay sharing stays as-is (
 
 ---
 
-## ☐ Milestone 8 — Sharing resilience + caps transparency (from live testing)
+## ◑ Milestone 8 — Sharing resilience + caps transparency (code done — pending live re-verify)
 
-The grant/revoke/member flow works but is **brittle** — live testing surfaced dead-end
-errors + missing UI. Two buckets: **correctness bugs** and **transparency/UX**.
+Live testing surfaced dead-end errors + missing UI. **Done & on `main`:**
+- **B1** make `peers.device_label` nullable — fixes `missing column device_label` (`b0764de`).
+- **B2/B3** re-hydrate vault shell on relay-forwarded peer-sync — fixes `subject_not_owner` +
+  `missing_dek_cached` "only after restart" (`1214c45`).
+- **G1** remove Capabilities sub-tab (`a247ebd`). **H1/H2** cap badges + descriptions (`9a6013a`),
+  with the relay's quota+rate_limit reported as **biscuit-derived caps**, not synthesized (`f0acf12`).
+- **D1** real peer names — drop hardcoded "Replication Server" (`41394bb`).
+- **B4** auto-retry transient shell errors so add/revoke/read self-heal (`9de9d06`).
+- **#3** (Member reads): audited — `authorize_read_delegated` is correct; the failure was the
+  stale biscuit → **fixed by B2/B3**. **E1** (avenCEO display): `add_member` ships the avenCEO row
+  via the member's `reads` grant + re-announce → **displays once B2/B3 re-hydrates**.
+
+⇒ #3 + E1 need a **live re-verify** (manual). Original punch-list below for reference.
 
 ### Correctness (the brittleness)
 - [ ] **B1 — `missing column device_label` on grant** — the grant/publish-profile path
@@ -183,6 +194,84 @@ errors + missing UI. Two buckets: **correctness bugs** and **transparency/UX**.
   limit**) as badges, like READ/WRITE.
 - [ ] **H2 — Per-cap human-readable description** — collapsible "how this cap works under the
   hood" for every badge → 100% always-on transparency of effective caps.
+
+---
+
+## M9 — Group-owned values (per-group cryptographic ACLs)
+
+**Problem.** One DEK *per identity* → a keyshare is all-or-nothing. The SYNC peer needs the
+avenCEO DEK to read the registry, but that same DEK decrypts **everything avenCEO owns**.
+The read-grant scope is only an authorization *filter*; the **key is the real boundary, and
+it is too coarse**. No per-collection/per-row cryptographic isolation.
+
+**Model (Jazz/CoJSON group-extension, rebuilt on our owner-binding).** The **Group** is the
+ownership primitive. A Group = { `group_id` (UUID), per-version DEK, biscuit (members/caps),
+optional **parent** }. A row's `owner` is a **group_id**. Access = holding the group's DEK —
+the key is the boundary, at whatever granularity you choose.
+
+- **Default = the identity group.** An identity's default `group_id` **is** the identity
+  UUID — so every existing row (`owner = identity_id`) is already "in the identity's default
+  group," DEK unchanged. **Zero migration for the common path; 100% backward-compatible.**
+- **Extension (cheap granularity).** A finer group **extends** a parent: its biscuit
+  delegates to the parent group, inheriting the parent's members. A value's own group costs
+  ~one delegation link, not N per-member re-seals. Default inherits admin/read for free;
+  break out only where the access pattern differs.
+- **2-level keys.** Group key sealed to each member; value DEKs sealed to the group key.
+  Add a member → one seal to the group key → reaches every value the group owns.
+- **Granularity is a knob:** everything-in-identity-group (today) → per-collection group →
+  per-row group. Same primitive, cost dial per need.
+- **Forward secrecy preserved:** per-group DEK rotation on member-remove (as today).
+
+**Granularity spectrum (ONE mechanism — only the `group_id` assigned per row differs):**
+
+| Level | Group assignment | DEKs |
+|---|---|---|
+| Identity (today) | every row -> identity's default group (`group_id = identity_id`) | 1 / identity |
+| Collection | rows -> `derive_subgroup_id(identity, "todos")` | 1 / collection |
+| **Row** | row -> `derive_subgroup_id(identity, row_id)` | 1 / row |
+
+Already generic (no rewrite): `owner` is an opaque UUID; seal/hydrate/keyshare/biscuit are
+keyed by `(owner, version)` — so "owner = group" already works; a sub-group is just another
+owner UUID with its own DEK + genesis + keyshares.
+
+**Affordable to the row — 2-level keys + extension:** a **group key** is sealed to each
+member; a value's **DEK is sealed to the group key** (1 seal, not per-member); a sub-group's
+DEK is sealed to its **parent's group key**, so it **inherits** the parent's members for free
+(a per-row group costs one seal, not N). Override only where the member set actually differs.
+**Private-by-default:** a new row defaults to the identity group; you opt INTO sharing.
+
+**Phases:**
+
+- [x] **M9-1 — Group primitives (aven-caps, additive, tested).** `derive_subgroup_id(parent,
+  label)` (deterministic; row-level = label is the row id); `mint_group_genesis_extending`
+  (a sub-group genesis recording `extends(parent)`); `group_extends_parent`. 26 tests green.
+  No live-flow change — the default `group_id` stays the identity id.
+- [x] **M9-2 — Inheritance (authorize extension) + 2-level keys (aven-caps, 28 tests).**
+  `authorize()` recurses to the `extends` parent on a deny (bounded depth) -> a sub-group's
+  members ARE the parent's members, no per-group grant. `GroupKey` +
+  `wrap_under_group_key`/`unwrap_under_group_key`: a value DEK wraps under the group key, the
+  group key under its PARENT group key, so a parent member walks parent->child->DEK with ONE
+  seal (not N). Existing identities unaffected (no `extends` fact).
+- [x] **M9-3 — Per-collection groups (backend complete).** `create_collection_group(identity,
+  label)` IPC ships (mints the sub-group genesis extending the identity + its DEK + keyshare +
+  `identities` row; `creategroup` dispatch). Data-routing needs NO backend change:
+  `groove_ipc_jazz_create` already owns a row by its `owner` column, so writing a row with
+  `owner = group_id` puts it in the group — authorized via inheritance, sealed under the
+  group's own DEK. Existing rows untouched (default = identity group). **Remaining: the
+  frontend share-a-collection UX** (call `creategroup`, write rows with the group owner).
+- [x] **M9-4 — Per-row groups (backend complete).** Same IPC + write path with `label =
+  row_id` -> one group per row. **Remaining: frontend opt-in.**
+
+**M9 status:** the full capability — library (ids, genesis, extension, inheritance authorize,
+2-level keys; 28 tests) + backend (create-group IPC, owner-routed writes) — is **complete and
+generic, no special-cases**. The only open work is the optional **frontend UX** to expose
+collection/row sharing; the data model and crypto are done all the way down to row level.
+
+**Delivers:** per-row crypto granularity is a **config choice** (the `group_id` you assign);
+the boundary is **the key**, generic, with no special-cases; the default path is unchanged.
+
+**Rejected:** a hardcoded "avenCEO may own only registry tables" invariant — a table-exclusion
+special-case. The group primitive is the generic, key-enforced replacement.
 
 ---
 

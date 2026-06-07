@@ -19,7 +19,6 @@
 					"name": "device_label",
 					"type": "text",
 					"plaintext": true,
-					"nullable": true,
 					"comment": "e.g. MacBook M1 — self-published device label (admin-identity roster) / local label (trust-set)"
 				},
 				{
@@ -166,12 +165,6 @@
 					"name": "body",
 					"type": "text",
 					"comment": "sealed at rest"
-				},
-				{
-					"name": "role",
-					"type": "text",
-					"nullable": true,
-					"comment": "sealed at rest; author kind: \"user\" | \"agent\" (null/absent on legacy rows = user). Plain text, NOT enum: the add-only migration lens fills a generic Text default that an enum's variant gate rejects (`expected Enum, got Some(Text)`)."
 				}
 			]
 		},
