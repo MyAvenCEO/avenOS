@@ -22,6 +22,16 @@
 		startLlmReadiness,
 		type LocalModel as LlmLocalModel,
 	} from '$lib/llm/model-download-store'
+	import {
+		cancelTtsDownload,
+		deleteTtsModel,
+		listLocalTtsModels,
+		startTtsDownload,
+		startTtsReadiness,
+		ttsDownloadFraction,
+		ttsState,
+		type LocalModel as TtsLocalModel,
+	} from '$lib/tts/model-download-store'
 	import { onMount } from 'svelte'
 
 	const tauri = $derived(browser && isTauriRuntime())
@@ -32,11 +42,37 @@
 	let llmLocal = $state<LlmLocalModel[]>([])
 	let llmBusyId = $state<string | null>(null)
 
+	// On-device TTS (MOSS-TTS-Nano) — separate model, manual download here.
+	let ttsLocal = $state<TtsLocalModel[]>([])
+	let ttsBusyId = $state<string | null>(null)
+
 	onMount(() => {
-		let unlisten: (() => void) | undefined
-		void startLlmReadiness().then((u) => (unlisten = u))
-		return () => unlisten?.()
+		let unlistenLlm: (() => void) | undefined
+		let unlistenTts: (() => void) | undefined
+		void startLlmReadiness().then((u) => (unlistenLlm = u))
+		void startTtsReadiness().then((u) => (unlistenTts = u))
+		return () => {
+			unlistenLlm?.()
+			unlistenTts?.()
+		}
 	})
+
+	async function onTtsStop() {
+		await cancelTtsDownload()
+		ttsLocal = await listLocalTtsModels()
+	}
+	async function onTtsStart() {
+		await startTtsDownload()
+	}
+	async function onTtsDelete(id: string) {
+		ttsBusyId = id
+		try {
+			await deleteTtsModel(id)
+			ttsLocal = await listLocalTtsModels()
+		} finally {
+			ttsBusyId = null
+		}
+	}
 
 	async function onLlmStop() {
 		await cancelLlmDownload()
@@ -123,6 +159,25 @@
 	const llmActiveOnDisk = $derived(llmLocal.find((m) => m.isActive))
 	const llmFraction = $derived(llmDownloadFraction($llmState))
 	const llmStatusKey = $derived($llmState.status)
+
+	// Re-scan the TTS listing whenever its readiness flips.
+	$effect(() => {
+		if (!tauri) {
+			ttsLocal = []
+			return
+		}
+		void $ttsState.status
+		let cancelled = false
+		void listLocalTtsModels().then((m) => {
+			if (!cancelled) ttsLocal = m
+		})
+		return () => {
+			cancelled = true
+		}
+	})
+	const ttsActiveOnDisk = $derived(ttsLocal.find((m) => m.isActive))
+	const ttsFraction = $derived(ttsDownloadFraction($ttsState))
+	const ttsStatusKey = $derived($ttsState.status)
 </script>
 
 <svelte:head>
@@ -322,6 +377,101 @@
 				<p class="text-status-error select-text text-[11px] leading-snug">{$llmState.error}</p>
 			{/if}
 			{#if llmStatusKey === 'unavailable'}
+				<p class="text-muted-foreground text-[11px] leading-snug">{t('models.secondaryInstance')}</p>
+			{/if}
+		</section>
+
+		<!-- On-device TTS (MOSS-TTS-Nano) — live status + manual download. -->
+		<section class="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
+			<div class="flex items-start justify-between gap-3">
+				<div class="min-w-0">
+					<div class="flex flex-wrap items-center gap-1.5">
+						<h2 class="truncate text-sm font-semibold tracking-tight">{$ttsState.model}</h2>
+						{#each MODALITIES as m (m)}
+							<span
+								class="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary"
+								>{t(`models.modalities.${m}`)}</span
+							>
+						{/each}
+					</div>
+					{#if $ttsState.quant}
+						<p class="text-muted-foreground mt-1 text-[11px]">{$ttsState.quant}</p>
+					{/if}
+					{#if ttsActiveOnDisk}
+						<p class="text-muted-foreground mt-0.5 font-mono text-[11px]">
+							{formatBytes(ttsActiveOnDisk.sizeBytes)}
+							{t('models.onDisk')}
+						</p>
+					{/if}
+				</div>
+				<div class="flex shrink-0 items-center gap-2">
+					<span
+						class="text-xs font-medium {ttsStatusKey === 'ready'
+							? 'text-status-success'
+							: ttsStatusKey === 'error'
+								? 'text-status-error'
+								: 'text-muted-foreground'}"
+					>
+						{t(`models.status.${ttsStatusKey}`)}
+					</span>
+					{#if ttsStatusKey === 'downloading'}
+						<button
+							type="button"
+							class="rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-foreground/80 outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-primary/30"
+							onclick={onTtsStop}
+						>
+							{t('models.stop')}
+						</button>
+					{:else if ttsStatusKey === 'idle' || ttsStatusKey === 'error'}
+						<button
+							type="button"
+							class="rounded-full border border-primary/40 px-2.5 py-1 text-[11px] font-medium text-primary outline-none transition-colors hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/30"
+							onclick={onTtsStart}
+						>
+							{ttsActiveOnDisk ? t('models.load') : t('models.download')}
+						</button>
+					{/if}
+					{#if ttsActiveOnDisk && ttsStatusKey !== 'unavailable'}
+						<button
+							type="button"
+							class="rounded-full border border-status-error/40 px-2.5 py-1 text-[11px] font-medium text-status-error outline-none transition-colors hover:bg-status-error/10 focus-visible:ring-2 focus-visible:ring-status-error/30 disabled:opacity-40"
+							disabled={ttsBusyId === ttsActiveOnDisk.id}
+							onclick={() => ttsActiveOnDisk && onTtsDelete(ttsActiveOnDisk.id)}
+						>
+							{ttsBusyId === ttsActiveOnDisk.id ? t('models.deleting') : t('models.delete')}
+						</button>
+					{/if}
+				</div>
+			</div>
+
+			{#if ttsStatusKey === 'downloading'}
+				<div class="space-y-1.5">
+					<div class="flex justify-end">
+						<span class="font-mono text-[10px] tabular-nums text-muted-foreground"
+							>{formatBytesPair($ttsState.receivedBytes, $ttsState.totalBytes)}</span
+						>
+					</div>
+					<div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+						{#if ttsFraction == null}
+							<div class="h-full w-1/3 animate-pulse rounded-full bg-primary/70"></div>
+						{:else}
+							<div
+								class="h-full rounded-full bg-primary transition-[width] duration-300"
+								style={`width: ${Math.round(ttsFraction * 100)}%`}
+							></div>
+						{/if}
+					</div>
+				</div>
+			{:else if ttsStatusKey === 'loading'}
+				<div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+					<div class="h-full w-1/3 animate-pulse rounded-full bg-primary/70"></div>
+				</div>
+			{/if}
+
+			{#if ttsStatusKey === 'error' && $ttsState.error}
+				<p class="text-status-error select-text text-[11px] leading-snug">{$ttsState.error}</p>
+			{/if}
+			{#if ttsStatusKey === 'unavailable'}
 				<p class="text-muted-foreground text-[11px] leading-snug">{t('models.secondaryInstance')}</p>
 			{/if}
 		</section>
