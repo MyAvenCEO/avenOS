@@ -205,33 +205,42 @@ mod imp {
 
 	use super::{TtsChunk, TtsStatus, CHUNK_EVENT, DOWNLOAD_EVENT, MODEL_DIR, MODEL_LABEL, MODEL_QUANT};
 
-	// TODO(export): point at the HF repo the MOSS-TTS-Nano ONNX export track
-	// publishes (the 4 graphs + `browser_poc_manifest.json` + `tokenizer.json`).
-	// Until those artifacts exist, a download attempt 404s and `tts_status` reports
-	// `error` — the command surface and engine wiring are otherwise complete.
-	const BASE_URL: &str = "https://huggingface.co/avenos/MOSS-TTS-Nano-ONNX/resolve/main/";
-	/// `(remote_subpath, local_filename)` — flattened so each `.onnx` finds any
-	/// `.onnx_data` siblings. (0.1B/20M weights are small; sidecars may be absent.)
+	// MOSS-TTS-Nano ships prebuilt ONNX across TWO public HF repos. The backbone
+	// (3 graphs we use + their `.data` weight sidecars + the manifest) and the codec
+	// (decoder graph + its `.data` sidecar) download into one flat dir.
+	const BASE_URL: &str = "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX/resolve/main/";
 	const FILES: &[(&str, &str)] = &[
 		("moss_tts_prefill.onnx", "moss_tts_prefill.onnx"),
 		("moss_tts_decode_step.onnx", "moss_tts_decode_step.onnx"),
 		("moss_tts_local_fixed_sampled_frame.onnx", "moss_tts_local_fixed_sampled_frame.onnx"),
-		("moss_audio_tokenizer_decode.onnx", "moss_audio_tokenizer_decode.onnx"),
+		("moss_tts_global_shared.data", "moss_tts_global_shared.data"),
+		("moss_tts_local_shared.data", "moss_tts_local_shared.data"),
 		("browser_poc_manifest.json", "browser_poc_manifest.json"),
-		("tokenizer.json", "tokenizer.json"),
 	];
+	const CODEC_BASE_URL: &str =
+		"https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/main/";
+	const CODEC_FILES: &[(&str, &str)] = &[
+		("moss_audio_tokenizer_decode_full.onnx", "moss_audio_tokenizer_decode_full.onnx"),
+		("moss_audio_tokenizer_decode_shared.data", "moss_audio_tokenizer_decode_shared.data"),
+	];
+	/// Bundled, verified fast tokenizer (upstream ships only a sentencepiece
+	/// `tokenizer.model`). Copied into the model dir before load. See
+	/// `scripts/moss-tts-nano-tokenizer.py`.
+	const TOKENIZER: &str = "tokenizer.json";
 
 	fn spec() -> TtsModelSpec {
 		TtsModelSpec {
 			dir: MODEL_DIR,
 			base_url: BASE_URL,
 			files: FILES,
+			codec_base_url: CODEC_BASE_URL,
+			codec_files: CODEC_FILES,
 			prefill: "moss_tts_prefill.onnx",
 			decode_step: "moss_tts_decode_step.onnx",
 			local_frame: "moss_tts_local_fixed_sampled_frame.onnx",
-			codec_decode: "moss_audio_tokenizer_decode.onnx",
+			codec_decode: "moss_audio_tokenizer_decode_full.onnx",
 			manifest: "browser_poc_manifest.json",
-			tokenizer: "tokenizer.json",
+			tokenizer: TOKENIZER,
 		}
 	}
 
@@ -326,6 +335,33 @@ mod imp {
 		))
 	}
 
+	/// Resolve the bundled `tokenizer.json` (a verified fast tokenizer; upstream
+	/// ships only a sentencepiece `tokenizer.model`). Resolution mirrors the dylib:
+	/// env override → app resources → dev-provisioned models copy.
+	fn resolve_tokenizer(app: &AppHandle) -> Result<PathBuf, String> {
+		if let Ok(p) = std::env::var("AVENOS_TTS_TOKENIZER") {
+			let p = PathBuf::from(p);
+			if p.is_file() {
+				return Ok(p);
+			}
+		}
+		if let Ok(res) = app.path().resource_dir() {
+			let p = res.join("resources").join("moss-tts-nano").join(TOKENIZER);
+			if p.is_file() {
+				return Ok(p);
+			}
+		}
+		let models = tauri_plugin_self::paths::models_dir(app)?;
+		let p = models.join("moss-tts-nano").join(TOKENIZER);
+		if p.is_file() {
+			return Ok(p);
+		}
+		Err(format!(
+			"bundled tokenizer.json not found (looked in app resources and {}); set AVENOS_TTS_TOKENIZER",
+			p.display()
+		))
+	}
+
 	async fn build_model(app: &AppHandle) -> Result<Synthesizer, String> {
 		let root = tauri_plugin_self::paths::models_dir(app)?;
 		state().cancelled.store(false, Ordering::Relaxed);
@@ -356,6 +392,22 @@ mod imp {
 		}
 
 		set_status(app, "loading", None);
+
+		// Place the bundled tokenizer.json into the model dir so the engine loads it
+		// alongside the downloaded onnx/manifest (idempotent; copies if missing/stale).
+		let tok_src = resolve_tokenizer(app)?;
+		let tok_dst = spec().model_dir(&root).join(TOKENIZER);
+		let needs_copy = std::fs::metadata(&tok_dst)
+			.ok()
+			.zip(std::fs::metadata(&tok_src).ok())
+			.map(|(d, s)| d.len() != s.len())
+			.unwrap_or(true);
+		if needs_copy {
+			std::fs::create_dir_all(spec().model_dir(&root))
+				.and_then(|_| std::fs::copy(&tok_src, &tok_dst).map(|_| ()))
+				.map_err(|e| format!("stage tokenizer: {e}"))?;
+		}
+
 		let dylib = resolve_dylib(app)?;
 		tts::init_runtime(&dylib)?;
 		let root3 = root.clone();

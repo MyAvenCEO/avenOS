@@ -37,18 +37,26 @@ use crate::onnx::CacheData;
 pub use crate::download::DownloadError;
 pub use crate::onnx::init_runtime;
 
-/// A downloadable ONNX TTS model: the four `.onnx` graphs (+ any `.onnx_data`
-/// sidecars), the `browser_poc_manifest.json` config, and the `tokenizer.json`,
-/// all landing flat under `<root>/<dir>/`.
+/// A downloadable ONNX TTS model, fetched from **two** HF repos into one flat dir:
+/// the backbone (`files`: 3 `.onnx` graphs + their `.data` weight sidecars + the
+/// `browser_poc_manifest.json`) and the codec (`codec_files`: the decoder graph +
+/// its `.data` sidecar). The `tokenizer.json` is NOT downloaded — upstream ships
+/// only a sentencepiece `tokenizer.model`, so a verified fast `tokenizer.json` is
+/// bundled with the app and the caller places it in this dir before [`Synthesizer::load`].
 #[derive(Clone, Copy, Debug)]
 pub struct TtsModelSpec {
 	/// Directory under the models root the files download into (also the delete id).
 	pub dir: &'static str,
-	/// Base URL the `files` are resolved against (e.g. a HF `.../resolve/main/`).
+	/// Base URL the backbone `files` are resolved against (a HF `.../resolve/main/`).
 	pub base_url: &'static str,
-	/// `(remote_subpath, local_filename)` pairs, flat so each `.onnx` finds its
-	/// `.onnx_data` sidecars as siblings.
+	/// Backbone `(remote_subpath, local_filename)` pairs (3 graphs + `.data` sidecars
+	/// + manifest), flat so each `.onnx` finds its sidecars as siblings.
 	pub files: &'static [(&'static str, &'static str)],
+	/// Base URL for the codec (audio-tokenizer) repo — a *separate* HF repo.
+	pub codec_base_url: &'static str,
+	/// Codec `(remote, local)` pairs (decoder graph + its `.data` sidecar), landing in
+	/// the same flat dir as the backbone files.
+	pub codec_files: &'static [(&'static str, &'static str)],
 	/// Local filename of the prefill graph (text rows → global hidden + KV cache).
 	pub prefill: &'static str,
 	/// Local filename of the autoregressive global decode-step graph.
@@ -59,7 +67,7 @@ pub struct TtsModelSpec {
 	pub codec_decode: &'static str,
 	/// Local filename of the `browser_poc_manifest.json` (token config + voices).
 	pub manifest: &'static str,
-	/// Local filename of the HF `tokenizer.json`.
+	/// Local filename of the bundled `tokenizer.json` (placed in `dir` by the caller).
 	pub tokenizer: &'static str,
 }
 
@@ -68,27 +76,35 @@ impl TtsModelSpec {
 		root.join(self.dir)
 	}
 
-	/// True when every required file is present on disk.
+	/// True when every downloaded file (both backbone + codec groups) is present on
+	/// disk. The bundled `tokenizer.json` is checked separately by the caller.
 	pub fn files_present(&self, root: &Path) -> bool {
 		let d = self.model_dir(root);
-		self.files.iter().all(|(_, name)| d.join(name).is_file())
+		self.files
+			.iter()
+			.chain(self.codec_files.iter())
+			.all(|(_, name)| d.join(name).is_file())
 	}
 }
 
-/// Download each file in `spec` into `<root>/<spec.dir>/`. Thin wrapper over the
-/// shared [`crate::download::download_files`]. Blocking — run on a dedicated thread.
+/// Download both file groups in `spec` into `<root>/<spec.dir>/` (backbone repo then
+/// codec repo). Thin wrapper over the shared [`crate::download::download_files`].
+/// Blocking — run on a dedicated thread. Progress is reported per group (the bar
+/// fills for the backbone, then again for the smaller codec).
 pub fn download_files(
 	spec: &TtsModelSpec,
 	root: &Path,
 	cancelled: impl Fn() -> bool,
-	on_progress: impl FnMut(u64, u64),
+	mut on_progress: impl FnMut(u64, u64),
 ) -> Result<(), DownloadError> {
+	let dir = spec.model_dir(root);
+	crate::download::download_files(&dir, spec.base_url, spec.files, &cancelled, &mut on_progress)?;
 	crate::download::download_files(
-		&spec.model_dir(root),
-		spec.base_url,
-		spec.files,
-		cancelled,
-		on_progress,
+		&dir,
+		spec.codec_base_url,
+		spec.codec_files,
+		&cancelled,
+		&mut on_progress,
 	)
 }
 

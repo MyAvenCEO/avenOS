@@ -47,7 +47,8 @@
 			"../../libs/aven-schema/schema.manifest.json": "aven-schema/schema.manifest.json",
 			"../../libs/aven-schema/migrations/registry.json": "aven-schema/migrations/registry.json",
 			"../../libs/aven-schema/migrations/snapshots/before-files.manifest.json": "aven-schema/migrations/snapshots/before-files.manifest.json",
-			"onnxruntime/libonnxruntime.dylib": "onnxruntime/libonnxruntime.dylib"
+			"onnxruntime/libonnxruntime.dylib": "onnxruntime/libonnxruntime.dylib",
+			"resources/moss-tts-nano/tokenizer.json": "resources/moss-tts-nano/tokenizer.json"
 		},
 		"macOS": {
 			"minimumSystemVersion": "12.0"
