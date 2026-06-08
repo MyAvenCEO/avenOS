@@ -422,9 +422,24 @@
 											aria-label={t('identities.talk.speak')}
 											title={t('identities.talk.speak')}
 										>
-											<span aria-hidden="true"
-												>{speakingId === msg.id ? (speakPhase === 'generating' ? '⏳' : '⏵') : '🔊'}</span
-											>
+											{#if speakingId !== msg.id}
+												<!-- idle: play -->
+												<svg class="size-3" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+													<path d="M5 3.5v9l7-4.5z" />
+												</svg>
+											{:else if speakPhase === 'generating'}
+												<!-- generating: spinning loader -->
+												<svg class="size-3 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+													<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" opacity="0.25" />
+													<path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+												</svg>
+											{:else}
+												<!-- playing: pause bars -->
+												<svg class="size-3" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+													<rect x="4" y="3" width="3" height="10" rx="1" />
+													<rect x="9" y="3" width="3" height="10" rx="1" />
+												</svg>
+											{/if}
 											<span
 												>{#if speakingId !== msg.id}{t('identities.talk.speak')}{:else if speakPhase === 'generating'}{t('identities.talk.generating', { seconds: speakElapsed })}{:else}{t('identities.talk.playing', { seconds: speakElapsed })}{/if}</span
 											>
