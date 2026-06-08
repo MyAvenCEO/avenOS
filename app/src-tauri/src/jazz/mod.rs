@@ -661,32 +661,6 @@ pub(super) async fn groove_write_branch_from_connected_schema(
 
 /// Groove durable files live here (was `.avenOS/jazz` before AvenOS renamed the folder).
 const AVEN_OS_GROOVE_DATA_DIR: &str = "db";
-const LEGACY_JAZZ_DATA_DIR: &str = "jazz";
-
-fn migrate_legacy_jazz_dir_to_db(user_root: &Path) -> Result<(), String> {
-	let db = user_root.join(AVEN_OS_GROOVE_DATA_DIR);
-	if db.exists() {
-		return Ok(());
-	}
-	let legacy = user_root.join(LEGACY_JAZZ_DATA_DIR);
-	if legacy.exists() {
-		fs::rename(&legacy, &db).map_err(|e| {
-			format!(
-				"migrate Groove dir {} -> {}: {e}",
-				legacy.display(),
-				db.display()
-			)
-		})?;
-		log::info!(
-			target: "avenos::jazz",
-			"Migrated legacy Groove directory {} -> {}",
-			legacy.display(),
-			db.display()
-		);
-	}
-	Ok(())
-}
-
 const CURRENT_JAZZ_LANE: &str = "lane-v1;env=client;user_branch=main";
 
 /// True when `AVENOS_DATA_DIR_OVERRIDE` collapses every identity into one shared
@@ -1563,7 +1537,6 @@ async fn jazz_connect(
 	let groove_hash = *SchemaHash::compute(&schema).as_bytes();
 
 	let user_root = vault_user_root(app)?;
-	migrate_legacy_jazz_dir_to_db(&user_root)?;
 	let data_dir = user_root.join(AVEN_OS_GROOVE_DATA_DIR);
 	let live_schemas =
 		reconcile_jazz_identity_cache_dir(&data_dir, peer_id, &groove_hash, &schema)?;
@@ -4079,11 +4052,9 @@ pub async fn self_clear_jazz_database(
 ) -> Result<(), String> {
 	jazz.reset_connection().await;
 	let root = vault_user_root(&app)?;
-	for rel in [AVEN_OS_GROOVE_DATA_DIR, LEGACY_JAZZ_DATA_DIR] {
-		let p = root.join(rel);
-		if p.exists() {
-			fs::remove_dir_all(&p).map_err(|e| format!("remove {}: {e}", p.display()))?;
-		}
+	let p = root.join(AVEN_OS_GROOVE_DATA_DIR);
+	if p.exists() {
+		fs::remove_dir_all(&p).map_err(|e| format!("remove {}: {e}", p.display()))?;
 	}
 	Ok(())
 }
