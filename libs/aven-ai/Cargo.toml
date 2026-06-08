@@ -70,3 +70,9 @@ required-features = ["tts"]
 [[example]]
 name = "llm_tool"
 required-features = ["llama"]
+
+# CLI: word-level speech-to-text with our own Parakeet STT (reuses the `stt` engine).
+#   cargo run --release --example asr_transcribe --features stt -- in.wav out.json
+[[example]]
+name = "asr_transcribe"
+required-features = ["stt"]
