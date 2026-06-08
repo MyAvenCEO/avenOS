@@ -337,9 +337,19 @@ impl SyncManager {
                         .metadata
                         .get(crate::capability::EDIT_SIG_META_KEY)
                         .map(|s| s.as_bytes());
+                    // A delete-flagged row is a destructive act: gate it under the distinct
+                    // `Delete` capability, not `Write` (audit #6). A peer granted only `write`
+                    // must not be able to hard-delete a victim's row on every member. The
+                    // local originate gate already requires `Delete` for deletes; this makes
+                    // the inbound apply gate match it on every receiving peer.
+                    let apply_op = if row.delete_kind.is_some() {
+                        crate::capability::AccOp::Delete
+                    } else {
+                        crate::capability::AccOp::Write
+                    };
                     match resolver.verify_on_apply(
                         &subject,
-                        crate::capability::AccOp::Write,
+                        apply_op,
                         &res,
                         &digest.0,
                         proof,

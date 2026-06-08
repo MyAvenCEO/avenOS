@@ -110,7 +110,7 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 	fn verify_on_apply(
 		&self,
 		_subject: &SyncTargetId,
-		_op: AccOp,
+		op: AccOp,
 		res: &ResourceCoord,
 		digest: &[u8; 32],
 		proof: Option<&[u8]>,
@@ -198,13 +198,23 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 		if !shell.vault.identities.contains_key(&binding.owner) {
 			return CapDecision::Allow;
 		}
+		// Honor an inbound Delete (audit #6): a delete-flagged row must satisfy the distinct
+		// `Delete` cap, NOT be re-coerced to `Write` by the table mapping — otherwise a peer
+		// granted only `write` could hard-delete a victim's row on every member. Non-delete
+		// writes keep their per-kind cap (`peers`→`Admit`, `keyshares`→`RotateDek`, else
+		// `Write`). The engine derives `op == Delete` from the row's `delete_kind`.
+		let required_op = if op == AccOp::Delete {
+			crate::identity_acc::AccOp::Delete
+		} else {
+			required_write_op_for_table(&res.table)
+		};
 		// Full inbound gate: edit-sig over the receiver digest + owner-binding for this
-		// identity + the author holds the per-kind cap (`peers`→`Admit`, `keyshares`→
-		// `RotateDek`, else `Write`). The author is the edit-signature's signer.
+		// identity + the author holds the cap required for this op/kind. The author is the
+		// edit-signature's signer.
 		match aven_caps::ownership::authorize_signed_edit(
 			&shell.vault,
 			binding.owner,
-			required_write_op_for_table(&res.table),
+			required_op,
 			&res.table,
 			Some(binding.value_id),
 			&es,
