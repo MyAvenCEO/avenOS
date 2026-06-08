@@ -227,30 +227,19 @@ impl Synthesizer {
 		let manifest: Manifest = serde_json::from_slice(&manifest_bytes)
 			.map_err(|e| format!("parse manifest: {e}"))?;
 
+		// NOTE: CPU execution provider. The CoreML EP (GPU/ANE) segfaults when registered
+		// through ort's `load-dynamic` against the runtime-loaded onnxruntime dylib — an
+		// ABI mismatch in `commit_from_file`. GPU offload for MOSS would need a statically
+		// linked onnxruntime built with CoreML, not the bundled dylib.
 		let build = |file: &str| -> Result<Session, String> {
 			let path = dir.join(file);
 			let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
-			#[allow(unused_mut)]
-			let mut builder = Session::builder()
+			Session::builder()
 				.map_err(|e| format!("session builder: {e}"))?
 				.with_optimization_level(GraphOptimizationLevel::Level3)
 				.map_err(|e| format!("opt level: {e}"))?
 				.with_intra_threads(threads)
-				.map_err(|e| format!("threads: {e}"))?;
-			// Apple: run on the GPU/Neural Engine via CoreML (ANE+GPU), falling back to
-			// CPU per-op automatically for anything CoreML can't take. Compiled CoreML
-			// models are cached next to the GGUF so launches after the first are fast.
-			#[cfg(any(target_os = "macos", target_os = "ios"))]
-			{
-				builder = builder
-					.with_execution_providers([ort::ep::CoreML::default()
-						.with_compute_units(ort::ep::coreml::ComputeUnits::All)
-						.with_model_format(ort::ep::coreml::ModelFormat::MLProgram)
-						.with_model_cache_dir(dir.join("coreml-cache").to_string_lossy())
-						.build()])
-					.map_err(|e| format!("coreml ep: {e}"))?;
-			}
-			builder
+				.map_err(|e| format!("threads: {e}"))?
 				.commit_from_file(&path)
 				.map_err(|e| format!("load model {}: {e}", path.display()))
 		};
