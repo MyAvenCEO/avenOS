@@ -21,7 +21,7 @@ stt = ["dep:sherpa-onnx", "dep:ureq", "dep:tar", "dep:bzip2"]
 llm = ["dep:ort", "dep:half", "dep:tokenizers", "dep:ureq", "dep:serde_json", "dep:log"]
 # On-device LLM via llama.cpp (LFM2.5-8B-A1B GGUF). Statically linked (no dylib to bundle or
 # sign), Metal on Apple. Same GGUF runs on macOS AND iOS. Replaces the ONNX `llm` path.
-llama = ["dep:llama-cpp-2", "dep:ureq", "dep:log"]
+llama = ["dep:llama-cpp-2", "dep:llama-cpp-sys-2", "dep:ureq", "dep:log"]
 # On-device text-to-speech (MOSS-TTS-Nano ONNX) via onnxruntime (`ort`). Reuses the
 # shared `download` module + the ort `load-dynamic` bundled-dylib path; the `onnx`
 # module supplies the ort KV-cache/init helpers. Streams 48 kHz PCM frames.
@@ -46,10 +46,14 @@ log = { version = "0.4", optional = true }
 # On-device LLM engine: llama.cpp (GGUF). Built static from source (in the executable — no
 # dylib), so the App-Store dylib codesign/strip saga goes away on both macOS and iOS.
 llama-cpp-2 = { version = "0.1.146", optional = true }
+# Raw bindings (same build as llama-cpp-2 above) — only for `llama_log_set`/`ggml_log_set`
+# to silence llama.cpp's verbose INFO logging via a C callback.
+llama-cpp-sys-2 = { version = "0.1.146", optional = true }
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
 # Apple GPU backend (Metal) for the llama.cpp LLM path; Metal shaders embed into the binary.
 llama-cpp-2 = { version = "0.1.146", optional = true, features = ["metal"] }
+llama-cpp-sys-2 = { version = "0.1.146", optional = true, features = ["metal"] }
 
 [dev-dependencies]
 # WAV writer for the `tts_synth` example (CLI MOSS-TTS → wav, used by the video-edit skill).
