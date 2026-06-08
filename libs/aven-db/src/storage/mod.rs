@@ -21,10 +21,6 @@ pub use storage_trait::Storage;
 mod rocksdb;
 #[cfg(all(feature = "rocksdb", not(target_arch = "wasm32")))]
 pub use rocksdb::RocksDBStorage;
-#[cfg(all(feature = "sqlite", not(target_arch = "wasm32")))]
-mod sqlite;
-#[cfg(all(feature = "sqlite", not(target_arch = "wasm32")))]
-pub use sqlite::SqliteStorage;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -189,8 +185,6 @@ const STORAGE_KIND_AUTHORITATIVE_BATCH_SETTLEMENT: &str = "authoritative_batch_s
 const STORAGE_KIND_ACKNOWLEDGED_REJECTED_BATCH: &str = "acknowledged_rejected_batch";
 const STORAGE_KIND_SEALED_BATCH_SUBMISSION: &str = "sealed_batch_submission";
 const STORAGE_KIND_CATALOGUE: &str = "catalogue";
-#[cfg(feature = "sqlite")]
-pub(crate) const SQLITE_STORE_KIND: &str = "sqlite";
 #[cfg(feature = "rocksdb")]
 pub(crate) const ROCKSDB_STORE_KIND: &str = "rocksdb";
 

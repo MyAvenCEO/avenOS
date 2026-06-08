@@ -2,8 +2,6 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use sha2::{Digest, Sha256};
-
 use crate::batch_fate::BatchFate;
 use crate::catalogue::CatalogueEntry;
 use crate::metadata::{MetadataKey, ObjectType};
@@ -216,7 +214,12 @@ pub(crate) struct QuerySubscription {
     pub(crate) uses_explicit_authorization_filtering: bool,
     /// Whether visible rows must stay aligned to the latest upstream query scope.
     pub(crate) sync_backed: bool,
-    /// Whether this subscription should be forwarded to upstream servers.
+    /// Upstream-propagation preference carried by the local subscribe API.
+    ///
+    /// Peer-mesh mode has no upstream servers to forward to, so the engine no
+    /// longer reads this — it is retained because it is part of the public
+    /// `subscribe_with_sync_and_propagation` surface.
+    #[allow(dead_code)]
     pub(crate) propagation: QueryPropagation,
     /// Schema mismatch warnings already emitted for the latest settled state.
     pub(crate) reported_schema_warnings: HashSet<SchemaWarningKey>,
@@ -343,52 +346,6 @@ pub(super) struct WriteTableCacheEntry {
     pub(super) select_policy: Option<Arc<PolicyExpr>>,
 }
 
-/// Server-side query subscription state.
-///
-/// When a client sends a QuerySubscription, the server builds a QueryGraph
-/// and tracks contributing ObjectIds. This struct holds that state.
-#[derive(Debug)]
-pub(super) struct ServerQuerySubscription {
-    /// The original query.
-    pub(super) query: Query,
-    /// Compiled QueryGraph (with client's session for policy filtering).
-    pub(super) graph: QueryGraph,
-    /// Subscription-specific schema context derived from the downstream client schema.
-    pub(super) schema_context: SchemaContext,
-    /// Client's session for permission evaluation.
-    pub(super) session: Option<Session>,
-    /// Resolved branches (from query.branches or schema context at creation time).
-    pub(super) branches: Vec<String>,
-    /// Extra tables whose rows must be synced so downstream clients can
-    /// reproduce bundled policy context locally.
-    pub(super) policy_context_tables: Vec<String>,
-    /// Durability tier requested by the downstream subscriber. `None` means the
-    /// subscriber did not request frontier gating.
-    pub(super) required_tier: Option<DurabilityTier>,
-    /// Lower-tier settlements are useful as an initial remote scope snapshot,
-    /// but repeated below-required settlements should not churn downstream
-    /// subscribers that are still waiting for their requested tier.
-    pub(super) sent_below_required_settled: bool,
-    /// Highest query settlement tier that has actually been emitted downstream.
-    ///
-    /// Dirty graph passes can leave a server subscription's scope unchanged. In
-    /// that case a repeated QuerySettled at the same tier carries no new
-    /// information, but large scopes are expensive for clients to decode and
-    /// apply.
-    pub(super) last_emitted_settled_tier: Option<DurabilityTier>,
-    /// Last computed scope (for detecting changes).
-    pub(super) last_scope: HashSet<(ObjectId, BranchName)>,
-    /// Flag indicating this subscription needs recompilation due to schema change.
-    pub(super) needs_recompile: bool,
-    /// Flag indicating this server subscription has settled at least once.
-    /// Used to emit QuerySettled to the client on first settlement.
-    pub(super) settled_once: bool,
-    /// Whether this subscription should be propagated to upstream servers.
-    pub(super) propagation: QueryPropagation,
-    /// Schema mismatch warnings already emitted for the latest settled state.
-    pub(super) reported_schema_warnings: HashSet<SchemaWarningKey>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct SchemaWarningKey {
     pub(crate) table_name: String,
@@ -483,9 +440,6 @@ pub struct QueryManager {
     /// Terminal local subscription failures.
     pub(super) failed_subscriptions: Vec<QuerySubscriptionFailure>,
 
-    /// Server-side query subscriptions from downstream clients.
-    /// Key is (client_id, query_id) to allow multiple queries per client.
-    pub(super) server_subscriptions: HashMap<(PeerId, QueryId), ServerQuerySubscription>,
     /// Schema context for multi-schema queries.
     /// Starts empty; initialized via set_current_schema().
     /// Enables lens transforms for rows from old schema branches.
@@ -598,7 +552,6 @@ impl QueryManager {
             next_subscription_id: 0,
             update_outbox: Vec::new(),
             failed_subscriptions: Vec::new(),
-            server_subscriptions: HashMap::new(),
             schema_context: SchemaContext::empty(),
             branch_schema_map: HashMap::new(),
             pending_row_visibility_changes: Vec::new(),
@@ -775,17 +728,10 @@ impl QueryManager {
         for sub in self.subscriptions.values_mut() {
             sub.needs_recompile = true;
         }
-        for sub in self.server_subscriptions.values_mut() {
-            sub.needs_recompile = true;
-        }
     }
 
     pub(super) fn has_stale_subscriptions(&self) -> bool {
         self.subscriptions.values().any(|sub| sub.needs_recompile)
-            || self
-                .server_subscriptions
-                .values()
-                .any(|sub| sub.needs_recompile)
     }
 
     pub(crate) fn ensure_known_schemas_catalogued<H: Storage>(
@@ -929,102 +875,11 @@ impl QueryManager {
                 reason: reason.clone(),
             });
         }
-
-        let mut failed_server: Vec<(PeerId, QueryId, String, String, QueryPropagation)> =
-            Vec::new();
-
-        // Recompile server-side subscriptions
-        for ((client_id, query_id), sub) in &mut self.server_subscriptions {
-            if sub.needs_recompile {
-                let query_for_compile =
-                    Self::query_for_server_compile(&sub.query, &sub.schema_context);
-                let compile_schema: Schema = sub
-                    .schema_context
-                    .current_schema
-                    .iter()
-                    .map(|(table_name, table_schema)| {
-                        let mut structural = table_schema.clone();
-                        structural.policies = TablePolicies::default();
-                        (*table_name, structural)
-                    })
-                    .collect();
-                // Recompile the graph
-                match Self::compile_graph(
-                    &query_for_compile,
-                    &compile_schema,
-                    sub.session.clone(),
-                    &sub.schema_context,
-                    RowPolicyMode::PermissiveLocal,
-                ) {
-                    Ok(new_graph) => {
-                        sub.branches = Self::resolved_server_query_branches(
-                            &query_for_compile,
-                            &sub.schema_context,
-                        );
-                        sub.graph = new_graph;
-                        sub.needs_recompile = false;
-                    }
-                    Err(err) => {
-                        let reason = err.to_string();
-                        tracing::error!(
-                            %client_id,
-                            query_id = query_id.0,
-                            error = %reason,
-                            "server subscription stale recompile failed; dropping subscription"
-                        );
-                        failed_server.push((
-                            *client_id,
-                            *query_id,
-                            "query_recompile_failed".to_string(),
-                            reason,
-                            sub.propagation,
-                        ));
-                    }
-                }
-            }
-        }
-
-        for (client_id, query_id, code, reason, _propagation) in failed_server {
-            self.server_subscriptions.remove(&(client_id, query_id));
-            self.sync_manager
-                .drop_client_query_subscription(client_id, query_id);
-            self.sync_manager.emit_query_subscription_rejected(
-                client_id,
-                query_id,
-                code,
-                format!(
-                    "query recompilation failed for query_id {}: {}",
-                    query_id.0, reason
-                ),
-            );
-        }
     }
 
     /// Get the schema context.
     pub fn schema_context(&self) -> &SchemaContext {
         &self.schema_context
-    }
-
-    fn process_pending_query_rejections(&mut self) {
-        for rejection in self.sync_manager.take_pending_query_rejections() {
-            let sub_id = QuerySubscriptionId(rejection.query_id.0);
-            if !self.subscriptions.contains_key(&sub_id) {
-                tracing::warn!(
-                    sub_id = sub_id.0,
-                    code = %rejection.code,
-                    error = %rejection.reason,
-                    "received rejection for unknown local subscription"
-                );
-                continue;
-            }
-
-            self.unsubscribe_with_sync(sub_id);
-            self.failed_subscriptions.push(QuerySubscriptionFailure {
-                subscription_id: sub_id,
-                code: rejection.code,
-                reason: rejection.reason,
-            });
-        }
     }
 
     /// Get the current branch name for writes.
@@ -1066,42 +921,6 @@ impl QueryManager {
     /// Get mutable reference to the underlying SyncManager.
     pub fn sync_manager_mut(&mut self) -> &mut SyncManager {
         &mut self.sync_manager
-    }
-
-    pub(crate) fn apply_query_settled(&mut self, query_id: QueryId, tier: DurabilityTier) {
-        let sub_id = QuerySubscriptionId(query_id.0);
-        if let Some(sub) = self.subscriptions.get_mut(&sub_id) {
-            let was_unsatisfied = !Self::subscription_query_frontier_satisfied(sub);
-            let before = sub.query_frontier_settled_tier;
-            let required_tier = sub.durability_tier;
-            sub.query_frontier_settled_tier = Some(
-                sub.query_frontier_settled_tier
-                    .map_or(tier, |current| current.max(tier)),
-            );
-            let now_satisfied = Self::subscription_query_frontier_satisfied(sub);
-            tracing::trace!(
-                query_id = query_id.0,
-                tier = ?tier,
-                required_tier = ?required_tier,
-                before = ?before,
-                after = ?sub.query_frontier_settled_tier,
-                was_unsatisfied,
-                now_satisfied,
-                "jazz trace query settled applied"
-            );
-            if was_unsatisfied && now_satisfied {
-                sub.needs_visibility_recompute = true;
-            }
-        }
-    }
-
-    pub(crate) fn subscription_query_frontier_satisfied(sub: &QuerySubscription) -> bool {
-        match sub.durability_tier {
-            Some(required_tier) => sub
-                .query_frontier_settled_tier
-                .is_some_and(|settled_tier| settled_tier >= required_tier),
-            None => true,
-        }
     }
 
     pub(crate) fn mark_subscriptions_visibility_recompute_for_batch(&mut self, batch_id: BatchId) {
@@ -1201,17 +1020,12 @@ impl QueryManager {
         }
     }
 
-    /// Remove a client and all its server-side state (subscriptions, in-flight policy checks).
+    /// Remove a client and all its sync state.
     ///
     /// Returns `false` if the client has unprocessed inbox entries.
     /// The caller should retry later.
     pub fn remove_client(&mut self, client_id: PeerId) -> bool {
-        if !self.sync_manager.remove_client(client_id) {
-            return false;
-        }
-        self.server_subscriptions
-            .retain(|&(cid, _), _| cid != client_id);
-        true
+        self.sync_manager.remove_client(client_id)
     }
 
     /// Get the schema.
@@ -1239,12 +1053,6 @@ impl QueryManager {
 
         // 1. Process SyncManager inbox (receives client writes)
         self.sync_manager.process_inbox(storage);
-        let remote_scope_dirty_query_ids = self.sync_manager.take_remote_query_scope_dirty();
-        for query_id in remote_scope_dirty_query_ids {
-            if let Some(sub) = self.subscriptions.get_mut(&QuerySubscriptionId(query_id.0)) {
-                sub.needs_visibility_recompute = true;
-            }
-        }
         self.pending_catalogue_updates.extend(
             self.sync_manager
                 .take_pending_catalogue_updates()
@@ -1268,17 +1076,6 @@ impl QueryManager {
         }
         self.handle_row_updates_batched(storage, row_visibility_changes);
 
-        // 3. Process pending query unsubscriptions from downstream clients
-        // before new subscriptions from the same tick. One-shot query helpers
-        // often unsubscribe and immediately resubscribe; draining removals
-        // first prevents stale per-client scope from suppressing the replay
-        // that the new subscription depends on.
-        self.process_pending_query_unsubscriptions();
-
-        // 3b. Process pending query subscriptions from downstream clients
-        // (after indices are updated, so initial settle finds existing data)
-        self.process_pending_query_subscriptions(storage);
-
         let post_permission_row_visibility_changes =
             self.sync_manager.take_pending_row_visibility_changes();
         if !post_permission_row_visibility_changes.is_empty() {
@@ -1289,26 +1086,6 @@ impl QueryManager {
         }
         self.handle_row_updates_batched(storage, post_permission_row_visibility_changes);
         self.apply_pending_batch_fate_effects(storage);
-
-        // 4c. Apply QuerySettled messages that do not depend on any earlier
-        // sequenced sync updates. Watermarked settlements stay queued for
-        // RuntimeCore, which tracks per-server stream progress.
-        let pending_query_settled = self.sync_manager.take_pending_query_settled();
-        if !pending_query_settled.is_empty() {
-            let mut blocked = Vec::new();
-            for pending_settled in pending_query_settled {
-                if pending_settled.through_seq == 0 {
-                    self.apply_query_settled(pending_settled.query_id, pending_settled.tier);
-                } else {
-                    blocked.push(pending_settled);
-                }
-            }
-            if !blocked.is_empty() {
-                self.sync_manager.requeue_pending_query_settled(blocked);
-            }
-        }
-
-        self.process_pending_query_rejections();
 
         // 5. Index storage is handled by Storage via batched_tick() - not here.
         // Tests/benchmarks that don't need real storage use NullStorage.
@@ -1355,14 +1132,10 @@ impl QueryManager {
             let table = subscription.graph.table.as_str().to_string();
             let mut schema_warnings = SchemaWarningAccumulator::default();
             let include_deleted = subscription.query.include_deleted;
-            let local_durability_satisfies_subscription = subscription
-                .durability_tier
-                .is_some_and(|tier| self.sync_manager.has_local_durability_at_least(tier));
-            let remote_scope_satisfies_subscription =
-                subscription.durability_tier.is_none_or(|tier| {
-                    self.sync_manager
-                        .has_remote_query_scope_snapshot_at_least(QueryId(sub_id.0), tier)
-                });
+            // Peer-mesh mode has no upstream servers, so remote scope snapshots
+            // never arrive: a tier-gated subscription is only "remote-satisfied"
+            // when it requested no tier at all.
+            let remote_scope_satisfies_subscription = subscription.durability_tier.is_none();
 
             let delta = {
                 let schema_context = &self.schema_context;
@@ -1461,28 +1234,10 @@ impl QueryManager {
                 Cow::Borrowed(subscription.graph.current_output_tuples_ref())
             };
 
-            if subscription.sync_backed
-                && Self::subscription_query_frontier_satisfied(&subscription)
-                && (!local_durability_satisfies_subscription || remote_scope_satisfies_subscription)
-                && self
-                    .sync_manager
-                    .has_remote_query_scope_snapshot(QueryId(sub_id.0))
-                && (subscription.propagation == QueryPropagation::Full
-                    || !self.sync_manager.has_durability_identity())
-            {
-                visible_tuples = Cow::Owned(self.filter_synced_query_scope_tuples(
-                    QueryId(sub_id.0),
-                    subscription.durability_tier,
-                    &subscription.pending_local_row_ids,
-                    visible_tuples.into_owned(),
-                ));
-            }
+            // Peer-mesh mode has no upstream servers, so no remote query-scope
+            // snapshot ever arrives — the synced-scope filter never applied here.
 
-            visible_tuples = self.filter_transaction_visible_tuples(
-                storage_ref,
-                QueryId(sub_id.0),
-                visible_tuples,
-            );
+            visible_tuples = self.filter_transaction_visible_tuples(storage_ref, visible_tuples);
 
             if !subscription.settled_once {
                 let visible_rows =
@@ -1588,9 +1343,6 @@ impl QueryManager {
 
         // Note: With sync storage, object loading is immediate. No need to request
         // async loads - objects are available when we query for them.
-
-        // 8. Settle server-side subscriptions and update scopes
-        self.settle_server_subscriptions(storage_ref);
     }
 
     pub(super) fn handle_row_update_with_origin(
@@ -2084,13 +1836,6 @@ impl QueryManager {
                 }
             }
         }
-
-        // Mark server subscriptions dirty (for downstream clients)
-        for server_sub in self.server_subscriptions.values_mut() {
-            if Self::subscription_involves_table(&server_sub.graph, table) {
-                server_sub.graph.mark_dirty_for_table(table);
-            }
-        }
     }
 
     /// Mark subscriptions dirty from external updates (default behavior).
@@ -2122,11 +1867,6 @@ impl QueryManager {
                 }
             }
         }
-        for server_sub in self.server_subscriptions.values_mut() {
-            if Self::subscription_involves_table(&server_sub.graph, table) {
-                server_sub.graph.mark_rows_updated(ids);
-            }
-        }
     }
 
     pub(crate) fn mark_local_row_updated_in_subscriptions(&mut self, table: &str, id: ObjectId) {
@@ -2134,11 +1874,6 @@ impl QueryManager {
             if Self::subscription_involves_table(&subscription.graph, table) {
                 subscription.graph.mark_row_updated(id);
                 subscription.pending_local_row_ids.insert(id);
-            }
-        }
-        for server_sub in self.server_subscriptions.values_mut() {
-            if Self::subscription_involves_table(&server_sub.graph, table) {
-                server_sub.graph.mark_row_updated(id);
             }
         }
     }
@@ -2159,11 +1894,6 @@ impl QueryManager {
                 }
             }
         }
-        for server_sub in self.server_subscriptions.values_mut() {
-            if Self::subscription_involves_table(&server_sub.graph, table) {
-                server_sub.graph.mark_rows_deleted(ids);
-            }
-        }
     }
 
     pub(super) fn mark_local_row_deleted_in_subscriptions(&mut self, table: &str, id: ObjectId) {
@@ -2171,11 +1901,6 @@ impl QueryManager {
             if Self::subscription_involves_table(&subscription.graph, table) {
                 subscription.graph.mark_row_deleted(id);
                 subscription.pending_local_row_ids.insert(id);
-            }
-        }
-        for server_sub in self.server_subscriptions.values_mut() {
-            if Self::subscription_involves_table(&server_sub.graph, table) {
-                server_sub.graph.mark_row_deleted(id);
             }
         }
     }
@@ -2717,33 +2442,6 @@ impl QueryManager {
             .collect()
     }
 
-    fn filter_synced_query_scope_tuples(
-        &self,
-        query_id: QueryId,
-        durability_tier: Option<DurabilityTier>,
-        pending_local_row_ids: &HashSet<ObjectId>,
-        tuples: Vec<Tuple>,
-    ) -> Vec<Tuple> {
-        let remote_scope = match durability_tier {
-            Some(tier) => self
-                .sync_manager
-                .remote_query_scope_at_least(query_id, tier),
-            None => self.sync_manager.remote_query_scope(query_id),
-        };
-        tuples
-            .into_iter()
-            .filter(|tuple| {
-                tuple.id_iter().any(|id| {
-                    pending_local_row_ids.contains(&id)
-                        || self.pending_local_row_batches.contains_key(&id)
-                }) || tuple
-                    .provenance()
-                    .iter()
-                    .any(|scoped_object| remote_scope.contains(scoped_object))
-            })
-            .collect()
-    }
-
     fn scope_from_tuples(tuples: &[Tuple]) -> HashSet<(ObjectId, BranchName)> {
         tuples
             .iter()
@@ -2788,16 +2486,16 @@ impl QueryManager {
     fn filter_transaction_visible_tuples<'a>(
         &mut self,
         storage: &dyn Storage,
-        query_id: QueryId,
         tuples: Cow<'a, [Tuple]>,
     ) -> Cow<'a, [Tuple]> {
         if tuples.is_empty() {
             return tuples;
         }
 
+        // Peer-mesh mode has no upstream servers, so the remote query scope is
+        // always empty: the query scope is exactly the local scope.
         let local_scope = Self::scope_from_tuples(tuples.as_ref());
-        let mut query_scope = local_scope.clone();
-        query_scope.extend(self.sync_manager.remote_query_scope(query_id));
+        let query_scope = local_scope.clone();
 
         let mut first_hidden = None;
 
@@ -2867,24 +2565,4 @@ impl QueryManager {
         let total = indices + subscriptions + policy_checks;
         (indices, subscriptions, policy_checks, total)
     }
-}
-
-fn propagation_label(propagation: QueryPropagation) -> &'static str {
-    match propagation {
-        QueryPropagation::Full => "full",
-        QueryPropagation::LocalOnly => "local-only",
-    }
-}
-
-fn subscription_group_key(query: &str, branches: &[String], propagation: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(query.as_bytes());
-    hasher.update([0]);
-    hasher.update(propagation.as_bytes());
-    hasher.update([0]);
-    for branch in branches {
-        hasher.update(branch.as_bytes());
-        hasher.update([0]);
-    }
-    hex::encode(hasher.finalize())
 }

@@ -23,7 +23,7 @@ fn schema_manager_update_uses_visible_row_after_legacy_commit_history_is_removed
     let v1_branch = format!("dev-{}-main", v1_hash.short());
 
     let mut writer =
-        SchemaManager::new(SyncManager::new(), v2.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v2.clone());
     writer.add_live_schema(v1.clone()).unwrap();
 
     let mut storage = MemoryStorage::new();
@@ -47,7 +47,7 @@ fn schema_manager_update_uses_visible_row_after_legacy_commit_history_is_removed
     writer.process(&mut storage);
 
     let mut reader =
-        SchemaManager::new(SyncManager::new(), v2, test_app_id(), "dev", "main").unwrap();
+        manager_for(v2);
     reader.add_live_schema(v1).unwrap();
 
     reader
@@ -229,7 +229,7 @@ fn transactional_insert_uses_frozen_target_branch_schema() {
     let lens = Lens::new(v1_hash, v2_hash, transform);
 
     let mut manager =
-        SchemaManager::new(SyncManager::new(), v2.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v2.clone());
     manager.add_live_schema_with_lens(v1.clone(), lens).unwrap();
 
     let mut storage = MemoryStorage::new();
@@ -295,7 +295,7 @@ fn transactional_insert_rejects_target_branch_outside_current_family() {
         .build();
 
     let mut manager =
-        SchemaManager::new(SyncManager::new(), schema, test_app_id(), "dev", "main").unwrap();
+        manager_for(schema);
     let mut storage = MemoryStorage::new();
 
     let write_context = WriteContext::default()
@@ -360,7 +360,7 @@ fn transactional_update_uses_frozen_target_branch_schema() {
     let lens = Lens::new(v1_hash, v2_hash, transform);
 
     let mut manager =
-        SchemaManager::new(SyncManager::new(), v2.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v2.clone());
     manager.add_live_schema_with_lens(v1.clone(), lens).unwrap();
 
     let mut storage = MemoryStorage::new();
@@ -474,7 +474,7 @@ fn transactional_delete_uses_frozen_target_branch_schema() {
     let lens = Lens::new(v1_hash, v2_hash, transform);
 
     let mut manager =
-        SchemaManager::new(SyncManager::new(), v2.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v2.clone());
     manager.add_live_schema_with_lens(v1.clone(), lens).unwrap();
 
     let mut storage = MemoryStorage::new();
@@ -578,7 +578,7 @@ fn e2e_rows_buffered_until_schema_activates() {
 
     // Client starts with v1 schema only
     let mut client =
-        SchemaManager::new(SyncManager::new(), v1.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v1.clone());
     let mut storage = MemoryStorage::new();
 
     // Get branch names

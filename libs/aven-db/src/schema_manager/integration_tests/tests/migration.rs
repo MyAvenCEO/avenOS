@@ -22,7 +22,7 @@ fn full_migration_add_column() {
 
     // Create manager with v2 as current
     let mut manager =
-        SchemaManager::new(SyncManager::new(), v2.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v2.clone());
 
     // Add v1 as live schema
     let lens = manager.add_live_schema(v1.clone()).unwrap();
@@ -103,7 +103,7 @@ fn multi_table_migration() {
         .build();
 
     let mut manager =
-        SchemaManager::new(SyncManager::new(), v2.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v2.clone());
     manager.add_live_schema(v1.clone()).unwrap();
 
     // Transform user row

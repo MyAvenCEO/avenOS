@@ -3094,42 +3094,6 @@ mod tests {
         );
     }
 
-    #[cfg(all(feature = "sqlite", not(target_arch = "wasm32")))]
-    #[test]
-    fn sqlite_common_case_visible_delete_after_restart_removes_durable_row() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let path = dir.path().join("storage.sqlite");
-
-        let (schema_hash, row_id, row) = {
-            let mut storage = SqliteStorage::open(&path).unwrap();
-            let seeded = seed_common_case_visible_task_row(&mut storage);
-            storage.flush().unwrap();
-            storage.close().unwrap();
-            seeded
-        };
-
-        let mut storage = SqliteStorage::open(&path).unwrap();
-        storage
-            .delete_visible_region_row("tasks", row.branch.as_str(), row_id)
-            .unwrap();
-
-        assert_eq!(
-            storage
-                .load_visible_region_row("tasks", row.branch.as_str(), row_id)
-                .unwrap(),
-            None
-        );
-        assert_eq!(
-            storage
-                .raw_table_get(
-                    &visible_row_raw_table_id("tasks", schema_hash).raw_table_name,
-                    &key_codec::visible_row_raw_table_key(row.branch.as_str(), row_id),
-                )
-                .unwrap(),
-            None
-        );
-    }
-
     #[cfg(all(feature = "rocksdb", not(target_arch = "wasm32")))]
     #[test]
     fn rocksdb_common_case_visible_delete_after_restart_removes_durable_row() {

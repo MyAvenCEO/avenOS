@@ -424,25 +424,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
         //    was just processed and made the schema available).
         self.schema_manager.process(&mut self.storage);
 
-        // 2b. Release QuerySettled notifications. Peer-mesh mode has no upstream
-        // server stream to watermark against, so every settlement applies now.
-        let ready_query_settled = self
-            .schema_manager
-            .query_manager_mut()
-            .sync_manager_mut()
-            .take_pending_query_settled();
-
-        if !ready_query_settled.is_empty() {
-            {
-                let query_manager = self.schema_manager.query_manager_mut();
-                for pending_settled in ready_query_settled {
-                    query_manager
-                        .apply_query_settled(pending_settled.query_id, pending_settled.tier);
-                }
-            }
-            self.schema_manager.process(&mut self.storage);
-        }
-
         // 2c. Apply replayable batch fates before collecting subscription
         // updates so fate-driven visibility changes land in the same tick.
         let received_batch_fates = self
@@ -573,27 +554,8 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
     pub fn batched_tick(&mut self) {
         let _span = debug_span!("batched_tick", tier = self.tier_label).entered();
 
-        if !self.has_outbound()
-            && self
-                .schema_manager
-                .query_manager()
-                .sync_manager()
-                .has_pending_query_subscriptions()
-        {
-            self.immediate_tick();
-        }
-
         // 1. Send all outgoing sync messages
         self.flush_runtime_outbox("flushing outbox");
-        if self
-            .schema_manager
-            .query_manager()
-            .sync_manager()
-            .has_pending_query_subscriptions()
-        {
-            self.scheduler.schedule_batched_tick();
-            return;
-        }
 
         // 2. Process parked sync messages
         self.handle_sync_messages();
@@ -602,15 +564,6 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
         // The scheduler's debounce prevents immediate_tick() from scheduling
         // another batched_tick while we're inside one, so we must flush here.
         self.flush_runtime_outbox("flushing post-process outbox");
-        if self
-            .schema_manager
-            .query_manager()
-            .sync_manager()
-            .has_pending_query_subscriptions()
-        {
-            self.scheduler.schedule_batched_tick();
-            return;
-        }
 
         // Flush the storage durability barrier so writes survive a hard kill (tab close, crash).
         if self.storage_write_pending_flush {

@@ -83,11 +83,6 @@ pub struct SyncManager {
 
     pub(super) inbox: Vec<InboxEntry>,
     pub(super) outbox: Vec<OutboxEntry>,
-    /// Pending permission checks awaiting policy evaluation.
-    /// Pending query subscriptions awaiting QueryGraph building by QueryManager.
-    pub(super) pending_query_subscriptions: Vec<PendingQuerySubscription>,
-    /// Pending query unsubscriptions awaiting cleanup by QueryManager.
-    pub(super) pending_query_unsubscriptions: Vec<PendingQueryUnsubscription>,
     /// Row visibility changes applied through row-history sync.
     pub(super) pending_row_visibility_changes: Vec<RowVisibilityChange>,
     /// Catalogue/system entry updates awaiting SchemaManager processing.
@@ -103,14 +98,6 @@ pub struct SyncManager {
     /// for a batch whose row member state may not be present on this peer.
     pub(super) batch_fate_interest: HashMap<BatchId, HashSet<PeerId>>,
 
-    /// Tracks which clients originated each query (for relaying QuerySettled).
-    pub(super) query_origin: HashMap<QueryId, HashSet<PeerId>>,
-    /// Query ids whose remote scope changed since the last QueryManager process.
-    pub(super) remote_query_scope_dirty: HashSet<QueryId>,
-    /// Pending QuerySettled notifications for QueryManager to process.
-    pub(super) pending_query_settled: Vec<PendingQuerySettled>,
-    /// Pending query rejections waiting for QueryManager to fail local subscriptions.
-    pub(super) pending_query_rejections: Vec<PendingQueryRejection>,
     /// Pending replayable batch fates for RuntimeCore to process.
     pub(super) pending_batch_fates: Vec<BatchFate>,
 
@@ -148,14 +135,6 @@ impl std::fmt::Debug for SyncManager {
             .field("inbox", &self.inbox)
             .field("outbox", &self.outbox)
             .field(
-                "pending_query_subscriptions",
-                &self.pending_query_subscriptions,
-            )
-            .field(
-                "pending_query_unsubscriptions",
-                &self.pending_query_unsubscriptions,
-            )
-            .field(
                 "pending_row_visibility_changes",
                 &self.pending_row_visibility_changes,
             )
@@ -164,9 +143,6 @@ impl std::fmt::Debug for SyncManager {
             .field("my_tiers", &self.my_tiers)
             .field("row_batch_interest", &self.row_batch_interest)
             .field("batch_fate_interest", &self.batch_fate_interest)
-            .field("query_origin", &self.query_origin)
-            .field("pending_query_settled", &self.pending_query_settled)
-            .field("pending_query_rejections", &self.pending_query_rejections)
             .field("pending_batch_fates", &self.pending_batch_fates)
             .field(
                 "pending_client_batch_fates",
@@ -220,18 +196,12 @@ impl SyncManager {
             quota_owner_bytes: HashMap::new(),
             inbox: Vec::new(),
             outbox: Vec::new(),
-            pending_query_subscriptions: Vec::new(),
-            pending_query_unsubscriptions: Vec::new(),
             pending_row_visibility_changes: Vec::new(),
             pending_catalogue_updates: Vec::new(),
             next_pending_id: 0,
             my_tiers: HashSet::new(),
             row_batch_interest: HashMap::new(),
             batch_fate_interest: HashMap::new(),
-            query_origin: HashMap::new(),
-            remote_query_scope_dirty: HashSet::new(),
-            pending_query_settled: Vec::new(),
-            pending_query_rejections: Vec::new(),
             pending_batch_fates: Vec::new(),
             pending_client_batch_fates: HashMap::new(),
             replay_table_contexts: HashMap::new(),
@@ -329,17 +299,6 @@ impl SyncManager {
         connections += self.my_tiers.len() * std::mem::size_of::<DurabilityTier>();
 
         let mut subscriptions = 0usize;
-        for state in self.clients.values() {
-            for (query_id, scope) in &state.queries {
-                subscriptions += std::mem::size_of_val(query_id);
-                subscriptions += std::mem::size_of_val(scope);
-                subscriptions += scope.scope.len() * std::mem::size_of::<(ObjectId, BranchName)>();
-                if let Some(session) = &scope.session {
-                    subscriptions += session.user_id.len();
-                }
-                subscriptions += 48;
-            }
-        }
         for (row_batch_key, clients) in &self.row_batch_interest {
             subscriptions += std::mem::size_of_val(row_batch_key);
             subscriptions += clients.len() * std::mem::size_of::<PeerId>();
@@ -350,22 +309,12 @@ impl SyncManager {
             subscriptions += clients.len() * std::mem::size_of::<PeerId>();
             subscriptions += 48;
         }
-        for (query_id, clients) in &self.query_origin {
-            subscriptions += std::mem::size_of_val(query_id);
-            subscriptions += clients.len() * std::mem::size_of::<PeerId>();
-            subscriptions += 48;
-        }
 
         let queues = self.inbox.len() * std::mem::size_of::<InboxEntry>()
             + self.outbox.len() * std::mem::size_of::<OutboxEntry>()
-            + self.pending_query_subscriptions.len()
-                * std::mem::size_of::<PendingQuerySubscription>()
-            + self.pending_query_unsubscriptions.len()
-                * std::mem::size_of::<PendingQueryUnsubscription>()
             + self.pending_row_visibility_changes.len()
                 * std::mem::size_of::<RowVisibilityChange>()
             + self.pending_catalogue_updates.len() * std::mem::size_of::<CatalogueEntry>()
-            + self.pending_query_settled.len() * std::mem::size_of::<PendingQuerySettled>()
             + self.pending_batch_fates.len() * std::mem::size_of::<BatchFate>()
             + self
                 .pending_client_batch_fates
@@ -442,16 +391,6 @@ impl SyncManager {
             clients.remove(&client_id);
             !clients.is_empty()
         });
-        // Clean up query origin map
-        self.query_origin.retain(|_, clients| {
-            clients.remove(&client_id);
-            !clients.is_empty()
-        });
-        // Clean up pending queues
-        self.pending_query_subscriptions
-            .retain(|s| s.client_id != client_id);
-        self.pending_query_unsubscriptions
-            .retain(|u| u.client_id != client_id);
         // Drop queued outbox messages for this client
         self.outbox
             .retain(|e| e.destination != Destination::Client(client_id));
@@ -632,206 +571,6 @@ impl SyncManager {
         }
     }
 
-    // ========================================================================
-    // Pending Query Subscriptions
-    // ========================================================================
-
-    /// Take pending query subscriptions for QueryManager to process.
-    ///
-    /// QueryManager will build QueryGraphs for these and call back with computed scopes.
-    pub fn take_pending_query_subscriptions(&mut self) -> Vec<PendingQuerySubscription> {
-        std::mem::take(&mut self.pending_query_subscriptions)
-    }
-
-    pub fn has_pending_query_subscriptions(&self) -> bool {
-        !self.pending_query_subscriptions.is_empty()
-    }
-
-    /// Re-queue pending query subscriptions that couldn't be processed yet.
-    ///
-    /// Called by QueryManager when schema isn't available for some subscriptions.
-    pub fn requeue_pending_query_subscriptions(&mut self, subs: Vec<PendingQuerySubscription>) {
-        self.pending_query_subscriptions.extend(subs);
-    }
-
-    /// Take pending query unsubscriptions for QueryManager to process.
-    ///
-    /// QueryManager will remove server-side QueryGraphs and forward upstream.
-    pub fn take_pending_query_unsubscriptions(&mut self) -> Vec<PendingQueryUnsubscription> {
-        std::mem::take(&mut self.pending_query_unsubscriptions)
-    }
-
-    /// Storage-backed version of `set_client_query_scope` that can replay row
-    /// objects directly from storage-backed visible rows.
-    pub fn set_client_query_scope_with_storage<H: Storage + ?Sized>(
-        &mut self,
-        storage: &H,
-        client_id: PeerId,
-        query_id: QueryId,
-        scope: HashSet<(ObjectId, BranchName)>,
-        session: Option<Session>,
-    ) {
-        let Some(client) = self.clients.get_mut(&client_id) else {
-            return;
-        };
-
-        let old_query_scope = client
-            .queries
-            .get(&query_id)
-            .map(|query| query.scope.clone())
-            .unwrap_or_default();
-        let old_scope: HashSet<(ObjectId, BranchName)> = client
-            .queries
-            .values()
-            .flat_map(|q| q.scope.iter().cloned())
-            .collect();
-
-        client.queries.insert(
-            query_id,
-            QueryScope {
-                scope: scope.clone(),
-                session,
-            },
-        );
-
-        let new_scope: HashSet<(ObjectId, BranchName)> = client
-            .queries
-            .values()
-            .flat_map(|q| q.scope.iter().cloned())
-            .collect();
-
-        let no_longer_visible: HashSet<(ObjectId, BranchName)> =
-            old_scope.difference(&new_scope).cloned().collect();
-        let newly_visible_for_query: Vec<(ObjectId, BranchName)> =
-            scope.difference(&old_query_scope).cloned().collect();
-
-        self.prune_client_scope_tracking(client_id, &no_longer_visible);
-
-        let mut newly_visible_batch_ids = HashSet::new();
-        for (object_id, branch_name) in newly_visible_for_query {
-            if let Some(batch_id) = self.queue_initial_row_to_client_with_storage(
-                storage,
-                client_id,
-                object_id,
-                branch_name,
-                true,
-            ) {
-                newly_visible_batch_ids.insert(batch_id);
-            }
-        }
-
-        // Initial query scope delivery can include many rows from the same
-        // sealed batch. Queue rows first so client interest is complete, then
-        // send one fate per batch instead of one growing fate per row.
-        for batch_id in newly_visible_batch_ids {
-            if let Some(fate) = self.load_batch_fate_by_batch_id_from_storage(storage, batch_id) {
-                self.queue_batch_fate_to_client(client_id, fate);
-            }
-        }
-    }
-
-    /// Drop a client's query subscription state.
-    ///
-    /// Removes per-query scope and origin tracking.
-    pub fn drop_client_query_subscription(&mut self, client_id: PeerId, query_id: QueryId) {
-        if let Some(client) = self.clients.get_mut(&client_id) {
-            let old_scope: HashSet<(ObjectId, BranchName)> = client
-                .queries
-                .values()
-                .flat_map(|q| q.scope.iter().cloned())
-                .collect();
-            client.queries.remove(&query_id);
-            let new_scope: HashSet<(ObjectId, BranchName)> = client
-                .queries
-                .values()
-                .flat_map(|q| q.scope.iter().cloned())
-                .collect();
-            let no_longer_visible: HashSet<(ObjectId, BranchName)> =
-                old_scope.difference(&new_scope).cloned().collect();
-            self.prune_client_scope_tracking(client_id, &no_longer_visible);
-        }
-
-        if let Some(clients) = self.query_origin.get_mut(&query_id) {
-            clients.remove(&client_id);
-            if clients.is_empty() {
-                self.query_origin.remove(&query_id);
-            }
-        }
-    }
-
-    fn prune_client_scope_tracking(
-        &mut self,
-        client_id: PeerId,
-        removed_scope: &HashSet<(ObjectId, BranchName)>,
-    ) {
-        if removed_scope.is_empty() {
-            return;
-        }
-
-        if !self.clients.contains_key(&client_id) {
-            return;
-        }
-        // No per-peer ledger to consult: drop this client's interest directly for
-        // any batch under the removed (object, branch) scope.
-        let removed: HashSet<(ObjectId, BranchName)> = removed_scope.iter().copied().collect();
-        self.row_batch_interest.retain(|key, clients| {
-            if removed.contains(&(key.row_id, key.branch_name)) {
-                clients.remove(&client_id);
-            }
-            !clients.is_empty()
-        });
-    }
-
-    /// Take pending QuerySettled notifications for QueryManager to process.
-    pub fn take_pending_query_settled(&mut self) -> Vec<PendingQuerySettled> {
-        std::mem::take(&mut self.pending_query_settled)
-    }
-
-    /// Re-queue QuerySettled notifications that are still blocked on stream sequencing.
-    pub fn requeue_pending_query_settled(&mut self, pending: Vec<PendingQuerySettled>) {
-        self.pending_query_settled.extend(pending);
-    }
-
-    /// Take pending query rejections for QueryManager to process.
-    pub fn take_pending_query_rejections(&mut self) -> Vec<PendingQueryRejection> {
-        std::mem::take(&mut self.pending_query_rejections)
-    }
-
-    /// Peer-mesh mode has no upstream servers, so no remote scope snapshots ever
-    /// arrive — this is always empty.
-    pub fn remote_query_scope(&self, _query_id: QueryId) -> HashSet<(ObjectId, BranchName)> {
-        HashSet::new()
-    }
-
-    /// Peer-mesh mode has no upstream servers, so no remote scope snapshots ever
-    /// arrive — this is always empty.
-    pub fn remote_query_scope_at_least(
-        &self,
-        _query_id: QueryId,
-        _requested_tier: DurabilityTier,
-    ) -> HashSet<(ObjectId, BranchName)> {
-        HashSet::new()
-    }
-
-    /// Peer-mesh mode has no upstream servers, so no remote scope snapshots ever arrive.
-    pub fn has_remote_query_scope_snapshot(&self, _query_id: QueryId) -> bool {
-        false
-    }
-
-    /// Peer-mesh mode has no upstream servers, so no remote scope snapshots ever arrive.
-    pub fn has_remote_query_scope_snapshot_at_least(
-        &self,
-        _query_id: QueryId,
-        _requested_tier: DurabilityTier,
-    ) -> bool {
-        false
-    }
-
-    /// Take query ids whose upstream scope changed since the last process pass.
-    pub fn take_remote_query_scope_dirty(&mut self) -> HashSet<QueryId> {
-        std::mem::take(&mut self.remote_query_scope_dirty)
-    }
-
     /// Take pending replayable batch fates for RuntimeCore to process.
     pub fn take_pending_batch_fates(&mut self) -> Vec<BatchFate> {
         std::mem::take(&mut self.pending_batch_fates)
@@ -861,72 +600,4 @@ impl SyncManager {
     pub fn requeue_pending_row_visibility_changes(&mut self, updates: Vec<RowVisibilityChange>) {
         self.pending_row_visibility_changes.extend(updates);
     }
-
-    /// Emit a QuerySettled notification to a client.
-    ///
-    /// Called by QueryManager when a server subscription settles for the first time.
-    pub fn emit_query_settled(
-        &mut self,
-        client_id: PeerId,
-        query_id: QueryId,
-        tier: DurabilityTier,
-        scope: &HashSet<(ObjectId, BranchName)>,
-    ) {
-        tracing::trace!(
-            %client_id,
-            query_id = query_id.0,
-            ?tier,
-            scope_len = scope.len(),
-            "jazz trace emitting query settled to client"
-        );
-        self.outbox.push(OutboxEntry {
-            destination: Destination::Client(client_id),
-            payload: SyncPayload::QuerySettled {
-                query_id,
-                tier,
-                scope: sorted_query_scope_snapshot(scope),
-                through_seq: 0,
-            },
-        });
-    }
-
-    /// Emit a schema warning to a client.
-    pub fn emit_schema_warning(&mut self, client_id: PeerId, warning: SchemaWarning) {
-        self.outbox.push(OutboxEntry {
-            destination: Destination::Client(client_id),
-            payload: SyncPayload::SchemaWarning(warning),
-        });
-    }
-
-    /// Emit a query subscription rejection error to a client.
-    pub fn emit_query_subscription_rejected(
-        &mut self,
-        client_id: PeerId,
-        query_id: QueryId,
-        code: impl Into<String>,
-        reason: impl Into<String>,
-    ) {
-        self.outbox.push(OutboxEntry {
-            destination: Destination::Client(client_id),
-            payload: SyncPayload::Error(SyncError::QuerySubscriptionRejected {
-                query_id,
-                code: code.into(),
-                reason: reason.into(),
-            }),
-        });
-    }
-}
-
-fn sorted_query_scope_snapshot(
-    scope: &HashSet<(ObjectId, BranchName)>,
-) -> Vec<(ObjectId, BranchName)> {
-    let mut entries: Vec<_> = scope.iter().copied().collect();
-    entries.sort_by(
-        |(left_object_id, left_branch), (right_object_id, right_branch)| {
-            left_object_id
-                .cmp(right_object_id)
-                .then_with(|| left_branch.as_str().cmp(right_branch.as_str()))
-        },
-    );
-    entries
 }

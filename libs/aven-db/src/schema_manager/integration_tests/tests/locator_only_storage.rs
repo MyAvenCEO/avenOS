@@ -1,7 +1,7 @@
 //! Test wrapper around `MemoryStorage` whose `load_visible_query_row`
 //! ignores the table argument and resolves rows by locator — matching how
-//! `RocksDBStorage` (and the trait-default `load_visible_region_row_bytes`
-//! used by SqliteStorage) actually behaves in production.
+//! `RocksDBStorage` (via the trait-default `load_visible_region_row_bytes`)
+//! actually behaves in production.
 //!
 //! This is the harness that makes the empty-table-hint bug observable in
 //! an in-process test. Plain `MemoryStorage` keys `row_histories` by table

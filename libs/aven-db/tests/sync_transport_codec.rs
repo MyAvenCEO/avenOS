@@ -1,7 +1,7 @@
 #![cfg(feature = "client-p2p")]
 
 use groove::object::{BranchName, ObjectId};
-use groove::sync_manager::{PeerId, DurabilityTier, QueryId, SyncError, SyncPayload};
+use groove::sync_manager::{PeerId, SyncError, SyncPayload};
 use groove::sync_targets::SyncTargetId;
 use groove::{decode_length_prefixed, encode_length_prefixed};
 
@@ -20,20 +20,4 @@ fn length_prefixed_roundtrip_errors_on_trailer() {
 
     buf.push(0);
     assert!(decode_length_prefixed(&buf).is_err());
-}
-
-#[test]
-fn query_settled_roundtrips() {
-    let cid = PeerId::new();
-    let target = SyncTargetId::Client(cid);
-    let payload = SyncPayload::QuerySettled {
-        query_id: QueryId(7),
-        tier: DurabilityTier::EdgeServer,
-        scope: Vec::new(),
-        through_seq: 0,
-    };
-    let buf = encode_length_prefixed(target.clone(), &payload).unwrap();
-    let (t2, p2) = decode_length_prefixed(&buf).unwrap();
-    assert_eq!(t2, target);
-    assert_eq!(p2, payload);
 }

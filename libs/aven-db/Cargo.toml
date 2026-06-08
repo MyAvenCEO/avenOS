@@ -12,10 +12,6 @@ path = "src/lib.rs"
 
 [features]
 default = []
-# Inert stubs for leftover upstream #[cfg(feature = ...)] (server/wasm paths stripped in this fork).
-transport = []
-transport-websocket = []
-sqlite = []
 test-utils = []
 rocksdb = ["dep:rocksdb"]
 runtime-tokio = ["dep:tokio"]

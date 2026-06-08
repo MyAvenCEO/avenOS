@@ -1,10 +1,8 @@
 use super::*;
 use crate::batch_fate::{CapturedFrontierMember, SealedBatchMember, SealedBatchSubmission};
-use crate::query_manager::policy::PolicyExpr;
-use crate::query_manager::query::QueryBuilder;
 use crate::query_manager::session::WriteContext;
 use crate::query_manager::types::{
-    ColumnType, SchemaBuilder, SchemaHash, TableName, TablePolicies, TableSchema,
+    ColumnType, SchemaBuilder, SchemaHash, TableName, TableSchema,
 };
 use crate::row_format::encode_row;
 use crate::row_histories::BatchId;
@@ -13,7 +11,7 @@ use crate::storage::{
     MemoryStorage, RawTableKeys, RawTableRows, RowLocator, Storage, StorageError,
 };
 use crate::sync_manager::{
-    PeerId, Destination, DurabilityTier, InboxEntry, OutboxEntry, Source, SyncError,
+    PeerId, Destination, DurabilityTier, InboxEntry, OutboxEntry, Source,
     SyncManager, SyncPayload,
 };
 use std::collections::HashMap;
@@ -65,14 +63,6 @@ struct CountingScheduler {
 }
 
 impl RowRegionReadFailingStorage {
-    fn new() -> Self {
-        Self {
-            inner: MemoryStorage::new(),
-            fail_visible_row_reads: true,
-            fail_row_locator_scans: false,
-        }
-    }
-
     fn with_row_locator_scan_failure() -> Self {
         Self {
             inner: MemoryStorage::new(),
@@ -1352,87 +1342,6 @@ fn schema_evolution_v2() -> Schema {
         .build()
 }
 
-fn protected_documents_schema() -> Schema {
-    let policies = TablePolicies::new()
-        .with_select(PolicyExpr::eq_session("owner_id", vec!["user_id".into()]))
-        .with_insert(PolicyExpr::eq_session("owner_id", vec!["user_id".into()]));
-
-    SchemaBuilder::new()
-        .table(
-            TableSchema::builder("documents")
-                .column("owner_id", ColumnType::Text)
-                .column("title", ColumnType::Text)
-                .policies(policies),
-        )
-        .build()
-}
-
-fn session_exists_rel_teams_schema() -> Schema {
-    use crate::query_manager::relation_ir::{
-        ColumnRef, JoinCondition, JoinKind, PredicateCmpOp, PredicateExpr, RelExpr, RowIdRef,
-        ValueRef,
-    };
-
-    let team_select_policy = PolicyExpr::ExistsRel {
-        rel: RelExpr::Filter {
-            input: Box::new(RelExpr::Join {
-                left: Box::new(RelExpr::TableScan {
-                    table: TableName::new("user_team_edges"),
-                }),
-                right: Box::new(RelExpr::TableScan {
-                    table: TableName::new("teams"),
-                }),
-                on: vec![JoinCondition {
-                    left: ColumnRef::scoped("user_team_edges", "team_id"),
-                    right: ColumnRef::scoped("__join_0", "id"),
-                }],
-                join_kind: JoinKind::Inner,
-            }),
-            predicate: PredicateExpr::And(vec![
-                PredicateExpr::Cmp {
-                    left: ColumnRef::scoped("user_team_edges", "user_id"),
-                    op: PredicateCmpOp::Eq,
-                    right: ValueRef::SessionRef(vec!["user_id".into()]),
-                },
-                PredicateExpr::Cmp {
-                    left: ColumnRef::scoped("__join_0", "id"),
-                    op: PredicateCmpOp::Eq,
-                    right: ValueRef::RowId(RowIdRef::Outer),
-                },
-            ]),
-        },
-    };
-
-    SchemaBuilder::new()
-        .table(
-            TableSchema::builder("teams")
-                .column("name", ColumnType::Text)
-                .policies(
-                    TablePolicies::new()
-                        .with_select(team_select_policy)
-                        .with_insert(PolicyExpr::True),
-                ),
-        )
-        .table(
-            TableSchema::builder("user_team_edges")
-                .column("user_id", ColumnType::Text)
-                .column("team_id", ColumnType::Uuid)
-                .policies(TablePolicies::new().with_insert(PolicyExpr::True)),
-        )
-        .build()
-}
-
-fn structural_session_exists_rel_teams_schema() -> Schema {
-    SchemaBuilder::new()
-        .table(TableSchema::builder("teams").column("name", ColumnType::Text))
-        .table(
-            TableSchema::builder("user_team_edges")
-                .column("user_id", ColumnType::Text)
-                .column("team_id", ColumnType::Uuid),
-        )
-        .build()
-}
-
 fn defaulted_todos_schema() -> Schema {
     SchemaBuilder::new()
         .table(
@@ -1472,27 +1381,6 @@ fn insert_and_wait_for_batch<S: Storage, Sch: Scheduler>(
     Ok((row, receiver))
 }
 
-fn update_and_wait_for_batch<S: Storage, Sch: Scheduler>(
-    core: &mut RuntimeCore<S, Sch>,
-    object_id: ObjectId,
-    values: Vec<(String, Value)>,
-    write_context: Option<&WriteContext>,
-    tier: DurabilityTier,
-) -> std::result::Result<futures::channel::oneshot::Receiver<PersistedWriteAck>, RuntimeError> {
-    let batch_id = core.update(object_id, values, write_context)?;
-    core.wait_for_batch(batch_id, tier)
-}
-
-fn delete_and_wait_for_batch<S: Storage, Sch: Scheduler>(
-    core: &mut RuntimeCore<S, Sch>,
-    object_id: ObjectId,
-    write_context: Option<&WriteContext>,
-    tier: DurabilityTier,
-) -> std::result::Result<futures::channel::oneshot::Receiver<PersistedWriteAck>, RuntimeError> {
-    let batch_id = core.delete(object_id, write_context)?;
-    core.wait_for_batch(batch_id, tier)
-}
-
 fn staged_user_row(
     row_id: ObjectId,
     batch_id: BatchId,
@@ -1514,13 +1402,6 @@ fn staged_user_row(
         crate::row_histories::RowState::StagingPending,
         None,
     )
-}
-
-fn document_insert_values(owner_id: &str, title: &str) -> HashMap<String, Value> {
-    HashMap::from([
-        ("owner_id".to_string(), Value::Text(owner_id.to_string())),
-        ("title".to_string(), Value::Text(title.to_string())),
-    ])
 }
 
 fn project_insert_values(name: &str, owner_id: &str) -> HashMap<String, Value> {
@@ -1596,12 +1477,6 @@ fn create_test_runtime() -> TestCore {
     create_runtime_with_schema(test_schema(), "test-app")
 }
 
-fn documents_query_by_title(title: &str) -> Query {
-    QueryBuilder::new("documents")
-        .filter_eq("title", Value::Text(title.into()))
-        .build()
-}
-
 fn column_index(schema: &Schema, table: &str, column: &str) -> usize {
     schema
         .get(&TableName::new(table))
@@ -1642,19 +1517,6 @@ fn execute_runtime_query(
     )
 }
 
-fn execute_local_runtime_query(
-    core: &mut TestCore,
-    query: Query,
-    session: Option<Session>,
-) -> Vec<(ObjectId, Vec<Value>)> {
-    execute_runtime_query_with_propagation(
-        core,
-        query,
-        session,
-        crate::sync_manager::QueryPropagation::LocalOnly,
-    )
-}
-
 fn execute_runtime_query_with_propagation(
     core: &mut TestCore,
     query: Query,
@@ -1689,47 +1551,6 @@ fn execute_runtime_query_with_durability_and_propagation(
     }
 }
 
-fn execute_runtime_query_with_local_overlay(
-    core: &mut TestCore,
-    query: Query,
-    session: Option<Session>,
-    durability: ReadDurabilityOptions,
-    propagation: crate::sync_manager::QueryPropagation,
-    overlay: QueryLocalOverlay,
-) -> Vec<(ObjectId, Vec<Value>)> {
-    let waker = noop_waker();
-    let mut cx = std::task::Context::from_waker(&waker);
-
-    let mut future =
-        core.query_with_local_overlay(query, session, durability, propagation, overlay);
-
-    match Pin::new(&mut future).poll(&mut cx) {
-        Poll::Ready(Ok(results)) => results,
-        Poll::Ready(Err(err)) => panic!("query should succeed: {err:?}"),
-        Poll::Pending => panic!("query should resolve immediately"),
-    }
-}
-
-fn decode_added_rows(delta: &SubscriptionDelta) -> Vec<(ObjectId, Vec<Value>)> {
-    delta
-        .ordered_delta
-        .added
-        .iter()
-        .map(|row| {
-            let values = decode_row(&delta.descriptor, &row.row.data).unwrap_or_else(|err| {
-                panic!(
-                    "subscription row {:?} should decode successfully: {err:?}",
-                    row.row.id
-                )
-            });
-            (row.row.id, values)
-        })
-        .collect()
-}
-
-
-
-
 
 
 
@@ -1754,6 +1575,5 @@ fn noop_waker() -> std::task::Waker {
 
 mod basic;
 mod fk_remove_error;
-mod query_subscription;
 mod schema_catalogue;
 mod write_batch;
