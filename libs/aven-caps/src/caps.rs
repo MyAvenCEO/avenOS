@@ -467,21 +467,56 @@ pub fn rebuild_identity_biscuit_excluding(
 	owner: Uuid,
 	exclude_did: &str,
 ) -> Result<Biscuit, String> {
-	let chain = vault
+	let chain = &vault
 		.identities
 		.get(&owner)
-		.ok_or_else(|| format!("unknown_identity:{owner}"))?;
-	let admins = identity_admins(&chain.biscuit, owner)?;
+		.ok_or_else(|| format!("unknown_identity:{owner}"))?
+		.biscuit;
+	// Snapshot EVERY grant the current chain carries so revoke drops ONLY the excluded
+	// DID. The prior version re-appended admins alone, so revoking any one peer silently
+	// stripped EVERY reader (Member), replica (Sync), and row-scoped grant from the
+	// identity — collateral access loss for everyone but the owner + admins.
+	let admins = identity_admins(chain, owner)?;
+	let readers = identity_readers(chain, owner)?;
+	let replicas = identity_replicas(chain, owner)?;
+	let grants = identity_grants(chain, owner)?;
+
+	let kp = &vault.biscuit_kp;
+	let excluded = |d: &str| peer_did_matches(d, exclude_did);
+	let is_owner = |d: &str| peer_did_matches(d, &vault.peer_did);
 	let mut biscuit = mint_genesis_identity(vault, owner)?;
-	// Genesis already grants the owner; re-append every other admin except the
-	// revoked one. Sort for deterministic order (HashSet iteration is unstable).
-	let mut remaining: Vec<String> = admins
+
+	// Genesis already grants the owner; re-append every OTHER admin except the revoked
+	// one. Sort each set for deterministic chain order (HashSet iteration is unstable).
+	let mut admin_dids: Vec<String> =
+		admins.into_iter().filter(|d| !excluded(d) && !is_owner(d)).collect();
+	admin_dids.sort();
+	for did in &admin_dids {
+		biscuit = attenuate_add_owner_third_party(kp, &biscuit, owner, did)?;
+	}
+	// Delegated readers (Member). Skip any DID already re-granted the strictly-greater
+	// owns above, and the owner/excluded DID.
+	let already_owner = |d: &str| admin_dids.iter().any(|a| peer_did_matches(a, d));
+	let mut reader_dids: Vec<String> = readers
 		.into_iter()
-		.filter(|d| !peer_did_matches(d, exclude_did) && !peer_did_matches(d, &vault.peer_did))
+		.filter(|d| !excluded(d) && !is_owner(d) && !already_owner(d))
 		.collect();
-	remaining.sort();
-	for did in remaining {
-		biscuit = attenuate_add_owner_third_party(&vault.biscuit_kp, &biscuit, owner, &did)?;
+	reader_dids.sort();
+	for did in &reader_dids {
+		biscuit = attenuate_add_reader_third_party(kp, &biscuit, owner, did)?;
+	}
+	// Blind replication peers (Sync relays).
+	let mut replica_dids: Vec<String> = replicas.into_iter().filter(|d| !excluded(d)).collect();
+	replica_dids.sort();
+	for did in &replica_dids {
+		biscuit = attenuate_add_replicate_third_party(kp, &biscuit, owner, did)?;
+	}
+	// Row/table-scoped granular grants (e.g. the avenCEO member's row-scoped `write`).
+	let mut grant_rows: Vec<(String, String, String)> =
+		grants.into_iter().filter(|(d, _, _)| !excluded(d)).collect();
+	grant_rows.sort();
+	for (did, op, prefix) in &grant_rows {
+		biscuit = attenuate_add_grant_third_party(kp, &biscuit, did, op, prefix)?;
 	}
 	Ok(biscuit)
 }

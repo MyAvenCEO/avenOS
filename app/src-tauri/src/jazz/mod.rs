@@ -1960,6 +1960,82 @@ pub(crate) async fn groove_ipc_peer_mesh_refresh(
 	})
 }
 
+/// Wrap a keyshare of EVERY DEK version the granter currently holds for `identity_uuid`
+/// to `recipient_did`. A grantee needs ALL historical versions, not just the current
+/// one: data written before a DEK rotation (e.g. a prior revoke) stays sealed under the
+/// OLD version, so a single current-version keyshare would leave that data permanently
+/// undecryptable — the member→revoke→regrant "poison" (a clean-slate grant works only
+/// because the identity has a single version). Idempotent: versions the recipient
+/// already holds a keyshare for are skipped, so a re-grant never duplicates rows.
+async fn wrap_all_dek_versions_to_recipient(
+	client: &JazzClient,
+	shell: &jazz_engine::ShellState,
+	identity_uuid: Uuid,
+	recipient_did: &str,
+) -> Result<(), String> {
+	let recipient_pk = crate::jazz_auth::ed25519_public_from_peer_did(recipient_did)?;
+	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recipient_pk)?;
+	let urn = jazz_engine::identity_urn(identity_uuid);
+
+	let ks_schema = jazz_engine::resolved_table_schema(client, "keyshares").await?;
+	let ks_spark_ix = jazz_engine::col_ix(&ks_schema, "owner")?;
+	let ks_ver_ix = jazz_engine::col_ix(&ks_schema, "dek_version")?;
+	let ks_recip_ix = jazz_engine::col_ix(&ks_schema, "recipient_did")?;
+
+	// Versions the recipient ALREADY has → skip (idempotent re-grant; no duplicate rows).
+	let mut have: std::collections::BTreeSet<i64> = std::collections::BTreeSet::new();
+	for (_oid, vals) in jazz_engine::exec_list_rows(client, "keyshares").await? {
+		if jazz_engine::uuid_cell_at(vals.as_slice(), ks_spark_ix)? != identity_uuid {
+			continue;
+		}
+		match vals.get(ks_recip_ix) {
+			Some(Value::Text(s)) if s == recipient_did => {}
+			_ => continue,
+		}
+		have.insert(jazz_engine::bigint_i64(
+			vals.get(ks_ver_ix).ok_or("ks_ver_missing")?,
+		)?);
+	}
+
+	// Every DEK version the granter holds for this identity, oldest first.
+	let mut versions: Vec<i64> = shell
+		.deks
+		.keys()
+		.filter(|(sid, _)| *sid == identity_uuid)
+		.map(|(_, v)| *v)
+		.collect();
+	versions.sort_unstable();
+	if versions.is_empty() {
+		return Err(format!("no DEK held for identity {identity_uuid}"));
+	}
+
+	for v in versions {
+		if have.contains(&v) {
+			continue;
+		}
+		let dek = shell
+			.deks
+			.get(&(identity_uuid, v))
+			.ok_or_else(|| format!("missing DEK for identity {identity_uuid} v{v}"))?;
+		let aad = crate::crypto::keyshare_wrap_aad(&urn, recipient_did, v);
+		let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
+		let mut ks = Map::new();
+		ks.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
+		ks.insert("dek_version".into(), JsonValue::Number(v.into()));
+		ks.insert("recipient_did".into(), JsonValue::String(recipient_did.to_string()));
+		ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
+		ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
+		let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
+		let ks_oid = ObjectId::new();
+		let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity_uuid)?;
+		client
+			.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+			.await
+			.map_err(format_jazz_err)?;
+	}
+	Ok(())
+}
+
 /// Append biscuit third-party `owns` for `peerDid`, persist updated `genesis_b64`, and add a DEK keyshare row so the peer can decrypt ciphertext for this identity after sync.
 pub(crate) async fn groove_ipc_spark_admin_add(
 	app: &tauri::AppHandle,
@@ -2006,36 +2082,6 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 		None,
 	)?;
 
-	let dek_ver = shell
-		.identity_versions
-		.get(&identity_uuid)
-		.copied()
-		.ok_or_else(|| format!("missing dek version for identity {identity_uuid}"))?;
-	let dek = shell
-		.deks
-		.get(&(identity_uuid, dek_ver))
-		.ok_or_else(|| format!("missing DEK for identity {identity_uuid} v{dek_ver}"))?;
-
-	let ks_schema_pre = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
-	let ks_spark_ix_pre = jazz_engine::col_ix(&ks_schema_pre, "owner")?;
-	let ks_ver_ix_pre = jazz_engine::col_ix(&ks_schema_pre, "dek_version")?;
-	let ks_recip_ix_pre = jazz_engine::col_ix(&ks_schema_pre, "recipient_did")?;
-
-	let ks_rows_pre = jazz_engine::exec_list_rows(client.as_ref(), "keyshares").await?;
-	let mut ks_exists = false;
-	for (_oid, vals) in ks_rows_pre {
-		let sid = jazz_engine::uuid_cell_at(vals.as_slice(), ks_spark_ix_pre)?;
-		let dv = jazz_engine::bigint_i64(vals.get(ks_ver_ix_pre).ok_or("ks_ver_missing")?)?;
-		let recip = match vals.get(ks_recip_ix_pre).ok_or("ks_recip_missing")? {
-			Value::Text(s) => s.as_str(),
-			_ => continue,
-		};
-		if sid == identity_uuid && dv == dek_ver && recip == peer_did.as_str() {
-			ks_exists = true;
-			break;
-		}
-	}
-
 	let bisc_identity = shell
 		.vault
 		.identities
@@ -2045,48 +2091,13 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 	let already_owner =
 		crate::identity_acc::identity_peer_is_owner(&bisc_identity.biscuit, identity_uuid, &peer_did)?;
 
-	if already_owner && ks_exists {
-		finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
-		return Ok(());
-	}
-
 	let _ = client.flush_peer_sync().await;
 
-	// Keyshare before genesis so peers often have the DEK before biscuit/catalogue rows land.
-	if !ks_exists {
-		let recipient_pk = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
-		let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recipient_pk)?;
-		let urn = jazz_engine::identity_urn(identity_uuid);
-		let aad = crate::crypto::keyshare_wrap_aad(&urn, &peer_did, dek_ver);
-		let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
-
-		let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
-		let mut ks = Map::new();
-		ks.insert(
-			"owner".into(),
-			JsonValue::String(identity_uuid.to_string()),
-		);
-		ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
-		ks.insert(
-			"recipient_did".into(),
-			JsonValue::String(peer_did.clone()),
-		);
-		ks.insert(
-			"wrapper_did".into(),
-			JsonValue::String(shell.peer_did.clone()),
-		);
-		ks.insert(
-			"wrapped_dek".into(),
-			JsonValue::String(wrapped),
-		);
-		let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
-		let ks_oid = ObjectId::new();
-		let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity_uuid)?;
-		client
-			.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
-			.await
-			.map_err(format_jazz_err)?;
-	}
+	// Keyshare(s) before genesis so peers often have the DEK before the biscuit/catalogue
+	// rows land. Wrap EVERY held DEK version (not just the current one) so the grantee can
+	// also decrypt data sealed under pre-rotation versions — this is what lets a re-grant
+	// after a revoke (which rotated the DEK) read the identity's pre-revoke data. Idempotent.
+	wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &peer_did).await?;
 
 	if !already_owner {
 		let new_biscuit = crate::identity_acc::attenuate_add_owner_third_party(
@@ -2331,35 +2342,6 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 	// Only a identity admin may grant read (same gate as admin/replicate add).
 	jazz_engine::authorize_gate(shell, "identities", crate::identity_acc::AccOp::Write, identity_uuid, None)?;
 
-	let dek_ver = shell
-		.identity_versions
-		.get(&identity_uuid)
-		.copied()
-		.ok_or_else(|| format!("missing dek version for identity {identity_uuid}"))?;
-	let dek = shell
-		.deks
-		.get(&(identity_uuid, dek_ver))
-		.ok_or_else(|| format!("missing DEK for identity {identity_uuid} v{dek_ver}"))?;
-
-	let ks_schema_pre = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
-	let ks_spark_ix_pre = jazz_engine::col_ix(&ks_schema_pre, "owner")?;
-	let ks_ver_ix_pre = jazz_engine::col_ix(&ks_schema_pre, "dek_version")?;
-	let ks_recip_ix_pre = jazz_engine::col_ix(&ks_schema_pre, "recipient_did")?;
-	let ks_rows_pre = jazz_engine::exec_list_rows(client.as_ref(), "keyshares").await?;
-	let mut ks_exists = false;
-	for (_oid, vals) in ks_rows_pre {
-		let sid = jazz_engine::uuid_cell_at(vals.as_slice(), ks_spark_ix_pre)?;
-		let dv = jazz_engine::bigint_i64(vals.get(ks_ver_ix_pre).ok_or("ks_ver_missing")?)?;
-		let recip = match vals.get(ks_recip_ix_pre).ok_or("ks_recip_missing")? {
-			Value::Text(s) => s.as_str(),
-			_ => continue,
-		};
-		if sid == identity_uuid && dv == dek_ver && recip == peer_did.as_str() {
-			ks_exists = true;
-			break;
-		}
-	}
-
 	let bisc_identity = shell
 		.vault
 		.identities
@@ -2368,32 +2350,12 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 	let already_reader = crate::identity_acc::identity_readers(&bisc_identity.biscuit, identity_uuid)?
 		.iter()
 		.any(|d| d.trim() == peer_did.as_str());
-	if already_reader && ks_exists {
-		finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
-		return Ok(());
-	}
 
 	let _ = client.flush_peer_sync().await;
 
-	// Keyshare before genesis so the reader often has the DEK before the chain lands.
-	if !ks_exists {
-		let recipient_pk = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
-		let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recipient_pk)?;
-		let urn = jazz_engine::identity_urn(identity_uuid);
-		let aad = crate::crypto::keyshare_wrap_aad(&urn, &peer_did, dek_ver);
-		let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
-		let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
-		let mut ks = Map::new();
-		ks.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
-		ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
-		ks.insert("recipient_did".into(), JsonValue::String(peer_did.clone()));
-		ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
-		ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
-		let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
-		let ks_oid = ObjectId::new();
-		let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity_uuid)?;
-		client.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta).await.map_err(format_jazz_err)?;
-	}
+	// Wrap EVERY held DEK version to the reader (see admin_add) so a post-rotation re-grant
+	// can read pre-rotation data. Idempotent — skips versions the reader already holds.
+	wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &peer_did).await?;
 
 	if !already_reader {
 		let new_biscuit = crate::identity_acc::attenuate_add_reader_third_party(
@@ -2838,15 +2800,11 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 	// Only the avenCEO owner may add members.
 	jazz_engine::authorize_gate(shell, "identities", crate::identity_acc::AccOp::Write, identity_uuid, None)?;
 
-	let dek_ver = shell
-		.identity_versions
-		.get(&identity_uuid)
-		.copied()
-		.ok_or_else(|| "avenCEO identity not claimed / not loaded on this device".to_string())?;
-	let dek = shell
-		.deks
-		.get(&(identity_uuid, dek_ver))
-		.ok_or_else(|| format!("missing DEK for avenCEO v{dek_ver}"))?;
+	// Fail fast (before creating the roster row) if this device doesn't hold the avenCEO
+	// DEK — without it we can't mint the member's keyshare.
+	if !shell.deks.keys().any(|(sid, _)| *sid == identity_uuid) {
+		return Err("avenCEO identity not claimed / not loaded on this device".to_string());
+	}
 
 	let _ = client.flush_peer_sync().await;
 
@@ -2867,22 +2825,9 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 	let prow_meta = owner_binding_meta(&shell.signing_key, member_oid, identity_uuid)?;
 	client.create_with_id_and_metadata("peers", member_oid, prow_vals, prow_meta).await.map_err(format_jazz_err)?;
 
-	// 2. Keyshare: wrap the avenCEO DEK to the member (decrypt sealed roster fields).
-	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &peer_pk)?;
-	let urn = jazz_engine::identity_urn(identity_uuid);
-	let aad = crate::crypto::keyshare_wrap_aad(&urn, &peer_did, dek_ver);
-	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
-	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
-	let mut ks = Map::new();
-	ks.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
-	ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
-	ks.insert("recipient_did".into(), JsonValue::String(peer_did.clone()));
-	ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
-	ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
-	let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
-	let ks_oid = ObjectId::new();
-	let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity_uuid)?;
-	client.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta).await.map_err(format_jazz_err)?;
+	// 2. Keyshare: wrap EVERY held avenCEO DEK version to the member so it can decrypt the
+	//    sealed roster fields (and prior-version data after any rotation). Idempotent.
+	wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &peer_did).await?;
 
 	// 3. Membership bundle in the biscuit: reads (whole roster) + write (own row only).
 	let bisc = shell
