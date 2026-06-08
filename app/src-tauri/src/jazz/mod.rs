@@ -1993,7 +1993,7 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 	// step or allowlist gate. Materialize the grantee in the local roster and
 	// register it for sync so the grant takes effect end-to-end. The roster
 	// ("synced with") is thus derived from grants, not hand-managed.
-	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "Peer").await?;
+	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "").await?;
 	if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
 		log::warn!(target: "avenos::jazz", "identity_admin_add register {peer_did}: {e}");
 	}
@@ -2168,7 +2168,7 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 	let peer_pk = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
 
 	// Register the replica as a sync peer so the grant takes effect end-to-end.
-	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "Replication Server").await?;
+	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "").await?;
 	if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
 		log::warn!(target: "avenos::jazz", "identity_replicate_add register {peer_did}: {e}");
 	}
@@ -2323,7 +2323,7 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 	}
 	let peer_pk = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
 
-	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "Member").await?;
+	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "").await?;
 	if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
 		log::warn!(target: "avenos::jazz", "identity_reader_add register {peer_did}: {e}");
 	}
@@ -2830,7 +2830,7 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 	let peer_pk = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
 	let identity_uuid = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
 
-	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "Member").await?;
+	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "").await?;
 	if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
 		log::warn!(target: "avenos::jazz", "aven_ceo_add_member register {peer_did}: {e}");
 	}

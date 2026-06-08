@@ -165,10 +165,11 @@ pub async fn add_remote_peer(
 		.duration_since(std::time::UNIX_EPOCH)
 		.map(|d| d.as_millis() as i64)
 		.unwrap_or(0);
-	let label = {
-		let l = device_label.trim();
-		if l.is_empty() { "Peer" } else { l }.to_string()
-	};
+	// Store the caller's label verbatim (empty allowed). Grant-side callers pass an
+	// empty label because they don't know the peer's real name — the UI then falls back
+	// to the short DID (and to the roster name once the peer self-publishes) instead of
+	// showing a misleading role word like "Replication Server" as if it were the device.
+	let label = device_label.trim().to_string();
 	let mut values: Map<String, JsonValue> = Map::new();
 	// Scope the trust-set row to the device's default identity so it syncs across the
 	// user's own devices (caps-only). If no identity exists yet it stays null = local.
