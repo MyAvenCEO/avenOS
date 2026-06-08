@@ -29,11 +29,14 @@ pub struct LlamaModelSpec {
 	pub file: &'static str,
 }
 
-/// LFM2.5-8B-A1B, Q4_K_M GGUF (LiquidAI official). Run on Metal via llama.cpp.
-pub const LFM2_5_8B_A1B: LlamaModelSpec = LlamaModelSpec {
-	dir: "lfm2.5-8b-a1b-gguf",
-	base_url: "https://huggingface.co/LiquidAI/LFM2.5-8B-A1B-GGUF/resolve/main/",
-	file: "LFM2.5-8B-A1B-Q4_K_M.gguf",
+/// LFM2.5-1.2B-Instruct, Q6_K GGUF (LiquidAI official). Run FULLY on Metal via
+/// llama.cpp. Chosen over the 8B-A1B MoE so the whole model (~0.9 GB) fits in the
+/// 8 GB Mac's Metal working set with headroom — the 8B-A1B (Q4_K_M, 4.8 GB) OOM'd
+/// the Metal command buffer on decode (all 32 experts must stay resident).
+pub const LFM2_5_1_2B: LlamaModelSpec = LlamaModelSpec {
+	dir: "lfm2.5-1.2b-instruct-gguf",
+	base_url: "https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF/resolve/main/",
+	file: "LFM2.5-1.2B-Instruct-Q6_K.gguf",
 };
 
 impl LlamaModelSpec {
