@@ -132,6 +132,14 @@ fn quiet_llama_logs() {
 fn backend() -> &'static LlamaBackend {
 	static BACKEND: std::sync::OnceLock<LlamaBackend> = std::sync::OnceLock::new();
 	BACKEND.get_or_init(|| {
+		// Disable ggml-metal residency sets. On macOS 26 the process-exit teardown frees the
+		// Metal device (C++ static destructor → `ggml_metal_device_free` → `ggml_metal_rsets_free`)
+		// while residency-set entries are still registered, so its `GGML_ASSERT(data count == 0)`
+		// fails → `ggml_abort()` → SIGABRT on quit (and a wedged relaunch). `GGML_METAL_NO_RESIDENCY`
+		// is ggml's own opt-out (ggml-metal-device.m): it leaves `rsets = nil`, so the free is a
+		// no-op. Residency sets are only a keep-resident perf hint; dropping them is safe. MUST be
+		// set before the Metal device is created (i.e. before backend init / first model load).
+		std::env::set_var("GGML_METAL_NO_RESIDENCY", "1");
 		quiet_llama_logs();
 		LlamaBackend::init().expect("llama.cpp backend init failed")
 	})
