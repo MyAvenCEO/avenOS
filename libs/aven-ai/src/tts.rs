@@ -233,13 +233,24 @@ impl Synthesizer {
 		// linked onnxruntime built with CoreML, not the bundled dylib.
 		let build = |file: &str| -> Result<Session, String> {
 			let path = dir.join(file);
-			let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+			// 2 intra-op threads (not all cores). MOSS runs hundreds of tiny single-token
+			// ops per clip; 8 threads = mostly dispatch/sync overhead. Benchmarked on M1:
+			// 8 threads → RTF 1.55x (slower than real-time); 2 threads → RTF 0.94x (faster
+			// than real-time, so streamed playback stays smooth). inter_op=1 like the
+			// reference runtime. `AVENOS_TTS_THREADS` overrides for tuning.
+			let threads = std::env::var("AVENOS_TTS_THREADS")
+				.ok()
+				.and_then(|s| s.parse::<usize>().ok())
+				.filter(|&n| n > 0)
+				.unwrap_or(2);
 			Session::builder()
 				.map_err(|e| format!("session builder: {e}"))?
 				.with_optimization_level(GraphOptimizationLevel::Level3)
 				.map_err(|e| format!("opt level: {e}"))?
 				.with_intra_threads(threads)
 				.map_err(|e| format!("threads: {e}"))?
+				.with_inter_threads(1)
+				.map_err(|e| format!("inter threads: {e}"))?
 				.commit_from_file(&path)
 				.map_err(|e| format!("load model {}: {e}", path.display()))
 		};
