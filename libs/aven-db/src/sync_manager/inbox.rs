@@ -347,6 +347,16 @@ impl SyncManager {
                     } else {
                         crate::capability::AccOp::Write
                     };
+                    if matches!(table.as_str(), "identities" | "keyshares" | "peers") {
+                        eprintln!(
+                            "[GRANTDIAG] inbox received+apply table={} row_id={} owner_binding={} edit_sig={} delete={}",
+                            table,
+                            row.row_id,
+                            proof.is_some(),
+                            edit_sig.is_some(),
+                            row.delete_kind.is_some()
+                        );
+                    }
                     match resolver.verify_on_apply(
                         &subject,
                         apply_op,
@@ -357,6 +367,10 @@ impl SyncManager {
                     ) {
                         crate::capability::CapDecision::Allow => {}
                         other => {
+                            eprintln!(
+                                "[GRANTDIAG] inbox REJECTED table={} row_id={} decision={:?}",
+                                table, row.row_id, other
+                            );
                             tracing::warn!(
                                 row_id = %row.row_id,
                                 table = %table,

@@ -117,6 +117,12 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 		edit_sig: Option<&[u8]>,
 	) -> CapDecision {
 		let spark_scoped = crate::identity_sync::is_spark_scoped_table(&res.table);
+		if spark_scoped {
+			eprintln!(
+				"[GRANTDIAG] verify_on_apply ENTER table={} row_id={} op={:?} owner_binding={} edit_sig={}",
+				res.table, res.row_id, op, proof.is_some(), edit_sig.is_some()
+			);
+		}
 
 		// Private by default: an identity-scoped row MUST carry an owner-binding — **no table
 		// exclusions**. Non-identity-scoped tables (local vault/shell, humans) aren't gated
@@ -124,6 +130,7 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 		// `keyshares`→`RotateDek`), not a skip.
 		let Some(proof) = proof else {
 			if spark_scoped {
+				eprintln!("[GRANTDIAG] DENY table={} reason=no_owner_binding", res.table);
 				return CapDecision::DenyPermanent;
 			}
 			return CapDecision::Allow;
@@ -140,9 +147,11 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 		//     author it names. Needs no vault, so any peer/relay enforces it → a forged
 		//     or relabeled row dies at every hop (E2E, relay-proof).
 		if binding.value_id != *res.row_id.uuid() {
+			eprintln!("[GRANTDIAG] DENY table={} reason=owner_binding_value_id_mismatch", res.table);
 			return CapDecision::DenyPermanent;
 		}
 		if aven_caps::ownership::verify_owner_binding(&binding).is_err() {
+			eprintln!("[GRANTDIAG] DENY table={} reason=owner_binding_signature_invalid", res.table);
 			return CapDecision::DenyPermanent;
 		}
 
@@ -167,22 +176,31 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 			Some(b) => b,
 			None => {
 				if spark_scoped {
+					eprintln!("[GRANTDIAG] DENY table={} reason=no_edit_sig", res.table);
 					return CapDecision::DenyPermanent;
 				}
 				return CapDecision::Allow;
 			}
 		};
 		let Ok(es_str) = std::str::from_utf8(edit_sig) else {
+			eprintln!("[GRANTDIAG] DENY table={} reason=edit_sig_not_utf8", res.table);
 			return CapDecision::DenyPermanent;
 		};
 		let es = match aven_caps::ownership::EditSignature::from_meta_str(es_str) {
 			Ok(e) => e,
-			Err(_) => return CapDecision::DenyPermanent,
+			Err(_) => {
+				eprintln!("[GRANTDIAG] DENY table={} reason=edit_sig_parse_failed", res.table);
+				return CapDecision::DenyPermanent;
+			}
 		};
 		// Bind the edit-sig to the receiver-computed digest. A relay that tampered with
 		// `data` changes that digest, so the carried signature no longer matches → reject
 		// (this holds even when we don't hold the identity, i.e. a pure relay).
 		if aven_caps::ownership::verify_signed_batch(&es, digest).is_err() {
+			eprintln!(
+				"[GRANTDIAG] DENY table={} reason=edit_sig_digest_mismatch (signed digest != receiver-computed digest)",
+				res.table
+			);
 			return CapDecision::DenyPermanent;
 		}
 
@@ -190,12 +208,20 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 		//     that the edit-signature's author may actually write it. A blind relay that does
 		//     not hold the identity accepts on authenticity + content-integrity alone.
 		let Ok(shell_guard) = self.shell.read() else {
+			if spark_scoped { eprintln!("[GRANTDIAG] PENDING table={} reason=shell_lock_poisoned", res.table); }
 			return CapDecision::Pending;
 		};
 		let Some(shell) = shell_guard.as_ref() else {
+			if spark_scoped { eprintln!("[GRANTDIAG] PENDING table={} reason=no_shell_yet", res.table); }
 			return CapDecision::Pending;
 		};
 		if !shell.vault.identities.contains_key(&binding.owner) {
+			if spark_scoped {
+				eprintln!(
+					"[GRANTDIAG] ALLOW table={} reason=not_yet_member_authenticity_ok owner={}",
+					res.table, binding.owner
+				);
+			}
 			return CapDecision::Allow;
 		}
 		// Honor an inbound Delete (audit #6): a delete-flagged row must satisfy the distinct
@@ -221,8 +247,17 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 			digest,
 			Some(&binding),
 		) {
-			Ok(()) => CapDecision::Allow,
-			Err(_) => CapDecision::DenyPermanent,
+			Ok(()) => {
+				eprintln!("[GRANTDIAG] ALLOW table={} reason=authorized_signed_edit", res.table);
+				CapDecision::Allow
+			}
+			Err(e) => {
+				eprintln!(
+					"[GRANTDIAG] DENY table={} reason=authorize_signed_edit_failed owner={} err={e}",
+					res.table, binding.owner
+				);
+				CapDecision::DenyPermanent
+			}
 		}
 	}
 }
