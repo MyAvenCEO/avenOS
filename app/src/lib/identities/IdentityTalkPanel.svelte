@@ -6,6 +6,7 @@
 	import type { ComposerMode } from '$lib/intents/types'
 	import { persistSparkFiles } from '$lib/jazz/intent-files'
 	import { streamReply } from '$lib/llm/generate'
+	import { LLM_TOOLS, executeToolCall } from '$lib/llm/tools'
 	import { speak } from '$lib/tts/speak'
 	import {
 		agentUnavailableReason,
@@ -267,11 +268,26 @@
 			replyId = reply.id
 			streamingId = reply.id
 			streaming = { ...streaming, [reply.id]: '' }
-			const full = await streamReply(prompt, reply.id, (piece) => {
-				// Reassign (not mutate) so the {#each} liveBody const re-derives reliably.
-				streaming = { ...streaming, [reply.id]: (streaming[reply.id] ?? '') + piece }
-			})
-			await messages.update(reply.id, { body: full || (streaming[reply.id] ?? '') })
+			let toolMsg: string | undefined
+			const full = await streamReply(
+				prompt,
+				reply.id,
+				(piece) => {
+					// Reassign (not mutate) so the {#each} liveBody const re-derives reliably.
+					streaming = { ...streaming, [reply.id]: (streaming[reply.id] ?? '') + piece }
+				},
+				{
+					tools: LLM_TOOLS,
+					// Single-turn: run the side effect (navigation) and show a short confirmation.
+					// Prefer it over any raw call text the model may have streamed.
+					onToolCall: (call) => {
+						const res = executeToolCall(call)
+						toolMsg = res.message
+						streaming = { ...streaming, [reply.id]: res.message }
+					},
+				},
+			)
+			await messages.update(reply.id, { body: toolMsg || full || (streaming[reply.id] ?? '') })
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e)
 			if (replyId) {

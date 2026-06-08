@@ -24,6 +24,10 @@ pub const DOWNLOAD_EVENT: &str = "llm:model-download";
 /// Per-token streaming event emitted during `llm_generate`.
 #[cfg_attr(not(any(feature = "local-llm", feature = "local-llama")), allow(dead_code))]
 pub const TOKEN_EVENT: &str = "llm:token";
+/// Emitted once when the model decides to call a tool (e.g. `navigate_pages`). The webview
+/// dispatches it (single-turn — there is no model round-trip).
+#[cfg_attr(not(any(feature = "local-llm", feature = "local-llama")), allow(dead_code))]
+pub const TOOL_CALL_EVENT: &str = "llm:tool-call";
 
 const MODEL_LABEL: &str = "LFM2.5 1.2B";
 
@@ -80,6 +84,29 @@ pub struct LlmToken {
 	pub done: bool,
 }
 
+/// A tool definition passed in from the webview on `llm_generate`. The app owns the tool
+/// registry (names, descriptions, JSON-Schema params); this layer just forwards them to the
+/// engine. `parameters` is a JSON-Schema object passed through verbatim.
+#[cfg_attr(not(feature = "local-llama"), allow(dead_code))]
+#[derive(serde::Deserialize, Clone)]
+pub struct Tool {
+	pub name: String,
+	#[serde(default)]
+	pub description: String,
+	#[serde(default)]
+	pub parameters: serde_json::Value,
+}
+
+/// One `llm:tool-call` event: the function the model chose plus its parsed arguments.
+#[cfg_attr(not(feature = "local-llama"), allow(dead_code))]
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmToolCall {
+	pub reply_id: String,
+	pub name: String,
+	pub arguments: serde_json::Value,
+}
+
 /// On-device LLM runs on the PRIMARY instance only (same rationale as ASR — a
 /// secondary dev instance shares the models cache and must not download/load).
 fn instance_enabled() -> bool {
@@ -108,11 +135,12 @@ pub async fn llm_generate(
 	app: AppHandle,
 	prompt: String,
 	reply_id: String,
+	#[allow(unused_variables)] tools: Option<Vec<Tool>>,
 ) -> Result<String, String> {
 	if !instance_enabled() {
 		return Err("on-device generation runs on the primary instance only".into());
 	}
-	imp::generate(&app, prompt, reply_id).await
+	imp::generate(&app, prompt, reply_id, tools.unwrap_or_default()).await
 }
 
 pub fn spawn_model_download(app: &AppHandle) {
@@ -196,7 +224,12 @@ mod imp {
 		LlmStatus::unavailable()
 	}
 
-	pub async fn generate(_app: &AppHandle, _prompt: String, _reply_id: String) -> Result<String, String> {
+	pub async fn generate(
+		_app: &AppHandle,
+		_prompt: String,
+		_reply_id: String,
+		_tools: Vec<super::Tool>,
+	) -> Result<String, String> {
 		Err("on-device generation is not available in this build (enable the `local-llm` feature)".into())
 	}
 
@@ -456,7 +489,14 @@ mod imp {
 		reset(app, true);
 	}
 
-	pub async fn generate(app: &AppHandle, prompt: String, reply_id: String) -> Result<String, String> {
+	// The ONNX/`ort` reuse branch has no tool-calling loop yet; `_tools` is accepted for a
+	// uniform command surface but ignored (the default build is `local-llama`).
+	pub async fn generate(
+		app: &AppHandle,
+		prompt: String,
+		reply_id: String,
+		_tools: Vec<super::Tool>,
+	) -> Result<String, String> {
 		let model = ensure_model(app).await?;
 		let app2 = app.clone();
 		let reply = reply_id.clone();
@@ -494,10 +534,13 @@ mod imp {
 	use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 	use std::sync::{Arc, Mutex, OnceLock};
 
-	use aven_ai::llama::{self, DownloadError, LlamaEngine};
+	use aven_ai::llama::{self, DownloadError, LlamaEngine, ToolSpec};
 	use tauri::{AppHandle, Emitter};
 
-	use super::{LlmStatus, LlmToken, DOWNLOAD_EVENT, MODEL_LABEL, MODEL_QUANT, TOKEN_EVENT};
+	use super::{
+		LlmStatus, LlmToken, LlmToolCall, DOWNLOAD_EVENT, MODEL_LABEL, MODEL_QUANT, TOKEN_EVENT,
+		TOOL_CALL_EVENT,
+	};
 
 	/// The GGUF spec (download URL + on-disk dir); `super::MODEL_DIR` mirrors `spec.dir`.
 	fn spec() -> llama::LlamaModelSpec {
@@ -683,13 +726,24 @@ mod imp {
 		reset(app, true);
 	}
 
-	pub async fn generate(app: &AppHandle, prompt: String, reply_id: String) -> Result<String, String> {
+	pub async fn generate(
+		app: &AppHandle,
+		prompt: String,
+		reply_id: String,
+		tools: Vec<super::Tool>,
+	) -> Result<String, String> {
 		let engine = ensure_model(app).await?;
 		let app2 = app.clone();
 		let reply = reply_id.clone();
+		// Map the webview's tool definitions onto the engine's generic `ToolSpec`.
+		let specs: Vec<ToolSpec> = tools
+			.into_iter()
+			.map(|t| ToolSpec { name: t.name, description: t.description, parameters: t.parameters })
+			.collect();
 		let stats = tokio::task::spawn_blocking(move || {
-			engine.generate(
+			engine.generate_with_tools(
 				&prompt,
+				&specs,
 				MAX_NEW_TOKENS,
 				|piece| {
 					let _ = app2.emit(
@@ -702,6 +756,20 @@ mod imp {
 		})
 		.await
 		.map_err(|e| format!("generate task: {e}"))?;
+
+		// Surface any tool call the model emitted (single-turn: the webview dispatches it).
+		if let Ok(s) = &stats {
+			for call in &s.tool_calls {
+				let _ = app.emit(
+					TOOL_CALL_EVENT,
+					LlmToolCall {
+						reply_id: reply_id.clone(),
+						name: call.name.clone(),
+						arguments: call.arguments.clone(),
+					},
+				);
+			}
+		}
 
 		// End-of-stream marker (also sent on error so the UI can stop the spinner).
 		let _ = app.emit(

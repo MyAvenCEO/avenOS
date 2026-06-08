@@ -66,12 +66,37 @@ pub fn download(
 	Ok(())
 }
 
-/// Outcome of a generation run — the decoded text plus the decode throughput.
+/// A tool the model may call. `parameters` is a JSON-Schema object (a [`serde_json::Value`])
+/// describing the arguments. Kept fully generic — the *app* owns the tool registry; this
+/// crate only knows how to advertise tools to LFM2 and parse the calls back out.
+#[derive(Clone, Debug)]
+pub struct ToolSpec {
+	pub name: String,
+	pub description: String,
+	/// JSON-Schema object for the arguments, e.g. `{"type":"object","properties":{…}}`.
+	pub parameters: serde_json::Value,
+}
+
+/// A tool call the model emitted: the function name plus its arguments as a JSON object.
+#[derive(Clone, Debug)]
+pub struct ToolCall {
+	pub name: String,
+	pub arguments: serde_json::Value,
+}
+
+/// Outcome of a generation run — the decoded text, decode throughput, and any tool calls
+/// the model emitted (empty for a plain text reply).
 pub struct GenStats {
 	pub text: String,
 	pub tokens: usize,
 	pub tokens_per_sec: f64,
+	pub tool_calls: Vec<ToolCall>,
 }
+
+/// Appended to [`SYSTEM_PROMPT`] when tools are offered, so the 1.2B model reliably reaches
+/// for a tool instead of describing what it would do.
+const TOOL_GUIDANCE: &str = " Wenn der Nutzer zu einem Bereich der App wechseln oder navigieren \
+	möchte, rufe das passende Tool auf, statt mit Text zu antworten.";
 
 /// Process-global llama.cpp backend (ggml init runs exactly once; the `metal` feature selects
 /// the GPU backend at build time). Init failure means no compute backend at all (Metal/GPU
@@ -124,12 +149,65 @@ impl LlamaEngine {
 		})
 	}
 
+	/// Build the LFM2 tool-calling prompt: the tool schemas go inside the system turn between
+	/// `<|tool_list_start|>` / `<|tool_list_end|>` (LFM2's native tool format), assistant turn
+	/// left open. Built by hand rather than via `apply_chat_template` because the `llama-cpp-2`
+	/// binding's template API takes only messages, not tool defs. `AddBos::Always` supplies the
+	/// BOS at tokenize time, so none is embedded here.
+	fn chat_prompt_with_tools(&self, user: &str, tools: &[ToolSpec]) -> String {
+		if tools.is_empty() {
+			return self.chat_prompt(user);
+		}
+		let tool_list = tools
+			.iter()
+			.map(|t| {
+				serde_json::json!({
+					"name": t.name,
+					"description": t.description,
+					"parameters": t.parameters,
+				})
+				.to_string()
+			})
+			.collect::<Vec<_>>()
+			.join(", ");
+		format!(
+			"<|im_start|>system\n{SYSTEM_PROMPT}{TOOL_GUIDANCE}\n\n\
+			 List of tools: <|tool_list_start|>[{tool_list}]<|tool_list_end|><|im_end|>\n\
+			 <|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n"
+		)
+	}
+
+	/// Resolve a single special token (e.g. `<|tool_call_start|>`) to its id, or `None` if the
+	/// tokenizer doesn't carry it as one atomic token. `str_to_token` parses special tokens, so
+	/// a well-formed LFM2 marker encodes to exactly one id.
+	fn special_token(&self, marker: &str) -> Option<llama_cpp_2::token::LlamaToken> {
+		match self.model.str_to_token(marker, AddBos::Never) {
+			Ok(ids) if ids.len() == 1 => Some(ids[0]),
+			_ => None,
+		}
+	}
+
 	/// Greedily decode up to `max_tokens` continuations of `prompt`, calling `on_token` with
 	/// each decoded piece (live streaming) and stopping early when `cancelled()` flips.
 	/// Returns the full text + tok/s.
 	pub fn generate(
 		&self,
 		prompt: &str,
+		max_tokens: usize,
+		on_token: impl FnMut(&str),
+		cancelled: impl Fn() -> bool,
+	) -> Result<GenStats, String> {
+		self.generate_with_tools(prompt, &[], max_tokens, on_token, cancelled)
+	}
+
+	/// Like [`generate`](Self::generate), but advertises `tools` to the model. When the model
+	/// emits a tool call (an LFM2 `<|tool_call_start|>…<|tool_call_end|>` span), the span is
+	/// parsed into a [`ToolCall`], kept out of the visible token stream, and generation stops
+	/// (single-turn: the caller dispatches the call). Plain replies behave exactly as before.
+	pub fn generate_with_tools(
+		&self,
+		prompt: &str,
+		tools: &[ToolSpec],
 		max_tokens: usize,
 		mut on_token: impl FnMut(&str),
 		cancelled: impl Fn() -> bool,
@@ -143,7 +221,7 @@ impl LlamaEngine {
 		// Wrap the user text in the model's chat template + a concise system prompt so
 		// LFM2.5-Instruct replies in chat mode (short, clean answers) instead of doing
 		// raw text completion. `str_to_token` parses the template's special tokens.
-		let templated = self.chat_prompt(prompt);
+		let templated = self.chat_prompt_with_tools(prompt, tools);
 		let tokens = self
 			.model
 			.str_to_token(&templated, AddBos::Always)
@@ -156,6 +234,15 @@ impl LlamaEngine {
 			batch.add(tok, i as i32, &[0], i == last).map_err(|e| format!("batch add: {e}"))?;
 		}
 		ctx.decode(&mut batch).map_err(|e| format!("decode prompt: {e}"))?;
+
+		// Tool-call span markers (looked up only when tools are offered). Inside the span the
+		// inner tokens render as plain text (`[navigate_pages(route="settings")]`); we collect
+		// them and parse once the span closes, rather than streaming them as visible reply text.
+		let tc_start = if tools.is_empty() { None } else { self.special_token("<|tool_call_start|>") };
+		let tc_end = if tools.is_empty() { None } else { self.special_token("<|tool_call_end|>") };
+		let mut in_tool_call = false;
+		let mut tool_bytes: Vec<u8> = Vec::new();
+		let mut tool_calls: Vec<ToolCall> = Vec::new();
 
 		// Not greedy: greedy on a 1.2B model loops into a single-token wall (the "粲粲…"
 		// garbage). Repetition penalty + top-p + a little temperature keeps it coherent.
@@ -183,6 +270,32 @@ impl LlamaEngine {
 			if self.model.is_eog_token(token) {
 				break;
 			}
+
+			// Tool-call span handling: open on `<|tool_call_start|>`, collect inner bytes, and
+			// on `<|tool_call_end|>` parse + stop (single-turn). The markers themselves never
+			// reach `on_token`, so the reply bubble stays clean.
+			if tc_start.is_some() && Some(token) == tc_start {
+				in_tool_call = true;
+			} else if tc_end.is_some() && Some(token) == tc_end {
+				let raw = String::from_utf8_lossy(&tool_bytes).into_owned();
+				if let Some(call) = parse_pythonic_call(&raw) {
+					tool_calls.push(call);
+				}
+				break;
+			} else if in_tool_call {
+				let bytes = self
+					.model
+					.token_to_piece_bytes(token, 64, false, None)
+					.map_err(|e| format!("detok: {e}"))?;
+				tool_bytes.extend_from_slice(&bytes);
+				produced += 1;
+				batch.clear();
+				batch.add(token, n_cur, &[0], true).map_err(|e| format!("batch add gen: {e}"))?;
+				n_cur += 1;
+				ctx.decode(&mut batch).map_err(|e| format!("decode gen: {e}"))?;
+				continue;
+			}
+
 			// Non-deprecated detok: explicit buffer, `special = false` (render plain text).
 			let bytes = self
 				.model
@@ -215,8 +328,117 @@ impl LlamaEngine {
 			text.push_str(&piece);
 		}
 
+		// Fallback: some LFM2 builds emit the call inline (no special markers). If we offered
+		// tools, found none via the span, and the visible text carries a `name(...)` for a known
+		// tool, recover it from the text.
+		if !tools.is_empty() && tool_calls.is_empty() {
+			if let Some(call) = find_tool_call_in_text(&text, tools) {
+				tool_calls.push(call);
+			}
+		}
+
 		let secs = t0.elapsed().as_secs_f64();
 		let tokens_per_sec = if secs > 0.0 { produced as f64 / secs } else { 0.0 };
-		Ok(GenStats { text, tokens: produced, tokens_per_sec })
+		Ok(GenStats { text, tokens: produced, tokens_per_sec, tool_calls })
 	}
+}
+
+/// Parse a single LFM2 Pythonic call — `navigate_pages(route="settings")`, with or without the
+/// enclosing `[ ]` — into a [`ToolCall`]. Returns `None` if it isn't a well-formed `name(args)`.
+/// Args are minimal-but-robust: comma-separated `key=value`, values quoted (string), `true`/
+/// `false` (bool), numeric, or bare (string).
+fn parse_pythonic_call(raw: &str) -> Option<ToolCall> {
+	let s = raw.trim().trim_start_matches('[').trim_end_matches(']').trim();
+	let open = s.find('(')?;
+	let close = s.rfind(')')?;
+	if close < open {
+		return None;
+	}
+	let name = s[..open].trim().to_string();
+	if name.is_empty() {
+		return None;
+	}
+	let mut map = serde_json::Map::new();
+	for part in split_top_level_commas(&s[open + 1..close]) {
+		let part = part.trim();
+		if part.is_empty() {
+			continue;
+		}
+		if let Some(eq) = part.find('=') {
+			let key = part[..eq].trim().to_string();
+			if !key.is_empty() {
+				map.insert(key, parse_arg_value(part[eq + 1..].trim()));
+			}
+		}
+	}
+	Some(ToolCall { name, arguments: serde_json::Value::Object(map) })
+}
+
+/// Coerce a raw argument token (`"settings"`, `true`, `3`, `bare`) into a JSON value.
+fn parse_arg_value(raw: &str) -> serde_json::Value {
+	if (raw.starts_with('"') && raw.ends_with('"') && raw.len() >= 2)
+		|| (raw.starts_with('\'') && raw.ends_with('\'') && raw.len() >= 2)
+	{
+		return serde_json::Value::String(raw[1..raw.len() - 1].to_string());
+	}
+	match raw {
+		"true" => return serde_json::Value::Bool(true),
+		"false" => return serde_json::Value::Bool(false),
+		_ => {}
+	}
+	if let Ok(n) = raw.parse::<i64>() {
+		return serde_json::Value::from(n);
+	}
+	if let Ok(f) = raw.parse::<f64>() {
+		return serde_json::Value::from(f);
+	}
+	serde_json::Value::String(raw.to_string())
+}
+
+/// Split an arg list on commas that are not inside quotes (so `a="x,y", b=1` → two parts).
+fn split_top_level_commas(args: &str) -> Vec<String> {
+	let mut out = Vec::new();
+	let mut cur = String::new();
+	let mut quote: Option<char> = None;
+	for c in args.chars() {
+		match quote {
+			Some(q) => {
+				cur.push(c);
+				if c == q {
+					quote = None;
+				}
+			}
+			None => match c {
+				'"' | '\'' => {
+					quote = Some(c);
+					cur.push(c);
+				}
+				',' => {
+					out.push(std::mem::take(&mut cur));
+				}
+				_ => cur.push(c),
+			},
+		}
+	}
+	if !cur.trim().is_empty() {
+		out.push(cur);
+	}
+	out
+}
+
+/// Fallback recovery: scan `text` for the first `name(...)` of a known tool and parse it. Used
+/// when the model emitted the call inline without the `<|tool_call_start|>` markers.
+fn find_tool_call_in_text(text: &str, tools: &[ToolSpec]) -> Option<ToolCall> {
+	for tool in tools {
+		let needle = format!("{}(", tool.name);
+		if let Some(start) = text.find(&needle) {
+			if let Some(rel_close) = text[start..].find(')') {
+				let span = &text[start..start + rel_close + 1];
+				if let Some(call) = parse_pythonic_call(span) {
+					return Some(call);
+				}
+			}
+		}
+	}
+	None
 }

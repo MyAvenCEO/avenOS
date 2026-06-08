@@ -21,7 +21,7 @@ stt = ["dep:sherpa-onnx", "dep:ureq", "dep:tar", "dep:bzip2"]
 llm = ["dep:ort", "dep:half", "dep:tokenizers", "dep:ureq", "dep:serde_json", "dep:log"]
 # On-device LLM via llama.cpp (LFM2.5-8B-A1B GGUF). Statically linked (no dylib to bundle or
 # sign), Metal on Apple. Same GGUF runs on macOS AND iOS. Replaces the ONNX `llm` path.
-llama = ["dep:llama-cpp-2", "dep:ureq", "dep:log"]
+llama = ["dep:llama-cpp-2", "dep:ureq", "dep:serde_json", "dep:log"]
 # On-device text-to-speech (MOSS-TTS-Nano ONNX) via onnxruntime (`ort`). Reuses the
 # shared `download` module + the ort `load-dynamic` bundled-dylib path; the `onnx`
 # module supplies the ort KV-cache/init helpers. Streams 48 kHz PCM frames.
