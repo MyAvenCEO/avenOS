@@ -164,7 +164,9 @@
 			// never a misleading hardcoded "Replication Server".
 			const isRelay = norm !== '' && norm === (session?.relayDid?.trim().toLowerCase() ?? '\0')
 			const fallback = isRelay ? t('identities.share.syncRelay') : undefined
-			const label = peerAccessLabel(s.did, peer?.deviceLabel ?? fallback, isThisDevice)
+			// Empty stored label (grant-side rows no longer stamp a role word) → fall back
+			// to the relay label or, via peerDisplayLabel, the short DID — never a role word.
+			const label = peerAccessLabel(s.did, peer?.deviceLabel?.trim() || fallback, isThisDevice)
 			return { did: s.did, label, isThisDevice, grant: s.grant, capabilities: s.caps }
 		})
 	})
