@@ -2,17 +2,7 @@
 	import { browser } from '$app/environment'
 	import { t } from '$lib/i18n'
 	import type { JazzRow } from '$lib/jazz/api'
-	import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
-	import type { ComposerMode } from '$lib/intents/types'
-	import { persistSparkFiles } from '$lib/jazz/intent-files'
-	import { streamReply } from '$lib/llm/generate'
-	import {
-		LLM_TOOLS,
-		resolveAgentTurn,
-		encodeToolCallBody,
-		parseToolCallBody,
-		type LlmToolCall,
-	} from '$lib/llm/tools'
+	import { parseToolCallBody } from '$lib/llm/tools'
 	import { speak } from '$lib/tts/speak'
 	import {
 		agentUnavailableReason,
@@ -25,6 +15,7 @@
 	import { jazzShell } from '$lib/runtime/jazz-shell'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import IdentityMessageAttachments from '$lib/identities/IdentityMessageAttachments.svelte'
+	import { getIdentityAgent } from '$lib/identities/identity-agent.svelte'
 	import { pairingLabelForSession } from '$lib/settings/active-vault-ui'
 	import { peerDisplayLabel } from '$lib/peer/display-label'
 	import { peerRows } from '$lib/peer/peer-mesh-store'
@@ -32,14 +23,6 @@
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/settings/device-session-store'
 	import { vaultList } from '$lib/settings/vault'
-	import {
-		mobileActionVeilClass,
-		mobileComposerVeilZClass,
-	} from '$lib/shell'
-	import {
-		clearMobileChromeOverrides,
-		setMobileChromeOverrides
-	} from '$lib/shell/mobile-chrome.svelte'
 
 	type Props = {
 		identityId: string
@@ -48,23 +31,20 @@
 
 	let { identityId, sparkName }: Props = $props()
 
-	// Deterministic author DID for on-device agent replies (role-tagged in the row).
-	const AGENT_DID = 'did:aven:agent:lfm2'
+	// The intent bar + agent submit/stream pipeline live in the identity layout (identity-wide).
+	// This panel is the talk SURFACE: it renders the message thread + the live streaming tokens
+	// the shared runtime is producing.
+	const agent = getIdentityAgent()
+	const streaming = $derived(agent.streaming)
+	const streamingId = $derived(agent.streamingId)
 
 	const session = $derived($jazzShell.session)
 	let err = $state<string | undefined>()
-	let sendBusy = $state(false)
-	// Row id of the agent reply currently streaming (or undefined). The live text
-	// is held in `streaming` and only persisted to the row once the stream ends, so
-	// we don't write a Jazz row per token.
-	let streamingId = $state<string | undefined>()
-	let streaming = $state<Record<string, string>>({})
 	// Row id of the agent reply currently being spoken on-device (or undefined) +
 	// live playback state (synthesizing vs playing) and seconds since Speak was pressed.
 	let speakingId = $state<string | undefined>()
 	let speakPhase = $state<'generating' | 'playing' | undefined>()
 	let speakElapsed = $state(0)
-	let composerMode = $state<ComposerMode>('collapsed')
 	let localPairingLabel = $state<string | undefined>(undefined)
 	let scrollEl = $state<HTMLDivElement | undefined>(undefined)
 
@@ -74,7 +54,6 @@
 
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
-	const composerDisabled = $derived(!session?.peerDid?.trim())
 
 	// Keep the on-device LLM status live so a pending agent bubble can explain WHY
 	// it's waiting (downloading the multi-GB model, loading it, not set up, error)
@@ -103,13 +82,7 @@
 			$llmState.status === 'downloading',
 	)
 
-	// On-device voice transcription: IntentComposer wires the real on-device STT
-	// path (and the download-progress / setup states) itself when running in Tauri,
-	// so nothing voice-specific needs to be passed here beyond surfacing errors.
-
-	const peersAllow = $derived<PeerRowReply[]>(
-		!tauri || !unlocked ? [] : $peerRows,
-	)
+	const peersAllow = $derived<PeerRowReply[]>(!tauri || !unlocked ? [] : $peerRows)
 
 	function idsMatch(a: string | null | undefined, b: string | null | undefined): boolean {
 		const na = (a ?? '').trim().toLowerCase()
@@ -208,112 +181,6 @@
 			scrollEl?.scrollTo({ top: scrollEl.scrollHeight, behavior: n > 1 ? 'smooth' : 'auto' })
 		})
 	})
-
-	$effect(() => {
-		const typing = composerMode === 'typing'
-		setMobileChromeOverrides({
-			hideProfile: typing,
-			hideAsideNav: typing
-		})
-		return () => clearMobileChromeOverrides()
-	})
-
-	async function handleComposerSubmit(message: string, files: File[]): Promise<void> {
-		const body = message.trim()
-		const did = session?.peerDid?.trim()
-		if ((!body && files.length === 0) || !did || !tauri || !unlocked || !canonicalSparkId || sendBusy) {
-			return
-		}
-		sendBusy = true
-		err = undefined
-		try {
-			const row = await messages.create({
-				owner: canonicalSparkId,
-				created_at_ms: Date.now(),
-				author_did: did,
-				role: 'user',
-				body,
-			})
-			if (files.length > 0) {
-				const { stored, errors } = await persistSparkFiles(row.id, files, {
-					identityId: canonicalSparkId,
-				})
-				if (errors.length > 0) {
-					const suffix =
-						stored > 0
-							? `Message sent; ${stored} file(s) saved. ${errors.join('; ')}`
-							: `Message sent but files failed: ${errors.join('; ')}`
-					err = suffix
-				}
-			}
-			// Fire the on-device agent reply (text-only prompts for now).
-			if (body) void replyWithAgent(body)
-		} catch (e) {
-			err = e instanceof Error ? e.message : String(e)
-		} finally {
-			sendBusy = false
-		}
-	}
-
-	/**
-	 * Create an empty agent message row, then stream LFM2.5 tokens into it live.
-	 * Tokens accumulate in `streaming[id]` (rendered as the bubble body); the final
-	 * text is persisted to the row once on completion.
-	 */
-	async function replyWithAgent(prompt: string): Promise<void> {
-		if (!canonicalSparkId) return
-		let replyId: string | undefined
-		try {
-			const reply = await messages.create({
-				owner: canonicalSparkId,
-				created_at_ms: Date.now(),
-				author_did: AGENT_DID,
-				role: 'agent',
-				body: '',
-			})
-			replyId = reply.id
-			streamingId = reply.id
-			streaming = { ...streaming, [reply.id]: '' }
-			// The agent is tool-call-only. Capture any real `<|tool_call_start|>` call and the
-			// streamed prose, then resolve the turn into exactly one tool-call record (executing
-			// the side effect). The chip is what's persisted + rendered — never bare prose.
-			let capturedCall: LlmToolCall | undefined
-			const full = await streamReply(
-				prompt,
-				reply.id,
-				(piece) => {
-					// Reassign (not mutate) so the {#each} liveBody const re-derives reliably.
-					streaming = { ...streaming, [reply.id]: (streaming[reply.id] ?? '') + piece }
-				},
-				{
-					tools: LLM_TOOLS,
-					onToolCall: (call) => (capturedCall = call),
-				},
-			)
-			const record = resolveAgentTurn({
-				replyId: reply.id,
-				userPrompt: prompt,
-				toolCall: capturedCall,
-				prose: full,
-			})
-			const body = encodeToolCallBody(record)
-			streaming = { ...streaming, [reply.id]: body }
-			await messages.update(reply.id, { body })
-		} catch (e) {
-			const msg = e instanceof Error ? e.message : String(e)
-			if (replyId) {
-				await messages.update(replyId, { body: `⚠️ ${msg}` }).catch(() => {})
-			} else {
-				err = msg
-			}
-		} finally {
-			if (replyId) {
-				const { [replyId]: _drop, ...rest } = streaming
-				streaming = rest
-			}
-			streamingId = undefined
-		}
-	}
 
 	/**
 	 * Speak an agent message on-device (MOSS-TTS-Nano). Streams `tts:audio-chunk`
@@ -513,35 +380,6 @@
 						</article>
 					{/each}
 				{/if}
-			</div>
-
-			<div
-				class={`pointer-events-none fixed inset-x-0 bottom-0 ${mobileComposerVeilZClass} flex justify-center max-sm:px-2 sm:px-5 sm:pt-3 sm:pb-5 ${mobileActionVeilClass}`}
-			>
-				<div
-					class="relative flex w-full max-w-none items-center justify-center max-sm:px-0 sm:pl-0 sm:pr-0"
-				>
-					<!-- When collapsed (just the round FAB), hug the button so the
-						 pointer-events-auto hit area doesn't blanket the full width and
-						 swallow clicks on the bottom message's Speak button. Expanded
-						 modes (typing/listening/preparing) still take the full width. -->
-					<div class={`pointer-events-auto min-w-0 ${composerMode === 'collapsed' ? 'w-fit' : 'w-full'}`}>
-					<IntentComposer
-						placeholder={t('identities.talk.messagePlaceholder')}
-						disabled={composerDisabled}
-						submitBusy={sendBusy}
-						enableAttachments={true}
-						embedAttachmentNamesInMessage={false}
-						onSubmitMessage={handleComposerSubmit}
-						onModeChange={(mode) => {
-							composerMode = mode
-						}}
-						onTranscribeError={(message) => {
-							err = message
-						}}
-					/>
-					</div>
-				</div>
 			</div>
 		</div>
 	{/if}

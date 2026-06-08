@@ -429,7 +429,12 @@
 			"playing": "Spielt… {seconds}s",
 			"navigating": "→ Öffne {target}",
 			"navOpening": "Klar — ich öffne {target}.",
-			"navUnknown": "⚠️ Unbekannte Seite: {target}"
+			"navUnknown": "⚠️ Unbekannte Seite: {target}",
+			"navNoIdentity": "⚠️ Keine aktive Identität, auf die ich wirken kann.",
+			"todoEmpty": "⚠️ Die Aufgabe braucht einen Titel.",
+			"todoAdded": "✓ Aufgabe hinzugefügt: {title}",
+			"todoAddedReply": "„{title}“ zu deinen Aufgaben hinzugefügt.",
+			"dismissReply": "Antwort schließen"
 		},
 		"todos": {
 			"title": "Todos",
@@ -555,7 +560,10 @@
 		"avenCeoClaimedSub": "Verzeichnis & Mitglieder dieses Netzwerks",
 		"avenCeoUnclaimedSub": "Nicht beansprucht — beanspruche es, um Admin/Eigentümer dieses Netzwerks zu werden.",
 		"avenCeoClaim": "Beanspruchen — Netzwerk-Admin werden",
-		"avenCeoClaiming": "Beanspruche…"
+		"avenCeoClaiming": "Beanspruche…",
+		"composer": {
+			"placeholder": "Sprich, navigiere oder füge eine Aufgabe hinzu…"
+		}
 	},
 	"uiLab": {
 		"pageTitle": "UI-Lab",

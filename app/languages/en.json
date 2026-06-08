@@ -442,7 +442,12 @@
 			"playing": "Playing… {seconds}s",
 			"navigating": "→ Opening {target}",
 			"navOpening": "Sure — opening {target}.",
-			"navUnknown": "⚠️ Unknown page: {target}"
+			"navUnknown": "⚠️ Unknown page: {target}",
+			"navNoIdentity": "⚠️ No active identity to act on.",
+			"todoEmpty": "⚠️ The todo needs a title.",
+			"todoAdded": "✓ Added todo: {title}",
+			"todoAddedReply": "Added “{title}” to your todos.",
+			"dismissReply": "Dismiss reply"
 		},
 		"todos": {
 			"title": "Todos",
@@ -578,7 +583,10 @@
 		"createHuman": "New human",
 		"createAven": "New aven",
 		"namePromptHuman": "Name this human identity",
-		"namePromptAven": "Name this aven identity"
+		"namePromptAven": "Name this aven identity",
+		"composer": {
+			"placeholder": "Talk, navigate, or add a todo…"
+		}
 	},
 	"uiLab": {
 		"pageTitle": "UI Lab",
