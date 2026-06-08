@@ -161,6 +161,10 @@ async function main() {
 		'--ci',
 		'-t',
 		tauriTarget,
+		// Desktop gets the full on-device AI stack (STT is default; llama LLM + MOSS
+		// TTS live behind `desktop-ai`). iOS omits this — it ships STT-only.
+		'--features',
+		'desktop-ai',
 		'--bundles',
 		'app',
 		'--config',
