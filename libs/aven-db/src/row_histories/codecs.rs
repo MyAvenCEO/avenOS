@@ -38,6 +38,8 @@ pub fn compute_row_digest(
     data: &[u8],
     updated_at: u64,
     updated_by: &str,
+    delete_kind: Option<DeleteKind>,
+    is_deleted: bool,
     metadata: Option<&RowMetadata>,
 ) -> Digest32 {
     let mut hasher = Hasher::new();
@@ -56,6 +58,19 @@ pub fn compute_row_digest(
 
     hasher.update(&updated_at.to_le_bytes());
     hasher.update(updated_by.as_bytes());
+
+    // Delete state (audit #7/#26). `delete_kind`/`is_deleted` are wire fields lifted out of
+    // `metadata` before hashing, so without this they were covered by NO digest — a relay
+    // could flip a live row to Hard-delete (or strip a delete) without breaking the
+    // owner-binding or edit-signature. Fold both into the preimage as two fixed bytes so any
+    // flip changes the digest the edit-signature (board 0010) signs and the receiver
+    // recomputes. Position: after `updated_by`, before the metadata block.
+    let kind_tag: u8 = match delete_kind {
+        None => 0x00,
+        Some(DeleteKind::Soft) => 0x01,
+        Some(DeleteKind::Hard) => 0x02,
+    };
+    hasher.update(&[kind_tag, is_deleted as u8]);
 
     if let Some(metadata) = metadata {
         hasher.update(&[1u8]);
@@ -925,4 +940,53 @@ pub(crate) fn decode_flat_visible_row_entry_with_codecs(
         merge_artifacts: column_bytes_with_layout(descriptor, layout, data, 17)?
             .map(|bytes| bytes.to_vec()),
     })
+}
+
+#[cfg(test)]
+mod delete_state_tests {
+    use super::*;
+
+    /// Compute a row digest holding every field constant EXCEPT the delete state, so a
+    /// digest difference is attributable only to `delete_kind` / `is_deleted`.
+    fn digest(delete_kind: Option<DeleteKind>, is_deleted: bool) -> Digest32 {
+        compute_row_digest(
+            "main",
+            &[],
+            b"row-data",
+            42,
+            "did:key:zAuthor",
+            delete_kind,
+            is_deleted,
+            None,
+        )
+    }
+
+    #[test]
+    fn row_digest_covers_delete_state() {
+        // Audit #7/#26: the delete state must be part of the digest the edit-signature
+        // (board 0010) signs, so a relay that flips it in flight is rejected on apply.
+        let live = digest(None, false);
+        let soft = digest(Some(DeleteKind::Soft), true);
+        let hard = digest(Some(DeleteKind::Hard), true);
+
+        // None -> Hard (forge a destructive network-wide wipe) is digest-detectable.
+        assert_ne!(live, hard, "None->Hard flip must change the digest");
+        // Hard -> Soft (downgrade) is digest-detectable.
+        assert_ne!(hard, soft, "Hard->Soft downgrade must change the digest");
+        // Some -> None (strip a legitimate delete / resurrect data) is digest-detectable.
+        assert_ne!(soft, live, "Some->None strip must change the digest");
+
+        // `is_deleted` is independently authenticated (kind held equal, only the flag flips).
+        let kind = Some(DeleteKind::Soft);
+        assert_ne!(
+            digest(kind, false),
+            digest(kind, true),
+            "is_deleted flip (kind held equal) must change the digest"
+        );
+
+        // Determinism sanity: identical delete state + all else equal => identical digest,
+        // so the differences above are caused only by the delete state, not noise.
+        assert_eq!(digest(None, false), digest(None, false));
+        assert_eq!(digest(Some(DeleteKind::Hard), true), digest(Some(DeleteKind::Hard), true));
+    }
 }

@@ -98,11 +98,11 @@ Because `compute_row_digest` is `pub` and re-exported from `row_histories::mod` 
 - `libs/aven-db/src/row_histories/types.rs` — update `StoredRowBatch::content_digest` (`:351-360`) to forward `self.delete_kind` and `self.is_deleted` to the widened `compute_row_digest`.
 
 ## Acceptance criteria
-- [ ] `compute_row_digest` hashes a delete-kind tag byte (None/Soft/Hard → 0x00/0x01/0x02) and an `is_deleted` byte — proven by reading `codecs.rs` and by `cargo build -p aven-db` succeeding with the widened signature.
-- [ ] `content_digest` forwards the row's `delete_kind`/`is_deleted` — proven by `cargo build -p aven-db` (the caller would not compile otherwise).
-- [ ] New regression test `row_digest_covers_delete_state` proves None→Hard, Hard→Soft, and Some→None flips each change the digest, with all other fields held identical — proven by `cargo test -p aven-db row_digest_covers_delete_state`.
-- [ ] No other `compute_row_digest` caller is left mis-arity — proven by a clean `cargo build -p aven-db`.
-- [ ] `cargo test -p aven-caps` still green (signature crate unaffected) — proven by its exit code.
+- [x] `compute_row_digest` hashes a delete-kind tag byte (None/Soft/Hard → 0x00/0x01/0x02) and an `is_deleted` byte after `updated_by` — proven by `cargo build` in `libs/aven-db` (Finished).
+- [x] `content_digest` forwards the row's `delete_kind`/`is_deleted` — proven by `cargo build` in `libs/aven-db` (the caller would not compile otherwise).
+- [x] New regression test `row_digest_covers_delete_state` proves None→Hard, Hard→Soft, Some→None, and is_deleted-only flips each change the digest, with all other fields held identical — proven by `cargo test row_digest_covers_delete_state` (1 passed). NOTE: the aven-db lib test target now COMPILES (main's "drop sqlite backend" refactor fixed the legacy ~266-error scaffolding), so this runs in-crate as the goal specified — 697 other aven-db tests also passed.
+- [x] No other `compute_row_digest` caller is left mis-arity — clean `cargo build` in `libs/aven-db`; only caller is `content_digest`.
+- [x] `cargo test` in `libs/aven-caps` still green (31 passed) — the digest this feeds into is the one 0010 signs.
 
 ## Verification
 ```bash
@@ -128,4 +128,5 @@ cargo test -p aven-caps
 
 ## Progress log
 Newest first.
+- `2026-06-08` — **Implemented + verified (ready for test column).** Widened `compute_row_digest` (codecs.rs) with `delete_kind: Option<DeleteKind>` + `is_deleted: bool`, hashing a 2-byte preimage (kind tag 0x00/0x01/0x02 + is_deleted) after `updated_by`, before the metadata block; updated the sole caller `StoredRowBatch::content_digest` (types.rs) to forward `self.delete_kind`/`self.is_deleted`. Added self-contained `row_digest_covers_delete_state` test in codecs.rs. Now that 0010 stamps+verifies the edit-sig over this digest, a relay flipping `delete_kind` in flight changes the receiver-computed digest → edit-sig mismatch → rejected. Verified: `cargo test row_digest_covers_delete_state` ✅ (+697 aven-db tests passed — the lib test target compiles again post-refactor), aven-db build ✅, aven-caps 31/31 ✅, app type-check ✅. Pairs with 0012. Moved plan → test.
 - `2026-06-08` — Planned from crypto audit (docs/security/crypto-audit-2026-06-08.md), findings #7/#26. Grounded against current source: code lives in `row_histories/` (not `sync_manager/` as the audit's line refs say). Confirmed `compute_row_digest` at `codecs.rs:35-74` omits delete fields; `new_with_batch_id` strips the Delete key at `types.rs:314`; `content_digest` at `types.rs:351-360`; `delete_winner` ranks Hard>Soft at `resolution.rs:82-104`; `DeleteKind{Soft,Hard}` at `metadata.rs:104`. Noted dependency on 0010 (digest must be signed+verified to enforce) and pairing with 0012 (inbound AccOp::Delete). Created in plan.

@@ -365,6 +365,8 @@ impl StoredRowBatch {
             &self.data,
             self.updated_at,
             &self.updated_by,
+            self.delete_kind,
+            self.is_deleted,
             (!self.metadata.is_empty()).then_some(&self.metadata),
         )
     }
