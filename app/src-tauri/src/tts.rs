@@ -528,14 +528,18 @@ mod imp {
 				|| false,
 			)
 		})
-		.await
-		.map_err(|e| format!("synthesize task: {e}"))?;
+		.await;
 
-		// End-of-stream marker (also sent on error so the UI can stop the spinner).
+		// ALWAYS emit the end-of-stream marker first — even if the synth task panicked
+		// or errored — so the webview's listener resolves and the Speak button recovers
+		// for the next playback (otherwise one bad run bricks the UI).
 		let _ = app.emit(
 			CHUNK_EVENT,
 			TtsChunk { reply_id, pcm: Vec::new(), sample_rate, done: true },
 		);
-		res
+		match res {
+			Ok(inner) => inner,
+			Err(e) => Err(format!("synthesize task: {e}")),
+		}
 	}
 }

@@ -423,7 +423,7 @@
 											title={t('identities.talk.speak')}
 										>
 											<span aria-hidden="true"
-												>{speakingId === msg.id ? (speakPhase === 'generating' ? '⏳' : '⏵') : '🔊'}</span
+												>{speakingId === msg.id ? (speakPhase === 'generating' ? '⏳' : '⏸') : '▶'}</span
 											>
 											<span
 												>{#if speakingId !== msg.id}{t('identities.talk.speak')}{:else if speakPhase === 'generating'}{t('identities.talk.generating', { seconds: speakElapsed })}{:else}{t('identities.talk.playing', { seconds: speakElapsed })}{/if}</span
