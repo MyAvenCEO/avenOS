@@ -23,7 +23,7 @@ use axum::response::Response;
 use axum::routing::get;
 use axum::Router;
 use ed25519_dalek::SigningKey;
-use groove::{AppContext, AppId, JazzClient, PeerId};
+use groove::{AppContext, AppId, EditSigner, JazzClient, ObjectId, PeerId};
 use tokio::signal::unix::{signal, SignalKind};
 
 use ws_server::WsServerListener;
@@ -190,6 +190,26 @@ impl groove::CapabilityResolver for ServerApplyGate {
     }
 }
 
+/// Server-side author **edit-signer** — the aven-node counterpart of the app's
+/// `AppEditSigner`. Installed via [`groove::JazzClient::set_edit_signer`] so every row the
+/// server authors (the avenCEO genesis in S.3 and the auto-admin grant in S.4) carries a
+/// valid `_edit_sig` signed by the server identity. Without it, server-authored control
+/// rows reach each peer with no edit-signature and die at the fail-closed `verify_on_apply`
+/// gate — so the first user never receives its admin grant and stays on the onboarding wall.
+struct ServerEditSigner {
+    signing_key: SigningKey,
+}
+
+impl EditSigner for ServerEditSigner {
+    fn sign_row(&self, _row_id: ObjectId, digest: &[u8; 32]) -> Option<(String, String)> {
+        let es = aven_caps::ownership::sign_batch(&self.signing_key, digest).ok()?;
+        Some((
+            aven_caps::ownership::EDIT_SIG_META_KEY.to_string(),
+            es.to_meta_string(),
+        ))
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
@@ -262,6 +282,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // relabeled row is rejected on apply even in transit through the server.
     if let Err(e) = engine.set_resolver(std::sync::Arc::new(ServerApplyGate)) {
         tracing::warn!("install server apply gate: {e}");
+    }
+
+    // Sign every row the server authors with the server identity, so the avenCEO genesis
+    // and the auto-admin grants carry a valid `_edit_sig` and pass each peer's fail-closed
+    // apply gate (the EditSignature hardening, board 0010). Must precede the genesis mint
+    // below so those rows are signed at creation.
+    if let Err(e) = engine.set_edit_signer(std::sync::Arc::new(ServerEditSigner {
+        signing_key: identity.clone(),
+    })) {
+        tracing::warn!("install server edit signer: {e}");
     }
 
     // S.3 — the server is the avenCEO owner: mint its genesis on startup (idempotent).
