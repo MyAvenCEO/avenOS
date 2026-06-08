@@ -34,9 +34,13 @@ the full authoring guide.
 
 Minimum shape:
 
+**Default aspect ratio is 1:1 (square, 1080×1080)** — use `data-resolution="square"`
+unless the user asks for landscape (16:9) or portrait (9:16).
+
 ```html
+<html data-resolution="square"><!-- 1:1 is the default -->
 <div id="root" data-composition-id="main"
-     data-start="0" data-duration="5" data-width="1920" data-height="1080">
+     data-start="0" data-duration="5" data-width="1080" data-height="1080">
   <h1 id="title" class="clip" data-start="0" data-duration="5" data-track-index="1">
     Hello
   </h1>
@@ -54,7 +58,7 @@ Minimum shape:
 
 1. **Scaffold or copy** a project dir. Fastest: copy `examples/hello-world` and
    edit it, or `npx hyperframes@latest init <name> --example blank --non-interactive
-   --skip-skills --resolution landscape`.
+   --skip-skills --resolution square` (1:1 is the skill default).
 2. **Author** the composition (HTML + GSAP). Apply the editorial principles in
    [`knowledge/editorial_principles.md`](./knowledge/editorial_principles.md):
    hook in the first frame, every visual earns its place, readable caption

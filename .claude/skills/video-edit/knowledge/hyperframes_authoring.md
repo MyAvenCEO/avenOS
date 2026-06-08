@@ -32,8 +32,9 @@ one `index.html` per clip.**
   under the exact same string on `window.__timelines`.
 - `data-duration` — clip length in seconds. The renderer captures
   `duration × fps` frames (default 30 fps → 150 frames for 5s).
-- `data-width` / `data-height` — canvas size. Pair with `data-resolution` on
-  `<html>` (`landscape` = 1920×1080, `portrait` = 1080×1920, `square` = 1080×1080)
+- `data-width` / `data-height` — canvas size. **Default to 1:1 square
+  (1080×1080).** Pair with `data-resolution` on `<html>` (`square` = 1080×1080
+  — the skill default; `landscape` = 1920×1080, `portrait` = 1080×1920)
   and a matching `<meta name="viewport" width=… height=…>`.
 
 ## Clips

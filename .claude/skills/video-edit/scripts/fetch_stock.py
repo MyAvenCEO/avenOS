@@ -25,7 +25,8 @@ Usage:
       "<query>"   e.g. "person desk papers working late focus"
       <out_dir>   where to save — usually <project_dir>/assets
       --photo     fetch a still photo instead of a video clip
-      --portrait  prefer portrait orientation (for vertical clips); default landscape
+      --portrait  prefer portrait orientation (for vertical clips)
+      --square    prefer square orientation (1:1 — the skill default); else landscape
 
 Prints the saved file path on success. Picks the highest-res file that is
 <= 1920 on the long edge (no point pulling 4K for a 1080p comp).
@@ -109,8 +110,7 @@ def _download(url: str, dest: Path) -> None:
         f.write(r.read())
 
 
-def fetch_video(query: str, out_dir: Path, portrait: bool) -> Path | None:
-    orient = "portrait" if portrait else "landscape"
+def fetch_video(query: str, out_dir: Path, orient: str) -> Path | None:
     q = urllib.parse.quote(query)
     data = _get(f"https://api.pexels.com/videos/search?query={q}"
                 f"&orientation={orient}&size=medium&per_page=8")
@@ -134,8 +134,7 @@ def fetch_video(query: str, out_dir: Path, portrait: bool) -> Path | None:
     return dest
 
 
-def fetch_photo(query: str, out_dir: Path, portrait: bool) -> Path | None:
-    orient = "portrait" if portrait else "landscape"
+def fetch_photo(query: str, out_dir: Path, orient: str) -> Path | None:
     q = urllib.parse.quote(query)
     data = _get(f"https://api.pexels.com/v1/search?query={q}"
                 f"&orientation={orient}&per_page=8")
@@ -159,16 +158,16 @@ def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     flags = {a for a in sys.argv[1:] if a.startswith("--")}
     if len(args) < 2:
-        print("usage: fetch_stock.py \"<query>\" <out_dir> [--photo] [--portrait]", file=sys.stderr)
+        print("usage: fetch_stock.py \"<query>\" <out_dir> [--photo] [--portrait|--square]", file=sys.stderr)
         return 2
     query, out_dir = args[0], Path(args[1]).expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
-    portrait = "--portrait" in flags
+    orient = "portrait" if "--portrait" in flags else "square" if "--square" in flags else "landscape"
     try:
-        res = (fetch_photo if "--photo" in flags else fetch_video)(query, out_dir, portrait)
+        res = (fetch_photo if "--photo" in flags else fetch_video)(query, out_dir, orient)
         if res is None and "--photo" not in flags:
             print("[fallback] no video, trying photo")
-            res = fetch_photo(query, out_dir, portrait)
+            res = fetch_photo(query, out_dir, orient)
         if res is None:
             print(f"no stock result for '{query}'", file=sys.stderr); return 1
         print(str(res))

@@ -240,8 +240,11 @@ impl Synthesizer {
 			// Apple: run on the GPU/Neural Engine via CoreML (ANE+GPU), falling back to
 			// CPU per-op automatically for anything CoreML can't take. Compiled CoreML
 			// models are cached next to the GGUF so launches after the first are fast.
+			// Set `AVENOS_TTS_CPU=1` to force the plain CPU provider (used by the
+			// `tts_synth` CLI example, where the CoreML EP mis-resolves the external
+			// `.data` sidecars). App default is unchanged (CoreML on).
 			#[cfg(any(target_os = "macos", target_os = "ios"))]
-			{
+			if std::env::var_os("AVENOS_TTS_CPU").is_none() {
 				builder = builder
 					.with_execution_providers([ort::ep::CoreML::default()
 						.with_compute_units(ort::ep::coreml::ComputeUnits::All)
