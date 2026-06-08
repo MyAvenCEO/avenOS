@@ -1,18 +1,20 @@
 /**
- * On-device LLM tool layer for the Talk chat. Three concerns, one file:
+ * On-device LLM tool layer for the Talk chat. The agent is tool-call-only: every turn resolves
+ * to a tool call (never bare prose). Concerns, one file:
  *
- *   1. SCHEMAS  — standard function-calling JSON Schema for each tool, advertised to the model.
+ *   1. SCHEMAS  — standard function-calling JSON Schema per tool. EVERY tool carries a standard
+ *                 `response` field: a short, human-facing reply (in the user's language) that we
+ *                 render as the bubble text and can speak via the TTS model.
  *   2. ROUTER   — `executeToolCall` dispatches a call by name to its executor (the side effect).
  *                 `navigate_pages` → the UI-routing executor (`navigateAppTo`).
- *   3. FALLBACK — `inferToolCallFromText` deterministically recovers a navigation intent from
- *                 the *user's* prompt when the small LFM2.5-1.2B answers in prose instead of
- *                 emitting a real `<|tool_call_start|>` call (it reliably names the route, but
- *                 not always in call syntax). Matching the user prompt — not the model's reply —
- *                 avoids false navigations from the model's rambling.
+ *   3. RESOLVE  — `resolveAgentTurn` turns a model turn (a real tool call, and/or the streamed
+ *                 prose, plus the user prompt) into exactly one rendered record, executing the
+ *                 side effect. Order: real call → (if it doesn't resolve) deterministic
+ *                 user-prompt navigation → wrap any prose as a `respond` call. So the UI only
+ *                 ever shows tool-call chips, and a malformed nav call still routes.
  *
- * The route set mirrors the app's ACTUAL navigation: the top nav (Intents / Sandbox /
- * Identities / Avens — `app/src/routes/+layout.svelte`) plus the self-settings sub-pages
- * (`app/src/lib/shell/settings-nav.ts`). Keep hrefs in sync with those.
+ * Routes mirror the app's ACTUAL nav (top nav in `app/src/routes/+layout.svelte`; self-settings
+ * in `app/src/lib/shell/settings-nav.ts`). Keep hrefs in sync.
  */
 
 import { t } from '$lib/i18n'
@@ -39,14 +41,27 @@ export type ToolDef = {
 	parameters: JsonSchema
 }
 
-/** Outcome of executing a tool call — a short, localized line for the chat bubble. */
-export type ToolDispatchResult = { ok: boolean; message: string }
+/** Outcome of executing a tool call's side effect. */
+export type ToolDispatchResult = { ok: boolean; message: string; response?: string }
 
 /** A tool executor: receives the (parsed) arguments, performs the side effect, returns a result. */
 type ToolExecutor = (args: Record<string, unknown>) => ToolDispatchResult
 
 /** A registry entry = the model-facing schema + its app-side executor. */
 type ToolEntry = { def: ToolDef; execute: ToolExecutor }
+
+/**
+ * The standard `response` property every tool schema carries. The model writes its short,
+ * human-facing reply here (spoken back via TTS); the rest of the args drive the side effect.
+ */
+const RESPONSE_PROP = {
+	response: {
+		type: 'string',
+		description:
+			"A short, friendly reply to the user in the user's language (one sentence), e.g. " +
+			"'Ich öffne die Einstellungen für dich.'. This is shown and spoken back to the user.",
+	},
+} as const
 
 // ───────────────────────────── navigate_pages ─────────────────────────────
 
@@ -56,7 +71,7 @@ type RouteDef = {
 	route: string
 	/** Where `navigateAppTo` sends the app — must match the real nav href. */
 	href: string
-	/** i18n key for the human label (confirmation bubble), localized at call time. */
+	/** i18n key for the human label (confirmation + spoken reply), localized at call time. */
 	labelKey: string
 	/** Short English gloss baked into the model-facing tool description. */
 	desc: string
@@ -79,7 +94,7 @@ const ROUTES: RouteDef[] = [
 	{ route: 'db', href: '/settings/db', labelKey: 'selfNav.db', desc: 'Database settings', aliases: ['datenbank', 'database'] },
 ]
 
-/** The `navigate_pages` schema, with the route enum + per-route hints baked into the description. */
+/** The `navigate_pages` schema, with the route enum + per-route hints + the standard `response`. */
 const NAVIGATE_TOOL: ToolDef = {
 	name: 'navigate_pages',
 	description:
@@ -95,8 +110,9 @@ const NAVIGATE_TOOL: ToolDef = {
 				enum: ROUTES.map((r) => r.route),
 				description: 'Which page to open.',
 			},
+			...RESPONSE_PROP,
 		},
-		required: ['route'],
+		required: ['route', 'response'],
 	},
 }
 
@@ -109,7 +125,7 @@ function resolveRoute(value: unknown): RouteDef | undefined {
 	return ROUTES.find((r) => r.route === raw || r.aliases?.includes(raw))
 }
 
-/** The UI-routing executor: perform the navigation and return a localized confirmation. */
+/** The UI-routing executor: perform the navigation and return result + a spoken-style response. */
 function executeNavigate(args: Record<string, unknown>): ToolDispatchResult {
 	const def = resolveRoute(args.route)
 	if (!def) {
@@ -117,7 +133,12 @@ function executeNavigate(args: Record<string, unknown>): ToolDispatchResult {
 		return { ok: false, message: t('identities.talk.navUnknown', { target: got || '?' }) }
 	}
 	navigateAppTo(def.href)
-	return { ok: true, message: t('identities.talk.navigating', { target: t(def.labelKey) }) }
+	const label = t(def.labelKey)
+	return {
+		ok: true,
+		message: t('identities.talk.navigating', { target: label }),
+		response: t('identities.talk.navOpening', { target: label }),
+	}
 }
 
 // ───────────────────────────── tool registry ─────────────────────────────
@@ -163,32 +184,86 @@ function findRouteInText(text: string): RouteDef | undefined {
 	return undefined
 }
 
-/**
- * Deterministic fallback: if `userPrompt` is an explicit navigation request, synthesize the
- * equivalent `navigate_pages` call so it flows through the same router. Returns undefined when
- * the prompt isn't a navigation command.
- */
-export function inferToolCallFromText(userPrompt: string, replyId: string): LlmToolCall | undefined {
-	const def = findRouteInText(userPrompt)
-	if (!def) return undefined
-	return { replyId, name: 'navigate_pages', arguments: { route: def.route } }
-}
-
-// ──────────────────────── structured chat-stream record ────────────────────────
+// ──────────────────────── chat-stream record + resolution ────────────────────────
 
 /** A tool call rendered as a chip in the chat stream; encoded into the message body so it
- *  survives reload without a schema change. `inferred` marks fallback-recovered calls. */
+ *  survives reload without a schema change. `response` is the speakable human-facing reply;
+ *  `result` is the technical action outcome; `inferred` marks fallback-recovered calls. */
 export type ToolCallRecord = {
 	kind: 'tool_call'
 	name: string
 	arguments: Record<string, unknown>
+	response: string
 	result: string
+	ok: boolean
 	inferred?: boolean
 }
 
-/** Encode a tool call + its result into a message body string. */
-export function encodeToolCallBody(rec: Omit<ToolCallRecord, 'kind'>): string {
-	return JSON.stringify({ kind: 'tool_call', ...rec } satisfies ToolCallRecord)
+function recordFrom(
+	name: string,
+	args: Record<string, unknown>,
+	exec: ToolDispatchResult,
+	inferred: boolean,
+): ToolCallRecord {
+	const modelResponse = String(args.response ?? '').trim()
+	return {
+		kind: 'tool_call',
+		name,
+		arguments: args,
+		response: modelResponse || exec.response || exec.message,
+		result: exec.message,
+		ok: exec.ok,
+		inferred,
+	}
+}
+
+/**
+ * Resolve a single agent turn into exactly one rendered tool-call record, executing the side
+ * effect. The agent is tool-call-only, so prose is never shown bare — it is wrapped as a
+ * `respond` call.
+ *
+ *   1. A real tool call from the model — if its side effect succeeds, use it.
+ *   2. Else, if the USER prompt is an explicit navigation command, route deterministically
+ *      (this is what saves a malformed real call like `route="{...}"`).
+ *   3. Else, wrap the model's prose (or a fallback) as a `respond` call.
+ */
+export function resolveAgentTurn(opts: {
+	replyId: string
+	userPrompt: string
+	toolCall?: LlmToolCall
+	prose: string
+}): ToolCallRecord {
+	const { userPrompt, toolCall, prose } = opts
+
+	if (toolCall && TOOLS[toolCall.name]) {
+		const exec = executeToolCall(toolCall)
+		if (exec.ok) return recordFrom(toolCall.name, toolCall.arguments, exec, false)
+		// Malformed/unresolvable args (e.g. the 1.2B nesting JSON into `route`) → try the prompt.
+	}
+
+	const def = findRouteInText(userPrompt)
+	if (def) {
+		const exec = executeNavigate({ route: def.route })
+		// Carry the model's prose as the response if it wrote one, else the synthesized reply.
+		const args = { route: def.route, response: String(toolCall?.arguments.response ?? '').trim() }
+		return recordFrom('navigate_pages', args, exec, true)
+	}
+
+	const text = prose.trim()
+	return {
+		kind: 'tool_call',
+		name: 'respond',
+		arguments: { response: text },
+		response: text || t('identities.talk.agentNoReply'),
+		result: '',
+		ok: true,
+		inferred: false,
+	}
+}
+
+/** Encode a record into a message body string (persisted; parsed back on render/reload). */
+export function encodeToolCallBody(rec: ToolCallRecord): string {
+	return JSON.stringify(rec)
 }
 
 /** Parse a message body back into a [`ToolCallRecord`], or null if it isn't one. */

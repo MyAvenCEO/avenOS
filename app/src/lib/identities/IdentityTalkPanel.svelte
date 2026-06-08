@@ -8,8 +8,7 @@
 	import { streamReply } from '$lib/llm/generate'
 	import {
 		LLM_TOOLS,
-		executeToolCall,
-		inferToolCallFromText,
+		resolveAgentTurn,
 		encodeToolCallBody,
 		parseToolCallBody,
 		type LlmToolCall,
@@ -275,19 +274,10 @@
 			replyId = reply.id
 			streamingId = reply.id
 			streaming = { ...streaming, [reply.id]: '' }
-			// Run a tool call through the router, render its chip in the stream, and remember
-			// the encoded body so it's persisted (and wins over any prose the model streamed).
-			let toolBody: string | undefined
-			const dispatch = (call: LlmToolCall, inferred: boolean) => {
-				const res = executeToolCall(call)
-				toolBody = encodeToolCallBody({
-					name: call.name,
-					arguments: call.arguments,
-					result: res.message,
-					inferred,
-				})
-				streaming = { ...streaming, [reply.id]: toolBody }
-			}
+			// The agent is tool-call-only. Capture any real `<|tool_call_start|>` call and the
+			// streamed prose, then resolve the turn into exactly one tool-call record (executing
+			// the side effect). The chip is what's persisted + rendered — never bare prose.
+			let capturedCall: LlmToolCall | undefined
 			const full = await streamReply(
 				prompt,
 				reply.id,
@@ -297,17 +287,18 @@
 				},
 				{
 					tools: LLM_TOOLS,
-					// Single-turn: a real `<|tool_call_start|>` call from the model.
-					onToolCall: (call) => dispatch(call, false),
+					onToolCall: (call) => (capturedCall = call),
 				},
 			)
-			// Fallback: the 1.2B often answers in prose instead of a real call. If the USER's
-			// prompt was an explicit navigation command, recover and dispatch it deterministically.
-			if (!toolBody) {
-				const inferred = inferToolCallFromText(prompt, reply.id)
-				if (inferred) dispatch(inferred, true)
-			}
-			await messages.update(reply.id, { body: toolBody || full || (streaming[reply.id] ?? '') })
+			const record = resolveAgentTurn({
+				replyId: reply.id,
+				userPrompt: prompt,
+				toolCall: capturedCall,
+				prose: full,
+			})
+			const body = encodeToolCallBody(record)
+			streaming = { ...streaming, [reply.id]: body }
+			await messages.update(reply.id, { body })
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e)
 			if (replyId) {
@@ -391,6 +382,38 @@
 						{t('identities.talk.noMessagesYet')}
 					</p>
 				{:else}
+					{#snippet speakBtn(id: string, text: string)}
+						<button
+							type="button"
+							class="text-muted-foreground hover:text-primary -mb-0.5 -ml-1 flex w-fit items-center gap-1 rounded px-1 py-0.5 text-xs transition-colors disabled:opacity-60"
+							onclick={() => speakMessage(id, text)}
+							disabled={speakingId != null}
+							aria-label={t('identities.talk.speak')}
+							title={t('identities.talk.speak')}
+						>
+							{#if speakingId !== id}
+								<!-- idle: play -->
+								<svg class="size-3" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+									<path d="M5 3.5v9l7-4.5z" />
+								</svg>
+							{:else if speakPhase === 'generating'}
+								<!-- generating: spinning loader -->
+								<svg class="size-3 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+									<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" opacity="0.25" />
+									<path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+								</svg>
+							{:else}
+								<!-- playing: pause bars -->
+								<svg class="size-3" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+									<rect x="4" y="3" width="3" height="10" rx="1" />
+									<rect x="9" y="3" width="3" height="10" rx="1" />
+								</svg>
+							{/if}
+							<span
+								>{#if speakingId !== id}{t('identities.talk.speak')}{:else if speakPhase === 'generating'}{t('identities.talk.generating', { seconds: speakElapsed })}{:else}{t('identities.talk.playing', { seconds: speakElapsed })}{/if}</span
+							>
+						</button>
+					{/snippet}
 					{#each thread as msg (msg.id)}
 						{@const own = isOwnMessage(msg)}
 						{@const isAgent = msg.role === 'agent'}
@@ -398,6 +421,8 @@
 						{@const liveBody = streaming[msg.id] ?? msg.body}
 						{@const toolCall = isAgent ? parseToolCallBody(liveBody) : null}
 						{@const pending = streamingId === msg.id && !liveBody?.trim()}
+						{@const speakText = toolCall ? toolCall.response : (liveBody ?? '')}
+						{@const showSpeak = isAgent && streamingId !== msg.id && !!speakText?.trim()}
 						{@const attachments = filesByMessageId.get(msg.id) ?? []}
 						<article
 							class="flex flex-col gap-0.5 {own ? 'items-end' : 'items-start'}"
@@ -447,58 +472,39 @@
 										{/if}
 									</div>
 								{:else if toolCall}
-									<!-- Tool-call chip: which tool ran, with which parameters, and the result. -->
-									<div class="flex flex-col gap-1">
-										<div class="flex items-center gap-1.5 text-xs">
-											<svg class="text-primary size-3.5 shrink-0" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+									<!-- Tool-call chip: the spoken human-facing reply, plus a muted technical
+									     footer (tool name + parameters + action result). -->
+									{#if toolCall.response?.trim()}
+										<p class="text-sm leading-relaxed whitespace-pre-wrap break-words">
+											{toolCall.response}
+										</p>
+									{/if}
+									<div class="text-muted-foreground/80 flex flex-col gap-0.5 text-[11px]">
+										<div class="flex items-center gap-1.5">
+											<svg class="text-primary/70 size-3 shrink-0" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
 												<path d="M11.5 1a3.5 3.5 0 0 0-3.36 4.52L1.7 11.96a1.55 1.55 0 1 0 2.19 2.19l6.44-6.44A3.5 3.5 0 1 0 11.5 1Zm0 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z" />
 											</svg>
-											<code class="text-primary font-mono font-semibold">{toolCall.name}</code>
+											<code class="font-mono font-semibold">{toolCall.name}</code>
 											{#if toolCall.inferred}
-												<span class="bg-muted-foreground/15 text-muted-foreground rounded px-1 py-0.5 text-[9px] font-medium tracking-wide uppercase">auto</span>
+												<span class="bg-muted-foreground/15 rounded px-1 py-0.5 text-[9px] font-medium tracking-wide uppercase">auto</span>
+											{/if}
+											{#if toolCall.name !== 'respond'}
+												<code class="font-mono break-all">{JSON.stringify(toolCall.arguments)}</code>
 											{/if}
 										</div>
-										<code class="text-muted-foreground font-mono text-[11px] break-all">{JSON.stringify(toolCall.arguments)}</code>
-										<p class="text-sm leading-relaxed">{toolCall.result}</p>
+										{#if toolCall.result}
+											<span class={toolCall.ok ? '' : 'text-amber-600 dark:text-amber-500'}>{toolCall.result}</span>
+										{/if}
 									</div>
 								{:else if liveBody?.trim()}
 									<p class="text-sm leading-relaxed whitespace-pre-wrap break-words">
 										{liveBody}
 									</p>
-									{#if isAgent && streamingId !== msg.id}
-										<button
-											type="button"
-											class="text-muted-foreground hover:text-primary -mb-0.5 -ml-1 flex w-fit items-center gap-1 rounded px-1 py-0.5 text-xs transition-colors disabled:opacity-60"
-											onclick={() => speakMessage(msg.id, liveBody)}
-											disabled={speakingId != null}
-											aria-label={t('identities.talk.speak')}
-											title={t('identities.talk.speak')}
-										>
-											{#if speakingId !== msg.id}
-												<!-- idle: play -->
-												<svg class="size-3" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-													<path d="M5 3.5v9l7-4.5z" />
-												</svg>
-											{:else if speakPhase === 'generating'}
-												<!-- generating: spinning loader -->
-												<svg class="size-3 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-													<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" opacity="0.25" />
-													<path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
-												</svg>
-											{:else}
-												<!-- playing: pause bars -->
-												<svg class="size-3" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-													<rect x="4" y="3" width="3" height="10" rx="1" />
-													<rect x="9" y="3" width="3" height="10" rx="1" />
-												</svg>
-											{/if}
-											<span
-												>{#if speakingId !== msg.id}{t('identities.talk.speak')}{:else if speakPhase === 'generating'}{t('identities.talk.generating', { seconds: speakElapsed })}{:else}{t('identities.talk.playing', { seconds: speakElapsed })}{/if}</span
-											>
-										</button>
-									{/if}
 								{:else if isAgent}
 									<p class="text-sm italic text-muted-foreground">{t('identities.talk.agentNoReply')}</p>
+								{/if}
+								{#if showSpeak}
+									{@render speakBtn(msg.id, speakText)}
 								{/if}
 								{#if attachments.length > 0}
 									<IdentityMessageAttachments files={attachments} inverted={own} />

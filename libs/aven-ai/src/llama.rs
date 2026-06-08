@@ -93,13 +93,16 @@ pub struct GenStats {
 	pub tool_calls: Vec<ToolCall>,
 }
 
-/// Instruction prepended to the tool list so the 1.2B model leans toward a tool call. Kept in
-/// English (LFM2's tool-use training is English) and short — an over-forceful prompt pushes the
-/// small model into canned "I can't…" refusals. When it still answers in prose it names the
-/// route, which the app-side `matchNavigationIntent` fallback recovers.
+/// Instruction prepended to the tool list. The agent is tool-call-only: it must answer with a
+/// tool call, never plain prose, and put its short human-facing reply in the tool's `response`
+/// field. Kept in English (LFM2's tool-use training is English) and short — an over-forceful
+/// prompt pushes the small model into canned "I can't…" refusals. The app still recovers from
+/// prose/malformed calls (user-prompt navigation fallback + prose wrapped as a `respond` call).
 const TOOL_GUIDANCE: &str =
-	"You are a navigation assistant. When the user wants to open or view a section of the app, \
-	 call the navigate_pages tool with the best-matching route.";
+	"You are a navigation assistant. ALWAYS answer by calling a tool — never with plain text. \
+	 When the user wants to open or view a section of the app, call navigate_pages with the \
+	 best-matching route. Put your short, friendly reply to the user in the tool's `response` \
+	 field, in the user's language.";
 
 /// Silence llama.cpp/ggml's INFO chatter (the multi-page model-loader + ggml-metal
 /// dump on every load). Installs a C log callback that drops everything below WARN,

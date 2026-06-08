@@ -428,6 +428,7 @@
 			"generating": "Erzeuge… {seconds}s",
 			"playing": "Spielt… {seconds}s",
 			"navigating": "→ Öffne {target}",
+			"navOpening": "Klar — ich öffne {target}.",
 			"navUnknown": "⚠️ Unbekannte Seite: {target}"
 		},
 		"todos": {

@@ -36,9 +36,13 @@ fn main() {
 					"type": "string",
 					"enum": ["intents", "sandbox", "identities", "avens", "settings", "models", "network"],
 					"description": "Which page to open."
+				},
+				"response": {
+					"type": "string",
+					"description": "A short, friendly reply to the user in their language (one sentence)."
 				}
 			},
-			"required": ["route"]
+			"required": ["route", "response"]
 		}),
 	}];
 
