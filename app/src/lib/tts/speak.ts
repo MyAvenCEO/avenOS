@@ -1,12 +1,14 @@
 /**
- * Streaming on-device text-to-speech client. Calls the `tts_synthesize` Tauri
- * command and plays the `tts:audio-chunk` events it emits (tagged with our
- * `replyId`) through Web Audio — the reverse of the STT capture path. Resolves
- * once the full clip has been emitted and queued for playback.
+ * On-device text-to-speech client. Calls the `tts_synthesize` Tauri command, which
+ * streams `tts:audio-chunk` events (tagged with our `replyId`), and plays the result
+ * through Web Audio.
  *
- * v1 emits the whole clip in a single chunk; the chunk handler already supports
- * multiple chunks (it schedules them back-to-back), so incremental streaming from
- * the engine will Just Work without changing this client.
+ * Playback model: we **buffer the whole clip, then play it as one continuous
+ * AudioBuffer**. Scheduling the streamed 0.5 s chunks back-to-back as they arrived
+ * underran whenever generation dipped below real-time (the LLM + webview compete for
+ * CPU on an 8 GB Mac) — the playhead passed the gap and you heard start/stop/start/
+ * stop. One buffer is gap-free by construction; the short synth wait is covered by the
+ * Speak button's "Generating…" spinner.
  */
 
 /** Payload of the `tts:audio-chunk` streaming event (see `app/src-tauri/src/tts.rs`). */
@@ -27,15 +29,15 @@ function audioContext(): AudioContext {
 	return sharedCtx
 }
 
-/**
- * Synthesize and play `text`. Streams PCM tagged with our `replyId`, scheduling
- * each chunk back-to-back on a shared AudioContext. Resolves when the backend
- * signals end-of-stream. Throws outside Tauri or if the backend errors (e.g.
- * model not downloaded / runtime missing).
- */
-/** Playback phase for UI feedback: synthesizing (no audio yet) → audio started. */
+/** Playback phase for UI feedback: synthesizing (no audio yet) → audio playing. */
 export type SpeakPhase = 'generating' | 'playing'
 
+/**
+ * Synthesize `text`, then play the full clip. Resolves when playback finishes (so the
+ * caller can hold the "speaking" state for the whole duration). `onPhase` reports the
+ * transition from synthesis to playback. Throws outside Tauri or if the backend errors
+ * (e.g. model not downloaded / runtime missing).
+ */
 export async function speak(
 	text: string,
 	replyId: string,
@@ -48,16 +50,17 @@ export async function speak(
 	])
 
 	onPhase?.('generating')
-	let playing = false
 
 	const ctx = audioContext()
 	if (ctx.state === 'suspended') await ctx.resume()
-	// Next start time for gapless back-to-back scheduling of streamed chunks.
-	let playhead = ctx.currentTime
+
+	// Accumulate every streamed PCM chunk; we concatenate + play once generation ends.
+	const parts: Float32Array[] = []
+	let sampleRate = 48000
 
 	// Resolve when the backend's `done` marker arrives — NOT when `invoke` resolves.
 	// Chunk events are delivered async; stopping the moment `invoke` returns can drop
-	// the final (or only) chunk, so nothing plays.
+	// the final (or only) chunk.
 	let onDone: () => void = () => {}
 	const streamDone = new Promise<void>((resolve) => {
 		onDone = resolve
@@ -71,27 +74,38 @@ export async function speak(
 			return
 		}
 		if (!p.pcm || p.pcm.length === 0) return
-
-		if (!playing) {
-			playing = true
-			onPhase?.('playing')
-		}
-		const samples = Float32Array.from(p.pcm)
-		const buffer = ctx.createBuffer(1, samples.length, p.sampleRate)
-		buffer.copyToChannel(samples, 0)
-		const src = ctx.createBufferSource()
-		src.buffer = buffer
-		src.connect(ctx.destination)
-		const startAt = Math.max(playhead, ctx.currentTime)
-		src.start(startAt)
-		playhead = startAt + buffer.duration
+		sampleRate = p.sampleRate
+		parts.push(Float32Array.from(p.pcm))
 	})
+
 	try {
 		await invoke('tts_synthesize', { text, replyId })
-		// Wait for all emitted chunks to be received + scheduled (the `done` marker is
-		// emitted after them). Safety timeout so a lost marker can't hang forever.
+		// Wait for all emitted chunks (the `done` marker follows them). Safety timeout
+		// so a lost marker can't hang forever.
 		await Promise.race([streamDone, new Promise((r) => setTimeout(r, 3000))])
 	} finally {
 		unlisten()
 	}
+
+	// Concatenate the whole clip into ONE buffer and play it gap-free.
+	const total = parts.reduce((n, a) => n + a.length, 0)
+	if (total === 0) return
+	const all = new Float32Array(total)
+	let offset = 0
+	for (const part of parts) {
+		all.set(part, offset)
+		offset += part.length
+	}
+
+	const buffer = ctx.createBuffer(1, all.length, sampleRate)
+	buffer.copyToChannel(all, 0)
+	const src = ctx.createBufferSource()
+	src.buffer = buffer
+	src.connect(ctx.destination)
+
+	onPhase?.('playing')
+	await new Promise<void>((resolve) => {
+		src.onended = () => resolve()
+		src.start()
+	})
 }

@@ -509,21 +509,19 @@ mod imp {
 				&text,
 				SynthOptions { voice: Some(voice), ..SynthOptions::default() },
 				|pcm| {
-					// Stream the clip in ~0.5 s slices. A whole multi-second reply as
-					// one event is a multi-MB JSON float array — slow/unreliable over
-					// the webview event IPC (and the webview plays slices back-to-back).
-					let chunk = (sample_rate as usize / 2).max(1);
-					for slice in pcm.chunks(chunk) {
-						let _ = app2.emit(
-							CHUNK_EVENT,
-							TtsChunk {
-								reply_id: reply.clone(),
-								pcm: slice.to_vec(),
-								sample_rate,
-								done: false,
-							},
-						);
-					}
+					// Emit each engine tail (~2 s, well under a MB of JSON) as ONE event.
+					// The webview buffers all tails and plays the whole clip as a single
+					// gap-free AudioBuffer, so finer slicing here just floods the IPC and
+					// janks the UI for no playback benefit.
+					let _ = app2.emit(
+						CHUNK_EVENT,
+						TtsChunk {
+							reply_id: reply.clone(),
+							pcm: pcm.to_vec(),
+							sample_rate,
+							done: false,
+						},
+					);
 				},
 				|| false,
 			)

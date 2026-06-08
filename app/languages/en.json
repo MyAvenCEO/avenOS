@@ -439,7 +439,10 @@
 			"speak": "Speak",
 			"speaking": "Speaking…",
 			"generating": "Generating… {seconds}s",
-			"playing": "Playing… {seconds}s"
+			"playing": "Playing… {seconds}s",
+			"navigating": "→ Opening {target}",
+			"navOpening": "Sure — opening {target}.",
+			"navUnknown": "⚠️ Unknown page: {target}"
 		},
 		"todos": {
 			"title": "Todos",
