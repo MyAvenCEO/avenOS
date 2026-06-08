@@ -27,6 +27,15 @@ fn main() {
 	// our staticlib link, rewrite every member name to be GLOBALLY unique across all the llama
 	// archives, then `ranlib` to rebuild each index.
 	if target_os == "ios" && std::env::var_os("CARGO_FEATURE_LOCAL_LLAMA").is_some() {
+		// ggml's CPU backend is built with GGML_USE_ACCELERATE on Apple, so its ops
+		// reference Accelerate's vDSP_* symbols (`ggml_compute_forward_*` → `_vDSP_vadd`,
+		// `_vDSP_vmul`, …). On macOS Tauri links the `.a`s via cargo, which picks up
+		// llama-cpp-sys-2's Accelerate link directive; the iOS path links through
+		// xcodebuild against `libapp.a`, where that directive is lost — only Metal/MetalKit
+		// made it into the generated Xcode project. Supply Accelerate here the same way the
+		// Foundation fix above does (Tauri's `ios xcode-script` forwards cargo link output),
+		// or the archive fails with "Undefined symbols … _vDSP_* … for architecture arm64".
+		println!("cargo:rustc-link-lib=framework=Accelerate");
 		uniquify_llama_archives();
 	}
 
