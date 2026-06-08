@@ -19,10 +19,10 @@ use serde::Serialize;
 use tauri::AppHandle;
 
 /// Progress/readiness event (download + load). Mirrors `llm:model-download`.
-#[cfg_attr(not(feature = "local-tts"), allow(dead_code))]
+#[cfg_attr(not(all(feature = "local-tts", not(target_os = "ios"))), allow(dead_code))]
 pub const DOWNLOAD_EVENT: &str = "tts:model-download";
 /// Streamed PCM event emitted during `tts_synthesize`.
-#[cfg_attr(not(feature = "local-tts"), allow(dead_code))]
+#[cfg_attr(not(all(feature = "local-tts", not(target_os = "ios"))), allow(dead_code))]
 pub const CHUNK_EVENT: &str = "tts:audio-chunk";
 
 const MODEL_LABEL: &str = "MOSS-TTS-Nano";
@@ -45,7 +45,7 @@ pub struct TtsStatus {
 }
 
 impl TtsStatus {
-	#[cfg_attr(feature = "local-tts", allow(dead_code))]
+	#[cfg_attr(all(feature = "local-tts", not(target_os = "ios")), allow(dead_code))]
 	pub fn unavailable() -> Self {
 		Self {
 			status: "unavailable".into(),
@@ -61,7 +61,7 @@ impl TtsStatus {
 /// One `tts:audio-chunk` streaming event. `replyId` ties chunks to the UI row that
 /// requested synthesis; `done` marks end-of-stream (with `pcm` empty).
 /// Constructed only by the feature-gated `imp` synthesizer (STT-only builds never emit it).
-#[cfg_attr(not(feature = "local-tts"), allow(dead_code))]
+#[cfg_attr(not(all(feature = "local-tts", not(target_os = "ios"))), allow(dead_code))]
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TtsChunk {
@@ -179,8 +179,13 @@ fn dir_size(path: &std::path::Path) -> u64 {
 	total
 }
 
-// ───────────────────────── default build (feature off) ─────────────────────────
-#[cfg(not(feature = "local-tts"))]
+// ───────── stub build: feature off, OR any iOS target ─────────
+// iOS bans standalone dylibs, and `ort` here is `load-dynamic` (it `dlopen`s
+// libonnxruntime at runtime). The desktop bundle strips the dylib before App Store
+// export, so even a `desktop-ai`/`local-tts` build slipping onto a device could only
+// reach for a library it is forbidden to ship. Force the stub on iOS regardless of
+// the feature so an iOS binary NEVER attempts the load — TTS stays desktop-only.
+#[cfg(not(all(feature = "local-tts", not(target_os = "ios"))))]
 mod imp {
 	use super::{AppHandle, TtsStatus};
 
@@ -197,8 +202,8 @@ mod imp {
 	pub fn unload(_app: &AppHandle) {}
 }
 
-// ───────────────────────── on-device build (`local-tts`) ────────────────────────
-#[cfg(feature = "local-tts")]
+// ─────────────── on-device build (`local-tts`, desktop only — see above) ───────────────
+#[cfg(all(feature = "local-tts", not(target_os = "ios")))]
 mod imp {
 	use std::path::PathBuf;
 	use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
