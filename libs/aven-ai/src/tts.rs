@@ -299,9 +299,9 @@ impl Synthesizer {
 		self.sample_rate
 	}
 
-	/// Synthesize `text` into mono f32 PCM, streaming it through `on_pcm` (called
-	/// once with the full clip in v1; chunked streaming is a later refinement).
-	/// `cancelled()` is polled each frame. Blocking — run on a dedicated thread.
+	/// Synthesize `text` into mono f32 PCM, streaming it through `on_pcm` in ~0.5 s
+	/// tails as frames are generated (so playback can start before the whole clip is
+	/// done). `cancelled()` is polled each frame. Blocking — run on a dedicated thread.
 	pub fn synthesize(
 		&self,
 		text: &str,
@@ -385,6 +385,12 @@ impl Synthesizer {
 		let mut seen: Vec<Vec<bool>> = vec![vec![false; codebook]; n_vq]; // per-codebook seen-set
 		let mut audio_frames: Vec<Vec<i32>> = Vec::new();
 		let cap = opts.max_frames.min(self.max_new_frames);
+		// Streaming: every STREAM_EVERY frames, codec-decode what we have so far and
+		// emit only the newly-decoded tail, so playback starts ~1 s in instead of after
+		// the whole clip. Re-decoding the growing prefix is cheap vs the frame loop and
+		// keeps the already-played samples identical (the RVQ decoder is causal).
+		const STREAM_EVERY: usize = 25; // ~0.5 s of frames
+		let mut emitted = 0usize;
 
 		let mut local = self.local_frame.lock().map_err(|_| "local lock poisoned")?;
 		let mut decode = self.decode.lock().map_err(|_| "decode lock poisoned")?;
@@ -444,6 +450,16 @@ impl Synthesizer {
 			}
 			audio_frames.push(frame.clone());
 
+			// Stream: decode-so-far and emit the newly-rendered tail (the codec sessions
+			// are independent of the local/decode locks held here, so this is safe).
+			if audio_frames.len() % STREAM_EVERY == 0 {
+				let pcm = self.decode_audio(&audio_frames)?;
+				if pcm.len() > emitted {
+					on_pcm(&pcm[emitted..]);
+					emitted = pcm.len();
+				}
+			}
+
 			// 4b) Advance the global transformer one frame (audio row → decode_step).
 			let mut audio_row = vec![self.cfg.audio_pad_token_id; row_width];
 			audio_row[0] = self.cfg.audio_assistant_slot_token_id;
@@ -481,9 +497,11 @@ impl Synthesizer {
 			return Ok(());
 		}
 
-		// 5) Codec-decode the accumulated RVQ frames → mono PCM.
+		// 5) Final codec-decode → emit only the tail not already streamed above.
 		let pcm = self.decode_audio(&audio_frames)?;
-		on_pcm(&pcm);
+		if pcm.len() > emitted {
+			on_pcm(&pcm[emitted..]);
+		}
 		Ok(())
 	}
 
