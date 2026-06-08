@@ -33,12 +33,22 @@ function audioContext(): AudioContext {
  * signals end-of-stream. Throws outside Tauri or if the backend errors (e.g.
  * model not downloaded / runtime missing).
  */
-export async function speak(text: string, replyId: string): Promise<void> {
+/** Playback phase for UI feedback: synthesizing (no audio yet) → audio started. */
+export type SpeakPhase = 'generating' | 'playing'
+
+export async function speak(
+	text: string,
+	replyId: string,
+	onPhase?: (phase: SpeakPhase) => void,
+): Promise<void> {
 	if (!isTauri()) throw new Error('on-device TTS requires the desktop app')
 	const [{ invoke }, { listen }] = await Promise.all([
 		import('@tauri-apps/api/core'),
 		import('@tauri-apps/api/event'),
 	])
+
+	onPhase?.('generating')
+	let playing = false
 
 	const ctx = audioContext()
 	if (ctx.state === 'suspended') await ctx.resume()
@@ -62,6 +72,10 @@ export async function speak(text: string, replyId: string): Promise<void> {
 		}
 		if (!p.pcm || p.pcm.length === 0) return
 
+		if (!playing) {
+			playing = true
+			onPhase?.('playing')
+		}
 		const samples = Float32Array.from(p.pcm)
 		const buffer = ctx.createBuffer(1, samples.length, p.sampleRate)
 		buffer.copyToChannel(samples, 0)

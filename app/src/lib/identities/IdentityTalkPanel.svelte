@@ -52,8 +52,11 @@
 	// we don't write a Jazz row per token.
 	let streamingId = $state<string | undefined>()
 	let streaming = $state<Record<string, string>>({})
-	// Row id of the agent reply currently being spoken on-device (or undefined).
+	// Row id of the agent reply currently being spoken on-device (or undefined) +
+	// live playback state (synthesizing vs playing) and seconds since Speak was pressed.
 	let speakingId = $state<string | undefined>()
+	let speakPhase = $state<'generating' | 'playing' | undefined>()
+	let speakElapsed = $state(0)
 	let composerMode = $state<ComposerMode>('collapsed')
 	let localPairingLabel = $state<string | undefined>(undefined)
 	let scrollEl = $state<HTMLDivElement | undefined>(undefined)
@@ -294,12 +297,22 @@
 		const text = body.trim()
 		if (!text || speakingId) return
 		speakingId = id
+		speakPhase = 'generating'
+		speakElapsed = 0
+		const startedAt = Date.now()
+		const tick = setInterval(() => {
+			speakElapsed = Math.floor((Date.now() - startedAt) / 1000)
+		}, 250)
 		try {
-			await speak(text, id)
+			await speak(text, id, (phase) => {
+				speakPhase = phase
+			})
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {
+			clearInterval(tick)
 			speakingId = undefined
+			speakPhase = undefined
 		}
 	}
 </script>
@@ -409,8 +422,12 @@
 											aria-label={t('identities.talk.speak')}
 											title={t('identities.talk.speak')}
 										>
-											<span aria-hidden="true">{speakingId === msg.id ? '⏵' : '🔊'}</span>
-											<span>{speakingId === msg.id ? t('identities.talk.speaking') : t('identities.talk.speak')}</span>
+											<span aria-hidden="true"
+												>{speakingId === msg.id ? (speakPhase === 'generating' ? '⏳' : '⏵') : '🔊'}</span
+											>
+											<span
+												>{#if speakingId !== msg.id}{t('identities.talk.speak')}{:else if speakPhase === 'generating'}{t('identities.talk.generating', { seconds: speakElapsed })}{:else}{t('identities.talk.playing', { seconds: speakElapsed })}{/if}</span
+											>
 										</button>
 									{/if}
 								{:else if isAgent}
