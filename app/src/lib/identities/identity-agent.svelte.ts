@@ -31,6 +31,13 @@ const FLOATING_REPLY_MS = 9000
 
 const CONTEXT_KEY = Symbol('identity-agent')
 
+/** Case-insensitive owner-id equality (todos are scoped to the active identity). */
+function idsMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+	const na = (a ?? '').trim().toLowerCase()
+	const nb = (b ?? '').trim().toLowerCase()
+	return na !== '' && na === nb
+}
+
 /**
  * Live, reactive view of the active identity, read fresh inside each turn so the runtime always
  * acts on the current identity / session even as the user navigates between sub-views.
@@ -126,6 +133,20 @@ export function createIdentityAgent(deps: {
 				identityBase: env.identityBase,
 				createTodo: async (title) => {
 					await deps.todos.create({ title, done: false, owner: env.canonicalSparkId })
+				},
+				listTodos: () =>
+					deps.todos.rows
+						.filter((r) => idsMatch(r.owner, env.canonicalSparkId))
+						.map((r) => ({
+							id: String(r.id),
+							title: String(r.title ?? ''),
+							done: r.done === true,
+						})),
+				updateTodoById: async (id, patch) => {
+					await deps.todos.update(id, patch)
+				},
+				deleteTodoById: async (id) => {
+					await deps.todos.delete(id)
 				},
 			}
 			const record = await resolveAgentTurn({

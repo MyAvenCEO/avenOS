@@ -107,6 +107,10 @@ const TOOL_FEWSHOT: &str = "\
 <|im_start|>assistant\n<|tool_call_start|>[create_todo(title=\"Buy apples\", response=\"Added 'Buy apples' to your todos.\")]<|tool_call_end|><|im_end|>\n\
 <|im_start|>user\nIch brauche noch Milch auf der Liste.<|im_end|>\n\
 <|im_start|>assistant\n<|tool_call_start|>[create_todo(title=\"Milch kaufen\", response=\"Ich setze 'Milch kaufen' auf deine Liste.\")]<|tool_call_end|><|im_end|>\n\
+<|im_start|>user\nmark buy apples as done<|im_end|>\n\
+<|im_start|>assistant\n<|tool_call_start|>[update_todo(query=\"apples\", done=true, response=\"Marked 'Buy apples' as done.\")]<|tool_call_end|><|im_end|>\n\
+<|im_start|>user\nLösch bitte Milch von der Liste.<|im_end|>\n\
+<|im_start|>assistant\n<|tool_call_start|>[delete_todo(query=\"Milch\", response=\"Erledigt — 'Milch kaufen' entfernt.\")]<|tool_call_end|><|im_end|>\n\
 <|im_start|>user\nopen members<|im_end|>\n\
 <|im_start|>assistant\n<|tool_call_start|>[navigate_views(view=\"members\", response=\"Sure — opening Members.\")]<|tool_call_end|><|im_end|>\n\
 <|im_start|>user\nZeig mir die Aufgaben.<|im_end|>\n\

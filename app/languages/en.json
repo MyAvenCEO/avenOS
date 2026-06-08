@@ -447,7 +447,13 @@
 			"todoEmpty": "⚠️ The todo needs a title.",
 			"todoAdded": "✓ Added todo: {title}",
 			"todoAddedReply": "Added “{title}” to your todos.",
-			"dismissReply": "Dismiss reply"
+			"dismissReply": "Dismiss reply",
+			"todoNotFound": "⚠️ No todo matching “{query}”.",
+			"todoNoChange": "⚠️ Nothing to change on that todo.",
+			"todoUpdated": "✓ Updated todo: {title}",
+			"todoUpdatedReply": "Updated “{title}”.",
+			"todoDeleted": "✓ Deleted todo: {title}",
+			"todoDeletedReply": "Removed “{title}” from your todos."
 		},
 		"todos": {
 			"title": "Todos",

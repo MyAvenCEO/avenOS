@@ -434,7 +434,13 @@
 			"todoEmpty": "⚠️ Die Aufgabe braucht einen Titel.",
 			"todoAdded": "✓ Aufgabe hinzugefügt: {title}",
 			"todoAddedReply": "„{title}“ zu deinen Aufgaben hinzugefügt.",
-			"dismissReply": "Antwort schließen"
+			"dismissReply": "Antwort schließen",
+			"todoNotFound": "⚠️ Kein Todo passend zu „{query}“.",
+			"todoNoChange": "⚠️ Nichts an diesem Todo zu ändern.",
+			"todoUpdated": "✓ Todo aktualisiert: {title}",
+			"todoUpdatedReply": "„{title}“ aktualisiert.",
+			"todoDeleted": "✓ Todo gelöscht: {title}",
+			"todoDeletedReply": "„{title}“ aus deinen Aufgaben entfernt."
 		},
 		"todos": {
 			"title": "Todos",

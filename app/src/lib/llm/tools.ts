@@ -47,11 +47,20 @@ export type ToolDef = {
  * Per-turn execution context: which identity the tools act on, plus its data mutations.
  * Built fresh each turn by the caller (the runtime), so executors stay pure/stateless.
  */
+/** A todo as the tools see it — the live snapshot the edit/delete tools resolve against. */
+export type TodoSnapshot = { id: string; title: string; done: boolean }
+
 export type ToolContext = {
 	/** Base path of the active identity, e.g. `/identities/<encoded-id>`. Drives `navigate_views`. */
 	identityBase: string
 	/** Add a todo to the active identity's task list. Resolves on success, throws on failure. */
 	createTodo: (title: string) => Promise<void>
+	/** The active identity's current todos — read first so edit/delete can resolve a target by name. */
+	listTodos: () => TodoSnapshot[]
+	/** Patch a todo by its id (title and/or done). Resolves on success, throws on failure. */
+	updateTodoById: (id: string, patch: { title?: string; done?: boolean }) => Promise<void>
+	/** Remove a todo by its id. Resolves on success, throws on failure. */
+	deleteTodoById: (id: string) => Promise<void>
 }
 
 /** Outcome of executing a tool call's side effect. */
@@ -193,11 +202,132 @@ async function executeCreateTodo(
 	}
 }
 
+// ──────────────────────── update_todo / delete_todo ────────────────────────
+
+/** The `update_todo` schema: which todo to change (by name) + the change + the standard `response`. */
+const UPDATE_TODO_TOOL: ToolDef = {
+	name: 'update_todo',
+	description:
+		"Change an EXISTING todo in the current identity's task list — rename it and/or mark it done " +
+		'or not done. Call this when the user wants to edit, rename, complete, check off, or reopen a ' +
+		'task. Identify the todo by words from its current title in `query`.',
+	parameters: {
+		type: 'object',
+		properties: {
+			query: {
+				type: 'string',
+				description: 'Words from the current title of the todo to change (used to find it).',
+			},
+			title: { type: 'string', description: 'The new title (optional — omit to keep it).' },
+			done: {
+				type: 'boolean',
+				description: 'Mark done (true) or not done (false) (optional — omit to keep it).',
+			},
+			...RESPONSE_PROP,
+		},
+		required: ['query', 'response'],
+	},
+}
+
+/** The `delete_todo` schema: which todo to remove (by name) + the standard `response`. */
+const DELETE_TODO_TOOL: ToolDef = {
+	name: 'delete_todo',
+	description:
+		"Remove an EXISTING todo from the current identity's task list. Call this when the user wants " +
+		'to delete, remove, or clear a task. Identify the todo by words from its current title in `query`.',
+	parameters: {
+		type: 'object',
+		properties: {
+			query: {
+				type: 'string',
+				description: 'Words from the current title of the todo to remove (used to find it).',
+			},
+			...RESPONSE_PROP,
+		},
+		required: ['query', 'response'],
+	},
+}
+
+/**
+ * Resolve a free-text `query` to one of the live todos (the "read first" step). Tries, in order:
+ * exact title, title ⊇ query / query ⊇ title (case-insensitive), then best word-overlap. Returns
+ * undefined when nothing plausibly matches, so the executor reports it rather than guessing wrong.
+ */
+function matchTodo(todos: TodoSnapshot[], query: string): TodoSnapshot | undefined {
+	const q = query.trim().toLowerCase()
+	if (!q || todos.length === 0) return undefined
+	const norm = (s: string) => s.trim().toLowerCase()
+	const exact = todos.find((t) => norm(t.title) === q)
+	if (exact) return exact
+	const contains = todos.find((t) => norm(t.title).includes(q) || q.includes(norm(t.title)))
+	if (contains) return contains
+	const qWords = new Set(q.split(/[^\p{L}\p{N}]+/u).filter(Boolean))
+	if (qWords.size === 0) return undefined
+	let best: { todo: TodoSnapshot; score: number } | undefined
+	for (const t of todos) {
+		const tWords = norm(t.title).split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+		const score = tWords.reduce((n, w) => n + (qWords.has(w) ? 1 : 0), 0)
+		if (score > 0 && (!best || score > best.score)) best = { todo: t, score }
+	}
+	return best?.todo
+}
+
+/** The todo-edit executor: read the live list, resolve the target, apply the change. */
+async function executeUpdateTodo(
+	args: Record<string, unknown>,
+	ctx: ToolContext,
+): Promise<ToolDispatchResult> {
+	const query = String(args.query ?? '').trim()
+	if (!query) return { ok: false, message: t('identities.talk.todoEmpty') }
+	const match = matchTodo(ctx.listTodos(), query)
+	if (!match) return { ok: false, message: t('identities.talk.todoNotFound', { query }) }
+	const patch: { title?: string; done?: boolean } = {}
+	if (typeof args.title === 'string' && args.title.trim()) patch.title = args.title.trim()
+	if (typeof args.done === 'boolean') patch.done = args.done
+	if (patch.title === undefined && patch.done === undefined) {
+		return { ok: false, message: t('identities.talk.todoNoChange') }
+	}
+	try {
+		await ctx.updateTodoById(match.id, patch)
+		const label = patch.title ?? match.title
+		return {
+			ok: true,
+			message: t('identities.talk.todoUpdated', { title: label }),
+			response: t('identities.talk.todoUpdatedReply', { title: label }),
+		}
+	} catch (e) {
+		return { ok: false, message: e instanceof Error ? e.message : String(e) }
+	}
+}
+
+/** The todo-delete executor: read the live list, resolve the target, remove it. */
+async function executeDeleteTodo(
+	args: Record<string, unknown>,
+	ctx: ToolContext,
+): Promise<ToolDispatchResult> {
+	const query = String(args.query ?? '').trim()
+	if (!query) return { ok: false, message: t('identities.talk.todoEmpty') }
+	const match = matchTodo(ctx.listTodos(), query)
+	if (!match) return { ok: false, message: t('identities.talk.todoNotFound', { query }) }
+	try {
+		await ctx.deleteTodoById(match.id)
+		return {
+			ok: true,
+			message: t('identities.talk.todoDeleted', { title: match.title }),
+			response: t('identities.talk.todoDeletedReply', { title: match.title }),
+		}
+	} catch (e) {
+		return { ok: false, message: e instanceof Error ? e.message : String(e) }
+	}
+}
+
 // ───────────────────────────── tool registry ─────────────────────────────
 
 const TOOLS: Record<string, ToolEntry> = {
 	[NAVIGATE_VIEWS_TOOL.name]: { def: NAVIGATE_VIEWS_TOOL, execute: executeNavigateViews },
 	[CREATE_TODO_TOOL.name]: { def: CREATE_TODO_TOOL, execute: executeCreateTodo },
+	[UPDATE_TODO_TOOL.name]: { def: UPDATE_TODO_TOOL, execute: executeUpdateTodo },
+	[DELETE_TODO_TOOL.name]: { def: DELETE_TODO_TOOL, execute: executeDeleteTodo },
 }
 
 /** The tools advertised to the model on every identity-agent generation. */
