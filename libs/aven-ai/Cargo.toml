@@ -64,3 +64,9 @@ hound = "3"
 [[example]]
 name = "tts_synth"
 required-features = ["tts"]
+
+# CLI: smoke-test LFM2 tool calling against a local GGUF.
+#   cargo run --example llm_tool --features llama -- <model.gguf> "Zeig mir die Settings."
+[[example]]
+name = "llm_tool"
+required-features = ["llama"]

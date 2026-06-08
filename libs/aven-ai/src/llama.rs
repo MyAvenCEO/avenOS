@@ -93,10 +93,13 @@ pub struct GenStats {
 	pub tool_calls: Vec<ToolCall>,
 }
 
-/// Appended to [`SYSTEM_PROMPT`] when tools are offered, so the 1.2B model reliably reaches
-/// for a tool instead of describing what it would do.
-const TOOL_GUIDANCE: &str = " Wenn der Nutzer zu einem Bereich der App wechseln oder navigieren \
-	möchte, rufe das passende Tool auf, statt mit Text zu antworten.";
+/// Instruction prepended to the tool list so the 1.2B model leans toward a tool call. Kept in
+/// English (LFM2's tool-use training is English) and short — an over-forceful prompt pushes the
+/// small model into canned "I can't…" refusals. When it still answers in prose it names the
+/// route, which the app-side `matchNavigationIntent` fallback recovers.
+const TOOL_GUIDANCE: &str =
+	"You are a navigation assistant. When the user wants to open or view a section of the app, \
+	 call the navigate_pages tool with the best-matching route.";
 
 /// Silence llama.cpp/ggml's INFO chatter (the multi-page model-loader + ggml-metal
 /// dump on every load). Installs a C log callback that drops everything below WARN,
@@ -174,11 +177,12 @@ impl LlamaEngine {
 		})
 	}
 
-	/// Build the LFM2 tool-calling prompt: the tool schemas go inside the system turn between
-	/// `<|tool_list_start|>` / `<|tool_list_end|>` (LFM2's native tool format), assistant turn
-	/// left open. Built by hand rather than via `apply_chat_template` because the `llama-cpp-2`
-	/// binding's template API takes only messages, not tool defs. `AddBos::Always` supplies the
-	/// BOS at tokenize time, so none is embedded here.
+	/// Build the LFM2 tool-calling prompt. Mirrors the EXACT shape this GGUF's embedded chat
+	/// template emits for tools: the JSON tool list is appended to the system turn as
+	/// `…\nList of tools: [ {json}, … ]` (this 1.2B build uses **no** `<|tool_list_start|>`
+	/// markers — only the *call*-side `<|tool_call_start|>`/`<|tool_call_end|>` tokens exist).
+	/// Built by hand because `llama-cpp-2`'s `apply_chat_template` takes only messages, not
+	/// tools. `AddBos::Always` supplies the BOS at tokenize time, so none is embedded here.
 	fn chat_prompt_with_tools(&self, user: &str, tools: &[ToolSpec]) -> String {
 		if tools.is_empty() {
 			return self.chat_prompt(user);
@@ -195,9 +199,14 @@ impl LlamaEngine {
 			})
 			.collect::<Vec<_>>()
 			.join(", ");
+		// Tools-only system turn — exactly what this GGUF's template emits when `tools` are set
+		// and there is no system message. The chatty German [`SYSTEM_PROMPT`] is deliberately
+		// omitted: it steers the 1.2B model into prose ("Gehe zu den Einstellungen.") instead of
+		// emitting a tool call. A terse instruction nudges it toward the call; when the 1.2B
+		// still answers in prose, it almost always *names* the target route — the app-side text
+		// fallback (see `matchNavigationIntent` in `app/src/lib/llm/tools.ts`) recovers it.
 		format!(
-			"<|im_start|>system\n{SYSTEM_PROMPT}{TOOL_GUIDANCE}\n\n\
-			 List of tools: <|tool_list_start|>[{tool_list}]<|tool_list_end|><|im_end|>\n\
+			"<|im_start|>system\n{TOOL_GUIDANCE}\nList of tools: [{tool_list}]<|im_end|>\n\
 			 <|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n"
 		)
 	}
@@ -269,15 +278,28 @@ impl LlamaEngine {
 		let mut tool_bytes: Vec<u8> = Vec::new();
 		let mut tool_calls: Vec<ToolCall> = Vec::new();
 
-		// Not greedy: greedy on a 1.2B model loops into a single-token wall (the "粲粲…"
-		// garbage). Repetition penalty + top-p + a little temperature keeps it coherent.
-		let mut sampler = LlamaSampler::chain_simple([
-			LlamaSampler::penalties(64, 1.15, 0.0, 0.0),
-			LlamaSampler::top_k(40),
-			LlamaSampler::top_p(0.95, 1),
-			LlamaSampler::temp(0.7),
-			LlamaSampler::dist(0x5EED_5EED),
-		]);
+		// Plain chat: not greedy (greedy on a 1.2B loops into a single-token wall — the "粲粲…"
+		// garbage); repetition penalty + top-p + a little temperature keeps it coherent.
+		// Tool calls want the opposite — near-deterministic so the model commits to the call and
+		// emits well-formed `name(args)` syntax (LFM2 recommends ~temp 0.3, light penalty).
+		let mut sampler = if tools.is_empty() {
+			LlamaSampler::chain_simple([
+				LlamaSampler::penalties(64, 1.15, 0.0, 0.0),
+				LlamaSampler::top_k(40),
+				LlamaSampler::top_p(0.95, 1),
+				LlamaSampler::temp(0.7),
+				LlamaSampler::dist(0x5EED_5EED),
+			])
+		} else {
+			// Calm (low-temp) for tool calls: steady enough to emit a well-formed call, but not
+			// greedy — greedy on this 1.2B collapses into canned "I can't…" refusal templates.
+			LlamaSampler::chain_simple([
+				LlamaSampler::penalties(64, 1.05, 0.0, 0.0),
+				LlamaSampler::top_p(0.9, 1),
+				LlamaSampler::temp(0.3),
+				LlamaSampler::dist(0x5EED_5EED),
+			])
+		};
 		let mut text = String::new();
 		// Detok byte buffer: byte-fallback tokens split a multibyte char (ä/ö/ü/emoji)
 		// across tokens, so decode each token alone would emit U+FFFD (the "��").
@@ -297,10 +319,17 @@ impl LlamaEngine {
 			}
 
 			// Tool-call span handling: open on `<|tool_call_start|>`, collect inner bytes, and
-			// on `<|tool_call_end|>` parse + stop (single-turn). The markers themselves never
-			// reach `on_token`, so the reply bubble stays clean.
+			// on `<|tool_call_end|>` parse + stop (single-turn). The markers are special/control
+			// tokens — detok'ing them errors ("Unknown Token Type") — so we feed them to the
+			// context for continuity and `continue` without rendering. They never reach `on_token`.
 			if tc_start.is_some() && Some(token) == tc_start {
 				in_tool_call = true;
+				produced += 1;
+				batch.clear();
+				batch.add(token, n_cur, &[0], true).map_err(|e| format!("batch add gen: {e}"))?;
+				n_cur += 1;
+				ctx.decode(&mut batch).map_err(|e| format!("decode gen: {e}"))?;
+				continue;
 			} else if tc_end.is_some() && Some(token) == tc_end {
 				let raw = String::from_utf8_lossy(&tool_bytes).into_owned();
 				if let Some(call) = parse_pythonic_call(&raw) {

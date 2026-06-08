@@ -6,7 +6,14 @@
 	import type { ComposerMode } from '$lib/intents/types'
 	import { persistSparkFiles } from '$lib/jazz/intent-files'
 	import { streamReply } from '$lib/llm/generate'
-	import { LLM_TOOLS, executeToolCall } from '$lib/llm/tools'
+	import {
+		LLM_TOOLS,
+		executeToolCall,
+		inferToolCallFromText,
+		encodeToolCallBody,
+		parseToolCallBody,
+		type LlmToolCall,
+	} from '$lib/llm/tools'
 	import { speak } from '$lib/tts/speak'
 	import {
 		agentUnavailableReason,
@@ -268,7 +275,19 @@
 			replyId = reply.id
 			streamingId = reply.id
 			streaming = { ...streaming, [reply.id]: '' }
-			let toolMsg: string | undefined
+			// Run a tool call through the router, render its chip in the stream, and remember
+			// the encoded body so it's persisted (and wins over any prose the model streamed).
+			let toolBody: string | undefined
+			const dispatch = (call: LlmToolCall, inferred: boolean) => {
+				const res = executeToolCall(call)
+				toolBody = encodeToolCallBody({
+					name: call.name,
+					arguments: call.arguments,
+					result: res.message,
+					inferred,
+				})
+				streaming = { ...streaming, [reply.id]: toolBody }
+			}
 			const full = await streamReply(
 				prompt,
 				reply.id,
@@ -278,16 +297,17 @@
 				},
 				{
 					tools: LLM_TOOLS,
-					// Single-turn: run the side effect (navigation) and show a short confirmation.
-					// Prefer it over any raw call text the model may have streamed.
-					onToolCall: (call) => {
-						const res = executeToolCall(call)
-						toolMsg = res.message
-						streaming = { ...streaming, [reply.id]: res.message }
-					},
+					// Single-turn: a real `<|tool_call_start|>` call from the model.
+					onToolCall: (call) => dispatch(call, false),
 				},
 			)
-			await messages.update(reply.id, { body: toolMsg || full || (streaming[reply.id] ?? '') })
+			// Fallback: the 1.2B often answers in prose instead of a real call. If the USER's
+			// prompt was an explicit navigation command, recover and dispatch it deterministically.
+			if (!toolBody) {
+				const inferred = inferToolCallFromText(prompt, reply.id)
+				if (inferred) dispatch(inferred, true)
+			}
+			await messages.update(reply.id, { body: toolBody || full || (streaming[reply.id] ?? '') })
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e)
 			if (replyId) {
@@ -376,6 +396,7 @@
 						{@const isAgent = msg.role === 'agent'}
 						{@const label = isAgent ? t('identities.talk.agentLabel') : authorLabel(msg.author_did)}
 						{@const liveBody = streaming[msg.id] ?? msg.body}
+						{@const toolCall = isAgent ? parseToolCallBody(liveBody) : null}
 						{@const pending = streamingId === msg.id && !liveBody?.trim()}
 						{@const attachments = filesByMessageId.get(msg.id) ?? []}
 						<article
@@ -424,6 +445,21 @@
 												></div>
 											</div>
 										{/if}
+									</div>
+								{:else if toolCall}
+									<!-- Tool-call chip: which tool ran, with which parameters, and the result. -->
+									<div class="flex flex-col gap-1">
+										<div class="flex items-center gap-1.5 text-xs">
+											<svg class="text-primary size-3.5 shrink-0" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+												<path d="M11.5 1a3.5 3.5 0 0 0-3.36 4.52L1.7 11.96a1.55 1.55 0 1 0 2.19 2.19l6.44-6.44A3.5 3.5 0 1 0 11.5 1Zm0 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z" />
+											</svg>
+											<code class="text-primary font-mono font-semibold">{toolCall.name}</code>
+											{#if toolCall.inferred}
+												<span class="bg-muted-foreground/15 text-muted-foreground rounded px-1 py-0.5 text-[9px] font-medium tracking-wide uppercase">auto</span>
+											{/if}
+										</div>
+										<code class="text-muted-foreground font-mono text-[11px] break-all">{JSON.stringify(toolCall.arguments)}</code>
+										<p class="text-sm leading-relaxed">{toolCall.result}</p>
 									</div>
 								{:else if liveBody?.trim()}
 									<p class="text-sm leading-relaxed whitespace-pre-wrap break-words">

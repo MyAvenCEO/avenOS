@@ -426,7 +426,9 @@
 			"speak": "Vorlesen",
 			"speaking": "Liest vor…",
 			"generating": "Erzeuge… {seconds}s",
-			"playing": "Spielt… {seconds}s"
+			"playing": "Spielt… {seconds}s",
+			"navigating": "→ Öffne {target}",
+			"navUnknown": "⚠️ Unbekannte Seite: {target}"
 		},
 		"todos": {
 			"title": "Todos",
