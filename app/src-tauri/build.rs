@@ -30,11 +30,14 @@ fn main() {
 		// ggml's CPU backend is built with GGML_USE_ACCELERATE on Apple, so its ops
 		// reference Accelerate's vDSP_* symbols (`ggml_compute_forward_*` → `_vDSP_vadd`,
 		// `_vDSP_vmul`, …). On macOS Tauri links the `.a`s via cargo, which picks up
-		// llama-cpp-sys-2's Accelerate link directive; the iOS path links through
-		// xcodebuild against `libapp.a`, where that directive is lost — only Metal/MetalKit
-		// made it into the generated Xcode project. Supply Accelerate here the same way the
-		// Foundation fix above does (Tauri's `ios xcode-script` forwards cargo link output),
-		// or the archive fails with "Undefined symbols … _vDSP_* … for architecture arm64".
+		// llama-cpp-sys-2's Accelerate link directive. On iOS the final link is done by
+		// xcodebuild against `libapp.a`, and this `rustc-link-lib` directive does NOT reach
+		// it — only the frameworks declared in the generated Xcode project are linked. The
+		// real fix lives in scripts/tauri-ios-asc.ts (`patchAccelerateFramework`), which adds
+		// Accelerate.framework to project.yml + project.pbxproj alongside Metal/MetalKit;
+		// without it the archive fails with "Undefined symbols … _vDSP_* … for architecture
+		// arm64". We keep the directive below as harmless defense-in-depth (in case a future
+		// Tauri forwards cargo link output into the xcodebuild link).
 		println!("cargo:rustc-link-lib=framework=Accelerate");
 		uniquify_llama_archives();
 	}
