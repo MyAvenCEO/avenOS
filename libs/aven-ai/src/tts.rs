@@ -230,12 +230,27 @@ impl Synthesizer {
 		let build = |file: &str| -> Result<Session, String> {
 			let path = dir.join(file);
 			let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
-			Session::builder()
+			#[allow(unused_mut)]
+			let mut builder = Session::builder()
 				.map_err(|e| format!("session builder: {e}"))?
 				.with_optimization_level(GraphOptimizationLevel::Level3)
 				.map_err(|e| format!("opt level: {e}"))?
 				.with_intra_threads(threads)
-				.map_err(|e| format!("threads: {e}"))?
+				.map_err(|e| format!("threads: {e}"))?;
+			// Apple: run on the GPU/Neural Engine via CoreML (ANE+GPU), falling back to
+			// CPU per-op automatically for anything CoreML can't take. Compiled CoreML
+			// models are cached next to the GGUF so launches after the first are fast.
+			#[cfg(any(target_os = "macos", target_os = "ios"))]
+			{
+				builder = builder
+					.with_execution_providers([ort::ep::CoreML::default()
+						.with_compute_units(ort::ep::coreml::ComputeUnits::All)
+						.with_model_format(ort::ep::coreml::ModelFormat::MLProgram)
+						.with_model_cache_dir(dir.join("coreml-cache").to_string_lossy())
+						.build()])
+					.map_err(|e| format!("coreml ep: {e}"))?;
+			}
+			builder
 				.commit_from_file(&path)
 				.map_err(|e| format!("load model {}: {e}", path.display()))
 		};
