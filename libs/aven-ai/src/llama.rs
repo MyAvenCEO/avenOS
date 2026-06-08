@@ -108,9 +108,9 @@ const TOOL_FEWSHOT: &str = "\
 <|im_start|>user\nIch brauche noch Milch auf der Liste.<|im_end|>\n\
 <|im_start|>assistant\n<|tool_call_start|>[create_todo(title=\"Milch kaufen\", response=\"Ich setze 'Milch kaufen' auf deine Liste.\")]<|tool_call_end|><|im_end|>\n\
 <|im_start|>user\nCurrent todos (id: title):\n7f3a2b1c-1d2e-4a3b-9c4d-5e6f7a8b9c0d: Bananen kaufen (open)\n9c8d7e6f-2a3b-4c5d-8e9f-0a1b2c3d4e5f: Milch kaufen (open)\n\nHak Bananen kaufen als erledigt ab.<|im_end|>\n\
-<|im_start|>assistant\n<|tool_call_start|>[update_todo(id=\"7f3a2b1c-1d2e-4a3b-9c4d-5e6f7a8b9c0d\", done=true, response=\"Bananen kaufen als erledigt markiert.\")]<|tool_call_end|><|im_end|>\n\
+<|im_start|>assistant\n<|tool_call_start|>[toggle_todo(id=\"7f3a2b1c-1d2e-4a3b-9c4d-5e6f7a8b9c0d\", response=\"Bananen kaufen als erledigt markiert.\")]<|tool_call_end|><|im_end|>\n\
 <|im_start|>user\nCurrent todos (id: title):\n4d5e6f70-3b4c-4d5e-9f0a-1b2c3d4e5f60: Banane kaufen (open)\n\nÄndere den Task 'Banane kaufen' auf '2 Äpfel'.<|im_end|>\n\
-<|im_start|>assistant\n<|tool_call_start|>[update_todo(id=\"4d5e6f70-3b4c-4d5e-9f0a-1b2c3d4e5f60\", title=\"2 Äpfel\", response=\"Umbenannt in '2 Äpfel'.\")]<|tool_call_end|><|im_end|>\n\
+<|im_start|>assistant\n<|tool_call_start|>[rename_todo(id=\"4d5e6f70-3b4c-4d5e-9f0a-1b2c3d4e5f60\", title=\"2 Äpfel\", response=\"Umbenannt in '2 Äpfel'.\")]<|tool_call_end|><|im_end|>\n\
 <|im_start|>user\nCurrent todos (id: title):\na1b2c3d4-4c5d-4e6f-8a9b-0c1d2e3f4a5b: Bananen kaufen (open)\ne5f6a7b8-5d6e-4f70-9a1b-2c3d4e5f6a7b: Milch kaufen (open)\n\nLösch Bananen und Milch.<|im_end|>\n\
 <|im_start|>assistant\n<|tool_call_start|>[delete_todo(id=\"a1b2c3d4-4c5d-4e6f-8a9b-0c1d2e3f4a5b, e5f6a7b8-5d6e-4f70-9a1b-2c3d4e5f6a7b\", response=\"Bananen und Milch gelöscht.\")]<|tool_call_end|><|im_end|>\n\
 <|im_start|>user\nopen members<|im_end|>\n\

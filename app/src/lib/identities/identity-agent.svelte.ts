@@ -120,8 +120,8 @@ export function createIdentityAgent(deps: {
 			const todosNow = deps.todos.rows
 				.filter((r) => idsMatch(r.owner, env.canonicalSparkId))
 				.map((r) => ({ id: String(r.id), title: String(r.title ?? ''), done: r.done === true }))
-			const idMap = new Map<string, { id: string; title: string }>()
-			todosNow.forEach((t) => idMap.set(t.id, { id: t.id, title: t.title }))
+			const idMap = new Map<string, { id: string; title: string; done: boolean }>()
+			todosNow.forEach((t) => idMap.set(t.id, { id: t.id, title: t.title, done: t.done }))
 			const todoPreamble =
 				todosNow.length > 0
 					? `Current todos (id: title):\n${todosNow

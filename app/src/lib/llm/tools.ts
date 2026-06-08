@@ -53,11 +53,11 @@ export type ToolContext = {
 	/** Add a todo to the active identity's task list. Resolves on success, throws on failure. */
 	createTodo: (title: string) => Promise<void>
 	/**
-	 * Resolve a SHORT id the model picked from the todo list shown in its context (1, 2, …) to the
-	 * real row id + title. The model selects the id; no app-side title matching. Undefined if the
-	 * short id wasn't in the list it was shown.
+	 * Resolve an id the model copied from the todo list shown in its context to the real row
+	 * (id + title + current done). The model selects the id; no app-side title matching. Undefined
+	 * if the id wasn't in the list it was shown.
 	 */
-	resolveTodo: (shortId: string) => { id: string; title: string } | undefined
+	resolveTodo: (id: string) => { id: string; title: string; done: boolean } | undefined
 	/** Patch a todo by its real id (title and/or done). Resolves on success, throws on failure. */
 	updateTodoById: (id: string, patch: { title?: string; done?: boolean }) => Promise<void>
 	/** Remove a todo by its real id. Resolves on success, throws on failure. */
@@ -203,16 +203,38 @@ async function executeCreateTodo(
 	}
 }
 
-// ──────────────────────── update_todo / delete_todo ────────────────────────
+// ─────────────── rename_todo / toggle_todo / delete_todo ───────────────
+//
+// Single-purpose tools (one job, one param) — the 1.2B reliably fills ONE argument but tends to
+// describe the change in prose and forget a second optional one. So toggling has NO boolean to
+// omit (it just flips), and renaming has ONLY a title.
 
-/** The `update_todo` schema: which todo(s) to change (by id) + the change + the standard `response`. */
-const UPDATE_TODO_TOOL: ToolDef = {
-	name: 'update_todo',
+/** The `rename_todo` schema: which todo (by id) + the new title + the standard `response`. */
+const RENAME_TODO_TOOL: ToolDef = {
+	name: 'rename_todo',
 	description:
-		"Change EXISTING todo(s) in the current identity's task list — rename one, and/or mark done " +
-		'or not done. Call this when the user wants to edit, rename, complete, check off, or reopen a ' +
-		'task. Read the todo list shown above the user message and copy the EXACT id(s) into `id` ' +
-		'(comma-separate several to change them at once).',
+		"Rename / edit the text of ONE existing todo in the current identity's list. Call this when " +
+		'the user wants to change a task\'s wording. Read the todo list shown above the user message, ' +
+		'copy the EXACT id into `id`, and put the new wording in `title`.',
+	parameters: {
+		type: 'object',
+		properties: {
+			id: { type: 'string', description: 'The exact id of the todo to rename, copied from the list.' },
+			title: { type: 'string', description: 'The new title text for the todo.' },
+			...RESPONSE_PROP,
+		},
+		required: ['id', 'title', 'response'],
+	},
+}
+
+/** The `toggle_todo` schema: which todo(s) (by id) + the standard `response`. Flips done — no flag. */
+const TOGGLE_TODO_TOOL: ToolDef = {
+	name: 'toggle_todo',
+	description:
+		'Toggle the done state of existing todo(s) — check off an open task or reopen a done one. Call ' +
+		'this when the user wants to complete, finish, check off, tick, mark done, or reopen a task. ' +
+		'Read the todo list shown above the user message and copy the EXACT id(s) into `id` ' +
+		'(comma-separate several to toggle them at once).',
 	parameters: {
 		type: 'object',
 		properties: {
@@ -220,11 +242,6 @@ const UPDATE_TODO_TOOL: ToolDef = {
 				type: 'string',
 				description:
 					'The exact id(s) of the target todo(s), copied from the list — comma-separated for several.',
-			},
-			title: { type: 'string', description: 'A new title (optional; only when changing ONE todo).' },
-			done: {
-				type: 'boolean',
-				description: 'Mark done (true) or not done (false) (optional — omit to keep it).',
 			},
 			...RESPONSE_PROP,
 		},
@@ -261,13 +278,13 @@ const DELETE_TODO_TOOL: ToolDef = {
 function resolveTargets(
 	raw: unknown,
 	ctx: ToolContext,
-): { id: string; title: string }[] {
+): { id: string; title: string; done: boolean }[] {
 	const ids = String(raw ?? '')
 		.split(/\s*(?:,|;|\band\b|\bund\b)\s*/iu)
 		.map((s) => s.trim())
 		.filter(Boolean)
 	const seen = new Set<string>()
-	const out: { id: string; title: string }[] = []
+	const out: { id: string; title: string; done: boolean }[] = []
 	for (const id of ids) {
 		const todo = ctx.resolveTodo(id)
 		if (todo && !seen.has(todo.id)) {
@@ -278,8 +295,31 @@ function resolveTargets(
 	return out
 }
 
-/** The todo-edit executor: act on the id(s) the model picked from the list it was shown. */
-async function executeUpdateTodo(
+/** The rename executor: set the new title on the one todo the model picked. */
+async function executeRenameTodo(
+	args: Record<string, unknown>,
+	ctx: ToolContext,
+): Promise<ToolDispatchResult> {
+	const raw = String(args.id ?? '').trim()
+	const title = String(args.title ?? '').trim()
+	if (!raw) return { ok: false, message: t('identities.talk.todoEmpty') }
+	if (!title) return { ok: false, message: t('identities.talk.todoNoChange') }
+	const target = ctx.resolveTodo(raw)
+	if (!target) return { ok: false, message: t('identities.talk.todoNotFound', { query: raw }) }
+	try {
+		await ctx.updateTodoById(target.id, { title })
+		return {
+			ok: true,
+			message: t('identities.talk.todoUpdated', { title }),
+			response: t('identities.talk.todoUpdatedReply', { title }),
+		}
+	} catch (e) {
+		return { ok: false, message: e instanceof Error ? e.message : String(e) }
+	}
+}
+
+/** The toggle executor: flip done on the id(s) the model picked — no boolean for it to omit. */
+async function executeToggleTodo(
 	args: Record<string, unknown>,
 	ctx: ToolContext,
 ): Promise<ToolDispatchResult> {
@@ -287,23 +327,13 @@ async function executeUpdateTodo(
 	if (!raw) return { ok: false, message: t('identities.talk.todoEmpty') }
 	const targets = resolveTargets(raw, ctx)
 	if (targets.length === 0) return { ok: false, message: t('identities.talk.todoNotFound', { query: raw }) }
-	const patch: { title?: string; done?: boolean } = {}
-	// A rename only makes sense for a single target; for several, just apply done.
-	if (targets.length === 1 && typeof args.title === 'string' && args.title.trim()) {
-		patch.title = args.title.trim()
-	}
-	if (typeof args.done === 'boolean') patch.done = args.done
-	if (patch.title === undefined && patch.done === undefined) {
-		return { ok: false, message: t('identities.talk.todoNoChange') }
-	}
 	try {
-		for (const target of targets) await ctx.updateTodoById(target.id, patch)
+		for (const target of targets) await ctx.updateTodoById(target.id, { done: !target.done })
 		if (targets.length === 1) {
-			const label = patch.title ?? targets[0].title
 			return {
 				ok: true,
-				message: t('identities.talk.todoUpdated', { title: label }),
-				response: t('identities.talk.todoUpdatedReply', { title: label }),
+				message: t('identities.talk.todoUpdated', { title: targets[0].title }),
+				response: t('identities.talk.todoUpdatedReply', { title: targets[0].title }),
 			}
 		}
 		const titles = targets.map((tt) => tt.title).join(', ')
@@ -351,7 +381,8 @@ async function executeDeleteTodo(
 const TOOLS: Record<string, ToolEntry> = {
 	[NAVIGATE_VIEWS_TOOL.name]: { def: NAVIGATE_VIEWS_TOOL, execute: executeNavigateViews },
 	[CREATE_TODO_TOOL.name]: { def: CREATE_TODO_TOOL, execute: executeCreateTodo },
-	[UPDATE_TODO_TOOL.name]: { def: UPDATE_TODO_TOOL, execute: executeUpdateTodo },
+	[RENAME_TODO_TOOL.name]: { def: RENAME_TODO_TOOL, execute: executeRenameTodo },
+	[TOGGLE_TODO_TOOL.name]: { def: TOGGLE_TODO_TOOL, execute: executeToggleTodo },
 	[DELETE_TODO_TOOL.name]: { def: DELETE_TODO_TOOL, execute: executeDeleteTodo },
 }
 
