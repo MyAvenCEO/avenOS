@@ -21,7 +21,7 @@ use crate::{
 	crypto::{
 		cell_seal_aad, column_type_slug, groove_value_to_canonical_utf8, ipc_json_from_opened_sensitive_plaintext,
 		decrypt_keyshare_payload, derive_kek_x25519, open_text_cell_payload,
-		keyshare_wrap_aad, seal_text_cell_payload, Dek, CELL_ENVELOPE_V1,
+		keyshare_wrap_aad, keyshare_wrap_aad_legacy, seal_text_cell_payload, Dek, CELL_ENVELOPE_V1,
 	},
 	jazz_auth,
 	schema_manifest,
@@ -296,11 +296,23 @@ pub(super) fn inject_default_identity(
 }
 
 fn current_dek_version(state: &ShellState, identity: Uuid) -> Result<i64, String> {
-	state
+	let claimed = state
 		.identity_versions
 		.get(&identity)
 		.cloned()
-		.ok_or_else(|| format!("unknown_spark_version:{identity}"))
+		.ok_or_else(|| format!("unknown_spark_version:{identity}"))?;
+	// Downgrade defense: `current_dek_version` rides as a PLAINTEXT column, so a relay could
+	// tamper it DOWN to make new writes seal under an old DEK a revoked peer still holds.
+	// Rotation always hands remaining holders the new version, so the newest DEK THIS device
+	// holds is the true current one — never seal under anything older than that.
+	let max_held = state
+		.deks
+		.keys()
+		.filter(|(sid, _)| *sid == identity)
+		.map(|(_, v)| *v)
+		.max()
+		.unwrap_or(claimed);
+	Ok(claimed.max(max_held))
 }
 
 pub(super) fn seal_column_plain(
@@ -631,8 +643,13 @@ pub(super) async fn hydrate_shell(
 			let urn = identity_urn(sid);
 			let wrapper_pk = jazz_auth::ed25519_public_from_peer_did(wrapper_did)?;
 			let kek = derive_kek_x25519(&signing_key, &wrapper_pk)?;
-			let aad = keyshare_wrap_aad(&urn, recipient, dv);
-			match decrypt_keyshare_payload(wrapped, &kek, &aad) {
+			// Prefer the wrapper-bound AAD; fall back to the legacy form so keyshares minted
+			// before wrapper_did was bound into the AAD still open (no flag day).
+			let aad = keyshare_wrap_aad(&urn, recipient, wrapper_did, dv);
+			let opened = decrypt_keyshare_payload(wrapped, &kek, &aad).or_else(|_| {
+				decrypt_keyshare_payload(wrapped, &kek, &keyshare_wrap_aad_legacy(&urn, recipient, dv))
+			});
+			match opened {
 				Ok(raw32) => {
 					deks.insert((sid, dv), Dek::from_plain_32(raw32));
 				}

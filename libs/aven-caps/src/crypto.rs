@@ -77,6 +77,12 @@ pub fn derive_kek_x25519(
 	let peer_montgomery =
 		ed25519_pk_to_curve25519_pk(peer_ed_pk).ok_or_else(|| "ed25519_to_curve25519".to_string())?;
 	let shared = my_x25519.diffie_hellman(&XPub::from(peer_montgomery));
+	// Reject low-order / small-subgroup peer keys. A non-contributory exchange yields the
+	// all-zero X25519 output, which would make the KEK independent of our secret — fail
+	// closed rather than derive a predictable key from a crafted peer point.
+	if !shared.was_contributory() {
+		return Err("kek_non_contributory_peer_key".to_string());
+	}
 	Ok(hkdf_kek(shared.as_bytes()))
 }
 
@@ -479,8 +485,24 @@ pub fn dek_version_from_aad_bytes(aad_plain: &[u8]) -> Result<u64, String> {
 		.map_err(|_| format!("aad_dek_version:{seg}"))
 }
 
+/// AAD binding a keyshare envelope to its (identity, recipient, **wrapper**, version).
+/// Binding `wrapper_did` pins the granter the unwrap derives its KEK from, closing a
+/// wrapper-confusion gap. New keyshares use this; [`keyshare_wrap_aad_legacy`] is the
+/// pre-binding form kept ONLY so the unwrap path can still open older keyshares.
 #[must_use]
-pub fn keyshare_wrap_aad(identity_urn: &str, recipient_did: &str, dek_version: i64) -> Vec<u8> {
+pub fn keyshare_wrap_aad(
+	identity_urn: &str,
+	recipient_did: &str,
+	wrapper_did: &str,
+	dek_version: i64,
+) -> Vec<u8> {
+	format!("keyshare|{identity_urn}|{recipient_did}|{wrapper_did}|{dek_version}").into_bytes()
+}
+
+/// Pre-`wrapper_did` AAD form. Do NOT use for new wraps — it exists solely as the unwrap
+/// fallback so keyshares minted before the wrapper binding still decrypt (no flag day).
+#[must_use]
+pub fn keyshare_wrap_aad_legacy(identity_urn: &str, recipient_did: &str, dek_version: i64) -> Vec<u8> {
 	format!("keyshare|{identity_urn}|{recipient_did}|{dek_version}").into_bytes()
 }
 
@@ -530,11 +552,12 @@ mod tests {
 		let owner = uuid::Uuid::new_v4();
 		let urn = format!("identity:{owner}");
 		let recipient_did = "did:key:zRecipient";
+		let granter_did = "did:key:zGranter";
 		let dek_ver = 1i64;
 		let dek_plain = random_identity_dek();
 
 		let kek_wrap = derive_kek_x25519(&granter, &recipient_pk).unwrap();
-		let aad = keyshare_wrap_aad(&urn, recipient_did, dek_ver);
+		let aad = keyshare_wrap_aad(&urn, recipient_did, granter_did, dek_ver);
 		let wrapped =
 			encrypt_keyshare_payload(&kek_wrap, dek_plain.expose(), &aad).unwrap();
 
@@ -635,7 +658,8 @@ mod tests {
 		let new_dek = random_identity_dek(); // v2 — minted at rotation
 
 		// Owner keyshares the NEW dek (v2) to Carol only.
-		let wrap_aad = keyshare_wrap_aad(&urn, carol_did, 2);
+		let owner_did = "did:key:zOwner";
+		let wrap_aad = keyshare_wrap_aad(&urn, carol_did, owner_did, 2);
 		let kek_wrap = derive_kek_x25519(&owner, &carol_pk).unwrap();
 		let carol_keyshare = encrypt_keyshare_payload(&kek_wrap, new_dek.expose(), &wrap_aad).unwrap();
 

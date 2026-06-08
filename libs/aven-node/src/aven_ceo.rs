@@ -11,7 +11,7 @@ use aven_caps::caps::{
 };
 use aven_caps::crypto::{
 	decrypt_keyshare_payload, derive_kek_x25519, encrypt_keyshare_payload, keyshare_wrap_aad,
-	random_identity_dek,
+	keyshare_wrap_aad_legacy, random_identity_dek,
 };
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -162,7 +162,7 @@ pub async fn ensure_avenceo_owned(
 	let dek = random_identity_dek();
 	let kek = derive_kek_x25519(signing, &vault.ed25519_public)?;
 	let urn = format!("identity:{avenceo_id}");
-	let aad = keyshare_wrap_aad(&urn, &vault.peer_did, dek_ver);
+	let aad = keyshare_wrap_aad(&urn, &vault.peer_did, &vault.peer_did, dek_ver);
 	let wrapped = encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
 	let ks_tbl = schema
 		.get(&TableName::new("keyshares"))
@@ -231,8 +231,16 @@ async fn read_server_dek(
 			let wrapped = text_at(&vals, wrap_ix);
 			let kek = derive_kek_x25519(signing, &vault.ed25519_public)?;
 			let urn = format!("identity:{avenceo_id}");
-			let aad = keyshare_wrap_aad(&urn, &vault.peer_did, dek_ver);
-			return decrypt_keyshare_payload(&wrapped, &kek, &aad);
+			// Self-keyshare: wrapper == this server. Prefer the wrapper-bound AAD, fall back
+			// to the legacy form so a keyshare minted before the binding still opens.
+			let aad = keyshare_wrap_aad(&urn, &vault.peer_did, &vault.peer_did, dek_ver);
+			return decrypt_keyshare_payload(&wrapped, &kek, &aad).or_else(|_| {
+				decrypt_keyshare_payload(
+					&wrapped,
+					&kek,
+					&keyshare_wrap_aad_legacy(&urn, &vault.peer_did, dek_ver),
+				)
+			});
 		}
 	}
 	Err("avenceo: server keyshare not found".into())
@@ -283,7 +291,7 @@ pub async fn maybe_grant_first_admin(
 	let dek = read_server_dek(engine, &vault, signing, avenceo_id, dek_ver).await?;
 	let kek = derive_kek_x25519(signing, &peer.0)?;
 	let urn = format!("identity:{avenceo_id}");
-	let aad = keyshare_wrap_aad(&urn, &peer_did, dek_ver);
+	let aad = keyshare_wrap_aad(&urn, &peer_did, &vault.peer_did, dek_ver);
 	let wrapped = encrypt_keyshare_payload(&kek, &dek, &aad)?;
 	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
 	let ks_tbl = schema.get(&TableName::new("keyshares")).ok_or("avenceo: no keyshares table")?;

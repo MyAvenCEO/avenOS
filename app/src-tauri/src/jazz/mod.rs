@@ -2017,7 +2017,7 @@ async fn wrap_all_dek_versions_to_recipient(
 			.deks
 			.get(&(identity_uuid, v))
 			.ok_or_else(|| format!("missing DEK for identity {identity_uuid} v{v}"))?;
-		let aad = crate::crypto::keyshare_wrap_aad(&urn, recipient_did, v);
+		let aad = crate::crypto::keyshare_wrap_aad(&urn, recipient_did, &shell.peer_did, v);
 		let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
 		let mut ks = Map::new();
 		ks.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
@@ -2226,7 +2226,7 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 		.ok_or_else(|| format!("missing DEK for identity {identity_uuid} v{dek_ver}"))?;
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &peer_pk)?;
 	let ks_urn = jazz_engine::identity_urn(identity_uuid);
-	let ks_aad = crate::crypto::keyshare_wrap_aad(&ks_urn, &peer_did, dek_ver);
+	let ks_aad = crate::crypto::keyshare_wrap_aad(&ks_urn, &peer_did, &shell.peer_did, dek_ver);
 	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek.expose(), &ks_aad)?;
 	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
 	let mut ks = Map::new();
@@ -2464,7 +2464,7 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 	let dek_plain = crate::crypto::random_identity_dek();
 	let urn = jazz_engine::identity_urn(identity_uuid);
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
-	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, dek_ver);
+	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, &shell.peer_did, dek_ver);
 	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
 	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
 	let mut ks = Map::new();
@@ -2550,7 +2550,7 @@ pub(crate) async fn groove_ipc_create_identity(
 	let dek_plain = crate::crypto::random_identity_dek();
 	let urn = jazz_engine::identity_urn(identity_uuid);
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
-	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, dek_ver);
+	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, &shell.peer_did, dek_ver);
 	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
 	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
 	let mut ks = Map::new();
@@ -2646,7 +2646,7 @@ pub(crate) async fn groove_ipc_create_collection_group(
 	let dek_plain = crate::crypto::random_identity_dek();
 	let urn = jazz_engine::identity_urn(group_id);
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
-	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, dek_ver);
+	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, &shell.peer_did, dek_ver);
 	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
 	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
 	let mut ks = Map::new();
@@ -3176,7 +3176,7 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 	for recip_did in prior_holders.iter().filter(|d| d.as_str() != peer_did.as_str()) {
 		let recip_pk = crate::jazz_auth::ed25519_public_from_peer_did(recip_did)?;
 		let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recip_pk)?;
-		let aad = crate::crypto::keyshare_wrap_aad(&urn, recip_did, new_v);
+		let aad = crate::crypto::keyshare_wrap_aad(&urn, recip_did, &shell.peer_did, new_v);
 		let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, new_dek.expose(), &aad)?;
 		let mut ks = Map::new();
 		ks.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
