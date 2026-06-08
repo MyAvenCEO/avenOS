@@ -50,3 +50,7 @@ llama-cpp-2 = { version = "0.1.146", optional = true }
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
 # Apple GPU backend (Metal) for the llama.cpp LLM path; Metal shaders embed into the binary.
 llama-cpp-2 = { version = "0.1.146", optional = true, features = ["metal"] }
+# Apple GPU/ANE for the on-device ONNX path (MOSS-TTS-Nano via ort): the CoreML
+# execution provider. Feature-unioned with the base `ort` dep above, so it only
+# turns on for Apple targets; the EP is resolved from the runtime-loaded dylib.
+ort = { version = "2.0.0-rc.12", optional = true, default-features = false, features = ["coreml"] }
