@@ -1,55 +1,55 @@
-# Every other breath — 30s square short
+# Every other breath — story-driven square short
 
-**Topic:** the ocean (phytoplankton) makes ~50% of Earth's oxygen.
-**Format:** 1:1 square (1080×1080), ~34.5s (length driven by the full voiceover).
-Six Pexels ocean clips + animated text + MOSS-TTS-Nano voiceover + a music bed.
-**Tone:** calm, awe → surprising stat → quiet landing.
+Built with the [[storytelling]] Story Finder, then edited with [[video-edit]].
 
-**Intro (0–3s, black screen):** music starts at t=0 but **8s into the track**
-(`data-media-start="8"`); the **voiceover starts at t=2**; the cold-open title
-"Take a deep breath." fades in on black; at ~3s the first clip fades up from
-black. Audio is mixed ~2× louder (voiceover boosted + limited, music at 0.32).
+**Compass (want · but · until):**
+> I wanted to take a breath without thinking, **but** I forgot it comes from
+> something invisible we're losing, **until** I saw the ocean is breathing for me.
 
-## Screenplay (6 beats × ~5s)
+**Why this beats the first cut:** v1 was a *topic* — it just stated the 50% stat.
+This version adds the missing **tension** (the source is invisible, taken for
+granted, and disappearing) and a real **change** (you can't unsee it → protect
+it), so it lands as a story instead of a fact.
 
-| t (s)    | B-roll (Pexels)            | On screen (text)                                        |
-| -------- | -------------------------- | ------------------------------------------------------- |
-| 0–5      | underwater sun rays        | **Take a deep breath.** → Now another.                  |
-| 5–10     | sunlit ocean surface       | Every second breath — the oxygen came from **the ocean.** |
-| 10–15    | green plankton / algae     | **Phytoplankton** · tiny · invisible · everywhere       |
-| 15–20    | coral reef fish            | Trillions turn sunlight into the air we breathe.        |
-| 20–25    | aerial ocean waves         | **~50%** of Earth's oxygen                              |
-| 25–30    | glowing jellyfish          | The ocean **breathed first.**                           |
+**Format:** 1:1 square (1080×1080), ~length driven by the voiceover. Six Pexels
+ocean clips + captions aligned to the spoken words + MOSS-TTS-Nano voiceover +
+music bed (1.5× under the voice, 8s into the track, faded out). Black intro:
+music from t=0, voiceover at t=2, first clip fades up from black at ~3s, +4s
+music tail after the voiceover.
 
-Clips crossfade (0.4s) with a slow push-in; text fades/slides per beat with
-hard-kills at clip boundaries.
+## Story beats
 
-## Audio
+| arc        | voiceover                                                        | on-screen |
+| ---------- | --------------------------------------------------------------- | --------- |
+| **want**   | Take a deep breath. You don't even think about it.              | Take a deep breath. |
+| **but**    | But that breath didn't come from a forest.                      | Not a forest. |
+| (reveal)   | Half of it came from the ocean — from specks too small to see.  | Half came from **the ocean.** |
+| (name it)  | Phytoplankton. Trillions, turning sunlight into the air in your lungs. | **Phytoplankton** · turning sunlight into air |
+| (tension)  | We barely notice them — and we're losing them.                  | **We're losing them.** |
+| **until**  | But once you see them, you can't unsee them. Every other breath is theirs. | Every other breath is theirs. |
+| (land)     | So protect the water, and it keeps breathing for you.           | Protect the water. **It breathes for you.** |
 
-- **Voiceover** — MOSS-TTS-Nano (`assets/vo.wav`, "Bella", 30.0s), full volume.
-- **Music bed** — `assets/music.mp3` ("madeira-mountain-trout-farm" by ende.app),
-  ducked to 0.16 under the voice.
+## Voiceover (MOSS-TTS-Nano)
 
-> "Take a deep breath. Now another. Every second breath you take, the oxygen in
-> it came from the ocean. Not from forests, from the sea. Drifting in the sunlit
-> water are phytoplankton: tiny, invisible, everywhere. Trillions of them turn
-> sunlight into the air we breathe. Half of Earth's oxygen, made by life too
-> small to see. So next time you breathe, remember: the ocean breathed first."
+> "Take a deep breath. You don't even think about it. But that breath didn't come
+> from a forest. Half of it came from the ocean, from specks too small to see.
+> Phytoplankton. Trillions of them, turning sunlight into the air in your lungs.
+> We barely notice them, and we're losing them. But once you see them, you can't
+> unsee them. Every other breath is theirs. So protect the water, and it keeps
+> breathing for you."
 
 ## Build
 
 ```bash
-# voiceover (MOSS-TTS-Nano, CPU by default)
-cargo run --release --manifest-path libs/aven-ai/Cargo.toml \
+# 1) voiceover (raise the frame cap so the full script renders)
+AVENOS_TTS_MAX_FRAMES=800 cargo run --release --manifest-path libs/aven-ai/Cargo.toml \
   --example tts_synth --features tts -- "<the narration above>" \
   .claude/skills/video-edit/examples/ocean-breath/assets/vo.wav
 
-# square b-roll (1:1) — repeat per shot
-python3 .claude/skills/video-edit/scripts/fetch_stock.py "<query>" \
-  .claude/skills/video-edit/examples/ocean-breath/assets --square
-# (re-encode each fetched clip to 1080² dense-keyframe before use)
+# 2) word-level timing, to align captions to the voice
+npx hyperframes transcribe .claude/skills/video-edit/examples/ocean-breath/assets/vo.wav --json
 
-# render + publish
+# 3) render + publish
 bash .claude/skills/video-edit/scripts/render.sh \
   .claude/skills/video-edit/examples/ocean-breath ocean-breath "Every other breath"
 ```

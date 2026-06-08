@@ -72,3 +72,6 @@ target/
 .claude/skills/video-edit/examples/**/assets/
 # Ephemeral Claude Code dev artifacts
 /.claude/scheduled_tasks.lock
+
+# Local dev preview config (machine-specific absolute paths)
+/.claude/launch.json
