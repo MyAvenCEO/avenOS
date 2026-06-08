@@ -490,6 +490,29 @@ pub(super) async fn build_object_owner_map(
 	Ok(out)
 }
 
+/// Map keyshares `object_id` → `recipient_did`. Drives the recipient-scoped sync gate: a
+/// keyshare (E2E-encrypted to one recipient) may always be forwarded to the peer it names,
+/// so a grantee receives its DEK without depending on broad membership evaluation or the
+/// ungated bootstrap. Includes soft-deleted rows so a revoked keyshare's tombstone still
+/// reaches its (former) recipient. Built alongside [`build_object_owner_map`].
+pub(super) async fn build_keyshare_recipient_map(
+	client: &JazzClient,
+) -> Result<HashMap<ObjectId, String>, String> {
+	let mut out = HashMap::new();
+	let schema = resolved_table_schema(client, "keyshares").await?;
+	let recip_ix = col_ix(&schema, "recipient_did")?;
+	let q = QueryBuilder::new(TableName::new("keyshares"))
+		.include_deleted()
+		.build();
+	let rows = client.query(q, None).await.map_err(super::format_jazz_err)?;
+	for (oid, vals) in rows {
+		if let Some(Value::Text(did)) = vals.get(recip_ix) {
+			out.insert(oid, did.clone());
+		}
+	}
+	Ok(out)
+}
+
 pub(super) async fn query_table_publish(
 	client: &JazzClient,
 	state: &ShellState,

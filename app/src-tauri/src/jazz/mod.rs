@@ -920,9 +920,11 @@ impl ManagedJazz {
 		client: &JazzClient,
 	) -> Result<(), String> {
 		let object_owner = jazz_engine::build_object_owner_map(client).await?;
+		let keyshare_recipient = jazz_engine::build_keyshare_recipient_map(client).await?;
 		let mut guard = self.sync_acl.write().expect("sync_acl poisoned");
 		if let Some(snap) = guard.as_mut() {
 			snap.object_owner = object_owner;
+			snap.keyshare_recipient = keyshare_recipient;
 		}
 		Ok(())
 	}
@@ -1762,7 +1764,8 @@ async fn jazz_shell_ready_inner(
 	// Mirror into the std-lock handle read by the biscuit sync gate.
 	*mj.sync_shell.write().expect("sync_shell poisoned") = Some(std::sync::Arc::clone(&arc));
 	let object_owner = jazz_engine::build_object_owner_map(client.as_ref()).await?;
-	let snap = identity_sync::build_sync_acl_snapshot(object_owner);
+	let keyshare_recipient = jazz_engine::build_keyshare_recipient_map(client.as_ref()).await?;
+	let snap = identity_sync::build_sync_acl_snapshot(object_owner, keyshare_recipient);
 	*mj.sync_acl.write().expect("sync_acl poisoned") = Some(snap);
 	if !for_ui_drain {
 		let first_mesh_publish = !mj.mesh_acl_rebroadcast_done.swap(true, Ordering::AcqRel);

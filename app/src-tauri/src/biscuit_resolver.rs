@@ -53,6 +53,21 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 		let Some(acl) = acl_guard.as_ref() else {
 			return CapDecision::Pending;
 		};
+
+		// 2a. Recipient-scoped keyshare delivery (gated, no chicken-and-egg). A keyshare is
+		// E2E-encrypted to exactly ONE recipient, so it may always be forwarded to the peer
+		// it names — a self-evident authorization that needs no membership/biscuit eval and
+		// never `Pending`s on the owner map. This is what guarantees a grantee deterministically
+		// receives its DEK (the held-DEK=[] bug) without the broad ungated bootstrap. It only
+		// ever GRANTS delivery to the addressed recipient; it never widens any other access.
+		if res.table == "keyshares" {
+			if let Some(recipient) = acl.keyshare_recipient.get(&res.row_id) {
+				if recipient.trim() == peer_did.trim() {
+					return CapDecision::Allow;
+				}
+			}
+		}
+
 		let Some(&owner) = acl.object_owner.get(&(res.table.clone(), res.row_id)) else {
 			return CapDecision::Pending;
 		};
