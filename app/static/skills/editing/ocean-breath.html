@@ -13,10 +13,7 @@
       }
       #root { position: relative; width: 1080px; height: 1080px; background: #000; }
 
-      .bg {
-        position: absolute; inset: 0; width: 1080px; height: 1080px;
-        object-fit: cover;
-      }
+      .bg { position: absolute; inset: 0; width: 1080px; height: 1080px; object-fit: cover; }
       #grad {
         position: absolute; inset: 0;
         background: linear-gradient(180deg,
@@ -29,59 +26,70 @@
         text-align: center; text-shadow: 0 4px 26px rgba(0,0,0,0.6);
       }
       .accent { color: #cfff05; }
+      .warn { color: #ff5c5c; }
 
       #b1   { top: 430px; font-size: 96px; font-weight: 800; letter-spacing: -2px; line-height: 1.04; }
-      #b1b  { top: 570px; font-size: 60px; font-weight: 600; color: #d8dde6; }
-      #b2   { bottom: 150px; font-size: 62px; font-weight: 700; line-height: 1.12; }
-      #b3   { top: 380px; font-size: 104px; font-weight: 800; letter-spacing: -2px; color: #cfff05; }
-      #b3s  { top: 520px; font-size: 46px; font-weight: 600; letter-spacing: 2px; color: #eafff0; text-transform: uppercase; }
-      #b4   { bottom: 150px; font-size: 62px; font-weight: 700; line-height: 1.12; }
-      #b5   { top: 380px; font-size: 250px; font-weight: 900; color: #cfff05; line-height: 1; }
-      #b5s  { top: 660px; font-size: 52px; font-weight: 600; color: #eafff0; }
-      #b6   { top: 470px; font-size: 84px; font-weight: 800; letter-spacing: -1.5px; line-height: 1.06; }
+      #b1b  { top: 570px; font-size: 56px; font-weight: 600; color: #d8dde6; }
+      #b2   { top: 440px; font-size: 96px; font-weight: 800; letter-spacing: -2px; line-height: 1.05; }
+      #b3   { bottom: 150px; font-size: 64px; font-weight: 700; line-height: 1.1; }
+      #b3s  { bottom: 100px; font-size: 40px; font-weight: 500; color: #cdd3dc; }
+      #b4   { top: 380px; font-size: 104px; font-weight: 800; letter-spacing: -2px; color: #cfff05; }
+      #b4s  { bottom: 150px; font-size: 56px; font-weight: 700; line-height: 1.12; }
+      #b5   { top: 450px; font-size: 92px; font-weight: 800; letter-spacing: -1.5px; line-height: 1.05; }
+      #b6   { bottom: 150px; font-size: 62px; font-weight: 700; line-height: 1.12; }
+      #b7   { top: 440px; font-size: 78px; font-weight: 800; letter-spacing: -1.5px; line-height: 1.06; }
+      #b8   { top: 460px; font-size: 92px; font-weight: 800; letter-spacing: -1.5px; line-height: 1.05; }
+      #b8b  { bottom: 150px; font-size: 58px; font-weight: 600; color: #eef2f7; }
 
       audio { display: none; }
     </style>
   </head>
   <body>
     <!--
-      "Every other breath" — square (1:1) short, length driven by the voiceover.
-      Intro: 0-3s black screen — music (from 8s into the track) starts at t=0,
-      the MOSS-TTS voiceover starts at t=2; the first clip fades up from black at
-      ~3s. Six Pexels ocean clips span [3 → end]. See script.md.
+      "Every other breath" — story-driven square (1:1) short, ~43.5s. Built with the
+      Story Finder (want·but·until): want=take a breath without thinking; but=its
+      invisible source we're losing; until=you can't unsee it → protect it.
+      Black intro (music from t=0 8s into the track; voiceover at t=2; first clip
+      fades up at ~3s). Captions aligned to the actual spoken words (Whisper
+      transcript). MOSS-TTS voiceover (the closer was synth'd separately and
+      concatenated, since the model ended early on the first pass). 4s music tail.
     -->
     <div id="root" data-composition-id="ocean-breath"
-         data-start="0" data-duration="34.5" data-width="1080" data-height="1080">
+         data-start="0" data-duration="43.5" data-width="1080" data-height="1080">
 
-      <!-- b-roll: six slots over [3 → 34.5], crossfading; bg1 fades up from black -->
-      <video id="bg1" class="bg clip" data-start="3"     data-duration="5.65" data-track-index="1" src="assets/stock_09152309.mp4" muted playsinline></video>
-      <video id="bg2" class="bg clip" data-start="8.25"  data-duration="5.65" data-track-index="2" src="assets/ocean_surface.mp4" muted playsinline></video>
-      <video id="bg3" class="bg clip" data-start="13.5"  data-duration="5.65" data-track-index="3" src="assets/green_water.mp4" muted playsinline></video>
-      <video id="bg4" class="bg clip" data-start="18.75" data-duration="5.65" data-track-index="4" src="assets/stock_62a5f651.mp4" muted playsinline></video>
-      <video id="bg5" class="bg clip" data-start="24"    data-duration="5.65" data-track-index="5" src="assets/deep_blue.mp4" muted playsinline></video>
-      <video id="bg6" class="bg clip" data-start="29.25" data-duration="5.25" data-track-index="6" src="assets/stock_abfed1d1.mp4" muted playsinline></video>
+      <!-- b-roll: six slots over [3 → 43.5], crossfading; bg1 fades up from black -->
+      <video id="bg1" class="bg clip" data-start="3"     data-duration="7.15" data-track-index="1" src="assets/stock_09152309.mp4" muted playsinline></video>
+      <video id="bg2" class="bg clip" data-start="9.75"  data-duration="7.15" data-track-index="2" src="assets/ocean_surface.mp4" muted playsinline></video>
+      <video id="bg3" class="bg clip" data-start="16.5"  data-duration="7.15" data-track-index="3" src="assets/green_water.mp4" muted playsinline></video>
+      <video id="bg4" class="bg clip" data-start="23.25" data-duration="7.15" data-track-index="4" src="assets/stock_62a5f651.mp4" muted playsinline></video>
+      <video id="bg5" class="bg clip" data-start="30"    data-duration="7.25" data-track-index="5" src="assets/deep_blue.mp4" muted playsinline></video>
+      <video id="bg6" class="bg clip" data-start="36.75" data-duration="6.75" data-track-index="6" src="assets/stock_abfed1d1.mp4" muted playsinline></video>
 
-      <div id="grad" class="clip" data-start="3" data-duration="31.5" data-track-index="7"></div>
+      <div id="grad" class="clip" data-start="3" data-duration="40.5" data-track-index="7"></div>
 
-      <!-- audio: music from t=0 (8s into the track, 2x), voiceover in at t=2 (boosted) -->
-      <audio id="music" class="clip" data-start="0" data-duration="34.5"  data-track-index="20" data-media-start="8" data-volume="0.32" src="assets/music.mp3"></audio>
-      <audio id="vo"    class="clip" data-start="2" data-duration="32.24" data-track-index="21" data-volume="1" src="assets/vo.wav"></audio>
+      <!-- audio: music bed (8s into the new track, 1.5x = 0.48, faded); voiceover at t=2 (natural) -->
+      <audio id="music" class="clip" data-start="0" data-duration="43.5"  data-track-index="20" data-volume="0.48" src="assets/music_bed.mp3"></audio>
+      <audio id="vo"    class="clip" data-start="2" data-duration="37.5"  data-track-index="21" data-volume="1" src="assets/vo.wav"></audio>
 
-      <!-- text beats -->
-      <h1 id="b1"  class="cap clip" data-start="0"     data-duration="5.2" data-track-index="10">Take a deep breath.</h1>
-      <p  id="b1b" class="cap clip" data-start="4.6"   data-duration="2"   data-track-index="11">Now another.</p>
-
-      <h2 id="b2"  class="cap clip" data-start="6.6"   data-duration="5.6" data-track-index="10">Every second breath — the oxygen came from <span class="accent">the ocean.</span></h2>
-
-      <h1 id="b3"  class="cap clip" data-start="12.6"  data-duration="5"   data-track-index="10">Phytoplankton</h1>
-      <p  id="b3s" class="cap clip" data-start="13.9"  data-duration="3.7" data-track-index="11">tiny · invisible · everywhere</p>
-
-      <h2 id="b4"  class="cap clip" data-start="18"    data-duration="4.6" data-track-index="10">Trillions turn sunlight into the air we breathe.</h2>
-
-      <div id="b5"  class="cap clip" data-start="22.6" data-duration="5.6" data-track-index="10">~50%</div>
-      <p   id="b5s" class="cap clip" data-start="23.4" data-duration="4.8" data-track-index="11">of Earth's oxygen</p>
-
-      <h1 id="b6"  class="cap clip" data-start="28.4"  data-duration="6.1" data-track-index="10">The ocean <span class="accent">breathed first.</span></h1>
+      <!-- text beats — aligned to spoken words (abs = 2 + vo word time) -->
+      <!-- WANT -->
+      <h1 id="b1"  class="cap clip" data-start="0"     data-duration="3.4" data-track-index="10">Take a deep breath.</h1>
+      <p  id="b1b" class="cap clip" data-start="3.4"   data-duration="2.4" data-track-index="11">You don't even think about it.</p>
+      <!-- BUT (the unexpected, invisible source) -->
+      <h1 id="b2"  class="cap clip" data-start="6"     data-duration="3.6" data-track-index="10">Not a forest.</h1>
+      <h2 id="b3"  class="cap clip" data-start="9.8"   data-duration="3.8" data-track-index="10">Half came from <span class="accent">the ocean.</span></h2>
+      <p  id="b3s" class="cap clip" data-start="13.6"  data-duration="1.5" data-track-index="11">specks too small to see</p>
+      <!-- NAME -->
+      <h1 id="b4"  class="cap clip" data-start="15.1"  data-duration="3.1" data-track-index="10">Phytoplankton</h1>
+      <h2 id="b4s" class="cap clip" data-start="18.3"  data-duration="5.9" data-track-index="11">Trillions — turning sunlight into the air in your lungs.</h2>
+      <!-- TENSION -->
+      <h1 id="b5"  class="cap clip" data-start="24.7"  data-duration="4.5" data-track-index="10">And we're <span class="warn">losing them.</span></h1>
+      <!-- UNTIL (the change) -->
+      <h2 id="b6"  class="cap clip" data-start="29.5"  data-duration="3.2" data-track-index="10">Once you see them, you can't unsee them.</h2>
+      <h1 id="b7"  class="cap clip" data-start="32.8"  data-duration="3"   data-track-index="10">Every other breath is <span class="accent">theirs.</span></h1>
+      <!-- LAND -->
+      <h1 id="b8"  class="cap clip" data-start="35.8"  data-duration="2.7" data-track-index="10">Protect the water.</h1>
+      <p  id="b8b" class="cap clip" data-start="38.4"  data-duration="5.1" data-track-index="11">It keeps breathing for you.</p>
     </div>
 
     <script>
@@ -89,36 +97,39 @@
       const tl = gsap.timeline({ paused: true });
 
       // b-roll: slow fade up from black (bg1), quick crossfades after, slow push-in
-      const starts = [3, 8.25, 13.5, 18.75, 24, 29.25];
+      const starts = [3, 9.75, 16.5, 23.25, 30, 36.75];
       gsap.utils.toArray(".bg").forEach((el, i) => {
         const s = starts[i];
-        const fade = i === 0 ? 1.4 : 0.6; // first clip eases up from black slowly
+        const fade = i === 0 ? 1.4 : 0.6;
         tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: fade, ease: "power2.out" }, s);
-        tl.fromTo(el, { scale: 1.0 }, { scale: 1.1, duration: 5.9, ease: "none" }, s);
+        tl.fromTo(el, { scale: 1.0 }, { scale: 1.1, duration: 7.25, ease: "none" }, s);
       });
 
-      // helper: fade/slide a caption in, hard-kill at its clip boundary
       function beat(sel, t, dur, fromY) {
-        tl.from(sel, { opacity: 0, y: fromY, duration: 0.7, ease: "power3.out" }, t + 0.15);
-        tl.to(sel,   { opacity: 0, duration: 0.4, ease: "power1.in" }, t + dur - 0.4);
+        tl.from(sel, { opacity: 0, y: fromY, duration: 0.6, ease: "power3.out" }, t + 0.1);
+        tl.to(sel,   { opacity: 0, duration: 0.35, ease: "power1.in" }, t + dur - 0.35);
         tl.set(sel,  { opacity: 0 }, t + dur);
       }
 
-      // b1 is the cold-open title on black — fade it in gently (before the VO at t=2)
+      // b1 cold-open title on black — fade in before the voice (at t≈2)
       tl.set("#b1", { opacity: 0 }, 0);
-      tl.fromTo("#b1", { opacity: 0, y: -30 }, { opacity: 1, y: 0, duration: 1.2, ease: "power3.out" }, 0.8);
-      tl.to("#b1", { opacity: 0, duration: 0.5, ease: "power1.in" }, 4.7);
-      tl.set("#b1", { opacity: 0 }, 5.2);
-      beat("#b1b", 4.6, 2, 24);
-      beat("#b2", 6.6, 5.6, 30);
-      tl.fromTo("#b2 .accent", { scale: 0.9 }, { scale: 1.06, duration: 0.5, ease: "back.out(2)" }, 7.3);
-      beat("#b3", 12.6, 5, -30);
-      beat("#b3s", 13.9, 3.7, 18);
-      beat("#b4", 18, 4.6, 30);
-      beat("#b5", 22.6, 5.6, 40);
-      tl.fromTo("#b5", { scale: 0.85 }, { scale: 1.0, duration: 0.6, ease: "back.out(1.7)" }, 22.75);
-      beat("#b5s", 23.4, 4.8, 20);
-      beat("#b6", 28.4, 6.1, -30);
+      tl.fromTo("#b1", { opacity: 0, y: -30 }, { opacity: 1, y: 0, duration: 1.2, ease: "power3.out" }, 0.9);
+      tl.to("#b1", { opacity: 0, duration: 0.5, ease: "power1.in" }, 2.9);
+      tl.set("#b1", { opacity: 0 }, 3.4);
+
+      beat("#b1b", 3.4, 2.4, 22);
+      beat("#b2", 6, 3.6, -28);
+      beat("#b3", 9.8, 3.8, 28);
+      tl.fromTo("#b3 .accent", { scale: 0.9 }, { scale: 1.06, duration: 0.5, ease: "back.out(2)" }, 11.0);
+      beat("#b3s", 13.6, 1.5, 16);
+      beat("#b4", 15.1, 3.1, -28);
+      beat("#b4s", 18.3, 5.9, 26);
+      beat("#b5", 24.7, 4.5, 28);
+      beat("#b6", 29.5, 3.2, 26);
+      beat("#b7", 32.8, 3, -26);
+      tl.fromTo("#b7 .accent", { scale: 0.9 }, { scale: 1.06, duration: 0.5, ease: "back.out(2)" }, 33.6);
+      beat("#b8", 35.8, 2.7, -26);
+      beat("#b8b", 38.4, 5.1, 24);
 
       window.__timelines["ocean-breath"] = tl;
     </script>
