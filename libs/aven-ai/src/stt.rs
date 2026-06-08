@@ -167,5 +167,56 @@ impl Transcriber {
 			.map(|r| r.text)
 			.unwrap_or_default()
 	}
+
+	/// Transcribe mono `pcm` into **word-level** timestamps. The transducer emits
+	/// per-token start times (`timestamps`) + durations; this merges those tokens
+	/// into words at the sentencepiece word-boundary marker (`▁`, U+2581). Returns
+	/// `(text, words)`. Blocking — run on a dedicated thread.
+	pub fn transcribe_words(&self, pcm: &[f32], sample_rate: u32) -> (String, Vec<Word>) {
+		let stream = self.rec.create_stream();
+		stream.accept_waveform(sample_rate as i32, pcm);
+		self.rec.decode(&stream);
+		let Some(res) = stream.get_result() else {
+			return (String::new(), Vec::new());
+		};
+		let ts = res.timestamps.unwrap_or_default();
+		let durs = res.durations.unwrap_or_default();
+
+		let mut words: Vec<Word> = Vec::new();
+		let mut cur = String::new();
+		let mut cur_start = 0.0_f32;
+		let mut cur_end = 0.0_f32;
+		for (i, tok) in res.tokens.iter().enumerate() {
+			let t = ts.get(i).copied().unwrap_or(cur_end);
+			let d = durs.get(i).copied().unwrap_or(0.0).max(0.0);
+			// sherpa decodes the sentencepiece boundary to either `▁` (U+2581) or a
+			// leading space depending on the model — a token starting with either
+			// begins a new word; punctuation tokens (".", ",") attach to the current.
+			let starts_word = tok.starts_with('\u{2581}') || tok.starts_with(' ');
+			let clean = tok.trim_start_matches(|c| c == '\u{2581}' || c == ' ');
+			if starts_word && !cur.is_empty() {
+				// close the previous word — its end is this word's onset
+				words.push(Word { text: cur.clone(), start: cur_start, end: t });
+				cur.clear();
+			}
+			if cur.is_empty() {
+				cur_start = t;
+			}
+			cur.push_str(clean);
+			cur_end = t + d;
+		}
+		if !cur.is_empty() {
+			words.push(Word { text: cur, start: cur_start, end: cur_end });
+		}
+		(res.text, words)
+	}
+}
+
+/// A recognized word with start/end times in seconds.
+#[derive(Clone, Debug)]
+pub struct Word {
+	pub text: String,
+	pub start: f32,
+	pub end: f32,
 }
 

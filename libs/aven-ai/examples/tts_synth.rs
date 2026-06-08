@@ -11,8 +11,9 @@
 //!   AVENOS_ORT_DYLIB    path to libonnxruntime.dylib
 //!                       (default: <repo>/app/src-tauri/onnxruntime/libonnxruntime.dylib;
 //!                        provision with `bun scripts/fetch-onnxruntime.ts`)
-//!   AVENOS_MODELS_DIR   models root (default: ~/.avenOS/models). MOSS ONNX files
-//!                       download here on first run (~hundreds of MB, once).
+//!   AVENOS_MODELS_DIR   models root (default: ~/Documents/.avenOS/models — the
+//!                       app's models dir, so the MOSS model the app already
+//!                       downloaded is reused; only re-downloads if absent).
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -68,8 +69,10 @@ fn models_root() -> PathBuf {
     if let Ok(p) = std::env::var("AVENOS_MODELS_DIR") {
         return PathBuf::from(p);
     }
+    // Same as the app (tauri_plugin_self::paths::models_dir): <Documents>/.avenOS/models,
+    // so the MOSS model the app already downloaded is reused (no re-download).
     let home = std::env::var("HOME").expect("HOME not set");
-    PathBuf::from(home).join(".avenOS/models")
+    PathBuf::from(home).join("Documents/.avenOS/models")
 }
 
 fn die(msg: impl AsRef<str>) -> ! {
