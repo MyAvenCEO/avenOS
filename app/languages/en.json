@@ -90,6 +90,8 @@
 		"selfSettings": "Self settings",
 		"tableNames": "Table names",
 		"viewSection": "View",
+		"skillsSection": "Skills",
+		"editing": "Editing",
 		"members": "Members",
 		"talk": "Talk",
 		"todos": "Todos",
@@ -703,6 +705,16 @@
 		"copyDebug": "Copy debug logs",
 		"copyFailed": "Copy failed",
 		"copyDebugHint": "Copy recent logs + peer/mesh state to clipboard for bug reports"
+	},
+	"editor": {
+		"title": "Editing",
+		"subtitle": "Video clips rendered by the video-edit skill (Hyperframes). Generate new clips from Claude Code; they appear here.",
+		"loading": "Loading clips…",
+		"empty": "No clips yet.",
+		"emptyHint": "Run the video-edit skill in Claude Code to render one.",
+		"clipList": "Rendered clips",
+		"viewSource": "View source",
+		"script": "Script"
 	},
 	"avens": {
 		"subtitle": "Hardcoded example avens. Open one to explore its sections.",

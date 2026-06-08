@@ -88,6 +88,8 @@
 		"selfSettings": "Self-Einstellungen",
 		"tableNames": "Tabellennamen",
 		"viewSection": "Ansicht",
+		"skillsSection": "Skills",
+		"editing": "Bearbeiten",
 		"members": "Mitglieder",
 		"talk": "Talk",
 		"todos": "Todos",
@@ -680,6 +682,16 @@
 		"copyDebug": "Debug-Logs kopieren",
 		"copyFailed": "Kopieren fehlgeschlagen",
 		"copyDebugHint": "Aktuelle Logs + Peer-/Mesh-Status für Fehlerberichte in die Zwischenablage kopieren"
+	},
+	"editor": {
+		"title": "Bearbeiten",
+		"subtitle": "Videoclips, gerendert vom video-edit-Skill (Hyperframes). Erzeuge neue Clips aus Claude Code; sie erscheinen hier.",
+		"loading": "Clips werden geladen…",
+		"empty": "Noch keine Clips.",
+		"emptyHint": "Führe den video-edit-Skill in Claude Code aus, um einen zu rendern.",
+		"clipList": "Gerenderte Clips",
+		"viewSource": "Quelle ansehen",
+		"script": "Skript"
 	},
 	"avens": {
 		"subtitle": "Fest hinterlegte Beispiel-Avens. Öffne eines, um seine Bereiche zu erkunden.",
