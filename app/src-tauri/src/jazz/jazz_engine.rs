@@ -357,6 +357,18 @@ fn map_sensitive_storage_cell(
 			});
 		}
 	}
+	// DIAG: a sealed cell we received but cannot open — either we hold no DEK for this
+	// identity (keyshare never arrived/unwrapped) or only a wrong-version one.
+	let held: Vec<i64> = state
+		.deks
+		.keys()
+		.filter(|(s, _)| *s == identity)
+		.map(|(_, v)| *v)
+		.collect();
+	log::warn!(
+		target: "avenos::jazz",
+		"KSDIAG decrypt-MISS: identity={identity} col={col} held_dek_versions={held:?}",
+	);
 	miss.push(col.into());
 	JsonValue::Null
 }
@@ -613,7 +625,17 @@ pub(super) async fn hydrate_shell(
 		let ks_wrapper_ix = col_ix(&ks_schema, "wrapper_did")?;
 		let ks_wrap_ix = col_ix(&ks_schema, "wrapped_dek")?;
 
-		for (_oid, vals) in exec_list_rows(client, "keyshares").await? {
+		// DIAG: the member-decrypt bug lives here or upstream. Log the whole keyshare
+		// picture so one repro pinpoints it: total rows synced in, which are addressed to
+		// THIS device, which unwrap, and the final DEK set. (target avenos::jazz, INFO.)
+		let all_keyshares = exec_list_rows(client, "keyshares").await?;
+		let mut ks_for_me = 0usize;
+		log::info!(
+			target: "avenos::jazz",
+			"KSDIAG hydrate: {} keyshare row(s) in store; me={}",
+			all_keyshares.len(), vault.peer_did,
+		);
+		for (_oid, vals) in all_keyshares {
 			let sid = uuid_cell_at(vals.as_slice(), ks_spark_ix)?;
 			let dv = bigint_i64(vals.get(ks_ver_ix).ok_or("ks_missing_ver")?)?;
 			if deks.contains_key(&(sid, dv)) {
@@ -624,8 +646,13 @@ pub(super) async fn hydrate_shell(
 				_ => return Err("ks_recip_bad".into()),
 			};
 			if recipient != vault.peer_did {
+				log::debug!(
+					target: "avenos::jazz",
+					"KSDIAG not-for-me: identity={sid} v={dv} recipient={recipient}",
+				);
 				continue;
 			}
+			ks_for_me += 1;
 			let wrapper_did = match vals.get(ks_wrapper_ix).ok_or("ks_missing_wrapper")? {
 				Value::Text(s) if !s.trim().is_empty() => s.trim(),
 				_ => {
@@ -651,16 +678,25 @@ pub(super) async fn hydrate_shell(
 			});
 			match opened {
 				Ok(raw32) => {
+					log::info!(
+						target: "avenos::jazz",
+						"KSDIAG unlocked DEK: identity={sid} v={dv} wrapper={wrapper_did}",
+					);
 					deks.insert((sid, dv), Dek::from_plain_32(raw32));
 				}
 				Err(e) => {
 					log::warn!(
 						target: "avenos::jazz",
-						"skip keyshare unwrap_fail owner={sid} wrapper={wrapper_did}: {e}",
+						"KSDIAG unwrap_FAIL: identity={sid} v={dv} wrapper={wrapper_did}: {e}",
 					);
 				}
 			}
 		}
+		log::info!(
+			target: "avenos::jazz",
+			"KSDIAG done: {ks_for_me} keyshare(s) addressed to me → {} DEK(s) unlocked",
+			deks.len(),
+		);
 
 		for (_oid, vals) in &sparks_rows {
 			let sid = match uuid_cell_at(vals.as_slice(), identity_id_ix) {
