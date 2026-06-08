@@ -77,6 +77,8 @@ impl LlmStatus {
 
 /// One `llm:token` streaming event. `replyId` ties tokens to the agent message row
 /// the webview created; `done` marks end-of-stream (with `token` empty).
+/// Constructed only by the feature-gated `imp` generators (STT-only builds never emit it).
+#[cfg_attr(not(any(feature = "local-llm", feature = "local-llama")), allow(dead_code))]
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct LlmToken {

@@ -60,6 +60,8 @@ impl TtsStatus {
 
 /// One `tts:audio-chunk` streaming event. `replyId` ties chunks to the UI row that
 /// requested synthesis; `done` marks end-of-stream (with `pcm` empty).
+/// Constructed only by the feature-gated `imp` synthesizer (STT-only builds never emit it).
+#[cfg_attr(not(feature = "local-tts"), allow(dead_code))]
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TtsChunk {
