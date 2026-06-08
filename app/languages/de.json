@@ -151,7 +151,7 @@
 	},
 	"models": {
 		"title": "Modelle",
-		"subtitle": "On-Device-Modelle auf diesem Gerät. Das Sprachmodell wird einmal heruntergeladen und läuft danach vollständig offline — deine Audiodaten verlassen das Gerät nie.",
+		"subtitle": "On-Device-Modelle auf diesem Gerät. Das Sprachmodell wird einmal heruntergeladen und läuft danach vollständig offline — deine Daten verlassen das Gerät nie.",
 		"needsDesktop": "On-Device-Modelle sind nur in der Desktop-App verfügbar.",
 		"empty": "Noch keine Modelle heruntergeladen. Öffne Talk und tippe auf das Mikrofon, um das Sprachmodell zu laden.",
 		"active": "Sprache",

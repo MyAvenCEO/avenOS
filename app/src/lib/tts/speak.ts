@@ -45,10 +45,22 @@ export async function speak(text: string, replyId: string): Promise<void> {
 	// Next start time for gapless back-to-back scheduling of streamed chunks.
 	let playhead = ctx.currentTime
 
+	// Resolve when the backend's `done` marker arrives — NOT when `invoke` resolves.
+	// Chunk events are delivered async; stopping the moment `invoke` returns can drop
+	// the final (or only) chunk, so nothing plays.
+	let onDone: () => void = () => {}
+	const streamDone = new Promise<void>((resolve) => {
+		onDone = resolve
+	})
+
 	const unlisten = await listen<TtsChunk>('tts:audio-chunk', (e) => {
 		const p = e.payload
 		if (!p || p.replyId !== replyId) return
-		if (p.done || !p.pcm || p.pcm.length === 0) return
+		if (p.done) {
+			onDone()
+			return
+		}
+		if (!p.pcm || p.pcm.length === 0) return
 
 		const samples = Float32Array.from(p.pcm)
 		const buffer = ctx.createBuffer(1, samples.length, p.sampleRate)
@@ -62,6 +74,9 @@ export async function speak(text: string, replyId: string): Promise<void> {
 	})
 	try {
 		await invoke('tts_synthesize', { text, replyId })
+		// Wait for all emitted chunks to be received + scheduled (the `done` marker is
+		// emitted after them). Safety timeout so a lost marker can't hang forever.
+		await Promise.race([streamDone, new Promise((r) => setTimeout(r, 3000))])
 	} finally {
 		unlisten()
 	}
