@@ -373,7 +373,9 @@ impl Synthesizer {
 		let seq_len = rows.len() / row_width;
 
 		// 3) Prefill → global hidden + initial KV caches.
-		let mut prefill = self.prefill.lock().map_err(|_| "prefill lock poisoned")?;
+		// Recover from a poisoned lock (a panic in a *previous* synth must not brick
+		// every later Speak — the session itself is fine to reuse).
+		let mut prefill = self.prefill.lock().unwrap_or_else(|p| p.into_inner());
 		let input_ids = Tensor::from_array((vec![1i64, seq_len as i64, row_width as i64], rows))
 			.map_err(|e| format!("input_ids: {e}"))?;
 		let attention_mask =
@@ -399,7 +401,14 @@ impl Synthesizer {
 		let mut rng = SplitMix64::new(opts.seed);
 		let mut seen: Vec<Vec<bool>> = vec![vec![false; codebook]; n_vq]; // per-codebook seen-set
 		let mut audio_frames: Vec<Vec<i32>> = Vec::new();
-		let cap = opts.max_frames.min(self.max_new_frames);
+		// `AVENOS_TTS_MAX_FRAMES` raises the hard frame cap for long narration (the
+		// manifest default 375 ≈ 30 s and truncates mid-sentence past that). Used by
+		// the `tts_synth` CLI; app default is unchanged.
+		let cap = std::env::var("AVENOS_TTS_MAX_FRAMES")
+			.ok()
+			.and_then(|s| s.parse::<usize>().ok())
+			.filter(|&n| n > 0)
+			.unwrap_or_else(|| opts.max_frames.min(self.max_new_frames));
 		// Streaming: every STREAM_EVERY frames, codec-decode what we have so far and
 		// emit only the newly-decoded tail, so playback starts ~1 s in instead of after
 		// the whole clip. Re-decoding the growing prefix is cheap vs the frame loop and
@@ -407,8 +416,8 @@ impl Synthesizer {
 		const STREAM_EVERY: usize = 25; // ~0.5 s of frames
 		let mut emitted = 0usize;
 
-		let mut local = self.local_frame.lock().map_err(|_| "local lock poisoned")?;
-		let mut decode = self.decode.lock().map_err(|_| "decode lock poisoned")?;
+		let mut local = self.local_frame.lock().unwrap_or_else(|p| p.into_inner());
+		let mut decode = self.decode.lock().unwrap_or_else(|p| p.into_inner());
 
 		for _ in 0..cap {
 			if cancelled() {
@@ -550,7 +559,7 @@ impl Synthesizer {
 		let lengths = Tensor::from_array((vec![1i64], vec![num_frames as i32]))
 			.map_err(|e| format!("audio_code_lengths: {e}"))?;
 
-		let mut codec = self.codec.lock().map_err(|_| "codec lock poisoned")?;
+		let mut codec = self.codec.lock().unwrap_or_else(|p| p.into_inner());
 		let outputs = codec
 			.run(ort::inputs![
 				"audio_codes" => codes,

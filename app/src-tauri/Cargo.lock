@@ -259,6 +259,7 @@ dependencies = [
  "bzip2",
  "half",
  "llama-cpp-2",
+ "llama-cpp-sys-2",
  "log",
  "ort",
  "serde",

@@ -98,12 +98,37 @@ pub struct GenStats {
 const TOOL_GUIDANCE: &str = " Wenn der Nutzer zu einem Bereich der App wechseln oder navigieren \
 	möchte, rufe das passende Tool auf, statt mit Text zu antworten.";
 
+/// Silence llama.cpp/ggml's INFO chatter (the multi-page model-loader + ggml-metal
+/// dump on every load). Installs a C log callback that drops everything below WARN,
+/// so real warnings/errors still surface. Runs once, before backend init.
+fn quiet_llama_logs() {
+	use std::os::raw::{c_char, c_void};
+	// ggml_log_level is a c_uint; NONE=0, DEBUG=1, INFO=2, WARN=3, ERROR=4, CONT=5.
+	unsafe extern "C" fn cb(
+		level: llama_cpp_sys_2::ggml_log_level,
+		text: *const c_char,
+		_user: *mut c_void,
+	) {
+		if level >= 3 && !text.is_null() {
+			let s = unsafe { std::ffi::CStr::from_ptr(text) }.to_string_lossy();
+			eprint!("{s}");
+		}
+	}
+	unsafe {
+		llama_cpp_sys_2::llama_log_set(Some(cb), std::ptr::null_mut());
+		llama_cpp_sys_2::ggml_log_set(Some(cb), std::ptr::null_mut());
+	}
+}
+
 /// Process-global llama.cpp backend (ggml init runs exactly once; the `metal` feature selects
 /// the GPU backend at build time). Init failure means no compute backend at all (Metal/GPU
 /// stack unavailable) — catastrophic and unrecoverable, hence the panic.
 fn backend() -> &'static LlamaBackend {
 	static BACKEND: std::sync::OnceLock<LlamaBackend> = std::sync::OnceLock::new();
-	BACKEND.get_or_init(|| LlamaBackend::init().expect("llama.cpp backend init failed"))
+	BACKEND.get_or_init(|| {
+		quiet_llama_logs();
+		LlamaBackend::init().expect("llama.cpp backend init failed")
+	})
 }
 
 /// Default system prompt: reply in German, short and clean (the 1.2B instruct model

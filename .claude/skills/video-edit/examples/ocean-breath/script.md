@@ -1,9 +1,14 @@
 # Every other breath — 30s square short
 
 **Topic:** the ocean (phytoplankton) makes ~50% of Earth's oxygen.
-**Format:** 1:1 square (1080×1080), 30.0s. Six Pexels ocean clips + animated
-text + MOSS-TTS-Nano voiceover + a music bed.
+**Format:** 1:1 square (1080×1080), ~34.5s (length driven by the full voiceover).
+Six Pexels ocean clips + animated text + MOSS-TTS-Nano voiceover + a music bed.
 **Tone:** calm, awe → surprising stat → quiet landing.
+
+**Intro (0–3s, black screen):** music starts at t=0 but **8s into the track**
+(`data-media-start="8"`); the **voiceover starts at t=2**; the cold-open title
+"Take a deep breath." fades in on black; at ~3s the first clip fades up from
+black. Audio is mixed ~2× louder (voiceover boosted + limited, music at 0.32).
 
 ## Screenplay (6 beats × ~5s)
 
