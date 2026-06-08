@@ -515,7 +515,11 @@
 				<div
 					class="relative flex w-full max-w-none items-center justify-center max-sm:px-0 sm:pl-0 sm:pr-0"
 				>
-					<div class="pointer-events-auto w-full min-w-0">
+					<!-- When collapsed (just the round FAB), hug the button so the
+						 pointer-events-auto hit area doesn't blanket the full width and
+						 swallow clicks on the bottom message's Speak button. Expanded
+						 modes (typing/listening/preparing) still take the full width. -->
+					<div class={`pointer-events-auto min-w-0 ${composerMode === 'collapsed' ? 'w-fit' : 'w-full'}`}>
 					<IntentComposer
 						placeholder={t('identities.talk.messagePlaceholder')}
 						disabled={composerDisabled}
