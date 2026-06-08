@@ -506,6 +506,8 @@ $effect(() => {
 
 /** Real microphone capture (only on the on-device path — `onTranscribeAudio` set). */
 let transcribing = $state(false)
+/** While in "preparing": auto-start recording the moment the voice model becomes ready. */
+let autoRecordWhenReady = $state(false)
 let recording = false
 let mediaStream: MediaStream | null = null
 let audioCtx: AudioContext | null = null
@@ -515,18 +517,37 @@ let muteNode: GainNode | null = null
 let pcmChunks: Float32Array[] = []
 let recordedSampleRate = 0
 
-async function startRecording() {
-	if (!effectiveTranscribe || recording) return
-	pcmChunks = []
+/**
+ * Create + resume the AudioContext INSIDE the user-gesture call stack (the mic tap). A context
+ * created later, off-gesture (e.g. when we auto-start recording the moment the model finishes
+ * loading), comes up SUSPENDED in WKWebView — `onaudioprocess` never fires and we capture silence
+ * (the "first recording does nothing" bug). Arming it on the tap means capture — now or once the
+ * model is ready — always begins on a RUNNING context. Cheap: no mic is opened here.
+ */
+function armAudioContext() {
+	if (!effectiveTranscribe || audioCtx) return
 	try {
-		// Create the AudioContext synchronously inside the user-gesture call stack (before any
-		// `await`). A context created after `await getUserMedia` is outside the gesture and, in
-		// WKWebView, starts SUSPENDED — then `onaudioprocess` never fires and we capture silence
-		// (the "STT doesn't react" bug seen after a tool-call navigation remounts the composer).
 		const Ctx: typeof AudioContext =
 			window.AudioContext ??
 			(window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
 		audioCtx = new Ctx()
+		if (audioCtx.state === 'suspended') void audioCtx.resume()
+	} catch {
+		audioCtx = null
+	}
+}
+
+/**
+ * Begin mic capture into the (already-armed) AudioContext. Safe to call off-gesture — the context
+ * was blessed by {@link armAudioContext} during the tap — so the auto-advance from "preparing" to
+ * "listening" records real audio on the first try.
+ */
+async function beginCapture() {
+	if (!effectiveTranscribe || recording) return
+	pcmChunks = []
+	try {
+		if (!audioCtx) armAudioContext()
+		if (!audioCtx) throw new Error('Microphone unavailable')
 		const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
 		mediaStream = stream
 		// Resume in case it came up (or was left) suspended — mirrors the TTS playback path.
@@ -580,29 +601,50 @@ function teardownRecording() {
 }
 
 function openListening() {
-	// Model not ready → don't record; morph the pill into the inline download
-	// progress / note instead (the parent supplies `voicePrep`).
+	void focusShellWebview()
+	// Bless the AudioContext now, inside the tap gesture — even if we have to wait for the model —
+	// so capture begins on a RUNNING context whether it starts now or auto-starts once ready.
+	armAudioContext()
+	// Model not ready → don't record yet; morph the pill into the inline download/load progress.
 	if (effectiveVoiceReason != null) {
-		void focusShellWebview()
-		// Auto-start the download+load on first entry into audio mode (mirrors the
-		// LFM model auto-starting on first generate). When the model still needs
-		// setup (idle/error, not already in flight, real wired runtime), kick it so
-		// the same "preparing" pill shows live progress instead of stalling on a
-		// "set it up in Settings" note. A no-op for secondary instances (unavailable).
+		// Auto-start the download+load on first entry into audio mode (mirrors the LFM model
+		// auto-starting on first generate). When the model still needs setup (idle/error, not
+		// already in flight, real wired runtime), kick it so the "preparing" pill shows live
+		// progress. A no-op for secondary instances (unavailable). The auto-advance effect below
+		// then drops us straight into recording the moment it's ready — no manual second tap.
 		if (tauriRuntime && voiceNeedsSetup($asrState.status)) {
 			void startAsrDownload()
 		}
 		onVoiceUnavailableClick?.()
+		autoRecordWhenReady = true
 		mode = 'preparing'
 		return
 	}
-	void focusShellWebview()
-	void startRecording()
+	void beginCapture()
 	mode = 'listening'
+}
+
+// Auto-advance "preparing" → "listening" the instant the voice model becomes ready, so loading
+// is fully automatic and recording starts itself (no "Tap to record" step). Guarded so it fires
+// once per arming; the context was armed in the mic-tap gesture, so capture isn't silent.
+$effect(() => {
+	if (mode !== 'preparing' || !autoRecordWhenReady) return
+	if (effectiveVoiceReason != null) return // still downloading / loading
+	autoRecordWhenReady = false
+	void beginCapture()
+	mode = 'listening'
+})
+
+/** Dismiss the preparing pill: stop waiting to auto-record and release the armed context. */
+function dismissPreparing() {
+	autoRecordWhenReady = false
+	teardownRecording()
+	mode = 'collapsed'
 }
 
 async function stopListening() {
 	teardownRecording()
+	autoRecordWhenReady = false
 	suppressTextEffect = true
 	keepTypingOpenUntilBlur = false
 	listeningSubmitOnRelease = false
@@ -950,7 +992,7 @@ const pillClass = $derived.by(() => {
 			<div class="flex items-center justify-between gap-2">
 				<span class="truncate text-xs font-semibold tracking-tight">
 					{effectiveVoicePrep?.status === 'ready'
-						? 'Voice model ready'
+						? 'Starting…'
 						: effectiveVoicePrep?.status === 'downloading' ||
 							  effectiveVoicePrep?.status === 'loading'
 							? 'Preparing voice model'
@@ -959,7 +1001,7 @@ const pillClass = $derived.by(() => {
 				<button
 					type="button"
 					class="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/30"
-					onclick={() => (mode = 'collapsed')}
+					onclick={dismissPreparing}
 					aria-label="Dismiss"
 				>
 					<svg class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
