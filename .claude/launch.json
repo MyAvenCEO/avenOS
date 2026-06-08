@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "app-dev",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd /Users/samuelandert/Documents/Development/avenOS/.claude/worktrees/angry-johnson-cf63ad/app && AVENOS_DEV_INSTANCE=A bun --bun x vite dev --port 1430 --host 127.0.0.1"],
+      "port": 1430
+    }
+  ]
+}
