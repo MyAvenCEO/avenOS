@@ -164,7 +164,7 @@
 	},
 	"models": {
 		"title": "Models",
-		"subtitle": "On-device models stored on this machine. The voice model downloads once and then runs fully offline — your audio never leaves the device.",
+		"subtitle": "On-device models stored on this machine. The voice model downloads once and then runs fully offline — your data never leaves the device.",
 		"needsDesktop": "On-device models are only available in the desktop app.",
 		"empty": "No models downloaded yet. Open Talk and tap the mic to fetch the voice model.",
 		"active": "Voice",

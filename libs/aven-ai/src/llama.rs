@@ -11,7 +11,7 @@ use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::{AddBos, LlamaModel};
+use llama_cpp_2::model::{AddBos, LlamaChatMessage, LlamaModel};
 use llama_cpp_2::sampling::LlamaSampler;
 
 pub use crate::download::DownloadError;
@@ -81,6 +81,13 @@ fn backend() -> &'static LlamaBackend {
 	BACKEND.get_or_init(|| LlamaBackend::init().expect("llama.cpp backend init failed"))
 }
 
+/// Default system prompt: reply in German, short and clean (the 1.2B instruct model
+/// rambles without steering).
+pub const SYSTEM_PROMPT: &str =
+	"Du bist Aven, ein hilfreicher On-Device-Assistent. Antworte immer auf Deutsch, in \
+	 sauberen, kompakten, kurzen Antworten — ein bis zwei Sätze, außer es wird ausdrücklich \
+	 mehr Detail verlangt. Keine Füllwörter, keine Einleitung.";
+
 /// A GGUF model kept resident in memory, so generations don't re-read 4.7 GB each turn. All
 /// layers are offloaded to the GPU (Metal). Load once, cache it, reuse across turns; every
 /// `generate` spins up a fresh context.
@@ -95,6 +102,26 @@ impl LlamaEngine {
 		let model = LlamaModel::load_from_file(backend(), model_path, &params)
 			.map_err(|e| format!("load model: {e}"))?;
 		Ok(Self { model })
+	}
+
+	/// Render `user` through the GGUF's embedded chat template with [`SYSTEM_PROMPT`]
+	/// (assistant turn left open). Falls back to ChatML if the model has no template.
+	fn chat_prompt(&self, user: &str) -> String {
+		let build = || -> Result<String, String> {
+			let tmpl = self.model.chat_template(None).map_err(|e| format!("chat_template: {e}"))?;
+			let chat = [
+				LlamaChatMessage::new("system".into(), SYSTEM_PROMPT.into())
+					.map_err(|e| format!("{e}"))?,
+				LlamaChatMessage::new("user".into(), user.into()).map_err(|e| format!("{e}"))?,
+			];
+			self.model.apply_chat_template(&tmpl, &chat, true).map_err(|e| format!("{e}"))
+		};
+		build().unwrap_or_else(|_| {
+			format!(
+				"<|im_start|>system\n{SYSTEM_PROMPT}<|im_end|>\n\
+				 <|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n"
+			)
+		})
 	}
 
 	/// Greedily decode up to `max_tokens` continuations of `prompt`, calling `on_token` with
@@ -113,9 +140,13 @@ impl LlamaEngine {
 			.new_context(backend(), ctx_params)
 			.map_err(|e| format!("new context: {e}"))?;
 
+		// Wrap the user text in the model's chat template + a concise system prompt so
+		// LFM2.5-Instruct replies in chat mode (short, clean answers) instead of doing
+		// raw text completion. `str_to_token` parses the template's special tokens.
+		let templated = self.chat_prompt(prompt);
 		let tokens = self
 			.model
-			.str_to_token(prompt, AddBos::Always)
+			.str_to_token(&templated, AddBos::Always)
 			.map_err(|e| format!("tokenize: {e}"))?;
 		let n_prompt = tokens.len();
 
@@ -126,8 +157,19 @@ impl LlamaEngine {
 		}
 		ctx.decode(&mut batch).map_err(|e| format!("decode prompt: {e}"))?;
 
-		let mut sampler = LlamaSampler::greedy();
+		// Not greedy: greedy on a 1.2B model loops into a single-token wall (the "粲粲…"
+		// garbage). Repetition penalty + top-p + a little temperature keeps it coherent.
+		let mut sampler = LlamaSampler::chain_simple([
+			LlamaSampler::penalties(64, 1.15, 0.0, 0.0),
+			LlamaSampler::top_k(40),
+			LlamaSampler::top_p(0.95, 1),
+			LlamaSampler::temp(0.7),
+			LlamaSampler::dist(0x5EED_5EED),
+		]);
 		let mut text = String::new();
+		// Detok byte buffer: byte-fallback tokens split a multibyte char (ä/ö/ü/emoji)
+		// across tokens, so decode each token alone would emit U+FFFD (the "��").
+		let mut byte_buf: Vec<u8> = Vec::new();
 		let mut n_cur = n_prompt as i32;
 		let mut produced = 0usize;
 		let t0 = Instant::now();
@@ -141,21 +183,36 @@ impl LlamaEngine {
 			if self.model.is_eog_token(token) {
 				break;
 			}
-			// Non-deprecated detok: explicit buffer (64 is ample for a single token's bytes),
-			// `special = false` (render plain text), no left-strip.
+			// Non-deprecated detok: explicit buffer, `special = false` (render plain text).
 			let bytes = self
 				.model
 				.token_to_piece_bytes(token, 64, false, None)
 				.map_err(|e| format!("detok: {e}"))?;
-			let piece = String::from_utf8_lossy(&bytes);
-			on_token(piece.as_ref());
-			text.push_str(&piece);
+			byte_buf.extend_from_slice(&bytes);
+			// Emit only the complete-UTF-8 prefix; keep any partial multibyte tail buffered.
+			let valid = match std::str::from_utf8(&byte_buf) {
+				Ok(_) => byte_buf.len(),
+				Err(e) => e.valid_up_to(),
+			};
+			if valid > 0 {
+				let piece = String::from_utf8_lossy(&byte_buf[..valid]).into_owned();
+				on_token(&piece);
+				text.push_str(&piece);
+				byte_buf.drain(..valid);
+			}
 			produced += 1;
 
 			batch.clear();
 			batch.add(token, n_cur, &[0], true).map_err(|e| format!("batch add gen: {e}"))?;
 			n_cur += 1;
 			ctx.decode(&mut batch).map_err(|e| format!("decode gen: {e}"))?;
+		}
+
+		// Flush any trailing partial-multibyte bytes (lossy — replaces a dangling tail).
+		if !byte_buf.is_empty() {
+			let piece = String::from_utf8_lossy(&byte_buf).into_owned();
+			on_token(&piece);
+			text.push_str(&piece);
 		}
 
 		let secs = t0.elapsed().as_secs_f64();
