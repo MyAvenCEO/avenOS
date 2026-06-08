@@ -128,6 +128,11 @@ pub struct SyncManager {
     /// The single peer-sync authorizer (§6 gate). `AllowAll` by default
     /// (local-only / tests); the app injects its biscuit-aware resolver.
     pub(super) resolver: std::sync::Arc<dyn crate::capability::CapabilityResolver>,
+
+    /// App-installed author edit-signer for the local write path (`None` until the app
+    /// calls `set_edit_signer`). Invoked by `authored_row_batch` to stamp an
+    /// `EDIT_SIG_META_KEY` signature over each locally-authored row's content digest.
+    pub(super) edit_signer: Option<std::sync::Arc<dyn crate::capability::EditSigner>>,
 }
 
 impl std::fmt::Debug for SyncManager {
@@ -235,6 +240,7 @@ impl SyncManager {
             // peers (app + server) always `set_resolver`; tests that need sync opt
             // into `AllowAllResolver` explicitly.
             resolver: std::sync::Arc::new(crate::capability::DenyAllResolver),
+            edit_signer: None,
         }
     }
 
@@ -242,6 +248,12 @@ impl SyncManager {
     /// biscuit-aware resolver; tests / local-only opt into `AllowAll` explicitly.
     pub fn set_resolver(&mut self, resolver: std::sync::Arc<dyn crate::capability::CapabilityResolver>) {
         self.resolver = resolver;
+    }
+
+    /// Inject the author edit-signer for the local write path. The app provides a signer
+    /// backed by its device key; without it, locally-authored rows carry no edit-signature.
+    pub fn set_edit_signer(&mut self, signer: std::sync::Arc<dyn crate::capability::EditSigner>) {
+        self.edit_signer = Some(signer);
     }
 
     pub fn reserve_timestamp(&mut self) -> u64 {

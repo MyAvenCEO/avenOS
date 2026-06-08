@@ -295,6 +295,18 @@ impl JazzClient {
             .map_err(|e| JazzError::Sync(format!("set_resolver: {e}")))
     }
 
+    /// Inject the author edit-signer for the local write path. The app provides a signer
+    /// backed by its device key so every locally-authored row carries an Ed25519 signature
+    /// over its content digest (`EDIT_SIG_META_KEY`), verified on apply by every peer.
+    pub fn set_edit_signer(
+        &self,
+        signer: std::sync::Arc<dyn crate::capability::EditSigner>,
+    ) -> Result<()> {
+        self.runtime
+            .set_edit_signer(signer)
+            .map_err(|e| JazzError::Sync(format!("set_edit_signer: {e}")))
+    }
+
     /// Peer client ids with a live registered sync link (for mesh status UI).
     pub fn peer_client_ids(&self) -> Result<Vec<PeerId>> {
         self.runtime

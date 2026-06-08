@@ -578,6 +578,16 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         Ok(())
     }
 
+    /// Inject the author edit-signer for the local write path (the app's device-key signer).
+    pub fn set_edit_signer(
+        &self,
+        signer: std::sync::Arc<dyn crate::capability::EditSigner>,
+    ) -> Result<(), RuntimeError> {
+        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        core.set_edit_signer(signer);
+        Ok(())
+    }
+
     /// Peer client ids currently registered for P2P sync (live transport links).
     pub fn peer_client_ids(&self) -> Result<Vec<PeerId>, RuntimeError> {
         let core = self.core.lock().map_err(|_| RuntimeError::LockError)?;

@@ -330,12 +330,20 @@ impl SyncManager {
                         .metadata
                         .get(crate::capability::OWNER_BINDING_META_KEY)
                         .map(|s| s.as_bytes());
+                    // The author edit-signature (audit #29) rides under its own metadata
+                    // key; hand it to the resolver alongside the owner-binding so it can
+                    // bind the digest IT computed to an authorized author.
+                    let edit_sig = row
+                        .metadata
+                        .get(crate::capability::EDIT_SIG_META_KEY)
+                        .map(|s| s.as_bytes());
                     match resolver.verify_on_apply(
                         &subject,
                         crate::capability::AccOp::Write,
                         &res,
                         &digest.0,
                         proof,
+                        edit_sig,
                     ) {
                         crate::capability::CapDecision::Allow => {}
                         other => {

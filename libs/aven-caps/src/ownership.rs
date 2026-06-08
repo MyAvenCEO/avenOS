@@ -303,6 +303,35 @@ mod tests {
 	}
 
 	#[test]
+	fn edit_sig_apply_rejects_tampered_data() {
+		// Audit #29: the edit-sig binds the row's content digest to an authorized author.
+		// A relay that mutates `data`/`metadata` in flight changes the digest the RECEIVER
+		// computes, so the carried edit-sig (signed over the original digest) no longer
+		// matches — `authorize_signed_edit` must reject it. The untampered row is accepted.
+		let identity = Uuid::from_u128(0xABCD);
+		let v = owner_vault_with_identity(1, identity);
+		let value = Uuid::from_u128(0x55);
+		let binding = mint_owner_binding(&sk(1), value, identity).unwrap();
+
+		// Author seals a batch and signs the digest the author computed (d0).
+		let d0 = [9u8; 32];
+		let es = sign_batch(&sk(1), &d0).unwrap();
+
+		// Untampered: receiver recomputes the same digest d0 → accepted.
+		authorize_signed_edit(&v, identity, AccOp::Write, "todos", Some(value), &es, &d0, Some(&binding))
+			.expect("untampered row whose receiver-digest matches the signed digest is accepted");
+
+		// Tampered: a relay rewrote `data`, so the receiver recomputes a DIFFERENT digest
+		// d1 while the edit-sig still carries the signature over d0 → rejected.
+		let d1 = [10u8; 32];
+		let r = authorize_signed_edit(&v, identity, AccOp::Write, "todos", Some(value), &es, &d1, Some(&binding));
+		assert!(
+			r.is_err(),
+			"a row tampered after signing (receiver-digest != signed digest) must be rejected"
+		);
+	}
+
+	#[test]
 	fn authorize_signed_edit_rejects_owner_binding_for_wrong_identity() {
 		let identity = Uuid::from_u128(0xABCD);
 		let other = Uuid::from_u128(0xBEEF);

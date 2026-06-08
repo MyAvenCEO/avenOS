@@ -46,8 +46,8 @@ use thiserror::Error;
 pub use avenos_client::{JazzClient, PeerInboundParkedHook};
 pub use sync_manager::RowBatchKey;
 pub use capability::{
-    AccOp, AllowAllResolver, CapDecision, CapabilityResolver, DenyAllResolver, ResourceCoord,
-    may_hold,
+    AccOp, AllowAllResolver, CapDecision, CapabilityResolver, DenyAllResolver, EditSigner,
+    ResourceCoord, may_hold,
 };
 pub use sync_targets::SyncTargetId;
 #[cfg(feature = "client-p2p")]

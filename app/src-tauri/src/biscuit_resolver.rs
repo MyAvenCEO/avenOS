@@ -14,7 +14,7 @@
 
 use std::sync::{Arc, RwLock};
 
-use groove::{AccOp, CapDecision, CapabilityResolver, ResourceCoord, SyncTargetId};
+use groove::{AccOp, CapDecision, CapabilityResolver, EditSigner, ObjectId, ResourceCoord, SyncTargetId};
 
 use crate::jazz::jazz_engine::ShellState;
 use crate::identity_sync::SyncAclSnapshot;
@@ -101,23 +101,29 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 	}
 
 	/// Inbound apply gate (Ownership & Caps master plan, Phase 2). A received row is
-	/// accepted only if it carries an authentic **owner-binding** whose author is
-	/// authorized for the identity. This runs on EVERY peer (incl. the always-on server),
-	/// so a forged or relabeled row is rejected at apply — not merely withheld outbound.
+	/// accepted only if (1) it carries an authentic **owner-binding** for this row, (2) it
+	/// carries an **edit-signature** that binds the digest the receiver computed (covering
+	/// `data` + `metadata`) to the author, and (3) that author is authorized for the
+	/// identity. This runs on EVERY peer (incl. the always-on server), so a forged,
+	/// relabeled, or `data`-tampered row is rejected at apply — not merely withheld outbound
+	/// (audit #29: the owner-binding alone covers only `value_id‖owner`, not `data`).
 	fn verify_on_apply(
 		&self,
 		_subject: &SyncTargetId,
 		_op: AccOp,
 		res: &ResourceCoord,
-		_digest: &[u8; 32],
+		digest: &[u8; 32],
 		proof: Option<&[u8]>,
+		edit_sig: Option<&[u8]>,
 	) -> CapDecision {
-		// Private by default: a identity-scoped row MUST carry an owner-binding — **no table
+		let spark_scoped = crate::identity_sync::is_spark_scoped_table(&res.table);
+
+		// Private by default: an identity-scoped row MUST carry an owner-binding — **no table
 		// exclusions**. Non-identity-scoped tables (local vault/shell, humans) aren't gated
 		// here. Control-plane access control is the per-kind cap below (`peers`→`Admit`,
 		// `keyshares`→`RotateDek`), not a skip.
 		let Some(proof) = proof else {
-			if crate::identity_sync::is_spark_scoped_table(&res.table) {
+			if spark_scoped {
 				return CapDecision::DenyPermanent;
 			}
 			return CapDecision::Allow;
@@ -153,9 +159,36 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 			}
 		}
 
-		// (b) Authorization — if we hold this identity's biscuit (we're a member), enforce
-		//     that the author may actually write it. A blind relay that does not hold the
-		//     identity accepts on authenticity alone; members do the membership check.
+		// (b) Content integrity — the edit-signature binds the digest the RECEIVER computed
+		//     (covering `data` + `metadata`) to the author. Required on identity-scoped rows
+		//     (fail-closed); absent = reject. Verified even by a blind relay, so a relay that
+		//     rewrote a sealed cell / keyshare column is rejected at the first hop.
+		let edit_sig = match edit_sig {
+			Some(b) => b,
+			None => {
+				if spark_scoped {
+					return CapDecision::DenyPermanent;
+				}
+				return CapDecision::Allow;
+			}
+		};
+		let Ok(es_str) = std::str::from_utf8(edit_sig) else {
+			return CapDecision::DenyPermanent;
+		};
+		let es = match aven_caps::ownership::EditSignature::from_meta_str(es_str) {
+			Ok(e) => e,
+			Err(_) => return CapDecision::DenyPermanent,
+		};
+		// Bind the edit-sig to the receiver-computed digest. A relay that tampered with
+		// `data` changes that digest, so the carried signature no longer matches → reject
+		// (this holds even when we don't hold the identity, i.e. a pure relay).
+		if aven_caps::ownership::verify_signed_batch(&es, digest).is_err() {
+			return CapDecision::DenyPermanent;
+		}
+
+		// (c) Authorization — if we hold this identity's biscuit (we're a member), enforce
+		//     that the edit-signature's author may actually write it. A blind relay that does
+		//     not hold the identity accepts on authenticity + content-integrity alone.
 		let Ok(shell_guard) = self.shell.read() else {
 			return CapDecision::Pending;
 		};
@@ -165,14 +198,18 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 		if !shell.vault.identities.contains_key(&binding.owner) {
 			return CapDecision::Allow;
 		}
-		// Per-kind cap: the author must hold the right that matches the row's kind.
-		match crate::identity_acc::authorize(
+		// Full inbound gate: edit-sig over the receiver digest + owner-binding for this
+		// identity + the author holds the per-kind cap (`peers`→`Admit`, `keyshares`→
+		// `RotateDek`, else `Write`). The author is the edit-signature's signer.
+		match aven_caps::ownership::authorize_signed_edit(
 			&shell.vault,
 			binding.owner,
 			required_write_op_for_table(&res.table),
 			&res.table,
 			Some(binding.value_id),
-			&binding.author_did,
+			&es,
+			digest,
+			Some(&binding),
 		) {
 			Ok(()) => CapDecision::Allow,
 			Err(_) => CapDecision::DenyPermanent,
@@ -190,5 +227,30 @@ fn required_write_op_for_table(table: &str) -> crate::identity_acc::AccOp {
 		"peers" => crate::identity_acc::AccOp::Admit,
 		"keyshares" => crate::identity_acc::AccOp::RotateDek,
 		_ => crate::identity_acc::AccOp::Write,
+	}
+}
+
+/// App-side author **edit-signer** (audit #29). Installed via
+/// [`groove::AvenosClient::set_edit_signer`]; the engine invokes it from the local write
+/// path with each assembled row's content digest. It signs that digest with the device key
+/// so `data` + `metadata` are authenticated end-to-end and rejected on apply by every peer
+/// if tampered in flight. The digest excludes the edit-sig slot, so stamping is digest-safe.
+pub struct AppEditSigner {
+	signing_key: ed25519_dalek::SigningKey,
+}
+
+impl AppEditSigner {
+	pub fn new(signing_key: ed25519_dalek::SigningKey) -> Self {
+		Self { signing_key }
+	}
+}
+
+impl EditSigner for AppEditSigner {
+	fn sign_row(&self, _row_id: ObjectId, digest: &[u8; 32]) -> Option<(String, String)> {
+		let es = aven_caps::ownership::sign_batch(&self.signing_key, digest).ok()?;
+		Some((
+			aven_caps::ownership::EDIT_SIG_META_KEY.to_string(),
+			es.to_meta_string(),
+		))
 	}
 }

@@ -137,8 +137,9 @@ impl groove::CapabilityResolver for ServerApplyGate {
         _subject: &groove::SyncTargetId,
         _op: groove::AccOp,
         res: &groove::ResourceCoord,
-        _digest: &[u8; 32],
+        digest: &[u8; 32],
         proof: Option<&[u8]>,
+        edit_sig: Option<&[u8]>,
     ) -> groove::CapDecision {
         let Some(proof) = proof else {
             return groove::CapDecision::Allow;
@@ -153,7 +154,25 @@ impl groove::CapabilityResolver for ServerApplyGate {
         if binding.value_id != *res.row_id.uuid() {
             return groove::CapDecision::DenyPermanent;
         }
-        match aven_caps::ownership::verify_owner_binding(&binding) {
+        if aven_caps::ownership::verify_owner_binding(&binding).is_err() {
+            return groove::CapDecision::DenyPermanent;
+        }
+        // Content integrity at the relay (audit #29): a bound (identity-scoped) row MUST
+        // carry an edit-signature that binds the digest the relay itself computed over
+        // `data` + `metadata`. The relay holds no identity biscuit so it can't check
+        // membership, but it CAN reject a row whose `data`/keyshare columns were tampered in
+        // flight — before storing or forwarding it. Missing/invalid edit-sig → reject.
+        let Some(edit_sig) = edit_sig else {
+            return groove::CapDecision::DenyPermanent;
+        };
+        let Ok(es_str) = std::str::from_utf8(edit_sig) else {
+            return groove::CapDecision::DenyPermanent;
+        };
+        let es = match aven_caps::ownership::EditSignature::from_meta_str(es_str) {
+            Ok(e) => e,
+            Err(_) => return groove::CapDecision::DenyPermanent,
+        };
+        match aven_caps::ownership::verify_signed_batch(&es, digest) {
             Ok(()) => groove::CapDecision::Allow,
             Err(_) => groove::CapDecision::DenyPermanent,
         }

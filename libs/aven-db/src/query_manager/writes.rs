@@ -248,7 +248,7 @@ impl QueryManager {
             }
         }
 
-        if let Some(batch_id) = authoring.batch_id {
+        let mut batch = if let Some(batch_id) = authoring.batch_id {
             StoredRowBatch::new_with_batch_id(
                 batch_id,
                 row_id,
@@ -271,7 +271,20 @@ impl QueryManager {
                 authoring.row_state,
                 None,
             )
+        };
+
+        // Author edit-signature (audit #29): once the batch is assembled, sign its content
+        // digest with the device key and stamp it under `EDIT_SIG_META_KEY` so `data` +
+        // `metadata` are authenticated end-to-end. The digest EXCLUDES the edit-sig slot, so
+        // stamping it back does not change the digest the receiver recomputes. No signer
+        // installed (local-only / tests) → unsigned, exactly as before.
+        if let Some(signer) = self.sync_manager.edit_signer.clone() {
+            let digest = batch.content_digest();
+            if let Some((key, value)) = signer.sign_row(row_id, &digest.0) {
+                batch.set_metadata_entry(key, value);
+            }
         }
+        batch
     }
 
     #[cfg(test)]

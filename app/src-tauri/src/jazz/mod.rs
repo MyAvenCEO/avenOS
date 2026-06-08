@@ -1559,6 +1559,22 @@ async fn jazz_connect(
 		log::warn!("install biscuit sync gate: {e}");
 	}
 
+	// Install the author edit-signer (audit #29): every locally-authored row is signed over
+	// its content digest with the device key, so `data` + `metadata` are authenticated and a
+	// relay that tampers with a sealed cell / keyshare column is rejected on apply by every
+	// peer. Installed at connect (before any identity row is authored) so no row ships
+	// unsigned. The key is the same device key that mints owner-bindings.
+	match crate::jazz_auth::signing_key_from_device_root(&root) {
+		Ok(signing_key) => {
+			let signer =
+				std::sync::Arc::new(crate::biscuit_resolver::AppEditSigner::new(signing_key));
+			if let Err(e) = client.set_edit_signer(signer) {
+				log::warn!("install author edit-signer: {e}");
+			}
+		}
+		Err(e) => log::warn!("derive signing key for edit-signer: {e}"),
+	}
+
 	crate::schema_migrations::stamp_current_vault_snapshot(&data_dir, &schema)?;
 	Ok(client)
 }

@@ -59,8 +59,17 @@ pub fn compute_row_digest(
 
     if let Some(metadata) = metadata {
         hasher.update(&[1u8]);
-        hasher.update(&(metadata.len() as u64).to_le_bytes());
-        for (key, value) in metadata.iter() {
+        // Exclude the edit-signature slot: it SIGNS this digest, so it can't be hashed
+        // INTO it (chicken-and-egg). Mirrors the `MetadataKey::Delete` exclusion in
+        // `StoredRowBatch::new_with_batch_id`. Filtering an absent key is a no-op for every
+        // row authored before edit-sigs existed, so no previously-stored digest changes.
+        // Author and receiver both compute the digest this way, so they agree.
+        let included: Vec<(&str, &str)> = metadata
+            .iter()
+            .filter(|&(key, _)| key != crate::capability::EDIT_SIG_META_KEY)
+            .collect();
+        hasher.update(&(included.len() as u64).to_le_bytes());
+        for (key, value) in included {
             hasher.update(&(key.len() as u64).to_le_bytes());
             hasher.update(key.as_bytes());
             hasher.update(&(value.len() as u64).to_le_bytes());
