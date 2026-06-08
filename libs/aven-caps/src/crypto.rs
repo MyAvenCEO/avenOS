@@ -487,8 +487,7 @@ pub fn dek_version_from_aad_bytes(aad_plain: &[u8]) -> Result<u64, String> {
 
 /// AAD binding a keyshare envelope to its (identity, recipient, **wrapper**, version).
 /// Binding `wrapper_did` pins the granter the unwrap derives its KEK from, closing a
-/// wrapper-confusion gap. New keyshares use this; [`keyshare_wrap_aad_legacy`] is the
-/// pre-binding form kept ONLY so the unwrap path can still open older keyshares.
+/// wrapper-confusion gap. The single keyshare AAD form — no legacy/downgrade variant.
 #[must_use]
 pub fn keyshare_wrap_aad(
 	identity_urn: &str,
@@ -497,13 +496,6 @@ pub fn keyshare_wrap_aad(
 	dek_version: i64,
 ) -> Vec<u8> {
 	format!("keyshare|{identity_urn}|{recipient_did}|{wrapper_did}|{dek_version}").into_bytes()
-}
-
-/// Pre-`wrapper_did` AAD form. Do NOT use for new wraps — it exists solely as the unwrap
-/// fallback so keyshares minted before the wrapper binding still decrypt (no flag day).
-#[must_use]
-pub fn keyshare_wrap_aad_legacy(identity_urn: &str, recipient_did: &str, dek_version: i64) -> Vec<u8> {
-	format!("keyshare|{identity_urn}|{recipient_did}|{dek_version}").into_bytes()
 }
 
 #[cfg(test)]

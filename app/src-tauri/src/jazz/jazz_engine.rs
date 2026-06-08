@@ -21,7 +21,7 @@ use crate::{
 	crypto::{
 		cell_seal_aad, column_type_slug, groove_value_to_canonical_utf8, ipc_json_from_opened_sensitive_plaintext,
 		decrypt_keyshare_payload, derive_kek_x25519, open_text_cell_payload,
-		keyshare_wrap_aad, keyshare_wrap_aad_legacy, seal_text_cell_payload, Dek, CELL_ENVELOPE_V1,
+		keyshare_wrap_aad, seal_text_cell_payload, Dek, CELL_ENVELOPE_V1,
 	},
 	jazz_auth,
 	schema_manifest,
@@ -693,13 +693,8 @@ pub(super) async fn hydrate_shell(
 			let urn = identity_urn(sid);
 			let wrapper_pk = jazz_auth::ed25519_public_from_peer_did(wrapper_did)?;
 			let kek = derive_kek_x25519(&signing_key, &wrapper_pk)?;
-			// Prefer the wrapper-bound AAD; fall back to the legacy form so keyshares minted
-			// before wrapper_did was bound into the AAD still open (no flag day).
 			let aad = keyshare_wrap_aad(&urn, recipient, wrapper_did, dv);
-			let opened = decrypt_keyshare_payload(wrapped, &kek, &aad).or_else(|_| {
-				decrypt_keyshare_payload(wrapped, &kek, &keyshare_wrap_aad_legacy(&urn, recipient, dv))
-			});
-			match opened {
+			match decrypt_keyshare_payload(wrapped, &kek, &aad) {
 				Ok(raw32) => {
 					log::info!(
 						target: "avenos::jazz",
