@@ -27,6 +27,12 @@ export const AVENS: AvenMeta[] = [
 		subtitle: 'Maia City - The Game',
 		href: '/avens/avenMAIA',
 	},
+	{
+		id: 'avenSKILLS',
+		name: 'avenSKILLS',
+		subtitle: 'Agent skills',
+		href: '/avens/avenSKILLS',
+	},
 ]
 
 export function avenById(id: string): AvenMeta | undefined {

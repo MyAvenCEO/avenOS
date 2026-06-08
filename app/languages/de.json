@@ -88,6 +88,9 @@
 		"selfSettings": "Self-Einstellungen",
 		"tableNames": "Tabellennamen",
 		"viewSection": "Ansicht",
+		"skillsSection": "Skills",
+		"editing": "Bearbeiten",
+		"bookkeeping": "Buchhaltung",
 		"members": "Mitglieder",
 		"talk": "Talk",
 		"todos": "Todos",
@@ -680,6 +683,44 @@
 		"copyDebug": "Debug-Logs kopieren",
 		"copyFailed": "Kopieren fehlgeschlagen",
 		"copyDebugHint": "Aktuelle Logs + Peer-/Mesh-Status für Fehlerberichte in die Zwischenablage kopieren"
+	},
+	"editor": {
+		"title": "Bearbeiten",
+		"subtitle": "Videoclips, gerendert vom video-edit-Skill (Hyperframes). Erzeuge neue Clips aus Claude Code; sie erscheinen hier.",
+		"loading": "Clips werden geladen…",
+		"empty": "Noch keine Clips.",
+		"emptyHint": "Führe den video-edit-Skill in Claude Code aus, um einen zu rendern.",
+		"clipList": "Gerenderte Clips",
+		"viewSource": "Quelle ansehen",
+		"script": "Skript"
+	},
+	"bookkeeping": {
+		"title": "Buchhaltung",
+		"subtitle": "DATEV SKR04 Standardkontenrahmen (gültig 2026). Schlage nach, auf welches Konto ein Geschäftsvorfall gebucht werden muss — suche nach Kontonummer oder Bezeichnung.",
+		"count": "{shown} von {total} Konten",
+		"loading": "Konten werden geladen…",
+		"searchPlaceholder": "Konto oder Bezeichnung suchen…",
+		"classFilter": "Nach Kontenklasse filtern",
+		"allClasses": "Alle",
+		"noResults": "Keine Konten gefunden.",
+		"funktionHint": "DATEV-Funktionskennzeichen (AM/AV = Automatikkonto, S = Sammelkonto, F = allgemein, KU = keine USt-Berechnung)",
+		"col": {
+			"konto": "Konto",
+			"funktion": "Funktion",
+			"bezeichnung": "Bezeichnung"
+		},
+		"class": {
+			"0": "Anlagevermögen",
+			"1": "Umlaufvermögen",
+			"2": "Eigen-/Fremdkapital-Abgrenzung",
+			"3": "Fremdkapital",
+			"4": "Betriebliche Erträge",
+			"5": "Material-/Wareneinsatz",
+			"6": "Betriebliche Aufwendungen",
+			"7": "Weitere Erträge und Aufwendungen",
+			"8": "(frei / unbelegt)",
+			"9": "Vortrags-, Kapital- und statistische Konten"
+		}
 	},
 	"avens": {
 		"subtitle": "Fest hinterlegte Beispiel-Avens. Öffne eines, um seine Bereiche zu erkunden.",

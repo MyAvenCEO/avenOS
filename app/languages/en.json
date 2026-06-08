@@ -90,6 +90,9 @@
 		"selfSettings": "Self settings",
 		"tableNames": "Table names",
 		"viewSection": "View",
+		"skillsSection": "Skills",
+		"editing": "Editing",
+		"bookkeeping": "Bookkeeping",
 		"members": "Members",
 		"talk": "Talk",
 		"todos": "Todos",
@@ -703,6 +706,44 @@
 		"copyDebug": "Copy debug logs",
 		"copyFailed": "Copy failed",
 		"copyDebugHint": "Copy recent logs + peer/mesh state to clipboard for bug reports"
+	},
+	"editor": {
+		"title": "Editing",
+		"subtitle": "Video clips rendered by the video-edit skill (Hyperframes). Generate new clips from Claude Code; they appear here.",
+		"loading": "Loading clips…",
+		"empty": "No clips yet.",
+		"emptyHint": "Run the video-edit skill in Claude Code to render one.",
+		"clipList": "Rendered clips",
+		"viewSource": "View source",
+		"script": "Script"
+	},
+	"bookkeeping": {
+		"title": "Bookkeeping",
+		"subtitle": "DATEV SKR04 standard chart of accounts (gültig 2026). Look up which account a transaction must be booked to — search by account number or name.",
+		"count": "{shown} of {total} accounts",
+		"loading": "Loading accounts…",
+		"searchPlaceholder": "Search Konto or Bezeichnung…",
+		"classFilter": "Filter by account class",
+		"allClasses": "All",
+		"noResults": "No accounts match your search.",
+		"funktionHint": "DATEV function code (AM/AV = Automatikkonto, S = Sammelkonto, F = general, KU = no VAT calc)",
+		"col": {
+			"konto": "Konto",
+			"funktion": "Funktion",
+			"bezeichnung": "Bezeichnung"
+		},
+		"class": {
+			"0": "Anlagevermögen",
+			"1": "Umlaufvermögen",
+			"2": "Eigen-/Fremdkapital-Abgrenzung",
+			"3": "Fremdkapital",
+			"4": "Betriebliche Erträge",
+			"5": "Material-/Wareneinsatz",
+			"6": "Betriebliche Aufwendungen",
+			"7": "Weitere Erträge und Aufwendungen",
+			"8": "(frei / unbelegt)",
+			"9": "Vortrags-, Kapital- und statistische Konten"
+		}
 	},
 	"avens": {
 		"subtitle": "Hardcoded example avens. Open one to explore its sections.",
