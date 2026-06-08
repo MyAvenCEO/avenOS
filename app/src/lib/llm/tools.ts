@@ -204,21 +204,23 @@ async function executeCreateTodo(
 
 // ──────────────────────── update_todo / delete_todo ────────────────────────
 
-/** The `update_todo` schema: which todo to change (by name) + the change + the standard `response`. */
+/** The `update_todo` schema: which todo(s) to change (by name) + the change + the standard `response`. */
 const UPDATE_TODO_TOOL: ToolDef = {
 	name: 'update_todo',
 	description:
-		"Change an EXISTING todo in the current identity's task list — rename it and/or mark it done " +
+		"Change EXISTING todo(s) in the current identity's task list — rename one, and/or mark done " +
 		'or not done. Call this when the user wants to edit, rename, complete, check off, or reopen a ' +
-		'task. Identify the todo by words from its current title in `query`.',
+		'task. Put words from the target title(s) in `query`; to change several at once, separate them ' +
+		'with commas or "and" (e.g. "bananas, apples"), or use "all" for every todo.',
 	parameters: {
 		type: 'object',
 		properties: {
 			query: {
 				type: 'string',
-				description: 'Words from the current title of the todo to change (used to find it).',
+				description:
+					'Words from the current title(s) to change — comma/"and"-separated for several, or "all".',
 			},
-			title: { type: 'string', description: 'The new title (optional — omit to keep it).' },
+			title: { type: 'string', description: 'A new title (optional; only when changing ONE todo).' },
 			done: {
 				type: 'boolean',
 				description: 'Mark done (true) or not done (false) (optional — omit to keep it).',
@@ -229,18 +231,20 @@ const UPDATE_TODO_TOOL: ToolDef = {
 	},
 }
 
-/** The `delete_todo` schema: which todo to remove (by name) + the standard `response`. */
+/** The `delete_todo` schema: which todo(s) to remove (by name) + the standard `response`. */
 const DELETE_TODO_TOOL: ToolDef = {
 	name: 'delete_todo',
 	description:
-		"Remove an EXISTING todo from the current identity's task list. Call this when the user wants " +
-		'to delete, remove, or clear a task. Identify the todo by words from its current title in `query`.',
+		"Remove EXISTING todo(s) from the current identity's task list. Call this when the user wants " +
+		'to delete, remove, or clear a task. Put words from the target title(s) in `query`; to remove ' +
+		'several at once, separate them with commas or "and", or use "all" for every todo.',
 	parameters: {
 		type: 'object',
 		properties: {
 			query: {
 				type: 'string',
-				description: 'Words from the current title of the todo to remove (used to find it).',
+				description:
+					'Words from the current title(s) to remove — comma/"and"-separated for several, or "all".',
 			},
 			...RESPONSE_PROP,
 		},
@@ -248,73 +252,143 @@ const DELETE_TODO_TOOL: ToolDef = {
 	},
 }
 
+/** Lower-case, strip accents (ä→a, é→e) and surrounding whitespace — so DE/EN spellings align. */
+function normTitle(s: string): string {
+	return s
+		.normalize('NFD')
+		.replace(/\p{M}+/gu, '')
+		.trim()
+		.toLowerCase()
+}
+
+function wordsOf(s: string): string[] {
+	return normTitle(s)
+		.split(/[^\p{L}\p{N}]+/u)
+		.filter(Boolean)
+}
+
 /**
- * Resolve a free-text `query` to one of the live todos (the "read first" step). Tries, in order:
- * exact title, title ⊇ query / query ⊇ title (case-insensitive), then best word-overlap. Returns
- * undefined when nothing plausibly matches, so the executor reports it rather than guessing wrong.
+ * Fuzzy single-word similarity — tolerant of plurals / inflections / EN↔DE stems so a model
+ * query like "banana"/"bananas" still resolves the todo "Bananen kaufen" (and "milk" ↔ "milch").
+ * Equal, one a prefix of the other, or a long-enough shared prefix all count.
  */
-function matchTodo(todos: TodoSnapshot[], query: string): TodoSnapshot | undefined {
-	const q = query.trim().toLowerCase()
+function wordSim(a: string, b: string): boolean {
+	if (a === b) return true
+	if (a.length < 3 || b.length < 3) return false
+	if (a.startsWith(b) || b.startsWith(a)) return true
+	let i = 0
+	const max = Math.min(a.length, b.length)
+	while (i < max && a[i] === b[i]) i++
+	return i >= 4 || i >= max - 1
+}
+
+/** Resolve ONE free-text target to the best-matching todo: exact title → substring → fuzzy words. */
+function matchOne(todos: TodoSnapshot[], target: string): TodoSnapshot | undefined {
+	const q = normTitle(target)
 	if (!q || todos.length === 0) return undefined
-	const norm = (s: string) => s.trim().toLowerCase()
-	const exact = todos.find((t) => norm(t.title) === q)
+	const exact = todos.find((t) => normTitle(t.title) === q)
 	if (exact) return exact
-	const contains = todos.find((t) => norm(t.title).includes(q) || q.includes(norm(t.title)))
+	const contains = todos.find((t) => normTitle(t.title).includes(q) || q.includes(normTitle(t.title)))
 	if (contains) return contains
-	const qWords = new Set(q.split(/[^\p{L}\p{N}]+/u).filter(Boolean))
-	if (qWords.size === 0) return undefined
+	const qWords = q.split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+	if (qWords.length === 0) return undefined
 	let best: { todo: TodoSnapshot; score: number } | undefined
 	for (const t of todos) {
-		const tWords = norm(t.title).split(/[^\p{L}\p{N}]+/u).filter(Boolean)
-		const score = tWords.reduce((n, w) => n + (qWords.has(w) ? 1 : 0), 0)
+		const tWords = wordsOf(t.title)
+		const score = qWords.reduce((n, qw) => n + (tWords.some((tw) => wordSim(tw, qw)) ? 1 : 0), 0)
 		if (score > 0 && (!best || score > best.score)) best = { todo: t, score }
 	}
 	return best?.todo
 }
 
-/** The todo-edit executor: read the live list, resolve the target, apply the change. */
+/** Matches the special "everything" target (so "mark all done" / "clear all" hit every todo). */
+const ALL_TARGETS_RE = /^(all|alle|alles|everything|every\s*todo|alle\s*(todos|aufgaben))$/u
+
+/**
+ * Resolve a (possibly multi-target) `query` to the live todos it refers to — the "read first" step.
+ * "all"/"alle" → every todo; otherwise split on commas / "and" / "und" / "&" / "/" and resolve each
+ * part to its best match (deduped). Empty result ⇒ the executor reports it instead of guessing.
+ */
+function matchTodos(todos: TodoSnapshot[], query: string): TodoSnapshot[] {
+	if (ALL_TARGETS_RE.test(normTitle(query))) return todos.slice()
+	const parts = query
+		.split(/\s*(?:,|;|\/|&|\band\b|\bund\b|\bplus\b|\bsowie\b)\s*/iu)
+		.map((p) => p.trim())
+		.filter(Boolean)
+	const seen = new Set<string>()
+	const out: TodoSnapshot[] = []
+	for (const part of parts.length > 0 ? parts : [query]) {
+		const m = matchOne(todos, part)
+		if (m && !seen.has(m.id)) {
+			seen.add(m.id)
+			out.push(m)
+		}
+	}
+	return out
+}
+
+/** The todo-edit executor: read the live list, resolve the target(s), apply the change to each. */
 async function executeUpdateTodo(
 	args: Record<string, unknown>,
 	ctx: ToolContext,
 ): Promise<ToolDispatchResult> {
 	const query = String(args.query ?? '').trim()
 	if (!query) return { ok: false, message: t('identities.talk.todoEmpty') }
-	const match = matchTodo(ctx.listTodos(), query)
-	if (!match) return { ok: false, message: t('identities.talk.todoNotFound', { query }) }
+	const targets = matchTodos(ctx.listTodos(), query)
+	if (targets.length === 0) return { ok: false, message: t('identities.talk.todoNotFound', { query }) }
 	const patch: { title?: string; done?: boolean } = {}
-	if (typeof args.title === 'string' && args.title.trim()) patch.title = args.title.trim()
+	// A rename only makes sense for a single target; for several, just apply done.
+	if (targets.length === 1 && typeof args.title === 'string' && args.title.trim()) {
+		patch.title = args.title.trim()
+	}
 	if (typeof args.done === 'boolean') patch.done = args.done
 	if (patch.title === undefined && patch.done === undefined) {
 		return { ok: false, message: t('identities.talk.todoNoChange') }
 	}
 	try {
-		await ctx.updateTodoById(match.id, patch)
-		const label = patch.title ?? match.title
+		for (const target of targets) await ctx.updateTodoById(target.id, patch)
+		if (targets.length === 1) {
+			const label = patch.title ?? targets[0].title
+			return {
+				ok: true,
+				message: t('identities.talk.todoUpdated', { title: label }),
+				response: t('identities.talk.todoUpdatedReply', { title: label }),
+			}
+		}
+		const titles = targets.map((tt) => tt.title).join(', ')
 		return {
 			ok: true,
-			message: t('identities.talk.todoUpdated', { title: label }),
-			response: t('identities.talk.todoUpdatedReply', { title: label }),
+			message: t('identities.talk.todosUpdated', { count: targets.length, titles }),
+			response: t('identities.talk.todosUpdatedReply', { count: targets.length }),
 		}
 	} catch (e) {
 		return { ok: false, message: e instanceof Error ? e.message : String(e) }
 	}
 }
 
-/** The todo-delete executor: read the live list, resolve the target, remove it. */
+/** The todo-delete executor: read the live list, resolve the target(s), remove each. */
 async function executeDeleteTodo(
 	args: Record<string, unknown>,
 	ctx: ToolContext,
 ): Promise<ToolDispatchResult> {
 	const query = String(args.query ?? '').trim()
 	if (!query) return { ok: false, message: t('identities.talk.todoEmpty') }
-	const match = matchTodo(ctx.listTodos(), query)
-	if (!match) return { ok: false, message: t('identities.talk.todoNotFound', { query }) }
+	const targets = matchTodos(ctx.listTodos(), query)
+	if (targets.length === 0) return { ok: false, message: t('identities.talk.todoNotFound', { query }) }
 	try {
-		await ctx.deleteTodoById(match.id)
+		for (const target of targets) await ctx.deleteTodoById(target.id)
+		if (targets.length === 1) {
+			return {
+				ok: true,
+				message: t('identities.talk.todoDeleted', { title: targets[0].title }),
+				response: t('identities.talk.todoDeletedReply', { title: targets[0].title }),
+			}
+		}
+		const titles = targets.map((tt) => tt.title).join(', ')
 		return {
 			ok: true,
-			message: t('identities.talk.todoDeleted', { title: match.title }),
-			response: t('identities.talk.todoDeletedReply', { title: match.title }),
+			message: t('identities.talk.todosDeleted', { count: targets.length, titles }),
+			response: t('identities.talk.todosDeletedReply', { count: targets.length }),
 		}
 	} catch (e) {
 		return { ok: false, message: e instanceof Error ? e.message : String(e) }

@@ -453,7 +453,11 @@
 			"todoUpdated": "✓ Updated todo: {title}",
 			"todoUpdatedReply": "Updated “{title}”.",
 			"todoDeleted": "✓ Deleted todo: {title}",
-			"todoDeletedReply": "Removed “{title}” from your todos."
+			"todoDeletedReply": "Removed “{title}” from your todos.",
+			"todosUpdated": "✓ Updated {count} todos: {titles}",
+			"todosUpdatedReply": "Updated {count} todos.",
+			"todosDeleted": "✓ Deleted {count} todos: {titles}",
+			"todosDeletedReply": "Removed {count} todos from your list."
 		},
 		"todos": {
 			"title": "Todos",

@@ -440,7 +440,11 @@
 			"todoUpdated": "✓ Todo aktualisiert: {title}",
 			"todoUpdatedReply": "„{title}“ aktualisiert.",
 			"todoDeleted": "✓ Todo gelöscht: {title}",
-			"todoDeletedReply": "„{title}“ aus deinen Aufgaben entfernt."
+			"todoDeletedReply": "„{title}“ aus deinen Aufgaben entfernt.",
+			"todosUpdated": "✓ {count} Todos aktualisiert: {titles}",
+			"todosUpdatedReply": "{count} Todos aktualisiert.",
+			"todosDeleted": "✓ {count} Todos gelöscht: {titles}",
+			"todosDeletedReply": "{count} Todos aus deiner Liste entfernt."
 		},
 		"todos": {
 			"title": "Todos",

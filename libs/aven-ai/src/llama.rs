@@ -109,6 +109,8 @@ const TOOL_FEWSHOT: &str = "\
 <|im_start|>assistant\n<|tool_call_start|>[create_todo(title=\"Milch kaufen\", response=\"Ich setze 'Milch kaufen' auf deine Liste.\")]<|tool_call_end|><|im_end|>\n\
 <|im_start|>user\nmark buy apples as done<|im_end|>\n\
 <|im_start|>assistant\n<|tool_call_start|>[update_todo(query=\"apples\", done=true, response=\"Marked 'Buy apples' as done.\")]<|tool_call_end|><|im_end|>\n\
+<|im_start|>user\nHak Bananen und Äpfel als erledigt ab.<|im_end|>\n\
+<|im_start|>assistant\n<|tool_call_start|>[update_todo(query=\"Bananen, Äpfel\", done=true, response=\"Bananen und Äpfel als erledigt markiert.\")]<|tool_call_end|><|im_end|>\n\
 <|im_start|>user\nLösch bitte Milch von der Liste.<|im_end|>\n\
 <|im_start|>assistant\n<|tool_call_start|>[delete_todo(query=\"Milch\", response=\"Erledigt — 'Milch kaufen' entfernt.\")]<|tool_call_end|><|im_end|>\n\
 <|im_start|>user\nopen members<|im_end|>\n\
