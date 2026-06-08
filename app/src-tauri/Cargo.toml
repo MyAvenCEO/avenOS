@@ -32,15 +32,17 @@ name = "aven-os-app"
 path = "src/main.rs"
 
 [features]
-# DEFAULT = STT only, so it's the one AI feature that builds on BOTH desktop and iOS.
-# llama.cpp (`local-llama`) does NOT link on iOS yet and the TTS onnxruntime dylib
-# (`local-llm`/`local-tts`) can't ship on iOS (Apple bans standalone dylibs), so they
-# live behind `desktop-ai`, which the macOS/dev builds opt into. `tauri ios build` has
-# no `--no-default-features`, so the iOS archive relies on this default being STT-only.
+# DEFAULT = STT only, so it builds on BOTH desktop and iOS with no extra flags.
+# The on-device LLM (`local-llama`, llama.cpp/Metal, statically linked) DOES link on
+# iOS — the build.rs ggml-archive de-collision fix made it work — so the iOS release +
+# dev scripts opt in via `--features local-llama` (mobile ships STT + LLM). Only the
+# TTS onnxruntime dylib (`local-llm`/`local-tts`) still can't ship on iOS (Apple bans
+# standalone dylibs), so it stays desktop-only behind `desktop-ai`.
 # (`--no-default-features` still gives the light stub build for CI / quick checks.)
 default = ["local-voice"]
 # Desktop (macOS) bundle of on-device AI on top of STT: llama.cpp LLM + MOSS TTS.
-# macOS release + dev pass `--features desktop-ai`; iOS never does.
+# macOS release + dev pass `--features desktop-ai`. iOS opts into `local-llama` directly
+# (LLM yes, TTS no — see above).
 desktop-ai = ["local-llama", "local-tts"]
 # On-device voice-note transcription (NVIDIA Parakeet-TDT-0.6b-v3 via the
 # `sherpa-onnx` crate, ONNX/int8). The `sherpa-onnx-sys` build script downloads

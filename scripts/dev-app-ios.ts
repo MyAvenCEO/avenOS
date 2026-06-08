@@ -99,8 +99,14 @@ async function main() {
 		AVENOS_DEV_INSECURE_IDENTITY: '1',
 	} satisfies Record<string, string | undefined>
 
+	// iOS gets STT (default) + the on-device LLM (LFM2.5-1.2B GGUF via llama.cpp/Metal,
+	// statically linked). Matches the release build (scripts/tauri-ios-asc.ts); TTS stays
+	// desktop-only (onnxruntime dylib can't ship on iOS).
 	const tauriArgs = ['bun', '--env-file=.env', 'x', '--bun', 'tauri', 'ios', 'dev']
+	// The optional [DEVICE] positional MUST precede `--features` (variadic — it would
+	// otherwise swallow the device name as a feature).
 	if (simDevice) tauriArgs.push(simDevice)
+	tauriArgs.push('--features', 'local-llama')
 
 	const child = Bun.spawn(tauriArgs, {
 		cwd: path.join(repoRoot, 'app'),
