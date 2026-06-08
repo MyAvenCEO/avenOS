@@ -113,12 +113,28 @@ export function createIdentityAgent(deps: {
 			replyId = reply.id
 			streamingId = reply.id
 			streaming = { ...streaming, [reply.id]: '' }
+
+			// Read the active identity's todos NOW and feed the list — with their REAL ids — into the
+			// model's context this turn, so it SELECTS the right id itself (no app-side title matching)
+			// for edit/toggle/delete. The map lets the executor validate the id the model copied back.
+			const todosNow = deps.todos.rows
+				.filter((r) => idsMatch(r.owner, env.canonicalSparkId))
+				.map((r) => ({ id: String(r.id), title: String(r.title ?? ''), done: r.done === true }))
+			const idMap = new Map<string, { id: string; title: string }>()
+			todosNow.forEach((t) => idMap.set(t.id, { id: t.id, title: t.title }))
+			const todoPreamble =
+				todosNow.length > 0
+					? `Current todos (id: title):\n${todosNow
+							.map((t) => `${t.id}: ${t.title}${t.done ? ' (done)' : ' (open)'}`)
+							.join('\n')}\n\n`
+					: ''
+
 			// The agent is tool-call-only. Capture any real `<|tool_call_start|>` call and the
 			// streamed prose, then resolve the turn into exactly one tool-call record (executing
 			// the side effect). The chip is what's persisted + rendered — never bare prose.
 			let capturedCall: LlmToolCall | undefined
 			const full = await streamReply(
-				prompt,
+				todoPreamble + prompt,
 				reply.id,
 				(piece) => {
 					// Reassign (not mutate) so the talk view's liveBody const re-derives reliably.
@@ -134,14 +150,7 @@ export function createIdentityAgent(deps: {
 				createTodo: async (title) => {
 					await deps.todos.create({ title, done: false, owner: env.canonicalSparkId })
 				},
-				listTodos: () =>
-					deps.todos.rows
-						.filter((r) => idsMatch(r.owner, env.canonicalSparkId))
-						.map((r) => ({
-							id: String(r.id),
-							title: String(r.title ?? ''),
-							done: r.done === true,
-						})),
+				resolveTodo: (shortId) => idMap.get(String(shortId).trim()),
 				updateTodoById: async (id, patch) => {
 					await deps.todos.update(id, patch)
 				},

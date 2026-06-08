@@ -47,19 +47,20 @@ export type ToolDef = {
  * Per-turn execution context: which identity the tools act on, plus its data mutations.
  * Built fresh each turn by the caller (the runtime), so executors stay pure/stateless.
  */
-/** A todo as the tools see it — the live snapshot the edit/delete tools resolve against. */
-export type TodoSnapshot = { id: string; title: string; done: boolean }
-
 export type ToolContext = {
 	/** Base path of the active identity, e.g. `/identities/<encoded-id>`. Drives `navigate_views`. */
 	identityBase: string
 	/** Add a todo to the active identity's task list. Resolves on success, throws on failure. */
 	createTodo: (title: string) => Promise<void>
-	/** The active identity's current todos — read first so edit/delete can resolve a target by name. */
-	listTodos: () => TodoSnapshot[]
-	/** Patch a todo by its id (title and/or done). Resolves on success, throws on failure. */
+	/**
+	 * Resolve a SHORT id the model picked from the todo list shown in its context (1, 2, …) to the
+	 * real row id + title. The model selects the id; no app-side title matching. Undefined if the
+	 * short id wasn't in the list it was shown.
+	 */
+	resolveTodo: (shortId: string) => { id: string; title: string } | undefined
+	/** Patch a todo by its real id (title and/or done). Resolves on success, throws on failure. */
 	updateTodoById: (id: string, patch: { title?: string; done?: boolean }) => Promise<void>
-	/** Remove a todo by its id. Resolves on success, throws on failure. */
+	/** Remove a todo by its real id. Resolves on success, throws on failure. */
 	deleteTodoById: (id: string) => Promise<void>
 }
 
@@ -204,21 +205,21 @@ async function executeCreateTodo(
 
 // ──────────────────────── update_todo / delete_todo ────────────────────────
 
-/** The `update_todo` schema: which todo(s) to change (by name) + the change + the standard `response`. */
+/** The `update_todo` schema: which todo(s) to change (by id) + the change + the standard `response`. */
 const UPDATE_TODO_TOOL: ToolDef = {
 	name: 'update_todo',
 	description:
 		"Change EXISTING todo(s) in the current identity's task list — rename one, and/or mark done " +
 		'or not done. Call this when the user wants to edit, rename, complete, check off, or reopen a ' +
-		'task. Put words from the target title(s) in `query`; to change several at once, separate them ' +
-		'with commas or "and" (e.g. "bananas, apples"), or use "all" for every todo.',
+		'task. Read the todo list shown above the user message and copy the EXACT id(s) into `id` ' +
+		'(comma-separate several to change them at once).',
 	parameters: {
 		type: 'object',
 		properties: {
-			query: {
+			id: {
 				type: 'string',
 				description:
-					'Words from the current title(s) to change — comma/"and"-separated for several, or "all".',
+					'The exact id(s) of the target todo(s), copied from the list — comma-separated for several.',
 			},
 			title: { type: 'string', description: 'A new title (optional; only when changing ONE todo).' },
 			done: {
@@ -227,115 +228,65 @@ const UPDATE_TODO_TOOL: ToolDef = {
 			},
 			...RESPONSE_PROP,
 		},
-		required: ['query', 'response'],
+		required: ['id', 'response'],
 	},
 }
 
-/** The `delete_todo` schema: which todo(s) to remove (by name) + the standard `response`. */
+/** The `delete_todo` schema: which todo(s) to remove (by id) + the standard `response`. */
 const DELETE_TODO_TOOL: ToolDef = {
 	name: 'delete_todo',
 	description:
 		"Remove EXISTING todo(s) from the current identity's task list. Call this when the user wants " +
-		'to delete, remove, or clear a task. Put words from the target title(s) in `query`; to remove ' +
-		'several at once, separate them with commas or "and", or use "all" for every todo.',
+		'to delete, remove, or clear a task. Read the todo list shown above the user message and copy ' +
+		'the EXACT id(s) into `id` (comma-separate several to remove them at once).',
 	parameters: {
 		type: 'object',
 		properties: {
-			query: {
+			id: {
 				type: 'string',
 				description:
-					'Words from the current title(s) to remove — comma/"and"-separated for several, or "all".',
+					'The exact id(s) of the target todo(s), copied from the list — comma-separated for several.',
 			},
 			...RESPONSE_PROP,
 		},
-		required: ['query', 'response'],
+		required: ['id', 'response'],
 	},
 }
 
-/** Lower-case, strip accents (ä→a, é→e) and surrounding whitespace — so DE/EN spellings align. */
-function normTitle(s: string): string {
-	return s
-		.normalize('NFD')
-		.replace(/\p{M}+/gu, '')
-		.trim()
-		.toLowerCase()
-}
-
-function wordsOf(s: string): string[] {
-	return normTitle(s)
-		.split(/[^\p{L}\p{N}]+/u)
-		.filter(Boolean)
-}
-
 /**
- * Fuzzy single-word similarity — tolerant of plurals / inflections / EN↔DE stems so a model
- * query like "banana"/"bananas" still resolves the todo "Bananen kaufen" (and "milk" ↔ "milch").
- * Equal, one a prefix of the other, or a long-enough shared prefix all count.
+ * Resolve the model's `id` arg to real todos (deduped). The model copies the exact id(s) it was
+ * shown in the list; for several it separates them with commas / "and". Split ONLY on those (not
+ * on hyphens etc.) so full ids stay intact.
  */
-function wordSim(a: string, b: string): boolean {
-	if (a === b) return true
-	if (a.length < 3 || b.length < 3) return false
-	if (a.startsWith(b) || b.startsWith(a)) return true
-	let i = 0
-	const max = Math.min(a.length, b.length)
-	while (i < max && a[i] === b[i]) i++
-	return i >= 4 || i >= max - 1
-}
-
-/** Resolve ONE free-text target to the best-matching todo: exact title → substring → fuzzy words. */
-function matchOne(todos: TodoSnapshot[], target: string): TodoSnapshot | undefined {
-	const q = normTitle(target)
-	if (!q || todos.length === 0) return undefined
-	const exact = todos.find((t) => normTitle(t.title) === q)
-	if (exact) return exact
-	const contains = todos.find((t) => normTitle(t.title).includes(q) || q.includes(normTitle(t.title)))
-	if (contains) return contains
-	const qWords = q.split(/[^\p{L}\p{N}]+/u).filter(Boolean)
-	if (qWords.length === 0) return undefined
-	let best: { todo: TodoSnapshot; score: number } | undefined
-	for (const t of todos) {
-		const tWords = wordsOf(t.title)
-		const score = qWords.reduce((n, qw) => n + (tWords.some((tw) => wordSim(tw, qw)) ? 1 : 0), 0)
-		if (score > 0 && (!best || score > best.score)) best = { todo: t, score }
-	}
-	return best?.todo
-}
-
-/** Matches the special "everything" target (so "mark all done" / "clear all" hit every todo). */
-const ALL_TARGETS_RE = /^(all|alle|alles|everything|every\s*todo|alle\s*(todos|aufgaben))$/u
-
-/**
- * Resolve a (possibly multi-target) `query` to the live todos it refers to — the "read first" step.
- * "all"/"alle" → every todo; otherwise split on commas / "and" / "und" / "&" / "/" and resolve each
- * part to its best match (deduped). Empty result ⇒ the executor reports it instead of guessing.
- */
-function matchTodos(todos: TodoSnapshot[], query: string): TodoSnapshot[] {
-	if (ALL_TARGETS_RE.test(normTitle(query))) return todos.slice()
-	const parts = query
-		.split(/\s*(?:,|;|\/|&|\band\b|\bund\b|\bplus\b|\bsowie\b)\s*/iu)
-		.map((p) => p.trim())
+function resolveTargets(
+	raw: unknown,
+	ctx: ToolContext,
+): { id: string; title: string }[] {
+	const ids = String(raw ?? '')
+		.split(/\s*(?:,|;|\band\b|\bund\b)\s*/iu)
+		.map((s) => s.trim())
 		.filter(Boolean)
 	const seen = new Set<string>()
-	const out: TodoSnapshot[] = []
-	for (const part of parts.length > 0 ? parts : [query]) {
-		const m = matchOne(todos, part)
-		if (m && !seen.has(m.id)) {
-			seen.add(m.id)
-			out.push(m)
+	const out: { id: string; title: string }[] = []
+	for (const id of ids) {
+		const todo = ctx.resolveTodo(id)
+		if (todo && !seen.has(todo.id)) {
+			seen.add(todo.id)
+			out.push(todo)
 		}
 	}
 	return out
 }
 
-/** The todo-edit executor: read the live list, resolve the target(s), apply the change to each. */
+/** The todo-edit executor: act on the id(s) the model picked from the list it was shown. */
 async function executeUpdateTodo(
 	args: Record<string, unknown>,
 	ctx: ToolContext,
 ): Promise<ToolDispatchResult> {
-	const query = String(args.query ?? '').trim()
-	if (!query) return { ok: false, message: t('identities.talk.todoEmpty') }
-	const targets = matchTodos(ctx.listTodos(), query)
-	if (targets.length === 0) return { ok: false, message: t('identities.talk.todoNotFound', { query }) }
+	const raw = String(args.id ?? '').trim()
+	if (!raw) return { ok: false, message: t('identities.talk.todoEmpty') }
+	const targets = resolveTargets(raw, ctx)
+	if (targets.length === 0) return { ok: false, message: t('identities.talk.todoNotFound', { query: raw }) }
 	const patch: { title?: string; done?: boolean } = {}
 	// A rename only makes sense for a single target; for several, just apply done.
 	if (targets.length === 1 && typeof args.title === 'string' && args.title.trim()) {
@@ -366,15 +317,15 @@ async function executeUpdateTodo(
 	}
 }
 
-/** The todo-delete executor: read the live list, resolve the target(s), remove each. */
+/** The todo-delete executor: remove the id(s) the model picked from the list it was shown. */
 async function executeDeleteTodo(
 	args: Record<string, unknown>,
 	ctx: ToolContext,
 ): Promise<ToolDispatchResult> {
-	const query = String(args.query ?? '').trim()
-	if (!query) return { ok: false, message: t('identities.talk.todoEmpty') }
-	const targets = matchTodos(ctx.listTodos(), query)
-	if (targets.length === 0) return { ok: false, message: t('identities.talk.todoNotFound', { query }) }
+	const raw = String(args.id ?? '').trim()
+	if (!raw) return { ok: false, message: t('identities.talk.todoEmpty') }
+	const targets = resolveTargets(raw, ctx)
+	if (targets.length === 0) return { ok: false, message: t('identities.talk.todoNotFound', { query: raw }) }
 	try {
 		for (const target of targets) await ctx.deleteTodoById(target.id)
 		if (targets.length === 1) {
