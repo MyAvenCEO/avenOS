@@ -135,24 +135,48 @@ impl CapabilityResolver for DenyAllResolver {
     }
 }
 
-/// May a peer **hold** (store/receive) a resource's batches? True for a member
-/// (`Write`) OR a blind replication peer (`Replicate`) — a server aven that
-/// stores & forwards the (encrypted) batches without a keyshare. `Replicate` is
-/// only consulted when membership doesn't already authorize, and the membership
-/// decision is preserved otherwise so `Pending` still DEFERS (never drops). This
-/// is the forwarding gate's single decision (`ship_frontier_diff`).
+/// May a peer **hold** (store/receive) a resource's batches? True for any of:
+/// a **reader** (`Read` — a delegated/`reads` Member that holds a keyshare and is
+/// entitled to receive the rows it can decrypt), an **owner** (`Write`), OR a blind
+/// **replication** peer (`Replicate` — a server aven that stores & forwards the
+/// encrypted batches without a keyshare). Authorized via ANY of the three caps,
+/// checked in that order and short-circuiting on the first `Allow`.
+///
+/// Invariant: if nothing authorizes outright but ANY check is still `Pending` (the
+/// ACL/shell isn't hydrated yet), the verdict is `Pending` so the caller DEFERS and
+/// never drops a frame it may later be allowed to ship. Only an all-`Deny` verdict is
+/// terminal. This is the forwarding gate's single decision (`ship_frontier_diff`).
+///
+/// NOTE: `Read` was historically omitted here — only `Write`/`Replicate` were checked
+/// — so a `reads`/Member grant silently withheld EVERY row of the identity (data,
+/// genesis, AND keyshares) from the grantee: the cap was minted but never delivered,
+/// so the member could not decrypt anything. Owners worked (they hold `Write`); the
+/// avenCEO member bundle worked only because it also grants a row-scoped `write`.
 pub fn may_hold(
     resolver: &dyn CapabilityResolver,
     subject: &SyncTargetId,
     res: &ResourceCoord,
 ) -> CapDecision {
-    match resolver.may_sync(subject, AccOp::Write, res) {
-        CapDecision::Allow => CapDecision::Allow,
-        write => match resolver.may_sync(subject, AccOp::Replicate, res) {
-            CapDecision::Allow => CapDecision::Allow,
-            // Not a replica either → keep the membership verdict (Pending defers).
-            _ => write,
-        },
+    let write = resolver.may_sync(subject, AccOp::Write, res);
+    if write == CapDecision::Allow {
+        return CapDecision::Allow;
+    }
+    let read = resolver.may_sync(subject, AccOp::Read, res);
+    if read == CapDecision::Allow {
+        return CapDecision::Allow;
+    }
+    let replicate = resolver.may_sync(subject, AccOp::Replicate, res);
+    if replicate == CapDecision::Allow {
+        return CapDecision::Allow;
+    }
+    // None authorize. Defer (never drop) if any check is awaiting ACL hydration.
+    if write == CapDecision::Pending
+        || read == CapDecision::Pending
+        || replicate == CapDecision::Pending
+    {
+        CapDecision::Pending
+    } else {
+        CapDecision::DenyPermanent
     }
 }
 
