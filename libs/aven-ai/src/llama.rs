@@ -283,7 +283,11 @@ impl LlamaEngine {
 			.map_err(|e| format!("tokenize: {e}"))?;
 		let n_prompt = tokens.len();
 
-		let mut batch = LlamaBatch::new(512, 1);
+		// Batch capacity must hold the whole prompt in one decode. Size it to the prompt (with a
+		// small floor), not a fixed 512 — the tool list + few-shot + a longer user message easily
+		// exceed 512 tokens, which otherwise fails with "batch add: Insufficient Space of 512".
+		// It's reused for single-token generation steps afterward (1 token always fits).
+		let mut batch = LlamaBatch::new(n_prompt.max(512), 1);
 		let last = tokens.len().saturating_sub(1);
 		for (i, &tok) in tokens.iter().enumerate() {
 			batch.add(tok, i as i32, &[0], i == last).map_err(|e| format!("batch add: {e}"))?;
