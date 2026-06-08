@@ -519,12 +519,18 @@ async function startRecording() {
 	if (!effectiveTranscribe || recording) return
 	pcmChunks = []
 	try {
-		const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-		mediaStream = stream
+		// Create the AudioContext synchronously inside the user-gesture call stack (before any
+		// `await`). A context created after `await getUserMedia` is outside the gesture and, in
+		// WKWebView, starts SUSPENDED — then `onaudioprocess` never fires and we capture silence
+		// (the "STT doesn't react" bug seen after a tool-call navigation remounts the composer).
 		const Ctx: typeof AudioContext =
 			window.AudioContext ??
 			(window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
 		audioCtx = new Ctx()
+		const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+		mediaStream = stream
+		// Resume in case it came up (or was left) suspended — mirrors the TTS playback path.
+		if (audioCtx.state === 'suspended') await audioCtx.resume()
 		recordedSampleRate = audioCtx.sampleRate
 		sourceNode = audioCtx.createMediaStreamSource(stream)
 		processorNode = audioCtx.createScriptProcessor(4096, 1, 1)
