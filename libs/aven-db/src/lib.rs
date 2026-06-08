@@ -47,13 +47,12 @@ pub use avenos_client::{JazzClient, PeerInboundParkedHook};
 pub use sync_manager::RowBatchKey;
 pub use capability::{
     AccOp, AllowAllResolver, CapDecision, CapabilityResolver, DenyAllResolver, ResourceCoord,
-    gated_pull, may_hold,
+    may_hold,
 };
 pub use sync_targets::SyncTargetId;
 #[cfg(feature = "client-p2p")]
 pub use sync_transport::{
-    decode_length_prefixed, decode_length_prefixed_client, encode_length_prefixed,
-    encode_length_prefixed_client, NullSyncTransport, PeerTransport, SyncTransport,
+    decode_length_prefixed, encode_length_prefixed, NullSyncTransport, PeerTransport, SyncTransport,
 };
 #[cfg(feature = "client-p2p")]
 pub use sync_manager::{InboxEntry, Source, SyncPayload};

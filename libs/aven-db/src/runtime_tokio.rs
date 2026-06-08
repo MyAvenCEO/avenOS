@@ -722,18 +722,6 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         Ok(())
     }
 
-    /// Return grouped telemetry for active downstream server subscriptions.
-    pub fn server_subscription_telemetry(
-        &self,
-    ) -> Result<Vec<crate::query_manager::manager::ServerSubscriptionTelemetryGroup>, RuntimeError>
-    {
-        let core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        Ok(core
-            .schema_manager()
-            .query_manager()
-            .server_subscription_telemetry())
-    }
-
     /// Access the underlying storage (for flushing, etc).
     ///
     /// The callback receives `&S` while holding the core lock.

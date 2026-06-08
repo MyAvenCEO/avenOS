@@ -285,15 +285,6 @@ impl JazzClient {
         .await
     }
 
-    /// Back-compat alias — prefer [`Self::connect_with_sync_transport`].
-    pub async fn connect_with_peer_transport(
-        context: AppContext,
-        sync_transport: Arc<dyn crate::sync_transport::SyncTransport>,
-        on_inbound_parked: Option<PeerInboundParkedHook>,
-    ) -> Result<Self> {
-        Self::connect_with_sync_transport(context, sync_transport, on_inbound_parked).await
-    }
-
     /// Inject the peer-sync capability gate (the app's biscuit-aware resolver).
     pub fn set_resolver(
         &self,

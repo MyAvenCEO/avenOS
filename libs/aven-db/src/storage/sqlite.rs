@@ -28,8 +28,6 @@ use crate::sync_manager::DurabilityTier;
 
 struct SqliteInner {
     conn: rusqlite::Connection,
-    #[allow(dead_code)]
-    path: PathBuf,
     /// Whether an explicit `BEGIN` transaction is currently open.
     write_tx_open: bool,
     ensured_raw_table_headers: HashSet<String>,
@@ -144,7 +142,6 @@ impl SqliteStorage {
             cache_namespace: super::next_storage_cache_namespace(),
             inner: Mutex::new(Some(SqliteInner {
                 conn,
-                path: path.to_path_buf(),
                 write_tx_open: false,
                 ensured_raw_table_headers: HashSet::new(),
                 visible_row_table_locators: HashMap::new(),

@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::batch_fate::BatchFate;
@@ -312,17 +311,6 @@ impl BatchedSubscriptionVisibilityEffects {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ServerSubscriptionTelemetryGroup {
-    #[serde(rename = "groupKey")]
-    pub group_key: String,
-    pub count: usize,
-    pub table: String,
-    pub query: String,
-    pub branches: Vec<String>,
-    pub propagation: QueryPropagation,
-}
-
 /// Update for a query subscription.
 #[derive(Debug, Clone)]
 pub struct QueryUpdate {
@@ -588,31 +576,6 @@ impl QueryManager {
             .collect();
         *reported = current_keys;
         new_warnings
-    }
-
-    pub fn server_subscription_telemetry(&self) -> Vec<ServerSubscriptionTelemetryGroup> {
-        let mut groups: HashMap<String, ServerSubscriptionTelemetryGroup> = HashMap::new();
-
-        for subscription in self.server_subscriptions.values() {
-            let query = serde_json::to_string(&subscription.query)
-                .unwrap_or_else(|_| "{\"error\":\"query serialization failed\"}".to_string());
-            let propagation = propagation_label(subscription.propagation);
-            let group_key = subscription_group_key(&query, &subscription.branches, propagation);
-
-            groups
-                .entry(group_key.clone())
-                .and_modify(|group| group.count += 1)
-                .or_insert_with(|| ServerSubscriptionTelemetryGroup {
-                    group_key,
-                    count: 1,
-                    table: subscription.query.table.as_str().to_string(),
-                    query,
-                    branches: subscription.branches.clone(),
-                    propagation: subscription.propagation,
-                });
-        }
-
-        groups.into_values().collect()
     }
 
     /// Create a new QueryManager with empty schema context.

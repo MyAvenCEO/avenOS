@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use base64::engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use biscuit_auth::{
 	builder::{Algorithm, AuthorizerBuilder, BlockBuilder},
@@ -227,7 +227,6 @@ pub fn decode_issuer_pubkey_b64(b64: &str) -> Result<PublicKey, String> {
 	}
 	let raw = URL_SAFE_NO_PAD
 		.decode(trimmed.as_bytes())
-		.or_else(|_| STANDARD_NO_PAD.decode(trimmed.as_bytes()))
 		.map_err(|e| format!("issuer_pubkey_b64_decode:{e}"))?;
 	PublicKey::from_bytes(raw.as_slice(), Algorithm::Ed25519.into()).map_err(|e| format!("issuer_pubkey_bad:{e:?}"))
 }
@@ -563,7 +562,6 @@ pub fn identity_admins(chain: &Biscuit, owner: Uuid) -> Result<std::collections:
 pub fn biscuit_from_storage(genesis_b64: &str, root: PublicKey) -> Result<Biscuit, String> {
 	let raw = URL_SAFE_NO_PAD
 		.decode(genesis_b64.as_bytes())
-		.or_else(|_| STANDARD_NO_PAD.decode(genesis_b64.as_bytes()))
 		.map_err(|e| format!("genesis-base64:{e}"))?;
 
 	Biscuit::from(raw.as_slice(), root).map_err(|e| format!("biscuit-from:{e:?}"))

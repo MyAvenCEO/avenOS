@@ -79,7 +79,7 @@ pub(crate) fn secrets_for_table(table: &str) -> Option<&'static HashSet<String>>
 fn secret_manifest() -> &'static HashMap<String, HashSet<String>> {
 	static M: OnceLock<HashMap<String, HashSet<String>>> = OnceLock::new();
 	M.get_or_init(|| {
-		schema_manifest::manifest_secret_columns().expect("aven-schema manifest secret columns")
+		schema_manifest::manifest_sensitive_columns().expect("aven-schema manifest sensitive columns")
 	})
 }
 

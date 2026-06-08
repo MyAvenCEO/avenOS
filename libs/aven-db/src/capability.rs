@@ -8,7 +8,6 @@
 //! The engine knows nothing about biscuits or sparks: the app's
 //! `BiscuitCapabilityResolver` is the only capability-aware implementation.
 
-use crate::frontier::FrontierDag;
 use crate::object::ObjectId;
 use crate::sync_targets::SyncTargetId;
 
@@ -177,30 +176,6 @@ pub fn may_hold(
         CapDecision::Pending
     } else {
         CapDecision::DenyPermanent
-    }
-}
-
-/// Per-hop gated reconcile (§6 "Gate") — the one integration point of gate ⨯ tracker.
-///
-/// Transfer the batches `subject` is owed from `source` **only** when `may_sync`
-/// returns `Allow`. `DenyPermanent` and `Pending` transfer **nothing new** and
-/// **never delete** what `dest` already holds — revoke is not retroactive
-/// (it stops future changes; a peer keeps what it already received). Applying the
-/// gate here, at every hop, means a batch only flows along fully-authorized paths.
-///
-/// Returns the number of batches transferred (0 when gated off).
-pub fn gated_pull(
-    dest: &mut FrontierDag,
-    source: &FrontierDag,
-    resolver: &dyn CapabilityResolver,
-    subject: &SyncTargetId,
-    res: &ResourceCoord,
-) -> usize {
-    match resolver.may_sync(subject, AccOp::Read, res) {
-        CapDecision::Allow => dest.pull_from(source),
-        // Deny terminates; Pending defers to a later round — neither sends now,
-        // neither touches already-held batches.
-        CapDecision::DenyPermanent | CapDecision::Pending => 0,
     }
 }
 

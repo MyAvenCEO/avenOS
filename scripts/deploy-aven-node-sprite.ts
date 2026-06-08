@@ -20,13 +20,32 @@ import { spawnSync } from 'node:child_process'
 const SPRITE = process.env.AVEN_CEO_SPRITE?.trim() || 'aven-ceo'
 const SEED = process.env.AVEN_SERVER_SEED?.trim() || ''
 const BIN =
-	process.env.AVEN_SERVER_BIN?.trim() ||
-	'/home/sprite/aven-build/target/rust/release/aven-node'
+	process.env.AVEN_SERVER_BIN?.trim() || '/home/sprite/aven-build/target/rust/release/aven-node'
 const DATA_DIR = process.env.AVEN_SERVER_DATA_DIR?.trim() || '/home/sprite/aven-data'
 const PIN_FILE = process.env.AVEN_SERVER_PIN_FILE?.trim() || '/home/sprite/server.pin'
 const BIND = process.env.AVEN_SERVER_BIND?.trim() || '0.0.0.0:4290'
 const HEALTH = process.env.AVEN_SERVER_HEALTH_BIND?.trim() || '0.0.0.0:8080'
 const RUST_LOG = process.env.RUST_LOG?.trim() || 'info'
+
+// Optional remote rebuild before deploy. The Sprite holds its own git checkout of
+// this repo at AVEN_SERVER_SRC_DIR; release:app:all sets AVEN_SERVER_BUILD_REF to the
+// exact commit it built the apps from, so the relay's aven-node — and therefore its
+// SchemaHash — is byte-for-byte the same source as the devices. Without this, a wiped
+// store just comes back up on the relay's *stale* schema and the skew returns.
+// Left unset by the plain `deploy:server:sprite` path → behaviour unchanged (no build).
+const SRC_DIR = process.env.AVEN_SERVER_SRC_DIR?.trim() || '/home/sprite/aven-build'
+const BUILD_REF = process.env.AVEN_SERVER_BUILD_REF?.trim() || ''
+const WANT_BUILD = !!(BUILD_REF || process.env.AVEN_SERVER_BUILD?.trim())
+const BUILD_TARGET = BUILD_REF || 'origin/main'
+// Override the whole recipe with AVEN_SERVER_BUILD_CMD if your Sprite differs.
+// Default: refresh the git checkout to the pinned commit and build the relay. There is
+// no root Cargo workspace, so aven-node builds via --manifest-path (same as the dev
+// relay in scripts/aven-server.ts). CWD stays at SRC_DIR so the committed
+// .cargo/config.toml (target-dir = target/rust) is discovered → binary lands at BIN.
+// `target/` is gitignored, so the checkout keeps the warm RocksDB build cache.
+const BUILD_CMD =
+	process.env.AVEN_SERVER_BUILD_CMD?.trim() ||
+	`. "$HOME/.cargo/env" 2>/dev/null; set -e; cd ${SRC_DIR} && git fetch --all --tags --prune && git checkout --detach ${BUILD_TARGET} && cargo build --release --manifest-path libs/aven-node/Cargo.toml`
 
 if (!/^[0-9a-fA-F]{64}$/.test(SEED)) {
 	console.error(
@@ -38,6 +57,35 @@ if (!/^[0-9a-fA-F]{64}$/.test(SEED)) {
 /** Run a command inside the Sprite over the websocket exec (reliable for short cmds). */
 function onSprite(args: string[]) {
 	return spawnSync('sprite', ['exec', '-s', SPRITE, '--', ...args], { encoding: 'utf8' })
+}
+
+/** Stream a long-running command inside the Sprite (inherits stdio so cargo progress shows). */
+function onSpriteStream(shellCmd: string) {
+	return spawnSync('sprite', ['exec', '-s', SPRITE, '--', 'sh', '-lc', shellCmd], {
+		stdio: 'inherit'
+	})
+}
+
+if (WANT_BUILD) {
+	console.log(
+		`Rebuilding aven-node on Sprite "${SPRITE}" @ ${BUILD_TARGET} in ${SRC_DIR}\n` +
+			'  (first build compiles RocksDB — can take several minutes; a dropped exec here means\n' +
+			'   the binary may be stale — re-run, or set AVEN_SERVER_BUILD_CMD to a Sprite job).'
+	)
+	const built = onSpriteStream(BUILD_CMD)
+	if (built.status !== 0) {
+		console.error(`❌ remote aven-node build failed (exit ${built.status ?? 'signal'}).`)
+		console.error(
+			`   Inspect: sprite exec -s ${SPRITE} -- sh -lc 'cd ${SRC_DIR} && git log -1 --oneline'`
+		)
+		process.exit(1)
+	}
+	const chk = onSprite(['test', '-x', BIN])
+	if (chk.status !== 0) {
+		console.error(`❌ build reported success but ${BIN} is missing/not executable.`)
+		process.exit(1)
+	}
+	console.log(`✅ aven-node rebuilt on the Sprite @ ${BUILD_TARGET}.`)
 }
 
 console.log(`Deploying aven-node → Sprite "${SPRITE}" (binary: ${BIN})`)
@@ -97,13 +145,16 @@ if (exists && !process.env.WIPE) {
 const get = onSprite(['/.sprite/bin/sprite-env', 'services', 'get', 'aven-node'])
 let status = 'unknown'
 try {
-	status = (JSON.parse(get.stdout || '{}') as { state?: { status?: string } })?.state?.status ?? 'unknown'
+	status =
+		(JSON.parse(get.stdout || '{}') as { state?: { status?: string } })?.state?.status ?? 'unknown'
 } catch {
 	/* leave as unknown */
 }
 if (status !== 'running') {
 	console.error(`❌ aven-node is not running (status: ${status}).`)
-	console.error(`   Logs: sprite exec -s ${SPRITE} -- tail -40 /.sprite/logs/services/aven-node.log`)
+	console.error(
+		`   Logs: sprite exec -s ${SPRITE} -- tail -40 /.sprite/logs/services/aven-node.log`
+	)
 	process.exit(1)
 }
 

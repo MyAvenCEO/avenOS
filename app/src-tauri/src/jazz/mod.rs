@@ -621,8 +621,6 @@ fn desired_root_client_uuid(self_state: &SelfState) -> Result<Uuid, String> {
 /// can still produce a different `SchemaHash` if jazz-tools' Schema-build
 /// changes shape between versions.
 const GROOVE_SCHEMA_HASH_FILE: &str = "groove_schema_hash";
-/// Legacy manifest-JSON fingerprint file. Kept only so old installs can be migrated/cleaned.
-const LEGACY_SCHEMA_FINGERPRINT_FILE: &str = "schema_fingerprint";
 
 const JAZZ_LANE_FILE: &str = "jazz_lane";
 
@@ -797,12 +795,6 @@ fn reconcile_jazz_identity_cache_dir(
 			jazz_dir.join(JAZZ_LANE_FILE).display()
 		)
 	})?;
-
-	// Best-effort cleanup of the legacy manifest-fingerprint file (kept for diagnostics only).
-	let legacy_fp = jazz_dir.join(LEGACY_SCHEMA_FINGERPRINT_FILE);
-	if legacy_fp.exists() {
-		let _ = fs::remove_file(&legacy_fp);
-	}
 
 	let composed = ComposedBranchName::new(
 		GROOVE_CLIENT_ENV,
