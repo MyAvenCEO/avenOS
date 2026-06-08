@@ -25,16 +25,16 @@ pub const DOWNLOAD_EVENT: &str = "llm:model-download";
 #[cfg_attr(not(any(feature = "local-llm", feature = "local-llama")), allow(dead_code))]
 pub const TOKEN_EVENT: &str = "llm:token";
 
-const MODEL_LABEL: &str = "LFM2.5 8B A1B";
+const MODEL_LABEL: &str = "LFM2.5 1.2B";
 
 // Backend-dependent label + on-disk dir. `local-llama` (llama.cpp GGUF on Metal) is the
 // default; the ONNX/onnxruntime path stays behind `local-llm` for the reuse branch.
 #[cfg(feature = "local-llama")]
-const MODEL_QUANT: &str = "GGUF · Q4_K_M (llama.cpp · Metal)";
+const MODEL_QUANT: &str = "GGUF · Q6_K (llama.cpp · Metal)";
 /// Directory under `.avenOS/models/` the GGUF downloads to (also the delete id). Must match
-/// `aven_ai::llama::LFM2_5_8B_A1B.dir`.
+/// `aven_ai::llama::LFM2_5_1_2B.dir`.
 #[cfg(feature = "local-llama")]
-const MODEL_DIR: &str = "lfm2.5-8b-a1b-gguf";
+const MODEL_DIR: &str = "lfm2.5-1.2b-instruct-gguf";
 
 #[cfg(not(feature = "local-llama"))]
 const MODEL_QUANT: &str = "ONNX · q4f16 (onnxruntime)";
@@ -501,7 +501,7 @@ mod imp {
 
 	/// The GGUF spec (download URL + on-disk dir); `super::MODEL_DIR` mirrors `spec.dir`.
 	fn spec() -> llama::LlamaModelSpec {
-		llama::LFM2_5_8B_A1B
+		llama::LFM2_5_1_2B
 	}
 
 	const CANCELLED: &str = "download cancelled";

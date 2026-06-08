@@ -28,7 +28,7 @@ export type LlmEvent = {
 	error?: string
 }
 
-export const LLM_MODEL_LABEL = 'LFM2.5 8B A1B'
+export const LLM_MODEL_LABEL = 'LFM2.5 1.2B'
 export const LLM_EVENT = 'llm:model-download'
 export const LLM_STATUS_COMMAND = 'llm_status'
 
