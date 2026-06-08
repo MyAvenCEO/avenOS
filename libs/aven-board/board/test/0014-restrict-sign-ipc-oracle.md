@@ -86,14 +86,14 @@ Two reinforcing changes, both small and both verifiable in `tauri-plugin-self`:
 - `app/src-tauri/capabilities/default.json` — no change needed (it references `self:default`, which after step above no longer contains the oracle); note in progress log.
 
 ## Acceptance criteria
-- [ ] The new test `sign_prepends_reserved_domain_disjoint_from_protocols` exists in `derive.rs` and proves the attack is blocked — proven by `cargo test -p tauri-plugin-self sign_prepends_reserved_domain_disjoint_from_protocols`. The test must assert ALL of:
+- [x] The new test `sign_prepends_reserved_domain_disjoint_from_protocols` exists in `derive.rs` and proves the attack is blocked — proven by `cargo test sign_prepends_reserved_domain_disjoint_from_protocols` (1 passed). It asserts ALL of:
   - signing the owner-binding payload `b"avenos:owner-binding:v1\0" ‖ value_id ‖ owner` through `derive::sign` yields a signature that is **NOT** the signature `signing_key_from_root(root).sign(payload)` would produce (i.e. the domain prefix is actually applied), and therefore would **fail** `aven_caps`-style verification of that raw payload;
   - `WEBVIEW_SIGN_DOMAIN` is byte-disjoint from `b"avenos:owner-binding:v1\0"`, `b"avenos:edit-sig:v1\0"`, and is not a prefix of any of them (and they are not a prefix of it);
   - a round-trip: `derive::verify(pub, &(WEBVIEW_SIGN_DOMAIN ‖ msg), &derive::sign(root, msg))` is `Ok(true)` while `derive::verify(pub, msg, &derive::sign(root, msg))` is `Ok(false)` (the bare message no longer verifies under its own un-prefixed bytes).
-- [ ] `sign`/`verify` are no longer registered IPC commands — proven by `cargo build -p tauri-plugin-self` succeeding with `commands::sign`/`commands::verify` removed from `generate_handler!` (a stale reference would fail to compile).
-- [ ] `allow-sign` and `allow-verify` are gone from `self:default` — proven by `grep -nE 'allow-sign|allow-verify' libs/tauri-plugin-self/permissions/default.toml` returning nothing.
-- [ ] No frontend regression — proven by `grep -rnE "plugin:self\|(sign|verify)\b" app libs --include='*.ts' --include='*.svelte'` returning zero matches.
-- [ ] The caps verifiers are unaffected — proven by `cargo test -p aven-caps` (known-green) still passing.
+- [x] `sign`/`verify` are no longer registered IPC commands — `commands::sign`/`commands::verify` removed from BOTH `generate_handler!` blocks and the `#[tauri::command]` fns deleted from `commands.rs`; proven by `cargo build` in `libs/tauri-plugin-self` (Finished) and `cargo check` on `aven-os-app` (Finished — capability validation passes; `capabilities/default.json` references only `self:default`).
+- [x] `"allow-sign"` and `"allow-verify"` are gone from `self:default` — proven by `grep -nE '"allow-sign"|"allow-verify"' permissions/default.toml` returning nothing.
+- [x] No frontend regression — `grep` for `plugin:self|sign`/`verify` across `app`/`libs` (.ts/.svelte) returns zero; only `signing_public_key`/`signing_peer_did` are used.
+- [x] The caps verifiers are unaffected — `cargo test` in `libs/aven-caps` (31 passed).
 
 ## Verification
 ```bash
@@ -122,4 +122,5 @@ cargo test -p aven-caps
 
 ## Progress log
 Newest first.
+- `2026-06-08` — **Implemented + verified (ready for test column).** Removed the `sign`/`verify` `#[tauri::command]` fns (commands.rs) and dropped them from both `generate_handler!` blocks (lib.rs) and from `self:default` (permissions/default.toml). Defense in depth: renamed the raw primitive to private `derive::sign_raw` and made `pub derive::sign` unconditionally prefix `WEBVIEW_SIGN_DOMAIN = b"avenos:webview-sign:v1\0"` (disjoint from owner-binding/edit-sig/challenge/biscuit domains). Verified non-breaking: the genuine signers (`mint_owner_binding`, `sign_batch`, `challenge::sign`, biscuit issuance) sign via `SigningKey`/`signing_key_from_root` directly, never through `derive::sign`; zero frontend callers of the IPC; `capabilities/default.json` references only `self:default`. Verified: `cargo test sign_prepends_reserved_domain_disjoint_from_protocols` ✅, tauri-plugin-self build ✅, app `cargo check` ✅ (capability validation passes), aven-caps 31/31 ✅. Moved plan → test.
 - `2026-06-08` — Planned from crypto audit (docs/security/crypto-audit-2026-06-08.md), findings #14/#10/#30 (duplicates of one defect). Grep-confirmed zero frontend callers of `plugin:self|sign`/`verify`; only `signing_public_key`/`signing_peer_did` are used by the UI (self-context.svelte.ts), and all real auth signing is Rust-side (jazz_auth.rs → signing_key_from_root). Verified genuine signers (`mint_owner_binding`, `sign_batch`, `challenge::sign`) sign via `SigningKey` directly, not via `derive::sign`, so domain-gating `derive::sign` is non-breaking. Created in plan. Complementary to 0010/0011 (verifier hardening); pairs with 0006 (Delete-on-inbound) as the audit's two outsized-blast-radius fixes.
