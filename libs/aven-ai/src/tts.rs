@@ -399,7 +399,14 @@ impl Synthesizer {
 		let mut rng = SplitMix64::new(opts.seed);
 		let mut seen: Vec<Vec<bool>> = vec![vec![false; codebook]; n_vq]; // per-codebook seen-set
 		let mut audio_frames: Vec<Vec<i32>> = Vec::new();
-		let cap = opts.max_frames.min(self.max_new_frames);
+		// `AVENOS_TTS_MAX_FRAMES` raises the hard frame cap for long narration (the
+		// manifest default 375 ≈ 30 s and truncates mid-sentence past that). Used by
+		// the `tts_synth` CLI; app default is unchanged.
+		let cap = std::env::var("AVENOS_TTS_MAX_FRAMES")
+			.ok()
+			.and_then(|s| s.parse::<usize>().ok())
+			.filter(|&n| n > 0)
+			.unwrap_or_else(|| opts.max_frames.min(self.max_new_frames));
 		// Streaming: every STREAM_EVERY frames, codec-decode what we have so far and
 		// emit only the newly-decoded tail, so playback starts ~1 s in instead of after
 		// the whole clip. Re-decoding the growing prefix is cheap vs the frame loop and
