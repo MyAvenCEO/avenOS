@@ -292,10 +292,14 @@ export async function resolveAgentTurn(opts: {
 }): Promise<ToolCallRecord> {
 	const { replyId, userPrompt, toolCall, prose, ctx } = opts
 
+	let failed: { name: string; args: Record<string, unknown>; exec: ToolDispatchResult } | undefined
 	if (toolCall && TOOLS[toolCall.name]) {
 		const exec = await executeToolCall(toolCall, ctx)
 		if (exec.ok) return recordFrom(toolCall.name, toolCall.arguments, exec, false)
-		// Malformed/unresolvable args (e.g. the 1.2B nesting JSON into a field) → try the prompt.
+		// The call failed. Keep it: maybe it's a malformed nav call the prompt-fallback recovers
+		// (e.g. the 1.2B nesting JSON into a field) — but if nothing recovers it, surface this
+		// real failure rather than hide it behind a `respond` that falsely claims success.
+		failed = { name: toolCall.name, args: toolCall.arguments, exec }
 	}
 
 	const def = findViewInText(userPrompt)
@@ -308,6 +312,10 @@ export async function resolveAgentTurn(opts: {
 		const args = { view: def.view, response: String(toolCall?.arguments.response ?? '').trim() }
 		return recordFrom('navigate_views', args, exec, true)
 	}
+
+	// A real tool call that genuinely failed (e.g. `create_todo` couldn't write the row) — show
+	// the failure chip (tool name + error) instead of a misleading "Sure, done!" respond bubble.
+	if (failed) return recordFrom(failed.name, failed.args, failed.exec, false)
 
 	const text = prose.trim()
 	return {
