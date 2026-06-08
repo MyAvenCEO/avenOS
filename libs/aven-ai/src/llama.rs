@@ -95,14 +95,17 @@ pub struct GenStats {
 
 /// Instruction prepended to the tool list. The agent is tool-call-only: it must answer with a
 /// tool call, never plain prose, and put its short human-facing reply in the tool's `response`
-/// field. Kept in English (LFM2's tool-use training is English) and short — an over-forceful
-/// prompt pushes the small model into canned "I can't…" refusals. The app still recovers from
-/// prose/malformed calls (user-prompt navigation fallback + prose wrapped as a `respond` call).
+/// field. Deliberately TOOL-AGNOSTIC — it must not name or favor any single tool (the JSON tool
+/// list that follows is the source of truth for what's available), so every tool (navigate,
+/// create a todo, …) is an equal first choice and new tools need no prompt edit. Kept in English
+/// (LFM2's tool-use training is English) and short — an over-forceful prompt pushes the small
+/// model into canned "I can't…" refusals. The app still recovers from a malformed nav call via a
+/// user-prompt fallback, and wraps any stray prose as a `respond` call.
 const TOOL_GUIDANCE: &str =
-	"You are a navigation assistant. ALWAYS answer by calling a tool — never with plain text. \
-	 When the user wants to open or view a section of the app, call navigate_pages with the \
-	 best-matching route. Put your short, friendly reply to the user in the tool's `response` \
-	 field, in the user's language.";
+	"You are Aven, a helpful on-device assistant. ALWAYS answer by calling exactly one of the \
+	 tools listed below — never with plain text. Pick the tool whose purpose best matches what \
+	 the user wants, and fill in its arguments from the user's request. Put your short, friendly \
+	 reply to the user in the tool's `response` field, in the user's language.";
 
 /// Silence llama.cpp/ggml's INFO chatter (the multi-page model-loader + ggml-metal
 /// dump on every load). Installs a C log callback that drops everything below WARN,
@@ -213,9 +216,10 @@ impl LlamaEngine {
 		// Tools-only system turn — exactly what this GGUF's template emits when `tools` are set
 		// and there is no system message. The chatty German [`SYSTEM_PROMPT`] is deliberately
 		// omitted: it steers the 1.2B model into prose ("Gehe zu den Einstellungen.") instead of
-		// emitting a tool call. A terse instruction nudges it toward the call; when the 1.2B
-		// still answers in prose, it almost always *names* the target route — the app-side text
-		// fallback (see `matchNavigationIntent` in `app/src/lib/llm/tools.ts`) recovers it.
+		// emitting a tool call. The terse, tool-agnostic [`TOOL_GUIDANCE`] nudges it toward a call;
+		// if the 1.2B still answers in prose for a navigation request, it usually *names* the
+		// target view — the app-side fallback (`findViewInText` in `app/src/lib/llm/tools.ts`)
+		// recovers that one case; other prose is wrapped as a `respond` call.
 		format!(
 			"<|im_start|>system\n{TOOL_GUIDANCE}\nList of tools: [{tool_list}]<|im_end|>\n\
 			 <|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n"
@@ -281,7 +285,7 @@ impl LlamaEngine {
 		ctx.decode(&mut batch).map_err(|e| format!("decode prompt: {e}"))?;
 
 		// Tool-call span markers (looked up only when tools are offered). Inside the span the
-		// inner tokens render as plain text (`[navigate_pages(route="settings")]`); we collect
+		// inner tokens render as plain text (`[create_todo(title="Banane kaufen")]`); we collect
 		// them and parse once the span closes, rather than streaming them as visible reply text.
 		let tc_start = if tools.is_empty() { None } else { self.special_token("<|tool_call_start|>") };
 		let tc_end = if tools.is_empty() { None } else { self.special_token("<|tool_call_end|>") };
@@ -408,7 +412,7 @@ impl LlamaEngine {
 	}
 }
 
-/// Parse a single LFM2 Pythonic call — `navigate_pages(route="settings")`, with or without the
+/// Parse a single LFM2 Pythonic call — `navigate_views(view="todos")`, with or without the
 /// enclosing `[ ]` — into a [`ToolCall`]. Returns `None` if it isn't a well-formed `name(args)`.
 /// Args are minimal-but-robust: comma-separated `key=value`, values quoted (string), `true`/
 /// `false` (bool), numeric, or bare (string).

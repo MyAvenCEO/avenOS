@@ -25,7 +25,7 @@ pub const DOWNLOAD_EVENT: &str = "llm:model-download";
 /// Per-token streaming event emitted during `llm_generate`.
 #[cfg_attr(not(any(feature = "local-llm", feature = "local-llama")), allow(dead_code))]
 pub const TOKEN_EVENT: &str = "llm:token";
-/// Emitted once when the model decides to call a tool (e.g. `navigate_pages`). The webview
+/// Emitted once when the model decides to call a tool (e.g. `navigate_views`, `create_todo`). The webview
 /// dispatches it (single-turn — there is no model round-trip).
 #[cfg_attr(not(any(feature = "local-llm", feature = "local-llama")), allow(dead_code))]
 pub const TOOL_CALL_EVENT: &str = "llm:tool-call";

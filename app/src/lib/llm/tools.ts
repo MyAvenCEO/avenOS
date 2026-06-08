@@ -280,7 +280,7 @@ function recordFrom(
  *
  *   1. A real tool call from the model — if its side effect succeeds, use it.
  *   2. Else, if the USER prompt is an explicit navigation command, route deterministically
- *      (this is what saves a malformed real call like `view="{...}"`).
+ *      (a cheap safety net for a malformed real call like `view="{...}"`).
  *   3. Else, wrap the model's prose (or a fallback) as a `respond` call.
  */
 export async function resolveAgentTurn(opts: {
@@ -295,7 +295,7 @@ export async function resolveAgentTurn(opts: {
 	if (toolCall && TOOLS[toolCall.name]) {
 		const exec = await executeToolCall(toolCall, ctx)
 		if (exec.ok) return recordFrom(toolCall.name, toolCall.arguments, exec, false)
-		// Malformed/unresolvable args (e.g. the 1.2B nesting JSON into `view`) → try the prompt.
+		// Malformed/unresolvable args (e.g. the 1.2B nesting JSON into a field) → try the prompt.
 	}
 
 	const def = findViewInText(userPrompt)
