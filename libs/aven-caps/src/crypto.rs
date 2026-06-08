@@ -187,30 +187,43 @@ pub fn seal_text_cell_payload(
 		)
 		.map_err(|e| format!("seal_fail:{e}"))?;
 
+	// Wire layout `v1.{nonce}.{ct}` — the AAD is NOT stored. It is fully reconstructible
+	// from the cell's coordinates (identity|table|column|row|dek_version|ty|msv), and it is
+	// the very value an attacker controls if it rides on the wire. The reader recomputes the
+	// expected AAD for the slot it is decoding and authenticates against THAT (see
+	// `open_text_cell_payload`), so a relocated/rolled-back envelope fails the AEAD tag.
 	let s = format!(
-		"v1.{0}.{1}.{2}",
+		"v1.{0}.{1}",
 		BASE64_ENC.encode(nonce),
-		BASE64_ENC.encode(aad_plain),
 		BASE64_ENC.encode(ct)
 	);
 	Ok(s)
 }
 
-pub fn open_text_cell_payload(dek32: &[u8; 32], envelope: &str) -> Result<(String, u64), String> {
-	let mut it = envelope.splitn(5, '.');
+/// Open a sealed cell, authenticating the ciphertext against the caller-supplied
+/// `expected_aad` — the `cell_seal_aad` the *reader* recomputes for the exact
+/// (identity, table, column, row, dek_version, type) slot it is decoding. The AEAD tag was
+/// computed over the AAD at seal time, so decryption succeeds ONLY when `expected_aad`
+/// equals it: a relay that relocated the envelope to a different cell (or replayed an
+/// old-version one) supplies coordinates that don't match and the open fails. The recovered
+/// `dek_version` is read from `expected_aad`.
+pub fn open_text_cell_payload(
+	dek32: &[u8; 32],
+	envelope: &str,
+	expected_aad: &[u8],
+) -> Result<(String, u64), String> {
+	let mut it = envelope.splitn(4, '.');
 	let ver = it.next().ok_or_else(|| "env:ver".to_string())?;
 	if ver != CELL_ENVELOPE_V1 {
 		return Err("env:v1_expected".into());
 	}
 	let nb64 = it.next().ok_or_else(|| "env:nonce".to_string())?;
-	let aad_b64 = it.next().ok_or_else(|| "env:aad".to_string())?;
 	let ct_b64 = it.next().ok_or_else(|| "env:ct".to_string())?;
 	if it.next().is_some() {
 		return Err("env:extra_dots".into());
 	}
 
 	let nonce_raw = BASE64_ENC.decode(nb64.as_bytes()).map_err(|_| "nonce_b64".to_string())?;
-	let aad_plain = BASE64_ENC.decode(aad_b64.as_bytes()).map_err(|_| "aad_b64".to_string())?;
 	let ct_raw = BASE64_ENC.decode(ct_b64.as_bytes()).map_err(|_| "ct_b64".to_string())?;
 
 	let nonce: [u8; 24] = nonce_raw.as_slice().try_into().map_err(|_| "nonce_len".to_string())?;
@@ -222,7 +235,7 @@ pub fn open_text_cell_payload(dek32: &[u8; 32], envelope: &str) -> Result<(Strin
 			XNonce::from_slice(&nonce),
 			chacha20poly1305::aead::Payload {
 				msg: ct_raw.as_slice(),
-				aad: &aad_plain,
+				aad: expected_aad,
 			},
 		)
 		.map_err(|_| "open_fail".to_string())?;
@@ -230,7 +243,7 @@ pub fn open_text_cell_payload(dek32: &[u8; 32], envelope: &str) -> Result<(Strin
 	let s =
 		std::str::from_utf8(&pt).map_err(|_| "cell_utf8".to_string())?.to_string();
 
-	let dek_ver_line = dek_version_from_aad_bytes(&aad_plain)?;
+	let dek_ver_line = dek_version_from_aad_bytes(expected_aad)?;
 	Ok((s, dek_ver_line))
 }
 
@@ -567,7 +580,7 @@ mod tests {
 		let aad_plain = format!("{identity_urn}|todos|title|{row}|1").into_bytes();
 
 		let enc = seal_text_cell_payload(dek.expose(), &aad_plain, "hello").unwrap();
-		let (out, dv) = open_text_cell_payload(dek.expose(), &enc).unwrap();
+		let (out, dv) = open_text_cell_payload(dek.expose(), &enc, &aad_plain).unwrap();
 		assert_eq!(out, "hello");
 		assert_eq!(dv, 1u64);
 		assert_eq!(dek_version_from_aad_bytes(&aad_plain).unwrap(), 1);
@@ -589,7 +602,7 @@ mod tests {
 			groove_value_to_canonical_utf8(&Value::Boolean(true)).unwrap();
 
 		let enc = seal_text_cell_payload(dek.expose(), &aad_plain, &canon).unwrap();
-		let (out, dv) = open_text_cell_payload(dek.expose(), &enc).unwrap();
+		let (out, dv) = open_text_cell_payload(dek.expose(), &enc, &aad_plain).unwrap();
 		let j =
 			ipc_json_from_opened_sensitive_plaintext(&out, &ColumnType::Text).unwrap();
 		assert_eq!(j, serde_json::json!(true));
@@ -617,14 +630,14 @@ mod tests {
 		let new_cell = seal_text_cell_payload(dek_v2.expose(), &aad_v2, "after rotation").unwrap();
 
 		// Correct version opens; cross-version DEK fails (authenticated decryption).
-		assert_eq!(open_text_cell_payload(dek_v1.expose(), &old_cell).unwrap().0, "before rotation");
-		assert_eq!(open_text_cell_payload(dek_v2.expose(), &new_cell).unwrap().0, "after rotation");
+		assert_eq!(open_text_cell_payload(dek_v1.expose(), &old_cell, &aad_v1).unwrap().0, "before rotation");
+		assert_eq!(open_text_cell_payload(dek_v2.expose(), &new_cell, &aad_v2).unwrap().0, "after rotation");
 		assert!(
-			open_text_cell_payload(dek_v2.expose(), &old_cell).is_err(),
+			open_text_cell_payload(dek_v2.expose(), &old_cell, &aad_v1).is_err(),
 			"v2 DEK must NOT open a v1 cell"
 		);
 		assert!(
-			open_text_cell_payload(dek_v1.expose(), &new_cell).is_err(),
+			open_text_cell_payload(dek_v1.expose(), &new_cell, &aad_v2).is_err(),
 			"v1 DEK (all a revoked peer keeps) must NOT open a post-rotation v2 cell"
 		);
 	}
@@ -665,15 +678,61 @@ mod tests {
 		let new_cell = seal_text_cell_payload(new_dek.expose(), &v2_aad, "after rotation").unwrap();
 
 		// Carol (rotated key) reads it; Bob (only the old v1 DEK) cannot.
-		assert_eq!(open_text_cell_payload(&carol_new_dek, &new_cell).unwrap().0, "after rotation");
+		assert_eq!(open_text_cell_payload(&carol_new_dek, &new_cell, &v2_aad).unwrap().0, "after rotation");
 		assert!(
-			open_text_cell_payload(old_dek.expose(), &new_cell).is_err(),
+			open_text_cell_payload(old_dek.expose(), &new_cell, &v2_aad).is_err(),
 			"revoked peer with only the old DEK cannot read post-rotation data"
 		);
 
 		// And old data (v1) remains readable to anyone holding the old DEK.
 		let v1_aad = cell_seal_aad(&urn, "messages", "body", row, 1, column_type_slug(&ColumnType::Text));
 		let old_cell = seal_text_cell_payload(old_dek.expose(), &v1_aad, "before rotation").unwrap();
-		assert_eq!(open_text_cell_payload(old_dek.expose(), &old_cell).unwrap().0, "before rotation");
+		assert_eq!(open_text_cell_payload(old_dek.expose(), &old_cell, &v1_aad).unwrap().0, "before rotation");
+	}
+
+	#[test]
+	fn reader_authoritative_cell_aad() {
+		// Audit #3/#28: the reader must authenticate a sealed cell against the AAD it
+		// recomputes for the slot being decoded — NOT an AAD carried in the (relay-supplied)
+		// envelope. So a relocated or rolled-back envelope fails to open.
+		let dek = random_identity_dek();
+		let identity = uuid::Uuid::nil();
+		let row = uuid::Uuid::nil();
+		let urn = format!("identity:{identity}");
+		let slug = column_type_slug(&ColumnType::Text);
+
+		// Seal cell A (column "secret_a", dek_version 1).
+		let aad_a = cell_seal_aad(&urn, "vault", "secret_a", row, 1, slug);
+		let env = seal_text_cell_payload(dek.expose(), &aad_a, "A-plaintext").unwrap();
+
+		// Honest read of cell A with the matching expected AAD succeeds.
+		let (pt, ver) = open_text_cell_payload(dek.expose(), &env, &aad_a).unwrap();
+		assert_eq!(pt, "A-plaintext");
+		assert_eq!(ver, 1u64);
+
+		// The wire envelope carries NO AAD field: exactly `v1.nonce.ct` (3 dotted fields).
+		assert_eq!(env.split('.').count(), 3, "AAD must not be stored in the envelope");
+
+		// RELOCATION: same DEK, same row, different column → reader supplies B's AAD → reject.
+		let aad_b = cell_seal_aad(&urn, "vault", "secret_b", row, 1, slug);
+		assert!(
+			open_text_cell_payload(dek.expose(), &env, &aad_b).is_err(),
+			"relocated envelope (different column) must fail AEAD authentication"
+		);
+
+		// RELOCATION across rows: same DEK, different row → reject.
+		let other_row = uuid::Uuid::from_u128(0x9999);
+		let aad_other_row = cell_seal_aad(&urn, "vault", "secret_a", other_row, 1, slug);
+		assert!(
+			open_text_cell_payload(dek.expose(), &env, &aad_other_row).is_err(),
+			"relocated envelope (different row) must fail AEAD authentication"
+		);
+
+		// ROLLBACK: same DEK, same coordinate, bumped version → reject.
+		let aad_v2 = cell_seal_aad(&urn, "vault", "secret_a", row, 2, slug);
+		assert!(
+			open_text_cell_payload(dek.expose(), &env, &aad_v2).is_err(),
+			"rolled-back/old-version envelope must fail against current-version AAD"
+		);
 	}
 }

@@ -107,25 +107,48 @@ pub(super) fn bigint_i64(v: &Value) -> Result<i64, String> {
 	}
 }
 
+/// The coordinates that bind a sealed cell to its slot. The reader recomputes
+/// `cell_seal_aad` from these per candidate DEK version and authenticates the ciphertext
+/// against it, so a relocated (different table/column/row) or rolled-back (old dek_version)
+/// envelope fails to open (audit #3/#28).
+///
+/// `storage_ty` MUST be the column's **storage** `ColumnType` — the same one the writer
+/// passed to [`seal_column_plain`] — not an IPC-exposed type, or the AAD slug won't match.
+pub(super) struct CellCoord<'a> {
+	pub table: &'a str,
+	pub column: &'a str,
+	pub row: Uuid,
+	pub storage_ty: &'a ColumnType,
+}
+
 fn open_sealed_text_for_identity(
 	deks: &HashMap<(Uuid, i64), Dek>,
 	identity: Uuid,
+	coord: &CellCoord,
 	raw: &str,
 ) -> Result<String, String> {
 	if !raw.starts_with(CELL_ENVELOPE_V1) {
 		return Ok(raw.to_string());
 	}
+	let urn = identity_urn(identity);
+	let slug = column_type_slug(coord.storage_ty);
 	let mut vers: Vec<i64> = deks
 		.keys()
 		.filter(|(s, _)| *s == identity)
 		.map(|(_, v)| *v)
 		.collect();
-	vers.sort_unstable();
+	// Newest version first: when several held versions exist, prefer opening the
+	// current-version envelope (a minor rollback-preference hardening).
+	vers.sort_unstable_by(|a, b| b.cmp(a));
 	for dv in vers {
 		let Some(dek) = deks.get(&(identity, dv)) else {
 			continue;
 		};
-		if let Ok((opened, _)) = open_text_cell_payload(dek.expose(), raw) {
+		// Reader-authoritative AAD: recompute the expected coordinates for THIS slot and
+		// version; the AEAD tag only verifies if the envelope was sealed at exactly this
+		// (table, column, row, version) — relocation/rollback fail.
+		let expected_aad = cell_seal_aad(&urn, coord.table, coord.column, coord.row, dv, slug);
+		if let Ok((opened, _)) = open_text_cell_payload(dek.expose(), raw, &expected_aad) {
 			return Ok(opened);
 		}
 	}
@@ -135,13 +158,14 @@ fn open_sealed_text_for_identity(
 fn hydrate_text_at(
 	deks: &HashMap<(Uuid, i64), Dek>,
 	identity: Uuid,
+	coord: &CellCoord,
 	cell: &Value,
 ) -> Result<String, String> {
 	match cell {
-		Value::Text(s) => open_sealed_text_for_identity(deks, identity, s.as_str()),
+		Value::Text(s) => open_sealed_text_for_identity(deks, identity, coord, s.as_str()),
 		Value::Bytea(b) => {
 			let s = std::str::from_utf8(b.as_slice()).map_err(|_| "hydrate_bytea_utf8".to_string())?;
-			open_sealed_text_for_identity(deks, identity, s)
+			open_sealed_text_for_identity(deks, identity, coord, s)
 		}
 		x => Err(format!("hydrate_text_bad:{x:?}")),
 	}
@@ -150,18 +174,18 @@ fn hydrate_text_at(
 fn hydrate_i64_at(
 	deks: &HashMap<(Uuid, i64), Dek>,
 	identity: Uuid,
+	coord: &CellCoord,
 	cell: &Value,
-	storage_ty: &ColumnType,
 ) -> Result<i64, String> {
 	match cell {
 		Value::BigInt(i) => Ok(*i),
 		Value::Integer(i) => Ok(*i as i64),
 		Value::Text(_) | Value::Bytea(_) => {
-			let opened = hydrate_text_at(deks, identity, cell)?;
+			let opened = hydrate_text_at(deks, identity, coord, cell)?;
 			if let Ok(n) = opened.trim().parse::<i64>() {
 				return Ok(n);
 			}
-			let ipc = ipc_json_from_opened_sensitive_plaintext(&opened, storage_ty)?;
+			let ipc = ipc_json_from_opened_sensitive_plaintext(&opened, coord.storage_ty)?;
 			if let Some(n) = ipc.as_i64() {
 				return Ok(n);
 			}
@@ -337,28 +361,43 @@ pub(super) fn seal_column_plain(
 
 fn map_sensitive_storage_cell(
 	state: &ShellState,
-	col: &str,
-	storage_ty: &ColumnType,
+	coord: &CellCoord,
+	ipc_ty: &ColumnType,
 	identity: Uuid,
 	raw: &str,
 	miss: &mut Vec<String>,
 ) -> JsonValue {
 	if !raw.starts_with(CELL_ENVELOPE_V1) {
-		return ipc_json_from_opened_sensitive_plaintext(raw, storage_ty)
+		return ipc_json_from_opened_sensitive_plaintext(raw, ipc_ty)
 			.unwrap_or_else(|_| JsonValue::String(raw.into()));
 	}
-	for ((sp, _dv), dek) in &state.deks {
-		if *sp != identity {
+	let urn = identity_urn(identity);
+	let slug = column_type_slug(coord.storage_ty);
+	let mut vers: Vec<i64> = state
+		.deks
+		.keys()
+		.filter(|(s, _)| *s == identity)
+		.map(|(_, v)| *v)
+		.collect();
+	// Newest version first (prefer the current-version envelope).
+	vers.sort_unstable_by(|a, b| b.cmp(a));
+	for dv in vers {
+		let Some(dek) = state.deks.get(&(identity, dv)) else {
 			continue;
-		}
-		if let Ok((opened, _ver)) = open_text_cell_payload(dek.expose(), raw) {
-			return ipc_json_from_opened_sensitive_plaintext(&opened, storage_ty).unwrap_or_else(|_| {
+		};
+		// Reader-authoritative AAD (audit #3/#28): bind the open to THIS exact slot +
+		// version, so a relocated/rolled-back envelope fails the AEAD tag instead of being
+		// surfaced as this cell's value.
+		let expected_aad = cell_seal_aad(&urn, coord.table, coord.column, coord.row, dv, slug);
+		if let Ok((opened, _ver)) = open_text_cell_payload(dek.expose(), raw, &expected_aad) {
+			return ipc_json_from_opened_sensitive_plaintext(&opened, ipc_ty).unwrap_or_else(|_| {
 				JsonValue::String(opened.into())
 			});
 		}
 	}
 	// DIAG: a sealed cell we received but cannot open — either we hold no DEK for this
-	// identity (keyshare never arrived/unwrapped) or only a wrong-version one.
+	// identity (keyshare never arrived/unwrapped), only a wrong-version one, or the envelope
+	// was relocated/tampered (its coordinates no longer match this slot).
 	let held: Vec<i64> = state
 		.deks
 		.keys()
@@ -367,9 +406,10 @@ fn map_sensitive_storage_cell(
 		.collect();
 	log::warn!(
 		target: "avenos::jazz",
-		"KSDIAG decrypt-MISS: identity={identity} col={col} held_dek_versions={held:?}",
+		"KSDIAG decrypt-MISS: identity={identity} col={} held_dek_versions={held:?}",
+		coord.column,
 	);
-	miss.push(col.into());
+	miss.push(coord.column.into());
 	JsonValue::Null
 }
 
@@ -393,10 +433,18 @@ pub(super) fn row_to_public_map(
 			if set.contains(name) {
 				let ipc_ty = crate::schema_manifest::expose_ts_for(table, name)
 					.unwrap_or(&desc.column_type);
+				// AAD slug must use the STORAGE type (what the writer sealed with), while the
+				// opened plaintext is interpreted with `ipc_ty`.
+				let coord = CellCoord {
+					table,
+					column: name,
+					row: *oid.uuid(),
+					storage_ty: &desc.column_type,
+				};
 				match cell {
 					Value::Text(s) => map_sensitive_storage_cell(
 						state,
-						name,
+						&coord,
 						ipc_ty,
 						identity,
 						s.as_str(),
@@ -407,7 +455,7 @@ pub(super) fn row_to_public_map(
 							.map_err(|_| format!("secret_col_bytea_utf8:{name}"))?;
 						map_sensitive_storage_cell(
 							state,
-							name,
+							&coord,
 							ipc_ty,
 							identity,
 							s,
@@ -631,6 +679,20 @@ pub(super) async fn hydrate_shell(
 		.get(ver_ix)
 		.map(|d| d.column_type.clone())
 		.ok_or("sparks_ver_col")?;
+	// Storage types for the genesis/issuer cells — needed so the reader recomputes the same
+	// AAD slug the writer sealed with (reader-authoritative open, audit #3/#28).
+	let genesis_storage_ty = sparks_schema
+		.columns
+		.columns
+		.get(genesis_ix)
+		.map(|d| d.column_type.clone())
+		.ok_or("sparks_genesis_col")?;
+	let issuer_storage_ty = sparks_schema
+		.columns
+		.columns
+		.get(issuer_ix)
+		.map(|d| d.column_type.clone())
+		.ok_or("sparks_issuer_col")?;
 
 	let manifest_opt: Option<VaultManifest> = std::fs::read_to_string(
 		paths::manifest_path(vault_files),
@@ -731,7 +793,13 @@ pub(super) async fn hydrate_shell(
 					continue;
 				}
 			};
-			let genesis_b64 = match hydrate_text_at(&deks, sid, genesis_cell) {
+			let genesis_coord = CellCoord {
+				table: "identities",
+				column: "genesis_b64",
+				row: sid,
+				storage_ty: &genesis_storage_ty,
+			};
+			let genesis_b64 = match hydrate_text_at(&deks, sid, &genesis_coord, genesis_cell) {
 				Ok(g) => g,
 				Err(e) => {
 					log::warn!(
@@ -742,16 +810,24 @@ pub(super) async fn hydrate_shell(
 				}
 			};
 			let issuer_opened = match vals.get(issuer_ix) {
-				Some(cell) => match hydrate_text_at(&deks, sid, cell) {
-					Ok(s) => Some(s),
-					Err(e) => {
-						log::debug!(
-							target: "avenos::jazz",
-							"hydrate_shell: identity {sid} issuer open failed, using local biscuit root: {e}",
-						);
-						None
+				Some(cell) => {
+					let issuer_coord = CellCoord {
+						table: "identities",
+						column: "issuer_pubkey_b64",
+						row: sid,
+						storage_ty: &issuer_storage_ty,
+					};
+					match hydrate_text_at(&deks, sid, &issuer_coord, cell) {
+						Ok(s) => Some(s),
+						Err(e) => {
+							log::debug!(
+								target: "avenos::jazz",
+								"hydrate_shell: identity {sid} issuer open failed, using local biscuit root: {e}",
+							);
+							None
+						}
 					}
-				},
+				}
 				None => None,
 			};
 			if let Err(e) = identity_acc::ingest_genesis_opened(
@@ -777,7 +853,13 @@ pub(super) async fn hydrate_shell(
 					continue;
 				}
 			};
-			let v = match hydrate_i64_at(&deks, sid, ver_cell, &ver_storage_ty) {
+			let ver_coord = CellCoord {
+				table: "identities",
+				column: "current_dek_version",
+				row: sid,
+				storage_ty: &ver_storage_ty,
+			};
+			let v = match hydrate_i64_at(&deks, sid, &ver_coord, ver_cell) {
 				Ok(v) => v,
 				Err(e) => {
 					log::warn!(
