@@ -64,3 +64,11 @@ target/
 # Fetched by scripts/fetch-onnxruntime.ts (matches the version ort targets); a
 # ~35MB binary — not committed, re-downloaded on demand / at packaging.
 /app/src-tauri/onnxruntime/
+
+# video-edit skill: generated / large media — re-render (render.sh) or re-fetch
+# (fetch_stock.py / tts_synth) locally; never commit the binaries.
+/app/static/skills/editing/*.mp4
+/app/static/skills/editing/*.wav
+.claude/skills/video-edit/examples/**/assets/
+# Ephemeral Claude Code dev artifacts
+/.claude/scheduled_tasks.lock

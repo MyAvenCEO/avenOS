@@ -54,3 +54,13 @@ llama-cpp-2 = { version = "0.1.146", optional = true, features = ["metal"] }
 # execution provider. Feature-unioned with the base `ort` dep above, so it only
 # turns on for Apple targets; the EP is resolved from the runtime-loaded dylib.
 ort = { version = "2.0.0-rc.12", optional = true, default-features = false, features = ["coreml"] }
+
+[dev-dependencies]
+# WAV writer for the `tts_synth` example (CLI MOSS-TTS → wav, used by the video-edit skill).
+hound = "3"
+
+# CLI: synthesize a line of text to a wav with MOSS-TTS-Nano (reuses the `tts` engine).
+#   cargo run --release --example tts_synth --features tts -- "text" out.wav
+[[example]]
+name = "tts_synth"
+required-features = ["tts"]
