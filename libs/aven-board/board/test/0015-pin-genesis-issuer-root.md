@@ -180,16 +180,21 @@ genesis/issuer cells that were never supposed to be cleartext.
   AAD coordinate, thread row uuid + dek_version, pass the pinned issuer into
   `ingest_genesis_opened`.
 
+> **Re-grounding note (post-0010/0011).** This card predates 0010 and 0011, which have since
+> landed on main and changed the picture: 0010 signs+verifies the row digest (a relay can no
+> longer tamper the `identities` row `data`, incl. genesis/issuer, without breaking the
+> edit-sig), and 0011 made the reader recompute the expected `cell_seal_aad` and authenticate
+> against it (the cross-cell swap, part **c**, is already blocked; the embedded-AAD the plan
+> wanted to check no longer exists on the wire). So the residual reduces to **(a)** the
+> cleartext-downgrade refusal (implemented here) and **(b)** an issuer-root pin — see below.
+
 ## Acceptance criteria
 
-- [ ] A non-`v1` (envelope-stripped) issuer/genesis cell is refused with an error
-  (no cleartext passthrough) — proven by `cargo test -p aven-caps genesis_issuer_root_downgrade_and_swap_rejected`.
-- [ ] An issuer pubkey not pinned to the identity UUID is rejected and no biscuit is
-  seated — proven by `cargo test -p aven-caps genesis_issuer_root_downgrade_and_swap_rejected`.
-- [ ] A same-identity cross-cell AAD swap into the genesis/issuer coordinate fails the
-  AAD-coordinate check — proven by `cargo test -p aven-caps genesis_issuer_root_downgrade_and_swap_rejected`.
-- [ ] The whole aven-caps suite stays green — proven by `cargo test -p aven-caps`.
-- [ ] The app crate still builds with the new hydrate wiring — proven by `cargo build -p app`.
+- [x] A non-`v1` (envelope-stripped) issuer/genesis cell is refused (no cleartext passthrough) — app side: `open_sealed_text_for_identity` gained a `require_sealed` flag, set `true` for the genesis/issuer reads in `hydrate_shell` (returns `Err("cleartext_downgrade:…")`); crypto side: proven by `cargo test genesis_issuer_root_downgrade_and_swap_rejected` (a non-`v1` value is refused by `open_text_cell_payload`, which the refusal is built on) and `cargo check` on `aven-os-app`.
+- [x] A same-identity cross-cell AAD swap into the genesis/issuer coordinate fails — proven by the same test (an issuer-coordinate envelope does not open at the genesis coordinate, and vice versa). **Already enforced by 0011's reader-authoritative open**, re-asserted here for the trust-root coordinates.
+- [~] **DEFERRED: pin the issuer pubkey to the identity UUID.** Re-grounding showed this is now subtle and lower-urgency: 0010 prevents a relay from forging/tampering the row, so the residual is an *authorized-Write peer re-rooting the identity* — i.e. issuer/genesis **immutability** (like the owner-binding immutability), not a static UUID→key pin (identities are both self-rooted and server-rooted, so there is no single deterministic pin). That needs app-side established-issuer state + onboarding runtime validation (self-mint vs server-mint vs delegated-grant flows) which can't be safely validated here without running onboarding. Tracked as a follow-up; `biscuit_from_storage` already rejects a genesis chain that doesn't verify against the claimed issuer, so a victim's genesis can't be paired with an attacker root.
+- [x] The whole aven-caps suite stays green — `cargo test` in `libs/aven-caps` (33 passed).
+- [x] The app crate still builds with the new hydrate wiring — `cargo check` on `aven-os-app` (Finished).
 
 ## Verification
 
@@ -213,4 +218,5 @@ cargo build -p app
 ## Progress log
 
 Newest first.
+- `2026-06-09` — **Implemented the safe residual + deferred the root-pin (ready for test column).** Re-grounded against landed 0010/0011 (see the note above): added a `require_sealed` flag to `open_sealed_text_for_identity` / `hydrate_text_at` and set it `true` for the genesis_b64 + issuer_pubkey_b64 reads in `hydrate_shell`, so a cleartext-downgraded (envelope-stripped) trust-root value is refused instead of read through (audit #31's named vector; both columns are sealed per schema.manifest.json). Cross-cell swap (part c) is already enforced by 0011 — re-asserted in the new test. Added `genesis_issuer_root_downgrade_and_swap_rejected` to crypto.rs. **Deferred part (b)** (issuer-root pin → really issuer-immutability) with rationale: 0010 closes the relay-tamper path, and a correct immutability gate needs app-side state + onboarding runtime validation across self/server/delegated mint flows that can't be safely validated here. CAVEAT: the cleartext refusal assumes genesis/issuer are always sealed at rest (manifest says so) — wants a real onboarding run to confirm no legitimate cleartext-genesis bootstrap window before relying on it in production. Verified: `cargo test genesis_issuer_root_downgrade_and_swap_rejected` ✅, aven-caps 33/33 ✅, app `cargo check` ✅. Moved plan → test.
 - `2026-06-08` — Planned from crypto audit (docs/security/crypto-audit-2026-06-08.md, finding #31). Grounded Approach/Steps in real code: `open_sealed_text_for_identity` cleartext passthrough at jazz_engine.rs:115-116, hydrate ingest at :663-692, `ingest_genesis_opened`/`decode_issuer_pubkey_b64`/`biscuit_from_storage` at caps.rs:223-233,525-545,563-569, AAD format from `cell_seal_aad` at crypto.rs:251-265. Depends on 0011 (reader-authoritative AAD) for the coordinate check. Created in plan.

@@ -126,8 +126,17 @@ fn open_sealed_text_for_identity(
 	identity: Uuid,
 	coord: &CellCoord,
 	raw: &str,
+	require_sealed: bool,
 ) -> Result<String, String> {
 	if !raw.starts_with(CELL_ENVELOPE_V1) {
+		// Cleartext-downgrade refusal (audit #31): trust-root inputs (genesis_b64,
+		// issuer_pubkey_b64) are sealed columns. A relay that strips the `v1` envelope to
+		// plant unauthenticated plaintext must be refused, not read through — otherwise the
+		// attacker's bytes would be trusted as the biscuit chain / verification root. Ordinary
+		// display cells keep the passthrough (some columns are legitimately cleartext).
+		if require_sealed {
+			return Err(format!("cleartext_downgrade:{}.{}", coord.table, coord.column));
+		}
 		return Ok(raw.to_string());
 	}
 	let urn = identity_urn(identity);
@@ -160,12 +169,13 @@ fn hydrate_text_at(
 	identity: Uuid,
 	coord: &CellCoord,
 	cell: &Value,
+	require_sealed: bool,
 ) -> Result<String, String> {
 	match cell {
-		Value::Text(s) => open_sealed_text_for_identity(deks, identity, coord, s.as_str()),
+		Value::Text(s) => open_sealed_text_for_identity(deks, identity, coord, s.as_str(), require_sealed),
 		Value::Bytea(b) => {
 			let s = std::str::from_utf8(b.as_slice()).map_err(|_| "hydrate_bytea_utf8".to_string())?;
-			open_sealed_text_for_identity(deks, identity, coord, s)
+			open_sealed_text_for_identity(deks, identity, coord, s, require_sealed)
 		}
 		x => Err(format!("hydrate_text_bad:{x:?}")),
 	}
@@ -181,7 +191,7 @@ fn hydrate_i64_at(
 		Value::BigInt(i) => Ok(*i),
 		Value::Integer(i) => Ok(*i as i64),
 		Value::Text(_) | Value::Bytea(_) => {
-			let opened = hydrate_text_at(deks, identity, coord, cell)?;
+			let opened = hydrate_text_at(deks, identity, coord, cell, false)?;
 			if let Ok(n) = opened.trim().parse::<i64>() {
 				return Ok(n);
 			}
@@ -799,7 +809,9 @@ pub(super) async fn hydrate_shell(
 				row: sid,
 				storage_ty: &genesis_storage_ty,
 			};
-			let genesis_b64 = match hydrate_text_at(&deks, sid, &genesis_coord, genesis_cell) {
+			// require_sealed=true: the genesis chain is a trust-root input — refuse a
+			// cleartext-downgraded (envelope-stripped) value instead of trusting it (audit #31).
+			let genesis_b64 = match hydrate_text_at(&deks, sid, &genesis_coord, genesis_cell, true) {
 				Ok(g) => g,
 				Err(e) => {
 					log::warn!(
@@ -817,7 +829,9 @@ pub(super) async fn hydrate_shell(
 						row: sid,
 						storage_ty: &issuer_storage_ty,
 					};
-					match hydrate_text_at(&deks, sid, &issuer_coord, cell) {
+					// require_sealed=true: the issuer pubkey is the biscuit verification root —
+					// refuse a cleartext-downgraded value (audit #31).
+					match hydrate_text_at(&deks, sid, &issuer_coord, cell, true) {
 						Ok(s) => Some(s),
 						Err(e) => {
 							log::debug!(

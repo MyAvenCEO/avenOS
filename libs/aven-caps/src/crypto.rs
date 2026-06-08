@@ -523,6 +523,78 @@ mod tests {
 	use ed25519_dalek::SigningKey;
 
 	#[test]
+	fn derive_kek_rejects_low_order_shared_secret() {
+		// Audit #1: a peer Ed25519 key that is a small-order point forces an all-zero
+		// (non-contributory) X25519 output, which would make the KEK independent of our
+		// secret — a constant the attacker can compute offline. `derive_kek_x25519` must
+		// reject such a peer key instead of deriving a predictable KEK. The guard is the
+		// `was_contributory()` check (the all-zero shared secret is the canonical witness of
+		// every small-order peer point under RFC 7748).
+		let me = SigningKey::from_bytes(&[5u8; 32]);
+
+		// `[0u8; 32]` is a well-known small-order Ed25519 point encoding (it appears on
+		// libsodium's low-order blocklist). It must NOT yield a usable KEK.
+		assert!(
+			derive_kek_x25519(&me, &[0u8; 32]).is_err(),
+			"a small-order peer key must not yield a usable KEK"
+		);
+
+		// Positive control: a normal high-order peer key still derives a KEK, so the guard
+		// rejects only the attack and does not break legitimate key agreement.
+		let good_peer = SigningKey::from_bytes(&[9u8; 32]).verifying_key().to_bytes();
+		assert!(
+			derive_kek_x25519(&me, &good_peer).is_ok(),
+			"a normal peer key must still derive a KEK"
+		);
+	}
+
+	#[test]
+	fn genesis_issuer_root_downgrade_and_swap_rejected() {
+		// Audit #31. genesis_b64 / issuer_pubkey_b64 are SEALED biscuit-trust-root inputs.
+		// This proves the crypto primitives the hydrate path relies on:
+		//  (a) a cleartext-downgraded (non-`v1`) value is rejected by the opener — the app's
+		//      `require_sealed` refusal at the genesis/issuer reads is built on this; and
+		//  (c) a cross-cell swap into the genesis/issuer coordinate fails AEAD authentication,
+		//      because the reader recomputes the expected coordinate AAD (board 0011).
+		// (b) Pinning the issuer to the identity UUID is deferred: a relay can no longer forge
+		//      or tamper these cells (board 0010 signs the row, 0011 binds the coordinate), so
+		//      the residual is issuer-immutability — see the board card.
+		let dek = random_identity_dek();
+		let identity = uuid::Uuid::nil();
+		let row = uuid::Uuid::nil();
+		let urn = format!("identity:{identity}");
+		let slug = column_type_slug(&ColumnType::Text);
+
+		// A legitimate, sealed genesis cell at its coordinate opens honestly.
+		let genesis_aad = cell_seal_aad(&urn, "identities", "genesis_b64", row, 1, slug);
+		let env = seal_text_cell_payload(dek.expose(), &genesis_aad, "GENESIS-CHAIN-B64").unwrap();
+		assert_eq!(
+			open_text_cell_payload(dek.expose(), &env, &genesis_aad).unwrap().0,
+			"GENESIS-CHAIN-B64"
+		);
+
+		// (a) Cleartext downgrade: a stripped / non-`v1` value is refused by the opener
+		//     (what the app's require_sealed=true at the genesis/issuer reads enforces).
+		assert!(
+			open_text_cell_payload(dek.expose(), "attacker-plaintext-root", &genesis_aad).is_err(),
+			"a non-v1 (envelope-stripped) trust-root value must be refused"
+		);
+
+		// (c) Cross-cell swap: an envelope sealed for the issuer coordinate must NOT open at
+		//     the genesis coordinate (or vice versa), even under the same identity DEK.
+		let issuer_aad = cell_seal_aad(&urn, "identities", "issuer_pubkey_b64", row, 1, slug);
+		let issuer_env = seal_text_cell_payload(dek.expose(), &issuer_aad, "ISSUER-PK").unwrap();
+		assert!(
+			open_text_cell_payload(dek.expose(), &issuer_env, &genesis_aad).is_err(),
+			"an issuer-coordinate envelope must not open at the genesis coordinate"
+		);
+		assert!(
+			open_text_cell_payload(dek.expose(), &env, &issuer_aad).is_err(),
+			"a genesis-coordinate envelope must not open at the issuer coordinate"
+		);
+	}
+
+	#[test]
 	fn group_key_two_level_inheritance() {
 		// The 2-level hierarchy that makes per-row groups affordable:
 		// parent group key -> child group key -> a value DEK.

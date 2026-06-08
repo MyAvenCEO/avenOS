@@ -150,13 +150,10 @@ change.
 
 ## Acceptance criteria
 
-- [ ] `derive_kek_x25519` returns `Err("low_order_dh")` for a peer key forcing an
-      all-zero ECDH output — proven by `cargo test -p aven-caps derive_kek_rejects_low_order_shared_secret`.
-- [ ] A normal (high-order) peer key still derives a KEK (positive control inside the
-      same test) — proven by the same test exiting 0.
-- [ ] No regression in existing keyshare crypto — proven by `cargo test -p aven-caps`
-      (includes `delegated_keyshare_wrap_unwrap`, `rotation_full_flow_keyshare_excludes_revoked`).
-- [ ] Crate builds with the new guard + `subtle` dep — proven by `cargo build -p aven-caps`.
+- [x] `derive_kek_x25519` rejects a peer key forcing an all-zero ECDH output — proven by `cargo test derive_kek_rejects_low_order_shared_secret` (1 passed). **The guard already exists on main** (`was_contributory()` at crypto.rs:83-85), added by parallel hardening — the *stronger* form the plan anticipated. Per the plan's degradation clause this item adds the named regression test rather than a duplicate guard; no `subtle` dep was needed and the error string is `kek_non_contributory_peer_key` (the guard's own, not the planned `low_order_dh`).
+- [x] A normal (high-order) peer key still derives a KEK (positive control inside the same test) — proven by the same test.
+- [x] No regression in existing keyshare crypto — proven by `cargo test` in `libs/aven-caps` (33 passed).
+- [x] Crate builds — proven by `cargo build` in `libs/aven-caps` (Finished). (No Cargo.toml change: `was_contributory()` is available without an extra dep.)
 
 ## Verification
 
@@ -183,4 +180,5 @@ cargo test -p aven-caps
 ## Progress log
 
 Newest first.
+- `2026-06-09` — **Verified + closed (ready for test column).** On re-grounding, `derive_kek_x25519` ALREADY carries the low-order guard on main — `if !shared.was_contributory() { return Err("kek_non_contributory_peer_key") }` (crypto.rs:83-85), landed by parallel crypto hardening since this was planned. `was_contributory()` is the stronger, exactly-right form (the plan only proposed an all-zero `ct_eq` to dodge a feature flag that turns out to be available), so per the plan's degradation clause I kept it and added the named regression test `derive_kek_rejects_low_order_shared_secret` (small-order peer key `[0u8;32]` → Err; normal key → Ok). No code/Cargo change beyond the test. Verified: test ✅, aven-caps 33/33 ✅. Moved plan → test.
 - `2026-06-08` — Planned from crypto audit (docs/security/crypto-audit-2026-06-08.md, finding #1). Verified against current source: `derive_kek_x25519` (crypto.rs:72-81) feeds `shared.as_bytes()` into `hkdf_kek` with NO all-zero/low-order/contributory guard; `git log -- libs/aven-caps/src/crypto.rs` (latest `4797d8f`) confirms no such guard was previously merged on this path. Created in plan.
