@@ -1,29 +1,40 @@
 #!/usr/bin/env python3
 """
-Transcribe a video to word-level timestamps via Hyperframes' transcriber.
-Output: <video>.workdir/words.json -> [{"word", "start", "end"}, ...]
+Transcribe a video to word-level timestamps with **our own on-device STT**
+(Parakeet via sherpa-onnx — the same `aven_ai::stt` engine the app ships), not
+Whisper. Output: <video>.workdir/words.json -> [{"word", "start", "end"}, ...]
 
-Hyperframes ships its OWN word-level transcriber:
-`npx hyperframes transcribe <audio> --json` (model small.en) which writes a
-transcript.json — a flat array of {start, end, word}. We wrap that and apply
-the SAME auto-correction logic the original used (Cloud→Claude, brand fixes).
+Pipeline: ffmpeg extracts 16 kHz mono audio, then the `asr_transcribe` CLI
+example (libs/aven-ai) runs Parakeet and emits word-level {start,end,word}. We
+apply the SAME auto-correction logic the original used (Cloud→Claude, brand +
+phrase fixes). The Parakeet model is reused from the app's models dir
+(~/Documents/.avenOS/models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8) — nothing
+re-downloads if the app already fetched it.
 
-Unlike the original WhisperX path, the Hyperframes transcriber has no heavy
-Python deps (faster-whisper, pyannote, etc.), so there is no skill-venv
-self-relaunch — it runs via `npx hyperframes@latest …` on Node, the same way
-`render.sh` invokes the CLI. Node ≥ 22 and ffmpeg on PATH are the only
-requirements.
+Requirements: a Rust toolchain (to build the `asr_transcribe` example with the
+`stt` feature — first build compiles sherpa-onnx, then it's cached) and ffmpeg.
 """
 import json
 import os
 import sys
 import subprocess
-import tempfile
 from pathlib import Path
 
-# Hyperframes is run on demand via `npx hyperframes@<version> …` — no global
-# install. Override with HF_VERSION (matches render.sh's convention).
-_HF_VERSION = os.environ.get("HF_VERSION", "latest")
+
+def _repo_root() -> Path:
+    """Repo root, to locate libs/aven-ai (works inside a git worktree)."""
+    here = Path(__file__).resolve()
+    try:
+        top = subprocess.run(
+            ["git", "-C", str(here.parent), "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        if top:
+            return Path(top)
+    except Exception:
+        pass
+    # fallback: .claude/skills/video-edit/scripts -> up 4
+    return here.parents[4] if len(here.parents) > 4 else here.parent
 
 
 def workdir_for(video_path: Path) -> Path:
@@ -58,54 +69,33 @@ def extract_audio(video_path: Path, audio_path: Path) -> None:
     )
 
 
-def transcribe(audio_path: Path, model_size: str = "small.en") -> list[dict]:
-    # Hyperframes' transcriber emits a flat array of {start, end, word} as JSON.
-    # `--json` prints the transcript to stdout; some CLI builds instead write a
-    # transcript.json next to the audio. We handle both: prefer stdout, fall
-    # back to the sidecar file. Model is small.en (Hyperframes' default).
-    result = subprocess.run(
-        [
-            "npx", "-y", f"hyperframes@{_HF_VERSION}", "transcribe",
-            str(audio_path), "--json", "--model", model_size,
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+def transcribe(audio_path: Path, model_size: str = "parakeet") -> list[dict]:
+    # Run our own Parakeet STT via the `asr_transcribe` cargo example, which emits
+    # a flat [{start,end,word}] JSON (the model is reused from the app's models
+    # dir). `model_size` is ignored (fixed Parakeet) — kept for CLI compatibility.
+    root = _repo_root()
+    out_json = audio_path.with_suffix(".asr.json")
+    cmd = [
+        "cargo", "run", "--release",
+        "--manifest-path", str(root / "libs" / "aven-ai" / "Cargo.toml"),
+        "--example", "asr_transcribe", "--features", "stt",
+        "--", str(audio_path), str(out_json),
+    ]
+    # asr_transcribe logs to stderr and prints the out path to stdout; let it
+    # stream so the (slow first) build + model load are visible.
+    subprocess.run(cmd, check=True)
+    if not out_json.exists():
+        raise RuntimeError(f"asr_transcribe produced no transcript at {out_json}")
 
-    raw = result.stdout.strip()
-    transcript = None
-    if raw:
-        # Tolerate npx/CLI banner noise before the JSON payload: find the first
-        # array/object bracket and parse from there.
-        for start in (raw.find("["), raw.find("{")):
-            if start == -1:
-                continue
-            try:
-                transcript = json.loads(raw[start:])
-                break
-            except json.JSONDecodeError:
-                continue
-    if transcript is None:
-        # Fall back to a sidecar transcript.json the CLI may have written.
-        sidecar = audio_path.with_name("transcript.json")
-        if not sidecar.exists():
-            sidecar = audio_path.with_suffix(".json")
-        if sidecar.exists():
-            transcript = json.loads(sidecar.read_text())
-    if transcript is None:
-        raise RuntimeError("hyperframes transcribe produced no parseable JSON transcript")
-
-    # Hyperframes returns a flat list of {start, end, word}. Some builds wrap it
-    # as {"words": [...]} — accept both shapes.
-    if isinstance(transcript, dict):
+    transcript = json.loads(out_json.read_text())
+    if isinstance(transcript, dict):  # tolerate a {"words": [...]} wrapper
         transcript = transcript.get("words", [])
 
     words: list[dict] = []
     for w in transcript:
         if "start" in w and "end" in w and w.get("word"):
             words.append({
-                "word": w["word"].strip(),
+                "word": str(w["word"]).strip(),
                 "start": float(w["start"]),
                 "end": float(w["end"]),
             })
@@ -226,7 +216,7 @@ def main() -> int:
         print(f"video not found: {video_path}", file=sys.stderr)
         return 1
 
-    model_size = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("WHISPER_MODEL", "small.en")
+    model_size = sys.argv[2] if len(sys.argv) > 2 else "parakeet"
 
     wd = workdir_for(video_path)
     wd.mkdir(exist_ok=True)
@@ -245,7 +235,7 @@ def main() -> int:
     print(f"[1/2] Extracting audio -> {audio_path}")
     extract_audio(video_path, audio_path)
 
-    print(f"[2/2] Transcribing with Hyperframes (model={model_size})")
+    print(f"[2/2] Transcribing with our Parakeet STT (aven-ai)")
     words = transcribe(audio_path, model_size)
     words_json.write_text(json.dumps(words, indent=2))
     print(f"Wrote {len(words)} words -> {words_json}")
