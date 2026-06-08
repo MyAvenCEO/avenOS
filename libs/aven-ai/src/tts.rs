@@ -227,33 +227,30 @@ impl Synthesizer {
 		let manifest: Manifest = serde_json::from_slice(&manifest_bytes)
 			.map_err(|e| format!("parse manifest: {e}"))?;
 
+		// NOTE: CPU execution provider. The CoreML EP (GPU/ANE) segfaults when registered
+		// through ort's `load-dynamic` against the runtime-loaded onnxruntime dylib — an
+		// ABI mismatch in `commit_from_file`. GPU offload for MOSS would need a statically
+		// linked onnxruntime built with CoreML, not the bundled dylib.
 		let build = |file: &str| -> Result<Session, String> {
 			let path = dir.join(file);
-			let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
-			#[allow(unused_mut)]
-			let mut builder = Session::builder()
+			// 2 intra-op threads (not all cores). MOSS runs hundreds of tiny single-token
+			// ops per clip; 8 threads = mostly dispatch/sync overhead. Benchmarked on M1:
+			// 8 threads → RTF 1.55x (slower than real-time); 2 threads → RTF 0.94x (faster
+			// than real-time, so streamed playback stays smooth). inter_op=1 like the
+			// reference runtime. `AVENOS_TTS_THREADS` overrides for tuning.
+			let threads = std::env::var("AVENOS_TTS_THREADS")
+				.ok()
+				.and_then(|s| s.parse::<usize>().ok())
+				.filter(|&n| n > 0)
+				.unwrap_or(2);
+			Session::builder()
 				.map_err(|e| format!("session builder: {e}"))?
 				.with_optimization_level(GraphOptimizationLevel::Level3)
 				.map_err(|e| format!("opt level: {e}"))?
 				.with_intra_threads(threads)
-				.map_err(|e| format!("threads: {e}"))?;
-			// Apple: run on the GPU/Neural Engine via CoreML (ANE+GPU), falling back to
-			// CPU per-op automatically for anything CoreML can't take. Compiled CoreML
-			// models are cached next to the GGUF so launches after the first are fast.
-			// Set `AVENOS_TTS_CPU=1` to force the plain CPU provider (used by the
-			// `tts_synth` CLI example, where the CoreML EP mis-resolves the external
-			// `.data` sidecars). App default is unchanged (CoreML on).
-			#[cfg(any(target_os = "macos", target_os = "ios"))]
-			if std::env::var_os("AVENOS_TTS_CPU").is_none() {
-				builder = builder
-					.with_execution_providers([ort::ep::CoreML::default()
-						.with_compute_units(ort::ep::coreml::ComputeUnits::All)
-						.with_model_format(ort::ep::coreml::ModelFormat::MLProgram)
-						.with_model_cache_dir(dir.join("coreml-cache").to_string_lossy())
-						.build()])
-					.map_err(|e| format!("coreml ep: {e}"))?;
-			}
-			builder
+				.map_err(|e| format!("threads: {e}"))?
+				.with_inter_threads(1)
+				.map_err(|e| format!("inter threads: {e}"))?
 				.commit_from_file(&path)
 				.map_err(|e| format!("load model {}: {e}", path.display()))
 		};

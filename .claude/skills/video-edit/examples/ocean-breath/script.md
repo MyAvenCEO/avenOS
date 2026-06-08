@@ -34,8 +34,8 @@ hard-kills at clip boundaries.
 ## Build
 
 ```bash
-# voiceover (CPU EP avoids the CoreML external-data quirk in the CLI)
-AVENOS_TTS_CPU=1 cargo run --release --manifest-path libs/aven-ai/Cargo.toml \
+# voiceover (MOSS-TTS-Nano, CPU by default)
+cargo run --release --manifest-path libs/aven-ai/Cargo.toml \
   --example tts_synth --features tts -- "<the narration above>" \
   .claude/skills/video-edit/examples/ocean-breath/assets/vo.wav
 
