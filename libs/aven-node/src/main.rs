@@ -241,7 +241,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let params = ChallengeParams::new(cfg.domain.clone(), cfg.uri.clone(), cfg.network_seed.clone());
-    let (listener, mut new_peers) = WsServerListener::new(params, server_did);
+    let (listener, mut new_peers) = WsServerListener::new(params, server_did, identity.clone());
 
     // Durable blind replica: a full RocksDB engine on the REAL schema, wired to the
     // WS listener. The real schema is required so the engine can persist & re-ship

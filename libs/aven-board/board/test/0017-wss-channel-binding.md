@@ -222,19 +222,11 @@ only the *did string* is stored). The client already learns `server_did` from
 
 ## Acceptance criteria
 
-- [ ] A `ClientAuth` proof bound to server nonce A is rejected when verified against a
-  different server nonce B (relay cannot move the client proof live) — proven by
-  `cargo test -p aven-p2p wss_relay_cannot_complete_mutual_handshake`.
-- [ ] A server attestation over `(client_nonce, server_nonce, client_did)` fails to verify
-  when either nonce is substituted (client detects a substituted backend) — proven by
-  `cargo test -p aven-p2p wss_relay_cannot_complete_mutual_handshake`.
-- [ ] The existing challenge tests still pass, confirming the raw-TLS path is unbroken by
-  the new `Client-Nonce:` line + empty-string back-compat — proven by
-  `cargo test -p aven-p2p` (includes `wrong_channel_binding_fails`,
-  `sign_then_verify_roundtrips`).
-- [ ] `aven-p2p` compiles with the new fields/helpers — proven by `cargo build -p aven-p2p`.
-- [ ] `aven-node` compiles with the server signing key + attestation wiring — proven by
-  `cargo build -p aven-node`.
+- [x] A `ClientAuth` proof bound to server nonce A is rejected when verified against a different server nonce B (relay cannot move the client proof live) — proven by `cargo test wss_relay_cannot_complete_mutual_handshake` (1 passed).
+- [x] A server attestation over `(client_nonce, server_nonce, client_did)` fails to verify when either nonce is substituted (client detects a substituted backend) — proven by the same test (substituted server nonce AND substituted client nonce both rejected; honest tuple verifies).
+- [x] The existing challenge tests still pass, confirming the raw-TLS path is unbroken by the new `Client-Nonce:` line + empty-string back-compat — `cargo test` in `libs/aven-p2p` (7 passed, incl. `wrong_channel_binding_fails`, `sign_then_verify_roundtrips`).
+- [x] `aven-p2p` compiles with the new fields/helpers — `cargo build` in `libs/aven-p2p` (Finished).
+- [x] `aven-node` compiles with the server signing key + attestation wiring — `cargo build` in `libs/aven-node` (Finished); the `WsServerListener::new` call site in `main.rs` now threads `identity.clone()`.
 
 ## Verification
 
@@ -261,4 +253,5 @@ cargo build -p aven-node
 ## Progress log
 
 Newest first.
+- `2026-06-09` — **Implemented + verified (ready for test column).** Added an application-layer mutual handshake for the wss path (audit #21): `ClientAuth` gained `client_nonce` (folded into `build_message` as a `Client-Nonce:` line), `AuthResult` gained `signature: Option<String>`, and new `server_attestation_message` / `verify_server_attestation` helpers in challenge.rs. `ws_server.rs` (aven-node) now holds a `server_signing_key`, rebuilds the client message with `auth.client_nonce`, and signs `(client_nonce, server_nonce, client_did)` into `AuthResult.signature`; `ws_client.rs` generates the client nonce, folds it in, and verifies the server attestation against the nonces it saw before pumping frames. Raw-TLS path unchanged in behavior (passes empty `client_nonce`, keeps its TLS-exporter binding; `signature: None`). Out of scope (noted): the TLS-exporter-for-wss option (deployment change). Verified: `cargo test wss_relay_cannot_complete_mutual_handshake` ✅, aven-p2p 7/7 (raw-TLS tests intact) ✅, aven-p2p + aven-node build ✅. Moved plan → test.
 - `2026-06-08` — Planned from crypto audit (docs/security/crypto-audit-2026-06-08.md, finding #21). Grounded Approach/Steps in real code: `NO_CHANNEL_BINDING=""` at ws_client.rs:38 / ws_server.rs:30, signed with empty binding at ws_client.rs:83 and verify_client at ws_server.rs:135-143, `build_message` canonical text at challenge.rs:95-115, and the correct raw-TLS exporter binding at transport.rs:113-120,126 (kept as-is). Chose audit fix option (3): application-layer mutual handshake (client-chosen nonce folded into ClientAuth + server signs (client_nonce||server_nonce||client_did) into AuthResult) so a relay cannot complete both sides; explicitly NOT relying on the TTL nonce as anti-relay. Scope = wss path only. Cross-links: complementary to 0010/0013 (apply-gate integrity); distinct from but related to 0014 (sign IPC oracle). Created in plan.
