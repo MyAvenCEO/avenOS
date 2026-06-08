@@ -182,7 +182,7 @@ function handleSubmit(text: string, _files: File[]): void {
 
 <!-- Bottom intent composer area — same cluster the Intents & Talk screens use -->
 <div
-	class={`pointer-events-none fixed inset-x-0 bottom-0 z-[45] flex justify-center bg-gradient-to-t from-background via-background/88 to-transparent px-3 ${mobileActionVeilClass} sm:from-55% sm:px-5 sm:pt-3 sm:pb-5`}
+	class={`pointer-events-none fixed inset-x-0 bottom-0 z-[45] flex justify-center px-3 ${mobileActionVeilClass} sm:px-5 sm:pt-3 sm:pb-5`}
 >
 	<div
 		class={`pointer-events-auto relative flex w-full items-center ${contentMaxWidthClass} sm:pl-0 sm:pr-0 ${composerMode === 'typing' ? 'max-sm:px-1' : 'max-sm:px-3'}`}

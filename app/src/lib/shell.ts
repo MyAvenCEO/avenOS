@@ -12,7 +12,7 @@ export const mobileProfileFabZClass = 'z-[47]'
 export const mobileFabBottomClass =
 	'max-sm:bottom-[max(0.5rem,env(safe-area-inset-bottom))]'
 export const mobileActionVeilClass =
-	'max-sm:pt-1 max-sm:pb-[max(0.5rem,env(safe-area-inset-bottom))] max-sm:from-35%'
+	'max-sm:pt-1 max-sm:pb-[max(0.5rem,env(safe-area-inset-bottom))]'
 export const mobileMainBottomPadClass =
 	'max-sm:pb-[calc(4.25rem+env(safe-area-inset-bottom))]'
 

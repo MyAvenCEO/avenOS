@@ -426,7 +426,7 @@
 			</div>
 
 			<div
-				class={`pointer-events-none fixed inset-x-0 bottom-0 ${mobileComposerVeilZClass} flex justify-center bg-gradient-to-t from-background via-background/88 to-transparent max-sm:px-2 sm:px-5 sm:from-55% sm:pt-3 sm:pb-5 ${mobileActionVeilClass}`}
+				class={`pointer-events-none fixed inset-x-0 bottom-0 ${mobileComposerVeilZClass} flex justify-center max-sm:px-2 sm:px-5 sm:pt-3 sm:pb-5 ${mobileActionVeilClass}`}
 			>
 				<div
 					class="relative flex w-full max-w-none items-center justify-center max-sm:px-0 sm:pl-0 sm:pr-0"
