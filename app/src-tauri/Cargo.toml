@@ -50,7 +50,7 @@ local-voice = ["dep:aven-ai", "aven-ai/stt"]
 # superseded by `local-llama` (llama.cpp). `ort` uses `load-dynamic`, so the build
 # is light; the onnxruntime dylib ships in the app bundle (still needed for TTS).
 local-llm = ["dep:aven-ai", "aven-ai/llm"]
-# On-device text LLM via llama.cpp (LFM2.5-8B-A1B GGUF, Metal, statically linked — no dylib).
+# On-device text LLM via llama.cpp (LFM2.5-1.2B GGUF, Metal, statically linked — no dylib).
 # The replacement for `local-llm` (ONNX). ON by default.
 local-llama = ["dep:aven-ai", "aven-ai/llama"]
 # On-device text-to-speech (MOSS-TTS-Nano ONNX via onnxruntime/`ort`). ON by

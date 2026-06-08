@@ -1,5 +1,6 @@
 //! On-device text generation — thin Tauri adapter over the `aven-ai` crate
-//! (LFM2.5-8B-A1B ONNX via onnxruntime/`ort`). Sibling of [`crate::asr`].
+//! (default: LFM2.5-1.2B GGUF via llama.cpp/Metal; the ONNX `ort` path behind
+//! `local-llm` targeted LFM2.5-8B-A1B). Sibling of [`crate::asr`].
 //!
 //! The inference + model-download mechanics live in `aven-ai` (Tauri-free, behind
 //! its `llm` feature). This file owns the app-side glue: the `#[tauri::command]`
@@ -527,7 +528,7 @@ mod imp {
 
 // ─────────────── llama.cpp / GGUF build (`local-llama` — Metal, default) ───────────────
 // Same status/epoch/cancel state machine as the ONNX imp, but the engine is `aven_ai::llama`
-// (LFM2.5-8B-A1B GGUF on Metal, statically linked — no dylib to resolve/sign). The model is
+// (LFM2.5-1.2B GGUF on Metal, statically linked — no dylib to resolve/sign). The model is
 // loaded once into a resident `LlamaEngine` and reused; each generate streams tokens.
 #[cfg(feature = "local-llama")]
 mod imp {

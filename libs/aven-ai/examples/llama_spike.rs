@@ -1,4 +1,4 @@
-//! Spike: load an LFM2.5-8B-A1B GGUF via llama.cpp (Metal) and measure decode tok/s.
+//! Spike: load an LFM2.5-1.2B GGUF via llama.cpp (Metal) and measure decode tok/s.
 //!
 //! Usage:
 //!   cargo run --release --example llama_spike --features llama -- <model.gguf> ["prompt"]
