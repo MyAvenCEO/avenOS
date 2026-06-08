@@ -93,19 +93,24 @@ pub struct GenStats {
 	pub tool_calls: Vec<ToolCall>,
 }
 
-/// Instruction prepended to the tool list. The agent is tool-call-only: it must answer with a
-/// tool call, never plain prose, and put its short human-facing reply in the tool's `response`
-/// field. Deliberately TOOL-AGNOSTIC — it must not name or favor any single tool (the JSON tool
-/// list that follows is the source of truth for what's available), so every tool (navigate,
-/// create a todo, …) is an equal first choice and new tools need no prompt edit. Kept in English
-/// (LFM2's tool-use training is English) and short — an over-forceful prompt pushes the small
-/// model into canned "I can't…" refusals. The app still recovers from a malformed nav call via a
-/// user-prompt fallback, and wraps any stray prose as a `respond` call.
-const TOOL_GUIDANCE: &str =
-	"You are Aven, a helpful on-device assistant. ALWAYS answer by calling exactly one of the \
-	 tools listed below — never with plain text. Pick the tool whose purpose best matches what \
-	 the user wants, and fill in its arguments from the user's request. Put your short, friendly \
-	 reply to the user in the tool's `response` field, in the user's language.";
+/// Few-shot demonstrations placed between the (tool-list-only) system turn and the real user
+/// turn. We follow LFM2.5's documented tool-use format EXACTLY — the system message carries only
+/// `List of tools: [...]`, with NO instructional prose. Prose like "always call a tool / pick the
+/// best tool" makes the 1.2B *reason about* the tools and emit canned "I'm sorry, I can't…"
+/// refusals instead of a call. Concrete examples teach the same behavior by demonstration without
+/// triggering that meta-reasoning. Kept small + BALANCED across tools so we don't bias the model
+/// toward one, and include the exact shapes that were drifting (English imperative, indirect
+/// German). Format mirrors the docs: `<|tool_call_start|>[name(arg="v")]<|tool_call_end|>`. Example
+/// tool names/args MUST stay in sync with the registry in `app/src/lib/llm/tools.ts`.
+const TOOL_FEWSHOT: &str = "\
+<|im_start|>user\nadd buy apples to todo<|im_end|>\n\
+<|im_start|>assistant\n<|tool_call_start|>[create_todo(title=\"Buy apples\", response=\"Added 'Buy apples' to your todos.\")]<|tool_call_end|><|im_end|>\n\
+<|im_start|>user\nIch brauche noch Milch auf der Liste.<|im_end|>\n\
+<|im_start|>assistant\n<|tool_call_start|>[create_todo(title=\"Milch kaufen\", response=\"Ich setze 'Milch kaufen' auf deine Liste.\")]<|tool_call_end|><|im_end|>\n\
+<|im_start|>user\nopen members<|im_end|>\n\
+<|im_start|>assistant\n<|tool_call_start|>[navigate_views(view=\"members\", response=\"Sure — opening Members.\")]<|tool_call_end|><|im_end|>\n\
+<|im_start|>user\nZeig mir die Aufgaben.<|im_end|>\n\
+<|im_start|>assistant\n<|tool_call_start|>[navigate_views(view=\"todos\", response=\"Klar — ich öffne die Todos.\")]<|tool_call_end|><|im_end|>\n";
 
 /// Silence llama.cpp/ggml's INFO chatter (the multi-page model-loader + ggml-metal
 /// dump on every load). Installs a C log callback that drops everything below WARN,
@@ -213,15 +218,16 @@ impl LlamaEngine {
 			})
 			.collect::<Vec<_>>()
 			.join(", ");
-		// Tools-only system turn — exactly what this GGUF's template emits when `tools` are set
-		// and there is no system message. The chatty German [`SYSTEM_PROMPT`] is deliberately
-		// omitted: it steers the 1.2B model into prose ("Gehe zu den Einstellungen.") instead of
-		// emitting a tool call. The terse, tool-agnostic [`TOOL_GUIDANCE`] nudges it toward a call;
-		// if the 1.2B still answers in prose for a navigation request, it usually *names* the
-		// target view — the app-side fallback (`findViewInText` in `app/src/lib/llm/tools.ts`)
-		// recovers that one case; other prose is wrapped as a `respond` call.
+		// Tool-list-only system turn — EXACTLY the format LFM2.5's tool-use docs use
+		// (`{"role":"system","content":"List of tools: [...]"}`). No instructional prose: the
+		// chatty German [`SYSTEM_PROMPT`] steers the 1.2B into prose, and "always call a tool /
+		// pick the best tool"-style guidance makes it *reason about* the tools and emit canned
+		// "I'm sorry, I can't…" refusals. The behavior we want is taught instead by [`TOOL_FEWSHOT`]
+		// demonstrations below. Any stray prose the model still emits is wrapped as `respond`, and a
+		// malformed nav call is recovered by `findViewInText` in `app/src/lib/llm/tools.ts`.
 		format!(
-			"<|im_start|>system\n{TOOL_GUIDANCE}\nList of tools: [{tool_list}]<|im_end|>\n\
+			"<|im_start|>system\nList of tools: [{tool_list}]<|im_end|>\n\
+			 {TOOL_FEWSHOT}\
 			 <|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n"
 		)
 	}
