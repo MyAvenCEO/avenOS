@@ -827,6 +827,11 @@ pub(super) async fn hydrate_shell(
 
 	let mut identity_versions = HashMap::new();
 	let sparks_rows = exec_list_rows(client, "identities").await?;
+	eprintln!(
+		"[QRYDIAG] exec_list_rows(identities) → {} row(s): {:?}",
+		sparks_rows.len(),
+		sparks_rows.iter().map(|(oid, _)| oid.uuid().to_string()).collect::<Vec<_>>()
+	);
 	let ver_storage_ty = sparks_schema
 		.columns
 		.columns
@@ -937,10 +942,11 @@ pub(super) async fn hydrate_shell(
 			deks.len(),
 		);
 
-		for (_oid, vals) in &sparks_rows {
+		for (oid, vals) in &sparks_rows {
 			let sid = match uuid_cell_at(vals.as_slice(), identity_id_ix) {
 				Ok(s) => s,
 				Err(e) => {
+					eprintln!("[QRYDIAG] skip identity row obj={} (owner cell unreadable): {e}", oid.uuid());
 					log::warn!(target: "avenos::jazz", "hydrate_shell: skip identity row (owner): {e}");
 					continue;
 				}
@@ -948,6 +954,7 @@ pub(super) async fn hydrate_shell(
 			let genesis_cell = match vals.get(genesis_ix) {
 				Some(c) => c,
 				None => {
+					eprintln!("[QRYDIAG] skip identity {sid} obj={} (missing genesis cell)", oid.uuid());
 					log::warn!(target: "avenos::jazz", "hydrate_shell: skip identity {sid} (missing genesis)");
 					continue;
 				}
