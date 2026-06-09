@@ -2407,7 +2407,7 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 			if issuer == my_issuer {
 				// Already claimed BY THIS DEVICE (e.g. after a restart) — idempotent:
 				// ensure the owner roster row + re-hydrate so the app shows. NOT an error.
-				ensure_aven_ceo_owner_row(client.as_ref(), &shell.peer_did, &shell.signing_key, identity_uuid).await?;
+				ensure_aven_ceo_owner_row(client.as_ref(), shell, identity_uuid).await?;
 				finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
 				return Ok(identity_uuid.to_string());
 			}
@@ -2457,7 +2457,7 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 	wrap_self_keyshare(client.as_ref(), shell, identity_uuid, &dek_plain, dek_ver).await?;
 
 	// The owner is the first member: give it a roster row (populated from identity).
-	ensure_aven_ceo_owner_row(client.as_ref(), &shell.peer_did, &shell.signing_key, identity_uuid).await?;
+	ensure_aven_ceo_owner_row(client.as_ref(), shell, identity_uuid).await?;
 
 	finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
 	Ok(identity_uuid.to_string())
@@ -2539,8 +2539,7 @@ pub(crate) async fn groove_ipc_create_identity(
 	// Self keyshare: wrap the identity DEK to this device so the owner can read sealed columns.
 	wrap_self_keyshare(client.as_ref(), shell, identity_uuid, &dek_plain, dek_ver).await?;
 
-	ensure_aven_ceo_owner_row(client.as_ref(), &shell.peer_did, &shell.signing_key, identity_uuid)
-		.await?;
+	ensure_aven_ceo_owner_row(client.as_ref(), shell, identity_uuid).await?;
 	finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
 	Ok(identity_uuid.to_string())
 }
@@ -2636,10 +2635,11 @@ pub(crate) async fn groove_ipc_create_collection_group(
 /// row already exists. Used at claim and idempotent re-claim.
 async fn ensure_aven_ceo_owner_row(
 	client: &JazzClient,
-	peer_did: &str,
-	signing_key: &ed25519_dalek::SigningKey,
+	shell: &jazz_engine::ShellState,
 	identity_uuid: Uuid,
 ) -> Result<(), String> {
+	let peer_did = shell.peer_did.as_str();
+	let signing_key = &shell.signing_key;
 	let peers_schema = jazz_engine::resolved_table_schema(client, "peers").await?;
 	let identity_ix = jazz_engine::col_ix(&peers_schema, "owner")?;
 	let did_ix = jazz_engine::col_ix(&peers_schema, "peer_did")?;
@@ -2667,8 +2667,19 @@ async fn ensure_aven_ceo_owner_row(
 	prow.insert("account_name".into(), JsonValue::String(name));
 	prow.insert("device_label".into(), JsonValue::String(label));
 	prow.insert("added_at_ms".into(), JsonValue::Number(now_ms.into()));
-	let prow_vals = insert_values("peers", &peers_schema, prow)?;
 	let prow_oid = ObjectId::new();
+	// Private-by-default: seal account_name/device_label under the identity DEK before
+	// materializing the row (routing columns stay plaintext). owner = identity_uuid,
+	// object row = this freshly created roster row's oid.
+	jazz_engine::seal_sensitive_in_patch(
+		shell,
+		"peers",
+		&peers_schema,
+		identity_uuid,
+		*prow_oid.uuid(),
+		&mut prow,
+	)?;
+	let prow_vals = insert_values("peers", &peers_schema, prow)?;
 	let prow_meta = owner_binding_meta(signing_key, prow_oid, identity_uuid)?;
 	client.create_with_id_and_metadata("peers", prow_oid, prow_vals, prow_meta).await.map_err(format_jazz_err)?;
 	Ok(())
@@ -2883,6 +2894,16 @@ pub(crate) async fn groove_ipc_aven_ceo_publish_profile(
 	let mut patch = Map::new();
 	patch.insert("account_name".into(), JsonValue::String(name));
 	patch.insert("device_label".into(), JsonValue::String(label));
+	// Private-by-default: seal account_name/device_label under the identity DEK, scoped
+	// to this member's own roster row, before building the patch ops.
+	jazz_engine::seal_sensitive_in_patch(
+		shell,
+		"peers",
+		&peers_schema,
+		identity_uuid,
+		*own_oid.uuid(),
+		&mut patch,
+	)?;
 	let ops = patch_updates(&peers_schema, patch)?;
 	let upd_meta = owner_binding_meta(&shell.signing_key, own_oid, identity_uuid)?;
 	client.update_with_metadata(own_oid, ops, upd_meta).await.map_err(format_jazz_err)?;
