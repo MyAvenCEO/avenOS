@@ -80,7 +80,7 @@
 		--hl: rgba(255, 255, 255, 0.07); /* raised highlight (top-left) */
 		--emboss-sh: rgba(0, 0, 0, 0.7); /* content emboss shadow */
 		--emboss-hl: rgba(255, 255, 255, 0.1); /* content emboss highlight */
-		--ink-idle: #2c3950; /* idle content — tone-on-tone, way darker on dark */
+		--ink-idle: #36435a; /* idle content — tone-on-tone, way darker on dark */
 		/* pressed-IN groove — mirrors the toggle's recessed track */
 		--track-fill: rgba(0, 0, 0, 0.32);
 		--track-top: rgba(0, 0, 0, 0.34);
@@ -94,7 +94,7 @@
 		--hl: rgba(255, 255, 255, 0.9);
 		--emboss-sh: rgba(0, 0, 0, 0.2);
 		--emboss-hl: rgba(255, 255, 255, 0.95);
-		--ink-idle: #d8d3c9; /* idle content — way lighter cream on light */
+		--ink-idle: #cec9bf; /* idle content — way lighter cream on light */
 		--track-fill: rgba(0, 0, 0, 0.1);
 		--track-top: rgba(0, 0, 0, 0.2);
 		--track-deep: rgba(0, 0, 0, 0.1);
