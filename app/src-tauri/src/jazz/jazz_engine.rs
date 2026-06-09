@@ -415,6 +415,15 @@ fn canon_cell_plaintext(
 	nullable: bool,
 	s: &str,
 ) -> Result<String, String> {
+	// genesis_b64 / issuer_pubkey_b64 are opaque base64 read RAW by the per-identity vault
+	// hydrate (it feeds the opened plaintext straight to base64::decode, with no
+	// un-canonicalization) — and aven-node seals them raw. Match that exactly: seal the raw
+	// string, NOT the canonical-JSON form, or the hydrate hands canonical JSON to base64::decode
+	// and fails `genesis-base64:Invalid symbol 123 ({)`, dropping the identity from the vault.
+	// Other sealed columns (e.g. name) ARE read back through the canonicalizing display path.
+	if table == "identities" && (col == "genesis_b64" || col == "issuer_pubkey_b64") {
+		return Ok(s.to_string());
+	}
 	let json = JsonValue::String(s.to_string());
 	let gv = match crate::schema_manifest::expose_ts_for(table, col) {
 		Some(expose) => super::json_cell_to_jazz(&json, expose, nullable)?,
