@@ -458,7 +458,12 @@
 			"toggleDone": "Toggle done",
 			"doubleClickEdit": "Double-click to edit",
 			"titleCannotBeEmpty": "Title cannot be empty",
-			"noTodosYet": "Noch keine Todos in diesem Identity."
+			"noTodosYet": "Noch keine Todos in diesem Identity.",
+			"listEyebrow": "Aufgabenliste",
+			"openLabel": "Offen",
+			"newSection": "Neu",
+			"entriesSection": "Einträge",
+			"clearDone": "Erledigte löschen"
 		},
 		"gallery": {
 			"title": "Dateien",
