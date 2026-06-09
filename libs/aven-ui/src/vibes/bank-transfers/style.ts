@@ -59,7 +59,7 @@ const selectors: StyleDef['selectors'] = {
 	'.bt-eyebrow': {
 		display: 'block',
 		fontSize: '10px',
-		fontWeight: '700',
+		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.12em',
@@ -75,7 +75,7 @@ const selectors: StyleDef['selectors'] = {
 	'.bt-list-title': {
 		margin: '0',
 		fontSize: '1.1rem',
-		fontWeight: '800',
+		fontWeight: '600',
 		letterSpacing: '-0.02em',
 		color: 'var(--text)',
 		lineHeight: '1.2',
@@ -89,7 +89,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bt-count-value': {
 		fontSize: '1.35rem',
-		fontWeight: '800',
+		fontWeight: '600',
 		fontFamily: 'ui-monospace, Menlo, monospace',
 		fontVariantNumeric: 'tabular-nums',
 		color: 'var(--brand-accent)',
@@ -97,7 +97,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bt-count-label': {
 		fontSize: '9px',
-		fontWeight: '700',
+		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.06em',
@@ -196,7 +196,7 @@ const selectors: StyleDef['selectors'] = {
 		gap: '10px',
 	},
 	'.bt-row-payee': {
-		fontWeight: '700',
+		fontWeight: '600',
 		fontSize: '14px',
 		color: 'var(--text)',
 		whiteSpace: 'nowrap',
@@ -207,7 +207,7 @@ const selectors: StyleDef['selectors'] = {
 	'.bt-row-amount': {
 		fontFamily: 'ui-monospace, Menlo, monospace',
 		fontVariantNumeric: 'tabular-nums',
-		fontWeight: '700',
+		fontWeight: '600',
 		fontSize: '14px',
 		color: 'var(--text)',
 		whiteSpace: 'nowrap',
@@ -234,7 +234,7 @@ const selectors: StyleDef['selectors'] = {
 	'.bt-row-status': {
 		marginTop: '2px',
 		fontSize: '10px',
-		fontWeight: '700',
+		fontWeight: '600',
 		textTransform: 'uppercase',
 		letterSpacing: '0.06em',
 		color: 'var(--muted)',

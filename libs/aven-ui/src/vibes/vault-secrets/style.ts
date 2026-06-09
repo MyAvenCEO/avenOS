@@ -33,7 +33,7 @@ const selectors: StyleDef['selectors'] = {
 	'.vs-title': {
 		margin: '0 0 6px 0',
 		fontSize: '1.125rem',
-		fontWeight: '600',
+		fontWeight: '500',
 		letterSpacing: '-0.02em',
 	},
 	'.vs-description': {
@@ -58,7 +58,7 @@ const selectors: StyleDef['selectors'] = {
 	'.vs-section-title': {
 		margin: '0 0 12px 0',
 		fontSize: '0.875rem',
-		fontWeight: '600',
+		fontWeight: '500',
 	},
 	'.vs-add-form': {
 		display: 'flex',
@@ -88,7 +88,7 @@ const selectors: StyleDef['selectors'] = {
 		cursor: 'pointer',
 		borderRadius: 'var(--radius-md)',
 		padding: '0.5rem 0.85rem',
-		fontWeight: '600',
+		fontWeight: '500',
 		fontSize: '0.8125rem',
 		border: 'none',
 		background: 'transparent',
