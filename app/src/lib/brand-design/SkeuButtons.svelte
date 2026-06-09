@@ -76,30 +76,44 @@
 		   (reads creamish/warm on the light surface, not bluish). 3D offsets
 		   are unchanged — only the shadow colours. */
 		--surf: #1d2532;
-		--sh: rgba(0, 0, 0, 0.5); /* raised drop shadow (bottom-right) */
-		--hl: rgba(255, 255, 255, 0.07); /* raised highlight (top-left) */
-		--emboss-sh: rgba(0, 0, 0, 0.48); /* content emboss shadow */
-		--emboss-hl: rgba(255, 255, 255, 0.3); /* content emboss highlight (stronger = more tactile) */
-		--ink-idle: #36435a; /* idle content — tone-on-tone, way darker on dark */
-		/* pressed-IN groove — mirrors the toggle's recessed track */
-		--track-fill: rgba(0, 0, 0, 0.32);
-		--track-top: rgba(0, 0, 0, 0.34);
-		--track-deep: rgba(0, 0, 0, 0.24);
-		--track-rim: rgba(0, 0, 0, 0.22);
-		--track-glow: rgba(255, 255, 255, 0.07);
+		/* The button IS the toggle's knob: solid fill + the exact knob box-shadow. */
+		--knob-bg: #263142;
+		--knob-shadow:
+			inset 0 0.25rem 0.25rem rgba(255, 255, 255, 0.08),
+			inset 0 -0.25rem 0.25rem rgba(0, 0, 0, 0.2),
+			0 0.6rem 0.4rem rgba(0, 0, 0, 0.5),
+			0 1.25rem 1rem rgba(0, 0, 0, 0.5);
+		/* Pressed = the toggle's empty TRACK (knob gone) — the recessed groove,
+		   stamped in. Same shadow recipe as the toggle track, scaled to the
+		   button so the groove keeps its depth. */
+		--knob-press:
+			inset 0 0 2.4rem 1.6rem rgba(0, 0, 0, 0.36),
+			inset 0 0.85rem 0.6rem rgba(0, 0, 0, 0.45),
+			inset 0 2.2rem 1.1rem rgba(0, 0, 0, 0.3),
+			0 -0.2rem 0.2rem rgba(0, 0, 0, 0.2),
+			0 0.22rem 0.22rem rgba(255, 255, 255, 0.09);
+		/* Text/icon is CUT into the knob (engraved, off). */
+		--ink-engrave: #1a2330;
+		--emboss-sh: rgba(0, 0, 0, 0.6);
+		--emboss-hl: rgba(255, 255, 255, 0.12);
 	}
 	.grid.is-light {
 		--surf: #dedad3;
-		--sh: rgba(0, 0, 0, 0.16);
-		--hl: rgba(255, 255, 255, 0.9);
-		--emboss-sh: rgba(0, 0, 0, 0.2);
-		--emboss-hl: rgba(255, 255, 255, 1);
-		--ink-idle: #cec9bf; /* idle content — way lighter cream on light */
-		--track-fill: rgba(0, 0, 0, 0.1);
-		--track-top: rgba(0, 0, 0, 0.2);
-		--track-deep: rgba(0, 0, 0, 0.1);
-		--track-rim: rgba(0, 0, 0, 0.12);
-		--track-glow: rgba(255, 255, 255, 0.45);
+		--knob-bg: #d5d0c7;
+		--knob-shadow:
+			inset 0 0.25rem 0.25rem rgba(255, 255, 255, 0.4),
+			inset 0 -0.25rem 0.25rem rgba(0, 0, 0, 0.15),
+			0 0.6rem 0.4rem rgba(0, 0, 0, 0.25),
+			0 1.25rem 1rem rgba(0, 0, 0, 0.25);
+		--knob-press:
+			inset 0 0 2.4rem 1.6rem rgba(0, 0, 0, 0.16),
+			inset 0 0.85rem 0.6rem rgba(0, 0, 0, 0.28),
+			inset 0 2.2rem 1.1rem rgba(0, 0, 0, 0.13),
+			0 -0.2rem 0.2rem rgba(0, 0, 0, 0.13),
+			0 0.22rem 0.22rem rgba(255, 255, 255, 0.55);
+		--ink-engrave: #c0bbb0;
+		--emboss-sh: rgba(0, 0, 0, 0.25);
+		--emboss-hl: rgba(255, 255, 255, 0.85);
 	}
 
 	.c-button {
@@ -113,37 +127,27 @@
 		border: 0;
 		border-radius: 1.4rem;
 		cursor: pointer;
-		background: transparent;
+		background: var(--knob-bg);
 		transition: box-shadow 150ms ease-out, background 150ms ease-out;
-		box-shadow:
-			0.55rem 0.55rem 1.5rem var(--sh),
-			-0.5rem -0.5rem 1.3rem var(--hl),
-			-0.12rem -0.12rem 0.2rem var(--hl);
+		box-shadow: var(--knob-shadow);
 	}
 
-	/* Active = physically pressed IN — recessed like the toggle's track:
-	   a soft inner fill + top-weighted inset shadow + a thin outer rim. */
+	/* Active = the knob is gone; only the empty toggle TRACK remains (transparent
+	   surface + recessed groove). The cut-out text's light switches on. */
 	.c-button.active {
 		background: transparent;
-		box-shadow:
-			inset 0 0 2.4rem 1.4rem var(--track-fill),
-			inset 0 0.55rem 0.45rem var(--track-top),
-			inset 0 1.1rem 0.7rem var(--track-deep),
-			0 -0.2rem 0.2rem var(--track-rim),
-			0 0.25rem 0.25rem var(--track-glow);
+		box-shadow: var(--knob-press);
 	}
 
-	/* Icon + label are "burned into" the button — embossed (raised, braille/
-	   domino-like) AND tinted a MATT variant of the button's accent so they stay
-	   readable. Active -> the full glowing accent. */
+	/* Icon + label are CUT into the knob — engraved (inverse of a raised bump:
+	   shadow top-left, highlight bottom-right), reading as the switched-OFF
+	   inside. When pressed, they light up (the knob's lamp turns on). */
 	.c-button__icon {
 		width: 1.65rem;
 		height: 1.65rem;
-		color: var(--ink-idle);
-		/* Reference elevation: equal x/y offset, blur ~2x offset -> soft, diffuse
-		   raised bump (dark shadow bottom-right, light highlight top-left). */
-		filter: drop-shadow(0.09rem 0.09rem 0.2rem var(--emboss-sh))
-			drop-shadow(-0.09rem -0.09rem 0.18rem var(--emboss-hl));
+		color: var(--ink-engrave);
+		filter: drop-shadow(-0.07rem -0.07rem 0.13rem var(--emboss-sh))
+			drop-shadow(0.07rem 0.07rem 0.12rem var(--emboss-hl));
 		transition: filter 150ms ease-out, color 150ms ease-out;
 	}
 	.c-button__label {
@@ -152,23 +156,21 @@
 		font-size: 0.78rem;
 		font-weight: 700;
 		letter-spacing: 0.01em;
-		color: var(--ink-idle);
-		/* Same drop-shadow elevation as the icon (NOT text-shadow) so the text
-		   gets the same clean diffuse bump without a heavy bottom shadow. */
-		filter: drop-shadow(0.09rem 0.09rem 0.2rem var(--emboss-sh))
-			drop-shadow(-0.09rem -0.09rem 0.18rem var(--emboss-hl));
+		color: var(--ink-engrave);
+		filter: drop-shadow(-0.07rem -0.07rem 0.13rem var(--emboss-sh))
+			drop-shadow(0.07rem 0.07rem 0.12rem var(--emboss-hl));
 		transition: filter 150ms ease-out, color 150ms ease-out;
 	}
 
-	/* Active -> full accent, lit with a soft glow */
+	/* Active -> light source ON: the cut-out fills with its accent and glows. */
 	.c-button.active .c-button__icon {
 		color: var(--accent);
-		filter: drop-shadow(0.03rem 0.03rem 0.05rem var(--emboss-sh))
-			drop-shadow(0 0 0.35rem color-mix(in srgb, var(--accent) 55%, transparent));
+		filter: drop-shadow(0 0 0.5rem color-mix(in srgb, var(--accent) 65%, transparent))
+			drop-shadow(0 0 0.18rem color-mix(in srgb, var(--accent) 60%, transparent));
 	}
 	.c-button.active .c-button__label {
 		color: var(--accent);
-		filter: drop-shadow(0.03rem 0.03rem 0.06rem var(--emboss-sh))
-			drop-shadow(0 0 0.35rem color-mix(in srgb, var(--accent) 50%, transparent));
+		filter: drop-shadow(0 0 0.5rem color-mix(in srgb, var(--accent) 55%, transparent))
+			drop-shadow(0 0 0.18rem color-mix(in srgb, var(--accent) 50%, transparent));
 	}
 </style>
