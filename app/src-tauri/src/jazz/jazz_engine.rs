@@ -369,6 +369,113 @@ pub(super) fn seal_column_plain(
 	seal_text_cell_payload(dek_entry.expose(), &aad, canonical_plaintext_utf8)
 }
 
+/// Seal one text cell under a RAW dek (mint path: a freshly minted identity's DEK is not in
+/// `ShellState.deks` yet, so we seal with the key we just generated). Byte-identical to
+/// `seal_column_plain` minus the state lookup.
+pub(super) fn seal_cell_with_dek(
+	dek32: &[u8; 32],
+	table: &str,
+	col_name: &str,
+	storage_ty: &ColumnType,
+	identity: Uuid,
+	row: Uuid,
+	dek_version: i64,
+	canonical_plaintext_utf8: &str,
+) -> Result<String, String> {
+	let urn = identity_urn(identity);
+	let slug = column_type_slug(storage_ty);
+	let aad = cell_seal_aad(&urn, table, col_name, row, dek_version, slug);
+	seal_text_cell_payload(dek32, &aad, canonical_plaintext_utf8)
+}
+
+/// Canonicalize a JSON string cell to the storage-form plaintext the read side recomputes
+/// against (honors `expose_ts_for` for text-stored logical types).
+fn canon_cell_plaintext(
+	table: &str,
+	col: &str,
+	column_type: &ColumnType,
+	nullable: bool,
+	s: &str,
+) -> Result<String, String> {
+	let json = JsonValue::String(s.to_string());
+	let gv = match crate::schema_manifest::expose_ts_for(table, col) {
+		Some(expose) => super::json_cell_to_jazz(&json, expose, nullable)?,
+		None => super::json_cell_to_jazz(&json, column_type, nullable)?,
+	};
+	groove_value_to_canonical_utf8(&gv)
+}
+
+/// Collect the registry-sensitive text columns present in `row` that are not already sealed.
+/// Private-by-default: a column is sensitive unless `plaintext:true` in the manifest.
+fn sensitive_plaintext_cells(
+	table: &str,
+	row: &Map<String, JsonValue>,
+) -> Vec<(String, String)> {
+	let Some(secrets) = secret_manifest().get(table) else {
+		return Vec::new();
+	};
+	let mut out = Vec::new();
+	for (col, val) in row.iter() {
+		if !secrets.contains(col.as_str()) {
+			continue;
+		}
+		if let JsonValue::String(s) = val {
+			if !super::is_sealed_or_phase1_storage_string(s) {
+				out.push((col.clone(), s.clone()));
+			}
+		}
+	}
+	out
+}
+
+/// UPDATE path: seal every registry-sensitive column in `patch` under the identity's current
+/// DEK (read from `ShellState`). Apply before `patch_updates` at every identity-scoped write so
+/// genesis/issuer/name/account_name/… never ship cleartext (the generic update path already
+/// does this; this brings the identity-specific IPCs in line).
+pub(super) fn seal_sensitive_in_patch(
+	state: &ShellState,
+	table: &str,
+	tbl: &TableSchema,
+	identity: Uuid,
+	row: Uuid,
+	patch: &mut Map<String, JsonValue>,
+) -> Result<(), String> {
+	for (col, s) in sensitive_plaintext_cells(table, patch) {
+		let cd = tbl
+			.columns
+			.column(&col)
+			.ok_or_else(|| format!("seal_missing_col:{col}"))?;
+		let canon = canon_cell_plaintext(table, &col, &cd.column_type, cd.nullable, &s)?;
+		let sealed = seal_column_plain(state, table, &col, &cd.column_type, identity, row, &canon)?;
+		patch.insert(col, JsonValue::String(sealed));
+	}
+	Ok(())
+}
+
+/// MINT path: seal every registry-sensitive column in `row_map` under a freshly generated DEK
+/// (not yet in `ShellState`). Use when creating a brand-new identity.
+pub(super) fn seal_sensitive_in_row_with_dek(
+	dek32: &[u8; 32],
+	table: &str,
+	tbl: &TableSchema,
+	identity: Uuid,
+	row: Uuid,
+	dek_version: i64,
+	row_map: &mut Map<String, JsonValue>,
+) -> Result<(), String> {
+	for (col, s) in sensitive_plaintext_cells(table, row_map) {
+		let cd = tbl
+			.columns
+			.column(&col)
+			.ok_or_else(|| format!("seal_missing_col:{col}"))?;
+		let canon = canon_cell_plaintext(table, &col, &cd.column_type, cd.nullable, &s)?;
+		let sealed =
+			seal_cell_with_dek(dek32, table, &col, &cd.column_type, identity, row, dek_version, &canon)?;
+		row_map.insert(col, JsonValue::String(sealed));
+	}
+	Ok(())
+}
+
 fn map_sensitive_storage_cell(
 	state: &ShellState,
 	coord: &CellCoord,
