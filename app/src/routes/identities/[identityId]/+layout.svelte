@@ -148,7 +148,7 @@
 	asideLabel={t('nav.identityViews')}
 	asideRightLabel={t('identities.meta.detailsLabel')}
 	sections={navSections}
-	desktopGridClass="md:grid-cols-[8.5rem_minmax(0,1fr)_10.5rem]"
+	desktopGridClass="md:grid-cols-[8.5rem_minmax(0,1fr)_8.5rem]"
 	sectionLabelClass="px-0 md:px-2"
 	{mainClass}
 	{contentClass}
