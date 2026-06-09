@@ -4,6 +4,7 @@ import { createBankTransfersShell } from '@avenos/aven-ui/vibes/bank-transfers'
 import { createContractShell } from '@avenos/aven-ui/vibes/contract'
 import { createErrorShell } from '@avenos/aven-ui/vibes/error'
 import { createInvoiceShell } from '@avenos/aven-ui/vibes/invoice'
+import { createMembersShell } from '@avenos/aven-ui/vibes/members'
 import { createSuccessShell } from '@avenos/aven-ui/vibes/success'
 import { createTodosShell } from '@avenos/aven-ui/vibes/todos'
 
@@ -18,6 +19,7 @@ export type VibeViewId =
 	| 'bank-transfers'
 	| 'bank-statement'
 	| 'contract'
+	| 'members'
 	| 'todos'
 	| 'error'
 	| 'success'
@@ -63,6 +65,15 @@ export const vibeViewList: VibeView[] = [
 		description: 'Mehrparteien-Vertrag mit Präambel, Begriffen, Klauseln und Signaturen.',
 		shell: createContractShell(),
 		containerName: 'aven-ui-contract',
+		interactive: false,
+	},
+	{
+		id: 'members',
+		label: 'Mitglieder',
+		description:
+			'Mitglieder-/Zugriffsfläche: DID einladen, Zugriffsstufe wählen, und wer Zugriff hat mit Berechtigungs-Chips. Erste Referenz-Vibe aus den Brand-Primitives.',
+		shell: createMembersShell(),
+		containerName: 'aven-ui-members',
 		interactive: false,
 	},
 	{
