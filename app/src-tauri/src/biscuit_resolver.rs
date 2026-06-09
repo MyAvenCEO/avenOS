@@ -62,13 +62,29 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 		// ever GRANTS delivery to the addressed recipient; it never widens any other access.
 		if res.table == "keyshares" {
 			if let Some(recipient) = acl.keyshare_recipient.get(&res.row_id) {
-				if recipient.trim() == peer_did.trim() {
+				let matched = recipient.trim() == peer_did.trim();
+				eprintln!(
+					"[SYNCDIAG] may_sync keyshares row={} → peer={} recipient={} matched={}",
+					res.row_id.uuid(), peer_did, recipient, matched
+				);
+				if matched {
 					return CapDecision::Allow;
 				}
+			} else {
+				eprintln!(
+					"[SYNCDIAG] may_sync keyshares row={} → peer={} NO recipient in acl (fall through to owner-auth)",
+					res.row_id.uuid(), peer_did
+				);
 			}
 		}
 
 		let Some(&owner) = acl.object_owner.get(&(res.table.clone(), res.row_id)) else {
+			if res.table == "keyshares" || res.table == "identities" {
+				eprintln!(
+					"[SYNCDIAG] may_sync {} row={} → peer={} PENDING (object_owner not in acl yet)",
+					res.table, res.row_id.uuid(), peer_did
+				);
+			}
 			return CapDecision::Pending;
 		};
 
@@ -87,14 +103,22 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 			AccOp::Delete => crate::identity_acc::AccOp::Delete,
 			AccOp::Replicate => crate::identity_acc::AccOp::Replicate,
 		};
-		match crate::identity_acc::authorize(
+		let decision = crate::identity_acc::authorize(
 			&shell.vault,
 			owner,
 			identity_op,
 			&res.table,
 			Some(*res.row_id.uuid()),
 			&peer_did,
-		) {
+		);
+		if res.table == "keyshares" || res.table == "identities" {
+			eprintln!(
+				"[SYNCDIAG] may_sync {} row={} → peer={} owner={} authorize={}",
+				res.table, res.row_id.uuid(), peer_did, owner,
+				match &decision { Ok(()) => "ALLOW".to_string(), Err(e) => format!("DENY:{e}") }
+			);
+		}
+		match decision {
 			Ok(()) => CapDecision::Allow,
 			Err(_) => CapDecision::DenyPermanent,
 		}
