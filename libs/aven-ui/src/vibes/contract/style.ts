@@ -14,7 +14,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.cv-hero': {
 		background: 'var(--tech-fill-inner)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		padding: '1rem 1.25rem 1.1rem',
 		marginBottom: '1rem',
@@ -52,7 +52,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.cv-party': {
 		background: 'var(--tech-fill)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		padding: '14px 16px',
 	},
@@ -74,7 +74,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.cv-preamble': {
 		background: 'var(--tech-fill)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		padding: '14px 18px',
 		marginBottom: '1rem',
@@ -114,7 +114,7 @@ const selectors: StyleDef['selectors'] = {
 	'.cv-clauses': { marginBottom: '1rem' },
 	'.cv-clause': {
 		background: 'var(--tech-fill-inner)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-md)',
 		padding: '12px 16px 14px',
 		marginBottom: '10px',
@@ -152,7 +152,7 @@ const selectors: StyleDef['selectors'] = {
 	'.cv-subclause-body': { fontSize: '12px', lineHeight: '1.5', color: 'var(--text)', whiteSpace: 'pre-line' },
 	'.cv-signatures': {
 		background: 'var(--tech-fill)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		padding: '14px 18px 18px',
 		marginBottom: '10px',
