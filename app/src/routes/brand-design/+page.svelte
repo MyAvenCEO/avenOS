@@ -84,7 +84,7 @@
 		--hl: rgba(255, 255, 255, 0.07);
 		--emboss-sh: rgba(0, 0, 0, 0.7);
 		--emboss-hl: rgba(255, 255, 255, 0.1);
-		--nav-ink: #2c3950;
+		--nav-ink: #36435a;
 		--track-fill: rgba(0, 0, 0, 0.32);
 		--track-top: rgba(0, 0, 0, 0.34);
 		--track-deep: rgba(0, 0, 0, 0.24);
@@ -100,7 +100,7 @@
 		--hl: rgba(255, 255, 255, 0.9);
 		--emboss-sh: rgba(0, 0, 0, 0.2);
 		--emboss-hl: rgba(255, 255, 255, 0.95);
-		--nav-ink: #d8d3c9;
+		--nav-ink: #cec9bf;
 		--track-fill: rgba(0, 0, 0, 0.1);
 		--track-top: rgba(0, 0, 0, 0.2);
 		--track-deep: rgba(0, 0, 0, 0.1);
