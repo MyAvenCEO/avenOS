@@ -56,6 +56,47 @@ export const brandBaseSelectors: Record<string, Record<string, unknown>> = {
 		padding: 'var(--pad-card-sm)',
 	},
 
+	/* Grid card — the docs-landing tile pattern (icon chip · title · description ·
+	 * optional action). Reusable across the design system for any card grid. */
+	'.grid-card': {
+		display: 'flex',
+		flexDirection: 'column',
+		gap: 'var(--gap-tight)',
+		background: 'var(--surface)',
+		border: '1px solid var(--border)',
+		borderRadius: 'var(--radius-card)',
+		padding: 'var(--pad-card)',
+	},
+	'.grid-card-icon': {
+		display: 'inline-flex',
+		alignItems: 'center',
+		justifyContent: 'center',
+		width: '2.5rem',
+		height: '2.5rem',
+		marginBottom: '0.5rem',
+		borderRadius: 'var(--radius-pill)',
+		border: '1px solid var(--border)',
+		color: 'var(--muted-strong)',
+	},
+	'.grid-card-title': {
+		fontSize: 'var(--fs-title)',
+		fontWeight: '500',
+		color: 'var(--text)',
+	},
+	'.grid-card-desc': {
+		fontSize: 'var(--fs-body)',
+		lineHeight: '1.5',
+		color: 'var(--muted)',
+	},
+	'.grid-card-action': {
+		marginTop: '0.25rem',
+		fontSize: 'var(--fs-micro)',
+		fontWeight: '600',
+		letterSpacing: 'var(--tracking-eyebrow)',
+		textTransform: 'uppercase',
+		color: 'var(--muted)',
+	},
+
 	/* Uppercase tracked eyebrow label (11px, muted). */
 	'.eyebrow': {
 		fontSize: 'var(--fs-eyebrow)',

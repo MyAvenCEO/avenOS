@@ -30,7 +30,6 @@
 	let skippedUnauthorizedRows = $state(0)
 	let bootstrapErr = $state<string | undefined>()
 	let explorerErr = $state<string | undefined>()
-	let refreshBusy = $state(false)
 
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
@@ -164,20 +163,6 @@
 		}
 	})
 
-	async function refreshExplorer(): Promise<void> {
-		if (!selectedTable || !tauri || !unlocked) return
-		refreshBusy = true
-		explorerErr = undefined
-		try {
-			const reply = await jazzExplorerList(selectedTable)
-			allRows = reply.rows
-			skippedUnauthorizedRows = reply.skippedUnauthorizedRows
-		} catch (e) {
-			explorerErr = e instanceof Error ? e.message : String(e)
-		} finally {
-			refreshBusy = false
-		}
-	}
 </script>
 
 <div class="flex min-h-0 w-full flex-1 flex-col gap-3">
@@ -217,88 +202,66 @@
 			{/each}
 		</div>
 
-		<div
-			class="flex min-h-[min(50dvh,24rem)] min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-background"
-		>
-			<div
-				class="border-border/60 flex shrink-0 flex-wrap items-center gap-3 border-b px-3 py-2 sm:px-4"
+		{#if explorerErr}
+			<p
+				class="text-destructive border-destructive/40 bg-destructive/10 shrink-0 rounded-lg border px-3 py-2 text-sm"
+				role="alert"
 			>
-				{#if selectedTable}
-					<h2 class="font-mono text-sm font-semibold tracking-tight">{selectedTable}</h2>
-					<span class="text-muted-foreground text-xs">
-						{explorerRows.length === 1
-							? t('common.rowCount', { count: explorerRows.length })
-							: t('common.rowCountPlural', { count: explorerRows.length })}
-					</span>
-					{#if skippedUnauthorizedRows > 0}
-						<span
-							class="text-amber-600 dark:text-amber-500 rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium"
-							title={t('db.explorer.gatedHiddenTitle')}
-						>
-							{t('common.gatedHidden', { count: skippedUnauthorizedRows })}
-						</span>
-					{/if}
-				{/if}
-				<button
-					type="button"
-					class="text-muted-foreground hover:text-foreground ml-auto inline-flex rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-					disabled={!selectedTable || refreshBusy}
-					onclick={() => void refreshExplorer()}
-				>
-					{refreshBusy ? t('common.refreshing') : t('db.explorer.refreshExplorer')}
-				</button>
-			</div>
+				{explorerErr}
+			</p>
+		{/if}
 
-			{#if explorerErr}
-				<p
-					class="text-destructive border-destructive/40 bg-destructive/10 m-4 shrink-0 rounded-lg border px-3 py-2 text-sm"
-					role="alert"
-				>
-					{explorerErr}
-				</p>
-			{/if}
+		{#if skippedUnauthorizedRows > 0}
+			<span
+				class="text-amber-600 dark:text-amber-500 w-fit shrink-0 rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium"
+				title={t('db.explorer.gatedHiddenTitle')}
+			>
+				{t('common.gatedHidden', { count: skippedUnauthorizedRows })}
+			</span>
+		{/if}
 
-			<div class="min-h-0 flex-1 overflow-auto p-3 sm:p-4">
-				{#if selectedTable === null || tables.length === 0}
-					<p class="text-muted-foreground text-sm">{t('db.explorer.pickTable')}</p>
-				{:else if explorerRows.length === 0}
-					<p class="text-muted-foreground text-sm">{t('db.explorer.noReadableRows')}</p>
-				{:else}
-					<div class="rounded-lg border border-border/60 shadow-sm">
-						<table class="w-max min-w-full border-collapse font-mono text-xs">
-							<thead class="sticky top-0 z-[1] bg-muted/95 backdrop-blur">
-								<tr>
-									{#each columns as col (col)}
-										<th
-											class="text-muted-foreground border-border/70 max-w-[20rem] border-b px-2 py-2 text-left align-bottom font-semibold whitespace-nowrap uppercase tracking-wide"
-											scope="col"
-										>
-											{col}
-										</th>
-									{/each}
-								</tr>
-							</thead>
-							<tbody>
-								{#each explorerRows as row, ix (typeof row.id === 'string' ? row.id : ix)}
-									<tr
-										class="border-border/60 odd:bg-muted/40 hover:bg-muted/60 transition-colors border-b align-top"
+		{#if selectedTable === null || tables.length === 0}
+			<p class="text-muted-foreground text-sm">{t('db.explorer.pickTable')}</p>
+		{:else if explorerRows.length === 0}
+			<p class="text-muted-foreground text-sm">{t('db.explorer.noReadableRows')}</p>
+		{:else}
+			<!-- The table itself is the outermost container — no schema-header wrapper or
+			     refresh control; the table tabs above already say which table we're in. -->
+			<div
+				class="min-h-0 min-w-0 flex-1 overflow-auto rounded-xl border border-border/60 bg-background"
+			>
+				<table class="w-max min-w-full border-collapse font-mono text-xs">
+					<thead class="sticky top-0 z-[1] bg-muted/95 backdrop-blur">
+						<tr>
+							{#each columns as col (col)}
+								<th
+									class="text-muted-foreground border-border/70 max-w-[20rem] border-b px-3 py-2.5 text-left align-bottom font-semibold whitespace-nowrap uppercase tracking-wide"
+									scope="col"
+								>
+									{col}
+								</th>
+							{/each}
+						</tr>
+					</thead>
+					<tbody>
+						{#each explorerRows as row, ix (typeof row.id === 'string' ? row.id : ix)}
+							<tr
+								class="border-border/60 odd:bg-muted/40 hover:bg-muted/60 transition-colors border-b align-top"
+							>
+								{#each columns as col (col)}
+									{@const c = formatCell(col, row[col], row as Record<string, unknown>)}
+									<td
+										class="max-w-xl border-border/40 px-3 py-2 text-[11px] leading-snug break-all"
+										title={c.title}
 									>
-										{#each columns as col (col)}
-											{@const c = formatCell(col, row[col], row as Record<string, unknown>)}
-											<td
-												class="max-w-xl border-border/40 px-2 py-1.5 text-[11px] leading-snug break-all"
-												title={c.title}
-											>
-												{c.text}
-											</td>
-										{/each}
-									</tr>
+										{c.text}
+									</td>
 								{/each}
-							</tbody>
-						</table>
-					</div>
-				{/if}
+							</tr>
+						{/each}
+					</tbody>
+				</table>
 			</div>
-		</div>
+		{/if}
 	{/if}
 </div>
