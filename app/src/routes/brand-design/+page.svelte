@@ -82,8 +82,8 @@
 		--surf: #1d2532;
 		--sh: rgba(0, 0, 0, 0.5);
 		--hl: rgba(255, 255, 255, 0.07);
-		--emboss-sh: rgba(0, 0, 0, 0.38);
-		--emboss-hl: rgba(255, 255, 255, 0.12);
+		--emboss-sh: rgba(0, 0, 0, 0.48);
+		--emboss-hl: rgba(255, 255, 255, 0.3);
 		--nav-ink: #36435a;
 		--nav-active-ink: #b3c0d2;
 		--nav-glow: rgba(150, 180, 220, 0.42);
@@ -100,8 +100,8 @@
 		--surf: #dedad3;
 		--sh: rgba(0, 0, 0, 0.16);
 		--hl: rgba(255, 255, 255, 0.9);
-		--emboss-sh: rgba(0, 0, 0, 0.13);
-		--emboss-hl: rgba(255, 255, 255, 0.95);
+		--emboss-sh: rgba(0, 0, 0, 0.2);
+		--emboss-hl: rgba(255, 255, 255, 1);
 		--nav-ink: #cec9bf;
 		--nav-active-ink: #514d46;
 		--nav-glow: rgba(255, 255, 255, 0.6);
@@ -165,8 +165,8 @@
 		background: transparent;
 		color: var(--nav-ink);
 		text-shadow:
-			-0.03rem -0.03rem 0.05rem var(--emboss-hl),
-			0.04rem 0.05rem 0.14rem var(--emboss-sh);
+			-0.06rem -0.07rem 0.04rem var(--emboss-hl),
+			0.07rem 0.08rem 0.11rem var(--emboss-sh);
 		transition: box-shadow 150ms ease-out, background 150ms ease-out, color 150ms ease-out;
 		box-shadow:
 			0.5rem 0.5rem 1.3rem var(--sh),
