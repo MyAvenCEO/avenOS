@@ -11,7 +11,8 @@ use aven_caps::caps::{
 };
 use aven_caps::crypto::{
 	cell_seal_aad, column_type_slug, decrypt_keyshare_payload, derive_kek_x25519,
-	encrypt_keyshare_payload, keyshare_wrap_aad, random_identity_dek, seal_text_cell_payload,
+	encrypt_keyshare_payload, keyshare_wrap_aad, open_text_cell_payload, random_identity_dek,
+	seal_text_cell_payload,
 };
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -137,6 +138,27 @@ fn seal_identity_cell(
 	let slug = column_type_slug(&col.column_type);
 	let aad = cell_seal_aad(&urn, "identities", column, avenceo_id, dek_ver, slug);
 	seal_text_cell_payload(dek32, &aad, plaintext)
+}
+
+/// Inverse of [`seal_identity_cell`] — open a sealed trust-root cell back to cleartext so the
+/// server can rebuild the biscuit chain (the grant reads its own sealed genesis/issuer).
+fn unseal_identity_cell(
+	dek32: &[u8; 32],
+	avenceo_id: Uuid,
+	sparks_tbl: &TableSchema,
+	column: &str,
+	dek_ver: i64,
+	sealed: &str,
+) -> Result<String, String> {
+	let col = sparks_tbl
+		.columns
+		.column(column)
+		.ok_or_else(|| format!("unseal: identities has no {column} column"))?;
+	let urn = format!("identity:{avenceo_id}");
+	let slug = column_type_slug(&col.column_type);
+	let aad = cell_seal_aad(&urn, "identities", column, avenceo_id, dek_ver, slug);
+	let (plaintext, _ver) = open_text_cell_payload(dek32, sealed, &aad)?;
+	Ok(plaintext)
 }
 
 pub async fn ensure_avenceo_owned(
@@ -285,9 +307,22 @@ pub async fn maybe_grant_first_admin(
 	if peer_did == vault.peer_did {
 		return Ok(());
 	}
-	let Some((sparks_oid, genesis_b64, issuer_b64, dek_ver)) = read_avenceo_identity(engine, avenceo_id).await? else {
+	let Some((sparks_oid, sealed_genesis, sealed_issuer, dek_ver)) = read_avenceo_identity(engine, avenceo_id).await? else {
 		return Ok(());
 	};
+
+	// The trust-root cells are stored SEALED under the avenCEO DEK. Read the DEK (needed to
+	// unseal them now AND to re-seal/wrap below), unseal genesis_b64 + issuer_pubkey_b64, then
+	// rebuild the biscuit chain from cleartext.
+	let dek = read_server_dek(engine, &vault, signing, avenceo_id, dek_ver).await?;
+	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
+	let sparks_tbl = schema
+		.get(&TableName::new("identities"))
+		.ok_or("avenceo: no identities table")?;
+	let genesis_b64 =
+		unseal_identity_cell(&dek, avenceo_id, sparks_tbl, "genesis_b64", dek_ver, &sealed_genesis)?;
+	let issuer_b64 =
+		unseal_identity_cell(&dek, avenceo_id, sparks_tbl, "issuer_pubkey_b64", dek_ver, &sealed_issuer)?;
 	let issuer_pk = decode_issuer_pubkey_b64(&issuer_b64)?;
 	let chain = biscuit_from_storage(&genesis_b64, issuer_pk)?;
 	let owners = identity_admins(&chain, avenceo_id)?;
@@ -300,21 +335,13 @@ pub async fn maybe_grant_first_admin(
 	let new_chain = attenuate_add_owner_third_party(&vault.biscuit_kp, &chain, avenceo_id, &peer_did)?;
 	let new_genesis_b64 =
 		URL_SAFE_NO_PAD.encode(new_chain.to_vec().map_err(|e| format!("genesis_encode:{e:?}"))?);
-
-	// Read the avenCEO DEK once: needed to (1) re-seal the updated genesis cell so the client
-	// accepts it (board 0015 cleartext-downgrade refusal) and (2) wrap a keyshare to the peer.
-	let dek = read_server_dek(engine, &vault, signing, avenceo_id, dek_ver).await?;
-	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
-	let sparks_tbl = schema
-		.get(&TableName::new("identities"))
-		.ok_or("avenceo: no identities table")?;
-	let sealed_genesis =
+	let resealed_genesis =
 		seal_identity_cell(&dek, avenceo_id, sparks_tbl, "genesis_b64", dek_ver, &new_genesis_b64)?;
 	let upd_meta = owner_binding_meta(signing, sparks_oid, avenceo_id)?;
 	engine
 		.update_with_metadata(
 			sparks_oid,
-			vec![("genesis_b64".to_string(), Value::Text(sealed_genesis))],
+			vec![("genesis_b64".to_string(), Value::Text(resealed_genesis))],
 			upd_meta,
 		)
 		.await
