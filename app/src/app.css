@@ -142,7 +142,10 @@
 	--color-surface-card-selected: #efeada;
 
 	--color-background: var(--color-surface-cream);
-	--color-foreground: oklch(0.33 0.02 265);
+	/* Default text ink — a dark slate-blue (NOT pure black), tinted toward the
+	 * brand navy so body copy reads warm-cool rather than harsh black. Mirrors
+	 * the vibe `ink`/`text` token in brand.style.json. */
+	--color-foreground: #1f2a3d;
 	/* Preview host behind sandbox iframe — slight contrast vs. card surface */
 	--color-sandbox-host: color-mix(in srgb, var(--color-background) 94%, var(--color-foreground));
 
@@ -155,6 +158,11 @@
 
 	--color-primary: var(--color-brand-navy);
 	--color-primary-foreground: #f8fafc;
+	/* Secondary button — the light cream/yellow fill (cf. the invoice
+	 * "Rechnung ansehen" action). Primary stays brand navy; secondary is this
+	 * warm cream with navy text. Mirrors brand.style.json `secondary`. */
+	--color-secondary: #f3e7c6;
+	--color-secondary-foreground: var(--color-brand-navy);
 	/* Lighter, slightly desaturated steel/slate blue derived from the brand navy
 	 * (#1E293B). Used for accent chrome (e.g. the mic button's 3px side borders)
 	 * where the deep navy fill would visually overpower the surrounding cream UI. */
