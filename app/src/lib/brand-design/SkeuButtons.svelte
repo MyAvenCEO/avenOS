@@ -72,25 +72,34 @@
 		grid-template-columns: repeat(3, 1fr);
 		gap: 2rem;
 
-		/* dark surface (default) */
+		/* Master palette mirrors the toggle: BLACK shadows + WHITE highlights
+		   (reads creamish/warm on the light surface, not bluish). 3D offsets
+		   are unchanged — only the shadow colours. */
 		--surf: #1d2532;
-		--sh: rgba(9, 14, 26, 0.55); /* raised drop shadow (bottom-right) */
-		--hl: rgba(120, 140, 180, 0.1); /* raised highlight (top-left), bluish */
-		--sh-in: rgba(0, 0, 0, 0.46); /* active inset — slightly less contrast */
-		--hl-in: rgba(255, 255, 255, 0.05);
-		--emboss-sh: rgba(8, 13, 26, 0.85); /* content emboss shadow */
-		--emboss-hl: rgba(125, 145, 185, 0.22); /* content emboss highlight */
+		--sh: rgba(0, 0, 0, 0.5); /* raised drop shadow (bottom-right) */
+		--hl: rgba(255, 255, 255, 0.07); /* raised highlight (top-left) */
+		--emboss-sh: rgba(0, 0, 0, 0.7); /* content emboss shadow */
+		--emboss-hl: rgba(255, 255, 255, 0.1); /* content emboss highlight */
 		--ink-idle: #2c3950; /* idle content — tone-on-tone, way darker on dark */
+		/* pressed-IN groove — mirrors the toggle's recessed track */
+		--track-fill: rgba(0, 0, 0, 0.32);
+		--track-top: rgba(0, 0, 0, 0.34);
+		--track-deep: rgba(0, 0, 0, 0.24);
+		--track-rim: rgba(0, 0, 0, 0.22);
+		--track-glow: rgba(255, 255, 255, 0.07);
 	}
 	.grid.is-light {
 		--surf: #dedad3;
-		--sh: rgba(163, 177, 198, 0.55);
-		--hl: rgba(255, 255, 255, 0.92);
-		--sh-in: rgba(0, 0, 0, 0.15); /* active inset — slightly less contrast */
-		--hl-in: rgba(255, 255, 255, 0.7);
-		--emboss-sh: rgba(163, 177, 198, 0.75);
+		--sh: rgba(0, 0, 0, 0.16);
+		--hl: rgba(255, 255, 255, 0.9);
+		--emboss-sh: rgba(0, 0, 0, 0.2);
 		--emboss-hl: rgba(255, 255, 255, 0.95);
 		--ink-idle: #d8d3c9; /* idle content — way lighter cream on light */
+		--track-fill: rgba(0, 0, 0, 0.1);
+		--track-top: rgba(0, 0, 0, 0.2);
+		--track-deep: rgba(0, 0, 0, 0.1);
+		--track-rim: rgba(0, 0, 0, 0.12);
+		--track-glow: rgba(255, 255, 255, 0.45);
 	}
 
 	.c-button {
@@ -112,17 +121,16 @@
 			-0.12rem -0.12rem 0.2rem var(--hl);
 	}
 
-	/* Active = pressed in (recessed); content lights up its accent colour. */
+	/* Active = physically pressed IN — recessed like the toggle's track:
+	   a soft inner fill + top-weighted inset shadow + a thin outer rim. */
 	.c-button.active {
-		background: linear-gradient(to top, rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.03));
+		background: transparent;
 		box-shadow:
-			inset 0.16rem 0.16rem 0.6rem var(--sh-in),
-			inset 0.5rem 0.5rem 1.2rem var(--sh-in),
-			inset -0.3rem -0.3rem 0.6rem var(--hl-in),
-			0.12rem 0.12rem 0.5rem var(--sh);
-	}
-	.grid.is-light .c-button.active {
-		background: linear-gradient(to top, rgba(163, 177, 198, 0.1), rgba(255, 255, 255, 0.4));
+			inset 0 0 2.4rem 1.4rem var(--track-fill),
+			inset 0 0.55rem 0.45rem var(--track-top),
+			inset 0 1.1rem 0.7rem var(--track-deep),
+			0 -0.2rem 0.2rem var(--track-rim),
+			0 0.25rem 0.25rem var(--track-glow);
 	}
 
 	/* Icon + label are "burned into" the button — embossed (raised, braille/
