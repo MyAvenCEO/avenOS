@@ -8,7 +8,7 @@ const tokens: StyleDef['tokens'] = {
 	text: '#1a1a1a',
 	accent: '#b3261e',
 	'radius-2xl': '2rem',
-	'font-sans': "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+	'font-sans': "'Chillax', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 }
 
 const selectors: StyleDef['selectors'] = {
