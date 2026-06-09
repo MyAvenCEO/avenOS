@@ -26,6 +26,8 @@
 </div>
 
 <style>
+	/* Card = the general button's inactive (raised) style: transparent surface,
+	   black drop shadow + white highlight (mirrors the toggle). */
 	.todo {
 		display: flex;
 		align-items: center;
@@ -33,23 +35,20 @@
 		width: min(26rem, 100%);
 		padding: 1.25rem 1.5rem;
 		border-radius: 1.5rem;
-		background: #232c3b;
+		background: transparent;
 		color: #dedad3;
-		transition: background-color 300ms ease-out, color 300ms ease-out, box-shadow 300ms ease-out;
+		transition: color 300ms ease-out, box-shadow 300ms ease-out;
 		box-shadow:
-			0 0.6rem 1.2rem rgba(0, 0, 0, 0.45),
-			0 0.15rem 0.35rem rgba(0, 0, 0, 0.35),
-			inset 0 0.12rem 0.18rem rgba(255, 255, 255, 0.07),
-			inset 0 -0.12rem 0.22rem rgba(0, 0, 0, 0.3);
+			0.55rem 0.55rem 1.5rem rgba(0, 0, 0, 0.5),
+			-0.5rem -0.5rem 1.3rem rgba(255, 255, 255, 0.07),
+			-0.12rem -0.12rem 0.2rem rgba(255, 255, 255, 0.07);
 	}
 	.todo.is-light {
-		background: #e4e0d8;
 		color: #2a2520;
 		box-shadow:
-			0 0.6rem 1.2rem rgba(0, 0, 0, 0.16),
-			0 0.15rem 0.35rem rgba(0, 0, 0, 0.1),
-			inset 0 0.12rem 0.18rem rgba(255, 255, 255, 0.75),
-			inset 0 -0.12rem 0.22rem rgba(0, 0, 0, 0.1);
+			0.55rem 0.55rem 1.5rem rgba(0, 0, 0, 0.16),
+			-0.5rem -0.5rem 1.3rem rgba(255, 255, 255, 0.9),
+			-0.12rem -0.12rem 0.2rem rgba(255, 255, 255, 0.9);
 	}
 
 	/* Recessed skeuo checkbox (empty = pressed-in well) */
@@ -86,23 +85,23 @@
 		transition: opacity 200ms ease-out, transform 200ms ease-out;
 	}
 
-	/* Checked = raised + filled accent */
+	/* Checked = an inner glowing lamp: stays recessed, but the well lights up
+	   with a soft radial accent glow (inner + outer halo). */
 	.check.checked {
-		background: #2f7d57;
-		color: #eafaf1;
+		background: radial-gradient(circle at 50% 42%, #66e6a0 0%, #2f9c63 52%, #1f6b44 100%);
+		color: #eafff3;
 		box-shadow:
-			inset 0 0.14rem 0.2rem rgba(255, 255, 255, 0.25),
-			inset 0 -0.14rem 0.25rem rgba(0, 0, 0, 0.4),
-			0 0.4rem 0.6rem rgba(0, 0, 0, 0.4),
-			0 0.1rem 0.2rem rgba(0, 0, 0, 0.3);
+			inset 0 0.16rem 0.4rem rgba(0, 0, 0, 0.5),
+			inset 0 0 0.8rem rgba(150, 255, 200, 0.55),
+			0 0 0.9rem 0.04rem rgba(60, 200, 130, 0.55);
 	}
 	.todo.is-light .check.checked {
-		background: #3a9468;
+		background: radial-gradient(circle at 50% 42%, #74ecab 0%, #38a86f 55%, #2c8457 100%);
+		color: #f2fff8;
 		box-shadow:
-			inset 0 0.14rem 0.2rem rgba(255, 255, 255, 0.4),
-			inset 0 -0.14rem 0.25rem rgba(0, 0, 0, 0.25),
-			0 0.4rem 0.6rem rgba(0, 0, 0, 0.2),
-			0 0.1rem 0.2rem rgba(0, 0, 0, 0.15);
+			inset 0 0.16rem 0.4rem rgba(0, 0, 0, 0.25),
+			inset 0 0 0.8rem rgba(190, 255, 220, 0.6),
+			0 0 0.9rem 0.04rem rgba(70, 195, 135, 0.5);
 	}
 	.check.checked svg {
 		opacity: 1;

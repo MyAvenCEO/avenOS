@@ -82,9 +82,11 @@
 		--surf: #1d2532;
 		--sh: rgba(0, 0, 0, 0.5);
 		--hl: rgba(255, 255, 255, 0.07);
-		--emboss-sh: rgba(0, 0, 0, 0.7);
-		--emboss-hl: rgba(255, 255, 255, 0.1);
+		--emboss-sh: rgba(0, 0, 0, 0.38);
+		--emboss-hl: rgba(255, 255, 255, 0.12);
 		--nav-ink: #36435a;
+		--nav-active-ink: #b3c0d2;
+		--nav-glow: rgba(150, 180, 220, 0.42);
 		--track-fill: rgba(0, 0, 0, 0.32);
 		--track-top: rgba(0, 0, 0, 0.34);
 		--track-deep: rgba(0, 0, 0, 0.24);
@@ -98,9 +100,11 @@
 		--surf: #dedad3;
 		--sh: rgba(0, 0, 0, 0.16);
 		--hl: rgba(255, 255, 255, 0.9);
-		--emboss-sh: rgba(0, 0, 0, 0.2);
+		--emboss-sh: rgba(0, 0, 0, 0.13);
 		--emboss-hl: rgba(255, 255, 255, 0.95);
 		--nav-ink: #cec9bf;
+		--nav-active-ink: #514d46;
+		--nav-glow: rgba(255, 255, 255, 0.6);
 		--track-fill: rgba(0, 0, 0, 0.1);
 		--track-top: rgba(0, 0, 0, 0.2);
 		--track-deep: rgba(0, 0, 0, 0.1);
@@ -161,8 +165,8 @@
 		background: transparent;
 		color: var(--nav-ink);
 		text-shadow:
-			-0.04rem -0.04rem 0.03rem var(--emboss-hl),
-			0.07rem 0.07rem 0.08rem var(--emboss-sh);
+			-0.03rem -0.03rem 0.05rem var(--emboss-hl),
+			0.04rem 0.05rem 0.14rem var(--emboss-sh);
 		transition: box-shadow 150ms ease-out, background 150ms ease-out, color 150ms ease-out;
 		box-shadow:
 			0.5rem 0.5rem 1.3rem var(--sh),
@@ -170,10 +174,13 @@
 			-0.1rem -0.1rem 0.18rem var(--hl);
 	}
 
-	/* Selected = physically pressed IN — recessed like the toggle's track. */
+	/* Selected = physically pressed IN — recessed like the toggle's track.
+	   The label lifts with a SOFT glow (not hard white), echoing the active
+	   colour buttons. */
 	.skeu-nav.active {
-		color: inherit;
+		color: var(--nav-active-ink);
 		background: transparent;
+		text-shadow: 0 0 0.5rem var(--nav-glow);
 		box-shadow:
 			inset 0 0 2.4rem 1.4rem var(--track-fill),
 			inset 0 0.55rem 0.45rem var(--track-top),
