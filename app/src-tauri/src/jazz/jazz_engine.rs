@@ -1008,6 +1008,11 @@ pub(super) async fn hydrate_shell(
 				issuer_opened.as_deref(),
 				biscuit_root_pub,
 			) {
+				eprintln!(
+					"[INGESTDIAG] skip identity {sid} biscuit ingest FAILED: {e} (issuer_opened={}, genesis_len={})",
+					issuer_opened.is_some(),
+					genesis_b64.len()
+				);
 				log::warn!(
 					target: "avenos::jazz",
 					"hydrate_shell: skip identity {sid} (biscuit ingest): {e}",
