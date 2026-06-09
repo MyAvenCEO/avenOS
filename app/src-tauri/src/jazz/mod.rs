@@ -2940,9 +2940,19 @@ pub(crate) async fn groove_ipc_aven_ceo_membership(
 	let shell = shell_arc.as_ref();
 	let identity_uuid = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
 	let Some(bisc) = shell.vault.identities.get(&identity_uuid) else {
+		eprintln!(
+			"[MEMDIAG] avenCEO NOT in vault (rehydrate/keyshare-decrypt missing) peer_did={} → none",
+			shell.peer_did
+		);
 		return Ok("none".to_string());
 	};
-	if crate::identity_acc::identity_peer_is_owner(&bisc.biscuit, identity_uuid, &shell.peer_did)? {
+	let owner = crate::identity_acc::identity_peer_is_owner(&bisc.biscuit, identity_uuid, &shell.peer_did)?;
+	let owners = crate::identity_acc::identity_admins(&bisc.biscuit, identity_uuid).unwrap_or_default();
+	eprintln!(
+		"[MEMDIAG] avenCEO IN vault peer_did={} is_owner={} chain_owners={:?}",
+		shell.peer_did, owner, owners
+	);
+	if owner {
 		return Ok("owner".to_string());
 	}
 	// Merely HYDRATING the avenCEO genesis is NOT membership — the genesis syncs widely, so a
