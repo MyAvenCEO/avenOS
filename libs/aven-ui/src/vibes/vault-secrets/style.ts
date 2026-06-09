@@ -44,7 +44,7 @@ const selectors: StyleDef['selectors'] = {
 	'.vs-error.vs-has-error': { display: 'block' },
 	'.vs-add-card, .vs-list-card': {
 		background: 'var(--tech-fill)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-lg)',
 		padding: '16px 18px',
 	},
@@ -116,7 +116,7 @@ const selectors: StyleDef['selectors'] = {
 		color: 'var(--muted)',
 		textAlign: 'center',
 		padding: '1.25rem 1rem',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-md)',
 	},
 	'.vs-list:has(.vs-row) ~ .vs-empty, .vs-list-card:has(.vs-row) .vs-empty': { display: 'none' },

@@ -19,7 +19,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bs-card': {
 		background: 'var(--tech-fill)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		padding: '18px 20px',
 		marginBottom: '16px',
@@ -59,7 +59,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bs-banner': {
 		background: 'var(--tech-fill-inner)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		padding: '14px 20px',
 		marginBottom: '16px',
@@ -133,7 +133,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bs-items-wrap': {
 		background: 'var(--tech-fill)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		overflow: 'auto',
 		marginBottom: '16px',

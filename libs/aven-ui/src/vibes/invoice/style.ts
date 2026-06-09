@@ -30,7 +30,7 @@ const components: StyleDef['components'] = {
 	},
 	invoiceCard: {
 		background: 'var(--tech-fill)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		padding: '18px 20px',
 		' h4': {
@@ -119,7 +119,7 @@ const components: StyleDef['components'] = {
 	},
 	invoiceDocBanner: {
 		background: 'var(--tech-fill-inner)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		padding: '14px 20px',
 		marginBottom: '16px',
@@ -188,7 +188,7 @@ const components: StyleDef['components'] = {
 	},
 	invoiceItemsWrap: {
 		background: 'var(--tech-fill)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		overflow: 'auto',
 		marginBottom: '16px',
@@ -305,7 +305,7 @@ const components: StyleDef['components'] = {
 		maxWidth: '380px',
 		minWidth: '260px',
 		background: 'var(--tech-fill)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		fontSize: '15px',
 		marginTop: '12px',
