@@ -81,11 +81,11 @@
 		--surf: #1d2532;
 		--sh: rgba(9, 14, 26, 0.55);
 		--hl: rgba(120, 140, 180, 0.1);
-		--sh-in: rgba(22, 32, 54, 0.5);
-		--hl-in: rgba(120, 140, 180, 0.08);
+		--sh-in: rgba(0, 0, 0, 0.55);
+		--hl-in: rgba(255, 255, 255, 0.05);
 		--emboss-sh: rgba(8, 13, 26, 0.85);
 		--emboss-hl: rgba(125, 145, 185, 0.22);
-		--nav-ink: rgba(222, 218, 211, 0.82);
+		--nav-ink: #93a2b8;
 	}
 	.stage.is-light {
 		background-color: #dedad3;
@@ -94,11 +94,11 @@
 		--surf: #dedad3;
 		--sh: rgba(163, 177, 198, 0.55);
 		--hl: rgba(255, 255, 255, 0.92);
-		--sh-in: rgba(150, 162, 184, 0.34);
-		--hl-in: rgba(255, 255, 255, 0.85);
+		--sh-in: rgba(0, 0, 0, 0.2);
+		--hl-in: rgba(255, 255, 255, 0.7);
 		--emboss-sh: rgba(163, 177, 198, 0.75);
 		--emboss-hl: rgba(255, 255, 255, 0.95);
-		--nav-ink: rgba(29, 37, 50, 0.82);
+		--nav-ink: #6f6c63;
 	}
 	.noise {
 		position: absolute;
