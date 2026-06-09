@@ -140,8 +140,10 @@
 		width: 1.65rem;
 		height: 1.65rem;
 		color: var(--ink-idle);
-		filter: drop-shadow(0.08rem 0.09rem 0.12rem var(--emboss-sh))
-			drop-shadow(-0.08rem -0.09rem 0.11rem var(--emboss-hl));
+		/* Reference elevation: equal x/y offset, blur ~2x offset -> soft, diffuse
+		   raised bump (dark shadow bottom-right, light highlight top-left). */
+		filter: drop-shadow(0.09rem 0.09rem 0.2rem var(--emboss-sh))
+			drop-shadow(-0.09rem -0.09rem 0.18rem var(--emboss-hl));
 		transition: filter 150ms ease-out, color 150ms ease-out;
 	}
 	.c-button__label {
@@ -151,10 +153,11 @@
 		font-weight: 700;
 		letter-spacing: 0.01em;
 		color: var(--ink-idle);
-		text-shadow:
-			-0.06rem -0.07rem 0.04rem var(--emboss-hl),
-			0.07rem 0.08rem 0.11rem var(--emboss-sh);
-		transition: text-shadow 150ms ease-out, color 150ms ease-out;
+		/* Same drop-shadow elevation as the icon (NOT text-shadow) so the text
+		   gets the same clean diffuse bump without a heavy bottom shadow. */
+		filter: drop-shadow(0.09rem 0.09rem 0.2rem var(--emboss-sh))
+			drop-shadow(-0.09rem -0.09rem 0.18rem var(--emboss-hl));
+		transition: filter 150ms ease-out, color 150ms ease-out;
 	}
 
 	/* Active -> full accent, lit with a soft glow */
@@ -165,8 +168,7 @@
 	}
 	.c-button.active .c-button__label {
 		color: var(--accent);
-		text-shadow:
-			0.03rem 0.03rem 0.05rem var(--emboss-sh),
-			0 0 0.4rem color-mix(in srgb, var(--accent) 45%, transparent);
+		filter: drop-shadow(0.03rem 0.03rem 0.06rem var(--emboss-sh))
+			drop-shadow(0 0 0.35rem color-mix(in srgb, var(--accent) 50%, transparent));
 	}
 </style>

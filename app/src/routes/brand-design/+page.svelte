@@ -39,7 +39,7 @@
 						aria-current={selected === item.id ? 'page' : undefined}
 						onclick={() => (selected = item.id)}
 					>
-						{item.label}
+						<span class="skeu-nav__label">{item.label}</span>
 					</button>
 				{/each}
 			</nav>
@@ -164,14 +164,19 @@
 		letter-spacing: -0.01em;
 		background: transparent;
 		color: var(--nav-ink);
-		text-shadow:
-			-0.06rem -0.07rem 0.04rem var(--emboss-hl),
-			0.07rem 0.08rem 0.11rem var(--emboss-sh);
 		transition: box-shadow 150ms ease-out, background 150ms ease-out, color 150ms ease-out;
 		box-shadow:
 			0.5rem 0.5rem 1.3rem var(--sh),
 			-0.45rem -0.45rem 1.1rem var(--hl),
 			-0.1rem -0.1rem 0.18rem var(--hl);
+	}
+	/* Drop-shadow elevation on the LABEL (not the button, which owns the
+	   neumorphic box-shadow) — same clean diffuse bump as the grid text. */
+	.skeu-nav__label {
+		display: inline-block;
+		filter: drop-shadow(0.08rem 0.08rem 0.16rem var(--emboss-sh))
+			drop-shadow(-0.08rem -0.08rem 0.16rem var(--emboss-hl));
+		transition: filter 150ms ease-out;
 	}
 
 	/* Selected = physically pressed IN — recessed like the toggle's track.
@@ -180,13 +185,15 @@
 	.skeu-nav.active {
 		color: var(--nav-active-ink);
 		background: transparent;
-		text-shadow: 0 0 0.5rem var(--nav-glow);
 		box-shadow:
 			inset 0 0 2.4rem 1.4rem var(--track-fill),
 			inset 0 0.55rem 0.45rem var(--track-top),
 			inset 0 1.1rem 0.7rem var(--track-deep),
 			0 -0.2rem 0.2rem var(--track-rim),
 			0 0.25rem 0.25rem var(--track-glow);
+	}
+	.skeu-nav.active .skeu-nav__label {
+		filter: drop-shadow(0 0 0.5rem var(--nav-glow));
 	}
 
 	.content {
