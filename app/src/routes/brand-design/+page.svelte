@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ButtonTwo from '$lib/brand-design/ButtonTwo.svelte'
 	import NeumorphicToggle from '$lib/brand-design/NeumorphicToggle.svelte'
 	import SkeuButtons from '$lib/brand-design/SkeuButtons.svelte'
 	import SkeuTodo from '$lib/brand-design/SkeuTodo.svelte'
@@ -6,13 +7,14 @@
 
 	// The toggle drives the surrounding surface (a real dark-mode switch).
 	let light = $state(false)
-	type CompId = 'toggle' | 'todo' | 'buttons'
+	type CompId = 'toggle' | 'todo' | 'buttons' | 'button2'
 	let selected = $state<CompId>('toggle')
 
 	const items: { id: CompId; label: string }[] = [
 		{ id: 'toggle', label: 'Toggle' },
 		{ id: 'todo', label: 'Todo item' },
 		{ id: 'buttons', label: 'Buttons' },
+		{ id: 'button2', label: 'Button2' },
 	]
 
 	const NOISE =
@@ -58,6 +60,8 @@
 					<SkeuTodo {light} />
 				{:else if selected === 'buttons'}
 					<SkeuButtons {light} />
+				{:else if selected === 'button2'}
+					<ButtonTwo bind:light />
 				{/if}
 			</div>
 		</main>
