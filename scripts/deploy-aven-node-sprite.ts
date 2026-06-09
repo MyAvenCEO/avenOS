@@ -130,8 +130,9 @@ if (WANT_BUILD) {
 			// detached: setsid + a LOGIN shell (sh -lc) so the exec disconnecting can't SIGHUP it
 			// AND cargo is on PATH (the Sprite's cargo is /.sprite/bin/cargo, only on the login
 			// PATH — a non-login `sh -c` can't find it). cargo's exit code → DONE sentinel.
-			`setsid sh -lc 'cd ${SRC_DIR} && ${BUILD_INVOCATION} > ${LOG} 2>&1; echo $? > ${DONE}' </dev/null >/dev/null 2>&1 &`,
-			'echo launched'
+			// NB: `& echo` on one line — a `;` after `&` is a dash syntax error, so this entry
+			// must stay last and must not be `; `-joined with a following command.
+			`setsid sh -lc 'cd ${SRC_DIR} && ${BUILD_INVOCATION} > ${LOG} 2>&1; echo $? > ${DONE}' </dev/null >/dev/null 2>&1 & echo launched`
 		].join('; ')
 	])
 	if (launch.status !== 0 || !(launch.stdout ?? '').includes('launched')) {
