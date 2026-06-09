@@ -149,7 +149,7 @@ fn open_sealed_text_for_identity(
 	// Newest version first: when several held versions exist, prefer opening the
 	// current-version envelope (a minor rollback-preference hardening).
 	vers.sort_unstable_by(|a, b| b.cmp(a));
-	for &dv in &vers {
+	for dv in vers {
 		let Some(dek) = deks.get(&(identity, dv)) else {
 			continue;
 		};
@@ -160,12 +160,6 @@ fn open_sealed_text_for_identity(
 		if let Ok((opened, _)) = open_text_cell_payload(dek.expose(), raw, &expected_aad) {
 			return Ok(opened);
 		}
-	}
-	if require_sealed {
-		eprintln!(
-			"[SEALDIAG] open FAIL {}.{} identity={} coord.row={} vers_held={:?} slug={}",
-			coord.table, coord.column, identity, coord.row, vers, slug
-		);
 	}
 	Err(format!("hydrate_open_sealed:{identity}"))
 }
@@ -372,12 +366,6 @@ pub(super) fn seal_column_plain(
 	let urn = identity_urn(identity);
 	let slug = column_type_slug(storage_ty);
 	let aad = cell_seal_aad(&urn, table, col_name, row, v, slug);
-	if col_name == "genesis_b64" || col_name == "issuer_pubkey_b64" {
-		eprintln!(
-			"[SEALDIAG] seal(state) {}.{} identity={} row={} v={} slug={}",
-			table, col_name, identity, row, v, slug
-		);
-	}
 	seal_text_cell_payload(dek_entry.expose(), &aad, canonical_plaintext_utf8)
 }
 
@@ -397,12 +385,6 @@ pub(super) fn seal_cell_with_dek(
 	let urn = identity_urn(identity);
 	let slug = column_type_slug(storage_ty);
 	let aad = cell_seal_aad(&urn, table, col_name, row, dek_version, slug);
-	if col_name == "genesis_b64" || col_name == "issuer_pubkey_b64" {
-		eprintln!(
-			"[SEALDIAG] seal(dek) {}.{} identity={} row={} v={} slug={}",
-			table, col_name, identity, row, dek_version, slug
-		);
-	}
 	seal_text_cell_payload(dek32, &aad, canonical_plaintext_utf8)
 }
 
@@ -558,7 +540,7 @@ fn map_sensitive_storage_cell(
 			});
 		}
 	}
-	// DIAG: a sealed cell we received but cannot open — either we hold no DEK for this
+	// A sealed cell we received but cannot open — either we hold no DEK for this
 	// identity (keyshare never arrived/unwrapped), only a wrong-version one, or the envelope
 	// was relocated/tampered (its coordinates no longer match this slot).
 	let held: Vec<i64> = state
@@ -569,7 +551,7 @@ fn map_sensitive_storage_cell(
 		.collect();
 	log::warn!(
 		target: "avenos::jazz",
-		"KSDIAG decrypt-MISS: identity={identity} col={} held_dek_versions={held:?}",
+		"decrypt-MISS: identity={identity} col={} held_dek_versions={held:?}",
 		coord.column,
 	);
 	miss.push(coord.column.into());
@@ -836,11 +818,6 @@ pub(super) async fn hydrate_shell(
 
 	let mut identity_versions = HashMap::new();
 	let sparks_rows = exec_list_rows(client, "identities").await?;
-	eprintln!(
-		"[QRYDIAG] exec_list_rows(identities) → {} row(s): {:?}",
-		sparks_rows.len(),
-		sparks_rows.iter().map(|(oid, _)| oid.uuid().to_string()).collect::<Vec<_>>()
-	);
 	let ver_storage_ty = sparks_schema
 		.columns
 		.columns
@@ -878,14 +855,11 @@ pub(super) async fn hydrate_shell(
 		let ks_wrapper_ix = col_ix(&ks_schema, "wrapper_did")?;
 		let ks_wrap_ix = col_ix(&ks_schema, "wrapped_dek")?;
 
-		// DIAG: the member-decrypt bug lives here or upstream. Log the whole keyshare
-		// picture so one repro pinpoints it: total rows synced in, which are addressed to
-		// THIS device, which unwrap, and the final DEK set. (target avenos::jazz, INFO.)
 		let all_keyshares = exec_list_rows(client, "keyshares").await?;
 		let mut ks_for_me = 0usize;
 		log::info!(
 			target: "avenos::jazz",
-			"KSDIAG hydrate: {} keyshare row(s) in store; me={}",
+			"keyshare hydrate: {} keyshare row(s) in store; me={}",
 			all_keyshares.len(), vault.peer_did,
 		);
 		for (_oid, vals) in all_keyshares {
@@ -901,7 +875,7 @@ pub(super) async fn hydrate_shell(
 			if recipient != vault.peer_did {
 				log::debug!(
 					target: "avenos::jazz",
-					"KSDIAG not-for-me: identity={sid} v={dv} recipient={recipient}",
+					"keyshare not-for-me: identity={sid} v={dv} recipient={recipient}",
 				);
 				continue;
 			}
@@ -928,34 +902,28 @@ pub(super) async fn hydrate_shell(
 				Ok(raw32) => {
 					log::info!(
 						target: "avenos::jazz",
-						"KSDIAG unlocked DEK: identity={sid} v={dv} wrapper={wrapper_did}",
+						"keyshare unlocked DEK: identity={sid} v={dv} wrapper={wrapper_did}",
 					);
 					deks.insert((sid, dv), Dek::from_plain_32(raw32));
 				}
 				Err(e) => {
-					eprintln!("[MEMDIAG] KSDIAG unwrap_FAIL identity={sid} v={dv} wrapper={wrapper_did}: {e}");
 					log::warn!(
 						target: "avenos::jazz",
-						"KSDIAG unwrap_FAIL: identity={sid} v={dv} wrapper={wrapper_did}: {e}",
+						"keyshare unwrap_FAIL: identity={sid} v={dv} wrapper={wrapper_did}: {e}",
 					);
 				}
 			}
 		}
-		eprintln!(
-			"[MEMDIAG] KSDIAG done: ks_for_me={ks_for_me} deks_unlocked={}",
-			deks.len()
-		);
 		log::info!(
 			target: "avenos::jazz",
-			"KSDIAG done: {ks_for_me} keyshare(s) addressed to me → {} DEK(s) unlocked",
+			"keyshare hydrate done: {ks_for_me} keyshare(s) addressed to me → {} DEK(s) unlocked",
 			deks.len(),
 		);
 
-		for (oid, vals) in &sparks_rows {
+		for (_oid, vals) in &sparks_rows {
 			let sid = match uuid_cell_at(vals.as_slice(), identity_id_ix) {
 				Ok(s) => s,
 				Err(e) => {
-					eprintln!("[QRYDIAG] skip identity row obj={} (owner cell unreadable): {e}", oid.uuid());
 					log::warn!(target: "avenos::jazz", "hydrate_shell: skip identity row (owner): {e}");
 					continue;
 				}
@@ -963,7 +931,6 @@ pub(super) async fn hydrate_shell(
 			let genesis_cell = match vals.get(genesis_ix) {
 				Some(c) => c,
 				None => {
-					eprintln!("[QRYDIAG] skip identity {sid} obj={} (missing genesis cell)", oid.uuid());
 					log::warn!(target: "avenos::jazz", "hydrate_shell: skip identity {sid} (missing genesis)");
 					continue;
 				}
@@ -979,7 +946,6 @@ pub(super) async fn hydrate_shell(
 			let genesis_b64 = match hydrate_text_at(&deks, sid, &genesis_coord, genesis_cell, true) {
 				Ok(g) => g,
 				Err(e) => {
-					eprintln!("[MEMDIAG] hydrate skip identity {sid} (genesis_b64 open failed, require_sealed=true): {e}");
 					log::warn!(
 						target: "avenos::jazz",
 						"hydrate_shell: skip identity {sid} (genesis open): {e}",
@@ -1017,11 +983,6 @@ pub(super) async fn hydrate_shell(
 				issuer_opened.as_deref(),
 				biscuit_root_pub,
 			) {
-				eprintln!(
-					"[INGESTDIAG] skip identity {sid} biscuit ingest FAILED: {e} (issuer_opened={}, genesis_len={})",
-					issuer_opened.is_some(),
-					genesis_b64.len()
-				);
 				log::warn!(
 					target: "avenos::jazz",
 					"hydrate_shell: skip identity {sid} (biscuit ingest): {e}",

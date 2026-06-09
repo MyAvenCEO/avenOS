@@ -94,32 +94,7 @@ pub fn compute_row_digest(
         hasher.update(&[0u8]);
     }
 
-    let out = Digest32(*hasher.finalize().as_bytes());
-    // [DIGDIAG] temporary: dump the digest preimage for owner-bound (spark) rows so we can
-    // diff the server's sign-time inputs ([S]) against the client's verify-time inputs ([A])
-    // and find which field makes a grant UPDATE's edit-sig digest mismatch.
-    let is_spark_dbg = metadata
-        .map(|m| {
-            m.iter()
-                .any(|(k, _)| k == crate::capability::OWNER_BINDING_META_KEY)
-        })
-        .unwrap_or(false);
-    if is_spark_dbg {
-        let d = out.0;
-        let meta_dump: Vec<String> = metadata
-            .map(|m| {
-                m.iter()
-                    .filter(|(k, _)| *k != crate::capability::EDIT_SIG_META_KEY)
-                    .map(|(k, v)| format!("{k}={}", v.len()))
-                    .collect()
-            })
-            .unwrap_or_default();
-        eprintln!(
-            "[DIGDIAG] digest={:02x}{:02x}{:02x}{:02x} branch={} nparents={} data_len={} updated_at={} updated_by={} kind={} is_deleted={} meta=[{}]",
-            d[0], d[1], d[2], d[3], branch, parents.len(), data.len(), updated_at, updated_by, kind_tag, is_deleted, meta_dump.join(",")
-        );
-    }
-    out
+    Digest32(*hasher.finalize().as_bytes())
 }
 
 fn metadata_entry_descriptor() -> &'static RowDescriptor {
