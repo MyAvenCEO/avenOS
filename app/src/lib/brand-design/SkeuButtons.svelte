@@ -76,21 +76,21 @@
 		--surf: #1d2532;
 		--sh: rgba(9, 14, 26, 0.55); /* raised drop shadow (bottom-right) */
 		--hl: rgba(120, 140, 180, 0.1); /* raised highlight (top-left), bluish */
-		--sh-in: rgba(0, 0, 0, 0.55); /* active inset — original (darker) */
+		--sh-in: rgba(0, 0, 0, 0.46); /* active inset — slightly less contrast */
 		--hl-in: rgba(255, 255, 255, 0.05);
 		--emboss-sh: rgba(8, 13, 26, 0.85); /* content emboss shadow */
 		--emboss-hl: rgba(125, 145, 185, 0.22); /* content emboss highlight */
-		--ink-idle: #93a2b8; /* readable bg-variant for idle content (light on dark) */
+		--ink-idle: #2c3950; /* idle content — tone-on-tone, way darker on dark */
 	}
 	.grid.is-light {
 		--surf: #dedad3;
 		--sh: rgba(163, 177, 198, 0.55);
 		--hl: rgba(255, 255, 255, 0.92);
-		--sh-in: rgba(0, 0, 0, 0.2); /* active inset — original (darker) */
+		--sh-in: rgba(0, 0, 0, 0.15); /* active inset — slightly less contrast */
 		--hl-in: rgba(255, 255, 255, 0.7);
 		--emboss-sh: rgba(163, 177, 198, 0.75);
 		--emboss-hl: rgba(255, 255, 255, 0.95);
-		--ink-idle: #6f6c63; /* readable bg-variant for idle content (dark on light) */
+		--ink-idle: #d8d3c9; /* idle content — way lighter cream on light */
 	}
 
 	.c-button {
