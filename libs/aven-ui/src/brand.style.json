@@ -10,9 +10,9 @@
   "muted-strong": "rgba(31, 42, 61, 0.72)",
 
   "bg-a": "#f8f6ef",
-  "surface": "rgba(255, 255, 255, 0.45)",
-  "surface-2": "rgba(255, 255, 255, 0.66)",
-  "surface-raised": "rgba(255, 255, 255, 0.66)",
+  "surface": "rgba(255, 255, 255, 0.42)",
+  "surface-2": "rgba(255, 255, 255, 0.55)",
+  "surface-raised": "rgba(255, 255, 255, 0.55)",
 
   "border": "rgba(31, 42, 61, 0.14)",
   "border-soft": "rgba(31, 42, 61, 0.08)",
