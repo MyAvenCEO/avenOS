@@ -43,14 +43,16 @@
 
   "max-w": "56rem",
 
+  "fs-micro": "10px",
   "fs-eyebrow": "11px",
   "fs-label": "11px",
   "fs-meta": "12px",
   "fs-body": "13px",
-  "fs-title": "0.9375rem",
   "fs-section": "0.875rem",
+  "fs-title": "0.9375rem",
+  "fs-lead": "1.0625rem",
   "fs-hero": "1.25rem",
-  "fs-amount": "2.25rem",
+  "fs-amount": "1.5rem",
 
   "tracking-eyebrow": "0.08em",
   "tracking-tight": "-0.02em",

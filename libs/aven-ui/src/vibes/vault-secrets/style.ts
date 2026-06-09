@@ -25,19 +25,19 @@ const selectors: StyleDef['selectors'] = {
 	'.vs-header': { marginBottom: '4px' },
 	'.vs-title': {
 		margin: '0 0 6px 0',
-		fontSize: '1.125rem',
+		fontSize: 'var(--fs-lead)',
 		fontWeight: '500',
 		letterSpacing: '-0.02em',
 	},
 	'.vs-description': {
 		margin: '0',
-		fontSize: '0.875rem',
+		fontSize: 'var(--fs-section)',
 		color: 'var(--muted)',
 		lineHeight: '1.45',
 	},
 	'.vs-error': {
 		margin: '0',
-		fontSize: '0.875rem',
+		fontSize: 'var(--fs-section)',
 		color: 'var(--destructive)',
 		display: 'none',
 	},
@@ -50,7 +50,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.vs-section-title': {
 		margin: '0 0 12px 0',
-		fontSize: '0.875rem',
+		fontSize: 'var(--fs-section)',
 		fontWeight: '500',
 	},
 	'.vs-add-form': {
@@ -60,7 +60,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.vs-field': { display: 'flex', flexDirection: 'column', gap: '4px' },
 	'.vs-field-label': {
-		fontSize: '0.75rem',
+		fontSize: 'var(--fs-meta)',
 		color: 'var(--muted)',
 	},
 	'.vs-input': {
@@ -82,7 +82,7 @@ const selectors: StyleDef['selectors'] = {
 		borderRadius: 'var(--radius-md)',
 		padding: '0.5rem 0.85rem',
 		fontWeight: '500',
-		fontSize: '0.8125rem',
+		fontSize: 'var(--fs-body)',
 		border: 'none',
 		background: 'transparent',
 	},
@@ -105,14 +105,14 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.vs-loading': {
 		margin: '0',
-		fontSize: '0.875rem',
+		fontSize: 'var(--fs-section)',
 		color: 'var(--muted)',
 		display: 'none',
 	},
 	'.vs-loading.vs-is-loading': { display: 'block' },
 	'.vs-empty': {
 		margin: '0',
-		fontSize: '0.875rem',
+		fontSize: 'var(--fs-section)',
 		color: 'var(--muted)',
 		textAlign: 'center',
 		padding: '1.25rem 1rem',
@@ -144,7 +144,7 @@ const selectors: StyleDef['selectors'] = {
 	'.vs-row-main': { minWidth: '0', flex: '1' },
 	'.vs-row-id': {
 		fontFamily: 'var(--font-mono)',
-		fontSize: '0.875rem',
+		fontSize: 'var(--fs-section)',
 		overflow: 'hidden',
 		textOverflow: 'ellipsis',
 		whiteSpace: 'nowrap',
@@ -152,7 +152,7 @@ const selectors: StyleDef['selectors'] = {
 	'.vs-row-value': {
 		marginTop: '6px',
 		fontFamily: 'var(--font-mono)',
-		fontSize: '0.75rem',
+		fontSize: 'var(--fs-meta)',
 		color: 'var(--muted)',
 		wordBreak: 'break-all',
 	},
