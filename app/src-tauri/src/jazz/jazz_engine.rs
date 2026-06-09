@@ -428,16 +428,33 @@ fn sensitive_plaintext_cells(
 	out
 }
 
+/// The AAD `row` coordinate a sealed cell must bind to — which differs by READ path:
+/// - `identities.genesis_b64` / `issuer_pubkey_b64` are opened by the per-identity vault hydrate
+///   with `row = sid` (the identity/owner uuid) — see jazz_engine genesis_coord (`row: sid`).
+/// - every other sealed cell (incl. `identities.name`) is opened by `row_to_public_map` with
+///   `row = *oid.uuid()` (the row object id).
+/// Sealing under the wrong coordinate yields an unopenable cell (AAD mismatch), which evicts the
+/// identity from the vault. aven-node seals genesis/issuer under the identity uuid for the same
+/// reason — this keeps the app's writes consistent with both the hydrate and aven-node.
+fn aad_row_for(table: &str, col: &str, identity: Uuid, object_row: Uuid) -> Uuid {
+	if table == "identities" && (col == "genesis_b64" || col == "issuer_pubkey_b64") {
+		identity
+	} else {
+		object_row
+	}
+}
+
 /// UPDATE path: seal every registry-sensitive column in `patch` under the identity's current
 /// DEK (read from `ShellState`). Apply before `patch_updates` at every identity-scoped write so
 /// genesis/issuer/name/account_name/… never ship cleartext (the generic update path already
-/// does this; this brings the identity-specific IPCs in line).
+/// does this; this brings the identity-specific IPCs in line). `object_row` is the row's object
+/// id; the per-column AAD coordinate is resolved via `aad_row_for`.
 pub(super) fn seal_sensitive_in_patch(
 	state: &ShellState,
 	table: &str,
 	tbl: &TableSchema,
 	identity: Uuid,
-	row: Uuid,
+	object_row: Uuid,
 	patch: &mut Map<String, JsonValue>,
 ) -> Result<(), String> {
 	for (col, s) in sensitive_plaintext_cells(table, patch) {
@@ -446,7 +463,8 @@ pub(super) fn seal_sensitive_in_patch(
 			.column(&col)
 			.ok_or_else(|| format!("seal_missing_col:{col}"))?;
 		let canon = canon_cell_plaintext(table, &col, &cd.column_type, cd.nullable, &s)?;
-		let sealed = seal_column_plain(state, table, &col, &cd.column_type, identity, row, &canon)?;
+		let aad_row = aad_row_for(table, &col, identity, object_row);
+		let sealed = seal_column_plain(state, table, &col, &cd.column_type, identity, aad_row, &canon)?;
 		patch.insert(col, JsonValue::String(sealed));
 	}
 	Ok(())
@@ -459,7 +477,7 @@ pub(super) fn seal_sensitive_in_row_with_dek(
 	table: &str,
 	tbl: &TableSchema,
 	identity: Uuid,
-	row: Uuid,
+	object_row: Uuid,
 	dek_version: i64,
 	row_map: &mut Map<String, JsonValue>,
 ) -> Result<(), String> {
@@ -469,8 +487,9 @@ pub(super) fn seal_sensitive_in_row_with_dek(
 			.column(&col)
 			.ok_or_else(|| format!("seal_missing_col:{col}"))?;
 		let canon = canon_cell_plaintext(table, &col, &cd.column_type, cd.nullable, &s)?;
+		let aad_row = aad_row_for(table, &col, identity, object_row);
 		let sealed =
-			seal_cell_with_dek(dek32, table, &col, &cd.column_type, identity, row, dek_version, &canon)?;
+			seal_cell_with_dek(dek32, table, &col, &cd.column_type, identity, aad_row, dek_version, &canon)?;
 		row_map.insert(col, JsonValue::String(sealed));
 	}
 	Ok(())
