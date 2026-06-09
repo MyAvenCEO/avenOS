@@ -149,7 +149,7 @@ fn open_sealed_text_for_identity(
 	// Newest version first: when several held versions exist, prefer opening the
 	// current-version envelope (a minor rollback-preference hardening).
 	vers.sort_unstable_by(|a, b| b.cmp(a));
-	for dv in vers {
+	for &dv in &vers {
 		let Some(dek) = deks.get(&(identity, dv)) else {
 			continue;
 		};
@@ -160,6 +160,12 @@ fn open_sealed_text_for_identity(
 		if let Ok((opened, _)) = open_text_cell_payload(dek.expose(), raw, &expected_aad) {
 			return Ok(opened);
 		}
+	}
+	if require_sealed {
+		eprintln!(
+			"[SEALDIAG] open FAIL {}.{} identity={} coord.row={} vers_held={:?} slug={}",
+			coord.table, coord.column, identity, coord.row, vers, slug
+		);
 	}
 	Err(format!("hydrate_open_sealed:{identity}"))
 }
@@ -366,6 +372,12 @@ pub(super) fn seal_column_plain(
 	let urn = identity_urn(identity);
 	let slug = column_type_slug(storage_ty);
 	let aad = cell_seal_aad(&urn, table, col_name, row, v, slug);
+	if col_name == "genesis_b64" || col_name == "issuer_pubkey_b64" {
+		eprintln!(
+			"[SEALDIAG] seal(state) {}.{} identity={} row={} v={} slug={}",
+			table, col_name, identity, row, v, slug
+		);
+	}
 	seal_text_cell_payload(dek_entry.expose(), &aad, canonical_plaintext_utf8)
 }
 
@@ -385,6 +397,12 @@ pub(super) fn seal_cell_with_dek(
 	let urn = identity_urn(identity);
 	let slug = column_type_slug(storage_ty);
 	let aad = cell_seal_aad(&urn, table, col_name, row, dek_version, slug);
+	if col_name == "genesis_b64" || col_name == "issuer_pubkey_b64" {
+		eprintln!(
+			"[SEALDIAG] seal(dek) {}.{} identity={} row={} v={} slug={}",
+			table, col_name, identity, row, dek_version, slug
+		);
+	}
 	seal_text_cell_payload(dek32, &aad, canonical_plaintext_utf8)
 }
 
