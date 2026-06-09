@@ -78,8 +78,8 @@
 		--surf: #1d2532;
 		--sh: rgba(0, 0, 0, 0.5); /* raised drop shadow (bottom-right) */
 		--hl: rgba(255, 255, 255, 0.07); /* raised highlight (top-left) */
-		--emboss-sh: rgba(0, 0, 0, 0.38); /* content emboss shadow (soft) */
-		--emboss-hl: rgba(255, 255, 255, 0.12); /* content emboss highlight */
+		--emboss-sh: rgba(0, 0, 0, 0.48); /* content emboss shadow */
+		--emboss-hl: rgba(255, 255, 255, 0.3); /* content emboss highlight (stronger = more tactile) */
 		--ink-idle: #36435a; /* idle content — tone-on-tone, way darker on dark */
 		/* pressed-IN groove — mirrors the toggle's recessed track */
 		--track-fill: rgba(0, 0, 0, 0.32);
@@ -92,8 +92,8 @@
 		--surf: #dedad3;
 		--sh: rgba(0, 0, 0, 0.16);
 		--hl: rgba(255, 255, 255, 0.9);
-		--emboss-sh: rgba(0, 0, 0, 0.13);
-		--emboss-hl: rgba(255, 255, 255, 0.95);
+		--emboss-sh: rgba(0, 0, 0, 0.2);
+		--emboss-hl: rgba(255, 255, 255, 1);
 		--ink-idle: #cec9bf; /* idle content — way lighter cream on light */
 		--track-fill: rgba(0, 0, 0, 0.1);
 		--track-top: rgba(0, 0, 0, 0.2);
@@ -140,8 +140,8 @@
 		width: 1.65rem;
 		height: 1.65rem;
 		color: var(--ink-idle);
-		filter: drop-shadow(0.05rem 0.06rem 0.16rem var(--emboss-sh))
-			drop-shadow(-0.05rem -0.06rem 0.13rem var(--emboss-hl));
+		filter: drop-shadow(0.08rem 0.09rem 0.12rem var(--emboss-sh))
+			drop-shadow(-0.08rem -0.09rem 0.11rem var(--emboss-hl));
 		transition: filter 150ms ease-out, color 150ms ease-out;
 	}
 	.c-button__label {
@@ -152,8 +152,8 @@
 		letter-spacing: 0.01em;
 		color: var(--ink-idle);
 		text-shadow:
-			-0.03rem -0.03rem 0.05rem var(--emboss-hl),
-			0.04rem 0.05rem 0.14rem var(--emboss-sh);
+			-0.06rem -0.07rem 0.04rem var(--emboss-hl),
+			0.07rem 0.08rem 0.11rem var(--emboss-sh);
 		transition: text-shadow 150ms ease-out, color 150ms ease-out;
 	}
 
