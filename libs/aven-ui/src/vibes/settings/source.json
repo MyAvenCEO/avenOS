@@ -1,0 +1,28 @@
+{
+	"eyebrow": "avenCEO",
+	"title": "Einstellungen",
+	"sections": [
+		{
+			"label": "Identität",
+			"items": [
+				{ "label": "Name", "value": "avenCEO", "hint": "Anzeigename dieser Identität" },
+				{ "label": "Typ", "value": "Human", "hint": "" },
+				{ "label": "Mitglieder", "value": "1", "hint": "Geräte mit Zugriff" }
+			]
+		},
+		{
+			"label": "Modelle",
+			"items": [
+				{ "label": "Chat", "value": "LFM2.5-8B", "hint": "On-device Sprachmodell" },
+				{ "label": "Sprache", "value": "Parakeet", "hint": "On-device STT" }
+			]
+		},
+		{
+			"label": "Netzwerk",
+			"items": [
+				{ "label": "Sync-Relay", "value": "Verbunden", "hint": "Blind-Sync für Backup" },
+				{ "label": "Peers", "value": "0", "hint": "" }
+			]
+		}
+	]
+}
