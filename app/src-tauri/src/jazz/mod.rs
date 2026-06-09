@@ -2541,7 +2541,34 @@ pub(crate) async fn groove_ipc_create_identity(
 
 	ensure_aven_ceo_owner_row(client.as_ref(), shell, identity_uuid).await?;
 	finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
+	auto_relay_sync_on_create(app, jazz, self_state, identity_uuid).await;
 	Ok(identity_uuid.to_string())
+}
+
+/// Default-grant the connected relay a blind-sync (`replicate`) cap on a freshly-created
+/// identity. The relay can only forward an identity it holds, so doing this at creation makes
+/// later member/owner grants reach invited devices REACTIVELY in any order — without it, granting
+/// a member before the relay-sync cap doesn't propagate until the invitee manually refreshes.
+/// Non-fatal + idempotent: if no relay is connected, skip; the user can still sync manually.
+async fn auto_relay_sync_on_create(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	self_state: &SelfState,
+	identity: Uuid,
+) {
+	let relay_did = jazz
+		.connected_relay_did
+		.read()
+		.ok()
+		.and_then(|g| g.as_ref().cloned());
+	let Some(relay_did) = relay_did else {
+		return;
+	};
+	if let Err(e) =
+		groove_ipc_spark_replicate_add(app, jazz, self_state, identity.to_string(), relay_did).await
+	{
+		log::warn!(target: "avenos::jazz", "auto relay-sync on create failed: {e}");
+	}
 }
 
 /// **M9-3/M9-4** — create (idempotently) a **sub-group** of `identity` labeled `label`: a
@@ -2627,6 +2654,7 @@ pub(crate) async fn groove_ipc_create_collection_group(
 	wrap_self_keyshare(client.as_ref(), shell, group_id, &dek_plain, dek_ver).await?;
 
 	finish_spark_admin_grant(app, jazz, self_state, client, group_id).await?;
+	auto_relay_sync_on_create(app, jazz, self_state, group_id).await;
 	Ok(group_id.to_string())
 }
 
