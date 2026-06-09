@@ -65,10 +65,10 @@
 		<div class="flex flex-wrap items-center gap-2">
 			<button
 				type="button"
-				class="rounded-full px-3 py-1 text-[10px] font-bold tracking-wider uppercase transition-opacity {panel ===
+				class="rounded-full px-3 py-1 text-[10px] font-bold tracking-wider uppercase transition-colors {panel ===
 				'render'
-					? 'bg-foreground text-background opacity-95'
-					: 'bg-white/10 opacity-60 hover:opacity-90'}"
+					? 'bg-primary text-primary-foreground'
+					: 'border border-border text-muted-foreground hover:text-foreground hover:bg-accent/5'}"
 				onclick={() => (panel = 'render')}
 			>
 				{t('uiLab.panelRender')}
@@ -76,10 +76,10 @@
 			{#each jsonPanels as p (p)}
 				<button
 					type="button"
-					class="rounded-full px-3 py-1 text-[10px] font-bold tracking-wider uppercase transition-opacity {panel ===
+					class="rounded-full px-3 py-1 text-[10px] font-bold tracking-wider uppercase transition-colors {panel ===
 					p
-						? 'bg-foreground text-background opacity-95'
-						: 'bg-white/10 opacity-60 hover:opacity-90'}"
+						? 'bg-primary text-primary-foreground'
+						: 'border border-border text-muted-foreground hover:text-foreground hover:bg-accent/5'}"
 					onclick={() => (panel = p)}
 				>
 					{t(`uiLab.panel${p.charAt(0).toUpperCase()}${p.slice(1)}`)}
