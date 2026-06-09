@@ -1744,6 +1744,15 @@ async fn jazz_shell_ready_inner(
 	*slot = Some(std::sync::Arc::clone(&arc));
 	// Mirror into the std-lock handle read by the biscuit sync gate.
 	*mj.sync_shell.write().expect("sync_shell poisoned") = Some(std::sync::Arc::clone(&arc));
+	{
+		let avenceo = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
+		eprintln!(
+			"[HYDIAG] full hydrate → identities_in_vault={} avenceo_present={} peer={}",
+			arc.vault.identities.len(),
+			arc.vault.identities.contains_key(&avenceo),
+			arc.peer_did
+		);
+	}
 	let object_owner = jazz_engine::build_object_owner_map(client.as_ref()).await?;
 	let keyshare_recipient = jazz_engine::build_keyshare_recipient_map(client.as_ref()).await?;
 	let snap = identity_sync::build_sync_acl_snapshot(object_owner, keyshare_recipient);
