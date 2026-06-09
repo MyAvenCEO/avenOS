@@ -14,7 +14,7 @@ const tokens: StyleDef['tokens'] = {
 	destructive: '#b45309',
 	'radius-lg': '1rem',
 	'radius-md': '0.75rem',
-	'font-sans': "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+	'font-sans': "'Chillax', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 	'font-mono': 'ui-monospace, Menlo, monospace',
 }
 

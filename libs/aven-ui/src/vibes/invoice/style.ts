@@ -20,7 +20,7 @@ const tokens: StyleDef['tokens'] = {
 	'row-divider': 'color-mix(in srgb, var(--border) 55%, transparent)',
 	'radius-2xl': '2rem',
 	'radius-md': '1rem',
-	'font-sans': "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+	'font-sans': "'Chillax', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 }
 
 const components: StyleDef['components'] = {
