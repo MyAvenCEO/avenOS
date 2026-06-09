@@ -2051,6 +2051,37 @@ async fn update_identity_genesis(
 	Ok(())
 }
 
+/// Wrap a freshly-minted identity/group DEK to the creating device and write the
+/// self-keyshare row, so the owner can read sealed columns later. Shared by the three
+/// mint IPCs (`create_identity`, `aven_ceo_claim`, `create_collection_group`).
+async fn wrap_self_keyshare(
+	client: &JazzClient,
+	shell: &jazz_engine::ShellState,
+	identity: Uuid,
+	dek_plain: &crate::crypto::Dek,
+	dek_ver: i64,
+) -> Result<(), String> {
+	let urn = jazz_engine::identity_urn(identity);
+	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
+	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, &shell.peer_did, dek_ver);
+	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
+	let ks_schema = jazz_engine::resolved_table_schema(client, "keyshares").await?;
+	let mut ks = Map::new();
+	ks.insert("owner".into(), JsonValue::String(identity.to_string()));
+	ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
+	ks.insert("recipient_did".into(), JsonValue::String(shell.peer_did.clone()));
+	ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
+	ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
+	let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
+	let ks_oid = ObjectId::new();
+	let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity)?;
+	client
+		.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+		.await
+		.map_err(format_jazz_err)?;
+	Ok(())
+}
+
 pub(crate) async fn groove_ipc_spark_admin_add(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -2423,21 +2454,7 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 
 	// Self keyshare: wrap a fresh DEK to this device so the owner can read sealed
 	// columns later (the roster is plaintext today, but keep the shape consistent).
-	let urn = jazz_engine::identity_urn(identity_uuid);
-	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
-	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, &shell.peer_did, dek_ver);
-	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
-	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
-	let mut ks = Map::new();
-	ks.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
-	ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
-	ks.insert("recipient_did".into(), JsonValue::String(shell.peer_did.clone()));
-	ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
-	ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
-	let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
-	let ks_oid = ObjectId::new();
-	let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity_uuid)?;
-	client.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta).await.map_err(format_jazz_err)?;
+	wrap_self_keyshare(client.as_ref(), shell, identity_uuid, &dek_plain, dek_ver).await?;
 
 	// The owner is the first member: give it a roster row (populated from identity).
 	ensure_aven_ceo_owner_row(client.as_ref(), &shell.peer_did, &shell.signing_key, identity_uuid).await?;
@@ -2520,24 +2537,7 @@ pub(crate) async fn groove_ipc_create_identity(
 		.map_err(format_jazz_err)?;
 
 	// Self keyshare: wrap the identity DEK to this device so the owner can read sealed columns.
-	let urn = jazz_engine::identity_urn(identity_uuid);
-	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
-	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, &shell.peer_did, dek_ver);
-	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
-	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
-	let mut ks = Map::new();
-	ks.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
-	ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
-	ks.insert("recipient_did".into(), JsonValue::String(shell.peer_did.clone()));
-	ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
-	ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
-	let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
-	let ks_oid = ObjectId::new();
-	let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity_uuid)?;
-	client
-		.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
-		.await
-		.map_err(format_jazz_err)?;
+	wrap_self_keyshare(client.as_ref(), shell, identity_uuid, &dek_plain, dek_ver).await?;
 
 	ensure_aven_ceo_owner_row(client.as_ref(), &shell.peer_did, &shell.signing_key, identity_uuid)
 		.await?;
@@ -2625,24 +2625,7 @@ pub(crate) async fn groove_ipc_create_collection_group(
 
 	// The group's OWN DEK (generated above), keyshared to the creator. Parent members inherit
 	// it via the 2-level key hierarchy (the group key wrapped under the parent group key).
-	let urn = jazz_engine::identity_urn(group_id);
-	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
-	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, &shell.peer_did, dek_ver);
-	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
-	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
-	let mut ks = Map::new();
-	ks.insert("owner".into(), JsonValue::String(group_id.to_string()));
-	ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
-	ks.insert("recipient_did".into(), JsonValue::String(shell.peer_did.clone()));
-	ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
-	ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
-	let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
-	let ks_oid = ObjectId::new();
-	let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, group_id)?;
-	client
-		.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
-		.await
-		.map_err(format_jazz_err)?;
+	wrap_self_keyshare(client.as_ref(), shell, group_id, &dek_plain, dek_ver).await?;
 
 	finish_spark_admin_grant(app, jazz, self_state, client, group_id).await?;
 	Ok(group_id.to_string())
@@ -3168,17 +3151,8 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 	);
 	let issuer_b64 = crate::identity_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public());
 	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
-	let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
-	let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "identities").await?;
-	let mut sparks_oid: Option<ObjectId> = None;
-	for (oid, vals) in sparks_rows {
-		if jazz_engine::uuid_cell_at(vals.as_slice(), identity_id_ix)? == identity_uuid {
-			sparks_oid = Some(oid);
-			break;
-		}
-	}
 	let sparks_oid =
-		sparks_oid.ok_or_else(|| format!("no identities row for owner={identity_uuid}"))?;
+		jazz_engine::find_identity_oid(client.as_ref(), &sparks_schema, identity_uuid).await?;
 	let mut patch = Map::new();
 	patch.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
 	patch.insert("issuer_pubkey_b64".into(), JsonValue::String(issuer_b64));
