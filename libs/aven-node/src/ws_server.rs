@@ -21,9 +21,10 @@ use groove::{
 use tokio::sync::{mpsc, Mutex};
 
 use aven_p2p::challenge::{
-    build_message, is_expired, random_nonce_b64, unix_now_secs, verify, AuthResult, ChallengeParams,
-    ClientAuth, ServerHello, CHALLENGE_TTL_SECS,
+    build_message, is_expired, random_nonce_b64, server_attestation_message, sign, unix_now_secs,
+    verify, AuthResult, ChallengeParams, ClientAuth, ServerHello, CHALLENGE_TTL_SECS,
 };
+use ed25519_dalek::SigningKey;
 
 /// No channel binding: TLS is proxy-terminated, so the challenge binds to the
 /// server nonce only. Must match `aven_p2p::ws_client` (also "").
@@ -38,12 +39,20 @@ pub struct WsServerListener {
     peers_tx: mpsc::Sender<PeerId>,
     params: ChallengeParams,
     server_did: String,
+    /// The server's own signing key — used to attest the mutual handshake (audit #21):
+    /// signs `(client_nonce, server_nonce, client_did)` so the client can confirm the
+    /// connection terminates at the real backend, not a relay that forwarded the hello.
+    server_signing_key: SigningKey,
 }
 
 impl WsServerListener {
     /// Build the listener + a stream of newly-authenticated peers (the host loop
     /// registers each via `register_peer_sync_client`).
-    pub fn new(params: ChallengeParams, server_did: String) -> (Arc<Self>, mpsc::Receiver<PeerId>) {
+    pub fn new(
+        params: ChallengeParams,
+        server_did: String,
+        server_signing_key: SigningKey,
+    ) -> (Arc<Self>, mpsc::Receiver<PeerId>) {
         let (inbound_tx, inbound_rx) = mpsc::channel(1024);
         let (peers_tx, peers_rx) = mpsc::channel(64);
         let this = Arc::new(Self {
@@ -53,6 +62,7 @@ impl WsServerListener {
             peers_tx,
             params,
             server_did,
+            server_signing_key,
         });
         (this, peers_rx)
     }
@@ -78,10 +88,19 @@ impl WsServerListener {
         send_json(&mut ws, &hello).await?;
         let auth: ClientAuth = recv_json(&mut ws).await?;
         let verdict = verify_client(&hello, &auth);
+        // Mutual handshake (audit #21): once the client is authenticated, attest the tuple
+        // (client_nonce, server_nonce, client_did) with the server key so the client can
+        // confirm this connection terminates at the real backend — a relay that forwarded
+        // our hello can't forge this signature over the client-side nonces. None on failure.
+        let attestation = verdict.as_ref().ok().map(|_| {
+            let msg = server_attestation_message(&auth.client_nonce, &hello.nonce, &auth.did);
+            sign(&self.server_signing_key, &msg)
+        });
         let result = AuthResult {
             ok: verdict.is_ok(),
             error: verdict.as_ref().err().cloned(),
             server_did: Some(self.server_did.clone()),
+            signature: attestation,
         };
         send_json(&mut ws, &result).await?;
         let peer = verdict?;
@@ -137,7 +156,7 @@ fn verify_client(hello: &ServerHello, auth: &ClientAuth) -> Result<PeerId, Strin
         return Err("challenge expired".into());
     }
     let pubkey = groove::did_key::ed25519_public_from_peer_did(&auth.did)?;
-    let message = build_message(hello, &auth.did, NO_CHANNEL_BINDING);
+    let message = build_message(hello, &auth.did, NO_CHANNEL_BINDING, &auth.client_nonce);
     verify(&pubkey, &message, &auth.signature)?;
     Ok(PeerId(pubkey))
 }

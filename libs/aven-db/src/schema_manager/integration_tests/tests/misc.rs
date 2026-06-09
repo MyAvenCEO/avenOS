@@ -22,7 +22,7 @@ fn context_validation() {
     let v2_hash = SchemaHash::compute(&v2);
 
     let mut manager =
-        SchemaManager::new(SyncManager::new(), v2, test_app_id(), "dev", "main").unwrap();
+        manager_for(v2);
     manager.add_live_schema(v1).unwrap();
 
     // Live context should include both current and previous schema hashes.

@@ -578,6 +578,16 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         Ok(())
     }
 
+    /// Inject the author edit-signer for the local write path (the app's device-key signer).
+    pub fn set_edit_signer(
+        &self,
+        signer: std::sync::Arc<dyn crate::capability::EditSigner>,
+    ) -> Result<(), RuntimeError> {
+        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        core.set_edit_signer(signer);
+        Ok(())
+    }
+
     /// Peer client ids currently registered for P2P sync (live transport links).
     pub fn peer_client_ids(&self) -> Result<Vec<PeerId>, RuntimeError> {
         let core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
@@ -722,34 +732,12 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         Ok(())
     }
 
-    /// Return grouped telemetry for active downstream server subscriptions.
-    pub fn server_subscription_telemetry(
-        &self,
-    ) -> Result<Vec<crate::query_manager::manager::ServerSubscriptionTelemetryGroup>, RuntimeError>
-    {
-        let core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        Ok(core
-            .schema_manager()
-            .query_manager()
-            .server_subscription_telemetry())
-    }
-
     /// Access the underlying storage (for flushing, etc).
     ///
     /// The callback receives `&S` while holding the core lock.
     pub fn with_storage<R>(&self, f: impl FnOnce(&S) -> R) -> Result<R, RuntimeError> {
         let core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
         Ok(f(core.storage()))
-    }
-
-    /// Run a closure with read access to the SyncManager (for testing/inspection).
-    #[cfg(test)]
-    pub(crate) fn with_sync_manager<R>(
-        &self,
-        f: impl FnOnce(&crate::sync_manager::SyncManager) -> R,
-    ) -> Result<R, RuntimeError> {
-        let core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        Ok(f(core.schema_manager().query_manager().sync_manager()))
     }
 
     /// Access the underlying schema manager while holding the core lock.

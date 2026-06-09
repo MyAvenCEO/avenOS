@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
-use crate::sync_manager::{PeerId, InboxEntry, Source, SyncPayload};
+use crate::sync_manager::{InboxEntry, Source, SyncPayload};
 use crate::sync_targets::SyncTargetId;
 
 const BINCODE_PAYLOAD_LIMIT_BYTES: usize = 128 * 1024 * 1024;
@@ -53,21 +53,6 @@ pub fn decode_length_prefixed(buf: &[u8]) -> Result<(SyncTargetId, SyncPayload),
     Ok((frame.target, frame.payload))
 }
 
-/// Legacy helper — maps PeerId targets for existing Groove peer paths.
-pub fn encode_length_prefixed_client(
-    target: PeerId,
-    payload: &SyncPayload,
-) -> Result<Vec<u8>, String> {
-    encode_length_prefixed(SyncTargetId::Client(target), payload)
-}
-
-pub fn decode_length_prefixed_client(buf: &[u8]) -> Result<(PeerId, SyncPayload), String> {
-    let (target, payload) = decode_length_prefixed(buf)?;
-    match target {
-        SyncTargetId::Client(c) => Ok((c, payload)),
-        other => Err(format!("sync frame: expected Client target, got {other:?}")),
-    }
-}
 
 fn encode_sync_frame_bincode(frame: &SyncFrameV1) -> Result<Vec<u8>, String> {
     bincode::serde::encode_to_vec(

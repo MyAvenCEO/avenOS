@@ -17,6 +17,17 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
             .set_resolver(resolver);
     }
 
+    /// Inject the author edit-signer for the local write path (the app's device-key signer).
+    pub fn set_edit_signer(
+        &mut self,
+        signer: std::sync::Arc<dyn crate::capability::EditSigner>,
+    ) {
+        self.schema_manager
+            .query_manager_mut()
+            .sync_manager_mut()
+            .set_edit_signer(signer);
+    }
+
     /// Push a sync message to the inbox (from network).
     pub fn push_sync_inbox(&mut self, entry: InboxEntry) {
         if entry.payload.writes_storage() {

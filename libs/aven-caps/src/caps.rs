@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use base64::engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use biscuit_auth::{
 	builder::{Algorithm, AuthorizerBuilder, BlockBuilder},
@@ -227,7 +227,6 @@ pub fn decode_issuer_pubkey_b64(b64: &str) -> Result<PublicKey, String> {
 	}
 	let raw = URL_SAFE_NO_PAD
 		.decode(trimmed.as_bytes())
-		.or_else(|_| STANDARD_NO_PAD.decode(trimmed.as_bytes()))
 		.map_err(|e| format!("issuer_pubkey_b64_decode:{e}"))?;
 	PublicKey::from_bytes(raw.as_slice(), Algorithm::Ed25519.into()).map_err(|e| format!("issuer_pubkey_bad:{e:?}"))
 }
@@ -563,7 +562,6 @@ pub fn identity_admins(chain: &Biscuit, owner: Uuid) -> Result<std::collections:
 pub fn biscuit_from_storage(genesis_b64: &str, root: PublicKey) -> Result<Biscuit, String> {
 	let raw = URL_SAFE_NO_PAD
 		.decode(genesis_b64.as_bytes())
-		.or_else(|_| STANDARD_NO_PAD.decode(genesis_b64.as_bytes()))
 		.map_err(|e| format!("genesis-base64:{e}"))?;
 
 	Biscuit::from(raw.as_slice(), root).map_err(|e| format!("biscuit-from:{e:?}"))
@@ -1003,6 +1001,44 @@ mod tests {
 		// The owner still reads + writes as a full member.
 		authorize(&v, sid, AccOp::Read, "peers", Some(rid), &v.peer_did.clone()).unwrap();
 		authorize(&v, sid, AccOp::Write, "peers", Some(rid), &v.peer_did.clone()).unwrap();
+	}
+
+	#[test]
+	fn writer_grant_denies_delete() {
+		// Audit #6: a peer granted a granular WRITE-ONLY cap must NOT be able to author a
+		// delete. The inbound apply gate now requests `AccOp::Delete` for delete-flagged rows
+		// (`inbox.rs`) and the app resolver honors it instead of re-coercing to `Write`
+		// (`biscuit_resolver.rs`); this proves the cap layer those call into truly separates
+		// Write from Delete for the exact granular writer in the attack.
+		let owner = vault(&[1u8; 32]);
+		let writer = vault(&[5u8; 32]);
+		let sid = uuid::Uuid::new_v4();
+		let row = uuid::Uuid::from_u128(0x4242);
+
+		let genesis = mint_genesis_identity(&owner, sid).unwrap();
+		// Granular write-only grant over one user-data row (the destructive-delete target).
+		let prefix = format!("identity:{sid}:todos:{row}");
+		let chain = attenuate_add_grant_third_party(
+			&owner.biscuit_kp,
+			&genesis,
+			&writer.peer_did,
+			"write",
+			&prefix,
+		)
+		.unwrap();
+		let mut v = owner;
+		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
+
+		// The write-only peer may Write its granted row…
+		authorize(&v, sid, AccOp::Write, "todos", Some(row), &writer.peer_did).unwrap();
+		// …but is DENIED Delete — it cannot self-author the hard-delete the inbox now gates
+		// under `AccOp::Delete`.
+		assert!(
+			authorize(&v, sid, AccOp::Delete, "todos", Some(row), &writer.peer_did).is_err(),
+			"a write-only granular grant must NOT confer Delete"
+		);
+		// The owner retains Delete (full member); the granular grant doesn't shadow ownership.
+		authorize(&v, sid, AccOp::Delete, "todos", Some(row), &v.peer_did.clone()).unwrap();
 	}
 
 	#[test]

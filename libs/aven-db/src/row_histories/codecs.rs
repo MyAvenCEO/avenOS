@@ -38,6 +38,8 @@ pub fn compute_row_digest(
     data: &[u8],
     updated_at: u64,
     updated_by: &str,
+    delete_kind: Option<DeleteKind>,
+    is_deleted: bool,
     metadata: Option<&RowMetadata>,
 ) -> Digest32 {
     let mut hasher = Hasher::new();
@@ -57,10 +59,32 @@ pub fn compute_row_digest(
     hasher.update(&updated_at.to_le_bytes());
     hasher.update(updated_by.as_bytes());
 
+    // Delete state (audit #7/#26). `delete_kind`/`is_deleted` are wire fields lifted out of
+    // `metadata` before hashing, so without this they were covered by NO digest — a relay
+    // could flip a live row to Hard-delete (or strip a delete) without breaking the
+    // owner-binding or edit-signature. Fold both into the preimage as two fixed bytes so any
+    // flip changes the digest the edit-signature (board 0010) signs and the receiver
+    // recomputes. Position: after `updated_by`, before the metadata block.
+    let kind_tag: u8 = match delete_kind {
+        None => 0x00,
+        Some(DeleteKind::Soft) => 0x01,
+        Some(DeleteKind::Hard) => 0x02,
+    };
+    hasher.update(&[kind_tag, is_deleted as u8]);
+
     if let Some(metadata) = metadata {
         hasher.update(&[1u8]);
-        hasher.update(&(metadata.len() as u64).to_le_bytes());
-        for (key, value) in metadata.iter() {
+        // Exclude the edit-signature slot: it SIGNS this digest, so it can't be hashed
+        // INTO it (chicken-and-egg). Mirrors the `MetadataKey::Delete` exclusion in
+        // `StoredRowBatch::new_with_batch_id`. Filtering an absent key is a no-op for every
+        // row authored before edit-sigs existed, so no previously-stored digest changes.
+        // Author and receiver both compute the digest this way, so they agree.
+        let included: Vec<(&str, &str)> = metadata
+            .iter()
+            .filter(|&(key, _)| key != crate::capability::EDIT_SIG_META_KEY)
+            .collect();
+        hasher.update(&(included.len() as u64).to_le_bytes());
+        for (key, value) in included {
             hasher.update(&(key.len() as u64).to_le_bytes());
             hasher.update(key.as_bytes());
             hasher.update(&(value.len() as u64).to_le_bytes());
@@ -70,7 +94,32 @@ pub fn compute_row_digest(
         hasher.update(&[0u8]);
     }
 
-    Digest32(*hasher.finalize().as_bytes())
+    let out = Digest32(*hasher.finalize().as_bytes());
+    // [DIGDIAG] temporary: dump the digest preimage for owner-bound (spark) rows so we can
+    // diff the server's sign-time inputs ([S]) against the client's verify-time inputs ([A])
+    // and find which field makes a grant UPDATE's edit-sig digest mismatch.
+    let is_spark_dbg = metadata
+        .map(|m| {
+            m.iter()
+                .any(|(k, _)| k == crate::capability::OWNER_BINDING_META_KEY)
+        })
+        .unwrap_or(false);
+    if is_spark_dbg {
+        let d = out.0;
+        let meta_dump: Vec<String> = metadata
+            .map(|m| {
+                m.iter()
+                    .filter(|(k, _)| *k != crate::capability::EDIT_SIG_META_KEY)
+                    .map(|(k, v)| format!("{k}={}", v.len()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        eprintln!(
+            "[DIGDIAG] digest={:02x}{:02x}{:02x}{:02x} branch={} nparents={} data_len={} updated_at={} updated_by={} kind={} is_deleted={} meta=[{}]",
+            d[0], d[1], d[2], d[3], branch, parents.len(), data.len(), updated_at, updated_by, kind_tag, is_deleted, meta_dump.join(",")
+        );
+    }
+    out
 }
 
 fn metadata_entry_descriptor() -> &'static RowDescriptor {
@@ -916,4 +965,53 @@ pub(crate) fn decode_flat_visible_row_entry_with_codecs(
         merge_artifacts: column_bytes_with_layout(descriptor, layout, data, 17)?
             .map(|bytes| bytes.to_vec()),
     })
+}
+
+#[cfg(test)]
+mod delete_state_tests {
+    use super::*;
+
+    /// Compute a row digest holding every field constant EXCEPT the delete state, so a
+    /// digest difference is attributable only to `delete_kind` / `is_deleted`.
+    fn digest(delete_kind: Option<DeleteKind>, is_deleted: bool) -> Digest32 {
+        compute_row_digest(
+            "main",
+            &[],
+            b"row-data",
+            42,
+            "did:key:zAuthor",
+            delete_kind,
+            is_deleted,
+            None,
+        )
+    }
+
+    #[test]
+    fn row_digest_covers_delete_state() {
+        // Audit #7/#26: the delete state must be part of the digest the edit-signature
+        // (board 0010) signs, so a relay that flips it in flight is rejected on apply.
+        let live = digest(None, false);
+        let soft = digest(Some(DeleteKind::Soft), true);
+        let hard = digest(Some(DeleteKind::Hard), true);
+
+        // None -> Hard (forge a destructive network-wide wipe) is digest-detectable.
+        assert_ne!(live, hard, "None->Hard flip must change the digest");
+        // Hard -> Soft (downgrade) is digest-detectable.
+        assert_ne!(hard, soft, "Hard->Soft downgrade must change the digest");
+        // Some -> None (strip a legitimate delete / resurrect data) is digest-detectable.
+        assert_ne!(soft, live, "Some->None strip must change the digest");
+
+        // `is_deleted` is independently authenticated (kind held equal, only the flag flips).
+        let kind = Some(DeleteKind::Soft);
+        assert_ne!(
+            digest(kind, false),
+            digest(kind, true),
+            "is_deleted flip (kind held equal) must change the digest"
+        );
+
+        // Determinism sanity: identical delete state + all else equal => identical digest,
+        // so the differences above are caused only by the delete state, not noise.
+        assert_eq!(digest(None, false), digest(None, false));
+        assert_eq!(digest(Some(DeleteKind::Hard), true), digest(Some(DeleteKind::Hard), true));
+    }
 }

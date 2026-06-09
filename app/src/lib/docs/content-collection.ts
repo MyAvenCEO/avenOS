@@ -119,6 +119,3 @@ export function contentChapterHref(section: ContentDocSection, slug: string): st
 export function getContentDoc(section: ContentDocSection, slug: string): ContentDocMeta | undefined {
 	return docsBySection[section].find((d) => d.slug === slug)
 }
-
-/** @deprecated use isContentDocSection */
-export const isContentDocGroup = isContentDocSection

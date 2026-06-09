@@ -16,11 +16,6 @@ pub(crate) struct SettlementEvalCache {
 }
 
 impl SettlementEvalCache {
-    #[cfg(test)]
-    pub(crate) fn is_empty(&self) -> bool {
-        self.relation_results.is_empty()
-    }
-
     pub(crate) fn relation_result_get(&self, key: &RelationSubexprKey) -> Option<AHashSet<Tuple>> {
         self.relation_results.get(key).cloned()
     }

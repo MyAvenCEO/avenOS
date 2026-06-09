@@ -621,8 +621,6 @@ fn desired_root_client_uuid(self_state: &SelfState) -> Result<Uuid, String> {
 /// can still produce a different `SchemaHash` if jazz-tools' Schema-build
 /// changes shape between versions.
 const GROOVE_SCHEMA_HASH_FILE: &str = "groove_schema_hash";
-/// Legacy manifest-JSON fingerprint file. Kept only so old installs can be migrated/cleaned.
-const LEGACY_SCHEMA_FINGERPRINT_FILE: &str = "schema_fingerprint";
 
 const JAZZ_LANE_FILE: &str = "jazz_lane";
 
@@ -661,32 +659,6 @@ pub(super) async fn groove_write_branch_from_connected_schema(
 
 /// Groove durable files live here (was `.avenOS/jazz` before AvenOS renamed the folder).
 const AVEN_OS_GROOVE_DATA_DIR: &str = "db";
-const LEGACY_JAZZ_DATA_DIR: &str = "jazz";
-
-fn migrate_legacy_jazz_dir_to_db(user_root: &Path) -> Result<(), String> {
-	let db = user_root.join(AVEN_OS_GROOVE_DATA_DIR);
-	if db.exists() {
-		return Ok(());
-	}
-	let legacy = user_root.join(LEGACY_JAZZ_DATA_DIR);
-	if legacy.exists() {
-		fs::rename(&legacy, &db).map_err(|e| {
-			format!(
-				"migrate Groove dir {} -> {}: {e}",
-				legacy.display(),
-				db.display()
-			)
-		})?;
-		log::info!(
-			target: "avenos::jazz",
-			"Migrated legacy Groove directory {} -> {}",
-			legacy.display(),
-			db.display()
-		);
-	}
-	Ok(())
-}
-
 const CURRENT_JAZZ_LANE: &str = "lane-v1;env=client;user_branch=main";
 
 /// True when `AVENOS_DATA_DIR_OVERRIDE` collapses every identity into one shared
@@ -824,12 +796,6 @@ fn reconcile_jazz_identity_cache_dir(
 		)
 	})?;
 
-	// Best-effort cleanup of the legacy manifest-fingerprint file (kept for diagnostics only).
-	let legacy_fp = jazz_dir.join(LEGACY_SCHEMA_FINGERPRINT_FILE);
-	if legacy_fp.exists() {
-		let _ = fs::remove_file(&legacy_fp);
-	}
-
 	let composed = ComposedBranchName::new(
 		GROOVE_CLIENT_ENV,
 		SchemaHash::from_bytes(*current_groove_hash),
@@ -920,9 +886,11 @@ impl ManagedJazz {
 		client: &JazzClient,
 	) -> Result<(), String> {
 		let object_owner = jazz_engine::build_object_owner_map(client).await?;
+		let keyshare_recipient = jazz_engine::build_keyshare_recipient_map(client).await?;
 		let mut guard = self.sync_acl.write().expect("sync_acl poisoned");
 		if let Some(snap) = guard.as_mut() {
 			snap.object_owner = object_owner;
+			snap.keyshare_recipient = keyshare_recipient;
 		}
 		Ok(())
 	}
@@ -1561,7 +1529,6 @@ async fn jazz_connect(
 	let groove_hash = *SchemaHash::compute(&schema).as_bytes();
 
 	let user_root = vault_user_root(app)?;
-	migrate_legacy_jazz_dir_to_db(&user_root)?;
 	let data_dir = user_root.join(AVEN_OS_GROOVE_DATA_DIR);
 	let live_schemas =
 		reconcile_jazz_identity_cache_dir(&data_dir, peer_id, &groove_hash, &schema)?;
@@ -1590,6 +1557,22 @@ async fn jazz_connect(
 	));
 	if let Err(e) = client.set_resolver(resolver) {
 		log::warn!("install biscuit sync gate: {e}");
+	}
+
+	// Install the author edit-signer (audit #29): every locally-authored row is signed over
+	// its content digest with the device key, so `data` + `metadata` are authenticated and a
+	// relay that tampers with a sealed cell / keyshare column is rejected on apply by every
+	// peer. Installed at connect (before any identity row is authored) so no row ships
+	// unsigned. The key is the same device key that mints owner-bindings.
+	match crate::jazz_auth::signing_key_from_device_root(&root) {
+		Ok(signing_key) => {
+			let signer =
+				std::sync::Arc::new(crate::biscuit_resolver::AppEditSigner::new(signing_key));
+			if let Err(e) = client.set_edit_signer(signer) {
+				log::warn!("install author edit-signer: {e}");
+			}
+		}
+		Err(e) => log::warn!("derive signing key for edit-signer: {e}"),
 	}
 
 	crate::schema_migrations::stamp_current_vault_snapshot(&data_dir, &schema)?;
@@ -1762,7 +1745,8 @@ async fn jazz_shell_ready_inner(
 	// Mirror into the std-lock handle read by the biscuit sync gate.
 	*mj.sync_shell.write().expect("sync_shell poisoned") = Some(std::sync::Arc::clone(&arc));
 	let object_owner = jazz_engine::build_object_owner_map(client.as_ref()).await?;
-	let snap = identity_sync::build_sync_acl_snapshot(object_owner);
+	let keyshare_recipient = jazz_engine::build_keyshare_recipient_map(client.as_ref()).await?;
+	let snap = identity_sync::build_sync_acl_snapshot(object_owner, keyshare_recipient);
 	*mj.sync_acl.write().expect("sync_acl poisoned") = Some(snap);
 	if !for_ui_drain {
 		let first_mesh_publish = !mj.mesh_acl_rebroadcast_done.swap(true, Ordering::AcqRel);
@@ -2017,7 +2001,7 @@ async fn wrap_all_dek_versions_to_recipient(
 			.deks
 			.get(&(identity_uuid, v))
 			.ok_or_else(|| format!("missing DEK for identity {identity_uuid} v{v}"))?;
-		let aad = crate::crypto::keyshare_wrap_aad(&urn, recipient_did, v);
+		let aad = crate::crypto::keyshare_wrap_aad(&urn, recipient_did, &shell.peer_did, v);
 		let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
 		let mut ks = Map::new();
 		ks.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
@@ -2226,7 +2210,7 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 		.ok_or_else(|| format!("missing DEK for identity {identity_uuid} v{dek_ver}"))?;
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &peer_pk)?;
 	let ks_urn = jazz_engine::identity_urn(identity_uuid);
-	let ks_aad = crate::crypto::keyshare_wrap_aad(&ks_urn, &peer_did, dek_ver);
+	let ks_aad = crate::crypto::keyshare_wrap_aad(&ks_urn, &peer_did, &shell.peer_did, dek_ver);
 	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek.expose(), &ks_aad)?;
 	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
 	let mut ks = Map::new();
@@ -2464,7 +2448,7 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 	let dek_plain = crate::crypto::random_identity_dek();
 	let urn = jazz_engine::identity_urn(identity_uuid);
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
-	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, dek_ver);
+	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, &shell.peer_did, dek_ver);
 	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
 	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
 	let mut ks = Map::new();
@@ -2550,7 +2534,7 @@ pub(crate) async fn groove_ipc_create_identity(
 	let dek_plain = crate::crypto::random_identity_dek();
 	let urn = jazz_engine::identity_urn(identity_uuid);
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
-	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, dek_ver);
+	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, &shell.peer_did, dek_ver);
 	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
 	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
 	let mut ks = Map::new();
@@ -2646,7 +2630,7 @@ pub(crate) async fn groove_ipc_create_collection_group(
 	let dek_plain = crate::crypto::random_identity_dek();
 	let urn = jazz_engine::identity_urn(group_id);
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
-	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, dek_ver);
+	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, &shell.peer_did, dek_ver);
 	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
 	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
 	let mut ks = Map::new();
@@ -2956,9 +2940,19 @@ pub(crate) async fn groove_ipc_aven_ceo_membership(
 	let shell = shell_arc.as_ref();
 	let identity_uuid = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
 	let Some(bisc) = shell.vault.identities.get(&identity_uuid) else {
+		eprintln!(
+			"[MEMDIAG] avenCEO NOT in vault (rehydrate/keyshare-decrypt missing) peer_did={} → none",
+			shell.peer_did
+		);
 		return Ok("none".to_string());
 	};
-	if crate::identity_acc::identity_peer_is_owner(&bisc.biscuit, identity_uuid, &shell.peer_did)? {
+	let owner = crate::identity_acc::identity_peer_is_owner(&bisc.biscuit, identity_uuid, &shell.peer_did)?;
+	let owners = crate::identity_acc::identity_admins(&bisc.biscuit, identity_uuid).unwrap_or_default();
+	eprintln!(
+		"[MEMDIAG] avenCEO IN vault peer_did={} is_owner={} chain_owners={:?}",
+		shell.peer_did, owner, owners
+	);
+	if owner {
 		return Ok("owner".to_string());
 	}
 	// Merely HYDRATING the avenCEO genesis is NOT membership — the genesis syncs widely, so a
@@ -3176,7 +3170,7 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 	for recip_did in prior_holders.iter().filter(|d| d.as_str() != peer_did.as_str()) {
 		let recip_pk = crate::jazz_auth::ed25519_public_from_peer_did(recip_did)?;
 		let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recip_pk)?;
-		let aad = crate::crypto::keyshare_wrap_aad(&urn, recip_did, new_v);
+		let aad = crate::crypto::keyshare_wrap_aad(&urn, recip_did, &shell.peer_did, new_v);
 		let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, new_dek.expose(), &aad)?;
 		let mut ks = Map::new();
 		ks.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
@@ -4076,11 +4070,9 @@ pub async fn self_clear_jazz_database(
 ) -> Result<(), String> {
 	jazz.reset_connection().await;
 	let root = vault_user_root(&app)?;
-	for rel in [AVEN_OS_GROOVE_DATA_DIR, LEGACY_JAZZ_DATA_DIR] {
-		let p = root.join(rel);
-		if p.exists() {
-			fs::remove_dir_all(&p).map_err(|e| format!("remove {}: {e}", p.display()))?;
-		}
+	let p = root.join(AVEN_OS_GROOVE_DATA_DIR);
+	if p.exists() {
+		fs::remove_dir_all(&p).map_err(|e| format!("remove {}: {e}", p.display()))?;
 	}
 	Ok(())
 }

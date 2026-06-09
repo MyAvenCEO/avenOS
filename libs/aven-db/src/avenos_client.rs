@@ -213,14 +213,6 @@ async fn open_persistent_storage(data_dir: &std::path::Path) -> Result<DynStorag
 
     std::fs::create_dir_all(data_dir)?;
     let db_path = data_dir.join("storage.rocksdb");
-    let legacy_path = data_dir.join("jazz.rocksdb");
-    if !db_path.exists() && legacy_path.is_file() {
-        std::fs::rename(&legacy_path, &db_path).map_err(|e| {
-            JazzError::Storage(format!(
-                "migrate jazz.rocksdb→storage.rocksdb: {e}"
-            ))
-        })?;
-    }
     let mut opened = None;
     let mut last_err = None;
 
@@ -293,15 +285,6 @@ impl JazzClient {
         .await
     }
 
-    /// Back-compat alias — prefer [`Self::connect_with_sync_transport`].
-    pub async fn connect_with_peer_transport(
-        context: AppContext,
-        sync_transport: Arc<dyn crate::sync_transport::SyncTransport>,
-        on_inbound_parked: Option<PeerInboundParkedHook>,
-    ) -> Result<Self> {
-        Self::connect_with_sync_transport(context, sync_transport, on_inbound_parked).await
-    }
-
     /// Inject the peer-sync capability gate (the app's biscuit-aware resolver).
     pub fn set_resolver(
         &self,
@@ -310,6 +293,18 @@ impl JazzClient {
         self.runtime
             .set_resolver(resolver)
             .map_err(|e| JazzError::Sync(format!("set_resolver: {e}")))
+    }
+
+    /// Inject the author edit-signer for the local write path. The app provides a signer
+    /// backed by its device key so every locally-authored row carries an Ed25519 signature
+    /// over its content digest (`EDIT_SIG_META_KEY`), verified on apply by every peer.
+    pub fn set_edit_signer(
+        &self,
+        signer: std::sync::Arc<dyn crate::capability::EditSigner>,
+    ) -> Result<()> {
+        self.runtime
+            .set_edit_signer(signer)
+            .map_err(|e| JazzError::Sync(format!("set_edit_signer: {e}")))
     }
 
     /// Peer client ids with a live registered sync link (for mesh status UI).

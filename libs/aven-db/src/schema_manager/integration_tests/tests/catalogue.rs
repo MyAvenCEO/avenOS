@@ -11,7 +11,7 @@ fn schema_manager_persists_current_schema_only_once_per_storage() {
         .build();
 
     let mut manager =
-        SchemaManager::new(SyncManager::new(), schema, test_app_id(), "dev", "main").unwrap();
+        manager_for(schema);
     let mut storage = CountingCatalogueUpsertsStorage::new();
 
     manager
@@ -64,7 +64,7 @@ fn catalogue_schema_persistence() {
         .build();
 
     let mut manager =
-        SchemaManager::new(SyncManager::new(), v2.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v2.clone());
 
     // Persist schema
     let mut storage = MemoryStorage::new();
@@ -103,7 +103,7 @@ fn catalogue_lens_persistence() {
         .build();
 
     let mut manager =
-        SchemaManager::new(SyncManager::new(), v2.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v2.clone());
     let lens = manager.add_live_schema(v1).unwrap().clone();
 
     // Persist lens
@@ -141,7 +141,7 @@ fn catalogue_process_schema_update() {
 
     // Client B starts with v1 schema
     let mut manager_b =
-        SchemaManager::new(SyncManager::new(), v1.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v1.clone());
 
     // Simulate receiving v2 schema from catalogue sync
     let v2_hash = SchemaHash::compute(&v2);
@@ -190,7 +190,7 @@ fn catalogue_lens_activates_pending_schema() {
 
     // Client B starts with v1 schema as current
     let mut manager_b =
-        SchemaManager::new(SyncManager::new(), v1.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v1.clone());
 
     let v1_hash = SchemaHash::compute(&v1);
     let v2_hash = SchemaHash::compute(&v2);
@@ -263,7 +263,7 @@ fn catalogue_draft_lens_does_not_activate_pending_schema() {
         .build();
 
     let mut schema_manager =
-        SchemaManager::new(SyncManager::new(), v1.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v1.clone());
 
     let v1_hash = SchemaHash::compute(&v1);
     let v2_hash = SchemaHash::compute(&v2);
@@ -370,7 +370,7 @@ fn catalogue_non_matching_app_id_is_ignored() {
         .build();
 
     let mut manager =
-        SchemaManager::new(SyncManager::new(), v1.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v1.clone());
 
     for schema in [v1, v2, v3, v4] {
         let hash = SchemaHash::compute(&schema);
@@ -432,7 +432,7 @@ fn catalogue_unknown_type_is_ignored() {
     let v2_hash = SchemaHash::compute(&v2);
 
     let mut manager =
-        SchemaManager::new(SyncManager::new(), v1.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v1.clone());
     let before_branches = manager.all_branches().len();
 
     let mut metadata = HashMap::new();
@@ -469,7 +469,7 @@ fn catalogue_same_schema_push_is_noop() {
     let v1_hash = SchemaHash::compute(&v1);
 
     let mut manager =
-        SchemaManager::new(SyncManager::new(), v1.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v1.clone());
 
     let before = (
         manager.all_branches().len(),
@@ -516,7 +516,7 @@ fn catalogue_schema_malformed_payload_errors_deterministically() {
         )
         .build();
     let mut manager =
-        SchemaManager::new(SyncManager::new(), v1, test_app_id(), "dev", "main").unwrap();
+        manager_for(v1);
 
     let target_hash = SchemaHash::from_bytes([9; 32]);
     let before_branches = manager.all_branches().len();
@@ -574,7 +574,7 @@ fn catalogue_lens_malformed_payload_errors_deterministically() {
         )
         .build();
     let mut manager =
-        SchemaManager::new(SyncManager::new(), v1, test_app_id(), "dev", "main").unwrap();
+        manager_for(v1);
 
     let before_branches = manager.all_branches().len();
     let source = SchemaHash::from_bytes([1; 32]);
@@ -660,7 +660,7 @@ fn e2e_multi_hop_catalogue_activation() {
 
     // Client starts with v1 schema
     let mut client =
-        SchemaManager::new(SyncManager::new(), v1.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v1.clone());
 
     // Receive v2 schema - becomes pending
     let v2_encoded = encode_schema(&v2);

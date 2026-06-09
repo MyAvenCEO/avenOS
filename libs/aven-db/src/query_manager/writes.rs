@@ -21,7 +21,7 @@ use super::manager::{
     WriteTableCacheEntry,
 };
 use super::policy::{ComplexClause, Operation, evaluate_simple_parts_with_row_id};
-use super::server_queries::RowTransformContext;
+use super::schema_resolution::RowTransformContext;
 use super::session::{AuthMode, Session, WriteContext};
 use super::types::{
     ColumnName, ColumnType, ComposedBranchName, RowDescriptor, Schema, SchemaHash,
@@ -248,7 +248,7 @@ impl QueryManager {
             }
         }
 
-        if let Some(batch_id) = authoring.batch_id {
+        let mut batch = if let Some(batch_id) = authoring.batch_id {
             StoredRowBatch::new_with_batch_id(
                 batch_id,
                 row_id,
@@ -271,62 +271,20 @@ impl QueryManager {
                 authoring.row_state,
                 None,
             )
+        };
+
+        // Author edit-signature (audit #29): once the batch is assembled, sign its content
+        // digest with the device key and stamp it under `EDIT_SIG_META_KEY` so `data` +
+        // `metadata` are authenticated end-to-end. The digest EXCLUDES the edit-sig slot, so
+        // stamping it back does not change the digest the receiver recomputes. No signer
+        // installed (local-only / tests) → unsigned, exactly as before.
+        if let Some(signer) = self.sync_manager.edit_signer.clone() {
+            let digest = batch.content_digest();
+            if let Some((key, value)) = signer.sign_row(row_id, &digest.0) {
+                batch.set_metadata_entry(key, value);
+            }
         }
-    }
-
-    #[cfg(test)]
-    fn stored_row_batch_for_tip(
-        &self,
-        storage: &dyn Storage,
-        row_id: ObjectId,
-        branch_name: &str,
-    ) -> Option<StoredRowBatch> {
-        let table = self.load_row_table_name(storage, row_id)?;
-        storage
-            .load_visible_region_row(&table, branch_name, row_id)
-            .ok()
-            .flatten()
-    }
-
-    #[cfg(test)]
-    pub(super) fn persist_row_region_tip<H: Storage>(
-        &self,
-        storage: &mut H,
-        table: &str,
-        row_id: ObjectId,
-        branch_name: &str,
-    ) -> Option<StoredRowBatch> {
-        let version = self.stored_row_batch_for_tip(storage, row_id, branch_name)?;
-        let visible_entry = storage
-            .load_visible_region_entry(table, branch_name, row_id)
-            .ok()
-            .flatten()?;
-
-        if let Err(error) =
-            storage.append_history_region_rows(table, std::slice::from_ref(&version))
-        {
-            tracing::warn!(
-                table,
-                branch = branch_name,
-                row_id = %row_id,
-                %error,
-                "failed to append row-history version"
-            );
-        }
-
-        if let Err(error) =
-            storage.upsert_visible_region_rows(table, std::slice::from_ref(&visible_entry))
-        {
-            tracing::warn!(
-                table,
-                branch = branch_name,
-                row_id = %row_id,
-                %error,
-                "failed to upsert visible row entry"
-            );
-        }
-
-        Some(version)
+        batch
     }
 
     fn apply_local_row_batch<H: Storage>(

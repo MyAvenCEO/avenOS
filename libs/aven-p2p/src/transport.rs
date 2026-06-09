@@ -123,9 +123,19 @@ impl ServerSyncTransport {
         let hello: ServerHello = read_json(&mut tls).await?;
         let did = groove::did_key::peer_did_from_ed25519(&signing_key.verifying_key().to_bytes())
             .map_err(|e| P2pError::Handshake(format!("encode our did: {e}")))?;
-        let message = build_message(&hello, &did, &cb);
+        // Raw-TLS path: the anti-relay anchor is the real TLS-exporter channel binding `cb`,
+        // so the wss mutual-handshake client nonce is unused here (empty).
+        let message = build_message(&hello, &did, &cb, "");
         let signature = sign(&signing_key, &message);
-        write_json(&mut tls, &ClientAuth { did, signature }).await?;
+        write_json(
+            &mut tls,
+            &ClientAuth {
+                did,
+                signature,
+                client_nonce: String::new(),
+            },
+        )
+        .await?;
 
         let result: AuthResult = read_json(&mut tls).await?;
         if !result.ok {
@@ -284,6 +294,9 @@ async fn accept_one(
         ok: verdict.is_ok(),
         error: verdict.as_ref().err().cloned(),
         server_did: Some(server_did),
+        // Raw-TLS path is relay-resistant via the exporter channel binding, so no
+        // application-layer server attestation is needed (that is the wss path's mechanism).
+        signature: None,
     };
     write_json(&mut tls, &result).await?;
     let peer = verdict.map_err(P2pError::Handshake)?;
@@ -305,7 +318,7 @@ fn verify_client(hello: &ServerHello, auth: &ClientAuth, cb: &str) -> std::resul
         return Err("challenge expired".into());
     }
     let pubkey = groove::did_key::ed25519_public_from_peer_did(&auth.did)?;
-    let message = build_message(hello, &auth.did, cb);
+    let message = build_message(hello, &auth.did, cb, &auth.client_nonce);
     verify(&pubkey, &message, &auth.signature)?;
     Ok(PeerId(pubkey))
 }
@@ -489,11 +502,14 @@ mod tls_did_challenge {
             groove::did_key::peer_did_from_ed25519(&SigningKey::from_bytes(&[7u8; 32]).verifying_key().to_bytes())
                 .unwrap();
         // Sign the message that claims the forged DID, but with key_a's key.
-        let message = build_message(&hello, &forged_did, &cb);
+        let message = build_message(&hello, &forged_did, &cb, "");
         let signature = sign(&key_a, &message);
-        write_json(&mut tls, &ClientAuth { did: forged_did, signature })
-            .await
-            .unwrap();
+        write_json(
+            &mut tls,
+            &ClientAuth { did: forged_did, signature, client_nonce: String::new() },
+        )
+        .await
+        .unwrap();
         let result: AuthResult = read_json(&mut tls).await.unwrap();
         assert!(!result.ok, "server must reject a signature that does not match the claimed DID");
     }

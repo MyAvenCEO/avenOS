@@ -11,7 +11,7 @@ mod query_to_relation_ir;
 pub mod query_wire;
 pub mod relation_ir;
 mod relation_ir_query_plan;
-pub mod server_queries;
+mod schema_resolution;
 pub mod session;
 pub mod settlement_eval_cache;
 pub mod subscriptions;
