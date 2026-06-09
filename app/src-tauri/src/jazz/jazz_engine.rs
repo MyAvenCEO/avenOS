@@ -653,6 +653,22 @@ pub(crate) async fn exec_list_rows(
 	client.query(q, None).await.map_err(super::format_jazz_err)
 }
 
+/// Locate the `identities` row whose `owner` cell equals `identity`. The row's object id is
+/// distinct from the identity uuid; grants/updates address the row by object id.
+pub(crate) async fn find_identity_oid(
+	client: &JazzClient,
+	schema: &TableSchema,
+	identity: Uuid,
+) -> Result<ObjectId, String> {
+	let id_ix = col_ix(schema, "owner")?;
+	for (oid, vals) in exec_list_rows(client, "identities").await? {
+		if uuid_cell_at(vals.as_slice(), id_ix)? == identity {
+			return Ok(oid);
+		}
+	}
+	Err(format!("no identities row for owner={identity}"))
+}
+
 /// Map Groove `(table, object_id)` → identity UUID for sync ACL on patch commits.
 ///
 /// MUST include soft-deleted rows. This map is the resource→identity lookup the peer-sync

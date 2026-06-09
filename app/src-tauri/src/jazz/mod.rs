@@ -2021,6 +2021,36 @@ async fn wrap_all_dek_versions_to_recipient(
 }
 
 /// Append biscuit third-party `owns` for `peerDid`, persist updated `genesis_b64`, and add a DEK keyshare row so the peer can decrypt ciphertext for this identity after sync.
+/// The shared grant ritual: locate an identity's row, seal the new `genesis_b64` under the
+/// identity DEK, sign the owner-binding, and persist it. Every admin/member/replicate grant
+/// funnels through here, so the seal coordinate + owner-binding are applied in exactly one place.
+async fn update_identity_genesis(
+	client: &JazzClient,
+	shell: &jazz_engine::ShellState,
+	identity: Uuid,
+	genesis_b64: String,
+) -> Result<(), String> {
+	let sparks_schema = jazz_engine::resolved_table_schema(client, "identities").await?;
+	let sparks_oid = jazz_engine::find_identity_oid(client, &sparks_schema, identity).await?;
+	let mut patch = Map::new();
+	patch.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
+	jazz_engine::seal_sensitive_in_patch(
+		shell,
+		"identities",
+		&sparks_schema,
+		identity,
+		*sparks_oid.uuid(),
+		&mut patch,
+	)?;
+	let ops = patch_updates(&sparks_schema, patch)?;
+	let upd_meta = owner_binding_meta(&shell.signing_key, sparks_oid, identity)?;
+	client
+		.update_with_metadata(sparks_oid, ops, upd_meta)
+		.await
+		.map_err(format_jazz_err)?;
+	Ok(())
+}
+
 pub(crate) async fn groove_ipc_spark_admin_add(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -2096,40 +2126,7 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 			.map_err(|e| format!("biscuit_encode:{e:?}"))?;
 		let genesis_b64 = URL_SAFE_NO_PAD.encode(genesis_vec);
 
-		let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
-		let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
-
-		let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "identities").await?;
-		let mut sparks_oid: Option<ObjectId> = None;
-		for (oid, vals) in sparks_rows {
-			let sid = jazz_engine::uuid_cell_at(vals.as_slice(), identity_id_ix)?;
-			if sid == identity_uuid {
-				sparks_oid = Some(oid);
-				break;
-			}
-		}
-		let sparks_oid =
-			sparks_oid.ok_or_else(|| format!("no identities row for owner={identity_uuid}"))?;
-
-		let mut patch_sparks = Map::new();
-		patch_sparks.insert(
-			"genesis_b64".into(),
-			JsonValue::String(genesis_b64),
-		);
-		jazz_engine::seal_sensitive_in_patch(
-			shell,
-			"identities",
-			&sparks_schema,
-			identity_uuid,
-			*sparks_oid.uuid(),
-			&mut patch_sparks,
-		)?;
-		let sparks_ops = patch_updates(&sparks_schema, patch_sparks)?;
-		let upd_meta = owner_binding_meta(&shell.signing_key, sparks_oid, identity_uuid)?;
-		client
-			.update_with_metadata(sparks_oid, sparks_ops, upd_meta)
-			.await
-			.map_err(format_jazz_err)?;
+		update_identity_genesis(client.as_ref(), shell, identity_uuid, genesis_b64).await?;
 	}
 
 	finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
@@ -2265,36 +2262,7 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 		.map_err(|e| format!("biscuit_encode:{e:?}"))?;
 	let genesis_b64 = URL_SAFE_NO_PAD.encode(genesis_vec);
 
-	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
-	let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
-	let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "identities").await?;
-	let mut sparks_oid: Option<ObjectId> = None;
-	for (oid, vals) in sparks_rows {
-		let sid = jazz_engine::uuid_cell_at(vals.as_slice(), identity_id_ix)?;
-		if sid == identity_uuid {
-			sparks_oid = Some(oid);
-			break;
-		}
-	}
-	let sparks_oid =
-		sparks_oid.ok_or_else(|| format!("no identities row for owner={identity_uuid}"))?;
-
-	let mut patch_sparks = Map::new();
-	patch_sparks.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
-	jazz_engine::seal_sensitive_in_patch(
-		shell,
-		"identities",
-		&sparks_schema,
-		identity_uuid,
-		*sparks_oid.uuid(),
-		&mut patch_sparks,
-	)?;
-	let sparks_ops = patch_updates(&sparks_schema, patch_sparks)?;
-	let upd_meta = owner_binding_meta(&shell.signing_key, sparks_oid, identity_uuid)?;
-	client
-		.update_with_metadata(sparks_oid, sparks_ops, upd_meta)
-		.await
-		.map_err(format_jazz_err)?;
+	update_identity_genesis(client.as_ref(), shell, identity_uuid, genesis_b64).await?;
 
 	finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
 
@@ -2367,31 +2335,7 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 		let genesis_vec = new_biscuit.to_vec().map_err(|e| format!("biscuit_encode:{e:?}"))?;
 		let genesis_b64 = URL_SAFE_NO_PAD.encode(genesis_vec);
 
-		let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
-		let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
-		let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "identities").await?;
-		let mut sparks_oid: Option<ObjectId> = None;
-		for (oid, vals) in sparks_rows {
-			let sid = jazz_engine::uuid_cell_at(vals.as_slice(), identity_id_ix)?;
-			if sid == identity_uuid {
-				sparks_oid = Some(oid);
-				break;
-			}
-		}
-		let sparks_oid = sparks_oid.ok_or_else(|| format!("no identities row for owner={identity_uuid}"))?;
-		let mut patch_sparks = Map::new();
-		patch_sparks.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
-		jazz_engine::seal_sensitive_in_patch(
-			shell,
-			"identities",
-			&sparks_schema,
-			identity_uuid,
-			*sparks_oid.uuid(),
-			&mut patch_sparks,
-		)?;
-		let sparks_ops = patch_updates(&sparks_schema, patch_sparks)?;
-		let upd_meta = owner_binding_meta(&shell.signing_key, sparks_oid, identity_uuid)?;
-		client.update_with_metadata(sparks_oid, sparks_ops, upd_meta).await.map_err(format_jazz_err)?;
+		update_identity_genesis(client.as_ref(), shell, identity_uuid, genesis_b64).await?;
 	}
 
 	finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
@@ -2889,30 +2833,7 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 	let genesis_b64 =
 		URL_SAFE_NO_PAD.encode(chain.to_vec().map_err(|e| format!("biscuit_encode:{e:?}"))?);
 
-	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
-	let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
-	let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "identities").await?;
-	let mut sparks_oid: Option<ObjectId> = None;
-	for (oid, vals) in sparks_rows {
-		if jazz_engine::uuid_cell_at(vals.as_slice(), identity_id_ix)? == identity_uuid {
-			sparks_oid = Some(oid);
-			break;
-		}
-	}
-	let sparks_oid = sparks_oid.ok_or_else(|| "no avenCEO identities row".to_string())?;
-	let mut patch = Map::new();
-	patch.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
-	jazz_engine::seal_sensitive_in_patch(
-		shell,
-		"identities",
-		&sparks_schema,
-		identity_uuid,
-		*sparks_oid.uuid(),
-		&mut patch,
-	)?;
-	let ops = patch_updates(&sparks_schema, patch)?;
-	let upd_meta = owner_binding_meta(&shell.signing_key, sparks_oid, identity_uuid)?;
-	client.update_with_metadata(sparks_oid, ops, upd_meta).await.map_err(format_jazz_err)?;
+	update_identity_genesis(client.as_ref(), shell, identity_uuid, genesis_b64).await?;
 
 	finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
 	Ok(())
