@@ -1,4 +1,5 @@
 import type { StyleDef } from '../../engine/types.js'
+import { withBrand } from '../../brand-style.js'
 import { invoiceStyle } from '../invoice/style.js'
 
 // Tokens specific to the transfer list; merged on top of the invoice tokens so
@@ -25,8 +26,10 @@ const selectors: StyleDef['selectors'] = {
 	'.bt-ui-container': {
 		height: '100%',
 		minHeight: '480px',
-		padding: '1.25rem 1.5rem',
-		borderRadius: 'var(--radius-2xl)',
+		maxWidth: 'var(--max-w)',
+		margin: '0 auto',
+		padding: 'var(--pad-card)',
+		borderRadius: 'var(--radius-card)',
 		background: 'var(--tech-fill)',
 		display: 'flex',
 		flexDirection: 'column',
@@ -276,8 +279,8 @@ const selectors: StyleDef['selectors'] = {
 	},
 }
 
-export const bankTransfersStyle: StyleDef = {
+export const bankTransfersStyle: StyleDef = withBrand({
 	tokens,
 	components: { ...(invoiceStyle.components ?? {}) },
 	selectors,
-}
+})

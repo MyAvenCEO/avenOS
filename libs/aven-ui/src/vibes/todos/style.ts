@@ -1,27 +1,21 @@
 import type { StyleDef } from '../../engine/types.js'
+import { withBrand } from '../../brand-style.js'
 
+// Shared brand layer provides colours/radii/fonts/ink. Todos keeps its navy
+// action accent and the row divider.
 const tokens: StyleDef['tokens'] = {
-	'bg-a': '#FBFAF6',
-	'tech-fill': 'rgba(255, 255, 255, 0.1)',
-	'tech-fill-inner': 'rgba(255, 255, 255, 0.15)',
-	text: '#1a1a1a',
-	muted: 'rgba(26, 26, 26, 0.45)',
-	border: 'rgba(0, 0, 0, 0.1)',
-	'border-soft': 'color-mix(in srgb, var(--border) 35%, transparent)',
-	'hitl-dash': 'color-mix(in srgb, var(--text) 20%, transparent)',
 	'row-divider': 'color-mix(in srgb, var(--border) 55%, transparent)',
 	'brand-accent': '#1e293b',
 	'brand-accent-fg': '#f8fafc',
-	'radius-2xl': '2rem',
-	'radius-md': '1rem',
-	'font-sans': "'Chillax', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 }
 
 const selectors: StyleDef['selectors'] = {
 	'.td-ui-container': {
 		minHeight: '100%',
-		padding: '1.25rem 1.5rem',
-		borderRadius: 'var(--radius-2xl)',
+		maxWidth: 'var(--max-w)',
+		margin: '0 auto',
+		padding: 'var(--pad-card)',
+		borderRadius: 'var(--radius-card)',
 		background: 'var(--tech-fill)',
 		border: 'none',
 		display: 'flex',
@@ -246,4 +240,4 @@ const selectors: StyleDef['selectors'] = {
 	},
 }
 
-export const todoStyle: StyleDef = { tokens, selectors }
+export const todoStyle: StyleDef = withBrand({ tokens, selectors })

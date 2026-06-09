@@ -1,36 +1,15 @@
 import type { StyleDef } from '../../engine/types.js'
+import { withBrand } from '../../brand-style.js'
 
-const tokens: StyleDef['tokens'] = {
-	'bg-a': '#FBFAF6',
-	'tech-fill': 'rgba(255, 255, 255, 0.1)',
-	'tech-fill-inner': 'rgba(255, 255, 255, 0.15)',
-	'hitl-dash': 'color-mix(in srgb, var(--text) 20%, transparent)',
-	border: 'rgba(0, 0, 0, 0.1)',
-	muted: 'rgba(26, 26, 26, 0.45)',
-	text: '#1a1a1a',
-	'brand-accent': '#e6b34d',
-	'radius-2xl': '2rem',
-	'radius-md': '1rem',
-	'font-sans': "'Chillax', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-}
-
+// All colours, radii, fonts and the dark-blue ink now come from the shared
+// brand layer (withBrand). Only contract-specific selectors remain below.
 const selectors: StyleDef['selectors'] = {
-	'*, *::before, *::after': { boxSizing: 'border-box' },
-	':host': {
-		fontFamily: 'var(--font-sans)',
-		background: 'var(--bg-a)',
-		color: 'var(--text)',
-		margin: '0',
-		minHeight: '100%',
-		height: '100%',
-		letterSpacing: '-0.015em',
-	},
 	'.cv-shell': {
-		padding: '1.25rem 1.5rem',
-		borderRadius: 'var(--radius-2xl)',
+		padding: 'var(--pad-card)',
+		borderRadius: 'var(--radius-card)',
 		background: 'var(--tech-fill)',
 		border: 'none',
-		maxWidth: '52rem',
+		maxWidth: 'var(--max-w)',
 		margin: '0 auto',
 	},
 	'.cv-hero': {
@@ -218,7 +197,4 @@ const selectors: StyleDef['selectors'] = {
 	},
 }
 
-export const contractStyle: StyleDef = {
-	tokens,
-	selectors,
-}
+export const contractStyle: StyleDef = withBrand({ selectors })
