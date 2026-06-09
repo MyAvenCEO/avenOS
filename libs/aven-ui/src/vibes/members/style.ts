@@ -75,7 +75,7 @@ const selectors: StyleDef['selectors'] = {
 		borderRadius: 'var(--radius-chip)',
 		border: '1px solid var(--border-soft)',
 		padding: '0.25rem 0.55rem',
-		fontSize: '10px',
+		fontSize: 'var(--fs-eyebrow)',
 		fontWeight: '600',
 		letterSpacing: '0.06em',
 		textTransform: 'uppercase',

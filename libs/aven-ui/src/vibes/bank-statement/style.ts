@@ -26,7 +26,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bs-card h4': {
 		margin: '0 0 8px 0',
-		fontSize: '10px',
+		fontSize: 'var(--fs-eyebrow)',
 		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
@@ -34,13 +34,13 @@ const selectors: StyleDef['selectors'] = {
 		opacity: '0.55',
 	},
 	'.bs-card .big': {
-		fontSize: '15px',
+		fontSize: 'var(--fs-title)',
 		fontWeight: '600',
 		color: 'var(--text)',
 		marginBottom: '4px',
 	},
 	'.bs-card .line': {
-		fontSize: '13px',
+		fontSize: 'var(--fs-body)',
 		color: 'var(--text)',
 		marginTop: '2px',
 		whiteSpace: 'pre-wrap',
@@ -48,7 +48,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bs-card .muted': {
 		color: 'var(--muted)',
-		fontSize: '12px',
+		fontSize: 'var(--fs-meta)',
 		marginTop: '2px',
 	},
 	'.bs-grid': {
@@ -63,7 +63,7 @@ const selectors: StyleDef['selectors'] = {
 		borderRadius: 'var(--radius-2xl)',
 		padding: '14px 20px',
 		marginBottom: '16px',
-		fontSize: '13px',
+		fontSize: 'var(--fs-body)',
 	},
 	'.bs-banner-hero': {
 		display: 'grid',
@@ -72,14 +72,14 @@ const selectors: StyleDef['selectors'] = {
 		alignItems: 'end',
 	},
 	'.bs-banner-title': {
-		fontSize: '1.1rem',
+		fontSize: 'var(--fs-lead)',
 		fontWeight: '600',
 		letterSpacing: '-0.02em',
 		color: 'var(--text)',
 		textTransform: 'capitalize',
 	},
 	'.bs-banner-sub': {
-		fontSize: '10px',
+		fontSize: 'var(--fs-eyebrow)',
 		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
@@ -87,7 +87,7 @@ const selectors: StyleDef['selectors'] = {
 		marginTop: '6px',
 	},
 	'.bs-banner-money': {
-		fontSize: '1.35rem',
+		fontSize: 'var(--fs-hero)',
 		fontWeight: '600',
 		fontFamily: 'ui-monospace, Menlo, monospace',
 		fontVariantNumeric: 'tabular-nums',
@@ -96,7 +96,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bs-banner-money .bs-banner-sub': { textAlign: 'right' },
 	'.bs-field-label': {
-		fontSize: '9px',
+		fontSize: 'var(--fs-micro)',
 		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
@@ -104,7 +104,7 @@ const selectors: StyleDef['selectors'] = {
 		marginTop: '4px',
 	},
 	'.bs-field-val': {
-		fontSize: '0.95rem',
+		fontSize: 'var(--fs-title)',
 		fontWeight: '600',
 		fontFamily: 'ui-monospace, Menlo, monospace',
 		fontVariantNumeric: 'tabular-nums',
@@ -124,7 +124,7 @@ const selectors: StyleDef['selectors'] = {
 		gap: '10px 14px',
 	},
 	'.bs-banner-fields--compact .bs-field-val': {
-		fontSize: '0.8125rem',
+		fontSize: 'var(--fs-body)',
 		fontWeight: '600',
 		lineHeight: '1.25',
 	},
@@ -141,7 +141,7 @@ const selectors: StyleDef['selectors'] = {
 	'.bs-items': {
 		width: '100%',
 		borderCollapse: 'collapse',
-		fontSize: '13px',
+		fontSize: 'var(--fs-body)',
 	},
 	'.bs-items thead th': {
 		textAlign: 'left',
@@ -149,7 +149,7 @@ const selectors: StyleDef['selectors'] = {
 		padding: '10px 12px',
 		borderBottom: '1px solid var(--border-soft)',
 		fontWeight: '600',
-		fontSize: '10px',
+		fontSize: 'var(--fs-eyebrow)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.05em',
 		color: 'var(--muted)',
@@ -176,21 +176,21 @@ const selectors: StyleDef['selectors'] = {
 		lineHeight: '1.35',
 	},
 	'.bs-desc-body': {
-		fontSize: '12px',
+		fontSize: 'var(--fs-meta)',
 		color: 'var(--muted)',
 		lineHeight: '1.45',
 		marginTop: '3px',
 		whiteSpace: 'pre-line',
 	},
 	'.bs-fx-hint': {
-		fontSize: '10px',
+		fontSize: 'var(--fs-eyebrow)',
 		color: 'var(--muted)',
 		marginTop: '4px',
 		fontStyle: 'italic',
 	},
 	'.bs-desc-title:empty, .bs-desc-body:empty, .bs-fx-hint:empty': { display: 'none' },
 	'.bs-notes': {
-		fontSize: '13px',
+		fontSize: 'var(--fs-body)',
 		lineHeight: '1.5',
 		whiteSpace: 'pre-line',
 		color: 'var(--text)',

@@ -35,7 +35,7 @@ const components: StyleDef['components'] = {
 		padding: '18px 20px',
 		' h4': {
 			margin: '0 0 8px 0',
-			fontSize: '10px',
+			fontSize: 'var(--fs-eyebrow)',
 			fontWeight: '600',
 			color: 'var(--muted)',
 			textTransform: 'uppercase',
@@ -43,13 +43,13 @@ const components: StyleDef['components'] = {
 			opacity: '0.55',
 		},
 		' .big': {
-			fontSize: '15px',
+			fontSize: 'var(--fs-title)',
 			fontWeight: '600',
 			color: 'var(--text)',
 			marginBottom: '4px',
 		},
 		' .line': {
-			fontSize: '13px',
+			fontSize: 'var(--fs-body)',
 			color: 'var(--text)',
 			marginTop: '2px',
 			whiteSpace: 'pre-wrap',
@@ -57,7 +57,7 @@ const components: StyleDef['components'] = {
 		},
 		' .muted': {
 			color: 'var(--muted)',
-			fontSize: '12px',
+			fontSize: 'var(--fs-meta)',
 			marginTop: '2px',
 		},
 		' .party-org-id-line + .party-org-id-line': {
@@ -87,7 +87,7 @@ const components: StyleDef['components'] = {
 		lineHeight: '1.35',
 	},
 	partyRepresentativeSublabel: {
-		fontSize: '11px',
+		fontSize: 'var(--fs-eyebrow)',
 		fontWeight: '500',
 		margin: '0',
 		lineHeight: '1.25',
@@ -95,7 +95,7 @@ const components: StyleDef['components'] = {
 		letterSpacing: 'normal',
 	},
 	invPartyRepName: {
-		fontSize: '13px',
+		fontSize: 'var(--fs-body)',
 		color: 'var(--text)',
 		lineHeight: '1.35',
 		margin: '0',
@@ -103,7 +103,7 @@ const components: StyleDef['components'] = {
 	partyOrgIdLine: {
 		marginTop: '8px',
 		marginBottom: '0',
-		fontSize: '12px',
+		fontSize: 'var(--fs-meta)',
 		lineHeight: '1.4',
 		color: 'var(--muted)',
 		fontWeight: '400',
@@ -123,7 +123,7 @@ const components: StyleDef['components'] = {
 		borderRadius: 'var(--radius-2xl)',
 		padding: '14px 20px',
 		marginBottom: '16px',
-		fontSize: '13px',
+		fontSize: 'var(--fs-body)',
 	},
 	invBannerHeroRow: {
 		display: 'grid',
@@ -133,14 +133,14 @@ const components: StyleDef['components'] = {
 		width: '100%',
 	},
 	invBannerValue: {
-		fontSize: '1.35rem',
+		fontSize: 'var(--fs-hero)',
 		fontWeight: '600',
 		lineHeight: '1.2',
 		color: 'var(--text)',
 		letterSpacing: '-0.02em',
 	},
 	invBannerSublabel: {
-		fontSize: '11px',
+		fontSize: 'var(--fs-eyebrow)',
 		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
@@ -173,13 +173,13 @@ const components: StyleDef['components'] = {
 		borderTop: '1px solid var(--banner-divider)',
 	},
 	invBannerCompactValue: {
-		fontSize: '0.88rem',
+		fontSize: 'var(--fs-section)',
 		fontWeight: '600',
 		lineHeight: '1.3',
 		color: 'var(--text)',
 	},
 	invBannerCompactSublabel: {
-		fontSize: '9px',
+		fontSize: 'var(--fs-micro)',
 		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
@@ -198,7 +198,7 @@ const components: StyleDef['components'] = {
 		flexDirection: 'column',
 		gap: '8px',
 		' .invoice-cap-block--title': {
-			fontSize: '15px',
+			fontSize: 'var(--fs-title)',
 			fontWeight: '600',
 			color: 'var(--text)',
 			letterSpacing: '-0.01em',
@@ -231,11 +231,11 @@ const components: StyleDef['components'] = {
 		flexWrap: 'wrap',
 		alignItems: 'baseline',
 		gap: '6px 10px',
-		fontSize: '12px',
+		fontSize: 'var(--fs-meta)',
 		lineHeight: '1.4',
 	},
 	invoiceCapK: {
-		fontSize: '10px',
+		fontSize: 'var(--fs-eyebrow)',
 		fontWeight: '600',
 		letterSpacing: '0.06em',
 		textTransform: 'uppercase',
@@ -248,14 +248,14 @@ const components: StyleDef['components'] = {
 	invoiceItems: {
 		width: '100%',
 		borderCollapse: 'collapse',
-		fontSize: '13px',
+		fontSize: 'var(--fs-body)',
 		' thead th': {
 			textAlign: 'left',
 			background: 'var(--surface-2)',
 			padding: '10px 14px',
 			borderBottom: '1px solid var(--border)',
 			fontWeight: '600',
-			fontSize: '11px',
+			fontSize: 'var(--fs-eyebrow)',
 			textTransform: 'uppercase',
 			letterSpacing: '0.05em',
 			color: 'var(--muted)',
@@ -286,7 +286,7 @@ const components: StyleDef['components'] = {
 		' td.idx': {
 			color: 'var(--muted)',
 			width: '32px',
-			fontSize: '11px',
+			fontSize: 'var(--fs-eyebrow)',
 		},
 	},
 	invLineItemPrimary: {
@@ -295,7 +295,7 @@ const components: StyleDef['components'] = {
 		lineHeight: '1.35',
 	},
 	invLineItemSecondary: {
-		fontSize: '12px',
+		fontSize: 'var(--fs-meta)',
 		color: 'var(--muted)',
 		lineHeight: '1.4',
 		marginTop: '3px',
@@ -307,7 +307,7 @@ const components: StyleDef['components'] = {
 		background: 'var(--tech-fill)',
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
-		fontSize: '15px',
+		fontSize: 'var(--fs-title)',
 		marginTop: '12px',
 		overflow: 'hidden',
 	},
@@ -321,21 +321,21 @@ const components: StyleDef['components'] = {
 		borderRadius: '0',
 	},
 	invoiceRootOutstandingLabel: {
-		fontSize: '10px',
+		fontSize: 'var(--fs-eyebrow)',
 		fontWeight: '600',
 		letterSpacing: '0.06em',
 		textTransform: 'uppercase',
 		color: 'var(--muted)',
 	},
 	invoiceRootOutstandingValue: {
-		fontSize: '1.1rem',
+		fontSize: 'var(--fs-lead)',
 		fontWeight: '600',
 		fontFamily: 'ui-monospace, Menlo, monospace',
 		fontVariantNumeric: 'tabular-nums',
 		color: 'var(--text)',
 	},
 	invoiceBundleLabel: {
-		fontSize: '10px',
+		fontSize: 'var(--fs-eyebrow)',
 		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
@@ -373,7 +373,7 @@ const selectors: StyleDef['selectors'] = {
 		color: 'var(--brand-accent)',
 	},
 	'.inv-banner-value.inv-banner-field-value': {
-		fontSize: '1.05rem',
+		fontSize: 'var(--fs-lead)',
 		fontWeight: '600',
 		lineHeight: '1.3',
 		color: 'var(--text)',
@@ -399,11 +399,11 @@ const selectors: StyleDef['selectors'] = {
 		textAlign: 'right',
 	},
 	'.inv-banner-mid--compact .inv-banner-mid-dates .inv-banner-field .inv-banner-field-value': {
-		fontSize: '0.88rem',
+		fontSize: 'var(--fs-section)',
 		fontWeight: '600',
 	},
 	'.inv-banner-mid--compact .inv-banner-mid-dates .inv-banner-sublabel': {
-		fontSize: '9px',
+		fontSize: 'var(--fs-micro)',
 		marginTop: '2px',
 	},
 	'.invoice-items-wrap--unified .invoice-items-cap': {
@@ -465,13 +465,13 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.invoice-totals .inv-totals-line--subtotal, .invoice-totals .inv-totals-line--tax, .invoice-totals .inv-totals-line--tax-total-sum':
 		{
-			fontSize: '16px',
+			fontSize: 'var(--fs-lead)',
 			lineHeight: '1.35',
 			color: 'var(--muted)',
 		},
 	'.invoice-totals .inv-totals-line--subtotal .num, .invoice-totals .inv-totals-line--tax .num, .invoice-totals .inv-totals-line--tax-total-sum .num':
 		{
-			fontSize: '17px',
+			fontSize: 'var(--fs-lead)',
 			fontWeight: '600',
 			color: 'var(--text)',
 		},
@@ -484,7 +484,7 @@ const selectors: StyleDef['selectors'] = {
 		paddingTop: '8px',
 	},
 	'.invoice-totals .inv-totals-line--tax-rate': {
-		fontSize: '14px',
+		fontSize: 'var(--fs-section)',
 		color: 'var(--muted)',
 		padding: '2px 0',
 	},
@@ -495,7 +495,7 @@ const selectors: StyleDef['selectors'] = {
 		minWidth: '0',
 	},
 	'.invoice-totals .inv-totals-line--tax-rate .inv-totals-line__tax-sub': {
-		fontSize: '12px',
+		fontSize: 'var(--fs-meta)',
 		fontWeight: '400',
 		lineHeight: '1.2',
 		color: 'var(--muted)',
@@ -511,14 +511,14 @@ const selectors: StyleDef['selectors'] = {
 		color: 'var(--text)',
 	},
 	'.invoice-totals .inv-totals-line--invoice-total > span:first-child': {
-		fontSize: '13px',
+		fontSize: 'var(--fs-body)',
 		fontWeight: '600',
 		textTransform: 'uppercase',
 		letterSpacing: '0.04em',
 		color: 'var(--muted)',
 	},
 	'.invoice-totals .inv-totals-line--invoice-total .num': {
-		fontSize: '1.5rem',
+		fontSize: 'var(--fs-amount)',
 		fontWeight: '600',
 		letterSpacing: '-0.03em',
 		color: 'var(--text)',

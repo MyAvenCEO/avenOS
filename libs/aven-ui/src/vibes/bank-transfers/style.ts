@@ -61,7 +61,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bt-eyebrow': {
 		display: 'block',
-		fontSize: '10px',
+		fontSize: 'var(--fs-eyebrow)',
 		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
@@ -77,7 +77,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bt-list-title': {
 		margin: '0',
-		fontSize: '1.1rem',
+		fontSize: 'var(--fs-lead)',
 		fontWeight: '600',
 		letterSpacing: '-0.02em',
 		color: 'var(--text)',
@@ -91,7 +91,7 @@ const selectors: StyleDef['selectors'] = {
 		flexShrink: '0',
 	},
 	'.bt-count-value': {
-		fontSize: '1.35rem',
+		fontSize: 'var(--fs-hero)',
 		fontWeight: '600',
 		fontFamily: 'ui-monospace, Menlo, monospace',
 		fontVariantNumeric: 'tabular-nums',
@@ -99,7 +99,7 @@ const selectors: StyleDef['selectors'] = {
 		lineHeight: '1.1',
 	},
 	'.bt-count-label': {
-		fontSize: '9px',
+		fontSize: 'var(--fs-micro)',
 		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
@@ -121,7 +121,7 @@ const selectors: StyleDef['selectors'] = {
 		textAlign: 'center',
 		color: 'var(--muted)',
 		padding: '1.5rem 1rem',
-		fontSize: '13px',
+		fontSize: 'var(--fs-body)',
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-md)',
 	},
@@ -200,7 +200,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bt-row-payee': {
 		fontWeight: '600',
-		fontSize: '14px',
+		fontSize: 'var(--fs-section)',
 		color: 'var(--text)',
 		whiteSpace: 'nowrap',
 		overflow: 'hidden',
@@ -211,7 +211,7 @@ const selectors: StyleDef['selectors'] = {
 		fontFamily: 'ui-monospace, Menlo, monospace',
 		fontVariantNumeric: 'tabular-nums',
 		fontWeight: '600',
-		fontSize: '14px',
+		fontSize: 'var(--fs-section)',
 		color: 'var(--text)',
 		whiteSpace: 'nowrap',
 		flexShrink: '0',
@@ -220,7 +220,7 @@ const selectors: StyleDef['selectors'] = {
 		color: 'var(--status-paid)',
 	},
 	'.bt-row-ref': {
-		fontSize: '12px',
+		fontSize: 'var(--fs-meta)',
 		color: 'var(--muted)',
 		whiteSpace: 'nowrap',
 		overflow: 'hidden',
@@ -228,7 +228,7 @@ const selectors: StyleDef['selectors'] = {
 		minWidth: '0',
 	},
 	'.bt-row-date': {
-		fontSize: '12px',
+		fontSize: 'var(--fs-meta)',
 		color: 'var(--muted)',
 		whiteSpace: 'nowrap',
 		fontVariantNumeric: 'tabular-nums',
@@ -236,7 +236,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bt-row-status': {
 		marginTop: '2px',
-		fontSize: '10px',
+		fontSize: 'var(--fs-eyebrow)',
 		fontWeight: '600',
 		textTransform: 'uppercase',
 		letterSpacing: '0.06em',
@@ -261,7 +261,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bt-detail-empty-text': {
 		marginTop: '8px',
-		fontSize: '13px',
+		fontSize: 'var(--fs-body)',
 		color: 'var(--muted)',
 		maxWidth: '260px',
 		lineHeight: '1.5',
