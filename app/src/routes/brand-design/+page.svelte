@@ -1,10 +1,19 @@
 <script lang="ts">
 	import NeumorphicToggle from '$lib/brand-design/NeumorphicToggle.svelte'
+	import SkeuButtons from '$lib/brand-design/SkeuButtons.svelte'
+	import SkeuTodo from '$lib/brand-design/SkeuTodo.svelte'
 	import { t } from '$lib/i18n'
 
-	// Toggle drives the SURROUNDING surface (a real dark-mode switch).
-	// Default = dark; checkbox checked = light "paper".
+	// The toggle drives the surrounding surface (a real dark-mode switch).
 	let light = $state(false)
+	type CompId = 'toggle' | 'todo' | 'buttons'
+	let selected = $state<CompId>('toggle')
+
+	const items: { id: CompId; label: string }[] = [
+		{ id: 'toggle', label: 'Toggle' },
+		{ id: 'todo', label: 'Todo item' },
+		{ id: 'buttons', label: 'Buttons' },
+	]
 
 	const NOISE =
 		"data:image/svg+xml,<svg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'><filter id='noiseFilter'><feTurbulence type='fractalNoise' baseFrequency='5' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.25'/></svg>"
@@ -14,28 +23,175 @@
 	<title>{t('nav.brandDesign')}{t('common.titleSuffix')}</title>
 </svelte:head>
 
-<div
-	class="relative flex min-h-[28rem] min-w-0 flex-1 flex-col overflow-hidden transition-colors duration-300 ease-out"
-	style="background-color: {light ? '#dedad3' : '#1d2532'};"
->
-	<!-- Noise paper texture, stronger on the light surface (matches the reference) -->
-	<div
-		class="pointer-events-none absolute inset-0 transition-opacity duration-300 ease-out"
-		style="background-image: url('{NOISE}'); background-repeat: repeat; opacity: {light ? 0.8 : 0.4};"
-		aria-hidden="true"
-	></div>
+<div class="stage" class:is-light={light}>
+	<div class="noise" style="background-image: url('{NOISE}'); opacity: {light ? 0.8 : 0.4};" aria-hidden="true"></div>
 
-	<header
-		class="relative z-10 px-6 py-6 transition-colors duration-300 ease-out sm:px-8"
-		style="color: {light ? '#1d2532' : '#dedad3'};"
-	>
-		<h1 class="text-2xl font-semibold tracking-tight">{t('nav.brandDesign')}</h1>
-		<p class="mt-1 max-w-xl text-sm leading-relaxed" style="opacity: 0.65;">
-			Skeuomorphism — paper-UI toggle. Tap the switch to flip the surrounding surface dark ↔ light.
-		</p>
-	</header>
+	<div class="layout">
+		<!-- Skeuomorphic component selector -->
+		<aside class="aside">
+			<p class="aside-label">Components</p>
+			<nav class="aside-nav">
+				{#each items as item (item.id)}
+					<button
+						type="button"
+						class="skeu-nav"
+						class:active={selected === item.id}
+						aria-current={selected === item.id ? 'page' : undefined}
+						onclick={() => (selected = item.id)}
+					>
+						{item.label}
+					</button>
+				{/each}
+			</nav>
+		</aside>
 
-	<div class="relative z-10 flex min-h-0 flex-1 items-center justify-center p-6">
-		<NeumorphicToggle bind:light />
+		<main class="content">
+			<header class="head">
+				<h1>{t('nav.brandDesign')}</h1>
+				<p>Skeuomorphism — paper-UI components. Pick one on the left; the toggle flips the surface.</p>
+			</header>
+
+			<div class="demo">
+				{#if selected === 'toggle'}
+					<NeumorphicToggle bind:light />
+				{:else if selected === 'todo'}
+					<SkeuTodo {light} />
+				{:else if selected === 'buttons'}
+					<SkeuButtons {light} />
+				{/if}
+			</div>
+		</main>
 	</div>
 </div>
+
+<style>
+	.stage {
+		position: relative;
+		display: flex;
+		flex: 1 1 0%;
+		min-height: 30rem;
+		min-width: 0;
+		overflow: hidden;
+		background-color: #1d2532;
+		color: #dedad3;
+		font-family: 'Chillax', sans-serif;
+		transition: background-color 300ms ease-out, color 300ms ease-out;
+	}
+	.stage.is-light {
+		background-color: #dedad3;
+		color: #1d2532;
+	}
+	.noise {
+		position: absolute;
+		inset: 0;
+		background-repeat: repeat;
+		pointer-events: none;
+		transition: opacity 300ms ease-out;
+	}
+
+	.layout {
+		position: relative;
+		z-index: 1;
+		display: flex;
+		flex: 1 1 0%;
+		min-width: 0;
+		gap: 1.5rem;
+		padding: 1.75rem;
+	}
+
+	.aside {
+		flex-shrink: 0;
+		width: 12rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+	.aside-label {
+		margin: 0 0 0.25rem 0.25rem;
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		opacity: 0.5;
+	}
+	.aside-nav {
+		display: flex;
+		flex-direction: column;
+		gap: 0.9rem;
+	}
+
+	/* Elevated skeuomorphic nav buttons */
+	.skeu-nav {
+		appearance: none;
+		border: none;
+		cursor: pointer;
+		text-align: left;
+		padding: 0.85rem 1.1rem;
+		border-radius: 1rem;
+		font-size: 0.95rem;
+		font-weight: 600;
+		letter-spacing: -0.01em;
+		color: inherit;
+		background: #263142;
+		transition: box-shadow 250ms ease-out, background-color 250ms ease-out, transform 120ms ease-out;
+		box-shadow:
+			0 0.5rem 0.9rem rgba(0, 0, 0, 0.4),
+			0 0.12rem 0.3rem rgba(0, 0, 0, 0.3),
+			inset 0 0.12rem 0.18rem rgba(255, 255, 255, 0.07),
+			inset 0 -0.12rem 0.22rem rgba(0, 0, 0, 0.3);
+	}
+	.stage.is-light .skeu-nav {
+		background: #e4e0d8;
+		box-shadow:
+			0 0.5rem 0.9rem rgba(0, 0, 0, 0.15),
+			0 0.12rem 0.3rem rgba(0, 0, 0, 0.1),
+			inset 0 0.12rem 0.18rem rgba(255, 255, 255, 0.75),
+			inset 0 -0.12rem 0.22rem rgba(0, 0, 0, 0.1);
+	}
+	.skeu-nav:hover {
+		transform: translateY(-1px);
+	}
+
+	/* Selected = pressed-in (recessed) */
+	.skeu-nav.active {
+		transform: none;
+		background: #20293699;
+		box-shadow:
+			inset 0 0.22rem 0.4rem rgba(0, 0, 0, 0.55),
+			inset 0 -0.12rem 0.22rem rgba(255, 255, 255, 0.05);
+		opacity: 0.95;
+	}
+	.stage.is-light .skeu-nav.active {
+		background: #d4cfc599;
+		box-shadow:
+			inset 0 0.22rem 0.4rem rgba(0, 0, 0, 0.2),
+			inset 0 -0.12rem 0.22rem rgba(255, 255, 255, 0.6);
+	}
+
+	.content {
+		display: flex;
+		flex: 1 1 0%;
+		min-width: 0;
+		flex-direction: column;
+	}
+	.head h1 {
+		margin: 0;
+		font-size: 1.6rem;
+		font-weight: 600;
+		letter-spacing: -0.02em;
+	}
+	.head p {
+		margin: 0.35rem 0 0;
+		max-width: 34rem;
+		font-size: 0.9rem;
+		line-height: 1.5;
+		opacity: 0.6;
+	}
+	.demo {
+		display: flex;
+		flex: 1 1 0%;
+		align-items: center;
+		justify-content: center;
+		padding: 1.5rem;
+	}
+</style>
