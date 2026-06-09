@@ -1,9 +1,6 @@
 <script lang="ts">
+import { onDestroy, tick } from 'svelte'
 import { browser } from '$app/environment'
-import { focusShellWebview } from '$lib/intent-mock/focus-shell-webview'
-import { encodeForModel } from '$lib/intent-mock/audio-encode'
-import { transcribeAudio } from '$lib/intent-mock/transcribe'
-import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import {
 	asrState,
 	startDownload as startAsrDownload,
@@ -12,7 +9,10 @@ import {
 	voicePrep as voicePrepOf,
 	voiceUnavailableReason as voiceUnavailableReasonOf
 } from '$lib/asr/model-download-store'
-import { onDestroy, tick } from 'svelte'
+import { encodeForModel } from '$lib/intent-mock/audio-encode'
+import { focusShellWebview } from '$lib/intent-mock/focus-shell-webview'
+import { transcribeAudio } from '$lib/intent-mock/transcribe'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 
 /** Typing-mode textarea: grow with content up to this many text rows, then scroll. */
 const TYPING_TEXTAREA_MAX_ROWS = 12
@@ -119,7 +119,9 @@ let {
 // the `VOICE_MOCK_TRANSCRIPTS` fallback only survives in non-Tauri (web) previews.
 // Callers may still override by passing the props explicitly.
 const tauriRuntime = $derived(browser && isTauriRuntime())
-const effectiveTranscribe = $derived(onTranscribeAudio ?? (tauriRuntime ? transcribeAudio : undefined))
+const effectiveTranscribe = $derived(
+	onTranscribeAudio ?? (tauriRuntime ? transcribeAudio : undefined)
+)
 const effectiveVoiceReason = $derived(
 	voiceUnavailableReason ?? (tauriRuntime ? voiceUnavailableReasonOf($asrState) : null)
 )
@@ -167,7 +169,7 @@ let isMobile = $state(false)
 /** Hold-to-record on mobile submits on pointer up (no send button). Stream / desktop keep the send control. */
 let listeningSubmitOnRelease = $state(false)
 
-	const MOBILE_MQ = '(max-width: 639px)'
+const MOBILE_MQ = '(max-width: 639px)'
 const LONG_PRESS_MS = 420
 const DOUBLE_TAP_MS = 220
 
@@ -550,6 +552,12 @@ async function beginCapture() {
 		if (!audioCtx) throw new Error('Microphone unavailable')
 		const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
 		mediaStream = stream
+		// iOS shows the mic-permission grant as a multi-second modal; a mode/teardown effect can
+		// null `audioCtx` while we await it. Without re-validating, the `audioCtx.state` read below
+		// throws "null is not an object" — the iOS-only crash (works on macOS, where the prompt is
+		// instant/pre-granted so the window never opens). Re-arm on a fresh running context.
+		if (!audioCtx) armAudioContext()
+		if (!audioCtx) throw new Error('Microphone unavailable')
 		// Resume in case it came up (or was left) suspended — mirrors the TTS playback path.
 		if (audioCtx.state === 'suspended') await audioCtx.resume()
 		recordedSampleRate = audioCtx.sampleRate
@@ -825,59 +833,59 @@ const pillClass = $derived.by(() => {
 				<div class="size-9 shrink-0" aria-hidden="true"></div>
 			{/if}
 			<div class="flex min-w-0 flex-1 flex-wrap gap-1.5 px-0.5 sm:px-0">
-			{#each attachments as a, i (`${a.file.name}-${a.file.size}-${a.file.lastModified}-${i}`)}
-				<div
-					class="group relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted/50 shadow-sm"
-					title={a.file.name}
-				>
-					{#if a.previewUrl}
-						<img src={a.previewUrl} alt="" class="size-full object-cover" />
-					{:else}
-						<div
-							class="flex size-full flex-col items-center justify-center gap-0.5 px-0.5 text-center"
-						>
-							<svg
-								class="size-4 shrink-0 opacity-60"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="1.5"
-								viewBox="0 0 24 24"
-								aria-hidden="true"
+				{#each attachments as a, i (`${a.file.name}-${a.file.size}-${a.file.lastModified}-${i}`)}
+					<div
+						class="group relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted/50 shadow-sm"
+						title={a.file.name}
+					>
+						{#if a.previewUrl}
+							<img src={a.previewUrl} alt="" class="size-full object-cover">
+						{:else}
+							<div
+								class="flex size-full flex-col items-center justify-center gap-0.5 px-0.5 text-center"
 							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 12 0 00-9-9z"
-								/>
-							</svg>
-							<span class="w-full truncate text-[8px] font-medium leading-none opacity-70">
-								{a.file.name.split('.').pop() ?? '·'}
-							</span>
-						</div>
-					{/if}
-					<button
-						type="button"
-						class="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full border border-border bg-background/95 text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
-						onclick={(ev) => {
+								<svg
+									class="size-4 shrink-0 opacity-60"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="1.5"
+									viewBox="0 0 24 24"
+									aria-hidden="true"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 12 0 00-9-9z"
+									/>
+								</svg>
+								<span class="w-full truncate text-[8px] font-medium leading-none opacity-70">
+									{a.file.name.split('.').pop() ?? '·'}
+								</span>
+							</div>
+						{/if}
+						<button
+							type="button"
+							class="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full border border-border bg-background/95 text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+							onclick={(ev) => {
 							ev.preventDefault()
 							ev.stopPropagation()
 							removeAttachmentAt(i)
 						}}
-						aria-label={`Remove ${a.file.name}`}
-					>
-						<svg
-							class="size-3"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							viewBox="0 0 24 24"
-							aria-hidden="true"
+							aria-label={`Remove ${a.file.name}`}
 						>
-							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-						</svg>
-					</button>
-				</div>
-			{/each}
+							<svg
+								class="size-3"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								viewBox="0 0 24 24"
+								aria-hidden="true"
+							>
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+							</svg>
+						</button>
+					</div>
+				{/each}
 			</div>
 		</div>
 	{/if}
@@ -886,7 +894,7 @@ const pillClass = $derived.by(() => {
 			<button
 				type="button"
 				class="flex h-14 w-14 shrink-0 touch-manipulation select-none items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
-				disabled={disabled}
+				{disabled}
 				onpointerdown={(e) => {
 					void focusShellWebview()
 					if (isMobile) onMobileCollapsedPointerDown(e)
@@ -927,7 +935,7 @@ const pillClass = $derived.by(() => {
 			</button>
 		</div>
 	{:else if mode === 'listening'}
-	<div class={pillClass} role="group">
+		<div class={pillClass} role="group">
 			<div
 				class={`flex shrink-0 items-center justify-start ${isMobile ? 'w-[2.75rem]' : 'w-[4.5rem]'}`}
 			>
@@ -951,42 +959,42 @@ const pillClass = $derived.by(() => {
 			<div
 				class={`flex shrink-0 items-center justify-end ${isMobile ? 'gap-1.5 pl-1' : 'w-[4.5rem] gap-2'}`}
 			>
-					<button
-						type="button"
-						class="flex size-8 shrink-0 items-center justify-center rounded-full border border-status-success/35 bg-status-success text-status-success-foreground shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] outline-none transition-colors hover:bg-status-success/90 focus-visible:ring-2 focus-visible:ring-status-success/40"
-						onclick={commitVoiceNote}
-						aria-label="Submit voice note as intent (mock)"
+				<button
+					type="button"
+					class="flex size-8 shrink-0 items-center justify-center rounded-full border border-status-success/35 bg-status-success text-status-success-foreground shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] outline-none transition-colors hover:bg-status-success/90 focus-visible:ring-2 focus-visible:ring-status-success/40"
+					onclick={commitVoiceNote}
+					aria-label="Submit voice note as intent (mock)"
+				>
+					<svg
+						class="size-4"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.5"
+						viewBox="0 0 24 24"
+						aria-hidden="true"
 					>
-						<svg
-							class="size-4"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.5"
-							viewBox="0 0 24 24"
-							aria-hidden="true"
-						>
-							<path stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5L20 7" />
-						</svg>
-					</button>
-					<button
-						type="button"
-						class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15 text-primary-foreground transition-opacity hover:bg-primary-foreground/25"
-						onclick={() => void stopListening()}
-						aria-label="Stop listening"
+						<path stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5L20 7" />
+					</svg>
+				</button>
+				<button
+					type="button"
+					class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15 text-primary-foreground transition-opacity hover:bg-primary-foreground/25"
+					onclick={() => void stopListening()}
+					aria-label="Stop listening"
+				>
+					<svg
+						class="size-4"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						viewBox="0 0 24 24"
+						aria-hidden="true"
 					>
-						<svg
-							class="size-4"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							viewBox="0 0 24 24"
-							aria-hidden="true"
-						>
-							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-						</svg>
-					</button>
-				</div>
-	</div>
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</div>
+		</div>
 	{:else if mode === 'preparing'}
 		<div class={pillClass} role="status" aria-live="polite">
 			<div class="flex items-center justify-between gap-2">
@@ -1004,7 +1012,14 @@ const pillClass = $derived.by(() => {
 					onclick={dismissPreparing}
 					aria-label="Dismiss"
 				>
-					<svg class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+					<svg
+						class="size-3.5"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						viewBox="0 0 24 24"
+						aria-hidden="true"
+					>
 						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
 					</svg>
 				</button>
@@ -1012,7 +1027,9 @@ const pillClass = $derived.by(() => {
 
 			{#if effectiveVoicePrep && (effectiveVoicePrep.status === 'downloading' || effectiveVoicePrep.status === 'loading')}
 				<div class="flex items-center justify-between gap-2">
-					<span class="truncate text-[11px] font-medium text-foreground/80">{effectiveVoicePrep.model}</span>
+					<span class="truncate text-[11px] font-medium text-foreground/80"
+						>{effectiveVoicePrep.model}</span
+					>
 					<span class="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground"
 						>{effectiveVoicePrep.sizeLabel}</span
 					>
@@ -1039,8 +1056,19 @@ const pillClass = $derived.by(() => {
 					class="mt-0.5 inline-flex items-center justify-center gap-1.5 self-start rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground outline-none transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/35"
 					onclick={openListening}
 				>
-					<svg class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M12 18v3m0-3a4 4 0 0 0 4-4V7a4 4 0 1 0-8 0v7a4 4 0 0 0 4 4Z" />
+					<svg
+						class="size-3.5"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						viewBox="0 0 24 24"
+						aria-hidden="true"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M12 18v3m0-3a4 4 0 0 0 4-4V7a4 4 0 1 0-8 0v7a4 4 0 0 0 4 4Z"
+						/>
 					</svg>
 					Tap to record
 				</button>
@@ -1050,8 +1078,19 @@ const pillClass = $derived.by(() => {
 					class="mt-0.5 inline-flex items-center justify-center gap-1.5 self-start rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground no-underline outline-none transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/35"
 					onclick={() => (mode = 'collapsed')}
 				>
-					<svg class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" />
+					<svg
+						class="size-3.5"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						viewBox="0 0 24 24"
+						aria-hidden="true"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"
+						/>
 					</svg>
 					Set up in Settings
 				</a>
@@ -1085,7 +1124,9 @@ const pillClass = $derived.by(() => {
 				</button>
 			{/if}
 			<div class="{pillClass} min-w-0 flex-1 !mx-0 max-sm:!max-w-none" role="group">
-				<div class="flex min-h-0 min-w-0 w-full items-center gap-2 py-1 max-sm:py-1 sm:gap-2.5 sm:py-2">
+				<div
+					class="flex min-h-0 min-w-0 w-full items-center gap-2 py-1 max-sm:py-1 sm:gap-2.5 sm:py-2"
+				>
 					<form
 						class="flex min-h-0 min-w-0 flex-1 items-center gap-2"
 						onsubmit={(e) => {
@@ -1117,11 +1158,9 @@ const pillClass = $derived.by(() => {
 					<button
 						type="button"
 						onclick={commitMessage}
-						disabled={
-							disabled ||
+						disabled={disabled ||
 							submitBusy ||
-							(command == null && text.trim().length === 0 && attachments.length === 0)
-						}
+							(command == null && text.trim().length === 0 && attachments.length === 0)}
 						aria-label={submitBusy ? 'Sending…' : 'Send message'}
 						class="flex size-9 max-sm:size-[2.7rem] shrink-0 self-center items-center justify-center rounded-full border border-primary/25 bg-primary text-primary-foreground shadow-[0_6px_18px_-8px_color-mix(in_srgb,var(--color-primary)_50%,transparent)] outline-none transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
 					>
@@ -1154,5 +1193,5 @@ const pillClass = $derived.by(() => {
 		tabindex="-1"
 		aria-hidden="true"
 		disabled={!enableAttachments}
-	/>
+	>
 </div>

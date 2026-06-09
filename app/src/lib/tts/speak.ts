@@ -25,7 +25,14 @@ function isTauri(): boolean {
 
 let sharedCtx: AudioContext | null = null
 function audioContext(): AudioContext {
-	if (!sharedCtx) sharedCtx = new AudioContext()
+	if (!sharedCtx) {
+		// iOS < 14.5 (and some WKWebView builds) only expose the prefixed constructor; bare
+		// `new AudioContext()` throws there. Mirror IntentComposer's capture path.
+		const Ctx: typeof AudioContext =
+			window.AudioContext ??
+			(window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+		sharedCtx = new Ctx()
+	}
 	return sharedCtx
 }
 
@@ -41,12 +48,12 @@ export type SpeakPhase = 'generating' | 'playing'
 export async function speak(
 	text: string,
 	replyId: string,
-	onPhase?: (phase: SpeakPhase) => void,
+	onPhase?: (phase: SpeakPhase) => void
 ): Promise<void> {
 	if (!isTauri()) throw new Error('on-device TTS requires the desktop app')
 	const [{ invoke }, { listen }] = await Promise.all([
 		import('@tauri-apps/api/core'),
-		import('@tauri-apps/api/event'),
+		import('@tauri-apps/api/event')
 	])
 
 	onPhase?.('generating')
