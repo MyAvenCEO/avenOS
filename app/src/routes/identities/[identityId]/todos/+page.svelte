@@ -13,7 +13,6 @@
 	import { createTodosShell } from '@avenos/aven-ui/vibes/todos'
 	import AvenUiView from '$lib/aven-ui/AvenUiView.svelte'
 	import { t } from '$lib/i18n'
-	import { jazzShell } from '$lib/runtime/jazz-shell'
 	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/settings/device-session-store'
@@ -21,7 +20,6 @@
 	const identityParam = $derived(String((page.params as { identityId?: string }).identityId ?? ''))
 	const decodedIdentityId = $derived(decodeURIComponent(identityParam))
 
-	const session = $derived($jazzShell.session)
 	let err = $state<string | undefined>()
 	let busy = $state(false)
 
@@ -100,14 +98,7 @@
 	<title>{t('identities.todos.title')}{t('common.titleSuffix')}</title>
 </svelte:head>
 
-<div class="flex min-h-0 flex-1 flex-col gap-6">
-	<header class="space-y-1">
-		<h1 class="text-xl font-semibold tracking-tight">{t('identities.todos.title')}</h1>
-		<p class="text-muted-foreground text-sm leading-relaxed">
-			{t('identities.todos.subtitle')}
-		</p>
-	</header>
-
+<div class="flex min-h-0 flex-1 flex-col gap-4">
 	{#if !tauri}
 		<p class="text-muted-foreground text-sm">{t('identities.needsDesktop')}</p>
 	{:else if !unlocked}
@@ -115,14 +106,6 @@
 	{:else if !decodedIdentityId}
 		<p class="text-muted-foreground text-sm">{t('identities.todos.missingSparkId')}</p>
 	{:else}
-		{#if session}
-			<p class="text-muted-foreground font-mono text-xs leading-snug">
-				{session.peerDidShort}
-				<span class="mx-2 text-border">·</span>
-				<span>identity:{canonicalSparkId}</span>
-			</p>
-		{/if}
-
 		{#if err}
 			<p
 				class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border px-3 py-2 text-sm leading-snug"

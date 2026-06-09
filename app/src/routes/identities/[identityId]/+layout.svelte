@@ -125,10 +125,19 @@
 	const innerContentClass = $derived(
 		[
 			'mx-auto flex w-full flex-col px-4 sm:px-6',
-			isGalleryView ? 'max-w-5xl' : 'max-w-3xl',
+			isGalleryView ? 'max-w-5xl' : 'max-w-4xl',
 			isTalkView ? 'min-h-0 flex-1 py-3 pb-0 sm:py-6' : 'py-6 sm:py-8',
 		].join(' '),
 	)
+
+	// Mocked identity metadata for the right detail aside (real wiring TBD).
+	const identityMetaRows = $derived([
+		{ label: t('identities.meta.name'), value: identityMeta?.name ?? '—', mono: false },
+		{ label: t('identities.meta.id'), value: canonicalSparkId, mono: true },
+		{ label: t('identities.meta.type'), value: t('identities.meta.typeHuman'), mono: false },
+		{ label: t('identities.meta.members'), value: '1', mono: false },
+		{ label: t('identities.meta.created'), value: '—', mono: false },
+	])
 </script>
 
 <svelte:head>
@@ -137,8 +146,9 @@
 
 <AsidePageLayout
 	asideLabel={t('nav.identityViews')}
+	asideRightLabel={t('identities.meta.detailsLabel')}
 	sections={navSections}
-	desktopGridClass="md:grid-cols-[12rem_minmax(0,1fr)]"
+	desktopGridClass="md:grid-cols-[8.5rem_minmax(0,1fr)_10.5rem]"
 	sectionLabelClass="px-0 md:px-2"
 	{mainClass}
 	{contentClass}
@@ -164,6 +174,28 @@
 					</p>
 				{/if}
 			</div>
+		</div>
+	{/snippet}
+
+	{#snippet asideRight()}
+		<div class="space-y-3 px-1 pt-2">
+			<p class="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
+				{t('identities.meta.detailsLabel')}
+			</p>
+			<dl class="space-y-2.5">
+				{#each identityMetaRows as row (row.label)}
+					<div class="space-y-0.5">
+						<dt class="text-muted-foreground text-[10px] uppercase tracking-wide">{row.label}</dt>
+						<dd
+							class="text-foreground leading-snug {row.mono
+								? 'break-all font-mono text-[10px]'
+								: 'text-xs font-medium'}"
+						>
+							{row.value}
+						</dd>
+					</div>
+				{/each}
+			</dl>
 		</div>
 	{/snippet}
 

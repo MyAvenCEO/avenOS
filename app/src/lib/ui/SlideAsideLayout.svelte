@@ -16,6 +16,9 @@
 		contentClass?: string
 		open?: boolean
 		aside: Snippet
+		/** Optional thin right aside (e.g. a metadata/detail panel). Desktop-only; needs a 3-col grid. */
+		asideRight?: Snippet
+		asideRightLabel?: string
 		/** Main column content (SvelteKit page outlet or inline panel). */
 		children: Snippet
 		/** When set, remount main content on route change (Tauri/WKWebView outlet refresh). */
@@ -30,6 +33,8 @@
 		contentClass = 'pb-16 md:pb-0',
 		open = $bindable(false),
 		aside,
+		asideRight,
+		asideRightLabel = '',
 		children,
 		routeKey,
 	}: Props = $props()
@@ -97,4 +102,13 @@
 			</button>
 		{/if}
 	</main>
+
+	{#if asideRight}
+		<aside
+			class="hidden min-h-0 flex-col border-l border-border/60 bg-card/20 px-3 pt-1 pb-6 md:flex md:min-h-0 md:overflow-y-auto"
+			aria-label={asideRightLabel}
+		>
+			{@render asideRight()}
+		</aside>
+	{/if}
 </div>

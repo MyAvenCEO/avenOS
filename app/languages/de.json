@@ -578,6 +578,15 @@
 		"avenCeoClaiming": "Beanspruche…",
 		"composer": {
 			"placeholder": "Sprich, navigiere oder füge eine Aufgabe hinzu…"
+		},
+		"meta": {
+			"detailsLabel": "Details",
+			"name": "Name",
+			"id": "ID",
+			"type": "Typ",
+			"typeHuman": "Mensch",
+			"members": "Mitglieder",
+			"created": "Erstellt"
 		}
 	},
 	"uiLab": {
