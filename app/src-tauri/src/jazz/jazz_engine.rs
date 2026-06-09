@@ -775,6 +775,7 @@ pub(super) async fn hydrate_shell(
 					deks.insert((sid, dv), Dek::from_plain_32(raw32));
 				}
 				Err(e) => {
+					eprintln!("[MEMDIAG] KSDIAG unwrap_FAIL identity={sid} v={dv} wrapper={wrapper_did}: {e}");
 					log::warn!(
 						target: "avenos::jazz",
 						"KSDIAG unwrap_FAIL: identity={sid} v={dv} wrapper={wrapper_did}: {e}",
@@ -782,6 +783,10 @@ pub(super) async fn hydrate_shell(
 				}
 			}
 		}
+		eprintln!(
+			"[MEMDIAG] KSDIAG done: ks_for_me={ks_for_me} deks_unlocked={}",
+			deks.len()
+		);
 		log::info!(
 			target: "avenos::jazz",
 			"KSDIAG done: {ks_for_me} keyshare(s) addressed to me → {} DEK(s) unlocked",
@@ -814,6 +819,7 @@ pub(super) async fn hydrate_shell(
 			let genesis_b64 = match hydrate_text_at(&deks, sid, &genesis_coord, genesis_cell, true) {
 				Ok(g) => g,
 				Err(e) => {
+					eprintln!("[MEMDIAG] hydrate skip identity {sid} (genesis_b64 open failed, require_sealed=true): {e}");
 					log::warn!(
 						target: "avenos::jazz",
 						"hydrate_shell: skip identity {sid} (genesis open): {e}",
