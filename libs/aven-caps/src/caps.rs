@@ -935,6 +935,52 @@ mod tests {
 		let _ = issuer_pk;
 	}
 
+	/// Repro for the grant→2nd-device blocker: aven-node adds the first admin (A) with the
+	/// ROOT key, then A grants a 2nd device (B) with A's OWN key — a SECOND third-party block
+	/// stacked on the first. The chain is serialized (genesis_b64) and re-verified via
+	/// `biscuit_from_storage` on every hydrate, so both round-trips must re-verify against the
+	/// issuer root. This mirrors the app exactly (write genesis_b64 → Biscuit::from on rehydrate).
+	#[test]
+	fn stacked_owner_grants_reverify_against_root() {
+		use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+		use base64::Engine;
+
+		let server = vault(&[1u8; 32]); // avenCEO issuer / root
+		let a = vault(&[2u8; 32]); // first admin
+		let b = vault(&[3u8; 32]); // second device
+		let sid = uuid::Uuid::new_v4();
+		let issuer_pk = server.biscuit_kp.public();
+
+		let genesis = mint_genesis_identity(&server, sid).unwrap();
+
+		// aven-node adds A (delegating key = the server/root key).
+		let chain1 = attenuate_add_owner_third_party(
+			&server.biscuit_kp,
+			&genesis,
+			sid,
+			a.peer_did.as_str(),
+		)
+		.unwrap();
+		let b64_1 = URL_SAFE_NO_PAD.encode(chain1.to_vec().unwrap());
+		let chain1_rt = biscuit_from_storage(&b64_1, issuer_pk)
+			.expect("1-level grant chain must re-verify against root");
+
+		// A adds B (delegating key = A's key, NOT the root) on the round-tripped chain.
+		let chain2 = attenuate_add_owner_third_party(
+			&a.biscuit_kp,
+			&chain1_rt,
+			sid,
+			b.peer_did.as_str(),
+		)
+		.unwrap();
+		let b64_2 = URL_SAFE_NO_PAD.encode(chain2.to_vec().unwrap());
+		let chain2_rt = biscuit_from_storage(&b64_2, issuer_pk)
+			.expect("2-level (stacked) grant chain must re-verify against root");
+
+		assert!(identity_peer_is_owner(&chain2_rt, sid, a.peer_did.as_str()).unwrap());
+		assert!(identity_peer_is_owner(&chain2_rt, sid, b.peer_did.as_str()).unwrap());
+	}
+
 	#[test]
 	fn replicate_grant_carries_ciphertext_without_membership() {
 		// Alice (owner) grants a server aven a `replicate` cap — NOT membership.
