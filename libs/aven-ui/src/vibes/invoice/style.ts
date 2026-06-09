@@ -1,34 +1,26 @@
 import type { StyleDef } from '../../engine/types.js'
+import { withBrand } from '../../brand-style.js'
 
+// Colours, radii, fonts and dark-blue ink come from the shared brand layer.
+// Only invoice-specific surface aliases / dividers are overridden here.
 const tokens: StyleDef['tokens'] = {
-	'bg-a': '#FBFAF6',
 	'bg-b': 'color-mix(in srgb, var(--bg-a) 82%, rgb(255 255 255))',
-	'tech-fill': 'rgba(255, 255, 255, 0.1)',
-	'tech-fill-inner': 'rgba(255, 255, 255, 0.15)',
 	'foreground-10': 'color-mix(in srgb, var(--text) 10%, transparent)',
-	'hitl-dash': 'color-mix(in srgb, var(--text) 20%, transparent)',
 	'surface-fill': 'var(--tech-fill)',
 	'surface-2': 'var(--tech-fill-inner)',
 	'surface-raised': 'var(--tech-fill-inner)',
-	border: 'rgba(0, 0, 0, 0.1)',
-	'border-strong': 'rgba(0, 0, 0, 0.14)',
-	'border-soft': 'color-mix(in srgb, var(--border) 35%, transparent)',
-	muted: 'rgba(26, 26, 26, 0.45)',
-	text: '#1a1a1a',
-	'brand-accent': '#e6b34d',
 	'banner-divider': 'color-mix(in srgb, var(--text) 12%, transparent)',
 	'row-divider': 'color-mix(in srgb, var(--border) 55%, transparent)',
-	'radius-2xl': '2rem',
-	'radius-md': '1rem',
-	'font-sans': "'Chillax', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 }
 
 const components: StyleDef['components'] = {
 	invoiceUiContainer: {
-		padding: '1.25rem 1.5rem',
-		borderRadius: 'var(--radius-2xl)',
+		padding: 'var(--pad-card)',
+		borderRadius: 'var(--radius-card)',
 		background: 'var(--tech-fill)',
 		border: 'none',
+		maxWidth: 'var(--max-w)',
+		margin: '0 auto',
 	},
 	invoiceGrid: {
 		display: 'grid',
@@ -570,8 +562,4 @@ const selectors: StyleDef['selectors'] = {
 	},
 }
 
-export const invoiceStyle: StyleDef = {
-	tokens,
-	components,
-	selectors,
-}
+export const invoiceStyle: StyleDef = withBrand({ tokens, components, selectors })

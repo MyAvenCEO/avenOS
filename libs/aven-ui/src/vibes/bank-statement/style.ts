@@ -1,37 +1,21 @@
 import type { StyleDef } from '../../engine/types.js'
+import { withBrand } from '../../brand-style.js'
 
+// Colours, radii, fonts and dark-blue ink come from the shared brand layer.
+// Only the two bank-statement-specific divider tokens are overridden here.
 const tokens: StyleDef['tokens'] = {
-	'bg-a': '#FBFAF6',
-	'tech-fill': 'rgba(255, 255, 255, 0.1)',
-	'tech-fill-inner': 'rgba(255, 255, 255, 0.15)',
-	'hitl-dash': 'color-mix(in srgb, var(--text) 20%, transparent)',
-	border: 'rgba(0, 0, 0, 0.1)',
-	'border-soft': 'color-mix(in srgb, var(--border) 35%, transparent)',
-	muted: 'rgba(26, 26, 26, 0.45)',
-	text: '#1a1a1a',
-	'brand-accent': '#e6b34d',
 	'banner-divider': 'color-mix(in srgb, var(--text) 12%, transparent)',
 	'row-divider': 'color-mix(in srgb, var(--border) 55%, transparent)',
-	'radius-2xl': '2rem',
-	'radius-md': '1rem',
-	'font-sans': "'Chillax', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 }
 
 const selectors: StyleDef['selectors'] = {
-	'*, *::before, *::after': { boxSizing: 'border-box' },
-	':host': {
-		fontFamily: 'var(--font-sans)',
-		background: 'var(--bg-a)',
-		color: 'var(--text)',
-		margin: '0',
-		minHeight: '100%',
-		height: '100%',
-	},
 	'.bs-ui-container': {
-		padding: '1.25rem 1.5rem',
-		borderRadius: 'var(--radius-2xl)',
+		padding: 'var(--pad-card)',
+		borderRadius: 'var(--radius-card)',
 		background: 'var(--tech-fill)',
 		border: 'none',
+		maxWidth: 'var(--max-w)',
+		margin: '0 auto',
 	},
 	'.bs-card': {
 		background: 'var(--tech-fill)',
@@ -219,7 +203,4 @@ const selectors: StyleDef['selectors'] = {
 	},
 }
 
-export const bankStatementStyle: StyleDef = {
-	tokens,
-	selectors,
-}
+export const bankStatementStyle: StyleDef = withBrand({ tokens, selectors })

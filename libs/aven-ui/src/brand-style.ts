@@ -1,5 +1,5 @@
-import brandJson from './brand.style.json' with { type: 'json' }
 import type { StyleDef } from './engine/types.js'
+import brandJson from './brand.style.json'
 
 /**
  * Shared brand design system for all vibe views.
@@ -16,7 +16,9 @@ import type { StyleDef } from './engine/types.js'
  * Vibes compose with `withBrand({ tokens, selectors })`, which merges the brand
  * tokens/selectors UNDER the vibe's own (vibe values win on conflict).
  */
-export const brandTokens: Record<string, string> = brandJson as Record<string, string>
+export const brandTokens: Record<string, string> = Object.fromEntries(
+	Object.entries(brandJson as Record<string, string>).filter(([k]) => !k.startsWith('$')),
+)
 
 export const brandBaseSelectors: Record<string, Record<string, unknown>> = {
 	'*, *::before, *::after': { boxSizing: 'border-box' },

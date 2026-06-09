@@ -1,14 +1,9 @@
 import type { StyleDef } from '../../engine/types.js'
+import { withBrand } from '../../brand-style.js'
 
+// Shared brand layer provides colours/radii/fonts/ink. Success keeps its accent.
 const tokens: StyleDef['tokens'] = {
-	'bg-a': '#FBFAF6',
-	'tech-fill': 'rgba(255, 255, 255, 0.1)',
-	border: 'rgba(0, 0, 0, 0.1)',
-	muted: 'rgba(26, 26, 26, 0.45)',
-	text: '#1a1a1a',
 	accent: '#2e7d52',
-	'radius-2xl': '2rem',
-	'font-sans': "'Chillax', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 }
 
 const selectors: StyleDef['selectors'] = {
@@ -64,7 +59,4 @@ const selectors: StyleDef['selectors'] = {
 	'.st-message-text:empty': { display: 'none' },
 }
 
-export const successStyle: StyleDef = {
-	tokens,
-	selectors,
-}
+export const successStyle: StyleDef = withBrand({ tokens, selectors })

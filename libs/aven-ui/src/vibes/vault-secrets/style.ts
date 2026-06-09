@@ -1,30 +1,23 @@
 import type { StyleDef } from '../../engine/types.js'
+import { withBrand } from '../../brand-style.js'
 
+// Shared brand layer provides colours/radii/fonts/ink. Vault keeps its
+// destructive accent and a 1rem radius alias used by its rows.
 const tokens: StyleDef['tokens'] = {
-	'bg-a': '#FBFAF6',
-	'tech-fill': 'rgba(255, 255, 255, 0.1)',
-	'tech-fill-inner': 'rgba(255, 255, 255, 0.15)',
-	text: '#1a1a1a',
-	muted: 'rgba(26, 26, 26, 0.45)',
-	border: 'rgba(0, 0, 0, 0.1)',
-	'border-soft': 'color-mix(in srgb, var(--border) 35%, transparent)',
-	'hitl-dash': 'color-mix(in srgb, var(--text) 20%, transparent)',
 	'row-divider': 'color-mix(in srgb, var(--border) 55%, transparent)',
-	'brand-accent': '#e6b34d',
 	destructive: '#b45309',
 	'radius-lg': '1rem',
-	'radius-md': '0.75rem',
-	'font-sans': "'Chillax', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-	'font-mono': 'ui-monospace, Menlo, monospace',
 }
 
 const selectors: StyleDef['selectors'] = {
 	'.vs-ui-container': {
 		minHeight: '100%',
-		padding: '1rem 1.25rem',
+		maxWidth: 'var(--max-w)',
+		margin: '0 auto',
+		padding: 'var(--pad-card)',
 		display: 'flex',
 		flexDirection: 'column',
-		gap: '16px',
+		gap: 'var(--gap-section)',
 		fontFamily: 'var(--font-sans)',
 		color: 'var(--text)',
 		boxSizing: 'border-box',
@@ -171,4 +164,4 @@ const selectors: StyleDef['selectors'] = {
 	},
 }
 
-export const vaultSecretsStyle: StyleDef = { tokens, selectors }
+export const vaultSecretsStyle: StyleDef = withBrand({ tokens, selectors })
