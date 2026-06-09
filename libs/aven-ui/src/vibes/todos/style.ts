@@ -42,7 +42,7 @@ const selectors: StyleDef['selectors'] = {
 	'.td-card h4': {
 		margin: '0 0 10px 0',
 		fontSize: '10px',
-		fontWeight: '700',
+		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.12em',
@@ -57,7 +57,7 @@ const selectors: StyleDef['selectors'] = {
 	'.td-eyebrow': {
 		display: 'block',
 		fontSize: '10px',
-		fontWeight: '700',
+		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.08em',
@@ -67,7 +67,7 @@ const selectors: StyleDef['selectors'] = {
 	'.td-banner-title': {
 		margin: '0',
 		fontSize: '1.1rem',
-		fontWeight: '800',
+		fontWeight: '600',
 		letterSpacing: '-0.02em',
 		color: 'var(--text)',
 		lineHeight: '1.2',
@@ -75,7 +75,7 @@ const selectors: StyleDef['selectors'] = {
 	'.td-field-label': {
 		display: 'block',
 		fontSize: '9px',
-		fontWeight: '700',
+		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.06em',
@@ -85,7 +85,7 @@ const selectors: StyleDef['selectors'] = {
 	'.td-banner-stat .td-field-label': { textAlign: 'right' },
 	'.td-banner-accent': {
 		fontSize: '1.35rem',
-		fontWeight: '800',
+		fontWeight: '600',
 		fontFamily: 'ui-monospace, Menlo, monospace',
 		fontVariantNumeric: 'tabular-nums',
 		color: 'var(--brand-accent)',
@@ -128,7 +128,7 @@ const selectors: StyleDef['selectors'] = {
 		cursor: 'pointer',
 		borderRadius: 'var(--radius-md)',
 		padding: '0.5rem 0.85rem',
-		fontWeight: '600',
+		fontWeight: '500',
 		fontSize: '0.8125rem',
 		transition: 'background 0.15s ease, border-color 0.15s ease, filter 0.15s ease',
 	},

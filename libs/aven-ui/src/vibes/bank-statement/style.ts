@@ -43,7 +43,7 @@ const selectors: StyleDef['selectors'] = {
 	'.bs-card h4': {
 		margin: '0 0 8px 0',
 		fontSize: '10px',
-		fontWeight: '700',
+		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.12em',
@@ -51,7 +51,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bs-card .big': {
 		fontSize: '15px',
-		fontWeight: '700',
+		fontWeight: '600',
 		color: 'var(--text)',
 		marginBottom: '4px',
 	},
@@ -89,14 +89,14 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bs-banner-title': {
 		fontSize: '1.1rem',
-		fontWeight: '800',
+		fontWeight: '600',
 		letterSpacing: '-0.02em',
 		color: 'var(--text)',
 		textTransform: 'capitalize',
 	},
 	'.bs-banner-sub': {
 		fontSize: '10px',
-		fontWeight: '700',
+		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.08em',
@@ -104,7 +104,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bs-banner-money': {
 		fontSize: '1.35rem',
-		fontWeight: '800',
+		fontWeight: '600',
 		fontFamily: 'ui-monospace, Menlo, monospace',
 		fontVariantNumeric: 'tabular-nums',
 		color: 'var(--brand-accent)',
@@ -113,7 +113,7 @@ const selectors: StyleDef['selectors'] = {
 	'.bs-banner-money .bs-banner-sub': { textAlign: 'right' },
 	'.bs-field-label': {
 		fontSize: '9px',
-		fontWeight: '700',
+		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.06em',
@@ -121,7 +121,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bs-field-val': {
 		fontSize: '0.95rem',
-		fontWeight: '700',
+		fontWeight: '600',
 		fontFamily: 'ui-monospace, Menlo, monospace',
 		fontVariantNumeric: 'tabular-nums',
 	},
@@ -141,7 +141,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bs-banner-fields--compact .bs-field-val': {
 		fontSize: '0.8125rem',
-		fontWeight: '700',
+		fontWeight: '600',
 		lineHeight: '1.25',
 	},
 	'.bs-banner-fields--compact .bs-field-cell--nowrap .bs-field-val': {
@@ -164,7 +164,7 @@ const selectors: StyleDef['selectors'] = {
 		background: 'var(--tech-fill-inner)',
 		padding: '10px 12px',
 		borderBottom: '1px solid var(--border-soft)',
-		fontWeight: '700',
+		fontWeight: '600',
 		fontSize: '10px',
 		textTransform: 'uppercase',
 		letterSpacing: '0.05em',
@@ -187,7 +187,7 @@ const selectors: StyleDef['selectors'] = {
 		color: 'color-mix(in srgb, var(--text) 75%, #b91c1c)',
 	},
 	'.bs-desc-title': {
-		fontWeight: '700',
+		fontWeight: '600',
 		color: 'var(--text)',
 		lineHeight: '1.35',
 	},

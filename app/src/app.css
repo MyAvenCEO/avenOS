@@ -102,6 +102,15 @@
 	--font-serif: "Chillax", ui-sans-serif, system-ui, sans-serif;
 	--font-mono: "JetBrains Mono", ui-monospace, monospace;
 
+	/* Chillax has noticeably heavier strokes than Inter at the same numeric
+	 * weight, so titles and highlighted items read too bold. Re-tune the weight
+	 * scale down one notch system-wide — every `font-semibold`/`font-bold`
+	 * utility across all components gets lighter without per-component edits.
+	 * Result tier: body 400 · medium/title 500 · strong emphasis 600 (was 700). */
+	--font-weight-medium: 500;
+	--font-weight-semibold: 500;
+	--font-weight-bold: 600;
+
 	--color-brand-navy: #1e293b;
 	--color-status-success-base: #2f5d50;
 	--color-status-working-base: #a4b69a;
