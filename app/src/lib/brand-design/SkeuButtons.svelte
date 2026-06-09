@@ -72,23 +72,25 @@
 		grid-template-columns: repeat(3, 1fr);
 		gap: 2rem;
 
-		/* dark surface (default) — shadows tinted navy/bluish, not pure black */
+		/* dark surface (default) */
 		--surf: #1d2532;
 		--sh: rgba(9, 14, 26, 0.55); /* raised drop shadow (bottom-right) */
 		--hl: rgba(120, 140, 180, 0.1); /* raised highlight (top-left), bluish */
-		--sh-in: rgba(22, 32, 54, 0.5); /* active inset — less black + bluish */
-		--hl-in: rgba(120, 140, 180, 0.08);
+		--sh-in: rgba(0, 0, 0, 0.55); /* active inset — original (darker) */
+		--hl-in: rgba(255, 255, 255, 0.05);
 		--emboss-sh: rgba(8, 13, 26, 0.85); /* content emboss shadow */
 		--emboss-hl: rgba(125, 145, 185, 0.22); /* content emboss highlight */
+		--ink-idle: #93a2b8; /* readable bg-variant for idle content (light on dark) */
 	}
 	.grid.is-light {
 		--surf: #dedad3;
 		--sh: rgba(163, 177, 198, 0.55);
 		--hl: rgba(255, 255, 255, 0.92);
-		--sh-in: rgba(150, 162, 184, 0.34); /* lighter + bluish-grey, not harsh black */
-		--hl-in: rgba(255, 255, 255, 0.85);
+		--sh-in: rgba(0, 0, 0, 0.2); /* active inset — original (darker) */
+		--hl-in: rgba(255, 255, 255, 0.7);
 		--emboss-sh: rgba(163, 177, 198, 0.75);
 		--emboss-hl: rgba(255, 255, 255, 0.95);
+		--ink-idle: #6f6c63; /* readable bg-variant for idle content (dark on light) */
 	}
 
 	.c-button {
@@ -129,7 +131,7 @@
 	.c-button__icon {
 		width: 1.65rem;
 		height: 1.65rem;
-		color: color-mix(in srgb, var(--accent) 62%, var(--surf));
+		color: var(--ink-idle);
 		filter: drop-shadow(0.09rem 0.09rem 0.11rem var(--emboss-sh))
 			drop-shadow(-0.07rem -0.07rem 0.09rem var(--emboss-hl));
 		transition: filter 150ms ease-out, color 150ms ease-out;
@@ -140,7 +142,7 @@
 		font-size: 0.78rem;
 		font-weight: 700;
 		letter-spacing: 0.01em;
-		color: color-mix(in srgb, var(--accent) 62%, var(--surf));
+		color: var(--ink-idle);
 		text-shadow:
 			-0.04rem -0.04rem 0.03rem var(--emboss-hl),
 			0.07rem 0.07rem 0.08rem var(--emboss-sh);
