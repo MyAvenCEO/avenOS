@@ -989,4 +989,25 @@ mod delete_state_tests {
         assert_eq!(digest(None, false), digest(None, false));
         assert_eq!(digest(Some(DeleteKind::Hard), true), digest(Some(DeleteKind::Hard), true));
     }
+
+    #[test]
+    fn row_digest_covers_data_so_dek_version_cannot_be_downgraded() {
+        // `current_dek_version` is a PLAINTEXT routing column, but it rides in the row `data`
+        // block — which compute_row_digest hashes and the author's edit-signature (board 0010)
+        // signs. So a relay that flips the version a write seals under (e.g. v2 -> v1, to make new
+        // data openable by a peer revoked at v2) changes the receiver-recomputed digest and is
+        // rejected on apply. This pins that `data` (hence every column in it, incl
+        // current_dek_version) is covered by the digest.
+        let mk = |data: &[u8]| {
+            compute_row_digest("main", &[], data, 42, "did:key:zAuthor", None, false, None)
+        };
+        let v2 = mk(b"owner=A|current_dek_version=2|genesis=...");
+        let v1 = mk(b"owner=A|current_dek_version=1|genesis=...");
+        assert_ne!(
+            v2, v1,
+            "a current_dek_version downgrade in the row data must change the digest (edit-sig rejects)"
+        );
+        // Determinism: same data => same digest, so the difference above is the version flip.
+        assert_eq!(mk(b"owner=A|current_dek_version=2|genesis=..."), v2);
+    }
 }

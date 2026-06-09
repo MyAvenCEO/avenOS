@@ -335,10 +335,22 @@ fn current_dek_version(state: &ShellState, identity: Uuid) -> Result<i64, String
 		.get(&identity)
 		.cloned()
 		.ok_or_else(|| format!("unknown_spark_version:{identity}"))?;
-	// Downgrade defense: `current_dek_version` rides as a PLAINTEXT column, so a relay could
-	// tamper it DOWN to make new writes seal under an old DEK a revoked peer still holds.
-	// Rotation always hands remaining holders the new version, so the newest DEK THIS device
-	// holds is the true current one — never seal under anything older than that.
+	// Downgrade defense (two independent layers; both inputs to the max() below are authenticated):
+	//  1. `claimed` is plaintext for ROUTING readability but NOT tamperable: it is a column in
+	//     the identities row `data`, which `compute_row_digest` hashes and the author's
+	//     edit-signature signs (board 0010/0013). A relay that flips it makes the receiver's
+	//     recomputed digest mismatch → `verify_on_apply` rejects the row (see aven-caps
+	//     `edit_sig_apply_rejects_tampered_data`). So a relay cannot downgrade the version a
+	//     write seals under.
+	//  2. Defense-in-depth: `max_held` is the newest version this device actually holds a
+	//     keyshare DEK for (keyshares are owner-bound + edit-signed → also authenticated).
+	//     Sealing under `max(claimed, max_held)` plus `seal_column_plain`'s "must hold the DEK"
+	//     check means a device that is BEHIND (authenticated version ahead of held DEKs)
+	//     fail-closes — it cannot write until it receives the rotated keyshare.
+	// Residual (NOT fixable here): a relay cannot tamper the version, but it CAN withhold a whole
+	// rotation (new genesis + keyshare) to freeze a member on an old version — an
+	// availability→confidentiality attack inherent to a single fully-controlling untrusted relay,
+	// mitigated by P2P (learn the rotation from another member), not by version authentication.
 	let max_held = state
 		.deks
 		.keys()
