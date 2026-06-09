@@ -55,7 +55,7 @@
 			class="c-button"
 			class:active={active[i]}
 			aria-pressed={active[i]}
-			style={active[i] ? `color: ${COLORS[b.type]};` : ''}
+			style="--accent: {COLORS[b.type]};"
 			onclick={() => (active[i] = !active[i])}
 		>
 			<svg class="c-button__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -123,12 +123,13 @@
 		background: linear-gradient(to top, rgba(163, 177, 198, 0.1), rgba(255, 255, 255, 0.4));
 	}
 
-	/* Icon + label are "burned into" the button — same-material emboss (raised,
-	   braille/domino-like), defined only by light/shadow until active. */
+	/* Icon + label are "burned into" the button — embossed (raised, braille/
+	   domino-like) AND tinted a MATT variant of the button's accent so they stay
+	   readable. Active -> the full glowing accent. */
 	.c-button__icon {
 		width: 1.65rem;
 		height: 1.65rem;
-		color: var(--surf);
+		color: color-mix(in srgb, var(--accent) 62%, var(--surf));
 		filter: drop-shadow(0.09rem 0.09rem 0.11rem var(--emboss-sh))
 			drop-shadow(-0.07rem -0.07rem 0.09rem var(--emboss-hl));
 		transition: filter 150ms ease-out, color 150ms ease-out;
@@ -139,20 +140,23 @@
 		font-size: 0.78rem;
 		font-weight: 700;
 		letter-spacing: 0.01em;
-		color: var(--surf);
+		color: color-mix(in srgb, var(--accent) 62%, var(--surf));
 		text-shadow:
 			-0.04rem -0.04rem 0.03rem var(--emboss-hl),
 			0.07rem 0.07rem 0.08rem var(--emboss-sh);
 		transition: text-shadow 150ms ease-out, color 150ms ease-out;
 	}
 
-	/* Active -> lit accent (inherits the inline accent colour on the button) */
+	/* Active -> full accent, lit with a soft glow */
 	.c-button.active .c-button__icon {
-		color: inherit;
-		filter: drop-shadow(0.03rem 0.03rem 0.05rem var(--emboss-sh));
+		color: var(--accent);
+		filter: drop-shadow(0.03rem 0.03rem 0.05rem var(--emboss-sh))
+			drop-shadow(0 0 0.35rem color-mix(in srgb, var(--accent) 55%, transparent));
 	}
 	.c-button.active .c-button__label {
-		color: inherit;
-		text-shadow: 0.03rem 0.03rem 0.05rem var(--emboss-sh);
+		color: var(--accent);
+		text-shadow:
+			0.03rem 0.03rem 0.05rem var(--emboss-sh),
+			0 0 0.4rem color-mix(in srgb, var(--accent) 45%, transparent);
 	}
 </style>

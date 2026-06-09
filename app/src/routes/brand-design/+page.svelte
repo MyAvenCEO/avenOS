@@ -76,10 +76,29 @@
 		color: #dedad3;
 		font-family: 'Chillax', sans-serif;
 		transition: background-color 300ms ease-out, color 300ms ease-out;
+
+		/* Shared skeuomorphic shadow palette (same as the button grid) — dark */
+		--surf: #1d2532;
+		--sh: rgba(9, 14, 26, 0.55);
+		--hl: rgba(120, 140, 180, 0.1);
+		--sh-in: rgba(22, 32, 54, 0.5);
+		--hl-in: rgba(120, 140, 180, 0.08);
+		--emboss-sh: rgba(8, 13, 26, 0.85);
+		--emboss-hl: rgba(125, 145, 185, 0.22);
+		--nav-ink: rgba(222, 218, 211, 0.82);
 	}
 	.stage.is-light {
 		background-color: #dedad3;
 		color: #1d2532;
+
+		--surf: #dedad3;
+		--sh: rgba(163, 177, 198, 0.55);
+		--hl: rgba(255, 255, 255, 0.92);
+		--sh-in: rgba(150, 162, 184, 0.34);
+		--hl-in: rgba(255, 255, 255, 0.85);
+		--emboss-sh: rgba(163, 177, 198, 0.75);
+		--emboss-hl: rgba(255, 255, 255, 0.95);
+		--nav-ink: rgba(29, 37, 50, 0.82);
 	}
 	.noise {
 		position: absolute;
@@ -120,52 +139,42 @@
 		gap: 0.9rem;
 	}
 
-	/* Elevated skeuomorphic nav buttons */
+	/* Same skeuomorphic treatment as the general buttons: transparent surface,
+	   raised neumorphic shadows, pressed-in when selected, embossed label. */
 	.skeu-nav {
 		appearance: none;
-		border: none;
+		border: 0;
 		cursor: pointer;
 		text-align: left;
-		padding: 0.85rem 1.1rem;
-		border-radius: 1rem;
+		padding: 0.9rem 1.15rem;
+		border-radius: 1.4rem;
 		font-size: 0.95rem;
-		font-weight: 600;
+		font-weight: 700;
 		letter-spacing: -0.01em;
-		color: inherit;
-		background: #263142;
-		transition: box-shadow 250ms ease-out, background-color 250ms ease-out, transform 120ms ease-out;
+		background: transparent;
+		color: var(--nav-ink);
+		text-shadow:
+			-0.04rem -0.04rem 0.03rem var(--emboss-hl),
+			0.07rem 0.07rem 0.08rem var(--emboss-sh);
+		transition: box-shadow 150ms ease-out, background 150ms ease-out, color 150ms ease-out;
 		box-shadow:
-			0 0.5rem 0.9rem rgba(0, 0, 0, 0.4),
-			0 0.12rem 0.3rem rgba(0, 0, 0, 0.3),
-			inset 0 0.12rem 0.18rem rgba(255, 255, 255, 0.07),
-			inset 0 -0.12rem 0.22rem rgba(0, 0, 0, 0.3);
-	}
-	.stage.is-light .skeu-nav {
-		background: #e4e0d8;
-		box-shadow:
-			0 0.5rem 0.9rem rgba(0, 0, 0, 0.15),
-			0 0.12rem 0.3rem rgba(0, 0, 0, 0.1),
-			inset 0 0.12rem 0.18rem rgba(255, 255, 255, 0.75),
-			inset 0 -0.12rem 0.22rem rgba(0, 0, 0, 0.1);
-	}
-	.skeu-nav:hover {
-		transform: translateY(-1px);
+			0.5rem 0.5rem 1.3rem var(--sh),
+			-0.45rem -0.45rem 1.1rem var(--hl),
+			-0.1rem -0.1rem 0.18rem var(--hl);
 	}
 
-	/* Selected = pressed-in (recessed) */
+	/* Selected = pressed-in (recessed); label brightens to full contrast */
 	.skeu-nav.active {
-		transform: none;
-		background: #20293699;
+		color: inherit;
+		background: linear-gradient(to top, rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.03));
 		box-shadow:
-			inset 0 0.22rem 0.4rem rgba(0, 0, 0, 0.55),
-			inset 0 -0.12rem 0.22rem rgba(255, 255, 255, 0.05);
-		opacity: 0.95;
+			inset 0.16rem 0.16rem 0.6rem var(--sh-in),
+			inset 0.5rem 0.5rem 1.2rem var(--sh-in),
+			inset -0.3rem -0.3rem 0.6rem var(--hl-in),
+			0.1rem 0.1rem 0.4rem var(--sh);
 	}
 	.stage.is-light .skeu-nav.active {
-		background: #d4cfc599;
-		box-shadow:
-			inset 0 0.22rem 0.4rem rgba(0, 0, 0, 0.2),
-			inset 0 -0.12rem 0.22rem rgba(255, 255, 255, 0.6);
+		background: linear-gradient(to top, rgba(163, 177, 198, 0.1), rgba(255, 255, 255, 0.4));
 	}
 
 	.content {
