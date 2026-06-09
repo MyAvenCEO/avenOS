@@ -1,0 +1,41 @@
+{
+	"didPlaceholder": "Paste a member's DID (did:key:…)",
+	"accessEyebrow": "Access level",
+	"accessLevels": [
+		{ "label": "Owner", "active": false },
+		{ "label": "Member", "active": false },
+		{ "label": "Sync", "active": true }
+	],
+	"hint": "Blind sync — the aven relays this identity's encrypted data it cannot read, for backup.",
+	"grantLabel": "Grant access",
+	"note": "Paste a device's DID to share this identity with it. Sharing is the only way to add access.",
+	"whoEyebrow": "Who has access",
+	"entries": [
+		{
+			"kind": "Device",
+			"name": "This device",
+			"did": "",
+			"perms": [
+				{ "label": "Owner", "on": true },
+				{ "label": "Read", "on": true },
+				{ "label": "Write", "on": true },
+				{ "label": "Delete", "on": true },
+				{ "label": "Admit", "on": true },
+				{ "label": "Rotate key", "on": true }
+			]
+		},
+		{
+			"kind": "Relay",
+			"name": "Sync relay",
+			"did": "did:key:z6MkvyW2GVSBGimWVFxRrq8Wfmv4iyH6QtAHLqaAb3eJqpp3",
+			"perms": [
+				{ "label": "Owner", "on": true },
+				{ "label": "Read", "on": false },
+				{ "label": "Write", "on": false },
+				{ "label": "Delete", "on": false },
+				{ "label": "Admit", "on": false },
+				{ "label": "Rotate key", "on": false }
+			]
+		}
+	]
+}
