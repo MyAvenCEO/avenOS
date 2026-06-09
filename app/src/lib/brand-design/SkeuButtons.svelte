@@ -71,6 +71,24 @@
 		display: grid;
 		grid-template-columns: repeat(3, 1fr);
 		gap: 2rem;
+
+		/* dark surface (default) — shadows tinted navy/bluish, not pure black */
+		--surf: #1d2532;
+		--sh: rgba(9, 14, 26, 0.55); /* raised drop shadow (bottom-right) */
+		--hl: rgba(120, 140, 180, 0.1); /* raised highlight (top-left), bluish */
+		--sh-in: rgba(22, 32, 54, 0.5); /* active inset — less black + bluish */
+		--hl-in: rgba(120, 140, 180, 0.08);
+		--emboss-sh: rgba(8, 13, 26, 0.85); /* content emboss shadow */
+		--emboss-hl: rgba(125, 145, 185, 0.22); /* content emboss highlight */
+	}
+	.grid.is-light {
+		--surf: #dedad3;
+		--sh: rgba(163, 177, 198, 0.55);
+		--hl: rgba(255, 255, 255, 0.92);
+		--sh-in: rgba(150, 162, 184, 0.34); /* lighter + bluish-grey, not harsh black */
+		--hl-in: rgba(255, 255, 255, 0.85);
+		--emboss-sh: rgba(163, 177, 198, 0.75);
+		--emboss-hl: rgba(255, 255, 255, 0.95);
 	}
 
 	.c-button {
@@ -85,48 +103,35 @@
 		border-radius: 1.4rem;
 		cursor: pointer;
 		background: transparent;
-		color: rgba(222, 218, 211, 0.55);
-		transition: color 150ms ease-out, box-shadow 150ms ease-out, background 150ms ease-out;
+		transition: box-shadow 150ms ease-out, background 150ms ease-out;
 		box-shadow:
-			0.55rem 0.55rem 1.5rem rgba(0, 0, 0, 0.5),
-			-0.5rem -0.5rem 1.3rem rgba(255, 255, 255, 0.05),
-			-0.12rem -0.12rem 0.2rem rgba(255, 255, 255, 0.04);
-	}
-	.grid.is-light .c-button {
-		color: rgba(29, 37, 50, 0.5);
-		box-shadow:
-			0.55rem 0.55rem 1.5rem rgba(0, 0, 0, 0.16),
-			-0.5rem -0.5rem 1.3rem rgba(255, 255, 255, 0.9),
-			-0.12rem -0.12rem 0.2rem rgba(255, 255, 255, 0.9);
-	}
-	.c-button:hover {
-		color: rgba(222, 218, 211, 0.85);
-	}
-	.grid.is-light .c-button:hover {
-		color: rgba(29, 37, 50, 0.8);
+			0.55rem 0.55rem 1.5rem var(--sh),
+			-0.5rem -0.5rem 1.3rem var(--hl),
+			-0.12rem -0.12rem 0.2rem var(--hl);
 	}
 
-	/* Active = pressed in (recessed), accent colour via inline style */
+	/* Active = pressed in (recessed); content lights up its accent colour. */
 	.c-button.active {
-		background: linear-gradient(to top, rgba(0, 0, 0, 0.12), rgba(255, 255, 255, 0.04));
+		background: linear-gradient(to top, rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.03));
 		box-shadow:
-			inset 0.16rem 0.16rem 0.6rem rgba(0, 0, 0, 0.6),
-			inset 0.55rem 0.55rem 1.2rem rgba(0, 0, 0, 0.4),
-			inset -0.3rem -0.3rem 0.6rem rgba(255, 255, 255, 0.05),
-			2px 2px 8px rgba(0, 0, 0, 0.35);
+			inset 0.16rem 0.16rem 0.6rem var(--sh-in),
+			inset 0.5rem 0.5rem 1.2rem var(--sh-in),
+			inset -0.3rem -0.3rem 0.6rem var(--hl-in),
+			0.12rem 0.12rem 0.5rem var(--sh);
 	}
 	.grid.is-light .c-button.active {
-		background: linear-gradient(to top, rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.5));
-		box-shadow:
-			inset 0.16rem 0.16rem 0.6rem rgba(0, 0, 0, 0.22),
-			inset 0.55rem 0.55rem 1.2rem rgba(0, 0, 0, 0.12),
-			inset -0.3rem -0.3rem 0.6rem rgba(255, 255, 255, 0.8),
-			2px 2px 8px rgba(0, 0, 0, 0.12);
+		background: linear-gradient(to top, rgba(163, 177, 198, 0.1), rgba(255, 255, 255, 0.4));
 	}
 
+	/* Icon + label are "burned into" the button — same-material emboss (raised,
+	   braille/domino-like), defined only by light/shadow until active. */
 	.c-button__icon {
 		width: 1.65rem;
 		height: 1.65rem;
+		color: var(--surf);
+		filter: drop-shadow(0.09rem 0.09rem 0.11rem var(--emboss-sh))
+			drop-shadow(-0.07rem -0.07rem 0.09rem var(--emboss-hl));
+		transition: filter 150ms ease-out, color 150ms ease-out;
 	}
 	.c-button__label {
 		display: block;
@@ -134,5 +139,20 @@
 		font-size: 0.78rem;
 		font-weight: 700;
 		letter-spacing: 0.01em;
+		color: var(--surf);
+		text-shadow:
+			-0.04rem -0.04rem 0.03rem var(--emboss-hl),
+			0.07rem 0.07rem 0.08rem var(--emboss-sh);
+		transition: text-shadow 150ms ease-out, color 150ms ease-out;
+	}
+
+	/* Active -> lit accent (inherits the inline accent colour on the button) */
+	.c-button.active .c-button__icon {
+		color: inherit;
+		filter: drop-shadow(0.03rem 0.03rem 0.05rem var(--emboss-sh));
+	}
+	.c-button.active .c-button__label {
+		color: inherit;
+		text-shadow: 0.03rem 0.03rem 0.05rem var(--emboss-sh);
 	}
 </style>
