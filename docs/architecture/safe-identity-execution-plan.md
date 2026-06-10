@@ -194,7 +194,37 @@ Extended to accept `did:safe:` alongside `did:key:` as the `new_signer_did` argu
   - "Create avenSAFE" — select humanSAFE controllers, assign roles
   - "Create sparkSAFE" — select avenSAFE controllers, assign roles
   - Controller management: add controller, remove controller, change role, transfer ownership
-  - Identity detail: show full controller chain + controlled SAFEs list
+  - SAFE detail: show full controller chain + controlled SAFEs list
+
+- [ ] **Phase 7 — Member management UI (legacy identities screens → SAFEs)**
+  - Rename the legacy "identities" screens to SAFEs end-to-end (routes, labels, i18n)
+  - Replace "add members" (today: raw signer DIDs only) with **SAFE-in-SAFE delegation**:
+    - On an **avenSAFE**: add member = pick a **humanSAFE `did:safe:`** (not a signer DID)
+    - On a **sparkSAFE**: add member = pick an **avenSAFE `did:safe:`**
+  - Add a third category row **Sparks** to the SAFE list/picker — three rows total:
+    | Row | Lists | Members are |
+    |---|---|---|
+    | Humans | humanSAFEs | signers |
+    | Avens | avenSAFEs | humanSAFE DIDs |
+    | Sparks | sparkSAFEs | avenSAFE DIDs |
+  - Member picker filters candidates by the target SAFE's type label (recursive ACC caps delegation)
+  - Role selector per added member (`owner` / `delegate` / `executor` / `reader`)
+
+---
+
+## avenCEO (node sync server) — Interim Simplification
+
+The node sync server currently runs the network-control identity **avenCEO** (deterministic
+v5 UUID from the network seed, `aven_ceo_identity()`), today typed as an aven.
+
+**Interim decision:** retype avenCEO as a **`human`-type SAFE** (name stays "avenCEO").
+
+- humanSAFEs keep the **direct signer caps path** (signer-rooted genesis, 1-hop authorize) —
+  exactly what the node uses today, so nothing in the sync/roster flow changes
+- Avoids making the network-control identity depend on N-hop SAFE-rooted authorization
+  before Phase 4 lands
+- The **admin claim logic** (who may claim/control avenCEO, claim-once semantics, possible
+  later move to a SAFE-rooted model) is explicitly **deferred** — revisit after Phases 3–4
 
 ---
 
