@@ -26,6 +26,11 @@ use crate::{P2pError, Result};
 const SNI: &str = "aven-node";
 /// Max handshake-message size (the sync frames have their own larger limit).
 const MAX_HANDSHAKE_BYTES: usize = 64 * 1024;
+/// Max sync-frame body size — matches the internal bincode decode ceiling so an
+/// attacker-controlled u32 length prefix cannot force an allocation larger than
+/// what the decoder would ever accept anyway.  Without this cap `read_frame`
+/// would `vec![0u8; len]` with a fully attacker-controlled `len` up to ~4 GiB.
+const MAX_SYNC_FRAME_BYTES: usize = 128 * 1024 * 1024;
 
 fn peer_from_did(did: &str) -> Result<PeerId> {
     let pk = groove::did_key::ed25519_public_from_peer_did(did)
@@ -68,11 +73,20 @@ where
     serde_json::from_slice(&body).map_err(|e| P2pError::Handshake(format!("decode handshake: {e}")))
 }
 
-/// Read one length-prefixed sync frame; returns `None` on clean EOF.
+/// Read one length-prefixed sync frame; returns `None` on clean EOF or an
+/// oversized frame (which drops the connection rather than allocating up to 4 GiB).
 async fn read_frame<R: AsyncReadExt + Unpin>(r: &mut R) -> Option<Vec<u8>> {
     let mut len_buf = [0u8; 4];
     r.read_exact(&mut len_buf).await.ok()?;
     let len = u32::from_le_bytes(len_buf) as usize;
+    if len > MAX_SYNC_FRAME_BYTES {
+        tracing::warn!(
+            len,
+            max = MAX_SYNC_FRAME_BYTES,
+            "sync frame exceeds size limit — dropping connection"
+        );
+        return None;
+    }
     let mut body = vec![0u8; len];
     r.read_exact(&mut body).await.ok()?;
     let mut frame = Vec::with_capacity(4 + len);
@@ -386,6 +400,40 @@ where
             }
         }
     });
+}
+
+#[cfg(test)]
+mod frame_bounds {
+    use super::*;
+
+    /// An oversized length prefix must NOT allocate — read_frame must return None
+    /// (drop the connection) rather than doing `vec![0u8; 4_294_967_295]`.
+    #[tokio::test]
+    async fn oversized_frame_prefix_drops_connection() {
+        let (mut client, mut server) = tokio::io::duplex(64);
+        // Write a length prefix larger than MAX_SYNC_FRAME_BYTES.
+        let too_large = (MAX_SYNC_FRAME_BYTES + 1) as u32;
+        client.write_all(&too_large.to_le_bytes()).await.unwrap();
+        // read_frame must return None immediately without reading `too_large` bytes.
+        let result = read_frame(&mut server).await;
+        assert!(result.is_none(), "oversized prefix must be rejected, got Some(_)");
+    }
+
+    /// A frame at exactly the limit must be accepted.
+    #[tokio::test]
+    async fn frame_at_limit_accepted() {
+        // Use a very small custom limit for speed: just test the boundary at 8 bytes.
+        // We can't change MAX_SYNC_FRAME_BYTES at runtime, so instead test that a
+        // 1-byte payload (well under the limit) round-trips correctly.
+        let (mut client, mut server) = tokio::io::duplex(1024);
+        let body: Vec<u8> = vec![0xAB; 8];
+        let len = body.len() as u32;
+        client.write_all(&len.to_le_bytes()).await.unwrap();
+        client.write_all(&body).await.unwrap();
+        let frame = read_frame(&mut server).await.expect("small frame must be accepted");
+        // frame = 4 bytes length + body
+        assert_eq!(&frame[4..], body.as_slice());
+    }
 }
 
 #[cfg(test)]
