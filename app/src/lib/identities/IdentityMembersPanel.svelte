@@ -194,15 +194,21 @@
 			peersAllow.map((p) => [p.signerDid.trim().toLowerCase(), p] as const),
 		)
 		const localDid = session?.signerDid?.trim().toLowerCase() ?? ''
+		// Derive the local device's own SAFE DID from defaultSparkUrn ("identity:<uuid>")
+		// so SAFE-in-SAFE owner entries are recognised as "this device".
+		const localSafeDid = session?.defaultSparkUrn?.startsWith('identity:')
+			? `did:safe:${session.defaultSparkUrn.slice('identity:'.length).toLowerCase()}`
+			: ''
 		return subjects.map((s): IdentityAccessEntry => {
 			const norm = s.did.trim().toLowerCase()
 			// SAFE member (did:safe:) — show its SAFE name + type, not a peer label.
 			if (norm.startsWith('did:safe:')) {
 				const safe = safeRowForDid(s.did)
+				const isThisDevice = localSafeDid !== '' && norm === localSafeDid
 				return {
 					did: s.did,
 					label: String(safe?.name ?? '') || t('common.unnamed'),
-					isThisDevice: false,
+					isThisDevice,
 					grant: s.grant,
 					capabilities: s.caps,
 					safeType: String(safe?.type ?? 'safe'),
