@@ -524,6 +524,20 @@ deterministic pass is load-bearing without it. Revisit after E7.
 
 Newest entry first.
 
+- `2026-06-10` — **E1a shipped**: aven-brain reworked to the 3-table model. New
+  `schema.rs` mirrors the manifest exactly (memories/entities/links, no created_at —
+  UUIDv7 row ids supply write time). `brain.rs`: kind→class registry enforced at write
+  (note/claim/bond; reserved-kind refusal), owner-scoped queries (`Brain::over(Arc<JazzClient>,
+  owner, embedder)` for the shared store), typed `Filter { stream, author_role, source }`
+  replaces free labels, `remember_with` (artifact columns), `search_traced` (via/rank/score),
+  `add_fact`/`facts` (claim-close semantics), mention notes idempotent, bonds with the
+  verbatim dynamics constants, read modifiers (veracity × age from row-id time) +
+  **abstention floor**, `assemble_context` → ContextBundle + camelCase ContextTrace
+  (serde), dreaming rewired to links (decay + entity-merge + bond dedup). **22/22 tests**
+  (13 migrated + 9 new: claim-close, note-idempotence, registry refusal, abstention,
+  traced via/rank, owner isolation, assemble budget/drops, trace JSON). `--features
+  models` compiles. Remaining for E1b: engine unseal-on-scan seam + `_created_at`
+  virtual columns (needed only for the app's sealed store, E2+).
 - `2026-06-10` — **Merged main again** (SAFE rename landed): `identities` table → **`safes`**
   (+ `safe_did`, types `human | aven | spark`), new `safe_controllers` (SAFE-in-SAFE
   delegation), `peer_did`→`signer_did`. Canonical terms per

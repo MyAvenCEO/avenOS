@@ -91,6 +91,8 @@ dependencies = [
  "aven-ai",
  "aven-db",
  "log",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 

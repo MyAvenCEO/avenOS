@@ -20,6 +20,10 @@ pub trait Embedder: Send + Sync {
     fn dim(&self) -> usize;
     /// Embed `text` into a `dim()`-length vector.
     async fn embed(&self, text: &str) -> Vec<f32>;
+    /// Short implementation name, surfaced in context traces.
+    fn name(&self) -> &'static str {
+        "embedder"
+    }
 }
 
 /// Deterministic hashed bag-of-words embedder for tests/dev (no model runtime).
@@ -40,6 +44,10 @@ impl StubEmbedder {
 impl Embedder for StubEmbedder {
     fn dim(&self) -> usize {
         self.dim
+    }
+
+    fn name(&self) -> &'static str {
+        "stub"
     }
 
     async fn embed(&self, text: &str) -> Vec<f32> {

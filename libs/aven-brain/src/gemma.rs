@@ -38,6 +38,10 @@ impl Embedder for GemmaEmbedder {
         self.dim
     }
 
+    fn name(&self) -> &'static str {
+        "gemma"
+    }
+
     async fn embed(&self, text: &str) -> Vec<f32> {
         let inner = Arc::clone(&self.inner);
         let owned = text.to_string();
