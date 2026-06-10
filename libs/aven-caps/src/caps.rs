@@ -294,6 +294,41 @@ pub fn mint_safe_genesis(
 		.map_err(|e| format!("genesis-build:{e}"))
 }
 
+/// Mint a **SAFE-rooted** genesis: the `owns` subject is `controller_did` (a
+/// `did:safe:` of the controlling SAFE — e.g. the founding humanSAFE of an
+/// avenSAFE) instead of this device's signer DID. The chain is still rooted at
+/// the founding signer's biscuit key (a biscuit needs a root keypair; the
+/// founding human's device key anchors it), but **authority** lives with the
+/// controller SAFE: the founding signer authorizes via the N-hop walk
+/// (signer → controller SAFE → this SAFE), not via a direct `owns`.
+pub fn mint_safe_genesis_with_controller(
+	vault: &BiscuitVault,
+	owner: Uuid,
+	controller_did: &str,
+) -> Result<Biscuit, String> {
+	let identity_urn = safe_urn_for(owner);
+	let prefix_lit = format!("{identity_urn}:");
+	let own_f = format!(
+		"owns(\"{}\", \"{}\")",
+		controller_did.replace('\\', "\\\\").replace('"', "\\\""),
+		identity_urn.replace('"', "\\\"")
+	);
+	let mut bb = Biscuit::builder().fact(own_f.as_str()).map_err(|e| format!("genesis-own-fact:{e}"))?;
+
+	for op in OWNER_RIGHTS {
+		let rf = format!(
+			"right(\"{op}\", \"{}\")",
+			prefix_lit.replace('"', "\\\"")
+		);
+		bb = bb
+			.fact(rf.as_str())
+			.map_err(|e| format!("genesis-right:{e}"))?;
+	}
+
+	bb.build(&vault.biscuit_kp)
+		.map_err(|e| format!("genesis-build:{e}"))
+}
+
 /// Mint a **sub-group** genesis biscuit (M9 group-owned values). Like
 /// [`mint_safe_genesis`] — the creating vault is the group's `owns` admin with full
 /// [`OWNER_RIGHTS`] over the group's resource prefix — but it also records
@@ -602,6 +637,12 @@ const MAX_GROUP_DEPTH: u32 = 8;
 /// parent inherits the SAME authority here — re-checked against the parent group, bounded
 /// by [`MAX_GROUP_DEPTH`]. A root group (no `extends` fact) behaves exactly as before, so
 /// every existing identity is unaffected.
+///
+/// **SAFE-in-SAFE delegation:** if this SAFE's `owns` set contains a `did:safe:`
+/// controller (e.g. an avenSAFE owned by a humanSAFE), a subject that controls
+/// that SAFE — directly as a signer, or transitively through further `did:safe:`
+/// hops — inherits the controller's authority here. The walk is bounded by the
+/// same depth limit, so a controller cycle terminates as a deny.
 pub fn authorize(
 	vault: &BiscuitVault,
 	owner: Uuid,
@@ -611,6 +652,41 @@ pub fn authorize(
 	subject_did: &str,
 ) -> Result<(), String> {
 	authorize_with_depth(vault, owner, op, table, row_id, subject_did, 0)
+}
+
+/// Does `subject_did` control SAFE `safe_id`? True if the subject is directly in
+/// the SAFE's `owns` set, or controls one of its `did:safe:` controllers
+/// (recursive, bounded by [`MAX_GROUP_DEPTH`] — a cycle exhausts the depth and
+/// returns false). Resolves controller chains purely from the loaded
+/// `vault.safes` biscuits — fully offline, no table lookup.
+pub fn subject_controls_safe(vault: &BiscuitVault, safe_id: Uuid, subject_did: &str) -> bool {
+	subject_controls_safe_with_depth(vault, safe_id, subject_did, 0)
+}
+
+fn subject_controls_safe_with_depth(
+	vault: &BiscuitVault,
+	safe_id: Uuid,
+	subject_did: &str,
+	depth: u32,
+) -> bool {
+	if depth > MAX_GROUP_DEPTH {
+		return false;
+	}
+	let Some(chain) = vault.safes.get(&safe_id) else {
+		return false;
+	};
+	let Ok(admins) = identity_admins(&chain.biscuit, safe_id) else {
+		return false;
+	};
+	if admins.iter().any(|a| signer_did_matches(a, subject_did)) {
+		return true;
+	}
+	admins.iter().any(|a| {
+		resolve_safe_did(a)
+			.filter(|c| *c != safe_id)
+			.map(|c| subject_controls_safe_with_depth(vault, c, subject_did, depth + 1))
+			.unwrap_or(false)
+	})
 }
 
 fn authorize_with_depth(
@@ -625,14 +701,34 @@ fn authorize_with_depth(
 	match authorize_local(vault, owner, op, table, row_id, subject_did) {
 		Ok(()) => Ok(()),
 		Err(e) => {
-			// Inheritance: a member of the parent group is a member here too.
 			if depth < MAX_GROUP_DEPTH {
 				if let Some(chain) = vault.safes.get(&owner) {
+					// Inheritance: a member of the parent group is a member here too.
 					if let Ok(Some(parent)) = group_extends_parent(&chain.biscuit) {
 						if authorize_with_depth(vault, parent, op, table, row_id, subject_did, depth + 1)
 							.is_ok()
 						{
 							return Ok(());
+						}
+					}
+					// SAFE-in-SAFE: a `did:safe:` entry in the owns set delegates this
+					// SAFE's authority to whoever controls that SAFE. If the subject
+					// controls the controller (transitively), re-run the local check AS
+					// the controller DID — it is in the owns set, so the SAFE's own
+					// `right` facts gate the op exactly as for a direct owner.
+					if let Ok(admins) = identity_admins(&chain.biscuit, owner) {
+						for admin in admins {
+							let Some(controller) = resolve_safe_did(&admin) else {
+								continue;
+							};
+							if controller == owner {
+								continue;
+							}
+							if subject_controls_safe_with_depth(vault, controller, subject_did, depth + 1)
+								&& authorize_local(vault, owner, op, table, row_id, &admin).is_ok()
+							{
+								return Ok(());
+							}
 						}
 					}
 				}
@@ -1203,5 +1299,112 @@ mod tests {
 			authorize(&v, sid, AccOp::Write, "todos", None, &bob.signer_did).is_err(),
 			"revoked Bob must be denied on the rebuilt biscuit"
 		);
+	}
+
+	#[test]
+	fn safe_in_safe_two_hop_authorize() {
+		// alice signer → humanSAFE H (signer-rooted) → avenSAFE A (controller = did:safe:H).
+		let mut alice = vault(&[1u8; 32]);
+		let outsider = vault(&[9u8; 32]);
+		let human_id = uuid::Uuid::new_v4();
+		let aven_id = uuid::Uuid::new_v4();
+
+		let human_genesis = mint_safe_genesis(&alice, human_id).unwrap();
+		alice.safes.insert(human_id, BiscuitIdentity { owner: human_id, biscuit: human_genesis });
+
+		let aven_genesis =
+			mint_safe_genesis_with_controller(&alice, aven_id, &safe_did(human_id)).unwrap();
+		alice.safes.insert(aven_id, BiscuitIdentity { owner: aven_id, biscuit: aven_genesis });
+
+		// Alice has NO direct owns on the aven — authority flows signer → humanSAFE → avenSAFE.
+		let admins = identity_admins(&alice.safes.get(&aven_id).unwrap().biscuit, aven_id).unwrap();
+		assert!(!admins.iter().any(|d| signer_did_matches(d, &alice.signer_did)));
+		assert!(admins.iter().any(|d| signer_did_matches(d, &safe_did(human_id))));
+
+		authorize(&alice, aven_id, AccOp::Write, "todos", None, &alice.signer_did.clone()).unwrap();
+		authorize(&alice, aven_id, AccOp::Read, "messages", None, &alice.signer_did.clone()).unwrap();
+		assert!(
+			authorize(&alice, aven_id, AccOp::Write, "todos", None, &outsider.signer_did).is_err(),
+			"a signer with no path into the controller SAFE must be denied"
+		);
+	}
+
+	#[test]
+	fn safe_in_safe_three_hop_spark() {
+		// signer → humanSAFE → avenSAFE → sparkSAFE (full recursive stack).
+		let mut alice = vault(&[1u8; 32]);
+		let human_id = uuid::Uuid::new_v4();
+		let aven_id = uuid::Uuid::new_v4();
+		let spark_id = uuid::Uuid::new_v4();
+
+		let h = mint_safe_genesis(&alice, human_id).unwrap();
+		alice.safes.insert(human_id, BiscuitIdentity { owner: human_id, biscuit: h });
+		let a = mint_safe_genesis_with_controller(&alice, aven_id, &safe_did(human_id)).unwrap();
+		alice.safes.insert(aven_id, BiscuitIdentity { owner: aven_id, biscuit: a });
+		let s = mint_safe_genesis_with_controller(&alice, spark_id, &safe_did(aven_id)).unwrap();
+		alice.safes.insert(spark_id, BiscuitIdentity { owner: spark_id, biscuit: s });
+
+		authorize(&alice, spark_id, AccOp::Write, "todos", None, &alice.signer_did.clone()).unwrap();
+		assert!(subject_controls_safe(&alice, spark_id, &alice.signer_did));
+	}
+
+	#[test]
+	fn safe_in_safe_added_human_safe_grants_its_signers() {
+		// avenSAFE A is signer-rooted by alice; bob's humanSAFE H2 is added as a
+		// did:safe: member → bob (a signer of H2) is authorized on A. Carol is not.
+		let mut alice = vault(&[1u8; 32]);
+		let bob = vault(&[2u8; 32]);
+		let carol = vault(&[3u8; 32]);
+		let aven_id = uuid::Uuid::new_v4();
+		let bob_human_id = uuid::Uuid::new_v4();
+
+		// Bob's humanSAFE (rooted at bob's key) — alice's vault holds the synced biscuit.
+		let bob_human = mint_safe_genesis(&bob, bob_human_id).unwrap();
+		alice
+			.safes
+			.insert(bob_human_id, BiscuitIdentity { owner: bob_human_id, biscuit: bob_human });
+
+		let genesis = mint_safe_genesis(&alice, aven_id).unwrap();
+		let chain = attenuate_add_owner_third_party(
+			&alice.biscuit_kp,
+			&genesis,
+			aven_id,
+			&safe_did(bob_human_id),
+		)
+		.unwrap();
+		alice.safes.insert(aven_id, BiscuitIdentity { owner: aven_id, biscuit: chain });
+
+		authorize(&alice, aven_id, AccOp::Write, "todos", None, &alice.signer_did.clone()).unwrap();
+		authorize(&alice, aven_id, AccOp::Write, "todos", None, &bob.signer_did).unwrap();
+		assert!(
+			authorize(&alice, aven_id, AccOp::Write, "todos", None, &carol.signer_did).is_err(),
+			"a signer outside the controller humanSAFE must be denied"
+		);
+	}
+
+	#[test]
+	fn safe_controller_cycle_terminates_as_deny() {
+		// A owned by did:safe:B and B owned by did:safe:A — the bounded walk must
+		// terminate (no hang) and deny a subject with no real anchor.
+		let mut alice = vault(&[1u8; 32]);
+		let outsider = vault(&[9u8; 32]);
+		let a_id = uuid::Uuid::new_v4();
+		let b_id = uuid::Uuid::new_v4();
+
+		let a = mint_safe_genesis_with_controller(&alice, a_id, &safe_did(b_id)).unwrap();
+		let b = mint_safe_genesis_with_controller(&alice, b_id, &safe_did(a_id)).unwrap();
+		alice.safes.insert(a_id, BiscuitIdentity { owner: a_id, biscuit: a });
+		alice.safes.insert(b_id, BiscuitIdentity { owner: b_id, biscuit: b });
+
+		assert!(authorize(&alice, a_id, AccOp::Write, "todos", None, &outsider.signer_did).is_err());
+		assert!(!subject_controls_safe(&alice, a_id, &outsider.signer_did));
+	}
+
+	#[test]
+	fn safe_did_resolve_roundtrip() {
+		let id = uuid::Uuid::new_v4();
+		assert_eq!(resolve_safe_did(&safe_did(id)), Some(id));
+		assert_eq!(resolve_safe_did("did:key:zabc"), None);
+		assert_eq!(resolve_safe_did("did:safe:not-a-uuid"), None);
 	}
 }

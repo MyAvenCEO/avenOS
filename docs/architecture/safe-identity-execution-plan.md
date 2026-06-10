@@ -160,33 +160,45 @@ Extended to accept `did:safe:` alongside `did:key:` as the `new_signer_did` argu
 
 ## Implementation Phases
 
-- [ ] **Phase 1 — Terminology sweep**
-  - Rename `identities` → `safes` in schema, Rust code, and docs
-  - Replace `"identity:<uuid>:"` with `"safe:<uuid>:"` in all biscuit resource strings
-  - Add `SAFE_DID_PREFIX` and `SAFE_RESOURCE_PREFIX` constants
-  - Update `aven_ceo_identity()` and related helpers to use `safe:` prefix
+- [x] **Phase 1 — Terminology sweep** ✅
+  - Renamed `identities` → `safes` in schema, Rust code, and frontend
+  - Replaced `"identity:<uuid>:"` with `"safe:<uuid>:"` in all biscuit resource strings
+  - Added `SAFE_DID_PREFIX` / `SAFE_RESOURCE_PREFIX` constants + `safe_did()` /
+    `safe_resource()` / `resolve_safe_did()` helpers
+  - ⚠️ Breaking: biscuits/keyshares/rows minted by pre-rename builds no longer
+    validate or decrypt — dev databases need a reset
 
-- [ ] **Phase 2 — Schema**
-  - Add `safe_did text` column to `safes` table (plaintext routing)
-  - Add `safe_controllers` table
-  - Add `"spark"` as a valid `type` label
-  - Add index on `safe_controllers(safe_id)` and `safe_controllers(controller_did)`
+- [x] **Phase 2 — Schema** ✅
+  - Added `safe_did text` column to `safes` (stamped `did:safe:<uuid>` on every create path)
+  - Added `safe_controllers` table (schema only — not yet populated; the biscuit
+    chain is the live source of truth for controllers)
+  - `"spark"` accepted as a `type` label end-to-end (create IPC + UI)
 
-- [ ] **Phase 3 — Genesis split**
-  - `mint_human_safe_genesis(vault, id)` — signer-rooted, current behaviour
-  - `mint_safe_genesis(vault, id, controller_safe_did)` — SAFE-rooted, for aven/spark
-  - Update `BiscuitVault` init path to call the correct variant based on `type`
+- [x] **Phase 3 — Genesis split** ✅
+  - `mint_safe_genesis(vault, id)` — signer-rooted (humanSAFE; was `mint_genesis_identity`)
+  - `mint_safe_genesis_with_controller(vault, id, controller_did)` — SAFE-rooted;
+    `owns(did:safe:<controller>)`, chain still anchored at the founding signer's biscuit key
+  - `createIdentity` picks the variant by `type`: aven → controlled by the creator's
+    humanSAFE, spark → controlled by the creator's avenSAFE (errors if none exists)
 
-- [ ] **Phase 4 — N-hop `authorize()`**
-  - Extend `authorize()` to walk `did:safe:` controller chains
-  - Add `resolve_safe_controllers(safe_did) -> Vec<ControllerEntry>` lookup
-  - Cache chain lookups within a single request
-  - Enforce max depth 8
+- [x] **Phase 4 — N-hop `authorize()`** ✅
+  - `authorize()` walks `did:safe:` entries in the owns set: subject controls the
+    controller SAFE (recursively) → inherits its authority on this SAFE
+  - `subject_controls_safe(vault, safe_id, did)` — public transitive-controller check
+  - Bounded by the same `MAX_GROUP_DEPTH = 8`; controller cycles terminate as deny
+  - Resolution is purely from loaded `vault.safes` biscuits (offline); cross-device
+    controller-chain distribution rides on Phase 5
+  - **Type enforcement at member-add** (application gate, `enforce_member_type_rule`):
+    humanSAFE admits signers only · avenSAFE admits humanSAFE DIDs only ·
+    sparkSAFE admits avenSAFE DIDs only · replicate grants are signer-only
 
-- [ ] **Phase 5 — DEK propagation**
-  - Wrap new SAFE's DEK for each founding controller
-  - On `admit` (new controller added): wrap and distribute keyshare to new controller
-  - On `rotate_dek`: re-wrap for all current controllers, exclude revoked
+- [ ] **Phase 5 — DEK propagation** (NEXT)
+  - A SAFE member has no pubkey — its **signers** need the keyshares. On adding a
+    `did:safe:` member: enumerate the controller SAFE's (transitive) signers and wrap
+    the DEK to each
+  - Distribute the controller SAFE's `safes` row (genesis) alongside, so members can
+    resolve the chain for verify-on-apply (today resolution is vault-local only)
+  - On `rotate_dek`: re-wrap for all current controllers' signers, exclude revoked
   - Auto-propagate: when signer added to humanSAFE, propagate keyshares to controlled avenSAFEs
 
 - [ ] **Phase 6 — UI / Onboarding**

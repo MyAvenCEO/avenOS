@@ -2036,6 +2036,106 @@ async fn wrap_all_dek_versions_to_recipient(
 	Ok(())
 }
 
+/// The `type` label of a SAFE, read from its local `safes` row (None = no row).
+async fn safe_type_of(client: &JazzClient, safe_uuid: Uuid) -> Result<Option<String>, String> {
+	let schema = jazz_engine::resolved_table_schema(client, "safes").await?;
+	let id_ix = jazz_engine::col_ix(&schema, "owner")?;
+	let type_ix = jazz_engine::col_ix(&schema, "type")?;
+	for (_oid, vals) in jazz_engine::exec_list_rows(client, "safes").await? {
+		if jazz_engine::uuid_cell_at(vals.as_slice(), id_ix)? == safe_uuid {
+			return Ok(match vals.get(type_ix) {
+				Some(Value::Text(s)) => Some(s.trim().to_string()),
+				_ => None,
+			});
+		}
+	}
+	Ok(None)
+}
+
+/// Enforce the SAFE-in-SAFE typing rule for a member being added to `target_safe`:
+/// **humanSAFEs admit signers** (`did:key:…`) only, **avenSAFEs admit humanSAFE
+/// DIDs** (`did:safe:…` of a human-type SAFE) only, and **sparkSAFEs admit
+/// avenSAFE DIDs** only. Keeps the recursive delegation stack well-typed —
+/// the biscuit protocol itself is type-agnostic, so this application gate is
+/// where the level constraints live.
+async fn enforce_member_type_rule(
+	client: &JazzClient,
+	target_safe: Uuid,
+	member_did: &str,
+) -> Result<(), String> {
+	let target_type = safe_type_of(client, target_safe)
+		.await?
+		.unwrap_or_else(|| "aven".to_string());
+	match target_type.as_str() {
+		"aven" | "spark" => {
+			let want = if target_type == "aven" { "human" } else { "aven" };
+			let Some(member_id) = crate::identity_acc::resolve_safe_did(member_did) else {
+				return Err(format!(
+					"a {target_type} SAFE admits {want} SAFE DIDs (did:safe:…) — signers join through a {want} SAFE"
+				));
+			};
+			let member_type = safe_type_of(client, member_id).await?;
+			if member_type.as_deref() != Some(want) {
+				return Err(format!(
+					"a {target_type} SAFE admits {want} SAFEs only — {member_did} is {}",
+					member_type.as_deref().unwrap_or("unknown (no local safes row)")
+				));
+			}
+			Ok(())
+		}
+		// humanSAFEs (and internal groups) anchor the chain: actual signers only.
+		_ => {
+			if member_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX) {
+				return Err(format!(
+					"a {target_type} SAFE admits signer DIDs (did:key:…) only — a SAFE cannot be a member of a {target_type} SAFE"
+				));
+			}
+			Ok(())
+		}
+	}
+}
+
+/// Find the SAFE of `want_type` this device's signer controls (directly or
+/// through the SAFE chain), to act as the **controller** of a new sub-SAFE.
+/// Oldest first (deterministic when several qualify). avenCEO is excluded —
+/// the network control identity is not a personal SAFE.
+async fn find_controlled_safe_of_type(
+	client: &JazzClient,
+	shell: &jazz_engine::ShellState,
+	want_type: &str,
+) -> Result<Option<Uuid>, String> {
+	let avenceo = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
+	let schema = jazz_engine::resolved_table_schema(client, "safes").await?;
+	let id_ix = jazz_engine::col_ix(&schema, "owner")?;
+	let type_ix = jazz_engine::col_ix(&schema, "type")?;
+	let created_ix = jazz_engine::col_ix(&schema, "created_at_ms")?;
+	let mut candidates: Vec<(i64, Uuid)> = Vec::new();
+	for (_oid, vals) in jazz_engine::exec_list_rows(client, "safes").await? {
+		let sid = jazz_engine::uuid_cell_at(vals.as_slice(), id_ix)?;
+		if sid == avenceo {
+			continue;
+		}
+		let ty = match vals.get(type_ix) {
+			Some(Value::Text(s)) => s.trim().to_string(),
+			_ => continue,
+		};
+		if ty != want_type {
+			continue;
+		}
+		if !crate::identity_acc::subject_controls_safe(&shell.vault, sid, &shell.signer_did) {
+			continue;
+		}
+		let at = match vals.get(created_ix) {
+			Some(Value::BigInt(i)) => *i,
+			Some(Value::Integer(i)) => *i as i64,
+			_ => i64::MAX,
+		};
+		candidates.push((at, sid));
+	}
+	candidates.sort();
+	Ok(candidates.first().map(|(_, sid)| *sid))
+}
+
 /// Append biscuit third-party `owns` for `peerDid`, persist updated `genesis_b64`, and add a DEK keyshare row so the peer can decrypt ciphertext for this identity after sync.
 pub(crate) async fn groove_ipc_spark_admin_add(
 	app: &tauri::AppHandle,
@@ -2063,15 +2163,21 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 		return Err("cannot grant a identity to your own DID".into());
 	}
 
-	let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&signer_did)?;
+	// SAFE-in-SAFE typing gate: human → signers, aven → humanSAFEs, spark → avenSAFEs.
+	enforce_member_type_rule(client.as_ref(), identity_uuid, &signer_did).await?;
+	let is_safe_member = signer_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX);
 
-	// Biscuit-driven sharing: the grant IS the trust act — no separate pairing
-	// step or allowlist gate. Materialize the grantee in the local roster and
-	// register it for sync so the grant takes effect end-to-end. The roster
-	// ("synced with") is thus derived from grants, not hand-managed.
-	crate::peers::add_remote_peer(client.as_ref(), &signer_did, "").await?;
-	if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
-		log::warn!(target: "avenos::jazz", "identity_admin_add register {signer_did}: {e}");
+	if !is_safe_member {
+		let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&signer_did)?;
+
+		// Biscuit-driven sharing: the grant IS the trust act — no separate pairing
+		// step or allowlist gate. Materialize the grantee in the local roster and
+		// register it for sync so the grant takes effect end-to-end. The roster
+		// ("synced with") is thus derived from grants, not hand-managed.
+		crate::peers::add_remote_peer(client.as_ref(), &signer_did, "").await?;
+		if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
+			log::warn!(target: "avenos::jazz", "identity_admin_add register {signer_did}: {e}");
+		}
 	}
 
 	jazz_engine::authorize_gate(
@@ -2084,7 +2190,7 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 
 	let bisc_identity = shell
 		.vault
-		.identities
+		.safes
 		.get(&identity_uuid)
 		.ok_or_else(|| format!("identity {identity_uuid} not loaded in vault"))?;
 
@@ -2097,7 +2203,11 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 	// rows land. Wrap EVERY held DEK version (not just the current one) so the grantee can
 	// also decrypt data sealed under pre-rotation versions — this is what lets a re-grant
 	// after a revoke (which rotated the DEK) read the identity's pre-revoke data. Idempotent.
-	wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &signer_did).await?;
+	// A SAFE member has no pubkey to wrap to — its signers reach the data through the
+	// controller chain; per-signer keyshare propagation is the DEK-propagation phase.
+	if !is_safe_member {
+		wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &signer_did).await?;
+	}
 
 	if !already_owner {
 		let new_biscuit = crate::identity_acc::attenuate_add_owner_third_party(
@@ -2176,6 +2286,10 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 	if signer_did == shell.signer_did {
 		return Err("cannot grant replication to your own DID".into());
 	}
+	// A replication relay is a concrete node — always a signer, never a SAFE.
+	if signer_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX) {
+		return Err("replication peers are signers (did:key:…) — a SAFE cannot relay".into());
+	}
 	let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&signer_did)?;
 
 	// Register the replica as a sync peer so the grant takes effect end-to-end.
@@ -2196,7 +2310,7 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 
 	let bisc_identity = shell
 		.vault
-		.identities
+		.safes
 		.get(&identity_uuid)
 		.ok_or_else(|| format!("identity {identity_uuid} not loaded in vault"))?;
 
@@ -2332,11 +2446,18 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 	if signer_did == shell.signer_did {
 		return Err("cannot grant read to your own DID".into());
 	}
-	let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&signer_did)?;
 
-	crate::peers::add_remote_peer(client.as_ref(), &signer_did, "").await?;
-	if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
-		log::warn!(target: "avenos::jazz", "identity_reader_add register {signer_did}: {e}");
+	// SAFE-in-SAFE typing gate: human → signers, aven → humanSAFEs, spark → avenSAFEs.
+	enforce_member_type_rule(client.as_ref(), identity_uuid, &signer_did).await?;
+	let is_safe_member = signer_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX);
+
+	if !is_safe_member {
+		let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&signer_did)?;
+
+		crate::peers::add_remote_peer(client.as_ref(), &signer_did, "").await?;
+		if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
+			log::warn!(target: "avenos::jazz", "identity_reader_add register {signer_did}: {e}");
+		}
 	}
 
 	// Only a identity admin may grant read (same gate as admin/replicate add).
@@ -2344,7 +2465,7 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 
 	let bisc_identity = shell
 		.vault
-		.identities
+		.safes
 		.get(&identity_uuid)
 		.ok_or_else(|| format!("identity {identity_uuid} not loaded in vault"))?;
 	let already_reader = crate::identity_acc::identity_readers(&bisc_identity.biscuit, identity_uuid)?
@@ -2355,7 +2476,10 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 
 	// Wrap EVERY held DEK version to the reader (see admin_add) so a post-rotation re-grant
 	// can read pre-rotation data. Idempotent — skips versions the reader already holds.
-	wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &signer_did).await?;
+	// SAFE members have no pubkey to wrap to (see admin_add) — DEK propagation phase.
+	if !is_safe_member {
+		wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &signer_did).await?;
+	}
 
 	if !already_reader {
 		let new_biscuit = crate::identity_acc::attenuate_add_reader_third_party(
@@ -2520,7 +2644,32 @@ pub(crate) async fn groove_ipc_create_identity(
 	let identity_uuid = uuid::Uuid::new_v4();
 	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "safes").await?;
 
-	let genesis = crate::identity_acc::mint_safe_genesis(&shell.vault, identity_uuid)?;
+	// Genesis split: humanSAFEs are signer-rooted (`owns(signer)`); aven and spark
+	// SAFEs are SAFE-rooted (`owns(did:safe:<controller>)`) — the creator's authority
+	// flows through the controller chain via the N-hop authorize, not a direct owns.
+	let genesis = match kind {
+		"aven" => {
+			let ctrl = find_controlled_safe_of_type(client.as_ref(), shell, "human")
+				.await?
+				.ok_or("create a Human SAFE first — an Aven SAFE is controlled by a Human SAFE")?;
+			crate::identity_acc::mint_safe_genesis_with_controller(
+				&shell.vault,
+				identity_uuid,
+				&crate::identity_acc::safe_did(ctrl),
+			)?
+		}
+		"spark" => {
+			let ctrl = find_controlled_safe_of_type(client.as_ref(), shell, "aven")
+				.await?
+				.ok_or("create an Aven SAFE first — a Spark SAFE is controlled by an Aven SAFE")?;
+			crate::identity_acc::mint_safe_genesis_with_controller(
+				&shell.vault,
+				identity_uuid,
+				&crate::identity_acc::safe_did(ctrl),
+			)?
+		}
+		_ => crate::identity_acc::mint_safe_genesis(&shell.vault, identity_uuid)?,
+	};
 	let genesis_b64 =
 		URL_SAFE_NO_PAD.encode(genesis.to_vec().map_err(|e| format!("genesis_encode:{e:?}"))?);
 	let issuer_b64 = crate::identity_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public());
@@ -2846,7 +2995,7 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 	// 3. Membership bundle in the biscuit: reads (whole roster) + write (own row only).
 	let bisc = shell
 		.vault
-		.identities
+		.safes
 		.get(&identity_uuid)
 		.ok_or_else(|| "avenCEO identity not loaded in vault".to_string())?;
 	let row_prefix = format!("safe:{identity_uuid}:peers:{}", member_oid.uuid());
@@ -3085,7 +3234,7 @@ pub(crate) async fn groove_ipc_spark_admin_list(
 	let shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
 	let bs = shell
 		.vault
-		.identities
+		.safes
 		.get(&identity_uuid)
 		.ok_or_else(|| format!("identity {identity_uuid} not in vault"))?;
 	let mut admin_dids: Vec<String> = crate::identity_acc::identity_admins(&bs.biscuit, identity_uuid)?
