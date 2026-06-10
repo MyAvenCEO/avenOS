@@ -1,12 +1,13 @@
-# aven-brain — Architecture & Execution Plan (v5)
+# aven-brain — Architecture & Execution Plan (v5.2)
 
 > **The one plan.** Architecture + execution roadmap for making aven-brain the per-identity
 > context manager of avenOS: one forever talk stream, brain-assembled LLM context, transparent
 > per-message recall, ingest-everything (messages, replies, files), and a fully dynamic DB viewer.
 >
-> Status: v5 · 2026-06-10 · Supersedes v4.2 (git `52777b3`). **This revision consolidates the
-> data model to three primitives — memory · entity · link** — after re-auditing the deep
-> structure of every reference. As-built record: `board/done/0010` (engine, pipeline, KG,
+> Status: v5.2 · 2026-06-10 · Supersedes v5.1 (git `c2e95e3`). **The data model is three
+> primitives — memory · entity · link — over typed artifact tables**, after re-auditing the deep
+> structure of every reference. (v5.2 folds "provenance" into "artifact": the former is just the
+> latter's reference + key attributes denormalized onto the memory row.) As-built record: `board/done/0010` (engine, pipeline, KG,
 > dreaming v1, EmbeddingGemma — done + tested; its 5-table schema migrates to the 3-table model
 > in E1). Sources: as-built `libs/aven-brain` · MemPalace · gBrain · Mnemosyne v3.5.0 · source
 > audits of `libs/aven-db` and `app/`.
@@ -54,9 +55,8 @@ Three layers: **artifacts** (sealed originals: `files`/`messages` rows — outsi
 
 | Term | Role |
 |---|---|
-| **artifact** | any app-owned table row (`messages`, `files`, `todos`, future `vendors`, …): the sealed, synced ground truth the brain derives from — and never writes |
-| **memory** | *evidence*: verbatim recallable text + embedding + provenance + veracity. A chat turn, a document chunk — always citable back to its artifact. Dreaming's summaries are also memories (provenance `summarizes`, veracity `inferred`). |
-| **provenance** | typed, indexed columns recording where a memory came from — `stream` (surface), `author_role` (user/agent/system), `source` (artifact row ref), `seq`/`line_start/end` (position), `content_date`; doubles as the cheap deterministic recall filter |
+| **artifact** | any app-owned table row (`messages`, `files`, `todos`, future `vendors`, …): the sealed, synced ground truth the brain derives from — and never writes. Every memory carries its artifact's reference + key attributes **denormalized as indexed columns** — `source` (the row), `stream` (surface), `author_role` (= the row's role), `seq`/`line_start/end` (position), `content_date` — "the artifact columns", which double as the cheap join-free recall filter |
+| **memory** | *evidence*: verbatim recallable text + embedding + artifact columns + veracity. A chat turn, a document chunk — always citable back to its artifact. Dreaming's summaries are also memories (lineage via `summarizes` links, veracity `inferred`). |
 | **entity** | *interpretation*: a named thing the brain believes exists (person/project/topic/document) — extracted, re-derivable, mergeable, never itself the truth |
 | **link** | the one edge primitive: `from —kind→ to` (+ validity/confidence/weight per class). Mentions, facts, bonds, summaries, refs — all links. |
 | **mention** | link kind, class *note*: memory → entity ("this evidence talks about X") |
@@ -80,7 +80,7 @@ index locally** (§3).
 
 ```
 memories  owner Uuid · content Text · embedding Vector{768}
-          stream Text · author_role Enum[user,agent,system]            ← provenance
+          stream Text · author_role Enum[user,agent,system]            ← artifact columns
           source Text (artifact row ref) · seq Int · line_start/end Int
           content_date Timestamp · content_hash Bytea · source_version BigInt
           normalize_version Int · created_at Timestamp
@@ -99,7 +99,7 @@ links     owner Uuid · from Uuid · to Uuid · kind Text · class Enum[note,cla
 Indexes: `memories(owner, stream, author_role)`, `memories(source)`, `memories(content_hash)`;
 `entities(owner, name, kind)`; `links(owner, from, kind)`, `links(owner, to, kind)`.
 `superseded_by` stays a column on memories (the hot path filters `IS NULL` cheaply); summary
-provenance is a *note* link `summary —summarizes→ source_memory`.
+lineage is a *note* link `summary —summarizes→ source_memory`.
 
 ### 2.2 The link kind registry (law 6, enforced)
 
@@ -147,7 +147,7 @@ BRAIN  memories · entities · links   (derived understanding — never the trut
 
 1. **Ingestion adapter (per table, registered)** — declares *what text this artifact contributes
    and when*. The contract (a per-table descendant of MemPalace's RFC-002 source-adapter):
-   `on_create / on_update / on_delete → memory drafts (+ provenance) · entity upsert ·
+   `on_create / on_update / on_delete → memory drafts (+ artifact columns) · entity upsert ·
    deterministic claims`. Examples:
    - `messages` → body on create (built into the talk flow, §4.1–4.2)
    - `files` → extracted text, chunked, on create (§4.3); type-aware extraction per mime
@@ -186,11 +186,12 @@ Kept out of the message row (whose `body` carries the tool-call envelope).
 
 ### 2.7 What we deliberately do NOT add
 
-No separate mentions/facts/relations tables (link kinds) · no working/episodic split (provenance
-+ `summarizes` links do it) · no `tier` column (age-weights are pure `f(created_at)`) · no
-canonical table (L0 = the self entity's compiled-truth card) · no scratchpad/banks (identities
-are the isolation) · no free-form labels (typed provenance only) · no eager provenance-entity
-derivation (lazy, §2.3) · no 13-type taxonomy (small decay classes from typed columns).
+No separate mentions/facts/relations tables (link kinds) · no standalone "provenance" concept
+(it's the artifact columns) · no working/episodic split (artifact columns + `summarizes` links
+do it) · no `tier` column (age-weights are pure `f(created_at)`) · no canonical table (L0 = the
+self entity's compiled-truth card) · no scratchpad/banks (identities are the isolation) · no
+free-form labels (typed artifact columns only) · no eager artifact-entity derivation (lazy,
+§2.3) · no 13-type taxonomy (small decay classes from typed columns).
 
 ---
 
@@ -249,7 +250,7 @@ One call before every LLM roundtrip (library method, testable without Tauri):
 
 ```
 assemble_context(query, opts { working_n=8, recall_k=6, entity_cards=2,
-                               budget_chars≈8000, provenance: { stream: 'talk' } })
+                               budget_chars≈8000, filter: { stream: 'talk' } })
   L0  self-card (always)                  ← compiled-truth card of the self entity
   L1  running gist (always)
   WW  working window: last N stream turns (chronological, always included)
@@ -363,7 +364,7 @@ become the same ingest path. Elsewhere, the existing behavior stays.
    (`from`/`to`/`source`/`source_memory`/`owner`/`message_id`, entity `ref_table`+`ref_id`) →
    clickable, jumping to the target table with an id filter. Links rows render their kind +
    class badge (note/claim/bond).
-3. **Brain search tab** — query + optional provenance filter (stream / author_role) →
+3. **Brain search tab** — query + optional artifact-column filter (stream / author_role) →
    `brain_search` → hits with via/rank/score badges, click-through to the `memories` row; entity
    list → entity-card panel; status strip (embedder, row counts) + **Dream** and **Backfill**
    buttons.
@@ -377,7 +378,7 @@ Each phase independently shippable, with files + verification:
 | # | Phase | Files (key) | Verify |
 |---|---|---|---|
 | **E0** | **Manifest + migration**: `vector` type, `memories`/`entities`/`links` (+owner), `context_traces`; snapshot + registry + embedded snapshot **in the same commit** | `libs/aven-schema/schema.manifest.json`, `migrations/registry.json` + snapshot, `app/src-tauri/src/schema_manifest.rs` | existing vault boots (lens applies, no wipe); fresh vault boots; tables listed by `jazzStatus()` |
-| **E1** | **Engine seam + 3-table rework**: unseal-on-scan transform for `nearest`/`text_search`; aven-brain migrates its 5-table schema to memory/entity/link + the kind→class registry (mention/fact/bond APIs unchanged in name, free-label param removed, `Provenance { stream, author_role, source }`); `open(identity)` over the shared store; `remember_with`, `search_traced` (via/rank provenance), `assemble_context`; rewire KG/dreaming/cards to links | `libs/aven-db` executor/scan path, `libs/aven-brain/src/{schema,brain}.rs` | `cargo test -p aven-brain` (13 tests migrated + registry tests: claim-close, note-idempotence, bond-potentiate); sealed fixture: search correct, no plaintext at rest |
+| **E1** | **Engine seam + 3-table rework**: unseal-on-scan transform for `nearest`/`text_search`; aven-brain migrates its 5-table schema to memory/entity/link + the kind→class registry (mention/fact/bond APIs unchanged in name, free-label param removed, scope = `Filter { stream, author_role, source }` over the artifact columns); `open(identity)` over the shared store; `remember_with`, `search_traced` (hits carry via/rank origin), `assemble_context`; rewire KG/dreaming/cards to links | `libs/aven-db` executor/scan path, `libs/aven-brain/src/{schema,brain}.rs` | `cargo test -p aven-brain` (13 tests migrated + registry tests: claim-close, note-idempotence, bond-potentiate); sealed fixture: search correct, no plaintext at rest |
 | **E2** | **App runtime**: brain module + Tauri commands `brain_status/ingest/search/entities/entity_card/assemble_context/backfill/dream` (asr/llm/tts pattern) + TS wrapper | new `app/src-tauri/src/brain.rs`, `app/src-tauri/src/lib.rs` (manage/handler/exit-drain), new `app/src/lib/brain/api.ts` | devtools: ingest → search round-trip on a real identity |
 | **E3** | **Ingestion**: the adapter registry (§2.4) + first adapters — messages (talk hooks for user/agent turns), files (markdown/text chunking; PDF next) + document entity upsert; todos adapter (event memories) next; backfill of pre-brain history; **drag-drop fix** | `identity-agent.svelte.ts`, `intent-files.ts`, `app/src/routes/+layout.svelte` | drop a .md on talk → stays on screen, chunks in `memories` with `source` = file row id + document entity with mentions; backfill idempotent (2nd run dedups all) |
 | **E4** | **Context manager**: `assemble_context` wiring + `context_traces` writes + fallback path | `identity-agent.svelte.ts` | reply still streams with brain off (fallback); trace row per human message; prompt contains L0/L1/WW/recall blocks under budget |
@@ -413,15 +414,14 @@ Each phase independently shippable, with files + verification:
 
 - **Brain** — each identity has one private memory store it fully owns; nobody else can read it.
 - **Artifact** — the real things your apps store: messages, files, todos, vendors. The ground
-  truth. The brain reads them and learns from them, but never changes them.
+  truth. The brain reads them and learns from them, but never changes them. Every memory carries
+  its artifact's fingerprint as fast typed fields — which row it derives from (`source`), which
+  surface (`stream`), who authored it (`author_role`) — the "which drawer" filters.
 - **Ingestion adapter** — each artifact type's little recipe for what the brain should remember
   about it: a message contributes its text, a file its pages, a todo its "created/completed"
   moments. New artifact type → new recipe, nothing else changes.
 - **Memory** — one piece of *evidence*, word-for-word: a chat message, a chunk of a document.
-  Always traceable to where it came from.
-- **Provenance** — every memory's birth certificate: which surface it came through (`stream`),
-  who authored it (`author_role`), which row it derives from (`source`). Typed fields, also the
-  fast "which drawer" filters.
+  Always traceable to its artifact.
 - **Entity** — a thing the brain *believes* exists: a person, project, document, topic. The
   brain's interpretation, distilled from evidence — never the truth itself.
 - **Typed entity** — an entity that points at a real row: the `document` entity for a dropped
@@ -465,5 +465,5 @@ Each phase independently shippable, with files + verification:
 
 The attested-TEE fact extractor (GLM-5.3 on Phala RedPill; trait seam `extractor.rs` built, no
 impl) is **parked** — see `board/done/0010-aven-brain-execution-plan.md` §6b for the full design
-(attest-or-refuse, provenance digests, phases P1–P4). Nothing in E0–E7 depends on it; the
+(attest-or-refuse, attestation digests on extracted claims, phases P1–P4). Nothing in E0–E7 depends on it; the
 deterministic pass is load-bearing without it. Revisit after E7.
