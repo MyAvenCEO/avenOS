@@ -323,7 +323,7 @@ mod tests {
 	fn acl_with_row(table: &str, row_id: Uuid, identity: Uuid) -> SyncAclSnapshot {
 		let mut map = HashMap::new();
 		map.insert((table.into(), ObjectId::from_uuid(row_id)), identity);
-		build_sync_acl_snapshot(map)
+		build_sync_acl_snapshot(map, HashMap::new())
 	}
 
 	fn dummy_digest() -> [u8; 32] {
@@ -365,7 +365,7 @@ mod tests {
 		let peer_did = v.peer_did.clone();
 		// ACL is present but contains no mapping for this row.
 		let resolver =
-			make_resolver(Some(make_shell(v)), Some(build_sync_acl_snapshot(HashMap::new())));
+			make_resolver(Some(make_shell(v)), Some(build_sync_acl_snapshot(HashMap::new(), HashMap::new())));
 		let res = make_res("todos", Uuid::new_v4());
 		assert_eq!(
 			resolver.may_sync(&SyncTargetId::PeerDid(peer_did), AccOp::Read, &res),
@@ -530,6 +530,7 @@ mod tests {
 				AccOp::Write,
 				&res,
 				&dummy_digest(),
+				None,
 				None
 			),
 			CapDecision::Allow
@@ -547,6 +548,7 @@ mod tests {
 				AccOp::Write,
 				&res,
 				&dummy_digest(),
+				None,
 				None
 			),
 			CapDecision::DenyPermanent
@@ -564,6 +566,7 @@ mod tests {
 
 		let binding = mint_owner_binding(&sk, row, sid).unwrap();
 		let proof = binding.to_meta_string();
+		let es = aven_caps::ownership::sign_batch(&sk, &dummy_digest()).unwrap().to_meta_string();
 
 		let resolver =
 			make_resolver(Some(make_shell(vault)), Some(acl_with_row("todos", row, sid)));
@@ -574,7 +577,8 @@ mod tests {
 				AccOp::Write,
 				&res,
 				&dummy_digest(),
-				Some(proof.as_bytes())
+				Some(proof.as_bytes()),
+				Some(es.as_bytes())
 			),
 			CapDecision::Allow
 		);
@@ -603,7 +607,8 @@ mod tests {
 				AccOp::Write,
 				&res,
 				&dummy_digest(),
-				Some(proof.as_bytes())
+				Some(proof.as_bytes()),
+				None
 			),
 			CapDecision::DenyPermanent
 		);
@@ -631,7 +636,8 @@ mod tests {
 				AccOp::Write,
 				&res,
 				&dummy_digest(),
-				Some(proof.as_bytes())
+				Some(proof.as_bytes()),
+				None
 			),
 			CapDecision::DenyPermanent
 		);
@@ -660,7 +666,8 @@ mod tests {
 				AccOp::Write,
 				&res,
 				&dummy_digest(),
-				Some(proof.as_bytes())
+				Some(proof.as_bytes()),
+				None
 			),
 			CapDecision::DenyPermanent,
 			"relabeling an existing row to a different identity must be rejected"
@@ -680,6 +687,7 @@ mod tests {
 		let row = Uuid::new_v4();
 		let binding = mint_owner_binding(&sk, row, sid).unwrap();
 		let proof = binding.to_meta_string();
+		let es = aven_caps::ownership::sign_batch(&sk, &dummy_digest()).unwrap().to_meta_string();
 
 		let resolver = make_resolver(Some(make_shell(relay_vault)), None);
 		let res = make_res("todos", row);
@@ -689,7 +697,8 @@ mod tests {
 				AccOp::Write,
 				&res,
 				&dummy_digest(),
-				Some(proof.as_bytes())
+				Some(proof.as_bytes()),
+				Some(es.as_bytes())
 			),
 			CapDecision::Allow,
 			"blind relay must allow any authentically-signed binding it doesn't hold the key for"
@@ -709,6 +718,7 @@ mod tests {
 
 		let binding = mint_owner_binding(&sk_outsider, row, sid).unwrap();
 		let proof = binding.to_meta_string();
+		let es = aven_caps::ownership::sign_batch(&sk_outsider, &dummy_digest()).unwrap().to_meta_string();
 
 		let resolver =
 			make_resolver(Some(make_shell(vault)), Some(acl_with_row("todos", row, sid)));
@@ -719,7 +729,8 @@ mod tests {
 				AccOp::Write,
 				&res,
 				&dummy_digest(),
-				Some(proof.as_bytes())
+				Some(proof.as_bytes()),
+				Some(es.as_bytes())
 			),
 			CapDecision::DenyPermanent,
 			"outsider with a valid signature but no biscuit grant must be denied"
