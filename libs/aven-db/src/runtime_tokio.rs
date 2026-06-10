@@ -521,6 +521,17 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
     // =========================================================================
 
     /// Execute a one-shot query with durability options.
+    /// Register the unseal-on-scan hook (plan §3 seam): bound into every subsequently
+    /// compiled ranking Sort node (`nearest` / `text_search`).
+    pub fn set_unseal(
+        &self,
+        hook: Option<crate::query_manager::graph_nodes::sort::UnsealFn>,
+    ) -> Result<(), RuntimeError> {
+        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        core.schema_manager_mut().query_manager_mut().set_unseal(hook);
+        Ok(())
+    }
+
     pub fn query(
         &self,
         query: Query,

@@ -130,6 +130,7 @@ impl QueryManager {
             session.clone(),
             &self.schema_context,
             compile_row_policy_mode,
+            self.unseal.as_ref(),
         )
         .map_err(|err| QueryError::QueryCompilationError(err.to_string()))?;
         let policy_context_tables = Self::policy_context_tables_for_graph(&graph);
@@ -221,6 +222,7 @@ impl QueryManager {
             session.clone(),
             schema_context,
             crate::query_manager::types::RowPolicyMode::PermissiveLocal,
+            self.unseal.as_ref(),
         )
         .map_err(|err| QueryError::QueryCompilationError(err.to_string()))?;
         let policy_context_tables = Self::policy_context_tables_for_graph(&graph);

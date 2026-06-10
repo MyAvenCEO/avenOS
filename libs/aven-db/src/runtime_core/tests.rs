@@ -1,5 +1,6 @@
 use super::*;
 use crate::batch_fate::{CapturedFrontierMember, SealedBatchMember, SealedBatchSubmission};
+use crate::query_manager::query::QueryBuilder;
 use crate::query_manager::session::WriteContext;
 use crate::query_manager::types::{
     ColumnType, SchemaBuilder, SchemaHash, TableName, TableSchema,

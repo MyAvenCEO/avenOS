@@ -50,6 +50,7 @@ pub use capability::{
     ResourceCoord, may_hold,
 };
 pub use sync_targets::SyncTargetId;
+pub use query_manager::graph_nodes::sort::UnsealFn;
 #[cfg(feature = "client-p2p")]
 pub use sync_transport::{
     decode_length_prefixed, encode_length_prefixed, NullSyncTransport, PeerTransport, SyncTransport,

@@ -125,6 +125,17 @@ pub(crate) struct RelationCompileFeatures {
 }
 
 impl QueryGraph {
+    /// Bind the unseal-on-scan hook (plan §3 seam) to every ranking Sort node
+    /// (`nearest` / `text_search`). No-op for graphs without ranking sorts.
+    pub fn bind_unseal(&mut self, hook: &super::graph_nodes::sort::UnsealFn) {
+        let table = self.table;
+        for compact in &mut self.nodes {
+            if let GraphNode::Sort(sort) = &mut compact.node {
+                sort.bind_unseal(&table, hook);
+            }
+        }
+    }
+
     pub fn new(table: TableName, descriptor: RowDescriptor) -> Self {
         Self {
             nodes: Vec::new(),

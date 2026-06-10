@@ -524,6 +524,19 @@ deterministic pass is load-bearing without it. Revisit after E7.
 
 Newest entry first.
 
+- `2026-06-10` — **E1b shipped — the engine unseal-on-scan seam (plan §3)**. New
+  `UnsealFn` hook `(table, column, stored Value) -> Option<plaintext Value>` registered
+  via `JazzClient::set_unseal_hook` → runtime → QueryManager; bound at compile into every
+  ranking SortNode (`QueryGraph::bind_unseal`), applied exactly where `nearest` (cosine)
+  and `text_search` (BM25) decode column values — plaintext transiently in RAM only;
+  query results still return stored (sealed) values. Subscriptions get the hook on
+  (re)compile too. Test `rc_unseal_hook_ranks_sealed_columns_by_plaintext`: without the
+  hook sealed bytes rank as stored (wrong row wins); with it, plaintext wins on both
+  retrievers, and results carry sealed values. **751/751 aven-db lib tests, 22/22
+  aven-brain.** Also fixed a lost `QueryBuilder` test import (merge artifact). Note:
+  `tests/capability_gate.rs` (`gated_pull`) arrived broken from main's own merge —
+  pre-existing, untouched. `_created_at`/`_updated_at` virtual columns deferred: UUIDv7
+  row ids already serve the brain; revisit if the DB viewer needs them (E6).
 - `2026-06-10` — **E1a shipped**: aven-brain reworked to the 3-table model. New
   `schema.rs` mirrors the manifest exactly (memories/entities/links, no created_at —
   UUIDv7 row ids supply write time). `brain.rs`: kind→class registry enforced at write

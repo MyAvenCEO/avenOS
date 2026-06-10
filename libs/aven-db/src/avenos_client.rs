@@ -527,6 +527,19 @@ impl JazzClient {
         Ok(SubscriptionStream::new(rx))
     }
 
+    /// Register the unseal-on-scan hook (the sealed-data seam, plan §3): the engine
+    /// calls it with (table, column, stored value) wherever `nearest`/`text_search`
+    /// read values for ranking, so sealed columns rank by their plaintext. Plaintext
+    /// exists transiently in RAM only; query results still carry stored rows.
+    pub fn set_unseal_hook(
+        &self,
+        hook: Option<crate::query_manager::graph_nodes::sort::UnsealFn>,
+    ) -> Result<()> {
+        self.runtime
+            .set_unseal(hook)
+            .map_err(|e| JazzError::Query(format!("set_unseal: {e:?}")))
+    }
+
     pub async fn query(
         &self,
         query: Query,

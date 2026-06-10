@@ -2,12 +2,39 @@ use ahash::AHashSet;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use crate::object::ObjectId;
 use crate::row_format::{compare_column, decode_column};
-use crate::query_manager::types::{RowDescriptor, Tuple, TupleDelta, TupleDescriptor, Value};
+use crate::query_manager::types::{
+    RowDescriptor, TableName, Tuple, TupleDelta, TupleDescriptor, Value,
+};
 
 use super::RowNode;
+
+/// Unseal-on-scan hook (the sealed-data seam, plan §3): maps a stored (possibly
+/// sealed) column [`Value`] to its plaintext for ranking. Supplied by the DEK-holding
+/// layer; invoked only where `nearest`/`text_search` read values — plaintext exists
+/// transiently in RAM, never in results (which carry row ids + stored rows only).
+/// Return `None` for unreadable values (they rank last / score zero).
+pub type UnsealFn = Arc<dyn Fn(&TableName, &str, &Value) -> Option<Value> + Send + Sync>;
+
+/// `UnsealFn` bound to one (table, column) by [`SortNode::bind_unseal`].
+#[derive(Clone)]
+struct BoundUnseal(Arc<dyn Fn(&Value) -> Option<Value> + Send + Sync>);
+
+impl std::ops::Deref for BoundUnseal {
+    type Target = Arc<dyn Fn(&Value) -> Option<Value> + Send + Sync>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for BoundUnseal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("BoundUnseal(..)")
+    }
+}
 
 /// Cosine distance (`1 - cosine_similarity`) between two equal-length vectors.
 /// Returns `+inf` for length mismatch and `1.0` for a zero-norm operand so that
@@ -153,6 +180,7 @@ fn compare_tuples_with(
     descriptor: &RowDescriptor,
     nearest_query: Option<&[f32]>,
     text_scores: Option<&HashMap<ObjectId, f32>>,
+    unseal: Option<&BoundUnseal>,
     a: &Tuple,
     b: &Tuple,
 ) -> Ordering {
@@ -175,7 +203,16 @@ fn compare_tuples_with(
                 let dist = |content: Option<&[u8]>| -> f32 {
                     match (content, nearest_query) {
                         (Some(data), Some(q)) => match decode_column(descriptor, data, column) {
-                            Ok(Value::Vector(v)) => cosine_distance(&v, q),
+                            Ok(stored) => {
+                                let plain = match unseal {
+                                    Some(u) => u(&stored),
+                                    None => Some(stored),
+                                };
+                                match plain {
+                                    Some(Value::Vector(v)) => cosine_distance(&v, q),
+                                    _ => f32::INFINITY,
+                                }
+                            }
                             _ => f32::INFINITY,
                         },
                         _ => f32::INFINITY,
@@ -240,6 +277,8 @@ pub struct SortNode {
     text_search: Option<TextSearchState>,
     /// Cached BM25 scores by row id; recomputed over the candidate set on change.
     text_scores: HashMap<ObjectId, f32>,
+    /// Unseal-on-scan hook bound to this node's ranking column (plan §3 seam).
+    unseal: Option<BoundUnseal>,
     /// Current sorted tuples.
     sorted_tuples: Vec<Tuple>,
     /// HashSet view of current tuples (for trait requirement).
@@ -261,6 +300,7 @@ impl SortNode {
             nearest_query: None,
             text_search: None,
             text_scores: HashMap::new(),
+            unseal: None,
             sorted_tuples: Vec::new(),
             current_tuples: AHashSet::new(),
             dirty: true,
@@ -285,6 +325,7 @@ impl SortNode {
             nearest_query: Some(query_vector),
             text_search: None,
             text_scores: HashMap::new(),
+            unseal: None,
             sorted_tuples: Vec::new(),
             current_tuples: AHashSet::new(),
             dirty: true,
@@ -312,10 +353,32 @@ impl SortNode {
                 query_terms: tokenize(query),
             }),
             text_scores: HashMap::new(),
+            unseal: None,
             sorted_tuples: Vec::new(),
             current_tuples: AHashSet::new(),
             dirty: true,
         }
+    }
+
+    /// Bind the unseal-on-scan hook to this node's ranking column (no-op for plain
+    /// ORDER BY nodes). `table` is the graph's primary table; the column name is
+    /// resolved from this node's descriptor.
+    pub fn bind_unseal(&mut self, table: &TableName, hook: &UnsealFn) {
+        let column_idx = match (&self.sort_keys.first().map(|k| k.target), &self.text_search) {
+            (Some(SortTarget::VectorDistance { column }), _) => Some(*column),
+            (_, Some(state)) => Some(state.column),
+            _ => None,
+        };
+        let Some(idx) = column_idx else { return };
+        let Some(col) = self.descriptor.columns.get(idx) else {
+            return;
+        };
+        let table = table.clone();
+        let column_name = col.name.as_str().to_string();
+        let hook = Arc::clone(hook);
+        self.unseal = Some(BoundUnseal(Arc::new(move |v: &Value| {
+            hook(&table, &column_name, v)
+        })));
     }
 
     /// (Re)compute BM25 scores over the current candidate set, keyed by row id.
@@ -330,8 +393,14 @@ impl SortNode {
             .filter_map(|t| {
                 let elem = t.get(0)?;
                 let content = elem.content()?;
-                let doc = match decode_column(&self.descriptor, content, column) {
-                    Ok(Value::Text(s)) => s,
+                let stored = decode_column(&self.descriptor, content, column).ok();
+                let plain = match (&self.unseal, stored) {
+                    (Some(u), Some(v)) => u(&v),
+                    (None, v) => v,
+                    _ => None,
+                };
+                let doc = match plain {
+                    Some(Value::Text(s)) => s,
                     _ => String::new(),
                 };
                 Some((elem.id(), doc))
@@ -350,9 +419,10 @@ impl SortNode {
         let sort_keys = &self.sort_keys;
         let descriptor = &self.descriptor;
         let nearest_query = self.nearest_query.as_deref();
+        let unseal = self.unseal.as_ref();
         self.sorted_tuples
             .binary_search_by(|t| {
-                compare_tuples_with(sort_keys, descriptor, nearest_query, None, t, tuple)
+                compare_tuples_with(sort_keys, descriptor, nearest_query, None, unseal, t, tuple)
             })
             .unwrap_or_else(|pos| pos)
     }
@@ -421,8 +491,9 @@ impl RowNode for SortNode {
                     let sort_keys = &self.sort_keys;
                     let descriptor = &self.descriptor;
                     let nearest_query = self.nearest_query.as_deref();
+                    let unseal = self.unseal.as_ref();
                     self.sorted_tuples.sort_unstable_by(|a, b| {
-                        compare_tuples_with(sort_keys, descriptor, nearest_query, None, a, b)
+                        compare_tuples_with(sort_keys, descriptor, nearest_query, None, unseal, a, b)
                     });
                 }
             } else {
@@ -445,8 +516,9 @@ impl RowNode for SortNode {
             let sort_keys = &self.sort_keys;
             let descriptor = &self.descriptor;
             let text_scores = &self.text_scores;
+            let unseal = self.unseal.as_ref();
             self.sorted_tuples.sort_unstable_by(|a, b| {
-                compare_tuples_with(sort_keys, descriptor, None, Some(text_scores), a, b)
+                compare_tuples_with(sort_keys, descriptor, None, Some(text_scores), unseal, a, b)
             });
         }
 
