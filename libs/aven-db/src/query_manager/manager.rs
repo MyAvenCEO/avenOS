@@ -126,7 +126,7 @@ impl std::error::Error for QueryError {}
 /// Handle to a pending query.
 ///
 /// Used to correlate query results with the original request.
-/// Wrappers (jazz-runtime, jazz-wasm) use this to fulfill
+/// Wrappers (avendb-runtime, avendb-wasm) use this to fulfill
 /// platform-specific futures/promises.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct QueryHandle(pub u64);
@@ -1018,7 +1018,7 @@ impl QueryManager {
             unique_batch_count,
             marked_row_count,
             max_confirmed_tier = ?max_confirmed_tier,
-            "jazz trace batch fate effects applied"
+            "avendb trace batch fate effects applied"
         );
     }
 
@@ -1293,7 +1293,7 @@ impl QueryManager {
                     added = visible_delta.added.len(),
                     settled_tier = ?subscription.query_frontier_settled_tier,
                     required_tier = ?subscription.durability_tier,
-                    "jazz trace subscription first delivery"
+                    "avendb trace subscription first delivery"
                 );
                 subscription.settled_once = true;
                 subscription.current_ordered_ids = ordered_ids_after;

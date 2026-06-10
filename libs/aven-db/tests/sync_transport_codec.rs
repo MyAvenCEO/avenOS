@@ -1,9 +1,9 @@
 #![cfg(feature = "client-p2p")]
 
-use groove::object::{BranchName, ObjectId};
-use groove::sync_manager::{PeerId, SyncError, SyncPayload};
-use groove::sync_targets::SyncTargetId;
-use groove::{decode_length_prefixed, encode_length_prefixed};
+use aven_db::object::{BranchName, ObjectId};
+use aven_db::sync_manager::{PeerId, SyncError, SyncPayload};
+use aven_db::sync_targets::SyncTargetId;
+use aven_db::{decode_length_prefixed, encode_length_prefixed};
 
 #[test]
 fn length_prefixed_roundtrip_errors_on_trailer() {

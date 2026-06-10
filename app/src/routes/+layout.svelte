@@ -6,9 +6,9 @@ import { installConsoleCapture } from '$lib/debug/console-capture'
 import { initLocale, normalizeLocale, setLocale, t } from '$lib/i18n'
 import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
 import { startPeerMeshStore } from '$lib/peer/peer-mesh-store'
-import { attachAvenosRuntimeBridge, grooveSessionReady } from '$lib/runtime/groove-runtime'
-import { avenCeoMembership } from '$lib/jazz/api'
-import { jazzStore } from '$lib/jazz/store.svelte'
+import { attachAvenosRuntimeBridge, avendbSessionReady } from '$lib/runtime/avendb-runtime'
+import { avenCeoMembership } from '$lib/avendb/api'
+import { avenDbStore } from '$lib/avendb/store.svelte'
 import NetworkGate from '$lib/shell/NetworkGate.svelte'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { displayTitleForSession } from '$lib/settings/active-vault-ui'
@@ -106,8 +106,8 @@ $effect(() => {
 	})()
 })
 
-/** Mesh touches Groove ACL — defer until strict local-first bootstrap confirms shell hydrate. */
-const meshAllowed = $derived(sessionKind === 'unlocked' && $grooveSessionReady)
+/** Mesh touches avenDB ACL — defer until strict local-first bootstrap confirms shell hydrate. */
+const meshAllowed = $derived(sessionKind === 'unlocked' && $avendbSessionReady)
 
 // Global invite-only gate: the app is locked behind membership of the network's
 // avenCEO identity. Membership = "do I hold an avenCEO cap in my vault?" (a local
@@ -115,13 +115,13 @@ const meshAllowed = $derived(sessionKind === 'unlocked' && $grooveSessionReady)
 // grants caps (auto-grants the first peer, invites the rest). We re-check when
 // identities sync, so the gate opens automatically once the server's grant + keyshare
 // land and hydrate avenCEO into the vault. Sandbox (non-tauri) is never gated.
-const identitiesStore = jazzStore('safes')
+const identitiesStore = avenDbStore('safes')
 let membership = $state<'owner' | 'member' | 'none' | 'unknown'>('unknown')
 $effect(() => {
 	void sessionKind
-	void $grooveSessionReady
+	void $avendbSessionReady
 	void identitiesStore.rows
-	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked' || !$grooveSessionReady) {
+	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked' || !$avendbSessionReady) {
 		membership = 'unknown'
 		return
 	}

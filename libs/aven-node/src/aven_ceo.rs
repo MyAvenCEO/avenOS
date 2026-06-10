@@ -18,7 +18,7 @@ use aven_caps::crypto::{
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::SigningKey;
-use groove::{JazzClient, ObjectId, PeerId, QueryBuilder, TableName, TableSchema, Value};
+use aven_db::{AvenDbClient, ObjectId, PeerId, QueryBuilder, TableName, TableSchema, Value};
 use uuid::Uuid;
 
 fn text_at(vals: &[Value], ix: usize) -> String {
@@ -75,7 +75,7 @@ fn col_ix(tbl: &TableSchema, name: &str) -> Result<usize, String> {
 }
 
 /// The avenCEO `identities` row's `genesis_b64` if it exists in the engine, else None.
-pub async fn avenceo_genesis_b64(engine: &JazzClient, avenceo_id: Uuid) -> Result<Option<String>, String> {
+pub async fn avenceo_genesis_b64(engine: &AvenDbClient, avenceo_id: Uuid) -> Result<Option<String>, String> {
 	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
 	let tbl = schema
 		.get(&TableName::new("safes"))
@@ -163,7 +163,7 @@ fn unseal_identity_cell(
 }
 
 pub async fn ensure_avenceo_owned(
-	engine: &JazzClient,
+	engine: &AvenDbClient,
 	vault: &BiscuitVault,
 	signing: &SigningKey,
 	avenceo_id: Uuid,
@@ -244,7 +244,7 @@ pub async fn ensure_avenceo_owned(
 
 /// The avenCEO `identities` row: `(object id, genesis_b64, issuer_pubkey_b64, dek_version)`.
 async fn read_avenceo_identity(
-	engine: &JazzClient,
+	engine: &AvenDbClient,
 	avenceo_id: Uuid,
 ) -> Result<Option<(ObjectId, String, String, i64)>, String> {
 	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
@@ -264,7 +264,7 @@ async fn read_avenceo_identity(
 
 /// Read + unwrap the server's own avenCEO DEK from its keyshare row (self-wrap).
 async fn read_server_dek(
-	engine: &JazzClient,
+	engine: &AvenDbClient,
 	vault: &BiscuitVault,
 	signing: &SigningKey,
 	avenceo_id: Uuid,
@@ -306,13 +306,13 @@ async fn read_server_dek(
 /// holds an avenCEO cap → it is a network member (the device gates on this). Idempotent
 /// per peer; once any admin exists, later peers must be invited.
 pub async fn maybe_grant_first_admin(
-	engine: &JazzClient,
+	engine: &AvenDbClient,
 	signing: &SigningKey,
 	avenceo_id: Uuid,
 	peer: PeerId,
 ) -> Result<(), String> {
 	let vault = build_vault_from_signing_key(signing)?;
-	let signer_did = groove::did_key::signer_did_from_ed25519(&peer.0)?;
+	let signer_did = aven_db::did_key::signer_did_from_ed25519(&peer.0)?;
 	if signer_did == vault.signer_did {
 		return Ok(());
 	}

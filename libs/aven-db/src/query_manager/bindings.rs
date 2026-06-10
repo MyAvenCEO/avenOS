@@ -36,7 +36,7 @@ pub struct RuntimeSchemaInput {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RuntimeSchemaEnvelopeWire {
-    #[serde(rename = "__jazzRuntimeSchema")]
+    #[serde(rename = "__avendbRuntimeSchema")]
     version: u8,
     schema: Schema,
     #[serde(default)]
@@ -587,7 +587,7 @@ mod tests {
     #[test]
     fn runtime_schema_envelope_reads_ts_policy_bundle_flag() {
         let schema_json = r#"{
-            "__jazzRuntimeSchema": 1,
+            "__avendbRuntimeSchema": 1,
             "schema": {
                 "todos": {
                     "columns": [
@@ -616,7 +616,7 @@ mod tests {
     #[test]
     fn runtime_schema_envelope_defaults_missing_policy_bundle_flag_to_permissive_local() {
         let schema_json = r#"{
-            "__jazzRuntimeSchema": 1,
+            "__avendbRuntimeSchema": 1,
             "schema": {
                 "todos": {
                     "columns": [

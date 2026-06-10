@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
-	import { jazzSession } from '$lib/jazz/api'
-	import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
+	import { avendbSession } from '$lib/avendb/api'
+	import { waitForAvenDbSessionReady } from '$lib/runtime/avendb-runtime'
 	import { deviceSession } from '$lib/settings/device-session-store'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { t } from '$lib/i18n'
@@ -24,8 +24,8 @@
 		busy = true
 		err = undefined
 		try {
-			await waitForGrooveSessionReady()
-			const session = await jazzSession()
+			await waitForAvenDbSessionReady()
+			const session = await avendbSession()
 			if (gen !== loadGen) return
 			ownDid = session.signerDid
 		} catch (e) {

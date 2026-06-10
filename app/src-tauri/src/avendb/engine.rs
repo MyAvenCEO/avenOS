@@ -1,13 +1,13 @@
-//! Shell: vault, DEKs, sealed text columns (submodule of `jazz`).
+//! Shell: vault, DEKs, sealed text columns (submodule of `avendb`).
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::OnceLock;
 
 use base64::Engine;
-use groove::{
+use aven_db::{
 	query_manager::types::{ColumnType, TableName, TableSchema},
-	JazzClient,
+	AvenDbClient,
 	ObjectId,
 	QueryBuilder,
 	Value,
@@ -19,11 +19,11 @@ use uuid::Uuid;
 
 use crate::{
 	crypto::{
-		cell_seal_aad, column_type_slug, groove_value_to_canonical_utf8, ipc_json_from_opened_sensitive_plaintext,
+		cell_seal_aad, column_type_slug, avendb_value_to_canonical_utf8, ipc_json_from_opened_sensitive_plaintext,
 		decrypt_keyshare_payload, derive_kek_x25519, open_text_cell_payload,
 		keyshare_wrap_aad, seal_text_cell_payload, Dek, CELL_ENVELOPE_V1,
 	},
-	jazz_auth,
+	avendb_auth,
 	schema_manifest,
 	identity_acc::{self, AccOp},
 };
@@ -39,13 +39,13 @@ pub(crate) struct ShellState {
 	/// Issuer (biscuit root) pubkey per loaded SAFE chain — kept so controller-chain
 	/// COPIES (`safe_controllers` rows) can be written/refreshed with the right root.
 	pub(crate) issuers: HashMap<Uuid, String>,
-	/// Groove write branch (`JazzClient` uses SchemaManager `"client"` / `"main"`). List queries must
+	/// avenDB write branch (`AvenDbClient` uses SchemaManager `"client"` / `"main"`). List queries must
 	/// use this branch only; empty `Query.branches` expands to **all live schema branches**, so merged
 	/// reads can expose rows whose tips are not writable on `current_branch()` (ObjectNotFound).
-	pub(crate) groove_write_branch: String,
+	pub(crate) avendb_write_branch: String,
 }
 
-fn jazz_cell_json(cell: &Value) -> JsonValue {
+fn avendb_cell_json(cell: &Value) -> JsonValue {
 	match cell {
 		Value::Integer(i) => JsonValue::Number((*i).into()),
 		Value::BigInt(i) => JsonValue::Number((*i).into()),
@@ -54,9 +54,9 @@ fn jazz_cell_json(cell: &Value) -> JsonValue {
 		Value::Timestamp(ts) => JsonValue::Number((*ts).into()),
 		Value::Uuid(oid) => JsonValue::String(oid.uuid().to_string()),
 		Value::Null => JsonValue::Null,
-		Value::Array(items) => JsonValue::Array(items.iter().map(jazz_cell_json).collect()),
+		Value::Array(items) => JsonValue::Array(items.iter().map(avendb_cell_json).collect()),
 		Value::Row { values: items, .. } => {
-			JsonValue::Array(items.iter().map(jazz_cell_json).collect())
+			JsonValue::Array(items.iter().map(avendb_cell_json).collect())
 		}
 		Value::Double(d) => JsonValue::Number(
 			serde_json::Number::from_f64(*d).map(Into::into).unwrap_or(0.into()),
@@ -260,7 +260,7 @@ pub(super) fn identity_uuid_from_json_row(
 		.get("owner")
 		.ok_or_else(|| "missing_spark_id".to_string())?;
 	let v =
-		super::json_cell_to_jazz(raw, &desc.column_type, desc.nullable)?;
+		super::json_cell_to_avendb(raw, &desc.column_type, desc.nullable)?;
 	match v {
 		Value::Uuid(oid) => Ok(*oid.uuid()),
 		Value::Text(s) => {
@@ -301,11 +301,11 @@ pub(super) fn place_secrets_for_insert(
 				let gv = if let Some(expose) =
 					crate::schema_manifest::expose_ts_for(table, key)
 				{
-					super::json_cell_to_jazz(raw, expose, desc.nullable)?
+					super::json_cell_to_avendb(raw, expose, desc.nullable)?
 				} else {
-					super::json_cell_to_jazz(raw, &desc.column_type, desc.nullable)?
+					super::json_cell_to_avendb(raw, &desc.column_type, desc.nullable)?
 				};
-				let canon = groove_value_to_canonical_utf8(&gv)?;
+				let canon = avendb_value_to_canonical_utf8(&gv)?;
 				plaintext_out.insert(key.to_string(), canon);
 				*raw = JsonValue::String(phase1.into());
 			}
@@ -425,10 +425,10 @@ fn canon_cell_plaintext(
 	}
 	let json = JsonValue::String(s.to_string());
 	let gv = match crate::schema_manifest::expose_ts_for(table, col) {
-		Some(expose) => super::json_cell_to_jazz(&json, expose, nullable)?,
-		None => super::json_cell_to_jazz(&json, column_type, nullable)?,
+		Some(expose) => super::json_cell_to_avendb(&json, expose, nullable)?,
+		None => super::json_cell_to_avendb(&json, column_type, nullable)?,
 	};
-	groove_value_to_canonical_utf8(&gv)
+	avendb_value_to_canonical_utf8(&gv)
 }
 
 /// Collect the registry-sensitive text columns present in `row` that are not already sealed.
@@ -456,7 +456,7 @@ fn sensitive_plaintext_cells(
 
 /// The AAD `row` coordinate a sealed cell must bind to — which differs by READ path:
 /// - `identities.genesis_b64` / `issuer_pubkey_b64` are opened by the per-identity vault hydrate
-///   with `row = sid` (the identity/owner uuid) — see jazz_engine genesis_coord (`row: sid`).
+///   with `row = sid` (the identity/owner uuid) — see avendb_engine genesis_coord (`row: sid`).
 /// - every other sealed cell (incl. `identities.name`) is opened by `row_to_public_map` with
 ///   `row = *oid.uuid()` (the row object id).
 /// Sealing under the wrong coordinate yields an unopenable cell (AAD mismatch), which evicts the
@@ -567,7 +567,7 @@ fn map_sensitive_storage_cell(
 		.map(|(_, v)| *v)
 		.collect();
 	log::warn!(
-		target: "avenos::jazz",
+		target: "avenos::avendb",
 		"decrypt-MISS: identity={identity} col={} held_dek_versions={held:?}",
 		coord.column,
 	);
@@ -628,10 +628,10 @@ pub(super) fn row_to_public_map(
 					_ => return Err(format!("secret_col_bad_storage:{name}:{cell:?}")),
 				}
 			} else {
-				jazz_cell_json(cell)
+				avendb_cell_json(cell)
 			}
 		} else {
-			jazz_cell_json(cell)
+			avendb_cell_json(cell)
 		};
 		m.insert(name.to_string(), jv);
 	}
@@ -641,20 +641,20 @@ pub(super) fn row_to_public_map(
 	Ok(m)
 }
 
-pub(crate) async fn resolved_table_schema(client: &JazzClient, table: &str) -> Result<TableSchema, String> {
-	let sch = client.schema().await.map_err(super::format_jazz_err)?;
+pub(crate) async fn resolved_table_schema(client: &AvenDbClient, table: &str) -> Result<TableSchema, String> {
+	let sch = client.schema().await.map_err(super::format_avendb_err)?;
 	let tn = TableName::new(table);
 	sch.get(&tn)
 		.cloned()
 		.ok_or_else(|| format!("unknown_table: {table}"))
 }
 
-/// Canonical Jazz read pattern — **no** `.branch()` override.
+/// Canonical AvenDb read pattern — **no** `.branch()` override.
 ///
-/// Per the Jazz docs ("Branches" → "Schema versions are merged automatically"):
+/// Per the AvenDb docs ("Branches" → "Schema versions are merged automatically"):
 /// reads auto-merge across **all known schema-version branches** in the current
 /// env/userBranch; writes go to the current schema branch. Earlier AvenOS code
-/// forced `.branch(groove_write_branch)`, which:
+/// forced `.branch(avendb_write_branch)`, which:
 ///   * silently scoped reads to a single branch (no lens activation),
 ///   * and only loaded `obj.branches[write_branch]` into `ObjectManager`, so
 ///     when the row's commits lived on any **other** loaded branch, the
@@ -663,17 +663,17 @@ pub(crate) async fn resolved_table_schema(client: &JazzClient, table: &str) -> R
 ///     returned a `BranchNotFound`/`ParentNotFound` that jazz-tools maps to
 ///     the misleading `QueryError::ObjectNotFound(id)`.
 pub(crate) async fn exec_list_rows(
-	client: &JazzClient,
+	client: &AvenDbClient,
 	table: &str,
 ) -> Result<Vec<(ObjectId, Vec<Value>)>, String> {
 	let q = QueryBuilder::new(TableName::new(table)).build();
-	client.query(q, None).await.map_err(super::format_jazz_err)
+	client.query(q, None).await.map_err(super::format_avendb_err)
 }
 
 /// Locate the `identities` row whose `owner` cell equals `identity`. The row's object id is
 /// distinct from the identity uuid; grants/updates address the row by object id.
 pub(crate) async fn find_identity_oid(
-	client: &JazzClient,
+	client: &AvenDbClient,
 	schema: &TableSchema,
 	identity: Uuid,
 ) -> Result<ObjectId, String> {
@@ -686,7 +686,7 @@ pub(crate) async fn find_identity_oid(
 	Err(format!("no safes row for owner={identity}"))
 }
 
-/// Map Groove `(table, object_id)` → identity UUID for sync ACL on patch commits.
+/// Map avenDB `(table, object_id)` → identity UUID for sync ACL on patch commits.
 ///
 /// MUST include soft-deleted rows. This map is the resource→identity lookup the peer-sync
 /// gate (`BiscuitCapabilityResolver::may_sync`) uses to authorize shipping a batch. A
@@ -697,7 +697,7 @@ pub(crate) async fn find_identity_oid(
 /// devices, even after reconnect" bug. Soft-delete keeps the row's data, so `owner` is
 /// still readable for a deleted row.
 pub(super) async fn build_object_owner_map(
-	client: &JazzClient,
+	client: &AvenDbClient,
 ) -> Result<HashMap<(String, ObjectId), Uuid>, String> {
 	let mut out = HashMap::new();
 	for table in crate::identity_sync::identity_scoped_table_names() {
@@ -706,7 +706,7 @@ pub(super) async fn build_object_owner_map(
 		let q = QueryBuilder::new(TableName::new(table))
 			.include_deleted()
 			.build();
-		let rows = client.query(q, None).await.map_err(super::format_jazz_err)?;
+		let rows = client.query(q, None).await.map_err(super::format_avendb_err)?;
 		for (oid, vals) in rows {
 			if let Ok(sid) = uuid_cell_at(vals.as_slice(), identity_ix) {
 				out.insert((table.clone(), oid), sid);
@@ -722,7 +722,7 @@ pub(super) async fn build_object_owner_map(
 /// ungated bootstrap. Includes soft-deleted rows so a revoked keyshare's tombstone still
 /// reaches its (former) recipient. Built alongside [`build_object_owner_map`].
 pub(super) async fn build_keyshare_recipient_map(
-	client: &JazzClient,
+	client: &AvenDbClient,
 ) -> Result<HashMap<ObjectId, String>, String> {
 	let mut out = HashMap::new();
 	let schema = resolved_table_schema(client, "keyshares").await?;
@@ -730,7 +730,7 @@ pub(super) async fn build_keyshare_recipient_map(
 	let q = QueryBuilder::new(TableName::new("keyshares"))
 		.include_deleted()
 		.build();
-	let rows = client.query(q, None).await.map_err(super::format_jazz_err)?;
+	let rows = client.query(q, None).await.map_err(super::format_avendb_err)?;
 	for (oid, vals) in rows {
 		if let Some(Value::Text(did)) = vals.get(recip_ix) {
 			out.insert(oid, did.clone());
@@ -740,7 +740,7 @@ pub(super) async fn build_keyshare_recipient_map(
 }
 
 pub(super) async fn query_table_publish(
-	client: &JazzClient,
+	client: &AvenDbClient,
 	state: &ShellState,
 	table: &str,
 	meta_key: &str,
@@ -770,16 +770,16 @@ pub(super) async fn query_table_publish(
 	Ok((out, skipped_unauthorized_rows))
 }
 
-/// Diagnostic-only re-derivation of the writable Groove branch from the connected client's
+/// Diagnostic-only re-derivation of the writable avenDB branch from the connected client's
 /// current schema. Failures are logged and converted to the literal "<unavailable>" rather than
 /// propagated, so this is safe to call inside write IPC paths purely for log enrichment.
-pub(super) async fn groove_write_branch_from_connected_schema_or_log(client: &JazzClient) -> String {
-	match super::groove_write_branch_from_connected_schema(client).await {
+pub(super) async fn avendb_write_branch_from_connected_schema_or_log(client: &AvenDbClient) -> String {
+	match super::avendb_write_branch_from_connected_schema(client).await {
 		Ok(b) => b,
 		Err(e) => {
 			log::warn!(
-				target: "avenos::jazz",
-				"groove_write_branch_from_connected_schema failed (logging only): {e}"
+				target: "avenos::avendb",
+				"avendb_write_branch_from_connected_schema failed (logging only): {e}"
 			);
 			"<unavailable>".to_string()
 		}
@@ -793,7 +793,7 @@ pub(super) async fn groove_write_branch_from_connected_schema_or_log(client: &Ja
 /// `current_branch()` without spuriously returning `BranchNotFound` (surfaced
 /// upstream as the misleading `ObjectNotFound`).
 pub(super) async fn find_row_snapshot(
-	client: &JazzClient,
+	client: &AvenDbClient,
 	table: &str,
 	_schema: &TableSchema,
 	id: Uuid,
@@ -824,21 +824,21 @@ pub(super) fn system_device_name() -> String {
 }
 
 pub(super) async fn hydrate_shell(
-	client: &JazzClient,
+	client: &AvenDbClient,
 	root: &[u8; 32],
 	vault_files: &Path,
 ) -> Result<ShellState, String> {
 	let mut vault = identity_acc::build_vault_from_root(root)?;
-	let signing_key = jazz_auth::signing_key_from_device_root(root)?;
+	let signing_key = avendb_auth::signing_key_from_device_root(root)?;
 	let biscuit_root_pub = vault.biscuit_kp.public();
 
-	let groove_write_branch =
-		super::groove_write_branch_from_connected_schema(client).await?;
-	if let Ok(manifest_branch) = super::groove_write_branch_for_manifest_schema() {
-		if manifest_branch != groove_write_branch {
+	let avendb_write_branch =
+		super::avendb_write_branch_from_connected_schema(client).await?;
+	if let Ok(manifest_branch) = super::avendb_write_branch_for_manifest_schema() {
+		if manifest_branch != avendb_write_branch {
 			log::warn!(
-				target: "avenos::jazz",
-				"Groove writable branch from connected schema differs from raw-manifest branch (writes use runtime): manifest_branch={manifest_branch} runtime_branch={groove_write_branch}"
+				target: "avenos::avendb",
+				"avenDB writable branch from connected schema differs from raw-manifest branch (writes use runtime): manifest_branch={manifest_branch} runtime_branch={avendb_write_branch}"
 			);
 		}
 	}
@@ -892,7 +892,7 @@ pub(super) async fn hydrate_shell(
 		let all_keyshares = exec_list_rows(client, "keyshares").await?;
 		let mut ks_for_me = 0usize;
 		log::info!(
-			target: "avenos::jazz",
+			target: "avenos::avendb",
 			"keyshare hydrate: {} keyshare row(s) in store; me={}",
 			all_keyshares.len(), vault.signer_did,
 		);
@@ -908,7 +908,7 @@ pub(super) async fn hydrate_shell(
 			};
 			if recipient != vault.signer_did {
 				log::debug!(
-					target: "avenos::jazz",
+					target: "avenos::avendb",
 					"keyshare not-for-me: identity={sid} v={dv} recipient={recipient}",
 				);
 				continue;
@@ -918,7 +918,7 @@ pub(super) async fn hydrate_shell(
 				Value::Text(s) if !s.trim().is_empty() => s.trim(),
 				_ => {
 					log::debug!(
-						target: "avenos::jazz",
+						target: "avenos::avendb",
 						"skip keyshare missing wrapper_did: owner={sid}",
 					);
 					continue;
@@ -929,27 +929,27 @@ pub(super) async fn hydrate_shell(
 				_ => return Err("ks_wrap_bad".into()),
 			};
 			let urn = safe_urn(sid);
-			let wrapper_pk = jazz_auth::ed25519_public_from_signer_did(wrapper_did)?;
+			let wrapper_pk = avendb_auth::ed25519_public_from_signer_did(wrapper_did)?;
 			let kek = derive_kek_x25519(&signing_key, &wrapper_pk)?;
 			let aad = keyshare_wrap_aad(&urn, recipient, wrapper_did, dv);
 			match decrypt_keyshare_payload(wrapped, &kek, &aad) {
 				Ok(raw32) => {
 					log::info!(
-						target: "avenos::jazz",
+						target: "avenos::avendb",
 						"keyshare unlocked DEK: identity={sid} v={dv} wrapper={wrapper_did}",
 					);
 					deks.insert((sid, dv), Dek::from_plain_32(raw32));
 				}
 				Err(e) => {
 					log::warn!(
-						target: "avenos::jazz",
+						target: "avenos::avendb",
 						"keyshare unwrap_FAIL: identity={sid} v={dv} wrapper={wrapper_did}: {e}",
 					);
 				}
 			}
 		}
 		log::info!(
-			target: "avenos::jazz",
+			target: "avenos::avendb",
 			"keyshare hydrate done: {ks_for_me} keyshare(s) addressed to me → {} DEK(s) unlocked",
 			deks.len(),
 		);
@@ -958,14 +958,14 @@ pub(super) async fn hydrate_shell(
 			let sid = match uuid_cell_at(vals.as_slice(), identity_id_ix) {
 				Ok(s) => s,
 				Err(e) => {
-					log::warn!(target: "avenos::jazz", "hydrate_shell: skip identity row (owner): {e}");
+					log::warn!(target: "avenos::avendb", "hydrate_shell: skip identity row (owner): {e}");
 					continue;
 				}
 			};
 			let genesis_cell = match vals.get(genesis_ix) {
 				Some(c) => c,
 				None => {
-					log::warn!(target: "avenos::jazz", "hydrate_shell: skip identity {sid} (missing genesis)");
+					log::warn!(target: "avenos::avendb", "hydrate_shell: skip identity {sid} (missing genesis)");
 					continue;
 				}
 			};
@@ -981,7 +981,7 @@ pub(super) async fn hydrate_shell(
 				Ok(g) => g,
 				Err(e) => {
 					log::warn!(
-						target: "avenos::jazz",
+						target: "avenos::avendb",
 						"hydrate_shell: skip identity {sid} (genesis open): {e}",
 					);
 					continue;
@@ -1001,7 +1001,7 @@ pub(super) async fn hydrate_shell(
 						Ok(s) => Some(s),
 						Err(e) => {
 							log::debug!(
-								target: "avenos::jazz",
+								target: "avenos::avendb",
 								"hydrate_shell: identity {sid} issuer open failed, using local biscuit root: {e}",
 							);
 							None
@@ -1018,7 +1018,7 @@ pub(super) async fn hydrate_shell(
 				biscuit_root_pub,
 			) {
 				log::warn!(
-					target: "avenos::jazz",
+					target: "avenos::avendb",
 					"hydrate_shell: skip identity {sid} (biscuit ingest): {e}",
 				);
 				continue;
@@ -1033,7 +1033,7 @@ pub(super) async fn hydrate_shell(
 				Some(c) => c,
 				None => {
 					log::warn!(
-						target: "avenos::jazz",
+						target: "avenos::avendb",
 						"hydrate_shell: skip identity {sid} (missing current_dek_version)",
 					);
 					continue;
@@ -1049,7 +1049,7 @@ pub(super) async fn hydrate_shell(
 				Ok(v) => v,
 				Err(e) => {
 					log::warn!(
-						target: "avenos::jazz",
+						target: "avenos::avendb",
 						"hydrate_shell: skip identity {sid} (dek version): {e}",
 					);
 					continue;
@@ -1121,7 +1121,7 @@ pub(super) async fn hydrate_shell(
 						biscuit_root_pub,
 					) {
 						log::warn!(
-							target: "avenos::jazz",
+							target: "avenos::avendb",
 							"hydrate_shell: controller copy ingest {ctrl_id} (for {row_owner}): {e}",
 						);
 						continue;
@@ -1169,7 +1169,7 @@ pub(super) async fn hydrate_shell(
 			client
 				.create("peers", peer_vals)
 				.await
-				.map_err(super::format_jazz_err)?;
+				.map_err(super::format_avendb_err)?;
 		}
 	}
 
@@ -1180,8 +1180,8 @@ pub(super) async fn hydrate_shell(
 	let default_identity = identity_keys.first().copied().unwrap_or_else(Uuid::nil);
 
 	log::debug!(
-		target: "avenos::jazz",
-		"hydrate_shell ready groove_write_branch={groove_write_branch} default_identity={default_identity}"
+		target: "avenos::avendb",
+		"hydrate_shell ready avendb_write_branch={avendb_write_branch} default_identity={default_identity}"
 	);
 
 	Ok(ShellState {
@@ -1192,6 +1192,6 @@ pub(super) async fn hydrate_shell(
 		deks,
 		identity_versions,
 		issuers,
-		groove_write_branch,
+		avendb_write_branch,
 	})
 }

@@ -2,9 +2,9 @@
 	/**
 	 * Identity todos — rendered through the dynamic JSON `todos` vibe (aven-ui) instead of a
 	 * hardcoded Svelte list. The host owns the data + mutations: `source` is derived live from the
-	 * `todos` Jazz table (a mutation updates `rows` → `source` re-derives → the view re-mounts with
+	 * `todos` AvenDb table (a mutation updates `rows` → `source` re-derives → the view re-mounts with
 	 * fresh state), and view events (ADD_ITEM / TOGGLE_ITEM / DELETE_ITEM / CLEAR_DONE) are handled
-	 * here against the Jazz store. Same data + agent tools as before, now a portable JSON UI.
+	 * here against the AvenDb store. Same data + agent tools as before, now a portable JSON UI.
 	 */
 	import { goto } from '$app/navigation'
 	import { browser } from '$app/environment'
@@ -13,7 +13,7 @@
 	import { createTodosShell } from '@avenos/aven-ui/vibes/todos'
 	import AvenUiView from '$lib/aven-ui/AvenUiView.svelte'
 	import { t } from '$lib/i18n'
-	import { jazzStore } from '$lib/jazz/store.svelte'
+	import { avenDbStore } from '$lib/avendb/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/settings/device-session-store'
 
@@ -23,8 +23,8 @@
 	let err = $state<string | undefined>()
 	let busy = $state(false)
 
-	const identitiesStore = jazzStore('safes')
-	const todos = jazzStore('todos')
+	const identitiesStore = avenDbStore('safes')
+	const todos = avenDbStore('todos')
 
 	function idsMatch(a: string, b: string): boolean {
 		return a.trim().toLowerCase() === b.trim().toLowerCase()

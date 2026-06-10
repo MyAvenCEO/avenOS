@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { JazzRow } from '$lib/jazz/api'
+	import type { AvenDbRow } from '$lib/avendb/api'
 	import GalleryPdfThumb from '$lib/gallery/GalleryPdfThumb.svelte'
 	import {
 		fileDownloadDataUrl,
@@ -9,7 +9,7 @@
 	} from '$lib/gallery/file-preview'
 
 	type Props = {
-		files: JazzRow[]
+		files: AvenDbRow[]
 		/** Message bubble uses primary colors — lighten attachment chrome. */
 		inverted?: boolean
 	}

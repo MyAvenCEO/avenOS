@@ -9,7 +9,7 @@ license = "MIT OR Apache-2.0"
 path = "src/lib.rs"
 
 [dependencies]
-groove = { package = "aven-db", path = "../aven-db", features = ["client-p2p"] }
+aven-db = { path = "../aven-db", features = ["client-p2p"] }
 biscuit-auth = { version = "6", features = ["datalog-macro"] }
 base64 = "0.22"
 uuid = { version = "1", features = ["serde", "v4"] }

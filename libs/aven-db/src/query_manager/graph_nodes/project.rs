@@ -310,7 +310,7 @@ mod tests {
             id,
             content: data.into(),
             batch_id: crate::row_histories::BatchId([0; 16]),
-            row_provenance: crate::metadata::RowProvenance::for_insert("jazz:test", 0),
+            row_provenance: crate::metadata::RowProvenance::for_insert("avendb:test", 0),
         }])
     }
 
@@ -486,13 +486,13 @@ mod tests {
                 id: user_id,
                 content: user_row.into(),
                 batch_id: crate::row_histories::BatchId([1; 16]),
-                row_provenance: crate::metadata::RowProvenance::for_insert("jazz:test", 0),
+                row_provenance: crate::metadata::RowProvenance::for_insert("avendb:test", 0),
             },
             TupleElement::Row {
                 id: post_id,
                 content: post_row.into(),
                 batch_id: crate::row_histories::BatchId([2; 16]),
-                row_provenance: crate::metadata::RowProvenance::for_insert("jazz:test", 0),
+                row_provenance: crate::metadata::RowProvenance::for_insert("avendb:test", 0),
             },
         ]);
 

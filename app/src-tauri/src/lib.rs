@@ -5,8 +5,8 @@ mod biscuit_resolver;
 mod crypto;
 mod mesh;
 mod network;
-mod jazz;
-mod jazz_auth;
+mod avendb;
+mod avendb_auth;
 mod log_ring;
 mod peers;
 mod schema_manifest;
@@ -18,12 +18,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Listener, Manager, RunEvent};
 
 /// Prevents duplicated drain work when [`RunEvent::ExitRequested`] fires more than once.
-static JAZZ_EXIT_DRAINING: AtomicBool = AtomicBool::new(false);
+static AVENDB_EXIT_DRAINING: AtomicBool = AtomicBool::new(false);
 
 /// True once the exit drain has begun. Connect paths consult this to refuse starting a
-/// new Groove/RocksDB open that would race the process's atexit destructors.
-pub(crate) fn jazz_exit_draining() -> bool {
-	JAZZ_EXIT_DRAINING.load(Ordering::SeqCst)
+/// new avenDB/RocksDB open that would race the process's atexit destructors.
+pub(crate) fn avendb_exit_draining() -> bool {
+	AVENDB_EXIT_DRAINING.load(Ordering::SeqCst)
 }
 
 #[tauri::command]
@@ -34,11 +34,11 @@ fn avenos_recent_rust_logs() -> Vec<String> {
 /// Install the global `log` subscriber.
 ///
 /// Without this, every `log::debug!` / `log::warn!` in this crate is a no-op,
-/// so `RUST_LOG=avenos::jazz=debug` produces nothing — leaving us blind whenever
+/// so `RUST_LOG=avenos::avendb=debug` produces nothing — leaving us blind whenever
 /// SurrealKV / ObjectManager state diverges and we ask the user for diagnostics.
 ///
 /// Default filter prints `info` everywhere plus `debug` for our own `avenos::*`
-/// targets so dev runs always show the Jazz lifecycle. Users can override via
+/// targets so dev runs always show the AvenDb lifecycle. Users can override via
 /// `RUST_LOG` (standard `env_logger` semantics).
 ///
 /// macOS/iOS TestFlight builds route through `os_log` (subsystem `ceo.aven.os`) and an in-app ring
@@ -93,13 +93,13 @@ fn init_logging() {
 	#[cfg(not(any(target_os = "ios", target_os = "macos")))]
 	{
 		let _ = env_logger::Builder::from_env(
-			env_logger::Env::default().default_filter_or("info,avenos=debug,groove::sync_manager=debug"),
+			env_logger::Env::default().default_filter_or("info,avenos=debug,aven_db::sync_manager=debug"),
 		)
 		.format_timestamp_millis()
 		.try_init();
 	}
 
-	// Forward `tracing::*` events from groove into the `log` crate (Apple ring + os_log).
+	// Forward `tracing::*` events from avendb into the `log` crate (Apple ring + os_log).
 	log_ring::init_tracing_bridge();
 
 	log::info!(
@@ -108,29 +108,29 @@ fn init_logging() {
 	);
 }
 
-/// Idempotently drain JazzClient + flush RocksDB.
+/// Idempotently drain AvenDbClient + flush RocksDB.
 ///
-/// `JAZZ_EXIT_DRAINING` is a single-shot guard: if `Ok(false)` was previously
+/// `AVENDB_EXIT_DRAINING` is a single-shot guard: if `Ok(false)` was previously
 /// observed, this is the first call and we run the drain. Otherwise we no-op
 /// (e.g. SIGINT then a follow-up `ExitRequested`).
-async fn drain_jazz_async(app_handle: AppHandle) {
-	if JAZZ_EXIT_DRAINING.swap(true, Ordering::SeqCst) {
-		log::debug!("drain_jazz_async: already draining, skipping");
+async fn drain_avendb_async(app_handle: AppHandle) {
+	if AVENDB_EXIT_DRAINING.swap(true, Ordering::SeqCst) {
+		log::debug!("drain_avendb_async: already draining, skipping");
 		return;
 	}
-	log::info!("shutdown: draining JazzClient + SurrealKV before exit");
-	let actor = jazz::runtime::groove_actor(&app_handle);
+	log::info!("shutdown: draining AvenDbClient + SurrealKV before exit");
+	let actor = avendb::runtime::avendb_actor(&app_handle);
 	// Hard cap the drain. If `reset_connection` is wedged on a Mutex /
 	// `runtime.flush()` deadlock, blocking forever just trades one bad
 	// shutdown (no flush) for a worse one (no exit at all, and the dev
 	// supervisor escalates to SIGKILL anyway). 5s is plenty for an idle
 	// client and short enough to detect a wedge in tests.
 	let drain_start = std::time::Instant::now();
-	// First wait out any `jazz_connect` already inside RocksDB `TransactionDB::Open` —
+	// First wait out any `avendb_connect` already inside RocksDB `TransactionDB::Open` —
 	// `reset_connection` force-clears `connect_in_progress` without joining it, and exiting
 	// under an in-flight open segfaults in the atexit C++ static destructors. New connects
-	// are refused via `jazz_exit_draining()` now that the flag is set.
-	let mj = app_handle.state::<jazz::ManagedJazz>();
+	// are refused via `avendb_exit_draining()` now that the flag is set.
+	let mj = app_handle.state::<avendb::ManagedAvenDb>();
 	let drain = tokio::time::timeout(std::time::Duration::from_secs(5), async {
 		mj.wait_for_connect_idle().await;
 		actor.reset_connection().await;
@@ -141,19 +141,19 @@ async fn drain_jazz_async(app_handle: AppHandle) {
 			drain_start.elapsed()
 		),
 		Err(_) => log::error!(
-			"shutdown: drain TIMED OUT after 5s — SurrealKV may not be fully flushed (likely deadlock on JazzClient/runtime flush)"
+			"shutdown: drain TIMED OUT after 5s — SurrealKV may not be fully flushed (likely deadlock on AvenDbClient/runtime flush)"
 		),
 	}
 }
 
-/// Same as [`drain_jazz_async`] but **blocks** the calling thread.
+/// Same as [`drain_avendb_async`] but **blocks** the calling thread.
 ///
 /// Safe to call only from a thread that is **not** already inside a tokio
 /// runtime — typically the Tauri main thread from a `RunEvent::ExitRequested`
 /// callback. Calling this from within a tokio task would deadlock.
-fn drain_jazz_blocking(app_handle: &AppHandle) {
+fn drain_avendb_blocking(app_handle: &AppHandle) {
 	let ah = app_handle.clone();
-	tauri::async_runtime::block_on(drain_jazz_async(ah));
+	tauri::async_runtime::block_on(drain_avendb_async(ah));
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -171,14 +171,14 @@ pub fn run() {
 		.plugin(tauri_plugin_vault::init())
 		.plugin(tauri_plugin_sandbox_quickjs::init())
 		.plugin(tauri_plugin_clipboard_manager::init())
-		.manage(jazz::ManagedJazz::default())
+		.manage(avendb::ManagedAvenDb::default())
 		.setup(|app| {
 			if let Err(e) = schema_manifest::install_runtime_schema_files(app.handle()) {
 				log::error!("schema runtime install: {e}");
 			}
 
-			app.manage(jazz::runtime::spawn_groove_actor(app.handle().clone()));
-			app.manage(jazz::ui_drain::spawn_ui_table_drain(app.handle().clone()));
+			app.manage(avendb::runtime::spawn_avendb_actor(app.handle().clone()));
+			app.manage(avendb::ui_drain::spawn_ui_table_drain(app.handle().clone()));
 
 			// NOTE: the on-device voice model is NOT auto-downloaded on launch. The
 			// user starts it explicitly from Self → Settings → Models (the ~640 MB
@@ -188,13 +188,13 @@ pub fn run() {
 			// Start the table-change drain so peer-sync deltas reach the webview without
 			// requiring a manual refresh. Local CRUD already calls `snapshot_broadcast`
 			// inline; this drain is what closes the loop for *remote* writes.
-			let mj_drain = app.state::<jazz::ManagedJazz>();
+			let mj_drain = app.state::<avendb::ManagedAvenDb>();
 			if let Some(rx) = mj_drain.take_change_rx() {
 				let handle_for_drain = app.handle().clone();
-				tauri::async_runtime::spawn(jazz::run_table_change_drain(handle_for_drain, rx));
+				tauri::async_runtime::spawn(avendb::run_table_change_drain(handle_for_drain, rx));
 			} else {
 				log::warn!(
-					target: "avenos::jazz",
+					target: "avenos::avendb",
 					"table-change drain receiver already taken; webview will only refresh on local writes",
 				);
 			}
@@ -203,7 +203,7 @@ pub fn run() {
 			let _lock_listen = app.listen("self:did-lock", move |_event| {
 				let handle = handle_for_lock.clone();
 				tauri::async_runtime::spawn(async move {
-					jazz::runtime::groove_actor(&handle).reset_connection().await;
+					avendb::runtime::avendb_actor(&handle).reset_connection().await;
 				});
 			});
 
@@ -227,17 +227,17 @@ pub fn run() {
 						(Ok(i), Ok(t)) => (i, t),
 						(int_res, term_res) => {
 							log::warn!(
-								"signal handler install failed (int={:?} term={:?}); Ctrl+C will skip Jazz flush",
+								"signal handler install failed (int={:?} term={:?}); Ctrl+C will skip AvenDb flush",
 								int_res.err(), term_res.err()
 							);
 							return;
 						}
 					};
 					tokio::select! {
-						_ = sigint.recv() => log::info!("SIGINT received → draining Jazz"),
-						_ = sigterm.recv() => log::info!("SIGTERM received → draining Jazz"),
+						_ = sigint.recv() => log::info!("SIGINT received → draining AvenDb"),
+						_ = sigterm.recv() => log::info!("SIGTERM received → draining AvenDb"),
 					}
-					drain_jazz_async(handle_for_signal.clone()).await;
+					drain_avendb_async(handle_for_signal.clone()).await;
 					handle_for_signal.exit(130);
 				});
 			}
@@ -248,10 +248,10 @@ pub fn run() {
 			avenos_recent_rust_logs,
 			network::network_seed,
 			network::aven_ceo_identity,
-			jazz::groove_runtime,
-			jazz::self_storage_paths,
-			jazz::self_clear_jazz_database,
-			jazz::self_clear_aven_os_data,
+			avendb::avendb_runtime,
+			avendb::self_storage_paths,
+			avendb::self_clear_avendb_database,
+			avendb::self_clear_aven_os_data,
 			asr::asr_status,
 			asr::transcribe_audio,
 			asr::asr_local_models,
@@ -276,7 +276,7 @@ pub fn run() {
 		.run(|app_handle, event| {
 			match event {
 				RunEvent::ExitRequested { api, code, .. } => {
-					// JazzClient owns a SurrealKV handle that requires an
+					// AvenDbClient owns a SurrealKV handle that requires an
 					// explicit async flush (`shutdown()` → `runtime.flush()` →
 					// `storage.flush()`). If the process exits while that flush
 					// is still in flight, the next boot opens a half-written
@@ -286,12 +286,12 @@ pub fn run() {
 					// `QueryError::ObjectNotFound`. Block here (we're on the
 					// main thread, no tokio runtime is active locally) so we
 					// only return after the drain finishes.
-					if JAZZ_EXIT_DRAINING.load(Ordering::SeqCst) {
+					if AVENDB_EXIT_DRAINING.load(Ordering::SeqCst) {
 						return;
 					}
 					api.prevent_exit();
 					let exit_code = code.unwrap_or(0);
-					drain_jazz_blocking(app_handle);
+					drain_avendb_blocking(app_handle);
 					app_handle.exit(exit_code);
 				}
 				_ => {}

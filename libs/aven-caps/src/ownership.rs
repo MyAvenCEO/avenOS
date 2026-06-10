@@ -20,7 +20,7 @@
 
 use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use groove::did_key::{ed25519_public_from_signer_did, signer_did_from_ed25519};
+use aven_db::did_key::{ed25519_public_from_signer_did, signer_did_from_ed25519};
 use uuid::Uuid;
 
 use crate::caps::{authorize, AccOp, BiscuitVault};

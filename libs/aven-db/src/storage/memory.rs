@@ -37,8 +37,8 @@ impl TableRowHistories {
 ///
 /// Stores objects and raw tables in HashMaps/BTreeMaps. No persistence.
 /// This is sufficient for:
-/// - All jazz unit tests
-/// - All jazz integration tests
+/// - All avenDB unit tests
+/// - All avenDB integration tests
 /// - Main thread in browser (acts as cache of worker state)
 pub struct MemoryStorage {
     cache_namespace: usize,

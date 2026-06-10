@@ -3,8 +3,8 @@ import { browser } from '$app/environment'
 import { listen } from '@tauri-apps/api/event'
 import { get, writable } from 'svelte/store'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-import { resetJazzShell } from '$lib/runtime/jazz-shell'
-import { grooveSessionReady, peerMeshSnapshot } from '$lib/runtime/groove-runtime'
+import { resetAvenDbShell } from '$lib/runtime/avendb-shell'
+import { avendbSessionReady, peerMeshSnapshot } from '$lib/runtime/avendb-runtime'
 import { resetAllTableRowStores } from '$lib/runtime/table-stores'
 export const DEVICE_PEER_SLOT = 'device_default'
 
@@ -35,8 +35,8 @@ export function setUnlockedWithIdentity(identity: ActiveVaultIdentity): void {
 
 export function applyLockedFrontendState(): void {
 	resetAllTableRowStores()
-	resetJazzShell()
-	grooveSessionReady.set(false)
+	resetAvenDbShell()
+	avendbSessionReady.set(false)
 	peerMeshSnapshot.set(undefined)
 	deviceSession.set({ kind: 'locked' })
 }
@@ -63,7 +63,7 @@ export function attachSelfRustEventMirrors(): () => void {
 				applyLockedFrontendState()
 			})
 			const u2 = await listen('self:did-unlock', async () => {
-				// LockGate already runs bootstrapJazzStrict before setUnlocked — do not bootstrap again here
+				// LockGate already runs bootstrapAvenDbStrict before setUnlocked — do not bootstrap again here
 				// (parallel hydrate contends on shell_hydrate / conn and can stall pairing IPC).
 				if (get(deviceSession).kind !== 'unlocked') return
 				const id = await fetchActiveVaultIdentity().catch(() => null)

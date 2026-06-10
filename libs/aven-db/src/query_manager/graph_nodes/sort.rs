@@ -588,7 +588,7 @@ mod tests {
             id,
             content: data.into(),
             batch_id: crate::row_histories::BatchId([0; 16]),
-            row_provenance: crate::metadata::RowProvenance::for_insert("jazz:test", 0),
+            row_provenance: crate::metadata::RowProvenance::for_insert("avendb:test", 0),
         }])
     }
 
@@ -753,7 +753,7 @@ mod tests {
                 id,
                 content: data.into(),
                 batch_id: crate::row_histories::BatchId([0; 16]),
-                row_provenance: crate::metadata::RowProvenance::for_insert("jazz:test", 0),
+                row_provenance: crate::metadata::RowProvenance::for_insert("avendb:test", 0),
             }])
         };
 

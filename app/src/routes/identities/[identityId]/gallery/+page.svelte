@@ -3,8 +3,8 @@
 	import { browser } from '$app/environment'
 	import { page } from '$app/state'
 	import { t } from '$lib/i18n'
-	import { jazzTable, type JazzRow } from '$lib/jazz/api'
-	import { jazzStore } from '$lib/jazz/store.svelte'
+	import { avenDbTable, type AvenDbRow } from '$lib/avendb/api'
+	import { avenDbStore } from '$lib/avendb/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/settings/device-session-store'
 	import GalleryPdfThumb from '$lib/gallery/GalleryPdfThumb.svelte'
@@ -17,8 +17,8 @@
 	const identityParam = $derived(String((page.params as { identityId?: string }).identityId ?? ''))
 	const decodedIdentityId = $derived(decodeURIComponent(identityParam))
 
-	const identitiesStore = jazzStore('safes')
-	const filesStore = jazzStore('files')
+	const identitiesStore = avenDbStore('safes')
+	const filesStore = avenDbStore('files')
 
 	function idsMatch(a: string, b: string): boolean {
 		return a.trim().toLowerCase() === b.trim().toLowerCase()
@@ -66,7 +66,7 @@
 		deletingId = id
 		deleteError = null
 		try {
-			await jazzTable('files').delete(id)
+			await avenDbTable('files').delete(id)
 			pendingDeleteId = null
 		} catch (e) {
 			deleteError = e instanceof Error ? e.message : String(e)

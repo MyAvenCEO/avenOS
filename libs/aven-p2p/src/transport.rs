@@ -1,12 +1,12 @@
-//! The two `groove::SyncTransport` implementations over authenticated TLS.
+//! The two `aven_db::SyncTransport` implementations over authenticated TLS.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use ed25519_dalek::SigningKey;
-use groove::{
-    decode_length_prefixed, encode_length_prefixed, InboxEntry, JazzError, PeerId, Source,
+use aven_db::{
+    decode_length_prefixed, encode_length_prefixed, InboxEntry, AvenDbError, PeerId, Source,
     SyncPayload, SyncTargetId, SyncTransport,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -33,7 +33,7 @@ const MAX_HANDSHAKE_BYTES: usize = 64 * 1024;
 const MAX_SYNC_FRAME_BYTES: usize = 128 * 1024 * 1024;
 
 fn peer_from_did(did: &str) -> Result<PeerId> {
-    let pk = groove::did_key::ed25519_public_from_signer_did(did)
+    let pk = aven_db::did_key::ed25519_public_from_signer_did(did)
         .map_err(|e| P2pError::Handshake(format!("decode did {did}: {e}")))?;
     Ok(PeerId(pk))
 }
@@ -135,7 +135,7 @@ impl ServerSyncTransport {
 
         // did:key challenge: receive nonce, sign the rebuilt message, send proof.
         let hello: ServerHello = read_json(&mut tls).await?;
-        let did = groove::did_key::signer_did_from_ed25519(&signing_key.verifying_key().to_bytes())
+        let did = aven_db::did_key::signer_did_from_ed25519(&signing_key.verifying_key().to_bytes())
             .map_err(|e| P2pError::Handshake(format!("encode our did: {e}")))?;
         // Raw-TLS path: the anti-relay anchor is the real TLS-exporter channel binding `cb`,
         // so the wss mutual-handshake client nonce is unused here (empty).
@@ -174,7 +174,7 @@ impl ServerSyncTransport {
     }
 
     /// The server's authenticated `PeerId` — register it via
-    /// `JazzClient::register_peer_sync_client` before sync flows.
+    /// `AvenDbClient::register_peer_sync_client` before sync flows.
     pub fn server_peer_id(&self) -> PeerId {
         self.server_peer
     }
@@ -182,16 +182,16 @@ impl ServerSyncTransport {
 
 #[async_trait]
 impl SyncTransport for ServerSyncTransport {
-    async fn send_to(&self, target: SyncTargetId, payload: SyncPayload) -> groove::Result<()> {
+    async fn send_to(&self, target: SyncTargetId, payload: SyncPayload) -> aven_db::Result<()> {
         let bytes = encode_length_prefixed(target, &payload)
-            .map_err(|e| JazzError::Sync(e))?;
+            .map_err(|e| AvenDbError::Sync(e))?;
         let mut w = self.writer.lock().await;
         w.write_all(&bytes)
             .await
-            .map_err(|e| JazzError::Sync(format!("server transport write: {e}")))?;
+            .map_err(|e| AvenDbError::Sync(format!("server transport write: {e}")))?;
         w.flush()
             .await
-            .map_err(|e| JazzError::Sync(format!("server transport flush: {e}")))?;
+            .map_err(|e| AvenDbError::Sync(format!("server transport flush: {e}")))?;
         Ok(())
     }
 
@@ -225,7 +225,7 @@ impl ServerListener {
         let acceptor = server_tls.acceptor()?;
         let listener = TcpListener::bind(bind_addr).await?;
         let server_did =
-            groove::did_key::signer_did_from_ed25519(&identity.verifying_key().to_bytes())
+            aven_db::did_key::signer_did_from_ed25519(&identity.verifying_key().to_bytes())
                 .map_err(|e| P2pError::Config(format!("server did: {e}")))?;
 
         let registry: Registry = Arc::new(Mutex::new(HashMap::new()));
@@ -331,7 +331,7 @@ fn verify_client(hello: &ServerHello, auth: &ClientAuth, cb: &str) -> std::resul
     if is_expired(hello) {
         return Err("challenge expired".into());
     }
-    let pubkey = groove::did_key::ed25519_public_from_signer_did(&auth.did)?;
+    let pubkey = aven_db::did_key::ed25519_public_from_signer_did(&auth.did)?;
     let message = build_message(hello, &auth.did, cb, &auth.client_nonce);
     verify(&pubkey, &message, &auth.signature)?;
     Ok(PeerId(pubkey))
@@ -339,11 +339,11 @@ fn verify_client(hello: &ServerHello, auth: &ClientAuth, cb: &str) -> std::resul
 
 #[async_trait]
 impl SyncTransport for ServerListener {
-    async fn send_to(&self, target: SyncTargetId, payload: SyncPayload) -> groove::Result<()> {
+    async fn send_to(&self, target: SyncTargetId, payload: SyncPayload) -> aven_db::Result<()> {
         let peer = match &target {
             SyncTargetId::Client(p) => *p,
             SyncTargetId::SignerDid(did) => peer_from_did(did)
-                .map_err(|e| JazzError::Sync(format!("route {did}: {e}")))?,
+                .map_err(|e| AvenDbError::Sync(format!("route {did}: {e}")))?,
         };
         let conn = {
             let reg = self.registry.lock().await;
@@ -355,14 +355,14 @@ impl SyncTransport for ServerListener {
             return Ok(());
         };
         let bytes = encode_length_prefixed(target, &payload)
-            .map_err(|e| JazzError::Sync(e))?;
+            .map_err(|e| AvenDbError::Sync(e))?;
         let mut w = conn.lock().await;
         w.write_all(&bytes)
             .await
-            .map_err(|e| JazzError::Sync(format!("server fanout write: {e}")))?;
+            .map_err(|e| AvenDbError::Sync(format!("server fanout write: {e}")))?;
         w.flush()
             .await
-            .map_err(|e| JazzError::Sync(format!("server fanout flush: {e}")))?;
+            .map_err(|e| AvenDbError::Sync(format!("server fanout flush: {e}")))?;
         Ok(())
     }
 
@@ -439,7 +439,7 @@ mod frame_bounds {
 #[cfg(test)]
 mod tls_did_challenge {
     use super::*;
-    use groove::sync_manager::SyncPayload;
+    use aven_db::sync_manager::SyncPayload;
 
     fn test_params() -> ChallengeParams {
         ChallengeParams::new("aven.test", "https://aven.test", "testnet")
@@ -547,7 +547,7 @@ mod tls_did_challenge {
         let hello: ServerHello = read_json(&mut tls).await.unwrap();
         let key_a = SigningKey::from_bytes(&[1u8; 32]);
         let forged_did =
-            groove::did_key::signer_did_from_ed25519(&SigningKey::from_bytes(&[7u8; 32]).verifying_key().to_bytes())
+            aven_db::did_key::signer_did_from_ed25519(&SigningKey::from_bytes(&[7u8; 32]).verifying_key().to_bytes())
                 .unwrap();
         // Sign the message that claims the forged DID, but with key_a's key.
         let message = build_message(&hello, &forged_did, &cb, "");

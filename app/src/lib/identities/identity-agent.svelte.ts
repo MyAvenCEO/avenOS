@@ -6,13 +6,13 @@
  * and persists it. The talk view renders the live `streaming` text + thread; other views render
  * the transient `lastReply` chip in place (the agent acts without yanking you to talk).
  *
- * Lives in `.svelte.ts` so it can hold runes (`$state`). `jazzStore` is NOT called here (it needs
+ * Lives in `.svelte.ts` so it can hold runes (`$state`). `avenDbStore` is NOT called here (it needs
  * component init for ref-counting) — the layout passes its already-mounted stores in.
  */
 
 import { getContext, setContext } from 'svelte'
-import type { JazzStore } from '$lib/jazz/store.svelte'
-import { persistSparkFiles } from '$lib/jazz/intent-files'
+import type { AvenDbStore } from '$lib/avendb/store.svelte'
+import { persistSparkFiles } from '$lib/avendb/intent-files'
 import { streamReply } from '$lib/llm/generate'
 import {
 	LLM_TOOLS,
@@ -75,8 +75,8 @@ export type IdentityAgent = {
  * Build the runtime. `env()` is a getter so methods read the LIVE identity/session at call time.
  */
 export function createIdentityAgent(deps: {
-	messages: JazzStore
-	todos: JazzStore
+	messages: AvenDbStore
+	todos: AvenDbStore
 	env: () => IdentityAgentEnv
 }): IdentityAgent {
 	let streaming = $state<Record<string, string>>({})

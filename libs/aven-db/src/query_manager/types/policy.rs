@@ -1,7 +1,7 @@
 use super::*;
 use serde::{Deserialize, Serialize};
 
-/// Legacy Jazz row-policy knob. AvenOS keeps [`PermissiveLocal`] only; biscuit ACC in `app/src-tauri` gates spark data.
+/// Legacy avenDB row-policy knob. AvenOS keeps [`PermissiveLocal`] only; biscuit ACC in `app/src-tauri` gates spark data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum RowPolicyMode {
     #[default]

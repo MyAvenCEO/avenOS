@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
 	import { t } from '$lib/i18n'
-	import { jazzSession } from '$lib/jazz/api'
+	import { avendbSession } from '$lib/avendb/api'
 	import { copyToClipboard } from '$lib/runtime/clipboard'
 
 	// Shown full-screen when this device is unlocked but NOT yet a member of the
@@ -13,7 +13,7 @@
 		if (!browser) return
 		void (async () => {
 			try {
-				ownDid = (await jazzSession()).signerDid ?? ''
+				ownDid = (await avendbSession()).signerDid ?? ''
 			} catch {
 				ownDid = ''
 			}

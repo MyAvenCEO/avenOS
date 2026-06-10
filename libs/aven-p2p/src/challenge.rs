@@ -215,12 +215,12 @@ mod tests {
     #[test]
     fn sign_then_verify_roundtrips() {
         let sk = SigningKey::from_bytes(&[3u8; 32]);
-        let did = groove::did_key::signer_did_from_ed25519(&sk.verifying_key().to_bytes()).unwrap();
+        let did = aven_db::did_key::signer_did_from_ed25519(&sk.verifying_key().to_bytes()).unwrap();
         let h = hello();
         let cb = "cb-value";
         let msg = build_message(&h, &did, cb, "");
         let sig = sign(&sk, &msg);
-        let pk = groove::did_key::ed25519_public_from_signer_did(&did).unwrap();
+        let pk = aven_db::did_key::ed25519_public_from_signer_did(&did).unwrap();
         assert!(verify(&pk, &msg, &sig).is_ok());
     }
 
@@ -236,13 +236,13 @@ mod tests {
     #[test]
     fn wrong_channel_binding_fails() {
         let sk = SigningKey::from_bytes(&[3u8; 32]);
-        let did = groove::did_key::signer_did_from_ed25519(&sk.verifying_key().to_bytes()).unwrap();
+        let did = aven_db::did_key::signer_did_from_ed25519(&sk.verifying_key().to_bytes()).unwrap();
         let h = hello();
         let signed = build_message(&h, &did, "client-cb", "");
         let sig = sign(&sk, &signed);
         // Server rebuilds with a *different* channel binding (a relayed session).
         let server_view = build_message(&h, &did, "server-cb", "");
-        let pk = groove::did_key::ed25519_public_from_signer_did(&did).unwrap();
+        let pk = aven_db::did_key::ed25519_public_from_signer_did(&did).unwrap();
         assert!(verify(&pk, &server_view, &sig).is_err());
     }
 
@@ -253,12 +253,12 @@ mod tests {
         // backend. The mutual handshake must make that impossible on at least one side.
         let client_sk = SigningKey::from_bytes(&[3u8; 32]);
         let client_did =
-            groove::did_key::peer_did_from_ed25519(&client_sk.verifying_key().to_bytes()).unwrap();
-        let client_pk = groove::did_key::ed25519_public_from_peer_did(&client_did).unwrap();
+            aven_db::did_key::peer_did_from_ed25519(&client_sk.verifying_key().to_bytes()).unwrap();
+        let client_pk = aven_db::did_key::ed25519_public_from_peer_did(&client_did).unwrap();
         let server_sk = SigningKey::from_bytes(&[7u8; 32]);
         let server_did =
-            groove::did_key::peer_did_from_ed25519(&server_sk.verifying_key().to_bytes()).unwrap();
-        let server_pk = groove::did_key::ed25519_public_from_peer_did(&server_did).unwrap();
+            aven_db::did_key::peer_did_from_ed25519(&server_sk.verifying_key().to_bytes()).unwrap();
+        let server_pk = aven_db::did_key::ed25519_public_from_peer_did(&server_did).unwrap();
 
         // (a) The client signs its proof bound to the ServerHello nonce A it saw + its own
         //     client nonce. A relay cannot move that proof onto a backend connection whose

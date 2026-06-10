@@ -1,4 +1,4 @@
-//! Tokio runtime adapter for Jazz.
+//! Tokio runtime adapter for avenDB.
 //!
 //! Provides `TokioRuntime<S>` - a thin wrapper around
 //! `RuntimeCore<S, TokioScheduler<S>>`
@@ -214,7 +214,7 @@ impl From<CoreRuntimeError> for RuntimeError {
 // TokioRuntime
 // ============================================================================
 
-/// Tokio runtime for Jazz, generic over storage backend.
+/// Tokio runtime for avenDB, generic over storage backend.
 ///
 /// Thin wrapper around `Arc<Mutex<RuntimeCore<S, TokioScheduler<S>>>>`.
 /// All methods grab the lock, call RuntimeCore, and return.

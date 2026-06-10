@@ -1,4 +1,4 @@
-//! Parse an aven-schema manifest JSON into a Groove [`Schema`] — the single
+//! Parse an aven-schema manifest JSON into a avenDB [`Schema`] — the single
 //! source of truth for the canonical schema (and its [`SchemaHash`]).
 //!
 //! Both the `avenos-schema-hash` binary and `aven-node` use this so the server
@@ -9,8 +9,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use groove::query_manager::types::{ColumnType, SchemaBuilder, TableSchemaBuilder};
-use groove::Schema;
+use aven_db::query_manager::types::{ColumnType, SchemaBuilder, TableSchemaBuilder};
+use aven_db::Schema;
 use serde::Deserialize;
 
 /// The canonical manifest, embedded at build time (repo source of truth).
@@ -86,7 +86,7 @@ fn add_column(tb: TableSchemaBuilder, col: &ManifestColumn) -> Result<TableSchem
 	}
 }
 
-/// Parse a manifest JSON string into a Groove [`Schema`].
+/// Parse a manifest JSON string into a avenDB [`Schema`].
 pub fn load_schema_from_str(raw: &str) -> Result<Schema, String> {
 	let m: Manifest = serde_json::from_str(raw).map_err(|e| format!("manifest JSON: {e}"))?;
 	let mut builder = SchemaBuilder::new();
@@ -100,7 +100,7 @@ pub fn load_schema_from_str(raw: &str) -> Result<Schema, String> {
 	Ok(builder.build())
 }
 
-/// Parse a manifest JSON file into a Groove [`Schema`].
+/// Parse a manifest JSON file into a avenDB [`Schema`].
 pub fn load_schema(path: &Path) -> Result<Schema, String> {
 	let raw =
 		std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;

@@ -135,7 +135,7 @@ impl ActiveVault {
 	}
 }
 
-/// On-disk profile for onboarding copy (readable before Jazz/Groove).
+/// On-disk profile for onboarding copy (readable before avenDB).
 pub const VAULT_MANIFEST_FILENAME: &str = crate::paths::MANIFEST_FILENAME;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

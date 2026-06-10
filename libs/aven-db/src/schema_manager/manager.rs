@@ -642,7 +642,7 @@ impl SchemaManager {
     /// Compute a canonical digest of the catalogue state known to this manager.
     pub fn catalogue_state_hash(&self) -> String {
         let mut hasher = Hasher::new();
-        hasher.update(b"jazz-catalogue-state-v1");
+        hasher.update(b"avendb-catalogue-state-v1");
 
         let mut schemas: Vec<_> = self.known_schemas.iter().collect();
         schemas.sort_by(|(left_hash, _), (right_hash, _)| {
@@ -1085,7 +1085,7 @@ impl SchemaManager {
     pub(crate) fn permissions_head_object_id_for(app_id: AppId) -> ObjectId {
         ObjectId::from_uuid(Uuid::new_v5(
             &Uuid::NAMESPACE_DNS,
-            format!("jazz-catalogue-permissions-head:{}", app_id.uuid()).as_bytes(),
+            format!("avendb-catalogue-permissions-head:{}", app_id.uuid()).as_bytes(),
         ))
     }
 
@@ -1096,7 +1096,7 @@ impl SchemaManager {
     #[cfg(test)]
     fn permissions_bundle_object_id(&self, bundle: &PermissionsBundleState) -> ObjectId {
         let mut identity =
-            format!("jazz-catalogue-permissions-bundle:{}:", self.app_id.uuid()).into_bytes();
+            format!("avendb-catalogue-permissions-bundle:{}:", self.app_id.uuid()).into_bytes();
         identity.extend_from_slice(&encode_permissions_bundle(
             bundle.schema_hash,
             bundle.version,

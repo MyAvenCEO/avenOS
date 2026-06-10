@@ -116,7 +116,7 @@ pub async fn vault_list(app: AppHandle, _vault_state: State<'_, ActiveVault>) ->
 /// no-op under the data-dir override sandbox (single shared root, no per-identity folder).
 ///
 /// After this runs, an identity provably owns a folder no other identity can resolve to —
-/// the foundation the connect-time owner check in `jazz` relies on.
+/// the foundation the connect-time owner check in `avendb` relies on.
 pub(crate) fn finalize_identity_folder<R: tauri::Runtime>(
 	app: &AppHandle<R>,
 	vault: &ActiveVault,

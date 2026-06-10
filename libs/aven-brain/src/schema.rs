@@ -1,16 +1,16 @@
 //! The aven-brain data model as an aven-db [`Schema`] — **three tables**:
 //! `memories` · `entities` · `links` (see the v5 plan, board `plan/0018`).
 //!
-//! Mirrors `libs/aven-schema/schema.manifest.json` exactly (groove storage types), so the
+//! Mirrors `libs/aven-schema/schema.manifest.json` exactly (avenDB storage types), so the
 //! same brain code runs over the lib's own store (tests) and the app's manifest-built
 //! store. Sealed-at-rest columns are declared `Text`/`Bytea` per the app convention;
 //! sealing itself is an app-layer concern.
 //!
-//! No `created_at`/`updated_at` columns anywhere: row [`groove::ObjectId`]s are UUIDv7
+//! No `created_at`/`updated_at` columns anywhere: row [`aven_db::ObjectId`]s are UUIDv7
 //! (time-ordered) and the engine's `RowProvenance` carries authorship — engine built-ins
 //! are never duplicated (plan §2.1).
 
-use groove::{ColumnType, Schema, SchemaBuilder, TableSchema, Value};
+use aven_db::{ColumnType, Schema, SchemaBuilder, TableSchema, Value};
 
 /// Default embedding dimensionality. EmbeddingGemma-300m's native size; Matryoshka-
 /// truncatable to 128/256 for storage savings (the brain picks the dim at build time).
@@ -99,7 +99,7 @@ pub fn brain_schema(embed_dim: usize) -> Schema {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use groove::TableName;
+    use aven_db::TableName;
 
     #[test]
     fn brain_schema_has_exactly_three_tables() {

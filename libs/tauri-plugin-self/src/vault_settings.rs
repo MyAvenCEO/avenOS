@@ -1,4 +1,4 @@
-//! Per-vault settings in `<identity>/vault/settings.json` (device-local, not Groove-synced).
+//! Per-vault settings in `<identity>/vault/settings.json` (device-local, not avenDB-synced).
 
 use std::fs;
 use std::path::Path;

@@ -143,13 +143,13 @@ describe('victorio POS ingest', () => {
 		const uploader: UploaderPort = {
 			async upload({ filename, contentSha256 }) {
 				uploads.push(filename)
-				return { fileId: `groove:${contentSha256.slice(0, 8)}` }
+				return { fileId: `avendb:${contentSha256.slice(0, 8)}` }
 			}
 		}
 		const ing = createIngestor(config, { ports: { uploader } })
 		const report = await ing.ingest(base())
 		expect(uploads).toEqual(['sample-pos.csv'])
-		expect(report.fileId.startsWith('groove:')).toBe(true)
+		expect(report.fileId.startsWith('avendb:')).toBe(true)
 		const orders = report.output.orders as unknown as Order[]
 		expect(orders[0]._source.fileId).toBe(report.fileId)
 	})

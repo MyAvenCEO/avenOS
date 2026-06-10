@@ -1,7 +1,7 @@
 //! RuntimeCore - Unified synchronous runtime logic for both native and WASM.
 //!
-//! This module provides the shared core logic that both jazz-tokio
-//! and jazz-wasm wrap. RuntimeCore is generic over `Storage` and `Scheduler`
+//! This module provides the shared core logic that both avendb-tokio
+//! and avendb-wasm wrap. RuntimeCore is generic over `Storage` and `Scheduler`
 //! which provide platform-specific behavior.
 //!
 //! ## Design

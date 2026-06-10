@@ -4,7 +4,7 @@
 //! proxy), runs the nonce-bound did:key challenge per connection (`channel_binding
 //! = ""`, since there is no in-process TLS to bind to), then routes length-prefixed
 //! frames by `PeerId`. It is the server analogue of `aven_p2p::WsClientTransport`
-//! and implements `groove::SyncTransport`, so the engine wiring is unchanged.
+//! and implements `aven_db::SyncTransport`, so the engine wiring is unchanged.
 //!
 //! Each connection is owned by a single task that `select!`s between the engine's
 //! per-peer outbound queue and inbound WS messages — no stream split needed.
@@ -14,8 +14,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use axum::extract::ws::{Message, WebSocket};
-use groove::{
-    decode_length_prefixed, encode_length_prefixed, InboxEntry, JazzError, PeerId, Source,
+use aven_db::{
+    decode_length_prefixed, encode_length_prefixed, InboxEntry, AvenDbError, PeerId, Source,
     SyncPayload, SyncTargetId, SyncTransport,
 };
 use tokio::sync::{mpsc, Mutex};
@@ -155,7 +155,7 @@ fn verify_client(hello: &ServerHello, auth: &ClientAuth) -> Result<PeerId, Strin
     if is_expired(hello) {
         return Err("challenge expired".into());
     }
-    let pubkey = groove::did_key::ed25519_public_from_signer_did(&auth.did)?;
+    let pubkey = aven_db::did_key::ed25519_public_from_signer_did(&auth.did)?;
     let message = build_message(hello, &auth.did, NO_CHANNEL_BINDING, &auth.client_nonce);
     verify(&pubkey, &message, &auth.signature)?;
     Ok(PeerId(pubkey))
@@ -163,12 +163,12 @@ fn verify_client(hello: &ServerHello, auth: &ClientAuth) -> Result<PeerId, Strin
 
 #[async_trait]
 impl SyncTransport for WsServerListener {
-    async fn send_to(&self, target: SyncTargetId, payload: SyncPayload) -> groove::Result<()> {
+    async fn send_to(&self, target: SyncTargetId, payload: SyncPayload) -> aven_db::Result<()> {
         let peer = match &target {
             SyncTargetId::Client(p) => *p,
             SyncTargetId::SignerDid(did) => PeerId(
-                groove::did_key::ed25519_public_from_signer_did(did)
-                    .map_err(|e| JazzError::Sync(format!("route {did}: {e}")))?,
+                aven_db::did_key::ed25519_public_from_signer_did(did)
+                    .map_err(|e| AvenDbError::Sync(format!("route {did}: {e}")))?,
             ),
         };
         let tx = { self.registry.lock().await.get(&peer).cloned() };
@@ -176,10 +176,10 @@ impl SyncTransport for WsServerListener {
             // Peer not connected — drop (frontier re-announces on reconnect).
             return Ok(());
         };
-        let bytes = encode_length_prefixed(target, &payload).map_err(JazzError::Sync)?;
+        let bytes = encode_length_prefixed(target, &payload).map_err(AvenDbError::Sync)?;
         tx.send(Message::Binary(bytes.into()))
             .await
-            .map_err(|e| JazzError::Sync(format!("ws fanout: {e}")))?;
+            .map_err(|e| AvenDbError::Sync(format!("ws fanout: {e}")))?;
         Ok(())
     }
 

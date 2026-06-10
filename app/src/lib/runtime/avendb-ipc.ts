@@ -19,7 +19,7 @@ const TRANSIENT_PATTERNS = [
 	'not claimed',
 	'ShellNotReady',
 	'shell_not_ready',
-	'grooveShellNotReady',
+	'avendbShellNotReady',
 ]
 
 function isTransientShellError(err: unknown): boolean {
@@ -29,9 +29,9 @@ function isTransientShellError(err: unknown): boolean {
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
-/** Multiplexed Groove IPC (`groove_runtime` on the Rust side). Transient shell errors
+/** Multiplexed avenDB IPC (`avendb_runtime` on the Rust side). Transient shell errors
  *  (re-hydration window) auto-retry with backoff so add/revoke/read self-heal (B4). */
-export async function grooveRuntime<T = unknown>(
+export async function avenDbRuntime<T = unknown>(
 	op: string,
 	payload: Record<string, unknown> = {},
 ): Promise<T> {
@@ -41,7 +41,7 @@ export async function grooveRuntime<T = unknown>(
 	// any write is applied.
 	for (let attempt = 0; attempt < 6; attempt++) {
 		try {
-			return await invoke<T>('groove_runtime', { op, payload })
+			return await invoke<T>('avendb_runtime', { op, payload })
 		} catch (e) {
 			lastErr = e
 			if (!isTransientShellError(e)) throw e

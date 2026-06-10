@@ -1,12 +1,12 @@
-//! Jazz v2-style local schema migrations: lenses between schema hashes, no full DB wipe.
+//! AvenDb v2-style local schema migrations: lenses between schema hashes, no full DB wipe.
 //!
 //! See <https://jazz.tools/docs/schemas/migrations> and `libs/aven-schema/migrations/`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use groove::query_manager::types::{Schema, SchemaHash};
-use groove::schema_manager::auto_lens::generate_lens;
+use aven_db::query_manager::types::{Schema, SchemaHash};
+use aven_db::schema_manager::auto_lens::generate_lens;
 use serde::Deserialize;
 
 use crate::schema_manifest;
@@ -71,19 +71,19 @@ pub fn persist_vault_snapshot(data_dir: &Path, hash: &[u8; 32], manifest_src: &P
 fn load_schema_for_hash(data_dir: &Path, hash: &[u8; 32]) -> Result<Option<Schema>, String> {
 	let vault_path = vault_snapshot_path(data_dir, hash);
 	if vault_path.is_file() {
-		return schema_manifest::load_jazz_schema_from_manifest_path(&vault_path).map(Some);
+		return schema_manifest::load_avendb_schema_from_manifest_path(&vault_path).map(Some);
 	}
 	if let Some(bundled) = bundled_manifest_for_hash(hash) {
 		if bundled.is_file() {
 			let _ = persist_vault_snapshot(data_dir, hash, &bundled);
-			return schema_manifest::load_jazz_schema_from_manifest_path(&bundled).map(Some);
+			return schema_manifest::load_avendb_schema_from_manifest_path(&bundled).map(Some);
 		}
 	}
 	Ok(None)
 }
 
 /// When on-disk schema hash differs from current manifest, return prior [`Schema`] versions to
-/// register as live schemas (Jazz lenses) instead of wiping Groove data.
+/// register as live schemas (AvenDb lenses) instead of wiping avenDB data.
 pub fn live_schemas_for_stored_hash(
 	data_dir: &Path,
 	stored_hash: &[u8; 32],
@@ -112,8 +112,8 @@ pub fn live_schemas_for_stored_hash(
 	}
 
 	log::info!(
-		target: "avenos::jazz",
-		"schema migration lens {} → {} (keeping Groove data)",
+		target: "avenos::avendb",
+		"schema migration lens {} → {} (keeping avenDB data)",
 		hex_short(stored_hash),
 		hex_short(&current_hash)
 	);
@@ -139,7 +139,7 @@ mod tests {
 
 	#[test]
 	fn current_manifest_has_stable_hash() {
-		let schema = schema_manifest::load_jazz_schema_from_manifest().unwrap();
+		let schema = schema_manifest::load_avendb_schema_from_manifest().unwrap();
 		let h = schema_hash_bytes(&schema);
 		assert_eq!(hash_hex(&h).len(), 64);
 	}
@@ -152,11 +152,11 @@ mod tests {
 	#[test]
 	fn registry_snapshots_lens_cleanly_to_current() {
 		let reg = load_registry().expect("load registry.json");
-		let current = schema_manifest::load_jazz_schema_from_manifest().expect("current manifest");
+		let current = schema_manifest::load_avendb_schema_from_manifest().expect("current manifest");
 		let root = schema_manifest::aven_schema_root();
 		for snap in &reg.snapshots {
 			let path = root.join(&snap.manifest);
-			let old = schema_manifest::load_jazz_schema_from_manifest_path(&path)
+			let old = schema_manifest::load_avendb_schema_from_manifest_path(&path)
 				.unwrap_or_else(|e| panic!("load snapshot {}: {e}", snap.manifest));
 			// The registry hash must actually match the snapshot it points at.
 			assert_eq!(

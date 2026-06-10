@@ -14,9 +14,9 @@
 
 use std::sync::{Arc, RwLock};
 
-use groove::{AccOp, CapDecision, CapabilityResolver, EditSigner, ObjectId, ResourceCoord, SyncTargetId};
+use aven_db::{AccOp, CapDecision, CapabilityResolver, EditSigner, ObjectId, ResourceCoord, SyncTargetId};
 
-use crate::jazz::jazz_engine::ShellState;
+use crate::avendb::engine::ShellState;
 use crate::identity_sync::SyncAclSnapshot;
 
 /// Live handles shared with the app shell. The app updates these as the vault
@@ -40,7 +40,7 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 		// 1. Subject → peer did:key.
 		let signer_did = match subject {
 			SyncTargetId::SignerDid(d) => d.clone(),
-			SyncTargetId::Client(pid) => match crate::jazz_auth::signer_did_from_ed25519(&pid.0) {
+			SyncTargetId::Client(pid) => match crate::avendb_auth::signer_did_from_ed25519(&pid.0) {
 				Ok(did) => did,
 				Err(_) => return CapDecision::DenyPermanent,
 			},
@@ -243,7 +243,7 @@ fn required_write_op_for_table(table: &str) -> crate::identity_acc::AccOp {
 }
 
 /// App-side author **edit-signer** (audit #29). Installed via
-/// [`groove::AvenosClient::set_edit_signer`]; the engine invokes it from the local write
+/// [`aven_db::AvenosClient::set_edit_signer`]; the engine invokes it from the local write
 /// path with each assembled row's content digest. It signs that digest with the device key
 /// so `data` + `metadata` are authenticated end-to-end and rejected on apply by every peer
 /// if tampered in flight. The digest excludes the edit-sig slot, so stamping is digest-safe.
@@ -279,11 +279,11 @@ mod tests {
 	};
 	use aven_caps::ownership::mint_owner_binding;
 	use ed25519_dalek::SigningKey;
-	use groove::{AccOp, CapDecision, ObjectId, ResourceCoord, SyncTargetId};
+	use aven_db::{AccOp, CapDecision, ObjectId, ResourceCoord, SyncTargetId};
 	use uuid::Uuid;
 
 	use crate::identity_sync::{build_sync_acl_snapshot, SyncAclSnapshot};
-	use crate::jazz::jazz_engine::ShellState;
+	use crate::avendb::engine::ShellState;
 
 	// ── test helpers ─────────────────────────────────────────────────────────
 
@@ -303,7 +303,7 @@ mod tests {
 			deks: HashMap::new(),
 			identity_versions: HashMap::new(),
 			issuers: HashMap::new(),
-			groove_write_branch: "main".into(),
+			avendb_write_branch: "main".into(),
 		})
 	}
 

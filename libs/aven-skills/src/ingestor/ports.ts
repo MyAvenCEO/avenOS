@@ -1,6 +1,6 @@
 /**
  * Side-effecting capabilities the ingestor needs, expressed as ports so the engine
- * stays environment-agnostic: the browser/Tauri host injects a Groove-backed uploader
+ * stays environment-agnostic: the browser/Tauri host injects an avenDB-backed uploader
  * + Web Crypto hash; tests inject in-memory fakes. Mirrors the actor model's
  * "talk to a capability, don't import it" boundary.
  */
@@ -14,7 +14,7 @@ export interface UploadInput {
 }
 
 export interface UploadResult {
-	/** Stable id of the persisted source doc (e.g. Groove `files` row id). */
+	/** Stable id of the persisted source doc (e.g. avenDB `files` row id). */
 	fileId: string
 }
 

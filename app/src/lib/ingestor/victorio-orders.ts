@@ -3,10 +3,10 @@
  * `victorio-pos-orders` config with browser ports and exposes a factory so the
  * reactive store can wire in live stage events / logging per run.
  *
- * v1 is fully in-memory: the source CSV is NOT persisted to Groove yet — the
+ * v1 is fully in-memory: the source CSV is NOT persisted to avenDB yet — the
  * uploader just returns a content-addressed id so provenance still works. To persist
- * the source later, swap `memoryUploaderPort()` for a Groove `files`-backed uploader
- * (see git history for the jazzTable('files') version).
+ * the source later, swap `memoryUploaderPort()` for a avenDB `files`-backed uploader
+ * (see git history for the avenDbTable('files') version).
  */
 
 import {

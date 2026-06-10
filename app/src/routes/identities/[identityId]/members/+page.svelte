@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
 	import { page } from '$app/state'
-	import { avenCeoSparkId } from '$lib/jazz/api'
+	import { avenCeoSparkId } from '$lib/avendb/api'
 	import IdentityMembersPanel from '$lib/identities/IdentityMembersPanel.svelte'
 
 	const identityParam = $derived(String((page.params as { identityId?: string }).identityId ?? ''))

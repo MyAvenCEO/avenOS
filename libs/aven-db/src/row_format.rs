@@ -268,7 +268,7 @@ pub(crate) fn encode_row_with_layout(
 /// Encode a destination row whose leading columns are supplied as values and
 /// whose remaining columns are projected from an already-encoded source row.
 ///
-/// This is used by flat row-history storage: Jazz system columns are new, but
+/// This is used by flat row-history storage: avenDB system columns are new, but
 /// user columns already arrive in native row format. Copying their encoded
 /// bytes avoids decode-then-reencode work on replay hot paths.
 pub(crate) fn encode_row_with_prefix_and_projected_tail(

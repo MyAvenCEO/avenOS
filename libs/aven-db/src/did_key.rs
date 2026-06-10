@@ -3,7 +3,7 @@
 //! One implementation, three consumers (the app, the device engine, and the
 //! `aven-p2p` transport) so the `did:key` representation can never diverge — the
 //! transport handshake decodes the *same* bytes the app/biscuit subject encodes.
-//! Lifted out of `app/src-tauri/src/jazz_auth.rs`, which now re-exports these.
+//! Lifted out of `app/src-tauri/src/avendb_auth.rs`, which now re-exports these.
 
 use ed25519_dalek::VerifyingKey;
 use multibase::Base;

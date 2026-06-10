@@ -1,6 +1,6 @@
 //! AvenOS authenticated sync transport.
 //!
-//! Two `impl groove::SyncTransport`s over one encrypted TLS wire (plan §2):
+//! Two `impl aven_db::SyncTransport`s over one encrypted TLS wire (plan §2):
 //!
 //! - [`ServerSyncTransport`] — the **client** side a device dials with. It opens
 //!   a TLS connection (server authenticated by its cert), completes a **did:key

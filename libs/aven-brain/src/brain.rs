@@ -1,4 +1,4 @@
-//! The [`Brain`] handle over an aven-db [`JazzClient`] for **one SAFE** (owner-scoped),
+//! The [`Brain`] handle over an aven-db [`AvenDbClient`] for **one SAFE** (owner-scoped),
 //! on the three-table model: `memories` · `entities` · `links`.
 //!
 //! - `remember` stores evidence (verbatim content + embedding + artifact columns) and,
@@ -19,7 +19,7 @@
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use groove::{AppContext, AppId, JazzClient, NullSyncTransport, ObjectId, QueryBuilder, Value};
+use aven_db::{AppContext, AppId, AvenDbClient, NullSyncTransport, ObjectId, QueryBuilder, Value};
 use serde::Serialize;
 
 use crate::embedder::Embedder;
@@ -387,7 +387,7 @@ fn abstention_floor(query_tokens: usize) -> f32 {
 
 /// The memory brain of one SAFE (owner-scoped over the shared store).
 pub struct Brain<E: Embedder> {
-    client: Arc<JazzClient>,
+    client: Arc<AvenDbClient>,
     embedder: E,
     owner: ObjectId,
 }
@@ -404,14 +404,14 @@ impl<E: Embedder> Brain<E> {
             data_dir,
             live_schemas: Vec::new(),
         };
-        let client = JazzClient::connect_headless_in_memory(context, Arc::new(NullSyncTransport))
+        let client = AvenDbClient::connect_headless_in_memory(context, Arc::new(NullSyncTransport))
             .await
             .map_err(|e| BrainError::Open(format!("{e:?}")))?;
         Ok(Self::over(Arc::new(client), owner, embedder))
     }
 
     /// Wrap an existing client (the app's shared store) as `owner`'s brain.
-    pub fn over(client: Arc<JazzClient>, owner: ObjectId, embedder: E) -> Self {
+    pub fn over(client: Arc<AvenDbClient>, owner: ObjectId, embedder: E) -> Self {
         Self {
             client,
             embedder,

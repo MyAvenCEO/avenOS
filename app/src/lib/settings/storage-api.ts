@@ -13,9 +13,9 @@ export async function selfStoragePaths(): Promise<SelfStoragePathsReply> {
 	return invoke<SelfStoragePathsReply>('self_storage_paths')
 }
 
-/** Removes Groove/SurrealKV under the active vault only; identity is preserved. */
-export async function selfClearJazzDatabase(): Promise<void> {
-	await invoke<void>('self_clear_jazz_database')
+/** Removes avenDB/SurrealKV under the active vault only; identity is preserved. */
+export async function selfClearAvenDbDatabase(): Promise<void> {
+	await invoke<void>('self_clear_avendb_database')
 }
 
 /** Deletes the entire `.avenOS` tree (all vaults, identity, schema cache) and locks the app. */

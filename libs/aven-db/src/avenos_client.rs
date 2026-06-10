@@ -1,10 +1,10 @@
-//! AvenOS P2P JazzClient (RocksDB + Hyperswarm peer transport, no WebSocket server).
+//! AvenOS P2P AvenDbClient (RocksDB + Hyperswarm peer transport, no WebSocket server).
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-use crate::groove_tokio::{SubscriptionHandle as RuntimeSubHandle, TokioRuntime};
+use crate::avendb_tokio::{SubscriptionHandle as RuntimeSubHandle, TokioRuntime};
 use crate::query_manager::manager::LocalUpdates;
 use crate::query_manager::query::Query;
 use crate::query_manager::session::Session;
@@ -18,7 +18,7 @@ use crate::sync_manager::{
 };
 use tokio::sync::{RwLock, mpsc};
 
-use crate::{AppContext, JazzError, ObjectId, Result, SubscriptionHandle, SubscriptionStream};
+use crate::{AppContext, AvenDbError, ObjectId, Result, SubscriptionHandle, SubscriptionStream};
 
 type DynStorage = Box<dyn Storage + Send>;
 type ClientRuntime = TokioRuntime<DynStorage>;
@@ -45,13 +45,13 @@ impl std::fmt::Debug for MaybeSyncTransport {
 }
 
 /// Slot holding the optional peer sync transport. Shared (not a plain field) so the
-/// transport can be attached *after* `connect` — the app opens Groove locally first
+/// transport can be attached *after* `connect` — the app opens avenDB locally first
 /// and wires peer sync in the background, so sign-in never blocks on the transport.
 /// The outbound forwarding callback reads this slot on each frame.
 type SharedSyncTransport =
     Arc<std::sync::RwLock<Option<Arc<dyn crate::sync_transport::SyncTransport>>>>;
 
-pub struct JazzClient {
+pub struct AvenDbClient {
     runtime: ClientRuntime,
     subscriptions: Arc<RwLock<HashMap<SubscriptionHandle, SubscriptionState>>>,
     subscription_senders: Arc<RwLock<HashMap<RuntimeSubHandle, mpsc::Sender<OrderedRowDelta>>>>,
@@ -138,7 +138,7 @@ fn peer_outbound_callback(
 
 /// Spawn the inbound pump that drains a peer transport into the runtime inbox.
 /// Used both at connect (when a transport is provided up front) and by
-/// [`JazzClient::attach_sync_transport`] (background attach after a local connect).
+/// [`AvenDbClient::attach_sync_transport`] (background attach after a local connect).
 fn spawn_peer_inbound(
     inbound_runtime: ClientRuntime,
     transport: Arc<dyn crate::sync_transport::SyncTransport>,
@@ -170,15 +170,15 @@ fn build_schema_manager(storage: &DynStorage, context: &AppContext) -> Result<Sc
         "client",
         "main",
     )
-    .map_err(|e| JazzError::Schema(format!("{e:?}")))?;
+    .map_err(|e| AvenDbError::Schema(format!("{e:?}")))?;
 
     rehydrate_schema_manager_from_catalogue(&mut schema_manager, storage.as_ref(), context.app_id)
-        .map_err(JazzError::Storage)?;
+        .map_err(AvenDbError::Storage)?;
 
     for old in &context.live_schemas {
         schema_manager
             .add_live_schema(old.clone())
-            .map_err(|e| JazzError::Schema(format!("live_schema migration: {e:?}")))?;
+            .map_err(|e| AvenDbError::Schema(format!("live_schema migration: {e:?}")))?;
     }
 
     Ok(schema_manager)
@@ -188,13 +188,13 @@ fn vec_values_to_map(
     schema: &Schema,
     table: &str,
     values: Vec<Value>,
-) -> std::result::Result<HashMap<String, Value>, JazzError> {
+) -> std::result::Result<HashMap<String, Value>, AvenDbError> {
     let table_name = TableName::new(table);
     let table_schema = schema
         .get(&table_name)
-        .ok_or_else(|| JazzError::Schema(format!("table not found: {table}")))?;
+        .ok_or_else(|| AvenDbError::Schema(format!("table not found: {table}")))?;
     if values.len() != table_schema.columns.columns.len() {
-        return Err(JazzError::Schema(format!(
+        return Err(AvenDbError::Schema(format!(
             "column count mismatch for {table}: expected {}, got {}",
             table_schema.columns.columns.len(),
             values.len()
@@ -240,7 +240,7 @@ async fn open_persistent_storage(data_dir: &std::path::Path) -> Result<DynStorag
     opened
         .map(|s| Box::new(s) as DynStorage)
         .ok_or_else(|| {
-            JazzError::Storage(format!(
+            AvenDbError::Storage(format!(
                 "failed to open rocksdb storage '{}': {:?}",
                 db_path.display(),
                 last_err
@@ -248,7 +248,7 @@ async fn open_persistent_storage(data_dir: &std::path::Path) -> Result<DynStorag
         })
 }
 
-impl JazzClient {
+impl AvenDbClient {
     pub async fn connect(context: AppContext) -> Result<Self> {
         Self::do_connect(context, MaybeSyncTransport::Off, None).await
     }
@@ -292,7 +292,7 @@ impl JazzClient {
     ) -> Result<()> {
         self.runtime
             .set_resolver(resolver)
-            .map_err(|e| JazzError::Sync(format!("set_resolver: {e}")))
+            .map_err(|e| AvenDbError::Sync(format!("set_resolver: {e}")))
     }
 
     /// Inject the author edit-signer for the local write path. The app provides a signer
@@ -304,25 +304,25 @@ impl JazzClient {
     ) -> Result<()> {
         self.runtime
             .set_edit_signer(signer)
-            .map_err(|e| JazzError::Sync(format!("set_edit_signer: {e}")))
+            .map_err(|e| AvenDbError::Sync(format!("set_edit_signer: {e}")))
     }
 
     /// Peer client ids with a live registered sync link (for mesh status UI).
     pub fn peer_client_ids(&self) -> Result<Vec<PeerId>> {
         self.runtime
             .peer_client_ids()
-            .map_err(|e| JazzError::Sync(format!("peer_client_ids: {e}")))
+            .map_err(|e| AvenDbError::Sync(format!("peer_client_ids: {e}")))
     }
 
     /// Peers whose frontier is converged from our side — "Up to date" (§10.2).
     pub fn converged_peer_ids(&self) -> Result<Vec<PeerId>> {
         self.runtime
             .converged_peer_ids()
-            .map_err(|e| JazzError::Sync(format!("converged_peer_ids: {e}")))
+            .map_err(|e| AvenDbError::Sync(format!("converged_peer_ids: {e}")))
     }
 
     /// Attach (or replace) the peer sync transport *after* a local [`Self::connect`].
-    /// This lets the app open Groove immediately and wire peer sync in the background,
+    /// This lets the app open avenDB immediately and wire peer sync in the background,
     /// so sign-in never blocks on establishing the transport. Outbound frames begin
     /// flowing as soon as the slot is populated; the inbound pump is (re)spawned here.
     pub fn attach_sync_transport(
@@ -348,18 +348,18 @@ impl JazzClient {
     pub fn register_peer_sync_client(&self, peer_id: PeerId) -> Result<()> {
         self.runtime
             .ensure_client_as_peer(peer_id)
-            .map_err(|e| JazzError::Sync(format!("ensure_client_as_peer {peer_id}: {e}")))?;
+            .map_err(|e| AvenDbError::Sync(format!("ensure_client_as_peer {peer_id}: {e}")))?;
         // Trust bootstrap FIRST: ship sparks/keyshares UNGATED so the peer can
         // obtain the spark + biscuit chain (it cannot authorize gated data
         // otherwise — chicken-and-egg). Then the gated frontier full catch-up.
         self.runtime
             .rebroadcast_peer_shell_catchup(peer_id)
             .map_err(|e| {
-                JazzError::Sync(format!("rebroadcast_peer_shell_catchup {peer_id}: {e}"))
+                AvenDbError::Sync(format!("rebroadcast_peer_shell_catchup {peer_id}: {e}"))
             })?;
         self.runtime
             .rebroadcast_peer_catchup(peer_id)
-            .map_err(|e| JazzError::Sync(format!("rebroadcast_peer_catchup {peer_id}: {e}")))?;
+            .map_err(|e| AvenDbError::Sync(format!("rebroadcast_peer_catchup {peer_id}: {e}")))?;
         Ok(())
     }
 
@@ -370,33 +370,33 @@ impl JazzClient {
     pub fn remove_peer_sync_client(&self, peer_id: PeerId) -> Result<bool> {
         self.runtime
             .remove_client(peer_id)
-            .map_err(|e| JazzError::Sync(format!("remove_client {peer_id}: {e}")))
+            .map_err(|e| AvenDbError::Sync(format!("remove_client {peer_id}: {e}")))
     }
 
     pub fn rebroadcast_peer_catchup(&self, peer_id: PeerId) -> Result<()> {
         self.runtime
             .rebroadcast_peer_catchup(peer_id)
-            .map_err(|e| JazzError::Sync(format!("rebroadcast_peer_catchup {peer_id}: {e}")))
+            .map_err(|e| AvenDbError::Sync(format!("rebroadcast_peer_catchup {peer_id}: {e}")))
     }
 
     pub fn rebroadcast_peer_shell_catchup(&self, peer_id: PeerId) -> Result<()> {
         self.runtime
             .rebroadcast_peer_shell_catchup(peer_id)
-            .map_err(|e| JazzError::Sync(format!("rebroadcast_peer_shell_catchup {peer_id}: {e}")))
+            .map_err(|e| AvenDbError::Sync(format!("rebroadcast_peer_shell_catchup {peer_id}: {e}")))
     }
 
     pub async fn rebroadcast_all_peer_clients_and_flush(&self) -> Result<()> {
         self.runtime
             .rebroadcast_all_peer_clients_and_flush()
             .await
-            .map_err(|e| JazzError::Sync(format!("rebroadcast_all_peer_clients_and_flush: {e}")))
+            .map_err(|e| AvenDbError::Sync(format!("rebroadcast_all_peer_clients_and_flush: {e}")))
     }
 
     pub async fn flush_peer_sync(&self) -> Result<()> {
         self.runtime
             .flush()
             .await
-            .map_err(|e| JazzError::Sync(format!("flush: {e}")))
+            .map_err(|e| AvenDbError::Sync(format!("flush: {e}")))
     }
 
     pub fn ingest_peer_sync(&self, from_peer_runtime_id: PeerId, payload: SyncPayload) -> Result<()> {
@@ -406,7 +406,7 @@ impl JazzClient {
         };
         self.runtime
             .push_sync_inbox(entry)
-            .map_err(|e| JazzError::Sync(format!("push_sync_inbox: {e}")))
+            .map_err(|e| AvenDbError::Sync(format!("push_sync_inbox: {e}")))
     }
 
     async fn do_connect(
@@ -443,7 +443,7 @@ impl JazzClient {
             id
         };
 
-        tracing::debug!(client_id = %client_id, "Groove client identity persisted (sync inbox / peers)");
+        tracing::debug!(client_id = %client_id, "avenDB client identity persisted (sync inbox / peers)");
 
         let schema_manager = build_schema_manager(&storage, &context)?;
         let peer_transport: SharedSyncTransport = Arc::new(std::sync::RwLock::new(match &peer_layer {
@@ -460,7 +460,7 @@ impl JazzClient {
 
         runtime
             .persist_schema()
-            .map_err(|e| JazzError::Storage(e.to_string()))?;
+            .map_err(|e| AvenDbError::Storage(e.to_string()))?;
 
         let subscription_senders: Arc<RwLock<HashMap<RuntimeSubHandle, mpsc::Sender<OrderedRowDelta>>>> =
             Arc::new(RwLock::new(HashMap::new()));
@@ -512,7 +512,7 @@ impl JazzClient {
                 },
                 session,
             )
-            .map_err(|e| JazzError::Query(e.to_string()))?;
+            .map_err(|e| AvenDbError::Query(e.to_string()))?;
 
         {
             let mut senders = self.subscription_senders.write().await;
@@ -537,7 +537,7 @@ impl JazzClient {
     ) -> Result<()> {
         self.runtime
             .set_unseal(hook)
-            .map_err(|e| JazzError::Query(format!("set_unseal: {e:?}")))
+            .map_err(|e| AvenDbError::Query(format!("set_unseal: {e:?}")))
     }
 
     pub async fn query(
@@ -555,22 +555,22 @@ impl JazzClient {
                     local_updates: LocalUpdates::Immediate,
                 },
             )
-            .map_err(|e| JazzError::Query(e.to_string()))?;
+            .map_err(|e| AvenDbError::Query(e.to_string()))?;
         future
             .await
-            .map_err(|e| JazzError::Query(format!("{e:?}")))
+            .map_err(|e| AvenDbError::Query(format!("{e:?}")))
     }
 
     pub async fn create(&self, table: &str, values: Vec<Value>) -> Result<ObjectId> {
         let schema = self
             .runtime
             .current_schema()
-            .map_err(|e| JazzError::Schema(e.to_string()))?;
+            .map_err(|e| AvenDbError::Schema(e.to_string()))?;
         let map = vec_values_to_map(&schema, table, values)?;
         let (object_id, _, _) = self
             .runtime
             .insert(table, map, None)
-            .map_err(|e| JazzError::Write(e.to_string()))?;
+            .map_err(|e| AvenDbError::Write(e.to_string()))?;
         Ok(object_id)
     }
 
@@ -587,19 +587,19 @@ impl JazzClient {
         let schema = self
             .runtime
             .current_schema()
-            .map_err(|e| JazzError::Schema(e.to_string()))?;
+            .map_err(|e| AvenDbError::Schema(e.to_string()))?;
         let map = vec_values_to_map(&schema, table, values)?;
         let (oid, _, _) = self
             .runtime
             .insert_with_id_and_metadata(table, map, Some(object_id), None, extra_metadata)
-            .map_err(|e| JazzError::Write(e.to_string()))?;
+            .map_err(|e| AvenDbError::Write(e.to_string()))?;
         Ok(oid)
     }
 
     pub async fn update(&self, object_id: ObjectId, updates: Vec<(String, Value)>) -> Result<()> {
         self.runtime
             .update(object_id, updates, None)
-            .map_err(|e| JazzError::Write(e.to_string()))?;
+            .map_err(|e| AvenDbError::Write(e.to_string()))?;
         Ok(())
     }
 
@@ -613,14 +613,14 @@ impl JazzClient {
     ) -> Result<()> {
         self.runtime
             .update_with_metadata(object_id, updates, None, extra_metadata)
-            .map_err(|e| JazzError::Write(e.to_string()))?;
+            .map_err(|e| AvenDbError::Write(e.to_string()))?;
         Ok(())
     }
 
     pub async fn delete(&self, object_id: ObjectId) -> Result<()> {
         self.runtime
             .delete(object_id, None)
-            .map_err(|e| JazzError::Write(e.to_string()))?;
+            .map_err(|e| AvenDbError::Write(e.to_string()))?;
         Ok(())
     }
 
@@ -633,7 +633,7 @@ impl JazzClient {
     ) -> Result<()> {
         self.runtime
             .delete_with_metadata(object_id, None, extra_metadata)
-            .map_err(|e| JazzError::Write(e.to_string()))?;
+            .map_err(|e| AvenDbError::Write(e.to_string()))?;
         Ok(())
     }
 
@@ -650,7 +650,7 @@ impl JazzClient {
     pub async fn schema(&self) -> Result<Schema> {
         self.runtime
             .current_schema()
-            .map_err(|e| JazzError::Query(e.to_string()))
+            .map_err(|e| AvenDbError::Query(e.to_string()))
     }
 
     pub fn is_connected(&self) -> bool {
@@ -682,12 +682,12 @@ impl JazzClient {
         self.runtime
             .flush()
             .await
-            .map_err(|e| JazzError::Connection(e.to_string()))?;
+            .map_err(|e| AvenDbError::Connection(e.to_string()))?;
 
         self.runtime
             .with_storage(|storage| storage.flush())
-            .map_err(|e| JazzError::Storage(e.to_string()))
-            .and_then(|r| r.map_err(|e| JazzError::Storage(e.to_string())))?;
+            .map_err(|e| AvenDbError::Storage(e.to_string()))
+            .and_then(|r| r.map_err(|e| AvenDbError::Storage(e.to_string())))?;
 
         Ok(())
     }

@@ -1,20 +1,20 @@
-//! Trusted-peer list (`peers` Groove table, `kind=remote`). A flat set of device
+//! Trusted-peer list (`peers` avenDB table, `kind=remote`). A flat set of device
 //! DIDs I'm P2P-connected with — the trust set + identity-grant allowlist. Local-only
 //! via `nosync` metadata; no `humans` coupling.
 
-use groove::query_manager::types::Value;
-use groove::JazzClient;
+use aven_db::query_manager::types::Value;
+use aven_db::AvenDbClient;
 use serde_json::{Map, Value as JsonValue};
 
-use crate::jazz::jazz_engine;
+use crate::avendb::avendb_engine;
 
 /// Load active remote peer DIDs referenced from the singleton `humans.my_devices` allowlist.
-pub async fn list_active_signer_dids(client: &JazzClient) -> Result<Vec<String>, String> {
-	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
-	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
-	let did_ix = jazz_engine::col_ix(&schema, "signer_did")?;
-	let status_ix = jazz_engine::col_ix(&schema, "status")?;
-	let kind_ix = jazz_engine::col_ix(&schema, "kind")?;
+pub async fn list_active_signer_dids(client: &AvenDbClient) -> Result<Vec<String>, String> {
+	let rows = engine::exec_list_rows(client, "peers").await?;
+	let schema = engine::resolved_table_schema(client, "peers").await?;
+	let did_ix = engine::col_ix(&schema, "signer_did")?;
+	let status_ix = engine::col_ix(&schema, "status")?;
+	let kind_ix = engine::col_ix(&schema, "kind")?;
 	let mut dids = Vec::new();
 	for (_oid, vals) in rows {
 		let kind = vals
@@ -52,13 +52,13 @@ fn value_as_text(v: &Value) -> Option<&str> {
 /// sync): trust-set rows live in the device's own default identity, so they sync
 /// across the user's own devices but stay invisible to a paired peer who doesn't
 /// hold that identity. Returns `None` before any identity exists (pre-bootstrap).
-pub async fn default_spark_id(client: &JazzClient) -> Result<Option<uuid::Uuid>, String> {
-	let rows = jazz_engine::exec_list_rows(client, "identities").await?;
-	let schema = jazz_engine::resolved_table_schema(client, "identities").await?;
-	let identity_ix = jazz_engine::col_ix(&schema, "owner")?;
+pub async fn default_spark_id(client: &AvenDbClient) -> Result<Option<uuid::Uuid>, String> {
+	let rows = engine::exec_list_rows(client, "identities").await?;
+	let schema = engine::resolved_table_schema(client, "identities").await?;
+	let identity_ix = engine::col_ix(&schema, "owner")?;
 	let mut ids: Vec<uuid::Uuid> = Vec::new();
 	for (_oid, vals) in rows {
-		if let Ok(sid) = jazz_engine::uuid_cell_at(vals.as_slice(), identity_ix) {
+		if let Ok(sid) = engine::uuid_cell_at(vals.as_slice(), identity_ix) {
 			ids.push(sid);
 		}
 	}
@@ -78,14 +78,14 @@ pub struct PeerRowReply {
 	pub status: String,
 }
 
-pub async fn list_peer_rows(client: &JazzClient) -> Result<Vec<PeerRowReply>, String> {
-	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
-	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
-	let did_ix = jazz_engine::col_ix(&schema, "signer_did")?;
-	let label_ix = jazz_engine::col_ix(&schema, "device_label")?;
-	let kind_ix = jazz_engine::col_ix(&schema, "kind")?;
-	let status_ix = jazz_engine::col_ix(&schema, "status")?;
-	let added_ix = jazz_engine::col_ix(&schema, "added_at_ms")?;
+pub async fn list_peer_rows(client: &AvenDbClient) -> Result<Vec<PeerRowReply>, String> {
+	let rows = engine::exec_list_rows(client, "peers").await?;
+	let schema = engine::resolved_table_schema(client, "peers").await?;
+	let did_ix = engine::col_ix(&schema, "signer_did")?;
+	let label_ix = engine::col_ix(&schema, "device_label")?;
+	let kind_ix = engine::col_ix(&schema, "kind")?;
+	let status_ix = engine::col_ix(&schema, "status")?;
+	let added_ix = engine::col_ix(&schema, "added_at_ms")?;
 	let mut out = Vec::new();
 	for (oid, vals) in rows {
 		let kind = vals
@@ -143,7 +143,7 @@ fn peer_timestamp_ms(v: &Value) -> Option<i64> {
 /// set — no `humans` coupling. First-contact / pairing primitive (plan §8 step
 /// 10 — the dev paste-DID shortcut). Idempotent: re-adding active peer is a no-op.
 pub async fn add_remote_peer(
-	client: &JazzClient,
+	client: &AvenDbClient,
 	signer_did: &str,
 	device_label: &str,
 ) -> Result<(), String> {
@@ -160,7 +160,7 @@ pub async fn add_remote_peer(
 		return set_peer_status(client, signer_did, "active").await;
 	}
 
-	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
+	let schema = engine::resolved_table_schema(client, "peers").await?;
 	let now_ms: i64 = std::time::SystemTime::now()
 		.duration_since(std::time::UNIX_EPOCH)
 		.map(|d| d.as_millis() as i64)
@@ -181,22 +181,22 @@ pub async fn add_remote_peer(
 	values.insert("kind".into(), JsonValue::String("remote".into()));
 	values.insert("added_at_ms".into(), JsonValue::Number(now_ms.into()));
 	values.insert("status".into(), JsonValue::String("active".into()));
-	let row_vals = crate::jazz::insert_values("peers", &schema, values)?;
+	let row_vals = crate::avendb::insert_values("peers", &schema, values)?;
 	client
 		.create("peers", row_vals)
 		.await
-		.map_err(crate::jazz::format_jazz_err)?;
+		.map_err(crate::avendb::format_avendb_err)?;
 	Ok(())
 }
 
 pub async fn set_peer_status(
-	client: &JazzClient,
+	client: &AvenDbClient,
 	signer_did: &str,
 	status: &str,
 ) -> Result<(), String> {
-	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
-	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
-	let did_ix = jazz_engine::col_ix(&schema, "signer_did")?;
+	let rows = engine::exec_list_rows(client, "peers").await?;
+	let schema = engine::resolved_table_schema(client, "peers").await?;
+	let did_ix = engine::col_ix(&schema, "signer_did")?;
 	let signer_did = signer_did.trim();
 	// Update EVERY matching row, not just the first: earlier add/forget cycles can
 	// leave duplicate rows for one DID. A lingering `revoked` dup would otherwise
@@ -215,11 +215,11 @@ pub async fn set_peer_status(
 				"status".into(),
 				JsonValue::String(status.to_string()),
 			);
-			let ops = crate::jazz::patch_updates(&schema, patch)?;
+			let ops = crate::avendb::patch_updates(&schema, patch)?;
 			client
 				.update(oid, ops)
 				.await
-				.map_err(crate::jazz::format_jazz_err)?;
+				.map_err(crate::avendb::format_avendb_err)?;
 		}
 	}
 	if matched {
@@ -230,7 +230,7 @@ pub async fn set_peer_status(
 }
 
 /// Returns true if `did` is an active allowlisted remote peer.
-pub async fn is_allowlisted(client: &JazzClient, did: &str) -> Result<bool, String> {
+pub async fn is_allowlisted(client: &AvenDbClient, did: &str) -> Result<bool, String> {
 	let dids = list_active_signer_dids(client).await?;
 	let t = did.trim();
 	Ok(dids.iter().any(|x| x == t))
@@ -241,11 +241,11 @@ pub async fn is_allowlisted(client: &JazzClient, did: &str) -> Result<bool, Stri
 /// cycles — a lingering revoked dup alongside an active row must NOT keep the
 /// peer deregistered (that left it stuck "Offline"). Distinct from "unknown"
 /// (no row) so first-contact stays permissive while a true Forget persists.
-pub async fn is_peer_revoked(client: &JazzClient, did: &str) -> Result<bool, String> {
-	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
-	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
-	let did_ix = jazz_engine::col_ix(&schema, "signer_did")?;
-	let status_ix = jazz_engine::col_ix(&schema, "status")?;
+pub async fn is_peer_revoked(client: &AvenDbClient, did: &str) -> Result<bool, String> {
+	let rows = engine::exec_list_rows(client, "peers").await?;
+	let schema = engine::resolved_table_schema(client, "peers").await?;
+	let did_ix = engine::col_ix(&schema, "signer_did")?;
+	let status_ix = engine::col_ix(&schema, "status")?;
 	let t = did.trim();
 	let mut has_revoked = false;
 	let mut has_active = false;

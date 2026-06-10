@@ -4,7 +4,7 @@
 //!     PEER_ID_<device>            P-256 keypair, private in Secure Enclave (macOS / iOS device).
 //!     device_root_secret          32 bytes, HKDF(ECDH(SE_priv, network_anchor), salt/info = NETWORK_SEED). RAM only.
 //!     PEER_ID_<device>_ED25519    HKDF-expanded from root secret. Used for `sign` / `verify` /
-//!                                 future Jazz agent + peeroxide Noise XX static key.
+//!                                 future avenDB agent + peeroxide Noise XX static key.
 //!
 //! **Linux / Windows debug** and **iOS Simulator debug** use [`dev_insecure`] (plain root secret on disk).
 

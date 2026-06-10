@@ -1,7 +1,7 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { getTableRowsStore } from '$lib/runtime/table-stores'
-import { grooveRuntime } from '$lib/runtime/groove-ipc'
+import { avenDbRuntime } from '$lib/runtime/avendb-ipc'
 
 /** The well-known avenCEO control-identity id for this network (deterministic from
  *  the network seed — every device computes the same one). */
@@ -12,38 +12,38 @@ export async function avenCeoSparkId(): Promise<string> {
 /** Network membership for the invite-only gate: 'owner' | 'member' | 'none'.
  *  A local vault check — the server grants caps; this reads what we hold. */
 export async function avenCeoMembership(): Promise<'owner' | 'member' | 'none'> {
-	return grooveRuntime<'owner' | 'member' | 'none'>('avenCeoMembership', {})
+	return avenDbRuntime<'owner' | 'member' | 'none'>('avenCeoMembership', {})
 }
 
 /** Onboard a member to the avenCEO roster by DID (the inverted invite): grants the
  *  membership bundle — read the roster + write only their own profile row. Owner-only. */
 export async function avenCeoAddMember(signerDid: string): Promise<void> {
-	await grooveRuntime('avenCeoAddMember', { signerDid })
+	await avenDbRuntime('avenCeoAddMember', { signerDid })
 }
 
 /** Self-publish this device's profile into its own avenCEO roster row. */
 export async function avenCeoPublishProfile(accountName: string, deviceLabel: string): Promise<void> {
-	await grooveRuntime('avenCeoPublishProfile', { accountName, deviceLabel })
+	await avenDbRuntime('avenCeoPublishProfile', { accountName, deviceLabel })
 }
 
 /** Create a new user-owned SAFE. `type`: 'human' (a person/persona), 'aven'
  *  (a group/workspace), or 'spark' (a cross-aven company). This device mints its
  *  genesis biscuit (→ owner) + DEK + self-keyshare. Returns the new id. */
 export async function createIdentity(name: string, type: 'human' | 'aven' | 'spark'): Promise<string> {
-	return grooveRuntime<string>('createIdentity', { name, type })
+	return avenDbRuntime<string>('createIdentity', { name, type })
 }
 
-/** Untyped Groove row from IPC — schema lives in Rust (`libs/aven-schema`). */
-export type JazzRow = Record<string, any> & { id: string }
+/** Untyped avenDB row from IPC — schema lives in Rust (`libs/aven-schema`). */
+export type AvenDbRow = Record<string, any> & { id: string }
 
-export type JazzStatusReply = {
+export type AvenDbStatusReply = {
 	ready: boolean
 	tables: string[]
-	session?: JazzSessionReply
+	session?: AvenDbSessionReply
 	message?: string
 }
 
-export type JazzSessionReply = {
+export type AvenDbSessionReply = {
 	signerDid: string
 	signerDidShort: string
 	defaultSparkUrn: string
@@ -51,25 +51,25 @@ export type JazzSessionReply = {
 	relayDid?: string | null
 }
 
-export async function jazzSession(): Promise<JazzSessionReply> {
-	return grooveRuntime<JazzSessionReply>('session', {})
+export async function avendbSession(): Promise<AvenDbSessionReply> {
+	return avenDbRuntime<AvenDbSessionReply>('session', {})
 }
 
-export async function jazzBootstrap(): Promise<JazzStatusReply> {
-	return grooveRuntime<JazzStatusReply>('bootstrap', {})
+export async function avendbBootstrap(): Promise<AvenDbStatusReply> {
+	return avenDbRuntime<AvenDbStatusReply>('bootstrap', {})
 }
 
-export async function jazzStatus(): Promise<JazzStatusReply> {
-	return grooveRuntime<JazzStatusReply>('status', {})
+export async function avenDbStatus(): Promise<AvenDbStatusReply> {
+	return avenDbRuntime<AvenDbStatusReply>('status', {})
 }
 
-/** Re-register allowlisted Hyperswarm peers + Groove sync (safe to call after peer table changes). */
-export type JazzPeerMeshRefreshReply = {
+/** Re-register allowlisted Hyperswarm peers + avenDB sync (safe to call after peer table changes). */
+export type AvenDbPeerMeshRefreshReply = {
 	registeredCount: number
 }
 
-export async function jazzPeerMeshRefresh(): Promise<JazzPeerMeshRefreshReply> {
-	return grooveRuntime<JazzPeerMeshRefreshReply>('peerMeshRefresh', {})
+export async function avendbPeerMeshRefresh(): Promise<AvenDbPeerMeshRefreshReply> {
+	return avenDbRuntime<AvenDbPeerMeshRefreshReply>('peerMeshRefresh', {})
 }
 
 /** Add a network peer as identity admin (biscuit + DEK keyshare); peer must be in My Network allowlist. */
@@ -77,7 +77,7 @@ export async function sparkAdminAdd(payload: {
 	identityId: string
 	signerDid: string
 }): Promise<void> {
-	await grooveRuntime('sparkAdminAdd', {
+	await avenDbRuntime('sparkAdminAdd', {
 		identityId: payload.identityId,
 		signerDid: payload.signerDid,
 	})
@@ -92,7 +92,7 @@ export async function sparkReplicateAdd(payload: {
 	identityId: string
 	signerDid: string
 }): Promise<void> {
-	await grooveRuntime('sparkReplicateAdd', {
+	await avenDbRuntime('sparkReplicateAdd', {
 		identityId: payload.identityId,
 		signerDid: payload.signerDid,
 	})
@@ -109,7 +109,7 @@ export async function sparkReaderAdd(payload: {
 	identityId: string
 	signerDid: string
 }): Promise<void> {
-	await grooveRuntime('sparkReaderAdd', {
+	await avenDbRuntime('sparkReaderAdd', {
 		identityId: payload.identityId,
 		signerDid: payload.signerDid,
 	})
@@ -137,14 +137,14 @@ export type IdentityAdminListReply = {
 }
 
 export async function sparkAdminList(identityId: string): Promise<IdentityAdminListReply> {
-	return grooveRuntime<IdentityAdminListReply>('sparkAdminList', { identityId })
+	return avenDbRuntime<IdentityAdminListReply>('sparkAdminList', { identityId })
 }
 
 export async function sparkAdminRevoke(_payload: {
 	identityId: string
 	signerDid: string
 }): Promise<void> {
-	await grooveRuntime('sparkAdminRevoke', _payload)
+	await avenDbRuntime('sparkAdminRevoke', _payload)
 }
 
 /** A trusted peer device (My Network) — flat list, no humans coupling. */
@@ -159,72 +159,72 @@ export type PeerRow = {
 
 /** List trusted peers (devices I'm P2P-connected with). */
 export async function peerList(): Promise<PeerRow[]> {
-	return grooveRuntime<PeerRow[]>('peerList', {})
+	return avenDbRuntime<PeerRow[]>('peerList', {})
 }
 
 /** First contact: add a trusted peer by DID (dev paste-DID shortcut). */
 export async function peerAdd(payload: { signerDid: string; label?: string }): Promise<void> {
-	await grooveRuntime('peerAdd', { signerDid: payload.signerDid, label: payload.label ?? '' })
+	await avenDbRuntime('peerAdd', { signerDid: payload.signerDid, label: payload.label ?? '' })
 }
 
 /** Remove a trusted peer from My Network. */
 export async function peerForget(signerDid: string): Promise<void> {
-	await grooveRuntime('peerRevoke', { signerDid })
+	await avenDbRuntime('peerRevoke', { signerDid })
 }
 
 /** Result of explorer list — rows omit unauthorized biscuit/identity gates; count is diagnostics-only. */
-export type JazzExplorerListReply = {
-	rows: JazzRow[]
+export type AvenDbExplorerListReply = {
+	rows: AvenDbRow[]
 	skippedUnauthorizedRows: number
 }
 
-export async function jazzExplorerList(table: string): Promise<JazzExplorerListReply> {
-	return grooveRuntime<JazzExplorerListReply>('explorerList', { table })
+export async function avenDbExplorerList(table: string): Promise<AvenDbExplorerListReply> {
+	return avenDbRuntime<AvenDbExplorerListReply>('explorerList', { table })
 }
 
 /**
- * Ref-counted subscribe on the Groove actor; row snapshots arrive on `avenos:runtime`
+ * Ref-counted subscribe on the avenDB actor; row snapshots arrive on `avenos:runtime`
  * `{ kind: 'table', table, rows }` → [`getTableRowsStore`].
  */
 async function subscribeToTableSnapshot(
 	table: string,
-	handler: (rows: JazzRow[]) => void,
+	handler: (rows: AvenDbRow[]) => void,
 ): Promise<UnlistenFn> {
 	const st = getTableRowsStore(table)
-	const un = st.subscribe((rows) => handler(rows as JazzRow[]))
-	await grooveRuntime('subscribe', { table })
+	const un = st.subscribe((rows) => handler(rows as AvenDbRow[]))
+	await avenDbRuntime('subscribe', { table })
 	return () => {
 		un()
-		void grooveRuntime('unsubscribe', { table })
+		void avenDbRuntime('unsubscribe', { table })
 	}
 }
 
-export async function jazzExplorerSubscribe(
+export async function avenDbExplorerSubscribe(
 	table: string,
-	handler: (rows: JazzRow[]) => void,
+	handler: (rows: AvenDbRow[]) => void,
 ): Promise<UnlistenFn> {
 	return subscribeToTableSnapshot(table, handler)
 }
 
 /** Table CRUD over JSON IPC (`jazz-tools` runs in the Rust shell only). */
-export function jazzTable(table: string) {
+export function avenDbTable(table: string) {
 	return {
-		async list(): Promise<JazzRow[]> {
-			return grooveRuntime<JazzRow[]>('list', { table })
+		async list(): Promise<AvenDbRow[]> {
+			return avenDbRuntime<AvenDbRow[]>('list', { table })
 		},
-		async get(id: string): Promise<JazzRow> {
-			return grooveRuntime<JazzRow>('get', { table, id })
+		async get(id: string): Promise<AvenDbRow> {
+			return avenDbRuntime<AvenDbRow>('get', { table, id })
 		},
-		async create(values: Record<string, unknown>): Promise<JazzRow> {
-			return grooveRuntime<JazzRow>('create', { table, values })
+		async create(values: Record<string, unknown>): Promise<AvenDbRow> {
+			return avenDbRuntime<AvenDbRow>('create', { table, values })
 		},
-		async update(id: string, patch: Record<string, unknown>): Promise<JazzRow> {
-			return grooveRuntime<JazzRow>('update', { table, id, patch })
+		async update(id: string, patch: Record<string, unknown>): Promise<AvenDbRow> {
+			return avenDbRuntime<AvenDbRow>('update', { table, id, patch })
 		},
 		async delete(id: string): Promise<void> {
-			await grooveRuntime('delete', { table, id })
+			await avenDbRuntime('delete', { table, id })
 		},
-		async subscribe(handler: (rows: JazzRow[]) => void): Promise<UnlistenFn> {
+		async subscribe(handler: (rows: AvenDbRow[]) => void): Promise<UnlistenFn> {
 			return subscribeToTableSnapshot(table, handler)
 		},
 	}

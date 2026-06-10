@@ -20,7 +20,7 @@ import {
 	secondsFromElapsedMs
 } from '$lib/intents/types'
 import { HITL_VIEW_IDS, type VibeViewId } from '$lib/aven-ui/vibe-views'
-import { persistIntentFiles } from '$lib/jazz/intent-files'
+import { persistIntentFiles } from '$lib/avendb/intent-files'
 import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
 
 /**
@@ -729,7 +729,7 @@ async function handleComposerSubmit(message: string, files: File[]) {
 	selectedId = row.id
 	const { stored, errors } = await persistIntentFiles(row.id, files)
 	if (errors.length) console.warn('[intent files]', errors.join('; '))
-	if (stored > 0) console.info(`[intent files] stored ${stored} file(s) in Groove`)
+	if (stored > 0) console.info(`[intent files] stored ${stored} file(s) in avenDB`)
 }
 
 /**

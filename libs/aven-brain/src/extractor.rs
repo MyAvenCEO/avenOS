@@ -17,7 +17,7 @@
 //! plaintext only to an attested TEE / ZDR endpoint — there is deliberately no silent
 //! non-attested fallback.
 
-use groove::ObjectId;
+use aven_db::ObjectId;
 
 /// One memory handed to the extractor.
 #[derive(Clone, Debug)]

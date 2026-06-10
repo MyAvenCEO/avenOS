@@ -2,7 +2,7 @@
 //!
 //! One process: an HTTP + WebSocket server on :8080 (TLS terminated at the Sprites
 //! proxy) serving `GET /health` and `GET /sync` — the nonce-bound did:key sync
-//! transport (`ws_server`) — feeding a full groove engine on **RocksDB** with the
+//! transport (`ws_server`) — feeding a full avenDB engine on **RocksDB** with the
 //! real schema. A peer holding a `replicate` grant ships this server its identity's
 //! encrypted batches; it stores them durably and forwards them, but holds **no
 //! keyshares**, so everything it mirrors stays ciphertext it cannot decrypt.
@@ -23,7 +23,7 @@ use axum::response::Response;
 use axum::routing::get;
 use axum::Router;
 use ed25519_dalek::SigningKey;
-use groove::{AppContext, AppId, EditSigner, JazzClient, ObjectId, PeerId};
+use aven_db::{AppContext, AppId, EditSigner, AvenDbClient, ObjectId, PeerId};
 use tokio::signal::unix::{signal, SignalKind};
 
 use ws_server::WsServerListener;
@@ -122,40 +122,40 @@ async fn sync_handler(
 /// permissive: the relay stores & forwards ciphertext for everyone.
 struct ServerApplyGate;
 
-impl groove::CapabilityResolver for ServerApplyGate {
+impl aven_db::CapabilityResolver for ServerApplyGate {
     fn may_sync(
         &self,
-        _subject: &groove::SyncTargetId,
-        _op: groove::AccOp,
-        _res: &groove::ResourceCoord,
-    ) -> groove::CapDecision {
-        groove::CapDecision::Allow
+        _subject: &aven_db::SyncTargetId,
+        _op: aven_db::AccOp,
+        _res: &aven_db::ResourceCoord,
+    ) -> aven_db::CapDecision {
+        aven_db::CapDecision::Allow
     }
 
     fn verify_on_apply(
         &self,
-        _subject: &groove::SyncTargetId,
-        _op: groove::AccOp,
-        res: &groove::ResourceCoord,
+        _subject: &aven_db::SyncTargetId,
+        _op: aven_db::AccOp,
+        res: &aven_db::ResourceCoord,
         digest: &[u8; 32],
         proof: Option<&[u8]>,
         edit_sig: Option<&[u8]>,
-    ) -> groove::CapDecision {
+    ) -> aven_db::CapDecision {
         let Some(proof) = proof else {
-            return groove::CapDecision::Allow;
+            return aven_db::CapDecision::Allow;
         };
         let Ok(meta) = std::str::from_utf8(proof) else {
-            return groove::CapDecision::DenyPermanent;
+            return aven_db::CapDecision::DenyPermanent;
         };
         let binding = match aven_caps::ownership::OwnerBinding::from_meta_str(meta) {
             Ok(b) => b,
-            Err(_) => return groove::CapDecision::DenyPermanent,
+            Err(_) => return aven_db::CapDecision::DenyPermanent,
         };
         if binding.value_id != *res.row_id.uuid() {
-            return groove::CapDecision::DenyPermanent;
+            return aven_db::CapDecision::DenyPermanent;
         }
         if aven_caps::ownership::verify_owner_binding(&binding).is_err() {
-            return groove::CapDecision::DenyPermanent;
+            return aven_db::CapDecision::DenyPermanent;
         }
         // Content integrity at the relay (audit #29): a bound (identity-scoped) row MUST
         // carry an edit-signature that binds the digest the relay itself computed over
@@ -163,18 +163,18 @@ impl groove::CapabilityResolver for ServerApplyGate {
         // membership, but it CAN reject a row whose `data`/keyshare columns were tampered in
         // flight — before storing or forwarding it. Missing/invalid edit-sig → reject.
         let Some(edit_sig) = edit_sig else {
-            return groove::CapDecision::DenyPermanent;
+            return aven_db::CapDecision::DenyPermanent;
         };
         let Ok(es_str) = std::str::from_utf8(edit_sig) else {
-            return groove::CapDecision::DenyPermanent;
+            return aven_db::CapDecision::DenyPermanent;
         };
         let es = match aven_caps::ownership::EditSignature::from_meta_str(es_str) {
             Ok(e) => e,
-            Err(_) => return groove::CapDecision::DenyPermanent,
+            Err(_) => return aven_db::CapDecision::DenyPermanent,
         };
         match aven_caps::ownership::verify_signed_batch(&es, digest) {
-            Ok(()) => groove::CapDecision::Allow,
-            Err(_) => groove::CapDecision::DenyPermanent,
+            Ok(()) => aven_db::CapDecision::Allow,
+            Err(_) => aven_db::CapDecision::DenyPermanent,
         }
     }
 
@@ -191,7 +191,7 @@ impl groove::CapabilityResolver for ServerApplyGate {
 }
 
 /// Server-side author **edit-signer** — the aven-node counterpart of the app's
-/// `AppEditSigner`. Installed via [`groove::JazzClient::set_edit_signer`] so every row the
+/// `AppEditSigner`. Installed via [`aven_db::AvenDbClient::set_edit_signer`] so every row the
 /// server authors (the avenCEO genesis in S.3 and the auto-admin grant in S.4) carries a
 /// valid `_edit_sig` signed by the server identity. Without it, server-authored control
 /// rows reach each peer with no edit-signature and die at the fail-closed `verify_on_apply`
@@ -221,7 +221,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = Config::from_env();
     let identity = load_identity(&cfg);
     let server_peer = PeerId(identity.verifying_key().to_bytes());
-    let server_did = groove::did_key::signer_did_from_ed25519(&server_peer.0)
+    let server_did = aven_db::did_key::signer_did_from_ed25519(&server_peer.0)
         .map_err(|e| format!("server did: {e}"))?;
     tracing::info!(%server_did, "aven-node identity");
 
@@ -262,8 +262,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // it is ever unreadable (a hard crash that left it unfinalized) reset and re-open
     // rather than crash-loop; missing batches re-sync from peers. The graceful
     // shutdown below makes this path rare.
-    let engine: Arc<JazzClient> =
-        match JazzClient::connect_with_sync_transport(ctx.clone(), listener.clone(), None).await {
+    let engine: Arc<AvenDbClient> =
+        match AvenDbClient::connect_with_sync_transport(ctx.clone(), listener.clone(), None).await {
             Ok(engine) => Arc::new(engine),
             Err(e) if store_is_corrupt(&e) => {
                 tracing::warn!(
@@ -272,7 +272,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "blind replica store unreadable — resetting and re-pulling from peers"
                 );
                 let _ = std::fs::remove_dir_all(&ctx.data_dir);
-                Arc::new(JazzClient::connect_with_sync_transport(ctx, listener.clone(), None).await?)
+                Arc::new(AvenDbClient::connect_with_sync_transport(ctx, listener.clone(), None).await?)
             }
             Err(e) => return Err(e.into()),
         };

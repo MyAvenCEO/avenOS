@@ -4,9 +4,9 @@
 //! and depend only on `BatchId`, so the convergence guarantees are provable with
 //! zero networking and zero heavy deps.
 
-use groove::object::ObjectId;
-use groove::row_histories::BatchId;
-use groove::{FrontierDag, frontier_diff, heads_for};
+use aven_db::object::ObjectId;
+use aven_db::row_histories::BatchId;
+use aven_db::{FrontierDag, frontier_diff, heads_for};
 
 fn bid(n: u8) -> BatchId {
     let mut bytes = [0u8; 16];

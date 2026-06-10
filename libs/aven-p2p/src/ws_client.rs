@@ -12,14 +12,14 @@
 //!
 //! Wire: handshake as three WS **text** messages (`ServerHello`, `ClientAuth`,
 //! `AuthResult` as JSON); sync frames as WS **binary** messages, each one a
-//! `groove::encode_length_prefixed` frame.
+//! `aven_db::encode_length_prefixed` frame.
 
 use async_trait::async_trait;
 use ed25519_dalek::SigningKey;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
-use groove::{
-    decode_length_prefixed, encode_length_prefixed, InboxEntry, JazzError, PeerId, Source,
+use aven_db::{
+    decode_length_prefixed, encode_length_prefixed, InboxEntry, AvenDbError, PeerId, Source,
     SyncPayload, SyncTargetId, SyncTransport,
 };
 use std::sync::Arc;
@@ -81,7 +81,7 @@ impl WsClientTransport {
 
         // did:key challenge over WS messages (nonce-bound; cb = "").
         let hello: ServerHello = recv_json(&mut stream).await?;
-        let did = groove::did_key::signer_did_from_ed25519(&signing_key.verifying_key().to_bytes())
+        let did = aven_db::did_key::signer_did_from_ed25519(&signing_key.verifying_key().to_bytes())
             .map_err(|e| P2pError::Handshake(format!("encode our did: {e}")))?;
         // Mutual handshake (audit #21): TLS terminates at the proxy here, so we fold in a
         // fresh client-chosen nonce and require the server to attest over it below — a relay
@@ -109,7 +109,7 @@ impl WsClientTransport {
             .server_did
             .ok_or_else(|| P2pError::Handshake("server did missing".into()))?;
         let server_peer = PeerId(
-            groove::did_key::ed25519_public_from_signer_did(&server_did)
+            aven_db::did_key::ed25519_public_from_signer_did(&server_did)
                 .map_err(|e| P2pError::Handshake(format!("decode server did: {e}")))?,
         );
         // Verify the server's attestation over the nonces WE saw (our client nonce + the
@@ -204,7 +204,7 @@ impl WsClientTransport {
     }
 
     /// The server's authenticated `PeerId` — register it via
-    /// `JazzClient::register_peer_sync_client` before sync flows.
+    /// `AvenDbClient::register_peer_sync_client` before sync flows.
     pub fn server_peer_id(&self) -> PeerId {
         self.server_peer
     }
@@ -218,12 +218,12 @@ impl WsClientTransport {
 
 #[async_trait]
 impl SyncTransport for WsClientTransport {
-    async fn send_to(&self, target: SyncTargetId, payload: SyncPayload) -> groove::Result<()> {
-        let bytes = encode_length_prefixed(target, &payload).map_err(JazzError::Sync)?;
+    async fn send_to(&self, target: SyncTargetId, payload: SyncPayload) -> aven_db::Result<()> {
+        let bytes = encode_length_prefixed(target, &payload).map_err(AvenDbError::Sync)?;
         self.out_tx
             .send(Message::Binary(bytes.into()))
             .await
-            .map_err(|e| JazzError::Sync(format!("ws transport send: {e}")))?;
+            .map_err(|e| AvenDbError::Sync(format!("ws transport send: {e}")))?;
         Ok(())
     }
 
