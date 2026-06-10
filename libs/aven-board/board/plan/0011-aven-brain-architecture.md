@@ -1,3 +1,13 @@
+---
+title: aven-brain — architecture & execution plan (v5.2)
+summary: The SSOT for aven-brain — three primitives (memory · entity · link with note/claim/bond classes) over typed artifact tables, CRDT-synced sealed rows with an engine unseal-on-scan seam, per-table ingestion adapters, brain-assembled LLM context (forever talk), per-message ContextTrace in a wide right aside, and a fully dynamic DB viewer. Phased roadmap E0–E7; TEE parked.
+owner: agent
+created: 2026-06-06
+updated: 2026-06-10
+tags: [aven-brain, memory, architecture, context, talk, db-viewer]
+goal: "Per §8: E0 — an existing vault and a fresh vault both boot after the manifest change (migration lens applies, no wipe in logs); E1 — `cargo test -p aven-brain` exits 0 on the 3-table schema incl. registry tests; E4–E6 — a talk message produces a context_traces row rendered in the right aside and `bun run check` exits 0."
+---
+
 # aven-brain — Architecture & Execution Plan (v5.2)
 
 > **The one plan.** Architecture + execution roadmap for making aven-brain the per-identity
@@ -83,7 +93,7 @@ memories  owner Uuid · content Text · embedding Vector{768}
           stream Text · author_role Enum[user,agent,system]            ← artifact columns
           source Text (artifact row ref) · seq Int · line_start/end Int
           content_date Timestamp · content_hash Bytea · source_version BigInt
-          normalize_version Int · created_at Timestamp
+          normalize_version Int
           veracity Enum[stated,inferred,imported,tool,unknown] · superseded_by →memories
 
 entities  owner Uuid · name Text · kind Text (person/agent/document/topic/project/thing)
@@ -93,13 +103,30 @@ entities  owner Uuid · name Text · kind Text (person/agent/document/topic/proj
 links     owner Uuid · from Uuid · to Uuid · kind Text · class Enum[note,claim,bond]
           valid_from Timestamp? · valid_to Timestamp? · confidence Double?     ← claim
           strength Double? · stability Double? · access_count Int? · last_access?  ← bond
-          source_memory →memories? · created_at Timestamp
+          source_memory →memories?
 ```
 
 Indexes: `memories(owner, stream, author_role)`, `memories(source)`, `memories(content_hash)`;
 `entities(owner, name, kind)`; `links(owner, from, kind)`, `links(owner, to, kind)`.
 `superseded_by` stays a column on memories (the hot path filters `IS NULL` cheaply); summary
 lineage is a *note* link `summary —summarizes→ source_memory`.
+
+**Engine built-ins we lean on — don't redo on top (verified in `libs/aven-db`):**
+
+| Built-in | Where | What it gives us |
+|---|---|---|
+| **`BatchId` = UUIDv7** | `row_histories/types.rs:30` | every write batch embeds a ms timestamp and is `Ord` — LWW winner resolution is already time-ordered |
+| **`RowProvenance { created_by, created_at, updated_by, updated_at }`** | `metadata.rs:127` | per-row creation/update time + author principal, maintained by the engine on every insert/update |
+| **row digest (`Digest32`)** | `row_histories/codecs.rs::compute_row_digest` | the per-version digest OwnerBinding/EditSignature bind to — authorship is already cryptographic |
+
+Consequences: **no `created_at`/`updated_at` columns on brain tables** — E1 surfaces the
+engine's `RowProvenance` as queryable virtual columns (`_created_at`, `_updated_at`); age-weights
+and the working window read those. Two are *not* replaceable and stay: `content_hash` (a
+plaintext-content-only dedup key for "does this exact text exist" lookups — the engine's row
+digest covers the whole sealed row and changes on any column update, so it can't serve content
+dedup) and `content_date` (domain time: when the content *happened*, not when it was written).
+`author_role` stays as a cheap typed filter, but is verifiable against the engine's
+`created_by`/EditSignature.
 
 ### 2.2 The link kind registry (law 6, enforced)
 
@@ -188,7 +215,9 @@ Kept out of the message row (whose `body` carries the tool-call envelope).
 
 No separate mentions/facts/relations tables (link kinds) · no standalone "provenance" concept
 (it's the artifact columns) · no working/episodic split (artifact columns + `summarizes` links
-do it) · no `tier` column (age-weights are pure `f(created_at)`) · no canonical table (L0 = the
+do it) · no `created_at`/`updated_at` columns (engine `RowProvenance` + UUIDv7 `BatchId` supply
+`_created_at`/`_updated_at`, §2.1) · no `tier` column (age-weights are pure `f(_created_at)`) ·
+no content-hash duplication of the engine row digest (different jobs, §2.1) · no canonical table (L0 = the
 self entity's compiled-truth card) · no scratchpad/banks (identities are the isolation) · no
 free-form labels (typed artifact columns only) · no eager artifact-entity derivation (lazy,
 §2.3) · no 13-type taxonomy (small decay classes from typed columns).
@@ -378,7 +407,7 @@ Each phase independently shippable, with files + verification:
 | # | Phase | Files (key) | Verify |
 |---|---|---|---|
 | **E0** | **Manifest + migration**: `vector` type, `memories`/`entities`/`links` (+owner), `context_traces`; snapshot + registry + embedded snapshot **in the same commit** | `libs/aven-schema/schema.manifest.json`, `migrations/registry.json` + snapshot, `app/src-tauri/src/schema_manifest.rs` | existing vault boots (lens applies, no wipe); fresh vault boots; tables listed by `jazzStatus()` |
-| **E1** | **Engine seam + 3-table rework**: unseal-on-scan transform for `nearest`/`text_search`; aven-brain migrates its 5-table schema to memory/entity/link + the kind→class registry (mention/fact/bond APIs unchanged in name, free-label param removed, scope = `Filter { stream, author_role, source }` over the artifact columns); `open(identity)` over the shared store; `remember_with`, `search_traced` (hits carry via/rank origin), `assemble_context`; rewire KG/dreaming/cards to links | `libs/aven-db` executor/scan path, `libs/aven-brain/src/{schema,brain}.rs` | `cargo test -p aven-brain` (13 tests migrated + registry tests: claim-close, note-idempotence, bond-potentiate); sealed fixture: search correct, no plaintext at rest |
+| **E1** | **Engine seam + 3-table rework**: unseal-on-scan transform for `nearest`/`text_search`; aven-brain migrates its 5-table schema to memory/entity/link + the kind→class registry (mention/fact/bond APIs unchanged in name, free-label param removed, scope = `Filter { stream, author_role, source }` over the artifact columns); `open(identity)` over the shared store; **surface `_created_at`/`_updated_at`** (engine `RowProvenance`/UUIDv7 `BatchId`) as queryable columns; `remember_with`, `search_traced` (hits carry via/rank origin), `assemble_context`; rewire KG/dreaming/cards to links | `libs/aven-db` executor/scan path, `libs/aven-brain/src/{schema,brain}.rs` | `cargo test -p aven-brain` (13 tests migrated + registry tests: claim-close, note-idempotence, bond-potentiate); sealed fixture: search correct, no plaintext at rest |
 | **E2** | **App runtime**: brain module + Tauri commands `brain_status/ingest/search/entities/entity_card/assemble_context/backfill/dream` (asr/llm/tts pattern) + TS wrapper | new `app/src-tauri/src/brain.rs`, `app/src-tauri/src/lib.rs` (manage/handler/exit-drain), new `app/src/lib/brain/api.ts` | devtools: ingest → search round-trip on a real identity |
 | **E3** | **Ingestion**: the adapter registry (§2.4) + first adapters — messages (talk hooks for user/agent turns), files (markdown/text chunking; PDF next) + document entity upsert; todos adapter (event memories) next; backfill of pre-brain history; **drag-drop fix** | `identity-agent.svelte.ts`, `intent-files.ts`, `app/src/routes/+layout.svelte` | drop a .md on talk → stays on screen, chunks in `memories` with `source` = file row id + document entity with mentions; backfill idempotent (2nd run dedups all) |
 | **E4** | **Context manager**: `assemble_context` wiring + `context_traces` writes + fallback path | `identity-agent.svelte.ts` | reply still streams with brain off (fallback); trace row per human message; prompt contains L0/L1/WW/recall blocks under budget |
@@ -467,3 +496,16 @@ The attested-TEE fact extractor (GLM-5.3 on Phala RedPill; trait seam `extractor
 impl) is **parked** — see `board/done/0010-aven-brain-execution-plan.md` §6b for the full design
 (attest-or-refuse, attestation digests on extracted claims, phases P1–P4). Nothing in E0–E7 depends on it; the
 deterministic pass is load-bearing without it. Revisit after E7.
+
+## Progress log
+
+Newest entry first.
+
+- `2026-06-10` — Moved into the board as `plan/0011` (was `docs/aven-brain-architecture.md`).
+  v5.2: provenance folded into artifact. v5.1: artifacts generalization + per-table ingestion
+  adapters. v5: data model consolidated to memory · entity · link (note/claim/bond registry).
+  v4: forever-talk context manager, ContextTrace + right aside, dynamic DB viewer, synced sealed
+  brain tables + engine unseal seam, TEE parked.
+- `2026-06-10` — v2–v3: Mnemosyne v3.5.0 full source audit merged with the MemPalace/gBrain
+  as-built plan (`done/0010`); first-principles synthesis.
+- `2026-06-06` — Originated as `docs/aven-brain-execution-plan.md` (MemPalace deep-dive).
