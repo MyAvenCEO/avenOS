@@ -8,7 +8,6 @@ Default permissions for tauri-plugin-self
 - `allow-public-key`
 - `allow-unlock`
 - `allow-peer-status`
-- `allow-device-signer-did`
 - `allow-signer-did`
 - `allow-signing-public-key`
 - `allow-lock`
@@ -53,32 +52,6 @@ Enables the active_identity command without any pre-configured scope.
 <td>
 
 Denies the active_identity command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`self:allow-device-signer-did`
-
-</td>
-<td>
-
-Enables the device_signer_did command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`self:deny-device-signer-did`
-
-</td>
-<td>
-
-Denies the device_signer_did command without any pre-configured scope.
 
 </td>
 </tr>

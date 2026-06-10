@@ -1247,14 +1247,14 @@ mod tests {
 		let sid = uuid::Uuid::new_v4();
 		let issuer_pk = server.biscuit_kp.public();
 
-		let genesis = mint_genesis_identity(&server, sid).unwrap();
+		let genesis = mint_safe_genesis(&server, sid).unwrap();
 
 		// aven-node adds A (delegating key = the server/root key).
 		let chain1 = attenuate_add_owner_third_party(
 			&server.biscuit_kp,
 			&genesis,
 			sid,
-			a.peer_did.as_str(),
+			a.signer_did.as_str(),
 		)
 		.unwrap();
 		let b64_1 = URL_SAFE_NO_PAD.encode(chain1.to_vec().unwrap());
@@ -1266,15 +1266,15 @@ mod tests {
 			&a.biscuit_kp,
 			&chain1_rt,
 			sid,
-			b.peer_did.as_str(),
+			b.signer_did.as_str(),
 		)
 		.unwrap();
 		let b64_2 = URL_SAFE_NO_PAD.encode(chain2.to_vec().unwrap());
 		let chain2_rt = biscuit_from_storage(&b64_2, issuer_pk)
 			.expect("2-level (stacked) grant chain must re-verify against root");
 
-		assert!(identity_peer_is_owner(&chain2_rt, sid, a.peer_did.as_str()).unwrap());
-		assert!(identity_peer_is_owner(&chain2_rt, sid, b.peer_did.as_str()).unwrap());
+		assert!(identity_peer_is_owner(&chain2_rt, sid, a.signer_did.as_str()).unwrap());
+		assert!(identity_peer_is_owner(&chain2_rt, sid, b.signer_did.as_str()).unwrap());
 	}
 
 	#[test]
@@ -1357,30 +1357,30 @@ mod tests {
 		let sid = uuid::Uuid::new_v4();
 		let row = uuid::Uuid::from_u128(0x4242);
 
-		let genesis = mint_genesis_identity(&owner, sid).unwrap();
+		let genesis = mint_safe_genesis(&owner, sid).unwrap();
 		// Granular write-only grant over one user-data row (the destructive-delete target).
-		let prefix = format!("identity:{sid}:todos:{row}");
+		let prefix = format!("safe:{sid}:todos:{row}");
 		let chain = attenuate_add_grant_third_party(
 			&owner.biscuit_kp,
 			&genesis,
-			&writer.peer_did,
+			&writer.signer_did,
 			"write",
 			&prefix,
 		)
 		.unwrap();
 		let mut v = owner;
-		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
+		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
 
 		// The write-only peer may Write its granted row…
-		authorize(&v, sid, AccOp::Write, "todos", Some(row), &writer.peer_did).unwrap();
+		authorize(&v, sid, AccOp::Write, "todos", Some(row), &writer.signer_did).unwrap();
 		// …but is DENIED Delete — it cannot self-author the hard-delete the inbox now gates
 		// under `AccOp::Delete`.
 		assert!(
-			authorize(&v, sid, AccOp::Delete, "todos", Some(row), &writer.peer_did).is_err(),
+			authorize(&v, sid, AccOp::Delete, "todos", Some(row), &writer.signer_did).is_err(),
 			"a write-only granular grant must NOT confer Delete"
 		);
 		// The owner retains Delete (full member); the granular grant doesn't shadow ownership.
-		authorize(&v, sid, AccOp::Delete, "todos", Some(row), &v.peer_did.clone()).unwrap();
+		authorize(&v, sid, AccOp::Delete, "todos", Some(row), &v.signer_did.clone()).unwrap();
 	}
 
 	#[test]

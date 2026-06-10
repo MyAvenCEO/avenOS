@@ -335,7 +335,7 @@ async fn refresh_downstream_controller_copies(
 		.collect();
 	for x in downstream {
 		if let Err(e) = upsert_controller_copy_row(client, shell, x, safe, new_chain_b64, "owner", None).await {
-			log::warn!(target: "avenos::jazz", "controller copy refresh {safe} \u2192 {x}: {e}");
+			log::warn!(target: "avenos::jazz", "controller copy refresh {safe} → {x}: {e}");
 		}
 	}
 	Ok(())
@@ -453,13 +453,13 @@ async fn enforce_member_type_rule(
 			let want = if target_type == "aven" { "human" } else { "aven" };
 			let Some(member_id) = crate::identity_acc::resolve_safe_did(member_did) else {
 				return Err(format!(
-					"a {target_type} SAFE admits {want} SAFE DIDs (did:safe:\u2026) \u2014 signers join through a {want} SAFE"
+					"a {target_type} SAFE admits {want} SAFE DIDs (did:safe:…) — signers join through a {want} SAFE"
 				));
 			};
 			let member_type = safe_type_of(client, member_id).await?;
 			if member_type.as_deref() != Some(want) {
 				return Err(format!(
-					"a {target_type} SAFE admits {want} SAFEs only \u2014 {member_did} is {}",
+					"a {target_type} SAFE admits {want} SAFEs only — {member_did} is {}",
 					member_type.as_deref().unwrap_or("unknown (no local safes row)")
 				));
 			}
@@ -468,7 +468,7 @@ async fn enforce_member_type_rule(
 		_ => {
 			if member_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX) {
 				return Err(format!(
-					"a {target_type} SAFE admits signer DIDs (did:key:\u2026) only \u2014 a SAFE cannot be a member of a {target_type} SAFE"
+					"a {target_type} SAFE admits signer DIDs (did:key:…) only — a SAFE cannot be a member of a {target_type} SAFE"
 				));
 			}
 			Ok(())
@@ -954,12 +954,12 @@ pub(crate) async fn groove_ipc_create_identity(
 		"aven" => Some(
 			find_controlled_safe_of_type(client.as_ref(), shell, "human")
 				.await?
-				.ok_or("create a Human SAFE first \u2014 an Aven SAFE is controlled by a Human SAFE")?,
+				.ok_or("create a Human SAFE first — an Aven SAFE is controlled by a Human SAFE")?,
 		),
 		"spark" => Some(
 			find_controlled_safe_of_type(client.as_ref(), shell, "aven")
 				.await?
-				.ok_or("create an Aven SAFE first \u2014 a Spark SAFE is controlled by an Aven SAFE")?,
+				.ok_or("create an Aven SAFE first — a Spark SAFE is controlled by an Aven SAFE")?,
 		),
 		_ => None,
 	};
