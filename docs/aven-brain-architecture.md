@@ -45,8 +45,8 @@
 | Term | Role |
 |---|---|
 | **brain** | the memory subsystem of one identity (rows scoped by `owner`) |
-| **memory** | atomic unit: verbatim content + embedding + typed scope + veracity + provenance |
-| **scope** | typed, indexed columns — `stream` (surface), `author_role` (user/agent/system), `source` (origin row ref); the cheap deterministic filters |
+| **memory** | atomic unit: verbatim content + embedding + provenance + veracity |
+| **provenance** | typed, indexed columns recording where a memory came from — `stream` (surface), `author_role` (user/agent/system), `source` (origin row ref), `seq`/`line_start/end` (position within it), `content_date`; doubles as the cheap deterministic recall filter |
 | **entity** | named node (person/project/topic); the semantic graph primitive |
 | **mention** | memory→entity edge (aboutness); append-only |
 | **fact** | typed temporal claim between entities; validity window + confidence + veracity |
@@ -103,10 +103,36 @@ snapshot broadcast.
 
 ### 2.4 What we deliberately do NOT add
 
-No working/episodic table split (typed scope columns + `summary_of` do it) · no `tier` column
+No working/episodic table split (provenance columns + `summary_of` do it) · no `tier` column
 (age-weights are pure `f(created_at)`) · no canonical table (L0 = the **self entity's**
 compiled-truth card) · no scratchpad/banks (identities are the isolation) · no 13-type taxonomy
 (small decay classes derived from the typed columns by the deterministic pass).
+
+### 2.5 Provenance is the spine; entities are typed refs to real tables
+
+Provenance and entities are two kinds of truth and are never merged (law 6, one level up):
+
+- **Provenance** = facts about the row itself — exactly one per memory, total, known with
+  certainty at write time, indexed scalar columns. The recall **hot path** filters on these
+  (no joins) before any ranking or unsealing.
+- **Entities** = facts about the world — many per memory, extracted, fallible, growing; the
+  enrichment layer (cards, graph hops, "about X"). Never on the hot path.
+
+**The rule that connects them:** typed entities are **derived deterministically from
+provenance** — and an entity's `kind` references an **actual aven-db schema table**, with the row
+ref carried in `properties` as `{ "ref_table": "<table>", "ref_id": "<row id>" }`:
+
+| Entity `kind` | References (actual table) | Created by (zero-LLM, on write) |
+|---|---|---|
+| `person` | `identities` row (the owner) | first ingest for an identity — this **is** the self entity whose compiled-truth card is L0 |
+| `agent` | `identities` row / agent DID | first agent reply |
+| `document` | `files` row | every file drop — the document becomes an entity with its own compiled-truth card + timeline; all its chunks `mention` it |
+| `topic` / `project` / `thing` | — (world knowledge, no table ref) | wikilink/regex extraction |
+
+Derivation is deterministic (same input → same entity on every device → clean CRDT merges;
+duplicates converge via dreaming's entity-merge). The DB viewer renders ref-bearing entities as
+clickable links to the referenced row, and entity cards link back the other way — so every typed
+entity is one click from the real schema row it stands for, and vice versa.
 
 ---
 
@@ -145,8 +171,10 @@ talk loop** (fire-and-forget, logged, idempotent).
    (base64 `content`, via `persistSparkFiles`) → brain pipeline: **extract text** (markdown/text
    directly; PDF extraction next) → **chunk ≈800 chars / 80 overlap** → embed → one `memories`
    row per chunk with provenance (`source` = file row id, `seq`, `line_start/end`,
-   `stream='talk'`, `author_role='user'`). Bytea originals are never searched directly — chunks
-   are; citations link back to the file + line range via `source`.
+   `stream='talk'`, `author_role='user'`), and **upserts a `kind: document` entity** (ref = the
+   `files` row, §2.5) that every chunk mentions — the document gets its own compiled-truth card
+   + timeline. Bytea originals are never searched directly — chunks are; citations link back to
+   the file + line range via `source`.
 4. **Deterministic graph on write** ✅: `[[wikilinks]]` + regex pass (entity patterns +
    fuzzy-merge ≥0.8 + stop-words; SPO patterns `is/has/uses/works at` conf 0.6–0.7, ≤5/memory,
    ≤4096-char input; temporal markers) → entities + mentions + relations.
@@ -162,7 +190,7 @@ One call before every LLM roundtrip (library method in `brain.rs`, testable with
 
 ```
 assemble_context(query, opts { working_n=8, recall_k=6, entity_cards=2,
-                               budget_chars≈8000, scope: { stream: 'talk' } })
+                               budget_chars≈8000, provenance: { stream: 'talk' } })
   L0  self-card (always)                      ← compiled-truth card of the "self" entity
   L1  running gist (always)
   WW  working window: last N session turns (chronological, always included)
@@ -274,7 +302,7 @@ become the same ingest path. Elsewhere, the existing behavior stays.
    `{type:'Bytea'}` → `0x1a2b3c… (n B)` hex; Timestamps → ISO + relative; FK/uuid cells
    (`memory`, `entity`, `a/b`, `subject/object`, `owner`, `message_id`) → clickable, jumping to
    the target table with an id filter.
-3. **Brain search tab** — query + optional typed scope (stream / author_role) → `brain_search` → hits with via/rank/score
+3. **Brain search tab** — query + optional provenance filter (stream / author_role) → `brain_search` → hits with via/rank/score
    badges, click-through to the `memories` row; entity list → entity-card panel; status strip
    (embedder, row counts) + **Dream** and **Backfill** buttons.
 
@@ -287,7 +315,7 @@ Each phase independently shippable, with files + verification:
 | # | Phase | Files (key) | Verify |
 |---|---|---|---|
 | **E0** | **Manifest + migration**: `vector` type, 5 brain tables (+owner), `context_traces`; snapshot + registry + embedded snapshot **in the same commit** | `libs/aven-schema/schema.manifest.json`, `migrations/registry.json` + snapshot, `app/src-tauri/src/schema_manifest.rs` | existing vault boots (lens applies, no wipe); fresh vault boots; tables listed by `jazzStatus()` |
-| **E1** | **Engine seam**: unseal-on-scan transform for `nearest`/`text_search`; aven-brain `open(identity)` over the shared store (owner scoping in queries); **migrate `remember`/`search_scoped`/`recall` to typed scope** — signatures take `Scope { stream, author_role, source }`, the as-built free-label parameter and the `memories` array column are removed; `remember_with` (source/content_date), `search_traced` (via/rank provenance), `assemble_context` | `libs/aven-db` executor/scan path, `libs/aven-brain/src/brain.rs`, `schema.rs` | `cargo test -p aven-brain`; sealed fixture: search returns correct rows, no plaintext at rest |
+| **E1** | **Engine seam**: unseal-on-scan transform for `nearest`/`text_search`; aven-brain `open(identity)` over the shared store (owner scoping in queries); **migrate `remember`/`search_scoped`/`recall` to typed provenance** — signatures take `Provenance { stream, author_role, source }`, the as-built free-label parameter and the `memories` array column are removed; derive provenance entities (`person`/`agent`/`document`, §2.5) on write; `remember_with` (source/content_date), `search_traced` (via/rank provenance), `assemble_context` | `libs/aven-db` executor/scan path, `libs/aven-brain/src/brain.rs`, `schema.rs` | `cargo test -p aven-brain`; sealed fixture: search returns correct rows, no plaintext at rest |
 | **E2** | **App runtime**: brain module + Tauri commands `brain_status/ingest/search/entities/entity_card/assemble_context/backfill/dream` (asr/llm/tts pattern) + TS wrapper | new `app/src-tauri/src/brain.rs`, `app/src-tauri/src/lib.rs` (manage/handler/exit-drain), new `app/src/lib/brain/api.ts` | devtools: ingest → search round-trip on a real identity |
 | **E3** | **Ingestion**: talk hooks (user/agent turns), file pipeline (markdown/text chunking; PDF next), backfill of pre-brain history, **drag-drop fix** | `identity-agent.svelte.ts`, `intent-files.ts`, `app/src/routes/+layout.svelte` | drop a .md on talk → stays on screen, chunks appear in `memories` with `source` = file row id; backfill idempotent (2nd run dedups all) |
 | **E4** | **Context manager**: `assemble_context` wiring + `context_traces` writes + fallback path | `identity-agent.svelte.ts` | reply still streams with brain off (fallback); trace row per human message; prompt contains L0/L1/WW/recall blocks under budget |
@@ -322,8 +350,12 @@ Each phase independently shippable, with files + verification:
 
 - **Brain** — each identity has one private memory store it fully owns; nobody else can read it.
 - **Memory** — one saved thing, word-for-word: a chat message, a chunk of a document, a note.
-- **Scope** — typed fields on every memory saying where it came from (`stream`), who authored it
-  (`author_role`), and which row it derives from (`source`) — the fast "which drawer" filters.
+- **Provenance** — every memory's birth certificate: which surface it came through (`stream`),
+  who authored it (`author_role`), and which row it derives from (`source`). Typed fields, also
+  the fast "which drawer" filters.
+- **Typed entity** — an entity whose `kind` points at a real table: the `document` entity for a
+  dropped file, the `person`/`agent` entities for the authors. One click from the entity card to
+  the actual row and back.
 - **Entity** — a thing the memories talk about: a person, project, place. A character in your story.
 - **Mention** — a thread from a memory to an entity ("this memory talks about Alice"). Threads
   are only ever added, never erased.
