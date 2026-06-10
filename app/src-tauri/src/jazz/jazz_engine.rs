@@ -250,6 +250,30 @@ pub(super) fn safe_urn(id: Uuid) -> String {
 	format!("safe:{id}")
 }
 
+/// Mint a fresh SAFE wrap keypair: `(wrap_did, seed_b64)`. The seed is sealed under the
+/// SAFE's DEK (column `safes.wrap_privkey_b64`); the did is public routing material.
+pub(super) fn mint_safe_wrap_keypair() -> Result<(String, String), String> {
+	use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+	use base64::Engine;
+	let mut seed = [0u8; 32];
+	use rand_core::RngCore;
+	rand_core::OsRng.fill_bytes(&mut seed);
+	let key = ed25519_dalek::SigningKey::from_bytes(&seed);
+	let did = jazz_auth::signer_did_from_ed25519(&key.verifying_key().to_bytes())?;
+	Ok((did, URL_SAFE_NO_PAD.encode(seed)))
+}
+
+/// Decode a SAFE wrap seed (`wrap_privkey_b64` plaintext after unseal) into its signing key.
+pub(super) fn wrap_signing_key_from_seed_b64(seed_b64: &str) -> Result<ed25519_dalek::SigningKey, String> {
+	use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+	use base64::Engine;
+	let raw = URL_SAFE_NO_PAD
+		.decode(seed_b64.trim().as_bytes())
+		.map_err(|e| format!("wrap_seed_b64:{e}"))?;
+	let seed: [u8; 32] = raw.as_slice().try_into().map_err(|_| "wrap_seed_len".to_string())?;
+	Ok(ed25519_dalek::SigningKey::from_bytes(&seed))
+}
+
 pub(super) fn identity_uuid_from_json_row(
 	tbl: &TableSchema,
 	row: &Map<String, JsonValue>,
@@ -419,7 +443,7 @@ fn canon_cell_plaintext(
 	// and fails `genesis-base64:Invalid symbol 123 ({)`, dropping the identity from the vault.
 	// Other sealed columns (e.g. name) ARE read back through the canonicalizing display path.
 	if (table == "safes" || table == "safe_controllers")
-		&& (col == "genesis_b64" || col == "issuer_pubkey_b64")
+		&& (col == "genesis_b64" || col == "issuer_pubkey_b64" || col == "wrap_privkey_b64")
 	{
 		return Ok(s.to_string());
 	}
@@ -464,7 +488,9 @@ fn sensitive_plaintext_cells(
 /// genesis evicts the identity from the vault, and a publish-side mismatch surfaces as a
 /// permanent decrypt-MISS (Null cell) in the webview snapshot.
 fn aad_row_for(table: &str, col: &str, identity: Uuid, object_row: Uuid) -> Uuid {
-	if table == "safes" && (col == "genesis_b64" || col == "issuer_pubkey_b64") {
+	if table == "safes"
+		&& (col == "genesis_b64" || col == "issuer_pubkey_b64" || col == "wrap_privkey_b64")
+	{
 		identity
 	} else {
 		object_row
@@ -593,7 +619,11 @@ pub(super) fn row_to_public_map(
 	for (desc, cell) in cols.iter().zip(vals.iter()) {
 		let name = desc.name_str();
 		let jv = if let Some(set) = secrets {
-			if set.contains(name) {
+			// Key material never leaves the engine: the SAFE wrap seed is consumed only by
+			// the hydrate fixpoint; the webview has no use for it. Publish Null, not the seed.
+			if name == "wrap_privkey_b64" {
+				JsonValue::Null
+			} else if set.contains(name) {
 				let ipc_ty = crate::schema_manifest::expose_ts_for(table, name)
 					.unwrap_or(&desc.column_type);
 				// AAD slug must use the STORAGE type (what the writer sealed with), while the
@@ -894,32 +924,31 @@ pub(super) async fn hydrate_shell(
 		let ks_wrap_ix = col_ix(&ks_schema, "wrapped_dek")?;
 
 		let all_keyshares = exec_list_rows(client, "keyshares").await?;
-		let mut ks_for_me = 0usize;
 		log::info!(
 			target: "avenos::jazz",
 			"keyshare hydrate: {} keyshare row(s) in store; me={}",
 			all_keyshares.len(), vault.signer_did,
 		);
+
+		// Parse every keyshare row once up front (the fixpoint below revisits them).
+		struct KsRow {
+			sid: Uuid,
+			dv: i64,
+			recipient: String,
+			wrapper_did: String,
+			wrapped: String,
+			unlocked: bool,
+		}
+		let mut ks_rows: Vec<KsRow> = Vec::new();
 		for (_oid, vals) in all_keyshares {
 			let sid = uuid_cell_at(vals.as_slice(), ks_spark_ix)?;
 			let dv = bigint_i64(vals.get(ks_ver_ix).ok_or("ks_missing_ver")?)?;
-			if deks.contains_key(&(sid, dv)) {
-				continue;
-			}
 			let recipient = match vals.get(ks_recip_ix).ok_or("ks_missing_recip")? {
-				Value::Text(s) => s.as_str(),
+				Value::Text(s) => s.trim().to_string(),
 				_ => return Err("ks_recip_bad".into()),
 			};
-			if recipient != vault.signer_did {
-				log::debug!(
-					target: "avenos::jazz",
-					"keyshare not-for-me: identity={sid} v={dv} recipient={recipient}",
-				);
-				continue;
-			}
-			ks_for_me += 1;
 			let wrapper_did = match vals.get(ks_wrapper_ix).ok_or("ks_missing_wrapper")? {
-				Value::Text(s) if !s.trim().is_empty() => s.trim(),
+				Value::Text(s) if !s.trim().is_empty() => s.trim().to_string(),
 				_ => {
 					log::debug!(
 						target: "avenos::jazz",
@@ -929,32 +958,127 @@ pub(super) async fn hydrate_shell(
 				}
 			};
 			let wrapped = match vals.get(ks_wrap_ix).ok_or("ks_missing_wrap")? {
-				Value::Text(s) => s.as_str(),
+				Value::Text(s) => s.clone(),
 				_ => return Err("ks_wrap_bad".into()),
 			};
-			let urn = safe_urn(sid);
-			let wrapper_pk = jazz_auth::ed25519_public_from_signer_did(wrapper_did)?;
-			let kek = derive_kek_x25519(&signing_key, &wrapper_pk)?;
-			let aad = keyshare_wrap_aad(&urn, recipient, wrapper_did, dv);
-			match decrypt_keyshare_payload(wrapped, &kek, &aad) {
-				Ok(raw32) => {
-					log::info!(
-						target: "avenos::jazz",
-						"keyshare unlocked DEK: identity={sid} v={dv} wrapper={wrapper_did}",
-					);
-					deks.insert((sid, dv), Dek::from_plain_32(raw32));
+			ks_rows.push(KsRow { sid, dv, recipient, wrapper_did, wrapped, unlocked: false });
+		}
+
+		// SAFE wrap keypairs (the `did:safe:` member primitive): each SAFE row carries a
+		// public `wrap_did` plus its ed25519 seed sealed under the SAFE's own DEK. A grant
+		// to a did:safe: member wraps the target DEK to that wrap key, so ANY member of the
+		// SAFE — whose signer set the granter cannot read (sealed genesis) — can unwrap.
+		// Collect each SAFE's (wrap_did, sealed seed cell); opened lazily in the fixpoint
+		// once that SAFE's DEK is held.
+		let wrap_did_ix = col_ix(&sparks_schema, "wrap_did").ok();
+		let wrap_priv_ix = col_ix(&sparks_schema, "wrap_privkey_b64").ok();
+		let wrap_priv_ty = wrap_priv_ix
+			.and_then(|ix| sparks_schema.columns.columns.get(ix))
+			.map(|d| d.column_type.clone());
+		let mut safe_wrap_cells: HashMap<Uuid, (String, Value)> = HashMap::new();
+		if let (Some(wd_ix), Some(wp_ix)) = (wrap_did_ix, wrap_priv_ix) {
+			for (_oid, vals) in &sparks_rows {
+				let Ok(sid) = uuid_cell_at(vals.as_slice(), identity_id_ix) else {
+					continue;
+				};
+				let wd = match vals.get(wd_ix) {
+					Some(Value::Text(s)) if !s.trim().is_empty() => s.trim().to_string(),
+					_ => continue,
+				};
+				let Some(cell) = vals.get(wp_ix).cloned() else {
+					continue;
+				};
+				safe_wrap_cells.insert(sid, (wd, cell));
+			}
+		}
+
+		// Fixpoint: device-signer keyshares unlock first-hop DEKs; an unlocked SAFE's wrap
+		// key then unlocks keyshares ADDRESSED TO that SAFE (controller chains: a human-SAFE
+		// member unlocks the aven SAFE it controls, which unlocks its spark, …). Bounded by
+		// the keyshare count — each round must unlock at least one new DEK to continue.
+		let mut wrap_keys: HashMap<String, ed25519_dalek::SigningKey> = HashMap::new();
+		let mut ks_for_me = 0usize;
+		loop {
+			// Open the wrap seed of every SAFE whose DEK we now hold (idempotent).
+			for (sid, (wdid, cell)) in &safe_wrap_cells {
+				if wrap_keys.contains_key(wdid) || !deks.keys().any(|(s, _)| s == sid) {
+					continue;
 				}
-				Err(e) => {
-					log::warn!(
+				let Some(ty) = wrap_priv_ty.as_ref() else {
+					continue;
+				};
+				let coord = CellCoord {
+					table: "safes",
+					column: "wrap_privkey_b64",
+					row: *sid,
+					storage_ty: ty,
+				};
+				// require_sealed=true: the wrap seed is key material — never accept a
+				// cleartext-downgraded value.
+				match hydrate_text_at(&deks, *sid, &coord, cell, true) {
+					Ok(seed_b64) => match wrap_signing_key_from_seed_b64(&seed_b64) {
+						Ok(k) => {
+							wrap_keys.insert(wdid.clone(), k);
+						}
+						Err(e) => log::warn!(
+							target: "avenos::jazz",
+							"safe wrap seed decode failed: identity={sid}: {e}",
+						),
+					},
+					Err(e) => log::debug!(
 						target: "avenos::jazz",
-						"keyshare unwrap_FAIL: identity={sid} v={dv} wrapper={wrapper_did}: {e}",
-					);
+						"safe wrap seed not openable yet: identity={sid}: {e}",
+					),
 				}
+			}
+
+			let mut progress = false;
+			for ks in ks_rows.iter_mut().filter(|k| !k.unlocked) {
+				if deks.contains_key(&(ks.sid, ks.dv)) {
+					ks.unlocked = true;
+					continue;
+				}
+				let unwrap_key: &ed25519_dalek::SigningKey = if ks.recipient == vault.signer_did {
+					&signing_key
+				} else if let Some(k) = wrap_keys.get(&ks.recipient) {
+					k
+				} else {
+					continue;
+				};
+				ks_for_me += 1;
+				let urn = safe_urn(ks.sid);
+				let wrapper_pk = jazz_auth::ed25519_public_from_signer_did(&ks.wrapper_did)?;
+				let kek = derive_kek_x25519(unwrap_key, &wrapper_pk)?;
+				let aad = keyshare_wrap_aad(&urn, &ks.recipient, &ks.wrapper_did, ks.dv);
+				match decrypt_keyshare_payload(&ks.wrapped, &kek, &aad) {
+					Ok(raw32) => {
+						log::info!(
+							target: "avenos::jazz",
+							"keyshare unlocked DEK: identity={} v={} wrapper={} via={}",
+							ks.sid, ks.dv, ks.wrapper_did,
+							if ks.recipient == vault.signer_did { "signer" } else { "safe-wrap" },
+						);
+						deks.insert((ks.sid, ks.dv), Dek::from_plain_32(raw32));
+						ks.unlocked = true;
+						progress = true;
+					}
+					Err(e) => {
+						log::warn!(
+							target: "avenos::jazz",
+							"keyshare unwrap_FAIL: identity={} v={} wrapper={}: {e}",
+							ks.sid, ks.dv, ks.wrapper_did,
+						);
+						ks.unlocked = true; // terminal for this row — don't retry every round
+					}
+				}
+			}
+			if !progress {
+				break;
 			}
 		}
 		log::info!(
 			target: "avenos::jazz",
-			"keyshare hydrate done: {ks_for_me} keyshare(s) addressed to me → {} DEK(s) unlocked",
+			"keyshare hydrate done: {ks_for_me} keyshare(s) addressed to me/my-SAFEs → {} DEK(s) unlocked",
 			deks.len(),
 		);
 

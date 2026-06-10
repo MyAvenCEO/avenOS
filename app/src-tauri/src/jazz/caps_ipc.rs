@@ -151,6 +151,27 @@ async fn wrap_self_keyshare(
 	Ok(())
 }
 
+/// The public wrap-DID of a SAFE, read from its `safes` row (plaintext routing material —
+/// readable even when the row's sealed cells are not, which is exactly the foreign-SAFE
+/// grant case). `None` for pre-wrap-key rows.
+async fn find_safe_wrap_did(client: &JazzClient, safe_id: Uuid) -> Result<Option<String>, String> {
+	let schema = jazz_engine::resolved_table_schema(client, "safes").await?;
+	let id_ix = jazz_engine::col_ix(&schema, "owner")?;
+	let Ok(wd_ix) = jazz_engine::col_ix(&schema, "wrap_did") else {
+		return Ok(None);
+	};
+	for (_oid, vals) in jazz_engine::exec_list_rows(client, "safes").await? {
+		if jazz_engine::uuid_cell_at(vals.as_slice(), id_ix)? != safe_id {
+			continue;
+		}
+		return Ok(match vals.get(wd_ix) {
+			Some(Value::Text(s)) if !s.trim().is_empty() => Some(s.trim().to_string()),
+			_ => None,
+		});
+	}
+	Ok(None)
+}
+
 async fn propagate_keyshares_for_member(
 	client: &JazzClient,
 	shell: &jazz_engine::ShellState,
@@ -159,12 +180,31 @@ async fn propagate_keyshares_for_member(
 	include_downstream: bool,
 ) -> Result<(), String> {
 	let member_safe = crate::identity_acc::resolve_safe_did(member_did);
-	let recipients: Vec<String> = match member_safe {
+	let mut recipients: Vec<String> = match member_safe {
 		Some(safe_id) => crate::identity_acc::safe_transitive_signers(&shell.vault, safe_id)
 			.into_iter()
 			.collect(),
 		None => vec![member_did.to_string()],
 	};
+	// did:safe: member — ALSO wrap to the member SAFE's wrap key. The transitive-signer
+	// enumeration above only works when we can read the member SAFE's biscuit (we hold its
+	// DEK); for a FOREIGN SAFE (sealed genesis, no DEK) it is empty and the grant would
+	// silently deliver no keys. The wrap_did is plaintext routing material on the SAFE's
+	// row, so it is always resolvable — and only that SAFE's members (DEK holders) can open
+	// the sealed wrap seed to unwrap. E2E holds; ordering and foreignness stop mattering.
+	let mut member_wrap_did: Option<String> = None;
+	if let Some(safe_id) = member_safe {
+		match find_safe_wrap_did(client, safe_id).await? {
+			Some(wd) => {
+				member_wrap_did = Some(wd.clone());
+				recipients.push(wd);
+			}
+			None => log::warn!(
+				target: "avenos::jazz",
+				"keyshare propagation: member SAFE {safe_id} has no wrap_did — only locally-resolvable signers receive keys",
+			),
+		}
+	}
 	let downstream: Vec<Uuid> = if include_downstream {
 		shell
 			.vault
@@ -184,7 +224,9 @@ async fn propagate_keyshares_for_member(
 		if recip == &shell.signer_did {
 			continue;
 		}
-		if member_safe.is_some() {
+		// A wrap-DID names a SAFE's key, not a device — never register it as a sync peer.
+		let is_wrap_recipient = member_wrap_did.as_deref() == Some(recip.as_str());
+		if member_safe.is_some() && !is_wrap_recipient {
 			let Ok(pk) = crate::jazz_auth::ed25519_public_from_signer_did(recip) else {
 				log::warn!(target: "avenos::jazz", "keyshare propagation: bad signer DID {recip}");
 				continue;
@@ -886,6 +928,9 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 		"safe_did".into(),
 		JsonValue::String(crate::identity_acc::safe_did(identity_uuid)),
 	);
+	let (wrap_did, wrap_seed_b64) = jazz_engine::mint_safe_wrap_keypair()?;
+	row.insert("wrap_did".into(), JsonValue::String(wrap_did));
+	row.insert("wrap_privkey_b64".into(), JsonValue::String(wrap_seed_b64));
 	row.insert(
 		"name".into(),
 		JsonValue::String(crate::identity_acc::AVEN_CEO_IDENTITY_NAME.to_string()),
@@ -991,6 +1036,12 @@ pub(crate) async fn groove_ipc_create_identity(
 		"safe_did".into(),
 		JsonValue::String(crate::identity_acc::safe_did(identity_uuid)),
 	);
+	// SAFE wrap keypair: public wrap_did (routing), seed sealed under the SAFE DEK below.
+	// This is what makes a grant TO this SAFE (did:safe: member) able to deliver keys —
+	// the granter wraps to wrap_did; any member opens the seed and unwraps.
+	let (wrap_did, wrap_seed_b64) = jazz_engine::mint_safe_wrap_keypair()?;
+	row.insert("wrap_did".into(), JsonValue::String(wrap_did));
+	row.insert("wrap_privkey_b64".into(), JsonValue::String(wrap_seed_b64));
 	row.insert("name".into(), JsonValue::String(name.clone()));
 	if kind == "human" {
 		let slug: String = name
@@ -1031,7 +1082,17 @@ pub(crate) async fn groove_ipc_create_identity(
 	wrap_self_keyshare(client.as_ref(), shell, identity_uuid, &dek_plain, dek_ver).await?;
 
 	if let Some(ctrl) = controller {
-		for recip in crate::identity_acc::safe_transitive_signers(&shell.vault, ctrl) {
+		// Controller wrap-key first: every member of the controlling SAFE — including
+		// signers we cannot enumerate locally — can unwrap via the SAFE's sealed seed.
+		// The per-signer wraps below stay as the direct fast path.
+		let mut recipients: Vec<String> =
+			crate::identity_acc::safe_transitive_signers(&shell.vault, ctrl)
+				.into_iter()
+				.collect();
+		if let Some(wd) = find_safe_wrap_did(client.as_ref(), ctrl).await? {
+			recipients.push(wd);
+		}
+		for recip in recipients {
 			if recip == shell.signer_did {
 				continue;
 			}
@@ -1555,7 +1616,28 @@ async fn reconcile_owner_keyshares(
 		{
 			continue;
 		}
-		for recip in crate::identity_acc::safe_transitive_signers(&shell.vault, sid) {
+		let mut recipients: Vec<String> =
+			crate::identity_acc::safe_transitive_signers(&shell.vault, sid)
+				.into_iter()
+				.collect();
+		// Every did:safe: member (owner-grade) also gets its WRAP-KEY share — this is the
+		// path that works even when the member SAFE is foreign (its signer set unreadable).
+		if let Some(bisc) = shell.vault.safes.get(&sid) {
+			if let Ok(admins) = crate::identity_acc::identity_admins(&bisc.biscuit, sid) {
+				for admin in admins {
+					let Some(member_safe) = crate::identity_acc::resolve_safe_did(&admin) else {
+						continue;
+					};
+					if member_safe == sid {
+						continue;
+					}
+					if let Some(wd) = find_safe_wrap_did(client, member_safe).await? {
+						recipients.push(wd);
+					}
+				}
+			}
+		}
+		for recip in recipients {
 			if recip == shell.signer_did {
 				continue;
 			}

@@ -104,6 +104,19 @@
 					"comment": "did:safe:<uuid> — stable public SAFE identifier"
 				},
 				{
+					"name": "wrap_did",
+					"type": "text",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "did:key of the SAFE wrap keypair — the public key granters wrap this SAFE's inbound DEK keyshares to (the did:safe: member primitive)"
+				},
+				{
+					"name": "wrap_privkey_b64",
+					"type": "text",
+					"nullable": true,
+					"comment": "sealed — ed25519 seed of the SAFE wrap keypair; only members (DEK holders) open it to unwrap SAFE-addressed keyshares"
+				},
+				{
 					"name": "username_slug",
 					"type": "text",
 					"plaintext": true,
