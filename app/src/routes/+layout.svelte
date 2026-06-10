@@ -32,7 +32,6 @@ const sandboxActive = $derived(path.startsWith('/sandbox'))
 const selfActive = $derived(path.startsWith('/settings'))
 const sparksNavActive = $derived(path.startsWith('/identities'))
 const avensActive = $derived(path.startsWith('/avens'))
-const brandDesignActive = $derived(path.startsWith('/brand-design'))
 
 const shellLocked = $derived(browser && isTauriRuntime() && $deviceSession.kind === 'locked')
 
@@ -271,15 +270,7 @@ $effect(() => {
 			>
 				<div
 					class="flex min-w-0 items-center justify-start justify-self-start sm:justify-self-start"
-				>
-					<a
-						href="/brand-design"
-						data-sveltekit-preload-data="hover"
-						class="hidden text-[10px] font-bold tracking-wider uppercase transition-opacity hover:opacity-80 sm:inline {brandDesignActive ? 'opacity-95' : 'opacity-40'}"
-						aria-current={brandDesignActive ? 'page' : undefined}
-						onclick={(e) => navigateApp('/brand-design', e)}
-					>{t('nav.brandDesign')}</a>
-				</div>
+				></div>
 
 				<nav
 					class="hidden flex-wrap items-center justify-center justify-self-center gap-x-2 gap-y-1 text-[10px] font-bold tracking-wider uppercase sm:flex"
