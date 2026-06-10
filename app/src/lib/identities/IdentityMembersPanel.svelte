@@ -94,6 +94,9 @@
 	// THE caps source for the UI: every subject + grant + effective caps, from the
 	// biscuit (`identity_cap_report`). Both tabs derive from this; nothing is hardcoded.
 	let subjects = $state<IdentitySubjectCaps[]>([])
+	// Backend-computed manage right (same authorize gate as the grant IPCs, full
+	// N-hop SAFE-in-SAFE walk) — drives the owner-only GIVE ACCESS form.
+	let viewerOwns = $state(false)
 	let adminErr = $state<string | undefined>()
 	let adminBusy = $state(false)
 	let addAdminDid = $state('')
@@ -241,7 +244,12 @@
 	// Owner-only management: only a holder of `owns` may grant/revoke. A read-only
 	// member sees the roster but NO manage controls — so it can't hit the
 	// `subject_not_owner` dead-end (members are read-only by design).
-	const amOwner = $derived(accessEntries.some((e) => e.isThisDevice && e.grant === 'owns'))
+	// `viewerOwns` is backend truth (same authorize gate as the grant IPCs, full
+	// N-hop SAFE-in-SAFE walk) — DID-equality alone misses transitive control,
+	// e.g. a human-SAFE signer managing the aven SAFE its human SAFE owns.
+	const amOwner = $derived(
+		viewerOwns || accessEntries.some((e) => e.isThisDevice && e.grant === 'owns'),
+	)
 
 	// Cap-centric view (Tab 2): invert subjects → for each actual cap, who holds it.
 	// Pure projection of the same single source — guarantees the two tabs agree.
@@ -291,10 +299,12 @@
 						adminDids = a.adminDids
 						replicaDids = a.replicaDids ?? []
 						subjects = a.subjects ?? []
+						viewerOwns = a.viewerOwns === true
 					} else {
 						adminDids = []
 						replicaDids = []
 						subjects = []
+						viewerOwns = false
 					}
 					addAdminDid = ''
 					addNote = undefined
@@ -327,6 +337,7 @@
 			adminDids = a.adminDids
 			replicaDids = a.replicaDids ?? []
 			subjects = a.subjects ?? []
+			viewerOwns = a.viewerOwns === true
 			adminErr = undefined
 		} catch (e) {
 			if (gen !== adminLoadGen) return
@@ -366,6 +377,7 @@
 				adminDids = a.adminDids
 				replicaDids = a.replicaDids ?? []
 				subjects = a.subjects ?? []
+				viewerOwns = a.viewerOwns === true
 			}
 		} catch (e) {
 			adminErr = e instanceof Error ? e.message : String(e)
@@ -397,6 +409,7 @@
 			adminDids = a.adminDids
 			replicaDids = a.replicaDids ?? []
 			subjects = a.subjects ?? []
+			viewerOwns = a.viewerOwns === true
 		} catch (e) {
 			if (gen !== adminLoadGen) return
 			revokeErr = e instanceof Error ? e.message : String(e)
@@ -412,6 +425,7 @@
 		void tauri
 		adminDids = []
 		subjects = []
+		viewerOwns = false
 		addAdminDid = ''
 		void loadSessionAndAdmins()
 	})

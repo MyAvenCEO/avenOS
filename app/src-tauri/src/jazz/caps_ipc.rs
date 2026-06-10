@@ -1071,6 +1071,12 @@ pub(crate) async fn groove_ipc_create_identity(
 	)
 	.await?;
 	finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
+	// Blind relay sync from birth: without the relay's `replicate` cap this identity's
+	// (encrypted) rows never leave this device when peers have no direct P2P link —
+	// a member grant on the controlling SAFE then "works" for the SAFE itself but the
+	// controlled aven/spark SAFEs silently never reach the invitee. Same E2E bundle as
+	// the manual ⚡ quick-relay action: ciphertext store-and-forward, no keyshare.
+	auto_relay_sync_on_create(app, jazz, self_state, identity_uuid).await;
 	Ok(identity_uuid.to_string())
 }
 
@@ -1582,6 +1588,12 @@ pub struct IdentityAdminListReply {
 	/// and effective caps, derived from the biscuit by `identity_acc::identity_cap_report`.
 	/// The Members UI renders these directly; it defines no cap vocabulary of its own.
 	pub subjects: Vec<SubjectCapsDto>,
+	/// Whether THIS device may manage the identity (grant/revoke) — the same
+	/// `authorize_gate(Write)` the grant IPCs enforce, so the UI's owner-only form
+	/// follows the biscuit's full N-hop SAFE-in-SAFE walk instead of guessing from
+	/// DID string equality (which misses transitive control, e.g. a human-SAFE
+	/// signer managing the aven SAFE that human SAFE owns).
+	pub viewer_owns: bool,
 }
 
 /// Who can access this identity: administrators (biscuit `owns`) + blind replication
@@ -1620,10 +1632,19 @@ pub(crate) async fn groove_ipc_spark_admin_list(
 			caps: s.caps.iter().map(|c| c.to_string()).collect(),
 		})
 		.collect();
+	let viewer_owns = jazz_engine::authorize_gate(
+		shell.as_ref(),
+		"safes",
+		crate::identity_acc::AccOp::Write,
+		identity_uuid,
+		None,
+	)
+	.is_ok();
 	Ok(IdentityAdminListReply {
 		admin_dids,
 		replica_dids,
 		subjects,
+		viewer_owns,
 	})
 }
 
