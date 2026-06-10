@@ -258,7 +258,7 @@
 					"name": "owner",
 					"type": "uuid",
 					"plaintext": true,
-					"comment": "routing — ACC + sync (one brain per identity)"
+					"comment": "routing — ACC + sync (one brain per SAFE)"
 				},
 				{
 					"name": "stream",

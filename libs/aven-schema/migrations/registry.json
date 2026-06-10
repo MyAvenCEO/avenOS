@@ -1,10 +1,4 @@
 {
-	"description": "Optional bundled schema snapshots (hash → manifest) when a vault has no copy under db/schema_snapshots/. Most migrations rely on per-vault stamps written at connect.",
-	"snapshots": [
-		{
-			"hash": "e395f88b94605cfc1f7a003378cda22a6af00e919f8666adf64ed494a1f2e26d",
-			"manifest": "migrations/snapshots/before-message-role.manifest.json",
-			"comment": "pre-messages.role (LFM2 agent replies). add-only enum column → auto lens; legacy rows null (treated as user); no wipe."
-		}
-	]
+	"description": "Optional bundled schema snapshots (hash \u2192 manifest) when a vault has no copy under db/schema_snapshots/. Most migrations rely on per-vault stamps written at connect.",
+	"snapshots": []
 }

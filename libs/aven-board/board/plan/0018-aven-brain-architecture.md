@@ -69,7 +69,7 @@ Three layers: **artifacts** (sealed originals: `files`/`messages` rows — outsi
 |---|---|
 | **artifact** | any app-owned table row (`messages`, `files`, `todos`, future `vendors`, …): the sealed, synced ground truth the brain derives from — and never writes. Every memory carries its artifact's reference + key attributes **denormalized as indexed columns** — `source` (the row), `stream` (surface), `author_role` (= the row's role), `seq`/`line_start/end` (position), `content_date` — "the artifact columns", which double as the cheap join-free recall filter |
 | **memory** | *evidence*: verbatim recallable text + embedding + artifact columns + veracity. A chat turn, a document chunk — always citable back to its artifact. Dreaming's summaries are also memories (lineage via `summarizes` links, veracity `inferred`). |
-| **entity** | *pure interpretation*: a name extracted from evidence that has **no backing row** — a topic, a project, a world-person ("Alice" from a chat). Things that *do* have a row (a document = its `files` row, you = your `identities` row, a vendor = its `vendors` row) are **linked directly — no shadow entity** |
+| **entity** | *pure interpretation*: a name extracted from evidence that has **no backing row** — a topic, a project, a world-person ("Alice" from a chat). Things that *do* have a row (a document = its `files` row, you = your `safes` row (your SAFE), a vendor = its `vendors` row) are **linked directly — no shadow entity** |
 | **link** | the one edge primitive: `from —kind→ to` (+ validity/confidence/weight per class). **Endpoints are any rows** — memories, entities, or artifact rows directly (every aven-db object carries its table in metadata, so refs resolve without discriminators). Mentions, facts, bonds, summaries — all links. |
 | **mention** | link kind, class *note*: memory → entity ("this evidence talks about X") |
 | **fact** | link kinds (free predicates), class *claim*: entity → entity, validity window + confidence + `source_memory` (the evidence behind the claim) |
@@ -150,7 +150,7 @@ shadow "typed entity" duplicating its identity:
 
 - a dropped file's chunks `mention` **the `files` row itself**; the document's compiled-truth
   card + timeline is a **derived view keyed by that row id**
-- L0 is the compiled-truth card keyed by **your `identities` row**
+- L0 is the compiled-truth card keyed by **your `safes` row** (your SAFE, `did:safe:<uuid>`)
 - a claim can connect artifact rows directly: `files-row —issued_by→ vendors-row`
 
 Ref resolution is built in: every aven-db object carries its table in metadata
@@ -159,7 +159,7 @@ discriminator columns.
 
 The `entities` table holds **pure interpretation only** — extracted names with no backing row
 (`person`/`topic`/`project`/`thing` from wikilinks/regex). **Promotion rule:** when an
-interpretation turns out to *be* a real row (extracted "Alice" matches an avenOS identity),
+interpretation turns out to *be* a real row (extracted "Alice" matches a SAFE),
 dreaming merges it — re-points its links to the artifact row (or aliases via a `refers_to` note
 link when history shouldn't be rewritten). Future "schema types" = new artifact tables + link
 kinds: **pure data, zero brain migrations.**
@@ -238,7 +238,7 @@ No separate mentions/facts/relations tables (link kinds) · no standalone "prove
 do it) · no `created_at`/`updated_at` columns (engine `RowProvenance` + UUIDv7 `BatchId` supply
 `_created_at`/`_updated_at`, §2.1) · no `tier` column (age-weights are pure `f(_created_at)`) ·
 no content-hash duplication of the engine row digest (different jobs, §2.1) · no canonical table (L0 = the
-card keyed by your `identities` row) · no shadow/typed entities (links point straight at
+card keyed by your `safes` row) · no shadow/typed entities (links point straight at
 artifact rows; `entities` is pure interpretation only) · no scratchpad/banks (identities are the
 isolation) · no
 free-form labels (typed artifact columns only) · no eager artifact-entity derivation (lazy,
@@ -302,7 +302,7 @@ One call before every LLM roundtrip (library method, testable without Tauri):
 ```
 assemble_context(query, opts { working_n=8, recall_k=6, entity_cards=2,
                                budget_chars≈8000, filter: { stream: 'talk' } })
-  L0  self-card (always)                  ← compiled-truth card keyed by your identities row
+  L0  self-card (always)                  ← compiled-truth card keyed by your safes row (SAFE)
   L1  running gist (always)
   WW  working window: last N stream turns (chronological, always included)
   L3  search_traced(query): nearest + text_search → RRF k=60, hits carry via/rank/score,
@@ -524,6 +524,15 @@ deterministic pass is load-bearing without it. Revisit after E7.
 
 Newest entry first.
 
+- `2026-06-10` — **Merged main again** (SAFE rename landed): `identities` table → **`safes`**
+  (+ `safe_did`, types `human | aven | spark`), new `safe_controllers` (SAFE-in-SAFE
+  delegation), `peer_did`→`signer_did`. Canonical terms per
+  `docs/architecture/safe-identity-execution-plan.md`: **Signer** (`did:key`, device key) vs
+  **SAFE** (`did:safe:<uuid>`, the identity container) — one brain per SAFE. Plan + manifest
+  comments aligned (`safes` row refs). Cleaned the last stale registry snapshot
+  (`before-message-role` — the table rename made it a draft lens; finishes main's
+  clean-baseline `5f52766`). Post-merge: E0 harness PASSED (new hash `aa2568d9…`),
+  aven-brain 13/13. Routes still `/identities/…` (frontend rename pending on main).
 - `2026-06-10` — **Merged latest main** (`1160ccc`, no conflicts) and re-verified the plan
   against it: all cited file refs intact (`todoPreamble` identity-agent:125, drag-drop
   `goto('/')` +layout:220–229, `n_ctx` 4096, `seal_column_plain` → `jazz/jazz_engine.rs`,
