@@ -7,7 +7,8 @@
 
 use aven_caps::caps::{
 	attenuate_add_owner_third_party, biscuit_from_storage, build_vault_from_signing_key,
-	decode_issuer_pubkey_b64, encode_issuer_pubkey_b64, mint_safe_genesis, identity_admins, BiscuitVault,
+	decode_issuer_pubkey_b64, encode_issuer_pubkey_b64, mint_safe_genesis, identity_admins, safe_did,
+	BiscuitVault,
 };
 use aven_caps::crypto::{
 	decrypt_keyshare_payload, derive_kek_x25519, encrypt_keyshare_payload, keyshare_wrap_aad,
@@ -142,6 +143,7 @@ pub async fn ensure_avenceo_owned(
 		&[
 			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 			("type", Value::Text("human".into())),
+			("safe_did", Value::Text(safe_did(avenceo_id))),
 			// The aven's default identity is named after the aven itself (per-aven
 			// config, e.g. avenCEO / avenMAIA) — not a hardcoded constant.
 			("name", Value::Text(aven_name.into())),

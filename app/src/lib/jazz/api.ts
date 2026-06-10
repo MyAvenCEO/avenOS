@@ -26,10 +26,10 @@ export async function avenCeoPublishProfile(accountName: string, deviceLabel: st
 	await grooveRuntime('avenCeoPublishProfile', { accountName, deviceLabel })
 }
 
-/** Create a new user-owned identity. `type`: 'human' (a person/persona) or 'aven'
- *  (a group/workspace). This device mints its genesis biscuit (→ owner) + DEK +
- *  self-keyshare. Returns the new id. */
-export async function createIdentity(name: string, type: 'human' | 'aven'): Promise<string> {
+/** Create a new user-owned SAFE. `type`: 'human' (a person/persona), 'aven'
+ *  (a group/workspace), or 'spark' (a cross-aven company). This device mints its
+ *  genesis biscuit (→ owner) + DEK + self-keyshare. Returns the new id. */
+export async function createIdentity(name: string, type: 'human' | 'aven' | 'spark'): Promise<string> {
 	return grooveRuntime<string>('createIdentity', { name, type })
 }
 

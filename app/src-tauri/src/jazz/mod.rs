@@ -2392,9 +2392,9 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 
 /// Claim the well-known **avenCEO** control identity (the network roster/membership
 /// identity). Deterministic id from the network seed — every device sees the same
-/// one. Claim-once: if a `identities` row already exists for it, it is already claimed
+/// one. Claim-once: if a `safes` row already exists for it, it is already claimed
 /// and this errors. Otherwise this device mints the genesis (becomes owner),
-/// creates the `identities` row + a self keyshare, and re-hydrates. Mirrors the
+/// creates the `safes` row + a self keyshare, and re-hydrates. Mirrors the
 /// bootstrap identity mint (`hydrate_shell`) but for a fixed id + name.
 pub(crate) async fn groove_ipc_aven_ceo_claim(
 	app: &tauri::AppHandle,
@@ -2445,7 +2445,13 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 
 	let mut row = Map::new();
 	row.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
-	row.insert("type".into(), JsonValue::String("aven".into()));
+	// Interim: avenCEO is a human-type SAFE (direct signer caps path) — matches the
+	// server-side mint in aven-node's `ensure_avenceo_owned`. Admin claim model deferred.
+	row.insert("type".into(), JsonValue::String("human".into()));
+	row.insert(
+		"safe_did".into(),
+		JsonValue::String(crate::identity_acc::safe_did(identity_uuid)),
+	);
 	row.insert(
 		"name".into(),
 		JsonValue::String(crate::identity_acc::AVEN_CEO_IDENTITY_NAME.to_string()),
@@ -2485,9 +2491,9 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 	Ok(identity_uuid.to_string())
 }
 
-/// Create a new user-owned identity (`type=aven` — a group/workspace). This device
-/// mints a fresh genesis biscuit (→ owner) + DEK + self-keyshare + stamped `identities`
-/// row + owner roster row, then re-hydrates. Backs the "+ create identity" grid action.
+/// Create a new user-owned SAFE (`type`: human | aven | spark). This device
+/// mints a fresh genesis biscuit (→ owner) + DEK + self-keyshare + stamped `safes`
+/// row + owner roster row, then re-hydrates. Backs the "+ create" grid actions.
 pub(crate) async fn groove_ipc_create_identity(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -2502,7 +2508,11 @@ pub(crate) async fn groove_ipc_create_identity(
 	if name.is_empty() {
 		return Err("identity name required".into());
 	}
-	let kind = if kind.trim() == "human" { "human" } else { "aven" };
+	let kind = match kind.trim() {
+		"human" => "human",
+		"spark" => "spark",
+		_ => "aven",
+	};
 	let client = with_connected_client(jazz, app, self_state).await?;
 	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
 	let shell = shell_arc.as_ref();
@@ -2523,6 +2533,10 @@ pub(crate) async fn groove_ipc_create_identity(
 	let mut row = Map::new();
 	row.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
 	row.insert("type".into(), JsonValue::String(kind.into()));
+	row.insert(
+		"safe_did".into(),
+		JsonValue::String(crate::identity_acc::safe_did(identity_uuid)),
+	);
 	row.insert("name".into(), JsonValue::String(name.clone()));
 	if kind == "human" {
 		let slug: String = name
