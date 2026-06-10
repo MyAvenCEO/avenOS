@@ -68,6 +68,10 @@ async fn wrap_all_dek_versions_to_recipient(
 			.ok_or_else(|| format!("missing DEK for identity {identity_uuid} v{v}"))?;
 		let aad = crate::crypto::keyshare_wrap_aad(&urn, recipient_did, &shell.signer_did, v);
 		let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
+		log::info!(
+			target: "avenos::jazz",
+			"keyshare wrap: identity={identity_uuid} v={v} → {recipient_did}",
+		);
 		let mut ks = Map::new();
 		ks.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
 		ks.insert("dek_version".into(), JsonValue::Number(v.into()));
@@ -1529,6 +1533,38 @@ pub(crate) async fn groove_ipc_aven_ceo_membership(
 	}
 }
 
+/// Self-healing keyshare invariant: every transitive OWNS signer of a SAFE this
+/// device controls must hold a keyshare for every DEK version we hold of it.
+/// The one-shot wraps (create-time controller wrap, grant-time downstream
+/// propagation) cover the common orders, but any missed/raced wrap used to be
+/// permanent — a member of the controlling SAFE then "had access" in the biscuit
+/// yet could never decrypt the controlled SAFE (the avenMAIA-invisible-to-baba
+/// bug). Idempotent (`wrap_all_dek_versions_to_recipient` skips held versions)
+/// and owner-side only: it wraps to the biscuit's owns-closure, never wider.
+async fn reconcile_owner_keyshares(
+	client: &JazzClient,
+	shell: &jazz_engine::ShellState,
+) -> Result<(), String> {
+	let safe_ids: Vec<Uuid> = shell.vault.safes.keys().copied().collect();
+	for sid in safe_ids {
+		if !shell.deks.keys().any(|(s, _)| *s == sid) {
+			continue;
+		}
+		if jazz_engine::authorize_gate(shell, "safes", crate::identity_acc::AccOp::Write, sid, None)
+			.is_err()
+		{
+			continue;
+		}
+		for recip in crate::identity_acc::safe_transitive_signers(&shell.vault, sid) {
+			if recip == shell.signer_did {
+				continue;
+			}
+			wrap_all_dek_versions_to_recipient(client, shell, sid, &recip).await?;
+		}
+	}
+	Ok(())
+}
+
 /// Re-hydrate vault shell + sync ACL, push grant to peers, refresh identities catalogue in the webview.
 async fn finish_spark_admin_grant(
 	app: &tauri::AppHandle,
@@ -1539,6 +1575,13 @@ async fn finish_spark_admin_grant(
 ) -> Result<(), String> {
 	jazz.invalidate_vault_shell();
 	let shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+
+	// Repair pass over the FRESH shell (post-grant biscuits): wrap any keyshare a
+	// transitive owns-signer is still missing, so cascade correctness never depends
+	// on the order of create vs. grant. Non-fatal — the grant itself already landed.
+	if let Err(e) = reconcile_owner_keyshares(client.as_ref(), shell.as_ref()).await {
+		log::warn!(target: "avenos::jazz", "post-grant keyshare reconcile failed: {e}");
+	}
 
 	// The grant just changed authorization (the peer is now `owns` in our
 	// biscuit). Re-announce our frontier to every peer so the newly-authorized
