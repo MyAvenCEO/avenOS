@@ -2104,6 +2104,208 @@ async fn propagate_keyshares_for_member(
 	Ok(())
 }
 
+/// Upsert ONE controller-chain copy row (`owner` + `controller_did` is the
+/// logical key). The copy lets members of `owner_safe` resolve `controller_id`'s
+/// chain without being its members — see the `safe_controllers` schema comment.
+async fn upsert_controller_copy_row(
+	client: &JazzClient,
+	shell: &jazz_engine::ShellState,
+	owner_safe: Uuid,
+	controller_id: Uuid,
+	genesis_b64: &str,
+	role: &str,
+) -> Result<(), String> {
+	let issuer_b64 = shell.issuers.get(&controller_id).cloned().unwrap_or_else(|| {
+		crate::identity_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public())
+	});
+	let ctrl_did = crate::identity_acc::safe_did(controller_id);
+	let sc_schema = jazz_engine::resolved_table_schema(client, "safe_controllers").await?;
+	let own_ix = jazz_engine::col_ix(&sc_schema, "owner")?;
+	let did_ix = jazz_engine::col_ix(&sc_schema, "controller_did")?;
+	let mut existing: Option<ObjectId> = None;
+	for (oid, vals) in jazz_engine::exec_list_rows(client, "safe_controllers").await? {
+		if jazz_engine::uuid_cell_at(vals.as_slice(), own_ix)? == owner_safe
+			&& matches!(vals.get(did_ix), Some(Value::Text(s)) if s == &ctrl_did)
+		{
+			existing = Some(oid);
+			break;
+		}
+	}
+	if let Some(oid) = existing {
+		let mut patch = Map::new();
+		patch.insert("genesis_b64".into(), JsonValue::String(genesis_b64.to_string()));
+		patch.insert("issuer_pubkey_b64".into(), JsonValue::String(issuer_b64));
+		let ops = patch_updates(&sc_schema, patch)?;
+		let meta = owner_binding_meta(&shell.signing_key, oid, owner_safe)?;
+		client.update_with_metadata(oid, ops, meta).await.map_err(format_jazz_err)?;
+	} else {
+		let now_ms: i64 = std::time::SystemTime::now()
+			.duration_since(std::time::UNIX_EPOCH)
+			.map(|d| d.as_millis() as i64)
+			.unwrap_or(0);
+		let mut row = Map::new();
+		row.insert("owner".into(), JsonValue::String(owner_safe.to_string()));
+		row.insert("controller_did".into(), JsonValue::String(ctrl_did));
+		row.insert("role".into(), JsonValue::String(role.to_string()));
+		row.insert("genesis_b64".into(), JsonValue::String(genesis_b64.to_string()));
+		row.insert("issuer_pubkey_b64".into(), JsonValue::String(issuer_b64));
+		row.insert("added_at_ms".into(), JsonValue::Number(now_ms.into()));
+		let vals = insert_values("safe_controllers", &sc_schema, row)?;
+		let oid = ObjectId::new();
+		let meta = owner_binding_meta(&shell.signing_key, oid, owner_safe)?;
+		client
+			.create_with_id_and_metadata("safe_controllers", oid, vals, meta)
+			.await
+			.map_err(format_jazz_err)?;
+	}
+	Ok(())
+}
+
+/// Write the FULL upward-closure controller copies for `owner_safe`, rooted at
+/// `root_controller`: one `safe_controllers` row per closure SAFE (the root, its
+/// controllers, theirs, …), serialized from the locally loaded vault chains —
+/// so a member of `owner_safe` can walk the whole path back to signer anchors.
+async fn write_controller_closure_copies(
+	client: &JazzClient,
+	shell: &jazz_engine::ShellState,
+	owner_safe: Uuid,
+	root_controller: Uuid,
+	role: &str,
+) -> Result<(), String> {
+	use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+	use base64::Engine;
+	for cid in crate::identity_acc::safe_controller_closure(&shell.vault, root_controller) {
+		let Some(b) = shell.vault.safes.get(&cid) else {
+			continue;
+		};
+		let gen_b64 = URL_SAFE_NO_PAD
+			.encode(b.biscuit.to_vec().map_err(|e| format!("chain_encode:{e:?}"))?);
+		let r = if cid == root_controller { role } else { "owner" };
+		upsert_controller_copy_row(client, shell, owner_safe, cid, &gen_b64, r).await?;
+	}
+	Ok(())
+}
+
+/// Refresh the COPIES of `safe`'s chain held by its downstream SAFEs after the
+/// chain changed (member add / revoke). Without this, a member's new device
+/// can't be verified by other downstream members until a copy refresh happens.
+async fn refresh_downstream_controller_copies(
+	client: &JazzClient,
+	shell: &jazz_engine::ShellState,
+	safe: Uuid,
+	new_chain_b64: &str,
+) -> Result<(), String> {
+	let downstream: Vec<Uuid> = shell
+		.vault
+		.safes
+		.keys()
+		.copied()
+		.filter(|&oid| {
+			oid != safe && crate::identity_acc::safe_controlled_by(&shell.vault, oid, safe)
+		})
+		.collect();
+	for x in downstream {
+		if let Err(e) = upsert_controller_copy_row(client, shell, x, safe, new_chain_b64, "owner").await {
+			log::warn!(target: "avenos::jazz", "controller copy refresh {safe} → {x}: {e}");
+		}
+	}
+	Ok(())
+}
+
+/// Cascade rotation for ONE downstream SAFE after a revoke on `parent`. The
+/// N-hop walk already denies the ex-member's signers fresh authorization, but
+/// they still HOLD this SAFE's DEKs — rotate to v+1 and re-wrap only to
+/// recipients still authorized once the rebuilt parent chain is in effect
+/// (judged via the overlay variant; the vault still holds the OLD parent
+/// chain at this point). The SAFE's biscuit does not change — its membership
+/// is the same; only the parent's member list shrank.
+async fn cascade_rotate_one(
+	client: &JazzClient,
+	shell: &jazz_engine::ShellState,
+	safe_id: Uuid,
+	parent: Uuid,
+	parent_new_chain: &crate::identity_acc::Biscuit,
+) -> Result<(), String> {
+	let Some(cur_v) = shell.identity_versions.get(&safe_id).copied() else {
+		return Ok(()); // not hydrated here — another admin's device cascades
+	};
+	let Some(bisc) = shell.vault.safes.get(&safe_id) else {
+		return Ok(());
+	};
+
+	// Who currently holds this SAFE's DEK (keyshare recipients).
+	let ks_schema = jazz_engine::resolved_table_schema(client, "keyshares").await?;
+	let ks_spark_ix = jazz_engine::col_ix(&ks_schema, "owner")?;
+	let ks_recip_ix = jazz_engine::col_ix(&ks_schema, "recipient_did")?;
+	let mut prior_holders: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+	let mut stale_rows: Vec<(ObjectId, String)> = Vec::new();
+	for (oid, vals) in jazz_engine::exec_list_rows(client, "keyshares").await? {
+		if jazz_engine::uuid_cell_at(vals.as_slice(), ks_spark_ix)? != safe_id {
+			continue;
+		}
+		if let Some(Value::Text(s)) = vals.get(ks_recip_ix) {
+			prior_holders.insert(s.clone());
+			stale_rows.push((oid, s.clone()));
+		}
+	}
+
+	let new_v = cur_v + 1;
+	let new_dek = crate::crypto::random_identity_dek();
+	let urn = jazz_engine::safe_urn(safe_id);
+	let keeper = |did: &str| {
+		crate::identity_acc::chain_still_member_with(
+			&shell.vault,
+			&bisc.biscuit,
+			safe_id,
+			did,
+			parent,
+			parent_new_chain,
+		)
+	};
+	for recip_did in prior_holders.iter().filter(|d| keeper(d.as_str())) {
+		let recip_pk = crate::jazz_auth::ed25519_public_from_signer_did(recip_did)?;
+		let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recip_pk)?;
+		let aad = crate::crypto::keyshare_wrap_aad(&urn, recip_did, &shell.signer_did, new_v);
+		let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, new_dek.expose(), &aad)?;
+		let mut ks = Map::new();
+		ks.insert("owner".into(), JsonValue::String(safe_id.to_string()));
+		ks.insert("dek_version".into(), JsonValue::Number(new_v.into()));
+		ks.insert("recipient_did".into(), JsonValue::String(recip_did.clone()));
+		ks.insert("wrapper_did".into(), JsonValue::String(shell.signer_did.clone()));
+		ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
+		let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
+		let ks_oid = ObjectId::new();
+		let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, safe_id)?;
+		client
+			.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+			.await
+			.map_err(format_jazz_err)?;
+	}
+
+	// Bump the SAFE's current_dek_version (genesis stays — membership unchanged).
+	let sparks_schema = jazz_engine::resolved_table_schema(client, "safes").await?;
+	let id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
+	for (oid, vals) in jazz_engine::exec_list_rows(client, "safes").await? {
+		if jazz_engine::uuid_cell_at(vals.as_slice(), id_ix)? == safe_id {
+			let mut patch = Map::new();
+			patch.insert("current_dek_version".into(), JsonValue::Number(new_v.into()));
+			let ops = patch_updates(&sparks_schema, patch)?;
+			let upd_meta = owner_binding_meta(&shell.signing_key, oid, safe_id)?;
+			client.update_with_metadata(oid, ops, upd_meta).await.map_err(format_jazz_err)?;
+			break;
+		}
+	}
+
+	// Cooperative cleanup: drop keyshare rows of recipients that fell out.
+	for (oid, recip) in stale_rows {
+		if !keeper(&recip) {
+			let del_meta = owner_binding_meta(&shell.signing_key, oid, safe_id)?;
+			let _ = client.delete_with_metadata(oid, del_meta).await;
+		}
+	}
+	Ok(())
+}
+
 /// The `type` label of a SAFE, read from its local `safes` row (None = no row).
 async fn safe_type_of(client: &JazzClient, safe_uuid: Uuid) -> Result<Option<String>, String> {
 	let schema = jazz_engine::resolved_table_schema(client, "safes").await?;
@@ -2306,7 +2508,7 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 		let mut patch_sparks = Map::new();
 		patch_sparks.insert(
 			"genesis_b64".into(),
-			JsonValue::String(genesis_b64),
+			JsonValue::String(genesis_b64.clone()),
 		);
 		let sparks_ops = patch_updates(&sparks_schema, patch_sparks)?;
 		let upd_meta = owner_binding_meta(&shell.signing_key, sparks_oid, identity_uuid)?;
@@ -2314,6 +2516,18 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 			.update_with_metadata(sparks_oid, sparks_ops, upd_meta)
 			.await
 			.map_err(format_jazz_err)?;
+
+		// The chain changed → refresh the copies of it held by downstream SAFEs,
+		// so their members can verify the new member's writes.
+		refresh_downstream_controller_copies(client.as_ref(), shell, identity_uuid, &genesis_b64)
+			.await?;
+	}
+
+	// SAFE member: write the controller-chain copies for the member SAFE's full
+	// upward closure, so THIS SAFE's other members can resolve its signers.
+	if let Some(member_safe) = crate::identity_acc::resolve_safe_did(&signer_did) {
+		write_controller_closure_copies(client.as_ref(), shell, identity_uuid, member_safe, "owner")
+			.await?;
 	}
 
 	finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
@@ -2575,6 +2789,13 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 		client.update_with_metadata(sparks_oid, sparks_ops, upd_meta).await.map_err(format_jazz_err)?;
 	}
 
+	// SAFE reader: copies of the reader SAFE's chain closure, so this SAFE's
+	// members can resolve the reader's signers for delegated-read authorize.
+	if let Some(member_safe) = crate::identity_acc::resolve_safe_did(&signer_did) {
+		write_controller_closure_copies(client.as_ref(), shell, identity_uuid, member_safe, "reader")
+			.await?;
+	}
+
 	finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
 	Ok(())
 }
@@ -2823,6 +3044,10 @@ pub(crate) async fn groove_ipc_create_identity(
 				.await
 				.map_err(format_jazz_err)?;
 		}
+		// Controller-chain copies: members of the new SAFE can resolve the full
+		// did:safe: path (controller, its controllers, …) without being members
+		// of those SAFEs — required for N-hop authorize on their devices.
+		write_controller_closure_copies(client.as_ref(), shell, identity_uuid, ctrl, "owner").await?;
 	}
 
 	ensure_aven_ceo_owner_row(client.as_ref(), &shell.signer_did, &shell.signing_key, identity_uuid)
@@ -3460,12 +3685,13 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 			.map_err(format_jazz_err)?;
 	}
 
-	// 3. Update the identities row: new biscuit + issuer + bumped current version.
+	// 3. Update the safes row: new biscuit + issuer + bumped current version.
 	let genesis_b64 = URL_SAFE_NO_PAD.encode(
 		new_biscuit
 			.to_vec()
 			.map_err(|e| format!("biscuit_encode:{e:?}"))?,
 	);
+	let revoke_genesis_b64 = genesis_b64.clone();
 	let issuer_b64 = crate::identity_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public());
 	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "safes").await?;
 	let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
@@ -3509,6 +3735,46 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 		{
 			let del_meta = owner_binding_meta(&shell.signing_key, oid, identity_uuid)?;
 			let _ = client.delete_with_metadata(oid, del_meta).await;
+		}
+	}
+
+	// 5. Controller-copy maintenance: refresh the copies of this SAFE's chain in
+	//    its downstream SAFEs (members verify against the new chain), and drop
+	//    the revoked did:safe: member's own copy row here.
+	refresh_downstream_controller_copies(client.as_ref(), shell, identity_uuid, &revoke_genesis_b64)
+		.await?;
+	if signer_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX) {
+		if let Ok(sc_schema) = jazz_engine::resolved_table_schema(client.as_ref(), "safe_controllers").await {
+			let own_ix = jazz_engine::col_ix(&sc_schema, "owner")?;
+			let did_ix = jazz_engine::col_ix(&sc_schema, "controller_did")?;
+			for (oid, vals) in jazz_engine::exec_list_rows(client.as_ref(), "safe_controllers").await? {
+				if jazz_engine::uuid_cell_at(vals.as_slice(), own_ix)? == identity_uuid
+					&& matches!(vals.get(did_ix), Some(Value::Text(s)) if s.as_str() == signer_did.as_str())
+				{
+					let del_meta = owner_binding_meta(&shell.signing_key, oid, identity_uuid)?;
+					let _ = client.delete_with_metadata(oid, del_meta).await;
+				}
+			}
+		}
+	}
+
+	// 6. CASCADE rotation: the N-hop walk denies the ex-member's signers fresh
+	//    authorization on the SAFEs this one controls, but they still HOLD those
+	//    DEKs — rotate every downstream SAFE too, re-wrapped only to recipients
+	//    still authorized under the REBUILT chain (overlay resolution).
+	let downstream: Vec<Uuid> = shell
+		.vault
+		.safes
+		.keys()
+		.copied()
+		.filter(|&oid| {
+			oid != identity_uuid
+				&& crate::identity_acc::safe_controlled_by(&shell.vault, oid, identity_uuid)
+		})
+		.collect();
+	for x in downstream {
+		if let Err(e) = cascade_rotate_one(client.as_ref(), shell, x, identity_uuid, &new_biscuit).await {
+			log::warn!(target: "avenos::jazz", "cascade rotate of downstream SAFE {x}: {e}");
 		}
 	}
 

@@ -36,6 +36,9 @@ pub(crate) struct ShellState {
 	pub(crate) default_identity: Uuid,
 	pub(crate) deks: HashMap<(Uuid, i64), Dek>,
 	pub(crate) identity_versions: HashMap<Uuid, i64>,
+	/// Issuer (biscuit root) pubkey per loaded SAFE chain — kept so controller-chain
+	/// COPIES (`safe_controllers` rows) can be written/refreshed with the right root.
+	pub(crate) issuers: HashMap<Uuid, String>,
 	/// Groove write branch (`JazzClient` uses SchemaManager `"client"` / `"main"`). List queries must
 	/// use this branch only; empty `Query.branches` expands to **all live schema branches**, so merged
 	/// reads can expose rows whose tips are not writable on `current_branch()` (ObjectNotFound).
@@ -616,6 +619,7 @@ pub(super) async fn hydrate_shell(
 	.and_then(|raw| serde_json::from_str(&raw).ok());
 
 	let mut deks: HashMap<(Uuid, i64), Dek> = HashMap::new();
+	let mut issuers: HashMap<Uuid, String> = HashMap::new();
 
 	if !sparks_rows.is_empty() {
 		let ks_schema = resolved_table_schema(client, "keyshares").await?;
@@ -749,6 +753,12 @@ pub(super) async fn hydrate_shell(
 				);
 				continue;
 			}
+			issuers.insert(
+				sid,
+				issuer_opened
+					.clone()
+					.unwrap_or_else(|| identity_acc::encode_issuer_pubkey_b64(&biscuit_root_pub)),
+			);
 			let ver_cell = match vals.get(ver_ix) {
 				Some(c) => c,
 				None => {
@@ -770,6 +780,63 @@ pub(super) async fn hydrate_shell(
 				}
 			};
 			identity_versions.insert(sid, v);
+		}
+
+		// Controller-chain COPIES (remote chain resolution): a SAFE's
+		// `safe_controllers` rows carry a copy of each upward controller's genesis,
+		// owned by the SAFE itself — so its members can resolve a `did:safe:`
+		// controller they are NOT members of (N-hop authorize + verify-on-apply).
+		// Primary `safes` rows always win; copies only fill the gaps.
+		if let Ok(sc_schema) = resolved_table_schema(client, "safe_controllers").await {
+			if let (Ok(own_ix), Ok(did_ix), Ok(gen_ix), Ok(iss_ix)) = (
+				col_ix(&sc_schema, "owner"),
+				col_ix(&sc_schema, "controller_did"),
+				col_ix(&sc_schema, "genesis_b64"),
+				col_ix(&sc_schema, "issuer_pubkey_b64"),
+			) {
+				for (_oid, vals) in exec_list_rows(client, "safe_controllers").await.unwrap_or_default() {
+					let Ok(row_owner) = uuid_cell_at(vals.as_slice(), own_ix) else {
+						continue;
+					};
+					let ctrl_did = match vals.get(did_ix) {
+						Some(Value::Text(s)) => s.clone(),
+						_ => continue,
+					};
+					let Some(ctrl_id) = identity_acc::resolve_safe_did(&ctrl_did) else {
+						continue;
+					};
+					if vault.safes.contains_key(&ctrl_id) {
+						continue;
+					}
+					let Some(gen_cell) = vals.get(gen_ix) else {
+						continue;
+					};
+					let Ok(gen_b64) = hydrate_text_at(&deks, row_owner, gen_cell) else {
+						continue;
+					};
+					let iss_opened =
+						vals.get(iss_ix).and_then(|c| hydrate_text_at(&deks, row_owner, c).ok());
+					if let Err(e) = identity_acc::ingest_genesis_opened(
+						&mut vault,
+						ctrl_id,
+						&gen_b64,
+						iss_opened.as_deref(),
+						biscuit_root_pub,
+					) {
+						log::warn!(
+							target: "avenos::jazz",
+							"hydrate_shell: controller copy ingest {ctrl_id} (for {row_owner}): {e}",
+						);
+						continue;
+					}
+					issuers.insert(
+						ctrl_id,
+						iss_opened.unwrap_or_else(|| {
+							identity_acc::encode_issuer_pubkey_b64(&biscuit_root_pub)
+						}),
+					);
+				}
+			}
 		}
 	} else {
 		// No bootstrap identity: the app works with zero identities. The user creates
@@ -827,6 +894,7 @@ pub(super) async fn hydrate_shell(
 		default_identity,
 		deks,
 		identity_versions,
+		issuers,
 		groove_write_branch,
 	})
 }

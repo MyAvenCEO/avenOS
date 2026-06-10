@@ -4,9 +4,13 @@ use std::collections::HashSet;
 
 use base64::engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD};
 use base64::Engine;
+// Re-exported so dependents (the device app) can NAME the chain type without a
+// direct biscuit_auth dependency — e.g. cascade-rotation helpers passing a
+// just-rebuilt chain by reference.
+pub use biscuit_auth::Biscuit;
 use biscuit_auth::{
 	builder::{Algorithm, AuthorizerBuilder, BlockBuilder},
-	Biscuit, KeyPair, PublicKey,
+	KeyPair, PublicKey,
 };
 use ed25519_dalek::SigningKey;
 use uuid::Uuid;
@@ -660,22 +664,41 @@ pub fn authorize(
 /// returns false). Resolves controller chains purely from the loaded
 /// `vault.safes` biscuits — fully offline, no table lookup.
 pub fn subject_controls_safe(vault: &BiscuitVault, safe_id: Uuid, subject_did: &str) -> bool {
-	subject_controls_safe_with_depth(vault, safe_id, subject_did, 0)
+	subject_controls_safe_with_depth(vault, safe_id, subject_did, None, 0)
+}
+
+/// [`subject_controls_safe`], but resolving `override.0` with the chain
+/// `override.1` instead of the vault's loaded copy. The cascade-rotation path
+/// uses this: the parent SAFE's chain was just rebuilt (revoke) and is not in
+/// the vault yet, but downstream membership must be judged against it.
+pub fn subject_controls_safe_with(
+	vault: &BiscuitVault,
+	safe_id: Uuid,
+	subject_did: &str,
+	override_safe: Uuid,
+	override_chain: &Biscuit,
+) -> bool {
+	subject_controls_safe_with_depth(vault, safe_id, subject_did, Some((override_safe, override_chain)), 0)
 }
 
 fn subject_controls_safe_with_depth(
 	vault: &BiscuitVault,
 	safe_id: Uuid,
 	subject_did: &str,
+	overlay: Option<(Uuid, &Biscuit)>,
 	depth: u32,
 ) -> bool {
 	if depth > MAX_GROUP_DEPTH {
 		return false;
 	}
-	let Some(chain) = vault.safes.get(&safe_id) else {
-		return false;
+	let admins = match overlay {
+		Some((oid, chain)) if oid == safe_id => identity_admins(chain, safe_id),
+		_ => match vault.safes.get(&safe_id) {
+			Some(c) => identity_admins(&c.biscuit, safe_id),
+			None => return false,
+		},
 	};
-	let Ok(admins) = identity_admins(&chain.biscuit, safe_id) else {
+	let Ok(admins) = admins else {
 		return false;
 	};
 	if admins.iter().any(|a| signer_did_matches(a, subject_did)) {
@@ -684,7 +707,7 @@ fn subject_controls_safe_with_depth(
 	admins.iter().any(|a| {
 		resolve_safe_did(a)
 			.filter(|c| *c != safe_id)
-			.map(|c| subject_controls_safe_with_depth(vault, c, subject_did, depth + 1))
+			.map(|c| subject_controls_safe_with_depth(vault, c, subject_did, overlay, depth + 1))
 			.unwrap_or(false)
 	})
 }
@@ -763,11 +786,39 @@ fn safe_controlled_by_with_depth(
 /// member also cuts its signers off the new key, unless a signer holds an
 /// independent credential of its own.
 pub fn chain_still_member(vault: &BiscuitVault, chain: &Biscuit, owner: Uuid, did: &str) -> bool {
+	chain_still_member_inner(vault, chain, owner, did, None)
+}
+
+/// [`chain_still_member`], resolving `override_safe` with `override_chain`
+/// instead of the vault copy — for cascade rotation, where a downstream SAFE's
+/// membership must be judged with the just-rebuilt PARENT chain in effect.
+pub fn chain_still_member_with(
+	vault: &BiscuitVault,
+	chain: &Biscuit,
+	owner: Uuid,
+	did: &str,
+	override_safe: Uuid,
+	override_chain: &Biscuit,
+) -> bool {
+	chain_still_member_inner(vault, chain, owner, did, Some((override_safe, override_chain)))
+}
+
+fn chain_still_member_inner(
+	vault: &BiscuitVault,
+	chain: &Biscuit,
+	owner: Uuid,
+	did: &str,
+	overlay: Option<(Uuid, &Biscuit)>,
+) -> bool {
+	let controls = |c: Uuid| match overlay {
+		Some((oid, och)) => subject_controls_safe_with(vault, c, did, oid, och),
+		None => subject_controls_safe(vault, c, did),
+	};
 	let via_safe = |dids: &HashSet<String>| {
 		dids.iter().any(|a| {
 			resolve_safe_did(a)
 				.filter(|c| *c != owner)
-				.map(|c| subject_controls_safe(vault, c, did))
+				.map(&controls)
 				.unwrap_or(false)
 		})
 	};
@@ -787,6 +838,34 @@ pub fn chain_still_member(vault: &BiscuitVault, chain: &Biscuit, owner: Uuid, di
 		}
 	}
 	false
+}
+
+/// The upward controller closure of `safe_id`: itself plus every `did:safe:`
+/// SAFE reachable through owns sets (depth-bounded, deduplicated). The chain-copy
+/// distribution writes one `safe_controllers` row per closure entry, so a
+/// downstream member can resolve the FULL path back to signer anchors.
+pub fn safe_controller_closure(vault: &BiscuitVault, safe_id: Uuid) -> Vec<Uuid> {
+	let mut seen: Vec<Uuid> = Vec::new();
+	let mut stack: Vec<(Uuid, u32)> = vec![(safe_id, 0)];
+	while let Some((id, depth)) = stack.pop() {
+		if depth > MAX_GROUP_DEPTH || seen.contains(&id) {
+			continue;
+		}
+		let Some(chain) = vault.safes.get(&id) else {
+			continue;
+		};
+		seen.push(id);
+		if let Ok(admins) = identity_admins(&chain.biscuit, id) {
+			for a in admins {
+				if let Some(ctrl) = resolve_safe_did(&a) {
+					if ctrl != id {
+						stack.push((ctrl, depth + 1));
+					}
+				}
+			}
+		}
+	}
+	seen
 }
 
 fn authorize_with_depth(
@@ -811,24 +890,30 @@ fn authorize_with_depth(
 							return Ok(());
 						}
 					}
-					// SAFE-in-SAFE: a `did:safe:` entry in the owns set delegates this
-					// SAFE's authority to whoever controls that SAFE. If the subject
-					// controls the controller (transitively), re-run the local check AS
-					// the controller DID — it is in the owns set, so the SAFE's own
-					// `right` facts gate the op exactly as for a direct owner.
+					// SAFE-in-SAFE: a `did:safe:` entry granted on this SAFE (owns OR
+					// reads) delegates that grant to whoever controls the named SAFE.
+					// If the subject controls it (transitively), re-run the local
+					// check AS the SAFE DID — the SAFE's own facts then gate the op
+					// exactly as for the direct grantee: an owns-SAFE passes owner
+					// rights, a reads-SAFE passes Read only (delegated-reads path).
+					let mut candidates: Vec<String> = Vec::new();
 					if let Ok(admins) = identity_admins(&chain.biscuit, owner) {
-						for admin in admins {
-							let Some(controller) = resolve_safe_did(&admin) else {
-								continue;
-							};
-							if controller == owner {
-								continue;
-							}
-							if subject_controls_safe_with_depth(vault, controller, subject_did, depth + 1)
-								&& authorize_local(vault, owner, op, table, row_id, &admin).is_ok()
-							{
-								return Ok(());
-							}
+						candidates.extend(admins);
+					}
+					if let Ok(readers) = identity_readers(&chain.biscuit, owner) {
+						candidates.extend(readers);
+					}
+					for candidate in candidates {
+						let Some(controller) = resolve_safe_did(&candidate) else {
+							continue;
+						};
+						if controller == owner {
+							continue;
+						}
+						if subject_controls_safe_with_depth(vault, controller, subject_did, None, depth + 1)
+							&& authorize_local(vault, owner, op, table, row_id, &candidate).is_ok()
+						{
+							return Ok(());
 						}
 					}
 				}
@@ -1573,5 +1658,69 @@ mod tests {
 		assert!(!chain_still_member(&alice, &rebuilt, aven_id, &bob.signer_did));
 		assert!(chain_still_member(&alice, &rebuilt, aven_id, &carol.signer_did));
 		assert!(chain_still_member(&alice, &rebuilt, aven_id, &alice.signer_did));
+	}
+
+	#[test]
+	fn safe_reader_grant_gives_its_signers_read_only() {
+		// bob's humanSAFE H2 is added as a READER on alice's aven — bob (a signer
+		// of H2) may Read but never Write/Delete.
+		let mut alice = vault(&[1u8; 32]);
+		let bob = vault(&[2u8; 32]);
+		let aven_id = uuid::Uuid::new_v4();
+		let bob_human_id = uuid::Uuid::new_v4();
+
+		let bob_human = mint_safe_genesis(&bob, bob_human_id).unwrap();
+		alice
+			.safes
+			.insert(bob_human_id, BiscuitIdentity { owner: bob_human_id, biscuit: bob_human });
+
+		let genesis = mint_safe_genesis(&alice, aven_id).unwrap();
+		let chain = attenuate_add_reader_third_party(
+			&alice.biscuit_kp,
+			&genesis,
+			aven_id,
+			&safe_did(bob_human_id),
+		)
+		.unwrap();
+		alice.safes.insert(aven_id, BiscuitIdentity { owner: aven_id, biscuit: chain });
+
+		authorize(&alice, aven_id, AccOp::Read, "todos", None, &bob.signer_did).unwrap();
+		assert!(authorize(&alice, aven_id, AccOp::Write, "todos", None, &bob.signer_did).is_err());
+		assert!(authorize(&alice, aven_id, AccOp::Delete, "todos", None, &bob.signer_did).is_err());
+	}
+
+	#[test]
+	fn cascade_overlay_judges_downstream_with_rebuilt_parent() {
+		// humanSAFE H (alice+bob) controls aven A; A controls spark S. Revoking bob
+		// from H rebuilds H's chain — S's membership must be judged with the NEW H
+		// chain overlaid (the vault still holds the old one).
+		let mut alice = vault(&[1u8; 32]);
+		let bob = vault(&[2u8; 32]);
+		let human_id = uuid::Uuid::new_v4();
+		let aven_id = uuid::Uuid::new_v4();
+		let spark_id = uuid::Uuid::new_v4();
+
+		let mut h = mint_safe_genesis(&alice, human_id).unwrap();
+		h = attenuate_add_owner_third_party(&alice.biscuit_kp, &h, human_id, &bob.signer_did).unwrap();
+		alice.safes.insert(human_id, BiscuitIdentity { owner: human_id, biscuit: h });
+		let a = mint_safe_genesis_with_controller(&alice, aven_id, &safe_did(human_id)).unwrap();
+		alice.safes.insert(aven_id, BiscuitIdentity { owner: aven_id, biscuit: a });
+		let s = mint_safe_genesis_with_controller(&alice, spark_id, &safe_did(aven_id)).unwrap();
+		alice.safes.insert(spark_id, BiscuitIdentity { owner: spark_id, biscuit: s });
+
+		// Bob is a transitive member of the spark today.
+		let s_chain = alice.safes.get(&spark_id).unwrap().biscuit.clone();
+		assert!(chain_still_member(&alice, &s_chain, spark_id, &bob.signer_did));
+
+		// Rebuild H WITHOUT bob. Vault still holds old H — the plain check is stale…
+		let new_h = rebuild_identity_biscuit_excluding(&alice, human_id, &bob.signer_did).unwrap();
+		assert!(chain_still_member(&alice, &s_chain, spark_id, &bob.signer_did), "stale without overlay");
+		// …the overlay variant judges with the rebuilt H chain: bob is out, alice stays.
+		assert!(!chain_still_member_with(&alice, &s_chain, spark_id, &bob.signer_did, human_id, &new_h));
+		assert!(chain_still_member_with(&alice, &s_chain, spark_id, &alice.signer_did, human_id, &new_h));
+
+		// Closure walks the full upward path: S → A → H.
+		let closure = safe_controller_closure(&alice, spark_id);
+		assert!(closure.contains(&spark_id) && closure.contains(&aven_id) && closure.contains(&human_id));
 	}
 }
