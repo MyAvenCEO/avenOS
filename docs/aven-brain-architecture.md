@@ -54,6 +54,7 @@ Three layers: **artifacts** (sealed originals: `files`/`messages` rows — outsi
 
 | Term | Role |
 |---|---|
+| **artifact** | any app-owned table row (`messages`, `files`, `todos`, future `vendors`, …): the sealed, synced ground truth the brain derives from — and never writes |
 | **memory** | *evidence*: verbatim recallable text + embedding + provenance + veracity. A chat turn, a document chunk — always citable back to its artifact. Dreaming's summaries are also memories (provenance `summarizes`, veracity `inferred`). |
 | **provenance** | typed, indexed columns recording where a memory came from — `stream` (surface), `author_role` (user/agent/system), `source` (artifact row ref), `seq`/`line_start/end` (position), `content_date`; doubles as the cheap deterministic recall filter |
 | **entity** | *interpretation*: a named thing the brain believes exists (person/project/topic/document) — extracted, re-derivable, mergeable, never itself the truth |
@@ -129,13 +130,51 @@ The DB viewer renders ref-bearing entities as clickable links to the referenced 
 cards link back — every typed entity is one click from the row it stands for. Future "schema
 types" = new entity kinds + link kinds: **pure data, zero migrations.**
 
-### 2.4 One app table: `context_traces`
+### 2.4 Artifacts — every app table plays the same way
+
+Generalization: **every app table is an artifact table.** `messages` and `files` are not special
+— `todos`, `identities`, and any future schema type (`vendors`, `invoices`, `contacts`, …) relate
+to the brain through the same two hooks:
+
+```
+ARTIFACTS  (app-owned, sealed, synced — the typed schema layer)
+  messages · files · todos · identities · vendors · …any future table
+      │ 1. ingest:     its text → memories (source = row ref)            [evidence]
+      │ 2. represent:  its identity → typed entity (ref_table/ref_id)    [interpretation]
+      ▼
+BRAIN  memories · entities · links   (derived understanding — never the truth)
+```
+
+1. **Ingestion adapter (per table, registered)** — declares *what text this artifact contributes
+   and when*. The contract (a per-table descendant of MemPalace's RFC-002 source-adapter):
+   `on_create / on_update / on_delete → memory drafts (+ provenance) · entity upsert ·
+   deterministic claims`. Examples:
+   - `messages` → body on create (built into the talk flow, §4.1–4.2)
+   - `files` → extracted text, chunked, on create (§4.3); type-aware extraction per mime
+     (markdown/text now, PDF next; an *invoice* PDF can later add deterministic claims like
+     `invoice —issued_by→ vendor`, `—due_on→ date` — adapter logic, zero schema change)
+   - `todos` → small **event memories** ("todo created: *Ship invoice flow*", "completed: …")
+     on create/update — state changes become recallable history, while the todo row stays the
+     live truth
+   Adapters are deterministic first (regex/structure), model-assisted only later and off the
+   write path; an artifact with no adapter simply contributes nothing (opt-in per table).
+2. **Typed entity** — if the artifact deserves graph presence, its adapter upserts the lazy
+   entity (`kind` = what it is: `document`/`todo`/`vendor`/`person`), which then accumulates
+   mentions, claims, bonds, and a compiled-truth card + timeline.
+
+**The direction of truth is strictly one-way.** Artifacts are app-owned ground truth; the brain
+only reads and derives — it never writes a todo or edits a file (tool calls write artifacts; the
+brain ingests the result). And the DB viewer becomes a two-layer browser for free: artifact
+tables ↔ brain tables, every `source`/`ref_table+ref_id` cell clickable in both directions
+(vendor row → its entity card → every conversation mentioning it → the exact message rows).
+
+### 2.5 One app table: `context_traces`
 
 The historical record of what was actually sent to the LLM per human message — sealed, synced,
 owner-scoped: `{ owner, message_id, reply_id?, trace (sealed ContextTrace JSON), created_at_ms }`.
 Kept out of the message row (whose `body` carries the tool-call envelope).
 
-### 2.5 Manifest & migration obligations (E0 — highest blast radius)
+### 2.6 Manifest & migration obligations (E0 — highest blast radius)
 
 - `libs/aven-schema/schema.manifest.json` gains `memories`/`entities`/`links` +
   `context_traces`; the manifest type system gains **`vector`**
@@ -145,7 +184,7 @@ Kept out of the message row (whose `body` carries the tool-call envelope).
   embed it in `schema_manifest.rs::install_runtime_schema_files` — else existing vaults fail
   connect with "unknown schema hash". Add-only ⇒ non-draft auto-lens, data survives.
 
-### 2.6 What we deliberately do NOT add
+### 2.7 What we deliberately do NOT add
 
 No separate mentions/facts/relations tables (link kinds) · no working/episodic split (provenance
 + `summarizes` links do it) · no `tier` column (age-weights are pure `f(created_at)`) · no
@@ -179,7 +218,8 @@ Plaintext lives only in RAM during the scan; results (row ids + ranks) carry no 
 ## 4. Write path — ingest everything
 
 Sealed artifacts are the source of truth; the brain derives evidence and understanding from
-them. Ingest **never blocks the talk loop** (fire-and-forget, logged, idempotent).
+them through **per-table ingestion adapters** (§2.4). Ingest **never blocks the talk loop**
+(fire-and-forget, logged, idempotent). The flows below are the first three adapters:
 
 1. **User turn** → `messages` row (sealed, synced) → `brain_ingest(content, stream='talk',
    author_role='user', source=row_id, content_date=created_at_ms)`.
@@ -339,7 +379,7 @@ Each phase independently shippable, with files + verification:
 | **E0** | **Manifest + migration**: `vector` type, `memories`/`entities`/`links` (+owner), `context_traces`; snapshot + registry + embedded snapshot **in the same commit** | `libs/aven-schema/schema.manifest.json`, `migrations/registry.json` + snapshot, `app/src-tauri/src/schema_manifest.rs` | existing vault boots (lens applies, no wipe); fresh vault boots; tables listed by `jazzStatus()` |
 | **E1** | **Engine seam + 3-table rework**: unseal-on-scan transform for `nearest`/`text_search`; aven-brain migrates its 5-table schema to memory/entity/link + the kind→class registry (mention/fact/bond APIs unchanged in name, free-label param removed, `Provenance { stream, author_role, source }`); `open(identity)` over the shared store; `remember_with`, `search_traced` (via/rank provenance), `assemble_context`; rewire KG/dreaming/cards to links | `libs/aven-db` executor/scan path, `libs/aven-brain/src/{schema,brain}.rs` | `cargo test -p aven-brain` (13 tests migrated + registry tests: claim-close, note-idempotence, bond-potentiate); sealed fixture: search correct, no plaintext at rest |
 | **E2** | **App runtime**: brain module + Tauri commands `brain_status/ingest/search/entities/entity_card/assemble_context/backfill/dream` (asr/llm/tts pattern) + TS wrapper | new `app/src-tauri/src/brain.rs`, `app/src-tauri/src/lib.rs` (manage/handler/exit-drain), new `app/src/lib/brain/api.ts` | devtools: ingest → search round-trip on a real identity |
-| **E3** | **Ingestion**: talk hooks (user/agent turns), file pipeline (markdown/text chunking; PDF next) + document entity upsert, backfill of pre-brain history, **drag-drop fix** | `identity-agent.svelte.ts`, `intent-files.ts`, `app/src/routes/+layout.svelte` | drop a .md on talk → stays on screen, chunks in `memories` with `source` = file row id + document entity with mentions; backfill idempotent (2nd run dedups all) |
+| **E3** | **Ingestion**: the adapter registry (§2.4) + first adapters — messages (talk hooks for user/agent turns), files (markdown/text chunking; PDF next) + document entity upsert; todos adapter (event memories) next; backfill of pre-brain history; **drag-drop fix** | `identity-agent.svelte.ts`, `intent-files.ts`, `app/src/routes/+layout.svelte` | drop a .md on talk → stays on screen, chunks in `memories` with `source` = file row id + document entity with mentions; backfill idempotent (2nd run dedups all) |
 | **E4** | **Context manager**: `assemble_context` wiring + `context_traces` writes + fallback path | `identity-agent.svelte.ts` | reply still streams with brain off (fallback); trace row per human message; prompt contains L0/L1/WW/recall blocks under budget |
 | **E5** | **Right aside**: layout third column + drawer, `TalkContextAside`, message-click selection | `SlideAsideLayout.svelte`, `AsidePageLayout.svelte`, identity `+layout.svelte`, `IdentityTalkPanel.svelte`, new `TalkContextAside.svelte`, `talk-context.svelte.ts` | xl: aside shows newest trace; clicking older message swaps it; <xl drawer; other routes untouched; `bun run check` |
 | **E6** | **DB viewer**: dynamic tables, `format-cell.ts`, ref navigation, link class badges, brain search tab | `db/+page.svelte`, new `app/src/lib/db/format-cell.ts` | brain tables render readable; Vector/Bytea/Timestamp formatted; ref click navigates; search shows via badges |
@@ -372,6 +412,11 @@ Each phase independently shippable, with files + verification:
 ## Appendix A — plain-language glossary
 
 - **Brain** — each identity has one private memory store it fully owns; nobody else can read it.
+- **Artifact** — the real things your apps store: messages, files, todos, vendors. The ground
+  truth. The brain reads them and learns from them, but never changes them.
+- **Ingestion adapter** — each artifact type's little recipe for what the brain should remember
+  about it: a message contributes its text, a file its pages, a todo its "created/completed"
+  moments. New artifact type → new recipe, nothing else changes.
 - **Memory** — one piece of *evidence*, word-for-word: a chat message, a chunk of a document.
   Always traceable to where it came from.
 - **Provenance** — every memory's birth certificate: which surface it came through (`stream`),
