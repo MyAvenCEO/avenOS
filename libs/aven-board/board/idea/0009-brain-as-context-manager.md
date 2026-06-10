@@ -3,7 +3,7 @@ title: Brain as the context manager — per-identity, transparent recall
 summary: Wire a per-identity aven-brain to each identity's aven-db, ingest everything (intent text/file/audio, every message, every document, every AI response) as memories, and make the brain the SINGLE SOURCE OF TRUTH that assembles context before every LLM roundtrip. Surface a transparent recall snippet on each AI response so the recall flow + references are visible.
 owner: unassigned
 created: 2026-06-07
-updated: 2026-06-07
+updated: 2026-06-10
 tags: [aven-brain, ux, context, memory, talk]
 goal: "In talk/chat, every AI response carries a RecallTrace the user can expand to see the query, the context layers loaded, and the ranked references (vector/bm25/both badges + scores + citations); and the LLM prompt is built by brain.assemble_context(), not a raw transcript."
 ---
@@ -141,3 +141,12 @@ each reference with a why-it-matched badge + score + clickable citation, plus en
   brain-as-context-manager, transparent recall UI). The library layer it builds on
   (remember/search/wake/recall/entity_card/dream + EmbeddingGemma encoder) already shipped — see
   the archived execution plan (`board/done/0010-aven-brain-execution-plan.md`).
+- `2026-06-10` — Design sections superseded by the **v4 execution plan**
+  (`docs/aven-brain-architecture.md`), which folds this card into phases E2–E6 with the locked
+  decisions: brain tables = normal CRDT-synced **sealed** tables (engine unseal-on-scan seam,
+  plaintext only transiently in RAM on-device); forever-talk (no sessions); per-human-message
+  ContextTrace stored in a new sealed `context_traces` table; **wide right aside** (third grid
+  column at xl, 22–30rem) showing the exact context sent per message; file drag-drop on an
+  identity screen stays in place and ingests into that identity's brain (no `goto('/')`);
+  DB viewer goes fully dynamic (runtime table list) with type-aware Vector/Bytea/Timestamp cells
+  + brain search tab. The four "decisions to lock" above are resolved there. TEE extractor parked.
