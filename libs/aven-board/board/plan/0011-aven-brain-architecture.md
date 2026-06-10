@@ -1,5 +1,5 @@
 ---
-title: aven-brain — architecture & execution plan (v5.2)
+title: aven-brain — architecture & execution plan (v5.4)
 summary: The SSOT for aven-brain — three primitives (memory · entity · link with note/claim/bond classes) over typed artifact tables, CRDT-synced sealed rows with an engine unseal-on-scan seam, per-table ingestion adapters, brain-assembled LLM context (forever talk), per-message ContextTrace in a wide right aside, and a fully dynamic DB viewer. Phased roadmap E0–E7; TEE parked.
 owner: agent
 created: 2026-06-06
@@ -8,13 +8,15 @@ tags: [aven-brain, memory, architecture, context, talk, db-viewer]
 goal: "Per §8: E0 — an existing vault and a fresh vault both boot after the manifest change (migration lens applies, no wipe in logs); E1 — `cargo test -p aven-brain` exits 0 on the 3-table schema incl. registry tests; E4–E6 — a talk message produces a context_traces row rendered in the right aside and `bun run check` exits 0."
 ---
 
-# aven-brain — Architecture & Execution Plan (v5.2)
+# aven-brain — Architecture & Execution Plan (v5.4)
 
 > **The one plan.** Architecture + execution roadmap for making aven-brain the per-identity
 > context manager of avenOS: one forever talk stream, brain-assembled LLM context, transparent
 > per-message recall, ingest-everything (messages, replies, files), and a fully dynamic DB viewer.
 >
-> Status: v5.2 · 2026-06-10 · Supersedes v5.1 (git `c2e95e3`). **The data model is three
+> Status: v5.4 · 2026-06-10 · Supersedes v5.2 (git `1e2b20b`). v5.3 leaned on engine
+> timestamp/digest built-ins; v5.4 deletes shadow/typed entities (links point straight at
+> artifact rows) and adopts the fresh-DB policy (no vault migration care pre-launch). **The data model is three
 > primitives — memory · entity · link — over typed artifact tables**, after re-auditing the deep
 > structure of every reference. (v5.2 folds "provenance" into "artifact": the former is just the
 > latter's reference + key attributes denormalized onto the memory row.) As-built record: `board/done/0010` (engine, pipeline, KG,
@@ -67,8 +69,8 @@ Three layers: **artifacts** (sealed originals: `files`/`messages` rows — outsi
 |---|---|
 | **artifact** | any app-owned table row (`messages`, `files`, `todos`, future `vendors`, …): the sealed, synced ground truth the brain derives from — and never writes. Every memory carries its artifact's reference + key attributes **denormalized as indexed columns** — `source` (the row), `stream` (surface), `author_role` (= the row's role), `seq`/`line_start/end` (position), `content_date` — "the artifact columns", which double as the cheap join-free recall filter |
 | **memory** | *evidence*: verbatim recallable text + embedding + artifact columns + veracity. A chat turn, a document chunk — always citable back to its artifact. Dreaming's summaries are also memories (lineage via `summarizes` links, veracity `inferred`). |
-| **entity** | *interpretation*: a named thing the brain believes exists (person/project/topic/document) — extracted, re-derivable, mergeable, never itself the truth |
-| **link** | the one edge primitive: `from —kind→ to` (+ validity/confidence/weight per class). Mentions, facts, bonds, summaries, refs — all links. |
+| **entity** | *pure interpretation*: a name extracted from evidence that has **no backing row** — a topic, a project, a world-person ("Alice" from a chat). Things that *do* have a row (a document = its `files` row, you = your `identities` row, a vendor = its `vendors` row) are **linked directly — no shadow entity** |
+| **link** | the one edge primitive: `from —kind→ to` (+ validity/confidence/weight per class). **Endpoints are any rows** — memories, entities, or artifact rows directly (every aven-db object carries its table in metadata, so refs resolve without discriminators). Mentions, facts, bonds, summaries — all links. |
 | **mention** | link kind, class *note*: memory → entity ("this evidence talks about X") |
 | **fact** | link kinds (free predicates), class *claim*: entity → entity, validity window + confidence + `source_memory` (the evidence behind the claim) |
 | **bond** | link kind, class *bond*: entity ↔ entity association with dynamics (Hebbian growth / Ebbinghaus decay) |
@@ -96,9 +98,9 @@ memories  owner Uuid · content Text · embedding Vector{768}
           normalize_version Int
           veracity Enum[stated,inferred,imported,tool,unknown] · superseded_by →memories
 
-entities  owner Uuid · name Text · kind Text (person/agent/document/topic/project/thing)
-          ref_table Text? · ref_id Text? (typed entities point at real rows, §2.3)
+entities  owner Uuid · name Text · kind Text (person/topic/project/thing)
           properties Json
+          — pure interpretation only; rows that exist as artifacts are linked directly (§2.3)
 
 links     owner Uuid · from Uuid · to Uuid · kind Text · class Enum[note,claim,bond]
           valid_from Timestamp? · valid_to Timestamp? · confidence Double?     ← claim
@@ -141,21 +143,26 @@ Each kind is registered once with its class; the brain refuses unregistered kind
 App code never writes "a link" — it writes `mention(memory, entity)`, `fact(s, p, o, from)`,
 `bond(a, b)`; the registry applies the class semantics.
 
-### 2.3 Typed entities — interpretation that points at real rows
+### 2.3 Links point at rows, not shadows
 
-An entity whose `ref_table`/`ref_id` are set stands for an actual schema row, created **lazily**
-(when extraction or a card needs it, never eagerly):
+If a thing already exists as an artifact row, **the graph references that row directly** — no
+shadow "typed entity" duplicating its identity:
 
-| Entity `kind` | References | Created when |
-|---|---|---|
-| `person` | `identities` row | the self entity — its compiled-truth card is L0 |
-| `agent` | `identities` / agent DID | first agent card is needed |
-| `document` | `files` row | a file is dropped — gets a card + timeline; its chunks `mention` it |
-| `topic` / `project` / `thing` | — | wikilink/regex extraction (pure world knowledge) |
+- a dropped file's chunks `mention` **the `files` row itself**; the document's compiled-truth
+  card + timeline is a **derived view keyed by that row id**
+- L0 is the compiled-truth card keyed by **your `identities` row**
+- a claim can connect artifact rows directly: `files-row —issued_by→ vendors-row`
 
-The DB viewer renders ref-bearing entities as clickable links to the referenced row, and entity
-cards link back — every typed entity is one click from the row it stands for. Future "schema
-types" = new entity kinds + link kinds: **pure data, zero migrations.**
+Ref resolution is built in: every aven-db object carries its table in metadata
+(`MetadataKey::Table`), so the DB viewer and cards resolve any link endpoint without
+discriminator columns.
+
+The `entities` table holds **pure interpretation only** — extracted names with no backing row
+(`person`/`topic`/`project`/`thing` from wikilinks/regex). **Promotion rule:** when an
+interpretation turns out to *be* a real row (extracted "Alice" matches an avenOS identity),
+dreaming merges it — re-points its links to the artifact row (or aliases via a `refers_to` note
+link when history shouldn't be rewritten). Future "schema types" = new artifact tables + link
+kinds: **pure data, zero brain migrations.**
 
 ### 2.4 Artifacts — every app table plays the same way
 
@@ -167,7 +174,7 @@ to the brain through the same two hooks:
 ARTIFACTS  (app-owned, sealed, synced — the typed schema layer)
   messages · files · todos · identities · vendors · …any future table
       │ 1. ingest:     its text → memories (source = row ref)            [evidence]
-      │ 2. represent:  its identity → typed entity (ref_table/ref_id)    [interpretation]
+      │ 2. graph:      links point straight at the artifact row (no shadow node)
       ▼
 BRAIN  memories · entities · links   (derived understanding — never the truth)
 ```
@@ -185,14 +192,14 @@ BRAIN  memories · entities · links   (derived understanding — never the trut
      live truth
    Adapters are deterministic first (regex/structure), model-assisted only later and off the
    write path; an artifact with no adapter simply contributes nothing (opt-in per table).
-2. **Typed entity** — if the artifact deserves graph presence, its adapter upserts the lazy
-   entity (`kind` = what it is: `document`/`todo`/`vendor`/`person`), which then accumulates
-   mentions, claims, bonds, and a compiled-truth card + timeline.
+2. **Graph presence** — automatic: links point straight at the artifact row (§2.3), which then
+   accumulates mentions, claims, bonds, and a compiled-truth card + timeline keyed by its id.
+   No node to create.
 
 **The direction of truth is strictly one-way.** Artifacts are app-owned ground truth; the brain
 only reads and derives — it never writes a todo or edits a file (tool calls write artifacts; the
 brain ingests the result). And the DB viewer becomes a two-layer browser for free: artifact
-tables ↔ brain tables, every `source`/`ref_table+ref_id` cell clickable in both directions
+tables ↔ brain tables, every `source`/link-endpoint cell clickable in both directions
 (vendor row → its entity card → every conversation mentioning it → the exact message rows).
 
 ### 2.5 One app table: `context_traces`
@@ -214,15 +221,15 @@ this one table. It stays a lean **decision log**, because the engine already kee
 - the trace row's own audit is free: signed (EditSignature), owner-bound, UUIDv7 batch-stamped,
   sync-auditable via BatchFate
 
-### 2.6 Manifest & migration obligations (E0 — highest blast radius)
+### 2.6 Manifest changes (E0)
 
 - `libs/aven-schema/schema.manifest.json` gains `memories`/`entities`/`links` +
-  `context_traces`; the manifest type system gains **`vector`**
+  `context_traces`; the manifest type system gains **`vector`** (with `dim`)
   (`schema_manifest.rs::column_type_from_manifest` has no vector mapping today).
-- Changing the manifest changes the Groove `SchemaHash`. **In the same commit**: snapshot the old
-  manifest to `libs/aven-schema/migrations/snapshots/`, register it in `migrations/registry.json`,
-  embed it in `schema_manifest.rs::install_runtime_schema_files` — else existing vaults fail
-  connect with "unknown schema hash". Add-only ⇒ non-draft auto-lens, data survives.
+- **Fresh-DB policy (decided):** pre-launch we don't carry existing vaults — no new migration
+  snapshot/registry entry is needed for this change (dev vaults reset). The existing registry
+  test (`registry_snapshots_lens_cleanly_to_current`) stays green since adding tables is
+  add-only. The snapshot/registry discipline resumes once real users exist.
 
 ### 2.7 What we deliberately do NOT add
 
@@ -231,7 +238,9 @@ No separate mentions/facts/relations tables (link kinds) · no standalone "prove
 do it) · no `created_at`/`updated_at` columns (engine `RowProvenance` + UUIDv7 `BatchId` supply
 `_created_at`/`_updated_at`, §2.1) · no `tier` column (age-weights are pure `f(_created_at)`) ·
 no content-hash duplication of the engine row digest (different jobs, §2.1) · no canonical table (L0 = the
-self entity's compiled-truth card) · no scratchpad/banks (identities are the isolation) · no
+card keyed by your `identities` row) · no shadow/typed entities (links point straight at
+artifact rows; `entities` is pure interpretation only) · no scratchpad/banks (identities are the
+isolation) · no
 free-form labels (typed artifact columns only) · no eager artifact-entity derivation (lazy,
 §2.3) · no 13-type taxonomy (small decay classes from typed columns).
 
@@ -272,10 +281,10 @@ them through **per-table ingestion adapters** (§2.4). Ingest **never blocks the
 3. **Files — drop anything into the talk stream**: original stays verbatim + sealed in `files`
    (via `persistSparkFiles`) → **extract text** (markdown/text directly; PDF next) → **chunk
    ≈800 chars / 80 overlap** → embed → one memory per chunk (`source` = file row id, `seq`,
-   `line_start/end`, `stream='talk'`, `author_role='user'`) → upsert the `kind: document`
-   entity (ref = the `files` row) which every chunk `mentions` — the document gets its own
-   compiled-truth card + timeline. Bytea originals are never searched — chunks are; citations
-   resolve back to file + line range via `source`.
+   `line_start/end`, `stream='talk'`, `author_role='user'`) → every chunk `mentions` **the
+   `files` row directly** — the document gets a compiled-truth card + timeline keyed by that
+   row id, no shadow node. Bytea originals are never searched — chunks are; citations resolve
+   back to file + line range via `source`.
 4. **Deterministic understanding on write** ✅ (rewired to links in E1): `[[wikilinks]]` + regex
    pass (entity patterns + fuzzy-merge ≥0.8 + stop-words; SPO patterns `is/has/uses/works at`
    conf 0.6–0.7, ≤5/memory, ≤4096-char input; temporal markers) → entities + `mentions` notes +
@@ -293,7 +302,7 @@ One call before every LLM roundtrip (library method, testable without Tauri):
 ```
 assemble_context(query, opts { working_n=8, recall_k=6, entity_cards=2,
                                budget_chars≈8000, filter: { stream: 'talk' } })
-  L0  self-card (always)                  ← compiled-truth card of the self entity
+  L0  self-card (always)                  ← compiled-truth card keyed by your identities row
   L1  running gist (always)
   WW  working window: last N stream turns (chronological, always included)
   L3  search_traced(query): nearest + text_search → RRF k=60, hits carry via/rank/score,
@@ -339,7 +348,7 @@ Scheduled background pass; everything derived, rebuildable, off the write path:
 | Pass | Status | What it does |
 |---|---|---|
 | Decay | ✅ (rewire to bond links in E1) | bonds: `strength·exp(−days/stability)`, floor 0.05 |
-| Entity-merge | ✅ (rewire in E1) | CRDT-safe merge of duplicate entities by normalized name; re-points their links |
+| Entity-merge | ✅ (rewire in E1) | CRDT-safe merge of duplicate entities by normalized name; re-points their links. **Promotion:** an interpretation entity matching a real artifact row merges into it (links re-pointed, or `refers_to` alias) |
 | Consolidate | ☐ | old stream turns → summary memory with **deterministic ID = f(identity, window)** (concurrent dreams converge under LWW) + `summarizes` note links |
 | Verify claims | ☐ | Bayesian confidence on repeat evidence `conf += (1−conf)·w_veracity·0.3`; contradictions: keep both claim links, mark loser superseded; recompute compiled-truth per entity |
 | Promote | ☐ | load-bearing `author_role='agent'` (`inferred`) memories get verified/promoted |
@@ -403,8 +412,8 @@ become the same ingest path. Elsewhere, the existing behavior stays.
 2. **Type-aware cells** — shared helper (`app/src/lib/db/format-cell.ts`) detecting engine
    serializations: `{type:'Vector'}` → `Vector(768) [0.12, −0.45, …]` (+tooltip);
    `{type:'Bytea'}` → `0x1a2b3c… (n B)` hex; Timestamps → ISO + relative; ref cells
-   (`from`/`to`/`source`/`source_memory`/`owner`/`message_id`, entity `ref_table`+`ref_id`) →
-   clickable, jumping to the target table with an id filter. Links rows render their kind +
+   (`from`/`to`/`source`/`source_memory`/`owner`/`message_id`) → clickable, resolved to their
+   table via the engine's object metadata (`MetadataKey::Table`), jumping there with an id filter. Links rows render their kind +
    class badge (note/claim/bond).
 3. **Brain search tab** — query + optional artifact-column filter (stream / author_role) →
    `brain_search` → hits with via/rank/score badges, click-through to the `memories` row; entity
@@ -419,10 +428,10 @@ Each phase independently shippable, with files + verification:
 
 | # | Phase | Files (key) | Verify |
 |---|---|---|---|
-| **E0** | **Manifest + migration**: `vector` type, `memories`/`entities`/`links` (+owner), `context_traces`; snapshot + registry + embedded snapshot **in the same commit** | `libs/aven-schema/schema.manifest.json`, `migrations/registry.json` + snapshot, `app/src-tauri/src/schema_manifest.rs` | existing vault boots (lens applies, no wipe); fresh vault boots; tables listed by `jazzStatus()` |
+| **E0** | **Manifest**: `vector` type mapping + `memories`/`entities`/`links` (+owner) + `context_traces`. Fresh-DB policy: no migration snapshot needed (§2.6) | `libs/aven-schema/schema.manifest.json`, `app/src-tauri/src/schema_manifest.rs` | schema tests pass (`current_manifest_has_stable_hash`, registry lens test); fresh vault boots; tables listed by `jazzStatus()` |
 | **E1** | **Engine seam + 3-table rework**: unseal-on-scan transform for `nearest`/`text_search`; aven-brain migrates its 5-table schema to memory/entity/link + the kind→class registry (mention/fact/bond APIs unchanged in name, free-label param removed, scope = `Filter { stream, author_role, source }` over the artifact columns); `open(identity)` over the shared store; **surface `_created_at`/`_updated_at`** (engine `RowProvenance`/UUIDv7 `BatchId`) as queryable columns; `remember_with`, `search_traced` (hits carry via/rank origin), `assemble_context`; rewire KG/dreaming/cards to links | `libs/aven-db` executor/scan path, `libs/aven-brain/src/{schema,brain}.rs` | `cargo test -p aven-brain` (13 tests migrated + registry tests: claim-close, note-idempotence, bond-potentiate); sealed fixture: search correct, no plaintext at rest |
 | **E2** | **App runtime**: brain module + Tauri commands `brain_status/ingest/search/entities/entity_card/assemble_context/backfill/dream` (asr/llm/tts pattern) + TS wrapper | new `app/src-tauri/src/brain.rs`, `app/src-tauri/src/lib.rs` (manage/handler/exit-drain), new `app/src/lib/brain/api.ts` | devtools: ingest → search round-trip on a real identity |
-| **E3** | **Ingestion**: the adapter registry (§2.4) + first adapters — messages (talk hooks for user/agent turns), files (markdown/text chunking; PDF next) + document entity upsert; todos adapter (event memories) next; backfill of pre-brain history; **drag-drop fix** | `identity-agent.svelte.ts`, `intent-files.ts`, `app/src/routes/+layout.svelte` | drop a .md on talk → stays on screen, chunks in `memories` with `source` = file row id + document entity with mentions; backfill idempotent (2nd run dedups all) |
+| **E3** | **Ingestion**: the adapter registry (§2.4) + first adapters — messages (talk hooks for user/agent turns), files (markdown/text chunking; PDF next; chunks mention the files row directly); todos adapter (event memories) next; backfill of pre-brain history; **drag-drop fix** | `identity-agent.svelte.ts`, `intent-files.ts`, `app/src/routes/+layout.svelte` | drop a .md on talk → stays on screen, chunks in `memories` with `source` = file row id + mention links to that row; backfill idempotent (2nd run dedups all) |
 | **E4** | **Context manager**: `assemble_context` wiring + `context_traces` writes + fallback path | `identity-agent.svelte.ts` | reply still streams with brain off (fallback); trace row per human message; prompt contains L0/L1/WW/recall blocks under budget |
 | **E5** | **Right aside**: layout third column + drawer, `TalkContextAside`, message-click selection | `SlideAsideLayout.svelte`, `AsidePageLayout.svelte`, identity `+layout.svelte`, `IdentityTalkPanel.svelte`, new `TalkContextAside.svelte`, `talk-context.svelte.ts` | xl: aside shows newest trace; clicking older message swaps it; <xl drawer; other routes untouched; `bun run check` |
 | **E6** | **DB viewer**: dynamic tables, `format-cell.ts`, ref navigation, link class badges, brain search tab | `db/+page.svelte`, new `app/src/lib/db/format-cell.ts` | brain tables render readable; Vector/Bytea/Timestamp formatted; ref click navigates; search shows via badges |
@@ -464,10 +473,11 @@ Each phase independently shippable, with files + verification:
   moments. New artifact type → new recipe, nothing else changes.
 - **Memory** — one piece of *evidence*, word-for-word: a chat message, a chunk of a document.
   Always traceable to its artifact.
-- **Entity** — a thing the brain *believes* exists: a person, project, document, topic. The
-  brain's interpretation, distilled from evidence — never the truth itself.
-- **Typed entity** — an entity that points at a real row: the `document` entity for a dropped
-  file, the `person` entity for you. One click from the card to the actual row and back.
+- **Entity** — a name the brain *believes* refers to something, when no real row exists for it:
+  a person from a story, a topic, a project. Pure interpretation, never the truth itself. Things
+  that *do* exist as rows — a file, a todo, you — never get a duplicate entity: the graph points
+  at the real row directly, and if an extracted name later turns out to be a real row, dreaming
+  merges them.
 - **Link** — the one connector: *something — kind → something*. Three flavors with different
   rules: **notes** ("this memory talks about Alice" — only ever added), **claims** ("Alice
   works at Acme, since 2020" — dated, confidence-weighted, replaced but never erased), and
