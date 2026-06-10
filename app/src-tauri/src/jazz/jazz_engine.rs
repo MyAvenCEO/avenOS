@@ -142,7 +142,7 @@ fn open_sealed_text_for_identity(
 		}
 		return Ok(raw.to_string());
 	}
-	let urn = identity_urn(identity);
+	let urn = safe_urn(identity);
 	let slug = column_type_slug(coord.storage_ty);
 	let mut vers: Vec<i64> = deks
 		.keys()
@@ -397,7 +397,7 @@ pub(super) fn seal_cell_with_dek(
 	dek_version: i64,
 	canonical_plaintext_utf8: &str,
 ) -> Result<String, String> {
-	let urn = identity_urn(identity);
+	let urn = safe_urn(identity);
 	let slug = column_type_slug(storage_ty);
 	let aad = cell_seal_aad(&urn, table, col_name, row, dek_version, slug);
 	seal_text_cell_payload(dek32, &aad, canonical_plaintext_utf8)
@@ -418,7 +418,9 @@ fn canon_cell_plaintext(
 	// string, NOT the canonical-JSON form, or the hydrate hands canonical JSON to base64::decode
 	// and fails `genesis-base64:Invalid symbol 123 ({)`, dropping the identity from the vault.
 	// Other sealed columns (e.g. name) ARE read back through the canonicalizing display path.
-	if table == "identities" && (col == "genesis_b64" || col == "issuer_pubkey_b64") {
+	if (table == "safes" || table == "safe_controllers")
+		&& (col == "genesis_b64" || col == "issuer_pubkey_b64")
+	{
 		return Ok(s.to_string());
 	}
 	let json = JsonValue::String(s.to_string());
@@ -461,7 +463,7 @@ fn sensitive_plaintext_cells(
 /// identity from the vault. aven-node seals genesis/issuer under the identity uuid for the same
 /// reason — this keeps the app's writes consistent with both the hydrate and aven-node.
 fn aad_row_for(table: &str, col: &str, identity: Uuid, object_row: Uuid) -> Uuid {
-	if table == "identities" && (col == "genesis_b64" || col == "issuer_pubkey_b64") {
+	if table == "safes" && (col == "genesis_b64" || col == "issuer_pubkey_b64") {
 		identity
 	} else {
 		object_row
@@ -531,7 +533,7 @@ fn map_sensitive_storage_cell(
 		return ipc_json_from_opened_sensitive_plaintext(raw, ipc_ty)
 			.unwrap_or_else(|_| JsonValue::String(raw.into()));
 	}
-	let urn = identity_urn(identity);
+	let urn = safe_urn(identity);
 	let slug = column_type_slug(coord.storage_ty);
 	let mut vers: Vec<i64> = state
 		.deks
@@ -676,12 +678,12 @@ pub(crate) async fn find_identity_oid(
 	identity: Uuid,
 ) -> Result<ObjectId, String> {
 	let id_ix = col_ix(schema, "owner")?;
-	for (oid, vals) in exec_list_rows(client, "identities").await? {
+	for (oid, vals) in exec_list_rows(client, "safes").await? {
 		if uuid_cell_at(vals.as_slice(), id_ix)? == identity {
 			return Ok(oid);
 		}
 	}
-	Err(format!("no identities row for owner={identity}"))
+	Err(format!("no safes row for owner={identity}"))
 }
 
 /// Map Groove `(table, object_id)` → identity UUID for sync ACL on patch commits.
@@ -968,7 +970,7 @@ pub(super) async fn hydrate_shell(
 				}
 			};
 			let genesis_coord = CellCoord {
-				table: "identities",
+				table: "safes",
 				column: "genesis_b64",
 				row: sid,
 				storage_ty: &genesis_storage_ty,
@@ -988,7 +990,7 @@ pub(super) async fn hydrate_shell(
 			let issuer_opened = match vals.get(issuer_ix) {
 				Some(cell) => {
 					let issuer_coord = CellCoord {
-						table: "identities",
+						table: "safes",
 						column: "issuer_pubkey_b64",
 						row: sid,
 						storage_ty: &issuer_storage_ty,
@@ -1038,7 +1040,7 @@ pub(super) async fn hydrate_shell(
 				}
 			};
 			let ver_coord = CellCoord {
-				table: "identities",
+				table: "safes",
 				column: "current_dek_version",
 				row: sid,
 				storage_ty: &ver_storage_ty,
@@ -1068,7 +1070,9 @@ pub(super) async fn hydrate_shell(
 				col_ix(&sc_schema, "genesis_b64"),
 				col_ix(&sc_schema, "issuer_pubkey_b64"),
 			) {
-				for (_oid, vals) in exec_list_rows(client, "safe_controllers").await.unwrap_or_default() {
+				let sc_gen_ty = sc_schema.columns.columns.get(gen_ix).map(|d| d.column_type.clone());
+				let sc_iss_ty = sc_schema.columns.columns.get(iss_ix).map(|d| d.column_type.clone());
+				for (oid, vals) in exec_list_rows(client, "safe_controllers").await.unwrap_or_default() {
 					let Ok(row_owner) = uuid_cell_at(vals.as_slice(), own_ix) else {
 						continue;
 					};
@@ -1085,11 +1089,30 @@ pub(super) async fn hydrate_shell(
 					let Some(gen_cell) = vals.get(gen_ix) else {
 						continue;
 					};
-					let Ok(gen_b64) = hydrate_text_at(&deks, row_owner, gen_cell) else {
+					let (Some(gen_ty), Some(iss_ty)) = (sc_gen_ty.as_ref(), sc_iss_ty.as_ref()) else {
 						continue;
 					};
-					let iss_opened =
-						vals.get(iss_ix).and_then(|c| hydrate_text_at(&deks, row_owner, c).ok());
+					// require_sealed=true: a chain copy is a trust-root input exactly like the
+					// primary `safes` genesis — refuse a cleartext-downgraded value (audit #31).
+					// Opened under the OWNING SAFE's DEK; AAD row = this copy row's object id.
+					let gen_coord = CellCoord {
+						table: "safe_controllers",
+						column: "genesis_b64",
+						row: *oid.uuid(),
+						storage_ty: gen_ty,
+					};
+					let Ok(gen_b64) = hydrate_text_at(&deks, row_owner, &gen_coord, gen_cell, true) else {
+						continue;
+					};
+					let iss_coord = CellCoord {
+						table: "safe_controllers",
+						column: "issuer_pubkey_b64",
+						row: *oid.uuid(),
+						storage_ty: iss_ty,
+					};
+					let iss_opened = vals
+						.get(iss_ix)
+						.and_then(|c| hydrate_text_at(&deks, row_owner, &iss_coord, c, true).ok());
 					if let Err(e) = identity_acc::ingest_genesis_opened(
 						&mut vault,
 						ctrl_id,

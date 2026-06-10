@@ -134,10 +134,10 @@ fn seal_identity_cell(
 	let col = sparks_tbl
 		.columns
 		.column(column)
-		.ok_or_else(|| format!("seal: identities has no {column} column"))?;
-	let urn = format!("identity:{avenceo_id}");
+		.ok_or_else(|| format!("seal: safes has no {column} column"))?;
+	let urn = format!("safe:{avenceo_id}");
 	let slug = column_type_slug(&col.column_type);
-	let aad = cell_seal_aad(&urn, "identities", column, avenceo_id, dek_ver, slug);
+	let aad = cell_seal_aad(&urn, "safes", column, avenceo_id, dek_ver, slug);
 	seal_text_cell_payload(dek32, &aad, plaintext)
 }
 
@@ -154,10 +154,10 @@ fn unseal_identity_cell(
 	let col = sparks_tbl
 		.columns
 		.column(column)
-		.ok_or_else(|| format!("unseal: identities has no {column} column"))?;
-	let urn = format!("identity:{avenceo_id}");
+		.ok_or_else(|| format!("unseal: safes has no {column} column"))?;
+	let urn = format!("safe:{avenceo_id}");
 	let slug = column_type_slug(&col.column_type);
-	let aad = cell_seal_aad(&urn, "identities", column, avenceo_id, dek_ver, slug);
+	let aad = cell_seal_aad(&urn, "safes", column, avenceo_id, dek_ver, slug);
 	let (plaintext, _ver) = open_text_cell_payload(dek32, sealed, &aad)?;
 	Ok(plaintext)
 }
