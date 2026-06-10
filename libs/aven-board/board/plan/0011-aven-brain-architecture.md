@@ -201,6 +201,19 @@ The historical record of what was actually sent to the LLM per human message —
 owner-scoped: `{ owner, message_id, reply_id?, trace (sealed ContextTrace JSON), created_at_ms }`.
 Kept out of the message row (whose `body` carries the tool-call envelope).
 
+**Reuse of the engine's audit trails (verified):** the engine audits *writes* — per-row batch
+histories (signed, UUIDv7-stamped, state reconstructable as-of any moment), batch durability/sync
+fates — but a context assembly is a *read + decision event*, which no write-trail records; hence
+this one table. It stays a lean **decision log**, because the engine already keeps the state log:
+- the trace records ids + via/rank/score + budget drops + an **assembly watermark** (the batch
+  frontier at assembly time) — combined with row histories, any trace is **replayable**: re-run
+  the deterministic `assemble_context` as-of the watermark and get the same candidates; the CRDT
+  history *is* the snapshot
+- snippets are stored only as a render convenience; superseded/edited memories resolve their
+  as-of state from row history, not from trace bloat
+- the trace row's own audit is free: signed (EditSignature), owner-bound, UUIDv7 batch-stamped,
+  sync-auditable via BatchFate
+
 ### 2.6 Manifest & migration obligations (E0 — highest blast radius)
 
 - `libs/aven-schema/schema.manifest.json` gains `memories`/`entities`/`links` +
