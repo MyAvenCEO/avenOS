@@ -14,6 +14,8 @@ struct QueryEnvelope<'a> {
     order_by: Vec<(String, SortDirection)>,
     offset: usize,
     limit: Option<usize>,
+    nearest: Option<NearestPlan>,
+    text_search: Option<TextSearchPlan>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,6 +55,25 @@ pub(crate) struct ExecutionQueryPlan {
     pub include_deleted: bool,
     pub array_subqueries: Vec<ArraySubquerySpec>,
     pub project_columns: Option<Vec<ProjectColumn>>,
+    pub nearest: Option<NearestPlan>,
+    pub text_search: Option<TextSearchPlan>,
+}
+
+/// Lowered vector-similarity spec. The query vector is stored as f32 bits so the
+/// plan stays `Eq` (f32 is not `Eq`); convert with `f32::from_bits` at use.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct NearestPlan {
+    pub column: String,
+    pub query_vector_bits: Vec<u32>,
+    pub k: usize,
+}
+
+/// Lowered lexical (BM25) full-text search spec.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TextSearchPlan {
+    pub column: String,
+    pub query: String,
+    pub k: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -870,9 +891,41 @@ fn unwrap_query_envelope(expr: &RelExpr) -> QueryEnvelope<'_> {
     let mut order_by = Vec::new();
     let mut offset = 0;
     let mut limit = None;
+    let mut nearest = None;
+    let mut text_search = None;
 
     loop {
         match current {
+            RelExpr::VectorNearest {
+                input,
+                column,
+                query_vector_bits,
+                k,
+            } => {
+                if nearest.is_none() {
+                    nearest = Some(NearestPlan {
+                        column: to_runtime_column(&column.column),
+                        query_vector_bits: query_vector_bits.clone(),
+                        k: *k,
+                    });
+                }
+                current = input;
+            }
+            RelExpr::TextSearch {
+                input,
+                column,
+                query,
+                k,
+            } => {
+                if text_search.is_none() {
+                    text_search = Some(TextSearchPlan {
+                        column: to_runtime_column(&column.column),
+                        query: query.clone(),
+                        k: *k,
+                    });
+                }
+                current = input;
+            }
             RelExpr::OrderBy { input, terms } => {
                 if order_by.is_empty() {
                     order_by = terms
@@ -904,6 +957,8 @@ fn unwrap_query_envelope(expr: &RelExpr) -> QueryEnvelope<'_> {
                     order_by,
                     offset,
                     limit,
+                    nearest,
+                    text_search,
                 };
             }
         }
@@ -927,6 +982,23 @@ pub(crate) fn lower_relation_to_execution_plan(
         .project_columns
         .or_else(|| select_columns.map(builder_select_columns_to_project_columns));
 
+    // A ranking op (`nearest` cosine / `text_search` BM25) owns ordering and caps rows to `k`.
+    let ranking_k = envelope
+        .nearest
+        .as_ref()
+        .map(|n| n.k)
+        .or_else(|| envelope.text_search.as_ref().map(|t| t.k));
+    let order_by = if ranking_k.is_some() {
+        Vec::new()
+    } else {
+        envelope.order_by
+    };
+    let limit = match (ranking_k, envelope.limit) {
+        (Some(k), Some(l)) => Some(l.min(k)),
+        (Some(k), None) => Some(k),
+        (None, l) => l,
+    };
+
     Some(ExecutionQueryPlan {
         table: core_plan.table,
         base_scope: core_plan.base_scope,
@@ -936,12 +1008,14 @@ pub(crate) fn lower_relation_to_execution_plan(
         recursive: core_plan.recursive,
         seed_relation: core_plan.seed_relation,
         result_element_index: core_plan.result_element_index,
-        order_by: envelope.order_by,
+        order_by,
         offset: envelope.offset,
-        limit: envelope.limit,
+        limit,
         include_deleted,
         array_subqueries,
         project_columns,
+        nearest: envelope.nearest,
+        text_search: envelope.text_search,
     })
 }
 

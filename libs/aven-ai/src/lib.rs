@@ -33,5 +33,9 @@ pub mod llm;
 #[cfg(feature = "llama")]
 pub mod llama;
 
+/// On-device text embeddings (EmbeddingGemma-300m ONNX) via onnxruntime (`ort`).
+#[cfg(feature = "embed")]
+pub mod embed;
+
 #[cfg(feature = "tts")]
 pub mod tts;

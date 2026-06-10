@@ -1,12 +1,102 @@
 use ahash::AHashSet;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
 
 use crate::object::ObjectId;
-use crate::row_format::compare_column;
-use crate::query_manager::types::{RowDescriptor, Tuple, TupleDelta, TupleDescriptor};
+use crate::row_format::{compare_column, decode_column};
+use crate::query_manager::types::{RowDescriptor, Tuple, TupleDelta, TupleDescriptor, Value};
 
 use super::RowNode;
+
+/// Cosine distance (`1 - cosine_similarity`) between two equal-length vectors.
+/// Returns `+inf` for length mismatch and `1.0` for a zero-norm operand so that
+/// well-formed candidates always sort ahead of degenerate ones.
+pub(crate) fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() {
+        return f32::INFINITY;
+    }
+    let mut dot = 0.0f32;
+    let mut na = 0.0f32;
+    let mut nb = 0.0f32;
+    for (x, y) in a.iter().zip(b.iter()) {
+        dot += x * y;
+        na += x * x;
+        nb += y * y;
+    }
+    let denom = na.sqrt() * nb.sqrt();
+    if denom <= 0.0 {
+        return 1.0;
+    }
+    1.0 - (dot / denom).clamp(-1.0, 1.0)
+}
+
+/// Lowercase word tokens of length >= 2 (mirrors MemPalace's `\w{2,}` tokenizer).
+pub(crate) fn tokenize(text: &str) -> Vec<String> {
+    text.split(|c: char| !c.is_alphanumeric())
+        .filter(|t| t.chars().count() >= 2)
+        .map(|t| t.to_lowercase())
+        .collect()
+}
+
+/// Okapi BM25 (`k1=1.5`, `b=0.75`, Lucene-smoothed IDF) over a candidate set,
+/// keyed by row id. Matches MemPalace's `_bm25_scores`. Higher score = more relevant.
+pub(crate) fn bm25_scores(
+    query_terms: &[String],
+    docs: &[(ObjectId, String)],
+) -> HashMap<ObjectId, f32> {
+    const K1: f32 = 1.5;
+    const B: f32 = 0.75;
+    let n = docs.len();
+    let mut scores: HashMap<ObjectId, f32> = HashMap::with_capacity(n);
+    let q: HashSet<String> = query_terms.iter().cloned().collect();
+    if q.is_empty() || n == 0 {
+        for (id, _) in docs {
+            scores.insert(*id, 0.0);
+        }
+        return scores;
+    }
+    let tokenized: Vec<(ObjectId, Vec<String>)> =
+        docs.iter().map(|(id, d)| (*id, tokenize(d))).collect();
+    let total_len: usize = tokenized.iter().map(|(_, t)| t.len()).sum();
+    let avgdl = (total_len as f32 / n as f32).max(1.0);
+
+    let mut df: HashMap<String, usize> = HashMap::new();
+    for (_, toks) in &tokenized {
+        let uniq: HashSet<&String> = toks.iter().collect();
+        for term in &q {
+            if uniq.contains(&term) {
+                *df.entry(term.clone()).or_insert(0) += 1;
+            }
+        }
+    }
+    let mut idf: HashMap<String, f32> = HashMap::new();
+    for term in &q {
+        let dfi = *df.get(term).unwrap_or(&0) as f32;
+        idf.insert(
+            term.clone(),
+            (((n as f32 - dfi + 0.5) / (dfi + 0.5)) + 1.0).ln(),
+        );
+    }
+    for (id, toks) in &tokenized {
+        let dl = toks.len() as f32;
+        let mut tf: HashMap<&String, usize> = HashMap::new();
+        for tok in toks {
+            if q.contains(tok) {
+                *tf.entry(tok).or_insert(0) += 1;
+            }
+        }
+        let mut score = 0.0f32;
+        for (term, freq) in &tf {
+            let f = *freq as f32;
+            let num = f * (K1 + 1.0);
+            let den = f + K1 * (1.0 - B + B * dl / avgdl);
+            score += idf.get(*term).copied().unwrap_or(0.0) * num / den;
+        }
+        scores.insert(*id, score);
+    }
+    scores
+}
 
 /// Sort direction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -31,6 +121,23 @@ pub enum SortTarget {
     /// This is needed because object ID is not part of row payload columns,
     /// but query semantics allow `ORDER BY id|_id` (including desc and mixed keys).
     RowId,
+    /// Virtual sort key for vector similarity: order ascending by cosine distance
+    /// from the node's `nearest_query` to the `Vector` value in this column.
+    /// Powers `nearest` (exact-cosine top-k). The query vector lives on the node.
+    VectorDistance { column: usize },
+    /// Virtual sort key for lexical relevance: order by descending BM25 score
+    /// (best first). Scores are corpus-dependent, so they are computed over the
+    /// whole candidate set and cached on the node (`text_scores`), keyed by row id.
+    TextScore,
+}
+
+/// Lexical-search state held on a `SortNode` for `SortTarget::TextScore`.
+#[derive(Debug, Clone)]
+struct TextSearchState {
+    /// Index of the `Text` column to score.
+    column: usize,
+    /// Pre-tokenized query terms.
+    query_terms: Vec<String>,
 }
 
 /// Threshold: when adding more than this many tuples, use bulk append + sort
@@ -44,6 +151,8 @@ const BULK_ADD_THRESHOLD: usize = 16;
 fn compare_tuples_with(
     sort_keys: &[SortKey],
     descriptor: &RowDescriptor,
+    nearest_query: Option<&[f32]>,
+    text_scores: Option<&HashMap<ObjectId, f32>>,
     a: &Tuple,
     b: &Tuple,
 ) -> Ordering {
@@ -62,6 +171,30 @@ fn compare_tuples_with(
                 (None, None) => Ordering::Equal,
             },
             SortTarget::RowId => compare_all_ids(a, b),
+            SortTarget::VectorDistance { column } => {
+                let dist = |content: Option<&[u8]>| -> f32 {
+                    match (content, nearest_query) {
+                        (Some(data), Some(q)) => match decode_column(descriptor, data, column) {
+                            Ok(Value::Vector(v)) => cosine_distance(&v, q),
+                            _ => f32::INFINITY,
+                        },
+                        _ => f32::INFINITY,
+                    }
+                };
+                dist(a_content)
+                    .partial_cmp(&dist(b_content))
+                    .unwrap_or(Ordering::Equal)
+            }
+            SortTarget::TextScore => {
+                let score = |t: &Tuple| -> f32 {
+                    match (t.get(0), text_scores) {
+                        (Some(e), Some(scores)) => scores.get(&e.id()).copied().unwrap_or(0.0),
+                        _ => 0.0,
+                    }
+                };
+                // Higher BM25 score = more relevant = earlier.
+                score(b).partial_cmp(&score(a)).unwrap_or(Ordering::Equal)
+            }
         };
 
         let ord = match key.direction {
@@ -101,6 +234,12 @@ pub struct SortNode {
     /// Output tuple descriptor (same as input - pass-through).
     output_tuple_descriptor: TupleDescriptor,
     sort_keys: Vec<SortKey>,
+    /// Query vector for any `SortTarget::VectorDistance` key (exact-cosine `nearest`).
+    nearest_query: Option<Vec<f32>>,
+    /// Lexical-search state for any `SortTarget::TextScore` key (BM25 `text_search`).
+    text_search: Option<TextSearchState>,
+    /// Cached BM25 scores by row id; recomputed over the candidate set on change.
+    text_scores: HashMap<ObjectId, f32>,
     /// Current sorted tuples.
     sorted_tuples: Vec<Tuple>,
     /// HashSet view of current tuples (for trait requirement).
@@ -119,10 +258,86 @@ impl SortNode {
             descriptor,
             output_tuple_descriptor: tuple_descriptor,
             sort_keys,
+            nearest_query: None,
+            text_search: None,
+            text_scores: HashMap::new(),
             sorted_tuples: Vec::new(),
             current_tuples: AHashSet::new(),
             dirty: true,
         }
+    }
+
+    /// Create a SortNode that orders by ascending cosine distance from `query_vector`
+    /// to the `Vector` value in `column` (exact-cosine `nearest`). Pass-through descriptor.
+    pub fn with_vector_nearest(
+        tuple_descriptor: TupleDescriptor,
+        column: usize,
+        query_vector: Vec<f32>,
+    ) -> Self {
+        let descriptor = tuple_descriptor.combined_descriptor();
+        Self {
+            descriptor,
+            output_tuple_descriptor: tuple_descriptor,
+            sort_keys: vec![SortKey {
+                target: SortTarget::VectorDistance { column },
+                direction: SortDirection::Ascending,
+            }],
+            nearest_query: Some(query_vector),
+            text_search: None,
+            text_scores: HashMap::new(),
+            sorted_tuples: Vec::new(),
+            current_tuples: AHashSet::new(),
+            dirty: true,
+        }
+    }
+
+    /// Create a SortNode that orders by descending BM25 relevance of `query` against
+    /// the `Text` value in `column` (lexical `text_search` top-k). Pass-through descriptor.
+    pub fn with_text_search(
+        tuple_descriptor: TupleDescriptor,
+        column: usize,
+        query: &str,
+    ) -> Self {
+        let descriptor = tuple_descriptor.combined_descriptor();
+        Self {
+            descriptor,
+            output_tuple_descriptor: tuple_descriptor,
+            sort_keys: vec![SortKey {
+                target: SortTarget::TextScore,
+                direction: SortDirection::Ascending,
+            }],
+            nearest_query: None,
+            text_search: Some(TextSearchState {
+                column,
+                query_terms: tokenize(query),
+            }),
+            text_scores: HashMap::new(),
+            sorted_tuples: Vec::new(),
+            current_tuples: AHashSet::new(),
+            dirty: true,
+        }
+    }
+
+    /// (Re)compute BM25 scores over the current candidate set, keyed by row id.
+    fn recompute_text_scores(&mut self) {
+        let (column, query_terms) = match self.text_search.as_ref() {
+            Some(state) => (state.column, state.query_terms.clone()),
+            None => return,
+        };
+        let docs: Vec<(ObjectId, String)> = self
+            .sorted_tuples
+            .iter()
+            .filter_map(|t| {
+                let elem = t.get(0)?;
+                let content = elem.content()?;
+                let doc = match decode_column(&self.descriptor, content, column) {
+                    Ok(Value::Text(s)) => s,
+                    _ => String::new(),
+                };
+                Some((elem.id(), doc))
+            })
+            .collect();
+        self.text_scores = bm25_scores(&query_terms, &docs);
     }
 
     /// Get the output tuple descriptor.
@@ -134,8 +349,11 @@ impl SortNode {
     fn find_tuple_position(&self, tuple: &Tuple) -> usize {
         let sort_keys = &self.sort_keys;
         let descriptor = &self.descriptor;
+        let nearest_query = self.nearest_query.as_deref();
         self.sorted_tuples
-            .binary_search_by(|t| compare_tuples_with(sort_keys, descriptor, t, tuple))
+            .binary_search_by(|t| {
+                compare_tuples_with(sort_keys, descriptor, nearest_query, None, t, tuple)
+            })
             .unwrap_or_else(|pos| pos)
     }
 
@@ -180,8 +398,12 @@ impl RowNode for SortNode {
         }
 
         // --- Phase 2: Additions ---
+        // BM25 scores depend on corpus stats over the whole candidate set, so text
+        // search always uses the bulk (full re-sort) path instead of incremental inserts.
+        let text_active = self.text_search.is_some();
         let new_count = input.added.len() + input.updated.len();
-        let use_bulk = self.sorted_tuples.is_empty() || new_count > BULK_ADD_THRESHOLD;
+        let use_bulk =
+            text_active || self.sorted_tuples.is_empty() || new_count > BULK_ADD_THRESHOLD;
 
         if new_count > 0 {
             if use_bulk {
@@ -194,10 +416,15 @@ impl RowNode for SortNode {
                     self.current_tuples.insert(tuple.clone());
                     self.sorted_tuples.push(tuple.clone());
                 }
-                let sort_keys = &self.sort_keys;
-                let descriptor = &self.descriptor;
-                self.sorted_tuples
-                    .sort_unstable_by(|a, b| compare_tuples_with(sort_keys, descriptor, a, b));
+                // Text search re-sorts below once scores are (re)computed.
+                if !text_active {
+                    let sort_keys = &self.sort_keys;
+                    let descriptor = &self.descriptor;
+                    let nearest_query = self.nearest_query.as_deref();
+                    self.sorted_tuples.sort_unstable_by(|a, b| {
+                        compare_tuples_with(sort_keys, descriptor, nearest_query, None, a, b)
+                    });
+                }
             } else {
                 // Incremental path: binary search + insert for small batches.
                 for tuple in input
@@ -210,6 +437,17 @@ impl RowNode for SortNode {
                     self.sorted_tuples.insert(pos, tuple.clone());
                 }
             }
+        }
+
+        // --- Phase 2b: BM25 (re)score + full re-sort when the candidate set changed ---
+        if text_active && (new_count > 0 || !removed_id_set.is_empty()) {
+            self.recompute_text_scores();
+            let sort_keys = &self.sort_keys;
+            let descriptor = &self.descriptor;
+            let text_scores = &self.text_scores;
+            self.sorted_tuples.sort_unstable_by(|a, b| {
+                compare_tuples_with(sort_keys, descriptor, None, Some(text_scores), a, b)
+            });
         }
 
         // --- Phase 3: Build result delta ---
