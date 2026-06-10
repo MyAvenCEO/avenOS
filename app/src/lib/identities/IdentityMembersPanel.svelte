@@ -156,6 +156,16 @@
 	function safeDidFor(row: JazzRow): string {
 		return `did:safe:${String(row.owner ?? '').trim()}`
 	}
+	// Human SAFEs admit concrete signer devices only (did:key:) — UX mirror of the
+	// backend `enforce_member_type_rule`, so a did:safe: paste fails here instead of
+	// at the IPC. Replicate grants are always signers, on every type.
+	const didTypeError = $derived.by<string | undefined>(() => {
+		const did = addAdminDid.trim().toLowerCase()
+		if (!did) return undefined
+		if (targetType === 'human' && did.startsWith('did:safe:'))
+			return t('identities.share.humanSignerOnly')
+		return undefined
+	})
 	// Resolve a did:safe: member back to its local SAFE row (for name display).
 	function safeRowForDid(did: string): JazzRow | undefined {
 		const norm = did.trim().toLowerCase()
@@ -537,10 +547,15 @@
 					class="border-border/60 bg-background/40 w-full rounded-lg border px-3 py-2 font-mono text-[12px]"
 					placeholder={memberSafeType && grantKind !== 'replicate'
 						? t('identities.share.safeDidPlaceholder')
-						: t('identities.share.didPlaceholder')}
+						: targetType === 'human'
+							? t('identities.share.signerDidPlaceholder')
+							: t('identities.share.didPlaceholder')}
 					bind:value={addAdminDid}
 					disabled={adminBusy}
 				/>
+				{#if didTypeError}
+					<p class="text-destructive text-xs">{didTypeError}</p>
+				{/if}
 				<!-- Grant kind: the biscuit's three bundles (owns/reads/replicate). The
 				     actual caps each confers show on the member card after granting. -->
 				<div class="flex flex-col gap-1.5">
@@ -562,7 +577,7 @@
 					<button
 						type="button"
 						class="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-						disabled={adminBusy || !addAdminDid.trim()}
+						disabled={adminBusy || !addAdminDid.trim() || !!didTypeError}
 						onclick={() => void grantAccess()}
 					>
 						{adminBusy ? '…' : t('identities.share.grantAccess')}
@@ -715,14 +730,19 @@
 			</h3>
 			<input
 				class="border-border/60 bg-background/40 w-full rounded-md border px-2.5 py-1.5 font-mono text-[11px]"
-				placeholder={t('identities.share.didPlaceholder')}
+				placeholder={targetType === 'human'
+					? t('identities.share.signerDidPlaceholder')
+					: t('identities.share.didPlaceholder')}
 				bind:value={addAdminDid}
 				disabled={adminBusy}
 			/>
+			{#if didTypeError}
+				<p class="text-destructive text-[11px]">{didTypeError}</p>
+			{/if}
 			<button
 				type="button"
 				class="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-				disabled={adminBusy || !addAdminDid.trim()}
+				disabled={adminBusy || !addAdminDid.trim() || !!didTypeError}
 				onclick={() => void grantAccess()}
 			>
 				{adminBusy ? '…' : t('identities.share.addAsAdmin')}

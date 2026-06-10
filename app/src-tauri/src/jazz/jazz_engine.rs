@@ -454,14 +454,15 @@ fn sensitive_plaintext_cells(
 	out
 }
 
-/// The AAD `row` coordinate a sealed cell must bind to — which differs by READ path:
-/// - `identities.genesis_b64` / `issuer_pubkey_b64` are opened by the per-identity vault hydrate
-///   with `row = sid` (the identity/owner uuid) — see jazz_engine genesis_coord (`row: sid`).
-/// - every other sealed cell (incl. `identities.name`) is opened by `row_to_public_map` with
-///   `row = *oid.uuid()` (the row object id).
-/// Sealing under the wrong coordinate yields an unopenable cell (AAD mismatch), which evicts the
-/// identity from the vault. aven-node seals genesis/issuer under the identity uuid for the same
-/// reason — this keeps the app's writes consistent with both the hydrate and aven-node.
+/// The AAD `row` coordinate a sealed cell binds to — the single source of truth for BOTH the
+/// seal side and every read side (vault hydrate AND `row_to_public_map`):
+/// - `safes.genesis_b64` / `issuer_pubkey_b64` bind to the identity/owner uuid (`row = sid`) —
+///   the per-identity vault hydrate opens them at that coordinate, and aven-node seals them
+///   the same way.
+/// - every other sealed cell (incl. `safes.name`) binds to the row object id (`*oid.uuid()`).
+/// Sealing or opening under the wrong coordinate is a guaranteed AEAD mismatch: an unopenable
+/// genesis evicts the identity from the vault, and a publish-side mismatch surfaces as a
+/// permanent decrypt-MISS (Null cell) in the webview snapshot.
 fn aad_row_for(table: &str, col: &str, identity: Uuid, object_row: Uuid) -> Uuid {
 	if table == "safes" && (col == "genesis_b64" || col == "issuer_pubkey_b64") {
 		identity
@@ -596,11 +597,14 @@ pub(super) fn row_to_public_map(
 				let ipc_ty = crate::schema_manifest::expose_ts_for(table, name)
 					.unwrap_or(&desc.column_type);
 				// AAD slug must use the STORAGE type (what the writer sealed with), while the
-				// opened plaintext is interpreted with `ipc_ty`.
+				// opened plaintext is interpreted with `ipc_ty`. The AAD `row` coordinate must
+				// match the SEAL side (`aad_row_for`): genesis/issuer are bound to the identity
+				// uuid, everything else to the row object id — opening with the wrong coordinate
+				// is a guaranteed AEAD miss (the old decrypt-MISS flood on genesis_b64).
 				let coord = CellCoord {
 					table,
 					column: name,
-					row: *oid.uuid(),
+					row: aad_row_for(table, name, identity, *oid.uuid()),
 					storage_ty: &desc.column_type,
 				};
 				match cell {
