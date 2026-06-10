@@ -1148,7 +1148,7 @@ fn registered_peer_dids(client: &JazzClient) -> std::collections::HashSet<String
 		.peer_client_ids()
 		.unwrap_or_default()
 		.iter()
-		.filter_map(|pid| crate::jazz_auth::peer_did_from_ed25519(&pid.0).ok())
+		.filter_map(|pid| crate::jazz_auth::signer_did_from_ed25519(&pid.0).ok())
 		.collect()
 }
 
@@ -1158,7 +1158,7 @@ fn converged_peer_dids(client: &JazzClient) -> std::collections::HashSet<String>
 		.converged_peer_ids()
 		.unwrap_or_default()
 		.iter()
-		.filter_map(|pid| crate::jazz_auth::peer_did_from_ed25519(&pid.0).ok())
+		.filter_map(|pid| crate::jazz_auth::signer_did_from_ed25519(&pid.0).ok())
 		.collect()
 }
 
@@ -1666,7 +1666,7 @@ fn spawn_dev_peer_sync(
 			};
 			// Record the authenticated relay DID so the UI can offer a one-click
 			// "replicate this identity to the connected relay".
-			if let Ok(did) = crate::jazz_auth::peer_did_from_ed25519(&remote.0) {
+			if let Ok(did) = crate::jazz_auth::signer_did_from_ed25519(&remote.0) {
 				if let Ok(mut slot) = relay_did_slot.write() {
 					*slot = Some(did);
 				}
@@ -1675,7 +1675,7 @@ fn spawn_dev_peer_sync(
 			// Don't re-register a peer the user has Forgotten (revoked) — that is what
 			// makes Forget persist across reconnect/restart. Only an explicit revoke is
 			// skipped; unknown peers stay permissive (first-contact).
-			let remote_did = crate::jazz_auth::peer_did_from_ed25519(&remote.0).ok();
+			let remote_did = crate::jazz_auth::signer_did_from_ed25519(&remote.0).ok();
 			let revoked = match &remote_did {
 				Some(did) => crate::peers::is_peer_revoked(&client, did)
 					.await
@@ -1973,7 +1973,7 @@ async fn wrap_all_dek_versions_to_recipient(
 	identity_uuid: Uuid,
 	recipient_did: &str,
 ) -> Result<(), String> {
-	let recipient_pk = crate::jazz_auth::ed25519_public_from_peer_did(recipient_did)?;
+	let recipient_pk = crate::jazz_auth::ed25519_public_from_signer_did(recipient_did)?;
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recipient_pk)?;
 	let urn = jazz_engine::identity_urn(identity_uuid);
 
@@ -2063,7 +2063,7 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 		return Err("cannot grant a identity to your own DID".into());
 	}
 
-	let peer_pk = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
+	let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&peer_did)?;
 
 	// Biscuit-driven sharing: the grant IS the trust act — no separate pairing
 	// step or allowlist gate. Materialize the grantee in the local roster and
@@ -2176,7 +2176,7 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 	if peer_did == shell.peer_did {
 		return Err("cannot grant replication to your own DID".into());
 	}
-	let peer_pk = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
+	let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&peer_did)?;
 
 	// Register the replica as a sync peer so the grant takes effect end-to-end.
 	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "").await?;
@@ -2332,7 +2332,7 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 	if peer_did == shell.peer_did {
 		return Err("cannot grant read to your own DID".into());
 	}
-	let peer_pk = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
+	let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&peer_did)?;
 
 	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "").await?;
 	if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
@@ -2789,7 +2789,7 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 	if peer_did == shell.peer_did {
 		return Err("cannot add yourself as a member".into());
 	}
-	let peer_pk = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
+	let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&peer_did)?;
 	let identity_uuid = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
 
 	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "").await?;
@@ -3174,7 +3174,7 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 	let new_dek = crate::crypto::random_identity_dek();
 	let urn = jazz_engine::identity_urn(identity_uuid);
 	for recip_did in prior_holders.iter().filter(|d| d.as_str() != peer_did.as_str()) {
-		let recip_pk = crate::jazz_auth::ed25519_public_from_peer_did(recip_did)?;
+		let recip_pk = crate::jazz_auth::ed25519_public_from_signer_did(recip_did)?;
 		let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recip_pk)?;
 		let aad = crate::crypto::keyshare_wrap_aad(&urn, recip_did, &shell.peer_did, new_v);
 		let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, new_dek.expose(), &aad)?;
@@ -3769,7 +3769,7 @@ pub(crate) async fn groove_ipc_peer_add(
 	if peer_did.is_empty() {
 		return Err("peer_did is empty".into());
 	}
-	crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
+	crate::jazz_auth::ed25519_public_from_signer_did(&peer_did)?;
 	let client = with_connected_client(jazz, app, self_state).await?;
 	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
 	if peer_did == shell_arc.as_ref().peer_did {
@@ -3780,7 +3780,7 @@ pub(crate) async fn groove_ipc_peer_add(
 	// Resume sync immediately — e.g. re-adding a Forgotten peer. Idempotent with
 	// the connect-time registration; harmless (queues until a transport exists)
 	// when no live link to this peer is present yet.
-	if let Ok(pk) = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did) {
+	if let Ok(pk) = crate::jazz_auth::ed25519_public_from_signer_did(&peer_did) {
 		if let Err(e) = client.register_peer_sync_client(PeerId(pk)) {
 			log::warn!(target: "avenos::jazz", "peer_add register {peer_did}: {e}");
 		}
@@ -3803,7 +3803,7 @@ pub(crate) async fn groove_ipc_peer_revoke(
 	// Actually stop syncing: drop the registered peer client so we no longer
 	// ship to it or accept its catch-up. Marking the row alone left the peer
 	// live in the mesh — Forget appeared to do nothing.
-	if let Ok(pk) = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did) {
+	if let Ok(pk) = crate::jazz_auth::ed25519_public_from_signer_did(&peer_did) {
 		match client.remove_peer_sync_client(PeerId(pk)) {
 			Ok(true) => {}
 			Ok(false) => log::warn!(

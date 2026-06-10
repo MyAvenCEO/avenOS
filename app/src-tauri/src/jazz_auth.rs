@@ -7,7 +7,7 @@ use ed25519_dalek::SigningKey;
 /// `groove::did_key` (so the app, the device engine, and the `aven-p2p` transport
 /// handshake all decode the same bytes — see board `0004-aven-node-mini`).
 /// Re-exported here so existing `crate::jazz_auth::…` call sites are unchanged.
-pub use groove::did_key::{ed25519_public_from_peer_did, peer_did_from_ed25519};
+pub use groove::did_key::{ed25519_public_from_signer_did, signer_did_from_ed25519};
 
 /// Deterministic jazz `PeerId`-style fingerprint (not a JWT claim for ACC).
 #[must_use]

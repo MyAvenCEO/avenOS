@@ -8,8 +8,8 @@ Default permissions for tauri-plugin-self
 - `allow-public-key`
 - `allow-unlock`
 - `allow-peer-status`
-- `allow-device-peer-did`
-- `allow-signing-peer-did`
+- `allow-device-signer-did`
+- `allow-signer-did`
 - `allow-signing-public-key`
 - `allow-sign`
 - `allow-verify`
@@ -62,12 +62,12 @@ Denies the active_identity command without any pre-configured scope.
 <tr>
 <td>
 
-`self:allow-device-peer-did`
+`self:allow-device-signer-did`
 
 </td>
 <td>
 
-Enables the device_peer_did command without any pre-configured scope.
+Enables the device_signer_did command without any pre-configured scope.
 
 </td>
 </tr>
@@ -75,12 +75,12 @@ Enables the device_peer_did command without any pre-configured scope.
 <tr>
 <td>
 
-`self:deny-device-peer-did`
+`self:deny-device-signer-did`
 
 </td>
 <td>
 
-Denies the device_peer_did command without any pre-configured scope.
+Denies the device_signer_did command without any pre-configured scope.
 
 </td>
 </tr>
@@ -244,12 +244,12 @@ Denies the sign command without any pre-configured scope.
 <tr>
 <td>
 
-`self:allow-signing-peer-did`
+`self:allow-signer-did`
 
 </td>
 <td>
 
-Enables the signing_peer_did command without any pre-configured scope.
+Enables the signer_did command without any pre-configured scope.
 
 </td>
 </tr>
@@ -257,12 +257,12 @@ Enables the signing_peer_did command without any pre-configured scope.
 <tr>
 <td>
 
-`self:deny-signing-peer-did`
+`self:deny-signer-did`
 
 </td>
 <td>
 
-Denies the signing_peer_did command without any pre-configured scope.
+Denies the signer_did command without any pre-configured scope.
 
 </td>
 </tr>

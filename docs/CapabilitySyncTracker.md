@@ -88,7 +88,7 @@ The authoritative tracker is the **per-resource frontier**: causal heads over th
 | Term | Definition | Anchor |
 |------|-----------|--------|
 | **Spark** | A *capability group* = the *unit of sync*; a scope of biscuit grants mapping to **one** DHT topic `= discovery_key(hash("spark:S"))`. A set of permissions that happens to be syncable — not a node, not a place. | `spark_acc::mint_genesis_spark` |
-| **Peer** | Any Ed25519 replica; its identity **is** its `did:key:`. In *0..N* sparks, one biscuit each. Every role below is just *which biscuit a peer holds* — never a special node type. | `SyncTargetId::PeerDid`; `jazz_auth::peer_did_from_ed25519` |
+| **Peer** | Any Ed25519 replica; its identity **is** its `did:key:`. In *0..N* sparks, one biscuit each. Every role below is just *which biscuit a peer holds* — never a special node type. | `SyncTargetId::SignerDid`; `jazz_auth::signer_did_from_ed25519` |
 | **Device peer** | A human's interactive device (laptop/phone). Online intermittently; holds the DEK (reads plaintext). | `peers` table (`kind="remote"`) |
 | **Aven** | An **always-on peer** = durable **mirror + rendezvous + indexer** for *1..N* sparks. Added to a spark by granting a biscuit, exactly like a person. **Blind by default**: `right(replicate,"spark:S:")` — no `owns`, no DEK → stores ciphertext, provably cannot read. | `aven-server` crate (M2); `DurabilityTier::EdgeServer` |
 
@@ -125,7 +125,7 @@ Holepunch splits into **transport** (HyperDHT + Hyperswarm + secret-stream) and 
 
 **Identity (free win):** secret-stream's Noise handshake uses Ed25519; our DID is already Ed25519 (`jazz_auth`). Bind the static key to the device identity → the transport-authenticated `remote_pubkey` **is** the biscuit subject DID, fed straight to `may_sync`.
 
-**Already in `aven-db` (the seam):** `SyncTransport` (`sync_transport.rs:94`), `NullSyncTransport`, length-prefixed `SyncFrameV1`, `SyncTargetId::PeerDid`, `CapturedFrontierMember`. The future mesh is **one** `impl SyncTransport`; nothing above the seam changes.
+**Already in `aven-db` (the seam):** `SyncTransport` (`sync_transport.rs:94`), `NullSyncTransport`, length-prefixed `SyncFrameV1`, `SyncTargetId::SignerDid`, `CapturedFrontierMember`. The future mesh is **one** `impl SyncTransport`; nothing above the seam changes.
 
 **Implementation — `peeroxide` v1.3.1** (pure-Rust Hyperswarm port; Kademlia DHT + Noise + holepunch + reliable UDP; wire-compatible with public HyperDHT):
 

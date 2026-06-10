@@ -47,7 +47,7 @@ This card resolves the inbox open questions in its favour:
   did:key challenge**, and the 2-peer shape → **N-client fan-out**.
 - **The did:key codec already exists** in
   [`app/src-tauri/src/jazz_auth.rs`](../../../../app/src-tauri/src/jazz_auth.rs)
-  (`peer_did_from_ed25519`, `ed25519_public_from_peer_did`, Ed25519 multicodec
+  (`signer_did_from_ed25519`, `ed25519_public_from_signer_did`, Ed25519 multicodec
   `0xed01` + base58btc). To avoid the "codec divergence" risk (plan §6) we **lift it
   into `aven-db`** so app, device, and `aven-p2p` share one implementation.
 - **The challenge message format** is pinned by
@@ -139,7 +139,7 @@ a small per-IP rate-limit to blunt handshake spam (plan §2.2 #4).
 Four parts, strictly ordered; each builds and tests green before the next.
 
 ### Part A — shared did:key codec → `aven-db` (kills divergence risk)
-Move `peer_did_from_ed25519` / `ed25519_public_from_peer_did` into a new
+Move `signer_did_from_ed25519` / `ed25519_public_from_signer_did` into a new
 `groove::did_key` module; have `app/src-tauri/src/jazz_auth.rs` **re-export** them so
 the app is unchanged behaviourally and `aven-p2p` (which depends on `aven-db`) gets the
 *same* implementation. One codec, three consumers.
@@ -158,7 +158,7 @@ Fill the placeholder crate. Add deps: `tokio-rustls`, `rustls`, `rustls-pemfile`
   TLS listener; accept loop; per connection run the challenge; register
   `HashMap<PeerId, ConnHandle>` (each `ConnHandle` = an outbound mpsc to a per-conn
   writer task). It exposes a `SyncTransport` whose `send_to(target)` resolves
-  `SyncTargetId::Client(peer)` / `PeerDid(did)` → connection (fan a `FrontierAnnounce`
+  `SyncTargetId::Client(peer)` / `SignerDid(did)` → connection (fan a `FrontierAnnounce`
   to all connected members in mini), and whose `recv_inbound()` drains a shared inbound
   mpsc fed by every read-pump.
 - **Trust config** — `ServerTrust::{ PinnedSpki(fingerprint), WebpkiRoots }`. Dev uses

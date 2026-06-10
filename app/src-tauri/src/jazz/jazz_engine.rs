@@ -668,7 +668,7 @@ pub(super) async fn hydrate_shell(
 				_ => return Err("ks_wrap_bad".into()),
 			};
 			let urn = identity_urn(sid);
-			let wrapper_pk = jazz_auth::ed25519_public_from_peer_did(wrapper_did)?;
+			let wrapper_pk = jazz_auth::ed25519_public_from_signer_did(wrapper_did)?;
 			let kek = derive_kek_x25519(&signing_key, &wrapper_pk)?;
 			// Prefer the wrapper-bound AAD; fall back to the legacy form so keyshares minted
 			// before wrapper_did was bound into the AAD still open (no flag day).

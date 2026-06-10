@@ -33,7 +33,7 @@ export function applyBootstrapReply(reply: JazzStatusReply): void {
 
 export function applyRuntimeSession(payload: {
 	grooveReady?: boolean
-	peerDid?: string
+	signerDid?: string
 	defaultSparkUrn?: string
 	message?: string
 	tables?: string[]
@@ -42,10 +42,10 @@ export function applyRuntimeSession(payload: {
 		const ready =
 			typeof payload.grooveReady === 'boolean' ? payload.grooveReady : s.ready
 		const session: JazzSessionReply | undefined =
-			payload.peerDid && payload.defaultSparkUrn
+			payload.signerDid && payload.defaultSparkUrn
 				? {
-						peerDid: payload.peerDid,
-						peerDidShort: shortPeerDid(payload.peerDid),
+						signerDid: payload.signerDid,
+						signerDidShort: shortSignerDid(payload.signerDid),
 						defaultSparkUrn: payload.defaultSparkUrn,
 					}
 				: s.session
@@ -63,7 +63,7 @@ export function markJazzShellReadyAfterUnlock(reply: JazzStatusReply): void {
 	applyBootstrapReply(reply)
 }
 
-function shortPeerDid(did: string): string {
+function shortSignerDid(did: string): string {
 	const t = did.trim()
 	if (t.length <= 20) return t
 	return `${t.slice(0, 12)}…${t.slice(-6)}`

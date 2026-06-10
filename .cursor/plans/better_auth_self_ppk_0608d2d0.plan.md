@@ -149,7 +149,7 @@ Wire the native app to the auth server. **Run full flow against local `libs/aven
   - **Prod:** `https://auth.testnet.aven.ceo`
 - Persistent Better Auth session cookie (secure storage)
 - `siteStatus()`, `checkInvite(token)`, `register({ flow, inviteToken? })`
-- Uses `plugin:self|signing_peer_did` + `plugin:self|sign`
+- Uses `plugin:self|signer_did` + `plugin:self|sign`
 
 ### 2. Route — `[app/src/routes/invite/+page.svelte](app/src/routes/invite/+page.svelte)`
 

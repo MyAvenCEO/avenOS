@@ -44,14 +44,14 @@ function createSelfContext() {
 	let peerPubB64 = $state<string | undefined>()
 
 	let signingPubB64 = $state<string | undefined>()
-	let signingPeerDid = $state<string | undefined>()
-	let devicePeerDid = $state<string | undefined>()
+	let signerDid = $state<string | undefined>()
+	let deviceSignerDid = $state<string | undefined>()
 
 	async function refresh(): Promise<void> {
 		if (!browser || !isTauriRuntime()) return
 		statusErr = undefined
-		devicePeerDid = undefined
-		signingPeerDid = undefined
+		deviceSignerDid = undefined
+		signerDid = undefined
 
 		try {
 			networkSeed = await invoke<string>('network_seed')
@@ -77,11 +77,11 @@ function createSelfContext() {
 			}
 
 			try {
-				devicePeerDid = await invoke<string>('plugin:self|device_peer_did', {
+				deviceSignerDid = await invoke<string>('plugin:self|device_signer_did', {
 					slot: DEVICE_PEER_SLOT,
 				})
 			} catch {
-				devicePeerDid = undefined
+				deviceSignerDid = undefined
 			}
 		} else {
 			peerPubB64 = undefined
@@ -97,9 +97,9 @@ function createSelfContext() {
 			}
 
 			try {
-				signingPeerDid = await invoke<string>('plugin:self|signing_peer_did')
+				signerDid = await invoke<string>('plugin:self|signer_did')
 			} catch {
-				signingPeerDid = undefined
+				signerDid = undefined
 			}
 		} else {
 			signingPubB64 = undefined
@@ -122,11 +122,11 @@ function createSelfContext() {
 		get signingPubB64() {
 			return signingPubB64
 		},
-		get signingPeerDid() {
-			return signingPeerDid
+		get signerDid() {
+			return signerDid
 		},
-		get devicePeerDid() {
-			return devicePeerDid
+		get deviceSignerDid() {
+			return deviceSignerDid
 		},
 		refresh,
 	}

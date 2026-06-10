@@ -10,7 +10,7 @@
 					"comment": "routing — caps-only sync. null = device-local trust-set row (not synced); admin-identity id = network roster row (syncs to admin-identity members)"
 				},
 				{
-					"name": "peer_did",
+					"name": "signer_did",
 					"type": "text",
 					"plaintext": true,
 					"comment": "did:key — peer/member identity"

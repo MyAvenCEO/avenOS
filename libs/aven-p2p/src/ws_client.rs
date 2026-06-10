@@ -78,7 +78,7 @@ impl WsClientTransport {
 
         // did:key challenge over WS messages (nonce-bound; cb = "").
         let hello: ServerHello = recv_json(&mut stream).await?;
-        let did = groove::did_key::peer_did_from_ed25519(&signing_key.verifying_key().to_bytes())
+        let did = groove::did_key::signer_did_from_ed25519(&signing_key.verifying_key().to_bytes())
             .map_err(|e| P2pError::Handshake(format!("encode our did: {e}")))?;
         let message = build_message(&hello, &did, NO_CHANNEL_BINDING);
         let signature = sign(&signing_key, &message);
@@ -94,7 +94,7 @@ impl WsClientTransport {
             .server_did
             .ok_or_else(|| P2pError::Handshake("server did missing".into()))?;
         let server_peer = PeerId(
-            groove::did_key::ed25519_public_from_peer_did(&server_did)
+            groove::did_key::ed25519_public_from_signer_did(&server_did)
                 .map_err(|e| P2pError::Handshake(format!("decode server did: {e}")))?,
         );
 

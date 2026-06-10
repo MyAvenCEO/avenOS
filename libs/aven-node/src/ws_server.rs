@@ -136,7 +136,7 @@ fn verify_client(hello: &ServerHello, auth: &ClientAuth) -> Result<PeerId, Strin
     if is_expired(hello) {
         return Err("challenge expired".into());
     }
-    let pubkey = groove::did_key::ed25519_public_from_peer_did(&auth.did)?;
+    let pubkey = groove::did_key::ed25519_public_from_signer_did(&auth.did)?;
     let message = build_message(hello, &auth.did, NO_CHANNEL_BINDING);
     verify(&pubkey, &message, &auth.signature)?;
     Ok(PeerId(pubkey))
@@ -148,7 +148,7 @@ impl SyncTransport for WsServerListener {
         let peer = match &target {
             SyncTargetId::Client(p) => *p,
             SyncTargetId::PeerDid(did) => PeerId(
-                groove::did_key::ed25519_public_from_peer_did(did)
+                groove::did_key::ed25519_public_from_signer_did(did)
                     .map_err(|e| JazzError::Sync(format!("route {did}: {e}")))?,
             ),
         };

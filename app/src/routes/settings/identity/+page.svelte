@@ -79,9 +79,9 @@
 			badge={t('self.identity.deviceDid')}
 			title={deviceLabel}
 			description={t('self.identity.deviceDidDescription')}
-			did={ctx.devicePeerDid}
+			did={ctx.deviceSignerDid}
 			copied={copyKey === 'device-did'}
-			onCopy={() => void copy('device-did', ctx.devicePeerDid)}
+			onCopy={() => void copy('device-did', ctx.deviceSignerDid)}
 			emptyHint={!ctx.status?.registered ? t('self.identity.unlockToProvisionDid') : undefined}
 		>
 			{#snippet technical()}
@@ -94,12 +94,12 @@
 		</SelfDidCard>
 
 		<SelfDidCard
-			badge={t('self.identity.peerDid')}
+			badge={t('self.identity.signerDid')}
 			title={personName}
-			description={t('self.identity.peerDidDescription')}
-			did={ctx.signingPeerDid}
-			copied={copyKey === 'peer-did'}
-			onCopy={() => void copy('peer-did', ctx.signingPeerDid)}
+			description={t('self.identity.signerDidDescription')}
+			did={ctx.signerDid}
+			copied={copyKey === 'signer-did'}
+			onCopy={() => void copy('signer-did', ctx.signerDid)}
 			emptyHint={!ctx.status?.unlocked ? t('self.identity.unlockToDeriveDid') : undefined}
 		>
 			{#snippet technical()}

@@ -38,9 +38,9 @@ The chain is recursive and uniform. The `type` label enforces application-layer 
 | | Today |
 |---|---|
 | Table | `identities` — types `"human"` and `"aven"` only |
-| Ownership | `owns(vault.peer_did, "identity:<id>")` — signer IS the SAFE, no separation |
-| Delegation | `attenuate_add_owner_third_party()` — accepts `peer_did` (signers) only |
-| Authorization | `authorize()` — single hop, `peer_did` → resource |
+| Ownership | `owns(vault.signer_did, "identity:<id>")` — signer IS the SAFE, no separation |
+| Delegation | `attenuate_add_owner_third_party()` — accepts `signer_did` (signers) only |
+| Authorization | `authorize()` — single hop, `signer_did` → resource |
 | Resource prefix | `"identity:<uuid>:"` throughout |
 | SAFE DID | Does not exist — only `did:key:` (signer-level) DIDs |
 | Spark type | Does not exist |
@@ -142,7 +142,7 @@ authorize(signer_did, op, safe_X)
 
 ### `attenuate_add_owner_third_party()`
 
-Extended to accept `did:safe:` alongside `did:key:` as the `new_peer_did` argument.
+Extended to accept `did:safe:` alongside `did:key:` as the `new_signer_did` argument.
 
 ---
 

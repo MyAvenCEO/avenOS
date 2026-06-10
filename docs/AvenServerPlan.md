@@ -97,7 +97,7 @@ The dev transport ([`dev_transport.rs`](../libs/aven-db/src/dev_transport.rs)) a
 |---|--------|---------------------|------------------------|
 | 1 | **N clients, not 2 peers** | `DevRole::{Listen, Dial}`, exactly one `accept()` | a server accept-loop + a connection registry keyed by authenticated remote DID; `send_to` routes / fans out by `target` |
 | 2 | **Authenticated handshake** ⚠️ | plaintext 32-byte `PeerId` exchange, **spoofable** ([`dev_transport.rs:72-77`](../libs/aven-db/src/dev_transport.rs)) | **TLS** (server cert) **+ a did:key challenge** proving the client controls its DID private key. The one place we must not cut corners — the biscuit gate trusts `remote` as the subject DID. Reuse the *same* did:key challenge `aven-auth` implements (§3) |
-| 3 | **Routing vocabulary** | `Source::Client(remote)` only | route a frame to the connection whose authenticated DID matches `SyncTargetId::PeerDid`/`Client` ([`sync_targets.rs`](../libs/aven-db/src/sync_targets.rs)); fan a `FrontierAnnounce` to all topic members |
+| 3 | **Routing vocabulary** | `Source::Client(remote)` only | route a frame to the connection whose authenticated DID matches `SyncTargetId::SignerDid`/`Client` ([`sync_targets.rs`](../libs/aven-db/src/sync_targets.rs)); fan a `FrontierAnnounce` to all topic members |
 | 4 | **Headless server host** | app-driven, two side-by-side Tauri instances | `JazzClient::connect_with_sync_transport` ([`avenos_client.rs:228`](../libs/aven-db/src/avenos_client.rs)) in server-mode, no UI; clients registered via `register_peer_sync_client` ([`avenos_client.rs:274`](../libs/aven-db/src/avenos_client.rs)) — the path the dev transport already feeds |
 
 > **Why build fresh, not promote `dev_transport.rs`.** Keeping the real transport in its own crate (`aven-p2p`) — leaving `dev_transport.rs` as the throwaway 2-peer harness — keeps the spoofable plaintext handshake out of any production path. The dev transport stays useful for the loopback/2-peer test harness.
@@ -201,7 +201,7 @@ Expiration Time: {expirationTime}
 
 1. **HTTP server** — `axum` router exposing the 6 endpoints under `/api/auth/aven-auth/`, plus `GET /health`. `trustedOrigins` / CORS preserved (`tauri://localhost`, `localhost:1420`, the prod host).
 2. **Store** — **SQLite via `rusqlite`** (decided above) over the same logical schema. Keep `AVEN_AUTH_DB_PATH` so existing dev DBs migrate trivially. Sits beside the engine's RocksDB dir on one fly volume (§4.4).
-3. **Crypto** — `ed25519-dalek` verify; reuse the in-tree did:key codec (`jazz_auth::ed25519_public_from_peer_did`) so encode/decode is identical across app, device, and server. **The same verify path backs the transport handshake (§2.2).**
+3. **Crypto** — `ed25519-dalek` verify; reuse the in-tree did:key codec (`jazz_auth::ed25519_public_from_signer_did`) so encode/decode is identical across app, device, and server. **The same verify path backs the transport handshake (§2.2).**
 4. **Sessions** — issue an opaque bearer token on `verify`, validate it on the admin-only endpoints. (~30 lines, replacing Better-Auth's `bearer()` plugin.)
 5. **Config** — `AvenAuthConfig { auth_url, secret, db_path, domain, network_seed, invite_ttl, invite_scheme }` from env (same names as [`env.ts`](../libs/aven-auth/src/lib/env.ts)), so `.env` is unchanged.
 6. **Parity smoke** — port [`scripts/smoke-api.ts`](../libs/aven-auth/scripts/smoke-api.ts) to run against the Rust server; assert identical JSON shapes + status codes. **This is the cutover gate.**

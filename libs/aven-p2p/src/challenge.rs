@@ -155,12 +155,12 @@ mod tests {
     #[test]
     fn sign_then_verify_roundtrips() {
         let sk = SigningKey::from_bytes(&[3u8; 32]);
-        let did = groove::did_key::peer_did_from_ed25519(&sk.verifying_key().to_bytes()).unwrap();
+        let did = groove::did_key::signer_did_from_ed25519(&sk.verifying_key().to_bytes()).unwrap();
         let h = hello();
         let cb = "cb-value";
         let msg = build_message(&h, &did, cb);
         let sig = sign(&sk, &msg);
-        let pk = groove::did_key::ed25519_public_from_peer_did(&did).unwrap();
+        let pk = groove::did_key::ed25519_public_from_signer_did(&did).unwrap();
         assert!(verify(&pk, &msg, &sig).is_ok());
     }
 
@@ -176,13 +176,13 @@ mod tests {
     #[test]
     fn wrong_channel_binding_fails() {
         let sk = SigningKey::from_bytes(&[3u8; 32]);
-        let did = groove::did_key::peer_did_from_ed25519(&sk.verifying_key().to_bytes()).unwrap();
+        let did = groove::did_key::signer_did_from_ed25519(&sk.verifying_key().to_bytes()).unwrap();
         let h = hello();
         let signed = build_message(&h, &did, "client-cb");
         let sig = sign(&sk, &signed);
         // Server rebuilds with a *different* channel binding (a relayed session).
         let server_view = build_message(&h, &did, "server-cb");
-        let pk = groove::did_key::ed25519_public_from_peer_did(&did).unwrap();
+        let pk = groove::did_key::ed25519_public_from_signer_did(&did).unwrap();
         assert!(verify(&pk, &server_view, &sig).is_err());
     }
 }

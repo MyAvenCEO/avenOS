@@ -1,5 +1,5 @@
 /** Truncate a `did:key:…` for compact UI. */
-export function shortPeerDid(did: string | undefined): string {
+export function shortSignerDid(did: string | undefined): string {
 	const t = (did ?? '').trim()
 	return t.length > 32 ? `${t.slice(0, 18)}…${t.slice(-8)}` : t
 }
@@ -9,24 +9,24 @@ export function shortPeerDid(did: string | undefined): string {
  * If `storedLabel` matches this device's pairing label, show the DID instead.
  */
 export function peerDisplayLabel(
-	peerDid: string,
+	signerDid: string,
 	storedLabel: string | undefined,
 	localPairingLabel: string | undefined,
 ): string {
 	const stored = storedLabel?.trim()
-	if (!stored) return shortPeerDid(peerDid)
+	if (!stored) return shortSignerDid(signerDid)
 	const local = localPairingLabel?.trim().toLowerCase()
-	if (local && stored.toLowerCase() === local) return shortPeerDid(peerDid)
+	if (local && stored.toLowerCase() === local) return shortSignerDid(signerDid)
 	return stored
 }
 
 /** Person name for compact UI (`firstName/deviceName` pairing label → `firstName` only). */
 export function peerPersonName(
-	peerDid: string,
+	signerDid: string,
 	storedLabel: string | undefined,
 	localPairingLabel: string | undefined,
 ): string {
-	const full = peerDisplayLabel(peerDid, storedLabel, localPairingLabel)
+	const full = peerDisplayLabel(signerDid, storedLabel, localPairingLabel)
 	const slash = full.indexOf('/')
 	if (slash > 0) return full.slice(0, slash).trim()
 	return full
@@ -34,11 +34,11 @@ export function peerPersonName(
 
 /** Person name + device name for picker rows (`firstName/deviceName` → two lines). */
 export function peerPickerLines(
-	peerDid: string,
+	signerDid: string,
 	storedLabel: string | undefined,
 	localPairingLabel: string | undefined,
 ): { title: string; device?: string } {
-	const full = peerDisplayLabel(peerDid, storedLabel, localPairingLabel)
+	const full = peerDisplayLabel(signerDid, storedLabel, localPairingLabel)
 	const slash = full.indexOf('/')
 	if (slash > 0) {
 		const title = full.slice(0, slash).trim()

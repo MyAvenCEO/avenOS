@@ -20,7 +20,7 @@
 
 use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use groove::did_key::{ed25519_public_from_peer_did, peer_did_from_ed25519};
+use groove::did_key::{ed25519_public_from_signer_did, signer_did_from_ed25519};
 use uuid::Uuid;
 
 use crate::caps::{authorize, AccOp, BiscuitVault};
@@ -65,7 +65,7 @@ pub fn mint_owner_binding(
 	value_id: Uuid,
 	owner: Uuid,
 ) -> Result<OwnerBinding, String> {
-	let author_did = peer_did_from_ed25519(&author_sk.verifying_key().to_bytes())?;
+	let author_did = signer_did_from_ed25519(&author_sk.verifying_key().to_bytes())?;
 	let sig = author_sk.sign(&owner_binding_msg(value_id, owner));
 	Ok(OwnerBinding { value_id, owner, author_did, sig: sig.to_bytes() })
 }
@@ -73,7 +73,7 @@ pub fn mint_owner_binding(
 /// Verify an owner-binding's signature against the author DID it claims. Does NOT check
 /// whether that author was *authorized* to bind to the identity — that is [`authorize`].
 pub fn verify_owner_binding(b: &OwnerBinding) -> Result<(), String> {
-	let pk = ed25519_public_from_peer_did(&b.author_did)?;
+	let pk = ed25519_public_from_signer_did(&b.author_did)?;
 	let vk = VerifyingKey::from_bytes(&pk).map_err(|e| format!("owner-binding-vk:{e}"))?;
 	let sig = Signature::from_bytes(&b.sig);
 	vk.verify(&owner_binding_msg(b.value_id, b.owner), &sig)
@@ -135,7 +135,7 @@ fn edit_sig_msg(batch_digest: &[u8; 32], author_did: &str) -> Vec<u8> {
 
 /// Sign a sealed batch's content digest with the author's device key.
 pub fn sign_batch(author_sk: &SigningKey, batch_digest: &[u8; 32]) -> Result<EditSignature, String> {
-	let author_did = peer_did_from_ed25519(&author_sk.verifying_key().to_bytes())?;
+	let author_did = signer_did_from_ed25519(&author_sk.verifying_key().to_bytes())?;
 	let sig = author_sk.sign(&edit_sig_msg(batch_digest, &author_did));
 	Ok(EditSignature { author_did, batch_digest: *batch_digest, sig: sig.to_bytes() })
 }
@@ -147,7 +147,7 @@ pub fn verify_signed_batch(s: &EditSignature, expected_digest: &[u8; 32]) -> Res
 	if &s.batch_digest != expected_digest {
 		return Err("edit-sig-digest-mismatch".into());
 	}
-	let pk = ed25519_public_from_peer_did(&s.author_did)?;
+	let pk = ed25519_public_from_signer_did(&s.author_did)?;
 	let vk = VerifyingKey::from_bytes(&pk).map_err(|e| format!("edit-sig-vk:{e}"))?;
 	let sig = Signature::from_bytes(&s.sig);
 	vk.verify(&edit_sig_msg(&s.batch_digest, &s.author_did), &sig)
@@ -262,7 +262,7 @@ mod tests {
 	#[test]
 	fn owner_binding_rejects_forged_author() {
 		let mut b = mint_owner_binding(&sk(1), Uuid::from_u128(1), Uuid::from_u128(2)).unwrap();
-		b.author_did = peer_did_from_ed25519(&sk(2).verifying_key().to_bytes()).unwrap();
+		b.author_did = signer_did_from_ed25519(&sk(2).verifying_key().to_bytes()).unwrap();
 		assert!(verify_owner_binding(&b).is_err(), "claiming a different author must fail");
 	}
 

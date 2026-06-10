@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-device-signer-did"
+description = "Enables the device_signer_did command without any pre-configured scope."
+commands.allow = ["device_signer_did"]
+
+[[permission]]
+identifier = "deny-device-signer-did"
+description = "Denies the device_signer_did command without any pre-configured scope."
+commands.deny = ["device_signer_did"]

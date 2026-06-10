@@ -10,7 +10,7 @@ AvenOS keeps **one sync home** in `libs/aven-db`. The app host stays thin: local
 
 | Piece | Type | Role |
 |-------|------|------|
-| `SyncTargetId` | enum | Who receives bytes — `PeerDid`, `Server`, `Client` |
+| `SyncTargetId` | enum | Who receives bytes — `SignerDid`, `Server`, `Client` |
 | `SyncAuthorizer` | trait | App implements biscuit rules — `may_deliver(target, payload)` |
 | `DeliveryLedger` | struct | Tracks pending/delivered per `(SyncTargetId, RowBatchKey)` |
 | `SyncTransport` | trait | Pluggable send/recv — `NullSyncTransport` is the local-only default |

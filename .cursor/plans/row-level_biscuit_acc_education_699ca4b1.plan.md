@@ -175,7 +175,7 @@ Concrete steps:
 Already partially true:
 
 - [`with_jazz_client`](app/src-tauri/src/jazz/mod.rs) requires `self_state.is_unlocked()`.  
-- [`query_table_publish`](app/src-tauri/src/jazz/jazz_engine.rs) skips rows failing [`authorize_gate`](app/src-tauri/src/jazz/jazz_engine.rs) (spark admin for local `peer_did`).
+- [`query_table_publish`](app/src-tauri/src/jazz/jazz_engine.rs) skips rows failing [`authorize_gate`](app/src-tauri/src/jazz/jazz_engine.rs) (spark admin for local `signer_did`).
 
 **Enforce:**
 

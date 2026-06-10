@@ -40,7 +40,7 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 		// 1. Subject → peer did:key.
 		let peer_did = match subject {
 			SyncTargetId::PeerDid(d) => d.clone(),
-			SyncTargetId::Client(pid) => match crate::jazz_auth::peer_did_from_ed25519(&pid.0) {
+			SyncTargetId::Client(pid) => match crate::jazz_auth::signer_did_from_ed25519(&pid.0) {
 				Ok(did) => did,
 				Err(_) => return CapDecision::DenyPermanent,
 			},

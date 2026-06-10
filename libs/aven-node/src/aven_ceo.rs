@@ -258,7 +258,7 @@ pub async fn maybe_grant_first_admin(
 	peer: PeerId,
 ) -> Result<(), String> {
 	let vault = build_vault_from_signing_key(signing)?;
-	let peer_did = groove::did_key::peer_did_from_ed25519(&peer.0)?;
+	let peer_did = groove::did_key::signer_did_from_ed25519(&peer.0)?;
 	if peer_did == vault.peer_did {
 		return Ok(());
 	}
