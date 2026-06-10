@@ -492,7 +492,7 @@
 			"noOneListed": "No one listed yet.",
 			"giveAccess": "Zugriff gewähren",
 			"addAsAdmin": "Add as admin",
-			"didPlaceholder": "DID eines Geräts einfügen (did:key:…)",
+			"didPlaceholder": "DID einfügen (did:key:… oder did:safe:… für nicht-menschliche Typen)",
 			"giveAccessHint": "Füge die DID eines Geräts ein, um diesen Identity damit zu teilen. Teilen ist der einzige Schritt — kein separates Pairing.",
 			"accessGrantedNote": "Access granted — it may take a moment to show on their device.",
 			"addReplica": "Replikationsserver",
@@ -571,6 +571,9 @@
 		"avenCeoUnclaimedSub": "Nicht beansprucht — beanspruche es, um Admin/Eigentümer dieses Netzwerks zu werden.",
 		"avenCeoClaim": "Beanspruchen — Netzwerk-Admin werden",
 		"avenCeoClaiming": "Beanspruche…",
+		"sparksSection": "Sparks",
+		"createSpark": "Neuer Spark",
+		"namePromptSpark": "Spark-Name",
 		"composer": {
 			"placeholder": "Sprich, navigiere oder füge eine Aufgabe hinzu…"
 		}

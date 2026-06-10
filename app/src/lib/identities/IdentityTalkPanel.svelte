@@ -48,7 +48,7 @@
 	let localPairingLabel = $state<string | undefined>(undefined)
 	let scrollEl = $state<HTMLDivElement | undefined>(undefined)
 
-	const identitiesStore = jazzStore('identities')
+	const identitiesStore = jazzStore('safes')
 	const messages = jazzStore('messages')
 	const filesStore = jazzStore('files')
 

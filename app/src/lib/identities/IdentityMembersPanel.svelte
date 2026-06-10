@@ -114,7 +114,7 @@
 	// adds an admin on another device) lands here in realtime over TCP sync. We watch
 	// it below and re-read the admin list whenever it changes — without it, the panel
 	// only refreshed on local add/revoke and on a fresh mount (app restart).
-	const identitiesStore = jazzStore('identities')
+	const identitiesStore = jazzStore('safes')
 	const sparkBiscuit = $derived.by<string | undefined>(() => {
 		const sid = identityId.trim().toLowerCase()
 		if (!sid) return undefined

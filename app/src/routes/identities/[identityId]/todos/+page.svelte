@@ -21,7 +21,7 @@
 	let editingId = $state<string | null>(null)
 	let editDraft = $state('')
 
-	const identitiesStore = jazzStore('identities')
+	const identitiesStore = jazzStore('safes')
 	const todos = jazzStore('todos')
 
 	function idsMatch(a: string, b: string): boolean {

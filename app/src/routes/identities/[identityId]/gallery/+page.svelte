@@ -17,7 +17,7 @@
 	const identityParam = $derived(String((page.params as { identityId?: string }).identityId ?? ''))
 	const decodedIdentityId = $derived(decodeURIComponent(identityParam))
 
-	const identitiesStore = jazzStore('identities')
+	const identitiesStore = jazzStore('safes')
 	const filesStore = jazzStore('files')
 
 	function idsMatch(a: string, b: string): boolean {

@@ -505,7 +505,7 @@
 			"noOneListed": "No one listed yet.",
 			"giveAccess": "Give access",
 			"addAsAdmin": "Add as admin",
-			"didPlaceholder": "Paste a member's DID (did:key:…)",
+			"didPlaceholder": "Paste a member's DID (did:key:… or did:safe:… for non-human types)",
 			"giveAccessHint": "Paste a device's DID to share this identity with it. Sharing is the only step — no separate pairing.",
 			"accessGrantedNote": "Access granted — it may take a moment to show on their device.",
 			"addReplica": "Replication server",
@@ -590,10 +590,13 @@
 		"namePrompt": "Name your new identity",
 		"humansSection": "Humans",
 		"avensSection": "Avens",
+		"sparksSection": "Sparks",
 		"createHuman": "New human",
 		"createAven": "New aven",
+		"createSpark": "New Spark",
 		"namePromptHuman": "Name this human identity",
 		"namePromptAven": "Name this aven identity",
+		"namePromptSpark": "Spark name",
 		"composer": {
 			"placeholder": "Talk, navigate, or add a todo…"
 		}

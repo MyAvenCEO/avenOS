@@ -26,7 +26,7 @@
 	const decodedIdentityId = $derived(decodeURIComponent(identityParam))
 	const identityBase = $derived(`/identities/${encodeURIComponent(decodedIdentityId)}`)
 
-	const identitiesStore = jazzStore('identities')
+	const identitiesStore = jazzStore('safes')
 	const messages = jazzStore('messages')
 	const todos = jazzStore('todos')
 
