@@ -207,29 +207,31 @@ Extended to accept `did:safe:` alongside `did:key:` as the `new_signer_did` argu
     `chain_still_member` against the REBUILT chain — revoking a `did:safe:` member cuts
     its signers off the new key (unless a signer holds an independent credential);
     cooperative cleanup drops the keyshare rows of every no-longer-member recipient
-  - Remaining (deferred): cascade rotation of DOWNSTREAM SAFEs on controller revoke;
-    cross-device distribution of controller `safes` rows for remote chain resolution
+  - **Cascade rotation** ✅: revoking a member also rotates every downstream-controlled
+    SAFE's DEK (`cascade_rotate_one`), re-wrapped only to recipients still authorized
+    under the REBUILT chain (overlay resolution: `chain_still_member_with` /
+    `subject_controls_safe_with`); stale keyshare rows dropped
+  - **Remote chain resolution** ✅: `safe_controllers` rows carry COPIES of each
+    upward controller's genesis, owned by the controlled SAFE (→ sync to exactly its
+    members, open under its DEK). Hydrate ingests copies for chains not loaded as
+    primaries; copies are written at SAFE-rooted create + did:safe: member add (full
+    upward closure), refreshed in downstream SAFEs on chain change, deleted on revoke
 
-- [ ] **Phase 6 — UI / Onboarding**
-  - "Create humanSAFE" — select signers, assign roles
-  - "Create avenSAFE" — select humanSAFE controllers, assign roles
-  - "Create sparkSAFE" — select avenSAFE controllers, assign roles
-  - Controller management: add controller, remove controller, change role, transfer ownership
-  - SAFE detail: show full controller chain + controlled SAFEs list
+- [x] **Phase 6 — UI / Onboarding** ✅ (core flows)
+  - Create humanSAFE / avenSAFE / sparkSAFE — three create actions on the list page;
+    the backend auto-roots aven at the creator's humanSAFE, spark at their avenSAFE
+  - Controller management: add (picker) / revoke per member via the members panel
+  - Deferred: explicit controller picker at create (today: oldest controlled SAFE of
+    the right type), transfer ownership, controller-chain visualization
 
-- [ ] **Phase 7 — Member management UI (legacy identities screens → SAFEs)**
-  - Rename the legacy "identities" screens to SAFEs end-to-end (routes, labels, i18n)
-  - Replace "add members" (today: raw signer DIDs only) with **SAFE-in-SAFE delegation**:
-    - On an **avenSAFE**: add member = pick a **humanSAFE `did:safe:`** (not a signer DID)
-    - On a **sparkSAFE**: add member = pick an **avenSAFE `did:safe:`**
-  - Add a third category row **Sparks** to the SAFE list/picker — three rows total:
-    | Row | Lists | Members are |
-    |---|---|---|
-    | Humans | humanSAFEs | signers |
-    | Avens | avenSAFEs | humanSAFE DIDs |
-    | Sparks | sparkSAFEs | avenSAFE DIDs |
-  - Member picker filters candidates by the target SAFE's type label (recursive ACC caps delegation)
-  - Role selector per added member (`owner` / `delegate` / `executor` / `reader`)
+- [x] **Phase 7 — Member management UI** ✅ (core flows)
+  - Three category rows on the list page: Humans / Avens / Sparks
+  - **SAFE-in-SAFE member picker**: on an avenSAFE the panel offers eligible local
+    humanSAFEs (sparkSAFE → avenSAFEs); picking fills `did:safe:…` — raw DID paste
+    stays available; type rules are backend-enforced either way
+  - did:safe: members render with their SAFE name + a type chip (e.g. "HUMAN SAFE")
+  - Role selector = the biscuit grant bundles (Owner=owns / Member=reads /
+    Relay=replicate); `delegate`/`executor` as granular grant-fact bundles deferred
 
 ---
 

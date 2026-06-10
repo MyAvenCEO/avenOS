@@ -12,6 +12,7 @@
 		avenCeoAddMember,
 		peerList,
 		type PeerRow,
+		type JazzRow,
 		type JazzSessionReply,
 		type IdentitySubjectCaps,
 		type IdentityGrant,
@@ -129,6 +130,42 @@
 		!tauri || !unlocked || !identityId.trim() ? [] : knownPeers,
 	)
 
+	// SAFE-in-SAFE member typing (enforced by the backend, mirrored here for UX):
+	// human SAFEs admit signers; aven SAFEs admit human SAFEs; spark SAFEs admit
+	// aven SAFEs. For aven/spark targets we offer a picker over the eligible local
+	// SAFEs — selecting one fills the DID input with its did:safe:.
+	const targetRow = $derived(
+		identitiesStore.rows.find(
+			(r) => String(r.owner ?? '').trim().toLowerCase() === identityId.trim().toLowerCase(),
+		),
+	)
+	const targetType = $derived(String(targetRow?.type ?? 'aven'))
+	const memberSafeType = $derived(
+		targetType === 'aven' ? 'human' : targetType === 'spark' ? 'aven' : null,
+	)
+	const memberDidsLower = $derived(new Set(subjects.map((s) => s.did.trim().toLowerCase())))
+	const eligibleMemberSafes = $derived.by(() => {
+		if (!memberSafeType || grantKind === 'replicate') return []
+		return identitiesStore.rows.filter(
+			(r) =>
+				r.type === memberSafeType &&
+				String(r.owner ?? '').trim().toLowerCase() !== identityId.trim().toLowerCase() &&
+				!memberDidsLower.has(`did:safe:${String(r.owner ?? '').trim().toLowerCase()}`),
+		)
+	})
+	function safeDidFor(row: JazzRow): string {
+		return `did:safe:${String(row.owner ?? '').trim()}`
+	}
+	// Resolve a did:safe: member back to its local SAFE row (for name display).
+	function safeRowForDid(did: string): JazzRow | undefined {
+		const norm = did.trim().toLowerCase()
+		if (!norm.startsWith('did:safe:')) return undefined
+		const id = norm.slice('did:safe:'.length)
+		return identitiesStore.rows.find(
+			(r) => String(r.owner ?? '').trim().toLowerCase() === id,
+		)
+	}
+
 	function peerAccessLabel(
 		signerDid: string,
 		storedLabel: string | undefined,
@@ -144,6 +181,8 @@
 		isThisDevice: boolean
 		grant: IdentityGrant
 		capabilities: string[]
+		/// Set when the member is a SAFE (did:safe:) — its type label for the chip.
+		safeType?: string
 	}
 
 	// Member-centric view: each subject from the biscuit (`subjects`), enriched with
@@ -157,6 +196,18 @@
 		const localDid = session?.signerDid?.trim().toLowerCase() ?? ''
 		return subjects.map((s): IdentityAccessEntry => {
 			const norm = s.did.trim().toLowerCase()
+			// SAFE member (did:safe:) — show its SAFE name + type, not a peer label.
+			if (norm.startsWith('did:safe:')) {
+				const safe = safeRowForDid(s.did)
+				return {
+					did: s.did,
+					label: String(safe?.name ?? '') || t('common.unnamed'),
+					isThisDevice: false,
+					grant: s.grant,
+					capabilities: s.caps,
+					safeType: String(safe?.type ?? 'safe'),
+				}
+			}
 			const peer = peersByDid.get(norm)
 			const isThisDevice = localDid !== '' && norm === localDid
 			// D1: real names. Prefer the roster device label (Admina/Bobo); the connected
@@ -451,9 +502,36 @@
 				<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
 					{t('identities.share.giveAccess')}
 				</h2>
+				{#if memberSafeType && grantKind !== 'replicate'}
+					<!-- SAFE-in-SAFE picker: aven SAFEs admit human SAFEs, spark SAFEs admit
+					     aven SAFEs (backend-enforced). Picking fills the DID input below. -->
+					<div class="flex flex-col gap-1.5">
+						<span class="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
+							{memberSafeType === 'human'
+								? t('identities.share.addMemberSafeHuman')
+								: t('identities.share.addMemberSafeAven')}
+						</span>
+						{#if eligibleMemberSafes.length > 0}
+							<select
+								class="border-border/60 bg-background/40 w-full rounded-lg border px-3 py-2 text-sm"
+								disabled={adminBusy}
+								onchange={(e) => (addAdminDid = e.currentTarget.value)}
+							>
+								<option value="">{t('identities.share.pickSafePlaceholder')}</option>
+								{#each eligibleMemberSafes as r (r.owner)}
+									<option value={safeDidFor(r)}>{r.name || t('common.unnamed')}</option>
+								{/each}
+							</select>
+						{:else}
+							<p class="text-muted-foreground text-xs leading-relaxed">{t('identities.share.noEligibleSafes')}</p>
+						{/if}
+					</div>
+				{/if}
 				<input
 					class="border-border/60 bg-background/40 w-full rounded-lg border px-3 py-2 font-mono text-[12px]"
-					placeholder={t('identities.share.didPlaceholder')}
+					placeholder={memberSafeType && grantKind !== 'replicate'
+						? t('identities.share.safeDidPlaceholder')
+						: t('identities.share.didPlaceholder')}
 					bind:value={addAdminDid}
 					disabled={adminBusy}
 				/>
@@ -526,6 +604,9 @@
 								{/if}
 								<div class="mt-2 flex flex-wrap items-center gap-1.5">
 									<!-- Grant kind (owns/reads/replicate) — primary; effective caps — muted. Biscuit caps + synthesized SYNC policy caps (10 MB / rate). Hover/legend = description. -->
+									{#if entry.safeType}
+										<span class="bg-accent text-accent-foreground rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase">{t('identities.share.safeChip', { type: entry.safeType })}</span>
+									{/if}
 									<span class="bg-primary/10 text-primary rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase">{grantLabel(entry.grant)}</span>
 									{#each entry.capabilities as cap (cap)}
 										<span class="bg-muted text-muted-foreground rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase" title={capDescription(cap)}>{capLabel(cap)}</span>
