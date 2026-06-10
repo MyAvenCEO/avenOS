@@ -211,6 +211,12 @@ pub(super) async fn with_connected_client(
 		jazz.reset_connection().await;
 		return Err("locked: unlock AvenOS identity first".into());
 	}
+	// Exit-drain gate: once shutdown has begun, NEVER start a (re)connect. The process is
+	// about to run C++ static destructors (RocksDB OptionTypeInfo registries) via `exit()`;
+	// a concurrent `TransactionDB::Open` reads those same statics → SIGSEGV at quit.
+	if crate::jazz_exit_draining() {
+		return Err("shutting down: refusing new Groove connect".into());
+	}
 	let desired = desired_root_client_uuid(self_state)?;
 
 	loop {
@@ -604,6 +610,19 @@ impl ManagedJazz {
 
 	fn reset_mesh_acl_catchup(&self) {
 		self.mesh_acl_rebroadcast_done.store(false, Ordering::Release);
+	}
+
+	/// Wait until no `jazz_connect` is in flight. Used by the exit drain: a connect holds
+	/// RocksDB internals (`TransactionDB::Open` reads static option registries), so exiting
+	/// the process under it races the C++ static destructors run by `exit()` → SIGSEGV.
+	pub(crate) async fn wait_for_connect_idle(&self) {
+		loop {
+			let notified = self.connect_done.notified();
+			if !*self.connect_in_progress.lock().await {
+				return;
+			}
+			notified.await;
+		}
 	}
 
 	/// Drops cached Groove runtime + biscuit shell (`SelfState`-derived). Prefer calling this whenever
