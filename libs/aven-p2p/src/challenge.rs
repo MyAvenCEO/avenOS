@@ -52,19 +52,35 @@ pub struct ServerHello {
 }
 
 /// Client → server: the proven identity + signature over the rebuilt message.
+///
+/// `client_nonce` is a fresh client-chosen nonce folded into the signed message. On the
+/// wss path (TLS terminates at the proxy, so there is no real channel binding) it is the
+/// value the server must echo back under its own signature in [`AuthResult::signature`],
+/// giving the client a mutual handshake that an on-path relay cannot complete on both
+/// sides. The raw-TLS path leaves it empty (its anti-relay is the TLS exporter binding).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientAuth {
     pub did: String,
     pub signature: String,
+    #[serde(default)]
+    pub client_nonce: String,
 }
 
 /// Server → client: handshake outcome + the server's own DID (so the client can
 /// register it as the peer it syncs through).
+///
+/// `signature` is the server's attestation over `(client_nonce, server_nonce, client_did)`
+/// (see [`server_attestation_message`]). The client verifies it against `server_did` and
+/// the nonces it itself saw — so a relay that forwarded the backend's `ServerHello` cannot
+/// also convince the client the connection terminates at the real backend. `Option` for
+/// serde tolerance toward older peers.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthResult {
     pub ok: bool,
     pub error: Option<String>,
     pub server_did: Option<String>,
+    #[serde(default)]
+    pub signature: Option<String>,
 }
 
 /// True if the hello's expiration time has passed (the server's nonce TTL gate).
@@ -92,7 +108,17 @@ pub fn unix_now_secs() -> u64 {
 }
 
 /// Build the canonical signed message. Identical on both ends → identical bytes.
-pub fn build_message(hello: &ServerHello, did: &str, channel_binding_b64: &str) -> String {
+///
+/// `client_nonce` is folded in as a trailing line so the client proof is bound to a value
+/// the client picked (used by the wss mutual handshake). The raw-TLS path passes `""`,
+/// keeping its signed bytes stable and its anti-relay anchored on the `Channel-Binding:`
+/// exporter line — both ends still derive identical bytes from the same empty value.
+pub fn build_message(
+    hello: &ServerHello,
+    did: &str,
+    channel_binding_b64: &str,
+    client_nonce: &str,
+) -> String {
     format!(
         "{domain} wants you to sign in with your Aven Self identity.\n\
          \n\
@@ -102,7 +128,8 @@ pub fn build_message(hello: &ServerHello, did: &str, channel_binding_b64: &str) 
          Nonce: {nonce}\n\
          Issued At: {issued}\n\
          Expiration Time: {exp}\n\
-         Channel-Binding: {cb}",
+         Channel-Binding: {cb}\n\
+         Client-Nonce: {client_nonce}",
         domain = hello.domain,
         uri = hello.uri,
         network = hello.network,
@@ -111,7 +138,40 @@ pub fn build_message(hello: &ServerHello, did: &str, channel_binding_b64: &str) 
         issued = hello.issued_at,
         exp = hello.expiration_time,
         cb = channel_binding_b64,
+        client_nonce = client_nonce,
     )
+}
+
+/// Canonical bytes the **server** signs (and the client verifies) to prove the connection
+/// terminates at the real backend. Binds the client-chosen nonce, the server's hello nonce,
+/// and the client DID. A relay between client and backend runs two distinct connections
+/// with two distinct `(client_nonce, server_nonce)` pairs: to make the backend accept the
+/// client proof it must forward the backend's `server_nonce` to the client, but then it
+/// cannot forge the backend's signature over the client-side tuple — so it cannot complete
+/// both sides of the handshake.
+pub fn server_attestation_message(
+    client_nonce: &str,
+    server_nonce: &str,
+    client_did: &str,
+) -> String {
+    format!(
+        "aven-server-attestation:v1\n\
+         Client-Nonce: {client_nonce}\n\
+         Server-Nonce: {server_nonce}\n\
+         Client-DID: {client_did}",
+    )
+}
+
+/// Verify the server's attestation signature against the nonces the client itself saw.
+pub fn verify_server_attestation(
+    server_pubkey: &[u8; 32],
+    client_nonce: &str,
+    server_nonce: &str,
+    client_did: &str,
+    sig_b64: &str,
+) -> Result<(), String> {
+    let msg = server_attestation_message(client_nonce, server_nonce, client_did);
+    verify(server_pubkey, &msg, sig_b64)
 }
 
 /// Sign the message with the device root signing key.
@@ -158,7 +218,7 @@ mod tests {
         let did = groove::did_key::signer_did_from_ed25519(&sk.verifying_key().to_bytes()).unwrap();
         let h = hello();
         let cb = "cb-value";
-        let msg = build_message(&h, &did, cb);
+        let msg = build_message(&h, &did, cb, "");
         let sig = sign(&sk, &msg);
         let pk = groove::did_key::ed25519_public_from_signer_did(&did).unwrap();
         assert!(verify(&pk, &msg, &sig).is_ok());
@@ -178,11 +238,70 @@ mod tests {
         let sk = SigningKey::from_bytes(&[3u8; 32]);
         let did = groove::did_key::signer_did_from_ed25519(&sk.verifying_key().to_bytes()).unwrap();
         let h = hello();
-        let signed = build_message(&h, &did, "client-cb");
+        let signed = build_message(&h, &did, "client-cb", "");
         let sig = sign(&sk, &signed);
         // Server rebuilds with a *different* channel binding (a relayed session).
-        let server_view = build_message(&h, &did, "server-cb");
+        let server_view = build_message(&h, &did, "server-cb", "");
         let pk = groove::did_key::ed25519_public_from_signer_did(&did).unwrap();
         assert!(verify(&pk, &server_view, &sig).is_err());
+    }
+
+    #[test]
+    fn wss_relay_cannot_complete_mutual_handshake() {
+        // Audit #21: on the wss path TLS terminates at the proxy, so a relay can forward the
+        // backend's ServerHello to the victim and try to relay the victim's ClientAuth to the
+        // backend. The mutual handshake must make that impossible on at least one side.
+        let client_sk = SigningKey::from_bytes(&[3u8; 32]);
+        let client_did =
+            groove::did_key::peer_did_from_ed25519(&client_sk.verifying_key().to_bytes()).unwrap();
+        let client_pk = groove::did_key::ed25519_public_from_peer_did(&client_did).unwrap();
+        let server_sk = SigningKey::from_bytes(&[7u8; 32]);
+        let server_did =
+            groove::did_key::peer_did_from_ed25519(&server_sk.verifying_key().to_bytes()).unwrap();
+        let server_pk = groove::did_key::ed25519_public_from_peer_did(&server_did).unwrap();
+
+        // (a) The client signs its proof bound to the ServerHello nonce A it saw + its own
+        //     client nonce. A relay cannot move that proof onto a backend connection whose
+        //     server nonce is B: the backend rebuilds the message with nonce B and the
+        //     signature fails.
+        let mut hello_a = hello();
+        hello_a.nonce = "server-nonce-A".into();
+        let client_nonce = "client-nonce-1";
+        let client_msg = build_message(&hello_a, &client_did, "", client_nonce);
+        let client_sig = sign(&client_sk, &client_msg);
+        // Backend connection has a different server nonce B.
+        let mut hello_b = hello();
+        hello_b.nonce = "server-nonce-B".into();
+        let backend_view = build_message(&hello_b, &client_did, "", client_nonce);
+        assert!(
+            verify(&client_pk, &backend_view, &client_sig).is_err(),
+            "client proof bound to server nonce A must not verify under server nonce B"
+        );
+
+        // (b) The server attests over (client_nonce, server_nonce, client_did). The client
+        //     verifies against the nonces IT saw. A relay that substitutes either nonce
+        //     (its backend-side tuple differs from the client-side tuple) cannot make the
+        //     attestation verify — and cannot forge the server's signature over the
+        //     client-side tuple.
+        let att = server_attestation_message(client_nonce, "server-nonce-A", &client_did);
+        let att_sig = sign(&server_sk, &att);
+        // Honest case: client verifies with exactly what it saw → ok.
+        assert!(
+            verify_server_attestation(&server_pk, client_nonce, "server-nonce-A", &client_did, &att_sig)
+                .is_ok(),
+            "honest server attestation must verify"
+        );
+        // Substituted server nonce (relay forwarded a different backend nonce) → reject.
+        assert!(
+            verify_server_attestation(&server_pk, client_nonce, "server-nonce-B", &client_did, &att_sig)
+                .is_err(),
+            "attestation must fail when the server nonce is substituted"
+        );
+        // Substituted client nonce → reject.
+        assert!(
+            verify_server_attestation(&server_pk, "client-nonce-2", "server-nonce-A", &client_did, &att_sig)
+                .is_err(),
+            "attestation must fail when the client nonce is substituted"
+        );
     }
 }

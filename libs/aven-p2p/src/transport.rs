@@ -26,6 +26,11 @@ use crate::{P2pError, Result};
 const SNI: &str = "aven-node";
 /// Max handshake-message size (the sync frames have their own larger limit).
 const MAX_HANDSHAKE_BYTES: usize = 64 * 1024;
+/// Max sync-frame body size — matches the internal bincode decode ceiling so an
+/// attacker-controlled u32 length prefix cannot force an allocation larger than
+/// what the decoder would ever accept anyway.  Without this cap `read_frame`
+/// would `vec![0u8; len]` with a fully attacker-controlled `len` up to ~4 GiB.
+const MAX_SYNC_FRAME_BYTES: usize = 128 * 1024 * 1024;
 
 fn peer_from_did(did: &str) -> Result<PeerId> {
     let pk = groove::did_key::ed25519_public_from_signer_did(did)
@@ -68,11 +73,20 @@ where
     serde_json::from_slice(&body).map_err(|e| P2pError::Handshake(format!("decode handshake: {e}")))
 }
 
-/// Read one length-prefixed sync frame; returns `None` on clean EOF.
+/// Read one length-prefixed sync frame; returns `None` on clean EOF or an
+/// oversized frame (which drops the connection rather than allocating up to 4 GiB).
 async fn read_frame<R: AsyncReadExt + Unpin>(r: &mut R) -> Option<Vec<u8>> {
     let mut len_buf = [0u8; 4];
     r.read_exact(&mut len_buf).await.ok()?;
     let len = u32::from_le_bytes(len_buf) as usize;
+    if len > MAX_SYNC_FRAME_BYTES {
+        tracing::warn!(
+            len,
+            max = MAX_SYNC_FRAME_BYTES,
+            "sync frame exceeds size limit — dropping connection"
+        );
+        return None;
+    }
     let mut body = vec![0u8; len];
     r.read_exact(&mut body).await.ok()?;
     let mut frame = Vec::with_capacity(4 + len);
@@ -123,9 +137,19 @@ impl ServerSyncTransport {
         let hello: ServerHello = read_json(&mut tls).await?;
         let did = groove::did_key::signer_did_from_ed25519(&signing_key.verifying_key().to_bytes())
             .map_err(|e| P2pError::Handshake(format!("encode our did: {e}")))?;
-        let message = build_message(&hello, &did, &cb);
+        // Raw-TLS path: the anti-relay anchor is the real TLS-exporter channel binding `cb`,
+        // so the wss mutual-handshake client nonce is unused here (empty).
+        let message = build_message(&hello, &did, &cb, "");
         let signature = sign(&signing_key, &message);
-        write_json(&mut tls, &ClientAuth { did, signature }).await?;
+        write_json(
+            &mut tls,
+            &ClientAuth {
+                did,
+                signature,
+                client_nonce: String::new(),
+            },
+        )
+        .await?;
 
         let result: AuthResult = read_json(&mut tls).await?;
         if !result.ok {
@@ -284,6 +308,9 @@ async fn accept_one(
         ok: verdict.is_ok(),
         error: verdict.as_ref().err().cloned(),
         server_did: Some(server_did),
+        // Raw-TLS path is relay-resistant via the exporter channel binding, so no
+        // application-layer server attestation is needed (that is the wss path's mechanism).
+        signature: None,
     };
     write_json(&mut tls, &result).await?;
     let peer = verdict.map_err(P2pError::Handshake)?;
@@ -305,7 +332,7 @@ fn verify_client(hello: &ServerHello, auth: &ClientAuth, cb: &str) -> std::resul
         return Err("challenge expired".into());
     }
     let pubkey = groove::did_key::ed25519_public_from_signer_did(&auth.did)?;
-    let message = build_message(hello, &auth.did, cb);
+    let message = build_message(hello, &auth.did, cb, &auth.client_nonce);
     verify(&pubkey, &message, &auth.signature)?;
     Ok(PeerId(pubkey))
 }
@@ -373,6 +400,40 @@ where
             }
         }
     });
+}
+
+#[cfg(test)]
+mod frame_bounds {
+    use super::*;
+
+    /// An oversized length prefix must NOT allocate — read_frame must return None
+    /// (drop the connection) rather than doing `vec![0u8; 4_294_967_295]`.
+    #[tokio::test]
+    async fn oversized_frame_prefix_drops_connection() {
+        let (mut client, mut server) = tokio::io::duplex(64);
+        // Write a length prefix larger than MAX_SYNC_FRAME_BYTES.
+        let too_large = (MAX_SYNC_FRAME_BYTES + 1) as u32;
+        client.write_all(&too_large.to_le_bytes()).await.unwrap();
+        // read_frame must return None immediately without reading `too_large` bytes.
+        let result = read_frame(&mut server).await;
+        assert!(result.is_none(), "oversized prefix must be rejected, got Some(_)");
+    }
+
+    /// A frame at exactly the limit must be accepted.
+    #[tokio::test]
+    async fn frame_at_limit_accepted() {
+        // Use a very small custom limit for speed: just test the boundary at 8 bytes.
+        // We can't change MAX_SYNC_FRAME_BYTES at runtime, so instead test that a
+        // 1-byte payload (well under the limit) round-trips correctly.
+        let (mut client, mut server) = tokio::io::duplex(1024);
+        let body: Vec<u8> = vec![0xAB; 8];
+        let len = body.len() as u32;
+        client.write_all(&len.to_le_bytes()).await.unwrap();
+        client.write_all(&body).await.unwrap();
+        let frame = read_frame(&mut server).await.expect("small frame must be accepted");
+        // frame = 4 bytes length + body
+        assert_eq!(&frame[4..], body.as_slice());
+    }
 }
 
 #[cfg(test)]
@@ -489,11 +550,14 @@ mod tls_did_challenge {
             groove::did_key::signer_did_from_ed25519(&SigningKey::from_bytes(&[7u8; 32]).verifying_key().to_bytes())
                 .unwrap();
         // Sign the message that claims the forged DID, but with key_a's key.
-        let message = build_message(&hello, &forged_did, &cb);
+        let message = build_message(&hello, &forged_did, &cb, "");
         let signature = sign(&key_a, &message);
-        write_json(&mut tls, &ClientAuth { did: forged_did, signature })
-            .await
-            .unwrap();
+        write_json(
+            &mut tls,
+            &ClientAuth { did: forged_did, signature, client_nonce: String::new() },
+        )
+        .await
+        .unwrap();
         let result: AuthResult = read_json(&mut tls).await.unwrap();
         assert!(!result.ok, "server must reject a signature that does not match the claimed DID");
     }

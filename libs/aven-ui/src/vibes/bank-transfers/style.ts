@@ -1,4 +1,5 @@
 import type { StyleDef } from '../../engine/types.js'
+import { withBrand } from '../../brand-style.js'
 import { invoiceStyle } from '../invoice/style.js'
 
 // Tokens specific to the transfer list; merged on top of the invoice tokens so
@@ -25,8 +26,10 @@ const selectors: StyleDef['selectors'] = {
 	'.bt-ui-container': {
 		height: '100%',
 		minHeight: '480px',
-		padding: '1.25rem 1.5rem',
-		borderRadius: 'var(--radius-2xl)',
+		maxWidth: 'var(--max-w)',
+		margin: '0 auto',
+		padding: 'var(--pad-card)',
+		borderRadius: 'var(--radius-card)',
 		background: 'var(--tech-fill)',
 		display: 'flex',
 		flexDirection: 'column',
@@ -47,7 +50,7 @@ const selectors: StyleDef['selectors'] = {
 		flexDirection: 'column',
 		minHeight: '0',
 		background: 'var(--tech-fill)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		padding: '18px 20px',
 		overflow: 'hidden',
@@ -58,8 +61,8 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bt-eyebrow': {
 		display: 'block',
-		fontSize: '10px',
-		fontWeight: '700',
+		fontSize: 'var(--fs-eyebrow)',
+		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.12em',
@@ -74,8 +77,8 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bt-list-title': {
 		margin: '0',
-		fontSize: '1.1rem',
-		fontWeight: '800',
+		fontSize: 'var(--fs-lead)',
+		fontWeight: '600',
 		letterSpacing: '-0.02em',
 		color: 'var(--text)',
 		lineHeight: '1.2',
@@ -88,16 +91,16 @@ const selectors: StyleDef['selectors'] = {
 		flexShrink: '0',
 	},
 	'.bt-count-value': {
-		fontSize: '1.35rem',
-		fontWeight: '800',
+		fontSize: 'var(--fs-hero)',
+		fontWeight: '600',
 		fontFamily: 'ui-monospace, Menlo, monospace',
 		fontVariantNumeric: 'tabular-nums',
 		color: 'var(--brand-accent)',
 		lineHeight: '1.1',
 	},
 	'.bt-count-label': {
-		fontSize: '9px',
-		fontWeight: '700',
+		fontSize: 'var(--fs-micro)',
+		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.06em',
@@ -118,8 +121,8 @@ const selectors: StyleDef['selectors'] = {
 		textAlign: 'center',
 		color: 'var(--muted)',
 		padding: '1.5rem 1rem',
-		fontSize: '13px',
-		border: '1px dashed var(--hitl-dash)',
+		fontSize: 'var(--fs-body)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-md)',
 	},
 	'.bt-list:has(.bt-row) li[data-empty="true"]': {
@@ -196,8 +199,8 @@ const selectors: StyleDef['selectors'] = {
 		gap: '10px',
 	},
 	'.bt-row-payee': {
-		fontWeight: '700',
-		fontSize: '14px',
+		fontWeight: '600',
+		fontSize: 'var(--fs-section)',
 		color: 'var(--text)',
 		whiteSpace: 'nowrap',
 		overflow: 'hidden',
@@ -207,8 +210,8 @@ const selectors: StyleDef['selectors'] = {
 	'.bt-row-amount': {
 		fontFamily: 'ui-monospace, Menlo, monospace',
 		fontVariantNumeric: 'tabular-nums',
-		fontWeight: '700',
-		fontSize: '14px',
+		fontWeight: '600',
+		fontSize: 'var(--fs-section)',
 		color: 'var(--text)',
 		whiteSpace: 'nowrap',
 		flexShrink: '0',
@@ -217,7 +220,7 @@ const selectors: StyleDef['selectors'] = {
 		color: 'var(--status-paid)',
 	},
 	'.bt-row-ref': {
-		fontSize: '12px',
+		fontSize: 'var(--fs-meta)',
 		color: 'var(--muted)',
 		whiteSpace: 'nowrap',
 		overflow: 'hidden',
@@ -225,7 +228,7 @@ const selectors: StyleDef['selectors'] = {
 		minWidth: '0',
 	},
 	'.bt-row-date': {
-		fontSize: '12px',
+		fontSize: 'var(--fs-meta)',
 		color: 'var(--muted)',
 		whiteSpace: 'nowrap',
 		fontVariantNumeric: 'tabular-nums',
@@ -233,8 +236,8 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bt-row-status': {
 		marginTop: '2px',
-		fontSize: '10px',
-		fontWeight: '700',
+		fontSize: 'var(--fs-eyebrow)',
+		fontWeight: '600',
 		textTransform: 'uppercase',
 		letterSpacing: '0.06em',
 		color: 'var(--muted)',
@@ -251,14 +254,14 @@ const selectors: StyleDef['selectors'] = {
 		alignItems: 'center',
 		justifyContent: 'center',
 		textAlign: 'center',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		background: 'var(--tech-fill)',
 		padding: '2rem',
 	},
 	'.bt-detail-empty-text': {
 		marginTop: '8px',
-		fontSize: '13px',
+		fontSize: 'var(--fs-body)',
 		color: 'var(--muted)',
 		maxWidth: '260px',
 		lineHeight: '1.5',
@@ -276,8 +279,8 @@ const selectors: StyleDef['selectors'] = {
 	},
 }
 
-export const bankTransfersStyle: StyleDef = {
+export const bankTransfersStyle: StyleDef = withBrand({
 	tokens,
 	components: { ...(invoiceStyle.components ?? {}) },
 	selectors,
-}
+})

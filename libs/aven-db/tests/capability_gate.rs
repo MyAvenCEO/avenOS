@@ -11,7 +11,7 @@ use groove::row_histories::BatchId;
 use groove::sync_targets::SyncTargetId;
 use groove::{
     AccOp, AllowAllResolver, CapDecision, CapabilityResolver, DenyAllResolver, FrontierDag,
-    ResourceCoord, gated_pull, may_hold,
+    ResourceCoord, may_hold,
 };
 
 /// Minimal biscuit-shaped resolver: granted → Allow, revoked → DenyPermanent,

@@ -1,30 +1,23 @@
 import type { StyleDef } from '../../engine/types.js'
+import { withBrand } from '../../brand-style.js'
 
+// Shared brand layer provides colours/radii/fonts/ink. Vault keeps its
+// destructive accent and a 1rem radius alias used by its rows.
 const tokens: StyleDef['tokens'] = {
-	'bg-a': '#FBFAF6',
-	'tech-fill': 'rgba(255, 255, 255, 0.1)',
-	'tech-fill-inner': 'rgba(255, 255, 255, 0.15)',
-	text: '#1a1a1a',
-	muted: 'rgba(26, 26, 26, 0.45)',
-	border: 'rgba(0, 0, 0, 0.1)',
-	'border-soft': 'color-mix(in srgb, var(--border) 35%, transparent)',
-	'hitl-dash': 'color-mix(in srgb, var(--text) 20%, transparent)',
 	'row-divider': 'color-mix(in srgb, var(--border) 55%, transparent)',
-	'brand-accent': '#e6b34d',
 	destructive: '#b45309',
 	'radius-lg': '1rem',
-	'radius-md': '0.75rem',
-	'font-sans': "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-	'font-mono': 'ui-monospace, Menlo, monospace',
 }
 
 const selectors: StyleDef['selectors'] = {
 	'.vs-ui-container': {
 		minHeight: '100%',
-		padding: '1rem 1.25rem',
+		maxWidth: 'var(--max-w)',
+		margin: '0 auto',
+		padding: 'var(--pad-card)',
 		display: 'flex',
 		flexDirection: 'column',
-		gap: '16px',
+		gap: 'var(--gap-section)',
 		fontFamily: 'var(--font-sans)',
 		color: 'var(--text)',
 		boxSizing: 'border-box',
@@ -32,33 +25,33 @@ const selectors: StyleDef['selectors'] = {
 	'.vs-header': { marginBottom: '4px' },
 	'.vs-title': {
 		margin: '0 0 6px 0',
-		fontSize: '1.125rem',
-		fontWeight: '600',
+		fontSize: 'var(--fs-lead)',
+		fontWeight: '500',
 		letterSpacing: '-0.02em',
 	},
 	'.vs-description': {
 		margin: '0',
-		fontSize: '0.875rem',
+		fontSize: 'var(--fs-section)',
 		color: 'var(--muted)',
 		lineHeight: '1.45',
 	},
 	'.vs-error': {
 		margin: '0',
-		fontSize: '0.875rem',
+		fontSize: 'var(--fs-section)',
 		color: 'var(--destructive)',
 		display: 'none',
 	},
 	'.vs-error.vs-has-error': { display: 'block' },
 	'.vs-add-card, .vs-list-card': {
 		background: 'var(--tech-fill)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-lg)',
 		padding: '16px 18px',
 	},
 	'.vs-section-title': {
 		margin: '0 0 12px 0',
-		fontSize: '0.875rem',
-		fontWeight: '600',
+		fontSize: 'var(--fs-section)',
+		fontWeight: '500',
 	},
 	'.vs-add-form': {
 		display: 'flex',
@@ -67,7 +60,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.vs-field': { display: 'flex', flexDirection: 'column', gap: '4px' },
 	'.vs-field-label': {
-		fontSize: '0.75rem',
+		fontSize: 'var(--fs-meta)',
 		color: 'var(--muted)',
 	},
 	'.vs-input': {
@@ -88,8 +81,8 @@ const selectors: StyleDef['selectors'] = {
 		cursor: 'pointer',
 		borderRadius: 'var(--radius-md)',
 		padding: '0.5rem 0.85rem',
-		fontWeight: '600',
-		fontSize: '0.8125rem',
+		fontWeight: '500',
+		fontSize: 'var(--fs-body)',
 		border: 'none',
 		background: 'transparent',
 	},
@@ -112,18 +105,18 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.vs-loading': {
 		margin: '0',
-		fontSize: '0.875rem',
+		fontSize: 'var(--fs-section)',
 		color: 'var(--muted)',
 		display: 'none',
 	},
 	'.vs-loading.vs-is-loading': { display: 'block' },
 	'.vs-empty': {
 		margin: '0',
-		fontSize: '0.875rem',
+		fontSize: 'var(--fs-section)',
 		color: 'var(--muted)',
 		textAlign: 'center',
 		padding: '1.25rem 1rem',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-md)',
 	},
 	'.vs-list:has(.vs-row) ~ .vs-empty, .vs-list-card:has(.vs-row) .vs-empty': { display: 'none' },
@@ -151,7 +144,7 @@ const selectors: StyleDef['selectors'] = {
 	'.vs-row-main': { minWidth: '0', flex: '1' },
 	'.vs-row-id': {
 		fontFamily: 'var(--font-mono)',
-		fontSize: '0.875rem',
+		fontSize: 'var(--fs-section)',
 		overflow: 'hidden',
 		textOverflow: 'ellipsis',
 		whiteSpace: 'nowrap',
@@ -159,7 +152,7 @@ const selectors: StyleDef['selectors'] = {
 	'.vs-row-value': {
 		marginTop: '6px',
 		fontFamily: 'var(--font-mono)',
-		fontSize: '0.75rem',
+		fontSize: 'var(--fs-meta)',
 		color: 'var(--muted)',
 		wordBreak: 'break-all',
 	},
@@ -171,4 +164,4 @@ const selectors: StyleDef['selectors'] = {
 	},
 }
 
-export const vaultSecretsStyle: StyleDef = { tokens, selectors }
+export const vaultSecretsStyle: StyleDef = withBrand({ tokens, selectors })

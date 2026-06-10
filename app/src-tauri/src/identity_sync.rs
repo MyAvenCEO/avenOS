@@ -10,13 +10,23 @@ use uuid::Uuid;
 pub struct SyncAclSnapshot {
 	/// Patch rows may omit owner — map `(table, object_id)` → identity scope for ACL.
 	pub object_owner: std::collections::HashMap<(String, ObjectId), Uuid>,
+	/// keyshares `object_id` → `recipient_did`. A keyshare is E2E-encrypted to exactly one
+	/// recipient, so the gate may forward it to the peer it is ADDRESSED to — a self-evident,
+	/// non-circular authorization that needs no membership evaluation. This is the gated,
+	/// recipient-scoped delivery that lets a grantee receive its DEK deterministically
+	/// (no broad ungated bootstrap, no chicken-and-egg, no metadata broadcast).
+	pub keyshare_recipient: std::collections::HashMap<ObjectId, String>,
 }
 
 /// Build the outbound sync ACL snapshot from the hydrated vault shell.
 pub fn build_sync_acl_snapshot(
 	object_owner: std::collections::HashMap<(String, ObjectId), Uuid>,
+	keyshare_recipient: std::collections::HashMap<ObjectId, String>,
 ) -> SyncAclSnapshot {
-	SyncAclSnapshot { object_owner }
+	SyncAclSnapshot {
+		object_owner,
+		keyshare_recipient,
+	}
 }
 
 static IDENTITY_SCOPED_TABLES: OnceLock<Vec<String>> = OnceLock::new();

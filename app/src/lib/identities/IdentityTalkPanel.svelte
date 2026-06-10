@@ -339,30 +339,32 @@
 										{/if}
 									</div>
 								{:else if toolCall}
-									<!-- Tool-call chip: the spoken human-facing reply, plus a muted technical
-									     footer (tool name + parameters + action result). -->
+									<!-- `respond` is just the agent's message. Action tools add ONE clean
+									     confirmation pill (human result + status) — no raw args/JSON. -->
 									{#if toolCall.response?.trim()}
 										<p class="text-sm leading-relaxed whitespace-pre-wrap break-words">
 											{toolCall.response}
 										</p>
 									{/if}
-									<div class="text-muted-foreground/80 flex flex-col gap-0.5 text-[11px]">
-										<div class="flex items-center gap-1.5">
-											<svg class="text-primary/70 size-3 shrink-0" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-												<path d="M11.5 1a3.5 3.5 0 0 0-3.36 4.52L1.7 11.96a1.55 1.55 0 1 0 2.19 2.19l6.44-6.44A3.5 3.5 0 1 0 11.5 1Zm0 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z" />
-											</svg>
-											<code class="font-mono font-semibold">{toolCall.name}</code>
-											{#if toolCall.inferred}
-												<span class="bg-muted-foreground/15 rounded px-1 py-0.5 text-[9px] font-medium tracking-wide uppercase">auto</span>
+									{#if toolCall.name !== 'respond' && (toolCall.result || toolCall.name)}
+										<div
+											class="border-border/60 bg-background/40 text-muted-foreground mt-0.5 inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium"
+										>
+											{#if toolCall.ok}
+												<svg class="size-3 shrink-0 text-emerald-600 dark:text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+													<path d="M5 13l4 4L19 7" />
+												</svg>
+											{:else}
+												<svg class="size-3 shrink-0 text-amber-600 dark:text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+													<path d="M12 8v5" /><path d="M12 16.5h.01" />
+												</svg>
 											{/if}
-											{#if toolCall.name !== 'respond'}
-												<code class="font-mono break-all">{JSON.stringify(toolCall.arguments)}</code>
+											<span class="truncate">{toolCall.result || toolCall.name}</span>
+											{#if toolCall.inferred}
+												<span class="bg-muted-foreground/15 rounded px-1 py-0.5 text-[9px] font-semibold tracking-wide uppercase">auto</span>
 											{/if}
 										</div>
-										{#if toolCall.result}
-											<span class={toolCall.ok ? '' : 'text-amber-600 dark:text-amber-500'}>{toolCall.result}</span>
-										{/if}
-									</div>
+									{/if}
 								{:else if liveBody?.trim()}
 									<p class="text-sm leading-relaxed whitespace-pre-wrap break-words">
 										{liveBody}

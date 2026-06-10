@@ -23,7 +23,7 @@ use axum::response::Response;
 use axum::routing::get;
 use axum::Router;
 use ed25519_dalek::SigningKey;
-use groove::{AppContext, AppId, JazzClient, PeerId};
+use groove::{AppContext, AppId, EditSigner, JazzClient, ObjectId, PeerId};
 use tokio::signal::unix::{signal, SignalKind};
 
 use ws_server::WsServerListener;
@@ -137,8 +137,9 @@ impl groove::CapabilityResolver for ServerApplyGate {
         _subject: &groove::SyncTargetId,
         _op: groove::AccOp,
         res: &groove::ResourceCoord,
-        _digest: &[u8; 32],
+        digest: &[u8; 32],
         proof: Option<&[u8]>,
+        edit_sig: Option<&[u8]>,
     ) -> groove::CapDecision {
         let Some(proof) = proof else {
             return groove::CapDecision::Allow;
@@ -153,7 +154,25 @@ impl groove::CapabilityResolver for ServerApplyGate {
         if binding.value_id != *res.row_id.uuid() {
             return groove::CapDecision::DenyPermanent;
         }
-        match aven_caps::ownership::verify_owner_binding(&binding) {
+        if aven_caps::ownership::verify_owner_binding(&binding).is_err() {
+            return groove::CapDecision::DenyPermanent;
+        }
+        // Content integrity at the relay (audit #29): a bound (identity-scoped) row MUST
+        // carry an edit-signature that binds the digest the relay itself computed over
+        // `data` + `metadata`. The relay holds no identity biscuit so it can't check
+        // membership, but it CAN reject a row whose `data`/keyshare columns were tampered in
+        // flight — before storing or forwarding it. Missing/invalid edit-sig → reject.
+        let Some(edit_sig) = edit_sig else {
+            return groove::CapDecision::DenyPermanent;
+        };
+        let Ok(es_str) = std::str::from_utf8(edit_sig) else {
+            return groove::CapDecision::DenyPermanent;
+        };
+        let es = match aven_caps::ownership::EditSignature::from_meta_str(es_str) {
+            Ok(e) => e,
+            Err(_) => return groove::CapDecision::DenyPermanent,
+        };
+        match aven_caps::ownership::verify_signed_batch(&es, digest) {
             Ok(()) => groove::CapDecision::Allow,
             Err(_) => groove::CapDecision::DenyPermanent,
         }
@@ -168,6 +187,26 @@ impl groove::CapabilityResolver for ServerApplyGate {
         let meta = std::str::from_utf8(proof?).ok()?;
         let binding = aven_caps::ownership::OwnerBinding::from_meta_str(meta).ok()?;
         Some((binding.owner.to_string(), AVEN_IDENTITY_QUOTA_BYTES))
+    }
+}
+
+/// Server-side author **edit-signer** — the aven-node counterpart of the app's
+/// `AppEditSigner`. Installed via [`groove::JazzClient::set_edit_signer`] so every row the
+/// server authors (the avenCEO genesis in S.3 and the auto-admin grant in S.4) carries a
+/// valid `_edit_sig` signed by the server identity. Without it, server-authored control
+/// rows reach each peer with no edit-signature and die at the fail-closed `verify_on_apply`
+/// gate — so the first user never receives its admin grant and stays on the onboarding wall.
+struct ServerEditSigner {
+    signing_key: SigningKey,
+}
+
+impl EditSigner for ServerEditSigner {
+    fn sign_row(&self, _row_id: ObjectId, digest: &[u8; 32]) -> Option<(String, String)> {
+        let es = aven_caps::ownership::sign_batch(&self.signing_key, digest).ok()?;
+        Some((
+            aven_caps::ownership::EDIT_SIG_META_KEY.to_string(),
+            es.to_meta_string(),
+        ))
     }
 }
 
@@ -202,7 +241,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let params = ChallengeParams::new(cfg.domain.clone(), cfg.uri.clone(), cfg.network_seed.clone());
-    let (listener, mut new_peers) = WsServerListener::new(params, server_did);
+    let (listener, mut new_peers) = WsServerListener::new(params, server_did, identity.clone());
 
     // Durable blind replica: a full RocksDB engine on the REAL schema, wired to the
     // WS listener. The real schema is required so the engine can persist & re-ship
@@ -243,6 +282,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // relabeled row is rejected on apply even in transit through the server.
     if let Err(e) = engine.set_resolver(std::sync::Arc::new(ServerApplyGate)) {
         tracing::warn!("install server apply gate: {e}");
+    }
+
+    // Sign every row the server authors with the server identity, so the avenCEO genesis
+    // and the auto-admin grants carry a valid `_edit_sig` and pass each peer's fail-closed
+    // apply gate (the EditSignature hardening, board 0010). Must precede the genesis mint
+    // below so those rows are signed at creation.
+    if let Err(e) = engine.set_edit_signer(std::sync::Arc::new(ServerEditSigner {
+        signing_key: identity.clone(),
+    })) {
+        tracing::warn!("install server edit signer: {e}");
     }
 
     // S.3 — the server is the avenCEO owner: mint its genesis on startup (idempotent).

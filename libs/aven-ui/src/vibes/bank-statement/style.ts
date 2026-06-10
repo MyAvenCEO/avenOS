@@ -1,62 +1,46 @@
 import type { StyleDef } from '../../engine/types.js'
+import { withBrand } from '../../brand-style.js'
 
+// Colours, radii, fonts and dark-blue ink come from the shared brand layer.
+// Only the two bank-statement-specific divider tokens are overridden here.
 const tokens: StyleDef['tokens'] = {
-	'bg-a': '#FBFAF6',
-	'tech-fill': 'rgba(255, 255, 255, 0.1)',
-	'tech-fill-inner': 'rgba(255, 255, 255, 0.15)',
-	'hitl-dash': 'color-mix(in srgb, var(--text) 20%, transparent)',
-	border: 'rgba(0, 0, 0, 0.1)',
-	'border-soft': 'color-mix(in srgb, var(--border) 35%, transparent)',
-	muted: 'rgba(26, 26, 26, 0.45)',
-	text: '#1a1a1a',
-	'brand-accent': '#e6b34d',
 	'banner-divider': 'color-mix(in srgb, var(--text) 12%, transparent)',
 	'row-divider': 'color-mix(in srgb, var(--border) 55%, transparent)',
-	'radius-2xl': '2rem',
-	'radius-md': '1rem',
-	'font-sans': "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 }
 
 const selectors: StyleDef['selectors'] = {
-	'*, *::before, *::after': { boxSizing: 'border-box' },
-	':host': {
-		fontFamily: 'var(--font-sans)',
-		background: 'var(--bg-a)',
-		color: 'var(--text)',
-		margin: '0',
-		minHeight: '100%',
-		height: '100%',
-	},
 	'.bs-ui-container': {
-		padding: '1.25rem 1.5rem',
-		borderRadius: 'var(--radius-2xl)',
+		padding: 'var(--pad-card)',
+		borderRadius: 'var(--radius-card)',
 		background: 'var(--tech-fill)',
 		border: 'none',
+		maxWidth: 'var(--max-w)',
+		margin: '0 auto',
 	},
 	'.bs-card': {
 		background: 'var(--tech-fill)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		padding: '18px 20px',
 		marginBottom: '16px',
 	},
 	'.bs-card h4': {
 		margin: '0 0 8px 0',
-		fontSize: '10px',
-		fontWeight: '700',
+		fontSize: 'var(--fs-eyebrow)',
+		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.12em',
 		opacity: '0.55',
 	},
 	'.bs-card .big': {
-		fontSize: '15px',
-		fontWeight: '700',
+		fontSize: 'var(--fs-title)',
+		fontWeight: '600',
 		color: 'var(--text)',
 		marginBottom: '4px',
 	},
 	'.bs-card .line': {
-		fontSize: '13px',
+		fontSize: 'var(--fs-body)',
 		color: 'var(--text)',
 		marginTop: '2px',
 		whiteSpace: 'pre-wrap',
@@ -64,7 +48,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bs-card .muted': {
 		color: 'var(--muted)',
-		fontSize: '12px',
+		fontSize: 'var(--fs-meta)',
 		marginTop: '2px',
 	},
 	'.bs-grid': {
@@ -75,11 +59,11 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bs-banner': {
 		background: 'var(--tech-fill-inner)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		padding: '14px 20px',
 		marginBottom: '16px',
-		fontSize: '13px',
+		fontSize: 'var(--fs-body)',
 	},
 	'.bs-banner-hero': {
 		display: 'grid',
@@ -88,23 +72,23 @@ const selectors: StyleDef['selectors'] = {
 		alignItems: 'end',
 	},
 	'.bs-banner-title': {
-		fontSize: '1.1rem',
-		fontWeight: '800',
+		fontSize: 'var(--fs-lead)',
+		fontWeight: '600',
 		letterSpacing: '-0.02em',
 		color: 'var(--text)',
 		textTransform: 'capitalize',
 	},
 	'.bs-banner-sub': {
-		fontSize: '10px',
-		fontWeight: '700',
+		fontSize: 'var(--fs-eyebrow)',
+		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.08em',
 		marginTop: '6px',
 	},
 	'.bs-banner-money': {
-		fontSize: '1.35rem',
-		fontWeight: '800',
+		fontSize: 'var(--fs-hero)',
+		fontWeight: '600',
 		fontFamily: 'ui-monospace, Menlo, monospace',
 		fontVariantNumeric: 'tabular-nums',
 		color: 'var(--brand-accent)',
@@ -112,16 +96,16 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bs-banner-money .bs-banner-sub': { textAlign: 'right' },
 	'.bs-field-label': {
-		fontSize: '9px',
-		fontWeight: '700',
+		fontSize: 'var(--fs-micro)',
+		fontWeight: '600',
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.06em',
 		marginTop: '4px',
 	},
 	'.bs-field-val': {
-		fontSize: '0.95rem',
-		fontWeight: '700',
+		fontSize: 'var(--fs-title)',
+		fontWeight: '600',
 		fontFamily: 'ui-monospace, Menlo, monospace',
 		fontVariantNumeric: 'tabular-nums',
 	},
@@ -140,8 +124,8 @@ const selectors: StyleDef['selectors'] = {
 		gap: '10px 14px',
 	},
 	'.bs-banner-fields--compact .bs-field-val': {
-		fontSize: '0.8125rem',
-		fontWeight: '700',
+		fontSize: 'var(--fs-body)',
+		fontWeight: '600',
 		lineHeight: '1.25',
 	},
 	'.bs-banner-fields--compact .bs-field-cell--nowrap .bs-field-val': {
@@ -149,7 +133,7 @@ const selectors: StyleDef['selectors'] = {
 	},
 	'.bs-items-wrap': {
 		background: 'var(--tech-fill)',
-		border: '1px dashed var(--hitl-dash)',
+		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		overflow: 'auto',
 		marginBottom: '16px',
@@ -157,15 +141,15 @@ const selectors: StyleDef['selectors'] = {
 	'.bs-items': {
 		width: '100%',
 		borderCollapse: 'collapse',
-		fontSize: '13px',
+		fontSize: 'var(--fs-body)',
 	},
 	'.bs-items thead th': {
 		textAlign: 'left',
 		background: 'var(--tech-fill-inner)',
 		padding: '10px 12px',
 		borderBottom: '1px solid var(--border-soft)',
-		fontWeight: '700',
-		fontSize: '10px',
+		fontWeight: '600',
+		fontSize: 'var(--fs-eyebrow)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.05em',
 		color: 'var(--muted)',
@@ -187,26 +171,26 @@ const selectors: StyleDef['selectors'] = {
 		color: 'color-mix(in srgb, var(--text) 75%, #b91c1c)',
 	},
 	'.bs-desc-title': {
-		fontWeight: '700',
+		fontWeight: '600',
 		color: 'var(--text)',
 		lineHeight: '1.35',
 	},
 	'.bs-desc-body': {
-		fontSize: '12px',
+		fontSize: 'var(--fs-meta)',
 		color: 'var(--muted)',
 		lineHeight: '1.45',
 		marginTop: '3px',
 		whiteSpace: 'pre-line',
 	},
 	'.bs-fx-hint': {
-		fontSize: '10px',
+		fontSize: 'var(--fs-eyebrow)',
 		color: 'var(--muted)',
 		marginTop: '4px',
 		fontStyle: 'italic',
 	},
 	'.bs-desc-title:empty, .bs-desc-body:empty, .bs-fx-hint:empty': { display: 'none' },
 	'.bs-notes': {
-		fontSize: '13px',
+		fontSize: 'var(--fs-body)',
 		lineHeight: '1.5',
 		whiteSpace: 'pre-line',
 		color: 'var(--text)',
@@ -219,7 +203,4 @@ const selectors: StyleDef['selectors'] = {
 	},
 }
 
-export const bankStatementStyle: StyleDef = {
-	tokens,
-	selectors,
-}
+export const bankStatementStyle: StyleDef = withBrand({ tokens, selectors })

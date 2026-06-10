@@ -26,29 +26,13 @@ pub async fn signing_public_key(state: State<'_, SelfState>) -> Result<Vec<u8>, 
 	state.with_root(|root| Ok(derive::ed25519_public(root)?.to_vec()))
 }
 
-/// Sign `message` (raw bytes) with the cached identity. Returns a 64-byte Ed25519 signature.
-#[tauri::command]
-pub async fn sign(state: State<'_, SelfState>, message: Vec<u8>) -> Result<Vec<u8>, String> {
-	state.with_root(|root| Ok(derive::sign(root, &message)?.to_vec()))
-}
-
-/// Verify a detached signature. Pure, no state required — exposed here for symmetry / dogfooding.
-#[tauri::command]
-pub async fn verify(
-	public_key: Vec<u8>,
-	message: Vec<u8>,
-	signature: Vec<u8>,
-) -> Result<bool, String> {
-	let pk: [u8; 32] = public_key
-		.as_slice()
-		.try_into()
-		.map_err(|_| format!("public_key: expected 32 bytes, got {}", public_key.len()))?;
-	let sig: [u8; 64] = signature
-		.as_slice()
-		.try_into()
-		.map_err(|_| format!("signature: expected 64 bytes, got {}", signature.len()))?;
-	derive::verify(&pk, &message, &sig)
-}
+// The generic `sign` / `verify` IPC commands were removed (audit #14/#10/#30): they signed
+// arbitrary caller-supplied bytes with the device identity key and were reachable from the
+// WebView, which made a compromised renderer a universal forging oracle for owner-bindings,
+// edit-sigs, biscuits, and p2p auth challenges. No frontend flow used them (only
+// `signing_public_key` / `signing_peer_did` are consumed by the UI; all real auth signing is
+// Rust-side via `jazz_auth` → `signing_key_from_root`). The raw primitive is now private
+// (`derive::sign_raw`); the public `derive::sign` domain-prefixes (`WEBVIEW_SIGN_DOMAIN`).
 
 /// Friendly host device label for onboarding (e.g. macOS "Computer Name": MacBook Air).
 #[tauri::command]

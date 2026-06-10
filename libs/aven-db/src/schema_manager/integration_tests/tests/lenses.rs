@@ -16,7 +16,7 @@ fn draft_lens_rejected() {
         .build();
 
     let mut manager =
-        SchemaManager::new(SyncManager::new(), v2, test_app_id(), "dev", "main").unwrap();
+        manager_for(v2);
     let result = manager.add_live_schema(v1);
 
     // Should fail - auto-generated lens is draft

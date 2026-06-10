@@ -471,7 +471,12 @@
 			"toggleDone": "Toggle done",
 			"doubleClickEdit": "Double-click to edit",
 			"titleCannotBeEmpty": "Title cannot be empty",
-			"noTodosYet": "No todos in this identity yet."
+			"noTodosYet": "No todos in this identity yet.",
+			"listEyebrow": "Task list",
+			"openLabel": "Open",
+			"newSection": "New",
+			"entriesSection": "Entries",
+			"clearDone": "Clear done"
 		},
 		"gallery": {
 			"title": "Files",
@@ -605,6 +610,15 @@
 		"namePromptSpark": "Spark name",
 		"composer": {
 			"placeholder": "Talk, navigate, or add a todo…"
+		},
+		"meta": {
+			"detailsLabel": "Details",
+			"name": "Name",
+			"id": "ID",
+			"type": "Type",
+			"typeHuman": "Human",
+			"members": "Members",
+			"created": "Created"
 		}
 	},
 	"uiLab": {

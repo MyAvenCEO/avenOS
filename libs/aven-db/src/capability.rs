@@ -8,7 +8,6 @@
 //! The engine knows nothing about biscuits or sparks: the app's
 //! `BiscuitCapabilityResolver` is the only capability-aware implementation.
 
-use crate::frontier::FrontierDag;
 use crate::object::ObjectId;
 use crate::sync_targets::SyncTargetId;
 
@@ -64,6 +63,18 @@ impl ResourceCoord {
 /// kept in sync by this note.
 pub const OWNER_BINDING_META_KEY: &str = "_owner_binding";
 
+/// Row-metadata key the per-row **edit signature** travels under (base64) — an Ed25519
+/// signature by the authoring device over the row's content digest, read back as opaque
+/// proof by [`CapabilityResolver::verify_on_apply`].
+///
+/// Must match `aven_caps::ownership::EDIT_SIG_META_KEY` (kept in sync by this note, same
+/// as [`OWNER_BINDING_META_KEY`]).
+///
+/// **Excluded from [`crate::row_histories::compute_row_digest`]**: the edit-sig *signs*
+/// that digest, so it cannot itself be hashed into it (chicken-and-egg). Excluding a key
+/// that no pre-edit-sig row carries is a no-op for every existing digest.
+pub const EDIT_SIG_META_KEY: &str = "_edit_sig";
+
 /// The one gate. Every outbound peer frame passes exactly one `may_sync`, at every hop.
 pub trait CapabilityResolver: Send + Sync {
     fn may_sync(&self, subject: &SyncTargetId, op: AccOp, res: &ResourceCoord) -> CapDecision;
@@ -77,6 +88,12 @@ pub trait CapabilityResolver: Send + Sync {
     /// owner-binding). The app's `BiscuitCapabilityResolver` deserializes + verifies them
     /// via `aven-caps` (`authorize_signed_edit`).
     ///
+    /// `proof` is the serialized signed **owner-binding** ([`OWNER_BINDING_META_KEY`]);
+    /// `edit_sig` is the serialized author **edit-signature** ([`EDIT_SIG_META_KEY`]) over
+    /// the `digest` the engine computed itself. Together they let the app's resolver run
+    /// `aven_caps::ownership::authorize_signed_edit` so a relay that tampered with the
+    /// row's `data`/`metadata` (which the owner-binding does NOT cover) is rejected.
+    ///
     /// Three-state like [`may_sync`]: `Allow` → persist; `DenyPermanent` → reject;
     /// `Pending` → defer (vault/ACL not hydrated yet), never drop. **Default is `Allow`**
     /// so permissive/local engines and tests are unchanged; production installs a
@@ -88,8 +105,9 @@ pub trait CapabilityResolver: Send + Sync {
         res: &ResourceCoord,
         digest: &[u8; 32],
         proof: Option<&[u8]>,
+        edit_sig: Option<&[u8]>,
     ) -> CapDecision {
-        let _ = (subject, op, res, digest, proof);
+        let _ = (subject, op, res, digest, proof, edit_sig);
         CapDecision::Allow
     }
 
@@ -101,6 +119,20 @@ pub trait CapabilityResolver: Send + Sync {
         let _ = proof;
         None
     }
+}
+
+/// App-installed signer for the **local write path** (`set_edit_signer`). The engine stays
+/// crypto-agnostic: after it assembles a locally-authored row batch it calls
+/// [`EditSigner::sign_row`] with the batch's content `digest` (which EXCLUDES the
+/// [`EDIT_SIG_META_KEY`] slot, so stamping the result back does not perturb it). The app
+/// signs the digest with the authoring device key and returns the `(metadata_key,
+/// base64_value)` to stamp into the row, so the author's signature travels with the batch
+/// and is verified by [`CapabilityResolver::verify_on_apply`] on every receiving peer.
+///
+/// Returns `None` to skip stamping (signer not ready). Mirrors the `set_resolver` /
+/// `CapabilityResolver` split: the engine owns the hook point, the app owns the crypto.
+pub trait EditSigner: Send + Sync {
+    fn sign_row(&self, row_id: ObjectId, digest: &[u8; 32]) -> Option<(String, String)>;
 }
 
 /// Permissive default — local-only mode and tests.
@@ -130,6 +162,7 @@ impl CapabilityResolver for DenyAllResolver {
         _res: &ResourceCoord,
         _digest: &[u8; 32],
         _proof: Option<&[u8]>,
+        _edit_sig: Option<&[u8]>,
     ) -> CapDecision {
         CapDecision::DenyPermanent
     }
@@ -177,30 +210,6 @@ pub fn may_hold(
         CapDecision::Pending
     } else {
         CapDecision::DenyPermanent
-    }
-}
-
-/// Per-hop gated reconcile (§6 "Gate") — the one integration point of gate ⨯ tracker.
-///
-/// Transfer the batches `subject` is owed from `source` **only** when `may_sync`
-/// returns `Allow`. `DenyPermanent` and `Pending` transfer **nothing new** and
-/// **never delete** what `dest` already holds — revoke is not retroactive
-/// (it stops future changes; a peer keeps what it already received). Applying the
-/// gate here, at every hop, means a batch only flows along fully-authorized paths.
-///
-/// Returns the number of batches transferred (0 when gated off).
-pub fn gated_pull(
-    dest: &mut FrontierDag,
-    source: &FrontierDag,
-    resolver: &dyn CapabilityResolver,
-    subject: &SyncTargetId,
-    res: &ResourceCoord,
-) -> usize {
-    match resolver.may_sync(subject, AccOp::Read, res) {
-        CapDecision::Allow => dest.pull_from(source),
-        // Deny terminates; Pending defers to a later round — neither sends now,
-        // neither touches already-held batches.
-        CapDecision::DenyPermanent | CapDecision::Pending => 0,
     }
 }
 

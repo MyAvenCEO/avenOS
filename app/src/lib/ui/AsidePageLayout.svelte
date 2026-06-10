@@ -26,6 +26,9 @@
 		header?: Snippet
 		/** Rendered in the aside below the nav sections (e.g. a contextual panel). */
 		asideExtra?: Snippet
+		/** Optional thin right aside (e.g. a metadata/detail panel). Needs a 3-col `desktopGridClass`. */
+		asideRight?: Snippet
+		asideRightLabel?: string
 		children: Snippet
 	}
 
@@ -42,6 +45,8 @@
 		routeKey,
 		header,
 		asideExtra,
+		asideRight,
+		asideRightLabel,
 		children,
 	}: Props = $props()
 
@@ -60,6 +65,8 @@
 <SlideAsideLayout
 	bind:open={asideOpen}
 	{asideLabel}
+	{asideRight}
+	{asideRightLabel}
 	{desktopGridClass}
 	class={className}
 	{mainClass}

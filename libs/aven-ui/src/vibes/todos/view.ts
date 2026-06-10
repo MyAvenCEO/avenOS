@@ -28,41 +28,8 @@ export const todoView: ViewDef = {
 				],
 			},
 			{
-				class: 'td-card',
-				children: [
-					{ tag: 'h4', text: '$labels.newSection' },
-					{
-						tag: 'form',
-						class: 'td-add-form',
-						$on: {
-							submit: { send: 'ADD_ITEM', payload: { text: '$field:draft' } },
-						},
-						children: [
-							{
-								tag: 'input',
-								class: 'td-input',
-								attrs: {
-									type: 'text',
-									placeholder: '$labels.addPlaceholder',
-									autocomplete: 'off',
-									required: 'true',
-									'data-aven-field': 'draft',
-								},
-							},
-							{
-								tag: 'button',
-								class: 'td-btn td-btn--primary',
-								attrs: { type: 'submit' },
-								text: '$labels.addButton',
-							},
-						],
-					},
-				],
-			},
-			{
 				class: 'td-card td-card--list',
 				children: [
-					{ tag: 'h4', text: '$labels.entriesSection' },
 					{
 						tag: 'ul',
 						class: 'td-list',
@@ -104,20 +71,6 @@ export const todoView: ViewDef = {
 											},
 										],
 									},
-								},
-							},
-						],
-					},
-					{
-						class: 'td-list-footer',
-						children: [
-							{
-								tag: 'button',
-								class: 'td-btn td-btn--ghost',
-								attrs: { type: 'button' },
-								text: '$labels.clearDone',
-								$on: {
-									click: { send: 'CLEAR_DONE', payload: {} },
 								},
 							},
 						],

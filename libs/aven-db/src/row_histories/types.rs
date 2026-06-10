@@ -256,6 +256,16 @@ impl RowMetadata {
             .iter()
             .map(|(key, value)| (key.as_str(), value.as_str()))
     }
+
+    /// Insert or replace a single entry, preserving the sorted+deduped invariant of
+    /// [`from_entries`]. Used to stamp the author edit-signature after assembly (it signs
+    /// the content digest, which excludes its own slot, so adding it is digest-neutral).
+    pub fn upsert(&mut self, key: String, value: String) {
+        let mut entries: Vec<(String, String)> = std::mem::take(&mut self.0).into_vec();
+        entries.retain(|(existing, _)| existing != &key);
+        entries.push((key, value));
+        *self = Self::from_entries(entries);
+    }
 }
 
 fn delete_kind_from_metadata(metadata: &HashMap<String, String>) -> Option<DeleteKind> {
@@ -355,8 +365,17 @@ impl StoredRowBatch {
             &self.data,
             self.updated_at,
             &self.updated_by,
+            self.delete_kind,
+            self.is_deleted,
             (!self.metadata.is_empty()).then_some(&self.metadata),
         )
+    }
+
+    /// Stamp a single metadata entry after assembly (e.g. the author edit-signature under
+    /// `EDIT_SIG_META_KEY`). Because `compute_row_digest` excludes the edit-sig slot, the
+    /// content digest is unchanged by this call when `key` is that slot.
+    pub fn set_metadata_entry(&mut self, key: String, value: String) {
+        self.metadata.upsert(key, value);
     }
 
     pub fn accepted_transaction_output(&self, confirmed_tier: DurabilityTier) -> Self {

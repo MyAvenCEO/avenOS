@@ -14,34 +14,35 @@ export const mobileAsideSectionLabelClass =
 export const mobileAsideBottomPadClass =
 	'pb-[max(0.75rem,env(safe-area-inset-bottom))]'
 
+/**
+ * Unified brand nav-item pill. Same language as the vibe-library Snippets nav:
+ * outline-bordered rounded-full items; the active item is a brand-navy filled
+ * pill. Identical on mobile and desktop (only sizing scales down at md+).
+ */
+function navPillBase(align: 'left' | 'right', size: 'lg' | 'md'): string {
+	const alignClass = align === 'right' ? 'text-right' : 'text-left'
+	const text = size === 'lg' ? 'text-[15px]' : 'text-[14px]'
+	return `flex w-full items-center gap-2.5 rounded-full border px-3.5 py-2.5 ${text} font-medium leading-snug tracking-tight transition-colors touch-manipulation md:px-3 md:py-2 md:text-[13px] ${alignClass}`
+}
+
 export function mobileAsideNavLinkClass(
 	active: boolean,
 	align: 'left' | 'right' = 'left',
 ): string {
-	const alignClass =
-		align === 'right'
-			? 'max-md:text-center text-right md:text-left'
-			: 'max-md:text-center text-left'
-	// Mobile: centered outline-button pills, larger text. Desktop (md+) keeps the flat list look.
-	const base = `block w-full rounded-xl px-3.5 py-3 text-[17px] font-semibold leading-snug tracking-tight transition-colors touch-manipulation max-md:border md:rounded-md md:border-0 md:px-3 md:py-1.5 md:text-[13px] ${alignClass}`
+	const base = navPillBase(align, 'lg')
 	return active
-		? `${base} bg-accent/15 text-foreground max-md:border-primary/60 max-md:bg-accent/20 md:font-medium`
-		: `${base} text-muted-foreground hover:bg-accent/10 hover:text-foreground max-md:border-border/70 max-md:text-foreground/90 md:text-muted-foreground/70`
+		? `${base} border-primary bg-primary text-primary-foreground`
+		: `${base} border-border text-foreground/80 hover:border-primary/40 hover:bg-accent/5`
 }
 
 export function mobileAsideNavLinkMutedClass(
 	active: boolean,
 	align: 'left' | 'right' = 'left',
 ): string {
-	const alignClass =
-		align === 'right'
-			? 'max-md:text-center text-right md:text-left'
-			: 'max-md:text-center text-left'
-	// Mobile: centered outline-button pills, larger text. Desktop (md+) keeps the flat list look.
-	const base = `block w-full rounded-xl px-3.5 py-3 text-[16px] font-medium leading-snug tracking-tight transition-colors touch-manipulation max-md:border md:rounded-md md:border-0 md:px-3 md:py-1.5 md:text-[13px] ${alignClass}`
+	const base = navPillBase(align, 'md')
 	return active
-		? `${base} bg-accent/15 text-foreground max-md:border-primary/60 max-md:bg-accent/20`
-		: `${base} text-muted-foreground hover:bg-accent/10 hover:text-foreground max-md:border-border/70 max-md:text-foreground/90 md:text-muted-foreground/70`
+		? `${base} border-primary bg-primary text-primary-foreground`
+		: `${base} border-border text-muted-foreground hover:border-primary/40 hover:bg-accent/5 hover:text-foreground`
 }
 
 export function mobileAsideTextAlignClass(align: 'left' | 'right'): string {

@@ -374,16 +374,16 @@ mod tests {
     use std::collections::HashMap;
 
     use super::*;
-    use crate::row_format::decode_row;
+    
     use crate::query_manager::graph::GraphNode;
-    use crate::query_manager::manager::QueryManager;
-    use crate::query_manager::policy::PolicyExpr;
+    
+    
     use crate::query_manager::query::QueryBuilder;
-    use crate::query_manager::types::{ColumnDescriptor, ColumnType, TableName, TablePolicies};
+    use crate::query_manager::types::{ColumnDescriptor, ColumnType, TableName};
     use crate::query_manager::types::{ComposedBranchName, SchemaBuilder, SchemaHash, TableSchema};
     use crate::schema_manager::{Lens, LensOp, LensTransform};
-    use crate::sync_manager::SyncManager;
-    use crate::test_support::seeded_memory_storage;
+    
+    
 
     fn test_schema() -> Schema {
         let mut schema = HashMap::new();

@@ -28,7 +28,10 @@ use tokio::sync::{mpsc, Mutex, Notify};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
-use crate::challenge::{build_message, sign, AuthResult, ClientAuth, ServerHello};
+use crate::challenge::{
+    build_message, random_nonce_b64, sign, verify_server_attestation, AuthResult, ClientAuth,
+    ServerHello,
+};
 use crate::{P2pError, Result};
 
 type Ws = WebSocketStream<MaybeTlsStream<TcpStream>>;
@@ -80,9 +83,21 @@ impl WsClientTransport {
         let hello: ServerHello = recv_json(&mut stream).await?;
         let did = groove::did_key::signer_did_from_ed25519(&signing_key.verifying_key().to_bytes())
             .map_err(|e| P2pError::Handshake(format!("encode our did: {e}")))?;
-        let message = build_message(&hello, &did, NO_CHANNEL_BINDING);
+        // Mutual handshake (audit #21): TLS terminates at the proxy here, so we fold in a
+        // fresh client-chosen nonce and require the server to attest over it below — a relay
+        // forwarding the backend's hello can't complete both sides.
+        let client_nonce = random_nonce_b64();
+        let message = build_message(&hello, &did, NO_CHANNEL_BINDING, &client_nonce);
         let signature = sign(&signing_key, &message);
-        send_json(&mut sink, &ClientAuth { did, signature }).await?;
+        send_json(
+            &mut sink,
+            &ClientAuth {
+                did: did.clone(),
+                signature,
+                client_nonce: client_nonce.clone(),
+            },
+        )
+        .await?;
 
         let result: AuthResult = recv_json(&mut stream).await?;
         if !result.ok {
@@ -97,6 +112,16 @@ impl WsClientTransport {
             groove::did_key::ed25519_public_from_signer_did(&server_did)
                 .map_err(|e| P2pError::Handshake(format!("decode server did: {e}")))?,
         );
+        // Verify the server's attestation over the nonces WE saw (our client nonce + the
+        // hello nonce) before trusting `server_did` or pumping frames. A relay that forwarded
+        // the backend's hello to us cannot produce the backend's signature over our
+        // client-side tuple, so a substituted/forwarded backend is rejected here.
+        let attestation = result
+            .signature
+            .as_deref()
+            .ok_or_else(|| P2pError::Handshake("server attestation missing".into()))?;
+        verify_server_attestation(&server_peer.0, &client_nonce, &hello.nonce, &did, attestation)
+            .map_err(|e| P2pError::Handshake(format!("server attestation invalid: {e}")))?;
 
         // Connection-drop signal: fired when either pump task ends. The app
         // supervisor awaits it to re-dial (network switch, hibernate, idle close).

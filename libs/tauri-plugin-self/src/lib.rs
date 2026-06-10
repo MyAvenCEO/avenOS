@@ -54,9 +54,6 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 	Builder::new("self")
 		.setup(|app, _| {
 			use tauri::Manager;
-			if let Err(e) = paths::migrate_layout(app) {
-				log::warn!(target: "avenos::paths", "layout migration: {e}");
-			}
 			app.manage(SelfState::default());
 			app.manage(ActiveVault::default());
 			app.manage(StrongholdSession::default());
@@ -70,8 +67,6 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 			macos::commands::peer_status,
 			commands::signer_did,
 			commands::signing_public_key,
-			commands::sign,
-			commands::verify,
 			commands::lock,
 			commands::host_device_label,
 			vault_commands::vault_list,
@@ -97,9 +92,6 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 		.setup(|app, _| {
 			use tauri::Manager;
 			dev_insecure::log_startup_banner();
-			if let Err(e) = paths::migrate_layout(app) {
-				log::warn!(target: "avenos::paths", "layout migration: {e}");
-			}
 			app.manage(SelfState::default());
 			app.manage(ActiveVault::default());
 			app.manage(StrongholdSession::default());
@@ -113,8 +105,6 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 			dev_insecure::peer_status,
 			commands::signer_did,
 			commands::signing_public_key,
-			commands::sign,
-			commands::verify,
 			commands::lock,
 			commands::host_device_label,
 			vault_commands::vault_list,

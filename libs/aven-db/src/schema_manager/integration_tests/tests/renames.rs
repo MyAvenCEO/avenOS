@@ -34,7 +34,7 @@ fn column_rename_lens() {
     let lens = Lens::new(v1_hash, v2_hash, transform);
 
     let mut manager =
-        SchemaManager::new(SyncManager::new(), v2.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v2.clone());
     manager.add_live_schema_with_lens(v1.clone(), lens).unwrap();
 
     // Test column translation for index lookup
@@ -545,7 +545,7 @@ fn table_rename_update_and_delete_copy_on_write() {
     let lens = Lens::new(v1_hash, v2_hash, transform);
 
     let mut manager =
-        SchemaManager::new(SyncManager::new(), v2.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v2.clone());
     manager.add_live_schema_with_lens(v1.clone(), lens).unwrap();
 
     let mut storage = MemoryStorage::new();
@@ -682,7 +682,7 @@ fn transactional_insert_uses_frozen_target_branch_renamed_table_schema() {
     let lens = Lens::new(v1_hash, v2_hash, transform);
 
     let mut manager =
-        SchemaManager::new(SyncManager::new(), v2.clone(), test_app_id(), "dev", "main").unwrap();
+        manager_for(v2.clone());
     manager.add_live_schema_with_lens(v1.clone(), lens).unwrap();
 
     let mut storage = MemoryStorage::new();

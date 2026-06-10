@@ -34,18 +34,25 @@
 		<p class="text-muted-foreground mb-2 px-1 text-[10px] font-bold tracking-wider uppercase">
 			{t('uiLab.snippetCategory')}
 		</p>
-		<nav class="flex flex-row gap-2 md:flex-col md:gap-1" aria-label={t('uiLab.snippetCategory')}>
-			{#each vibeViewList as view (view.id)}
+		<nav class="flex flex-row gap-2 md:flex-col md:gap-1.5" aria-label={t('uiLab.snippetCategory')}>
+			{#each vibeViewList as view, i (view.id)}
+				{@const active = selectedId === view.id}
 				<button
 					type="button"
-					class="rounded-full px-3 py-1.5 text-left text-[11px] font-semibold tracking-wide transition-opacity md:w-full md:rounded-lg md:px-3 md:py-2 md:text-sm md:font-medium {selectedId ===
-					view.id
-						? 'bg-foreground text-background opacity-95'
-						: 'bg-white/10 opacity-60 hover:opacity-90'}"
-					aria-current={selectedId === view.id ? 'page' : undefined}
+					class="group flex items-center gap-2.5 rounded-full border px-3.5 py-2 text-left text-sm font-medium tracking-tight transition-colors md:w-full {active
+						? 'border-primary bg-primary text-primary-foreground'
+						: 'border-border text-foreground/80 hover:border-primary/40 hover:bg-accent/5'}"
+					aria-current={active ? 'page' : undefined}
 					onclick={() => selectView(view.id)}
 				>
-					{view.label}
+					<span
+						class="text-[11px] font-semibold tabular-nums tracking-wider {active
+							? 'text-primary-foreground/70'
+							: 'text-muted-foreground/60'}"
+					>
+						{String(i + 1).padStart(2, '0')}
+					</span>
+					<span class="truncate">{view.label}</span>
 				</button>
 			{/each}
 		</nav>
@@ -58,10 +65,10 @@
 		<div class="flex flex-wrap items-center gap-2">
 			<button
 				type="button"
-				class="rounded-full px-3 py-1 text-[10px] font-bold tracking-wider uppercase transition-opacity {panel ===
+				class="rounded-full px-3 py-1 text-[10px] font-bold tracking-wider uppercase transition-colors {panel ===
 				'render'
-					? 'bg-foreground text-background opacity-95'
-					: 'bg-white/10 opacity-60 hover:opacity-90'}"
+					? 'bg-primary text-primary-foreground'
+					: 'border border-border text-muted-foreground hover:text-foreground hover:bg-accent/5'}"
 				onclick={() => (panel = 'render')}
 			>
 				{t('uiLab.panelRender')}
@@ -69,10 +76,10 @@
 			{#each jsonPanels as p (p)}
 				<button
 					type="button"
-					class="rounded-full px-3 py-1 text-[10px] font-bold tracking-wider uppercase transition-opacity {panel ===
+					class="rounded-full px-3 py-1 text-[10px] font-bold tracking-wider uppercase transition-colors {panel ===
 					p
-						? 'bg-foreground text-background opacity-95'
-						: 'bg-white/10 opacity-60 hover:opacity-90'}"
+						? 'bg-primary text-primary-foreground'
+						: 'border border-border text-muted-foreground hover:text-foreground hover:bg-accent/5'}"
 					onclick={() => (panel = p)}
 				>
 					{t(`uiLab.panel${p.charAt(0).toUpperCase()}${p.slice(1)}`)}

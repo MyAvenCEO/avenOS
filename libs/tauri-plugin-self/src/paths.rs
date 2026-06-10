@@ -17,8 +17,6 @@ pub const IDENTITY_CRYPTO_DIR: &str = "vault";
 pub const MANIFEST_FILENAME: &str = "manifest.json";
 pub const SETTINGS_FILENAME: &str = "settings.json";
 pub const STRONGHOLD_FILENAME: &str = "strong.hold";
-pub const STORAGE_ROCKSDB_FILENAME: &str = "storage.rocksdb";
-pub const LEGACY_ROCKSDB_FILENAME: &str = "jazz.rocksdb";
 
 pub(crate) fn expand_override() -> Option<PathBuf> {
 	let ok = std::env::var("AVENOS_DATA_DIR_OVERRIDE").ok()?;
@@ -65,11 +63,6 @@ pub fn peers_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, Strin
 		return Err("peers_dir_unavailable_under_data_dir_override".into());
 	}
 	Ok(aven_os_app_base(app)?.join("peers"))
-}
-
-/// Legacy name — prefer [`peers_dir`].
-pub fn vaults_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
-	peers_dir(app)
 }
 
 /// `<Documents>/.avenOS/models` — shared on-device model cache (e.g. the Gemma 4
@@ -184,31 +177,6 @@ pub fn vault_is_complete(root: &Path) -> bool {
 	identity_crypto_dir(root).is_dir() && db_dir(root).is_dir()
 }
 
-/// One-time migration: `vaults/` → `peers/`, `self/` → `vault/`, legacy filenames.
-pub fn migrate_layout<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-	if expand_override().is_some() {
-		return migrate_identity_root(&aven_os_app_base(app)?);
-	}
-	let base = aven_os_app_base(app)?;
-	let legacy_vaults = base.join("vaults");
-	let peers = base.join("peers");
-	if legacy_vaults.is_dir() && !peers.exists() {
-		fs::rename(&legacy_vaults, &peers)
-			.map_err(|e| format!("migrate vaults→peers: {e}"))?;
-		log::info!(target: "avenos::paths", "migrated {} → {}", legacy_vaults.display(), peers.display());
-	}
-	if !peers.is_dir() {
-		fs::create_dir_all(&peers).map_err(|e| format!("mkdir peers: {e}"))?;
-	}
-	let rd = fs::read_dir(&peers).map_err(|e| format!("read_dir peers: {e}"))?;
-	for ent in rd.flatten() {
-		if ent.metadata().map(|m| m.is_dir()).unwrap_or(false) {
-			migrate_identity_root(&ent.path())?;
-		}
-	}
-	Ok(())
-}
-
 #[cfg(test)]
 mod identity_folder_id_tests {
 	use super::*;
@@ -234,41 +202,3 @@ mod identity_folder_id_tests {
 	}
 }
 
-fn migrate_identity_root(root: &Path) -> Result<(), String> {
-	let legacy_self = root.join("self");
-	let crypto = identity_crypto_dir(root);
-	if legacy_self.is_dir() && !crypto.exists() {
-		fs::rename(&legacy_self, &crypto)
-			.map_err(|e| format!("migrate self→vault {}: {e}", root.display()))?;
-	}
-	if crypto.is_dir() {
-		let legacy_manifest_root = root.join("vault_manifest.json");
-		let manifest = manifest_path(root);
-		if legacy_manifest_root.is_file() && !manifest.is_file() {
-			fs::create_dir_all(&crypto).ok();
-			fs::rename(&legacy_manifest_root, &manifest)
-				.map_err(|e| format!("migrate manifest: {e}"))?;
-		}
-		let legacy_manifest_in_crypto = crypto.join("vault_manifest.json");
-		if legacy_manifest_in_crypto.is_file() && !manifest.is_file() {
-			fs::rename(&legacy_manifest_in_crypto, &manifest)
-				.map_err(|e| format!("migrate vault_manifest in crypto dir: {e}"))?;
-		}
-		let legacy_settings = crypto.join("vault_settings.json");
-		let settings = settings_path(root);
-		if legacy_settings.is_file() && !settings.is_file() {
-			fs::rename(&legacy_settings, &settings)
-				.map_err(|e| format!("migrate settings: {e}"))?;
-		}
-	}
-	let db = db_dir(root);
-	if db.is_dir() {
-		let legacy_rocksdb = db.join(LEGACY_ROCKSDB_FILENAME);
-		let storage = db.join(STORAGE_ROCKSDB_FILENAME);
-		if legacy_rocksdb.is_file() && !storage.exists() {
-			fs::rename(&legacy_rocksdb, &storage)
-				.map_err(|e| format!("migrate jazz.rocksdb→storage.rocksdb: {e}"))?;
-		}
-	}
-	Ok(())
-}

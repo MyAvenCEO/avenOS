@@ -9,8 +9,6 @@ permissions = [
   "allow-peer-status",
   "allow-signer-did",
   "allow-signing-public-key",
-  "allow-sign",
-  "allow-verify",
   "allow-lock",
   "allow-host-device-label",
   "allow-vault-list",

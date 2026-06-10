@@ -330,12 +330,30 @@ impl SyncManager {
                         .metadata
                         .get(crate::capability::OWNER_BINDING_META_KEY)
                         .map(|s| s.as_bytes());
+                    // The author edit-signature (audit #29) rides under its own metadata
+                    // key; hand it to the resolver alongside the owner-binding so it can
+                    // bind the digest IT computed to an authorized author.
+                    let edit_sig = row
+                        .metadata
+                        .get(crate::capability::EDIT_SIG_META_KEY)
+                        .map(|s| s.as_bytes());
+                    // A delete-flagged row is a destructive act: gate it under the distinct
+                    // `Delete` capability, not `Write` (audit #6). A peer granted only `write`
+                    // must not be able to hard-delete a victim's row on every member. The
+                    // local originate gate already requires `Delete` for deletes; this makes
+                    // the inbound apply gate match it on every receiving peer.
+                    let apply_op = if row.delete_kind.is_some() {
+                        crate::capability::AccOp::Delete
+                    } else {
+                        crate::capability::AccOp::Write
+                    };
                     match resolver.verify_on_apply(
                         &subject,
-                        crate::capability::AccOp::Write,
+                        apply_op,
                         &res,
                         &digest.0,
                         proof,
+                        edit_sig,
                     ) {
                         crate::capability::CapDecision::Allow => {}
                         other => {
@@ -1070,13 +1088,13 @@ impl SyncManager {
                 }
             }
         }
-        let Some(client) = self.clients.get(&client_id) else {
+        if !self.clients.contains_key(&client_id) {
             tracing::warn!(
                 %client_id,
                 "message from unknown client, ignoring (race with mesh reconcile?)"
             );
             return;
-        };
+        }
         tracing::trace!(%client_id, payload = payload.variant_name(), "client→payload");
 
         match &payload {
@@ -1152,100 +1170,6 @@ impl SyncManager {
                     "EvictResource notice received (drop wiring pending — see SSOT M2; no-op for safety)"
                 );
             }
-            // Handle query subscription with full Query struct
-            // Queue for QueryManager to process (SyncManager doesn't know about QueryGraph)
-            SyncPayload::QuerySubscription {
-                query_id,
-                query,
-                session,
-                required_tier,
-                propagation,
-                policy_context_tables,
-            } => {
-                // Build effective session: identity (user_id) comes from the
-                // server-established session (set during the SSE auth handshake) and
-                // cannot be overridden by the payload. However, ephemeral per-subscription
-                // claims supplied in the payload — such as a join_code for invite flows —
-                // are merged in when the user_id matches, so that policy conditions like
-                // `claims.join_code` evaluate correctly for this subscription.
-                let effective_session = match (&client.session, session) {
-                    (Some(client_session), Some(payload_session)) => {
-                        if client_session.user_id != payload_session.user_id {
-                            tracing::warn!(
-                                %client_id,
-                                "QuerySubscription payload session user_id does not match client session; ignoring payload session"
-                            );
-                            Some(client_session.clone())
-                        } else {
-                            // Same user: merge claims. Payload provides ephemeral claims
-                            // (e.g. join_code); client session claims take precedence so
-                            // auth-established values cannot be spoofed.
-                            let merged_claims = if let (
-                                serde_json::Value::Object(client_map),
-                                serde_json::Value::Object(payload_map),
-                            ) =
-                                (&client_session.claims, &payload_session.claims)
-                            {
-                                let mut merged = payload_map.clone();
-                                merged.extend(client_map.clone());
-                                serde_json::Value::Object(merged)
-                            } else {
-                                client_session.claims.clone()
-                            };
-                            Some(Session {
-                                user_id: client_session.user_id.clone(),
-                                claims: merged_claims,
-                                auth_mode: client_session.auth_mode,
-                            })
-                        }
-                    }
-                    (Some(client_session), None) => Some(client_session.clone()),
-                    (None, payload_session) => payload_session.clone(),
-                };
-                // Track origin for QuerySettled relay
-                self.query_origin
-                    .entry(*query_id)
-                    .or_default()
-                    .insert(client_id);
-                tracing::trace!(
-                    %client_id,
-                    query_id = query_id.0,
-                    table = %query.table,
-                    ?propagation,
-                    "jazz trace received query subscription from client"
-                );
-                self.pending_query_subscriptions
-                    .push(PendingQuerySubscription {
-                        client_id,
-                        query_id: *query_id,
-                        query: query.as_ref().clone(),
-                        session: effective_session,
-                        required_tier: *required_tier,
-                        propagation: *propagation,
-                        policy_context_tables: policy_context_tables.clone(),
-                    });
-            }
-            // Handle query unsubscription
-            // Queue for QueryManager to process (remove server-side QueryGraph, forward upstream)
-            SyncPayload::QueryUnsubscription { query_id } => {
-                tracing::trace!(
-                    %client_id,
-                    query_id = query_id.0,
-                    "jazz trace received query unsubscription from client"
-                );
-                // Clean up query origin
-                if let Some(clients) = self.query_origin.get_mut(query_id) {
-                    clients.remove(&client_id);
-                    if clients.is_empty() {
-                        self.query_origin.remove(query_id);
-                    }
-                }
-                self.pending_query_unsubscriptions
-                    .push(PendingQueryUnsubscription {
-                        client_id,
-                        query_id: *query_id,
-                    });
-            }
             SyncPayload::BatchFate { fate } => {
                 if self.retain_client_batch_fate(fate) {
                     self.pending_batch_fates.push(fate.clone());
@@ -1257,32 +1181,6 @@ impl SyncManager {
                     storage,
                     Destination::Client(client_id),
                     batch_ids.clone(),
-                );
-            }
-            SyncPayload::QuerySettled {
-                query_id,
-                tier,
-                scope: _,
-                through_seq,
-            } => {
-                // Client relaying a QuerySettled from downstream
-                self.pending_query_settled.push(PendingQuerySettled {
-                    query_id: *query_id,
-                    tier: *tier,
-                    through_seq: *through_seq,
-                });
-            }
-            SyncPayload::SchemaWarning(warning) => {
-                tracing::warn!(
-                    %client_id,
-                    query_id = warning.query_id.0,
-                    "client attempted to send SchemaWarning payload; ignoring"
-                );
-            }
-            SyncPayload::ConnectionSchemaDiagnostics(_) => {
-                tracing::warn!(
-                    %client_id,
-                    "client attempted to send ConnectionSchemaDiagnostics payload; ignoring"
                 );
             }
             // Clients shouldn't send these

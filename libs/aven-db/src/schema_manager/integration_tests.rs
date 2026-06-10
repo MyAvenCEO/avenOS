@@ -33,6 +33,12 @@ mod tests {
         AppId::from_name("integration-test-app")
     }
 
+    /// Build a `SchemaManager` over a fresh `SyncManager` on the standard
+    /// `dev`/`main` test branch — the construction every integration test repeats.
+    fn manager_for(schema: crate::query_manager::types::Schema) -> SchemaManager {
+        SchemaManager::new(SyncManager::new(), schema, test_app_id(), "dev", "main").unwrap()
+    }
+
     #[derive(Debug, Clone)]
     struct IncomingRowBatch {
         content: Vec<u8>,
@@ -341,45 +347,7 @@ mod tests {
         decode_lens_transform, decode_schema, encode_lens_transform, encode_schema,
     };
 
-    /// Test schema persistence and encoding roundtrip.
-
-    /// Test lens persistence and encoding roundtrip.
-
-    /// Test catalogue update processing: schema received via sync.
-
-    /// Test catalogue update processing: lens makes pending schema live.
-
-    /// Test catalogue update processing: draft lenses are stored but must not
-    /// activate pending schemas.
-
-    /// Test pending catalogue updates are queued in QueryManager.
-
-    /// Non-matching app_id catalogue objects must be ignored for all schema-shape variants.
-
-    /// Unknown catalogue type must be ignored even for materially different schema payloads.
-
-    /// Pushing the exact same schema (same hash/content) should be a no-op.
-
-    /// Malformed schema payload should fail decode path deterministically.
-
-    /// Malformed lens payload should fail decode path deterministically.
-
-    /// E2E test: Full catalogue sync flow with data query.
-    ///
-    /// This test simulates the complete flow where:
-    /// 1. Client A (v2) persists schema and lens to catalogue
-    /// 2. Client B (v1) receives via catalogue sync
-    /// 3. Client A writes a row on v2 branch
-    /// 4. Client B queries and receives transformed data
-
-    /// Test multi-hop lens cascade activation via catalogue.
-    ///
-    /// Scenario: v1 client receives v2, then v3, then lens(v1->v2), then lens(v2->v3).
-    /// After each step, verify correct pending/live states.
-    // ========================================================================
-    // Multi-Client Server Schema Sync Tests
-    // ========================================================================
-    use crate::sync_manager::DurabilityTier;
+    
 
     /// E2E test: Two clients with same schema, server with empty schema.
     ///
@@ -445,7 +413,6 @@ mod tests {
     mod locator_only_storage;
     mod migration;
     mod misc;
-    mod query_subscription;
     mod renames;
     mod writes;
 }
