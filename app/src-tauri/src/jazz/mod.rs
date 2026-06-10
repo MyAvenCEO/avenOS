@@ -2036,6 +2036,74 @@ async fn wrap_all_dek_versions_to_recipient(
 	Ok(())
 }
 
+/// Phase 5 — DEK propagation for a freshly granted member. A `did:safe:` member
+/// has no pubkey, so the target SAFE's DEKs are wrapped to every transitive
+/// **signer** of the member SAFE instead (each also registered as a sync peer).
+/// Propagation includes DOWNSTREAM SAFEs: every SAFE the target (transitively)
+/// controls is shared to the same recipients — a signer joining a humanSAFE also
+/// receives the DEKs of the avens/sparks that humanSAFE controls. The target
+/// SAFE's own DEK must be held (errors otherwise — the granter is an admin);
+/// downstream SAFEs whose DEK we don't hold are skipped (idempotent: the next
+/// grant or rotation re-runs propagation).
+async fn propagate_keyshares_for_member(
+	client: &JazzClient,
+	shell: &jazz_engine::ShellState,
+	target_safe: Uuid,
+	member_did: &str,
+	include_downstream: bool,
+) -> Result<(), String> {
+	let member_safe = crate::identity_acc::resolve_safe_did(member_did);
+	let recipients: Vec<String> = match member_safe {
+		Some(safe_id) => crate::identity_acc::safe_transitive_signers(&shell.vault, safe_id)
+			.into_iter()
+			.collect(),
+		None => vec![member_did.to_string()],
+	};
+	// The target + every SAFE it transitively controls (downstream propagation).
+	// Owner grants only — a READER of the target does not control it, so the
+	// SAFEs it controls are not the reader's to decrypt.
+	let downstream: Vec<Uuid> = if include_downstream {
+		shell
+			.vault
+			.safes
+			.keys()
+			.copied()
+			.filter(|&oid| {
+				oid != target_safe
+					&& crate::identity_acc::safe_controlled_by(&shell.vault, oid, target_safe)
+			})
+			.collect()
+	} else {
+		Vec::new()
+	};
+
+	for recip in &recipients {
+		if recip == &shell.signer_did {
+			continue;
+		}
+		// SAFE-expanded recipients weren't registered by the caller — do it here so
+		// the keyshare + genesis batches actually ship to them.
+		if member_safe.is_some() {
+			let Ok(pk) = crate::jazz_auth::ed25519_public_from_signer_did(recip) else {
+				log::warn!(target: "avenos::jazz", "keyshare propagation: bad signer DID {recip}");
+				continue;
+			};
+			crate::peers::add_remote_peer(client, recip, "").await?;
+			if let Err(e) = client.register_peer_sync_client(PeerId(pk)) {
+				log::warn!(target: "avenos::jazz", "keyshare propagation register {recip}: {e}");
+			}
+		}
+		wrap_all_dek_versions_to_recipient(client, shell, target_safe, recip).await?;
+		for &oid in &downstream {
+			if !shell.deks.keys().any(|(sid, _)| *sid == oid) {
+				continue;
+			}
+			wrap_all_dek_versions_to_recipient(client, shell, oid, recip).await?;
+		}
+	}
+	Ok(())
+}
+
 /// The `type` label of a SAFE, read from its local `safes` row (None = no row).
 async fn safe_type_of(client: &JazzClient, safe_uuid: Uuid) -> Result<Option<String>, String> {
 	let schema = jazz_engine::resolved_table_schema(client, "safes").await?;
@@ -2203,11 +2271,9 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 	// rows land. Wrap EVERY held DEK version (not just the current one) so the grantee can
 	// also decrypt data sealed under pre-rotation versions — this is what lets a re-grant
 	// after a revoke (which rotated the DEK) read the identity's pre-revoke data. Idempotent.
-	// A SAFE member has no pubkey to wrap to — its signers reach the data through the
-	// controller chain; per-signer keyshare propagation is the DEK-propagation phase.
-	if !is_safe_member {
-		wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &signer_did).await?;
-	}
+	// A SAFE member's keyshares go to its transitive SIGNERS (a SAFE has no pubkey), and
+	// downstream-controlled SAFEs propagate to the same recipients (owner grant).
+	propagate_keyshares_for_member(client.as_ref(), shell, identity_uuid, &signer_did, true).await?;
 
 	if !already_owner {
 		let new_biscuit = crate::identity_acc::attenuate_add_owner_third_party(
@@ -2476,10 +2542,9 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 
 	// Wrap EVERY held DEK version to the reader (see admin_add) so a post-rotation re-grant
 	// can read pre-rotation data. Idempotent — skips versions the reader already holds.
-	// SAFE members have no pubkey to wrap to (see admin_add) — DEK propagation phase.
-	if !is_safe_member {
-		wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &signer_did).await?;
-	}
+	// SAFE members propagate to their transitive signers (see admin_add). NO downstream:
+	// a reader doesn't control this SAFE, so its controlled SAFEs stay sealed to them.
+	propagate_keyshares_for_member(client.as_ref(), shell, identity_uuid, &signer_did, false).await?;
 
 	if !already_reader {
 		let new_biscuit = crate::identity_acc::attenuate_add_reader_third_party(
@@ -2647,28 +2712,26 @@ pub(crate) async fn groove_ipc_create_identity(
 	// Genesis split: humanSAFEs are signer-rooted (`owns(signer)`); aven and spark
 	// SAFEs are SAFE-rooted (`owns(did:safe:<controller>)`) — the creator's authority
 	// flows through the controller chain via the N-hop authorize, not a direct owns.
-	let genesis = match kind {
-		"aven" => {
-			let ctrl = find_controlled_safe_of_type(client.as_ref(), shell, "human")
+	let controller: Option<Uuid> = match kind {
+		"aven" => Some(
+			find_controlled_safe_of_type(client.as_ref(), shell, "human")
 				.await?
-				.ok_or("create a Human SAFE first — an Aven SAFE is controlled by a Human SAFE")?;
-			crate::identity_acc::mint_safe_genesis_with_controller(
-				&shell.vault,
-				identity_uuid,
-				&crate::identity_acc::safe_did(ctrl),
-			)?
-		}
-		"spark" => {
-			let ctrl = find_controlled_safe_of_type(client.as_ref(), shell, "aven")
+				.ok_or("create a Human SAFE first — an Aven SAFE is controlled by a Human SAFE")?,
+		),
+		"spark" => Some(
+			find_controlled_safe_of_type(client.as_ref(), shell, "aven")
 				.await?
-				.ok_or("create an Aven SAFE first — a Spark SAFE is controlled by an Aven SAFE")?;
-			crate::identity_acc::mint_safe_genesis_with_controller(
-				&shell.vault,
-				identity_uuid,
-				&crate::identity_acc::safe_did(ctrl),
-			)?
-		}
-		_ => crate::identity_acc::mint_safe_genesis(&shell.vault, identity_uuid)?,
+				.ok_or("create an Aven SAFE first — a Spark SAFE is controlled by an Aven SAFE")?,
+		),
+		_ => None,
+	};
+	let genesis = match controller {
+		Some(ctrl) => crate::identity_acc::mint_safe_genesis_with_controller(
+			&shell.vault,
+			identity_uuid,
+			&crate::identity_acc::safe_did(ctrl),
+		)?,
+		None => crate::identity_acc::mint_safe_genesis(&shell.vault, identity_uuid)?,
 	};
 	let genesis_b64 =
 		URL_SAFE_NO_PAD.encode(genesis.to_vec().map_err(|e| format!("genesis_encode:{e:?}"))?);
@@ -2729,6 +2792,38 @@ pub(crate) async fn groove_ipc_create_identity(
 		.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
 		.await
 		.map_err(format_jazz_err)?;
+
+	// Phase 5 at genesis: a SAFE-rooted SAFE belongs to its controller's signers,
+	// not just this device — wrap the fresh DEK to every transitive co-signer of
+	// the controller SAFE (multi-device humans / co-owned controllers decrypt
+	// from day one). The fresh DEK isn't in shell.deks yet, so wrap inline.
+	if let Some(ctrl) = controller {
+		for recip in crate::identity_acc::safe_transitive_signers(&shell.vault, ctrl) {
+			if recip == shell.signer_did {
+				continue;
+			}
+			let Ok(recip_pk) = crate::jazz_auth::ed25519_public_from_signer_did(&recip) else {
+				log::warn!(target: "avenos::jazz", "create: bad controller signer DID {recip}");
+				continue;
+			};
+			let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recip_pk)?;
+			let aad = crate::crypto::keyshare_wrap_aad(&urn, &recip, &shell.signer_did, dek_ver);
+			let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
+			let mut ks = Map::new();
+			ks.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
+			ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
+			ks.insert("recipient_did".into(), JsonValue::String(recip.clone()));
+			ks.insert("wrapper_did".into(), JsonValue::String(shell.signer_did.clone()));
+			ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
+			let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
+			let ks_oid = ObjectId::new();
+			let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity_uuid)?;
+			client
+				.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+				.await
+				.map_err(format_jazz_err)?;
+		}
+	}
 
 	ensure_aven_ceo_owner_row(client.as_ref(), &shell.signer_did, &shell.signing_key, identity_uuid)
 		.await?;
@@ -3336,7 +3431,16 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 	let new_v = cur_v + 1;
 	let new_dek = crate::crypto::random_identity_dek();
 	let urn = jazz_engine::safe_urn(identity_uuid);
-	for recip_did in prior_holders.iter().filter(|d| d.as_str() != signer_did.as_str()) {
+	// Membership is judged against the REBUILT chain (not just `!= revoked DID`):
+	// revoking a did:safe: member must also cut its transitive SIGNERS off the new
+	// key — keyshares are wrapped to signers, so the raw string filter alone would
+	// quietly re-key everyone the revoked SAFE brought in. A signer that holds an
+	// independent credential of its own (direct owns/reads/grant or another SAFE
+	// path) legitimately stays.
+	for recip_did in prior_holders.iter().filter(|d| {
+		d.as_str() != signer_did.as_str()
+			&& crate::identity_acc::chain_still_member(&shell.vault, &new_biscuit, identity_uuid, d.as_str())
+	}) {
 		let recip_pk = crate::jazz_auth::ed25519_public_from_signer_did(recip_did)?;
 		let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recip_pk)?;
 		let aad = crate::crypto::keyshare_wrap_aad(&urn, recip_did, &shell.signer_did, new_v);
@@ -3386,9 +3490,10 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 		.await
 		.map_err(format_jazz_err)?;
 
-	// 4. Cooperative cleanup: delete the revoked peer's keyshare rows (all
-	//    versions) so honest peers drop them. (The peer keeps only whatever it
-	//    already decrypted; it never gets v+1.)
+	// 4. Cooperative cleanup: delete the keyshare rows of every recipient that is
+	//    no longer a member per the REBUILT chain — the revoked DID itself, and
+	//    (for a did:safe: revoke) the signers it had brought in. (A removed peer
+	//    keeps only whatever it already decrypted; it never gets v+1.)
 	let ks_spark_ix = jazz_engine::col_ix(&ks_schema, "owner")?;
 	let ks_recip_ix = jazz_engine::col_ix(&ks_schema, "recipient_did")?;
 	let ks_rows = jazz_engine::exec_list_rows(client.as_ref(), "keyshares").await?;
@@ -3398,7 +3503,10 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 			Some(Value::Text(s)) => s.as_str(),
 			_ => continue,
 		};
-		if sid == identity_uuid && recip == signer_did.as_str() {
+		if sid == identity_uuid
+			&& (recip == signer_did.as_str()
+				|| !crate::identity_acc::chain_still_member(&shell.vault, &new_biscuit, identity_uuid, recip))
+		{
 			let del_meta = owner_binding_meta(&shell.signing_key, oid, identity_uuid)?;
 			let _ = client.delete_with_metadata(oid, del_meta).await;
 		}

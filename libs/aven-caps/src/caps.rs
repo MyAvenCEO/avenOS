@@ -689,6 +689,106 @@ fn subject_controls_safe_with_depth(
 	})
 }
 
+/// All transitive **signer** DIDs (`did:key:…`) that control `safe_id`: the
+/// SAFE's own signer admins plus, recursively, the signers of its `did:safe:`
+/// controllers. The DEK-propagation set — a `did:safe:` member has no pubkey,
+/// so keyshares are wrapped to these signers instead. Only locally-loaded
+/// chains resolve (offline model); an unresolvable controller contributes none.
+pub fn safe_transitive_signers(vault: &BiscuitVault, safe_id: Uuid) -> HashSet<String> {
+	let mut out = HashSet::new();
+	collect_safe_signers(vault, safe_id, &mut out, 0);
+	out
+}
+
+fn collect_safe_signers(vault: &BiscuitVault, safe_id: Uuid, out: &mut HashSet<String>, depth: u32) {
+	if depth > MAX_GROUP_DEPTH {
+		return;
+	}
+	let Some(chain) = vault.safes.get(&safe_id) else {
+		return;
+	};
+	let Ok(admins) = identity_admins(&chain.biscuit, safe_id) else {
+		return;
+	};
+	for a in admins {
+		match resolve_safe_did(&a) {
+			Some(ctrl) if ctrl != safe_id => collect_safe_signers(vault, ctrl, out, depth + 1),
+			Some(_) => {}
+			None => {
+				out.insert(a.trim().to_string());
+			}
+		}
+	}
+}
+
+/// Is `controller_safe` a (transitive) controller of `safe_id`? True if its
+/// `did:safe:` appears in `safe_id`'s owns set, or in the owns set of one of
+/// `safe_id`'s `did:safe:` controllers (recursive, depth-bounded). Used to find
+/// the DOWNSTREAM SAFEs a new member of `controller_safe` also gains — e.g. a
+/// signer joining a humanSAFE inherits its avens and their sparks.
+pub fn safe_controlled_by(vault: &BiscuitVault, safe_id: Uuid, controller_safe: Uuid) -> bool {
+	safe_controlled_by_with_depth(vault, safe_id, controller_safe, 0)
+}
+
+fn safe_controlled_by_with_depth(
+	vault: &BiscuitVault,
+	safe_id: Uuid,
+	controller_safe: Uuid,
+	depth: u32,
+) -> bool {
+	if depth > MAX_GROUP_DEPTH {
+		return false;
+	}
+	let Some(chain) = vault.safes.get(&safe_id) else {
+		return false;
+	};
+	let Ok(admins) = identity_admins(&chain.biscuit, safe_id) else {
+		return false;
+	};
+	admins.iter().any(|a| {
+		resolve_safe_did(a)
+			.filter(|c| *c != safe_id)
+			.map(|c| {
+				c == controller_safe
+					|| safe_controlled_by_with_depth(vault, c, controller_safe, depth + 1)
+			})
+			.unwrap_or(false)
+	})
+}
+
+/// Whether `did` still holds ANY membership credential on `owner` per `chain`:
+/// a direct `owns`/`reads`/`grant`, or transitive control through a `did:safe:`
+/// entry (owns or reads). The revoke→rotate path runs this against the REBUILT
+/// chain to decide who receives the rotated DEK — so revoking a `did:safe:`
+/// member also cuts its signers off the new key, unless a signer holds an
+/// independent credential of its own.
+pub fn chain_still_member(vault: &BiscuitVault, chain: &Biscuit, owner: Uuid, did: &str) -> bool {
+	let via_safe = |dids: &HashSet<String>| {
+		dids.iter().any(|a| {
+			resolve_safe_did(a)
+				.filter(|c| *c != owner)
+				.map(|c| subject_controls_safe(vault, c, did))
+				.unwrap_or(false)
+		})
+	};
+	if let Ok(admins) = identity_admins(chain, owner) {
+		if admins.iter().any(|a| signer_did_matches(a, did)) || via_safe(&admins) {
+			return true;
+		}
+	}
+	if let Ok(readers) = identity_readers(chain, owner) {
+		if readers.iter().any(|a| signer_did_matches(a, did)) || via_safe(&readers) {
+			return true;
+		}
+	}
+	if let Ok(grants) = identity_grants(chain, owner) {
+		if grants.iter().any(|(d, _, _)| signer_did_matches(d, did)) {
+			return true;
+		}
+	}
+	false
+}
+
 fn authorize_with_depth(
 	vault: &BiscuitVault,
 	owner: Uuid,
@@ -1406,5 +1506,72 @@ mod tests {
 		assert_eq!(resolve_safe_did(&safe_did(id)), Some(id));
 		assert_eq!(resolve_safe_did("did:key:zabc"), None);
 		assert_eq!(resolve_safe_did("did:safe:not-a-uuid"), None);
+	}
+
+	#[test]
+	fn transitive_signers_and_controlled_by_walk_the_stack() {
+		// alice + bob co-own humanSAFE H; H controls aven A; A controls spark S.
+		let mut alice = vault(&[1u8; 32]);
+		let bob = vault(&[2u8; 32]);
+		let human_id = uuid::Uuid::new_v4();
+		let aven_id = uuid::Uuid::new_v4();
+		let spark_id = uuid::Uuid::new_v4();
+
+		let mut h = mint_safe_genesis(&alice, human_id).unwrap();
+		h = attenuate_add_owner_third_party(&alice.biscuit_kp, &h, human_id, &bob.signer_did).unwrap();
+		alice.safes.insert(human_id, BiscuitIdentity { owner: human_id, biscuit: h });
+		let a = mint_safe_genesis_with_controller(&alice, aven_id, &safe_did(human_id)).unwrap();
+		alice.safes.insert(aven_id, BiscuitIdentity { owner: aven_id, biscuit: a });
+		let s = mint_safe_genesis_with_controller(&alice, spark_id, &safe_did(aven_id)).unwrap();
+		alice.safes.insert(spark_id, BiscuitIdentity { owner: spark_id, biscuit: s });
+
+		// The spark's transitive signer set is exactly {alice, bob} — resolved
+		// through aven → human, no did:safe: entries leak through.
+		let signers = safe_transitive_signers(&alice, spark_id);
+		assert!(signers.iter().any(|d| signer_did_matches(d, &alice.signer_did)));
+		assert!(signers.iter().any(|d| signer_did_matches(d, &bob.signer_did)));
+		assert_eq!(signers.len(), 2);
+
+		// Downstream discovery: H controls A and S; A controls S but not H.
+		assert!(safe_controlled_by(&alice, aven_id, human_id));
+		assert!(safe_controlled_by(&alice, spark_id, human_id));
+		assert!(safe_controlled_by(&alice, spark_id, aven_id));
+		assert!(!safe_controlled_by(&alice, human_id, aven_id));
+	}
+
+	#[test]
+	fn chain_still_member_cuts_revoked_safe_signers() {
+		// avenSAFE A owned by alice; bob's humanSAFE H2 added as did:safe: member.
+		// After rebuilding the chain WITHOUT H2, bob must no longer be a member —
+		// while carol, a direct signer admin, stays.
+		let mut alice = vault(&[1u8; 32]);
+		let bob = vault(&[2u8; 32]);
+		let carol = vault(&[3u8; 32]);
+		let aven_id = uuid::Uuid::new_v4();
+		let bob_human_id = uuid::Uuid::new_v4();
+
+		let bob_human = mint_safe_genesis(&bob, bob_human_id).unwrap();
+		alice
+			.safes
+			.insert(bob_human_id, BiscuitIdentity { owner: bob_human_id, biscuit: bob_human });
+
+		let mut chain = mint_safe_genesis(&alice, aven_id).unwrap();
+		chain = attenuate_add_owner_third_party(&alice.biscuit_kp, &chain, aven_id, &safe_did(bob_human_id))
+			.unwrap();
+		chain =
+			attenuate_add_owner_third_party(&alice.biscuit_kp, &chain, aven_id, &carol.signer_did).unwrap();
+		alice.safes.insert(aven_id, BiscuitIdentity { owner: aven_id, biscuit: chain });
+
+		// Before revoke: bob is a member through H2.
+		let cur = &alice.safes.get(&aven_id).unwrap().biscuit.clone();
+		assert!(chain_still_member(&alice, cur, aven_id, &bob.signer_did));
+		assert!(chain_still_member(&alice, cur, aven_id, &carol.signer_did));
+
+		// Revoke H2 → rebuilt chain has no did:safe:H2. Bob falls out, carol stays.
+		let rebuilt =
+			rebuild_identity_biscuit_excluding(&alice, aven_id, &safe_did(bob_human_id)).unwrap();
+		assert!(!chain_still_member(&alice, &rebuilt, aven_id, &bob.signer_did));
+		assert!(chain_still_member(&alice, &rebuilt, aven_id, &carol.signer_did));
+		assert!(chain_still_member(&alice, &rebuilt, aven_id, &alice.signer_did));
 	}
 }

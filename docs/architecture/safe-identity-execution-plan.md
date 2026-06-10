@@ -192,14 +192,23 @@ Extended to accept `did:safe:` alongside `did:key:` as the `new_signer_did` argu
     humanSAFE admits signers only · avenSAFE admits humanSAFE DIDs only ·
     sparkSAFE admits avenSAFE DIDs only · replicate grants are signer-only
 
-- [ ] **Phase 5 — DEK propagation** (NEXT)
-  - A SAFE member has no pubkey — its **signers** need the keyshares. On adding a
-    `did:safe:` member: enumerate the controller SAFE's (transitive) signers and wrap
-    the DEK to each
-  - Distribute the controller SAFE's `safes` row (genesis) alongside, so members can
-    resolve the chain for verify-on-apply (today resolution is vault-local only)
-  - On `rotate_dek`: re-wrap for all current controllers' signers, exclude revoked
-  - Auto-propagate: when signer added to humanSAFE, propagate keyshares to controlled avenSAFEs
+- [x] **Phase 5 — DEK propagation** ✅
+  - `safe_transitive_signers(vault, safe_id)` — the propagation set: a SAFE's signer
+    admins plus, recursively, the signers of its `did:safe:` controllers
+  - On adding a `did:safe:` member (owner or reader): keyshares wrap to each transitive
+    signer of the member SAFE; each is registered as a sync peer
+  - **Downstream auto-propagation** (owner grants only): every SAFE the target
+    (transitively) controls — found via `safe_controlled_by` — is keyshared to the same
+    recipients. A signer joining a humanSAFE also receives its avens'/sparks' DEKs.
+    Reader grants get NO downstream (a reader doesn't control the SAFE)
+  - **Genesis**: a SAFE-rooted create wraps the fresh DEK to every transitive co-signer
+    of the controller SAFE (multi-device humans decrypt from day one)
+  - **Revoke→rotate**: membership for the v+1 re-wrap is judged via
+    `chain_still_member` against the REBUILT chain — revoking a `did:safe:` member cuts
+    its signers off the new key (unless a signer holds an independent credential);
+    cooperative cleanup drops the keyshare rows of every no-longer-member recipient
+  - Remaining (deferred): cascade rotation of DOWNSTREAM SAFEs on controller revoke;
+    cross-device distribution of controller `safes` rows for remote chain resolution
 
 - [ ] **Phase 6 — UI / Onboarding**
   - "Create humanSAFE" — select signers, assign roles
