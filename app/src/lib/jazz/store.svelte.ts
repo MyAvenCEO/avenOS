@@ -35,7 +35,7 @@ function rowsEqual(prev: JazzRow[], next: JazzRow[]): boolean {
 type SnapshotPolicy = 'replace' | 'catalogue'
 
 const TABLE_POLICY: Record<string, SnapshotPolicy> = {
-	identities: 'catalogue',
+	safes: 'catalogue',
 	keyshares: 'catalogue',
 }
 

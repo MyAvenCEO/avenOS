@@ -53,8 +53,8 @@ fn value_as_text(v: &Value) -> Option<&str> {
 /// across the user's own devices but stay invisible to a paired peer who doesn't
 /// hold that identity. Returns `None` before any identity exists (pre-bootstrap).
 pub async fn default_spark_id(client: &JazzClient) -> Result<Option<uuid::Uuid>, String> {
-	let rows = jazz_engine::exec_list_rows(client, "identities").await?;
-	let schema = jazz_engine::resolved_table_schema(client, "identities").await?;
+	let rows = jazz_engine::exec_list_rows(client, "safes").await?;
+	let schema = jazz_engine::resolved_table_schema(client, "safes").await?;
 	let identity_ix = jazz_engine::col_ix(&schema, "owner")?;
 	let mut ids: Vec<uuid::Uuid> = Vec::new();
 	for (_oid, vals) in rows {

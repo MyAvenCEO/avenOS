@@ -288,13 +288,7 @@ async fn read_server_dek(
 			// Self-keyshare: wrapper == this server. Prefer the wrapper-bound AAD, fall back
 			// to the legacy form so a keyshare minted before the binding still opens.
 			let aad = keyshare_wrap_aad(&urn, &vault.signer_did, &vault.signer_did, dek_ver);
-			return decrypt_keyshare_payload(&wrapped, &kek, &aad).or_else(|_| {
-				decrypt_keyshare_payload(
-					&wrapped,
-					&kek,
-					&keyshare_wrap_aad_legacy(&urn, &vault.signer_did, dek_ver),
-				)
-			});
+			return decrypt_keyshare_payload(&wrapped, &kek, &aad);
 		}
 	}
 	Err("avenceo: server keyshare not found".into())
