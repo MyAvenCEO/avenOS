@@ -524,6 +524,14 @@ deterministic pass is load-bearing without it. Revisit after E7.
 
 Newest entry first.
 
+- `2026-06-10` — **E0 shipped** (`fdaaffb`): `vector` type mapping in `schema_manifest.rs` +
+  the 4 tables (`memories`/`entities`/`links`/`context_traces`) in `schema.manifest.json`.
+  Verified against the real engine via a standalone groove harness (the app crate can't build in
+  the Linux container — GTK system libs): manifest → `Schema` with `Vector{768}` builds ✓,
+  `SchemaHash` computes ✓, registry snapshot hashes match ✓, **pre-E0 → E0 lens is non-draft**
+  (truly add-only) ✓. Pre-existing on main (not E0): the oldest registry snapshot
+  (`before-peers-spark-id`) drafts against current — moot under the fresh-DB policy.
+  Next: E1 (engine unseal-on-scan seam + aven-brain 3-table rework).
 - `2026-06-10` — Moved into the board as `plan/0011` (was `docs/aven-brain-architecture.md`).
   v5.2: provenance folded into artifact. v5.1: artifacts generalization + per-table ingestion
   adapters. v5: data model consolidated to memory · entity · link (note/claim/bond registry).
