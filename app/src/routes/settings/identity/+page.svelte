@@ -76,24 +76,6 @@
 
 	<section class="space-y-3">
 		<SelfDidCard
-			badge={t('self.identity.deviceDid')}
-			title={deviceLabel}
-			description={t('self.identity.deviceDidDescription')}
-			did={ctx.deviceSignerDid}
-			copied={copyKey === 'device-did'}
-			onCopy={() => void copy('device-did', ctx.deviceSignerDid)}
-			emptyHint={!ctx.status?.registered ? t('self.identity.unlockToProvisionDid') : undefined}
-		>
-			{#snippet technical()}
-				{#if ctx.peerPubB64}
-					<p class="text-[10px] uppercase tracking-wide opacity-80">{t('self.identity.secureEnclaveKey')}</p>
-					<pre class="overflow-x-auto font-mono text-[10px] leading-snug select-text">{ctx.peerPubB64}</pre>
-				{/if}
-				<p>{t('self.identity.deviceCryptoNote')}</p>
-			{/snippet}
-		</SelfDidCard>
-
-		<SelfDidCard
 			badge={t('self.identity.signerDid')}
 			title={personName}
 			description={t('self.identity.signerDidDescription')}

@@ -660,15 +660,10 @@
 		"identity": {
 			"title": "Self",
 			"subtitle": "Deine Identität auf diesem Gerät — {device}.",
-			"deviceDid": "Geräte-DID",
-			"deviceDidDescription": "Touch-ID-gesicherte Hardware-Identität für dieses Gerät.",
-			"unlockToProvisionDid": "Einmal entsperren, um diese Geräte-DID bereitzustellen.",
-			"peerDid": "Peer-DID",
-			"peerDidDescription": "Abgeleitet nach Touch ID — für Identities, Signieren und Sync.",
-			"unlockToDeriveDid": "Entsperren, um deine Peer-DID abzuleiten.",
-			"secureEnclaveKey": "Secure Enclave public key (SEC1)",
+			"signerDid": "Signer-DID",
+			"signerDidDescription": "HKDF-abgeleitete Ed25519-Identität — für Signieren, Caps und Sync.",
+			"unlockToDeriveDid": "Entsperren, um deine Signer-DID abzuleiten.",
 			"verifyingKey": "Verifying key (base64)",
-			"deviceCryptoNote": "NIST P-256 · did:key · p256-pub",
 			"signingCryptoNote": "HKDF-derived Ed25519 · did:key · ed25519-pub"
 		},
 		"peers": {

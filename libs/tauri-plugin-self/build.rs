@@ -4,7 +4,6 @@ fn main() {
 		"public_key",
 		"unlock",
 		"peer_status",
-		"device_signer_did",
 		"signer_did",
 		"signing_public_key",
 		"sign",

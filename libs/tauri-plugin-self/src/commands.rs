@@ -20,27 +20,6 @@ pub async fn signer_did(state: State<'_, SelfState>) -> Result<String, String> {
 	})
 }
 
-/// `did:key` for the device's **P-256 Secure Enclave** credential transcript (needs macOS peer pub on disk).
-#[tauri::command]
-pub async fn device_signer_did(app: AppHandle, vault: State<'_, ActiveVault>, slot: String) -> Result<String, String> {
-	#[cfg(any(target_os = "macos", target_os = "ios"))]
-	{
-		let pk = crate::macos::commands::read_device_pubkey_file(&app, &*vault, &slot).await?;
-		crate::did::device_did_from_sec1_public_key(&pk)
-	}
-
-	#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-	{
-		let _ = (app, vault, slot);
-		if crate::dev_insecure::enabled() {
-			return Err(
-				"device_signer_did (P-256 credential) unavailable with dev plain-root identity".into(),
-			);
-		}
-		Err("device_signer_did (P-256 credential) is unavailable on this platform in v1".into())
-	}
-}
-
 /// 32-byte Ed25519 public key derived from the cached root secret. No biometric prompt.
 #[tauri::command]
 pub async fn signing_public_key(state: State<'_, SelfState>) -> Result<Vec<u8>, String> {
