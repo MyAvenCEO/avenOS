@@ -7,7 +7,7 @@
 
 use aven_caps::caps::{
 	attenuate_add_owner_third_party, biscuit_from_storage, build_vault_from_signing_key,
-	decode_issuer_pubkey_b64, encode_issuer_pubkey_b64, mint_genesis_identity, identity_admins, BiscuitVault,
+	decode_issuer_pubkey_b64, encode_issuer_pubkey_b64, mint_safe_genesis, identity_admins, BiscuitVault,
 };
 use aven_caps::crypto::{
 	decrypt_keyshare_payload, derive_kek_x25519, encrypt_keyshare_payload, keyshare_wrap_aad,
@@ -76,11 +76,11 @@ fn col_ix(tbl: &TableSchema, name: &str) -> Result<usize, String> {
 pub async fn avenceo_genesis_b64(engine: &JazzClient, avenceo_id: Uuid) -> Result<Option<String>, String> {
 	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
 	let tbl = schema
-		.get(&TableName::new("identities"))
-		.ok_or("avenceo: no identities table")?;
+		.get(&TableName::new("safes"))
+		.ok_or("avenceo: no safes table")?;
 	let sid_ix = col_ix(tbl, "owner")?;
 	let gen_ix = col_ix(tbl, "genesis_b64")?;
-	let q = QueryBuilder::new(TableName::new("identities")).build();
+	let q = QueryBuilder::new(TableName::new("safes")).build();
 	let rows = engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))?;
 	for (_oid, vals) in rows {
 		let matches = match vals.get(sid_ix) {
@@ -130,18 +130,18 @@ pub async fn ensure_avenceo_owned(
 	}
 	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
 
-	let genesis = mint_genesis_identity(vault, avenceo_id)?;
+	let genesis = mint_safe_genesis(vault, avenceo_id)?;
 	let genesis_b64 =
 		URL_SAFE_NO_PAD.encode(genesis.to_vec().map_err(|e| format!("genesis_encode:{e:?}"))?);
 	let issuer_b64 = encode_issuer_pubkey_b64(&vault.biscuit_kp.public());
 	let dek_ver = 1i64;
 
-	let sparks_tbl = schema.get(&TableName::new("identities")).ok_or("avenceo: no identities table")?;
+	let sparks_tbl = schema.get(&TableName::new("safes")).ok_or("avenceo: no safes table")?;
 	let sparks_row = row_in_order(
 		sparks_tbl,
 		&[
 			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
-			("type", Value::Text("aven".into())),
+			("type", Value::Text("human".into())),
 			// The aven's default identity is named after the aven itself (per-aven
 			// config, e.g. avenCEO / avenMAIA) — not a hardcoded constant.
 			("name", Value::Text(aven_name.into())),
@@ -154,14 +154,14 @@ pub async fn ensure_avenceo_owned(
 	let sparks_oid = ObjectId::new();
 	let sparks_meta = owner_binding_meta(signing, sparks_oid, avenceo_id)?;
 	engine
-		.create_with_id_and_metadata("identities", sparks_oid, sparks_row, sparks_meta)
+		.create_with_id_and_metadata("safes", sparks_oid, sparks_row, sparks_meta)
 		.await
-		.map_err(|e| format!("create identities:{e:?}"))?;
+		.map_err(|e| format!("create safes:{e:?}"))?;
 
 	// Self keyshare (the identity's DEK wrapped to the server, so it can read avenCEO).
 	let dek = random_identity_dek();
 	let kek = derive_kek_x25519(signing, &vault.ed25519_public)?;
-	let urn = format!("identity:{avenceo_id}");
+	let urn = format!("safe:{avenceo_id}");
 	let aad = keyshare_wrap_aad(&urn, &vault.signer_did, &vault.signer_did, dek_ver);
 	let wrapped = encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
 	let ks_tbl = schema
@@ -194,12 +194,12 @@ async fn read_avenceo_identity(
 	avenceo_id: Uuid,
 ) -> Result<Option<(ObjectId, String, String, i64)>, String> {
 	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
-	let tbl = schema.get(&TableName::new("identities")).ok_or("avenceo: no identities table")?;
+	let tbl = schema.get(&TableName::new("safes")).ok_or("avenceo: no safes table")?;
 	let sid_ix = col_ix(tbl, "owner")?;
 	let gen_ix = col_ix(tbl, "genesis_b64")?;
 	let iss_ix = col_ix(tbl, "issuer_pubkey_b64")?;
 	let ver_ix = col_ix(tbl, "current_dek_version")?;
-	let q = QueryBuilder::new(TableName::new("identities")).build();
+	let q = QueryBuilder::new(TableName::new("safes")).build();
 	for (oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
 		if uuid_matches(&vals, sid_ix, avenceo_id) {
 			return Ok(Some((oid, text_at(&vals, gen_ix), text_at(&vals, iss_ix), bigint_at(&vals, ver_ix))));
@@ -230,7 +230,7 @@ async fn read_server_dek(
 		{
 			let wrapped = text_at(&vals, wrap_ix);
 			let kek = derive_kek_x25519(signing, &vault.ed25519_public)?;
-			let urn = format!("identity:{avenceo_id}");
+			let urn = format!("safe:{avenceo_id}");
 			// Self-keyshare: wrapper == this server. Prefer the wrapper-bound AAD, fall back
 			// to the legacy form so a keyshare minted before the binding still opens.
 			let aad = keyshare_wrap_aad(&urn, &vault.signer_did, &vault.signer_did, dek_ver);
@@ -290,7 +290,7 @@ pub async fn maybe_grant_first_admin(
 	// Wrap the avenCEO DEK to the peer so it can read the identity (→ becomes a member).
 	let dek = read_server_dek(engine, &vault, signing, avenceo_id, dek_ver).await?;
 	let kek = derive_kek_x25519(signing, &peer.0)?;
-	let urn = format!("identity:{avenceo_id}");
+	let urn = format!("safe:{avenceo_id}");
 	let aad = keyshare_wrap_aad(&urn, &signer_did, &vault.signer_did, dek_ver);
 	let wrapped = encrypt_keyshare_payload(&kek, &dek, &aad)?;
 	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;

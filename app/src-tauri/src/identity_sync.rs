@@ -30,7 +30,7 @@ fn identity_scoped_tables_cached() -> &'static [String] {
 					"manifest identity-scoped tables unavailable ({e}); using compile-time fallback",
 				);
 				vec![
-					"identities".into(),
+					"safes".into(),
 					"keyshares".into(),
 					"todos".into(),
 					"messages".into(),
@@ -48,14 +48,14 @@ pub fn identity_scoped_table_names() -> &'static [String] {
 }
 
 /// Biscuit vault / trusted-peer tables — full shell re-hydrate on change.
-pub const VAULT_SHELL_TABLES: &[&str] = &["identities", "keyshares", "peers"];
+pub const VAULT_SHELL_TABLES: &[&str] = &["safes", "keyshares", "peers"];
 
 /// Catalogue tables republished to the webview after vault shell re-hydrate (`peers` uses its own path).
-pub const VAULT_CATALOGUE_UI_TABLES: &[&str] = &["identities", "keyshares"];
+pub const VAULT_CATALOGUE_UI_TABLES: &[&str] = &["safes", "keyshares"];
 
-/// Manifest `owner` tables except vault shell catalogue rows (`identities`, `keyshares`).
+/// Manifest `owner` tables except vault shell catalogue rows (`safes`, `keyshares`).
 pub fn is_spark_data_table(name: &str) -> bool {
-	is_spark_scoped_table(name) && !matches!(name, "identities" | "keyshares")
+	is_spark_scoped_table(name) && !matches!(name, "safes" | "keyshares")
 }
 
 pub fn is_vault_shell_table(name: &str) -> bool {

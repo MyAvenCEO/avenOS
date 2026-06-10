@@ -22,7 +22,7 @@ pub struct BiscuitVault {
 	pub biscuit_kp: KeyPair,
 	pub signer_did: String,
 	pub ed25519_public: [u8; 32],
-	pub identities: std::collections::HashMap<Uuid, BiscuitIdentity>,
+	pub safes: std::collections::HashMap<Uuid, BiscuitIdentity>,
 }
 
 #[derive(Clone, Copy)]
@@ -56,8 +56,8 @@ impl AccOp {
 	}
 }
 
-fn identity_urn_for(owner: Uuid) -> String {
-	format!("identity:{owner}")
+fn safe_urn_for(owner: Uuid) -> String {
+	format!("safe:{owner}")
 }
 
 /// **Default** display name of an aven's control identity. Each aven names its
@@ -112,8 +112,23 @@ pub fn aven_ceo_registry_group(network_seed: &str) -> Uuid {
 	derive_subgroup_id(aven_ceo_identity(network_seed), "registry")
 }
 
+pub const SAFE_DID_PREFIX: &str = "did:safe:";
+pub const SAFE_RESOURCE_PREFIX: &str = "safe:";
+
+pub fn safe_did(id: Uuid) -> String {
+    format!("did:safe:{id}")
+}
+
+pub fn safe_resource(id: Uuid) -> String {
+    format!("safe:{id}:")
+}
+
+pub fn resolve_safe_did(did: &str) -> Option<Uuid> {
+    did.strip_prefix("did:safe:").and_then(|s| Uuid::parse_str(s.trim()).ok())
+}
+
 /// The rights a identity **owner** holds, minted into the genesis biscuit. THE single
-/// source of truth for the rights vocabulary: [`mint_genesis_identity`] grants exactly
+/// source of truth for the rights vocabulary: [`mint_safe_genesis`] grants exactly
 /// these, and [`identity_cap_report`] reports exactly these for an owner, so genesis
 /// and the UI cap display can never drift.
 pub const OWNER_RIGHTS: &[&str] = &["read", "write", "delete", "admit", "rotate_dek"];
@@ -191,12 +206,12 @@ pub fn identity_cap_report(chain: &Biscuit, owner: Uuid) -> Result<Vec<SubjectCa
 		if owner_set.contains(did.trim()) {
 			continue;
 		}
-		// Honesty: a read SCOPED to the registry tables (`identities:` / `peers:`) is the
+		// Honesty: a read SCOPED to the registry tables (`safes:` / `peers:`) is the
 		// SYNC peer's directory access — it reads the member directory, NOT the identity's
 		// data. Report it as the distinct cap `directory` so the badge can never imply broad
 		// read access (a full-identity read is still reported as `read`).
 		let cap: &str = if op == "read"
-			&& (prefix.ends_with(":identities:") || prefix.ends_with(":peers:"))
+			&& (prefix.ends_with(":safes:") || prefix.ends_with(":peers:"))
 		{
 			"directory"
 		} else {
@@ -248,15 +263,15 @@ pub fn build_vault_from_signing_key(sk_ed: &SigningKey) -> Result<BiscuitVault, 
 		biscuit_kp,
 		signer_did,
 		ed25519_public: pk_arr,
-		identities: std::collections::HashMap::new(),
+		safes: std::collections::HashMap::new(),
 	})
 }
 
-pub fn mint_genesis_identity(
+pub fn mint_safe_genesis(
 	vault: &BiscuitVault,
 	owner: Uuid,
 ) -> Result<Biscuit, String> {
-	let identity_urn = identity_urn_for(owner);
+	let identity_urn = safe_urn_for(owner);
 	let prefix_lit = format!("{identity_urn}:");
 	let own_f = format!(
 			"owns(\"{}\", \"{}\")",
@@ -280,7 +295,7 @@ pub fn mint_genesis_identity(
 }
 
 /// Mint a **sub-group** genesis biscuit (M9 group-owned values). Like
-/// [`mint_genesis_identity`] — the creating vault is the group's `owns` admin with full
+/// [`mint_safe_genesis`] — the creating vault is the group's `owns` admin with full
 /// [`OWNER_RIGHTS`] over the group's resource prefix — but it also records
 /// `extends("identity:<parent>")`. That fact makes the group **inherit** the parent
 /// group's members: the live authorizer, on a local deny, consults the parent chain, so a
@@ -293,9 +308,9 @@ pub fn mint_group_genesis_extending(
 	group_id: Uuid,
 	parent_id: Uuid,
 ) -> Result<Biscuit, String> {
-	let group_urn = identity_urn_for(group_id);
+	let group_urn = safe_urn_for(group_id);
 	let prefix_lit = format!("{group_urn}:");
-	let parent_urn = identity_urn_for(parent_id);
+	let parent_urn = safe_urn_for(parent_id);
 	let own_f = format!(
 		"owns(\"{}\", \"{}\")",
 		vault.signer_did.replace('"', "\\\""),
@@ -322,7 +337,7 @@ pub fn group_extends_parent(chain: &Biscuit) -> Result<Option<Uuid>, String> {
 		.query_all("parent($u) <- extends($u)")
 		.map_err(|e| format!("b-query-extends:{e}"))?;
 	for (urn,) in rows {
-		if let Some(rest) = urn.strip_prefix("identity:") {
+		if let Some(rest) = urn.strip_prefix("safe:") {
 			if let Ok(u) = Uuid::parse_str(rest.trim()) {
 				return Ok(Some(u));
 			}
@@ -343,7 +358,7 @@ pub fn attenuate_add_owner_third_party(
 	let req = chain
 		.third_party_request()
 		.map_err(|e| format!("tp_request:{e:?}"))?;
-	let identity_str = identity_urn_for(owner);
+	let identity_str = safe_urn_for(owner);
 	let own_f = format!(
 		"owns(\"{}\", \"{}\")",
 		new_signer_did.replace('\\', "\\\\").replace('"', "\\\""),
@@ -374,7 +389,7 @@ pub fn attenuate_add_replicate_third_party(
 	let req = chain
 		.third_party_request()
 		.map_err(|e| format!("tp_request:{e:?}"))?;
-	let prefix = format!("{}:", identity_urn_for(owner));
+	let prefix = format!("{}:", safe_urn_for(owner));
 	let rep_f = format!(
 		"replicate(\"{}\", \"{}\")",
 		replica_did.replace('\\', "\\\\").replace('"', "\\\""),
@@ -407,7 +422,7 @@ pub fn attenuate_add_reader_third_party(
 	let req = chain
 		.third_party_request()
 		.map_err(|e| format!("tp_request:{e:?}"))?;
-	let prefix = format!("{}:", identity_urn_for(owner));
+	let prefix = format!("{}:", safe_urn_for(owner));
 	let read_f = format!(
 		"reads(\"{}\", \"{}\")",
 		reader_did.replace('\\', "\\\\").replace('"', "\\\""),
@@ -428,7 +443,7 @@ pub fn attenuate_add_reader_third_party(
 /// who hold a `reads` grant but are not owners). The server reads this on
 /// `admin-identity` to build its admission allowlist.
 pub fn identity_readers(chain: &Biscuit, owner: Uuid) -> Result<HashSet<String>, String> {
-	let prefix = format!("{}:", identity_urn_for(owner));
+	let prefix = format!("{}:", safe_urn_for(owner));
 	let mut authorizer = chain.authorizer().map_err(|e| format!("b-authorizer:{e}"))?;
 	let rule = format!(
 		r#"readers($p) <- reads($p, "{prefix}")"#,
@@ -442,7 +457,7 @@ pub fn identity_readers(chain: &Biscuit, owner: Uuid) -> Result<HashSet<String>,
 
 /// All replication-peer DIDs granted on a identity per the biscuit chain.
 pub fn identity_replicas(chain: &Biscuit, owner: Uuid) -> Result<HashSet<String>, String> {
-	let prefix = format!("{}:", identity_urn_for(owner));
+	let prefix = format!("{}:", safe_urn_for(owner));
 	let mut authorizer = chain.authorizer().map_err(|e| format!("b-authorizer:{e}"))?;
 	let rule = format!(
 		r#"replicas($p) <- replicate($p, "{prefix}")"#,
@@ -460,7 +475,7 @@ pub fn identity_replicas(chain: &Biscuit, owner: Uuid) -> Result<HashSet<String>
 /// the new chain's `owns` set no longer contains it → `authorize` denies it.
 /// Pair with DEK rotation so the revoked peer also cannot decrypt new data.
 ///
-/// NOTE: must be called by the genesis owner — `mint_genesis_identity` re-roots the
+/// NOTE: must be called by the genesis owner — `mint_safe_genesis` re-roots the
 /// chain to `vault.biscuit_kp`, so a delegated (non-owner) admin cannot rebuild.
 pub fn rebuild_identity_biscuit_excluding(
 	vault: &BiscuitVault,
@@ -468,7 +483,7 @@ pub fn rebuild_identity_biscuit_excluding(
 	exclude_did: &str,
 ) -> Result<Biscuit, String> {
 	let chain = &vault
-		.identities
+		.safes
 		.get(&owner)
 		.ok_or_else(|| format!("unknown_identity:{owner}"))?
 		.biscuit;
@@ -484,7 +499,7 @@ pub fn rebuild_identity_biscuit_excluding(
 	let kp = &vault.biscuit_kp;
 	let excluded = |d: &str| signer_did_matches(d, exclude_did);
 	let is_owner = |d: &str| signer_did_matches(d, &vault.signer_did);
-	let mut biscuit = mint_genesis_identity(vault, owner)?;
+	let mut biscuit = mint_safe_genesis(vault, owner)?;
 
 	// Genesis already grants the owner; re-append every OTHER admin except the revoked
 	// one. Sort each set for deterministic chain order (HashSet iteration is unstable).
@@ -534,7 +549,7 @@ pub fn ingest_genesis_opened(
 		_ => local_fallback_issuer_pk,
 	};
 	let biscuit = biscuit_from_storage(genesis_b64, issuer_pk)?;
-	vault.identities.insert(
+	vault.safes.insert(
 		owner,
 		BiscuitIdentity {
 			owner,
@@ -549,14 +564,14 @@ fn signer_did_matches(a: &str, b: &str) -> bool {
 }
 
 pub fn identity_peer_is_owner(chain: &Biscuit, owner: Uuid, signer_did: &str) -> Result<bool, String> {
-	let identity_str = identity_urn_for(owner);
+	let identity_str = safe_urn_for(owner);
 	let admins = trusted_subject_dids(chain, &identity_str)?;
 	Ok(admins.iter().any(|a| signer_did_matches(a, signer_did)))
 }
 
 /// All admin (`owns`) DIDs for a identity per the biscuit chain.
 pub fn identity_admins(chain: &Biscuit, owner: Uuid) -> Result<std::collections::HashSet<String>, String> {
-	let identity_str = identity_urn_for(owner);
+	let identity_str = safe_urn_for(owner);
 	trusted_subject_dids(chain, &identity_str)
 }
 
@@ -612,7 +627,7 @@ fn authorize_with_depth(
 		Err(e) => {
 			// Inheritance: a member of the parent group is a member here too.
 			if depth < MAX_GROUP_DEPTH {
-				if let Some(chain) = vault.identities.get(&owner) {
+				if let Some(chain) = vault.safes.get(&owner) {
 					if let Ok(Some(parent)) = group_extends_parent(&chain.biscuit) {
 						if authorize_with_depth(vault, parent, op, table, row_id, subject_did, depth + 1)
 							.is_ok()
@@ -636,10 +651,10 @@ fn authorize_local(
 	subject_did: &str,
 ) -> Result<(), String> {
 	let chain = vault
-		.identities
+		.safes
 		.get(&owner)
 		.ok_or_else(|| format!("unknown_identity:{owner}"))?;
-	let identity_str = identity_urn_for(owner);
+	let identity_str = safe_urn_for(owner);
 	let resource = match row_id {
 		None => format!("{identity_str}:{table}"),
 		Some(r) => format!("{identity_str}:{table}:{r}"),
@@ -814,7 +829,7 @@ fn authorize_granted_op(chain: &Biscuit, op: &str, resource: &str, subject_did: 
 /// every `grant(...)` whose prefix is under this identity. Feeds the per-subject cap
 /// report (so row-scoped/table-scoped grants surface in the UI).
 pub fn identity_grants(chain: &Biscuit, owner: Uuid) -> Result<Vec<(String, String, String)>, String> {
-	let identity_prefix = identity_urn_for(owner);
+	let identity_prefix = safe_urn_for(owner);
 	let mut authorizer = chain.authorizer().map_err(|e| format!("b-authorizer:{e}"))?;
 	let rows: Vec<(String, String, String)> = authorizer
 		.query_all("granted($p, $op, $pre) <- grant($p, $op, $pre)")
@@ -852,8 +867,8 @@ mod tests {
 		let root = [9u8; 32];
 		let mut v = vault(&root);
 		let sid = uuid::Uuid::new_v4();
-		let biscuit = mint_genesis_identity(&v, sid).unwrap();
-		v.identities.insert(
+		let biscuit = mint_safe_genesis(&v, sid).unwrap();
+		v.safes.insert(
 			sid,
 			BiscuitIdentity {
 				owner: sid,
@@ -877,8 +892,8 @@ mod tests {
 		let root = [9u8; 32];
 		let mut v = vault(&root);
 		let sid = uuid::Uuid::new_v4();
-		let biscuit = mint_genesis_identity(&v, sid).unwrap();
-		v.identities.insert(
+		let biscuit = mint_safe_genesis(&v, sid).unwrap();
+		v.safes.insert(
 			sid,
 			BiscuitIdentity {
 				owner: sid,
@@ -897,7 +912,7 @@ mod tests {
 		let bob = vault(&root_bob);
 
 		let sid = uuid::Uuid::new_v4();
-		let genesis = mint_genesis_identity(&alice, sid).unwrap();
+		let genesis = mint_safe_genesis(&alice, sid).unwrap();
 		let issuer_pk = alice.biscuit_kp.public();
 
 		let chain = attenuate_add_owner_third_party(
@@ -908,7 +923,7 @@ mod tests {
 		)
 		.unwrap();
 
-		alice.identities.insert(
+		alice.safes.insert(
 			sid,
 			BiscuitIdentity {
 				owner: sid,
@@ -919,9 +934,9 @@ mod tests {
 			biscuit_kp: bob.biscuit_kp,
 			signer_did: bob.signer_did.clone(),
 			ed25519_public: bob.ed25519_public,
-			identities: std::collections::HashMap::new(),
+			safes: std::collections::HashMap::new(),
 		};
-		bob_vault.identities.insert(
+		bob_vault.safes.insert(
 			sid,
 			BiscuitIdentity {
 				owner: sid,
@@ -946,7 +961,7 @@ mod tests {
 		let sid = uuid::Uuid::new_v4();
 		let rid = uuid::Uuid::new_v4();
 
-		let genesis = mint_genesis_identity(&alice, sid).unwrap();
+		let genesis = mint_safe_genesis(&alice, sid).unwrap();
 		let chain = attenuate_add_replicate_third_party(
 			&alice.biscuit_kp,
 			&genesis,
@@ -955,7 +970,7 @@ mod tests {
 		)
 		.unwrap();
 		let mut v = alice;
-		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
+		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
 
 		// The replica IS authorized to store-and-forward (Replicate) the identity's rows…
 		authorize(&v, sid, AccOp::Replicate, "todos", Some(rid), &server.signer_did).unwrap();
@@ -981,15 +996,15 @@ mod tests {
 		let sid = uuid::Uuid::new_v4();
 		let rid = uuid::Uuid::new_v4();
 
-		let genesis = mint_genesis_identity(&alice, sid).unwrap();
+		let genesis = mint_safe_genesis(&alice, sid).unwrap();
 		let chain =
 			attenuate_add_reader_third_party(&alice.biscuit_kp, &genesis, sid, reader.signer_did.as_str())
 				.unwrap();
 		let mut v = alice;
-		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
+		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
 
 		// Enumerated as a reader.
-		let readers = identity_readers(&v.identities.get(&sid).unwrap().biscuit, sid).unwrap();
+		let readers = identity_readers(&v.safes.get(&sid).unwrap().biscuit, sid).unwrap();
 		assert!(readers.iter().any(|d| signer_did_matches(d, &reader.signer_did)), "reader listed");
 
 		// The reader IS authorized to Read…
@@ -1046,11 +1061,11 @@ mod tests {
 		// The genesis records the parent it extends (the inheritance link).
 		assert_eq!(group_extends_parent(&biscuit).unwrap(), Some(parent));
 		// The creator is the group's owner — full rights over the GROUP's own prefix.
-		v.identities.insert(group, BiscuitIdentity { owner: group, biscuit });
+		v.safes.insert(group, BiscuitIdentity { owner: group, biscuit });
 		authorize(&v, group, AccOp::Write, "todos", None, &v.signer_did.clone()).unwrap();
 		// A plain identity genesis has no parent (it is a root group).
 		let id = uuid::Uuid::new_v4();
-		let plain = mint_genesis_identity(&v, id).unwrap();
+		let plain = mint_safe_genesis(&v, id).unwrap();
 		assert_eq!(group_extends_parent(&plain).unwrap(), None);
 	}
 
@@ -1062,14 +1077,14 @@ mod tests {
 
 		// Parent identity owned by `v`, with `reader` added as a delegated reader.
 		let parent = uuid::Uuid::new_v4();
-		let mut pb = mint_genesis_identity(&v, parent).unwrap();
+		let mut pb = mint_safe_genesis(&v, parent).unwrap();
 		pb = attenuate_add_reader_third_party(&v.biscuit_kp, &pb, parent, &reader.signer_did).unwrap();
-		v.identities.insert(parent, BiscuitIdentity { owner: parent, biscuit: pb });
+		v.safes.insert(parent, BiscuitIdentity { owner: parent, biscuit: pb });
 
 		// A sub-group (collection-level) that EXTENDS the parent.
 		let group = derive_subgroup_id(parent, "todos");
 		let gb = mint_group_genesis_extending(&v, group, parent).unwrap();
-		v.identities.insert(group, BiscuitIdentity { owner: group, biscuit: gb });
+		v.safes.insert(group, BiscuitIdentity { owner: group, biscuit: gb });
 
 		// Inheritance: the parent's reader may READ the sub-group with NO per-group grant.
 		authorize(&v, group, AccOp::Read, "todos", Some(uuid::Uuid::new_v4()), &reader.signer_did).unwrap();
@@ -1088,8 +1103,8 @@ mod tests {
 		let own_row = uuid::Uuid::from_u128(0x1111_2222);
 		let other_row = uuid::Uuid::from_u128(0x3333_4444);
 
-		let genesis = mint_genesis_identity(&owner, sid).unwrap();
-		let prefix = format!("identity:{sid}:peers:{own_row}");
+		let genesis = mint_safe_genesis(&owner, sid).unwrap();
+		let prefix = format!("safe:{sid}:peers:{own_row}");
 		let chain = attenuate_add_grant_third_party(
 			&owner.biscuit_kp,
 			&genesis,
@@ -1099,7 +1114,7 @@ mod tests {
 		)
 		.unwrap();
 		let mut v = owner;
-		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
+		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
 
 		// Member may write its OWN row…
 		authorize(&v, sid, AccOp::Write, "peers", Some(own_row), &member.signer_did).unwrap();
@@ -1112,7 +1127,7 @@ mod tests {
 		authorize(&v, sid, AccOp::Write, "peers", Some(other_row), &v.signer_did.clone()).unwrap();
 
 		// Enumerated by identity_grants for the cap report.
-		let grants = identity_grants(&v.identities.get(&sid).unwrap().biscuit, sid).unwrap();
+		let grants = identity_grants(&v.safes.get(&sid).unwrap().biscuit, sid).unwrap();
 		assert!(grants
 			.iter()
 			.any(|(d, o, p)| signer_did_matches(d, &member.signer_did) && o == "write" && p == &prefix));
@@ -1125,7 +1140,7 @@ mod tests {
 		let replica = vault(&[7u8; 32]);
 		let sid = uuid::Uuid::new_v4();
 
-		let mut chain = mint_genesis_identity(&owner, sid).unwrap();
+		let mut chain = mint_safe_genesis(&owner, sid).unwrap();
 		chain = attenuate_add_reader_third_party(&owner.biscuit_kp, &chain, sid, &reader.signer_did).unwrap();
 		chain = attenuate_add_replicate_third_party(&owner.biscuit_kp, &chain, sid, &replica.signer_did).unwrap();
 
@@ -1160,13 +1175,13 @@ mod tests {
 		let carol = vault(&[3u8; 32]);
 		let sid = uuid::Uuid::new_v4();
 
-		let mut chain = mint_genesis_identity(&alice, sid).unwrap();
+		let mut chain = mint_safe_genesis(&alice, sid).unwrap();
 		chain = attenuate_add_owner_third_party(&alice.biscuit_kp, &chain, sid, &bob.signer_did).unwrap();
 		chain =
 			attenuate_add_owner_third_party(&alice.biscuit_kp, &chain, sid, &carol.signer_did).unwrap();
 
 		let mut v = alice;
-		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
+		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
 
 		// Sanity: all three authorized before revoke.
 		authorize(&v, sid, AccOp::Write, "todos", None, &v.signer_did.clone()).unwrap();
@@ -1181,7 +1196,7 @@ mod tests {
 		assert!(!admins.iter().any(|d| signer_did_matches(d, &bob.signer_did)), "bob removed");
 
 		// Authorize against the rebuilt chain: owner + carol allowed, bob denied.
-		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: rebuilt });
+		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: rebuilt });
 		authorize(&v, sid, AccOp::Write, "todos", None, &v.signer_did.clone()).unwrap();
 		authorize(&v, sid, AccOp::Write, "todos", None, &carol.signer_did).unwrap();
 		assert!(

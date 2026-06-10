@@ -279,7 +279,7 @@ pub(crate) async fn execute_drain_batch(
 			.into_iter()
 			.filter(|t| t != "peers") // peers has its own publish path (publish_trusted_peers_ui)
 			.collect();
-		set.insert("identities".to_string());
+		set.insert("safes".to_string());
 		set.into_iter().collect()
 	} else {
 		Vec::new()
@@ -1060,10 +1060,10 @@ impl ManagedJazz {
 		}
 		let (snap, _) =
 			jazz_engine::query_table_publish(client, shell, table, ENCRYPTED_META).await?;
-		if table == "identities" && snap.is_empty() {
+		if table == "safes" && snap.is_empty() {
 			log::warn!(
 				target: "avenos::jazz",
-				"bootstrap: identities table empty after hydrate — UI may seed on next write",
+				"bootstrap: safes table empty after hydrate — UI may seed on next write",
 			);
 		}
 		let encoded = serde_json::to_string(&snap).map_err(|e| e.to_string())?;
@@ -1647,7 +1647,7 @@ fn spawn_dev_peer_sync(
 				let _ = change_tx.send(table);
 			}
 			Some(None) => {
-				for t in ["identities", "keyshares", "peers"] {
+				for t in ["safes", "keyshares", "peers"] {
 					let _ = change_tx.send(t.to_string());
 				}
 			}
@@ -1840,7 +1840,7 @@ fn jazz_session_reply_from_shell(shell: &jazz_engine::ShellState) -> JazzSession
 	JazzSessionReply {
 		signer_did: shell.signer_did.clone(),
 		signer_did_short: jazz_engine::short_signer_did(&shell.signer_did),
-		default_spark_urn: jazz_engine::identity_urn(shell.default_identity),
+		default_spark_urn: jazz_engine::safe_urn(shell.default_identity),
 		// This shell-only path has no relay handle; the live relay DID is filled
 		// by `groove_ipc_session` (which can read `ManagedJazz`).
 		relay_did: None,
@@ -1944,7 +1944,7 @@ pub(crate) async fn groove_ipc_session(
 	Ok(JazzSessionReply {
 		signer_did: shell.signer_did.clone(),
 		signer_did_short: jazz_engine::short_signer_did(&shell.signer_did),
-		default_spark_urn: jazz_engine::identity_urn(shell.default_identity),
+		default_spark_urn: jazz_engine::safe_urn(shell.default_identity),
 		relay_did,
 	})
 }
@@ -1975,7 +1975,7 @@ async fn wrap_all_dek_versions_to_recipient(
 ) -> Result<(), String> {
 	let recipient_pk = crate::jazz_auth::ed25519_public_from_signer_did(recipient_did)?;
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recipient_pk)?;
-	let urn = jazz_engine::identity_urn(identity_uuid);
+	let urn = jazz_engine::safe_urn(identity_uuid);
 
 	let ks_schema = jazz_engine::resolved_table_schema(client, "keyshares").await?;
 	let ks_spark_ix = jazz_engine::col_ix(&ks_schema, "owner")?;
@@ -2076,7 +2076,7 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 
 	jazz_engine::authorize_gate(
 		shell,
-		"identities",
+		"safes",
 		crate::identity_acc::AccOp::Write,
 		identity_uuid,
 		None,
@@ -2112,10 +2112,10 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 			.map_err(|e| format!("biscuit_encode:{e:?}"))?;
 		let genesis_b64 = URL_SAFE_NO_PAD.encode(genesis_vec);
 
-		let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
+		let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "safes").await?;
 		let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
 
-		let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "identities").await?;
+		let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "safes").await?;
 		let mut sparks_oid: Option<ObjectId> = None;
 		for (oid, vals) in sparks_rows {
 			let sid = jazz_engine::uuid_cell_at(vals.as_slice(), identity_id_ix)?;
@@ -2125,7 +2125,7 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 			}
 		}
 		let sparks_oid =
-			sparks_oid.ok_or_else(|| format!("no identities row for owner={identity_uuid}"))?;
+			sparks_oid.ok_or_else(|| format!("no safes row for owner={identity_uuid}"))?;
 
 		let mut patch_sparks = Map::new();
 		patch_sparks.insert(
@@ -2188,7 +2188,7 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 	// vault must be authorized to write this identity's catalogue).
 	jazz_engine::authorize_gate(
 		shell,
-		"identities",
+		"safes",
 		crate::identity_acc::AccOp::Write,
 		identity_uuid,
 		None,
@@ -2225,7 +2225,7 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 		.get(&(identity_uuid, dek_ver))
 		.ok_or_else(|| format!("missing DEK for identity {identity_uuid} v{dek_ver}"))?;
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &peer_pk)?;
-	let ks_urn = jazz_engine::identity_urn(identity_uuid);
+	let ks_urn = jazz_engine::safe_urn(identity_uuid);
 	let ks_aad = crate::crypto::keyshare_wrap_aad(&ks_urn, &signer_did, &shell.signer_did, dek_ver);
 	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek.expose(), &ks_aad)?;
 	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
@@ -2259,23 +2259,23 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 		&chain,
 		&signer_did,
 		"read",
-		&format!("identity:{identity_uuid}:identities:"),
+		&format!("safe:{identity_uuid}:safes:"),
 	)?;
 	let new_biscuit = crate::identity_acc::attenuate_add_grant_third_party(
 		&shell.vault.biscuit_kp,
 		&chain,
 		&signer_did,
 		"read",
-		&format!("identity:{identity_uuid}:peers:"),
+		&format!("safe:{identity_uuid}:peers:"),
 	)?;
 	let genesis_vec = new_biscuit
 		.to_vec()
 		.map_err(|e| format!("biscuit_encode:{e:?}"))?;
 	let genesis_b64 = URL_SAFE_NO_PAD.encode(genesis_vec);
 
-	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
+	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "safes").await?;
 	let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
-	let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "identities").await?;
+	let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "safes").await?;
 	let mut sparks_oid: Option<ObjectId> = None;
 	for (oid, vals) in sparks_rows {
 		let sid = jazz_engine::uuid_cell_at(vals.as_slice(), identity_id_ix)?;
@@ -2285,7 +2285,7 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 		}
 	}
 	let sparks_oid =
-		sparks_oid.ok_or_else(|| format!("no identities row for owner={identity_uuid}"))?;
+		sparks_oid.ok_or_else(|| format!("no safes row for owner={identity_uuid}"))?;
 
 	let mut patch_sparks = Map::new();
 	patch_sparks.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
@@ -2340,7 +2340,7 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 	}
 
 	// Only a identity admin may grant read (same gate as admin/replicate add).
-	jazz_engine::authorize_gate(shell, "identities", crate::identity_acc::AccOp::Write, identity_uuid, None)?;
+	jazz_engine::authorize_gate(shell, "safes", crate::identity_acc::AccOp::Write, identity_uuid, None)?;
 
 	let bisc_identity = shell
 		.vault
@@ -2367,9 +2367,9 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 		let genesis_vec = new_biscuit.to_vec().map_err(|e| format!("biscuit_encode:{e:?}"))?;
 		let genesis_b64 = URL_SAFE_NO_PAD.encode(genesis_vec);
 
-		let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
+		let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "safes").await?;
 		let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
-		let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "identities").await?;
+		let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "safes").await?;
 		let mut sparks_oid: Option<ObjectId> = None;
 		for (oid, vals) in sparks_rows {
 			let sid = jazz_engine::uuid_cell_at(vals.as_slice(), identity_id_ix)?;
@@ -2378,7 +2378,7 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 				break;
 			}
 		}
-		let sparks_oid = sparks_oid.ok_or_else(|| format!("no identities row for owner={identity_uuid}"))?;
+		let sparks_oid = sparks_oid.ok_or_else(|| format!("no safes row for owner={identity_uuid}"))?;
 		let mut patch_sparks = Map::new();
 		patch_sparks.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
 		let sparks_ops = patch_updates(&sparks_schema, patch_sparks)?;
@@ -2410,10 +2410,10 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 
 	let identity_uuid = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
 
-	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
+	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "safes").await?;
 	let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
 	let issuer_ix = jazz_engine::col_ix(&sparks_schema, "issuer_pubkey_b64")?;
-	let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "identities").await?;
+	let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "safes").await?;
 	let my_issuer = crate::identity_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public());
 	for (_oid, vals) in &sparks_rows {
 		if jazz_engine::uuid_cell_at(vals.as_slice(), identity_id_ix)? == identity_uuid {
@@ -2433,7 +2433,7 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 	}
 
 	// Mint genesis — this device's biscuit key roots the chain → it is the owner.
-	let genesis = crate::identity_acc::mint_genesis_identity(&shell.vault, identity_uuid)?;
+	let genesis = crate::identity_acc::mint_safe_genesis(&shell.vault, identity_uuid)?;
 	let genesis_b64 =
 		URL_SAFE_NO_PAD.encode(genesis.to_vec().map_err(|e| format!("genesis_encode:{e:?}"))?);
 	let issuer_b64 = crate::identity_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public());
@@ -2454,15 +2454,15 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 	row.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
 	row.insert("current_dek_version".into(), JsonValue::Number(dek_ver.into()));
 	row.insert("created_at_ms".into(), JsonValue::Number(now_ms.into()));
-	let sparks_vals = insert_values("identities", &sparks_schema, row)?;
+	let sparks_vals = insert_values("safes", &sparks_schema, row)?;
 	let sparks_oid = ObjectId::new();
 	let sparks_meta = owner_binding_meta(&shell.signing_key, sparks_oid, identity_uuid)?;
-	client.create_with_id_and_metadata("identities", sparks_oid, sparks_vals, sparks_meta).await.map_err(format_jazz_err)?;
+	client.create_with_id_and_metadata("safes", sparks_oid, sparks_vals, sparks_meta).await.map_err(format_jazz_err)?;
 
 	// Self keyshare: wrap a fresh DEK to this device so the owner can read sealed
 	// columns later (the roster is plaintext today, but keep the shape consistent).
 	let dek_plain = crate::crypto::random_identity_dek();
-	let urn = jazz_engine::identity_urn(identity_uuid);
+	let urn = jazz_engine::safe_urn(identity_uuid);
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
 	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.signer_did, &shell.signer_did, dek_ver);
 	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
@@ -2508,9 +2508,9 @@ pub(crate) async fn groove_ipc_create_identity(
 	let shell = shell_arc.as_ref();
 
 	let identity_uuid = uuid::Uuid::new_v4();
-	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
+	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "safes").await?;
 
-	let genesis = crate::identity_acc::mint_genesis_identity(&shell.vault, identity_uuid)?;
+	let genesis = crate::identity_acc::mint_safe_genesis(&shell.vault, identity_uuid)?;
 	let genesis_b64 =
 		URL_SAFE_NO_PAD.encode(genesis.to_vec().map_err(|e| format!("genesis_encode:{e:?}"))?);
 	let issuer_b64 = crate::identity_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public());
@@ -2538,17 +2538,17 @@ pub(crate) async fn groove_ipc_create_identity(
 	row.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
 	row.insert("current_dek_version".into(), JsonValue::Number(dek_ver.into()));
 	row.insert("created_at_ms".into(), JsonValue::Number(now_ms.into()));
-	let sparks_vals = insert_values("identities", &sparks_schema, row)?;
+	let sparks_vals = insert_values("safes", &sparks_schema, row)?;
 	let sparks_oid = ObjectId::new();
 	let sparks_meta = owner_binding_meta(&shell.signing_key, sparks_oid, identity_uuid)?;
 	client
-		.create_with_id_and_metadata("identities", sparks_oid, sparks_vals, sparks_meta)
+		.create_with_id_and_metadata("safes", sparks_oid, sparks_vals, sparks_meta)
 		.await
 		.map_err(format_jazz_err)?;
 
 	// Self keyshare: wrap a fresh DEK to this device so the owner can read sealed columns.
 	let dek_plain = crate::crypto::random_identity_dek();
-	let urn = jazz_engine::identity_urn(identity_uuid);
+	let urn = jazz_engine::safe_urn(identity_uuid);
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
 	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.signer_did, &shell.signer_did, dek_ver);
 	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
@@ -2602,14 +2602,14 @@ pub(crate) async fn groove_ipc_create_collection_group(
 	let shell = shell_arc.as_ref();
 
 	// Only the parent identity's owner may carve out a sub-group.
-	jazz_engine::authorize_gate(shell, "identities", crate::identity_acc::AccOp::Write, parent_id, None)?;
+	jazz_engine::authorize_gate(shell, "safes", crate::identity_acc::AccOp::Write, parent_id, None)?;
 
 	let group_id = crate::identity_acc::derive_subgroup_id(parent_id, &label);
 
-	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
+	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "safes").await?;
 	let id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
 	// Idempotent: if the group's row already exists, return it (deterministic id).
-	for (_oid, vals) in jazz_engine::exec_list_rows(client.as_ref(), "identities").await? {
+	for (_oid, vals) in jazz_engine::exec_list_rows(client.as_ref(), "safes").await? {
 		if jazz_engine::uuid_cell_at(vals.as_slice(), id_ix)? == group_id {
 			return Ok(group_id.to_string());
 		}
@@ -2633,18 +2633,18 @@ pub(crate) async fn groove_ipc_create_collection_group(
 	row.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
 	row.insert("current_dek_version".into(), JsonValue::Number(dek_ver.into()));
 	row.insert("created_at_ms".into(), JsonValue::Number(now_ms.into()));
-	let sparks_vals = insert_values("identities", &sparks_schema, row)?;
+	let sparks_vals = insert_values("safes", &sparks_schema, row)?;
 	let sparks_oid = ObjectId::new();
 	let sparks_meta = owner_binding_meta(&shell.signing_key, sparks_oid, group_id)?;
 	client
-		.create_with_id_and_metadata("identities", sparks_oid, sparks_vals, sparks_meta)
+		.create_with_id_and_metadata("safes", sparks_oid, sparks_vals, sparks_meta)
 		.await
 		.map_err(format_jazz_err)?;
 
 	// The group's OWN DEK, keyshared to the creator. Parent members inherit it via the
 	// 2-level key hierarchy (the group key wrapped under the parent group key).
 	let dek_plain = crate::crypto::random_identity_dek();
-	let urn = jazz_engine::identity_urn(group_id);
+	let urn = jazz_engine::safe_urn(group_id);
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
 	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.signer_did, &shell.signer_did, dek_ver);
 	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
@@ -2718,12 +2718,12 @@ async fn read_own_profile(client: &JazzClient, signer_did: &str) -> (String, Str
 	let mut label = String::new();
 	// Display name from this device's own (human-typed) identity. `name` is sealed,
 	// so the roster uses the plaintext `username_slug` handle (best-effort).
-	if let Ok(schema) = jazz_engine::resolved_table_schema(client, "identities").await {
+	if let Ok(schema) = jazz_engine::resolved_table_schema(client, "safes").await {
 		if let (Ok(type_ix), Ok(slug_ix)) = (
 			jazz_engine::col_ix(&schema, "type"),
 			jazz_engine::col_ix(&schema, "username_slug"),
 		) {
-			if let Ok(rows) = jazz_engine::exec_list_rows(client, "identities").await {
+			if let Ok(rows) = jazz_engine::exec_list_rows(client, "safes").await {
 				for (_o, vals) in rows {
 					let is_human =
 						matches!(vals.get(type_ix), Some(Value::Text(t)) if t.trim() == "human");
@@ -2798,7 +2798,7 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 	}
 
 	// Only the avenCEO owner may add members.
-	jazz_engine::authorize_gate(shell, "identities", crate::identity_acc::AccOp::Write, identity_uuid, None)?;
+	jazz_engine::authorize_gate(shell, "safes", crate::identity_acc::AccOp::Write, identity_uuid, None)?;
 
 	// Fail fast (before creating the roster row) if this device doesn't hold the avenCEO
 	// DEK — without it we can't mint the member's keyshare.
@@ -2835,7 +2835,7 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 		.identities
 		.get(&identity_uuid)
 		.ok_or_else(|| "avenCEO identity not loaded in vault".to_string())?;
-	let row_prefix = format!("identity:{identity_uuid}:peers:{}", member_oid.uuid());
+	let row_prefix = format!("safe:{identity_uuid}:peers:{}", member_oid.uuid());
 	let chain = crate::identity_acc::attenuate_add_reader_third_party(
 		&shell.vault.biscuit_kp,
 		&bisc.biscuit,
@@ -2852,9 +2852,9 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 	let genesis_b64 =
 		URL_SAFE_NO_PAD.encode(chain.to_vec().map_err(|e| format!("biscuit_encode:{e:?}"))?);
 
-	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
+	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "safes").await?;
 	let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
-	let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "identities").await?;
+	let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "safes").await?;
 	let mut sparks_oid: Option<ObjectId> = None;
 	for (oid, vals) in sparks_rows {
 		if jazz_engine::uuid_cell_at(vals.as_slice(), identity_id_ix)? == identity_uuid {
@@ -2862,7 +2862,7 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 			break;
 		}
 	}
-	let sparks_oid = sparks_oid.ok_or_else(|| "no avenCEO identities row".to_string())?;
+	let sparks_oid = sparks_oid.ok_or_else(|| "no avenCEO safes row".to_string())?;
 	let mut patch = Map::new();
 	patch.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
 	let ops = patch_updates(&sparks_schema, patch)?;
@@ -2955,7 +2955,7 @@ pub(crate) async fn groove_ipc_aven_ceo_membership(
 	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
 	let shell = shell_arc.as_ref();
 	let identity_uuid = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
-	let Some(bisc) = shell.vault.identities.get(&identity_uuid) else {
+	let Some(bisc) = shell.vault.safes.get(&identity_uuid) else {
 		return Ok("none".to_string());
 	};
 	if crate::identity_acc::identity_peer_is_owner(&bisc.biscuit, identity_uuid, &shell.signer_did)? {
@@ -3001,7 +3001,7 @@ async fn finish_spark_admin_grant(
 	}
 
 	let _ = jazz
-		.publish_table_snapshot_force(app, client.as_ref(), shell.as_ref(), "identities")
+		.publish_table_snapshot_force(app, client.as_ref(), shell.as_ref(), "safes")
 		.await;
 
 	// Republish the trusted-peer roster + mesh snapshot so the member's chip
@@ -3137,7 +3137,7 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 	}
 
 	// Must hold write on this identity to manage its members.
-	jazz_engine::authorize_gate(shell, "identities", crate::identity_acc::AccOp::Write, identity_uuid, None)?;
+	jazz_engine::authorize_gate(shell, "safes", crate::identity_acc::AccOp::Write, identity_uuid, None)?;
 
 	let cur_v = shell
 		.identity_versions
@@ -3172,7 +3172,7 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 	//    members decrypt at v+1.
 	let new_v = cur_v + 1;
 	let new_dek = crate::crypto::random_identity_dek();
-	let urn = jazz_engine::identity_urn(identity_uuid);
+	let urn = jazz_engine::safe_urn(identity_uuid);
 	for recip_did in prior_holders.iter().filter(|d| d.as_str() != signer_did.as_str()) {
 		let recip_pk = crate::jazz_auth::ed25519_public_from_signer_did(recip_did)?;
 		let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recip_pk)?;
@@ -3200,9 +3200,9 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 			.map_err(|e| format!("biscuit_encode:{e:?}"))?,
 	);
 	let issuer_b64 = crate::identity_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public());
-	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "identities").await?;
+	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "safes").await?;
 	let identity_id_ix = jazz_engine::col_ix(&sparks_schema, "owner")?;
-	let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "identities").await?;
+	let sparks_rows = jazz_engine::exec_list_rows(client.as_ref(), "safes").await?;
 	let mut sparks_oid: Option<ObjectId> = None;
 	for (oid, vals) in sparks_rows {
 		if jazz_engine::uuid_cell_at(vals.as_slice(), identity_id_ix)? == identity_uuid {
@@ -3211,7 +3211,7 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 		}
 	}
 	let sparks_oid =
-		sparks_oid.ok_or_else(|| format!("no identities row for owner={identity_uuid}"))?;
+		sparks_oid.ok_or_else(|| format!("no safes row for owner={identity_uuid}"))?;
 	let mut patch = Map::new();
 	patch.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
 	patch.insert("issuer_pubkey_b64".into(), JsonValue::String(issuer_b64));

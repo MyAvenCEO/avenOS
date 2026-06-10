@@ -209,8 +209,8 @@ pub(super) fn short_signer_did(did: &str) -> String {
 	}
 }
 
-pub(super) fn identity_urn(id: Uuid) -> String {
-	format!("identity:{id}")
+pub(super) fn safe_urn(id: Uuid) -> String {
+	format!("safe:{id}")
 }
 
 pub(super) fn identity_uuid_from_json_row(
@@ -329,7 +329,7 @@ pub(super) fn seal_column_plain(
 		.deks
 		.get(&(identity, v))
 		.ok_or_else(|| format!("missing_dek_cached:{identity}|{v}"))?;
-	let urn = identity_urn(identity);
+	let urn = safe_urn(identity);
 	let slug = column_type_slug(storage_ty);
 	let aad = cell_seal_aad(&urn, table, col_name, row, v, slug);
 	seal_text_cell_payload(dek_entry.expose(), &aad, canonical_plaintext_utf8)
@@ -594,14 +594,14 @@ pub(super) async fn hydrate_shell(
 		}
 	}
 
-	let sparks_schema = resolved_table_schema(client, "identities").await?;
+	let sparks_schema = resolved_table_schema(client, "safes").await?;
 	let identity_id_ix = col_ix(&sparks_schema, "owner")?;
 	let issuer_ix = col_ix(&sparks_schema, "issuer_pubkey_b64")?;
 	let genesis_ix = col_ix(&sparks_schema, "genesis_b64")?;
 	let ver_ix = col_ix(&sparks_schema, "current_dek_version")?;
 
 	let mut identity_versions = HashMap::new();
-	let sparks_rows = exec_list_rows(client, "identities").await?;
+	let sparks_rows = exec_list_rows(client, "safes").await?;
 	let ver_storage_ty = sparks_schema
 		.columns
 		.columns
@@ -667,7 +667,7 @@ pub(super) async fn hydrate_shell(
 				Value::Text(s) => s.as_str(),
 				_ => return Err("ks_wrap_bad".into()),
 			};
-			let urn = identity_urn(sid);
+			let urn = safe_urn(sid);
 			let wrapper_pk = jazz_auth::ed25519_public_from_signer_did(wrapper_did)?;
 			let kek = derive_kek_x25519(&signing_key, &wrapper_pk)?;
 			// Prefer the wrapper-bound AAD; fall back to the legacy form so keyshares minted
@@ -809,7 +809,7 @@ pub(super) async fn hydrate_shell(
 		}
 	}
 
-	let mut identity_keys: Vec<Uuid> = vault.identities.keys().cloned().collect();
+	let mut identity_keys: Vec<Uuid> = vault.safes.keys().cloned().collect();
 	identity_keys.sort();
 	// Zero identities is valid: the user creates one (+ New) or is added via caps after
 	// the invite. `default_identity` is a nil sentinel until then (no fallback owner).

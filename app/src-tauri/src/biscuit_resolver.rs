@@ -147,7 +147,7 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 		let Some(shell) = shell_guard.as_ref() else {
 			return CapDecision::Pending;
 		};
-		if !shell.vault.identities.contains_key(&binding.owner) {
+		if !shell.vault.safes.contains_key(&binding.owner) {
 			return CapDecision::Allow;
 		}
 		// Per-kind cap: the author must hold the right that matches the row's kind.

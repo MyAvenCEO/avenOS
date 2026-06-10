@@ -83,20 +83,27 @@
 				}
 			]
 		},
-		"identities": {
+		"safes": {
 			"columns": [
 				{
 					"name": "owner",
 					"type": "uuid",
 					"plaintext": true,
-					"comment": "routing — identity row identity (self-owned)"
+					"comment": "routing — SAFE row identity (self-owned)"
 				},
 				{
 					"name": "type",
 					"type": "text",
 					"plaintext": true,
 					"nullable": true,
-					"comment": "human | aven — the kind of identity"
+					"comment": "human | aven | spark — the kind of SAFE"
+				},
+				{
+					"name": "safe_did",
+					"type": "text",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "did:safe:<uuid> — stable public SAFE identifier"
 				},
 				{
 					"name": "username_slug",
@@ -123,6 +130,34 @@
 					"type": "bigint",
 					"plaintext": true,
 					"comment": "identity row metadata"
+				}
+			]
+		},
+		"safe_controllers": {
+			"columns": [
+				{
+					"name": "safe_id",
+					"type": "uuid",
+					"plaintext": true,
+					"comment": "routing — the SAFE being controlled"
+				},
+				{
+					"name": "controller_did",
+					"type": "text",
+					"plaintext": true,
+					"comment": "did:key:z... OR did:safe:<uuid>"
+				},
+				{
+					"name": "role",
+					"type": "text",
+					"plaintext": true,
+					"comment": "owner | delegate | executor | reader"
+				},
+				{
+					"name": "added_at_ms",
+					"type": "bigint",
+					"plaintext": true,
+					"comment": "controller admission timestamp"
 				}
 			]
 		},

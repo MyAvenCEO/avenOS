@@ -217,7 +217,7 @@ pub fn authorize_signed_edit(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::caps::{build_vault_from_signing_key, mint_genesis_identity, BiscuitIdentity};
+	use crate::caps::{build_vault_from_signing_key, mint_safe_genesis, BiscuitIdentity};
 
 	fn sk(seed: u8) -> SigningKey {
 		SigningKey::from_bytes(&[seed; 32])
@@ -225,8 +225,8 @@ mod tests {
 
 	fn owner_vault_with_identity(seed: u8, identity: Uuid) -> BiscuitVault {
 		let mut v = build_vault_from_signing_key(&sk(seed)).unwrap();
-		let genesis = mint_genesis_identity(&v, identity).unwrap();
-		v.identities.insert(identity, BiscuitIdentity { owner: identity, biscuit: genesis });
+		let genesis = mint_safe_genesis(&v, identity).unwrap();
+		v.safes.insert(identity, BiscuitIdentity { owner: identity, biscuit: genesis });
 		v
 	}
 
