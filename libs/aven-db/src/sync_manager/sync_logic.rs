@@ -7,7 +7,19 @@ use std::collections::HashMap;
 
 impl SyncManager {
     fn scope_delivery_row(mut row: StoredRowBatch) -> StoredRowBatch {
-        if row.state.is_visible() {
+        // Visible rows are normally delivered flat (parentless) as a current-state snapshot
+        // — an upstream frontier optimization. BUT a row carrying an author edit-signature
+        // (board 0010) signed its content digest INCLUDING `parents`, so flattening makes the
+        // receiver recompute a different digest and reject the row (edit_sig_digest_mismatch).
+        // That breaks every signed UPDATE (e.g. the avenCEO admin grant). Keep `parents` for
+        // signed rows so the signature verifies end-to-end; unsigned rows keep the snapshot
+        // optimization. (Signed *creates* are already parentless, so this only adds the parent
+        // back to signed updates, which target already-located objects.)
+        let signed = row
+            .metadata
+            .iter()
+            .any(|(k, _)| k == crate::capability::EDIT_SIG_META_KEY);
+        if row.state.is_visible() && !signed {
             row.parents.clear();
         }
         row

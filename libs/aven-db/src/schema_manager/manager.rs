@@ -20,7 +20,7 @@ use crate::query_manager::manager::{DeleteHandle, InsertResult, QueryError, Quer
 use crate::query_manager::query::{Query, QueryBuilder};
 use crate::query_manager::session::{Session, WriteContext};
 use crate::query_manager::types::{
-    ComposedBranchName, RowDescriptor, RowPolicyMode, Schema, SchemaHash, TableName, TablePolicies,
+    ComposedBranchName, RowPolicyMode, Schema, SchemaHash, TableName, TablePolicies,
     Value,
 };
 use crate::query_manager::writes::{RowBranchDelete, RowBranchWrite};
@@ -1892,30 +1892,6 @@ fn latest_catalogue_content_matches<H: Storage + ?Sized>(
     latest_content == expected
 }
 
-#[allow(dead_code)]
-fn reorder_values_by_column_name(
-    source_descriptor: &RowDescriptor,
-    target_descriptor: &RowDescriptor,
-    values: &[Value],
-) -> Option<Vec<Value>> {
-    if values.len() != source_descriptor.columns.len()
-        || source_descriptor.columns.len() != target_descriptor.columns.len()
-    {
-        return None;
-    }
-
-    let mut values_by_column = HashMap::with_capacity(values.len());
-    for (column, value) in source_descriptor.columns.iter().zip(values.iter()) {
-        values_by_column.insert(column.name, value.clone());
-    }
-
-    let mut reordered_values = Vec::with_capacity(values.len());
-    for column in &target_descriptor.columns {
-        reordered_values.push(values_by_column.remove(&column.name)?);
-    }
-
-    Some(reordered_values)
-}
 
 fn merge_permissions_into_schema(
     schema: &Schema,

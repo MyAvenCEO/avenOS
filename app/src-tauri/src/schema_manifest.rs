@@ -263,12 +263,6 @@ pub fn manifest_sensitive_columns() -> Result<HashMap<String, HashSet<String>>, 
 	Ok(out)
 }
 
-/// Back-compat name for callers that historically called this «secret manifest» for text-only sealing.
-#[inline]
-pub fn manifest_secret_columns() -> Result<HashMap<String, HashSet<String>>, String> {
-	manifest_sensitive_columns()
-}
-
 /// Table names that carry a `owner` column — the manifest is the single source of truth
 /// for which tables participate in biscuit-gated P2P sync and ACL object maps.
 pub fn manifest_spark_scoped_table_names() -> Result<Vec<String>, String> {

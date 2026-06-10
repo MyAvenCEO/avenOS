@@ -1,0 +1,491 @@
+//! Row CRUD IPC over the Groove-backed Jazz client.
+
+use groove::{JazzClient, ObjectId};
+use serde_json::Value as JsonValue;
+use tauri_plugin_self::state::SelfState;
+use uuid::Uuid;
+
+use crate::identity_sync;
+
+use super::*;
+
+pub(crate) async fn groove_ipc_jazz_list(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	self_state: &SelfState,
+	table: String,
+) -> Result<Vec<JsonRow>, String> {
+	let client = with_connected_client(jazz, app, self_state).await?;
+	let shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+	let (rows, _) =
+		jazz_engine::query_table_publish(client.as_ref(), &shell, &table, ENCRYPTED_META).await?;
+	Ok(rows)
+}
+
+pub(crate) async fn groove_ipc_jazz_explorer_list(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	self_state: &SelfState,
+	table: String,
+) -> Result<JazzExplorerListReply, String> {
+	let client = with_connected_client(jazz, app, self_state).await?;
+	let shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+	let (rows, skipped_unauthorized_rows) =
+		jazz_engine::query_table_publish(client.as_ref(), &shell, &table, ENCRYPTED_META).await?;
+	Ok(JazzExplorerListReply {
+		rows,
+		skipped_unauthorized_rows,
+	})
+}
+
+pub(crate) async fn groove_ipc_jazz_get(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	self_state: &SelfState,
+	table: String,
+	id: String,
+) -> Result<JsonRow, String> {
+	let client = with_connected_client(jazz, app, self_state).await?;
+	let shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+	let uuid = Uuid::parse_str(&id).map_err(|e| format!("invalid id UUID: {e}"))?;
+
+	let tbl = jazz_engine::resolved_table_schema(client.as_ref(), &table).await?;
+	match jazz_engine::find_row_snapshot(client.as_ref(), &table, &tbl, uuid).await? {
+		Some((oid, vals)) => {
+			let identity_row = jazz_engine::identity_uuid_row(&tbl, &vals).unwrap_or(shell.default_identity);
+			jazz_engine::authorize_gate(
+				&shell,
+				&table,
+				crate::identity_acc::AccOp::Read,
+				identity_row,
+				Some(*oid.uuid()),
+			)?;
+			jazz_engine::row_to_public_map(
+				&shell,
+				&table,
+				&tbl,
+				oid,
+				&vals,
+				ENCRYPTED_META,
+			)
+		}
+		None => Err(format!("row not found table={table} id={uuid}")),
+	}
+}
+
+/// Mint a signed owner-binding for a freshly generated `row_id` and return it as the
+/// row-metadata entry to stamp at create. EVERY identity-scoped create (data AND
+/// control-plane) routes a binding through this, so the row carries its proof on the
+/// wire and is verified on apply — the basis for deny-by-default (private by default).
+pub(crate) fn owner_binding_meta(
+	signing_key: &ed25519_dalek::SigningKey,
+	row_id: ObjectId,
+	owner: Uuid,
+) -> Result<std::collections::HashMap<String, String>, String> {
+	let binding =
+		aven_caps::ownership::mint_owner_binding(signing_key, *row_id.uuid(), owner)?;
+	let mut meta = std::collections::HashMap::new();
+	meta.insert(
+		aven_caps::ownership::OWNER_BINDING_META_KEY.to_string(),
+		binding.to_meta_string(),
+	);
+	Ok(meta)
+}
+
+async fn finish_spark_data_write(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	client: &JazzClient,
+	shell: &jazz_engine::ShellState,
+	table: &str,
+) {
+	if !identity_sync::is_spark_data_table(table) {
+		return;
+	}
+	let _ = jazz
+		.snapshot_broadcast(app, client, shell, table)
+		.await;
+}
+
+pub(crate) async fn groove_ipc_jazz_create(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	self_state: &SelfState,
+	table: String,
+	mut values: JsonRow,
+) -> Result<JsonRow, String> {
+	let client = with_connected_client(jazz, app, self_state).await?;
+	let shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+	let tbl = jazz_engine::resolved_table_schema(client.as_ref(), &table).await?;
+
+	if table == "peers" {
+		let identity = jazz_engine::identity_uuid_from_json_row(&tbl, &values)?;
+		let vals = insert_values("peers", &tbl, values)?;
+		let oid = ObjectId::new();
+		let prow_meta = owner_binding_meta(&shell.signing_key, oid, identity)?;
+		client
+			.create_with_id_and_metadata(&table, oid, vals.clone(), prow_meta)
+			.await
+			.map_err(format_jazz_err)?;
+
+		let (_, vals_fresh) =
+			jazz_engine::find_row_snapshot(client.as_ref(), &table, &tbl, *oid.uuid())
+				.await?
+				.ok_or_else(|| "create_reread_missing".to_string())?;
+
+		let reply = jazz_engine::row_to_public_map(
+			&shell,
+			&table,
+			&tbl,
+			oid,
+			&vals_fresh,
+			ENCRYPTED_META,
+		)?;
+
+		let _ = jazz.change_tx.send(table.clone());
+
+		#[cfg(any(target_os = "macos", target_os = "ios"))]
+		{
+			let _ = execute_mesh_refresh_full(app, jazz).await?;
+		}
+
+		return Ok(reply);
+	}
+
+	let mut plaintext = std::collections::HashMap::new();
+
+	jazz_engine::inject_default_identity(&mut values, &tbl, shell.default_identity)?;
+	let identity_gate = jazz_engine::identity_uuid_from_json_row(&tbl, &values)?;
+	jazz_engine::authorize_gate(
+		&shell,
+		&table,
+		crate::identity_acc::AccOp::Write,
+		identity_gate,
+		None,
+	)?;
+	jazz_engine::place_secrets_for_insert(
+		&tbl,
+		&table,
+		&mut values,
+		&mut plaintext,
+		PHASE1_SECRET_PLACEHOLDER,
+	)?;
+
+		let vals = insert_values(&table, &tbl, values)?;
+		// Stamp a signed owner-binding (digest-covered) so every peer verifies it on
+		// apply; the id is fixed up-front so the binding's value_id == the row id.
+		let oid = ObjectId::new();
+		let extra_meta = owner_binding_meta(&shell.signing_key, oid, identity_gate)?;
+		let oid = client
+			.create_with_id_and_metadata(&table, oid, vals.clone(), extra_meta)
+			.await
+			.map_err(format_jazz_err)?;
+
+	if identity_sync::needs_acl_object_map_refresh_after_create(&table) {
+		let _ = jazz.refresh_sync_acl_object_map(client.as_ref()).await;
+	}
+
+	if !plaintext.is_empty() {
+		let identity = jazz_engine::identity_uuid_row(&tbl, &vals)?;
+		let mut ph = JsonRow::new();
+		for (col, pt) in plaintext {
+			let cd = tbl
+				.columns
+				.column(&col)
+				.ok_or_else(|| format!("manifest_missing_col:{col}"))?;
+			ph.insert(
+				col.clone(),
+				JsonValue::String(jazz_engine::seal_column_plain(
+					&shell,
+					&table,
+					&col,
+					&cd.column_type,
+					identity,
+					*oid.uuid(),
+					&pt,
+				)?),
+			);
+		}
+		let ops = patch_updates(&tbl, ph)?;
+		let upd_meta = owner_binding_meta(&shell.signing_key, oid, identity)?;
+		client
+			.update_with_metadata(oid, ops, upd_meta)
+			.await
+			.map_err(format_jazz_err)?;
+	}
+
+	let (_, vals_fresh) =
+		jazz_engine::find_row_snapshot(client.as_ref(), &table, &tbl, *oid.uuid())
+			.await?
+			.ok_or_else(|| "create_reread_missing".to_string())?;
+
+	let reply = jazz_engine::row_to_public_map(
+		&shell,
+		&table,
+		&tbl,
+		oid,
+		&vals_fresh,
+		ENCRYPTED_META,
+	)?;
+
+	let _ = jazz.change_tx.send(table.clone());
+
+	finish_spark_data_write(app, jazz, client.as_ref(), shell.as_ref(), &table).await;
+
+	Ok(reply)
+}
+
+pub(crate) async fn groove_ipc_jazz_update(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	self_state: &SelfState,
+	table: String,
+	id: String,
+	patch: JsonRow,
+) -> Result<JsonRow, String> {
+	let client = with_connected_client(jazz, app, self_state).await?;
+	let shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+	let tbl = jazz_engine::resolved_table_schema(client.as_ref(), &table).await?;
+	let uuid =
+		uuid::Uuid::parse_str(&id).map_err(|e| format!("invalid id UUID parse: {e}"))?;
+
+	// Owner is write-once. The signed owner-binding pins a row's identity and
+	// `verify_on_apply` rejects any relabel at every peer (relay-proof). Refuse a
+	// local relabel too, so the field is truly immutable: a user-data update must
+	// never carry the owning-identity column.
+	if patch.contains_key("owner") {
+		return Err(
+			"owner is immutable: a row's owning identity cannot be changed via update".into(),
+		);
+	}
+
+	// `find_row_snapshot` reads without `.branch()` so jazz-tools auto-loads the
+	// row's `Object` on **every** known schema-version branch into ObjectManager.
+	// Important: keep using `oid` from the query result — `ObjectId::from_uuid`
+	// produces a non-interned id that misses the pointer-keyed in-memory map.
+	let (oid, old_vals) = jazz_engine::find_row_snapshot(client.as_ref(), &table, &tbl, uuid)
+		.await?
+		.ok_or_else(|| {
+			log::warn!(
+				target: "avenos::jazz",
+				"jazz_update row missing in any known schema branch table={table} uuid={uuid} groove_branch={}",
+				shell.groove_write_branch
+			);
+			format!(
+				"row_not_found:{uuid} (table={table}). Row is not visible on any known schema-version branch \
+				— it may have been hard-deleted, or this client has no lens path to its schema yet."
+			)
+		})?;
+	let runtime_branch = jazz_engine::groove_write_branch_from_connected_schema_or_log(client.as_ref()).await;
+	log::debug!(
+		target: "avenos::jazz",
+		"jazz_update resolved row table={table} uuid={uuid} cached_branch={} runtime_branch={runtime_branch} oid_uuid={}",
+		shell.groove_write_branch,
+		oid.uuid()
+	);
+	let identity = jazz_engine::identity_uuid_row(&tbl, &old_vals)?;
+
+	jazz_engine::authorize_gate(
+		&shell,
+		&table,
+		crate::identity_acc::AccOp::Write,
+		identity,
+		Some(uuid),
+	)?;
+
+	let mut sealed_patch = patch;
+	if let Some(sec) = jazz_engine::secrets_for_table(&table) {
+		for col in sec.iter() {
+			if let Some(js) = sealed_patch.get(col.as_str()).cloned() {
+				if js.is_null() {
+					continue;
+				}
+				let cd = tbl
+					.columns
+					.column(col)
+					.ok_or_else(|| format!("unknown_sensitive_col:{col}"))?;
+				let gv = if let Some(expose) =
+					crate::schema_manifest::expose_ts_for(&table, col)
+				{
+					json_cell_to_jazz(&js, expose, cd.nullable)?
+				} else {
+					json_cell_to_jazz(&js, &cd.column_type, cd.nullable)?
+				};
+				let canon = crate::crypto::groove_value_to_canonical_utf8(&gv)?;
+				let ct = jazz_engine::seal_column_plain(
+					&shell,
+					&table,
+					col,
+					&cd.column_type,
+					identity,
+					uuid,
+					&canon,
+				)?;
+				sealed_patch.insert(col.clone(), JsonValue::String(ct));
+			}
+		}
+	}
+
+	let ops = patch_updates(&tbl, sealed_patch)?;
+
+	let upd_meta = owner_binding_meta(&shell.signing_key, oid, identity)?;
+	client
+		.update_with_metadata(oid, ops, upd_meta)
+		.await
+		.map_err(|e| {
+			let msg = format_jazz_err(e);
+			log::warn!(
+				target: "avenos::jazz",
+				"jazz_update Groove write failed table={table} uuid={uuid} write_branch={} runtime_branch={runtime_branch} oid_uuid={} err={}",
+				shell.groove_write_branch,
+				oid.uuid(),
+				msg
+			);
+			format!(
+				"{msg} (table={table} id={uuid} write_branch={} runtime_branch={runtime_branch})",
+				shell.groove_write_branch
+			)
+		})?;
+
+	let _ = jazz.change_tx.send(table.clone());
+
+	finish_spark_data_write(app, jazz, client.as_ref(), shell.as_ref(), &table).await;
+
+	groove_ipc_jazz_get(app, jazz, self_state, table, id.to_string()).await
+}
+
+pub(crate) async fn groove_ipc_jazz_delete(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	self_state: &SelfState,
+	table: String,
+	id: String,
+) -> Result<(), String> {
+	let client = with_connected_client(jazz, app, self_state).await?;
+	let shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+	let tbl = jazz_engine::resolved_table_schema(client.as_ref(), &table).await?;
+	let uuid =
+		uuid::Uuid::parse_str(&id).map_err(|e| format!("invalid UUID: {e}"))?;
+	// See jazz_update: read across all known schema branches so the row's
+	// `Object` is loaded into ObjectManager on every branch it lives on. Use
+	// the interned `oid` from the query (never `ObjectId::from_uuid`).
+	let (oid, row_vals) = jazz_engine::find_row_snapshot(client.as_ref(), &table, &tbl, uuid)
+		.await?
+		.ok_or_else(|| {
+			log::warn!(
+				target: "avenos::jazz",
+				"jazz_delete row missing in any known schema branch table={table} uuid={uuid} groove_branch={}",
+				shell.groove_write_branch
+			);
+			format!(
+				"row_not_found:{uuid} (table={table}). Row is not visible on any known schema-version branch."
+			)
+		})?;
+	let runtime_branch = jazz_engine::groove_write_branch_from_connected_schema_or_log(client.as_ref()).await;
+	log::debug!(
+		target: "avenos::jazz",
+		"jazz_delete resolved row table={table} uuid={uuid} cached_branch={} runtime_branch={runtime_branch} oid_uuid={}",
+		shell.groove_write_branch,
+		oid.uuid()
+	);
+	let identity = jazz_engine::identity_uuid_row(&tbl, &row_vals)?;
+
+	jazz_engine::authorize_gate(
+		&shell,
+		&table,
+		crate::identity_acc::AccOp::Delete,
+		identity,
+		Some(uuid),
+	)?;
+
+	let del_meta = owner_binding_meta(&shell.signing_key, oid, identity)?;
+	client
+		.delete_with_metadata(oid, del_meta)
+		.await
+		.map_err(|e| {
+			let msg = format_jazz_err(e);
+			log::warn!(
+				target: "avenos::jazz",
+				"jazz_delete Groove write failed table={table} uuid={uuid} write_branch={} runtime_branch={runtime_branch} oid_uuid={} err={}",
+				shell.groove_write_branch,
+				oid.uuid(),
+				msg
+			);
+			format!(
+				"{msg} (table={table} id={uuid} write_branch={} runtime_branch={runtime_branch})",
+				shell.groove_write_branch
+			)
+		})?;
+	let _ = jazz.change_tx.send(table.clone());
+	Ok(())
+}
+
+pub(crate) async fn groove_ipc_jazz_subscribe(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	self_state: &SelfState,
+	table: String,
+) -> Result<(), String> {
+	let _n = jazz.bump_table_ui_ref(&table).await;
+	if table == "peers" {
+		let client = with_connected_client(jazz, app, self_state).await?;
+		let rows = crate::peers::list_peer_rows(client.as_ref()).await?;
+		emit_avenos_runtime(
+			app,
+			serde_json::json!({
+				"kind": "table",
+				"table": &table,
+				"rows": rows,
+			}),
+		);
+		return Ok(());
+	}
+	let client = with_connected_client(jazz, app, self_state).await?;
+	let shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+	let (snap, _) =
+		jazz_engine::query_table_publish(client.as_ref(), &shell, &table, ENCRYPTED_META).await?;
+	emit_avenos_runtime(
+		app,
+		serde_json::json!({
+			"kind": "table",
+			"table": &table,
+			"rows": snap,
+		}),
+	);
+	Ok(())
+}
+
+pub(crate) async fn groove_ipc_jazz_unsubscribe(jazz: &ManagedJazz, table: String) -> Result<(), String> {
+	jazz.drop_table_ui_ref(&table).await;
+	Ok(())
+}
+
+pub(super) fn pj_str(p: &serde_json::Value, key: &str) -> Result<String, String> {
+	p.get(key)
+		.and_then(|v| v.as_str())
+		.map(|s| s.trim().to_string())
+		.filter(|s| !s.is_empty())
+		.ok_or_else(|| format!("groove_runtime: missing or empty string field `{key}`"))
+}
+
+/// Announce our frontier to peers after a local identity-scoped write so they pull
+/// the change **live**. The engine seal publishes rows locally but does not
+/// announce to peers on its own — without this, peers only converge on the next
+/// reconnect/catch-up ("syncs on restart, not on the fly"). Idempotent: peers
+/// diff our heads and pull only what they're owed + authorized for.
+pub(super) async fn announce_local_write_to_peers(
+	app: &tauri::AppHandle,
+	mj: &ManagedJazz,
+	ss: &SelfState,
+	table: &str,
+) {
+	if !identity_sync::is_spark_scoped_table(table) {
+		return; // local-only tables (peers/humans) are never P2P-forwarded
+	}
+	let Ok(client) = with_connected_client(mj, app, ss).await else {
+		return;
+	};
+	if let Err(e) = client.rebroadcast_all_peer_clients_and_flush().await {
+		log::debug!(target: "avenos::jazz", "announce local write to peers ({table}): {e}");
+	}
+}

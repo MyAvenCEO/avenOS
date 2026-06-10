@@ -26,7 +26,7 @@ use std::time::Instant;
 
 use crate::object::{BranchName, ObjectId};
 use crate::row_histories::BatchId;
-use crate::sync_manager::{PeerId, Destination, QueryId, Source, SyncPayload};
+use crate::sync_manager::{PeerId, Destination, Source, SyncPayload};
 
 // ============================================================================
 // Types
@@ -111,16 +111,6 @@ impl SyncMessage {
         matches!(self.payload, SyncPayload::BatchFate { .. })
     }
 
-    /// True if this is a `QuerySubscription` payload.
-    pub fn is_query_subscription(&self) -> bool {
-        matches!(self.payload, SyncPayload::QuerySubscription { .. })
-    }
-
-    /// True if this is a `QuerySettled` payload.
-    pub fn is_query_settled(&self) -> bool {
-        matches!(self.payload, SyncPayload::QuerySettled { .. })
-    }
-
     /// True if this is an `Error` payload.
     pub fn is_error(&self) -> bool {
         matches!(self.payload, SyncPayload::Error(_))
@@ -133,16 +123,6 @@ impl SyncMessage {
                 Some(row.row_id)
             }
             SyncPayload::BatchFate { .. } => None,
-            _ => None,
-        }
-    }
-
-    /// Extract query_id from payloads that carry one.
-    pub fn query_id(&self) -> Option<QueryId> {
-        match &self.payload {
-            SyncPayload::QuerySubscription { query_id, .. } => Some(*query_id),
-            SyncPayload::QueryUnsubscription { query_id } => Some(*query_id),
-            SyncPayload::QuerySettled { query_id, .. } => Some(*query_id),
             _ => None,
         }
     }
@@ -908,31 +888,6 @@ impl<'a> Normalizer<'a> {
                     entry.object_type().unwrap_or("unknown"),
                 )
             }
-            SyncPayload::QuerySubscription { query_id, .. } => {
-                format!("query:{}", query_id.0)
-            }
-            SyncPayload::QueryUnsubscription { query_id } => {
-                format!("query:{}", query_id.0)
-            }
-            SyncPayload::QuerySettled {
-                query_id,
-                scope,
-                through_seq,
-                ..
-            } => {
-                format!(
-                    "query:{} scope:{} through_seq:{}",
-                    query_id.0,
-                    scope.len(),
-                    through_seq
-                )
-            }
-            SyncPayload::SchemaWarning(w) => {
-                format!("query:{} table:{}", w.query_id.0, w.table_name)
-            }
-            SyncPayload::ConnectionSchemaDiagnostics(diagnostics) => {
-                format!("client_schema:{}", diagnostics.client_schema_hash.short())
-            }
             SyncPayload::Error(e) => {
                 format!("{:?}", e)
             }
@@ -1073,31 +1028,6 @@ fn format_payload_details(payload: &SyncPayload, names: &Names<'_>) -> String {
                 submission.captured_frontier.len()
             )
         }
-        SyncPayload::QuerySubscription { query_id, .. } => {
-            format!("query:{}", query_id.0)
-        }
-        SyncPayload::QueryUnsubscription { query_id } => {
-            format!("query:{}", query_id.0)
-        }
-        SyncPayload::QuerySettled {
-            query_id,
-            scope,
-            through_seq,
-            ..
-        } => {
-            format!(
-                "query:{} scope:{} through_seq:{}",
-                query_id.0,
-                scope.len(),
-                through_seq
-            )
-        }
-        SyncPayload::SchemaWarning(w) => {
-            format!("query:{} table:{}", w.query_id.0, w.table_name)
-        }
-        SyncPayload::ConnectionSchemaDiagnostics(diagnostics) => {
-            format!("client_schema:{}", diagnostics.client_schema_hash.short())
-        }
         SyncPayload::Error(e) => {
             format!("{:?}", e)
         }
@@ -1168,8 +1098,8 @@ mod tests {
         let cid = PeerId::default();
         tracer.register_client(cid, "bob");
 
-        let payload = SyncPayload::QueryUnsubscription {
-            query_id: QueryId(1),
+        let payload = SyncPayload::BatchFateNeeded {
+            batch_ids: Vec::new(),
         };
         tracer.record_outgoing("server", &Destination::Client(cid), &payload);
 

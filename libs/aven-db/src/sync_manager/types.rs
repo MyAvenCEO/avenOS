@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -6,7 +6,6 @@ use uuid::Uuid;
 use crate::batch_fate::{BatchFate, SealedBatchSubmission};
 use crate::catalogue::CatalogueEntry;
 use crate::object::{BranchName, ObjectId};
-use crate::query_manager::query::Query;
 use crate::query_manager::session::Session;
 use crate::query_manager::types::SchemaHash;
 use crate::row_histories::{BatchId, StoredRowBatch};
@@ -106,34 +105,9 @@ impl RowBatchKey {
     }
 }
 
-/// Deferred query settlement waiting for stream sequencing prerequisites.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PendingQuerySettled {
-    pub query_id: QueryId,
-    pub tier: DurabilityTier,
-    pub through_seq: u64,
-}
-
-/// Deferred query rejection waiting for QueryManager to drop local state.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PendingQueryRejection {
-    pub query_id: QueryId,
-    pub code: String,
-    pub reason: String,
-}
-
 // ============================================================================
 // Connection State
 // ============================================================================
-
-/// A query's scope and session for policy filtering.
-#[derive(Debug, Clone, Default)]
-pub struct QueryScope {
-    /// The scope of objects/branches this query covers.
-    pub scope: HashSet<(ObjectId, BranchName)>,
-    /// The session to use for policy filtering (captured at registration time).
-    pub session: Option<Session>,
-}
 
 /// Tracking state for a connected peer client.
 ///
@@ -144,8 +118,6 @@ pub struct QueryScope {
 pub struct ClientState {
     /// Client's session for policy evaluation.
     pub session: Option<Session>,
-    /// Active queries from this client.
-    pub queries: HashMap<QueryId, QueryScope>,
 }
 
 impl ClientState {
@@ -181,12 +153,6 @@ pub enum SyncError {
     CatalogueWriteDenied {
         object_id: ObjectId,
         branch_name: BranchName,
-    },
-    /// Query subscription was rejected (e.g. query compilation failed).
-    QuerySubscriptionRejected {
-        query_id: QueryId,
-        code: String,
-        reason: String,
     },
 }
 
@@ -246,43 +212,6 @@ pub enum SyncPayload {
     /// Explicitly seal a transactional batch so the authority can validate it.
     SealBatch { submission: SealedBatchSubmission },
 
-    /// Subscribe to a query (client to server).
-    /// Server will build QueryGraph and send matching objects.
-    QuerySubscription {
-        query_id: QueryId,
-        query: Box<Query>,
-        #[serde(with = "query_subscription_session_serde")]
-        session: Option<Session>,
-        #[serde(default)]
-        required_tier: Option<DurabilityTier>,
-        #[serde(default)]
-        propagation: QueryPropagation,
-        #[serde(default)]
-        policy_context_tables: Vec<String>,
-    },
-
-    /// Unsubscribe from a query (client to server).
-    QueryUnsubscription { query_id: QueryId },
-
-    /// Query frontier settlement notification with the authoritative query scope
-    /// for the settled server result.
-    ///
-    /// This means the upstream server has reached a complete first frontier for the
-    /// subscription. Per-batch durability and visibility are replayed via `BatchFate`.
-    QuerySettled {
-        query_id: QueryId,
-        tier: DurabilityTier,
-        scope: Vec<(ObjectId, BranchName)>,
-        /// Highest stream sequence known to be emitted before this notification.
-        through_seq: u64,
-    },
-
-    /// Warning that rows exist on an older schema branch but are currently unreachable.
-    SchemaWarning(SchemaWarning),
-
-    /// Connection-time schema diagnostics for observability.
-    ConnectionSchemaDiagnostics(ConnectionSchemaDiagnostics),
-
     /// Error response.
     Error(SyncError),
 }
@@ -316,66 +245,6 @@ impl ConnectionSchemaDiagnostics {
     }
 }
 
-/// Sessions contain claims as a JSON object.
-/// postcard does not support the dynamic deserialization style it expects (deserialize_any)
-/// so we need a custom serializer/deserializer to serialize/deserialize the claims as a string.
-mod query_subscription_session_serde {
-    use crate::query_manager::session::{AuthMode, Session};
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-    struct SessionWire {
-        user_id: String,
-        claims_json: String,
-        auth_mode: AuthMode,
-    }
-
-    pub fn serialize<S>(value: &Option<Session>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        if serializer.is_human_readable() {
-            return value.serialize(serializer);
-        }
-
-        let wire: Option<SessionWire> = value
-            .as_ref()
-            .map(|session| {
-                let claims_json =
-                    serde_json::to_string(&session.claims).map_err(serde::ser::Error::custom)?;
-                Ok(SessionWire {
-                    user_id: session.user_id.clone(),
-                    claims_json,
-                    auth_mode: session.auth_mode,
-                })
-            })
-            .transpose()?;
-
-        wire.serialize(serializer)
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Session>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        if deserializer.is_human_readable() {
-            return Option::<Session>::deserialize(deserializer);
-        }
-
-        let wire = Option::<SessionWire>::deserialize(deserializer)?;
-        wire.map(|session_wire| {
-            let claims = serde_json::from_str(&session_wire.claims_json)
-                .map_err(serde::de::Error::custom)?;
-            Ok(Session {
-                user_id: session_wire.user_id,
-                claims,
-                auth_mode: session_wire.auth_mode,
-            })
-        })
-        .transpose()
-    }
-}
-
 impl SyncPayload {
     pub fn object_id(&self) -> Option<ObjectId> {
         match self {
@@ -387,9 +256,6 @@ impl SyncPayload {
             SyncPayload::BatchFateNeeded { .. } => None,
             SyncPayload::SealBatch { submission } => {
                 submission.members.first().map(|member| member.object_id)
-            }
-            SyncPayload::QuerySettled { scope, .. } => {
-                scope.first().map(|(object_id, _)| *object_id)
             }
             _ => None,
         }
@@ -404,9 +270,6 @@ impl SyncPayload {
             SyncPayload::BatchFate { .. } => None,
             SyncPayload::BatchFateNeeded { .. } => None,
             SyncPayload::SealBatch { .. } => None,
-            SyncPayload::QuerySettled { scope, .. } => {
-                scope.first().map(|(_, branch_name)| *branch_name)
-            }
             _ => None,
         }
     }
@@ -475,11 +338,6 @@ impl SyncPayload {
             SyncPayload::FrontierNeed { .. } => "FrontierNeed",
             SyncPayload::EvictResource { .. } => "EvictResource",
             SyncPayload::SealBatch { .. } => "SealBatch",
-            SyncPayload::QuerySubscription { .. } => "QuerySubscription",
-            SyncPayload::QueryUnsubscription { .. } => "QueryUnsubscription",
-            SyncPayload::QuerySettled { .. } => "QuerySettled",
-            SyncPayload::SchemaWarning(_) => "SchemaWarning",
-            SyncPayload::ConnectionSchemaDiagnostics(_) => "ConnectionSchemaDiagnostics",
             SyncPayload::Error(_) => "Error",
         }
     }
@@ -553,29 +411,9 @@ pub struct InboxEntry {
     pub payload: SyncPayload,
 }
 
-/// A pending query subscription that needs QueryGraph building.
-#[derive(Debug, Clone)]
-pub struct PendingQuerySubscription {
-    pub client_id: PeerId,
-    pub query_id: QueryId,
-    pub query: Query,
-    pub session: Option<Session>,
-    pub required_tier: Option<DurabilityTier>,
-    pub propagation: QueryPropagation,
-    pub policy_context_tables: Vec<String>,
-}
-
-/// A pending query unsubscription that needs cleanup.
-#[derive(Debug, Clone)]
-pub struct PendingQueryUnsubscription {
-    pub client_id: PeerId,
-    pub query_id: QueryId,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::query_manager::session::AuthMode;
 
     #[test]
     fn destination_exposes_peer_identity_for_telemetry() {
@@ -593,28 +431,5 @@ mod tests {
 
         assert_eq!(client.peer_kind(), "client");
         assert_eq!(client.peer_label(), client_id.to_string());
-    }
-
-    #[test]
-    fn query_subscription_postcard_roundtrip_preserves_session_auth_mode() {
-        let payload = SyncPayload::QuerySubscription {
-            query_id: QueryId(7),
-            query: Box::new(Query::new("todos")),
-            session: Some(Session::new("alice").with_auth_mode(AuthMode::LocalFirst)),
-            required_tier: None,
-            propagation: QueryPropagation::Full,
-            policy_context_tables: Vec::new(),
-        };
-
-        let bytes = payload.to_bytes().expect("encode payload");
-        let decoded = SyncPayload::from_bytes(&bytes).expect("decode payload");
-
-        match decoded {
-            SyncPayload::QuerySubscription {
-                session: Some(session),
-                ..
-            } => assert_eq!(session.auth_mode, AuthMode::LocalFirst),
-            other => panic!("expected QuerySubscription with session, got {other:?}"),
-        }
     }
 }

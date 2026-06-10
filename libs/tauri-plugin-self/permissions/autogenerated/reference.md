@@ -11,8 +11,6 @@ Default permissions for tauri-plugin-self
 - `allow-device-peer-did`
 - `allow-signing-peer-did`
 - `allow-signing-public-key`
-- `allow-sign`
-- `allow-verify`
 - `allow-lock`
 - `allow-host-device-label`
 - `allow-vault-list`

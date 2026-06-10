@@ -10,8 +10,9 @@ use aven_caps::caps::{
 	decode_issuer_pubkey_b64, encode_issuer_pubkey_b64, mint_genesis_identity, identity_admins, BiscuitVault,
 };
 use aven_caps::crypto::{
-	decrypt_keyshare_payload, derive_kek_x25519, encrypt_keyshare_payload, keyshare_wrap_aad,
-	keyshare_wrap_aad_legacy, random_identity_dek,
+	cell_seal_aad, column_type_slug, decrypt_keyshare_payload, derive_kek_x25519,
+	encrypt_keyshare_payload, keyshare_wrap_aad, open_text_cell_payload, random_identity_dek,
+	seal_text_cell_payload,
 };
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -117,6 +118,49 @@ fn owner_binding_meta(
 	Ok(meta)
 }
 
+/// Seal a trust-root identity cell (`genesis_b64` / `issuer_pubkey_b64`) under the avenCEO
+/// DEK, byte-identically to the app's `seal_column_plain` so the hardened client can open it.
+/// Board 0015 makes the client REFUSE a cleartext trust root (`cleartext_downgrade`), so the
+/// server — the avenCEO author — must seal these cells, not write them in the clear.
+fn seal_identity_cell(
+	dek32: &[u8; 32],
+	avenceo_id: Uuid,
+	sparks_tbl: &TableSchema,
+	column: &str,
+	dek_ver: i64,
+	plaintext: &str,
+) -> Result<String, String> {
+	let col = sparks_tbl
+		.columns
+		.column(column)
+		.ok_or_else(|| format!("seal: identities has no {column} column"))?;
+	let urn = format!("identity:{avenceo_id}");
+	let slug = column_type_slug(&col.column_type);
+	let aad = cell_seal_aad(&urn, "identities", column, avenceo_id, dek_ver, slug);
+	seal_text_cell_payload(dek32, &aad, plaintext)
+}
+
+/// Inverse of [`seal_identity_cell`] — open a sealed trust-root cell back to cleartext so the
+/// server can rebuild the biscuit chain (the grant reads its own sealed genesis/issuer).
+fn unseal_identity_cell(
+	dek32: &[u8; 32],
+	avenceo_id: Uuid,
+	sparks_tbl: &TableSchema,
+	column: &str,
+	dek_ver: i64,
+	sealed: &str,
+) -> Result<String, String> {
+	let col = sparks_tbl
+		.columns
+		.column(column)
+		.ok_or_else(|| format!("unseal: identities has no {column} column"))?;
+	let urn = format!("identity:{avenceo_id}");
+	let slug = column_type_slug(&col.column_type);
+	let aad = cell_seal_aad(&urn, "identities", column, avenceo_id, dek_ver, slug);
+	let (plaintext, _ver) = open_text_cell_payload(dek32, sealed, &aad)?;
+	Ok(plaintext)
+}
+
 pub async fn ensure_avenceo_owned(
 	engine: &JazzClient,
 	vault: &BiscuitVault,
@@ -136,7 +180,16 @@ pub async fn ensure_avenceo_owned(
 	let issuer_b64 = encode_issuer_pubkey_b64(&vault.biscuit_kp.public());
 	let dek_ver = 1i64;
 
+	// The identity's content DEK. Seal the trust-root cells (genesis_b64, issuer_pubkey_b64)
+	// under it so the hardened client accepts them (board 0015 refuses a cleartext trust root);
+	// the same DEK is wrapped to the server below so it can re-read avenCEO.
+	let dek = random_identity_dek();
+
 	let sparks_tbl = schema.get(&TableName::new("identities")).ok_or("avenceo: no identities table")?;
+	let sealed_genesis =
+		seal_identity_cell(dek.expose(), avenceo_id, sparks_tbl, "genesis_b64", dek_ver, &genesis_b64)?;
+	let sealed_issuer =
+		seal_identity_cell(dek.expose(), avenceo_id, sparks_tbl, "issuer_pubkey_b64", dek_ver, &issuer_b64)?;
 	let sparks_row = row_in_order(
 		sparks_tbl,
 		&[
@@ -145,8 +198,8 @@ pub async fn ensure_avenceo_owned(
 			// The aven's default identity is named after the aven itself (per-aven
 			// config, e.g. avenCEO / avenMAIA) — not a hardcoded constant.
 			("name", Value::Text(aven_name.into())),
-			("issuer_pubkey_b64", Value::Text(issuer_b64)),
-			("genesis_b64", Value::Text(genesis_b64)),
+			("issuer_pubkey_b64", Value::Text(sealed_issuer)),
+			("genesis_b64", Value::Text(sealed_genesis)),
 			("current_dek_version", Value::BigInt(dek_ver)),
 			("created_at_ms", Value::BigInt(now_ms())),
 		],
@@ -159,7 +212,6 @@ pub async fn ensure_avenceo_owned(
 		.map_err(|e| format!("create identities:{e:?}"))?;
 
 	// Self keyshare (the identity's DEK wrapped to the server, so it can read avenCEO).
-	let dek = random_identity_dek();
 	let kek = derive_kek_x25519(signing, &vault.ed25519_public)?;
 	let urn = format!("identity:{avenceo_id}");
 	let aad = keyshare_wrap_aad(&urn, &vault.peer_did, &vault.peer_did, dek_ver);
@@ -231,16 +283,9 @@ async fn read_server_dek(
 			let wrapped = text_at(&vals, wrap_ix);
 			let kek = derive_kek_x25519(signing, &vault.ed25519_public)?;
 			let urn = format!("identity:{avenceo_id}");
-			// Self-keyshare: wrapper == this server. Prefer the wrapper-bound AAD, fall back
-			// to the legacy form so a keyshare minted before the binding still opens.
+			// Self-keyshare: wrapper == this server.
 			let aad = keyshare_wrap_aad(&urn, &vault.peer_did, &vault.peer_did, dek_ver);
-			return decrypt_keyshare_payload(&wrapped, &kek, &aad).or_else(|_| {
-				decrypt_keyshare_payload(
-					&wrapped,
-					&kek,
-					&keyshare_wrap_aad_legacy(&urn, &vault.peer_did, dek_ver),
-				)
-			});
+			return decrypt_keyshare_payload(&wrapped, &kek, &aad);
 		}
 	}
 	Err("avenceo: server keyshare not found".into())
@@ -262,9 +307,22 @@ pub async fn maybe_grant_first_admin(
 	if peer_did == vault.peer_did {
 		return Ok(());
 	}
-	let Some((sparks_oid, genesis_b64, issuer_b64, dek_ver)) = read_avenceo_identity(engine, avenceo_id).await? else {
+	let Some((sparks_oid, sealed_genesis, sealed_issuer, dek_ver)) = read_avenceo_identity(engine, avenceo_id).await? else {
 		return Ok(());
 	};
+
+	// The trust-root cells are stored SEALED under the avenCEO DEK. Read the DEK (needed to
+	// unseal them now AND to re-seal/wrap below), unseal genesis_b64 + issuer_pubkey_b64, then
+	// rebuild the biscuit chain from cleartext.
+	let dek = read_server_dek(engine, &vault, signing, avenceo_id, dek_ver).await?;
+	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
+	let sparks_tbl = schema
+		.get(&TableName::new("identities"))
+		.ok_or("avenceo: no identities table")?;
+	let genesis_b64 =
+		unseal_identity_cell(&dek, avenceo_id, sparks_tbl, "genesis_b64", dek_ver, &sealed_genesis)?;
+	let issuer_b64 =
+		unseal_identity_cell(&dek, avenceo_id, sparks_tbl, "issuer_pubkey_b64", dek_ver, &sealed_issuer)?;
 	let issuer_pk = decode_issuer_pubkey_b64(&issuer_b64)?;
 	let chain = biscuit_from_storage(&genesis_b64, issuer_pk)?;
 	let owners = identity_admins(&chain, avenceo_id)?;
@@ -273,27 +331,27 @@ pub async fn maybe_grant_first_admin(
 		return Ok(());
 	}
 
-	// Append owns(peer) (server-signed) and persist the new genesis.
+	// Append owns(peer) (server-signed) and persist the new genesis, re-sealed under the DEK.
 	let new_chain = attenuate_add_owner_third_party(&vault.biscuit_kp, &chain, avenceo_id, &peer_did)?;
 	let new_genesis_b64 =
 		URL_SAFE_NO_PAD.encode(new_chain.to_vec().map_err(|e| format!("genesis_encode:{e:?}"))?);
+	let resealed_genesis =
+		seal_identity_cell(&dek, avenceo_id, sparks_tbl, "genesis_b64", dek_ver, &new_genesis_b64)?;
 	let upd_meta = owner_binding_meta(signing, sparks_oid, avenceo_id)?;
 	engine
 		.update_with_metadata(
 			sparks_oid,
-			vec![("genesis_b64".to_string(), Value::Text(new_genesis_b64))],
+			vec![("genesis_b64".to_string(), Value::Text(resealed_genesis))],
 			upd_meta,
 		)
 		.await
 		.map_err(|e| format!("update genesis:{e:?}"))?;
 
 	// Wrap the avenCEO DEK to the peer so it can read the identity (→ becomes a member).
-	let dek = read_server_dek(engine, &vault, signing, avenceo_id, dek_ver).await?;
 	let kek = derive_kek_x25519(signing, &peer.0)?;
 	let urn = format!("identity:{avenceo_id}");
 	let aad = keyshare_wrap_aad(&urn, &peer_did, &vault.peer_did, dek_ver);
 	let wrapped = encrypt_keyshare_payload(&kek, &dek, &aad)?;
-	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
 	let ks_tbl = schema.get(&TableName::new("keyshares")).ok_or("avenceo: no keyshares table")?;
 	let ks_row = row_in_order(
 		ks_tbl,

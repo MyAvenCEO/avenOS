@@ -96,7 +96,7 @@
 					<div class="flex items-center gap-2">
 						<button
 							type="submit"
-							class="bg-foreground text-background rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+							class="bg-primary text-primary-foreground rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
 							disabled={creating || !newName.trim()}>{creating ? t('identities.creating') : t('common.create')}</button
 						>
 						<button

@@ -458,7 +458,12 @@
 			"toggleDone": "Toggle done",
 			"doubleClickEdit": "Double-click to edit",
 			"titleCannotBeEmpty": "Title cannot be empty",
-			"noTodosYet": "Noch keine Todos in diesem Identity."
+			"noTodosYet": "Noch keine Todos in diesem Identity.",
+			"listEyebrow": "Aufgabenliste",
+			"openLabel": "Offen",
+			"newSection": "Neu",
+			"entriesSection": "Einträge",
+			"clearDone": "Erledigte löschen"
 		},
 		"gallery": {
 			"title": "Dateien",
@@ -573,6 +578,15 @@
 		"avenCeoClaiming": "Beanspruche…",
 		"composer": {
 			"placeholder": "Sprich, navigiere oder füge eine Aufgabe hinzu…"
+		},
+		"meta": {
+			"detailsLabel": "Details",
+			"name": "Name",
+			"id": "ID",
+			"type": "Typ",
+			"typeHuman": "Mensch",
+			"members": "Mitglieder",
+			"created": "Erstellt"
 		}
 	},
 	"uiLab": {

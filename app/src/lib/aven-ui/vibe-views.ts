@@ -2,8 +2,12 @@ import type { UiFixtureShell } from '@avenos/aven-ui'
 import { createBankStatementShell } from '@avenos/aven-ui/vibes/bank-statement'
 import { createBankTransfersShell } from '@avenos/aven-ui/vibes/bank-transfers'
 import { createContractShell } from '@avenos/aven-ui/vibes/contract'
+import { createChatShell } from '@avenos/aven-ui/vibes/chat'
 import { createErrorShell } from '@avenos/aven-ui/vibes/error'
+import { createFilesShell } from '@avenos/aven-ui/vibes/files'
 import { createInvoiceShell } from '@avenos/aven-ui/vibes/invoice'
+import { createMembersShell } from '@avenos/aven-ui/vibes/members'
+import { createSettingsShell } from '@avenos/aven-ui/vibes/settings'
 import { createSuccessShell } from '@avenos/aven-ui/vibes/success'
 import { createTodosShell } from '@avenos/aven-ui/vibes/todos'
 
@@ -18,6 +22,10 @@ export type VibeViewId =
 	| 'bank-transfers'
 	| 'bank-statement'
 	| 'contract'
+	| 'members'
+	| 'chat'
+	| 'files'
+	| 'settings'
 	| 'todos'
 	| 'error'
 	| 'success'
@@ -63,6 +71,39 @@ export const vibeViewList: VibeView[] = [
 		description: 'Mehrparteien-Vertrag mit Präambel, Begriffen, Klauseln und Signaturen.',
 		shell: createContractShell(),
 		containerName: 'aven-ui-contract',
+		interactive: false,
+	},
+	{
+		id: 'members',
+		label: 'Mitglieder',
+		description:
+			'Mitglieder-/Zugriffsfläche: DID einladen, Zugriffsstufe wählen, und wer Zugriff hat mit Berechtigungs-Chips. Erste Referenz-Vibe aus den Brand-Primitives.',
+		shell: createMembersShell(),
+		containerName: 'aven-ui-members',
+		interactive: false,
+	},
+	{
+		id: 'chat',
+		label: 'Chat',
+		description: 'Konversationsfläche mit rollenbasierten Sprechblasen (Du / Aven) aus den Brand-Primitives.',
+		shell: createChatShell(),
+		containerName: 'aven-ui-chat',
+		interactive: false,
+	},
+	{
+		id: 'files',
+		label: 'Dateien',
+		description: 'Dateiliste mit Icon, Name, Metadaten und Typ-Chip — Standard-Vibe aus den Brand-Primitives.',
+		shell: createFilesShell(),
+		containerName: 'aven-ui-files',
+		interactive: false,
+	},
+	{
+		id: 'settings',
+		label: 'Einstellungen',
+		description: 'Einstellungsfläche: Abschnitte mit Label/Wert-Zeilen aus den Brand-Primitives.',
+		shell: createSettingsShell(),
+		containerName: 'aven-ui-settings',
 		interactive: false,
 	},
 	{

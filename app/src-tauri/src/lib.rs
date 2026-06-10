@@ -20,6 +20,12 @@ use tauri::{AppHandle, Listener, Manager, RunEvent};
 /// Prevents duplicated drain work when [`RunEvent::ExitRequested`] fires more than once.
 static JAZZ_EXIT_DRAINING: AtomicBool = AtomicBool::new(false);
 
+/// True once the exit drain has begun. Connect paths consult this to refuse starting a
+/// new Groove/RocksDB open that would race the process's atexit destructors.
+pub(crate) fn jazz_exit_draining() -> bool {
+	JAZZ_EXIT_DRAINING.load(Ordering::SeqCst)
+}
+
 #[tauri::command]
 fn avenos_recent_rust_logs() -> Vec<String> {
 	log_ring::recent_lines()
@@ -120,10 +126,15 @@ async fn drain_jazz_async(app_handle: AppHandle) {
 	// supervisor escalates to SIGKILL anyway). 5s is plenty for an idle
 	// client and short enough to detect a wedge in tests.
 	let drain_start = std::time::Instant::now();
-	let drain = tokio::time::timeout(
-		std::time::Duration::from_secs(5),
-		actor.reset_connection(),
-	);
+	// First wait out any `jazz_connect` already inside RocksDB `TransactionDB::Open` —
+	// `reset_connection` force-clears `connect_in_progress` without joining it, and exiting
+	// under an in-flight open segfaults in the atexit C++ static destructors. New connects
+	// are refused via `jazz_exit_draining()` now that the flag is set.
+	let mj = app_handle.state::<jazz::ManagedJazz>();
+	let drain = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+		mj.wait_for_connect_idle().await;
+		actor.reset_connection().await;
+	});
 	match drain.await {
 		Ok(()) => log::info!(
 			"shutdown: drain complete in {:?}",

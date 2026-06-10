@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use base64::engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use biscuit_auth::{
 	builder::{Algorithm, AuthorizerBuilder, BlockBuilder},
@@ -227,7 +227,6 @@ pub fn decode_issuer_pubkey_b64(b64: &str) -> Result<PublicKey, String> {
 	}
 	let raw = URL_SAFE_NO_PAD
 		.decode(trimmed.as_bytes())
-		.or_else(|_| STANDARD_NO_PAD.decode(trimmed.as_bytes()))
 		.map_err(|e| format!("issuer_pubkey_b64_decode:{e}"))?;
 	PublicKey::from_bytes(raw.as_slice(), Algorithm::Ed25519.into()).map_err(|e| format!("issuer_pubkey_bad:{e:?}"))
 }
@@ -563,7 +562,6 @@ pub fn identity_admins(chain: &Biscuit, owner: Uuid) -> Result<std::collections:
 pub fn biscuit_from_storage(genesis_b64: &str, root: PublicKey) -> Result<Biscuit, String> {
 	let raw = URL_SAFE_NO_PAD
 		.decode(genesis_b64.as_bytes())
-		.or_else(|_| STANDARD_NO_PAD.decode(genesis_b64.as_bytes()))
 		.map_err(|e| format!("genesis-base64:{e}"))?;
 
 	Biscuit::from(raw.as_slice(), root).map_err(|e| format!("biscuit-from:{e:?}"))
@@ -937,6 +935,52 @@ mod tests {
 		let _ = issuer_pk;
 	}
 
+	/// Repro for the grant→2nd-device blocker: aven-node adds the first admin (A) with the
+	/// ROOT key, then A grants a 2nd device (B) with A's OWN key — a SECOND third-party block
+	/// stacked on the first. The chain is serialized (genesis_b64) and re-verified via
+	/// `biscuit_from_storage` on every hydrate, so both round-trips must re-verify against the
+	/// issuer root. This mirrors the app exactly (write genesis_b64 → Biscuit::from on rehydrate).
+	#[test]
+	fn stacked_owner_grants_reverify_against_root() {
+		use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+		use base64::Engine;
+
+		let server = vault(&[1u8; 32]); // avenCEO issuer / root
+		let a = vault(&[2u8; 32]); // first admin
+		let b = vault(&[3u8; 32]); // second device
+		let sid = uuid::Uuid::new_v4();
+		let issuer_pk = server.biscuit_kp.public();
+
+		let genesis = mint_genesis_identity(&server, sid).unwrap();
+
+		// aven-node adds A (delegating key = the server/root key).
+		let chain1 = attenuate_add_owner_third_party(
+			&server.biscuit_kp,
+			&genesis,
+			sid,
+			a.peer_did.as_str(),
+		)
+		.unwrap();
+		let b64_1 = URL_SAFE_NO_PAD.encode(chain1.to_vec().unwrap());
+		let chain1_rt = biscuit_from_storage(&b64_1, issuer_pk)
+			.expect("1-level grant chain must re-verify against root");
+
+		// A adds B (delegating key = A's key, NOT the root) on the round-tripped chain.
+		let chain2 = attenuate_add_owner_third_party(
+			&a.biscuit_kp,
+			&chain1_rt,
+			sid,
+			b.peer_did.as_str(),
+		)
+		.unwrap();
+		let b64_2 = URL_SAFE_NO_PAD.encode(chain2.to_vec().unwrap());
+		let chain2_rt = biscuit_from_storage(&b64_2, issuer_pk)
+			.expect("2-level (stacked) grant chain must re-verify against root");
+
+		assert!(identity_peer_is_owner(&chain2_rt, sid, a.peer_did.as_str()).unwrap());
+		assert!(identity_peer_is_owner(&chain2_rt, sid, b.peer_did.as_str()).unwrap());
+	}
+
 	#[test]
 	fn replicate_grant_carries_ciphertext_without_membership() {
 		// Alice (owner) grants a server aven a `replicate` cap — NOT membership.
@@ -1003,6 +1047,44 @@ mod tests {
 		// The owner still reads + writes as a full member.
 		authorize(&v, sid, AccOp::Read, "peers", Some(rid), &v.peer_did.clone()).unwrap();
 		authorize(&v, sid, AccOp::Write, "peers", Some(rid), &v.peer_did.clone()).unwrap();
+	}
+
+	#[test]
+	fn writer_grant_denies_delete() {
+		// Audit #6: a peer granted a granular WRITE-ONLY cap must NOT be able to author a
+		// delete. The inbound apply gate now requests `AccOp::Delete` for delete-flagged rows
+		// (`inbox.rs`) and the app resolver honors it instead of re-coercing to `Write`
+		// (`biscuit_resolver.rs`); this proves the cap layer those call into truly separates
+		// Write from Delete for the exact granular writer in the attack.
+		let owner = vault(&[1u8; 32]);
+		let writer = vault(&[5u8; 32]);
+		let sid = uuid::Uuid::new_v4();
+		let row = uuid::Uuid::from_u128(0x4242);
+
+		let genesis = mint_genesis_identity(&owner, sid).unwrap();
+		// Granular write-only grant over one user-data row (the destructive-delete target).
+		let prefix = format!("identity:{sid}:todos:{row}");
+		let chain = attenuate_add_grant_third_party(
+			&owner.biscuit_kp,
+			&genesis,
+			&writer.peer_did,
+			"write",
+			&prefix,
+		)
+		.unwrap();
+		let mut v = owner;
+		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
+
+		// The write-only peer may Write its granted row…
+		authorize(&v, sid, AccOp::Write, "todos", Some(row), &writer.peer_did).unwrap();
+		// …but is DENIED Delete — it cannot self-author the hard-delete the inbox now gates
+		// under `AccOp::Delete`.
+		assert!(
+			authorize(&v, sid, AccOp::Delete, "todos", Some(row), &writer.peer_did).is_err(),
+			"a write-only granular grant must NOT confer Delete"
+		);
+		// The owner retains Delete (full member); the granular grant doesn't shadow ownership.
+		authorize(&v, sid, AccOp::Delete, "todos", Some(row), &v.peer_did.clone()).unwrap();
 	}
 
 	#[test]

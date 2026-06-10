@@ -1,14 +1,9 @@
 import type { StyleDef } from '../../engine/types.js'
+import { withBrand } from '../../brand-style.js'
 
+// Shared brand layer provides colours/radii/fonts/ink. Error keeps its accent.
 const tokens: StyleDef['tokens'] = {
-	'bg-a': '#FBFAF6',
-	'tech-fill': 'rgba(255, 255, 255, 0.1)',
-	border: 'rgba(0, 0, 0, 0.1)',
-	muted: 'rgba(26, 26, 26, 0.45)',
-	text: '#1a1a1a',
 	accent: '#b3261e',
-	'radius-2xl': '2rem',
-	'font-sans': "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 }
 
 const selectors: StyleDef['selectors'] = {
@@ -24,12 +19,14 @@ const selectors: StyleDef['selectors'] = {
 	'.st-panel': {
 		display: 'flex',
 		flexDirection: 'column',
-		gap: '8px',
+		gap: 'var(--gap-tight)',
 		overflow: 'hidden',
-		borderRadius: 'var(--radius-2xl)',
-		border: '2px dotted color-mix(in srgb, var(--border) 40%, transparent)',
-		background: 'var(--tech-fill)',
-		padding: '12px 14px',
+		borderRadius: 'var(--radius-card)',
+		border: '1px solid var(--border)',
+		background: 'var(--surface)',
+		padding: 'var(--pad-card)',
+		maxWidth: 'var(--max-w)',
+		margin: '0 auto',
 	},
 	'.st-badge': {
 		display: 'inline-flex',
@@ -38,33 +35,30 @@ const selectors: StyleDef['selectors'] = {
 		border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
 		background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
 		padding: '2px 8px',
-		fontSize: '9px',
-		fontWeight: '600',
+		fontSize: 'var(--fs-micro)',
+		fontWeight: '500',
 		letterSpacing: '0.18em',
 		textTransform: 'uppercase',
 		color: 'var(--accent)',
 	},
 	'.st-eyebrow': {
-		fontSize: '8px',
-		fontWeight: '700',
+		fontSize: 'var(--fs-micro)',
+		fontWeight: '600',
 		letterSpacing: '0.22em',
 		textTransform: 'uppercase',
 		opacity: '0.4',
 	},
 	'.st-title': {
 		margin: '2px 0 0',
-		fontSize: '1rem',
+		fontSize: 'var(--fs-lead)',
 		lineHeight: '1.35',
-		fontWeight: '600',
+		fontWeight: '500',
 		color: 'var(--text)',
 	},
-	'.st-message': { fontSize: '12px', lineHeight: '1.6', color: 'var(--accent)' },
-	'.st-message-label': { fontWeight: '600', marginRight: '6px' },
+	'.st-message': { fontSize: 'var(--fs-meta)', lineHeight: '1.6', color: 'var(--accent)' },
+	'.st-message-label': { fontWeight: '500', marginRight: '6px' },
 	'.st-message-text': { whiteSpace: 'pre-line' },
 	'.st-message-text:empty': { display: 'none' },
 }
 
-export const errorStyle: StyleDef = {
-	tokens,
-	selectors,
-}
+export const errorStyle: StyleDef = withBrand({ tokens, selectors })

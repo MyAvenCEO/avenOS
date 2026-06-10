@@ -68,9 +68,3 @@ export function settingsNavSections(): SettingsNavSection[] {
 		},
 	]
 }
-
-/** @deprecated use settingsNavSections() for reactive locale */
-export const settingsNavSectionsStatic = settingsNavSections()
-
-/** Legacy alias */
-export const selfNavSections = settingsNavSections

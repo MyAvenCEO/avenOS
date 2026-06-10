@@ -15,6 +15,47 @@
 	font-display: swap;
 }
 
+/* Chillax — primary UI + display typeface. Self-hosted (woff2) so the Tauri
+ * app renders offline, and so shadow-DOM vibe views (which inherit document
+ * `@font-face` rules) pick it up without bundling the font per vibe.
+ * Five weights map to the design-system scale:
+ *   300 Light · 400 Regular · 500 Medium · 600 Semibold · 700 Bold */
+@font-face {
+	font-family: 'Chillax';
+	src: url('$lib/assets/fonts/Chillax-Light.woff2') format('woff2');
+	font-weight: 300;
+	font-style: normal;
+	font-display: swap;
+}
+@font-face {
+	font-family: 'Chillax';
+	src: url('$lib/assets/fonts/Chillax-Regular.woff2') format('woff2');
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+@font-face {
+	font-family: 'Chillax';
+	src: url('$lib/assets/fonts/Chillax-Medium.woff2') format('woff2');
+	font-weight: 500;
+	font-style: normal;
+	font-display: swap;
+}
+@font-face {
+	font-family: 'Chillax';
+	src: url('$lib/assets/fonts/Chillax-Semibold.woff2') format('woff2');
+	font-weight: 600;
+	font-style: normal;
+	font-display: swap;
+}
+@font-face {
+	font-family: 'Chillax';
+	src: url('$lib/assets/fonts/Chillax-Bold.woff2') format('woff2');
+	font-weight: 700;
+	font-style: normal;
+	font-display: swap;
+}
+
 .avenos-wordmark {
 	font-family: 'Ouroboros', ui-serif, Georgia, 'Iowan Old Style', 'Palatino Linotype', serif;
 	font-size: clamp(2.75rem, 9vw, 3.5rem);
@@ -51,9 +92,24 @@
  *     · Selected: #EFEADA  (--color-surface-card-selected)      — slightly more saturated eggshell
  */
 @theme {
-	--font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-	--font-serif: "Cormorant Upright", ui-serif, Georgia, serif;
-	--font-mono: "JetBrains Mono", monospace;
+	/* Chillax is the single typeface across body, UI, and titles. `--font-display`
+	 * is intentionally a SEPARATE token (today aliased to Chillax) so headings can
+	 * later be upgraded to a dedicated display face by editing only this one line —
+	 * components reference `font-display`, not "Chillax", so nothing else changes.
+	 * `--font-serif` is kept as an alias too; the app no longer relies on a serif. */
+	--font-sans: "Chillax", ui-sans-serif, system-ui, sans-serif;
+	--font-display: "Chillax", ui-sans-serif, system-ui, sans-serif;
+	--font-serif: "Chillax", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+	/* Chillax has noticeably heavier strokes than Inter at the same numeric
+	 * weight, so titles and highlighted items read too bold. Re-tune the weight
+	 * scale down one notch system-wide — every `font-semibold`/`font-bold`
+	 * utility across all components gets lighter without per-component edits.
+	 * Result tier: body 400 · medium/title 500 · strong emphasis 600 (was 700). */
+	--font-weight-medium: 500;
+	--font-weight-semibold: 500;
+	--font-weight-bold: 600;
 
 	--color-brand-navy: #1e293b;
 	--color-status-success-base: #2f5d50;
@@ -86,7 +142,10 @@
 	--color-surface-card-selected: #efeada;
 
 	--color-background: var(--color-surface-cream);
-	--color-foreground: oklch(0.33 0.02 265);
+	/* Default text ink — a dark slate-blue (NOT pure black), tinted toward the
+	 * brand navy so body copy reads warm-cool rather than harsh black. Mirrors
+	 * the vibe `ink`/`text` token in brand.style.json. */
+	--color-foreground: #1f2a3d;
 	/* Preview host behind sandbox iframe — slight contrast vs. card surface */
 	--color-sandbox-host: color-mix(in srgb, var(--color-background) 94%, var(--color-foreground));
 
@@ -99,6 +158,11 @@
 
 	--color-primary: var(--color-brand-navy);
 	--color-primary-foreground: #f8fafc;
+	/* Secondary button — the light cream/yellow fill (cf. the invoice
+	 * "Rechnung ansehen" action). Primary stays brand navy; secondary is this
+	 * warm cream with navy text. Mirrors brand.style.json `secondary`. */
+	--color-secondary: #f3e7c6;
+	--color-secondary-foreground: var(--color-brand-navy);
 	/* Lighter, slightly desaturated steel/slate blue derived from the brand navy
 	 * (#1E293B). Used for accent chrome (e.g. the mic button's 3px side borders)
 	 * where the deep navy fill would visually overpower the surrounding cream UI. */
@@ -169,6 +233,17 @@
 
 	body {
 		@apply bg-background text-foreground font-sans tracking-tight;
+	}
+
+	/* Design-system titles. Components don't need to opt in — bare h1–h6 inherit
+	 * the display face, a tighter tracking, and a balanced weight tuned for
+	 * Chillax's geometric forms. Swap `--font-display` to retheme all titles. */
+	h1, h2, h3, h4, h5, h6 {
+		font-family: var(--font-display);
+		font-weight: 500;
+		letter-spacing: -0.02em;
+		line-height: 1.15;
+		text-wrap: balance;
 	}
 
 	@media (max-width: 639px) {
