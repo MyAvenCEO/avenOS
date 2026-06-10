@@ -115,7 +115,7 @@ const meshAllowed = $derived(sessionKind === 'unlocked' && $grooveSessionReady)
 // grants caps (auto-grants the first peer, invites the rest). We re-check when
 // identities sync, so the gate opens automatically once the server's grant + keyshare
 // land and hydrate avenCEO into the vault. Sandbox (non-tauri) is never gated.
-const identitiesStore = jazzStore('identities')
+const identitiesStore = jazzStore('safes')
 let membership = $state<'owner' | 'member' | 'none' | 'unknown'>('unknown')
 $effect(() => {
 	void sessionKind

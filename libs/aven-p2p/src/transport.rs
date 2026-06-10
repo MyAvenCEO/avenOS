@@ -33,7 +33,7 @@ const MAX_HANDSHAKE_BYTES: usize = 64 * 1024;
 const MAX_SYNC_FRAME_BYTES: usize = 128 * 1024 * 1024;
 
 fn peer_from_did(did: &str) -> Result<PeerId> {
-    let pk = groove::did_key::ed25519_public_from_peer_did(did)
+    let pk = groove::did_key::ed25519_public_from_signer_did(did)
         .map_err(|e| P2pError::Handshake(format!("decode did {did}: {e}")))?;
     Ok(PeerId(pk))
 }
@@ -135,7 +135,7 @@ impl ServerSyncTransport {
 
         // did:key challenge: receive nonce, sign the rebuilt message, send proof.
         let hello: ServerHello = read_json(&mut tls).await?;
-        let did = groove::did_key::peer_did_from_ed25519(&signing_key.verifying_key().to_bytes())
+        let did = groove::did_key::signer_did_from_ed25519(&signing_key.verifying_key().to_bytes())
             .map_err(|e| P2pError::Handshake(format!("encode our did: {e}")))?;
         // Raw-TLS path: the anti-relay anchor is the real TLS-exporter channel binding `cb`,
         // so the wss mutual-handshake client nonce is unused here (empty).
@@ -225,7 +225,7 @@ impl ServerListener {
         let acceptor = server_tls.acceptor()?;
         let listener = TcpListener::bind(bind_addr).await?;
         let server_did =
-            groove::did_key::peer_did_from_ed25519(&identity.verifying_key().to_bytes())
+            groove::did_key::signer_did_from_ed25519(&identity.verifying_key().to_bytes())
                 .map_err(|e| P2pError::Config(format!("server did: {e}")))?;
 
         let registry: Registry = Arc::new(Mutex::new(HashMap::new()));
@@ -331,7 +331,7 @@ fn verify_client(hello: &ServerHello, auth: &ClientAuth, cb: &str) -> std::resul
     if is_expired(hello) {
         return Err("challenge expired".into());
     }
-    let pubkey = groove::did_key::ed25519_public_from_peer_did(&auth.did)?;
+    let pubkey = groove::did_key::ed25519_public_from_signer_did(&auth.did)?;
     let message = build_message(hello, &auth.did, cb, &auth.client_nonce);
     verify(&pubkey, &message, &auth.signature)?;
     Ok(PeerId(pubkey))
@@ -342,7 +342,7 @@ impl SyncTransport for ServerListener {
     async fn send_to(&self, target: SyncTargetId, payload: SyncPayload) -> groove::Result<()> {
         let peer = match &target {
             SyncTargetId::Client(p) => *p,
-            SyncTargetId::PeerDid(did) => peer_from_did(did)
+            SyncTargetId::SignerDid(did) => peer_from_did(did)
                 .map_err(|e| JazzError::Sync(format!("route {did}: {e}")))?,
         };
         let conn = {
@@ -547,7 +547,7 @@ mod tls_did_challenge {
         let hello: ServerHello = read_json(&mut tls).await.unwrap();
         let key_a = SigningKey::from_bytes(&[1u8; 32]);
         let forged_did =
-            groove::did_key::peer_did_from_ed25519(&SigningKey::from_bytes(&[7u8; 32]).verifying_key().to_bytes())
+            groove::did_key::signer_did_from_ed25519(&SigningKey::from_bytes(&[7u8; 32]).verifying_key().to_bytes())
                 .unwrap();
         // Sign the message that claims the forged DID, but with key_a's key.
         let message = build_message(&hello, &forged_did, &cb, "");

@@ -14,7 +14,7 @@ pub const DID_KEY_ED25519_PREFIX: &[u8] = &[0xed, 0x01];
 
 /// Encode a 32-byte Ed25519 public key as `did:key:z…` (multibase Base58BTC of
 /// `0xed01 || pubkey`).
-pub fn peer_did_from_ed25519(pubkey: &[u8; 32]) -> Result<String, String> {
+pub fn signer_did_from_ed25519(pubkey: &[u8; 32]) -> Result<String, String> {
     let mut buf = Vec::with_capacity(DID_KEY_ED25519_PREFIX.len() + 32);
     buf.extend_from_slice(DID_KEY_ED25519_PREFIX);
     buf.extend_from_slice(pubkey.as_slice());
@@ -27,7 +27,7 @@ pub fn peer_did_from_ed25519(pubkey: &[u8; 32]) -> Result<String, String> {
 
 /// Reverse `did:key:` + multibase(Base58BTC, `0xed01 || ed25519 pub`). Also
 /// validates the bytes are a well-formed Ed25519 point.
-pub fn ed25519_public_from_peer_did(did: &str) -> Result<[u8; 32], String> {
+pub fn ed25519_public_from_signer_did(did: &str) -> Result<[u8; 32], String> {
     let rest = did
         .strip_prefix("did:key:")
         .ok_or_else(|| format!("did_key_expected_prefix:{did}"))?;
@@ -58,15 +58,15 @@ mod tests {
         let pk = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32])
             .verifying_key()
             .to_bytes();
-        let did = peer_did_from_ed25519(&pk).expect("encode");
+        let did = signer_did_from_ed25519(&pk).expect("encode");
         assert!(did.starts_with("did:key:z"));
-        let back = ed25519_public_from_peer_did(&did).expect("decode");
+        let back = ed25519_public_from_signer_did(&did).expect("decode");
         assert_eq!(back, pk);
     }
 
     #[test]
     fn rejects_non_did_key() {
-        assert!(ed25519_public_from_peer_did("did:web:example.com").is_err());
-        assert!(ed25519_public_from_peer_did("not-a-did").is_err());
+        assert!(ed25519_public_from_signer_did("did:web:example.com").is_err());
+        assert!(ed25519_public_from_signer_did("not-a-did").is_err());
     }
 }

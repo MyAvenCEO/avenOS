@@ -48,7 +48,7 @@
 	let localPairingLabel = $state<string | undefined>(undefined)
 	let scrollEl = $state<HTMLDivElement | undefined>(undefined)
 
-	const identitiesStore = jazzStore('identities')
+	const identitiesStore = jazzStore('safes')
 	const messages = jazzStore('messages')
 	const filesStore = jazzStore('files')
 
@@ -117,11 +117,11 @@
 	})
 
 	const peersByDid = $derived(
-		new Map(peersAllow.map((p) => [p.peerDid.trim().toLowerCase(), p] as const)),
+		new Map(peersAllow.map((p) => [p.signerDid.trim().toLowerCase(), p] as const)),
 	)
 
 	function authorLabel(authorDid: string | null | undefined): string {
-		const local = session?.peerDid?.trim().toLowerCase() ?? ''
+		const local = session?.signerDid?.trim().toLowerCase() ?? ''
 		const did = (authorDid ?? '').trim()
 		const norm = did.toLowerCase()
 		if (local && norm === local) return t('common.you')
@@ -147,7 +147,7 @@
 	}
 
 	function isOwnMessage(row: JazzRow): boolean {
-		const local = session?.peerDid?.trim().toLowerCase() ?? ''
+		const local = session?.signerDid?.trim().toLowerCase() ?? ''
 		const author = (row.author_did ?? '').trim().toLowerCase()
 		return local !== '' && author !== '' && author === local
 	}

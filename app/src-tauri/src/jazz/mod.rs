@@ -437,7 +437,7 @@ fn spawn_dev_peer_sync(
 				let _ = change_tx.send(table);
 			}
 			Some(None) => {
-				for t in ["identities", "keyshares", "peers"] {
+				for t in ["safes", "keyshares", "peers"] {
 					let _ = change_tx.send(t.to_string());
 				}
 			}
@@ -456,7 +456,7 @@ fn spawn_dev_peer_sync(
 			};
 			// Record the authenticated relay DID so the UI can offer a one-click
 			// "replicate this identity to the connected relay".
-			if let Ok(did) = crate::jazz_auth::peer_did_from_ed25519(&remote.0) {
+			if let Ok(did) = crate::jazz_auth::signer_did_from_ed25519(&remote.0) {
 				if let Ok(mut slot) = relay_did_slot.write() {
 					*slot = Some(did);
 				}
@@ -465,7 +465,7 @@ fn spawn_dev_peer_sync(
 			// Don't re-register a peer the user has Forgotten (revoked) — that is what
 			// makes Forget persist across reconnect/restart. Only an explicit revoke is
 			// skipped; unknown peers stay permissive (first-contact).
-			let remote_did = crate::jazz_auth::peer_did_from_ed25519(&remote.0).ok();
+			let remote_did = crate::jazz_auth::signer_did_from_ed25519(&remote.0).ok();
 			let revoked = match &remote_did {
 				Some(did) => crate::peers::is_peer_revoked(&client, did)
 					.await
@@ -625,9 +625,9 @@ pub(crate) async fn groove_ipc_status(
 
 fn jazz_session_reply_from_shell(shell: &jazz_engine::ShellState) -> JazzSessionReply {
 	JazzSessionReply {
-		peer_did: shell.peer_did.clone(),
-		peer_did_short: jazz_engine::short_peer_did(&shell.peer_did),
-		default_spark_urn: jazz_engine::identity_urn(shell.default_identity),
+		signer_did: shell.signer_did.clone(),
+		signer_did_short: jazz_engine::short_signer_did(&shell.signer_did),
+		default_spark_urn: jazz_engine::safe_urn(shell.default_identity),
 		// This shell-only path has no relay handle; the live relay DID is filled
 		// by `groove_ipc_session` (which can read `ManagedJazz`).
 		relay_did: None,
@@ -656,7 +656,7 @@ pub(crate) async fn groove_ipc_bootstrap(
 				"kind": "session",
 				"phase": "ready",
 				"grooveReady": true,
-				"peerDid": session.peer_did,
+				"signerDid": session.signer_did,
 				"defaultSparkUrn": session.default_spark_urn,
 				"tables": tables.clone(),
 			}));
@@ -729,9 +729,9 @@ pub(crate) async fn groove_ipc_session(
 		.ok()
 		.and_then(|slot| slot.clone());
 	Ok(JazzSessionReply {
-		peer_did: shell.peer_did.clone(),
-		peer_did_short: jazz_engine::short_peer_did(&shell.peer_did),
-		default_spark_urn: jazz_engine::identity_urn(shell.default_identity),
+		signer_did: shell.signer_did.clone(),
+		signer_did_short: jazz_engine::short_signer_did(&shell.signer_did),
+		default_spark_urn: jazz_engine::safe_urn(shell.default_identity),
 		relay_did,
 	})
 }
@@ -836,36 +836,36 @@ pub(crate) async fn groove_runtime_dispatch(
 		}
 		"peerlist" => serde_json::to_value(groove_ipc_peer_list(app, mj, ss).await?).map_err(|e| e.to_string()),
 		"peeradd" => {
-			let peer_did = pj_str(&pj, "peerDid")?;
+			let signer_did = pj_str(&pj, "signerDid")?;
 			let label = pj
 				.get("label")
 				.and_then(|v| v.as_str())
 				.unwrap_or("")
 				.to_string();
-			groove_ipc_peer_add(app, mj, ss, peer_did, label).await?;
+			groove_ipc_peer_add(app, mj, ss, signer_did, label).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"peerrevoke" => {
-			let peer_did = pj_str(&pj, "peerDid")?;
-			groove_ipc_peer_revoke(app, mj, ss, peer_did).await?;
+			let signer_did = pj_str(&pj, "signerDid")?;
+			groove_ipc_peer_revoke(app, mj, ss, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"sparkadminadd" => {
 			let owner = pj_str(&pj, "identityId")?;
-			let peer_did = pj_str(&pj, "peerDid")?;
-			groove_ipc_spark_admin_add(app, mj, ss, owner, peer_did).await?;
+			let signer_did = pj_str(&pj, "signerDid")?;
+			groove_ipc_spark_admin_add(app, mj, ss, owner, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"sparkreplicateadd" => {
 			let owner = pj_str(&pj, "identityId")?;
-			let peer_did = pj_str(&pj, "peerDid")?;
-			groove_ipc_spark_replicate_add(app, mj, ss, owner, peer_did).await?;
+			let signer_did = pj_str(&pj, "signerDid")?;
+			groove_ipc_spark_replicate_add(app, mj, ss, owner, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"sparkreaderadd" => {
 			let owner = pj_str(&pj, "identityId")?;
-			let peer_did = pj_str(&pj, "peerDid")?;
-			groove_ipc_spark_reader_add(app, mj, ss, owner, peer_did).await?;
+			let signer_did = pj_str(&pj, "signerDid")?;
+			groove_ipc_spark_reader_add(app, mj, ss, owner, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"avenceoclaim" => {
@@ -885,8 +885,8 @@ pub(crate) async fn groove_runtime_dispatch(
 			Ok(serde_json::Value::String(id))
 		}
 		"avenceoaddmember" => {
-			let peer_did = pj_str(&pj, "peerDid")?;
-			groove_ipc_aven_ceo_add_member(app, mj, ss, peer_did).await?;
+			let signer_did = pj_str(&pj, "signerDid")?;
+			groove_ipc_aven_ceo_add_member(app, mj, ss, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"avenceopublishprofile" => {
@@ -906,8 +906,8 @@ pub(crate) async fn groove_runtime_dispatch(
 		}
 		"sparkadminrevoke" => {
 			let owner = pj_str(&pj, "identityId")?;
-			let peer_did = pj_str(&pj, "peerDid")?;
-			groove_ipc_spark_admin_revoke(app, mj, ss, owner, peer_did).await?;
+			let signer_did = pj_str(&pj, "signerDid")?;
+			groove_ipc_spark_admin_revoke(app, mj, ss, owner, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		other => Err(format!(

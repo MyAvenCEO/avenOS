@@ -48,7 +48,7 @@ export type PeerTransportMode = 'lan' | 'direct' | 'punched' | 'relay'
 
 export type PeerMeshPeerState = {
 	id: string
-	peerDid: string
+	signerDid: string
 	deviceLabel: string
 	dbStatus: string
 	addedAtMs: number
@@ -234,38 +234,38 @@ export function peerMeshRailClass(phase: PeerMeshPhase): string {
 	}
 }
 
-function normalizePeerDid(peerDid: string | undefined | null): string {
-	return typeof peerDid === 'string' ? peerDid.trim() : ''
+function normalizeSignerDid(signerDid: string | undefined | null): string {
+	return typeof signerDid === 'string' ? signerDid.trim() : ''
 }
 
 /** Lookup a trusted peer row in the live mesh snapshot (canonical phase source). */
 export function meshPeerByDid(
 	mesh: PeerMeshStatusReply | undefined,
-	peerDid: string | undefined,
+	signerDid: string | undefined,
 ): PeerMeshPeerState | undefined {
-	const did = normalizePeerDid(peerDid)
+	const did = normalizeSignerDid(signerDid)
 	if (!mesh || !did) return undefined
-	return mesh.peers.find((p) => p.peerDid === did)
+	return mesh.peers.find((p) => p.signerDid === did)
 }
 
 /** Phase for a trusted peer — prefer mesh snapshot, never re-derive transport state. */
 export function meshPeerPhase(
 	mesh: PeerMeshStatusReply | undefined,
-	peerDid: string | undefined,
+	signerDid: string | undefined,
 	dbStatus?: string,
 ): PeerMeshPhase {
 	return (
-		meshPeerByDid(mesh, peerDid)?.phase ??
+		meshPeerByDid(mesh, signerDid)?.phase ??
 		(dbStatus === 'pairing' ? 'pairing' : dbStatus === 'active' ? 'searching' : 'offline')
 	)
 }
 
 export function findPeerMeshPhase(
 	status: PeerMeshStatusReply | undefined,
-	peerDid: string | undefined,
+	signerDid: string | undefined,
 	dbStatus?: string,
 ): PeerMeshPhase {
-	return meshPeerPhase(status, peerDid, dbStatus)
+	return meshPeerPhase(status, signerDid, dbStatus)
 }
 
 /** Granular connect sub-label while parent phase is `searching` (Connecting). */
@@ -291,10 +291,10 @@ export function peerTransportModeTitle(_mode?: PeerTransportMode | null): string
 
 export function peerMeshDetailSubLabel(
 	status: PeerMeshStatusReply | undefined,
-	peerDid: string | undefined,
+	signerDid: string | undefined,
 	phase: PeerMeshPhase,
 ): string | null {
-	const row = meshPeerByDid(status, peerDid)
+	const row = meshPeerByDid(status, signerDid)
 	if (!row) return null
 	if (phase === 'searching') {
 		if (row.connectSubstate) {
@@ -332,7 +332,7 @@ export function peerMeshDetailSubLabel(
 
 export function peerMeshDetailSubTitle(
 	status: PeerMeshStatusReply | undefined,
-	peerDid: string | undefined,
+	signerDid: string | undefined,
 	phase: PeerMeshPhase,
 ): string | null {
 	if (phase === 'syncing' || phase === 'ready') {

@@ -49,8 +49,8 @@ pub struct JazzStatusReply {
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JazzSessionReply {
-	pub peer_did: String,
-	pub peer_did_short: String,
+	pub signer_did: String,
+	pub signer_did_short: String,
 	pub default_spark_urn: String,
 	/// did:key of the aven-node relay this device is synced through, if any —
 	/// lets the UI offer a one-click "replicate this identity to the relay".

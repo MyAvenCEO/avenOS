@@ -4,7 +4,7 @@
 //! shipping a batch to a peer. Here it is answered from identity biscuits:
 //!   1. subject (`PeerId` = Ed25519 pubkey) → `did:key:`
 //!   2. resource `(table, row)` → identity id (via the live `SyncAclSnapshot`)
-//!   3. `identity_acc::authorize(vault, identity, op, table, row, peer_did)`
+//!   3. `identity_acc::authorize(vault, identity, op, table, row, signer_did)`
 //!
 //! Three-state per §1.2: `Pending` (ACL / vault not hydrated yet) DEFERS — it
 //! never drops a frame; only an explicit biscuit denial is `DenyPermanent`.
@@ -38,9 +38,9 @@ impl BiscuitCapabilityResolver {
 impl CapabilityResolver for BiscuitCapabilityResolver {
 	fn may_sync(&self, subject: &SyncTargetId, op: AccOp, res: &ResourceCoord) -> CapDecision {
 		// 1. Subject → peer did:key.
-		let peer_did = match subject {
-			SyncTargetId::PeerDid(d) => d.clone(),
-			SyncTargetId::Client(pid) => match crate::jazz_auth::peer_did_from_ed25519(&pid.0) {
+		let signer_did = match subject {
+			SyncTargetId::SignerDid(d) => d.clone(),
+			SyncTargetId::Client(pid) => match crate::jazz_auth::signer_did_from_ed25519(&pid.0) {
 				Ok(did) => did,
 				Err(_) => return CapDecision::DenyPermanent,
 			},
@@ -62,7 +62,7 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 		// ever GRANTS delivery to the addressed recipient; it never widens any other access.
 		if res.table == "keyshares" {
 			if let Some(recipient) = acl.keyshare_recipient.get(&res.row_id) {
-				if recipient.trim() == peer_did.trim() {
+				if recipient.trim() == signer_did.trim() {
 					return CapDecision::Allow;
 				}
 			}
@@ -93,7 +93,7 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 			identity_op,
 			&res.table,
 			Some(*res.row_id.uuid()),
-			&peer_did,
+			&signer_did,
 		) {
 			Ok(()) => CapDecision::Allow,
 			Err(_) => CapDecision::DenyPermanent,
@@ -197,7 +197,7 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 		let Some(shell) = shell_guard.as_ref() else {
 			return CapDecision::Pending;
 		};
-		if !shell.vault.identities.contains_key(&binding.owner) {
+		if !shell.vault.safes.contains_key(&binding.owner) {
 			return CapDecision::Allow;
 		}
 		// Honor an inbound Delete (audit #6): a delete-flagged row must satisfy the distinct
@@ -274,7 +274,7 @@ mod tests {
 
 	use aven_caps::caps::{
 		attenuate_add_owner_third_party, attenuate_add_reader_third_party,
-		build_vault_from_signing_key, mint_genesis_identity, rebuild_identity_biscuit_excluding,
+		build_vault_from_signing_key, mint_safe_genesis, rebuild_identity_biscuit_excluding,
 		BiscuitIdentity, BiscuitVault,
 	};
 	use aven_caps::ownership::mint_owner_binding;
@@ -294,14 +294,15 @@ mod tests {
 	/// Wrap a vault in the Arc<ShellState> the resolver expects. Only `vault` is
 	/// consulted by may_sync / verify_on_apply; the other fields are inert.
 	fn make_shell(vault: BiscuitVault) -> Arc<ShellState> {
-		let peer_did = vault.peer_did.clone();
+		let peer_did = vault.signer_did.clone();
 		Arc::new(ShellState {
-			peer_did,
+			signer_did: peer_did,
 			vault,
 			signing_key: SigningKey::from_bytes(&[0xcc; 32]),
 			default_identity: Uuid::nil(),
 			deks: HashMap::new(),
 			identity_versions: HashMap::new(),
+			issuers: HashMap::new(),
 			groove_write_branch: "main".into(),
 		})
 	}
@@ -330,7 +331,7 @@ mod tests {
 		[0u8; 32]
 	}
 	fn dummy_subject() -> SyncTargetId {
-		SyncTargetId::PeerDid("did:key:unused".into())
+		SyncTargetId::SignerDid("did:key:unused".into())
 	}
 
 	// ── may_sync: defer / pending paths ──────────────────────────────────────
@@ -340,7 +341,7 @@ mod tests {
 		let resolver = make_resolver(None, None);
 		let res = make_res("todos", Uuid::new_v4());
 		assert_eq!(
-			resolver.may_sync(&SyncTargetId::PeerDid("did:key:x".into()), AccOp::Read, &res),
+			resolver.may_sync(&SyncTargetId::SignerDid("did:key:x".into()), AccOp::Read, &res),
 			CapDecision::Pending,
 			"unhydrated ACL must defer, never drop"
 		);
@@ -353,7 +354,7 @@ mod tests {
 		let resolver = make_resolver(None, Some(acl_with_row("todos", row, sid)));
 		let res = make_res("todos", row);
 		assert_eq!(
-			resolver.may_sync(&SyncTargetId::PeerDid("did:key:x".into()), AccOp::Read, &res),
+			resolver.may_sync(&SyncTargetId::SignerDid("did:key:x".into()), AccOp::Read, &res),
 			CapDecision::Pending,
 			"unhydrated shell must defer"
 		);
@@ -362,13 +363,13 @@ mod tests {
 	#[test]
 	fn may_sync_pending_when_row_absent_from_acl() {
 		let v = make_vault(&[1u8; 32]);
-		let peer_did = v.peer_did.clone();
+		let peer_did = v.signer_did.clone();
 		// ACL is present but contains no mapping for this row.
 		let resolver =
 			make_resolver(Some(make_shell(v)), Some(build_sync_acl_snapshot(HashMap::new(), HashMap::new())));
 		let res = make_res("todos", Uuid::new_v4());
 		assert_eq!(
-			resolver.may_sync(&SyncTargetId::PeerDid(peer_did), AccOp::Read, &res),
+			resolver.may_sync(&SyncTargetId::SignerDid(peer_did), AccOp::Read, &res),
 			CapDecision::Pending,
 			"row absent from ACL must defer, not deny"
 		);
@@ -381,14 +382,14 @@ mod tests {
 		let mut v = make_vault(&[1u8; 32]);
 		let sid = Uuid::new_v4();
 		let row = Uuid::new_v4();
-		let biscuit = mint_genesis_identity(&v, sid).unwrap();
-		let peer_did = v.peer_did.clone();
-		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit });
+		let biscuit = mint_safe_genesis(&v, sid).unwrap();
+		let peer_did = v.signer_did.clone();
+		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit });
 
 		let resolver =
 			make_resolver(Some(make_shell(v)), Some(acl_with_row("todos", row, sid)));
 		let res = make_res("todos", row);
-		let subject = SyncTargetId::PeerDid(peer_did);
+		let subject = SyncTargetId::SignerDid(peer_did);
 
 		assert_eq!(resolver.may_sync(&subject, AccOp::Read, &res), CapDecision::Allow);
 		assert_eq!(resolver.may_sync(&subject, AccOp::Write, &res), CapDecision::Allow);
@@ -399,15 +400,15 @@ mod tests {
 		let mut v = make_vault(&[1u8; 32]);
 		let sid = Uuid::new_v4();
 		let row = Uuid::new_v4();
-		let biscuit = mint_genesis_identity(&v, sid).unwrap();
-		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit });
+		let biscuit = mint_safe_genesis(&v, sid).unwrap();
+		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit });
 
 		let resolver =
 			make_resolver(Some(make_shell(v)), Some(acl_with_row("todos", row, sid)));
 		let res = make_res("todos", row);
 		let intruder = make_vault(&[99u8; 32]);
 		assert_eq!(
-			resolver.may_sync(&SyncTargetId::PeerDid(intruder.peer_did), AccOp::Read, &res),
+			resolver.may_sync(&SyncTargetId::SignerDid(intruder.signer_did), AccOp::Read, &res),
 			CapDecision::DenyPermanent,
 			"unrecognised DID must be denied"
 		);
@@ -419,20 +420,20 @@ mod tests {
 		let reader = make_vault(&[2u8; 32]);
 		let sid = Uuid::new_v4();
 		let row = Uuid::new_v4();
-		let genesis = mint_genesis_identity(&owner, sid).unwrap();
+		let genesis = mint_safe_genesis(&owner, sid).unwrap();
 		let chain = attenuate_add_reader_third_party(
 			&owner.biscuit_kp,
 			&genesis,
 			sid,
-			&reader.peer_did,
+			&reader.signer_did,
 		)
 		.unwrap();
-		owner.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
+		owner.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
 
 		let resolver =
 			make_resolver(Some(make_shell(owner)), Some(acl_with_row("todos", row, sid)));
 		let res = make_res("todos", row);
-		let subject = SyncTargetId::PeerDid(reader.peer_did);
+		let subject = SyncTargetId::SignerDid(reader.signer_did);
 		assert_eq!(resolver.may_sync(&subject, AccOp::Read, &res), CapDecision::Allow);
 		assert_eq!(
 			resolver.may_sync(&subject, AccOp::Write, &res),
@@ -456,22 +457,22 @@ mod tests {
 		{
 			let mut owner = make_vault(&root_owner);
 			let member = make_vault(&root_member);
-			let genesis = mint_genesis_identity(&owner, sid).unwrap();
+			let genesis = mint_safe_genesis(&owner, sid).unwrap();
 			let granted = attenuate_add_reader_third_party(
 				&owner.biscuit_kp,
 				&genesis,
 				sid,
-				&member.peer_did,
+				&member.signer_did,
 			)
 			.unwrap();
-			owner.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: granted });
-			let revoked = rebuild_identity_biscuit_excluding(&owner, sid, &member.peer_did).unwrap();
-			owner.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: revoked });
+			owner.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: granted });
+			let revoked = rebuild_identity_biscuit_excluding(&owner, sid, &member.signer_did).unwrap();
+			owner.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: revoked });
 			let resolver =
 				make_resolver(Some(make_shell(owner)), Some(acl_with_row("todos", row, sid)));
 			assert_eq!(
 				resolver.may_sync(
-					&SyncTargetId::PeerDid(member.peer_did),
+					&SyncTargetId::SignerDid(member.signer_did),
 					AccOp::Read,
 					&make_res("todos", row)
 				),
@@ -485,20 +486,20 @@ mod tests {
 			let mut owner = make_vault(&root_owner); // same root → same DID
 			let member = make_vault(&root_member);
 			let outsider = make_vault(&root_outsider);
-			let genesis = mint_genesis_identity(&owner, sid).unwrap();
+			let genesis = mint_safe_genesis(&owner, sid).unwrap();
 			let regranted = attenuate_add_reader_third_party(
 				&owner.biscuit_kp,
 				&genesis,
 				sid,
-				&member.peer_did,
+				&member.signer_did,
 			)
 			.unwrap();
-			owner.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: regranted });
+			owner.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: regranted });
 			let resolver =
 				make_resolver(Some(make_shell(owner)), Some(acl_with_row("todos", row, sid)));
 			assert_eq!(
 				resolver.may_sync(
-					&SyncTargetId::PeerDid(member.peer_did),
+					&SyncTargetId::SignerDid(member.signer_did),
 					AccOp::Read,
 					&make_res("todos", row)
 				),
@@ -507,7 +508,7 @@ mod tests {
 			);
 			assert_eq!(
 				resolver.may_sync(
-					&SyncTargetId::PeerDid(outsider.peer_did),
+					&SyncTargetId::SignerDid(outsider.signer_did),
 					AccOp::Read,
 					&make_res("todos", row)
 				),
@@ -561,8 +562,8 @@ mod tests {
 		let mut vault = make_vault(&[1u8; 32]);
 		let sid = Uuid::new_v4();
 		let row = Uuid::new_v4();
-		let biscuit = mint_genesis_identity(&vault, sid).unwrap();
-		vault.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit });
+		let biscuit = mint_safe_genesis(&vault, sid).unwrap();
+		vault.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit });
 
 		let binding = mint_owner_binding(&sk, row, sid).unwrap();
 		let proof = binding.to_meta_string();
@@ -591,8 +592,8 @@ mod tests {
 		let sid = Uuid::new_v4();
 		let row = Uuid::new_v4();
 		let other_row = Uuid::new_v4();
-		let biscuit = mint_genesis_identity(&vault, sid).unwrap();
-		vault.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit });
+		let biscuit = mint_safe_genesis(&vault, sid).unwrap();
+		vault.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit });
 
 		// Binding is minted for `other_row` but the ResourceCoord targets `row`.
 		let binding = mint_owner_binding(&sk, other_row, sid).unwrap();
@@ -620,8 +621,8 @@ mod tests {
 		let mut vault = make_vault(&[1u8; 32]);
 		let sid = Uuid::new_v4();
 		let row = Uuid::new_v4();
-		let biscuit = mint_genesis_identity(&vault, sid).unwrap();
-		vault.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit });
+		let biscuit = mint_safe_genesis(&vault, sid).unwrap();
+		vault.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit });
 
 		let mut binding = mint_owner_binding(&sk, row, sid).unwrap();
 		binding.sig[0] ^= 0xff; // corrupt one byte of the 64-byte signature
@@ -650,8 +651,8 @@ mod tests {
 		let sid_a = Uuid::new_v4();
 		let sid_b = Uuid::new_v4(); // attacker's target identity
 		let row = Uuid::new_v4();
-		let biscuit_a = mint_genesis_identity(&vault, sid_a).unwrap();
-		vault.identities.insert(sid_a, BiscuitIdentity { owner: sid_a, biscuit: biscuit_a });
+		let biscuit_a = mint_safe_genesis(&vault, sid_a).unwrap();
+		vault.safes.insert(sid_a, BiscuitIdentity { owner: sid_a, biscuit: biscuit_a });
 
 		// The ACL records sid_a as the established owner; binding claims sid_b.
 		let binding = mint_owner_binding(&sk_a, row, sid_b).unwrap();
@@ -713,8 +714,8 @@ mod tests {
 		let mut vault = make_vault(&[1u8; 32]);
 		let sid = Uuid::new_v4();
 		let row = Uuid::new_v4();
-		let biscuit = mint_genesis_identity(&vault, sid).unwrap();
-		vault.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit });
+		let biscuit = mint_safe_genesis(&vault, sid).unwrap();
+		vault.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit });
 
 		let binding = mint_owner_binding(&sk_outsider, row, sid).unwrap();
 		let proof = binding.to_meta_string();

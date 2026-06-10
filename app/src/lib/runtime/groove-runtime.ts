@@ -42,7 +42,7 @@ type AvenosRuntimePayload =
 			grooveReady?: boolean
 			phase?: string
 			message?: string
-			peerDid?: string
+			signerDid?: string
 			defaultSparkUrn?: string
 			tables?: string[]
 	  }

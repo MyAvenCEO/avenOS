@@ -307,18 +307,6 @@
           "markdownDescription": "Denies the active_identity command without any pre-configured scope."
         },
         {
-          "description": "Enables the device_peer_did command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-device-peer-did",
-          "markdownDescription": "Enables the device_peer_did command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the device_peer_did command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-device-peer-did",
-          "markdownDescription": "Denies the device_peer_did command without any pre-configured scope."
-        },
-        {
           "description": "Enables the host_device_label command without any pre-configured scope.",
           "type": "string",
           "const": "allow-host-device-label",
@@ -391,16 +379,16 @@
           "markdownDescription": "Denies the sign command without any pre-configured scope."
         },
         {
-          "description": "Enables the signing_peer_did command without any pre-configured scope.",
+          "description": "Enables the signer_did command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-signing-peer-did",
-          "markdownDescription": "Enables the signing_peer_did command without any pre-configured scope."
+          "const": "allow-signer-did",
+          "markdownDescription": "Enables the signer_did command without any pre-configured scope."
         },
         {
-          "description": "Denies the signing_peer_did command without any pre-configured scope.",
+          "description": "Denies the signer_did command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-signing-peer-did",
-          "markdownDescription": "Denies the signing_peer_did command without any pre-configured scope."
+          "const": "deny-signer-did",
+          "markdownDescription": "Denies the signer_did command without any pre-configured scope."
         },
         {
           "description": "Enables the signing_public_key command without any pre-configured scope.",
@@ -523,10 +511,10 @@
           "markdownDescription": "Denies the verify command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-device-peer-did`\n- `allow-signing-peer-did`\n- `allow-signing-public-key`\n- `allow-lock`\n- `allow-host-device-label`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`\n- `allow-active-identity`\n- `allow-vault-ui-settings-get`\n- `allow-vault-ui-settings-set-locale`",
+          "description": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-signer-did`\n- `allow-signing-public-key`\n- `allow-lock`\n- `allow-host-device-label`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`\n- `allow-active-identity`\n- `allow-vault-ui-settings-get`\n- `allow-vault-ui-settings-set-locale`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-device-peer-did`\n- `allow-signing-peer-did`\n- `allow-signing-public-key`\n- `allow-lock`\n- `allow-host-device-label`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`\n- `allow-active-identity`\n- `allow-vault-ui-settings-get`\n- `allow-vault-ui-settings-set-locale`"
+          "markdownDescription": "Default permissions for tauri-plugin-self\n#### This default permission set includes:\n\n- `allow-register`\n- `allow-public-key`\n- `allow-unlock`\n- `allow-peer-status`\n- `allow-signer-did`\n- `allow-signing-public-key`\n- `allow-lock`\n- `allow-host-device-label`\n- `allow-vault-list`\n- `allow-vault-slug-preview`\n- `allow-vault-select`\n- `allow-vault-create`\n- `allow-vault-selected-slug`\n- `allow-active-identity`\n- `allow-vault-ui-settings-get`\n- `allow-vault-ui-settings-set-locale`"
         },
         {
           "description": "Read-only self IPC for the isolated vault webview\n#### This permission set includes:\n\n- `allow-peer-status`\n- `allow-active-identity`",

@@ -26,7 +26,7 @@
 	const decodedIdentityId = $derived(decodeURIComponent(identityParam))
 	const identityBase = $derived(`/identities/${encodeURIComponent(decodedIdentityId)}`)
 
-	const identitiesStore = jazzStore('identities')
+	const identitiesStore = jazzStore('safes')
 	const messages = jazzStore('messages')
 	const todos = jazzStore('todos')
 
@@ -52,7 +52,7 @@
 			env: () => ({
 				canonicalSparkId,
 				identityBase,
-				authorDid: session?.peerDid,
+				authorDid: session?.signerDid,
 				tauri,
 				unlocked,
 			}),
@@ -65,7 +65,7 @@
 
 	// Show the intent bar wherever a submit can actually land (unlocked desktop identity).
 	const showComposer = $derived(tauri && unlocked && !!canonicalSparkId)
-	const composerDisabled = $derived(!session?.peerDid?.trim())
+	const composerDisabled = $derived(!session?.signerDid?.trim())
 	let composerMode = $state<ComposerMode>('collapsed')
 
 	$effect(() => {

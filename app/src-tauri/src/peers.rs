@@ -9,10 +9,10 @@ use serde_json::{Map, Value as JsonValue};
 use crate::jazz::jazz_engine;
 
 /// Load active remote peer DIDs referenced from the singleton `humans.my_devices` allowlist.
-pub async fn list_active_peer_dids(client: &JazzClient) -> Result<Vec<String>, String> {
+pub async fn list_active_signer_dids(client: &JazzClient) -> Result<Vec<String>, String> {
 	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
 	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
-	let did_ix = jazz_engine::col_ix(&schema, "peer_did")?;
+	let did_ix = jazz_engine::col_ix(&schema, "signer_did")?;
 	let status_ix = jazz_engine::col_ix(&schema, "status")?;
 	let kind_ix = jazz_engine::col_ix(&schema, "kind")?;
 	let mut dids = Vec::new();
@@ -34,7 +34,7 @@ pub async fn list_active_peer_dids(client: &JazzClient) -> Result<Vec<String>, S
 		let did = vals
 			.get(did_ix)
 			.and_then(value_as_text)
-			.ok_or_else(|| "peers: missing peer_did".to_string())?;
+			.ok_or_else(|| "peers: missing signer_did".to_string())?;
 		dids.push(did.trim().to_string());
 	}
 	Ok(dids)
@@ -71,7 +71,7 @@ pub async fn default_spark_id(client: &JazzClient) -> Result<Option<uuid::Uuid>,
 #[serde(rename_all = "camelCase")]
 pub struct PeerRowReply {
 	pub id: String,
-	pub peer_did: String,
+	pub signer_did: String,
 	pub device_label: String,
 	pub kind: String,
 	pub added_at_ms: i64,
@@ -81,7 +81,7 @@ pub struct PeerRowReply {
 pub async fn list_peer_rows(client: &JazzClient) -> Result<Vec<PeerRowReply>, String> {
 	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
 	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
-	let did_ix = jazz_engine::col_ix(&schema, "peer_did")?;
+	let did_ix = jazz_engine::col_ix(&schema, "signer_did")?;
 	let label_ix = jazz_engine::col_ix(&schema, "device_label")?;
 	let kind_ix = jazz_engine::col_ix(&schema, "kind")?;
 	let status_ix = jazz_engine::col_ix(&schema, "status")?;
@@ -104,7 +104,7 @@ pub async fn list_peer_rows(client: &JazzClient) -> Result<Vec<PeerRowReply>, St
 		}
 		out.push(PeerRowReply {
 			id: oid.uuid().to_string(),
-			peer_did: vals
+			signer_did: vals
 				.get(did_ix)
 				.and_then(value_as_text)
 				.unwrap_or("")
@@ -144,20 +144,20 @@ fn peer_timestamp_ms(v: &Value) -> Option<i64> {
 /// 10 — the dev paste-DID shortcut). Idempotent: re-adding active peer is a no-op.
 pub async fn add_remote_peer(
 	client: &JazzClient,
-	peer_did: &str,
+	signer_did: &str,
 	device_label: &str,
 ) -> Result<(), String> {
-	let peer_did = peer_did.trim();
-	if peer_did.is_empty() {
-		return Err("peer_did is empty".into());
+	let signer_did = signer_did.trim();
+	if signer_did.is_empty() {
+		return Err("signer_did is empty".into());
 	}
-	if is_allowlisted(client, peer_did).await? {
+	if is_allowlisted(client, signer_did).await? {
 		return Ok(());
 	}
 	// Re-adding a previously Forgotten peer: reactivate its row instead of
 	// creating a duplicate (a leftover revoked row would keep it deregistered).
-	if is_peer_revoked(client, peer_did).await? {
-		return set_peer_status(client, peer_did, "active").await;
+	if is_peer_revoked(client, signer_did).await? {
+		return set_peer_status(client, signer_did, "active").await;
 	}
 
 	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
@@ -176,7 +176,7 @@ pub async fn add_remote_peer(
 	if let Some(sid) = default_spark_id(client).await? {
 		values.insert("owner".into(), JsonValue::String(sid.to_string()));
 	}
-	values.insert("peer_did".into(), JsonValue::String(peer_did.to_string()));
+	values.insert("signer_did".into(), JsonValue::String(signer_did.to_string()));
 	values.insert("device_label".into(), JsonValue::String(label));
 	values.insert("kind".into(), JsonValue::String("remote".into()));
 	values.insert("added_at_ms".into(), JsonValue::Number(now_ms.into()));
@@ -191,13 +191,13 @@ pub async fn add_remote_peer(
 
 pub async fn set_peer_status(
 	client: &JazzClient,
-	peer_did: &str,
+	signer_did: &str,
 	status: &str,
 ) -> Result<(), String> {
 	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
 	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
-	let did_ix = jazz_engine::col_ix(&schema, "peer_did")?;
-	let peer_did = peer_did.trim();
+	let did_ix = jazz_engine::col_ix(&schema, "signer_did")?;
+	let signer_did = signer_did.trim();
 	// Update EVERY matching row, not just the first: earlier add/forget cycles can
 	// leave duplicate rows for one DID. A lingering `revoked` dup would otherwise
 	// keep is_peer_revoked() true after re-granting → the connect gate skips
@@ -208,7 +208,7 @@ pub async fn set_peer_status(
 			.get(did_ix)
 			.and_then(value_as_text)
 			.unwrap_or("");
-		if existing.trim() == peer_did {
+		if existing.trim() == signer_did {
 			matched = true;
 			let mut patch = Map::new();
 			patch.insert(
@@ -225,13 +225,13 @@ pub async fn set_peer_status(
 	if matched {
 		Ok(())
 	} else {
-		Err("peer_did not found in allowlist".into())
+		Err("signer_did not found in allowlist".into())
 	}
 }
 
 /// Returns true if `did` is an active allowlisted remote peer.
 pub async fn is_allowlisted(client: &JazzClient, did: &str) -> Result<bool, String> {
-	let dids = list_active_peer_dids(client).await?;
+	let dids = list_active_signer_dids(client).await?;
 	let t = did.trim();
 	Ok(dids.iter().any(|x| x == t))
 }
@@ -244,7 +244,7 @@ pub async fn is_allowlisted(client: &JazzClient, did: &str) -> Result<bool, Stri
 pub async fn is_peer_revoked(client: &JazzClient, did: &str) -> Result<bool, String> {
 	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
 	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
-	let did_ix = jazz_engine::col_ix(&schema, "peer_did")?;
+	let did_ix = jazz_engine::col_ix(&schema, "signer_did")?;
 	let status_ix = jazz_engine::col_ix(&schema, "status")?;
 	let t = did.trim();
 	let mut has_revoked = false;

@@ -10,7 +10,7 @@
 					"comment": "routing — caps-only sync. null = device-local trust-set row (not synced); admin-identity id = network roster row (syncs to admin-identity members)"
 				},
 				{
-					"name": "peer_did",
+					"name": "signer_did",
 					"type": "text",
 					"plaintext": true,
 					"comment": "did:key — peer/member identity"
@@ -81,20 +81,27 @@
 				}
 			]
 		},
-		"identities": {
+		"safes": {
 			"columns": [
 				{
 					"name": "owner",
 					"type": "uuid",
 					"plaintext": true,
-					"comment": "routing — identity row identity (self-owned)"
+					"comment": "routing — SAFE row identity (self-owned)"
 				},
 				{
 					"name": "type",
 					"type": "text",
 					"plaintext": true,
 					"nullable": true,
-					"comment": "human | aven — the kind of identity"
+					"comment": "human | aven | spark — the kind of SAFE"
+				},
+				{
+					"name": "safe_did",
+					"type": "text",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "did:safe:<uuid> — stable public SAFE identifier"
 				},
 				{
 					"name": "username_slug",
@@ -121,6 +128,44 @@
 					"type": "bigint",
 					"plaintext": true,
 					"comment": "identity row metadata"
+				}
+			]
+		},
+		"safe_controllers": {
+			"columns": [
+				{
+					"name": "owner",
+					"type": "uuid",
+					"plaintext": true,
+					"comment": "routing — the controlled SAFE; rows sync to exactly its members"
+				},
+				{
+					"name": "controller_did",
+					"type": "text",
+					"plaintext": true,
+					"comment": "did:safe:<uuid> of the controller this row copies"
+				},
+				{
+					"name": "role",
+					"type": "text",
+					"plaintext": true,
+					"comment": "owner | delegate | executor | reader"
+				},
+				{
+					"name": "genesis_b64",
+					"type": "text",
+					"comment": "sealed at rest — COPY of the controller's biscuit chain, readable by THIS SAFE's members so they can resolve the did:safe: path offline (N-hop authorize + verify-on-apply)"
+				},
+				{
+					"name": "issuer_pubkey_b64",
+					"type": "text",
+					"comment": "sealed at rest — the controller chain's root Ed25519 public key"
+				},
+				{
+					"name": "added_at_ms",
+					"type": "bigint",
+					"plaintext": true,
+					"comment": "controller admission timestamp"
 				}
 			]
 		},

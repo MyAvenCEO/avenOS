@@ -14,13 +14,13 @@ async fn main() {
     let url = std::env::args().nth(1).expect("usage: ws_probe <ws-url>");
     let key = SigningKey::from_bytes(&[42u8; 32]);
     let did =
-        groove::did_key::peer_did_from_ed25519(&key.verifying_key().to_bytes()).unwrap();
+        groove::did_key::signer_did_from_ed25519(&key.verifying_key().to_bytes()).unwrap();
     eprintln!("dialing {url} as {did}");
     match WsClientTransport::connect(&url, key).await {
         Ok(t) => {
             let server = t.server_peer_id();
             let server_did =
-                groove::did_key::peer_did_from_ed25519(&server.0).unwrap_or_default();
+                groove::did_key::signer_did_from_ed25519(&server.0).unwrap_or_default();
             println!("OK authenticated — server_did={server_did}");
         }
         Err(e) => {

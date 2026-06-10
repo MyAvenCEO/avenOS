@@ -13,32 +13,11 @@ use crate::vault::ActiveVault;
 
 /// Stable `did:key` for HKDF-derived **Ed25519** application signing (`PEER_ID_<device>_ED25519`).
 #[tauri::command]
-pub async fn signing_peer_did(state: State<'_, SelfState>) -> Result<String, String> {
+pub async fn signer_did(state: State<'_, SelfState>) -> Result<String, String> {
 	state.with_root(|root| {
 		let pk = derive::ed25519_public(root)?;
 		Ok(crate::did::signing_did_ed25519(&pk))
 	})
-}
-
-/// `did:key` for the device's **P-256 Secure Enclave** credential transcript (needs macOS peer pub on disk).
-#[tauri::command]
-pub async fn device_peer_did(app: AppHandle, vault: State<'_, ActiveVault>, slot: String) -> Result<String, String> {
-	#[cfg(any(target_os = "macos", target_os = "ios"))]
-	{
-		let pk = crate::macos::commands::read_device_pubkey_file(&app, &*vault, &slot).await?;
-		crate::did::device_did_from_sec1_public_key(&pk)
-	}
-
-	#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-	{
-		let _ = (app, vault, slot);
-		if crate::dev_insecure::enabled() {
-			return Err(
-				"device_peer_did (P-256 credential) unavailable with dev plain-root identity".into(),
-			);
-		}
-		Err("device_peer_did (P-256 credential) is unavailable on this platform in v1".into())
-	}
 }
 
 /// 32-byte Ed25519 public key derived from the cached root secret. No biometric prompt.

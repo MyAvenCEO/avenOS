@@ -7,7 +7,7 @@
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/settings/device-session-store'
 
-	const identitiesStore = jazzStore('identities')
+	const identitiesStore = jazzStore('safes')
 
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
@@ -18,7 +18,8 @@
 	)
 	const humans = $derived(identities.filter((i) => i.type === 'human'))
 	// `group` rows are internal M9 sub-groups (collection/row crypto groups), not displayed identities.
-	const avens = $derived(identities.filter((i) => i.type !== 'human' && i.type !== 'group'))
+	const avens = $derived(identities.filter((i) => i.type !== 'human' && i.type !== 'group' && i.type !== 'spark'))
+	const sparks = $derived(identities.filter((i) => i.type === 'spark'))
 	const loading = $derived(tauri && unlocked && !identitiesStore.loaded && !identitiesStore.error)
 
 	function sparkSubtitle(row: JazzRow): string {
@@ -29,10 +30,10 @@
 	let creating = $state(false)
 	let createErr = $state<string | undefined>(undefined)
 	// Inline create — Tauri's webview blocks window.prompt(), so use a real input.
-	let creatingType = $state<'human' | 'aven' | null>(null)
+	let creatingType = $state<'human' | 'aven' | 'spark' | null>(null)
 	let newName = $state('')
 
-	function startCreate(type: 'human' | 'aven'): void {
+	function startCreate(type: 'human' | 'aven' | 'spark'): void {
 		creatingType = type
 		newName = ''
 		createErr = undefined
@@ -59,7 +60,7 @@
 	<title>{t('identities.title')}{t('common.titleSuffix')}</title>
 </svelte:head>
 
-{#snippet identityGrid(rows: JazzRow[], type: 'human' | 'aven')}
+{#snippet identityGrid(rows: JazzRow[], type: 'human' | 'aven' | 'spark')}
 	<ul class="grid gap-3 sm:grid-cols-2">
 		{#each rows as row (row.owner)}
 			<li>
@@ -86,7 +87,7 @@
 					<!-- svelte-ignore a11y_autofocus -->
 					<input
 						bind:value={newName}
-						placeholder={type === 'human' ? t('identities.namePromptHuman') : t('identities.namePromptAven')}
+						placeholder={type === 'human' ? t('identities.namePromptHuman') : type === 'aven' ? t('identities.namePromptAven') : t('identities.namePromptSpark')}
 						class="border-input bg-background w-full rounded-md border px-2 py-1.5 text-sm"
 						autofocus
 						onkeydown={(e) => {
@@ -114,7 +115,7 @@
 				>
 					<span class="text-2xl leading-none">+</span>
 					<span class="text-sm font-medium"
-						>{type === 'human' ? t('identities.createHuman') : t('identities.createAven')}</span
+						>{type === 'human' ? t('identities.createHuman') : type === 'aven' ? t('identities.createAven') : t('identities.createSpark')}</span
 					>
 				</button>
 			{/if}
@@ -150,6 +151,11 @@
 			<section class="space-y-3">
 				<h2 class="text-muted-foreground text-[11px] font-semibold uppercase tracking-wider">{t('identities.avensSection')}</h2>
 				{@render identityGrid(avens, 'aven')}
+			</section>
+
+			<section class="space-y-3">
+				<h2 class="text-muted-foreground text-[11px] font-semibold uppercase tracking-wider">{t('identities.sparksSection')}</h2>
+				{@render identityGrid(sparks, 'spark')}
 			</section>
 		{/if}
 	</div>

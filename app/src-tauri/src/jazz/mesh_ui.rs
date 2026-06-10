@@ -72,7 +72,7 @@ fn registered_peer_dids(client: &JazzClient) -> std::collections::HashSet<String
 		.peer_client_ids()
 		.unwrap_or_default()
 		.iter()
-		.filter_map(|pid| crate::jazz_auth::peer_did_from_ed25519(&pid.0).ok())
+		.filter_map(|pid| crate::jazz_auth::signer_did_from_ed25519(&pid.0).ok())
 		.collect()
 }
 
@@ -82,7 +82,7 @@ fn converged_peer_dids(client: &JazzClient) -> std::collections::HashSet<String>
 		.converged_peer_ids()
 		.unwrap_or_default()
 		.iter()
-		.filter_map(|pid| crate::jazz_auth::peer_did_from_ed25519(&pid.0).ok())
+		.filter_map(|pid| crate::jazz_auth::signer_did_from_ed25519(&pid.0).ok())
 		.collect()
 }
 
@@ -111,8 +111,8 @@ fn build_peer_mesh_status(
 		.iter()
 		.filter(|r| r.status == "active")
 		.map(|r| {
-			let linked = registered_dids.contains(&r.peer_did);
-			let converged = linked && converged_dids.contains(&r.peer_did);
+			let linked = registered_dids.contains(&r.signer_did);
+			let converged = linked && converged_dids.contains(&r.signer_did);
 			let (phase, usability, bootstrap) = if converged {
 				(
 					PeerMeshPhase::Ready,
@@ -134,7 +134,7 @@ fn build_peer_mesh_status(
 			};
 			PeerMeshPeerState {
 				id: r.id.clone(),
-				peer_did: r.peer_did.clone(),
+				signer_did: r.signer_did.clone(),
 				device_label: r.device_label.clone(),
 				db_status: r.status.clone(),
 				added_at_ms: r.added_at_ms.max(0) as u64,
@@ -264,10 +264,10 @@ pub(crate) async fn groove_ipc_peer_add(
 	if peer_did.is_empty() {
 		return Err("peer_did is empty".into());
 	}
-	crate::jazz_auth::ed25519_public_from_peer_did(&peer_did)?;
+	crate::jazz_auth::ed25519_public_from_signer_did(&peer_did)?;
 	let client = with_connected_client(jazz, app, self_state).await?;
 	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
-	if peer_did == shell_arc.as_ref().peer_did {
+	if peer_did == shell_arc.as_ref().signer_did {
 		return Err("cannot add your own DID as a peer".into());
 	}
 	crate::peers::add_remote_peer(client.as_ref(), &peer_did, &device_label).await?;
@@ -275,7 +275,7 @@ pub(crate) async fn groove_ipc_peer_add(
 	// Resume sync immediately — e.g. re-adding a Forgotten peer. Idempotent with
 	// the connect-time registration; harmless (queues until a transport exists)
 	// when no live link to this peer is present yet.
-	if let Ok(pk) = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did) {
+	if let Ok(pk) = crate::jazz_auth::ed25519_public_from_signer_did(&peer_did) {
 		if let Err(e) = client.register_peer_sync_client(PeerId(pk)) {
 			log::warn!(target: "avenos::jazz", "peer_add register {peer_did}: {e}");
 		}
@@ -298,7 +298,7 @@ pub(crate) async fn groove_ipc_peer_revoke(
 	// Actually stop syncing: drop the registered peer client so we no longer
 	// ship to it or accept its catch-up. Marking the row alone left the peer
 	// live in the mesh — Forget appeared to do nothing.
-	if let Ok(pk) = crate::jazz_auth::ed25519_public_from_peer_did(&peer_did) {
+	if let Ok(pk) = crate::jazz_auth::ed25519_public_from_signer_did(&peer_did) {
 		match client.remove_peer_sync_client(PeerId(pk)) {
 			Ok(true) => {}
 			Ok(false) => log::warn!(

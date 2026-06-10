@@ -23,7 +23,7 @@
 	let err = $state<string | undefined>()
 	let busy = $state(false)
 
-	const identitiesStore = jazzStore('identities')
+	const identitiesStore = jazzStore('safes')
 	const todos = jazzStore('todos')
 
 	function idsMatch(a: string, b: string): boolean {

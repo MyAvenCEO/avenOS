@@ -627,7 +627,7 @@ mod tests {
 		let recipient_pk = recipient.verifying_key().to_bytes();
 
 		let owner = uuid::Uuid::new_v4();
-		let urn = format!("identity:{owner}");
+		let urn = format!("safe:{owner}");
 		let recipient_did = "did:key:zRecipient";
 		let granter_did = "did:key:zGranter";
 		let dek_ver = 1i64;
@@ -648,7 +648,7 @@ mod tests {
 		let dek = random_identity_dek();
 		let identity = uuid::Uuid::nil();
 		let row = uuid::Uuid::nil();
-		let identity_urn = format!("identity:{identity}");
+		let identity_urn = format!("safe:{identity}");
 		let aad_plain = format!("{identity_urn}|todos|title|{row}|1").into_bytes();
 
 		let enc = seal_text_cell_payload(dek.expose(), &aad_plain, "hello").unwrap();
@@ -663,7 +663,7 @@ mod tests {
 		let dek = random_identity_dek();
 		let identity = uuid::Uuid::nil();
 		let row = uuid::Uuid::nil();
-		let identity_urn = format!("identity:{identity}");
+		let identity_urn = format!("safe:{identity}");
 		let aad_plain = cell_seal_aad(&identity_urn, "todos", "done", row, 2, column_type_slug(&ColumnType::Text));
 		assert_eq!(
 			dek_version_from_aad_bytes(&aad_plain).unwrap(),
@@ -691,7 +691,7 @@ mod tests {
 		let dek_v2 = random_identity_dek();
 		let identity = uuid::Uuid::new_v4();
 		let row = uuid::Uuid::new_v4();
-		let urn = format!("identity:{identity}");
+		let urn = format!("safe:{identity}");
 
 		// Old cell, sealed under v1.
 		let aad_v1 = cell_seal_aad(&urn, "messages", "body", row, 1, column_type_slug(&ColumnType::Text));
@@ -728,7 +728,7 @@ mod tests {
 
 		let identity = uuid::Uuid::new_v4();
 		let row = uuid::Uuid::new_v4();
-		let urn = format!("identity:{identity}");
+		let urn = format!("safe:{identity}");
 		let carol_did = "did:key:zCarol";
 
 		let old_dek = random_identity_dek(); // v1 — everyone (incl. revoked Bob) had this

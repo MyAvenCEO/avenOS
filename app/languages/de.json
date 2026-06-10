@@ -497,7 +497,13 @@
 			"noOneListed": "No one listed yet.",
 			"giveAccess": "Zugriff gewähren",
 			"addAsAdmin": "Add as admin",
-			"didPlaceholder": "DID eines Geräts einfügen (did:key:…)",
+			"didPlaceholder": "DID einfügen (did:key:… oder did:safe:… für nicht-menschliche Typen)",
+			"safeDidPlaceholder": "…oder eine did:safe:… DID direkt einfügen",
+			"addMemberSafeHuman": "Human-SAFE als Mitglied hinzufügen",
+			"addMemberSafeAven": "Aven-SAFE als Mitglied hinzufügen",
+			"pickSafePlaceholder": "SAFE auswählen…",
+			"noEligibleSafes": "Keine passenden SAFEs auf diesem Gerät — füge unten eine did:safe:… DID ein.",
+			"safeChip": "{type} SAFE",
 			"giveAccessHint": "Füge die DID eines Geräts ein, um diesen Identity damit zu teilen. Teilen ist der einzige Schritt — kein separates Pairing.",
 			"accessGrantedNote": "Access granted — it may take a moment to show on their device.",
 			"addReplica": "Replikationsserver",
@@ -576,6 +582,9 @@
 		"avenCeoUnclaimedSub": "Nicht beansprucht — beanspruche es, um Admin/Eigentümer dieses Netzwerks zu werden.",
 		"avenCeoClaim": "Beanspruchen — Netzwerk-Admin werden",
 		"avenCeoClaiming": "Beanspruche…",
+		"sparksSection": "Sparks",
+		"createSpark": "Neuer Spark",
+		"namePromptSpark": "Spark-Name",
 		"composer": {
 			"placeholder": "Sprich, navigiere oder füge eine Aufgabe hinzu…"
 		},
@@ -674,15 +683,10 @@
 		"identity": {
 			"title": "Self",
 			"subtitle": "Deine Identität auf diesem Gerät — {device}.",
-			"deviceDid": "Geräte-DID",
-			"deviceDidDescription": "Touch-ID-gesicherte Hardware-Identität für dieses Gerät.",
-			"unlockToProvisionDid": "Einmal entsperren, um diese Geräte-DID bereitzustellen.",
-			"peerDid": "Peer-DID",
-			"peerDidDescription": "Abgeleitet nach Touch ID — für Identities, Signieren und Sync.",
-			"unlockToDeriveDid": "Entsperren, um deine Peer-DID abzuleiten.",
-			"secureEnclaveKey": "Secure Enclave public key (SEC1)",
+			"signerDid": "Signer-DID",
+			"signerDidDescription": "HKDF-abgeleitete Ed25519-Identität — für Signieren, Caps und Sync.",
+			"unlockToDeriveDid": "Entsperren, um deine Signer-DID abzuleiten.",
 			"verifyingKey": "Verifying key (base64)",
-			"deviceCryptoNote": "NIST P-256 · did:key · p256-pub",
 			"signingCryptoNote": "HKDF-derived Ed25519 · did:key · ed25519-pub"
 		},
 		"peers": {

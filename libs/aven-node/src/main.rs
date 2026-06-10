@@ -221,7 +221,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = Config::from_env();
     let identity = load_identity(&cfg);
     let server_peer = PeerId(identity.verifying_key().to_bytes());
-    let server_did = groove::did_key::peer_did_from_ed25519(&server_peer.0)
+    let server_did = groove::did_key::signer_did_from_ed25519(&server_peer.0)
         .map_err(|e| format!("server did: {e}"))?;
     tracing::info!(%server_did, "aven-node identity");
 
@@ -236,7 +236,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         %avenceo_id,
         server_name = %cfg.server_name,
         network_seed = %cfg.network_seed,
-        owner_did = %server_vault.peer_did,
+        owner_did = %server_vault.signer_did,
         "avenCEO control identity — server is the owner"
     );
 

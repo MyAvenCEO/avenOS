@@ -57,7 +57,7 @@ pub struct P2pDiagnostics {
 #[serde(rename_all = "camelCase")]
 pub struct PeerMeshPeerState {
     pub id: String,
-    pub peer_did: String,
+    pub signer_did: String,
     pub device_label: String,
     pub db_status: String,
     pub added_at_ms: u64,
