@@ -524,6 +524,16 @@ deterministic pass is load-bearing without it. Revisit after E7.
 
 Newest entry first.
 
+- `2026-06-10` — **Merged latest main** (`1160ccc`, no conflicts) and re-verified the plan
+  against it: all cited file refs intact (`todoPreamble` identity-agent:125, drag-drop
+  `goto('/')` +layout:220–229, `n_ctx` 4096, `seal_column_plain` → `jazz/jazz_engine.rs`,
+  `groove_runtime` → `jazz/mod.rs` post-split, `IDENTITY_SCOPED_TABLES` db page:25). Main
+  independently adopted the **clean-baseline snapshot policy** (`5f52766`) — the stale
+  draft-lens snapshot is gone; the E0 harness now passes the full registry check
+  (`before-message-role` lenses cleanly; hash `f350ca95…` unchanged). aven-brain still 13/13.
+  Renumbered this item **0011 → 0018** (main's security items took 0009–0017). New on main,
+  no plan impact: jazz/mod.rs split (A1), avens/ routes, relay auto-grant on identity create,
+  peers label/name columns sealed.
 - `2026-06-10` — **E0 shipped** (`fdaaffb`): `vector` type mapping in `schema_manifest.rs` +
   the 4 tables (`memories`/`entities`/`links`/`context_traces`) in `schema.manifest.json`.
   Verified against the real engine via a standalone groove harness (the app crate can't build in
@@ -532,7 +542,7 @@ Newest entry first.
   (truly add-only) ✓. Pre-existing on main (not E0): the oldest registry snapshot
   (`before-peers-spark-id`) drafts against current — moot under the fresh-DB policy.
   Next: E1 (engine unseal-on-scan seam + aven-brain 3-table rework).
-- `2026-06-10` — Moved into the board as `plan/0011` (was `docs/aven-brain-architecture.md`).
+- `2026-06-10` — Moved into the board as `plan/0011`, renumbered to `plan/0018` after the main merge took 0009–0017 (was `docs/aven-brain-architecture.md`).
   v5.2: provenance folded into artifact. v5.1: artifacts generalization + per-table ingestion
   adapters. v5: data model consolidated to memory · entity · link (note/claim/bond registry).
   v4: forever-talk context manager, ContextTrace + right aside, dynamic DB viewer, synced sealed

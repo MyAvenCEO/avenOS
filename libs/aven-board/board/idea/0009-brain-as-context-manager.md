@@ -142,7 +142,7 @@ each reference with a why-it-matched badge + score + clickable citation, plus en
   (remember/search/wake/recall/entity_card/dream + EmbeddingGemma encoder) already shipped — see
   the archived execution plan (`board/done/0010-aven-brain-execution-plan.md`).
 - `2026-06-10` — Design sections superseded by the **v4 execution plan**
-  (`libs/aven-board/board/plan/0011-aven-brain-architecture.md`), which folds this card into phases E2–E6 with the locked
+  (`libs/aven-board/board/plan/0018-aven-brain-architecture.md`), which folds this card into phases E2–E6 with the locked
   decisions: brain tables = normal CRDT-synced **sealed** tables (engine unseal-on-scan seam,
   plaintext only transiently in RAM on-device); forever-talk (no sessions); per-human-message
   ContextTrace stored in a new sealed `context_traces` table; **wide right aside** (third grid

@@ -171,7 +171,7 @@ remote **GLM-5.3 in a Phala RedPill TEE** (§6b, TODO). aven-brain stays light b
 ## 6b. Extractor — GLM-5.3 on Phala Cloud RedPill TEE (board plan)
 
 > **⏸ PARKED (2026-06-10)** — deferred out of the active roadmap by the v4 execution plan
-> (`libs/aven-board/board/plan/0011-aven-brain-architecture.md`, Appendix B). Nothing active depends on it; revisit after E7.
+> (`libs/aven-board/board/plan/0018-aven-brain-architecture.md`, Appendix B). Nothing active depends on it; revisit after E7.
 
 **Status: TODO — seam only.** `extractor.rs` defines the `Extractor` trait +
 `ExtractedFact`/`ExtractionInput`; there is **no implementation and no fallback**. With no
