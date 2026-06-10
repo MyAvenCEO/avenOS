@@ -20,7 +20,7 @@ pub struct BiscuitIdentity {
 
 pub struct BiscuitVault {
 	pub biscuit_kp: KeyPair,
-	pub peer_did: String,
+	pub signer_did: String,
 	pub ed25519_public: [u8; 32],
 	pub identities: std::collections::HashMap<Uuid, BiscuitIdentity>,
 }
@@ -241,12 +241,12 @@ pub fn build_vault_from_signing_key(sk_ed: &SigningKey) -> Result<BiscuitVault, 
 	let biscuit_kp =
 		biscuit_keypair_from_ed25519_signing(sk_ed.as_bytes())?;
 
-	let peer_did =
+	let signer_did =
 		groove::did_key::signer_did_from_ed25519(&pk_arr)?;
 
 	Ok(BiscuitVault {
 		biscuit_kp,
-		peer_did,
+		signer_did,
 		ed25519_public: pk_arr,
 		identities: std::collections::HashMap::new(),
 	})
@@ -260,7 +260,7 @@ pub fn mint_genesis_identity(
 	let prefix_lit = format!("{identity_urn}:");
 	let own_f = format!(
 			"owns(\"{}\", \"{}\")",
-			vault.peer_did.replace('"', "\\\""),
+			vault.signer_did.replace('"', "\\\""),
 			identity_urn.replace('"', "\\\"")
 		);
 	let mut bb = Biscuit::builder().fact(own_f.as_str()).map_err(|e| format!("genesis-own-fact:{e}"))?;
@@ -298,7 +298,7 @@ pub fn mint_group_genesis_extending(
 	let parent_urn = identity_urn_for(parent_id);
 	let own_f = format!(
 		"owns(\"{}\", \"{}\")",
-		vault.peer_did.replace('"', "\\\""),
+		vault.signer_did.replace('"', "\\\""),
 		group_urn.replace('"', "\\\"")
 	);
 	let mut bb = Biscuit::builder()
@@ -331,14 +331,14 @@ pub fn group_extends_parent(chain: &Biscuit) -> Result<Option<Uuid>, String> {
 	Ok(None)
 }
 
-/// Append a third-party biscuit block granting `new_peer_did` an [`owns`] fact on this Identity,
+/// Append a third-party biscuit block granting `new_signer_did` an [`owns`] fact on this Identity,
 /// signed by `delegating_kp` (typically the device's biscuit [`KeyPair`], i.e. same key that
 /// anchored the genesis or a prior delegated admin's key — see biscuit third-party semantics).
 pub fn attenuate_add_owner_third_party(
 	delegating_kp: &KeyPair,
 	chain: &Biscuit,
 	owner: Uuid,
-	new_peer_did: &str,
+	new_signer_did: &str,
 ) -> Result<Biscuit, String> {
 	let req = chain
 		.third_party_request()
@@ -346,7 +346,7 @@ pub fn attenuate_add_owner_third_party(
 	let identity_str = identity_urn_for(owner);
 	let own_f = format!(
 		"owns(\"{}\", \"{}\")",
-		new_peer_did.replace('\\', "\\\\").replace('"', "\\\""),
+		new_signer_did.replace('\\', "\\\\").replace('"', "\\\""),
 		identity_str.replace('\\', "\\\\").replace('"', "\\\"")
 	);
 	let bb = BlockBuilder::new()
@@ -455,7 +455,7 @@ pub fn identity_replicas(chain: &Biscuit, owner: Uuid) -> Result<HashSet<String>
 }
 
 /// Re-mint a identity biscuit granting every current admin EXCEPT `exclude_did`
-/// (v2 revoke). Genesis re-grants the owner (`vault.peer_did`); every other
+/// (v2 revoke). Genesis re-grants the owner (`vault.signer_did`); every other
 /// remaining admin is re-appended. The excluded DID is simply not re-granted, so
 /// the new chain's `owns` set no longer contains it → `authorize` denies it.
 /// Pair with DEK rotation so the revoked peer also cannot decrypt new data.
@@ -482,8 +482,8 @@ pub fn rebuild_identity_biscuit_excluding(
 	let grants = identity_grants(chain, owner)?;
 
 	let kp = &vault.biscuit_kp;
-	let excluded = |d: &str| peer_did_matches(d, exclude_did);
-	let is_owner = |d: &str| peer_did_matches(d, &vault.peer_did);
+	let excluded = |d: &str| signer_did_matches(d, exclude_did);
+	let is_owner = |d: &str| signer_did_matches(d, &vault.signer_did);
 	let mut biscuit = mint_genesis_identity(vault, owner)?;
 
 	// Genesis already grants the owner; re-append every OTHER admin except the revoked
@@ -496,7 +496,7 @@ pub fn rebuild_identity_biscuit_excluding(
 	}
 	// Delegated readers (Member). Skip any DID already re-granted the strictly-greater
 	// owns above, and the owner/excluded DID.
-	let already_owner = |d: &str| admin_dids.iter().any(|a| peer_did_matches(a, d));
+	let already_owner = |d: &str| admin_dids.iter().any(|a| signer_did_matches(a, d));
 	let mut reader_dids: Vec<String> = readers
 		.into_iter()
 		.filter(|d| !excluded(d) && !is_owner(d) && !already_owner(d))
@@ -544,14 +544,14 @@ pub fn ingest_genesis_opened(
 	Ok(())
 }
 
-fn peer_did_matches(a: &str, b: &str) -> bool {
+fn signer_did_matches(a: &str, b: &str) -> bool {
 	a.trim() == b.trim()
 }
 
-pub fn identity_peer_is_owner(chain: &Biscuit, owner: Uuid, peer_did: &str) -> Result<bool, String> {
+pub fn identity_peer_is_owner(chain: &Biscuit, owner: Uuid, signer_did: &str) -> Result<bool, String> {
 	let identity_str = identity_urn_for(owner);
 	let admins = trusted_subject_dids(chain, &identity_str)?;
-	Ok(admins.iter().any(|a| peer_did_matches(a, peer_did)))
+	Ok(admins.iter().any(|a| signer_did_matches(a, signer_did)))
 }
 
 /// All admin (`owns`) DIDs for a identity per the biscuit chain.
@@ -654,7 +654,7 @@ fn authorize_local(
 	}
 
 	let admins = trusted_subject_dids(&chain.biscuit, &identity_str)?;
-	if !admins.iter().any(|a| peer_did_matches(a, subject_did)) {
+	if !admins.iter().any(|a| signer_did_matches(a, subject_did)) {
 		// Non-owner subject: the only thing it may hold is a *delegated* right
 		// (admin-signed third-party block), not membership. A delegated `reads`
 		// grant authorizes Read without `owns` — the same generalization
@@ -733,7 +733,7 @@ fn authorize_replicate(chain: &Biscuit, resource: &str, subject_did: &str) -> Re
 		.map_err(|e| format!("authz-rep-query:{e}"))?;
 	let allowed = grants
 		.iter()
-		.any(|(did, prefix)| peer_did_matches(did, subject_did) && resource.starts_with(prefix));
+		.any(|(did, prefix)| signer_did_matches(did, subject_did) && resource.starts_with(prefix));
 	if allowed {
 		Ok(())
 	} else {
@@ -755,7 +755,7 @@ fn authorize_read_delegated(chain: &Biscuit, resource: &str, subject_did: &str) 
 		.map_err(|e| format!("authz-read-query:{e}"))?;
 	let allowed = grants
 		.iter()
-		.any(|(did, prefix)| peer_did_matches(did, subject_did) && resource.starts_with(prefix));
+		.any(|(did, prefix)| signer_did_matches(did, subject_did) && resource.starts_with(prefix));
 	if allowed {
 		Ok(())
 	} else {
@@ -801,7 +801,7 @@ fn authorize_granted_op(chain: &Biscuit, op: &str, resource: &str, subject_did: 
 		.query_all("granted($p, $op, $pre) <- grant($p, $op, $pre)")
 		.map_err(|e| format!("authz-grant-query:{e}"))?;
 	let allowed = grants.iter().any(|(did, gop, prefix)| {
-		peer_did_matches(did, subject_did) && gop == op && resource.starts_with(prefix)
+		signer_did_matches(did, subject_did) && gop == op && resource.starts_with(prefix)
 	});
 	if allowed {
 		Ok(())
@@ -860,7 +860,7 @@ mod tests {
 				biscuit,
 			},
 		);
-		authorize(&v, sid, AccOp::Write, "todos", None, &v.peer_did.clone()).unwrap();
+		authorize(&v, sid, AccOp::Write, "todos", None, &v.signer_did.clone()).unwrap();
 		assert!(authorize(
 			&v,
 			sid,
@@ -886,7 +886,7 @@ mod tests {
 			},
 		);
 		let rid = uuid::Uuid::new_v4();
-		authorize(&v, sid, AccOp::Delete, "todos", Some(rid), &v.peer_did.clone()).unwrap();
+		authorize(&v, sid, AccOp::Delete, "todos", Some(rid), &v.signer_did.clone()).unwrap();
 	}
 
 	#[test]
@@ -904,7 +904,7 @@ mod tests {
 			&alice.biscuit_kp,
 			&genesis,
 			sid,
-			bob.peer_did.as_str(),
+			bob.signer_did.as_str(),
 		)
 		.unwrap();
 
@@ -917,7 +917,7 @@ mod tests {
 		);
 		let mut bob_vault = BiscuitVault {
 			biscuit_kp: bob.biscuit_kp,
-			peer_did: bob.peer_did.clone(),
+			signer_did: bob.signer_did.clone(),
 			ed25519_public: bob.ed25519_public,
 			identities: std::collections::HashMap::new(),
 		};
@@ -929,10 +929,10 @@ mod tests {
 			},
 		);
 
-		authorize(&alice, sid, AccOp::Write, "todos", None, &alice.peer_did).unwrap();
-		authorize(&bob_vault, sid, AccOp::Write, "todos", None, &bob.peer_did).unwrap();
+		authorize(&alice, sid, AccOp::Write, "todos", None, &alice.signer_did).unwrap();
+		authorize(&bob_vault, sid, AccOp::Write, "todos", None, &bob.signer_did).unwrap();
 		let other = vault(&[33u8; 32]);
-		assert!(authorize(&bob_vault, sid, AccOp::Write, "todos", None, &other.peer_did).is_err());
+		assert!(authorize(&bob_vault, sid, AccOp::Write, "todos", None, &other.signer_did).is_err());
 
 		let _ = issuer_pk;
 	}
@@ -951,24 +951,24 @@ mod tests {
 			&alice.biscuit_kp,
 			&genesis,
 			sid,
-			server.peer_did.as_str(),
+			server.signer_did.as_str(),
 		)
 		.unwrap();
 		let mut v = alice;
 		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
 
 		// The replica IS authorized to store-and-forward (Replicate) the identity's rows…
-		authorize(&v, sid, AccOp::Replicate, "todos", Some(rid), &server.peer_did).unwrap();
+		authorize(&v, sid, AccOp::Replicate, "todos", Some(rid), &server.signer_did).unwrap();
 		// …but is NOT a member: it can neither read nor write (no decryption / no edits).
-		assert!(authorize(&v, sid, AccOp::Write, "todos", Some(rid), &server.peer_did).is_err());
-		assert!(authorize(&v, sid, AccOp::Read, "todos", Some(rid), &server.peer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Write, "todos", Some(rid), &server.signer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Read, "todos", Some(rid), &server.signer_did).is_err());
 		// A DID with no replicate grant cannot store-and-forward.
 		assert!(
-			authorize(&v, sid, AccOp::Replicate, "todos", Some(rid), &outsider.peer_did).is_err()
+			authorize(&v, sid, AccOp::Replicate, "todos", Some(rid), &outsider.signer_did).is_err()
 		);
 		// And holding `replicate` does NOT confer membership to a real member check:
 		// the owner still works as a member.
-		authorize(&v, sid, AccOp::Write, "todos", Some(rid), &v.peer_did.clone()).unwrap();
+		authorize(&v, sid, AccOp::Write, "todos", Some(rid), &v.signer_did.clone()).unwrap();
 	}
 
 	#[test]
@@ -983,26 +983,26 @@ mod tests {
 
 		let genesis = mint_genesis_identity(&alice, sid).unwrap();
 		let chain =
-			attenuate_add_reader_third_party(&alice.biscuit_kp, &genesis, sid, reader.peer_did.as_str())
+			attenuate_add_reader_third_party(&alice.biscuit_kp, &genesis, sid, reader.signer_did.as_str())
 				.unwrap();
 		let mut v = alice;
 		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
 
 		// Enumerated as a reader.
 		let readers = identity_readers(&v.identities.get(&sid).unwrap().biscuit, sid).unwrap();
-		assert!(readers.iter().any(|d| peer_did_matches(d, &reader.peer_did)), "reader listed");
+		assert!(readers.iter().any(|d| signer_did_matches(d, &reader.signer_did)), "reader listed");
 
 		// The reader IS authorized to Read…
-		authorize(&v, sid, AccOp::Read, "peers", Some(rid), &reader.peer_did).unwrap();
+		authorize(&v, sid, AccOp::Read, "peers", Some(rid), &reader.signer_did).unwrap();
 		// …but is NOT a member/admin: no write, no delete, no replicate.
-		assert!(authorize(&v, sid, AccOp::Write, "peers", Some(rid), &reader.peer_did).is_err());
-		assert!(authorize(&v, sid, AccOp::Delete, "peers", Some(rid), &reader.peer_did).is_err());
-		assert!(authorize(&v, sid, AccOp::Replicate, "peers", Some(rid), &reader.peer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Write, "peers", Some(rid), &reader.signer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Delete, "peers", Some(rid), &reader.signer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Replicate, "peers", Some(rid), &reader.signer_did).is_err());
 		// A DID with no reads grant cannot read.
-		assert!(authorize(&v, sid, AccOp::Read, "peers", Some(rid), &outsider.peer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Read, "peers", Some(rid), &outsider.signer_did).is_err());
 		// The owner still reads + writes as a full member.
-		authorize(&v, sid, AccOp::Read, "peers", Some(rid), &v.peer_did.clone()).unwrap();
-		authorize(&v, sid, AccOp::Write, "peers", Some(rid), &v.peer_did.clone()).unwrap();
+		authorize(&v, sid, AccOp::Read, "peers", Some(rid), &v.signer_did.clone()).unwrap();
+		authorize(&v, sid, AccOp::Write, "peers", Some(rid), &v.signer_did.clone()).unwrap();
 	}
 
 	#[test]
@@ -1047,7 +1047,7 @@ mod tests {
 		assert_eq!(group_extends_parent(&biscuit).unwrap(), Some(parent));
 		// The creator is the group's owner — full rights over the GROUP's own prefix.
 		v.identities.insert(group, BiscuitIdentity { owner: group, biscuit });
-		authorize(&v, group, AccOp::Write, "todos", None, &v.peer_did.clone()).unwrap();
+		authorize(&v, group, AccOp::Write, "todos", None, &v.signer_did.clone()).unwrap();
 		// A plain identity genesis has no parent (it is a root group).
 		let id = uuid::Uuid::new_v4();
 		let plain = mint_genesis_identity(&v, id).unwrap();
@@ -1063,7 +1063,7 @@ mod tests {
 		// Parent identity owned by `v`, with `reader` added as a delegated reader.
 		let parent = uuid::Uuid::new_v4();
 		let mut pb = mint_genesis_identity(&v, parent).unwrap();
-		pb = attenuate_add_reader_third_party(&v.biscuit_kp, &pb, parent, &reader.peer_did).unwrap();
+		pb = attenuate_add_reader_third_party(&v.biscuit_kp, &pb, parent, &reader.signer_did).unwrap();
 		v.identities.insert(parent, BiscuitIdentity { owner: parent, biscuit: pb });
 
 		// A sub-group (collection-level) that EXTENDS the parent.
@@ -1072,11 +1072,11 @@ mod tests {
 		v.identities.insert(group, BiscuitIdentity { owner: group, biscuit: gb });
 
 		// Inheritance: the parent's reader may READ the sub-group with NO per-group grant.
-		authorize(&v, group, AccOp::Read, "todos", Some(uuid::Uuid::new_v4()), &reader.peer_did).unwrap();
+		authorize(&v, group, AccOp::Read, "todos", Some(uuid::Uuid::new_v4()), &reader.signer_did).unwrap();
 		// The creator (parent owner) may WRITE the sub-group (its own `owns`).
-		authorize(&v, group, AccOp::Write, "todos", None, &v.peer_did.clone()).unwrap();
+		authorize(&v, group, AccOp::Write, "todos", None, &v.signer_did.clone()).unwrap();
 		// An outsider (member of neither parent nor group) is DENIED — inheritance is bounded.
-		assert!(authorize(&v, group, AccOp::Read, "todos", Some(uuid::Uuid::new_v4()), &outsider.peer_did).is_err());
+		assert!(authorize(&v, group, AccOp::Read, "todos", Some(uuid::Uuid::new_v4()), &outsider.signer_did).is_err());
 	}
 
 	#[test]
@@ -1093,7 +1093,7 @@ mod tests {
 		let chain = attenuate_add_grant_third_party(
 			&owner.biscuit_kp,
 			&genesis,
-			&member.peer_did,
+			&member.signer_did,
 			"write",
 			&prefix,
 		)
@@ -1102,20 +1102,20 @@ mod tests {
 		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
 
 		// Member may write its OWN row…
-		authorize(&v, sid, AccOp::Write, "peers", Some(own_row), &member.peer_did).unwrap();
+		authorize(&v, sid, AccOp::Write, "peers", Some(own_row), &member.signer_did).unwrap();
 		// …but NOT another row, NOT another table, NOT read, NOT delete.
-		assert!(authorize(&v, sid, AccOp::Write, "peers", Some(other_row), &member.peer_did).is_err());
-		assert!(authorize(&v, sid, AccOp::Write, "todos", Some(own_row), &member.peer_did).is_err());
-		assert!(authorize(&v, sid, AccOp::Read, "peers", Some(own_row), &member.peer_did).is_err());
-		assert!(authorize(&v, sid, AccOp::Delete, "peers", Some(own_row), &member.peer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Write, "peers", Some(other_row), &member.signer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Write, "todos", Some(own_row), &member.signer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Read, "peers", Some(own_row), &member.signer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Delete, "peers", Some(own_row), &member.signer_did).is_err());
 		// Owner keeps full access (the granular grant doesn't shadow ownership).
-		authorize(&v, sid, AccOp::Write, "peers", Some(other_row), &v.peer_did.clone()).unwrap();
+		authorize(&v, sid, AccOp::Write, "peers", Some(other_row), &v.signer_did.clone()).unwrap();
 
 		// Enumerated by identity_grants for the cap report.
 		let grants = identity_grants(&v.identities.get(&sid).unwrap().biscuit, sid).unwrap();
 		assert!(grants
 			.iter()
-			.any(|(d, o, p)| peer_did_matches(d, &member.peer_did) && o == "write" && p == &prefix));
+			.any(|(d, o, p)| signer_did_matches(d, &member.signer_did) && o == "write" && p == &prefix));
 	}
 
 	#[test]
@@ -1126,19 +1126,19 @@ mod tests {
 		let sid = uuid::Uuid::new_v4();
 
 		let mut chain = mint_genesis_identity(&owner, sid).unwrap();
-		chain = attenuate_add_reader_third_party(&owner.biscuit_kp, &chain, sid, &reader.peer_did).unwrap();
-		chain = attenuate_add_replicate_third_party(&owner.biscuit_kp, &chain, sid, &replica.peer_did).unwrap();
+		chain = attenuate_add_reader_third_party(&owner.biscuit_kp, &chain, sid, &reader.signer_did).unwrap();
+		chain = attenuate_add_replicate_third_party(&owner.biscuit_kp, &chain, sid, &replica.signer_did).unwrap();
 
 		let report = identity_cap_report(&chain, sid).unwrap();
 		// Single source: owner caps == OWNER_RIGHTS, reader == [read], replica == [replicate].
 		let owner_rights: Vec<String> = OWNER_RIGHTS.iter().map(|s| s.to_string()).collect();
-		let o = report.iter().find(|s| peer_did_matches(&s.did, &owner.peer_did)).unwrap();
+		let o = report.iter().find(|s| signer_did_matches(&s.did, &owner.signer_did)).unwrap();
 		assert_eq!(o.grant, "owns");
 		assert_eq!(o.caps, owner_rights);
-		let r = report.iter().find(|s| peer_did_matches(&s.did, &reader.peer_did)).unwrap();
+		let r = report.iter().find(|s| signer_did_matches(&s.did, &reader.signer_did)).unwrap();
 		assert_eq!(r.grant, "reads");
 		assert_eq!(r.caps, vec!["read".to_string()]);
-		let p = report.iter().find(|s| peer_did_matches(&s.did, &replica.peer_did)).unwrap();
+		let p = report.iter().find(|s| signer_did_matches(&s.did, &replica.signer_did)).unwrap();
 		assert_eq!(p.grant, "replicate");
 		// A relay's effective caps now report the bounds its grant implies on the aven:
 		// the blind `replicate` + a per-identity 10 MB `quota` + inbound `rate_limit`.
@@ -1161,31 +1161,31 @@ mod tests {
 		let sid = uuid::Uuid::new_v4();
 
 		let mut chain = mint_genesis_identity(&alice, sid).unwrap();
-		chain = attenuate_add_owner_third_party(&alice.biscuit_kp, &chain, sid, &bob.peer_did).unwrap();
+		chain = attenuate_add_owner_third_party(&alice.biscuit_kp, &chain, sid, &bob.signer_did).unwrap();
 		chain =
-			attenuate_add_owner_third_party(&alice.biscuit_kp, &chain, sid, &carol.peer_did).unwrap();
+			attenuate_add_owner_third_party(&alice.biscuit_kp, &chain, sid, &carol.signer_did).unwrap();
 
 		let mut v = alice;
 		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
 
 		// Sanity: all three authorized before revoke.
-		authorize(&v, sid, AccOp::Write, "todos", None, &v.peer_did.clone()).unwrap();
-		authorize(&v, sid, AccOp::Write, "todos", None, &bob.peer_did).unwrap();
-		authorize(&v, sid, AccOp::Write, "todos", None, &carol.peer_did).unwrap();
+		authorize(&v, sid, AccOp::Write, "todos", None, &v.signer_did.clone()).unwrap();
+		authorize(&v, sid, AccOp::Write, "todos", None, &bob.signer_did).unwrap();
+		authorize(&v, sid, AccOp::Write, "todos", None, &carol.signer_did).unwrap();
 
 		// Revoke Bob: re-mint excluding Bob.
-		let rebuilt = rebuild_identity_biscuit_excluding(&v, sid, &bob.peer_did).unwrap();
+		let rebuilt = rebuild_identity_biscuit_excluding(&v, sid, &bob.signer_did).unwrap();
 		let admins = identity_admins(&rebuilt, sid).unwrap();
-		assert!(admins.iter().any(|d| peer_did_matches(d, &v.peer_did)), "owner kept");
-		assert!(admins.iter().any(|d| peer_did_matches(d, &carol.peer_did)), "carol kept");
-		assert!(!admins.iter().any(|d| peer_did_matches(d, &bob.peer_did)), "bob removed");
+		assert!(admins.iter().any(|d| signer_did_matches(d, &v.signer_did)), "owner kept");
+		assert!(admins.iter().any(|d| signer_did_matches(d, &carol.signer_did)), "carol kept");
+		assert!(!admins.iter().any(|d| signer_did_matches(d, &bob.signer_did)), "bob removed");
 
 		// Authorize against the rebuilt chain: owner + carol allowed, bob denied.
 		v.identities.insert(sid, BiscuitIdentity { owner: sid, biscuit: rebuilt });
-		authorize(&v, sid, AccOp::Write, "todos", None, &v.peer_did.clone()).unwrap();
-		authorize(&v, sid, AccOp::Write, "todos", None, &carol.peer_did).unwrap();
+		authorize(&v, sid, AccOp::Write, "todos", None, &v.signer_did.clone()).unwrap();
+		authorize(&v, sid, AccOp::Write, "todos", None, &carol.signer_did).unwrap();
 		assert!(
-			authorize(&v, sid, AccOp::Write, "todos", None, &bob.peer_did).is_err(),
+			authorize(&v, sid, AccOp::Write, "todos", None, &bob.signer_did).is_err(),
 			"revoked Bob must be denied on the rebuilt biscuit"
 		);
 	}

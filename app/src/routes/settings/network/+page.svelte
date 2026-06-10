@@ -27,7 +27,7 @@
 			await waitForGrooveSessionReady()
 			const session = await jazzSession()
 			if (gen !== loadGen) return
-			ownDid = session.peerDid
+			ownDid = session.signerDid
 		} catch (e) {
 			if (gen !== loadGen) return
 			err = e instanceof Error ? e.message : String(e)

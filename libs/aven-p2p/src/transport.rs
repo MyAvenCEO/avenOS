@@ -315,7 +315,7 @@ impl SyncTransport for ServerListener {
     async fn send_to(&self, target: SyncTargetId, payload: SyncPayload) -> groove::Result<()> {
         let peer = match &target {
             SyncTargetId::Client(p) => *p,
-            SyncTargetId::PeerDid(did) => peer_from_did(did)
+            SyncTargetId::SignerDid(did) => peer_from_did(did)
                 .map_err(|e| JazzError::Sync(format!("route {did}: {e}")))?,
         };
         let conn = {

@@ -11,7 +11,7 @@ export { peerMeshSnapshot } from '$lib/runtime/groove-runtime'
 function meshPeerToRow(p: PeerMeshPeerState): PeerRowReply {
 	return {
 		id: p.id,
-		peerDid: p.peerDid,
+		signerDid: p.signerDid,
 		deviceLabel: p.deviceLabel,
 		kind: 'remote',
 		addedAtMs: p.addedAtMs,

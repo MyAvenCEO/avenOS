@@ -4,7 +4,7 @@
 //! shipping a batch to a peer. Here it is answered from identity biscuits:
 //!   1. subject (`PeerId` = Ed25519 pubkey) → `did:key:`
 //!   2. resource `(table, row)` → identity id (via the live `SyncAclSnapshot`)
-//!   3. `identity_acc::authorize(vault, identity, op, table, row, peer_did)`
+//!   3. `identity_acc::authorize(vault, identity, op, table, row, signer_did)`
 //!
 //! Three-state per §1.2: `Pending` (ACL / vault not hydrated yet) DEFERS — it
 //! never drops a frame; only an explicit biscuit denial is `DenyPermanent`.
@@ -38,8 +38,8 @@ impl BiscuitCapabilityResolver {
 impl CapabilityResolver for BiscuitCapabilityResolver {
 	fn may_sync(&self, subject: &SyncTargetId, op: AccOp, res: &ResourceCoord) -> CapDecision {
 		// 1. Subject → peer did:key.
-		let peer_did = match subject {
-			SyncTargetId::PeerDid(d) => d.clone(),
+		let signer_did = match subject {
+			SyncTargetId::SignerDid(d) => d.clone(),
 			SyncTargetId::Client(pid) => match crate::jazz_auth::signer_did_from_ed25519(&pid.0) {
 				Ok(did) => did,
 				Err(_) => return CapDecision::DenyPermanent,
@@ -78,7 +78,7 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 			identity_op,
 			&res.table,
 			Some(*res.row_id.uuid()),
-			&peer_did,
+			&signer_did,
 		) {
 			Ok(()) => CapDecision::Allow,
 			Err(_) => CapDecision::DenyPermanent,

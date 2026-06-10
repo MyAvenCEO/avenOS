@@ -147,7 +147,7 @@ impl SyncTransport for WsServerListener {
     async fn send_to(&self, target: SyncTargetId, payload: SyncPayload) -> groove::Result<()> {
         let peer = match &target {
             SyncTargetId::Client(p) => *p,
-            SyncTargetId::PeerDid(did) => PeerId(
+            SyncTargetId::SignerDid(did) => PeerId(
                 groove::did_key::ed25519_public_from_signer_did(did)
                     .map_err(|e| JazzError::Sync(format!("route {did}: {e}")))?,
             ),

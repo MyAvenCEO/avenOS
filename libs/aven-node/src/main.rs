@@ -197,7 +197,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         %avenceo_id,
         server_name = %cfg.server_name,
         network_seed = %cfg.network_seed,
-        owner_did = %server_vault.peer_did,
+        owner_did = %server_vault.signer_did,
         "avenCEO control identity — server is the owner"
     );
 

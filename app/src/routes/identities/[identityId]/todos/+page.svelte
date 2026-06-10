@@ -151,7 +151,7 @@
 	{:else}
 		{#if session}
 			<p class="text-muted-foreground font-mono text-xs leading-snug">
-				{session.peerDidShort}
+				{session.signerDidShort}
 				<span class="mx-2 text-border">·</span>
 				<span>identity:{canonicalSparkId}</span>
 			</p>

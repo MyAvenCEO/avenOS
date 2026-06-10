@@ -17,8 +17,8 @@ export async function avenCeoMembership(): Promise<'owner' | 'member' | 'none'> 
 
 /** Onboard a member to the avenCEO roster by DID (the inverted invite): grants the
  *  membership bundle — read the roster + write only their own profile row. Owner-only. */
-export async function avenCeoAddMember(peerDid: string): Promise<void> {
-	await grooveRuntime('avenCeoAddMember', { peerDid })
+export async function avenCeoAddMember(signerDid: string): Promise<void> {
+	await grooveRuntime('avenCeoAddMember', { signerDid })
 }
 
 /** Self-publish this device's profile into its own avenCEO roster row. */
@@ -44,8 +44,8 @@ export type JazzStatusReply = {
 }
 
 export type JazzSessionReply = {
-	peerDid: string
-	peerDidShort: string
+	signerDid: string
+	signerDidShort: string
 	defaultSparkUrn: string
 	/** did:key of the aven-node relay this device is synced through, if any. */
 	relayDid?: string | null
@@ -75,11 +75,11 @@ export async function jazzPeerMeshRefresh(): Promise<JazzPeerMeshRefreshReply> {
 /** Add a network peer as identity admin (biscuit + DEK keyshare); peer must be in My Network allowlist. */
 export async function sparkAdminAdd(payload: {
 	identityId: string
-	peerDid: string
+	signerDid: string
 }): Promise<void> {
 	await grooveRuntime('sparkAdminAdd', {
 		identityId: payload.identityId,
-		peerDid: payload.peerDid,
+		signerDid: payload.signerDid,
 	})
 }
 
@@ -90,11 +90,11 @@ export async function sparkAdminAdd(payload: {
  */
 export async function sparkReplicateAdd(payload: {
 	identityId: string
-	peerDid: string
+	signerDid: string
 }): Promise<void> {
 	await grooveRuntime('sparkReplicateAdd', {
 		identityId: payload.identityId,
-		peerDid: payload.peerDid,
+		signerDid: payload.signerDid,
 	})
 }
 
@@ -107,11 +107,11 @@ export async function sparkReplicateAdd(payload: {
  */
 export async function sparkReaderAdd(payload: {
 	identityId: string
-	peerDid: string
+	signerDid: string
 }): Promise<void> {
 	await grooveRuntime('sparkReaderAdd', {
 		identityId: payload.identityId,
-		peerDid: payload.peerDid,
+		signerDid: payload.signerDid,
 	})
 }
 
@@ -142,7 +142,7 @@ export async function sparkAdminList(identityId: string): Promise<IdentityAdminL
 
 export async function sparkAdminRevoke(_payload: {
 	identityId: string
-	peerDid: string
+	signerDid: string
 }): Promise<void> {
 	await grooveRuntime('sparkAdminRevoke', _payload)
 }
@@ -150,7 +150,7 @@ export async function sparkAdminRevoke(_payload: {
 /** A trusted peer device (My Network) — flat list, no humans coupling. */
 export type PeerRow = {
 	id: string
-	peerDid: string
+	signerDid: string
 	deviceLabel: string
 	kind: string
 	addedAtMs: number
@@ -163,13 +163,13 @@ export async function peerList(): Promise<PeerRow[]> {
 }
 
 /** First contact: add a trusted peer by DID (dev paste-DID shortcut). */
-export async function peerAdd(payload: { peerDid: string; label?: string }): Promise<void> {
-	await grooveRuntime('peerAdd', { peerDid: payload.peerDid, label: payload.label ?? '' })
+export async function peerAdd(payload: { signerDid: string; label?: string }): Promise<void> {
+	await grooveRuntime('peerAdd', { signerDid: payload.signerDid, label: payload.label ?? '' })
 }
 
 /** Remove a trusted peer from My Network. */
-export async function peerForget(peerDid: string): Promise<void> {
-	await grooveRuntime('peerRevoke', { peerDid })
+export async function peerForget(signerDid: string): Promise<void> {
+	await grooveRuntime('peerRevoke', { signerDid })
 }
 
 /** Result of explorer list — rows omit unauthorized biscuit/identity gates; count is diagnostics-only. */

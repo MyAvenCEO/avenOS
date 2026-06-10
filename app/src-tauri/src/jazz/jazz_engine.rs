@@ -29,7 +29,7 @@ use crate::{
 };
 
 pub(crate) struct ShellState {
-	pub(crate) peer_did: String,
+	pub(crate) signer_did: String,
 	pub(crate) vault: identity_acc::BiscuitVault,
 	#[allow(dead_code)]
 	pub(crate) signing_key: ed25519_dalek::SigningKey,
@@ -189,7 +189,7 @@ pub(super) fn authorize_gate(
 	owner: Uuid,
 	row_uuid: Option<Uuid>,
 ) -> Result<(), String> {
-	identity_acc::authorize(&state.vault, owner, op, table, row_uuid, &state.peer_did)
+	identity_acc::authorize(&state.vault, owner, op, table, row_uuid, &state.signer_did)
 }
 
 fn now_unix_ms_i64() -> i64 {
@@ -199,7 +199,7 @@ fn now_unix_ms_i64() -> i64 {
 		.unwrap_or(0i64)
 }
 
-pub(super) fn short_peer_did(did: &str) -> String {
+pub(super) fn short_signer_did(did: &str) -> String {
 	match did.strip_prefix("did:key:") {
 		Some(rest) => {
 			let head: String = rest.chars().take(12).collect();
@@ -633,7 +633,7 @@ pub(super) async fn hydrate_shell(
 		log::info!(
 			target: "avenos::jazz",
 			"KSDIAG hydrate: {} keyshare row(s) in store; me={}",
-			all_keyshares.len(), vault.peer_did,
+			all_keyshares.len(), vault.signer_did,
 		);
 		for (_oid, vals) in all_keyshares {
 			let sid = uuid_cell_at(vals.as_slice(), ks_spark_ix)?;
@@ -645,7 +645,7 @@ pub(super) async fn hydrate_shell(
 				Value::Text(s) => s.as_str(),
 				_ => return Err("ks_recip_bad".into()),
 			};
-			if recipient != vault.peer_did {
+			if recipient != vault.signer_did {
 				log::debug!(
 					target: "avenos::jazz",
 					"KSDIAG not-for-me: identity={sid} v={dv} recipient={recipient}",
@@ -778,11 +778,11 @@ pub(super) async fn hydrate_shell(
 		// has its own local `peers` row (presence + auto device label), idempotently —
 		// this branch re-runs every hydrate until the first identity exists.
 		let peers_schema_seed = resolved_table_schema(client, "peers").await?;
-		let did_ix = col_ix(&peers_schema_seed, "peer_did")?;
+		let did_ix = col_ix(&peers_schema_seed, "signer_did")?;
 		let existing_peers = exec_list_rows(client, "peers").await.unwrap_or_default();
 		let has_local = existing_peers
 			.iter()
-			.any(|(_o, vals)| matches!(vals.get(did_ix), Some(Value::Text(s)) if s == &vault.peer_did));
+			.any(|(_o, vals)| matches!(vals.get(did_ix), Some(Value::Text(s)) if s == &vault.signer_did));
 		if !has_local {
 			let device_label = manifest_opt
 				.as_ref()
@@ -793,7 +793,7 @@ pub(super) async fn hydrate_shell(
 				"peers",
 				&peers_schema_seed,
 				vec![
-					("peer_did".into(), JsonValue::String(vault.peer_did.clone())),
+					("signer_did".into(), JsonValue::String(vault.signer_did.clone())),
 					("device_label".into(), JsonValue::String(device_label)),
 					("kind".into(), JsonValue::String("local".into())),
 					("added_at_ms".into(), JsonValue::Number(now_unix_ms_i64().into())),
@@ -821,7 +821,7 @@ pub(super) async fn hydrate_shell(
 	);
 
 	Ok(ShellState {
-		peer_did: vault.peer_did.clone(),
+		signer_did: vault.signer_did.clone(),
 		vault,
 		signing_key,
 		default_identity,

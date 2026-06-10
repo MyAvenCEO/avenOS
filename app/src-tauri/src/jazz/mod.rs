@@ -64,8 +64,8 @@ pub struct JazzStatusReply {
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JazzSessionReply {
-	pub peer_did: String,
-	pub peer_did_short: String,
+	pub signer_did: String,
+	pub signer_did_short: String,
 	pub default_spark_urn: String,
 	/// did:key of the aven-node relay this device is synced through, if any —
 	/// lets the UI offer a one-click "replicate this identity to the relay".
@@ -1123,8 +1123,8 @@ pub(crate) async fn publish_trusted_peers_ui(
 	let (rows, snap) = if ss.is_unlocked() {
 		let client = with_connected_client(jazz, app, ss).await?;
 		let rows = crate::peers::list_peer_rows(client.as_ref()).await?;
-		let registered = registered_peer_dids(client.as_ref());
-		let converged = converged_peer_dids(client.as_ref());
+		let registered = registered_signer_dids(client.as_ref());
+		let converged = converged_signer_dids(client.as_ref());
 		let local_pk_prefix = local_pk_prefix_hex(ss);
 		let snap = build_peer_mesh_status(&rows, &registered, &converged, local_pk_prefix);
 		(rows, snap)
@@ -1143,7 +1143,7 @@ pub(crate) async fn publish_trusted_peers_ui(
 }
 
 /// did:key set for peer clients with a live registered sync link.
-fn registered_peer_dids(client: &JazzClient) -> std::collections::HashSet<String> {
+fn registered_signer_dids(client: &JazzClient) -> std::collections::HashSet<String> {
 	client
 		.peer_client_ids()
 		.unwrap_or_default()
@@ -1153,7 +1153,7 @@ fn registered_peer_dids(client: &JazzClient) -> std::collections::HashSet<String
 }
 
 /// did:key set for peers whose frontier is converged from our side ("Up to date").
-fn converged_peer_dids(client: &JazzClient) -> std::collections::HashSet<String> {
+fn converged_signer_dids(client: &JazzClient) -> std::collections::HashSet<String> {
 	client
 		.converged_peer_ids()
 		.unwrap_or_default()
@@ -1187,8 +1187,8 @@ fn build_peer_mesh_status(
 		.iter()
 		.filter(|r| r.status == "active")
 		.map(|r| {
-			let linked = registered_dids.contains(&r.peer_did);
-			let converged = linked && converged_dids.contains(&r.peer_did);
+			let linked = registered_dids.contains(&r.signer_did);
+			let converged = linked && converged_dids.contains(&r.signer_did);
 			let (phase, usability, bootstrap) = if converged {
 				(
 					PeerMeshPhase::Ready,
@@ -1210,7 +1210,7 @@ fn build_peer_mesh_status(
 			};
 			PeerMeshPeerState {
 				id: r.id.clone(),
-				peer_did: r.peer_did.clone(),
+				signer_did: r.signer_did.clone(),
 				device_label: r.device_label.clone(),
 				db_status: r.status.clone(),
 				added_at_ms: r.added_at_ms.max(0) as u64,
@@ -1838,8 +1838,8 @@ pub(crate) async fn groove_ipc_status(
 
 fn jazz_session_reply_from_shell(shell: &jazz_engine::ShellState) -> JazzSessionReply {
 	JazzSessionReply {
-		peer_did: shell.peer_did.clone(),
-		peer_did_short: jazz_engine::short_peer_did(&shell.peer_did),
+		signer_did: shell.signer_did.clone(),
+		signer_did_short: jazz_engine::short_signer_did(&shell.signer_did),
 		default_spark_urn: jazz_engine::identity_urn(shell.default_identity),
 		// This shell-only path has no relay handle; the live relay DID is filled
 		// by `groove_ipc_session` (which can read `ManagedJazz`).
@@ -1869,7 +1869,7 @@ pub(crate) async fn groove_ipc_bootstrap(
 				"kind": "session",
 				"phase": "ready",
 				"grooveReady": true,
-				"peerDid": session.peer_did,
+				"signerDid": session.signer_did,
 				"defaultSparkUrn": session.default_spark_urn,
 				"tables": tables.clone(),
 			}));
@@ -1942,8 +1942,8 @@ pub(crate) async fn groove_ipc_session(
 		.ok()
 		.and_then(|slot| slot.clone());
 	Ok(JazzSessionReply {
-		peer_did: shell.peer_did.clone(),
-		peer_did_short: jazz_engine::short_peer_did(&shell.peer_did),
+		signer_did: shell.signer_did.clone(),
+		signer_did_short: jazz_engine::short_signer_did(&shell.signer_did),
 		default_spark_urn: jazz_engine::identity_urn(shell.default_identity),
 		relay_did,
 	})
@@ -2017,13 +2017,13 @@ async fn wrap_all_dek_versions_to_recipient(
 			.deks
 			.get(&(identity_uuid, v))
 			.ok_or_else(|| format!("missing DEK for identity {identity_uuid} v{v}"))?;
-		let aad = crate::crypto::keyshare_wrap_aad(&urn, recipient_did, &shell.peer_did, v);
+		let aad = crate::crypto::keyshare_wrap_aad(&urn, recipient_did, &shell.signer_did, v);
 		let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
 		let mut ks = Map::new();
 		ks.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
 		ks.insert("dek_version".into(), JsonValue::Number(v.into()));
 		ks.insert("recipient_did".into(), JsonValue::String(recipient_did.to_string()));
-		ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
+		ks.insert("wrapper_did".into(), JsonValue::String(shell.signer_did.clone()));
 		ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 		let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
 		let ks_oid = ObjectId::new();
@@ -2042,16 +2042,16 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 	jazz: &ManagedJazz,
 	self_state: &SelfState,
 	owner: String,
-	peer_did: String,
+	signer_did: String,
 ) -> Result<(), String> {
 	use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 	use base64::Engine;
 
 	let identity_uuid =
 		Uuid::parse_str(owner.trim()).map_err(|e| format!("invalid owner UUID: {e}"))?;
-	let peer_did = peer_did.trim().to_string();
-	if peer_did.is_empty() {
-		return Err("peer_did is empty".into());
+	let signer_did = signer_did.trim().to_string();
+	if signer_did.is_empty() {
+		return Err("signer_did is empty".into());
 	}
 
 	let client = with_connected_client(jazz, app, self_state).await?;
@@ -2059,19 +2059,19 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
 	let shell = shell_arc.as_ref();
 
-	if peer_did == shell.peer_did {
+	if signer_did == shell.signer_did {
 		return Err("cannot grant a identity to your own DID".into());
 	}
 
-	let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&peer_did)?;
+	let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&signer_did)?;
 
 	// Biscuit-driven sharing: the grant IS the trust act — no separate pairing
 	// step or allowlist gate. Materialize the grantee in the local roster and
 	// register it for sync so the grant takes effect end-to-end. The roster
 	// ("synced with") is thus derived from grants, not hand-managed.
-	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "").await?;
+	crate::peers::add_remote_peer(client.as_ref(), &signer_did, "").await?;
 	if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
-		log::warn!(target: "avenos::jazz", "identity_admin_add register {peer_did}: {e}");
+		log::warn!(target: "avenos::jazz", "identity_admin_add register {signer_did}: {e}");
 	}
 
 	jazz_engine::authorize_gate(
@@ -2089,7 +2089,7 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 		.ok_or_else(|| format!("identity {identity_uuid} not loaded in vault"))?;
 
 	let already_owner =
-		crate::identity_acc::identity_peer_is_owner(&bisc_identity.biscuit, identity_uuid, &peer_did)?;
+		crate::identity_acc::identity_peer_is_owner(&bisc_identity.biscuit, identity_uuid, &signer_did)?;
 
 	let _ = client.flush_peer_sync().await;
 
@@ -2097,14 +2097,14 @@ pub(crate) async fn groove_ipc_spark_admin_add(
 	// rows land. Wrap EVERY held DEK version (not just the current one) so the grantee can
 	// also decrypt data sealed under pre-rotation versions — this is what lets a re-grant
 	// after a revoke (which rotated the DEK) read the identity's pre-revoke data. Idempotent.
-	wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &peer_did).await?;
+	wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &signer_did).await?;
 
 	if !already_owner {
 		let new_biscuit = crate::identity_acc::attenuate_add_owner_third_party(
 			&shell.vault.biscuit_kp,
 			&bisc_identity.biscuit,
 			identity_uuid,
-			&peer_did,
+			&signer_did,
 		)?;
 
 		let genesis_vec = new_biscuit
@@ -2157,31 +2157,31 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 	jazz: &ManagedJazz,
 	self_state: &SelfState,
 	owner: String,
-	peer_did: String,
+	signer_did: String,
 ) -> Result<(), String> {
 	use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 	use base64::Engine;
 
 	let identity_uuid =
 		Uuid::parse_str(owner.trim()).map_err(|e| format!("invalid owner UUID: {e}"))?;
-	let peer_did = peer_did.trim().to_string();
-	if peer_did.is_empty() {
-		return Err("peer_did is empty".into());
+	let signer_did = signer_did.trim().to_string();
+	if signer_did.is_empty() {
+		return Err("signer_did is empty".into());
 	}
 
 	let client = with_connected_client(jazz, app, self_state).await?;
 	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
 	let shell = shell_arc.as_ref();
 
-	if peer_did == shell.peer_did {
+	if signer_did == shell.signer_did {
 		return Err("cannot grant replication to your own DID".into());
 	}
-	let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&peer_did)?;
+	let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&signer_did)?;
 
 	// Register the replica as a sync peer so the grant takes effect end-to-end.
-	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "").await?;
+	crate::peers::add_remote_peer(client.as_ref(), &signer_did, "").await?;
 	if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
-		log::warn!(target: "avenos::jazz", "identity_replicate_add register {peer_did}: {e}");
+		log::warn!(target: "avenos::jazz", "identity_replicate_add register {signer_did}: {e}");
 	}
 
 	// Only a identity admin may grant replication (same gate as admin-add: the local
@@ -2202,7 +2202,7 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 
 	let already_replica = crate::identity_acc::identity_replicas(&bisc_identity.biscuit, identity_uuid)?
 		.iter()
-		.any(|d| d.trim() == peer_did.as_str());
+		.any(|d| d.trim() == signer_did.as_str());
 	if already_replica {
 		finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
 		return Ok(());
@@ -2226,14 +2226,14 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 		.ok_or_else(|| format!("missing DEK for identity {identity_uuid} v{dek_ver}"))?;
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &peer_pk)?;
 	let ks_urn = jazz_engine::identity_urn(identity_uuid);
-	let ks_aad = crate::crypto::keyshare_wrap_aad(&ks_urn, &peer_did, &shell.peer_did, dek_ver);
+	let ks_aad = crate::crypto::keyshare_wrap_aad(&ks_urn, &signer_did, &shell.signer_did, dek_ver);
 	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek.expose(), &ks_aad)?;
 	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
 	let mut ks = Map::new();
 	ks.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
 	ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
-	ks.insert("recipient_did".into(), JsonValue::String(peer_did.clone()));
-	ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
+	ks.insert("recipient_did".into(), JsonValue::String(signer_did.clone()));
+	ks.insert("wrapper_did".into(), JsonValue::String(shell.signer_did.clone()));
 	ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 	let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
 	let ks_oid = ObjectId::new();
@@ -2252,19 +2252,19 @@ pub(crate) async fn groove_ipc_spark_replicate_add(
 		&shell.vault.biscuit_kp,
 		&bisc_identity.biscuit,
 		identity_uuid,
-		&peer_did,
+		&signer_did,
 	)?;
 	let chain = crate::identity_acc::attenuate_add_grant_third_party(
 		&shell.vault.biscuit_kp,
 		&chain,
-		&peer_did,
+		&signer_did,
 		"read",
 		&format!("identity:{identity_uuid}:identities:"),
 	)?;
 	let new_biscuit = crate::identity_acc::attenuate_add_grant_third_party(
 		&shell.vault.biscuit_kp,
 		&chain,
-		&peer_did,
+		&signer_did,
 		"read",
 		&format!("identity:{identity_uuid}:peers:"),
 	)?;
@@ -2313,30 +2313,30 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 	jazz: &ManagedJazz,
 	self_state: &SelfState,
 	owner: String,
-	peer_did: String,
+	signer_did: String,
 ) -> Result<(), String> {
 	use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 	use base64::Engine;
 
 	let identity_uuid =
 		Uuid::parse_str(owner.trim()).map_err(|e| format!("invalid owner UUID: {e}"))?;
-	let peer_did = peer_did.trim().to_string();
-	if peer_did.is_empty() {
-		return Err("peer_did is empty".into());
+	let signer_did = signer_did.trim().to_string();
+	if signer_did.is_empty() {
+		return Err("signer_did is empty".into());
 	}
 
 	let client = with_connected_client(jazz, app, self_state).await?;
 	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
 	let shell = shell_arc.as_ref();
 
-	if peer_did == shell.peer_did {
+	if signer_did == shell.signer_did {
 		return Err("cannot grant read to your own DID".into());
 	}
-	let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&peer_did)?;
+	let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&signer_did)?;
 
-	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "").await?;
+	crate::peers::add_remote_peer(client.as_ref(), &signer_did, "").await?;
 	if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
-		log::warn!(target: "avenos::jazz", "identity_reader_add register {peer_did}: {e}");
+		log::warn!(target: "avenos::jazz", "identity_reader_add register {signer_did}: {e}");
 	}
 
 	// Only a identity admin may grant read (same gate as admin/replicate add).
@@ -2349,20 +2349,20 @@ pub(crate) async fn groove_ipc_spark_reader_add(
 		.ok_or_else(|| format!("identity {identity_uuid} not loaded in vault"))?;
 	let already_reader = crate::identity_acc::identity_readers(&bisc_identity.biscuit, identity_uuid)?
 		.iter()
-		.any(|d| d.trim() == peer_did.as_str());
+		.any(|d| d.trim() == signer_did.as_str());
 
 	let _ = client.flush_peer_sync().await;
 
 	// Wrap EVERY held DEK version to the reader (see admin_add) so a post-rotation re-grant
 	// can read pre-rotation data. Idempotent — skips versions the reader already holds.
-	wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &peer_did).await?;
+	wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &signer_did).await?;
 
 	if !already_reader {
 		let new_biscuit = crate::identity_acc::attenuate_add_reader_third_party(
 			&shell.vault.biscuit_kp,
 			&bisc_identity.biscuit,
 			identity_uuid,
-			&peer_did,
+			&signer_did,
 		)?;
 		let genesis_vec = new_biscuit.to_vec().map_err(|e| format!("biscuit_encode:{e:?}"))?;
 		let genesis_b64 = URL_SAFE_NO_PAD.encode(genesis_vec);
@@ -2424,7 +2424,7 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 			if issuer == my_issuer {
 				// Already claimed BY THIS DEVICE (e.g. after a restart) — idempotent:
 				// ensure the owner roster row + re-hydrate so the app shows. NOT an error.
-				ensure_aven_ceo_owner_row(client.as_ref(), &shell.peer_did, &shell.signing_key, identity_uuid).await?;
+				ensure_aven_ceo_owner_row(client.as_ref(), &shell.signer_did, &shell.signing_key, identity_uuid).await?;
 				finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
 				return Ok(identity_uuid.to_string());
 			}
@@ -2464,14 +2464,14 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 	let dek_plain = crate::crypto::random_identity_dek();
 	let urn = jazz_engine::identity_urn(identity_uuid);
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
-	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, &shell.peer_did, dek_ver);
+	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.signer_did, &shell.signer_did, dek_ver);
 	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
 	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
 	let mut ks = Map::new();
 	ks.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
 	ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
-	ks.insert("recipient_did".into(), JsonValue::String(shell.peer_did.clone()));
-	ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
+	ks.insert("recipient_did".into(), JsonValue::String(shell.signer_did.clone()));
+	ks.insert("wrapper_did".into(), JsonValue::String(shell.signer_did.clone()));
 	ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 	let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
 	let ks_oid = ObjectId::new();
@@ -2479,7 +2479,7 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 	client.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta).await.map_err(format_jazz_err)?;
 
 	// The owner is the first member: give it a roster row (populated from identity).
-	ensure_aven_ceo_owner_row(client.as_ref(), &shell.peer_did, &shell.signing_key, identity_uuid).await?;
+	ensure_aven_ceo_owner_row(client.as_ref(), &shell.signer_did, &shell.signing_key, identity_uuid).await?;
 
 	finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
 	Ok(identity_uuid.to_string())
@@ -2550,14 +2550,14 @@ pub(crate) async fn groove_ipc_create_identity(
 	let dek_plain = crate::crypto::random_identity_dek();
 	let urn = jazz_engine::identity_urn(identity_uuid);
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
-	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, &shell.peer_did, dek_ver);
+	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.signer_did, &shell.signer_did, dek_ver);
 	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
 	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
 	let mut ks = Map::new();
 	ks.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
 	ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
-	ks.insert("recipient_did".into(), JsonValue::String(shell.peer_did.clone()));
-	ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
+	ks.insert("recipient_did".into(), JsonValue::String(shell.signer_did.clone()));
+	ks.insert("wrapper_did".into(), JsonValue::String(shell.signer_did.clone()));
 	ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 	let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
 	let ks_oid = ObjectId::new();
@@ -2567,7 +2567,7 @@ pub(crate) async fn groove_ipc_create_identity(
 		.await
 		.map_err(format_jazz_err)?;
 
-	ensure_aven_ceo_owner_row(client.as_ref(), &shell.peer_did, &shell.signing_key, identity_uuid)
+	ensure_aven_ceo_owner_row(client.as_ref(), &shell.signer_did, &shell.signing_key, identity_uuid)
 		.await?;
 	finish_spark_admin_grant(app, jazz, self_state, client, identity_uuid).await?;
 	Ok(identity_uuid.to_string())
@@ -2646,14 +2646,14 @@ pub(crate) async fn groove_ipc_create_collection_group(
 	let dek_plain = crate::crypto::random_identity_dek();
 	let urn = jazz_engine::identity_urn(group_id);
 	let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &shell.vault.ed25519_public)?;
-	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.peer_did, &shell.peer_did, dek_ver);
+	let aad = crate::crypto::keyshare_wrap_aad(&urn, &shell.signer_did, &shell.signer_did, dek_ver);
 	let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, dek_plain.expose(), &aad)?;
 	let ks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
 	let mut ks = Map::new();
 	ks.insert("owner".into(), JsonValue::String(group_id.to_string()));
 	ks.insert("dek_version".into(), JsonValue::Number(dek_ver.into()));
-	ks.insert("recipient_did".into(), JsonValue::String(shell.peer_did.clone()));
-	ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
+	ks.insert("recipient_did".into(), JsonValue::String(shell.signer_did.clone()));
+	ks.insert("wrapper_did".into(), JsonValue::String(shell.signer_did.clone()));
 	ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 	let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
 	let ks_oid = ObjectId::new();
@@ -2672,13 +2672,13 @@ pub(crate) async fn groove_ipc_create_collection_group(
 /// row already exists. Used at claim and idempotent re-claim.
 async fn ensure_aven_ceo_owner_row(
 	client: &JazzClient,
-	peer_did: &str,
+	signer_did: &str,
 	signing_key: &ed25519_dalek::SigningKey,
 	identity_uuid: Uuid,
 ) -> Result<(), String> {
 	let peers_schema = jazz_engine::resolved_table_schema(client, "peers").await?;
 	let identity_ix = jazz_engine::col_ix(&peers_schema, "owner")?;
-	let did_ix = jazz_engine::col_ix(&peers_schema, "peer_did")?;
+	let did_ix = jazz_engine::col_ix(&peers_schema, "signer_did")?;
 	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
 	for (_o, vals) in &rows {
 		let sid = jazz_engine::uuid_cell_at(vals.as_slice(), identity_ix).ok();
@@ -2686,18 +2686,18 @@ async fn ensure_aven_ceo_owner_row(
 			Some(Value::Text(s)) => s.as_str(),
 			_ => "",
 		};
-		if sid == Some(identity_uuid) && d == peer_did {
+		if sid == Some(identity_uuid) && d == signer_did {
 			return Ok(());
 		}
 	}
-	let (name, label) = read_own_profile(client, peer_did).await;
+	let (name, label) = read_own_profile(client, signer_did).await;
 	let now_ms: i64 = std::time::SystemTime::now()
 		.duration_since(std::time::UNIX_EPOCH)
 		.map(|d| d.as_millis() as i64)
 		.unwrap_or(0);
 	let mut prow = Map::new();
 	prow.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
-	prow.insert("peer_did".into(), JsonValue::String(peer_did.to_string()));
+	prow.insert("signer_did".into(), JsonValue::String(signer_did.to_string()));
 	prow.insert("kind".into(), JsonValue::String("member".into()));
 	prow.insert("status".into(), JsonValue::String("active".into()));
 	prow.insert("account_name".into(), JsonValue::String(name));
@@ -2713,7 +2713,7 @@ async fn ensure_aven_ceo_owner_row(
 /// Read this device's self profile for auto-publishing into the roster: display
 /// name from the singleton `humans.first_name`, device label from this device's
 /// own (`kind=local`/own-DID) `peers` row. Both best-effort (empty if unset).
-async fn read_own_profile(client: &JazzClient, peer_did: &str) -> (String, String) {
+async fn read_own_profile(client: &JazzClient, signer_did: &str) -> (String, String) {
 	let mut name = String::new();
 	let mut label = String::new();
 	// Display name from this device's own (human-typed) identity. `name` is sealed,
@@ -2741,7 +2741,7 @@ async fn read_own_profile(client: &JazzClient, peer_did: &str) -> (String, Strin
 	}
 	if let Ok(schema) = jazz_engine::resolved_table_schema(client, "peers").await {
 		if let (Ok(did_ix), Ok(label_ix)) = (
-			jazz_engine::col_ix(&schema, "peer_did"),
+			jazz_engine::col_ix(&schema, "signer_did"),
 			jazz_engine::col_ix(&schema, "device_label"),
 		) {
 			if let Ok(rows) = jazz_engine::exec_list_rows(client, "peers").await {
@@ -2750,7 +2750,7 @@ async fn read_own_profile(client: &JazzClient, peer_did: &str) -> (String, Strin
 						Some(Value::Text(s)) => s.as_str(),
 						_ => "",
 					};
-					if d == peer_did {
+					if d == signer_did {
 						if let Some(Value::Text(s)) = vals.get(label_ix) {
 							if !s.trim().is_empty() {
 								label = s.trim().to_string();
@@ -2774,27 +2774,27 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
 	self_state: &SelfState,
-	peer_did: String,
+	signer_did: String,
 ) -> Result<(), String> {
 	use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 	use base64::Engine;
 
-	let peer_did = peer_did.trim().to_string();
-	if peer_did.is_empty() {
-		return Err("peer_did is empty".into());
+	let signer_did = signer_did.trim().to_string();
+	if signer_did.is_empty() {
+		return Err("signer_did is empty".into());
 	}
 	let client = with_connected_client(jazz, app, self_state).await?;
 	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
 	let shell = shell_arc.as_ref();
-	if peer_did == shell.peer_did {
+	if signer_did == shell.signer_did {
 		return Err("cannot add yourself as a member".into());
 	}
-	let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&peer_did)?;
+	let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&signer_did)?;
 	let identity_uuid = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
 
-	crate::peers::add_remote_peer(client.as_ref(), &peer_did, "").await?;
+	crate::peers::add_remote_peer(client.as_ref(), &signer_did, "").await?;
 	if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
-		log::warn!(target: "avenos::jazz", "aven_ceo_add_member register {peer_did}: {e}");
+		log::warn!(target: "avenos::jazz", "aven_ceo_add_member register {signer_did}: {e}");
 	}
 
 	// Only the avenCEO owner may add members.
@@ -2816,7 +2816,7 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 	let peers_schema = jazz_engine::resolved_table_schema(client.as_ref(), "peers").await?;
 	let mut prow = Map::new();
 	prow.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
-	prow.insert("peer_did".into(), JsonValue::String(peer_did.clone()));
+	prow.insert("signer_did".into(), JsonValue::String(signer_did.clone()));
 	prow.insert("kind".into(), JsonValue::String("member".into()));
 	prow.insert("status".into(), JsonValue::String("active".into()));
 	prow.insert("added_at_ms".into(), JsonValue::Number(now_ms.into()));
@@ -2827,7 +2827,7 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 
 	// 2. Keyshare: wrap EVERY held avenCEO DEK version to the member so it can decrypt the
 	//    sealed roster fields (and prior-version data after any rotation). Idempotent.
-	wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &peer_did).await?;
+	wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &signer_did).await?;
 
 	// 3. Membership bundle in the biscuit: reads (whole roster) + write (own row only).
 	let bisc = shell
@@ -2840,12 +2840,12 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 		&shell.vault.biscuit_kp,
 		&bisc.biscuit,
 		identity_uuid,
-		&peer_did,
+		&signer_did,
 	)?;
 	let chain = crate::identity_acc::attenuate_add_grant_third_party(
 		&shell.vault.biscuit_kp,
 		&chain,
-		&peer_did,
+		&signer_did,
 		"write",
 		&row_prefix,
 	)?;
@@ -2891,7 +2891,7 @@ pub(crate) async fn groove_ipc_aven_ceo_publish_profile(
 
 	let peers_schema = jazz_engine::resolved_table_schema(client.as_ref(), "peers").await?;
 	let identity_ix = jazz_engine::col_ix(&peers_schema, "owner")?;
-	let did_ix = jazz_engine::col_ix(&peers_schema, "peer_did")?;
+	let did_ix = jazz_engine::col_ix(&peers_schema, "signer_did")?;
 	let rows = jazz_engine::exec_list_rows(client.as_ref(), "peers").await?;
 	let mut own_oid: Option<ObjectId> = None;
 	for (oid, vals) in rows {
@@ -2900,7 +2900,7 @@ pub(crate) async fn groove_ipc_aven_ceo_publish_profile(
 			Some(Value::Text(s)) => s.as_str(),
 			_ => "",
 		};
-		if sid == Some(identity_uuid) && did == shell.peer_did.as_str() {
+		if sid == Some(identity_uuid) && did == shell.signer_did.as_str() {
 			own_oid = Some(oid);
 			break;
 		}
@@ -2919,7 +2919,7 @@ pub(crate) async fn groove_ipc_aven_ceo_publish_profile(
 
 	// Auto-publish from this device's identity when the caller passes blanks
 	// (name from humans.first_name, label from the local device peer row).
-	let (def_name, def_label) = read_own_profile(client.as_ref(), &shell.peer_did).await;
+	let (def_name, def_label) = read_own_profile(client.as_ref(), &shell.signer_did).await;
 	let name = if account_name.trim().is_empty() {
 		def_name
 	} else {
@@ -2958,14 +2958,14 @@ pub(crate) async fn groove_ipc_aven_ceo_membership(
 	let Some(bisc) = shell.vault.identities.get(&identity_uuid) else {
 		return Ok("none".to_string());
 	};
-	if crate::identity_acc::identity_peer_is_owner(&bisc.biscuit, identity_uuid, &shell.peer_did)? {
+	if crate::identity_acc::identity_peer_is_owner(&bisc.biscuit, identity_uuid, &shell.signer_did)? {
 		return Ok("owner".to_string());
 	}
 	// Merely HYDRATING the avenCEO genesis is NOT membership — the genesis syncs widely, so a
 	// device can hold the identity in its vault with no grant at all. Membership requires an
 	// actual cap to THIS device (a `reads` or `replicate` grant). Without one, the device has
 	// only *seen* avenCEO and must stay on the invite gate — no auto-progress without caps.
-	let did = shell.peer_did.trim();
+	let did = shell.signer_did.trim();
 	let is_reader = crate::identity_acc::identity_readers(&bisc.biscuit, identity_uuid)?
 		.iter()
 		.any(|d| d.trim() == did);
@@ -3099,7 +3099,7 @@ pub(crate) async fn groove_ipc_spark_admin_list(
 	})
 }
 
-/// v2 per-identity revoke = **key rotation**. Removes `peer_did` from `owner`:
+/// v2 per-identity revoke = **key rotation**. Removes `signer_did` from `owner`:
 ///  1. re-mint the identity biscuit WITHOUT the peer (the gate now denies it new
 ///     frames for this identity — it stays a peer for any OTHER shared identities),
 ///  2. rotate the DEK to v+1 and keyshare v+1 to the REMAINING members ONLY, so
@@ -3116,23 +3116,23 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 	jazz: &ManagedJazz,
 	self_state: &SelfState,
 	owner: String,
-	peer_did: String,
+	signer_did: String,
 ) -> Result<(), String> {
 	use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 	use base64::Engine;
 
 	let identity_uuid =
 		Uuid::parse_str(owner.trim()).map_err(|e| format!("invalid owner UUID: {e}"))?;
-	let peer_did = peer_did.trim().to_string();
-	if peer_did.is_empty() {
-		return Err("peer_did is empty".into());
+	let signer_did = signer_did.trim().to_string();
+	if signer_did.is_empty() {
+		return Err("signer_did is empty".into());
 	}
 
 	let client = with_connected_client(jazz, app, self_state).await?;
 	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
 	let shell = shell_arc.as_ref();
 
-	if peer_did == shell.peer_did {
+	if signer_did == shell.signer_did {
 		return Err("cannot revoke your own access".into());
 	}
 
@@ -3161,7 +3161,7 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 
 	// 1. Re-mint biscuit excluding the revoked peer (drops its grant from the chain).
 	let new_biscuit =
-		crate::identity_acc::rebuild_identity_biscuit_excluding(&shell.vault, identity_uuid, &peer_did)?;
+		crate::identity_acc::rebuild_identity_biscuit_excluding(&shell.vault, identity_uuid, &signer_did)?;
 
 	// 2. ALWAYS rotate the DEK — revoke = remove + rotate (forward secrecy by default,
 	//    no per-peer special-casing). Re-wrap the fresh v+1 key to every remaining
@@ -3173,16 +3173,16 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 	let new_v = cur_v + 1;
 	let new_dek = crate::crypto::random_identity_dek();
 	let urn = jazz_engine::identity_urn(identity_uuid);
-	for recip_did in prior_holders.iter().filter(|d| d.as_str() != peer_did.as_str()) {
+	for recip_did in prior_holders.iter().filter(|d| d.as_str() != signer_did.as_str()) {
 		let recip_pk = crate::jazz_auth::ed25519_public_from_signer_did(recip_did)?;
 		let kek = crate::crypto::derive_kek_x25519(&shell.signing_key, &recip_pk)?;
-		let aad = crate::crypto::keyshare_wrap_aad(&urn, recip_did, &shell.peer_did, new_v);
+		let aad = crate::crypto::keyshare_wrap_aad(&urn, recip_did, &shell.signer_did, new_v);
 		let wrapped = crate::crypto::encrypt_keyshare_payload(&kek, new_dek.expose(), &aad)?;
 		let mut ks = Map::new();
 		ks.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
 		ks.insert("dek_version".into(), JsonValue::Number(new_v.into()));
 		ks.insert("recipient_did".into(), JsonValue::String(recip_did.clone()));
-		ks.insert("wrapper_did".into(), JsonValue::String(shell.peer_did.clone()));
+		ks.insert("wrapper_did".into(), JsonValue::String(shell.signer_did.clone()));
 		ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 		let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
 		let ks_oid = ObjectId::new();
@@ -3235,7 +3235,7 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 			Some(Value::Text(s)) => s.as_str(),
 			_ => continue,
 		};
-		if sid == identity_uuid && recip == peer_did.as_str() {
+		if sid == identity_uuid && recip == signer_did.as_str() {
 			let del_meta = owner_binding_meta(&shell.signing_key, oid, identity_uuid)?;
 			let _ = client.delete_with_metadata(oid, del_meta).await;
 		}
@@ -3731,8 +3731,8 @@ pub(crate) async fn execute_mesh_snapshot(
 	}
 	let client = with_connected_client(jazz, app, ss).await?;
 	let rows = crate::peers::list_peer_rows(client.as_ref()).await?;
-	let registered = registered_peer_dids(client.as_ref());
-	let converged = converged_peer_dids(client.as_ref());
+	let registered = registered_signer_dids(client.as_ref());
+	let converged = converged_signer_dids(client.as_ref());
 	Ok(build_peer_mesh_status(
 		&rows,
 		&registered,
@@ -3762,27 +3762,27 @@ pub(crate) async fn groove_ipc_peer_add(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
 	self_state: &SelfState,
-	peer_did: String,
+	signer_did: String,
 	device_label: String,
 ) -> Result<(), String> {
-	let peer_did = peer_did.trim().to_string();
-	if peer_did.is_empty() {
-		return Err("peer_did is empty".into());
+	let signer_did = signer_did.trim().to_string();
+	if signer_did.is_empty() {
+		return Err("signer_did is empty".into());
 	}
-	crate::jazz_auth::ed25519_public_from_signer_did(&peer_did)?;
+	crate::jazz_auth::ed25519_public_from_signer_did(&signer_did)?;
 	let client = with_connected_client(jazz, app, self_state).await?;
 	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
-	if peer_did == shell_arc.as_ref().peer_did {
+	if signer_did == shell_arc.as_ref().signer_did {
 		return Err("cannot add your own DID as a peer".into());
 	}
-	crate::peers::add_remote_peer(client.as_ref(), &peer_did, &device_label).await?;
+	crate::peers::add_remote_peer(client.as_ref(), &signer_did, &device_label).await?;
 
 	// Resume sync immediately — e.g. re-adding a Forgotten peer. Idempotent with
 	// the connect-time registration; harmless (queues until a transport exists)
 	// when no live link to this peer is present yet.
-	if let Ok(pk) = crate::jazz_auth::ed25519_public_from_signer_did(&peer_did) {
+	if let Ok(pk) = crate::jazz_auth::ed25519_public_from_signer_did(&signer_did) {
 		if let Err(e) = client.register_peer_sync_client(PeerId(pk)) {
-			log::warn!(target: "avenos::jazz", "peer_add register {peer_did}: {e}");
+			log::warn!(target: "avenos::jazz", "peer_add register {signer_did}: {e}");
 		}
 	}
 
@@ -3795,22 +3795,22 @@ pub(crate) async fn groove_ipc_peer_revoke(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
 	self_state: &SelfState,
-	peer_did: String,
+	signer_did: String,
 ) -> Result<(), String> {
 	let client = with_connected_client(jazz, app, self_state).await?;
-	crate::peers::set_peer_status(client.as_ref(), &peer_did, "revoked").await?;
+	crate::peers::set_peer_status(client.as_ref(), &signer_did, "revoked").await?;
 
 	// Actually stop syncing: drop the registered peer client so we no longer
 	// ship to it or accept its catch-up. Marking the row alone left the peer
 	// live in the mesh — Forget appeared to do nothing.
-	if let Ok(pk) = crate::jazz_auth::ed25519_public_from_signer_did(&peer_did) {
+	if let Ok(pk) = crate::jazz_auth::ed25519_public_from_signer_did(&signer_did) {
 		match client.remove_peer_sync_client(PeerId(pk)) {
 			Ok(true) => {}
 			Ok(false) => log::warn!(
 				target: "avenos::jazz",
-				"peer_revoke {peer_did}: client had unprocessed inbox; deregister deferred"
+				"peer_revoke {signer_did}: client had unprocessed inbox; deregister deferred"
 			),
-			Err(e) => log::warn!(target: "avenos::jazz", "peer_revoke {peer_did}: {e}"),
+			Err(e) => log::warn!(target: "avenos::jazz", "peer_revoke {signer_did}: {e}"),
 		}
 	}
 
@@ -3940,36 +3940,36 @@ pub(crate) async fn groove_runtime_dispatch(
 		}
 		"peerlist" => serde_json::to_value(groove_ipc_peer_list(app, mj, ss).await?).map_err(|e| e.to_string()),
 		"peeradd" => {
-			let peer_did = pj_str(&pj, "peerDid")?;
+			let signer_did = pj_str(&pj, "signerDid")?;
 			let label = pj
 				.get("label")
 				.and_then(|v| v.as_str())
 				.unwrap_or("")
 				.to_string();
-			groove_ipc_peer_add(app, mj, ss, peer_did, label).await?;
+			groove_ipc_peer_add(app, mj, ss, signer_did, label).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"peerrevoke" => {
-			let peer_did = pj_str(&pj, "peerDid")?;
-			groove_ipc_peer_revoke(app, mj, ss, peer_did).await?;
+			let signer_did = pj_str(&pj, "signerDid")?;
+			groove_ipc_peer_revoke(app, mj, ss, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"sparkadminadd" => {
 			let owner = pj_str(&pj, "identityId")?;
-			let peer_did = pj_str(&pj, "peerDid")?;
-			groove_ipc_spark_admin_add(app, mj, ss, owner, peer_did).await?;
+			let signer_did = pj_str(&pj, "signerDid")?;
+			groove_ipc_spark_admin_add(app, mj, ss, owner, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"sparkreplicateadd" => {
 			let owner = pj_str(&pj, "identityId")?;
-			let peer_did = pj_str(&pj, "peerDid")?;
-			groove_ipc_spark_replicate_add(app, mj, ss, owner, peer_did).await?;
+			let signer_did = pj_str(&pj, "signerDid")?;
+			groove_ipc_spark_replicate_add(app, mj, ss, owner, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"sparkreaderadd" => {
 			let owner = pj_str(&pj, "identityId")?;
-			let peer_did = pj_str(&pj, "peerDid")?;
-			groove_ipc_spark_reader_add(app, mj, ss, owner, peer_did).await?;
+			let signer_did = pj_str(&pj, "signerDid")?;
+			groove_ipc_spark_reader_add(app, mj, ss, owner, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"avenceoclaim" => {
@@ -3989,8 +3989,8 @@ pub(crate) async fn groove_runtime_dispatch(
 			Ok(serde_json::Value::String(id))
 		}
 		"avenceoaddmember" => {
-			let peer_did = pj_str(&pj, "peerDid")?;
-			groove_ipc_aven_ceo_add_member(app, mj, ss, peer_did).await?;
+			let signer_did = pj_str(&pj, "signerDid")?;
+			groove_ipc_aven_ceo_add_member(app, mj, ss, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"avenceopublishprofile" => {
@@ -4010,8 +4010,8 @@ pub(crate) async fn groove_runtime_dispatch(
 		}
 		"sparkadminrevoke" => {
 			let owner = pj_str(&pj, "identityId")?;
-			let peer_did = pj_str(&pj, "peerDid")?;
-			groove_ipc_spark_admin_revoke(app, mj, ss, owner, peer_did).await?;
+			let signer_did = pj_str(&pj, "signerDid")?;
+			groove_ipc_spark_admin_revoke(app, mj, ss, owner, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		other => Err(format!(

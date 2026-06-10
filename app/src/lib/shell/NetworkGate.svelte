@@ -13,7 +13,7 @@
 		if (!browser) return
 		void (async () => {
 			try {
-				ownDid = (await jazzSession()).peerDid ?? ''
+				ownDid = (await jazzSession()).signerDid ?? ''
 			} catch {
 				ownDid = ''
 			}

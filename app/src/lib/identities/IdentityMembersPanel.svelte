@@ -130,12 +130,12 @@
 	)
 
 	function peerAccessLabel(
-		peerDid: string,
+		signerDid: string,
 		storedLabel: string | undefined,
 		isThisDevice: boolean,
 	): string {
 		if (isThisDevice) return t('common.thisDevice')
-		return peerDisplayLabel(peerDid, storedLabel, localPairingLabel)
+		return peerDisplayLabel(signerDid, storedLabel, localPairingLabel)
 	}
 
 	type IdentityAccessEntry = {
@@ -152,9 +152,9 @@
 	// real sync logic; revisit with proper transport state later.)
 	const accessEntries = $derived.by((): IdentityAccessEntry[] => {
 		const peersByDid = new Map(
-			peersAllow.map((p) => [p.peerDid.trim().toLowerCase(), p] as const),
+			peersAllow.map((p) => [p.signerDid.trim().toLowerCase(), p] as const),
 		)
-		const localDid = session?.peerDid?.trim().toLowerCase() ?? ''
+		const localDid = session?.signerDid?.trim().toLowerCase() ?? ''
 		return subjects.map((s): IdentityAccessEntry => {
 			const norm = s.did.trim().toLowerCase()
 			const peer = peersByDid.get(norm)
@@ -281,13 +281,13 @@
 		adminErr = undefined
 		addNote = undefined
 		try {
-			if (kind === 'owns') await sparkAdminAdd({ identityId: sid, peerDid: did })
+			if (kind === 'owns') await sparkAdminAdd({ identityId: sid, signerDid: did })
 			else if (kind === 'reads')
 				// On avenCEO, "Member" is the full membership bundle (reads + keyshare +
 				// row-scoped self-publish write); elsewhere it's a plain read grant.
 				if (isAvenCeo) await avenCeoAddMember(did)
-				else await sparkReaderAdd({ identityId: sid, peerDid: did })
-			else await sparkReplicateAdd({ identityId: sid, peerDid: did })
+				else await sparkReaderAdd({ identityId: sid, signerDid: did })
+			else await sparkReplicateAdd({ identityId: sid, signerDid: did })
 			// The grant SUCCEEDED — always clear the input + show the note, even though a
 			// concurrent re-hydration (the grant triggers a sync, which reloads the roster)
 			// may have bumped adminLoadGen. Only the roster-state write below is gen-guarded,
@@ -322,7 +322,7 @@
 		revokeNote = undefined
 		addNote = undefined
 		try {
-			await sparkAdminRevoke({ identityId: sid, peerDid: did })
+			await sparkAdminRevoke({ identityId: sid, signerDid: did })
 			if (gen !== adminLoadGen) return
 			revokeNote = t('identities.share.revokedNote', { label })
 			const a = await sparkAdminList(sid)
@@ -404,7 +404,7 @@
 		const report = formatDebugReport(
 			{
 				identityId,
-				ownDid: session?.peerDid ?? '',
+				ownDid: session?.signerDid ?? '',
 				adminDids,
 				replicaDids,
 				peerRows,
@@ -426,7 +426,7 @@
 	}
 
 	async function copyOwnDid(): Promise<void> {
-		const did = session?.peerDid
+		const did = session?.signerDid
 		if (!browser || !did) return
 		if (await copyToClipboard(did)) {
 			didCopied = true

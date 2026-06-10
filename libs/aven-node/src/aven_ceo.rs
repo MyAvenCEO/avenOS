@@ -162,7 +162,7 @@ pub async fn ensure_avenceo_owned(
 	let dek = random_identity_dek();
 	let kek = derive_kek_x25519(signing, &vault.ed25519_public)?;
 	let urn = format!("identity:{avenceo_id}");
-	let aad = keyshare_wrap_aad(&urn, &vault.peer_did, &vault.peer_did, dek_ver);
+	let aad = keyshare_wrap_aad(&urn, &vault.signer_did, &vault.signer_did, dek_ver);
 	let wrapped = encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
 	let ks_tbl = schema
 		.get(&TableName::new("keyshares"))
@@ -172,8 +172,8 @@ pub async fn ensure_avenceo_owned(
 		&[
 			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 			("dek_version", Value::BigInt(dek_ver)),
-			("recipient_did", Value::Text(vault.peer_did.clone())),
-			("wrapper_did", Value::Text(vault.peer_did.clone())),
+			("recipient_did", Value::Text(vault.signer_did.clone())),
+			("wrapper_did", Value::Text(vault.signer_did.clone())),
 			("wrapped_dek", Value::Text(wrapped)),
 		],
 	);
@@ -184,7 +184,7 @@ pub async fn ensure_avenceo_owned(
 		.await
 		.map_err(|e| format!("create keyshares:{e:?}"))?;
 
-	tracing::info!(%avenceo_id, owner_did = %vault.peer_did, "minted avenCEO genesis — server is owner");
+	tracing::info!(%avenceo_id, owner_did = %vault.signer_did, "minted avenCEO genesis — server is owner");
 	Ok(())
 }
 
@@ -226,19 +226,19 @@ async fn read_server_dek(
 	for (_oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
 		if uuid_matches(&vals, sid_ix, avenceo_id)
 			&& bigint_at(&vals, ver_ix) == dek_ver
-			&& text_at(&vals, recip_ix) == vault.peer_did
+			&& text_at(&vals, recip_ix) == vault.signer_did
 		{
 			let wrapped = text_at(&vals, wrap_ix);
 			let kek = derive_kek_x25519(signing, &vault.ed25519_public)?;
 			let urn = format!("identity:{avenceo_id}");
 			// Self-keyshare: wrapper == this server. Prefer the wrapper-bound AAD, fall back
 			// to the legacy form so a keyshare minted before the binding still opens.
-			let aad = keyshare_wrap_aad(&urn, &vault.peer_did, &vault.peer_did, dek_ver);
+			let aad = keyshare_wrap_aad(&urn, &vault.signer_did, &vault.signer_did, dek_ver);
 			return decrypt_keyshare_payload(&wrapped, &kek, &aad).or_else(|_| {
 				decrypt_keyshare_payload(
 					&wrapped,
 					&kek,
-					&keyshare_wrap_aad_legacy(&urn, &vault.peer_did, dek_ver),
+					&keyshare_wrap_aad_legacy(&urn, &vault.signer_did, dek_ver),
 				)
 			});
 		}
@@ -258,8 +258,8 @@ pub async fn maybe_grant_first_admin(
 	peer: PeerId,
 ) -> Result<(), String> {
 	let vault = build_vault_from_signing_key(signing)?;
-	let peer_did = groove::did_key::signer_did_from_ed25519(&peer.0)?;
-	if peer_did == vault.peer_did {
+	let signer_did = groove::did_key::signer_did_from_ed25519(&peer.0)?;
+	if signer_did == vault.signer_did {
 		return Ok(());
 	}
 	let Some((sparks_oid, genesis_b64, issuer_b64, dek_ver)) = read_avenceo_identity(engine, avenceo_id).await? else {
@@ -268,13 +268,13 @@ pub async fn maybe_grant_first_admin(
 	let issuer_pk = decode_issuer_pubkey_b64(&issuer_b64)?;
 	let chain = biscuit_from_storage(&genesis_b64, issuer_pk)?;
 	let owners = identity_admins(&chain, avenceo_id)?;
-	if owners.iter().any(|d| d.trim() != vault.peer_did) {
-		tracing::debug!(%peer_did, "avenCEO already has an admin — not auto-granting");
+	if owners.iter().any(|d| d.trim() != vault.signer_did) {
+		tracing::debug!(%signer_did, "avenCEO already has an admin — not auto-granting");
 		return Ok(());
 	}
 
 	// Append owns(peer) (server-signed) and persist the new genesis.
-	let new_chain = attenuate_add_owner_third_party(&vault.biscuit_kp, &chain, avenceo_id, &peer_did)?;
+	let new_chain = attenuate_add_owner_third_party(&vault.biscuit_kp, &chain, avenceo_id, &signer_did)?;
 	let new_genesis_b64 =
 		URL_SAFE_NO_PAD.encode(new_chain.to_vec().map_err(|e| format!("genesis_encode:{e:?}"))?);
 	let upd_meta = owner_binding_meta(signing, sparks_oid, avenceo_id)?;
@@ -291,7 +291,7 @@ pub async fn maybe_grant_first_admin(
 	let dek = read_server_dek(engine, &vault, signing, avenceo_id, dek_ver).await?;
 	let kek = derive_kek_x25519(signing, &peer.0)?;
 	let urn = format!("identity:{avenceo_id}");
-	let aad = keyshare_wrap_aad(&urn, &peer_did, &vault.peer_did, dek_ver);
+	let aad = keyshare_wrap_aad(&urn, &signer_did, &vault.signer_did, dek_ver);
 	let wrapped = encrypt_keyshare_payload(&kek, &dek, &aad)?;
 	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
 	let ks_tbl = schema.get(&TableName::new("keyshares")).ok_or("avenceo: no keyshares table")?;
@@ -300,8 +300,8 @@ pub async fn maybe_grant_first_admin(
 		&[
 			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 			("dek_version", Value::BigInt(dek_ver)),
-			("recipient_did", Value::Text(peer_did.clone())),
-			("wrapper_did", Value::Text(vault.peer_did.clone())),
+			("recipient_did", Value::Text(signer_did.clone())),
+			("wrapper_did", Value::Text(vault.signer_did.clone())),
 			("wrapped_dek", Value::Text(wrapped)),
 		],
 	);
@@ -318,9 +318,9 @@ pub async fn maybe_grant_first_admin(
 	// the device stays stuck at the invite gate even though it is now an owner.
 	// Mirrors the device-side grant path (`finish_spark_admin_grant`).
 	if let Err(e) = engine.rebroadcast_all_peer_clients_and_flush().await {
-		tracing::warn!(%peer_did, "avenCEO post-grant re-announce failed: {e}");
+		tracing::warn!(%signer_did, "avenCEO post-grant re-announce failed: {e}");
 	}
 
-	tracing::info!(%peer_did, %avenceo_id, "auto-granted FIRST peer admin on avenCEO (server-signed)");
+	tracing::info!(%signer_did, %avenceo_id, "auto-granted FIRST peer admin on avenCEO (server-signed)");
 	Ok(())
 }

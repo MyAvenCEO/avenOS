@@ -8,19 +8,19 @@ use crate::sync_manager::PeerId;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SyncTargetId {
     /// Trusted peer mesh member (`did:key:…`).
-    PeerDid(String),
+    SignerDid(String),
     /// Downstream client session (Groove role).
     Client(PeerId),
 }
 
 impl SyncTargetId {
-    pub fn peer_did(did: impl Into<String>) -> Self {
-        Self::PeerDid(did.into())
+    pub fn signer_did(did: impl Into<String>) -> Self {
+        Self::SignerDid(did.into())
     }
 
-    pub fn as_peer_did(&self) -> Option<&str> {
+    pub fn as_signer_did(&self) -> Option<&str> {
         match self {
-            Self::PeerDid(d) => Some(d.as_str()),
+            Self::SignerDid(d) => Some(d.as_str()),
             _ => None,
         }
     }

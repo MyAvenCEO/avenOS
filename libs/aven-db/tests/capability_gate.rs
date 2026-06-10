@@ -24,7 +24,7 @@ struct TestResolver {
 
 impl CapabilityResolver for TestResolver {
     fn may_sync(&self, subject: &SyncTargetId, _op: AccOp, _res: &ResourceCoord) -> CapDecision {
-        let did = subject.as_peer_did().unwrap_or("");
+        let did = subject.as_signer_did().unwrap_or("");
         if self.revoked.contains(did) {
             return CapDecision::DenyPermanent;
         }
@@ -50,16 +50,16 @@ fn resolver_three_state() {
     let res = ResourceCoord::new("spark:S:todos:ROW", "todos", ObjectId::new());
 
     assert_eq!(
-        resolver.may_sync(&SyncTargetId::peer_did("did:key:alice"), AccOp::Write, &res),
+        resolver.may_sync(&SyncTargetId::signer_did("did:key:alice"), AccOp::Write, &res),
         CapDecision::Allow,
     );
     assert_eq!(
-        resolver.may_sync(&SyncTargetId::peer_did("did:key:bob"), AccOp::Write, &res),
+        resolver.may_sync(&SyncTargetId::signer_did("did:key:bob"), AccOp::Write, &res),
         CapDecision::DenyPermanent,
     );
     // Un-hydrated unknown subject DEFERS — the pairing/bootstrap window stays correct.
     assert_eq!(
-        resolver.may_sync(&SyncTargetId::peer_did("did:key:carol"), AccOp::Read, &res),
+        resolver.may_sync(&SyncTargetId::signer_did("did:key:carol"), AccOp::Read, &res),
         CapDecision::Pending,
     );
 }
@@ -67,7 +67,7 @@ fn resolver_three_state() {
 #[test]
 fn builtin_resolvers_are_total() {
     let res = ResourceCoord::new("spark:S", "todos", ObjectId::new());
-    let who = SyncTargetId::peer_did("did:key:anyone");
+    let who = SyncTargetId::signer_did("did:key:anyone");
     assert_eq!(
         AllowAllResolver.may_sync(&who, AccOp::Read, &res),
         CapDecision::Allow
@@ -95,7 +95,7 @@ struct RoleResolver {
 
 impl CapabilityResolver for RoleResolver {
     fn may_sync(&self, subject: &SyncTargetId, op: AccOp, _res: &ResourceCoord) -> CapDecision {
-        let did = subject.as_peer_did().unwrap_or("");
+        let did = subject.as_signer_did().unwrap_or("");
         match op {
             AccOp::Replicate => {
                 if self.replicas.contains(did) {
@@ -132,24 +132,24 @@ fn replication_peer_may_hold_without_membership() {
 
     // Member → holds via Write.
     assert_eq!(
-        may_hold(&resolver, &SyncTargetId::peer_did("did:key:member"), &res),
+        may_hold(&resolver, &SyncTargetId::signer_did("did:key:member"), &res),
         CapDecision::Allow,
     );
     // Server aven (replica) → holds via Replicate, though it is NOT a member
     // (a Write-only check would deny it — that was the regression).
     assert_eq!(
-        resolver.may_sync(&SyncTargetId::peer_did("did:key:server"), AccOp::Write, &res),
+        resolver.may_sync(&SyncTargetId::signer_did("did:key:server"), AccOp::Write, &res),
         CapDecision::DenyPermanent,
         "the replica is deliberately not a member",
     );
     assert_eq!(
-        may_hold(&resolver, &SyncTargetId::peer_did("did:key:server"), &res),
+        may_hold(&resolver, &SyncTargetId::signer_did("did:key:server"), &res),
         CapDecision::Allow,
         "but it MAY hold the spark's encrypted batches via its replicate grant",
     );
     // Outsider → neither member nor replica → denied.
     assert_eq!(
-        may_hold(&resolver, &SyncTargetId::peer_did("did:key:outsider"), &res),
+        may_hold(&resolver, &SyncTargetId::signer_did("did:key:outsider"), &res),
         CapDecision::DenyPermanent,
     );
 
@@ -161,7 +161,7 @@ fn replication_peer_may_hold_without_membership() {
         hydrated: false,
     };
     assert_eq!(
-        may_hold(&pending, &SyncTargetId::peer_did("did:key:bootstrapping"), &res),
+        may_hold(&pending, &SyncTargetId::signer_did("did:key:bootstrapping"), &res),
         CapDecision::Pending,
     );
 }
@@ -216,7 +216,7 @@ fn capability_gates_every_hop() {
         &mut granted_peer,
         &hub,
         &resolver,
-        &SyncTargetId::peer_did("did:key:granted"),
+        &SyncTargetId::signer_did("did:key:granted"),
         &res,
     );
     assert_eq!(transferred, 2);
@@ -231,7 +231,7 @@ fn capability_gates_every_hop() {
         &mut revoked_peer,
         &hub,
         &resolver,
-        &SyncTargetId::peer_did("did:key:revoked"),
+        &SyncTargetId::signer_did("did:key:revoked"),
         &res,
     );
     assert_eq!(transferred, 0, "revoke stops new batches");
@@ -256,7 +256,7 @@ fn grant_then_reannounce_ships_previously_withheld() {
     hub.insert(bid(1), vec![]);
     hub.insert(bid(2), vec![bid(1)]);
     let res = ResourceCoord::new("spark:S", "messages", ObjectId::new());
-    let peer = SyncTargetId::peer_did("did:key:newpeer");
+    let peer = SyncTargetId::signer_did("did:key:newpeer");
 
     // Before the grant: ACL not hydrated for this peer → Pending → withholds,
     // never drops (the row stays available at the source).

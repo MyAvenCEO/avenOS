@@ -17,7 +17,7 @@ async fn loopback_delivers_frame() {
 
     // A sends a frame → it lands in B's inbox, tagged as coming from A.
     let payload = SyncPayload::BatchFateNeeded { batch_ids: vec![] };
-    a.send_to(SyncTargetId::peer_did("did:key:b"), payload.clone())
+    a.send_to(SyncTargetId::signer_did("did:key:b"), payload.clone())
         .await
         .expect("loopback send");
 
@@ -37,7 +37,7 @@ async fn loopback_is_directional() {
     let (a, b) = LoopbackTransport::pair(a_source, b_source.clone());
 
     // B → A does not leak into B's own inbox.
-    b.send_to(SyncTargetId::peer_did("did:key:a"), SyncPayload::BatchFateNeeded { batch_ids: vec![] })
+    b.send_to(SyncTargetId::signer_did("did:key:a"), SyncPayload::BatchFateNeeded { batch_ids: vec![] })
         .await
         .expect("loopback send");
     assert_eq!(b.pending(), 0);

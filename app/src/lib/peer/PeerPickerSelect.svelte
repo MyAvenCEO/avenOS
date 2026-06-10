@@ -22,15 +22,15 @@
 	let open = $state(false)
 	let rootEl = $state<HTMLDivElement | undefined>()
 
-	const selectedPeer = $derived(peers.find((p) => p.peerDid === value))
+	const selectedPeer = $derived(peers.find((p) => p.signerDid === value))
 	const selectedLines = $derived(
 		selectedPeer
-			? peerPickerLines(selectedPeer.peerDid, selectedPeer.deviceLabel, localPairingLabel)
+			? peerPickerLines(selectedPeer.signerDid, selectedPeer.deviceLabel, localPairingLabel)
 			: null,
 	)
 
-	function select(peerDid: string): void {
-		value = peerDid
+	function select(signerDid: string): void {
+		value = signerDid
 		open = false
 	}
 
@@ -99,8 +99,8 @@
 			aria-label={resolvedPlaceholder}
 		>
 			{#each peers as peer (peer.id)}
-				{@const lines = peerPickerLines(peer.peerDid, peer.deviceLabel, localPairingLabel)}
-				{@const selected = peer.peerDid === value}
+				{@const lines = peerPickerLines(peer.signerDid, peer.deviceLabel, localPairingLabel)}
+				{@const selected = peer.signerDid === value}
 				<li role="presentation">
 					<button
 						type="button"
@@ -108,7 +108,7 @@
 							{selected ? 'bg-surface-card-selected' : ''}"
 						role="option"
 						aria-selected={selected}
-						onclick={() => select(peer.peerDid)}
+						onclick={() => select(peer.signerDid)}
 					>
 						<span class="block truncate font-medium">{lines.title}</span>
 						{#if lines.device}

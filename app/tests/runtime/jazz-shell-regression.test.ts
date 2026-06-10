@@ -15,14 +15,14 @@ describe('jazz-shell regression', () => {
 			ready: true,
 			tables: ['sparks', 'messages'],
 			session: {
-				peerDid: 'did:key:z6Mk',
-				peerDidShort: 'did:key:z6Mk',
+				signerDid: 'did:key:z6Mk',
+				signerDidShort: 'did:key:z6Mk',
 				defaultSparkUrn: 'urn:aven:spark:00000000-0000-0000-0000-000000000001',
 			},
 		})
 		const s = get(jazzShell)
 		expect(s.ready).toBe(true)
-		expect(s.session?.peerDid).toBe('did:key:z6Mk')
+		expect(s.session?.signerDid).toBe('did:key:z6Mk')
 		expect(s.tables).toContain('sparks')
 	})
 
@@ -32,8 +32,8 @@ describe('jazz-shell regression', () => {
 			ready: true,
 			tables: ['todos'],
 			session: {
-				peerDid: 'did:key:aaa',
-				peerDidShort: 'aaa',
+				signerDid: 'did:key:aaa',
+				signerDidShort: 'aaa',
 				defaultSparkUrn: 'urn:aven:spark:1',
 			},
 		})
@@ -45,7 +45,7 @@ describe('jazz-shell regression', () => {
 		expect(s.ready).toBe(false)
 		expect(s.message).toBe('rehydrating')
 		expect(s.tables).toEqual(['todos'])
-		expect(s.session?.peerDid).toBe('did:key:aaa')
+		expect(s.session?.signerDid).toBe('did:key:aaa')
 	})
 
 	it('reset clears shell on lock path', () => {
@@ -53,8 +53,8 @@ describe('jazz-shell regression', () => {
 			ready: true,
 			tables: ['sparks'],
 			session: {
-				peerDid: 'did:key:x',
-				peerDidShort: 'x',
+				signerDid: 'did:key:x',
+				signerDidShort: 'x',
 				defaultSparkUrn: 'urn:aven:spark:1',
 			},
 		})
