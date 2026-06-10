@@ -1164,18 +1164,8 @@ pub(crate) async fn groove_ipc_create_collection_group(
 	row.insert("genesis_b64".into(), JsonValue::String(genesis_b64));
 	row.insert("current_dek_version".into(), JsonValue::Number(dek_ver.into()));
 	row.insert("created_at_ms".into(), JsonValue::Number(now_ms.into()));
-	let dek_plain = crate::crypto::random_identity_dek();
-	let sparks_oid = ObjectId::new();
-	jazz_engine::seal_sensitive_in_row_with_dek(
-		dek_plain.expose(),
-		"safes",
-		&sparks_schema,
-		group_id,
-		*sparks_oid.uuid(),
-		dek_ver,
-		&mut row,
-	)?;
 	let sparks_vals = insert_values("safes", &sparks_schema, row)?;
+	let sparks_oid = ObjectId::new();
 	let sparks_meta = owner_binding_meta(&shell.signing_key, sparks_oid, group_id)?;
 	client
 		.create_with_id_and_metadata("safes", sparks_oid, sparks_vals, sparks_meta)
@@ -1184,6 +1174,7 @@ pub(crate) async fn groove_ipc_create_collection_group(
 
 	// The group's OWN DEK (generated above), keyshared to the creator. Parent members inherit
 	// it via the 2-level key hierarchy (the group key wrapped under the parent group key).
+	let dek_plain = crate::crypto::random_identity_dek();
 	wrap_self_keyshare(client.as_ref(), shell, group_id, &dek_plain, dek_ver).await?;
 
 	finish_spark_admin_grant(app, jazz, self_state, client, group_id).await?;
@@ -1415,7 +1406,7 @@ pub(crate) async fn groove_ipc_aven_ceo_publish_profile(
 
 	let peers_schema = jazz_engine::resolved_table_schema(client.as_ref(), "peers").await?;
 	let identity_ix = jazz_engine::col_ix(&peers_schema, "owner")?;
-	let did_ix = jazz_engine::col_ix(&peers_schema, "peer_did")?;
+	let did_ix = jazz_engine::col_ix(&peers_schema, "signer_did")?;
 	let rows = jazz_engine::exec_list_rows(client.as_ref(), "peers").await?;
 	let mut own_oid: Option<ObjectId> = None;
 	for (oid, vals) in rows {
@@ -1458,16 +1449,6 @@ pub(crate) async fn groove_ipc_aven_ceo_publish_profile(
 	let mut patch = Map::new();
 	patch.insert("account_name".into(), JsonValue::String(name));
 	patch.insert("device_label".into(), JsonValue::String(label));
-	// Private-by-default: seal account_name/device_label under the identity DEK, scoped
-	// to this member's own roster row, before building the patch ops.
-	jazz_engine::seal_sensitive_in_patch(
-		shell,
-		"peers",
-		&peers_schema,
-		identity_uuid,
-		*own_oid.uuid(),
-		&mut patch,
-	)?;
 	let ops = patch_updates(&peers_schema, patch)?;
 	let upd_meta = owner_binding_meta(&shell.signing_key, own_oid, identity_uuid)?;
 	client.update_with_metadata(own_oid, ops, upd_meta).await.map_err(format_jazz_err)?;
@@ -1489,7 +1470,7 @@ pub(crate) async fn groove_ipc_aven_ceo_membership(
 	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
 	let shell = shell_arc.as_ref();
 	let identity_uuid = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
-	let Some(bisc) = shell.vault.identities.get(&identity_uuid) else {
+	let Some(bisc) = shell.vault.safes.get(&identity_uuid) else {
 		return Ok("none".to_string());
 	};
 	let owner = crate::identity_acc::identity_peer_is_owner(&bisc.biscuit, identity_uuid, &shell.signer_did)?;
@@ -1590,7 +1571,7 @@ pub(crate) async fn groove_ipc_spark_admin_list(
 	let shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
 	let bs = shell
 		.vault
-		.identities
+		.safes
 		.get(&identity_uuid)
 		.ok_or_else(|| format!("identity {identity_uuid} not in vault"))?;
 	let mut admin_dids: Vec<String> = crate::identity_acc::identity_admins(&bs.biscuit, identity_uuid)?
@@ -1618,7 +1599,7 @@ pub(crate) async fn groove_ipc_spark_admin_list(
 	})
 }
 
-/// v2 per-identity revoke = **key rotation**. Removes `peer_did` from `owner`:
+/// v2 per-identity revoke = **key rotation**. Removes `signer_did` from `owner`:
 ///  1. re-mint the identity biscuit WITHOUT the peer (the gate now denies it new
 ///     frames for this identity — it stays a peer for any OTHER shared identities),
 ///  2. rotate the DEK to v+1 and keyshare v+1 to the REMAINING members ONLY, so
