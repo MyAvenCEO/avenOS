@@ -163,17 +163,6 @@ fn open_sealed_text_for_identity(
 		if let Ok((opened, _)) = open_text_cell_payload(dek.expose(), raw, &expected_aad) {
 			return Ok(opened);
 		}
-		// Legacy fallback: genesis_b64/issuer_pubkey_b64 were sealed under "identities"
-		// before the identities→safes table rename; try the old AAD so existing data opens.
-		if coord.table == "safes"
-			&& (coord.column == "genesis_b64" || coord.column == "issuer_pubkey_b64")
-		{
-			let legacy_aad =
-				cell_seal_aad(&urn, "identities", coord.column, coord.row, dv, slug);
-			if let Ok((opened, _)) = open_text_cell_payload(dek.expose(), raw, &legacy_aad) {
-				return Ok(opened);
-			}
-		}
 	}
 	Err(format!("hydrate_open_sealed:{identity}"))
 }
