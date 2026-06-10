@@ -45,8 +45,8 @@
 | Term | Role |
 |---|---|
 | **brain** | the memory subsystem of one identity (rows scoped by `owner`) |
-| **memory** | atomic unit: verbatim content + embedding + tags + veracity + provenance |
-| **tag** | free label; the cheap deterministic scope (`stream:talk`, `role:user`, `doc:<id>`, `self`) |
+| **memory** | atomic unit: verbatim content + embedding + typed scope + veracity + provenance |
+| **scope** | typed, indexed columns — `stream` (surface), `author_role` (user/agent/system), `source` (origin row ref); the cheap deterministic filters |
 | **entity** | named node (person/project/topic); the semantic graph primitive |
 | **mention** | memory→entity edge (aboutness); append-only |
 | **fact** | typed temporal claim between entities; validity window + confidence + veracity |
@@ -70,7 +70,7 @@ once on any device, sync everywhere; index locally** (§3).
 
 | Table | Columns (built ✅ in `libs/aven-brain/src/schema.rs`) | Δ additions |
 |---|---|---|
-| `memories` | `content Text`, `embedding Vector{768}`, `tags Array<Text>`, `source`, `seq`, `line_start/line_end`, `content_date Timestamp`, `content_hash Bytea`, `source_version BigInt`, `normalize_version`, `created_at` | `owner Uuid` (routing) · `veracity Enum[stated,inferred,imported,tool,unknown]` · `superseded_by →memories` · `summary_of Array<→memories>` |
+| `memories` | `content Text`, `embedding Vector{768}`, `source`, `seq`, `line_start/line_end`, `content_date Timestamp`, `content_hash Bytea`, `source_version BigInt`, `normalize_version`, `created_at` | `owner Uuid` (routing) · `stream Text` · `author_role Enum[user,agent,system]` · `veracity Enum[stated,inferred,imported,tool,unknown]` · `superseded_by →memories` · `summary_of Array<→memories>` |
 | `entities` | `name`, `kind`, `properties Json` | `owner` |
 | `mentions` | `memory →memories`, `entity →entities` | `owner` |
 | `facts` | `subject →entities`, `predicate`, `object →entities`, `valid_from`, `valid_to`, `confidence Double`, `source_memory` | `owner` · `veracity Enum` |
@@ -103,10 +103,10 @@ snapshot broadcast.
 
 ### 2.4 What we deliberately do NOT add
 
-No working/episodic table split (session tags + `summary_of` do it) · no `tier` column
+No working/episodic table split (typed scope columns + `summary_of` do it) · no `tier` column
 (age-weights are pure `f(created_at)`) · no canonical table (L0 = the **self entity's**
 compiled-truth card) · no scratchpad/banks (identities are the isolation) · no 13-type taxonomy
-(small decay classes derived from tags).
+(small decay classes derived from the typed columns by the deterministic pass).
 
 ---
 
@@ -118,8 +118,9 @@ The seam: a **column-unseal transform** supplied by the DEK-holding layer, invok
 executor reads `embedding`/`content` values for ranking or for building local derived indexes.
 Plaintext lives only in RAM during the scan; results (row ids + ranks) carry no plaintext.
 
-- Filter-before-rank is already free (executor order `filter → rank → limit`): tag/entity/owner
-  predicates narrow candidates before any unsealing happens.
+- Filter-before-rank is already free (executor order `filter → rank → limit`): typed predicates
+  (`owner`/`stream`/`author_role`/entity) are indexed and narrow candidates before any unsealing
+  happens.
 - **Scale ladder:** unsealed exact scan (now) → int8/bit quantized side-columns (32× smaller,
   Hamming popcount — Mnemosyne holds 35 ms @ 10M rows on exactly this; the local quantized cache
   is derived state, never synced) → HNSW only if a real workload misses budget.
@@ -135,20 +136,20 @@ Plaintext lives only in RAM during the scan; results (row ids + ranks) carry no 
 Sealed originals are the source of truth; the brain derives from them. Ingest **never blocks the
 talk loop** (fire-and-forget, logged, idempotent).
 
-1. **User turn** → `messages` row (sealed, synced) → `brain_ingest(content,
-   tags=[stream:talk, role:user], source=row_id, content_date=created_at_ms)`.
+1. **User turn** → `messages` row (sealed, synced) → `brain_ingest(content, stream='talk',
+   author_role='user', source=row_id, content_date=created_at_ms)`.
 2. **Agent reply** → after `resolveAgentTurn`, ingest the human-facing prose (not the tool-call
-   envelope) with `role:agent`, `veracity: inferred` (recallable, down-weighted; dreaming may
-   promote it).
+   envelope) with `author_role='agent'`, `veracity: inferred` (recallable, down-weighted;
+   dreaming may promote it).
 3. **Files — drop anything into the talk stream**: original stays verbatim + sealed in `files`
    (base64 `content`, via `persistSparkFiles`) → brain pipeline: **extract text** (markdown/text
    directly; PDF extraction next) → **chunk ≈800 chars / 80 overlap** → embed → one `memories`
    row per chunk with provenance (`source` = file row id, `seq`, `line_start/end`,
-   tags=[`doc:<file_id>`, `stream:talk`]). Bytea originals are never searched directly — chunks
-   are; citations link back to the file + line range.
+   `stream='talk'`, `author_role='user'`). Bytea originals are never searched directly — chunks
+   are; citations link back to the file + line range via `source`.
 4. **Deterministic graph on write** ✅: `[[wikilinks]]` + regex pass (entity patterns +
    fuzzy-merge ≥0.8 + stop-words; SPO patterns `is/has/uses/works at` conf 0.6–0.7, ≤5/memory,
-   ≤4096-char input; temporal tags) → entities + mentions + relations.
+   ≤4096-char input; temporal markers) → entities + mentions + relations.
 5. **Idempotent + convergent**: `content_hash` dedup before embedding; deterministic extraction
    ⇒ two devices ingesting the same content converge (row dedup by hash, entity dedup by
    dreaming's merge pass).
@@ -161,7 +162,7 @@ One call before every LLM roundtrip (library method in `brain.rs`, testable with
 
 ```
 assemble_context(query, opts { working_n=8, recall_k=6, entity_cards=2,
-                               budget_chars≈8000, scope_tags=[stream:talk] })
+                               budget_chars≈8000, scope: { stream: 'talk' } })
   L0  self-card (always)                      ← compiled-truth card of the "self" entity
   L1  running gist (always)
   WW  working window: last N session turns (chronological, always included)
@@ -188,8 +189,8 @@ type ContextTrace = {
   query: string
   l0Self: string
   l1Gist: string[]
-  working:  { id: string; snippet: string; tags: string[] }[]
-  recalled: { id: string; snippet: string; tags: string[]; rank: number;
+  working:  { id: string; snippet: string; authorRole: 'user' | 'agent' | 'system' }[]
+  recalled: { id: string; snippet: string; source?: string; rank: number;
               via: 'vector' | 'bm25' | 'both'; score: number }[]
   entities: { name: string; kind: string; relations: [string, number][] }[]
   budget: { usedChars: number; maxChars: number; droppedRecalled: number; droppedWorking: number }
@@ -210,7 +211,7 @@ Scheduled background pass; everything derived, rebuildable, off the write path:
 | Entity-merge | ✅ | CRDT-safe merge of duplicate entities by normalized name |
 | Consolidate | ☐ | old session turns → summary memory with **deterministic ID = f(identity, window)** (devices dreaming concurrently converge under LWW) + `summary_of` provenance |
 | Verify facts | ☐ | Bayesian confidence on repeat mentions `conf += (1−conf)·w_veracity·0.3`; contradictions: keep both, mark loser `superseded_by`; recompute compiled-truth per entity |
-| Promote | ☐ | load-bearing `role:agent` (`inferred`) memories get verified/promoted |
+| Promote | ☐ | load-bearing `author_role='agent'` (`inferred`) memories get verified/promoted |
 | L1 rewrite | ☐ | deep rewrite of the running summary (incremental per-turn + batch here) |
 
 ---
@@ -231,7 +232,7 @@ replyWithAgent(prompt, userRowId)
   → assembled = brain_assemble_context(identity, prompt)      (catch → undefined)
   → streamReply((assembled?.prompt ?? '') + todoPreamble + prompt, …)
   → resolveAgentTurn → persist reply body (unchanged)
-  → brain_ingest(reply prose, role:agent)
+  → brain_ingest(reply prose, author_role='agent')
   → context_traces.create({ owner, message_id: userRowId, reply_id, trace })
 ```
 
@@ -273,7 +274,7 @@ become the same ingest path. Elsewhere, the existing behavior stays.
    `{type:'Bytea'}` → `0x1a2b3c… (n B)` hex; Timestamps → ISO + relative; FK/uuid cells
    (`memory`, `entity`, `a/b`, `subject/object`, `owner`, `message_id`) → clickable, jumping to
    the target table with an id filter.
-3. **Brain search tab** — query + optional tag scope → `brain_search` → hits with via/rank/score
+3. **Brain search tab** — query + optional typed scope (stream / author_role) → `brain_search` → hits with via/rank/score
    badges, click-through to the `memories` row; entity list → entity-card panel; status strip
    (embedder, row counts) + **Dream** and **Backfill** buttons.
 
@@ -286,9 +287,9 @@ Each phase independently shippable, with files + verification:
 | # | Phase | Files (key) | Verify |
 |---|---|---|---|
 | **E0** | **Manifest + migration**: `vector` type, 5 brain tables (+owner), `context_traces`; snapshot + registry + embedded snapshot **in the same commit** | `libs/aven-schema/schema.manifest.json`, `migrations/registry.json` + snapshot, `app/src-tauri/src/schema_manifest.rs` | existing vault boots (lens applies, no wipe); fresh vault boots; tables listed by `jazzStatus()` |
-| **E1** | **Engine seam**: unseal-on-scan transform for `nearest`/`text_search`; aven-brain `open(identity)` over the shared store (owner scoping in queries); `remember_with` (source/content_date), `search_traced` (via/rank provenance), `assemble_context` | `libs/aven-db` executor/scan path, `libs/aven-brain/src/brain.rs`, `schema.rs` | `cargo test -p aven-brain`; sealed fixture: search returns correct rows, no plaintext at rest |
+| **E1** | **Engine seam**: unseal-on-scan transform for `nearest`/`text_search`; aven-brain `open(identity)` over the shared store (owner scoping in queries); **migrate `remember`/`search_scoped`/`recall` to typed scope** — signatures take `Scope { stream, author_role, source }`, the as-built free-label parameter and the `memories` array column are removed; `remember_with` (source/content_date), `search_traced` (via/rank provenance), `assemble_context` | `libs/aven-db` executor/scan path, `libs/aven-brain/src/brain.rs`, `schema.rs` | `cargo test -p aven-brain`; sealed fixture: search returns correct rows, no plaintext at rest |
 | **E2** | **App runtime**: brain module + Tauri commands `brain_status/ingest/search/entities/entity_card/assemble_context/backfill/dream` (asr/llm/tts pattern) + TS wrapper | new `app/src-tauri/src/brain.rs`, `app/src-tauri/src/lib.rs` (manage/handler/exit-drain), new `app/src/lib/brain/api.ts` | devtools: ingest → search round-trip on a real identity |
-| **E3** | **Ingestion**: talk hooks (user/agent turns), file pipeline (markdown/text chunking; PDF next), backfill of pre-brain history, **drag-drop fix** | `identity-agent.svelte.ts`, `intent-files.ts`, `app/src/routes/+layout.svelte` | drop a .md on talk → stays on screen, chunks appear in `memories` with `doc:` tags; backfill idempotent (2nd run dedups all) |
+| **E3** | **Ingestion**: talk hooks (user/agent turns), file pipeline (markdown/text chunking; PDF next), backfill of pre-brain history, **drag-drop fix** | `identity-agent.svelte.ts`, `intent-files.ts`, `app/src/routes/+layout.svelte` | drop a .md on talk → stays on screen, chunks appear in `memories` with `source` = file row id; backfill idempotent (2nd run dedups all) |
 | **E4** | **Context manager**: `assemble_context` wiring + `context_traces` writes + fallback path | `identity-agent.svelte.ts` | reply still streams with brain off (fallback); trace row per human message; prompt contains L0/L1/WW/recall blocks under budget |
 | **E5** | **Right aside**: layout third column + drawer, `TalkContextAside`, message-click selection | `SlideAsideLayout.svelte`, `AsidePageLayout.svelte`, identity `+layout.svelte`, `IdentityTalkPanel.svelte`, new `TalkContextAside.svelte`, `talk-context.svelte.ts` | xl: aside shows newest trace; clicking older message swaps it; <xl drawer; other routes untouched; `bun run check` |
 | **E6** | **DB viewer**: dynamic tables, `format-cell.ts`, FK navigation, brain search tab | `db/+page.svelte`, new `app/src/lib/db/format-cell.ts` | brain tables render readable; Vector/Bytea/Timestamp formatted; FK click navigates; search shows via badges |
@@ -321,7 +322,8 @@ Each phase independently shippable, with files + verification:
 
 - **Brain** — each identity has one private memory store it fully owns; nobody else can read it.
 - **Memory** — one saved thing, word-for-word: a chat message, a chunk of a document, a note.
-- **Tag** — a cheap label on a memory (`stream:talk`, `role:user`) — the fast "which drawer" filter.
+- **Scope** — typed fields on every memory saying where it came from (`stream`), who authored it
+  (`author_role`), and which row it derives from (`source`) — the fast "which drawer" filters.
 - **Entity** — a thing the memories talk about: a person, project, place. A character in your story.
 - **Mention** — a thread from a memory to an entity ("this memory talks about Alice"). Threads
   are only ever added, never erased.
