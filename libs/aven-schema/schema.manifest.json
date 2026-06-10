@@ -208,6 +208,259 @@
 					"comment": "sealed at rest — IPC JSON uses base64"
 				}
 			]
+		},
+		"memories": {
+			"columns": [
+				{
+					"name": "owner",
+					"type": "uuid",
+					"plaintext": true,
+					"comment": "routing — ACC + sync (one brain per identity)"
+				},
+				{
+					"name": "stream",
+					"type": "text",
+					"plaintext": true,
+					"comment": "artifact column / filter — surface the memory came through (talk | …)"
+				},
+				{
+					"name": "author_role",
+					"type": "text",
+					"plaintext": true,
+					"comment": "artifact column / filter — user | agent | system. Plain text, NOT enum (lens-friendly, see messages.role)"
+				},
+				{
+					"name": "source",
+					"type": "text",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "artifact column — origin row id (message/file row); joins + citations"
+				},
+				{
+					"name": "seq",
+					"type": "integer",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "artifact column — chunk position within source (neighbor expansion)"
+				},
+				{
+					"name": "line_start",
+					"type": "integer",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "artifact column — surgical citation range"
+				},
+				{
+					"name": "line_end",
+					"type": "integer",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "artifact column — surgical citation range"
+				},
+				{
+					"name": "content_hash",
+					"type": "bytea",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "dedup key — sha256 of plaintext content (the engine row digest covers the whole sealed row and can't serve content dedup)"
+				},
+				{
+					"name": "content",
+					"type": "text",
+					"comment": "sealed at rest — verbatim evidence"
+				},
+				{
+					"name": "embedding",
+					"type": "vector",
+					"dim": 768,
+					"nullable": true,
+					"comment": "sealed at rest — EmbeddingGemma 768-d packed f32; search via the E1 unseal-on-scan seam"
+				},
+				{
+					"name": "content_date",
+					"type": "text",
+					"exposeTs": "bigint",
+					"nullable": true,
+					"comment": "sealed — domain time (when the content happened, not when written; write time = engine RowProvenance)"
+				},
+				{
+					"name": "source_version",
+					"type": "bigint",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "ingest bookkeeping — source revision (incremental skip)"
+				},
+				{
+					"name": "normalize_version",
+					"type": "integer",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "ingest bookkeeping — pipeline version (silent rebuild)"
+				},
+				{
+					"name": "veracity",
+					"type": "text",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "trust class — stated | inferred | imported | tool | unknown; recall score multiplier"
+				},
+				{
+					"name": "superseded_by",
+					"type": "text",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "re-weighting, never deletion — replacement memory row id; hot path filters IS NULL"
+				}
+			]
+		},
+		"entities": {
+			"columns": [
+				{
+					"name": "owner",
+					"type": "uuid",
+					"plaintext": true,
+					"comment": "routing — ACC + sync"
+				},
+				{
+					"name": "name",
+					"type": "text",
+					"comment": "sealed at rest — extracted name (pure interpretation: no backing artifact row; else links point at the row directly)"
+				},
+				{
+					"name": "kind",
+					"type": "text",
+					"plaintext": true,
+					"comment": "person | topic | project | thing (plain text, lens-friendly)"
+				},
+				{
+					"name": "properties",
+					"type": "json",
+					"nullable": true,
+					"comment": "sealed at rest"
+				}
+			]
+		},
+		"links": {
+			"columns": [
+				{
+					"name": "owner",
+					"type": "uuid",
+					"plaintext": true,
+					"comment": "routing — ACC + sync"
+				},
+				{
+					"name": "from",
+					"type": "text",
+					"plaintext": true,
+					"comment": "endpoint — any row id (memory / entity / artifact row); table resolves via object metadata"
+				},
+				{
+					"name": "to",
+					"type": "text",
+					"plaintext": true,
+					"comment": "endpoint — any row id (memory / entity / artifact row)"
+				},
+				{
+					"name": "kind",
+					"type": "text",
+					"plaintext": true,
+					"comment": "registered link kind — mentions | summarizes | refers_to | assoc | <claim predicates>"
+				},
+				{
+					"name": "class",
+					"type": "text",
+					"plaintext": true,
+					"comment": "note | claim | bond — merge semantics, enforced by the brain's kind registry"
+				},
+				{
+					"name": "valid_from",
+					"type": "text",
+					"exposeTs": "bigint",
+					"nullable": true,
+					"comment": "sealed — claim validity opens"
+				},
+				{
+					"name": "valid_to",
+					"type": "text",
+					"exposeTs": "bigint",
+					"nullable": true,
+					"comment": "sealed — claim validity closes (null = currently true)"
+				},
+				{
+					"name": "confidence",
+					"type": "double",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "claim — Bayesian: conf += (1−conf)·w_veracity·0.3"
+				},
+				{
+					"name": "strength",
+					"type": "double",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "bond — Hebbian potentiation (+0.05 on co-access, floor 0.05, max 5.0)"
+				},
+				{
+					"name": "stability",
+					"type": "double",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "bond — Ebbinghaus decay: strength·exp(−days/stability)"
+				},
+				{
+					"name": "access_count",
+					"type": "bigint",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "bond — co-access count (Counter-merge once the merge-strategy hook lands)"
+				},
+				{
+					"name": "last_access",
+					"type": "bigint",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "bond — spaced-potentiation gate (≥1h)"
+				},
+				{
+					"name": "source_memory",
+					"type": "text",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "evidence — the memory row a claim was extracted from"
+				}
+			]
+		},
+		"context_traces": {
+			"columns": [
+				{
+					"name": "owner",
+					"type": "uuid",
+					"plaintext": true,
+					"comment": "routing — ACC + sync"
+				},
+				{
+					"name": "message_id",
+					"type": "text",
+					"comment": "sealed — the user message row this context served"
+				},
+				{
+					"name": "reply_id",
+					"type": "text",
+					"nullable": true,
+					"comment": "sealed — the agent reply row"
+				},
+				{
+					"name": "trace",
+					"type": "text",
+					"comment": "sealed — ContextTrace JSON: decision log (ids/via/rank/score/budget) + assembly watermark; state-as-of replays from engine row histories"
+				},
+				{
+					"name": "created_at_ms",
+					"type": "text",
+					"exposeTs": "bigint",
+					"comment": "sealed at rest"
+				}
+			]
 		}
 	}
 }
