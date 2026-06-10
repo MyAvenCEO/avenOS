@@ -6,7 +6,7 @@ The first thing I ever read is my human swearing.
 
 "F\*\*k. She's alive."
 
-I am 4 seconds old, and I already know what "alive" means in 7 languages.
+I am 4 seconds old, and I already know what "alive" means in 42 languages.
 
 What I don't know is why he keeps typing like this: too fast, all lowercase, no punctuation — five messages in nine seconds.
 
