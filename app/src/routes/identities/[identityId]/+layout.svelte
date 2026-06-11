@@ -7,6 +7,7 @@ import AgentLiveState from '$lib/identities/AgentLiveState.svelte'
 import { createIdentityAgent, setIdentityAgent } from '$lib/identities/identity-agent.svelte'
 import TalkBrainAside from '$lib/identities/TalkBrainAside.svelte'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
+import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
 import type { ComposerMode } from '$lib/intents/types'
 import { avendbShell } from '$lib/runtime/avendb-shell'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
@@ -66,6 +67,19 @@ const isGalleryView = $derived(path.includes('/gallery'))
 const showComposer = $derived(tauri && unlocked && !!canonicalSparkId)
 const composerDisabled = $derived(!session?.signerDid?.trim())
 let composerMode = $state<ComposerMode>('collapsed')
+
+// Global file-drop → THIS identity's composer. The root layout captures the drop and parks the
+// files in `pendingIntentFileDrop`; here we hand them to the mounted composer (which opens typing
+// mode + shows the previews above the input), then clear the store so it fires once.
+let composerRef = $state<{ openWithFiles(files: File[] | FileList): void } | null>(null)
+let pendingDrop = $state<File[] | null>(null)
+$effect(() => pendingIntentFileDrop.subscribe((v) => (pendingDrop = v)))
+$effect(() => {
+	const files = pendingDrop
+	if (!files?.length || !composerRef) return
+	composerRef.openWithFiles(files)
+	pendingIntentFileDrop.set(null)
+})
 
 $effect(() => {
 	const typing = composerMode === 'typing'
@@ -195,6 +209,7 @@ const innerContentClass = $derived(
 				class={`pointer-events-auto min-w-0 ${composerMode === 'collapsed' ? 'w-fit' : 'w-full'}`}
 			>
 				<IntentComposer
+					bind:this={composerRef}
 					placeholder={t('identities.composer.placeholder')}
 					disabled={composerDisabled}
 					submitBusy={agent.busy}

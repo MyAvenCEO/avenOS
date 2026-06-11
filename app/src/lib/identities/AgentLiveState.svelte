@@ -44,13 +44,14 @@ const confirmTitles = $derived(agent.pendingConfirm?.titles ?? [])
 		transition:fade={{ duration: 120 }}
 	>
 		{#if live.kind === 'confirm'}
-			<!-- HITL gate: the human must accept before a destructive (delete) action runs. -->
+			<!-- HITL gate: the human must accept before a destructive (delete) action runs.
+			     (Explicit red — this theme has no `destructive` color token.) -->
 			<div
-				class="border-destructive/40 bg-card/95 ring-destructive/10 flex w-full flex-col gap-2.5 rounded-2xl border px-4 py-3 shadow-lg ring-1 backdrop-blur"
+				class="bg-card/95 flex w-full flex-col gap-2.5 rounded-2xl border border-red-500/40 px-4 py-3 shadow-lg ring-1 ring-red-500/10 backdrop-blur"
 			>
 				<div class="flex items-start gap-2.5">
 					<svg
-						class="text-destructive mt-0.5 size-4 shrink-0"
+						class="mt-0.5 size-4 shrink-0 text-red-600 dark:text-red-500"
 						viewBox="0 0 16 16"
 						fill="currentColor"
 						aria-hidden="true"
@@ -87,7 +88,7 @@ const confirmTitles = $derived(agent.pendingConfirm?.titles ?? [])
 					</button>
 					<button
 						type="button"
-						class="bg-destructive rounded-full px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90"
+						class="rounded-full bg-red-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-red-700"
 						onclick={() => agent.confirmPending()}
 					>
 						{t('identities.talk.confirmAccept')}
