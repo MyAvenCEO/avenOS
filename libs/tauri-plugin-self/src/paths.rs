@@ -1,7 +1,7 @@
-//! Canonical layout: `<Documents>/.avenOS/<network>/vaults/<slug>/{vault,db}`.
+//! Canonical layout: `<Documents>/.avenOS/<network>/vaults/<slug>/{secrets,db}`.
 //!
 //! **Override**: `AVENOS_DATA_DIR_OVERRIDE` points at a **full identity root** (directory that directly
-//! contains `vault/` and `db/`) for tests and tooling.
+//! contains `secrets/` and `db/`) for tests and tooling.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ use crate::vault::ActiveVault;
 /// Slug used for synthetic entries when `AVENOS_DATA_DIR_OVERRIDE` is active.
 pub const OVERRIDE_VAULT_SLUG: &str = "sandbox";
 
-pub const IDENTITY_CRYPTO_DIR: &str = "vault";
+pub const IDENTITY_CRYPTO_DIR: &str = "secrets";
 pub const MANIFEST_FILENAME: &str = "manifest.json";
 pub const SETTINGS_FILENAME: &str = "settings.json";
 pub const STRONGHOLD_FILENAME: &str = "strong.hold";
@@ -92,7 +92,7 @@ pub fn aven_os_user_root<R: tauri::Runtime>(
 	Ok(vaults_dir(app)?.join(&slug))
 }
 
-/// `…/vaults/<slug>/vault` — SE blobs, strong.hold, manifest, settings.
+/// `…/vaults/<slug>/secrets` — SE blobs, strong.hold, manifest, settings.
 pub fn identity_crypto_dir(identity_root: &Path) -> PathBuf {
 	identity_root.join(IDENTITY_CRYPTO_DIR)
 }

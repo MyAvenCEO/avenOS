@@ -1,4 +1,4 @@
-//! Stronghold snapshot at `identities/<slug>/vault/strong.hold`.
+//! Stronghold snapshot at `vaults/<slug>/secrets/strong.hold`.
 
 use std::path::Path;
 use std::sync::Mutex;

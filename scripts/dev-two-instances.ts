@@ -5,7 +5,7 @@
  * Instance A → http://127.0.0.1:1420
  * Instance B → http://127.0.0.1:1421
  *
- * Both use the network layout: <Documents>/.avenOS/ceo.aven/testnet/abagana/vaults/<slug>/{db,vault}.
+ * Both use the network layout: <Documents>/.avenOS/ceo.aven/testnet/abagana/vaults/<slug>/{db,secrets}.
  * **Do not** set AVENOS_DATA_DIR_OVERRIDE here — each window gets its own in-memory active vault via
  * the lock-screen picker, so two personas (e.g. alice + bob vaults) can run concurrently without two
  * separate override trees.
