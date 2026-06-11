@@ -144,6 +144,32 @@ fn run_handle_event(logic: &str, send: &str, payload: &Value, state: &Value) -> 
 	serde_json::from_str(&json).map_err(|e| e.to_string())
 }
 
+/// Run a vibe's agent-tool executor in the sandbox: eval `logic`, call the global
+/// `executeTool(name, args, data)`, and return its JSON result. STATELESS (fresh bounded runtime,
+/// no session) — the vibe is the planner: it validates `args` against `data` and returns a PLAN
+/// (a list of CRUD ops + a machine-facing result), which the trusted host then applies to avenDB.
+/// The sandbox never touches data directly, so an untrusted vibe can only ever propose ops.
+pub fn run_tool(logic: &str, name: &str, args: &Value, data: &Value) -> Result<Value, String> {
+	let runtime = bounded_runtime()?;
+	let context = Context::full(&runtime).map_err(|e| e.to_string())?;
+	let json: String = context
+		.with(|ctx| -> Result<String, String> {
+			ctx.eval::<(), _>(logic).map_err(|e| e.to_string())?;
+			let script = format!(
+				"(function() {{ if (typeof executeTool !== 'function') return ''; var r = executeTool({}, {}, {}); return r == null ? '' : JSON.stringify(r); }})()",
+				serde_json::to_string(name).map_err(|e| e.to_string())?,
+				serde_json::to_string(args).map_err(|e| e.to_string())?,
+				serde_json::to_string(data).map_err(|e| e.to_string())?
+			);
+			ctx.eval::<String, _>(script).map_err(|e| e.to_string())
+		})
+		.map_err(|e| e.to_string())?;
+	if json.is_empty() {
+		return Err(format!("vibe logic exposes no executeTool for: {name}"));
+	}
+	serde_json::from_str(&json).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod eval_bounds {
 	use super::*;

@@ -89,3 +89,21 @@ pub fn session_unmount(
 ) -> Result<(), String> {
 	manager.unmount(&request.session_id)
 }
+
+/// A stateless vibe-tool execution: eval the vibe `logic`, call `executeTool(name, args, data)`,
+/// return the plan it produces. No session, no avenDB — the host applies the plan (see `run_tool`).
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunToolRequest {
+	pub logic: String,
+	pub name: String,
+	#[serde(default)]
+	pub args: Value,
+	#[serde(default)]
+	pub data: Value,
+}
+
+#[tauri::command]
+pub fn run_tool(request: RunToolRequest) -> Result<Value, String> {
+	crate::session::run_tool(&request.logic, &request.name, &request.args, &request.data)
+}

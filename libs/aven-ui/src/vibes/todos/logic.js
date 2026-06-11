@@ -118,3 +118,90 @@ function handleEvent(type, payload, state) {
 		isEmpty: items.length === 0
 	}
 }
+
+// ─────────────────────────── agent tool (planner) ───────────────────────────
+//
+// The `todos` agent tool lives WITH the vibe. This runs in the QuickJS sandbox: it validates the
+// model's `args` against the live `data` (the host passes the current todos as [{id,title,done}])
+// and returns a PLAN — a list of CRUD `ops` + a machine-facing `toolResult`. The sandbox NEVER
+// touches avenDB; the trusted host applies the plan (and gates deletes via HITL). Pure + JSON-only.
+function executeTool(name, args, data) {
+	if (name !== 'todos') return null
+	args = args || {}
+	data = data || []
+	var action = String(args.action || '')
+		.trim()
+		.toLowerCase()
+	var items = Array.isArray(args.items) ? args.items : []
+
+	if (action === 'list') {
+		return { action: 'list', ops: [], titles: [], errors: [], toolResult: JSON.stringify(data) }
+	}
+	if (action !== 'create' && action !== 'update' && action !== 'delete') {
+		return {
+			action: 'unknown',
+			ops: [],
+			titles: [],
+			errors: ['unknown action: ' + (action || '?')],
+			toolResult: JSON.stringify({ ok: false, error: 'unknown action' })
+		}
+	}
+	if (items.length === 0) {
+		return {
+			action: action,
+			ops: [],
+			titles: [],
+			errors: [action + ': items is empty'],
+			toolResult: JSON.stringify({ ok: false, action: action, error: 'items is empty' })
+		}
+	}
+
+	var byId = {}
+	for (var d = 0; d < data.length; d++) byId[String(data[d].id)] = data[d]
+
+	var ops = []
+	var titles = []
+	var errors = []
+	for (var i = 0; i < items.length; i++) {
+		var it = items[i] || {}
+		if (action === 'create') {
+			var title = String(it.title == null ? '' : it.title).trim()
+			if (!title) {
+				errors.push('create: missing title')
+				continue
+			}
+			ops.push({ kind: 'create', title: title })
+			titles.push(title)
+			continue
+		}
+		var id = String(it.id == null ? '' : it.id).trim()
+		var target = byId[id]
+		if (!target) {
+			errors.push(action + ': no todo with id "' + id + '"')
+			continue
+		}
+		if (action === 'delete') {
+			ops.push({ kind: 'delete', id: target.id })
+			titles.push(target.title)
+			continue
+		}
+		var patch = {}
+		var newTitle = it.title == null ? '' : String(it.title).trim()
+		if (newTitle) patch.title = newTitle
+		if (typeof it.done === 'boolean') patch.done = it.done
+		if (Object.keys(patch).length === 0) {
+			errors.push('update: nothing to change on "' + id + '"')
+			continue
+		}
+		ops.push({ kind: 'update', id: target.id, patch: patch })
+		titles.push(target.title)
+	}
+
+	var toolResult = JSON.stringify({
+		ok: errors.length === 0,
+		action: action,
+		changed: titles.length,
+		errors: errors
+	})
+	return { action: action, ops: ops, titles: titles, errors: errors, toolResult: toolResult }
+}

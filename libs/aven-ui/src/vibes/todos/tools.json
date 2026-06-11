@@ -1,0 +1,42 @@
+[
+	{
+		"name": "todos",
+		"description": "Query and modify the current identity's todo list — the ONE tool for all task operations. Actions: 'list' returns every todo with its exact id, title and done state; 'create' adds the given items (each needs a title); 'update' edits the given items by id (new title and/or done — set done true to complete, false to reopen); 'delete' removes the given items by id. Batch freely: pass several entries in `items` to act on many todos in one call. ALWAYS call 'list' first to get the real ids before updating or deleting.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["list", "create", "update", "delete"],
+					"description": "What to do with the todo list."
+				},
+				"items": {
+					"type": "array",
+					"description": "The todos to act on (ignored for `list`). create: {title}; update: {id, title? and/or done?}; delete: {id}.",
+					"items": {
+						"type": "object",
+						"properties": {
+							"id": {
+								"type": "string",
+								"description": "The EXACT id of an existing todo, copied from a `list` result."
+							},
+							"title": {
+								"type": "string",
+								"description": "The task text — a short imperative phrase, in the user's language."
+							},
+							"done": {
+								"type": "boolean",
+								"description": "Whether the task is completed."
+							}
+						}
+					}
+				},
+				"response": {
+					"type": "string",
+					"description": "A short, friendly reply to the user in the user's language (one sentence), e.g. 'Ich öffne die Aufgaben für dich.'. This is shown and spoken back to the user."
+				}
+			},
+			"required": ["action", "response"]
+		}
+	}
+]

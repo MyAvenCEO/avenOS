@@ -21,6 +21,7 @@
 
 import { t } from '$lib/i18n'
 import { navigateAppTo } from '$lib/shell'
+import { VIBE_TOOL_DEFS, VIBE_TOOL_EXECUTORS } from './vibe-tools'
 
 /** Payload of the `llm:tool-call` event (see `app/src-tauri/src/llm.rs`). */
 export type LlmToolCall = {
@@ -202,195 +203,38 @@ function executeNavigateViews(args: Record<string, unknown>, ctx: ToolContext): 
 	}
 }
 
-// ───────────────────────────── todos (generic CRUD) ─────────────────────────────
-//
-// ONE tool for the whole task list (board 0021). The model picks an `action` and passes a
-// BATCH of `items`; ids are never guessed app-side — the model reads them from a `list` call
-// and copies them EXACTLY. No keyword/regex recovery on this path: structured arguments only.
-// Advertised to the Tinfoil cloud model (which runs the agentic list→mutate loop), not the
-// on-device 1.2B (it can't reliably emit nested JSON arrays).
-
-/** The generic `todos` schema: one action + a batch of items + the standard `response`. */
-const TODOS_TOOL: ToolDef = {
-	name: 'todos',
-	description:
-		"Query and modify the current identity's todo list — the ONE tool for all task operations. " +
-		"Actions: 'list' returns every todo with its exact id, title and done state; " +
-		"'create' adds the given items (each needs a title); " +
-		"'update' edits the given items by id (new title and/or done — set done true to complete, " +
-		"false to reopen); 'delete' removes the given items by id. " +
-		'Batch freely: pass several entries in `items` to act on many todos in one call. ' +
-		"ALWAYS call 'list' first to get the real ids before updating or deleting.",
-	parameters: {
-		type: 'object',
-		properties: {
-			action: {
-				type: 'string',
-				enum: ['list', 'create', 'update', 'delete'],
-				description: 'What to do with the todo list.'
-			},
-			items: {
-				type: 'array',
-				description:
-					'The todos to act on (ignored for `list`). create: {title}; update: {id, title? and/or done?}; delete: {id}.',
-				items: {
-					type: 'object',
-					properties: {
-						id: {
-							type: 'string',
-							description: 'The EXACT id of an existing todo, copied from a `list` result.'
-						},
-						title: {
-							type: 'string',
-							description: "The task text — a short imperative phrase, in the user's language."
-						},
-						done: { type: 'boolean', description: 'Whether the task is completed.' }
-					}
-				}
-			},
-			...RESPONSE_PROP
-		},
-		required: ['action', 'response']
-	}
-}
-
-/** One entry of the model's `items` batch (all fields optional — validated per action). */
-type TodoItemArg = { id?: unknown; title?: unknown; done?: unknown }
-
-/** Human summary for a completed batch: singular keys for one item, plural for several. */
-function todosSummary(
-	action: 'create' | 'update' | 'delete',
-	titles: string[]
-): { message: string; response: string } {
-	const base = { create: 'todoAdded', update: 'todoUpdated', delete: 'todoDeleted' }[action]
-	if (titles.length === 1) {
-		return {
-			message: t(`identities.talk.${base}`, { title: titles[0] }),
-			response: t(`identities.talk.${base}Reply`, { title: titles[0] })
-		}
-	}
-	const params = { count: titles.length, titles: titles.join(', ') }
-	const plural = base.replace('todo', 'todos')
-	return {
-		message: t(`identities.talk.${plural}`, params),
-		response: t(`identities.talk.${plural}Reply`, params)
-	}
-}
-
-/**
- * The generic todos executor. `list` reads live rows and returns them as the machine-facing
- * `toolResult` (JSON) for the agent loop; mutations run the batch item-by-item, collecting
- * per-item errors instead of failing the whole call.
- */
-async function executeTodos(
-	args: Record<string, unknown>,
-	ctx: ToolContext
-): Promise<ToolDispatchResult> {
-	const action = String(args.action ?? '')
-		.trim()
-		.toLowerCase()
-	const items = Array.isArray(args.items) ? (args.items as TodoItemArg[]) : []
-
-	if (action === 'list') {
-		const todos = ctx.listTodos()
-		return {
-			ok: true,
-			message: t('identities.talk.todosListed', { count: todos.length }),
-			toolResult: JSON.stringify(todos)
-		}
-	}
-	if (action !== 'create' && action !== 'update' && action !== 'delete') {
-		return {
-			ok: false,
-			message: t('identities.talk.todoNoChange'),
-			toolResult: `unknown action: ${action || '?'}`
-		}
-	}
-	if (items.length === 0) {
-		return {
-			ok: false,
-			message: t('identities.talk.todoEmpty'),
-			toolResult: `${action}: items is empty`
-		}
-	}
-
-	const errors: string[] = []
-	const titles: string[] = []
-	for (const item of items) {
-		try {
-			if (action === 'create') {
-				const title = String(item.title ?? '').trim()
-				if (!title) {
-					errors.push('create: missing title')
-					continue
-				}
-				await ctx.createTodo(title)
-				titles.push(title)
-				continue
-			}
-			const id = String(item.id ?? '').trim()
-			const target = ctx.resolveTodo(id)
-			if (!target) {
-				errors.push(`${action}: no todo with id "${id}"`)
-				continue
-			}
-			if (action === 'delete') {
-				await ctx.deleteTodoById(target.id)
-			} else {
-				const patch: { title?: string; done?: boolean } = {}
-				const title = item.title === undefined ? '' : String(item.title).trim()
-				if (title) patch.title = title
-				if (typeof item.done === 'boolean') patch.done = item.done
-				if (Object.keys(patch).length === 0) {
-					errors.push(`update: nothing to change on "${id}"`)
-					continue
-				}
-				await ctx.updateTodoById(target.id, patch)
-			}
-			titles.push(target.title)
-		} catch (e) {
-			errors.push(e instanceof Error ? e.message : String(e))
-		}
-	}
-
-	const toolResult = JSON.stringify({
-		ok: errors.length === 0,
-		action,
-		changed: titles.length,
-		errors
-	})
-	if (titles.length === 0) {
-		return { ok: false, message: errors.join('; ') || t('identities.talk.todoEmpty'), toolResult }
-	}
-	const { message, response } = todosSummary(action, titles)
-	return {
-		ok: errors.length === 0,
-		message: errors.length > 0 ? `${message} · ⚠️ ${errors.join('; ')}` : message,
-		response,
-		toolResult
-	}
-}
-
 // ───────────────────────────── tool registry ─────────────────────────────
 
+// The registry = navigation (host-owned) + every VIBE-owned tool (schema from the vibe's
+// `tools.json`, executor = the host applier that runs the vibe's sandboxed planner — see
+// `vibe-tools.ts`). This is the seam where dynamically-loaded vibes contribute agent tools.
 const TOOLS: Record<string, ToolEntry> = {
 	[NAVIGATE_VIEWS_TOOL.name]: { def: NAVIGATE_VIEWS_TOOL, execute: executeNavigateViews },
-	[TODOS_TOOL.name]: { def: TODOS_TOOL, execute: executeTodos }
+	...Object.fromEntries(
+		VIBE_TOOL_DEFS.map((def) => [
+			def.name,
+			{
+				def,
+				execute: (args: Record<string, unknown>, ctx: ToolContext) =>
+					VIBE_TOOL_EXECUTORS[def.name](args, ctx)
+			}
+		])
+	)
 }
 
 /**
- * Tools advertised to the ON-DEVICE 1.2B model: navigation only. Todo CRUD is the generic,
- * batch `todos` tool (nested JSON arrays + an agentic list→mutate loop) — more than the 1.2B
- * can reliably emit — so it's reserved for the Tinfoil cloud model (see {@link CLOUD_TOOLS}).
+ * Tools advertised to the ON-DEVICE 1.2B model: navigation only. Vibe CRUD tools (nested JSON
+ * arrays + an agentic list→mutate loop) are more than the 1.2B can reliably emit, so they're
+ * reserved for the Tinfoil cloud model (see {@link CLOUD_TOOLS}).
  */
 export const LLM_TOOLS: ToolDef[] = [NAVIGATE_VIEWS_TOOL]
 
 /**
- * Tools advertised to the Tinfoil CLOUD model: navigation + the generic `todos` CRUD tool.
- * The cloud path runs a real tool loop, so the model calls `todos {action:"list"}` to learn
- * ids, then batches create/update/delete — no app-side id matching or keyword parsing.
+ * Tools advertised to the Tinfoil CLOUD model: navigation + every vibe-owned tool. The cloud path
+ * runs a real tool loop, so the model can call `todos {action:"list"}` to learn ids, then batch
+ * create/update/delete — the schema + decision logic live in the vibe, not here.
  */
-export const CLOUD_TOOLS: ToolDef[] = [NAVIGATE_VIEWS_TOOL, TODOS_TOOL]
+export const CLOUD_TOOLS: ToolDef[] = [NAVIGATE_VIEWS_TOOL, ...VIBE_TOOL_DEFS]
 
 /** Hard cap on the cloud agentic tool loop (list → mutate → reply) so one turn can't run away. */
 export const MAX_TOOL_ROUNDS = 5

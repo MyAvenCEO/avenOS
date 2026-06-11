@@ -46,6 +46,22 @@ export async function sessionUnmount(sessionId: string): Promise<void> {
 	await invoke('plugin:sandbox-quickjs|session_unmount', { request: { sessionId } })
 }
 
+/**
+ * Run a vibe's agent-tool executor in the sandbox (stateless). Evals `logic`, calls the global
+ * `executeTool(name, args, data)`, and returns the PLAN it produces. The sandbox is the planner —
+ * it validates against `data` and returns ops + a machine result; the trusted host applies them.
+ */
+export async function sessionRunTool(req: {
+	logic: string
+	name: string
+	toolArgs?: unknown
+	data?: unknown
+}): Promise<unknown> {
+	return invoke('plugin:sandbox-quickjs|run_tool', {
+		request: { logic: req.logic, name: req.name, args: req.toolArgs ?? {}, data: req.data ?? null }
+	})
+}
+
 export async function listenSandboxQjsState(
 	handler: (event: SandboxQjsStateEvent) => void
 ): Promise<UnlistenFn> {

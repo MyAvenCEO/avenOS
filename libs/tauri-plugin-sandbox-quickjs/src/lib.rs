@@ -14,6 +14,7 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 			commands::session_mount,
 			commands::session_dispatch,
 			commands::session_unmount,
+			commands::run_tool,
 		])
 		.setup(|app, _api| {
 			app.manage(SessionManager::default());
