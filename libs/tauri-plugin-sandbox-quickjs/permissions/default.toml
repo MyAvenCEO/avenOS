@@ -6,4 +6,5 @@ permissions = [
   "allow-session-mount",
   "allow-session-dispatch",
   "allow-session-unmount",
+  "allow-run-tool",
 ]

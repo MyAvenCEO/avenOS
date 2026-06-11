@@ -7,6 +7,7 @@ Default permissions for tauri-plugin-sandbox-quickjs
 - `allow-session-mount`
 - `allow-session-dispatch`
 - `allow-session-unmount`
+- `allow-run-tool`
 
 ## Permission Table
 
@@ -16,6 +17,32 @@ Default permissions for tauri-plugin-sandbox-quickjs
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`sandbox-quickjs:allow-run-tool`
+
+</td>
+<td>
+
+Enables the run_tool command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sandbox-quickjs:deny-run-tool`
+
+</td>
+<td>
+
+Denies the run_tool command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>

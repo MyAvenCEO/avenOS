@@ -295,6 +295,18 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the run_tool command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-run-tool",
+          "markdownDescription": "Enables the run_tool command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the run_tool command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-run-tool",
+          "markdownDescription": "Denies the run_tool command without any pre-configured scope."
+        },
+        {
           "description": "Enables the session_dispatch command without any pre-configured scope.",
           "type": "string",
           "const": "allow-session-dispatch",
@@ -331,10 +343,10 @@
           "markdownDescription": "Denies the session_unmount command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for tauri-plugin-sandbox-quickjs\n#### This default permission set includes:\n\n- `allow-session-mount`\n- `allow-session-dispatch`\n- `allow-session-unmount`",
+          "description": "Default permissions for tauri-plugin-sandbox-quickjs\n#### This default permission set includes:\n\n- `allow-session-mount`\n- `allow-session-dispatch`\n- `allow-session-unmount`\n- `allow-run-tool`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for tauri-plugin-sandbox-quickjs\n#### This default permission set includes:\n\n- `allow-session-mount`\n- `allow-session-dispatch`\n- `allow-session-unmount`"
+          "markdownDescription": "Default permissions for tauri-plugin-sandbox-quickjs\n#### This default permission set includes:\n\n- `allow-session-mount`\n- `allow-session-dispatch`\n- `allow-session-unmount`\n- `allow-run-tool`"
         }
       ]
     }
