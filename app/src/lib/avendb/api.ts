@@ -134,6 +134,10 @@ export type IdentityAdminListReply = {
 	/** THE cap source of truth: every subject + grant + effective caps from the
 	 *  biscuit. The Members UI renders these directly and defines no caps itself. */
 	subjects: IdentitySubjectCaps[]
+	/** Whether this device may manage the identity (grant/revoke) — computed by the
+	 *  backend with the same authorize gate the grant IPCs enforce (full N-hop
+	 *  SAFE-in-SAFE walk), so the UI never guesses ownership from DID equality. */
+	viewerOwns: boolean
 }
 
 export async function sparkAdminList(identityId: string): Promise<IdentityAdminListReply> {

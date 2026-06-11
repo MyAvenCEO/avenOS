@@ -35,7 +35,7 @@ function rowsEqual(prev: AvenDbRow[], next: AvenDbRow[]): boolean {
 type SnapshotPolicy = 'replace' | 'catalogue'
 
 const TABLE_POLICY: Record<string, SnapshotPolicy> = {
-	identities: 'catalogue',
+	safes: 'catalogue',
 	keyshares: 'catalogue',
 }
 

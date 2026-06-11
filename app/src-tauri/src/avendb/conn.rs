@@ -754,10 +754,10 @@ impl ManagedAvenDb {
 		}
 		let (snap, _) =
 			engine::query_table_publish(client, shell, table, ENCRYPTED_META).await?;
-		if table == "identities" && snap.is_empty() {
+		if table == "safes" && snap.is_empty() {
 			log::warn!(
 				target: "avenos::avendb",
-				"bootstrap: identities table empty after hydrate — UI may seed on next write",
+				"bootstrap: safes table empty after hydrate — UI may seed on next write",
 			);
 		}
 		let encoded = serde_json::to_string(&snap).map_err(|e| e.to_string())?;

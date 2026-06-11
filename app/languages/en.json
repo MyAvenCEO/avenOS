@@ -511,6 +511,8 @@
 			"giveAccess": "Give access",
 			"addAsAdmin": "Add as admin",
 			"didPlaceholder": "Paste a member's DID (did:key:… or did:safe:… for non-human types)",
+			"signerDidPlaceholder": "Paste a signer device DID (did:key:…)",
+			"humanSignerOnly": "A Human SAFE admits signer devices only — paste a did:key:… DID, not a did:safe:…",
 			"safeDidPlaceholder": "…or paste a did:safe:… DID directly",
 			"addMemberSafeHuman": "Add a Human SAFE as member",
 			"addMemberSafeAven": "Add an Aven SAFE as member",

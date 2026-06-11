@@ -498,6 +498,8 @@
 			"giveAccess": "Zugriff gewähren",
 			"addAsAdmin": "Add as admin",
 			"didPlaceholder": "DID einfügen (did:key:… oder did:safe:… für nicht-menschliche Typen)",
+			"signerDidPlaceholder": "Signer-Geräte-DID einfügen (did:key:…)",
+			"humanSignerOnly": "Ein Human-SAFE nimmt nur Signer-Geräte auf — füge eine did:key:… DID ein, keine did:safe:…",
 			"safeDidPlaceholder": "…oder eine did:safe:… DID direkt einfügen",
 			"addMemberSafeHuman": "Human-SAFE als Mitglied hinzufügen",
 			"addMemberSafeAven": "Aven-SAFE als Mitglied hinzufügen",

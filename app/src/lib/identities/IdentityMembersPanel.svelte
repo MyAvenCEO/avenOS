@@ -94,6 +94,9 @@
 	// THE caps source for the UI: every subject + grant + effective caps, from the
 	// biscuit (`identity_cap_report`). Both tabs derive from this; nothing is hardcoded.
 	let subjects = $state<IdentitySubjectCaps[]>([])
+	// Backend-computed manage right (same authorize gate as the grant IPCs, full
+	// N-hop SAFE-in-SAFE walk) — drives the owner-only GIVE ACCESS form.
+	let viewerOwns = $state(false)
 	let adminErr = $state<string | undefined>()
 	let adminBusy = $state(false)
 	let addAdminDid = $state('')
@@ -156,6 +159,16 @@
 	function safeDidFor(row: AvenDbRow): string {
 		return `did:safe:${String(row.owner ?? '').trim()}`
 	}
+	// Human SAFEs admit concrete signer devices only (did:key:) — UX mirror of the
+	// backend `enforce_member_type_rule`, so a did:safe: paste fails here instead of
+	// at the IPC. Replicate grants are always signers, on every type.
+	const didTypeError = $derived.by<string | undefined>(() => {
+		const did = addAdminDid.trim().toLowerCase()
+		if (!did) return undefined
+		if (targetType === 'human' && did.startsWith('did:safe:'))
+			return t('identities.share.humanSignerOnly')
+		return undefined
+	})
 	// Resolve a did:safe: member back to its local SAFE row (for name display).
 	function safeRowForDid(did: string): AvenDbRow | undefined {
 		const norm = did.trim().toLowerCase()
@@ -194,15 +207,21 @@
 			peersAllow.map((p) => [p.signerDid.trim().toLowerCase(), p] as const),
 		)
 		const localDid = session?.signerDid?.trim().toLowerCase() ?? ''
+		// Derive the local device's own SAFE DID from defaultSparkUrn ("identity:<uuid>")
+		// so SAFE-in-SAFE owner entries are recognised as "this device".
+		const localSafeDid = session?.defaultSparkUrn?.startsWith('identity:')
+			? `did:safe:${session.defaultSparkUrn.slice('identity:'.length).toLowerCase()}`
+			: ''
 		return subjects.map((s): IdentityAccessEntry => {
 			const norm = s.did.trim().toLowerCase()
 			// SAFE member (did:safe:) — show its SAFE name + type, not a peer label.
 			if (norm.startsWith('did:safe:')) {
 				const safe = safeRowForDid(s.did)
+				const isThisDevice = localSafeDid !== '' && norm === localSafeDid
 				return {
 					did: s.did,
 					label: String(safe?.name ?? '') || t('common.unnamed'),
-					isThisDevice: false,
+					isThisDevice,
 					grant: s.grant,
 					capabilities: s.caps,
 					safeType: String(safe?.type ?? 'safe'),
@@ -225,7 +244,12 @@
 	// Owner-only management: only a holder of `owns` may grant/revoke. A read-only
 	// member sees the roster but NO manage controls — so it can't hit the
 	// `subject_not_owner` dead-end (members are read-only by design).
-	const amOwner = $derived(accessEntries.some((e) => e.isThisDevice && e.grant === 'owns'))
+	// `viewerOwns` is backend truth (same authorize gate as the grant IPCs, full
+	// N-hop SAFE-in-SAFE walk) — DID-equality alone misses transitive control,
+	// e.g. a human-SAFE signer managing the aven SAFE its human SAFE owns.
+	const amOwner = $derived(
+		viewerOwns || accessEntries.some((e) => e.isThisDevice && e.grant === 'owns'),
+	)
 
 	// Cap-centric view (Tab 2): invert subjects → for each actual cap, who holds it.
 	// Pure projection of the same single source — guarantees the two tabs agree.
@@ -275,10 +299,12 @@
 						adminDids = a.adminDids
 						replicaDids = a.replicaDids ?? []
 						subjects = a.subjects ?? []
+						viewerOwns = a.viewerOwns === true
 					} else {
 						adminDids = []
 						replicaDids = []
 						subjects = []
+						viewerOwns = false
 					}
 					addAdminDid = ''
 					addNote = undefined
@@ -311,6 +337,7 @@
 			adminDids = a.adminDids
 			replicaDids = a.replicaDids ?? []
 			subjects = a.subjects ?? []
+			viewerOwns = a.viewerOwns === true
 			adminErr = undefined
 		} catch (e) {
 			if (gen !== adminLoadGen) return
@@ -350,6 +377,7 @@
 				adminDids = a.adminDids
 				replicaDids = a.replicaDids ?? []
 				subjects = a.subjects ?? []
+				viewerOwns = a.viewerOwns === true
 			}
 		} catch (e) {
 			adminErr = e instanceof Error ? e.message : String(e)
@@ -381,6 +409,7 @@
 			adminDids = a.adminDids
 			replicaDids = a.replicaDids ?? []
 			subjects = a.subjects ?? []
+			viewerOwns = a.viewerOwns === true
 		} catch (e) {
 			if (gen !== adminLoadGen) return
 			revokeErr = e instanceof Error ? e.message : String(e)
@@ -396,6 +425,7 @@
 		void tauri
 		adminDids = []
 		subjects = []
+		viewerOwns = false
 		addAdminDid = ''
 		void loadSessionAndAdmins()
 	})
@@ -531,10 +561,15 @@
 					class="border-border/60 bg-background/40 w-full rounded-lg border px-3 py-2 font-mono text-[12px]"
 					placeholder={memberSafeType && grantKind !== 'replicate'
 						? t('identities.share.safeDidPlaceholder')
-						: t('identities.share.didPlaceholder')}
+						: targetType === 'human'
+							? t('identities.share.signerDidPlaceholder')
+							: t('identities.share.didPlaceholder')}
 					bind:value={addAdminDid}
 					disabled={adminBusy}
 				/>
+				{#if didTypeError}
+					<p class="text-destructive text-xs">{didTypeError}</p>
+				{/if}
 				<!-- Grant kind: the biscuit's three bundles (owns/reads/replicate). The
 				     actual caps each confers show on the member card after granting. -->
 				<div class="flex flex-col gap-1.5">
@@ -556,7 +591,7 @@
 					<button
 						type="button"
 						class="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-						disabled={adminBusy || !addAdminDid.trim()}
+						disabled={adminBusy || !addAdminDid.trim() || !!didTypeError}
 						onclick={() => void grantAccess()}
 					>
 						{adminBusy ? '…' : t('identities.share.grantAccess')}
@@ -709,14 +744,19 @@
 			</h3>
 			<input
 				class="border-border/60 bg-background/40 w-full rounded-md border px-2.5 py-1.5 font-mono text-[11px]"
-				placeholder={t('identities.share.didPlaceholder')}
+				placeholder={targetType === 'human'
+					? t('identities.share.signerDidPlaceholder')
+					: t('identities.share.didPlaceholder')}
 				bind:value={addAdminDid}
 				disabled={adminBusy}
 			/>
+			{#if didTypeError}
+				<p class="text-destructive text-[11px]">{didTypeError}</p>
+			{/if}
 			<button
 				type="button"
 				class="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-				disabled={adminBusy || !addAdminDid.trim()}
+				disabled={adminBusy || !addAdminDid.trim() || !!didTypeError}
 				onclick={() => void grantAccess()}
 			>
 				{adminBusy ? '…' : t('identities.share.addAsAdmin')}

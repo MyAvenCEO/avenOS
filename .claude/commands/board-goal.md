@@ -1,13 +1,13 @@
 ---
 description: Pick up an aven-board work item and drive it to its measurable goal.
-argument-hint: <item-ref — slug, filename, or column/slug, e.g. plan/0001-example-spec>
+argument-hint: <item-ref — slug, filename, or column/slug, e.g. build/0001-example-spec>
 allowed-tools: Bash, Read, Edit, Glob, Grep
 ---
 
-You are picking a work item off the **aven-board** kanban and driving it to done.
-The board lives at `libs/aven-board/board/<column>/*.md` (columns: `inbox`, `plan`,
-`test`, `done`); the folder a file sits in is its state. Read
-`libs/aven-board/AGENTS.md` for the full workflow before acting.
+You are picking a work item off the **aven-board** kanban and driving it to ship.
+The board lives at `libs/aven-board/board/<column>/*.md` (columns: `ideate`,
+`discover`, `build`, `review`, `ship`); the folder a file sits in is its state.
+Read `libs/aven-board/AGENTS.md` for the full workflow before acting.
 
 ## Requested item
 
@@ -22,24 +22,27 @@ The board lives at `libs/aven-board/board/<column>/*.md` (columns: `inbox`, `pla
 1. **Resolve** the reference to exactly one work-item file. If it's ambiguous,
    list the candidates and ask which one. If you can't find it at all, say so.
 2. **Read** the file in full.
-   - If it's in `inbox/`, it isn't specced yet — it has no real `goal`. Stop and
-     offer to plan it first (turn it into a spec with `templates/plan.md`,
-     `git mv` it to `plan/`), rather than building blind.
+   - If it's in `ideate/`, it isn't specced yet — it has no real `goal`. Stop and
+     run discovery first (turn it into a spec with `templates/plan.md`, uncover a
+     measurable goal, `git mv` it to `discover/`), rather than building blind.
 3. **Find the completion condition** — the frontmatter `goal` field (mirrored in
    the `## Goal` section). This is the single, transcript-verifiable end state.
    If it's missing or vague (not provable from command output), sharpen it first
    and write it back into the file.
 4. **Build it.** Implement the smallest change that satisfies the Acceptance
    criteria and Approach. When you start implementing, `git mv` the file from
-   `plan/` to `test/` (preserve the `NNNN-` prefix so the id is stable).
-5. **Verify** by running the item's `## Verification` commands plus the repo gates
+   `discover/` (or `build/`) into `build/`, then into `review/` once it's built
+   (preserve the `NNNN-` prefix so the id is stable).
+5. **Review** by running the item's `## Verification` commands plus the repo gates
    (`bun run check`, `bun run lint`). Run them for real so the output — the proof
-   the goal condition refers to — is in the transcript.
-6. **Close the loop.** When the completion condition is met: check off the
+   the goal condition refers to — is in the transcript, then present a clear
+   pass/fail verdict.
+6. **Close the loop (HITL).** When the completion condition is met: check off the
    Acceptance criteria, append a dated line to the `## Progress log`, bump
-   `updated:` in frontmatter, and `git mv` the file to `done/`. If verification
-   fails and you can't fix it in scope, move it back to `plan/` with a note in the
-   progress log explaining why.
+   `updated:` in frontmatter, and — once a human has verified the verdict —
+   `git mv` the file to `ship/`. If verification fails and you can't fix it in
+   scope, move it back to `build/` or `discover/` with a note in the progress log
+   explaining why.
 
 ## Goal-driven autonomy
 

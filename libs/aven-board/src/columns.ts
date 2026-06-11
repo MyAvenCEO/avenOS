@@ -12,30 +12,39 @@ export type BoardColumnMeta = {
  * The folder under `board/` matching `id` is the single source of truth for state.
  */
 export const BOARD_COLUMN_META: Record<BoardColumnId, BoardColumnMeta> = {
-	idea: {
-		id: 'idea',
-		label: 'Idea',
+	ideate: {
+		id: 'ideate',
+		label: 'Ideate',
 		aka: 'Backlog',
 		description: 'Raw ideas and tasks. Throw anything here — unrefined and unsorted.'
 	},
-	plan: {
-		id: 'plan',
-		label: 'Plan',
+	discover: {
+		id: 'discover',
+		label: 'Discover',
 		aka: 'Spec',
 		description:
-			'Specced and ready for an agent to build. Has a concrete plan + acceptance criteria.'
+			'Interviewing to uncover the real goal and make it measurable — turning a task into a metric.'
 	},
-	test: {
-		id: 'test',
-		label: 'Test',
-		aka: 'Review',
-		description: 'Implemented and awaiting verification — tests, review, and acceptance checks.'
+	build: {
+		id: 'build',
+		label: 'Build',
+		aka: 'Execute',
+		description:
+			'Carries a measurable goal. Being built toward that single completion condition.'
 	},
-	done: {
-		id: 'done',
-		label: 'Done',
-		aka: 'Shipped',
-		description: 'Verified and complete. Kept as a record of what shipped.'
+	review: {
+		id: 'review',
+		label: 'Review',
+		aka: 'Evaluate',
+		description:
+			'Built and measured against the goal — awaiting human verification (HITL) before it ships.'
+	},
+	ship: {
+		id: 'ship',
+		label: 'Ship',
+		aka: 'Released',
+		description:
+			'Released to all targets (server node + Mac/iOS apps) and pushed to main — the shipped, archived record.'
 	}
 }
 

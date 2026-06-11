@@ -93,7 +93,7 @@ pub(crate) async fn execute_drain_batch(
 			.into_iter()
 			.filter(|t| t != "peers") // peers has its own publish path (publish_trusted_peers_ui)
 			.collect();
-		set.insert("identities".to_string());
+		set.insert("safes".to_string());
 		set.into_iter().collect()
 	} else {
 		Vec::new()
