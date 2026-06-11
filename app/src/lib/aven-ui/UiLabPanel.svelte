@@ -1,32 +1,32 @@
 <script lang="ts">
-	import AvenUiView from '$lib/aven-ui/AvenUiView.svelte'
-	import { vibeViewById, vibeViewList, type VibeViewId } from '$lib/aven-ui/vibe-views'
-	import { t } from '$lib/i18n'
+import AvenUiView from '$lib/aven-ui/AvenUiView.svelte'
+import { type VibeViewId, vibeViewById, vibeViewList } from '$lib/aven-ui/vibe-views'
+import { t } from '$lib/i18n'
 
-	type Panel = 'render' | 'view' | 'style' | 'state' | 'logic' | 'source'
+type Panel = 'render' | 'view' | 'style' | 'state' | 'logic' | 'source'
 
-	let panel = $state<Panel>('render')
-	let selectedId = $state<VibeViewId>('invoice')
-	let runtimeState = $state<Record<string, unknown> | null>(null)
+let panel = $state<Panel>('render')
+let selectedId = $state<VibeViewId>('invoice')
+let runtimeState = $state<Record<string, unknown> | null>(null)
 
-	const selected = $derived(vibeViewById(selectedId))
-	const shell = $derived(selected.shell)
+const selected = $derived(vibeViewById(selectedId))
+const shell = $derived(selected.shell)
 
-	const jsonPanels: Panel[] = ['view', 'style', 'state', 'logic', 'source']
+const jsonPanels: Panel[] = ['view', 'style', 'state', 'logic', 'source']
 
-	function jsonFor(panelId: Panel): string {
-		if (panelId === 'view') return JSON.stringify(shell.view, null, 2)
-		if (panelId === 'style') return JSON.stringify(shell.style, null, 2)
-		if (panelId === 'source') return JSON.stringify(shell.source, null, 2)
-		if (panelId === 'logic') return shell.logic
-		return JSON.stringify(runtimeState ?? {}, null, 2)
-	}
+function _jsonFor(panelId: Panel): string {
+	if (panelId === 'view') return JSON.stringify(shell.view, null, 2)
+	if (panelId === 'style') return JSON.stringify(shell.style, null, 2)
+	if (panelId === 'source') return JSON.stringify(shell.source, null, 2)
+	if (panelId === 'logic') return shell.logic
+	return JSON.stringify(runtimeState ?? {}, null, 2)
+}
 
-	function selectView(id: VibeViewId) {
-		if (id === selectedId) return
-		runtimeState = null
-		selectedId = id
-	}
+function selectView(id: VibeViewId) {
+	if (id === selectedId) return
+	runtimeState = null
+	selectedId = id
+}
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col gap-4 md:grid md:grid-cols-[14rem_minmax(0,1fr)] md:gap-6">
@@ -95,7 +95,7 @@
 		>
 			{#key selectedId}
 				<AvenUiView
-					shell={shell}
+					{shell}
 					containerName={selected.containerName}
 					interactive={selected.interactive}
 					onState={(s) => (runtimeState = s)}

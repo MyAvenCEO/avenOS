@@ -10,14 +10,14 @@ export const chatShell: UiFixtureShell = {
 	style: chatStyle,
 	source: chatSource as Record<string, unknown>,
 	interface: chatInterface,
-	logic: chatLogic,
+	logic: chatLogic
 }
 
 export function createChatShell(): UiFixtureShell {
 	return chatShell
 }
 
-export { chatLogic }
-export { chatView } from './view.js'
-export { chatStyle } from './style.js'
 export { default as chatSource } from './source.json'
+export { chatStyle } from './style.js'
+export { chatView } from './view.js'
+export { chatLogic }

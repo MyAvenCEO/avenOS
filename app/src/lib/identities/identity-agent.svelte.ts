@@ -11,26 +11,26 @@
  */
 
 import { getContext, setContext } from 'svelte'
-import type { AvenDbStore } from '$lib/avendb/store.svelte'
-import { persistSparkFiles } from '$lib/avendb/intent-files'
-import { brainAssembleContext, brainIngest } from '$lib/brain/api'
 import { avenDbTable } from '$lib/avendb/api'
+import { persistSparkFiles } from '$lib/avendb/intent-files'
+import type { AvenDbStore } from '$lib/avendb/store.svelte'
+import { brainAssembleContext, brainIngest } from '$lib/brain/api'
 import { streamReply, tinfoilAvailable, tinfoilChat } from '$lib/llm/generate'
 import {
 	CLOUD_SYSTEM_PROMPT,
 	CLOUD_TOOLS,
-	LLM_TOOLS,
-	MAX_TOOL_ROUNDS,
 	cloudToolRecord,
 	encodeToolCallBody,
 	executeToolCall,
+	LLM_TOOLS,
+	type LlmToolCall,
+	MAX_TOOL_ROUNDS,
 	resolveAgentTurn,
 	respondRecord,
-	toOpenAiTools,
-	type LlmToolCall,
 	type ToolCallRecord,
 	type ToolContext,
 	type ToolDispatchResult,
+	toOpenAiTools
 } from '$lib/llm/tools'
 
 /** Deterministic author DID for on-device agent replies (role-tagged in the row). */
@@ -129,7 +129,7 @@ export function createIdentityAgent(deps: {
 			},
 			deleteTodoById: async (id) => {
 				await deps.todos.delete(id)
-			},
+			}
 		}
 	}
 
@@ -137,7 +137,7 @@ export function createIdentityAgent(deps: {
 	async function persistRecord(
 		env: IdentityAgentEnv,
 		replyId: string,
-		record: ToolCallRecord,
+		record: ToolCallRecord
 	): Promise<void> {
 		const body = encodeToolCallBody(record)
 		streaming = { ...streaming, [replyId]: body }
@@ -148,7 +148,7 @@ export function createIdentityAgent(deps: {
 				authorRole: 'agent',
 				source: replyId,
 				contentDateMs: Date.now(),
-				veracity: 'inferred',
+				veracity: 'inferred'
 			}).catch(() => {})
 		}
 		showFloating(record)
@@ -165,16 +165,14 @@ export function createIdentityAgent(deps: {
 	async function runCloudLoop(
 		prompt: string,
 		replyId: string,
-		ctx: ToolContext,
+		ctx: ToolContext
 	): Promise<ToolCallRecord> {
 		const messages: unknown[] = [
 			{ role: 'system', content: CLOUD_SYSTEM_PROMPT },
-			{ role: 'user', content: prompt },
+			{ role: 'user', content: prompt }
 		]
 		const tools = toOpenAiTools(CLOUD_TOOLS)
-		let last:
-			| { name: string; args: Record<string, unknown>; exec: ToolDispatchResult }
-			| undefined
+		let last: { name: string; args: Record<string, unknown>; exec: ToolDispatchResult } | undefined
 
 		const finalize = (reply: string): ToolCallRecord =>
 			last ? cloudToolRecord(last.name, last.args, last.exec, reply) : respondRecord(reply)
@@ -195,7 +193,7 @@ export function createIdentityAgent(deps: {
 				messages.push({
 					role: 'tool',
 					tool_call_id: call.id,
-					content: exec.toolResult ?? exec.message,
+					content: exec.toolResult ?? exec.message
 				})
 			}
 		}
@@ -220,7 +218,7 @@ export function createIdentityAgent(deps: {
 				created_at_ms: Date.now(),
 				author_did: AGENT_DID,
 				role: 'agent',
-				body: '',
+				body: ''
 			})
 			replyId = reply.id
 			streamingId = reply.id
@@ -241,7 +239,7 @@ export function createIdentityAgent(deps: {
 			// E4: the brain is the context manager — assembled, budgeted, traced.
 			// Graceful degradation is law: any brain failure falls back to the raw prompt.
 			const assembled = await brainAssembleContext(env.canonicalSparkId, prompt, {
-				stream: 'talk',
+				stream: 'talk'
 			}).catch(() => undefined)
 			const brainPrefix = assembled?.prompt ? `${assembled.prompt}\n\n` : ''
 
@@ -252,7 +250,7 @@ export function createIdentityAgent(deps: {
 			if (assembled) {
 				const t = assembled.trace
 				const lines: string[] = [
-					`🧠 stored · found ${t.recalled.length} related, ${t.entities.length} entities`,
+					`🧠 stored · found ${t.recalled.length} related, ${t.entities.length} entities`
 				]
 				for (const r of t.recalled.slice(0, 5)) {
 					lines.push(`• ${r.snippet} (${r.via})`)
@@ -270,7 +268,7 @@ export function createIdentityAgent(deps: {
 							message_id: userRowId,
 							reply_id: reply.id,
 							trace: JSON.stringify(t),
-							created_at_ms: Date.now(),
+							created_at_ms: Date.now()
 						})
 						.catch(() => {})
 				}
@@ -290,15 +288,15 @@ export function createIdentityAgent(deps: {
 				},
 				{
 					tools: LLM_TOOLS,
-					onToolCall: (call) => (capturedCall = call),
-				},
+					onToolCall: (call) => (capturedCall = call)
+				}
 			)
 			const record = await resolveAgentTurn({
 				replyId: reply.id,
 				userPrompt: prompt,
 				toolCall: capturedCall,
 				prose: full,
-				ctx,
+				ctx
 			})
 			await persistRecord(env, reply.id, record)
 		} catch (e) {
@@ -339,7 +337,7 @@ export function createIdentityAgent(deps: {
 				created_at_ms: Date.now(),
 				author_did: did,
 				role: 'user',
-				body,
+				body
 			})
 			// E3: the brain reads along — fire-and-forget, never blocks the talk loop.
 			if (body) {
@@ -348,14 +346,12 @@ export function createIdentityAgent(deps: {
 					authorRole: 'user',
 					source: row.id,
 					contentDateMs: Date.now(),
-					veracity: 'stated',
-				}).catch((e) =>
-					console.error('[brain] ingest failed:', e instanceof Error ? e.message : e),
-				)
+					veracity: 'stated'
+				}).catch((e) => console.error('[brain] ingest failed:', e instanceof Error ? e.message : e))
 			}
 			if (files.length > 0) {
 				const { stored, errors } = await persistSparkFiles(row.id, files, {
-					identityId: env.canonicalSparkId,
+					identityId: env.canonicalSparkId
 				})
 				if (errors.length > 0) {
 					err =
@@ -399,7 +395,7 @@ export function createIdentityAgent(deps: {
 		},
 		clearErr() {
 			err = undefined
-		},
+		}
 	}
 }
 

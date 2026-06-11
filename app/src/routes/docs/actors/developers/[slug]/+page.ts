@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit'
-import type { PageLoad } from './$types'
 import { getActorDoc } from '$lib/docs/actors-collection'
+import type { PageLoad } from './$types'
 
 export const ssr = false
 export const prerender = false

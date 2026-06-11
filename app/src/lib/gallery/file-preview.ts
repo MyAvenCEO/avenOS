@@ -21,7 +21,9 @@ export function fileTypeLabel(row: AvenDbRow): string {
 		const ext = name.slice(dot + 1).trim()
 		if (ext && ext.length <= 5 && /^[a-z0-9]+$/i.test(ext)) return ext.toUpperCase()
 	}
-	const mime = String(row.mime_type ?? '').trim().toLowerCase()
+	const mime = String(row.mime_type ?? '')
+		.trim()
+		.toLowerCase()
 	if (mime) {
 		const sub = mime.includes('/') ? mime.slice(mime.indexOf('/') + 1) : mime
 		const cleaned = (sub.replace(/^x-/, '').replace(/\+.*$/, '').split('.').pop() ?? sub).trim()

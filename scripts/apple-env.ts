@@ -8,10 +8,7 @@ import path from 'node:path'
 
 function stripQuotes(v: string): string {
 	let s = v.trim()
-	if (
-		(s.startsWith('"') && s.endsWith('"')) ||
-		(s.startsWith("'") && s.endsWith("'"))
-	) {
+	if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
 		s = s.slice(1, -1)
 	}
 	return s.replace(/\\n/g, '\n')
@@ -46,7 +43,7 @@ export function applyAppleEnvLocal(repoRoot: string): void {
 		const key = line.slice(0, eq).trim()
 		if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue
 		const valRaw = line.slice(eq + 1).trim()
-		let val = stripQuotes(valRaw)
+		const val = stripQuotes(valRaw)
 		if (process.env[key] === undefined) process.env[key] = val
 	}
 }

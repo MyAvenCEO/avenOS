@@ -1,19 +1,21 @@
 <script lang="ts">
-	import { page } from '$app/state'
-	import { t } from '$lib/i18n'
-	import { avenDbStore } from '$lib/avendb/store.svelte'
-	import IdentityTalkPanel from '$lib/identities/IdentityTalkPanel.svelte'
+import { page } from '$app/state'
+import { avenDbStore } from '$lib/avendb/store.svelte'
+import { t } from '$lib/i18n'
+import IdentityTalkPanel from '$lib/identities/IdentityTalkPanel.svelte'
 
-	const identityParam = $derived(String((page.params as { identityId?: string }).identityId ?? ''))
-	const decodedIdentityId = $derived(decodeURIComponent(identityParam))
+const identityParam = $derived(String((page.params as { identityId?: string }).identityId ?? ''))
+const decodedIdentityId = $derived(decodeURIComponent(identityParam))
 
-	const identitiesStore = avenDbStore('safes')
+const identitiesStore = avenDbStore('safes')
 
-	function idsMatch(a: string, b: string): boolean {
-		return a.trim().toLowerCase() === b.trim().toLowerCase()
-	}
+function idsMatch(a: string, b: string): boolean {
+	return a.trim().toLowerCase() === b.trim().toLowerCase()
+}
 
-	const identityMeta = $derived(identitiesStore.rows.find((s) => idsMatch(s.owner, decodedIdentityId)))
+const identityMeta = $derived(
+	identitiesStore.rows.find((s) => idsMatch(s.owner, decodedIdentityId))
+)
 </script>
 
 <svelte:head>

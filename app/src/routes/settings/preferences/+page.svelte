@@ -1,62 +1,62 @@
 <script lang="ts">
-	import { browser } from '$app/environment'
-	import { localeDisplayName, setLocale, t, type SupportedLocale } from '$lib/i18n'
-	import { deviceSession } from '$lib/settings/device-session-store'
-	import { vaultUiSettingsGet, vaultUiSettingsSetLocale } from '$lib/settings/vault-ui-settings'
-	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-	import LanguageIcon from '$lib/i18n/LanguageIcon.svelte'
+import { browser } from '$app/environment'
+import { localeDisplayName, type SupportedLocale, setLocale, t } from '$lib/i18n'
+import LanguageIcon from '$lib/i18n/LanguageIcon.svelte'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+import { deviceSession } from '$lib/settings/device-session-store'
+import { vaultUiSettingsGet, vaultUiSettingsSetLocale } from '$lib/settings/vault-ui-settings'
 
-	let locale = $state<SupportedLocale>('en')
-	let loading = $state(true)
-	let saving = $state(false)
-	let error = $state<string | null>(null)
+let locale = $state<SupportedLocale>('en')
+let loading = $state(true)
+let saving = $state(false)
+let error = $state<string | null>(null)
 
-	const unlocked = $derived($deviceSession.kind !== 'locked')
-	const show = $derived(browser && isTauriRuntime())
+const unlocked = $derived($deviceSession.kind !== 'locked')
+const show = $derived(browser && isTauriRuntime())
 
-	const localeOptions: SupportedLocale[] = ['en', 'de']
+const localeOptions: SupportedLocale[] = ['en', 'de']
 
-	async function load(): Promise<void> {
-		if (!show || !unlocked) {
-			loading = false
-			return
-		}
-		loading = true
-		error = null
-		try {
-			const res = await vaultUiSettingsGet()
-			locale = res.locale
-			setLocale(res.locale)
-		} catch (e) {
-			error = e instanceof Error ? e.message : String(e)
-		} finally {
-			loading = false
-		}
+async function load(): Promise<void> {
+	if (!show || !unlocked) {
+		loading = false
+		return
 	}
-
-	async function onSelect(next: SupportedLocale): Promise<void> {
-		if (!show || !unlocked || saving || next === locale) return
-		const prev = locale
-		locale = next
-		setLocale(next)
-		saving = true
-		error = null
-		try {
-			await vaultUiSettingsSetLocale(next)
-		} catch (e) {
-			locale = prev
-			setLocale(prev)
-			error = e instanceof Error ? e.message : String(e)
-		} finally {
-			saving = false
-		}
+	loading = true
+	error = null
+	try {
+		const res = await vaultUiSettingsGet()
+		locale = res.locale
+		setLocale(res.locale)
+	} catch (e) {
+		error = e instanceof Error ? e.message : String(e)
+	} finally {
+		loading = false
 	}
+}
 
-	$effect(() => {
-		void show
-		void unlocked
-		void load()
-	})
+async function onSelect(next: SupportedLocale): Promise<void> {
+	if (!show || !unlocked || saving || next === locale) return
+	const prev = locale
+	locale = next
+	setLocale(next)
+	saving = true
+	error = null
+	try {
+		await vaultUiSettingsSetLocale(next)
+	} catch (e) {
+		locale = prev
+		setLocale(prev)
+		error = e instanceof Error ? e.message : String(e)
+	} finally {
+		saving = false
+	}
+}
+
+$effect(() => {
+	void show
+	void unlocked
+	void load()
+})
 </script>
 
 <svelte:head>
@@ -92,7 +92,7 @@
 							checked={locale === opt}
 							disabled={saving}
 							onchange={() => void onSelect(opt)}
-						/>
+						>
 						<span>{localeDisplayName(opt, locale)}</span>
 					</label>
 				{/each}

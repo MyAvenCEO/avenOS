@@ -1,34 +1,35 @@
 <script lang="ts">
-	import { contentIntroHref } from '$lib/docs/content-collection'
-	import { firstFounderSlug } from '$lib/docs/self-collection'
-	import { navigateApp } from '$lib/shell'
-	import { firstFounderSlug as sparksFirstSlug } from '$lib/docs/identities-collection'
-	import { firstDeveloperSlug as syncFirstSlug } from '$lib/docs/sync-collection'
-	import { firstActorDocSlug } from '$lib/docs/actors-collection'
+import { firstActorDocSlug } from '$lib/docs/actors-collection'
+import { contentIntroHref } from '$lib/docs/content-collection'
+import { firstFounderSlug as sparksFirstSlug } from '$lib/docs/identities-collection'
+import { firstFounderSlug } from '$lib/docs/self-collection'
+import { firstDeveloperSlug as syncFirstSlug } from '$lib/docs/sync-collection'
+import { navigateApp } from '$lib/shell'
 
-	const selfHref = firstFounderSlug ? `/docs/self/founders/${firstFounderSlug}` : '/docs'
-	const syncHref = syncFirstSlug ? `/docs/sync/developers/${syncFirstSlug}` : '/docs'
-	const sparksHref = sparksFirstSlug ? `/docs/identities/founders/${sparksFirstSlug}` : '/docs'
-	const actorsHref = firstActorDocSlug
-		? `/docs/actors/developers/${firstActorDocSlug}`
-		: '/docs'
-	const contentHref = contentIntroHref
+const selfHref = firstFounderSlug ? `/docs/self/founders/${firstFounderSlug}` : '/docs'
+const syncHref = syncFirstSlug ? `/docs/sync/developers/${syncFirstSlug}` : '/docs'
+const sparksHref = sparksFirstSlug ? `/docs/identities/founders/${sparksFirstSlug}` : '/docs'
+const actorsHref = firstActorDocSlug ? `/docs/actors/developers/${firstActorDocSlug}` : '/docs'
+const contentHref = contentIntroHref
 </script>
 
 <svelte:head>
 	<title>Dokumentation — @AvenOS/app</title>
 </svelte:head>
 
-<div class="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background font-sans text-foreground antialiased">
+<div
+	class="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background font-sans text-foreground antialiased"
+>
 	<main class="flex-1 px-6 py-10 sm:px-10 sm:py-14">
 		<div class="mx-auto max-w-5xl">
 			<header class="mb-10">
 				<p class="tech-label mb-3">Dokumentation</p>
 				<h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">AvenOS</h1>
 				<p class="mt-2 max-w-prose text-sm leading-relaxed text-muted-foreground">
-					<strong class="font-medium text-foreground">AvenOS</strong> ist das Betriebssystem unter
-					deinem AvenCEO — mit Ende-zu-Ende-Verschlüsselung, Daten die dir gehören und einem KI,
-					der mit dir wächst. Hier findest du, wie die einzelnen Teile zusammenspielen.
+					<strong class="font-medium text-foreground">AvenOS</strong>
+					ist das Betriebssystem unter deinem AvenCEO — mit Ende-zu-Ende-Verschlüsselung, Daten die
+					dir gehören und einem KI, der mit dir wächst. Hier findest du, wie die einzelnen Teile
+					zusammenspielen.
 				</p>
 			</header>
 
@@ -100,7 +101,9 @@
 						</svg>
 					</div>
 					<div>
-						<p class="text-sm font-semibold tracking-tight text-foreground">Self &amp; device keys</p>
+						<p class="text-sm font-semibold tracking-tight text-foreground">
+							Self &amp; device keys
+						</p>
 						<p class="mt-0.5 text-xs leading-snug text-muted-foreground">
 							Plain-English architecture: Secure Enclave, network anchor, signing — how your Mac
 							proves it is you.
@@ -181,11 +184,7 @@
 							stroke-width="1.75"
 							aria-hidden="true"
 						>
-							<path
-								d="M4 6h16M4 12h10M4 18h14"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							/>
+							<path d="M4 6h16M4 12h10M4 18h14" stroke-linecap="round" stroke-linejoin="round" />
 							<path d="M17 10l3 2-3 2" stroke-linecap="round" stroke-linejoin="round" />
 						</svg>
 					</div>
@@ -273,7 +272,10 @@
 							stroke-width="1.75"
 							aria-hidden="true"
 						>
-							<path d="M12 2l8 4v6c0 5-3.5 9.5-8 10-4.5-.5-8-5-8-10V6l8-4z" stroke-linejoin="round" />
+							<path
+								d="M12 2l8 4v6c0 5-3.5 9.5-8 10-4.5-.5-8-5-8-10V6l8-4z"
+								stroke-linejoin="round"
+							/>
 							<path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round" />
 						</svg>
 					</div>

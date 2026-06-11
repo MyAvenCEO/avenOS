@@ -1,34 +1,34 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte'
-	import { navigateApp } from '$lib/shell'
-	import type { AsideNavSection } from './aside-nav'
-	import MobileAsideNavLink from './MobileAsideNavLink.svelte'
-	import MobileAsideSectionLabel from './MobileAsideSectionLabel.svelte'
+import type { Snippet } from 'svelte'
+import { navigateApp } from '$lib/shell'
+import type { AsideNavSection } from './aside-nav'
+import MobileAsideNavLink from './MobileAsideNavLink.svelte'
+import MobileAsideSectionLabel from './MobileAsideSectionLabel.svelte'
 
-	type Props = {
-		sections: AsideNavSection[]
-		/** Default muted styling for links unless an item overrides. */
-		muted?: boolean
-		/** Extra classes on the root `<nav>`. */
-		navClass?: string
-		/** Extra classes on section labels (desktop horizontal padding). */
-		sectionLabelClass?: string
-		header?: Snippet
-		/** Rendered below the nav sections (e.g. a contextual panel). */
-		footer?: Snippet
-		/** Called after an item's own `onclick` (e.g. close mobile drawer). */
-		onItemActivate?: (e: MouseEvent) => void
-	}
+type Props = {
+	sections: AsideNavSection[]
+	/** Default muted styling for links unless an item overrides. */
+	muted?: boolean
+	/** Extra classes on the root `<nav>`. */
+	navClass?: string
+	/** Extra classes on section labels (desktop horizontal padding). */
+	sectionLabelClass?: string
+	header?: Snippet
+	/** Rendered below the nav sections (e.g. a contextual panel). */
+	footer?: Snippet
+	/** Called after an item's own `onclick` (e.g. close mobile drawer). */
+	onItemActivate?: (e: MouseEvent) => void
+}
 
-	let {
-		sections,
-		muted = false,
-		navClass = '',
-		sectionLabelClass = 'px-0 md:px-3',
-		header,
-		footer,
-		onItemActivate,
-	}: Props = $props()
+let {
+	sections,
+	muted = false,
+	navClass = '',
+	sectionLabelClass = 'px-0 md:px-3',
+	header,
+	footer,
+	onItemActivate
+}: Props = $props()
 </script>
 
 {#if header}

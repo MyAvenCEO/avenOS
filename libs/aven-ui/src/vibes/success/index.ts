@@ -10,14 +10,14 @@ export const successShell: UiFixtureShell = {
 	style: successStyle,
 	source: successSource as Record<string, unknown>,
 	interface: successInterface,
-	logic: successLogic,
+	logic: successLogic
 }
 
 export function createSuccessShell(): UiFixtureShell {
 	return successShell
 }
 
-export { successLogic }
-export { successView } from './view.js'
-export { successStyle } from './style.js'
 export { default as successSource } from './source.json'
+export { successStyle } from './style.js'
+export { successView } from './view.js'
+export { successLogic }

@@ -1,84 +1,84 @@
 <script lang="ts">
-	import { browser } from '$app/environment'
-	import { t } from '$lib/i18n'
-	import {
-		selfClearAvenOsData,
-		selfClearAvenDbDatabase,
-		selfStoragePaths,
-		type SelfStoragePathsReply,
-	} from '$lib/settings/storage-api'
-	import { applyLockedFrontendState } from '$lib/settings/device-session-store'
-	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+import { browser } from '$app/environment'
+import { t } from '$lib/i18n'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+import { applyLockedFrontendState } from '$lib/settings/device-session-store'
+import {
+	type SelfStoragePathsReply,
+	selfClearAvenDbDatabase,
+	selfClearAvenOsData,
+	selfStoragePaths
+} from '$lib/settings/storage-api'
 
-	let paths = $state<SelfStoragePathsReply | undefined>()
-	let pathsErr = $state<string | undefined>()
-	let busy = $state(false)
-	let clearErr = $state<string | undefined>()
-	let clearDone = $state(false)
-	let confirmOpen = $state(false)
-	let fullResetErr = $state<string | undefined>()
-	let fullResetDone = $state(false)
-	let fullResetConfirmOpen = $state(false)
+let paths = $state<SelfStoragePathsReply | undefined>()
+let pathsErr = $state<string | undefined>()
+let busy = $state(false)
+let clearErr = $state<string | undefined>()
+let clearDone = $state(false)
+let confirmOpen = $state(false)
+let fullResetErr = $state<string | undefined>()
+let fullResetDone = $state(false)
+let fullResetConfirmOpen = $state(false)
 
-	const tauri = $derived(browser && isTauriRuntime())
+const tauri = $derived(browser && isTauriRuntime())
 
-	$effect(() => {
-		if (!tauri) {
-			paths = undefined
+$effect(() => {
+	if (!tauri) {
+		paths = undefined
+		pathsErr = undefined
+		return
+	}
+	let cancelled = false
+	void (async () => {
+		try {
 			pathsErr = undefined
-			return
-		}
-		let cancelled = false
-		void (async () => {
-			try {
-				pathsErr = undefined
-				clearDone = false
-				fullResetDone = false
-				const p = await selfStoragePaths()
-				if (!cancelled) paths = p
-			} catch (e) {
-				if (!cancelled) pathsErr = e instanceof Error ? e.message : String(e)
-			}
-		})()
-		return () => {
-			cancelled = true
-		}
-	})
-
-	async function clearDb(): Promise<void> {
-		if (!tauri || busy) return
-		busy = true
-		clearErr = undefined
-		clearDone = false
-		confirmOpen = false
-		try {
-			await selfClearAvenDbDatabase()
-			clearDone = true
-			paths = await selfStoragePaths()
+			clearDone = false
+			fullResetDone = false
+			const p = await selfStoragePaths()
+			if (!cancelled) paths = p
 		} catch (e) {
-			clearErr = e instanceof Error ? e.message : String(e)
-		} finally {
-			busy = false
+			if (!cancelled) pathsErr = e instanceof Error ? e.message : String(e)
 		}
+	})()
+	return () => {
+		cancelled = true
 	}
+})
 
-	async function clearAllAvenOsData(): Promise<void> {
-		if (!tauri || busy) return
-		busy = true
-		fullResetErr = undefined
-		fullResetDone = false
-		fullResetConfirmOpen = false
-		try {
-			await selfClearAvenOsData()
-			applyLockedFrontendState()
-			fullResetDone = true
-			paths = await selfStoragePaths()
-		} catch (e) {
-			fullResetErr = e instanceof Error ? e.message : String(e)
-		} finally {
-			busy = false
-		}
+async function clearDb(): Promise<void> {
+	if (!tauri || busy) return
+	busy = true
+	clearErr = undefined
+	clearDone = false
+	confirmOpen = false
+	try {
+		await selfClearAvenDbDatabase()
+		clearDone = true
+		paths = await selfStoragePaths()
+	} catch (e) {
+		clearErr = e instanceof Error ? e.message : String(e)
+	} finally {
+		busy = false
 	}
+}
+
+async function clearAllAvenOsData(): Promise<void> {
+	if (!tauri || busy) return
+	busy = true
+	fullResetErr = undefined
+	fullResetDone = false
+	fullResetConfirmOpen = false
+	try {
+		await selfClearAvenOsData()
+		applyLockedFrontendState()
+		fullResetDone = true
+		paths = await selfStoragePaths()
+	} catch (e) {
+		fullResetErr = e instanceof Error ? e.message : String(e)
+	} finally {
+		busy = false
+	}
+}
 </script>
 
 <svelte:head>
@@ -104,40 +104,58 @@
 		</p>
 	{:else if paths}
 		<section class="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
-			<h2 class="text-[11px] font-semibold uppercase tracking-wider opacity-70">{t('db.self.paths')}</h2>
+			<h2 class="text-[11px] font-semibold uppercase tracking-wider opacity-70">
+				{t('db.self.paths')}
+			</h2>
 			<dl class="space-y-3 text-[13px]">
 				<div>
-					<dt class="text-muted-foreground mb-1 font-mono text-[10px] uppercase tracking-wide">{t('db.self.appRoot')}</dt>
+					<dt class="text-muted-foreground mb-1 font-mono text-[10px] uppercase tracking-wide">
+						{t('db.self.appRoot')}
+					</dt>
 					<dd class="break-all font-mono text-[11px] leading-snug select-text">{paths.appBase}</dd>
 				</div>
 				<div>
-					<dt class="text-muted-foreground mb-1 font-mono text-[10px] uppercase tracking-wide">{t('db.self.activeVault')}</dt>
+					<dt class="text-muted-foreground mb-1 font-mono text-[10px] uppercase tracking-wide">
+						{t('db.self.activeVault')}
+					</dt>
 					<dd class="break-all font-mono text-[11px] leading-snug select-text">{paths.root}</dd>
 				</div>
 				<div>
-					<dt class="text-muted-foreground mb-1 font-mono text-[10px] uppercase tracking-wide">{t('db.self.database')}</dt>
+					<dt class="text-muted-foreground mb-1 font-mono text-[10px] uppercase tracking-wide">
+						{t('db.self.database')}
+					</dt>
 					<dd class="break-all font-mono text-[11px] leading-snug select-text">{paths.dbDir}</dd>
 				</div>
 				<div>
-					<dt class="text-muted-foreground mb-1 font-mono text-[10px] uppercase tracking-wide">{t('db.self.selfIdentity')}</dt>
-					<dd class="break-all font-mono text-[11px] leading-snug select-text">{paths.selfIdentityDir}</dd>
+					<dt class="text-muted-foreground mb-1 font-mono text-[10px] uppercase tracking-wide">
+						{t('db.self.selfIdentity')}
+					</dt>
+					<dd class="break-all font-mono text-[11px] leading-snug select-text">
+						{paths.selfIdentityDir}
+					</dd>
 				</div>
 			</dl>
 		</section>
 
 		<section class="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
-			<h2 class="text-[11px] font-semibold uppercase tracking-wider opacity-70">{t('db.self.avendbStore')}</h2>
+			<h2 class="text-[11px] font-semibold uppercase tracking-wider opacity-70">
+				{t('db.self.avendbStore')}
+			</h2>
 			<p class="text-muted-foreground text-xs leading-relaxed">
 				{t('db.self.clearDescription')}
 			</p>
 
 			{#if clearErr}
-				<p class="text-destructive border-destructive/30 bg-destructive/5 rounded-md border px-3 py-2 text-xs select-text">
+				<p
+					class="text-destructive border-destructive/30 bg-destructive/5 rounded-md border px-3 py-2 text-xs select-text"
+				>
 					{clearErr}
 				</p>
 			{/if}
 			{#if clearDone}
-				<p class="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded-md border px-3 py-2 text-xs">
+				<p
+					class="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded-md border px-3 py-2 text-xs"
+				>
 					{t('db.self.clearSuccess')}
 				</p>
 			{/if}
@@ -179,21 +197,25 @@
 			{/if}
 		</section>
 
-		<section
-			class="space-y-3 rounded-xl border border-destructive/35 bg-destructive/[0.04] p-4"
-		>
-			<h2 class="text-destructive text-[11px] font-semibold uppercase tracking-wider">{t('db.self.dangerZone')}</h2>
+		<section class="space-y-3 rounded-xl border border-destructive/35 bg-destructive/[0.04] p-4">
+			<h2 class="text-destructive text-[11px] font-semibold uppercase tracking-wider">
+				{t('db.self.dangerZone')}
+			</h2>
 			<p class="text-muted-foreground text-xs leading-relaxed">
 				{t('db.self.fullResetDescription')}
 			</p>
 
 			{#if fullResetErr}
-				<p class="text-destructive border-destructive/30 bg-destructive/5 rounded-md border px-3 py-2 text-xs select-text">
+				<p
+					class="text-destructive border-destructive/30 bg-destructive/5 rounded-md border px-3 py-2 text-xs select-text"
+				>
 					{fullResetErr}
 				</p>
 			{/if}
 			{#if fullResetDone}
-				<p class="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded-md border px-3 py-2 text-xs">
+				<p
+					class="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded-md border px-3 py-2 text-xs"
+				>
 					{t('db.self.fullResetSuccess')}
 				</p>
 			{/if}

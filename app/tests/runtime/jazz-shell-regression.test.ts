@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'bun:test'
+import { get } from 'svelte/store'
 import {
 	applyBootstrapReply,
 	applyRuntimeSession,
 	jazzShell,
 	markJazzShellReadyAfterUnlock,
-	resetJazzShell,
+	resetJazzShell
 } from '../../src/lib/runtime/jazz-shell'
-import { get } from 'svelte/store'
 
 describe('jazz-shell regression', () => {
 	it('bootstrap reply fills session and ready', () => {
@@ -17,8 +17,8 @@ describe('jazz-shell regression', () => {
 			session: {
 				signerDid: 'did:key:z6Mk',
 				signerDidShort: 'did:key:z6Mk',
-				defaultSparkUrn: 'urn:aven:spark:00000000-0000-0000-0000-000000000001',
-			},
+				defaultSparkUrn: 'urn:aven:spark:00000000-0000-0000-0000-000000000001'
+			}
 		})
 		const s = get(jazzShell)
 		expect(s.ready).toBe(true)
@@ -34,12 +34,12 @@ describe('jazz-shell regression', () => {
 			session: {
 				signerDid: 'did:key:aaa',
 				signerDidShort: 'aaa',
-				defaultSparkUrn: 'urn:aven:spark:1',
-			},
+				defaultSparkUrn: 'urn:aven:spark:1'
+			}
 		})
 		applyRuntimeSession({
 			grooveReady: false,
-			message: 'rehydrating',
+			message: 'rehydrating'
 		})
 		const s = get(jazzShell)
 		expect(s.ready).toBe(false)
@@ -55,8 +55,8 @@ describe('jazz-shell regression', () => {
 			session: {
 				signerDid: 'did:key:x',
 				signerDidShort: 'x',
-				defaultSparkUrn: 'urn:aven:spark:1',
-			},
+				defaultSparkUrn: 'urn:aven:spark:1'
+			}
 		})
 		resetJazzShell()
 		const s = get(jazzShell)

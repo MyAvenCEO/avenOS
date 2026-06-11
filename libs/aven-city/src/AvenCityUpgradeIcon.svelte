@@ -1,17 +1,17 @@
 <script lang="ts">
-	import type { AvenCityUpgradeIcon } from './upgrades'
+import type { AvenCityUpgradeIcon } from './upgrades'
 
-	let {
-		variant,
-		size = 28,
-		class: className = ''
-	}: {
-		variant: AvenCityUpgradeIcon
-		size?: number | string
-		class?: string
-	} = $props()
+let {
+	variant,
+	size = 28,
+	class: className = ''
+}: {
+	variant: AvenCityUpgradeIcon
+	size?: number | string
+	class?: string
+} = $props()
 
-	const dimension = $derived(typeof size === 'number' ? size : undefined)
+const dimension = $derived(typeof size === 'number' ? size : undefined)
 </script>
 
 <svg

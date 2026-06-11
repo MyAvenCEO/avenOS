@@ -32,22 +32,20 @@ export type AsideRouteNavSection = {
 /** Map route-based nav config to render-ready sections for the current path. */
 export function asideNavSectionsFromRoutes(
 	sections: AsideRouteNavSection[],
-	path: string,
+	path: string
 ): AsideNavSection[] {
 	return sections.map((section) => ({
 		title: section.title,
 		items: section.items.map((item) => ({
 			href: item.href,
 			label: item.label,
-			active: item.match(path),
-		})),
+			active: item.match(path)
+		}))
 	}))
 }
 
 /** Default inner main column for aside-backed app pages (Self, Identities detail, …). */
-export const asidePageContentClass =
-	'mx-auto w-full max-w-3xl px-4 pt-4 pb-8 sm:px-6 md:px-8'
+export const asidePageContentClass = 'mx-auto w-full max-w-3xl px-4 pt-4 pb-8 sm:px-6 md:px-8'
 
 /** Wider variant (e.g. Identities gallery). */
-export const asidePageContentWideClass =
-	'mx-auto flex w-full max-w-5xl flex-col px-4 sm:px-6'
+export const asidePageContentWideClass = 'mx-auto flex w-full max-w-5xl flex-col px-4 sm:px-6'

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { AvenCityGame } from '@avenos/aven-city'
-	import { t } from '$lib/i18n'
+import { AvenCityGame } from '@avenos/aven-city'
+import { t } from '$lib/i18n'
 </script>
 
 <svelte:head>

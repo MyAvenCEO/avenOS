@@ -91,13 +91,23 @@
 				"totals": {
 					"subtotal": 3700,
 					"tax_breakdown": [
-						{ "tax_rate_percent": 19, "tax_amount": 703, "net_subtotal": 3700, "tax_group_letter": "A" }
+						{
+							"tax_rate_percent": 19,
+							"tax_amount": 703,
+							"net_subtotal": 3700,
+							"tax_group_letter": "A"
+						}
 					],
 					"tax_total": 703,
 					"invoice_total": 4403
 				},
 				"payments": [
-					{ "date": "2026-04-20", "amount": 4403, "method": "SEPA-Überweisung", "reference": "INV R-2026-1842" }
+					{
+						"date": "2026-04-20",
+						"amount": 4403,
+						"method": "SEPA-Überweisung",
+						"reference": "INV R-2026-1842"
+					}
 				],
 				"total_outstanding": 0,
 				"payment_instructions": "Vollständig beglichen per SEPA-Überweisung auf IBAN DE12 3456 7890 1234 5678 90 (BIC ABCDDEFFXXX) bei der Musterbank AG."
@@ -164,7 +174,12 @@
 				"totals": {
 					"subtotal": 1000,
 					"tax_breakdown": [
-						{ "tax_rate_percent": 19, "tax_amount": 190, "net_subtotal": 1000, "tax_group_letter": "A" }
+						{
+							"tax_rate_percent": 19,
+							"tax_amount": 190,
+							"net_subtotal": 1000,
+							"tax_group_letter": "A"
+						}
 					],
 					"tax_total": 190,
 					"invoice_total": 1190
@@ -242,7 +257,12 @@
 				"totals": {
 					"subtotal": 300,
 					"tax_breakdown": [
-						{ "tax_rate_percent": 19, "tax_amount": 57, "net_subtotal": 300, "tax_group_letter": "A" }
+						{
+							"tax_rate_percent": 19,
+							"tax_amount": 57,
+							"net_subtotal": 300,
+							"tax_group_letter": "A"
+						}
 					],
 					"tax_total": 57,
 					"invoice_total": 357
@@ -323,7 +343,12 @@
 				"totals": {
 					"subtotal": 2000,
 					"tax_breakdown": [
-						{ "tax_rate_percent": 19, "tax_amount": 380, "net_subtotal": 2000, "tax_group_letter": "A" }
+						{
+							"tax_rate_percent": 19,
+							"tax_amount": 380,
+							"net_subtotal": 2000,
+							"tax_group_letter": "A"
+						}
 					],
 					"tax_total": 380,
 					"invoice_total": 2380
@@ -391,7 +416,12 @@
 				"totals": {
 					"subtotal": 800,
 					"tax_breakdown": [
-						{ "tax_rate_percent": 19, "tax_amount": 152, "net_subtotal": 800, "tax_group_letter": "A" }
+						{
+							"tax_rate_percent": 19,
+							"tax_amount": 152,
+							"net_subtotal": 800,
+							"tax_group_letter": "A"
+						}
 					],
 					"tax_total": 152,
 					"invoice_total": 952

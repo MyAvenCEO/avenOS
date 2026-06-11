@@ -2,7 +2,7 @@ export type VaultSecretKind = 'passwords' | 'api-keys'
 
 const STORAGE_PREFIX: Record<VaultSecretKind, string> = {
 	passwords: 'pw.',
-	'api-keys': 'api.',
+	'api-keys': 'api.'
 }
 
 /** Map user-facing id → Stronghold storage id (no `/` allowed). */
@@ -29,6 +29,8 @@ export function matchesSecretKind(kind: VaultSecretKind, storageId: string): boo
 	return false
 }
 
-export function vaultSecretTitleKey(kind: VaultSecretKind): 'vaultNav.passwords' | 'vaultNav.apiKeys' {
+export function vaultSecretTitleKey(
+	kind: VaultSecretKind
+): 'vaultNav.passwords' | 'vaultNav.apiKeys' {
 	return kind === 'passwords' ? 'vaultNav.passwords' : 'vaultNav.apiKeys'
 }

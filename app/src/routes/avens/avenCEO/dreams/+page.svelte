@@ -1,11 +1,7 @@
 <script lang="ts">
-import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import { t } from '$lib/i18n'
-import {
-	contentMaxWidthClass,
-	mobileActionVeilClass,
-	mobileMainBottomPadClass
-} from '$lib/shell'
+import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
+import { contentMaxWidthClass, mobileActionVeilClass, mobileMainBottomPadClass } from '$lib/shell'
 
 /**
  * A founder-customer wish: a feature, bug, idea or request, captured with a
@@ -31,15 +27,13 @@ const SEED_WISHLIST: Wish[] = [
 	{
 		id: 'w-2',
 		title: 'Voice capture drops the last word',
-		description:
-			'When dictating a quick note the final word is sometimes cut off before it lands.',
+		description: 'When dictating a quick note the final word is sometimes cut off before it lands.',
 		metric: 'Reduce dictation transcription errors from ~8% to <1% of notes.'
 	},
 	{
 		id: 'w-3',
 		title: 'Weekly digest of open intents',
-		description:
-			'A Monday-morning summary of everything still waiting on me, grouped by status.',
+		description: 'A Monday-morning summary of everything still waiting on me, grouped by status.',
 		metric: 'Lift weekly intent follow-through from 62% to 85%.'
 	}
 ]
@@ -136,7 +130,7 @@ function handleSubmit(text: string, _files: File[]): void {
 								<p class="mt-2 text-[12px] font-medium leading-relaxed text-primary/90">
 									<span class="text-muted-foreground/80 uppercase tracking-wider text-[10px]"
 										>{t('dreams.metricLabel')}</span
-									><br />
+									><br>
 									{wish.metric}
 								</p>
 							</article>
@@ -168,7 +162,7 @@ function handleSubmit(text: string, _files: File[]): void {
 								<p class="mt-2 text-[12px] font-medium leading-relaxed text-status-working">
 									<span class="text-muted-foreground/80 uppercase tracking-wider text-[10px]"
 										>{t('dreams.metricLabel')}</span
-									><br />
+									><br>
 									{wish.metric}
 								</p>
 							</article>

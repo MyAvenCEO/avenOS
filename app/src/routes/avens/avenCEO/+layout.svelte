@@ -1,43 +1,43 @@
 <script lang="ts">
-	import { page } from '$app/state'
-	import { t } from '$lib/i18n'
-	import { navigateApp } from '$lib/shell'
-	import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
-	import { asideNavSectionsFromRoutes } from '$lib/ui/aside-nav'
-	import { avenById } from '../avens-data'
+import { page } from '$app/state'
+import { t } from '$lib/i18n'
+import { navigateApp } from '$lib/shell'
+import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
+import { asideNavSectionsFromRoutes } from '$lib/ui/aside-nav'
+import { avenById } from '../avens-data'
 
-	let { children: pageOutlet } = $props()
+let { children: pageOutlet } = $props()
 
-	const aven = avenById('avenCEO')
-	const path = $derived(page.url.pathname)
+const aven = avenById('avenCEO')
+const path = $derived(page.url.pathname)
 
-	const navSections = $derived(
-		asideNavSectionsFromRoutes(
-			[
-				{
-					title: t('nav.viewSection'),
-					items: [
-						{
-							href: '/avens/avenCEO/board',
-							label: t('nav.board'),
-							match: (p) => p.startsWith('/avens/avenCEO/board'),
-						},
-						{
-							href: '/avens/avenCEO/docs',
-							label: t('nav.docs'),
-							match: (p) => p.startsWith('/avens/avenCEO/docs'),
-						},
-						{
-							href: '/avens/avenCEO/dreams',
-							label: t('nav.dreams'),
-							match: (p) => p.startsWith('/avens/avenCEO/dreams'),
-						},
-					],
-				},
-			],
-			path,
-		),
+const navSections = $derived(
+	asideNavSectionsFromRoutes(
+		[
+			{
+				title: t('nav.viewSection'),
+				items: [
+					{
+						href: '/avens/avenCEO/board',
+						label: t('nav.board'),
+						match: (p) => p.startsWith('/avens/avenCEO/board')
+					},
+					{
+						href: '/avens/avenCEO/docs',
+						label: t('nav.docs'),
+						match: (p) => p.startsWith('/avens/avenCEO/docs')
+					},
+					{
+						href: '/avens/avenCEO/dreams',
+						label: t('nav.dreams'),
+						match: (p) => p.startsWith('/avens/avenCEO/dreams')
+					}
+				]
+			}
+		],
+		path
 	)
+)
 </script>
 
 <svelte:head>

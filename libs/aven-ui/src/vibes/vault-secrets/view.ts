@@ -8,8 +8,8 @@ export const vaultSecretsView: ViewDef = {
 				class: 'vs-header',
 				children: [
 					{ tag: 'h1', class: 'vs-title', text: '$title' },
-					{ class: 'vs-description', text: '$description' },
-				],
+					{ class: 'vs-description', text: '$description' }
+				]
 			},
 			{ class: '$errorClass', text: '$errorMessage' },
 			{
@@ -22,8 +22,8 @@ export const vaultSecretsView: ViewDef = {
 						$on: {
 							submit: {
 								send: 'ADD_SECRET',
-								payload: { id: '$field:newId', value: '$field:newValue' },
-							},
+								payload: { id: '$field:newId', value: '$field:newValue' }
+							}
 						},
 						children: [
 							{
@@ -37,10 +37,10 @@ export const vaultSecretsView: ViewDef = {
 											type: 'text',
 											autocomplete: 'off',
 											required: 'true',
-											'data-aven-field': 'newId',
-										},
-									},
-								],
+											'data-aven-field': 'newId'
+										}
+									}
+								]
 							},
 							{
 								class: 'vs-field',
@@ -53,20 +53,20 @@ export const vaultSecretsView: ViewDef = {
 											type: 'password',
 											autocomplete: 'off',
 											required: 'true',
-											'data-aven-field': 'newValue',
-										},
-									},
-								],
+											'data-aven-field': 'newValue'
+										}
+									}
+								]
 							},
 							{
 								tag: 'button',
 								class: 'vs-btn vs-btn--primary',
 								attrs: { type: 'submit', disabled: '$busy' },
-								text: '$labels.addButton',
-							},
-						],
-					},
-				],
+								text: '$labels.addButton'
+							}
+						]
+					}
+				]
 			},
 			{
 				class: 'vs-list-card',
@@ -77,7 +77,7 @@ export const vaultSecretsView: ViewDef = {
 						tag: 'p',
 						class: 'vs-empty',
 						text: '$emptyMessage',
-						attrs: { 'data-empty': 'true' },
+						attrs: { 'data-empty': 'true' }
 					},
 					{
 						tag: 'ul',
@@ -94,8 +94,8 @@ export const vaultSecretsView: ViewDef = {
 												class: 'vs-row-main',
 												children: [
 													{ class: 'vs-row-id', text: '$$displayId' },
-													{ class: '$$revealedClass', text: '$$revealedText' },
-												],
+													{ class: '$$revealedClass', text: '$$revealedText' }
+												]
 											},
 											{
 												class: 'vs-row-actions',
@@ -106,8 +106,8 @@ export const vaultSecretsView: ViewDef = {
 														attrs: { type: 'button' },
 														text: '$$revealLabel',
 														$on: {
-															click: { send: 'TOGGLE_REVEAL', payload: { id: '$$id' } },
-														},
+															click: { send: 'TOGGLE_REVEAL', payload: { id: '$$id' } }
+														}
 													},
 													{
 														tag: 'button',
@@ -115,19 +115,19 @@ export const vaultSecretsView: ViewDef = {
 														attrs: { type: 'button' },
 														text: '$labels.delete',
 														$on: {
-															click: { send: 'DELETE_SECRET', payload: { id: '$$id' } },
-														},
-													},
-												],
-											},
-										],
-									},
-								},
-							},
-						],
-					},
-				],
-			},
-		],
-	},
+															click: { send: 'DELETE_SECRET', payload: { id: '$$id' } }
+														}
+													}
+												]
+											}
+										]
+									}
+								}
+							}
+						]
+					}
+				]
+			}
+		]
+	}
 }

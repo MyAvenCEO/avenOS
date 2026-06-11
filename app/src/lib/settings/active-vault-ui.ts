@@ -1,10 +1,10 @@
 import type { DeviceSession } from './device-session-store'
-import { vaultPairingLabel, vaultCardTitle, type VaultListEntry } from './vault'
+import { type VaultListEntry, vaultCardTitle, vaultPairingLabel } from './vault'
 
 /** Rows from `vault_list` keyed by authoritative unlocked identity slug (`active_identity.usernameSlug`). */
 export function pickVaultRowForIdentity(
 	vaults: VaultListEntry[],
-	session: DeviceSession,
+	session: DeviceSession
 ): VaultListEntry | undefined {
 	if (session.kind !== 'unlocked') return undefined
 	const slug = session.identity.usernameSlug
@@ -16,7 +16,7 @@ export function pickVaultRowForIdentity(
 		usernameSlug: slug,
 		firstName: undefined,
 		deviceLabel: session.identity.pairingLabel?.trim() ?? undefined,
-		hasIdentityBlob: true,
+		hasIdentityBlob: true
 	}
 }
 
@@ -28,9 +28,9 @@ export function displayTitleForSession(vaults: VaultListEntry[], session: Device
 
 export function pairingLabelForSession(
 	vaults: VaultListEntry[],
-	session: DeviceSession,
+	session: DeviceSession
 ): string | undefined {
 	if (session.kind === 'locked') return undefined
 	const row = pickVaultRowForIdentity(vaults, session)
-	return row ? vaultPairingLabel(row) : session.identity.pairingLabel ?? undefined
+	return row ? vaultPairingLabel(row) : (session.identity.pairingLabel ?? undefined)
 }

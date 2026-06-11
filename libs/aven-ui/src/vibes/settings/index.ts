@@ -10,14 +10,14 @@ export const settingsShell: UiFixtureShell = {
 	style: settingsStyle,
 	source: settingsSource as Record<string, unknown>,
 	interface: settingsInterface,
-	logic: settingsLogic,
+	logic: settingsLogic
 }
 
 export function createSettingsShell(): UiFixtureShell {
 	return settingsShell
 }
 
-export { settingsLogic }
-export { settingsView } from './view.js'
-export { settingsStyle } from './style.js'
 export { default as settingsSource } from './source.json'
+export { settingsStyle } from './style.js'
+export { settingsView } from './view.js'
+export { settingsLogic }

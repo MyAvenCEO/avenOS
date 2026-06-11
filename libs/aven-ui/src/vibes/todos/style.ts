@@ -1,12 +1,12 @@
-import type { StyleDef } from '../../engine/types.js'
 import { withBrand } from '../../brand-style.js'
+import type { StyleDef } from '../../engine/types.js'
 
 // Shared brand layer provides colours/radii/fonts/ink. Todos keeps its navy
 // action accent and the row divider.
 const tokens: StyleDef['tokens'] = {
 	'row-divider': 'color-mix(in srgb, var(--border) 55%, transparent)',
 	'brand-accent': '#1e293b',
-	'brand-accent-fg': '#f8fafc',
+	'brand-accent-fg': '#f8fafc'
 }
 
 const selectors: StyleDef['selectors'] = {
@@ -24,14 +24,14 @@ const selectors: StyleDef['selectors'] = {
 		boxSizing: 'border-box',
 		fontFamily: 'var(--font-sans)',
 		color: 'var(--text)',
-		letterSpacing: '-0.02em',
+		letterSpacing: '-0.02em'
 	},
 	'.td-card': {
 		background: 'var(--surface)',
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-card)',
 		padding: 'var(--pad-card)',
-		marginBottom: '0',
+		marginBottom: '0'
 	},
 	'.td-card:last-child': { marginBottom: '0' },
 	'.td-card h4': {
@@ -41,13 +41,13 @@ const selectors: StyleDef['selectors'] = {
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.12em',
-		opacity: '0.55',
+		opacity: '0.55'
 	},
 	'.td-banner-grid': {
 		display: 'grid',
 		gridTemplateColumns: '1fr auto',
 		gap: '12px 24px',
-		alignItems: 'end',
+		alignItems: 'end'
 	},
 	'.td-eyebrow': {
 		display: 'block',
@@ -57,7 +57,7 @@ const selectors: StyleDef['selectors'] = {
 		textTransform: 'uppercase',
 		letterSpacing: '0.08em',
 		opacity: '0.55',
-		marginBottom: '6px',
+		marginBottom: '6px'
 	},
 	'.td-banner-title': {
 		margin: '0',
@@ -65,7 +65,7 @@ const selectors: StyleDef['selectors'] = {
 		fontWeight: '600',
 		letterSpacing: '-0.02em',
 		color: 'var(--text)',
-		lineHeight: '1.2',
+		lineHeight: '1.2'
 	},
 	'.td-field-label': {
 		display: 'block',
@@ -74,7 +74,7 @@ const selectors: StyleDef['selectors'] = {
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.06em',
-		marginBottom: '4px',
+		marginBottom: '4px'
 	},
 	'.td-banner-stat': { textAlign: 'right' },
 	'.td-banner-stat .td-field-label': { textAlign: 'right' },
@@ -84,7 +84,7 @@ const selectors: StyleDef['selectors'] = {
 		fontFamily: 'ui-monospace, Menlo, monospace',
 		fontVariantNumeric: 'tabular-nums',
 		color: 'var(--brand-accent)',
-		lineHeight: '1.15',
+		lineHeight: '1.15'
 	},
 	'.td-card--list': {
 		flex: '1',
@@ -95,13 +95,13 @@ const selectors: StyleDef['selectors'] = {
 		// Each task item is its own dashed mini-card now — drop the container's border/padding.
 		border: 'none',
 		background: 'transparent',
-		padding: '0',
+		padding: '0'
 	},
 	'.td-add-form': {
 		display: 'flex',
 		gap: '10px',
 		flexWrap: 'wrap',
-		alignItems: 'stretch',
+		alignItems: 'stretch'
 	},
 	'.td-input': {
 		flex: '1',
@@ -112,11 +112,11 @@ const selectors: StyleDef['selectors'] = {
 		border: '1px solid var(--border-soft)',
 		borderRadius: 'var(--radius-md)',
 		padding: '0.55rem 0.85rem',
-		outline: 'none',
+		outline: 'none'
 	},
 	'.td-input:focus': {
 		borderColor: 'var(--brand-accent)',
-		boxShadow: '0 0 0 2px color-mix(in srgb, var(--brand-accent) 28%, transparent)',
+		boxShadow: '0 0 0 2px color-mix(in srgb, var(--brand-accent) 28%, transparent)'
 	},
 	'.td-btn': {
 		font: 'inherit',
@@ -125,18 +125,18 @@ const selectors: StyleDef['selectors'] = {
 		padding: '0.5rem 0.85rem',
 		fontWeight: '500',
 		fontSize: 'var(--fs-body)',
-		transition: 'background 0.15s ease, border-color 0.15s ease, filter 0.15s ease',
+		transition: 'background 0.15s ease, border-color 0.15s ease, filter 0.15s ease'
 	},
 	'.td-btn--primary': {
 		background: 'var(--brand-accent)',
 		color: 'var(--brand-accent-fg)',
-		border: '1px solid color-mix(in srgb, var(--text) 12%, transparent)',
+		border: '1px solid color-mix(in srgb, var(--text) 12%, transparent)'
 	},
 	'.td-btn--primary:hover': { filter: 'brightness(1.03)' },
 	'.td-btn--ghost': {
 		background: 'var(--tech-fill-inner)',
 		border: '1px solid var(--border-soft)',
-		color: 'var(--text)',
+		color: 'var(--text)'
 	},
 	'.td-btn--ghost:disabled': { opacity: '0.45', cursor: 'not-allowed' },
 	'.td-btn--icon': {
@@ -146,7 +146,7 @@ const selectors: StyleDef['selectors'] = {
 		fontSize: 'var(--fs-hero)',
 		lineHeight: '1',
 		padding: '0.2rem 0.45rem',
-		fontWeight: '400',
+		fontWeight: '400'
 	},
 	'.td-btn--icon:hover': { color: '#dc2626' },
 	'.td-list': {
@@ -158,7 +158,7 @@ const selectors: StyleDef['selectors'] = {
 		overflowY: 'auto',
 		display: 'flex',
 		flexDirection: 'column',
-		gap: 'var(--gap)',
+		gap: 'var(--gap)'
 	},
 	'.td-list li.empty': {
 		textAlign: 'center',
@@ -167,7 +167,7 @@ const selectors: StyleDef['selectors'] = {
 		fontSize: 'var(--fs-body)',
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-md)',
-		marginTop: '2px',
+		marginTop: '2px'
 	},
 	'.td-list:has(.td-row) li[data-empty="true"]': { display: 'none' },
 	'.td-row': {
@@ -178,7 +178,7 @@ const selectors: StyleDef['selectors'] = {
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-md)',
 		background: 'var(--tech-fill)',
-		animation: 'td-slide-in 0.18s ease-out',
+		animation: 'td-slide-in 0.18s ease-out'
 	},
 	'.td-row input[type="checkbox"]': {
 		appearance: 'none',
@@ -193,11 +193,11 @@ const selectors: StyleDef['selectors'] = {
 		cursor: 'pointer',
 		display: 'grid',
 		placeContent: 'center',
-		transition: 'background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease',
+		transition: 'background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease'
 	},
 	'.td-row input[type="checkbox"]:checked': {
 		background: 'var(--brand-accent)',
-		borderColor: 'color-mix(in srgb, var(--text) 14%, transparent)',
+		borderColor: 'color-mix(in srgb, var(--text) 14%, transparent)'
 	},
 	'.td-row input[type="checkbox"]::after': {
 		content: '""',
@@ -207,7 +207,7 @@ const selectors: StyleDef['selectors'] = {
 		borderWidth: '0 2px 2px 0',
 		transform: 'rotate(45deg) translate(-0.5px, -1px)',
 		opacity: '0',
-		boxSizing: 'content-box',
+		boxSizing: 'content-box'
 	},
 	'.td-row input[type="checkbox"]:checked::after': { opacity: '1' },
 	'.td-row-text': {
@@ -217,11 +217,11 @@ const selectors: StyleDef['selectors'] = {
 		borderRadius: '0.35rem',
 		fontSize: 'var(--fs-title)',
 		whiteSpace: 'pre-wrap',
-		wordBreak: 'break-word',
+		wordBreak: 'break-word'
 	},
 	'.td-row.done .td-row-text': {
 		textDecoration: 'line-through',
-		color: 'var(--muted)',
+		color: 'var(--muted)'
 	},
 	'.td-list-footer': {
 		display: 'flex',
@@ -229,16 +229,16 @@ const selectors: StyleDef['selectors'] = {
 		marginTop: '12px',
 		paddingTop: '12px',
 		borderTop: '1px solid color-mix(in srgb, var(--text) 10%, transparent)',
-		flexShrink: '0',
+		flexShrink: '0'
 	},
 	'@keyframes td-slide-in': {
 		from: { opacity: '0', transform: 'translateY(-3px)' },
-		to: { opacity: '1', transform: 'translateY(0)' },
+		to: { opacity: '1', transform: 'translateY(0)' }
 	},
 	'@media (max-width: 560px)': {
 		'.td-banner-grid': { gridTemplateColumns: '1fr' },
-		'.td-banner-stat, .td-banner-stat .td-field-label': { textAlign: 'left' },
-	},
+		'.td-banner-stat, .td-banner-stat .td-field-label': { textAlign: 'left' }
+	}
 }
 
 export const todoStyle: StyleDef = withBrand({ tokens, selectors })

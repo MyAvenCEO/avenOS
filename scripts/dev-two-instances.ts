@@ -38,12 +38,11 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
-import { homedir, platform, tmpdir } from 'node:os'
+import { homedir, platform } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { freeDevServerPort } from './free-dev-server-port.ts'
 import { DEV_SERVER_SEED, LOCAL_WS, SERVER_HTTP_PORT, waitForPort } from './aven-server.ts'
+import { freeDevServerPort } from './free-dev-server-port.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appDir = path.join(repoRoot, 'app')
@@ -115,8 +114,8 @@ function spawnLabelled(
 		env: opts.env,
 		stdio: ['ignore', 'pipe', 'pipe']
 	})
-	child.stdout.on('data', (d: Buffer) => process.stdout.write(prefixLines(label, colour, d) + '\n'))
-	child.stderr.on('data', (d: Buffer) => process.stderr.write(prefixLines(label, colour, d) + '\n'))
+	child.stdout.on('data', (d: Buffer) => process.stdout.write(`${prefixLines(label, colour, d)}\n`))
+	child.stderr.on('data', (d: Buffer) => process.stderr.write(`${prefixLines(label, colour, d)}\n`))
 	child.on('exit', (code) => {
 		console.log(`${BOLD}${colour}[${label}]${RESET} process exited (code ${code ?? 'signal'})`)
 	})
@@ -159,7 +158,7 @@ function spawnTauri(label: 'A' | 'B', colour: string, env: Record<string, string
 	// stays local-only.
 	const instanceEnv: Record<string, string> = {
 		...env,
-		AVENOS_DEV_INSTANCE: label,
+		AVENOS_DEV_INSTANCE: label
 	}
 	if (label === 'B') {
 		instanceEnv.CARGO_TARGET_DIR = TAURI_B_TARGET_DIR
@@ -295,7 +294,9 @@ async function main() {
 	)
 	const tauriB = spawnTauri('B', MAGENTA, baseEnv)
 
-	const allProcs = [server, tauriA, viteB, tauriB].filter(Boolean) as ReturnType<typeof spawnLabelled>[]
+	const allProcs = [server, tauriA, viteB, tauriB].filter(Boolean) as ReturnType<
+		typeof spawnLabelled
+	>[]
 
 	for (const sig of ['SIGINT', 'SIGTERM'] as const) {
 		process.on(sig, () => {

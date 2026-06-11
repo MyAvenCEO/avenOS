@@ -1,4 +1,6 @@
 <script lang="ts">
+import { tick } from 'svelte'
+import { focusShellWebview } from '$lib/intent-mock/focus-shell-webview'
 /**
  * Bottom composer cluster — owns the per-status action pills and the
  * `IntentComposer` mount. Rendered inside the page's fixed bottom bar
@@ -21,11 +23,12 @@
  * coexist with the HITL action pills.
  */
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
-import { focusShellWebview } from '$lib/intent-mock/focus-shell-webview'
-import { tick } from 'svelte'
-import { type ComposerMode, type IntentRow } from './types'
+import type { ComposerMode, IntentRow } from './types'
 
-type ComposerApi = { openWithCommand(label: string): void; openWithFiles(files: File[] | FileList): void }
+type ComposerApi = {
+	openWithCommand(label: string): void
+	openWithFiles(files: File[] | FileList): void
+}
 
 let {
 	intent,
@@ -86,8 +89,10 @@ const collapsedBarClass =
 	'w-full max-sm:grid max-sm:grid-cols-[1fr_auto_1fr] max-sm:items-center max-sm:gap-1 sm:flex sm:min-h-12 sm:items-center sm:justify-center sm:gap-3'
 const expandedBarClass =
 	'flex w-full min-w-0 max-sm:min-h-0 items-center justify-center gap-2 sm:min-h-12 sm:gap-3'
-const sideLeftClass = 'flex min-w-0 items-center justify-end gap-1 max-sm:justify-end sm:flex-1 sm:justify-end sm:gap-2'
-const sideRightClass = 'flex min-w-0 items-center justify-start gap-1 max-sm:justify-start sm:flex-1 sm:justify-start sm:gap-2'
+const sideLeftClass =
+	'flex min-w-0 items-center justify-end gap-1 max-sm:justify-end sm:flex-1 sm:justify-end sm:gap-2'
+const sideRightClass =
+	'flex min-w-0 items-center justify-start gap-1 max-sm:justify-start sm:flex-1 sm:justify-start sm:gap-2'
 const composerWrapCollapsed = 'shrink-0 justify-self-center max-sm:col-start-2 max-sm:row-start-1'
 const composerWrapExpanded = 'flex min-w-0 flex-1 items-center justify-center'
 const mobileIconBtn =
@@ -156,7 +161,7 @@ const mobileIconBtn =
 				<IntentComposer
 					bind:this={composerRef}
 					rowCluster={composerMode === 'collapsed'}
-					onSubmitMessage={onSubmitMessage}
+					{onSubmitMessage}
 					onModeChange={(m: ComposerMode) => {
 						composerMode = m
 					}}
@@ -197,7 +202,7 @@ const mobileIconBtn =
 					bind:this={composerRef}
 					bind:command={composerCommand}
 					rowCluster={composerMode === 'collapsed'}
-					onSubmitMessage={onSubmitMessage}
+					{onSubmitMessage}
 					onCommandSubmit={handleCommand}
 					onModeChange={(m: ComposerMode) => {
 						composerMode = m
@@ -244,7 +249,7 @@ const mobileIconBtn =
 	{:else}
 		<IntentComposer
 			bind:this={composerRef}
-			onSubmitMessage={onSubmitMessage}
+			{onSubmitMessage}
 			onModeChange={(m: ComposerMode) => {
 				composerMode = m
 			}}

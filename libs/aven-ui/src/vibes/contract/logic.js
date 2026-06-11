@@ -35,7 +35,7 @@ function buildParty(p, idx) {
 }
 
 function buildClauses(clauses) {
-	return (Array.isArray(clauses) ? clauses : []).map(function (c) {
+	return (Array.isArray(clauses) ? clauses : []).map((c) => {
 		if (!isRecord(c)) c = {}
 		var sub = Array.isArray(c.subclauses) ? c.subclauses : []
 		return {
@@ -43,22 +43,24 @@ function buildClauses(clauses) {
 			title: str(c.title),
 			body: typeof c.body === 'string' ? c.body.trim() : '',
 			subclauses: sub
-				.map(function (s) {
+				.map((s) => {
 					if (!isRecord(s)) return null
-					return { label: typeof s.label === 'string' ? s.label : '', body: typeof s.body === 'string' ? s.body : '' }
+					return {
+						label: typeof s.label === 'string' ? s.label : '',
+						body: typeof s.body === 'string' ? s.body : ''
+					}
 				})
-				.filter(function (s) {
-					return s && (s.label || s.body)
-				}),
+				.filter((s) => s && (s.label || s.body))
 		}
 	})
 }
 
 function buildSignatures(signatures, parties) {
 	return (Array.isArray(signatures) ? signatures : [])
-		.map(function (sig) {
+		.map((sig) => {
 			if (!isRecord(sig)) return null
-			var idx = typeof sig.party_index === 'number' && !isNaN(sig.party_index) ? sig.party_index : -1
+			var idx =
+				typeof sig.party_index === 'number' && !isNaN(sig.party_index) ? sig.party_index : -1
 			var partyLab = 'Signatur'
 			if (idx >= 0 && Array.isArray(parties) && isRecord(parties[idx])) {
 				partyLab = str(parties[idx].role) || 'Partei ' + (idx + 1)
@@ -72,12 +74,10 @@ function buildSignatures(signatures, parties) {
 				party: partyLab,
 				name: typeof sig.signer_name === 'string' ? sig.signer_name : '—',
 				role: typeof sig.signer_role === 'string' ? sig.signer_role : '',
-				meta: metaBits.join(' · '),
+				meta: metaBits.join(' · ')
 			}
 		})
-		.filter(function (b) {
-			return b
-		})
+		.filter((b) => b)
 }
 
 function initState(source) {
@@ -95,16 +95,14 @@ function initState(source) {
 	if (str(s.preamble)) preamble.push({ text: str(s.preamble) })
 
 	var defs = (Array.isArray(s.definitions) ? s.definitions : [])
-		.map(function (d) {
+		.map((d) => {
 			if (!isRecord(d)) return null
 			var term = str(d.term)
 			var def = str(d.definition)
 			if (!term && !def) return null
 			return { term: term || 'Begriff', body: def }
 		})
-		.filter(function (d) {
-			return d
-		})
+		.filter((d) => d)
 	var defsSection = defs.length ? [{ rows: defs }] : []
 
 	var clauses = buildClauses(s.clauses)
@@ -126,6 +124,6 @@ function initState(source) {
 		clauses: clauses,
 		clausesEmpty: clausesEmpty,
 		signSection: signSection,
-		footnote: footnote,
+		footnote: footnote
 	}
 }

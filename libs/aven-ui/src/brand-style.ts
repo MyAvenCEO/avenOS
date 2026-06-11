@@ -1,5 +1,5 @@
-import type { StyleDef } from './engine/types.js'
 import brandJson from './brand.style.json'
+import type { StyleDef } from './engine/types.js'
 
 /**
  * Shared brand design system for all vibe views.
@@ -17,7 +17,7 @@ import brandJson from './brand.style.json'
  * tokens/selectors UNDER the vibe's own (vibe values win on conflict).
  */
 export const brandTokens: Record<string, string> = Object.fromEntries(
-	Object.entries(brandJson as Record<string, string>).filter(([k]) => !k.startsWith('$')),
+	Object.entries(brandJson as Record<string, string>).filter(([k]) => !k.startsWith('$'))
 )
 
 export const brandBaseSelectors: Record<string, Record<string, unknown>> = {
@@ -29,7 +29,7 @@ export const brandBaseSelectors: Record<string, Record<string, unknown>> = {
 		margin: '0',
 		minHeight: '100%',
 		height: '100%',
-		letterSpacing: '-0.011em',
+		letterSpacing: '-0.011em'
 	},
 
 	/* Outer shell — one standardized max width + padding for every template. */
@@ -39,7 +39,7 @@ export const brandBaseSelectors: Record<string, Record<string, unknown>> = {
 		padding: 'var(--pad-card)',
 		display: 'flex',
 		flexDirection: 'column',
-		gap: 'var(--gap-section)',
+		gap: 'var(--gap-section)'
 	},
 
 	/* Reference card: rounded-xl, subtle border, translucent cream, p-6. */
@@ -47,13 +47,13 @@ export const brandBaseSelectors: Record<string, Record<string, unknown>> = {
 		background: 'var(--surface)',
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-card)',
-		padding: 'var(--pad-card)',
+		padding: 'var(--pad-card)'
 	},
 	'.card-sm': {
 		background: 'var(--surface)',
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-inner)',
-		padding: 'var(--pad-card-sm)',
+		padding: 'var(--pad-card-sm)'
 	},
 
 	/* Grid card — the docs-landing tile pattern (icon chip · title · description ·
@@ -65,7 +65,7 @@ export const brandBaseSelectors: Record<string, Record<string, unknown>> = {
 		background: 'var(--surface)',
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-card)',
-		padding: 'var(--pad-card)',
+		padding: 'var(--pad-card)'
 	},
 	'.grid-card-icon': {
 		display: 'inline-flex',
@@ -76,17 +76,17 @@ export const brandBaseSelectors: Record<string, Record<string, unknown>> = {
 		marginBottom: '0.5rem',
 		borderRadius: 'var(--radius-pill)',
 		border: '1px solid var(--border)',
-		color: 'var(--muted-strong)',
+		color: 'var(--muted-strong)'
 	},
 	'.grid-card-title': {
 		fontSize: 'var(--fs-title)',
 		fontWeight: '500',
-		color: 'var(--text)',
+		color: 'var(--text)'
 	},
 	'.grid-card-desc': {
 		fontSize: 'var(--fs-body)',
 		lineHeight: '1.5',
-		color: 'var(--muted)',
+		color: 'var(--muted)'
 	},
 	'.grid-card-action': {
 		marginTop: '0.25rem',
@@ -94,7 +94,7 @@ export const brandBaseSelectors: Record<string, Record<string, unknown>> = {
 		fontWeight: '600',
 		letterSpacing: 'var(--tracking-eyebrow)',
 		textTransform: 'uppercase',
-		color: 'var(--muted)',
+		color: 'var(--muted)'
 	},
 
 	/* Uppercase tracked eyebrow label (11px, muted). */
@@ -103,7 +103,7 @@ export const brandBaseSelectors: Record<string, Record<string, unknown>> = {
 		fontWeight: '500',
 		letterSpacing: 'var(--tracking-eyebrow)',
 		textTransform: 'uppercase',
-		color: 'var(--muted)',
+		color: 'var(--muted)'
 	},
 
 	/* Buttons: primary stays brand navy; secondary is the cream/yellow fill. */
@@ -119,24 +119,31 @@ export const brandBaseSelectors: Record<string, Record<string, unknown>> = {
 		border: '1px solid transparent',
 		cursor: 'pointer',
 		background: 'var(--primary)',
-		color: 'var(--primary-foreground)',
+		color: 'var(--primary-foreground)'
 	},
 	'.btn-secondary': {
 		background: 'var(--secondary)',
 		color: 'var(--secondary-foreground)',
-		border: '1px solid color-mix(in srgb, var(--secondary-foreground) 14%, transparent)',
-	},
+		border: '1px solid color-mix(in srgb, var(--secondary-foreground) 14%, transparent)'
+	}
 }
 
 function mergeDeep(
 	base: Record<string, unknown>,
-	over: Record<string, unknown>,
+	over: Record<string, unknown>
 ): Record<string, unknown> {
 	const out: Record<string, unknown> = { ...base }
 	for (const key of Object.keys(over)) {
 		const ov = over[key]
 		const bv = out[key]
-		if (ov && typeof ov === 'object' && !Array.isArray(ov) && bv && typeof bv === 'object' && !Array.isArray(bv)) {
+		if (
+			ov &&
+			typeof ov === 'object' &&
+			!Array.isArray(ov) &&
+			bv &&
+			typeof bv === 'object' &&
+			!Array.isArray(bv)
+		) {
 			out[key] = mergeDeep(bv as Record<string, unknown>, ov as Record<string, unknown>)
 		} else {
 			out[key] = ov
@@ -154,6 +161,6 @@ export function withBrand(style: StyleDef): StyleDef {
 	return {
 		tokens: mergeDeep(brandTokens, (style.tokens ?? {}) as Record<string, unknown>),
 		components: style.components,
-		selectors: mergeDeep(brandBaseSelectors, (style.selectors ?? {}) as Record<string, unknown>),
+		selectors: mergeDeep(brandBaseSelectors, (style.selectors ?? {}) as Record<string, unknown>)
 	}
 }

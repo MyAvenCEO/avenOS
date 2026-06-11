@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit'
-import type { PageLoad } from './$types'
 import { getSelfDoc } from '$lib/docs/self-collection'
+import type { PageLoad } from './$types'
 
 export const ssr = false
 export const prerender = false

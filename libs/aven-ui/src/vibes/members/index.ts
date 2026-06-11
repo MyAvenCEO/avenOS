@@ -10,14 +10,14 @@ export const membersShell: UiFixtureShell = {
 	style: membersStyle,
 	source: membersSource as Record<string, unknown>,
 	interface: membersInterface,
-	logic: membersLogic,
+	logic: membersLogic
 }
 
 export function createMembersShell(): UiFixtureShell {
 	return membersShell
 }
 
-export { membersLogic }
-export { membersView } from './view.js'
-export { membersStyle } from './style.js'
 export { default as membersSource } from './source.json'
+export { membersStyle } from './style.js'
+export { membersView } from './view.js'
+export { membersLogic }

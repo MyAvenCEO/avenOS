@@ -1,4 +1,4 @@
-import { writable, type Readable, type Writable } from 'svelte/store'
+import { type Readable, type Writable, writable } from 'svelte/store'
 
 /** Per-table row snapshots pushed via `avenos:runtime` `{ kind: 'table' }`. */
 const tableStores = new Map<string, Writable<unknown[]>>()

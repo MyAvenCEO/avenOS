@@ -1,4 +1,6 @@
 <script lang="ts">
+import { t } from '$lib/i18n'
+import StatusCard from './StatusCard.svelte'
 /**
  * Left aside — list of intent rows + collapsible "Archived" group.
  *
@@ -12,13 +14,7 @@
  * Mobile: full-width master list, bottom-aligned above the composer with
  * archived at the top and errors nearest the action bar.
  */
-import {
-	type IntentRow,
-	intentTotalSkillElapsedSeconds,
-	statusLabel
-} from './types'
-import StatusCard from './StatusCard.svelte'
-import { t } from '$lib/i18n'
+import { type IntentRow, intentTotalSkillElapsedSeconds, statusLabel } from './types'
 
 const MOBILE_MQ = '(max-width: 639px)'
 
@@ -123,7 +119,9 @@ const mobileActiveIntents = $derived([...activeIntents].reverse())
 <div
 	class={`col-start-1 row-start-1 flex min-h-[1.125rem] items-center gap-2 self-start ${selectedId ? 'max-sm:hidden' : ''}`}
 >
-	<span class="text-[8px] font-bold tracking-[0.22em] opacity-30 uppercase">{t('intents.title')}</span>
+	<span class="text-[8px] font-bold tracking-[0.22em] opacity-30 uppercase"
+		>{t('intents.title')}</span
+	>
 </div>
 
 <div

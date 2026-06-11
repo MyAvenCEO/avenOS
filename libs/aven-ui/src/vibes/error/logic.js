@@ -9,6 +9,6 @@ function initState(source) {
 		eyebrow: str(s.eyebrow) || 'Automatisierung gestoppt',
 		title: str(s.title),
 		messageLabel: str(s.messageLabel) || 'Grund:',
-		message: str(s.message),
+		message: str(s.message)
 	}
 }

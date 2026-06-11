@@ -10,14 +10,14 @@ export const bankStatementShell: UiFixtureShell = {
 	style: bankStatementStyle,
 	source: bankStatementSource as Record<string, unknown>,
 	interface: bankStatementInterface,
-	logic: bankStatementLogic,
+	logic: bankStatementLogic
 }
 
 export function createBankStatementShell(): UiFixtureShell {
 	return bankStatementShell
 }
 
-export { bankStatementLogic }
-export { bankStatementView } from './view.js'
-export { bankStatementStyle } from './style.js'
 export { default as bankStatementSource } from './source.json'
+export { bankStatementStyle } from './style.js'
+export { bankStatementView } from './view.js'
+export { bankStatementLogic }

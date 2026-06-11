@@ -5,14 +5,12 @@ export const mobileAsidePanelClass =
 
 export const mobileAsideWidthClass = 'w-full'
 
-export const mobileAsideBackdropClass =
-	'fixed inset-0 bg-background/55 backdrop-blur-[2px]'
+export const mobileAsideBackdropClass = 'fixed inset-0 bg-background/55 backdrop-blur-[2px]'
 
 export const mobileAsideSectionLabelClass =
 	'text-muted-foreground mb-2 text-[10px] font-bold tracking-[0.2em] uppercase md:mb-1 md:text-[9px]'
 
-export const mobileAsideBottomPadClass =
-	'pb-[max(0.75rem,env(safe-area-inset-bottom))]'
+export const mobileAsideBottomPadClass = 'pb-[max(0.75rem,env(safe-area-inset-bottom))]'
 
 /**
  * Unified brand nav-item pill. Same language as the vibe-library Snippets nav:
@@ -25,10 +23,7 @@ function navPillBase(align: 'left' | 'right', size: 'lg' | 'md'): string {
 	return `flex w-full items-center gap-2.5 rounded-full border px-3.5 py-2.5 ${text} font-medium leading-snug tracking-tight transition-colors touch-manipulation md:px-3 md:py-2 md:text-[13px] ${alignClass}`
 }
 
-export function mobileAsideNavLinkClass(
-	active: boolean,
-	align: 'left' | 'right' = 'left',
-): string {
+export function mobileAsideNavLinkClass(active: boolean, align: 'left' | 'right' = 'left'): string {
 	const base = navPillBase(align, 'lg')
 	return active
 		? `${base} border-primary bg-primary text-primary-foreground`
@@ -37,7 +32,7 @@ export function mobileAsideNavLinkClass(
 
 export function mobileAsideNavLinkMutedClass(
 	active: boolean,
-	align: 'left' | 'right' = 'left',
+	align: 'left' | 'right' = 'left'
 ): string {
 	const base = navPillBase(align, 'md')
 	return active

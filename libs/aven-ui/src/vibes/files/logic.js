@@ -8,14 +8,17 @@ function arr(x) {
 
 function initState(source) {
 	var s = source || {}
-	var files = arr(s.files).map(function (f) {
-		return { icon: str(f.icon) || '📄', name: str(f.name), meta: str(f.meta), kind: str(f.kind) }
-	})
+	var files = arr(s.files).map((f) => ({
+		icon: str(f.icon) || '📄',
+		name: str(f.name),
+		meta: str(f.meta),
+		kind: str(f.kind)
+	}))
 	return {
 		eyebrow: str(s.eyebrow) || 'Vault',
 		title: str(s.title) || 'Dateien',
 		count: String(files.length),
 		emptyMessage: str(s.emptyMessage) || 'Noch keine Dateien.',
-		files: files,
+		files: files
 	}
 }

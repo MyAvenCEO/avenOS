@@ -1,8 +1,8 @@
 import type { UiFixtureShell } from '@avenos/aven-ui'
 import { createBankStatementShell } from '@avenos/aven-ui/vibes/bank-statement'
 import { createBankTransfersShell } from '@avenos/aven-ui/vibes/bank-transfers'
-import { createContractShell } from '@avenos/aven-ui/vibes/contract'
 import { createChatShell } from '@avenos/aven-ui/vibes/chat'
+import { createContractShell } from '@avenos/aven-ui/vibes/contract'
 import { createErrorShell } from '@avenos/aven-ui/vibes/error'
 import { createFilesShell } from '@avenos/aven-ui/vibes/files'
 import { createInvoiceShell } from '@avenos/aven-ui/vibes/invoice'
@@ -46,7 +46,7 @@ export const vibeViewList: VibeView[] = [
 		description: 'Rechnungsansicht mit Positionen, Summen und Zahlungsinformationen.',
 		shell: createInvoiceShell(),
 		containerName: 'aven-ui-invoice',
-		interactive: false,
+		interactive: false
 	},
 	{
 		id: 'bank-transfers',
@@ -55,7 +55,7 @@ export const vibeViewList: VibeView[] = [
 			'Geteilte Ansicht: links die Liste der Überweisungen/Zahlungen mit Status-Indikator, rechts die Rechnung zur ausgewählten Transaktion.',
 		shell: createBankTransfersShell(),
 		containerName: 'aven-ui-bank-transfers',
-		interactive: true,
+		interactive: true
 	},
 	{
 		id: 'bank-statement',
@@ -63,7 +63,7 @@ export const vibeViewList: VibeView[] = [
 		description: 'Kontoauszug-Ansicht, angeglichen an das OCR-Schema bank_statement.',
 		shell: createBankStatementShell(),
 		containerName: 'aven-ui-bank-statement',
-		interactive: false,
+		interactive: false
 	},
 	{
 		id: 'contract',
@@ -71,7 +71,7 @@ export const vibeViewList: VibeView[] = [
 		description: 'Mehrparteien-Vertrag mit Präambel, Begriffen, Klauseln und Signaturen.',
 		shell: createContractShell(),
 		containerName: 'aven-ui-contract',
-		interactive: false,
+		interactive: false
 	},
 	{
 		id: 'members',
@@ -80,23 +80,25 @@ export const vibeViewList: VibeView[] = [
 			'Mitglieder-/Zugriffsfläche: DID einladen, Zugriffsstufe wählen, und wer Zugriff hat mit Berechtigungs-Chips. Erste Referenz-Vibe aus den Brand-Primitives.',
 		shell: createMembersShell(),
 		containerName: 'aven-ui-members',
-		interactive: false,
+		interactive: false
 	},
 	{
 		id: 'chat',
 		label: 'Chat',
-		description: 'Konversationsfläche mit rollenbasierten Sprechblasen (Du / Aven) aus den Brand-Primitives.',
+		description:
+			'Konversationsfläche mit rollenbasierten Sprechblasen (Du / Aven) aus den Brand-Primitives.',
 		shell: createChatShell(),
 		containerName: 'aven-ui-chat',
-		interactive: false,
+		interactive: false
 	},
 	{
 		id: 'files',
 		label: 'Dateien',
-		description: 'Dateiliste mit Icon, Name, Metadaten und Typ-Chip — Standard-Vibe aus den Brand-Primitives.',
+		description:
+			'Dateiliste mit Icon, Name, Metadaten und Typ-Chip — Standard-Vibe aus den Brand-Primitives.',
 		shell: createFilesShell(),
 		containerName: 'aven-ui-files',
-		interactive: false,
+		interactive: false
 	},
 	{
 		id: 'settings',
@@ -104,7 +106,7 @@ export const vibeViewList: VibeView[] = [
 		description: 'Einstellungsfläche: Abschnitte mit Label/Wert-Zeilen aus den Brand-Primitives.',
 		shell: createSettingsShell(),
 		containerName: 'aven-ui-settings',
-		interactive: false,
+		interactive: false
 	},
 	{
 		id: 'todos',
@@ -112,7 +114,7 @@ export const vibeViewList: VibeView[] = [
 		description: 'Kleine Aufgabenliste mit Host- und Sandbox-Sync.',
 		shell: createTodosShell(),
 		containerName: 'aven-ui-todos',
-		interactive: true,
+		interactive: true
 	},
 	{
 		id: 'error',
@@ -120,7 +122,7 @@ export const vibeViewList: VibeView[] = [
 		description: 'Diagnose-Panel für gestoppte Automatisierungen (HITL-Fehlerzustand).',
 		shell: createErrorShell(),
 		containerName: 'aven-ui-error',
-		interactive: false,
+		interactive: false
 	},
 	{
 		id: 'success',
@@ -128,8 +130,8 @@ export const vibeViewList: VibeView[] = [
 		description: 'Abschluss-Panel für erfolgreich beendete Intents.',
 		shell: createSuccessShell(),
 		containerName: 'aven-ui-success',
-		interactive: false,
-	},
+		interactive: false
+	}
 ]
 
 /** Views used as live HITL placeholders (excludes the error/success screens). */
@@ -138,7 +140,7 @@ export const HITL_VIEW_IDS: VibeViewId[] = [
 	'bank-transfers',
 	'bank-statement',
 	'contract',
-	'todos',
+	'todos'
 ]
 
 export function vibeViewById(id: VibeViewId): VibeView {

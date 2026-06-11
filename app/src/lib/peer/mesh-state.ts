@@ -5,16 +5,9 @@ export type PeerMeshPhase = 'pairing' | 'offline' | 'searching' | 'syncing' | 'r
 
 export type PeerUsability = 'unavailable' | 'connecting' | 'liveSyncing' | 'usable'
 
-export type PeerSyncBlockReason =
-	| 'muxPending'
-	| 'policyPending'
-	| 'catchupPending'
+export type PeerSyncBlockReason = 'muxPending' | 'policyPending' | 'catchupPending'
 
-export type SyncBootstrapPhase =
-	| 'transportPending'
-	| 'shellPending'
-	| 'trustPending'
-	| 'ready'
+export type SyncBootstrapPhase = 'transportPending' | 'shellPending' | 'trustPending' | 'ready'
 
 export type LinkHealth = 'none' | 'half' | 'full'
 
@@ -39,10 +32,7 @@ export type P2pDiagnostics = {
 	preferRelayOnly?: boolean
 }
 
-export type PeerConnectSubstate =
-	| 'discovering'
-	| 'handshaking'
-	| 'relayPairing'
+export type PeerConnectSubstate = 'discovering' | 'handshaking' | 'relayPairing'
 
 export type PeerTransportMode = 'lan' | 'direct' | 'punched' | 'relay'
 
@@ -100,7 +90,7 @@ export function peerMeshPhaseLabel(phase: PeerMeshPhase): string {
 export function peerMeshPhaseUserLabel(
 	phase: PeerMeshPhase,
 	usability?: PeerUsability | null,
-	opts?: { linkHealth?: LinkHealth | null },
+	opts?: { linkHealth?: LinkHealth | null }
 ): string {
 	switch (peerMeshDisplayPhase(phase, usability, opts)) {
 		case 'pairing':
@@ -124,7 +114,7 @@ export function peerMeshPhaseAnimating(phase: PeerMeshPhase): boolean {
 export function peerMeshDisplayPhase(
 	phase: PeerMeshPhase,
 	usability?: PeerUsability | null,
-	opts?: { linkHealth?: LinkHealth | null },
+	opts?: { linkHealth?: LinkHealth | null }
 ): PeerMeshPhase {
 	if (opts?.linkHealth === 'half' || opts?.linkHealth === 'none') {
 		if (phase === 'ready') return 'searching'
@@ -144,10 +134,10 @@ export function peerMeshShortLabel(
 		usability?: PeerUsability | null
 		syncBlockReason?: PeerSyncBlockReason | null
 		linkHealth?: LinkHealth | null
-	},
+	}
 ): string {
 	const display = peerMeshDisplayPhase(phase, opts?.usability, {
-		linkHealth: opts?.linkHealth,
+		linkHealth: opts?.linkHealth
 	})
 	switch (display) {
 		case 'pairing':
@@ -241,7 +231,7 @@ function normalizeSignerDid(signerDid: string | undefined | null): string {
 /** Lookup a trusted peer row in the live mesh snapshot (canonical phase source). */
 export function meshPeerByDid(
 	mesh: PeerMeshStatusReply | undefined,
-	signerDid: string | undefined,
+	signerDid: string | undefined
 ): PeerMeshPeerState | undefined {
 	const did = normalizeSignerDid(signerDid)
 	if (!mesh || !did) return undefined
@@ -252,7 +242,7 @@ export function meshPeerByDid(
 export function meshPeerPhase(
 	mesh: PeerMeshStatusReply | undefined,
 	signerDid: string | undefined,
-	dbStatus?: string,
+	dbStatus?: string
 ): PeerMeshPhase {
 	return (
 		meshPeerByDid(mesh, signerDid)?.phase ??
@@ -263,7 +253,7 @@ export function meshPeerPhase(
 export function findPeerMeshPhase(
 	status: PeerMeshStatusReply | undefined,
 	signerDid: string | undefined,
-	dbStatus?: string,
+	dbStatus?: string
 ): PeerMeshPhase {
 	return meshPeerPhase(status, signerDid, dbStatus)
 }
@@ -292,7 +282,7 @@ export function peerTransportModeTitle(_mode?: PeerTransportMode | null): string
 export function peerMeshDetailSubLabel(
 	status: PeerMeshStatusReply | undefined,
 	signerDid: string | undefined,
-	phase: PeerMeshPhase,
+	phase: PeerMeshPhase
 ): string | null {
 	const row = meshPeerByDid(status, signerDid)
 	if (!row) return null
@@ -331,9 +321,9 @@ export function peerMeshDetailSubLabel(
 }
 
 export function peerMeshDetailSubTitle(
-	status: PeerMeshStatusReply | undefined,
-	signerDid: string | undefined,
-	phase: PeerMeshPhase,
+	_status: PeerMeshStatusReply | undefined,
+	_signerDid: string | undefined,
+	phase: PeerMeshPhase
 ): string | null {
 	if (phase === 'syncing' || phase === 'ready') {
 		return peerTransportModeTitle(null)

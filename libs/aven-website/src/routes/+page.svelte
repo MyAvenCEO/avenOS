@@ -7,9 +7,9 @@
 </svelte:head>
 
 <script lang="ts">
+import { beamAvatarSvg, paletteFromCommaString } from '$lib/beam-avatar'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
-import { beamAvatarSvg, paletteFromCommaString } from '$lib/beam-avatar'
 import { loadPublishersWithSkills, skillDetailHref } from '$lib/skills/loader'
 import danielPhoto from '../images/daniel.png'
 import samuelPhoto from '../images/samuel.jpg'

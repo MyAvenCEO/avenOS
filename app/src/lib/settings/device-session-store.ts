@@ -1,11 +1,11 @@
 import { invoke } from '@tauri-apps/api/core'
-import { browser } from '$app/environment'
 import { listen } from '@tauri-apps/api/event'
 import { get, writable } from 'svelte/store'
-import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-import { resetAvenDbShell } from '$lib/runtime/avendb-shell'
+import { browser } from '$app/environment'
 import { avendbSessionReady, peerMeshSnapshot } from '$lib/runtime/avendb-runtime'
+import { resetAvenDbShell } from '$lib/runtime/avendb-shell'
 import { resetAllTableRowStores } from '$lib/runtime/table-stores'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 export const DEVICE_PEER_SLOT = 'device_default'
 
 /** Pinned Rust identity (`plugin:self|active_identity`) — authoritative while unlocked. */

@@ -1,36 +1,34 @@
 <script lang="ts">
-	import type { AvenDbRow } from '$lib/avendb/api'
-	import GalleryPdfThumb from '$lib/gallery/GalleryPdfThumb.svelte'
-	import {
-		fileDownloadDataUrl,
-		formatBytes,
-		imageDataUrl,
-		isPdfMime,
-	} from '$lib/gallery/file-preview'
+import type { AvenDbRow } from '$lib/avendb/api'
+import {
+	fileDownloadDataUrl,
+	formatBytes,
+	imageDataUrl,
+	isPdfMime
+} from '$lib/gallery/file-preview'
+import GalleryPdfThumb from '$lib/gallery/GalleryPdfThumb.svelte'
 
-	type Props = {
-		files: AvenDbRow[]
-		/** Message bubble uses primary colors — lighten attachment chrome. */
-		inverted?: boolean
-	}
+type Props = {
+	files: AvenDbRow[]
+	/** Message bubble uses primary colors — lighten attachment chrome. */
+	inverted?: boolean
+}
 
-	let { files, inverted = false }: Props = $props()
+let { files, inverted = false }: Props = $props()
 
-	let brokenIds = $state<Set<string>>(new Set())
+let brokenIds = $state<Set<string>>(new Set())
 
-	function markBroken(id: string): void {
-		brokenIds = new Set(brokenIds).add(id)
-	}
+function markBroken(id: string): void {
+	brokenIds = new Set(brokenIds).add(id)
+}
 
-	const shellClass = $derived(
-		inverted
-			? 'border-primary-foreground/25 bg-primary-foreground/10'
-			: 'border-border/50 bg-background/40',
-	)
-	const metaClass = $derived(
-		inverted ? 'text-primary-foreground/80' : 'text-muted-foreground',
-	)
-	const titleClass = $derived(inverted ? 'text-primary-foreground' : 'text-foreground')
+const shellClass = $derived(
+	inverted
+		? 'border-primary-foreground/25 bg-primary-foreground/10'
+		: 'border-border/50 bg-background/40'
+)
+const metaClass = $derived(inverted ? 'text-primary-foreground/80' : 'text-muted-foreground')
+const titleClass = $derived(inverted ? 'text-primary-foreground' : 'text-foreground')
 </script>
 
 <div class="flex max-w-[min(100%,18rem)] flex-col gap-2" aria-label="Attachments">
@@ -48,15 +46,17 @@
 					{@const src = imageDataUrl(row)}
 					{#if src && !brokenIds.has(row.id)}
 						<img
-							src={src}
+							{src}
 							alt=""
 							class="h-full w-full object-cover"
 							loading="lazy"
 							decoding="async"
 							onerror={() => markBroken(row.id)}
-						/>
+						>
 					{:else}
-						<div class="{metaClass} flex h-full w-full items-center justify-center p-4 text-center text-xs">
+						<div
+							class="{metaClass} flex h-full w-full items-center justify-center p-4 text-center text-xs"
+						>
 							No preview
 						</div>
 					{/if}

@@ -18,12 +18,12 @@ export const contractView: ViewDef = {
 								tag: 'span',
 								children: [
 									{ tag: 'strong', text: '$$label' },
-									{ tag: 'span', text: '$$value' },
-								],
-							},
-						},
-					},
-				],
+									{ tag: 'span', text: '$$value' }
+								]
+							}
+						}
+					}
+				]
 			},
 			{
 				class: 'cv-parties',
@@ -38,12 +38,12 @@ export const contractView: ViewDef = {
 							{
 								$each: {
 									items: '$$lines',
-									template: { class: 'cv-party-line', text: '$$text' },
-								},
-							},
-						],
-					},
-				},
+									template: { class: 'cv-party-line', text: '$$text' }
+								}
+							}
+						]
+					}
+				}
 			},
 			{
 				$each: {
@@ -52,10 +52,10 @@ export const contractView: ViewDef = {
 						class: 'cv-preamble',
 						children: [
 							{ tag: 'h3', text: 'Präambel' },
-							{ class: 'cv-preamble-body', text: '$$text' },
-						],
-					},
-				},
+							{ class: 'cv-preamble-body', text: '$$text' }
+						]
+					}
+				}
 			},
 			{
 				$each: {
@@ -71,14 +71,14 @@ export const contractView: ViewDef = {
 										class: 'cv-def-row',
 										children: [
 											{ class: 'cv-def-term', text: '$$term' },
-											{ class: 'cv-def-body', text: '$$body' },
-										],
-									},
-								},
-							},
-						],
-					},
-				},
+											{ class: 'cv-def-body', text: '$$body' }
+										]
+									}
+								}
+							}
+						]
+					}
+				}
 			},
 			{
 				class: 'cv-clauses',
@@ -94,8 +94,8 @@ export const contractView: ViewDef = {
 										class: 'cv-clause-head',
 										children: [
 											{ tag: 'span', class: 'cv-clause-num', text: '$$num' },
-											{ tag: 'span', class: 'cv-clause-title', text: '$$title' },
-										],
+											{ tag: 'span', class: 'cv-clause-title', text: '$$title' }
+										]
 									},
 									{ class: 'cv-clause-body', text: '$$body' },
 									{
@@ -105,22 +105,22 @@ export const contractView: ViewDef = {
 												class: 'cv-subclause',
 												children: [
 													{ class: 'cv-subclause-label', text: '$$label' },
-													{ class: 'cv-subclause-body', text: '$$body' },
-												],
-											},
-										},
-									},
-								],
-							},
-						},
+													{ class: 'cv-subclause-body', text: '$$body' }
+												]
+											}
+										}
+									}
+								]
+							}
+						}
 					},
 					{
 						$each: {
 							items: '$clausesEmpty',
-							template: { class: 'cv-footnote', text: '$$text' },
-						},
-					},
-				],
+							template: { class: 'cv-footnote', text: '$$text' }
+						}
+					}
+				]
 			},
 			{
 				$each: {
@@ -139,21 +139,21 @@ export const contractView: ViewDef = {
 											{ class: 'cv-sign-party', text: '$$party' },
 											{ class: 'cv-sign-name', text: '$$name' },
 											{ class: 'cv-sign-meta', text: '$$role' },
-											{ class: 'cv-sign-meta', text: '$$meta' },
-										],
-									},
-								},
-							},
-						],
-					},
-				},
+											{ class: 'cv-sign-meta', text: '$$meta' }
+										]
+									}
+								}
+							}
+						]
+					}
+				}
 			},
 			{
 				$each: {
 					items: '$footnote',
-					template: { class: 'cv-footnote', text: '$$text' },
-				},
-			},
-		],
-	},
+					template: { class: 'cv-footnote', text: '$$text' }
+				}
+			}
+		]
+	}
 }

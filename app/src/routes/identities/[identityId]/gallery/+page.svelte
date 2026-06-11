@@ -1,79 +1,73 @@
 <script lang="ts">
-	import { goto } from '$app/navigation'
-	import { browser } from '$app/environment'
-	import { page } from '$app/state'
-	import { t } from '$lib/i18n'
-	import { avenDbTable, type AvenDbRow } from '$lib/avendb/api'
-	import { avenDbStore } from '$lib/avendb/store.svelte'
-	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-	import { deviceSession } from '$lib/settings/device-session-store'
-	import GalleryPdfThumb from '$lib/gallery/GalleryPdfThumb.svelte'
-	import {
-		coerceEpochMs,
-		fileTypeLabel,
-		imageDataUrl,
-	} from '$lib/gallery/file-preview'
+import { browser } from '$app/environment'
+import { goto } from '$app/navigation'
+import { page } from '$app/state'
+import { type AvenDbRow, avenDbTable } from '$lib/avendb/api'
+import { avenDbStore } from '$lib/avendb/store.svelte'
+import { coerceEpochMs, fileTypeLabel, imageDataUrl } from '$lib/gallery/file-preview'
+import GalleryPdfThumb from '$lib/gallery/GalleryPdfThumb.svelte'
+import { t } from '$lib/i18n'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+import { deviceSession } from '$lib/settings/device-session-store'
 
-	const identityParam = $derived(String((page.params as { identityId?: string }).identityId ?? ''))
-	const decodedIdentityId = $derived(decodeURIComponent(identityParam))
+const identityParam = $derived(String((page.params as { identityId?: string }).identityId ?? ''))
+const decodedIdentityId = $derived(decodeURIComponent(identityParam))
 
-	const identitiesStore = avenDbStore('safes')
-	const filesStore = avenDbStore('files')
+const identitiesStore = avenDbStore('safes')
+const filesStore = avenDbStore('files')
 
-	function idsMatch(a: string, b: string): boolean {
-		return a.trim().toLowerCase() === b.trim().toLowerCase()
-	}
+function idsMatch(a: string, b: string): boolean {
+	return a.trim().toLowerCase() === b.trim().toLowerCase()
+}
 
-	const identityMeta = $derived(
-		identitiesStore.rows.find((s) => idsMatch(s.owner, decodedIdentityId)),
-	)
-	const sparksResolved = $derived(identitiesStore.loaded)
-	const canonicalSparkId = $derived(identityMeta?.owner ?? decodedIdentityId)
+const identityMeta = $derived(
+	identitiesStore.rows.find((s) => idsMatch(s.owner, decodedIdentityId))
+)
+const sparksResolved = $derived(identitiesStore.loaded)
+const canonicalSparkId = $derived(identityMeta?.owner ?? decodedIdentityId)
 
-	const rows = $derived(
-		[...filesStore.rows]
-			.filter((r) => idsMatch(r.owner, canonicalSparkId))
-			.sort(
-				(a, b) => coerceEpochMs(b.created_at_ms) - coerceEpochMs(a.created_at_ms),
-			),
-	)
+const rows = $derived(
+	[...filesStore.rows]
+		.filter((r) => idsMatch(r.owner, canonicalSparkId))
+		.sort((a, b) => coerceEpochMs(b.created_at_ms) - coerceEpochMs(a.created_at_ms))
+)
 
-	const unlocked = $derived($deviceSession.kind === 'unlocked')
-	const tauri = $derived(browser && isTauriRuntime())
+const unlocked = $derived($deviceSession.kind === 'unlocked')
+const tauri = $derived(browser && isTauriRuntime())
 
-	let brokenIds = $state<Set<string>>(new Set())
+let brokenIds = $state<Set<string>>(new Set())
 
-	function markBroken(id: string): void {
-		brokenIds = new Set(brokenIds).add(id)
-	}
+function markBroken(id: string): void {
+	brokenIds = new Set(brokenIds).add(id)
+}
 
-	let pendingDeleteId = $state<string | null>(null)
-	let deletingId = $state<string | null>(null)
-	let deleteError = $state<string | null>(null)
+let pendingDeleteId = $state<string | null>(null)
+let deletingId = $state<string | null>(null)
+let deleteError = $state<string | null>(null)
 
-	function requestDelete(id: string): void {
-		deleteError = null
-		pendingDeleteId = id
-	}
+function requestDelete(id: string): void {
+	deleteError = null
+	pendingDeleteId = id
+}
 
-	function cancelDelete(): void {
-		if (deletingId) return
+function cancelDelete(): void {
+	if (deletingId) return
+	pendingDeleteId = null
+}
+
+async function confirmDelete(id: string): Promise<void> {
+	if (deletingId) return
+	deletingId = id
+	deleteError = null
+	try {
+		await avenDbTable('files').delete(id)
 		pendingDeleteId = null
+	} catch (e) {
+		deleteError = e instanceof Error ? e.message : String(e)
+	} finally {
+		deletingId = null
 	}
-
-	async function confirmDelete(id: string): Promise<void> {
-		if (deletingId) return
-		deletingId = id
-		deleteError = null
-		try {
-			await avenDbTable('files').delete(id)
-			pendingDeleteId = null
-		} catch (e) {
-			deleteError = e instanceof Error ? e.message : String(e)
-		} finally {
-			deletingId = null
-		}
-	}
+}
 </script>
 
 <svelte:head>
@@ -109,7 +103,9 @@
 		{:else if sparksResolved && !identityMeta && !filesStore.error}
 			<p class="text-muted-foreground text-sm">
 				{t('identities.gallery.notInLedger')}
-				<button type="button" class="underline" onclick={() => goto('/identities')}>{t('identities.gallery.backToSparks')}</button>.
+				<button type="button" class="underline" onclick={() => goto('/identities')}>
+					{t('identities.gallery.backToSparks')}
+				</button>.
 			</p>
 		{/if}
 
@@ -117,7 +113,9 @@
 			{#if !filesStore.loaded && !filesStore.error}
 				<p class="text-muted-foreground text-sm">{t('common.loadingFiles')}</p>
 			{:else if rows.length === 0}
-				<p class="text-muted-foreground rounded-xl border border-border/60 px-4 py-8 text-center text-sm">
+				<p
+					class="text-muted-foreground rounded-xl border border-border/60 px-4 py-8 text-center text-sm"
+				>
 					{t('identities.gallery.noFilesYet')}
 				</p>
 			{:else}
@@ -194,13 +192,13 @@
 									{@const src = imageDataUrl(row)}
 									{#if src && !brokenIds.has(row.id)}
 										<img
-											src={src}
+											{src}
 											alt=""
 											class="h-full w-full object-cover"
 											loading="lazy"
 											decoding="async"
 											onerror={() => markBroken(row.id)}
-										/>
+										>
 									{:else}
 										<div
 											class="text-muted-foreground flex h-full w-full items-center justify-center p-4 text-center"

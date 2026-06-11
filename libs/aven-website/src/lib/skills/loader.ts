@@ -77,6 +77,7 @@ export function publisherIdentity(
 	lang: SupportedLang = 'de'
 ): PublisherIdentityJson {
 	const list = publisherIdentities(lang)
+	// biome-ignore lint/style/noNonNullAssertion: the en registry is the static, complete fallback — every id resolvable by construction.
 	return list.find((p) => p.id === id) ?? publisherRegistry.en.find((p) => p.id === id)!
 }
 

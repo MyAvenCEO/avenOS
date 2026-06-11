@@ -89,8 +89,26 @@
 	],
 	"signature_note": "Dieses Dokument ist eine technische Vorschau zu Demonstrationszwecken und ersetzt keine Rechtsberatung.",
 	"signatures": [
-		{ "party_index": 0, "signer_name": "Dr. Elena Vogt", "signer_role": "Geschäftsführerin", "place": "Berlin", "date": "2026-04-28" },
-		{ "party_index": 1, "signer_name": "Dr. Jonas Klein", "signer_role": "Vorstand", "place": "Hamburg", "date": "2026-04-28" },
-		{ "party_index": 2, "signer_name": "— (Kenntnisnahme)", "signer_role": "Institutsbevollmächtigte", "place": "Berlin", "date": "2026-04-28" }
+		{
+			"party_index": 0,
+			"signer_name": "Dr. Elena Vogt",
+			"signer_role": "Geschäftsführerin",
+			"place": "Berlin",
+			"date": "2026-04-28"
+		},
+		{
+			"party_index": 1,
+			"signer_name": "Dr. Jonas Klein",
+			"signer_role": "Vorstand",
+			"place": "Hamburg",
+			"date": "2026-04-28"
+		},
+		{
+			"party_index": 2,
+			"signer_name": "— (Kenntnisnahme)",
+			"signer_role": "Institutsbevollmächtigte",
+			"place": "Berlin",
+			"date": "2026-04-28"
+		}
 	]
 }

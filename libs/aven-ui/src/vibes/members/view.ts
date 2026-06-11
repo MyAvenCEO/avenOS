@@ -21,15 +21,15 @@ export const membersView: ViewDef = {
 							{
 								$each: {
 									items: '$accessLevels',
-									template: { tag: 'span', class: '$$pillClass', text: '$$label' },
-								},
-							},
-						],
+									template: { tag: 'span', class: '$$pillClass', text: '$$label' }
+								}
+							}
+						]
 					},
 					{ class: 'mb-hint', text: '$hint' },
 					{ tag: 'button', class: 'btn mb-grant', attrs: { type: 'button' }, text: '$grantLabel' },
-					{ class: 'mb-note', text: '$note' },
-				],
+					{ class: 'mb-note', text: '$note' }
+				]
 			},
 
 			// Who has access
@@ -47,8 +47,8 @@ export const membersView: ViewDef = {
 										class: 'mb-entry-head',
 										children: [
 											{ class: 'eyebrow mb-kind', text: '$$kind' },
-											{ tag: 'span', class: 'mb-name', text: '$$name' },
-										],
+											{ tag: 'span', class: 'mb-name', text: '$$name' }
+										]
 									},
 									{ class: 'mb-did', text: '$$did' },
 									{
@@ -57,17 +57,17 @@ export const membersView: ViewDef = {
 											{
 												$each: {
 													items: '$$perms',
-													template: { tag: 'span', class: '$$chipClass', text: '$$label' },
-												},
-											},
-										],
-									},
-								],
-							},
-						},
-					},
-				],
-			},
-		],
-	},
+													template: { tag: 'span', class: '$$chipClass', text: '$$label' }
+												}
+											}
+										]
+									}
+								]
+							}
+						}
+					}
+				]
+			}
+		]
+	}
 }

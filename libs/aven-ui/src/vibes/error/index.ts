@@ -10,14 +10,14 @@ export const errorShell: UiFixtureShell = {
 	style: errorStyle,
 	source: errorSource as Record<string, unknown>,
 	interface: errorInterface,
-	logic: errorLogic,
+	logic: errorLogic
 }
 
 export function createErrorShell(): UiFixtureShell {
 	return errorShell
 }
 
-export { errorLogic }
-export { errorView } from './view.js'
-export { errorStyle } from './style.js'
 export { default as errorSource } from './source.json'
+export { errorStyle } from './style.js'
+export { errorView } from './view.js'
+export { errorLogic }

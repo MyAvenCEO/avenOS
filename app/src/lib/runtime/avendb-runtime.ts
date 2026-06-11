@@ -1,11 +1,11 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { get, writable } from 'svelte/store'
 import { browser } from '$app/environment'
-import { writable, get } from 'svelte/store'
-import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import type { PeerMeshStatusReply } from '$lib/peer/mesh-state'
+import { avenDbRuntime } from '$lib/runtime/avendb-ipc'
 import { applyRuntimeSession } from '$lib/runtime/avendb-shell'
 import { getTableRowsStore } from '$lib/runtime/table-stores'
-import { avenDbRuntime } from '$lib/runtime/avendb-ipc'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 
 export { avenDbRuntime } from '$lib/runtime/avendb-ipc'
 
@@ -74,7 +74,11 @@ export function attachAvenosRuntimeBridge(): () => void {
 		if (p.kind === 'mesh' && p.snapshot && typeof p.snapshot === 'object') {
 			peerMeshSnapshot.set(p.snapshot as PeerMeshStatusReply)
 		}
-		if (p.kind === 'table' && typeof p.table === 'string' && Array.isArray((p as { rows?: unknown }).rows)) {
+		if (
+			p.kind === 'table' &&
+			typeof p.table === 'string' &&
+			Array.isArray((p as { rows?: unknown }).rows)
+		) {
 			const pl = p as { table: string; rows: unknown[] }
 			getTableRowsStore(pl.table).set(pl.rows)
 		}
@@ -83,7 +87,7 @@ export function attachAvenosRuntimeBridge(): () => void {
 	return () => {
 		if (gen !== bridgeGeneration) return
 		bridgeGeneration += 1
-		unsubs.forEach((u) => u())
+		for (const u of unsubs) u()
 	}
 }
 

@@ -2,15 +2,14 @@
 import { browser } from '$app/environment'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
+import { startAsrReadiness } from '$lib/asr/model-download-store'
+import { avenCeoMembership } from '$lib/avendb/api'
+import { avenDbStore } from '$lib/avendb/store.svelte'
 import { installConsoleCapture } from '$lib/debug/console-capture'
 import { initLocale, normalizeLocale, setLocale, t } from '$lib/i18n'
 import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
 import { startPeerMeshStore } from '$lib/peer/peer-mesh-store'
 import { attachAvenosRuntimeBridge, avendbSessionReady } from '$lib/runtime/avendb-runtime'
-import { avenCeoMembership } from '$lib/avendb/api'
-import { avenDbStore } from '$lib/avendb/store.svelte'
-import NetworkGate from '$lib/shell/NetworkGate.svelte'
-import HumanSafeGate from '$lib/shell/HumanSafeGate.svelte'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { displayTitleForSession } from '$lib/settings/active-vault-ui'
 import { attachSelfRustEventMirrors, deviceSession } from '$lib/settings/device-session-store'
@@ -18,8 +17,9 @@ import LockGate from '$lib/settings/LockGate.svelte'
 import { type VaultListEntry, vaultCardTitle, vaultList } from '$lib/settings/vault'
 import { vaultUiSettingsGet } from '$lib/settings/vault-ui-settings'
 import { navigateApp } from '$lib/shell'
+import HumanSafeGate from '$lib/shell/HumanSafeGate.svelte'
 import MobileShellNav from '$lib/shell/MobileShellNav.svelte'
-import { startAsrReadiness } from '$lib/asr/model-download-store'
+import NetworkGate from '$lib/shell/NetworkGate.svelte'
 import '../app.css'
 
 if (browser) installConsoleCapture()
@@ -273,110 +273,110 @@ $effect(() => {
 		{:else if appAccessState === 'gate'}
 			<NetworkGate />
 		{:else}
-		<header
-			class="shrink-0 bg-background/90 px-3 pt-[max(0.375rem,env(safe-area-inset-top))] pb-1 backdrop-blur-sm sm:px-6 sm:pt-3 sm:pb-2"
-		>
-			<div
-				class="mx-auto grid w-full max-w-[min(100%,88rem)] grid-cols-1 items-center gap-x-2 gap-y-2 sm:grid-cols-3"
+			<header
+				class="shrink-0 bg-background/90 px-3 pt-[max(0.375rem,env(safe-area-inset-top))] pb-1 backdrop-blur-sm sm:px-6 sm:pt-3 sm:pb-2"
 			>
 				<div
-					class="flex min-w-0 items-center justify-start justify-self-start sm:justify-self-start"
-				></div>
-
-				<nav
-					class="hidden flex-wrap items-center justify-center justify-self-center gap-x-2 gap-y-1 text-[10px] font-bold tracking-wider uppercase sm:flex"
-					aria-label={t('nav.appSections')}
+					class="mx-auto grid w-full max-w-[min(100%,88rem)] grid-cols-1 items-center gap-x-2 gap-y-2 sm:grid-cols-3"
 				>
-					<a
-						href="/"
-						data-sveltekit-preload-data="hover"
-						class="transition-opacity hover:opacity-80 {intentsActive ? 'opacity-95' : 'opacity-40'}"
-						aria-current={intentsActive ? 'page' : undefined}
-						onclick={(e) => navigateApp('/', e)}
-						>{t('nav.intents')}</a
-					>
-					<span class="select-none opacity-25" aria-hidden="true">|</span>
-					<a
-						href="/sandbox"
-						data-sveltekit-preload-data="hover"
-						class="transition-opacity hover:opacity-80 {sandboxActive ? 'opacity-95' : 'opacity-40'}"
-						aria-current={sandboxActive ? 'page' : undefined}
-						onclick={(e) => navigateApp('/sandbox', e)}
-						>{t('nav.sandbox')}</a
-					>
-					<span class="select-none opacity-25" aria-hidden="true">|</span>
-					<a
-						href="/identities"
-						data-sveltekit-preload-data="hover"
-						class="transition-opacity hover:opacity-80 {sparksNavActive ? 'opacity-95' : 'opacity-40'}"
-						aria-current={sparksNavActive ? 'page' : undefined}
-						onclick={(e) => navigateApp('/identities', e)}
-						>{t('nav.identities')}</a
-					>
-					<span class="select-none opacity-25" aria-hidden="true">|</span>
-					<a
-						href="/avens"
-						data-sveltekit-preload-data="hover"
-						class="transition-opacity hover:opacity-80 {avensActive ? 'opacity-95' : 'opacity-40'}"
-						aria-current={avensActive ? 'page' : undefined}
-						onclick={(e) => navigateApp('/avens', e)}
-						>{t('nav.avens')}</a
-					>
-				</nav>
-
-				<nav
-					class="hidden min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 justify-self-end text-[10px] font-bold tracking-wider uppercase sm:flex"
-					aria-label={t('nav.deviceIdentity')}
-				>
-					<a
-						href="/settings/identity"
-						data-sveltekit-preload-data="hover"
-						class="normal-case max-w-[8rem] truncate text-[11px] font-semibold tracking-normal transition-opacity hover:opacity-80 sm:max-w-[10rem] {selfActive ? 'opacity-95' : 'opacity-40'}"
-						aria-current={selfActive ? 'page' : undefined}
-						title={selfNavLabel}
-						onclick={(e) => navigateApp('/settings/identity', e)}
-						>{selfNavLabel}</a
-					>
-				</nav>
-			</div>
-		</header>
-		{#if dragActive}
-			<div
-				class="pointer-events-auto fixed inset-0 z-[100] flex touch-none items-center justify-center bg-background/95 backdrop-blur-md"
-				role="region"
-				aria-label={t('intents.fileDrop.region')}
-			>
-				<div class="mx-6 w-full max-w-md">
 					<div
-						class="rounded-[var(--radius-lg)] border-[3px] border-dashed border-primary/50 bg-card/96 p-[10px] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-primary)_14%,transparent)] ring-2 ring-primary/20 ring-offset-[8px] ring-offset-background backdrop-blur-sm"
+						class="flex min-w-0 items-center justify-start justify-self-start sm:justify-self-start"
+					></div>
+
+					<nav
+						class="hidden flex-wrap items-center justify-center justify-self-center gap-x-2 gap-y-1 text-[10px] font-bold tracking-wider uppercase sm:flex"
+						aria-label={t('nav.appSections')}
 					>
-						<div
-							class="rounded-[calc(var(--radius-lg)-8px)] border border-dotted border-primary/40 bg-muted/40 px-7 py-9 text-center"
+						<a
+							href="/"
+							data-sveltekit-preload-data="hover"
+							class="transition-opacity hover:opacity-80 {intentsActive ? 'opacity-95' : 'opacity-40'}"
+							aria-current={intentsActive ? 'page' : undefined}
+							onclick={(e) => navigateApp('/', e)}
+							>{t('nav.intents')}</a
 						>
-							<p class="text-xl font-semibold tracking-tight text-primary md:text-[1.3rem]">
-								{t('intents.fileDrop.title')}
-							</p>
-							<p class="mt-2.5 px-1 text-[12px] leading-relaxed opacity-85">
-								{t('intents.fileDrop.subtitle')}
-							</p>
-							<p class="mt-1.5 px-1 text-[11px] leading-relaxed opacity-55">
-								{t('intents.fileDrop.hint')}
-							</p>
+						<span class="select-none opacity-25" aria-hidden="true">|</span>
+						<a
+							href="/sandbox"
+							data-sveltekit-preload-data="hover"
+							class="transition-opacity hover:opacity-80 {sandboxActive ? 'opacity-95' : 'opacity-40'}"
+							aria-current={sandboxActive ? 'page' : undefined}
+							onclick={(e) => navigateApp('/sandbox', e)}
+							>{t('nav.sandbox')}</a
+						>
+						<span class="select-none opacity-25" aria-hidden="true">|</span>
+						<a
+							href="/identities"
+							data-sveltekit-preload-data="hover"
+							class="transition-opacity hover:opacity-80 {sparksNavActive ? 'opacity-95' : 'opacity-40'}"
+							aria-current={sparksNavActive ? 'page' : undefined}
+							onclick={(e) => navigateApp('/identities', e)}
+							>{t('nav.identities')}</a
+						>
+						<span class="select-none opacity-25" aria-hidden="true">|</span>
+						<a
+							href="/avens"
+							data-sveltekit-preload-data="hover"
+							class="transition-opacity hover:opacity-80 {avensActive ? 'opacity-95' : 'opacity-40'}"
+							aria-current={avensActive ? 'page' : undefined}
+							onclick={(e) => navigateApp('/avens', e)}
+							>{t('nav.avens')}</a
+						>
+					</nav>
+
+					<nav
+						class="hidden min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 justify-self-end text-[10px] font-bold tracking-wider uppercase sm:flex"
+						aria-label={t('nav.deviceIdentity')}
+					>
+						<a
+							href="/settings/identity"
+							data-sveltekit-preload-data="hover"
+							class="normal-case max-w-[8rem] truncate text-[11px] font-semibold tracking-normal transition-opacity hover:opacity-80 sm:max-w-[10rem] {selfActive ? 'opacity-95' : 'opacity-40'}"
+							aria-current={selfActive ? 'page' : undefined}
+							title={selfNavLabel}
+							onclick={(e) => navigateApp('/settings/identity', e)}
+							>{selfNavLabel}</a
+						>
+					</nav>
+				</div>
+			</header>
+			{#if dragActive}
+				<div
+					class="pointer-events-auto fixed inset-0 z-[100] flex touch-none items-center justify-center bg-background/95 backdrop-blur-md"
+					role="region"
+					aria-label={t('intents.fileDrop.region')}
+				>
+					<div class="mx-6 w-full max-w-md">
+						<div
+							class="rounded-[var(--radius-lg)] border-[3px] border-dashed border-primary/50 bg-card/96 p-[10px] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-primary)_14%,transparent)] ring-2 ring-primary/20 ring-offset-[8px] ring-offset-background backdrop-blur-sm"
+						>
+							<div
+								class="rounded-[calc(var(--radius-lg)-8px)] border border-dotted border-primary/40 bg-muted/40 px-7 py-9 text-center"
+							>
+								<p class="text-xl font-semibold tracking-tight text-primary md:text-[1.3rem]">
+									{t('intents.fileDrop.title')}
+								</p>
+								<p class="mt-2.5 px-1 text-[12px] leading-relaxed opacity-85">
+									{t('intents.fileDrop.subtitle')}
+								</p>
+								<p class="mt-1.5 px-1 text-[11px] leading-relaxed opacity-55">
+									{t('intents.fileDrop.hint')}
+								</p>
+							</div>
 						</div>
 					</div>
 				</div>
+			{/if}
+			<div
+				class={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden${dragActive ? ' pointer-events-none select-none saturate-75 contrast-[0.85] brightness-90 blur-[3px]' : ''}`}
+				aria-hidden={dragActive ? true : undefined}
+			>
+				{#key routeKey}
+					{@render pageContent()}
+				{/key}
 			</div>
-		{/if}
-		<div
-			class={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden${dragActive ? ' pointer-events-none select-none saturate-75 contrast-[0.85] brightness-90 blur-[3px]' : ''}`}
-			aria-hidden={dragActive ? true : undefined}
-		>
-			{#key routeKey}
-				{@render pageContent()}
-			{/key}
-		</div>
 
-		<MobileShellNav {selfNavLabel} {selfActive} />
+			<MobileShellNav {selfNavLabel} {selfActive} />
 		{/if}
 	{/if}
 </div>

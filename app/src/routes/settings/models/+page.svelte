@@ -1,183 +1,183 @@
 <script lang="ts">
-	import { browser } from '$app/environment'
-	import { t } from '$lib/i18n'
-	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-	import {
-		asrState,
-		cancelDownload,
-		deleteModel,
-		downloadFraction,
-		listLocalModels,
-		startDownload,
-		type LocalModel,
-	} from '$lib/asr/model-download-store'
-	import { formatBytes, formatBytesPair } from '$lib/asr/format'
-	import {
-		cancelLlmDownload,
-		deleteLlmModel,
-		listLocalLlmModels,
-		llmDownloadFraction,
-		llmState,
-		startLlmDownload,
-		startLlmReadiness,
-		type LocalModel as LlmLocalModel,
-	} from '$lib/llm/model-download-store'
-	import {
-		cancelTtsDownload,
-		deleteTtsModel,
-		listLocalTtsModels,
-		startTtsDownload,
-		startTtsReadiness,
-		ttsDownloadFraction,
-		ttsState,
-		type LocalModel as TtsLocalModel,
-	} from '$lib/tts/model-download-store'
-	import { onMount } from 'svelte'
+import { onMount } from 'svelte'
+import { browser } from '$app/environment'
+import { formatBytes, formatBytesPair } from '$lib/asr/format'
+import {
+	asrState,
+	cancelDownload,
+	deleteModel,
+	downloadFraction,
+	type LocalModel,
+	listLocalModels,
+	startDownload
+} from '$lib/asr/model-download-store'
+import { t } from '$lib/i18n'
+import {
+	cancelLlmDownload,
+	deleteLlmModel,
+	type LocalModel as LlmLocalModel,
+	listLocalLlmModels,
+	llmDownloadFraction,
+	llmState,
+	startLlmDownload,
+	startLlmReadiness
+} from '$lib/llm/model-download-store'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+import {
+	cancelTtsDownload,
+	deleteTtsModel,
+	listLocalTtsModels,
+	startTtsDownload,
+	startTtsReadiness,
+	type LocalModel as TtsLocalModel,
+	ttsDownloadFraction,
+	ttsState
+} from '$lib/tts/model-download-store'
 
-	const tauri = $derived(browser && isTauriRuntime())
-	let local = $state<LocalModel[]>([])
-	let busyId = $state<string | null>(null)
+const tauri = $derived(browser && isTauriRuntime())
+let local = $state<LocalModel[]>([])
+let busyId = $state<string | null>(null)
 
-	// On-device LLM (LFM2.5) — separate model managed alongside the voice model.
-	let llmLocal = $state<LlmLocalModel[]>([])
-	let llmBusyId = $state<string | null>(null)
+// On-device LLM (LFM2.5) — separate model managed alongside the voice model.
+let llmLocal = $state<LlmLocalModel[]>([])
+let llmBusyId = $state<string | null>(null)
 
-	// On-device TTS (MOSS-TTS-Nano) — separate model, manual download here.
-	let ttsLocal = $state<TtsLocalModel[]>([])
-	let ttsBusyId = $state<string | null>(null)
+// On-device TTS (MOSS-TTS-Nano) — separate model, manual download here.
+let ttsLocal = $state<TtsLocalModel[]>([])
+let ttsBusyId = $state<string | null>(null)
 
-	onMount(() => {
-		let unlistenLlm: (() => void) | undefined
-		let unlistenTts: (() => void) | undefined
-		void startLlmReadiness().then((u) => (unlistenLlm = u))
-		void startTtsReadiness().then((u) => (unlistenTts = u))
-		return () => {
-			unlistenLlm?.()
-			unlistenTts?.()
-		}
-	})
+onMount(() => {
+	let unlistenLlm: (() => void) | undefined
+	let unlistenTts: (() => void) | undefined
+	void startLlmReadiness().then((u) => (unlistenLlm = u))
+	void startTtsReadiness().then((u) => (unlistenTts = u))
+	return () => {
+		unlistenLlm?.()
+		unlistenTts?.()
+	}
+})
 
-	async function onTtsStop() {
-		await cancelTtsDownload()
+async function onTtsStop() {
+	await cancelTtsDownload()
+	ttsLocal = await listLocalTtsModels()
+}
+async function onTtsStart() {
+	await startTtsDownload()
+}
+async function onTtsDelete(id: string) {
+	ttsBusyId = id
+	try {
+		await deleteTtsModel(id)
 		ttsLocal = await listLocalTtsModels()
+	} finally {
+		ttsBusyId = null
 	}
-	async function onTtsStart() {
-		await startTtsDownload()
-	}
-	async function onTtsDelete(id: string) {
-		ttsBusyId = id
-		try {
-			await deleteTtsModel(id)
-			ttsLocal = await listLocalTtsModels()
-		} finally {
-			ttsBusyId = null
-		}
-	}
+}
 
-	async function onLlmStop() {
-		await cancelLlmDownload()
+async function onLlmStop() {
+	await cancelLlmDownload()
+	llmLocal = await listLocalLlmModels()
+}
+async function onLlmStart() {
+	await startLlmDownload()
+}
+async function onLlmDelete(id: string) {
+	llmBusyId = id
+	try {
+		await deleteLlmModel(id)
 		llmLocal = await listLocalLlmModels()
+	} finally {
+		llmBusyId = null
 	}
-	async function onLlmStart() {
-		await startLlmDownload()
-	}
-	async function onLlmDelete(id: string) {
-		llmBusyId = id
-		try {
-			await deleteLlmModel(id)
-			llmLocal = await listLocalLlmModels()
-		} finally {
-			llmBusyId = null
-		}
-	}
+}
 
-	// Parakeet is a speech-to-text model (audio in → text out). AvenOS uses it for
-	// voice-note transcription.
-	const MODALITIES = ['audio', 'text'] as const
+// Parakeet is a speech-to-text model (audio in → text out). AvenOS uses it for
+// voice-note transcription.
+const MODALITIES = ['audio', 'text'] as const
 
-	async function refreshLocal() {
-		if (!tauri) return
-		local = await listLocalModels()
-	}
+async function refreshLocal() {
+	if (!tauri) return
+	local = await listLocalModels()
+}
 
-	async function onStop() {
-		await cancelDownload()
+async function onStop() {
+	await cancelDownload()
+	await refreshLocal()
+}
+
+async function onStart() {
+	await startDownload()
+}
+
+async function onDelete(id: string) {
+	busyId = id
+	try {
+		await deleteModel(id)
 		await refreshLocal()
+	} finally {
+		busyId = null
 	}
+}
 
-	async function onStart() {
-		await startDownload()
+// Re-scan the on-disk listing whenever readiness flips (e.g. a download
+// finishes), so freshly fetched weights show up without a manual refresh.
+$effect(() => {
+	if (!tauri) {
+		local = []
+		return
 	}
-
-	async function onDelete(id: string) {
-		busyId = id
-		try {
-			await deleteModel(id)
-			await refreshLocal()
-		} finally {
-			busyId = null
-		}
+	void $asrState.status
+	let cancelled = false
+	void listLocalModels().then((m) => {
+		if (!cancelled) local = m
+	})
+	return () => {
+		cancelled = true
 	}
+})
 
-	// Re-scan the on-disk listing whenever readiness flips (e.g. a download
-	// finishes), so freshly fetched weights show up without a manual refresh.
-	$effect(() => {
-		if (!tauri) {
-			local = []
-			return
-		}
-		void $asrState.status
-		let cancelled = false
-		void listLocalModels().then((m) => {
-			if (!cancelled) local = m
-		})
-		return () => {
-			cancelled = true
-		}
+const activeOnDisk = $derived(local.find((m) => m.isActive))
+const others = $derived(local.filter((m) => !m.isActive))
+const fraction = $derived(downloadFraction($asrState))
+const statusKey = $derived($asrState.status)
+
+// Re-scan the LLM listing whenever its readiness flips.
+$effect(() => {
+	if (!tauri) {
+		llmLocal = []
+		return
+	}
+	void $llmState.status
+	let cancelled = false
+	void listLocalLlmModels().then((m) => {
+		if (!cancelled) llmLocal = m
 	})
+	return () => {
+		cancelled = true
+	}
+})
+const llmActiveOnDisk = $derived(llmLocal.find((m) => m.isActive))
+const llmFraction = $derived(llmDownloadFraction($llmState))
+const llmStatusKey = $derived($llmState.status)
 
-	const activeOnDisk = $derived(local.find((m) => m.isActive))
-	const others = $derived(local.filter((m) => !m.isActive))
-	const fraction = $derived(downloadFraction($asrState))
-	const statusKey = $derived($asrState.status)
-
-	// Re-scan the LLM listing whenever its readiness flips.
-	$effect(() => {
-		if (!tauri) {
-			llmLocal = []
-			return
-		}
-		void $llmState.status
-		let cancelled = false
-		void listLocalLlmModels().then((m) => {
-			if (!cancelled) llmLocal = m
-		})
-		return () => {
-			cancelled = true
-		}
+// Re-scan the TTS listing whenever its readiness flips.
+$effect(() => {
+	if (!tauri) {
+		ttsLocal = []
+		return
+	}
+	void $ttsState.status
+	let cancelled = false
+	void listLocalTtsModels().then((m) => {
+		if (!cancelled) ttsLocal = m
 	})
-	const llmActiveOnDisk = $derived(llmLocal.find((m) => m.isActive))
-	const llmFraction = $derived(llmDownloadFraction($llmState))
-	const llmStatusKey = $derived($llmState.status)
-
-	// Re-scan the TTS listing whenever its readiness flips.
-	$effect(() => {
-		if (!tauri) {
-			ttsLocal = []
-			return
-		}
-		void $ttsState.status
-		let cancelled = false
-		void listLocalTtsModels().then((m) => {
-			if (!cancelled) ttsLocal = m
-		})
-		return () => {
-			cancelled = true
-		}
-	})
-	const ttsActiveOnDisk = $derived(ttsLocal.find((m) => m.isActive))
-	const ttsFraction = $derived(ttsDownloadFraction($ttsState))
-	const ttsStatusKey = $derived($ttsState.status)
+	return () => {
+		cancelled = true
+	}
+})
+const ttsActiveOnDisk = $derived(ttsLocal.find((m) => m.isActive))
+const ttsFraction = $derived(ttsDownloadFraction($ttsState))
+const ttsStatusKey = $derived($ttsState.status)
 </script>
 
 <svelte:head>
@@ -284,7 +284,9 @@
 				<p class="text-status-error select-text text-[11px] leading-snug">{$asrState.error}</p>
 			{/if}
 			{#if statusKey === 'unavailable'}
-				<p class="text-muted-foreground text-[11px] leading-snug">{t('models.secondaryInstance')}</p>
+				<p class="text-muted-foreground text-[11px] leading-snug">
+					{t('models.secondaryInstance')}
+				</p>
 			{/if}
 		</section>
 
@@ -377,7 +379,9 @@
 				<p class="text-status-error select-text text-[11px] leading-snug">{$llmState.error}</p>
 			{/if}
 			{#if llmStatusKey === 'unavailable'}
-				<p class="text-muted-foreground text-[11px] leading-snug">{t('models.secondaryInstance')}</p>
+				<p class="text-muted-foreground text-[11px] leading-snug">
+					{t('models.secondaryInstance')}
+				</p>
 			{/if}
 		</section>
 
@@ -472,7 +476,9 @@
 				<p class="text-status-error select-text text-[11px] leading-snug">{$ttsState.error}</p>
 			{/if}
 			{#if ttsStatusKey === 'unavailable'}
-				<p class="text-muted-foreground text-[11px] leading-snug">{t('models.secondaryInstance')}</p>
+				<p class="text-muted-foreground text-[11px] leading-snug">
+					{t('models.secondaryInstance')}
+				</p>
 			{/if}
 		</section>
 
@@ -482,12 +488,16 @@
 				<h2 class="text-[11px] font-semibold uppercase tracking-wider opacity-70">
 					{t('models.title')}
 				</h2>
-				<ul class="divide-border/60 overflow-hidden rounded-xl border border-border/60 bg-card/30 divide-y">
+				<ul
+					class="divide-border/60 overflow-hidden rounded-xl border border-border/60 bg-card/30 divide-y"
+				>
 					{#each others as m (m.id)}
 						<li class="flex items-center justify-between gap-3 px-4 py-3">
 							<span class="truncate font-mono text-[12px] select-text">{m.id}</span>
 							<div class="flex shrink-0 items-center gap-3">
-								<span class="text-muted-foreground font-mono text-[11px]">{formatBytes(m.sizeBytes)}</span>
+								<span class="text-muted-foreground font-mono text-[11px]"
+									>{formatBytes(m.sizeBytes)}</span
+								>
 								<button
 									type="button"
 									class="rounded-full border border-status-error/40 px-2.5 py-1 text-[11px] font-medium text-status-error outline-none transition-colors hover:bg-status-error/10 focus-visible:ring-2 focus-visible:ring-status-error/30 disabled:opacity-40"

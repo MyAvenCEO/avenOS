@@ -1,5 +1,5 @@
-import type { AvenUiEngineOptions, UiBundle, UiEvent } from './types.js'
 import { StateStore } from './state-store.js'
+import type { AvenUiEngineOptions, UiBundle, UiEvent } from './types.js'
 import { ViewEngine } from './view-engine.js'
 
 export class AvenUiEngine {
@@ -25,13 +25,13 @@ export class AvenUiEngine {
 		this.viewEngine.configure({
 			onEvent: this.onEvent,
 			slots: bundle.slots,
-			containerName: this.containerName,
+			containerName: this.containerName
 		})
 		this.shadowRoot = await this.viewEngine.mount(
 			this.container,
 			bundle.view,
 			bundle.state,
-			bundle.style,
+			bundle.style
 		)
 		this.unsubState = this.stateStore.subscribe((state) => {
 			void this.rerender(state)
@@ -66,12 +66,26 @@ export class AvenUiEngine {
 
 	private async rerender(state: Record<string, unknown>): Promise<void> {
 		if (!this.bundle || !this.shadowRoot) return
-		await this.viewEngine.render(this.bundle.view, state, this.shadowRoot, this.shadowRoot.adoptedStyleSheets)
+		await this.viewEngine.render(
+			this.bundle.view,
+			state,
+			this.shadowRoot,
+			this.shadowRoot.adoptedStyleSheets
+		)
 	}
 }
 
-export { AvenUiEngine as default }
-export type { UiBundle, UiEvent, ViewDef, StyleDef, ViewNode, SlotRegistry, UiFixtureShell, InterfaceDef } from './types.js'
-export { validateViewDef } from './view-validator.js'
-export { validateStyleDef } from './style-validator.js'
 export { StateStore } from './state-store.js'
+export { validateStyleDef } from './style-validator.js'
+export type {
+	InterfaceDef,
+	SlotRegistry,
+	StyleDef,
+	UiBundle,
+	UiEvent,
+	UiFixtureShell,
+	ViewDef,
+	ViewNode
+} from './types.js'
+export { validateViewDef } from './view-validator.js'
+export { AvenUiEngine as default }

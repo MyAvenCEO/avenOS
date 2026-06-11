@@ -19,11 +19,10 @@ function sleepMs(ms: number): void {
 
 function listenersPid(port: number): string[] {
 	try {
-		const out = execFileSync(
-			'lsof',
-			['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'],
-			{ encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
-		).trim()
+		const out = execFileSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'], {
+			encoding: 'utf8',
+			stdio: ['ignore', 'pipe', 'ignore']
+		}).trim()
 		if (!out) return []
 		return [...new Set(out.split(/\s+/).filter(Boolean))]
 	} catch {

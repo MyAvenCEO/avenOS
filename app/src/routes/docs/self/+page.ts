@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit'
-import type { PageLoad } from './$types'
 import { firstFounderSlug } from '$lib/docs/self-collection'
+import type { PageLoad } from './$types'
 
 export const ssr = false
 export const prerender = false

@@ -73,8 +73,8 @@ export function spawnAvenServer(env: Record<string, string> = {}): ChildProcess 
 		},
 		stdio: ['ignore', 'pipe', 'pipe']
 	})
-	child.stdout?.on('data', (d: Buffer) => process.stdout.write(prefixLines(d) + '\n'))
-	child.stderr?.on('data', (d: Buffer) => process.stderr.write(prefixLines(d) + '\n'))
+	child.stdout?.on('data', (d: Buffer) => process.stdout.write(`${prefixLines(d)}\n`))
+	child.stderr?.on('data', (d: Buffer) => process.stderr.write(`${prefixLines(d)}\n`))
 	child.on('exit', (code) =>
 		console.log(`${BOLD}${GREEN}[S]${RESET} relay exited (code ${code ?? 'signal'})`)
 	)

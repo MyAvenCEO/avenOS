@@ -37,7 +37,7 @@ export const initialTtsState: TtsState = {
 	model: TTS_MODEL_LABEL,
 	quant: '',
 	receivedBytes: 0,
-	totalBytes: 0,
+	totalBytes: 0
 }
 
 /** Pure: fold one backend event/reply into the next state. */
@@ -47,7 +47,7 @@ export function reduceTtsEvent(state: TtsState, ev: TtsEvent): TtsState {
 		model: ev.model ?? state.model,
 		quant: ev.quant ?? state.quant,
 		receivedBytes: ev.receivedBytes ?? state.receivedBytes,
-		totalBytes: ev.totalBytes ?? state.totalBytes,
+		totalBytes: ev.totalBytes ?? state.totalBytes
 	}
 	if (ev.status) next.status = ev.status
 	next.error = ev.status === 'error' ? (ev.error ?? state.error ?? 'download failed') : undefined
@@ -81,7 +81,7 @@ export async function startTtsReadiness(): Promise<Unsubscriber> {
 	if (!isTauri()) return () => {}
 	const [{ invoke }, { listen }] = await Promise.all([
 		import('@tauri-apps/api/core'),
-		import('@tauri-apps/api/event'),
+		import('@tauri-apps/api/event')
 	])
 	try {
 		const reply = await invoke<TtsEvent>(TTS_STATUS_COMMAND)

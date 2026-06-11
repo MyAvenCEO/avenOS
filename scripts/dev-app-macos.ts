@@ -5,9 +5,9 @@
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { freeDevServerPort } from './free-dev-server-port.ts'
-import { ensureOnnxruntimeDylib } from './fetch-onnxruntime.ts'
 import { startSyncRelay } from './aven-server.ts'
+import { ensureOnnxruntimeDylib } from './fetch-onnxruntime.ts'
+import { freeDevServerPort } from './free-dev-server-port.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -27,7 +27,9 @@ async function main() {
 	try {
 		ortDylib = ensureOnnxruntimeDylib()
 	} catch (e) {
-		console.warn(`[dev:app:macos] onnxruntime provisioning skipped: ${e instanceof Error ? e.message : e}`)
+		console.warn(
+			`[dev:app:macos] onnxruntime provisioning skipped: ${e instanceof Error ? e.message : e}`
+		)
 	}
 
 	console.log(

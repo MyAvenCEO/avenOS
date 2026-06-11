@@ -1,10 +1,10 @@
-import { browser } from '$app/environment'
 import { derived, get } from 'svelte/store'
-import { deviceSession } from '$lib/settings/device-session-store'
-import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+import { browser } from '$app/environment'
 import type { PeerRowReply } from '$lib/peer/api'
 import type { PeerMeshPeerState } from '$lib/peer/mesh-state'
 import { avendbSessionReady, peerMeshSnapshot, peerMeshStatus } from '$lib/runtime/avendb-runtime'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+import { deviceSession } from '$lib/settings/device-session-store'
 
 export { peerMeshSnapshot } from '$lib/runtime/avendb-runtime'
 
@@ -15,13 +15,13 @@ function meshPeerToRow(p: PeerMeshPeerState): PeerRowReply {
 		deviceLabel: p.deviceLabel,
 		kind: 'remote',
 		addedAtMs: p.addedAtMs,
-		status: p.dbStatus,
+		status: p.dbStatus
 	}
 }
 
 /** Trusted remote peers — derived from the live mesh snapshot. */
 export const peerRows = derived(peerMeshSnapshot, ($mesh) =>
-	($mesh?.peers ?? []).map(meshPeerToRow),
+	($mesh?.peers ?? []).map(meshPeerToRow)
 )
 
 let storeGeneration = 0

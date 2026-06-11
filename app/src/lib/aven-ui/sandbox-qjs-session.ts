@@ -1,6 +1,6 @@
+import type { InterfaceDef, StyleDef, UiFixtureShell, ViewDef } from '@avenos/aven-ui'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import type { InterfaceDef, StyleDef, UiFixtureShell, ViewDef } from '@avenos/aven-ui'
 
 export const SANDBOX_QJS_STATE_EVENT = 'sandbox-qjs://state'
 
@@ -23,7 +23,7 @@ export type SandboxQjsStateEvent = {
 }
 
 export async function sessionMount(
-	request: SandboxQjsMountRequest,
+	request: SandboxQjsMountRequest
 ): Promise<SandboxQjsMountResult> {
 	return invoke<SandboxQjsMountResult>('plugin:sandbox-quickjs|session_mount', { request })
 }
@@ -37,8 +37,8 @@ export async function sessionDispatch(args: {
 		request: {
 			sessionId: args.sessionId,
 			send: args.send,
-			payload: args.payload ?? {},
-		},
+			payload: args.payload ?? {}
+		}
 	})
 }
 
@@ -47,7 +47,7 @@ export async function sessionUnmount(sessionId: string): Promise<void> {
 }
 
 export async function listenSandboxQjsState(
-	handler: (event: SandboxQjsStateEvent) => void,
+	handler: (event: SandboxQjsStateEvent) => void
 ): Promise<UnlistenFn> {
 	return listen<SandboxQjsStateEvent>(SANDBOX_QJS_STATE_EVENT, (e) => handler(e.payload))
 }
@@ -58,6 +58,6 @@ export function mountRequestFromShell(shell: UiFixtureShell): SandboxQjsMountReq
 		style: shell.style,
 		source: shell.source,
 		interface: shell.interface,
-		logic: shell.logic,
+		logic: shell.logic
 	}
 }

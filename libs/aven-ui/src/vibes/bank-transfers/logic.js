@@ -75,7 +75,7 @@ var DEFAULT_LIST_LABELS = {
 	countLabel: 'Vorgänge',
 	emptyList: 'Keine Überweisungen vorhanden',
 	detailEyebrow: 'Beleg',
-	detailEmpty: 'Wähle links eine Überweisung, um die zugehörige Rechnung anzuzeigen.',
+	detailEmpty: 'Wähle links eine Überweisung, um die zugehörige Rechnung anzuzeigen.'
 }
 
 function mergeListLabels(source) {
@@ -93,7 +93,7 @@ var STATUS_META = {
 	pending: { label: 'Ausstehend', dotClass: 'bt-dot bt-dot--pending' },
 	scheduled: { label: 'Geplant', dotClass: 'bt-dot bt-dot--scheduled' },
 	failed: { label: 'Fehlgeschlagen', dotClass: 'bt-dot bt-dot--failed' },
-	overdue: { label: 'Überfällig', dotClass: 'bt-dot bt-dot--overdue' },
+	overdue: { label: 'Überfällig', dotClass: 'bt-dot bt-dot--overdue' }
 }
 
 function statusMeta(status) {
@@ -102,7 +102,8 @@ function statusMeta(status) {
 
 function txCurrency(tx) {
 	if (tx.currency) return tx.currency
-	if (tx.invoice && tx.invoice.header && tx.invoice.header.currency) return tx.invoice.header.currency
+	if (tx.invoice && tx.invoice.header && tx.invoice.header.currency)
+		return tx.invoice.header.currency
 	return 'EUR'
 }
 
@@ -120,7 +121,7 @@ function buildRow(tx, selectedId) {
 		dotClass: meta.dotClass,
 		rowClass: active ? 'bt-row bt-row--active' : 'bt-row',
 		ariaCurrent: active ? 'true' : 'false',
-		amountClass: incoming ? 'bt-row-amount bt-row-amount--in' : 'bt-row-amount',
+		amountClass: incoming ? 'bt-row-amount bt-row-amount--in' : 'bt-row-amount'
 	}
 }
 
@@ -167,8 +168,8 @@ var DEFAULT_INVOICE_LABELS = {
 		{ label: 'ME', class: '' },
 		{ label: 'Einzelpreis', class: 'num' },
 		{ label: 'USt. %', class: 'num' },
-		{ label: 'Betrag', class: 'num' },
-	],
+		{ label: 'Betrag', class: 'num' }
+	]
 }
 
 function mergeInvoiceLabels(inv) {
@@ -178,7 +179,8 @@ function mergeInvoiceLabels(inv) {
 	var k
 	for (k in DEFAULT_INVOICE_LABELS) merged[k] = DEFAULT_INVOICE_LABELS[k]
 	for (k in labels) merged[k] = labels[k]
-	if (!labels.tableColumns || !labels.tableColumns.length) merged.tableColumns = DEFAULT_INVOICE_LABELS.tableColumns
+	if (!labels.tableColumns || !labels.tableColumns.length)
+		merged.tableColumns = DEFAULT_INVOICE_LABELS.tableColumns
 	return merged
 }
 
@@ -190,15 +192,11 @@ function buildPartyCard(role, party) {
 	if (plzCity) addressLines.push({ line: plzCity })
 	if (party.country) addressLines.push({ line: party.country })
 	var identifiers = (party.identifiers || [])
-		.filter(function (id) {
-			return id && id.value && String(id.value).trim()
-		})
-		.map(function (id) {
-			return {
-				label: id.label_printed ? String(id.label_printed) + ': ' : '',
-				value: id.value || '',
-			}
-		})
+		.filter((id) => id && id.value && String(id.value).trim())
+		.map((id) => ({
+			label: id.label_printed ? String(id.label_printed) + ': ' : '',
+			value: id.value || ''
+		}))
 	return {
 		role: role,
 		name: party.name || '–',
@@ -206,7 +204,7 @@ function buildPartyCard(role, party) {
 		addressLines: addressLines,
 		email: party.email || '',
 		phone: party.phone || '',
-		identifiers: identifiers,
+		identifiers: identifiers
 	}
 }
 
@@ -222,7 +220,7 @@ function buildDetail(inv) {
 		totalRows.push({
 			label: labels.subtotal,
 			value: fmtMoney(totals.subtotal, cur),
-			rowClass: 'row inv-totals-line inv-totals-line--subtotal',
+			rowClass: 'row inv-totals-line inv-totals-line--subtotal'
 		})
 	}
 	var taxBreakdown = totals.tax_breakdown || []
@@ -237,68 +235,66 @@ function buildDetail(inv) {
 		totalRows.push({
 			label: lab,
 			value: fmtMoney(trow.tax_amount, cur),
-			rowClass: 'row inv-totals-line inv-totals-line--tax-rate',
+			rowClass: 'row inv-totals-line inv-totals-line--tax-rate'
 		})
 	}
 	if (totals.tax_total != null) {
 		totalRows.push({
 			label: labels.taxTotal,
 			value: fmtMoney(totals.tax_total, cur),
-			rowClass: 'row inv-totals-line inv-totals-line--tax-total-sum',
+			rowClass: 'row inv-totals-line inv-totals-line--tax-total-sum'
 		})
 	}
 	if (totals.invoice_total != null) {
 		totalRows.push({
 			label: labels.invoiceTotal,
 			value: fmtMoney(totals.invoice_total, cur),
-			rowClass: 'row inv-totals-line inv-totals-line--invoice-total',
+			rowClass: 'row inv-totals-line inv-totals-line--invoice-total'
 		})
 	}
 
-	var payments = (inv.payments || []).map(function (pay) {
+	var payments = (inv.payments || []).map((pay) => {
 		var bits = []
 		if (pay.date) bits.push(fmtDate(pay.date))
 		if (pay.method) bits.push(splitMethodLabel(pay.method))
 		if (pay.reference) bits.push(String(pay.reference))
 		return {
 			left: bits.length ? bits.join(' · ') : labels.paymentFallback,
-			amount: pay.amount == null ? '–' : fmtMoney(pay.amount, cur),
+			amount: pay.amount == null ? '–' : fmtMoney(pay.amount, cur)
 		}
 	})
 
-	var sections = (inv.statements || []).map(function (st) {
-		return {
-			sectionTitle: st.section_title || '',
-			servicePeriod: st.service_period || '',
-			lineItems: (st.line_items || []).map(function (raw, i) {
-				var kind = raw.line_kind ? String(raw.line_kind).trim() : ''
-				var taxPct = raw.tax_rate_percent
-				var tax = '–'
-				if (taxPct != null && String(taxPct) !== '' && !isNaN(Number(taxPct))) {
-					tax = fmtNum(Number(taxPct)) + '%'
-				}
-				var quantity = ''
-				if (raw.quantity != null && typeof raw.quantity === 'number') {
-					quantity = fmtNum(raw.quantity)
-				} else if (raw.quantity != null) {
-					quantity = String(raw.quantity)
-				}
-				return {
-					idx: String(i + 1),
-					position: raw.position != null ? String(raw.position) : '',
-					article: raw.article_number != null ? String(raw.article_number) : '',
-					title: raw.title ? String(raw.title).trim() : '',
-					description: raw.description ? String(raw.description).trim() : '',
-					quantity: quantity,
-					unit: raw.quantity_unit || '',
-					unitPrice: fmtMoney(raw.unit_price, cur),
-					tax: tax,
-					amount: fmtMoney(raw.amount, cur),
-					rowClass: kind === 'discount' ? 'inv-line inv-line-discount' : 'inv-line',
-				}
-			}),
-		}
-	})
+	var sections = (inv.statements || []).map((st) => ({
+		sectionTitle: st.section_title || '',
+		servicePeriod: st.service_period || '',
+		lineItems: (st.line_items || []).map((raw, i) => {
+			var kind = raw.line_kind ? String(raw.line_kind).trim() : ''
+			var taxPct = raw.tax_rate_percent
+			var tax = '–'
+			if (taxPct != null && String(taxPct) !== '' && !isNaN(Number(taxPct))) {
+				tax = fmtNum(Number(taxPct)) + '%'
+			}
+			var quantity = ''
+			if (raw.quantity != null && typeof raw.quantity === 'number') {
+				quantity = fmtNum(raw.quantity)
+			} else if (raw.quantity != null) {
+				quantity = String(raw.quantity)
+			}
+			return {
+				idx: String(i + 1),
+				position: raw.position != null ? String(raw.position) : '',
+				article: raw.article_number != null ? String(raw.article_number) : '',
+				title: raw.title ? String(raw.title).trim() : '',
+				description: raw.description ? String(raw.description).trim() : '',
+				quantity: quantity,
+				unit: raw.quantity_unit || '',
+				unitPrice: fmtMoney(raw.unit_price, cur),
+				tax: tax,
+				amount: fmtMoney(raw.amount, cur),
+				rowClass: kind === 'discount' ? 'inv-line inv-line-discount' : 'inv-line'
+			}
+		})
+	}))
 
 	return {
 		labels: labels,
@@ -315,7 +311,7 @@ function buildDetail(inv) {
 		totalRows: totalRows,
 		payments: payments,
 		outstanding: fmtMoney(inv.total_outstanding, cur),
-		paymentInstructions: inv.payment_instructions ? String(inv.payment_instructions).trim() : '',
+		paymentInstructions: inv.payment_instructions ? String(inv.payment_instructions).trim() : ''
 	}
 }
 
@@ -331,9 +327,7 @@ function buildState(source, selectedId) {
 		selectedId = txData[0].id
 	}
 	var selected = findTx(txData, selectedId)
-	var transfers = txData.map(function (tx) {
-		return buildRow(tx, selectedId)
-	})
+	var transfers = txData.map((tx) => buildRow(tx, selectedId))
 	return {
 		labels: listLabels,
 		title: source.title || 'Überweisungen',
@@ -345,7 +339,7 @@ function buildState(source, selectedId) {
 		detailEmptyMessage: listLabels.detailEmpty,
 		transfers: transfers,
 		txData: txData,
-		detail: buildDetail(selected ? selected.invoice : {}),
+		detail: buildDetail(selected ? selected.invoice : {})
 	}
 }
 

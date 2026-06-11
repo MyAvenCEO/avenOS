@@ -1,7 +1,13 @@
 /**
  * Markdown chapters under docs/content/{overview,sheet,production,storytelling,prompts}/
  */
-export const contentDocSections = ['overview', 'sheet', 'production', 'storytelling', 'prompts'] as const
+export const contentDocSections = [
+	'overview',
+	'sheet',
+	'production',
+	'storytelling',
+	'prompts'
+] as const
 
 export type ContentDocSection = (typeof contentDocSections)[number]
 
@@ -22,28 +28,28 @@ const sectionModules: Record<ContentDocSection, Record<string, string>> = {
 	overview: import.meta.glob('@avenos/docs/content/overview/*.md', {
 		query: '?raw',
 		import: 'default',
-		eager: true,
+		eager: true
 	}) as Record<string, string>,
 	sheet: import.meta.glob('@avenos/docs/content/sheet/*.md', {
 		query: '?raw',
 		import: 'default',
-		eager: true,
+		eager: true
 	}) as Record<string, string>,
 	production: import.meta.glob('@avenos/docs/content/production/*.md', {
 		query: '?raw',
 		import: 'default',
-		eager: true,
+		eager: true
 	}) as Record<string, string>,
 	storytelling: import.meta.glob('@avenos/docs/content/storytelling/*.md', {
 		query: '?raw',
 		import: 'default',
-		eager: true,
+		eager: true
 	}) as Record<string, string>,
 	prompts: import.meta.glob('@avenos/docs/content/prompts/*.md', {
 		query: '?raw',
 		import: 'default',
-		eager: true,
-	}) as Record<string, string>,
+		eager: true
+	}) as Record<string, string>
 }
 
 function parseFrontmatter(raw: string): { title?: string; body: string } {
@@ -77,7 +83,10 @@ function buildMeta(path: string, raw: string, section: ContentDocSection): Conte
 	return { slug, section, order: orderFromSlug(slug), title, raw: body.trim() }
 }
 
-function buildSection(modules: Record<string, string>, section: ContentDocSection): ContentDocMeta[] {
+function buildSection(
+	modules: Record<string, string>,
+	section: ContentDocSection
+): ContentDocMeta[] {
 	return Object.entries(modules)
 		.filter(([path]) => DOC_KEY.test(path.split('/').pop() ?? ''))
 		.map(([path, raw]) => buildMeta(path, raw as string, section))
@@ -95,7 +104,7 @@ export const docsBySection: Record<ContentDocSection, ContentDocMeta[]> = {
 	sheet: sheetDocs,
 	production: productionDocs,
 	storytelling: storytellingDocs,
-	prompts: promptsDocs,
+	prompts: promptsDocs
 }
 
 export const allContentDocs: ContentDocMeta[] = contentDocSections.flatMap((s) => docsBySection[s])
@@ -116,6 +125,9 @@ export function contentChapterHref(section: ContentDocSection, slug: string): st
 	return `/docs/content/${section}/${slug}`
 }
 
-export function getContentDoc(section: ContentDocSection, slug: string): ContentDocMeta | undefined {
+export function getContentDoc(
+	section: ContentDocSection,
+	slug: string
+): ContentDocMeta | undefined {
 	return docsBySection[section].find((d) => d.slug === slug)
 }

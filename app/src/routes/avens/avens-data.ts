@@ -13,26 +13,26 @@ export const AVENS: AvenMeta[] = [
 		id: 'avenVICTORIO',
 		name: 'avenVICTORIO',
 		subtitle: 'POS journal',
-		href: '/avens/avenVICTORIO',
+		href: '/avens/avenVICTORIO'
 	},
 	{
 		id: 'avenCEO',
 		name: 'avenCEO',
 		subtitle: 'Orchestrator',
-		href: '/avens/avenCEO',
+		href: '/avens/avenCEO'
 	},
 	{
 		id: 'avenMAIA',
 		name: 'avenMAIA',
 		subtitle: 'Maia City - The Game',
-		href: '/avens/avenMAIA',
+		href: '/avens/avenMAIA'
 	},
 	{
 		id: 'avenSKILLS',
 		name: 'avenSKILLS',
 		subtitle: 'Agent skills',
-		href: '/avens/avenSKILLS',
-	},
+		href: '/avens/avenSKILLS'
+	}
 ]
 
 export function avenById(id: string): AvenMeta | undefined {

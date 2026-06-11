@@ -26,9 +26,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		name: typeof body.name === 'string' ? body.name.trim().slice(0, 120) : '',
 		newsletter: Boolean(body.newsletter),
 		intent: typeof body.intent === 'string' ? body.intent.slice(0, 64) : '',
-		preferredName: typeof body.preferredName === 'string' ? body.preferredName.trim().slice(0, 48) : '',
+		preferredName:
+			typeof body.preferredName === 'string' ? body.preferredName.trim().slice(0, 48) : '',
 		tier: typeof body.tier === 'string' ? body.tier.slice(0, 32) : '',
-		ts: new Date().toISOString(),
+		ts: new Date().toISOString()
 	}
 
 	const webhook = process.env.WAITLIST_WEBHOOK_URL
@@ -37,8 +38,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
-				text: `AvenCEO waitlist\n\`\`\`${JSON.stringify(payload, null, 2)}\`\`\``,
-			}),
+				text: `AvenCEO waitlist\n\`\`\`${JSON.stringify(payload, null, 2)}\`\`\``
+			})
 		}).catch(() => {})
 	} else {
 		console.info('[waitlist]', payload)

@@ -10,14 +10,14 @@ export const invoiceShell: UiFixtureShell = {
 	style: invoiceStyle,
 	source: invoiceSource as Record<string, unknown>,
 	interface: invoiceInterface,
-	logic: invoiceLogic,
+	logic: invoiceLogic
 }
 
 export function createInvoiceShell(): UiFixtureShell {
 	return invoiceShell
 }
 
-export { invoiceLogic }
-export { invoiceView } from './view.js'
-export { invoiceStyle } from './style.js'
 export { default as invoiceSource } from './source.json'
+export { invoiceStyle } from './style.js'
+export { invoiceView } from './view.js'
+export { invoiceLogic }

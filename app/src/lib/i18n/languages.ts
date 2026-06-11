@@ -1,5 +1,5 @@
-import en from '../../../languages/en.json'
 import de from '../../../languages/de.json'
+import en from '../../../languages/en.json'
 import { DEFAULT_LOCALE, normalizeLocale, type SupportedLocale } from './locales'
 
 type MessageTree = { [key: string]: string | MessageTree }
@@ -27,7 +27,7 @@ function interpolate(template: string, params?: Record<string, string | number>)
 export function translate(
 	locale: SupportedLocale,
 	key: string,
-	params?: Record<string, string | number>,
+	params?: Record<string, string | number>
 ): string {
 	const loc = normalizeLocale(locale)
 	const primary = resolvePath(catalogs[loc], key)

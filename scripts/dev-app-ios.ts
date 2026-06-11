@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { spawnSync } from 'node:child_process'
 /**
  * Tauri iOS Simulator dev: SvelteKit on :1420 (`beforeDevCommand`), app in Simulator.
  *
@@ -9,7 +10,6 @@
  * TestFlight / device builds keep Secure Enclave — see docs/deploy/ios-simulator-local.md.
  */
 import { existsSync } from 'node:fs'
-import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -24,14 +24,14 @@ function resolveSimulatorDevice(): string | undefined {
 	if (fromEnv) return fromEnv
 
 	const list = spawnSync('xcrun', ['simctl', 'list', 'devices', 'available', '-j'], {
-		encoding: 'utf8',
+		encoding: 'utf8'
 	})
 	if (list.status !== 0 || !list.stdout) return undefined
 
 	try {
 		const parsed = JSON.parse(list.stdout) as { devices?: Record<string, SimDevice[]> }
 		const runtimes = Object.keys(parsed.devices ?? {}).filter((r) =>
-			r.toLowerCase().includes('ios'),
+			r.toLowerCase().includes('ios')
 		)
 		runtimes.sort((a, b) => b.localeCompare(a))
 		for (const runtime of runtimes) {
@@ -61,14 +61,16 @@ async function main() {
 
 	const xcode = spawnSync('xcodebuild', ['-version'], { encoding: 'utf8' })
 	if (xcode.status !== 0) {
-		console.error('dev:app:ios: Xcode not found. Install Xcode and run `xcode-select --install` if needed.')
+		console.error(
+			'dev:app:ios: Xcode not found. Install Xcode and run `xcode-select --install` if needed.'
+		)
 		process.exit(1)
 	}
 
 	const genApple = path.join(repoRoot, 'app/src-tauri/gen/apple')
 	if (!existsSync(genApple)) {
 		console.error(
-			'dev:app:ios: missing app/src-tauri/gen/apple — run once from app:\n  CI=true bunx tauri ios init --ci',
+			'dev:app:ios: missing app/src-tauri/gen/apple — run once from app:\n  CI=true bunx tauri ios init --ci'
 		)
 		process.exit(1)
 	}
@@ -77,7 +79,7 @@ async function main() {
 
 	const simDevice = resolveSimulatorDevice()
 	console.log(
-		'[dev:app:ios] AvenOS Tauri (iOS Simulator) · SvelteKit @ http://127.0.0.1:1420 · `tauri ios dev`',
+		'[dev:app:ios] AvenOS Tauri (iOS Simulator) · SvelteKit @ http://127.0.0.1:1420 · `tauri ios dev`'
 	)
 	if (simDevice) {
 		console.log(`[dev:app:ios] Simulator device: ${simDevice}`)
@@ -85,18 +87,18 @@ async function main() {
 		console.log('[dev:app:ios] No simulator name resolved — Tauri will prompt or pick a device.')
 	}
 	console.log(
-		'[dev:app:ios] Identity: dev insecure (same as Linux debug). Override sim: AVEN_IOS_SIM_DEVICE="iPhone 16 Pro".',
+		'[dev:app:ios] Identity: dev insecure (same as Linux debug). Override sim: AVEN_IOS_SIM_DEVICE="iPhone 16 Pro".'
 	)
 	console.log(
-		'[dev:app:ios] First build can take 10–20+ min. Leave this terminal open — Xcode installs and **launches** avenOS automatically.',
+		'[dev:app:ios] First build can take 10–20+ min. Leave this terminal open — Xcode installs and **launches** avenOS automatically.'
 	)
 	console.log(
-		'[dev:app:ios] Until launch finishes, Spotlight/home will show no avenOS (that is normal).\n',
+		'[dev:app:ios] Until launch finishes, Spotlight/home will show no avenOS (that is normal).\n'
 	)
 
 	const env = {
 		...process.env,
-		AVENOS_DEV_INSECURE_IDENTITY: '1',
+		AVENOS_DEV_INSECURE_IDENTITY: '1'
 	} satisfies Record<string, string | undefined>
 
 	// iOS gets STT (default) + the on-device LLM (LFM2.5-1.2B GGUF via llama.cpp/Metal,
@@ -113,7 +115,7 @@ async function main() {
 		stdout: 'inherit',
 		stderr: 'inherit',
 		stdin: 'inherit',
-		env,
+		env
 	})
 
 	const code = await child.exited

@@ -11,13 +11,7 @@
 import { type Unsubscriber, writable } from 'svelte/store'
 import { formatBytesPair } from '$lib/asr/format'
 
-export type AsrStatus =
-	| 'idle'
-	| 'downloading'
-	| 'loading'
-	| 'ready'
-	| 'error'
-	| 'unavailable'
+export type AsrStatus = 'idle' | 'downloading' | 'loading' | 'ready' | 'error' | 'unavailable'
 
 export type AsrState = {
 	status: AsrStatus

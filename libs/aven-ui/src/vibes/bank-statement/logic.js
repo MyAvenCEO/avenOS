@@ -1,5 +1,5 @@
 function pad2(n) {
-	return n < 10 ? '0' + n : String(n)
+	return n < 10 ? `0${n}` : String(n)
 }
 
 function fmtDate(s) {
@@ -7,8 +7,8 @@ function fmtDate(s) {
 	var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s).trim())
 	if (m) {
 		var d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
-		if (!isNaN(d.getTime())) {
-			return pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) + '.' + d.getFullYear()
+		if (!Number.isNaN(d.getTime())) {
+			return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`
 		}
 	}
 	return String(s).trim()
@@ -23,7 +23,7 @@ function groupThousands(whole) {
 		out = s.charAt(i) + out
 		count++
 		if (count === 3 && i > 0) {
-			out = '.' + out
+			out = `.${out}`
 			count = 0
 		}
 	}
@@ -32,21 +32,21 @@ function groupThousands(whole) {
 
 function fmtMoney(n, currency) {
 	var cur = currency || 'EUR'
-	if (n == null || isNaN(Number(n))) return '–'
+	if (n == null || Number.isNaN(Number(n))) return '–'
 	var num = Number(n)
 	var sign = num < 0 ? '-' : ''
 	var abs = Math.abs(num)
 	var parts = abs.toFixed(2).split('.')
-	return sign + groupThousands(parts[0]) + ',' + parts[1] + ' ' + cur
+	return `${sign + groupThousands(parts[0])},${parts[1]} ${cur}`
 }
 
 function fmtNum(n) {
-	if (n == null || isNaN(Number(n))) return '–'
+	if (n == null || Number.isNaN(Number(n))) return '–'
 	var num = Number(n)
 	var sign = num < 0 ? '-' : ''
 	var abs = Math.abs(num)
 	var parts = abs.toFixed(2).split('.')
-	return sign + groupThousands(parts[0]) + ',' + parts[1]
+	return `${sign + groupThousands(parts[0])},${parts[1]}`
 }
 
 function isRecord(x) {
@@ -58,7 +58,7 @@ var STATEMENT_KIND_LABELS = {
 	fee_or_service_statement: 'Gebühren- / Serviceauszug',
 	credit_card_statement: 'Kreditkartenabrechnung',
 	savings_account_statement: 'Sparkontoauszug',
-	other: 'Sonstiges',
+	other: 'Sonstiges'
 }
 
 function statementKindLabel(k) {
@@ -68,7 +68,7 @@ function statementKindLabel(k) {
 
 function pushField(target, label, val, cur, money, nowrap) {
 	if (val == null) return
-	if (typeof val === 'number' && isNaN(val)) return
+	if (typeof val === 'number' && Number.isNaN(val)) return
 	var shown =
 		money && typeof val === 'number'
 			? fmtMoney(val, cur)
@@ -79,7 +79,7 @@ function pushField(target, label, val, cur, money, nowrap) {
 	target.push({
 		val: shown,
 		label: label,
-		cellClass: nowrap ? 'bs-field-cell bs-field-cell--nowrap' : 'bs-field-cell',
+		cellClass: nowrap ? 'bs-field-cell bs-field-cell--nowrap' : 'bs-field-cell'
 	})
 }
 
@@ -87,7 +87,7 @@ function buildPartyCard(roleTitle, party, footer) {
 	party = party || {}
 	var lines = []
 	var contact = typeof party.contact_name === 'string' ? party.contact_name.trim() : ''
-	if (contact) lines.push({ cls: 'muted', text: 'Ansprechpartner: ' + contact })
+	if (contact) lines.push({ cls: 'muted', text: `Ansprechpartner: ${contact}` })
 	var street = typeof party.street === 'string' ? party.street : ''
 	var pc = typeof party.postal_code === 'string' ? party.postal_code : ''
 	var city = typeof party.city === 'string' ? party.city : ''
@@ -96,8 +96,10 @@ function buildPartyCard(roleTitle, party, footer) {
 	if (street) lines.push({ cls: 'line', text: street })
 	if (plzCity) lines.push({ cls: 'line', text: plzCity })
 	if (country) lines.push({ cls: 'muted', text: country })
-	if (typeof party.email === 'string' && party.email) lines.push({ cls: 'muted', text: party.email })
-	if (typeof party.phone === 'string' && party.phone) lines.push({ cls: 'muted', text: party.phone })
+	if (typeof party.email === 'string' && party.email)
+		lines.push({ cls: 'muted', text: party.email })
+	if (typeof party.phone === 'string' && party.phone)
+		lines.push({ cls: 'muted', text: party.phone })
 	var tax = party.tax_id
 	if (typeof tax === 'string' && tax.trim()) lines.push({ cls: 'muted', text: tax.trim() })
 	if (footer) lines.push({ cls: 'muted', text: footer })
@@ -105,29 +107,29 @@ function buildPartyCard(roleTitle, party, footer) {
 }
 
 function buildRows(transactions, cur) {
-	return (Array.isArray(transactions) ? transactions : []).map(function (raw) {
+	return (Array.isArray(transactions) ? transactions : []).map((raw) => {
 		if (!isRecord(raw)) raw = {}
 		var title = typeof raw.title === 'string' ? raw.title.trim() : ''
 		var desc = typeof raw.description === 'string' ? raw.description.trim() : ''
 		var amt = raw.amount
-		var amtNum = typeof amt === 'number' && !isNaN(amt) ? amt : null
+		var amtNum = typeof amt === 'number' && !Number.isNaN(amt) ? amt : null
 		var amtCls = amtNum != null && amtNum < 0 ? 'num num--neg' : 'num'
 		var fxBits = []
 		if (raw.original_amount != null && raw.original_currency) {
 			fxBits.push(
 				fmtMoney(raw.original_amount, String(raw.original_currency)) +
 					' · Kurs ' +
-					(raw.exchange_rate != null ? raw.exchange_rate : '–'),
+					(raw.exchange_rate != null ? raw.exchange_rate : '–')
 			)
 		}
 		if (raw.fx_surcharge_eur != null && typeof raw.fx_surcharge_eur === 'number') {
-			fxBits.push('FX-Gebühr EUR ' + fmtMoney(raw.fx_surcharge_eur, cur))
+			fxBits.push(`FX-Gebühr EUR ${fmtMoney(raw.fx_surcharge_eur, cur)}`)
 		}
 		if (
 			raw.foreign_exchange_fee_percent != null &&
 			typeof raw.foreign_exchange_fee_percent === 'number'
 		) {
-			fxBits.push(fmtNum(raw.foreign_exchange_fee_percent) + '% Umrechnung')
+			fxBits.push(`${fmtNum(raw.foreign_exchange_fee_percent)}% Umrechnung`)
 		}
 		var bal = raw.balance_after
 		var rate = raw.exchange_rate
@@ -140,7 +142,7 @@ function buildRows(transactions, cur) {
 			amount: fmtMoney(amt, cur),
 			amountClass: amtCls,
 			balance: bal != null && typeof bal === 'number' ? fmtMoney(bal, cur) : '–',
-			rate: rate != null && String(rate).trim() ? String(rate) : '–',
+			rate: rate != null && String(rate).trim() ? String(rate) : '–'
 		}
 	})
 }
@@ -151,10 +153,10 @@ var COLUMNS = [
 	{ label: 'Verwendungszweck', cls: '' },
 	{ label: 'Betrag', cls: 'num' },
 	{ label: 'Saldo', cls: 'num' },
-	{ label: 'Kurs', cls: 'num' },
+	{ label: 'Kurs', cls: 'num' }
 ]
 
-function initState(source) {
+function _initState(source) {
 	var s = source || {}
 	var cur = typeof s.currency === 'string' ? s.currency : 'EUR'
 
@@ -179,7 +181,7 @@ function initState(source) {
 	var periodFrom = fmtDate(s.period_start)
 	var periodTo = fmtDate(s.period_end)
 	var periodRange =
-		periodFrom && periodTo ? periodFrom + ' – ' + periodTo : periodFrom || periodTo || null
+		periodFrom && periodTo ? `${periodFrom} – ${periodTo}` : periodFrom || periodTo || null
 
 	var fieldsLine3 = []
 	pushField(fieldsLine3, 'Auszugsart', statementKindLabel(s.statement_kind), cur)
@@ -190,7 +192,7 @@ function initState(source) {
 
 	var branchFooter =
 		typeof overview.branch_name === 'string' && overview.branch_name.trim()
-			? 'Filiale: ' + overview.branch_name.trim()
+			? `Filiale: ${overview.branch_name.trim()}`
 			: ''
 
 	var notes = []
@@ -206,6 +208,6 @@ function initState(source) {
 		institution: buildPartyCard('Institut', s.institution, branchFooter),
 		columns: COLUMNS,
 		rows: buildRows(s.transactions, cur),
-		notes: notes,
+		notes: notes
 	}
 }

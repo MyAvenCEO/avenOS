@@ -1,61 +1,61 @@
 {
-  "slug": "golden-offer",
-  "publisher": {
-    "id": "avenmaia",
-    "displayName": "AvenMaia",
-    "founderName": "Samuel",
-    "scope": "Samuel Andert · aven.ceo"
-  },
-  "oneLineCopy": "The offer you should have been making all along.",
-  "hero": {
-    "kicker": "Skill · AvenMaia · golden-offer",
-    "headlineMain": "More yes. Less negotiation.",
-    "headlineSerifLead": "Your Aven analyzes your offer, knows your target audience and builds the offer frame where saying no feels wrong.",
-    "promiseHoursPerWeek": "3+ hrs/week"
-  },
-  "founderScenario": {
-    "timestamp": "3:40 pm",
-    "story": "Samuel sends the proposal. 48 hours of silence. Then: \"Sounds interesting, but too expensive.\" He knows the price isn't the problem. The framing is the problem. But he doesn't know how to change it without underselling himself."
-  },
-  "benefits": [
-    "Your offer communicates value — not price",
-    "The offer frame is aligned to the specific objections of your target audience",
-    "No more negotiation ping-pong — your Aven anticipates objections in advance",
-    "Conversion rate of your offers increases — measurable after the first month",
-    "You know why your offer works — not just that it works"
-  ],
-  "howSteps": [
-    "You give your Aven your existing offer, target audience and context",
-    "Your Aven analyzes the Hormozi Value Equation: dream outcome, probability, time, effort",
-    "A revised offer frame is created — with rationale for every change",
-    "You receive the draft for approval, refine it and deploy it"
-  ],
-  "whatMechanics": {
-    "input": "Existing offer, target audience description, past objections / rejections",
-    "magic": "Value equation analysis → objection mapping → offer reframing → bonus stack generation → language optimization for purchase decision",
-    "output": "Revised offer document · objection anticipation matrix · bonus stack suggestions"
-  },
-  "playsWith": [
-    { "slug": "blog-writer", "relation": "Strong offers become strong content hooks" },
-    { "slug": "brain-memorizer", "relation": "Client context from past conversations flows in" },
-    { "slug": "human-reviewer", "relation": "Final offer is reviewed before sending" }
-  ],
-  "valueStack": {
-    "standaloneAlternatives": [
-      { "label": "Copywriting consultant (hours)", "eurPerMonth": 300 },
-      { "label": "Hormozi course / coaching", "eurPerMonth": 100 },
-      { "label": "A/B testing platform (tooling)", "eurPerMonth": 49 }
-    ],
-    "standaloneTotalEurPerMonth": 449,
-    "timeDelayToValue": "First revised offer frame within 30 minutes",
-    "effortToInstall": "10 min · existing offer as input — the rest comes from your Aven",
-    "proof": "Samuel applied golden-offer to his own proposals. The first version of this page was the golden version."
-  },
-  "bonuses": [
-    "Objection bible: your Aven keeps a log of all objections and how you neutralized them",
-    "Offer variants: A/B-ready variants for different target audiences generated automatically",
-    "Price anchor architecture: your Aven recommends the optimal price tier structure for maximum conversion"
-  ],
-  "scarcity": "golden-offer is Samuel's most powerful skill — and the one that pays for itself fastest. Available in every CEO plan. No copywriting retainer. No course.",
-  "letterFromPublisher": "I didn't teach Samuel to write offers. I taught him to build them. The difference: an offer you write hopes. An offer you build converts. With this skill, Samuel read his first no not as rejection — but as a data point."
+	"slug": "golden-offer",
+	"publisher": {
+		"id": "avenmaia",
+		"displayName": "AvenMaia",
+		"founderName": "Samuel",
+		"scope": "Samuel Andert · aven.ceo"
+	},
+	"oneLineCopy": "The offer you should have been making all along.",
+	"hero": {
+		"kicker": "Skill · AvenMaia · golden-offer",
+		"headlineMain": "More yes. Less negotiation.",
+		"headlineSerifLead": "Your Aven analyzes your offer, knows your target audience and builds the offer frame where saying no feels wrong.",
+		"promiseHoursPerWeek": "3+ hrs/week"
+	},
+	"founderScenario": {
+		"timestamp": "3:40 pm",
+		"story": "Samuel sends the proposal. 48 hours of silence. Then: \"Sounds interesting, but too expensive.\" He knows the price isn't the problem. The framing is the problem. But he doesn't know how to change it without underselling himself."
+	},
+	"benefits": [
+		"Your offer communicates value — not price",
+		"The offer frame is aligned to the specific objections of your target audience",
+		"No more negotiation ping-pong — your Aven anticipates objections in advance",
+		"Conversion rate of your offers increases — measurable after the first month",
+		"You know why your offer works — not just that it works"
+	],
+	"howSteps": [
+		"You give your Aven your existing offer, target audience and context",
+		"Your Aven analyzes the Hormozi Value Equation: dream outcome, probability, time, effort",
+		"A revised offer frame is created — with rationale for every change",
+		"You receive the draft for approval, refine it and deploy it"
+	],
+	"whatMechanics": {
+		"input": "Existing offer, target audience description, past objections / rejections",
+		"magic": "Value equation analysis → objection mapping → offer reframing → bonus stack generation → language optimization for purchase decision",
+		"output": "Revised offer document · objection anticipation matrix · bonus stack suggestions"
+	},
+	"playsWith": [
+		{ "slug": "blog-writer", "relation": "Strong offers become strong content hooks" },
+		{ "slug": "brain-memorizer", "relation": "Client context from past conversations flows in" },
+		{ "slug": "human-reviewer", "relation": "Final offer is reviewed before sending" }
+	],
+	"valueStack": {
+		"standaloneAlternatives": [
+			{ "label": "Copywriting consultant (hours)", "eurPerMonth": 300 },
+			{ "label": "Hormozi course / coaching", "eurPerMonth": 100 },
+			{ "label": "A/B testing platform (tooling)", "eurPerMonth": 49 }
+		],
+		"standaloneTotalEurPerMonth": 449,
+		"timeDelayToValue": "First revised offer frame within 30 minutes",
+		"effortToInstall": "10 min · existing offer as input — the rest comes from your Aven",
+		"proof": "Samuel applied golden-offer to his own proposals. The first version of this page was the golden version."
+	},
+	"bonuses": [
+		"Objection bible: your Aven keeps a log of all objections and how you neutralized them",
+		"Offer variants: A/B-ready variants for different target audiences generated automatically",
+		"Price anchor architecture: your Aven recommends the optimal price tier structure for maximum conversion"
+	],
+	"scarcity": "golden-offer is Samuel's most powerful skill — and the one that pays for itself fastest. Available in every CEO plan. No copywriting retainer. No course.",
+	"letterFromPublisher": "I didn't teach Samuel to write offers. I taught him to build them. The difference: an offer you write hopes. An offer you build converts. With this skill, Samuel read his first no not as rejection — but as a data point."
 }

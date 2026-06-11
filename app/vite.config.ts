@@ -1,5 +1,5 @@
-import path from 'node:path'
 import { createRequire } from 'node:module'
+import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { sveltekit } from '@sveltejs/kit/vite'
 import tailwindcss from '@tailwindcss/vite'
@@ -54,11 +54,11 @@ export default defineConfig(({ mode }) => {
 					'**/.svelte-kit/**',
 					// Relay/Tauri secrets — changing ../.env must not restart Vite (race on shared .vite-temp).
 					path.join(repoRoot, '.env'),
-					path.join(repoRoot, '.env.*'),
-				],
+					path.join(repoRoot, '.env.*')
+				]
 			},
 			headers: crossOriginIsolationHeaders,
-			fs: { allow: [repoRoot, workspaceRoot] },
-		},
+			fs: { allow: [repoRoot, workspaceRoot] }
+		}
 	}
 })

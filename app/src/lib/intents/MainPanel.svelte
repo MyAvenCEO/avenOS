@@ -1,4 +1,9 @@
 <script lang="ts">
+import { t } from '$lib/i18n'
+import ActivityView from './ActivityView.svelte'
+import ConfigView from './ConfigView.svelte'
+import ContextView from './ContextView.svelte'
+import DisplayView from './DisplayView.svelte'
 /**
  * Center column — mobile inline skills scroller, Activity/Display tab
  * strip, and the body that swaps between `ActivityView` and `DisplayView`
@@ -12,24 +17,14 @@
  * `activityTab` is `$bindable` so the parent can read the current tab if
  * needed. Skill selection on mobile lives in the skills drawer (`SkillsAside`).
  */
-import {
-	type ActivityEntry,
-	type ActivityTab,
-	type IntentRow,
-	type SkillWorker,
-} from './types'
-import ActivityView from './ActivityView.svelte'
-import DisplayView from './DisplayView.svelte'
-import ConfigView from './ConfigView.svelte'
-import ContextView from './ContextView.svelte'
-import { t } from '$lib/i18n'
+import type { ActivityEntry, ActivityTab, IntentRow, SkillWorker } from './types'
 
 let {
 	intent,
 	selectedSkill,
 	filteredLogs,
 	nowMs,
-	activityTab = $bindable<ActivityTab>('activity'),
+	activityTab = $bindable<ActivityTab>('activity')
 }: {
 	intent: IntentRow | null
 	selectedSkill: SkillWorker | null

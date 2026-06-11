@@ -1,15 +1,17 @@
 <script lang="ts">
-	import { page } from '$app/state'
-	import DocsChapterLayout from '$lib/docs/DocsChapterLayout.svelte'
-	import { asideNavSectionsFromDocGroups } from '$lib/docs/docs-chapter-nav'
-	import { actorDocs } from '$lib/docs/actors-collection'
+import { page } from '$app/state'
+import { actorDocs } from '$lib/docs/actors-collection'
+import DocsChapterLayout from '$lib/docs/DocsChapterLayout.svelte'
+import { asideNavSectionsFromDocGroups } from '$lib/docs/docs-chapter-nav'
 
-	let { children } = $props()
+let { children } = $props()
 
-	const groups = [{ label: 'Architecture', docs: actorDocs, base: '/docs/actors/developers' }] as const
+const groups = [
+	{ label: 'Architecture', docs: actorDocs, base: '/docs/actors/developers' }
+] as const
 
-	const path = $derived(page.url.pathname)
-	const navSections = $derived(asideNavSectionsFromDocGroups(groups, path))
+const path = $derived(page.url.pathname)
+const navSections = $derived(asideNavSectionsFromDocGroups(groups, path))
 </script>
 
 <svelte:head>

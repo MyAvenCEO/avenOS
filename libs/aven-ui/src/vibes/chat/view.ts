@@ -9,8 +9,8 @@ export const chatView: ViewDef = {
 				children: [
 					{ class: 'eyebrow', text: '$eyebrow' },
 					{ tag: 'h1', class: 'ch-title', text: '$title' },
-					{ class: 'ch-subtitle', text: '$subtitle' },
-				],
+					{ class: 'ch-subtitle', text: '$subtitle' }
+				]
 			},
 			{
 				class: 'ch-thread',
@@ -25,16 +25,16 @@ export const chatView: ViewDef = {
 										class: 'ch-meta',
 										children: [
 											{ tag: 'span', class: 'ch-author', text: '$$author' },
-											{ tag: 'span', class: 'ch-time', text: '$$time' },
-										],
+											{ tag: 'span', class: 'ch-time', text: '$$time' }
+										]
 									},
-									{ class: '$$bubbleClass', text: '$$body' },
-								],
-							},
-						},
-					},
-				],
-			},
-		],
-	},
+									{ class: '$$bubbleClass', text: '$$body' }
+								]
+							}
+						}
+					}
+				]
+			}
+		]
+	}
 }
