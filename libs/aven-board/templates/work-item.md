@@ -26,7 +26,7 @@ What "good" looks like when this is done. Observable, not vague.
 
 When this moves to **discover**, sharpen this into a single **completion
 condition** that can be proven from command output, and copy it into the
-frontmatter `goal` so it can be handed to `/goal` / `/board-goal`. See
+frontmatter `goal` so it can be handed to `/aven-build` / `/goal`. See
 `templates/plan.md`.
 
 ## Plan

@@ -247,7 +247,7 @@ cargo build -p aven-node
 ## Hand-off
 
 ```
-/board-goal 0017-wss-channel-binding
+/aven-build 0017-wss-channel-binding
 ```
 
 ## Progress log

@@ -29,6 +29,7 @@ completion condition provable from command output (the built-in `/goal` evaluato
 reads only the transcript). Hand an item to Claude Code with:
 
 ```
-/board-goal <item-ref>     # resolves the item, builds + reviews, moves columns
+/aven-build <item-ref>        # execute toward the goal, move build → review
+/aven-review <item-ref>       # evaluate the metric, bubble to human sign-off
 /goal <completion condition>  # or flip on the built-in cross-turn loop directly
 ```

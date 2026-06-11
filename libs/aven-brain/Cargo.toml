@@ -16,8 +16,14 @@ models = ["dep:aven-ai", "dep:tokio", "dep:log"]
 
 [dependencies]
 aven-db = { path = "../aven-db", features = ["client-p2p"] }
+aven-caps = { path = "../aven-caps" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+base64 = "0.22"
+hkdf = "0.12"
+sha2 = "0.10"
+rand_core = { version = "0.6", features = ["getrandom"] }
+uuid = "1"
 aven-ai = { path = "../aven-ai", optional = true, features = ["embed"] }
 tokio = { version = "1", optional = true, features = ["rt"] }
 log = { version = "0.4", optional = true }

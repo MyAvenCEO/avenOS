@@ -71,7 +71,7 @@ bun run lint    # biome
 Pick this up with the board command (resolves the item, loads it, drives it):
 
 ```
-/board-goal <item-ref>
+/aven-build <item-ref>
 ```
 
 …or hand the condition straight to the built-in goal loop:

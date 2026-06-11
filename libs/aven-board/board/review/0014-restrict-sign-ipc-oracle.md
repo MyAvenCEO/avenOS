@@ -117,7 +117,7 @@ cargo test -p aven-caps
 
 ## Hand-off
 ```
-/board-goal libs/aven-board/board/plan/0014-restrict-sign-ipc-oracle.md
+/aven-build libs/aven-board/board/plan/0014-restrict-sign-ipc-oracle.md
 ```
 
 ## Progress log

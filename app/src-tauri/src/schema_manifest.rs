@@ -158,14 +158,10 @@ pub fn manifest_sensitive_columns() -> Result<HashMap<String, HashSet<String>>, 
 			if col.plaintext {
 				continue;
 			}
-			// Sealing is a text/bytea-storage concept (an AEAD payload string). Non-string
-			// storage (vector/integer/bigint/double/…, e.g. the brain's `embedding`) can never
-			// carry a sealed cell — treating it as sensitive made hydrate reject the whole row
-			// (`secret_col_bad_storage`). Such columns pass through as-is until the engine's
-			// unseal-on-scan seam (board 0018) brings sealing to them.
-			if !matches!(col.ty.as_str(), "text" | "bytea") {
-				continue;
-			}
+			// Fail closed (board 0021): EVERY non-plaintext column is sealed at rest — the
+			// manifest declares sealed columns with sealable storage (text/bytea), so a
+			// non-string value in a sensitive column is a law violation and hydrate errors
+			// (`secret_col_bad_storage`), never a silent plaintext pass-through.
 			out.entry(table_name.clone())
 				.or_default()
 				.insert(col.name.clone());

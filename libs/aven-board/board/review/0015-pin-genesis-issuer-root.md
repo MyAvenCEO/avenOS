@@ -212,7 +212,7 @@ cargo build -p app
 ## Hand-off
 
 ```
-/board-goal 0015-pin-genesis-issuer-root
+/aven-build 0015-pin-genesis-issuer-root
 ```
 
 ## Progress log

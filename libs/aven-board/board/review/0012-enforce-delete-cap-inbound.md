@@ -90,7 +90,7 @@ cargo test -p aven-caps
 ## Hand-off
 
 ```
-/board-goal 0012-enforce-delete-cap-inbound
+/aven-build 0012-enforce-delete-cap-inbound
 ```
 
 ## Progress log

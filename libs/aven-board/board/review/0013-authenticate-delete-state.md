@@ -123,7 +123,7 @@ cargo test -p aven-caps
 
 ## Hand-off
 ```
-/board-goal 0013-authenticate-delete-state
+/aven-build 0013-authenticate-delete-state
 ```
 
 ## Progress log
