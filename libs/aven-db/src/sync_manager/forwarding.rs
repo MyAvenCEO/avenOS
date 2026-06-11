@@ -199,7 +199,7 @@ impl SyncManager {
         for (object_id, locator) in locators {
             let table = locator.table.to_string();
             // Local identity / trust tables are never P2P-forwarded.
-            if matches!(table.as_str(), "humans" | "peers") {
+            if matches!(table.as_str(), "humans" | "signers") {
                 continue;
             }
             let metadata = metadata_from_row_locator(&locator);

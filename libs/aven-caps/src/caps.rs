@@ -215,7 +215,7 @@ pub fn identity_cap_report(chain: &Biscuit, owner: Uuid) -> Result<Vec<SubjectCa
 		// data. Report it as the distinct cap `directory` so the badge can never imply broad
 		// read access (a full-identity read is still reported as `read`).
 		let cap: &str = if op == "read"
-			&& (prefix.ends_with(":safes:") || prefix.ends_with(":peers:"))
+			&& (prefix.ends_with(":safes:") || prefix.ends_with(":signers:"))
 		{
 			"directory"
 		} else {
@@ -624,7 +624,7 @@ pub fn biscuit_from_storage(genesis_b64: &str, root: PublicKey) -> Result<Biscui
 fn trusted_subject_dids(b: &Biscuit, identity_urn: &str) -> Result<HashSet<String>, String> {
 	let mut authorizer =
 		b.authorizer().map_err(|e| format!("b-authorizer:{e}"))?;
-	let rule = format!(r#"peers($p) <- owns($p, "{identity}")"#, identity = identity_urn);
+	let rule = format!(r#"signers($p) <- owns($p, "{identity}")"#, identity = identity_urn);
 	let admins: Vec<(String,)> = authorizer
 		.query_all(rule.as_str())
 		.map_err(|e| format!("b-query-own:{e}"))?;
@@ -1059,7 +1059,7 @@ fn authorize_read_delegated(chain: &Biscuit, resource: &str, subject_did: &str) 
 
 /// Append a third-party block granting `did` a **granular** right: it may perform
 /// `op` on any resource under `prefix` (e.g. `op="write"`,
-/// `prefix="identity:S:peers:ROWID"` = write only that one row). Signed by an admin
+/// `prefix="identity:S:signers:ROWID"` = write only that one row). Signed by an admin
 /// key. This is the unified delegated-right primitive — `owns`/`reads`/`replicate`
 /// are the coarse special cases; this expresses any op at any resource scope
 /// (per-identity, per-table, or per-row via the prefix).
@@ -1333,16 +1333,16 @@ mod tests {
 		assert!(readers.iter().any(|d| signer_did_matches(d, &reader.signer_did)), "reader listed");
 
 		// The reader IS authorized to Read…
-		authorize(&v, sid, AccOp::Read, "peers", Some(rid), &reader.signer_did).unwrap();
+		authorize(&v, sid, AccOp::Read, "signers", Some(rid), &reader.signer_did).unwrap();
 		// …but is NOT a member/admin: no write, no delete, no replicate.
-		assert!(authorize(&v, sid, AccOp::Write, "peers", Some(rid), &reader.signer_did).is_err());
-		assert!(authorize(&v, sid, AccOp::Delete, "peers", Some(rid), &reader.signer_did).is_err());
-		assert!(authorize(&v, sid, AccOp::Replicate, "peers", Some(rid), &reader.signer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Write, "signers", Some(rid), &reader.signer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Delete, "signers", Some(rid), &reader.signer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Replicate, "signers", Some(rid), &reader.signer_did).is_err());
 		// A DID with no reads grant cannot read.
-		assert!(authorize(&v, sid, AccOp::Read, "peers", Some(rid), &outsider.signer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Read, "signers", Some(rid), &outsider.signer_did).is_err());
 		// The owner still reads + writes as a full member.
-		authorize(&v, sid, AccOp::Read, "peers", Some(rid), &v.signer_did.clone()).unwrap();
-		authorize(&v, sid, AccOp::Write, "peers", Some(rid), &v.signer_did.clone()).unwrap();
+		authorize(&v, sid, AccOp::Read, "signers", Some(rid), &v.signer_did.clone()).unwrap();
+		authorize(&v, sid, AccOp::Write, "signers", Some(rid), &v.signer_did.clone()).unwrap();
 	}
 
 	#[test]
@@ -1467,7 +1467,7 @@ mod tests {
 		let other_row = uuid::Uuid::from_u128(0x3333_4444);
 
 		let genesis = mint_safe_genesis(&owner, sid).unwrap();
-		let prefix = format!("safe:{sid}:peers:{own_row}");
+		let prefix = format!("safe:{sid}:signers:{own_row}");
 		let chain = attenuate_add_grant_third_party(
 			&owner.biscuit_kp,
 			&genesis,
@@ -1480,14 +1480,14 @@ mod tests {
 		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
 
 		// Member may write its OWN row…
-		authorize(&v, sid, AccOp::Write, "peers", Some(own_row), &member.signer_did).unwrap();
+		authorize(&v, sid, AccOp::Write, "signers", Some(own_row), &member.signer_did).unwrap();
 		// …but NOT another row, NOT another table, NOT read, NOT delete.
-		assert!(authorize(&v, sid, AccOp::Write, "peers", Some(other_row), &member.signer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Write, "signers", Some(other_row), &member.signer_did).is_err());
 		assert!(authorize(&v, sid, AccOp::Write, "todos", Some(own_row), &member.signer_did).is_err());
-		assert!(authorize(&v, sid, AccOp::Read, "peers", Some(own_row), &member.signer_did).is_err());
-		assert!(authorize(&v, sid, AccOp::Delete, "peers", Some(own_row), &member.signer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Read, "signers", Some(own_row), &member.signer_did).is_err());
+		assert!(authorize(&v, sid, AccOp::Delete, "signers", Some(own_row), &member.signer_did).is_err());
 		// Owner keeps full access (the granular grant doesn't shadow ownership).
-		authorize(&v, sid, AccOp::Write, "peers", Some(other_row), &v.signer_did.clone()).unwrap();
+		authorize(&v, sid, AccOp::Write, "signers", Some(other_row), &v.signer_did.clone()).unwrap();
 
 		// Enumerated by identity_grants for the cap report.
 		let grants = identity_grants(&v.safes.get(&sid).unwrap().biscuit, sid).unwrap();

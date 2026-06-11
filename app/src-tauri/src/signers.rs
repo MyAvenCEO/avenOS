@@ -10,8 +10,8 @@ use crate::jazz::jazz_engine;
 
 /// Load active remote peer DIDs referenced from the singleton `humans.my_devices` allowlist.
 pub async fn list_active_signer_dids(client: &JazzClient) -> Result<Vec<String>, String> {
-	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
-	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
+	let rows = jazz_engine::exec_list_rows(client, "signers").await?;
+	let schema = jazz_engine::resolved_table_schema(client, "signers").await?;
 	let did_ix = jazz_engine::col_ix(&schema, "signer_did")?;
 	let status_ix = jazz_engine::col_ix(&schema, "status")?;
 	let kind_ix = jazz_engine::col_ix(&schema, "kind")?;
@@ -69,7 +69,7 @@ pub async fn default_spark_id(client: &JazzClient) -> Result<Option<uuid::Uuid>,
 /// One row for IPC — mirrors `peers` table (remote rows only for trusted-device UI).
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PeerRowReply {
+pub struct SignerRowReply {
 	pub id: String,
 	pub signer_did: String,
 	pub device_label: String,
@@ -78,9 +78,9 @@ pub struct PeerRowReply {
 	pub status: String,
 }
 
-pub async fn list_peer_rows(client: &JazzClient) -> Result<Vec<PeerRowReply>, String> {
-	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
-	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
+pub async fn list_signer_rows(client: &JazzClient) -> Result<Vec<SignerRowReply>, String> {
+	let rows = jazz_engine::exec_list_rows(client, "signers").await?;
+	let schema = jazz_engine::resolved_table_schema(client, "signers").await?;
 	let did_ix = jazz_engine::col_ix(&schema, "signer_did")?;
 	let label_ix = jazz_engine::col_ix(&schema, "device_label")?;
 	let kind_ix = jazz_engine::col_ix(&schema, "kind")?;
@@ -102,7 +102,7 @@ pub async fn list_peer_rows(client: &JazzClient) -> Result<Vec<PeerRowReply>, St
 		if status == "revoked" {
 			continue;
 		}
-		out.push(PeerRowReply {
+		out.push(SignerRowReply {
 			id: oid.uuid().to_string(),
 			signer_did: vals
 				.get(did_ix)
@@ -142,7 +142,7 @@ fn peer_timestamp_ms(v: &Value) -> Option<i64> {
 /// `peers` table (`kind=remote`, `status=active`). This flat list IS the trust
 /// set — no `humans` coupling. First-contact / pairing primitive (plan §8 step
 /// 10 — the dev paste-DID shortcut). Idempotent: re-adding active peer is a no-op.
-pub async fn add_remote_peer(
+pub async fn add_remote_signer(
 	client: &JazzClient,
 	signer_did: &str,
 	device_label: &str,
@@ -156,11 +156,11 @@ pub async fn add_remote_peer(
 	}
 	// Re-adding a previously Forgotten peer: reactivate its row instead of
 	// creating a duplicate (a leftover revoked row would keep it deregistered).
-	if is_peer_revoked(client, signer_did).await? {
-		return set_peer_status(client, signer_did, "active").await;
+	if is_signer_revoked(client, signer_did).await? {
+		return set_signer_status(client, signer_did, "active").await;
 	}
 
-	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
+	let schema = jazz_engine::resolved_table_schema(client, "signers").await?;
 	let now_ms: i64 = std::time::SystemTime::now()
 		.duration_since(std::time::UNIX_EPOCH)
 		.map(|d| d.as_millis() as i64)
@@ -181,26 +181,26 @@ pub async fn add_remote_peer(
 	values.insert("kind".into(), JsonValue::String("remote".into()));
 	values.insert("added_at_ms".into(), JsonValue::Number(now_ms.into()));
 	values.insert("status".into(), JsonValue::String("active".into()));
-	let row_vals = crate::jazz::insert_values("peers", &schema, values)?;
+	let row_vals = crate::jazz::insert_values("signers", &schema, values)?;
 	client
-		.create("peers", row_vals)
+		.create("signers", row_vals)
 		.await
 		.map_err(crate::jazz::format_jazz_err)?;
 	Ok(())
 }
 
-pub async fn set_peer_status(
+pub async fn set_signer_status(
 	client: &JazzClient,
 	signer_did: &str,
 	status: &str,
 ) -> Result<(), String> {
-	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
-	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
+	let rows = jazz_engine::exec_list_rows(client, "signers").await?;
+	let schema = jazz_engine::resolved_table_schema(client, "signers").await?;
 	let did_ix = jazz_engine::col_ix(&schema, "signer_did")?;
 	let signer_did = signer_did.trim();
 	// Update EVERY matching row, not just the first: earlier add/forget cycles can
 	// leave duplicate rows for one DID. A lingering `revoked` dup would otherwise
-	// keep is_peer_revoked() true after re-granting → the connect gate skips
+	// keep is_signer_revoked() true after re-granting → the connect gate skips
 	// registration → the peer stays "Offline" and never syncs.
 	let mut matched = false;
 	for (oid, vals) in rows {
@@ -241,9 +241,9 @@ pub async fn is_allowlisted(client: &JazzClient, did: &str) -> Result<bool, Stri
 /// cycles — a lingering revoked dup alongside an active row must NOT keep the
 /// peer deregistered (that left it stuck "Offline"). Distinct from "unknown"
 /// (no row) so first-contact stays permissive while a true Forget persists.
-pub async fn is_peer_revoked(client: &JazzClient, did: &str) -> Result<bool, String> {
-	let rows = jazz_engine::exec_list_rows(client, "peers").await?;
-	let schema = jazz_engine::resolved_table_schema(client, "peers").await?;
+pub async fn is_signer_revoked(client: &JazzClient, did: &str) -> Result<bool, String> {
+	let rows = jazz_engine::exec_list_rows(client, "signers").await?;
+	let schema = jazz_engine::resolved_table_schema(client, "signers").await?;
 	let did_ix = jazz_engine::col_ix(&schema, "signer_did")?;
 	let status_ix = jazz_engine::col_ix(&schema, "status")?;
 	let t = did.trim();

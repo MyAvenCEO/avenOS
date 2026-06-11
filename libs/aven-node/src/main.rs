@@ -88,7 +88,7 @@ fn derive_identity_db_dir(network_seed: &str, server_name: &str) -> std::path::P
     for seg in network_seed.split('/').filter(|s| !s.is_empty()) {
         base = base.join(seg);
     }
-    base.join("peers").join(server_name).join("db")
+    base.join("vaults").join(server_name).join("db")
 }
 
 fn load_identity(cfg: &Config) -> SigningKey {

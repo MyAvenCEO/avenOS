@@ -252,7 +252,7 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 /// owner) is a plain `Write`.
 fn required_write_op_for_table(table: &str) -> crate::identity_acc::AccOp {
 	match table {
-		"peers" => crate::identity_acc::AccOp::Admit,
+		"signers" => crate::identity_acc::AccOp::Admit,
 		"keyshares" => crate::identity_acc::AccOp::RotateDek,
 		_ => crate::identity_acc::AccOp::Write,
 	}

@@ -437,7 +437,7 @@ fn spawn_dev_peer_sync(
 				let _ = change_tx.send(table);
 			}
 			Some(None) => {
-				for t in ["safes", "keyshares", "peers"] {
+				for t in ["safes", "keyshares", "signers"] {
 					let _ = change_tx.send(t.to_string());
 				}
 			}
@@ -467,7 +467,7 @@ fn spawn_dev_peer_sync(
 			// skipped; unknown peers stay permissive (first-contact).
 			let remote_did = crate::jazz_auth::signer_did_from_ed25519(&remote.0).ok();
 			let revoked = match &remote_did {
-				Some(did) => crate::peers::is_peer_revoked(&client, did)
+				Some(did) => crate::signers::is_signer_revoked(&client, did)
 					.await
 					.unwrap_or(false),
 				None => false,

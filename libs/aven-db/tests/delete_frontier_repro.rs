@@ -27,7 +27,7 @@ fn sync_frontier(io: &MemoryStorage) -> (FrontierDag, Vec<BatchId>) {
     let mut dag = FrontierDag::new();
     for (oid, locator) in io.scan_row_locators().expect("scan_row_locators") {
         let table = locator.table.to_string();
-        if table == "humans" || table == "peers" {
+        if table == "humans" || table == "signers" {
             continue;
         }
         if let Ok(batches) = io.scan_history_row_batches(&table, oid) {

@@ -39,7 +39,38 @@
 		unlocked: boolean
 	}
 
-	type CreateStep = 'locale' | 'name' | 'device' | 'biometry'
+	type CreateStep = 'locale' | 'seal'
+
+	// Sign-in / signer method this self is sealed with. Today: the device's
+	// built-in Secure Enclave biometric. Scaffolded as a list so future methods
+	// (hardware security key, recovery phrase) slot in as additional
+	// login/recovery factors.
+	type SignerType = 'secure_enclave' | 'security_key' | 'recovery_phrase'
+	const signerOptions: {
+		id: SignerType
+		labelKey: string
+		descKey: string
+		available: boolean
+	}[] = [
+		{
+			id: 'secure_enclave',
+			labelKey: 'lockGate.signerSecureEnclave',
+			descKey: 'lockGate.signerSecureEnclaveDesc',
+			available: true,
+		},
+		{
+			id: 'security_key',
+			labelKey: 'lockGate.signerSecurityKey',
+			descKey: 'lockGate.signerComingSoon',
+			available: false,
+		},
+		{
+			id: 'recovery_phrase',
+			labelKey: 'lockGate.signerRecoveryPhrase',
+			descKey: 'lockGate.signerComingSoon',
+			available: false,
+		},
+	]
 
 	let loading = $state(false)
 	let err = $state<string | undefined>()
@@ -47,12 +78,13 @@
 	let vaultsReady = $state(false)
 	let mode = $state<'pick' | 'create'>('pick')
 	let createStep = $state<CreateStep>('locale')
-	let createBiometryStarted = $state(false)
 	let resolvingDeviceLabel = $state(false)
-	let deviceLabelAutoFilled = $state(false)
-	let firstName = $state('')
-	let nameInputEl = $state<HTMLInputElement | null>(null)
-	let deviceName = $state('')
+	let signerNameInputEl = $state<HTMLInputElement | null>(null)
+	// The single onboarding name = this signer's human-readable label (auto-filled
+	// from whoami, editable). There is no separate person/first-name and no human
+	// SAFE at onboarding — a signer (did:key) + its data vault is all we create.
+	let signerName = $state('')
+	let signerType = $state<SignerType>('secure_enclave')
 	let selectedSlug = $state<string | undefined>()
 	let unlockingSlug = $state<string | undefined>()
 	let selectedLocale = $state<SupportedLocale>(getLocale())
@@ -95,18 +127,26 @@
 	function startCreate(): void {
 		mode = 'create'
 		createStep = 'locale'
-		createBiometryStarted = false
 		resolvingDeviceLabel = false
-		deviceLabelAutoFilled = false
-		deviceName = ''
+		signerName = ''
+		signerType = 'secure_enclave'
 		err = undefined
 	}
 
-	function chooseLocale(locale: SupportedLocale): void {
+	async function chooseLocale(locale: SupportedLocale): Promise<void> {
 		selectedLocale = locale
 		setLocale(locale)
-		createStep = 'name'
 		err = undefined
+		// Pre-fill the signer name from the OS (whoami). Always editable on the seal
+		// step before sign-up — we never submit it silently.
+		resolvingDeviceLabel = true
+		signerName = ''
+		try {
+			await resolveDeviceLabel()
+		} finally {
+			resolvingDeviceLabel = false
+		}
+		createStep = 'seal'
 	}
 
 	async function loadVaultsWithRetry(maxAttempts = 8): Promise<VaultListEntry[]> {
@@ -123,18 +163,13 @@
 	}
 
 	$effect(() => {
-		if (mode !== 'create' || createStep !== 'biometry' || createBiometryStarted || loading) return
-		createBiometryStarted = true
-		void finalizeCreate()
-	})
-
-	$effect(() => {
-		if (mode !== 'create' || createStep !== 'name') return
-		void nameInputEl
+		if (mode !== 'create' || createStep !== 'seal' || resolvingDeviceLabel) return
+		void signerNameInputEl
 		void tick().then(() => {
-			const el = nameInputEl
-			if (!el || mode !== 'create' || createStep !== 'name') return
+			const el = signerNameInputEl
+			if (!el || mode !== 'create' || createStep !== 'seal') return
 			el.focus()
+			el.select()
 		})
 	})
 
@@ -272,70 +307,39 @@
 		await unlockExisting()
 	}
 
-	async function resolveDeviceLabel(): Promise<boolean> {
-		if (!browser || !isTauriRuntime()) return false
+	// Auto-fill the signer name from the OS (whoami / Computer Name). Best-effort:
+	// on failure we leave the field blank for the user to type. The value is always
+	// editable on the seal step before sign-up — we never submit it silently.
+	async function resolveDeviceLabel(): Promise<void> {
+		if (!browser || !isTauriRuntime()) return
 		try {
 			const label = (await invoke<string>('plugin:self|host_device_label')).trim()
-			if (!label) return false
-			deviceName = label
-			deviceLabelAutoFilled = true
-			return true
+			if (label) signerName = label
 		} catch {
-			return false
+			// leave blank — user names the signer on the seal step
 		}
-	}
-
-	async function advanceCreateName(): Promise<void> {
-		if (!firstName.trim()) {
-			err = t('lockGate.errAddName')
-			return
-		}
-		err = undefined
-		resolvingDeviceLabel = true
-		deviceName = ''
-		deviceLabelAutoFilled = false
-		try {
-			if (await resolveDeviceLabel()) {
-				createStep = 'biometry'
-			} else {
-				createStep = 'device'
-			}
-		} finally {
-			resolvingDeviceLabel = false
-		}
-	}
-
-	function advanceCreateDevice(): void {
-		if (!deviceName.trim()) {
-			err = t('lockGate.errAddDeviceName')
-			return
-		}
-		err = undefined
-		createStep = 'biometry'
 	}
 
 	function backCreateStep(): void {
 		err = undefined
-		createBiometryStarted = false
-		if (createStep === 'device') {
-			createStep = 'name'
-		} else if (createStep === 'name') {
+		if (createStep === 'seal') {
 			createStep = 'locale'
-		} else if (createStep === 'biometry') {
-			createStep = deviceLabelAutoFilled ? 'name' : 'device'
 		}
 	}
 
 	async function finalizeCreate(): Promise<void> {
-		if (!firstName.trim() || !deviceName.trim()) {
-			err = t('lockGate.errFinishStepsFirst')
-			createBiometryStarted = false
+		if (loading) return
+		const name = signerName.trim()
+		if (!name) {
+			err = t('lockGate.errAddSignerName')
 			return
 		}
 		loading = true
 		err = undefined
 		try {
-			const created = await vaultCreate(firstName.trim(), deviceName.trim())
+			// One name today: it labels the signer (signers.device_label) and names
+			// the local vault folder. No separate human SAFE / person name yet.
+			const created = await vaultCreate(name, name)
 			await vaultUiSettingsSetLocale(selectedLocale)
 			applyVaultList(await vaultList())
 			selectedSlug = created.usernameSlug
@@ -343,7 +347,6 @@
 			await runUnlockPipeline()
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
-			createBiometryStarted = false
 		} finally {
 			loading = false
 		}
@@ -479,85 +482,119 @@
 						</button>
 					{/if}
 				</div>
-			{:else if createStep === 'name'}
-				<div class="flex w-full max-w-md flex-col gap-4">
+			{:else}
+				<div class="flex w-full max-w-md flex-col gap-5">
 					<div>
-						<p class="text-muted-foreground mb-3 text-center text-sm leading-relaxed">
-							{t('lockGate.whoAreYou')}
-						</p>
-						<div class="relative">
-							<input
-								class={pillInputClass}
-								bind:this={nameInputEl}
-								bind:value={firstName}
-								autocomplete="given-name"
-								placeholder={t('lockGate.namePlaceholder')}
-								aria-label={t('lockGate.yourName')}
-								disabled={resolvingDeviceLabel}
-								onkeydown={(e) => {
-									if (e.key === 'Enter' && !resolvingDeviceLabel) {
-										e.preventDefault()
-										void advanceCreateName()
-									}
-								}}
-							/>
-							{@render pillSubmit(
-								t('common.continue'),
-								() => void advanceCreateName(),
-								loading || resolvingDeviceLabel,
-							)}
-						</div>
+						<label
+							class="text-muted-foreground mb-2 block text-center text-sm leading-relaxed"
+							for="lockgate-signer-name"
+						>
+							{t('lockGate.nameYourDevice')}
+						</label>
 						{#if resolvingDeviceLabel}
-							<p class="text-muted-foreground mt-3 text-sm" aria-live="polite">
+							<p
+								class="text-muted-foreground mb-2 text-center text-xs"
+								aria-live="polite"
+							>
 								{t('common.detectingDevice')}
 							</p>
 						{/if}
-					</div>
-					<button
-						type="button"
-						class={outlineBtnClass}
-						disabled={loading}
-						onclick={backCreateStep}
-					>
-						{t('common.back')}
-					</button>
-					{#if vaults.length > 0}
-						<button
-							type="button"
-							class={outlineBtnClass}
-							disabled={loading}
-							onclick={() => {
-								mode = 'pick'
-								err = undefined
+						<input
+							id="lockgate-signer-name"
+							class={pillInputClass}
+							bind:this={signerNameInputEl}
+							bind:value={signerName}
+							autocomplete="off"
+							placeholder={t('lockGate.devicePlaceholder')}
+							aria-label={t('lockGate.deviceName')}
+							disabled={loading || resolvingDeviceLabel}
+							onkeydown={(e) => {
+								if (e.key === 'Enter') {
+									e.preventDefault()
+									void finalizeCreate()
+								}
 							}}
-						>
-							{t('lockGate.backToSignIn')}
-						</button>
-					{/if}
-				</div>
-			{:else if createStep === 'device'}
-				<div class="flex w-full max-w-md flex-col gap-4">
+						/>
+					</div>
+
 					<div>
-						<p class="text-muted-foreground mb-3 text-sm leading-relaxed">
-							{t('lockGate.whichDevice')}
+						<p class="text-muted-foreground mb-2 text-sm leading-relaxed">
+							{t('lockGate.signerTypeLabel')}
 						</p>
-						<div class="relative">
-							<input
-								class={pillInputClass}
-								bind:value={deviceName}
-								autocomplete="off"
-								placeholder={t('lockGate.devicePlaceholder')}
-								aria-label={t('lockGate.deviceName')}
-								onkeydown={(e) => {
-									if (e.key === 'Enter') {
-										e.preventDefault()
-										advanceCreateDevice()
-									}
-								}}
-							/>
-							{@render pillSubmit(t('common.continue'), advanceCreateDevice, loading)}
+						<div class="flex flex-col gap-2">
+							{#each signerOptions as opt (opt.id)}
+								<button
+									type="button"
+									class="flex w-full items-center gap-3 rounded-lg border bg-background/97 px-4 py-3 text-left shadow-sm backdrop-blur-sm transition-[background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-55 {signerType ===
+									opt.id
+										? 'border-primary ring-2 ring-primary/30'
+										: 'border-border/60 hover:bg-accent/10'}"
+									disabled={!opt.available || loading}
+									aria-pressed={signerType === opt.id}
+									onclick={() => {
+										if (opt.available) signerType = opt.id
+									}}
+								>
+									<span
+										class="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-brand-navy)]/10 text-[var(--color-brand-navy)]"
+										aria-hidden="true"
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="18"
+											height="18"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+											<path d="M7 11V7a5 5 0 0 1 10 0v4" />
+										</svg>
+									</span>
+									<span class="min-w-0 flex-1">
+										<span class="block text-sm font-medium">{t(opt.labelKey)}</span>
+										<span class="text-muted-foreground block text-xs leading-snug">
+											{t(opt.descKey)}
+										</span>
+									</span>
+									{#if signerType === opt.id}
+										<svg
+											class="text-primary shrink-0"
+											xmlns="http://www.w3.org/2000/svg"
+											width="18"
+											height="18"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2.5"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+										>
+											<path d="M20 6 9 17l-5-5" />
+										</svg>
+									{/if}
+								</button>
+							{/each}
 						</div>
 					</div>
+
+					<p class="text-muted-foreground text-center text-xs leading-relaxed">
+						{t('lockGate.biometryHint')}
+					</p>
+
+					<button
+						type="button"
+						class="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-brand-navy)] px-6 py-3 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 disabled:opacity-50"
+						disabled={loading || resolvingDeviceLabel || !signerName.trim()}
+						onclick={() => void finalizeCreate()}
+					>
+						{loading ? t('common.unlocking') : t('lockGate.sealToDevice')}
+					</button>
+
 					<button
 						type="button"
 						class={outlineBtnClass}
@@ -566,30 +603,6 @@
 					>
 						{t('common.back')}
 					</button>
-				</div>
-			{:else}
-				<div
-					class="flex w-full max-w-md flex-col items-center gap-4 rounded-lg border border-border/60 bg-background/97 px-6 py-8 text-center shadow-sm backdrop-blur-sm"
-					aria-live="polite"
-				>
-					<p class="text-muted-foreground text-sm leading-relaxed">
-						{t('lockGate.biometryHint')}
-					</p>
-					{#if loading}
-						<p class="text-muted-foreground text-sm">{t('common.unlocking')}</p>
-					{/if}
-					{#if !loading && err}
-						<button
-							type="button"
-							class={outlineBtnClass}
-							onclick={() => {
-								createBiometryStarted = false
-								backCreateStep()
-							}}
-						>
-							{t('common.back')}
-						</button>
-					{/if}
 				</div>
 			{/if}
 		</div>

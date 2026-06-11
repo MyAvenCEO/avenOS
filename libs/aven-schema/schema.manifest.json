@@ -1,6 +1,6 @@
 {
 	"tables": {
-		"peers": {
+		"signers": {
 			"columns": [
 				{
 					"name": "owner",

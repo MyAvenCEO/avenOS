@@ -118,9 +118,9 @@ pub(crate) async fn groove_ipc_jazz_create(
 	let shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
 	let tbl = jazz_engine::resolved_table_schema(client.as_ref(), &table).await?;
 
-	if table == "peers" {
+	if table == "signers" {
 		let identity = jazz_engine::identity_uuid_from_json_row(&tbl, &values)?;
-		let vals = insert_values("peers", &tbl, values)?;
+		let vals = insert_values("signers", &tbl, values)?;
 		let oid = ObjectId::new();
 		let prow_meta = owner_binding_meta(&shell.signing_key, oid, identity)?;
 		client
@@ -427,9 +427,9 @@ pub(crate) async fn groove_ipc_jazz_subscribe(
 	table: String,
 ) -> Result<(), String> {
 	let _n = jazz.bump_table_ui_ref(&table).await;
-	if table == "peers" {
+	if table == "signers" {
 		let client = with_connected_client(jazz, app, self_state).await?;
-		let rows = crate::peers::list_peer_rows(client.as_ref()).await?;
+		let rows = crate::signers::list_signer_rows(client.as_ref()).await?;
 		emit_avenos_runtime(
 			app,
 			serde_json::json!({

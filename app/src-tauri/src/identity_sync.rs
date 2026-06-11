@@ -61,7 +61,7 @@ pub fn identity_scoped_table_names() -> &'static [String] {
 /// Biscuit vault / trusted-peer tables — full shell re-hydrate on change.
 /// `safe_controllers` carries controller-chain COPIES the vault resolves
 /// `did:safe:` paths from, so a changed copy re-hydrates like a changed chain.
-pub const VAULT_SHELL_TABLES: &[&str] = &["safes", "safe_controllers", "keyshares", "peers"];
+pub const VAULT_SHELL_TABLES: &[&str] = &["safes", "safe_controllers", "keyshares", "signers"];
 
 /// Catalogue tables republished to the webview after vault shell re-hydrate (`peers` uses its own path).
 pub const VAULT_CATALOGUE_UI_TABLES: &[&str] = &["safes", "keyshares"];

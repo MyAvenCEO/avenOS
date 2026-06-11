@@ -8,7 +8,7 @@ mod network;
 mod jazz;
 mod jazz_auth;
 mod log_ring;
-mod peers;
+mod signers;
 mod schema_manifest;
 mod schema_migrations;
 mod identity_acc;

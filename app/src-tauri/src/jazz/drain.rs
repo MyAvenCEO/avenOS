@@ -40,8 +40,8 @@ pub(crate) async fn execute_drain_batch(
 		.iter()
 		.any(|t| identity_sync::is_vault_shell_table(t));
 
-	let peers_pending = pending.remove("peers");
-	if peers_pending {
+	let signers_pending = pending.remove("signers");
+	if signers_pending {
 		if let Err(e) = publish_trusted_peers_ui(app, jazz, self_state).await {
 			log::warn!(
 				target: "avenos::jazz",
@@ -91,7 +91,7 @@ pub(crate) async fn execute_drain_batch(
 			.subscribed_tables()
 			.await
 			.into_iter()
-			.filter(|t| t != "peers") // peers has its own publish path (publish_trusted_peers_ui)
+			.filter(|t| t != "signers") // peers has its own publish path (publish_trusted_peers_ui)
 			.collect();
 		set.insert("safes".to_string());
 		set.into_iter().collect()

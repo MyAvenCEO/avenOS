@@ -19,7 +19,7 @@
 				{ "name": "created_at_ms", "type": "bigint", "plaintext": true }
 			]
 		},
-		"peers": {
+		"signers": {
 			"columns": [
 				{
 					"name": "peer_did",

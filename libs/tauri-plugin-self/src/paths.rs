@@ -1,4 +1,4 @@
-//! Canonical layout: `<Documents>/.avenOS/<network>/peers/<slug>/{vault,db}`.
+//! Canonical layout: `<Documents>/.avenOS/<network>/vaults/<slug>/{vault,db}`.
 //!
 //! **Override**: `AVENOS_DATA_DIR_OVERRIDE` points at a **full identity root** (directory that directly
 //! contains `vault/` and `db/`) for tests and tooling.
@@ -41,7 +41,7 @@ pub fn user_documents_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathB
 
 use crate::network::NETWORK_PATH_SEGMENTS;
 
-/// `<Documents>/.avenOS/<network>` — parent of `peers/`.
+/// `<Documents>/.avenOS/<network>` — parent of `vaults/`.
 pub fn aven_os_app_base<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
 	if let Some(root) = expand_override() {
 		fs::create_dir_all(&root).map_err(|e| format!("create_dir_all {}: {e}", root.display()))?;
@@ -56,13 +56,13 @@ pub fn aven_os_app_base<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf
 	Ok(base)
 }
 
-/// `<Documents>/.avenOS/<network>/peers/` — the container of one `<slug>/` dir per
-/// peer (every client device AND server node is a peer). On-disk name is `peers`.
-pub fn peers_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+/// `<Documents>/.avenOS/<network>/vaults/` — the container of one `<slug>/` dir per
+/// peer (every client device AND server node is a peer). On-disk name is `vaults`.
+pub fn vaults_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
 	if expand_override().is_some() {
-		return Err("peers_dir_unavailable_under_data_dir_override".into());
+		return Err("vaults_dir_unavailable_under_data_dir_override".into());
 	}
-	Ok(aven_os_app_base(app)?.join("peers"))
+	Ok(aven_os_app_base(app)?.join("vaults"))
 }
 
 /// `<Documents>/.avenOS/models` — shared on-device model cache (e.g. the Gemma 4
@@ -80,7 +80,7 @@ pub fn models_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, Stri
 	Ok(dir)
 }
 
-/// Resolves the active peer's directory (`…/peers/<slug>` or override root).
+/// Resolves the active vault directory (`…/vaults/<slug>` or override root).
 pub fn aven_os_user_root<R: tauri::Runtime>(
 	app: &AppHandle<R>,
 	vault: &ActiveVault,
@@ -89,10 +89,10 @@ pub fn aven_os_user_root<R: tauri::Runtime>(
 		return Ok(root);
 	}
 	let slug = vault.require_slug()?;
-	Ok(peers_dir(app)?.join(&slug))
+	Ok(vaults_dir(app)?.join(&slug))
 }
 
-/// `…/peers/<slug>/vault` — SE blobs, strong.hold, manifest, settings.
+/// `…/vaults/<slug>/vault` — SE blobs, strong.hold, manifest, settings.
 pub fn identity_crypto_dir(identity_root: &Path) -> PathBuf {
 	identity_root.join(IDENTITY_CRYPTO_DIR)
 }

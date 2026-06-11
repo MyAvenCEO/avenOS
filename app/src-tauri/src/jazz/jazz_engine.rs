@@ -1269,9 +1269,9 @@ pub(super) async fn hydrate_shell(
 		// on the aven-node, never defaulted on a device. We only ensure this device
 		// has its own local `peers` row (presence + auto device label), idempotently —
 		// this branch re-runs every hydrate until the first identity exists.
-		let peers_schema_seed = resolved_table_schema(client, "peers").await?;
-		let did_ix = col_ix(&peers_schema_seed, "signer_did")?;
-		let existing_peers = exec_list_rows(client, "peers").await.unwrap_or_default();
+		let signers_schema_seed = resolved_table_schema(client, "signers").await?;
+		let did_ix = col_ix(&signers_schema_seed, "signer_did")?;
+		let existing_peers = exec_list_rows(client, "signers").await.unwrap_or_default();
 		let has_local = existing_peers
 			.iter()
 			.any(|(_o, vals)| matches!(vals.get(did_ix), Some(Value::Text(s)) if s == &vault.signer_did));
@@ -1282,8 +1282,8 @@ pub(super) async fn hydrate_shell(
 				.filter(|s| !s.is_empty())
 				.unwrap_or_else(system_device_name);
 			let peer_vals = super::insert_values(
-				"peers",
-				&peers_schema_seed,
+				"signers",
+				&signers_schema_seed,
 				vec![
 					("signer_did".into(), JsonValue::String(vault.signer_did.clone())),
 					("device_label".into(), JsonValue::String(device_label)),
@@ -1295,7 +1295,7 @@ pub(super) async fn hydrate_shell(
 				.collect(),
 			)?;
 			client
-				.create("peers", peer_vals)
+				.create("signers", peer_vals)
 				.await
 				.map_err(super::format_jazz_err)?;
 		}

@@ -712,8 +712,8 @@ impl ManagedJazz {
 		if self.table_ui_ref_count(table).await == 0 {
 			return Ok(false);
 		}
-		if table == "peers" {
-			let rows = crate::peers::list_peer_rows(client).await?;
+		if table == "signers" {
+			let rows = crate::signers::list_signer_rows(client).await?;
 			return emit_peers_table_snapshot(self, app, &rows);
 		}
 		let (snap, _) = jazz_engine::query_table_publish(client, shell, table, ENCRYPTED_META).await?;
@@ -747,8 +747,8 @@ impl ManagedJazz {
 		shell: &jazz_engine::ShellState,
 		table: &str,
 	) -> Result<(), String> {
-		if table == "peers" {
-			let rows = crate::peers::list_peer_rows(client).await?;
+		if table == "signers" {
+			let rows = crate::signers::list_signer_rows(client).await?;
 			let _ = emit_peers_table_snapshot(self, app, &rows)?;
 			return Ok(());
 		}

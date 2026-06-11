@@ -10,11 +10,11 @@ use tauri_plugin_self::state::SelfState;
 
 use super::*;
 
-/// Emit `{ kind: "table", table: "peers" }` from canonical allowlisted remote rows.
+/// Emit `{ kind: "table", table: "signers" }` from canonical allowlisted remote rows.
 pub(super) fn emit_peers_table_snapshot(
 	jazz: &ManagedJazz,
 	app: &tauri::AppHandle,
-	rows: &[crate::peers::PeerRowReply],
+	rows: &[crate::signers::SignerRowReply],
 ) -> Result<bool, String> {
 	let encoded = serde_json::to_string(rows).map_err(|e| e.to_string())?;
 	{
@@ -22,16 +22,16 @@ pub(super) fn emit_peers_table_snapshot(
 			.last_table_snapshots
 			.write()
 			.expect("last_table_snapshots poisoned");
-		if last.get("peers").is_some_and(|prev| prev == &encoded) {
+		if last.get("signers").is_some_and(|prev| prev == &encoded) {
 			return Ok(false);
 		}
-		last.insert("peers".to_string(), encoded);
+		last.insert("signers".to_string(), encoded);
 	}
 	emit_avenos_runtime(
 		app,
 		serde_json::json!({
 			"kind": "table",
-			"table": "peers",
+			"table": "signers",
 			"rows": rows,
 		}),
 	);
@@ -46,7 +46,7 @@ pub(crate) async fn publish_trusted_peers_ui(
 ) -> Result<(), String> {
 	let (rows, snap) = if ss.is_unlocked() {
 		let client = with_connected_client(jazz, app, ss).await?;
-		let rows = crate::peers::list_peer_rows(client.as_ref()).await?;
+		let rows = crate::signers::list_signer_rows(client.as_ref()).await?;
 		let registered = registered_peer_dids(client.as_ref());
 		let converged = converged_peer_dids(client.as_ref());
 		let local_pk_prefix = local_pk_prefix_hex(ss);
@@ -59,7 +59,7 @@ pub(crate) async fn publish_trusted_peers_ui(
 		)
 	};
 
-	if jazz.table_ui_ref_count("peers").await > 0 {
+	if jazz.table_ui_ref_count("signers").await > 0 {
 		let _ = emit_peers_table_snapshot(jazz, app, &rows);
 	}
 
@@ -102,7 +102,7 @@ fn local_pk_prefix_hex(ss: &SelfState) -> String {
 /// date); registered but still owed batches is `Syncing`; no live link is
 /// `Searching`. No demo data.
 fn build_peer_mesh_status(
-	rows: &[crate::peers::PeerRowReply],
+	rows: &[crate::signers::SignerRowReply],
 	registered_dids: &std::collections::HashSet<String>,
 	converged_dids: &std::collections::HashSet<String>,
 	local_pk_prefix: String,
@@ -225,7 +225,7 @@ pub(crate) async fn execute_mesh_snapshot(
 		));
 	}
 	let client = with_connected_client(jazz, app, ss).await?;
-	let rows = crate::peers::list_peer_rows(client.as_ref()).await?;
+	let rows = crate::signers::list_signer_rows(client.as_ref()).await?;
 	let registered = registered_peer_dids(client.as_ref());
 	let converged = converged_peer_dids(client.as_ref());
 	Ok(build_peer_mesh_status(
@@ -247,9 +247,9 @@ pub(crate) async fn groove_ipc_peer_list(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
 	self_state: &SelfState,
-) -> Result<Vec<crate::peers::PeerRowReply>, String> {
+) -> Result<Vec<crate::signers::SignerRowReply>, String> {
 	let client = with_connected_client(jazz, app, self_state).await?;
-	crate::peers::list_peer_rows(client.as_ref()).await
+	crate::signers::list_signer_rows(client.as_ref()).await
 }
 
 /// First-contact / pairing: add a trusted peer (device DID) to My Network.
@@ -270,7 +270,7 @@ pub(crate) async fn groove_ipc_peer_add(
 	if peer_did == shell_arc.as_ref().signer_did {
 		return Err("cannot add your own DID as a peer".into());
 	}
-	crate::peers::add_remote_peer(client.as_ref(), &peer_did, &device_label).await?;
+	crate::signers::add_remote_signer(client.as_ref(), &peer_did, &device_label).await?;
 
 	// Resume sync immediately — e.g. re-adding a Forgotten peer. Idempotent with
 	// the connect-time registration; harmless (queues until a transport exists)
@@ -293,7 +293,7 @@ pub(crate) async fn groove_ipc_peer_revoke(
 	peer_did: String,
 ) -> Result<(), String> {
 	let client = with_connected_client(jazz, app, self_state).await?;
-	crate::peers::set_peer_status(client.as_ref(), &peer_did, "revoked").await?;
+	crate::signers::set_signer_status(client.as_ref(), &peer_did, "revoked").await?;
 
 	// Actually stop syncing: drop the registered peer client so we no longer
 	// ship to it or accept its catch-up. Marking the row alone left the peer
@@ -312,6 +312,6 @@ pub(crate) async fn groove_ipc_peer_revoke(
 	// Re-publish the trusted-peer list + mesh snapshot so the row and its chip
 	// disappear immediately (replaces the no-op execute_mesh_refresh_full).
 	let _ = publish_trusted_peers_ui(app, jazz, self_state).await;
-	let _ = jazz.change_tx.send("peers".to_string());
+	let _ = jazz.change_tx.send("signers".to_string());
 	Ok(())
 }
