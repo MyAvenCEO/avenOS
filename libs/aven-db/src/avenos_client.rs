@@ -574,6 +574,81 @@ impl AvenDbClient {
         Ok(object_id)
     }
 
+    /// Schema-checked create BY COLUMN NAME — order-independent and typo-safe, unlike the
+    /// positional [`create`]. Resolves `fields` against the live schema:
+    ///   - unknown column name        → error (caught typos / drift),
+    ///   - missing nullable column     → `Null`,
+    ///   - missing non-nullable column → error,
+    /// then the engine type-checks each value on encode. Prefer this for any hand-built row
+    /// (it makes a manifest column-order change incapable of silently corrupting a write).
+    pub async fn create_checked(
+        &self,
+        table: &str,
+        fields: std::collections::HashMap<String, Value>,
+    ) -> Result<ObjectId> {
+        let map = self.resolve_named_row(table, fields)?;
+        let (object_id, _, _) = self
+            .runtime
+            .insert(table, map, None)
+            .map_err(|e| AvenDbError::Write(e.to_string()))?;
+        Ok(object_id)
+    }
+
+    /// [`create_checked`] + a caller-supplied id and row metadata (e.g. the owner-binding).
+    pub async fn create_checked_with_id_and_metadata(
+        &self,
+        table: &str,
+        object_id: ObjectId,
+        fields: std::collections::HashMap<String, Value>,
+        extra_metadata: std::collections::HashMap<String, String>,
+    ) -> Result<ObjectId> {
+        let map = self.resolve_named_row(table, fields)?;
+        let (oid, _, _) = self
+            .runtime
+            .insert_with_id_and_metadata(table, map, Some(object_id), None, extra_metadata)
+            .map_err(|e| AvenDbError::Write(e.to_string()))?;
+        Ok(oid)
+    }
+
+    /// Resolve a name→value map into a full row map in schema order, filling missing
+    /// nullable columns with `Null` and rejecting unknown / missing-required columns.
+    fn resolve_named_row(
+        &self,
+        table: &str,
+        mut fields: std::collections::HashMap<String, Value>,
+    ) -> Result<std::collections::HashMap<String, Value>> {
+        let schema = self
+            .runtime
+            .current_schema()
+            .map_err(|e| AvenDbError::Schema(e.to_string()))?;
+        let table_schema = schema
+            .get(&TableName::new(table))
+            .ok_or_else(|| AvenDbError::Schema(format!("table not found: {table}")))?;
+        let mut row = std::collections::HashMap::with_capacity(table_schema.columns.columns.len());
+        for col in table_schema.columns.columns.iter() {
+            let name = col.name.to_string();
+            match fields.remove(&name) {
+                Some(value) => {
+                    row.insert(name, value);
+                }
+                None if col.nullable => {
+                    row.insert(name, Value::Null);
+                }
+                None => {
+                    return Err(AvenDbError::Schema(format!(
+                        "create {table}: missing required column `{name}`"
+                    )));
+                }
+            }
+        }
+        if let Some(unknown) = fields.keys().next() {
+            return Err(AvenDbError::Schema(format!(
+                "create {table}: unknown column `{unknown}` (not in schema)"
+            )));
+        }
+        Ok(row)
+    }
+
     /// Create a row with a caller-supplied id and extra row metadata (e.g. the
     /// owner-binding header). Used by the app to stamp a signed binding whose
     /// `value_id` equals this row id, verified on apply by every peer.

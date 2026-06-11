@@ -16,6 +16,7 @@
 //!   append-only/idempotent, claim kinds are free predicates, `assoc` is the bond kind.
 //! - No `created_at` columns: row ids are UUIDv7 — creation time is decoded from the id.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -445,29 +446,29 @@ impl<E: Embedder> Brain<E> {
         }
 
         let embedding = self.embedder.embed(content).await;
-        // Column order per `schema.rs`: owner, content, embedding, stream, author_role,
-        // source, seq, line_start, line_end, content_date, content_hash, source_version,
-        // normalize_version, veracity, superseded_by.
-        let values = vec![
-            Value::Uuid(self.owner),
-            Value::Text(content.to_string()),
-            Value::Vector(embedding),
-            Value::Text(opts.stream.clone()),
-            Value::Text(opts.author_role.clone()),
-            opt_text(opts.source.clone()),
-            opt_int(opts.seq),
-            opt_int(opts.line_start),
-            opt_int(opts.line_end),
-            opt_text(opts.content_date_ms.map(|ms| ms.to_string())),
-            Value::Bytea(hash.to_vec()),
-            Value::Null,
-            Value::Integer(1),
-            opt_text(opts.veracity.clone()),
-            Value::Null, // superseded_by
-        ];
+        // Name-keyed write: order-independent of the manifest. Unset columns
+        // (source_version, superseded_by) are null-filled by `create_checked`.
+        let fields = HashMap::from([
+            ("owner".to_string(), Value::Uuid(self.owner)),
+            ("content".to_string(), Value::Text(content.to_string())),
+            ("embedding".to_string(), Value::Vector(embedding)),
+            ("stream".to_string(), Value::Text(opts.stream.clone())),
+            ("author_role".to_string(), Value::Text(opts.author_role.clone())),
+            ("source".to_string(), opt_text(opts.source.clone())),
+            ("seq".to_string(), opt_int(opts.seq)),
+            ("line_start".to_string(), opt_int(opts.line_start)),
+            ("line_end".to_string(), opt_int(opts.line_end)),
+            (
+                "content_date".to_string(),
+                opt_text(opts.content_date_ms.map(|ms| ms.to_string())),
+            ),
+            ("content_hash".to_string(), Value::Bytea(hash.to_vec())),
+            ("normalize_version".to_string(), Value::Integer(1)),
+            ("veracity".to_string(), opt_text(opts.veracity.clone())),
+        ]);
         let memory_id = self
             .client
-            .create(MEMORIES, values)
+            .create_checked(MEMORIES, fields)
             .await
             .map_err(|e| BrainError::Write(format!("{e:?}")))?;
 
@@ -751,23 +752,18 @@ impl<E: Embedder> Brain<E> {
         // valid_to, confidence, strength, stability, access_count, last_access,
         // source_memory.
         self.client
-            .create(
+            .create_checked(
                 LINKS,
-                vec![
-                    Value::Uuid(self.owner),
-                    Value::Text(id_str(&subj)),
-                    Value::Text(id_str(&obj)),
-                    Value::Text(predicate.to_string()),
-                    Value::Text(LinkClass::Claim.as_str().to_string()),
-                    Value::Text(now.to_string()),
-                    Value::Null, // valid_to (open = currently true)
-                    Value::Double(confidence),
-                    Value::Null,
-                    Value::Null,
-                    Value::Null,
-                    Value::Null,
-                    opt_text(source_memory.map(|m| id_str(&m))),
-                ],
+                HashMap::from([
+                    ("owner".to_string(), Value::Uuid(self.owner)),
+                    ("from".to_string(), Value::Text(id_str(&subj))),
+                    ("to".to_string(), Value::Text(id_str(&obj))),
+                    ("kind".to_string(), Value::Text(predicate.to_string())),
+                    ("class".to_string(), Value::Text(LinkClass::Claim.as_str().to_string())),
+                    ("valid_from".to_string(), Value::Text(now.to_string())),
+                    ("confidence".to_string(), Value::Double(confidence)),
+                    ("source_memory".to_string(), opt_text(source_memory.map(|m| id_str(&m)))),
+                ]),
             )
             .await
             .map_err(|e| BrainError::Write(format!("{e:?}")))
@@ -1360,23 +1356,15 @@ impl<E: Embedder> Brain<E> {
             return Ok(());
         }
         self.client
-            .create(
+            .create_checked(
                 LINKS,
-                vec![
-                    Value::Uuid(self.owner),
-                    Value::Text(id_str(&memory)),
-                    Value::Text(id_str(&entity)),
-                    Value::Text("mentions".to_string()),
-                    Value::Text(LinkClass::Note.as_str().to_string()),
-                    Value::Null,
-                    Value::Null,
-                    Value::Null,
-                    Value::Null,
-                    Value::Null,
-                    Value::Null,
-                    Value::Null,
-                    Value::Null,
-                ],
+                HashMap::from([
+                    ("owner".to_string(), Value::Uuid(self.owner)),
+                    ("from".to_string(), Value::Text(id_str(&memory))),
+                    ("to".to_string(), Value::Text(id_str(&entity))),
+                    ("kind".to_string(), Value::Text("mentions".to_string())),
+                    ("class".to_string(), Value::Text(LinkClass::Note.as_str().to_string())),
+                ]),
             )
             .await
             .map_err(|e| BrainError::Write(format!("{e:?}")))?;
@@ -1389,14 +1377,13 @@ impl<E: Embedder> Brain<E> {
             return Ok(id);
         }
         self.client
-            .create(
+            .create_checked(
                 ENTITIES,
-                vec![
-                    Value::Uuid(self.owner),
-                    Value::Text(name.to_string()),
-                    Value::Text("unknown".to_string()),
-                    Value::Null, // properties
-                ],
+                HashMap::from([
+                    ("owner".to_string(), Value::Uuid(self.owner)),
+                    ("name".to_string(), Value::Text(name.to_string())),
+                    ("kind".to_string(), Value::Text("unknown".to_string())),
+                ]),
             )
             .await
             .map_err(|e| BrainError::Write(format!("{e:?}")))
@@ -1452,23 +1439,19 @@ impl<E: Embedder> Brain<E> {
                 .map_err(|e| BrainError::Write(format!("{e:?}")))?;
         } else {
             self.client
-                .create(
+                .create_checked(
                     LINKS,
-                    vec![
-                        Value::Uuid(self.owner),
-                        Value::Text(id_str(&a)),
-                        Value::Text(id_str(&b)),
-                        Value::Text(BOND_KIND.to_string()),
-                        Value::Text(LinkClass::Bond.as_str().to_string()),
-                        Value::Null,
-                        Value::Null,
-                        Value::Null,
-                        Value::Double(1.0), // strength (seed)
-                        Value::Double(1.0), // stability
-                        Value::BigInt(1),   // access_count
-                        Value::BigInt(now), // last_access
-                        Value::Null,
-                    ],
+                    HashMap::from([
+                        ("owner".to_string(), Value::Uuid(self.owner)),
+                        ("from".to_string(), Value::Text(id_str(&a))),
+                        ("to".to_string(), Value::Text(id_str(&b))),
+                        ("kind".to_string(), Value::Text(BOND_KIND.to_string())),
+                        ("class".to_string(), Value::Text(LinkClass::Bond.as_str().to_string())),
+                        ("strength".to_string(), Value::Double(1.0)),
+                        ("stability".to_string(), Value::Double(1.0)),
+                        ("access_count".to_string(), Value::BigInt(1)),
+                        ("last_access".to_string(), Value::BigInt(now)),
+                    ]),
                 )
                 .await
                 .map_err(|e| BrainError::Write(format!("{e:?}")))?;
