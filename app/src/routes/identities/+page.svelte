@@ -17,6 +17,9 @@
 		[...identitiesStore.rows].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '')),
 	)
 	const humans = $derived(identities.filter((i) => i.type === 'human'))
+	// One human self per device: once a signer owns (or is paired into) a human SAFE, the
+	// "+ create human" card is hidden — more humans join via signer-pairing, not new SAFEs.
+	const canCreateHuman = $derived(humans.length === 0)
 	// `group` rows are internal M9 sub-groups (collection/row crypto groups), not displayed identities.
 	const avens = $derived(identities.filter((i) => i.type !== 'human' && i.type !== 'group' && i.type !== 'spark'))
 	const sparks = $derived(identities.filter((i) => i.type === 'spark'))
@@ -75,8 +78,9 @@
 				</button>
 			</li>
 		{/each}
-		<li>
-			{#if creatingType === type}
+		{#if type !== 'human' || canCreateHuman}
+			<li>
+				{#if creatingType === type}
 				<form
 					class="flex min-h-[5.5rem] w-full flex-col gap-2 rounded-xl border border-dashed border-input bg-card/20 px-3 py-3"
 					onsubmit={(e) => {
@@ -120,6 +124,7 @@
 				</button>
 			{/if}
 		</li>
+		{/if}
 	</ul>
 {/snippet}
 

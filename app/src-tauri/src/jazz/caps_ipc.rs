@@ -1020,6 +1020,17 @@ pub(crate) async fn groove_ipc_create_identity(
 	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
 	let shell = shell_arc.as_ref();
 
+	// One human self per device: if this signer already owns (or is paired into) a human
+	// SAFE, refuse to mint another — additional devices join the SAME human via signer
+	// pairing, not a new SAFE. The UI hides the card; this is the backstop.
+	if kind == "human"
+		&& find_controlled_safe_of_type(client.as_ref(), shell, "human")
+			.await?
+			.is_some()
+	{
+		return Err("you already have a human self — add devices by pairing their signer".into());
+	}
+
 	let identity_uuid = uuid::Uuid::new_v4();
 	let sparks_schema = jazz_engine::resolved_table_schema(client.as_ref(), "safes").await?;
 
