@@ -5,25 +5,25 @@ single `.md` file; the folder it lives in is its state. No database — git is t
 single source of truth.
 
 ```
-idea/ → discovery/ → goal/ → review/ → ship/
-(backlog) (spec)     (execute) (evaluate) (archive)
+ideate/ → discover/ → build/ → review/ → ship/
+(backlog)  (spec)      (execute) (evaluate) (release+archive)
 ```
 
-Throw any idea or task into `idea`, spec it into a **measurable goal** in
-`discovery`, execute it in `goal`, evaluate it against the metric in `review`
-(human-verified, HITL), and archive it in `ship`. Each state has a skill:
-`/idea`, `/discovery`, `/goal`, `/review`, `/ship`.
+Throw any idea or task into `ideate`, spec it into a **measurable goal** in
+`discover`, execute it in `build`, evaluate it against the metric in `review`
+(human-verified, HITL), and release + archive it in `ship`. Each state has a
+skill: `/ideate`, `/discover`, `/build`, `/review`, `/ship`.
 
 ## Layout
 
 ```
 aven-board/
 ├─ board/                 # the work items — single source of truth
-│  ├─ idea/       (backlog)
-│  ├─ discovery/  (spec — uncover + measure the goal)
-│  ├─ goal/       (execute toward the metric)
+│  ├─ ideate/     (backlog)
+│  ├─ discover/   (spec — uncover + measure the goal)
+│  ├─ build/      (execute toward the metric)
 │  ├─ review/     (evaluate; human-verified, HITL)
-│  └─ ship/       (shipped / archive)
+│  └─ ship/       (released to all targets / archive)
 ├─ templates/             # how to write items + plans
 │  ├─ work-item.md
 │  └─ plan.md
@@ -33,7 +33,7 @@ aven-board/
 │  ├─ frontmatter.ts      # frontmatter parser
 │  ├─ render.ts           # markdown → sanitized HTML (marked + DOMPurify)
 │  ├─ work-items.ts       # loads board/<col>/*.md via import.meta.glob
-│  ├─ BoardView.svelte    # the kanban (4 columns)
+│  ├─ BoardView.svelte    # the kanban (5 columns)
 │  ├─ BoardColumn.svelte
 │  ├─ BoardCard.svelte    # title + summary card
 │  └─ WorkItemDoc.svelte  # full-screen doc + bottom-center back button
@@ -58,7 +58,7 @@ current board state.
 
 ## Goal-driven hand-off
 
-Every item past `idea/` carries a **`goal`** in its frontmatter: one measurable
+Every item past `ideate/` carries a **`goal`** in its frontmatter: one measurable
 completion condition, provable from command output. That makes items compatible
 with Claude Code's built-in `/goal` loop, and with the project command:
 
@@ -72,7 +72,7 @@ and the full-screen doc view surfaces the goal with a one-click "Copy /goal".
 
 ## Working the board
 
-See **[AGENTS.md](./AGENTS.md)**. In short: create items in `idea/` from
-`templates/work-item.md`, move them forward with `git mv` (`idea → discovery →
-goal → review → ship`), keep frontmatter accurate (`title`, `summary`, `tags`,
+See **[AGENTS.md](./AGENTS.md)**. In short: create items in `ideate/` from
+`templates/work-item.md`, move them forward with `git mv` (`ideate → discover →
+build → review → ship`), keep frontmatter accurate (`title`, `summary`, `tags`,
 `owner`, `goal`, dates), and append to each item's `## Progress log`.

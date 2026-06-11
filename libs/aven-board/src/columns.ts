@@ -12,25 +12,25 @@ export type BoardColumnMeta = {
  * The folder under `board/` matching `id` is the single source of truth for state.
  */
 export const BOARD_COLUMN_META: Record<BoardColumnId, BoardColumnMeta> = {
-	idea: {
-		id: 'idea',
-		label: 'Idea',
+	ideate: {
+		id: 'ideate',
+		label: 'Ideate',
 		aka: 'Backlog',
 		description: 'Raw ideas and tasks. Throw anything here — unrefined and unsorted.'
 	},
-	discovery: {
-		id: 'discovery',
-		label: 'Discovery',
+	discover: {
+		id: 'discover',
+		label: 'Discover',
 		aka: 'Spec',
 		description:
 			'Interviewing to uncover the real goal and make it measurable — turning a task into a metric.'
 	},
-	goal: {
-		id: 'goal',
-		label: 'Goal',
+	build: {
+		id: 'build',
+		label: 'Build',
 		aka: 'Execute',
 		description:
-			'Carries a measurable goal. Being executed toward that single completion condition.'
+			'Carries a measurable goal. Being built toward that single completion condition.'
 	},
 	review: {
 		id: 'review',
@@ -42,8 +42,9 @@ export const BOARD_COLUMN_META: Record<BoardColumnId, BoardColumnMeta> = {
 	ship: {
 		id: 'ship',
 		label: 'Ship',
-		aka: 'Shipped',
-		description: 'Verified and complete. Kept as the shipped/archived record.'
+		aka: 'Released',
+		description:
+			'Released to all targets (server node + Mac/iOS apps) and pushed to main — the shipped, archived record.'
 	}
 }
 

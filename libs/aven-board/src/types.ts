@@ -1,5 +1,5 @@
 /** Canonical board states — the folder a work item lives in is the source of truth. */
-export const BOARD_COLUMN_IDS = ['idea', 'discovery', 'goal', 'review', 'ship'] as const
+export const BOARD_COLUMN_IDS = ['ideate', 'discover', 'build', 'review', 'ship'] as const
 
 export type BoardColumnId = (typeof BOARD_COLUMN_IDS)[number]
 

@@ -7,25 +7,25 @@ there is no database. Git is the single source of truth.
 
 ```
 libs/aven-board/board/
-  idea/        ← raw ideas & tasks (aka backlog)
-  discovery/   ← being specced: uncover the goal, make it measurable
-  goal/        ← has a measurable goal; being executed toward it
-  review/      ← built & measured; awaiting human verification (HITL)
-  ship/        ← verified & shipped (archive)
+  ideate/    ← raw ideas & tasks (aka backlog)
+  discover/  ← being specced: uncover the goal, make it measurable
+  build/     ← has a measurable goal; being built toward it
+  review/    ← built & measured; awaiting human verification (HITL)
+  ship/      ← released to all targets & pushed to main (archive)
 ```
 
 ## The lifecycle
 
 ```
-idea  →  discovery  →  goal  →  review  →  ship
-(backlog) (spec)      (execute) (evaluate) (archive)
+ideate  →  discover  →  build  →  review  →  ship
+(backlog)  (spec)       (execute) (evaluate) (release+archive)
 ```
 
 Moving a card forward (or back) means **moving the file** with `git mv` so history
 is preserved:
 
 ```sh
-git mv libs/aven-board/board/idea/0007-thing.md libs/aven-board/board/discovery/0007-thing.md
+git mv libs/aven-board/board/ideate/0007-thing.md libs/aven-board/board/discover/0007-thing.md
 ```
 
 Keep the numeric filename prefix stable across moves so the item keeps its id.
@@ -37,37 +37,37 @@ spec-driven method, end to end). Invoke with `/<name>`:
 
 | State | Skill | What it does |
 | --- | --- | --- |
-| `idea/` | **`/idea`** | Ideate — capture a raw thought as a well-formed idea card. |
-| `discovery/` | **`/discovery`** | Interview to uncover the real goal and make it **measurable**. |
-| `goal/` | **`/goal`** ¹ | Take the measurable metric and **execute** the smallest change. |
+| `ideate/` | **`/ideate`** | Capture a raw thought as a well-formed idea card. |
+| `discover/` | **`/discover`** | Interview to uncover the real goal and make it **measurable**. |
+| `build/` | **`/build`** | Take the measurable metric and **execute** the smallest change. |
 | `review/` | **`/review`** | Evaluate the work against the metric; bubble to a human (HITL). |
-| `ship/` | **`/ship`** | Archive the human-approved item as the shipped record. |
+| `ship/` | **`/ship`** | Release to all targets + push to main, then archive the record. |
 
-¹ The `goal` state pairs with Claude Code's built-in **`/goal`** cross-turn loop,
+The `build` state pairs with Claude Code's built-in **`/goal`** cross-turn loop,
 which drives toward a transcript-provable completion condition. The
-[`/board-goal`](../../.claude/commands/board-goal.md) command composes execute →
+[`/board-goal`](../../.claude/commands/board-goal.md) command composes build →
 review across columns in one pass.
 
 ## How you (the agent) work the board
 
-### 1. Capture → `idea/`  *(skill: `/idea`)*
+### 1. Capture → `ideate/`  *(skill: `/ideate`)*
 - Create `NNNN-short-slug.md` from `templates/work-item.md`.
 - Use the next free 4-digit number in the column. Lowercase, hyphenated slug.
 - Fill in frontmatter `title` + `summary` (the card shows these) and the Context.
 - Keep it short. The idea is for capture, not specs.
 
-### 2. Discovery → `discovery/`  *(skill: `/discovery`)*
-- `git mv` the file into `discovery/`.
+### 2. Discover → `discover/`  *(skill: `/discover`)*
+- `git mv` the file into `discover/`.
 - Interview to uncover the real **goal** (the decision the work drives, not the
   task), then expand the doc using `templates/plan.md`: Approach, Steps, Files to
   touch, **Acceptance criteria**, and a **Verification** block.
 - Write a **measurable goal** — a single completion condition provable from
   command output — into the frontmatter `goal` field (see "Goals" below).
-- A card leaving `discovery/` must be executable by another agent without asking
+- A card leaving `discover/` must be executable by another agent without asking
   questions.
 
-### 3. Execute → `goal/`  *(skill: `/goal`)*
-- `git mv` the file into `goal/` when you start executing.
+### 3. Build → `build/`  *(skill: `/build`)*
+- `git mv` the file into `build/` when you start executing.
 - Implement the smallest change that satisfies the acceptance criteria.
 - Update the doc as you go (check off criteria, append to the Progress log).
 - When the code is written, `git mv` the file into `review/`.
@@ -77,12 +77,17 @@ review across columns in one pass.
   `bun run lint`). Their output is the proof the metric refers to.
 - Annotate each Acceptance criterion with its evidence, then **bubble a clear
   pass/fail verdict to a human** — review measures, the human verifies (HITL).
-- If it fails, `git mv` it back to `goal/` (re-execute) or `discovery/` (re-spec)
+- If it fails, `git mv` it back to `build/` (re-execute) or `discover/` (re-spec)
   with a note explaining why.
 
 ### 5. Ship → `ship/`  *(skill: `/ship`)*
-- Once a human has approved the review verdict, check the final boxes, append to
-  the Progress log, bump `updated:`, and `git mv` the file into `ship/`.
+- Once a human has approved the review verdict, **release** (human-triggered):
+  push/merge to remote `main`, deploy the server (`bun run deploy:server:sprite`),
+  and release the apps (`bun run release:app:all <build#>` → macOS `.pkg` + iOS
+  `.ipa`). These are outward-facing, credentialed, irreversible — never run them
+  autonomously.
+- Then check the final boxes, append to the Progress log, bump `updated:`, and
+  `git mv` the file into `ship/`.
 - A `ship/` item is the shipped record — never delete it to "clean up".
 
 ## Frontmatter contract
@@ -106,7 +111,7 @@ goal: <completion condition>    # the line handed to `/goal` (see below)
 
 ## Goals — and handing work to Claude Code
 
-Every item promoted out of `idea/` carries a **goal**: one measurable completion
+Every item promoted out of `ideate/` carries a **goal**: one measurable completion
 condition that Claude Code's built-in `/goal` loop can work toward. The `/goal`
 evaluator reads the **transcript only** — it never runs anything — so the goal
 must be provable from command output you actually produce.
@@ -118,10 +123,10 @@ Name three things: the **end state**, the **proof** (a command + its expected
 result), and the **constraints** that matter (e.g. "no other files changed").
 
 Hand an item to Claude Code with the project command (resolves the item, reads
-it, executes + reviews, moves it across columns):
+it, builds + reviews, moves it across columns):
 
 ```
-/board-goal <item-ref>          # e.g. /board-goal goal/0001-example-spec
+/board-goal <item-ref>          # e.g. /board-goal build/0001-example-spec
 ```
 
 …or flip on the built-in cross-turn loop directly with the item's condition:
@@ -139,9 +144,9 @@ meaningful step, newest first. This is how the next agent picks up cold:
 
 ```md
 ## Progress log
-- `2026-06-02` — Moved discovery → goal; implemented X in `app/src/...`.
-- `2026-06-02` — Discovery: uncovered the goal, made it measurable; moved idea → discovery.
-- `2026-06-02` — Created in idea.
+- `2026-06-02` — Moved discover → build; implemented X in `app/src/...`.
+- `2026-06-02` — Discovery: uncovered the goal, made it measurable; moved ideate → discover.
+- `2026-06-02` — Created in ideate.
 ```
 
 ## Rules of thumb

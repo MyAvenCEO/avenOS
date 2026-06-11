@@ -1,6 +1,6 @@
 ---
 name: review
-description: Evaluate an aven-board review/ item against its measurable goal, then bubble the result to a human to verify (HITL). Runs the item's Verification commands plus the repo gates, proves the metric from real command output, annotates the Acceptance criteria with evidence, and presents a clear pass/fail verdict for human sign-off — it does not ship on its own. This is the evaluator layer and the goal→review state of the spec-driven flow. Use when someone says "review NNNN", "evaluate this", "measure it against the goal", "did the metric hold?", "is this ready to ship?". For observing real app behavior use the [[verify]] skill; on human approval the [[ship]] skill archives it; failures bubble back to [[discovery]] or [[goal]].
+description: Evaluate an aven-board review/ item against its measurable goal, then bubble the result to a human to verify (HITL). Runs the item's Verification commands plus the repo gates, proves the metric from real command output, annotates the Acceptance criteria with evidence, and presents a clear pass/fail verdict for human sign-off — it does not ship on its own. This is the evaluator layer and the build→review state of the spec-driven flow. Use when someone says "review NNNN", "evaluate this", "measure it against the goal", "did the metric hold?", "is this ready to ship?". For observing real app behavior use the [[verify]] skill; on human approval the [[ship]] skill releases + archives it; failures bubble back to [[discover]] or [[build]].
 ---
 
 # Review — measure against the goal, hand to the human (the `review/` state)
@@ -8,7 +8,7 @@ description: Evaluate an aven-board review/ item against its measurable goal, th
 This is the **evaluator** (Layer 2): the gate where built work is measured against
 its metric and the verdict is handed to a human to verify. Read
 `libs/aven-board/AGENTS.md` once before working the board. The folder a card lives
-in is its state; lifecycle is `idea → discovery → goal → review → ship`.
+in is its state; lifecycle is `ideate → discover → build → review → ship`.
 
 The mental model: the agent is a librarian, not a colleague — it can be
 confidently wrong, and "make it better" is not a lever. The lever that *works* is
@@ -18,7 +18,7 @@ the loop** — it measures, then asks a person to verify before anything ships.
 
 **Precondition:** the card is in `libs/aven-board/board/review/` with a Verification
 block and a measurable goal. If there's no metric to check against, the spec was
-incomplete — bounce it to [[discovery]], don't invent a pass.
+incomplete — bounce it to [[discover]], don't invent a pass.
 
 ## What to do
 
@@ -52,20 +52,21 @@ incomplete — bounce it to [[discovery]], don't invent a pass.
 
 ## Hand-off (after the human verifies)
 
-- **Approved →** the [[ship]] skill archives it (`git mv review → ship`).
-- **Rejected / failed →** `git mv` the card back to `goal/` (re-execute) or
-  `discovery/` (re-spec) with a Progress-log note on what failed and why. That's a
+- **Approved →** the [[ship]] skill releases it (deploy server + apps, push to
+  main) and `git mv review → ship`.
+- **Rejected / failed →** `git mv` the card back to `build/` (re-execute) or
+  `discover/` (re-spec) with a Progress-log note on what failed and why. That's a
   valid outcome, not a defeat.
 
-The [[board-goal]] command runs execute → review in one pass and surfaces the same
+The [[board-goal]] command runs build → review in one pass and surfaces the same
 verdict for your sign-off.
 
 ## Condensed
 
 1. Confirm the card is in `review/` with a measurable goal — else bounce to
-   [[discovery]].
+   [[discover]].
 2. Run the item's Verification + `bun run check` / `bun run lint` for real.
 3. Pull external/second-model signal where it sharpens the proof.
 4. Annotate Acceptance boxes with evidence; log the result; bump `updated`.
 5. Bubble a clear pass/fail verdict to the human. On approval → [[ship]]; on
-   failure → back to [[goal]] / [[discovery]] with a note.
+   failure → back to [[build]] / [[discover]] with a note.

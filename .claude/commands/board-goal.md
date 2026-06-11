@@ -1,12 +1,12 @@
 ---
 description: Pick up an aven-board work item and drive it to its measurable goal.
-argument-hint: <item-ref — slug, filename, or column/slug, e.g. goal/0001-example-spec>
+argument-hint: <item-ref — slug, filename, or column/slug, e.g. build/0001-example-spec>
 allowed-tools: Bash, Read, Edit, Glob, Grep
 ---
 
 You are picking a work item off the **aven-board** kanban and driving it to ship.
-The board lives at `libs/aven-board/board/<column>/*.md` (columns: `idea`,
-`discovery`, `goal`, `review`, `ship`); the folder a file sits in is its state.
+The board lives at `libs/aven-board/board/<column>/*.md` (columns: `ideate`,
+`discover`, `build`, `review`, `ship`); the folder a file sits in is its state.
 Read `libs/aven-board/AGENTS.md` for the full workflow before acting.
 
 ## Requested item
@@ -22,16 +22,16 @@ Read `libs/aven-board/AGENTS.md` for the full workflow before acting.
 1. **Resolve** the reference to exactly one work-item file. If it's ambiguous,
    list the candidates and ask which one. If you can't find it at all, say so.
 2. **Read** the file in full.
-   - If it's in `idea/`, it isn't specced yet — it has no real `goal`. Stop and
+   - If it's in `ideate/`, it isn't specced yet — it has no real `goal`. Stop and
      run discovery first (turn it into a spec with `templates/plan.md`, uncover a
-     measurable goal, `git mv` it to `discovery/`), rather than building blind.
+     measurable goal, `git mv` it to `discover/`), rather than building blind.
 3. **Find the completion condition** — the frontmatter `goal` field (mirrored in
    the `## Goal` section). This is the single, transcript-verifiable end state.
    If it's missing or vague (not provable from command output), sharpen it first
    and write it back into the file.
-4. **Execute it.** Implement the smallest change that satisfies the Acceptance
+4. **Build it.** Implement the smallest change that satisfies the Acceptance
    criteria and Approach. When you start implementing, `git mv` the file from
-   `discovery/` (or `goal/`) into `goal/`, then into `review/` once it's built
+   `discover/` (or `build/`) into `build/`, then into `review/` once it's built
    (preserve the `NNNN-` prefix so the id is stable).
 5. **Review** by running the item's `## Verification` commands plus the repo gates
    (`bun run check`, `bun run lint`). Run them for real so the output — the proof
@@ -41,7 +41,7 @@ Read `libs/aven-board/AGENTS.md` for the full workflow before acting.
    Acceptance criteria, append a dated line to the `## Progress log`, bump
    `updated:` in frontmatter, and — once a human has verified the verdict —
    `git mv` the file to `ship/`. If verification fails and you can't fix it in
-   scope, move it back to `goal/` or `discovery/` with a note in the progress log
+   scope, move it back to `build/` or `discover/` with a note in the progress log
    explaining why.
 
 ## Goal-driven autonomy

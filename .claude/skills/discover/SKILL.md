@@ -1,25 +1,25 @@
 ---
-name: discovery
-description: Discovery — turn a vague idea or task into a tightly-scoped spec with a measurable goal, by interviewing the user to uncover the real goal (the decision the work drives, not the task), making "done" provable from command output, slicing it agile-small, and forcing explicit verification of key decisions. Use when an idea is ready to be specced, or someone asks to "do discovery", "spec this out", "make this goal measurable", "what's the actual goal here", "interview me about this", "how do I make 'done' provable", "is this a task or a goal", "turn this into a plan/work item". Promotes an aven-board card into discovery/ with a measurable goal, then hands the metric to the [[goal]] skill (or /board-goal / /goal) to execute. Mirrors [[storytelling]] for engineering work — find the real goal first, then build.
+name: discover
+description: Discover — turn a vague idea or task into a tightly-scoped spec with a measurable goal, by interviewing the user to uncover the real goal (the decision the work drives, not the task), making "done" provable from command output, slicing it agile-small, and forcing explicit verification of key decisions. Use when an idea is ready to be specced, or someone asks to "do discovery", "discover the goal", "spec this out", "make this goal measurable", "what's the actual goal here", "interview me about this", "how do I make 'done' provable", "is this a task or a goal", "turn this into a plan/work item". Promotes an aven-board card into discover/ with a measurable goal, then hands the metric to the [[build]] skill (or /board-goal / /goal) to execute. Mirrors [[storytelling]] for engineering work — find the real goal first, then build.
 ---
 
-# Discovery — uncover the goal, make it measurable (the `discovery/` state)
+# Discover — uncover the goal, make it measurable (the `discover/` state)
 
 AI is brilliant at what can be **measured** and lost on what can't. Ask a model
 "the car wash is 50 m away — should I drive or walk?" and it says walk, because it
 has no signal that you need the *car* there. That gap — between your understanding
 of what you actually want and the model's computational power — is what discovery
 closes. The output of discovery is a **measurable metric**: a single completion
-condition the [[goal]] skill can then execute toward.
+condition the [[build]] skill can then execute toward.
 
-This is the `idea → discovery` promotion and the work done while a card sits in
-`discovery/`. It does what plan-mode is too high-level for: work *with* the user
-to design a detailed spec whose **goal is measurable**, so building and verifying
-it are no longer matters of taste. In this repo the spec is the work-item file in
-`libs/aven-board/board/discovery/NNNN-slug.md` (template `templates/plan.md`); its
-measurable `goal` is the line later handed to [[goal]] / `/goal` / `/board-goal`.
+This is the `ideate → discover` promotion and the work done while a card sits in
+`discover/`. It does what plan-mode is too high-level for: work *with* the user to
+design a detailed spec whose **goal is measurable**, so building and verifying it
+are no longer matters of taste. In this repo the spec is the work-item file in
+`libs/aven-board/board/discover/NNNN-slug.md` (template `templates/plan.md`); its
+measurable `goal` is the line later handed to [[build]] / `/goal` / `/board-goal`.
 Read `libs/aven-board/AGENTS.md` once first. Lifecycle:
-`idea → discovery → goal → review → ship`.
+`ideate → discover → build → review → ship`.
 
 ## How to run it (interactively)
 
@@ -88,7 +88,7 @@ Spec it **agile**: tight scope, one clear checkpoint, review, adjust, repeat.
 
 - If the goal needs more than a handful of verifiable steps, it's **too big** —
   carve off the first slice that has its own measurable metric and spec *that*.
-  Note the rest as follow-on cards back in `idea/`.
+  Note the rest as follow-on cards back in `ideate/`.
 - Each step should be **small and independently verifiable** — checkable before
   moving on, not a leap of faith.
 - State the checkpoint explicitly: "we'll stop and look after step N."
@@ -121,12 +121,12 @@ of the [[review]] (evaluator) layer that grades the work later.
 
 ---
 
-## Output — write the spec, promote to `discovery/`, hand off the metric
+## Output — write the spec, promote to `discover/`, hand off the metric
 
 When the four steps hold:
 
-1. **Promote the card.** `git mv` the file from `board/idea/` into
-   `board/discovery/` (keep the `NNNN-` prefix).
+1. **Promote the card.** `git mv` the file from `board/ideate/` into
+   `board/discover/` (keep the `NNNN-` prefix).
 2. **Write the spec** using `templates/plan.md`: **Context** (so it stands alone),
    **Goal** + the measurable **Completion condition**, **Approach**, small
    **Steps**, **Files to touch**, **Acceptance criteria**, **Verification**
@@ -135,11 +135,11 @@ When the four steps hold:
    in `goal:`, identical to the Completion condition in the body. Keep `title`,
    `summary`, `tags`, `owner`, dates accurate; append a dated `## Progress log`
    line (newest first).
-4. **Hand the metric to execution** — the [[goal]] skill takes it from here
-   (`git mv discovery → goal` and builds toward the condition):
+4. **Hand the metric to execution** — the [[build]] skill takes it from here
+   (`git mv discover → build` and builds toward the condition):
 
    ```
-   /board-goal <item-ref>          # resolve, execute + review, move across columns
+   /board-goal <item-ref>          # resolve, build + review, move across columns
    /goal <paste the completion condition>   # or flip on the cross-turn loop directly
    ```
 
@@ -155,8 +155,8 @@ execute without asking a single question.
 3. **Slice it agile** — tight scope, one checkpoint; carve big specs into small.
 4. **Be precise & verify decisions** — confirm load-bearing choices explicitly.
 5. **Seed the criteria** — Acceptance criteria, each provable from the transcript.
-6. **Promote & hand off** — write the `discovery/` spec, mirror the metric into
-   `goal:`, pass it to the [[goal]] skill / `/board-goal` / `/goal`.
+6. **Promote & hand off** — write the `discover/` spec, mirror the metric into
+   `goal:`, pass it to the [[build]] skill / `/board-goal` / `/goal`.
 
 You can outsource the thinking, but not the understanding. The spec is your
 understanding made precise enough that a model can execute it and you can prove

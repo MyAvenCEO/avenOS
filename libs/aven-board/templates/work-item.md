@@ -6,7 +6,7 @@ created: YYYY-MM-DD
 updated: YYYY-MM-DD
 tags: [area, kind]
 # goal — leave blank or rough in idea; make it a single, measurable,
-# transcript-verifiable completion condition before this moves to `discovery`.
+# transcript-verifiable completion condition before this moves to `discover`.
 goal:
 ---
 
@@ -24,14 +24,14 @@ Why this exists. The problem, the trigger, or the idea. Link related items by id
 
 What "good" looks like when this is done. Observable, not vague.
 
-When this moves to **discovery**, sharpen this into a single **completion
+When this moves to **discover**, sharpen this into a single **completion
 condition** that can be proven from command output, and copy it into the
 frontmatter `goal` so it can be handed to `/goal` / `/board-goal`. See
 `templates/plan.md`.
 
 ## Plan
 
-_Filled in when the item moves to **discovery**. See `templates/plan.md` for the
+_Filled in when the item moves to **discover**. See `templates/plan.md` for the
 full spec shape — paste its sections here or keep the plan inline._
 
 ## Acceptance criteria

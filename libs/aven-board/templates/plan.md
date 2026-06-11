@@ -84,4 +84,4 @@ Pick this up with the board command (resolves the item, loads it, drives it):
 
 Newest entry first.
 
-- `YYYY-MM-DD` — Discovery: uncovered the goal, made it measurable. Moved idea → discovery.
+- `YYYY-MM-DD` — Discovery: uncovered the goal, made it measurable. Moved ideate → discover.
