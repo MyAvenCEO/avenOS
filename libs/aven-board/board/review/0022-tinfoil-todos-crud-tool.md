@@ -245,6 +245,13 @@ git status --short
 
 ## Progress log
 
+- `2026-06-11` — UX + model (Samuel): switched the default model to **`gemma4-31b`**
+  (native function calling). Added a **live status strip** above the intent button
+  on EVERY identity sub-view: a "thinking" pill while the cloud model is called +
+  one pill per tool call (running → done/error with the result line). New runtime
+  state `phase` + `toolBadges` on `IdentityAgent`, driven from `runCloudLoop`;
+  rendered in the identity `+layout.svelte` so feedback shows on non-talk screens
+  too. App `bun run check` + biome clean.
 - `2026-06-11` — Pivot 2 (Samuel): **pure-cloud mode** — ALL Talk LLM requests go
   to the Tinfoil cloud agent (navigation + todos CRUD). The on-device LFM2.5
   stream + brain-recall reply are commented out in `replyWithAgent` (restorable;

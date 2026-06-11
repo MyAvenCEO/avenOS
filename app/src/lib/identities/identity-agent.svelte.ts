@@ -51,6 +51,41 @@ function idsMatch(a: string | null | undefined, b: string | null | undefined): b
 	return na !== '' && na === nb
 }
 
+/** Overall agent activity this turn — drives the live status strip above the intent button. */
+export type AgentPhase = 'idle' | 'thinking' | 'tool'
+
+/** One live tool-call badge: a pill that starts `running` and resolves to `done`/`error`. */
+export type ToolBadge = {
+	id: number
+	/** The tool name (e.g. `navigate_views`, `todos`) — used for the icon/emoji. */
+	name: string
+	/** Human-facing line: the "running" verb while live, then the tool's result message. */
+	label: string
+	status: 'running' | 'done' | 'error'
+}
+
+/** A short "running" label for a tool call before its result is known (in the user's language-ish). */
+function runningLabel(name: string, args: Record<string, unknown>): string {
+	if (name === 'navigate_views') {
+		const view = String(args.view ?? '').trim()
+		return view ? `Opening ${view}…` : 'Switching view…'
+	}
+	if (name === 'todos') {
+		const action = String(args.action ?? '')
+			.trim()
+			.toLowerCase()
+		return (
+			{
+				list: 'Reading todos…',
+				create: 'Adding todos…',
+				update: 'Updating todos…',
+				delete: 'Removing todos…'
+			}[action] ?? 'Working on todos…'
+		)
+	}
+	return `${name}…`
+}
+
 /**
  * Live, reactive view of the active identity, read fresh inside each turn so the runtime always
  * acts on the current identity / session even as the user navigates between sub-views.
@@ -70,6 +105,10 @@ export type IdentityAgent = {
 	readonly streamingId: string | undefined
 	/** The most recent resolved turn, for the transient floating chip on non-talk views. */
 	readonly lastReply: ToolCallRecord | undefined
+	/** Overall agent activity this turn (idle / thinking / tool) — drives the live status strip. */
+	readonly phase: AgentPhase
+	/** Live tool-call badges for the current/last turn (running → done/error), newest last. */
+	readonly toolBadges: ToolBadge[]
 	/** Last submit/agent error (file persist failure, generation error, …). */
 	readonly err: string | undefined
 	/** True while a submit is in flight. */
@@ -95,6 +134,9 @@ export function createIdentityAgent(deps: {
 	let streaming = $state<Record<string, string>>({})
 	let streamingId = $state<string | undefined>(undefined)
 	let lastReply = $state<ToolCallRecord | undefined>(undefined)
+	let phase = $state<AgentPhase>('idle')
+	let toolBadges = $state<ToolBadge[]>([])
+	let badgeSeq = 0
 	let err = $state<string | undefined>(undefined)
 	let busy = $state(false)
 	let dismissTimer: ReturnType<typeof setTimeout> | undefined
@@ -107,7 +149,23 @@ export function createIdentityAgent(deps: {
 		if (dismissTimer) clearTimeout(dismissTimer)
 		dismissTimer = setTimeout(() => {
 			lastReply = undefined
+			// The live badges linger alongside the reply chip, then clear together.
+			toolBadges = []
 		}, FLOATING_REPLY_MS)
+	}
+
+	/** Append a fresh `running` badge for a tool call; returns its id so the caller can resolve it. */
+	function startToolBadge(name: string, args: Record<string, unknown>): number {
+		const id = ++badgeSeq
+		toolBadges = [...toolBadges, { id, name, label: runningLabel(name, args), status: 'running' }]
+		return id
+	}
+
+	/** Resolve a tool badge to its outcome (result line + done/error), in place. */
+	function finishToolBadge(id: number, label: string, ok: boolean): void {
+		toolBadges = toolBadges.map((b) =>
+			b.id === id ? { ...b, label, status: ok ? 'done' : 'error' } : b
+		)
 	}
 
 	/**
@@ -181,16 +239,20 @@ export function createIdentityAgent(deps: {
 			last ? cloudToolRecord(last.name, last.args, last.exec, reply) : respondRecord(reply)
 
 		for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+			phase = 'thinking'
 			const turn = await tinfoilChat(messages, tools)
 			if (!turn.toolCalls || turn.toolCalls.length === 0) return finalize(turn.content ?? '')
 
 			messages.push(turn.assistantRaw) // verbatim — carries the tool_call ids
+			phase = 'tool'
 			for (const call of turn.toolCalls) {
 				const args =
 					call.arguments && typeof call.arguments === 'object'
 						? (call.arguments as Record<string, unknown>)
 						: {}
+				const badgeId = startToolBadge(call.name, args) // live "running" pill
 				const exec = await executeToolCall({ replyId, name: call.name, arguments: args }, ctx)
+				finishToolBadge(badgeId, exec.message, exec.ok) // → done/error with the result line
 				last = { name: call.name, args, exec }
 				streaming = { ...streaming, [replyId]: exec.message } // live progress line
 				messages.push({
@@ -201,6 +263,7 @@ export function createIdentityAgent(deps: {
 			}
 		}
 		// Round cap reached — force a final no-tools reply so the user always gets a sentence.
+		phase = 'thinking'
 		const turn = await tinfoilChat(messages, [])
 		return finalize(turn.content ?? '')
 	}
@@ -330,6 +393,9 @@ export function createIdentityAgent(deps: {
 		}
 		busy = true
 		err = undefined
+		// Fresh status strip for this turn: clear the prior run's badges, show "thinking".
+		toolBadges = []
+		phase = 'thinking'
 		try {
 			const row = await deps.messages.create({
 				owner: env.canonicalSparkId,
@@ -365,6 +431,8 @@ export function createIdentityAgent(deps: {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {
 			busy = false
+			// The turn is over: stop "thinking"; resolved badges linger via the floating-chip timer.
+			phase = 'idle'
 		}
 	}
 
@@ -378,6 +446,12 @@ export function createIdentityAgent(deps: {
 		get lastReply() {
 			return lastReply
 		},
+		get phase() {
+			return phase
+		},
+		get toolBadges() {
+			return toolBadges
+		},
 		get err() {
 			return err
 		},
@@ -387,6 +461,7 @@ export function createIdentityAgent(deps: {
 		submit,
 		dismissReply() {
 			lastReply = undefined
+			toolBadges = []
 			if (dismissTimer) clearTimeout(dismissTimer)
 		},
 		setErr(message: string) {

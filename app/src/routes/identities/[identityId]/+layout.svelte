@@ -261,6 +261,62 @@ const identityMetaRows = $derived([
 		</div>
 	{/if}
 
+	<!-- Live agent status strip — shown on EVERY sub-view (talk + non-talk), above the intent
+	     button. Surfaces "thinking" while the cloud model is called and one pill per tool call
+	     (running → done/error) so the user always sees what the agent is doing. -->
+	{#if agent.phase !== 'idle' || agent.toolBadges.length > 0}
+		<div
+			class="pointer-events-none fixed inset-x-0 bottom-36 z-[44] flex justify-center px-4 sm:bottom-40"
+		>
+			<div class="flex max-w-md flex-wrap items-center justify-center gap-1.5">
+				{#if agent.phase === 'thinking'}
+					<span
+						class="border-border/60 bg-card/95 text-muted-foreground flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium shadow-sm backdrop-blur"
+					>
+						<span class="bg-primary size-1.5 animate-pulse rounded-full"></span>
+						{t('identities.talk.agentThinking')}
+					</span>
+				{/if}
+				{#each agent.toolBadges as badge (badge.id)}
+					<span
+						class="bg-card/95 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium shadow-sm backdrop-blur
+							{badge.status === 'running'
+							? 'border-primary/40 text-foreground ring-1 ring-primary/15'
+							: badge.status === 'error'
+								? 'border-amber-500/40 text-amber-700 dark:text-amber-500'
+								: 'border-emerald-500/40 text-emerald-700 dark:text-emerald-500'}"
+					>
+						{#if badge.status === 'running'}
+							<svg
+								class="text-primary size-3 shrink-0 animate-spin"
+								viewBox="0 0 16 16"
+								aria-hidden="true"
+							>
+								<circle
+									cx="8"
+									cy="8"
+									r="6"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-opacity="0.25"
+								/>
+								<path
+									d="M8 2a6 6 0 0 1 6 6"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+								/>
+							</svg>
+						{/if}
+						<span class="max-w-[12rem] truncate">{badge.label}</span>
+					</span>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
 	<div
 		class={`pointer-events-none fixed inset-x-0 bottom-0 ${mobileComposerVeilZClass} flex justify-center max-sm:px-2 sm:px-5 sm:pt-3 sm:pb-5 ${mobileActionVeilClass}`}
 	>

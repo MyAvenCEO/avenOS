@@ -13,8 +13,8 @@ use serde_json::Value;
 use tinfoil::Client;
 use tokio::sync::OnceCell;
 
-/// Default chat model — Tinfoil's recommended model for agentic / tool-calling work.
-pub const DEFAULT_MODEL: &str = "kimi-k2-6";
+/// Default chat model — Gemma 4 31B (native function calling, 256K context).
+pub const DEFAULT_MODEL: &str = "gemma4-31b";
 
 /// One tool call the model requested this round. `arguments` is the parsed JSON object
 /// (`Value::Null` when the model emitted unparseable arguments — the caller surfaces it).
