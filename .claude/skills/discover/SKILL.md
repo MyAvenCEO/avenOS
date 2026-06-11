@@ -1,6 +1,6 @@
 ---
 name: discover
-description: Discover — turn a vague idea or task into a tightly-scoped spec with a measurable goal, by interviewing the user to uncover the real goal (the decision the work drives, not the task), making "done" provable from command output, slicing it agile-small, and forcing explicit verification of key decisions. Use when an idea is ready to be specced, or someone asks to "do discovery", "discover the goal", "spec this out", "make this goal measurable", "what's the actual goal here", "interview me about this", "how do I make 'done' provable", "is this a task or a goal", "turn this into a plan/work item". Promotes an aven-board card into discover/ with a measurable goal, then hands the metric to the [[build]] skill (or /board-goal / /goal) to execute. Mirrors [[storytelling]] for engineering work — find the real goal first, then build.
+description: Discover — turn a vague idea or task into a tightly-scoped spec with a measurable goal, by interviewing the user to uncover the real goal (the decision the work drives, not the task), making "done" provable from command output, slicing it agile-small, and forcing explicit verification of key decisions. Use when an idea is ready to be specced, or someone asks to "do discovery", "discover the goal", "spec this out", "make this goal measurable", "what's the actual goal here", "interview me about this", "how do I make 'done' provable", "is this a task or a goal", "turn this into a plan/work item". Promotes an aven-board card into discover/ with a measurable goal, then hands the metric to the [[build]] skill (/aven-build, or the built-in /goal loop) to execute. Mirrors [[storytelling]] for engineering work — find the real goal first, then build.
 ---
 
 # Discover — uncover the goal, make it measurable (the `discover/` state)
@@ -17,7 +17,7 @@ This is the `ideate → discover` promotion and the work done while a card sits 
 design a detailed spec whose **goal is measurable**, so building and verifying it
 are no longer matters of taste. In this repo the spec is the work-item file in
 `libs/aven-board/board/discover/NNNN-slug.md` (template `templates/plan.md`); its
-measurable `goal` is the line later handed to [[build]] / `/goal` / `/board-goal`.
+measurable `goal` is the line later handed to [[build]] (`/aven-build`) / `/goal`.
 Read `libs/aven-board/AGENTS.md` once first. Lifecycle:
 `ideate → discover → build → review → ship`.
 
@@ -139,7 +139,7 @@ When the four steps hold:
    (`git mv discover → build` and builds toward the condition):
 
    ```
-   /board-goal <item-ref>          # resolve, build + review, move across columns
+   /aven-build <item-ref>          # execute toward the metric, move discover → build → review
    /goal <paste the completion condition>   # or flip on the cross-turn loop directly
    ```
 
@@ -156,7 +156,7 @@ execute without asking a single question.
 4. **Be precise & verify decisions** — confirm load-bearing choices explicitly.
 5. **Seed the criteria** — Acceptance criteria, each provable from the transcript.
 6. **Promote & hand off** — write the `discover/` spec, mirror the metric into
-   `goal:`, pass it to the [[build]] skill / `/board-goal` / `/goal`.
+   `goal:`, pass it to the [[build]] skill (`/aven-build`) / `/goal`.
 
 You can outsource the thinking, but not the understanding. The spec is your
 understanding made precise enough that a model can execute it and you can prove

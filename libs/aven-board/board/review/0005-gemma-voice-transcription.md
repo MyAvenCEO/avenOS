@@ -418,7 +418,7 @@ voice note, confirm the streamed body is the real transcript.
 ## Hand-off
 
 ```
-/board-goal plan/0005-gemma-voice-transcription
+/aven-build plan/0005-gemma-voice-transcription
 ```
 
 …or hand the condition straight to the built-in loop:

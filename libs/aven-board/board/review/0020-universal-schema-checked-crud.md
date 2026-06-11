@@ -118,7 +118,7 @@ git diff --stat libs/aven-schema/schema.manifest.json                           
 ## Hand-off
 
 ```
-/board-goal 0020
+/aven-build 0020
 ```
 
 …or hand the condition straight to the built-in goal loop:

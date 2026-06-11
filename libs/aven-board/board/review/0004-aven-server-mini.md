@@ -303,7 +303,7 @@ bun run lint
 ## Hand-off
 
 ```
-/board-goal plan/0004-aven-server-mini
+/aven-build plan/0004-aven-server-mini
 ```
 
 …or hand the condition straight to the built-in goal loop:

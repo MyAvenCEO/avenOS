@@ -174,7 +174,7 @@ cargo test -p aven-caps
 ## Hand-off
 
 ```
-/board-goal 0016-reject-low-order-x25519
+/aven-build 0016-reject-low-order-x25519
 ```
 
 ## Progress log

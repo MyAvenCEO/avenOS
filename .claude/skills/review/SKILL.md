@@ -58,8 +58,8 @@ incomplete — bounce it to [[discover]], don't invent a pass.
   `discover/` (re-spec) with a Progress-log note on what failed and why. That's a
   valid outcome, not a defeat.
 
-The [[board-goal]] command runs build → review in one pass and surfaces the same
-verdict for your sign-off.
+Chained after [[build]] (`/aven-build` then `/aven-review`), this surfaces the
+same verdict for your sign-off.
 
 ## Condensed
 

@@ -44,9 +44,10 @@ spec-driven method, end to end). Invoke with `/<name>`:
 | `ship/` | **`/ship`** | Release to all targets + push to main, then archive the record. |
 
 The `build` state pairs with Claude Code's built-in **`/goal`** cross-turn loop,
-which drives toward a transcript-provable completion condition. The
-[`/board-goal`](../../.claude/commands/board-goal.md) command composes build →
-review across columns in one pass.
+which drives toward a transcript-provable completion condition. Each state has a
+typed entry point in the input field: `/aven-ideate`, `/aven-discover`,
+`/aven-build`, `/aven-review`, `/aven-ship` (thin commands that invoke the
+skills). Chain them to move a card across columns.
 
 ## How you (the agent) work the board
 
@@ -122,11 +123,12 @@ must be provable from command output you actually produce.
 Name three things: the **end state**, the **proof** (a command + its expected
 result), and the **constraints** that matter (e.g. "no other files changed").
 
-Hand an item to Claude Code with the project command (resolves the item, reads
-it, builds + reviews, moves it across columns):
+Hand an item to its state command (the skill resolves the item, reads it, does
+that state's work, and moves the card forward):
 
 ```
-/board-goal <item-ref>          # e.g. /board-goal build/0001-example-spec
+/aven-build <item-ref>          # e.g. /aven-build 0001 — execute, move build → review
+/aven-review <item-ref>         # evaluate against the metric, bubble to human
 ```
 
 …or flip on the built-in cross-turn loop directly with the item's condition:

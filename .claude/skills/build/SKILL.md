@@ -1,6 +1,6 @@
 ---
 name: build
-description: Build toward a measurable goal — take the metric produced by discovery and implement the smallest change that satisfies it, then git mv the card from build/ into review/. This is the execution state of the spec-driven flow. Use when someone says "build NNNN", "build toward the goal", "implement the spec", "execute this item", "drive this to its metric", "do the plan", or hands you a build/ (or discover-specced) card to implement. Requires a card with a measurable goal (if it's still raw, run the [[discover]] skill first). Pairs with Claude Code's built-in /goal cross-turn loop and the [[board-goal]] command; evaluation + human sign-off is the [[review]] skill's job.
+description: Build toward a measurable goal — take the metric produced by discovery and implement the smallest change that satisfies it, then git mv the card from build/ into review/. This is the execution state of the spec-driven flow. Use when someone says "build NNNN", "build toward the goal", "implement the spec", "execute this item", "drive this to its metric", "do the plan", or hands you a build/ (or discover-specced) card to implement. Requires a card with a measurable goal (if it's still raw, run the [[discover]] skill first). Pairs with Claude Code's built-in /goal cross-turn loop (typed entry: /aven-build); evaluation + human sign-off is the [[review]] skill's job.
 ---
 
 # Build — execute toward the measurable metric (the `build/` state)
@@ -24,8 +24,8 @@ re-run — keep looping until the metric is provably met, rather than stopping a
 "I wrote the code". That in-session loop is yours to drive; the build skill cannot
 start Claude Code's built-in **`/goal`** loop itself (slash commands only fire from
 a user message), so for *unattended, cross-turn* continuation you **emit a
-ready-to-run `/goal` line** for the human to flip on (see "Where to stop"). The
-[[board-goal]] command composes build → review end to end.
+ready-to-run `/goal` line** for the human to flip on (see "Where to stop").
+Evaluation follows as its own state: [[review]] (`/aven-review`).
 
 ## What to do
 
@@ -72,8 +72,7 @@ it for them):
 /goal <paste the card's completion condition>
 ```
 
-To run the whole thing in one pass instead, use the [[board-goal]] command
-(resolve → build → review).
+Then hand the result to the evaluator state: `/aven-review <item-ref>`.
 
 ## Condensed
 

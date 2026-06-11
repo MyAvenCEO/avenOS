@@ -113,7 +113,7 @@ fn reader_authoritative_cell_aad() {
 
 ## Hand-off
 ```
-/board-goal 0011-reader-authoritative-cell-aad
+/aven-build 0011-reader-authoritative-cell-aad
 ```
 
 ## Progress log

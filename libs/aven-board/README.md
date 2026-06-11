@@ -63,12 +63,14 @@ completion condition, provable from command output. That makes items compatible
 with Claude Code's built-in `/goal` loop, and with the project command:
 
 ```
-/board-goal <item-ref>          # resolve the item, execute + review, move it across columns
+/aven-build <item-ref>          # execute toward the goal, move the card build → review
+/aven-review <item-ref>         # evaluate against the metric, bubble to human sign-off
 /goal <completion condition>    # or flip on the built-in cross-turn loop directly
 ```
 
-The command lives at [`.claude/commands/board-goal.md`](../../.claude/commands/board-goal.md),
-and the full-screen doc view surfaces the goal with a one-click "Copy /goal".
+The per-state commands live at `.claude/commands/aven-*.md` (thin entry points
+into the skills), and the full-screen doc view surfaces the goal with a
+one-click "Copy /goal".
 
 ## Working the board
 

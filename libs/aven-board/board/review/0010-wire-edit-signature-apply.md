@@ -205,7 +205,7 @@ cargo test -p aven-caps
 
 ## Hand-off
 ```
-/board-goal 0010-wire-edit-signature-apply
+/aven-build 0010-wire-edit-signature-apply
 ```
 
 ## Progress log
