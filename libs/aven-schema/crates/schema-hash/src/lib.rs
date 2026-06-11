@@ -30,6 +30,9 @@ struct ManifestColumn {
 	variants: Option<Vec<String>>,
 	#[serde(default)]
 	schema: Option<serde_json::Value>,
+	/// Required for `"type": "vector"` — embedding dimensionality (e.g. 768).
+	#[serde(default)]
+	dim: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -70,6 +73,15 @@ fn column_type_from_manifest(col: &ManifestColumn) -> Result<ColumnType, String>
 			Ok(ColumnType::Enum { variants })
 		}
 		"batch_id" => Ok(ColumnType::BatchId),
+		"vector" => {
+			let dim = col
+				.dim
+				.ok_or_else(|| format!("vector column `{}` missing `dim`", col.name))?;
+			if dim == 0 {
+				return Err(format!("vector column `{}` has zero `dim`", col.name));
+			}
+			Ok(ColumnType::Vector { dim })
+		}
 		other => Err(format!(
 			"unknown column `{}` kind {other:?} (Row/nested array types are not supported in manifest)",
 			col.name,
