@@ -554,6 +554,17 @@ deterministic pass is load-bearing without it. Revisit after E7.
 
 Newest entry first.
 
+- `2026-06-10` — **UX decision + E4 completed via brain-recall mode.** Talk is
+  human↔human (or human↔self); the brain answers EVERY message with a deterministic
+  structured recall bubble — "stored · found N related, M entities" + top snippets with
+  via badges — built from the ContextTrace, no conversational LLM reply. This dissolves
+  the E4 toolset swap (no agent reply → no nav/todo tools in talk); the LLM path remains
+  only as fallback when the brain is unavailable, and LFM2.5's coming role is the
+  normalizer (law §4.6). Trace persists per message as before. svelte-check clean.
+  **E3b still open (Mac-side):** write ritual — owner-binding + sealing for brain rows +
+  unseal-hook registration at connect. E5 = render the stored traces richly in the wide
+  right aside (the recall bubble is its v0).
+
 - `2026-06-10` — **E4 core shipped — the brain feeds the LLM.** `replyWithAgent` now calls
   `brainAssembleContext(identity, prompt, {stream:'talk'})` and prepends the budgeted
   bundle to the LFM2.5 prompt (graceful fallback to raw prompt on any brain error); the

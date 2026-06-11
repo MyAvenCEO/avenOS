@@ -138,6 +138,38 @@ export function createIdentityAgent(deps: {
 			}).catch(() => undefined)
 			const brainPrefix = assembled?.prompt ? `${assembled.prompt}\n\n` : ''
 
+			// E4 (brain-recall mode): talk is human↔human; the brain answers every message
+			// with a structured RECALL — what it stored and what it found — deterministic,
+			// no conversational LLM. (LLM reply path below remains as fallback when the
+			// brain is unavailable.)
+			if (assembled) {
+				const t = assembled.trace
+				const lines: string[] = [
+					`🧠 stored · found ${t.recalled.length} related, ${t.entities.length} entities`,
+				]
+				for (const r of t.recalled.slice(0, 5)) {
+					lines.push(`• ${r.snippet} (${r.via})`)
+				}
+				if (t.entities.length > 0) {
+					lines.push(`↳ ${t.entities.map((e) => e.name).join(' · ')}`)
+				}
+				const recallBody = lines.join('\n')
+				streaming = { ...streaming, [reply.id]: recallBody }
+				await deps.messages.update(reply.id, { body: recallBody })
+				if (userRowId) {
+					void avenDbTable('context_traces')
+						.create({
+							owner: env.canonicalSparkId,
+							message_id: userRowId,
+							reply_id: reply.id,
+							trace: JSON.stringify(t),
+							created_at_ms: Date.now(),
+						})
+						.catch(() => {})
+				}
+				return
+			}
+
 			// The agent is tool-call-only. Capture any real `<|tool_call_start|>` call and the
 			// streamed prose, then resolve the turn into exactly one tool-call record (executing
 			// the side effect). The chip is what's persisted + rendered — never bare prose.
@@ -177,18 +209,6 @@ export function createIdentityAgent(deps: {
 			const body = encodeToolCallBody(record)
 			streaming = { ...streaming, [reply.id]: body }
 			await deps.messages.update(reply.id, { body })
-			// E4: persist the receipt — which context was sent for THIS human message.
-			if (assembled && userRowId) {
-				void avenDbTable('context_traces')
-					.create({
-						owner: env.canonicalSparkId,
-						message_id: userRowId,
-						reply_id: reply.id,
-						trace: JSON.stringify(assembled.trace),
-						created_at_ms: Date.now(),
-					})
-					.catch(() => {})
-			}
 			// E3: ingest the human-facing prose (not the tool envelope), down-weighted.
 			if (record.response) {
 				void brainIngest(env.canonicalSparkId, record.response, {
