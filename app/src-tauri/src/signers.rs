@@ -74,6 +74,9 @@ pub struct SignerRowReply {
 	pub signer_did: String,
 	pub device_label: String,
 	pub kind: String,
+	/// How the key is held — apple_se | env_seed | … (None = apple_se). Surfaced as the
+	/// signer-type label in the Members UI.
+	pub signer_type: Option<String>,
 	pub added_at_ms: i64,
 	pub status: String,
 }
@@ -86,6 +89,7 @@ pub async fn list_signer_rows(client: &JazzClient) -> Result<Vec<SignerRowReply>
 	let kind_ix = jazz_engine::col_ix(&schema, "kind")?;
 	let status_ix = jazz_engine::col_ix(&schema, "status")?;
 	let added_ix = jazz_engine::col_ix(&schema, "added_at_ms")?;
+	let signer_type_ix = jazz_engine::col_ix(&schema, "signer_type").ok();
 	let mut out = Vec::new();
 	for (oid, vals) in rows {
 		let kind = vals
@@ -115,6 +119,11 @@ pub async fn list_signer_rows(client: &JazzClient) -> Result<Vec<SignerRowReply>
 				.unwrap_or("")
 				.to_string(),
 			kind: kind.to_string(),
+			signer_type: signer_type_ix
+				.and_then(|ix| vals.get(ix))
+				.and_then(value_as_text)
+				.map(str::to_string)
+				.filter(|s| !s.is_empty()),
 			added_at_ms: vals
 				.get(added_ix)
 				.and_then(peer_timestamp_ms)

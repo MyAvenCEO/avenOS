@@ -25,7 +25,7 @@
 	import { peerDisplayLabel } from '$lib/peer/display-label'
 	import { pairingLabelForSession } from '$lib/settings/active-vault-ui'
 	import { deviceSession } from '$lib/settings/device-session-store'
-	import { vaultList } from '$lib/settings/vault'
+	import { signerTypeLabelKey, vaultList } from '$lib/settings/vault'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { formatDebugReport, recentRustLogs } from '$lib/debug/console-capture'
 	import { copyToClipboard } from '$lib/runtime/clipboard'
@@ -196,6 +196,9 @@
 		capabilities: string[]
 		/// Set when the member is a SAFE (did:safe:) — its type label for the chip.
 		safeType?: string
+		/// Set when the member is a signer (did:key:) — how its key is held
+		/// (apple_se | env_seed | …), shown as the signer-type subtitle.
+		signerType?: string
 	}
 
 	// Member-centric view: each subject from the biscuit (`subjects`), enriched with
@@ -237,7 +240,10 @@
 			// Empty stored label (grant-side rows no longer stamp a role word) → fall back
 			// to the relay label or, via peerDisplayLabel, the short DID — never a role word.
 			const label = peerAccessLabel(s.did, peer?.deviceLabel?.trim() || fallback, isThisDevice)
-			return { did: s.did, label, isThisDevice, grant: s.grant, capabilities: s.caps }
+			// did:key signer — surface how its key is held (env_seed for the server,
+			// apple_se for a human device). isThisDevice has no peer row → apple_se.
+			const signerType = peer?.signerType?.trim() || (isThisDevice ? 'apple_se' : undefined)
+			return { did: s.did, label, isThisDevice, grant: s.grant, capabilities: s.caps, signerType }
 		})
 	})
 
@@ -642,6 +648,9 @@
 									{#if entry.safeType}
 										<span class="bg-accent text-accent-foreground rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase">{t('identities.share.safeChip', { type: entry.safeType })}</span>
 									{/if}
+									{#if entry.signerType}
+										<span class="bg-accent text-accent-foreground rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase">{t(signerTypeLabelKey(entry.signerType))}</span>
+									{/if}
 									<span class="bg-primary/10 text-primary rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase">{grantLabel(entry.grant)}</span>
 									{#each entry.capabilities as cap (cap)}
 										<span class="bg-muted text-muted-foreground rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase" title={capDescription(cap)}>{capLabel(cap)}</span>
@@ -728,6 +737,12 @@
 							<p class="text-muted-foreground truncate font-mono text-[10px] leading-snug select-text" title={entry.did}>{entry.did}</p>
 						{/if}
 						<div class="mt-1 flex flex-wrap gap-1">
+							{#if entry.safeType}
+								<span class="bg-accent text-accent-foreground rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase">{t('identities.share.safeChip', { type: entry.safeType })}</span>
+							{/if}
+							{#if entry.signerType}
+								<span class="bg-accent text-accent-foreground rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase">{t(signerTypeLabelKey(entry.signerType))}</span>
+							{/if}
 							<span class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase">{grantLabel(entry.grant)}</span>
 							{#each entry.capabilities as cap (cap)}
 								<span class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase" title={capDescription(cap)}>{capLabel(cap)}</span>

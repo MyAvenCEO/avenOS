@@ -157,6 +157,7 @@ export type PeerRow = {
 	signerDid: string
 	deviceLabel: string
 	kind: string
+	signerType?: string
 	addedAtMs: number
 	status: string
 }
