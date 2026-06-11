@@ -15,7 +15,11 @@ import { persistSparkFiles } from '$lib/avendb/intent-files'
 import type { AvenDbStore } from '$lib/avendb/store.svelte'
 import { brainAssembleContext, brainDream, brainIngest } from '$lib/brain/api'
 import { t } from '$lib/i18n'
-import { beginRoundtrip, patchRoundtrip } from '$lib/identities/talk-brain-roundtrip.svelte'
+import {
+	beginRoundtrip,
+	patchDream,
+	patchRoundtrip
+} from '$lib/identities/talk-brain-roundtrip.svelte'
 import { tinfoilAvailable, tinfoilChat } from '$lib/llm/generate'
 import {
 	CLOUD_SYSTEM_PROMPT,
@@ -527,8 +531,18 @@ export function createIdentityAgent(deps: {
 			if (body) await replyWithAgent(body, row.id, assembledContext)
 			// Dreaming runs after every turn (idempotent, deterministic, cheap): heal claims,
 			// merge entities, decay bonds, consolidate — continuous upkeep, not a nightly batch.
-			// Fire-and-forget so it never blocks the talk loop.
-			if (body) void brainDream(env.canonicalSparkId).catch(() => {})
+			// Fire-and-forget so it never blocks the talk loop; its state surfaces in the brain aside.
+			if (body) {
+				patchDream(row.id, { phase: 'dreaming' })
+				void brainDream(env.canonicalSparkId)
+					.then((report) => patchDream(row.id, { phase: 'done', report }))
+					.catch((e) =>
+						patchDream(row.id, {
+							phase: 'error',
+							error: e instanceof Error ? e.message : String(e)
+						})
+					)
+			}
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {

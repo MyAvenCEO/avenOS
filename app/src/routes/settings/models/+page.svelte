@@ -12,6 +12,7 @@ import {
 	startDownload
 } from '$lib/asr/model-download-store'
 import {
+	applyEmbedEvent,
 	cancelEmbedDownload,
 	deleteEmbedModel,
 	embedDownloadFraction,
@@ -60,8 +61,30 @@ let embedLocal: LocalEmbedModel[] = $state([])
 let embedBusy = $state(false)
 const embedFraction = $derived(embedDownloadFraction($embedState))
 const embedActiveOnDisk = $derived(embedLocal.find((m) => m.isActive) ?? embedLocal[0])
+// Re-scan the on-disk listing whenever embed readiness flips (e.g. a download finishes), so the
+// freshly fetched weights show up without a manual refresh — parity with the other models.
+$effect(() => {
+	if (!tauri) {
+		embedLocal = []
+		return
+	}
+	void $embedState.status
+	let cancelled = false
+	void listLocalEmbedModels().then((m) => {
+		if (!cancelled) embedLocal = m
+	})
+	return () => {
+		cancelled = true
+	}
+})
 async function onEmbedStart() {
-	await startEmbedDownload()
+	// Surface a failing invoke (e.g. the brain-gemma backend missing in a stale build) instead of
+	// silently doing nothing — the row then shows an error rather than appearing inert.
+	try {
+		await startEmbedDownload()
+	} catch (e) {
+		applyEmbedEvent({ status: 'error', error: e instanceof Error ? e.message : String(e) })
+	}
 }
 async function onEmbedStop() {
 	await cancelEmbedDownload()

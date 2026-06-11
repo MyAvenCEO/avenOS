@@ -48,6 +48,47 @@ function snip(s: string, n = 110): string {
 			{/if}
 		</section>
 
+		<!-- DREAMING — the post-turn consolidation pass (decay · merge · heal · consolidate). -->
+		{#if rt.dream}
+			<section class="rounded-lg border border-violet-500/30 bg-violet-500/5 p-2">
+				<div class="mb-1 flex items-center gap-1.5 font-medium text-violet-400">
+					<span>dreaming</span>
+					{#if rt.dream.phase === 'dreaming'}
+						<span class="size-1.5 animate-pulse rounded-full bg-violet-400"></span>
+						<span class="text-muted-foreground">consolidating…</span>
+					{/if}
+				</div>
+				{#if rt.dream.phase === 'error'}
+					<p class="text-red-400">{rt.dream.error}</p>
+				{:else if rt.dream.report}
+					{@const d = rt.dream.report}
+					{@const rows = [
+						['bonds decayed', d.bondsDecayed],
+						['entities merged', d.entitiesMerged],
+						['claims deduped', d.claimsDeduped],
+						['claims healed', d.claimsContradicted],
+						['memories consolidated', d.memoriesConsolidated],
+						['summaries written', d.summariesWritten]
+					] as const}
+					{@const active = rows.filter(([, n]) => n > 0)}
+					{#if active.length === 0}
+						<p class="text-muted-foreground">nothing to consolidate (already tidy)</p>
+					{:else}
+						<ul class="space-y-0.5">
+							{#each active as [ label, n ] (label)}
+								<li class="text-muted-foreground">
+									<span class="text-foreground/90 font-mono">{n}</span>
+									{label}
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				{:else}
+					<p class="text-muted-foreground">consolidating memory…</p>
+				{/if}
+			</section>
+		{/if}
+
 		{#if rt.error}
 			<section class="rounded-lg border border-red-500/40 bg-red-500/10 p-2 text-red-400">
 				{rt.error}

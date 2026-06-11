@@ -7,7 +7,14 @@
  * fills this panel AND grounds the LLM reply this turn — the panel is the receipt for
  * the context the AI actually saw.
  */
-import type { ContextTrace } from '$lib/brain/api'
+import type { ContextTrace, DreamReport } from '$lib/brain/api'
+
+/** The dreaming consolidation pass that runs after each turn (decay, merge, heal, consolidate). */
+export type DreamState = {
+	phase: 'dreaming' | 'done' | 'error'
+	report?: DreamReport
+	error?: string
+}
 
 export type BrainRoundtrip = {
 	/** Identity (SAFE) this roundtrip belongs to. */
@@ -24,6 +31,8 @@ export type BrainRoundtrip = {
 	error?: string
 	/** Roundtrip phases: stored → recalled (or error). */
 	phase: 'storing' | 'recalling' | 'done' | 'error'
+	/** The post-turn dreaming consolidation pass (decay/merge/heal), once it starts. */
+	dream?: DreamState
 	atMs: number
 }
 
@@ -44,4 +53,11 @@ export function patchRoundtrip(messageId: string, patch: Partial<BrainRoundtrip>
 	const cur = brainRoundtrip.latest
 	if (!cur || cur.messageId !== messageId) return
 	brainRoundtrip.latest = { ...cur, ...patch }
+}
+
+/** Mark the dreaming pass for `messageId`'s roundtrip (ignored once a newer turn supersedes it). */
+export function patchDream(messageId: string, dream: DreamState) {
+	const cur = brainRoundtrip.latest
+	if (!cur || cur.messageId !== messageId) return
+	brainRoundtrip.latest = { ...cur, dream }
 }
