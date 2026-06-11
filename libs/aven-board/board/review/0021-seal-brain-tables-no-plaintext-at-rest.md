@@ -103,11 +103,11 @@ time. Out of scope: engine-side filter unsealing, an in-memory vector index
 
 ## Acceptance criteria
 
-- [ ] No plaintext at rest — proven by `no_plaintext_at_rest` passing in `cargo test` (libs/aven-brain).
-- [ ] Dedup private + idempotent — proven by `hmac_dedup_idempotent` passing in the same run.
-- [ ] Recall/search/graph still work sealed — proven by the FULL aven-brain suite exiting 0.
-- [ ] Fail-closed restored — proven by `grep -n 'matches!(col.ty.as_str()' app/src-tauri/src/schema_manifest.rs` returning no hits.
-- [ ] Schema parity holds — proven by `cargo test` exit 0 in libs/aven-db and `cargo check` exit 0 in app/src-tauri + libs/aven-node.
+- [x] No plaintext at rest — proven by `no_plaintext_at_rest` passing in `cargo test` (libs/aven-brain).
+- [x] Dedup private + idempotent — proven by `hmac_dedup_idempotent` passing in the same run.
+- [x] Recall/search/graph still work sealed — proven by the FULL aven-brain suite exiting 0.
+- [x] Fail-closed restored — proven by `grep -n 'matches!(col.ty.as_str()' app/src-tauri/src/schema_manifest.rs` returning no hits.
+- [x] Schema parity holds — proven by `cargo test` exit 0 in libs/aven-db and `cargo check` exit 0 in app/src-tauri + libs/aven-node.
 
 ## Verification
 
@@ -134,6 +134,8 @@ cd ../../libs/aven-node && cargo check                                          
 ## Progress log
 
 Newest entry first.
+
+- `2026-06-11` — Build complete, all acceptance criteria proven. Step 1: manifest + brain_schema flipped in lockstep (only `owner` + keyed-MAC `content_hash` plaintext; embedding = sealed packed-f32 text; numerics = sealed decimal strings). Step 2 (checkpoint PASSED green, continued): `Sealer` seam + `KeySealer` (one impl: random key for tests, DEK for the app; `cell_seal_aad` coordinates byte-identical to device hydrate); every brain write seals bound to a pre-minted row id via `create_checked_with_id_and_metadata`; graph filters + entity lookup moved brain-side over opened `LinkRow`s; `no_plaintext_at_rest` + `hmac_dedup_idempotent` added — 27/27 tests green. **Spec deviation (documented):** E1b's `UnsealFn(&TableName, &str, &Value)` carries no row id, so it cannot open row-bound AAD — instead of weakening the AAD, BOTH retrievers moved brain-side (cosine + lexical over opened cells, same RRF/modifiers/floor; same O(n) as the index-less engine scan). E1b wiring dropped; engine-side sealed search = follow-up optimization card if scale demands. Step 3: brain_ipc constructs the brain with the identity's DEK sealer (fail closed: no DEK → no brain → never plaintext). Step 4: 3460b29 read-tolerance reverted — hydrate errors on unsealable plaintext again. Step 5: aven-brain 27 ok, aven-db 704+ ok, fail-closed grep clean, app + node check 0 errors. Schema hash changed ⇒ wipe + relay redeploy before live verify. Moved build → review.
 
 - `2026-06-11` — Discovery: decisions confirmed with Samuel (unseal-on-scan; HMAC dedup key; one slice for all 4 tables + fail-closed revert). Grounded the constraint that E1b unsealing covers ranking only ⇒ graph filters move brain-side. Metric made transcript-provable. Moved ideate → discover.
 - `2026-06-11` — Captured in ideate after the `secret_col_bad_storage` incident exposed brain plaintext at rest (content included, not just embeddings).

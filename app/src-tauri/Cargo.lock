@@ -274,9 +274,15 @@ dependencies = [
 name = "aven-brain"
 version = "0.0.1"
 dependencies = [
+ "aven-caps",
  "aven-db",
+ "base64 0.22.1",
+ "hkdf",
+ "rand_core",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
+ "uuid",
 ]
 
 [[package]]

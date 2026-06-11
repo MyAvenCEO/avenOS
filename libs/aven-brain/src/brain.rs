@@ -6,10 +6,16 @@
 //!   **mention** links (note class) and potentiates **assoc** links (bond class) for
 //!   every co-mentioned pair. No LLM touches the write path, so the graph is
 //!   reproducible across devices (clean CRDT merges). Idempotent by `content_hash`.
-//! - `search` runs both engine retrievers (`nearest` cosine + `text_search` BM25),
-//!   fuses with **RRF (k=60)**, then applies the read modifiers: veracity weight ×
-//!   age weight, and the **abstention floor** (return nothing over noise).
-//!   [`Brain::search_traced`] surfaces per-hit `via`/rank/score for RecallTrace.
+//! - **Sealed at rest (board 0021):** every non-routing cell is sealed through the
+//!   [`crate::sealer::Sealer`] seam before write and opened on read — plaintext exists
+//!   only transiently in RAM. Only `owner` and the keyed-MAC `content_hash` are
+//!   plaintext routing; `IS NULL` filters still run DB-side (null-ness is metadata).
+//!   Retrieval and the graph walks therefore scan owner-scoped rows and filter
+//!   brain-side after opening (the engine cannot see into sealed cells).
+//! - `search` runs both retrievers brain-side (cosine over opened embeddings + lexical
+//!   over opened content), fuses with **RRF (k=60)**, then applies the read modifiers:
+//!   veracity weight × age weight, and the **abstention floor** (return nothing over
+//!   noise). [`Brain::search_traced`] surfaces per-hit `via`/rank/score for RecallTrace.
 //! - `add_fact` writes **claim** links (temporal single-truth: a new assertion for the
 //!   same (subject, predicate) closes the old row's `valid_to`; nothing is deleted).
 //! - The link **kind→class registry** (law 6) is enforced at write: note kinds are
@@ -21,10 +27,13 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use aven_db::{AppContext, AppId, AvenDbClient, NullSyncTransport, ObjectId, QueryBuilder, Value};
+use base64::engine::general_purpose::STANDARD as B64;
+use base64::Engine as _;
 use serde::Serialize;
 
 use crate::embedder::Embedder;
 use crate::schema::{brain_schema, ENTITIES, LINKS, MEMORIES};
+use crate::sealer::{KeySealer, Sealer};
 
 /// Errors from brain operations.
 #[derive(Debug)]
@@ -142,6 +151,27 @@ impl Filter {
             stream: Some(s.into()),
             ..Default::default()
         }
+    }
+
+    /// Brain-side match over an OPENED memory — sealed columns can't be filtered by
+    /// the engine, so the typed filter applies after the cells are opened.
+    fn matches(&self, m: &Memory) -> bool {
+        if let Some(s) = &self.stream {
+            if &m.stream != s {
+                return false;
+            }
+        }
+        if let Some(r) = &self.author_role {
+            if &m.author_role != r {
+                return false;
+            }
+        }
+        if let Some(src) = &self.source {
+            if m.source.as_deref() != Some(src.as_str()) {
+                return false;
+            }
+        }
+        true
     }
 }
 
@@ -386,15 +416,35 @@ fn abstention_floor(query_tokens: usize) -> f32 {
     }
 }
 
+/// One opened link row — every sealed cell decrypted, numbers parsed. The graph
+/// walks filter over these brain-side (the engine cannot see into sealed cells).
+struct LinkRow {
+    id: ObjectId,
+    from: String,
+    to: String,
+    kind: String,
+    class: String,
+    valid_from: Option<i64>,
+    valid_to: Option<i64>,
+    confidence: f64,
+    strength: f64,
+    stability: f64,
+    access_count: i64,
+    last_access: i64,
+    source_memory: Option<String>,
+}
+
 /// The memory brain of one SAFE (owner-scoped over the shared store).
 pub struct Brain<E: Embedder> {
     client: Arc<AvenDbClient>,
     embedder: E,
+    sealer: Arc<dyn Sealer>,
     owner: ObjectId,
 }
 
 impl<E: Embedder> Brain<E> {
-    /// Open an ephemeral, in-memory brain for `owner` (tests / dev). Nothing persists.
+    /// Open an ephemeral, in-memory brain for `owner` (tests / dev) with a
+    /// random-key sealer. Nothing persists; nothing else can open its cells.
     pub async fn open_in_memory(app: &str, owner: ObjectId, embedder: E) -> Result<Self, BrainError> {
         let data_dir = std::env::temp_dir().join(format!("aven-brain-{app}"));
         let _ = std::fs::create_dir_all(&data_dir);
@@ -408,14 +458,23 @@ impl<E: Embedder> Brain<E> {
         let client = AvenDbClient::connect_headless_in_memory(context, Arc::new(NullSyncTransport))
             .await
             .map_err(|e| BrainError::Open(format!("{e:?}")))?;
-        Ok(Self::over(Arc::new(client), owner, embedder))
+        let sealer = Arc::new(KeySealer::random(*owner.uuid()));
+        Ok(Self::over(Arc::new(client), owner, embedder, sealer))
     }
 
-    /// Wrap an existing client (the app's shared store) as `owner`'s brain.
-    pub fn over(client: Arc<AvenDbClient>, owner: ObjectId, embedder: E) -> Self {
+    /// Wrap an existing client (the app's shared store) as `owner`'s brain. The
+    /// sealer is the app's DEK-backed implementation — same AAD coordinates as the
+    /// device seal path, so hydrate/viewer open brain cells like any other.
+    pub fn over(
+        client: Arc<AvenDbClient>,
+        owner: ObjectId,
+        embedder: E,
+        sealer: Arc<dyn Sealer>,
+    ) -> Self {
         Self {
             client,
             embedder,
+            sealer,
             owner,
         }
     }
@@ -434,41 +493,81 @@ impl<E: Embedder> Brain<E> {
 
     /// Store a memory (verbatim content + embedding + artifact columns) and build the
     /// graph from its `[[wikilink]]` references. **Idempotent**: identical content
-    /// returns the existing memory id without re-writing.
+    /// returns the existing memory id without re-writing. Every non-routing cell is
+    /// sealed bound to this row's freshly-minted id.
     pub async fn remember_with(
         &self,
         content: &str,
         opts: &RememberOptions,
     ) -> Result<ObjectId, BrainError> {
-        let hash = content_hash(content);
-        if let Some(existing) = self.find_by_content_hash(&hash).await? {
+        let mac = self.sealer.dedup_mac(content);
+        if let Some(existing) = self.find_by_content_hash(&mac).await? {
             return Ok(existing);
         }
 
         let embedding = self.embedder.embed(content).await;
-        // Name-keyed write: order-independent of the manifest. Unset columns
-        // (source_version, superseded_by) are null-filled by `create_checked`.
+        let oid = ObjectId::new();
+        let row = *oid.uuid();
         let fields = HashMap::from([
             ("owner".to_string(), Value::Uuid(self.owner)),
-            ("content".to_string(), Value::Text(content.to_string())),
-            ("embedding".to_string(), Value::Vector(embedding)),
-            ("stream".to_string(), Value::Text(opts.stream.clone())),
-            ("author_role".to_string(), Value::Text(opts.author_role.clone())),
-            ("source".to_string(), opt_text(opts.source.clone())),
-            ("seq".to_string(), opt_int(opts.seq)),
-            ("line_start".to_string(), opt_int(opts.line_start)),
-            ("line_end".to_string(), opt_int(opts.line_end)),
+            ("content".to_string(), self.sv(MEMORIES, "content", row, content)?),
+            (
+                "embedding".to_string(),
+                self.sv(MEMORIES, "embedding", row, &encode_embedding(&embedding))?,
+            ),
+            ("stream".to_string(), self.sv(MEMORIES, "stream", row, &opts.stream)?),
+            (
+                "author_role".to_string(),
+                self.sv(MEMORIES, "author_role", row, &opts.author_role)?,
+            ),
+            (
+                "source".to_string(),
+                self.sv_opt(MEMORIES, "source", row, opts.source.as_deref())?,
+            ),
+            (
+                "seq".to_string(),
+                self.sv_opt(MEMORIES, "seq", row, opts.seq.map(|n| n.to_string()).as_deref())?,
+            ),
+            (
+                "line_start".to_string(),
+                self.sv_opt(
+                    MEMORIES,
+                    "line_start",
+                    row,
+                    opts.line_start.map(|n| n.to_string()).as_deref(),
+                )?,
+            ),
+            (
+                "line_end".to_string(),
+                self.sv_opt(
+                    MEMORIES,
+                    "line_end",
+                    row,
+                    opts.line_end.map(|n| n.to_string()).as_deref(),
+                )?,
+            ),
             (
                 "content_date".to_string(),
-                opt_text(opts.content_date_ms.map(|ms| ms.to_string())),
+                self.sv_opt(
+                    MEMORIES,
+                    "content_date",
+                    row,
+                    opts.content_date_ms.map(|ms| ms.to_string()).as_deref(),
+                )?,
             ),
-            ("content_hash".to_string(), Value::Bytea(hash.to_vec())),
-            ("normalize_version".to_string(), Value::Integer(1)),
-            ("veracity".to_string(), opt_text(opts.veracity.clone())),
+            ("content_hash".to_string(), Value::Bytea(mac)),
+            (
+                "normalize_version".to_string(),
+                self.sv(MEMORIES, "normalize_version", row, "1")?,
+            ),
+            (
+                "veracity".to_string(),
+                self.sv_opt(MEMORIES, "veracity", row, opts.veracity.as_deref())?,
+            ),
         ]);
         let memory_id = self
             .client
-            .create_checked(MEMORIES, fields)
+            .create_checked_with_id_and_metadata(MEMORIES, oid, fields, HashMap::new())
             .await
             .map_err(|e| BrainError::Write(format!("{e:?}")))?;
 
@@ -506,6 +605,11 @@ impl<E: Embedder> Brain<E> {
     }
 
     /// Hybrid retrieval with per-hit provenance (via / rank / score) for RecallTrace.
+    ///
+    /// Sealed-at-rest: both retrievers run brain-side — owner-scoped scan, open each
+    /// candidate in RAM, rank by cosine (vector) and lexical overlap (text), then the
+    /// usual RRF fuse + modifiers + abstention floor. Same O(n) as the index-less
+    /// engine scan this replaced; an in-memory index is the follow-up optimization.
     pub async fn search_traced(
         &self,
         query: &str,
@@ -514,36 +618,53 @@ impl<E: Embedder> Brain<E> {
     ) -> Result<Vec<ScoredMemory>, BrainError> {
         let over = (k * 4).max(8);
         let qvec = self.embedder.embed(query).await;
+        let qtokens = content_tokens(query);
 
-        let vector_rows = self
-            .client
-            .query(
-                self.memory_query(filter)
-                    .nearest("embedding", qvec, over)
-                    .build(),
-                None,
-            )
-            .await
-            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+        // One owner-scoped fetch; open + filter brain-side.
+        let rows = self.memory_rows().await?;
+        let mut candidates: Vec<(ObjectId, Memory, Option<Vec<f32>>)> = Vec::new();
+        for (id, vals) in &rows {
+            let m = self.open_memory(*id, vals);
+            if !filter.matches(&m) {
+                continue;
+            }
+            let emb = self
+                .open_at(MEMORIES, "embedding", id, vals, 2)
+                .and_then(|s| decode_embedding(&s));
+            candidates.push((*id, m, emb));
+        }
 
-        let text_rows = self
-            .client
-            .query(
-                self.memory_query(filter)
-                    .text_search("content", query, over)
-                    .build(),
-                None,
-            )
-            .await
-            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+        // Vector list: cosine over opened embeddings (descending, positives only).
+        let mut vector_list: Vec<(ObjectId, f32)> = candidates
+            .iter()
+            .filter_map(|(id, _, emb)| {
+                let c = cosine(&qvec, emb.as_deref()?);
+                (c > 0.0).then_some((*id, c))
+            })
+            .collect();
+        vector_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        vector_list.truncate(over);
+
+        // Text list: lexical overlap over opened content (descending, positives only).
+        let mut text_list: Vec<(ObjectId, f32)> = candidates
+            .iter()
+            .filter_map(|(id, m, _)| {
+                let s = lexical_overlap(&qtokens, &m.content);
+                (s > 0.0).then_some((*id, s))
+            })
+            .collect();
+        text_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        text_list.truncate(over);
 
         // RRF fuse with via tracking.
-        use std::collections::HashMap;
         let mut score: HashMap<ObjectId, f32> = HashMap::new();
         let mut via: HashMap<ObjectId, Via> = HashMap::new();
         let mut mem: HashMap<ObjectId, Memory> = HashMap::new();
-        for (list, list_via) in [(&vector_rows, Via::Vector), (&text_rows, Via::Bm25)] {
-            for (rank, (id, vals)) in list.iter().enumerate() {
+        for (id, m, _) in &candidates {
+            mem.insert(*id, m.clone());
+        }
+        for (list, list_via) in [(&vector_list, Via::Vector), (&text_list, Via::Bm25)] {
+            for (rank, (id, _)) in list.iter().enumerate() {
                 *score.entry(*id).or_insert(0.0) += 1.0 / (RRF_K + rank as f32 + 1.0);
                 via.entry(*id)
                     .and_modify(|v| {
@@ -552,7 +673,6 @@ impl<E: Embedder> Brain<E> {
                         }
                     })
                     .or_insert(list_via);
-                mem.entry(*id).or_insert_with(|| memory_from_row(*id, vals));
             }
         }
 
@@ -565,7 +685,6 @@ impl<E: Embedder> Brain<E> {
         }
 
         // Abstention floor: drop hits below the minimum lexical overlap with the query.
-        let qtokens = content_tokens(query);
         let floor = abstention_floor(qtokens.len());
         let mut ranked: Vec<(ObjectId, f32)> = score
             .into_iter()
@@ -597,12 +716,12 @@ impl<E: Embedder> Brain<E> {
     /// The `n` most-recent memories matching `filter` (no query text). Newest first —
     /// ordering comes from the UUIDv7 row ids, no timestamp column needed.
     pub async fn recall(&self, filter: &Filter, n: usize) -> Result<Vec<Memory>, BrainError> {
-        let rows = self
-            .client
-            .query(self.memory_query(filter).build(), None)
-            .await
-            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
-        let mut mems: Vec<Memory> = rows.iter().map(|(id, v)| memory_from_row(*id, v)).collect();
+        let rows = self.memory_rows().await?;
+        let mut mems: Vec<Memory> = rows
+            .iter()
+            .map(|(id, v)| self.open_memory(*id, v))
+            .filter(|m| filter.matches(m))
+            .collect();
         mems.sort_by(|a, b| b.id.uuid().cmp(a.id.uuid()));
         mems.truncate(n);
         Ok(mems)
@@ -613,34 +732,23 @@ impl<E: Embedder> Brain<E> {
         let Some(eid) = self.entity_id_by_name(name).await? else {
             return Ok(Vec::new());
         };
-        let mention_rows = self
-            .client
-            .query(
-                self.link_query()
-                    .filter_eq("to", Value::Text(id_str(&eid)))
-                    .filter_eq("kind", Value::Text("mentions".to_string()))
-                    .build(),
-                None,
-            )
-            .await
-            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
-        let memory_ids: std::collections::HashSet<String> = mention_rows
-            .iter()
-            .map(|(_, v)| text_at(v, 1)) // `from`
+        let eid_s = id_str(&eid);
+        let memory_ids: std::collections::HashSet<String> = self
+            .links()
+            .await?
+            .into_iter()
+            .filter(|l| l.to == eid_s && l.kind == "mentions")
+            .map(|l| l.from)
             .collect();
         if memory_ids.is_empty() {
             return Ok(Vec::new());
         }
         // Small-scale fetch: scan this owner's memories and keep the mentioned ones.
-        let all = self
-            .client
-            .query(self.memory_query(&Filter::default()).build(), None)
-            .await
-            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
-        Ok(all
+        let rows = self.memory_rows().await?;
+        Ok(rows
             .into_iter()
             .filter(|(id, _)| memory_ids.contains(&id_str(id)))
-            .map(|(id, v)| memory_from_row(id, &v))
+            .map(|(id, v)| self.open_memory(id, &v))
             .collect())
     }
 
@@ -662,8 +770,8 @@ impl<E: Embedder> Brain<E> {
             .iter()
             .map(|(id, v)| Entity {
                 id: *id,
-                name: text_at(v, 1),
-                kind: text_at(v, 2),
+                name: self.open_at(ENTITIES, "name", id, v, 1).unwrap_or_default(),
+                kind: self.open_at(ENTITIES, "kind", id, v, 2).unwrap_or_default(),
             })
             .collect())
     }
@@ -681,23 +789,17 @@ impl<E: Embedder> Brain<E> {
             return Ok(None);
         };
         let (a, b) = canonical_pair(a, b);
-        let rows = self
-            .client
-            .query(
-                self.link_query()
-                    .filter_eq("from", Value::Text(id_str(&a)))
-                    .filter_eq("to", Value::Text(id_str(&b)))
-                    .filter_eq("kind", Value::Text(BOND_KIND.to_string()))
-                    .build(),
-                None,
-            )
-            .await
-            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
-        Ok(rows.first().map(|(_, v)| Relation {
-            strength: f64_at(v, 8),
-            stability: f64_at(v, 9),
-            access_count: i64_at(v, 10),
-        }))
+        let (a_s, b_s) = (id_str(&a), id_str(&b));
+        Ok(self
+            .links()
+            .await?
+            .into_iter()
+            .find(|l| l.from == a_s && l.to == b_s && l.kind == BOND_KIND)
+            .map(|l| Relation {
+                strength: l.strength,
+                stability: l.stability,
+                access_count: l.access_count,
+            }))
     }
 
     /// Record a temporal **claim**: `subject —predicate→ object` (entities upserted by
@@ -727,43 +829,58 @@ impl<E: Embedder> Brain<E> {
         let subj = self.upsert_entity(subject).await?;
         let obj = self.upsert_entity(object).await?;
         let now = now_ms();
+        let subj_s = id_str(&subj);
 
         // Close any open claim for the same (subject, predicate).
-        let open = self
-            .client
-            .query(
-                self.link_query()
-                    .filter_eq("from", Value::Text(id_str(&subj)))
-                    .filter_eq("kind", Value::Text(predicate.to_string()))
-                    .filter_is_null("valid_to")
-                    .build(),
-                None,
-            )
-            .await
-            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
-        for (id, _) in open {
+        let open: Vec<ObjectId> = self
+            .links()
+            .await?
+            .into_iter()
+            .filter(|l| l.from == subj_s && l.kind == predicate && l.valid_to.is_none())
+            .map(|l| l.id)
+            .collect();
+        for id in open {
+            let sealed_to = self.sv(LINKS, "valid_to", *id.uuid(), &now.to_string())?;
             self.client
-                .update(id, vec![("valid_to".to_string(), Value::Text(now.to_string()))])
+                .update(id, vec![("valid_to".to_string(), sealed_to)])
                 .await
                 .map_err(|e| BrainError::Write(format!("{e:?}")))?;
         }
 
-        // Column order per `schema.rs`: owner, from, to, kind, class, valid_from,
-        // valid_to, confidence, strength, stability, access_count, last_access,
-        // source_memory.
+        let oid = ObjectId::new();
+        let row = *oid.uuid();
         self.client
-            .create_checked(
+            .create_checked_with_id_and_metadata(
                 LINKS,
+                oid,
                 HashMap::from([
                     ("owner".to_string(), Value::Uuid(self.owner)),
-                    ("from".to_string(), Value::Text(id_str(&subj))),
-                    ("to".to_string(), Value::Text(id_str(&obj))),
-                    ("kind".to_string(), Value::Text(predicate.to_string())),
-                    ("class".to_string(), Value::Text(LinkClass::Claim.as_str().to_string())),
-                    ("valid_from".to_string(), Value::Text(now.to_string())),
-                    ("confidence".to_string(), Value::Double(confidence)),
-                    ("source_memory".to_string(), opt_text(source_memory.map(|m| id_str(&m)))),
+                    ("from".to_string(), self.sv(LINKS, "from", row, &subj_s)?),
+                    ("to".to_string(), self.sv(LINKS, "to", row, &id_str(&obj))?),
+                    ("kind".to_string(), self.sv(LINKS, "kind", row, predicate)?),
+                    (
+                        "class".to_string(),
+                        self.sv(LINKS, "class", row, LinkClass::Claim.as_str())?,
+                    ),
+                    (
+                        "valid_from".to_string(),
+                        self.sv(LINKS, "valid_from", row, &now.to_string())?,
+                    ),
+                    (
+                        "confidence".to_string(),
+                        self.sv(LINKS, "confidence", row, &confidence.to_string())?,
+                    ),
+                    (
+                        "source_memory".to_string(),
+                        self.sv_opt(
+                            LINKS,
+                            "source_memory",
+                            row,
+                            source_memory.map(|m| id_str(&m)).as_deref(),
+                        )?,
+                    ),
                 ]),
+                HashMap::new(),
             )
             .await
             .map_err(|e| BrainError::Write(format!("{e:?}")))
@@ -774,31 +891,24 @@ impl<E: Embedder> Brain<E> {
         let Some(subj) = self.entity_id_by_name(subject).await? else {
             return Ok(Vec::new());
         };
-        let rows = self
-            .client
-            .query(
-                self.link_query()
-                    .filter_eq("from", Value::Text(id_str(&subj)))
-                    .filter_eq("class", Value::Text(LinkClass::Claim.as_str().to_string()))
-                    .build(),
-                None,
-            )
-            .await
-            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+        let subj_s = id_str(&subj);
         let names: std::collections::HashMap<String, String> = self
             .entities()
             .await?
             .into_iter()
             .map(|e| (id_str(&e.id), e.name))
             .collect();
-        Ok(rows
-            .iter()
-            .map(|(_, v)| Fact {
-                predicate: text_at(v, 3),
-                object_name: names.get(&text_at(v, 2)).cloned().unwrap_or_default(),
-                valid_from_ms: text_at_opt(v, 5).and_then(|s| s.parse().ok()),
-                valid_to_ms: text_at_opt(v, 6).and_then(|s| s.parse().ok()),
-                confidence: f64_at(v, 7),
+        Ok(self
+            .links()
+            .await?
+            .into_iter()
+            .filter(|l| l.from == subj_s && l.class == LinkClass::Claim.as_str())
+            .map(|l| Fact {
+                predicate: l.kind,
+                object_name: names.get(&l.to).cloned().unwrap_or_default(),
+                valid_from_ms: l.valid_from,
+                valid_to_ms: l.valid_to,
+                confidence: l.confidence,
             })
             .collect())
     }
@@ -857,21 +967,16 @@ impl<E: Embedder> Brain<E> {
             .unwrap_or_default();
 
         // Bonds involving this entity (either side): (other_id_str, strength).
+        let eid_s = id_str(&eid);
         let mut weighted: Vec<(String, f64)> = Vec::new();
-        for (self_col, other_col) in [("from", 2usize), ("to", 1usize)] {
-            let rows = self
-                .client
-                .query(
-                    self.link_query()
-                        .filter_eq(self_col, Value::Text(id_str(&eid)))
-                        .filter_eq("kind", Value::Text(BOND_KIND.to_string()))
-                        .build(),
-                    None,
-                )
-                .await
-                .map_err(|e| BrainError::Read(format!("{e:?}")))?;
-            for (_, v) in rows {
-                weighted.push((text_at(&v, other_col), f64_at(&v, 8)));
+        for l in self.links().await? {
+            if l.kind != BOND_KIND {
+                continue;
+            }
+            if l.from == eid_s {
+                weighted.push((l.to, l.strength));
+            } else if l.to == eid_s {
+                weighted.push((l.from, l.strength));
             }
         }
         let names: std::collections::HashMap<String, String> = self
@@ -1074,29 +1179,24 @@ impl<E: Embedder> Brain<E> {
 
     /// Ebbinghaus decay over bond links: `strength · exp(-days/stability)`, floored.
     async fn decay_bonds(&self, now: i64) -> Result<usize, BrainError> {
-        let rows = self
-            .client
-            .query(
-                self.link_query()
-                    .filter_eq("kind", Value::Text(BOND_KIND.to_string()))
-                    .build(),
-                None,
-            )
-            .await
-            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+        let bonds: Vec<LinkRow> = self
+            .links()
+            .await?
+            .into_iter()
+            .filter(|l| l.kind == BOND_KIND)
+            .collect();
         let mut decayed = 0;
-        for (id, v) in rows {
-            let strength = f64_at(&v, 8);
-            let stability = f64_at(&v, 9).max(1e-4);
-            let last = i64_at(&v, 11);
-            let days = now.saturating_sub(last) as f64 / MS_PER_DAY as f64;
+        for l in bonds {
+            let stability = l.stability.max(1e-4);
+            let days = now.saturating_sub(l.last_access) as f64 / MS_PER_DAY as f64;
             if days <= 0.0 {
                 continue;
             }
-            let new_strength = (strength * (-days / stability).exp()).max(STRENGTH_FLOOR);
-            if (new_strength - strength).abs() > 1e-9 {
+            let new_strength = (l.strength * (-days / stability).exp()).max(STRENGTH_FLOOR);
+            if (new_strength - l.strength).abs() > 1e-9 {
+                let sealed = self.sv(LINKS, "strength", *l.id.uuid(), &new_strength.to_string())?;
                 self.client
-                    .update(id, vec![("strength".to_string(), Value::Double(new_strength))])
+                    .update(l.id, vec![("strength".to_string(), sealed)])
                     .await
                     .map_err(|e| BrainError::Write(format!("{e:?}")))?;
                 decayed += 1;
@@ -1135,47 +1235,42 @@ impl<E: Embedder> Brain<E> {
     async fn merge_entity(&self, dup: ObjectId, canon: ObjectId) -> Result<(), BrainError> {
         let dup_s = id_str(&dup);
         let canon_s = id_str(&canon);
-        for (col, other_col_idx) in [("from", 2usize), ("to", 1usize)] {
-            let rows = self
-                .client
-                .query(
-                    self.link_query()
-                        .filter_eq(col, Value::Text(dup_s.clone()))
-                        .build(),
-                    None,
-                )
-                .await
-                .map_err(|e| BrainError::Read(format!("{e:?}")))?;
-            for (lid, v) in rows {
-                let kind = text_at(&v, 3);
-                let other = text_at(&v, other_col_idx);
-                if kind == BOND_KIND && other == canon_s {
-                    // would become a self-bond — drop it.
-                    self.client
-                        .delete(lid)
-                        .await
-                        .map_err(|e| BrainError::Write(format!("{e:?}")))?;
-                    continue;
-                }
-                if kind == BOND_KIND {
-                    // Keep canonical endpoint ordering for bonds.
-                    let (na, nb) = canonical_pair_str(&canon_s, &other);
-                    self.client
-                        .update(
-                            lid,
-                            vec![
-                                ("from".to_string(), Value::Text(na)),
-                                ("to".to_string(), Value::Text(nb)),
-                            ],
-                        )
-                        .await
-                        .map_err(|e| BrainError::Write(format!("{e:?}")))?;
-                } else {
-                    self.client
-                        .update(lid, vec![(col.to_string(), Value::Text(canon_s.clone()))])
-                        .await
-                        .map_err(|e| BrainError::Write(format!("{e:?}")))?;
-                }
+        let touching: Vec<LinkRow> = self
+            .links()
+            .await?
+            .into_iter()
+            .filter(|l| l.from == dup_s || l.to == dup_s)
+            .collect();
+        for l in touching {
+            let row = *l.id.uuid();
+            let other = if l.from == dup_s { &l.to } else { &l.from };
+            if l.kind == BOND_KIND && other == &canon_s {
+                // would become a self-bond — drop it.
+                self.client
+                    .delete(l.id)
+                    .await
+                    .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+                continue;
+            }
+            if l.kind == BOND_KIND {
+                // Keep canonical endpoint ordering for bonds.
+                let (na, nb) = canonical_pair_str(&canon_s, other);
+                self.client
+                    .update(
+                        l.id,
+                        vec![
+                            ("from".to_string(), self.sv(LINKS, "from", row, &na)?),
+                            ("to".to_string(), self.sv(LINKS, "to", row, &nb)?),
+                        ],
+                    )
+                    .await
+                    .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+            } else {
+                let col = if l.from == dup_s { "from" } else { "to" };
+                self.client
+                    .update(l.id, vec![(col.to_string(), self.sv(LINKS, col, row, &canon_s)?)])
+                    .await
+                    .map_err(|e| BrainError::Write(format!("{e:?}")))?;
             }
         }
         self.client
@@ -1188,48 +1283,44 @@ impl<E: Embedder> Brain<E> {
     /// Collapse duplicate bonds per endpoint pair (max strength, summed access_count).
     async fn dedup_bonds(&self) -> Result<(), BrainError> {
         use std::collections::HashMap;
-        let rows = self
-            .client
-            .query(
-                self.link_query()
-                    .filter_eq("kind", Value::Text(BOND_KIND.to_string()))
-                    .build(),
-                None,
-            )
-            .await
-            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+        let bonds: Vec<LinkRow> = self
+            .links()
+            .await?
+            .into_iter()
+            .filter(|l| l.kind == BOND_KIND)
+            .collect();
         let mut by_pair: HashMap<(String, String), (ObjectId, f64, i64, bool)> = HashMap::new();
         let mut to_delete: Vec<ObjectId> = Vec::new();
-        for (id, v) in &rows {
-            let a = text_at(v, 1);
-            let b = text_at(v, 2);
-            if a == b {
-                to_delete.push(*id);
+        for l in &bonds {
+            if l.from == l.to {
+                to_delete.push(l.id);
                 continue;
             }
-            let key = canonical_pair_str(&a, &b);
-            let strength = f64_at(v, 8);
-            let count = i64_at(v, 10);
+            let key = canonical_pair_str(&l.from, &l.to);
             match by_pair.get_mut(&key) {
                 None => {
-                    by_pair.insert(key, (*id, strength, count, false));
+                    by_pair.insert(key, (l.id, l.strength, l.access_count, false));
                 }
                 Some(entry) => {
-                    entry.1 = entry.1.max(strength);
-                    entry.2 += count;
+                    entry.1 = entry.1.max(l.strength);
+                    entry.2 += l.access_count;
                     entry.3 = true;
-                    to_delete.push(*id);
+                    to_delete.push(l.id);
                 }
             }
         }
         for (_, (keep, strength, count, dirty)) in by_pair {
             if dirty {
+                let row = *keep.uuid();
                 self.client
                     .update(
                         keep,
                         vec![
-                            ("strength".to_string(), Value::Double(strength)),
-                            ("access_count".to_string(), Value::BigInt(count)),
+                            ("strength".to_string(), self.sv(LINKS, "strength", row, &strength.to_string())?),
+                            (
+                                "access_count".to_string(),
+                                self.sv(LINKS, "access_count", row, &count.to_string())?,
+                            ),
                         ],
                     )
                     .await
@@ -1247,26 +1338,120 @@ impl<E: Embedder> Brain<E> {
 
     // ── Internals ────────────────────────────────────────────────────────────
 
-    /// Base memories query: owner-scoped, superseded rows hidden, typed filter applied.
-    fn memory_query(&self, filter: &Filter) -> QueryBuilder {
-        let mut qb = QueryBuilder::new(MEMORIES)
-            .filter_eq("owner", Value::Uuid(self.owner))
-            .filter_is_null("superseded_by");
-        if let Some(s) = &filter.stream {
-            qb = qb.filter_eq("stream", Value::Text(s.clone()));
-        }
-        if let Some(r) = &filter.author_role {
-            qb = qb.filter_eq("author_role", Value::Text(r.clone()));
-        }
-        if let Some(src) = &filter.source {
-            qb = qb.filter_eq("source", Value::Text(src.clone()));
-        }
-        qb
+    /// Seal one cell bound to `(table, column, row)` → a sealed Text value.
+    fn sv(&self, table: &str, column: &str, row: uuid::Uuid, plaintext: &str) -> Result<Value, BrainError> {
+        Ok(Value::Text(
+            self.sealer
+                .seal(table, column, row, plaintext)
+                .map_err(BrainError::Write)?,
+        ))
     }
 
-    /// Base links query: owner-scoped.
-    fn link_query(&self) -> QueryBuilder {
-        QueryBuilder::new(LINKS).filter_eq("owner", Value::Uuid(self.owner))
+    /// Seal an optional cell — `None` stays `Null` (null-ness is metadata).
+    fn sv_opt(
+        &self,
+        table: &str,
+        column: &str,
+        row: uuid::Uuid,
+        plaintext: Option<&str>,
+    ) -> Result<Value, BrainError> {
+        match plaintext {
+            Some(s) => self.sv(table, column, row, s),
+            None => Ok(Value::Null),
+        }
+    }
+
+    /// Open one sealed cell of a fetched row (None for Null or unopenable).
+    fn open_at(&self, table: &str, column: &str, id: &ObjectId, v: &[Value], i: usize) -> Option<String> {
+        match v.get(i) {
+            Some(Value::Text(s)) => self.sealer.open(table, column, *id.uuid(), s).ok(),
+            _ => None,
+        }
+    }
+
+    /// All raw memory rows of this owner with `superseded_by IS NULL` (DB-side —
+    /// null-ness is metadata even on sealed columns).
+    async fn memory_rows(&self) -> Result<Vec<(ObjectId, Vec<Value>)>, BrainError> {
+        self.client
+            .query(
+                QueryBuilder::new(MEMORIES)
+                    .filter_eq("owner", Value::Uuid(self.owner))
+                    .filter_is_null("superseded_by")
+                    .build(),
+                None,
+            )
+            .await
+            .map_err(|e| BrainError::Read(format!("{e:?}")))
+    }
+
+    /// Open a fetched memory row into the public [`Memory`] (cells decrypt in RAM).
+    /// Memory column order: owner, content, embedding, stream, author_role, source,
+    /// seq, line_start, line_end, content_date, content_hash, source_version,
+    /// normalize_version, veracity, superseded_by.
+    fn open_memory(&self, id: ObjectId, vals: &[Value]) -> Memory {
+        Memory {
+            id,
+            content: self.open_at(MEMORIES, "content", &id, vals, 1).unwrap_or_default(),
+            stream: self.open_at(MEMORIES, "stream", &id, vals, 3).unwrap_or_default(),
+            author_role: self
+                .open_at(MEMORIES, "author_role", &id, vals, 4)
+                .unwrap_or_default(),
+            source: self.open_at(MEMORIES, "source", &id, vals, 5),
+            veracity: self.open_at(MEMORIES, "veracity", &id, vals, 13),
+        }
+    }
+
+    /// All link rows of this owner, opened (the graph walks filter over these).
+    /// Link column order: owner, from, to, kind, class, valid_from, valid_to,
+    /// confidence, strength, stability, access_count, last_access, source_memory.
+    async fn links(&self) -> Result<Vec<LinkRow>, BrainError> {
+        let rows = self
+            .client
+            .query(
+                QueryBuilder::new(LINKS)
+                    .filter_eq("owner", Value::Uuid(self.owner))
+                    .build(),
+                None,
+            )
+            .await
+            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+        Ok(rows
+            .iter()
+            .map(|(id, v)| LinkRow {
+                id: *id,
+                from: self.open_at(LINKS, "from", id, v, 1).unwrap_or_default(),
+                to: self.open_at(LINKS, "to", id, v, 2).unwrap_or_default(),
+                kind: self.open_at(LINKS, "kind", id, v, 3).unwrap_or_default(),
+                class: self.open_at(LINKS, "class", id, v, 4).unwrap_or_default(),
+                valid_from: self
+                    .open_at(LINKS, "valid_from", id, v, 5)
+                    .and_then(|s| s.parse().ok()),
+                valid_to: self
+                    .open_at(LINKS, "valid_to", id, v, 6)
+                    .and_then(|s| s.parse().ok()),
+                confidence: self
+                    .open_at(LINKS, "confidence", id, v, 7)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
+                strength: self
+                    .open_at(LINKS, "strength", id, v, 8)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
+                stability: self
+                    .open_at(LINKS, "stability", id, v, 9)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
+                access_count: self
+                    .open_at(LINKS, "access_count", id, v, 10)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0),
+                last_access: self
+                    .open_at(LINKS, "last_access", id, v, 11)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0),
+                source_memory: self.open_at(LINKS, "source_memory", id, v, 12),
+            })
+            .collect())
     }
 
     /// The L0 self text (reserved `self` stream).
@@ -1335,36 +1520,37 @@ impl<E: Embedder> Brain<E> {
                 return Ok(e.id);
             }
         }
-        self.upsert_entity(name).await
+        self.create_entity(name).await
     }
 
     /// Idempotent **note** link: `memory —mentions→ entity` (re-insert is a no-op).
     async fn ensure_mention(&self, memory: ObjectId, entity: ObjectId) -> Result<(), BrainError> {
-        let existing = self
-            .client
-            .query(
-                self.link_query()
-                    .filter_eq("from", Value::Text(id_str(&memory)))
-                    .filter_eq("to", Value::Text(id_str(&entity)))
-                    .filter_eq("kind", Value::Text("mentions".to_string()))
-                    .build(),
-                None,
-            )
-            .await
-            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
-        if !existing.is_empty() {
+        let (mem_s, ent_s) = (id_str(&memory), id_str(&entity));
+        let exists = self
+            .links()
+            .await?
+            .iter()
+            .any(|l| l.from == mem_s && l.to == ent_s && l.kind == "mentions");
+        if exists {
             return Ok(());
         }
+        let oid = ObjectId::new();
+        let row = *oid.uuid();
         self.client
-            .create_checked(
+            .create_checked_with_id_and_metadata(
                 LINKS,
+                oid,
                 HashMap::from([
                     ("owner".to_string(), Value::Uuid(self.owner)),
-                    ("from".to_string(), Value::Text(id_str(&memory))),
-                    ("to".to_string(), Value::Text(id_str(&entity))),
-                    ("kind".to_string(), Value::Text("mentions".to_string())),
-                    ("class".to_string(), Value::Text(LinkClass::Note.as_str().to_string())),
+                    ("from".to_string(), self.sv(LINKS, "from", row, &mem_s)?),
+                    ("to".to_string(), self.sv(LINKS, "to", row, &ent_s)?),
+                    ("kind".to_string(), self.sv(LINKS, "kind", row, "mentions")?),
+                    (
+                        "class".to_string(),
+                        self.sv(LINKS, "class", row, LinkClass::Note.as_str())?,
+                    ),
                 ]),
+                HashMap::new(),
             )
             .await
             .map_err(|e| BrainError::Write(format!("{e:?}")))?;
@@ -1376,82 +1562,99 @@ impl<E: Embedder> Brain<E> {
         if let Some(id) = self.entity_id_by_name(name).await? {
             return Ok(id);
         }
+        self.create_entity(name).await
+    }
+
+    async fn create_entity(&self, name: &str) -> Result<ObjectId, BrainError> {
+        let oid = ObjectId::new();
+        let row = *oid.uuid();
         self.client
-            .create_checked(
+            .create_checked_with_id_and_metadata(
                 ENTITIES,
+                oid,
                 HashMap::from([
                     ("owner".to_string(), Value::Uuid(self.owner)),
-                    ("name".to_string(), Value::Text(name.to_string())),
-                    ("kind".to_string(), Value::Text("unknown".to_string())),
+                    ("name".to_string(), self.sv(ENTITIES, "name", row, name)?),
+                    ("kind".to_string(), self.sv(ENTITIES, "kind", row, "unknown")?),
                 ]),
+                HashMap::new(),
             )
             .await
             .map_err(|e| BrainError::Write(format!("{e:?}")))
     }
 
+    /// Exact-name entity lookup — opened brain-side (sealed cells defeat `filter_eq`).
     async fn entity_id_by_name(&self, name: &str) -> Result<Option<ObjectId>, BrainError> {
-        let rows = self
-            .client
-            .query(
-                QueryBuilder::new(ENTITIES)
-                    .filter_eq("owner", Value::Uuid(self.owner))
-                    .filter_eq("name", Value::Text(name.to_string()))
-                    .build(),
-                None,
-            )
-            .await
-            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
-        Ok(rows.first().map(|(id, _)| *id))
+        Ok(self
+            .entities()
+            .await?
+            .into_iter()
+            .find(|e| e.name == name)
+            .map(|e| e.id))
     }
 
     /// Create or reinforce the **bond** between two entities (Hebbian potentiation).
     async fn potentiate_bond(&self, a: ObjectId, b: ObjectId) -> Result<(), BrainError> {
         let (a, b) = canonical_pair(a, b);
         let now = now_ms();
-        let rows = self
-            .client
-            .query(
-                self.link_query()
-                    .filter_eq("from", Value::Text(id_str(&a)))
-                    .filter_eq("to", Value::Text(id_str(&b)))
-                    .filter_eq("kind", Value::Text(BOND_KIND.to_string()))
-                    .build(),
-                None,
-            )
-            .await
-            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+        let (a_s, b_s) = (id_str(&a), id_str(&b));
+        let existing = self
+            .links()
+            .await?
+            .into_iter()
+            .find(|l| l.from == a_s && l.to == b_s && l.kind == BOND_KIND);
 
-        if let Some((id, v)) = rows.first() {
-            let strength = (f64_at(v, 8) + POTENTIATION_INCREMENT).min(MAX_STRENGTH);
-            let spaced = now.saturating_sub(i64_at(v, 11)) >= SPACED_INTERVAL_MS;
-            let stability = f64_at(v, 9) + if spaced { STABILITY_INCREMENT } else { 0.0 };
+        if let Some(l) = existing {
+            let row = *l.id.uuid();
+            let strength = (l.strength + POTENTIATION_INCREMENT).min(MAX_STRENGTH);
+            let spaced = now.saturating_sub(l.last_access) >= SPACED_INTERVAL_MS;
+            let stability = l.stability + if spaced { STABILITY_INCREMENT } else { 0.0 };
             self.client
                 .update(
-                    *id,
+                    l.id,
                     vec![
-                        ("strength".to_string(), Value::Double(strength)),
-                        ("stability".to_string(), Value::Double(stability)),
-                        ("access_count".to_string(), Value::BigInt(i64_at(v, 10) + 1)),
-                        ("last_access".to_string(), Value::BigInt(now)),
+                        ("strength".to_string(), self.sv(LINKS, "strength", row, &strength.to_string())?),
+                        (
+                            "stability".to_string(),
+                            self.sv(LINKS, "stability", row, &stability.to_string())?,
+                        ),
+                        (
+                            "access_count".to_string(),
+                            self.sv(LINKS, "access_count", row, &(l.access_count + 1).to_string())?,
+                        ),
+                        (
+                            "last_access".to_string(),
+                            self.sv(LINKS, "last_access", row, &now.to_string())?,
+                        ),
                     ],
                 )
                 .await
                 .map_err(|e| BrainError::Write(format!("{e:?}")))?;
         } else {
+            let oid = ObjectId::new();
+            let row = *oid.uuid();
             self.client
-                .create_checked(
+                .create_checked_with_id_and_metadata(
                     LINKS,
+                    oid,
                     HashMap::from([
                         ("owner".to_string(), Value::Uuid(self.owner)),
-                        ("from".to_string(), Value::Text(id_str(&a))),
-                        ("to".to_string(), Value::Text(id_str(&b))),
-                        ("kind".to_string(), Value::Text(BOND_KIND.to_string())),
-                        ("class".to_string(), Value::Text(LinkClass::Bond.as_str().to_string())),
-                        ("strength".to_string(), Value::Double(1.0)),
-                        ("stability".to_string(), Value::Double(1.0)),
-                        ("access_count".to_string(), Value::BigInt(1)),
-                        ("last_access".to_string(), Value::BigInt(now)),
+                        ("from".to_string(), self.sv(LINKS, "from", row, &a_s)?),
+                        ("to".to_string(), self.sv(LINKS, "to", row, &b_s)?),
+                        ("kind".to_string(), self.sv(LINKS, "kind", row, BOND_KIND)?),
+                        (
+                            "class".to_string(),
+                            self.sv(LINKS, "class", row, LinkClass::Bond.as_str())?,
+                        ),
+                        ("strength".to_string(), self.sv(LINKS, "strength", row, "1")?),
+                        ("stability".to_string(), self.sv(LINKS, "stability", row, "1")?),
+                        ("access_count".to_string(), self.sv(LINKS, "access_count", row, "1")?),
+                        (
+                            "last_access".to_string(),
+                            self.sv(LINKS, "last_access", row, &now.to_string())?,
+                        ),
                     ]),
+                    HashMap::new(),
                 )
                 .await
                 .map_err(|e| BrainError::Write(format!("{e:?}")))?;
@@ -1459,14 +1662,15 @@ impl<E: Embedder> Brain<E> {
         Ok(())
     }
 
-    /// Look up an existing memory by content hash (idempotency / dedup).
-    async fn find_by_content_hash(&self, hash: &[u8]) -> Result<Option<ObjectId>, BrainError> {
+    /// Look up an existing memory by its keyed dedup MAC (idempotency). The MAC column
+    /// is plaintext routing, so this equality stays a DB-level filter.
+    async fn find_by_content_hash(&self, mac: &[u8]) -> Result<Option<ObjectId>, BrainError> {
         let rows = self
             .client
             .query(
                 QueryBuilder::new(MEMORIES)
                     .filter_eq("owner", Value::Uuid(self.owner))
-                    .filter_eq("content_hash", Value::Bytea(hash.to_vec()))
+                    .filter_eq("content_hash", Value::Bytea(mac.to_vec()))
                     .build(),
                 None,
             )
@@ -1496,9 +1700,6 @@ fn extract_wikilinks(content: &str) -> Vec<String> {
     out
 }
 
-/// Memory column order: owner, content, embedding, stream, author_role, source, seq,
-/// line_start, line_end, content_date, content_hash, source_version, normalize_version,
-/// veracity, superseded_by.
 /// Auto-extract entity names: maximal runs of Capitalized words (each ≥2 chars),
 /// skipping a single-word run at a sentence start (ambiguous capitalization) or one
 /// that is a capitalized stop-word ("I", "The", …). High precision, low recall —
@@ -1626,17 +1827,6 @@ fn levenshtein_sim(a: &str, b: &str) -> f64 {
     1.0 - prev[m] as f64 / n.max(m) as f64
 }
 
-fn memory_from_row(id: ObjectId, vals: &[Value]) -> Memory {
-    Memory {
-        id,
-        content: text_at(vals, 1),
-        stream: text_at(vals, 3),
-        author_role: text_at(vals, 4),
-        source: text_at_opt(vals, 5),
-        veracity: text_at_opt(vals, 13),
-    }
-}
-
 /// Order an entity-id pair canonically so a bond has one row regardless of direction.
 fn canonical_pair(a: ObjectId, b: ObjectId) -> (ObjectId, ObjectId) {
     if a.uuid() <= b.uuid() {
@@ -1696,64 +1886,44 @@ fn lexical_overlap(query_tokens: &[String], content: &str) -> f32 {
     hits as f32 / query_tokens.len() as f32
 }
 
-fn text_at(v: &[Value], i: usize) -> String {
-    match v.get(i) {
-        Some(Value::Text(s)) => s.clone(),
-        _ => String::new(),
+/// Cosine similarity (0 when either vector is degenerate).
+fn cosine(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
     }
-}
-fn text_at_opt(v: &[Value], i: usize) -> Option<String> {
-    match v.get(i) {
-        Some(Value::Text(s)) => Some(s.clone()),
-        _ => None,
+    let (mut dot, mut na, mut nb) = (0.0f32, 0.0f32, 0.0f32);
+    for (x, y) in a.iter().zip(b.iter()) {
+        dot += x * y;
+        na += x * x;
+        nb += y * y;
     }
-}
-fn f64_at(v: &[Value], i: usize) -> f64 {
-    match v.get(i) {
-        Some(Value::Double(f)) => *f,
-        _ => 0.0,
+    if na <= 0.0 || nb <= 0.0 {
+        return 0.0;
     }
-}
-fn i64_at(v: &[Value], i: usize) -> i64 {
-    match v.get(i) {
-        Some(Value::BigInt(n)) => *n,
-        _ => 0,
-    }
-}
-fn opt_text(s: Option<String>) -> Value {
-    match s {
-        Some(s) => Value::Text(s),
-        None => Value::Null,
-    }
-}
-fn opt_int(n: Option<i64>) -> Value {
-    match n {
-        Some(n) => Value::Integer(n as i32),
-        None => Value::Null,
-    }
-}
-/// Truncate to at most `max` chars, appending an ellipsis when cut.
-fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        s.to_string()
-    } else {
-        let head: String = s.chars().take(max).collect();
-        format!("{head}…")
-    }
-}
-/// Canonical form for entity-name dedup (trim + lowercase).
-fn normalize_name(name: &str) -> String {
-    name.trim().to_lowercase()
+    dot / (na.sqrt() * nb.sqrt())
 }
 
-/// Stable, deterministic content hash (FNV-1a 64-bit) — identical across devices.
-fn content_hash(content: &str) -> [u8; 8] {
-    let mut h: u64 = 0xcbf29ce484222325;
-    for byte in content.bytes() {
-        h ^= byte as u64;
-        h = h.wrapping_mul(0x100000001b3);
+/// Packed-f32 (LE) → base64: the plaintext that goes INSIDE the sealed embedding cell.
+fn encode_embedding(v: &[f32]) -> String {
+    let mut bytes = Vec::with_capacity(v.len() * 4);
+    for x in v {
+        bytes.extend_from_slice(&x.to_le_bytes());
     }
-    h.to_le_bytes()
+    B64.encode(bytes)
+}
+
+/// Inverse of [`encode_embedding`].
+fn decode_embedding(s: &str) -> Option<Vec<f32>> {
+    let bytes = B64.decode(s).ok()?;
+    if bytes.len() % 4 != 0 {
+        return None;
+    }
+    Some(
+        bytes
+            .chunks_exact(4)
+            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .collect(),
+    )
 }
 
 fn now_ms() -> i64 {
@@ -1765,6 +1935,21 @@ fn now_ms() -> i64 {
 
 fn ser_object_id<S: serde::Serializer>(id: &ObjectId, s: S) -> Result<S::Ok, S::Error> {
     s.serialize_str(&id.uuid().to_string())
+}
+
+/// Truncate to at most `max` chars, appending an ellipsis when cut.
+fn truncate(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_string()
+    } else {
+        let head: String = s.chars().take(max).collect();
+        format!("{head}…")
+    }
+}
+
+/// Canonical form for entity-name dedup (trim + lowercase).
+fn normalize_name(name: &str) -> String {
+    name.trim().to_lowercase()
 }
 
 #[cfg(test)]
@@ -1858,7 +2043,7 @@ mod tests {
         assert!(!hits.is_empty());
         assert_eq!(hits[0].rank, 1);
         assert!(hits[0].score > 0.0);
-        // The matching memory should be found by BOTH retrievers (stub embeds + BM25).
+        // The matching memory should be found by BOTH retrievers (stub embeds + lexical).
         assert_eq!(hits[0].via, Via::Both, "via: {:?}", hits[0].via);
     }
 
@@ -2089,10 +2274,12 @@ mod tests {
         // A second brain over the SAME app dir name would be a separate in-memory store,
         // so simulate the shared store by re-wrapping the same client via search with a
         // different owner: easiest honest check — a different owner sees nothing.
+        let other_owner = owner();
         let other = Brain::over(
             Arc::clone(&brain_a.client),
-            owner(),
+            other_owner,
             StubEmbedder::new(EMBED_DIM),
+            Arc::new(KeySealer::random(*other_owner.uuid())),
         );
         let hits = other.search("alpha's secret plan", 5).await.unwrap();
         assert!(hits.is_empty(), "other owner must not see alpha's memories, got {hits:?}");
@@ -2176,5 +2363,101 @@ mod tests {
         assert!(json.contains("\"l0Self\""), "camelCase keys: {json}");
         assert!(json.contains("\"assembledAtMs\""));
         assert!(json.contains("\"usedChars\""));
+    }
+
+    // ── Board 0021: sealed-at-rest proofs ────────────────────────────────────
+
+    /// THE privacy law test: write through a sealed brain, then re-read the RAW
+    /// stored rows (no sealer, no unseal hook) across all three tables — none of
+    /// the plaintext (content words, entity names, link kinds, graph endpoints)
+    /// may appear anywhere, and no cell may hold a plaintext Vector.
+    #[tokio::test]
+    async fn no_plaintext_at_rest() {
+        let brain = test_brain("test-sealed-at-rest").await;
+        let mid = brain
+            .remember("the zebra migration spreadsheet [[Kornelia]] works at Glimmerwerk")
+            .await
+            .unwrap();
+
+        let mut all_cells: Vec<(String, Value)> = Vec::new();
+        for table in [MEMORIES, ENTITIES, LINKS] {
+            let rows = brain
+                .client
+                .query(QueryBuilder::new(table).build(), None)
+                .await
+                .unwrap();
+            assert!(!rows.is_empty(), "{table} must have rows");
+            for (_, vals) in rows {
+                for v in vals {
+                    all_cells.push((table.to_string(), v));
+                }
+            }
+        }
+
+        // Plaintext that must NOT be on disk: content words, entity names, link
+        // kinds/classes, and graph endpoints (the memory row id appears in links).
+        let secrets = [
+            "zebra",
+            "migration",
+            "spreadsheet",
+            "Kornelia",
+            "Glimmerwerk",
+            "mentions",
+            "assoc",
+            "works_at",
+            "note",
+            "bond",
+            "claim",
+            &id_str(&mid),
+        ];
+        for (table, cell) in &all_cells {
+            assert!(
+                !matches!(cell, Value::Vector(_)),
+                "{table}: no plaintext Vector may hit storage, got {cell:?}"
+            );
+            if let Value::Text(s) = cell {
+                for secret in secrets {
+                    assert!(
+                        !s.contains(secret),
+                        "{table}: plaintext `{secret}` leaked to storage in {s:?}"
+                    );
+                }
+            }
+        }
+
+        // And yet the brain itself reads everything back fine (unseal in RAM).
+        let hits = brain.search("zebra migration", 1).await.unwrap();
+        assert_eq!(hits.len(), 1);
+        assert!(hits[0].content.contains("zebra"));
+        let names: Vec<String> = brain
+            .entities()
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|e| e.name)
+            .collect();
+        assert!(names.iter().any(|n| n == "Kornelia"), "entities: {names:?}");
+    }
+
+    /// The dedup key is a KEYED MAC: idempotent within one brain, and two brains
+    /// (different keys) produce different MACs for identical content — disk and
+    /// relay learn nothing about content equality across SAFEs.
+    #[tokio::test]
+    async fn hmac_dedup_idempotent() {
+        let brain = test_brain("test-hmac-dedup").await;
+        let a = brain.remember("hmac dedup probe content").await.unwrap();
+        let b = brain.remember("hmac dedup probe content").await.unwrap();
+        assert_eq!(a, b, "identical content must dedup to one row");
+
+        let mac_of = |brain: &Brain<StubEmbedder>| brain.sealer.dedup_mac("hmac dedup probe content");
+        let mac_a = mac_of(&brain);
+        assert_eq!(mac_a.len(), 32, "32-byte PRF output");
+
+        let other = test_brain("test-hmac-dedup-other").await;
+        let mac_b = mac_of(&other);
+        assert_ne!(
+            mac_a, mac_b,
+            "different keys must produce different MACs for the same content"
+        );
     }
 }

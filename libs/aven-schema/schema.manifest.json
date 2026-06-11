@@ -306,96 +306,84 @@
 				{
 					"name": "content",
 					"type": "text",
-					"comment": "sealed at rest — verbatim evidence"
+					"comment": "sealed at rest — verbatim memory text"
 				},
 				{
 					"name": "embedding",
-					"type": "vector",
-					"dim": 768,
+					"type": "text",
 					"nullable": true,
-					"comment": "sealed at rest — EmbeddingGemma 768-d packed f32; search via the E1 unseal-on-scan seam"
+					"comment": "sealed at rest — packed-f32 embedding (base64 inside the AEAD payload; dim lives in the payload)"
 				},
 				{
 					"name": "stream",
 					"type": "text",
-					"plaintext": true,
-					"comment": "artifact column / filter — surface the memory came through (talk | …)"
+					"comment": "sealed at rest — surface the memory came from (talk | note | self | …)"
 				},
 				{
 					"name": "author_role",
 					"type": "text",
-					"plaintext": true,
-					"comment": "artifact column / filter — user | agent | system. Plain text, NOT enum (lens-friendly, see messages.role)"
+					"comment": "sealed at rest — author kind of the origin artifact (user | agent)"
 				},
 				{
 					"name": "source",
 					"type": "text",
-					"plaintext": true,
 					"nullable": true,
-					"comment": "artifact column — origin row id (message/file row); joins + citations"
+					"comment": "sealed at rest — origin artifact row id"
 				},
 				{
 					"name": "seq",
-					"type": "integer",
-					"plaintext": true,
+					"type": "text",
 					"nullable": true,
-					"comment": "artifact column — chunk position within source (neighbor expansion)"
+					"comment": "sealed at rest — position in the origin artifact (decimal string; logical integer)"
 				},
 				{
 					"name": "line_start",
-					"type": "integer",
-					"plaintext": true,
+					"type": "text",
 					"nullable": true,
-					"comment": "artifact column — surgical citation range"
+					"comment": "sealed at rest — origin line range start (decimal string; logical integer)"
 				},
 				{
 					"name": "line_end",
-					"type": "integer",
-					"plaintext": true,
+					"type": "text",
 					"nullable": true,
-					"comment": "artifact column — surgical citation range"
+					"comment": "sealed at rest — origin line range end (decimal string; logical integer)"
 				},
 				{
 					"name": "content_date",
 					"type": "text",
-					"exposeTs": "bigint",
 					"nullable": true,
-					"comment": "sealed — domain time (when the content happened, not when written; write time = engine RowProvenance)"
+					"comment": "sealed at rest — domain time, ms since epoch"
 				},
 				{
 					"name": "content_hash",
 					"type": "bytea",
 					"plaintext": true,
 					"nullable": true,
-					"comment": "dedup key — sha256 of plaintext content (the engine row digest covers the whole sealed row and can't serve content dedup)"
+					"comment": "routing — keyed-MAC dedup key (HKDF(DEK)-PRF over content): equality-searchable by members, opaque to disk and the blind relay"
 				},
 				{
 					"name": "source_version",
-					"type": "bigint",
-					"plaintext": true,
+					"type": "text",
 					"nullable": true,
-					"comment": "ingest bookkeeping — source revision (incremental skip)"
+					"comment": "sealed at rest — origin artifact version (decimal string; logical bigint)"
 				},
 				{
 					"name": "normalize_version",
-					"type": "integer",
-					"plaintext": true,
+					"type": "text",
 					"nullable": true,
-					"comment": "ingest bookkeeping — pipeline version (silent rebuild)"
+					"comment": "sealed at rest — normalizer version (decimal string; logical integer)"
 				},
 				{
 					"name": "veracity",
 					"type": "text",
-					"plaintext": true,
 					"nullable": true,
-					"comment": "trust class — stated | inferred | imported | tool | unknown; recall score multiplier"
+					"comment": "sealed at rest — trust class: stated | inferred | imported | tool | unknown"
 				},
 				{
 					"name": "superseded_by",
 					"type": "text",
-					"plaintext": true,
 					"nullable": true,
-					"comment": "re-weighting, never deletion — replacement memory row id; hot path filters IS NULL"
+					"comment": "sealed at rest — replacement memory row id; hot path filters IS NULL (null-ness is metadata)"
 				}
 			]
 		},
@@ -410,19 +398,18 @@
 				{
 					"name": "name",
 					"type": "text",
-					"comment": "sealed at rest — extracted name (pure interpretation: no backing artifact row; else links point at the row directly)"
+					"comment": "sealed at rest — entity name"
 				},
 				{
 					"name": "kind",
 					"type": "text",
-					"plaintext": true,
-					"comment": "person | topic | project | thing (plain text, lens-friendly)"
+					"comment": "sealed at rest — entity kind (person | org | topic | unknown | …)"
 				},
 				{
 					"name": "properties",
-					"type": "json",
+					"type": "text",
 					"nullable": true,
-					"comment": "sealed at rest"
+					"comment": "sealed at rest — JSON properties as a sealed text payload"
 				}
 			]
 		},
@@ -437,82 +424,70 @@
 				{
 					"name": "from",
 					"type": "text",
-					"plaintext": true,
-					"comment": "endpoint — any row id (memory / entity / artifact row); table resolves via object metadata"
+					"comment": "sealed at rest — source row id (graph topology is content, not routing)"
 				},
 				{
 					"name": "to",
 					"type": "text",
-					"plaintext": true,
-					"comment": "endpoint — any row id (memory / entity / artifact row)"
+					"comment": "sealed at rest — target row id"
 				},
 				{
 					"name": "kind",
 					"type": "text",
-					"plaintext": true,
-					"comment": "registered link kind — mentions | summarizes | refers_to | assoc | <claim predicates>"
+					"comment": "sealed at rest — registered link kind (mentions | assoc | claim predicates)"
 				},
 				{
 					"name": "class",
 					"type": "text",
-					"plaintext": true,
-					"comment": "note | claim | bond — merge semantics, enforced by the brain's kind registry"
+					"comment": "sealed at rest — note | claim | bond"
 				},
 				{
 					"name": "valid_from",
 					"type": "text",
-					"exposeTs": "bigint",
 					"nullable": true,
-					"comment": "sealed — claim validity opens"
+					"comment": "sealed at rest — claim validity start, ms since epoch"
 				},
 				{
 					"name": "valid_to",
 					"type": "text",
-					"exposeTs": "bigint",
 					"nullable": true,
-					"comment": "sealed — claim validity closes (null = currently true)"
+					"comment": "sealed at rest — claim validity end, ms since epoch; NULL = currently true"
 				},
 				{
 					"name": "confidence",
-					"type": "double",
-					"plaintext": true,
+					"type": "text",
 					"nullable": true,
-					"comment": "claim — Bayesian: conf += (1−conf)·w_veracity·0.3"
+					"comment": "sealed at rest — claim confidence (decimal string; logical double)"
 				},
 				{
 					"name": "strength",
-					"type": "double",
-					"plaintext": true,
+					"type": "text",
 					"nullable": true,
-					"comment": "bond — Hebbian potentiation (+0.05 on co-access, floor 0.05, max 5.0)"
+					"comment": "sealed at rest — bond strength (decimal string; logical double)"
 				},
 				{
 					"name": "stability",
-					"type": "double",
-					"plaintext": true,
+					"type": "text",
 					"nullable": true,
-					"comment": "bond — Ebbinghaus decay: strength·exp(−days/stability)"
+					"comment": "sealed at rest — bond stability (decimal string; logical double)"
 				},
 				{
 					"name": "access_count",
-					"type": "bigint",
-					"plaintext": true,
+					"type": "text",
 					"nullable": true,
-					"comment": "bond — co-access count (Counter-merge once the merge-strategy hook lands)"
+					"comment": "sealed at rest — bond co-access count (decimal string; logical bigint)"
 				},
 				{
 					"name": "last_access",
-					"type": "bigint",
-					"plaintext": true,
+					"type": "text",
 					"nullable": true,
-					"comment": "bond — spaced-potentiation gate (≥1h)"
+					"comment": "sealed at rest — last potentiation, ms since epoch (decimal string)"
 				},
 				{
 					"name": "source_memory",
 					"type": "text",
-					"plaintext": true,
 					"nullable": true,
-					"comment": "evidence — the memory row a claim was extracted from"
+					"comment": "sealed at rest — evidence memory row id"
 				}
 			]
 		},

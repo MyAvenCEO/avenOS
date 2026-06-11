@@ -42,6 +42,7 @@ pub mod brain;
 pub mod embedder;
 pub mod extractor;
 pub mod schema;
+pub mod sealer;
 
 pub use brain::{
     Brain, BrainError, ContextBundle, ContextOptions, ContextTrace, DreamReport, Entity,
@@ -50,6 +51,7 @@ pub use brain::{
 pub use embedder::{Embedder, StubEmbedder};
 pub use extractor::{ExtractedFact, ExtractionInput, Extractor};
 pub use schema::{brain_schema, EMBED_DIM};
+pub use sealer::{KeySealer, Sealer};
 
 /// Real on-device EmbeddingGemma embedder (ONNX via aven-ai). Behind the `models` feature.
 #[cfg(feature = "models")]

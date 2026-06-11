@@ -4,15 +4,14 @@
 //! `brainEntities`, `brainEntityCard`, `brainAssembleContext`, `brainBackfill`,
 //! `brainDream`.
 //!
-//! v1 scope note (tracked in plan 0018 E3): brain writes are **local-first** — they do
-//! not yet stamp owner-bindings nor seal columns, so brain rows read fine through the
-//! brain's own engine-level queries but are not yet sync/IPC-authorized like app rows.
-//! The write ritual (owner binding + sealing + unseal-hook registration) is the E3
-//! hardening step.
+//! Sealed at rest (board 0021): every brain row is written through the identity's
+//! DEK-backed [`aven_brain::KeySealer`] — same `cell_seal_aad` coordinates as the
+//! device seal path, so the app's hydrate / DB viewer opens brain cells like any
+//! other sealed cell. Remaining E3 hardening: owner-binding stamps on brain rows.
 
 use std::sync::Arc;
 
-use aven_brain::{Brain, ContextOptions, Filter, RememberOptions, StubEmbedder, EMBED_DIM};
+use aven_brain::{Brain, ContextOptions, Filter, KeySealer, RememberOptions, StubEmbedder, EMBED_DIM};
 use aven_db::{AvenDbClient, ObjectId, QueryBuilder, Value};
 use serde_json::json;
 use tauri_plugin_self::state::SelfState;
@@ -21,15 +20,27 @@ use uuid::Uuid;
 use super::conn::{with_connected_client, ManagedAvenDb, ENCRYPTED_META};
 use super::engine;
 
-/// Wrap the shared connected client as `identity`'s brain (stub embedder until E7).
+/// Wrap the shared connected client as `identity`'s brain (stub embedder until E7),
+/// sealed with the identity's current DEK — no DEK, no brain (fail closed: a brain
+/// that cannot seal must not write plaintext).
 fn brain_over(
 	client: Arc<AvenDbClient>,
+	shell: &engine::ShellState,
 	identity: &str,
 ) -> Result<(Brain<StubEmbedder>, ObjectId), String> {
-	let owner = Uuid::parse_str(identity.trim()).map_err(|e| format!("identity uuid: {e}"))?;
-	let owner = ObjectId::from_uuid(owner);
+	let owner_uuid = Uuid::parse_str(identity.trim()).map_err(|e| format!("identity uuid: {e}"))?;
+	let ver = *shell
+		.identity_versions
+		.get(&owner_uuid)
+		.ok_or("brain: no DEK version for this identity (keyshare not arrived?)")?;
+	let dek = shell
+		.deks
+		.get(&(owner_uuid, ver))
+		.ok_or("brain: identity DEK not held — cannot seal")?;
+	let sealer = Arc::new(KeySealer::new(*dek.expose(), owner_uuid, ver));
+	let owner = ObjectId::from_uuid(owner_uuid);
 	Ok((
-		Brain::over(client, owner, StubEmbedder::new(EMBED_DIM)),
+		Brain::over(client, owner, StubEmbedder::new(EMBED_DIM), sealer),
 		owner,
 	))
 }
@@ -58,7 +69,8 @@ pub(crate) async fn brain_ipc_status(
 	identity: String,
 ) -> Result<serde_json::Value, String> {
 	let client = with_connected_client(mj, app, ss).await?;
-	let (brain, owner) = brain_over(client.clone(), &identity)?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, owner) = brain_over(client.clone(), &shell, &identity)?;
 	Ok(json!({
 		"ready": true,
 		"embedder": brain.embedder_name(),
@@ -83,7 +95,8 @@ pub(crate) async fn brain_ipc_ingest(
 	veracity: Option<String>,
 ) -> Result<serde_json::Value, String> {
 	let client = with_connected_client(mj, app, ss).await?;
-	let (brain, _) = brain_over(client, &identity)?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(client, &shell, &identity)?;
 	let opts = RememberOptions {
 		stream: stream.unwrap_or_else(|| "talk".to_string()),
 		author_role: author_role.unwrap_or_else(|| "user".to_string()),
@@ -109,7 +122,8 @@ pub(crate) async fn brain_ipc_search(
 	stream: Option<String>,
 ) -> Result<serde_json::Value, String> {
 	let client = with_connected_client(mj, app, ss).await?;
-	let (brain, _) = brain_over(client, &identity)?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(client, &shell, &identity)?;
 	let filter = Filter {
 		stream,
 		..Default::default()
@@ -128,7 +142,8 @@ pub(crate) async fn brain_ipc_entities(
 	identity: String,
 ) -> Result<serde_json::Value, String> {
 	let client = with_connected_client(mj, app, ss).await?;
-	let (brain, _) = brain_over(client, &identity)?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(client, &shell, &identity)?;
 	let entities = brain.entities().await.map_err(|e| e.to_string())?;
 	serde_json::to_value(entities).map_err(|e| e.to_string())
 }
@@ -141,7 +156,8 @@ pub(crate) async fn brain_ipc_entity_card(
 	name: String,
 ) -> Result<serde_json::Value, String> {
 	let client = with_connected_client(mj, app, ss).await?;
-	let (brain, _) = brain_over(client, &identity)?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(client, &shell, &identity)?;
 	let card = brain.entity_card(&name).await.map_err(|e| e.to_string())?;
 	serde_json::to_value(card).map_err(|e| e.to_string())
 }
@@ -158,7 +174,8 @@ pub(crate) async fn brain_ipc_assemble_context(
 	stream: Option<String>,
 ) -> Result<serde_json::Value, String> {
 	let client = with_connected_client(mj, app, ss).await?;
-	let (brain, _) = brain_over(client, &identity)?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(client, &shell, &identity)?;
 	let mut opts = ContextOptions::default();
 	if let Some(n) = working_n {
 		opts.working_n = n.clamp(1, 32);
@@ -194,7 +211,7 @@ pub(crate) async fn brain_ipc_backfill(
 	let (rows, _skipped) =
 		engine::query_table_publish(client.as_ref(), &shell, "messages", ENCRYPTED_META).await?;
 
-	let (brain, _) = brain_over(client, &identity)?;
+	let (brain, _) = brain_over(client, &shell, &identity)?;
 	let ident_norm = identity.trim().to_ascii_lowercase();
 	let mut scanned = 0usize;
 	let mut ingested = 0usize;
@@ -243,7 +260,8 @@ pub(crate) async fn brain_ipc_dream(
 	identity: String,
 ) -> Result<serde_json::Value, String> {
 	let client = with_connected_client(mj, app, ss).await?;
-	let (brain, _) = brain_over(client, &identity)?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(client, &shell, &identity)?;
 	let report = brain.dream().await.map_err(|e| e.to_string())?;
 	serde_json::to_value(report).map_err(|e| e.to_string())
 }
