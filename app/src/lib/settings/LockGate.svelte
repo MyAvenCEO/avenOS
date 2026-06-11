@@ -522,7 +522,7 @@
 							{t('lockGate.signerTypeLabel')}
 						</p>
 						<div class="flex flex-col gap-2">
-							{#each signerOptions as opt (opt.id)}
+							{#each signerOptions.filter((o) => o.available) as opt (opt.id)}
 								<button
 									type="button"
 									class="flex w-full items-center gap-3 rounded-lg border bg-background/97 px-4 py-3 text-left shadow-sm backdrop-blur-sm transition-[background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-55 {signerType ===

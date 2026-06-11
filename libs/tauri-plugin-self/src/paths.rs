@@ -173,6 +173,26 @@ pub fn identity_folder_id(key_bytes: &[u8]) -> String {
 	out
 }
 
+/// Transient, filesystem-safe slug for a freshly-created vault folder, before the
+/// signer key exists. The device/signer name is a free-form display label — never a
+/// path component — so the folder gets a random staging id here, then
+/// [`finalize_identity_folder`] renames it to the deterministic, key-derived
+/// [`identity_folder_id`] once biometry has produced the key. `staging-` prefix +
+/// 128 random bits; passes [`validate_username_slug`].
+#[must_use]
+pub fn new_staging_slug() -> String {
+	use rand_core::{OsRng, RngCore};
+	let mut bytes = [0u8; 16];
+	OsRng.fill_bytes(&mut bytes);
+	let mut out = String::with_capacity(40);
+	out.push_str("staging-");
+	for b in &bytes {
+		out.push(char::from_digit(u32::from(b >> 4), 16).expect("hex nibble"));
+		out.push(char::from_digit(u32::from(b & 0x0f), 16).expect("hex nibble"));
+	}
+	out
+}
+
 pub fn vault_is_complete(root: &Path) -> bool {
 	identity_crypto_dir(root).is_dir() && db_dir(root).is_dir()
 }

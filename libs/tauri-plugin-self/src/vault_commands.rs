@@ -247,11 +247,14 @@ pub async fn vault_create(
 		});
 	}
 
-	let slug_base = paths::slugify_first_name(&first_name)?;
+	// The vault folder slug is NOT derived from the (free-form) device/signer name —
+	// it's a transient staging id, renamed to the deterministic, key-derived
+	// `identity_folder_id(signer pubkey)` at `finalize_identity_folder` once biometry
+	// has produced the key. So the name can contain any characters (spaces, parens).
 	let vaults_base = paths::vaults_dir(&app)?;
 	fs::create_dir_all(&vaults_base).map_err(|e| format!("create_dir_all: {e}"))?;
 
-	let slug = allocate_username_slug(&vaults_base, &slug_base)?;
+	let slug = allocate_username_slug(&vaults_base, &paths::new_staging_slug())?;
 	let vr = vaults_base.join(&slug);
 
 	fs::create_dir_all(paths::db_dir(&vr)).map_err(|e| format!("mkdir identity db: {e}"))?;
