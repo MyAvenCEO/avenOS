@@ -144,6 +144,12 @@ pub struct VaultManifest {
 	pub first_name: String,
 	pub username_slug: String,
 	pub device_label: String,
+	/// How this signer's key is held — `apple_se` (Apple Secure Enclave, the default
+	/// human-device factor) | `env_seed` (a server/aven node) | `security_key` |
+	/// `recovery_phrase`. Surfaced on the pre-unlock login selector as the signer-type
+	/// subtitle and written onto the local `signers` row at bootstrap. `None` = apple_se.
+	#[serde(default)]
+	pub signer_type: Option<String>,
 	pub created_at_ms: i64,
 }
 

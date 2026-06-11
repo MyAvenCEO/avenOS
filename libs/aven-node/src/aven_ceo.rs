@@ -240,6 +240,31 @@ pub async fn ensure_avenceo_owned(
 		.await
 		.map_err(|e| format!("create keyshares:{e:?}"))?;
 
+	// Publish the server's own signer into avenCEO's roster, tagged signer_type=env_seed
+	// (key held from AVEN_SERVER_SEED, not a human's Secure Enclave). This both labels the
+	// owner in the Members UI and lets the device-side ≥1-human-owner guard recognise the
+	// server signer as NON-human. Owned by avenCEO so it syncs to its members.
+	if let Some(signers_tbl) = schema.get(&TableName::new("signers")) {
+		let signers_row = row_in_order(
+			signers_tbl,
+			&[
+				("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
+				("signer_did", Value::Text(vault.signer_did.clone())),
+				("device_label", Value::Text(aven_name.into())),
+				("kind", Value::Text("remote".into())),
+				("signer_type", Value::Text("env_seed".into())),
+				("added_at_ms", Value::BigInt(now_ms())),
+				("status", Value::Text("active".into())),
+			],
+		);
+		let signers_oid = ObjectId::new();
+		let signers_meta = owner_binding_meta(signing, signers_oid, avenceo_id)?;
+		engine
+			.create_with_id_and_metadata("signers", signers_oid, signers_row, signers_meta)
+			.await
+			.map_err(|e| format!("create signers:{e:?}"))?;
+	}
+
 	tracing::info!(%avenceo_id, owner_did = %vault.signer_did, "minted avenCEO genesis — server is owner");
 	Ok(())
 }

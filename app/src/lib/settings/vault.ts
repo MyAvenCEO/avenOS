@@ -4,6 +4,7 @@ export type VaultListEntry = {
 	usernameSlug: string
 	firstName?: string
 	deviceLabel?: string
+	signerType?: string
 	hasIdentityBlob: boolean
 	locale?: string
 }
@@ -30,11 +31,30 @@ export type VaultCreateReply = {
 	usernameSlug: string
 }
 
-export async function vaultCreate(firstName: string, deviceLabel: string): Promise<VaultCreateReply> {
+export async function vaultCreate(
+	firstName: string,
+	deviceLabel: string,
+	signerType?: string,
+): Promise<VaultCreateReply> {
 	return invoke<VaultCreateReply>('plugin:self|vault_create', {
 		firstName,
 		deviceLabel,
+		signerType,
 	})
+}
+
+/** i18n key for a signer-type subtitle (Apple SE / ENV var / …). Defaults to apple_se. */
+export function signerTypeLabelKey(signerType?: string): string {
+	switch ((signerType ?? 'apple_se').trim()) {
+		case 'env_seed':
+			return 'lockGate.signerTypeEnvSeed'
+		case 'security_key':
+			return 'lockGate.signerSecurityKey'
+		case 'recovery_phrase':
+			return 'lockGate.signerRecoveryPhrase'
+		default:
+			return 'lockGate.signerTypeAppleSe'
+	}
 }
 
 function titleCaseFromSlug(slug: string): string {

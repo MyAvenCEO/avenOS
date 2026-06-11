@@ -145,6 +145,8 @@
 		"devicePlaceholder": "MacBook Air, iPhone 17, Galaxy S24…",
 		"signerTypeLabel": "Sign-in method",
 		"signerSecureEnclave": "Secure Enclave",
+		"signerTypeAppleSe": "Apple Secure Enclave",
+		"signerTypeEnvSeed": "ENV seed (server)",
 		"signerSecureEnclaveDesc": "This device's built-in biometric (Touch ID / Face ID)",
 		"signerSecurityKey": "Security key",
 		"signerRecoveryPhrase": "Recovery phrase",

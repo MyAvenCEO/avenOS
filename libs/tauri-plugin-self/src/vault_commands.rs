@@ -18,6 +18,7 @@ pub struct VaultListEntry {
 	pub username_slug: String,
 	pub first_name: Option<String>,
 	pub device_label: Option<String>,
+	pub signer_type: Option<String>,
 	pub has_identity_blob: bool,
 	pub locale: String,
 }
@@ -70,6 +71,7 @@ pub async fn vault_list(app: AppHandle, _vault_state: State<'_, ActiveVault>) ->
 			username_slug: OVERRIDE_VAULT_SLUG.into(),
 			first_name: man.as_ref().map(|m| m.first_name.clone()),
 			device_label: man.as_ref().map(|m| m.device_label.clone()),
+			signer_type: man.as_ref().and_then(|m| m.signer_type.clone()),
 			has_identity_blob: paths::vault_is_complete(&root)
 				&& crypto_dir_has_identity(&paths::identity_crypto_dir(&root)),
 			locale: vault_locale(&root),
@@ -101,6 +103,7 @@ pub async fn vault_list(app: AppHandle, _vault_state: State<'_, ActiveVault>) ->
 			username_slug: name,
 			first_name: man.as_ref().map(|m| m.first_name.clone()),
 			device_label: man.as_ref().map(|m| m.device_label.clone()),
+			signer_type: man.as_ref().and_then(|m| m.signer_type.clone()),
 			has_identity_blob: crypto_dir_has_identity(&paths::identity_crypto_dir(&vr)),
 			locale: vault_locale(&vr),
 		});
@@ -217,9 +220,14 @@ pub async fn vault_create(
 	vault_state: State<'_, ActiveVault>,
 	first_name: String,
 	device_label: String,
+	signer_type: Option<String>,
 ) -> Result<VaultCreateReply, String> {
 	let first_name = first_name.trim().to_string();
 	let device_label = device_label.trim().to_string();
+	let signer_type = signer_type
+		.map(|s| s.trim().to_string())
+		.filter(|s| !s.is_empty())
+		.or_else(|| Some("apple_se".to_string()));
 	if first_name.is_empty() {
 		return Err("first_name_required".into());
 	}
@@ -238,6 +246,7 @@ pub async fn vault_create(
 			first_name: first_name.clone(),
 			username_slug: OVERRIDE_VAULT_SLUG.into(),
 			device_label: device_label.clone(),
+			signer_type: signer_type.clone(),
 			created_at_ms: now,
 		};
 		write_manifest(&root, &m)?;
@@ -267,6 +276,7 @@ pub async fn vault_create(
 		first_name: first_name.clone(),
 		username_slug: slug.clone(),
 		device_label: device_label.clone(),
+		signer_type: signer_type.clone(),
 		created_at_ms: now,
 	};
 	write_manifest(&vr, &m)?;

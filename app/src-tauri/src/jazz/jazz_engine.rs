@@ -1281,6 +1281,14 @@ pub(super) async fn hydrate_shell(
 				.map(|m| m.device_label.trim().to_string())
 				.filter(|s| !s.is_empty())
 				.unwrap_or_else(system_device_name);
+			// How this device's key is held — from the manifest (signer-type picker at
+			// onboarding); default apple_se (Secure Enclave, a human device).
+			let signer_type = manifest_opt
+				.as_ref()
+				.and_then(|m| m.signer_type.clone())
+				.map(|s| s.trim().to_string())
+				.filter(|s| !s.is_empty())
+				.unwrap_or_else(|| "apple_se".to_string());
 			let peer_vals = super::insert_values(
 				"signers",
 				&signers_schema_seed,
@@ -1288,6 +1296,7 @@ pub(super) async fn hydrate_shell(
 					("signer_did".into(), JsonValue::String(vault.signer_did.clone())),
 					("device_label".into(), JsonValue::String(device_label)),
 					("kind".into(), JsonValue::String("local".into())),
+					("signer_type".into(), JsonValue::String(signer_type)),
 					("added_at_ms".into(), JsonValue::Number(now_unix_ms_i64().into())),
 					("status".into(), JsonValue::String("active".into())),
 				]

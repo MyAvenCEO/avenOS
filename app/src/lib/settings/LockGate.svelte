@@ -24,6 +24,7 @@
 	} from '$lib/settings/device-session-store'
 	import { vaultUiSettingsSetLocale } from '$lib/settings/vault-ui-settings'
 	import {
+		signerTypeLabelKey,
 		vaultCardTitle,
 		vaultCreate,
 		vaultList,
@@ -45,7 +46,9 @@
 	// built-in Secure Enclave biometric. Scaffolded as a list so future methods
 	// (hardware security key, recovery phrase) slot in as additional
 	// login/recovery factors.
-	type SignerType = 'secure_enclave' | 'security_key' | 'recovery_phrase'
+	// Canonical signer_type ids (persisted to the manifest + signers row). apple_se =
+	// Apple Secure Enclave (a human device); env_seed = a server/aven node key.
+	type SignerType = 'apple_se' | 'security_key' | 'recovery_phrase'
 	const signerOptions: {
 		id: SignerType
 		labelKey: string
@@ -53,7 +56,7 @@
 		available: boolean
 	}[] = [
 		{
-			id: 'secure_enclave',
+			id: 'apple_se',
 			labelKey: 'lockGate.signerSecureEnclave',
 			descKey: 'lockGate.signerSecureEnclaveDesc',
 			available: true,
@@ -84,7 +87,7 @@
 	// from whoami, editable). There is no separate person/first-name and no human
 	// SAFE at onboarding — a signer (did:key) + its data vault is all we create.
 	let signerName = $state('')
-	let signerType = $state<SignerType>('secure_enclave')
+	let signerType = $state<SignerType>('apple_se')
 	let selectedSlug = $state<string | undefined>()
 	let unlockingSlug = $state<string | undefined>()
 	let selectedLocale = $state<SupportedLocale>(getLocale())
@@ -129,7 +132,7 @@
 		createStep = 'locale'
 		resolvingDeviceLabel = false
 		signerName = ''
-		signerType = 'secure_enclave'
+		signerType = 'apple_se'
 		err = undefined
 	}
 
@@ -339,7 +342,7 @@
 		try {
 			// One name today: it labels the signer (signers.device_label) and names
 			// the local vault folder. No separate human SAFE / person name yet.
-			const created = await vaultCreate(name, name)
+			const created = await vaultCreate(name, name, signerType)
 			await vaultUiSettingsSetLocale(selectedLocale)
 			applyVaultList(await vaultList())
 			selectedSlug = created.usernameSlug
@@ -421,8 +424,8 @@
 										<div class="text-muted-foreground text-[11px]">
 											{#if unlockingSlug === v.usernameSlug}
 												{t('common.unlocking')}
-											{:else if v.deviceLabel}
-												{v.deviceLabel}
+											{:else}
+												{t(signerTypeLabelKey(v.signerType))}
 											{/if}
 											{#if !v.hasIdentityBlob && unlockingSlug !== v.usernameSlug}
 												<span class="text-amber-600">{t('lockGate.finishSetupBelow')}</span>
