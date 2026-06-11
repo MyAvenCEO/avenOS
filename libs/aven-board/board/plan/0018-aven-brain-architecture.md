@@ -524,6 +524,19 @@ deterministic pass is load-bearing without it. Revisit after E7.
 
 Newest entry first.
 
+- `2026-06-10` — **E2 shipped — app brain runtime.** New `app/src-tauri/src/avendb/brain_ipc.rs`:
+  per-SAFE `Brain::over(Arc<AvenDbClient>, owner, StubEmbedder)` over the shared connected
+  client (`with_connected_client`), exposed as `avendb_runtime` ops — `brainStatus`,
+  `brainIngest`, `brainSearch` (traced via/rank/score), `brainEntities`, `brainEntityCard`,
+  `brainAssembleContext` (ContextBundle + trace), `brainBackfill` (existing `messages`
+  hydrated through the shell/DEK, idempotent), `brainDream`. TS wrapper
+  `app/src/lib/brain/api.ts` with full types. svelte-check: 1706 files, only the
+  pre-existing aven-ui error. **Flagged for E3 hardening (documented in brain_ipc):**
+  brain writes don't yet stamp owner-bindings nor seal columns (local-first v1) — the
+  write ritual + unseal-hook registration land with E3. App Rust compile needs the Mac
+  (GTK). Note: a container rollback reverted local state mid-phase; recovered via
+  fast-forward from the pushed remote — push-early discipline pays.
+
 - `2026-06-10` — **E1b shipped — the engine unseal-on-scan seam (plan §3)**. New
   `UnsealFn` hook `(table, column, stored Value) -> Option<plaintext Value>` registered
   via `JazzClient::set_unseal_hook` → runtime → QueryManager; bound at compile into every

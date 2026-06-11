@@ -460,6 +460,13 @@ pub(crate) async fn avendb_ipc_avendb_unsubscribe(avendb: &ManagedAvenDb, table:
 	Ok(())
 }
 
+pub(super) fn pj_opt_str(p: &serde_json::Value, key: &str) -> Option<String> {
+	p.get(key)
+		.and_then(|v| v.as_str())
+		.map(|s| s.trim().to_string())
+		.filter(|s| !s.is_empty())
+}
+
 pub(super) fn pj_str(p: &serde_json::Value, key: &str) -> Result<String, String> {
 	p.get(key)
 		.and_then(|v| v.as_str())

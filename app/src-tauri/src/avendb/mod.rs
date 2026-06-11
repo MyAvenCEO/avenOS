@@ -7,6 +7,7 @@ pub mod ui_drain;
 mod conn;
 mod drain;
 mod mesh_ui;
+mod brain_ipc;
 mod caps_ipc;
 mod crud_ipc;
 
@@ -778,6 +779,61 @@ pub(crate) async fn avendb_runtime_dispatch(
 			let table = pj_str(&pj, "table")?;
 			serde_json::to_value(avendb_ipc_avendb_explorer_list(app, mj, ss, table).await?)
 				.map_err(|e| e.to_string())
+		}
+		"brainstatus" => brain_ipc::brain_ipc_status(app, mj, ss, pj_str(&pj, "identity")?).await,
+		"braindream" => brain_ipc::brain_ipc_dream(app, mj, ss, pj_str(&pj, "identity")?).await,
+		"brainbackfill" => brain_ipc::brain_ipc_backfill(app, mj, ss, pj_str(&pj, "identity")?).await,
+		"brainentities" => brain_ipc::brain_ipc_entities(app, mj, ss, pj_str(&pj, "identity")?).await,
+		"brainentitycard" => {
+			brain_ipc::brain_ipc_entity_card(
+				app,
+				mj,
+				ss,
+				pj_str(&pj, "identity")?,
+				pj_str(&pj, "name")?,
+			)
+			.await
+		}
+		"braningest" | "braineingest" | "brainingest" => {
+			brain_ipc::brain_ipc_ingest(
+				app,
+				mj,
+				ss,
+				pj_str(&pj, "identity")?,
+				pj_str(&pj, "content")?,
+				pj_opt_str(&pj, "stream"),
+				pj_opt_str(&pj, "authorRole"),
+				pj_opt_str(&pj, "source"),
+				pj.get("contentDateMs").and_then(|v| v.as_i64()),
+				pj_opt_str(&pj, "veracity"),
+			)
+			.await
+		}
+		"brainsearch" => {
+			brain_ipc::brain_ipc_search(
+				app,
+				mj,
+				ss,
+				pj_str(&pj, "identity")?,
+				pj_str(&pj, "query")?,
+				pj.get("k").and_then(|v| v.as_u64()).unwrap_or(8) as usize,
+				pj_opt_str(&pj, "stream"),
+			)
+			.await
+		}
+		"brainassemblecontext" => {
+			brain_ipc::brain_ipc_assemble_context(
+				app,
+				mj,
+				ss,
+				pj_str(&pj, "identity")?,
+				pj_str(&pj, "query")?,
+				pj.get("workingN").and_then(|v| v.as_u64()).map(|n| n as usize),
+				pj.get("recallK").and_then(|v| v.as_u64()).map(|n| n as usize),
+				pj.get("budgetChars").and_then(|v| v.as_u64()).map(|n| n as usize),
+				pj_opt_str(&pj, "stream"),
+			)
+			.await
 		}
 		"get" => {
 			let table = pj_str(&pj, "table")?;
