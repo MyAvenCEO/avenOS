@@ -1,24 +1,17 @@
 <script lang="ts">
-	import { browser } from '$app/environment'
 	import { t } from '$lib/i18n'
-	import { jazzSession } from '$lib/jazz/api'
+	import { jazzStore } from '$lib/jazz/store.svelte'
 	import { copyToClipboard } from '$lib/runtime/clipboard'
 
 	// Shown full-screen when this device is unlocked but NOT yet a member of the
-	// network's avenCEO identity. Invitation-only: the aven-node auto-grants the
-	// first peer; everyone else shares their DID with a founder to be vouched in.
-	let ownDid = $state('')
+	// network's avenCEO identity. Invitation-only: the aven-node auto-grants the first
+	// peer; everyone else shares their HUMAN SAFE did:safe with a founder to be vouched
+	// in. The SYNC/membership cap is granted to the human SAFE — never the raw device
+	// signer — and the device's signers inherit it through SAFE membership.
+	const safesStore = jazzStore('safes')
+	const humanSafe = $derived(safesStore.rows.find((r) => r.type === 'human'))
+	const ownDid = $derived(humanSafe ? `did:safe:${String(humanSafe.owner ?? '').trim()}` : '')
 	let didCopied = $state(false)
-	$effect(() => {
-		if (!browser) return
-		void (async () => {
-			try {
-				ownDid = (await jazzSession()).signerDid ?? ''
-			} catch {
-				ownDid = ''
-			}
-		})()
-	})
 	async function copyDid(): Promise<void> {
 		if (!ownDid) return
 		if (await copyToClipboard(ownDid)) {

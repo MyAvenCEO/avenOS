@@ -1431,12 +1431,22 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 	if signer_did == shell.signer_did {
 		return Err("cannot add yourself as a member".into());
 	}
-	let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&signer_did)?;
 	let identity_uuid = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
+	let is_safe_member = signer_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX);
 
-	crate::signers::add_remote_signer(client.as_ref(), &signer_did, "").await?;
-	if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
-		log::warn!(target: "avenos::jazz", "aven_ceo_add_member register {signer_did}: {e}");
+	// avenCEO (an aven SAFE) admits human did:safe owners OR did:key signers. The network
+	// invite prefers a person's human did:safe — the SYNC/membership cap then lives on the
+	// human SAFE, and its device signers inherit it through SAFE membership.
+	enforce_member_type_rule(client.as_ref(), identity_uuid, &signer_did).await?;
+
+	// did:key members are direct P2P sync peers; did:safe members receive keys via the
+	// SAFE's wrap key (propagate_keyshares_for_member), never as a registered peer.
+	if !is_safe_member {
+		let peer_pk = crate::jazz_auth::ed25519_public_from_signer_did(&signer_did)?;
+		crate::signers::add_remote_signer(client.as_ref(), &signer_did, "").await?;
+		if let Err(e) = client.register_peer_sync_client(PeerId(peer_pk)) {
+			log::warn!(target: "avenos::jazz", "aven_ceo_add_member register {signer_did}: {e}");
+		}
 	}
 
 	// Only the avenCEO owner may add members.
@@ -1469,7 +1479,13 @@ pub(crate) async fn groove_ipc_aven_ceo_add_member(
 
 	// 2. Keyshare: wrap EVERY held avenCEO DEK version to the member so it can decrypt the
 	//    sealed roster fields (and prior-version data after any rotation). Idempotent.
-	wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &signer_did).await?;
+	//    did:safe member → deliver via the SAFE's wrap key + transitive signers; did:key
+	//    member → wrap directly to the signer.
+	if is_safe_member {
+		propagate_keyshares_for_member(client.as_ref(), shell, identity_uuid, &signer_did, false).await?;
+	} else {
+		wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &signer_did).await?;
+	}
 
 	// 3. Membership bundle in the biscuit: reads (whole roster) + write (own row only).
 	let bisc = shell

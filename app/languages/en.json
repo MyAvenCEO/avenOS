@@ -915,14 +915,23 @@
 			}
 		}
 	},
+	"humanGate": {
+		"kicker": "One more step",
+		"title": "What should we call you?",
+		"body": "Your signer and vault are ready. Now create your human self — the identity that holds your data and that the network invites in. Your name lives on your device until you choose to share it.",
+		"namePlaceholder": "Alice",
+		"createButton": "Create my human self",
+		"creating": "Creating your human self…",
+		"footnote": "You can add more selves (avens, sparks) later. This first one is you."
+	},
 	"networkGate": {
 		"kicker": "Invitation only",
 		"title": "The new world is built by sovereign founders.",
 		"body": "This is the backbone of a different world — one owned by the people who build on it. A new breed of founders who hold their own identity, their own data, their own word. It isn't a product you sign up for. It's a circle you're welcomed into.",
-		"how": "Access is passed hand to hand, founder to founder. To step inside, find someone already here who will vouch for you and open the door.",
+		"how": "Share your human SAFE ID below with someone already here. Access is passed hand to hand, founder to founder — they vouch for your human self and open the door.",
 		"footnote": "When a founder invites you, your place will be waiting — and if you're the very first here, you'll be welcomed in automatically.",
-		"yourDid": "Your DID",
-		"copyDid": "Copy DID",
+		"yourDid": "Your human SAFE ID (did:safe)",
+		"copyDid": "Copy ID",
 		"copied": "Copied",
 		"checking": "Checking network membership…"
 	}

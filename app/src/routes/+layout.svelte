@@ -10,6 +10,7 @@ import { attachAvenosRuntimeBridge, grooveSessionReady } from '$lib/runtime/groo
 import { avenCeoMembership } from '$lib/jazz/api'
 import { jazzStore } from '$lib/jazz/store.svelte'
 import NetworkGate from '$lib/shell/NetworkGate.svelte'
+import HumanSafeGate from '$lib/shell/HumanSafeGate.svelte'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { displayTitleForSession } from '$lib/settings/active-vault-ui'
 import { attachSelfRustEventMirrors, deviceSession } from '$lib/settings/device-session-store'
@@ -154,9 +155,14 @@ $effect(() => {
 		clearInterval(id)
 	}
 })
-const appAccessState = $derived.by<'app' | 'gate' | 'checking'>(() => {
+// Step 2 of onboarding: after sign-in, every self needs a HUMAN SAFE (the did:safe the
+// network invite/SYNC caps are granted to). Created locally — no network needed — so it
+// gates BEFORE the invite gate. avenCEO syncs in as type "aven", so it never satisfies this.
+const hasHumanSafe = $derived(identitiesStore.rows.some((r) => r.type === 'human'))
+const appAccessState = $derived.by<'app' | 'human' | 'gate' | 'checking'>(() => {
 	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked') return 'app'
-	if (membership === 'unknown') return 'checking'
+	if (membership === 'unknown' || !identitiesStore.loaded) return 'checking'
+	if (!hasHumanSafe) return 'human'
 	return membership === 'none' ? 'gate' : 'app'
 })
 
@@ -259,6 +265,8 @@ $effect(() => {
 			<div class="flex min-h-0 flex-1 items-center justify-center p-6">
 				<p class="text-muted-foreground text-sm">{t('networkGate.checking')}</p>
 			</div>
+		{:else if appAccessState === 'human'}
+			<HumanSafeGate />
 		{:else if appAccessState === 'gate'}
 			<NetworkGate />
 		{:else}
