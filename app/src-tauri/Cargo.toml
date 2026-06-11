@@ -44,7 +44,10 @@ default = ["local-voice"]
 # plus the Tinfoil confidential-cloud chat path (activates only when `TINFOIL_API_KEY`
 # is set in the env — local dev). macOS release + dev pass `--features desktop-ai`.
 # iOS opts into `local-llama` directly (LLM yes, TTS no — see above).
-desktop-ai = ["local-llama", "local-tts", "tinfoil"]
+desktop-ai = ["local-llama", "local-tts", "tinfoil", "brain-gemma"]
+# Real on-device brain embeddings (EmbeddingGemma-300m ONNX via aven-brain/models).
+# Desktop-only for now (needs the bundled onnxruntime dylib, like local-tts).
+brain-gemma = ["aven-brain/models"]
 # Confidential CLOUD chat (Tinfoil enclave, OpenAI-compatible tool calling) — board 0021.
 # Desktop/local-dev only; the webview drives the tool loop via `tinfoil_chat`.
 tinfoil = ["dep:aven-ai", "aven-ai/tinfoil"]

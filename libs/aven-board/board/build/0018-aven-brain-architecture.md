@@ -554,6 +554,17 @@ deterministic pass is load-bearing without it. Revisit after E7.
 
 Newest entry first.
 
+- `2026-06-10` — **E7 embedder wired + auto-assemble parked.** App gains the
+  `brain-gemma` feature (folded into `desktop-ai`): `AppEmbedder` enum (Gemma | Stub)
+  with a process-cached, lazily-loaded EmbeddingGemma-300m (ort dylib via the llm/tts
+  lookup; any failure logs and falls back to stub — observable in `brain_status`).
+  `brain_over` is async and embedder-aware atop main's sealed-brain `KeySealer` flow
+  (board 0021 — E3b sealing landed on main 🎉). Mixed stub/gemma stores flagged: the
+  re-embed maintenance pass remains E7's open half, plus the Gemma weights download UX.
+  **Auto-assemble-context into the Tinfoil/Gemma prompt: PARKED** pending the talk-UX
+  rethink (the disabled block on main stays as-is). Verified here: aven-brain
+  `--features models` compiles; app compile = Mac.
+
 - `2026-06-10` — **UX decision + E4 completed via brain-recall mode.** Talk is
   human↔human (or human↔self); the brain answers EVERY message with a deterministic
   structured recall bubble — "stored · found N related, M entities" + top snippets with
