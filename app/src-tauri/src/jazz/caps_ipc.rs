@@ -495,17 +495,38 @@ async fn enforce_member_type_rule(
 		.await?
 		.unwrap_or_else(|| "aven".to_string());
 	match target_type.as_str() {
-		"aven" | "spark" => {
-			let want = if target_type == "aven" { "human" } else { "aven" };
+		"aven" => {
+			// An aven is a (potentially autonomous) self-serving entity. It admits BOTH:
+			//  - its own `did:key` signers (e.g. a server node's env-seed key) — so an aven
+			//    deployed on a node owns itself directly; and
+			//  - human owners via `did:safe:` pointing at a human-type SAFE.
+			// (The ≥1-human-owner anti-lockout guard ensures a human always remains.)
+			// It does NOT admit aven/spark SAFE DIDs as members.
+			if member_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX) {
+				let Some(member_id) = crate::identity_acc::resolve_safe_did(member_did) else {
+					return Err(format!("invalid SAFE DID: {member_did}"));
+				};
+				let member_type = safe_type_of(client, member_id).await?;
+				if member_type.as_deref() != Some("human") {
+					return Err(format!(
+						"an aven SAFE admits human SAFE DIDs (did:safe:…) or signer DIDs (did:key:…) — {member_did} is {}",
+						member_type.as_deref().unwrap_or("unknown (no local safes row)")
+					));
+				}
+			}
+			Ok(())
+		}
+		"spark" => {
 			let Some(member_id) = crate::identity_acc::resolve_safe_did(member_did) else {
-				return Err(format!(
-					"a {target_type} SAFE admits {want} SAFE DIDs (did:safe:…) — signers join through a {want} SAFE"
-				));
+				return Err(
+					"a spark SAFE admits aven SAFE DIDs (did:safe:…) — signers join through an aven SAFE"
+						.into(),
+				);
 			};
 			let member_type = safe_type_of(client, member_id).await?;
-			if member_type.as_deref() != Some(want) {
+			if member_type.as_deref() != Some("aven") {
 				return Err(format!(
-					"a {target_type} SAFE admits {want} SAFEs only — {member_did} is {}",
+					"a spark SAFE admits aven SAFEs only — {member_did} is {}",
 					member_type.as_deref().unwrap_or("unknown (no local safes row)")
 				));
 			}
@@ -923,7 +944,10 @@ pub(crate) async fn groove_ipc_aven_ceo_claim(
 
 	let mut row = Map::new();
 	row.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
-	row.insert("type".into(), JsonValue::String("human".into()));
+	// avenCEO is an aven SAFE (the network's autonomous control identity), not a human.
+	// It is owned directly by its env-seed server signer and admits human owners via
+	// did:safe — exactly what the relaxed aven member rule allows.
+	row.insert("type".into(), JsonValue::String("aven".into()));
 	row.insert(
 		"safe_did".into(),
 		JsonValue::String(crate::identity_acc::safe_did(identity_uuid)),

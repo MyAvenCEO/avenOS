@@ -195,7 +195,9 @@ pub async fn ensure_avenceo_owned(
 		sparks_tbl,
 		&[
 			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
-			("type", Value::Text("human".into())),
+			// avenCEO is an aven SAFE (autonomous network control identity) owned directly
+			// by this node's env-seed server signer; it admits human owners via did:safe.
+			("type", Value::Text("aven".into())),
 			("safe_did", Value::Text(safe_did(avenceo_id))),
 			// The aven's default identity is named after the aven itself (per-aven
 			// config, e.g. avenCEO / avenMAIA) — not a hardcoded constant.
