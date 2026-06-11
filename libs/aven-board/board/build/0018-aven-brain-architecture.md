@@ -554,6 +554,15 @@ deterministic pass is load-bearing without it. Revisit after E7.
 
 Newest entry first.
 
+- `2026-06-10` — **E4 core shipped — the brain feeds the LLM.** `replyWithAgent` now calls
+  `brainAssembleContext(identity, prompt, {stream:'talk'})` and prepends the budgeted
+  bundle to the LFM2.5 prompt (graceful fallback to raw prompt on any brain error); the
+  ContextTrace receipt is persisted per human message into `context_traces`
+  (`message_id` = user row, `reply_id`). svelte-check clean. **Remaining:** E4 toolset
+  swap (retire nav/todo tools → brain tools; needs `llm/tools.ts` rework + prompt-format
+  test on Mac), E3b write ritual (owner-binding + sealing + unseal-hook registration —
+  Mac-side), E5 aside renders the stored traces.
+
 - `2026-06-10` — **E3a shipped — automatic rung-0 + live hooks + drag-drop.** Brain lib:
   `extract_auto_entities` (capitalized runs, sentence-start + stopword guards,
   wikilink-markup-safe tokenizer), `upsert_entity_fuzzy` (Damerau-Levenshtein ≥0.8 —

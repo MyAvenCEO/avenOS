@@ -13,7 +13,8 @@
 import { getContext, setContext } from 'svelte'
 import type { AvenDbStore } from '$lib/avendb/store.svelte'
 import { persistSparkFiles } from '$lib/avendb/intent-files'
-import { brainIngest } from '$lib/brain/api'
+import { brainAssembleContext, brainIngest } from '$lib/brain/api'
+import { avenDbTable } from '$lib/avendb/api'
 import { streamReply } from '$lib/llm/generate'
 import {
 	LLM_TOOLS,
@@ -99,7 +100,7 @@ export function createIdentityAgent(deps: {
 	 * Create an empty agent row, stream LFM2.5 tokens into `streaming[id]`, then resolve the turn
 	 * into one tool-call record (executing its side effect) and persist it as the row body.
 	 */
-	async function replyWithAgent(prompt: string): Promise<void> {
+	async function replyWithAgent(prompt: string, userRowId?: string): Promise<void> {
 		const env = deps.env()
 		if (!env.canonicalSparkId) return
 		let replyId: string | undefined
@@ -130,12 +131,19 @@ export function createIdentityAgent(deps: {
 							.join('\n')}\n\n`
 					: ''
 
+			// E4: the brain is the context manager — assembled, budgeted, traced.
+			// Graceful degradation is law: any brain failure falls back to the raw prompt.
+			const assembled = await brainAssembleContext(env.canonicalSparkId, prompt, {
+				stream: 'talk',
+			}).catch(() => undefined)
+			const brainPrefix = assembled?.prompt ? `${assembled.prompt}\n\n` : ''
+
 			// The agent is tool-call-only. Capture any real `<|tool_call_start|>` call and the
 			// streamed prose, then resolve the turn into exactly one tool-call record (executing
 			// the side effect). The chip is what's persisted + rendered — never bare prose.
 			let capturedCall: LlmToolCall | undefined
 			const full = await streamReply(
-				todoPreamble + prompt,
+				brainPrefix + todoPreamble + prompt,
 				reply.id,
 				(piece) => {
 					// Reassign (not mutate) so the talk view's liveBody const re-derives reliably.
@@ -169,6 +177,18 @@ export function createIdentityAgent(deps: {
 			const body = encodeToolCallBody(record)
 			streaming = { ...streaming, [reply.id]: body }
 			await deps.messages.update(reply.id, { body })
+			// E4: persist the receipt — which context was sent for THIS human message.
+			if (assembled && userRowId) {
+				void avenDbTable('context_traces')
+					.create({
+						owner: env.canonicalSparkId,
+						message_id: userRowId,
+						reply_id: reply.id,
+						trace: JSON.stringify(assembled.trace),
+						created_at_ms: Date.now(),
+					})
+					.catch(() => {})
+			}
 			// E3: ingest the human-facing prose (not the tool envelope), down-weighted.
 			if (record.response) {
 				void brainIngest(env.canonicalSparkId, record.response, {
@@ -242,7 +262,7 @@ export function createIdentityAgent(deps: {
 				}
 			}
 			// Fire the on-device agent reply (text-only prompts for now).
-			if (body) await replyWithAgent(body)
+			if (body) await replyWithAgent(body, row.id)
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {
