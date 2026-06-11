@@ -14,6 +14,7 @@ import { getContext, setContext } from 'svelte'
 import { persistSparkFiles } from '$lib/avendb/intent-files'
 import type { AvenDbStore } from '$lib/avendb/store.svelte'
 import { brainAssembleContext, brainIngest } from '$lib/brain/api'
+import { t } from '$lib/i18n'
 import { beginRoundtrip, patchRoundtrip } from '$lib/identities/talk-brain-roundtrip.svelte'
 import { tinfoilAvailable, tinfoilChat } from '$lib/llm/generate'
 import {
@@ -65,6 +66,17 @@ export type ToolBadge = {
 	status: 'running' | 'done' | 'error'
 }
 
+/**
+ * A destructive action awaiting explicit human sign-off (HITL). The cloud loop pauses and the
+ * unified live-state renders an accept/cancel card before the action actually runs. Currently
+ * only `todos delete` is gated.
+ */
+export type PendingConfirm = {
+	action: 'delete'
+	/** Human-readable titles of the todos that would be removed — shown in the confirm card. */
+	titles: string[]
+}
+
 /** A short "running" label for a tool call before its result is known (in the user's language-ish). */
 function runningLabel(name: string, args: Record<string, unknown>): string {
 	if (name === 'navigate_views') {
@@ -110,12 +122,18 @@ export type IdentityAgent = {
 	readonly phase: AgentPhase
 	/** Live tool-call badges for the current/last turn (running → done/error), newest last. */
 	readonly toolBadges: ToolBadge[]
+	/** A destructive action awaiting human sign-off (HITL), or undefined. Drives the confirm card. */
+	readonly pendingConfirm: PendingConfirm | undefined
 	/** Last submit/agent error (file persist failure, generation error, …). */
 	readonly err: string | undefined
 	/** True while a submit is in flight. */
 	readonly busy: boolean
 	/** Submit an intent (text + optional files) from any identity sub-view. */
 	submit(message: string, files: File[]): Promise<void>
+	/** Accept the pending HITL action — lets the gated tool call run. */
+	confirmPending(): void
+	/** Reject the pending HITL action — the gated tool call is skipped. */
+	cancelPending(): void
 	/** Dismiss the floating reply chip. */
 	dismissReply(): void
 	/** Surface an error (e.g. a transcription failure from the composer). */
@@ -138,12 +156,33 @@ export function createIdentityAgent(deps: {
 	let phase = $state<AgentPhase>('idle')
 	let toolBadges = $state<ToolBadge[]>([])
 	let badgeSeq = 0
+	let pendingConfirm = $state<PendingConfirm | undefined>(undefined)
+	// Resolver for the in-flight HITL gate; called by confirm/cancel to un-block the cloud loop.
+	let confirmResolver: ((accepted: boolean) => void) | undefined
 	let err = $state<string | undefined>(undefined)
 	let busy = $state(false)
 	let dismissTimer: ReturnType<typeof setTimeout> | undefined
 	// Whether the Tinfoil cloud path is usable (feature compiled + `TINFOIL_API_KEY` set).
 	// Probed once on first reply and memoized — it can't change within an app run.
 	let cloudReady: boolean | undefined
+
+	/**
+	 * Pause the cloud loop on a destructive action and await explicit human sign-off (HITL).
+	 * Surfaces `pendingConfirm` (the live-state renders the accept/cancel card) and resolves to
+	 * the human's choice. Settling clears the pending state so the strip returns to normal.
+	 */
+	function requestConfirm(p: PendingConfirm): Promise<boolean> {
+		return new Promise((resolve) => {
+			confirmResolver = resolve
+			pendingConfirm = p
+		})
+	}
+	function settleConfirm(accepted: boolean): void {
+		const resolve = confirmResolver
+		confirmResolver = undefined
+		pendingConfirm = undefined
+		resolve?.(accepted)
+	}
 
 	function showFloating(rec: ToolCallRecord): void {
 		lastReply = rec
@@ -251,6 +290,32 @@ export function createIdentityAgent(deps: {
 					call.arguments && typeof call.arguments === 'object'
 						? (call.arguments as Record<string, unknown>)
 						: {}
+
+				// HITL gate: a `todos delete` does NOT run until the human accepts it. Pause the loop,
+				// show the accept/cancel card, and on cancel feed a "cancelled" result back to the
+				// model (so it tells the user nothing was deleted) instead of executing.
+				if (call.name === 'todos' && String(args.action ?? '').toLowerCase() === 'delete') {
+					const items = Array.isArray(args.items) ? (args.items as { id?: unknown }[]) : []
+					const titles = items
+						.map((it) => ctx.resolveTodo(String(it?.id ?? '').trim())?.title)
+						.filter((tt): tt is string => !!tt)
+					const accepted = await requestConfirm({ action: 'delete', titles })
+					if (!accepted) {
+						const message = t('identities.talk.deleteCancelled')
+						const badgeId = startToolBadge(call.name, args)
+						finishToolBadge(badgeId, message, false)
+						const exec: ToolDispatchResult = {
+							ok: false,
+							message,
+							toolResult: JSON.stringify({ ok: false, action: 'delete', cancelled: true })
+						}
+						last = { name: call.name, args, exec }
+						streaming = { ...streaming, [replyId]: message }
+						messages.push({ role: 'tool', tool_call_id: call.id, content: exec.toolResult })
+						continue
+					}
+				}
+
 				const badgeId = startToolBadge(call.name, args) // live "running" pill
 				const exec = await executeToolCall({ replyId, name: call.name, arguments: args }, ctx)
 				finishToolBadge(badgeId, exec.message, exec.ok) // → done/error with the result line
@@ -450,6 +515,8 @@ export function createIdentityAgent(deps: {
 			busy = false
 			// The turn is over: stop "thinking"; resolved badges linger via the floating-chip timer.
 			phase = 'idle'
+			// Safety: never leave a HITL gate dangling if the turn ended unexpectedly.
+			if (pendingConfirm) settleConfirm(false)
 		}
 	}
 
@@ -469,6 +536,9 @@ export function createIdentityAgent(deps: {
 		get toolBadges() {
 			return toolBadges
 		},
+		get pendingConfirm() {
+			return pendingConfirm
+		},
 		get err() {
 			return err
 		},
@@ -476,6 +546,12 @@ export function createIdentityAgent(deps: {
 			return busy
 		},
 		submit,
+		confirmPending() {
+			settleConfirm(true)
+		},
+		cancelPending() {
+			settleConfirm(false)
+		},
 		dismissReply() {
 			lastReply = undefined
 			toolBadges = []

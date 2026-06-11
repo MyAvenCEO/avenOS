@@ -471,7 +471,13 @@
 			"todosDeletedReply": "Removed {count} todos from your list.",
 			"todosListed": "📋 {count} todos",
 			"todosAdded": "✓ Added {count} todos: {titles}",
-			"todosAddedReply": "Added {count} todos to your list."
+			"todosAddedReply": "Added {count} todos to your list.",
+			"deleteCancelled": "Deletion cancelled — nothing was removed.",
+			"confirmDeleteOne": "Delete “{title}”?",
+			"confirmDeleteMany": "Delete {count} todos?",
+			"confirmDeletePrompt": "Aven asked to remove this from your list. This can’t be undone.",
+			"confirmAccept": "Delete",
+			"confirmReject": "Keep"
 		},
 		"todos": {
 			"title": "Todos",

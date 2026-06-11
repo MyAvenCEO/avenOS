@@ -458,7 +458,13 @@
 			"todosDeletedReply": "{count} Todos aus deiner Liste entfernt.",
 			"todosListed": "📋 {count} Aufgaben",
 			"todosAdded": "✓ {count} Todos hinzugefügt: {titles}",
-			"todosAddedReply": "{count} Todos zu deiner Liste hinzugefügt."
+			"todosAddedReply": "{count} Todos zu deiner Liste hinzugefügt.",
+			"deleteCancelled": "Löschen abgebrochen — nichts wurde entfernt.",
+			"confirmDeleteOne": "„{title}“ löschen?",
+			"confirmDeleteMany": "{count} Todos löschen?",
+			"confirmDeletePrompt": "Aven möchte dies von deiner Liste entfernen. Das lässt sich nicht rückgängig machen.",
+			"confirmAccept": "Löschen",
+			"confirmReject": "Behalten"
 		},
 		"todos": {
 			"title": "Todos",

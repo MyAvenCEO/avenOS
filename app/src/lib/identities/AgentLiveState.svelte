@@ -16,13 +16,16 @@ let { agent }: { agent: IdentityAgent } = $props()
 
 type Live =
 	| { kind: 'idle' }
+	| { kind: 'confirm' }
 	| { kind: 'error' }
 	| { kind: 'thinking' }
 	| { kind: 'tool'; label: string }
 	| { kind: 'result' }
 
-// The single "latest" state, by priority: error → running tool → thinking → result → idle.
+// The single "latest" state, by priority: HITL confirm → error → running tool → thinking →
+// result → idle. A pending confirmation is the most important interactive state, so it wins.
 const live = $derived.by((): Live => {
+	if (agent.pendingConfirm) return { kind: 'confirm' }
 	if (agent.err) return { kind: 'error' }
 	const running = agent.toolBadges.find((b) => b.status === 'running')
 	if (running) return { kind: 'tool', label: running.label }
@@ -30,6 +33,9 @@ const live = $derived.by((): Live => {
 	if (agent.lastReply) return { kind: 'result' }
 	return { kind: 'idle' }
 })
+
+// Title line for the delete confirmation card.
+const confirmTitles = $derived(agent.pendingConfirm?.titles ?? [])
 </script>
 
 {#if live.kind !== 'idle'}
@@ -37,7 +43,58 @@ const live = $derived.by((): Live => {
 		class="pointer-events-auto mb-2 flex w-full max-w-md justify-center px-4"
 		transition:fade={{ duration: 120 }}
 	>
-		{#if live.kind === 'error'}
+		{#if live.kind === 'confirm'}
+			<!-- HITL gate: the human must accept before a destructive (delete) action runs. -->
+			<div
+				class="border-destructive/40 bg-card/95 ring-destructive/10 flex w-full flex-col gap-2.5 rounded-2xl border px-4 py-3 shadow-lg ring-1 backdrop-blur"
+			>
+				<div class="flex items-start gap-2.5">
+					<svg
+						class="text-destructive mt-0.5 size-4 shrink-0"
+						viewBox="0 0 16 16"
+						fill="currentColor"
+						aria-hidden="true"
+					>
+						<path
+							d="M6.5 1a1 1 0 0 0-1 1v.5H3a.75.75 0 0 0 0 1.5h.3l.6 8.2A2 2 0 0 0 5.9 15h4.2a2 2 0 0 0 2-1.8l.6-8.2h.3a.75.75 0 0 0 0-1.5h-2.5V2a1 1 0 0 0-1-1zm.5 4.25a.75.75 0 0 1 1.5 0v5a.75.75 0 0 1-1.5 0zm3 0a.75.75 0 0 1 1.5 0v5a.75.75 0 0 1-1.5 0zm-4.5 0a.75.75 0 0 1 1.5 0v5a.75.75 0 0 1-1.5 0z"
+						/>
+					</svg>
+					<div class="min-w-0 flex-1">
+						<p class="text-foreground text-sm font-semibold leading-snug">
+							{confirmTitles.length === 1
+								? t('identities.talk.confirmDeleteOne', { title: confirmTitles[0] })
+								: t('identities.talk.confirmDeleteMany', { count: confirmTitles.length })}
+						</p>
+						<p class="text-muted-foreground mt-0.5 text-xs leading-snug">
+							{t('identities.talk.confirmDeletePrompt')}
+						</p>
+						{#if confirmTitles.length > 1}
+							<ul class="text-muted-foreground mt-1.5 space-y-0.5 text-xs">
+								{#each confirmTitles as title (title)}
+									<li class="truncate">• {title}</li>
+								{/each}
+							</ul>
+						{/if}
+					</div>
+				</div>
+				<div class="flex justify-end gap-2">
+					<button
+						type="button"
+						class="border-border/70 text-foreground hover:bg-muted rounded-full border px-3.5 py-1.5 text-xs font-semibold transition"
+						onclick={() => agent.cancelPending()}
+					>
+						{t('identities.talk.confirmReject')}
+					</button>
+					<button
+						type="button"
+						class="bg-destructive rounded-full px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90"
+						onclick={() => agent.confirmPending()}
+					>
+						{t('identities.talk.confirmAccept')}
+					</button>
+				</div>
+			</div>
+		{:else if live.kind === 'error'}
 			<div
 				role="alert"
 				class="text-destructive border-destructive/40 bg-destructive/10 flex w-full items-start gap-2 rounded-2xl border px-4 py-2.5 text-sm leading-snug shadow-lg backdrop-blur"
