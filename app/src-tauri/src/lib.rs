@@ -264,6 +264,8 @@ pub fn run() {
 			llm::llm_cancel_download,
 			llm::llm_start_download,
 			llm::llm_delete_model,
+			llm::tinfoil_available,
+			llm::tinfoil_chat,
 			tts::tts_status,
 			tts::tts_synthesize,
 			tts::tts_local_models,

@@ -64,3 +64,48 @@ export async function streamReply(
 		unlistenTool?.()
 	}
 }
+
+// ───────────────────────── Tinfoil confidential cloud chat ─────────────────────────
+//
+// The cloud counterpart to the on-device path: one OpenAI-style chat completion round per
+// call (the TOOL LOOP lives in the caller — see `identity-agent`). Thin invoke wrappers over
+// the `tinfoil_available` / `tinfoil_chat` Tauri commands (board 0021).
+
+/** One tool call the cloud model requested this round (mirrors `aven_ai::tinfoil::ToolCallOut`). */
+export type CloudToolCall = { id: string; name: string; arguments: unknown }
+
+/** Result of one cloud chat round (mirrors `aven_ai::tinfoil::ChatTurn`). `assistantRaw` is the
+ *  raw OpenAI assistant message to re-append verbatim before sending tool results back. */
+export type CloudChatTurn = {
+	content: string | null
+	toolCalls: CloudToolCall[]
+	assistantRaw: unknown
+}
+
+async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+	if (!isTauri()) throw new Error('cloud AI requires the desktop app')
+	const { invoke } = await import('@tauri-apps/api/core')
+	return invoke<T>(cmd, args)
+}
+
+/** Whether the Tinfoil cloud path can run (feature compiled + `TINFOIL_API_KEY` set). */
+export async function tinfoilAvailable(): Promise<boolean> {
+	if (!isTauri()) return false
+	try {
+		return await tauriInvoke<boolean>('tinfoil_available')
+	} catch {
+		return false
+	}
+}
+
+/**
+ * Run ONE cloud chat completion round. `messages` is the full OpenAI conversation so far
+ * (verbatim), `tools` the OpenAI `tools` array (omit/empty forces a plain-text reply). Throws
+ * outside Tauri or if the enclave call fails.
+ */
+export async function tinfoilChat(messages: unknown[], tools?: unknown[]): Promise<CloudChatTurn> {
+	return tauriInvoke<CloudChatTurn>('tinfoil_chat', {
+		messages,
+		tools: tools && tools.length > 0 ? tools : null,
+	})
+}

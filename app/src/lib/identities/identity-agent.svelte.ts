@@ -15,14 +15,22 @@ import type { AvenDbStore } from '$lib/avendb/store.svelte'
 import { persistSparkFiles } from '$lib/avendb/intent-files'
 import { brainAssembleContext, brainIngest } from '$lib/brain/api'
 import { avenDbTable } from '$lib/avendb/api'
-import { streamReply } from '$lib/llm/generate'
+import { streamReply, tinfoilAvailable, tinfoilChat } from '$lib/llm/generate'
 import {
+	CLOUD_SYSTEM_PROMPT,
+	CLOUD_TOOLS,
 	LLM_TOOLS,
+	MAX_TOOL_ROUNDS,
+	cloudToolRecord,
 	encodeToolCallBody,
+	executeToolCall,
 	resolveAgentTurn,
+	respondRecord,
+	toOpenAiTools,
 	type LlmToolCall,
 	type ToolCallRecord,
 	type ToolContext,
+	type ToolDispatchResult,
 } from '$lib/llm/tools'
 
 /** Deterministic author DID for on-device agent replies (role-tagged in the row). */
@@ -87,6 +95,9 @@ export function createIdentityAgent(deps: {
 	let err = $state<string | undefined>(undefined)
 	let busy = $state(false)
 	let dismissTimer: ReturnType<typeof setTimeout> | undefined
+	// Whether the Tinfoil cloud path is usable (feature compiled + `TINFOIL_API_KEY` set).
+	// Probed once on first reply and memoized — it can't change within an app run.
+	let cloudReady: boolean | undefined
 
 	function showFloating(rec: ToolCallRecord): void {
 		lastReply = rec
@@ -97,8 +108,107 @@ export function createIdentityAgent(deps: {
 	}
 
 	/**
-	 * Create an empty agent row, stream LFM2.5 tokens into `streaming[id]`, then resolve the turn
-	 * into one tool-call record (executing its side effect) and persist it as the row body.
+	 * The per-turn tool execution context, reading the active identity's todos LIVE each call (so
+	 * the cloud loop sees its own creates/deletes between rounds; `resolveTodo` validates the exact
+	 * id the model copied from a `list` result). Shared by the local and cloud paths.
+	 */
+	function buildToolContext(env: IdentityAgentEnv): ToolContext {
+		const mine = () =>
+			deps.todos.rows
+				.filter((r) => idsMatch(r.owner, env.canonicalSparkId))
+				.map((r) => ({ id: String(r.id), title: String(r.title ?? ''), done: r.done === true }))
+		return {
+			identityBase: env.identityBase,
+			listTodos: mine,
+			createTodo: async (title) => {
+				await deps.todos.create({ title, done: false, owner: env.canonicalSparkId })
+			},
+			resolveTodo: (id) => mine().find((todo) => todo.id === String(id).trim()),
+			updateTodoById: async (id, patch) => {
+				await deps.todos.update(id, patch)
+			},
+			deleteTodoById: async (id) => {
+				await deps.todos.delete(id)
+			},
+		}
+	}
+
+	/** Persist a resolved turn as the agent row body (chip JSON), surface it, and ingest the prose. */
+	async function persistRecord(
+		env: IdentityAgentEnv,
+		replyId: string,
+		record: ToolCallRecord,
+	): Promise<void> {
+		const body = encodeToolCallBody(record)
+		streaming = { ...streaming, [replyId]: body }
+		await deps.messages.update(replyId, { body })
+		if (record.response) {
+			void brainIngest(env.canonicalSparkId, record.response, {
+				stream: 'talk',
+				authorRole: 'agent',
+				source: replyId,
+				contentDateMs: Date.now(),
+				veracity: 'inferred',
+			}).catch(() => {})
+		}
+		showFloating(record)
+	}
+
+	/**
+	 * The Tinfoil cloud agent loop: drive the generic `todos` CRUD + navigation via real
+	 * OpenAI-style tool calls. Each round runs the returned tool calls against avenDB, appends the
+	 * assistant turn + `role:"tool"` results, and re-calls — so the model can `list` todos to learn
+	 * ids, then batch update/delete. Capped at {@link MAX_TOOL_ROUNDS}; the last meaningful tool
+	 * call (or the final prose) becomes the one persisted {@link ToolCallRecord}. Progress shows in
+	 * the live streaming bubble. No regex/keyword parsing — structured tool arguments only.
+	 */
+	async function runCloudLoop(
+		prompt: string,
+		replyId: string,
+		ctx: ToolContext,
+	): Promise<ToolCallRecord> {
+		const messages: unknown[] = [
+			{ role: 'system', content: CLOUD_SYSTEM_PROMPT },
+			{ role: 'user', content: prompt },
+		]
+		const tools = toOpenAiTools(CLOUD_TOOLS)
+		let last:
+			| { name: string; args: Record<string, unknown>; exec: ToolDispatchResult }
+			| undefined
+
+		const finalize = (reply: string): ToolCallRecord =>
+			last ? cloudToolRecord(last.name, last.args, last.exec, reply) : respondRecord(reply)
+
+		for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+			const turn = await tinfoilChat(messages, tools)
+			if (!turn.toolCalls || turn.toolCalls.length === 0) return finalize(turn.content ?? '')
+
+			messages.push(turn.assistantRaw) // verbatim — carries the tool_call ids
+			for (const call of turn.toolCalls) {
+				const args =
+					call.arguments && typeof call.arguments === 'object'
+						? (call.arguments as Record<string, unknown>)
+						: {}
+				const exec = await executeToolCall({ replyId, name: call.name, arguments: args }, ctx)
+				last = { name: call.name, args, exec }
+				streaming = { ...streaming, [replyId]: exec.message } // live progress line
+				messages.push({
+					role: 'tool',
+					tool_call_id: call.id,
+					content: exec.toolResult ?? exec.message,
+				})
+			}
+		}
+		// Round cap reached — force a final no-tools reply so the user always gets a sentence.
+		const turn = await tinfoilChat(messages, [])
+		return finalize(turn.content ?? '')
+	}
+
+	/**
+	 * Create an empty agent row, produce one tool-call record (executing its side effect), and
+	 * persist it as the row body. Routing: if the Tinfoil cloud path is available it runs the
+	 * agentic tool loop (generic `todos` CRUD + navigation); otherwise the on-device path applies
+	 * (brain-recall structured reply, falling back to the local LFM2.5 stream).
 	 */
 	async function replyWithAgent(prompt: string, userRowId?: string): Promise<void> {
 		const env = deps.env()
@@ -116,21 +226,18 @@ export function createIdentityAgent(deps: {
 			streamingId = reply.id
 			streaming = { ...streaming, [reply.id]: '' }
 
-			// Read the active identity's todos NOW and feed the list — with their REAL ids — into the
-			// model's context this turn, so it SELECTS the right id itself (no app-side title matching)
-			// for edit/toggle/delete. The map lets the executor validate the id the model copied back.
-			const todosNow = deps.todos.rows
-				.filter((r) => idsMatch(r.owner, env.canonicalSparkId))
-				.map((r) => ({ id: String(r.id), title: String(r.title ?? ''), done: r.done === true }))
-			const idMap = new Map<string, { id: string; title: string; done: boolean }>()
-			todosNow.forEach((t) => idMap.set(t.id, { id: t.id, title: t.title, done: t.done }))
-			const todoPreamble =
-				todosNow.length > 0
-					? `Current todos (id: title):\n${todosNow
-							.map((t) => `${t.id}: ${t.title}${t.done ? ' (done)' : ' (open)'}`)
-							.join('\n')}\n\n`
-					: ''
+			const ctx = buildToolContext(env)
 
+			// Tinfoil cloud path (board 0021): a real OpenAI-style tool loop drives the generic
+			// `todos` CRUD + navigation. Probe availability once, then memoize for the app run.
+			if (cloudReady === undefined) cloudReady = await tinfoilAvailable()
+			if (cloudReady) {
+				const record = await runCloudLoop(prompt, reply.id, ctx)
+				await persistRecord(env, reply.id, record)
+				return
+			}
+
+			// ── On-device fallback (no TINFOIL_API_KEY) ──
 			// E4: the brain is the context manager — assembled, budgeted, traced.
 			// Graceful degradation is law: any brain failure falls back to the raw prompt.
 			const assembled = await brainAssembleContext(env.canonicalSparkId, prompt, {
@@ -175,7 +282,7 @@ export function createIdentityAgent(deps: {
 			// the side effect). The chip is what's persisted + rendered — never bare prose.
 			let capturedCall: LlmToolCall | undefined
 			const full = await streamReply(
-				brainPrefix + todoPreamble + prompt,
+				brainPrefix + prompt,
 				reply.id,
 				(piece) => {
 					// Reassign (not mutate) so the talk view's liveBody const re-derives reliably.
@@ -186,19 +293,6 @@ export function createIdentityAgent(deps: {
 					onToolCall: (call) => (capturedCall = call),
 				},
 			)
-			const ctx: ToolContext = {
-				identityBase: env.identityBase,
-				createTodo: async (title) => {
-					await deps.todos.create({ title, done: false, owner: env.canonicalSparkId })
-				},
-				resolveTodo: (shortId) => idMap.get(String(shortId).trim()),
-				updateTodoById: async (id, patch) => {
-					await deps.todos.update(id, patch)
-				},
-				deleteTodoById: async (id) => {
-					await deps.todos.delete(id)
-				},
-			}
 			const record = await resolveAgentTurn({
 				replyId: reply.id,
 				userPrompt: prompt,
@@ -206,20 +300,7 @@ export function createIdentityAgent(deps: {
 				prose: full,
 				ctx,
 			})
-			const body = encodeToolCallBody(record)
-			streaming = { ...streaming, [reply.id]: body }
-			await deps.messages.update(reply.id, { body })
-			// E3: ingest the human-facing prose (not the tool envelope), down-weighted.
-			if (record.response) {
-				void brainIngest(env.canonicalSparkId, record.response, {
-					stream: 'talk',
-					authorRole: 'agent',
-					source: reply.id,
-					contentDateMs: Date.now(),
-					veracity: 'inferred',
-				}).catch(() => {})
-			}
-			showFloating(record)
+			await persistRecord(env, reply.id, record)
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e)
 			if (replyId) {

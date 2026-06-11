@@ -146,6 +146,54 @@ pub async fn llm_generate(
 	imp::generate(&app, prompt, reply_id, tools.unwrap_or_default()).await
 }
 
+// ─────────────────── Tinfoil confidential-cloud chat (board 0021) ───────────────────
+// Stateless adapters over `aven_ai::tinfoil`: the webview owns the tool loop (it executes
+// tool calls against avenDB and re-calls with appended `role:"tool"` results); this layer
+// just forwards ONE completion round per call. Activates only when `TINFOIL_API_KEY` is
+// set in the env — local dev, no proxy, no key storage.
+
+/// Whether the cloud chat path can run (feature compiled + `TINFOIL_API_KEY` set).
+#[tauri::command(rename_all = "camelCase")]
+pub async fn tinfoil_available() -> bool {
+	#[cfg(feature = "tinfoil")]
+	{
+		aven_ai::tinfoil::available()
+	}
+	#[cfg(not(feature = "tinfoil"))]
+	{
+		false
+	}
+}
+
+/// One OpenAI-style chat completion round against the Tinfoil enclave. `messages` is the
+/// full conversation so far (verbatim JSON); `tools` the OpenAI `tools` array (empty/None
+/// forces a plain-text reply); `model` defaults to the agentic recommendation (kimi-k2-6).
+#[tauri::command(rename_all = "camelCase")]
+#[cfg(feature = "tinfoil")]
+pub async fn tinfoil_chat(
+	messages: Vec<serde_json::Value>,
+	tools: Option<serde_json::Value>,
+	model: Option<String>,
+) -> Result<aven_ai::tinfoil::ChatTurn, String> {
+	let model = model.unwrap_or_else(|| aven_ai::tinfoil::DEFAULT_MODEL.into());
+	aven_ai::tinfoil::chat(
+		messages,
+		tools.unwrap_or(serde_json::Value::Null),
+		&model,
+	)
+	.await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+#[cfg(not(feature = "tinfoil"))]
+pub async fn tinfoil_chat(
+	_messages: Vec<serde_json::Value>,
+	_tools: Option<serde_json::Value>,
+	_model: Option<String>,
+) -> Result<serde_json::Value, String> {
+	Err("cloud chat is not available in this build (enable the `tinfoil` feature)".into())
+}
+
 pub fn spawn_model_download(app: &AppHandle) {
 	if !instance_enabled() {
 		log::info!(target: "avenos::llm", "secondary instance — skipping LLM model download/load");

@@ -7,7 +7,7 @@
  *                 render as the bubble text and can speak via the TTS model.
  *   2. ROUTER   — `executeToolCall` dispatches a call by name to its executor (the side effect),
  *                 passing a per-turn {@link ToolContext} (the active identity + its mutations).
- *                 `navigate_views` → in-identity routing; `create_todo` → add a task.
+ *                 `navigate_views` → in-identity routing; `todos` → the generic task CRUD.
  *   3. RESOLVE  — `resolveAgentTurn` turns a model turn (a real tool call, and/or the streamed
  *                 prose, plus the user prompt) into exactly one rendered record, executing the
  *                 side effect. Order: real call → (if it doesn't resolve) deterministic
@@ -50,12 +50,13 @@ export type ToolDef = {
 export type ToolContext = {
 	/** Base path of the active identity, e.g. `/identities/<encoded-id>`. Drives `navigate_views`. */
 	identityBase: string
+	/** Read the active identity's todos LIVE (id + title + done) — the `todos` list action. */
+	listTodos: () => { id: string; title: string; done: boolean }[]
 	/** Add a todo to the active identity's task list. Resolves on success, throws on failure. */
 	createTodo: (title: string) => Promise<void>
 	/**
-	 * Resolve an id the model copied from the todo list shown in its context to the real row
-	 * (id + title + current done). The model selects the id; no app-side title matching. Undefined
-	 * if the id wasn't in the list it was shown.
+	 * Resolve an id the model copied from a todo list it was shown (a prior `list` result) to the
+	 * real row. The model selects the id; no app-side title matching. Undefined if the id is gone.
 	 */
 	resolveTodo: (id: string) => { id: string; title: string; done: boolean } | undefined
 	/** Patch a todo by its real id (title and/or done). Resolves on success, throws on failure. */
@@ -64,8 +65,17 @@ export type ToolContext = {
 	deleteTodoById: (id: string) => Promise<void>
 }
 
-/** Outcome of executing a tool call's side effect. */
-export type ToolDispatchResult = { ok: boolean; message: string; response?: string }
+/**
+ * Outcome of executing a tool call's side effect. `message` is the human-facing result line;
+ * `toolResult` (when set) is the MACHINE-facing content sent back to the model as the
+ * `role:"tool"` message on the cloud agent loop (e.g. the JSON todo list for `list`).
+ */
+export type ToolDispatchResult = {
+	ok: boolean
+	message: string
+	response?: string
+	toolResult?: string
+}
 
 /** A tool executor: receives the (parsed) arguments + the turn context, performs the side effect. */
 type ToolExecutor = (
@@ -162,217 +172,172 @@ function executeNavigateViews(args: Record<string, unknown>, ctx: ToolContext): 
 	}
 }
 
-// ───────────────────────────── create_todo ─────────────────────────────
-
-/** The `create_todo` schema: the task text + the standard `response`. */
-const CREATE_TODO_TOOL: ToolDef = {
-	name: 'create_todo',
-	description:
-		"Add a new todo / task to the current identity's task list. Call this whenever the user asks " +
-		'to add, create, note, remember, or jot down a task or todo.',
-	parameters: {
-		type: 'object',
-		properties: {
-			title: {
-				type: 'string',
-				description: "The task text — a short imperative phrase, in the user's language.",
-			},
-			...RESPONSE_PROP,
-		},
-		required: ['title', 'response'],
-	},
-}
-
-/** The task-creation executor: add the todo to the active identity, return the outcome. */
-async function executeCreateTodo(
-	args: Record<string, unknown>,
-	ctx: ToolContext,
-): Promise<ToolDispatchResult> {
-	const title = String(args.title ?? '').trim()
-	if (!title) return { ok: false, message: t('identities.talk.todoEmpty') }
-	if (!ctx.createTodo) return { ok: false, message: t('identities.talk.navNoIdentity') }
-	try {
-		await ctx.createTodo(title)
-		return {
-			ok: true,
-			message: t('identities.talk.todoAdded', { title }),
-			response: t('identities.talk.todoAddedReply', { title }),
-		}
-	} catch (e) {
-		return { ok: false, message: e instanceof Error ? e.message : String(e) }
-	}
-}
-
-// ─────────────── rename_todo / toggle_todo / delete_todo ───────────────
+// ───────────────────────────── todos (generic CRUD) ─────────────────────────────
 //
-// Single-purpose tools (one job, one param) — the 1.2B reliably fills ONE argument but tends to
-// describe the change in prose and forget a second optional one. So toggling has NO boolean to
-// omit (it just flips), and renaming has ONLY a title.
+// ONE tool for the whole task list (board 0021). The model picks an `action` and passes a
+// BATCH of `items`; ids are never guessed app-side — the model reads them from a `list` call
+// and copies them EXACTLY. No keyword/regex recovery on this path: structured arguments only.
+// Advertised to the Tinfoil cloud model (which runs the agentic list→mutate loop), not the
+// on-device 1.2B (it can't reliably emit nested JSON arrays).
 
-/** The `rename_todo` schema: which todo (by id) + the new title + the standard `response`. */
-const RENAME_TODO_TOOL: ToolDef = {
-	name: 'rename_todo',
+/** The generic `todos` schema: one action + a batch of items + the standard `response`. */
+const TODOS_TOOL: ToolDef = {
+	name: 'todos',
 	description:
-		"Rename / edit the text of ONE existing todo in the current identity's list. Call this when " +
-		'the user wants to change a task\'s wording. Read the todo list shown above the user message, ' +
-		'copy the EXACT id into `id`, and put the new wording in `title`.',
+		"Query and modify the current identity's todo list — the ONE tool for all task operations. " +
+		"Actions: 'list' returns every todo with its exact id, title and done state; " +
+		"'create' adds the given items (each needs a title); " +
+		"'update' edits the given items by id (new title and/or done — set done true to complete, " +
+		"false to reopen); 'delete' removes the given items by id. " +
+		'Batch freely: pass several entries in `items` to act on many todos in one call. ' +
+		"ALWAYS call 'list' first to get the real ids before updating or deleting.",
 	parameters: {
 		type: 'object',
 		properties: {
-			id: { type: 'string', description: 'The exact id of the todo to rename, copied from the list.' },
-			title: { type: 'string', description: 'The new title text for the todo.' },
-			...RESPONSE_PROP,
-		},
-		required: ['id', 'title', 'response'],
-	},
-}
-
-/** The `toggle_todo` schema: which todo(s) (by id) + the standard `response`. Flips done — no flag. */
-const TOGGLE_TODO_TOOL: ToolDef = {
-	name: 'toggle_todo',
-	description:
-		'Toggle the done state of existing todo(s) — check off an open task or reopen a done one. Call ' +
-		'this when the user wants to complete, finish, check off, tick, mark done, or reopen a task. ' +
-		'Read the todo list shown above the user message and copy the EXACT id(s) into `id` ' +
-		'(comma-separate several to toggle them at once).',
-	parameters: {
-		type: 'object',
-		properties: {
-			id: {
+			action: {
 				type: 'string',
+				enum: ['list', 'create', 'update', 'delete'],
+				description: 'What to do with the todo list.',
+			},
+			items: {
+				type: 'array',
 				description:
-					'The exact id(s) of the target todo(s), copied from the list — comma-separated for several.',
+					'The todos to act on (ignored for `list`). create: {title}; update: {id, title? and/or done?}; delete: {id}.',
+				items: {
+					type: 'object',
+					properties: {
+						id: {
+							type: 'string',
+							description: 'The EXACT id of an existing todo, copied from a `list` result.',
+						},
+						title: {
+							type: 'string',
+							description: "The task text — a short imperative phrase, in the user's language.",
+						},
+						done: { type: 'boolean', description: 'Whether the task is completed.' },
+					},
+				},
 			},
 			...RESPONSE_PROP,
 		},
-		required: ['id', 'response'],
+		required: ['action', 'response'],
 	},
 }
 
-/** The `delete_todo` schema: which todo(s) to remove (by id) + the standard `response`. */
-const DELETE_TODO_TOOL: ToolDef = {
-	name: 'delete_todo',
-	description:
-		"Remove EXISTING todo(s) from the current identity's task list. Call this when the user wants " +
-		'to delete, remove, or clear a task. Read the todo list shown above the user message and copy ' +
-		'the EXACT id(s) into `id` (comma-separate several to remove them at once).',
-	parameters: {
-		type: 'object',
-		properties: {
-			id: {
-				type: 'string',
-				description:
-					'The exact id(s) of the target todo(s), copied from the list — comma-separated for several.',
-			},
-			...RESPONSE_PROP,
-		},
-		required: ['id', 'response'],
-	},
+/** One entry of the model's `items` batch (all fields optional — validated per action). */
+type TodoItemArg = { id?: unknown; title?: unknown; done?: unknown }
+
+/** Human summary for a completed batch: singular keys for one item, plural for several. */
+function todosSummary(
+	action: 'create' | 'update' | 'delete',
+	titles: string[],
+): { message: string; response: string } {
+	const base = { create: 'todoAdded', update: 'todoUpdated', delete: 'todoDeleted' }[action]
+	if (titles.length === 1) {
+		return {
+			message: t(`identities.talk.${base}`, { title: titles[0] }),
+			response: t(`identities.talk.${base}Reply`, { title: titles[0] }),
+		}
+	}
+	const params = { count: titles.length, titles: titles.join(', ') }
+	const plural = base.replace('todo', 'todos')
+	return {
+		message: t(`identities.talk.${plural}`, params),
+		response: t(`identities.talk.${plural}Reply`, params),
+	}
 }
 
 /**
- * Resolve the model's `id` arg to real todos (deduped). The model copies the exact id(s) it was
- * shown in the list; for several it separates them with commas / "and". Split ONLY on those (not
- * on hyphens etc.) so full ids stay intact.
+ * The generic todos executor. `list` reads live rows and returns them as the machine-facing
+ * `toolResult` (JSON) for the agent loop; mutations run the batch item-by-item, collecting
+ * per-item errors instead of failing the whole call.
  */
-function resolveTargets(
-	raw: unknown,
-	ctx: ToolContext,
-): { id: string; title: string; done: boolean }[] {
-	const ids = String(raw ?? '')
-		.split(/\s*(?:,|;|\band\b|\bund\b)\s*/iu)
-		.map((s) => s.trim())
-		.filter(Boolean)
-	const seen = new Set<string>()
-	const out: { id: string; title: string; done: boolean }[] = []
-	for (const id of ids) {
-		const todo = ctx.resolveTodo(id)
-		if (todo && !seen.has(todo.id)) {
-			seen.add(todo.id)
-			out.push(todo)
-		}
-	}
-	return out
-}
-
-/** The rename executor: set the new title on the one todo the model picked. */
-async function executeRenameTodo(
+async function executeTodos(
 	args: Record<string, unknown>,
 	ctx: ToolContext,
 ): Promise<ToolDispatchResult> {
-	const raw = String(args.id ?? '').trim()
-	const title = String(args.title ?? '').trim()
-	if (!raw) return { ok: false, message: t('identities.talk.todoEmpty') }
-	if (!title) return { ok: false, message: t('identities.talk.todoNoChange') }
-	const target = ctx.resolveTodo(raw)
-	if (!target) return { ok: false, message: t('identities.talk.todoNotFound', { query: raw }) }
-	try {
-		await ctx.updateTodoById(target.id, { title })
+	const action = String(args.action ?? '')
+		.trim()
+		.toLowerCase()
+	const items = Array.isArray(args.items) ? (args.items as TodoItemArg[]) : []
+
+	if (action === 'list') {
+		const todos = ctx.listTodos()
 		return {
 			ok: true,
-			message: t('identities.talk.todoUpdated', { title }),
-			response: t('identities.talk.todoUpdatedReply', { title }),
+			message: t('identities.talk.todosListed', { count: todos.length }),
+			toolResult: JSON.stringify(todos),
 		}
-	} catch (e) {
-		return { ok: false, message: e instanceof Error ? e.message : String(e) }
 	}
-}
+	if (action !== 'create' && action !== 'update' && action !== 'delete') {
+		return {
+			ok: false,
+			message: t('identities.talk.todoNoChange'),
+			toolResult: `unknown action: ${action || '?'}`,
+		}
+	}
+	if (items.length === 0) {
+		return {
+			ok: false,
+			message: t('identities.talk.todoEmpty'),
+			toolResult: `${action}: items is empty`,
+		}
+	}
 
-/** The toggle executor: flip done on the id(s) the model picked — no boolean for it to omit. */
-async function executeToggleTodo(
-	args: Record<string, unknown>,
-	ctx: ToolContext,
-): Promise<ToolDispatchResult> {
-	const raw = String(args.id ?? '').trim()
-	if (!raw) return { ok: false, message: t('identities.talk.todoEmpty') }
-	const targets = resolveTargets(raw, ctx)
-	if (targets.length === 0) return { ok: false, message: t('identities.talk.todoNotFound', { query: raw }) }
-	try {
-		for (const target of targets) await ctx.updateTodoById(target.id, { done: !target.done })
-		if (targets.length === 1) {
-			return {
-				ok: true,
-				message: t('identities.talk.todoUpdated', { title: targets[0].title }),
-				response: t('identities.talk.todoUpdatedReply', { title: targets[0].title }),
+	const errors: string[] = []
+	const titles: string[] = []
+	for (const item of items) {
+		try {
+			if (action === 'create') {
+				const title = String(item.title ?? '').trim()
+				if (!title) {
+					errors.push('create: missing title')
+					continue
+				}
+				await ctx.createTodo(title)
+				titles.push(title)
+				continue
 			}
-		}
-		const titles = targets.map((tt) => tt.title).join(', ')
-		return {
-			ok: true,
-			message: t('identities.talk.todosUpdated', { count: targets.length, titles }),
-			response: t('identities.talk.todosUpdatedReply', { count: targets.length }),
-		}
-	} catch (e) {
-		return { ok: false, message: e instanceof Error ? e.message : String(e) }
-	}
-}
-
-/** The todo-delete executor: remove the id(s) the model picked from the list it was shown. */
-async function executeDeleteTodo(
-	args: Record<string, unknown>,
-	ctx: ToolContext,
-): Promise<ToolDispatchResult> {
-	const raw = String(args.id ?? '').trim()
-	if (!raw) return { ok: false, message: t('identities.talk.todoEmpty') }
-	const targets = resolveTargets(raw, ctx)
-	if (targets.length === 0) return { ok: false, message: t('identities.talk.todoNotFound', { query: raw }) }
-	try {
-		for (const target of targets) await ctx.deleteTodoById(target.id)
-		if (targets.length === 1) {
-			return {
-				ok: true,
-				message: t('identities.talk.todoDeleted', { title: targets[0].title }),
-				response: t('identities.talk.todoDeletedReply', { title: targets[0].title }),
+			const id = String(item.id ?? '').trim()
+			const target = ctx.resolveTodo(id)
+			if (!target) {
+				errors.push(`${action}: no todo with id "${id}"`)
+				continue
 			}
+			if (action === 'delete') {
+				await ctx.deleteTodoById(target.id)
+			} else {
+				const patch: { title?: string; done?: boolean } = {}
+				const title = item.title === undefined ? '' : String(item.title).trim()
+				if (title) patch.title = title
+				if (typeof item.done === 'boolean') patch.done = item.done
+				if (Object.keys(patch).length === 0) {
+					errors.push(`update: nothing to change on "${id}"`)
+					continue
+				}
+				await ctx.updateTodoById(target.id, patch)
+			}
+			titles.push(target.title)
+		} catch (e) {
+			errors.push(e instanceof Error ? e.message : String(e))
 		}
-		const titles = targets.map((tt) => tt.title).join(', ')
-		return {
-			ok: true,
-			message: t('identities.talk.todosDeleted', { count: targets.length, titles }),
-			response: t('identities.talk.todosDeletedReply', { count: targets.length }),
-		}
-	} catch (e) {
-		return { ok: false, message: e instanceof Error ? e.message : String(e) }
+	}
+
+	const toolResult = JSON.stringify({
+		ok: errors.length === 0,
+		action,
+		changed: titles.length,
+		errors,
+	})
+	if (titles.length === 0) {
+		return { ok: false, message: errors.join('; ') || t('identities.talk.todoEmpty'), toolResult }
+	}
+	const { message, response } = todosSummary(action, titles)
+	return {
+		ok: errors.length === 0,
+		message: errors.length > 0 ? `${message} · ⚠️ ${errors.join('; ')}` : message,
+		response,
+		toolResult,
 	}
 }
 
@@ -380,14 +345,40 @@ async function executeDeleteTodo(
 
 const TOOLS: Record<string, ToolEntry> = {
 	[NAVIGATE_VIEWS_TOOL.name]: { def: NAVIGATE_VIEWS_TOOL, execute: executeNavigateViews },
-	[CREATE_TODO_TOOL.name]: { def: CREATE_TODO_TOOL, execute: executeCreateTodo },
-	[RENAME_TODO_TOOL.name]: { def: RENAME_TODO_TOOL, execute: executeRenameTodo },
-	[TOGGLE_TODO_TOOL.name]: { def: TOGGLE_TODO_TOOL, execute: executeToggleTodo },
-	[DELETE_TODO_TOOL.name]: { def: DELETE_TODO_TOOL, execute: executeDeleteTodo },
+	[TODOS_TOOL.name]: { def: TODOS_TOOL, execute: executeTodos },
 }
 
-/** The tools advertised to the model on every identity-agent generation. */
-export const LLM_TOOLS: ToolDef[] = Object.values(TOOLS).map((e) => e.def)
+/**
+ * Tools advertised to the ON-DEVICE 1.2B model: navigation only. Todo CRUD is the generic,
+ * batch `todos` tool (nested JSON arrays + an agentic list→mutate loop) — more than the 1.2B
+ * can reliably emit — so it's reserved for the Tinfoil cloud model (see {@link CLOUD_TOOLS}).
+ */
+export const LLM_TOOLS: ToolDef[] = [NAVIGATE_VIEWS_TOOL]
+
+/**
+ * Tools advertised to the Tinfoil CLOUD model: navigation + the generic `todos` CRUD tool.
+ * The cloud path runs a real tool loop, so the model calls `todos {action:"list"}` to learn
+ * ids, then batches create/update/delete — no app-side id matching or keyword parsing.
+ */
+export const CLOUD_TOOLS: ToolDef[] = [NAVIGATE_VIEWS_TOOL, TODOS_TOOL]
+
+/** Hard cap on the cloud agentic tool loop (list → mutate → reply) so one turn can't run away. */
+export const MAX_TOOL_ROUNDS = 5
+
+/** System prompt for the cloud agent: act via tools, query before mutating, reply concisely. */
+export const CLOUD_SYSTEM_PROMPT =
+	'You are Aven, the assistant inside one identity. Fulfil the user request by calling the ' +
+	'provided tools. To edit or delete todos you MUST first call `todos` with action "list" to ' +
+	'get the real ids, then call `todos` again with the exact ids. Batch related changes into one ' +
+	"call. When the task is done, reply with a short, friendly sentence in the user's language."
+
+/** Map our {@link ToolDef}s onto the OpenAI `tools` array shape the Tinfoil SDK expects. */
+export function toOpenAiTools(defs: ToolDef[]): unknown[] {
+	return defs.map((d) => ({
+		type: 'function',
+		function: { name: d.name, description: d.description, parameters: d.parameters },
+	}))
+}
 
 /** Dispatch a tool call to its executor (the router). Unknown tools are surfaced, not thrown. */
 export function executeToolCall(
@@ -499,20 +490,42 @@ export async function resolveAgentTurn(opts: {
 		return recordFrom('navigate_views', args, exec, true)
 	}
 
-	// A real tool call that genuinely failed (e.g. `create_todo` couldn't write the row) — show
-	// the failure chip (tool name + error) instead of a misleading "Sure, done!" respond bubble.
+	// A real tool call that genuinely failed (e.g. `todos` couldn't write the row) — show the
+	// failure chip (tool name + error) instead of a misleading "Sure, done!" respond bubble.
 	if (failed) return recordFrom(failed.name, failed.args, failed.exec, false)
 
-	const text = prose.trim()
+	return respondRecord(prose)
+}
+
+/** Wrap free text as a `respond` tool-call record (the agent is tool-call-only — prose is never
+ *  shown bare). Used by the local prose fallback and the cloud loop's final reply. */
+export function respondRecord(text: string): ToolCallRecord {
+	const trimmed = text.trim()
 	return {
 		kind: 'tool_call',
 		name: 'respond',
-		arguments: { response: text },
-		response: text || t('identities.talk.agentNoReply'),
+		arguments: { response: trimmed },
+		response: trimmed || t('identities.talk.agentNoReply'),
 		result: '',
 		ok: true,
 		inferred: false,
 	}
+}
+
+/**
+ * Build a {@link ToolCallRecord} from an executed cloud tool call. The cloud loop persists one
+ * record per turn (the last meaningful tool call), so the existing chip UI + TTS speak path work
+ * unchanged. `response` prefers the model's final reply, else the record's own response.
+ */
+export function cloudToolRecord(
+	name: string,
+	args: Record<string, unknown>,
+	exec: ToolDispatchResult,
+	finalReply?: string,
+): ToolCallRecord {
+	const rec = recordFrom(name, args, exec, false)
+	const reply = (finalReply ?? '').trim()
+	return reply ? { ...rec, response: reply } : rec
 }
 
 /** Encode a record into a message body string (persisted; parsed back on render/reload). */

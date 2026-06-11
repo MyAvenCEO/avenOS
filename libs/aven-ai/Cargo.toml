@@ -30,6 +30,11 @@ llama = ["dep:llama-cpp-2", "dep:llama-cpp-sys-2", "dep:ureq", "dep:serde_json",
 # shared `download` module + the ort `load-dynamic` bundled-dylib path; the `onnx`
 # module supplies the ort KV-cache/init helpers. Streams 48 kHz PCM frames.
 tts = ["dep:ort", "dep:half", "dep:tokenizers", "dep:ureq", "dep:serde", "dep:serde_json", "dep:log"]
+# Confidential CLOUD chat via the Tinfoil enclave SDK (OpenAI-compatible chat with tool
+# calling; enclave attestation built in). Key comes from `TINFOIL_API_KEY` in the env —
+# local-dev only for now, no proxy/key storage. NOTE: the `tinfoil` crate is git-only
+# (not on crates.io) and AGPL-3.0 — revisit the license before shipping (board 0021).
+tinfoil = ["dep:tinfoil", "dep:tokio", "dep:serde", "dep:serde_json", "dep:log"]
 
 [dependencies]
 # STT engine + first-run model download (tar.bz2 from GitHub releases) + extract.
@@ -53,6 +58,11 @@ llama-cpp-2 = { version = "0.1.146", optional = true }
 # Raw bindings (same build as llama-cpp-2 above) — only for `llama_log_set`/`ggml_log_set`
 # to silence llama.cpp's verbose INFO logging via a C callback.
 llama-cpp-sys-2 = { version = "0.1.146", optional = true }
+# Tinfoil enclave client (wraps async-openai; verifies enclave attestation on connect).
+# Git-only: the crate is not published on crates.io.
+tinfoil = { git = "https://github.com/tinfoilsh/tinfoil-rs", optional = true }
+# Async client cache for the `tinfoil` path (the SDK is async; Tauri supplies the runtime).
+tokio = { version = "1", optional = true, default-features = false, features = ["sync"] }
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
 # Apple GPU backend (Metal) for the llama.cpp LLM path; Metal shaders embed into the binary.

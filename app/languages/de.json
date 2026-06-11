@@ -455,7 +455,10 @@
 			"todosUpdated": "✓ {count} Todos aktualisiert: {titles}",
 			"todosUpdatedReply": "{count} Todos aktualisiert.",
 			"todosDeleted": "✓ {count} Todos gelöscht: {titles}",
-			"todosDeletedReply": "{count} Todos aus deiner Liste entfernt."
+			"todosDeletedReply": "{count} Todos aus deiner Liste entfernt.",
+			"todosListed": "📋 {count} Aufgaben",
+			"todosAdded": "✓ {count} Todos hinzugefügt: {titles}",
+			"todosAddedReply": "{count} Todos zu deiner Liste hinzugefügt."
 		},
 		"todos": {
 			"title": "Todos",

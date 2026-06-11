@@ -39,3 +39,7 @@ pub mod embed;
 
 #[cfg(feature = "tts")]
 pub mod tts;
+
+/// Confidential cloud chat via the Tinfoil enclave SDK (OpenAI-compatible, tool calling).
+#[cfg(feature = "tinfoil")]
+pub mod tinfoil;

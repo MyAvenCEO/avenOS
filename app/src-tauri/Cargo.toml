@@ -40,10 +40,14 @@ path = "src/main.rs"
 # standalone dylibs), so it stays desktop-only behind `desktop-ai`.
 # (`--no-default-features` still gives the light stub build for CI / quick checks.)
 default = ["local-voice"]
-# Desktop (macOS) bundle of on-device AI on top of STT: llama.cpp LLM + MOSS TTS.
-# macOS release + dev pass `--features desktop-ai`. iOS opts into `local-llama` directly
-# (LLM yes, TTS no — see above).
-desktop-ai = ["local-llama", "local-tts"]
+# Desktop (macOS) bundle of on-device AI on top of STT: llama.cpp LLM + MOSS TTS,
+# plus the Tinfoil confidential-cloud chat path (activates only when `TINFOIL_API_KEY`
+# is set in the env — local dev). macOS release + dev pass `--features desktop-ai`.
+# iOS opts into `local-llama` directly (LLM yes, TTS no — see above).
+desktop-ai = ["local-llama", "local-tts", "tinfoil"]
+# Confidential CLOUD chat (Tinfoil enclave, OpenAI-compatible tool calling) — board 0021.
+# Desktop/local-dev only; the webview drives the tool loop via `tinfoil_chat`.
+tinfoil = ["dep:aven-ai", "aven-ai/tinfoil"]
 # On-device voice-note transcription (NVIDIA Parakeet-TDT-0.6b-v3 via the
 # `sherpa-onnx` crate, ONNX/int8). The `sherpa-onnx-sys` build script downloads
 # prebuilt static libs (incl. onnxruntime); iOS uses the vendored arm64 libs.

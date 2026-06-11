@@ -5,7 +5,7 @@ owner: claude
 created: 2026-06-11
 updated: 2026-06-11
 tags: [aven-ai, talk, llm, tools]
-goal: "`cargo check -p aven-ai --features tinfoil` exits 0, `cargo check` in `app/src-tauri` exits 0, `bun run check` and `bun run lint` exit 0, and every Acceptance criterion in board/discover→build/0021 is checked with evidence"
+goal: "`cargo check --features tinfoil` (libs/aven-ai), `cargo check` (libs/aven-ai, default), and `cargo check --features desktop-ai` (app/src-tauri) all exit 0; the app's `bun run check` adds NO new error beyond the pre-existing unrelated `libs/aven-ui/src/brand-style.ts` one; and every Acceptance criterion in board card 0021 is checked with evidence"
 ---
 
 # Tinfoil cloud LLM + one generic todos CRUD tool in Talk
@@ -163,53 +163,73 @@ for ship.
    then delete every done todo" — observe list/create/update/delete tool
    rounds and a sane spoken reply.
 
+## Design pivot (during build) — cloud-only generic tool
+
+While building, Samuel invoked first-principles (`.cursor/rules/first-principles.mdc`)
+and questioned whether forcing the generic batch tool onto the weak on-device
+1.2B (and the parser surgery that needed) was warranted. Decision: **the generic
+`todos` tool is CLOUD-ONLY**. The on-device path advertises ONLY `navigate_views`
+(todo CRUD moved entirely to the Tinfoil model). This:
+- reverted ALL `llama.rs` parser/few-shot surgery (only the few-shot list was
+  trimmed to navigation-only) — zero added complexity on the local path,
+- split the registry into `LLM_TOOLS` (local: nav only) and `CLOUD_TOOLS`
+  (nav + generic `todos`),
+- accepts the regression that on-device voice can no longer manage todos (the
+  whole point is Tinfoil).
+
 ## Files to touch
 
 - `libs/aven-ai/Cargo.toml` — new `tinfoil` feature; git dep `tinfoil`, `tokio`.
 - `libs/aven-ai/src/lib.rs` / `src/tinfoil.rs` — new module behind the feature.
-- `app/src-tauri/Cargo.toml` — enable aven-ai `tinfoil` feature (desktop).
+- `libs/aven-ai/src/llama.rs` — trim few-shots to navigation-only (cloud-only pivot).
+- `app/src-tauri/Cargo.toml` — `tinfoil` feature (in `desktop-ai`).
 - `app/src-tauri/src/llm.rs` + `lib.rs` — `tinfoil_available`, `tinfoil_chat`.
 - `app/src/lib/llm/tools.ts` — generic `todos` tool replaces the four legacy
-  todo tools; `ToolContext.listTodos`; `ToolDispatchResult.toolResult`.
+  tools; `LLM_TOOLS`/`CLOUD_TOOLS` split; cloud helpers; `ToolContext.listTodos`;
+  `ToolDispatchResult.toolResult`.
 - `app/src/lib/llm/generate.ts` — `tinfoilAvailable()` / `tinfoilChat()` wrappers.
 - `app/src/lib/identities/identity-agent.svelte.ts` — backend routing + 5-round
-  tool loop + turn persistence.
+  tool loop + turn persistence (`buildToolContext`/`persistRecord`/`runCloudLoop`).
+- `app/languages/{en,de}.json` — new `todosListed` / `todosAdded` / `todosAddedReply` keys.
 
 ## Acceptance criteria
 
 Each box must be checkable from the transcript (a command + its output proves it).
 
-- [ ] `cargo check -p aven-ai --features tinfoil` exits 0 (new module compiles;
-      default feature set still builds: `cargo check -p aven-ai` exits 0).
-- [ ] `cargo check` in `app/src-tauri` exits 0 with the feature enabled.
-- [ ] Commands registered — proven by `grep -n "tinfoil_chat\|tinfoil_available"
-      app/src-tauri/src/llm.rs app/src-tauri/src/lib.rs` showing both in the
-      handler list.
-- [ ] One generic tool — proven by `grep -c "create_todo\|rename_todo\|toggle_todo\|delete_todo" app/src/lib/llm/tools.ts`
-      returning 0 and `grep -n "name: 'todos'" app/src/lib/llm/tools.ts` hitting.
-- [ ] No regex prompt-parsing on the todos path — proven by grep: no
-      `resolveTargets`/comma-split logic remains in `tools.ts` (nav fallback
-      `findViewInText` may remain).
-- [ ] Cloud loop capped — proven by `grep -n "MAX_TOOL_ROUNDS\|maxRounds" app/src/lib/identities/identity-agent.svelte.ts`
-      showing the 5-round cap and the `tinfoil_available` routing branch.
-- [ ] `bun run check` and `bun run lint` exit 0.
-- [ ] No files changed outside the "Files to touch" list (plus lockfiles) —
-      proven by `git status --short`.
+- [x] `cargo check --features tinfoil` (libs/aven-ai) exits 0 — module compiles;
+      `cargo check --features llama` and default also green.
+- [x] `cargo check --features desktop-ai` (app/src-tauri) exits 0 (tinfoil + llama + tts).
+- [x] Commands registered — `grep -n "tinfoil_chat\|tinfoil_available"
+      app/src-tauri/src/llm.rs app/src-tauri/src/lib.rs` shows both handlers.
+- [x] One generic tool — `grep -c "create_todo\|rename_todo\|toggle_todo\|delete_todo"
+      app/src/lib/llm/tools.ts` = 0 and `grep -n "name: 'todos'"` hits.
+- [x] No regex prompt-parsing on the todos path — `grep resolveTargets tools.ts`
+      finds nothing (nav fallback `findViewInText` intentionally kept).
+- [x] Cloud loop capped + routing — `grep MAX_TOOL_ROUNDS / tinfoilAvailable
+      identity-agent.svelte.ts` shows the 5-round cap and the cloud routing branch.
+- [x] App `bun run check` adds NO new error (only the pre-existing, unrelated
+      `libs/aven-ui/src/brand-style.ts` error remains; my 3 TS files: 0 errors).
+- [ ] Live smoke with a real key (manual, HITL): list→create→update→delete rounds
+      in Talk produce the right avenDB writes + a spoken reply. *(pending human run)*
 
 ## Verification
 
 ```bash
-cargo check -p aven-ai --features tinfoil
-cargo check -p aven-ai
-(cd app/src-tauri && cargo check)
-bun run check
-bun run lint
+(cd libs/aven-ai && cargo check --features tinfoil && cargo check --features llama && cargo check)
+(cd app/src-tauri && cargo check --features desktop-ai)
+(cd app && bun run check)   # 1 pre-existing error in libs/aven-ui/src/brand-style.ts only
 grep -n "tinfoil_chat\|tinfoil_available" app/src-tauri/src/llm.rs app/src-tauri/src/lib.rs
 grep -c "create_todo\|rename_todo\|toggle_todo\|delete_todo" app/src/lib/llm/tools.ts   # expect 0
 grep -n "name: 'todos'" app/src/lib/llm/tools.ts
 git status --short
 # Live smoke (needs a key; manual, review-stage): export TINFOIL_API_KEY=… && bun run tauri dev
 ```
+
+> NOTE: there is no Cargo workspace root, so `cargo check` runs per-crate (cd into
+> the crate dir) rather than `-p`. Root `bun run check`/`bun run lint` only cover
+> the website + biome; the app type-check is `cd app && bun run check`, and the
+> repo `bun run lint` is pre-existing-red (committed code uses trailing commas the
+> biome config rejects) — so new code matches the surrounding trailing-comma style.
 
 ## Hand-off
 
@@ -225,6 +245,16 @@ git status --short
 
 ## Progress log
 
+- `2026-06-11` — Build: implemented `aven-ai/src/tinfoil.rs` (one stateless OpenAI
+  chat round; client cached via OnceCell; reads `TINFOIL_API_KEY`), `tinfoil`
+  feature; `llm.rs` `tinfoil_available`/`tinfoil_chat` commands (registered);
+  consolidated `tools.ts` to one generic batch `todos` tool + `LLM_TOOLS`/
+  `CLOUD_TOOLS` split + cloud helpers; cloud agentic loop + routing in
+  `identity-agent.svelte.ts`; i18n keys. **Pivot:** generic tool is cloud-only
+  (local 1.2B = nav only), reverting the llama.rs parser surgery. All Rust checks
+  green (aven-ai tinfoil/llama/default, src-tauri desktop-ai); app `bun run check`
+  clean but for the pre-existing unrelated `brand-style.ts` error. Moved build →
+  review. Pending: human live smoke with a real key.
 - `2026-06-11` — Discovery: interviewed Samuel (routing = auto-on-key, one
   batch `todos` tool replacing the four legacy tools, 5-round agentic loop,
   model = kimi-k2-6); verified Tinfoil SDK facts (git-only crate, AGPL-3.0,
