@@ -317,8 +317,9 @@ them through **per-table ingestion adapters** (§2.4). Ingest **never blocks the
    adapter may schedule — writes never block on a model. Rung 2 = the parked attested-TEE
    extractor (Appendix B), same trait.
 8. **Dreaming is a scheduler, not a bedtime.** All passes are idempotent → trigger freely:
-   every N turns, on idle, on app open/close, manual. Cheap code passes (decay/merge/verify)
-   run often; local-LLM passes batch on idle; remote passes rarest.
+   **after every turn** (live as of 2026-06-11 — fire-and-forget post-reply), on idle, on app
+   open/close, manual. Cheap code passes (decay/merge/verify/consolidate) run continuously;
+   model-assisted passes (GLM-5.1) batch on idle; remote passes rarest.
 5. **Idempotent + convergent**: `content_hash` dedup before embedding; deterministic extraction
    ⇒ two devices ingesting the same content converge (row dedup by hash, entity dedup by
    dreaming's merge, note links idempotent by definition).
@@ -399,8 +400,14 @@ reference in Appendix B.
 
 ### 7.1 Forever talk — the brain is the context manager
 
-There are no sessions (storage already is one identity-scoped stream). Today's prompt is
-literally `todoPreamble + userPrompt` (`identity-agent.svelte.ts::replyWithAgent`). New flow:
+There are no sessions (storage already is one identity-scoped stream). The brain assembles the
+context **fresh on every turn** — no per-session or per-day summary stands in for live recall;
+this is the closest to realtime, fully-dynamic auto context management we can do. **Live as of
+2026-06-11:** `submit` ingests the turn, awaits `brain_assemble_context`, and passes
+`bundle.prompt` into the cloud reply as a second `system` message ("What you remember…");
+**dreaming fires fire-and-forget after every turn** (idempotent/deterministic ⇒ continuous
+upkeep, not a nightly batch). Today's prompt was `todoPreamble + userPrompt`
+(`identity-agent.svelte.ts::replyWithAgent`); the assembled-context flow:
 
 ```
 submit(message, files)
@@ -562,6 +569,19 @@ deterministic pass is load-bearing without it. Revisit after E7.
 ## Progress log
 
 Newest entry first.
+
+- `2026-06-11` — **Auto-assemble UN-parked + dreaming per-turn: the brain now actually feeds
+  the LLM.** `submit` (`identity-agent.svelte.ts`) ingests the turn, awaits
+  `brainAssembleContext`, and passes `bundle.prompt` into `runCloudLoop` as a second `system`
+  message ("What you remember…") — so the cloud reply is grounded in L0 self · L1 gist ·
+  working window · live RRF recall · entity cards instead of `[system, message]` alone. Same
+  assembled bundle still drives the roundtrip aside (now labeled "sent to the AI as context
+  this turn" — no longer display-only). Reassembled fresh every turn: no per-session/day
+  summary substitutes for live recall — realtime, fully-dynamic context. **Dreaming now fires
+  fire-and-forget after every turn** (idempotent/deterministic ⇒ continuous upkeep, not a
+  nightly batch): heal claims, merge entities, decay bonds, consolidate. Graceful degradation
+  intact: any brain error → context-free reply, talk loop never blocks. §6/§7.1/law-8 updated.
+  svelte-check clean (1 pre-existing aven-ui error).
 
 - `2026-06-11` — **E6 closed + E7 second half shipped: dreaming v2, re-embed, Gemma download
   UX.** Brain lib (**27/27 tests**): `dream_at` now also runs **verify_claims** (same-object

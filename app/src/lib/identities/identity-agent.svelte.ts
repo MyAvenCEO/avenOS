@@ -13,7 +13,7 @@
 import { getContext, setContext } from 'svelte'
 import { persistSparkFiles } from '$lib/avendb/intent-files'
 import type { AvenDbStore } from '$lib/avendb/store.svelte'
-import { brainAssembleContext, brainIngest } from '$lib/brain/api'
+import { brainAssembleContext, brainDream, brainIngest } from '$lib/brain/api'
 import { beginRoundtrip, patchRoundtrip } from '$lib/identities/talk-brain-roundtrip.svelte'
 import { tinfoilAvailable, tinfoilChat } from '$lib/llm/generate'
 import {
@@ -30,9 +30,10 @@ import {
 	toOpenAiTools
 } from '$lib/llm/tools'
 
-// PURE-CLOUD MODE (board 0022): the on-device LFM + brain-recall reply path is disabled — see
-// the commented `replyWithAgent` block below. To restore local mode, re-add these imports:
-//   import { brainAssembleContext } from '$lib/brain/api'
+// PURE-CLOUD MODE (board 0022): replies go to the Tinfoil cloud agent, now GROUNDED in the
+// brain's auto-assembled context (see `submit` → `replyWithAgent` → `runCloudLoop`). The
+// on-device LFM2.5 stream + brain-recall structured reply stay disabled — preserved in the
+// commented block below. To restore local mode, re-add these imports:
 //   import { avenDbTable } from '$lib/avendb/api'
 //   import { streamReply } from '$lib/llm/generate'
 //   import { LLM_TOOLS, resolveAgentTurn, type LlmToolCall } from '$lib/llm/tools'
@@ -227,12 +228,21 @@ export function createIdentityAgent(deps: {
 	async function runCloudLoop(
 		prompt: string,
 		replyId: string,
-		ctx: ToolContext
+		ctx: ToolContext,
+		context?: string
 	): Promise<ToolCallRecord> {
-		const messages: unknown[] = [
-			{ role: 'system', content: CLOUD_SYSTEM_PROMPT },
-			{ role: 'user', content: prompt }
-		]
+		// The brain's auto-assembled context (L0 self · L1 gist · working window · live recall ·
+		// entity cards) rides as a second system message — so the model answers WITH memory, not
+		// from nothing. It's reassembled fresh every turn (no per-session/day summary): the closest
+		// to realtime, fully-dynamic context management we can do.
+		const messages: unknown[] = [{ role: 'system', content: CLOUD_SYSTEM_PROMPT }]
+		if (context && context.trim()) {
+			messages.push({
+				role: 'system',
+				content: `What you remember (auto-assembled from memory — use it to ground your reply):\n\n${context}`
+			})
+		}
+		messages.push({ role: 'user', content: prompt })
 		const tools = toOpenAiTools(CLOUD_TOOLS)
 		let last: { name: string; args: Record<string, unknown>; exec: ToolDispatchResult } | undefined
 
@@ -276,7 +286,11 @@ export function createIdentityAgent(deps: {
 	 * brain-recall structured reply are disabled for now — preserved in the commented block below
 	 * so local mode can be restored by uncommenting it (and re-adding the imports listed up top).
 	 */
-	async function replyWithAgent(prompt: string, _userRowId?: string): Promise<void> {
+	async function replyWithAgent(
+		prompt: string,
+		_userRowId?: string,
+		context?: string
+	): Promise<void> {
 		const env = deps.env()
 		if (!env.canonicalSparkId) return
 		let replyId: string | undefined
@@ -305,7 +319,7 @@ export function createIdentityAgent(deps: {
 				)
 				return
 			}
-			const record = await runCloudLoop(prompt, reply.id, ctx)
+			const record = await runCloudLoop(prompt, reply.id, ctx, context)
 			await persistRecord(env, reply.id, record)
 
 			/* ───────────────── DISABLED: on-device LFM + brain-recall fallback ─────────────────
@@ -405,31 +419,33 @@ export function createIdentityAgent(deps: {
 				role: 'user',
 				body
 			})
-			// E3: the brain reads along — fire-and-forget, never blocks the talk loop.
-			// E5 v1: capture the roundtrip (stored + a DISPLAY-ONLY assemble probe) for the
-			// brain aside. Nothing from the probe is sent to any LLM (auto-assemble parked).
+			// The brain is the context manager. Store the turn, then assemble the auto-managed
+			// context (L0 self · L1 gist · working window · live recall · entity cards) — this both
+			// drives the roundtrip aside AND grounds the LLM reply below. Reassembled fresh every
+			// turn (no per-session/day summary): realtime, fully-dynamic context. Best-effort —
+			// any brain error falls back to a context-free reply.
+			let assembledContext: string | undefined
 			if (body) {
 				beginRoundtrip(env.canonicalSparkId, row.id, body)
-				void (async () => {
-					try {
-						const { id: memoryId } = await brainIngest(env.canonicalSparkId, body, {
-							stream: 'talk',
-							authorRole: 'user',
-							source: row.id,
-							contentDateMs: Date.now(),
-							veracity: 'stated'
-						})
-						patchRoundtrip(row.id, { memoryId, phase: 'recalling' })
-						const bundle = await brainAssembleContext(env.canonicalSparkId, body, {
-							stream: 'talk'
-						})
-						patchRoundtrip(row.id, { trace: bundle.trace, phase: 'done' })
-					} catch (e) {
-						const msg = e instanceof Error ? e.message : String(e)
-						console.error('[brain] roundtrip failed:', msg)
-						patchRoundtrip(row.id, { error: msg, phase: 'error' })
-					}
-				})()
+				try {
+					const { id: memoryId } = await brainIngest(env.canonicalSparkId, body, {
+						stream: 'talk',
+						authorRole: 'user',
+						source: row.id,
+						contentDateMs: Date.now(),
+						veracity: 'stated'
+					})
+					patchRoundtrip(row.id, { memoryId, phase: 'recalling' })
+					const bundle = await brainAssembleContext(env.canonicalSparkId, body, {
+						stream: 'talk'
+					})
+					assembledContext = bundle.prompt
+					patchRoundtrip(row.id, { trace: bundle.trace, phase: 'done' })
+				} catch (e) {
+					const msg = e instanceof Error ? e.message : String(e)
+					console.error('[brain] roundtrip failed:', msg)
+					patchRoundtrip(row.id, { error: msg, phase: 'error' })
+				}
 			}
 			if (files.length > 0) {
 				const { stored, errors } = await persistSparkFiles(row.id, files, {
@@ -442,8 +458,12 @@ export function createIdentityAgent(deps: {
 							: `Message sent but files failed: ${errors.join('; ')}`
 				}
 			}
-			// Fire the on-device agent reply (text-only prompts for now).
-			if (body) await replyWithAgent(body, row.id)
+			// Fire the agent reply, grounded in the auto-assembled context.
+			if (body) await replyWithAgent(body, row.id, assembledContext)
+			// Dreaming runs after every turn (idempotent, deterministic, cheap): heal claims,
+			// merge entities, decay bonds, consolidate — continuous upkeep, not a nightly batch.
+			// Fire-and-forget so it never blocks the talk loop.
+			if (body) void brainDream(env.canonicalSparkId).catch(() => {})
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {
