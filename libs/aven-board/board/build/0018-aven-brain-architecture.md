@@ -302,6 +302,15 @@ them through **per-table ingestion adapters** (§2.4). Ingest **never blocks the
    hallucination-contained (agent claims enter as `inferred` text that dreaming verifies
    before promotion). The dreaming extractor is schema-constrained JSON at temp 0 — its
    output also lands as links via code, never as freehand writes.
+6. **Structuring is alongside, never between.** Raw artifact text always ingests instantly
+   (rung 0 on the raw text); an optional async LFM2.5 pass may add a *structured note* as
+   its own memory (`inferred`, `refers_to` the original) whose markup rung 0 then parses.
+   Adapters (§2.4) are the deterministic always-on layer; structuring is an enrichment an
+   adapter may schedule — writes never block on a model. Rung 2 = the parked attested-TEE
+   extractor (Appendix B), same trait.
+7. **Dreaming is a scheduler, not a bedtime.** All passes are idempotent → trigger freely:
+   every N turns, on idle, on app open/close, manual. Cheap code passes (decay/merge/verify)
+   run often; local-LLM passes batch on idle; remote passes rarest.
 5. **Idempotent + convergent**: `content_hash` dedup before embedding; deterministic extraction
    ⇒ two devices ingesting the same content converge (row dedup by hash, entity dedup by
    dreaming's merge, note links idempotent by definition).
