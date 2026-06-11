@@ -205,28 +205,31 @@ pub(super) fn json_to_text_storage_cell(
 	))
 }
 
+/// JSON boundary → name-keyed cells for the universal schema-checked create
+/// (`create_checked*`, board 0020). This only decodes JSON per the column's type;
+/// row resolution (missing-required error, nullable Null-fill) is owned by
+/// aven-db's `resolve_named_row`. Unknown keys error here — never silently dropped.
 pub(super) fn insert_values(
 	table: &str,
 	table_schema: &TableSchema,
 	values: JsonRow,
-) -> Result<Vec<Value>, String> {
-	let cols = &table_schema.columns.columns;
-	let mut row = Vec::with_capacity(cols.len());
-	for cd in cols {
-		let key = cd.name_str();
-		let cv = values.get(key);
-		let val = match cv {
-			None if cd.nullable => Value::Null,
-			None => return Err(format!("missing column `{key}`")),
-			Some(js) => {
-				if matches!(cd.column_type, ColumnType::Text) {
-					json_to_text_storage_cell(table, key, js, cd.nullable)?
-				} else {
-					json_cell_to_avendb(js, &cd.column_type, cd.nullable)?
-				}
-			}
+) -> Result<std::collections::HashMap<String, Value>, String> {
+	let row_desc = &table_schema.columns;
+	let mut row = std::collections::HashMap::with_capacity(values.len());
+	for (key, js) in &values {
+		if key == "id" {
+			// Reserved: the row id is engine-assigned, not a column (mirrors patch_updates).
+			continue;
+		}
+		let cd = row_desc
+			.column(key)
+			.ok_or_else(|| format!("create {table}: unknown column `{key}` (not in schema)"))?;
+		let val = if matches!(cd.column_type, ColumnType::Text) {
+			json_to_text_storage_cell(table, key, js, cd.nullable)?
+		} else {
+			json_cell_to_avendb(js, &cd.column_type, cd.nullable)?
 		};
-		row.push(val);
+		row.insert(key.clone(), val);
 	}
 	Ok(row)
 }

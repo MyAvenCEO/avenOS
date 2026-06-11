@@ -49,21 +49,11 @@ fn now_ms() -> i64 {
 		.unwrap_or(0)
 }
 
-/// Build a row's `Vec<Value>` in the table's column order from named cells
-/// (missing columns → `Null`). The server's only row-construction path — it has
-/// no JSON/IPC machinery like the device app's `insert_values`.
-fn row_in_order(tbl: &TableSchema, cells: &[(&str, Value)]) -> Vec<Value> {
-	tbl.columns
-		.columns
-		.iter()
-		.map(|c| {
-			cells
-				.iter()
-				.find(|(n, _)| *n == c.name_str())
-				.map(|(_, v)| v.clone())
-				.unwrap_or(Value::Null)
-		})
-		.collect()
+/// Named cells → the universal schema-checked create input (board 0020). Unknown
+/// columns error and missing nullable columns are Null-filled by aven-db's
+/// `resolve_named_row` — the server has no positional row path.
+fn named_row(cells: &[(&str, Value)]) -> std::collections::HashMap<String, Value> {
+	cells.iter().map(|(n, v)| ((*n).to_string(), v.clone())).collect()
 }
 
 fn col_ix(tbl: &TableSchema, name: &str) -> Result<usize, String> {
@@ -191,9 +181,7 @@ pub async fn ensure_avenceo_owned(
 		seal_identity_cell(dek.expose(), avenceo_id, sparks_tbl, "genesis_b64", dek_ver, &genesis_b64)?;
 	let sealed_issuer =
 		seal_identity_cell(dek.expose(), avenceo_id, sparks_tbl, "issuer_pubkey_b64", dek_ver, &issuer_b64)?;
-	let sparks_row = row_in_order(
-		sparks_tbl,
-		&[
+	let sparks_row = named_row(&[
 			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 			// avenCEO is an aven SAFE (autonomous network control identity) owned directly
 			// by this node's env-seed server signer; it admits human owners via did:safe.
@@ -211,7 +199,7 @@ pub async fn ensure_avenceo_owned(
 	let sparks_oid = ObjectId::new();
 	let sparks_meta = owner_binding_meta(signing, sparks_oid, avenceo_id)?;
 	engine
-		.create_with_id_and_metadata("safes", sparks_oid, sparks_row, sparks_meta)
+		.create_checked_with_id_and_metadata("safes", sparks_oid, sparks_row, sparks_meta)
 		.await
 		.map_err(|e| format!("create safes:{e:?}"))?;
 
@@ -220,12 +208,7 @@ pub async fn ensure_avenceo_owned(
 	let urn = format!("safe:{avenceo_id}");
 	let aad = keyshare_wrap_aad(&urn, &vault.signer_did, &vault.signer_did, dek_ver);
 	let wrapped = encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
-	let ks_tbl = schema
-		.get(&TableName::new("keyshares"))
-		.ok_or("avenceo: no keyshares table")?;
-	let ks_row = row_in_order(
-		ks_tbl,
-		&[
+	let ks_row = named_row(&[
 			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 			("dek_version", Value::BigInt(dek_ver)),
 			("recipient_did", Value::Text(vault.signer_did.clone())),
@@ -236,7 +219,7 @@ pub async fn ensure_avenceo_owned(
 	let ks_oid = ObjectId::new();
 	let ks_meta = owner_binding_meta(signing, ks_oid, avenceo_id)?;
 	engine
-		.create_with_id_and_metadata("keyshares", ks_oid, ks_row, ks_meta)
+		.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_row, ks_meta)
 		.await
 		.map_err(|e| format!("create keyshares:{e:?}"))?;
 
@@ -244,10 +227,8 @@ pub async fn ensure_avenceo_owned(
 	// (key held from AVEN_SERVER_SEED, not a human's Secure Enclave). This both labels the
 	// owner in the Members UI and lets the device-side ≥1-human-owner guard recognise the
 	// server signer as NON-human. Owned by avenCEO so it syncs to its members.
-	if let Some(signers_tbl) = schema.get(&TableName::new("signers")) {
-		let signers_row = row_in_order(
-			signers_tbl,
-			&[
+	if schema.get(&TableName::new("signers")).is_some() {
+		let signers_row = named_row(&[
 				("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 				("signer_did", Value::Text(vault.signer_did.clone())),
 				("device_label", Value::Text(aven_name.into())),
@@ -260,7 +241,7 @@ pub async fn ensure_avenceo_owned(
 		let signers_oid = ObjectId::new();
 		let signers_meta = owner_binding_meta(signing, signers_oid, avenceo_id)?;
 		engine
-			.create_with_id_and_metadata("signers", signers_oid, signers_row, signers_meta)
+			.create_checked_with_id_and_metadata("signers", signers_oid, signers_row, signers_meta)
 			.await
 			.map_err(|e| format!("create signers:{e:?}"))?;
 	}
@@ -403,10 +384,7 @@ pub async fn grant_first_human_admin(
 	let urn = format!("safe:{avenceo_id}");
 	let aad = keyshare_wrap_aad(&urn, &wrap_did, &vault.signer_did, dek_ver);
 	let wrapped = encrypt_keyshare_payload(&kek, &dek, &aad)?;
-	let ks_tbl = schema.get(&TableName::new("keyshares")).ok_or("avenceo: no keyshares table")?;
-	let ks_row = row_in_order(
-		ks_tbl,
-		&[
+	let ks_row = named_row(&[
 			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 			("dek_version", Value::BigInt(dek_ver)),
 			("recipient_did", Value::Text(wrap_did.clone())),
@@ -417,7 +395,7 @@ pub async fn grant_first_human_admin(
 	let ks_oid = ObjectId::new();
 	let ks_meta = owner_binding_meta(signing, ks_oid, avenceo_id)?;
 	engine
-		.create_with_id_and_metadata("keyshares", ks_oid, ks_row, ks_meta)
+		.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_row, ks_meta)
 		.await
 		.map_err(|e| format!("create keyshares:{e:?}"))?;
 

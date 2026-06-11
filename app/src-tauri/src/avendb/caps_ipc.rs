@@ -82,7 +82,7 @@ async fn wrap_all_dek_versions_to_recipient(
 		let ks_oid = ObjectId::new();
 		let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity_uuid)?;
 		client
-			.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+			.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
 			.await
 			.map_err(format_avendb_err)?;
 	}
@@ -145,7 +145,7 @@ async fn wrap_self_keyshare(
 	let ks_oid = ObjectId::new();
 	let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity)?;
 	client
-		.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+		.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
 		.await
 		.map_err(format_avendb_err)?;
 	Ok(())
@@ -322,7 +322,7 @@ async fn upsert_controller_copy_row(
 		let vals = insert_values("safe_controllers", &sc_schema, row)?;
 		let meta = owner_binding_meta(&shell.signing_key, oid, owner_safe)?;
 		client
-			.create_with_id_and_metadata("safe_controllers", oid, vals, meta)
+			.create_checked_with_id_and_metadata("safe_controllers", oid, vals, meta)
 			.await
 			.map_err(format_avendb_err)?;
 	}
@@ -444,7 +444,7 @@ async fn cascade_rotate_one(
 		let ks_oid = ObjectId::new();
 		let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, safe_id)?;
 		client
-			.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+			.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
 			.await
 			.map_err(format_avendb_err)?;
 	}
@@ -768,7 +768,7 @@ pub(crate) async fn avendb_ipc_spark_replicate_add(
 	let ks_oid = ObjectId::new();
 	let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity_uuid)?;
 	client
-		.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+		.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
 		.await
 		.map_err(format_avendb_err)?;
 
@@ -978,7 +978,7 @@ pub(crate) async fn avendb_ipc_aven_ceo_claim(
 	)?;
 	let sparks_vals = insert_values("safes", &sparks_schema, row)?;
 	let sparks_meta = owner_binding_meta(&shell.signing_key, sparks_oid, identity_uuid)?;
-	client.create_with_id_and_metadata("safes", sparks_oid, sparks_vals, sparks_meta).await.map_err(format_avendb_err)?;
+	client.create_checked_with_id_and_metadata("safes", sparks_oid, sparks_vals, sparks_meta).await.map_err(format_avendb_err)?;
 
 	wrap_self_keyshare(client.as_ref(), shell, identity_uuid, &dek_plain, dek_ver).await?;
 
@@ -1108,7 +1108,7 @@ pub(crate) async fn avendb_ipc_create_identity(
 	let sparks_vals = insert_values("safes", &sparks_schema, row)?;
 	let sparks_meta = owner_binding_meta(&shell.signing_key, sparks_oid, identity_uuid)?;
 	client
-		.create_with_id_and_metadata("safes", sparks_oid, sparks_vals, sparks_meta)
+		.create_checked_with_id_and_metadata("safes", sparks_oid, sparks_vals, sparks_meta)
 		.await
 		.map_err(format_avendb_err)?;
 
@@ -1148,7 +1148,7 @@ pub(crate) async fn avendb_ipc_create_identity(
 			let ks_oid = ObjectId::new();
 			let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity_uuid)?;
 			client
-				.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+				.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
 				.await
 				.map_err(format_avendb_err)?;
 		}
@@ -1282,7 +1282,7 @@ pub(crate) async fn avendb_ipc_create_collection_group(
 	let sparks_vals = insert_values("safes", &sparks_schema, row)?;
 	let sparks_meta = owner_binding_meta(&shell.signing_key, sparks_oid, group_id)?;
 	client
-		.create_with_id_and_metadata("safes", sparks_oid, sparks_vals, sparks_meta)
+		.create_checked_with_id_and_metadata("safes", sparks_oid, sparks_vals, sparks_meta)
 		.await
 		.map_err(format_avendb_err)?;
 
@@ -1359,7 +1359,7 @@ async fn ensure_aven_ceo_owner_row(
 	}
 	let prow_vals = insert_values("signers", &signers_schema, prow)?;
 	let prow_meta = owner_binding_meta(&shell.signing_key, prow_oid, identity_uuid)?;
-	client.create_with_id_and_metadata("signers", prow_oid, prow_vals, prow_meta).await.map_err(format_avendb_err)?;
+	client.create_checked_with_id_and_metadata("signers", prow_oid, prow_vals, prow_meta).await.map_err(format_avendb_err)?;
 	Ok(())
 }
 
@@ -1486,7 +1486,7 @@ pub(crate) async fn avendb_ipc_aven_ceo_add_member(
 	let prow_vals = insert_values("signers", &signers_schema, prow)?;
 	let member_oid = ObjectId::new();
 	let prow_meta = owner_binding_meta(&shell.signing_key, member_oid, identity_uuid)?;
-	client.create_with_id_and_metadata("signers", member_oid, prow_vals, prow_meta).await.map_err(format_avendb_err)?;
+	client.create_checked_with_id_and_metadata("signers", member_oid, prow_vals, prow_meta).await.map_err(format_avendb_err)?;
 
 	// 2. Keyshare: wrap EVERY held avenCEO DEK version to the member so it can decrypt the
 	//    sealed roster fields (and prior-version data after any rotation). Idempotent.
@@ -1980,7 +1980,7 @@ pub(crate) async fn avendb_ipc_spark_admin_revoke(
 		let ks_oid = ObjectId::new();
 		let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity_uuid)?;
 		client
-			.create_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+			.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
 			.await
 			.map_err(format_avendb_err)?;
 	}

@@ -192,7 +192,7 @@ pub async fn add_remote_signer(
 	values.insert("status".into(), JsonValue::String("active".into()));
 	let row_vals = crate::avendb::insert_values("signers", &schema, values)?;
 	client
-		.create("signers", row_vals)
+		.create_checked("signers", row_vals)
 		.await
 		.map_err(crate::avendb::format_avendb_err)?;
 	Ok(())

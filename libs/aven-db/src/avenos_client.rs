@@ -184,29 +184,6 @@ fn build_schema_manager(storage: &DynStorage, context: &AppContext) -> Result<Sc
     Ok(schema_manager)
 }
 
-fn vec_values_to_map(
-    schema: &Schema,
-    table: &str,
-    values: Vec<Value>,
-) -> std::result::Result<HashMap<String, Value>, AvenDbError> {
-    let table_name = TableName::new(table);
-    let table_schema = schema
-        .get(&table_name)
-        .ok_or_else(|| AvenDbError::Schema(format!("table not found: {table}")))?;
-    if values.len() != table_schema.columns.columns.len() {
-        return Err(AvenDbError::Schema(format!(
-            "column count mismatch for {table}: expected {}, got {}",
-            table_schema.columns.columns.len(),
-            values.len()
-        )));
-    }
-    let mut map = HashMap::with_capacity(values.len());
-    for (col, value) in table_schema.columns.columns.iter().zip(values) {
-        map.insert(col.name.to_string(), value);
-    }
-    Ok(map)
-}
-
 async fn open_persistent_storage(data_dir: &std::path::Path) -> Result<DynStorage> {
     const MAX_ATTEMPTS: usize = 100;
     const RETRY_DELAY_MS: u64 = 25;
@@ -561,21 +538,9 @@ impl AvenDbClient {
             .map_err(|e| AvenDbError::Query(format!("{e:?}")))
     }
 
-    pub async fn create(&self, table: &str, values: Vec<Value>) -> Result<ObjectId> {
-        let schema = self
-            .runtime
-            .current_schema()
-            .map_err(|e| AvenDbError::Schema(e.to_string()))?;
-        let map = vec_values_to_map(&schema, table, values)?;
-        let (object_id, _, _) = self
-            .runtime
-            .insert(table, map, None)
-            .map_err(|e| AvenDbError::Write(e.to_string()))?;
-        Ok(object_id)
-    }
-
-    /// Schema-checked create BY COLUMN NAME — order-independent and typo-safe, unlike the
-    /// positional [`create`]. Resolves `fields` against the live schema:
+    /// Schema-checked create BY COLUMN NAME — THE row-write surface (the old positional
+    /// `create(Vec<Value>)` is gone: zipping by index let a manifest column-order change
+    /// silently corrupt writes). Resolves `fields` against the live schema:
     ///   - unknown column name        → error (caught typos / drift),
     ///   - missing nullable column     → `Null`,
     ///   - missing non-nullable column → error,
@@ -647,28 +612,6 @@ impl AvenDbClient {
             )));
         }
         Ok(row)
-    }
-
-    /// Create a row with a caller-supplied id and extra row metadata (e.g. the
-    /// owner-binding header). Used by the app to stamp a signed binding whose
-    /// `value_id` equals this row id, verified on apply by every peer.
-    pub async fn create_with_id_and_metadata(
-        &self,
-        table: &str,
-        object_id: ObjectId,
-        values: Vec<Value>,
-        extra_metadata: std::collections::HashMap<String, String>,
-    ) -> Result<ObjectId> {
-        let schema = self
-            .runtime
-            .current_schema()
-            .map_err(|e| AvenDbError::Schema(e.to_string()))?;
-        let map = vec_values_to_map(&schema, table, values)?;
-        let (oid, _, _) = self
-            .runtime
-            .insert_with_id_and_metadata(table, map, Some(object_id), None, extra_metadata)
-            .map_err(|e| AvenDbError::Write(e.to_string()))?;
-        Ok(oid)
     }
 
     pub async fn update(&self, object_id: ObjectId, updates: Vec<(String, Value)>) -> Result<()> {

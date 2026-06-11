@@ -219,6 +219,17 @@ pub(super) fn identity_uuid_row(schema: &TableSchema, vals: &[Value]) -> Result<
 	uuid_cell_at(vals, ix)
 }
 
+/// Owner identity from a name-keyed row (the `create_checked` input shape, board 0020).
+pub(super) fn identity_uuid_named(
+	vals: &std::collections::HashMap<String, Value>,
+) -> Result<Uuid, String> {
+	match vals.get("owner").ok_or("missing `owner` cell")? {
+		Value::Uuid(oid) => Ok(*oid.uuid()),
+		Value::Text(s) => Uuid::parse_str(s.trim()).map_err(|e| format!("uuid_parse:{e}")),
+		x => Err(format!("expected_uuid_cell:{x:?}")),
+	}
+}
+
 pub(super) fn authorize_gate(
 	state: &ShellState,
 	table: &str,
@@ -1304,7 +1315,7 @@ pub(super) async fn hydrate_shell(
 				.collect(),
 			)?;
 			client
-				.create("signers", peer_vals)
+				.create_checked("signers", peer_vals)
 				.await
 				.map_err(super::format_avendb_err)?;
 		}

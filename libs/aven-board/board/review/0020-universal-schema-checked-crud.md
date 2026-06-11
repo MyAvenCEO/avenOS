@@ -97,11 +97,11 @@ Checkpoint: stop and review after step 2 (the app is the biggest surface).
 
 ## Acceptance criteria
 
-- [ ] No positional write path remains — proven by `grep -rn "vec_values_to_map\|row_in_order" libs/aven-db/src libs/aven-node/src app/src-tauri/src` (no output) and `grep -n "pub async fn create(" libs/aven-db/src/avenos_client.rs` (no output).
-- [ ] Unknown column names error at every boundary — proven by the aven-db test for `resolve_named_row` unknown-column rejection passing in `cargo test`.
-- [ ] All writers compile against the universal surface — proven by `cargo check` exit 0 in `app/src-tauri` and `libs/aven-node`.
-- [ ] Behavior preserved — proven by `cargo test` exit 0 in `libs/aven-db` and `libs/aven-brain` (25 brain tests include real writes).
-- [ ] Schema untouched — proven by `git diff --stat libs/aven-schema/schema.manifest.json` (empty).
+- [x] No positional write path remains — proven by `grep -rn "vec_values_to_map\|row_in_order" libs/aven-db/src libs/aven-node/src app/src-tauri/src` (no output) and `grep -n "pub async fn create(" libs/aven-db/src/avenos_client.rs` (no output).
+- [x] Unknown column names error at every boundary — proven by the aven-db test for `resolve_named_row` unknown-column rejection passing in `cargo test`.
+- [x] All writers compile against the universal surface — proven by `cargo check` exit 0 in `app/src-tauri` and `libs/aven-node`.
+- [x] Behavior preserved — proven by `cargo test` exit 0 in `libs/aven-db` and `libs/aven-brain` (25 brain tests include real writes).
+- [x] Schema untouched — proven by `git diff --stat libs/aven-schema/schema.manifest.json` (empty).
 
 ## Verification
 
@@ -130,5 +130,7 @@ git diff --stat libs/aven-schema/schema.manifest.json                           
 ## Progress log
 
 Newest entry first.
+
+- `2026-06-11` — Build complete, all acceptance criteria proven: positional `create`/`create_with_id_and_metadata`/`vec_values_to_map` deleted from aven-db; `create_checked*` is the only write surface (+3 contract tests in `tests/create_checked.rs`: unknown-column rejected, missing-required rejected, nullable Null-fill round-trips). App `insert_values` now emits name-keyed cells and rejects unknown keys (`id` reserved, mirroring `patch_updates`); all call sites swapped to `create_checked*`; node `row_in_order` → `named_row` + checked creates, dead schema lookups removed. Verified: greps empty; aven-db 704+3 ok; aven-brain 25 ok; app+node `cargo check` 0 errors; manifest untouched. Moved build → review.
 
 - `2026-06-11` — Discovery: goal uncovered (make schema-drift write corruption structurally impossible, not "add a helper"), metric made transcript-provable, scope confirmed with Samuel: full unification across ALL tables/types, universal interface co-located in aven-db, compact rule applied (eliminate positional path entirely, no shims). Brain already migrated (`fa24d83`); the memories column-order outage (`43134b0`) is the motivating incident. Created directly in discover/ — the ideate+interview happened in-session.

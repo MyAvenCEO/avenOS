@@ -124,7 +124,7 @@ pub(crate) async fn avendb_ipc_avendb_create(
 		let oid = ObjectId::new();
 		let prow_meta = owner_binding_meta(&shell.signing_key, oid, identity)?;
 		client
-			.create_with_id_and_metadata(&table, oid, vals.clone(), prow_meta)
+			.create_checked_with_id_and_metadata(&table, oid, vals.clone(), prow_meta)
 			.await
 			.map_err(format_avendb_err)?;
 
@@ -177,7 +177,7 @@ pub(crate) async fn avendb_ipc_avendb_create(
 		let oid = ObjectId::new();
 		let extra_meta = owner_binding_meta(&shell.signing_key, oid, identity_gate)?;
 		let oid = client
-			.create_with_id_and_metadata(&table, oid, vals.clone(), extra_meta)
+			.create_checked_with_id_and_metadata(&table, oid, vals.clone(), extra_meta)
 			.await
 			.map_err(format_avendb_err)?;
 
@@ -186,7 +186,7 @@ pub(crate) async fn avendb_ipc_avendb_create(
 	}
 
 	if !plaintext.is_empty() {
-		let identity = engine::identity_uuid_row(&tbl, &vals)?;
+		let identity = engine::identity_uuid_named(&vals)?;
 		let mut ph = JsonRow::new();
 		for (col, pt) in plaintext {
 			let cd = tbl
