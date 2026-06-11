@@ -379,10 +379,19 @@ Scheduled background pass; everything derived, rebuildable, off the write path:
 |---|---|---|
 | Decay | ✅ (rewire to bond links in E1) | bonds: `strength·exp(−days/stability)`, floor 0.05 |
 | Entity-merge | ✅ (rewire in E1) | CRDT-safe merge of duplicate entities by normalized name; re-points their links. **Promotion:** an interpretation entity matching a real artifact row merges into it (links re-pointed, or `refers_to` alias) |
-| Consolidate | ☐ | old stream turns → summary memory with **deterministic ID = f(identity, window)** (concurrent dreams converge under LWW) + `summarizes` note links |
-| Verify claims | ☐ | Bayesian confidence on repeat evidence `conf += (1−conf)·w_veracity·0.3`; contradictions: keep both claim links, mark loser superseded; recompute compiled-truth per entity |
+| Consolidate | ✅ (v2) | talk turns >24h old, not yet summarized, grouped per day → **deterministic digest content** (concurrent dreams converge via content-hash dedup — stronger than the deterministic-ID scheme, which is dropped) → summary memory (stream `summary`, veracity `inferred`) + `summarizes` note links |
+| Verify claims | ✅ (v2) | Bayesian confidence on repeat evidence `conf += (1−conf)·w_veracity·0.3` (also applied at write: re-asserting the same fact bumps instead of resetting); same-object duplicates collapse to the oldest claim; contradictions: highest confidence wins (tie → oldest), losers closed with `valid_to` — nothing deleted |
 | Promote | ☐ | load-bearing `author_role='agent'` (`inferred`) memories get verified/promoted |
 | L1 rewrite | ☐ | deep rewrite of the running summary (incremental per-turn + batch here) |
+| Re-embed | ✅ (v2) | maintenance pass (`re_embed_all`, exposed as `brainReembed`): re-embeds every memory with the current embedder — run after the embedder changes (stub → Gemma) |
+
+**Model-assisted passes run on GLM-5.1.** The deterministic passes above are code and stay
+code (law: models produce text; only deterministic code produces rows). The passes that need a
+model — Promote, L1 rewrite, and rung-1 extraction (§4) — are designated **GLM-5.1**
+(`glm-5-1`, 200k ctx, 754B/40B-active MoE), behind the same `Extractor` trait seam, schema-
+constrained JSON at temp 0. Transport must satisfy the privacy law: attested enclave (Tinfoil-
+style) or equivalent ZDR guarantee — same bar as the talk path. Supersedes the GLM-5.3
+reference in Appendix B.
 
 ---
 
@@ -545,7 +554,7 @@ Each phase independently shippable, with files + verification:
 
 ## Appendix B — parked: TEE extractor
 
-The attested-TEE fact extractor (GLM-5.3 on Phala RedPill; trait seam `extractor.rs` built, no
+The attested-TEE fact extractor (now GLM-5.1 per §6; trait seam `extractor.rs` built, no
 impl) is **parked** — see `board/done/0010-aven-brain-execution-plan.md` §6b for the full design
 (attest-or-refuse, attestation digests on extracted claims, phases P1–P4). Nothing in E0–E7 depends on it; the
 deterministic pass is load-bearing without it. Revisit after E7.
@@ -553,6 +562,25 @@ deterministic pass is load-bearing without it. Revisit after E7.
 ## Progress log
 
 Newest entry first.
+
+- `2026-06-11` — **E6 closed + E7 second half shipped: dreaming v2, re-embed, Gemma download
+  UX.** Brain lib (**27/27 tests**): `dream_at` now also runs **verify_claims** (same-object
+  duplicate collapse with Bayesian bump + contradiction healer — highest confidence wins,
+  losers get `valid_to`, nothing deleted) and **consolidate** (talk turns >24h → per-day
+  deterministic digest summaries, stream `summary`, content-hash convergent; `summarizes`
+  links via the new generalized `add_note_link`); `add_fact_with_confidence` re-asserts now
+  BUMP confidence instead of resetting; new `re_embed_all` → `brainReembed` op
+  (`brain_ipc.rs`/`mod.rs`/`api.ts`; DreamReport extended on both sides). **Gemma weights
+  download** = the exact same flow as asr/llm/tts: new `app/src-tauri/src/embed_model.rs`
+  (`embed_status`/`embed_local_models`/`embed_start_download`/`embed_cancel_download`/
+  `embed_delete_model` + `embed:model-download` events over the shared resumable
+  downloader; stub when `brain-gemma` is off), TS mirror `app/src/lib/embed/
+  model-download-store.ts`, and an EmbeddingGemma section on Settings → Models. **E6:
+  already done on main** — the team's sealed-brain work made the DB viewer dynamic
+  (`tables` from runtime status, vector/sealed cell summarization); verified, nothing to
+  add. **Dreaming model pinned: GLM-5.1** (§6) for the model-assisted passes only;
+  deterministic passes stay code. Also removed the DETAILS right aside on identity pages
+  (user request). svelte-check clean (1 pre-existing aven-ui error); app compile = Mac.
 
 - `2026-06-10` — **E5 v1 shipped — the brain roundtrip aside.** New right aside on talk
   (24rem, xl+): always shows the LATEST roundtrip for the last human message — STORED

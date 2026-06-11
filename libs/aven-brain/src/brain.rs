@@ -283,6 +283,13 @@ impl EntityCard {
 pub struct DreamReport {
     pub bonds_decayed: usize,
     pub entities_merged: usize,
+    /// Duplicate open claims collapsed (cross-device sync healer).
+    pub claims_deduped: usize,
+    /// Contradicting open claims closed (highest confidence stays open).
+    pub claims_contradicted: usize,
+    /// Old talk turns rolled into summary memories this pass.
+    pub memories_consolidated: usize,
+    pub summaries_written: usize,
 }
 
 // ── Context assembly types ───────────────────────────────────────────────────
@@ -829,15 +836,30 @@ impl<E: Embedder> Brain<E> {
         let obj = self.upsert_entity(object).await?;
         let now = now_ms();
         let subj_s = id_str(&subj);
+        let obj_s = id_str(&obj);
 
-        // Close any open claim for the same (subject, predicate).
-        let open: Vec<ObjectId> = self
+        let open_claims: Vec<LinkRow> = self
             .links()
             .await?
             .into_iter()
             .filter(|l| l.from == subj_s && l.kind == predicate && l.valid_to.is_none())
-            .map(|l| l.id)
             .collect();
+
+        // Repeat evidence for the SAME object: Bayesian confidence bump on the open
+        // row — `conf += (1−conf)·w·0.3` (w = the new assertion's confidence) — and
+        // no new row. Re-stating a fact strengthens it instead of resetting it.
+        if let Some(same) = open_claims.iter().find(|l| l.to == obj_s) {
+            let bumped = (same.confidence + (1.0 - same.confidence) * confidence * 0.3).min(1.0);
+            let sealed = self.sv(LINKS, "confidence", *same.id.uuid(), &bumped.to_string())?;
+            self.client
+                .update(same.id, vec![("confidence".to_string(), sealed)])
+                .await
+                .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+            return Ok(same.id);
+        }
+
+        // Different object: close the old assertion(s) — superseded, never deleted.
+        let open: Vec<ObjectId> = open_claims.into_iter().map(|l| l.id).collect();
         for id in open {
             let sealed_to = self.sv(LINKS, "valid_to", *id.uuid(), &now.to_string())?;
             self.client
@@ -1170,10 +1192,181 @@ impl<E: Embedder> Brain<E> {
     pub async fn dream_at(&self, now: i64) -> Result<DreamReport, BrainError> {
         let entities_merged = self.merge_duplicate_entities().await?;
         let bonds_decayed = self.decay_bonds(now).await?;
+        let (claims_deduped, claims_contradicted) = self.verify_claims(now).await?;
+        let (summaries_written, memories_consolidated) = self.consolidate(now).await?;
         Ok(DreamReport {
             bonds_decayed,
             entities_merged,
+            claims_deduped,
+            claims_contradicted,
+            memories_consolidated,
+            summaries_written,
         })
+    }
+
+    /// Claim healer (cross-device): collapse duplicate OPEN claims per
+    /// (subject, predicate, object) — keep the earliest, bump its confidence per
+    /// duplicate, close the rest — then resolve contradictions per (subject,
+    /// predicate): the highest-confidence claim stays open, others close.
+    /// Nothing is ever deleted (law 3).
+    async fn verify_claims(&self, now: i64) -> Result<(usize, usize), BrainError> {
+        use std::collections::HashMap as Map;
+        let open: Vec<LinkRow> = self
+            .links()
+            .await?
+            .into_iter()
+            .filter(|l| l.class == LinkClass::Claim.as_str() && l.valid_to.is_none())
+            .collect();
+
+        let mut deduped = 0usize;
+        let mut contradicted = 0usize;
+        let mut by_subject_pred: Map<(String, String), Vec<LinkRow>> = Map::new();
+        for l in open {
+            by_subject_pred.entry((l.from.clone(), l.kind.clone())).or_default().push(l);
+        }
+
+        for (_, mut group) in by_subject_pred {
+            if group.len() < 2 {
+                continue;
+            }
+            group.sort_by(|a, b| a.id.uuid().cmp(b.id.uuid())); // oldest first (UUIDv7)
+
+            // Phase 1: same-object duplicates → keep oldest, bump, close the rest.
+            let mut survivors: Vec<LinkRow> = Vec::new();
+            for l in group {
+                if let Some(keep) = survivors.iter_mut().find(|s| s.to == l.to) {
+                    keep.confidence =
+                        (keep.confidence + (1.0 - keep.confidence) * l.confidence * 0.3).min(1.0);
+                    let sealed_conf =
+                        self.sv(LINKS, "confidence", *keep.id.uuid(), &keep.confidence.to_string())?;
+                    self.client
+                        .update(keep.id, vec![("confidence".to_string(), sealed_conf)])
+                        .await
+                        .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+                    let sealed_to = self.sv(LINKS, "valid_to", *l.id.uuid(), &now.to_string())?;
+                    self.client
+                        .update(l.id, vec![("valid_to".to_string(), sealed_to)])
+                        .await
+                        .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+                    deduped += 1;
+                } else {
+                    survivors.push(l);
+                }
+            }
+
+            // Phase 2: contradiction — different objects still open: highest
+            // confidence wins (tie → oldest), the rest close.
+            if survivors.len() > 1 {
+                let winner = survivors
+                    .iter()
+                    .enumerate()
+                    .max_by(|(ia, a), (ib, b)| {
+                        a.confidence
+                            .partial_cmp(&b.confidence)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                            .then(ib.cmp(ia)) // tie → earlier (lower index) wins
+                    })
+                    .map(|(i, _)| i)
+                    .unwrap_or(0);
+                for (i, l) in survivors.iter().enumerate() {
+                    if i == winner {
+                        continue;
+                    }
+                    let sealed_to = self.sv(LINKS, "valid_to", *l.id.uuid(), &now.to_string())?;
+                    self.client
+                        .update(l.id, vec![("valid_to".to_string(), sealed_to)])
+                        .await
+                        .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+                    contradicted += 1;
+                }
+            }
+        }
+        Ok((deduped, contradicted))
+    }
+
+    /// Consolidation: roll talk turns older than 24h into per-day summary memories
+    /// (stream `summary`, deterministic digest content ⇒ content-hash idempotent ⇒
+    /// concurrent dreams on two devices converge), linked `summarizes → member`.
+    /// Originals stay recallable; search dedups summary-vs-member (read path).
+    async fn consolidate(&self, now: i64) -> Result<(usize, usize), BrainError> {
+        use std::collections::{HashMap as Map, HashSet};
+        const CONSOLIDATE_AFTER_MS: i64 = 24 * 3_600_000;
+        const MIN_WINDOW: usize = 3;
+
+        let summarized: HashSet<String> = self
+            .links()
+            .await?
+            .into_iter()
+            .filter(|l| l.kind == "summarizes")
+            .map(|l| l.to)
+            .collect();
+
+        let rows = self.memory_rows().await?;
+        let mut by_day: Map<i64, Vec<(i64, ObjectId, String)>> = Map::new();
+        for (id, vals) in &rows {
+            let m = self.open_memory(*id, vals);
+            if m.stream != "talk" || summarized.contains(&id_str(id)) {
+                continue;
+            }
+            let at = created_ms(id);
+            if now.saturating_sub(at) < CONSOLIDATE_AFTER_MS {
+                continue;
+            }
+            by_day.entry(at / MS_PER_DAY).or_default().push((at, *id, m.content));
+        }
+
+        let mut summaries = 0usize;
+        let mut consolidated = 0usize;
+        for (day, mut members) in by_day {
+            if members.len() < MIN_WINDOW {
+                continue;
+            }
+            members.sort_by_key(|(at, id, _)| (*at, *id.uuid()));
+            let mut digest = format!("Day summary ({}):\n", day);
+            for (_, _, content) in &members {
+                digest.push_str("• ");
+                digest.push_str(&truncate(content, 120));
+                digest.push('\n');
+            }
+            let summary_id = self
+                .remember_with(
+                    &digest,
+                    &RememberOptions {
+                        stream: "summary".to_string(),
+                        author_role: "system".to_string(),
+                        veracity: Some("inferred".to_string()),
+                        ..Default::default()
+                    },
+                )
+                .await?;
+            for (_, member, _) in &members {
+                self.add_note_link(summary_id, *member, "summarizes").await?;
+                consolidated += 1;
+            }
+            summaries += 1;
+        }
+        Ok((summaries, consolidated))
+    }
+
+    /// Re-embed every memory with the CURRENT embedder (maintenance: stub→gemma
+    /// migration or model upgrades). Idempotent; returns the number re-embedded.
+    pub async fn re_embed_all(&self) -> Result<usize, BrainError> {
+        let rows = self.memory_rows().await?;
+        let mut n = 0usize;
+        for (id, vals) in &rows {
+            let Some(content) = self.open_at(MEMORIES, "content", id, vals, 1) else {
+                continue;
+            };
+            let emb = self.embedder.embed(&content).await;
+            let sealed =
+                self.sv(MEMORIES, "embedding", *id.uuid(), &encode_embedding(&emb))?;
+            self.client
+                .update(*id, vec![("embedding".to_string(), sealed)])
+                .await
+                .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+            n += 1;
+        }
+        Ok(n)
     }
 
     /// Ebbinghaus decay over bond links: `strength · exp(-days/stability)`, floored.
@@ -1524,12 +1717,23 @@ impl<E: Embedder> Brain<E> {
 
     /// Idempotent **note** link: `memory —mentions→ entity` (re-insert is a no-op).
     async fn ensure_mention(&self, memory: ObjectId, entity: ObjectId) -> Result<(), BrainError> {
-        let (mem_s, ent_s) = (id_str(&memory), id_str(&entity));
+        self.add_note_link(memory, entity, "mentions").await
+    }
+
+    /// Idempotent **note** link of any registered note kind (append-only, law 6).
+    async fn add_note_link(
+        &self,
+        from: ObjectId,
+        to: ObjectId,
+        kind: &str,
+    ) -> Result<(), BrainError> {
+        debug_assert!(NOTE_KINDS.contains(&kind), "unregistered note kind {kind}");
+        let (from_s, to_s) = (id_str(&from), id_str(&to));
         let exists = self
             .links()
             .await?
             .iter()
-            .any(|l| l.from == mem_s && l.to == ent_s && l.kind == "mentions");
+            .any(|l| l.from == from_s && l.to == to_s && l.kind == kind);
         if exists {
             return Ok(());
         }
@@ -1541,9 +1745,9 @@ impl<E: Embedder> Brain<E> {
                 oid,
                 HashMap::from([
                     ("owner".to_string(), Value::Uuid(self.owner)),
-                    ("from".to_string(), self.sv(LINKS, "from", row, &mem_s)?),
-                    ("to".to_string(), self.sv(LINKS, "to", row, &ent_s)?),
-                    ("kind".to_string(), self.sv(LINKS, "kind", row, "mentions")?),
+                    ("from".to_string(), self.sv(LINKS, "from", row, &from_s)?),
+                    ("to".to_string(), self.sv(LINKS, "to", row, &to_s)?),
+                    ("kind".to_string(), self.sv(LINKS, "kind", row, kind)?),
                     (
                         "class".to_string(),
                         self.sv(LINKS, "class", row, LinkClass::Note.as_str())?,

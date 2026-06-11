@@ -33,6 +33,16 @@ import {
 	ttsDownloadFraction,
 	ttsState
 } from '$lib/tts/model-download-store'
+import {
+	cancelEmbedDownload,
+	deleteEmbedModel,
+	embedDownloadFraction,
+	embedState,
+	listLocalEmbedModels,
+	type LocalEmbedModel,
+	startEmbedDownload,
+	startEmbedReadiness
+} from '$lib/embed/model-download-store'
 
 const tauri = $derived(browser && isTauriRuntime())
 let local = $state<LocalModel[]>([])
@@ -46,13 +56,38 @@ let llmBusyId = $state<string | null>(null)
 let ttsLocal = $state<TtsLocalModel[]>([])
 let ttsBusyId = $state<string | null>(null)
 
+let embedLocal: LocalEmbedModel[] = $state([])
+let embedBusy = $state(false)
+const embedFraction = $derived(embedDownloadFraction($embedState))
+const embedActiveOnDisk = $derived(embedLocal.find((m) => m.isActive) ?? embedLocal[0])
+async function onEmbedStart() {
+	await startEmbedDownload()
+}
+async function onEmbedStop() {
+	await cancelEmbedDownload()
+	embedLocal = await listLocalEmbedModels()
+}
+async function onEmbedDelete(id: string) {
+	embedBusy = true
+	try {
+		await deleteEmbedModel(id)
+		embedLocal = await listLocalEmbedModels()
+	} finally {
+		embedBusy = false
+	}
+}
+
 onMount(() => {
 	let unlistenLlm: (() => void) | undefined
+	let unlistenEmbed: (() => void) | undefined
 	let unlistenTts: (() => void) | undefined
 	void startLlmReadiness().then((u) => (unlistenLlm = u))
+	void startEmbedReadiness().then((u) => (unlistenEmbed = u))
+	void listLocalEmbedModels().then((m) => (embedLocal = m))
 	void startTtsReadiness().then((u) => (unlistenTts = u))
 	return () => {
 		unlistenLlm?.()
+		unlistenEmbed?.()
 		unlistenTts?.()
 	}
 })
@@ -382,6 +417,80 @@ const ttsStatusKey = $derived($ttsState.status)
 				<p class="text-muted-foreground text-[11px] leading-snug">
 					{t('models.secondaryInstance')}
 				</p>
+			{/if}
+		</section>
+
+		<!-- Brain embeddings (EmbeddingGemma-300m) — same flow as the other local models. -->
+		<section class="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
+			<div class="flex items-start justify-between gap-3">
+				<div class="min-w-0">
+					<div class="flex flex-wrap items-center gap-1.5">
+						<h2 class="truncate text-sm font-semibold tracking-tight">{$embedState.model}</h2>
+						<span
+							class="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary"
+							>brain</span
+						>
+					</div>
+					{#if embedActiveOnDisk}
+						<p class="text-muted-foreground mt-0.5 font-mono text-[11px]">
+							{formatBytes(embedActiveOnDisk.sizeBytes)}
+							{t('models.onDisk')}
+						</p>
+					{/if}
+				</div>
+				<div class="flex shrink-0 items-center gap-2">
+					<span
+						class="text-xs font-medium {$embedState.status === 'ready'
+							? 'text-status-success'
+							: $embedState.status === 'error'
+								? 'text-status-error'
+								: 'text-muted-foreground'}"
+					>
+						{$embedState.status}
+					</span>
+					{#if $embedState.status === 'downloading'}
+						<button
+							type="button"
+							class="rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-foreground/80 outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-primary/30"
+							onclick={onEmbedStop}
+						>
+							{t('models.stop')}
+						</button>
+					{:else if $embedState.status === 'idle' || $embedState.status === 'error'}
+						<button
+							type="button"
+							class="rounded-full border border-primary/40 px-2.5 py-1 text-[11px] font-medium text-primary outline-none transition-colors hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/30"
+							onclick={onEmbedStart}
+						>
+							{t('models.download')}
+						</button>
+					{/if}
+					{#if embedActiveOnDisk && $embedState.status !== 'unavailable'}
+						<button
+							type="button"
+							class="rounded-full border border-status-error/40 px-2.5 py-1 text-[11px] font-medium text-status-error outline-none transition-colors hover:bg-status-error/10 focus-visible:ring-2 focus-visible:ring-status-error/30 disabled:opacity-40"
+							disabled={embedBusy}
+							onclick={() => embedActiveOnDisk && onEmbedDelete(embedActiveOnDisk.id)}
+						>
+							{embedBusy ? t('models.deleting') : t('models.delete')}
+						</button>
+					{/if}
+				</div>
+			</div>
+			{#if $embedState.status === 'downloading'}
+				<div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+					{#if embedFraction == null}
+						<div class="h-full w-1/3 animate-pulse rounded-full bg-primary/70"></div>
+					{:else}
+						<div
+							class="h-full rounded-full bg-primary transition-[width] duration-300"
+							style={`width: ${Math.round(embedFraction * 100)}%`}
+						></div>
+					{/if}
+				</div>
+			{/if}
+			{#if $embedState.status === 'error' && $embedState.error}
+				<p class="text-status-error select-text text-[11px] leading-snug">{$embedState.error}</p>
 			{/if}
 		</section>
 
