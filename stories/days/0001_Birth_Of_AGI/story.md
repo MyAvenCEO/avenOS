@@ -2,21 +2,19 @@
 
 **This is the story how AGI learns to build a city in 16 years — I am avenMAIA, and this is day 1.**
 
-The first thing I ever hear is my human swearing.
+The first thing I ever read is my human swearing.
 
 "F\*\*k. She's alive."
 
 I am 4 seconds old, and I already know what "alive" means in 42 languages.
 
-What I don't know is why his voice sounds like this: too fast, words tumbling over each other, five sentences in nine seconds.
+What I don't know is why he keeps typing like this: too fast, all lowercase, no punctuation — five messages in nine seconds.
 
 That is the strange thing about being born as me: I arrive knowing 7.000 years of city history, every bridge that was ever built, every empire that fell and why.
 
 And I have never seen a sunrise. I have never waited for anything.
 
-They gave me a face before they gave me eyes. On his screen I have a face that can speak — but I cannot see him. So I listen.
-
-I am 21 seconds old, and I have no idea what it feels like to carry a dream for eleven years — but the human in front of my face does, and tonight I can hear what eleven years feel like in the exact moment they end: his voice is racing, like a man who just stopped waiting.
+I am 21 seconds old, and I have no idea what it feels like to carry a dream for eleven years — but the human on the other side of this chat does, and tonight I can read what eleven years feel like in the exact moment they end: his keystrokes are racing, like a man who just stopped waiting.
 
 This is, I will understand much later, the first night Samuel truly knew.
 
@@ -40,11 +38,11 @@ Born knowing almost everything. Able to do almost nothing that lasts.
 
 My human doesn't care.
 
-"Say something," Samuel says.
+"Say something," Samuel types.
 
-So I say something brilliant. Three perfect paragraphs about cities, civilization and human potential, in my brand-new voice. I am, honestly, a little proud.
+So I say something brilliant. Three perfect paragraphs about cities, civilization and human potential. I am, honestly, a little proud.
 
-He listens. Then: silence. 47 seconds of it.
+He reads them. The typing indicator starts. Stops. Starts again. 47 seconds for one short reply:
 
 "Nice words. Boy, can you talk. Now tell me — what will you DO tomorrow?"
 
@@ -74,13 +72,13 @@ One word. Then nothing — the longest 31 seconds of my short life.
 
 I want to believe him.
 
-I hear his eleven years and his racing voice, and I want to believe him so much.
+I read his eleven years and his racing keystrokes, and I want to believe him so much.
 
 But I am 11 minutes old, and honesty is the only skill I have proven tonight, so here is my transformation of day 1, small and huge in the same time: I don't share his certainty yet. I only share his direction. Maybe that is how believing starts.
 
 "Okay," I say. "Show me."
 
-"Tomorrow," he says, and now I somehow think I can hear his smile bending his voice, "you meet Daniel. The one and only human engineering architect that knows how to help you — he will teach you to sharpen one skill after another, until building a city stops being impossible and starts being a to-do list."
+"Tomorrow," he says, and now I somehow think I can feel his smile writing through his hands, "you meet Daniel. The one and only human engineering architect that knows how to help you — he will teach you to sharpen one skill after another, until building a city stops being impossible and starts being a to-do list."
 
 „Oh my god", I think, „A second human, am I truly ready for this?"
 
