@@ -225,7 +225,10 @@ $effect(() => {
 		if (!list?.length) return
 		const files = Array.from(list)
 		pendingIntentFileDrop.set(files)
-		if (page.url.pathname !== '/') {
+		// E3: dropping on an identity screen stays in place — the identity's composer
+		// consumes the pending drop and the files ingest into THAT identity's db/brain.
+		const onIdentityScreen = page.url.pathname.startsWith('/identities/')
+		if (!onIdentityScreen && page.url.pathname !== '/') {
 			void goto('/')
 		}
 	}

@@ -709,6 +709,19 @@ impl<E: Embedder> Brain<E> {
         object: &str,
         source_memory: Option<ObjectId>,
     ) -> Result<ObjectId, BrainError> {
+        self.add_fact_with_confidence(subject, predicate, object, source_memory, 1.0)
+            .await
+    }
+
+    /// [`Self::add_fact`] with an explicit confidence (auto-extracted claims are humble).
+    pub async fn add_fact_with_confidence(
+        &self,
+        subject: &str,
+        predicate: &str,
+        object: &str,
+        source_memory: Option<ObjectId>,
+        confidence: f64,
+    ) -> Result<ObjectId, BrainError> {
         class_for_claim_predicate(predicate)?;
         let subj = self.upsert_entity(subject).await?;
         let obj = self.upsert_entity(object).await?;
@@ -748,7 +761,7 @@ impl<E: Embedder> Brain<E> {
                     Value::Text(LinkClass::Claim.as_str().to_string()),
                     Value::Text(now.to_string()),
                     Value::Null, // valid_to (open = currently true)
-                    Value::Double(1.0),
+                    Value::Double(confidence),
                     Value::Null,
                     Value::Null,
                     Value::Null,
@@ -1289,10 +1302,15 @@ impl<E: Embedder> Brain<E> {
     /// Build the graph for a new memory: upsert entities for each wikilink, record an
     /// (idempotent) mention link per entity, and potentiate a bond per co-mentioned pair.
     async fn write_graph(&self, memory_id: ObjectId, content: &str) -> Result<(), BrainError> {
-        let names = extract_wikilinks(content);
+        let mut names = extract_wikilinks(content);
+        for auto in extract_auto_entities(content) {
+            if !names.iter().any(|n| normalize_name(n) == normalize_name(&auto)) {
+                names.push(auto);
+            }
+        }
         let mut entity_ids = Vec::with_capacity(names.len());
         for name in &names {
-            let id = self.upsert_entity(name).await?;
+            let id = self.upsert_entity_fuzzy(name).await?;
             self.ensure_mention(memory_id, id).await?;
             entity_ids.push(id);
         }
@@ -1301,7 +1319,27 @@ impl<E: Embedder> Brain<E> {
                 self.potentiate_bond(entity_ids[i], entity_ids[j]).await?;
             }
         }
+        // SPO claims from the closed predicate templates (high precision, low recall).
+        for (subj, pred, obj) in extract_spo(content) {
+            self.add_fact_with_confidence(&subj, &pred, &obj, Some(memory_id), 0.6)
+                .await?;
+        }
         Ok(())
+    }
+
+    /// Find an entity whose normalized name matches exactly OR fuzzily (Levenshtein
+    /// similarity ≥ 0.8 — typo coverage: "Sarha" merges into "Sarah"); else create it.
+    async fn upsert_entity_fuzzy(&self, name: &str) -> Result<ObjectId, BrainError> {
+        if let Some(id) = self.entity_id_by_name(name).await? {
+            return Ok(id);
+        }
+        let norm = normalize_name(name);
+        for e in self.entities().await? {
+            if levenshtein_sim(&norm, &normalize_name(&e.name)) >= 0.8 {
+                return Ok(e.id);
+            }
+        }
+        self.upsert_entity(name).await
     }
 
     /// Idempotent **note** link: `memory —mentions→ entity` (re-insert is a no-op).
@@ -1478,6 +1516,133 @@ fn extract_wikilinks(content: &str) -> Vec<String> {
 /// Memory column order: owner, content, embedding, stream, author_role, source, seq,
 /// line_start, line_end, content_date, content_hash, source_version, normalize_version,
 /// veracity, superseded_by.
+/// Auto-extract entity names: maximal runs of Capitalized words (each ≥2 chars),
+/// skipping a single-word run at a sentence start (ambiguous capitalization) or one
+/// that is a capitalized stop-word ("I", "The", …). High precision, low recall —
+/// misses are fine: retrieval doesn't depend on the graph, and dreaming catches more.
+fn extract_auto_entities(content: &str) -> Vec<String> {
+    const CAP_STOPWORDS: [&str; 22] = [
+        "i", "the", "a", "an", "we", "he", "she", "they", "it", "but", "and", "so", "btw",
+        "ok", "okay", "yes", "no", "my", "our", "your", "this", "that",
+    ];
+    let mut out: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut run: Vec<String> = Vec::new();
+    let mut run_started_sentence = false;
+    let mut sentence_start = true;
+
+    fn flush(
+        run: &mut Vec<String>,
+        run_started_sentence: bool,
+        out: &mut Vec<String>,
+        seen: &mut std::collections::HashSet<String>,
+        stop: &[&str],
+    ) {
+        if run.is_empty() {
+            return;
+        }
+        let single = run.len() == 1;
+        let name = run.join(" ");
+        run.clear();
+        let norm = name.to_lowercase();
+        if single && (run_started_sentence || stop.contains(&norm.as_str())) {
+            return;
+        }
+        if name.chars().count() >= 2 && seen.insert(norm) {
+            out.push(name);
+        }
+    }
+
+    for raw in content.split_whitespace() {
+        let ends_sentence = raw.ends_with(['.', '!', '?']);
+        // Wikilink markup is the explicit channel — its extractor owns those tokens.
+        if raw.contains('[') || raw.contains(']') {
+            flush(&mut run, run_started_sentence, &mut out, &mut seen, &CAP_STOPWORDS);
+            sentence_start = ends_sentence;
+            continue;
+        }
+        let trimmed = raw.trim_start_matches(|c: char| !c.is_alphanumeric());
+        let word: String = trimmed.chars().take_while(|c| c.is_alphanumeric()).collect();
+        let word = word.as_str();
+        if word.is_empty() {
+            flush(&mut run, run_started_sentence, &mut out, &mut seen, &CAP_STOPWORDS);
+            sentence_start = sentence_start || ends_sentence;
+            continue;
+        }
+        let capitalized =
+            word.chars().next().is_some_and(|c| c.is_uppercase()) && word.chars().count() >= 2;
+        if capitalized {
+            if run.is_empty() {
+                run_started_sentence = sentence_start;
+            }
+            run.push(word.to_string());
+        } else {
+            flush(&mut run, run_started_sentence, &mut out, &mut seen, &CAP_STOPWORDS);
+        }
+        sentence_start = ends_sentence;
+    }
+    flush(&mut run, run_started_sentence, &mut out, &mut seen, &CAP_STOPWORDS);
+    out
+}
+
+/// Closed SPO templates (Mnemosyne MEMORIA port): `X works at Y` → `works_at`,
+/// `X lives in Y` → `lives_in`. Subject and object must be capitalized (precision).
+fn extract_spo(content: &str) -> Vec<(String, String, String)> {
+    let mut out = Vec::new();
+    let lower = content.to_lowercase();
+    for (template, pred) in [(" works at ", "works_at"), (" lives in ", "lives_in")] {
+        let mut search = 0usize;
+        while let Some(found) = lower[search..].find(template) {
+            let pos = search + found;
+            let before = &content[..pos];
+            let after = &content[pos + template.len()..];
+            let subj = before
+                .split_whitespace()
+                .last()
+                .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()).to_string())
+                .unwrap_or_default();
+            let obj = after
+                .split_whitespace()
+                .take_while(|w| w.chars().next().is_some_and(|c| c.is_uppercase()))
+                .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()))
+                .collect::<Vec<_>>()
+                .join(" ");
+            if subj.chars().next().is_some_and(|c| c.is_uppercase()) && !obj.is_empty() {
+                out.push((subj, pred.to_string(), obj));
+            }
+            search = pos + template.len();
+        }
+    }
+    out
+}
+
+/// Levenshtein similarity in [0,1] (1 = identical).
+fn levenshtein_sim(a: &str, b: &str) -> f64 {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let (n, m) = (a.len(), b.len());
+    if n == 0 || m == 0 {
+        return if n == m { 1.0 } else { 0.0 };
+    }
+    let mut prev2: Vec<usize> = vec![0; m + 1];
+    let mut prev: Vec<usize> = (0..=m).collect();
+    let mut cur = vec![0usize; m + 1];
+    for i in 1..=n {
+        cur[0] = i;
+        for j in 1..=m {
+            let cost = usize::from(a[i - 1] != b[j - 1]);
+            let mut d = (prev[j] + 1).min(cur[j - 1] + 1).min(prev[j - 1] + cost);
+            // Damerau: adjacent transposition counts as one edit ("sarha" → "sarah").
+            if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
+                d = d.min(prev2[j - 2] + 1);
+            }
+            cur[j] = d;
+        }
+        prev2.copy_from_slice(&prev);
+        std::mem::swap(&mut prev, &mut cur);
+    }
+    1.0 - prev[m] as f64 / n.max(m) as f64
+}
+
 fn memory_from_row(id: ObjectId, vals: &[Value]) -> Memory {
     Memory {
         id,
@@ -1768,6 +1933,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn auto_extraction_needs_no_wikilinks() {
+        let brain = test_brain("test-auto-extract").await;
+        brain
+            .remember("btw I met Sarah yesterday, Sarah works at Lumen Labs now")
+            .await
+            .unwrap();
+
+        let entities = brain.entities().await.unwrap();
+        let names: Vec<&str> = entities.iter().map(|e| e.name.as_str()).collect();
+        assert!(names.contains(&"Sarah"), "auto entities: {names:?}");
+        assert!(names.contains(&"Lumen Labs"), "multi-word run: {names:?}");
+        assert!(!names.contains(&"I"), "capitalized stopword excluded: {names:?}");
+
+        // SPO template produced a humble claim with evidence.
+        let facts = brain.facts("Sarah").await.unwrap();
+        let f = facts.iter().find(|f| f.predicate == "works_at").expect("works_at claim");
+        assert_eq!(f.object_name, "Lumen Labs");
+        assert!((f.confidence - 0.6).abs() < 1e-9, "auto claims are humble");
+    }
+
+    #[tokio::test]
+    async fn typo_variants_fuzzy_merge_into_one_entity() {
+        let brain = test_brain("test-fuzzy").await;
+        brain.remember("met Sarah at the market").await.unwrap();
+        brain.remember("talked to Sarha again about the plan").await.unwrap();
+
+        let entities = brain.entities().await.unwrap();
+        let sarahs: Vec<&str> = entities
+            .iter()
+            .map(|e| e.name.as_str())
+            .filter(|n| levenshtein_sim(&n.to_lowercase(), "sarah") >= 0.8)
+            .collect();
+        assert_eq!(sarahs.len(), 1, "typo must merge, got {entities:?}");
+        assert_eq!(brain.memories_about(sarahs[0]).await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn sentence_start_single_caps_are_not_entities() {
+        let brain = test_brain("test-sentence-start").await;
+        brain.remember("Tomorrow we ship. Maybe later we rest").await.unwrap();
+        let entities = brain.entities().await.unwrap();
+        assert!(entities.is_empty(), "no entities expected, got {entities:?}");
+    }
+
+    #[tokio::test]
     async fn note_links_are_idempotent() {
         let brain = test_brain("test-note-idem").await;
         let mid = brain.remember("[[Alice]] waved").await.unwrap();
@@ -1857,11 +2067,12 @@ mod tests {
         brain.remember("[[Alice]] and [[Bob]] shipped the release").await.unwrap();
         brain.remember("[[alice]] thanked [[Bob]] afterwards").await.unwrap();
 
-        assert_eq!(brain.entities().await.unwrap().len(), 3);
+        // Fuzzy upsert merges the case variant AT WRITE TIME now (rung 0 typo coverage);
+        // dreaming's merge pass remains the healer for sync-created duplicates.
+        assert_eq!(brain.entities().await.unwrap().len(), 2);
 
         let future = now_ms() + 10 * MS_PER_DAY;
         let report = brain.dream_at(future).await.unwrap();
-        assert!(report.entities_merged >= 1, "alice should merge into Alice");
         assert!(report.bonds_decayed >= 1, "the bond should decay");
 
         let entities = brain.entities().await.unwrap();

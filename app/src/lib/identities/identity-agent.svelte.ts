@@ -13,6 +13,7 @@
 import { getContext, setContext } from 'svelte'
 import type { AvenDbStore } from '$lib/avendb/store.svelte'
 import { persistSparkFiles } from '$lib/avendb/intent-files'
+import { brainIngest } from '$lib/brain/api'
 import { streamReply } from '$lib/llm/generate'
 import {
 	LLM_TOOLS,
@@ -168,6 +169,16 @@ export function createIdentityAgent(deps: {
 			const body = encodeToolCallBody(record)
 			streaming = { ...streaming, [reply.id]: body }
 			await deps.messages.update(reply.id, { body })
+			// E3: ingest the human-facing prose (not the tool envelope), down-weighted.
+			if (record.response) {
+				void brainIngest(env.canonicalSparkId, record.response, {
+					stream: 'talk',
+					authorRole: 'agent',
+					source: reply.id,
+					contentDateMs: Date.now(),
+					veracity: 'inferred',
+				}).catch(() => {})
+			}
 			showFloating(record)
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e)
@@ -209,6 +220,16 @@ export function createIdentityAgent(deps: {
 				role: 'user',
 				body,
 			})
+			// E3: the brain reads along — fire-and-forget, never blocks the talk loop.
+			if (body) {
+				void brainIngest(env.canonicalSparkId, body, {
+					stream: 'talk',
+					authorRole: 'user',
+					source: row.id,
+					contentDateMs: Date.now(),
+					veracity: 'stated',
+				}).catch(() => {})
+			}
 			if (files.length > 0) {
 				const { stored, errors } = await persistSparkFiles(row.id, files, {
 					identityId: env.canonicalSparkId,

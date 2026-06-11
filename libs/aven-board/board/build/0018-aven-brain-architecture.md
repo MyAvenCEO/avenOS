@@ -554,6 +554,19 @@ deterministic pass is load-bearing without it. Revisit after E7.
 
 Newest entry first.
 
+- `2026-06-10` — **E3a shipped — automatic rung-0 + live hooks + drag-drop.** Brain lib:
+  `extract_auto_entities` (capitalized runs, sentence-start + stopword guards,
+  wikilink-markup-safe tokenizer), `upsert_entity_fuzzy` (Damerau-Levenshtein ≥0.8 —
+  "Sarha"→"Sarah" at write time), `extract_spo` (`works_at`/`lives_in`, capitalized
+  subject+object) → claims at confidence 0.6 with `source_memory` evidence;
+  `add_fact_with_confidence`. **25/25 tests** (3 new: auto-extraction-no-wikilinks,
+  typo fuzzy-merge, sentence-start safety; dream test adapted — case variants now merge
+  at write). App: live `brainIngest` hooks on user turn (`stated`) + agent prose
+  (`inferred`) in `identity-agent.svelte.ts`, fire-and-forget; drag-drop on
+  `/identities/*` stays in place. svelte-check clean (1 pre-existing aven-ui error).
+  **E3b remaining:** write ritual (owner-binding + sealing + unseal-hook registration at
+  connect) — needs Mac-side work; file-chunk adapter.
+
 - `2026-06-10` — **E2 shipped — app brain runtime.** New `app/src-tauri/src/avendb/brain_ipc.rs`:
   per-SAFE `Brain::over(Arc<AvenDbClient>, owner, StubEmbedder)` over the shared connected
   client (`with_connected_client`), exposed as `avendb_runtime` ops — `brainStatus`,
