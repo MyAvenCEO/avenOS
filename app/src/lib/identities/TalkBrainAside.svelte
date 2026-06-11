@@ -11,15 +11,13 @@ const { identityId }: { identityId: string } = $props()
 
 const rt = $derived(
 	brainRoundtrip.latest &&
-	brainRoundtrip.latest.identity.trim().toLowerCase() === identityId.trim().toLowerCase()
+		brainRoundtrip.latest.identity.trim().toLowerCase() === identityId.trim().toLowerCase()
 		? brainRoundtrip.latest
 		: null
 )
 
 /** L3 hits minus the just-stored memory (it would always find itself). */
-const recalled = $derived(
-	(rt?.trace?.recalled ?? []).filter((r) => r.id !== rt?.memoryId)
-)
+const recalled = $derived((rt?.trace?.recalled ?? []).filter((r) => r.id !== rt?.memoryId))
 
 function snip(s: string, n = 110): string {
 	return s.length > n ? `${s.slice(0, n)}…` : s
@@ -103,7 +101,8 @@ function snip(s: string, n = 110): string {
 			<!-- L3 -->
 			<section class="rounded-lg border border-border/60 bg-card/30 p-2">
 				<div class="mb-1 font-medium">
-					<span class="text-sky-400">L3</span> recall · {recalled.length} hit{recalled.length === 1 ? '' : 's'}
+					<span class="text-sky-400">L3</span>
+					recall · {recalled.length} hit{recalled.length === 1 ? '' : 's'}
 				</div>
 				{#if recalled.length === 0}
 					<p class="text-muted-foreground">nothing relevant (abstained)</p>
@@ -116,9 +115,12 @@ function snip(s: string, n = 110): string {
 										? 'bg-violet-500/20 text-violet-300'
 										: r.via === 'bm25'
 											? 'bg-amber-500/20 text-amber-300'
-											: 'bg-emerald-500/20 text-emerald-300'}">{r.via}</span
+											: 'bg-emerald-500/20 text-emerald-300'}"
+									>{r.via}</span
 								>
-								<span class="text-muted-foreground font-mono text-[10px]">#{r.rank} {r.score.toFixed(3)}</span>
+								<span class="text-muted-foreground font-mono text-[10px]"
+									>#{r.rank} {r.score.toFixed(3)}</span
+								>
 								<p class="text-foreground/90">{snip(r.snippet)}</p>
 							</li>
 						{/each}
@@ -143,7 +145,8 @@ function snip(s: string, n = 110): string {
 			</section>
 
 			<p class="text-muted-foreground text-[10px]">
-				{t.budget.usedChars}/{t.budget.maxChars} chars
+				{t.budget.usedChars}/{t.budget.maxChars}
+				chars
 				{#if t.budget.droppedRecalled + t.budget.droppedWorking > 0}
 					· dropped {t.budget.droppedRecalled + t.budget.droppedWorking}
 				{/if}
