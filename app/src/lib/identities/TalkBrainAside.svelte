@@ -24,9 +24,8 @@ function snip(s: string, n = 110): string {
 }
 </script>
 
-<div class="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-3 text-xs">
+<div class="flex h-full min-h-0 flex-col gap-3 overflow-y-auto py-1 text-xs">
 	<div class="flex items-center gap-2">
-		<span class="text-base">🧠</span>
 		<span class="font-semibold tracking-tight">Brain roundtrip</span>
 		{#if rt}
 			<span class="text-muted-foreground ml-auto">

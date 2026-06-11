@@ -5,6 +5,7 @@ import { avenDbStore } from '$lib/avendb/store.svelte'
 import { t } from '$lib/i18n'
 import AgentLiveState from '$lib/identities/AgentLiveState.svelte'
 import { createIdentityAgent, setIdentityAgent } from '$lib/identities/identity-agent.svelte'
+import TalkBrainAside from '$lib/identities/TalkBrainAside.svelte'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import type { ComposerMode } from '$lib/intents/types'
 import { avendbShell } from '$lib/runtime/avendb-shell'
@@ -127,15 +128,6 @@ const innerContentClass = $derived(
 		isTalkView ? 'min-h-0 flex-1 py-3 pb-0 sm:py-6' : 'py-6 sm:py-8'
 	].join(' ')
 )
-
-// Mocked identity metadata for the right detail aside (real wiring TBD).
-const identityMetaRows = $derived([
-	{ label: t('identities.meta.name'), value: identityMeta?.name ?? '—', mono: false },
-	{ label: t('identities.meta.id'), value: canonicalSparkId, mono: true },
-	{ label: t('identities.meta.type'), value: t('identities.meta.typeHuman'), mono: false },
-	{ label: t('identities.meta.members'), value: '1', mono: false },
-	{ label: t('identities.meta.created'), value: '—', mono: false }
-])
 </script>
 
 <svelte:head>
@@ -144,9 +136,9 @@ const identityMetaRows = $derived([
 
 <AsidePageLayout
 	asideLabel={t('nav.identityViews')}
-	asideRightLabel={t('identities.meta.detailsLabel')}
+	asideRightLabel="Brain roundtrip"
 	sections={navSections}
-	desktopGridClass="md:grid-cols-[8.5rem_minmax(0,1fr)_8.5rem]"
+	desktopGridClass="md:grid-cols-[8.5rem_minmax(0,1fr)_420px]"
 	sectionLabelClass="px-0 md:px-2"
 	{mainClass}
 	{contentClass}
@@ -176,25 +168,9 @@ const identityMetaRows = $derived([
 	{/snippet}
 
 	{#snippet asideRight()}
-		<div class="space-y-3 px-1 pt-2">
-			<p class="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
-				{t('identities.meta.detailsLabel')}
-			</p>
-			<dl class="space-y-2.5">
-				{#each identityMetaRows as row (row.label)}
-					<div class="space-y-0.5">
-						<dt class="text-muted-foreground text-[10px] uppercase tracking-wide">{row.label}</dt>
-						<dd
-							class="text-foreground leading-snug {row.mono
-								? 'break-all font-mono text-[10px]'
-								: 'text-xs font-medium'}"
-						>
-							{row.value}
-						</dd>
-					</div>
-				{/each}
-			</dl>
-		</div>
+		<!-- Brain roundtrip (E5 v1): the permanent right aside on EVERY identity sub-view —
+		     shows what the brain stored + recalled for the last message. Display-only. -->
+		<TalkBrainAside identityId={decodedIdentityId} />
 	{/snippet}
 
 	{#snippet children()}
