@@ -895,10 +895,20 @@
 	"humanGate": {
 		"kicker": "Noch ein Schritt",
 		"title": "Wie sollen wir dich nennen?",
-		"body": "Dein Signer und Vault sind bereit. Erstelle jetzt dein menschliches Selbst — die Identität, die deine Daten hält und die ins Netzwerk eingeladen wird. Dein Name bleibt auf deinem Gerät, bis du ihn teilst.",
+		"body": "Dein Signer und Vault sind bereit. Richte jetzt dein menschliches Selbst ein — die Identität, die deine Daten hält und die ins Netzwerk eingeladen wird.",
+		"createOption": "Neues Selbst erstellen",
+		"createOptionDesc": "Neu beginnen — benenne dich und erstelle eine neue menschliche Identität auf diesem Gerät.",
+		"pairOption": "Mit bestehendem Selbst koppeln",
+		"pairOptionDesc": "Dies ist ein weiteres Gerät eines Selbst, das du bereits hast — verbinde es von deinem anderen Gerät aus.",
 		"namePlaceholder": "Alice",
 		"createButton": "Mein menschliches Selbst erstellen",
 		"creating": "Erstelle dein menschliches Selbst…",
+		"pairTitle": "Dieses Gerät koppeln",
+		"pairBody": "Öffne auf einem Gerät, das dein menschliches Selbst bereits hält, die Mitglieder und füge den untenstehenden Signer als Eigentümer hinzu. Sobald es ankommt, verbindet sich dieses Gerät automatisch.",
+		"yourSignerDid": "Signer-DID dieses Geräts",
+		"copySignerDid": "Signer-DID kopieren",
+		"copied": "Kopiert",
+		"pairWaiting": "Warte darauf, dass dein anderes Gerät diesen Signer hinzufügt…",
 		"footnote": "Weitere Selbste (Avens, Sparks) kannst du später hinzufügen. Dieses erste bist du."
 	},
 	"networkGate": {

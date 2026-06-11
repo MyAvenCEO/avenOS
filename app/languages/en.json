@@ -918,10 +918,20 @@
 	"humanGate": {
 		"kicker": "One more step",
 		"title": "What should we call you?",
-		"body": "Your signer and vault are ready. Now create your human self — the identity that holds your data and that the network invites in. Your name lives on your device until you choose to share it.",
+		"body": "Your signer and vault are ready. Now set up your human self — the identity that holds your data and that the network invites in.",
+		"createOption": "Create a new self",
+		"createOptionDesc": "Start fresh — name yourself and mint a new human identity on this device.",
+		"pairOption": "Pair with an existing self",
+		"pairOptionDesc": "This is another device of a self you already have — join it from your other device.",
 		"namePlaceholder": "Alice",
 		"createButton": "Create my human self",
 		"creating": "Creating your human self…",
+		"pairTitle": "Pair this device",
+		"pairBody": "On a device that already holds your human self, open Members and add the signer below as an owner. Once it lands, this device joins automatically.",
+		"yourSignerDid": "This device's signer DID",
+		"copySignerDid": "Copy signer DID",
+		"copied": "Copied",
+		"pairWaiting": "Waiting for your other device to add this signer…",
 		"footnote": "You can add more selves (avens, sparks) later. This first one is you."
 	},
 	"networkGate": {
