@@ -5,7 +5,7 @@ owner: claude
 created: 2026-06-11
 updated: 2026-06-11
 tags: [aven-ai, talk, llm, tools]
-goal: "`cargo check --features tinfoil` (libs/aven-ai), `cargo check` (libs/aven-ai, default), and `cargo check --features desktop-ai` (app/src-tauri) all exit 0; the app's `bun run check` adds NO new error beyond the pre-existing unrelated `libs/aven-ui/src/brand-style.ts` one; and every Acceptance criterion in board card 0021 is checked with evidence"
+goal: "`cargo check --features tinfoil` (libs/aven-ai), `cargo check` (libs/aven-ai, default), and `cargo check --features desktop-ai` (app/src-tauri) all exit 0; the app's `bun run check` adds NO new error beyond the pre-existing unrelated `libs/aven-ui/src/brand-style.ts` one; and every Acceptance criterion in board card 0022 is checked with evidence"
 ---
 
 # Tinfoil cloud LLM + one generic todos CRUD tool in Talk
@@ -234,13 +234,13 @@ git status --short
 ## Hand-off
 
 ```
-/board-goal discover/0021-tinfoil-todos-crud-tool
+/aven-review 0022
 ```
 
 …or hand the condition straight to the built-in goal loop:
 
 ```
-/goal `cargo check -p aven-ai --features tinfoil` exits 0, `cargo check` in app/src-tauri exits 0, `bun run check` and `bun run lint` exit 0, and every Acceptance criterion in board card 0021 is checked with evidence
+/goal `cargo check -p aven-ai --features tinfoil` exits 0, `cargo check` in app/src-tauri exits 0, `bun run check` and `bun run lint` exit 0, and every Acceptance criterion in board card 0022 is checked with evidence
 ```
 
 ## Progress log

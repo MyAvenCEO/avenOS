@@ -341,7 +341,7 @@ dependencies = [
  "aven-db",
  "base64 0.22.1",
  "hkdf",
- "rand_core",
+ "rand_core 0.6.4",
  "serde",
  "serde_json",
  "sha2 0.10.9",
