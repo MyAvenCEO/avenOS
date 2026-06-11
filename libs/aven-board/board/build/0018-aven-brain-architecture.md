@@ -302,13 +302,21 @@ them through **per-table ingestion adapters** (§2.4). Ingest **never blocks the
    hallucination-contained (agent claims enter as `inferred` text that dreaming verifies
    before promotion). The dreaming extractor is schema-constrained JSON at temp 0 — its
    output also lands as links via code, never as freehand writes.
-6. **Structuring is alongside, never between.** Raw artifact text always ingests instantly
+6. **Talk is human-to-human; LFM2.5 is the ambient NORMALIZER, not a chat partner.** Its
+   primary job is the minimal transcription of each human message: fix typos
+   (`sahra` → `[[Sarah]]`), canonicalize entities as wikilinks, leave structure and wording
+   otherwise AS-IS — zero rephrasing, zero summarizing (temp 0, tightly prompted). This
+   normalized note is the async sibling memory (`inferred`, `refers_to` original,
+   `normalize_version` stamped) that gives rung-0 regex + embeddings clean input — better
+   offline non-LLM results, which is the point. The displayed/sealed original is never
+   altered. Lands with the E4 LLM plumbing.
+7. **Structuring is alongside, never between.** Raw artifact text always ingests instantly
    (rung 0 on the raw text); an optional async LFM2.5 pass may add a *structured note* as
    its own memory (`inferred`, `refers_to` the original) whose markup rung 0 then parses.
    Adapters (§2.4) are the deterministic always-on layer; structuring is an enrichment an
    adapter may schedule — writes never block on a model. Rung 2 = the parked attested-TEE
    extractor (Appendix B), same trait.
-7. **Dreaming is a scheduler, not a bedtime.** All passes are idempotent → trigger freely:
+8. **Dreaming is a scheduler, not a bedtime.** All passes are idempotent → trigger freely:
    every N turns, on idle, on app open/close, manual. Cheap code passes (decay/merge/verify)
    run often; local-LLM passes batch on idle; remote passes rarest.
 5. **Idempotent + convergent**: `content_hash` dedup before embedding; deterministic extraction
