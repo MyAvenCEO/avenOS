@@ -571,6 +571,14 @@ pub fn rebuild_identity_biscuit_excluding(
 	for (did, op, prefix) in &grant_rows {
 		biscuit = attenuate_add_grant_third_party(kp, &biscuit, did, op, prefix)?;
 	}
+
+	// Anti-lockout invariant (CAPS-level, fail-closed): a SAFE must ALWAYS retain at
+	// least one owner. Genesis re-grants the minting owner, so this can only fire if a
+	// future change to mint_safe_genesis drops that — but enforce it explicitly so no
+	// revoke path can ever leave a SAFE with an empty `owns` set (= permanently locked).
+	if identity_admins(&biscuit, owner)?.is_empty() {
+		return Err("cannot remove the last owner of a SAFE".into());
+	}
 	Ok(biscuit)
 }
 
@@ -1494,6 +1502,40 @@ mod tests {
 		assert!(grants
 			.iter()
 			.any(|(d, o, p)| signer_did_matches(d, &member.signer_did) && o == "write" && p == &prefix));
+	}
+
+	#[test]
+	fn revoke_never_empties_the_owner_set() {
+		// Anti-lockout: rebuild_identity_biscuit_excluding (the v2 revoke) must never
+		// leave a SAFE with an empty `owns` set. Genesis re-grants the minting owner, so
+		// the owner set always retains at least it.
+		let owner = vault(&[1u8; 32]);
+		let admin2 = vault(&[5u8; 32]);
+		let sid = uuid::Uuid::new_v4();
+
+		let genesis = mint_safe_genesis(&owner, sid).unwrap();
+		let chain =
+			attenuate_add_owner_third_party(&owner.biscuit_kp, &genesis, sid, &admin2.signer_did).unwrap();
+		let mut v = owner;
+		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
+
+		// Two owners to start.
+		let before = identity_admins(&v.safes.get(&sid).unwrap().biscuit, sid).unwrap();
+		assert!(before.iter().any(|d| signer_did_matches(d, &v.signer_did)));
+		assert!(before.iter().any(|d| signer_did_matches(d, &admin2.signer_did)));
+
+		// Revoke the second owner → genesis owner remains, set is non-empty.
+		let after = rebuild_identity_biscuit_excluding(&v, sid, &admin2.signer_did).unwrap();
+		let owners = identity_admins(&after, sid).unwrap();
+		assert!(!owners.is_empty(), "owner set must never be empty");
+		assert!(owners.iter().any(|d| signer_did_matches(d, &v.signer_did)));
+		assert!(!owners.iter().any(|d| signer_did_matches(d, &admin2.signer_did)));
+
+		// Trying to revoke the genesis owner is a no-op for ownership — it is re-granted,
+		// so the SAFE can never be locked out of itself.
+		let after2 = rebuild_identity_biscuit_excluding(&v, sid, &v.signer_did.clone()).unwrap();
+		let owners2 = identity_admins(&after2, sid).unwrap();
+		assert!(owners2.iter().any(|d| signer_did_matches(d, &v.signer_did)));
 	}
 
 	#[test]

@@ -1785,6 +1785,64 @@ pub(crate) async fn groove_ipc_spark_admin_list(
 /// revoked peer keeps only what it already decrypted (not retroactive — physics).
 /// Owner-scoped: the re-mint re-roots the chain to this device's biscuit key and
 /// updates the stored issuer (the common case is This device = OWNER).
+/// Count how many of `owner_dids` are HUMAN owners, for the ≥1-human-owner anti-lockout
+/// guard. Classification (matches the agreed taxonomy):
+///   - `did:safe:X`  → human iff the `safes` row for X has `type == "human"`.
+///   - `did:key:…`   → a signer; human UNLESS its `signers` row marks
+///     `signer_type == "env_seed"` (a server/aven-node key). Unknown/missing signer
+///     rows default to human (a real remote person we don't yet track locally).
+async fn count_human_owners(client: &JazzClient, owner_dids: &[String]) -> Result<usize, String> {
+	use crate::identity_acc::{resolve_safe_did, SAFE_DID_PREFIX};
+
+	// safe uuid → type
+	let safes_schema = jazz_engine::resolved_table_schema(client, "safes").await?;
+	let s_owner_ix = jazz_engine::col_ix(&safes_schema, "owner")?;
+	let s_type_ix = jazz_engine::col_ix(&safes_schema, "type")?;
+	let mut safe_type: std::collections::HashMap<Uuid, String> = std::collections::HashMap::new();
+	for (_o, vals) in jazz_engine::exec_list_rows(client, "safes").await.unwrap_or_default() {
+		if let Ok(u) = jazz_engine::uuid_cell_at(vals.as_slice(), s_owner_ix) {
+			let ty = match vals.get(s_type_ix) {
+				Some(Value::Text(t)) => t.trim().to_string(),
+				_ => String::new(),
+			};
+			safe_type.insert(u, ty);
+		}
+	}
+
+	// signer did → signer_type
+	let sg_schema = jazz_engine::resolved_table_schema(client, "signers").await?;
+	let sg_did_ix = jazz_engine::col_ix(&sg_schema, "signer_did")?;
+	let sg_type_ix = jazz_engine::col_ix(&sg_schema, "signer_type")?;
+	let mut signer_type: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+	for (_o, vals) in jazz_engine::exec_list_rows(client, "signers").await.unwrap_or_default() {
+		if let Some(Value::Text(d)) = vals.get(sg_did_ix) {
+			let ty = match vals.get(sg_type_ix) {
+				Some(Value::Text(t)) => t.trim().to_string(),
+				_ => String::new(),
+			};
+			signer_type.insert(d.trim().to_string(), ty);
+		}
+	}
+
+	let mut humans = 0usize;
+	for did in owner_dids {
+		let did = did.trim();
+		if did.starts_with(SAFE_DID_PREFIX) {
+			if resolve_safe_did(did)
+				.and_then(|u| safe_type.get(&u))
+				.map(|t| t == "human")
+				.unwrap_or(false)
+			{
+				humans += 1;
+			}
+		} else if signer_type.get(did).map(String::as_str).unwrap_or("") != "env_seed" {
+			// did:key signer — human unless explicitly an env_seed server key.
+			humans += 1;
+		}
+	}
+	Ok(humans)
+}
+
 pub(crate) async fn groove_ipc_spark_admin_revoke(
 	app: &tauri::AppHandle,
 	jazz: &ManagedJazz,
@@ -1832,6 +1890,19 @@ pub(crate) async fn groove_ipc_spark_admin_revoke(
 
 	let new_biscuit =
 		crate::identity_acc::rebuild_identity_biscuit_excluding(&shell.vault, identity_uuid, &signer_did)?;
+
+	// Anti-lockout (CAPS-level, fail-closed before any DB mutation): every SAFE must
+	// always keep at least one HUMAN owner, so an autonomous aven/server owner can never
+	// be the last one standing. Classify the post-revoke owner set and reject if it would
+	// leave zero humans.
+	let post_owners: Vec<String> = crate::identity_acc::identity_admins(&new_biscuit, identity_uuid)?
+		.into_iter()
+		.collect();
+	if count_human_owners(client.as_ref(), &post_owners).await? == 0 {
+		return Err(
+			"cannot remove the last human owner — every SAFE must keep at least one human owner".into(),
+		);
+	}
 
 	let new_v = cur_v + 1;
 	let new_dek = crate::crypto::random_identity_dek();

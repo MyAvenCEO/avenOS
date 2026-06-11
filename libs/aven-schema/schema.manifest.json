@@ -34,6 +34,13 @@
 					"comment": "local | remote"
 				},
 				{
+					"name": "signer_type",
+					"type": "text",
+					"plaintext": true,
+					"nullable": true,
+					"comment": "how this signer's key is held — apple_se (Apple Secure Enclave, a human device) | env_seed (AVEN_SERVER_SEED, a server/aven node) | security_key | recovery_phrase. null/absent = treated as apple_se (human). Drives the ≥1-human-owner anti-lockout guard."
+				},
+				{
 					"name": "added_at_ms",
 					"type": "bigint",
 					"plaintext": true,
