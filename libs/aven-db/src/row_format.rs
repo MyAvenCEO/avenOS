@@ -6,8 +6,11 @@ use crate::object::ObjectId;
 use crate::query_manager::types::{ColumnDescriptor, ColumnType, RowDescriptor, Value};
 use uuid::Uuid;
 
-/// Maximum payload size allowed for a single BYTEA value (1 MiB).
-pub const BYTEA_MAX_BYTES: usize = 1_048_576;
+/// Maximum payload size allowed for a single BYTEA value (24 MiB). Sized to cover the app's
+/// `INTENT_FILE_MAX_BYTES` (15 MiB) file uploads after base64 (+~34%) land in the `files.content`
+/// bytea column — a 1 MiB cap rejected even modest images. Still bounded so a runaway value can't
+/// exhaust memory.
+pub const BYTEA_MAX_BYTES: usize = 24 * 1024 * 1024;
 const INVALID_UUID_TEXT_SENTINEL: [u8; 16] = [0xff; 16];
 
 /// Encoding error types.
