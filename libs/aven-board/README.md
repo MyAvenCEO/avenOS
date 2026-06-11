@@ -5,22 +5,25 @@ single `.md` file; the folder it lives in is its state. No database — git is t
 single source of truth.
 
 ```
-idea/ → plan/ → test/ → done/
-(idea)   (spec)   (verify) (archive)
+idea/ → discovery/ → goal/ → review/ → ship/
+(backlog) (spec)     (execute) (evaluate) (archive)
 ```
 
-Throw any idea or task into `idea`, spec it in `plan`, let an agent build it, and
-verify it in `test` before it lands in `done`.
+Throw any idea or task into `idea`, spec it into a **measurable goal** in
+`discovery`, execute it in `goal`, evaluate it against the metric in `review`
+(human-verified, HITL), and archive it in `ship`. Each state has a skill:
+`/idea`, `/discovery`, `/goal`, `/review`, `/ship`.
 
 ## Layout
 
 ```
 aven-board/
 ├─ board/                 # the work items — single source of truth
-│  ├─ idea/  (backlog)
-│  ├─ plan/   (spec)
-│  ├─ test/   (review)
-│  └─ done/   (shipped)
+│  ├─ idea/       (backlog)
+│  ├─ discovery/  (spec — uncover + measure the goal)
+│  ├─ goal/       (execute toward the metric)
+│  ├─ review/     (evaluate; human-verified, HITL)
+│  └─ ship/       (shipped / archive)
 ├─ templates/             # how to write items + plans
 │  ├─ work-item.md
 │  └─ plan.md
@@ -55,12 +58,12 @@ current board state.
 
 ## Goal-driven hand-off
 
-Every `plan/` item carries a **`goal`** in its frontmatter: one measurable
+Every item past `idea/` carries a **`goal`** in its frontmatter: one measurable
 completion condition, provable from command output. That makes items compatible
 with Claude Code's built-in `/goal` loop, and with the project command:
 
 ```
-/board-goal <item-ref>          # resolve the item, build + verify, move it across columns
+/board-goal <item-ref>          # resolve the item, execute + review, move it across columns
 /goal <completion condition>    # or flip on the built-in cross-turn loop directly
 ```
 
@@ -70,6 +73,6 @@ and the full-screen doc view surfaces the goal with a one-click "Copy /goal".
 ## Working the board
 
 See **[AGENTS.md](./AGENTS.md)**. In short: create items in `idea/` from
-`templates/work-item.md`, move them forward with `git mv`, keep frontmatter
-accurate (`title`, `summary`, `tags`, `owner`, `goal`, dates), and append to each
-item's `## Progress log`.
+`templates/work-item.md`, move them forward with `git mv` (`idea → discovery →
+goal → review → ship`), keep frontmatter accurate (`title`, `summary`, `tags`,
+`owner`, `goal`, dates), and append to each item's `## Progress log`.

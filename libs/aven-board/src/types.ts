@@ -1,5 +1,5 @@
 /** Canonical board states — the folder a work item lives in is the source of truth. */
-export const BOARD_COLUMN_IDS = ['idea', 'plan', 'test', 'done'] as const
+export const BOARD_COLUMN_IDS = ['idea', 'discovery', 'goal', 'review', 'ship'] as const
 
 export type BoardColumnId = (typeof BOARD_COLUMN_IDS)[number]
 
@@ -30,7 +30,7 @@ export type WorkItem = {
 	/**
 	 * Measurable, transcript-verifiable completion condition from frontmatter `goal`.
 	 * This is the single line handed to Claude Code's built-in `/goal` to drive the
-	 * item to done — e.g. "`bun run check` and `bun run lint` exit 0".
+	 * item to ship — e.g. "`bun run check` and `bun run lint` exit 0".
 	 */
 	goal?: string
 	/** Markdown body with frontmatter stripped. */

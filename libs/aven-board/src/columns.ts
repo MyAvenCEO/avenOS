@@ -18,24 +18,32 @@ export const BOARD_COLUMN_META: Record<BoardColumnId, BoardColumnMeta> = {
 		aka: 'Backlog',
 		description: 'Raw ideas and tasks. Throw anything here — unrefined and unsorted.'
 	},
-	plan: {
-		id: 'plan',
-		label: 'Plan',
+	discovery: {
+		id: 'discovery',
+		label: 'Discovery',
 		aka: 'Spec',
 		description:
-			'Specced and ready for an agent to build. Has a concrete plan + acceptance criteria.'
+			'Interviewing to uncover the real goal and make it measurable — turning a task into a metric.'
 	},
-	test: {
-		id: 'test',
-		label: 'Test',
-		aka: 'Review',
-		description: 'Implemented and awaiting verification — tests, review, and acceptance checks.'
+	goal: {
+		id: 'goal',
+		label: 'Goal',
+		aka: 'Execute',
+		description:
+			'Carries a measurable goal. Being executed toward that single completion condition.'
 	},
-	done: {
-		id: 'done',
-		label: 'Done',
+	review: {
+		id: 'review',
+		label: 'Review',
+		aka: 'Evaluate',
+		description:
+			'Built and measured against the goal — awaiting human verification (HITL) before it ships.'
+	},
+	ship: {
+		id: 'ship',
+		label: 'Ship',
 		aka: 'Shipped',
-		description: 'Verified and complete. Kept as a record of what shipped.'
+		description: 'Verified and complete. Kept as the shipped/archived record.'
 	}
 }
 

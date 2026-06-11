@@ -8,7 +8,7 @@ import { type BoardColumn, type BoardColumnId, isBoardColumnId, type WorkItem } 
  * These are eager raw imports so the board is a zero-IPC visualizer of the
  * git-tracked markdown files: in dev Vite hot-reloads on add/move/edit, and a
  * Tauri build bakes in the current board state. Moving a card between columns
- * is literally `git mv board/idea/x.md board/plan/x.md` (see AGENTS.md).
+ * is literally `git mv board/idea/x.md board/discovery/x.md` (see AGENTS.md).
  */
 const columnModules: Record<BoardColumnId, Record<string, string>> = {
 	idea: import.meta.glob('../board/idea/*.md', {
@@ -16,17 +16,22 @@ const columnModules: Record<BoardColumnId, Record<string, string>> = {
 		import: 'default',
 		eager: true
 	}) as Record<string, string>,
-	plan: import.meta.glob('../board/plan/*.md', {
+	discovery: import.meta.glob('../board/discovery/*.md', {
 		query: '?raw',
 		import: 'default',
 		eager: true
 	}) as Record<string, string>,
-	test: import.meta.glob('../board/test/*.md', {
+	goal: import.meta.glob('../board/goal/*.md', {
 		query: '?raw',
 		import: 'default',
 		eager: true
 	}) as Record<string, string>,
-	done: import.meta.glob('../board/done/*.md', {
+	review: import.meta.glob('../board/review/*.md', {
+		query: '?raw',
+		import: 'default',
+		eager: true
+	}) as Record<string, string>,
+	ship: import.meta.glob('../board/ship/*.md', {
 		query: '?raw',
 		import: 'default',
 		eager: true
