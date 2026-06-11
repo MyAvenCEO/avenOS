@@ -13,7 +13,8 @@
 import { getContext, setContext } from 'svelte'
 import { persistSparkFiles } from '$lib/avendb/intent-files'
 import type { AvenDbStore } from '$lib/avendb/store.svelte'
-import { brainIngest } from '$lib/brain/api'
+import { brainAssembleContext, brainIngest } from '$lib/brain/api'
+import { beginRoundtrip, patchRoundtrip } from '$lib/identities/talk-brain-roundtrip.svelte'
 import { tinfoilAvailable, tinfoilChat } from '$lib/llm/generate'
 import {
 	CLOUD_SYSTEM_PROMPT,
@@ -405,14 +406,30 @@ export function createIdentityAgent(deps: {
 				body
 			})
 			// E3: the brain reads along — fire-and-forget, never blocks the talk loop.
+			// E5 v1: capture the roundtrip (stored + a DISPLAY-ONLY assemble probe) for the
+			// brain aside. Nothing from the probe is sent to any LLM (auto-assemble parked).
 			if (body) {
-				void brainIngest(env.canonicalSparkId, body, {
-					stream: 'talk',
-					authorRole: 'user',
-					source: row.id,
-					contentDateMs: Date.now(),
-					veracity: 'stated'
-				}).catch((e) => console.error('[brain] ingest failed:', e instanceof Error ? e.message : e))
+				beginRoundtrip(env.canonicalSparkId, row.id, body)
+				void (async () => {
+					try {
+						const { id: memoryId } = await brainIngest(env.canonicalSparkId, body, {
+							stream: 'talk',
+							authorRole: 'user',
+							source: row.id,
+							contentDateMs: Date.now(),
+							veracity: 'stated'
+						})
+						patchRoundtrip(row.id, { memoryId, phase: 'recalling' })
+						const bundle = await brainAssembleContext(env.canonicalSparkId, body, {
+							stream: 'talk'
+						})
+						patchRoundtrip(row.id, { trace: bundle.trace, phase: 'done' })
+					} catch (e) {
+						const msg = e instanceof Error ? e.message : String(e)
+						console.error('[brain] roundtrip failed:', msg)
+						patchRoundtrip(row.id, { error: msg, phase: 'error' })
+					}
+				})()
 			}
 			if (files.length > 0) {
 				const { stored, errors } = await persistSparkFiles(row.id, files, {

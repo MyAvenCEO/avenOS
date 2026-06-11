@@ -554,6 +554,17 @@ deterministic pass is load-bearing without it. Revisit after E7.
 
 Newest entry first.
 
+- `2026-06-10` — **E5 v1 shipped — the brain roundtrip aside.** New right aside on talk
+  (24rem, xl+): always shows the LATEST roundtrip for the last human message — STORED
+  (snippet + memory id) → inner query → **L0 self · L1 gist · L2 entities · L3 recall**
+  (via/rank/score badges, self-hit filtered, abstention shown as "nothing relevant") →
+  working window → budget/embedder footer. Powered by a **display-only**
+  `assemble_context` probe after ingest (`talk-brain-roundtrip.svelte.ts` runes store +
+  `TalkBrainAside.svelte`); explicitly labeled "nothing sent to the LLM" — auto-assemble
+  stays parked. Confirmed how the cloud path works today: the Tinfoil/Gemma call gets
+  ONLY `[system, current message]` — zero history; the brain probe is the path to memory
+  once the UX is decided. svelte-check clean.
+
 - `2026-06-10` — **E7 embedder wired + auto-assemble parked.** App gains the
   `brain-gemma` feature (folded into `desktop-ai`): `AppEmbedder` enum (Gemma | Stub)
   with a process-cached, lazily-loaded EmbeddingGemma-300m (ort dylib via the llm/tts
