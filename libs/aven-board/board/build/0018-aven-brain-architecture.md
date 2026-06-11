@@ -294,6 +294,14 @@ them through **per-table ingestion adapters** (§2.4). Ingest **never blocks the
    Status: wikilinks ✅ built; the automatic regex pass is an **E3 deliverable** (brain-lib
    `write_graph` extension + tests). Rung 1 (local LLM, dreaming-time, off the write path)
    can use the already-integrated LFM2.5.
+5. **Models produce text; only deterministic code produces rows.** The chat agent SHOULD
+   write structured notes — as `[[wikilink]]` markup *inside its text* (an E4 system-prompt
+   convention; later an explicit `remember` tool), which rung 0 then parses. An LLM never
+   writes entities/links rows directly: structure embedded in text stays re-derivable
+   (wipe-and-rebuild safe), CRDT-convergent (same text → same graph on every device), and
+   hallucination-contained (agent claims enter as `inferred` text that dreaming verifies
+   before promotion). The dreaming extractor is schema-constrained JSON at temp 0 — its
+   output also lands as links via code, never as freehand writes.
 5. **Idempotent + convergent**: `content_hash` dedup before embedding; deterministic extraction
    ⇒ two devices ingesting the same content converge (row dedup by hash, entity dedup by
    dreaming's merge, note links idempotent by definition).
