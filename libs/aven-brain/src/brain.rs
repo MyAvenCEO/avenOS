@@ -86,6 +86,13 @@ const NOTE_KINDS: [&str; 3] = ["mentions", "summarizes", "refers_to"];
 /// The bond kind.
 const BOND_KIND: &str = "assoc";
 
+/// Hard cap on how many entities one memory contributes to the graph. Bounds the per-entity
+/// fuzzy-scan AND the O(n²) bonding loop in `write_graph`, so a pasted wall of text can't saturate
+/// the serial avenDB runtime (24 entities ⇒ ≤ 276 bonds; plenty for real notes).
+const MAX_GRAPH_ENTITIES: usize = 24;
+/// Hard cap on SPO facts extracted from one memory (same runaway-write protection).
+const MAX_GRAPH_FACTS: usize = 16;
+
 /// Resolve a kind to its class. Claim predicates are free-form but must not collide
 /// with the reserved note/bond kinds.
 fn class_for_claim_predicate(kind: &str) -> Result<(), BrainError> {
@@ -1677,10 +1684,17 @@ impl<E: Embedder> Brain<E> {
     async fn write_graph(&self, memory_id: ObjectId, content: &str) -> Result<(), BrainError> {
         let mut names = extract_wikilinks(content);
         for auto in extract_auto_entities(content) {
+            // A pasted wall of text (e.g. a match report) can mention hundreds of names; without
+            // a cap each one triggers a fuzzy entity scan and the O(n²) bonding loop below
+            // explodes into tens of thousands of writes, freezing the serial avenDB runtime.
+            if names.len() >= MAX_GRAPH_ENTITIES {
+                break;
+            }
             if !names.iter().any(|n| normalize_name(n) == normalize_name(&auto)) {
                 names.push(auto);
             }
         }
+        names.truncate(MAX_GRAPH_ENTITIES); // wikilinks alone could already exceed the cap
         let mut entity_ids = Vec::with_capacity(names.len());
         for name in &names {
             let id = self.upsert_entity_fuzzy(name).await?;
@@ -1692,8 +1706,9 @@ impl<E: Embedder> Brain<E> {
                 self.potentiate_bond(entity_ids[i], entity_ids[j]).await?;
             }
         }
-        // SPO claims from the closed predicate templates (high precision, low recall).
-        for (subj, pred, obj) in extract_spo(content) {
+        // SPO claims from the closed predicate templates (high precision, low recall). Capped for
+        // the same runaway-write protection as the entity graph above.
+        for (subj, pred, obj) in extract_spo(content).into_iter().take(MAX_GRAPH_FACTS) {
             self.add_fact_with_confidence(&subj, &pred, &obj, Some(memory_id), 0.6)
                 .await?;
         }

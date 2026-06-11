@@ -2271,10 +2271,16 @@
           "markdownDescription": "Denies the unminimize command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for tauri-plugin-sandbox-quickjs\n#### This default permission set includes:\n\n- `allow-session-mount`\n- `allow-session-dispatch`\n- `allow-session-unmount`",
+          "description": "Default permissions for tauri-plugin-sandbox-quickjs\n#### This default permission set includes:\n\n- `allow-session-mount`\n- `allow-session-dispatch`\n- `allow-session-unmount`\n- `allow-run-tool`",
           "type": "string",
           "const": "sandbox-quickjs:default",
-          "markdownDescription": "Default permissions for tauri-plugin-sandbox-quickjs\n#### This default permission set includes:\n\n- `allow-session-mount`\n- `allow-session-dispatch`\n- `allow-session-unmount`"
+          "markdownDescription": "Default permissions for tauri-plugin-sandbox-quickjs\n#### This default permission set includes:\n\n- `allow-session-mount`\n- `allow-session-dispatch`\n- `allow-session-unmount`\n- `allow-run-tool`"
+        },
+        {
+          "description": "Enables the run_tool command without any pre-configured scope.",
+          "type": "string",
+          "const": "sandbox-quickjs:allow-run-tool",
+          "markdownDescription": "Enables the run_tool command without any pre-configured scope."
         },
         {
           "description": "Enables the session_dispatch command without any pre-configured scope.",
@@ -2293,6 +2299,12 @@
           "type": "string",
           "const": "sandbox-quickjs:allow-session-unmount",
           "markdownDescription": "Enables the session_unmount command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the run_tool command without any pre-configured scope.",
+          "type": "string",
+          "const": "sandbox-quickjs:deny-run-tool",
+          "markdownDescription": "Denies the run_tool command without any pre-configured scope."
         },
         {
           "description": "Denies the session_dispatch command without any pre-configured scope.",
