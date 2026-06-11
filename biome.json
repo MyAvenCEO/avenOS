@@ -9,7 +9,7 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": ["**", "!!**/bun.lock", "!!ARCHIVE/ocr-example"]
+		"includes": ["**", "!!**/bun.lock", "!!ARCHIVE/ocr-example", "!!.claude/worktrees"]
 	},
 	"formatter": {
 		"enabled": true,
