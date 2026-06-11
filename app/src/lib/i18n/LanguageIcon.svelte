@@ -1,8 +1,8 @@
 <script lang="ts">
-	// The Universal Language Icon ("Turnstile") by Farhat Datta — https://languageicon.org
-	// Public-domain mark. Fills use currentColor so it inherits the surrounding text color;
-	// viewBox is cropped to the artwork bounds so it sits flush in a square container.
-	let { class: className = 'size-6' }: { class?: string } = $props()
+// The Universal Language Icon ("Turnstile") by Farhat Datta — https://languageicon.org
+// Public-domain mark. Fills use currentColor so it inherits the surrounding text color;
+// viewBox is cropped to the artwork bounds so it sits flush in a square container.
+let { class: className = 'size-6' }: { class?: string } = $props()
 </script>
 
 <svg

@@ -10,14 +10,14 @@ export const filesShell: UiFixtureShell = {
 	style: filesStyle,
 	source: filesSource as Record<string, unknown>,
 	interface: filesInterface,
-	logic: filesLogic,
+	logic: filesLogic
 }
 
 export function createFilesShell(): UiFixtureShell {
 	return filesShell
 }
 
-export { filesLogic }
-export { filesView } from './view.js'
-export { filesStyle } from './style.js'
 export { default as filesSource } from './source.json'
+export { filesStyle } from './style.js'
+export { filesView } from './view.js'
+export { filesLogic }

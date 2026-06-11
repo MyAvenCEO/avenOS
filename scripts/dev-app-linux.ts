@@ -10,8 +10,8 @@
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { freeDevServerPort } from './free-dev-server-port.ts'
 import { startSyncRelay } from './aven-server.ts'
+import { freeDevServerPort } from './free-dev-server-port.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 

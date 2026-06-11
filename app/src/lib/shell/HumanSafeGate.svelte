@@ -1,71 +1,71 @@
 <script lang="ts">
-	import { tick } from 'svelte'
-	import { browser } from '$app/environment'
-	import { t } from '$lib/i18n'
-	import { createIdentity, avendbSession } from '$lib/avendb/api'
-	import { copyToClipboard } from '$lib/runtime/clipboard'
+import { tick } from 'svelte'
+import { browser } from '$app/environment'
+import { avendbSession, createIdentity } from '$lib/avendb/api'
+import { t } from '$lib/i18n'
+import { copyToClipboard } from '$lib/runtime/clipboard'
 
-	// Shown full-screen once, right after first sign-in: the device has a signer + vault
-	// but no HUMAN SAFE yet. Two ways forward:
-	//   • Create — name yourself → mint a new human SAFE (did:safe) on this device.
-	//   • Pair   — this is another device of an existing self: show its signer did:key so
-	//     the existing account adds it as an OWNER of their human SAFE. Once that grant
-	//     syncs in, a human row appears and the parent gate advances on its own.
-	type Mode = 'choose' | 'create' | 'pair'
-	let mode = $state<Mode>('choose')
+// Shown full-screen once, right after first sign-in: the device has a signer + vault
+// but no HUMAN SAFE yet. Two ways forward:
+//   • Create — name yourself → mint a new human SAFE (did:safe) on this device.
+//   • Pair   — this is another device of an existing self: show its signer did:key so
+//     the existing account adds it as an OWNER of their human SAFE. Once that grant
+//     syncs in, a human row appears and the parent gate advances on its own.
+type Mode = 'choose' | 'create' | 'pair'
+let mode = $state<Mode>('choose')
 
-	let name = $state('')
-	let creating = $state(false)
-	let err = $state<string | undefined>()
-	let inputEl = $state<HTMLInputElement | null>(null)
+let name = $state('')
+let creating = $state(false)
+let err = $state<string | undefined>()
+let inputEl = $state<HTMLInputElement | null>(null)
 
-	let signerDid = $state('')
-	let didCopied = $state(false)
+let signerDid = $state('')
+let didCopied = $state(false)
 
-	$effect(() => {
-		if (mode === 'create') void tick().then(() => inputEl?.focus())
-	})
+$effect(() => {
+	if (mode === 'create') void tick().then(() => inputEl?.focus())
+})
 
-	$effect(() => {
-		if (!browser || mode !== 'pair' || signerDid) return
-		void (async () => {
-			try {
-				signerDid = (await avendbSession()).signerDid ?? ''
-			} catch {
-				signerDid = ''
-			}
-		})()
-	})
-
-	async function submit(): Promise<void> {
-		const n = name.trim()
-		if (!n || creating) return
-		creating = true
-		err = undefined
+$effect(() => {
+	if (!browser || mode !== 'pair' || signerDid) return
+	void (async () => {
 		try {
-			await createIdentity(n, 'human')
-			// On success the parent's safes store gains a `type === 'human'` row and this
-			// gate is replaced automatically — no navigation needed here.
-		} catch (e) {
-			err = e instanceof Error ? e.message : String(e)
-			creating = false
+			signerDid = (await avendbSession()).signerDid ?? ''
+		} catch {
+			signerDid = ''
 		}
-	}
+	})()
+})
 
-	async function copyDid(): Promise<void> {
-		if (!signerDid) return
-		if (await copyToClipboard(signerDid)) {
-			didCopied = true
-			setTimeout(() => (didCopied = false), 1500)
-		}
+async function submit(): Promise<void> {
+	const n = name.trim()
+	if (!n || creating) return
+	creating = true
+	err = undefined
+	try {
+		await createIdentity(n, 'human')
+		// On success the parent's safes store gains a `type === 'human'` row and this
+		// gate is replaced automatically — no navigation needed here.
+	} catch (e) {
+		err = e instanceof Error ? e.message : String(e)
+		creating = false
 	}
+}
 
-	const pillInput =
-		'border-input bg-background/97 w-full min-h-[3.75rem] rounded-full border px-5 py-3 pr-[3.75rem] text-lg shadow-sm backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40'
-	const choiceBtn =
-		'hover:bg-accent/10 flex w-full flex-col gap-1 rounded-xl border border-border/60 bg-background/97 px-5 py-4 text-left shadow-sm backdrop-blur-sm transition-[background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40'
-	const backBtn =
-		'border-input text-foreground hover:bg-accent self-start rounded-lg border px-4 py-2 text-sm font-medium'
+async function copyDid(): Promise<void> {
+	if (!signerDid) return
+	if (await copyToClipboard(signerDid)) {
+		didCopied = true
+		setTimeout(() => (didCopied = false), 1500)
+	}
+}
+
+const pillInput =
+	'border-input bg-background/97 w-full min-h-[3.75rem] rounded-full border px-5 py-3 pr-[3.75rem] text-lg shadow-sm backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40'
+const choiceBtn =
+	'hover:bg-accent/10 flex w-full flex-col gap-1 rounded-xl border border-border/60 bg-background/97 px-5 py-4 text-left shadow-sm backdrop-blur-sm transition-[background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40'
+const backBtn =
+	'border-input text-foreground hover:bg-accent self-start rounded-lg border px-4 py-2 text-sm font-medium'
 </script>
 
 <div class="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-6">
@@ -112,7 +112,7 @@
 							void submit()
 						}
 					}}
-				/>
+				>
 				<button
 					type="button"
 					class="absolute top-1/2 right-2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--color-brand-navy)] text-white shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 disabled:opacity-40"

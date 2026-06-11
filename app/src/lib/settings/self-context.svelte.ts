@@ -5,8 +5,8 @@
  */
 
 import { invoke } from '@tauri-apps/api/core'
-import { browser } from '$app/environment'
 import { getContext, setContext } from 'svelte'
+import { browser } from '$app/environment'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { DEVICE_PEER_SLOT } from '$lib/settings/device-session-store'
 import { NETWORK_SEED as NETWORK_SEED_FALLBACK } from '$lib/settings/network'
@@ -98,7 +98,7 @@ function createSelfContext() {
 		get signerDid() {
 			return signerDid
 		},
-		refresh,
+		refresh
 	}
 }
 
@@ -110,6 +110,7 @@ export function provideSelfContext(): SelfContext {
 
 export function useSelfContext(): SelfContext {
 	const ctx = getContext<SelfContext>(KEY)
-	if (!ctx) throw new Error('useSelfContext: provider missing — wrap pages in /settings/+layout.svelte')
+	if (!ctx)
+		throw new Error('useSelfContext: provider missing — wrap pages in /settings/+layout.svelte')
 	return ctx
 }

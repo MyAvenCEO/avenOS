@@ -69,7 +69,14 @@ export function levelFor(value: number, opts: LevelOptions = {}): LevelInfo {
 		for (let k = 0; k < fib.length && fib[k] <= value; k++) i = k
 		if (i < 0) {
 			const next = fib[0]
-			return { level: 0, current: 0, next, progress: clamp01(value / next), direction, maxed: false }
+			return {
+				level: 0,
+				current: 0,
+				next,
+				progress: clamp01(value / next),
+				direction,
+				maxed: false
+			}
 		}
 		const maxed = i >= fib.length - 1
 		const current = fib[i]

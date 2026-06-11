@@ -11,7 +11,7 @@ export function shortSignerDid(did: string | undefined): string {
 export function peerDisplayLabel(
 	signerDid: string,
 	storedLabel: string | undefined,
-	localPairingLabel: string | undefined,
+	localPairingLabel: string | undefined
 ): string {
 	const stored = storedLabel?.trim()
 	if (!stored) return shortSignerDid(signerDid)
@@ -24,7 +24,7 @@ export function peerDisplayLabel(
 export function peerPersonName(
 	signerDid: string,
 	storedLabel: string | undefined,
-	localPairingLabel: string | undefined,
+	localPairingLabel: string | undefined
 ): string {
 	const full = peerDisplayLabel(signerDid, storedLabel, localPairingLabel)
 	const slash = full.indexOf('/')
@@ -36,7 +36,7 @@ export function peerPersonName(
 export function peerPickerLines(
 	signerDid: string,
 	storedLabel: string | undefined,
-	localPairingLabel: string | undefined,
+	localPairingLabel: string | undefined
 ): { title: string; device?: string } {
 	const full = peerDisplayLabel(signerDid, storedLabel, localPairingLabel)
 	const slash = full.indexOf('/')

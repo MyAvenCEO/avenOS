@@ -19,7 +19,7 @@ const TRANSIENT_PATTERNS = [
 	'not claimed',
 	'ShellNotReady',
 	'shell_not_ready',
-	'avendbShellNotReady',
+	'avendbShellNotReady'
 ]
 
 function isTransientShellError(err: unknown): boolean {
@@ -33,7 +33,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
  *  (re-hydration window) auto-retry with backoff so add/revoke/read self-heal (B4). */
 export async function avenDbRuntime<T = unknown>(
 	op: string,
-	payload: Record<string, unknown> = {},
+	payload: Record<string, unknown> = {}
 ): Promise<T> {
 	let lastErr: unknown
 	// Up to 6 attempts over ~4.5s — covers the re-hydration window after a grant or a

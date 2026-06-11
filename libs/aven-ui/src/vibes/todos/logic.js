@@ -8,7 +8,7 @@ var DEFAULT_LABELS = {
 	clearDone: 'Erledigte löschen',
 	toggleAria: 'Als erledigt markieren',
 	deleteAria: 'Löschen',
-	emptyList: 'Noch keine Aufgaben — oben hinzufügen.',
+	emptyList: 'Noch keine Aufgaben — oben hinzufügen.'
 }
 
 function mergeLabels(source) {
@@ -25,14 +25,12 @@ function uid() {
 }
 
 function mapItems(items) {
-	return (items || []).map(function (it) {
-		return {
-			id: String(it.id || uid()),
-			text: it.text || '',
-			done: !!it.done,
-			rowClass: it.done ? 'td-row done' : 'td-row',
-		}
-	})
+	return (items || []).map((it) => ({
+		id: String(it.id || uid()),
+		text: it.text || '',
+		done: !!it.done,
+		rowClass: it.done ? 'td-row done' : 'td-row'
+	}))
 }
 
 function computeOpenCount(items) {
@@ -52,10 +50,10 @@ function initState(source) {
 		title: source.title || 'Aufgaben',
 		openCount: computeOpenCount(items),
 		draft: '',
-		hasDone: items.some(function (i) { return i.done }),
+		hasDone: items.some((i) => i.done),
 		items: items,
 		emptyMessage: labels.emptyList,
-		isEmpty: items.length === 0,
+		isEmpty: items.length === 0
 	}
 }
 
@@ -74,7 +72,7 @@ function handleEvent(type, payload, state) {
 			hasDone: state.hasDone,
 			items: items,
 			emptyMessage: state.emptyMessage,
-			isEmpty: items.length === 0,
+			isEmpty: items.length === 0
 		}
 	}
 
@@ -93,7 +91,7 @@ function handleEvent(type, payload, state) {
 					id: items[i].id,
 					text: items[i].text,
 					done: !items[i].done,
-					rowClass: !items[i].done ? 'td-row done' : 'td-row',
+					rowClass: !items[i].done ? 'td-row done' : 'td-row'
 				}
 				break
 			}
@@ -102,11 +100,11 @@ function handleEvent(type, payload, state) {
 
 	if (type === 'DELETE_ITEM') {
 		var did = payload.id
-		items = items.filter(function (it) { return it.id !== did })
+		items = items.filter((it) => it.id !== did)
 	}
 
 	if (type === 'CLEAR_DONE') {
-		items = items.filter(function (it) { return !it.done })
+		items = items.filter((it) => !it.done)
 	}
 
 	return {
@@ -114,9 +112,9 @@ function handleEvent(type, payload, state) {
 		title: state.title,
 		openCount: computeOpenCount(items),
 		draft: draft,
-		hasDone: items.some(function (i) { return i.done }),
+		hasDone: items.some((i) => i.done),
 		items: items,
 		emptyMessage: state.labels.emptyList,
-		isEmpty: items.length === 0,
+		isEmpty: items.length === 0
 	}
 }

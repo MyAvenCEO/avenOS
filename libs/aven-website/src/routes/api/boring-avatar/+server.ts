@@ -1,5 +1,5 @@
-import type { RequestHandler } from './$types'
 import { beamAvatarSvg, paletteFromCommaString } from '$lib/beam-avatar'
+import type { RequestHandler } from './$types'
 
 function maskId(seed: string, size: number): string {
 	let h = 0

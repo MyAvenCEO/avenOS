@@ -1,4 +1,9 @@
 <script lang="ts">
+import { t } from '$lib/i18n'
+import MobileAsideDrawer from '$lib/ui/MobileAsideDrawer.svelte'
+import MobileAsideSectionLabel from '$lib/ui/MobileAsideSectionLabel.svelte'
+import { mobileAsideBottomPadClass } from '$lib/ui/mobile-aside'
+import StatusCard from './StatusCard.svelte'
 /**
  * Right aside — skills + workers for the selected intent.
  *
@@ -8,15 +13,10 @@
 import {
 	type IntentRow,
 	type SkillWorker,
-	type WorkerActor,
 	skillLiveElapsedSeconds,
-	skillStatusLabel
+	skillStatusLabel,
+	type WorkerActor
 } from './types'
-import StatusCard from './StatusCard.svelte'
-import MobileAsideDrawer from '$lib/ui/MobileAsideDrawer.svelte'
-import MobileAsideSectionLabel from '$lib/ui/MobileAsideSectionLabel.svelte'
-import { mobileAsideBottomPadClass } from '$lib/ui/mobile-aside'
-import { t } from '$lib/i18n'
 
 let {
 	intent,

@@ -1,6 +1,6 @@
-import type { StyleDef } from './types.js'
 import { CSS_INJECTION_PATTERNS, FORBIDDEN_PATH_KEYS } from './security.js'
 import { validateStyleDef } from './style-validator.js'
+import type { StyleDef } from './types.js'
 import { compileCSSProperties, toKebabCase } from './utils.js'
 
 function assertSafePath(path: string, context = 'style token path'): void {
@@ -35,13 +35,19 @@ function sanitizeCSSInterpolatedValue(value: unknown): string {
 
 function deepMerge(
 	target: Record<string, unknown>,
-	source: Record<string, unknown>,
+	source: Record<string, unknown>
 ): Record<string, unknown> {
 	const output = { ...target }
 	for (const key of Object.keys(source)) {
 		const sv = source[key]
 		const tv = target[key]
-		if (sv instanceof Object && !Array.isArray(sv) && key in target && tv instanceof Object && !Array.isArray(tv)) {
+		if (
+			sv instanceof Object &&
+			!Array.isArray(sv) &&
+			key in target &&
+			tv instanceof Object &&
+			!Array.isArray(tv)
+		) {
 			output[key] = deepMerge(tv as Record<string, unknown>, sv as Record<string, unknown>)
 		} else {
 			output[key] = sv
@@ -70,9 +76,9 @@ export class StyleEngine {
 				md: '480px',
 				lg: '640px',
 				xl: '768px',
-				'2xl': '1024px',
+				'2xl': '1024px'
 			},
-			containerName,
+			containerName
 		}
 
 		const brandTokens = (style.tokens ?? {}) as Record<string, unknown>
@@ -124,14 +130,14 @@ export class StyleEngine {
 	private compileModifierStyles(
 		styles: Record<string, unknown>,
 		tokens: Record<string, unknown>,
-		indent = 2,
+		indent = 2
 	): string {
 		return compileCSSProperties(styles, (v) => this.interpolateTokens(v, tokens), indent)
 	}
 
 	private compileComponentsToCSS(
 		components: Record<string, Record<string, unknown>>,
-		tokens: Record<string, unknown>,
+		tokens: Record<string, unknown>
 	): string {
 		const cssRules: string[] = []
 		for (const [className, styles] of Object.entries(components)) {
@@ -147,9 +153,7 @@ export class StyleEngine {
 				else baseStyles[prop] = value
 			}
 			if (Object.keys(baseStyles).length > 0) {
-				cssRules.push(
-					`.${kebabClassName} {\n${this.compileModifierStyles(baseStyles, tokens)}\n}`,
-				)
+				cssRules.push(`.${kebabClassName} {\n${this.compileModifierStyles(baseStyles, tokens)}\n}`)
 			}
 			for (const [modifier, modifierStyles] of Object.entries(modifiers)) {
 				let selector: string
@@ -166,23 +170,36 @@ export class StyleEngine {
 		return cssRules.join('\n\n')
 	}
 
-	private compileSelectors(selectors: Record<string, Record<string, unknown>>, tokens: Record<string, unknown>): string {
+	private compileSelectors(
+		selectors: Record<string, Record<string, unknown>>,
+		tokens: Record<string, unknown>
+	): string {
 		const cssRules: string[] = []
 		for (const [selector, styles] of Object.entries(selectors)) {
 			const interpolatedSelector = this.interpolateTokens(selector, tokens)
 			if (interpolatedSelector.startsWith('@')) {
 				const nestedRules: string[] = []
 				for (const [nestedSelector, nestedStyles] of Object.entries(styles)) {
-					if (typeof nestedStyles === 'object' && nestedStyles !== null && !Array.isArray(nestedStyles)) {
-						const kebabNested = nestedSelector.replace(/\.([a-zA-Z][a-zA-Z0-9]*)/g, (_m, cn) => `.${toKebabCase(cn)}`)
+					if (
+						typeof nestedStyles === 'object' &&
+						nestedStyles !== null &&
+						!Array.isArray(nestedStyles)
+					) {
+						const kebabNested = nestedSelector.replace(
+							/\.([a-zA-Z][a-zA-Z0-9]*)/g,
+							(_m, cn) => `.${toKebabCase(cn)}`
+						)
 						nestedRules.push(
-							`  ${kebabNested} {\n${this.compileModifierStyles(nestedStyles as Record<string, unknown>, tokens, 4)}\n  }`,
+							`  ${kebabNested} {\n${this.compileModifierStyles(nestedStyles as Record<string, unknown>, tokens, 4)}\n  }`
 						)
 					}
 				}
 				cssRules.push(`${interpolatedSelector} {\n${nestedRules.join('\n')}\n}`)
 			} else {
-				const kebabSelector = interpolatedSelector.replace(/\.([a-zA-Z][a-zA-Z0-9]*)/g, (_m, cn) => `.${toKebabCase(cn)}`)
+				const kebabSelector = interpolatedSelector.replace(
+					/\.([a-zA-Z][a-zA-Z0-9]*)/g,
+					(_m, cn) => `.${toKebabCase(cn)}`
+				)
 				cssRules.push(`${kebabSelector} {\n${this.compileModifierStyles(styles, tokens)}\n}`)
 			}
 		}
@@ -193,7 +210,7 @@ export class StyleEngine {
 		tokens: Record<string, unknown>,
 		components: Record<string, Record<string, unknown>>,
 		selectors: Record<string, Record<string, unknown>>,
-		containerName: string,
+		containerName: string
 	): string {
 		let css = `${this.compileTokensToCSS(tokens, containerName)}\n${this.compileComponentsToCSS(components, tokens)}`
 		const selectorCSS = this.compileSelectors(selectors, tokens)

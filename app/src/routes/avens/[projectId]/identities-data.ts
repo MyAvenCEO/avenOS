@@ -23,9 +23,9 @@ const SPARKS_BY_AVEN: Record<string, AvenSparkMeta[]> = {
 			id: 'hh',
 			name: 'H&H',
 			kind: 'Restaurant',
-			subtitle: 'Dine-in & to-go · POS journal',
-		},
-	],
+			subtitle: 'Dine-in & to-go · POS journal'
+		}
+	]
 }
 
 export function sparksForAven(avenId: string): AvenSparkMeta[] {

@@ -20,10 +20,7 @@ function stripFrontmatter(src: string): string {
 }
 
 function countWords(text: string): number {
-	return text
-		.trim()
-		.split(/\s+/g)
-		.filter(Boolean).length
+	return text.trim().split(/\s+/g).filter(Boolean).length
 }
 
 let failed = false

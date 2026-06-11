@@ -11,7 +11,7 @@ const CONDITIONAL_OPS = [
 	'$gt',
 	'$lt',
 	'$gte',
-	'$lte',
+	'$lte'
 ]
 
 function isDSLOperation(value: unknown): boolean {
@@ -30,12 +30,12 @@ function rejectValue(value: unknown, path: string, propName: string): void {
 	if (typeof value === 'object' && value !== null && isDSLOperation(value)) {
 		const opName = Object.keys(value)[0]
 		throw new Error(
-			`[aven-ui] Conditional logic (${opName}) not allowed in ${path}.${propName}. Use state machines.`,
+			`[aven-ui] Conditional logic (${opName}) not allowed in ${path}.${propName}. Use state machines.`
 		)
 	}
 	if (hasTernary(value)) {
 		throw new Error(
-			`[aven-ui] Ternary operators not allowed in ${path}.${propName}. Use state machines.`,
+			`[aven-ui] Ternary operators not allowed in ${path}.${propName}. Use state machines.`
 		)
 	}
 }
@@ -62,7 +62,7 @@ function validateViewNode(node: unknown, path = 'view'): void {
 			const child = n.children[i]
 			if (typeof child === 'object' && child !== null && isDSLOperation(child)) {
 				throw new Error(
-					`[aven-ui] Conditional logic (${Object.keys(child)[0]}) not allowed in view templates.`,
+					`[aven-ui] Conditional logic (${Object.keys(child)[0]}) not allowed in view templates.`
 				)
 			}
 			validateViewNode(child, `${path}.children[${i}]`)
@@ -109,14 +109,17 @@ export class Evaluator {
 		this.maxDepth = options.maxDepth ?? 50
 	}
 
-	async evaluate(expression: unknown, data: { state: Record<string, unknown>; item?: unknown; index?: number }): Promise<unknown> {
+	async evaluate(
+		expression: unknown,
+		data: { state: Record<string, unknown>; item?: unknown; index?: number }
+	): Promise<unknown> {
 		return this.evaluateInner(expression, data, 0)
 	}
 
 	private async evaluateInner(
 		expression: unknown,
 		data: { state: Record<string, unknown>; item?: unknown; index?: number },
-		depth: number,
+		depth: number
 	): Promise<unknown> {
 		if (depth > this.maxDepth) {
 			throw new Error('[aven-ui] Maximum expression depth exceeded')

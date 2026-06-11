@@ -1,27 +1,27 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte'
-	import { t } from '$lib/i18n'
-	import TechnicalFold from '$lib/settings/TechnicalFold.svelte'
+import type { Snippet } from 'svelte'
+import { t } from '$lib/i18n'
+import TechnicalFold from '$lib/settings/TechnicalFold.svelte'
 
-	let {
-		badge,
-		title,
-		description,
-		did,
-		copied = false,
-		onCopy,
-		emptyHint,
-		technical,
-	}: {
-		badge?: string
-		title: string
-		description: string
-		did?: string
-		copied?: boolean
-		onCopy: () => void
-		emptyHint?: string
-		technical?: Snippet
-	} = $props()
+let {
+	badge,
+	title,
+	description,
+	did,
+	copied = false,
+	onCopy,
+	emptyHint,
+	technical
+}: {
+	badge?: string
+	title: string
+	description: string
+	did?: string
+	copied?: boolean
+	onCopy: () => void
+	emptyHint?: string
+	technical?: Snippet
+} = $props()
 </script>
 
 <article class="space-y-2 rounded-xl border border-border/60 bg-card/30 p-4">
@@ -53,9 +53,7 @@
 	{#if did}
 		<p class="break-all font-mono text-[11px] leading-snug text-foreground select-text">{did}</p>
 		{#if technical}
-			<TechnicalFold>
-				{@render technical()}
-			</TechnicalFold>
+			<TechnicalFold> {@render technical()} </TechnicalFold>
 		{/if}
 	{:else if emptyHint}
 		<p class="text-muted-foreground text-xs">{emptyHint}</p>

@@ -6,14 +6,16 @@ import UiLabPanel from '$lib/aven-ui/UiLabPanel.svelte'
 	<title>Vibe-View Library — @AvenOS/app</title>
 </svelte:head>
 
-<div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background font-sans text-foreground antialiased">
+<div
+	class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background font-sans text-foreground antialiased"
+>
 	<div class="flex min-h-0 min-w-0 flex-1 flex-col px-4 py-6 sm:px-6">
 		<header class="mb-4 flex shrink-0 items-baseline justify-between gap-3">
 			<div>
 				<p class="tech-label pb-1">Vibe-View Library</p>
 				<p class="max-w-prose text-xs leading-snug text-muted-foreground">
-					Alle aven-ui-Ansichten live — gerendert aus JSON View/Style/State, QuickJS-Logik in
-					Tauri. Tabs zeigen die zugrunde liegenden Konfigurationen.
+					Alle aven-ui-Ansichten live — gerendert aus JSON View/Style/State, QuickJS-Logik in Tauri.
+					Tabs zeigen die zugrunde liegenden Konfigurationen.
 				</p>
 			</div>
 			<a

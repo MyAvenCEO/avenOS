@@ -29,8 +29,7 @@ export const BOARD_COLUMN_META: Record<BoardColumnId, BoardColumnMeta> = {
 		id: 'build',
 		label: 'Build',
 		aka: 'Execute',
-		description:
-			'Carries a measurable goal. Being built toward that single completion condition.'
+		description: 'Carries a measurable goal. Being built toward that single completion condition.'
 	},
 	review: {
 		id: 'review',

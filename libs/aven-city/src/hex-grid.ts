@@ -78,7 +78,13 @@ export function axialDistance(a: HexCoord, b: HexCoord): number {
 	return (Math.abs(a.q - b.q) + Math.abs(a.q + a.r - b.q - b.r) + Math.abs(a.r - b.r)) / 2
 }
 
-export function isInsideHex(worldX: number, worldY: number, q: number, r: number, radius: number): boolean {
+export function isInsideHex(
+	worldX: number,
+	worldY: number,
+	q: number,
+	r: number,
+	radius: number
+): boolean {
 	const cell = worldToAxial(worldX, worldY, radius)
 	return cell.q === q && cell.r === r
 }

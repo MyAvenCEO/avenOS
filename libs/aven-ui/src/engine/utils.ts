@@ -8,7 +8,7 @@ export function toKebabCase(str: string): string {
 export function compileCSSProperties(
 	styles: Record<string, unknown>,
 	interpolateTokens: (value: unknown) => string,
-	indent = 2,
+	indent = 2
 ): string {
 	if (typeof styles !== 'object' || styles === null || Array.isArray(styles)) return ''
 	const pad = ' '.repeat(indent)

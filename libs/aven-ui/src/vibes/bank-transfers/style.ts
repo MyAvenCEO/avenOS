@@ -1,5 +1,5 @@
-import type { StyleDef } from '../../engine/types.js'
 import { withBrand } from '../../brand-style.js'
+import type { StyleDef } from '../../engine/types.js'
 import { invoiceStyle } from '../invoice/style.js'
 
 // Tokens specific to the transfer list; merged on top of the invoice tokens so
@@ -10,7 +10,7 @@ const tokens: StyleDef['tokens'] = {
 	'status-pending': '#e6b34d',
 	'status-scheduled': '#3b82c4',
 	'status-failed': '#c0392b',
-	'status-overdue': '#d97706',
+	'status-overdue': '#d97706'
 }
 
 const selectors: StyleDef['selectors'] = {
@@ -21,7 +21,7 @@ const selectors: StyleDef['selectors'] = {
 		color: 'var(--text)',
 		margin: '0',
 		height: '100%',
-		minHeight: '100%',
+		minHeight: '100%'
 	},
 	'.bt-ui-container': {
 		height: '100%',
@@ -36,14 +36,14 @@ const selectors: StyleDef['selectors'] = {
 		boxSizing: 'border-box',
 		fontFamily: 'var(--font-sans)',
 		color: 'var(--text)',
-		letterSpacing: '-0.02em',
+		letterSpacing: '-0.02em'
 	},
 	'.bt-split': {
 		display: 'grid',
 		gridTemplateColumns: '1fr 1fr',
 		gap: '16px',
 		flex: '1',
-		minHeight: '0',
+		minHeight: '0'
 	},
 	'.bt-list-pane': {
 		display: 'flex',
@@ -53,11 +53,11 @@ const selectors: StyleDef['selectors'] = {
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		padding: '18px 20px',
-		overflow: 'hidden',
+		overflow: 'hidden'
 	},
 	'.bt-list-header': {
 		flexShrink: '0',
-		marginBottom: '14px',
+		marginBottom: '14px'
 	},
 	'.bt-eyebrow': {
 		display: 'block',
@@ -67,13 +67,13 @@ const selectors: StyleDef['selectors'] = {
 		textTransform: 'uppercase',
 		letterSpacing: '0.12em',
 		opacity: '0.55',
-		marginBottom: '6px',
+		marginBottom: '6px'
 	},
 	'.bt-list-head-row': {
 		display: 'flex',
 		alignItems: 'baseline',
 		justifyContent: 'space-between',
-		gap: '12px',
+		gap: '12px'
 	},
 	'.bt-list-title': {
 		margin: '0',
@@ -81,14 +81,14 @@ const selectors: StyleDef['selectors'] = {
 		fontWeight: '600',
 		letterSpacing: '-0.02em',
 		color: 'var(--text)',
-		lineHeight: '1.2',
+		lineHeight: '1.2'
 	},
 	'.bt-count': {
 		display: 'flex',
 		flexDirection: 'column',
 		alignItems: 'flex-end',
 		textAlign: 'right',
-		flexShrink: '0',
+		flexShrink: '0'
 	},
 	'.bt-count-value': {
 		fontSize: 'var(--fs-hero)',
@@ -96,7 +96,7 @@ const selectors: StyleDef['selectors'] = {
 		fontFamily: 'ui-monospace, Menlo, monospace',
 		fontVariantNumeric: 'tabular-nums',
 		color: 'var(--brand-accent)',
-		lineHeight: '1.1',
+		lineHeight: '1.1'
 	},
 	'.bt-count-label': {
 		fontSize: 'var(--fs-micro)',
@@ -104,7 +104,7 @@ const selectors: StyleDef['selectors'] = {
 		color: 'var(--muted)',
 		textTransform: 'uppercase',
 		letterSpacing: '0.06em',
-		marginTop: '2px',
+		marginTop: '2px'
 	},
 	'.bt-list': {
 		listStyle: 'none',
@@ -115,7 +115,7 @@ const selectors: StyleDef['selectors'] = {
 		overflowY: 'auto',
 		display: 'flex',
 		flexDirection: 'column',
-		gap: '8px',
+		gap: '8px'
 	},
 	'.bt-empty': {
 		textAlign: 'center',
@@ -123,10 +123,10 @@ const selectors: StyleDef['selectors'] = {
 		padding: '1.5rem 1rem',
 		fontSize: 'var(--fs-body)',
 		border: '1px solid var(--border)',
-		borderRadius: 'var(--radius-md)',
+		borderRadius: 'var(--radius-md)'
 	},
 	'.bt-list:has(.bt-row) li[data-empty="true"]': {
-		display: 'none',
+		display: 'none'
 	},
 	'.bt-row': {
 		display: 'flex',
@@ -141,20 +141,20 @@ const selectors: StyleDef['selectors'] = {
 		border: '1px solid var(--border-soft)',
 		borderRadius: 'var(--radius-md)',
 		padding: '12px 14px',
-		transition: 'border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease',
+		transition: 'border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease'
 	},
 	'.bt-row:hover': {
 		borderColor: 'color-mix(in srgb, var(--text) 18%, transparent)',
-		background: 'color-mix(in srgb, var(--tech-fill-inner) 55%, rgb(255 255 255))',
+		background: 'color-mix(in srgb, var(--tech-fill-inner) 55%, rgb(255 255 255))'
 	},
 	'.bt-row:focus-visible': {
 		outline: '2px solid var(--brand-accent)',
-		outlineOffset: '1px',
+		outlineOffset: '1px'
 	},
 	'.bt-row--active': {
 		borderColor: 'var(--brand-accent)',
 		background: 'color-mix(in srgb, var(--brand-accent) 12%, var(--tech-fill-inner))',
-		boxShadow: '0 0 0 1px color-mix(in srgb, var(--brand-accent) 45%, transparent)',
+		boxShadow: '0 0 0 1px color-mix(in srgb, var(--brand-accent) 45%, transparent)'
 	},
 	'.bt-dot': {
 		width: '10px',
@@ -163,40 +163,40 @@ const selectors: StyleDef['selectors'] = {
 		flexShrink: '0',
 		marginTop: '5px',
 		background: 'var(--muted)',
-		boxShadow: '0 0 0 3px color-mix(in srgb, var(--muted) 18%, transparent)',
+		boxShadow: '0 0 0 3px color-mix(in srgb, var(--muted) 18%, transparent)'
 	},
 	'.bt-dot--paid': {
 		background: 'var(--status-paid)',
-		boxShadow: '0 0 0 3px color-mix(in srgb, var(--status-paid) 20%, transparent)',
+		boxShadow: '0 0 0 3px color-mix(in srgb, var(--status-paid) 20%, transparent)'
 	},
 	'.bt-dot--pending': {
 		background: 'var(--status-pending)',
-		boxShadow: '0 0 0 3px color-mix(in srgb, var(--status-pending) 22%, transparent)',
+		boxShadow: '0 0 0 3px color-mix(in srgb, var(--status-pending) 22%, transparent)'
 	},
 	'.bt-dot--scheduled': {
 		background: 'var(--status-scheduled)',
-		boxShadow: '0 0 0 3px color-mix(in srgb, var(--status-scheduled) 20%, transparent)',
+		boxShadow: '0 0 0 3px color-mix(in srgb, var(--status-scheduled) 20%, transparent)'
 	},
 	'.bt-dot--failed': {
 		background: 'var(--status-failed)',
-		boxShadow: '0 0 0 3px color-mix(in srgb, var(--status-failed) 20%, transparent)',
+		boxShadow: '0 0 0 3px color-mix(in srgb, var(--status-failed) 20%, transparent)'
 	},
 	'.bt-dot--overdue': {
 		background: 'var(--status-overdue)',
-		boxShadow: '0 0 0 3px color-mix(in srgb, var(--status-overdue) 20%, transparent)',
+		boxShadow: '0 0 0 3px color-mix(in srgb, var(--status-overdue) 20%, transparent)'
 	},
 	'.bt-row-body': {
 		flex: '1',
 		minWidth: '0',
 		display: 'flex',
 		flexDirection: 'column',
-		gap: '3px',
+		gap: '3px'
 	},
 	'.bt-row-line': {
 		display: 'flex',
 		alignItems: 'baseline',
 		justifyContent: 'space-between',
-		gap: '10px',
+		gap: '10px'
 	},
 	'.bt-row-payee': {
 		fontWeight: '600',
@@ -205,7 +205,7 @@ const selectors: StyleDef['selectors'] = {
 		whiteSpace: 'nowrap',
 		overflow: 'hidden',
 		textOverflow: 'ellipsis',
-		minWidth: '0',
+		minWidth: '0'
 	},
 	'.bt-row-amount': {
 		fontFamily: 'ui-monospace, Menlo, monospace',
@@ -214,10 +214,10 @@ const selectors: StyleDef['selectors'] = {
 		fontSize: 'var(--fs-section)',
 		color: 'var(--text)',
 		whiteSpace: 'nowrap',
-		flexShrink: '0',
+		flexShrink: '0'
 	},
 	'.bt-row-amount--in': {
-		color: 'var(--status-paid)',
+		color: 'var(--status-paid)'
 	},
 	'.bt-row-ref': {
 		fontSize: 'var(--fs-meta)',
@@ -225,14 +225,14 @@ const selectors: StyleDef['selectors'] = {
 		whiteSpace: 'nowrap',
 		overflow: 'hidden',
 		textOverflow: 'ellipsis',
-		minWidth: '0',
+		minWidth: '0'
 	},
 	'.bt-row-date': {
 		fontSize: 'var(--fs-meta)',
 		color: 'var(--muted)',
 		whiteSpace: 'nowrap',
 		fontVariantNumeric: 'tabular-nums',
-		flexShrink: '0',
+		flexShrink: '0'
 	},
 	'.bt-row-status': {
 		marginTop: '2px',
@@ -240,12 +240,12 @@ const selectors: StyleDef['selectors'] = {
 		fontWeight: '600',
 		textTransform: 'uppercase',
 		letterSpacing: '0.06em',
-		color: 'var(--muted)',
+		color: 'var(--muted)'
 	},
 	'.bt-detail-pane': {
 		minHeight: '0',
 		overflow: 'auto',
-		borderRadius: 'var(--radius-2xl)',
+		borderRadius: 'var(--radius-2xl)'
 	},
 	'.bt-detail-empty': {
 		height: '100%',
@@ -257,30 +257,30 @@ const selectors: StyleDef['selectors'] = {
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-2xl)',
 		background: 'var(--tech-fill)',
-		padding: '2rem',
+		padding: '2rem'
 	},
 	'.bt-detail-empty-text': {
 		marginTop: '8px',
 		fontSize: 'var(--fs-body)',
 		color: 'var(--muted)',
 		maxWidth: '260px',
-		lineHeight: '1.5',
+		lineHeight: '1.5'
 	},
 	'.bt-detail-pane[data-has-selection="true"] .bt-detail-empty': {
-		display: 'none',
+		display: 'none'
 	},
 	'.bt-detail-pane[data-has-selection="false"] .bt-detail-doc': {
-		display: 'none',
+		display: 'none'
 	},
 	'@media (max-width: 640px)': {
 		'.bt-split': {
-			gridTemplateColumns: '1fr',
-		},
-	},
+			gridTemplateColumns: '1fr'
+		}
+	}
 }
 
 export const bankTransfersStyle: StyleDef = withBrand({
 	tokens,
 	components: { ...(invoiceStyle.components ?? {}) },
-	selectors,
+	selectors
 })

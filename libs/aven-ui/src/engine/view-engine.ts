@@ -1,16 +1,23 @@
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
-import type { RenderData, SlotRegistry, StyleDef, UiEvent, UiEventDef, ViewDef, ViewNode } from './types.js'
-import { Evaluator, validateViewDef } from './view-validator.js'
 import {
 	BOOLEAN_ATTRS,
 	SAFE_TAGS,
-	URL_ATTRS,
 	sanitizeAttributeWhitelist,
 	sanitizePayloadForValidation,
+	URL_ATTRS
 } from './security.js'
-import { toKebabCase } from './utils.js'
 import { StyleEngine } from './style-engine.js'
+import type {
+	RenderData,
+	SlotRegistry,
+	StyleDef,
+	UiEvent,
+	UiEventDef,
+	ViewDef,
+	ViewNode
+} from './types.js'
+import { Evaluator, validateViewDef } from './view-validator.js'
 
 async function renderMarkdown(rawText: unknown): Promise<string> {
 	if (rawText == null || typeof rawText !== 'string') return ''
@@ -69,7 +76,7 @@ export class ViewEngine {
 		container: HTMLElement,
 		viewDef: ViewDef,
 		state: Record<string, unknown>,
-		style: StyleDef,
+		style: StyleDef
 	): Promise<ShadowRoot> {
 		validateViewDef(viewDef)
 		const shadowRoot = container.shadowRoot ?? container.attachShadow({ mode: 'open' })
@@ -82,7 +89,7 @@ export class ViewEngine {
 		viewDef: ViewDef,
 		state: Record<string, unknown>,
 		shadowRoot: ShadowRoot,
-		styleSheets: CSSStyleSheet[],
+		styleSheets: CSSStyleSheet[]
 	): Promise<void> {
 		const focus = this.captureFocus(shadowRoot)
 		this.currentState = state
@@ -107,7 +114,7 @@ export class ViewEngine {
 		return {
 			path,
 			selectionStart: active.selectionStart,
-			selectionEnd: active.selectionEnd,
+			selectionEnd: active.selectionEnd
 		}
 	}
 
@@ -127,7 +134,7 @@ export class ViewEngine {
 	private async renderNode(
 		node: ViewNode,
 		data: RenderData,
-		path = '0',
+		path = '0'
 	): Promise<HTMLElement | null> {
 		if (!node) return null
 
@@ -192,7 +199,7 @@ export class ViewEngine {
 	private async renderEach(
 		eachDef: { items: string; template: ViewNode },
 		data: RenderData,
-		path: string,
+		path: string
 	): Promise<DocumentFragment> {
 		const fragment = document.createDocumentFragment()
 		const items = await this.evaluator.evaluate(eachDef.items, data)
@@ -218,7 +225,11 @@ export class ViewEngine {
 		if (child) wrapper.appendChild(child)
 	}
 
-	private attachEvents(element: HTMLElement, events: Record<string, UiEventDef>, data: RenderData): void {
+	private attachEvents(
+		element: HTMLElement,
+		events: Record<string, UiEventDef>,
+		data: RenderData
+	): void {
 		for (const [eventName, eventDef] of Object.entries(events)) {
 			element.addEventListener(eventName, (domEvent) => {
 				if (eventName === 'submit') {
@@ -227,7 +238,7 @@ export class ViewEngine {
 				const liveData: RenderData = {
 					state: this.currentState,
 					item: data.item,
-					index: data.index,
+					index: data.index
 				}
 				void this.deliverEvent(eventDef, liveData, element, domEvent)
 			})
@@ -238,7 +249,7 @@ export class ViewEngine {
 		eventDef: UiEventDef,
 		data: RenderData,
 		sourceEl: HTMLElement,
-		domEvent?: Event,
+		domEvent?: Event
 	): Promise<void> {
 		const payload = eventDef.payload
 			? await this.resolvePayload(eventDef.payload, data, sourceEl, domEvent)
@@ -262,7 +273,7 @@ export class ViewEngine {
 		payload: Record<string, unknown>,
 		data: RenderData,
 		sourceEl: HTMLElement,
-		domEvent?: Event,
+		domEvent?: Event
 	): Promise<Record<string, unknown>> {
 		const result: Record<string, unknown> = {}
 		const form = sourceEl instanceof HTMLFormElement ? sourceEl : null
@@ -271,7 +282,10 @@ export class ViewEngine {
 				const target = domEvent?.target
 				if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
 					result[key] = target.value
-				} else if (sourceEl instanceof HTMLInputElement || sourceEl instanceof HTMLTextAreaElement) {
+				} else if (
+					sourceEl instanceof HTMLInputElement ||
+					sourceEl instanceof HTMLTextAreaElement
+				) {
 					result[key] = sourceEl.value
 				} else {
 					result[key] = ''
@@ -287,11 +301,7 @@ export class ViewEngine {
 				result[key] = this.readFormField(form, value.slice(7))
 				continue
 			}
-			if (
-				value === '$draft' &&
-				form &&
-				domEvent?.type === 'submit'
-			) {
+			if (value === '$draft' && form && domEvent?.type === 'submit') {
 				result[key] = this.readFormField(form, 'draft') || this.readFormField(form, '')
 				if (result[key] === '') {
 					const input = form.querySelector('input[type="text"], input:not([type]), textarea')
@@ -304,7 +314,7 @@ export class ViewEngine {
 			result[key] = await this.evaluator.evaluate(value, {
 				state: this.currentState,
 				item: data.item,
-				index: data.index,
+				index: data.index
 			})
 		}
 		return result

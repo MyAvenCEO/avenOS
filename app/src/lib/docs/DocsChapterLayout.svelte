@@ -1,19 +1,19 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte'
-	import { navigateApp } from '$lib/shell'
-	import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
-	import type { AsideNavSection } from '$lib/ui/aside-nav'
-	import { docsChapterContentClass } from './docs-chapter-nav'
+import type { Snippet } from 'svelte'
+import { navigateApp } from '$lib/shell'
+import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
+import type { AsideNavSection } from '$lib/ui/aside-nav'
+import { docsChapterContentClass } from './docs-chapter-nav'
 
-	type Props = {
-		/** Shown under the Documentation back link in the breadcrumb bar. */
-		chapterTitle: string
-		sections: AsideNavSection[]
-		routeKey: string
-		children: Snippet
-	}
+type Props = {
+	/** Shown under the Documentation back link in the breadcrumb bar. */
+	chapterTitle: string
+	sections: AsideNavSection[]
+	routeKey: string
+	children: Snippet
+}
 
-	let { chapterTitle, sections, routeKey, children }: Props = $props()
+let { chapterTitle, sections, routeKey, children }: Props = $props()
 </script>
 
 <div
@@ -46,7 +46,7 @@
 		asideLabel="Chapters"
 		{sections}
 		muted
-		routeKey={routeKey}
+		{routeKey}
 		desktopGridClass="md:grid-cols-[13rem_minmax(0,1fr)]"
 		class="min-h-0 flex-1"
 		mainClass="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto md:flex-none"

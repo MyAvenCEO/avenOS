@@ -1,99 +1,105 @@
 <script lang="ts">
-	import { browser } from '$app/environment'
-	import { t } from '$lib/i18n'
-	import {
-		matchesSecretKind,
-		toDisplayId,
-		toStorageId,
-		vaultSecretTitleKey,
-		type VaultSecretKind,
-	} from '$lib/vault/secret-kind'
-	import { secretsDelete, secretsList, secretsReveal, secretsSet, type SecretListEntry } from '$lib/vault/secrets'
+import { browser } from '$app/environment'
+import { t } from '$lib/i18n'
+import {
+	matchesSecretKind,
+	toDisplayId,
+	toStorageId,
+	type VaultSecretKind,
+	vaultSecretTitleKey
+} from '$lib/vault/secret-kind'
+import {
+	type SecretListEntry,
+	secretsDelete,
+	secretsList,
+	secretsReveal,
+	secretsSet
+} from '$lib/vault/secrets'
 
-	let { kind }: { kind: VaultSecretKind } = $props()
+let { kind }: { kind: VaultSecretKind } = $props()
 
-	let secrets = $state<SecretListEntry[]>([])
-	let loading = $state(true)
-	let error = $state<string | null>(null)
-	let newId = $state('')
-	let newValue = $state('')
-	let busy = $state(false)
-	let revealed = $state<Record<string, string>>({})
+let secrets = $state<SecretListEntry[]>([])
+let loading = $state(true)
+let error = $state<string | null>(null)
+let newId = $state('')
+let newValue = $state('')
+let busy = $state(false)
+let revealed = $state<Record<string, string>>({})
 
-	const titleKey = $derived(vaultSecretTitleKey(kind))
-	const filtered = $derived(secrets.filter((row) => matchesSecretKind(kind, row.id)))
+const titleKey = $derived(vaultSecretTitleKey(kind))
+const filtered = $derived(secrets.filter((row) => matchesSecretKind(kind, row.id)))
 
-	async function refresh() {
-		loading = true
-		error = null
-		try {
-			secrets = await secretsList()
-		} catch (e) {
-			error = e instanceof Error ? e.message : String(e)
-			secrets = []
-		} finally {
-			loading = false
-		}
+async function refresh() {
+	loading = true
+	error = null
+	try {
+		secrets = await secretsList()
+	} catch (e) {
+		error = e instanceof Error ? e.message : String(e)
+		secrets = []
+	} finally {
+		loading = false
 	}
+}
 
-	$effect(() => {
-		void kind
-		if (!browser) return
-		void refresh()
-	})
+$effect(() => {
+	void kind
+	if (!browser) return
+	void refresh()
+})
 
-	async function addSecret() {
-		const storageId = toStorageId(kind, newId)
-		if (!storageId) return
-		busy = true
-		error = null
-		try {
-			await secretsSet(storageId, newValue)
-			newId = ''
-			newValue = ''
-			await refresh()
-		} catch (e) {
-			error = e instanceof Error ? e.message : String(e)
-		} finally {
-			busy = false
-		}
+async function addSecret() {
+	const storageId = toStorageId(kind, newId)
+	if (!storageId) return
+	busy = true
+	error = null
+	try {
+		await secretsSet(storageId, newValue)
+		newId = ''
+		newValue = ''
+		await refresh()
+	} catch (e) {
+		error = e instanceof Error ? e.message : String(e)
+	} finally {
+		busy = false
 	}
+}
 
-	function hideReveal(id: string) {
-		const next = { ...revealed }
-		delete next[id]
-		revealed = next
-	}
+function hideReveal(id: string) {
+	const next = { ...revealed }
+	delete next[id]
+	revealed = next
+}
 
-	async function toggleReveal(id: string) {
-		if (revealed[id]) {
-			hideReveal(id)
-			return
-		}
-		busy = true
-		error = null
-		try {
-			revealed = { ...revealed, [id]: await secretsReveal(id) }
-		} catch (e) {
-			error = e instanceof Error ? e.message : String(e)
-		} finally {
-			busy = false
-		}
+async function toggleReveal(id: string) {
+	if (revealed[id]) {
+		hideReveal(id)
+		return
 	}
+	busy = true
+	error = null
+	try {
+		revealed = { ...revealed, [id]: await secretsReveal(id) }
+	} catch (e) {
+		error = e instanceof Error ? e.message : String(e)
+	} finally {
+		busy = false
+	}
+}
 
-	async function remove(id: string) {
-		busy = true
-		error = null
-		try {
-			await secretsDelete(id)
-			hideReveal(id)
-			await refresh()
-		} catch (e) {
-			error = e instanceof Error ? e.message : String(e)
-		} finally {
-			busy = false
-		}
+async function remove(id: string) {
+	busy = true
+	error = null
+	try {
+		await secretsDelete(id)
+		hideReveal(id)
+		await refresh()
+	} catch (e) {
+		error = e instanceof Error ? e.message : String(e)
+	} finally {
+		busy = false
 	}
+}
 </script>
 
 <section class="flex h-full min-h-0 flex-1 flex-col px-4 py-4 sm:px-6 sm:py-6">
@@ -120,7 +126,7 @@
 				class="border-input bg-background w-full rounded-md border px-3 py-2 text-sm"
 				bind:value={newId}
 				disabled={busy}
-			/>
+			>
 		</label>
 		<label class="block space-y-1">
 			<span class="text-muted-foreground text-xs">{t('vaultSecrets.valueLabel')}</span>
@@ -130,7 +136,7 @@
 				autocomplete="off"
 				bind:value={newValue}
 				disabled={busy}
-			/>
+			>
 		</label>
 		<button
 			class="bg-primary text-primary-foreground rounded-md px-3 py-2 text-sm disabled:opacity-50"
@@ -155,7 +161,9 @@
 							<div class="min-w-0">
 								<p class="truncate font-mono text-sm">{toDisplayId(kind, row.id)}</p>
 								{#if revealed[row.id]}
-									<p class="text-muted-foreground mt-1 break-all font-mono text-xs">{revealed[row.id]}</p>
+									<p class="text-muted-foreground mt-1 break-all font-mono text-xs">
+										{revealed[row.id]}
+									</p>
 								{/if}
 							</div>
 							<div class="flex shrink-0 gap-2">

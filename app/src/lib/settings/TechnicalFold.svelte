@@ -1,15 +1,15 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte'
+import type { Snippet } from 'svelte'
 
-	let {
-		label = 'Technical details',
-		children,
-	}: {
-		label?: string
-		children: Snippet
-	} = $props()
+let {
+	label = 'Technical details',
+	children
+}: {
+	label?: string
+	children: Snippet
+} = $props()
 
-	let open = $state(false)
+let open = $state(false)
 </script>
 
 <div class="flex justify-end">

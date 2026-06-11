@@ -34,12 +34,12 @@ export type VaultCreateReply = {
 export async function vaultCreate(
 	firstName: string,
 	deviceLabel: string,
-	signerType?: string,
+	signerType?: string
 ): Promise<VaultCreateReply> {
 	return invoke<VaultCreateReply>('plugin:self|vault_create', {
 		firstName,
 		deviceLabel,
-		signerType,
+		signerType
 	})
 }
 

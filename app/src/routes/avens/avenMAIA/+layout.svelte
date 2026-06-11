@@ -1,33 +1,33 @@
 <script lang="ts">
-	import { page } from '$app/state'
-	import { t } from '$lib/i18n'
-	import { navigateApp } from '$lib/shell'
-	import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
-	import { asideNavSectionsFromRoutes } from '$lib/ui/aside-nav'
-	import { avenById } from '../avens-data'
+import { page } from '$app/state'
+import { t } from '$lib/i18n'
+import { navigateApp } from '$lib/shell'
+import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
+import { asideNavSectionsFromRoutes } from '$lib/ui/aside-nav'
+import { avenById } from '../avens-data'
 
-	let { children: pageOutlet } = $props()
+let { children: pageOutlet } = $props()
 
-	const aven = avenById('avenMAIA')
-	const path = $derived(page.url.pathname)
+const aven = avenById('avenMAIA')
+const path = $derived(page.url.pathname)
 
-	const navSections = $derived(
-		asideNavSectionsFromRoutes(
-			[
-				{
-					title: t('nav.viewSection'),
-					items: [
-						{
-							href: '/avens/avenMAIA/game',
-							label: t('nav.maiaCityGame'),
-							match: (p) => p.startsWith('/avens/avenMAIA/game'),
-						},
-					],
-				},
-			],
-			path,
-		),
+const navSections = $derived(
+	asideNavSectionsFromRoutes(
+		[
+			{
+				title: t('nav.viewSection'),
+				items: [
+					{
+						href: '/avens/avenMAIA/game',
+						label: t('nav.maiaCityGame'),
+						match: (p) => p.startsWith('/avens/avenMAIA/game')
+					}
+				]
+			}
+		],
+		path
 	)
+)
 </script>
 
 <svelte:head>

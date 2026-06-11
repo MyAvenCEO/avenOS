@@ -8,9 +8,7 @@
 		"country": "Germany",
 		"email": "billing@techsupply.example",
 		"phone": "+49 89 12345678",
-		"identifiers": [
-			{ "category": "vat_id", "value": "DE123456789", "label_printed": "USt-IdNr." }
-		]
+		"identifiers": [{ "category": "vat_id", "value": "DE123456789", "label_printed": "USt-IdNr." }]
 	},
 	"buyer": {
 		"name": "Acme Consulting AG",

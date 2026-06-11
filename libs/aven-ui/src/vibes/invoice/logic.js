@@ -80,8 +80,8 @@ var DEFAULT_LABELS = {
 		{ label: 'ME', class: '' },
 		{ label: 'Einzelpreis', class: 'num' },
 		{ label: 'USt. %', class: 'num' },
-		{ label: 'Betrag', class: 'num' },
-	],
+		{ label: 'Betrag', class: 'num' }
+	]
 }
 
 function mergeLabels(source) {
@@ -91,7 +91,8 @@ function mergeLabels(source) {
 	var k
 	for (k in DEFAULT_LABELS) merged[k] = DEFAULT_LABELS[k]
 	for (k in labels) merged[k] = labels[k]
-	if (!labels.tableColumns || !labels.tableColumns.length) merged.tableColumns = DEFAULT_LABELS.tableColumns
+	if (!labels.tableColumns || !labels.tableColumns.length)
+		merged.tableColumns = DEFAULT_LABELS.tableColumns
 	return merged
 }
 
@@ -115,13 +116,11 @@ function buildPartyCard(role, party) {
 	if (plzCity) addressLines.push({ line: plzCity })
 	if (party.country) addressLines.push({ line: party.country })
 	var identifiers = (party.identifiers || [])
-		.filter(function (id) { return id && id.value && String(id.value).trim() })
-		.map(function (id) {
-			return {
-				label: id.label_printed ? String(id.label_printed) + ': ' : '',
-				value: id.value || '',
-			}
-		})
+		.filter((id) => id && id.value && String(id.value).trim())
+		.map((id) => ({
+			label: id.label_printed ? String(id.label_printed) + ': ' : '',
+			value: id.value || ''
+		}))
 	return {
 		role: role,
 		name: party.name || '–',
@@ -129,7 +128,7 @@ function buildPartyCard(role, party) {
 		addressLines: addressLines,
 		email: party.email || '',
 		phone: party.phone || '',
-		identifiers: identifiers,
+		identifiers: identifiers
 	}
 }
 
@@ -145,7 +144,7 @@ function initState(source) {
 		totalRows.push({
 			label: labels.subtotal,
 			value: fmtMoney(totals.subtotal, cur),
-			rowClass: 'row inv-totals-line inv-totals-line--subtotal',
+			rowClass: 'row inv-totals-line inv-totals-line--subtotal'
 		})
 	}
 	var taxBreakdown = totals.tax_breakdown || []
@@ -160,68 +159,66 @@ function initState(source) {
 		totalRows.push({
 			label: lab,
 			value: fmtMoney(row.tax_amount, cur),
-			rowClass: 'row inv-totals-line inv-totals-line--tax-rate',
+			rowClass: 'row inv-totals-line inv-totals-line--tax-rate'
 		})
 	}
 	if (totals.tax_total != null) {
 		totalRows.push({
 			label: labels.taxTotal,
 			value: fmtMoney(totals.tax_total, cur),
-			rowClass: 'row inv-totals-line inv-totals-line--tax-total-sum',
+			rowClass: 'row inv-totals-line inv-totals-line--tax-total-sum'
 		})
 	}
 	if (totals.invoice_total != null) {
 		totalRows.push({
 			label: labels.invoiceTotal,
 			value: fmtMoney(totals.invoice_total, cur),
-			rowClass: 'row inv-totals-line inv-totals-line--invoice-total',
+			rowClass: 'row inv-totals-line inv-totals-line--invoice-total'
 		})
 	}
 
-	var payments = (source.payments || []).map(function (p) {
+	var payments = (source.payments || []).map((p) => {
 		var bits = []
 		if (p.date) bits.push(fmtDate(p.date))
 		if (p.method) bits.push(splitMethodLabel(p.method))
 		if (p.reference) bits.push(String(p.reference))
 		return {
 			left: bits.length ? bits.join(' · ') : labels.paymentFallback,
-			amount: p.amount == null ? '–' : fmtMoney(p.amount, cur),
+			amount: p.amount == null ? '–' : fmtMoney(p.amount, cur)
 		}
 	})
 
-	var sections = (source.statements || []).map(function (st) {
-		return {
-			sectionTitle: st.section_title || '',
-			servicePeriod: st.service_period || '',
-			lineItems: (st.line_items || []).map(function (raw, i) {
-				var kind = raw.line_kind ? String(raw.line_kind).trim() : ''
-				var taxPct = raw.tax_rate_percent
-				var tax = '–'
-				if (taxPct != null && String(taxPct) !== '' && !isNaN(Number(taxPct))) {
-					tax = fmtNum(Number(taxPct)) + '%'
-				}
-				var quantity = ''
-				if (raw.quantity != null && typeof raw.quantity === 'number') {
-					quantity = fmtNum(raw.quantity)
-				} else if (raw.quantity != null) {
-					quantity = String(raw.quantity)
-				}
-				return {
-					idx: String(i + 1),
-					position: raw.position != null ? String(raw.position) : '',
-					article: raw.article_number != null ? String(raw.article_number) : '',
-					title: raw.title ? String(raw.title).trim() : '',
-					description: raw.description ? String(raw.description).trim() : '',
-					quantity: quantity,
-					unit: raw.quantity_unit || '',
-					unitPrice: fmtMoney(raw.unit_price, cur),
-					tax: tax,
-					amount: fmtMoney(raw.amount, cur),
-					rowClass: kind === 'discount' ? 'inv-line inv-line-discount' : 'inv-line',
-				}
-			}),
-		}
-	})
+	var sections = (source.statements || []).map((st) => ({
+		sectionTitle: st.section_title || '',
+		servicePeriod: st.service_period || '',
+		lineItems: (st.line_items || []).map((raw, i) => {
+			var kind = raw.line_kind ? String(raw.line_kind).trim() : ''
+			var taxPct = raw.tax_rate_percent
+			var tax = '–'
+			if (taxPct != null && String(taxPct) !== '' && !isNaN(Number(taxPct))) {
+				tax = fmtNum(Number(taxPct)) + '%'
+			}
+			var quantity = ''
+			if (raw.quantity != null && typeof raw.quantity === 'number') {
+				quantity = fmtNum(raw.quantity)
+			} else if (raw.quantity != null) {
+				quantity = String(raw.quantity)
+			}
+			return {
+				idx: String(i + 1),
+				position: raw.position != null ? String(raw.position) : '',
+				article: raw.article_number != null ? String(raw.article_number) : '',
+				title: raw.title ? String(raw.title).trim() : '',
+				description: raw.description ? String(raw.description).trim() : '',
+				quantity: quantity,
+				unit: raw.quantity_unit || '',
+				unitPrice: fmtMoney(raw.unit_price, cur),
+				tax: tax,
+				amount: fmtMoney(raw.amount, cur),
+				rowClass: kind === 'discount' ? 'inv-line inv-line-discount' : 'inv-line'
+			}
+		})
+	}))
 
 	return {
 		labels: labels,
@@ -238,6 +235,8 @@ function initState(source) {
 		totalRows: totalRows,
 		payments: payments,
 		outstanding: fmtMoney(source.total_outstanding, cur),
-		paymentInstructions: source.payment_instructions ? String(source.payment_instructions).trim() : '',
+		paymentInstructions: source.payment_instructions
+			? String(source.payment_instructions).trim()
+			: ''
 	}
 }

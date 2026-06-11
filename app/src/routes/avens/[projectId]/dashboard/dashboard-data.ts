@@ -5,7 +5,7 @@
  * climbs the Fibonacci level ladder.
  */
 
-import { levelFor, type LevelInfo } from '$lib/leveling'
+import { type LevelInfo, levelFor } from '$lib/leveling'
 
 const EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' })
 export function formatEur(value: number): string {

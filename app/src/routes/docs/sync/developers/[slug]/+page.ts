@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit'
-import type { PageLoad } from './$types'
 import { getSyncDoc } from '$lib/docs/sync-collection'
+import type { PageLoad } from './$types'
 
 export const ssr = false
 export const prerender = false

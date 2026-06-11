@@ -1,38 +1,38 @@
 <script lang="ts">
-	import { page } from '$app/state'
-	import { t } from '$lib/i18n'
-	import { navigateApp } from '$lib/shell'
-	import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
-	import { asideNavSectionsFromRoutes } from '$lib/ui/aside-nav'
-	import { avenById } from '../avens-data'
+import { page } from '$app/state'
+import { t } from '$lib/i18n'
+import { navigateApp } from '$lib/shell'
+import AsidePageLayout from '$lib/ui/AsidePageLayout.svelte'
+import { asideNavSectionsFromRoutes } from '$lib/ui/aside-nav'
+import { avenById } from '../avens-data'
 
-	let { children: pageOutlet } = $props()
+let { children: pageOutlet } = $props()
 
-	const aven = avenById('avenSKILLS')
-	const path = $derived(page.url.pathname)
+const aven = avenById('avenSKILLS')
+const path = $derived(page.url.pathname)
 
-	const navSections = $derived(
-		asideNavSectionsFromRoutes(
-			[
-				{
-					title: t('nav.skillsSection'),
-					items: [
-						{
-							href: '/avens/avenSKILLS/editing',
-							label: t('nav.editing'),
-							match: (p) => p.startsWith('/avens/avenSKILLS/editing'),
-						},
-						{
-							href: '/avens/avenSKILLS/bookkeeping',
-							label: t('nav.bookkeeping'),
-							match: (p) => p.startsWith('/avens/avenSKILLS/bookkeeping'),
-						},
-					],
-				},
-			],
-			path,
-		),
+const navSections = $derived(
+	asideNavSectionsFromRoutes(
+		[
+			{
+				title: t('nav.skillsSection'),
+				items: [
+					{
+						href: '/avens/avenSKILLS/editing',
+						label: t('nav.editing'),
+						match: (p) => p.startsWith('/avens/avenSKILLS/editing')
+					},
+					{
+						href: '/avens/avenSKILLS/bookkeeping',
+						label: t('nav.bookkeeping'),
+						match: (p) => p.startsWith('/avens/avenSKILLS/bookkeeping')
+					}
+				]
+			}
+		],
+		path
 	)
+)
 </script>
 
 <svelte:head>

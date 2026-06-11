@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { spawnSync } from 'node:child_process'
 /**
  * TestFlight-only iOS pipeline: builds a signed App Store `.ipa` for Transporter upload.
  * Does not target the iOS Simulator — validate on physical devices via TestFlight only.
@@ -15,8 +16,15 @@
  *   AVEN_IOS_CF_BUNDLE_VERSION — CFBundleVersion for this upload (default "13")
  *   AVEN_OUTPUT_IPA — output path (default dist/ios-appstore/avenOS-<version>-build<N>.ipa)
  */
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { spawnSync } from 'node:child_process'
+import {
+	copyFileSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync
+} from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -25,7 +33,7 @@ import {
 	readRustToolchainChannel,
 	rustToolchainShellExports,
 	rustToolchainShellExportsPbx,
-	rustupToolchainEnv,
+	rustupToolchainEnv
 } from './rust-toolchain.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -42,20 +50,22 @@ const entitlementsSrc = path.join(tauriDir, 'ios-template/aven-os-app_iOS.entitl
 const team = process.env.APPLE_DEVELOPMENT_TEAM?.trim()
 if (!team) {
 	console.error(
-		'tauri-ios-asc: set APPLE_DEVELOPMENT_TEAM in .env.apple.local (or shell) — see scripts/apple-env.local.template',
+		'tauri-ios-asc: set APPLE_DEVELOPMENT_TEAM in .env.apple.local (or shell) — see scripts/apple-env.local.template'
 	)
 	process.exit(1)
 }
 
 if (!existsSync(genApple)) {
 	console.error(
-		'tauri-ios-asc: missing src-tauri/gen/apple — run from app: CI=true bunx tauri ios init --ci',
+		'tauri-ios-asc: missing src-tauri/gen/apple — run from app: CI=true bunx tauri ios init --ci'
 	)
 	process.exit(1)
 }
 
 function readPackageVersion(): string {
-	const pkg = JSON.parse(readFileSync(path.join(appDir, 'package.json'), 'utf8')) as { version?: string }
+	const pkg = JSON.parse(readFileSync(path.join(appDir, 'package.json'), 'utf8')) as {
+		version?: string
+	}
 	return (pkg.version ?? '0.0.0').trim()
 }
 
@@ -81,7 +91,7 @@ function hasAutomaticCiSigning(): boolean {
 		process.env.APPLE_API_ISSUER?.trim() &&
 			process.env.APPLE_API_KEY?.trim() &&
 			process.env.APPLE_API_KEY_PATH?.trim() &&
-			existsSync(process.env.APPLE_API_KEY_PATH.trim()),
+			existsSync(process.env.APPLE_API_KEY_PATH.trim())
 	)
 }
 
@@ -131,7 +141,7 @@ function exportArchiveManually(profileName: string, exportDir: string): string {
 </dict>
 </plist>
 `,
-		'utf8',
+		'utf8'
 	)
 
 	// Apple rejects standalone dylibs in an app bundle (STATE_ERROR.VALIDATION_ERROR:
@@ -145,21 +155,35 @@ function exportArchiveManually(profileName: string, exportDir: string): string {
 		// copy is the macOS binary — it can't load on iOS, so removing it is safe and the only
 		// way past Apple's check.
 		rmSync(path.join(archivedApp, 'assets', 'onnxruntime'), { recursive: true, force: true })
-		console.log('[tauri-ios-asc] stripped assets/onnxruntime (standalone dylib not permitted on iOS)')
+		console.log(
+			'[tauri-ios-asc] stripped assets/onnxruntime (standalone dylib not permitted on iOS)'
+		)
 		// Diagnostic only: surface any OTHER stray standalone .dylib (it would also be rejected)
 		// WITHOUT deleting — a linked lib must be repackaged as a framework, not silently dropped.
-		const left = spawnSync('find', [archivedApp, '-type', 'f', '-name', '*.dylib'], { encoding: 'utf8' })
+		const left = spawnSync('find', [archivedApp, '-type', 'f', '-name', '*.dylib'], {
+			encoding: 'utf8'
+		})
 		const stray = (left.stdout ?? '').trim()
 		if (stray) {
-			console.warn(`[tauri-ios-asc] WARNING — other standalone .dylib still in bundle (will fail App Store validation):\n${stray}`)
+			console.warn(
+				`[tauri-ios-asc] WARNING — other standalone .dylib still in bundle (will fail App Store validation):\n${stray}`
+			)
 		}
 	}
 
 	console.log('[tauri-ios-asc] xcodebuild -exportArchive profile=%s', profileName)
 	const r = spawnSync(
 		'xcodebuild',
-		['-exportArchive', '-archivePath', ARCHIVE_PATH, '-exportPath', exportDir, '-exportOptionsPlist', exportOptions],
-		{ stdio: 'inherit' },
+		[
+			'-exportArchive',
+			'-archivePath',
+			ARCHIVE_PATH,
+			'-exportPath',
+			exportDir,
+			'-exportOptionsPlist',
+			exportOptions
+		],
+		{ stdio: 'inherit' }
 	)
 	if (r.status !== 0) {
 		console.error('tauri-ios-asc: xcodebuild export failed')
@@ -186,7 +210,7 @@ function generateIosIconsFromSource() {
 	const genScript = path.join(repoRoot, 'scripts/generate-ios-icons.py')
 	if (!existsSync(source)) {
 		console.error(
-			'tauri-ios-asc: missing icons/app-icon-source.png — add a 1024×1024 PNG (see scripts/generate-ios-icons.py)',
+			'tauri-ios-asc: missing icons/app-icon-source.png — add a 1024×1024 PNG (see scripts/generate-ios-icons.py)'
 		)
 		process.exit(1)
 	}
@@ -204,7 +228,7 @@ function ensureIosDevicePlatform(workspace: string, scheme: string) {
 	const r = spawnSync(
 		'xcodebuild',
 		['-showdestinations', '-workspace', workspace, '-scheme', scheme],
-		{ encoding: 'utf8' },
+		{ encoding: 'utf8' }
 	)
 	const out = `${r.stdout ?? ''}\n${r.stderr ?? ''}`
 	if (!out.includes('is not installed')) return
@@ -213,14 +237,14 @@ function ensureIosDevicePlatform(workspace: string, scheme: string) {
 			'tauri-ios-asc: Xcode cannot build for physical iOS (iphoneos) yet.',
 			'Install the matching iOS platform in Xcode → Settings → Platforms (Components).',
 			'Then run: xcodebuild -runFirstLaunch -checkForNewerComponents',
-			'Verify: xcodebuild -showdestinations -workspace app/src-tauri/gen/apple/aven-os-app.xcodeproj/project.xcworkspace -scheme aven-os-app_iOS',
-		].join('\n'),
+			'Verify: xcodebuild -showdestinations -workspace app/src-tauri/gen/apple/aven-os-app.xcodeproj/project.xcworkspace -scheme aven-os-app_iOS'
+		].join('\n')
 	)
 	process.exit(1)
 }
 
 function shellEscapeSingleQuoted(value: string): string {
-	return `'${value.replace(/'/g, `'\"'\"'`)}'`
+	return `'${value.replace(/'/g, `'"'"'`)}'`
 }
 
 function writeAvenIosCompileEnv() {
@@ -233,7 +257,7 @@ function writeAvenIosCompileEnv() {
 	const wsUrl = process.env.AVENOS_SERVER_WS_URL || 'wss://aven-ceo-bmrha.sprites.app/sync'
 	const lines = [
 		`export RUSTUP_TOOLCHAIN=${shellEscapeSingleQuoted(channel)}`,
-		`export AVENOS_SERVER_WS_URL=${shellEscapeSingleQuoted(wsUrl)}`,
+		`export AVENOS_SERVER_WS_URL=${shellEscapeSingleQuoted(wsUrl)}`
 	]
 
 	// On-device voice (Parakeet via sherpa-onnx) needs the iOS arm64 static libs.
@@ -263,7 +287,7 @@ function writeAvenIosCompileEnv() {
 /** Legacy Xcode patches pinned Rust 1.88; upgrade whenever rust-toolchain.toml changes. */
 const LEGACY_RUST_TOOLCHAIN_EXPORTS = [
 	'export RUSTUP_TOOLCHAIN=1.88; export PATH="${HOME}/.cargo/bin:${PATH}"; ',
-	'export RUSTUP_TOOLCHAIN=1.88; export PATH=\\"${HOME}/.cargo/bin:${PATH}\\"; ',
+	'export RUSTUP_TOOLCHAIN=1.88; export PATH=\\"${HOME}/.cargo/bin:${PATH}\\"; '
 ] as const
 
 function ensureRustToolchainReady(): void {
@@ -280,7 +304,7 @@ function ensureRustToolchainReady(): void {
 	}
 	for (const target of ['aarch64-apple-ios', 'aarch64-apple-ios-sim']) {
 		const add = spawnSync('rustup', ['target', 'add', target, '--toolchain', channel], {
-			stdio: 'inherit',
+			stdio: 'inherit'
 		})
 		if (add.status !== 0) {
 			console.error('tauri-ios-asc: rustup target add %s failed', target)
@@ -289,7 +313,7 @@ function ensureRustToolchainReady(): void {
 	}
 	const v = spawnSync('rustc', ['--version'], {
 		env: { ...process.env, RUSTUP_TOOLCHAIN: channel },
-		encoding: 'utf8',
+		encoding: 'utf8'
 	})
 	const line = (v.stdout || v.stderr || '').trim()
 	const rustcMinor = channel.match(/^(\d+\.\d+)/)?.[1] ?? channel
@@ -297,7 +321,7 @@ function ensureRustToolchainReady(): void {
 		console.error(
 			'tauri-ios-asc: rustc not available on toolchain %s — run: rustup toolchain install %s',
 			channel,
-			channel,
+			channel
 		)
 		process.exit(1)
 	}
@@ -356,10 +380,13 @@ function patchXcodeRustScript() {
 			pbx = pbx.replaceAll(brokenPbxCompileEnv, fixedPbxCompileEnv)
 			changed = true
 		}
-		if (pbx.includes('shellScript = "bun tauri ios xcode-script') && !pbx.includes('.aven-ios-compile.env')) {
+		if (
+			pbx.includes('shellScript = "bun tauri ios xcode-script') &&
+			!pbx.includes('.aven-ios-compile.env')
+		) {
 			pbx = pbx.replace(
 				'shellScript = "bun tauri ios xcode-script',
-				`shellScript = "${rustEnv}bun tauri ios xcode-script`,
+				`shellScript = "${rustEnv}bun tauri ios xcode-script`
 			)
 			changed = true
 		} else if (pbx.includes('RUSTUP_TOOLCHAIN=1.88')) {
@@ -376,7 +403,7 @@ function patchXcodeRustScript() {
 		if (pbx.includes('--configuration ${CONFIGURATION:?} 0 ${ARCHS:?}')) {
 			pbx = pbx.replaceAll(
 				'--configuration ${CONFIGURATION:?} 0 ${ARCHS:?}',
-				'--configuration ${CONFIGURATION:?} ${ARCHS:?}',
+				'--configuration ${CONFIGURATION:?} ${ARCHS:?}'
 			)
 			changed = true
 		}
@@ -386,7 +413,9 @@ function patchXcodeRustScript() {
 		}
 		if (changed) {
 			writeFileSync(pbxproj, pbx, 'utf8')
-			console.log('[tauri-ios-asc] patched project.pbxproj (Rust build script + FRAMEWORK_SEARCH_PATHS)')
+			console.log(
+				'[tauri-ios-asc] patched project.pbxproj (Rust build script + FRAMEWORK_SEARCH_PATHS)'
+			)
 		}
 	}
 }
@@ -420,7 +449,7 @@ function patchAccelerateFramework() {
 			// Add alongside the other linked SDK frameworks (mirrors `- sdk: Metal.framework`).
 			yml = yml.replace(
 				'      - sdk: CoreGraphics.framework\n',
-				'      - sdk: Accelerate.framework\n      - sdk: CoreGraphics.framework\n',
+				'      - sdk: Accelerate.framework\n      - sdk: CoreGraphics.framework\n'
 			)
 			writeFileSync(projectYml, yml, 'utf8')
 			console.log('[tauri-ios-asc] patched project.yml (linked Accelerate.framework)')
@@ -435,20 +464,22 @@ function patchAccelerateFramework() {
 	// 1. PBXBuildFile entry — the membership of the framework in a build phase.
 	pbx = pbx.replace(
 		'/* Begin PBXBuildFile section */\n',
-		`/* Begin PBXBuildFile section */\n\t\t${BUILD_FILE} /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ${FRAMEWORK_REF} /* Accelerate.framework */; };\n`,
+		`/* Begin PBXBuildFile section */\n\t\t${BUILD_FILE} /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ${FRAMEWORK_REF} /* Accelerate.framework */; };\n`
 	)
 	// 2. PBXFileReference entry — points at the SDK framework.
 	pbx = pbx.replace(
 		'/* Begin PBXFileReference section */\n',
-		`/* Begin PBXFileReference section */\n\t\t${FRAMEWORK_REF} /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };\n`,
+		`/* Begin PBXFileReference section */\n\t\t${FRAMEWORK_REF} /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };\n`
 	)
 	// 3. Add to the Frameworks build phase's files list (this is what the linker reads).
 	pbx = pbx.replace(
 		'isa = PBXFrameworksBuildPhase;\n\t\t\tbuildActionMask = 2147483647;\n\t\t\tfiles = (\n',
-		`isa = PBXFrameworksBuildPhase;\n\t\t\tbuildActionMask = 2147483647;\n\t\t\tfiles = (\n\t\t\t\t${BUILD_FILE} /* Accelerate.framework in Frameworks */,\n`,
+		`isa = PBXFrameworksBuildPhase;\n\t\t\tbuildActionMask = 2147483647;\n\t\t\tfiles = (\n\t\t\t\t${BUILD_FILE} /* Accelerate.framework in Frameworks */,\n`
 	)
 	writeFileSync(pbxproj, pbx, 'utf8')
-	console.log('[tauri-ios-asc] patched project.pbxproj (linked Accelerate.framework for ggml/llama.cpp)')
+	console.log(
+		'[tauri-ios-asc] patched project.pbxproj (linked Accelerate.framework for ggml/llama.cpp)'
+	)
 }
 
 function patchPodfile() {
@@ -471,7 +502,7 @@ function findIpa(): string | null {
 	const candidates = [
 		path.join(genApple, 'build/arm64/avenOS.ipa'),
 		path.join(genApple, 'build/universal/avenOS.ipa'),
-		path.join(genApple, 'build/avenOS.ipa'),
+		path.join(genApple, 'build/avenOS.ipa')
 	]
 	for (const p of candidates) {
 		if (existsSync(p)) return p
@@ -483,15 +514,16 @@ function configureSigning(env: NodeJS.ProcessEnv): 'automatic' | 'manual' {
 	const hasProfile = Boolean(process.env.AVEN_IOS_APP_STORE_MOBILEPROVISION?.trim())
 	const hasP12 = Boolean(
 		process.env.AVEN_IOS_CERTIFICATE_P12?.trim() &&
-			process.env.AVEN_IOS_CERTIFICATE_PASSWORD?.trim(),
+			process.env.AVEN_IOS_CERTIFICATE_PASSWORD?.trim()
 	)
 
 	if (hasProfile && hasP12) {
 		const profilePath = mustFile(
 			'AVEN_IOS_APP_STORE_MOBILEPROVISION',
-			process.env.AVEN_IOS_APP_STORE_MOBILEPROVISION,
+			process.env.AVEN_IOS_APP_STORE_MOBILEPROVISION
 		)
 		const p12Path = mustFile('AVEN_IOS_CERTIFICATE_P12', process.env.AVEN_IOS_CERTIFICATE_P12)
+		// biome-ignore lint/style/noNonNullAssertion: intentional crash when the secret is unset — same behavior as before, release scripts fail loud.
 		const p12Password = process.env.AVEN_IOS_CERTIFICATE_PASSWORD!.trim()
 		env.IOS_MOBILE_PROVISION = fileToBase64(profilePath)
 		env.IOS_CERTIFICATE = fileToBase64(p12Path)
@@ -504,7 +536,7 @@ function configureSigning(env: NodeJS.ProcessEnv): 'automatic' | 'manual' {
 		console.log('[tauri-ios-asc] signing=automatic (App Store Connect API key)')
 		if (hasProfile) {
 			console.warn(
-				'[tauri-ios-asc] AVEN_IOS_APP_STORE_MOBILEPROVISION is set but manual p12 env is missing — automatic signing may fail if ASC has no cloud profile for ceo.aven.os. Export Apple Distribution .p12 and set AVEN_IOS_CERTIFICATE_P12 + AVEN_IOS_CERTIFICATE_PASSWORD.',
+				'[tauri-ios-asc] AVEN_IOS_APP_STORE_MOBILEPROVISION is set but manual p12 env is missing — automatic signing may fail if ASC has no cloud profile for ceo.aven.os. Export Apple Distribution .p12 and set AVEN_IOS_CERTIFICATE_P12 + AVEN_IOS_CERTIFICATE_PASSWORD.'
 			)
 		}
 		return 'automatic'
@@ -512,13 +544,13 @@ function configureSigning(env: NodeJS.ProcessEnv): 'automatic' | 'manual' {
 
 	if (hasProfile) {
 		console.error(
-			'tauri-ios-asc: AVEN_IOS_APP_STORE_MOBILEPROVISION is set — also set AVEN_IOS_CERTIFICATE_P12 and AVEN_IOS_CERTIFICATE_PASSWORD (Keychain → export Apple Distribution .p12), or configure APPLE_API_* for automatic signing.',
+			'tauri-ios-asc: AVEN_IOS_APP_STORE_MOBILEPROVISION is set — also set AVEN_IOS_CERTIFICATE_P12 and AVEN_IOS_CERTIFICATE_PASSWORD (Keychain → export Apple Distribution .p12), or configure APPLE_API_* for automatic signing.'
 		)
 		process.exit(1)
 	}
 
 	console.error(
-		'tauri-ios-asc: configure manual signing (p12 + mobileprovision) or APPLE_API_* for automatic CI signing',
+		'tauri-ios-asc: configure manual signing (p12 + mobileprovision) or APPLE_API_* for automatic CI signing'
 	)
 	process.exit(1)
 }
@@ -546,12 +578,12 @@ async function main() {
 		JSON.stringify(
 			{
 				build: { beforeBuildCommand: '' },
-				bundle: { iOS: { bundleVersion } },
+				bundle: { iOS: { bundleVersion } }
 			},
 			null,
-			2,
+			2
 		),
-		'utf8',
+		'utf8'
 	)
 
 	const tauriEnv = {
@@ -563,16 +595,21 @@ async function main() {
 		// by exporting AVENOS_SERVER_WS_URL; defaults to the hosted aven-ceo relay.
 		AVENOS_SERVER_WS_URL:
 			process.env.AVENOS_SERVER_WS_URL || 'wss://aven-ceo-bmrha.sprites.app/sync',
-		...rustupToolchainEnv(repoRoot),
+		...rustupToolchainEnv(repoRoot)
 	}
 	const signingMode = configureSigning(tauriEnv)
 
-	console.log('[tauri-ios-asc] team=%s build=%s mode=%s target=arm64-device', team, bundleVersion, signingMode)
+	console.log(
+		'[tauri-ios-asc] team=%s build=%s mode=%s target=arm64-device',
+		team,
+		bundleVersion,
+		signingMode
+	)
 
 	const frontendBuild = spawnSync('bun', ['run', 'build'], {
 		cwd: appDir,
 		stdio: 'inherit',
-		env: tauriEnv,
+		env: tauriEnv
 	})
 	if (frontendBuild.status !== 0) {
 		console.error('tauri-ios-asc: frontend build failed')
@@ -596,7 +633,7 @@ async function main() {
 		'aarch64',
 		'--ci',
 		'--config',
-		mergePath,
+		mergePath
 	]
 	if (signingMode === 'manual') {
 		tauriArgs.push('--archive-only')
@@ -612,7 +649,7 @@ async function main() {
 	if (signingMode === 'manual') {
 		const profilePath = mustFile(
 			'AVEN_IOS_APP_STORE_MOBILEPROVISION',
-			process.env.AVEN_IOS_APP_STORE_MOBILEPROVISION,
+			process.env.AVEN_IOS_APP_STORE_MOBILEPROVISION
 		)
 		const profileName = readMobileProvisionName(profilePath)
 		const exportDir = path.join(genApple, 'build/export-manual')
@@ -622,7 +659,7 @@ async function main() {
 	}
 	if (!ipaSrc) {
 		console.error(
-			'tauri-ios-asc: could not find avenOS.ipa under gen/apple/build/ — check CLI output for the export path',
+			'tauri-ios-asc: could not find avenOS.ipa under gen/apple/build/ — check CLI output for the export path'
 		)
 		process.exit(1)
 	}
@@ -642,7 +679,7 @@ async function main() {
 
 	console.log(`[tauri-ios-asc] done → ${ipaOut}`)
 	console.log(
-		'[tauri-ios-asc] Upload preferred: bun run release:app:ios <N> — uses altool/App Store Connect API. Use Apple Transporter only as a GUI fallback if CLI upload fails.',
+		'[tauri-ios-asc] Upload preferred: bun run release:app:ios <N> — uses altool/App Store Connect API. Use Apple Transporter only as a GUI fallback if CLI upload fails.'
 	)
 }
 

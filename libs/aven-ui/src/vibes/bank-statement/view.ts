@@ -9,10 +9,10 @@ function partyCard(prefix: string): ViewNode {
 			{
 				$each: {
 					items: `$${prefix}.lines`,
-					template: { class: '$$cls', text: '$$text' },
-				},
-			},
-		],
+					template: { class: '$$cls', text: '$$text' }
+				}
+			}
+		]
 	}
 }
 
@@ -34,8 +34,8 @@ export const bankStatementView: ViewDef = {
 									{
 										children: [
 											{ class: 'bs-banner-title', text: '$heroTitle' },
-											{ class: 'bs-banner-sub', text: '$heroSub' },
-										],
+											{ class: 'bs-banner-sub', text: '$heroSub' }
+										]
 									},
 									{
 										class: 'bs-banner-money',
@@ -44,14 +44,14 @@ export const bankStatementView: ViewDef = {
 											template: {
 												children: [
 													{ tag: 'div', text: '$$money' },
-													{ class: 'bs-banner-sub', text: '$$sub' },
-												],
-											},
-										},
-									},
-								],
-							},
-						],
+													{ class: 'bs-banner-sub', text: '$$sub' }
+												]
+											}
+										}
+									}
+								]
+							}
+						]
 					},
 					{
 						class: 'bs-banner-subheader',
@@ -64,10 +64,10 @@ export const bankStatementView: ViewDef = {
 										class: '$$cellClass',
 										children: [
 											{ class: 'bs-field-val', text: '$$val' },
-											{ class: 'bs-field-label', text: '$$label' },
-										],
-									},
-								},
+											{ class: 'bs-field-label', text: '$$label' }
+										]
+									}
+								}
 							},
 							{
 								class: 'bs-banner-fields bs-banner-fields--compact',
@@ -77,18 +77,18 @@ export const bankStatementView: ViewDef = {
 										class: '$$cellClass',
 										children: [
 											{ class: 'bs-field-val', text: '$$val' },
-											{ class: 'bs-field-label', text: '$$label' },
-										],
-									},
-								},
-							},
-						],
-					},
-				],
+											{ class: 'bs-field-label', text: '$$label' }
+										]
+									}
+								}
+							}
+						]
+					}
+				]
 			},
 			{
 				class: 'bs-grid',
-				children: [partyCard('holder'), partyCard('institution')],
+				children: [partyCard('holder'), partyCard('institution')]
 			},
 			{
 				class: 'bs-items-wrap',
@@ -105,10 +105,10 @@ export const bankStatementView: ViewDef = {
 										tag: 'tr',
 										$each: {
 											items: '$columns',
-											template: { tag: 'th', class: '$$cls', text: '$$label' },
-										},
-									},
-								],
+											template: { tag: 'th', class: '$$cls', text: '$$label' }
+										}
+									}
+								]
 							},
 							{
 								tag: 'tbody',
@@ -124,19 +124,19 @@ export const bankStatementView: ViewDef = {
 												children: [
 													{ class: 'bs-desc-title', text: '$$descTitle' },
 													{ class: 'bs-desc-body', text: '$$descBody' },
-													{ class: 'bs-fx-hint', text: '$$fx' },
-												],
+													{ class: 'bs-fx-hint', text: '$$fx' }
+												]
 											},
 											{ tag: 'td', class: '$$amountClass', text: '$$amount' },
 											{ tag: 'td', class: 'num', text: '$$balance' },
-											{ tag: 'td', class: 'num', text: '$$rate' },
-										],
-									},
-								},
-							},
-						],
-					},
-				],
+											{ tag: 'td', class: 'num', text: '$$rate' }
+										]
+									}
+								}
+							}
+						]
+					}
+				]
 			},
 			{
 				$each: {
@@ -145,11 +145,11 @@ export const bankStatementView: ViewDef = {
 						class: 'bs-card',
 						children: [
 							{ tag: 'h4', text: 'Hinweise' },
-							{ class: 'bs-notes', text: '$$text' },
-						],
-					},
-				},
-			},
-		],
-	},
+							{ class: 'bs-notes', text: '$$text' }
+						]
+					}
+				}
+			}
+		]
+	}
 }

@@ -11,9 +11,7 @@ async function ensureWorker(module: typeof import('pdfjs-dist')): Promise<void> 
 	if (workerConfigured) return
 	const { default: workerUrlRel } = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
 	const href =
-		typeof window !== 'undefined'
-			? new URL(workerUrlRel, window.location.href).href
-			: workerUrlRel
+		typeof window !== 'undefined' ? new URL(workerUrlRel, window.location.href).href : workerUrlRel
 	module.GlobalWorkerOptions.workerSrc = href
 	workerConfigured = true
 }
@@ -58,7 +56,7 @@ export function createPdfObjectUrlFromBase64(base64: string): string | null {
 
 export async function renderPdfFirstPageDataUrl(
 	base64: string,
-	maxSide = 400,
+	maxSide = 400
 ): Promise<string | null> {
 	if (typeof document === 'undefined') return null
 
@@ -83,7 +81,7 @@ export async function renderPdfFirstPageDataUrl(
 		cMapUrl: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${v}/cmaps/`,
 		cMapPacked: true,
 		standardFontDataUrl: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${v}/standard_fonts/`,
-		wasmUrl,
+		wasmUrl
 	})
 
 	try {
@@ -103,7 +101,7 @@ export async function renderPdfFirstPageDataUrl(
 		const task = page.render({
 			canvasContext: ctx,
 			viewport,
-			canvas,
+			canvas
 		})
 		await task.promise
 		return canvas.toDataURL('image/jpeg', 0.82)

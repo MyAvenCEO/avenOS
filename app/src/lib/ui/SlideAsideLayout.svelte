@@ -1,54 +1,56 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte'
-	import { mobileAsideFabZClass, mobileFabBottomClass } from '$lib/shell'
-	import { mobileChromeOverrides } from '$lib/shell/mobile-chrome.svelte'
-	import MobileAsideDrawer from './MobileAsideDrawer.svelte'
+import type { Snippet } from 'svelte'
+import { mobileAsideFabZClass, mobileFabBottomClass } from '$lib/shell'
+import { mobileChromeOverrides } from '$lib/shell/mobile-chrome.svelte'
+import MobileAsideDrawer from './MobileAsideDrawer.svelte'
 
-	type Props = {
-		asideLabel: string
-		/** Tailwind `md:grid-cols-*` for desktop two-column layout. */
-		desktopGridClass?: string
-		/** Extra classes on the root grid wrapper. */
-		class?: string
-		/** Extra classes on the main content column. */
-		mainClass?: string
-		/** Extra classes on the inner content wrapper (mobile bottom padding for FAB). */
-		contentClass?: string
-		open?: boolean
-		aside: Snippet
-		/** Optional thin right aside (e.g. a metadata/detail panel). Desktop-only; needs a 3-col grid. */
-		asideRight?: Snippet
-		asideRightLabel?: string
-		/** Main column content (SvelteKit page outlet or inline panel). */
-		children: Snippet
-		/** When set, remount main content on route change (Tauri/WKWebView outlet refresh). */
-		routeKey?: string
-	}
+type Props = {
+	asideLabel: string
+	/** Tailwind `md:grid-cols-*` for desktop two-column layout. */
+	desktopGridClass?: string
+	/** Extra classes on the root grid wrapper. */
+	class?: string
+	/** Extra classes on the main content column. */
+	mainClass?: string
+	/** Extra classes on the inner content wrapper (mobile bottom padding for FAB). */
+	contentClass?: string
+	open?: boolean
+	aside: Snippet
+	/** Optional thin right aside (e.g. a metadata/detail panel). Desktop-only; needs a 3-col grid. */
+	asideRight?: Snippet
+	asideRightLabel?: string
+	/** Main column content (SvelteKit page outlet or inline panel). */
+	children: Snippet
+	/** When set, remount main content on route change (Tauri/WKWebView outlet refresh). */
+	routeKey?: string
+}
 
-	let {
-		asideLabel,
-		desktopGridClass = 'md:grid-cols-[14rem_minmax(0,1fr)]',
-		class: className = '',
-		mainClass = 'relative flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-none',
-		contentClass = 'pb-16 md:pb-0',
-		open = $bindable(false),
-		aside,
-		asideRight,
-		asideRightLabel = '',
-		children,
-		routeKey,
-	}: Props = $props()
+let {
+	asideLabel,
+	desktopGridClass = 'md:grid-cols-[14rem_minmax(0,1fr)]',
+	class: className = '',
+	mainClass = 'relative flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-none',
+	contentClass = 'pb-16 md:pb-0',
+	open = $bindable(false),
+	aside,
+	asideRight,
+	asideRightLabel = '',
+	children,
+	routeKey
+}: Props = $props()
 
-	const asideId = `slide-aside-${Math.random().toString(36).slice(2, 9)}`
-	const chrome = $derived(mobileChromeOverrides())
-	const showAsideFab = $derived(!chrome.hideAsideNav)
+const asideId = `slide-aside-${Math.random().toString(36).slice(2, 9)}`
+const chrome = $derived(mobileChromeOverrides())
+const showAsideFab = $derived(!chrome.hideAsideNav)
 
-	function toggle() {
-		open = !open
-	}
+function toggle() {
+	open = !open
+}
 </script>
 
-<div class="flex h-full min-h-0 w-full flex-1 flex-col md:grid md:h-full {desktopGridClass} {className}">
+<div
+	class="flex h-full min-h-0 w-full flex-1 flex-col md:grid md:h-full {desktopGridClass} {className}"
+>
 	<aside
 		id={asideId}
 		class="hidden min-h-0 flex-col border-r border-border/60 bg-card/20 px-3 pt-1 pb-6 md:flex md:min-h-0"

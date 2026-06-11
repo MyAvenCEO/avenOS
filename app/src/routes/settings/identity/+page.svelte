@@ -1,57 +1,57 @@
 <script lang="ts">
-	import { browser } from '$app/environment'
-	import { t } from '$lib/i18n'
-	import { useSelfContext } from '$lib/settings/self-context.svelte'
-	import { pickVaultRowForIdentity } from '$lib/settings/active-vault-ui'
-	import SelfDidCard from '$lib/settings/SelfDidCard.svelte'
-	import { vaultCardTitle, vaultList, type VaultListEntry } from '$lib/settings/vault'
-	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-	import { copyToClipboard } from '$lib/runtime/clipboard'
-	import { deviceSession } from '$lib/settings/device-session-store'
+import { browser } from '$app/environment'
+import { t } from '$lib/i18n'
+import { copyToClipboard } from '$lib/runtime/clipboard'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+import { pickVaultRowForIdentity } from '$lib/settings/active-vault-ui'
+import { deviceSession } from '$lib/settings/device-session-store'
+import SelfDidCard from '$lib/settings/SelfDidCard.svelte'
+import { useSelfContext } from '$lib/settings/self-context.svelte'
+import { type VaultListEntry, vaultCardTitle, vaultList } from '$lib/settings/vault'
 
-	const ctx = useSelfContext()
+const ctx = useSelfContext()
 
-	let copyKey = $state<string | null>(null)
-	let vaults = $state<VaultListEntry[]>([])
+let copyKey = $state<string | null>(null)
+let vaults = $state<VaultListEntry[]>([])
 
-	const sessionKind = $derived($deviceSession.kind)
+const sessionKind = $derived($deviceSession.kind)
 
-	$effect(() => {
-		if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked') return
-		void $deviceSession
-		void (async () => {
-			try {
-				vaults = await vaultList()
-			} catch {
-				vaults = []
-			}
-		})()
-	})
-
-	const activeVault = $derived.by(() => {
-		if ($deviceSession.kind === 'locked') return undefined
-		return pickVaultRowForIdentity(vaults, $deviceSession)
-	})
-
-	const personName = $derived.by(() => {
-		const v = activeVault
-		return v ? vaultCardTitle(v) : t('self.identity.title')
-	})
-
-	const deviceLabel = $derived(activeVault?.deviceLabel?.trim() || t('common.thisDevice'))
-
-	async function copy(label: string, value: string | undefined): Promise<void> {
-		if (!value) return
-		const ok = await copyToClipboard(value)
-		if (ok) {
-			copyKey = label
-			setTimeout(() => {
-				if (copyKey === label) copyKey = null
-			}, 1200)
-		} else {
-			copyKey = null
+$effect(() => {
+	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked') return
+	void $deviceSession
+	void (async () => {
+		try {
+			vaults = await vaultList()
+		} catch {
+			vaults = []
 		}
+	})()
+})
+
+const activeVault = $derived.by(() => {
+	if ($deviceSession.kind === 'locked') return undefined
+	return pickVaultRowForIdentity(vaults, $deviceSession)
+})
+
+const personName = $derived.by(() => {
+	const v = activeVault
+	return v ? vaultCardTitle(v) : t('self.identity.title')
+})
+
+const deviceLabel = $derived(activeVault?.deviceLabel?.trim() || t('common.thisDevice'))
+
+async function copy(label: string, value: string | undefined): Promise<void> {
+	if (!value) return
+	const ok = await copyToClipboard(value)
+	if (ok) {
+		copyKey = label
+		setTimeout(() => {
+			if (copyKey === label) copyKey = null
+		}, 1200)
+	} else {
+		copyKey = null
 	}
+}
 </script>
 
 <svelte:head>
@@ -86,8 +86,12 @@
 		>
 			{#snippet technical()}
 				{#if ctx.signingPubB64}
-					<p class="text-[10px] uppercase tracking-wide opacity-80">{t('self.identity.verifyingKey')}</p>
-					<pre class="overflow-x-auto font-mono text-[10px] leading-snug select-text">{ctx.signingPubB64}</pre>
+					<p class="text-[10px] uppercase tracking-wide opacity-80">
+						{t('self.identity.verifyingKey')}
+					</p>
+					<pre
+						class="overflow-x-auto font-mono text-[10px] leading-snug select-text"
+					>{ctx.signingPubB64}</pre>
 					<button
 						type="button"
 						class="border-input hover:bg-accent rounded-md border px-2 py-1 text-[10px]"

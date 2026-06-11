@@ -1,59 +1,59 @@
 <script lang="ts">
-	import type { PeerRowReply } from './api'
-	import { peerPickerLines } from './display-label'
-	import { t } from '$lib/i18n'
+import { t } from '$lib/i18n'
+import type { PeerRowReply } from './api'
+import { peerPickerLines } from './display-label'
 
-	let {
-		peers,
-		value = $bindable(''),
-		localPairingLabel,
-		placeholder = undefined,
-		disabled = false,
-	}: {
-		peers: PeerRowReply[]
-		value?: string
-		localPairingLabel?: string
-		placeholder?: string
-		disabled?: boolean
-	} = $props()
+let {
+	peers,
+	value = $bindable(''),
+	localPairingLabel,
+	placeholder = undefined,
+	disabled = false
+}: {
+	peers: PeerRowReply[]
+	value?: string
+	localPairingLabel?: string
+	placeholder?: string
+	disabled?: boolean
+} = $props()
 
-	const resolvedPlaceholder = $derived(placeholder ?? t('peer.selectPairedPeer'))
+const resolvedPlaceholder = $derived(placeholder ?? t('peer.selectPairedPeer'))
 
-	let open = $state(false)
-	let rootEl = $state<HTMLDivElement | undefined>()
+let open = $state(false)
+let rootEl = $state<HTMLDivElement | undefined>()
 
-	const selectedPeer = $derived(peers.find((p) => p.signerDid === value))
-	const selectedLines = $derived(
-		selectedPeer
-			? peerPickerLines(selectedPeer.signerDid, selectedPeer.deviceLabel, localPairingLabel)
-			: null,
-	)
+const selectedPeer = $derived(peers.find((p) => p.signerDid === value))
+const selectedLines = $derived(
+	selectedPeer
+		? peerPickerLines(selectedPeer.signerDid, selectedPeer.deviceLabel, localPairingLabel)
+		: null
+)
 
-	function select(signerDid: string): void {
-		value = signerDid
-		open = false
+function select(signerDid: string): void {
+	value = signerDid
+	open = false
+}
+
+function toggle(): void {
+	if (disabled) return
+	open = !open
+}
+
+$effect(() => {
+	if (!open) return
+	function onDocClick(event: MouseEvent): void {
+		if (rootEl && !rootEl.contains(event.target as Node)) open = false
 	}
-
-	function toggle(): void {
-		if (disabled) return
-		open = !open
+	function onKey(event: KeyboardEvent): void {
+		if (event.key === 'Escape') open = false
 	}
-
-	$effect(() => {
-		if (!open) return
-		function onDocClick(event: MouseEvent): void {
-			if (rootEl && !rootEl.contains(event.target as Node)) open = false
-		}
-		function onKey(event: KeyboardEvent): void {
-			if (event.key === 'Escape') open = false
-		}
-		document.addEventListener('click', onDocClick, true)
-		document.addEventListener('keydown', onKey)
-		return () => {
-			document.removeEventListener('click', onDocClick, true)
-			document.removeEventListener('keydown', onKey)
-		}
-	})
+	document.addEventListener('click', onDocClick, true)
+	document.addEventListener('keydown', onKey)
+	return () => {
+		document.removeEventListener('click', onDocClick, true)
+		document.removeEventListener('keydown', onKey)
+	}
+})
 </script>
 
 <div bind:this={rootEl} class="relative min-w-0 flex-1">

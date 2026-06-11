@@ -1,9 +1,9 @@
-import { browser } from '$app/environment'
 import { get } from 'svelte/store'
-import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-import { deviceSession } from '$lib/settings/device-session-store'
+import { browser } from '$app/environment'
 import { avenDbTable } from '$lib/avendb/api'
 import { waitForAvenDbSessionReady } from '$lib/runtime/avendb-runtime'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+import { deviceSession } from '$lib/settings/device-session-store'
 
 /** Max binary size before base64 encode (v1 single bytea column). */
 export const INTENT_FILE_MAX_BYTES = 15 * 1024 * 1024
@@ -17,7 +17,7 @@ const ALLOWED_MIME = new Set([
 	'text/plain',
 	'text/rtf',
 	'application/rtf',
-	'text/markdown',
+	'text/markdown'
 ])
 
 function inferMimeFromFilename(name: string): string | null {
@@ -36,11 +36,13 @@ function inferMimeFromFilename(name: string): string | null {
 /**
  * Resolved MIME for an allowed file, or error string.
  */
-export function classifyIntentUploadFile(file: File): { ok: true; mime: string } | { ok: false; err: string } {
+export function classifyIntentUploadFile(
+	file: File
+): { ok: true; mime: string } | { ok: false; err: string } {
 	if (file.size > INTENT_FILE_MAX_BYTES) {
 		return {
 			ok: false,
-			err: `${file.name}: file too large (max ${Math.round(INTENT_FILE_MAX_BYTES / (1024 * 1024))} MiB)`,
+			err: `${file.name}: file too large (max ${Math.round(INTENT_FILE_MAX_BYTES / (1024 * 1024))} MiB)`
 		}
 	}
 
@@ -55,7 +57,7 @@ export function classifyIntentUploadFile(file: File): { ok: true; mime: string }
 		} else {
 			return {
 				ok: false,
-				err: `${file.name}: type not allowed (need PDF, image, CSV, TXT, RTF, or Markdown; got ${mime || 'unknown'})`,
+				err: `${file.name}: type not allowed (need PDF, image, CSV, TXT, RTF, or Markdown; got ${mime || 'unknown'})`
 			}
 		}
 	}
@@ -83,7 +85,7 @@ async function fileToBase64(file: File): Promise<string> {
 export async function persistSparkFiles(
 	parentId: string,
 	files: File[],
-	options?: { identityId?: string },
+	options?: { identityId?: string }
 ): Promise<{ stored: number; errors: string[] }> {
 	const errors: string[] = []
 	if (!browser || !isTauriRuntime()) {
@@ -99,7 +101,7 @@ export async function persistSparkFiles(
 	} catch (e) {
 		return {
 			stored: 0,
-			errors: [e instanceof Error ? e.message : String(e)],
+			errors: [e instanceof Error ? e.message : String(e)]
 		}
 	}
 
@@ -122,7 +124,7 @@ export async function persistSparkFiles(
 				mime_type: classified.mime,
 				size_bytes: file.size,
 				created_at_ms: now,
-				content,
+				content
 			})
 			stored += 1
 		} catch (e) {
@@ -139,7 +141,7 @@ export async function persistSparkFiles(
  */
 export async function persistIntentFiles(
 	intentId: string,
-	files: File[],
+	files: File[]
 ): Promise<{ stored: number; errors: string[] }> {
 	return persistSparkFiles(intentId, files)
 }

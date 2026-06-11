@@ -1,24 +1,24 @@
 <script lang="ts">
-	import { useSelfContext } from '$lib/settings/self-context.svelte'
-	import { t } from '$lib/i18n'
-	import { copyToClipboard } from '$lib/runtime/clipboard'
+import { t } from '$lib/i18n'
+import { copyToClipboard } from '$lib/runtime/clipboard'
+import { useSelfContext } from '$lib/settings/self-context.svelte'
 
-	const ctx = useSelfContext()
+const ctx = useSelfContext()
 
-	let copyKey = $state<string | null>(null)
+let copyKey = $state<string | null>(null)
 
-	async function copyText(value: string | undefined, key: string): Promise<void> {
-		if (!value) return
-		const ok = await copyToClipboard(value)
-		if (ok) {
-			copyKey = key
-			setTimeout(() => {
-				if (copyKey === key) copyKey = null
-			}, 1200)
-		} else {
-			copyKey = null
-		}
+async function copyText(value: string | undefined, key: string): Promise<void> {
+	if (!value) return
+	const ok = await copyToClipboard(value)
+	if (ok) {
+		copyKey = key
+		setTimeout(() => {
+			if (copyKey === key) copyKey = null
+		}, 1200)
+	} else {
+		copyKey = null
 	}
+}
 </script>
 
 <svelte:head>

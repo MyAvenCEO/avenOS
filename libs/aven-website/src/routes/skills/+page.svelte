@@ -7,10 +7,10 @@
 </svelte:head>
 
 <script lang="ts">
+import { beamAvatarSvg, paletteFromCommaString } from '$lib/beam-avatar'
 import AvenIdCheckCta from '$lib/components/AvenIdCheckCta.svelte'
 import MarketingSiteHeader from '$lib/components/MarketingSiteHeader.svelte'
 import SkillMarketplaceCard from '$lib/components/SkillMarketplaceCard.svelte'
-import { beamAvatarSvg, paletteFromCommaString } from '$lib/beam-avatar'
 import { loadPublishersWithSkills, loadSkills, skillDetailHref } from '$lib/skills/loader'
 
 const skills = loadSkills('de')

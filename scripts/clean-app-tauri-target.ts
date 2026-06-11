@@ -10,7 +10,7 @@ const dirs = [
 	path.join(root, 'app/src-tauri/target'),
 	path.join(root, 'libs/aven-db/target'),
 	// Legacy wrong target-dir (../../../target/rust from app/src-tauri).
-	path.join(root, '..', 'target/rust'),
+	path.join(root, '..', 'target/rust')
 ]
 
 for (const dir of dirs) {

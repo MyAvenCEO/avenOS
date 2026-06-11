@@ -8,8 +8,8 @@ export const settingsView: ViewDef = {
 			{
 				children: [
 					{ class: 'eyebrow', text: '$eyebrow' },
-					{ tag: 'h1', class: 'set-title', text: '$title' },
-				],
+					{ tag: 'h1', class: 'set-title', text: '$title' }
+				]
 			},
 			{
 				$each: {
@@ -31,20 +31,20 @@ export const settingsView: ViewDef = {
 														class: 'set-row-main',
 														children: [
 															{ tag: 'span', class: 'set-label', text: '$$label' },
-															{ tag: 'span', class: 'set-hint', text: '$$hint' },
-														],
+															{ tag: 'span', class: 'set-hint', text: '$$hint' }
+														]
 													},
-													{ tag: 'span', class: 'set-value', text: '$$value' },
-												],
-											},
-										},
-									},
-								],
-							},
-						],
-					},
-				},
-			},
-		],
-	},
+													{ tag: 'span', class: 'set-value', text: '$$value' }
+												]
+											}
+										}
+									}
+								]
+							}
+						]
+					}
+				}
+			}
+		]
+	}
 }

@@ -1,50 +1,50 @@
 <script lang="ts">
-	import { onMount } from 'svelte'
-	import { browser } from '$app/environment'
-	import { t } from '$lib/i18n'
+import { onMount } from 'svelte'
+import { browser } from '$app/environment'
+import { t } from '$lib/i18n'
 
-	type Clip = {
-		id: string
-		title: string
-		src: string
-		html?: string
-		script?: string
-		durationSec?: number | null
-	}
+type Clip = {
+	id: string
+	title: string
+	src: string
+	html?: string
+	script?: string
+	durationSec?: number | null
+}
 
-	let clips = $state<Clip[]>([])
-	let loaded = $state(false)
-	let loadError = $state<string | null>(null)
-	let selectedId = $state<string | null>(null)
+let clips = $state<Clip[]>([])
+let loaded = $state(false)
+let loadError = $state<string | null>(null)
+let selectedId = $state<string | null>(null)
 
-	const selected = $derived(clips.find((c) => c.id === selectedId) ?? clips[0] ?? null)
+const selected = $derived(clips.find((c) => c.id === selectedId) ?? clips[0] ?? null)
 
-	async function loadManifest(): Promise<void> {
-		try {
-			const res = await fetch('/skills/editing/manifest.json', { cache: 'no-store' })
-			if (res.status === 404) {
-				clips = []
-				return
-			}
-			if (!res.ok) throw new Error(`manifest ${res.status}`)
-			const data = (await res.json()) as Clip[]
-			clips = Array.isArray(data) ? data : []
-			if (clips.length && !selectedId) selectedId = clips[0].id
-		} catch (e) {
-			loadError = e instanceof Error ? e.message : String(e)
-		} finally {
-			loaded = true
+async function loadManifest(): Promise<void> {
+	try {
+		const res = await fetch('/skills/editing/manifest.json', { cache: 'no-store' })
+		if (res.status === 404) {
+			clips = []
+			return
 		}
+		if (!res.ok) throw new Error(`manifest ${res.status}`)
+		const data = (await res.json()) as Clip[]
+		clips = Array.isArray(data) ? data : []
+		if (clips.length && !selectedId) selectedId = clips[0].id
+	} catch (e) {
+		loadError = e instanceof Error ? e.message : String(e)
+	} finally {
+		loaded = true
 	}
+}
 
-	onMount(() => {
-		if (browser) void loadManifest()
-	})
+onMount(() => {
+	if (browser) void loadManifest()
+})
 
-	function fmtDuration(sec?: number | null): string {
-		if (!sec && sec !== 0) return ''
-		return `${Number(sec).toFixed(sec % 1 === 0 ? 0 : 1)}s`
-	}
+function fmtDuration(sec?: number | null): string {
+	if (!sec && sec !== 0) return ''
+	return `${Number(sec).toFixed(sec % 1 === 0 ? 0 : 1)}s`
+}
 </script>
 
 <svelte:head>
@@ -67,7 +67,9 @@
 			{loadError}
 		</p>
 	{:else if clips.length === 0}
-		<div class="border-border/60 text-muted-foreground rounded-xl border px-4 py-10 text-center text-sm">
+		<div
+			class="border-border/60 text-muted-foreground rounded-xl border px-4 py-10 text-center text-sm"
+		>
 			<p>{t('editor.empty')}</p>
 			<p class="mt-2 font-mono text-[11px]">{t('editor.emptyHint')}</p>
 		</div>
@@ -123,13 +125,12 @@
 
 					{#if selected.script}
 						<section class="space-y-1.5">
-							<h3
-								class="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide"
-							>
+							<h3 class="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
 								{t('editor.script')}
 							</h3>
 							<pre
-								class="border-border/60 bg-muted/30 text-foreground/90 max-h-80 overflow-auto rounded-lg border px-3 py-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">{selected.script}</pre>
+								class="border-border/60 bg-muted/30 text-foreground/90 max-h-80 overflow-auto rounded-lg border px-3 py-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap"
+							>{selected.script}</pre>
 						</section>
 					{/if}
 				</div>

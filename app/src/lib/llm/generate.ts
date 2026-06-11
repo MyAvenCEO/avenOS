@@ -37,12 +37,12 @@ export async function streamReply(
 	prompt: string,
 	replyId: string,
 	onToken: (piece: string) => void,
-	opts: StreamReplyOptions = {},
+	opts: StreamReplyOptions = {}
 ): Promise<string> {
 	if (!isTauri()) throw new Error('on-device AI requires the desktop app')
 	const [{ invoke }, { listen }] = await Promise.all([
 		import('@tauri-apps/api/core'),
-		import('@tauri-apps/api/event'),
+		import('@tauri-apps/api/event')
 	])
 
 	const unlisten = await listen<LlmToken>('llm:token', (e) => {
@@ -106,6 +106,6 @@ export async function tinfoilAvailable(): Promise<boolean> {
 export async function tinfoilChat(messages: unknown[], tools?: unknown[]): Promise<CloudChatTurn> {
 	return tauriInvoke<CloudChatTurn>('tinfoil_chat', {
 		messages,
-		tools: tools && tools.length > 0 ? tools : null,
+		tools: tools && tools.length > 0 ? tools : null
 	})
 }

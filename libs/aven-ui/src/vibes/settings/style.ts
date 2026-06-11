@@ -1,8 +1,13 @@
-import type { StyleDef } from '../../engine/types.js'
 import { withBrand } from '../../brand-style.js'
+import type { StyleDef } from '../../engine/types.js'
 
 const selectors: StyleDef['selectors'] = {
-	'.set-title': { margin: '0', fontSize: 'var(--fs-hero)', fontWeight: '500', letterSpacing: 'var(--tracking-tight)' },
+	'.set-title': {
+		margin: '0',
+		fontSize: 'var(--fs-hero)',
+		fontWeight: '500',
+		letterSpacing: 'var(--tracking-tight)'
+	},
 	'.set-section': { display: 'flex', flexDirection: 'column', gap: 'var(--gap-tight)' },
 	'.set-section-label': { paddingLeft: '0.25rem' },
 
@@ -15,7 +20,7 @@ const selectors: StyleDef['selectors'] = {
 		justifyContent: 'space-between',
 		gap: 'var(--gap)',
 		padding: '0.875rem var(--pad-card)',
-		borderBottom: '1px solid var(--border-soft)',
+		borderBottom: '1px solid var(--border-soft)'
 	},
 	'.set-row:last-child': { borderBottom: 'none' },
 	'.set-row-main': { display: 'flex', flexDirection: 'column', gap: '2px', minWidth: '0' },
@@ -27,8 +32,8 @@ const selectors: StyleDef['selectors'] = {
 		fontSize: 'var(--fs-body)',
 		fontFamily: 'var(--font-mono)',
 		color: 'var(--muted-strong)',
-		textAlign: 'right',
-	},
+		textAlign: 'right'
+	}
 }
 
 export const settingsStyle: StyleDef = withBrand({ selectors })

@@ -1,12 +1,12 @@
-import type { StyleDef } from '../../engine/types.js'
 import { withBrand } from '../../brand-style.js'
+import type { StyleDef } from '../../engine/types.js'
 
 // Shared brand layer provides colours/radii/fonts/ink. Vault keeps its
 // destructive accent and a 1rem radius alias used by its rows.
 const tokens: StyleDef['tokens'] = {
 	'row-divider': 'color-mix(in srgb, var(--border) 55%, transparent)',
 	destructive: '#b45309',
-	'radius-lg': '1rem',
+	'radius-lg': '1rem'
 }
 
 const selectors: StyleDef['selectors'] = {
@@ -20,48 +20,48 @@ const selectors: StyleDef['selectors'] = {
 		gap: 'var(--gap-section)',
 		fontFamily: 'var(--font-sans)',
 		color: 'var(--text)',
-		boxSizing: 'border-box',
+		boxSizing: 'border-box'
 	},
 	'.vs-header': { marginBottom: '4px' },
 	'.vs-title': {
 		margin: '0 0 6px 0',
 		fontSize: 'var(--fs-lead)',
 		fontWeight: '500',
-		letterSpacing: '-0.02em',
+		letterSpacing: '-0.02em'
 	},
 	'.vs-description': {
 		margin: '0',
 		fontSize: 'var(--fs-section)',
 		color: 'var(--muted)',
-		lineHeight: '1.45',
+		lineHeight: '1.45'
 	},
 	'.vs-error': {
 		margin: '0',
 		fontSize: 'var(--fs-section)',
 		color: 'var(--destructive)',
-		display: 'none',
+		display: 'none'
 	},
 	'.vs-error.vs-has-error': { display: 'block' },
 	'.vs-add-card, .vs-list-card': {
 		background: 'var(--tech-fill)',
 		border: '1px solid var(--border)',
 		borderRadius: 'var(--radius-lg)',
-		padding: '16px 18px',
+		padding: '16px 18px'
 	},
 	'.vs-section-title': {
 		margin: '0 0 12px 0',
 		fontSize: 'var(--fs-section)',
-		fontWeight: '500',
+		fontWeight: '500'
 	},
 	'.vs-add-form': {
 		display: 'flex',
 		flexDirection: 'column',
-		gap: '12px',
+		gap: '12px'
 	},
 	'.vs-field': { display: 'flex', flexDirection: 'column', gap: '4px' },
 	'.vs-field-label': {
 		fontSize: 'var(--fs-meta)',
-		color: 'var(--muted)',
+		color: 'var(--muted)'
 	},
 	'.vs-input': {
 		font: 'inherit',
@@ -70,11 +70,11 @@ const selectors: StyleDef['selectors'] = {
 		border: '1px solid var(--border-soft)',
 		borderRadius: 'var(--radius-md)',
 		padding: '0.55rem 0.75rem',
-		outline: 'none',
+		outline: 'none'
 	},
 	'.vs-input:focus': {
 		borderColor: 'var(--brand-accent)',
-		boxShadow: '0 0 0 2px color-mix(in srgb, var(--brand-accent) 28%, transparent)',
+		boxShadow: '0 0 0 2px color-mix(in srgb, var(--brand-accent) 28%, transparent)'
 	},
 	'.vs-btn': {
 		font: 'inherit',
@@ -84,30 +84,30 @@ const selectors: StyleDef['selectors'] = {
 		fontWeight: '500',
 		fontSize: 'var(--fs-body)',
 		border: 'none',
-		background: 'transparent',
+		background: 'transparent'
 	},
 	'.vs-btn--primary': {
 		alignSelf: 'flex-start',
 		background: 'var(--brand-accent)',
 		color: 'var(--text)',
-		border: '1px solid color-mix(in srgb, var(--text) 12%, transparent)',
+		border: '1px solid color-mix(in srgb, var(--text) 12%, transparent)'
 	},
 	'.vs-btn--primary:disabled': { opacity: '0.45', cursor: 'not-allowed' },
 	'.vs-btn--link': {
 		color: 'var(--brand-accent)',
 		textDecoration: 'underline',
-		padding: '0.25rem 0.5rem',
+		padding: '0.25rem 0.5rem'
 	},
 	'.vs-btn--danger': {
 		color: 'var(--destructive)',
 		textDecoration: 'underline',
-		padding: '0.25rem 0.5rem',
+		padding: '0.25rem 0.5rem'
 	},
 	'.vs-loading': {
 		margin: '0',
 		fontSize: 'var(--fs-section)',
 		color: 'var(--muted)',
-		display: 'none',
+		display: 'none'
 	},
 	'.vs-loading.vs-is-loading': { display: 'block' },
 	'.vs-empty': {
@@ -117,11 +117,11 @@ const selectors: StyleDef['selectors'] = {
 		textAlign: 'center',
 		padding: '1.25rem 1rem',
 		border: '1px solid var(--border)',
-		borderRadius: 'var(--radius-md)',
+		borderRadius: 'var(--radius-md)'
 	},
 	'.vs-list:has(.vs-row) ~ .vs-empty, .vs-list-card:has(.vs-row) .vs-empty': { display: 'none' },
 	'.vs-list-card:has(.vs-is-loading) .vs-list, .vs-list-card:has(.vs-is-loading) .vs-empty': {
-		display: 'none',
+		display: 'none'
 	},
 	'.vs-list': {
 		listStyle: 'none',
@@ -129,7 +129,7 @@ const selectors: StyleDef['selectors'] = {
 		padding: '0',
 		border: '1px solid var(--border-soft)',
 		borderRadius: 'var(--radius-md)',
-		overflow: 'hidden',
+		overflow: 'hidden'
 	},
 	'.vs-row': {
 		display: 'flex',
@@ -138,7 +138,7 @@ const selectors: StyleDef['selectors'] = {
 		justifyContent: 'space-between',
 		gap: '10px 16px',
 		padding: '12px 14px',
-		borderBottom: '1px solid var(--row-divider)',
+		borderBottom: '1px solid var(--row-divider)'
 	},
 	'.vs-row:last-child': { borderBottom: 'none' },
 	'.vs-row-main': { minWidth: '0', flex: '1' },
@@ -147,21 +147,21 @@ const selectors: StyleDef['selectors'] = {
 		fontSize: 'var(--fs-section)',
 		overflow: 'hidden',
 		textOverflow: 'ellipsis',
-		whiteSpace: 'nowrap',
+		whiteSpace: 'nowrap'
 	},
 	'.vs-row-value': {
 		marginTop: '6px',
 		fontFamily: 'var(--font-mono)',
 		fontSize: 'var(--fs-meta)',
 		color: 'var(--muted)',
-		wordBreak: 'break-all',
+		wordBreak: 'break-all'
 	},
 	'.vs-row-value.vs-hidden': { display: 'none' },
 	'.vs-row-actions': {
 		display: 'flex',
 		flexShrink: '0',
-		gap: '8px',
-	},
+		gap: '8px'
+	}
 }
 
 export const vaultSecretsStyle: StyleDef = withBrand({ tokens, selectors })

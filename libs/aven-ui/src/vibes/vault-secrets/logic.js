@@ -1,10 +1,10 @@
 var PREFIX = {
 	passwords: 'pw.',
-	'api-keys': 'api.',
+	'api-keys': 'api.'
 }
 
 function mergeLabels(source) {
-	var labels = (source && source.labels) || {}
+	var labels = source?.labels || {}
 	return {
 		description: labels.description || '',
 		addTitle: labels.addTitle || 'Add secret',
@@ -16,13 +16,13 @@ function mergeLabels(source) {
 		hide: labels.hide || 'Hide',
 		addButton: labels.addButton || 'Add',
 		delete: labels.delete || 'Delete',
-		loading: labels.loading || 'Loading…',
+		loading: labels.loading || 'Loading…'
 	}
 }
 
 function matchesKind(kind, storageId) {
 	var apiPrefix = PREFIX['api-keys']
-	var pwPrefix = PREFIX.passwords
+	var _pwPrefix = PREFIX.passwords
 	if (kind === 'api-keys') return storageId.indexOf(apiPrefix) === 0
 	return storageId.indexOf(apiPrefix) !== 0
 }
@@ -38,10 +38,8 @@ function mapItems(source) {
 	var revealed = source.revealed || {}
 	var labels = mergeLabels(source)
 	return (source.secrets || [])
-		.filter(function (row) {
-			return row && row.id && matchesKind(kind, row.id)
-		})
-		.map(function (row) {
+		.filter((row) => row?.id && matchesKind(kind, row.id))
+		.map((row) => {
 			var id = String(row.id)
 			var isRevealed = !!revealed[id]
 			return {
@@ -50,12 +48,12 @@ function mapItems(source) {
 				revealedText: isRevealed ? String(revealed[id]) : '',
 				revealLabel: isRevealed ? labels.hide : labels.reveal,
 				revealedClass: isRevealed ? 'vs-row-value' : 'vs-row-value vs-hidden',
-				rowClass: 'vs-row',
+				rowClass: 'vs-row'
 			}
 		})
 }
 
-function initState(source) {
+function _initState(source) {
 	source = source || {}
 	var labels = mergeLabels(source)
 	var loading = !!source.loading
@@ -80,11 +78,11 @@ function initState(source) {
 		addDisabled: busy || !newId.trim(),
 		isEmpty: !loading && items.length === 0,
 		emptyMessage: labels.empty,
-		items: items,
+		items: items
 	}
 }
 
-function handleEvent(type, payload, state) {
+function _handleEvent(type, payload, state) {
 	payload = payload || {}
 	var newId = state.newId || ''
 	var newValue = state.newValue || ''
@@ -112,6 +110,6 @@ function handleEvent(type, payload, state) {
 		addDisabled: state.busy || !newId.trim(),
 		isEmpty: state.isEmpty,
 		emptyMessage: state.emptyMessage,
-		items: state.items,
+		items: state.items
 	}
 }

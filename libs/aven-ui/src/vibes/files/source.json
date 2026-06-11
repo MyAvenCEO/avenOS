@@ -3,7 +3,12 @@
 	"title": "Dateien",
 	"emptyMessage": "Noch keine Dateien abgelegt.",
 	"files": [
-		{ "icon": "📄", "name": "Rechnung_R-2026-1842.pdf", "meta": "182 KB · 15.05.2026", "kind": "PDF" },
+		{
+			"icon": "📄",
+			"name": "Rechnung_R-2026-1842.pdf",
+			"meta": "182 KB · 15.05.2026",
+			"kind": "PDF"
+		},
 		{ "icon": "🧾", "name": "Kontoauszug_April.csv", "meta": "24 KB · 02.05.2026", "kind": "CSV" },
 		{ "icon": "🖼", "name": "Belegfoto.jpg", "meta": "1,2 MB · 28.04.2026", "kind": "Bild" },
 		{ "icon": "📝", "name": "Vertrag_TechSupply.md", "meta": "8 KB · 12.04.2026", "kind": "Text" }

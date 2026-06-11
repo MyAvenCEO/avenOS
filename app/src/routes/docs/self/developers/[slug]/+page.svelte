@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { renderDocMarkdown } from '$lib/docs/render-doc'
+import { renderDocMarkdown } from '$lib/docs/render-doc'
 
-	let { data } = $props()
+let { data } = $props()
 
-	const rendered = $derived(renderDocMarkdown(data.doc.raw))
+const rendered = $derived(renderDocMarkdown(data.doc.raw))
 </script>
 
 <svelte:head>

@@ -80,7 +80,7 @@ export type ToolDispatchResult = {
 /** A tool executor: receives the (parsed) arguments + the turn context, performs the side effect. */
 type ToolExecutor = (
 	args: Record<string, unknown>,
-	ctx: ToolContext,
+	ctx: ToolContext
 ) => ToolDispatchResult | Promise<ToolDispatchResult>
 
 /** A registry entry = the model-facing schema + its app-side executor. */
@@ -95,8 +95,8 @@ const RESPONSE_PROP = {
 		type: 'string',
 		description:
 			"A short, friendly reply to the user in the user's language (one sentence), e.g. " +
-			"'Ich öffne die Aufgaben für dich.'. This is shown and spoken back to the user.",
-	},
+			"'Ich öffne die Aufgaben für dich.'. This is shown and spoken back to the user."
+	}
 } as const
 
 // ───────────────────────────── navigate_views ─────────────────────────────
@@ -117,11 +117,41 @@ type ViewDef = {
 
 /** The identity's sub-views. Mirrors the identity layout's aside nav. Extend here only. */
 const VIEWS: ViewDef[] = [
-	{ view: 'talk', subpath: '/talk', labelKey: 'nav.talk', desc: 'Talk — chat with the identity agent', aliases: ['chat', 'message', 'messages', 'nachricht', 'nachrichten', 'gespräch'] },
-	{ view: 'todos', subpath: '/todos', labelKey: 'nav.todos', desc: 'Todos — the identity task list', aliases: ['todo', 'task', 'tasks', 'aufgabe', 'aufgaben'] },
-	{ view: 'files', subpath: '/gallery', labelKey: 'nav.gallery', desc: 'Files — media & files gallery', aliases: ['file', 'gallery', 'galerie', 'media', 'medien', 'datei', 'dateien'] },
-	{ view: 'members', subpath: '/members', labelKey: 'nav.members', desc: 'Members — people with access', aliases: ['member', 'people', 'mitglied', 'mitglieder', 'leute'] },
-	{ view: 'db', subpath: '/db', labelKey: 'nav.db', desc: 'DB — raw table explorer', aliases: ['database', 'datenbank', 'table', 'tables', 'tabelle', 'tabellen'] },
+	{
+		view: 'talk',
+		subpath: '/talk',
+		labelKey: 'nav.talk',
+		desc: 'Talk — chat with the identity agent',
+		aliases: ['chat', 'message', 'messages', 'nachricht', 'nachrichten', 'gespräch']
+	},
+	{
+		view: 'todos',
+		subpath: '/todos',
+		labelKey: 'nav.todos',
+		desc: 'Todos — the identity task list',
+		aliases: ['todo', 'task', 'tasks', 'aufgabe', 'aufgaben']
+	},
+	{
+		view: 'files',
+		subpath: '/gallery',
+		labelKey: 'nav.gallery',
+		desc: 'Files — media & files gallery',
+		aliases: ['file', 'gallery', 'galerie', 'media', 'medien', 'datei', 'dateien']
+	},
+	{
+		view: 'members',
+		subpath: '/members',
+		labelKey: 'nav.members',
+		desc: 'Members — people with access',
+		aliases: ['member', 'people', 'mitglied', 'mitglieder', 'leute']
+	},
+	{
+		view: 'db',
+		subpath: '/db',
+		labelKey: 'nav.db',
+		desc: 'DB — raw table explorer',
+		aliases: ['database', 'datenbank', 'table', 'tables', 'tabelle', 'tabellen']
+	}
 ]
 
 /** The `navigate_views` schema, with the view enum + per-view hints + the standard `response`. */
@@ -138,12 +168,12 @@ const NAVIGATE_VIEWS_TOOL: ToolDef = {
 			view: {
 				type: 'string',
 				enum: VIEWS.map((v) => v.view),
-				description: 'Which sub-view to open.',
+				description: 'Which sub-view to open.'
 			},
-			...RESPONSE_PROP,
+			...RESPONSE_PROP
 		},
-		required: ['view', 'response'],
-	},
+		required: ['view', 'response']
+	}
 }
 
 /** Resolve a model-emitted view value (or alias) to its [`ViewDef`], case-insensitively. */
@@ -168,7 +198,7 @@ function executeNavigateViews(args: Record<string, unknown>, ctx: ToolContext): 
 	return {
 		ok: true,
 		message: t('identities.talk.navigating', { target: label }),
-		response: t('identities.talk.navOpening', { target: label }),
+		response: t('identities.talk.navOpening', { target: label })
 	}
 }
 
@@ -197,7 +227,7 @@ const TODOS_TOOL: ToolDef = {
 			action: {
 				type: 'string',
 				enum: ['list', 'create', 'update', 'delete'],
-				description: 'What to do with the todo list.',
+				description: 'What to do with the todo list.'
 			},
 			items: {
 				type: 'array',
@@ -208,20 +238,20 @@ const TODOS_TOOL: ToolDef = {
 					properties: {
 						id: {
 							type: 'string',
-							description: 'The EXACT id of an existing todo, copied from a `list` result.',
+							description: 'The EXACT id of an existing todo, copied from a `list` result.'
 						},
 						title: {
 							type: 'string',
-							description: "The task text — a short imperative phrase, in the user's language.",
+							description: "The task text — a short imperative phrase, in the user's language."
 						},
-						done: { type: 'boolean', description: 'Whether the task is completed.' },
-					},
-				},
+						done: { type: 'boolean', description: 'Whether the task is completed.' }
+					}
+				}
 			},
-			...RESPONSE_PROP,
+			...RESPONSE_PROP
 		},
-		required: ['action', 'response'],
-	},
+		required: ['action', 'response']
+	}
 }
 
 /** One entry of the model's `items` batch (all fields optional — validated per action). */
@@ -230,20 +260,20 @@ type TodoItemArg = { id?: unknown; title?: unknown; done?: unknown }
 /** Human summary for a completed batch: singular keys for one item, plural for several. */
 function todosSummary(
 	action: 'create' | 'update' | 'delete',
-	titles: string[],
+	titles: string[]
 ): { message: string; response: string } {
 	const base = { create: 'todoAdded', update: 'todoUpdated', delete: 'todoDeleted' }[action]
 	if (titles.length === 1) {
 		return {
 			message: t(`identities.talk.${base}`, { title: titles[0] }),
-			response: t(`identities.talk.${base}Reply`, { title: titles[0] }),
+			response: t(`identities.talk.${base}Reply`, { title: titles[0] })
 		}
 	}
 	const params = { count: titles.length, titles: titles.join(', ') }
 	const plural = base.replace('todo', 'todos')
 	return {
 		message: t(`identities.talk.${plural}`, params),
-		response: t(`identities.talk.${plural}Reply`, params),
+		response: t(`identities.talk.${plural}Reply`, params)
 	}
 }
 
@@ -254,7 +284,7 @@ function todosSummary(
  */
 async function executeTodos(
 	args: Record<string, unknown>,
-	ctx: ToolContext,
+	ctx: ToolContext
 ): Promise<ToolDispatchResult> {
 	const action = String(args.action ?? '')
 		.trim()
@@ -266,21 +296,21 @@ async function executeTodos(
 		return {
 			ok: true,
 			message: t('identities.talk.todosListed', { count: todos.length }),
-			toolResult: JSON.stringify(todos),
+			toolResult: JSON.stringify(todos)
 		}
 	}
 	if (action !== 'create' && action !== 'update' && action !== 'delete') {
 		return {
 			ok: false,
 			message: t('identities.talk.todoNoChange'),
-			toolResult: `unknown action: ${action || '?'}`,
+			toolResult: `unknown action: ${action || '?'}`
 		}
 	}
 	if (items.length === 0) {
 		return {
 			ok: false,
 			message: t('identities.talk.todoEmpty'),
-			toolResult: `${action}: items is empty`,
+			toolResult: `${action}: items is empty`
 		}
 	}
 
@@ -327,7 +357,7 @@ async function executeTodos(
 		ok: errors.length === 0,
 		action,
 		changed: titles.length,
-		errors,
+		errors
 	})
 	if (titles.length === 0) {
 		return { ok: false, message: errors.join('; ') || t('identities.talk.todoEmpty'), toolResult }
@@ -337,7 +367,7 @@ async function executeTodos(
 		ok: errors.length === 0,
 		message: errors.length > 0 ? `${message} · ⚠️ ${errors.join('; ')}` : message,
 		response,
-		toolResult,
+		toolResult
 	}
 }
 
@@ -345,7 +375,7 @@ async function executeTodos(
 
 const TOOLS: Record<string, ToolEntry> = {
 	[NAVIGATE_VIEWS_TOOL.name]: { def: NAVIGATE_VIEWS_TOOL, execute: executeNavigateViews },
-	[TODOS_TOOL.name]: { def: TODOS_TOOL, execute: executeTodos },
+	[TODOS_TOOL.name]: { def: TODOS_TOOL, execute: executeTodos }
 }
 
 /**
@@ -377,14 +407,14 @@ export const CLOUD_SYSTEM_PROMPT =
 export function toOpenAiTools(defs: ToolDef[]): unknown[] {
 	return defs.map((d) => ({
 		type: 'function',
-		function: { name: d.name, description: d.description, parameters: d.parameters },
+		function: { name: d.name, description: d.description, parameters: d.parameters }
 	}))
 }
 
 /** Dispatch a tool call to its executor (the router). Unknown tools are surfaced, not thrown. */
 export function executeToolCall(
 	call: LlmToolCall,
-	ctx: ToolContext,
+	ctx: ToolContext
 ): ToolDispatchResult | Promise<ToolDispatchResult> {
 	const entry = TOOLS[call.name]
 	if (!entry) return { ok: false, message: `⚠️ ${call.name}?` }
@@ -395,8 +425,22 @@ export function executeToolCall(
 
 /** Navigation cue words (German + English), matched as case-insensitive substrings. */
 const NAV_CUES = [
-	'öffne', 'offne', 'zeig', 'geh', 'navig', 'wechsel', 'bring mich', 'wechsle', 'zur seite',
-	'open', 'show', 'go to', 'goto', 'switch to', 'display', 'take me',
+	'öffne',
+	'offne',
+	'zeig',
+	'geh',
+	'navig',
+	'wechsel',
+	'bring mich',
+	'wechsle',
+	'zur seite',
+	'open',
+	'show',
+	'go to',
+	'goto',
+	'switch to',
+	'display',
+	'take me'
 ]
 
 /**
@@ -437,7 +481,7 @@ function recordFrom(
 	name: string,
 	args: Record<string, unknown>,
 	exec: ToolDispatchResult,
-	inferred: boolean,
+	inferred: boolean
 ): ToolCallRecord {
 	const modelResponse = String(args.response ?? '').trim()
 	return {
@@ -447,7 +491,7 @@ function recordFrom(
 		response: modelResponse || exec.response || exec.message,
 		result: exec.message,
 		ok: exec.ok,
-		inferred,
+		inferred
 	}
 }
 
@@ -484,7 +528,7 @@ export async function resolveAgentTurn(opts: {
 	if (def) {
 		const exec = await executeToolCall(
 			{ replyId, name: 'navigate_views', arguments: { view: def.view } },
-			ctx,
+			ctx
 		)
 		// Carry the model's prose as the response if it wrote one, else the synthesized reply.
 		const args = { view: def.view, response: String(toolCall?.arguments.response ?? '').trim() }
@@ -509,7 +553,7 @@ export function respondRecord(text: string): ToolCallRecord {
 		response: trimmed || t('identities.talk.agentNoReply'),
 		result: '',
 		ok: true,
-		inferred: false,
+		inferred: false
 	}
 }
 
@@ -522,7 +566,7 @@ export function cloudToolRecord(
 	name: string,
 	args: Record<string, unknown>,
 	exec: ToolDispatchResult,
-	finalReply?: string,
+	finalReply?: string
 ): ToolCallRecord {
 	const rec = recordFrom(name, args, exec, false)
 	const reply = (finalReply ?? '').trim()

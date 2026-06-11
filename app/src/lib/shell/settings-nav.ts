@@ -1,5 +1,5 @@
-import type { AsideRouteNavSection } from '$lib/ui/aside-nav'
 import { t } from '$lib/i18n'
+import type { AsideRouteNavSection } from '$lib/ui/aside-nav'
 
 export type SettingsNavItem = AsideRouteNavSection['items'][number]
 export type SettingsNavSection = AsideRouteNavSection
@@ -12,9 +12,9 @@ export function settingsNavSections(): SettingsNavSection[] {
 				{
 					href: '/settings/identity',
 					label: t('selfNav.self'),
-					match: (p) => p.startsWith('/settings/identity'),
-				},
-			],
+					match: (p) => p.startsWith('/settings/identity')
+				}
+			]
 		},
 		{
 			title: t('vaultNav.title'),
@@ -22,14 +22,14 @@ export function settingsNavSections(): SettingsNavSection[] {
 				{
 					href: '/settings/vault/passwords',
 					label: t('vaultNav.passwords'),
-					match: (p) => p.startsWith('/settings/vault/passwords'),
+					match: (p) => p.startsWith('/settings/vault/passwords')
 				},
 				{
 					href: '/settings/vault/api-keys',
 					label: t('vaultNav.apiKeys'),
-					match: (p) => p.startsWith('/settings/vault/api-keys'),
-				},
-			],
+					match: (p) => p.startsWith('/settings/vault/api-keys')
+				}
+			]
 		},
 		{
 			title: t('selfNav.preferencesCategory'),
@@ -37,9 +37,9 @@ export function settingsNavSections(): SettingsNavSection[] {
 				{
 					href: '/settings/preferences',
 					label: t('selfNav.language'),
-					match: (p) => p.startsWith('/settings/preferences'),
-				},
-			],
+					match: (p) => p.startsWith('/settings/preferences')
+				}
+			]
 		},
 		{
 			title: t('selfNav.models'),
@@ -47,9 +47,9 @@ export function settingsNavSections(): SettingsNavSection[] {
 				{
 					href: '/settings/models',
 					label: t('selfNav.localModels'),
-					match: (p) => p.startsWith('/settings/models'),
-				},
-			],
+					match: (p) => p.startsWith('/settings/models')
+				}
+			]
 		},
 		{
 			title: t('selfNav.advanced'),
@@ -57,14 +57,14 @@ export function settingsNavSections(): SettingsNavSection[] {
 				{
 					href: '/settings/advanced/network',
 					label: t('selfNav.network'),
-					match: (p) => p.startsWith('/settings/advanced/network'),
+					match: (p) => p.startsWith('/settings/advanced/network')
 				},
 				{
 					href: '/settings/db',
 					label: t('selfNav.db'),
-					match: (p) => p.startsWith('/settings/db'),
-				},
-			],
-		},
+					match: (p) => p.startsWith('/settings/db')
+				}
+			]
+		}
 	]
 }

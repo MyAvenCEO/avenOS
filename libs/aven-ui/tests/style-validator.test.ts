@@ -11,16 +11,16 @@ describe('validateStyleDef', () => {
 		expect(() =>
 			validateStyleDef({
 				tokens: {},
-				rawCss: 'body { background: red; }',
-			} as never),
+				rawCss: 'body { background: red; }'
+			} as never)
 		).toThrow(/Raw CSS is not allowed/)
 	})
 
 	test('rejects @import in token values', () => {
 		expect(() =>
 			validateStyleDef({
-				tokens: { evil: '@import url("https://evil.example/x.css")' },
-			}),
+				tokens: { evil: '@import url("https://evil.example/x.css")' }
+			})
 		).toThrow(/Forbidden CSS value/)
 	})
 
@@ -28,9 +28,9 @@ describe('validateStyleDef', () => {
 		expect(() =>
 			validateStyleDef({
 				components: {
-					bad: { background: 'javascript:alert(1)' },
-				},
-			}),
+					bad: { background: 'javascript:alert(1)' }
+				}
+			})
 		).toThrow(/Forbidden CSS value/)
 	})
 })

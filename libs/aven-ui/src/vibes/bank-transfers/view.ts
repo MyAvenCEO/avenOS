@@ -8,7 +8,7 @@ import { invoiceView } from '../invoice/view.js'
  */
 function prefixExpr(value: string): string {
 	if (value.startsWith('$$')) return value
-	if (value.startsWith('$')) return '$detail.' + value.slice(1)
+	if (value.startsWith('$')) return `$detail.${value.slice(1)}`
 	return value
 }
 
@@ -59,12 +59,12 @@ export const bankTransfersView: ViewDef = {
 												class: 'bt-count',
 												children: [
 													{ tag: 'span', class: 'bt-count-value', text: '$count' },
-													{ tag: 'span', class: 'bt-count-label', text: '$labels.countLabel' },
-												],
-											},
-										],
-									},
-								],
+													{ tag: 'span', class: 'bt-count-label', text: '$labels.countLabel' }
+												]
+											}
+										]
+									}
+								]
 							},
 							{
 								tag: 'ul',
@@ -75,7 +75,7 @@ export const bankTransfersView: ViewDef = {
 										tag: 'li',
 										class: 'bt-empty',
 										text: '$emptyMessage',
-										attrs: { 'data-empty': 'true' },
+										attrs: { 'data-empty': 'true' }
 									},
 									{
 										$each: {
@@ -89,13 +89,17 @@ export const bankTransfersView: ViewDef = {
 														attrs: {
 															type: 'button',
 															'aria-current': '$$ariaCurrent',
-															'data-id': '$$id',
+															'data-id': '$$id'
 														},
 														$on: {
-															click: { send: 'SELECT_TX', payload: { id: '$$id' } },
+															click: { send: 'SELECT_TX', payload: { id: '$$id' } }
 														},
 														children: [
-															{ tag: 'span', class: '$$dotClass', attrs: { 'aria-hidden': 'true' } },
+															{
+																tag: 'span',
+																class: '$$dotClass',
+																attrs: { 'aria-hidden': 'true' }
+															},
 															{
 																class: 'bt-row-body',
 																children: [
@@ -103,28 +107,28 @@ export const bankTransfersView: ViewDef = {
 																		class: 'bt-row-line bt-row-line--top',
 																		children: [
 																			{ tag: 'span', class: 'bt-row-payee', text: '$$payee' },
-																			{ tag: 'span', class: '$$amountClass', text: '$$amount' },
-																		],
+																			{ tag: 'span', class: '$$amountClass', text: '$$amount' }
+																		]
 																	},
 																	{
 																		class: 'bt-row-line bt-row-line--sub',
 																		children: [
 																			{ tag: 'span', class: 'bt-row-ref', text: '$$reference' },
-																			{ tag: 'span', class: 'bt-row-date', text: '$$date' },
-																		],
+																			{ tag: 'span', class: 'bt-row-date', text: '$$date' }
+																		]
 																	},
-																	{ tag: 'span', class: 'bt-row-status', text: '$$statusLabel' },
-																],
-															},
-														],
-													},
-												],
-											},
-										},
-									},
-								],
-							},
-						],
+																	{ tag: 'span', class: 'bt-row-status', text: '$$statusLabel' }
+																]
+															}
+														]
+													}
+												]
+											}
+										}
+									}
+								]
+							}
+						]
 					},
 					{
 						class: 'bt-detail-pane',
@@ -137,19 +141,19 @@ export const bankTransfersView: ViewDef = {
 										class: 'bt-detail-empty-inner',
 										children: [
 											{ class: 'bt-eyebrow', text: '$labels.detailEyebrow' },
-											{ class: 'bt-detail-empty-text', text: '$detailEmptyMessage' },
-										],
-									},
-								],
+											{ class: 'bt-detail-empty-text', text: '$detailEmptyMessage' }
+										]
+									}
+								]
 							},
 							{
 								class: 'bt-detail-doc',
-								children: [invoiceDetailNode],
-							},
-						],
-					},
-				],
-			},
-		],
-	},
+								children: [invoiceDetailNode]
+							}
+						]
+					}
+				]
+			}
+		]
+	}
 }

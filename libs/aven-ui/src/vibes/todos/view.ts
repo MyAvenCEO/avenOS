@@ -13,19 +13,19 @@ export const todoView: ViewDef = {
 							{
 								children: [
 									{ class: 'td-eyebrow', text: '$labels.listEyebrow' },
-									{ tag: 'h1', class: 'td-banner-title', text: '$title' },
-								],
+									{ tag: 'h1', class: 'td-banner-title', text: '$title' }
+								]
 							},
 							{
 								class: 'td-banner-stat',
 								children: [
 									{ class: 'td-field-label', text: '$labels.openLabel' },
-									{ class: 'td-banner-accent', text: '$openCount' },
-								],
-							},
-						],
-					},
-				],
+									{ class: 'td-banner-accent', text: '$openCount' }
+								]
+							}
+						]
+					}
+				]
 			},
 			{
 				class: 'td-card td-card--list',
@@ -38,7 +38,7 @@ export const todoView: ViewDef = {
 								tag: 'li',
 								class: 'empty',
 								text: '$emptyMessage',
-								attrs: { 'data-empty': 'true' },
+								attrs: { 'data-empty': 'true' }
 							},
 							{
 								$each: {
@@ -53,11 +53,11 @@ export const todoView: ViewDef = {
 												attrs: {
 													type: 'checkbox',
 													'aria-label': '$labels.toggleAria',
-													checked: '$$done',
+													checked: '$$done'
 												},
 												$on: {
-													change: { send: 'TOGGLE_ITEM', payload: { id: '$$id' } },
-												},
+													change: { send: 'TOGGLE_ITEM', payload: { id: '$$id' } }
+												}
 											},
 											{ class: 'td-row-text', text: '$$text' },
 											{
@@ -66,17 +66,17 @@ export const todoView: ViewDef = {
 												attrs: { type: 'button', 'aria-label': '$labels.deleteAria' },
 												text: '×',
 												$on: {
-													click: { send: 'DELETE_ITEM', payload: { id: '$$id' } },
-												},
-											},
-										],
-									},
-								},
-							},
-						],
-					},
-				],
-			},
-		],
-	},
+													click: { send: 'DELETE_ITEM', payload: { id: '$$id' } }
+												}
+											}
+										]
+									}
+								}
+							}
+						]
+					}
+				]
+			}
+		]
+	}
 }

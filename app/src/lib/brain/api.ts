@@ -82,7 +82,7 @@ export function brainIngest(
 		source?: string
 		contentDateMs?: number
 		veracity?: string
-	} = {},
+	} = {}
 ): Promise<{ id: string }> {
 	return avenDbRuntime('brainIngest', { identity, content, ...opts })
 }
@@ -92,7 +92,7 @@ export function brainSearch(
 	identity: string,
 	query: string,
 	k = 8,
-	stream?: string,
+	stream?: string
 ): Promise<BrainHit[]> {
 	return avenDbRuntime('brainSearch', { identity, query, k, ...(stream ? { stream } : {}) })
 }
@@ -101,10 +101,7 @@ export function brainEntities(identity: string): Promise<BrainEntity[]> {
 	return avenDbRuntime('brainEntities', { identity })
 }
 
-export function brainEntityCard(
-	identity: string,
-	name: string,
-): Promise<BrainEntityCard | null> {
+export function brainEntityCard(identity: string, name: string): Promise<BrainEntityCard | null> {
 	return avenDbRuntime('brainEntityCard', { identity, name })
 }
 
@@ -112,7 +109,7 @@ export function brainEntityCard(
 export function brainAssembleContext(
 	identity: string,
 	query: string,
-	opts: { workingN?: number; recallK?: number; budgetChars?: number; stream?: string } = {},
+	opts: { workingN?: number; recallK?: number; budgetChars?: number; stream?: string } = {}
 ): Promise<ContextBundle> {
 	return avenDbRuntime('brainAssembleContext', { identity, query, ...opts })
 }

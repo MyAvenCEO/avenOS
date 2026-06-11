@@ -11,23 +11,24 @@
  */
 
 import { getContext, setContext } from 'svelte'
-import type { AvenDbStore } from '$lib/avendb/store.svelte'
 import { persistSparkFiles } from '$lib/avendb/intent-files'
+import type { AvenDbStore } from '$lib/avendb/store.svelte'
 import { brainIngest } from '$lib/brain/api'
 import { tinfoilAvailable, tinfoilChat } from '$lib/llm/generate'
 import {
 	CLOUD_SYSTEM_PROMPT,
 	CLOUD_TOOLS,
-	MAX_TOOL_ROUNDS,
 	cloudToolRecord,
 	encodeToolCallBody,
 	executeToolCall,
+	MAX_TOOL_ROUNDS,
 	respondRecord,
-	toOpenAiTools,
 	type ToolCallRecord,
 	type ToolContext,
 	type ToolDispatchResult,
+	toOpenAiTools
 } from '$lib/llm/tools'
+
 // PURE-CLOUD MODE (board 0022): the on-device LFM + brain-recall reply path is disabled — see
 // the commented `replyWithAgent` block below. To restore local mode, re-add these imports:
 //   import { brainAssembleContext } from '$lib/brain/api'
@@ -131,7 +132,7 @@ export function createIdentityAgent(deps: {
 			},
 			deleteTodoById: async (id) => {
 				await deps.todos.delete(id)
-			},
+			}
 		}
 	}
 
@@ -139,7 +140,7 @@ export function createIdentityAgent(deps: {
 	async function persistRecord(
 		env: IdentityAgentEnv,
 		replyId: string,
-		record: ToolCallRecord,
+		record: ToolCallRecord
 	): Promise<void> {
 		const body = encodeToolCallBody(record)
 		streaming = { ...streaming, [replyId]: body }
@@ -150,7 +151,7 @@ export function createIdentityAgent(deps: {
 				authorRole: 'agent',
 				source: replyId,
 				contentDateMs: Date.now(),
-				veracity: 'inferred',
+				veracity: 'inferred'
 			}).catch(() => {})
 		}
 		showFloating(record)
@@ -167,16 +168,14 @@ export function createIdentityAgent(deps: {
 	async function runCloudLoop(
 		prompt: string,
 		replyId: string,
-		ctx: ToolContext,
+		ctx: ToolContext
 	): Promise<ToolCallRecord> {
 		const messages: unknown[] = [
 			{ role: 'system', content: CLOUD_SYSTEM_PROMPT },
-			{ role: 'user', content: prompt },
+			{ role: 'user', content: prompt }
 		]
 		const tools = toOpenAiTools(CLOUD_TOOLS)
-		let last:
-			| { name: string; args: Record<string, unknown>; exec: ToolDispatchResult }
-			| undefined
+		let last: { name: string; args: Record<string, unknown>; exec: ToolDispatchResult } | undefined
 
 		const finalize = (reply: string): ToolCallRecord =>
 			last ? cloudToolRecord(last.name, last.args, last.exec, reply) : respondRecord(reply)
@@ -197,7 +196,7 @@ export function createIdentityAgent(deps: {
 				messages.push({
 					role: 'tool',
 					tool_call_id: call.id,
-					content: exec.toolResult ?? exec.message,
+					content: exec.toolResult ?? exec.message
 				})
 			}
 		}
@@ -223,7 +222,7 @@ export function createIdentityAgent(deps: {
 				created_at_ms: Date.now(),
 				author_did: AGENT_DID,
 				role: 'agent',
-				body: '',
+				body: ''
 			})
 			replyId = reply.id
 			streamingId = reply.id
@@ -238,7 +237,7 @@ export function createIdentityAgent(deps: {
 				await persistRecord(
 					env,
 					reply.id,
-					respondRecord('Cloud AI is unavailable — set TINFOIL_API_KEY to enable Aven.'),
+					respondRecord('Cloud AI is unavailable — set TINFOIL_API_KEY to enable Aven.')
 				)
 				return
 			}
@@ -337,7 +336,7 @@ export function createIdentityAgent(deps: {
 				created_at_ms: Date.now(),
 				author_did: did,
 				role: 'user',
-				body,
+				body
 			})
 			// E3: the brain reads along — fire-and-forget, never blocks the talk loop.
 			if (body) {
@@ -346,14 +345,12 @@ export function createIdentityAgent(deps: {
 					authorRole: 'user',
 					source: row.id,
 					contentDateMs: Date.now(),
-					veracity: 'stated',
-				}).catch((e) =>
-					console.error('[brain] ingest failed:', e instanceof Error ? e.message : e),
-				)
+					veracity: 'stated'
+				}).catch((e) => console.error('[brain] ingest failed:', e instanceof Error ? e.message : e))
 			}
 			if (files.length > 0) {
 				const { stored, errors } = await persistSparkFiles(row.id, files, {
-					identityId: env.canonicalSparkId,
+					identityId: env.canonicalSparkId
 				})
 				if (errors.length > 0) {
 					err =
@@ -397,7 +394,7 @@ export function createIdentityAgent(deps: {
 		},
 		clearErr() {
 			err = undefined
-		},
+		}
 	}
 }
 

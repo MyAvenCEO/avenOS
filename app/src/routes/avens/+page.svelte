@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { goto } from '$app/navigation'
-	import { t } from '$lib/i18n'
-	import { AVENS } from './avens-data'
+import { goto } from '$app/navigation'
+import { t } from '$lib/i18n'
+import { AVENS } from './avens-data'
 </script>
 
 <svelte:head>
@@ -25,8 +25,7 @@
 						class="group border-input hover:bg-accent hover:text-accent-foreground hover:border-border flex w-full flex-col gap-1 rounded-xl border bg-card/40 px-4 py-4 text-left transition-colors"
 						onclick={() => goto(aven.href)}
 					>
-						<span
-							class="text-base font-medium tracking-tight group-hover:text-accent-foreground"
+						<span class="text-base font-medium tracking-tight group-hover:text-accent-foreground"
 							>{aven.name}</span
 						>
 						<span class="text-muted-foreground text-[11px] group-hover:text-accent-foreground/85"

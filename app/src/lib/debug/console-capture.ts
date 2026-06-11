@@ -85,8 +85,8 @@ export function formatDebugReport(state?: Record<string, unknown>, rustLogs?: st
 		out += `${rustLogs.join('\n')}\n\n`
 	}
 	out += `=== CONSOLE (${RING.length}) ===\n`
-	out += RING.map(
-		(e) => `[${new Date(e.t).toISOString()}] ${e.level.toUpperCase()} ${e.msg}`,
-	).join('\n')
+	out += RING.map((e) => `[${new Date(e.t).toISOString()}] ${e.level.toUpperCase()} ${e.msg}`).join(
+		'\n'
+	)
 	return out
 }

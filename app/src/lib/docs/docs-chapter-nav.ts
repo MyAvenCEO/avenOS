@@ -9,7 +9,7 @@ export type DocChapterNavGroup = {
 /** Build aside nav sections from docs chapter groups (founders / developers, etc.). */
 export function asideNavSectionsFromDocGroups(
 	groups: readonly DocChapterNavGroup[],
-	path: string,
+	path: string
 ): AsideNavSection[] {
 	return groups.map((group) => ({
 		title: group.label,
@@ -19,9 +19,9 @@ export function asideNavSectionsFromDocGroups(
 				href,
 				label: doc.title,
 				active: path === href,
-				class: 'line-clamp-2 leading-snug',
+				class: 'line-clamp-2 leading-snug'
 			}
-		}),
+		})
 	}))
 }
 

@@ -1,6 +1,6 @@
 import { browser } from '$app/environment'
-import { DEFAULT_LOCALE, normalizeLocale, type SupportedLocale } from './locales'
 import { translate } from './languages'
+import { DEFAULT_LOCALE, normalizeLocale, type SupportedLocale } from './locales'
 
 let locale = $state<SupportedLocale>(DEFAULT_LOCALE)
 

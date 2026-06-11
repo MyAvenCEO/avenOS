@@ -1,7 +1,7 @@
-import type { UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
-import { getTableRowsStore } from '$lib/runtime/table-stores'
+import type { UnlistenFn } from '@tauri-apps/api/event'
 import { avenDbRuntime } from '$lib/runtime/avendb-ipc'
+import { getTableRowsStore } from '$lib/runtime/table-stores'
 
 /** The well-known avenCEO control-identity id for this network (deterministic from
  *  the network seed — every device computes the same one). */
@@ -22,18 +22,25 @@ export async function avenCeoAddMember(signerDid: string): Promise<void> {
 }
 
 /** Self-publish this device's profile into its own avenCEO roster row. */
-export async function avenCeoPublishProfile(accountName: string, deviceLabel: string): Promise<void> {
+export async function avenCeoPublishProfile(
+	accountName: string,
+	deviceLabel: string
+): Promise<void> {
 	await avenDbRuntime('avenCeoPublishProfile', { accountName, deviceLabel })
 }
 
 /** Create a new user-owned SAFE. `type`: 'human' (a person/persona), 'aven'
  *  (a group/workspace), or 'spark' (a cross-aven company). This device mints its
  *  genesis biscuit (→ owner) + DEK + self-keyshare. Returns the new id. */
-export async function createIdentity(name: string, type: 'human' | 'aven' | 'spark'): Promise<string> {
+export async function createIdentity(
+	name: string,
+	type: 'human' | 'aven' | 'spark'
+): Promise<string> {
 	return avenDbRuntime<string>('createIdentity', { name, type })
 }
 
 /** Untyped avenDB row from IPC — schema lives in Rust (`libs/aven-schema`). */
+// biome-ignore lint/suspicious/noExplicitAny: deliberate untyped IPC boundary — the schema is Rust-side; rows are validated by the engine, not TS.
 export type AvenDbRow = Record<string, any> & { id: string }
 
 export type AvenDbStatusReply = {
@@ -79,7 +86,7 @@ export async function sparkAdminAdd(payload: {
 }): Promise<void> {
 	await avenDbRuntime('sparkAdminAdd', {
 		identityId: payload.identityId,
-		signerDid: payload.signerDid,
+		signerDid: payload.signerDid
 	})
 }
 
@@ -94,7 +101,7 @@ export async function sparkReplicateAdd(payload: {
 }): Promise<void> {
 	await avenDbRuntime('sparkReplicateAdd', {
 		identityId: payload.identityId,
-		signerDid: payload.signerDid,
+		signerDid: payload.signerDid
 	})
 }
 
@@ -111,7 +118,7 @@ export async function sparkReaderAdd(payload: {
 }): Promise<void> {
 	await avenDbRuntime('sparkReaderAdd', {
 		identityId: payload.identityId,
-		signerDid: payload.signerDid,
+		signerDid: payload.signerDid
 	})
 }
 
@@ -193,7 +200,7 @@ export async function avenDbExplorerList(table: string): Promise<AvenDbExplorerL
  */
 async function subscribeToTableSnapshot(
 	table: string,
-	handler: (rows: AvenDbRow[]) => void,
+	handler: (rows: AvenDbRow[]) => void
 ): Promise<UnlistenFn> {
 	const st = getTableRowsStore(table)
 	const un = st.subscribe((rows) => handler(rows as AvenDbRow[]))
@@ -206,7 +213,7 @@ async function subscribeToTableSnapshot(
 
 export async function avenDbExplorerSubscribe(
 	table: string,
-	handler: (rows: AvenDbRow[]) => void,
+	handler: (rows: AvenDbRow[]) => void
 ): Promise<UnlistenFn> {
 	return subscribeToTableSnapshot(table, handler)
 }
@@ -231,6 +238,6 @@ export function avenDbTable(table: string) {
 		},
 		async subscribe(handler: (rows: AvenDbRow[]) => void): Promise<UnlistenFn> {
 			return subscribeToTableSnapshot(table, handler)
-		},
+		}
 	}
 }

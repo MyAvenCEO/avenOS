@@ -1,54 +1,52 @@
 <script lang="ts">
-	import { onMount } from 'svelte'
-	import { browser } from '$app/environment'
-	import { t } from '$lib/i18n'
-	import VirtualList from '$lib/ingestor/VirtualList.svelte'
+import { onMount } from 'svelte'
+import { browser } from '$app/environment'
+import { t } from '$lib/i18n'
+import VirtualList from '$lib/ingestor/VirtualList.svelte'
 
-	type Konto = {
-		konto: string
-		funktion: string
-		bezeichnung: string
-	}
+type Konto = {
+	konto: string
+	funktion: string
+	bezeichnung: string
+}
 
-	let accounts = $state<Konto[]>([])
-	let loaded = $state(false)
-	let loadError = $state<string | null>(null)
+let accounts = $state<Konto[]>([])
+let loaded = $state(false)
+let loadError = $state<string | null>(null)
 
-	let query = $state('')
-	let klasse = $state<string>('all')
+let query = $state('')
+let klasse = $state<string>('all')
 
-	// Shared column template so the header and every row line up.
-	const GRID = 'grid-template-columns: 80px 92px minmax(200px,1fr)'
+// Shared column template so the header and every row line up.
+const GRID = 'grid-template-columns: 80px 92px minmax(200px,1fr)'
 
-	const classes = $derived(
-		Array.from(new Set(accounts.map((a) => a.konto[0]))).sort(),
-	)
+const classes = $derived(Array.from(new Set(accounts.map((a) => a.konto[0]))).sort())
 
-	const filtered = $derived.by<Konto[]>(() => {
-		const q = query.trim().toLowerCase()
-		return accounts.filter((a) => {
-			if (klasse !== 'all' && a.konto[0] !== klasse) return false
-			if (!q) return true
-			return a.konto.startsWith(q) || a.bezeichnung.toLowerCase().includes(q)
-		})
+const filtered = $derived.by<Konto[]>(() => {
+	const q = query.trim().toLowerCase()
+	return accounts.filter((a) => {
+		if (klasse !== 'all' && a.konto[0] !== klasse) return false
+		if (!q) return true
+		return a.konto.startsWith(q) || a.bezeichnung.toLowerCase().includes(q)
 	})
+})
 
-	async function load(): Promise<void> {
-		try {
-			const res = await fetch('/skills/bookkeeping/konten.json', { cache: 'no-store' })
-			if (!res.ok) throw new Error(`konten.json ${res.status}`)
-			const data = (await res.json()) as Konto[]
-			accounts = Array.isArray(data) ? data : []
-		} catch (e) {
-			loadError = e instanceof Error ? e.message : String(e)
-		} finally {
-			loaded = true
-		}
+async function load(): Promise<void> {
+	try {
+		const res = await fetch('/skills/bookkeeping/konten.json', { cache: 'no-store' })
+		if (!res.ok) throw new Error(`konten.json ${res.status}`)
+		const data = (await res.json()) as Konto[]
+		accounts = Array.isArray(data) ? data : []
+	} catch (e) {
+		loadError = e instanceof Error ? e.message : String(e)
+	} finally {
+		loaded = true
 	}
+}
 
-	onMount(() => {
-		if (browser) void load()
-	})
+onMount(() => {
+	if (browser) void load()
+})
 </script>
 
 <svelte:head>
@@ -86,8 +84,12 @@
 				placeholder={t('bookkeeping.searchPlaceholder')}
 				aria-label={t('bookkeeping.searchPlaceholder')}
 				class="border-input bg-card/40 focus:border-border focus:ring-ring/30 min-w-0 flex-1 rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-2 sm:max-w-xs"
-			/>
-			<div class="flex flex-wrap items-center gap-1" role="group" aria-label={t('bookkeeping.classFilter')}>
+			>
+			<div
+				class="flex flex-wrap items-center gap-1"
+				role="group"
+				aria-label={t('bookkeeping.classFilter')}
+			>
 				<button
 					type="button"
 					onclick={() => (klasse = 'all')}
@@ -141,7 +143,8 @@
 								{#if a.funktion}
 									<span
 										class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[10px] tracking-tight"
-										title={t('bookkeeping.funktionHint')}>{a.funktion}</span
+										title={t('bookkeeping.funktionHint')}
+										>{a.funktion}</span
 									>
 								{/if}
 							</span>

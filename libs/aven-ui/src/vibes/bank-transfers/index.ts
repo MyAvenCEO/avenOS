@@ -10,14 +10,14 @@ export const bankTransfersShell: UiFixtureShell = {
 	style: bankTransfersStyle,
 	source: bankTransfersSource as Record<string, unknown>,
 	interface: bankTransfersInterface,
-	logic: bankTransfersLogic,
+	logic: bankTransfersLogic
 }
 
 export function createBankTransfersShell(): UiFixtureShell {
 	return bankTransfersShell
 }
 
-export { bankTransfersLogic }
-export { bankTransfersView } from './view.js'
-export { bankTransfersStyle } from './style.js'
 export { default as bankTransfersSource } from './source.json'
+export { bankTransfersStyle } from './style.js'
+export { bankTransfersView } from './view.js'
+export { bankTransfersLogic }

@@ -9,7 +9,7 @@ export const CSS_INJECTION_PATTERNS = [
 	/expression\s*\(/i,
 	/-moz-binding\s*:/i,
 	/@import\b/i,
-	/behavior\s*:/i,
+	/behavior\s*:/i
 ]
 
 export const SAFE_TAGS = new Set([
@@ -81,7 +81,7 @@ export const SAFE_TAGS = new Set([
 	'output',
 	'dialog',
 	'hr',
-	'br',
+	'br'
 ])
 
 export const BOOLEAN_ATTRS = new Set([
@@ -91,7 +91,7 @@ export const BOOLEAN_ATTRS = new Set([
 	'selected',
 	'autofocus',
 	'required',
-	'multiple',
+	'multiple'
 ])
 
 export const URL_ATTRS = new Set(['href', 'src', 'action', 'formaction', 'poster'])
@@ -99,7 +99,7 @@ export const URL_ATTRS = new Set(['href', 'src', 'action', 'formaction', 'poster
 export function sanitizeAttributeWhitelist(value: unknown): string {
 	if (value === null || value === undefined) return ''
 	const s = String(value)
-	return s.replace(/[^\p{L}\p{N}\s.,!?_:;@#()+=\[\]~&%/-]/gu, '')
+	return s.replace(/[^\p{L}\p{N}\s.,!?_:;@#()+=[\]~&%/-]/gu, '')
 }
 
 export function sanitizePayloadForValidation(payload: unknown): unknown {

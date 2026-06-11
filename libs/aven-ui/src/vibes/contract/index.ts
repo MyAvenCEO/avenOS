@@ -10,14 +10,14 @@ export const contractShell: UiFixtureShell = {
 	style: contractStyle,
 	source: contractSource as Record<string, unknown>,
 	interface: contractInterface,
-	logic: contractLogic,
+	logic: contractLogic
 }
 
 export function createContractShell(): UiFixtureShell {
 	return contractShell
 }
 
-export { contractLogic }
-export { contractView } from './view.js'
-export { contractStyle } from './style.js'
 export { default as contractSource } from './source.json'
+export { contractStyle } from './style.js'
+export { contractView } from './view.js'
+export { contractLogic }

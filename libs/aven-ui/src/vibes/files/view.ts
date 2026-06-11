@@ -14,11 +14,11 @@ export const filesView: ViewDef = {
 							{
 								children: [
 									{ class: 'eyebrow', text: '$eyebrow' },
-									{ tag: 'h1', class: 'fl-title', text: '$title' },
-								],
+									{ tag: 'h1', class: 'fl-title', text: '$title' }
+								]
 							},
-							{ class: 'fl-count', text: '$count' },
-						],
+							{ class: 'fl-count', text: '$count' }
+						]
 					},
 					{
 						class: 'fl-list',
@@ -35,18 +35,18 @@ export const filesView: ViewDef = {
 												class: 'fl-body',
 												children: [
 													{ tag: 'span', class: 'fl-name', text: '$$name' },
-													{ tag: 'span', class: 'fl-meta', text: '$$meta' },
-												],
+													{ tag: 'span', class: 'fl-meta', text: '$$meta' }
+												]
 											},
-											{ tag: 'span', class: 'fl-kind', text: '$$kind' },
-										],
-									},
-								},
-							},
-						],
-					},
-				],
-			},
-		],
-	},
+											{ tag: 'span', class: 'fl-kind', text: '$$kind' }
+										]
+									}
+								}
+							}
+						]
+					}
+				]
+			}
+		]
+	}
 }

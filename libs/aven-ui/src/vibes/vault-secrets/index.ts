@@ -10,14 +10,14 @@ export const vaultSecretsShell: UiFixtureShell = {
 	style: vaultSecretsStyle,
 	source: vaultSecretsSource as Record<string, unknown>,
 	interface: vaultSecretsInterface,
-	logic: vaultSecretsLogic,
+	logic: vaultSecretsLogic
 }
 
 export function createVaultSecretsShell(): UiFixtureShell {
 	return vaultSecretsShell
 }
 
-export { vaultSecretsLogic }
-export { vaultSecretsView } from './view.js'
-export { vaultSecretsStyle } from './style.js'
 export { default as vaultSecretsSource } from './source.json'
+export { vaultSecretsStyle } from './style.js'
+export { vaultSecretsView } from './view.js'
+export { vaultSecretsLogic }

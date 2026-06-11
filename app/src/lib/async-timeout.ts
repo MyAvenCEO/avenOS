@@ -13,7 +13,7 @@ export function withTimeoutMs<T>(p: Promise<T>, ms: number, label = 'Timed out')
 			(e) => {
 				window.clearTimeout(id)
 				reject(e)
-			},
+			}
 		)
 	})
 }

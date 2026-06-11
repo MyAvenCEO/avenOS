@@ -1,4 +1,5 @@
 <script lang="ts">
+import { t } from '$lib/i18n'
 /**
  * "Context" tab body — placeholder surface for the actor's contextual
  * memory. Same dotted perforation chrome as `ActivityView` / `ConfigView`
@@ -7,7 +8,6 @@
  * mocked summary line so the empty tab still feels intentional.
  */
 import { formatLogTime, type IntentRow, type SkillWorker } from './types'
-import { t } from '$lib/i18n'
 
 let {
 	intent,
@@ -25,9 +25,9 @@ const mockContextLine = $derived(
 	skill
 		? t('intents.context.skillTransition', {
 				time: mockTimestamp,
-				intent: intent?.title ?? '—',
+				intent: intent?.title ?? '—'
 			})
-		: t('intents.context.intentTransition', { time: mockTimestamp }),
+		: t('intents.context.intentTransition', { time: mockTimestamp })
 )
 </script>
 

@@ -1,7 +1,7 @@
 import { browser } from '$app/environment'
-import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { markAvenDbShellReadyAfterUnlock } from '$lib/runtime/avendb-shell'
-import { avendbBootstrap, type AvenDbStatusReply } from './api'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+import { type AvenDbStatusReply, avendbBootstrap } from './api'
 
 /**
  * After Touch ID unlock: connect SurrealKV + hydrate local shell.
@@ -18,7 +18,7 @@ export async function bootstrapAvenDbStrict(): Promise<AvenDbStatusReply> {
 		throw new Error(
 			detail
 				? `Local avenDB vault did not finish loading: ${detail}`
-				: 'Local avenDB vault did not finish loading — try again or restart the app.',
+				: 'Local avenDB vault did not finish loading — try again or restart the app.'
 		)
 	}
 	return reply

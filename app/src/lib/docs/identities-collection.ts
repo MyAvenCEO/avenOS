@@ -14,13 +14,13 @@ export type SparksDocMeta = {
 const founderModules = import.meta.glob('@avenos/docs/identities/founders/*.md', {
 	query: '?raw',
 	import: 'default',
-	eager: true,
+	eager: true
 }) as Record<string, string>
 
 const developerModules = import.meta.glob('@avenos/docs/identities/developers/*.md', {
 	query: '?raw',
 	import: 'default',
-	eager: true,
+	eager: true
 }) as Record<string, string>
 
 const DOC_KEY = /^\d{2}-.+\.md$/

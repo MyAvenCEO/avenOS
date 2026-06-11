@@ -1,8 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import {
-	getTableRowsStore,
-	resetAllTableRowStores,
-} from '../../src/lib/runtime/table-stores'
+import { getTableRowsStore, resetAllTableRowStores } from '../../src/lib/runtime/table-stores'
 
 describe('table row stores', () => {
 	test('resetAllTableRowStores clears data', () => {

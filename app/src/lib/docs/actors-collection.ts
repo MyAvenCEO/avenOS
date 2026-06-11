@@ -11,7 +11,7 @@ export type ActorsDocMeta = {
 const developerModules = import.meta.glob('@avenos/docs/actors/developers/*.md', {
 	query: '?raw',
 	import: 'default',
-	eager: true,
+	eager: true
 }) as Record<string, string>
 
 const DOC_KEY = /^\d{2}-.+\.md$/

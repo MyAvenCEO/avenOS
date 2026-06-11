@@ -21,13 +21,13 @@ export type SelfDocMeta = {
 const founderModules = import.meta.glob('@avenos/docs/self/founders/*.md', {
 	query: '?raw',
 	import: 'default',
-	eager: true,
+	eager: true
 }) as Record<string, string>
 
 const developerModules = import.meta.glob('@avenos/docs/self/developers/*.md', {
 	query: '?raw',
 	import: 'default',
-	eager: true,
+	eager: true
 }) as Record<string, string>
 
 // ---------------------------------------------------------------------------

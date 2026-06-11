@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { spawnSync } from 'node:child_process'
 /**
  * Mac App Store / TestFlight track: Apple Silicon `.app` (Tauri) + signed `.pkg` via `productbuild`.
  *
@@ -13,8 +14,15 @@
  *   AVEN_MAC_CF_BUNDLE_VERSION — CFBundleVersion for this upload (default "13")
  *   AVEN_OUTPUT_PKG — output path for the pkg (default dist/macos-appstore/avenOS-<version>-b<build>.pkg)
  */
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { spawnSync } from 'node:child_process'
+import {
+	copyFileSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync
+} from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -36,14 +44,16 @@ function mustEnv(name: string): string {
 }
 
 function readPackageVersion(): string {
-	const pkg = JSON.parse(readFileSync(path.join(appDir, 'package.json'), 'utf8')) as { version?: string }
+	const pkg = JSON.parse(readFileSync(path.join(appDir, 'package.json'), 'utf8')) as {
+		version?: string
+	}
 	return (pkg.version ?? '0.0.0').trim()
 }
 
 function readCfBundleVersion(appPath: string): string | null {
 	const plist = path.join(appPath, 'Contents/Info.plist')
 	const r = spawnSync('plutil', ['-extract', 'CFBundleVersion', 'raw', '-o', '-', plist], {
-		encoding: 'utf8',
+		encoding: 'utf8'
 	})
 	if (r.status !== 0) return null
 	return r.stdout.trim()
@@ -54,7 +64,7 @@ function resolveBuiltAppPath(
 	buildLog: string,
 	cargoTargetDir: string,
 	tauriTarget: string,
-	bundleVersion: string,
+	bundleVersion: string
 ): string {
 	const appName = 'avenOS.app'
 	const rel = path.join(tauriTarget, 'release', 'bundle', 'macos', appName)
@@ -81,7 +91,7 @@ function resolveBuiltAppPath(
 	}
 
 	console.error(
-		`build-appstore-macos: no signed .app with CFBundleVersion=${bundleVersion}. Checked:\n${[...candidates].map((p) => `  ${p}`).join('\n')}`,
+		`build-appstore-macos: no signed .app with CFBundleVersion=${bundleVersion}. Checked:\n${[...candidates].map((p) => `  ${p}`).join('\n')}`
 	)
 	process.exit(1)
 }
@@ -96,7 +106,7 @@ async function main() {
 	const version = readPackageVersion()
 	console.log(
 		'[build-appstore-macos] CFBundleVersion=%s (AVEN_MAC_CF_BUNDLE_VERSION or default 13)',
-		bundleVersion,
+		bundleVersion
 	)
 
 	mkdirSync(path.dirname(profileDest), { recursive: true })
@@ -118,7 +128,7 @@ async function main() {
 	const onnxSign = spawnSync(
 		'codesign',
 		['--force', '--options', 'runtime', '--timestamp', '--sign', signId, onnxDylib],
-		{ stdio: 'inherit' },
+		{ stdio: 'inherit' }
 	)
 	if (onnxSign.status !== 0) {
 		console.error('[build-appstore-macos] failed to codesign onnxruntime dylib')
@@ -133,7 +143,7 @@ async function main() {
 		// Run `bun run build` once below — Tauri can invoke beforeBuildCommand more than once
 		// during a single `tauri build`, which races hashed SvelteKit chunks vs generate_context!.
 		build: {
-			beforeBuildCommand: '',
+			beforeBuildCommand: ''
 		},
 		bundle: {
 			targets: ['app'],
@@ -146,10 +156,10 @@ async function main() {
 				signingIdentity: signId,
 				infoPlist: 'Info.plist',
 				files: {
-					'embedded.provisionprofile': 'profiles/mac-app-store.provisionprofile',
-				},
-			},
-		},
+					'embedded.provisionprofile': 'profiles/mac-app-store.provisionprofile'
+				}
+			}
+		}
 	}
 	writeFileSync(mergePath, JSON.stringify(merge, null, 2), 'utf8')
 
@@ -168,7 +178,7 @@ async function main() {
 		'--bundles',
 		'app',
 		'--config',
-		mergePath,
+		mergePath
 	]
 
 	// App Store `.app` is signed with Apple Distribution — notarization needs Developer ID and
@@ -182,7 +192,7 @@ async function main() {
 		'APPLE_API_KEY_PATH',
 		'APPLE_ID',
 		'APPLE_PASSWORD',
-		'APPLE_TEAM_ID',
+		'APPLE_TEAM_ID'
 	]) {
 		delete tauriEnv[key]
 	}
@@ -196,7 +206,7 @@ async function main() {
 	const frontendBuild = spawnSync('bun', ['run', 'build'], {
 		cwd: appDir,
 		stdio: 'inherit',
-		env: tauriEnv,
+		env: tauriEnv
 	})
 	if (frontendBuild.status !== 0) {
 		console.error('build-appstore-macos: frontend build failed')
@@ -206,7 +216,7 @@ async function main() {
 	const br = spawnSync('bunx', ['--bun', ...tauriArgs], {
 		cwd: appDir,
 		stdio: 'inherit',
-		env: tauriEnv,
+		env: tauriEnv
 	})
 	if (br.status !== 0) {
 		console.error('build-appstore-macos: tauri build failed')
@@ -217,11 +227,11 @@ async function main() {
 	const appPath = resolveBuiltAppPath('', cargoTargetDir, tauriTarget, bundleVersion)
 
 	const verify = spawnSync('codesign', ['--verify', '--deep', '--strict', appPath], {
-		stdio: 'inherit',
+		stdio: 'inherit'
 	})
 	if (verify.status !== 0) {
 		console.warn(
-			'[build-appstore-macos] codesign --verify failed (re-sign with entitlements if your pipeline requires it).',
+			'[build-appstore-macos] codesign --verify failed (re-sign with entitlements if your pipeline requires it).'
 		)
 	}
 
@@ -233,16 +243,8 @@ async function main() {
 
 	const pb = spawnSync(
 		'xcrun',
-		[
-			'productbuild',
-			'--sign',
-			pkgSignId,
-			'--component',
-			appPath,
-			'/Applications',
-			pkgOut,
-		],
-		{ stdio: 'inherit' },
+		['productbuild', '--sign', pkgSignId, '--component', appPath, '/Applications', pkgOut],
+		{ stdio: 'inherit' }
 	)
 	if (pb.status !== 0) {
 		console.error('build-appstore-macos: productbuild failed')
@@ -257,7 +259,7 @@ async function main() {
 
 	console.log(`[build-appstore-macos] done → ${pkgOut}`)
 	console.log(
-		'[build-appstore-macos] Upload preferred: bun run release:app:mac <N> — uses altool/App Store Connect API. Use Apple Transporter only as a GUI fallback if CLI upload fails.',
+		'[build-appstore-macos] Upload preferred: bun run release:app:mac <N> — uses altool/App Store Connect API. Use Apple Transporter only as a GUI fallback if CLI upload fails.'
 	)
 }
 

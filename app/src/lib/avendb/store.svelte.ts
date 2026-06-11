@@ -2,11 +2,11 @@ import { onDestroy } from 'svelte'
 import { get } from 'svelte/store'
 import { browser } from '$app/environment'
 import { withTimeoutMs } from '$lib/async-timeout'
+import { avendbSessionReady, waitForAvenDbSessionReady } from '$lib/runtime/avendb-runtime'
+import { avendbShell } from '$lib/runtime/avendb-shell'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import type { DeviceSession } from '$lib/settings/device-session-store'
 import { deviceSession } from '$lib/settings/device-session-store'
-import { avendbShell } from '$lib/runtime/avendb-shell'
-import { avendbSessionReady, waitForAvenDbSessionReady } from '$lib/runtime/avendb-runtime'
 import { type AvenDbRow, avenDbTable } from './api'
 
 /** Subscribe/hydrate under P2P + ACL rehydrate can exceed a few seconds — not a user-facing failure. */
@@ -36,7 +36,7 @@ type SnapshotPolicy = 'replace' | 'catalogue'
 
 const TABLE_POLICY: Record<string, SnapshotPolicy> = {
 	safes: 'catalogue',
-	keyshares: 'catalogue',
+	keyshares: 'catalogue'
 }
 
 /** Natural per-table key for merge dedup; falls back to the generic row `id`. */
@@ -114,10 +114,10 @@ function createTablePool(table: string): InternalPool {
 								unsub()
 								resolve()
 							}
-						}),
+						})
 					]),
 					SUBSCRIBE_BUDGET_MS,
-					'avenDB session ready',
+					'avenDB session ready'
 				)
 			}
 			const u = await withTimeoutMs(
@@ -128,7 +128,7 @@ function createTablePool(table: string): InternalPool {
 					loaded = true
 				}),
 				SUBSCRIBE_BUDGET_MS,
-				`${table} subscribe`,
+				`${table} subscribe`
 			)
 			if (!alive) {
 				u()
@@ -202,7 +202,7 @@ function createTablePool(table: string): InternalPool {
 		},
 		delete(id: string) {
 			return api.delete(id)
-		},
+		}
 	}
 
 	return {
@@ -212,7 +212,7 @@ function createTablePool(table: string): InternalPool {
 			alive = false
 			unlisten?.()
 			stopWatch?.()
-		},
+		}
 	}
 }
 
@@ -225,17 +225,18 @@ function createTablePool(table: string): InternalPool {
  * MUST be called from component `<script>` init (uses `onDestroy`).
  */
 export function avenDbStore(table: string): AvenDbStore {
-	let pool = pools.get(table)
-	if (!pool) {
-		pool = createTablePool(table)
-		pools.set(table, pool)
+	let existing = pools.get(table)
+	if (!existing) {
+		existing = createTablePool(table)
+		pools.set(table, existing)
 	}
+	const pool = existing
 
 	pool.refs++
 	onDestroy(() => {
-		pool!.refs--
-		if (pool!.refs <= 0) {
-			pool!.destroy()
+		pool.refs--
+		if (pool.refs <= 0) {
+			pool.destroy()
 			pools.delete(table)
 		}
 	})

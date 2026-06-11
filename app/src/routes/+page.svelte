@@ -1,9 +1,7 @@
 <script lang="ts">
-import { contentMaxWidthClass, mobileActionVeilClass, mobileFabBottomClass, mobileMainBottomPadClass } from '$lib/shell'
-import {
-	clearMobileChromeOverrides,
-	setMobileChromeOverrides
-} from '$lib/shell/mobile-chrome.svelte'
+import { HITL_VIEW_IDS, type VibeViewId } from '$lib/aven-ui/vibe-views'
+import { persistIntentFiles } from '$lib/avendb/intent-files'
+import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
 import HitlActionBar from '$lib/intents/HitlActionBar.svelte'
 import IntentsAside from '$lib/intents/IntentsAside.svelte'
 import MainPanel from '$lib/intents/MainPanel.svelte'
@@ -11,17 +9,24 @@ import SkillsAside from '$lib/intents/SkillsAside.svelte'
 import {
 	type ActivityEntry,
 	type ActivityTab,
+	type ComposerMode,
 	type IntentRow,
 	type IntentStatus,
 	type SkillStatus,
 	type SkillWorker,
-	type WorkerActor,
-	type ComposerMode,
-	secondsFromElapsedMs
+	secondsFromElapsedMs,
+	type WorkerActor
 } from '$lib/intents/types'
-import { HITL_VIEW_IDS, type VibeViewId } from '$lib/aven-ui/vibe-views'
-import { persistIntentFiles } from '$lib/avendb/intent-files'
-import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
+import {
+	contentMaxWidthClass,
+	mobileActionVeilClass,
+	mobileFabBottomClass,
+	mobileMainBottomPadClass
+} from '$lib/shell'
+import {
+	clearMobileChromeOverrides,
+	setMobileChromeOverrides
+} from '$lib/shell/mobile-chrome.svelte'
 
 /**
  * Random pick from `HITL_VIEW_IDS` (the aven-ui view catalog). Caller stores
@@ -373,8 +378,7 @@ const selectedIntent = $derived(allIntents.find((i) => i.id === selectedId) ?? n
 $effect(() => {
 	const typing = composerMode === 'typing'
 	setMobileChromeOverrides({
-		hideProfile:
-			typing || !!(selectedId && selectedIntent && selectedIntent.skills.length > 0)
+		hideProfile: typing || !!(selectedId && selectedIntent && selectedIntent.skills.length > 0)
 	})
 	return () => clearMobileChromeOverrides()
 })
@@ -404,9 +408,7 @@ const selectedSkillWorkers = $derived<WorkerActor[]>(
 )
 
 /** Currently selected skill chip (or `null`). Used for the HITL preview trigger. */
-const selectedSkill = $derived(
-	selectedIntent?.skills.find((s) => s.id === selectedSkillId) ?? null
-)
+const selectedSkill = $derived(selectedIntent?.skills.find((s) => s.id === selectedSkillId) ?? null)
 
 /**
  * Skills rendered in the skills lists (desktop right aside and mobile inline
@@ -793,102 +795,98 @@ function backToMasterList() {
 </svelte:head>
 
 <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-	<main class={`${contentMaxWidthClass} flex min-h-0 flex-1 flex-col px-3 ${mobileMainBottomPadClass} sm:px-5 sm:pb-28 ${selectedId ? 'max-sm:px-3' : ''}`}>
-			<div
-				class="grid min-h-0 flex-1 grid-cols-1 gap-x-3 gap-y-1 max-sm:pt-0 max-sm:pb-0 pt-1 pb-1 max-sm:flex max-sm:min-h-0 max-sm:flex-1 max-sm:flex-col sm:grid-cols-[13rem_minmax(0,1fr)_13rem] sm:grid-rows-[auto_minmax(0,1fr)] sm:items-stretch"
-			>
-				<IntentsAside
-					{activeIntents}
-					{archivedIntents}
-					{selectedId}
-					bind:archivedOpen
-					{nowMs}
-					onSelect={selectIntent}
-				/>
-
-				<MainPanel
-					intent={selectedIntent}
-					{selectedSkill}
-					{filteredLogs}
-					{nowMs}
-					bind:activityTab
-				/>
-
-				<SkillsAside
-					intent={selectedIntent}
-					{displayedSkills}
-					workers={selectedSkillWorkers}
-					{selectedSkillId}
-					{selectedWorkerName}
-					{nowMs}
-					bind:mobileOpen={mobileSkillsOpen}
-					onSelectSkill={(id) => (selectedSkillId = id)}
-					onSelectWorker={(name) => (selectedWorkerName = name)}
-				/>
-			</div>
-		</main>
-
-		<!-- Bottom composer + mobile nav FABs -->
+	<main
+		class={`${contentMaxWidthClass} flex min-h-0 flex-1 flex-col px-3 ${mobileMainBottomPadClass} sm:px-5 sm:pb-28 ${selectedId ? 'max-sm:px-3' : ''}`}
+	>
 		<div
-			class={`pointer-events-none fixed inset-x-0 bottom-0 z-[45] flex justify-center px-3 ${mobileActionVeilClass} sm:px-5 sm:pt-3 sm:pb-5`}
+			class="grid min-h-0 flex-1 grid-cols-1 gap-x-3 gap-y-1 max-sm:pt-0 max-sm:pb-0 pt-1 pb-1 max-sm:flex max-sm:min-h-0 max-sm:flex-1 max-sm:flex-col sm:grid-cols-[13rem_minmax(0,1fr)_13rem] sm:grid-rows-[auto_minmax(0,1fr)] sm:items-stretch"
 		>
-			<div
-				class={`pointer-events-auto relative flex w-full items-center ${contentMaxWidthClass} sm:pl-0 sm:pr-0 ${composerMode === 'typing' ? 'max-sm:px-1' : 'max-sm:pl-14 max-sm:pr-14'}`}
-			>
-				<HitlActionBar
-					bind:this={hitlActionBarRef}
-					bind:composerMode
-					intent={selectedIntent}
-					onSubmitMessage={handleComposerSubmit}
-					onRetrain={handleRetrainCommand}
-					onArchive={() => selectedIntent && markArchived(selectedIntent.id)}
-					onAccept={() => selectedIntent && acceptIntentSuccess(selectedIntent.id)}
-				/>
-			</div>
+			<IntentsAside
+				{activeIntents}
+				{archivedIntents}
+				{selectedId}
+				bind:archivedOpen
+				{nowMs}
+				onSelect={selectIntent}
+			/>
+
+			<MainPanel intent={selectedIntent} {selectedSkill} {filteredLogs} {nowMs} bind:activityTab />
+
+			<SkillsAside
+				intent={selectedIntent}
+				{displayedSkills}
+				workers={selectedSkillWorkers}
+				{selectedSkillId}
+				{selectedWorkerName}
+				{nowMs}
+				bind:mobileOpen={mobileSkillsOpen}
+				onSelectSkill={(id) => (selectedSkillId = id)}
+				onSelectWorker={(name) => (selectedWorkerName = name)}
+			/>
 		</div>
+	</main>
 
-		{#if selectedId && composerMode !== 'typing'}
-			<button
-				type="button"
-				class="border-border bg-background/95 text-foreground hover:bg-background fixed z-[46] inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full border shadow-md backdrop-blur-sm transition-colors max-sm:left-3 {mobileFabBottomClass} sm:hidden"
-				onclick={backToMasterList}
-				aria-label="Back to intents list"
-			>
-				<svg
-					viewBox="0 0 24 24"
-					class="size-4 shrink-0 opacity-80"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2.5"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="m15 18-6-6 6-6" />
-				</svg>
-			</button>
-		{/if}
+	<!-- Bottom composer + mobile nav FABs -->
+	<div
+		class={`pointer-events-none fixed inset-x-0 bottom-0 z-[45] flex justify-center px-3 ${mobileActionVeilClass} sm:px-5 sm:pt-3 sm:pb-5`}
+	>
+		<div
+			class={`pointer-events-auto relative flex w-full items-center ${contentMaxWidthClass} sm:pl-0 sm:pr-0 ${composerMode === 'typing' ? 'max-sm:px-1' : 'max-sm:pl-14 max-sm:pr-14'}`}
+		>
+			<HitlActionBar
+				bind:this={hitlActionBarRef}
+				bind:composerMode
+				intent={selectedIntent}
+				onSubmitMessage={handleComposerSubmit}
+				onRetrain={handleRetrainCommand}
+				onArchive={() => selectedIntent && markArchived(selectedIntent.id)}
+				onAccept={() => selectedIntent && acceptIntentSuccess(selectedIntent.id)}
+			/>
+		</div>
+	</div>
 
-		{#if selectedId && selectedIntent && selectedIntent.skills.length > 0 && composerMode !== 'typing'}
-			<button
-				type="button"
-				class="border-border bg-background/95 text-foreground hover:bg-background fixed z-[46] inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full border shadow-md backdrop-blur-sm transition-colors max-sm:right-3 {mobileFabBottomClass} sm:hidden"
-				onclick={() => (mobileSkillsOpen = !mobileSkillsOpen)}
-				aria-expanded={mobileSkillsOpen}
-				aria-label={mobileSkillsOpen ? 'Close skills panel' : 'Open skills panel'}
+	{#if selectedId && composerMode !== 'typing'}
+		<button
+			type="button"
+			class="border-border bg-background/95 text-foreground hover:bg-background fixed z-[46] inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full border shadow-md backdrop-blur-sm transition-colors max-sm:left-3 {mobileFabBottomClass} sm:hidden"
+			onclick={backToMasterList}
+			aria-label="Back to intents list"
+		>
+			<svg
+				viewBox="0 0 24 24"
+				class="size-4 shrink-0 opacity-80"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2.5"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
 			>
-				<svg
-					viewBox="0 0 24 24"
-					class="size-4 shrink-0 opacity-80"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M4 6h16M4 12h16M4 18h16" />
-				</svg>
-			</button>
-		{/if}
+				<path d="m15 18-6-6 6-6" />
+			</svg>
+		</button>
+	{/if}
+
+	{#if selectedId && selectedIntent && selectedIntent.skills.length > 0 && composerMode !== 'typing'}
+		<button
+			type="button"
+			class="border-border bg-background/95 text-foreground hover:bg-background fixed z-[46] inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full border shadow-md backdrop-blur-sm transition-colors max-sm:right-3 {mobileFabBottomClass} sm:hidden"
+			onclick={() => (mobileSkillsOpen = !mobileSkillsOpen)}
+			aria-expanded={mobileSkillsOpen}
+			aria-label={mobileSkillsOpen ? 'Close skills panel' : 'Open skills panel'}
+		>
+			<svg
+				viewBox="0 0 24 24"
+				class="size-4 shrink-0 opacity-80"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				<path d="M4 6h16M4 12h16M4 18h16" />
+			</svg>
+		</button>
+	{/if}
 </div>

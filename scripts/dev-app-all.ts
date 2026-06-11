@@ -19,7 +19,7 @@ const script = scriptByPlatform[platform]
 
 if (!script) {
 	console.error(
-		`dev:app:all: no native Tauri dev script for "${platform}". Use "bun run dev:app" for browser-only Vite.`,
+		`dev:app:all: no native Tauri dev script for "${platform}". Use "bun run dev:app" for browser-only Vite.`
 	)
 	process.exit(1)
 }

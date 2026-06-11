@@ -1,5 +1,5 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.4.14/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
 	"root": true,
 	"vcs": {
 		"enabled": true,
@@ -9,7 +9,15 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": ["**", "!!**/bun.lock", "!!ARCHIVE/ocr-example"]
+		"includes": [
+			"**",
+			"!!**/bun.lock",
+			"!!ARCHIVE/ocr-example",
+			"!!.claude",
+			"!!**/permissions/schemas",
+			"!!app/src-tauri/gen",
+			"!!app/static/skills"
+		]
 	},
 	"formatter": {
 		"enabled": true,
@@ -54,6 +62,39 @@
 			"enabled": true
 		}
 	},
+	"overrides": [
+		{
+			"includes": ["libs/aven-ui/src/vibes/**/logic.js"],
+			"linter": {
+				"enabled": false
+			}
+		},
+		{
+			"includes": ["**/*.svelte"],
+			"linter": {
+				"rules": {
+					"correctness": {
+						"noUnusedVariables": "off",
+						"noUnusedFunctionParameters": "off"
+					},
+					"suspicious": {
+						"noGlobalAssign": "off"
+					},
+					"a11y": "off"
+				}
+			}
+		},
+		{
+			"includes": ["scripts/tauri-ios-asc.ts"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noTemplateCurlyInString": "off"
+					}
+				}
+			}
+		}
+	],
 	"assist": {
 		"enabled": true,
 		"actions": {

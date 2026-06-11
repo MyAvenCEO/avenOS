@@ -3,8 +3,8 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { Terminal } from '@xterm/xterm'
 import { onDestroy, onMount } from 'svelte'
-import { t } from '$lib/i18n'
 import { openpty } from 'xterm-pty'
+import { t } from '$lib/i18n'
 import { startWebcmWithPty } from './webcm-worker'
 import '@xterm/xterm/css/xterm.css'
 
@@ -94,9 +94,7 @@ async function mountTerminal() {
 		overlay = 'error'
 		overlayMsg = e instanceof Error ? e.message : String(e)
 		term?.writeln(`\r\n\x1b[31m${overlayMsg}\x1b[0m\r\n`)
-		term?.writeln(
-			`\x1b[90m${t('sandbox.fetchWebcmHint')}\x1b[0m\r\n`,
-		)
+		term?.writeln(`\x1b[90m${t('sandbox.fetchWebcmHint')}\x1b[0m\r\n`)
 	}
 }
 </script>
