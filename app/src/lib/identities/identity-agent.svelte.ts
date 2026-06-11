@@ -268,7 +268,9 @@ export function createIdentityAgent(deps: {
 					source: row.id,
 					contentDateMs: Date.now(),
 					veracity: 'stated',
-				}).catch(() => {})
+				}).catch((e) =>
+					console.error('[brain] ingest failed:', e instanceof Error ? e.message : e),
+				)
 			}
 			if (files.length > 0) {
 				const { stored, errors } = await persistSparkFiles(row.id, files, {

@@ -751,7 +751,7 @@ pub(crate) async fn avendb_ipc_peer_mesh_refresh(
 /// Multiplexed IPC: one entry for avenDB session, tables, mesh, and peer admin.
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct avenDBRuntimeEnvelope {
+pub(crate) struct AvenDbRuntimeEnvelope {
 	pub op: String,
 	#[serde(default)]
 	pub payload: serde_json::Value,
@@ -762,7 +762,7 @@ pub(crate) async fn avendb_runtime_dispatch(
 	_window: tauri::Window,
 	mj: &ManagedAvenDb,
 	ss: &SelfState,
-	envelope: avenDBRuntimeEnvelope,
+	envelope: AvenDbRuntimeEnvelope,
 ) -> Result<serde_json::Value, String> {
 	let op = envelope.op.trim().to_ascii_lowercase();
 	let pj = envelope.payload;
@@ -976,11 +976,11 @@ pub(crate) async fn avendb_runtime_dispatch(
 pub async fn avendb_runtime(
 	window: tauri::Window,
 	_app: tauri::AppHandle,
-	actor: tauri::State<'_, runtime::avenDBActorHandle>,
+	actor: tauri::State<'_, runtime::AvenDbActorHandle>,
 	op: String,
 	payload: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
-	let envelope = avenDBRuntimeEnvelope {
+	let envelope = AvenDbRuntimeEnvelope {
 		op,
 		payload: payload.unwrap_or_else(|| serde_json::json!({})),
 	};

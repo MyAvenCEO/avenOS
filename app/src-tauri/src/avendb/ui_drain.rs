@@ -1,4 +1,4 @@
-//! UI table-change drain — separate mailbox from [`super::runtime::avenDBActorHandle`].
+//! UI table-change drain — separate mailbox from [`super::runtime::AvenDbActorHandle`].
 //!
 //! Peer mesh reconcile, IPC runtime, and invite apply stay on the avenDB actor. Snapshot
 //! republish + vault shell re-hydrate for the webview runs here so inbound sync deltas

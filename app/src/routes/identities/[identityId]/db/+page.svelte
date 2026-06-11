@@ -22,7 +22,20 @@
 
 	// Tables that carry an owning-identity column (manifest-aligned). Device-local,
 	// non-identity tables (e.g. `humans`) never appear in a identity's data view.
-	const IDENTITY_SCOPED_TABLES = ['safes', 'safe_controllers', 'messages', 'todos', 'files', 'peers', 'keyshares']
+	const IDENTITY_SCOPED_TABLES = [
+		'safes',
+		'safe_controllers',
+		'messages',
+		'todos',
+		'files',
+		'signers',
+		'keyshares',
+		// aven-brain tables (per-SAFE memory)
+		'memories',
+		'entities',
+		'links',
+		'context_traces',
+	]
 
 	let tables = $state<string[]>([])
 	let selectedTable = $state<string | null>(null)
