@@ -73,6 +73,11 @@
 		if (value === null || value === undefined) return { text: '' }
 		if (typeof value === 'boolean') return { text: value ? t('common.true') : t('common.false') }
 		if (typeof value === 'number') return { text: String(value) }
+		// Embedding vectors and other long numeric arrays: a dimensionality summary,
+		// not 768 floats flooding the table.
+		if (Array.isArray(value) && value.length > 16 && value.every((x) => typeof x === 'number')) {
+			return { text: `[${value.length}-dim vector]` }
+		}
 		if (typeof value === 'string') {
 			const trimmed = value.length > cellPreviewMax ? `${value.slice(0, cellPreviewMax)}…` : value
 			return value.length > cellPreviewMax ? { text: trimmed, title: value } : { text: trimmed }
