@@ -285,10 +285,15 @@ them through **per-table ingestion adapters** (§2.4). Ingest **never blocks the
    `files` row directly** — the document gets a compiled-truth card + timeline keyed by that
    row id, no shadow node. Bytea originals are never searched — chunks are; citations resolve
    back to file + line range via `source`.
-4. **Deterministic understanding on write** ✅ (rewired to links in E1): `[[wikilinks]]` + regex
-   pass (entity patterns + fuzzy-merge ≥0.8 + stop-words; SPO patterns `is/has/uses/works at`
-   conf 0.6–0.7, ≤5/memory, ≤4096-char input; temporal markers) → entities + `mentions` notes +
-   claim links + `assoc` bonds.
+4. **Automatic understanding on write — never manual.** Rung 0 runs on EVERY memory with no
+   user action: the regex pass (Mnemosyne MEMORIA port — entity name patterns + stop-words +
+   Levenshtein fuzzy-merge ≥0.8; SPO predicates `is/has/uses/works at` conf 0.6–0.7,
+   ≤5/memory, ≤4096-char input; temporal markers) → entities + `mentions` notes + claim
+   links + `assoc` bonds. `[[wikilinks]]` are the OPTIONAL explicit-override channel
+   (gBrain heritage, agents/power users), additive to — never required for — extraction.
+   Status: wikilinks ✅ built; the automatic regex pass is an **E3 deliverable** (brain-lib
+   `write_graph` extension + tests). Rung 1 (local LLM, dreaming-time, off the write path)
+   can use the already-integrated LFM2.5.
 5. **Idempotent + convergent**: `content_hash` dedup before embedding; deterministic extraction
    ⇒ two devices ingesting the same content converge (row dedup by hash, entity dedup by
    dreaming's merge, note links idempotent by definition).
@@ -431,7 +436,7 @@ Each phase independently shippable, with files + verification:
 | **E0** | **Manifest**: `vector` type mapping + `memories`/`entities`/`links` (+owner) + `context_traces`. Fresh-DB policy: no migration snapshot needed (§2.6) | `libs/aven-schema/schema.manifest.json`, `app/src-tauri/src/schema_manifest.rs` | schema tests pass (`current_manifest_has_stable_hash`, registry lens test); fresh vault boots; tables listed by `jazzStatus()` |
 | **E1** | **Engine seam + 3-table rework**: unseal-on-scan transform for `nearest`/`text_search`; aven-brain migrates its 5-table schema to memory/entity/link + the kind→class registry (mention/fact/bond APIs unchanged in name, free-label param removed, scope = `Filter { stream, author_role, source }` over the artifact columns); `open(identity)` over the shared store; **surface `_created_at`/`_updated_at`** (engine `RowProvenance`/UUIDv7 `BatchId`) as queryable columns; `remember_with`, `search_traced` (hits carry via/rank origin), `assemble_context`; rewire KG/dreaming/cards to links | `libs/aven-db` executor/scan path, `libs/aven-brain/src/{schema,brain}.rs` | `cargo test -p aven-brain` (13 tests migrated + registry tests: claim-close, note-idempotence, bond-potentiate); sealed fixture: search correct, no plaintext at rest |
 | **E2** | **App runtime**: brain module + Tauri commands `brain_status/ingest/search/entities/entity_card/assemble_context/backfill/dream` (asr/llm/tts pattern) + TS wrapper | new `app/src-tauri/src/brain.rs`, `app/src-tauri/src/lib.rs` (manage/handler/exit-drain), new `app/src/lib/brain/api.ts` | devtools: ingest → search round-trip on a real identity |
-| **E3** | **Ingestion**: the adapter registry (§2.4) + first adapters — messages (talk hooks for user/agent turns), files (markdown/text chunking; PDF next; chunks mention the files row directly); todos adapter (event memories) next; backfill of pre-brain history; **drag-drop fix** | `identity-agent.svelte.ts`, `intent-files.ts`, `app/src/routes/+layout.svelte` | drop a .md on talk → stays on screen, chunks in `memories` with `source` = file row id + mention links to that row; backfill idempotent (2nd run dedups all) |
+| **E3** | **Ingestion**: the adapter registry (§2.4) + first adapters — messages (talk hooks for user/agent turns) **+ the automatic rung-0 regex extraction in the brain lib (no manual wikilinks required)**, files (markdown/text chunking; PDF next; chunks mention the files row directly); todos adapter (event memories) next; backfill of pre-brain history; **drag-drop fix** | `identity-agent.svelte.ts`, `intent-files.ts`, `app/src/routes/+layout.svelte` | drop a .md on talk → stays on screen, chunks in `memories` with `source` = file row id + mention links to that row; backfill idempotent (2nd run dedups all) |
 | **E4** | **Context manager**: `assemble_context` wiring + `context_traces` writes + fallback path | `identity-agent.svelte.ts` | reply still streams with brain off (fallback); trace row per human message; prompt contains L0/L1/WW/recall blocks under budget |
 | **E5** | **Right aside**: layout third column + drawer, `TalkContextAside`, message-click selection | `SlideAsideLayout.svelte`, `AsidePageLayout.svelte`, identity `+layout.svelte`, `IdentityTalkPanel.svelte`, new `TalkContextAside.svelte`, `talk-context.svelte.ts` | xl: aside shows newest trace; clicking older message swaps it; <xl drawer; other routes untouched; `bun run check` |
 | **E6** | **DB viewer**: dynamic tables, `format-cell.ts`, ref navigation, link class badges, brain search tab | `db/+page.svelte`, new `app/src/lib/db/format-cell.ts` | brain tables render readable; Vector/Bytea/Timestamp formatted; ref click navigates; search shows via badges |
