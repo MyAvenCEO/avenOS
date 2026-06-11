@@ -872,10 +872,6 @@ pub(crate) async fn groove_runtime_dispatch(
 			let id = groove_ipc_aven_ceo_claim(app, mj, ss).await?;
 			Ok(serde_json::Value::String(id))
 		}
-		"avenceopromotehumanowner" => {
-			groove_ipc_aven_ceo_promote_human_owner(app, mj, ss).await?;
-			Ok(serde_json::Value::Null)
-		}
 		"createidentity" => {
 			let name = pj_str(&pj, "name")?;
 			let kind = pj_str(&pj, "type").unwrap_or_else(|_| "aven".to_string());

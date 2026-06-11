@@ -7,7 +7,7 @@
 
 use aven_caps::caps::{
 	attenuate_add_owner_third_party, biscuit_from_storage, build_vault_from_signing_key,
-	decode_issuer_pubkey_b64, encode_issuer_pubkey_b64, mint_safe_genesis, identity_admins, safe_did,
+	decode_issuer_pubkey_b64, encode_issuer_pubkey_b64, identity_admins, mint_safe_genesis, safe_did,
 	BiscuitVault,
 };
 use aven_caps::crypto::{
@@ -18,7 +18,7 @@ use aven_caps::crypto::{
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::SigningKey;
-use groove::{JazzClient, ObjectId, PeerId, QueryBuilder, TableName, TableSchema, Value};
+use groove::{JazzClient, ObjectId, QueryBuilder, TableName, TableSchema, Value};
 use uuid::Uuid;
 
 fn text_at(vals: &[Value], ix: usize) -> String {
@@ -321,48 +321,67 @@ async fn read_server_dek(
 	Err("avenceo: server keyshare not found".into())
 }
 
-/// S.4 — auto-grant the **first** connecting peer admin on avenCEO. If avenCEO has
-/// no non-server owner yet, the server appends `owns(peerDid)` to the chain
-/// (server-signed) + wraps a keyshare to the peer, then persists. The peer now
-/// holds an avenCEO cap → it is a network member (the device gates on this). Idempotent
-/// per peer; once any admin exists, later peers must be invited.
-pub async fn maybe_grant_first_admin(
+/// Grant the network's FIRST human SAFE admin on avenCEO — the human, never a device key.
+/// avenCEO is owned by the env-seed server signer; this adds the first human SAFE that has
+/// synced in (a `type=human` row) as a co-owner and wraps the avenCEO DEK to that SAFE's
+/// `wrap_did`, so the person's devices read avenCEO + manage the network through SAFE
+/// membership. The bootstrap device signer is NEVER granted. Idempotent: once avenCEO has
+/// any non-server owner it is done. Driven by a periodic tick + per peer connect, so it
+/// fires whenever the human SAFE lands (it is created AFTER the device first connects).
+pub async fn grant_first_human_admin(
 	engine: &JazzClient,
 	signing: &SigningKey,
 	avenceo_id: Uuid,
-	peer: PeerId,
 ) -> Result<(), String> {
 	let vault = build_vault_from_signing_key(signing)?;
-	let signer_did = groove::did_key::signer_did_from_ed25519(&peer.0)?;
-	if signer_did == vault.signer_did {
-		return Ok(());
-	}
-	let Some((sparks_oid, sealed_genesis, sealed_issuer, dek_ver)) = read_avenceo_identity(engine, avenceo_id).await? else {
+	let Some((sparks_oid, sealed_genesis, sealed_issuer, dek_ver)) =
+		read_avenceo_identity(engine, avenceo_id).await?
+	else {
 		return Ok(());
 	};
-
-	// The trust-root cells are stored SEALED under the avenCEO DEK. Read the DEK (needed to
-	// unseal them now AND to re-seal/wrap below), unseal genesis_b64 + issuer_pubkey_b64, then
-	// rebuild the biscuit chain from cleartext.
 	let dek = read_server_dek(engine, &vault, signing, avenceo_id, dek_ver).await?;
 	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
-	let sparks_tbl = schema
-		.get(&TableName::new("safes"))
-		.ok_or("avenceo: no safes table")?;
+	let sparks_tbl = schema.get(&TableName::new("safes")).ok_or("avenceo: no safes table")?;
 	let genesis_b64 =
 		unseal_identity_cell(&dek, avenceo_id, sparks_tbl, "genesis_b64", dek_ver, &sealed_genesis)?;
 	let issuer_b64 =
 		unseal_identity_cell(&dek, avenceo_id, sparks_tbl, "issuer_pubkey_b64", dek_ver, &sealed_issuer)?;
 	let issuer_pk = decode_issuer_pubkey_b64(&issuer_b64)?;
 	let chain = biscuit_from_storage(&genesis_b64, issuer_pk)?;
+
+	// Already has a non-server owner (a human SAFE was granted earlier) -> done.
 	let owners = identity_admins(&chain, avenceo_id)?;
 	if owners.iter().any(|d| d.trim() != vault.signer_did) {
-		tracing::debug!(%signer_did, "avenCEO already has an admin — not auto-granting");
 		return Ok(());
 	}
 
-	// Append owns(peer) (server-signed) and persist the new genesis, re-sealed under the DEK.
-	let new_chain = attenuate_add_owner_third_party(&vault.biscuit_kp, &chain, avenceo_id, &signer_did)?;
+	// Find the first synced HUMAN SAFE. type/owner/wrap_did are PLAINTEXT routing columns,
+	// so the blind server reads them without the SAFE's DEK. wrap_did is required to deliver
+	// the avenCEO DEK to the SAFE's members.
+	let type_ix = col_ix(sparks_tbl, "type")?;
+	let owner_ix = col_ix(sparks_tbl, "owner")?;
+	let wrap_ix = col_ix(sparks_tbl, "wrap_did")?;
+	let q = QueryBuilder::new(TableName::new("safes")).build();
+	let mut human: Option<(Uuid, String)> = None;
+	for (_oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
+		if text_at(&vals, type_ix) != "human" {
+			continue;
+		}
+		let Some(owner_uuid) = uuid_at(&vals, owner_ix) else { continue };
+		let wrap_did = text_at(&vals, wrap_ix);
+		if wrap_did.is_empty() {
+			continue;
+		}
+		human = Some((owner_uuid, wrap_did));
+		break;
+	}
+	let Some((human_uuid, wrap_did)) = human else {
+		return Ok(()); // no human SAFE synced yet — wait for the next tick
+	};
+	let human_did = safe_did(human_uuid);
+
+	// Append owns(humanSAFE) (server-signed) and persist re-sealed genesis.
+	let new_chain = attenuate_add_owner_third_party(&vault.biscuit_kp, &chain, avenceo_id, &human_did)?;
 	let new_genesis_b64 =
 		URL_SAFE_NO_PAD.encode(new_chain.to_vec().map_err(|e| format!("genesis_encode:{e:?}"))?);
 	let resealed_genesis =
@@ -377,10 +396,12 @@ pub async fn maybe_grant_first_admin(
 		.await
 		.map_err(|e| format!("update genesis:{e:?}"))?;
 
-	// Wrap the avenCEO DEK to the peer so it can read the identity (→ becomes a member).
-	let kek = derive_kek_x25519(signing, &peer.0)?;
+	// Wrap the avenCEO DEK to the human SAFE's wrap_did so its members can decrypt avenCEO.
+	// Members open the (sealed) wrap seed with the SAFE DEK, then unwrap this keyshare.
+	let wrap_pk = groove::did_key::ed25519_public_from_signer_did(&wrap_did)?;
+	let kek = derive_kek_x25519(signing, &wrap_pk)?;
 	let urn = format!("safe:{avenceo_id}");
-	let aad = keyshare_wrap_aad(&urn, &signer_did, &vault.signer_did, dek_ver);
+	let aad = keyshare_wrap_aad(&urn, &wrap_did, &vault.signer_did, dek_ver);
 	let wrapped = encrypt_keyshare_payload(&kek, &dek, &aad)?;
 	let ks_tbl = schema.get(&TableName::new("keyshares")).ok_or("avenceo: no keyshares table")?;
 	let ks_row = row_in_order(
@@ -388,7 +409,7 @@ pub async fn maybe_grant_first_admin(
 		&[
 			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 			("dek_version", Value::BigInt(dek_ver)),
-			("recipient_did", Value::Text(signer_did.clone())),
+			("recipient_did", Value::Text(wrap_did.clone())),
 			("wrapper_did", Value::Text(vault.signer_did.clone())),
 			("wrapped_dek", Value::Text(wrapped)),
 		],
@@ -400,15 +421,19 @@ pub async fn maybe_grant_first_admin(
 		.await
 		.map_err(|e| format!("create keyshares:{e:?}"))?;
 
-	// Re-announce our frontier so the just-authorized peer re-pulls avenCEO. The
-	// identity's genesis + keyshare batches were announced-and-DENIED before this
-	// grant (the peer held no cap), so without a re-announce they never re-ship and
-	// the device stays stuck at the invite gate even though it is now an owner.
-	// Mirrors the device-side grant path (`finish_spark_admin_grant`).
+	// Re-announce so the device re-pulls the updated avenCEO genesis + keyshare and its gate
+	// opens (its earlier pulls were denied before it held a cap).
 	if let Err(e) = engine.rebroadcast_all_peer_clients_and_flush().await {
-		tracing::warn!(%signer_did, "avenCEO post-grant re-announce failed: {e}");
+		tracing::warn!("avenCEO human-admin re-announce failed: {e}");
 	}
-
-	tracing::info!(%signer_did, %avenceo_id, "auto-granted FIRST peer admin on avenCEO (server-signed)");
+	tracing::info!(%avenceo_id, %human_did, "granted FIRST human SAFE admin on avenCEO (server-signed); DEK wrapped to wrap_did");
 	Ok(())
+}
+
+fn uuid_at(vals: &[Value], ix: usize) -> Option<Uuid> {
+	match vals.get(ix) {
+		Some(Value::Uuid(o)) => Some(*o.uuid()),
+		Some(Value::Text(s)) => Uuid::parse_str(s.trim()).ok(),
+		_ => None,
+	}
 }

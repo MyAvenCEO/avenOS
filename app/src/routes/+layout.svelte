@@ -7,7 +7,7 @@ import { initLocale, normalizeLocale, setLocale, t } from '$lib/i18n'
 import { pendingIntentFileDrop } from '$lib/intents/global-file-drop'
 import { startPeerMeshStore } from '$lib/peer/peer-mesh-store'
 import { attachAvenosRuntimeBridge, grooveSessionReady } from '$lib/runtime/groove-runtime'
-import { avenCeoMembership, avenCeoPromoteHumanOwner } from '$lib/jazz/api'
+import { avenCeoMembership } from '$lib/jazz/api'
 import { jazzStore } from '$lib/jazz/store.svelte'
 import NetworkGate from '$lib/shell/NetworkGate.svelte'
 import HumanSafeGate from '$lib/shell/HumanSafeGate.svelte'
@@ -164,21 +164,6 @@ const appAccessState = $derived.by<'app' | 'human' | 'gate' | 'checking'>(() => 
 	if (membership === 'unknown' || !identitiesStore.loaded) return 'checking'
 	if (!hasHumanSafe) return 'human'
 	return membership === 'none' ? 'gate' : 'app'
-})
-
-// Once this device is the avenCEO admin (server auto-grants the FIRST peer's signer),
-// elevate ownership to the person's HUMAN SAFE so all their devices inherit admin through
-// SAFE membership — the admin is the human, not a single device key. Idempotent backend
-// no-op once the human SAFE already owns avenCEO; run once per session.
-let promotedHumanOwner = $state(false)
-$effect(() => {
-	if (!browser || !isTauriRuntime()) return
-	if (promotedHumanOwner || membership !== 'owner' || !hasHumanSafe) return
-	promotedHumanOwner = true
-	void avenCeoPromoteHumanOwner().catch(() => {
-		// best-effort — re-armed next session if it didn't land
-		promotedHumanOwner = false
-	})
 })
 
 // After the invite gate opens, land on /identities (not /intents) — the user

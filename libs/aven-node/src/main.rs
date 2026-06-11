@@ -311,11 +311,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Err(e) = engine_for_peers.register_peer_sync_client(peer) {
                 tracing::warn!(%peer, "register peer: {e}");
             }
-            // S.4 — the first peer to connect is auto-granted admin on avenCEO.
+            // S.4 — grant the first human SAFE (not the device signer) admin on avenCEO.
+            // The human SAFE is created AFTER first connect, so this also runs on a periodic
+            // tick (below); here it catches the case where it's already synced on reconnect.
             if let Err(e) =
-                aven_ceo::maybe_grant_first_admin(&engine_for_peers, &grant_signing, avenceo_id, peer).await
+                aven_ceo::grant_first_human_admin(&engine_for_peers, &grant_signing, avenceo_id).await
             {
-                tracing::warn!(%peer, "avenCEO auto-grant: {e}");
+                tracing::warn!(%peer, "avenCEO human-admin grant: {e}");
+            }
+        }
+    });
+
+    // Periodic admin grant: the first admin's HUMAN SAFE is created on-device AFTER it first
+    // connects, so a per-connect check alone would miss it. This tick grants the first human
+    // SAFE that syncs in (idempotent once avenCEO has a non-server owner) so the device's
+    // invite gate opens within seconds — no device reconnect required.
+    let engine_for_tick = engine.clone();
+    let tick_signing = identity.clone();
+    let admin_tick = tokio::spawn(async move {
+        let mut iv = tokio::time::interval(std::time::Duration::from_secs(5));
+        iv.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            iv.tick().await;
+            if let Err(e) =
+                aven_ceo::grant_first_human_admin(&engine_for_tick, &tick_signing, avenceo_id).await
+            {
+                tracing::debug!("avenCEO human-admin tick: {e}");
             }
         }
     });
@@ -346,6 +367,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("finalizing RocksDB store…");
     peer_task.abort();
     let _ = peer_task.await;
+    admin_tick.abort();
+    let _ = admin_tick.await;
     match Arc::try_unwrap(engine) {
         Ok(client) => {
             if let Err(e) = client.shutdown().await {
