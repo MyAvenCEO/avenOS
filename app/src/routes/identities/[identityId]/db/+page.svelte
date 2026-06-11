@@ -20,22 +20,6 @@
 	const identityParam = $derived(String((page.params as { identityId?: string }).identityId ?? ''))
 	const decodedIdentityId = $derived(decodeURIComponent(identityParam))
 
-	// Tables that carry an owning-identity column (manifest-aligned). Device-local,
-	// non-identity tables (e.g. `humans`) never appear in a identity's data view.
-	const IDENTITY_SCOPED_TABLES = [
-		'safes',
-		'safe_controllers',
-		'messages',
-		'todos',
-		'files',
-		'signers',
-		'keyshares',
-		// aven-brain tables (per-SAFE memory)
-		'memories',
-		'entities',
-		'links',
-		'context_traces',
-	]
 
 	let tables = $state<string[]>([])
 	let selectedTable = $state<string | null>(null)
@@ -121,7 +105,9 @@
 				if (cancelled) return
 				const status = await withTimeoutMs(avenDbStatus(), DB_IPC_BUDGET_MS, t('errors.dbAvenDbStatusStalled'))
 				if (cancelled) return
-				tables = (status.tables ?? []).filter((tbl) => IDENTITY_SCOPED_TABLES.includes(tbl))
+				// Show every table the live avenDB schema declares — no hand-maintained
+				// allowlist. Non-identity-scoped tables simply render "No readable rows".
+				tables = [...(status.tables ?? [])].sort()
 				if (!status.ready) bootstrapErr = t('db.explorer.shellNotReady')
 			} catch (e) {
 				if (!cancelled) {
