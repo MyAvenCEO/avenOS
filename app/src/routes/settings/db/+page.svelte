@@ -3,7 +3,7 @@
 	import { t } from '$lib/i18n'
 	import {
 		selfClearAvenOsData,
-		selfClearJazzDatabase,
+		selfClearAvenDbDatabase,
 		selfStoragePaths,
 		type SelfStoragePathsReply,
 	} from '$lib/settings/storage-api'
@@ -52,7 +52,7 @@
 		clearDone = false
 		confirmOpen = false
 		try {
-			await selfClearJazzDatabase()
+			await selfClearAvenDbDatabase()
 			clearDone = true
 			paths = await selfStoragePaths()
 		} catch (e) {
@@ -126,7 +126,7 @@
 		</section>
 
 		<section class="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
-			<h2 class="text-[11px] font-semibold uppercase tracking-wider opacity-70">{t('db.self.grooveStore')}</h2>
+			<h2 class="text-[11px] font-semibold uppercase tracking-wider opacity-70">{t('db.self.avendbStore')}</h2>
 			<p class="text-muted-foreground text-xs leading-relaxed">
 				{t('db.self.clearDescription')}
 			</p>

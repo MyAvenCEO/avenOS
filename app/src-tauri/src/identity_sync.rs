@@ -2,7 +2,7 @@
 
 use std::sync::OnceLock;
 
-use groove::ObjectId;
+use aven_db::ObjectId;
 use uuid::Uuid;
 
 /// Snapshot of object→identity mappings used to gate outbound sync (updated on every shell hydrate).
@@ -53,7 +53,7 @@ fn identity_scoped_tables_cached() -> &'static [String] {
 	})
 }
 
-/// Tables whose rows include `owner` per the active Jazz manifest.
+/// Tables whose rows include `owner` per the active AvenDb manifest.
 pub fn identity_scoped_table_names() -> &'static [String] {
 	identity_scoped_tables_cached()
 }

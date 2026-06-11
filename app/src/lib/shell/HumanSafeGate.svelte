@@ -2,7 +2,7 @@
 	import { tick } from 'svelte'
 	import { browser } from '$app/environment'
 	import { t } from '$lib/i18n'
-	import { createIdentity, jazzSession } from '$lib/jazz/api'
+	import { createIdentity, avendbSession } from '$lib/avendb/api'
 	import { copyToClipboard } from '$lib/runtime/clipboard'
 
 	// Shown full-screen once, right after first sign-in: the device has a signer + vault
@@ -30,7 +30,7 @@
 		if (!browser || mode !== 'pair' || signerDid) return
 		void (async () => {
 			try {
-				signerDid = (await jazzSession()).signerDid ?? ''
+				signerDid = (await avendbSession()).signerDid ?? ''
 			} catch {
 				signerDid = ''
 			}

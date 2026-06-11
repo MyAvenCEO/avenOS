@@ -1,7 +1,7 @@
 //! Peer-mesh UI types — the single shape the webview consumes for sync status.
 //!
 //! Built from real trusted-peer rows + live transport registration in
-//! `jazz::build_peer_mesh_status` (no demo data).
+//! `avendb::build_peer_mesh_status` (no demo data).
 
 use serde::Serialize;
 

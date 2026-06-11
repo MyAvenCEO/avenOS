@@ -260,7 +260,7 @@ pub fn build_vault_from_signing_key(sk_ed: &SigningKey) -> Result<BiscuitVault, 
 		biscuit_keypair_from_ed25519_signing(sk_ed.as_bytes())?;
 
 	let signer_did =
-		groove::did_key::signer_did_from_ed25519(&pk_arr)?;
+		aven_db::did_key::signer_did_from_ed25519(&pk_arr)?;
 
 	Ok(BiscuitVault {
 		biscuit_kp,

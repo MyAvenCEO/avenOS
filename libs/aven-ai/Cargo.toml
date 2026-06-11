@@ -19,6 +19,10 @@ stt = ["dep:sherpa-onnx", "dep:ureq", "dep:tar", "dep:bzip2"]
 # and stays App-Store/TestFlight-safe (the dylib ships signed in the app bundle;
 # only model *weights* download at first run).
 llm = ["dep:ort", "dep:half", "dep:tokenizers", "dep:ureq", "dep:serde_json", "dep:log"]
+# On-device text embeddings (EmbeddingGemma-300m ONNX) via onnxruntime (`ort`,
+# load-dynamic — same bundled dylib as `llm`) + HF tokenizer. Encoder counterpart
+# to the generation paths.
+embed = ["dep:ort", "dep:tokenizers", "dep:log"]
 # On-device LLM via llama.cpp (LFM2.5-1.2B GGUF). Statically linked (no dylib to bundle or
 # sign), Metal on Apple. Same GGUF runs on macOS AND iOS. Replaces the ONNX `llm` path.
 llama = ["dep:llama-cpp-2", "dep:llama-cpp-sys-2", "dep:ureq", "dep:serde_json", "dep:log"]

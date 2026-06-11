@@ -2,9 +2,9 @@
 //! `recv_inbound`, tagged with A's source. Proves the `SyncTransport` seam end
 //! to end with zero networking, so the frontier protocol can run on it.
 
-use groove::sync_transport::{LoopbackTransport, SyncTransport};
-use groove::{PeerId, Source, SyncPayload};
-use groove::SyncTargetId;
+use aven_db::sync_transport::{LoopbackTransport, SyncTransport};
+use aven_db::{PeerId, Source, SyncPayload};
+use aven_db::SyncTargetId;
 
 #[tokio::test]
 async fn loopback_delivers_frame() {

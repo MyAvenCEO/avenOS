@@ -126,7 +126,7 @@ impl std::error::Error for QueryError {}
 /// Handle to a pending query.
 ///
 /// Used to correlate query results with the original request.
-/// Wrappers (jazz-runtime, jazz-wasm) use this to fulfill
+/// Wrappers (avendb-runtime, avendb-wasm) use this to fulfill
 /// platform-specific futures/promises.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct QueryHandle(pub u64);
@@ -422,6 +422,8 @@ pub struct QueryManager {
     pub(super) sync_manager: SyncManager,
     pub(super) schema: Arc<Schema>,
     pub(super) row_policy_mode: RowPolicyMode,
+    /// Unseal-on-scan hook bound into ranking Sort nodes at compile (plan §3 seam).
+    pub(super) unseal: Option<crate::query_manager::graph_nodes::sort::UnsealFn>,
     pub(super) authorization_schema: Option<Arc<Schema>>,
     pub(super) authorization_schema_required: bool,
     pub(super) authorization_context_cache: HashMap<(String, String), Arc<SchemaContext>>,
@@ -544,6 +546,7 @@ impl QueryManager {
             sync_manager,
             schema: Arc::new(Schema::new()),
             row_policy_mode: RowPolicyMode::PermissiveLocal,
+            unseal: None,
             authorization_schema: None,
             authorization_schema_required: false,
             authorization_context_cache: HashMap::new(),
@@ -678,20 +681,31 @@ impl QueryManager {
         }
     }
 
+    /// Register the unseal-on-scan hook; bound into every subsequently compiled
+    /// ranking Sort node (`nearest` / `text_search`). See plan §3 (sealed-data seam).
+    pub fn set_unseal(&mut self, hook: Option<crate::query_manager::graph_nodes::sort::UnsealFn>) {
+        self.unseal = hook;
+    }
+
     pub(super) fn compile_graph(
         query: &Query,
         schema: &Schema,
         session: Option<Session>,
         schema_context: &SchemaContext,
         row_policy_mode: RowPolicyMode,
+        unseal: Option<&crate::query_manager::graph_nodes::sort::UnsealFn>,
     ) -> Result<QueryGraph, QueryCompileError> {
-        QueryGraph::try_compile_with_schema_context(
+        let mut graph = QueryGraph::try_compile_with_schema_context(
             query,
             schema,
             session,
             schema_context,
             row_policy_mode,
-        )
+        )?;
+        if let Some(hook) = unseal {
+            graph.bind_unseal(hook);
+        }
+        Ok(graph)
     }
 
     pub(super) fn local_subscription_uses_explicit_authorization(
@@ -802,6 +816,7 @@ impl QueryManager {
         let current_schema = self.schema.clone();
         let current_schema_context = self.schema_context.clone();
         let authorization_schema = self.authorization_schema.clone();
+        let unseal = self.unseal.clone();
 
         // Recompile local subscriptions
         for (sub_id, sub) in &mut self.subscriptions {
@@ -842,6 +857,7 @@ impl QueryManager {
                     sub.session.clone(),
                     &current_schema_context,
                     compile_row_policy_mode,
+                    unseal.as_ref(),
                 ) {
                     Ok(new_graph) => {
                         let policy_context_tables =
@@ -1002,7 +1018,7 @@ impl QueryManager {
             unique_batch_count,
             marked_row_count,
             max_confirmed_tier = ?max_confirmed_tier,
-            "jazz trace batch fate effects applied"
+            "avendb trace batch fate effects applied"
         );
     }
 
@@ -1277,7 +1293,7 @@ impl QueryManager {
                     added = visible_delta.added.len(),
                     settled_tier = ?subscription.query_frontier_settled_tier,
                     required_tier = ?subscription.durability_tier,
-                    "jazz trace subscription first delivery"
+                    "avendb trace subscription first delivery"
                 );
                 subscription.settled_once = true;
                 subscription.current_ordered_ids = ordered_ids_after;

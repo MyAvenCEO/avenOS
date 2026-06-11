@@ -1,4 +1,4 @@
-import type { JazzRow } from '$lib/jazz/api'
+import type { AvenDbRow } from '$lib/avendb/api'
 
 export function isPreviewableImage(mime: string): boolean {
 	const m = mime.trim().toLowerCase()
@@ -14,7 +14,7 @@ export function isPdfMime(mime: string): boolean {
  * Prefers the filename extension, falls back to the mime subtype, then "FILE".
  * Used as the preview-tile fallback when no thumbnail can be rendered.
  */
-export function fileTypeLabel(row: JazzRow): string {
+export function fileTypeLabel(row: AvenDbRow): string {
 	const name = String(row.filename ?? '').trim()
 	const dot = name.lastIndexOf('.')
 	if (dot >= 0 && dot < name.length - 1) {
@@ -30,7 +30,7 @@ export function fileTypeLabel(row: JazzRow): string {
 	return 'FILE'
 }
 
-export function imageDataUrl(row: JazzRow): string | null {
+export function imageDataUrl(row: AvenDbRow): string | null {
 	const mime = String(row.mime_type ?? '')
 	if (!isPreviewableImage(mime)) return null
 	const b64 = String(row.content ?? '').trim()
@@ -38,7 +38,7 @@ export function imageDataUrl(row: JazzRow): string | null {
 	return `data:${mime};base64,${b64}`
 }
 
-export function fileDownloadDataUrl(row: JazzRow): string | null {
+export function fileDownloadDataUrl(row: AvenDbRow): string | null {
 	const b64 = String(row.content ?? '').trim()
 	if (!b64) return null
 	const mime = String(row.mime_type ?? '').trim() || 'application/octet-stream'

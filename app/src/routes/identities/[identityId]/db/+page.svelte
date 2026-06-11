@@ -3,12 +3,12 @@
 	import { browser } from '$app/environment'
 	import { t } from '$lib/i18n'
 	import {
-		jazzExplorerList,
-		jazzExplorerSubscribe,
-		jazzStatus,
-		type JazzExplorerListReply,
-	} from '$lib/jazz/api'
-	import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
+		avenDbExplorerList,
+		avenDbExplorerSubscribe,
+		avenDbStatus,
+		type AvenDbExplorerListReply,
+	} from '$lib/avendb/api'
+	import { waitForAvenDbSessionReady } from '$lib/runtime/avendb-runtime'
 	import { withTimeoutMs } from '$lib/async-timeout'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/settings/device-session-store'
@@ -101,12 +101,12 @@
 			try {
 				bootstrapErr = undefined
 				await withTimeoutMs(
-					waitForGrooveSessionReady(),
+					waitForAvenDbSessionReady(),
 					DB_IPC_BUDGET_MS,
-					t('errors.dbGrooveSessionStalled'),
+					t('errors.dbavenDBSessionStalled'),
 				)
 				if (cancelled) return
-				const status = await withTimeoutMs(jazzStatus(), DB_IPC_BUDGET_MS, t('errors.dbJazzStatusStalled'))
+				const status = await withTimeoutMs(avenDbStatus(), DB_IPC_BUDGET_MS, t('errors.dbAvenDbStatusStalled'))
 				if (cancelled) return
 				tables = (status.tables ?? []).filter((tbl) => IDENTITY_SCOPED_TABLES.includes(tbl))
 				if (!status.ready) bootstrapErr = t('db.explorer.shellNotReady')
@@ -144,7 +144,7 @@
 		void (async () => {
 			try {
 				explorerErr = undefined
-				const reply: JazzExplorerListReply = await jazzExplorerList(table)
+				const reply: AvenDbExplorerListReply = await avenDbExplorerList(table)
 				if (cancelled) return
 				allRows = reply.rows
 				skippedUnauthorizedRows = reply.skippedUnauthorizedRows
@@ -152,7 +152,7 @@
 				if (!cancelled) explorerErr = e instanceof Error ? e.message : String(e)
 			}
 			unlisten?.()
-			unlisten = await jazzExplorerSubscribe(table, (next) => {
+			unlisten = await avenDbExplorerSubscribe(table, (next) => {
 				if (!cancelled) allRows = next
 			})
 			if (cancelled) unlisten?.()

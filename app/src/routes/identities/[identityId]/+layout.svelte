@@ -2,8 +2,8 @@
 	import { browser } from '$app/environment'
 	import { page } from '$app/state'
 	import { t } from '$lib/i18n'
-	import { jazzStore } from '$lib/jazz/store.svelte'
-	import { jazzShell } from '$lib/runtime/jazz-shell'
+	import { avenDbStore } from '$lib/avendb/store.svelte'
+	import { avendbShell } from '$lib/runtime/avendb-shell'
 	import { deviceSession } from '$lib/settings/device-session-store'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { navigateApp } from '$lib/shell'
@@ -26,9 +26,9 @@
 	const decodedIdentityId = $derived(decodeURIComponent(identityParam))
 	const identityBase = $derived(`/identities/${encodeURIComponent(decodedIdentityId)}`)
 
-	const identitiesStore = jazzStore('safes')
-	const messages = jazzStore('messages')
-	const todos = jazzStore('todos')
+	const identitiesStore = avenDbStore('safes')
+	const messages = avenDbStore('messages')
+	const todos = avenDbStore('todos')
 
 	function idsMatch(a: string, b: string): boolean {
 		return a.trim().toLowerCase() === b.trim().toLowerCase()
@@ -39,7 +39,7 @@
 	)
 	const canonicalSparkId = $derived(identityMeta?.owner ?? decodedIdentityId)
 
-	const session = $derived($jazzShell.session)
+	const session = $derived($avendbShell.session)
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
 

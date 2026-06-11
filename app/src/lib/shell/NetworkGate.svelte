@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { t } from '$lib/i18n'
-	import { jazzStore } from '$lib/jazz/store.svelte'
+	import { avenDbStore } from '$lib/avendb/store.svelte'
 	import { copyToClipboard } from '$lib/runtime/clipboard'
 
 	// Shown full-screen when this device is unlocked but NOT yet a member of the
@@ -8,7 +8,7 @@
 	// peer; everyone else shares their HUMAN SAFE did:safe with a founder to be vouched
 	// in. The SYNC/membership cap is granted to the human SAFE — never the raw device
 	// signer — and the device's signers inherit it through SAFE membership.
-	const safesStore = jazzStore('safes')
+	const safesStore = avenDbStore('safes')
 	const humanSafe = $derived(safesStore.rows.find((r) => r.type === 'human'))
 	const ownDid = $derived(humanSafe ? `did:safe:${String(humanSafe.owner ?? '').trim()}` : '')
 	let didCopied = $state(false)

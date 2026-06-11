@@ -19,17 +19,17 @@ fn schedule_table_drain_follow_up(app: tauri::AppHandle, tables: HashSet<String>
 		let drain = ui_drain::ui_table_drain(&app);
 		if let Err(e) = drain.enqueue(tables).await {
 			log::trace!(
-				target: "avenos::jazz",
+				target: "avenos::avendb",
 				"table-change drain follow-up enqueue failed: {e}",
 			);
 		}
 	});
 }
 
-/// Runs one coalesced UI drain batch (shell hydrate + snapshots). Never enqueued on the Groove actor.
+/// Runs one coalesced UI drain batch (shell hydrate + snapshots). Never enqueued on the avenDB actor.
 pub(crate) async fn execute_drain_batch(
 	app: &tauri::AppHandle,
-	jazz: &ManagedJazz,
+	avendb: &ManagedAvenDb,
 	self_state: &SelfState,
 	mut pending: std::collections::HashSet<String>,
 ) {
@@ -42,19 +42,19 @@ pub(crate) async fn execute_drain_batch(
 
 	let signers_pending = pending.remove("signers");
 	if signers_pending {
-		if let Err(e) = publish_trusted_peers_ui(app, jazz, self_state).await {
+		if let Err(e) = publish_trusted_peers_ui(app, avendb, self_state).await {
 			log::warn!(
-				target: "avenos::jazz",
+				target: "avenos::avendb",
 				"table-change drain: publish_trusted_peers_ui failed: {e}",
 			);
 		}
 	}
 
-	let want_snapshots = !pending.is_empty() && jazz.any_ui_subscriber(&pending).await;
+	let want_snapshots = !pending.is_empty() && avendb.any_ui_subscriber(&pending).await;
 	if !vault_shell_maybe_dirty && !want_snapshots {
 		if !pending.is_empty() {
 			log::trace!(
-				target: "avenos::jazz",
+				target: "avenos::avendb",
 				"table-change drain: no UI subscribers for {} table(s), skip",
 				pending.len(),
 			);
@@ -62,7 +62,7 @@ pub(crate) async fn execute_drain_batch(
 		return;
 	}
 
-	let client = match with_connected_client(jazz, app, self_state).await {
+	let client = match with_connected_client(avendb, app, self_state).await {
 		Ok(c) => c,
 		Err(_) => return,
 	};
@@ -74,9 +74,9 @@ pub(crate) async fn execute_drain_batch(
 	// row, so the content digest changes and we still invalidate + re-hydrate — reactivity is
 	// preserved; identical re-deliveries are now a no-op. On a query error we fail safe to dirty.
 	let vault_shell_dirty =
-		vault_shell_maybe_dirty && jazz.vault_shell_content_changed(client.as_ref()).await;
+		vault_shell_maybe_dirty && avendb.vault_shell_content_changed(client.as_ref()).await;
 	if vault_shell_dirty {
-		jazz.invalidate_vault_shell();
+		avendb.invalidate_vault_shell();
 	}
 
 	// A vault-shell re-hydrate can change row ACCESS for ANY table — a single identity grant
@@ -87,7 +87,7 @@ pub(crate) async fn execute_drain_batch(
 	// Tables the user is *not* viewing need no push: navigating to them re-`list()`s through
 	// the now-hydrated shell. This force-set bypasses the per-table subscriber gate.
 	let force_after_rehydrate: Vec<String> = if vault_shell_dirty {
-		let mut set: std::collections::HashSet<String> = jazz
+		let mut set: std::collections::HashSet<String> = avendb
 			.subscribed_tables()
 			.await
 			.into_iter()
@@ -105,13 +105,13 @@ pub(crate) async fn execute_drain_batch(
 	if (vault_shell_dirty || want_snapshots) && !pairing_active {
 		if let Err(e) = client.flush_peer_sync().await {
 			log::debug!(
-				target: "avenos::jazz",
+				target: "avenos::avendb",
 				"table-change drain: flush_peer_sync before shell/snapshot: {e}",
 			);
 		}
 	} else if (vault_shell_dirty || want_snapshots) && pairing_active {
 		log::trace!(
-			target: "avenos::jazz",
+			target: "avenos::avendb",
 			"table-change drain: defer flush_peer_sync — pairing active",
 		);
 	}
@@ -120,9 +120,9 @@ pub(crate) async fn execute_drain_batch(
 		.iter()
 		.any(|t| identity_sync::is_spark_data_table(t))
 	{
-		if let Err(e) = jazz.refresh_sync_acl_object_map(client.as_ref()).await {
+		if let Err(e) = avendb.refresh_sync_acl_object_map(client.as_ref()).await {
 			log::debug!(
-				target: "avenos::jazz",
+				target: "avenos::avendb",
 				"table-change drain: refresh_sync_acl_object_map failed: {e}",
 			);
 		}
@@ -130,11 +130,11 @@ pub(crate) async fn execute_drain_batch(
 
 	let mut shell_hydrate_ok = !vault_shell_dirty;
 	if vault_shell_dirty {
-		match jazz_shell_for_ui(app, jazz, self_state, client.clone()).await {
+		match avendb_shell_for_ui(app, avendb, self_state, client.clone()).await {
 			Ok(_) => shell_hydrate_ok = true,
 			Err(e) => {
 				log::warn!(
-					target: "avenos::jazz",
+					target: "avenos::avendb",
 					"table-change drain: vault shell re-hydrate failed: {e}",
 				);
 			}
@@ -149,11 +149,11 @@ pub(crate) async fn execute_drain_batch(
 		return;
 	}
 
-	let shell = match jazz_shell_for_ui(app, jazz, self_state, client.clone()).await {
+	let shell = match avendb_shell_for_ui(app, avendb, self_state, client.clone()).await {
 		Ok(s) => s,
 		Err(e) => {
 			log::debug!(
-				target: "avenos::jazz",
+				target: "avenos::avendb",
 				"table-change drain: shell not ready ({e}); skip batch ({} table(s))",
 				pending.len(),
 			);
@@ -166,22 +166,22 @@ pub(crate) async fn execute_drain_batch(
 	// for ANY table — no special cases.
 	for table in &force_after_rehydrate {
 		{
-			let mut last = jazz
+			let mut last = avendb
 				.last_table_snapshots
 				.write()
 				.expect("last_table_snapshots poisoned");
 			last.remove(table);
 		}
-		match jazz
+		match avendb
 			.publish_table_snapshot_force(app, client.as_ref(), shell.as_ref(), table)
 			.await
 		{
 			Ok(()) => log::debug!(
-				target: "avenos::jazz",
+				target: "avenos::avendb",
 				"table-change drain: force-published {table} after shell re-hydrate",
 			),
 			Err(e) => log::warn!(
-				target: "avenos::jazz",
+				target: "avenos::avendb",
 				"table-change drain: publish_table_snapshot_force({table}) failed: {e}",
 			),
 		}
@@ -196,7 +196,7 @@ pub(crate) async fn execute_drain_batch(
 			.cloned()
 			.collect();
 		{
-			let mut last = jazz
+			let mut last = avendb
 				.last_table_snapshots
 				.write()
 				.expect("last_table_snapshots poisoned");
@@ -205,17 +205,17 @@ pub(crate) async fn execute_drain_batch(
 			}
 		}
 		for table in to_broadcast {
-			match jazz
+			match avendb
 				.snapshot_broadcast(app, client.as_ref(), shell.as_ref(), &table)
 				.await
 			{
 				Ok(true) => log::debug!(
-					target: "avenos::jazz",
+					target: "avenos::avendb",
 					"table-change drain: republished {table}",
 				),
 				Ok(false) => {}
 				Err(e) => log::warn!(
-					target: "avenos::jazz",
+					target: "avenos::avendb",
 					"table-change drain: snapshot_broadcast({table}) failed: {e}",
 				),
 			}
@@ -240,9 +240,9 @@ pub(crate) async fn execute_drain_batch(
 /// store and serialize the snapshot once per commit, which is wasted work and noisy on
 /// the event channel.
 ///
-/// Why on a separate task: peer-sync's `recv_inbound` is called from inside the Groove
+/// Why on a separate task: peer-sync's `recv_inbound` is called from inside the avenDB
 /// sync loop, which holds its own locks. Doing the snapshot query inline would risk
-/// re-entering the `JazzConn` mutex and stalling Groove. Posting to an unbounded MPSC
+/// re-entering the `AvenDbConn` mutex and stalling avenDB. Posting to an unbounded MPSC
 /// keeps `recv_inbound` non-blocking; the drain task takes the locks at its own pace.
 pub async fn run_table_change_drain(
 	app: tauri::AppHandle,
@@ -257,7 +257,7 @@ pub async fn run_table_change_drain(
 	loop {
 		let Some(first) = rx.recv().await else {
 			log::debug!(
-				target: "avenos::jazz",
+				target: "avenos::avendb",
 				"table-change drain: channel closed, exiting",
 			);
 			return;
@@ -280,7 +280,7 @@ pub async fn run_table_change_drain(
 		let drain = app.state::<ui_drain::UiTableDrainHandle>();
 		if let Err(e) = drain.enqueue(pending).await {
 			log::warn!(
-				target: "avenos::jazz",
+				target: "avenos::avendb",
 				"table-change drain: failed to enqueue batch on ui drain: {e}",
 			);
 		}
@@ -297,7 +297,7 @@ pub(super) async fn enqueue_vault_catalogue_drain(app: &tauri::AppHandle) {
 	let drain = ui_drain::ui_table_drain(app);
 	if let Err(e) = drain.enqueue(tables).await {
 		log::debug!(
-			target: "avenos::jazz",
+			target: "avenos::avendb",
 			"vault catalogue drain enqueue failed: {e}",
 		);
 	}

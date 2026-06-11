@@ -31,7 +31,7 @@ pub async fn signing_public_key(state: State<'_, SelfState>) -> Result<Vec<u8>, 
 // WebView, which made a compromised renderer a universal forging oracle for owner-bindings,
 // edit-sigs, biscuits, and p2p auth challenges. No frontend flow used them (only
 // `signing_public_key` / `signing_peer_did` are consumed by the UI; all real auth signing is
-// Rust-side via `jazz_auth` → `signing_key_from_root`). The raw primitive is now private
+// Rust-side via `avendb_auth` → `signing_key_from_root`). The raw primitive is now private
 // (`derive::sign_raw`); the public `derive::sign` domain-prefixes (`WEBVIEW_SIGN_DOMAIN`).
 
 /// Friendly host device label for onboarding (e.g. macOS "Computer Name": MacBook Air).
@@ -59,7 +59,7 @@ fn host_device_label_inner() -> String {
 
 /// Zeroize the cached root secret. Frontend should call this on window close / explicit re-lock.
 ///
-/// Emits **`self:did-lock`** so the shell can tear down dependents (e.g. Groove / Jazz runtime)
+/// Emits **`self:did-lock`** so the shell can tear down dependents (e.g. avenDB runtime)
 /// whose cache must never outlive this secret.
 #[tauri::command]
 pub async fn lock(

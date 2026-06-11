@@ -29,6 +29,228 @@ fn test_runtime_core_insert_query() {
     assert_eq!(results[0].1, row_values);
 }
 
+#[test]
+fn rc_nearest_returns_top_k_by_cosine_distance() {
+    // Schema with a first-class Vector column.
+    let schema = SchemaBuilder::new()
+        .table(
+            TableSchema::builder("memories")
+                .column("id", ColumnType::Uuid)
+                .column("embedding", ColumnType::Vector { dim: 3 }),
+        )
+        .build();
+    let mut core = create_runtime_with_schema(schema, "nearest-cosine-test");
+
+    // Query vector points along +x. Distances to it (1 - cosine):
+    //   a = +x        -> 0.0   (identical direction, nearest)
+    //   b = +x+y (45) -> ~0.293
+    //   c = -x        -> 2.0   (opposite, farthest)
+    let ((a, _), _) = core
+        .insert(
+            "memories",
+            HashMap::from([
+                ("id".to_string(), Value::Uuid(ObjectId::new())),
+                ("embedding".to_string(), Value::Vector(vec![1.0, 0.0, 0.0])),
+            ]),
+            None,
+        )
+        .unwrap();
+    let ((b, _), _) = core
+        .insert(
+            "memories",
+            HashMap::from([
+                ("id".to_string(), Value::Uuid(ObjectId::new())),
+                ("embedding".to_string(), Value::Vector(vec![1.0, 1.0, 0.0])),
+            ]),
+            None,
+        )
+        .unwrap();
+    let ((c, _), _) = core
+        .insert(
+            "memories",
+            HashMap::from([
+                ("id".to_string(), Value::Uuid(ObjectId::new())),
+                ("embedding".to_string(), Value::Vector(vec![-1.0, 0.0, 0.0])),
+            ]),
+            None,
+        )
+        .unwrap();
+
+    core.immediate_tick();
+    core.batched_tick();
+
+    let query = QueryBuilder::new("memories")
+        .nearest("embedding", vec![1.0, 0.0, 0.0], 2)
+        .build();
+    let results = execute_query(&mut core, query);
+
+    let ids: Vec<ObjectId> = results.iter().map(|(id, _)| *id).collect();
+    assert_eq!(ids.len(), 2, "k=2 should return 2 rows, got {results:?}");
+    assert_eq!(ids[0], a, "closest must be the identical-direction vector");
+    assert_eq!(ids[1], b, "second closest must be the 45-degree vector");
+    assert!(
+        !ids.contains(&c),
+        "opposite-direction vector must be excluded by k=2"
+    );
+}
+
+#[test]
+fn rc_unseal_hook_ranks_sealed_columns_by_plaintext() {
+    use crate::query_manager::graph_nodes::sort::UnsealFn;
+    use std::sync::Arc;
+
+    // Sealed-at-rest simulation: embeddings stored negated, bodies stored reversed.
+    // The unseal-on-scan hook (plan §3 seam) recovers plaintext for ranking only.
+    let schema = SchemaBuilder::new()
+        .table(
+            TableSchema::builder("memories")
+                .column("id", ColumnType::Uuid)
+                .column("embedding", ColumnType::Vector { dim: 3 })
+                .column("body", ColumnType::Text),
+        )
+        .build();
+    let mut core = create_runtime_with_schema(schema, "unseal-seam-test");
+
+    let seal_vec = |v: &[f32]| Value::Vector(v.iter().map(|x| -x).collect());
+    let seal_text = |t: &str| Value::Text(t.chars().rev().collect());
+
+    // Plaintext a = +x, "the quick brown fox"; plaintext c = -x, "slow turtle crawls".
+    let ((a, _), _) = core
+        .insert(
+            "memories",
+            HashMap::from([
+                ("id".to_string(), Value::Uuid(ObjectId::new())),
+                ("embedding".to_string(), seal_vec(&[1.0, 0.0, 0.0])),
+                ("body".to_string(), seal_text("the quick brown fox")),
+            ]),
+            None,
+        )
+        .unwrap();
+    let ((c, _), _) = core
+        .insert(
+            "memories",
+            HashMap::from([
+                ("id".to_string(), Value::Uuid(ObjectId::new())),
+                ("embedding".to_string(), seal_vec(&[-1.0, 0.0, 0.0])),
+                ("body".to_string(), seal_text("slow turtle crawls")),
+            ]),
+            None,
+        )
+        .unwrap();
+
+    core.immediate_tick();
+    core.batched_tick();
+
+    // WITHOUT the hook the engine ranks the sealed bytes as-is: c's stored
+    // embedding (+x after sealing) wins nearest(+x) — the wrong row.
+    let query = QueryBuilder::new("memories")
+        .nearest("embedding", vec![1.0, 0.0, 0.0], 1)
+        .build();
+    let results = execute_query(&mut core, query);
+    assert_eq!(results[0].0, c, "sealed bytes rank as stored without the hook");
+
+    // Register the unseal hook: ranking now follows plaintext.
+    let hook: UnsealFn = Arc::new(|_table, column, v| match (column, v) {
+        ("embedding", Value::Vector(sealed)) => {
+            Some(Value::Vector(sealed.iter().map(|x| -x).collect()))
+        }
+        ("body", Value::Text(sealed)) => Some(Value::Text(sealed.chars().rev().collect())),
+        _ => Some(v.clone()),
+    });
+    core.schema_manager_mut()
+        .query_manager_mut()
+        .set_unseal(Some(hook));
+
+    let query = QueryBuilder::new("memories")
+        .nearest("embedding", vec![1.0, 0.0, 0.0], 1)
+        .build();
+    let results = execute_query(&mut core, query);
+    assert_eq!(results[0].0, a, "with the hook, plaintext +x wins nearest(+x)");
+
+    // BM25 over sealed text: only the unsealed body of `a` contains the terms.
+    let query = QueryBuilder::new("memories")
+        .text_search("body", "quick fox", 1)
+        .build();
+    let results = execute_query(&mut core, query);
+    assert_eq!(results[0].0, a, "with the hook, BM25 scores plaintext bodies");
+
+    // Results still carry the STORED (sealed) row values — no plaintext leaks out.
+    let stored_body = &results[0].1;
+    assert!(
+        stored_body
+            .iter()
+            .any(|v| matches!(v, Value::Text(s) if s == &"the quick brown fox".chars().rev().collect::<String>())),
+        "query results must return stored (sealed) values, got {stored_body:?}"
+    );
+}
+
+#[test]
+fn rc_text_search_returns_top_k_by_bm25() {
+    let schema = SchemaBuilder::new()
+        .table(
+            TableSchema::builder("memories")
+                .column("id", ColumnType::Uuid)
+                .column("body", ColumnType::Text),
+        )
+        .build();
+    let mut core = create_runtime_with_schema(schema, "text-search-bm25-test");
+
+    // Query "quick fox":
+    //   a = both terms, long doc  -> moderate BM25
+    //   b = both terms, short doc -> highest BM25 (length normalization)
+    //   c = no query terms        -> 0, excluded
+    let ((a, _), _) = core
+        .insert(
+            "memories",
+            HashMap::from([
+                ("id".to_string(), Value::Uuid(ObjectId::new())),
+                (
+                    "body".to_string(),
+                    Value::Text("the quick brown fox jumps over things".to_string()),
+                ),
+            ]),
+            None,
+        )
+        .unwrap();
+    let ((b, _), _) = core
+        .insert(
+            "memories",
+            HashMap::from([
+                ("id".to_string(), Value::Uuid(ObjectId::new())),
+                ("body".to_string(), Value::Text("quick fox".to_string())),
+            ]),
+            None,
+        )
+        .unwrap();
+    let ((c, _), _) = core
+        .insert(
+            "memories",
+            HashMap::from([
+                ("id".to_string(), Value::Uuid(ObjectId::new())),
+                ("body".to_string(), Value::Text("the lazy dog sleeps".to_string())),
+            ]),
+            None,
+        )
+        .unwrap();
+
+    core.immediate_tick();
+    core.batched_tick();
+
+    let query = QueryBuilder::new("memories")
+        .text_search("body", "quick fox", 2)
+        .build();
+    let results = execute_query(&mut core, query);
+
+    let ids: Vec<ObjectId> = results.iter().map(|(id, _)| *id).collect();
+    assert_eq!(ids.len(), 2, "k=2 should return 2 rows, got {results:?}");
+    assert_eq!(ids[0], b, "shortest doc with both query terms ranks first (BM25)");
+    assert_eq!(ids[1], a, "longer doc with both terms ranks second");
+    assert!(
+        !ids.contains(&c),
+        "doc with no query terms must be excluded by k=2"
+    );
+}
+
 
 #[test]
 fn test_runtime_core_insert_materializes_schema_defaults() {

@@ -6,8 +6,8 @@ use chacha20poly1305::aead::Aead;
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use ed25519_dalek::SigningKey;
-use groove::query_manager::types::ColumnType;
-use groove::{ObjectId, Value};
+use aven_db::query_manager::types::ColumnType;
+use aven_db::{ObjectId, Value};
 use hkdf::Hkdf;
 use rand_core::{OsRng, RngCore};
 use serde_json::{json, Number, Value as JsonValue};
@@ -283,7 +283,7 @@ pub fn cell_seal_aad(
 	.into_bytes()
 }
 
-pub fn groove_value_to_canonical_utf8(val: &Value) -> Result<String, String> {
+pub fn avendb_value_to_canonical_utf8(val: &Value) -> Result<String, String> {
 	let j = match val {
 		Value::Null => json!({"schema_v": CELL_CANON_SCHEMA_V, "t": "null"}),
 		Value::Text(s) => json!({"schema_v": CELL_CANON_SCHEMA_V, "t": "text", "v": s}),
@@ -389,7 +389,7 @@ fn canonical_json_to_grove(j: &JsonValue) -> Result<Value, String> {
 	})
 }
 
-fn groove_value_to_ipc_json(cell: &Value) -> JsonValue {
+fn avendb_value_to_ipc_json(cell: &Value) -> JsonValue {
 	match cell {
 		Value::Integer(i) => JsonValue::Number(Number::from(*i)),
 		Value::BigInt(i) => JsonValue::Number(Number::from(*i)),
@@ -398,9 +398,9 @@ fn groove_value_to_ipc_json(cell: &Value) -> JsonValue {
 		Value::Timestamp(ts) => JsonValue::Number(Number::from(*ts)),
 		Value::Uuid(oid) => JsonValue::String(oid.uuid().to_string()),
 		Value::Null => JsonValue::Null,
-		Value::Array(items) => JsonValue::Array(items.iter().map(groove_value_to_ipc_json).collect()),
+		Value::Array(items) => JsonValue::Array(items.iter().map(avendb_value_to_ipc_json).collect()),
 		Value::Row { values: items, .. } => {
-			JsonValue::Array(items.iter().map(groove_value_to_ipc_json).collect())
+			JsonValue::Array(items.iter().map(avendb_value_to_ipc_json).collect())
 		}
 		Value::Double(d) => JsonValue::Number(
 			Number::from_f64(*d).unwrap_or_else(|| Number::from(0)),
@@ -481,7 +481,7 @@ pub fn ipc_json_from_opened_sensitive_plaintext(
 	if let Ok(v) = serde_json::from_str::<JsonValue>(opened_plain) {
 		if v.get("schema_v").and_then(JsonValue::as_u64) == Some(CELL_CANON_SCHEMA_V) {
 			let gv = canonical_json_to_grove(&v)?;
-			return Ok(groove_value_to_ipc_json(&gv));
+			return Ok(avendb_value_to_ipc_json(&gv));
 		}
 	}
 	legacy_plain_to_ipc(opened_plain, storage_ty)
@@ -515,7 +515,7 @@ pub fn keyshare_wrap_aad(
 mod tests {
 	use super::{
 		column_type_slug, decrypt_keyshare_payload, dek_version_from_aad_bytes,
-		derive_kek_x25519, encrypt_keyshare_payload, groove_value_to_canonical_utf8,
+		derive_kek_x25519, encrypt_keyshare_payload, avendb_value_to_canonical_utf8,
 		ipc_json_from_opened_sensitive_plaintext, keyshare_wrap_aad, open_text_cell_payload,
 		random_group_key, random_identity_dek, seal_text_cell_payload, cell_seal_aad,
 		unwrap_under_group_key, wrap_under_group_key, ColumnType, Value,
@@ -671,7 +671,7 @@ mod tests {
 		);
 
 		let canon =
-			groove_value_to_canonical_utf8(&Value::Boolean(true)).unwrap();
+			avendb_value_to_canonical_utf8(&Value::Boolean(true)).unwrap();
 
 		let enc = seal_text_cell_payload(dek.expose(), &aad_plain, &canon).unwrap();
 		let (out, dv) = open_text_cell_payload(dek.expose(), &enc, &aad_plain).unwrap();

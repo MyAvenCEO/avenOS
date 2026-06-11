@@ -2,8 +2,8 @@ import { browser } from '$app/environment'
 import { get } from 'svelte/store'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { deviceSession } from '$lib/settings/device-session-store'
-import { jazzTable } from '$lib/jazz/api'
-import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
+import { avenDbTable } from '$lib/avendb/api'
+import { waitForAvenDbSessionReady } from '$lib/runtime/avendb-runtime'
 
 /** Max binary size before base64 encode (v1 single bytea column). */
 export const INTENT_FILE_MAX_BYTES = 15 * 1024 * 1024
@@ -76,7 +76,7 @@ async function fileToBase64(file: File): Promise<string> {
 }
 
 /**
- * Persist attachments to Groove `files` table (Tauri + unlocked only).
+ * Persist attachments to avenDB `files` table (Tauri + unlocked only).
  * `parentId` is stored in `intent_id` (intent row id from composer, or message id from talk).
  * Pass `identityId` when the file belongs to a non-default identity (e.g. talk threads).
  */
@@ -90,12 +90,12 @@ export async function persistSparkFiles(
 		return { stored: 0, errors }
 	}
 	if (get(deviceSession).kind !== 'unlocked') {
-		return { stored: 0, errors: ['Device locked — unlock to store files in Groove.'] }
+		return { stored: 0, errors: ['Device locked — unlock to store files in avenDB.'] }
 	}
 
 	let stored = 0
 	try {
-		await waitForGrooveSessionReady()
+		await waitForAvenDbSessionReady()
 	} catch (e) {
 		return {
 			stored: 0,
@@ -103,7 +103,7 @@ export async function persistSparkFiles(
 		}
 	}
 
-	const api = jazzTable('files')
+	const api = avenDbTable('files')
 	const now = Date.now()
 	const identityId = options?.identityId?.trim()
 
@@ -134,7 +134,7 @@ export async function persistSparkFiles(
 }
 
 /**
- * Persist composer attachments to Groove `files` table (Tauri + unlocked only).
+ * Persist composer attachments to avenDB `files` table (Tauri + unlocked only).
  * `owner` is injected by the shell if omitted.
  */
 export async function persistIntentFiles(

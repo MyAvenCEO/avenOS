@@ -1,17 +1,21 @@
-//! Loads `libs/aven-schema/schema.manifest.json` (Rust / Groove source of truth).
+//! Loads `libs/aven-schema/schema.manifest.json` (Rust / avenDB source of truth).
+//!
+//! Parsing lives in `aven_db::manifest` (colocated with the engine); this module keeps
+//! the app concerns: file locations, compile-time embeds, sandbox install, and the
+//! sealing/exposure policy maps.
 //!
 //! - **Debug**: read from the repo checkout when present (fast iteration).
 //! - **Release / sandbox**: compile-time embed + copy into `<network-root>/schema/` at startup
 //!   (App Store cannot read the developer machine path under `CARGO_MANIFEST_DIR`).
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use groove::query_manager::types::{ColumnType, SchemaBuilder, TableSchemaBuilder};
-use groove::Schema;
-use serde::Deserialize;
+use aven_db::manifest::{column_type_from_expose_ts, parse_manifest, Manifest};
+use aven_db::query_manager::types::ColumnType;
+use aven_db::Schema;
 use tauri::AppHandle;
 
 /// Subdirectory under [`tauri_plugin_self::paths::aven_os_app_base`] for schema cache files.
@@ -32,38 +36,6 @@ const EMBEDDED_SNAPSHOT_BEFORE_FILES: &str = include_str!(concat!(
 ));
 
 static RUNTIME_AVEN_SCHEMA_ROOT: OnceLock<PathBuf> = OnceLock::new();
-
-#[derive(Debug, Deserialize)]
-struct ManifestColumn {
-	name: String,
-	#[serde(rename = "type")]
-	ty: String,
-	#[serde(default)]
-	nullable: bool,
-	/// When true: routing/sync metadata stored unsealed (e.g. `owner`). Not world-readable.
-	/// When false (default): column is sealed at rest and gated by biscuit on IPC paths.
-	#[serde(default)]
-	plaintext: bool,
-	/// Required for `"type": "enum"`.
-	#[serde(default)]
-	variants: Option<Vec<String>>,
-	/// Optional JSON Schema constraint for `"type": "json"`.
-	#[serde(default)]
-	schema: Option<serde_json::Value>,
-	/// Logical IPC/TS type when Groove storage is `text` (sealed at rest). e.g. `"bigint"` for timestamps.
-	#[serde(default, rename = "exposeTs")]
-	expose_ts: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ManifestTable {
-	columns: Vec<ManifestColumn>,
-}
-
-#[derive(Debug, Deserialize)]
-struct Manifest {
-	tables: BTreeMap<String, ManifestTable>,
-}
 
 fn dev_aven_schema_root() -> PathBuf {
 	PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../libs/aven-schema")
@@ -125,48 +97,6 @@ fn write_if_changed(path: &Path, contents: &str) -> Result<(), String> {
 	fs::write(path, contents).map_err(|e| format!("write {}: {e}", path.display()))
 }
 
-fn column_type_from_manifest(col: &ManifestColumn) -> Result<ColumnType, String> {
-	match col.ty.as_str() {
-		"text" => Ok(ColumnType::Text),
-		"boolean" => Ok(ColumnType::Boolean),
-		"integer" => Ok(ColumnType::Integer),
-		"bigint" => Ok(ColumnType::BigInt),
-		"uuid" => Ok(ColumnType::Uuid),
-		"uuid[]" => Ok(ColumnType::Array {
-			element: Box::new(ColumnType::Uuid),
-		}),
-		"bytea" => Ok(ColumnType::Bytea),
-		"double" => Ok(ColumnType::Double),
-		"timestamp" => Ok(ColumnType::Timestamp),
-		"json" => Ok(ColumnType::Json {
-			schema: col.schema.clone(),
-		}),
-		"enum" => {
-			let variants = col.variants.clone().ok_or_else(|| {
-				format!("enum column `{}` missing `variants`", col.name)
-			})?;
-			if variants.is_empty() {
-				return Err(format!("enum column `{}` has empty `variants`", col.name));
-			}
-			Ok(ColumnType::Enum { variants })
-		}
-		"batch_id" => Ok(ColumnType::BatchId),
-		other => Err(format!(
-			"unknown column `{}` kind {other:?} (Row/nested array types are not supported in manifest)",
-			col.name,
-		)),
-	}
-}
-
-fn add_column(tb: TableSchemaBuilder, col: &ManifestColumn) -> Result<TableSchemaBuilder, String> {
-	let ct = column_type_from_manifest(col)?;
-	if col.nullable {
-		Ok(tb.nullable_column(&col.name, ct))
-	} else {
-		Ok(tb.column(&col.name, ct))
-	}
-}
-
 fn read_manifest_json() -> Result<String, String> {
 	if cfg!(debug_assertions) {
 		let path = dev_aven_schema_root().join(SCHEMA_MANIFEST_FILENAME);
@@ -186,25 +116,10 @@ fn read_manifest_json() -> Result<String, String> {
 }
 
 fn read_manifest() -> Result<Manifest, String> {
-	let raw = read_manifest_json()?;
-	serde_json::from_str(&raw).map_err(|e| format!("manifest JSON: {e}"))
+	parse_manifest(&read_manifest_json()?)
 }
 
 static EXPOSE_TS_MAP: OnceLock<HashMap<(String, String), ColumnType>> = OnceLock::new();
-
-fn column_type_from_expose_ts(slug: &str) -> Result<ColumnType, String> {
-	match slug {
-		"string" => Ok(ColumnType::Text),
-		"boolean" => Ok(ColumnType::Boolean),
-		"bigint" => Ok(ColumnType::BigInt),
-		"integer" => Ok(ColumnType::Integer),
-		"uuid" => Ok(ColumnType::Uuid),
-		"string[]" => Ok(ColumnType::Array {
-			element: Box::new(ColumnType::Text),
-		}),
-		other => Err(format!("unknown exposeTs {other:?}")),
-	}
-}
 
 fn expose_ts_map() -> &'static HashMap<(String, String), ColumnType> {
 	EXPOSE_TS_MAP.get_or_init(|| {
@@ -228,7 +143,7 @@ fn expose_ts_map() -> &'static HashMap<(String, String), ColumnType> {
 	})
 }
 
-/// Logical Jazz/IPC type for a column (e.g. `bigint` for `text` + `exposeTs: bigint`).
+/// Logical AvenDb/IPC type for a column (e.g. `bigint` for `text` + `exposeTs: bigint`).
 pub fn expose_ts_for(table: &str, column: &str) -> Option<&'static ColumnType> {
 	expose_ts_map().get(&(table.to_string(), column.to_string()))
 }
@@ -262,29 +177,12 @@ pub fn manifest_spark_scoped_table_names() -> Result<Vec<String>, String> {
 		.collect())
 }
 
-/// Build a Jazz [`Schema`] from a manifest JSON file (e.g. migration snapshots).
-pub fn load_jazz_schema_from_manifest_path(path: &std::path::Path) -> Result<Schema, String> {
-	let raw =
-		std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-	let m: Manifest = serde_json::from_str(&raw).map_err(|e| format!("manifest JSON: {e}"))?;
-	manifest_to_schema(m)
+/// Build a AvenDb [`Schema`] from a manifest JSON file (e.g. migration snapshots).
+pub fn load_avendb_schema_from_manifest_path(path: &std::path::Path) -> Result<Schema, String> {
+	aven_db::manifest::schema_from_manifest_path(path)
 }
 
-fn manifest_to_schema(m: Manifest) -> Result<Schema, String> {
-	let mut builder = SchemaBuilder::new();
-	for (table_name, def) in m.tables {
-		let mut tb = TableSchemaBuilder::new(&table_name);
-		for col in def.columns {
-			tb = add_column(tb, &col)?;
-		}
-		builder = builder.table(tb);
-	}
-	Ok(builder.build())
-}
-
-/// Build a Jazz [`Schema`] from the active manifest (repo, `.avenOS/aven-schema`, or compile-time embed).
-pub fn load_jazz_schema_from_manifest() -> Result<Schema, String> {
-	let raw = read_manifest_json()?;
-	let m: Manifest = serde_json::from_str(&raw).map_err(|e| format!("manifest JSON: {e}"))?;
-	manifest_to_schema(m)
+/// Build a AvenDb [`Schema`] from the active manifest (repo, `.avenOS/aven-schema`, or compile-time embed).
+pub fn load_avendb_schema_from_manifest() -> Result<Schema, String> {
+	aven_db::manifest::schema_from_manifest_str(&read_manifest_json()?)
 }

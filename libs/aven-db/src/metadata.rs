@@ -121,7 +121,7 @@ impl fmt::Display for DeleteKind {
     }
 }
 
-pub const SYSTEM_PRINCIPAL_ID: &str = "jazz:system";
+pub const SYSTEM_PRINCIPAL_ID: &str = "avendb:system";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RowProvenance {

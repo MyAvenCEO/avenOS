@@ -189,13 +189,13 @@ mod tests {
                 id: left_id,
                 content: left_data.into(),
                 batch_id: crate::row_histories::BatchId([0; 16]),
-                row_provenance: crate::metadata::RowProvenance::for_insert("jazz:test", 0),
+                row_provenance: crate::metadata::RowProvenance::for_insert("avendb:test", 0),
             },
             TupleElement::Row {
                 id: right_id,
                 content: right_data.into(),
                 batch_id: crate::row_histories::BatchId([0; 16]),
-                row_provenance: crate::metadata::RowProvenance::for_insert("jazz:test", 0),
+                row_provenance: crate::metadata::RowProvenance::for_insert("avendb:test", 0),
             },
         ])
     }

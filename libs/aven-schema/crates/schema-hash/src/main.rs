@@ -1,9 +1,9 @@
-//! Print the 32-byte hex Groove SchemaHash for an aven-schema manifest JSON file.
+//! Print the 32-byte hex avenDB SchemaHash for an aven-schema manifest JSON file.
 use std::env;
 use std::path::PathBuf;
 
 use avenos_schema_hash::load_schema;
-use groove::query_manager::types::SchemaHash;
+use aven_db::query_manager::types::SchemaHash;
 
 fn hash_hex(bytes: &[u8; 32]) -> String {
 	bytes.iter().map(|b| format!("{b:02x}")).collect()

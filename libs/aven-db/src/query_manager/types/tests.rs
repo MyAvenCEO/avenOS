@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use uuid::Uuid;
 
 fn test_row_provenance() -> crate::metadata::RowProvenance {
-    crate::metadata::RowProvenance::for_insert("jazz:test", 1)
+    crate::metadata::RowProvenance::for_insert("avendb:test", 1)
 }
 
 #[test]

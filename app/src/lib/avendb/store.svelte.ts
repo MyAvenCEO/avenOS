@@ -5,9 +5,9 @@ import { withTimeoutMs } from '$lib/async-timeout'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import type { DeviceSession } from '$lib/settings/device-session-store'
 import { deviceSession } from '$lib/settings/device-session-store'
-import { jazzShell } from '$lib/runtime/jazz-shell'
-import { grooveSessionReady, waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
-import { type JazzRow, jazzTable } from './api'
+import { avendbShell } from '$lib/runtime/avendb-shell'
+import { avendbSessionReady, waitForAvenDbSessionReady } from '$lib/runtime/avendb-runtime'
+import { type AvenDbRow, avenDbTable } from './api'
 
 /** Subscribe/hydrate under P2P + ACL rehydrate can exceed a few seconds — not a user-facing failure. */
 const SUBSCRIBE_BUDGET_MS = 30_000
@@ -17,7 +17,7 @@ function deviceSessionFingerprint(s: DeviceSession): string {
 	return `${s.identity.usernameSlug}:${s.identity.ppkHex}`
 }
 
-function rowsEqual(prev: JazzRow[], next: JazzRow[]): boolean {
+function rowsEqual(prev: AvenDbRow[], next: AvenDbRow[]): boolean {
 	if (prev.length !== next.length) return false
 	return JSON.stringify(prev) === JSON.stringify(next)
 }
@@ -40,48 +40,48 @@ const TABLE_POLICY: Record<string, SnapshotPolicy> = {
 }
 
 /** Natural per-table key for merge dedup; falls back to the generic row `id`. */
-function rowKey(row: JazzRow): string {
+function rowKey(row: AvenDbRow): string {
 	const natural = row.owner ?? row.identityId
 	if (typeof natural === 'string' && natural.trim()) return natural.trim().toLowerCase()
 	return String(row.id ?? '')
 }
 
-function applySnapshotRows(table: string, prev: JazzRow[], next: JazzRow[]): JazzRow[] {
+function applySnapshotRows(table: string, prev: AvenDbRow[], next: AvenDbRow[]): AvenDbRow[] {
 	const policy = TABLE_POLICY[table] ?? 'replace'
 	if (policy === 'replace') return next
 	// catalogue: ignore transient empties, merge by key (defensive against partial snapshots).
 	if (next.length === 0 && prev.length > 0) return prev
-	const byKey = new Map<string, JazzRow>()
+	const byKey = new Map<string, AvenDbRow>()
 	for (const row of prev) byKey.set(rowKey(row), row)
 	for (const row of next) byKey.set(rowKey(row), row)
 	return [...byKey.values()]
 }
 
-export type JazzStore = {
-	readonly rows: JazzRow[]
+export type AvenDbStore = {
+	readonly rows: AvenDbRow[]
 	readonly loaded: boolean
 	readonly error: string | undefined
 
-	get(id: string): Promise<JazzRow>
-	create(values: Record<string, unknown>): Promise<JazzRow>
-	update(id: string, patch: Record<string, unknown>): Promise<JazzRow>
+	get(id: string): Promise<AvenDbRow>
+	create(values: Record<string, unknown>): Promise<AvenDbRow>
+	update(id: string, patch: Record<string, unknown>): Promise<AvenDbRow>
 	delete(id: string): Promise<void>
 }
 
 type InternalPool = {
 	refs: number
-	store: JazzStore
+	store: AvenDbStore
 	destroy: () => void
 }
 
 const pools = new Map<string, InternalPool>()
 
 function createTablePool(table: string): InternalPool {
-	let rows = $state<JazzRow[]>([])
+	let rows = $state<AvenDbRow[]>([])
 	let loaded = $state(false)
 	let error = $state<string | undefined>()
 
-	const api = jazzTable(table)
+	const api = avenDbTable(table)
 
 	let unlisten: (() => void) | undefined
 	let alive = true
@@ -95,29 +95,29 @@ function createTablePool(table: string): InternalPool {
 		const kind = get(deviceSession).kind
 		if (kind !== 'unlocked') return
 		try {
-			if (!get(grooveSessionReady) || !get(jazzShell).ready) {
+			if (!get(avendbSessionReady) || !get(avendbShell).ready) {
 				await withTimeoutMs(
 					Promise.all([
-						waitForGrooveSessionReady(),
+						waitForAvenDbSessionReady(),
 						new Promise<void>((resolve) => {
-							if (get(jazzShell).ready) {
+							if (get(avendbShell).ready) {
 								resolve()
 								return
 							}
-							const unsub = jazzShell.subscribe((shell) => {
+							const unsub = avendbShell.subscribe((shell) => {
 								if (shell.ready) {
 									unsub()
 									resolve()
 								}
 							})
-							if (get(jazzShell).ready) {
+							if (get(avendbShell).ready) {
 								unsub()
 								resolve()
 							}
 						}),
 					]),
 					SUBSCRIBE_BUDGET_MS,
-					'Groove session ready',
+					'avenDB session ready',
 				)
 			}
 			const u = await withTimeoutMs(
@@ -168,7 +168,7 @@ function createTablePool(table: string): InternalPool {
 		void start()
 	})
 
-	const store: JazzStore = {
+	const store: AvenDbStore = {
 		get rows() {
 			return rows
 		},
@@ -217,14 +217,14 @@ function createTablePool(table: string): InternalPool {
 }
 
 /**
- * Svelte 5 handle for **one Jazz table**: reactive snapshot + mutations over the unified
- * `change_tx` drain (local CRUD and peer deltas both converge on `jazz:<table>:changed`).
+ * Svelte 5 handle for **one AvenDb table**: reactive snapshot + mutations over the unified
+ * `change_tx` drain (local CRUD and peer deltas both converge on `avendb:<table>:changed`).
  *
  * One backend subscribe per table per app (ref-counted pool), not per component instance.
  *
  * MUST be called from component `<script>` init (uses `onDestroy`).
  */
-export function jazzStore(table: string): JazzStore {
+export function avenDbStore(table: string): AvenDbStore {
 	let pool = pools.get(table)
 	if (!pool) {
 		pool = createTablePool(table)

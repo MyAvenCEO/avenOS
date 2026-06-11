@@ -6,13 +6,15 @@
  * and persists it. The talk view renders the live `streaming` text + thread; other views render
  * the transient `lastReply` chip in place (the agent acts without yanking you to talk).
  *
- * Lives in `.svelte.ts` so it can hold runes (`$state`). `jazzStore` is NOT called here (it needs
+ * Lives in `.svelte.ts` so it can hold runes (`$state`). `avenDbStore` is NOT called here (it needs
  * component init for ref-counting) — the layout passes its already-mounted stores in.
  */
 
 import { getContext, setContext } from 'svelte'
-import type { JazzStore } from '$lib/jazz/store.svelte'
-import { persistSparkFiles } from '$lib/jazz/intent-files'
+import type { AvenDbStore } from '$lib/avendb/store.svelte'
+import { persistSparkFiles } from '$lib/avendb/intent-files'
+import { brainAssembleContext, brainIngest } from '$lib/brain/api'
+import { avenDbTable } from '$lib/avendb/api'
 import { streamReply } from '$lib/llm/generate'
 import {
 	LLM_TOOLS,
@@ -75,8 +77,8 @@ export type IdentityAgent = {
  * Build the runtime. `env()` is a getter so methods read the LIVE identity/session at call time.
  */
 export function createIdentityAgent(deps: {
-	messages: JazzStore
-	todos: JazzStore
+	messages: AvenDbStore
+	todos: AvenDbStore
 	env: () => IdentityAgentEnv
 }): IdentityAgent {
 	let streaming = $state<Record<string, string>>({})
@@ -98,7 +100,7 @@ export function createIdentityAgent(deps: {
 	 * Create an empty agent row, stream LFM2.5 tokens into `streaming[id]`, then resolve the turn
 	 * into one tool-call record (executing its side effect) and persist it as the row body.
 	 */
-	async function replyWithAgent(prompt: string): Promise<void> {
+	async function replyWithAgent(prompt: string, userRowId?: string): Promise<void> {
 		const env = deps.env()
 		if (!env.canonicalSparkId) return
 		let replyId: string | undefined
@@ -129,12 +131,51 @@ export function createIdentityAgent(deps: {
 							.join('\n')}\n\n`
 					: ''
 
+			// E4: the brain is the context manager — assembled, budgeted, traced.
+			// Graceful degradation is law: any brain failure falls back to the raw prompt.
+			const assembled = await brainAssembleContext(env.canonicalSparkId, prompt, {
+				stream: 'talk',
+			}).catch(() => undefined)
+			const brainPrefix = assembled?.prompt ? `${assembled.prompt}\n\n` : ''
+
+			// E4 (brain-recall mode): talk is human↔human; the brain answers every message
+			// with a structured RECALL — what it stored and what it found — deterministic,
+			// no conversational LLM. (LLM reply path below remains as fallback when the
+			// brain is unavailable.)
+			if (assembled) {
+				const t = assembled.trace
+				const lines: string[] = [
+					`🧠 stored · found ${t.recalled.length} related, ${t.entities.length} entities`,
+				]
+				for (const r of t.recalled.slice(0, 5)) {
+					lines.push(`• ${r.snippet} (${r.via})`)
+				}
+				if (t.entities.length > 0) {
+					lines.push(`↳ ${t.entities.map((e) => e.name).join(' · ')}`)
+				}
+				const recallBody = lines.join('\n')
+				streaming = { ...streaming, [reply.id]: recallBody }
+				await deps.messages.update(reply.id, { body: recallBody })
+				if (userRowId) {
+					void avenDbTable('context_traces')
+						.create({
+							owner: env.canonicalSparkId,
+							message_id: userRowId,
+							reply_id: reply.id,
+							trace: JSON.stringify(t),
+							created_at_ms: Date.now(),
+						})
+						.catch(() => {})
+				}
+				return
+			}
+
 			// The agent is tool-call-only. Capture any real `<|tool_call_start|>` call and the
 			// streamed prose, then resolve the turn into exactly one tool-call record (executing
 			// the side effect). The chip is what's persisted + rendered — never bare prose.
 			let capturedCall: LlmToolCall | undefined
 			const full = await streamReply(
-				todoPreamble + prompt,
+				brainPrefix + todoPreamble + prompt,
 				reply.id,
 				(piece) => {
 					// Reassign (not mutate) so the talk view's liveBody const re-derives reliably.
@@ -168,6 +209,16 @@ export function createIdentityAgent(deps: {
 			const body = encodeToolCallBody(record)
 			streaming = { ...streaming, [reply.id]: body }
 			await deps.messages.update(reply.id, { body })
+			// E3: ingest the human-facing prose (not the tool envelope), down-weighted.
+			if (record.response) {
+				void brainIngest(env.canonicalSparkId, record.response, {
+					stream: 'talk',
+					authorRole: 'agent',
+					source: reply.id,
+					contentDateMs: Date.now(),
+					veracity: 'inferred',
+				}).catch(() => {})
+			}
 			showFloating(record)
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e)
@@ -209,6 +260,16 @@ export function createIdentityAgent(deps: {
 				role: 'user',
 				body,
 			})
+			// E3: the brain reads along — fire-and-forget, never blocks the talk loop.
+			if (body) {
+				void brainIngest(env.canonicalSparkId, body, {
+					stream: 'talk',
+					authorRole: 'user',
+					source: row.id,
+					contentDateMs: Date.now(),
+					veracity: 'stated',
+				}).catch(() => {})
+			}
 			if (files.length > 0) {
 				const { stored, errors } = await persistSparkFiles(row.id, files, {
 					identityId: env.canonicalSparkId,
@@ -221,7 +282,7 @@ export function createIdentityAgent(deps: {
 				}
 			}
 			// Fire the on-device agent reply (text-only prompts for now).
-			if (body) await replyWithAgent(body)
+			if (body) await replyWithAgent(body, row.id)
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {

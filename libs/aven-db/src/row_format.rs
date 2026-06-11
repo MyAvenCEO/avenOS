@@ -268,7 +268,7 @@ pub(crate) fn encode_row_with_layout(
 /// Encode a destination row whose leading columns are supplied as values and
 /// whose remaining columns are projected from an already-encoded source row.
 ///
-/// This is used by flat row-history storage: Jazz system columns are new, but
+/// This is used by flat row-history storage: avenDB system columns are new, but
 /// user columns already arrive in native row format. Copying their encoded
 /// bytes avoids decode-then-reencode work on replay hot paths.
 pub(crate) fn encode_row_with_prefix_and_projected_tail(
@@ -481,6 +481,7 @@ fn estimated_variable_value_len(col: &ColumnDescriptor, val: &Value) -> usize {
         + match val {
             Value::Text(s) => s.len(),
             Value::Bytea(bytes) => bytes.len(),
+            Value::Vector(v) => v.len() * size_of::<f32>(),
             Value::Array(elements) => estimated_array_len(elements, &col.column_type),
             Value::Row { id, values } => {
                 let id_len = 1 + id.map(|_| 16).unwrap_or(0);
@@ -712,6 +713,11 @@ fn encode_variable_value(buf: &mut Vec<u8>, col: &ColumnDescriptor, val: &Value)
     match val {
         Value::Text(s) => buf.extend_from_slice(s.as_bytes()),
         Value::Bytea(bytes) => buf.extend_from_slice(bytes),
+        Value::Vector(v) => {
+            for f in v {
+                buf.extend_from_slice(&f.to_le_bytes());
+            }
+        }
         Value::Array(elements) => encode_array_into(buf, elements, &col.column_type),
         Value::Row { id, values } => {
             // Encode row using its descriptor from the column type

@@ -1,12 +1,13 @@
-//! Generic Jazz CRUD over Tauri IPC. Schema mirrors `libs/aven-schema/schema.manifest.json`.
+//! Generic AvenDb CRUD over Tauri IPC. Schema mirrors `libs/aven-schema/schema.manifest.json`.
 
-pub(crate) mod jazz_engine;
+pub(crate) mod engine;
 pub mod runtime;
 pub mod ui_drain;
 
 mod conn;
 mod drain;
 mod mesh_ui;
+mod brain_ipc;
 mod caps_ipc;
 mod crud_ipc;
 
@@ -21,12 +22,12 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use groove::{
+use aven_db::{
 	query_manager::types::{ColumnType, SchemaHash, TableSchema},
 	AppContext,
 	AppId,
 	PeerId,
-	JazzClient,
+	AvenDbClient,
 	metadata::MetadataKey,
 	ObjectId,
 	PeerInboundParkedHook,
@@ -65,7 +66,7 @@ fn is_sealed_or_phase1_storage_string(s: &str) -> bool {
 	s == PHASE1_SECRET_PLACEHOLDER || s.starts_with(crate::crypto::CELL_ENVELOPE_V1)
 }
 
-pub(super) fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable: bool) -> Result<Value, String> {
+pub(super) fn json_cell_to_avendb(cell: &JsonValue, col_ty: &ColumnType, nullable: bool) -> Result<Value, String> {
 	if cell.is_null() || *cell == JsonValue::Null {
 		return nullable
 			.then(|| Ok(Value::Null))
@@ -73,7 +74,7 @@ pub(super) fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable:
 	}
 	if let Some(s) = cell.as_str() {
 		if is_sealed_or_phase1_storage_string(s) {
-			// Keep Groove column types aligned with the manifest (e.g. `files.content` is bytea).
+			// Keep avenDB column types aligned with the manifest (e.g. `files.content` is bytea).
 			return if matches!(col_ty, ColumnType::Bytea) {
 				decode_json_bytea(s).map(Value::Bytea)
 			} else {
@@ -114,7 +115,7 @@ pub(super) fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable:
 				.ok_or_else(|| format!("expected JSON array column (inner={inner:?})"))?;
 			let mut elems = Vec::with_capacity(arr.len());
 			for item in arr {
-				elems.push(json_cell_to_jazz(item, inner.as_ref(), false)?);
+				elems.push(json_cell_to_avendb(item, inner.as_ref(), false)?);
 			}
 			Ok(Value::Array(elems))
 		}
@@ -173,7 +174,7 @@ pub(super) fn json_cell_to_jazz(cell: &JsonValue, col_ty: &ColumnType, nullable:
 	}
 }
 
-/// Encode IPC JSON into a Groove `Text` cell (storage is always `text` for sealed columns).
+/// Encode IPC JSON into a avenDB `Text` cell (storage is always `text` for sealed columns).
 ///
 /// When the manifest sets `exposeTs`, the logical value is encoded as canonical JSON inside the
 /// text cell (then sealed on the write path). Plain `text` columns without `exposeTs` store UTF-8 strings.
@@ -189,8 +190,8 @@ pub(super) fn json_to_text_storage_cell(
 			.unwrap_or_else(|| Err("null not permitted".to_string()));
 	}
 	if let Some(expose) = crate::schema_manifest::expose_ts_for(table, column) {
-		let gv = json_cell_to_jazz(cell, expose, nullable)?;
-		let canon = crate::crypto::groove_value_to_canonical_utf8(&gv)?;
+		let gv = json_cell_to_avendb(cell, expose, nullable)?;
+		let canon = crate::crypto::avendb_value_to_canonical_utf8(&gv)?;
 		return Ok(Value::Text(canon));
 	}
 	if let Some(s) = cell.as_str() {
@@ -221,7 +222,7 @@ pub(super) fn insert_values(
 				if matches!(cd.column_type, ColumnType::Text) {
 					json_to_text_storage_cell(table, key, js, cd.nullable)?
 				} else {
-					json_cell_to_jazz(js, &cd.column_type, cd.nullable)?
+					json_cell_to_avendb(js, &cd.column_type, cd.nullable)?
 				}
 			}
 		};
@@ -239,7 +240,7 @@ pub(crate) fn patch_updates(table_schema: &TableSchema, patch: JsonRow) -> Resul
 			continue;
 		}
 		let col = row_desc.column(k).ok_or_else(|| format!("unknown_column: {k}"))?;
-		let v = json_cell_to_jazz(raw_js, &col.column_type, col.nullable)?;
+		let v = json_cell_to_avendb(raw_js, &col.column_type, col.nullable)?;
 		ops.push((k.clone(), v));
 	}
 	if ops.is_empty() {
@@ -317,28 +318,28 @@ fn server_ws_url() -> Option<String> {
 async fn try_any_peer_transport(
 	root: &[u8; 32],
 ) -> Option<(Arc<dyn SyncTransport>, PeerId, Arc<tokio::sync::Notify>)> {
-	let sk = crate::jazz_auth::signing_key_from_device_root(root).ok()?;
+	let sk = crate::avendb_auth::signing_key_from_device_root(root).ok()?;
 	try_server_transport(sk).await
 }
 
-async fn jazz_connect(
+async fn avendb_connect(
 	app: &tauri::AppHandle,
 	self_state: &SelfState,
-	mj: &ManagedJazz,
-) -> Result<JazzClient, String> {
+	mj: &ManagedAvenDb,
+) -> Result<AvenDbClient, String> {
 	let root = self_state
 		.with_root(|r| Ok(*r))
 		.map_err(|_| "locked: unlock AvenOS identity first".to_string())?;
 
-	let schema = crate::schema_manifest::load_jazz_schema_from_manifest()?;
+	let schema = crate::schema_manifest::load_avendb_schema_from_manifest()?;
 	let pk = ed25519_public(&root)?;
 	let peer_id = PeerId(pk);
-	let groove_hash = *SchemaHash::compute(&schema).as_bytes();
+	let avendb_hash = *SchemaHash::compute(&schema).as_bytes();
 
 	let user_root = vault_user_root(app)?;
-	let data_dir = user_root.join(AVEN_OS_GROOVE_DATA_DIR);
+	let data_dir = user_root.join(AVEN_OS_AVENDB_DATA_DIR);
 	let live_schemas =
-		reconcile_jazz_identity_cache_dir(&data_dir, peer_id, &groove_hash, &schema)?;
+		reconcile_avendb_identity_cache_dir(&data_dir, peer_id, &avendb_hash, &schema)?;
 
 	let ctx = AppContext {
 		app_id: AppId::from_name("ceo.aven.os"),
@@ -349,11 +350,11 @@ async fn jazz_connect(
 	};
 
 	let _ = app;
-	// Connect Groove LOCALLY only — this is the sole thing sign-in waits on. The
+	// Connect avenDB LOCALLY only — this is the sole thing sign-in waits on. The
 	// sync transport (the aven-node relay over TLS) is established and attached
 	// in the BACKGROUND (see `spawn_dev_peer_sync`), so bootstrap can never block
 	// waiting for the relay to appear.
-	let client = JazzClient::connect(ctx).await.map_err(format_jazz_err)?;
+	let client = AvenDbClient::connect(ctx).await.map_err(format_avendb_err)?;
 	// Install the biscuit-backed sync gate (replaces the `AllowAll` default).
 	// It reads the live shell vault + identity ACL handles, so it authorizes from
 	// real biscuits the moment the shell hydrates; until then it returns
@@ -371,7 +372,7 @@ async fn jazz_connect(
 	// relay that tampers with a sealed cell / keyshare column is rejected on apply by every
 	// peer. Installed at connect (before any identity row is authored) so no row ships
 	// unsigned. The key is the same device key that mints owner-bindings.
-	match crate::jazz_auth::signing_key_from_device_root(&root) {
+	match crate::avendb_auth::signing_key_from_device_root(&root) {
 		Ok(signing_key) => {
 			let signer =
 				std::sync::Arc::new(crate::biscuit_resolver::AppEditSigner::new(signing_key));
@@ -388,12 +389,12 @@ async fn jazz_connect(
 
 /// Establish the sync transport (the aven-node relay over TLS) in the BACKGROUND
 /// and attach it to an already-connected (local) client. Never blocks sign-in:
-/// Groove is connected locally first, and this only wires sync once the relay is
+/// avenDB is connected locally first, and this only wires sync once the relay is
 /// reachable. A no-op when sync is unconfigured (`try_any_peer_transport` returns
 /// `None` immediately when `AVENOS_SERVER_SYNC` is unset).
 fn spawn_dev_peer_sync(
 	self_state: &SelfState,
-	client: Arc<JazzClient>,
+	client: Arc<AvenDbClient>,
 	change_tx: tokio::sync::mpsc::UnboundedSender<String>,
 	relay_did_slot: Arc<RwLock<Option<String>>>,
 ) {
@@ -456,7 +457,7 @@ fn spawn_dev_peer_sync(
 			};
 			// Record the authenticated relay DID so the UI can offer a one-click
 			// "replicate this identity to the connected relay".
-			if let Ok(did) = crate::jazz_auth::signer_did_from_ed25519(&remote.0) {
+			if let Ok(did) = crate::avendb_auth::signer_did_from_ed25519(&remote.0) {
 				if let Ok(mut slot) = relay_did_slot.write() {
 					*slot = Some(did);
 				}
@@ -465,7 +466,7 @@ fn spawn_dev_peer_sync(
 			// Don't re-register a peer the user has Forgotten (revoked) — that is what
 			// makes Forget persist across reconnect/restart. Only an explicit revoke is
 			// skipped; unknown peers stay permissive (first-contact).
-			let remote_did = crate::jazz_auth::signer_did_from_ed25519(&remote.0).ok();
+			let remote_did = crate::avendb_auth::signer_did_from_ed25519(&remote.0).ok();
 			let revoked = match &remote_did {
 				Some(did) => crate::signers::is_signer_revoked(&client, did)
 					.await
@@ -486,7 +487,7 @@ fn spawn_dev_peer_sync(
 }
 
 /// Flip shell gate after local vault shell is ready (demo mesh — no live transport reconcile).
-fn mark_shell_local_ready_for_mesh(_app: &tauri::AppHandle, mj: &ManagedJazz) {
+fn mark_shell_local_ready_for_mesh(_app: &tauri::AppHandle, mj: &ManagedAvenDb) {
 	mj.mesh_local_shell_gate.store(true, Ordering::Release);
 }
 
@@ -494,32 +495,32 @@ async fn pairing_session_active(_app: &tauri::AppHandle) -> bool {
 	false
 }
 
-async fn jazz_shell_ready(
+async fn avendb_shell_ready(
 	app: &tauri::AppHandle,
-	mj: &ManagedJazz,
+	mj: &ManagedAvenDb,
 	self_state: &SelfState,
-	client: Arc<JazzClient>,
-) -> Result<std::sync::Arc<jazz_engine::ShellState>, String> {
-	jazz_shell_ready_inner(app, mj, self_state, client, false).await
+	client: Arc<AvenDbClient>,
+) -> Result<std::sync::Arc<engine::ShellState>, String> {
+	avendb_shell_ready_inner(app, mj, self_state, client, false).await
 }
 
 /// Shell hydrate for UI table drains — no mesh reconcile, ACL bootstrap, or pairing-sensitive flush side effects.
-async fn jazz_shell_for_ui(
+async fn avendb_shell_for_ui(
 	app: &tauri::AppHandle,
-	mj: &ManagedJazz,
+	mj: &ManagedAvenDb,
 	self_state: &SelfState,
-	client: Arc<JazzClient>,
-) -> Result<std::sync::Arc<jazz_engine::ShellState>, String> {
-	jazz_shell_ready_inner(app, mj, self_state, client, true).await
+	client: Arc<AvenDbClient>,
+) -> Result<std::sync::Arc<engine::ShellState>, String> {
+	avendb_shell_ready_inner(app, mj, self_state, client, true).await
 }
 
-async fn jazz_shell_ready_inner(
+async fn avendb_shell_ready_inner(
 	app: &tauri::AppHandle,
-	mj: &ManagedJazz,
+	mj: &ManagedAvenDb,
 	self_state: &SelfState,
-	client: Arc<JazzClient>,
+	client: Arc<AvenDbClient>,
 	for_ui_drain: bool,
-) -> Result<std::sync::Arc<jazz_engine::ShellState>, String> {
+) -> Result<std::sync::Arc<engine::ShellState>, String> {
 	if !mj.shell_vault_stale.load(Ordering::Acquire) {
 		if let Some(cached) = mj.shell.lock().await.clone() {
 			if !for_ui_drain {
@@ -544,15 +545,15 @@ async fn jazz_shell_ready_inner(
 		.map_err(|_| "locked: unlock AvenOS identity first".to_string())?;
 	let vault_files = vault_user_root(app)?;
 	// Full hydrate when vault tables change (identities/keyshares/peers) or on first use after unlock.
-	let hydrated = jazz_engine::hydrate_shell(client.as_ref(), &root, &vault_files).await?;
+	let hydrated = engine::hydrate_shell(client.as_ref(), &root, &vault_files).await?;
 	mj.shell_vault_stale.store(false, Ordering::Release);
 	let arc = std::sync::Arc::new(hydrated);
 	let mut slot = mj.shell.lock().await;
 	*slot = Some(std::sync::Arc::clone(&arc));
 	// Mirror into the std-lock handle read by the biscuit sync gate.
 	*mj.sync_shell.write().expect("sync_shell poisoned") = Some(std::sync::Arc::clone(&arc));
-	let object_owner = jazz_engine::build_object_owner_map(client.as_ref()).await?;
-	let keyshare_recipient = jazz_engine::build_keyshare_recipient_map(client.as_ref()).await?;
+	let object_owner = engine::build_object_owner_map(client.as_ref()).await?;
+	let keyshare_recipient = engine::build_keyshare_recipient_map(client.as_ref()).await?;
 	let snap = identity_sync::build_sync_acl_snapshot(object_owner, keyshare_recipient);
 	*mj.sync_acl.write().expect("sync_acl poisoned") = Some(snap);
 	if !for_ui_drain {
@@ -565,14 +566,14 @@ async fn jazz_shell_ready_inner(
 	Ok(arc)
 }
 
-pub(crate) async fn groove_ipc_status(
+pub(crate) async fn avendb_ipc_status(
 	_app: &tauri::AppHandle,
-	jazz: &ManagedJazz,
+	avendb: &ManagedAvenDb,
 	self_state: &SelfState,
-) -> Result<JazzStatusReply, String> {
+) -> Result<AvenDbStatusReply, String> {
 	if !self_state.is_unlocked() {
-		jazz.reset_connection().await;
-		return Ok(JazzStatusReply {
+		avendb.reset_connection().await;
+		return Ok(AvenDbStatusReply {
 			ready: false,
 			tables: vec![],
 			session: None,
@@ -582,14 +583,14 @@ pub(crate) async fn groove_ipc_status(
 
 	let desired = desired_root_client_uuid(&self_state)?;
 
-	let jc = jazz.conn.lock().await;
+	let jc = avendb.conn.lock().await;
 	if jc.linked_identity != Some(desired) {
 		let stale = jc.client.is_some() || jc.linked_identity.is_some();
 		drop(jc);
 		if stale {
-			jazz.reset_connection().await;
+			avendb.reset_connection().await;
 		}
-		return Ok(JazzStatusReply {
+		return Ok(AvenDbStatusReply {
 			ready: false,
 			tables: vec![],
 			session: None,
@@ -600,7 +601,7 @@ pub(crate) async fn groove_ipc_status(
 	let client = match jc.client.clone() {
 		Some(c) => c,
 		None => {
-			return Ok(JazzStatusReply {
+			return Ok(AvenDbStatusReply {
 				ready: false,
 				tables: vec![],
 				session: None,
@@ -608,14 +609,14 @@ pub(crate) async fn groove_ipc_status(
 			});
 		}
 	};
-	let shell_ready = !jazz.shell_vault_stale.load(Ordering::Acquire)
-		&& jazz.shell.lock().await.is_some();
+	let shell_ready = !avendb.shell_vault_stale.load(Ordering::Acquire)
+		&& avendb.shell.lock().await.is_some();
 	drop(jc);
 
-	let sch = client.schema().await.map_err(format_jazz_err)?;
+	let sch = client.schema().await.map_err(format_avendb_err)?;
 	let mut names: Vec<String> = sch.keys().map(|k| k.to_string()).collect();
 	names.sort();
-	Ok(JazzStatusReply {
+	Ok(AvenDbStatusReply {
 		ready: shell_ready,
 		tables: names,
 		session: None,
@@ -623,13 +624,13 @@ pub(crate) async fn groove_ipc_status(
 	})
 }
 
-fn jazz_session_reply_from_shell(shell: &jazz_engine::ShellState) -> JazzSessionReply {
-	JazzSessionReply {
+fn avendb_session_reply_from_shell(shell: &engine::ShellState) -> AvenDbSessionReply {
+	AvenDbSessionReply {
 		signer_did: shell.signer_did.clone(),
-		signer_did_short: jazz_engine::short_signer_did(&shell.signer_did),
-		default_spark_urn: jazz_engine::safe_urn(shell.default_identity),
+		signer_did_short: engine::short_signer_did(&shell.signer_did),
+		default_spark_urn: engine::safe_urn(shell.default_identity),
 		// This shell-only path has no relay handle; the live relay DID is filled
-		// by `groove_ipc_session` (which can read `ManagedJazz`).
+		// by `avendb_ipc_session` (which can read `ManagedAvenDb`).
 		relay_did: None,
 	}
 }
@@ -638,24 +639,24 @@ fn jazz_session_reply_from_shell(shell: &jazz_engine::ShellState) -> JazzSession
 /// snapshots (their contents hydrate the shell, they are never painted directly).
 const NON_UI_TABLES: &[&str] = &["keyshares"];
 
-pub(crate) async fn groove_ipc_bootstrap(
+pub(crate) async fn avendb_ipc_bootstrap(
 	app: &tauri::AppHandle,
-	jazz: &ManagedJazz,
+	avendb: &ManagedAvenDb,
 	self_state: &SelfState,
-) -> Result<JazzStatusReply, String> {
-	let client = with_connected_client(jazz, app, self_state).await?;
-	let sch = client.schema().await.map_err(format_jazz_err)?;
+) -> Result<AvenDbStatusReply, String> {
+	let client = with_connected_client(avendb, app, self_state).await?;
+	let sch = client.schema().await.map_err(format_avendb_err)?;
 	let mut tables: Vec<String> = sch.keys().map(|k| k.to_string()).collect();
 	tables.sort();
 
 	let client_arc = client.clone();
-	match jazz_shell_ready(app, jazz, self_state, client).await {
+	match avendb_shell_ready(app, avendb, self_state, client).await {
 		Ok(shell) => {
-			let session = jazz_session_reply_from_shell(shell.as_ref());
+			let session = avendb_session_reply_from_shell(shell.as_ref());
 			emit_avenos_runtime(app, serde_json::json!({
 				"kind": "session",
 				"phase": "ready",
-				"grooveReady": true,
+				"avendbReady": true,
 				"signerDid": session.signer_did,
 				"defaultSparkUrn": session.default_spark_urn,
 				"tables": tables.clone(),
@@ -667,7 +668,7 @@ pub(crate) async fn groove_ipc_bootstrap(
 				if NON_UI_TABLES.contains(&table.as_str()) {
 					continue;
 				}
-				if let Err(e) = jazz
+				if let Err(e) = avendb
 					.publish_table_snapshot_force(
 						app,
 						client_arc.as_ref(),
@@ -677,21 +678,21 @@ pub(crate) async fn groove_ipc_bootstrap(
 					.await
 				{
 					log::warn!(
-						target: "avenos::jazz",
+						target: "avenos::avendb",
 						"bootstrap snapshot {table}: {e}",
 					);
 				}
 			}
 			#[cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))]
 			{
-				if let Err(e) = execute_mesh_refresh_full(app, jazz).await {
+				if let Err(e) = execute_mesh_refresh_full(app, avendb).await {
 					log::debug!(
-						target: "avenos::jazz",
+						target: "avenos::avendb",
 						"post-bootstrap mesh refresh: {e}",
 					);
 				}
 			}
-			Ok(JazzStatusReply {
+			Ok(AvenDbStatusReply {
 				ready: true,
 				tables,
 				session: Some(session),
@@ -699,14 +700,14 @@ pub(crate) async fn groove_ipc_bootstrap(
 			})
 		}
 		Err(e) => {
-			log::warn!(target: "avenos::jazz", "jazz_bootstrap shell_ready: {e}");
+			log::warn!(target: "avenos::avendb", "avendb_bootstrap shell_ready: {e}");
 			emit_avenos_runtime(app, serde_json::json!({
 				"kind": "session",
 				"phase": "bootstrapping",
-				"grooveReady": false,
+				"avendbReady": false,
 				"message": e,
 			}));
-			Ok(JazzStatusReply {
+			Ok(AvenDbStatusReply {
 				ready: false,
 				tables,
 				session: None,
@@ -716,83 +717,138 @@ pub(crate) async fn groove_ipc_bootstrap(
 	}
 }
 
-pub(crate) async fn groove_ipc_session(
+pub(crate) async fn avendb_ipc_session(
 	app: &tauri::AppHandle,
-	jazz: &ManagedJazz,
+	avendb: &ManagedAvenDb,
 	self_state: &SelfState,
-) -> Result<JazzSessionReply, String> {
-	let client = with_connected_client(jazz, app, self_state).await?;
-	let shell = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
-	let relay_did = jazz
+) -> Result<AvenDbSessionReply, String> {
+	let client = with_connected_client(avendb, app, self_state).await?;
+	let shell = avendb_shell_ready(app, avendb, self_state, client.clone()).await?;
+	let relay_did = avendb
 		.connected_relay_did
 		.read()
 		.ok()
 		.and_then(|slot| slot.clone());
-	Ok(JazzSessionReply {
+	Ok(AvenDbSessionReply {
 		signer_did: shell.signer_did.clone(),
-		signer_did_short: jazz_engine::short_signer_did(&shell.signer_did),
-		default_spark_urn: jazz_engine::safe_urn(shell.default_identity),
+		signer_did_short: engine::short_signer_did(&shell.signer_did),
+		default_spark_urn: engine::safe_urn(shell.default_identity),
 		relay_did,
 	})
 }
 
-/// Demo mesh — no live Groove peer registration.
-pub(crate) async fn groove_ipc_peer_mesh_refresh(
+/// Demo mesh — no live avenDB peer registration.
+pub(crate) async fn avendb_ipc_peer_mesh_refresh(
 	_app: &tauri::AppHandle,
-	_jazz: &ManagedJazz,
+	_avendb: &ManagedAvenDb,
 	_self_state: &SelfState,
-) -> Result<JazzPeerMeshRefreshReply, String> {
-	Ok(JazzPeerMeshRefreshReply {
+) -> Result<AvenDbPeerMeshRefreshReply, String> {
+	Ok(AvenDbPeerMeshRefreshReply {
 		registered_count: 0,
 	})
 }
 
-/// Multiplexed IPC: one entry for Groove session, tables, mesh, and peer admin.
+/// Multiplexed IPC: one entry for avenDB session, tables, mesh, and peer admin.
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct GrooveRuntimeEnvelope {
+pub(crate) struct avenDBRuntimeEnvelope {
 	pub op: String,
 	#[serde(default)]
 	pub payload: serde_json::Value,
 }
 
-pub(crate) async fn groove_runtime_dispatch(
+pub(crate) async fn avendb_runtime_dispatch(
 	app: &tauri::AppHandle,
 	_window: tauri::Window,
-	mj: &ManagedJazz,
+	mj: &ManagedAvenDb,
 	ss: &SelfState,
-	envelope: GrooveRuntimeEnvelope,
+	envelope: avenDBRuntimeEnvelope,
 ) -> Result<serde_json::Value, String> {
 	let op = envelope.op.trim().to_ascii_lowercase();
 	let pj = envelope.payload;
 
 	match op.as_str() {
-		"bootstrap" => serde_json::to_value(groove_ipc_bootstrap(app, mj, ss).await?).map_err(|e| e.to_string()),
-		"status" => serde_json::to_value(groove_ipc_status(app, mj, ss).await?).map_err(|e| e.to_string()),
-		"session" => serde_json::to_value(groove_ipc_session(app, mj, ss).await?).map_err(|e| e.to_string()),
+		"bootstrap" => serde_json::to_value(avendb_ipc_bootstrap(app, mj, ss).await?).map_err(|e| e.to_string()),
+		"status" => serde_json::to_value(avendb_ipc_status(app, mj, ss).await?).map_err(|e| e.to_string()),
+		"session" => serde_json::to_value(avendb_ipc_session(app, mj, ss).await?).map_err(|e| e.to_string()),
 		"list" => {
 			let table = pj_str(&pj, "table")?;
-			serde_json::to_value(groove_ipc_jazz_list(app, mj, ss, table).await?).map_err(|e| e.to_string())
+			serde_json::to_value(avendb_ipc_avendb_list(app, mj, ss, table).await?).map_err(|e| e.to_string())
 		}
 		"explorerlist" => {
 			let table = pj_str(&pj, "table")?;
-			serde_json::to_value(groove_ipc_jazz_explorer_list(app, mj, ss, table).await?)
+			serde_json::to_value(avendb_ipc_avendb_explorer_list(app, mj, ss, table).await?)
 				.map_err(|e| e.to_string())
+		}
+		"brainstatus" => brain_ipc::brain_ipc_status(app, mj, ss, pj_str(&pj, "identity")?).await,
+		"braindream" => brain_ipc::brain_ipc_dream(app, mj, ss, pj_str(&pj, "identity")?).await,
+		"brainbackfill" => brain_ipc::brain_ipc_backfill(app, mj, ss, pj_str(&pj, "identity")?).await,
+		"brainentities" => brain_ipc::brain_ipc_entities(app, mj, ss, pj_str(&pj, "identity")?).await,
+		"brainentitycard" => {
+			brain_ipc::brain_ipc_entity_card(
+				app,
+				mj,
+				ss,
+				pj_str(&pj, "identity")?,
+				pj_str(&pj, "name")?,
+			)
+			.await
+		}
+		"braningest" | "braineingest" | "brainingest" => {
+			brain_ipc::brain_ipc_ingest(
+				app,
+				mj,
+				ss,
+				pj_str(&pj, "identity")?,
+				pj_str(&pj, "content")?,
+				pj_opt_str(&pj, "stream"),
+				pj_opt_str(&pj, "authorRole"),
+				pj_opt_str(&pj, "source"),
+				pj.get("contentDateMs").and_then(|v| v.as_i64()),
+				pj_opt_str(&pj, "veracity"),
+			)
+			.await
+		}
+		"brainsearch" => {
+			brain_ipc::brain_ipc_search(
+				app,
+				mj,
+				ss,
+				pj_str(&pj, "identity")?,
+				pj_str(&pj, "query")?,
+				pj.get("k").and_then(|v| v.as_u64()).unwrap_or(8) as usize,
+				pj_opt_str(&pj, "stream"),
+			)
+			.await
+		}
+		"brainassemblecontext" => {
+			brain_ipc::brain_ipc_assemble_context(
+				app,
+				mj,
+				ss,
+				pj_str(&pj, "identity")?,
+				pj_str(&pj, "query")?,
+				pj.get("workingN").and_then(|v| v.as_u64()).map(|n| n as usize),
+				pj.get("recallK").and_then(|v| v.as_u64()).map(|n| n as usize),
+				pj.get("budgetChars").and_then(|v| v.as_u64()).map(|n| n as usize),
+				pj_opt_str(&pj, "stream"),
+			)
+			.await
 		}
 		"get" => {
 			let table = pj_str(&pj, "table")?;
 			let id = pj_str(&pj, "id")?;
-			serde_json::to_value(groove_ipc_jazz_get(app, mj, ss, table, id).await?).map_err(|e| e.to_string())
+			serde_json::to_value(avendb_ipc_avendb_get(app, mj, ss, table, id).await?).map_err(|e| e.to_string())
 		}
 		"create" => {
 			let table = pj_str(&pj, "table")?;
 			let values: JsonRow = serde_json::from_value(
 				pj.get("values")
 					.cloned()
-					.ok_or_else(|| "groove_runtime: missing `values`".to_string())?,
+					.ok_or_else(|| "avendb_runtime: missing `values`".to_string())?,
 			)
-			.map_err(|e| format!("groove_runtime: values: {e}"))?;
-			let created = groove_ipc_jazz_create(app, mj, ss, table.clone(), values).await?;
+			.map_err(|e| format!("avendb_runtime: values: {e}"))?;
+			let created = avendb_ipc_avendb_create(app, mj, ss, table.clone(), values).await?;
 			announce_local_write_to_peers(app, mj, ss, &table).await;
 			serde_json::to_value(created).map_err(|e| e.to_string())
 		}
@@ -802,39 +858,39 @@ pub(crate) async fn groove_runtime_dispatch(
 			let patch: JsonRow = serde_json::from_value(
 				pj.get("patch")
 					.cloned()
-					.ok_or_else(|| "groove_runtime: missing `patch`".to_string())?,
+					.ok_or_else(|| "avendb_runtime: missing `patch`".to_string())?,
 			)
-			.map_err(|e| format!("groove_runtime: patch: {e}"))?;
-			let updated = groove_ipc_jazz_update(app, mj, ss, table.clone(), id, patch).await?;
+			.map_err(|e| format!("avendb_runtime: patch: {e}"))?;
+			let updated = avendb_ipc_avendb_update(app, mj, ss, table.clone(), id, patch).await?;
 			announce_local_write_to_peers(app, mj, ss, &table).await;
 			serde_json::to_value(updated).map_err(|e| e.to_string())
 		}
 		"delete" => {
 			let table = pj_str(&pj, "table")?;
 			let id = pj_str(&pj, "id")?;
-			groove_ipc_jazz_delete(app, mj, ss, table.clone(), id).await?;
+			avendb_ipc_avendb_delete(app, mj, ss, table.clone(), id).await?;
 			announce_local_write_to_peers(app, mj, ss, &table).await;
 			Ok(serde_json::Value::Null)
 		}
 		"subscribe" => {
 			let table = pj_str(&pj, "table")?;
-			groove_ipc_jazz_subscribe(app, mj, ss, table).await?;
+			avendb_ipc_avendb_subscribe(app, mj, ss, table).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"unsubscribe" => {
 			let table = pj_str(&pj, "table")?;
-			groove_ipc_jazz_unsubscribe(mj, table).await?;
+			avendb_ipc_avendb_unsubscribe(mj, table).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"peermeshrefresh" => {
-			serde_json::to_value(groove_ipc_peer_mesh_refresh(app, mj, ss).await?)
+			serde_json::to_value(avendb_ipc_peer_mesh_refresh(app, mj, ss).await?)
 				.map_err(|e| e.to_string())
 		}
 		"meshstatus" => {
 			let snap = execute_mesh_snapshot(app, mj, ss).await?;
 			serde_json::to_value(snap).map_err(|e| e.to_string())
 		}
-		"peerlist" => serde_json::to_value(groove_ipc_peer_list(app, mj, ss).await?).map_err(|e| e.to_string()),
+		"peerlist" => serde_json::to_value(avendb_ipc_peer_list(app, mj, ss).await?).map_err(|e| e.to_string()),
 		"peeradd" => {
 			let signer_did = pj_str(&pj, "signerDid")?;
 			let label = pj
@@ -842,89 +898,89 @@ pub(crate) async fn groove_runtime_dispatch(
 				.and_then(|v| v.as_str())
 				.unwrap_or("")
 				.to_string();
-			groove_ipc_peer_add(app, mj, ss, signer_did, label).await?;
+			avendb_ipc_peer_add(app, mj, ss, signer_did, label).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"peerrevoke" => {
 			let signer_did = pj_str(&pj, "signerDid")?;
-			groove_ipc_peer_revoke(app, mj, ss, signer_did).await?;
+			avendb_ipc_peer_revoke(app, mj, ss, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"sparkadminadd" => {
 			let owner = pj_str(&pj, "identityId")?;
 			let signer_did = pj_str(&pj, "signerDid")?;
-			groove_ipc_spark_admin_add(app, mj, ss, owner, signer_did).await?;
+			avendb_ipc_spark_admin_add(app, mj, ss, owner, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"sparkreplicateadd" => {
 			let owner = pj_str(&pj, "identityId")?;
 			let signer_did = pj_str(&pj, "signerDid")?;
-			groove_ipc_spark_replicate_add(app, mj, ss, owner, signer_did).await?;
+			avendb_ipc_spark_replicate_add(app, mj, ss, owner, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"sparkreaderadd" => {
 			let owner = pj_str(&pj, "identityId")?;
 			let signer_did = pj_str(&pj, "signerDid")?;
-			groove_ipc_spark_reader_add(app, mj, ss, owner, signer_did).await?;
+			avendb_ipc_spark_reader_add(app, mj, ss, owner, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"avenceoclaim" => {
-			let id = groove_ipc_aven_ceo_claim(app, mj, ss).await?;
+			let id = avendb_ipc_aven_ceo_claim(app, mj, ss).await?;
 			Ok(serde_json::Value::String(id))
 		}
 		"createidentity" => {
 			let name = pj_str(&pj, "name")?;
 			let kind = pj_str(&pj, "type").unwrap_or_else(|_| "aven".to_string());
-			let id = groove_ipc_create_identity(app, mj, ss, name, kind).await?;
+			let id = avendb_ipc_create_identity(app, mj, ss, name, kind).await?;
 			Ok(serde_json::Value::String(id))
 		}
 		"creategroup" => {
 			let identity = pj_str(&pj, "identityId")?;
 			let label = pj_str(&pj, "label")?;
-			let id = groove_ipc_create_collection_group(app, mj, ss, identity, label).await?;
+			let id = avendb_ipc_create_collection_group(app, mj, ss, identity, label).await?;
 			Ok(serde_json::Value::String(id))
 		}
 		"avenceoaddmember" => {
 			let signer_did = pj_str(&pj, "signerDid")?;
-			groove_ipc_aven_ceo_add_member(app, mj, ss, signer_did).await?;
+			avendb_ipc_aven_ceo_add_member(app, mj, ss, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"avenceopublishprofile" => {
 			let account_name = pj_str(&pj, "accountName")?;
 			let device_label = pj_str(&pj, "deviceLabel")?;
-			groove_ipc_aven_ceo_publish_profile(app, mj, ss, account_name, device_label).await?;
+			avendb_ipc_aven_ceo_publish_profile(app, mj, ss, account_name, device_label).await?;
 			Ok(serde_json::Value::Null)
 		}
 		"avenceomembership" => {
-			let m = groove_ipc_aven_ceo_membership(app, mj, ss).await?;
+			let m = avendb_ipc_aven_ceo_membership(app, mj, ss).await?;
 			Ok(serde_json::Value::String(m))
 		}
 		"sparkadminlist" => {
 			let owner = pj_str(&pj, "identityId")?;
-			serde_json::to_value(groove_ipc_spark_admin_list(app, mj, ss, owner).await?)
+			serde_json::to_value(avendb_ipc_spark_admin_list(app, mj, ss, owner).await?)
 				.map_err(|e| e.to_string())
 		}
 		"sparkadminrevoke" => {
 			let owner = pj_str(&pj, "identityId")?;
 			let signer_did = pj_str(&pj, "signerDid")?;
-			groove_ipc_spark_admin_revoke(app, mj, ss, owner, signer_did).await?;
+			avendb_ipc_spark_admin_revoke(app, mj, ss, owner, signer_did).await?;
 			Ok(serde_json::Value::Null)
 		}
 		other => Err(format!(
-			"groove_runtime: unknown op `{other}` — valid ops: bootstrap, status, session, list, explorerList, get, create, update, delete, subscribe, unsubscribe, peerMeshRefresh, meshStatus, peerList, peerAdd, peerRevoke, sparkAdminAdd, sparkAdminList, sparkAdminRevoke, sparkReplicateAdd, sparkReaderAdd, avenCeoClaim"
+			"avendb_runtime: unknown op `{other}` — valid ops: bootstrap, status, session, list, explorerList, get, create, update, delete, subscribe, unsubscribe, peerMeshRefresh, meshStatus, peerList, peerAdd, peerRevoke, sparkAdminAdd, sparkAdminList, sparkAdminRevoke, sparkReplicateAdd, sparkReaderAdd, avenCeoClaim"
 		)),
 	}
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub async fn groove_runtime(
+pub async fn avendb_runtime(
 	window: tauri::Window,
 	_app: tauri::AppHandle,
-	actor: tauri::State<'_, runtime::GrooveActorHandle>,
+	actor: tauri::State<'_, runtime::avenDBActorHandle>,
 	op: String,
 	payload: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
-	let envelope = GrooveRuntimeEnvelope {
+	let envelope = avenDBRuntimeEnvelope {
 		op,
 		payload: payload.unwrap_or_else(|| serde_json::json!({})),
 	};
@@ -964,28 +1020,28 @@ pub async fn self_storage_paths(app: tauri::AppHandle) -> Result<SelfStoragePath
 	}
 }
 
-/// Deletes the local Groove store (`db/` under AvenOS user root, plus legacy `jazz/` if present).
+/// Deletes the local avenDB store (`db/` under AvenOS user root, plus legacy `avendb/` if present).
 #[tauri::command(rename_all = "camelCase")]
-pub async fn self_clear_jazz_database(
+pub async fn self_clear_avendb_database(
 	app: tauri::AppHandle,
-	jazz: tauri::State<'_, ManagedJazz>,
+	avendb: tauri::State<'_, ManagedAvenDb>,
 ) -> Result<(), String> {
-	jazz.reset_connection().await;
+	avendb.reset_connection().await;
 	let root = vault_user_root(&app)?;
-	let p = root.join(AVEN_OS_GROOVE_DATA_DIR);
+	let p = root.join(AVEN_OS_AVENDB_DATA_DIR);
 	if p.exists() {
 		fs::remove_dir_all(&p).map_err(|e| format!("remove {}: {e}", p.display()))?;
 	}
 	Ok(())
 }
 
-/// Lock, tear down Groove, and delete the entire `.avenOS` tree (all vaults, identity, schema cache).
+/// Lock, tear down avenDB, and delete the entire `.avenOS` tree (all vaults, identity, schema cache).
 #[tauri::command(rename_all = "camelCase")]
 pub async fn self_clear_aven_os_data(
 	app: tauri::AppHandle,
-	jazz: tauri::State<'_, ManagedJazz>,
+	avendb: tauri::State<'_, ManagedAvenDb>,
 ) -> Result<(), String> {
-	jazz.reset_connection().await;
+	avendb.reset_connection().await;
 
 	let self_state: tauri::State<'_, SelfState> = app.state();
 	self_state.clear();
@@ -1003,24 +1059,24 @@ pub async fn self_clear_aven_os_data(
 #[cfg(test)]
 mod json_cell_tests {
 	use super::*;
-	use groove::query_manager::types::ColumnType;
+	use aven_db::query_manager::types::ColumnType;
 	use serde_json::json;
 
 	#[test]
-	fn json_cell_to_jazz_bytea_standard_base64() {
+	fn json_cell_to_avendb_bytea_standard_base64() {
 		let cell = json!("aGVsbG8=");
-		let v = json_cell_to_jazz(&cell, &ColumnType::Bytea, false).unwrap();
+		let v = json_cell_to_avendb(&cell, &ColumnType::Bytea, false).unwrap();
 		assert_eq!(v, Value::Bytea(b"hello".to_vec()));
 	}
 
 	#[test]
-	fn json_cell_to_jazz_phase1_and_sealed_bytea_stay_bytea() {
+	fn json_cell_to_avendb_phase1_and_sealed_bytea_stay_bytea() {
 		let phase1 = json!(PHASE1_SECRET_PLACEHOLDER);
-		let v = json_cell_to_jazz(&phase1, &ColumnType::Bytea, false).unwrap();
+		let v = json_cell_to_avendb(&phase1, &ColumnType::Bytea, false).unwrap();
 		assert_eq!(v, Value::Bytea(PHASE1_SECRET_PLACEHOLDER.as_bytes().to_vec()));
 
 		let sealed = format!("{}abc", crate::crypto::CELL_ENVELOPE_V1);
-		let v = json_cell_to_jazz(&json!(sealed), &ColumnType::Bytea, false).unwrap();
+		let v = json_cell_to_avendb(&json!(sealed), &ColumnType::Bytea, false).unwrap();
 		assert!(matches!(v, Value::Bytea(b) if b.starts_with(crate::crypto::CELL_ENVELOPE_V1.as_bytes())));
 	}
 
@@ -1028,10 +1084,10 @@ mod json_cell_tests {
 	fn sealed_bytea_canonical_roundtrip_ipc() {
 		use base64::Engine;
 		use crate::crypto::{
-			groove_value_to_canonical_utf8, ipc_json_from_opened_sensitive_plaintext,
+			avendb_value_to_canonical_utf8, ipc_json_from_opened_sensitive_plaintext,
 		};
 		let payload = b"fake-image-bytes".to_vec();
-		let canon = groove_value_to_canonical_utf8(&Value::Bytea(payload.clone())).unwrap();
+		let canon = avendb_value_to_canonical_utf8(&Value::Bytea(payload.clone())).unwrap();
 		let ipc = ipc_json_from_opened_sensitive_plaintext(&canon, &ColumnType::Bytea).unwrap();
 		let b64 = ipc.as_str().expect("bytea ipc is base64 string");
 		assert_eq!(
@@ -1041,11 +1097,11 @@ mod json_cell_tests {
 	}
 
 	#[test]
-	fn json_cell_to_jazz_double_batch_id_enum() {
-		let d = json_cell_to_jazz(&json!(1.5), &ColumnType::Double, false).unwrap();
+	fn json_cell_to_avendb_double_batch_id_enum() {
+		let d = json_cell_to_avendb(&json!(1.5), &ColumnType::Double, false).unwrap();
 		assert_eq!(d, Value::Double(1.5));
 
-		let bid = json_cell_to_jazz(
+		let bid = json_cell_to_avendb(
 			&json!("0102030405060708090a0b0c0d0e0f10"),
 			&ColumnType::BatchId,
 			false,
@@ -1056,37 +1112,37 @@ mod json_cell_tests {
 		let en = ColumnType::Enum {
 			variants: vec!["a".into(), "b".into()],
 		};
-		let v = json_cell_to_jazz(&json!("a"), &en, false).unwrap();
+		let v = json_cell_to_avendb(&json!("a"), &en, false).unwrap();
 		assert_eq!(v, Value::Text("a".into()));
 	}
 
 	#[test]
-	fn json_cell_to_jazz_json_column() {
+	fn json_cell_to_avendb_json_column() {
 		let cell = json!({"k": 1});
-		let v = json_cell_to_jazz(&cell, &ColumnType::Json { schema: None }, false).unwrap();
+		let v = json_cell_to_avendb(&cell, &ColumnType::Json { schema: None }, false).unwrap();
 		assert_eq!(v, Value::Text(r#"{"k":1}"#.into()));
 	}
 
 	#[test]
-	fn json_cell_to_jazz_rejects_row_type() {
+	fn json_cell_to_avendb_rejects_row_type() {
 		let row_ty = ColumnType::Row {
-			columns: Box::new(groove::query_manager::types::RowDescriptor::new(vec![])),
+			columns: Box::new(aven_db::query_manager::types::RowDescriptor::new(vec![])),
 		};
-		let err = json_cell_to_jazz(&json!([]), &row_ty, false).unwrap_err();
+		let err = json_cell_to_avendb(&json!([]), &row_ty, false).unwrap_err();
 		assert!(err.contains("engine-only"));
 	}
 
 	#[test]
-	fn json_cell_to_jazz_sealed_bigint_stored_as_text() {
+	fn json_cell_to_avendb_sealed_bigint_stored_as_text() {
 		let sealed = format!("{}abc", crate::crypto::CELL_ENVELOPE_V1);
-		let v = json_cell_to_jazz(&json!(sealed), &ColumnType::Text, false).unwrap();
+		let v = json_cell_to_avendb(&json!(sealed), &ColumnType::Text, false).unwrap();
 		assert!(matches!(v, Value::Text(s) if s.starts_with(crate::crypto::CELL_ENVELOPE_V1)));
 	}
 
 	#[test]
 	fn sealed_bigint_canonical_roundtrip_ipc() {
-		use crate::crypto::{groove_value_to_canonical_utf8, ipc_json_from_opened_sensitive_plaintext};
-		let canon = groove_value_to_canonical_utf8(&Value::BigInt(1_704_000_000_000)).unwrap();
+		use crate::crypto::{avendb_value_to_canonical_utf8, ipc_json_from_opened_sensitive_plaintext};
+		let canon = avendb_value_to_canonical_utf8(&Value::BigInt(1_704_000_000_000)).unwrap();
 		let ipc = ipc_json_from_opened_sensitive_plaintext(&canon, &ColumnType::Text).unwrap();
 		assert_eq!(ipc.as_i64(), Some(1_704_000_000_000));
 	}

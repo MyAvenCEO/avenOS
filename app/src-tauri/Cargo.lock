@@ -271,6 +271,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aven-brain"
+version = "0.0.1"
+dependencies = [
+ "aven-db",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "aven-caps"
 version = "0.0.1"
 dependencies = [
@@ -331,6 +340,7 @@ dependencies = [
  "ar",
  "async-trait",
  "aven-ai",
+ "aven-brain",
  "aven-caps",
  "aven-db",
  "aven-p2p",

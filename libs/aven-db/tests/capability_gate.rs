@@ -6,10 +6,10 @@
 
 use std::collections::HashSet;
 
-use groove::object::ObjectId;
-use groove::row_histories::BatchId;
-use groove::sync_targets::SyncTargetId;
-use groove::{
+use aven_db::object::ObjectId;
+use aven_db::row_histories::BatchId;
+use aven_db::sync_targets::SyncTargetId;
+use aven_db::{
     AccOp, AllowAllResolver, CapDecision, CapabilityResolver, DenyAllResolver, FrontierDag,
     ResourceCoord, may_hold,
 };

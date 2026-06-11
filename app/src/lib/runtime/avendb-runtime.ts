@@ -3,11 +3,11 @@ import { browser } from '$app/environment'
 import { writable, get } from 'svelte/store'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import type { PeerMeshStatusReply } from '$lib/peer/mesh-state'
-import { applyRuntimeSession } from '$lib/runtime/jazz-shell'
+import { applyRuntimeSession } from '$lib/runtime/avendb-shell'
 import { getTableRowsStore } from '$lib/runtime/table-stores'
-import { grooveRuntime } from '$lib/runtime/groove-ipc'
+import { avenDbRuntime } from '$lib/runtime/avendb-ipc'
 
-export { grooveRuntime } from '$lib/runtime/groove-ipc'
+export { avenDbRuntime } from '$lib/runtime/avendb-ipc'
 
 /**
  * Live mesh snapshot — updated only by `avenos:runtime` `{ kind: 'mesh' }`.
@@ -15,31 +15,31 @@ export { grooveRuntime } from '$lib/runtime/groove-ipc'
 export const peerMeshSnapshot = writable<PeerMeshStatusReply | undefined>(undefined)
 
 /**
- * Local Groove shell is hydrated and ACL/mesh gates may run.
- * Driven by `avenos:runtime` `{ kind: 'session', grooveReady }` and unlock/bootstrap paths.
+ * Local avenDB shell is hydrated and ACL/mesh gates may run.
+ * Driven by `avenos:runtime` `{ kind: 'session', avendbReady }` and unlock/bootstrap paths.
  */
-export const grooveSessionReady = writable(false)
+export const avendbSessionReady = writable(false)
 
-/** Resolves when LockGate/bootstrap has hydrated the local Groove shell. */
-export function waitForGrooveSessionReady(): Promise<void> {
-	if (get(grooveSessionReady)) return Promise.resolve()
+/** Resolves when LockGate/bootstrap has hydrated the local avenDB shell. */
+export function waitForAvenDbSessionReady(): Promise<void> {
+	if (get(avendbSessionReady)) return Promise.resolve()
 	return new Promise((resolve) => {
 		let unsub: (() => void) | undefined
 		const done = () => {
 			unsub?.()
 			resolve()
 		}
-		unsub = grooveSessionReady.subscribe((ready) => {
+		unsub = avendbSessionReady.subscribe((ready) => {
 			if (ready) done()
 		})
-		if (get(grooveSessionReady)) done()
+		if (get(avendbSessionReady)) done()
 	})
 }
 
 type AvenosRuntimePayload =
 	| {
 			kind: 'session'
-			grooveReady?: boolean
+			avendbReady?: boolean
 			phase?: string
 			message?: string
 			signerDid?: string
@@ -67,8 +67,8 @@ export function attachAvenosRuntimeBridge(): () => void {
 		if (gen !== bridgeGeneration) return
 		if (p.kind === 'session') {
 			applyRuntimeSession(p as Extract<AvenosRuntimePayload, { kind: 'session' }>)
-			if (typeof p.grooveReady === 'boolean') {
-				grooveSessionReady.set(p.grooveReady)
+			if (typeof p.avendbReady === 'boolean') {
+				avendbSessionReady.set(p.avendbReady)
 			}
 		}
 		if (p.kind === 'mesh' && p.snapshot && typeof p.snapshot === 'object') {
@@ -88,5 +88,5 @@ export function attachAvenosRuntimeBridge(): () => void {
 }
 
 export async function peerMeshStatus(): Promise<PeerMeshStatusReply> {
-	return grooveRuntime<PeerMeshStatusReply>('meshStatus', {})
+	return avenDbRuntime<PeerMeshStatusReply>('meshStatus', {})
 }

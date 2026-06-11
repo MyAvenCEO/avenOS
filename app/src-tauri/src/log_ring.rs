@@ -71,7 +71,7 @@ impl Visit for MessageVisitor {
 	}
 }
 
-/// Forwards tracing events into the `log` crate so groove diagnostics land in
+/// Forwards tracing events into the `log` crate so avendb diagnostics land in
 /// the in-app ring buffer and `os_log`.
 pub struct LogForwardSubscriber;
 
@@ -82,8 +82,8 @@ impl Subscriber for LogForwardSubscriber {
 		let target = metadata.target();
 		let level = *metadata.level();
 
-		// `groove::query_manager` emits a debug line per subscription creation/delta — keep warn+.
-		if target.starts_with("groove::query_manager") && level > Level::WARN {
+		// `aven_db::query_manager` emits a debug line per subscription creation/delta — keep warn+.
+		if target.starts_with("aven_db::query_manager") && level > Level::WARN {
 			return false;
 		}
 

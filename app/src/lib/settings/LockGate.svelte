@@ -4,8 +4,8 @@
 	import { onMount, tick } from 'svelte'
 	import { getCurrentWindow } from '@tauri-apps/api/window'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
-	import { bootstrapJazzStrict } from '$lib/jazz/bootstrap'
-	import { grooveSessionReady } from '$lib/runtime/groove-runtime'
+	import { bootstrapAvenDbStrict } from '$lib/avendb/bootstrap'
+	import { avendbSessionReady } from '$lib/runtime/avendb-runtime'
 	import {
 		getLocale,
 		initLocale,
@@ -210,9 +210,9 @@
 							err = t('lockGate.errUnlockedSessionUnread')
 							return
 						}
-						await bootstrapJazzStrict()
+						await bootstrapAvenDbStrict()
 						setUnlockedWithIdentity(id)
-						grooveSessionReady.set(true)
+						avendbSessionReady.set(true)
 					} catch (e) {
 						if (!cancelled) {
 							err = e instanceof Error ? e.message : String(e)
@@ -252,16 +252,16 @@
 				throw new Error(t('lockGate.errIdentityAfterUnlock'))
 			}
 			// Forward into the app the moment identity is known; hydrate the
-			// Groove shell (RocksDB open, keyshare/biscuit hydrate, peer transport)
+			// avenDB shell (RocksDB open, keyshare/biscuit hydrate, peer transport)
 			// in the BACKGROUND. Inside views gate their data on
-			// `grooveSessionReady`, so the unlock feels instant instead of blocking
+			// `avendbSessionReady`, so the unlock feels instant instead of blocking
 			// several seconds on bootstrap.
-			grooveSessionReady.set(false)
+			avendbSessionReady.set(false)
 			setUnlockedWithIdentity(identity)
 			loading = false
 			unlockingSlug = undefined
-			void bootstrapJazzStrict()
-				.then(() => grooveSessionReady.set(true))
+			void bootstrapAvenDbStrict()
+				.then(() => avendbSessionReady.set(true))
 				.catch((e) => {
 					// Bootstrap failed after we already forwarded — re-lock and
 					// surface the error back on the lock screen.

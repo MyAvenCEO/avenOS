@@ -1,6 +1,6 @@
 //! Peer mesh status / publishing for the webview.
 
-use groove::{JazzClient, PeerId};
+use aven_db::{AvenDbClient, PeerId};
 use crate::mesh::{
 	LinkHealth, P2pDiagnostics, PeerMeshPeerState, PeerMeshPhase, PeerMeshStatusReply, PeerUsability,
 	SyncBootstrapPhase,
@@ -12,13 +12,13 @@ use super::*;
 
 /// Emit `{ kind: "table", table: "signers" }` from canonical allowlisted remote rows.
 pub(super) fn emit_peers_table_snapshot(
-	jazz: &ManagedJazz,
+	avendb: &ManagedAvenDb,
 	app: &tauri::AppHandle,
 	rows: &[crate::signers::SignerRowReply],
 ) -> Result<bool, String> {
 	let encoded = serde_json::to_string(rows).map_err(|e| e.to_string())?;
 	{
-		let mut last = jazz
+		let mut last = avendb
 			.last_table_snapshots
 			.write()
 			.expect("last_table_snapshots poisoned");
@@ -41,11 +41,11 @@ pub(super) fn emit_peers_table_snapshot(
 /// Single fetch of trusted remote peers → table push (if subscribed) + mesh snapshot.
 pub(crate) async fn publish_trusted_peers_ui(
 	app: &tauri::AppHandle,
-	jazz: &ManagedJazz,
+	avendb: &ManagedAvenDb,
 	ss: &SelfState,
 ) -> Result<(), String> {
 	let (rows, snap) = if ss.is_unlocked() {
-		let client = with_connected_client(jazz, app, ss).await?;
+		let client = with_connected_client(avendb, app, ss).await?;
 		let rows = crate::signers::list_signer_rows(client.as_ref()).await?;
 		let registered = registered_peer_dids(client.as_ref());
 		let converged = converged_peer_dids(client.as_ref());
@@ -59,30 +59,30 @@ pub(crate) async fn publish_trusted_peers_ui(
 		)
 	};
 
-	if jazz.table_ui_ref_count("signers").await > 0 {
-		let _ = emit_peers_table_snapshot(jazz, app, &rows);
+	if avendb.table_ui_ref_count("signers").await > 0 {
+		let _ = emit_peers_table_snapshot(avendb, app, &rows);
 	}
 
-	emit_mesh_snapshot(app, jazz, snap)
+	emit_mesh_snapshot(app, avendb, snap)
 }
 
 /// did:key set for peer clients with a live registered sync link.
-fn registered_peer_dids(client: &JazzClient) -> std::collections::HashSet<String> {
+fn registered_peer_dids(client: &AvenDbClient) -> std::collections::HashSet<String> {
 	client
 		.peer_client_ids()
 		.unwrap_or_default()
 		.iter()
-		.filter_map(|pid| crate::jazz_auth::signer_did_from_ed25519(&pid.0).ok())
+		.filter_map(|pid| crate::avendb_auth::signer_did_from_ed25519(&pid.0).ok())
 		.collect()
 }
 
 /// did:key set for peers whose frontier is converged from our side ("Up to date").
-fn converged_peer_dids(client: &JazzClient) -> std::collections::HashSet<String> {
+fn converged_peer_dids(client: &AvenDbClient) -> std::collections::HashSet<String> {
 	client
 		.converged_peer_ids()
 		.unwrap_or_default()
 		.iter()
-		.filter_map(|pid| crate::jazz_auth::signer_did_from_ed25519(&pid.0).ok())
+		.filter_map(|pid| crate::avendb_auth::signer_did_from_ed25519(&pid.0).ok())
 		.collect()
 }
 
@@ -170,12 +170,12 @@ fn build_peer_mesh_status(
 
 fn emit_mesh_snapshot(
 	app: &tauri::AppHandle,
-	jazz: &ManagedJazz,
+	avendb: &ManagedAvenDb,
 	snap: PeerMeshStatusReply,
 ) -> Result<(), String> {
 	let encoded = serde_json::to_string(&snap).map_err(|e| e.to_string())?;
 	{
-		let mut last = jazz
+		let mut last = avendb
 			.last_mesh_snapshot
 			.write()
 			.expect("last_mesh_snapshot poisoned");
@@ -192,18 +192,18 @@ fn emit_mesh_snapshot(
 }
 
 pub(super) async fn publish_peer_mesh_after_acl(app: &tauri::AppHandle) {
-	runtime::groove_actor(app).publish_mesh().await;
+	runtime::avendb_actor(app).publish_mesh().await;
 }
 
 /// Actor-only: assemble + emit mesh snapshot (no re-enqueue). Skips emit when JSON unchanged.
 pub(crate) async fn execute_publish_mesh(
 	app: &tauri::AppHandle,
-	jazz: &ManagedJazz,
+	avendb: &ManagedAvenDb,
 	ss: &SelfState,
 ) {
-	if let Err(e) = publish_trusted_peers_ui(app, jazz, ss).await {
+	if let Err(e) = publish_trusted_peers_ui(app, avendb, ss).await {
 		log::debug!(
-			target: "avenos::jazz",
+			target: "avenos::avendb",
 			"execute_publish_mesh: {e}",
 		);
 	}
@@ -213,7 +213,7 @@ pub(crate) async fn execute_publish_mesh(
 /// + live transport registration (same builder as the pushed snapshot).
 pub(crate) async fn execute_mesh_snapshot(
 	app: &tauri::AppHandle,
-	jazz: &ManagedJazz,
+	avendb: &ManagedAvenDb,
 	ss: &SelfState,
 ) -> Result<PeerMeshStatusReply, String> {
 	if !ss.is_unlocked() {
@@ -224,7 +224,7 @@ pub(crate) async fn execute_mesh_snapshot(
 			String::new(),
 		));
 	}
-	let client = with_connected_client(jazz, app, ss).await?;
+	let client = with_connected_client(avendb, app, ss).await?;
 	let rows = crate::signers::list_signer_rows(client.as_ref()).await?;
 	let registered = registered_peer_dids(client.as_ref());
 	let converged = converged_peer_dids(client.as_ref());
@@ -238,24 +238,24 @@ pub(crate) async fn execute_mesh_snapshot(
 
 pub(crate) async fn execute_mesh_refresh_full(
 	_app: &tauri::AppHandle,
-	_jazz: &ManagedJazz,
+	_avendb: &ManagedAvenDb,
 ) -> Result<u32, String> {
 	Ok(0)
 }
 
-pub(crate) async fn groove_ipc_peer_list(
+pub(crate) async fn avendb_ipc_peer_list(
 	app: &tauri::AppHandle,
-	jazz: &ManagedJazz,
+	avendb: &ManagedAvenDb,
 	self_state: &SelfState,
 ) -> Result<Vec<crate::signers::SignerRowReply>, String> {
-	let client = with_connected_client(jazz, app, self_state).await?;
+	let client = with_connected_client(avendb, app, self_state).await?;
 	crate::signers::list_signer_rows(client.as_ref()).await
 }
 
 /// First-contact / pairing: add a trusted peer (device DID) to My Network.
-pub(crate) async fn groove_ipc_peer_add(
+pub(crate) async fn avendb_ipc_peer_add(
 	app: &tauri::AppHandle,
-	jazz: &ManagedJazz,
+	avendb: &ManagedAvenDb,
 	self_state: &SelfState,
 	peer_did: String,
 	device_label: String,
@@ -264,9 +264,9 @@ pub(crate) async fn groove_ipc_peer_add(
 	if peer_did.is_empty() {
 		return Err("peer_did is empty".into());
 	}
-	crate::jazz_auth::ed25519_public_from_signer_did(&peer_did)?;
-	let client = with_connected_client(jazz, app, self_state).await?;
-	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+	crate::avendb_auth::ed25519_public_from_signer_did(&peer_did)?;
+	let client = with_connected_client(avendb, app, self_state).await?;
+	let shell_arc = avendb_shell_ready(app, avendb, self_state, client.clone()).await?;
 	if peer_did == shell_arc.as_ref().signer_did {
 		return Err("cannot add your own DID as a peer".into());
 	}
@@ -275,43 +275,43 @@ pub(crate) async fn groove_ipc_peer_add(
 	// Resume sync immediately — e.g. re-adding a Forgotten peer. Idempotent with
 	// the connect-time registration; harmless (queues until a transport exists)
 	// when no live link to this peer is present yet.
-	if let Ok(pk) = crate::jazz_auth::ed25519_public_from_signer_did(&peer_did) {
+	if let Ok(pk) = crate::avendb_auth::ed25519_public_from_signer_did(&peer_did) {
 		if let Err(e) = client.register_peer_sync_client(PeerId(pk)) {
-			log::warn!(target: "avenos::jazz", "peer_add register {peer_did}: {e}");
+			log::warn!(target: "avenos::avendb", "peer_add register {peer_did}: {e}");
 		}
 	}
 
 	// Reflect the new/reactivated peer in the list + mesh immediately.
-	let _ = publish_trusted_peers_ui(app, jazz, self_state).await;
+	let _ = publish_trusted_peers_ui(app, avendb, self_state).await;
 	Ok(())
 }
 
-pub(crate) async fn groove_ipc_peer_revoke(
+pub(crate) async fn avendb_ipc_peer_revoke(
 	app: &tauri::AppHandle,
-	jazz: &ManagedJazz,
+	avendb: &ManagedAvenDb,
 	self_state: &SelfState,
 	peer_did: String,
 ) -> Result<(), String> {
-	let client = with_connected_client(jazz, app, self_state).await?;
+	let client = with_connected_client(avendb, app, self_state).await?;
 	crate::signers::set_signer_status(client.as_ref(), &peer_did, "revoked").await?;
 
 	// Actually stop syncing: drop the registered peer client so we no longer
 	// ship to it or accept its catch-up. Marking the row alone left the peer
 	// live in the mesh — Forget appeared to do nothing.
-	if let Ok(pk) = crate::jazz_auth::ed25519_public_from_signer_did(&peer_did) {
+	if let Ok(pk) = crate::avendb_auth::ed25519_public_from_signer_did(&peer_did) {
 		match client.remove_peer_sync_client(PeerId(pk)) {
 			Ok(true) => {}
 			Ok(false) => log::warn!(
-				target: "avenos::jazz",
+				target: "avenos::avendb",
 				"peer_revoke {peer_did}: client had unprocessed inbox; deregister deferred"
 			),
-			Err(e) => log::warn!(target: "avenos::jazz", "peer_revoke {peer_did}: {e}"),
+			Err(e) => log::warn!(target: "avenos::avendb", "peer_revoke {peer_did}: {e}"),
 		}
 	}
 
 	// Re-publish the trusted-peer list + mesh snapshot so the row and its chip
 	// disappear immediately (replaces the no-op execute_mesh_refresh_full).
-	let _ = publish_trusted_peers_ui(app, jazz, self_state).await;
-	let _ = jazz.change_tx.send("signers".to_string());
+	let _ = publish_trusted_peers_ui(app, avendb, self_state).await;
+	let _ = avendb.change_tx.send("signers".to_string());
 	Ok(())
 }

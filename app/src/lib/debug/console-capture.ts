@@ -12,7 +12,7 @@ export type CapturedLog = { t: number; level: string; msg: string }
 
 /**
  * Pull the device's recent Rust log lines (the in-memory ring fed by the
- * `tracing`/`log` bridge — includes `groove::sync_manager` forwarding-gate lines
+ * `tracing`/`log` bridge — includes `avendb::sync_manager` forwarding-gate lines
  * and `avenos::*` peer/sync lifecycle). This is what shows whether a peer (incl.
  * the replication/server peer) actually received and forwarded a batch. Empty
  * outside the Tauri runtime (web/dev preview).

@@ -775,7 +775,7 @@ mod tests {
             id: ObjectId::new(),
             content: user_data.into(),
             batch_id: crate::row_histories::BatchId([0; 16]),
-            row_provenance: crate::metadata::RowProvenance::for_insert("jazz:test", 0),
+            row_provenance: crate::metadata::RowProvenance::for_insert("avendb:test", 0),
         }]);
 
         let correlation = node.extract_correlation_value(&user_tuple);
@@ -818,7 +818,7 @@ mod tests {
             id: row_id,
             content: user_data.into(),
             batch_id: crate::row_histories::BatchId([0; 16]),
-            row_provenance: crate::metadata::RowProvenance::for_insert("jazz:test", 0),
+            row_provenance: crate::metadata::RowProvenance::for_insert("avendb:test", 0),
         }]);
 
         let correlation = node.extract_correlation_value(&user_tuple);

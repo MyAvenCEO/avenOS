@@ -12,6 +12,6 @@ pub use aven_caps::caps::*;
 /// Build the cap vault from this device's 32-byte root (tauri-derived signing
 /// key). The shared crate stays tauri-free; this wrapper supplies the key.
 pub fn build_vault_from_root(root: &[u8; 32]) -> Result<BiscuitVault, String> {
-	let sk = crate::jazz_auth::signing_key_from_device_root(root)?;
+	let sk = crate::avendb_auth::signing_key_from_device_root(root)?;
 	build_vault_from_signing_key(&sk)
 }

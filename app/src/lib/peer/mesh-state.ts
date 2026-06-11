@@ -59,9 +59,9 @@ export type PeerMeshPeerState = {
 	reconnectAttempt?: number | null
 	lastDisconnectAtMs?: number | null
 	lastDisconnectReason?: string | null
-	/** Groove mux worker + outbound channel ready. */
-	grooveMuxReady?: boolean | null
-	/** Biscuit ACL loaded and Groove P2P client registered. */
+	/** avenDB mux worker + outbound channel ready. */
+	avendbMuxReady?: boolean | null
+	/** Biscuit ACL loaded and avenDB P2P client registered. */
 	syncReady?: boolean | null
 	/** Outbound catch-up finished for this peer. */
 	catchupReady?: boolean | null
@@ -316,9 +316,9 @@ export function peerMeshDetailSubLabel(
 		if (reason === 'policyPending') return t('peer.syncBlock.policyPending')
 		if (reason === 'catchupPending') return t('peer.syncBlock.catchupPending')
 		const parts: string[] = []
-		if (row.grooveMuxReady === false) parts.push('mux pending')
-		if (row.grooveMuxReady === true && row.syncReady === false) parts.push('policy pending')
-		if (row.grooveMuxReady === true && row.catchupReady === false) parts.push('catch-up pending')
+		if (row.avendbMuxReady === false) parts.push('mux pending')
+		if (row.avendbMuxReady === true && row.syncReady === false) parts.push('policy pending')
+		if (row.avendbMuxReady === true && row.catchupReady === false) parts.push('catch-up pending')
 		if (parts.length > 0) return parts.join(' · ')
 	}
 	if (

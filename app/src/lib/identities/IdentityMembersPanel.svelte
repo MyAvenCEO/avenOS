@@ -2,8 +2,8 @@
 	import { browser } from '$app/environment'
 	import { withTimeoutMs } from '$lib/async-timeout'
 	import {
-		jazzSession,
-		jazzStatus,
+		avendbSession,
+		avenDbStatus,
 		sparkAdminAdd,
 		sparkAdminList,
 		sparkAdminRevoke,
@@ -12,13 +12,13 @@
 		avenCeoAddMember,
 		peerList,
 		type PeerRow,
-		type JazzRow,
-		type JazzSessionReply,
+		type AvenDbRow,
+		type AvenDbSessionReply,
 		type IdentitySubjectCaps,
 		type IdentityGrant,
-	} from '$lib/jazz/api'
-	import { waitForGrooveSessionReady } from '$lib/runtime/groove-runtime'
-	import { jazzStore } from '$lib/jazz/store.svelte'
+	} from '$lib/avendb/api'
+	import { waitForAvenDbSessionReady } from '$lib/runtime/avendb-runtime'
+	import { avenDbStore } from '$lib/avendb/store.svelte'
 	// Mesh snapshot kept ONLY for the copyable debug report (diagnostics), not for
 	// any UI display — per-peer connection state is intentionally not shown.
 	import { peerMeshSnapshot } from '$lib/peer/peer-mesh-store'
@@ -86,7 +86,7 @@
 
 	const LOCAL_IPC_BUDGET_MS = 12_000
 
-	let session = $state<JazzSessionReply | undefined>()
+	let session = $state<AvenDbSessionReply | undefined>()
 	let err = $state<string | undefined>()
 	let busy = $state(false)
 	let adminDids = $state<string[]>([])
@@ -118,7 +118,7 @@
 	// adds an admin on another device) lands here in realtime over TCP sync. We watch
 	// it below and re-read the admin list whenever it changes — without it, the panel
 	// only refreshed on local add/revoke and on a fresh mount (app restart).
-	const identitiesStore = jazzStore('safes')
+	const identitiesStore = avenDbStore('safes')
 	const sparkBiscuit = $derived.by<string | undefined>(() => {
 		const sid = identityId.trim().toLowerCase()
 		if (!sid) return undefined
@@ -156,7 +156,7 @@
 				!memberDidsLower.has(`did:safe:${String(r.owner ?? '').trim().toLowerCase()}`),
 		)
 	})
-	function safeDidFor(row: JazzRow): string {
+	function safeDidFor(row: AvenDbRow): string {
 		return `did:safe:${String(row.owner ?? '').trim()}`
 	}
 	// Human SAFEs admit concrete signer devices only (did:key:) — UX mirror of the
@@ -170,7 +170,7 @@
 		return undefined
 	})
 	// Resolve a did:safe: member back to its local SAFE row (for name display).
-	function safeRowForDid(did: string): JazzRow | undefined {
+	function safeRowForDid(did: string): AvenDbRow | undefined {
 		const norm = did.trim().toLowerCase()
 		if (!norm.startsWith('did:safe:')) return undefined
 		const id = norm.slice('did:safe:'.length)
@@ -287,12 +287,12 @@
 		try {
 			await withTimeoutMs(
 				(async () => {
-					await waitForGrooveSessionReady()
-					const status = await jazzStatus()
+					await waitForAvenDbSessionReady()
+					const status = await avenDbStatus()
 					if (!status.ready) {
-						throw new Error(t('errors.grooveShellNotReady'))
+						throw new Error(t('errors.avendbShellNotReady'))
 					}
-					const nextSession = await jazzSession()
+					const nextSession = await avendbSession()
 					if (gen !== adminLoadGen) return
 					session = nextSession
 

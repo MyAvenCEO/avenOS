@@ -1,4 +1,4 @@
-//! Tokio runtime adapter for Jazz.
+//! Tokio runtime adapter for avenDB.
 //!
 //! Provides `TokioRuntime<S>` - a thin wrapper around
 //! `RuntimeCore<S, TokioScheduler<S>>`
@@ -214,7 +214,7 @@ impl From<CoreRuntimeError> for RuntimeError {
 // TokioRuntime
 // ============================================================================
 
-/// Tokio runtime for Jazz, generic over storage backend.
+/// Tokio runtime for avenDB, generic over storage backend.
 ///
 /// Thin wrapper around `Arc<Mutex<RuntimeCore<S, TokioScheduler<S>>>>`.
 /// All methods grab the lock, call RuntimeCore, and return.
@@ -521,6 +521,17 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
     // =========================================================================
 
     /// Execute a one-shot query with durability options.
+    /// Register the unseal-on-scan hook (plan §3 seam): bound into every subsequently
+    /// compiled ranking Sort node (`nearest` / `text_search`).
+    pub fn set_unseal(
+        &self,
+        hook: Option<crate::query_manager::graph_nodes::sort::UnsealFn>,
+    ) -> Result<(), RuntimeError> {
+        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        core.schema_manager_mut().query_manager_mut().set_unseal(hook);
+        Ok(())
+    }
+
     pub fn query(
         &self,
         query: Query,

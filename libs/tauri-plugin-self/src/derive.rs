@@ -6,7 +6,7 @@
 //! From that root we run a second HKDF-Expand per derived primitive, using disjoint `info` strings.
 //! Each branch is independent: compromise of a derived seed never reveals the root or its siblings.
 //!
-//! v1 only derives **`PEER_ID_<device>_ED25519`**, which Jazz will consume as its
+//! v1 only derives **`PEER_ID_<device>_ED25519`**, which avenDB will consume as its
 //! agent signing key (one curve, two roles — also slated as the peeroxide Noise XX static key).
 
 use ed25519_dalek::{Signature, SigningKey, Verifier, VerifyingKey, SECRET_KEY_LENGTH};

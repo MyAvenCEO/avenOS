@@ -448,7 +448,7 @@ mod tests {
     fn make_loaded_row(data: Vec<u8>, batch_id: BatchId) -> LoadedRow {
         LoadedRow::new(
             data,
-            RowProvenance::for_insert("jazz:test", 0),
+            RowProvenance::for_insert("avendb:test", 0),
             Default::default(),
             batch_id,
         )

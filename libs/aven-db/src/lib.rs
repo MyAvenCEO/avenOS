@@ -1,9 +1,10 @@
-extern crate self as groove;
+extern crate self as aven_db;
 
 pub mod batch_fate;
 pub mod catalogue;
 pub mod commit;
 pub mod digest;
+pub mod manifest;
 pub mod metadata;
 pub mod object;
 pub mod query_manager;
@@ -31,7 +32,7 @@ pub use sync_manager::sync_tracer;
 #[cfg(feature = "runtime-tokio")]
 pub mod runtime_tokio;
 #[cfg(feature = "runtime-tokio")]
-pub use runtime_tokio as groove_tokio;
+pub use runtime_tokio as avendb_tokio;
 
 #[cfg(feature = "client-p2p")]
 mod avenos_client;
@@ -43,13 +44,14 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 #[cfg(feature = "client-p2p")]
-pub use avenos_client::{JazzClient, PeerInboundParkedHook};
+pub use avenos_client::{AvenDbClient, PeerInboundParkedHook};
 pub use sync_manager::RowBatchKey;
 pub use capability::{
     AccOp, AllowAllResolver, CapDecision, CapabilityResolver, DenyAllResolver, EditSigner,
     ResourceCoord, may_hold,
 };
 pub use sync_targets::SyncTargetId;
+pub use query_manager::graph_nodes::sort::UnsealFn;
 #[cfg(feature = "client-p2p")]
 pub use sync_transport::{
     decode_length_prefixed, encode_length_prefixed, NullSyncTransport, PeerTransport, SyncTransport,
@@ -74,7 +76,7 @@ pub use sync_manager::PeerId;
 #[cfg(feature = "client-p2p")]
 pub use sync_manager::DurabilityTier;
 
-/// Configuration for connecting to Jazz (AvenOS P2P client).
+/// Configuration for connecting to avenDB (AvenOS P2P client).
 #[cfg(feature = "client-p2p")]
 #[derive(Debug, Clone)]
 pub struct AppContext {
@@ -82,13 +84,13 @@ pub struct AppContext {
     pub client_id: Option<PeerId>,
     pub schema: Schema,
     pub data_dir: PathBuf,
-    /// Older schema versions registered via Jazz lenses (local-first migrations).
+    /// Older schema versions registered via avenDB lenses (local-first migrations).
     pub live_schemas: Vec<Schema>,
 }
 
 #[cfg(feature = "client-p2p")]
 #[derive(Error, Debug)]
-pub enum JazzError {
+pub enum AvenDbError {
     #[error("Connection error: {0}")]
     Connection(String),
     #[error("Query error: {0}")]
@@ -110,7 +112,7 @@ pub enum JazzError {
 }
 
 #[cfg(feature = "client-p2p")]
-pub type Result<T> = std::result::Result<T, JazzError>;
+pub type Result<T> = std::result::Result<T, AvenDbError>;
 
 #[cfg(feature = "client-p2p")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

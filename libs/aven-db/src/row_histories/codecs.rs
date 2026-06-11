@@ -325,7 +325,7 @@ pub(crate) fn flat_row_codecs(user_descriptor: &RowDescriptor) -> Arc<FlatRowCod
 }
 
 /// Build the physical row descriptor used when row-history state is stored as a
-/// single flat row: reserved Jazz columns first, followed by the table's user
+/// single flat row: reserved avenDB columns first, followed by the table's user
 /// columns as nullable storage columns.
 pub fn history_row_physical_descriptor(user_descriptor: &RowDescriptor) -> RowDescriptor {
     let mut columns = history_row_system_columns();

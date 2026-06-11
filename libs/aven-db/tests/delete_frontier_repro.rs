@@ -12,13 +12,13 @@
 
 use std::collections::HashMap;
 
-use groove::frontier::{frontier_diff, FrontierDag};
-use groove::object::ObjectId;
-use groove::query_manager::types::{ColumnType, Schema, SchemaBuilder, TableSchema, Value};
-use groove::row_histories::BatchId;
-use groove::schema_manager::{AppId, SchemaManager};
-use groove::storage::{MemoryStorage, Storage};
-use groove::sync_manager::SyncManager;
+use aven_db::frontier::{frontier_diff, FrontierDag};
+use aven_db::object::ObjectId;
+use aven_db::query_manager::types::{ColumnType, Schema, SchemaBuilder, TableSchema, Value};
+use aven_db::row_histories::BatchId;
+use aven_db::schema_manager::{AppId, SchemaManager};
+use aven_db::storage::{MemoryStorage, Storage};
+use aven_db::sync_manager::SyncManager;
 
 /// Verbatim reconstruction of `SyncManager::build_sync_dag`: every row locator × every
 /// history batch for that object → a `FrontierDag`. `dag.heads()` is exactly what a peer
@@ -118,10 +118,10 @@ fn delete_batch_is_in_the_announced_frontier() {
 /// Does it actually STORE the delete (so its own frontier advances and it re-forwards)?
 #[test]
 fn peer_receiving_the_delete_actually_stores_it() {
-    use groove::capability::AllowAllResolver;
-    use groove::metadata::MetadataKey;
-    use groove::sync_manager::types::RowMetadata;
-    use groove::sync_manager::{InboxEntry, PeerId, Source, SyncPayload};
+    use aven_db::capability::AllowAllResolver;
+    use aven_db::metadata::MetadataKey;
+    use aven_db::sync_manager::types::RowMetadata;
+    use aven_db::sync_manager::{InboxEntry, PeerId, Source, SyncPayload};
 
     // --- Engine A: create + delete; capture both batches and the row metadata. ---
     let mut io_a = MemoryStorage::new();

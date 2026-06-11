@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
 	import { t } from '$lib/i18n'
-	import type { JazzRow } from '$lib/jazz/api'
+	import type { AvenDbRow } from '$lib/avendb/api'
 	import { parseToolCallBody } from '$lib/llm/tools'
 	import { speak } from '$lib/tts/speak'
 	import {
@@ -12,8 +12,8 @@
 	} from '$lib/llm/model-download-store'
 	import { formatBytesPair } from '$lib/asr/format'
 	import { onMount } from 'svelte'
-	import { jazzShell } from '$lib/runtime/jazz-shell'
-	import { jazzStore } from '$lib/jazz/store.svelte'
+	import { avendbShell } from '$lib/runtime/avendb-shell'
+	import { avenDbStore } from '$lib/avendb/store.svelte'
 	import IdentityMessageAttachments from '$lib/identities/IdentityMessageAttachments.svelte'
 	import { getIdentityAgent } from '$lib/identities/identity-agent.svelte'
 	import { pairingLabelForSession } from '$lib/settings/active-vault-ui'
@@ -38,7 +38,7 @@
 	const streaming = $derived(agent.streaming)
 	const streamingId = $derived(agent.streamingId)
 
-	const session = $derived($jazzShell.session)
+	const session = $derived($avendbShell.session)
 	let err = $state<string | undefined>()
 	// Row id of the agent reply currently being spoken on-device (or undefined) +
 	// live playback state (synthesizing vs playing) and seconds since Speak was pressed.
@@ -48,9 +48,9 @@
 	let localPairingLabel = $state<string | undefined>(undefined)
 	let scrollEl = $state<HTMLDivElement | undefined>(undefined)
 
-	const identitiesStore = jazzStore('safes')
-	const messages = jazzStore('messages')
-	const filesStore = jazzStore('files')
+	const identitiesStore = avenDbStore('safes')
+	const messages = avenDbStore('messages')
+	const filesStore = avenDbStore('files')
 
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
@@ -101,7 +101,7 @@
 	)
 
 	const filesByMessageId = $derived.by(() => {
-		const map = new Map<string, JazzRow[]>()
+		const map = new Map<string, AvenDbRow[]>()
 		for (const row of filesStore.rows) {
 			if (!idsMatch(row.owner, canonicalSparkId)) continue
 			const parentId = row.intent_id?.trim()
@@ -129,7 +129,7 @@
 		return peerDisplayLabel(did, peer?.deviceLabel, localPairingLabel)
 	}
 
-	/** Groove IPC may send exposeTs bigint as number or legacy string. */
+	/** avenDB IPC may send exposeTs bigint as number or legacy string. */
 	function coerceEpochMs(v: unknown): number {
 		if (typeof v === 'number' && Number.isFinite(v)) return v
 		if (typeof v === 'string' && /^\d+$/.test(v.trim())) return Number(v.trim())
@@ -146,7 +146,7 @@
 		}
 	}
 
-	function isOwnMessage(row: JazzRow): boolean {
+	function isOwnMessage(row: AvenDbRow): boolean {
 		const local = session?.signerDid?.trim().toLowerCase() ?? ''
 		const author = (row.author_did ?? '').trim().toLowerCase()
 		return local !== '' && author !== '' && author === local

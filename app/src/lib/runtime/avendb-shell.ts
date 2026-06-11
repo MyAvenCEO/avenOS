@@ -1,29 +1,29 @@
 import { writable } from 'svelte/store'
-import type { JazzSessionReply, JazzStatusReply } from '$lib/jazz/api'
+import type { AvenDbSessionReply, AvenDbStatusReply } from '$lib/avendb/api'
 
-export type JazzShellState = {
+export type AvenDbShellState = {
 	ready: boolean
 	tables: string[]
-	session: JazzSessionReply | undefined
+	session: AvenDbSessionReply | undefined
 	message: string | undefined
 }
 
-const initial: JazzShellState = {
+const initial: AvenDbShellState = {
 	ready: false,
 	tables: [],
 	session: undefined,
 	message: undefined,
 }
 
-/** Single UI source for Groove bootstrap session + table list (bootstrap IPC + runtime events). */
-export const jazzShell = writable<JazzShellState>(initial)
+/** Single UI source for avenDB bootstrap session + table list (bootstrap IPC + runtime events). */
+export const avendbShell = writable<AvenDbShellState>(initial)
 
-export function resetJazzShell(): void {
-	jazzShell.set(initial)
+export function resetAvenDbShell(): void {
+	avendbShell.set(initial)
 }
 
-export function applyBootstrapReply(reply: JazzStatusReply): void {
-	jazzShell.update((s) => ({
+export function applyBootstrapReply(reply: AvenDbStatusReply): void {
+	avendbShell.update((s) => ({
 		ready: reply.ready,
 		tables: reply.tables ?? s.tables,
 		session: reply.session ?? s.session,
@@ -32,16 +32,16 @@ export function applyBootstrapReply(reply: JazzStatusReply): void {
 }
 
 export function applyRuntimeSession(payload: {
-	grooveReady?: boolean
+	avendbReady?: boolean
 	signerDid?: string
 	defaultSparkUrn?: string
 	message?: string
 	tables?: string[]
 }): void {
-	jazzShell.update((s) => {
+	avendbShell.update((s) => {
 		const ready =
-			typeof payload.grooveReady === 'boolean' ? payload.grooveReady : s.ready
-		const session: JazzSessionReply | undefined =
+			typeof payload.avendbReady === 'boolean' ? payload.avendbReady : s.ready
+		const session: AvenDbSessionReply | undefined =
 			payload.signerDid && payload.defaultSparkUrn
 				? {
 						signerDid: payload.signerDid,
@@ -58,8 +58,8 @@ export function applyRuntimeSession(payload: {
 	})
 }
 
-/** LockGate: bootstrap reply is authoritative; syncs shell before `grooveSessionReady`. */
-export function markJazzShellReadyAfterUnlock(reply: JazzStatusReply): void {
+/** LockGate: bootstrap reply is authoritative; syncs shell before `avendbSessionReady`. */
+export function markAvenDbShellReadyAfterUnlock(reply: AvenDbStatusReply): void {
 	applyBootstrapReply(reply)
 }
 

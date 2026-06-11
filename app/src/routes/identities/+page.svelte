@@ -2,12 +2,12 @@
 	import { goto } from '$app/navigation'
 	import { browser } from '$app/environment'
 	import { t } from '$lib/i18n'
-	import { createIdentity, type JazzRow } from '$lib/jazz/api'
-	import { jazzStore } from '$lib/jazz/store.svelte'
+	import { createIdentity, type AvenDbRow } from '$lib/avendb/api'
+	import { avenDbStore } from '$lib/avendb/store.svelte'
 	import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 	import { deviceSession } from '$lib/settings/device-session-store'
 
-	const identitiesStore = jazzStore('safes')
+	const identitiesStore = avenDbStore('safes')
 
 	const unlocked = $derived($deviceSession.kind === 'unlocked')
 	const tauri = $derived(browser && isTauriRuntime())
@@ -25,7 +25,7 @@
 	const sparks = $derived(identities.filter((i) => i.type === 'spark'))
 	const loading = $derived(tauri && unlocked && !identitiesStore.loaded && !identitiesStore.error)
 
-	function sparkSubtitle(row: JazzRow): string {
+	function sparkSubtitle(row: AvenDbRow): string {
 		const id = row.owner
 		return id.length > 14 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id
 	}
@@ -63,7 +63,7 @@
 	<title>{t('identities.title')}{t('common.titleSuffix')}</title>
 </svelte:head>
 
-{#snippet identityGrid(rows: JazzRow[], type: 'human' | 'aven' | 'spark')}
+{#snippet identityGrid(rows: AvenDbRow[], type: 'human' | 'aven' | 'spark')}
 	<ul class="grid gap-3 sm:grid-cols-2">
 		{#each rows as row (row.owner)}
 			<li>

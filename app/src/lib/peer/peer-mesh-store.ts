@@ -4,9 +4,9 @@ import { deviceSession } from '$lib/settings/device-session-store'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import type { PeerRowReply } from '$lib/peer/api'
 import type { PeerMeshPeerState } from '$lib/peer/mesh-state'
-import { grooveSessionReady, peerMeshSnapshot, peerMeshStatus } from '$lib/runtime/groove-runtime'
+import { avendbSessionReady, peerMeshSnapshot, peerMeshStatus } from '$lib/runtime/avendb-runtime'
 
-export { peerMeshSnapshot } from '$lib/runtime/groove-runtime'
+export { peerMeshSnapshot } from '$lib/runtime/avendb-runtime'
 
 function meshPeerToRow(p: PeerMeshPeerState): PeerRowReply {
 	return {
@@ -51,7 +51,7 @@ export function startPeerMeshStore(): () => void {
 	const boot = () => {
 		if (gen !== storeGeneration) return
 		if (get(deviceSession).kind !== 'unlocked') return
-		if (!get(grooveSessionReady)) return
+		if (!get(avendbSessionReady)) return
 		void hydrateMesh(gen)
 	}
 
@@ -63,10 +63,10 @@ export function startPeerMeshStore(): () => void {
 			peerMeshSnapshot.set(undefined)
 			return
 		}
-		if (get(grooveSessionReady)) boot()
+		if (get(avendbSessionReady)) boot()
 	})
 
-	const stopReady = grooveSessionReady.subscribe((ready) => {
+	const stopReady = avendbSessionReady.subscribe((ready) => {
 		if (gen !== storeGeneration) return
 		if (ready && get(deviceSession).kind === 'unlocked') boot()
 	})
