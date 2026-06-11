@@ -426,9 +426,12 @@ async function speakMessage(id: string, body: string): Promise<void> {
 										{t('identities.talk.agentNoReply')}
 									</p>
 								{/if}
-								{#if showSpeak}
-									{@render speakBtn(msg.id, speakText)}
-								{/if}
+								<!-- Speak (on-device TTS) hidden for now — pure-cloud mode (board 0022).
+									{#if showSpeak}
+										{@render speakBtn(msg.id, speakText)}
+									{/if}
+								-->
+
 								{#if attachments.length > 0}
 									<IdentityMessageAttachments files={attachments} inverted={own} />
 								{/if}

@@ -431,7 +431,7 @@
 			"noMessagesYet": "Noch keine Nachrichten. Sag Hallo — Peers mit Zugriff auf diesen Identity sehen es nach dem Sync.",
 			"messagePlaceholder": "Nachricht schreiben…",
 			"authorAtTime": "{author} at {time}",
-			"agentLabel": "Aven · LFM2.5",
+			"agentLabel": "Aven",
 			"agentThinking": "Aven denkt nach…",
 			"agentNoReply": "(keine Antwort)",
 			"speak": "Vorlesen",

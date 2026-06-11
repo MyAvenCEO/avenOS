@@ -3,6 +3,7 @@ import { browser } from '$app/environment'
 import { page } from '$app/state'
 import { avenDbStore } from '$lib/avendb/store.svelte'
 import { t } from '$lib/i18n'
+import AgentLiveState from '$lib/identities/AgentLiveState.svelte'
 import { createIdentityAgent, setIdentityAgent } from '$lib/identities/identity-agent.svelte'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import type { ComposerMode } from '$lib/intents/types'
@@ -171,127 +172,16 @@ const innerContentClass = $derived(
 </AsidePageLayout>
 
 {#if showComposer}
-	{#if agent.err}
-		<div
-			class="pointer-events-none fixed inset-x-0 bottom-24 z-[44] flex justify-center px-4 sm:bottom-28"
-		>
-			<div
-				class="text-destructive border-destructive/40 bg-destructive/10 pointer-events-auto flex w-full max-w-md items-start gap-2 rounded-2xl border px-4 py-3 text-sm leading-snug shadow-lg backdrop-blur"
-				role="alert"
-			>
-				<span class="min-w-0 flex-1">{agent.err}</span>
-				<button
-					type="button"
-					class="hover:text-foreground -mr-1 shrink-0 px-1 font-semibold"
-					onclick={() => agent.clearErr()}
-					aria-label={t('identities.talk.dismissReply')}
-				>
-					×
-				</button>
-			</div>
-		</div>
-	{/if}
-
-	<!-- Transient agent reply chip — shown on non-talk views (talk renders the reply in-thread),
-	     so the agent can act in place without yanking the user to talk. -->
-	{#if !isTalkView && agent.lastReply}
-		{@const rec = agent.lastReply}
-		<div
-			class="pointer-events-none fixed inset-x-0 bottom-24 z-[44] flex justify-center px-4 sm:bottom-28"
-		>
-			<button
-				type="button"
-				class="border-border/60 bg-card/95 text-foreground pointer-events-auto flex w-full max-w-md flex-col gap-1 rounded-2xl border px-4 py-3 text-left shadow-lg ring-1 ring-primary/15 backdrop-blur transition hover:bg-card"
-				onclick={() => agent.dismissReply()}
-				aria-label={t('identities.talk.dismissReply')}
-			>
-				{#if rec.response?.trim()}
-					<p class="text-sm leading-relaxed">{rec.response}</p>
-				{/if}
-				<div class="text-muted-foreground/80 flex items-center gap-1.5 text-[11px]">
-					<svg
-						class="text-primary/70 size-3 shrink-0"
-						viewBox="0 0 16 16"
-						fill="currentColor"
-						aria-hidden="true"
-					>
-						<path
-							d="M11.5 1a3.5 3.5 0 0 0-3.36 4.52L1.7 11.96a1.55 1.55 0 1 0 2.19 2.19l6.44-6.44A3.5 3.5 0 1 0 11.5 1Zm0 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"
-						/>
-					</svg>
-					<code class="font-mono font-semibold">{rec.name}</code>
-					{#if rec.result}
-						<span class="truncate {rec.ok ? '' : 'text-amber-600 dark:text-amber-500'}"
-							>· {rec.result}</span
-						>
-					{/if}
-				</div>
-			</button>
-		</div>
-	{/if}
-
-	<!-- Live agent status strip — shown on EVERY sub-view (talk + non-talk), above the intent
-	     button. Surfaces "thinking" while the cloud model is called and one pill per tool call
-	     (running → done/error) so the user always sees what the agent is doing. -->
-	{#if agent.phase !== 'idle' || agent.toolBadges.length > 0}
-		<div
-			class="pointer-events-none fixed inset-x-0 bottom-36 z-[44] flex justify-center px-4 sm:bottom-40"
-		>
-			<div class="flex max-w-md flex-wrap items-center justify-center gap-1.5">
-				{#if agent.phase === 'thinking'}
-					<span
-						class="border-border/60 bg-card/95 text-muted-foreground flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium shadow-sm backdrop-blur"
-					>
-						<span class="bg-primary size-1.5 animate-pulse rounded-full"></span>
-						{t('identities.talk.agentThinking')}
-					</span>
-				{/if}
-				{#each agent.toolBadges as badge (badge.id)}
-					<span
-						class="bg-card/95 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium shadow-sm backdrop-blur
-							{badge.status === 'running'
-							? 'border-primary/40 text-foreground ring-1 ring-primary/15'
-							: badge.status === 'error'
-								? 'border-amber-500/40 text-amber-700 dark:text-amber-500'
-								: 'border-emerald-500/40 text-emerald-700 dark:text-emerald-500'}"
-					>
-						{#if badge.status === 'running'}
-							<svg
-								class="text-primary size-3 shrink-0 animate-spin"
-								viewBox="0 0 16 16"
-								aria-hidden="true"
-							>
-								<circle
-									cx="8"
-									cy="8"
-									r="6"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-opacity="0.25"
-								/>
-								<path
-									d="M8 2a6 6 0 0 1 6 6"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-								/>
-							</svg>
-						{/if}
-						<span class="max-w-[12rem] truncate">{badge.label}</span>
-					</span>
-				{/each}
-			</div>
-		</div>
-	{/if}
-
 	<div
 		class={`pointer-events-none fixed inset-x-0 bottom-0 ${mobileComposerVeilZClass} flex justify-center max-sm:px-2 sm:px-5 sm:pt-3 sm:pb-5 ${mobileActionVeilClass}`}
 	>
 		<div
-			class="relative flex w-full max-w-none items-center justify-center max-sm:px-0 sm:pl-0 sm:pr-0"
+			class="relative flex w-full max-w-none flex-col items-center justify-center max-sm:px-0 sm:pl-0 sm:pr-0"
 		>
+			<!-- ONE unified live-state indicator (thinking / executing / result / error), a few px
+				 above the intent button — replaces the old separate floating chips. -->
+			<AgentLiveState {agent} />
+
 			<!-- When collapsed (just the round FAB), hug the button so the pointer-events-auto hit
 				 area doesn't blanket the full width. Expanded modes still take the full width. -->
 			<div
