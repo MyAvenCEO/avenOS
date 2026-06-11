@@ -13,25 +13,27 @@
 import { getContext, setContext } from 'svelte'
 import type { AvenDbStore } from '$lib/avendb/store.svelte'
 import { persistSparkFiles } from '$lib/avendb/intent-files'
-import { brainAssembleContext, brainIngest } from '$lib/brain/api'
-import { avenDbTable } from '$lib/avendb/api'
-import { streamReply, tinfoilAvailable, tinfoilChat } from '$lib/llm/generate'
+import { brainIngest } from '$lib/brain/api'
+import { tinfoilAvailable, tinfoilChat } from '$lib/llm/generate'
 import {
 	CLOUD_SYSTEM_PROMPT,
 	CLOUD_TOOLS,
-	LLM_TOOLS,
 	MAX_TOOL_ROUNDS,
 	cloudToolRecord,
 	encodeToolCallBody,
 	executeToolCall,
-	resolveAgentTurn,
 	respondRecord,
 	toOpenAiTools,
-	type LlmToolCall,
 	type ToolCallRecord,
 	type ToolContext,
 	type ToolDispatchResult,
 } from '$lib/llm/tools'
+// PURE-CLOUD MODE (board 0022): the on-device LFM + brain-recall reply path is disabled — see
+// the commented `replyWithAgent` block below. To restore local mode, re-add these imports:
+//   import { brainAssembleContext } from '$lib/brain/api'
+//   import { avenDbTable } from '$lib/avendb/api'
+//   import { streamReply } from '$lib/llm/generate'
+//   import { LLM_TOOLS, resolveAgentTurn, type LlmToolCall } from '$lib/llm/tools'
 
 /** Deterministic author DID for on-device agent replies (role-tagged in the row). */
 const AGENT_DID = 'did:aven:agent:lfm2'
@@ -206,11 +208,12 @@ export function createIdentityAgent(deps: {
 
 	/**
 	 * Create an empty agent row, produce one tool-call record (executing its side effect), and
-	 * persist it as the row body. Routing: if the Tinfoil cloud path is available it runs the
-	 * agentic tool loop (generic `todos` CRUD + navigation); otherwise the on-device path applies
-	 * (brain-recall structured reply, falling back to the local LFM2.5 stream).
+	 * persist it as the row body. PURE-CLOUD MODE (board 0022): EVERY LLM request goes to the
+	 * Tinfoil cloud agent (navigation + `todos` CRUD). The on-device LFM2.5 stream and the
+	 * brain-recall structured reply are disabled for now — preserved in the commented block below
+	 * so local mode can be restored by uncommenting it (and re-adding the imports listed up top).
 	 */
-	async function replyWithAgent(prompt: string, userRowId?: string): Promise<void> {
+	async function replyWithAgent(prompt: string, _userRowId?: string): Promise<void> {
 		const env = deps.env()
 		if (!env.canonicalSparkId) return
 		let replyId: string | undefined
@@ -228,79 +231,74 @@ export function createIdentityAgent(deps: {
 
 			const ctx = buildToolContext(env)
 
-			// Tinfoil cloud path (board 0021): a real OpenAI-style tool loop drives the generic
-			// `todos` CRUD + navigation. Probe availability once, then memoize for the app run.
+			// Probe cloud availability once, then memoize for the app run.
 			if (cloudReady === undefined) cloudReady = await tinfoilAvailable()
-			if (cloudReady) {
-				const record = await runCloudLoop(prompt, reply.id, ctx)
-				await persistRecord(env, reply.id, record)
+			if (!cloudReady) {
+				// Pure-cloud mode with no key: there is no local fallback (disabled). Surface it.
+				await persistRecord(
+					env,
+					reply.id,
+					respondRecord('Cloud AI is unavailable — set TINFOIL_API_KEY to enable Aven.'),
+				)
 				return
 			}
-
-			// ── On-device fallback (no TINFOIL_API_KEY) ──
-			// E4: the brain is the context manager — assembled, budgeted, traced.
-			// Graceful degradation is law: any brain failure falls back to the raw prompt.
-			const assembled = await brainAssembleContext(env.canonicalSparkId, prompt, {
-				stream: 'talk',
-			}).catch(() => undefined)
-			const brainPrefix = assembled?.prompt ? `${assembled.prompt}\n\n` : ''
-
-			// E4 (brain-recall mode): talk is human↔human; the brain answers every message
-			// with a structured RECALL — what it stored and what it found — deterministic,
-			// no conversational LLM. (LLM reply path below remains as fallback when the
-			// brain is unavailable.)
-			if (assembled) {
-				const t = assembled.trace
-				const lines: string[] = [
-					`🧠 stored · found ${t.recalled.length} related, ${t.entities.length} entities`,
-				]
-				for (const r of t.recalled.slice(0, 5)) {
-					lines.push(`• ${r.snippet} (${r.via})`)
-				}
-				if (t.entities.length > 0) {
-					lines.push(`↳ ${t.entities.map((e) => e.name).join(' · ')}`)
-				}
-				const recallBody = lines.join('\n')
-				streaming = { ...streaming, [reply.id]: recallBody }
-				await deps.messages.update(reply.id, { body: recallBody })
-				if (userRowId) {
-					void avenDbTable('context_traces')
-						.create({
-							owner: env.canonicalSparkId,
-							message_id: userRowId,
-							reply_id: reply.id,
-							trace: JSON.stringify(t),
-							created_at_ms: Date.now(),
-						})
-						.catch(() => {})
-				}
-				return
-			}
-
-			// The agent is tool-call-only. Capture any real `<|tool_call_start|>` call and the
-			// streamed prose, then resolve the turn into exactly one tool-call record (executing
-			// the side effect). The chip is what's persisted + rendered — never bare prose.
-			let capturedCall: LlmToolCall | undefined
-			const full = await streamReply(
-				brainPrefix + prompt,
-				reply.id,
-				(piece) => {
-					// Reassign (not mutate) so the talk view's liveBody const re-derives reliably.
-					streaming = { ...streaming, [reply.id]: (streaming[reply.id] ?? '') + piece }
-				},
-				{
-					tools: LLM_TOOLS,
-					onToolCall: (call) => (capturedCall = call),
-				},
-			)
-			const record = await resolveAgentTurn({
-				replyId: reply.id,
-				userPrompt: prompt,
-				toolCall: capturedCall,
-				prose: full,
-				ctx,
-			})
+			const record = await runCloudLoop(prompt, reply.id, ctx)
 			await persistRecord(env, reply.id, record)
+
+			/* ───────────────── DISABLED: on-device LFM + brain-recall fallback ─────────────────
+			 * Restore local mode by uncommenting this block and re-adding the imports listed at the
+			 * top of the file. It runs the brain-recall structured reply, then the local LFM2.5
+			 * tool-call stream (navigation only). Replace the `if (!cloudReady) {…} runCloudLoop`
+			 * lines above with `if (cloudReady) { runCloudLoop; return }` to make it the fallback.
+			 *
+			 * // E4: the brain is the context manager — assembled, budgeted, traced.
+			 * const assembled = await brainAssembleContext(env.canonicalSparkId, prompt, {
+			 * 	stream: 'talk',
+			 * }).catch(() => undefined)
+			 * const brainPrefix = assembled?.prompt ? `${assembled.prompt}\n\n` : ''
+			 * // E4 (brain-recall mode): deterministic structured RECALL, no conversational LLM.
+			 * if (assembled) {
+			 * 	const t = assembled.trace
+			 * 	const lines: string[] = [
+			 * 		`🧠 stored · found ${t.recalled.length} related, ${t.entities.length} entities`,
+			 * 	]
+			 * 	for (const r of t.recalled.slice(0, 5)) lines.push(`• ${r.snippet} (${r.via})`)
+			 * 	if (t.entities.length > 0) lines.push(`↳ ${t.entities.map((e) => e.name).join(' · ')}`)
+			 * 	const recallBody = lines.join('\n')
+			 * 	streaming = { ...streaming, [reply.id]: recallBody }
+			 * 	await deps.messages.update(reply.id, { body: recallBody })
+			 * 	if (_userRowId) {
+			 * 		void avenDbTable('context_traces')
+			 * 			.create({
+			 * 				owner: env.canonicalSparkId,
+			 * 				message_id: _userRowId,
+			 * 				reply_id: reply.id,
+			 * 				trace: JSON.stringify(t),
+			 * 				created_at_ms: Date.now(),
+			 * 			})
+			 * 			.catch(() => {})
+			 * 	}
+			 * 	return
+			 * }
+			 * // Tool-call-only on-device stream (navigation).
+			 * let capturedCall: LlmToolCall | undefined
+			 * const full = await streamReply(
+			 * 	brainPrefix + prompt,
+			 * 	reply.id,
+			 * 	(piece) => {
+			 * 		streaming = { ...streaming, [reply.id]: (streaming[reply.id] ?? '') + piece }
+			 * 	},
+			 * 	{ tools: LLM_TOOLS, onToolCall: (call) => (capturedCall = call) },
+			 * )
+			 * const record = await resolveAgentTurn({
+			 * 	replyId: reply.id,
+			 * 	userPrompt: prompt,
+			 * 	toolCall: capturedCall,
+			 * 	prose: full,
+			 * 	ctx,
+			 * })
+			 * await persistRecord(env, reply.id, record)
+			 * ──────────────────────────────────────────────────────────────────────────────── */
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e)
 			if (replyId) {

@@ -245,6 +245,15 @@ git status --short
 
 ## Progress log
 
+- `2026-06-11` — Pivot 2 (Samuel): **pure-cloud mode** — ALL Talk LLM requests go
+  to the Tinfoil cloud agent (navigation + todos CRUD). The on-device LFM2.5
+  stream + brain-recall reply are commented out in `replyWithAgent` (restorable;
+  imports listed at the top of `identity-agent.svelte.ts`). `CLOUD_TOOLS` keeps
+  both `navigate_views` + `todos`; cloud system prompt updated. No-key path now
+  shows a "set TINFOIL_API_KEY" notice instead of falling back to local. Also
+  cleared an unrelated dead-code warning (`LinkRow.source_memory`) in `aven-brain`
+  that surfaced after merging main. App `bun run check` + `biome lint` clean (only
+  the pre-existing `brand-style.ts` error); `aven-brain` builds warning-free.
 - `2026-06-11` — Build: implemented `aven-ai/src/tinfoil.rs` (one stateless OpenAI
   chat round; client cached via OnceCell; reads `TINFOIL_API_KEY`), `tinfoil`
   feature; `llm.rs` `tinfoil_available`/`tinfoil_chat` commands (registered);

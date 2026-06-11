@@ -368,9 +368,10 @@ export const MAX_TOOL_ROUNDS = 5
 /** System prompt for the cloud agent: act via tools, query before mutating, reply concisely. */
 export const CLOUD_SYSTEM_PROMPT =
 	'You are Aven, the assistant inside one identity. Fulfil the user request by calling the ' +
-	'provided tools. To edit or delete todos you MUST first call `todos` with action "list" to ' +
-	'get the real ids, then call `todos` again with the exact ids. Batch related changes into one ' +
-	"call. When the task is done, reply with a short, friendly sentence in the user's language."
+	'provided tools: use `navigate_views` to switch the open view, and `todos` to manage the task ' +
+	'list. To edit or delete todos you MUST first call `todos` with action "list" to get the real ' +
+	'ids, then call `todos` again with the exact ids. Batch related changes into one call. When ' +
+	"the task is done, reply with a short, friendly sentence in the user's language."
 
 /** Map our {@link ToolDef}s onto the OpenAI `tools` array shape the Tinfoil SDK expects. */
 export function toOpenAiTools(defs: ToolDef[]): unknown[] {

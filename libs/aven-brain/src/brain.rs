@@ -431,7 +431,6 @@ struct LinkRow {
     stability: f64,
     access_count: i64,
     last_access: i64,
-    source_memory: Option<String>,
 }
 
 /// The memory brain of one SAFE (owner-scoped over the shared store).
@@ -1403,7 +1402,8 @@ impl<E: Embedder> Brain<E> {
 
     /// All link rows of this owner, opened (the graph walks filter over these).
     /// Link column order: owner, from, to, kind, class, valid_from, valid_to,
-    /// confidence, strength, stability, access_count, last_access, source_memory.
+    /// confidence, strength, stability, access_count, last_access, source_memory
+    /// (col 12 `source_memory` is provenance-only — not read by any walk, so not opened here).
     async fn links(&self) -> Result<Vec<LinkRow>, BrainError> {
         let rows = self
             .client
@@ -1449,7 +1449,6 @@ impl<E: Embedder> Brain<E> {
                     .open_at(LINKS, "last_access", id, v, 11)
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(0),
-                source_memory: self.open_at(LINKS, "source_memory", id, v, 12),
             })
             .collect())
     }
