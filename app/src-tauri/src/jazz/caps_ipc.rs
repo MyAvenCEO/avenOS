@@ -1407,6 +1407,43 @@ async fn read_own_profile(client: &JazzClient, signer_did: &str) -> (String, Str
 	(name, label)
 }
 
+/// Promote this device's HUMAN SAFE to OWNER of avenCEO. The network's first admin is
+/// auto-granted by the server to its device signer (did:key); this elevates the admin to
+/// the person's human SAFE (did:safe) so EVERY one of their devices inherits avenCEO admin
+/// through SAFE membership — the admin is the human, not a single device key. Idempotent
+/// and best-effort: no-op if this device isn't (yet) an avenCEO owner, has no human SAFE,
+/// or the human SAFE already owns avenCEO. Reuses the did:safe-capable owner-grant.
+pub(crate) async fn groove_ipc_aven_ceo_promote_human_owner(
+	app: &tauri::AppHandle,
+	jazz: &ManagedJazz,
+	self_state: &SelfState,
+) -> Result<(), String> {
+	let client = with_connected_client(jazz, app, self_state).await?;
+	let shell_arc = jazz_shell_ready(app, jazz, self_state, client.clone()).await?;
+	let shell = shell_arc.as_ref();
+	let avenceo = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
+
+	// Only an avenCEO owner can grant — silently skip until the server admits this device.
+	if jazz_engine::authorize_gate(shell, "safes", crate::identity_acc::AccOp::Write, avenceo, None)
+		.is_err()
+	{
+		return Ok(());
+	}
+	// This device's human SAFE (onboarding step 2). Skip if it doesn't exist yet.
+	let Some(human) = find_controlled_safe_of_type(client.as_ref(), shell, "human").await? else {
+		return Ok(());
+	};
+	let human_did = crate::identity_acc::safe_did(human);
+
+	// Already an owner? avoid the re-grant work (admin_add is itself idempotent too).
+	if let Some(bisc) = shell.vault.safes.get(&avenceo) {
+		if crate::identity_acc::identity_peer_is_owner(&bisc.biscuit, avenceo, &human_did)? {
+			return Ok(());
+		}
+	}
+	groove_ipc_spark_admin_add(app, jazz, self_state, avenceo.to_string(), human_did).await
+}
+
 /// Add a member to the avenCEO roster — the inverted-invite / DID-push onboarding.
 /// The owner pastes a candidate DID and grants the membership BUNDLE: `reads` on
 /// avenCEO (read the whole roster) + a keyshare + a ROW-SCOPED `write` on the

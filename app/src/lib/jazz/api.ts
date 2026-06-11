@@ -21,6 +21,13 @@ export async function avenCeoAddMember(signerDid: string): Promise<void> {
 	await grooveRuntime('avenCeoAddMember', { signerDid })
 }
 
+/** Elevate avenCEO admin from this device's signer to its HUMAN SAFE, so every device of
+ *  the person inherits admin through SAFE membership. Idempotent + best-effort (no-op until
+ *  this device is an avenCEO owner and has a human SAFE). Run once after becoming owner. */
+export async function avenCeoPromoteHumanOwner(): Promise<void> {
+	await grooveRuntime('avenCeoPromoteHumanOwner', {})
+}
+
 /** Self-publish this device's profile into its own avenCEO roster row. */
 export async function avenCeoPublishProfile(accountName: string, deviceLabel: string): Promise<void> {
 	await grooveRuntime('avenCeoPublishProfile', { accountName, deviceLabel })
