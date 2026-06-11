@@ -134,7 +134,7 @@ async function mount(): Promise<void> {
 	}
 }
 
-function _attachHost(element: HTMLElement) {
+function attachHost(element: HTMLElement) {
 	hostNode = element
 	void mount()
 	return () => {

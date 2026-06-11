@@ -14,7 +14,7 @@ const shell = $derived(selected.shell)
 
 const jsonPanels: Panel[] = ['view', 'style', 'state', 'logic', 'source']
 
-function _jsonFor(panelId: Panel): string {
+function jsonFor(panelId: Panel): string {
 	if (panelId === 'view') return JSON.stringify(shell.view, null, 2)
 	if (panelId === 'style') return JSON.stringify(shell.style, null, 2)
 	if (panelId === 'source') return JSON.stringify(shell.source, null, 2)
