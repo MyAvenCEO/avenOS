@@ -124,11 +124,13 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 		// `keyshares`→`RotateDek`), not a skip.
 		let Some(proof) = proof else {
 			if spark_scoped {
-				return CapDecision::DenyPermanent;
+				log::warn!(target: "avenos::jazz", "verify_on_apply DENY[no-binding]: table={} row={}", res.table, res.row_id.uuid());
+			return CapDecision::DenyPermanent;
 			}
 			return CapDecision::Allow;
 		};
 		let Ok(meta) = std::str::from_utf8(proof) else {
+			log::warn!(target: "avenos::jazz", "verify_on_apply DENY[binding-utf8]: table={} row={}", res.table, res.row_id.uuid());
 			return CapDecision::DenyPermanent;
 		};
 		let binding = match aven_caps::ownership::OwnerBinding::from_meta_str(meta) {
@@ -140,9 +142,11 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 		//     author it names. Needs no vault, so any peer/relay enforces it → a forged
 		//     or relabeled row dies at every hop (E2E, relay-proof).
 		if binding.value_id != *res.row_id.uuid() {
+			log::warn!(target: "avenos::jazz", "verify_on_apply DENY[binding-row-mismatch]: table={} row={}", res.table, res.row_id.uuid());
 			return CapDecision::DenyPermanent;
 		}
 		if aven_caps::ownership::verify_owner_binding(&binding).is_err() {
+			log::warn!(target: "avenos::jazz", "verify_on_apply DENY[binding-sig]: table={} row={}", res.table, res.row_id.uuid());
 			return CapDecision::DenyPermanent;
 		}
 
@@ -153,7 +157,8 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 			if let Some(acl) = acl_guard.as_ref() {
 				if let Some(&existing) = acl.object_owner.get(&(res.table.clone(), res.row_id)) {
 					if existing != binding.owner {
-						return CapDecision::DenyPermanent;
+						log::warn!(target: "avenos::jazz", "verify_on_apply DENY[owner-relabel]: table={} row={}", res.table, res.row_id.uuid());
+			return CapDecision::DenyPermanent;
 					}
 				}
 			}
@@ -167,24 +172,28 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 			Some(b) => b,
 			None => {
 				if spark_scoped {
-					return CapDecision::DenyPermanent;
+					log::warn!(target: "avenos::jazz", "verify_on_apply DENY[no-edit-sig]: table={} row={}", res.table, res.row_id.uuid());
+			return CapDecision::DenyPermanent;
 				}
 				return CapDecision::Allow;
 			}
 		};
 		let Ok(es_str) = std::str::from_utf8(edit_sig) else {
+			log::warn!(target: "avenos::jazz", "verify_on_apply DENY[edit-sig-utf8]: table={} row={}", res.table, res.row_id.uuid());
 			return CapDecision::DenyPermanent;
 		};
 		let es = match aven_caps::ownership::EditSignature::from_meta_str(es_str) {
 			Ok(e) => e,
 			Err(_) => {
-				return CapDecision::DenyPermanent;
+				log::warn!(target: "avenos::jazz", "verify_on_apply DENY[edit-sig-parse]: table={} row={}", res.table, res.row_id.uuid());
+			return CapDecision::DenyPermanent;
 			}
 		};
 		// Bind the edit-sig to the receiver-computed digest. A relay that tampered with
 		// `data` changes that digest, so the carried signature no longer matches → reject
 		// (this holds even when we don't hold the identity, i.e. a pure relay).
 		if aven_caps::ownership::verify_signed_batch(&es, digest).is_err() {
+			log::warn!(target: "avenos::jazz", "verify_on_apply DENY[edit-sig-digest]: table={} row={}", res.table, res.row_id.uuid());
 			return CapDecision::DenyPermanent;
 		}
 
@@ -224,7 +233,14 @@ impl CapabilityResolver for BiscuitCapabilityResolver {
 			Some(&binding),
 		) {
 			Ok(()) => CapDecision::Allow,
-			Err(_) => CapDecision::DenyPermanent,
+			Err(e) => {
+				log::warn!(
+					target: "avenos::jazz",
+					"verify_on_apply DENY: table={} row={} owner={} author={} op={}: {e}",
+					res.table, res.row_id.uuid(), binding.owner, es.author_did, required_op.as_op_str(),
+				);
+				CapDecision::DenyPermanent
+			}
 		}
 	}
 }

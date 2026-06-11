@@ -48,7 +48,7 @@ pub enum AccOp {
 }
 
 impl AccOp {
-	fn as_op_str(self) -> &'static str {
+	pub fn as_op_str(self) -> &'static str {
 		match self {
 			AccOp::Read => "read",
 			AccOp::Write => "write",
