@@ -2,10 +2,10 @@
  * Latest brain roundtrip for the talk surface (plan 0018, E5 v1).
  *
  * One roundtrip = what happened in the brain for the LAST human message: what was
- * stored (the new memory) and what a display-only `assemble_context` probe recalled
- * (L0 self · L1 gist · L2 entities · L3 search hits + inner query + budget). The
- * probe feeds ONLY this panel — nothing is sent to any LLM (auto-assemble is parked
- * pending the talk-UX rethink).
+ * stored (the new memory) and what `assemble_context` recalled (L0 self · L1 gist ·
+ * L2 entities · L3 search hits + inner query + budget). The same assembled bundle both
+ * fills this panel AND grounds the LLM reply this turn — the panel is the receipt for
+ * the context the AI actually saw.
  */
 import type { ContextTrace } from '$lib/brain/api'
 

@@ -380,6 +380,19 @@ pub(crate) async fn brain_ipc_backfill(
 	Ok(json!({ "scanned": scanned, "ingested": ingested }))
 }
 
+pub(crate) async fn brain_ipc_reembed(
+	app: &tauri::AppHandle,
+	mj: &ManagedAvenDb,
+	ss: &SelfState,
+	identity: String,
+) -> Result<serde_json::Value, String> {
+	let client = with_connected_client(mj, app, ss).await?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(app, client, &shell, &identity).await?;
+	let n = brain.re_embed_all().await.map_err(|e| e.to_string())?;
+	Ok(json!({ "reembedded": n, "embedder": brain.embedder_name() }))
+}
+
 pub(crate) async fn brain_ipc_dream(
 	app: &tauri::AppHandle,
 	mj: &ManagedAvenDb,

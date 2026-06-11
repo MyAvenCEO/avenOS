@@ -1,9 +1,9 @@
 <script lang="ts">
 /**
- * The brain roundtrip panel (plan 0018, E5 v1): always shows the LATEST roundtrip for
- * the last human message — what was STORED and what a display-only assemble probe
- * RECALLED, broken down by context layer (L0 self · L1 gist · L2 entities · L3 search),
- * plus the inner query and budget. Nothing here is sent to an LLM.
+ * The brain roundtrip panel (plan 0018, E5): always shows the LATEST roundtrip for the
+ * last human message — what was STORED and what the auto-assembled context RECALLED,
+ * broken down by context layer (L0 self · L1 gist · L2 entities · L3 search), plus the
+ * inner query and budget. This is the exact context fed to the AI for this turn.
  */
 import { brainRoundtrip } from '$lib/identities/talk-brain-roundtrip.svelte'
 
@@ -149,7 +149,7 @@ function snip(s: string, n = 110): string {
 				{#if t.budget.droppedRecalled + t.budget.droppedWorking > 0}
 					· dropped {t.budget.droppedRecalled + t.budget.droppedWorking}
 				{/if}
-				· embedder: {t.embedder} · display-only (nothing sent to the LLM)
+				· embedder: {t.embedder} · sent to the AI as context this turn
 			</p>
 		{/if}
 	{/if}

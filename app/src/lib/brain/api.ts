@@ -65,7 +65,14 @@ export type ContextTrace = {
 
 export type ContextBundle = { prompt: string; trace: ContextTrace }
 
-export type DreamReport = { bondsDecayed: number; entitiesMerged: number }
+export type DreamReport = {
+	bondsDecayed: number
+	entitiesMerged: number
+	claimsDeduped: number
+	claimsContradicted: number
+	memoriesConsolidated: number
+	summariesWritten: number
+}
 
 /** Row counts + embedder info for an identity's brain. */
 export function brainStatus(identity: string): Promise<BrainStatus> {
@@ -119,7 +126,12 @@ export function brainBackfill(identity: string): Promise<{ scanned: number; inge
 	return avenDbRuntime('brainBackfill', { identity })
 }
 
-/** Run a dreaming consolidation pass (bond decay + entity merge). */
+/** Re-embed every memory with the CURRENT embedder (stub→gemma migration). */
+export function brainReembed(identity: string): Promise<{ reembedded: number; embedder: string }> {
+	return avenDbRuntime('brainReembed', { identity })
+}
+
+/** Run a dreaming consolidation pass (decay, merge, claim healing, consolidation). */
 export function brainDream(identity: string): Promise<DreamReport> {
 	return avenDbRuntime('brainDream', { identity })
 }

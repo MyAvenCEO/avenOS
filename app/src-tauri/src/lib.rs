@@ -1,4 +1,5 @@
 mod asr;
+mod embed_model;
 mod llm;
 mod tts;
 mod biscuit_resolver;
@@ -258,6 +259,11 @@ pub fn run() {
 			asr::asr_cancel_download,
 			asr::asr_start_download,
 			asr::asr_delete_model,
+			embed_model::embed_status,
+			embed_model::embed_local_models,
+			embed_model::embed_start_download,
+			embed_model::embed_cancel_download,
+			embed_model::embed_delete_model,
 			llm::llm_status,
 			llm::llm_generate,
 			llm::llm_local_models,

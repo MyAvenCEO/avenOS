@@ -182,8 +182,8 @@ const innerContentClass = $derived(
 	{/snippet}
 
 	{#snippet asideRight()}
-		<!-- Brain roundtrip (E5 v1): the permanent right aside on EVERY identity sub-view —
-		     shows what the brain stored + recalled for the last message. Display-only. -->
+		<!-- Brain roundtrip (E5): the permanent right aside on EVERY identity sub-view — shows what
+		     the brain stored + recalled (the context fed to the AI) for the last message. -->
 		<TalkBrainAside identityId={decodedIdentityId} />
 	{/snippet}
 
