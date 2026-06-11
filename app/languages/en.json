@@ -444,7 +444,7 @@
 			"noMessagesYet": "No messages yet. Say hello — peers with access to this identity will see it after sync.",
 			"messagePlaceholder": "Write a message…",
 			"authorAtTime": "{author} at {time}",
-			"agentLabel": "Aven · LFM2.5",
+			"agentLabel": "Aven",
 			"agentThinking": "Aven is thinking…",
 			"agentNoReply": "(no reply)",
 			"speak": "Speak",
