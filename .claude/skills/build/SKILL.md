@@ -18,10 +18,14 @@ a measurable goal is how agents drift. A build-ready card is, by contract,
 buildable without asking questions — if you *do* have a real question, the spec
 was incomplete, so answer it back into the spec rather than guessing.
 
-The metric is your target the whole way through. Claude Code's built-in **`/goal`
-loop** is the engine that drives toward exactly this kind of transcript-provable
-condition across turns — this skill is the board-state discipline around it, and
-the [[board-goal]] command composes build → review end to end.
+The metric is your target the whole way through. **Iterate to it in-session:**
+run the Verification, read the output against the Acceptance criteria, fix, and
+re-run — keep looping until the metric is provably met, rather than stopping at
+"I wrote the code". That in-session loop is yours to drive; the build skill cannot
+start Claude Code's built-in **`/goal`** loop itself (slash commands only fire from
+a user message), so for *unattended, cross-turn* continuation you **emit a
+ready-to-run `/goal` line** for the human to flip on (see "Where to stop"). The
+[[board-goal]] command composes build → review end to end.
 
 ## What to do
 
@@ -42,7 +46,10 @@ the [[board-goal]] command composes build → review end to end.
    `## Progress log` (newest first) so the next agent can pick up cold. Don't batch
    the whole build into one opaque leap.
 5. **Match the surrounding code** — its naming, idioms, and comment density.
-6. **Bump `updated:`** in frontmatter as you touch the file.
+6. **Iterate to green in-session.** Run the Verification, compare against the
+   Acceptance criteria, fix what's red, re-run — loop until the metric is provably
+   met. Don't hand off a build you haven't seen pass.
+7. **Bump `updated:`** in frontmatter as you touch the file.
 
 ## Where to stop
 
@@ -54,9 +61,19 @@ git mv libs/aven-board/board/build/NNNN-slug.md libs/aven-board/board/review/NNN
 ```
 
 Do **not** declare it done here. Running the Verification, proving the metric from
-real output, and bubbling the result to a human is the [[review]] skill's job. To
-run the whole thing in one pass, use the [[board-goal]] command (resolve → build →
-review), or flip on the built-in loop with `/goal <completion condition>`.
+real output, and bubbling the result to a human is the [[review]] skill's job.
+
+**Always emit the hand-off line.** Before you end the turn, print the card's
+completion condition as a ready-to-run `/goal` line so a human can flip on
+unattended, cross-turn continuation if they want it (the build skill can't enable
+it for them):
+
+```
+/goal <paste the card's completion condition>
+```
+
+To run the whole thing in one pass instead, use the [[board-goal]] command
+(resolve → build → review).
 
 ## Condensed
 
@@ -65,4 +82,6 @@ review), or flip on the built-in loop with `/goal <completion condition>`.
 3. Implement the smallest change that meets the Acceptance criteria; touch only the
    listed files.
 4. Check boxes + log progress per step; bump `updated`.
-5. Stop at "built"; `git mv` build → review and hand to [[review]] to evaluate.
+5. Iterate to green in-session: run Verification → fix → re-run until the metric holds.
+6. `git mv` build → review, hand to [[review]], and print the `/goal <condition>`
+   line for optional unattended continuation.
