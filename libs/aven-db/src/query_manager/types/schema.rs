@@ -585,6 +585,38 @@ impl SchemaBuilder {
 /// Schema mapping table names to their table schemas.
 pub type Schema = HashMap<TableName, TableSchema>;
 
+/// The single source of truth for "is this table identity (SAFE) scoped?": a table is
+/// spark/identity-scoped **iff it carries an `owner` column**. Identity-scoped rows are
+/// the E2E, per-SAFE-identity data whose owner-binding is mandatory on apply (no table
+/// exceptions). Both the app's inbound gate (`biscuit_resolver`) and the relay's
+/// (`aven-node`) classify rows with this one predicate so the two can never disagree.
+///
+/// Derived from the live schema, so it cannot drift from the manifest. Unknown tables
+/// (not in this schema) return `false` — they are not identity-scoped E2E data.
+pub fn is_owner_scoped_table(schema: &Schema, table: &str) -> bool {
+    schema
+        .get(&TableName::new(table))
+        .map(table_schema_is_owner_scoped)
+        .unwrap_or(false)
+}
+
+/// True when this table schema declares an `owner` column. See [`is_owner_scoped_table`].
+pub fn table_schema_is_owner_scoped(table: &TableSchema) -> bool {
+    table.columns.column("owner").is_some()
+}
+
+/// All identity (SAFE) scoped table names in the schema — those carrying an `owner`
+/// column. Sorted for stable output. See [`is_owner_scoped_table`].
+pub fn owner_scoped_table_names(schema: &Schema) -> Vec<String> {
+    let mut names: Vec<String> = schema
+        .iter()
+        .filter(|(_, t)| table_schema_is_owner_scoped(t))
+        .map(|(n, _)| n.as_str().to_string())
+        .collect();
+    names.sort();
+    names
+}
+
 /// Validate that no INHERITS cycles exist in the schema.
 ///
 /// Cycles include: A→A (self-reference), A→B→A (direct cycle), A→B→C→A (indirect cycle).

@@ -120,7 +120,26 @@ async fn sync_handler(
 /// reject a forged or relabeled row whose owner-binding signature is invalid, before
 /// storing or forwarding it (members enforce membership on their side). Outbound stays
 /// permissive: the relay stores & forwards ciphertext for everyone.
-struct ServerApplyGate;
+struct ServerApplyGate {
+    /// Identity (SAFE) scoped tables — those carrying an `owner` column, derived once from
+    /// the live schema (`aven_db::owner_scoped_table_names`). A row on one of these MUST
+    /// carry an owner-binding to apply; the relay denies a bindingless one fail-closed,
+    /// byte-for-byte with the client gate (`biscuit_resolver.rs`). Non-owner-scoped tables
+    /// (local/non-E2E) are not gated here.
+    spark_scoped: std::collections::HashSet<String>,
+}
+
+impl ServerApplyGate {
+    fn new(schema: &aven_db::Schema) -> Self {
+        Self {
+            spark_scoped: aven_db::owner_scoped_table_names(schema).into_iter().collect(),
+        }
+    }
+
+    fn is_spark_scoped(&self, table: &str) -> bool {
+        self.spark_scoped.contains(table)
+    }
+}
 
 impl aven_db::CapabilityResolver for ServerApplyGate {
     fn may_sync(
@@ -141,7 +160,18 @@ impl aven_db::CapabilityResolver for ServerApplyGate {
         proof: Option<&[u8]>,
         edit_sig: Option<&[u8]>,
     ) -> aven_db::CapDecision {
+        // A3 — fail-closed, no exceptions: a spark/identity-scoped (owner-bearing) row MUST
+        // carry an owner-binding to apply, exactly like the client gate (`biscuit_resolver.rs`).
+        // The relay was the last fail-OPEN peer; this closes it. Non-owner-scoped tables
+        // (local/non-E2E) carry no binding and stay permissive.
         let Some(proof) = proof else {
+            if self.is_spark_scoped(&res.table) {
+                tracing::warn!(
+                    table = %res.table, row = %res.row_id.uuid(),
+                    "relay-deny[no-binding]: spark-scoped row missing owner-binding"
+                );
+                return aven_db::CapDecision::DenyPermanent;
+            }
             return aven_db::CapDecision::Allow;
         };
         let Ok(meta) = std::str::from_utf8(proof) else {
@@ -248,6 +278,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // replicated row batches; it holds NO keyshares, so every batch stays ciphertext.
     let schema =
         avenos_schema_hash::embedded_schema().map_err(|e| format!("load schema: {e}"))?;
+    // Identity-scoped (owner-bearing) tables, derived once from the live schema — the relay
+    // apply gate denies a bindingless row on any of these (A3, fail-closed). Computed before
+    // `schema` is moved into the engine context below.
+    let apply_gate = ServerApplyGate::new(&schema);
     let data_dir = cfg.data_dir.clone();
     tracing::info!(data_dir = %data_dir.display(), "durable storage (RocksDB)");
     let ctx = AppContext {
@@ -280,7 +314,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Phase 2 — every peer verifies. Install the relay-proof apply gate so a forged or
     // relabeled row is rejected on apply even in transit through the server.
-    if let Err(e) = engine.set_resolver(std::sync::Arc::new(ServerApplyGate)) {
+    if let Err(e) = engine.set_resolver(std::sync::Arc::new(apply_gate)) {
         tracing::warn!("install server apply gate: {e}");
     }
 
@@ -389,4 +423,120 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn store_is_corrupt(e: &impl std::fmt::Display) -> bool {
     let m = e.to_string();
     m.contains("Corruption") || m.contains("wal_dir") || m.contains("rocksdb open")
+}
+
+#[cfg(test)]
+mod apply_gate_tests {
+    //! A3 — the relay apply gate is fail-closed on identity (SAFE) scoped rows, byte-for-byte
+    //! with the client gate: a spark-scoped row with no owner-binding is rejected; a
+    //! non-spark-scoped row without one is allowed; a validly bound + edit-signed row is
+    //! accepted; a forged/relabeled/tampered one is rejected.
+    use super::ServerApplyGate;
+    use aven_caps::ownership::{mint_owner_binding, sign_batch};
+    use aven_db::{AccOp, CapDecision, CapabilityResolver, ObjectId, PeerId, ResourceCoord, SyncTargetId};
+    use uuid::Uuid;
+
+    /// A gate whose only identity-scoped table is `todos` (no schema needed for the unit).
+    fn gate() -> ServerApplyGate {
+        ServerApplyGate { spark_scoped: ["todos".to_string()].into_iter().collect() }
+    }
+
+    fn subject() -> SyncTargetId {
+        SyncTargetId::Client(PeerId([7u8; 32]))
+    }
+
+    fn coord(table: &str, row: Uuid) -> ResourceCoord {
+        ResourceCoord::new(format!("urn:{row}"), table.to_string(), ObjectId::from_uuid(row))
+    }
+
+    fn is_deny(d: CapDecision) -> bool {
+        matches!(d, CapDecision::DenyPermanent)
+    }
+    fn is_allow(d: CapDecision) -> bool {
+        matches!(d, CapDecision::Allow)
+    }
+
+    #[test]
+    fn apply_gate_denies_spark_scoped_row_without_binding() {
+        let g = gate();
+        let res = coord("todos", Uuid::from_u128(0x11));
+        let d = g.verify_on_apply(&subject(), AccOp::Write, &res, &[9u8; 32], None, None);
+        assert!(is_deny(d), "spark-scoped row with no owner-binding must be denied");
+    }
+
+    #[test]
+    fn apply_gate_allows_non_spark_scoped_without_binding() {
+        let g = gate();
+        let res = coord("humans", Uuid::from_u128(0x22)); // not owner-scoped → not gated
+        let d = g.verify_on_apply(&subject(), AccOp::Write, &res, &[9u8; 32], None, None);
+        assert!(is_allow(d), "non-spark-scoped row without a binding stays permissive");
+    }
+
+    #[test]
+    fn apply_gate_allows_valid_bound_signed_row() {
+        let g = gate();
+        let sk = ed25519_dalek::SigningKey::from_bytes(&[3u8; 32]);
+        let value = Uuid::from_u128(0x55);
+        let owner = Uuid::from_u128(0xABCD);
+        let digest = [9u8; 32];
+        let binding = mint_owner_binding(&sk, value, owner).unwrap();
+        let es = sign_batch(&sk, &digest).unwrap();
+        let res = coord("todos", value);
+        let d = g.verify_on_apply(
+            &subject(),
+            AccOp::Write,
+            &res,
+            &digest,
+            Some(binding.to_meta_string().as_bytes()),
+            Some(es.to_meta_string().as_bytes()),
+        );
+        assert!(is_allow(d), "an authentic owner-binding + edit-sig over the receiver digest is accepted");
+    }
+
+    #[test]
+    fn apply_gate_rejects_forged_or_tampered_row() {
+        let g = gate();
+        let sk = ed25519_dalek::SigningKey::from_bytes(&[3u8; 32]);
+        let value = Uuid::from_u128(0x55);
+        let owner = Uuid::from_u128(0xABCD);
+        let signed_digest = [9u8; 32];
+        let binding = mint_owner_binding(&sk, value, owner).unwrap();
+        let es = sign_batch(&sk, &signed_digest).unwrap();
+        let res = coord("todos", value);
+
+        // (a) Tampered in flight: the receiver recomputes a DIFFERENT digest than the one signed.
+        let tampered = [10u8; 32];
+        let d = g.verify_on_apply(
+            &subject(),
+            AccOp::Write,
+            &res,
+            &tampered,
+            Some(binding.to_meta_string().as_bytes()),
+            Some(es.to_meta_string().as_bytes()),
+        );
+        assert!(is_deny(d), "edit-sig over a different digest (data tampered) must be denied");
+
+        // (b) Relabeled row: binding names a different row id than the one being applied.
+        let other = coord("todos", Uuid::from_u128(0x66));
+        let d2 = g.verify_on_apply(
+            &subject(),
+            AccOp::Write,
+            &other,
+            &signed_digest,
+            Some(binding.to_meta_string().as_bytes()),
+            Some(es.to_meta_string().as_bytes()),
+        );
+        assert!(is_deny(d2), "owner-binding for a different row id must be denied");
+
+        // (c) Missing edit-sig on a bound spark-scoped row.
+        let d3 = g.verify_on_apply(
+            &subject(),
+            AccOp::Write,
+            &res,
+            &signed_digest,
+            Some(binding.to_meta_string().as_bytes()),
+            None,
+        );
+        assert!(is_deny(d3), "a bound row with no edit-signature must be denied");
+    }
 }
