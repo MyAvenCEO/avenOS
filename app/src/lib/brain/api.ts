@@ -3,6 +3,7 @@
  * store. Thin wrappers around the `avendb_runtime` brain ops; all calls are
  * identity-scoped (one brain per SAFE).
  */
+import { invoke } from '@tauri-apps/api/core'
 import { avenDbRuntime } from '$lib/runtime/avendb-ipc'
 
 export type BrainStatus = {
@@ -177,4 +178,12 @@ export type DreamStep = {
  */
 export function brainDreamStep(identity: string, cursor: number): Promise<DreamStep> {
 	return avenDbRuntime('brainDreamStep', { identity, cursor })
+}
+
+/**
+ * Run ONE extraction batch OFF the avenDB actor. Called when `brainDreamStep` returns
+ * `phase === "extract_ready"` so the Tinfoil HTTP call never blocks the actor mailbox.
+ */
+export function brainDoExtract(identity: string): Promise<DreamStep> {
+	return invoke('brain_do_extract', { identity })
 }

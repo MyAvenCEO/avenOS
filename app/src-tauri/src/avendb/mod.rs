@@ -7,7 +7,7 @@ pub mod ui_drain;
 mod conn;
 mod drain;
 mod mesh_ui;
-mod brain_ipc;
+pub mod brain_ipc;
 mod caps_ipc;
 mod crud_ipc;
 

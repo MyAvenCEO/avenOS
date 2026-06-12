@@ -272,6 +272,7 @@ pub fn run() {
 			llm::llm_delete_model,
 			llm::tinfoil_available,
 			llm::tinfoil_chat,
+			avendb::brain_ipc::brain_do_extract,
 			tts::tts_status,
 			tts::tts_synthesize,
 			tts::tts_local_models,

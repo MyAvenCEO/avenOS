@@ -13,7 +13,7 @@
 import { getContext, setContext } from 'svelte'
 import { persistSparkFiles } from '$lib/avendb/intent-files'
 import type { AvenDbStore } from '$lib/avendb/store.svelte'
-import { brainAssembleContext, brainDreamStep, brainIngest } from '$lib/brain/api'
+import { brainAssembleContext, brainDoExtract, brainDreamStep, brainIngest } from '$lib/brain/api'
 import { t } from '$lib/i18n'
 import {
 	beginRoundtrip,
@@ -77,6 +77,17 @@ async function runDreamLogged(identity: string): Promise<void> {
 		for (let guard = 0; guard < 64; guard++) {
 			const t0 = Date.now()
 			const step = await brainDreamStep(identity, cursor)
+			// extract_ready: the actor hands off to a non-actor IPC so the Tinfoil HTTP
+			// call never blocks the actor mailbox (DB viewer, next message, etc.)
+			if (step.phase === 'extract_ready') {
+				dreamLogStep({ phase: 'extract_ready', label: 'Extracting facts (off-actor)…', count: 0, tokens: 0, ms: Date.now() - t0 })
+				cursor = step.nextCursor
+				// Fire extraction in background — don't await (actor is free for other msgs).
+				brainDoExtract(identity)
+					.then((es) => dreamLogStep({ phase: es.phase, label: es.label, count: es.count, tokens: es.tokens, ms: 0 }))
+					.catch((e) => dreamLogStep({ phase: 'error', label: String(e), count: 0, tokens: 0, ms: 0 }))
+				continue
+			}
 			dreamLogStep({
 				phase: step.phase,
 				label: step.label,

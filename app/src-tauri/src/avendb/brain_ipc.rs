@@ -519,6 +519,59 @@ pub(crate) async fn brain_ipc_dream(
 	serde_json::to_value(report).map_err(|e| e.to_string())
 }
 
+/// Run fact-extraction OFF the avenDB actor.
+///
+/// This is a standalone Tauri command (NOT routed through the actor mailbox) so the
+/// Tinfoil enclave HTTP call — which can take 60–120 seconds — never blocks the DB
+/// viewer, next-message ingest, or any other actor-routed operation. The app calls this
+/// when `dream_step` returns `phase == "extract_ready"`.
+#[tauri::command]
+pub async fn brain_do_extract(
+	app: tauri::AppHandle,
+	identity: String,
+	mj: tauri::State<'_, ManagedAvenDb>,
+	ss: tauri::State<'_, SelfState>,
+) -> Result<serde_json::Value, String> {
+	let client = with_connected_client(&mj, &app, &ss).await?;
+	let shell = super::avendb_shell_ready(&app, &mj, &ss, client.clone()).await?;
+	let (brain, _) = brain_over(&app, client, &shell, &identity).await?;
+	let brain = brain.with_extractor(app_extractor());
+	let noop = |label: &str| {
+		serde_json::to_value(aven_brain::DreamStep {
+			phase: "extract".into(),
+			label: label.into(),
+			count: 0,
+			tokens: 0,
+			next_cursor: 100,
+			done: false,
+		})
+		.map_err(|e| e.to_string())
+	};
+	if !brain.extractor_enabled() {
+		return noop("No extractor configured — skipping");
+	}
+	let result = brain.extract_one_batch().await.map_err(|e| e.to_string())?;
+	serde_json::to_value(match result {
+		Some((n_mems, n_facts, tokens)) => aven_brain::DreamStep {
+			phase: "extract".into(),
+			label: format!("Mined {n_facts} facts from {n_mems} memories"),
+			count: n_facts as i64,
+			tokens,
+			next_cursor: 100,
+			done: false,
+		},
+		None => aven_brain::DreamStep {
+			phase: "extract".into(),
+			label: "All memories fact-mined".into(),
+			count: 0,
+			tokens: 0,
+			next_cursor: 100,
+			done: false,
+		},
+	})
+	.map_err(|e| e.to_string())
+}
+
 /// One step of a STEPPED dream — a single bounded phase. The caller loops (cursor 0 → done),
 /// which keeps the dream OFF the main path: each step is its own avenDB-runtime turn, so reads
 /// (status polls, the DB viewer) interleave between phases instead of waiting for the whole pass.

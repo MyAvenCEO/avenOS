@@ -591,6 +591,20 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         self.embedder.name()
     }
 
+    /// Whether a real extractor is configured (used by the off-actor extract IPC to skip
+    /// the Tinfoil call when no key is available rather than failing silently).
+    pub fn extractor_enabled(&self) -> bool {
+        self.extractor.enabled()
+    }
+
+    /// Run ONE extraction batch off the actor (board 0024 fix): prepare the batch, call
+    /// the configured extractor, write facts back. Called by `brain_do_extract` (a
+    /// non-actor Tauri command) so the Tinfoil HTTP call never blocks the avenDB mailbox.
+    /// Returns `Some((memories_mined, facts_written, tokens))` or `None` when fully mined.
+    pub async fn extract_one_batch(&self) -> Result<Option<(usize, usize, i64)>, BrainError> {
+        self.extract_batch(EXTRACT_BATCH_MAX).await
+    }
+
     // ── Write path ───────────────────────────────────────────────────────────
 
     /// Store a memory with default artifact columns. **Idempotent** by content hash.
@@ -1385,14 +1399,38 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             .take(opts.recall_k)
             .collect();
 
-        // L2: entity cards for entities named in the (enriched) query.
+        // L2: entity cards for entities named in the (enriched) query — plus entities
+        // promoted from the top recalled memories. The recall-promotion path bridges
+        // queries that don't literally name an entity (e.g. "who scored?" → recalled
+        // chunk contains "Julian Quinones" → entity card surfaces without substring match).
         let mut cards: Vec<EntityCard> = Vec::new();
+        // L2a: literal/substring match against the query (fast, deterministic)
         for name in self.entities_in_query(&recall_query).await? {
             if cards.len() >= opts.entity_cards {
                 break;
             }
             if let Some(card) = self.entity_card(&name).await? {
                 cards.push(card);
+            }
+        }
+        // L2b: entity promotion — extract names from top recalled chunks, dedupe vs L2a.
+        if cards.len() < opts.entity_cards {
+            for scored in recalled.iter().take(4) {
+                if cards.len() >= opts.entity_cards {
+                    break;
+                }
+                for name in extract_auto_entities(&scored.memory.content).into_iter().take(4) {
+                    if cards.len() >= opts.entity_cards {
+                        break;
+                    }
+                    let norm = normalize_name(&name);
+                    if cards.iter().any(|c: &EntityCard| normalize_name(&c.name) == norm) {
+                        continue;
+                    }
+                    if let Some(card) = self.entity_card(&name).await? {
+                        cards.push(card);
+                    }
+                }
             }
         }
 
@@ -1573,31 +1611,22 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             });
         }
         Ok(match cursor {
-            // Extract: ONE bounded batch through the configured extractor per step (real
-            // tokens surface in the panel); re-enters until every memory is mined.
-            EXTRACT => {
-                if !self.extractor.enabled() {
-                    DreamStep::ok(
-                        "extract",
-                        "No extractor configured — deterministic dreaming only".into(),
-                        0,
-                        MERGE,
-                    )
+            // Extract: signal the app to run extraction OFF the actor.
+            // The Tinfoil HTTP call can take 100+ seconds — running it inside a
+            // dream_step (= one actor message) blocks EVERY other avenDB operation
+            // (DB viewer polls, next message ingest) for its full duration.
+            // The app calls `brain_do_extract` (a non-actor IPC) for the real work;
+            // the actor is freed immediately to serve other requests.
+            EXTRACT => DreamStep::ok(
+                "extract_ready",
+                if self.extractor.enabled() {
+                    "Signalling off-actor extraction".into()
                 } else {
-                    match self.extract_batch(EXTRACT_BATCH_MAX).await? {
-                        Some((n_memories, n_facts, tokens)) => DreamStep {
-                            phase: "extract".into(),
-                            label: format!("Mined {n_facts} facts from {n_memories} memories"),
-                            count: n_facts as i64,
-                            tokens,
-                            // A full batch may leave more to mine — re-enter this phase.
-                            next_cursor: if n_memories == EXTRACT_BATCH_MAX { EXTRACT } else { MERGE },
-                            done: false,
-                        },
-                        None => DreamStep::ok("extract", "All memories fact-mined".into(), 0, MERGE),
-                    }
-                }
-            }
+                    "No extractor configured — skipping".into()
+                },
+                0,
+                MERGE,
+            ),
             MERGE => {
                 let n = self.merge_duplicate_entities().await? as i64;
                 DreamStep::ok("merge", format!("Merged {n} duplicate entities"), n, MERGE + 1)
@@ -2261,6 +2290,10 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             self.add_fact_with_confidence(&subj, &pred, &obj, Some(memory_id), 0.6)
                 .await?;
         }
+        // Always mark this memory as graph-processed, even when no entities were found
+        // (short queries, single-word messages). Without this, enrich_one re-processes
+        // the same entity-free memory every dream pass → infinite loop in the dreaming log.
+        self.add_note_link(memory_id, memory_id, "refers_to").await?;
         Ok(())
     }
 
