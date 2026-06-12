@@ -132,9 +132,13 @@ mod imp {
 				}
 				Err(e) => {
 					let cancelled = state().cancelled.load(Ordering::Relaxed);
-					*state().status.lock().unwrap() = "idle".into();
-					if !cancelled {
+					if cancelled {
+						*state().status.lock().unwrap() = "idle".into();
+					} else {
+						// Surface the failure as `error` (NOT `idle`) so the row shows WHY instead of
+						// silently flicking back to a Download button.
 						log::warn!(target: "avenos::embed", "gemma download failed: {e}");
+						*state().status.lock().unwrap() = "error".into();
 						*state().error.lock().unwrap() = Some(e);
 					}
 				}
@@ -154,6 +158,18 @@ mod imp {
 		state().total.store(0, Ordering::Relaxed);
 		emit(app);
 	}
+
+	/// ENFORCE gemma mode: auto-start the download iff the weights aren't already on disk. No-op
+	/// when present (avoids a downloading→ready flicker) or already in-flight (`spawn_download`
+	/// guards that). Called on first brain use so the embedder is always fetched without a click.
+	pub fn ensure(app: &AppHandle) {
+		if let Ok(root) = tauri_plugin_self::paths::models_dir(app) {
+			if aven_ai::embed::EMBEDDINGGEMMA_300M.files_present(&root) {
+				return;
+			}
+		}
+		spawn_download(app);
+	}
 }
 
 #[cfg(not(feature = "brain-gemma"))]
@@ -171,6 +187,13 @@ mod imp {
 	}
 	pub fn spawn_download(_app: &AppHandle) {}
 	pub fn cancel(_app: &AppHandle) {}
+	pub fn ensure(_app: &AppHandle) {}
+}
+
+/// ENFORCE gemma mode: auto-fetch the embedder weights if missing (idempotent). The brain calls
+/// this on first use so it converges to EmbeddingGemma without a manual Download click.
+pub fn ensure_download(app: &AppHandle) {
+	imp::ensure(app);
 }
 
 #[tauri::command(rename_all = "camelCase")]

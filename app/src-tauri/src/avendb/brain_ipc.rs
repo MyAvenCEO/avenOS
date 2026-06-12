@@ -92,46 +92,51 @@ fn resolve_ort_dylib(app: &tauri::AppHandle) -> Result<std::path::PathBuf, Strin
 /// observable via `brain_status.embedder`.
 #[cfg(feature = "brain-gemma")]
 async fn gemma_embedder(app: &tauri::AppHandle) -> Option<Arc<aven_brain::GemmaEmbedder>> {
-	use tokio::sync::OnceCell;
-	static GEMMA: OnceCell<Option<Arc<aven_brain::GemmaEmbedder>>> = OnceCell::const_new();
-	let app = app.clone();
-	GEMMA
-		.get_or_init(|| async move {
-			let models = match tauri_plugin_self::paths::models_dir(&app) {
-				Ok(p) => p,
-				Err(e) => {
-					log::warn!(target: "avenos::brain", "gemma: models dir: {e}");
-					return None;
-				}
-			};
-			let dylib = match resolve_ort_dylib(&app) {
-				Ok(p) => p,
-				Err(e) => {
-					log::warn!(target: "avenos::brain", "gemma: {e} → stub embedder");
-					return None;
-				}
-			};
-			match tokio::task::spawn_blocking(move || {
-				aven_brain::GemmaEmbedder::load(&models, &dylib)
-			})
-			.await
-			{
-				Ok(Ok(e)) => {
-					log::info!(target: "avenos::brain", "EmbeddingGemma loaded (dim {})", e.dim());
-					Some(Arc::new(e))
-				}
-				Ok(Err(e)) => {
-					log::warn!(target: "avenos::brain", "gemma load failed → stub: {e}");
-					None
-				}
-				Err(e) => {
-					log::warn!(target: "avenos::brain", "gemma load join error → stub: {e}");
-					None
-				}
-			}
-		})
-		.await
-		.clone()
+	use std::sync::OnceLock;
+	use tokio::sync::Mutex;
+	// Memoize the LOADED embedder ONLY (success). Absence/downloading retries on the NEXT call, so
+	// the brain upgrades to gemma the moment the 1.23 GB download finishes — no app restart (the old
+	// OnceCell cached the stub decision forever).
+	static GEMMA: OnceLock<Mutex<Option<Arc<aven_brain::GemmaEmbedder>>>> = OnceLock::new();
+	let mut guard = GEMMA.get_or_init(|| Mutex::new(None)).lock().await;
+	if let Some(g) = guard.as_ref() {
+		return Some(g.clone());
+	}
+	let models = match tauri_plugin_self::paths::models_dir(app) {
+		Ok(p) => p,
+		Err(e) => {
+			log::warn!(target: "avenos::brain", "gemma: models dir: {e}");
+			return None;
+		}
+	};
+	// Weights not on disk yet → ENFORCE gemma mode: auto-start the download, use stub until ready.
+	if !aven_ai::embed::EMBEDDINGGEMMA_300M.files_present(&models) {
+		crate::embed_model::ensure_download(app);
+		return None;
+	}
+	let dylib = match resolve_ort_dylib(app) {
+		Ok(p) => p,
+		Err(e) => {
+			log::warn!(target: "avenos::brain", "gemma: {e} → stub embedder");
+			return None;
+		}
+	};
+	match tokio::task::spawn_blocking(move || aven_brain::GemmaEmbedder::load(&models, &dylib)).await {
+		Ok(Ok(e)) => {
+			log::info!(target: "avenos::brain", "EmbeddingGemma loaded (dim {})", e.dim());
+			let arc = Arc::new(e);
+			*guard = Some(arc.clone());
+			Some(arc)
+		}
+		Ok(Err(e)) => {
+			log::warn!(target: "avenos::brain", "gemma load failed → stub: {e}");
+			None
+		}
+		Err(e) => {
+			log::warn!(target: "avenos::brain", "gemma load join error → stub: {e}");
+			None
+		}
+	}
 }
 
 /// Pick the best available embedder for this process. NOTE: all devices of an

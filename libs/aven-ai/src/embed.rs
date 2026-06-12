@@ -60,9 +60,19 @@ impl EmbedModelSpec {
 pub const EMBEDDINGGEMMA_300M: EmbedModelSpec = EmbedModelSpec {
     dir: "embeddinggemma-300m-onnx",
     repo: "onnx-community/embeddinggemma-300m-ONNX",
+    // Full-precision fp32: a 480 KB graph + a 1.23 GB external-data sidecar. Recall quality is the
+    // foundation everything else stands on, so we ship the best embeddings (not a quantized
+    // variant). The `.onnx` references its `.onnx_data` by relative name, so BOTH must download
+    // into the same dir; omitting the sidecar (the old bug) left the model unloadable and the
+    // brain stuck on the stub embedder.
     onnx: "onnx/model.onnx",
     tokenizer: "tokenizer.json",
-    files: &["onnx/model.onnx", "tokenizer.json", "config.json"],
+    files: &[
+        "onnx/model.onnx",
+        "onnx/model.onnx_data",
+        "tokenizer.json",
+        "config.json",
+    ],
     dim: 768,
 };
 
