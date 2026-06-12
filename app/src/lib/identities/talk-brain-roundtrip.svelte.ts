@@ -71,15 +71,24 @@ export const brainDreamLog = $state<{
 	atMs: number
 }>({ identity: null, running: false, entries: [], atMs: 0 })
 
+/** Newest entries to keep in the continuous log (older ones roll off). */
+const DREAM_LOG_MAX = 200
+
 export function dreamLogStart(identity: string) {
-	brainDreamLog.identity = identity
+	// Continuous activity: keep the log across turns; only wipe when the IDENTITY changes (a
+	// different brain). The dream is ongoing upkeep, not a per-message event.
+	if (brainDreamLog.identity !== identity) {
+		brainDreamLog.identity = identity
+		brainDreamLog.entries = []
+	}
 	brainDreamLog.running = true
-	brainDreamLog.entries = []
 	brainDreamLog.atMs = Date.now()
 }
 
 export function dreamLogStep(entry: DreamLogEntry) {
-	brainDreamLog.entries = [...brainDreamLog.entries, entry]
+	const next = [...brainDreamLog.entries, entry]
+	brainDreamLog.entries =
+		next.length > DREAM_LOG_MAX ? next.slice(next.length - DREAM_LOG_MAX) : next
 }
 
 export function dreamLogEnd() {
