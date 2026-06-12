@@ -509,11 +509,24 @@ impl<E: Embedder> Brain<E> {
         self.remember_with(content, &RememberOptions::default()).await
     }
 
-    /// Store a memory (verbatim content + embedding + artifact columns) and build the
-    /// graph from its `[[wikilink]]` references. **Idempotent**: identical content
-    /// returns the existing memory id without re-writing. Every non-routing cell is
-    /// sealed bound to this row's freshly-minted id.
+    /// Store a memory (verbatim content + embedding + artifact columns) and build its entity/
+    /// relation graph inline. **Idempotent** by content hash. For BULK ingest (a long paste split
+    /// into many chunks) use [`remember_chunked`](Self::remember_chunked), which defers the graph
+    /// to the dream pass so the serial avenDB runtime never freezes.
     pub async fn remember_with(
+        &self,
+        content: &str,
+        opts: &RememberOptions,
+    ) -> Result<ObjectId, BrainError> {
+        let id = self.remember_raw(content, opts).await?;
+        self.write_graph(id, content).await?;
+        Ok(id)
+    }
+
+    /// Store a memory (content + embedding + artifact columns) WITHOUT building the graph — the
+    /// fast core shared by `remember_with` (which adds the graph) and `remember_chunked` (which
+    /// leaves the graph to the dream pass). Idempotent by content hash.
+    async fn remember_raw(
         &self,
         content: &str,
         opts: &RememberOptions,
@@ -589,9 +602,8 @@ impl<E: Embedder> Brain<E> {
             .await
             .map_err(|e| BrainError::Write(format!("{e:?}")))?;
 
-        // Deterministic graph build from wikilinks (zero LLM).
-        self.write_graph(memory_id, content).await?;
-
+        // No graph here — the caller decides (inline for `remember_with`, deferred to the dream
+        // pass for `remember_chunked`).
         Ok(memory_id)
     }
 
@@ -611,7 +623,9 @@ impl<E: Embedder> Brain<E> {
             o.seq = Some(i as i64);
             o.line_start = Some(ch.line_start);
             o.line_end = Some(ch.line_end);
-            ids.push(self.remember_with(&ch.text, &o).await?);
+            // remember_RAW: no inline graph — the dream pass enriches these (capped), so a 30-chunk
+            // paste can't freeze the serial avenDB runtime with 30× fuzzy-scan write_graph calls.
+            ids.push(self.remember_raw(&ch.text, &o).await?);
         }
         Ok(ids)
     }
@@ -1223,6 +1237,10 @@ impl<E: Embedder> Brain<E> {
     /// Consolidation as of `now` (ms): merge duplicate entities (by normalized name),
     /// then apply Ebbinghaus decay to bond strength.
     pub async fn dream_at(&self, now: i64) -> Result<DreamReport, BrainError> {
+        // Build the entity/relation graph for recently-stored memories that don't have one yet —
+        // moved here OFF the synchronous ingest path. First so the fresh entities feed the
+        // merge/dedup steps below.
+        let _enriched = self.enrich_recent_graphs().await?;
         let entities_merged = self.merge_duplicate_entities().await?;
         let bonds_decayed = self.decay_bonds(now).await?;
         let (claims_deduped, claims_contradicted) = self.verify_claims(now).await?;
@@ -1707,6 +1725,32 @@ impl<E: Embedder> Brain<E> {
 
     /// Build the graph for a new memory: upsert entities for each wikilink, record an
     /// (idempotent) mention link per entity, and potentiate a bond per co-mentioned pair.
+    /// Build the entity/relation graph for the most-recent memories that don't have one yet
+    /// (no `note` link from them). Capped per dream pass so it never blocks the avenDB runtime for
+    /// long; newest-first so a just-pasted document enriches over the next few turns. Idempotent.
+    async fn enrich_recent_graphs(&self) -> Result<usize, BrainError> {
+        const MAX_ENRICH_PER_DREAM: usize = 6;
+        let built: std::collections::HashSet<String> = self
+            .links()
+            .await?
+            .into_iter()
+            .filter(|l| l.class == LinkClass::Note.as_str())
+            .map(|l| l.from)
+            .collect();
+        let mut n = 0;
+        for m in self.recall(&Filter::default(), 128).await? {
+            if n >= MAX_ENRICH_PER_DREAM {
+                break;
+            }
+            if built.contains(&id_str(&m.id)) {
+                continue;
+            }
+            self.write_graph(m.id, &m.content).await?;
+            n += 1;
+        }
+        Ok(n)
+    }
+
     async fn write_graph(&self, memory_id: ObjectId, content: &str) -> Result<(), BrainError> {
         let mut names = extract_wikilinks(content);
         for auto in extract_auto_entities(content) {

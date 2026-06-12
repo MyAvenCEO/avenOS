@@ -80,6 +80,13 @@ pub fn download_files(
 			return Err(DownloadError::Cancelled);
 		}
 
+		// A `local` like `onnx/model.onnx` lives in a SUBDIR — create it before writing the `.part`,
+		// or `File::create` fails with "No such file or directory" (the model-dir mkdir above only
+		// makes the root).
+		if let Some(parent) = dest.parent() {
+			fs::create_dir_all(parent).map_err(|e| fail(format!("create dir {}: {e}", parent.display())))?;
+		}
+
 		let tmp = dir.join(format!("{local}.part"));
 		let resume_from = tmp.metadata().map(|m| m.len()).unwrap_or(0);
 
