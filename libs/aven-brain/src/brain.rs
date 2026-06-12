@@ -93,6 +93,11 @@ const MAX_GRAPH_ENTITIES: usize = 24;
 /// Hard cap on SPO facts extracted from one memory (same runaway-write protection).
 const MAX_GRAPH_FACTS: usize = 16;
 
+/// Target characters per stored memory chunk. A long paste (match report, article, transcript) is
+/// split into chunks ~this size so recall can surface the SPECIFIC relevant passage (e.g. one
+/// red-card event) instead of one giant blob the context budget would truncate.
+const MEMORY_CHUNK_MAX_CHARS: usize = 480;
+
 /// Resolve a kind to its class. Claim predicates are free-form but must not collide
 /// with the reserved note/bond kinds.
 fn class_for_claim_predicate(kind: &str) -> Result<(), BrainError> {
@@ -588,6 +593,27 @@ impl<E: Embedder> Brain<E> {
         self.write_graph(memory_id, content).await?;
 
         Ok(memory_id)
+    }
+
+    /// Store a long paste as MANY chunk-memories (each carrying `seq` + its line range) so recall
+    /// returns the specific relevant passage instead of one blob the context budget would truncate.
+    /// Short content stores as a single memory. Returns the stored ids in order; the FIRST is the
+    /// primary (surfaced to the roundtrip aside). Each chunk dedups independently.
+    pub async fn remember_chunked(
+        &self,
+        content: &str,
+        opts: &RememberOptions,
+    ) -> Result<Vec<ObjectId>, BrainError> {
+        let chunks = chunk_content(content, MEMORY_CHUNK_MAX_CHARS);
+        let mut ids = Vec::with_capacity(chunks.len());
+        for (i, ch) in chunks.iter().enumerate() {
+            let mut o = opts.clone();
+            o.seq = Some(i as i64);
+            o.line_start = Some(ch.line_start);
+            o.line_end = Some(ch.line_end);
+            ids.push(self.remember_with(&ch.text, &o).await?);
+        }
+        Ok(ids)
     }
 
     // ── Read path ────────────────────────────────────────────────────────────
@@ -2082,6 +2108,67 @@ const STOPWORDS: [&str; 16] = [
     "we", "it",
 ];
 
+/// One chunk of a longer paste: a 1-based inclusive line range + its text.
+#[derive(Debug, Clone)]
+pub struct Chunk {
+    pub line_start: i64,
+    pub line_end: i64,
+    pub text: String,
+}
+
+/// Split `content` into retrieval-sized chunks at paragraph (blank-line) boundaries, packing
+/// consecutive paragraphs up to ~`max_chars`. Content already within `max_chars` yields ONE chunk.
+/// Boundary rule: flush a half-full chunk at a blank line, or just before a line would overflow —
+/// so naturally-delimited items (a match's minute-events) land one-or-two per chunk.
+pub fn chunk_content(content: &str, max_chars: usize) -> Vec<Chunk> {
+    let lines: Vec<&str> = content.lines().collect();
+    if content.trim().chars().count() <= max_chars {
+        return vec![Chunk {
+            line_start: 1,
+            line_end: lines.len().max(1) as i64,
+            text: content.trim().to_string(),
+        }];
+    }
+    let mut chunks: Vec<Chunk> = Vec::new();
+    let mut buf = String::new();
+    let mut start = 1usize; // 1-based start line of the current chunk
+    let mut last = 1usize; // last non-blank line appended
+    for (idx, line) in lines.iter().enumerate() {
+        let ln = idx + 1;
+        let is_blank = line.trim().is_empty();
+        let buf_chars = buf.chars().count();
+        let overflow = buf_chars + line.chars().count() + 1 > max_chars;
+        if !buf.is_empty() && ((is_blank && buf_chars >= max_chars / 2) || overflow) {
+            chunks.push(Chunk {
+                line_start: start as i64,
+                line_end: last as i64,
+                text: buf.trim().to_string(),
+            });
+            buf.clear();
+        }
+        if buf.is_empty() {
+            if is_blank {
+                continue; // never start a chunk on a blank line
+            }
+            start = ln;
+        } else {
+            buf.push('\n');
+        }
+        buf.push_str(line);
+        if !is_blank {
+            last = ln;
+        }
+    }
+    if !buf.trim().is_empty() {
+        chunks.push(Chunk {
+            line_start: start as i64,
+            line_end: last as i64,
+            text: buf.trim().to_string(),
+        });
+    }
+    chunks
+}
+
 /// Lowercased non-stopword tokens (≥3 chars) for the abstention floor.
 fn content_tokens(text: &str) -> Vec<String> {
     text.to_lowercase()
@@ -2091,15 +2178,33 @@ fn content_tokens(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// Fraction of query tokens present in the content.
+/// Light German stem: strip a few common inflectional suffixes so "karten"~"karte"~"kart",
+/// "tore"~"tor", "spielen"~"spiel" collapse to a shared stem and match. Crude + deterministic;
+/// the real semantic bridge (paraphrase, synonyms like "netzt"≈"Tor") is the embedder.
+fn stem(token: &str) -> &str {
+    for suf in ["en", "er", "es", "e", "n", "s"] {
+        if token.len() > suf.len() + 2 && token.ends_with(suf) {
+            return &token[..token.len() - suf.len()];
+        }
+    }
+    token
+}
+
+/// Fraction of query tokens present in the content — matched by STEM (bridges German plural/
+/// inflection) with a raw-substring fallback.
 fn lexical_overlap(query_tokens: &[String], content: &str) -> f32 {
     if query_tokens.is_empty() {
         return 1.0;
     }
     let content_lower = content.to_lowercase();
+    let content_stems: std::collections::HashSet<&str> = content_lower
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|t| t.len() >= 3)
+        .map(stem)
+        .collect();
     let hits = query_tokens
         .iter()
-        .filter(|t| content_lower.contains(t.as_str()))
+        .filter(|t| content_stems.contains(stem(t)) || content_lower.contains(t.as_str()))
         .count();
     hits as f32 / query_tokens.len() as f32
 }
@@ -2184,6 +2289,85 @@ mod tests {
         Brain::open_in_memory(app, owner(), StubEmbedder::new(EMBED_DIM))
             .await
             .expect("open brain")
+    }
+
+    // ───────────────────────── recall eval (the scoreboard) ─────────────────────────
+    //
+    // A golden retrieval eval drawn from a REAL failing conversation (user pasted a 10KB WM-2026
+    // match report, then asked "who got red cards?" / "how many yellows?" — the brain abstained
+    // and the LLM answered wrong). Each probe lists the facts (substrings) that MUST surface in the
+    // recalled memories for the LLM to answer correctly. We ingest the same report two ways — one
+    // blob (`remember`) vs chunked (`remember_chunked`) — and score fact-coverage@k, proving
+    // chunking is the win. Run `cargo test -p aven-brain recall_eval -- --nocapture` for the table.
+
+    const EVAL_REPORT: &str = include_str!("eval_fixtures/wm2026_mex_rsa.txt");
+
+    /// (query, facts that must appear in the recalled passages).
+    const EVAL_PROBES: &[(&str, &[&str])] = &[
+        ("wer hat eine rote karte bekommen", &["Sithole", "Zwane", "Montes"]),
+        ("wie viele gelbe karten gab es und wer", &["Mokoena", "Gutierrez", "Sibisi"]),
+        ("in welcher minute war die erste rote karte", &["49"]),
+        ("wer hat die tore geschossen", &["Quinones", "Jimenez"]),
+    ];
+
+    /// Fraction of a probe's facts found across the top-`k` recalled memories.
+    async fn probe_coverage(brain: &Brain<StubEmbedder>, query: &str, facts: &[&str], k: usize) -> f32 {
+        let hits = brain.search(query, k).await.expect("search");
+        let blob = hits
+            .iter()
+            .map(|m| m.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let found = facts.iter().filter(|f| blob.contains(**f)).count();
+        found as f32 / facts.len() as f32
+    }
+
+    async fn eval_coverage(label: &str, brain: &Brain<StubEmbedder>) -> f32 {
+        let mut total = 0.0;
+        for (query, facts) in EVAL_PROBES {
+            let cov = probe_coverage(brain, query, facts, 8).await;
+            eprintln!("  [{label}] {:>3.0}%  «{query}»", cov * 100.0);
+            total += cov;
+        }
+        total / EVAL_PROBES.len() as f32
+    }
+
+    // Scoreboard, not a fast unit test (~70s: ~30 chunk ingests + scans). Run explicitly:
+    //   cargo test -p aven-brain recall_eval -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore = "recall eval scoreboard — run explicitly with --ignored --nocapture"]
+    async fn recall_eval_chunking_beats_one_blob() {
+        // Blob: the whole report as ONE memory (today's talk-ingest behaviour).
+        let blob = test_brain("eval-blob").await;
+        blob.remember(EVAL_REPORT).await.expect("remember blob");
+
+        // Chunked: the report split into passage-sized memories.
+        let chunked = test_brain("eval-chunked").await;
+        let ids = chunked
+            .remember_chunked(EVAL_REPORT, &RememberOptions::default())
+            .await
+            .expect("remember chunked");
+
+        eprintln!("\n── recall eval (fact-coverage@8) ──");
+        eprintln!("  chunks stored: {}", ids.len());
+        let blob_cov = eval_coverage("blob   ", &blob).await;
+        let chunk_cov = eval_coverage("chunked", &chunked).await;
+        eprintln!(
+            "  mean: blob {:.0}%  ·  chunked {:.0}%\n",
+            blob_cov * 100.0,
+            chunk_cov * 100.0
+        );
+
+        // Blob scores 100% trivially (one memory holds the whole report) but that DOESN'T scale —
+        // in the app `assemble_context` budget-truncates the blob, so the LLM loses the scattered
+        // facts. The real bar is chunked recall quality (the scoreboard we tune). With stub-embed
+        // stemming we clear 0.75; downloading EmbeddingGemma (semantic) should push it higher.
+        assert!(ids.len() > 1, "a 10KB report must split into several chunks");
+        assert!(
+            chunk_cov >= 0.75,
+            "chunked fact-coverage regressed to {:.0}% — tune chunking/stemming/abstention/RRF",
+            chunk_cov * 100.0
+        );
     }
 
     #[tokio::test]

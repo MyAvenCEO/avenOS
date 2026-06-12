@@ -232,11 +232,18 @@ pub(crate) async fn brain_ipc_ingest(
 		veracity,
 		..Default::default()
 	};
-	let id = brain
-		.remember_with(&content, &opts)
+	// Chunk long pastes (match reports, articles) into passage-sized memories so recall can
+	// surface the specific relevant passage; short content stays one memory. The first chunk is
+	// the primary id surfaced to the roundtrip aside.
+	let ids = brain
+		.remember_chunked(&content, &opts)
 		.await
 		.map_err(|e| e.to_string())?;
-	Ok(json!({ "id": id.uuid().to_string() }))
+	let primary = ids
+		.first()
+		.map(|id| id.uuid().to_string())
+		.unwrap_or_default();
+	Ok(json!({ "id": primary, "chunks": ids.len() }))
 }
 
 pub(crate) async fn brain_ipc_search(
