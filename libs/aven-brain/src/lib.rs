@@ -45,7 +45,7 @@ pub mod schema;
 pub mod sealer;
 
 pub use brain::{
-    Brain, BrainError, ContextBundle, ContextOptions, ContextTrace, DreamReport, Entity,
+    Brain, BrainError, ContextBundle, ContextOptions, ContextTrace, DreamReport, DreamStep, Entity,
     EntityCard, Fact, Filter, LinkClass, Memory, Relation, RememberOptions, ScoredMemory, Via,
 };
 pub use embedder::{Embedder, StubEmbedder};

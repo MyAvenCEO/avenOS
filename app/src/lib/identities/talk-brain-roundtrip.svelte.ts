@@ -7,14 +7,7 @@
  * fills this panel AND grounds the LLM reply this turn — the panel is the receipt for
  * the context the AI actually saw.
  */
-import type { ContextTrace, DreamReport } from '$lib/brain/api'
-
-/** The dreaming consolidation pass that runs after each turn (decay, merge, heal, consolidate). */
-export type DreamState = {
-	phase: 'dreaming' | 'done' | 'error'
-	report?: DreamReport
-	error?: string
-}
+import type { ContextTrace } from '$lib/brain/api'
 
 export type BrainRoundtrip = {
 	/** Identity (SAFE) this roundtrip belongs to. */
@@ -31,8 +24,6 @@ export type BrainRoundtrip = {
 	error?: string
 	/** Roundtrip phases: stored → recalled (or error). */
 	phase: 'storing' | 'recalling' | 'done' | 'error'
-	/** The post-turn dreaming consolidation pass (decay/merge/heal), once it starts. */
-	dream?: DreamState
 	atMs: number
 }
 
@@ -55,9 +46,42 @@ export function patchRoundtrip(messageId: string, patch: Partial<BrainRoundtrip>
 	brainRoundtrip.latest = { ...cur, ...patch }
 }
 
-/** Mark the dreaming pass for `messageId`'s roundtrip (ignored once a newer turn supersedes it). */
-export function patchDream(messageId: string, dream: DreamState) {
-	const cur = brainRoundtrip.latest
-	if (!cur || cur.messageId !== messageId) return
-	brainRoundtrip.latest = { ...cur, dream }
+// ───────────────────────────── dreaming log ─────────────────────────────
+//
+// A real-time, top-to-bottom log of the STEPPED dream pass (one entry per phase: enrich · merge ·
+// decay · verify · consolidate). Surfaced in the brain aside's "Dreaming" tab so the consolidation
+// is transparent — what it loaded/merged/processed, how long, and (reserved) token cost per step.
+
+/** One logged dream step. */
+export type DreamLogEntry = {
+	phase: string
+	label: string
+	count: number
+	/** LLM tokens for this step — 0 for the deterministic phases (reserved for LLM enrichment). */
+	tokens: number
+	/** Wall-clock ms this step took (round-trip). */
+	ms: number
+}
+
+/** Reactive holder for the latest dream pass's log (per identity). */
+export const brainDreamLog = $state<{
+	identity: string | null
+	running: boolean
+	entries: DreamLogEntry[]
+	atMs: number
+}>({ identity: null, running: false, entries: [], atMs: 0 })
+
+export function dreamLogStart(identity: string) {
+	brainDreamLog.identity = identity
+	brainDreamLog.running = true
+	brainDreamLog.entries = []
+	brainDreamLog.atMs = Date.now()
+}
+
+export function dreamLogStep(entry: DreamLogEntry) {
+	brainDreamLog.entries = [...brainDreamLog.entries, entry]
+}
+
+export function dreamLogEnd() {
+	brainDreamLog.running = false
 }

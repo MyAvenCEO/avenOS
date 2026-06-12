@@ -135,3 +135,22 @@ export function brainReembed(identity: string): Promise<{ reembedded: number; em
 export function brainDream(identity: string): Promise<DreamReport> {
 	return avenDbRuntime('brainDream', { identity })
 }
+
+/** One step of a STEPPED dream (mirrors `aven_brain::DreamStep`). */
+export type DreamStep = {
+	phase: string
+	label: string
+	count: number
+	tokens: number
+	nextCursor: number
+	done: boolean
+}
+
+/**
+ * Run ONE dream phase (start at cursor 0, re-call with `nextCursor` until `done`). Each call is a
+ * separate avenDB-runtime turn, so the dream stays OFF the main path — reads interleave between
+ * phases — and every step returns a log line for the live dreaming panel.
+ */
+export function brainDreamStep(identity: string, cursor: number): Promise<DreamStep> {
+	return avenDbRuntime('brainDreamStep', { identity, cursor })
+}

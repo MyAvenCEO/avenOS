@@ -785,6 +785,10 @@ pub(crate) async fn avendb_runtime_dispatch(
 		}
 		"brainstatus" => brain_ipc::brain_ipc_status(app, mj, ss, pj_str(&pj, "identity")?).await,
 		"braindream" => brain_ipc::brain_ipc_dream(app, mj, ss, pj_str(&pj, "identity")?).await,
+		"braindreamstep" => {
+			let cursor = pj.get("cursor").and_then(|v| v.as_i64()).unwrap_or(0);
+			brain_ipc::brain_ipc_dream_step(app, mj, ss, pj_str(&pj, "identity")?, cursor).await
+		}
 		"brainreembed" => brain_ipc::brain_ipc_reembed(app, mj, ss, pj_str(&pj, "identity")?).await,
 		"brainbackfill" => brain_ipc::brain_ipc_backfill(app, mj, ss, pj_str(&pj, "identity")?).await,
 		"brainentities" => brain_ipc::brain_ipc_entities(app, mj, ss, pj_str(&pj, "identity")?).await,

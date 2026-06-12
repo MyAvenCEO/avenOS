@@ -417,3 +417,24 @@ pub(crate) async fn brain_ipc_dream(
 	let report = brain.dream().await.map_err(|e| e.to_string())?;
 	serde_json::to_value(report).map_err(|e| e.to_string())
 }
+
+/// One step of a STEPPED dream — a single bounded phase. The caller loops (cursor 0 → done),
+/// which keeps the dream OFF the main path: each step is its own avenDB-runtime turn, so reads
+/// (status polls, the DB viewer) interleave between phases instead of waiting for the whole pass.
+pub(crate) async fn brain_ipc_dream_step(
+	app: &tauri::AppHandle,
+	mj: &ManagedAvenDb,
+	ss: &SelfState,
+	identity: String,
+	cursor: i64,
+) -> Result<serde_json::Value, String> {
+	let client = with_connected_client(mj, app, ss).await?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(app, client, &shell, &identity).await?;
+	let now = std::time::SystemTime::now()
+		.duration_since(std::time::UNIX_EPOCH)
+		.map(|d| d.as_millis() as i64)
+		.unwrap_or(0);
+	let step = brain.dream_step(cursor, now).await.map_err(|e| e.to_string())?;
+	serde_json::to_value(step).map_err(|e| e.to_string())
+}

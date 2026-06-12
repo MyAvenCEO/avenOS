@@ -13,11 +13,13 @@
 import { getContext, setContext } from 'svelte'
 import { persistSparkFiles } from '$lib/avendb/intent-files'
 import type { AvenDbStore } from '$lib/avendb/store.svelte'
-import { brainAssembleContext, brainDream, brainIngest } from '$lib/brain/api'
+import { brainAssembleContext, brainDreamStep, brainIngest } from '$lib/brain/api'
 import { t } from '$lib/i18n'
 import {
 	beginRoundtrip,
-	patchDream,
+	dreamLogEnd,
+	dreamLogStart,
+	dreamLogStep,
 	patchRoundtrip
 } from '$lib/identities/talk-brain-roundtrip.svelte'
 import { tinfoilAvailable, tinfoilChat } from '$lib/llm/generate'
@@ -56,6 +58,47 @@ function idsMatch(a: string | null | undefined, b: string | null | undefined): b
 	const na = (a ?? '').trim().toLowerCase()
 	const nb = (b ?? '').trim().toLowerCase()
 	return na !== '' && na === nb
+}
+
+/** One dream at a time across the app — a new turn's dream is skipped while one is running. */
+let dreaming = false
+
+/**
+ * Drive the STEPPED dream to completion, streaming each phase into the dreaming log. Each step is a
+ * separate avenDB-runtime turn, so reads (status polls, DB viewer) interleave between phases — the
+ * dream never holds the runtime. Fire-and-forget; idempotent if skipped.
+ */
+async function runDreamLogged(identity: string): Promise<void> {
+	if (dreaming) return
+	dreaming = true
+	dreamLogStart(identity)
+	try {
+		let cursor = 0
+		for (let guard = 0; guard < 64; guard++) {
+			const t0 = Date.now()
+			const step = await brainDreamStep(identity, cursor)
+			dreamLogStep({
+				phase: step.phase,
+				label: step.label,
+				count: step.count,
+				tokens: step.tokens,
+				ms: Date.now() - t0
+			})
+			if (step.done) break
+			cursor = step.nextCursor
+		}
+	} catch (e) {
+		dreamLogStep({
+			phase: 'error',
+			label: e instanceof Error ? e.message : String(e),
+			count: 0,
+			tokens: 0,
+			ms: 0
+		})
+	} finally {
+		dreamLogEnd()
+		dreaming = false
+	}
 }
 
 /** Overall agent activity this turn — drives the live status strip above the intent button. */
@@ -529,20 +572,11 @@ export function createIdentityAgent(deps: {
 			}
 			// Fire the agent reply, grounded in the auto-assembled context.
 			if (body) await replyWithAgent(body, row.id, assembledContext)
-			// Dreaming runs after every turn (idempotent, deterministic, cheap): heal claims,
-			// merge entities, decay bonds, consolidate — continuous upkeep, not a nightly batch.
-			// Fire-and-forget so it never blocks the talk loop; its state surfaces in the brain aside.
-			if (body) {
-				patchDream(row.id, { phase: 'dreaming' })
-				void brainDream(env.canonicalSparkId)
-					.then((report) => patchDream(row.id, { phase: 'done', report }))
-					.catch((e) =>
-						patchDream(row.id, {
-							phase: 'error',
-							error: e instanceof Error ? e.message : String(e)
-						})
-					)
-			}
+			// Dreaming runs after every turn: heal claims, merge entities, decay bonds, consolidate +
+			// build the entity graph for new memories — continuous upkeep. Fire-and-forget AND
+			// STEPPED (one phase per call) so it never blocks the talk loop OR the avenDB runtime,
+			// and every step streams into the brain aside's Dreaming tab.
+			if (body) void runDreamLogged(env.canonicalSparkId)
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {

@@ -304,6 +304,38 @@ pub struct DreamReport {
     pub summaries_written: usize,
 }
 
+/// One step of a STEPPED dream (see [`Brain::dream_step`]) — a single bounded phase, returned for
+/// the live dreaming panel and so the runtime can yield between phases.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DreamStep {
+    /// Machine phase id: `enrich | merge | decay | verify | consolidate | done`.
+    pub phase: String,
+    /// Human log line for the dreaming panel.
+    pub label: String,
+    /// Items this step affected.
+    pub count: i64,
+    /// LLM tokens spent this step — 0 for today's deterministic phases; reserved for future
+    /// LLM-assisted enrichment so the panel can show per-step cost.
+    pub tokens: i64,
+    /// Cursor to pass to the NEXT call. Meaningless once `done`.
+    pub next_cursor: i64,
+    pub done: bool,
+}
+
+impl DreamStep {
+    fn ok(phase: &str, label: String, count: i64, next_cursor: i64) -> Self {
+        Self {
+            phase: phase.into(),
+            label,
+            count,
+            tokens: 0,
+            next_cursor,
+            done: false,
+        }
+    }
+}
+
 // ── Context assembly types ───────────────────────────────────────────────────
 
 /// Options for [`Brain::assemble_context`].
@@ -1252,6 +1284,53 @@ impl<E: Embedder> Brain<E> {
             claims_contradicted,
             memories_consolidated,
             summaries_written,
+        })
+    }
+
+    /// Run ONE dream phase by `cursor` (start at 0; re-call with `next_cursor` until `done`).
+    /// Each call is bounded and a single avenDB-runtime turn, so the runtime YIELDS to other
+    /// requests (status polls, reads) between phases instead of being held for the whole pass —
+    /// and every step returns a log line for the live dreaming panel.
+    pub async fn dream_step(&self, cursor: i64, now: i64) -> Result<DreamStep, BrainError> {
+        Ok(match cursor {
+            0 => {
+                let n = self.enrich_recent_graphs().await? as i64;
+                DreamStep::ok("enrich", format!("Graphed {n} new memories"), n, 1)
+            }
+            1 => {
+                let n = self.merge_duplicate_entities().await? as i64;
+                DreamStep::ok("merge", format!("Merged {n} duplicate entities"), n, 2)
+            }
+            2 => {
+                let n = self.decay_bonds(now).await? as i64;
+                DreamStep::ok("decay", format!("Decayed {n} bonds"), n, 3)
+            }
+            3 => {
+                let (dedup, contra) = self.verify_claims(now).await?;
+                DreamStep::ok(
+                    "verify",
+                    format!("Healed claims · {dedup} deduped, {contra} contradictions resolved"),
+                    (dedup + contra) as i64,
+                    4,
+                )
+            }
+            4 => {
+                let (summaries, mems) = self.consolidate(now).await?;
+                DreamStep::ok(
+                    "consolidate",
+                    format!("Consolidated {mems} memories into {summaries} summaries"),
+                    (summaries + mems) as i64,
+                    5,
+                )
+            }
+            _ => DreamStep {
+                phase: "done".into(),
+                label: "Dreaming complete".into(),
+                count: 0,
+                tokens: 0,
+                next_cursor: cursor,
+                done: true,
+            },
         })
     }
 
