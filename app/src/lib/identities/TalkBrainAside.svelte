@@ -205,6 +205,19 @@ function phaseStyle(phase: string): { dot: string; text: string } {
 						{/if}
 						· embedder: {t.embedder} · sent to the AI as context this turn
 					</p>
+
+					<!-- raw prompt: the assembled context VERBATIM — the panel above is the
+					     summary view; this IS what the LLM saw (100% receipt, board 0023). -->
+					{#if rt.prompt}
+						<details class="rounded-lg border border-border/60 bg-card/30 p-2">
+							<summary class="cursor-pointer font-medium">
+								raw prompt · {rt.prompt.length} chars · verbatim
+							</summary>
+							<pre
+								class="text-muted-foreground mt-1 max-h-96 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-snug"
+							>{rt.prompt}</pre>
+						</details>
+					{/if}
 				{/if}
 			{/if}
 		{:else}

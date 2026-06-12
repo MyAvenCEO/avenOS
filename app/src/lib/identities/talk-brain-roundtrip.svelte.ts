@@ -20,6 +20,8 @@ export type BrainRoundtrip = {
 	memoryId?: string
 	/** The display-only assemble probe result (L0–L3 + budget + embedder). */
 	trace?: ContextTrace
+	/** The assembled prompt VERBATIM — the 100% receipt of what the LLM saw (board 0023). */
+	prompt?: string
 	/** Probe error, when ingest/assemble failed (brain offline etc.). */
 	error?: string
 	/** Roundtrip phases: stored → recalled (or error). */

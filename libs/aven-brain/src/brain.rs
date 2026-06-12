@@ -357,12 +357,15 @@ pub struct ContextOptions {
 
 impl Default for ContextOptions {
     fn default() -> Self {
+        // Sized for ONE continuous conversation with no app-side thread concept (board
+        // 0023): the working window + recall budget carry conversational continuity, so
+        // they are generous — a second ingested document must not crowd the first out.
         Self {
-            working_n: 8,
-            recall_k: 6,
+            working_n: 12,
+            recall_k: 10,
             entity_cards: 2,
             gist_n: 5,
-            budget_chars: 8_000,
+            budget_chars: 16_000,
             filter: Filter::default(),
         }
     }
@@ -438,6 +441,11 @@ const SPACED_INTERVAL_MS: i64 = 3_600_000;
 const MS_PER_DAY: i64 = 86_400_000;
 /// RRF constant (3-way convergent: gBrain · Mnemosyne · as-built).
 const RRF_K: f32 = 60.0;
+/// MMR re-rank balance: λ weighs relevance, (1−λ) penalizes redundancy with the hits
+/// already selected AND with the query itself — a stored echo of the user's own
+/// question (every talk turn is a memory) carries no new information and must not
+/// crowd content out of the top-k.
+const MMR_LAMBDA: f32 = 0.7;
 /// Veracity score multipliers (Mnemosyne).
 fn veracity_weight(v: Option<&str>) -> f32 {
     match v {
@@ -459,11 +467,16 @@ fn age_weight(age_ms: i64) -> f32 {
     }
 }
 /// Abstention floor: minimum lexical overlap by query token count (Mnemosyne).
+/// Long natural-language questions (and window-enriched inner queries) share a smaller
+/// FRACTION of their tokens with any one passage, so the floor relaxes with length —
+/// otherwise a chunked document can never clear it for a full-sentence question.
 fn abstention_floor(query_tokens: usize) -> f32 {
     match query_tokens {
         0..=2 => 0.15,
         3 => 0.5,
-        _ => 0.3,
+        4..=5 => 0.3,
+        6..=15 => 0.2,
+        _ => 0.1,
     }
 }
 
@@ -781,7 +794,39 @@ impl<E: Embedder> Brain<E> {
             })
             .collect();
         ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        ranked.truncate(k);
+
+        // MMR re-rank: greedy diversity pass over the survivors so the top-k isn't
+        // dominated by one cluster — pick by λ·relevance − (1−λ)·redundancy, where
+        // redundancy is the max stemmed-Jaccard against the picks so far. The pick set
+        // is SEEDED with the query itself, so a stored echo of the user's own question
+        // (talk turns are memories too) is maximally redundant and sinks below content.
+        let max_score = ranked.first().map(|(_, s)| *s).unwrap_or(0.0).max(f32::EPSILON);
+        let sets: HashMap<ObjectId, std::collections::HashSet<String>> = ranked
+            .iter()
+            .map(|(id, _)| (*id, stem_set(&mem[id].content)))
+            .collect();
+        let qset = stem_set(query);
+        let mut pool = ranked;
+        let mut picked_sets: Vec<&std::collections::HashSet<String>> = vec![&qset];
+        let mut ranked: Vec<(ObjectId, f32)> = Vec::with_capacity(k);
+        while ranked.len() < k && !pool.is_empty() {
+            let best = pool
+                .iter()
+                .enumerate()
+                .map(|(i, (id, s))| {
+                    let redundancy = picked_sets
+                        .iter()
+                        .map(|p| jaccard(&sets[id], p))
+                        .fold(0.0f32, f32::max);
+                    (i, MMR_LAMBDA * (s / max_score) - (1.0 - MMR_LAMBDA) * redundancy)
+                })
+                .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            let pick = pool.remove(best);
+            picked_sets.push(&sets[&pick.0]);
+            ranked.push(pick);
+        }
 
         Ok(ranked
             .into_iter()
@@ -1131,18 +1176,32 @@ impl<E: Embedder> Brain<E> {
         let working_ids: std::collections::HashSet<String> =
             working.iter().map(|m| id_str(&m.id)).collect();
 
+        // Inner recall query: the brain carries conversational continuity ITSELF (no
+        // app-side thread concept) — a thin follow-up ("check your memory", "schau
+        // nochmal") has no recallable tokens of its own, so it is enriched with the last
+        // exchange from the working window. The trace records the enriched query: the
+        // receipt shows exactly what recall ran.
+        const ENRICH_QUERY_MIN_TOKENS: usize = 4;
+        let mut recall_query = query.to_string();
+        if content_tokens(query).len() < ENRICH_QUERY_MIN_TOKENS {
+            for m in working.iter().rev().take(3) {
+                recall_query.push('\n');
+                recall_query.push_str(&truncate(&m.content, 240));
+            }
+        }
+
         // L3: traced hybrid recall across everything, excluding the window.
         let recalled: Vec<ScoredMemory> = self
-            .search_traced(query, opts.recall_k * 2, &Filter::default())
+            .search_traced(&recall_query, opts.recall_k * 2, &Filter::default())
             .await?
             .into_iter()
             .filter(|s| !working_ids.contains(&id_str(&s.memory.id)) && s.memory.stream != "self")
             .take(opts.recall_k)
             .collect();
 
-        // L2: entity cards for entities named in the query.
+        // L2: entity cards for entities named in the (enriched) query.
         let mut cards: Vec<EntityCard> = Vec::new();
-        for name in self.entities_in_query(query).await? {
+        for name in self.entities_in_query(&recall_query).await? {
             if cards.len() >= opts.entity_cards {
                 break;
             }
@@ -1223,7 +1282,7 @@ impl<E: Embedder> Brain<E> {
         }
 
         let trace = ContextTrace {
-            query: query.to_string(),
+            query: recall_query,
             l0_self: l0,
             l1_gist: gist,
             working: kept_working
@@ -2352,6 +2411,29 @@ fn stem(token: &str) -> &str {
     token
 }
 
+/// Stemmed token set of a text — the unit the MMR redundancy measure compares.
+fn stem_set(text: &str) -> std::collections::HashSet<String> {
+    text.to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|t| t.len() >= 3)
+        .map(|t| stem(t).to_string())
+        .collect()
+}
+
+/// Jaccard similarity of two stemmed token sets (0 when either is empty).
+fn jaccard(a: &std::collections::HashSet<String>, b: &std::collections::HashSet<String>) -> f32 {
+    if a.is_empty() || b.is_empty() {
+        return 0.0;
+    }
+    let inter = a.intersection(b).count();
+    let union = a.len() + b.len() - inter;
+    if union == 0 {
+        0.0
+    } else {
+        inter as f32 / union as f32
+    }
+}
+
 /// Fraction of query tokens present in the content — matched by STEM (bridges German plural/
 /// inflection) with a raw-substring fallback.
 fn lexical_overlap(query_tokens: &[String], content: &str) -> f32 {
@@ -2463,6 +2545,9 @@ mod tests {
     // chunking is the win. Run `cargo test -p aven-brain recall_eval -- --nocapture` for the table.
 
     const EVAL_REPORT: &str = include_str!("eval_fixtures/wm2026_mex_rsa.txt");
+    /// Doc B: the unrelated coaching-website text the failing transcript ingested
+    /// between questions about the match report — it must not crowd doc A out.
+    const EVAL_DOC_B: &str = include_str!("eval_fixtures/coaching_site.txt");
 
     /// (query, facts that must appear in the recalled passages).
     const EVAL_PROBES: &[(&str, &[&str])] = &[
@@ -2472,9 +2557,47 @@ mod tests {
         ("wer hat die tore geschossen", &["Quinones", "Jimenez"]),
     ];
 
-    /// Fraction of a probe's facts found across the top-`k` recalled memories.
+    /// The multi-turn probe sequence about doc A (won · scorers+minutes · cards) — the
+    /// conversation from the failing transcript, every turn stored like the app stores
+    /// it. The cross-lingual EN-question/DE-doc case is deliberately absent: bridging
+    /// "south africa"→"Südafrika" is the semantic embedder's job (Gemma), not the
+    /// deterministic gate's (see board card 0023).
+    const MULTI_TURN_PROBES: &[(&str, &[&str])] = &[
+        ("wer hat das spiel mexiko gegen südafrika gewonnen", &["2:0"]),
+        ("wer hat die tore geschossen und wann", &["Quinones", "Jimenez"]),
+        ("in welcher minute war die erste rote karte", &["49"]),
+        ("wer hat eine rote karte bekommen", &["Sithole", "Zwane", "Montes"]),
+        ("wie viele gelbe karten gab es und wer", &["Mokoena", "Gutierrez", "Sibisi"]),
+    ];
+
+    /// Fraction of a probe's facts found across the top-`k` recalled memories —
+    /// recalled the way `assemble_context` recalls: the working window (the live
+    /// conversation, already in the prompt) is excluded, so the measure is what RECALL
+    /// contributes beyond the visible exchange. Set `EVAL_DEBUG=1` to dump the top-k.
     async fn probe_coverage(brain: &Brain<StubEmbedder>, query: &str, facts: &[&str], k: usize) -> f32 {
-        let hits = brain.search(query, k).await.expect("search");
+        let working: std::collections::HashSet<String> = brain
+            .recall(&Filter::stream("talk"), ContextOptions::default().working_n)
+            .await
+            .expect("window")
+            .iter()
+            .map(|m| id_str(&m.id))
+            .collect();
+        let hits: Vec<Memory> = brain
+            .search_traced(query, k * 2, &Filter::default())
+            .await
+            .expect("search")
+            .into_iter()
+            .filter(|s| !working.contains(&id_str(&s.memory.id)) && s.memory.stream != "self")
+            .take(k)
+            .map(|s| s.memory)
+            .collect();
+        if std::env::var("EVAL_DEBUG").is_ok() {
+            eprintln!("  «{query}»");
+            for (i, m) in hits.iter().enumerate() {
+                let head: String = m.content.chars().take(90).collect();
+                eprintln!("    {}. [{}] {head}", i + 1, m.stream);
+            }
+        }
         let blob = hits
             .iter()
             .map(|m| m.content.as_str())
@@ -2529,6 +2652,83 @@ mod tests {
             chunk_cov >= 0.75,
             "chunked fact-coverage regressed to {:.0}% — tune chunking/stemming/abstention/RRF",
             chunk_cov * 100.0
+        );
+    }
+
+    /// The multi-turn case (board 0023): recall must survive a ≥6-turn conversation
+    /// about doc A — every question AND reply stored as talk memories, like the app
+    /// does — INCLUDING an unrelated doc B ingested in between. Asserts mean
+    /// fact-coverage@8 ≥ 0.85 over the post-doc-B probe sequence AND no drop vs the
+    /// pre-doc-B baseline.
+    //   cargo test -p aven-brain recall_eval -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore = "multi-turn recall eval scoreboard — run explicitly with --ignored --nocapture"]
+    async fn recall_eval_multi_turn_survives_second_doc() {
+        let brain = test_brain("eval-multi-turn").await;
+        // Pasted by the user (the transcript pasted both docs into Talk) → stated.
+        let doc = RememberOptions {
+            stream: "doc".to_string(),
+            veracity: Some("stated".to_string()),
+            ..Default::default()
+        };
+        let talk = |role: &str| RememberOptions {
+            stream: "talk".to_string(),
+            author_role: role.to_string(),
+            veracity: Some(if role == "user" { "stated" } else { "inferred" }.to_string()),
+            ..Default::default()
+        };
+        brain.remember_chunked(EVAL_REPORT, &doc).await.expect("ingest doc A");
+
+        // One probe pass = the conversational ping-pong: store the question, search,
+        // store a generic assistant reply (NO fact substrings — replies must not
+        // inflate coverage), like the app ingests both sides of every exchange.
+        async fn probe_pass(
+            brain: &Brain<StubEmbedder>,
+            label: &str,
+            talk: &dyn Fn(&str) -> RememberOptions,
+        ) -> f32 {
+            let mut total = 0.0;
+            for (query, facts) in MULTI_TURN_PROBES {
+                brain.remember_with(query, &talk("user")).await.expect("store question");
+                let cov = probe_coverage(brain, query, facts, 8).await;
+                eprintln!("  [{label}] {:>3.0}%  «{query}»", cov * 100.0);
+                total += cov;
+                brain
+                    .remember_with(
+                        &format!("Dazu steht etwas im Spielbericht — ich schaue nach ({query})."),
+                        &talk("agent"),
+                    )
+                    .await
+                    .expect("store reply");
+            }
+            total / MULTI_TURN_PROBES.len() as f32
+        }
+
+        eprintln!("\n── multi-turn recall eval (fact-coverage@8) ──");
+        let before_b = probe_pass(&brain, "before-B", &talk).await;
+
+        // The unrelated second document lands mid-conversation.
+        let b_ids = brain.remember_chunked(EVAL_DOC_B, &doc).await.expect("ingest doc B");
+
+        let after_b = probe_pass(&brain, "after-B ", &talk).await;
+        eprintln!(
+            "  doc-B chunks: {} · mean: before doc B {:.0}%  ·  after doc B {:.0}%\n",
+            b_ids.len(),
+            before_b * 100.0,
+            after_b * 100.0
+        );
+
+        assert!(b_ids.len() > 1, "doc B must split into several chunks");
+        assert!(
+            after_b >= 0.85,
+            "post-doc-B fact-coverage@8 is {:.0}% (< 85%) — multi-turn recall regressed",
+            after_b * 100.0
+        );
+        assert!(
+            after_b + 1e-6 >= before_b,
+            "second-doc ingest degraded recall: {:.0}% → {:.0}%",
+            before_b * 100.0,
+            after_b * 100.0
         );
     }
 
@@ -2912,6 +3112,208 @@ mod tests {
             tiny.trace.budget.dropped_working + tiny.trace.budget.dropped_recalled > 0,
             "tiny budget must drop something: {:?}",
             tiny.trace.budget
+        );
+    }
+
+    /// Board 0023: the trace is a 100%-faithful receipt — every block of the assembled
+    /// prompt is accounted for in the `ContextTrace`, and the drop counters account for
+    /// everything excluded, so the aside can render exactly what the LLM saw.
+    #[tokio::test]
+    async fn trace_parity_every_prompt_block_is_receipted() {
+        let brain = test_brain("test-trace-parity").await;
+        brain.set_self("I am Atlas, the household aven.").await.unwrap();
+        brain.remember("[[Gnomes]] live in the [[Garden]]").await.unwrap();
+        brain
+            .remember("the garden gnome census counted 42 gnomes this spring")
+            .await
+            .unwrap();
+        const TURNS: usize = 5;
+        for i in 0..TURNS {
+            brain
+                .remember_with(
+                    &format!("talk turn {i} about the garden gnome census"),
+                    &RememberOptions {
+                        stream: "talk".to_string(),
+                        author_role: if i % 2 == 0 { "user" } else { "agent" }.to_string(),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap();
+        }
+
+        let opts = ContextOptions {
+            filter: Filter::stream("talk"),
+            ..Default::default()
+        };
+        let query = "how many gnomes did the garden census count";
+        let bundle = brain.assemble_context(query, &opts).await.unwrap();
+        let (prompt, t) = (&bundle.prompt, &bundle.trace);
+        let sans_ellipsis = |s: &str| s.strip_suffix('…').unwrap_or(s).to_string();
+
+        // Trace → prompt: every receipted item appears in the prompt verbatim.
+        assert!(prompt.starts_with("# Self\n"), "prompt:\n{prompt}");
+        assert!(prompt.contains(&t.l0_self), "L0 in prompt");
+        for g in &t.l1_gist {
+            assert!(prompt.contains(&format!("- {g}")), "gist line `{g}` in prompt");
+        }
+        for w in &t.working {
+            assert!(
+                prompt.contains(&format!("{}: {}", w.author_role, sans_ellipsis(&w.snippet))),
+                "working `{}` in prompt",
+                w.snippet
+            );
+        }
+        for r in &t.recalled {
+            assert!(
+                prompt.contains(&format!("- {}", sans_ellipsis(&r.snippet))),
+                "recalled `{}` in prompt",
+                r.snippet
+            );
+        }
+        for e in &t.entities {
+            assert!(prompt.contains(&format!("# {} (", e.name)), "entity card `{}`", e.name);
+        }
+
+        // Prompt → trace: every section/line of the prompt is receipted — counts match.
+        let lines_under = |header: &str| -> Vec<&str> {
+            let Some(start) = prompt.find(header) else { return Vec::new() };
+            prompt[start + header.len()..]
+                .lines()
+                .take_while(|l| !l.starts_with("# ") && !l.starts_with("\n# "))
+                .filter(|l| !l.trim().is_empty())
+                .collect()
+        };
+        assert_eq!(lines_under("# Story so far\n").len(), t.l1_gist.len(), "gist parity");
+        assert_eq!(lines_under("# Conversation\n").len(), t.working.len(), "working parity");
+        assert_eq!(
+            lines_under("# Relevant memories\n").len(),
+            t.recalled.len(),
+            "recall parity"
+        );
+        // Every section header is one of the receipted blocks (no unreceipted section).
+        for header in prompt.lines().filter(|l| l.starts_with("# ")) {
+            let known = ["# Self", "# Story so far", "# Conversation", "# Relevant memories"]
+                .contains(&header)
+                || t.entities.iter().any(|e| header.starts_with(&format!("# {} (", e.name)));
+            assert!(known, "unreceipted prompt section: {header}");
+        }
+        assert_eq!(t.budget.used_chars, prompt.chars().count(), "budget used == prompt length");
+
+        // Drop accounting: the window fetched all TURNS talk rows — kept + dropped
+        // must cover them, and the recall counter must cover the recall fetch.
+        let working_ids: std::collections::HashSet<String> =
+            t.working.iter().map(|w| w.id.clone()).collect();
+        let fetched_recall = brain
+            .search_traced(query, opts.recall_k * 2, &Filter::default())
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|s| !working_ids.contains(&id_str(&s.memory.id)) && s.memory.stream != "self")
+            .take(opts.recall_k)
+            .count();
+        assert_eq!(t.working.len() + t.budget.dropped_working, TURNS, "working drops");
+        assert_eq!(t.recalled.len() + t.budget.dropped_recalled, fetched_recall, "recall drops");
+
+        // Under a tiny budget the same parity holds: exclusions land in the counters.
+        let tiny = brain
+            .assemble_context(
+                query,
+                &ContextOptions {
+                    budget_chars: 500,
+                    filter: Filter::stream("talk"),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            tiny.trace.working.len() + tiny.trace.budget.dropped_working,
+            TURNS,
+            "tiny-budget working drops: {:?}",
+            tiny.trace.budget
+        );
+        assert_eq!(tiny.trace.budget.used_chars, tiny.prompt.chars().count());
+    }
+
+    /// Board 0023: a thin follow-up ("schau nochmal") carries no recallable tokens of
+    /// its own — the brain enriches the inner query from the working window, so
+    /// continuity lives in the brain, not in an app-side thread.
+    #[tokio::test]
+    async fn assemble_context_enriches_thin_query_from_working_window() {
+        let brain = test_brain("test-enrich-query").await;
+        brain
+            .remember("the beach trip photos are saved in the shared album")
+            .await
+            .unwrap();
+        let talk = |role: &str| RememberOptions {
+            stream: "talk".to_string(),
+            author_role: role.to_string(),
+            ..Default::default()
+        };
+        brain
+            .remember_with("did we save the beach trip photos somewhere", &talk("user"))
+            .await
+            .unwrap();
+        brain.remember_with("let me look that up", &talk("agent")).await.unwrap();
+
+        let bundle = brain
+            .assemble_context(
+                "schau nochmal nach",
+                &ContextOptions {
+                    filter: Filter::stream("talk"),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        // The receipt shows the enriched inner query…
+        assert!(
+            bundle.trace.query.contains("beach"),
+            "inner query should be window-enriched, got: {}",
+            bundle.trace.query
+        );
+        // …and recall surfaces the memory the bare follow-up would have missed.
+        assert!(
+            bundle.trace.recalled.iter().any(|r| r.snippet.contains("album")),
+            "enriched recall should surface the album memory: {:?}",
+            bundle.trace.recalled
+        );
+    }
+
+    /// MMR re-rank: a stored verbatim echo of the user's own question (talk turns are
+    /// memories) must not outrank the content that answers it.
+    #[tokio::test]
+    async fn mmr_demotes_stored_query_echo_below_content() {
+        let brain = test_brain("test-mmr-echo").await;
+        let query = "wer hat die rote karte bekommen";
+        brain
+            .remember_with(
+                query,
+                &RememberOptions {
+                    stream: "talk".to_string(),
+                    veracity: Some("stated".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        let content = brain
+            .remember_with(
+                "In Minute 49 hat Sithole die rote Karte bekommen nach einer Notbremse",
+                &RememberOptions {
+                    veracity: Some("stated".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        let hits = brain.search(query, 2).await.unwrap();
+        assert_eq!(hits.len(), 2);
+        assert_eq!(
+            hits[0].id, content,
+            "the echo of the question must not outrank the content: {hits:?}"
         );
     }
 

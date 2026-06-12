@@ -552,7 +552,7 @@ export function createIdentityAgent(deps: {
 						stream: 'talk'
 					})
 					assembledContext = bundle.prompt
-					patchRoundtrip(row.id, { trace: bundle.trace, phase: 'done' })
+					patchRoundtrip(row.id, { trace: bundle.trace, prompt: bundle.prompt, phase: 'done' })
 				} catch (e) {
 					const msg = e instanceof Error ? e.message : String(e)
 					console.error('[brain] roundtrip failed:', msg)

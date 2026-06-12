@@ -174,16 +174,17 @@ migration, full conversation-summary memory.
 
 Each box checkable from the transcript (a command + its output proves it).
 
-- [ ] New multi-turn `recall_eval` case exists — `grep -n "multi.turn\|after_b\|doc_b" libs/aven-brain/src/brain.rs` hits.
-- [ ] `cargo test -p aven-brain recall_eval -- --ignored --nocapture` exits 0 with
+- [x] New multi-turn `recall_eval` case exists — `grep -n "multi.turn\|after_b\|doc_b" libs/aven-brain/src/brain.rs` hits (13 lines; `recall_eval_multi_turn_survives_second_doc` + the `eval_fixtures/coaching_site.txt` doc-B fixture).
+- [x] `cargo test -p aven-brain recall_eval -- --ignored --nocapture` exits 0 with
       printed mean fact-coverage@8 ≥ 0.85 over the post-second-doc probes AND
-      post-B ≥ pre-B (no degradation).
-- [ ] `cargo test -p aven-brain` exits 0 (27+ tests; no regression).
-- [ ] Re-rank/recall change present — `grep -n "mmr\|re.rank\|rerank\|recall_k\|budget" libs/aven-brain/src/brain.rs` shows the new logic.
-- [ ] Continuous brain-managed context — `grep -n "buildToolContext\|assembleContext\|messages" app/src/lib/identities/identity-agent.svelte.ts` shows `runCloudLoop` sending ONLY [system + bundle + current message]; assistant replies are ingested as memories; NO app-side thread/session array exists.
-- [ ] `cargo test -p aven-brain trace_parity` exits 0 — every prompt block is in the trace; drop counters account for all exclusions.
-- [ ] Aside raw-prompt view — `grep -n "raw prompt\|bundle.prompt\|prompt" app/src/lib/identities/TalkBrainAside.svelte` shows the verbatim view; HITL: the panel content matches what was sent.
-- [ ] `cd app && bun run check` clean (only the pre-existing `brand-style.ts`) and `bun run lint` green.
+      post-B ≥ pre-B (no degradation) — measured **before-B 100% · after-B 100%**
+      (the pre-fix code reproduced the bug on this exact eval: 77% → 57%).
+- [x] `cargo test -p aven-brain` exits 0 — **30 passed** (27 pre-existing + 3 new; no regression).
+- [x] Re-rank/recall change present — `grep -n "mmr\|re.rank\|rerank\|recall_k\|budget" libs/aven-brain/src/brain.rs` shows the MMR pass in `search_traced` (query-seeded, so stored question-echoes sink below content), the relaxed abstention floor for ≥6-token queries, and the raised `ContextOptions` defaults (working_n 12 · recall_k 10 · budget 16k).
+- [x] Continuous brain-managed context — `grep -n "messages" app/src/lib/identities/identity-agent.svelte.ts` shows `runCloudLoop` sending ONLY [system + assembled bundle + current message]; assistant replies are ingested as memories (`persistRecord` → `brainIngest` authorRole agent, pre-existing); NO app-side thread/session array exists. NEW: the inner recall query is window-enriched for thin follow-ups ("schau nochmal") so continuity lives in the brain (`assemble_context`; test `assemble_context_enriches_thin_query_from_working_window`).
+- [x] `cargo test -p aven-brain trace_parity` exits 0 — every prompt block is in the trace; drop counters account for all exclusions (`trace_parity_every_prompt_block_is_receipted`, both directions + tiny-budget case).
+- [x] Aside raw-prompt view — `grep -n "raw prompt\|rt.prompt" app/src/lib/identities/TalkBrainAside.svelte` shows the collapsible verbatim view (`bundle.prompt` rides the roundtrip as `prompt`); HITL: the panel content matches what was sent.
+- [x] `cd app && bun run check` clean (only the pre-existing `brand-style.ts`) and `bun run lint` green.
 - [ ] HITL smoke (human): the exact transcript — ingest report, ask across 6+
       turns incl. the second doc + the English question — Aven answers correctly;
       brain aside shows `embedder: gemma`.
@@ -216,6 +217,27 @@ grep -n "bundle.prompt\|raw" app/src/lib/identities/TalkBrainAside.svelte
 
 ## Progress log
 
+- `2026-06-12` — Build (claude): moved discover → build → review. (1) Added the
+  doc-B fixture (`coaching_site.txt`) + `recall_eval_multi_turn_survives_second_doc`
+  — every probe turn stored as talk memories like the app does, probes recalled the
+  way `assemble_context` recalls (working window excluded); BASELINE reproduced the
+  bug deterministically: before-B 77% → after-B 57%. (2) Recall robustness: MMR
+  re-rank in `search_traced` (λ=0.7, pick set seeded with the query so a stored echo
+  of the user's own question sinks below content), abstention floor relaxed for
+  ≥6-token natural-language questions (0.2, >15 tokens 0.1), `ContextOptions`
+  defaults raised (working_n 8→12, recall_k 6→10, budget 8k→16k). Eval now
+  **before-B 100% · after-B 100%**; the old chunking eval rose 79%→88% as a side
+  effect. (3) Brain-managed continuity: thin follow-ups (<4 content tokens) get the
+  inner recall query enriched from the working window (assistant-reply ingestion
+  already existed in `persistRecord`); `runCloudLoop` confirmed at
+  [system + bundle + current] — no thread arrays. (4) Receipt fidelity:
+  `trace_parity_every_prompt_block_is_receipted` (trace→prompt AND prompt→trace +
+  drop accounting), `trace.query` now records the enriched inner query, and the
+  aside gained the collapsible verbatim raw-prompt view (`prompt` rides the
+  roundtrip). `cargo test` 30 green · `cargo check` green · `bun run check` clean
+  (only pre-existing `brand-style.ts`) · `bun run lint` green. OPEN (HITL): Gemma
+  load smoke + the live 6-turn transcript re-run (criterion below) — needs the
+  1.23 GB model on a real device.
 - `2026-06-12` — Discovery: interviewed Samuel — tackle BOTH the thread-feed +
   recall tuning AND the Gemma verification in one card; measure via an extended
   multi-turn recall eval (ingest A + unrelated B, probe A, assert coverage ≥0.85
