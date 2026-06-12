@@ -384,12 +384,6 @@
 					"type": "text",
 					"nullable": true,
 					"comment": "sealed at rest — replacement memory row id; hot path filters IS NULL (null-ness is metadata)"
-				},
-				{
-					"name": "importance",
-					"type": "text",
-					"nullable": true,
-					"comment": "sealed at rest — salience 0..1 chosen at write (decimal string; null scores as 0.5) — bounded rank modifier (board 0025)"
 				}
 			]
 		},

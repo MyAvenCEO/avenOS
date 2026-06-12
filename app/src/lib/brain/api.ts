@@ -21,9 +21,11 @@ export type BrainHit = {
 	authorRole: string
 	source?: string | null
 	veracity?: string | null
+	/** Salience 0..1 chosen at write (0.5 = neutral). */
+	importance: number
 	rank: number
 	score: number
-	via: 'vector' | 'bm25' | 'both'
+	via: 'vector' | 'bm25' | 'graph' | 'both'
 }
 
 export type BrainEntity = { id: string; name: string; kind: string }
@@ -54,7 +56,7 @@ export type ContextTrace = {
 		snippet: string
 		source?: string | null
 		rank: number
-		via: 'vector' | 'bm25' | 'both'
+		via: 'vector' | 'bm25' | 'graph' | 'both'
 		score: number
 	}>
 	entities: Array<{ name: string; kind: string; bonds: [string, number][] }>
@@ -91,9 +93,29 @@ export function brainIngest(
 		source?: string
 		contentDateMs?: number
 		veracity?: string
+		/** Salience 0..1 chosen at write (default 0.5 = neutral) — board 0025. */
+		importance?: number
 	} = {}
 ): Promise<{ id: string }> {
 	return avenDbRuntime('brainIngest', { identity, content, ...opts })
+}
+
+/** Explicit `refers_to` link between two memories (the `memory_link` tool). */
+export function brainLink(identity: string, from: string, to: string): Promise<{ ok: boolean }> {
+	return avenDbRuntime('brainLink', { identity, from, to })
+}
+
+/** Step a memory's veracity one tier toward `stated` (the `memory_attest` tool). */
+export function brainAttest(
+	identity: string,
+	id: string
+): Promise<{ ok: boolean; veracity: string }> {
+	return avenDbRuntime('brainAttest', { identity, id })
+}
+
+/** Soft-drop a memory from recall — tombstone, nothing deleted (the `memory_forget` tool). */
+export function brainForget(identity: string, id: string): Promise<{ ok: boolean }> {
+	return avenDbRuntime('brainForget', { identity, id })
 }
 
 /** Hybrid recall (RRF + modifiers + abstention floor) with per-hit via/rank/score. */

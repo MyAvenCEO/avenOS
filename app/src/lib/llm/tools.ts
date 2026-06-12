@@ -21,6 +21,7 @@
 
 import { t } from '$lib/i18n'
 import { navigateAppTo } from '$lib/shell'
+import { MEMORY_TOOL_DEFS, MEMORY_TOOL_EXECUTORS } from './memory-tools'
 import { VIBE_TOOL_DEFS, VIBE_TOOL_EXECUTORS } from './vibe-tools'
 
 /** Payload of the `llm:tool-call` event (see `app/src-tauri/src/llm.rs`). */
@@ -51,6 +52,8 @@ export type ToolDef = {
 export type ToolContext = {
 	/** Base path of the active identity, e.g. `/identities/<encoded-id>`. Drives `navigate_views`. */
 	identityBase: string
+	/** The active identity's canonical id (its SAFE) — the memory tools' brain scope. */
+	identityId: string
 	/** Read the active identity's todos LIVE (id + title + done) — the `todos` list action. */
 	listTodos: () => { id: string; title: string; done: boolean }[]
 	/** Add a todo to the active identity's task list. Resolves on success, throws on failure. */
@@ -219,6 +222,18 @@ const TOOLS: Record<string, ToolEntry> = {
 					VIBE_TOOL_EXECUTORS[def.name](args, ctx)
 			}
 		])
+	),
+	// The agentic memory surface (board 0025): deliberate remember/recall/link/attest/
+	// forget over the identity's brain — executors in `memory-tools.ts`.
+	...Object.fromEntries(
+		MEMORY_TOOL_DEFS.map((def) => [
+			def.name,
+			{
+				def,
+				execute: (args: Record<string, unknown>, ctx: ToolContext) =>
+					MEMORY_TOOL_EXECUTORS[def.name](args, ctx)
+			}
+		])
 	)
 }
 
@@ -234,7 +249,7 @@ export const LLM_TOOLS: ToolDef[] = [NAVIGATE_VIEWS_TOOL]
  * runs a real tool loop, so the model can call `todos {action:"list"}` to learn ids, then batch
  * create/update/delete — the schema + decision logic live in the vibe, not here.
  */
-export const CLOUD_TOOLS: ToolDef[] = [NAVIGATE_VIEWS_TOOL, ...VIBE_TOOL_DEFS]
+export const CLOUD_TOOLS: ToolDef[] = [NAVIGATE_VIEWS_TOOL, ...VIBE_TOOL_DEFS, ...MEMORY_TOOL_DEFS]
 
 /** Hard cap on the cloud agentic tool loop (list → mutate → reply) so one turn can't run away. */
 export const MAX_TOOL_ROUNDS = 5
@@ -244,7 +259,14 @@ export const CLOUD_SYSTEM_PROMPT =
 	'You are Aven, the assistant inside one identity. Fulfil the user request by calling the ' +
 	'provided tools: use `navigate_views` to switch the open view, and `todos` to manage the task ' +
 	'list. To edit or delete todos you MUST first call `todos` with action "list" to get the real ' +
-	'ids, then call `todos` again with the exact ids. Batch related changes into one call. When ' +
+	'ids, then call `todos` again with the exact ids. Batch related changes into one call. ' +
+	'You also have a deliberate memory: routine chat is stored automatically, so call ' +
+	'`memory_remember` only for durable facts, preferences, and decisions you would want in a ' +
+	'future session ("would I want this next session?") — choose an importance (0..1) and ' +
+	'veracity. When the context above does not contain the answer, or the user asks what you ' +
+	'remember, search deeper with `memory_recall`; use the returned ids with `memory_link` ' +
+	'(relate two memories), `memory_attest` (mark one as proven true), and `memory_forget` ' +
+	'(ONLY when the user explicitly asks to forget — they will be asked to confirm). When ' +
 	"the task is done, reply with a short, friendly sentence in the user's language."
 
 /** Map our {@link ToolDef}s onto the OpenAI `tools` array shape the Tinfoil SDK expects. */

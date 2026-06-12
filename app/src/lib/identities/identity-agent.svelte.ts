@@ -268,6 +268,7 @@ export function createIdentityAgent(deps: {
 				.map((r) => ({ id: String(r.id), title: String(r.title ?? ''), done: r.done === true }))
 		return {
 			identityBase: env.identityBase,
+			identityId: env.canonicalSparkId,
 			listTodos: mine,
 			createTodo: async (title) => {
 				await deps.todos.create({ title, done: false, owner: env.canonicalSparkId })
@@ -348,14 +349,23 @@ export function createIdentityAgent(deps: {
 						? (call.arguments as Record<string, unknown>)
 						: {}
 
-				// HITL gate: a `todos delete` does NOT run until the human accepts it. Pause the loop,
-				// show the accept/cancel card, and on cancel feed a "cancelled" result back to the
+				// HITL gate: destructive actions do NOT run until the human accepts them — a
+				// `todos delete` and a `memory_forget` (board 0025) both pause the loop, show
+				// the accept/cancel card, and on cancel feed a "cancelled" result back to the
 				// model (so it tells the user nothing was deleted) instead of executing.
-				if (call.name === 'todos' && String(args.action ?? '').toLowerCase() === 'delete') {
-					const items = Array.isArray(args.items) ? (args.items as { id?: unknown }[]) : []
-					const titles = items
-						.map((it) => ctx.resolveTodo(String(it?.id ?? '').trim())?.title)
-						.filter((tt): tt is string => !!tt)
+				const isTodoDelete =
+					call.name === 'todos' && String(args.action ?? '').toLowerCase() === 'delete'
+				const isMemoryForget = call.name === 'memory_forget'
+				if (isTodoDelete || isMemoryForget) {
+					let titles: string[]
+					if (isTodoDelete) {
+						const items = Array.isArray(args.items) ? (args.items as { id?: unknown }[]) : []
+						titles = items
+							.map((it) => ctx.resolveTodo(String(it?.id ?? '').trim())?.title)
+							.filter((tt): tt is string => !!tt)
+					} else {
+						titles = [`memory ${String(args.id ?? '').trim()}`]
+					}
 					const accepted = await requestConfirm({ action: 'delete', titles })
 					if (!accepted) {
 						const message = t('identities.talk.deleteCancelled')

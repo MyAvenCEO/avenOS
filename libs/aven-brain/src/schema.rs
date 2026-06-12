@@ -59,6 +59,10 @@ pub fn brain_schema(_embed_dim: usize) -> Schema {
                 // Re-weighting, never deletion: replacement memory row id; the hot path
                 // filters `IS NULL` (null-ness is metadata — works on sealed columns).
                 .nullable_column("superseded_by", ColumnType::Text)
+                // Salience 0..1 chosen at write time (decimal string; null scores as
+                // 0.5) — a bounded rank modifier next to veracity/age (board 0025).
+                // Appended LAST: open_memory reads cells by index.
+                .nullable_column("importance", ColumnType::Text)
                 // Indexes only over plaintext routing — indexing ciphertext is noise.
                 .index_only(["owner", "content_hash"]),
         )
@@ -172,6 +176,7 @@ mod tests {
             "normalize_version",
             "veracity",
             "superseded_by",
+            "importance",
         ] {
             assert!(
                 memories.columns.column(col).is_some(),

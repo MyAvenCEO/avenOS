@@ -131,14 +131,18 @@ pub struct Memory {
     pub author_role: String,
     pub source: Option<String>,
     pub veracity: Option<String>,
+    /// Salience 0..1 chosen at write (0.5 = neutral default).
+    pub importance: f32,
 }
 
-/// How a search hit was found.
+/// How a search hit was found. `Graph` = the entity/fact voice (board 0025): an entity
+/// named in the query voted for this memory through its links. `Both` = multiple voices.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Via {
     Vector,
     Bm25,
+    Graph,
     Both,
 }
 
@@ -206,6 +210,9 @@ pub struct RememberOptions {
     pub content_date_ms: Option<i64>,
     /// stated | inferred | imported | tool | unknown (None scores as unknown).
     pub veracity: Option<String>,
+    /// Salience 0..1 chosen at write — mnemosyne's importance, a bounded rank
+    /// modifier next to veracity/age (board 0025). 0.5 = neutral.
+    pub importance: f32,
 }
 
 impl Default for RememberOptions {
@@ -219,6 +226,7 @@ impl Default for RememberOptions {
             line_end: None,
             content_date_ms: None,
             veracity: None,
+            importance: 0.5,
         }
     }
 }
@@ -464,6 +472,11 @@ fn veracity_weight(v: Option<&str>) -> f32 {
         _ => 0.8, // unknown
     }
 }
+/// Importance (salience) weight: a BOUNDED ±20% modifier next to veracity/age
+/// (mnemosyne weighs importance ~20% of rank). 0.5 (the default) is neutral ×1.0.
+fn importance_weight(importance: f32) -> f32 {
+    0.8 + 0.4 * importance.clamp(0.0, 1.0)
+}
 /// Age weights ×1.0 <30d · ×0.5 <180d · ×0.25 ≥180d — pure f(row-id time).
 fn age_weight(age_ms: i64) -> f32 {
     if age_ms < 30 * MS_PER_DAY {
@@ -503,6 +516,9 @@ struct LinkRow {
     stability: f64,
     access_count: i64,
     last_access: i64,
+    /// Claim provenance: the memory the fact was extracted from (the fact voice
+    /// recalls through it — board 0025).
+    source_memory: Option<String>,
 }
 
 /// The memory brain of one SAFE (owner-scoped over the shared store).
@@ -668,6 +684,15 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
                 "veracity".to_string(),
                 self.sv_opt(MEMORIES, "veracity", row, opts.veracity.as_deref())?,
             ),
+            (
+                "importance".to_string(),
+                self.sv(
+                    MEMORIES,
+                    "importance",
+                    row,
+                    &opts.importance.clamp(0.0, 1.0).to_string(),
+                )?,
+            ),
         ]);
         let memory_id = self
             .client
@@ -782,6 +807,53 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         text_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         text_list.truncate(over);
 
+        // Graph+fact voice (board 0025): entities NAMED in the query vote for the
+        // memories that mention them (mention links) and for their claims' source
+        // memories — so a typo'd/paraphrased memory the lexical+vector voices miss
+        // (e.g. "Sarha" for "Sarah", merged at write time) still surfaces through
+        // its graph links. Scores = votes per memory; fused via the same RRF.
+        let mut graph_votes: HashMap<ObjectId, f32> = HashMap::new();
+        let by_id: HashMap<ObjectId, ()> = candidates.iter().map(|(id, _, _)| (*id, ())).collect();
+        {
+            let matched: Vec<String> = {
+                let mut ids = Vec::new();
+                for name in self.entities_in_query(query).await? {
+                    if let Some(eid) = self.entity_id_by_name(&name).await? {
+                        ids.push(id_str(&eid));
+                    }
+                }
+                ids
+            };
+            if !matched.is_empty() {
+                for l in self.links().await? {
+                    let memory_id = if l.kind == "mentions" && matched.contains(&l.to) {
+                        // mention voice: memory —mentions→ matched entity
+                        Some(l.from.clone())
+                    } else if l.class == LinkClass::Claim.as_str()
+                        && l.valid_to.is_none()
+                        && (matched.contains(&l.from) || matched.contains(&l.to))
+                    {
+                        // fact voice: an open claim about the entity → its source memory
+                        l.source_memory.clone()
+                    } else {
+                        None
+                    };
+                    let Some(id) = memory_id.and_then(|s| uuid::Uuid::parse_str(&s).ok()) else {
+                        continue;
+                    };
+                    let oid = ObjectId::from_uuid(id);
+                    if by_id.contains_key(&oid) {
+                        *graph_votes.entry(oid).or_insert(0.0) += 1.0;
+                    }
+                }
+            }
+        }
+        let mut graph_list: Vec<(ObjectId, f32)> = graph_votes.into_iter().collect();
+        graph_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        graph_list.truncate(over);
+        let graph_ids: std::collections::HashSet<ObjectId> =
+            graph_list.iter().map(|(id, _)| *id).collect();
+
         // RRF fuse with via tracking.
         let mut score: HashMap<ObjectId, f32> = HashMap::new();
         let mut via: HashMap<ObjectId, Via> = HashMap::new();
@@ -789,7 +861,11 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         for (id, m, _) in &candidates {
             mem.insert(*id, m.clone());
         }
-        for (list, list_via) in [(&vector_list, Via::Vector), (&text_list, Via::Bm25)] {
+        for (list, list_via) in [
+            (&vector_list, Via::Vector),
+            (&text_list, Via::Bm25),
+            (&graph_list, Via::Graph),
+        ] {
             for (rank, (id, _)) in list.iter().enumerate() {
                 *score.entry(*id).or_insert(0.0) += 1.0 / (RRF_K + rank as f32 + 1.0);
                 via.entry(*id)
@@ -802,20 +878,24 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             }
         }
 
-        // Read modifiers: veracity weight × age weight (age from the UUIDv7 row id).
+        // Read modifiers: veracity × age (from the UUIDv7 row id) × importance.
         let now = now_ms();
         for (id, s) in score.iter_mut() {
             let m = &mem[id];
             let age = now.saturating_sub(created_ms(id));
-            *s *= veracity_weight(m.veracity.as_deref()) * age_weight(age);
+            *s *= veracity_weight(m.veracity.as_deref())
+                * age_weight(age)
+                * importance_weight(m.importance);
         }
 
         // Abstention floor: drop hits below the minimum lexical overlap with the query.
+        // Graph-voice hits are exempt — they carry structural evidence (an explicit
+        // mention/claim link), which is exactly what the lexical floor cannot see.
         let floor = abstention_floor(qtokens.len());
         let mut ranked: Vec<(ObjectId, f32)> = score
             .into_iter()
             .filter(|(id, _)| {
-                if qtokens.is_empty() {
+                if qtokens.is_empty() || graph_ids.contains(id) {
                     return true;
                 }
                 lexical_overlap(&qtokens, &mem[id].content) >= floor
@@ -907,6 +987,84 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             .into_iter()
             .filter(|(id, _)| memory_ids.contains(&id_str(id)))
             .map(|(id, v)| self.open_memory(id, &v))
+            .collect())
+    }
+
+    // ── Curation (the agentic memory tool surface, board 0025) ──────────────
+
+    /// Drop a memory from recall — soft: `superseded_by` is stamped with the row's own
+    /// id (a tombstone; nothing is deleted, law 3). Every read path filters
+    /// `superseded_by IS NULL`, so the memory leaves search, recall, and the window.
+    pub async fn forget(&self, id: ObjectId) -> Result<(), BrainError> {
+        let sealed = self.sv(MEMORIES, "superseded_by", *id.uuid(), &id_str(&id))?;
+        self.client
+            .update(id, vec![("superseded_by".to_string(), sealed)])
+            .await
+            .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+        Ok(())
+    }
+
+    /// Collaboratively strengthen a memory: step its veracity one tier toward `stated`
+    /// (mnemosyne's compounding validation, minimal form). The ladder strictly raises
+    /// the read-path weight: tool → imported → inferred → stated; unknown → stated.
+    /// Returns the new veracity.
+    pub async fn attest(&self, id: ObjectId) -> Result<String, BrainError> {
+        let rows = self.memory_rows().await?;
+        let current = rows
+            .iter()
+            .find(|(rid, _)| *rid == id)
+            .map(|(rid, vals)| self.open_memory(*rid, vals).veracity)
+            .ok_or_else(|| BrainError::Read(format!("attest: no memory {}", id_str(&id))))?;
+        let next = match current.as_deref() {
+            Some("tool") => "imported",
+            Some("imported") => "inferred",
+            Some("inferred") | Some("stated") => "stated",
+            // unknown (0.8) sits above inferred (0.7) — stepping it anywhere but
+            // `stated` would LOWER its weight.
+            _ => "stated",
+        };
+        let sealed = self.sv(MEMORIES, "veracity", *id.uuid(), next)?;
+        self.client
+            .update(id, vec![("veracity".to_string(), sealed)])
+            .await
+            .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+        Ok(next.to_string())
+    }
+
+    /// Explicit, deliberate link between two memories ("these belong together") — a
+    /// `refers_to` note link (append-only, idempotent). The model's `memory_link` tool.
+    pub async fn link(&self, from: ObjectId, to: ObjectId) -> Result<(), BrainError> {
+        self.add_note_link(from, to, "refers_to").await
+    }
+
+    /// Memories explicitly linked to `id` via `refers_to`, either direction — the
+    /// traversal the `link` primitive promises.
+    pub async fn linked(&self, id: ObjectId) -> Result<Vec<Memory>, BrainError> {
+        let id_s = id_str(&id);
+        let other: std::collections::HashSet<String> = self
+            .links()
+            .await?
+            .into_iter()
+            .filter(|l| l.kind == "refers_to")
+            .filter_map(|l| {
+                if l.from == id_s {
+                    Some(l.to)
+                } else if l.to == id_s {
+                    Some(l.from)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if other.is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok(self
+            .memory_rows()
+            .await?
+            .into_iter()
+            .filter(|(rid, _)| other.contains(&id_str(rid)))
+            .map(|(rid, v)| self.open_memory(rid, &v))
             .collect())
     }
 
@@ -1946,7 +2104,7 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
     /// Open a fetched memory row into the public [`Memory`] (cells decrypt in RAM).
     /// Memory column order: owner, content, embedding, stream, author_role, source,
     /// seq, line_start, line_end, content_date, content_hash, source_version,
-    /// normalize_version, veracity, superseded_by.
+    /// normalize_version, veracity, superseded_by, importance.
     fn open_memory(&self, id: ObjectId, vals: &[Value]) -> Memory {
         Memory {
             id,
@@ -1957,13 +2115,17 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
                 .unwrap_or_default(),
             source: self.open_at(MEMORIES, "source", &id, vals, 5),
             veracity: self.open_at(MEMORIES, "veracity", &id, vals, 13),
+            // Pre-importance rows (and lens-migrated nulls) score neutral.
+            importance: self
+                .open_at(MEMORIES, "importance", &id, vals, 15)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0.5),
         }
     }
 
     /// All link rows of this owner, opened (the graph walks filter over these).
     /// Link column order: owner, from, to, kind, class, valid_from, valid_to,
-    /// confidence, strength, stability, access_count, last_access, source_memory
-    /// (col 12 `source_memory` is provenance-only — not read by any walk, so not opened here).
+    /// confidence, strength, stability, access_count, last_access, source_memory.
     async fn links(&self) -> Result<Vec<LinkRow>, BrainError> {
         let rows = self
             .client
@@ -2009,6 +2171,7 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
                     .open_at(LINKS, "last_access", id, v, 11)
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(0),
+                source_memory: self.open_at(LINKS, "source_memory", id, v, 12),
             })
             .collect())
     }
@@ -3130,6 +3293,130 @@ mod tests {
 
         assert_eq!(card.recent_memories.len(), 2, "timeline: {:?}", card.recent_memories);
         assert!(card.render().contains("Bob"));
+    }
+
+    /// Board 0025 (THE GATE): the four tool-backing primitives behind the agentic
+    /// memory surface — importance ranks, forget removes, attest strengthens, an
+    /// explicit link traverses.
+    #[tokio::test]
+    async fn memory_tools_importance_forget_attest_link() {
+        let brain = test_brain("test-memory-tools").await;
+
+        // (a) Higher importance ranks a memory above a lower one for the same query.
+        let minor = brain
+            .remember_with(
+                "team meeting notes version one",
+                &RememberOptions {
+                    importance: 0.1,
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        let major = brain
+            .remember_with(
+                "team meeting notes version two",
+                &RememberOptions {
+                    importance: 0.9,
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        let hits = brain.search("team meeting notes", 2).await.unwrap();
+        eprintln!(
+            "(a) importance ordering: [{}]",
+            hits.iter()
+                .map(|m| format!("{} (importance {})", m.content, m.importance))
+                .collect::<Vec<_>>()
+                .join(" · ")
+        );
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].id, major, "importance 0.9 must outrank 0.1: {hits:?}");
+        assert_eq!(hits[1].id, minor);
+
+        // (b) forget drops a memory from search AND recall — soft, nothing deleted.
+        let secret = brain
+            .remember("the secret picnic spot is by the old mill")
+            .await
+            .unwrap();
+        assert_eq!(brain.search("secret picnic spot", 3).await.unwrap().len(), 1);
+        brain.forget(secret).await.unwrap();
+        let after = brain.search("secret picnic spot", 3).await.unwrap();
+        eprintln!("(b) forget: {} hits after forgetting (was 1)", after.len());
+        assert!(after.is_empty(), "forgotten memory must leave recall: {after:?}");
+        assert!(
+            !brain
+                .recall(&Filter::default(), usize::MAX)
+                .await
+                .unwrap()
+                .iter()
+                .any(|m| m.id == secret),
+            "forgotten memory must leave plain recall too"
+        );
+
+        // (c) attest steps veracity toward `stated` — the weight strictly rises.
+        let humble = brain
+            .remember_with(
+                "the printer is on the third floor",
+                &RememberOptions {
+                    veracity: Some("tool".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        let mut prev = veracity_weight(Some("tool"));
+        let mut tiers = vec!["tool".to_string()];
+        for _ in 0..3 {
+            let next = brain.attest(humble).await.unwrap();
+            let w = veracity_weight(Some(&next));
+            assert!(w > prev, "attest must raise the veracity weight ({tiers:?} → {next})");
+            prev = w;
+            tiers.push(next);
+        }
+        eprintln!("(c) attest ladder: {} (weight {:.1} → {:.1})", tiers.join(" → "), 0.5, prev);
+        assert_eq!(tiers.last().map(String::as_str), Some("stated"));
+        assert_eq!(brain.attest(humble).await.unwrap(), "stated", "stated is the ceiling");
+
+        // (d) an explicit link is traversable, both directions.
+        let a = brain.remember("booked the cabin for the offsite").await.unwrap();
+        let b = brain.remember("the offsite agenda lives in the shared doc").await.unwrap();
+        brain.link(a, b).await.unwrap();
+        let from_a = brain.linked(a).await.unwrap();
+        let from_b = brain.linked(b).await.unwrap();
+        eprintln!(
+            "(d) link traversal: a→[{}] · b→[{}]",
+            from_a.iter().map(|m| m.content.as_str()).collect::<Vec<_>>().join(", "),
+            from_b.iter().map(|m| m.content.as_str()).collect::<Vec<_>>().join(", ")
+        );
+        assert!(from_a.iter().any(|m| m.id == b), "a → b traversable");
+        assert!(from_b.iter().any(|m| m.id == a), "b → a traversable (either direction)");
+        // Idempotent re-link (note class).
+        brain.link(a, b).await.unwrap();
+        assert_eq!(brain.linked(a).await.unwrap().len(), 1);
+    }
+
+    /// Board 0025: the graph+fact recall voice — a query naming an entity surfaces a
+    /// linked memory the lexical/vector voices miss (the write-time fuzzy merge knows
+    /// "Sarha" IS Sarah; only the graph can see that).
+    #[tokio::test]
+    async fn memory_tools_graph_voice_surfaces_linked_memory() {
+        let brain = test_brain("test-graph-voice").await;
+        brain.remember("met Sarah at the market").await.unwrap();
+        // The typo'd memory: fuzzy entity upsert merges "Sarha" into the Sarah entity
+        // at write time — its CONTENT never contains "sarah".
+        let typod = brain.remember("talked to Sarha again about the plan").await.unwrap();
+
+        let hits = brain.search("what is the plan with Sarah", 5).await.unwrap();
+        eprintln!(
+            "graph voice hits: [{}]",
+            hits.iter().map(|m| m.content.as_str()).collect::<Vec<_>>().join(" · ")
+        );
+        assert!(
+            hits.iter().any(|m| m.id == typod),
+            "the graph voice must surface the typo'd memory the lexical floor drops: {hits:?}"
+        );
     }
 
     /// Board 0024 (THE GATE): a dream pass with a configured extractor writes the

@@ -814,8 +814,28 @@ pub(crate) async fn avendb_runtime_dispatch(
 				pj_opt_str(&pj, "source"),
 				pj.get("contentDateMs").and_then(|v| v.as_i64()),
 				pj_opt_str(&pj, "veracity"),
+				pj.get("importance").and_then(|v| v.as_f64()),
 			)
 			.await
+		}
+		"brainlink" => {
+			brain_ipc::brain_ipc_link(
+				app,
+				mj,
+				ss,
+				pj_str(&pj, "identity")?,
+				pj_str(&pj, "from")?,
+				pj_str(&pj, "to")?,
+			)
+			.await
+		}
+		"brainattest" => {
+			brain_ipc::brain_ipc_attest(app, mj, ss, pj_str(&pj, "identity")?, pj_str(&pj, "id")?)
+				.await
+		}
+		"brainforget" => {
+			brain_ipc::brain_ipc_forget(app, mj, ss, pj_str(&pj, "identity")?, pj_str(&pj, "id")?)
+				.await
 		}
 		"brainsearch" => {
 			brain_ipc::brain_ipc_search(

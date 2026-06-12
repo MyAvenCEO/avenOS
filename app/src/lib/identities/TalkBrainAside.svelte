@@ -170,7 +170,9 @@ function phaseStyle(phase: string): { dot: string; text: string } {
 										? 'bg-violet-500/20 text-violet-300'
 										: r.via === 'bm25'
 											? 'bg-amber-500/20 text-amber-300'
-											: 'bg-emerald-500/20 text-emerald-300'}"
+											: r.via === 'graph'
+												? 'bg-sky-500/20 text-sky-300'
+												: 'bg-emerald-500/20 text-emerald-300'}"
 											>{r.via}</span
 										>
 										<span class="text-muted-foreground font-mono text-[10px]"

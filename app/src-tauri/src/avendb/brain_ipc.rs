@@ -265,6 +265,7 @@ pub(crate) async fn brain_ipc_ingest(
 	source: Option<String>,
 	content_date_ms: Option<i64>,
 	veracity: Option<String>,
+	importance: Option<f64>,
 ) -> Result<serde_json::Value, String> {
 	let client = with_connected_client(mj, app, ss).await?;
 	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
@@ -275,6 +276,7 @@ pub(crate) async fn brain_ipc_ingest(
 		source,
 		content_date_ms,
 		veracity,
+		importance: importance.map(|v| v.clamp(0.0, 1.0) as f32).unwrap_or(0.5),
 		..Default::default()
 	};
 	// Chunk long pastes (match reports, articles) into passage-sized memories so recall can
@@ -443,6 +445,63 @@ pub(crate) async fn brain_ipc_reembed(
 	let (brain, _) = brain_over(app, client, &shell, &identity).await?;
 	let n = brain.re_embed_all().await.map_err(|e| e.to_string())?;
 	Ok(json!({ "reembedded": n, "embedder": brain.embedder_name() }))
+}
+
+/// Parse a webview-supplied memory row id into an [`ObjectId`].
+fn memory_oid(id: &str) -> Result<ObjectId, String> {
+	Uuid::parse_str(id.trim())
+		.map(ObjectId::from_uuid)
+		.map_err(|e| format!("memory id: {e}"))
+}
+
+/// The model's `memory_link` tool (board 0025): explicit `refers_to` between two memories.
+pub(crate) async fn brain_ipc_link(
+	app: &tauri::AppHandle,
+	mj: &ManagedAvenDb,
+	ss: &SelfState,
+	identity: String,
+	from: String,
+	to: String,
+) -> Result<serde_json::Value, String> {
+	let client = with_connected_client(mj, app, ss).await?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(app, client, &shell, &identity).await?;
+	brain
+		.link(memory_oid(&from)?, memory_oid(&to)?)
+		.await
+		.map_err(|e| e.to_string())?;
+	Ok(json!({ "ok": true }))
+}
+
+/// The model's `memory_attest` tool (board 0025): step veracity one tier toward `stated`.
+pub(crate) async fn brain_ipc_attest(
+	app: &tauri::AppHandle,
+	mj: &ManagedAvenDb,
+	ss: &SelfState,
+	identity: String,
+	id: String,
+) -> Result<serde_json::Value, String> {
+	let client = with_connected_client(mj, app, ss).await?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(app, client, &shell, &identity).await?;
+	let veracity = brain.attest(memory_oid(&id)?).await.map_err(|e| e.to_string())?;
+	Ok(json!({ "ok": true, "veracity": veracity }))
+}
+
+/// The model's `memory_forget` tool (board 0025, HITL-gated in the webview): soft-drop
+/// a memory from recall (tombstone — nothing is deleted).
+pub(crate) async fn brain_ipc_forget(
+	app: &tauri::AppHandle,
+	mj: &ManagedAvenDb,
+	ss: &SelfState,
+	identity: String,
+	id: String,
+) -> Result<serde_json::Value, String> {
+	let client = with_connected_client(mj, app, ss).await?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(app, client, &shell, &identity).await?;
+	brain.forget(memory_oid(&id)?).await.map_err(|e| e.to_string())?;
+	Ok(json!({ "ok": true }))
 }
 
 pub(crate) async fn brain_ipc_dream(
