@@ -1292,35 +1292,53 @@ impl<E: Embedder> Brain<E> {
     /// requests (status polls, reads) between phases instead of being held for the whole pass —
     /// and every step returns a log line for the live dreaming panel.
     pub async fn dream_step(&self, cursor: i64, now: i64) -> Result<DreamStep, BrainError> {
+        // Phase A (cursor 0..ENRICH_CAP): graph ONE new memory per step — so the log streams an
+        // entry immediately and each heavy `write_graph` is its own runtime turn. Then phases B–E.
+        const ENRICH_CAP: i64 = 8;
+        const MERGE: i64 = 100;
+        if cursor < ENRICH_CAP {
+            return Ok(match self.enrich_one().await? {
+                Some(snip) => {
+                    let next = cursor + 1;
+                    DreamStep::ok(
+                        "enrich",
+                        format!("Graphed “{snip}”"),
+                        1,
+                        if next < ENRICH_CAP { next } else { MERGE },
+                    )
+                }
+                // Nothing left to graph this pass → jump to the consolidation phases.
+                None if cursor == 0 => {
+                    DreamStep::ok("enrich", "No new memories to graph".into(), 0, MERGE)
+                }
+                None => DreamStep::ok("enrich", "Graphed all new memories".into(), 0, MERGE),
+            });
+        }
         Ok(match cursor {
-            0 => {
-                let n = self.enrich_recent_graphs().await? as i64;
-                DreamStep::ok("enrich", format!("Graphed {n} new memories"), n, 1)
-            }
-            1 => {
+            MERGE => {
                 let n = self.merge_duplicate_entities().await? as i64;
-                DreamStep::ok("merge", format!("Merged {n} duplicate entities"), n, 2)
+                DreamStep::ok("merge", format!("Merged {n} duplicate entities"), n, MERGE + 1)
             }
-            2 => {
+            101 => {
                 let n = self.decay_bonds(now).await? as i64;
-                DreamStep::ok("decay", format!("Decayed {n} bonds"), n, 3)
+                DreamStep::ok("decay", format!("Decayed {n} bonds"), n, 102)
             }
-            3 => {
+            102 => {
                 let (dedup, contra) = self.verify_claims(now).await?;
                 DreamStep::ok(
                     "verify",
                     format!("Healed claims · {dedup} deduped, {contra} contradictions resolved"),
                     (dedup + contra) as i64,
-                    4,
+                    103,
                 )
             }
-            4 => {
+            103 => {
                 let (summaries, mems) = self.consolidate(now).await?;
                 DreamStep::ok(
                     "consolidate",
-                    format!("Consolidated {mems} memories into {summaries} summaries"),
+                    format!("Consolidated {mems} old turns into {summaries} summaries"),
                     (summaries + mems) as i64,
-                    5,
+                    104,
                 )
             }
             _ => DreamStep {
@@ -1332,6 +1350,27 @@ impl<E: Embedder> Brain<E> {
                 done: true,
             },
         })
+    }
+
+    /// Graph the next recent memory that has no graph yet (no `note` link from it). Returns a short
+    /// snippet of what it graphed, or `None` when there's nothing left. One `write_graph` per call
+    /// so the stepped dream logs + yields per memory.
+    async fn enrich_one(&self) -> Result<Option<String>, BrainError> {
+        let built: std::collections::HashSet<String> = self
+            .links()
+            .await?
+            .into_iter()
+            .filter(|l| l.class == LinkClass::Note.as_str())
+            .map(|l| l.from)
+            .collect();
+        for m in self.recall(&Filter::default(), 64).await? {
+            if !built.contains(&id_str(&m.id)) {
+                self.write_graph(m.id, &m.content).await?;
+                let snip: String = m.content.chars().take(56).collect();
+                return Ok(Some(snip));
+            }
+        }
+        Ok(None)
     }
 
     /// Claim healer (cross-device): collapse duplicate OPEN claims per
