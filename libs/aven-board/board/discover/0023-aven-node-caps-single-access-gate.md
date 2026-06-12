@@ -19,26 +19,40 @@ Findings being closed: **A8** (public internet can reach the Sprite machine), **
 must be the single source of truth for any access — disk and DB rows/roles alike — and
 nobody from the public may reach the Sprite machine.*
 
-**The blind-relay constraint that shapes everything (read before building):** the relay
-is a *blind* replica. Each user identity's capability chain (`genesis_b64`,
-`issuer_pubkey_b64`) is **sealed under that identity's DEK** (board 0015,
-`aven_ceo.rs:116-153`), which the relay never holds. So the relay **cannot** evaluate
-per-row membership for user data — that is *why* `ServerApplyGate::may_sync` returns
-`Allow` and `verify_on_apply` checks only authenticity (`main.rs:125-179`). Making the
-relay enforce per-row read/write caps would require giving it the DEKs, which destroys
-E2E. **Decision (confirmed with the user):** per-row cap enforcement stays on the client
-(already fail-closed in `app/src-tauri/src/biscuit_resolver.rs:39-101`); the relay's
-cap job is **connection admission + authenticity**, both of which it *can* verify
-because it owns the avenCEO root.
+**The two cap layers — what the relay CAN vs CANNOT see (read before building):**
+
+*avenCEO is the relay's access-control SSOT.* The relay **owns** avenCEO: it holds the
+avenCEO DEK (self-wrapped, `aven_ceo.rs:206-224`, read back via `read_server_dek`
+`:273-303`), so it can decrypt avenCEO and read its biscuit chain →
+`identity_admins(&chain, avenceo_id)` gives the avenCEO **admin set** (`:334`); and it
+reads plaintext `recipient_did` on avenCEO-owned keyshares (`:285`) → the **member
+roster** (every DID holding an avenCEO keyshare). So all **node/server caps are
+avenCEO-tracked and relay-enforceable**: admission / `may_sync` ("is this DID an avenCEO
+member/admin?"), the **per-identity upload quota** (already keyed by owner-binding,
+`main.rs:181-190`), and **rate limiting**. avenCEO is where these live and where the
+relay enforces them — the single source of truth for node-level access.
+
+*What the relay still cannot see — and must not.* Each **user** identity's capability
+chain (`genesis_b64`, `issuer_pubkey_b64`) is **sealed under that identity's DEK** (board
+0015, `aven_ceo.rs:116-153`), which the relay never holds. So the relay cannot evaluate
+**per-spark membership** (is Bob a member of Alice's private spark) — that is *why*
+today's `may_sync` returns `Allow`. That stays client-enforced (already fail-closed in
+`app/src-tauri/src/biscuit_resolver.rs:39-101`) and must, or E2E breaks. Per-spark caps
+are not node caps, so this split is clean.
+
+**Decision (confirmed with the user):** the relay enforces **avenCEO-membership-level**
+caps (admission, quota, rate) against the avenCEO roster as SSOT, plus **authenticity**
+(A3); **per-spark** read/write caps stay on the client.
 
 Related: `0008-aven-server-relay-hardening` (durability/registry — separate, scoped out
 there as "auth/invite/ACC model = separate work"; this is that work).
 
-User-confirmed decisions (discovery): admission = **cap gate + Sprite URL lockdown**;
-A1 scope = **admission + authenticity only**; A3 = **mirror the client** (fail-closed on
-spark-scoped tables, no exceptions within that class; non-spark-scoped/local tables
-unchanged); packaging = **one card, built in the three phases below with a checkpoint
-after each**.
+User-confirmed decisions (discovery): admission = **cap gate (avenCEO roster as SSOT) +
+Sprite URL lockdown**; A1 scope = **avenCEO-membership caps (admission/quota/rate) at the
+relay + authenticity**; per-spark caps stay client-side; A3 = **per-SAFE-identity owner-
+binding on every spark-scoped (owner-bearing) row, E2E, zero exceptions** — the relay
+fail-closed exactly like the client; packaging = **one card, built in the three phases
+below with a checkpoint after each**.
 
 ## Goal
 
@@ -77,28 +91,34 @@ relay is the only peer still fail-open (`main.rs:144-146`). Mirror it:
 - This is "no unsigned/unbound rows e2e, zero exceptions" **within the spark-scoped
   class** — matching the client byte-for-byte so the two gates can never disagree.
 
-### Phase 2 — A8 + A1: cap-gated connection admission + machine lockdown
-The relay owns avenCEO (`main.rs:222-251`) so it holds avenCEO's genesis + issuer pubkey
-and **can verify a biscuit that chains to the avenCEO root**. Add an admission step to
-the handshake:
-- Extend `ClientAuth` (`aven-p2p/src/challenge.rs:61-67`) with an optional
-  `membership_proof` (a serialized biscuit/attestation chaining avenCEO → this peer's
-  SAFE/DID). Backward-tolerant serde so old peers still parse.
-- In `ws_server.rs` after the did:key proof, classify the peer:
-  - **Full member** — `membership_proof` verifies against the avenCEO chain → admit, full
-    sync (today's behaviour, now earned not granted).
-  - **Onboarding (restricted)** — no/þinvalid membership proof → admit in a restricted
-    mode that the relay *can* enforce blind: outbound limited to avenCEO genesis/issuer
-    rows + keyshares whose `recipient_did` == this peer (the existing self-evident
-    keyshare delivery, `biscuit_resolver.rs:57-69`); inbound limited to rows whose
-    owner-binding `author_did` == this peer's connection DID (self-authored onboarding:
-    its own human SAFE + signer + self-keyshares). This preserves the first-human-admin
-    bootstrap (`aven_ceo.rs:305-361`) — a brand-new device must connect *before* it's an
-    avenCEO member.
+### Phase 2 — A8 + A1: cap-gated admission with avenCEO as the relay's ACL SSOT
+The relay owns avenCEO and can read its roster (admins via `identity_admins`, members via
+avenCEO-keyshare `recipient_did`). So admission is enforced **against the avenCEO roster
+the relay already holds** — avenCEO is the SSOT, not a per-connection assertion. A
+peer-presented biscuit is an optional fast-path/secondary check, not the source of truth.
+Add an admission step to the handshake:
+- In `ws_server.rs` after the did:key proof, the relay maps the proven peer DID to its
+  avenCEO standing by consulting the avenCEO roster (admin set + member `recipient_did`
+  set) it reads from its own store. Optionally accept a `membership_proof` added to
+  `ClientAuth` (`aven-p2p/src/challenge.rs:61-67`, serde-tolerant) as a fast path before
+  the roster is hydrated. Classify:
+  - **Member/admin** (DID in the avenCEO roster) → admit, full sync.
+  - **Onboarding (restricted)** — DID not yet in the roster → admit in a restricted mode
+    the relay enforces blind: outbound limited to avenCEO genesis/issuer rows + keyshares
+    whose `recipient_did` == this peer (existing self-evident delivery,
+    `biscuit_resolver.rs:57-69`); inbound limited to rows whose owner-binding `author_did`
+    == this peer's connection DID (self-authored: its own human SAFE + signer +
+    self-keyshares). Preserves the first-human-admin bootstrap (`aven_ceo.rs:305-361`) —
+    a new device must connect *before* it is granted into avenCEO. Once granted, its next
+    connect classifies as member.
   - **Reject** — only if the did:key proof itself fails (unchanged).
-- Enforce the restriction by tagging the registered peer with its tier and checking it in
-  `may_sync` (outbound) and `verify_on_apply` (inbound author-DID match) — both
-  relay-verifiable without any DEK.
+- Enforce the tier by tagging the registry entry and checking it in `may_sync` (outbound
+  scope) and `verify_on_apply` (inbound author-DID match) — all from the avenCEO roster +
+  owner-binding, no user DEK needed.
+- **Quota & rate (avenCEO-tracked):** keep the per-identity upload quota
+  (`main.rs:181-190`) and add per-peer rate limiting, both scoped by avenCEO membership so
+  a member's budget is known and a non-member is capped to the onboarding minimum. (Builds
+  on audit P1/S2 — bounded maps, frame cap — cross-referenced, not re-done here.)
 - **Machine lockdown (the Sprite "auth URL" half):** ensure the Sprite exposes *only*
   :8080 (`/sync` + `/health`) to the public — no other listener — and set the URL auth
   posture explicitly in the deploy script + runbook. NB tension: full Sprites
@@ -107,9 +127,14 @@ the handshake:
   is 8080-only, (b) an optional coarse app-embedded gate token checked at handshake
   before the cap step, and (c) document the posture. The cap gate is the real control.
 
-### Phase 3 — A2: metadata minimization + documentation
-Blind routing genuinely needs a few plaintext columns (`owner`, `type`, `recipient_did`,
-`wrap_did`, `dek_version` — `aven_ceo.rs:339-344`). Scope conservatively:
+### Phase 3 — A2: metadata exposure (largely closed by Phase 2) + documentation
+**Phase 2 closes most of A2:** once admission is cap-gated, the plaintext routing/
+relationship metadata is visible only to **avenCEO members**, not the public internet —
+and that same plaintext roster is *what the relay needs* to enforce membership, so it
+must stay readable to the relay. So A2 is no longer "blind it from everyone"; it is
+"non-members can't read it (done in P2) + minimize and document the member-visible
+residual." Blind routing genuinely needs a few plaintext columns (`owner`, `type`,
+`recipient_did`, `wrap_did`, `dek_version` — `aven_ceo.rs:339-344`). Scope conservatively:
 - Enumerate the **minimal required** plaintext set and add a test/assert that no column
   outside it is written in the clear by the relay's authored rows.
 - Where a relationship column is used only for equality routing (`recipient_did`),
@@ -129,10 +154,11 @@ server↔server mesh; the durability/registry work in `0008`.
    binding; keep all downstream checks.
 3. **P1.3** Tests in `aven-node`: spark-scoped no-binding → deny; non-spark no-binding →
    allow; valid bound+signed → allow; forged/relabeled/tampered → deny. **Checkpoint.**
-4. **P2.1** Add `membership_proof` to `ClientAuth` (serde-tolerant) + a verifier in
-   `aven-caps`/`aven-p2p` that checks a proof against the avenCEO chain.
-5. **P2.2** Classify peers (member / onboarding / reject) in `ws_server.rs`; tag the
-   registry entry with the tier.
+4. **P2.1** Build the avenCEO roster reader in the relay (admin set via `identity_admins`
+   + member set via avenCEO-keyshare `recipient_did`); optional `membership_proof` on
+   `ClientAuth` (serde-tolerant) as a fast path.
+5. **P2.2** Classify peers (member / onboarding / reject) in `ws_server.rs` against the
+   roster; tag the registry entry with the tier.
 6. **P2.3** Enforce the onboarding restriction in `may_sync` (outbound: avenCEO + own
    keyshares) and `verify_on_apply` (inbound: self-authored only).
 7. **P2.4** Tests: member admitted full; onboarding peer can push only self-authored rows
@@ -223,3 +249,11 @@ grep -n "relay" docs/security/trust-boundaries-and-sensitive-material.md  # A2 d
   cap-gated admission + Sprite URL lockdown (A8); mirror-the-client fail-closed apply
   gate (A3); conservative metadata minimization + documentation (A2); one card built in
   three checkpointed phases. Made the goal measurable. Created in `discover/`.
+- `2026-06-12` — Refinement (user): corrected the model — **avenCEO is the relay's ACL
+  SSOT**. The relay owns avenCEO and can read its roster (admins via `identity_admins`;
+  members via avenCEO-keyshare `recipient_did`), so node caps (admission/`may_sync`,
+  upload quota, rate limiting) ARE relay-enforceable against avenCEO — only per-spark
+  membership stays client-side. Admission now reads the avenCEO roster (SSOT) rather than
+  relying on a presented biscuit. A3 restated as per-SAFE-identity owner-binding on every
+  spark-scoped (owner-bearing) row, E2E, zero exceptions. Noted that cap-gated admission
+  (P2) by itself closes most of A2 (metadata visible to members, not the public).
