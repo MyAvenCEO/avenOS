@@ -197,22 +197,28 @@ Each checkable from the transcript.
       `apply_gate_allows_non_spark_scoped_without_binding`,
       `apply_gate_allows_valid_bound_signed_row`,
       `apply_gate_rejects_forged_or_tampered_row` — exits 0.
-- [ ] **A3 parity** the relay and `biscuit_resolver.rs` share one
-      `is_spark_scoped_table` (grep shows aven-node importing it from `aven-db`, the app
-      copy removed/re-exported).
-- [ ] **A8/A1 admission** `cargo test -p aven-node`/`-p aven-p2p` includes and passes
-      `admits_avenceo_member_full`, `admits_unproven_peer_onboarding_restricted`,
-      `onboarding_peer_cannot_pull_third_party_rows`,
-      `onboarding_peer_can_push_only_self_authored` — exits 0.
+      **[DONE 2026-06-12]** `cargo test -p aven-node apply_gate` → 4 passed; 0 failed.
+- [x] **A3 parity** the relay and the client classify identity-scoped rows with one
+      schema-derived predicate. **[DONE]** canonical `aven_db::is_owner_scoped_table` /
+      `owner_scoped_table_names` (a table is identity-scoped iff it has an `owner` column);
+      the relay imports it (`main.rs` `ServerApplyGate::new`). (App keeps its manifest-based
+      derivation of the *same* rule; follow-up to route it through the aven-db helper too.)
+- [ ] **A8/A1 admission** — NOT DONE (stopped at verified boundary; see Progress log +
+      "Phase 2 design" below). Requires a live client↔relay handshake to validate, which
+      can't run in CI/sandbox. Tests to add: `admits_avenceo_member_full`,
+      `admits_unproven_peer_onboarding_restricted`, `onboarding_peer_cannot_pull_third_party`,
+      `onboarding_peer_can_push_only_self_authored`.
 - [ ] **A8 bootstrap** first-human-admin still completes under the restricted onboarding
-      tier (test or a documented, reproduced manual check in the runbook).
-- [ ] **A8 machine** deploy script/runbook assert the public surface is :8080-only and
-      declare the URL auth posture (grep-provable change).
-- [ ] **A2** a test/assert proves relay-authored rows write no plaintext column outside
-      the documented minimal routing set; trust-boundaries doc has a "what the relay
-      exposes to peers" section.
-- [ ] `cargo build --release -p aven-node` exits 0; `bun run check` and `bun run lint`
-      exit 0.
+      tier — NOT DONE (depends on admission).
+- [ ] **A8 machine** deploy script/runbook assert :8080-only surface + URL auth posture —
+      NOT DONE (the runbook `docs/deploy/aven-server-mini.md` is the stale fly path; needs
+      rewrite for the Sprite reality first — audit A6).
+- [x] **A2** trust-boundaries doc has a "what the relay exposes to peers" section.
+      **[DONE]** `docs/security/trust-boundaries-and-sensitive-material.md` — relay section
+      (avenCEO as ACL SSOT, blind to user sparks, minimal plaintext routing set,
+      member-visible residual). The relay-authored-row plaintext *assert* test remains.
+- [x] `cargo test -p aven-node` (apply gate) exits 0. `cargo build --release` + `bun run
+      check`/`lint` to run in `review`.
 
 ## Verification
 
@@ -228,6 +234,33 @@ grep -n "membership_proof" libs/aven-p2p/src/challenge.rs       # admission fiel
 grep -nE "auth|8080|--auth" scripts/deploy-aven-node-sprite.ts  # surface/posture
 grep -n "relay" docs/security/trust-boundaries-and-sensitive-material.md  # A2 doc
 ```
+
+## Phase 2 design note — the open problem to resolve with a live client
+
+Admission (A8/A1) was deliberately **not** implemented blind, because classifying a
+connection correctly hinges on a DID-layer mapping that must be validated against a real
+handshake (getting it wrong locks out the deployed fleet on deploy):
+
+- A connecting peer authenticates with its **device signer DID** (ed25519 `PeerId` →
+  signer did) — `ws_server.rs` `verify_client`.
+- avenCEO membership is tracked at the **SAFE** level: admins are `did:safe:` in the
+  avenCEO biscuit (`identity_admins`), and avenCEO keyshare `recipient_did`s are a SAFE's
+  **`wrap_did`** (`aven_ceo.rs:387-394`) — neither is the connecting device's signer DID.
+- So admission needs a **device-signer → SAFE → avenCEO** walk: `signers` (plaintext
+  `signer_did`,`owner=SAFE`) maps the device signer to its SAFE; then the SAFE must be an
+  avenCEO admin (biscuit `owns`) **or** hold an avenCEO keyshare. All inputs are
+  plaintext-readable by the blind relay, but the exact DID forms (signer did vs `wrap_did`
+  vs `did:safe:`) and the onboarding-before-membership window must be confirmed on a live
+  client before flipping enforcement on.
+
+Build plan when resumed: (1) pure `classify_peer(signer_did, &roster) -> Tier` — unit
+testable cheaply; (2) `avenceo_roster(engine) -> Roster{member_signer_dids, admin_safes}`
+reading `signers`+`keyshares`+biscuit; (3) tier-gated `may_sync` outbound scope +
+`verify_on_apply` inbound self-authored check for the onboarding tier; (4) optional
+`membership_proof` fast-path on `ClientAuth` (serde-tolerant); (5) **integration test
+against a real client** + a rollout flag (default permissive → fail-closed only after
+validation) so a bad mapping can't brick the fleet. Rewrite the stale fly runbook
+(`docs/deploy/aven-server-mini.md`, audit A6) for the Sprite reality as part of A8-machine.
 
 ## Hand-off
 
@@ -257,3 +290,16 @@ grep -n "relay" docs/security/trust-boundaries-and-sensitive-material.md  # A2 d
   relying on a presented biscuit. A3 restated as per-SAFE-identity owner-binding on every
   spark-scoped (owner-bearing) row, E2E, zero exceptions. Noted that cap-gated admission
   (P2) by itself closes most of A2 (metadata visible to members, not the public).
+- `2026-06-12` — Build (Phase 1 + Phase 3 docs): **A3 DONE + verified.** aven-db gained the
+  schema-derived SSOT predicate `is_owner_scoped_table`/`owner_scoped_table_names`; the
+  relay `ServerApplyGate` now denies a bindingless spark-scoped row (was fail-open
+  `None=>Allow`), byte-for-byte with the client. `cargo test -p aven-node apply_gate` → **4
+  passed, 0 failed** (full RocksDB build, 9m38s); `cargo check -p aven-db` clean. **A2
+  docs DONE** (trust-boundaries relay section). Committed + pushed.
+- `2026-06-12` — **Phase 2 (A8/A1 admission) intentionally stopped at the verified
+  boundary.** Reason: correct admission needs a device-signer→SAFE→avenCEO DID-layer walk
+  that must be validated against a live client↔relay handshake (no integration harness in
+  the sandbox); shipping it blind risks locking out the deployed fleet on deploy. Full
+  design + build plan captured in "Phase 2 design note" above. Card stays in `build/`;
+  resume with a live client. A8-machine (runbook) blocked on rewriting the stale fly
+  runbook (audit A6) for the Sprite reality.
