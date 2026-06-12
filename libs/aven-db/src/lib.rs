@@ -71,7 +71,8 @@ pub use query_manager::types::{
 };
 #[cfg(feature = "client-p2p")]
 pub use query_manager::types::schema::{
-    is_owner_scoped_table, owner_scoped_table_names, table_schema_is_owner_scoped,
+    is_owner_scoped_table, owner_invariant_ok, owner_scoped_table_names,
+    table_schema_is_owner_scoped,
 };
 #[cfg(feature = "client-p2p")]
 pub use schema_manager::AppId;

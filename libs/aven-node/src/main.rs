@@ -12,6 +12,7 @@
 //! the challenge is nonce-bound (no channel binding). Config is all env; the
 //! identity seed is a Sprite secret; `AVEN_SERVER_DATA_DIR` is the persistent path.
 
+mod admission;
 mod aven_ceo;
 mod ws_server;
 
@@ -344,6 +345,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         while let Some(peer) = new_peers.recv().await {
             if let Err(e) = engine_for_peers.register_peer_sync_client(peer) {
                 tracing::warn!(%peer, "register peer: {e}");
+            }
+            // Admission (A8) — classify the peer against the avenCEO roster (the relay's ACL
+            // SSOT). SHADOW MODE: log the tier the peer WOULD get; do not yet restrict sync.
+            // Enforcement is gated behind AVEN_SERVER_ENFORCE_ADMISSION (default off) so this
+            // can be deployed for telemetry and validated against real clients before the
+            // fail-closed flip — see admission.rs + board 0023.
+            match aven_db::did_key::signer_did_from_ed25519(&peer.0) {
+                Ok(peer_did) => {
+                    match admission::read_avenceo_member_signer_dids(&engine_for_peers, avenceo_id).await {
+                        Ok(member_dids) => {
+                            let roster = admission::Roster { member_signer_dids: member_dids };
+                            let tier = admission::classify_peer(&peer_did, &roster);
+                            tracing::info!(
+                                %peer, tier = ?tier, roster_size = roster.member_signer_dids.len(),
+                                enforce = admission::enforcement_enabled(),
+                                "admission classification (shadow — not enforced)"
+                            );
+                        }
+                        Err(e) => tracing::warn!(%peer, "admission roster read: {e}"),
+                    }
+                }
+                Err(e) => tracing::warn!(%peer, "admission: peer did: {e}"),
             }
             // S.4 — grant the first human SAFE (not the device signer) admin on avenCEO.
             // The human SAFE is created AFTER first connect, so this also runs on a periodic

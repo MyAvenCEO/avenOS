@@ -296,8 +296,21 @@ validation) so a bad mapping can't brick the fleet. Rewrite the stale fly runboo
   `None=>Allow`), byte-for-byte with the client. `cargo test -p aven-node apply_gate` → **4
   passed, 0 failed** (full RocksDB build, 9m38s); `cargo check -p aven-db` clean. **A2
   docs DONE** (trust-boundaries relay section). Committed + pushed.
-- `2026-06-12` — **Phase 2 (A8/A1 admission) intentionally stopped at the verified
-  boundary.** Reason: correct admission needs a device-signer→SAFE→avenCEO DID-layer walk
+- `2026-06-12` — **Owner invariant on the write path (user ask: reject ownerless values
+  everywhere).** Added `aven_db::owner_invariant_ok` (a non-nullable `owner` column must
+  hold a non-null value; nullable-owner tables like `signers` local rows are the schema's
+  carve-out) and enforced it in `AvenDbClient::resolve_named_row` — THE create surface —
+  so no create path (app or relay) can write an ownerless value into an owned table, zero
+  exceptions. Inbound sync is already covered by the fail-closed apply gate; non-nullable
+  owner columns can't be nulled on update by the column constraint. +3 aven-db unit tests.
+- `2026-06-12` — **Admission shadow wiring (Phase 2 safe core).** Added `admission.rs`:
+  pure `classify_peer` (Member iff the peer's device did:key is in avenCEO's roster) +
+  `read_avenceo_member_signer_dids` (reads `signers.signer_did WHERE owner==avenceo_id` —
+  plaintext, no DEK) + 5 unit tests. Wired into the peer loop in SHADOW mode (logs the tier;
+  enforcement gated behind `AVEN_SERVER_ENFORCE_ADMISSION`, default off) so it can be
+  deployed for telemetry and validated against real clients before the fail-closed flip.
+- `2026-06-12` — **Phase 2 (A8/A1 admission enforcement) intentionally stopped at the
+  verified boundary.** Reason: correct admission needs a device-signer→SAFE→avenCEO DID-layer walk
   that must be validated against a live client↔relay handshake (no integration harness in
   the sandbox); shipping it blind risks locking out the deployed fleet on deploy. Full
   design + build plan captured in "Phase 2 design note" above. Card stays in `build/`;
