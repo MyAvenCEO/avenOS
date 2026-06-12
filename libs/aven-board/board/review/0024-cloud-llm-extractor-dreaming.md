@@ -148,20 +148,23 @@ recall ranker (0023 territory); multi-pass re-prompting.
 
 Each box checkable from the transcript (a command + its output proves it).
 
-- [ ] `MockExtractor` + write-back exist — `grep -n "MockExtractor\|with_extractor\|ExtractedFact" libs/aven-brain/src/brain.rs libs/aven-brain/src/extractor.rs` hits.
-- [ ] `cargo test -p aven-brain extractor -- --nocapture` exits 0 — prints the facts read back from the graph (subject→predicate→object) after a mock-extractor dream.
-- [ ] `cargo test -p aven-brain` exits 0 (28+ tests; no regression).
-- [ ] `TinfoilExtractor` compiles — `grep -rn "TinfoilExtractor" libs/ app/` hits and `cargo check` (with the feature) is green.
-- [ ] Dream step returns real tokens — `grep -n "tokens" app/src-tauri/src/avendb/brain_ipc.rs` shows the enrich step populating it (not hard-zero).
-- [ ] `cd app && bun run check` clean (only the pre-existing `brand-style.ts`) and `bun run lint` green.
-- [ ] Dreaming tab is the complete receipt — every phase `dream_step` can emit is
-      logged (compare the brain's phase list vs `phaseStyle()` in
-      `TalkBrainAside.svelte`); the log is continuous across turns.
+- [x] `MockExtractor` + write-back exist — `grep -n "MockExtractor\|with_extractor\|ExtractedFact" libs/aven-brain/src/brain.rs libs/aven-brain/src/extractor.rs` hits (`Brain<E, X = NoExtractor>` + `with_extractor`; `extract_batch` writes claims + the `extracted` idempotence marker).
+- [x] `cargo test -p aven-brain extractor -- --nocapture` exits 0 — prints the facts read back from the graph after the mock-extractor dream (`Yaya Sithole —received→ red card`, `Julian Quinones —scored→ goal at 9'`), proves provenance, open validity, confidence carry-through, and that a second dream extracts nothing (`facts_extracted == 0`).
+- [x] `cargo test -p aven-brain` exits 0 — **32 passed** (30 from 0023 + 2 new; no regression).
+- [x] `TinfoilExtractor` compiles — `grep -rn "TinfoilExtractor" app/` hits (`app/src-tauri/src/llm.rs`, glm-5-1, structured-JSON prompt, parse-and-clamp) and `cargo check --features tinfoil` is green (aven-ai and the app crate).
+- [x] Dream step returns real tokens — the `extract` phase carries the extractor's `Extraction.tokens` (Tinfoil `usage.total_tokens`); `grep -n "tokens" app/src-tauri/src/avendb/brain_ipc.rs` hits the injection comment; proven deterministically by `extractor_stepped_dream_emits_extract_phase_with_tokens`.
+- [x] `cd app && bun run check` clean (only the pre-existing `brand-style.ts`) and `bun run lint` green.
+- [x] Dreaming tab is the complete receipt — the stepped-dream test asserts every
+      phase (`enrich · extract · merge · decay · verify · consolidate · done`) appears
+      in the step log; `phaseStyle()` gained the `extract` accent (rose); the log
+      stays continuous across turns (unchanged from c3caa92).
 - [ ] HITL smoke (human): ingest the report → dream → Dreaming tab shows an
       `extract`/`enrich` step with non-zero `tokens` and labels naming what was
       mined; querying the graph surfaces the red-card + goal-scorer relations.
-- [ ] Security invariant honored: the Tinfoil adapter verifies attestation before
-      sending memory content; no non-attested fallback path exists.
+- [x] Security invariant honored: the Tinfoil SDK attests the enclave on first connect
+      (before any chat round carries memory content); `app_extractor()` yields
+      `NoExtractor` when the feature/key is absent — there is no non-attested path,
+      and an attestation/init failure fails the dream step instead of falling back.
 
 ## Verification
 
@@ -190,6 +193,30 @@ grep -rn "TinfoilExtractor" libs/ app/
 
 ## Progress log
 
+- `2026-06-12` — Build (claude): moved discover → build → review. (1) Deterministic
+  core: `Brain` gained a second generic (`X: Extractor = NoExtractor`, enum-style
+  default — the trait's `async fn` isn't dyn-safe) + `with_extractor`; the dream pass
+  (one-shot AND stepped) batches newly-written, not-yet-extracted memories
+  (`extract_batch`, cap 6/step), writes each `ExtractedFact` back as a claim link
+  (subject→predicate→object, confidence + `source_memory` provenance, in-batch
+  dedupe + claim-semantics dedupe), and marks mined memories with an `extracted`
+  note self-link (idempotence with NO schema change — law 2); `Extraction { facts,
+  tokens }` evolved the trait so the panel gets real per-step cost;
+  `DreamReport.facts_extracted` added. Gate test prints the facts read back and
+  proves a second dream extracts nothing. (2) `TinfoilExtractor` (glm-5-1,
+  structured-JSON array with per-block source indices, fence-tolerant parse,
+  predicate snake_casing, confidence clamp) in `app/src-tauri/src/llm.rs` behind the
+  existing `tinfoil` feature; `aven_ai::tinfoil::ChatTurn` now carries
+  `total_tokens` from the usage block. (3) Wiring: `AppExtractor` enum (None |
+  Tinfoil) in `brain_ipc.rs`, injected into `brain_ipc_dream` +
+  `brain_ipc_dream_step`; `api.ts` `DreamReport.factsExtracted`;
+  `TalkBrainAside` `phaseStyle` gained the `extract` accent. Stepped-dream test
+  asserts ALL phases appear in the log (complete receipt) with non-zero extract
+  tokens. `cargo test` 32 green · `cargo check --features tinfoil` green (aven-ai +
+  app) · `bun run check` clean (pre-existing `brand-style.ts` only) · `bun run lint`
+  green. OPEN (HITL): live smoke — ingest the report with `TINFOIL_API_KEY` set,
+  watch the Dreaming tab's `extract` step mine the red-card/goal relations with
+  real tokens.
 - `2026-06-12` — Discovery: Samuel asked to also wire cloud-LLM entity/relation
   extraction into dreaming ("proper cloud-based dreaming"). Found the `Extractor`
   seam already scaffolded (trait + `ExtractedFact`, off-write-path, attested-TEE

@@ -68,6 +68,8 @@ export type ContextBundle = { prompt: string; trace: ContextTrace }
 export type DreamReport = {
 	bondsDecayed: number
 	entitiesMerged: number
+	/** Typed facts mined by the configured extractor (board 0024). */
+	factsExtracted: number
 	claimsDeduped: number
 	claimsContradicted: number
 	memoriesConsolidated: number

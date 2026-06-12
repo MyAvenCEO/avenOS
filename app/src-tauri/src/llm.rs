@@ -194,6 +194,87 @@ pub async fn tinfoil_chat(
 	Err("cloud chat is not available in this build (enable the `tinfoil` feature)".into())
 }
 
+// ──────────────────── Tinfoil dreaming fact extractor (board 0024) ────────────────────
+
+/// glm-5-1 in the Tinfoil enclave as the dreaming fact [`aven_brain::Extractor`]: mines
+/// typed subject→predicate→object facts from new memories, off the write path. The
+/// Tinfoil SDK verifies enclave attestation on first connect, satisfying the extractor
+/// seam's security invariant — memory plaintext only ever goes to the attested TEE, and
+/// there is NO non-attested fallback (an init/attestation failure fails the step).
+#[cfg(feature = "tinfoil")]
+pub struct TinfoilExtractor;
+
+/// Extraction model: strong structured-JSON output (board 0024 decision).
+#[cfg(feature = "tinfoil")]
+const EXTRACTOR_MODEL: &str = "glm-5-1";
+
+#[cfg(feature = "tinfoil")]
+const EXTRACTOR_SYSTEM: &str = "You mine typed facts from a user's private notes. \
+Given numbered memory blocks, return ONLY a JSON array (no prose, no code fences) of \
+facts: {\"source\": <block number>, \"subject\": string, \"predicate\": string, \
+\"object\": string, \"confidence\": number 0..1}. Subjects and objects are short \
+entity names; predicates are lowercase snake_case relations (e.g. works_at, scored, \
+received). Only facts the text actually states — return [] when there are none.";
+
+#[cfg(feature = "tinfoil")]
+impl aven_brain::Extractor for TinfoilExtractor {
+	async fn extract(
+		&self,
+		batch: &[aven_brain::ExtractionInput],
+	) -> Result<aven_brain::Extraction, String> {
+		use serde::Deserialize;
+		if batch.is_empty() {
+			return Ok(aven_brain::Extraction::default());
+		}
+		let mut blocks = String::new();
+		for (i, input) in batch.iter().enumerate() {
+			blocks.push_str(&format!("[{i}]\n{}\n\n", input.content));
+		}
+		let messages = vec![
+			serde_json::json!({ "role": "system", "content": EXTRACTOR_SYSTEM }),
+			serde_json::json!({ "role": "user", "content": blocks }),
+		];
+		let turn =
+			aven_ai::tinfoil::chat(messages, serde_json::Value::Null, EXTRACTOR_MODEL).await?;
+		let text = turn.content.unwrap_or_default();
+		// Tolerate fenced/prefixed output: parse from the first '[' to the last ']'.
+		let json = match (text.find('['), text.rfind(']')) {
+			(Some(a), Some(b)) if a < b => &text[a..=b],
+			_ => return Err(format!("extractor returned no JSON array: {text:.120}")),
+		};
+		#[derive(Deserialize)]
+		struct RawFact {
+			source: usize,
+			subject: String,
+			predicate: String,
+			object: String,
+			#[serde(default)]
+			confidence: Option<f32>,
+		}
+		let raw: Vec<RawFact> =
+			serde_json::from_str(json).map_err(|e| format!("extractor JSON: {e}"))?;
+		let facts = raw
+			.into_iter()
+			.filter(|f| {
+				f.source < batch.len()
+					&& !f.subject.trim().is_empty()
+					&& !f.predicate.trim().is_empty()
+					&& !f.object.trim().is_empty()
+			})
+			.map(|f| aven_brain::ExtractedFact {
+				subject: f.subject,
+				predicate: f.predicate.to_lowercase().replace(' ', "_"),
+				object: f.object,
+				valid_from: None,
+				valid_to: None,
+				confidence: f.confidence.unwrap_or(0.7).clamp(0.0, 1.0),
+				source_memory: batch[f.source].memory_id,
+			})
+			.collect();
+		Ok(aven_brain::Extraction { facts, tokens: turn.total_tokens })
+	}
+}
+
 pub fn spawn_model_download(app: &AppHandle) {
 	if !instance_enabled() {
 		log::info!(target: "avenos::llm", "secondary instance — skipping LLM model download/load");

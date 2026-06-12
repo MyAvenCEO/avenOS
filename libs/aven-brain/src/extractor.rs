@@ -5,17 +5,18 @@
 //! `Extractor` only *adds* typed, temporal facts (subject→predicate→object) on top, so it
 //! is purely additive — retrieval works fully without it.
 //!
-//! # Status: TODO — prepared seam only
+//! # Status: implemented (board 0024)
 //!
-//! This module defines the trait + types. There is **no implementation and no fallback**
-//! yet. If no `Extractor` is configured, [`crate::Brain::dream`] runs only its
-//! deterministic passes (decay, exact-name entity merge, relation dedup).
+//! [`crate::Brain`] carries an `Extractor` (default [`NoExtractor`] — deterministic
+//! dreaming only). The dream pass batches newly-written, not-yet-extracted memories,
+//! calls the configured extractor, and writes each [`ExtractedFact`] back to the graph
+//! as a claim link (subject entity —predicate→ object entity), idempotently (an
+//! `extracted` note marker per mined memory). The app injects a Tinfoil-enclave glm-5-1
+//! adapter behind its `tinfoil` feature.
 //!
-//! The planned default is **GLM-5.3 hosted in a Phala Cloud RedPill TEE**, attestation-
-//! verified before any memory leaves the device (see the execution plan's
-//! "Extractor — GLM-5.3 on Phala RedPill TEE" board plan). Any remote adapter MUST send
-//! plaintext only to an attested TEE / ZDR endpoint — there is deliberately no silent
-//! non-attested fallback.
+//! **Security invariant:** any remote adapter MUST send plaintext only to an **attested
+//! TEE** / ZDR endpoint, attestation-verified before transmitting — there is
+//! deliberately no silent non-attested fallback. The Tinfoil SDK attests on connect.
 
 use aven_db::ObjectId;
 
@@ -30,7 +31,7 @@ pub struct ExtractionInput {
 
 /// A typed, temporal assertion extracted from a memory: `subject —predicate→ object`,
 /// optionally valid over a window, with a confidence and its source memory. Maps to a
-/// `facts` row (see [`crate::schema::FACTS`]).
+/// claim link row (see [`crate::schema::LINKS`]).
 #[derive(Clone, Debug)]
 pub struct ExtractedFact {
     /// Subject entity name (normalized + matched to an entity on write-back).
@@ -49,6 +50,14 @@ pub struct ExtractedFact {
     pub source_memory: ObjectId,
 }
 
+/// One extraction round's result: the facts plus the LLM tokens it cost — surfaced
+/// per `extract` step in the dreaming panel (the deterministic phases stay at 0).
+#[derive(Clone, Debug, Default)]
+pub struct Extraction {
+    pub facts: Vec<ExtractedFact>,
+    pub tokens: i64,
+}
+
 /// Extracts typed facts from a batch of memories during *dreaming*.
 ///
 /// Batched + off the write path: implementations optimize for **quality over latency**
@@ -59,9 +68,65 @@ pub struct ExtractedFact {
 /// attestation before transmitting. No silent fallback to a non-attested endpoint.
 #[allow(async_fn_in_trait)]
 pub trait Extractor: Send + Sync {
-    /// Extract facts from `batch`. Returns all facts found across the inputs.
-    async fn extract(&self, batch: &[ExtractionInput]) -> Result<Vec<ExtractedFact>, String>;
+    /// Whether this extractor actually mines facts. `false` ⇒ the dream pass skips the
+    /// extract phase's batching/marking entirely (and says so in its log line).
+    fn enabled(&self) -> bool {
+        true
+    }
+    /// Extract facts from `batch`. Returns all facts found across the inputs plus the
+    /// token cost of producing them.
+    async fn extract(&self, batch: &[ExtractionInput]) -> Result<Extraction, String>;
 }
 
-// TODO(extractor): implement `RedPillExtractor` (GLM-5.3 on Phala Cloud RedPill TEE) behind
-// a feature — attestation-verified OpenAI-compatible transport. No fallback for now.
+/// The "no extractor configured" default — [`crate::Brain::dream`] runs only its
+/// deterministic passes (decay, exact-name entity merge, relation dedup).
+pub struct NoExtractor;
+
+impl Extractor for NoExtractor {
+    fn enabled(&self) -> bool {
+        false
+    }
+
+    async fn extract(&self, _batch: &[ExtractionInput]) -> Result<Extraction, String> {
+        Ok(Extraction::default())
+    }
+}
+
+/// Deterministic test double: emits the configured `(subject, predicate, object)`
+/// triples for EVERY input memory (source_memory = that input, confidence 0.9, no
+/// validity window) and bills a fixed 42 tokens per call — so tests can prove the
+/// dream→graph write-back and the per-step token surfacing without a model.
+pub struct MockExtractor {
+    triples: Vec<(String, String, String)>,
+}
+
+impl MockExtractor {
+    pub fn new<S: Into<String>>(triples: Vec<(S, S, S)>) -> Self {
+        Self {
+            triples: triples
+                .into_iter()
+                .map(|(s, p, o)| (s.into(), p.into(), o.into()))
+                .collect(),
+        }
+    }
+}
+
+impl Extractor for MockExtractor {
+    async fn extract(&self, batch: &[ExtractionInput]) -> Result<Extraction, String> {
+        let facts = batch
+            .iter()
+            .flat_map(|input| {
+                self.triples.iter().map(|(s, p, o)| ExtractedFact {
+                    subject: s.clone(),
+                    predicate: p.clone(),
+                    object: o.clone(),
+                    valid_from: None,
+                    valid_to: None,
+                    confidence: 0.9,
+                    source_memory: input.memory_id,
+                })
+            })
+            .collect();
+        Ok(Extraction { facts, tokens: 42 })
+    }
+}

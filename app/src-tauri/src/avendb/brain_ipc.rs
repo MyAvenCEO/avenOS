@@ -12,7 +12,8 @@
 use std::sync::Arc;
 
 use aven_brain::{
-	Brain, ContextOptions, Embedder, Filter, KeySealer, RememberOptions, StubEmbedder, EMBED_DIM,
+	Brain, ContextOptions, Embedder, Extraction, ExtractionInput, Extractor, Filter, KeySealer,
+	NoExtractor, RememberOptions, StubEmbedder, EMBED_DIM,
 };
 use aven_db::{AvenDbClient, ObjectId, QueryBuilder, Value};
 use serde_json::json;
@@ -137,6 +138,45 @@ async fn gemma_embedder(app: &tauri::AppHandle) -> Option<Arc<aven_brain::GemmaE
 			None
 		}
 	}
+}
+
+/// The app's dreaming fact extractor (board 0024): glm-5-1 in the Tinfoil enclave when
+/// the `tinfoil` feature is compiled AND `TINFOIL_API_KEY` is set; otherwise none —
+/// dreaming stays fully deterministic. Enum dispatch because [`Extractor`] uses
+/// `async fn` (not dyn-safe), same as [`AppEmbedder`].
+pub(crate) enum AppExtractor {
+	None(NoExtractor),
+	#[cfg(feature = "tinfoil")]
+	Tinfoil(crate::llm::TinfoilExtractor),
+}
+
+impl Extractor for AppExtractor {
+	fn enabled(&self) -> bool {
+		match self {
+			AppExtractor::None(x) => x.enabled(),
+			#[cfg(feature = "tinfoil")]
+			AppExtractor::Tinfoil(x) => x.enabled(),
+		}
+	}
+
+	async fn extract(&self, batch: &[ExtractionInput]) -> Result<Extraction, String> {
+		match self {
+			AppExtractor::None(x) => x.extract(batch).await,
+			#[cfg(feature = "tinfoil")]
+			AppExtractor::Tinfoil(x) => x.extract(batch).await,
+		}
+	}
+}
+
+/// Pick the dream extractor for this process. Attestation is the Tinfoil client's
+/// connect-time invariant — no key / no feature ⇒ NO extractor (never a non-attested
+/// fallback).
+fn app_extractor() -> AppExtractor {
+	#[cfg(feature = "tinfoil")]
+	if aven_ai::tinfoil::available() {
+		return AppExtractor::Tinfoil(crate::llm::TinfoilExtractor);
+	}
+	AppExtractor::None(NoExtractor)
 }
 
 /// Pick the best available embedder for this process. NOTE: all devices of an
@@ -414,6 +454,8 @@ pub(crate) async fn brain_ipc_dream(
 	let client = with_connected_client(mj, app, ss).await?;
 	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
 	let (brain, _) = brain_over(app, client, &shell, &identity).await?;
+	// Attested-cloud fact mining rides the dream pass when available (board 0024).
+	let brain = brain.with_extractor(app_extractor());
 	let report = brain.dream().await.map_err(|e| e.to_string())?;
 	serde_json::to_value(report).map_err(|e| e.to_string())
 }
@@ -431,6 +473,10 @@ pub(crate) async fn brain_ipc_dream_step(
 	let client = with_connected_client(mj, app, ss).await?;
 	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
 	let (brain, _) = brain_over(app, client, &shell, &identity).await?;
+	// Inject the dream extractor: the `extract` step mines typed facts through the
+	// attested Tinfoil enclave (glm-5-1) and returns its REAL `tokens` — the dreaming
+	// panel's token column is live cost, never hard-zero (board 0024).
+	let brain = brain.with_extractor(app_extractor());
 	let now = std::time::SystemTime::now()
 		.duration_since(std::time::UNIX_EPOCH)
 		.map(|d| d.as_millis() as i64)

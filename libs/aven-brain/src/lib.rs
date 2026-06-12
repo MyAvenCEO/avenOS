@@ -49,7 +49,9 @@ pub use brain::{
     EntityCard, Fact, Filter, LinkClass, Memory, Relation, RememberOptions, ScoredMemory, Via,
 };
 pub use embedder::{Embedder, StubEmbedder};
-pub use extractor::{ExtractedFact, ExtractionInput, Extractor};
+pub use extractor::{
+    ExtractedFact, Extraction, ExtractionInput, Extractor, MockExtractor, NoExtractor,
+};
 pub use schema::{brain_schema, EMBED_DIM};
 pub use sealer::{KeySealer, Sealer};
 

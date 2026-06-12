@@ -37,6 +37,8 @@ function phaseStyle(phase: string): { dot: string; text: string } {
 	switch (phase) {
 		case 'enrich':
 			return { dot: 'bg-sky-400', text: 'text-sky-400' }
+		case 'extract':
+			return { dot: 'bg-rose-400', text: 'text-rose-400' }
 		case 'merge':
 			return { dot: 'bg-violet-400', text: 'text-violet-400' }
 		case 'decay':

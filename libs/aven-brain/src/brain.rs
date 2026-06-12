@@ -32,6 +32,7 @@ use base64::Engine as _;
 use serde::Serialize;
 
 use crate::embedder::Embedder;
+use crate::extractor::{ExtractionInput, Extractor, NoExtractor};
 use crate::schema::{brain_schema, ENTITIES, LINKS, MEMORIES};
 use crate::sealer::{KeySealer, Sealer};
 
@@ -82,9 +83,14 @@ impl LinkClass {
 }
 
 /// Reserved note kinds (append-only).
-const NOTE_KINDS: [&str; 3] = ["mentions", "summarizes", "refers_to"];
+const NOTE_KINDS: [&str; 4] = ["mentions", "summarizes", "refers_to", "extracted"];
 /// The bond kind.
 const BOND_KIND: &str = "assoc";
+/// Note kind marking a memory as fact-mined (a self-link `memory —extracted→ memory`) —
+/// the dream pass's extracted-cursor: never re-extract, no schema change (law 2).
+const EXTRACTED_KIND: &str = "extracted";
+/// Memories handed to the extractor per dream step (bounded so a step always yields).
+const EXTRACT_BATCH_MAX: usize = 6;
 
 /// Hard cap on how many entities one memory contributes to the graph. Bounds the per-entity
 /// fuzzy-scan AND the O(n²) bonding loop in `write_graph`, so a pasted wall of text can't saturate
@@ -295,6 +301,8 @@ impl EntityCard {
 pub struct DreamReport {
     pub bonds_decayed: usize,
     pub entities_merged: usize,
+    /// Typed facts mined by the configured [`Extractor`] and written to the graph.
+    pub facts_extracted: usize,
     /// Duplicate open claims collapsed (cross-device sync healer).
     pub claims_deduped: usize,
     /// Contradicting open claims closed (highest confidence stays open).
@@ -309,14 +317,14 @@ pub struct DreamReport {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DreamStep {
-    /// Machine phase id: `enrich | merge | decay | verify | consolidate | done`.
+    /// Machine phase id: `enrich | extract | merge | decay | verify | consolidate | done`.
     pub phase: String,
     /// Human log line for the dreaming panel.
     pub label: String,
     /// Items this step affected.
     pub count: i64,
-    /// LLM tokens spent this step — 0 for today's deterministic phases; reserved for future
-    /// LLM-assisted enrichment so the panel can show per-step cost.
+    /// LLM tokens spent this step — real cost for the `extract` phase (the configured
+    /// [`Extractor`]'s usage), 0 for the deterministic phases.
     pub tokens: i64,
     /// Cursor to pass to the NEXT call. Meaningless once `done`.
     pub next_cursor: i64,
@@ -498,11 +506,16 @@ struct LinkRow {
 }
 
 /// The memory brain of one SAFE (owner-scoped over the shared store).
-pub struct Brain<E: Embedder> {
+///
+/// `X` is the dreaming fact [`Extractor`] — [`NoExtractor`] by default (deterministic
+/// dreaming only); inject a real one with [`Brain::with_extractor`]. A generic (not a
+/// `dyn`) because the trait uses `async fn` — same reason the app's embedder is an enum.
+pub struct Brain<E: Embedder, X: Extractor = NoExtractor> {
     client: Arc<AvenDbClient>,
     embedder: E,
     sealer: Arc<dyn Sealer>,
     owner: ObjectId,
+    extractor: X,
 }
 
 impl<E: Embedder> Brain<E> {
@@ -539,6 +552,21 @@ impl<E: Embedder> Brain<E> {
             embedder,
             sealer,
             owner,
+            extractor: NoExtractor,
+        }
+    }
+}
+
+impl<E: Embedder, X: Extractor> Brain<E, X> {
+    /// Attach a dreaming fact extractor (board 0024) — the dream pass will mine typed
+    /// facts from newly-written memories through it, off the write path.
+    pub fn with_extractor<X2: Extractor>(self, extractor: X2) -> Brain<E, X2> {
+        Brain {
+            client: self.client,
+            embedder: self.embedder,
+            sealer: self.sealer,
+            owner: self.owner,
+            extractor,
         }
     }
 
@@ -1332,6 +1360,16 @@ impl<E: Embedder> Brain<E> {
         // moved here OFF the synchronous ingest path. First so the fresh entities feed the
         // merge/dedup steps below.
         let _enriched = self.enrich_recent_graphs().await?;
+        // Extract: mine typed facts from not-yet-extracted memories through the configured
+        // extractor (board 0024) — batched to exhaustion here; the stepped dream does one
+        // bounded batch per step.
+        let mut facts_extracted = 0usize;
+        for _ in 0..16 {
+            match self.extract_batch(EXTRACT_BATCH_MAX).await? {
+                Some((_, n_facts, _)) => facts_extracted += n_facts,
+                None => break,
+            }
+        }
         let entities_merged = self.merge_duplicate_entities().await?;
         let bonds_decayed = self.decay_bonds(now).await?;
         let (claims_deduped, claims_contradicted) = self.verify_claims(now).await?;
@@ -1339,6 +1377,7 @@ impl<E: Embedder> Brain<E> {
         Ok(DreamReport {
             bonds_decayed,
             entities_merged,
+            facts_extracted,
             claims_deduped,
             claims_contradicted,
             memories_consolidated,
@@ -1352,8 +1391,10 @@ impl<E: Embedder> Brain<E> {
     /// and every step returns a log line for the live dreaming panel.
     pub async fn dream_step(&self, cursor: i64, now: i64) -> Result<DreamStep, BrainError> {
         // Phase A (cursor 0..ENRICH_CAP): graph ONE new memory per step — so the log streams an
-        // entry immediately and each heavy `write_graph` is its own runtime turn. Then phases B–E.
+        // entry immediately and each heavy `write_graph` is its own runtime turn. Then the
+        // extract phase (cursor 50, one bounded batch per step), then phases C–F.
         const ENRICH_CAP: i64 = 8;
+        const EXTRACT: i64 = 50;
         const MERGE: i64 = 100;
         if cursor < ENRICH_CAP {
             return Ok(match self.enrich_one().await? {
@@ -1363,17 +1404,42 @@ impl<E: Embedder> Brain<E> {
                         "enrich",
                         format!("Graphed “{snip}”"),
                         1,
-                        if next < ENRICH_CAP { next } else { MERGE },
+                        if next < ENRICH_CAP { next } else { EXTRACT },
                     )
                 }
-                // Nothing left to graph this pass → jump to the consolidation phases.
+                // Nothing left to graph this pass → on to fact extraction.
                 None if cursor == 0 => {
-                    DreamStep::ok("enrich", "No new memories to graph".into(), 0, MERGE)
+                    DreamStep::ok("enrich", "No new memories to graph".into(), 0, EXTRACT)
                 }
-                None => DreamStep::ok("enrich", "Graphed all new memories".into(), 0, MERGE),
+                None => DreamStep::ok("enrich", "Graphed all new memories".into(), 0, EXTRACT),
             });
         }
         Ok(match cursor {
+            // Extract: ONE bounded batch through the configured extractor per step (real
+            // tokens surface in the panel); re-enters until every memory is mined.
+            EXTRACT => {
+                if !self.extractor.enabled() {
+                    DreamStep::ok(
+                        "extract",
+                        "No extractor configured — deterministic dreaming only".into(),
+                        0,
+                        MERGE,
+                    )
+                } else {
+                    match self.extract_batch(EXTRACT_BATCH_MAX).await? {
+                        Some((n_memories, n_facts, tokens)) => DreamStep {
+                            phase: "extract".into(),
+                            label: format!("Mined {n_facts} facts from {n_memories} memories"),
+                            count: n_facts as i64,
+                            tokens,
+                            // A full batch may leave more to mine — re-enter this phase.
+                            next_cursor: if n_memories == EXTRACT_BATCH_MAX { EXTRACT } else { MERGE },
+                            done: false,
+                        },
+                        None => DreamStep::ok("extract", "All memories fact-mined".into(), 0, MERGE),
+                    }
+                }
+            }
             MERGE => {
                 let n = self.merge_duplicate_entities().await? as i64;
                 DreamStep::ok("merge", format!("Merged {n} duplicate entities"), n, MERGE + 1)
@@ -1411,15 +1477,16 @@ impl<E: Embedder> Brain<E> {
         })
     }
 
-    /// Graph the next recent memory that has no graph yet (no `note` link from it). Returns a short
-    /// snippet of what it graphed, or `None` when there's nothing left. One `write_graph` per call
-    /// so the stepped dream logs + yields per memory.
+    /// Graph the next recent memory that has no graph yet (no `note` link from it — the
+    /// `extracted` fact-mining marker doesn't count). Returns a short snippet of what it
+    /// graphed, or `None` when there's nothing left. One `write_graph` per call so the
+    /// stepped dream logs + yields per memory.
     async fn enrich_one(&self) -> Result<Option<String>, BrainError> {
         let built: std::collections::HashSet<String> = self
             .links()
             .await?
             .into_iter()
-            .filter(|l| l.class == LinkClass::Note.as_str())
+            .filter(|l| l.class == LinkClass::Note.as_str() && l.kind != EXTRACTED_KIND)
             .map(|l| l.from)
             .collect();
         for m in self.recall(&Filter::default(), 64).await? {
@@ -1430,6 +1497,78 @@ impl<E: Embedder> Brain<E> {
             }
         }
         Ok(None)
+    }
+
+    /// Hand ONE batch of newly-written, not-yet-extracted memories to the configured
+    /// [`Extractor`] and write the returned facts back to the graph as claim links
+    /// (subject entity —predicate→ object entity, confidence + provenance). Each mined
+    /// memory gets an idempotence marker (`memory —extracted→ memory`, note class) so it
+    /// is never re-extracted; identical (subject, predicate, object) facts dedupe via
+    /// the claim semantics (re-assertion = Bayesian confidence bump, no new row).
+    /// Returns `(memories mined, facts written, tokens spent)`, or `None` when
+    /// everything is already extracted. Extractor errors fail the step WITHOUT marking,
+    /// so the batch retries next dream.
+    async fn extract_batch(
+        &self,
+        cap: usize,
+    ) -> Result<Option<(usize, usize, i64)>, BrainError> {
+        if !self.extractor.enabled() {
+            return Ok(None);
+        }
+        let extracted: std::collections::HashSet<String> = self
+            .links()
+            .await?
+            .into_iter()
+            .filter(|l| l.kind == EXTRACTED_KIND)
+            .map(|l| l.from)
+            .collect();
+        let mut batch: Vec<ExtractionInput> = Vec::with_capacity(cap);
+        for m in self.recall(&Filter::default(), 64).await? {
+            if batch.len() >= cap {
+                break;
+            }
+            // Self/summary streams are brain-authored — nothing new to mine there.
+            if m.stream == "self" || m.stream == "summary" || extracted.contains(&id_str(&m.id)) {
+                continue;
+            }
+            batch.push(ExtractionInput {
+                memory_id: m.id,
+                content: m.content,
+            });
+        }
+        if batch.is_empty() {
+            return Ok(None);
+        }
+
+        let out = self
+            .extractor
+            .extract(&batch)
+            .await
+            .map_err(|e| BrainError::Write(format!("extractor: {e}")))?;
+
+        let mut written = 0usize;
+        let mut seen: std::collections::HashSet<(String, String, String)> =
+            std::collections::HashSet::new();
+        for f in &out.facts {
+            // In-batch dedupe; cross-batch dupes collapse via claim semantics anyway.
+            if !seen.insert((f.subject.clone(), f.predicate.clone(), f.object.clone())) {
+                continue;
+            }
+            self.add_fact_with_confidence(
+                &f.subject,
+                &f.predicate,
+                &f.object,
+                Some(f.source_memory),
+                f.confidence as f64,
+            )
+            .await?;
+            written += 1;
+        }
+        for input in &batch {
+            self.add_note_link(input.memory_id, input.memory_id, EXTRACTED_KIND)
+                .await?;
+        }
+        Ok(Some((batch.len(), written, out.tokens)))
     }
 
     /// Claim healer (cross-device): collapse duplicate OPEN claims per
@@ -1911,7 +2050,7 @@ impl<E: Embedder> Brain<E> {
             .links()
             .await?
             .into_iter()
-            .filter(|l| l.class == LinkClass::Note.as_str())
+            .filter(|l| l.class == LinkClass::Note.as_str() && l.kind != EXTRACTED_KIND)
             .map(|l| l.from)
             .collect();
         let mut n = 0;
@@ -2991,6 +3130,89 @@ mod tests {
 
         assert_eq!(card.recent_memories.len(), 2, "timeline: {:?}", card.recent_memories);
         assert!(card.render().contains("Bob"));
+    }
+
+    /// Board 0024 (THE GATE): a dream pass with a configured extractor writes the
+    /// returned `ExtractedFact`s to the graph as queryable claim rows — and never
+    /// re-extracts a memory.
+    #[tokio::test]
+    async fn extractor_mock_dream_writes_queryable_facts() {
+        use crate::extractor::MockExtractor;
+        let brain = test_brain("test-extractor").await.with_extractor(MockExtractor::new(vec![
+            ("Yaya Sithole", "received", "red card"),
+            ("Julian Quinones", "scored", "goal at 9'"),
+        ]));
+        let memory = brain
+            .remember("Tooooor! MEXIKO - Südafrika 1:0. Julian Quinones übernimmt und schießt ins Tor.")
+            .await
+            .unwrap();
+
+        let report = brain.dream().await.unwrap();
+        assert_eq!(report.facts_extracted, 2, "both mock facts written: {report:?}");
+
+        // The facts landed queryable: subject entity → predicate → object.
+        eprintln!("facts read back from the graph after the mock-extractor dream:");
+        for subject in ["Yaya Sithole", "Julian Quinones"] {
+            for f in brain.facts(subject).await.unwrap() {
+                eprintln!("  {subject} —{}→ {} (confidence {})", f.predicate, f.object_name, f.confidence);
+            }
+        }
+        let sithole = brain.facts("Yaya Sithole").await.unwrap();
+        let red = sithole.iter().find(|f| f.predicate == "received").expect("received claim");
+        assert_eq!(red.object_name, "red card");
+        assert!(red.valid_to_ms.is_none(), "freshly mined claim is open");
+        // f32→f64 widening: 0.9f32 lands at ~0.89999998.
+        assert!((red.confidence - 0.9).abs() < 1e-6, "extractor confidence carried");
+        let quinones = brain.facts("Julian Quinones").await.unwrap();
+        let goal = quinones.iter().find(|f| f.predicate == "scored").expect("scored claim");
+        assert_eq!(goal.object_name, "goal at 9'");
+
+        // Provenance: the claim cites the memory it was mined from.
+        let links = brain.links().await.unwrap();
+        assert!(
+            links.iter().any(|l| l.kind == "received" && l.class == "claim"),
+            "claim link row exists"
+        );
+        assert!(
+            links.iter().any(|l| l.kind == EXTRACTED_KIND && l.from == id_str(&memory)),
+            "mined memory carries the extracted marker"
+        );
+
+        // Idempotence: a second dream finds nothing new to extract and changes nothing.
+        let again = brain.dream().await.unwrap();
+        assert_eq!(again.facts_extracted, 0, "already-extracted memories must not re-extract");
+        assert_eq!(brain.facts("Yaya Sithole").await.unwrap().len(), sithole.len());
+    }
+
+    /// Board 0024: the stepped dream emits the `extract` phase with REAL tokens (the
+    /// panel's per-step cost), and every phase of the pass appears in the step log —
+    /// the Dreaming tab is a complete receipt.
+    #[tokio::test]
+    async fn extractor_stepped_dream_emits_extract_phase_with_tokens() {
+        use crate::extractor::MockExtractor;
+        let brain = test_brain("test-extractor-step")
+            .await
+            .with_extractor(MockExtractor::new(vec![("Sarah", "works_at", "Lumen Labs")]));
+        brain.remember("met Sarah at the Lumen Labs office").await.unwrap();
+
+        let mut phases: Vec<String> = Vec::new();
+        let mut extract_tokens = 0i64;
+        let mut cursor = 0i64;
+        for _ in 0..64 {
+            let step = brain.dream_step(cursor, now_ms()).await.unwrap();
+            if step.phase == "extract" {
+                extract_tokens += step.tokens;
+            }
+            phases.push(step.phase.clone());
+            if step.done {
+                break;
+            }
+            cursor = step.next_cursor;
+        }
+        for phase in ["enrich", "extract", "merge", "decay", "verify", "consolidate", "done"] {
+            assert!(phases.contains(&phase.to_string()), "phase `{phase}` logged: {phases:?}");
+        }
+        assert!(extract_tokens > 0, "the extract step surfaces real tokens: {phases:?}");
     }
 
     #[tokio::test]

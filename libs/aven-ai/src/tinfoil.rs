@@ -35,6 +35,10 @@ pub struct ChatTurn {
 	pub content: Option<String>,
 	pub tool_calls: Vec<ToolCallOut>,
 	pub assistant_raw: Value,
+	/// Total tokens billed for this round (prompt + completion) from the response's
+	/// usage block; 0 when the endpoint omits it. Surfaced per-step in the dreaming
+	/// panel for the extractor path.
+	pub total_tokens: i64,
 }
 
 /// Whether the cloud path can run at all: `TINFOIL_API_KEY` is set and non-empty.
@@ -77,6 +81,11 @@ pub async fn chat(messages: Vec<Value>, tools: Value, model: &str) -> Result<Cha
 		.pointer("/choices/0/message")
 		.cloned()
 		.unwrap_or(Value::Null);
+	let total_tokens = response
+		.raw()
+		.pointer("/usage/total_tokens")
+		.and_then(Value::as_i64)
+		.unwrap_or(0);
 	let content = response.content().map(|s| s.to_string());
 	let tool_calls = response
 		.typed_tool_calls()
@@ -88,5 +97,5 @@ pub async fn chat(messages: Vec<Value>, tools: Value, model: &str) -> Result<Cha
 		})
 		.collect();
 
-	Ok(ChatTurn { content, tool_calls, assistant_raw })
+	Ok(ChatTurn { content, tool_calls, assistant_raw, total_tokens })
 }
