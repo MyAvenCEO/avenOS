@@ -187,6 +187,60 @@ confidence ("we pin certs" — we don't, on this path) and config drift.
 
 ---
 
+## Sprites platform considerations
+
+Folded in from the Sprites documentation (`https://docs.sprites.dev`,
+`https://sprites.dev/api`). Note: that host is **not on this environment's network
+egress allowlist**, so these were gathered from the public docs via search rather than
+read directly — re-verify against the live docs before acting on A8/A9.
+
+Platform baseline (good): Sprites run in **Firecracker microVMs on isolated networks**,
+and "nothing can connect to your Sprite directly" — the *only* ingress is the public
+URL, which proxies to **port 8080** inside the VM. That means the relay's entire remote
+attack surface is exactly `/health` + `/sync` on 8080 (`main.rs:344-351`); there is no
+stray listener, and the `fly.toml` raw-TCP `:4290` path (A6) is not reachable on this
+platform. Each Sprite has a **100 GB persistent filesystem that survives shutdown**,
+which is what actually backs the durable RocksDB store (`main.rs:248-279`) — confirming
+A6: the `fly.toml` "stateless by design" comment is simply wrong for the shipping
+deployment.
+
+### A8 — [Medium] The production sync endpoint rides a Sprites "public URL," which the platform scopes to non-sensitive use
+The app dials `wss://<sprite>.sprites.app/sync`
+(`scripts/build-appstore-macos.ts:204`, `tauri-ios-asc.ts:257`), i.e. the relay is
+exposed through a Sprites **public URL** (`sprite url … --auth public`). The Sprites
+docs state plainly that public URLs "expose your Sprite to the internet … should only
+be used for demos, webhooks, or non-sensitive work" and "should never expose secrets,
+environment variables, or sensitive data via HTTP." Here the public URL *is* the
+production transport for the whole network's sync. That is workable **only because**
+the app-layer did:key challenge + E2E encryption carry the security — but it also means
+the platform-level access gate is set to "anyone on the internet," and the open-to-all
+property in A1 is not incidental, it is how the endpoint is configured. Sprites also
+offers an **authenticated** URL mode; using it (or a signed-token gate at the proxy)
+would add a second, platform-enforced barrier in front of the did:key handshake if the
+network is meant to be closed.
+
+> Recommendation: decide consciously between "public URL + app-layer auth only" (then
+> document it, and lean on A1/A3 hardening) vs. switching to Sprites authenticated URLs
+> as defence-in-depth. Either way, confirm the relay's URL auth mode in the deploy
+> runbook rather than leaving it implicit.
+
+### A9 — [Medium, operational] The avenCEO seed and all env vars are captured by Sprite checkpoints and live on the persistent disk
+The relay's `AVEN_SERVER_SEED` is delivered as a **Sprite service env var**
+(`deploy-aven-node-sprite.ts:183-190`). Per the Sprites docs, **checkpoints capture the
+entire environment including env vars and disk state**, and the 100 GB filesystem
+persists across shutdowns. So the crown-jewel seed of A5 is not only in `.env` and the
+live service env — it is also captured in any checkpoint/snapshot and resident on
+durable Sprite storage. Anyone with access to the Sprite account, a checkpoint, or a
+disk image therefore obtains avenCEO takeover (A5's blast radius). This is a property
+of *where the secret lives*, not a code bug.
+
+> Recommendation: treat Sprite checkpoints/snapshots of this relay as secret-bearing
+> artifacts (same handling as the seed itself); restrict who can create/restore/export
+> them; and include "rotate `AVEN_SERVER_SEED` + re-share sparks" in the incident
+> runbook for any suspected checkpoint or account exposure.
+
+---
+
 ## What's solid (so the next reader doesn't re-litigate it)
 
 - **Content E2E encryption holds against a hostile relay.** User content is sealed
@@ -223,7 +277,9 @@ confidence ("we pin certs" — we don't, on this path) and config drift.
    owner key should be separable.
 4. **A2** — document and, where possible, minimize the world-readable routing/
    relationship metadata.
-5. **A6 / A7** — remove the contradictory `fly.toml` and dead config.
+5. **A8 / A9** — confirm the Sprite URL auth mode (public vs authenticated) in the
+   runbook, and treat checkpoints/snapshots as seed-bearing secrets.
+6. **A6 / A7** — remove the contradictory `fly.toml` and dead config.
 
 None of these require touching the crypto core; they are access-control scoping,
 quota, and config-hygiene changes plus two documentation decisions.
