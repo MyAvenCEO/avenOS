@@ -52,6 +52,23 @@ Decisions (Samuel, 2026-06-12): focus this card on the **tool surface** ("especi
 its tool definitions"); fold in the one primitive the tools need (importance) and a
 graph+fact recall voice; make "done" provable by a deterministic brain test.
 
+### Alignment — the three refactoring upgrades
+
+This is 3 of 3 majors sharing one invariant — **the brain is the single context
+manager, and the aside is its complete receipt**:
+- **[0023](0023-multi-turn-memory-recall.md)** — context assembly + recall:
+  continuous brain-managed context (no session/thread concept), 100%-faithful
+  Context tab. The graph+fact recall voice added HERE plugs into 0023's RRF+MMR
+  pipeline; importance becomes another bounded rank modifier next to
+  veracity/age.
+- **[0024](0024-cloud-llm-extractor-dreaming.md)** — dreaming: the cloud-mined
+  typed facts are exactly what `memory_recall` + the fact voice surface; `attest`
+  composes with 0024's confidence/provenance fields.
+- **0025 (this)** — agency: deliberate remember/recall/link/attest/forget. Tool
+  calls remain visible end-to-end: live-state badges show the calls, and any
+  `memory_recall` the model runs lands in the Context-tab receipt like auto
+  recall does (same `search_traced` trace path — no invisible memory reads).
+
 ## Goal
 
 The cloud model gets a small, deliberate **memory tool surface** — it can store a
@@ -170,3 +187,7 @@ grep -n "memory_remember\|MEMORY_TOOL_DEFS" app/src/lib/llm/tools.ts app/src/lib
   graph/fact voice; deterministic gate = a brain test proving the 4 tool-backing
   primitives. Canonical slots / temporal-weight / scratchpad / MIB embeddings = backlog.
   Companion to [0023](0023-multi-turn-memory-recall.md) (recall) + [0024](0024-cloud-llm-extractor-dreaming.md) (extractor).
+- `2026-06-12` — Alignment pass (Samuel): bound into the 3-upgrade set under the
+  shared invariant (brain = single context manager, aside = complete receipt):
+  tool-driven `memory_recall` must flow through the same traced path so it shows
+  in the Context tab — no invisible memory reads.

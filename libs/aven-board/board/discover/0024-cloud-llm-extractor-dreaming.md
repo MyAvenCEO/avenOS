@@ -35,11 +35,26 @@ Two enablers now exist that make filling the seam cheap:
   enrich step is what lights it up.
 
 Decisions (Samuel, 2026-06-12): transport = **Tinfoil enclave** (already wired +
-attested); model = **glm-5-1** (strong structured-JSON output). Companion to
-[0023](../discover/0023-multi-turn-memory-recall.md): 0023 makes recall survive
-multi-turn; this card makes the *graph itself richer* so typed-relation questions
-are answerable at all. They compose; this one is the "proper cloud-based dreaming"
-half.
+attested); model = **glm-5-1** (strong structured-JSON output); the Dreaming tab
+must reflect **100% of how dreaming works** — every phase the brain executes
+appears in the log (no silent phases), with real per-step tokens/cost.
+
+### Alignment — the three refactoring upgrades
+
+This is 2 of 3 majors sharing one invariant — **the brain is the single context
+manager, and the aside is its complete receipt**:
+- **[0023](0023-multi-turn-memory-recall.md)** — context assembly + recall:
+  continuous brain-managed context (no session/thread concept), 100%-faithful
+  Context tab (`trace_parity` + verbatim raw-prompt view).
+- **0024 (this)** — dreaming: cloud-LLM typed fact extraction off the write
+  path; 100%-faithful Dreaming tab (every `DreamStep` phase logged, real tokens).
+- **[0025](0025-agentic-memory-tools-mnemosyne.md)** — agency: explicit memory
+  tools; the facts this card mines become queryable through 0025's graph/fact
+  recall voice and `memory_recall` tool.
+
+0023 makes recall survive multi-turn; this card makes the *graph itself richer*
+so typed-relation questions are answerable at all. They compose; this one is the
+"proper cloud-based dreaming" half.
 
 ## Goal
 
@@ -90,6 +105,12 @@ core; the Tinfoil adapter + app wiring is the real-world half behind a smoke.
 4. **Idempotence / provenance.** Don't re-extract a memory twice (track an
    extracted cursor/flag); facts carry `source_memory` for provenance + later
    decay/verify. Dedupe identical (subject,predicate,object).
+5. **100%-faithful Dreaming tab.** Every phase `dream_step` executes (enrich ·
+   extract · merge · decay · verify · consolidate) emits a `DreamLogEntry` — no
+   silent phases. Each entry carries what it loaded/produced (`count`, `label`
+   naming the memories/facts touched), wall-clock `ms`, and real `tokens` for the
+   LLM phases. The continuous log (no reset across turns) stays as built; the
+   extract phase gets its own `phaseStyle` accent.
 
 Out of scope (follow-on): Phala RedPill adapter (Tinfoil covers attested-cloud
 now); fact decay/contradiction-resolution policy; using extracted facts in the
@@ -120,6 +141,8 @@ recall ranker (0023 territory); multi-pass re-prompting.
   step; return real `tokens`.
 - `app/src/lib/identities/identity-agent.svelte.ts` — `runDreamLogged` surfaces the
   enrich step's tokens (the column already exists in `TalkBrainAside.svelte`).
+- `app/src/lib/identities/TalkBrainAside.svelte` — `phaseStyle` accent for the new
+  `extract` phase; verify every brain phase has a rendering (complete receipt).
 
 ## Acceptance criteria
 
@@ -131,9 +154,12 @@ Each box checkable from the transcript (a command + its output proves it).
 - [ ] `TinfoilExtractor` compiles — `grep -rn "TinfoilExtractor" libs/ app/` hits and `cargo check` (with the feature) is green.
 - [ ] Dream step returns real tokens — `grep -n "tokens" app/src-tauri/src/avendb/brain_ipc.rs` shows the enrich step populating it (not hard-zero).
 - [ ] `cd app && bun run check` clean (only the pre-existing `brand-style.ts`) and `bun run lint` green.
+- [ ] Dreaming tab is the complete receipt — every phase `dream_step` can emit is
+      logged (compare the brain's phase list vs `phaseStyle()` in
+      `TalkBrainAside.svelte`); the log is continuous across turns.
 - [ ] HITL smoke (human): ingest the report → dream → Dreaming tab shows an
-      `enrich` step with non-zero `tokens`; querying the graph surfaces the
-      red-card + goal-scorer relations.
+      `extract`/`enrich` step with non-zero `tokens` and labels naming what was
+      mined; querying the graph surfaces the red-card + goal-scorer relations.
 - [ ] Security invariant honored: the Tinfoil adapter verifies attestation before
       sending memory content; no non-attested fallback path exists.
 
@@ -171,3 +197,7 @@ grep -rn "TinfoilExtractor" libs/ app/
   attested, satisfies the invariant without Phala); model = glm-5-1. Sliced as a
   companion to 0023: deterministic gate = mock-extractor facts land queryable in
   the graph; real glm-5-1 quality = HITL smoke (token column already rendered).
+- `2026-06-12` — Alignment pass (Samuel): Dreaming tab must reflect 100% of how
+  dreaming works — every `DreamStep` phase logged (no silent phases), real
+  tokens/labels, continuous log. Added the 3-card alignment section
+  (0023 context · 0024 dreaming · 0025 agency).

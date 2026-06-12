@@ -1,11 +1,11 @@
 ---
 title: Memory recall + auto-context that survives a multi-turn conversation
-summary: Make Aven reliably answer questions about an ingested document across many turns (incl. an unrelated doc ingested in between) — feed the chat thread into context, tune recall + re-rank, verify the multilingual Gemma embedder, proven by an extended multi-turn recall eval.
+summary: Make Aven reliably answer questions about an ingested document across many turns (incl. an unrelated doc ingested in between) — the brain is the SOLE context manager (no app-side session/thread concept; one continuous conversation, every LLM request fully auto-context-managed via assemble_context's working window), recall tuned + re-ranked, the aside a 100%-faithful receipt of the exact context built, the multilingual Gemma embedder verified — proven by an extended multi-turn recall eval + a trace-parity test.
 owner: claude
 created: 2026-06-12
 updated: 2026-06-12
 tags: [aven-brain, recall, context, eval]
-goal: "`cargo test -p aven-brain recall_eval -- --ignored --nocapture` exits 0 with the NEW multi-turn case asserting mean fact-coverage@8 ≥ 0.85 over the post-second-doc probe sequence AND no drop vs the pre-second-doc baseline; `cargo test -p aven-brain` (27+ tests) and `cargo check`/(`cd app && bun run check`)/`bun run lint` all green"
+goal: "`cargo test -p aven-brain recall_eval -- --ignored --nocapture` exits 0 with the NEW multi-turn case asserting mean fact-coverage@8 ≥ 0.85 over the post-second-doc probe sequence AND no drop vs the pre-second-doc baseline; `cargo test -p aven-brain trace_parity` exits 0 (every line of the assembled prompt is accounted for in the ContextTrace receipt — the aside can render 100% of what the LLM saw); runCloudLoop sends ONLY [system + assembled bundle + current message] (no app-side thread arrays — grep-provable); `cargo test -p aven-brain` (27+ tests) and `cargo check`/(`cd app && bun run check`)/`bun run lint` all green"
 ---
 
 # Memory recall + auto-context that survives a multi-turn conversation
@@ -27,12 +27,21 @@ mostly worked, then it **degraded**:
 So recall **doesn't survive a few message ping-pongs**, especially once new
 content is ingested. Two distinct root causes (both must be fixed — "both" card):
 
-1. **The cloud model never sees the chat thread.** In pure-cloud mode
-   (`runCloudLoop`, `identity-agent.svelte.ts`) the messages are
-   `[system] + [brain assembled context] + [current user message]` — NOT the
-   conversation. So a conversational follow-up ("check your memory", "schau
-   nochmal") has nothing to work with when recall misses; the model can't even
-   see what it just said.
+1. **Conversation continuity is under-served by the brain's working window.**
+   In pure-cloud mode (`runCloudLoop`, `identity-agent.svelte.ts`) the messages
+   are `[system] + [brain assembled context] + [current user message]`. That
+   *shape* is correct and stays — Samuel's architectural decision (2026-06-12):
+   there is **NO hardcoded session/thread concept**; it is ONE continuous
+   long-running conversation where **every LLM request is fully auto-context-
+   managed by the brain**. The fix is therefore NOT to feed an app-side thread
+   array into the messages (that would reintroduce a session concept) — it is to
+   make `assemble_context`'s **working window** (it already pulls the last N
+   turns chronologically, budgeted) strong enough to carry conversational
+   continuity: bigger `working_n`/budget share, the assistant's own replies
+   ingested as memories so the window contains both sides, and the inner recall
+   query enriched from the window (not just the bare current message). A
+   follow-up like "check your memory" / "schau nochmal" then works because the
+   brain sees the exchange — not because the app replayed a thread.
 2. **The embedder is the stub** (deterministic hashed bag-of-words, no
    semantics). The headline failure — an **English** question over a **German**
    document ("south africa" shares zero tokens with "Südafrika") — is
@@ -46,9 +55,23 @@ re-ranking / query-expansion / multi-hop**. A deterministic eval harness exists
 (`libs/aven-brain` `recall_eval`, fact-coverage@k on this exact report) — ~79%
 chunked coverage with the stub — and is the measurement seam.
 
-Decisions (Samuel, 2026-06-12): tackle **both** threads in one card
-(thread-feed + recall tuning AND Gemma verification); make "done" provable by
-**extending the recall eval to a multi-turn sequence**.
+Decisions (Samuel, 2026-06-12): tackle **both** threads in one card (recall
+tuning AND Gemma verification); make "done" provable by **extending the recall
+eval to a multi-turn sequence**; **no session/thread concept** — one continuous
+conversation, the brain auto-manages context per request; the right aside must
+reflect **100%** how the last context was built (and dreaming — see 0024).
+
+### Alignment — the three refactoring upgrades
+
+This is 1 of 3 majors that share one invariant — **the brain is the single
+context manager, and the aside is its complete receipt**:
+- **0023 (this)** — context assembly + recall: continuous brain-managed context,
+  multi-turn-robust retrieval, 100%-faithful Context tab.
+- **[0024](0024-cloud-llm-extractor-dreaming.md)** — dreaming: cloud-LLM typed
+  fact extraction off the write path, 100%-faithful Dreaming tab w/ real tokens.
+- **[0025](0025-agentic-memory-tools-mnemosyne.md)** — agency: explicit memory
+  tools so the model deliberately remembers/recalls/curates; its richer graph +
+  importance feed straight back into this card's recall.
 
 ## Goal
 
@@ -61,7 +84,11 @@ conversation (≥6 turns), **including an unrelated document ingested in between
 > `cargo test -p aven-brain recall_eval -- --ignored --nocapture` exits 0 with
 > the NEW multi-turn case asserting mean fact-coverage@8 ≥ 0.85 over the
 > post-second-doc probe sequence AND no drop vs the pre-second-doc baseline;
-> `cargo test -p aven-brain` (27+ tests) and `cargo check` /
+> `cargo test -p aven-brain trace_parity` exits 0 (every line of the assembled
+> prompt is accounted for in the `ContextTrace` receipt — the aside can render
+> 100% of what the LLM saw); `runCloudLoop` sends ONLY
+> [system + assembled bundle + current message] (no app-side thread arrays —
+> grep-provable); `cargo test -p aven-brain` (27+ tests) and `cargo check` /
 > (`cd app && bun run check`) / `bun run lint` all green.
 
 The metric proves the deterministic, CI-able core (thread-aware recall survives a
@@ -71,7 +98,7 @@ deterministic gate — the stub can't do semantics by construction.
 
 ## Approach
 
-Four moves, smallest-verifiable-first. Brain changes are deterministic + unit-
+Five moves, smallest-verifiable-first. Brain changes are deterministic + unit-
 tested; the app + model changes get a HITL smoke.
 
 1. **Multi-turn recall eval (the metric, first).** Extend `recall_eval` in
@@ -85,13 +112,25 @@ tested; the app + model changes get a HITL smoke.
    a light **re-rank / diversity (MMR)** pass so the top-k isn't dominated by one
    cluster. Tune the abstention floor for multi-word queries. Drive these by the
    eval numbers (no guessing).
-3. **Thread-aware context (app).** `runCloudLoop` includes the **recent
-   conversation turns** in the cloud messages (bounded, e.g. last 6), so
-   conversational follow-ups work even when recall is imperfect — and
-   `assemble_context`'s inner query can be enriched with the recent turn(s)
-   instead of only the bare message. (`identity-agent.svelte.ts`.) Verified by
-   smoke, not the deterministic gate.
-4. **Gemma prerequisite (verify).** Confirm EmbeddingGemma loads (download fix is
+3. **Brain-managed continuous context (no thread concept).** Keep `runCloudLoop`
+   at exactly `[system + bundle.prompt + current message]` and make the brain
+   carry continuity itself: (a) ingest the **assistant's replies** as memories so
+   the working window holds both sides of the exchange; (b) raise `working_n` +
+   its budget share so the window survives long turns; (c) enrich the **inner
+   recall query** from the working window (last user+assistant turn) instead of
+   only the bare message. Remove/refuse any app-side thread/session array. The
+   brain auto-manages every request of the one continuous conversation.
+   (`identity-agent.svelte.ts`, `ContextOptions`.)
+4. **100%-faithful receipt (aside).** The Context tab must reflect *exactly* how
+   the last context was built — no silent gaps. Add a deterministic
+   `trace_parity` test: every block of `bundle.prompt` (L0 self, gist, working
+   window, recalled, entity cards) is represented in `ContextTrace`, and the
+   drop counters account for everything excluded. In the aside, add a collapsible
+   **raw prompt** view rendering `bundle.prompt` verbatim, so what the panel
+   shows IS what the LLM saw (the trace today truncates snippets to 120 chars —
+   fine for the summary view, but the verbatim view closes the gap).
+   (`TalkBrainAside.svelte`, `brain.rs`.)
+5. **Gemma prerequisite (verify).** Confirm EmbeddingGemma loads (download fix is
    in) → multilingual semantic recall. Document in the eval that the cross-
    lingual EN-query/DE-doc case is the embedder's job; optionally add a
    `#[ignore]` gemma-mode probe. Surfaced as `embedder: gemma` in the brain
@@ -108,17 +147,26 @@ migration, full conversation-summary memory.
    Checkpoint: show the baseline numbers.
 2. Brain: raise recall k/budget + add the re-rank/MMR pass; re-run the eval until
    coverage ≥ 0.85 and no post-B drop. Keep all 27 existing tests green.
-3. App: feed the recent thread into `runCloudLoop` + enrich the assemble query.
+3. Brain-managed continuity: ingest assistant replies as memories; raise
+   `working_n`/budget; enrich the inner query from the working window. Confirm
+   `runCloudLoop` stays [system + bundle + current message] — no thread arrays.
    `bun run check` + `bun run lint` green.
-4. Verify Gemma loads (manual smoke) — embedder flips to `gemma`; re-ask the
+4. Receipt fidelity: add the `trace_parity` test + the aside's verbatim raw-prompt
+   view. Checkpoint: parity test green; aside shows the exact assembled prompt.
+5. Verify Gemma loads (manual smoke) — embedder flips to `gemma`; re-ask the
    English question about the German doc and confirm it recalls.
 
 ## Files to touch
 
 - `libs/aven-brain/src/brain.rs` — `recall_eval` multi-turn case; recall k/budget;
-  re-rank/MMR in `search_traced` / `assemble_context`.
+  re-rank/MMR in `search_traced` / `assemble_context`; working-window
+  `ContextOptions` tuning; the `trace_parity` test.
 - `libs/aven-brain/src/eval_fixtures/` — a second, unrelated doc-B fixture.
-- `app/src/lib/identities/identity-agent.svelte.ts` — thread-aware cloud context.
+- `app/src/lib/identities/identity-agent.svelte.ts` — ingest assistant replies as
+  memories; inner-query enrichment from the window; KEEP messages =
+  [system + bundle + current] (no thread arrays).
+- `app/src/lib/identities/TalkBrainAside.svelte` — collapsible verbatim raw-prompt
+  view (the 100% receipt).
 - (verify only) `app/src-tauri/src/embed_model.rs` / `avendb/brain_ipc.rs` — Gemma
   load path (already fixed; confirm).
 
@@ -132,7 +180,9 @@ Each box checkable from the transcript (a command + its output proves it).
       post-B ≥ pre-B (no degradation).
 - [ ] `cargo test -p aven-brain` exits 0 (27+ tests; no regression).
 - [ ] Re-rank/recall change present — `grep -n "mmr\|re.rank\|rerank\|recall_k\|budget" libs/aven-brain/src/brain.rs` shows the new logic.
-- [ ] Thread-aware context — `grep -n "thread\|recent turns\|messages.push" app/src/lib/identities/identity-agent.svelte.ts` shows the conversation feeding into `runCloudLoop`.
+- [ ] Continuous brain-managed context — `grep -n "buildToolContext\|assembleContext\|messages" app/src/lib/identities/identity-agent.svelte.ts` shows `runCloudLoop` sending ONLY [system + bundle + current message]; assistant replies are ingested as memories; NO app-side thread/session array exists.
+- [ ] `cargo test -p aven-brain trace_parity` exits 0 — every prompt block is in the trace; drop counters account for all exclusions.
+- [ ] Aside raw-prompt view — `grep -n "raw prompt\|bundle.prompt\|prompt" app/src/lib/identities/TalkBrainAside.svelte` shows the verbatim view; HITL: the panel content matches what was sent.
 - [ ] `cd app && bun run check` clean (only the pre-existing `brand-style.ts`) and `bun run lint` green.
 - [ ] HITL smoke (human): the exact transcript — ingest report, ask across 6+
       turns incl. the second doc + the English question — Aven answers correctly;
@@ -142,11 +192,13 @@ Each box checkable from the transcript (a command + its output proves it).
 
 ```bash
 cargo test -p aven-brain recall_eval -- --ignored --nocapture   # ≥0.85, no post-B drop
+cargo test -p aven-brain trace_parity                           # 100% receipt parity
 cargo test -p aven-brain                                        # 27+ green
 (cd app && bun run check)
 bun run lint
 grep -n "mmr\|re.rank\|rerank\|recall_k\|budget" libs/aven-brain/src/brain.rs
-grep -n "thread\|recent turns" app/src/lib/identities/identity-agent.svelte.ts
+grep -n "messages" app/src/lib/identities/identity-agent.svelte.ts  # only [system+bundle+current]
+grep -n "bundle.prompt\|raw" app/src/lib/identities/TalkBrainAside.svelte
 # Live smoke: bun dev:app:mac → ingest report, 6+ turn ping-pong incl. 2nd doc + EN question
 ```
 
@@ -167,6 +219,14 @@ grep -n "thread\|recent turns" app/src/lib/identities/identity-agent.svelte.ts
 - `2026-06-12` — Discovery: interviewed Samuel — tackle BOTH the thread-feed +
   recall tuning AND the Gemma verification in one card; measure via an extended
   multi-turn recall eval (ingest A + unrelated B, probe A, assert coverage ≥0.85
-  + no post-B drop). Diagnosed the two root causes (cloud model sees no chat
-  thread; stub embedder can't bridge EN-query/DE-doc). Created directly in
-  discover/ with a measurable goal.
+  + no post-B drop). Diagnosed the two root causes (working window too weak to
+  carry continuity; stub embedder can't bridge EN-query/DE-doc). Created directly
+  in discover/ with a measurable goal.
+- `2026-06-12` — Rework (Samuel): NO hardcoded session/thread concept — one
+  continuous conversation, every LLM request fully auto-context-managed by the
+  brain. Replaced the "feed recent thread into messages" move with brain-managed
+  continuity (ingest assistant replies, bigger working window, window-enriched
+  inner query; `runCloudLoop` stays [system+bundle+current]). Added the 100%
+  receipt requirement: `trace_parity` test + verbatim raw-prompt view in the
+  aside. Added the 3-card alignment section (0023 context · 0024 dreaming ·
+  0025 agency).
