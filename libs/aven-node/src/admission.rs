@@ -6,12 +6,17 @@
 //! the handshake (`PeerId` → `signer_did_from_ed25519`), so classification is a direct
 //! set-membership test — no user DEK, no biscuit decryption, no DID-layer translation.
 //!
-//! **Rollout safety:** classification here is *observational by default*. Enforcement (
-//! restricting a non-member to the onboarding tier) is gated behind
-//! `AVEN_SERVER_ENFORCE_ADMISSION`, which defaults **off** — so deploying this only emits
-//! telemetry (the tier each peer *would* get) until a live client↔relay handshake has
-//! confirmed members classify correctly. Flipping it on without that check could lock out
-//! the deployed fleet, so the flip is a deliberate, validated step. See board 0023.
+//! **Enforcement (this build):** a peer NOT in the roster is denied **outbound** reads of
+//! the spark *data* content tables (todos/messages/files/…), so a non-member cannot pull
+//! members' content; the trust/identity/control tables (safes/keyshares/signers/…) stay
+//! open so a new device can still onboard. Members get full sync.
+//!
+//! **Known limit (documented, not hidden):** the roster is built from avenCEO-owned
+//! `signers` rows, which the blind relay cannot fully *authorize* (membership flows through
+//! a human-SAFE chain sealed under the human's DEK), so it is **trust-on-publish**. The
+//! sound, poison-proof control is a handshake membership-proof (the device presents its own
+//! SAFE chain at connect) — a both-ends protocol change tracked in board 0023. Until then,
+//! treat this as a dev-grade enforced default, not the production public-lockout.
 
 use std::collections::HashSet;
 
@@ -54,16 +59,15 @@ pub fn classify_peer(peer_signer_did: &str, roster: &Roster) -> PeerTier {
     }
 }
 
-/// Whether enforcement is active. Defaults **off** (shadow/telemetry-only) so a bad mapping
-/// can't brick the fleet; set `AVEN_SERVER_ENFORCE_ADMISSION=1` only after live validation.
-pub fn enforcement_enabled() -> bool {
-    std::env::var("AVEN_SERVER_ENFORCE_ADMISSION")
-        .ok()
-        .map(|v| {
-            let v = v.trim().to_ascii_lowercase();
-            v == "1" || v == "true" || v == "on" || v == "yes"
-        })
-        .unwrap_or(false)
+/// Pure outbound decision: may a peer of `tier` receive a row on `table`? Members get
+/// everything; an onboarding (non-member) peer is denied the spark **data** content tables
+/// (`spark_data`) so it cannot pull members' content, but is still served the
+/// trust/identity/control tables it needs to onboard. Unit-testable without an engine.
+pub fn outbound_allowed(tier: PeerTier, table: &str, spark_data: &HashSet<String>) -> bool {
+    match tier {
+        PeerTier::Member => true,
+        PeerTier::Onboarding => !spark_data.contains(table),
+    }
 }
 
 fn col_ix(schema: &aven_db::Schema, table: &str, name: &str) -> Option<usize> {
@@ -158,10 +162,26 @@ mod tests {
         assert_eq!(classify_peer("  did:key:zMEMBER  ", &r), PeerTier::Member);
     }
 
+    fn spark_data() -> HashSet<String> {
+        ["todos", "messages", "files"].iter().map(|s| s.to_string()).collect()
+    }
+
     #[test]
-    fn enforcement_defaults_off() {
-        // No env set in the test process → shadow mode, the fleet-safe default.
-        std::env::remove_var("AVEN_SERVER_ENFORCE_ADMISSION");
-        assert!(!enforcement_enabled());
+    fn member_may_pull_everything() {
+        let sd = spark_data();
+        assert!(outbound_allowed(PeerTier::Member, "todos", &sd));
+        assert!(outbound_allowed(PeerTier::Member, "safes", &sd));
+    }
+
+    #[test]
+    fn onboarding_denied_content_allowed_trust_tables() {
+        let sd = spark_data();
+        // Denied the spark data/content tables…
+        assert!(!outbound_allowed(PeerTier::Onboarding, "todos", &sd));
+        assert!(!outbound_allowed(PeerTier::Onboarding, "messages", &sd));
+        // …but still served the trust/identity/control tables it needs to onboard.
+        assert!(outbound_allowed(PeerTier::Onboarding, "safes", &sd));
+        assert!(outbound_allowed(PeerTier::Onboarding, "keyshares", &sd));
+        assert!(outbound_allowed(PeerTier::Onboarding, "signers", &sd));
     }
 }
