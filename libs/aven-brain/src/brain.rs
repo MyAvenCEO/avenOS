@@ -553,18 +553,20 @@ impl LogEntry {
     }
 }
 
-/// One human turn + the exact context that turn saw (board 0029 M3).
+/// One assembled-context turn: the persisted [`ContextTrace`] + the human message it was assembled
+/// for (matched by query; `None` if the message can't be located). Board 0029 M3 / 0033.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DebugRound {
-    /// The human message that opened this round.
-    pub message: Memory,
-    /// The `ContextTrace` assembled for it (None if no trace was persisted for this round).
-    pub context_trace: Option<ContextTrace>,
+    /// The human message that opened this round (matched to the trace's query).
+    pub message: Option<Memory>,
+    /// The `ContextTrace` assembled for this turn.
+    pub context_trace: ContextTrace,
 }
 
-/// The full-session debug bundle (board 0029 M3): the whole message history, the per-round
-/// assembled [`ContextTrace`], and the full dream log — one JSON, replayable/analyzable.
+/// The full-session debug bundle (board 0029 M3): the whole message history, one round per
+/// PERSISTED context trace (the turns that actually assembled context), and the full instrumentation
+/// log — one JSON, replayable/analyzable.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DebugExport {
@@ -572,7 +574,7 @@ pub struct DebugExport {
     pub exported_at_ms: i64,
     /// Every conversational memory (instrumentation streams excluded), oldest-first.
     pub messages: Vec<Memory>,
-    /// One entry per human message; `rounds.len() == count(messages where author == user)`.
+    /// One entry per persisted `ContextTrace`, oldest-first — the turns that assembled context.
     pub rounds: Vec<DebugRound>,
     /// The full persisted instrumentation log, oldest-first.
     pub dream_log: Vec<LogEntry>,
@@ -1201,13 +1203,25 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         let traces = self.read_traces().await?;
         let dream_log = self.read_log().await?;
 
-        let rounds: Vec<DebugRound> = messages
-            .iter()
-            .filter(|m| m.author_role == "user")
-            .enumerate()
-            .map(|(i, message)| DebugRound {
-                message: message.clone(),
-                context_trace: traces.get(i).cloned(),
+        // One round per PERSISTED trace (the turns that actually assembled context), each matched to
+        // its human message by the query's first line (the inner recall query is the message body,
+        // possibly enriched with appended context lines — the first line is the body). Consume
+        // messages in order so repeated identical queries pair to distinct turns. Board 0033: this
+        // replaces the old index pairing that yoked all-history messages to the few recent traces.
+        let mut used = vec![false; messages.len()];
+        let rounds: Vec<DebugRound> = traces
+            .into_iter()
+            .map(|t| {
+                let key = t.query.lines().next().unwrap_or("").to_string();
+                let mut matched: Option<Memory> = None;
+                for (i, m) in messages.iter().enumerate() {
+                    if !used[i] && m.author_role == "user" && m.content == key {
+                        used[i] = true;
+                        matched = Some(m.clone());
+                        break;
+                    }
+                }
+                DebugRound { message: matched, context_trace: t }
             })
             .collect();
 
@@ -1990,21 +2004,42 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         let snap = phase!("snapshot (epoch-cached)", self.snapshot().await?);
 
         let l0 = phase!("l0 self", snap.l0_self());
-        let gist: Vec<String> = phase!(
-            "l1 gist",
-            snap.recall(&Filter::default(), opts.gist_n + 16)
-                .into_iter()
-                .filter(|m| m.stream != "self" && !is_instrumentation_stream(&m.stream))
-                .take(opts.gist_n)
-                .map(|m| truncate(&m.content, 160))
-                .collect()
-        );
 
-        // Working window: last N turns of the filtered stream, chronological.
+        // Working window FIRST (the verbatim recent turns) so the gist can exclude them — otherwise
+        // the "story so far" just echoes the conversation shown right below it (board 0033).
         let mut working = phase!("working window", snap.recall(&opts.filter, opts.working_n));
         working.reverse();
         let working_ids: std::collections::HashSet<String> =
             working.iter().map(|m| id_str(&m.id)).collect();
+
+        // L1 gist = the "story so far". PREFER consolidated `summary` digests (what dreaming
+        // distilled); never the working-window messages (shown verbatim below) and never `self`.
+        // Falls back to older memories OUTSIDE the window when no summary exists yet — so the gist
+        // adds context the window doesn't, instead of duplicating it (board 0033). An empty gist is
+        // better than a redundant one.
+        let gist: Vec<String> = phase!("l1 gist", {
+            let mut lines: Vec<String> = snap
+                .recall(&Filter::stream("summary"), opts.gist_n)
+                .into_iter()
+                .map(|m| truncate(&m.content, 160))
+                .collect();
+            if lines.len() < opts.gist_n {
+                for m in snap.recall(&Filter::default(), opts.gist_n + opts.working_n + 16) {
+                    if lines.len() >= opts.gist_n {
+                        break;
+                    }
+                    if m.stream == "self"
+                        || m.stream == "summary"
+                        || is_instrumentation_stream(&m.stream)
+                        || working_ids.contains(&id_str(&m.id))
+                    {
+                        continue;
+                    }
+                    lines.push(truncate(&m.content, 160));
+                }
+            }
+            lines
+        });
 
         // Inner recall query: the brain carries conversational continuity ITSELF (no
         // app-side thread concept) — a thin follow-up ("check your memory", "schau
@@ -3716,19 +3751,57 @@ mod tests {
         assert_eq!(export.messages.len(), 3, "3 talk turns, no instrumentation rows");
         assert!(export.messages.iter().all(|m| m.stream == "talk"));
 
-        // one round per HUMAN message — the card's count invariant.
+        // one round per persisted trace — here every human message assembled context, so the round
+        // count equals the human-message count (board 0029 M3 / 0033).
         let humans = export.messages.iter().filter(|m| m.author_role == "user").count();
-        assert_eq!(export.rounds.len(), humans);
         assert_eq!(export.rounds.len(), 2);
+        assert_eq!(export.rounds.len(), humans);
 
-        // every round carries the ContextTrace that turn actually saw.
-        assert!(export.rounds.iter().all(|r| r.context_trace.is_some()));
-        assert_eq!(export.rounds[0].message.content, "Wer war der Schiedsrichter?");
+        // every round is matched to the human message its query was assembled for.
+        assert!(export.rounds.iter().all(|r| r.message.is_some()));
+        assert_eq!(
+            export.rounds[0].message.as_ref().unwrap().content,
+            "Wer war der Schiedsrichter?"
+        );
 
         // the full dream log is bundled.
         assert_eq!(export.dream_log.len(), 1);
         assert_eq!(export.dream_log[0].kind, "dream");
         assert_eq!(export.dream_log[0].phase, "extract");
+    }
+
+    #[tokio::test]
+    async fn l1_gist_never_echoes_the_working_window() {
+        // Board 0033: the L1 gist used to be the N most-recent memories verbatim — a duplicate of
+        // the working window shown right below it (and even the current query). It must instead add
+        // context the window doesn't.
+        let brain = test_brain("gist-no-echo").await;
+        let talk = RememberOptions {
+            stream: "talk".to_string(),
+            author_role: "user".to_string(),
+            ..Default::default()
+        };
+        for i in 0..16 {
+            brain
+                .remember_with(&format!("conversation turn number {i}"), &talk)
+                .await
+                .unwrap();
+        }
+        let bundle = brain
+            .assemble_context("what did we discuss", &ContextOptions::default())
+            .await
+            .unwrap();
+        let t = bundle.trace;
+        let working: std::collections::HashSet<&str> =
+            t.working.iter().map(|w| w.snippet.as_str()).collect();
+        assert!(!t.working.is_empty(), "sanity: working window populated");
+        for g in &t.l1_gist {
+            assert!(
+                !working.contains(g.as_str()),
+                "gist line duplicates the working window: {g:?}"
+            );
+            assert_ne!(g, "what did we discuss", "gist echoes the current query");
+        }
     }
 
     // ───────────────────────── recall eval (the scoreboard) ─────────────────────────
