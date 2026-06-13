@@ -195,12 +195,22 @@ function runningLabel(name: string, args: Record<string, unknown>): string {
  * Live, reactive view of the active identity, read fresh inside each turn so the runtime always
  * acts on the current identity / session even as the user navigates between sub-views.
  */
+/** One chat turn for the LLM messages array (PLAIN mode's traditional session history). */
+type ChatTurn = { role: 'user' | 'assistant'; content: string }
+
 export type IdentityAgentEnv = {
 	canonicalSparkId: string
 	identityBase: string
 	authorDid: string | undefined
 	tauri: boolean
 	unlocked: boolean
+	/**
+	 * `brain` = the memory-managed surface (store → assemble L0/L1/L2/L3 context → reply → dream).
+	 * `plain` = a traditional chat: recent message history is sent to the LLM directly, with the
+	 * todos tools, and NO brain (no ingest/recall/dream). Lets the brain be iterated on in isolation
+	 * (board: split Talk/Brain). Defaults to `plain` everywhere except the Brain view.
+	 */
+	mode: 'brain' | 'plain'
 }
 
 export type IdentityAgent = {
@@ -360,14 +370,18 @@ export function createIdentityAgent(deps: {
 		prompt: string,
 		replyId: string,
 		ctx: ToolContext,
-		context?: string
+		context?: string,
+		history?: ChatTurn[]
 	): Promise<ToolCallRecord> {
-		// The brain's auto-assembled context (L0 self · L1 gist · working window · live recall ·
-		// entity cards) rides as a second system message — so the model answers WITH memory, not
-		// from nothing. It's reassembled fresh every turn (no per-session/day summary): the closest
-		// to realtime, fully-dynamic context management we can do.
 		const messages: unknown[] = [{ role: 'system', content: CLOUD_SYSTEM_PROMPT }]
-		if (context?.trim()) {
+		if (history && history.length > 0) {
+			// PLAIN mode: traditional session — the recent conversation as real chat turns, so the
+			// model has continuity WITHOUT the brain. No memory assembly.
+			for (const turn of history) messages.push(turn)
+		} else if (context?.trim()) {
+			// BRAIN mode: the auto-assembled context (L0 self · L1 gist · working window · live recall ·
+			// entity cards) rides as a system message — the model answers WITH memory, reassembled
+			// fresh every turn. Continuity comes from the working window, not a chat-history array.
 			messages.push({
 				role: 'system',
 				content: `What you remember (auto-assembled from memory — use it to ground your reply):\n\n${context}`
@@ -468,6 +482,25 @@ export function createIdentityAgent(deps: {
 	 * brain-recall structured reply are disabled for now — preserved in the commented block below
 	 * so local mode can be restored by uncommenting it (and re-adding the imports listed up top).
 	 */
+	/** Recent conversation as chat turns (PLAIN mode's traditional session window) — the last
+	 * `limit` non-empty user/agent messages for this identity, oldest-first, excluding the current
+	 * user row + the empty reply row. No brain; the LLM gets the raw thread like an ordinary chat. */
+	function sessionHistory(env: IdentityAgentEnv, excludeIds: string[], limit = 24): ChatTurn[] {
+		const me = env.canonicalSparkId.trim().toLowerCase()
+		return deps.messages.rows
+			.filter(
+				(m) =>
+					String(m.owner).trim().toLowerCase() === me &&
+					(m.role === 'user' || m.role === 'agent') &&
+					String(m.body ?? '').trim() !== '' &&
+					!excludeIds.includes(String(m.id))
+			)
+			.slice()
+			.sort((a, b) => Number(a.created_at_ms ?? 0) - Number(b.created_at_ms ?? 0))
+			.slice(-limit)
+			.map((m) => ({ role: m.role === 'agent' ? 'assistant' : 'user', content: String(m.body) }))
+	}
+
 	async function replyWithAgent(
 		prompt: string,
 		_userRowId?: string,
@@ -501,7 +534,13 @@ export function createIdentityAgent(deps: {
 				)
 				return
 			}
-			const record = await runCloudLoop(prompt, reply.id, ctx, context)
+			// PLAIN mode: build the traditional session history (prior turns, excluding this turn's
+			// user row + the empty reply). BRAIN mode: no history — continuity rides in `context`.
+			const history =
+				env.mode === 'plain'
+					? sessionHistory(env, [reply.id, _userRowId ?? ''])
+					: undefined
+			const record = await runCloudLoop(prompt, reply.id, ctx, context, history)
 			await persistRecord(env, reply.id, record)
 
 			/* ───────────────── DISABLED: on-device LFM + brain-recall fallback ─────────────────
@@ -592,7 +631,7 @@ export function createIdentityAgent(deps: {
 		// recalls on a stub — mixing fake (hashed bag-of-words) and real EmbeddingGemma vectors in
 		// one store permanently corrupts recall. The first message triggers the model download (like
 		// voice STT); the turn waits until it's loaded rather than degrading silently.
-		if (env.tauri && body) {
+		if (env.mode === 'brain' && env.tauri && body) {
 			const emb = get(embedState)
 			if (emb.status !== 'ready') {
 				void startEmbedDownload()
@@ -625,7 +664,9 @@ export function createIdentityAgent(deps: {
 			// any brain error falls back to a context-free reply.
 			let assembledContext: string | undefined
 			let embedBlocked = false
-			if (body) {
+			// BRAIN mode only: store + assemble the memory-managed context. PLAIN mode skips all of
+			// this — it's a traditional chat (recent history sent straight to the LLM, see replyWithAgent).
+			if (env.mode === 'brain' && body) {
 				activityStart(env.canonicalSparkId)
 				beginRoundtrip(env.canonicalSparkId, row.id, body)
 				try {
@@ -692,15 +733,13 @@ export function createIdentityAgent(deps: {
 							: `Message sent but files failed: ${errors.join('; ')}`
 				}
 			}
-			// Fire the agent reply, grounded in the auto-assembled context — UNLESS the embedder
-			// wasn't ready (board 0032): we never answer without memory on a stub. The user resends
-			// once the model finishes loading.
+			// Fire the agent reply. BRAIN mode grounds it in the auto-assembled context (unless the
+			// embedder wasn't ready — board 0032 — in which case we never answer on a stub). PLAIN mode
+			// passes no brain context; replyWithAgent builds traditional session history instead.
 			if (body && !embedBlocked) await replyWithAgent(body, row.id, assembledContext)
-			// Dreaming runs after every turn: heal claims, merge entities, decay bonds, consolidate +
-			// build the entity graph for new memories — continuous upkeep. Fire-and-forget AND
-			// STEPPED (one phase per call) so it never blocks the talk loop OR the avenDB runtime,
-			// and every step streams into the brain aside's Dreaming tab.
-			if (body && !embedBlocked) void runDreamLogged(env.canonicalSparkId)
+			// Dreaming (brain mode only): heal claims, merge entities, decay bonds, consolidate + build
+			// the entity graph for new memories. STEPPED + fire-and-forget; streams into the Dreaming tab.
+			if (env.mode === 'brain' && body && !embedBlocked) void runDreamLogged(env.canonicalSparkId)
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {
@@ -711,7 +750,7 @@ export function createIdentityAgent(deps: {
 			// Persist this turn's activity timeline (store · recall · model · tools, with timings) to
 			// the sealed dreamlog stream so the perf history survives reload and rides along in the
 			// debug export (board 0029 M2). Best-effort, fire-and-forget.
-			if (env.tauri && env.canonicalSparkId && brainActivity.steps.length > 0) {
+			if (env.mode === 'brain' && env.tauri && env.canonicalSparkId && brainActivity.steps.length > 0) {
 				void brainAppendActivity(
 					env.canonicalSparkId,
 					brainActivity.steps.map((s) => ({
