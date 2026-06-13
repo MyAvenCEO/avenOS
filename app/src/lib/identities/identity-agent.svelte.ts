@@ -14,6 +14,13 @@ import { getContext, setContext } from 'svelte'
 import { persistSparkFiles } from '$lib/avendb/intent-files'
 import type { AvenDbStore } from '$lib/avendb/store.svelte'
 import { brainAssembleContext, brainDoExtract, brainDreamStep, brainIngest } from '$lib/brain/api'
+import {
+	EMBED_MODEL_LABEL,
+	embedDownloadFraction,
+	embedState,
+	startEmbedDownload
+} from '$lib/embed/model-download-store'
+import { get } from 'svelte/store'
 import { t } from '$lib/i18n'
 import {
 	activityBegin,
@@ -574,6 +581,23 @@ export function createIdentityAgent(deps: {
 		) {
 			return
 		}
+		// Hard-block the turn until the on-device embedder is ready (board 0032). The brain NEVER
+		// recalls on a stub — mixing fake (hashed bag-of-words) and real EmbeddingGemma vectors in
+		// one store permanently corrupts recall. The first message triggers the model download (like
+		// voice STT); the turn waits until it's loaded rather than degrading silently.
+		if (env.tauri && body) {
+			const emb = get(embedState)
+			if (emb.status !== 'ready') {
+				void startEmbedDownload()
+				const frac = embedDownloadFraction(emb)
+				const pct = frac == null ? '' : ` ${Math.round(frac * 100)}%`
+				err =
+					emb.status === 'error'
+						? `Memory model failed to load: ${emb.error ?? 'unknown error'}. Retrying — send again shortly.`
+						: `Preparing memory model${pct}… ${EMBED_MODEL_LABEL} is downloading. Your message will send once it's ready.`
+				return
+			}
+		}
 		busy = true
 		err = undefined
 		// Fresh status strip for this turn: clear the prior run's badges, show "thinking".
@@ -593,6 +617,7 @@ export function createIdentityAgent(deps: {
 			// turn (no per-session/day summary): realtime, fully-dynamic context. Best-effort —
 			// any brain error falls back to a context-free reply.
 			let assembledContext: string | undefined
+			let embedBlocked = false
 			if (body) {
 				activityStart(env.canonicalSparkId)
 				beginRoundtrip(env.canonicalSparkId, row.id, body)
@@ -630,9 +655,23 @@ export function createIdentityAgent(deps: {
 					patchRoundtrip(row.id, { trace: bundle.trace, prompt: bundle.prompt, phase: 'done' })
 				} catch (e) {
 					const msg = e instanceof Error ? e.message : String(e)
-					console.error('[brain] roundtrip failed:', msg)
-					activityBegin('error', 'Memory roundtrip failed', msg)
-					patchRoundtrip(row.id, { error: msg, phase: 'error' })
+					// The embedder isn't loaded (model still downloading, or load failed — board 0032).
+					// HARD-BLOCK the turn: never answer without memory on a stub. Trigger the download
+					// and surface a clear preparing state instead of a silent context-free reply.
+					if (msg.includes('EMBED_MODEL_NOT_READY')) {
+						embedBlocked = true
+						void startEmbedDownload()
+						const emb = get(embedState)
+						const frac = embedDownloadFraction(emb)
+						const pct = frac == null ? '' : ` ${Math.round(frac * 100)}%`
+						err = `Preparing memory model${pct}… ${EMBED_MODEL_LABEL} isn't ready yet. Your message will send once it's loaded.`
+						activityBegin('error', 'Memory model not ready', err)
+						patchRoundtrip(row.id, { error: err, phase: 'error' })
+					} else {
+						console.error('[brain] roundtrip failed:', msg)
+						activityBegin('error', 'Memory roundtrip failed', msg)
+						patchRoundtrip(row.id, { error: msg, phase: 'error' })
+					}
 				}
 			}
 			if (files.length > 0) {
@@ -646,13 +685,15 @@ export function createIdentityAgent(deps: {
 							: `Message sent but files failed: ${errors.join('; ')}`
 				}
 			}
-			// Fire the agent reply, grounded in the auto-assembled context.
-			if (body) await replyWithAgent(body, row.id, assembledContext)
+			// Fire the agent reply, grounded in the auto-assembled context — UNLESS the embedder
+			// wasn't ready (board 0032): we never answer without memory on a stub. The user resends
+			// once the model finishes loading.
+			if (body && !embedBlocked) await replyWithAgent(body, row.id, assembledContext)
 			// Dreaming runs after every turn: heal claims, merge entities, decay bonds, consolidate +
 			// build the entity graph for new memories — continuous upkeep. Fire-and-forget AND
 			// STEPPED (one phase per call) so it never blocks the talk loop OR the avenDB runtime,
 			// and every step streams into the brain aside's Dreaming tab.
-			if (body) void runDreamLogged(env.canonicalSparkId)
+			if (body && !embedBlocked) void runDreamLogged(env.canonicalSparkId)
 		} catch (e) {
 			err = e instanceof Error ? e.message : String(e)
 		} finally {

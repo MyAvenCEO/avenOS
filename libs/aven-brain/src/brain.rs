@@ -1057,6 +1057,11 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         self.embedder.name()
     }
 
+    /// The embedder's vector dimension (the loaded model's actual dim, for status/diagnostics).
+    pub fn embedder_dim(&self) -> usize {
+        self.embedder.dim()
+    }
+
     /// Whether a real extractor is configured (used by the off-actor extract IPC to skip
     /// the Tinfoil call when no key is available rather than failing silently).
     pub fn extractor_enabled(&self) -> bool {

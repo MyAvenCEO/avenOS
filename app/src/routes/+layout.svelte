@@ -3,6 +3,7 @@ import { browser } from '$app/environment'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
 import { startAsrReadiness } from '$lib/asr/model-download-store'
+import { startEmbedReadiness } from '$lib/embed/model-download-store'
 import { avenCeoMembership } from '$lib/avendb/api'
 import { avenDbStore } from '$lib/avendb/store.svelte'
 import { installConsoleCapture } from '$lib/debug/console-capture'
@@ -56,6 +57,22 @@ $effect(() => {
 	let active = true
 	let unsub = () => {}
 	void startAsrReadiness().then((u) => {
+		if (active) unsub = u
+		else u()
+	})
+	return () => {
+		active = false
+		unsub()
+	}
+})
+
+// On-device brain embedder (EmbeddingGemma): track download/readiness so the talk panel can
+// block the send until the model is loaded (board 0032 — never recall on a stub embedder).
+$effect(() => {
+	if (!browser || !isTauriRuntime()) return () => {}
+	let active = true
+	let unsub = () => {}
+	void startEmbedReadiness().then((u) => {
 		if (active) unsub = u
 		else u()
 	})

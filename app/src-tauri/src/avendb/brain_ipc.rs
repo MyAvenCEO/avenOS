@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use aven_brain::{
 	Brain, ContextOptions, Embedder, Extraction, ExtractionInput, Extractor, Filter, KeySealer,
-	NoExtractor, RememberOptions, StubEmbedder, EMBED_DIM,
+	NoExtractor, RememberOptions,
 };
 use aven_db::{AvenDbClient, ObjectId, QueryBuilder, Value};
 use serde_json::json;
@@ -23,37 +23,56 @@ use uuid::Uuid;
 use super::conn::{with_connected_client, ManagedAvenDb, ENCRYPTED_META};
 use super::engine;
 
-/// The app's brain embedder: EmbeddingGemma-300m when the `brain-gemma` feature is on
-/// AND the model + onnxruntime dylib are present; otherwise the deterministic stub.
+/// Recognizable error returned by [`app_embedder`]/[`brain_over`] when the real embedder isn't
+/// loaded yet — the frontend matches this prefix to show "preparing memory model… X%" and block
+/// the turn (instead of treating it as a generic failure). Board 0032: there is NO stub fallback.
+pub(crate) const EMBED_MODEL_NOT_READY: &str = "EMBED_MODEL_NOT_READY";
+
+/// The app's brain embedder. **There is exactly one real embedder — EmbeddingGemma-300m — and no
+/// stub fallback (board 0032).** Mixing fake (hashed bag-of-words) vectors with Gemma vectors in
+/// one store permanently corrupts recall, so the brain must NEVER embed with anything but the real
+/// model. This is enforced at COMPILE time: under `brain-gemma` the only constructible variant is
+/// `Gemma`; `app_embedder` returns an error (never a stub) when the model isn't loaded.
 /// Enum dispatch because [`Embedder`] uses `async fn` (not dyn-safe).
 pub(crate) enum AppEmbedder {
-	Stub(StubEmbedder),
+	/// The on-device EmbeddingGemma-300m — the only real embedder. Constructed solely by
+	/// [`app_embedder`], and only once the model has loaded.
 	#[cfg(feature = "brain-gemma")]
 	Gemma(Arc<aven_brain::GemmaEmbedder>),
+	/// NEVER constructed. Exists only so the type stays inhabited on builds without `brain-gemma`
+	/// (iOS, until the embedder is wired there). `brain_over` refuses to build a Brain without a
+	/// real embedder, so this can't reach `embed` — a fake vector can never enter the store.
+	#[allow(dead_code)]
+	Unavailable,
 }
 
 impl Embedder for AppEmbedder {
 	fn dim(&self) -> usize {
 		match self {
-			AppEmbedder::Stub(e) => e.dim(),
 			#[cfg(feature = "brain-gemma")]
 			AppEmbedder::Gemma(e) => e.dim(),
+			AppEmbedder::Unavailable => {
+				unreachable!("AppEmbedder::Unavailable is never constructed (board 0032)")
+			}
 		}
 	}
 
 	async fn embed(&self, text: &str) -> Vec<f32> {
+		let _ = text;
 		match self {
-			AppEmbedder::Stub(e) => e.embed(text).await,
 			#[cfg(feature = "brain-gemma")]
 			AppEmbedder::Gemma(e) => e.embed(text).await,
+			AppEmbedder::Unavailable => {
+				unreachable!("AppEmbedder::Unavailable is never constructed (board 0032)")
+			}
 		}
 	}
 
 	fn name(&self) -> &'static str {
 		match self {
-			AppEmbedder::Stub(e) => e.name(),
 			#[cfg(feature = "brain-gemma")]
 			AppEmbedder::Gemma(e) => e.name(),
+			AppEmbedder::Unavailable => "unavailable",
 		}
 	}
 }
@@ -194,18 +213,31 @@ fn app_extractor() -> AppExtractor {
 /// Pick the best available embedder for this process. NOTE: all devices of an
 /// identity must embed with one model — mixed stub/gemma stores degrade recall
 /// across the boundary (re-embed pass = the E7 maintenance item).
-async fn app_embedder(app: &tauri::AppHandle) -> AppEmbedder {
+/// Resolve the REAL embedder, or an error — never a stub (board 0032). When EmbeddingGemma isn't
+/// loaded yet this kicks off the download (download-on-first-use, like voice STT) and returns
+/// [`EMBED_MODEL_NOT_READY`] so the caller blocks the turn and shows progress. The brain refuses to
+/// run on a fake embedder because mixing stub + Gemma vectors permanently corrupts recall.
+async fn app_embedder(app: &tauri::AppHandle) -> Result<AppEmbedder, String> {
 	#[cfg(feature = "brain-gemma")]
-	if let Some(g) = gemma_embedder(app).await {
-		return AppEmbedder::Gemma(g);
+	{
+		if let Some(g) = gemma_embedder(app).await {
+			return Ok(AppEmbedder::Gemma(g));
+		}
+		// Not loaded — ensure the download is running (idempotent) and block until ready.
+		crate::embed_model::ensure_download(app);
+		Err(EMBED_MODEL_NOT_READY.to_string())
 	}
-	let _ = app;
-	AppEmbedder::Stub(StubEmbedder::new(EMBED_DIM))
+	#[cfg(not(feature = "brain-gemma"))]
+	{
+		let _ = app;
+		Err(EMBED_MODEL_NOT_READY.to_string())
+	}
 }
 
-/// Wrap the shared connected client as `identity`'s brain (EmbeddingGemma when
-/// available, stub otherwise), sealed with the identity's current DEK — no DEK,
-/// no brain (fail closed: a brain that cannot seal must not write plaintext).
+/// Wrap the shared connected client as `identity`'s brain with the REAL EmbeddingGemma embedder,
+/// sealed with the identity's current DEK. Fail closed on BOTH axes: no DEK → no brain (never write
+/// plaintext); embedder not loaded → `Err(EMBED_MODEL_NOT_READY)` (never a stub — board 0032). The
+/// embedder is resolved LAST so a missing DEK still reports first.
 async fn brain_over(
 	app: &tauri::AppHandle,
 	client: Arc<AvenDbClient>,
@@ -223,10 +255,10 @@ async fn brain_over(
 		.ok_or("brain: identity DEK not held — cannot seal")?;
 	let sealer = Arc::new(KeySealer::new(*dek.expose(), owner_uuid, ver));
 	let owner = ObjectId::from_uuid(owner_uuid);
-	Ok((
-		Brain::over(client, owner, app_embedder(app).await, sealer),
-		owner,
-	))
+	// Resolve the real embedder — returns Err (never a stub) if Gemma isn't loaded, blocking the
+	// brain until the model is ready.
+	let embedder = app_embedder(app).await?;
+	Ok((Brain::over(client, owner, embedder, sealer), owner))
 }
 
 async fn owner_count(
@@ -258,7 +290,7 @@ pub(crate) async fn brain_ipc_status(
 	Ok(json!({
 		"ready": true,
 		"embedder": brain.embedder_name(),
-		"embedDim": EMBED_DIM,
+		"embedDim": brain.embedder_dim(),
 		"memories": owner_count(client.as_ref(), "memories", owner).await?,
 		"entities": owner_count(client.as_ref(), "entities", owner).await?,
 		"links": owner_count(client.as_ref(), "links", owner).await?,
