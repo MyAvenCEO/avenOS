@@ -606,6 +606,11 @@ async function main() {
 		signingMode
 	)
 
+	// Wipe the SvelteKit static output FIRST so the iOS build embeds a CONSISTENT asset set — a
+	// stale `build/` (e.g. left by a prior mac/iOS run with different chunk hashes) otherwise makes
+	// the bundler reference hashed chunks the fresh build didn't emit ("failed to read asset …").
+	rmSync(path.join(appDir, 'build'), { recursive: true, force: true })
+
 	const frontendBuild = spawnSync('bun', ['run', 'build'], {
 		cwd: appDir,
 		stdio: 'inherit',
