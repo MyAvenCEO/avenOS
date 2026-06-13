@@ -16,7 +16,7 @@
 		"tauri:dev": "bun --bun x tauri dev --features desktop-ai",
 		"tauri:ios:dev:sim": "bun --bun x tauri ios dev",
 		"tauri:build:macos": "bun --bun x tauri build",
-		"tauri:build:linux": "bun --bun x tauri build --bundles deb,appimage",
+		"tauri:build:linux": "bun --bun x tauri build --bundles deb,appimage --features desktop-ai",
 		"tauri:ios:build:asc": "bun ../scripts/tauri-ios-asc.ts"
 	},
 	"devDependencies": {
