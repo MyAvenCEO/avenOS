@@ -235,32 +235,32 @@ grep -nE "auth|8080|--auth" scripts/deploy-aven-node-sprite.ts  # surface/postur
 grep -n "relay" docs/security/trust-boundaries-and-sensitive-material.md  # A2 doc
 ```
 
-## Phase 2 design note — the open problem to resolve with a live client
+## Phase 2 — SOUND admission (resolved; no handshake proof needed)
 
-Admission (A8/A1) was deliberately **not** implemented blind, because classifying a
-connection correctly hinges on a DID-layer mapping that must be validated against a real
-handshake (getting it wrong locks out the deployed fleet on deploy):
+The original plan assumed admission needed a handshake **membership-proof** (the device
+presents its SAFE chain) because the relay can't resolve a device→SAFE→avenCEO walk (the
+human-SAFE chain is sealed under the human DEK). On investigation that approach is also
+**unsound**: avenCEO grants ownership to a SAFE by *UUID* (`attenuate_add_owner_third_party`),
+not by pinned key, so a relay that loaded a *presented* SAFE chain by UUID could be handed a
+forged chain naming the attacker's device — an auth bypass.
 
-- A connecting peer authenticates with its **device signer DID** (ed25519 `PeerId` →
-  signer did) — `ws_server.rs` `verify_client`.
-- avenCEO membership is tracked at the **SAFE** level: admins are `did:safe:` in the
-  avenCEO biscuit (`identity_admins`), and avenCEO keyshare `recipient_did`s are a SAFE's
-  **`wrap_did`** (`aven_ceo.rs:387-394`) — neither is the connecting device's signer DID.
-- So admission needs a **device-signer → SAFE → avenCEO** walk: `signers` (plaintext
-  `signer_did`,`owner=SAFE`) maps the device signer to its SAFE; then the SAFE must be an
-  avenCEO admin (biscuit `owns`) **or** hold an avenCEO keyshare. All inputs are
-  plaintext-readable by the blind relay, but the exact DID forms (signer did vs `wrap_did`
-  vs `did:safe:`) and the onboarding-before-membership window must be confirmed on a live
-  client before flipping enforcement on.
+The correct, sound signal already exists and lives **in avenCEO's own chain**, which the
+relay holds and trusts (server-rooted): avenCEO grants each admitted member device a `reads`
+right on avenCEO (`attenuate_add_reader_third_party`; the app's admit flow does this —
+`caps_ipc.rs:1421-1531`). `identity_readers(avenceo_chain)` enumerates exactly those member
+**did:keys**. Only an avenCEO owner can append a reads grant, so this set is **poison-proof**
+— a stranger cannot self-promote into it. The connecting peer's device did:key is already
+proven by the handshake challenge, so admission is a direct membership test against this
+cryptographic set. **No presented proof, no `ClientAuth`/protocol change, no client edits.**
 
-Build plan when resumed: (1) pure `classify_peer(signer_did, &roster) -> Tier` — unit
-testable cheaply; (2) `avenceo_roster(engine) -> Roster{member_signer_dids, admin_safes}`
-reading `signers`+`keyshares`+biscuit; (3) tier-gated `may_sync` outbound scope +
-`verify_on_apply` inbound self-authored check for the onboarding tier; (4) optional
-`membership_proof` fast-path on `ClientAuth` (serde-tolerant); (5) **integration test
-against a real client** + a rollout flag (default permissive → fail-closed only after
-validation) so a bad mapping can't brick the fleet. Rewrite the stale fly runbook
-(`docs/deploy/aven-server-mini.md`, audit A6) for the Sprite reality as part of A8-machine.
+Implemented: `aven_ceo::avenceo_member_dids` builds avenCEO's chain (read identity → unwrap
+server DEK → unseal genesis/issuer → `biscuit_from_storage`) and returns `identity_readers`;
+the relay refreshes this into a shared roster each tick + on connect; `ServerApplyGate::
+may_sync` denies a non-member outbound reads of the spark **content** tables while leaving
+trust/identity/control tables open for onboarding. The trust-on-publish `signers` roster was
+removed. Remaining for production hardening (separate): A8-machine runbook rewrite (audit A6)
++ optional Sprite authenticated-URL; live-client validation of the onboarding→granted→member
+transition (a from-scratch dev run via `dev:app2x`).
 
 ## Hand-off
 
@@ -276,6 +276,34 @@ validation) so a bad mapping can't brick the fleet. Rewrite the stale fly runboo
 
 ## Progress log
 
+- `2026-06-13` — **Sync-break fix + course correction (live `dev:app2x` testing).** Live run
+  surfaced two breakages in the merged hardening: (1) `relay-deny[no-binding]` on
+  `keyshares`/`memories` — ROOT CAUSE: `aven-brain` wrote owner-bearing rows
+  (memories/entities/links) with empty metadata (no owner-binding). FIX: thread the device
+  signer into `Brain` and stamp an owner-binding on every brain write (the edit-sig is added
+  by the app's `AppEditSigner`). This makes **binding enforcement system-wide** — the A3
+  fail-closed gate is KEPT and now correct everywhere. (2) `may_sync` was withholding a
+  user's own `messages` from their device because it gated spark CONTENT by avenCEO
+  reader-membership — the WRONG axis. Per the **sync-cap model**: a blind relay cannot
+  evaluate a SAFE's per-identity replicate/sync cap (those chains are sealed under the SAFE
+  DEK), so forwarding MUST stay permissive at the relay; the sync cap is enforced on the
+  devices that hold it, and content stays E2E ciphertext. REMOVED the avenCEO-membership
+  content-gating + its roster machinery (and `admission.rs`); kept A3 authenticity. Tests:
+  aven-node 4/4 (A3); aven-brain builds. Note: "keep the public OUT" (A8) is NOT solved by
+  content-gating — it needs connection-level admission (handshake) or client-side replicate
+  caps; tracked as remaining.
+
+- `2026-06-13` — **Sound admission landed (the real public-lockout).** Found the original
+  handshake-membership-proof plan to be both unnecessary and *unsound* (avenCEO grants
+  ownership by SAFE UUID, so a presented SAFE chain by UUID is forgeable → auth bypass).
+  The correct signal already lives in avenCEO's server-rooted chain: the `reads` grants the
+  app's admit flow issues to member did:keys (`caps_ipc.rs:1421-1531`). Implemented
+  `aven_ceo::avenceo_member_dids` → `identity_readers(avenceo_chain)`; relay now sources its
+  roster cryptographically from this (poison-proof — only an avenCEO owner can add a reader),
+  replacing the trust-on-publish `signers` roster. No client/protocol change. `may_sync`
+  enforces non-member content-table denial as before. Removed the dev flag earlier; admission
+  is now sound + enforced. Needs a from-scratch `dev:app2x` run to validate the
+  onboarding→granted→member transition live.
 - `2026-06-12` — Discovery: interviewed; uncovered that the blind relay cannot evaluate
   per-row user caps (caps sealed under user DEKs), so A1 is reframed to admission +
   authenticity with per-row enforcement staying on the client. Confirmed decisions:

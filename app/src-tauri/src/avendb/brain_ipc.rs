@@ -212,7 +212,16 @@ async fn brain_over(
 	let sealer = Arc::new(KeySealer::new(*dek.expose(), owner_uuid, ver));
 	let owner = ObjectId::from_uuid(owner_uuid);
 	Ok((
-		Brain::over(client, owner, app_embedder(app).await, sealer),
+		// Pass the device signer so every brain row (memories/entities/links) carries an
+		// owner-binding and passes the fail-closed apply gate on relay + peers (else it never
+		// syncs). The edit-signature is added by the client's installed AppEditSigner.
+		Brain::over(
+			client,
+			owner,
+			app_embedder(app).await,
+			sealer,
+			Some(shell.signing_key.clone()),
+		),
 		owner,
 	))
 }
