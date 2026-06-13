@@ -443,7 +443,7 @@ pub(crate) async fn brain_ipc_debug_export(
 
 /// Build the debug export AND WRITE it to a file on disk, returning the absolute path. The Tauri
 /// webview can't do a browser `<a download>` blob save, so the frontend button calls this and shows
-/// the path. Lands under `<Documents>/.avenOS/<network>/debug-exports/`.
+/// the path. Lands in a clean, visible `<Documents>/avenOS/debug/` folder.
 pub(crate) async fn brain_ipc_debug_export_save(
 	app: &tauri::AppHandle,
 	mj: &ManagedAvenDb,
@@ -456,8 +456,10 @@ pub(crate) async fn brain_ipc_debug_export_save(
 	let export = brain.debug_export().await.map_err(|e| e.to_string())?;
 	let json = serde_json::to_string_pretty(&export).map_err(|e| e.to_string())?;
 
-	let dir = tauri_plugin_self::paths::aven_os_app_base(app)?.join("debug-exports");
-	std::fs::create_dir_all(&dir).map_err(|e| format!("create debug-exports dir: {e}"))?;
+	let dir = tauri_plugin_self::paths::user_documents_dir(app)?
+		.join("avenOS")
+		.join("debug");
+	std::fs::create_dir_all(&dir).map_err(|e| format!("create avenOS/debug dir: {e}"))?;
 	let fname = format!("brain-debug-{}-{}.json", identity.trim(), export.exported_at_ms);
 	let path = dir.join(&fname);
 	std::fs::write(&path, json.as_bytes()).map_err(|e| format!("write {}: {e}", path.display()))?;

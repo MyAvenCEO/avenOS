@@ -199,7 +199,7 @@ export type BrainDebugExportSaved = {
 /**
  * Build the debug export AND WRITE it to a file on disk (the Tauri webview can't do a browser blob
  * download), returning the absolute path. The "Export debug session" button calls this and shows
- * where the file landed (`<Documents>/.avenOS/<network>/debug-exports/`).
+ * where the file landed (`<Documents>/avenOS/debug/`).
  */
 export function brainDebugExportSave(identity: string): Promise<BrainDebugExportSaved> {
 	return brainRuntime('brainDebugExportSave', { identity })
