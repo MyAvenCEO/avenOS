@@ -22,7 +22,7 @@
 		"dev:app2x:mac": "bun --env-file=.env ./scripts/dev-two-instances.ts",
 		"dev:app2x:linux": "bun --env-file=.env ./scripts/dev-two-instances.ts",
 		"deploy:server:sprite": "bun --env-file=.env ./scripts/deploy-aven-node-sprite.ts",
-		"build:app:linux": "bun run --cwd app tauri:build:linux",
+		"build:app:linux": "bun ./scripts/build-app-linux.ts",
 		"release:app:all": "bun ./scripts/release-app.ts all",
 		"release:app:mac": "bun ./scripts/release-app.ts mac",
 		"release:app:ios": "bun ./scripts/release-app.ts ios",

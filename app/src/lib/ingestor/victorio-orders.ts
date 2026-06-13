@@ -15,8 +15,8 @@ import {
 	type IngestorOptions,
 	memoryUploaderPort,
 	webCryptoHashPort
-} from '@avenos/aven-skills'
-import config from '@avenos/aven-skills/configs/victorio-pos-orders.json'
+} from '../../../../libs/aven-skills/src/index'
+import config from '../../../../libs/aven-skills/configs/victorio-pos-orders.json'
 
 export const ingestConfig = config as unknown as IngestConfig
 

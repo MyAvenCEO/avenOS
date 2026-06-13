@@ -22,7 +22,9 @@ use crate::vault::ActiveVault;
 const WARN: &str = "\x1b[1;31m";
 const RESET: &str = "\x1b[0m";
 
-/// `AVENOS_DEV_INSECURE_IDENTITY=1` forces this path even in release builds (local QA only).
+/// `AVENOS_DEV_INSECURE_IDENTITY=1` still force-enables this path everywhere, but
+/// on non-Apple desktop targets it is now the default identity backend until a
+/// secure native implementation exists.
 pub fn enabled() -> bool {
 	if std::env::var("AVENOS_DEV_INSECURE_IDENTITY")
 		.ok()
@@ -30,8 +32,10 @@ pub fn enabled() -> bool {
 	{
 		return true;
 	}
-	#[cfg(all(target_os = "ios", target_abi = "sim"))]
-	{
+	if cfg!(not(any(target_os = "macos", target_os = "ios"))) {
+		return true;
+	}
+	if cfg!(all(target_os = "ios", target_abi = "sim")) {
 		return cfg!(debug_assertions);
 	}
 	cfg!(debug_assertions)
@@ -125,7 +129,10 @@ pub async fn register<R: Runtime>(
 	slot: String,
 ) -> Result<(), String> {
 	if !enabled() {
-		return Err("tauri-plugin-self: macOS only in v1 (set AVENOS_DEV_INSECURE_IDENTITY=1 for forced dev mode)".into());
+		return Err(
+			"tauri-plugin-self: secure Apple identity only in v1; filesystem fallback unavailable on this target"
+				.into(),
+		);
 	}
 	let dir = slot_dir(&app, &vault)?;
 	let path = dev_root_secret_path(&dir, &slot);
@@ -172,7 +179,7 @@ pub async fn unlock<R: Runtime>(
 	stronghold: State<'_, crate::stronghold_vault::StrongholdSession>,
 ) -> Result<(), String> {
 	if !enabled() {
-		return Err("tauri-plugin-self: macOS only in v1".into());
+		return Err("tauri-plugin-self: filesystem-backed identity unavailable on this target".into());
 	}
 	let dir = slot_dir(&app, &vault)?;
 	let path = dev_root_secret_path(&dir, &slot);

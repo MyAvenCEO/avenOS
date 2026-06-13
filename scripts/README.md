@@ -18,6 +18,7 @@ Repo-root automation for the **Tauri app**, **App Store releases**, and **aven-d
 | `clean:app:rust` | `clean-app-tauri-target.ts` | Wipe shared `target/rust` (mac dev uses this) |
 | `verify:aven-db` | `verify-aven-db-gates.sh` | Post–re-vendor Rust + `app` check gates |
 | `fetch:webcm` | `fetch-webcm.ts` | Download webcm into `app/static/webcm/` |
+| `build:app:linux` | `build-app-linux.ts` | Linux Tauri build with native dependency preflight |
 | `release:app:*` | `release-app.ts` | macOS `.pkg` / iOS `.ipa` build + altool upload |
 
 ## Called indirectly (keep)

@@ -5,7 +5,11 @@
  * is created up-front and reused, so re-importing the same file is idempotent.
  */
 
-import { INGEST_STAGES, type IngestReport, type Logger } from '@avenos/aven-skills'
+import {
+	INGEST_STAGES,
+	type IngestReport,
+	type Logger
+} from '../../../../libs/aven-skills/src/index'
 import type { Order } from '../../routes/avens/[projectId]/[identityId]/orders/orders-data'
 import { createOrdersIngestor } from './victorio-orders'
 

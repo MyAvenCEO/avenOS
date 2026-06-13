@@ -341,6 +341,7 @@ dependencies = [
  "aven-caps",
  "aven-db",
  "base64 0.22.1",
+ "ed25519-dalek",
  "hkdf",
  "log",
  "rand_core 0.6.4",

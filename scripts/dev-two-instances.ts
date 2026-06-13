@@ -42,7 +42,9 @@ import { homedir, platform } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DEV_SERVER_SEED, LOCAL_WS, SERVER_HTTP_PORT, waitForPort } from './aven-server.ts'
+import { ensureOnnxruntimeDylib } from './fetch-onnxruntime.ts'
 import { freeDevServerPort } from './free-dev-server-port.ts'
+import { ensureLinuxNativeDeps } from './linux-native-deps.ts'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appDir = path.join(repoRoot, 'app')
@@ -216,6 +218,10 @@ async function main() {
 		console.error('dev:app2x: `cargo` not found. Install Rust from https://rustup.rs')
 		process.exit(1)
 	}
+	ensureLinuxNativeDeps('dev:app2x:linux')
+	if (process.env.AVENOS_DEV_CLEAN_RUST === '1') {
+		spawnSync('bun', ['./scripts/clean-app-tauri-target.ts'], { cwd: repoRoot, stdio: 'inherit' })
+	}
 
 	console.log(
 		`\n${BOLD}AvenOS — two-instance dev harness (${platLabel})${RESET}\n` +
@@ -236,6 +242,11 @@ async function main() {
 	if (!EXTERNAL_WS) freeDevServerPort(SERVER_HTTP_PORT)
 
 	const baseEnv = devBaseEnv()
+	try {
+		baseEnv.AVENOS_ORT_DYLIB = ensureOnnxruntimeDylib(process.arch === 'x64' ? 'x86_64' : 'arm64')
+	} catch (e) {
+		console.warn(`[dev:app2x] onnxruntime provisioning skipped: ${e instanceof Error ? e.message : e}`)
+	}
 
 	// Resolve the sync relay: a remote Sprite-hosted server over its public wss URL
 	// (no proxy, no pin — the exact path a device takes), else a LOCAL aven-node we
