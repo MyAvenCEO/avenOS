@@ -4,7 +4,6 @@
 //!
 //! Own integration binary → the process-global change-log is isolated from parallel tests.
 
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 

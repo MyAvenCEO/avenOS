@@ -29,7 +29,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use aven_db::{AppContext, AppId, AvenDbClient, NullSyncTransport, ObjectId, QueryBuilder, Value};
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine as _;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::embedder::Embedder;
 use crate::extractor::{ExtractionInput, Extractor, NoExtractor};
@@ -150,7 +150,7 @@ pub struct Memory {
 
 /// How a search hit was found. `Graph` = the entity/fact voice (board 0025): an entity
 /// named in the query voted for this memory through its links. `Both` = multiple voices.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Via {
     Vector,
@@ -334,7 +334,7 @@ pub struct DreamReport {
 }
 
 /// An entity touched by a dream step — name + kind, for clickable cards in the dreaming log.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DreamEntity {
     pub name: String,
@@ -416,7 +416,7 @@ impl Default for ContextOptions {
 }
 
 /// The stored receipt of one context assembly (rendered by the recall UI).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContextTrace {
     pub query: String,
@@ -436,14 +436,14 @@ pub struct ContextTrace {
 }
 
 /// One sub-phase of context assembly + its duration in ms (board: recall transparency).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TraceTiming {
     pub label: String,
     pub ms: u64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TraceWorking {
     pub id: String,
@@ -451,7 +451,7 @@ pub struct TraceWorking {
     pub author_role: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TraceRecalled {
     pub id: String,
@@ -462,7 +462,7 @@ pub struct TraceRecalled {
     pub score: f32,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TraceEntity {
     pub name: String,
@@ -470,7 +470,7 @@ pub struct TraceEntity {
     pub bonds: Vec<(String, f64)>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TraceBudget {
     pub used_chars: usize,
@@ -485,6 +485,87 @@ pub struct TraceBudget {
 pub struct ContextBundle {
     pub prompt: String,
     pub trace: ContextTrace,
+}
+
+// ── Persisted instrumentation + debug export (board 0029 M2/M3) ──────────────
+
+/// One persisted instrumentation entry: a dreaming [`DreamStep`] or a recall/activity step,
+/// stored SEALED in the [`STREAM_DREAMLOG`] stream so the brain's runtime history survives
+/// reload/restart/sync and can be exported. Excluded from every recall path — the brain never
+/// recalls its own logs. Round-trips through the store; read back with [`Brain::read_log`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogEntry {
+    /// `dream` | `activity` — which timeline this entry belongs to.
+    pub kind: String,
+    /// Machine phase/step id (dream phase, or an activity step id).
+    pub phase: String,
+    /// Human log line for the panel.
+    pub label: String,
+    /// Items this step affected.
+    #[serde(default)]
+    pub count: i64,
+    /// LLM tokens spent this step (0 for deterministic phases).
+    #[serde(default)]
+    pub tokens: i64,
+    /// Entities this step created/typed — clickable cards in the dreaming log.
+    #[serde(default)]
+    pub entities: Vec<DreamEntity>,
+    /// ms since epoch — the ordering key.
+    pub at_ms: i64,
+}
+
+impl LogEntry {
+    /// Build a `dream`-timeline entry from a finished [`DreamStep`].
+    pub fn from_dream_step(step: &DreamStep, at_ms: i64) -> Self {
+        Self {
+            kind: "dream".to_string(),
+            phase: step.phase.clone(),
+            label: step.label.clone(),
+            count: step.count,
+            tokens: step.tokens,
+            entities: step.entities.clone(),
+            at_ms,
+        }
+    }
+
+    /// Build an `activity`-timeline entry (a recall/turn step from the Activity tab).
+    pub fn activity(phase: impl Into<String>, label: impl Into<String>, count: i64, at_ms: i64) -> Self {
+        Self {
+            kind: "activity".to_string(),
+            phase: phase.into(),
+            label: label.into(),
+            count,
+            tokens: 0,
+            entities: Vec::new(),
+            at_ms,
+        }
+    }
+}
+
+/// One human turn + the exact context that turn saw (board 0029 M3).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugRound {
+    /// The human message that opened this round.
+    pub message: Memory,
+    /// The `ContextTrace` assembled for it (None if no trace was persisted for this round).
+    pub context_trace: Option<ContextTrace>,
+}
+
+/// The full-session debug bundle (board 0029 M3): the whole message history, the per-round
+/// assembled [`ContextTrace`], and the full dream log — one JSON, replayable/analyzable.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugExport {
+    pub owner: String,
+    pub exported_at_ms: i64,
+    /// Every conversational memory (instrumentation streams excluded), oldest-first.
+    pub messages: Vec<Memory>,
+    /// One entry per human message; `rounds.len() == count(messages where author == user)`.
+    pub rounds: Vec<DebugRound>,
+    /// The full persisted instrumentation log, oldest-first.
+    pub dream_log: Vec<LogEntry>,
 }
 
 // ── Constants (copy-verbatim, plan §9) ───────────────────────────────────────
@@ -1018,6 +1099,110 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             links_dropped += 1;
         }
         Ok((entities_dropped, links_dropped))
+    }
+
+    // ── Persisted instrumentation log + debug export (board 0029 M2/M3) ────────
+
+    /// Append one instrumentation entry to the SEALED [`STREAM_DREAMLOG`] stream (M2). It is
+    /// persisted like any memory — sealed at rest, synced — but excluded from every recall
+    /// path, so the brain never recalls its own logs. Survives reload/restart; read via
+    /// [`read_log`](Self::read_log). The `at_ms` is also stored in `seq` for DB-side ordering.
+    pub async fn append_log(&self, entry: &LogEntry) -> Result<ObjectId, BrainError> {
+        let json = serde_json::to_string(entry)
+            .map_err(|e| BrainError::Write(format!("log serialize: {e}")))?;
+        let opts = RememberOptions {
+            stream: STREAM_DREAMLOG.to_string(),
+            author_role: "system".to_string(),
+            source: Some(entry.kind.clone()),
+            seq: Some(entry.at_ms),
+            veracity: Some("tool".to_string()),
+            ..Default::default()
+        };
+        self.remember_raw(&json, &opts).await
+    }
+
+    /// Persist a finished [`DreamStep`] to the dream log (convenience over [`append_log`]).
+    pub async fn log_dream_step(&self, step: &DreamStep, at_ms: i64) -> Result<ObjectId, BrainError> {
+        self.append_log(&LogEntry::from_dream_step(step, at_ms)).await
+    }
+
+    /// Read the full persisted instrumentation log, oldest-first (M2). The ONE read path that
+    /// deliberately does NOT skip instrumentation streams: it opens the sealed [`STREAM_DREAMLOG`]
+    /// rows and deserializes each. Malformed rows are skipped (forward-compatible).
+    pub async fn read_log(&self) -> Result<Vec<LogEntry>, BrainError> {
+        let rows = self.memory_rows().await?;
+        let mut out: Vec<LogEntry> = rows
+            .iter()
+            .map(|(id, v)| self.open_memory(*id, v))
+            .filter(|m| m.stream == STREAM_DREAMLOG)
+            .filter_map(|m| serde_json::from_str::<LogEntry>(&m.content).ok())
+            .collect();
+        out.sort_by_key(|e| e.at_ms);
+        Ok(out)
+    }
+
+    /// Persist one round's [`ContextTrace`] to the SEALED [`STREAM_TRACE`] stream (M3) so the
+    /// debug export can reconstruct exactly what context each turn saw. Excluded from recall.
+    pub async fn persist_context_trace(&self, trace: &ContextTrace) -> Result<ObjectId, BrainError> {
+        let json = serde_json::to_string(trace)
+            .map_err(|e| BrainError::Write(format!("trace serialize: {e}")))?;
+        let opts = RememberOptions {
+            stream: STREAM_TRACE.to_string(),
+            author_role: "system".to_string(),
+            seq: Some(trace.assembled_at_ms),
+            veracity: Some("tool".to_string()),
+            ..Default::default()
+        };
+        self.remember_raw(&json, &opts).await
+    }
+
+    /// Read every persisted per-round [`ContextTrace`], oldest-first (M3).
+    async fn read_traces(&self) -> Result<Vec<ContextTrace>, BrainError> {
+        let rows = self.memory_rows().await?;
+        let mut out: Vec<ContextTrace> = rows
+            .iter()
+            .map(|(id, v)| self.open_memory(*id, v))
+            .filter(|m| m.stream == STREAM_TRACE)
+            .filter_map(|m| serde_json::from_str::<ContextTrace>(&m.content).ok())
+            .collect();
+        out.sort_by_key(|t| t.assembled_at_ms);
+        Ok(out)
+    }
+
+    /// Bundle the FULL session for debugging (M3): the whole message history (instrumentation
+    /// streams excluded), one round per human message paired with the [`ContextTrace`] that turn
+    /// saw, and the full dream log — one JSON, replayable. `rounds.len()` equals the number of
+    /// `user`-authored messages (traces are persisted once per human turn, in order).
+    pub async fn debug_export(&self) -> Result<DebugExport, BrainError> {
+        let rows = self.memory_rows().await?;
+        let mut messages: Vec<Memory> = rows
+            .iter()
+            .map(|(id, v)| self.open_memory(*id, v))
+            .filter(|m| !is_instrumentation_stream(&m.stream))
+            .collect();
+        // Row ids are UUIDv7 — ascending uuid == chronological (see module header).
+        messages.sort_by(|a, b| a.id.uuid().cmp(b.id.uuid()));
+
+        let traces = self.read_traces().await?;
+        let dream_log = self.read_log().await?;
+
+        let rounds: Vec<DebugRound> = messages
+            .iter()
+            .filter(|m| m.author_role == "user")
+            .enumerate()
+            .map(|(i, message)| DebugRound {
+                message: message.clone(),
+                context_trace: traces.get(i).cloned(),
+            })
+            .collect();
+
+        Ok(DebugExport {
+            owner: id_str(&self.owner),
+            exported_at_ms: now_ms(),
+            messages,
+            rounds,
+            dream_log,
+        })
     }
 
     // ── Write path ───────────────────────────────────────────────────────────
@@ -3404,6 +3589,132 @@ mod tests {
             .expect("open brain")
     }
 
+    /// Shared (client, owner, sealer) so a test can open TWO brains over the SAME store — proving
+    /// persistence survives dropping/reopening the Brain handle (the in-memory store lives in the
+    /// shared `Arc<AvenDbClient>`, so the second brain must reuse it, not reconnect).
+    async fn shared_parts(app: &str) -> (Arc<AvenDbClient>, ObjectId, Arc<dyn Sealer>) {
+        let owner = owner();
+        let data_dir = std::env::temp_dir().join(format!("aven-brain-{app}"));
+        let _ = std::fs::create_dir_all(&data_dir);
+        let context = AppContext {
+            app_id: AppId::from_name(app),
+            client_id: None,
+            schema: brain_schema(EMBED_DIM),
+            data_dir,
+            live_schemas: Vec::new(),
+        };
+        let client = AvenDbClient::connect_headless_in_memory(context, Arc::new(NullSyncTransport))
+            .await
+            .expect("connect");
+        let sealer: Arc<dyn Sealer> = Arc::new(KeySealer::random(*owner.uuid()));
+        (Arc::new(client), owner, sealer)
+    }
+
+    // ───────────────────────── observability (board 0029 M2/M3) ─────────────────────────
+
+    #[tokio::test]
+    async fn dream_log_persists_across_brain_instances() {
+        let (client, owner, sealer) = shared_parts("dreamlog-persist").await;
+
+        // Brain A writes a dream step + an activity step, then is dropped.
+        {
+            let brain = Brain::over(client.clone(), owner, StubEmbedder::new(EMBED_DIM), sealer.clone());
+            let step = DreamStep {
+                phase: "extract".into(),
+                label: "typed 3 entities".into(),
+                count: 3,
+                tokens: 128,
+                entities: vec![DreamEntity { name: "Ada".into(), kind: "person".into() }],
+                next_cursor: 1,
+                done: false,
+            };
+            brain.log_dream_step(&step, 1_000).await.unwrap();
+            brain
+                .append_log(&LogEntry::activity("recall", "recalled 7 memories", 7, 2_000))
+                .await
+                .unwrap();
+        } // Brain A dropped — only the shared client + store remain.
+
+        // A FRESH Brain over the same client reads the log back identically (oldest-first).
+        let reopened =
+            Brain::over(client.clone(), owner, StubEmbedder::new(EMBED_DIM), sealer.clone());
+        let log = reopened.read_log().await.unwrap();
+        assert_eq!(log.len(), 2, "both entries survive a fresh Brain instance");
+        assert_eq!(log[0].kind, "dream");
+        assert_eq!(log[0].phase, "extract");
+        assert_eq!(log[0].count, 3);
+        assert_eq!(log[0].tokens, 128);
+        assert_eq!(log[0].entities, vec![DreamEntity { name: "Ada".into(), kind: "person".into() }]);
+        assert_eq!(log[1].kind, "activity");
+        assert_eq!(log[1].label, "recalled 7 memories");
+
+        // Sealed at rest: a brain with a DIFFERENT key over the SAME store can't read the log
+        // (the bytes are ciphertext, not plaintext) — its read yields nothing decodable.
+        let wrong_key: Arc<dyn Sealer> = Arc::new(KeySealer::random(*owner.uuid()));
+        let intruder = Brain::over(client.clone(), owner, StubEmbedder::new(EMBED_DIM), wrong_key);
+        assert!(
+            intruder.read_log().await.unwrap().is_empty(),
+            "log is sealed — the wrong key decodes nothing"
+        );
+    }
+
+    #[tokio::test]
+    async fn debug_export_bundles_messages_traces_and_dreamlog() {
+        let brain = test_brain("debug-export").await;
+        let user = RememberOptions {
+            stream: "talk".into(),
+            author_role: "user".into(),
+            ..Default::default()
+        };
+        let asst = RememberOptions {
+            stream: "talk".into(),
+            author_role: "assistant".into(),
+            ..Default::default()
+        };
+
+        // Turn 1: human asks, we assemble + persist the trace, assistant replies.
+        brain.remember_with("Wer war der Schiedsrichter?", &user).await.unwrap();
+        let b1 = brain
+            .assemble_context("Wer war der Schiedsrichter?", &ContextOptions::default())
+            .await
+            .unwrap();
+        brain.persist_context_trace(&b1.trace).await.unwrap();
+        brain.remember_with("Der Schiedsrichter leitete das Spiel.", &asst).await.unwrap();
+
+        // Turn 2: a second human message + its trace.
+        brain.remember_with("Und wie viele gelbe Karten?", &user).await.unwrap();
+        let b2 = brain
+            .assemble_context("Und wie viele gelbe Karten?", &ContextOptions::default())
+            .await
+            .unwrap();
+        brain.persist_context_trace(&b2.trace).await.unwrap();
+
+        // A dream step lands in the log.
+        brain
+            .log_dream_step(&DreamStep::ok("extract", "typed 1 entity".into(), 1, 0), 1)
+            .await
+            .unwrap();
+
+        let export = brain.debug_export().await.unwrap();
+
+        // messages = the 3 conversational turns; instrumentation (trace/dreamlog) excluded.
+        assert_eq!(export.messages.len(), 3, "3 talk turns, no instrumentation rows");
+        assert!(export.messages.iter().all(|m| m.stream == "talk"));
+
+        // one round per HUMAN message — the card's count invariant.
+        let humans = export.messages.iter().filter(|m| m.author_role == "user").count();
+        assert_eq!(export.rounds.len(), humans);
+        assert_eq!(export.rounds.len(), 2);
+
+        // every round carries the ContextTrace that turn actually saw.
+        assert!(export.rounds.iter().all(|r| r.context_trace.is_some()));
+        assert_eq!(export.rounds[0].message.content, "Wer war der Schiedsrichter?");
+
+        // the full dream log is bundled.
+        assert_eq!(export.dream_log.len(), 1);
+        assert_eq!(export.dream_log[0].kind, "dream");
+        assert_eq!(export.dream_log[0].phase, "extract");
+    }
 
     // ───────────────────────── recall eval (the scoreboard) ─────────────────────────
     //

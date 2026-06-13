@@ -155,6 +155,38 @@ export function brainBackfill(identity: string): Promise<{ scanned: number; inge
 	return brainRuntime('brainBackfill', { identity })
 }
 
+/** One persisted instrumentation entry (dream or activity step) — mirrors `aven_brain::LogEntry`. */
+export type BrainLogEntry = {
+	kind: 'dream' | 'activity' | string
+	phase: string
+	label: string
+	count: number
+	tokens: number
+	entities?: { name: string; kind: string }[]
+	atMs: number
+}
+
+/** The full-session debug bundle — mirrors `aven_brain::DebugExport` (board 0029 M3). */
+export type BrainDebugExport = {
+	owner: string
+	exportedAtMs: number
+	/** Whole message history (instrumentation excluded), oldest-first. */
+	messages: unknown[]
+	/** One entry per human message + the ContextTrace that turn saw. */
+	rounds: { message: unknown; contextTrace: ContextBundle['trace'] | null }[]
+	/** The full persisted dreaming/activity log, oldest-first. */
+	dreamLog: BrainLogEntry[]
+}
+
+/**
+ * Export the FULL session for debugging (board 0029 M3): whole message history + the per-round
+ * `ContextTrace` + the full persisted dreaming log, as one JSON. The brain aside's "Export debug
+ * session" button downloads this for offline analysis of recall quality over time.
+ */
+export function brainDebugExport(identity: string): Promise<BrainDebugExport> {
+	return brainRuntime('brainDebugExport', { identity })
+}
+
 /** Re-embed every memory with the CURRENT embedder (stub→gemma migration). */
 export function brainReembed(identity: string): Promise<{ reembedded: number; embedder: string }> {
 	return brainRuntime('brainReembed', { identity })

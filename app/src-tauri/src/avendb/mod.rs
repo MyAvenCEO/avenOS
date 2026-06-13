@@ -791,6 +791,9 @@ pub(crate) async fn avendb_runtime_dispatch(
 		}
 		"brainreembed" => brain_ipc::brain_ipc_reembed(app, mj, ss, pj_str(&pj, "identity")?).await,
 		"brainbackfill" => brain_ipc::brain_ipc_backfill(app, mj, ss, pj_str(&pj, "identity")?).await,
+		"braindebugexport" => {
+			brain_ipc::brain_ipc_debug_export(app, mj, ss, pj_str(&pj, "identity")?).await
+		}
 		"brainentities" => brain_ipc::brain_ipc_entities(app, mj, ss, pj_str(&pj, "identity")?).await,
 		"brainentitycard" => {
 			brain_ipc::brain_ipc_entity_card(
@@ -1046,6 +1049,9 @@ pub async fn brain_runtime(
 			brain_ipc::brain_ipc_rebuild_graph(&app, &mj, &ss, pj_str(&pj, "identity")?).await
 		}
 		"brainbackfill" => brain_ipc::brain_ipc_backfill(&app, &mj, &ss, pj_str(&pj, "identity")?).await,
+		"braindebugexport" => {
+			brain_ipc::brain_ipc_debug_export(&app, &mj, &ss, pj_str(&pj, "identity")?).await
+		}
 		"brainentities" => brain_ipc::brain_ipc_entities(&app, &mj, &ss, pj_str(&pj, "identity")?).await,
 		"brainentitycard" => {
 			brain_ipc::brain_ipc_entity_card(

@@ -387,7 +387,26 @@ pub(crate) async fn brain_ipc_assemble_context(
 		.assemble_context(&query, &opts)
 		.await
 		.map_err(|e| e.to_string())?;
+	// Persist this round's trace to the sealed `trace` stream (board 0029 M3) so the debug
+	// export can reconstruct exactly what context each turn saw. Best-effort.
+	let _ = brain.persist_context_trace(&bundle.trace).await;
 	serde_json::to_value(bundle).map_err(|e| e.to_string())
+}
+
+/// Full-session debug export (board 0029 M3): ONE JSON with the whole message history, the
+/// per-round `ContextTrace`, and the full dreaming log — downloaded by the "Export debug session"
+/// button in the brain aside for offline analysis of recall quality over time.
+pub(crate) async fn brain_ipc_debug_export(
+	app: &tauri::AppHandle,
+	mj: &ManagedAvenDb,
+	ss: &SelfState,
+	identity: String,
+) -> Result<serde_json::Value, String> {
+	let client = with_connected_client(mj, app, ss).await?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(app, client, &shell, &identity).await?;
+	let export = brain.debug_export().await.map_err(|e| e.to_string())?;
+	serde_json::to_value(export).map_err(|e| e.to_string())
 }
 
 /// One-shot backfill: ingest this identity's existing `messages` history into the
@@ -610,7 +629,7 @@ pub async fn brain_do_extract(
 	};
 	let self_tok = self_tokens.unwrap_or(0);
 
-	serde_json::to_value(match result {
+	let step = match result {
 		Some((n_mems, entities, n_facts, tokens)) => aven_brain::DreamStep {
 			phase: "extract".into(),
 			label: format!(
@@ -632,8 +651,14 @@ pub async fn brain_do_extract(
 			next_cursor: 100,
 			done: false,
 		},
-	})
-	.map_err(|e| e.to_string())
+	};
+	// Persist to the sealed `dreamlog` stream (board 0029 M2) — best-effort.
+	let now = std::time::SystemTime::now()
+		.duration_since(std::time::UNIX_EPOCH)
+		.map(|d| d.as_millis() as i64)
+		.unwrap_or(0);
+	let _ = brain.log_dream_step(&step, now).await;
+	serde_json::to_value(step).map_err(|e| e.to_string())
 }
 
 /// One step of a STEPPED dream — a single bounded phase. The caller loops (cursor 0 → done),
@@ -658,5 +683,9 @@ pub(crate) async fn brain_ipc_dream_step(
 		.map(|d| d.as_millis() as i64)
 		.unwrap_or(0);
 	let step = brain.dream_step(cursor, now).await.map_err(|e| e.to_string())?;
+	// Persist the dream step to the sealed `dreamlog` stream (board 0029 M2) so the dreaming
+	// history accumulates across turns/restarts and the debug export can replay it. Best-effort:
+	// a log-write failure must never fail the dream pass.
+	let _ = brain.log_dream_step(&step, now).await;
 	serde_json::to_value(step).map_err(|e| e.to_string())
 }

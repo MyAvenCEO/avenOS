@@ -98,14 +98,18 @@ in the log stream so the export can reconstruct "what context did turn N actuall
 
 Each box provable from the transcript.
 
-- [ ] M1: `recall_eval_no_regression` exits 0 — mean fact-coverage@8 ≥ recorded baseline over ≥40
-      probes / ≥6 docs / ≥3 multi-turn+multi-doc sequences; `recall_eval --ignored` prints the table.
-- [ ] M2: `dream_log_persists_across_brain_instances` exits 0 — sealed log round-trips; a fresh Brain
-      reads the same entries; the entries are sealed (not plaintext) at rest.
-- [ ] M3: `debug_export_bundles_messages_traces_and_dreamlog` exits 0 — one JSON with messages +
-      per-round ContextTrace + dream log; round count == human-message count.
-- [ ] No regression: existing aven-brain lib + integration tests stay green.
-- [ ] `cargo build -p aven-brain -p aven-os-app` exits 0; frontend svelte-check clean.
+- [x] M1: `recall_eval_no_regression` exits 0 — mean fact-coverage@8 = **98.9%** ≥ baseline 0.45 over
+      **44 probes / 6 docs** incl. multi-turn + a 300-memory noise haystack; `recall_eval --ignored`
+      prints the per-scenario table (multi-turn before/after doc-B + blob-vs-chunked). _(commit 64ceef9)_
+- [x] M2: `dream_log_persists_across_brain_instances` exits 0 — a dream step + an activity step written
+      to the sealed `dreamlog` stream round-trip through the store; a FRESH `Brain::over` the same client
+      reads them back identically; a wrong-key Brain reads **nothing** (proves sealed, not plaintext).
+- [x] M3: `debug_export_bundles_messages_traces_and_dreamlog` exits 0 — one JSON = full message history
+      (instrumentation excluded) + a per-round `ContextTrace` (sealed `trace` stream) + the dream log;
+      `rounds.len() == count(messages where author == user)`.
+- [x] No regression: 38 aven-brain lib tests + 3 frontier integration tests stay green; suite warning-clean.
+- [x] `cargo build -p aven-brain -p aven-os-app` exits 0; app `bun run check` = 0 errors / 0 warnings
+      (also fixed a pre-existing `aven-ui/brand-style.ts` type error that blocked the gate).
 
 ## Verification
 
@@ -119,6 +123,19 @@ cargo build -p aven-brain -p aven-os-app
 
 Newest entry first.
 
+- `2026-06-13` — **Build complete (M1+M2+M3), all three named tests + build + svelte-check green.**
+  - **M1**: scaled `recall_eval` 10× — 6 fixture docs, 44 single/multi-turn probes, + a 300-memory
+    noise haystack so fact-coverage@8 has teeth (98.9%, sensitive to ranking/budget regressions).
+    `recall_eval_no_regression` gate added (baseline 0.45). _(commit 64ceef9)_
+  - **M2**: persisted dreaming/activity logs to the sealed `dreamlog` stream — `Brain::append_log`/
+    `log_dream_step`/`read_log`; round-trips through the store, survives a fresh `Brain` instance,
+    unreadable under the wrong key. Wired into `brain_ipc_dream_step` + `brain_do_extract` (best-effort).
+  - **M3**: per-round `ContextTrace` persisted to the sealed `trace` stream (`persist_context_trace`,
+    wired into `brain_ipc_assemble_context`); `Brain::debug_export` bundles messages + per-round trace
+    + dream log into one JSON; `braindebugexport` IPC + `brainDebugExport` API + an "export session"
+    button in `TalkBrainAside` that downloads it. Added `Deserialize` to the trace/dream types.
+  - Incidental: fixed a pre-existing `aven-ui/brand-style.ts` svelte-check type error; removed 2 unused
+    imports in the frontier integration tests (suite now warning-clean).
 - `2026-06-13` — Discovery: uncovered the real goal (make memory quality PROVABLE + the brain
   debuggable, as the foundation for recall-quality fixes). Made it measurable (3 named tests + the
   scoreboard). Confirmed: sealed avenDB log stream for persistence; one foundation card, M1/M2/M3.

@@ -161,6 +161,9 @@ export function withBrand(style: StyleDef): StyleDef {
 	return {
 		tokens: mergeDeep(brandTokens, (style.tokens ?? {}) as Record<string, unknown>),
 		components: style.components,
-		selectors: mergeDeep(brandBaseSelectors, (style.selectors ?? {}) as Record<string, unknown>)
+		selectors: mergeDeep(
+			brandBaseSelectors,
+			(style.selectors ?? {}) as Record<string, unknown>
+		) as Record<string, Record<string, unknown>>
 	}
 }

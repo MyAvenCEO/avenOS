@@ -5,7 +5,7 @@
  * broken down by context layer (L0 self · L1 gist · L2 entities · L3 search), plus the
  * inner query and budget. This is the exact context fed to the AI for this turn.
  */
-import { type BrainEntity, brainEntities, brainRebuildGraph } from '$lib/brain/api'
+import { type BrainEntity, brainDebugExport, brainEntities, brainRebuildGraph } from '$lib/brain/api'
 import {
 	brainActivity,
 	brainDreamLog,
@@ -63,6 +63,31 @@ async function exportActivity(): Promise<void> {
 	if (await copyToClipboard(JSON.stringify(payload, null, 2))) {
 		exported = true
 		setTimeout(() => (exported = false), 1500)
+	}
+}
+
+let exportingSession = $state(false)
+/**
+ * Download the FULL debug session (board 0029 M3): the whole message history + every per-round
+ * ContextTrace + the full persisted dreaming log, as one JSON file — for offline analysis of
+ * recall quality over time. Unlike `exportActivity` (this turn only), this is the entire session.
+ */
+async function downloadDebugSession(): Promise<void> {
+	if (exportingSession) return
+	exportingSession = true
+	try {
+		const bundle = await brainDebugExport(identityId)
+		const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' })
+		const url = URL.createObjectURL(blob)
+		const a = document.createElement('a')
+		a.href = url
+		a.download = `brain-debug-${identityId}-${bundle.exportedAtMs}.json`
+		a.click()
+		URL.revokeObjectURL(url)
+	} catch (err) {
+		console.error('debug export failed', err)
+	} finally {
+		exportingSession = false
 	}
 }
 
@@ -242,6 +267,15 @@ function phaseStyle(phase: string): { dot: string; text: string } {
 						onclick={() => void exportActivity()}
 					>
 						{exported ? 'copied ✓' : 'export'}
+					</button>
+					<button
+						type="button"
+						class="border-border/60 text-muted-foreground hover:bg-card hover:text-foreground rounded-md border px-2 py-0.5 text-[10px] transition disabled:opacity-50"
+						disabled={exportingSession}
+						title="Download the full session: messages + every per-round context + dreaming log"
+						onclick={() => void downloadDebugSession()}
+					>
+						{exportingSession ? 'exporting…' : 'export session'}
 					</button>
 				</div>
 				<ol class="space-y-2">

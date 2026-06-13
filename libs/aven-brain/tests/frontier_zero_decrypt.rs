@@ -6,7 +6,6 @@
 //! test in its own process means no parallel test can bump the epoch between the two assembles —
 //! the brain itself holds NO frontier logic (it purely consumes aven-db's epoch).
 
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
