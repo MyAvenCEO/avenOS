@@ -12,6 +12,7 @@
 //! the challenge is nonce-bound (no channel binding). Config is all env; the
 //! identity seed is a Sprite secret; `AVEN_SERVER_DATA_DIR` is the persistent path.
 
+mod admission;
 mod aven_ceo;
 mod ws_server;
 
@@ -120,16 +121,93 @@ async fn sync_handler(
 /// reject a forged or relabeled row whose owner-binding signature is invalid, before
 /// storing or forwarding it (members enforce membership on their side). Outbound stays
 /// permissive: the relay stores & forwards ciphertext for everyone.
-struct ServerApplyGate;
+struct ServerApplyGate {
+    /// Identity (SAFE) scoped tables — those carrying an `owner` column, derived once from
+    /// the live schema (`aven_db::owner_scoped_table_names`). A row on one of these MUST
+    /// carry an owner-binding to apply; the relay denies a bindingless one fail-closed,
+    /// byte-for-byte with the client gate (`biscuit_resolver.rs`). Non-owner-scoped tables
+    /// (local/non-E2E) are not gated here.
+    spark_scoped: std::collections::HashSet<String>,
+    /// Spark **data/content** tables (owner-scoped minus the trust/identity/control tables
+    /// safes/safe_controllers/keyshares). A non-member peer is denied OUTBOUND reads of
+    /// these (admission, A8/A1), so it cannot pull members' content, while the trust tables
+    /// stay open for onboarding. Mirrors the app's `is_spark_data_table`.
+    spark_data: std::collections::HashSet<String>,
+    /// avenCEO's member device did:keys (the relay's roster, the access-control SSOT),
+    /// refreshed live by the admin tick. Trust-on-publish until the handshake membership-
+    /// proof lands (see `admission`). Shared `std::sync::RwLock` because `may_sync` is sync.
+    roster: std::sync::Arc<std::sync::RwLock<std::collections::HashSet<String>>>,
+}
+
+impl ServerApplyGate {
+    fn new(
+        schema: &aven_db::Schema,
+        roster: std::sync::Arc<std::sync::RwLock<std::collections::HashSet<String>>>,
+    ) -> Self {
+        let spark_scoped: std::collections::HashSet<String> =
+            aven_db::owner_scoped_table_names(schema).into_iter().collect();
+        // Content tables = owner-scoped minus the trust/identity/control set (kept open for
+        // onboarding). Matches `app/src-tauri/.../identity_sync.rs::is_spark_data_table`.
+        let trust_tables = ["safes", "safe_controllers", "keyshares"];
+        let spark_data = spark_scoped
+            .iter()
+            .filter(|t| !trust_tables.contains(&t.as_str()))
+            .cloned()
+            .collect();
+        Self { spark_scoped, spark_data, roster }
+    }
+
+    fn is_spark_scoped(&self, table: &str) -> bool {
+        self.spark_scoped.contains(table)
+    }
+
+    /// Resolve a sync subject to its device did:key (for roster membership).
+    fn subject_did(subject: &aven_db::SyncTargetId) -> Option<String> {
+        match subject {
+            aven_db::SyncTargetId::SignerDid(d) => Some(d.clone()),
+            aven_db::SyncTargetId::Client(p) => {
+                aven_db::did_key::signer_did_from_ed25519(&p.0).ok()
+            }
+        }
+    }
+}
 
 impl aven_db::CapabilityResolver for ServerApplyGate {
     fn may_sync(
         &self,
-        _subject: &aven_db::SyncTargetId,
+        subject: &aven_db::SyncTargetId,
         _op: aven_db::AccOp,
-        _res: &aven_db::ResourceCoord,
+        res: &aven_db::ResourceCoord,
     ) -> aven_db::CapDecision {
-        aven_db::CapDecision::Allow
+        // Admission (A8/A1) — a non-member peer may not pull spark DATA/content rows. The
+        // trust/identity/control tables (safes/keyshares/signers/…) stay open so a new
+        // device can still onboard. Membership = the peer's device did:key is in avenCEO's
+        // roster (the relay's ACL SSOT). Non-content tables are always allowed.
+        if !self.spark_data.contains(&res.table) {
+            return aven_db::CapDecision::Allow;
+        }
+        let Some(did) = Self::subject_did(subject) else {
+            return aven_db::CapDecision::DenyPermanent;
+        };
+        let is_member = self
+            .roster
+            .read()
+            .map(|r| r.contains(did.trim()))
+            .unwrap_or(false);
+        let tier = if is_member {
+            admission::PeerTier::Member
+        } else {
+            admission::PeerTier::Onboarding
+        };
+        if admission::outbound_allowed(tier, &res.table, &self.spark_data) {
+            aven_db::CapDecision::Allow
+        } else {
+            tracing::debug!(
+                table = %res.table, %did,
+                "admission-deny[non-member]: content table withheld from non-member"
+            );
+            aven_db::CapDecision::DenyPermanent
+        }
     }
 
     fn verify_on_apply(
@@ -141,7 +219,18 @@ impl aven_db::CapabilityResolver for ServerApplyGate {
         proof: Option<&[u8]>,
         edit_sig: Option<&[u8]>,
     ) -> aven_db::CapDecision {
+        // A3 — fail-closed, no exceptions: a spark/identity-scoped (owner-bearing) row MUST
+        // carry an owner-binding to apply, exactly like the client gate (`biscuit_resolver.rs`).
+        // The relay was the last fail-OPEN peer; this closes it. Non-owner-scoped tables
+        // (local/non-E2E) carry no binding and stay permissive.
         let Some(proof) = proof else {
+            if self.is_spark_scoped(&res.table) {
+                tracing::warn!(
+                    table = %res.table, row = %res.row_id.uuid(),
+                    "relay-deny[no-binding]: spark-scoped row missing owner-binding"
+                );
+                return aven_db::CapDecision::DenyPermanent;
+            }
             return aven_db::CapDecision::Allow;
         };
         let Ok(meta) = std::str::from_utf8(proof) else {
@@ -248,6 +337,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // replicated row batches; it holds NO keyshares, so every batch stays ciphertext.
     let schema =
         avenos_schema_hash::embedded_schema().map_err(|e| format!("load schema: {e}"))?;
+    // Identity-scoped (owner-bearing) tables, derived once from the live schema — the relay
+    // apply gate denies a bindingless row on any of these (A3, fail-closed). Computed before
+    // `schema` is moved into the engine context below. The shared `roster` is avenCEO's
+    // member did:keys (admission SSOT), refreshed by the admin tick and read in `may_sync`.
+    let roster: std::sync::Arc<std::sync::RwLock<std::collections::HashSet<String>>> =
+        std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashSet::new()));
+    let apply_gate = ServerApplyGate::new(&schema, roster.clone());
     let data_dir = cfg.data_dir.clone();
     tracing::info!(data_dir = %data_dir.display(), "durable storage (RocksDB)");
     let ctx = AppContext {
@@ -280,7 +376,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Phase 2 — every peer verifies. Install the relay-proof apply gate so a forged or
     // relabeled row is rejected on apply even in transit through the server.
-    if let Err(e) = engine.set_resolver(std::sync::Arc::new(ServerApplyGate)) {
+    if let Err(e) = engine.set_resolver(std::sync::Arc::new(apply_gate)) {
         tracing::warn!("install server apply gate: {e}");
     }
 
@@ -306,10 +402,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // shutdown and reclaim its engine clone (to finalize RocksDB via sole ownership).
     let engine_for_peers = engine.clone();
     let grant_signing = identity.clone();
+    let roster_for_peers = roster.clone();
     let peer_task = tokio::spawn(async move {
         while let Some(peer) = new_peers.recv().await {
             if let Err(e) = engine_for_peers.register_peer_sync_client(peer) {
                 tracing::warn!(%peer, "register peer: {e}");
+            }
+            // Admission (A8/A1) — refresh avenCEO's roster (the ACL SSOT) on connect so a
+            // just-granted member classifies correctly, then log this peer's tier. The
+            // outbound enforcement itself runs in `ServerApplyGate::may_sync` against this
+            // shared roster (a non-member is denied content tables; trust tables stay open
+            // for onboarding). Roster is trust-on-publish — see admission.rs / board 0023.
+            refresh_roster(&engine_for_peers, &roster_for_peers, avenceo_id).await;
+            match aven_db::did_key::signer_did_from_ed25519(&peer.0) {
+                Ok(peer_did) => {
+                    let is_member = roster_for_peers
+                        .read()
+                        .map(|r| r.contains(peer_did.trim()))
+                        .unwrap_or(false);
+                    tracing::info!(
+                        %peer, member = is_member,
+                        roster_size = roster_for_peers.read().map(|r| r.len()).unwrap_or(0),
+                        "admission: peer tier (enforced outbound)"
+                    );
+                }
+                Err(e) => tracing::warn!(%peer, "admission: peer did: {e}"),
             }
             // S.4 — grant the first human SAFE (not the device signer) admin on avenCEO.
             // The human SAFE is created AFTER first connect, so this also runs on a periodic
@@ -328,6 +445,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // invite gate opens within seconds — no device reconnect required.
     let engine_for_tick = engine.clone();
     let tick_signing = identity.clone();
+    let roster_for_tick = roster.clone();
     let admin_tick = tokio::spawn(async move {
         let mut iv = tokio::time::interval(std::time::Duration::from_secs(5));
         iv.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -338,6 +456,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             {
                 tracing::debug!("avenCEO human-admin tick: {e}");
             }
+            // Keep the admission roster (the relay's ACL SSOT) current as devices are
+            // granted / publish their signers, so `may_sync` enforces against fresh state.
+            refresh_roster(&engine_for_tick, &roster_for_tick, avenceo_id).await;
         }
     });
 
@@ -384,9 +505,147 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Refresh the shared avenCEO member roster from the durable store (best-effort). Reads the
+/// device did:keys published as avenCEO signers (plaintext routing columns — no DEK) and
+/// swaps them into the shared set the apply gate reads in `may_sync`.
+async fn refresh_roster(
+    engine: &AvenDbClient,
+    roster: &std::sync::Arc<std::sync::RwLock<std::collections::HashSet<String>>>,
+    avenceo_id: uuid::Uuid,
+) {
+    match admission::read_avenceo_member_signer_dids(engine, avenceo_id).await {
+        Ok(members) => {
+            if let Ok(mut w) = roster.write() {
+                *w = members;
+            }
+        }
+        Err(e) => tracing::debug!("admission roster refresh: {e}"),
+    }
+}
+
 /// A storage-open failure a blind replica can recover from by resetting its
 /// (re-pullable) cache — chiefly a RocksDB store left unfinalized by a hard crash.
 fn store_is_corrupt(e: &impl std::fmt::Display) -> bool {
     let m = e.to_string();
     m.contains("Corruption") || m.contains("wal_dir") || m.contains("rocksdb open")
+}
+
+#[cfg(test)]
+mod apply_gate_tests {
+    //! A3 — the relay apply gate is fail-closed on identity (SAFE) scoped rows, byte-for-byte
+    //! with the client gate: a spark-scoped row with no owner-binding is rejected; a
+    //! non-spark-scoped row without one is allowed; a validly bound + edit-signed row is
+    //! accepted; a forged/relabeled/tampered one is rejected.
+    use super::ServerApplyGate;
+    use aven_caps::ownership::{mint_owner_binding, sign_batch};
+    use aven_db::{AccOp, CapDecision, CapabilityResolver, ObjectId, PeerId, ResourceCoord, SyncTargetId};
+    use uuid::Uuid;
+
+    /// A gate whose only identity-scoped table is `todos` (no schema needed for the unit).
+    fn gate() -> ServerApplyGate {
+        ServerApplyGate {
+            spark_scoped: ["todos".to_string()].into_iter().collect(),
+            spark_data: ["todos".to_string()].into_iter().collect(),
+            roster: std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashSet::new())),
+        }
+    }
+
+    fn subject() -> SyncTargetId {
+        SyncTargetId::Client(PeerId([7u8; 32]))
+    }
+
+    fn coord(table: &str, row: Uuid) -> ResourceCoord {
+        ResourceCoord::new(format!("urn:{row}"), table.to_string(), ObjectId::from_uuid(row))
+    }
+
+    fn is_deny(d: CapDecision) -> bool {
+        matches!(d, CapDecision::DenyPermanent)
+    }
+    fn is_allow(d: CapDecision) -> bool {
+        matches!(d, CapDecision::Allow)
+    }
+
+    #[test]
+    fn apply_gate_denies_spark_scoped_row_without_binding() {
+        let g = gate();
+        let res = coord("todos", Uuid::from_u128(0x11));
+        let d = g.verify_on_apply(&subject(), AccOp::Write, &res, &[9u8; 32], None, None);
+        assert!(is_deny(d), "spark-scoped row with no owner-binding must be denied");
+    }
+
+    #[test]
+    fn apply_gate_allows_non_spark_scoped_without_binding() {
+        let g = gate();
+        let res = coord("humans", Uuid::from_u128(0x22)); // not owner-scoped → not gated
+        let d = g.verify_on_apply(&subject(), AccOp::Write, &res, &[9u8; 32], None, None);
+        assert!(is_allow(d), "non-spark-scoped row without a binding stays permissive");
+    }
+
+    #[test]
+    fn apply_gate_allows_valid_bound_signed_row() {
+        let g = gate();
+        let sk = ed25519_dalek::SigningKey::from_bytes(&[3u8; 32]);
+        let value = Uuid::from_u128(0x55);
+        let owner = Uuid::from_u128(0xABCD);
+        let digest = [9u8; 32];
+        let binding = mint_owner_binding(&sk, value, owner).unwrap();
+        let es = sign_batch(&sk, &digest).unwrap();
+        let res = coord("todos", value);
+        let d = g.verify_on_apply(
+            &subject(),
+            AccOp::Write,
+            &res,
+            &digest,
+            Some(binding.to_meta_string().as_bytes()),
+            Some(es.to_meta_string().as_bytes()),
+        );
+        assert!(is_allow(d), "an authentic owner-binding + edit-sig over the receiver digest is accepted");
+    }
+
+    #[test]
+    fn apply_gate_rejects_forged_or_tampered_row() {
+        let g = gate();
+        let sk = ed25519_dalek::SigningKey::from_bytes(&[3u8; 32]);
+        let value = Uuid::from_u128(0x55);
+        let owner = Uuid::from_u128(0xABCD);
+        let signed_digest = [9u8; 32];
+        let binding = mint_owner_binding(&sk, value, owner).unwrap();
+        let es = sign_batch(&sk, &signed_digest).unwrap();
+        let res = coord("todos", value);
+
+        // (a) Tampered in flight: the receiver recomputes a DIFFERENT digest than the one signed.
+        let tampered = [10u8; 32];
+        let d = g.verify_on_apply(
+            &subject(),
+            AccOp::Write,
+            &res,
+            &tampered,
+            Some(binding.to_meta_string().as_bytes()),
+            Some(es.to_meta_string().as_bytes()),
+        );
+        assert!(is_deny(d), "edit-sig over a different digest (data tampered) must be denied");
+
+        // (b) Relabeled row: binding names a different row id than the one being applied.
+        let other = coord("todos", Uuid::from_u128(0x66));
+        let d2 = g.verify_on_apply(
+            &subject(),
+            AccOp::Write,
+            &other,
+            &signed_digest,
+            Some(binding.to_meta_string().as_bytes()),
+            Some(es.to_meta_string().as_bytes()),
+        );
+        assert!(is_deny(d2), "owner-binding for a different row id must be denied");
+
+        // (c) Missing edit-sig on a bound spark-scoped row.
+        let d3 = g.verify_on_apply(
+            &subject(),
+            AccOp::Write,
+            &res,
+            &signed_digest,
+            Some(binding.to_meta_string().as_bytes()),
+            None,
+        );
+        assert!(is_deny(d3), "a bound row with no edit-signature must be denied");
+    }
 }
