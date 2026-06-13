@@ -265,7 +265,7 @@ validation) so a bad mapping can't brick the fleet. Rewrite the stale fly runboo
 ## Hand-off
 
 ```
-/aven-build 0023-aven-node-caps-single-access-gate
+/aven-build 0026-aven-node-caps-single-access-gate
 ```
 
 …or drive the loop directly:
