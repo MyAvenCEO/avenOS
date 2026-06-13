@@ -441,6 +441,82 @@ pub(crate) async fn brain_ipc_debug_export(
 	serde_json::to_value(export).map_err(|e| e.to_string())
 }
 
+/// Build the debug export AND WRITE it to a file on disk, returning the absolute path. The Tauri
+/// webview can't do a browser `<a download>` blob save, so the frontend button calls this and shows
+/// the path. Lands under `<Documents>/.avenOS/<network>/debug-exports/`.
+pub(crate) async fn brain_ipc_debug_export_save(
+	app: &tauri::AppHandle,
+	mj: &ManagedAvenDb,
+	ss: &SelfState,
+	identity: String,
+) -> Result<serde_json::Value, String> {
+	let client = with_connected_client(mj, app, ss).await?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(app, client, &shell, &identity).await?;
+	let export = brain.debug_export().await.map_err(|e| e.to_string())?;
+	let json = serde_json::to_string_pretty(&export).map_err(|e| e.to_string())?;
+
+	let dir = tauri_plugin_self::paths::aven_os_app_base(app)?.join("debug-exports");
+	std::fs::create_dir_all(&dir).map_err(|e| format!("create debug-exports dir: {e}"))?;
+	let fname = format!("brain-debug-{}-{}.json", identity.trim(), export.exported_at_ms);
+	let path = dir.join(&fname);
+	std::fs::write(&path, json.as_bytes()).map_err(|e| format!("write {}: {e}", path.display()))?;
+
+	Ok(json!({
+		"path": path.to_string_lossy(),
+		"bytes": json.len(),
+		"messages": export.messages.len(),
+		"rounds": export.rounds.len(),
+		"dreamLog": export.dream_log.len(),
+	}))
+}
+
+/// Persist a batch of `activity`-timeline steps (board 0029 M2): the frontend Activity tab is live
+/// `$state`, so at turn-end the app ships its steps here to be sealed into the `dreamlog` stream —
+/// so the perf timeline survives reload and rides along in the debug export. Best-effort per entry.
+pub(crate) async fn brain_ipc_append_activity(
+	app: &tauri::AppHandle,
+	mj: &ManagedAvenDb,
+	ss: &SelfState,
+	identity: String,
+	entries: Vec<ActivityLogIn>,
+) -> Result<serde_json::Value, String> {
+	let client = with_connected_client(mj, app, ss).await?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(app, client, &shell, &identity).await?;
+	let mut written = 0usize;
+	for e in entries {
+		let entry = aven_brain::LogEntry {
+			kind: "activity".to_string(),
+			phase: e.phase,
+			label: e.label,
+			detail: e.detail,
+			count: 0,
+			tokens: 0,
+			ms: e.ms,
+			entities: Vec::new(),
+			at_ms: e.at_ms,
+		};
+		if brain.append_log(&entry).await.is_ok() {
+			written += 1;
+		}
+	}
+	Ok(json!({ "written": written }))
+}
+
+/// One activity step from the frontend timeline (board 0029 M2).
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ActivityLogIn {
+	pub phase: String,
+	pub label: String,
+	#[serde(default)]
+	pub detail: Option<String>,
+	#[serde(default)]
+	pub ms: i64,
+	pub at_ms: i64,
+}
+
 /// One-shot backfill: ingest this identity's existing `messages` history into the
 /// brain (idempotent — `content_hash` dedups re-runs). Bodies are read through the
 /// shell's hydration (sealed columns opened with the identity DEK).

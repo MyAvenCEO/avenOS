@@ -13,7 +13,13 @@
 import { getContext, setContext } from 'svelte'
 import { persistSparkFiles } from '$lib/avendb/intent-files'
 import type { AvenDbStore } from '$lib/avendb/store.svelte'
-import { brainAssembleContext, brainDoExtract, brainDreamStep, brainIngest } from '$lib/brain/api'
+import {
+	brainAppendActivity,
+	brainAssembleContext,
+	brainDoExtract,
+	brainDreamStep,
+	brainIngest
+} from '$lib/brain/api'
 import {
 	EMBED_MODEL_LABEL,
 	embedDownloadFraction,
@@ -28,6 +34,7 @@ import {
 	activityFinish,
 	activityStart,
 	beginRoundtrip,
+	brainActivity,
 	dreamLogEnd,
 	dreamLogStart,
 	dreamLogStep,
@@ -701,6 +708,21 @@ export function createIdentityAgent(deps: {
 			// The turn is over: stop "thinking"; resolved badges linger via the floating-chip timer.
 			phase = 'idle'
 			activityEnd()
+			// Persist this turn's activity timeline (store · recall · model · tools, with timings) to
+			// the sealed dreamlog stream so the perf history survives reload and rides along in the
+			// debug export (board 0029 M2). Best-effort, fire-and-forget.
+			if (env.tauri && env.canonicalSparkId && brainActivity.steps.length > 0) {
+				void brainAppendActivity(
+					env.canonicalSparkId,
+					brainActivity.steps.map((s) => ({
+						phase: s.kind,
+						label: s.label,
+						detail: s.detail,
+						ms: s.ms ?? 0,
+						atMs: s.startMs
+					}))
+				).catch(() => {})
+			}
 			// Safety: never leave a HITL gate dangling if the turn ended unexpectedly.
 			if (pendingConfirm) settleConfirm(false)
 		}

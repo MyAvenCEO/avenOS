@@ -794,6 +794,14 @@ pub(crate) async fn avendb_runtime_dispatch(
 		"braindebugexport" => {
 			brain_ipc::brain_ipc_debug_export(app, mj, ss, pj_str(&pj, "identity")?).await
 		}
+		"braindebugexportsave" => {
+			brain_ipc::brain_ipc_debug_export_save(app, mj, ss, pj_str(&pj, "identity")?).await
+		}
+		"brainappendactivity" => {
+			let entries = serde_json::from_value(pj.get("entries").cloned().unwrap_or_default())
+				.map_err(|e| format!("brainappendactivity: entries: {e}"))?;
+			brain_ipc::brain_ipc_append_activity(app, mj, ss, pj_str(&pj, "identity")?, entries).await
+		}
 		"brainentities" => brain_ipc::brain_ipc_entities(app, mj, ss, pj_str(&pj, "identity")?).await,
 		"brainentitycard" => {
 			brain_ipc::brain_ipc_entity_card(
@@ -1051,6 +1059,14 @@ pub async fn brain_runtime(
 		"brainbackfill" => brain_ipc::brain_ipc_backfill(&app, &mj, &ss, pj_str(&pj, "identity")?).await,
 		"braindebugexport" => {
 			brain_ipc::brain_ipc_debug_export(&app, &mj, &ss, pj_str(&pj, "identity")?).await
+		}
+		"braindebugexportsave" => {
+			brain_ipc::brain_ipc_debug_export_save(&app, &mj, &ss, pj_str(&pj, "identity")?).await
+		}
+		"brainappendactivity" => {
+			let entries = serde_json::from_value(pj.get("entries").cloned().unwrap_or_default())
+				.map_err(|e| format!("brainappendactivity: entries: {e}"))?;
+			brain_ipc::brain_ipc_append_activity(&app, &mj, &ss, pj_str(&pj, "identity")?, entries).await
 		}
 		"brainentities" => brain_ipc::brain_ipc_entities(&app, &mj, &ss, pj_str(&pj, "identity")?).await,
 		"brainentitycard" => {

@@ -502,12 +502,18 @@ pub struct LogEntry {
     pub phase: String,
     /// Human log line for the panel.
     pub label: String,
+    /// Extra one-line detail (an activity step's detail — e.g. the recall per-phase breakdown).
+    #[serde(default)]
+    pub detail: Option<String>,
     /// Items this step affected.
     #[serde(default)]
     pub count: i64,
     /// LLM tokens spent this step (0 for deterministic phases).
     #[serde(default)]
     pub tokens: i64,
+    /// Wall-clock duration of this step in ms (activity steps — the perf signal). 0 if N/A.
+    #[serde(default)]
+    pub ms: i64,
     /// Entities this step created/typed — clickable cards in the dreaming log.
     #[serde(default)]
     pub entities: Vec<DreamEntity>,
@@ -522,8 +528,10 @@ impl LogEntry {
             kind: "dream".to_string(),
             phase: step.phase.clone(),
             label: step.label.clone(),
+            detail: None,
             count: step.count,
             tokens: step.tokens,
+            ms: 0,
             entities: step.entities.clone(),
             at_ms,
         }
@@ -535,8 +543,10 @@ impl LogEntry {
             kind: "activity".to_string(),
             phase: phase.into(),
             label: label.into(),
+            detail: None,
             count,
             tokens: 0,
+            ms: 0,
             entities: Vec::new(),
             at_ms,
         }

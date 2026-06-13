@@ -180,11 +180,43 @@ export type BrainDebugExport = {
 
 /**
  * Export the FULL session for debugging (board 0029 M3): whole message history + the per-round
- * `ContextTrace` + the full persisted dreaming log, as one JSON. The brain aside's "Export debug
- * session" button downloads this for offline analysis of recall quality over time.
+ * `ContextTrace` + the full persisted dreaming log, as one JSON object.
  */
 export function brainDebugExport(identity: string): Promise<BrainDebugExport> {
 	return brainRuntime('brainDebugExport', { identity })
+}
+
+/** Summary returned by {@link brainDebugExportSave}. */
+export type BrainDebugExportSaved = {
+	/** Absolute path of the written JSON file. */
+	path: string
+	bytes: number
+	messages: number
+	rounds: number
+	dreamLog: number
+}
+
+/**
+ * Build the debug export AND WRITE it to a file on disk (the Tauri webview can't do a browser blob
+ * download), returning the absolute path. The "Export debug session" button calls this and shows
+ * where the file landed (`<Documents>/.avenOS/<network>/debug-exports/`).
+ */
+export function brainDebugExportSave(identity: string): Promise<BrainDebugExportSaved> {
+	return brainRuntime('brainDebugExportSave', { identity })
+}
+
+/** One activity-timeline step persisted to the sealed log (board 0029 M2). */
+export type BrainActivityLogIn = { phase: string; label: string; detail?: string; ms: number; atMs: number }
+
+/**
+ * Persist a turn's activity-timeline steps (store · recall · model · tools) to the sealed dreamlog
+ * stream so the perf timeline survives reload + rides along in the debug export. Best-effort.
+ */
+export function brainAppendActivity(
+	identity: string,
+	entries: BrainActivityLogIn[]
+): Promise<{ written: number }> {
+	return brainRuntime('brainAppendActivity', { identity, entries })
 }
 
 /** Re-embed every memory with the CURRENT embedder (stub→gemma migration). */

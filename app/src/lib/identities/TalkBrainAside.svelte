@@ -5,7 +5,7 @@
  * broken down by context layer (L0 self · L1 gist · L2 entities · L3 search), plus the
  * inner query and budget. This is the exact context fed to the AI for this turn.
  */
-import { type BrainEntity, brainDebugExport, brainEntities, brainRebuildGraph } from '$lib/brain/api'
+import { type BrainEntity, brainDebugExportSave, brainEntities, brainRebuildGraph } from '$lib/brain/api'
 import {
 	brainActivity,
 	brainDreamLog,
@@ -67,27 +67,27 @@ async function exportActivity(): Promise<void> {
 }
 
 let exportingSession = $state(false)
+let exportResult = $state<string | null>(null)
 /**
- * Download the FULL debug session (board 0029 M3): the whole message history + every per-round
- * ContextTrace + the full persisted dreaming log, as one JSON file — for offline analysis of
- * recall quality over time. Unlike `exportActivity` (this turn only), this is the entire session.
+ * Export the FULL debug session (board 0029 M3): the whole message history + every per-round
+ * ContextTrace + the full persisted dreaming/activity log. The Tauri webview can't do a browser
+ * blob download, so the Rust side WRITES the JSON to a file and returns its path; we show the path
+ * and copy it to the clipboard so it's easy to find and share.
  */
 async function downloadDebugSession(): Promise<void> {
 	if (exportingSession) return
 	exportingSession = true
+	exportResult = null
 	try {
-		const bundle = await brainDebugExport(identityId)
-		const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' })
-		const url = URL.createObjectURL(blob)
-		const a = document.createElement('a')
-		a.href = url
-		a.download = `brain-debug-${identityId}-${bundle.exportedAtMs}.json`
-		a.click()
-		URL.revokeObjectURL(url)
+		const saved = await brainDebugExportSave(identityId)
+		await copyToClipboard(saved.path)
+		exportResult = `Saved (${saved.messages} msgs · ${saved.rounds} rounds · ${saved.dreamLog} log) — path copied:\n${saved.path}`
 	} catch (err) {
+		exportResult = `Export failed: ${err instanceof Error ? err.message : String(err)}`
 		console.error('debug export failed', err)
 	} finally {
 		exportingSession = false
+		setTimeout(() => (exportResult = null), 12000)
 	}
 }
 
@@ -278,6 +278,10 @@ function phaseStyle(phase: string): { dot: string; text: string } {
 						{exportingSession ? 'exporting…' : 'export session'}
 					</button>
 				</div>
+				{#if exportResult}
+					<pre
+						class="border-border/40 text-muted-foreground mt-1 whitespace-pre-wrap break-all rounded-md border bg-muted/30 p-2 text-[10px] leading-snug">{exportResult}</pre>
+				{/if}
 				<ol class="space-y-2">
 					{#each activity.steps as s (s.id)}
 						{@const as = activityStyle(s.kind)}
