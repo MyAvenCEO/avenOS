@@ -105,12 +105,13 @@ async function main() {
 	// statically linked). Matches the release build (scripts/tauri-ios-asc.ts); TTS stays
 	// desktop-only (onnxruntime dylib can't ship on iOS).
 	const tauriArgs = ['bun', '--env-file=.env', 'x', '--bun', 'tauri', 'ios', 'dev']
-	// The optional [DEVICE] positional MUST precede `--features` (variadic — it would
-	// otherwise swallow the device name as a feature).
+	// The optional [DEVICE] positional MUST precede `--features` (variadic — it would otherwise
+	// swallow the device name as a feature).
 	if (simDevice) tauriArgs.push(simDevice)
-	// Tinfoil cloud is now in the crate DEFAULT but can't ship on iOS — opt out explicitly
-	// (STT + on-device LLM only), matching the release build (scripts/tauri-ios-asc.ts).
-	tauriArgs.push('--no-default-features', '--features', 'local-voice,local-llama')
+	// iOS feature set: STT + the on-device LLM. Tauri CLI 2.x has NO `--no-default-features` (only
+	// additive `-f/--features`), so iOS-incompatible features (Tinfoil cloud, onnxruntime dylibs)
+	// must be kept OUT of the crate `default` set (app/src-tauri/Cargo.toml) — can't strip here.
+	tauriArgs.push('--features', 'local-voice,local-llama')
 
 	const child = Bun.spawn(tauriArgs, {
 		cwd: path.join(repoRoot, 'app'),

@@ -32,18 +32,16 @@ name = "aven-os-app"
 path = "src/main.rs"
 
 [features]
-# DEFAULT = STT only, so it builds on BOTH desktop and iOS with no extra flags.
-# The on-device LLM (`local-llama`, llama.cpp/Metal, statically linked) DOES link on
-# iOS — the build.rs ggml-archive de-collision fix made it work — so the iOS release +
-# dev scripts opt in via `--features local-llama` (mobile ships STT + LLM). Only the
-# TTS onnxruntime dylib (`local-llm`/`local-tts`) still can't ship on iOS (Apple bans
-# standalone dylibs), so it stays desktop-only behind `desktop-ai`.
-# (`--no-default-features` still gives the light stub build for CI / quick checks.)
-# Cloud AI (Tinfoil confidential-cloud chat) is ON BY DEFAULT so Aven works out of the box for
-# desktop/dev with no `--features` flag (it activates only when `TINFOIL_API_KEY` is set). iOS
-# CANNOT ship the Tinfoil client, so the iOS scripts opt out with `--no-default-features
-# --features local-voice,local-llama`.
-default = ["local-voice", "tinfoil"]
+# DEFAULT = STT only — iOS-SAFE, builds on BOTH desktop and iOS with no extra flags.
+# WHY only STT: Tauri CLI 2.x has NO `--no-default-features` (only additive `-f/--features`), so
+# anything in `default` is FORCED into the iOS build — and the Tinfoil cloud client + the TTS/
+# embedding onnxruntime dylibs CANNOT ship on iOS. So they must NOT live in `default`; they're
+# opt-in via `desktop-ai` instead. Cloud is still ON out-of-the-box for desktop: every desktop
+# entry point (`dev:app:mac`, `release:app`) passes `--features desktop-ai`, which includes
+# `tinfoil`. Only a bare `cargo build` with no features lacks cloud (CI/quick-check, not how the
+# app runs). The on-device LLM (`local-llama`, llama.cpp/Metal, statically linked) DOES link on
+# iOS, so the iOS scripts add it via `--features local-voice,local-llama`.
+default = ["local-voice"]
 # Desktop (macOS) bundle of on-device AI on top of STT: llama.cpp LLM + MOSS TTS,
 # plus the Tinfoil confidential-cloud chat path (activates only when `TINFOIL_API_KEY`
 # is set in the env — local dev). macOS release + dev pass `--features desktop-ai`.
