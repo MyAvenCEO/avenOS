@@ -70,7 +70,7 @@ sync just moves the batches. (Chapter: [aven-db sync layer](01-aven-db-sync).)
 **7 · Frontier change-feed.** The newest batches are the **frontier**; a monotonic store epoch
 ticks on every commit, and `changes_since(cursor)` hands a reader exactly the batches it's missing.
 The insight: a remote peer and an in-process cache (the memory brain, a UI list) are the **same** —
-each holds a cursor and catches up the same reliable way. (Chapter: [the change-feed](02-frontiers-explained#4-the-big-idea-every-reader-is-a-peer).)
+each holds a cursor and catches up the same reliable way. (Chapter: [the change-feed](06-change-feed).)
 
 ---
 
@@ -112,8 +112,10 @@ frontier doesn't care who wrote it.
 ## Where to go next
 
 - **New to CRDTs/sync?** → [Frontiers, explained like you're 12](02-frontiers-explained)
-- **The sync engine** (SyncTarget / SyncAuthorizer / SyncTransport) → [aven-db sync layer](01-aven-db-sync)
+- **Storage, rows & safe writes** (RocksDB, batches, schema-checked CRUD) → [Storage & CRUD](05-storage-and-crud)
 - **Encryption at rest** (the Sealer, AAD coordinates, the unseal seam) → [Sealed cells](03-sealed-cells)
 - **Who may read/write/sync** (biscuit, SAFEs, invite-only) → [Capabilities](04-capabilities)
+- **The sync engine** (SyncTarget / SyncAuthorizer / SyncTransport) → [aven-db sync layer](01-aven-db-sync)
+- **Staying fresh** (`changes_since`, cursors, every reader a peer) → [The change-feed](06-change-feed)
 
-This chapter is the SSOT map; each link is the deep dive.
+This chapter is the SSOT map; each link is the deep dive — bottom of the stack to top.
