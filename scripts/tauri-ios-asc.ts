@@ -606,6 +606,11 @@ async function main() {
 		signingMode
 	)
 
+	// Wipe the SvelteKit static output FIRST so the iOS build embeds a CONSISTENT asset set — a
+	// stale `build/` (e.g. left by a prior mac/iOS run with different chunk hashes) otherwise makes
+	// the bundler reference hashed chunks the fresh build didn't emit ("failed to read asset …").
+	rmSync(path.join(appDir, 'build'), { recursive: true, force: true })
+
 	const frontendBuild = spawnSync('bun', ['run', 'build'], {
 		cwd: appDir,
 		stdio: 'inherit',
@@ -621,13 +626,6 @@ async function main() {
 		'tauri',
 		'ios',
 		'build',
-		// iOS ships STT + the on-device LLM (LFM2.5-1.2B GGUF via llama.cpp/Metal, statically
-		// linked — no dylib). TTS stays desktop-only (onnxruntime dylib can't ship on iOS), and
-		// the Tinfoil cloud client (now in the crate DEFAULT) also can't ship on iOS — so we
-		// `--no-default-features` and name the iOS set explicitly: STT + on-device LLM only.
-		'--no-default-features',
-		'--features',
-		'local-voice,local-llama',
 		'--export-method',
 		'app-store-connect',
 		'--target',
@@ -639,6 +637,11 @@ async function main() {
 	if (signingMode === 'manual') {
 		tauriArgs.push('--archive-only')
 	}
+	// iOS feature set: STT + the on-device LLM (LFM2.5-1.2B GGUF via llama.cpp/Metal, statically
+	// linked — no dylib). Tauri CLI 2.x has NO `--no-default-features` (only additive `-f/--features`),
+	// so iOS-incompatible features (Tinfoil cloud client, TTS/embedding onnxruntime dylibs) MUST be
+	// kept OUT of the crate `default` set (see app/src-tauri/Cargo.toml) — they can't be stripped here.
+	tauriArgs.push('--features', 'local-voice,local-llama')
 
 	const r = spawnSync('bunx', tauriArgs, { cwd: appDir, stdio: 'inherit', env: tauriEnv })
 	if (r.status !== 0) {

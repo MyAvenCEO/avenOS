@@ -203,6 +203,12 @@ async function main() {
 	tauriEnv.AVENOS_SERVER_WS_URL =
 		process.env.AVENOS_SERVER_WS_URL || 'wss://aven-ceo-bmrha.sprites.app/sync'
 
+	// Wipe the SvelteKit static output FIRST so `generate_context!` embeds a CONSISTENT asset set.
+	// A stale `build/` (e.g. left by a prior iOS/mac build with different chunk hashes) makes the
+	// fresh prerendered HTML/manifest reference hashed chunks the new build re-emitted under
+	// different names — Tauri then fails: "failed to read asset … nodes/58.*.js No such file".
+	rmSync(path.join(appDir, 'build'), { recursive: true, force: true })
+
 	const frontendBuild = spawnSync('bun', ['run', 'build'], {
 		cwd: appDir,
 		stdio: 'inherit',
