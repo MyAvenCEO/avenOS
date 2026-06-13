@@ -167,9 +167,15 @@ function spawnTauri(label: 'A' | 'B', colour: string, env: Record<string, string
 		instanceEnv.AVEN_PEER_SUFFIX = ' (B)'
 	}
 
-	// For B: pass the overlay as inline JSON to `tauri dev --config '{...}'`.
+	// Cloud AI (Tinfoil) lives behind the `desktop-ai` feature; the crate default is
+	// `local-voice` only, so WITHOUT this both dev instances compile `tinfoil` out and Aven
+	// reports "Cloud AI unavailable" no matter what's in `.env`. Match the single-instance
+	// `tauri:dev` script (`--features desktop-ai`) so both A and B get the cloud agent.
+	// For B: also pass the overlay as inline JSON to `tauri dev --config '{...}'`.
 	// Do NOT use `--` before --config — that routes it to cargo, not to the Tauri CLI.
-	const extraArgs = label === 'B' ? ['--config', TAURI_B_CONFIG] : []
+	const featureArgs = ['--features', 'desktop-ai']
+	const extraArgs =
+		label === 'B' ? ['--config', TAURI_B_CONFIG, ...featureArgs] : [...featureArgs]
 
 	return spawnLabelled(label, colour, 'bun', ['--bun', 'x', 'tauri', 'dev', ...extraArgs], {
 		cwd: appDir,
