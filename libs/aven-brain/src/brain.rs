@@ -490,6 +490,11 @@ pub struct Brain<E: Embedder> {
     embedder: E,
     sealer: Arc<dyn Sealer>,
     owner: ObjectId,
+    /// The device signing key, used to mint the **owner-binding** stamped on every row this
+    /// brain writes (memories / entities / links). Without it those owner-bearing rows reach
+    /// the fail-closed apply gate (relay + peers) with no binding and are rejected — so brain
+    /// data never syncs. `None` only for the in-memory/test path (no sync, no gate).
+    signer: Option<ed25519_dalek::SigningKey>,
 }
 
 impl<E: Embedder> Brain<E> {
@@ -509,23 +514,48 @@ impl<E: Embedder> Brain<E> {
             .await
             .map_err(|e| BrainError::Open(format!("{e:?}")))?;
         let sealer = Arc::new(KeySealer::random(*owner.uuid()));
-        Ok(Self::over(Arc::new(client), owner, embedder, sealer))
+        // In-memory brains never sync, so no binding is required (None).
+        Ok(Self::over(Arc::new(client), owner, embedder, sealer, None))
     }
 
     /// Wrap an existing client (the app's shared store) as `owner`'s brain. The
     /// sealer is the app's DEK-backed implementation — same AAD coordinates as the
-    /// device seal path, so hydrate/viewer open brain cells like any other.
+    /// device seal path, so hydrate/viewer open brain cells like any other. `signer` is the
+    /// device key that stamps the owner-binding on every row this brain writes (pass the
+    /// app's `shell.signing_key`); `None` only for non-syncing in-memory use.
     pub fn over(
         client: Arc<AvenDbClient>,
         owner: ObjectId,
         embedder: E,
         sealer: Arc<dyn Sealer>,
+        signer: Option<ed25519_dalek::SigningKey>,
     ) -> Self {
         Self {
             client,
             embedder,
             sealer,
             owner,
+            signer,
+        }
+    }
+
+    /// Row metadata stamping the **owner-binding** for a freshly-created row owned by this
+    /// brain's SAFE — so the row passes the fail-closed apply gate on every peer (relay
+    /// included). Mirrors the app's `crud_ipc::owner_binding_meta`. Empty when there is no
+    /// signer (in-memory/test brains, which never sync). The edit-signature is added
+    /// automatically by the client's installed `EditSigner`.
+    fn binding_meta(&self, oid: ObjectId) -> HashMap<String, String> {
+        let Some(sk) = self.signer.as_ref() else {
+            return HashMap::new();
+        };
+        match aven_caps::ownership::mint_owner_binding(sk, *oid.uuid(), *self.owner.uuid()) {
+            Ok(binding) => HashMap::from([(
+                aven_caps::ownership::OWNER_BINDING_META_KEY.to_string(),
+                binding.to_meta_string(),
+            )]),
+            // Minting only fails on a malformed key (never with a real device key); fall back
+            // to no binding rather than failing the write.
+            Err(_e) => HashMap::new(),
         }
     }
 
@@ -630,7 +660,7 @@ impl<E: Embedder> Brain<E> {
         ]);
         let memory_id = self
             .client
-            .create_checked_with_id_and_metadata(MEMORIES, oid, fields, HashMap::new())
+            .create_checked_with_id_and_metadata(MEMORIES, oid, fields, self.binding_meta(oid))
             .await
             .map_err(|e| BrainError::Write(format!("{e:?}")))?;
 
@@ -980,7 +1010,7 @@ impl<E: Embedder> Brain<E> {
                         )?,
                     ),
                 ]),
-                HashMap::new(),
+                self.binding_meta(oid),
             )
             .await
             .map_err(|e| BrainError::Write(format!("{e:?}")))
@@ -1956,7 +1986,7 @@ impl<E: Embedder> Brain<E> {
                         self.sv(LINKS, "class", row, LinkClass::Note.as_str())?,
                     ),
                 ]),
-                HashMap::new(),
+                self.binding_meta(oid),
             )
             .await
             .map_err(|e| BrainError::Write(format!("{e:?}")))?;
@@ -1983,7 +2013,7 @@ impl<E: Embedder> Brain<E> {
                     ("name".to_string(), self.sv(ENTITIES, "name", row, name)?),
                     ("kind".to_string(), self.sv(ENTITIES, "kind", row, "unknown")?),
                 ]),
-                HashMap::new(),
+                self.binding_meta(oid),
             )
             .await
             .map_err(|e| BrainError::Write(format!("{e:?}")))
@@ -2060,7 +2090,7 @@ impl<E: Embedder> Brain<E> {
                             self.sv(LINKS, "last_access", row, &now.to_string())?,
                         ),
                     ]),
-                    HashMap::new(),
+                    self.binding_meta(oid),
                 )
                 .await
                 .map_err(|e| BrainError::Write(format!("{e:?}")))?;
@@ -2844,6 +2874,7 @@ mod tests {
             other_owner,
             StubEmbedder::new(EMBED_DIM),
             Arc::new(KeySealer::random(*other_owner.uuid())),
+            None,
         );
         let hits = other.search("alpha's secret plan", 5).await.unwrap();
         assert!(hits.is_empty(), "other owner must not see alpha's memories, got {hits:?}");
