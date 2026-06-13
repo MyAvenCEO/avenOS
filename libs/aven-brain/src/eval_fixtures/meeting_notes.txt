@@ -1,0 +1,12 @@
+Meeting-Notiz — Produkt-Sync, Dienstag 16.06.2026, 10:00, Raum "Nordlicht"
+
+Anwesend: Samuel (Lead), Mara (Design), Tobias (Backend), Lena (QA). Entschuldigt: Jonas.
+
+Entscheidungen:
+- Das Onboarding wird NICHT mehr hinter dem Invite-Gate versteckt — lokal-first, Sync ist optional.
+  Owner: Tobias. Frist: Freitag 20.06.2026.
+- Mara übernimmt das Redesign der Aktivitäts-Ansicht; erster Entwurf bis 18.06.
+- Lena schreibt Regressionstests für die Recall-Qualität; Ziel: messbare fact-coverage.
+
+Offene Punkte: Der Tinfoil-Cloud-Key soll standardmäßig aktiv sein. Budget für das Q3-Offsite steht
+noch aus (Samuel klärt mit Finance). Nächstes Sync: Donnerstag 18.06.2026, 10:00.

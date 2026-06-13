@@ -104,6 +104,19 @@ const MAX_GRAPH_FACTS: usize = 16;
 /// red-card event) instead of one giant blob the context budget would truncate.
 const MEMORY_CHUNK_MAX_CHARS: usize = 480;
 
+/// Reserved streams holding **instrumentation**, not memory: persisted dreaming/activity steps
+/// (`dreamlog`) and per-round context traces (`trace`) (board 0029). They live in the memories
+/// table — sealed + synced like everything else — but are excluded from every recall/gist/extract
+/// path so the brain never recalls its own debug logs. The debug export reads them back.
+const STREAM_DREAMLOG: &str = "dreamlog";
+const STREAM_TRACE: &str = "trace";
+
+/// True for the reserved instrumentation streams ([`STREAM_DREAMLOG`]/[`STREAM_TRACE`]) — the one
+/// predicate every recall/extract site uses to skip debug-log rows.
+fn is_instrumentation_stream(stream: &str) -> bool {
+    stream == STREAM_DREAMLOG || stream == STREAM_TRACE
+}
+
 /// Resolve a kind to its class. Claim predicates are free-form but must not collide
 /// with the reserved note/bond kinds.
 fn class_for_claim_predicate(kind: &str) -> Result<(), BrainError> {
@@ -633,7 +646,7 @@ impl ReadSnapshot {
             .memories
             .iter()
             .map(|(_, m, _)| m)
-            .filter(|m| filter.matches(m))
+            .filter(|m| filter.matches(m) && !is_instrumentation_stream(&m.stream))
             .cloned()
             .collect();
         mems.sort_by(|a, b| b.id.uuid().cmp(a.id.uuid()));
@@ -701,7 +714,7 @@ impl ReadSnapshot {
         let candidates: Vec<(ObjectId, &Memory, &Option<Vec<f32>>)> = self
             .memories
             .iter()
-            .filter(|(_, m, _)| filter.matches(m))
+            .filter(|(_, m, _)| filter.matches(m) && !is_instrumentation_stream(&m.stream))
             .map(|(id, m, emb)| (*id, m, emb))
             .collect();
 
@@ -1646,7 +1659,12 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             .recall(&Filter::default(), 256)
             .await?
             .into_iter()
-            .filter(|m| m.author_role == "user" && m.stream != "self" && m.stream != "summary")
+            .filter(|m| {
+                m.author_role == "user"
+                    && m.stream != "self"
+                    && m.stream != "summary"
+                    && !is_instrumentation_stream(&m.stream)
+            })
             .take(SELF_WINDOW)
             .map(|m| m.content)
             .collect();
@@ -1676,7 +1694,11 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         let mut out = String::from("# Self\n");
         out.push_str(&self_text);
         out.push_str("\n\n# Recent memories\n");
-        for m in recent.iter().filter(|m| m.stream != "self").take(gist_n) {
+        for m in recent
+            .iter()
+            .filter(|m| m.stream != "self" && !is_instrumentation_stream(&m.stream))
+            .take(gist_n)
+        {
             out.push_str("- ");
             out.push_str(&truncate(&m.content, 200));
             out.push('\n');
@@ -1772,7 +1794,7 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             "l1 gist",
             snap.recall(&Filter::default(), opts.gist_n + 16)
                 .into_iter()
-                .filter(|m| m.stream != "self")
+                .filter(|m| m.stream != "self" && !is_instrumentation_stream(&m.stream))
                 .take(opts.gist_n)
                 .map(|m| truncate(&m.content, 160))
                 .collect()
@@ -2154,8 +2176,13 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             if batch.len() >= cap {
                 break;
             }
-            // Self/summary streams are brain-authored — nothing new to mine there.
-            if m.stream == "self" || m.stream == "summary" || extracted.contains(&id_str(&m.id)) {
+            // Self/summary streams are brain-authored — nothing new to mine there; dreamlog/trace
+            // are instrumentation, never memory.
+            if m.stream == "self"
+                || m.stream == "summary"
+                || is_instrumentation_stream(&m.stream)
+                || extracted.contains(&id_str(&m.id))
+            {
                 continue;
             }
             batch.push(ExtractionInput {
@@ -3391,6 +3418,77 @@ mod tests {
     /// Doc B: the unrelated coaching-website text the failing transcript ingested
     /// between questions about the match report — it must not crowd doc A out.
     const EVAL_DOC_B: &str = include_str!("eval_fixtures/coaching_site.txt");
+    /// Corpus docs C–F (board 0029): a 2nd match report, a recipe, meeting notes, a person
+    /// profile — varied domains/length so the eval is a real corpus, not one report. Each carries
+    /// facts a probe must surface. (Doc B stays the pure distractor — no probes target it.)
+    const EVAL_DOC_C: &str = include_str!("eval_fixtures/match_eng_cro.txt");
+    const EVAL_DOC_D: &str = include_str!("eval_fixtures/recipe_pancakes.txt");
+    const EVAL_DOC_E: &str = include_str!("eval_fixtures/meeting_notes.txt");
+    const EVAL_DOC_F: &str = include_str!("eval_fixtures/profile_ada.txt");
+    /// Every corpus doc + whether probes target it (the distractor must NOT be probed).
+    const CORPUS: &[(&str, &str)] = &[
+        ("A:wm-mex-rsa", EVAL_REPORT),
+        ("B:coaching", EVAL_DOC_B),
+        ("C:eng-cro", EVAL_DOC_C),
+        ("D:recipe", EVAL_DOC_D),
+        ("E:meeting", EVAL_DOC_E),
+        ("F:profile", EVAL_DOC_F),
+    ];
+    /// ≥40 single-turn probes across docs A·C·D·E·F (B is noise). Each lists facts (substrings)
+    /// that MUST surface in the top-8 recalled passages. This is the regression-gated corpus.
+    const CORPUS_PROBES: &[(&str, &[&str])] = &[
+        // doc A — WM Mexiko 2:0 Südafrika
+        ("wer hat eine rote karte bekommen", &["Sithole", "Zwane", "Montes"]),
+        ("wie viele gelbe karten gab es und wer", &["Mokoena", "Gutierrez", "Sibisi"]),
+        ("in welcher minute war die erste rote karte", &["49"]),
+        ("wer hat die tore mexiko südafrika geschossen", &["Quinones", "Jimenez"]),
+        ("wie endete mexiko gegen südafrika", &["2:0"]),
+        // doc C — England 3:1 Kroatien
+        ("wie endete england gegen kroatien", &["3:1"]),
+        ("wer schoss die tore für england", &["Kane", "Saka", "Bellingham"]),
+        ("wer traf für kroatien", &["Modric"]),
+        ("wer war schiedsrichter england kroatien", &["Wilton Sampaio"]),
+        ("wer sah die gelb-rote karte england kroatien", &["Gvardiol"]),
+        ("wer ist kapitän von england", &["Kane"]),
+        ("in welcher minute fiel der elfmeter england", &["12"]),
+        // doc D — recipe
+        ("welche zutaten brauche ich für pfannkuchen", &["Mehl", "Buttermilch", "Eier"]),
+        ("wie viel mehl für die pfannkuchen", &["250 g"]),
+        ("wie lange muss der teig ruhen", &["10 Minuten"]),
+        ("wie viele pfannkuchen ergibt das rezept", &["12"]),
+        ("für wie viele personen ist das pfannkuchen rezept", &["4 Personen"]),
+        // doc E — meeting notes
+        ("wer ist owner für das onboarding", &["Tobias"]),
+        ("was wurde zum invite gate entschieden", &["lokal-first"]),
+        ("wann ist das nächste sync meeting", &["Donnerstag", "18.06"]),
+        ("wer schreibt die regressionstests für recall", &["Lena"]),
+        ("wer war beim produkt-sync anwesend", &["Samuel", "Mara", "Tobias", "Lena"]),
+        ("wer übernimmt das redesign der aktivitäts-ansicht", &["Mara"]),
+        ("in welchem raum war der produkt-sync", &["Nordlicht"]),
+        // doc F — profile
+        ("wo arbeitet ada okonkwo", &["ETH Zürich"]),
+        ("welche sprachen spricht ada", &["Igbo", "Französisch"]),
+        ("welchen preis erhielt ada 2024", &["Dijkstra"]),
+        ("wie heißt adas tochter", &["Zoe"]),
+        ("was sind adas hobbys", &["Bouldern", "Cello"]),
+        ("wann wurde ada geboren", &["1987"]),
+        ("wie groß ist adas forschungsgruppe", &["sieben"]),
+    ];
+    /// Multi-turn degradation sequences (board 0029): recall must survive a running conversation
+    /// where each Q+reply is stored as talk memories AND other docs sit in the same store. Three
+    /// sequences over docs A / C / E. (`MULTI_TURN_PROBES` is sequence A, defined above.)
+    const MT_C: &[(&str, &[&str])] = &[
+        ("wie endete england gegen kroatien", &["3:1"]),
+        ("wer schoss die tore für england", &["Kane", "Saka", "Bellingham"]),
+        ("wer war der schiedsrichter", &["Wilton Sampaio"]),
+        ("wer sah die gelb-rote karte", &["Gvardiol"]),
+    ];
+    const MT_E: &[(&str, &[&str])] = &[
+        ("wer ist owner für das onboarding", &["Tobias"]),
+        ("wann ist das nächste sync meeting", &["Donnerstag"]),
+        ("wer schreibt die regressionstests", &["Lena"]),
+        ("wer war beim sync anwesend", &["Samuel", "Mara"]),
+    ];
 
     /// (query, facts that must appear in the recalled passages).
     const EVAL_PROBES: &[(&str, &[&str])] = &[
@@ -3572,6 +3670,94 @@ mod tests {
             "second-doc ingest degraded recall: {:.0}% → {:.0}%",
             before_b * 100.0,
             after_b * 100.0
+        );
+    }
+
+    /// Board 0029 (M1) — the REGRESSION GATE. A 10×-bigger corpus (6 docs, varied domains) +
+    /// ≥40 probes (31 single-turn + 3 multi-turn degradation sequences A/C/E, each Q+reply stored
+    /// like the app does). Asserts mean fact-coverage@8 ≥ a recorded BASELINE, so any change that
+    /// regresses recall fails CI. Runs by default (not `--ignored`): stub embedder, ~6 docs.
+    /// The `recall_eval*` scoreboards (`--ignored`) print the per-scenario tables for tuning.
+    #[tokio::test]
+    async fn recall_eval_no_regression() {
+        // Captured from a green run on the stub embedder over the 300-memory haystack (deterministic:
+        // index-built noise, stub embedder, fixed ingest order → reproducible at ~98.9%). The margin
+        // below the observed mean is the regression budget — a ranking/budget change that pushes facts
+        // out of top-8 under noise trips this. Raise it as semantic Gemma + tuning push recall higher.
+        const BASELINE: f32 = 0.90;
+
+        let brain = test_brain("eval-corpus-no-regression").await;
+        let doc = RememberOptions {
+            stream: "doc".to_string(),
+            veracity: Some("stated".to_string()),
+            ..Default::default()
+        };
+        // NOISE FIRST — a realistic haystack (~300 unrelated memories) so recall has to find the
+        // needle, like the real app (1500+ memories), not a 6-doc toy where everything trivially
+        // scores 100%. Fact-free distractor lines via remember_raw (no graph → fast seed).
+        const NOISE: usize = 300;
+        let noise_opts = RememberOptions { stream: "talk".to_string(), ..Default::default() };
+        let topics = [
+            "das Wetter war wechselhaft",
+            "ich habe Einkäufe erledigt",
+            "der Zug hatte Verspätung",
+            "wir haben über das Budget gesprochen",
+            "die Katze schlief den ganzen Tag",
+            "ein neues Café hat aufgemacht",
+            "die Batterie war fast leer",
+            "der Garten braucht Wasser",
+        ];
+        for i in 0..NOISE {
+            let line = format!("Notiz {i}: {} und sonst nichts Besonderes.", topics[i % topics.len()]);
+            brain.remember_raw(&line, &noise_opts).await.expect("noise");
+        }
+        for (label, text) in CORPUS {
+            brain.remember_chunked(text, &doc).await.unwrap_or_else(|_| panic!("ingest {label}"));
+        }
+
+        let mut sum = 0.0f32;
+        let mut n = 0usize;
+        // Single-turn corpus probes (≥6 docs; B is the unprobed distractor).
+        for (query, facts) in CORPUS_PROBES {
+            sum += probe_coverage(&brain, query, facts, 8).await;
+            n += 1;
+        }
+        // Multi-turn degradation sequences — store each question + a fact-free reply, like the app.
+        for (seq_label, seq) in [("A", MULTI_TURN_PROBES), ("C", MT_C), ("E", MT_E)] {
+            for (query, facts) in seq {
+                let q_opts = RememberOptions {
+                    stream: "talk".to_string(),
+                    author_role: "user".to_string(),
+                    ..Default::default()
+                };
+                brain.remember_with(query, &q_opts).await.expect("store question");
+                sum += probe_coverage(&brain, query, facts, 8).await;
+                n += 1;
+                let a_opts = RememberOptions {
+                    stream: "talk".to_string(),
+                    author_role: "agent".to_string(),
+                    ..Default::default()
+                };
+                brain
+                    .remember_with(&format!("Ich schaue im {seq_label}-Kontext nach ({query})."), &a_opts)
+                    .await
+                    .expect("store reply");
+            }
+        }
+
+        let mean = sum / n as f32;
+        eprintln!(
+            "── recall_eval_no_regression: {n} probes over {} docs · mean fact-coverage@8 = {:.1}% (baseline {:.0}%)",
+            CORPUS.len(),
+            mean * 100.0,
+            BASELINE * 100.0
+        );
+        assert!(n >= 40, "the corpus must be 10× the original (≥40 probes), got {n}");
+        assert!(
+            mean >= BASELINE,
+            "recall REGRESSED: mean fact-coverage@8 {:.1}% < baseline {:.0}% — a change made memory worse",
+            mean * 100.0,
+            BASELINE * 100.0
         );
     }
 
