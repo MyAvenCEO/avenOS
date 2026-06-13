@@ -204,7 +204,7 @@ reusing `frontier_diff` + the batch→row index (O(delta), via a LIVE runtime fr
 (this brain cache, UI list stores, remote peers) is a peer holding a frontier cursor and applying the
 delta; the brain's `apply` = decrypt ONLY the changed row → update its domain object. The
 `frontier_epoch()` from M1 is the O(1) "did anything move?" gate in front of the feed. One version
-(the frontier), one diff, one apply-loop shape — the brain holds zero freshness logic. 0026's M3 then
+(the frontier), one diff, one apply-loop shape — the brain holds zero freshness logic. 0036's M3 then
 becomes: replace `snapshot()`'s full rebuild with a `changes_since` apply-loop + `mirror_applies_only_delta`.
 
 **Consolidate, don't accrete (compact-simplify rule).** The current `Brain::snapshot()` +
@@ -227,7 +227,7 @@ git status --porcelain
 …or hand the condition straight to the goal loop:
 
 ```
-/aven-build 0026
+/aven-build 0036
 ```
 
 ## Progress log
@@ -248,8 +248,8 @@ Newest entry first.
 - `2026-06-13` — Checkpoint: M1+M2+M4 done+verified (goal line met — no-write turns are zero-decrypt,
   convergence proven, frontier primitive in aven-db). M3 (incremental decrypt-only-delta) stays
   required but is BLOCKED on the generic frontier change-feed, now carved to its own card
-  [[0027-frontier-change-feed]] (it's bigger than 0026 and also retires the lossy subscription +
-  serves UI stores). 0026 stays in build/ pending 0027. Recorded the unified "every reader is a
+  [[0027-frontier-change-feed]] (it's bigger than 0036 and also retires the lossy subscription +
+  serves UI stores). 0036 stays in build/ pending 0027. Recorded the unified "every reader is a
   frontier peer" architecture as M3's design.
 - `2026-06-13` — Build (aven-db primitive): shipped M1+M2+M4 in the correct layer.
   **aven-db**: `frontier_epoch.rs` (process-global `AtomicU64`) bumped at the universal batch sink

@@ -20,7 +20,7 @@ ride on top of it as follow-on work (once we can prove a change helps, not hurts
 Where things stand (this session): `assemble_context` builds L0 self / L1 gist / L2 entities (typed by
 the Tinfoil glm-5-1 extractor) / L3 hybrid recall (RRF over EmbeddingGemma cosine + BM25 + graph voice
 + MMR + abstention) + working window + budget; the brain reads through a frontier-driven decrypt-once
-cache ([[0026-frontier-as-peer-memory-cache]] / [[0027-frontier-change-feed]]). Dreaming runs stepped
+cache ([[0036-frontier-as-peer-memory-cache]] / [[0027-frontier-change-feed]]). Dreaming runs stepped
 phases (enrich/extract/merge/decay/verify/consolidate) off-actor. `ContextTrace` + `DreamStep` +
 `TraceTiming` exist and flow to the Activity / Context / Dreaming tabs (`TalkBrainAside.svelte`). The
 `recall_eval` harness exists (`brain.rs` tests, fact-coverage@8 over the WM-2026 match report + one

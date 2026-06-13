@@ -23,7 +23,7 @@ These come from a **cfg-gated stub-vs-real split**: `embed_model.rs` has a real 
 at `app/src-tauri/src/avendb/brain_ipc.rs:115` under that feature) and a no-op stub for builds
 without it. The gates don't line up cleanly, so in some feature combos the stub's `ensure`/
 `ensure_download` and the `Emitter` import are compiled but unused → warnings. They're harmless
-(builds succeed) and PRE-EXISTING (unrelated to the frontier work, board 0026/0027), but they're
+(builds succeed) and PRE-EXISTING (unrelated to the frontier work, board 0036/0027), but they're
 noise against the project's clean-build / compact-simplify ethos.
 
 The fix is a careful cfg alignment, NOT a blind deletion: `ensure_download` is live under
@@ -90,6 +90,6 @@ Newest entry first.
   removed the orphaned stub `imp::ensure`. Both feature configs (`local-voice`; `desktop-ai,local-voice`)
   `cargo check` clean — zero embed_model warnings; brain-gemma path unchanged; confined to
   `embed_model.rs`. Moved discover → review.
-- `2026-06-13` — Discovered + specced. Surfaced during the frontier work (board 0026/0027) build
+- `2026-06-13` — Discovered + specced. Surfaced during the frontier work (board 0036/0027) build
   output; confirmed `ensure_download` is live under `brain-gemma` so it's a cfg-alignment task, not
   a deletion. Measurable goal = zero embed_model warnings across the feature matrix.

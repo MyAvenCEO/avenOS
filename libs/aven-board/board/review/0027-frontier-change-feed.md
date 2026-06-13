@@ -1,6 +1,6 @@
 ---
 title: Generic frontier change-feed — every reader is a peer (one DRY sync SSOT)
-summary: aven-db exposes `changes_since(frontier) -> (frontier', [RowChange])` — the reliable CRDT frontier-diff delta — so in-memory caches, UI stores, and remote peers all reconcile through ONE mechanism. Retires the lossy subscription; unblocks 0026's incremental decrypt.
+summary: aven-db exposes `changes_since(frontier) -> (frontier', [RowChange])` — the reliable CRDT frontier-diff delta — so in-memory caches, UI stores, and remote peers all reconcile through ONE mechanism. Retires the lossy subscription; unblocks 0036's incremental decrypt.
 owner: claude (aven-db + aven-brain)
 created: 2026-06-13
 updated: 2026-06-13
@@ -17,7 +17,7 @@ batch-pull** (`frontier.rs`: `heads()`, `frontier_diff`, `pull_from`; `sync_mana
 batches) used between devices, and a **lossy in-process subscription** (`subscribe` →
 `OrderedRowDelta` via `try_send`/`try_read`, which silently drops under load — fine for a UI
 hint, unsafe as a source of truth). Consumers that need a correct live view (the brain's
-decrypt-once read cache — [[0026-frontier-as-peer-memory-cache]] — and UI list stores) have no
+decrypt-once read cache — [[0036-frontier-as-peer-memory-cache]] — and UI list stores) have no
 reliable, generic, incremental feed to consume.
 
 The unifying insight (Samuel): the CRDT **frontier/batch DAG is the single source of truth** for
@@ -25,9 +25,9 @@ what changed, and **every reader should be a peer** that holds a frontier cursor
 via the same frontier-diff/apply path devices already use. The in-memory cache is just the
 nearest (in-process) peer. One mechanism, not three.
 
-Board 0026 delivered the O(1) `AvenDbClient::frontier_epoch()` gate (the "did anything move?"
+Board 0036 delivered the O(1) `AvenDbClient::frontier_epoch()` gate (the "did anything move?"
 check) and proved the consumer side (zero-decrypt on unchanged epoch; convergence after local +
-synced writes). What's missing — and what 0026's M3 (incremental decrypt-only-delta) is blocked
+synced writes). What's missing — and what 0036's M3 (incremental decrypt-only-delta) is blocked
 on — is the generic **delta feed**: given a cursor, return exactly the rows that changed.
 
 ## Goal
@@ -47,7 +47,7 @@ loop that touches only the delta. Retire the lossy subscription as the freshness
 End state = one frontier SSOT (the batch-DAG heads) · per-consumer cursor · `changes_since` is the
 ONE reconciliation. The gating tests prove the two load-bearing properties: the feed returns only
 the delta (DRY/correct), and the brain consuming it decrypts only the delta (the write-turn millions
-win + closes [[0026-frontier-as-peer-memory-cache]] M3). S4–S5 (migrate UI stores, DELETE the lossy
+win + closes [[0036-frontier-as-peer-memory-cache]] M3). S4–S5 (migrate UI stores, DELETE the lossy
 `subscribe` path) are required consolidation milestones tracked below; the goal-line gates the core.
 
 Shape (sharpen into a measurable completion condition in discover):
@@ -60,7 +60,7 @@ client.changes_since(cursor: Frontier) -> (next: Frontier, changes: Vec<RowChang
 - Reuses `frontier_diff` + the batch→row index (the same machinery `sync_manager`/`forwarding`
   already build for remote peers) — but computed from a **LIVE runtime frontier** so the diff is
   **O(delta)**, not the O(all) `build_sync_dag`. (The live frontier is the real new infra here;
-  the `frontier_epoch` bump sites from 0026 are where it's maintained.)
+  the `frontier_epoch` bump sites from 0036 are where it's maintained.)
 - **Reliable / resilient**: inherits CRDT properties — causal order, idempotent apply,
   convergence, no lost updates (the lossy subscription's failure mode is gone).
 - **Generic & DRY**: one feed; the consumer supplies `apply`. Brain `apply` = decrypt ONLY the
@@ -79,7 +79,7 @@ should stop existing. 100% migrate, no compat shims, no parallel paths.
 - **DELETE the lossy subscription.** Once `changes_since` exists, migrate every `subscribe` /
   `OrderedRowDelta` call site to the feed, then **delete** the lossy path (`try_send`/`try_read`
   drop-under-load) — not keep it alongside.
-- **DELETE the brain's bespoke cache.** 0026's interim `Brain::snapshot()` + `SnapshotCache` +
+- **DELETE the brain's bespoke cache.** 0036's interim `Brain::snapshot()` + `SnapshotCache` +
   `CacheEntry` + full `load_snapshot()` rebuild collapse into the universal consumer apply-loop —
   the brain ends with **zero freshness logic** (just `apply` = decrypt the changed row). Don't run
   two caches.
@@ -117,7 +117,7 @@ Concrete shape found by tracing the core:
    (O(delta)). Test `changes_since_returns_only_the_delta`.
 2. **S2** — generic consumer-side materialized-view apply-loop helper (cursor + `apply(RowChange)`).
 3. **S3** — brain consumes it: **DELETE** `snapshot()`/`SnapshotCache`/full `load_snapshot` rebuild;
-   `apply` = decrypt only the changed row. Test `mirror_applies_only_delta` (closes [[0026-frontier-as-peer-memory-cache]] M3).
+   `apply` = decrypt only the changed row. Test `mirror_applies_only_delta` (closes [[0036-frontier-as-peer-memory-cache]] M3).
 4. **S4** — migrate UI list stores onto the feed.
 5. **S5** — **DELETE** the lossy `subscribe`/`OrderedRowDelta` path (no parallel path left).
 
@@ -131,7 +131,7 @@ Each must be checkable from the transcript (a command + its output proves it).
 - [x] **S1** cost: `frontier_epoch()`/`changes_since` are a Mutex'd `Vec` read (no DAG rebuild, no
       decrypt) — O(delta) in the changed-row count, not total rows.
 - [x] **S3** brain consumes the feed: `mirror_applies_only_delta` (aven-brain) exits 0 — a write
-      turn decodes `delta * 3 < full`. Closes [[0026-frontier-as-peer-memory-cache]] M3.
+      turn decodes `delta * 3 < full`. Closes [[0036-frontier-as-peer-memory-cache]] M3.
 - [x] No regression: 35 aven-brain lib + `recall_zero_decrypt` + `mirror_converges` green; aven-db
       `create_checked` suite (5) + **aven-db lib 753** green; app crate (`desktop-ai,local-voice`)
       builds; `cargo build -p aven-db -p aven-brain` exits 0.
@@ -163,7 +163,7 @@ Newest entry first.
   `changes_since_returns_only_the_delta` green. **S3** — `Brain::snapshot()` rewired to an
   incremental reconcile: `changes_since` names the delta, only those ids re-decoded (DRY decoders
   `decode_memory`/`decode_entity`/`decode_link` + `raw_rows`), the rest reused; `mirror_applies_only_delta`
-  green (closes 0026 M3); M2 zero-decrypt + M4 convergence still green; 35 lib + aven-db suites green;
+  green (closes 0036 M3); M2 zero-decrypt + M4 convergence still green; 35 lib + aven-db suites green;
   builds clean. Moved build → review. S4 (migrate UI stores) + S5 (DELETE the lossy subscription +
   cap the change-log) remain as the consolidation tail — app-wide, beyond the goal line.
 - `2026-06-13` — Discover→build: made measurable (goal line = `changes_since` returns only the delta
@@ -174,7 +174,7 @@ Newest entry first.
   NOTE: S1→S5 is a substantial storage/sync-core build best executed with app-level verification, not
   only unit tests — start fresh-focused. Compact-simplify mandate applies: net lines REMOVED (the
   lossy subscription + the brain's interim cache both deleted).
-- `2026-06-13` — Created in idea. Carved out of [[0026-frontier-as-peer-memory-cache]] when M1
+- `2026-06-13` — Created in idea. Carved out of [[0036-frontier-as-peer-memory-cache]] when M1
   (`frontier_epoch` gate) + M2/M4 (consumer zero-decrypt + convergence) landed and M3 (incremental
-  decrypt) proved to need this generic delta feed. Bigger than 0026 (also retires the lossy
+  decrypt) proved to need this generic delta feed. Bigger than 0036 (also retires the lossy
   subscription + serves UI stores) → its own card. Architecture: "every reader is a frontier peer."

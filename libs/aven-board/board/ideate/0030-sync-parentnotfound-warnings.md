@@ -31,7 +31,7 @@ never received the parent; or local rows were rebuilt while the peer kept its ow
 recurring, steady stream of these in the logs suggests it isn't fully self-healing — likely the relay
 missing parents, or a request-missing-parents path that isn't firing/converging.
 
-Relates to the frontier work ([[0026-frontier-as-peer-memory-cache]] / [[0027-frontier-change-feed]])
+Relates to the frontier work ([[0036-frontier-as-peer-memory-cache]] / [[0027-frontier-change-feed]])
 only tangentially — that's local read freshness; this is peer→peer batch application.
 
 ## Goal
@@ -53,5 +53,5 @@ count returns to zero after a sync settles.
 
 Newest entry first.
 
-- `2026-06-13` — Captured from dev logs while working memory/frontier cards (0026–0029). Pre-existing;
+- `2026-06-13` — Captured from dev logs while working memory/frontier cards (0027–0036). Pre-existing;
   not caused by that work. Needs its own investigation (sync inbox + missing-parent request path / relay history gaps).
