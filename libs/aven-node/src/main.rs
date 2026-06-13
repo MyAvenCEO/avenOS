@@ -136,13 +136,13 @@ struct ServerApplyGate {
     /// avenCEO's member device did:keys (the relay's roster, the access-control SSOT),
     /// refreshed live by the admin tick. Trust-on-publish until the handshake membership-
     /// proof lands (see `admission`). Shared `std::sync::RwLock` because `may_sync` is sync.
-    roster: std::sync::Arc<std::sync::RwLock<std::collections::HashSet<String>>>,
+    roster: std::sync::Arc<std::sync::RwLock<admission::Roster>>,
 }
 
 impl ServerApplyGate {
     fn new(
         schema: &aven_db::Schema,
-        roster: std::sync::Arc<std::sync::RwLock<std::collections::HashSet<String>>>,
+        roster: std::sync::Arc<std::sync::RwLock<admission::Roster>>,
     ) -> Self {
         let spark_scoped: std::collections::HashSet<String> =
             aven_db::owner_scoped_table_names(schema).into_iter().collect();
@@ -189,16 +189,12 @@ impl aven_db::CapabilityResolver for ServerApplyGate {
         let Some(did) = Self::subject_did(subject) else {
             return aven_db::CapDecision::DenyPermanent;
         };
-        let is_member = self
+        // One classification decision, shared with the unit-tested pure fn (board 0026).
+        let tier = self
             .roster
             .read()
-            .map(|r| r.contains(did.trim()))
-            .unwrap_or(false);
-        let tier = if is_member {
-            admission::PeerTier::Member
-        } else {
-            admission::PeerTier::Onboarding
-        };
+            .map(|r| admission::classify_peer(did.trim(), &r))
+            .unwrap_or(admission::PeerTier::Onboarding);
         if admission::outbound_allowed(tier, &res.table, &self.spark_data) {
             aven_db::CapDecision::Allow
         } else {
@@ -341,8 +337,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // apply gate denies a bindingless row on any of these (A3, fail-closed). Computed before
     // `schema` is moved into the engine context below. The shared `roster` is avenCEO's
     // member did:keys (admission SSOT), refreshed by the admin tick and read in `may_sync`.
-    let roster: std::sync::Arc<std::sync::RwLock<std::collections::HashSet<String>>> =
-        std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashSet::new()));
+    let roster: std::sync::Arc<std::sync::RwLock<admission::Roster>> =
+        std::sync::Arc::new(std::sync::RwLock::new(admission::Roster::default()));
     let apply_gate = ServerApplyGate::new(&schema, roster.clone());
     let data_dir = cfg.data_dir.clone();
     tracing::info!(data_dir = %data_dir.display(), "durable storage (RocksDB)");
@@ -422,7 +418,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .unwrap_or(false);
                     tracing::info!(
                         %peer, member = is_member,
-                        roster_size = roster_for_peers.read().map(|r| r.len()).unwrap_or(0),
+                        roster_size = roster_for_peers.read().map(|r| r.member_signer_dids.len()).unwrap_or(0),
                         "admission: peer tier (enforced outbound)"
                     );
                 }
@@ -510,13 +506,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// swaps them into the shared set the apply gate reads in `may_sync`.
 async fn refresh_roster(
     engine: &AvenDbClient,
-    roster: &std::sync::Arc<std::sync::RwLock<std::collections::HashSet<String>>>,
+    roster: &std::sync::Arc<std::sync::RwLock<admission::Roster>>,
     avenceo_id: uuid::Uuid,
 ) {
     match admission::read_avenceo_member_signer_dids(engine, avenceo_id).await {
         Ok(members) => {
             if let Ok(mut w) = roster.write() {
-                *w = members;
+                w.member_signer_dids = members;
             }
         }
         Err(e) => tracing::debug!("admission roster refresh: {e}"),
@@ -546,7 +542,7 @@ mod apply_gate_tests {
         ServerApplyGate {
             spark_scoped: ["todos".to_string()].into_iter().collect(),
             spark_data: ["todos".to_string()].into_iter().collect(),
-            roster: std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashSet::new())),
+            roster: std::sync::Arc::new(std::sync::RwLock::new(crate::admission::Roster::default())),
         }
     }
 
