@@ -32,7 +32,7 @@ use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 
 use crate::embedder::Embedder;
-use crate::extractor::{ExtractionInput, Extractor, NoExtractor};
+use crate::extractor::{ExtractionInput, Extractor, KnownClaim, NoExtractor};
 use crate::schema::{brain_schema, ENTITIES, LINKS, MEMORIES};
 use crate::sealer::{KeySealer, Sealer};
 
@@ -91,6 +91,8 @@ const BOND_KIND: &str = "assoc";
 const EXTRACTED_KIND: &str = "extracted";
 /// Memories handed to the extractor per dream step (bounded so a step always yields).
 const EXTRACT_BATCH_MAX: usize = 6;
+/// How many existing open claims to hand the extractor as reconciliation context (board 0034).
+const KNOWN_CLAIMS_CAP: usize = 64;
 
 /// Hard cap on how many entities one memory contributes to the graph. Bounds the per-entity
 /// fuzzy-scan AND the O(n²) bonding loop in `write_graph`, so a pasted wall of text can't saturate
@@ -2388,6 +2390,33 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
     /// memory gets an idempotence marker (`memory —extracted→ memory`, note class) so it
     /// is never re-extracted; identical (subject, predicate, object) facts dedupe via
     /// the claim semantics (re-assertion = Bayesian confidence bump, no new row).
+    /// The owner's existing OPEN claims (subject/predicate/object, entity ids resolved to names),
+    /// capped — handed to the extractor as reconciliation context so it can reuse a known predicate
+    /// when a new statement updates that relation (board 0034: generic contradiction resolution).
+    async fn known_claims(&self, cap: usize) -> Result<Vec<KnownClaim>, BrainError> {
+        let names: std::collections::HashMap<String, String> = self
+            .entities()
+            .await?
+            .into_iter()
+            .map(|e| (id_str(&e.id), e.name))
+            .collect();
+        let mut out = Vec::new();
+        for l in self.links().await? {
+            if out.len() >= cap {
+                break;
+            }
+            if l.class != LinkClass::Claim.as_str() || l.valid_to.is_some() {
+                continue;
+            }
+            let Some(subject) = names.get(&l.from).cloned() else {
+                continue;
+            };
+            let object = names.get(&l.to).cloned().unwrap_or_default();
+            out.push(KnownClaim { subject, predicate: l.kind, object });
+        }
+        Ok(out)
+    }
+
     /// Returns `(memories mined, facts written, tokens spent)`, or `None` when
     /// everything is already extracted. Extractor errors fail the step WITHOUT marking,
     /// so the batch retries next dream.
@@ -2429,9 +2458,13 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             return Ok(None);
         }
 
+        // Hand the extractor the existing OPEN claims as reconciliation context (board 0034): when a
+        // statement in the batch updates a known relation, the model reuses that predicate so the
+        // stale claim is superseded — generic, no hardcoded synonym table.
+        let known = self.known_claims(KNOWN_CLAIMS_CAP).await?;
         let out = self
             .extractor
-            .extract(&batch)
+            .extract(&batch, &known)
             .await
             .map_err(|e| BrainError::Write(format!("extractor: {e}")))?;
 
@@ -3802,6 +3835,68 @@ mod tests {
             );
             assert_ne!(g, "what did we discuss", "gist echoes the current query");
         }
+    }
+
+    #[tokio::test]
+    async fn extractor_reconciles_against_known_claims_no_hardcoding() {
+        // Board 0034: generic contradiction resolution. The brain hands the extractor the existing
+        // OPEN claims; a reconciling extractor REUSES the known predicate for an update, so normal
+        // supersession closes the stale claim. The "same relation?" decision lives in the extractor
+        // (the model, in prod), never a hardcoded synonym table in the brain.
+        use crate::extractor::{ExtractedFact, Extraction};
+
+        struct ReconcileMock;
+        impl Extractor for ReconcileMock {
+            async fn extract(
+                &self,
+                batch: &[ExtractionInput],
+                known: &[KnownClaim],
+            ) -> Result<Extraction, String> {
+                // Reuse the predicate of the known claim about "the user" (any predicate string),
+                // emitting the corrected value. No literal predicate vocabulary here.
+                let facts = known
+                    .iter()
+                    .find(|k| k.subject == "the user")
+                    .map(|k| {
+                        vec![ExtractedFact {
+                            subject: "the user".to_string(),
+                            predicate: k.predicate.clone(),
+                            object: "Samuel".to_string(),
+                            valid_from: None,
+                            valid_to: None,
+                            confidence: 0.9,
+                            source_memory: batch[0].memory_id,
+                        }]
+                    })
+                    .unwrap_or_default();
+                Ok(Extraction { entities: Vec::new(), facts, tokens: 1 })
+            }
+        }
+
+        let brain = test_brain("reconcile").await;
+        // Seed the original name under an arbitrary predicate the extractor later reuses.
+        brain.add_fact("the user", "full_name", "Sam", None).await.unwrap();
+        let talk = RememberOptions {
+            stream: "talk".to_string(),
+            author_role: "user".to_string(),
+            ..Default::default()
+        };
+        brain.remember_with("ich heiße eigentlich Samuel", &talk).await.unwrap();
+
+        // Dream through the reconciling extractor: it sees `full_name=Sam` and reuses `full_name`.
+        let brain = brain.with_extractor(ReconcileMock);
+        brain.dream().await.unwrap();
+
+        let open: Vec<Fact> = brain
+            .facts("the user")
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|f| f.valid_to_ms.is_none())
+            .collect();
+        assert_eq!(open.len(), 1, "the update must supersede the old name, got {open:?}");
+        assert_eq!(open[0].predicate, "full_name", "the extractor's reused predicate, not a Rust constant");
+        assert_eq!(open[0].object_name, "Samuel", "the correction wins");
     }
 
     // ───────────────────────── recall eval (the scoreboard) ─────────────────────────

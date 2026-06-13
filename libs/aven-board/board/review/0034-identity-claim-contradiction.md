@@ -46,16 +46,23 @@ The intelligence belongs in the extractor, not a Rust table:
 
 ## Acceptance criteria
 
-- [ ] A `MockExtractor` fed the subject's open claims returns a supersession; `extract_batch` applies
-      it so the old claim closes and only the corrected one stays open. No hardcoded predicate strings
-      anywhere in the path.
-- [ ] `recall_eval_no_regression` + full suite stay green.
+- [x] `extract()` now takes the subject's existing open claims (`known: &[KnownClaim]`); `extract_batch`
+      gathers them (`known_claims`, cap 64) and passes them. Test `extractor_reconciles_against_known_claims_no_hardcoding`:
+      a reconciling extractor REUSES the known predicate (`full_name`, arbitrary) for an update → the
+      stale claim closes, one corrected claim stays open. The predicate is the extractor's, not a Rust constant.
+- [x] No hardcoded synonym table / `canonical_predicate` in production (`grep` clean; the only `full_name`
+      hits are the test fixture proving an arbitrary predicate flows through generically).
+- [x] `recall_eval_no_regression` + full suite (40 lib + 3 integration) green; the TinfoilExtractor prompt
+      now includes a KNOWN FACTS block + a "reuse the exact subject+predicate on an update" instruction;
+      `cargo build -p aven-os-app --features desktop-ai` exits 0.
 
 ## Verification
 
 ```
-cargo test -p aven-brain   # the new reconcile test + no-regression
-grep -rn "canonical_predicate\|full_name\|goes_by" libs/aven-brain/src   # expect: nothing hardcoded
+cargo test -p aven-brain extractor_reconciles_against_known_claims_no_hardcoding
+cargo test -p aven-brain                       # full suite + recall no-regression
+grep -rn "canonical_predicate" libs/aven-brain/src app/src-tauri/src   # expect: nothing
+cargo build -p aven-os-app --features desktop-ai
 ```
 
 ## Follow-ups
@@ -66,6 +73,9 @@ grep -rn "canonical_predicate\|full_name\|goes_by" libs/aven-brain/src   # expec
 
 ## Progress log
 
+- `2026-06-13` — Built the generic mechanism: `KnownClaim` context threaded into `Extractor::extract`,
+  `extract_batch` gathers open claims (`known_claims`), the TinfoilExtractor prompt shows them + asks to
+  reuse the exact predicate on an update; reconcile test green, no hardcoded vocabulary. Moved to review.
 - `2026-06-13` — Reverted the hardcoded `canonical_predicate` synonym table (violated the
   fully-generic principle). Re-specced as extractor reconciliation (the model decides same-relation,
   in any language). Back to discover until built + validated against a real export.

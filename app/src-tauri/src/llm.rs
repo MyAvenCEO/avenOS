@@ -222,19 +222,34 @@ relations (e.g. plays_for, scored, scored_in, assisted, booked, sent_off, defeat
 drew_with, refereed, hosted_in, took_place_on). Be exhaustive: capture goals, cards, \
 results, lineups, dates.\n\
 Subjects/objects/names are short entity names. Only what the text actually states — \
-return {\"entities\":[],\"facts\":[]} when there is nothing.";
+return {\"entities\":[],\"facts\":[]} when there is nothing.\n\
+If a KNOWN FACTS list is provided and a memory UPDATES one of those relations (a correction or a \
+change over time), REUSE that fact's EXACT subject and predicate so the update replaces the old \
+value — do not invent a synonym predicate for the same relation.";
 
 #[cfg(feature = "tinfoil")]
 impl aven_brain::Extractor for TinfoilExtractor {
 	async fn extract(
 		&self,
 		batch: &[aven_brain::ExtractionInput],
+		known: &[aven_brain::KnownClaim],
 	) -> Result<aven_brain::Extraction, String> {
 		use serde::Deserialize;
 		if batch.is_empty() {
 			return Ok(aven_brain::Extraction::default());
 		}
+		// Reconciliation context (board 0034): show the model the existing open claims so a memory
+		// that UPDATES a known relation reuses its exact predicate → the stale claim is superseded.
+		// Generic — the model judges "same relation" in any language; no hardcoded synonym table.
 		let mut blocks = String::new();
+		if !known.is_empty() {
+			blocks.push_str("KNOWN FACTS (reuse the exact subject+predicate when a memory updates one):\n");
+			for k in known {
+				blocks.push_str(&format!("- {} | {} | {}\n", k.subject, k.predicate, k.object));
+			}
+			blocks.push('\n');
+		}
+		blocks.push_str("MEMORIES:\n");
 		for (i, input) in batch.iter().enumerate() {
 			blocks.push_str(&format!("[{i}]\n{}\n\n", input.content));
 		}

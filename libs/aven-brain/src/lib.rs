@@ -51,7 +51,7 @@ pub use brain::{
 };
 pub use embedder::{Embedder, StubEmbedder};
 pub use extractor::{
-    ExtractedEntity, ExtractedFact, Extraction, ExtractionInput, Extractor, MockExtractor,
+    ExtractedEntity, ExtractedFact, Extraction, ExtractionInput, Extractor, KnownClaim, MockExtractor,
     NoExtractor, SelfSummary,
 };
 pub use schema::{brain_schema, EMBED_DIM};

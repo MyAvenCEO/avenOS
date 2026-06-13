@@ -178,11 +178,15 @@ impl Extractor for AppExtractor {
 		}
 	}
 
-	async fn extract(&self, batch: &[ExtractionInput]) -> Result<Extraction, String> {
+	async fn extract(
+		&self,
+		batch: &[ExtractionInput],
+		known: &[aven_brain::KnownClaim],
+	) -> Result<Extraction, String> {
 		match self {
-			AppExtractor::None(x) => x.extract(batch).await,
+			AppExtractor::None(x) => x.extract(batch, known).await,
 			#[cfg(feature = "tinfoil")]
-			AppExtractor::Tinfoil(x) => x.extract(batch).await,
+			AppExtractor::Tinfoil(x) => x.extract(batch, known).await,
 		}
 	}
 

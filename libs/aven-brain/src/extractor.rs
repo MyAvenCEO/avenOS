@@ -29,6 +29,18 @@ pub struct ExtractionInput {
     pub content: String,
 }
 
+/// An existing OPEN claim handed to the extractor as reconciliation context (board 0034). The
+/// extractor sees what's already known so, when a new statement UPDATES a known relation, it can
+/// **reuse that relation's exact predicate** — then normal `(subject, predicate)` supersession closes
+/// the stale claim. This keeps contradiction-resolution FULLY GENERIC: the "is this the same
+/// relation?" judgement lives in the model (any language, any relation), never a hardcoded table.
+#[derive(Clone, Debug)]
+pub struct KnownClaim {
+    pub subject: String,
+    pub predicate: String,
+    pub object: String,
+}
+
 /// A typed, temporal assertion extracted from a memory: `subject —predicate→ object`,
 /// optionally valid over a window, with a confidence and its source memory. Maps to a
 /// claim link row (see [`crate::schema::LINKS`]).
@@ -97,9 +109,15 @@ pub trait Extractor: Send + Sync {
     fn enabled(&self) -> bool {
         true
     }
-    /// Extract facts from `batch`. Returns all facts found across the inputs plus the
-    /// token cost of producing them.
-    async fn extract(&self, batch: &[ExtractionInput]) -> Result<Extraction, String>;
+    /// Extract facts from `batch`. `known` carries the owner's existing OPEN claims as
+    /// reconciliation context (board 0034): when a new statement updates a known relation, REUSE
+    /// that claim's exact predicate so supersession closes the stale one — no hardcoded synonyms.
+    /// Returns all facts found across the inputs plus the token cost of producing them.
+    async fn extract(
+        &self,
+        batch: &[ExtractionInput],
+        known: &[KnownClaim],
+    ) -> Result<Extraction, String>;
 
     /// Synthesize/refresh the brain owner's L0 **self** profile (who they are: name, age,
     /// role, location, goals, durable preferences) from their recent first-person memories
@@ -124,7 +142,11 @@ impl Extractor for NoExtractor {
         false
     }
 
-    async fn extract(&self, _batch: &[ExtractionInput]) -> Result<Extraction, String> {
+    async fn extract(
+        &self,
+        _batch: &[ExtractionInput],
+        _known: &[KnownClaim],
+    ) -> Result<Extraction, String> {
         Ok(Extraction::default())
     }
 }
@@ -149,7 +171,11 @@ impl MockExtractor {
 }
 
 impl Extractor for MockExtractor {
-    async fn extract(&self, batch: &[ExtractionInput]) -> Result<Extraction, String> {
+    async fn extract(
+        &self,
+        batch: &[ExtractionInput],
+        _known: &[KnownClaim],
+    ) -> Result<Extraction, String> {
         let facts = batch
             .iter()
             .flat_map(|input| {
