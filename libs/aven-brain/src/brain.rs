@@ -117,6 +117,22 @@ fn is_instrumentation_stream(stream: &str) -> bool {
     stream == STREAM_DREAMLOG || stream == STREAM_TRACE
 }
 
+/// Canonicalize a claim predicate so SYNONYMOUS assertions supersede each other instead of
+/// coexisting (board 0034). Claim supersession keys on exact `(subject, predicate)`, but the LLM
+/// extractor freely emits `name` / `full_name` / `called` / `goes_by` for the SAME relation — so
+/// `name=Sam` and `full_name=Samuel` both survived and recall served the contradiction. Name-like
+/// predicates fold to `name`; everything else just normalizes case/separators.
+fn canonical_predicate(predicate: &str) -> String {
+    let p = predicate.trim().to_lowercase().replace([' ', '-'], "_");
+    match p.as_str() {
+        "name" | "full_name" | "fullname" | "called" | "is_called" | "goes_by" | "named"
+        | "is_named" | "first_name" | "firstname" | "given_name" | "real_name" | "preferred_name" => {
+            "name".to_string()
+        }
+        _ => p,
+    }
+}
+
 /// Resolve a kind to its class. Claim predicates are free-form but must not collide
 /// with the reserved note/bond kinds.
 fn class_for_claim_predicate(kind: &str) -> Result<(), BrainError> {
@@ -1731,6 +1747,10 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         source_memory: Option<ObjectId>,
         confidence: f64,
     ) -> Result<ObjectId, BrainError> {
+        // Fold synonymous predicates (name/full_name/called/…) to one canonical key so a corrected
+        // assertion SUPERSEDES the old one instead of coexisting with it (board 0034).
+        let predicate = canonical_predicate(predicate);
+        let predicate = predicate.as_str();
         class_for_claim_predicate(predicate)?;
         let subj = self.upsert_entity(subject).await?;
         let obj = self.upsert_entity(object).await?;
@@ -3802,6 +3822,27 @@ mod tests {
             );
             assert_ne!(g, "what did we discuss", "gist echoes the current query");
         }
+    }
+
+    #[tokio::test]
+    async fn identity_name_predicates_canonicalize_and_supersede() {
+        // Board 0034: the extractor emits `name` then `full_name` for the same relation. Both used
+        // to survive (different predicate keys) → recall served "name is Sam" AND "full name is
+        // Samuel". Canonicalization folds them so the correction supersedes the old name.
+        let brain = test_brain("name-canon").await;
+        brain.add_fact("the user", "name", "Sam", None).await.unwrap();
+        brain.add_fact("the user", "full_name", "Samuel", None).await.unwrap();
+
+        let open: Vec<Fact> = brain
+            .facts("the user")
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|f| f.valid_to_ms.is_none())
+            .collect();
+        assert_eq!(open.len(), 1, "contradictory name claims must collapse to one, got {open:?}");
+        assert_eq!(open[0].predicate, "name");
+        assert_eq!(open[0].object_name, "Samuel", "the correction wins");
     }
 
     // ───────────────────────── recall eval (the scoreboard) ─────────────────────────
