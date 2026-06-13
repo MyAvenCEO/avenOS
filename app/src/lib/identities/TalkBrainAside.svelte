@@ -16,7 +16,7 @@ import { copyToClipboard } from '$lib/runtime/clipboard'
 
 const { identityId }: { identityId: string } = $props()
 
-let tab = $state<'activity' | 'context' | 'dreaming'>('activity')
+let tab = $state<'activity' | 'context' | 'dreaming' | 'entities'>('activity')
 
 /** Live activity timeline for THIS identity (or null). */
 const activity = $derived(
@@ -113,7 +113,7 @@ function activityStyle(kind: string): { dot: string; text: string } {
 /** When set, the aside shows the entity detail view (back button returns to the tabs). */
 let detail = $state<string | null>(null)
 
-// The brain's entities for THIS identity — shown as walkable mini-cards in the Dreaming tab.
+// The brain's entities for THIS identity — shown as walkable mini-cards in the Entities tab.
 // Newest first (ObjectId is time-ordered). Re-fetched whenever the dream log advances, so
 // freshly-typed entities appear as dreaming mines them.
 let entities = $state<BrainEntity[]>([])
@@ -237,6 +237,19 @@ function phaseStyle(phase: string): { dot: string; text: string } {
 			Dreaming
 			{#if log?.running}
 				<span class="size-1.5 animate-pulse rounded-full bg-violet-400"></span>
+			{/if}
+		</button>
+		<button
+			type="button"
+			class="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold tracking-tight transition {tab ===
+			'entities'
+				? 'bg-card text-foreground'
+				: 'text-muted-foreground hover:text-foreground'}"
+			onclick={() => (tab = 'entities')}
+		>
+			Entities
+			{#if entities.length > 0}
+				<span class="text-[10px] text-muted-foreground">{entities.length}</span>
 			{/if}
 		</button>
 		{#if tab === 'context' && rt}
@@ -460,47 +473,9 @@ function phaseStyle(phase: string): { dot: string; text: string } {
 					{/if}
 				{/if}
 			{/if}
-		{:else}
-			<!-- DREAMING TAB: the entity graph it has built + the live consolidation log. -->
-
-			<!-- Entity cards: every entity dreaming has graphed/typed. Click → detail view. -->
-			<section class="rounded-lg border border-border/60 bg-card/30 p-2">
-				<div class="mb-1.5 flex items-center gap-2">
-					<span class="font-medium"><span class="text-sky-400">entities</span> · {entities.length}</span>
-					<button
-						type="button"
-						class="ml-auto rounded-md border border-border/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition hover:border-primary/60 hover:text-foreground disabled:opacity-50"
-						title="Wipe the entity graph (memories kept) and re-mine it clean + typed over the next dreams"
-						disabled={rebuilding}
-						onclick={rebuildGraph}
-					>
-						{rebuilding ? 'rebuilding…' : 'rebuild'}
-					</button>
-				</div>
-				{#if entities.length === 0}
-					<p class="text-muted-foreground">— none graphed yet</p>
-				{:else}
-					<div class="grid grid-cols-2 gap-1.5">
-						{#each entities.slice(0, 40) as e (e.id)}
-							<button
-								type="button"
-								class="flex flex-col items-start rounded-md border border-border/60 px-2 py-1 text-left transition hover:border-primary/60 hover:bg-card"
-								onclick={() => (detail = e.name)}
-							>
-								<span class="w-full truncate font-medium text-foreground/90">{e.name}</span>
-								<span class="text-[10px] text-sky-400">{e.kind}</span>
-							</button>
-						{/each}
-					</div>
-					{#if entities.length > 40}
-						<p class="text-muted-foreground mt-1.5 text-[10px]">
-							+{entities.length - 40} more — click any card to walk the graph
-						</p>
-					{/if}
-				{/if}
-			</section>
-
-			<div class="mb-1 mt-1 font-medium text-muted-foreground">consolidation log</div>
+		{:else if tab === 'dreaming'}
+			<!-- DREAMING TAB: the live consolidation log (entities live in their own tab now). -->
+			<div class="mb-1 font-medium text-muted-foreground">consolidation log</div>
 			{#if !log || (log.entries.length === 0 && !log.running)}
 				<p class="text-muted-foreground">No dream yet — it runs after each message.</p>
 			{:else}
@@ -546,6 +521,44 @@ function phaseStyle(phase: string): { dot: string; text: string } {
 					{/if}
 				</ol>
 			{/if}
+		{:else}
+			<!-- ENTITIES TAB: the knowledge graph the brain has built — every entity it graphed +
+			     typed. Click a card to walk its facts + bonds; rebuild re-mines it clean. -->
+			<section class="rounded-lg border border-border/60 bg-card/30 p-2">
+				<div class="mb-1.5 flex items-center gap-2">
+					<span class="font-medium"><span class="text-sky-400">entities</span> · {entities.length}</span>
+					<button
+						type="button"
+						class="ml-auto rounded-md border border-border/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition hover:border-primary/60 hover:text-foreground disabled:opacity-50"
+						title="Wipe the entity graph (memories kept) and re-mine it clean + typed over the next dreams"
+						disabled={rebuilding}
+						onclick={rebuildGraph}
+					>
+						{rebuilding ? 'rebuilding…' : 'rebuild'}
+					</button>
+				</div>
+				{#if entities.length === 0}
+					<p class="text-muted-foreground">— none graphed yet. Ingest a few notes; dreaming types them.</p>
+				{:else}
+					<div class="grid grid-cols-2 gap-1.5">
+						{#each entities.slice(0, 80) as e (e.id)}
+							<button
+								type="button"
+								class="flex flex-col items-start rounded-md border border-border/60 px-2 py-1 text-left transition hover:border-primary/60 hover:bg-card"
+								onclick={() => (detail = e.name)}
+							>
+								<span class="w-full truncate font-medium text-foreground/90">{e.name}</span>
+								<span class="text-[10px] text-sky-400">{e.kind}</span>
+							</button>
+						{/each}
+					</div>
+					{#if entities.length > 80}
+						<p class="text-muted-foreground mt-1.5 text-[10px]">
+							+{entities.length - 80} more — click any card to walk the graph
+						</p>
+					{/if}
+				{/if}
+			</section>
 		{/if}
 	</div>
 </div>
