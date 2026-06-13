@@ -64,10 +64,14 @@ stub entirely if the caller is itself cfg-gated (then no stub is needed). Verify
 
 ## Acceptance criteria
 
-- [ ] `cargo build -p aven-os-app --no-default-features --features desktop-ai,local-voice` — 0 embed_model warnings.
-- [ ] `cargo build -p aven-os-app` (no default features) — 0 embed_model warnings.
-- [ ] brain-gemma path unchanged (the download still triggers from `brain_ipc.rs`).
-- [ ] No files changed beyond `embed_model.rs` (+ caller only if required).
+- [x] `cargo check -p aven-os-app --no-default-features --features desktop-ai,local-voice` — 0
+      embed_model warnings/errors (brain-gemma ON: `ensure_download` + real `imp::ensure` + `Emitter`
+      all used).
+- [x] `cargo check -p aven-os-app --no-default-features --features local-voice` (no brain-gemma —
+      the config that was warning) — 0 embed_model warnings/errors.
+- [x] brain-gemma path unchanged: `brain_ipc.rs:115` still calls `ensure_download` (both now gated
+      to `brain-gemma`, so they line up).
+- [x] Changes confined to `embed_model.rs` (no caller edit needed — the gates already matched).
 
 ## Verification
 
@@ -81,6 +85,11 @@ git status --porcelain
 
 Newest entry first.
 
+- `2026-06-13` — DONE. Gated `Emitter` import to `brain-gemma` (only the real `imp` emits), gated
+  `ensure_download` to `brain-gemma` (its only caller, `brain_ipc.rs:115`, is likewise gated), and
+  removed the orphaned stub `imp::ensure`. Both feature configs (`local-voice`; `desktop-ai,local-voice`)
+  `cargo check` clean — zero embed_model warnings; brain-gemma path unchanged; confined to
+  `embed_model.rs`. Moved discover → review.
 - `2026-06-13` — Discovered + specced. Surfaced during the frontier work (board 0026/0027) build
   output; confirmed `ensure_download` is live under `brain-gemma` so it's a cfg-alignment task, not
   a deletion. Measurable goal = zero embed_model warnings across the feature matrix.

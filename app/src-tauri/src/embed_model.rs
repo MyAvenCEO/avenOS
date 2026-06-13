@@ -9,7 +9,11 @@
 //! (run `brainReembed` afterwards to migrate existing memories into Gemma space).
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
+// `Emitter` is only used by the real (brain-gemma) `imp` to push download-progress events;
+// without that feature there's no emit, so the import would be dead.
+#[cfg(feature = "brain-gemma")]
+use tauri::Emitter;
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -187,11 +191,12 @@ mod imp {
 	}
 	pub fn spawn_download(_app: &AppHandle) {}
 	pub fn cancel(_app: &AppHandle) {}
-	pub fn ensure(_app: &AppHandle) {}
 }
 
 /// ENFORCE gemma mode: auto-fetch the embedder weights if missing (idempotent). The brain calls
-/// this on first use so it converges to EmbeddingGemma without a manual Download click.
+/// this on first use so it converges to EmbeddingGemma without a manual Download click. Only the
+/// `brain-gemma` build has a downloader (and the only caller, `brain_ipc`, is likewise gated).
+#[cfg(feature = "brain-gemma")]
 pub fn ensure_download(app: &AppHandle) {
 	imp::ensure(app);
 }
