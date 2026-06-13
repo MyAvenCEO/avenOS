@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use aven_brain::{
 	Brain, ContextOptions, Embedder, Extraction, ExtractionInput, Extractor, Filter, KeySealer,
-	NoExtractor, RememberOptions, StubEmbedder, EMBED_DIM,
+	NoExtractor, RememberOptions,
 };
 use aven_db::{AvenDbClient, ObjectId, QueryBuilder, Value};
 use serde_json::json;
@@ -23,37 +23,56 @@ use uuid::Uuid;
 use super::conn::{with_connected_client, ManagedAvenDb, ENCRYPTED_META};
 use super::engine;
 
-/// The app's brain embedder: EmbeddingGemma-300m when the `brain-gemma` feature is on
-/// AND the model + onnxruntime dylib are present; otherwise the deterministic stub.
+/// Recognizable error returned by [`app_embedder`]/[`brain_over`] when the real embedder isn't
+/// loaded yet — the frontend matches this prefix to show "preparing memory model… X%" and block
+/// the turn (instead of treating it as a generic failure). Board 0032: there is NO stub fallback.
+pub(crate) const EMBED_MODEL_NOT_READY: &str = "EMBED_MODEL_NOT_READY";
+
+/// The app's brain embedder. **There is exactly one real embedder — EmbeddingGemma-300m — and no
+/// stub fallback (board 0032).** Mixing fake (hashed bag-of-words) vectors with Gemma vectors in
+/// one store permanently corrupts recall, so the brain must NEVER embed with anything but the real
+/// model. This is enforced at COMPILE time: under `brain-gemma` the only constructible variant is
+/// `Gemma`; `app_embedder` returns an error (never a stub) when the model isn't loaded.
 /// Enum dispatch because [`Embedder`] uses `async fn` (not dyn-safe).
 pub(crate) enum AppEmbedder {
-	Stub(StubEmbedder),
+	/// The on-device EmbeddingGemma-300m — the only real embedder. Constructed solely by
+	/// [`app_embedder`], and only once the model has loaded.
 	#[cfg(feature = "brain-gemma")]
 	Gemma(Arc<aven_brain::GemmaEmbedder>),
+	/// NEVER constructed. Exists only so the type stays inhabited on builds without `brain-gemma`
+	/// (iOS, until the embedder is wired there). `brain_over` refuses to build a Brain without a
+	/// real embedder, so this can't reach `embed` — a fake vector can never enter the store.
+	#[allow(dead_code)]
+	Unavailable,
 }
 
 impl Embedder for AppEmbedder {
 	fn dim(&self) -> usize {
 		match self {
-			AppEmbedder::Stub(e) => e.dim(),
 			#[cfg(feature = "brain-gemma")]
 			AppEmbedder::Gemma(e) => e.dim(),
+			AppEmbedder::Unavailable => {
+				unreachable!("AppEmbedder::Unavailable is never constructed (board 0032)")
+			}
 		}
 	}
 
 	async fn embed(&self, text: &str) -> Vec<f32> {
+		let _ = text;
 		match self {
-			AppEmbedder::Stub(e) => e.embed(text).await,
 			#[cfg(feature = "brain-gemma")]
 			AppEmbedder::Gemma(e) => e.embed(text).await,
+			AppEmbedder::Unavailable => {
+				unreachable!("AppEmbedder::Unavailable is never constructed (board 0032)")
+			}
 		}
 	}
 
 	fn name(&self) -> &'static str {
 		match self {
-			AppEmbedder::Stub(e) => e.name(),
 			#[cfg(feature = "brain-gemma")]
 			AppEmbedder::Gemma(e) => e.name(),
+			AppEmbedder::Unavailable => "unavailable",
 		}
 	}
 }
@@ -159,11 +178,27 @@ impl Extractor for AppExtractor {
 		}
 	}
 
-	async fn extract(&self, batch: &[ExtractionInput]) -> Result<Extraction, String> {
+	async fn extract(
+		&self,
+		batch: &[ExtractionInput],
+		known: &[aven_brain::KnownClaim],
+	) -> Result<Extraction, String> {
 		match self {
-			AppExtractor::None(x) => x.extract(batch).await,
+			AppExtractor::None(x) => x.extract(batch, known).await,
 			#[cfg(feature = "tinfoil")]
-			AppExtractor::Tinfoil(x) => x.extract(batch).await,
+			AppExtractor::Tinfoil(x) => x.extract(batch, known).await,
+		}
+	}
+
+	async fn summarize_self(
+		&self,
+		owner_memories: &[String],
+		current: &str,
+	) -> Result<Option<aven_brain::SelfSummary>, String> {
+		match self {
+			AppExtractor::None(x) => x.summarize_self(owner_memories, current).await,
+			#[cfg(feature = "tinfoil")]
+			AppExtractor::Tinfoil(x) => x.summarize_self(owner_memories, current).await,
 		}
 	}
 }
@@ -182,18 +217,31 @@ fn app_extractor() -> AppExtractor {
 /// Pick the best available embedder for this process. NOTE: all devices of an
 /// identity must embed with one model — mixed stub/gemma stores degrade recall
 /// across the boundary (re-embed pass = the E7 maintenance item).
-async fn app_embedder(app: &tauri::AppHandle) -> AppEmbedder {
+/// Resolve the REAL embedder, or an error — never a stub (board 0032). When EmbeddingGemma isn't
+/// loaded yet this kicks off the download (download-on-first-use, like voice STT) and returns
+/// [`EMBED_MODEL_NOT_READY`] so the caller blocks the turn and shows progress. The brain refuses to
+/// run on a fake embedder because mixing stub + Gemma vectors permanently corrupts recall.
+async fn app_embedder(app: &tauri::AppHandle) -> Result<AppEmbedder, String> {
 	#[cfg(feature = "brain-gemma")]
-	if let Some(g) = gemma_embedder(app).await {
-		return AppEmbedder::Gemma(g);
+	{
+		if let Some(g) = gemma_embedder(app).await {
+			return Ok(AppEmbedder::Gemma(g));
+		}
+		// Not loaded — ensure the download is running (idempotent) and block until ready.
+		crate::embed_model::ensure_download(app);
+		Err(EMBED_MODEL_NOT_READY.to_string())
 	}
-	let _ = app;
-	AppEmbedder::Stub(StubEmbedder::new(EMBED_DIM))
+	#[cfg(not(feature = "brain-gemma"))]
+	{
+		let _ = app;
+		Err(EMBED_MODEL_NOT_READY.to_string())
+	}
 }
 
-/// Wrap the shared connected client as `identity`'s brain (EmbeddingGemma when
-/// available, stub otherwise), sealed with the identity's current DEK — no DEK,
-/// no brain (fail closed: a brain that cannot seal must not write plaintext).
+/// Wrap the shared connected client as `identity`'s brain with the REAL EmbeddingGemma embedder,
+/// sealed with the identity's current DEK. Fail closed on BOTH axes: no DEK → no brain (never write
+/// plaintext); embedder not loaded → `Err(EMBED_MODEL_NOT_READY)` (never a stub — board 0032). The
+/// embedder is resolved LAST so a missing DEK still reports first.
 async fn brain_over(
 	app: &tauri::AppHandle,
 	client: Arc<AvenDbClient>,
@@ -211,17 +259,14 @@ async fn brain_over(
 		.ok_or("brain: identity DEK not held — cannot seal")?;
 	let sealer = Arc::new(KeySealer::new(*dek.expose(), owner_uuid, ver));
 	let owner = ObjectId::from_uuid(owner_uuid);
+	// Resolve the real embedder — returns Err (never a stub) if Gemma isn't loaded, blocking the
+	// brain until the model is ready.
+	let embedder = app_embedder(app).await?;
+	// Pass the device signer so every brain row (memories/entities/links) carries an owner-binding
+	// and passes the fail-closed apply gate on relay + peers (else it never syncs). The
+	// edit-signature is added by the client's installed AppEditSigner.
 	Ok((
-		// Pass the device signer so every brain row (memories/entities/links) carries an
-		// owner-binding and passes the fail-closed apply gate on relay + peers (else it never
-		// syncs). The edit-signature is added by the client's installed AppEditSigner.
-		Brain::over(
-			client,
-			owner,
-			app_embedder(app).await,
-			sealer,
-			Some(shell.signing_key.clone()),
-		),
+		Brain::over(client, owner, embedder, sealer, Some(shell.signing_key.clone())),
 		owner,
 	))
 }
@@ -255,7 +300,7 @@ pub(crate) async fn brain_ipc_status(
 	Ok(json!({
 		"ready": true,
 		"embedder": brain.embedder_name(),
-		"embedDim": EMBED_DIM,
+		"embedDim": brain.embedder_dim(),
 		"memories": owner_count(client.as_ref(), "memories", owner).await?,
 		"entities": owner_count(client.as_ref(), "entities", owner).await?,
 		"links": owner_count(client.as_ref(), "links", owner).await?,
@@ -384,7 +429,104 @@ pub(crate) async fn brain_ipc_assemble_context(
 		.assemble_context(&query, &opts)
 		.await
 		.map_err(|e| e.to_string())?;
+	// Persist this round's trace to the sealed `trace` stream (board 0029 M3) so the debug
+	// export can reconstruct exactly what context each turn saw. Best-effort.
+	let _ = brain.persist_context_trace(&bundle.trace).await;
 	serde_json::to_value(bundle).map_err(|e| e.to_string())
+}
+
+/// Full-session debug export (board 0029 M3): ONE JSON with the whole message history, the
+/// per-round `ContextTrace`, and the full dreaming log — downloaded by the "Export debug session"
+/// button in the brain aside for offline analysis of recall quality over time.
+pub(crate) async fn brain_ipc_debug_export(
+	app: &tauri::AppHandle,
+	mj: &ManagedAvenDb,
+	ss: &SelfState,
+	identity: String,
+) -> Result<serde_json::Value, String> {
+	let client = with_connected_client(mj, app, ss).await?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(app, client, &shell, &identity).await?;
+	let export = brain.debug_export().await.map_err(|e| e.to_string())?;
+	serde_json::to_value(export).map_err(|e| e.to_string())
+}
+
+/// Build the debug export AND WRITE it to a file on disk, returning the absolute path. The Tauri
+/// webview can't do a browser `<a download>` blob save, so the frontend button calls this and shows
+/// the path. Lands in a clean, visible `<Documents>/avenOS/debug/` folder.
+pub(crate) async fn brain_ipc_debug_export_save(
+	app: &tauri::AppHandle,
+	mj: &ManagedAvenDb,
+	ss: &SelfState,
+	identity: String,
+) -> Result<serde_json::Value, String> {
+	let client = with_connected_client(mj, app, ss).await?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(app, client, &shell, &identity).await?;
+	let export = brain.debug_export().await.map_err(|e| e.to_string())?;
+	let json = serde_json::to_string_pretty(&export).map_err(|e| e.to_string())?;
+
+	let dir = tauri_plugin_self::paths::user_documents_dir(app)?
+		.join("avenOS")
+		.join("debug");
+	std::fs::create_dir_all(&dir).map_err(|e| format!("create avenOS/debug dir: {e}"))?;
+	let fname = format!("brain-debug-{}-{}.json", identity.trim(), export.exported_at_ms);
+	let path = dir.join(&fname);
+	std::fs::write(&path, json.as_bytes()).map_err(|e| format!("write {}: {e}", path.display()))?;
+
+	Ok(json!({
+		"path": path.to_string_lossy(),
+		"bytes": json.len(),
+		"messages": export.messages.len(),
+		"rounds": export.rounds.len(),
+		"dreamLog": export.dream_log.len(),
+	}))
+}
+
+/// Persist a batch of `activity`-timeline steps (board 0029 M2): the frontend Activity tab is live
+/// `$state`, so at turn-end the app ships its steps here to be sealed into the `dreamlog` stream —
+/// so the perf timeline survives reload and rides along in the debug export. Best-effort per entry.
+pub(crate) async fn brain_ipc_append_activity(
+	app: &tauri::AppHandle,
+	mj: &ManagedAvenDb,
+	ss: &SelfState,
+	identity: String,
+	entries: Vec<ActivityLogIn>,
+) -> Result<serde_json::Value, String> {
+	let client = with_connected_client(mj, app, ss).await?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(app, client, &shell, &identity).await?;
+	let mut written = 0usize;
+	for e in entries {
+		let entry = aven_brain::LogEntry {
+			kind: "activity".to_string(),
+			phase: e.phase,
+			label: e.label,
+			detail: e.detail,
+			count: 0,
+			tokens: 0,
+			ms: e.ms,
+			entities: Vec::new(),
+			at_ms: e.at_ms,
+		};
+		if brain.append_log(&entry).await.is_ok() {
+			written += 1;
+		}
+	}
+	Ok(json!({ "written": written }))
+}
+
+/// One activity step from the frontend timeline (board 0029 M2).
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ActivityLogIn {
+	pub phase: String,
+	pub label: String,
+	#[serde(default)]
+	pub detail: Option<String>,
+	#[serde(default)]
+	pub ms: i64,
+	pub at_ms: i64,
 }
 
 /// One-shot backfill: ingest this identity's existing `messages` history into the
@@ -528,6 +670,21 @@ pub(crate) async fn brain_ipc_dream(
 	serde_json::to_value(report).map_err(|e| e.to_string())
 }
 
+/// Wipe the derived entity/link graph (memories untouched) so dreams re-build it under the
+/// current rules — clears pre-existing `unknown` junk after an extraction-logic upgrade.
+pub(crate) async fn brain_ipc_rebuild_graph(
+	app: &tauri::AppHandle,
+	mj: &ManagedAvenDb,
+	ss: &SelfState,
+	identity: String,
+) -> Result<serde_json::Value, String> {
+	let client = with_connected_client(mj, app, ss).await?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(app, client, &shell, &identity).await?;
+	let (entities, links) = brain.rebuild_graph().await.map_err(|e| e.to_string())?;
+	Ok(json!({ "entities": entities, "links": links }))
+}
+
 /// Run fact-extraction OFF the avenDB actor.
 ///
 /// This is a standalone Tauri command (NOT routed through the actor mailbox) so the
@@ -551,6 +708,7 @@ pub async fn brain_do_extract(
 			label: label.into(),
 			count: 0,
 			tokens: 0,
+			entities: Vec::new(),
 			next_cursor: 100,
 			done: false,
 		})
@@ -559,26 +717,68 @@ pub async fn brain_do_extract(
 	if !brain.extractor_enabled() {
 		return noop("No extractor configured — skipping");
 	}
-	let result = brain.extract_one_batch().await.map_err(|e| e.to_string())?;
-	serde_json::to_value(match result {
-		Some((n_mems, n_facts, tokens)) => aven_brain::DreamStep {
+	let result = match brain.extract_one_batch().await {
+		Ok(r) => r,
+		Err(e) => {
+			let msg = e.to_string();
+			// Timeout is transient — don't fail the dreaming pass, just log and skip.
+			let label = if msg.contains("timed out") {
+				"Extraction timed out — will retry next dream".to_string()
+			} else {
+				format!("Extraction failed: {msg}")
+			};
+			return serde_json::to_value(aven_brain::DreamStep {
+				phase: "extract".into(),
+				label,
+				count: 0,
+				tokens: 0,
+				entities: Vec::new(),
+				next_cursor: 100,
+				done: false,
+			})
+			.map_err(|e| e.to_string());
+		}
+	};
+	// Auto-maintain L0 self from the owner's recent first-person memories (same off-actor
+	// pass so the LLM call never blocks the actor). A failure here must NOT fail the extract
+	// step — self upkeep is best-effort.
+	let self_tokens = brain.refresh_self().await.ok().flatten();
+	let self_suffix = match self_tokens {
+		Some(_) => " · self refreshed",
+		None => "",
+	};
+	let self_tok = self_tokens.unwrap_or(0);
+
+	let step = match result {
+		Some((n_mems, entities, n_facts, tokens)) => aven_brain::DreamStep {
 			phase: "extract".into(),
-			label: format!("Mined {n_facts} facts from {n_mems} memories"),
-			count: n_facts as i64,
-			tokens,
+			label: format!(
+				"Mined {} typed entities + {n_facts} facts from {n_mems} memories{self_suffix}",
+				entities.len()
+			),
+			count: (entities.len() + n_facts) as i64,
+			tokens: tokens + self_tok,
+			entities,
 			next_cursor: 100,
 			done: false,
 		},
 		None => aven_brain::DreamStep {
 			phase: "extract".into(),
-			label: "All memories fact-mined".into(),
+			label: format!("All memories fact-mined{self_suffix}"),
 			count: 0,
-			tokens: 0,
+			tokens: self_tok,
+			entities: Vec::new(),
 			next_cursor: 100,
 			done: false,
 		},
-	})
-	.map_err(|e| e.to_string())
+	};
+	// Persist to the sealed `dreamlog` stream (board 0029 M2) — best-effort.
+	let now = std::time::SystemTime::now()
+		.duration_since(std::time::UNIX_EPOCH)
+		.map(|d| d.as_millis() as i64)
+		.unwrap_or(0);
+	let _ = brain.log_dream_step(&step, now).await;
+	serde_json::to_value(step).map_err(|e| e.to_string())
 }
 
 /// One step of a STEPPED dream — a single bounded phase. The caller loops (cursor 0 → done),
@@ -603,5 +803,9 @@ pub(crate) async fn brain_ipc_dream_step(
 		.map(|d| d.as_millis() as i64)
 		.unwrap_or(0);
 	let step = brain.dream_step(cursor, now).await.map_err(|e| e.to_string())?;
+	// Persist the dream step to the sealed `dreamlog` stream (board 0029 M2) so the dreaming
+	// history accumulates across turns/restarts and the debug export can replay it. Best-effort:
+	// a log-write failure must never fail the dream pass.
+	let _ = brain.log_dream_step(&step, now).await;
 	serde_json::to_value(step).map_err(|e| e.to_string())
 }

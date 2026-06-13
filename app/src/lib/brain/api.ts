@@ -1,10 +1,12 @@
 /**
  * aven-brain IPC client (plan 0018, E2) — a per-SAFE brain over the shared avenDB
- * store. Thin wrappers around the `avendb_runtime` brain ops; all calls are
+ * store. Thin wrappers around the `brain_runtime` ops, which run OUTSIDE the avenDB
+ * actor mailbox so brain calls and todo/message CRUD interleave instead of blocking
+ * each other (writes still serialize at avenDB's internal core Mutex). All calls are
  * identity-scoped (one brain per SAFE).
  */
 import { invoke } from '@tauri-apps/api/core'
-import { avenDbRuntime } from '$lib/runtime/avendb-ipc'
+import { brainRuntime } from '$lib/runtime/avendb-ipc'
 
 export type BrainStatus = {
 	ready: boolean
@@ -63,6 +65,8 @@ export type ContextTrace = {
 	entities: Array<{ name: string; kind: string; bonds: [string, number][] }>
 	budget: { usedChars: number; maxChars: number; droppedRecalled: number; droppedWorking: number }
 	embedder: string
+	/** Per-phase wall-clock breakdown of the assembly (l0 · gist · working · recall · entities · pack). */
+	timings?: Array<{ label: string; ms: number }>
 	assembledAtMs: number
 }
 
@@ -81,7 +85,7 @@ export type DreamReport = {
 
 /** Row counts + embedder info for an identity's brain. */
 export function brainStatus(identity: string): Promise<BrainStatus> {
-	return avenDbRuntime('brainStatus', { identity })
+	return brainRuntime('brainStatus', { identity })
 }
 
 /** Store one memory (idempotent by content hash). Returns the memory row id. */
@@ -98,12 +102,12 @@ export function brainIngest(
 		importance?: number
 	} = {}
 ): Promise<{ id: string }> {
-	return avenDbRuntime('brainIngest', { identity, content, ...opts })
+	return brainRuntime('brainIngest', { identity, content, ...opts })
 }
 
 /** Explicit `refers_to` link between two memories (the `memory_link` tool). */
 export function brainLink(identity: string, from: string, to: string): Promise<{ ok: boolean }> {
-	return avenDbRuntime('brainLink', { identity, from, to })
+	return brainRuntime('brainLink', { identity, from, to })
 }
 
 /** Step a memory's veracity one tier toward `stated` (the `memory_attest` tool). */
@@ -111,12 +115,12 @@ export function brainAttest(
 	identity: string,
 	id: string
 ): Promise<{ ok: boolean; veracity: string }> {
-	return avenDbRuntime('brainAttest', { identity, id })
+	return brainRuntime('brainAttest', { identity, id })
 }
 
 /** Soft-drop a memory from recall — tombstone, nothing deleted (the `memory_forget` tool). */
 export function brainForget(identity: string, id: string): Promise<{ ok: boolean }> {
-	return avenDbRuntime('brainForget', { identity, id })
+	return brainRuntime('brainForget', { identity, id })
 }
 
 /** Hybrid recall (RRF + modifiers + abstention floor) with per-hit via/rank/score. */
@@ -126,15 +130,15 @@ export function brainSearch(
 	k = 8,
 	stream?: string
 ): Promise<BrainHit[]> {
-	return avenDbRuntime('brainSearch', { identity, query, k, ...(stream ? { stream } : {}) })
+	return brainRuntime('brainSearch', { identity, query, k, ...(stream ? { stream } : {}) })
 }
 
 export function brainEntities(identity: string): Promise<BrainEntity[]> {
-	return avenDbRuntime('brainEntities', { identity })
+	return brainRuntime('brainEntities', { identity })
 }
 
 export function brainEntityCard(identity: string, name: string): Promise<BrainEntityCard | null> {
-	return avenDbRuntime('brainEntityCard', { identity, name })
+	return brainRuntime('brainEntityCard', { identity, name })
 }
 
 /** The brain as context manager: budgeted prompt + ContextTrace receipt for one turn. */
@@ -143,22 +147,96 @@ export function brainAssembleContext(
 	query: string,
 	opts: { workingN?: number; recallK?: number; budgetChars?: number; stream?: string } = {}
 ): Promise<ContextBundle> {
-	return avenDbRuntime('brainAssembleContext', { identity, query, ...opts })
+	return brainRuntime('brainAssembleContext', { identity, query, ...opts })
 }
 
 /** One-shot ingest of the identity's existing message history (idempotent re-runs). */
 export function brainBackfill(identity: string): Promise<{ scanned: number; ingested: number }> {
-	return avenDbRuntime('brainBackfill', { identity })
+	return brainRuntime('brainBackfill', { identity })
+}
+
+/** One persisted instrumentation entry (dream or activity step) — mirrors `aven_brain::LogEntry`. */
+export type BrainLogEntry = {
+	kind: 'dream' | 'activity' | string
+	phase: string
+	label: string
+	count: number
+	tokens: number
+	entities?: { name: string; kind: string }[]
+	atMs: number
+}
+
+/** The full-session debug bundle — mirrors `aven_brain::DebugExport` (board 0029 M3). */
+export type BrainDebugExport = {
+	owner: string
+	exportedAtMs: number
+	/** Whole message history (instrumentation excluded), oldest-first. */
+	messages: unknown[]
+	/** One entry per human message + the ContextTrace that turn saw. */
+	rounds: { message: unknown; contextTrace: ContextBundle['trace'] | null }[]
+	/** The full persisted dreaming/activity log, oldest-first. */
+	dreamLog: BrainLogEntry[]
+}
+
+/**
+ * Export the FULL session for debugging (board 0029 M3): whole message history + the per-round
+ * `ContextTrace` + the full persisted dreaming log, as one JSON object.
+ */
+export function brainDebugExport(identity: string): Promise<BrainDebugExport> {
+	return brainRuntime('brainDebugExport', { identity })
+}
+
+/** Summary returned by {@link brainDebugExportSave}. */
+export type BrainDebugExportSaved = {
+	/** Absolute path of the written JSON file. */
+	path: string
+	bytes: number
+	messages: number
+	rounds: number
+	dreamLog: number
+}
+
+/**
+ * Build the debug export AND WRITE it to a file on disk (the Tauri webview can't do a browser blob
+ * download), returning the absolute path. The "Export debug session" button calls this and shows
+ * where the file landed (`<Documents>/avenOS/debug/`).
+ */
+export function brainDebugExportSave(identity: string): Promise<BrainDebugExportSaved> {
+	return brainRuntime('brainDebugExportSave', { identity })
+}
+
+/** One activity-timeline step persisted to the sealed log (board 0029 M2). */
+export type BrainActivityLogIn = { phase: string; label: string; detail?: string; ms: number; atMs: number }
+
+/**
+ * Persist a turn's activity-timeline steps (store · recall · model · tools) to the sealed dreamlog
+ * stream so the perf timeline survives reload + rides along in the debug export. Best-effort.
+ */
+export function brainAppendActivity(
+	identity: string,
+	entries: BrainActivityLogIn[]
+): Promise<{ written: number }> {
+	return brainRuntime('brainAppendActivity', { identity, entries })
 }
 
 /** Re-embed every memory with the CURRENT embedder (stub→gemma migration). */
 export function brainReembed(identity: string): Promise<{ reembedded: number; embedder: string }> {
-	return avenDbRuntime('brainReembed', { identity })
+	return brainRuntime('brainReembed', { identity })
+}
+
+/**
+ * Wipe the derived entity/link graph (memories untouched) so dreams re-build it clean under
+ * the current rules — clears pre-existing `unknown` junk after the extraction-logic upgrade.
+ */
+export function brainRebuildGraph(
+	identity: string
+): Promise<{ entities: number; links: number }> {
+	return brainRuntime('brainRebuildGraph', { identity })
 }
 
 /** Run a dreaming consolidation pass (decay, merge, claim healing, consolidation). */
 export function brainDream(identity: string): Promise<DreamReport> {
-	return avenDbRuntime('brainDream', { identity })
+	return brainRuntime('brainDream', { identity })
 }
 
 /** One step of a STEPPED dream (mirrors `aven_brain::DreamStep`). */
@@ -167,6 +245,8 @@ export type DreamStep = {
 	label: string
 	count: number
 	tokens: number
+	/** Entities typed by this step (extract phase) — clickable cards in the dreaming log. */
+	entities?: { name: string; kind: string }[]
 	nextCursor: number
 	done: boolean
 }
@@ -177,7 +257,7 @@ export type DreamStep = {
  * phases — and every step returns a log line for the live dreaming panel.
  */
 export function brainDreamStep(identity: string, cursor: number): Promise<DreamStep> {
-	return avenDbRuntime('brainDreamStep', { identity, cursor })
+	return brainRuntime('brainDreamStep', { identity, cursor })
 }
 
 /**

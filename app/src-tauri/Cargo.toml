@@ -39,7 +39,11 @@ path = "src/main.rs"
 # TTS onnxruntime dylib (`local-llm`/`local-tts`) still can't ship on iOS (Apple bans
 # standalone dylibs), so it stays desktop-only behind `desktop-ai`.
 # (`--no-default-features` still gives the light stub build for CI / quick checks.)
-default = ["local-voice"]
+# Cloud AI (Tinfoil confidential-cloud chat) is ON BY DEFAULT so Aven works out of the box for
+# desktop/dev with no `--features` flag (it activates only when `TINFOIL_API_KEY` is set). iOS
+# CANNOT ship the Tinfoil client, so the iOS scripts opt out with `--no-default-features
+# --features local-voice,local-llama`.
+default = ["local-voice", "tinfoil"]
 # Desktop (macOS) bundle of on-device AI on top of STT: llama.cpp LLM + MOSS TTS,
 # plus the Tinfoil confidential-cloud chat path (activates only when `TINFOIL_API_KEY`
 # is set in the env — local dev). macOS release + dev pass `--features desktop-ai`.

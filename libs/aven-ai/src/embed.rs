@@ -128,12 +128,25 @@ impl Embedder {
             .tokenizer
             .encode(text, true)
             .map_err(|e| format!("tokenize: {e}"))?;
-        let ids: Vec<i64> = enc.get_ids().iter().map(|&t| t as i64).collect();
-        let mask: Vec<i64> = enc.get_attention_mask().iter().map(|&m| m as i64).collect();
-        let seq = ids.len() as i64;
-        if seq == 0 {
+        let mut ids: Vec<i64> = enc.get_ids().iter().map(|&t| t as i64).collect();
+        let mut mask: Vec<i64> = enc.get_attention_mask().iter().map(|&m| m as i64).collect();
+        if ids.is_empty() {
             return Ok(vec![0.0; self.dim]);
         }
+
+        // FIXED sequence length (board 0031): the model's `RotaryEmbedding` op caches cos/sin for the
+        // sequence length of the FIRST run and can't resize it ("Updating cos_cache and sin_cache in
+        // RotaryEmbedding is not currently supported") — so a later, longer input crashes the kernel
+        // and the embedder silently degrades. Pad/truncate EVERY input to one constant length so the
+        // cache is sized once and never updated. Real tokens carry `attention_mask = 1`, padding `0`,
+        // so mean-pooling ignores the pads — the embedding is identical to the unpadded run.
+        const PAD_LEN: usize = 512;
+        let real = ids.len().min(PAD_LEN);
+        ids.truncate(real);
+        ids.resize(PAD_LEN, 0);
+        mask.truncate(real);
+        mask.resize(PAD_LEN, 0);
+        let seq = PAD_LEN as i64;
 
         let mut inputs: Vec<(String, ort::session::SessionInputValue)> = vec![(
             "input_ids".to_string(),

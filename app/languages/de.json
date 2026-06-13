@@ -12,6 +12,7 @@
 		"gettingReady": "Wird vorbereitet…",
 		"applyingConnection": "Wird auf die aktive Verbindung angewendet…",
 		"back": "Zurück",
+		"dismiss": "Schließen",
 		"continue": "Weiter",
 		"cancel": "Abbrechen",
 		"copy": "Kopieren",
@@ -93,6 +94,7 @@
 		"bookkeeping": "Buchhaltung",
 		"members": "Mitglieder",
 		"talk": "Talk",
+		"brain": "Brain",
 		"todos": "Todos",
 		"gallery": "Dateien",
 		"peers": "Peers",
@@ -929,6 +931,8 @@
 		"yourDid": "Deine humanSAFE-ID (did:safe)",
 		"copyDid": "ID kopieren",
 		"copied": "Kopiert",
-		"checking": "Prüfe Netzwerk-Mitgliedschaft…"
+		"checking": "Prüfe Netzwerk-Mitgliedschaft…",
+		"bannerTitle": "Noch nicht im Netzwerk",
+		"bannerBody": "Lokal bist du vollständig eingerichtet. Teile deine humanSAFE-ID mit einem Gründer, um über Geräte hinweg zu synchronisieren."
 	}
 }

@@ -29,6 +29,18 @@ pub struct ExtractionInput {
     pub content: String,
 }
 
+/// An existing OPEN claim handed to the extractor as reconciliation context (board 0034). The
+/// extractor sees what's already known so, when a new statement UPDATES a known relation, it can
+/// **reuse that relation's exact predicate** — then normal `(subject, predicate)` supersession closes
+/// the stale claim. This keeps contradiction-resolution FULLY GENERIC: the "is this the same
+/// relation?" judgement lives in the model (any language, any relation), never a hardcoded table.
+#[derive(Clone, Debug)]
+pub struct KnownClaim {
+    pub subject: String,
+    pub predicate: String,
+    pub object: String,
+}
+
 /// A typed, temporal assertion extracted from a memory: `subject —predicate→ object`,
 /// optionally valid over a window, with a confidence and its source memory. Maps to a
 /// claim link row (see [`crate::schema::LINKS`]).
@@ -50,11 +62,35 @@ pub struct ExtractedFact {
     pub source_memory: ObjectId,
 }
 
-/// One extraction round's result: the facts plus the LLM tokens it cost — surfaced
-/// per `extract` step in the dreaming panel (the deterministic phases stay at 0).
+/// A typed entity the extractor recognized: a name plus its kind (`person`, `team`,
+/// `place`, `org`, `event`, `referee`, …). Written back to upgrade the entity row's
+/// `kind` from the deterministic default (`unknown`), so L2 cards read "Lozano (player)"
+/// instead of "Lozano (unknown)". Free-form kind — the model picks the domain label.
+#[derive(Clone, Debug)]
+pub struct ExtractedEntity {
+    /// Entity name (matched to an entity row on write-back, same as fact subjects).
+    pub name: String,
+    /// Domain kind label (lowercase, e.g. `person`, `team`, `referee`, `match`).
+    pub kind: String,
+}
+
+/// One extraction round's result: the typed entities + facts plus the LLM tokens it cost
+/// — surfaced per `extract` step in the dreaming panel (the deterministic phases stay at 0).
 #[derive(Clone, Debug, Default)]
 pub struct Extraction {
+    /// Typed entities to upgrade `kind` on (board 0024 — richer L2 cards).
+    pub entities: Vec<ExtractedEntity>,
     pub facts: Vec<ExtractedFact>,
+    pub tokens: i64,
+}
+
+/// A synthesized L0-self profile of the brain owner, distilled from their first-person
+/// statements (board: auto self). `text` REPLACES the current self profile; `tokens` is the
+/// LLM cost. An empty `text` (or `None` from [`Extractor::summarize_self`]) means "nothing
+/// durable to record — leave L0 self unchanged".
+#[derive(Clone, Debug, Default)]
+pub struct SelfSummary {
+    pub text: String,
     pub tokens: i64,
 }
 
@@ -73,9 +109,28 @@ pub trait Extractor: Send + Sync {
     fn enabled(&self) -> bool {
         true
     }
-    /// Extract facts from `batch`. Returns all facts found across the inputs plus the
-    /// token cost of producing them.
-    async fn extract(&self, batch: &[ExtractionInput]) -> Result<Extraction, String>;
+    /// Extract facts from `batch`. `known` carries the owner's existing OPEN claims as
+    /// reconciliation context (board 0034): when a new statement updates a known relation, REUSE
+    /// that claim's exact predicate so supersession closes the stale one — no hardcoded synonyms.
+    /// Returns all facts found across the inputs plus the token cost of producing them.
+    async fn extract(
+        &self,
+        batch: &[ExtractionInput],
+        known: &[KnownClaim],
+    ) -> Result<Extraction, String>;
+
+    /// Synthesize/refresh the brain owner's L0 **self** profile (who they are: name, age,
+    /// role, location, goals, durable preferences) from their recent first-person memories
+    /// (`owner_memories`), merging with the `current` profile. Returns `None` when there is
+    /// nothing durable to record. Default: `None` — the deterministic path leaves L0 self
+    /// manual; only an LLM extractor populates it automatically.
+    async fn summarize_self(
+        &self,
+        _owner_memories: &[String],
+        _current: &str,
+    ) -> Result<Option<SelfSummary>, String> {
+        Ok(None)
+    }
 }
 
 /// The "no extractor configured" default — [`crate::Brain::dream`] runs only its
@@ -87,7 +142,11 @@ impl Extractor for NoExtractor {
         false
     }
 
-    async fn extract(&self, _batch: &[ExtractionInput]) -> Result<Extraction, String> {
+    async fn extract(
+        &self,
+        _batch: &[ExtractionInput],
+        _known: &[KnownClaim],
+    ) -> Result<Extraction, String> {
         Ok(Extraction::default())
     }
 }
@@ -112,7 +171,11 @@ impl MockExtractor {
 }
 
 impl Extractor for MockExtractor {
-    async fn extract(&self, batch: &[ExtractionInput]) -> Result<Extraction, String> {
+    async fn extract(
+        &self,
+        batch: &[ExtractionInput],
+        _known: &[KnownClaim],
+    ) -> Result<Extraction, String> {
         let facts = batch
             .iter()
             .flat_map(|input| {
@@ -127,6 +190,6 @@ impl Extractor for MockExtractor {
                 })
             })
             .collect();
-        Ok(Extraction { facts, tokens: 42 })
+        Ok(Extraction { entities: Vec::new(), facts, tokens: 42 })
     }
 }

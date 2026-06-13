@@ -169,6 +169,10 @@ impl Storage for MemoryStorage {
         encoded_visible_rows: &[OwnedVisibleRowBytes],
         index_mutations: &[IndexMutation<'_>],
     ) -> Result<(), StorageError> {
+        // Store change-log (board 0026/0027): record committed history-row ids so the frontier
+        // feed can return the delta. This `prepared` sink is the visible+history path (the common
+        // local-insert route); `apply_encoded_row_mutation` is the history-only path — both record.
+        crate::frontier_epoch::record(encoded_history_rows.iter().map(|r| r.row_id));
         if history_rows.len() != encoded_history_rows.len() {
             return Err(StorageError::IoError(format!(
                 "prepared history row count mismatch: {} decoded vs {} encoded",
@@ -261,6 +265,9 @@ impl Storage for MemoryStorage {
         visible_rows: &[OwnedVisibleRowBytes],
         index_mutations: &[IndexMutation<'_>],
     ) -> Result<(), StorageError> {
+        // Store change-log (board 0026/0027): record committed history-row ids — local OR synced
+        // (the single sink both write paths funnel through) — for the frontier delta feed.
+        crate::frontier_epoch::record(history_rows.iter().map(|r| r.row_id));
         let table = table.to_string();
 
         for row in history_rows {

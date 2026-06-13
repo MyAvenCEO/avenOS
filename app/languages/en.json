@@ -12,6 +12,7 @@
 		"gettingReady": "Getting things ready…",
 		"applyingConnection": "Applying to the live connection…",
 		"back": "Back",
+		"dismiss": "Dismiss",
 		"continue": "Continue",
 		"cancel": "Cancel",
 		"copy": "Copy",
@@ -95,6 +96,7 @@
 		"bookkeeping": "Bookkeeping",
 		"members": "Members",
 		"talk": "Talk",
+		"brain": "Brain",
 		"todos": "Todos",
 		"gallery": "Files",
 		"peers": "Peers",
@@ -952,6 +954,8 @@
 		"yourDid": "Your human SAFE ID (did:safe)",
 		"copyDid": "Copy ID",
 		"copied": "Copied",
-		"checking": "Checking network membership…"
+		"checking": "Checking network membership…",
+		"bannerTitle": "Not on the network yet",
+		"bannerBody": "You're fully set up locally. Share your human SAFE ID with a founder to sync across devices."
 	}
 }

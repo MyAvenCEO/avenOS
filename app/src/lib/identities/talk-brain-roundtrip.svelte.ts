@@ -63,6 +63,8 @@ export type DreamLogEntry = {
 	tokens: number
 	/** Wall-clock ms this step took (round-trip). */
 	ms: number
+	/** Entities this step typed (the extract phase) — clickable cards in the log. */
+	entities?: { name: string; kind: string }[]
 }
 
 /** Reactive holder for the latest dream pass's log (per identity). */
@@ -95,4 +97,74 @@ export function dreamLogStep(entry: DreamLogEntry) {
 
 export function dreamLogEnd() {
 	brainDreamLog.running = false
+}
+
+// ───────────────────────────── activity log ─────────────────────────────
+//
+// A transparent, live timeline of THIS turn's pipeline — store → recall → each LLM round →
+// each tool call → respond — with per-step wall-clock timing. Surfaced in the brain aside's
+// primary "Activity" tab so the 30s "thinking" gap is explained step by step (which recall
+// was slow, how many model rounds ran, which tools fired) instead of an opaque spinner.
+
+export type ActivityKind = 'store' | 'recall' | 'llm' | 'tool' | 'respond' | 'error' | 'info'
+
+/** One step in the turn pipeline. `ms` is filled when the step finishes. */
+export type ActivityStep = {
+	id: number
+	kind: ActivityKind
+	label: string
+	detail?: string
+	status: 'running' | 'done' | 'error'
+	startMs: number
+	ms?: number
+}
+
+/** Reactive holder for the current turn's activity (per identity). */
+export const brainActivity = $state<{
+	identity: string | null
+	steps: ActivityStep[]
+	running: boolean
+	atMs: number
+}>({ identity: null, steps: [], running: false, atMs: 0 })
+
+let activitySeq = 0
+
+/** Begin a fresh turn timeline (clears the prior turn's steps). */
+export function activityStart(identity: string) {
+	brainActivity.identity = identity
+	brainActivity.steps = []
+	brainActivity.running = true
+	brainActivity.atMs = Date.now()
+}
+
+/** Push a running step; returns its id to finish later. */
+export function activityBegin(kind: ActivityKind, label: string, detail?: string): number {
+	const id = ++activitySeq
+	brainActivity.steps = [
+		...brainActivity.steps,
+		{ id, kind, label, detail, status: 'running', startMs: Date.now() }
+	]
+	return id
+}
+
+/** Finish a step: stamp its duration + optional final detail/label/status. */
+export function activityFinish(
+	id: number,
+	patch?: { detail?: string; label?: string; status?: 'done' | 'error' }
+) {
+	brainActivity.steps = brainActivity.steps.map((s) =>
+		s.id === id
+			? {
+					...s,
+					status: patch?.status ?? 'done',
+					ms: Date.now() - s.startMs,
+					detail: patch?.detail ?? s.detail,
+					label: patch?.label ?? s.label
+				}
+			: s
+	)
+}
+
+export function activityEnd() {
+	brainActivity.running = false
 }

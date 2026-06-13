@@ -7,7 +7,7 @@ const rendered = $derived(renderDocMarkdown(data.doc.raw))
 </script>
 
 <svelte:head>
-	<title>{data.doc.title} — Sync · AvenOS</title>
+	<title>{data.doc.title} — avenDB · AvenOS</title>
 </svelte:head>
 
 <article

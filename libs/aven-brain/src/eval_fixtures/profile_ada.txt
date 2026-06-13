@@ -1,0 +1,10 @@
+Profil: Dr. Ada Okonkwo
+
+Ada Okonkwo ist Forscherin für verteilte Systeme an der ETH Zürich. Sie wurde 1987 in Lagos geboren
+und zog 2009 nach Zürich. Ihr Spezialgebiet sind CRDTs und konfliktfreie Replikation.
+
+Sie spricht vier Sprachen: Englisch, Deutsch, Igbo und Französisch. Ada leitet die Forschungsgruppe
+"Convergent" mit sieben Mitarbeitenden. 2024 erhielt sie den Dijkstra-Preis für ihre Arbeit an
+frontier-basierter Synchronisation.
+
+Hobbys: Bouldern und Cello. Sie hat eine Tochter, Zoe (geboren 2019). Kontakt: ada@convergent.ethz.ch.

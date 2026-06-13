@@ -4,11 +4,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-use crate::avendb_tokio::{SubscriptionHandle as RuntimeSubHandle, TokioRuntime};
+use crate::avendb_tokio::TokioRuntime;
 use crate::query_manager::manager::LocalUpdates;
 use crate::query_manager::query::Query;
-use crate::query_manager::session::Session;
-use crate::query_manager::types::{OrderedRowDelta, Schema, TableName, Value};
+use crate::query_manager::types::{Schema, TableName, Value};
 use crate::runtime_core::ReadDurabilityOptions;
 use crate::schema_manager::{SchemaManager, rehydrate_schema_manager_from_catalogue};
 use crate::storage::{RocksDBStorage, Storage, StorageError};
@@ -16,9 +15,7 @@ use crate::sync_manager::{
     PeerId, Destination, DurabilityTier, InboxEntry, OutboxEntry, Source, SyncManager,
     SyncPayload,
 };
-use tokio::sync::{RwLock, mpsc};
-
-use crate::{AppContext, AvenDbError, ObjectId, Result, SubscriptionHandle, SubscriptionStream};
+use crate::{AppContext, AvenDbError, ObjectId, Result};
 
 type DynStorage = Box<dyn Storage + Send>;
 type ClientRuntime = TokioRuntime<DynStorage>;
@@ -53,15 +50,8 @@ type SharedSyncTransport =
 
 pub struct AvenDbClient {
     runtime: ClientRuntime,
-    subscriptions: Arc<RwLock<HashMap<SubscriptionHandle, SubscriptionState>>>,
-    subscription_senders: Arc<RwLock<HashMap<RuntimeSubHandle, mpsc::Sender<OrderedRowDelta>>>>,
-    next_handle: std::sync::atomic::AtomicU64,
     peer_transport: SharedSyncTransport,
     peer_inbound_task: std::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
-}
-
-struct SubscriptionState {
-    runtime_handle: RuntimeSubHandle,
 }
 
 /// Called after an inbound peer sync frame is parked on the runtime inbox (post-`push_sync_inbox`).
@@ -439,9 +429,6 @@ impl AvenDbClient {
             .persist_schema()
             .map_err(|e| AvenDbError::Storage(e.to_string()))?;
 
-        let subscription_senders: Arc<RwLock<HashMap<RuntimeSubHandle, mpsc::Sender<OrderedRowDelta>>>> =
-            Arc::new(RwLock::new(HashMap::new()));
-
         let peer_inbound_task = match peer_layer {
             MaybeSyncTransport::Off => None,
             MaybeSyncTransport::Active(t) => {
@@ -451,58 +438,15 @@ impl AvenDbClient {
 
         Ok(Self {
             runtime,
-            subscriptions: Arc::new(RwLock::new(HashMap::new())),
-            subscription_senders,
-            next_handle: std::sync::atomic::AtomicU64::new(1),
             peer_transport,
             peer_inbound_task: std::sync::Mutex::new(peer_inbound_task),
         })
     }
 
-    pub async fn subscribe(&self, query: Query) -> Result<SubscriptionStream> {
-        self.subscribe_internal(query, None).await
-    }
-
-    async fn subscribe_internal(
-        &self,
-        query: Query,
-        session: Option<Session>,
-    ) -> Result<SubscriptionStream> {
-        let handle = SubscriptionHandle(
-            self.next_handle
-                .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-        );
-
-        let (tx, rx) = mpsc::channel::<OrderedRowDelta>(64);
-        let senders = self.subscription_senders.clone();
-
-        let runtime_handle = self
-            .runtime
-            .subscribe(
-                query.clone(),
-                move |delta| {
-                    if let Ok(senders_guard) = senders.try_read()
-                        && let Some(sender) = senders_guard.get(&delta.handle)
-                    {
-                        let _ = sender.try_send(delta.ordered_delta);
-                    }
-                },
-                session,
-            )
-            .map_err(|e| AvenDbError::Query(e.to_string()))?;
-
-        {
-            let mut senders = self.subscription_senders.write().await;
-            senders.insert(runtime_handle, tx);
-        }
-
-        {
-            let mut subs = self.subscriptions.write().await;
-            subs.insert(handle, SubscriptionState { runtime_handle });
-        }
-
-        Ok(SubscriptionStream::new(rx))
-    }
+    // Board 0027: the lossy push subscription (`subscribe`/`subscribe_internal`/`unsubscribe` →
+    // `OrderedRowDelta` over a bounded `try_send` channel that dropped under load) is DELETED.
+    // Live reads now reconcile via the reliable frontier feed [`changes_since`]; the UI uses the
+    // table-change drain. One freshness mechanism, no drop-under-load footgun.
 
     /// Register the unseal-on-scan hook (the sealed-data seam, plan §3): the engine
     /// calls it with (table, column, stored value) wherever `nearest`/`text_search`
@@ -546,6 +490,23 @@ impl AvenDbClient {
     ///   - missing non-nullable column → error,
     /// then the engine type-checks each value on encode. Prefer this for any hand-built row
     /// (it makes a manifest column-order change incapable of silently corrupting a write).
+    /// The current store epoch (board 0026) — an O(1) monotonic token that advances on every
+    /// committed history batch (local write OR synced peer apply), independent of row count.
+    /// Consumers (e.g. aven-brain's decrypt-once read cache) key their snapshots on it to ask
+    /// "has anything changed since I last looked?" without scanning. Process-global.
+    pub fn frontier_epoch(&self) -> u64 {
+        crate::frontier_epoch::current()
+    }
+
+    /// The frontier delta feed (board 0027): the changes since `cursor` + the new cursor. The ONE
+    /// reconciliation any consumer uses — brain cache, UI store, remote peer — each holding its own
+    /// cursor; `apply` the returned ids to its view (re-read each: present ⇒ upsert, gone ⇒ remove),
+    /// or full-rebuild on `Resync`. O(delta) in the changed-row count. `cursor == frontier_epoch()`
+    /// ⇒ `Delta([])` (nothing changed).
+    pub fn changes_since(&self, cursor: u64) -> (u64, crate::frontier_epoch::Changes) {
+        crate::frontier_epoch::changes_since(cursor)
+    }
+
     pub async fn create_checked(
         &self,
         table: &str,
@@ -662,16 +623,6 @@ impl AvenDbClient {
         self.runtime
             .delete_with_metadata(object_id, None, extra_metadata)
             .map_err(|e| AvenDbError::Write(e.to_string()))?;
-        Ok(())
-    }
-
-    pub async fn unsubscribe(&self, handle: SubscriptionHandle) -> Result<()> {
-        let mut subs = self.subscriptions.write().await;
-        if let Some(state) = subs.remove(&handle) {
-            let mut senders = self.subscription_senders.write().await;
-            senders.remove(&state.runtime_handle);
-            let _ = self.runtime.unsubscribe(state.runtime_handle);
-        }
         Ok(())
     }
 

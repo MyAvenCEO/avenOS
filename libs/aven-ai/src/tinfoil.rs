@@ -71,11 +71,11 @@ pub async fn chat(messages: Vec<Value>, tools: Value, model: &str) -> Result<Cha
 		body = body.set("tools", tools);
 	}
 	let response = tokio::time::timeout(
-		std::time::Duration::from_secs(60),
+		std::time::Duration::from_secs(120),
 		client.chat_relaxed().create(body),
 	)
 	.await
-	.map_err(|_| "tinfoil chat: request timed out after 60 s".to_string())?
+	.map_err(|_| "tinfoil chat: request timed out after 120 s".to_string())?
 	.map_err(|e| format!("tinfoil chat: {e}"))?;
 
 	let assistant_raw = response

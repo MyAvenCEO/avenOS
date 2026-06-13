@@ -13,6 +13,7 @@ import {
 	llmState,
 	startLlmReadiness
 } from '$lib/llm/model-download-store'
+import { tinfoilAvailable } from '$lib/llm/generate'
 import { parseToolCallBody } from '$lib/llm/tools'
 import type { PeerRowReply } from '$lib/peer/api'
 import { peerDisplayLabel } from '$lib/peer/display-label'
@@ -47,6 +48,7 @@ let speakPhase = $state<'generating' | 'playing' | undefined>()
 let speakElapsed = $state(0)
 let localPairingLabel = $state<string | undefined>(undefined)
 let scrollEl = $state<HTMLDivElement | undefined>(undefined)
+let cloudAvailable = $state(false)
 
 const identitiesStore = avenDbStore('safes')
 const messages = avenDbStore('messages')
@@ -61,11 +63,14 @@ const tauri = $derived(browser && isTauriRuntime())
 onMount(() => {
 	let unlisten: (() => void) | undefined
 	void startLlmReadiness().then((u) => (unlisten = u))
+	void tinfoilAvailable().then((v) => (cloudAvailable = v))
 	return () => unlisten?.()
 })
 
 /** Status line shown inside a pending agent bubble (before any token arrives). */
 const agentPendingLabel = $derived.by(() => {
+	// In pure-cloud mode the local model is intentionally idle — show "thinking" anyway.
+	if (cloudAvailable) return t('identities.talk.agentThinking')
 	const s = $llmState
 	if (s.status === 'ready') return t('identities.talk.agentThinking')
 	const reason = agentUnavailableReason(s) ?? t('identities.talk.agentThinking')

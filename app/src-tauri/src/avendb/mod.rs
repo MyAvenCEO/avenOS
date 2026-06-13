@@ -791,6 +791,17 @@ pub(crate) async fn avendb_runtime_dispatch(
 		}
 		"brainreembed" => brain_ipc::brain_ipc_reembed(app, mj, ss, pj_str(&pj, "identity")?).await,
 		"brainbackfill" => brain_ipc::brain_ipc_backfill(app, mj, ss, pj_str(&pj, "identity")?).await,
+		"braindebugexport" => {
+			brain_ipc::brain_ipc_debug_export(app, mj, ss, pj_str(&pj, "identity")?).await
+		}
+		"braindebugexportsave" => {
+			brain_ipc::brain_ipc_debug_export_save(app, mj, ss, pj_str(&pj, "identity")?).await
+		}
+		"brainappendactivity" => {
+			let entries = serde_json::from_value(pj.get("entries").cloned().unwrap_or_default())
+				.map_err(|e| format!("brainappendactivity: entries: {e}"))?;
+			brain_ipc::brain_ipc_append_activity(app, mj, ss, pj_str(&pj, "identity")?, entries).await
+		}
 		"brainentities" => brain_ipc::brain_ipc_entities(app, mj, ss, pj_str(&pj, "identity")?).await,
 		"brainentitycard" => {
 			brain_ipc::brain_ipc_entity_card(
@@ -1013,6 +1024,126 @@ pub async fn avendb_runtime(
 		payload: payload.unwrap_or_else(|| serde_json::json!({})),
 	};
 	actor.runtime_invoke(window, envelope).await
+}
+
+/// Brain-specific IPC — runs OUTSIDE the actor mailbox so brain tool calls (search,
+/// ingest, context assembly) don't block todo/message CRUD and vice versa.
+///
+/// Safe by construction: avenDB is a RocksDB-backed CRDT store, and EVERY write serializes
+/// at the runtime core `Mutex` (`runtime_tokio.rs` — `self.core.lock()` per insert/update),
+/// held only for the brief duration of one row mutation, NEVER across an `.await`. The actor
+/// mailbox is a SECOND, redundant serialization layer that serializes at the whole-IPC-op
+/// level — so a slow brain op (Tinfoil HTTP, embedding compute) queued there blocks every
+/// todo/message op behind it. Bypassing it lets brain ops and CRUD interleave; their writes
+/// still serialize correctly at the core Mutex, while the slow compute happens off-lock.
+#[tauri::command(rename_all = "camelCase")]
+pub async fn brain_runtime(
+	app: tauri::AppHandle,
+	mj: tauri::State<'_, ManagedAvenDb>,
+	ss: tauri::State<'_, SelfState>,
+	op: String,
+	payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+	let pj = payload.unwrap_or_default();
+	match op.to_lowercase().as_str() {
+		"brainstatus" => brain_ipc::brain_ipc_status(&app, &mj, &ss, pj_str(&pj, "identity")?).await,
+		"braindream" => brain_ipc::brain_ipc_dream(&app, &mj, &ss, pj_str(&pj, "identity")?).await,
+		"braindreamstep" => {
+			let cursor = pj.get("cursor").and_then(|v| v.as_i64()).unwrap_or(0);
+			brain_ipc::brain_ipc_dream_step(&app, &mj, &ss, pj_str(&pj, "identity")?, cursor).await
+		}
+		"brainreembed" => brain_ipc::brain_ipc_reembed(&app, &mj, &ss, pj_str(&pj, "identity")?).await,
+		"brainrebuildgraph" => {
+			brain_ipc::brain_ipc_rebuild_graph(&app, &mj, &ss, pj_str(&pj, "identity")?).await
+		}
+		"brainbackfill" => brain_ipc::brain_ipc_backfill(&app, &mj, &ss, pj_str(&pj, "identity")?).await,
+		"braindebugexport" => {
+			brain_ipc::brain_ipc_debug_export(&app, &mj, &ss, pj_str(&pj, "identity")?).await
+		}
+		"braindebugexportsave" => {
+			brain_ipc::brain_ipc_debug_export_save(&app, &mj, &ss, pj_str(&pj, "identity")?).await
+		}
+		"brainappendactivity" => {
+			let entries = serde_json::from_value(pj.get("entries").cloned().unwrap_or_default())
+				.map_err(|e| format!("brainappendactivity: entries: {e}"))?;
+			brain_ipc::brain_ipc_append_activity(&app, &mj, &ss, pj_str(&pj, "identity")?, entries).await
+		}
+		"brainentities" => brain_ipc::brain_ipc_entities(&app, &mj, &ss, pj_str(&pj, "identity")?).await,
+		"brainentitycard" => {
+			brain_ipc::brain_ipc_entity_card(
+				&app,
+				&mj,
+				&ss,
+				pj_str(&pj, "identity")?,
+				pj_str(&pj, "name")?,
+			)
+			.await
+		}
+		"braningest" | "braineingest" | "brainingest" => {
+			brain_ipc::brain_ipc_ingest(
+				&app,
+				&mj,
+				&ss,
+				pj_str(&pj, "identity")?,
+				pj_str(&pj, "content")?,
+				pj_opt_str(&pj, "stream"),
+				pj_opt_str(&pj, "authorRole"),
+				pj_opt_str(&pj, "source"),
+				pj.get("contentDateMs").and_then(|v| v.as_i64()),
+				pj_opt_str(&pj, "veracity"),
+				pj.get("importance").and_then(|v| v.as_f64()),
+			)
+			.await
+		}
+		"brainlink" => {
+			brain_ipc::brain_ipc_link(
+				&app,
+				&mj,
+				&ss,
+				pj_str(&pj, "identity")?,
+				pj_str(&pj, "from")?,
+				pj_str(&pj, "to")?,
+			)
+			.await
+		}
+		"brainattest" => {
+			brain_ipc::brain_ipc_attest(&app, &mj, &ss, pj_str(&pj, "identity")?, pj_str(&pj, "id")?)
+				.await
+		}
+		"brainforget" => {
+			brain_ipc::brain_ipc_forget(&app, &mj, &ss, pj_str(&pj, "identity")?, pj_str(&pj, "id")?)
+				.await
+		}
+		"brainsearch" => {
+			brain_ipc::brain_ipc_search(
+				&app,
+				&mj,
+				&ss,
+				pj_str(&pj, "identity")?,
+				pj_str(&pj, "query")?,
+				pj.get("k").and_then(|v| v.as_u64()).unwrap_or(8) as usize,
+				pj_opt_str(&pj, "stream"),
+			)
+			.await
+		}
+		"brainassemblecontext" => {
+			brain_ipc::brain_ipc_assemble_context(
+				&app,
+				&mj,
+				&ss,
+				pj_str(&pj, "identity")?,
+				pj_str(&pj, "query")?,
+				pj.get("workingN").and_then(|v| v.as_u64()).map(|n| n as usize),
+				pj.get("recallK").and_then(|v| v.as_u64()).map(|n| n as usize),
+				pj.get("budgetChars").and_then(|v| v.as_u64()).map(|n| n as usize),
+				pj_opt_str(&pj, "stream"),
+			)
+			.await
+		}
+		other => Err(format!(
+			"brain_runtime: unknown op `{other}`"
+		)),
+	}
 }
 
 #[derive(Clone, serde::Serialize)]

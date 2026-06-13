@@ -54,13 +54,19 @@ const agent = setIdentityAgent(
 			identityBase,
 			authorDid: session?.signerDid,
 			tauri,
-			unlocked
+			unlocked,
+			// Brain view → memory-managed; everywhere else → plain traditional chat (no brain).
+			mode: isBrainView ? 'brain' : 'plain'
 		})
 	})
 )
 
 const path = $derived(page.url.pathname)
-const isTalkView = $derived(path.includes('/talk'))
+// The Brain view is the memory-managed chat (agent `brain` mode + the roundtrip aside). The plain
+// Talk view (and everywhere else) runs the agent in `plain` mode — traditional session, no brain.
+const isBrainView = $derived(path.includes('/brain'))
+// Both Talk and Brain use the full-height chat layout.
+const isTalkView = $derived(path.includes('/talk') || isBrainView)
 const isGalleryView = $derived(path.includes('/gallery'))
 
 // Show the intent bar wherever a submit can actually land (unlocked desktop identity).
@@ -99,6 +105,11 @@ const navSections = $derived(
 						match: (p) => p.startsWith(`${identityBase}/talk`)
 					},
 					{
+						href: `${identityBase}/brain`,
+						label: t('nav.brain'),
+						match: (p) => p.startsWith(`${identityBase}/brain`)
+					},
+					{
 						href: `${identityBase}/todos`,
 						label: t('nav.todos'),
 						match: (p) => p.startsWith(`${identityBase}/todos`)
@@ -125,6 +136,14 @@ const navSections = $derived(
 	)
 )
 
+// The 420px right column (Brain roundtrip aside) only exists on the Brain view; everywhere else
+// is a clean 2-column layout (no brain panel).
+const identityGridClass = $derived(
+	isBrainView
+		? 'md:grid-cols-[8.5rem_minmax(0,1fr)_420px]'
+		: 'md:grid-cols-[8.5rem_minmax(0,1fr)]'
+)
+
 const mainClass = $derived(
 	isTalkView
 		? 'relative flex min-h-0 min-w-0 flex-col overflow-hidden'
@@ -148,11 +167,20 @@ const innerContentClass = $derived(
 	<title>{identityMeta?.name ?? t('identities.identityLabel')}{t('common.titleSuffix')}</title>
 </svelte:head>
 
+<!-- Top-level snippet so it can be passed conditionally to AsidePageLayout's `asideRight` prop.
+     Shown ONLY on the Brain view (memory-managed chat): the brain roundtrip — what was stored +
+     recalled (the context fed to the AI), entities, and the dreaming log. Plain Talk + other views
+     render no aside (clean 2-column layout). -->
+{#snippet brainAside()}
+	<TalkBrainAside identityId={decodedIdentityId} />
+{/snippet}
+
 <AsidePageLayout
 	asideLabel={t('nav.identityViews')}
 	asideRightLabel="Brain roundtrip"
 	sections={navSections}
-	desktopGridClass="md:grid-cols-[8.5rem_minmax(0,1fr)_420px]"
+	asideRight={isBrainView ? brainAside : undefined}
+	desktopGridClass={identityGridClass}
 	sectionLabelClass="px-0 md:px-2"
 	{mainClass}
 	{contentClass}
@@ -179,12 +207,6 @@ const innerContentClass = $derived(
 				{/if}
 			</div>
 		</div>
-	{/snippet}
-
-	{#snippet asideRight()}
-		<!-- Brain roundtrip (E5): the permanent right aside on EVERY identity sub-view — shows what
-		     the brain stored + recalled (the context fed to the AI) for the last message. -->
-		<TalkBrainAside identityId={decodedIdentityId} />
 	{/snippet}
 
 	{#snippet children()}

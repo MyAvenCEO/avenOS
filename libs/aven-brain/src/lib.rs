@@ -45,12 +45,14 @@ pub mod schema;
 pub mod sealer;
 
 pub use brain::{
-    Brain, BrainError, ContextBundle, ContextOptions, ContextTrace, DreamReport, DreamStep, Entity,
-    EntityCard, Fact, Filter, LinkClass, Memory, Relation, RememberOptions, ScoredMemory, Via,
+    Brain, BrainError, ContextBundle, ContextOptions, ContextTrace, DebugExport, DebugRound,
+    DreamEntity, DreamReport, DreamStep, Entity, EntityCard, Fact, Filter, LinkClass, LogEntry,
+    Memory, Relation, RememberOptions, ScoredMemory, Via,
 };
 pub use embedder::{Embedder, StubEmbedder};
 pub use extractor::{
-    ExtractedFact, Extraction, ExtractionInput, Extractor, MockExtractor, NoExtractor,
+    ExtractedEntity, ExtractedFact, Extraction, ExtractionInput, Extractor, KnownClaim, MockExtractor,
+    NoExtractor, SelfSummary,
 };
 pub use schema::{brain_schema, EMBED_DIM};
 pub use sealer::{KeySealer, Sealer};
