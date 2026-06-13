@@ -108,7 +108,9 @@ async function main() {
 	// The optional [DEVICE] positional MUST precede `--features` (variadic — it would
 	// otherwise swallow the device name as a feature).
 	if (simDevice) tauriArgs.push(simDevice)
-	tauriArgs.push('--features', 'local-llama')
+	// Tinfoil cloud is now in the crate DEFAULT but can't ship on iOS — opt out explicitly
+	// (STT + on-device LLM only), matching the release build (scripts/tauri-ios-asc.ts).
+	tauriArgs.push('--no-default-features', '--features', 'local-voice,local-llama')
 
 	const child = Bun.spawn(tauriArgs, {
 		cwd: path.join(repoRoot, 'app'),

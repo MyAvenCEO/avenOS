@@ -621,12 +621,13 @@ async function main() {
 		'tauri',
 		'ios',
 		'build',
-		// iOS ships STT (default) + the on-device LLM (LFM2.5-1.2B GGUF via llama.cpp/Metal,
-		// statically linked — no dylib). TTS stays desktop-only (its onnxruntime dylib can't
-		// ship on iOS), so we opt into `local-llama` directly rather than the `desktop-ai`
-		// bundle the macOS build uses.
+		// iOS ships STT + the on-device LLM (LFM2.5-1.2B GGUF via llama.cpp/Metal, statically
+		// linked — no dylib). TTS stays desktop-only (onnxruntime dylib can't ship on iOS), and
+		// the Tinfoil cloud client (now in the crate DEFAULT) also can't ship on iOS — so we
+		// `--no-default-features` and name the iOS set explicitly: STT + on-device LLM only.
+		'--no-default-features',
 		'--features',
-		'local-llama',
+		'local-voice,local-llama',
 		'--export-method',
 		'app-store-connect',
 		'--target',
