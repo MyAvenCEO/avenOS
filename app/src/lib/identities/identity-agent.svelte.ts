@@ -16,6 +16,10 @@ import type { AvenDbStore } from '$lib/avendb/store.svelte'
 import { brainAssembleContext, brainDoExtract, brainDreamStep, brainIngest } from '$lib/brain/api'
 import { t } from '$lib/i18n'
 import {
+	activityBegin,
+	activityEnd,
+	activityFinish,
+	activityStart,
 	beginRoundtrip,
 	dreamLogEnd,
 	dreamLogStart,
@@ -60,6 +64,12 @@ function idsMatch(a: string | null | undefined, b: string | null | undefined): b
 	return na !== '' && na === nb
 }
 
+/** Trim a tool result / reply to a one-line detail for the activity timeline. */
+function snipActivity(s: string, n = 90): string {
+	const one = s.replace(/\s+/g, ' ').trim()
+	return one.length > n ? `${one.slice(0, n)}…` : one
+}
+
 /** One dream at a time across the app — a new turn's dream is skipped while one is running. */
 let dreaming = false
 
@@ -84,7 +94,16 @@ async function runDreamLogged(identity: string): Promise<void> {
 				cursor = step.nextCursor
 				// Fire extraction in background — don't await (actor is free for other msgs).
 				brainDoExtract(identity)
-					.then((es) => dreamLogStep({ phase: es.phase, label: es.label, count: es.count, tokens: es.tokens, ms: 0 }))
+					.then((es) =>
+						dreamLogStep({
+							phase: es.phase,
+							label: es.label,
+							count: es.count,
+							tokens: es.tokens,
+							ms: 0,
+							entities: es.entities
+						})
+					)
 					.catch((e) => dreamLogStep({ phase: 'error', label: String(e), count: 0, tokens: 0, ms: 0 }))
 				continue
 			}
@@ -349,8 +368,18 @@ export function createIdentityAgent(deps: {
 
 		for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
 			phase = 'thinking'
+			const llmId = activityBegin('llm', `Asking the cloud model (round ${round + 1})…`)
 			const turn = await tinfoilChat(messages, tools)
-			if (!turn.toolCalls || turn.toolCalls.length === 0) return finalize(turn.content ?? '')
+			const nCalls = turn.toolCalls?.length ?? 0
+			activityFinish(llmId, {
+				label: `Model round ${round + 1}`,
+				detail: nCalls > 0 ? `requested ${nCalls} tool call${nCalls === 1 ? '' : 's'}` : 'final reply'
+			})
+			if (!turn.toolCalls || turn.toolCalls.length === 0) {
+				const reply = turn.content ?? ''
+				if (reply.trim()) activityBegin('respond', 'Replied', snipActivity(reply))
+				return finalize(reply)
+			}
 
 			messages.push(turn.assistantRaw) // verbatim — carries the tool_call ids
 			phase = 'tool'
@@ -395,8 +424,14 @@ export function createIdentityAgent(deps: {
 				}
 
 				const badgeId = startToolBadge(call.name, args) // live "running" pill
+				const toolLabel = args.action ? `${call.name} · ${String(args.action)}` : call.name
+				const actId = activityBegin('tool', toolLabel)
 				const exec = await executeToolCall({ replyId, name: call.name, arguments: args }, ctx)
 				finishToolBadge(badgeId, exec.message, exec.ok) // → done/error with the result line
+				activityFinish(actId, {
+					detail: snipActivity(exec.message),
+					status: exec.ok ? 'done' : 'error'
+				})
 				last = { name: call.name, args, exec }
 				streaming = { ...streaming, [replyId]: exec.message } // live progress line
 				messages.push({
@@ -559,8 +594,10 @@ export function createIdentityAgent(deps: {
 			// any brain error falls back to a context-free reply.
 			let assembledContext: string | undefined
 			if (body) {
+				activityStart(env.canonicalSparkId)
 				beginRoundtrip(env.canonicalSparkId, row.id, body)
 				try {
+					const storeId = activityBegin('store', 'Storing your message in memory…')
 					const { id: memoryId } = await brainIngest(env.canonicalSparkId, body, {
 						stream: 'talk',
 						authorRole: 'user',
@@ -568,15 +605,33 @@ export function createIdentityAgent(deps: {
 						contentDateMs: Date.now(),
 						veracity: 'stated'
 					})
+					activityFinish(storeId, { label: 'Stored in memory', detail: memoryId })
 					patchRoundtrip(row.id, { memoryId, phase: 'recalling' })
+					const recallId = activityBegin(
+						'recall',
+						'Recalling relevant memories (embed + hybrid search)…'
+					)
 					const bundle = await brainAssembleContext(env.canonicalSparkId, body, {
 						stream: 'talk'
 					})
 					assembledContext = bundle.prompt
+					const tr = bundle.trace
+					const hits = tr?.recalled?.length ?? 0
+					// Per-phase breakdown (slowest first) so the recall cost is transparent.
+					const breakdown = (tr?.timings ?? [])
+						.slice()
+						.sort((a, b) => b.ms - a.ms)
+						.map((p) => `${p.label} ${p.ms >= 1000 ? `${(p.ms / 1000).toFixed(1)}s` : `${p.ms}ms`}`)
+						.join(' · ')
+					activityFinish(recallId, {
+						label: 'Assembled context',
+						detail: `${hits} hits · ${tr?.entities?.length ?? 0} entities · ${tr?.embedder ?? '—'} · ${tr?.budget?.usedChars ?? 0} chars${breakdown ? `\n${breakdown}` : ''}`
+					})
 					patchRoundtrip(row.id, { trace: bundle.trace, prompt: bundle.prompt, phase: 'done' })
 				} catch (e) {
 					const msg = e instanceof Error ? e.message : String(e)
 					console.error('[brain] roundtrip failed:', msg)
+					activityBegin('error', 'Memory roundtrip failed', msg)
 					patchRoundtrip(row.id, { error: msg, phase: 'error' })
 				}
 			}
@@ -604,6 +659,7 @@ export function createIdentityAgent(deps: {
 			busy = false
 			// The turn is over: stop "thinking"; resolved badges linger via the floating-chip timer.
 			phase = 'idle'
+			activityEnd()
 			// Safety: never leave a HITL gate dangling if the turn ended unexpectedly.
 			if (pendingConfirm) settleConfirm(false)
 		}

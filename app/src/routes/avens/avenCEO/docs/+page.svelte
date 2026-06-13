@@ -146,9 +146,10 @@ const contentHref = contentIntroHref
 						</svg>
 					</div>
 					<div>
-						<p class="text-sm font-semibold tracking-tight text-foreground">Sync</p>
+						<p class="text-sm font-semibold tracking-tight text-foreground">avenDB</p>
 						<p class="mt-0.5 text-xs leading-snug text-muted-foreground">
-							aven-db sync layer — SyncTarget, SyncAuthorizer, SyncTransport contract.
+							Frontiers, CRDT, branching &amp; merging — explained like you're 12 — plus the whole
+							avenDB picture — storage, CRDT, schema CRUD, sealed cells, capabilities &amp; sync.
 						</p>
 					</div>
 					<span

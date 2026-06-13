@@ -166,6 +166,18 @@ impl Extractor for AppExtractor {
 			AppExtractor::Tinfoil(x) => x.extract(batch).await,
 		}
 	}
+
+	async fn summarize_self(
+		&self,
+		owner_memories: &[String],
+		current: &str,
+	) -> Result<Option<aven_brain::SelfSummary>, String> {
+		match self {
+			AppExtractor::None(x) => x.summarize_self(owner_memories, current).await,
+			#[cfg(feature = "tinfoil")]
+			AppExtractor::Tinfoil(x) => x.summarize_self(owner_memories, current).await,
+		}
+	}
 }
 
 /// Pick the dream extractor for this process. Attestation is the Tinfoil client's
@@ -519,6 +531,21 @@ pub(crate) async fn brain_ipc_dream(
 	serde_json::to_value(report).map_err(|e| e.to_string())
 }
 
+/// Wipe the derived entity/link graph (memories untouched) so dreams re-build it under the
+/// current rules — clears pre-existing `unknown` junk after an extraction-logic upgrade.
+pub(crate) async fn brain_ipc_rebuild_graph(
+	app: &tauri::AppHandle,
+	mj: &ManagedAvenDb,
+	ss: &SelfState,
+	identity: String,
+) -> Result<serde_json::Value, String> {
+	let client = with_connected_client(mj, app, ss).await?;
+	let shell = super::avendb_shell_ready(app, mj, ss, client.clone()).await?;
+	let (brain, _) = brain_over(app, client, &shell, &identity).await?;
+	let (entities, links) = brain.rebuild_graph().await.map_err(|e| e.to_string())?;
+	Ok(json!({ "entities": entities, "links": links }))
+}
+
 /// Run fact-extraction OFF the avenDB actor.
 ///
 /// This is a standalone Tauri command (NOT routed through the actor mailbox) so the
@@ -542,6 +569,7 @@ pub async fn brain_do_extract(
 			label: label.into(),
 			count: 0,
 			tokens: 0,
+			entities: Vec::new(),
 			next_cursor: 100,
 			done: false,
 		})
@@ -550,21 +578,57 @@ pub async fn brain_do_extract(
 	if !brain.extractor_enabled() {
 		return noop("No extractor configured — skipping");
 	}
-	let result = brain.extract_one_batch().await.map_err(|e| e.to_string())?;
+	let result = match brain.extract_one_batch().await {
+		Ok(r) => r,
+		Err(e) => {
+			let msg = e.to_string();
+			// Timeout is transient — don't fail the dreaming pass, just log and skip.
+			let label = if msg.contains("timed out") {
+				"Extraction timed out — will retry next dream".to_string()
+			} else {
+				format!("Extraction failed: {msg}")
+			};
+			return serde_json::to_value(aven_brain::DreamStep {
+				phase: "extract".into(),
+				label,
+				count: 0,
+				tokens: 0,
+				entities: Vec::new(),
+				next_cursor: 100,
+				done: false,
+			})
+			.map_err(|e| e.to_string());
+		}
+	};
+	// Auto-maintain L0 self from the owner's recent first-person memories (same off-actor
+	// pass so the LLM call never blocks the actor). A failure here must NOT fail the extract
+	// step — self upkeep is best-effort.
+	let self_tokens = brain.refresh_self().await.ok().flatten();
+	let self_suffix = match self_tokens {
+		Some(_) => " · self refreshed",
+		None => "",
+	};
+	let self_tok = self_tokens.unwrap_or(0);
+
 	serde_json::to_value(match result {
-		Some((n_mems, n_facts, tokens)) => aven_brain::DreamStep {
+		Some((n_mems, entities, n_facts, tokens)) => aven_brain::DreamStep {
 			phase: "extract".into(),
-			label: format!("Mined {n_facts} facts from {n_mems} memories"),
-			count: n_facts as i64,
-			tokens,
+			label: format!(
+				"Mined {} typed entities + {n_facts} facts from {n_mems} memories{self_suffix}",
+				entities.len()
+			),
+			count: (entities.len() + n_facts) as i64,
+			tokens: tokens + self_tok,
+			entities,
 			next_cursor: 100,
 			done: false,
 		},
 		None => aven_brain::DreamStep {
 			phase: "extract".into(),
-			label: "All memories fact-mined".into(),
+			label: format!("All memories fact-mined{self_suffix}"),
 			count: 0,
-			tokens: 0,
+			tokens: self_tok,
+			entities: Vec::new(),
 			next_cursor: 100,
 			done: false,
 		},

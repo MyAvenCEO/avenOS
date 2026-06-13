@@ -4,6 +4,7 @@ pub mod batch_fate;
 pub mod catalogue;
 pub mod commit;
 pub mod digest;
+pub mod frontier_epoch;
 pub mod manifest;
 pub mod metadata;
 pub mod object;
@@ -114,22 +115,6 @@ pub enum AvenDbError {
 #[cfg(feature = "client-p2p")]
 pub type Result<T> = std::result::Result<T, AvenDbError>;
 
-#[cfg(feature = "client-p2p")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct SubscriptionHandle(pub u64);
-
-#[cfg(feature = "client-p2p")]
-pub struct SubscriptionStream {
-    receiver: tokio::sync::mpsc::Receiver<OrderedRowDelta>,
-}
-
-#[cfg(feature = "client-p2p")]
-impl SubscriptionStream {
-    pub(crate) fn new(receiver: tokio::sync::mpsc::Receiver<OrderedRowDelta>) -> Self {
-        Self { receiver }
-    }
-
-    pub async fn next(&mut self) -> Option<OrderedRowDelta> {
-        self.receiver.recv().await
-    }
-}
+// Board 0027: the lossy push subscription (`SubscriptionHandle`/`SubscriptionStream` →
+// `OrderedRowDelta` over a bounded channel) is DELETED. Live reads reconcile via the reliable
+// frontier feed (`AvenDbClient::changes_since`); the UI uses the table-change drain.

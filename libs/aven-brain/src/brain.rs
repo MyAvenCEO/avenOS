@@ -320,6 +320,14 @@ pub struct DreamReport {
     pub summaries_written: usize,
 }
 
+/// An entity touched by a dream step — name + kind, for clickable cards in the dreaming log.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DreamEntity {
+    pub name: String,
+    pub kind: String,
+}
+
 /// One step of a STEPPED dream (see [`Brain::dream_step`]) — a single bounded phase, returned for
 /// the live dreaming panel and so the runtime can yield between phases.
 #[derive(Debug, Clone, Serialize)]
@@ -334,6 +342,10 @@ pub struct DreamStep {
     /// LLM tokens spent this step — real cost for the `extract` phase (the configured
     /// [`Extractor`]'s usage), 0 for the deterministic phases.
     pub tokens: i64,
+    /// Entities this step created/typed (the `extract` phase) — rendered as clickable cards
+    /// in the dreaming log. Empty for steps that don't surface entities.
+    #[serde(default)]
+    pub entities: Vec<DreamEntity>,
     /// Cursor to pass to the NEXT call. Meaningless once `done`.
     pub next_cursor: i64,
     pub done: bool,
@@ -346,6 +358,7 @@ impl DreamStep {
             label,
             count,
             tokens: 0,
+            entities: Vec::new(),
             next_cursor,
             done: false,
         }
@@ -379,7 +392,9 @@ impl Default for ContextOptions {
         Self {
             working_n: 12,
             recall_k: 10,
-            entity_cards: 2,
+            // Room for the answer-bearing entities (referee, players, teams) surfaced from
+            // recall — not just the 1–2 generic nouns the query literally names (board 0024).
+            entity_cards: 6,
             gist_n: 5,
             budget_chars: 16_000,
             filter: Filter::default(),
@@ -399,7 +414,20 @@ pub struct ContextTrace {
     pub entities: Vec<TraceEntity>,
     pub budget: TraceBudget,
     pub embedder: String,
+    /// Per-phase wall-clock breakdown of THIS assembly (l0 · gist · working · recall · entities
+    /// · pack) — surfaced in the Activity tab so the recall cost is transparent, not one opaque
+    /// number. The receipt of where the time went.
+    #[serde(default)]
+    pub timings: Vec<TraceTiming>,
     pub assembled_at_ms: i64,
+}
+
+/// One sub-phase of context assembly + its duration in ms (board: recall transparency).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TraceTiming {
+    pub label: String,
+    pub ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -503,6 +531,7 @@ fn abstention_floor(query_tokens: usize) -> f32 {
 
 /// One opened link row — every sealed cell decrypted, numbers parsed. The graph
 /// walks filter over these brain-side (the engine cannot see into sealed cells).
+#[derive(Clone)]
 struct LinkRow {
     id: ObjectId,
     from: String,
@@ -532,6 +561,349 @@ pub struct Brain<E: Embedder, X: Extractor = NoExtractor> {
     sealer: Arc<dyn Sealer>,
     owner: ObjectId,
     extractor: X,
+}
+
+/// Process-global decrypted read mirror keyed by owner, validated by aven-db's O(1)
+/// [`AvenDbClient::frontier_epoch`] (board 0026). The brain is a CONSUMER of aven-db's
+/// freshness SSOT: a turn whose epoch is unchanged serves the cached plaintext snapshot
+/// (ZERO decryption); any committed batch — local OR synced — advances the epoch and triggers
+/// exactly one rebuild. The frontier/sync authority lives in aven-db; the brain only caches
+/// its decrypted DOMAIN model (it alone holds the DEK + row context aven-db can't see).
+///
+/// Keyed by owner only: the epoch is process-global, so another owner's write also bumps it
+/// (a harmless extra rebuild, never stale data). A DEK rotation re-seals rows = writes = epoch
+/// bumps = rebuild with the live sealer, so no version is needed in the key.
+type SnapshotCache = std::sync::Mutex<std::collections::HashMap<uuid::Uuid, CacheEntry>>;
+
+/// Per-owner incremental mirror (board 0027): the decoded tables as id→value maps + the frontier
+/// `cursor` they're current at. On read, `changes_since(cursor)` names the changed ids; only those
+/// are re-decoded (decrypt the delta), the rest reused — and the built `snapshot` is served as-is
+/// when nothing changed. This is the consumer side of the universal frontier feed.
+struct CacheEntry {
+    cursor: u64,
+    mems: std::collections::HashMap<ObjectId, (Memory, Option<Vec<f32>>)>,
+    ents: std::collections::HashMap<ObjectId, Entity>,
+    links: std::collections::HashMap<ObjectId, LinkRow>,
+    snapshot: Arc<ReadSnapshot>,
+}
+
+fn snapshot_cache() -> &'static SnapshotCache {
+    static CACHE: std::sync::OnceLock<SnapshotCache> = std::sync::OnceLock::new();
+    CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+/// A decrypted-once read snapshot of the owner's brain tables (board: recall perf). Loaded
+/// ONCE at the top of the read-only [`Brain::assemble_context`] and passed into the pure
+/// `*_from` helpers, so one turn decrypts each table once instead of dozens of times
+/// (recall ×3, entity_card ×N, facts, memories_about all re-scanned + re-AEAD'd before).
+/// Request-scoped on purpose: the base `entities()`/`links()`/`recall()` stay un-memoized so
+/// write-interleaved callers (dreaming, `write_graph`) always read fresh — no staleness.
+struct ReadSnapshot {
+    /// All live memories, decrypted, with embeddings — the recall corpus.
+    memories: Vec<(ObjectId, Memory, Option<Vec<f32>>)>,
+    entities: Vec<Entity>,
+    links: Vec<LinkRow>,
+}
+
+impl ReadSnapshot {
+    /// Exact-name entity lookup (mirrors `Brain::entity_id_by_name`).
+    fn entity_by_name(&self, name: &str) -> Option<&Entity> {
+        self.entities.iter().find(|e| e.name == name)
+    }
+
+    /// Entity names appearing in the query — wikilinks ∪ case-insensitive name match
+    /// (pure mirror of `Brain::entities_in_query`).
+    fn entities_in_query(&self, query: &str) -> Vec<String> {
+        let mut names = extract_wikilinks(query);
+        let lower = query.to_lowercase();
+        for e in &self.entities {
+            if names.iter().any(|n| normalize_name(n) == normalize_name(&e.name)) {
+                continue;
+            }
+            if lower.contains(&normalize_name(&e.name)) {
+                names.push(e.name.clone());
+            }
+        }
+        names
+    }
+
+    /// Recency-sorted memories matching `filter`, capped at `n` (mirror of `Brain::recall`).
+    fn recall(&self, filter: &Filter, n: usize) -> Vec<Memory> {
+        let mut mems: Vec<Memory> = self
+            .memories
+            .iter()
+            .map(|(_, m, _)| m)
+            .filter(|m| filter.matches(m))
+            .cloned()
+            .collect();
+        mems.sort_by(|a, b| b.id.uuid().cmp(a.id.uuid()));
+        mems.truncate(n);
+        mems
+    }
+
+    /// Memories that mention `name` via a mention link (mirror of `Brain::memories_about`).
+    fn memories_about(&self, name: &str) -> Vec<Memory> {
+        let Some(e) = self.entity_by_name(name) else {
+            return Vec::new();
+        };
+        let eid_s = id_str(&e.id);
+        let memory_ids: std::collections::HashSet<&str> = self
+            .links
+            .iter()
+            .filter(|l| l.to == eid_s && l.kind == "mentions")
+            .map(|l| l.from.as_str())
+            .collect();
+        if memory_ids.is_empty() {
+            return Vec::new();
+        }
+        self.memories
+            .iter()
+            .filter(|(id, _, _)| memory_ids.contains(id_str(id).as_str()))
+            .map(|(_, m, _)| m.clone())
+            .collect()
+    }
+
+    /// Open claims with `name` as subject (mirror of `Brain::facts`).
+    fn facts(&self, subject: &str) -> Vec<Fact> {
+        let Some(subj) = self.entity_by_name(subject) else {
+            return Vec::new();
+        };
+        let subj_s = id_str(&subj.id);
+        let names: std::collections::HashMap<String, String> = self
+            .entities
+            .iter()
+            .map(|e| (id_str(&e.id), e.name.clone()))
+            .collect();
+        self.links
+            .iter()
+            .filter(|l| l.from == subj_s && l.class == LinkClass::Claim.as_str())
+            .map(|l| Fact {
+                predicate: l.kind.clone(),
+                object_name: names.get(&l.to).cloned().unwrap_or_default(),
+                valid_from_ms: l.valid_from,
+                valid_to_ms: l.valid_to,
+                confidence: l.confidence,
+            })
+            .collect()
+    }
+
+    /// Hybrid recall ranking (vector + bm25 + graph voice → RRF + modifiers + abstention +
+    /// MMR) over this snapshot — the PURE core extracted from `Brain::search_traced`, reading
+    /// only the snapshot (zero decrypt). `qvec` is the already-embedded query. Both
+    /// `search_traced` (fresh decrypt) and `assemble_context` (cached mirror) call this, so the
+    /// ranking has ONE definition.
+    fn rank(&self, query: &str, qvec: &[f32], k: usize, filter: &Filter) -> Vec<ScoredMemory> {
+        use std::cmp::Ordering;
+        let over = (k * 4).max(8);
+        let qtokens = content_tokens(query);
+
+        // Candidates = snapshot memories passing the typed filter.
+        let candidates: Vec<(ObjectId, &Memory, &Option<Vec<f32>>)> = self
+            .memories
+            .iter()
+            .filter(|(_, m, _)| filter.matches(m))
+            .map(|(id, m, emb)| (*id, m, emb))
+            .collect();
+
+        // Vector list: cosine over opened embeddings (descending, positives only).
+        let mut vector_list: Vec<(ObjectId, f32)> = candidates
+            .iter()
+            .filter_map(|(id, _, emb)| {
+                let c = cosine(qvec, emb.as_deref()?);
+                (c > 0.0).then_some((*id, c))
+            })
+            .collect();
+        vector_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+        vector_list.truncate(over);
+
+        // Text list: lexical overlap over opened content (descending, positives only).
+        let mut text_list: Vec<(ObjectId, f32)> = candidates
+            .iter()
+            .filter_map(|(id, m, _)| {
+                let s = lexical_overlap(&qtokens, &m.content);
+                (s > 0.0).then_some((*id, s))
+            })
+            .collect();
+        text_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+        text_list.truncate(over);
+
+        // Graph+fact voice: entities NAMED in the query vote for memories that mention them
+        // (mention links) and for their open claims' source memories.
+        let by_id: HashMap<ObjectId, ()> = candidates.iter().map(|(id, _, _)| (*id, ())).collect();
+        let mut graph_votes: HashMap<ObjectId, f32> = HashMap::new();
+        let matched: Vec<String> = self
+            .entities_in_query(query)
+            .into_iter()
+            .filter_map(|name| self.entity_by_name(&name).map(|e| id_str(&e.id)))
+            .collect();
+        if !matched.is_empty() {
+            for l in &self.links {
+                let memory_id = if l.kind == "mentions" && matched.contains(&l.to) {
+                    Some(l.from.clone())
+                } else if l.class == LinkClass::Claim.as_str()
+                    && l.valid_to.is_none()
+                    && (matched.contains(&l.from) || matched.contains(&l.to))
+                {
+                    l.source_memory.clone()
+                } else {
+                    None
+                };
+                let Some(id) = memory_id.and_then(|s| uuid::Uuid::parse_str(&s).ok()) else {
+                    continue;
+                };
+                let oid = ObjectId::from_uuid(id);
+                if by_id.contains_key(&oid) {
+                    *graph_votes.entry(oid).or_insert(0.0) += 1.0;
+                }
+            }
+        }
+        let mut graph_list: Vec<(ObjectId, f32)> = graph_votes.into_iter().collect();
+        graph_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+        graph_list.truncate(over);
+        let graph_ids: std::collections::HashSet<ObjectId> =
+            graph_list.iter().map(|(id, _)| *id).collect();
+
+        // RRF fuse with via tracking.
+        let mut score: HashMap<ObjectId, f32> = HashMap::new();
+        let mut via: HashMap<ObjectId, Via> = HashMap::new();
+        let mut mem: HashMap<ObjectId, Memory> = HashMap::new();
+        for (id, m, _) in &candidates {
+            mem.insert(*id, (*m).clone());
+        }
+        for (list, list_via) in [
+            (&vector_list, Via::Vector),
+            (&text_list, Via::Bm25),
+            (&graph_list, Via::Graph),
+        ] {
+            for (rank, (id, _)) in list.iter().enumerate() {
+                *score.entry(*id).or_insert(0.0) += 1.0 / (RRF_K + rank as f32 + 1.0);
+                via.entry(*id)
+                    .and_modify(|v| {
+                        if *v != list_via {
+                            *v = Via::Both;
+                        }
+                    })
+                    .or_insert(list_via);
+            }
+        }
+
+        // Read modifiers: veracity × age (from the UUIDv7 row id) × importance.
+        let now = now_ms();
+        for (id, s) in score.iter_mut() {
+            let m = &mem[id];
+            let age = now.saturating_sub(created_ms(id));
+            *s *= veracity_weight(m.veracity.as_deref())
+                * age_weight(age)
+                * importance_weight(m.importance);
+        }
+
+        // Abstention floor (graph-voice hits exempt — structural evidence the floor can't see).
+        let floor = abstention_floor(qtokens.len());
+        let mut ranked: Vec<(ObjectId, f32)> = score
+            .into_iter()
+            .filter(|(id, _)| {
+                if qtokens.is_empty() || graph_ids.contains(id) {
+                    return true;
+                }
+                lexical_overlap(&qtokens, &mem[id].content) >= floor
+            })
+            .collect();
+        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+
+        // MMR re-rank: greedy diversity, pick set seeded with the query itself.
+        let max_score = ranked.first().map(|(_, s)| *s).unwrap_or(0.0).max(f32::EPSILON);
+        let sets: HashMap<ObjectId, std::collections::HashSet<String>> = ranked
+            .iter()
+            .map(|(id, _)| (*id, stem_set(&mem[id].content)))
+            .collect();
+        let qset = stem_set(query);
+        let mut pool = ranked;
+        let mut picked_sets: Vec<&std::collections::HashSet<String>> = vec![&qset];
+        let mut ranked: Vec<(ObjectId, f32)> = Vec::with_capacity(k);
+        while ranked.len() < k && !pool.is_empty() {
+            let best = pool
+                .iter()
+                .enumerate()
+                .map(|(i, (id, s))| {
+                    let redundancy = picked_sets
+                        .iter()
+                        .map(|p| jaccard(&sets[id], p))
+                        .fold(0.0f32, f32::max);
+                    (i, MMR_LAMBDA * (s / max_score) - (1.0 - MMR_LAMBDA) * redundancy)
+                })
+                .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal))
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            let pick = pool.remove(best);
+            picked_sets.push(&sets[&pick.0]);
+            ranked.push(pick);
+        }
+
+        ranked
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, (id, s))| {
+                let memory = mem.remove(&id)?;
+                Some(ScoredMemory {
+                    memory,
+                    rank: i + 1,
+                    score: s,
+                    via: via.get(&id).copied().unwrap_or(Via::Vector),
+                })
+            })
+            .collect()
+    }
+
+    /// L0 self text from the snapshot (the reserved `self` stream's newest memory).
+    fn l0_self(&self) -> String {
+        self.recall(&Filter::stream("self"), 1)
+            .into_iter()
+            .next()
+            .map(|m| m.content)
+            .unwrap_or_else(|| "(self not set)".to_string())
+    }
+
+    /// Full card for one entity — kind, bonds, open facts, mentioning memories (pure mirror
+    /// of `Brain::entity_card`, reading only from this snapshot — zero decrypt).
+    fn entity_card(&self, name: &str) -> Option<EntityCard> {
+        let e = self.entity_by_name(name)?;
+        let eid_s = id_str(&e.id);
+        let kind = e.kind.clone();
+        let mut weighted: Vec<(String, f64)> = Vec::new();
+        for l in &self.links {
+            if l.kind != BOND_KIND {
+                continue;
+            }
+            if l.from == eid_s {
+                weighted.push((l.to.clone(), l.strength));
+            } else if l.to == eid_s {
+                weighted.push((l.from.clone(), l.strength));
+            }
+        }
+        let names: std::collections::HashMap<String, String> = self
+            .entities
+            .iter()
+            .map(|e| (id_str(&e.id), e.name.clone()))
+            .collect();
+        let mut bonds: Vec<(String, f64)> = weighted
+            .into_iter()
+            .filter_map(|(id, s)| names.get(&id).map(|n| (n.clone(), s)))
+            .collect();
+        bonds.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        let facts = self
+            .facts(name)
+            .into_iter()
+            .filter(|f| f.valid_to_ms.is_none())
+            .collect();
+        let recent_memories = self.memories_about(name);
+        Some(EntityCard {
+            name: name.to_string(),
+            kind,
+            bonds,
+            facts,
+            recent_memories,
+        })
+    }
 }
 
 impl<E: Embedder> Brain<E> {
@@ -600,9 +972,39 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
     /// Run ONE extraction batch off the actor (board 0024 fix): prepare the batch, call
     /// the configured extractor, write facts back. Called by `brain_do_extract` (a
     /// non-actor Tauri command) so the Tinfoil HTTP call never blocks the avenDB mailbox.
-    /// Returns `Some((memories_mined, facts_written, tokens))` or `None` when fully mined.
-    pub async fn extract_one_batch(&self) -> Result<Option<(usize, usize, i64)>, BrainError> {
+    /// Returns `Some((memories_mined, entities_typed, facts_written, tokens))` or `None`.
+    pub async fn extract_one_batch(
+        &self,
+    ) -> Result<Option<(usize, Vec<DreamEntity>, usize, i64)>, BrainError> {
         self.extract_batch(EXTRACT_BATCH_MAX).await
+    }
+
+    /// Wipe the derived graph — every entity and every link (mentions, bonds, claims, and
+    /// the `extracted`/`refers_to` dream markers) — WITHOUT touching memories. The next
+    /// dreams then re-build it from scratch under the CURRENT rules: explicit `[[wikilinks]]`
+    /// plus the LLM extractor's typed entities + facts (no deterministic German-noun soup).
+    /// Use after upgrading the extraction logic to clear pre-existing `unknown` junk.
+    /// Returns `(entities_dropped, links_dropped)`.
+    pub async fn rebuild_graph(&self) -> Result<(usize, usize), BrainError> {
+        let entities = self.entities().await?;
+        let mut entities_dropped = 0usize;
+        for e in entities {
+            self.client
+                .delete(e.id)
+                .await
+                .map_err(|err| BrainError::Write(format!("{err:?}")))?;
+            entities_dropped += 1;
+        }
+        let links = self.links().await?;
+        let mut links_dropped = 0usize;
+        for l in links {
+            self.client
+                .delete(l.id)
+                .await
+                .map_err(|err| BrainError::Write(format!("{err:?}")))?;
+            links_dropped += 1;
+        }
+        Ok((entities_dropped, links_dropped))
     }
 
     // ── Write path ───────────────────────────────────────────────────────────
@@ -622,7 +1024,7 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         opts: &RememberOptions,
     ) -> Result<ObjectId, BrainError> {
         let id = self.remember_raw(content, opts).await?;
-        self.write_graph(id, content).await?;
+        let _ = self.write_graph(id, content).await?;
         Ok(id)
     }
 
@@ -781,188 +1183,11 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         k: usize,
         filter: &Filter,
     ) -> Result<Vec<ScoredMemory>, BrainError> {
-        let over = (k * 4).max(8);
+        // Decrypt the snapshot once, then run the shared pure ranker (board 0026 — one
+        // ranking definition for both this fresh-read path and the cached assemble path).
         let qvec = self.embedder.embed(query).await;
-        let qtokens = content_tokens(query);
-
-        // One owner-scoped fetch; open + filter brain-side.
-        let rows = self.memory_rows().await?;
-        let mut candidates: Vec<(ObjectId, Memory, Option<Vec<f32>>)> = Vec::new();
-        for (id, vals) in &rows {
-            let m = self.open_memory(*id, vals);
-            if !filter.matches(&m) {
-                continue;
-            }
-            let emb = self
-                .open_at(MEMORIES, "embedding", id, vals, 2)
-                .and_then(|s| decode_embedding(&s));
-            candidates.push((*id, m, emb));
-        }
-
-        // Vector list: cosine over opened embeddings (descending, positives only).
-        let mut vector_list: Vec<(ObjectId, f32)> = candidates
-            .iter()
-            .filter_map(|(id, _, emb)| {
-                let c = cosine(&qvec, emb.as_deref()?);
-                (c > 0.0).then_some((*id, c))
-            })
-            .collect();
-        vector_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        vector_list.truncate(over);
-
-        // Text list: lexical overlap over opened content (descending, positives only).
-        let mut text_list: Vec<(ObjectId, f32)> = candidates
-            .iter()
-            .filter_map(|(id, m, _)| {
-                let s = lexical_overlap(&qtokens, &m.content);
-                (s > 0.0).then_some((*id, s))
-            })
-            .collect();
-        text_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        text_list.truncate(over);
-
-        // Graph+fact voice (board 0025): entities NAMED in the query vote for the
-        // memories that mention them (mention links) and for their claims' source
-        // memories — so a typo'd/paraphrased memory the lexical+vector voices miss
-        // (e.g. "Sarha" for "Sarah", merged at write time) still surfaces through
-        // its graph links. Scores = votes per memory; fused via the same RRF.
-        let mut graph_votes: HashMap<ObjectId, f32> = HashMap::new();
-        let by_id: HashMap<ObjectId, ()> = candidates.iter().map(|(id, _, _)| (*id, ())).collect();
-        {
-            let matched: Vec<String> = {
-                let mut ids = Vec::new();
-                for name in self.entities_in_query(query).await? {
-                    if let Some(eid) = self.entity_id_by_name(&name).await? {
-                        ids.push(id_str(&eid));
-                    }
-                }
-                ids
-            };
-            if !matched.is_empty() {
-                for l in self.links().await? {
-                    let memory_id = if l.kind == "mentions" && matched.contains(&l.to) {
-                        // mention voice: memory —mentions→ matched entity
-                        Some(l.from.clone())
-                    } else if l.class == LinkClass::Claim.as_str()
-                        && l.valid_to.is_none()
-                        && (matched.contains(&l.from) || matched.contains(&l.to))
-                    {
-                        // fact voice: an open claim about the entity → its source memory
-                        l.source_memory.clone()
-                    } else {
-                        None
-                    };
-                    let Some(id) = memory_id.and_then(|s| uuid::Uuid::parse_str(&s).ok()) else {
-                        continue;
-                    };
-                    let oid = ObjectId::from_uuid(id);
-                    if by_id.contains_key(&oid) {
-                        *graph_votes.entry(oid).or_insert(0.0) += 1.0;
-                    }
-                }
-            }
-        }
-        let mut graph_list: Vec<(ObjectId, f32)> = graph_votes.into_iter().collect();
-        graph_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        graph_list.truncate(over);
-        let graph_ids: std::collections::HashSet<ObjectId> =
-            graph_list.iter().map(|(id, _)| *id).collect();
-
-        // RRF fuse with via tracking.
-        let mut score: HashMap<ObjectId, f32> = HashMap::new();
-        let mut via: HashMap<ObjectId, Via> = HashMap::new();
-        let mut mem: HashMap<ObjectId, Memory> = HashMap::new();
-        for (id, m, _) in &candidates {
-            mem.insert(*id, m.clone());
-        }
-        for (list, list_via) in [
-            (&vector_list, Via::Vector),
-            (&text_list, Via::Bm25),
-            (&graph_list, Via::Graph),
-        ] {
-            for (rank, (id, _)) in list.iter().enumerate() {
-                *score.entry(*id).or_insert(0.0) += 1.0 / (RRF_K + rank as f32 + 1.0);
-                via.entry(*id)
-                    .and_modify(|v| {
-                        if *v != list_via {
-                            *v = Via::Both;
-                        }
-                    })
-                    .or_insert(list_via);
-            }
-        }
-
-        // Read modifiers: veracity × age (from the UUIDv7 row id) × importance.
-        let now = now_ms();
-        for (id, s) in score.iter_mut() {
-            let m = &mem[id];
-            let age = now.saturating_sub(created_ms(id));
-            *s *= veracity_weight(m.veracity.as_deref())
-                * age_weight(age)
-                * importance_weight(m.importance);
-        }
-
-        // Abstention floor: drop hits below the minimum lexical overlap with the query.
-        // Graph-voice hits are exempt — they carry structural evidence (an explicit
-        // mention/claim link), which is exactly what the lexical floor cannot see.
-        let floor = abstention_floor(qtokens.len());
-        let mut ranked: Vec<(ObjectId, f32)> = score
-            .into_iter()
-            .filter(|(id, _)| {
-                if qtokens.is_empty() || graph_ids.contains(id) {
-                    return true;
-                }
-                lexical_overlap(&qtokens, &mem[id].content) >= floor
-            })
-            .collect();
-        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-        // MMR re-rank: greedy diversity pass over the survivors so the top-k isn't
-        // dominated by one cluster — pick by λ·relevance − (1−λ)·redundancy, where
-        // redundancy is the max stemmed-Jaccard against the picks so far. The pick set
-        // is SEEDED with the query itself, so a stored echo of the user's own question
-        // (talk turns are memories too) is maximally redundant and sinks below content.
-        let max_score = ranked.first().map(|(_, s)| *s).unwrap_or(0.0).max(f32::EPSILON);
-        let sets: HashMap<ObjectId, std::collections::HashSet<String>> = ranked
-            .iter()
-            .map(|(id, _)| (*id, stem_set(&mem[id].content)))
-            .collect();
-        let qset = stem_set(query);
-        let mut pool = ranked;
-        let mut picked_sets: Vec<&std::collections::HashSet<String>> = vec![&qset];
-        let mut ranked: Vec<(ObjectId, f32)> = Vec::with_capacity(k);
-        while ranked.len() < k && !pool.is_empty() {
-            let best = pool
-                .iter()
-                .enumerate()
-                .map(|(i, (id, s))| {
-                    let redundancy = picked_sets
-                        .iter()
-                        .map(|p| jaccard(&sets[id], p))
-                        .fold(0.0f32, f32::max);
-                    (i, MMR_LAMBDA * (s / max_score) - (1.0 - MMR_LAMBDA) * redundancy)
-                })
-                .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
-                .map(|(i, _)| i)
-                .unwrap_or(0);
-            let pick = pool.remove(best);
-            picked_sets.push(&sets[&pick.0]);
-            ranked.push(pick);
-        }
-
-        Ok(ranked
-            .into_iter()
-            .enumerate()
-            .filter_map(|(i, (id, s))| {
-                let memory = mem.remove(&id)?;
-                Some(ScoredMemory {
-                    memory,
-                    rank: i + 1,
-                    score: s,
-                    via: via.get(&id).copied().unwrap_or(Via::Vector),
-                })
-            })
-            .collect())
+        let snap = self.load_snapshot().await?;
+        Ok(snap.rank(query, &qvec, k, filter))
     }
 
     /// The `n` most-recent memories matching `filter` (no query text). Newest first —
@@ -1059,7 +1284,9 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             .links()
             .await?
             .into_iter()
-            .filter(|l| l.kind == "refers_to")
+            // Skip self-links: `memory —refers_to→ itself` is write_graph's graph-built
+            // marker (set even when a memory has no entities), NOT a user `memory_link`.
+            .filter(|l| l.kind == "refers_to" && l.from != l.to)
             .filter_map(|l| {
                 if l.from == id_s {
                     Some(l.to)
@@ -1086,25 +1313,147 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
 
     /// All entities in this brain.
     pub async fn entities(&self) -> Result<Vec<Entity>, BrainError> {
-        let rows = self
-            .client
+        Ok(self
+            .raw_rows(ENTITIES)
+            .await?
+            .iter()
+            .map(|(id, v)| self.decode_entity(*id, v))
+            .collect())
+    }
+
+    /// Raw owner-scoped rows of a table (NO decryption) — the cheap input to the incremental
+    /// snapshot reconcile (board 0027): scan is cheap, only changed rows get decoded.
+    async fn raw_rows(&self, table: &str) -> Result<Vec<(ObjectId, Vec<Value>)>, BrainError> {
+        self.client
             .query(
-                QueryBuilder::new(ENTITIES)
+                QueryBuilder::new(table)
                     .filter_eq("owner", Value::Uuid(self.owner))
                     .build(),
                 None,
             )
             .await
-            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
+            .map_err(|e| BrainError::Read(format!("{e:?}")))
+    }
+
+    /// Decode one raw entity row → `Entity` (one decrypt point, shared by the loader + reconcile).
+    fn decode_entity(&self, id: ObjectId, v: &[Value]) -> Entity {
+        Entity {
+            id,
+            name: self.open_at(ENTITIES, "name", &id, v, 1).unwrap_or_default(),
+            kind: self.open_at(ENTITIES, "kind", &id, v, 2).unwrap_or_default(),
+        }
+    }
+
+    /// Decrypt the full live-memory corpus ONCE (id + opened Memory + embedding) — the shared
+    /// recall input for one [`assemble_context`] turn (see [`ReadSnapshot`]).
+    async fn load_candidates(
+        &self,
+    ) -> Result<Vec<(ObjectId, Memory, Option<Vec<f32>>)>, BrainError> {
+        let rows = self.memory_rows().await?;
         Ok(rows
             .iter()
-            .map(|(id, v)| Entity {
-                id: *id,
-                name: self.open_at(ENTITIES, "name", id, v, 1).unwrap_or_default(),
-                kind: self.open_at(ENTITIES, "kind", id, v, 2).unwrap_or_default(),
+            .map(|(id, vals)| {
+                let m = self.open_memory(*id, vals);
+                let emb = self
+                    .open_at(MEMORIES, "embedding", id, vals, 2)
+                    .and_then(|s| decode_embedding(&s));
+                (*id, m, emb)
             })
             .collect())
     }
+
+    /// Decrypt all three brain tables ONCE for a read-only [`assemble_context`] turn — the
+    /// shared input to the pure `ReadSnapshot` helpers, so gist/working recall + every entity
+    /// card read from RAM instead of re-decrypting. (Not used by write-interleaved callers.)
+    async fn load_snapshot(&self) -> Result<ReadSnapshot, BrainError> {
+        Ok(ReadSnapshot {
+            memories: self.load_candidates().await?,
+            entities: self.entities().await?,
+            links: self.links().await?,
+        })
+    }
+
+    /// Cross-turn decrypt-once read mirror (board 0026 M2): serve the process-global cached
+    /// snapshot when aven-db's `frontier_epoch()` is unchanged (ZERO decryption), else rebuild
+    /// once and re-cache. The brain CONSUMES aven-db's O(1) freshness token — it does not
+    /// reinvent a frontier. Read-only path (`assemble_context`); writers use the fresh loaders.
+    async fn snapshot(&self) -> Result<Arc<ReadSnapshot>, BrainError> {
+        use std::collections::{HashMap, HashSet};
+        let key = *self.owner.uuid();
+
+        // Read the prior cursor + decoded maps (clone out under the lock; never hold across await).
+        let prior = {
+            let cache = snapshot_cache().lock().unwrap();
+            cache
+                .get(&key)
+                .map(|e| (e.cursor, e.mems.clone(), e.ents.clone(), e.links.clone(), e.snapshot.clone()))
+        };
+        let (cursor, mut mems, mut ents, mut links, prior_snapshot) = match prior {
+            Some((c, m, e, l, s)) => (c, m, e, l, Some(s)),
+            None => (0, HashMap::new(), HashMap::new(), HashMap::new(), None),
+        };
+
+        // Consume aven-db's frontier feed: the delta since our cursor — or `Resync` when our
+        // cursor predates the retained change window (then we full-rebuild, like a far-behind peer).
+        let (next, changes) = self.client.changes_since(cursor);
+        // `None` ⇒ resync (re-decode everything, ignore the cache); `Some(set)` ⇒ incremental.
+        let changed: Option<HashSet<ObjectId>> = match changes {
+            aven_db::frontier_epoch::Changes::Delta(ids) => Some(ids.into_iter().collect()),
+            aven_db::frontier_epoch::Changes::Resync => None,
+        };
+        if let Some(set) = &changed {
+            if set.is_empty() {
+                if let Some(s) = prior_snapshot {
+                    return Ok(s); // nothing changed → serve the built mirror, ZERO decrypt
+                }
+            }
+        }
+        // Decode iff the row is in the changed set (or we're resyncing, or it isn't cached);
+        // otherwise reuse the cached decode. Decrypt == the delta (or all, on resync/first build).
+        let decode_needed = |id: &ObjectId| match &changed {
+            None => true,                       // resync: re-decode all
+            Some(set) => set.contains(id),      // incremental: only changed ids
+        };
+
+        // Reconcile each table from fresh RAW rows (no decrypt); reuse cached decode for the rest,
+        // drop ids no longer present.
+        let mem_rows = self.raw_rows(MEMORIES).await?;
+        let mut next_mems = HashMap::with_capacity(mem_rows.len());
+        for (id, vals) in &mem_rows {
+            let keep = (!decode_needed(id)).then(|| mems.remove(id)).flatten();
+            next_mems.insert(*id, keep.unwrap_or_else(|| self.decode_memory(*id, vals)));
+        }
+        let ent_rows = self.raw_rows(ENTITIES).await?;
+        let mut next_ents = HashMap::with_capacity(ent_rows.len());
+        for (id, vals) in &ent_rows {
+            let keep = (!decode_needed(id)).then(|| ents.remove(id)).flatten();
+            next_ents.insert(*id, keep.unwrap_or_else(|| self.decode_entity(*id, vals)));
+        }
+        let link_rows = self.raw_rows(LINKS).await?;
+        let mut next_links = HashMap::with_capacity(link_rows.len());
+        for (id, vals) in &link_rows {
+            let keep = (!decode_needed(id)).then(|| links.remove(id)).flatten();
+            next_links.insert(*id, keep.unwrap_or_else(|| self.decode_link(*id, vals)));
+        }
+
+        let snapshot = Arc::new(ReadSnapshot {
+            memories: next_mems.iter().map(|(id, (m, e))| (*id, m.clone(), e.clone())).collect(),
+            entities: next_ents.values().cloned().collect(),
+            links: next_links.values().cloned().collect(),
+        });
+        snapshot_cache().lock().unwrap().insert(
+            key,
+            CacheEntry {
+                cursor: next,
+                mems: next_mems,
+                ents: next_ents,
+                links: next_links,
+                snapshot: snapshot.clone(),
+            },
+        );
+        Ok(snapshot)
+    }
+
 
     /// The bond (dynamics) between two named entities, if any.
     pub async fn relation(
@@ -1281,6 +1630,44 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         Ok(())
     }
 
+    /// Auto-maintain L0 **self**: hand the owner's recent first-person memories to the
+    /// configured extractor, which distils who they are (name, age, role, goals, durable
+    /// preferences) merged with the current profile, and writes the result via [`set_self`].
+    /// Runs in the off-actor extract pass so the LLM call never blocks the avenDB mailbox.
+    /// Returns `Some(tokens)` when L0 self was updated, `None` when unchanged/unsupported.
+    pub async fn refresh_self(&self) -> Result<Option<i64>, BrainError> {
+        if !self.extractor.enabled() {
+            return Ok(None);
+        }
+        // The owner's own words ground "self" — assistant/tool/summary turns don't. Newest
+        // first, capped so a long history stays one bounded LLM call.
+        const SELF_WINDOW: usize = 40;
+        let mine: Vec<String> = self
+            .recall(&Filter::default(), 256)
+            .await?
+            .into_iter()
+            .filter(|m| m.author_role == "user" && m.stream != "self" && m.stream != "summary")
+            .take(SELF_WINDOW)
+            .map(|m| m.content)
+            .collect();
+        if mine.is_empty() {
+            return Ok(None);
+        }
+        let current = self.l0_self().await?;
+        let summary = self
+            .extractor
+            .summarize_self(&mine, &current)
+            .await
+            .map_err(|e| BrainError::Write(format!("self summary: {e}")))?;
+        match summary {
+            Some(s) if !s.text.trim().is_empty() => {
+                self.set_self(s.text.trim()).await?;
+                Ok(Some(s.tokens))
+            }
+            _ => Ok(None),
+        }
+    }
+
     /// Assemble the wake-up context: L0 self + L1 gist (the `gist_n` most-recent
     /// non-self memories, compactly rendered). The block an agent loads on start.
     pub async fn wake(&self, gist_n: usize) -> Result<String, BrainError> {
@@ -1360,18 +1747,39 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         query: &str,
         opts: &ContextOptions,
     ) -> Result<ContextBundle, BrainError> {
-        let l0 = self.l0_self().await?;
-        let gist: Vec<String> = self
-            .recall(&Filter::default(), opts.gist_n + 16)
-            .await?
-            .into_iter()
-            .filter(|m| m.stream != "self")
-            .take(opts.gist_n)
-            .map(|m| truncate(&m.content, 160))
-            .collect();
+        // Per-phase timing (board: recall transparency) — each `phase!` records a TraceTiming.
+        let mut timings: Vec<TraceTiming> = Vec::new();
+        macro_rules! phase {
+            ($label:expr, $body:expr) => {{
+                let __t = std::time::Instant::now();
+                let __r = $body;
+                timings.push(TraceTiming {
+                    label: $label.to_string(),
+                    ms: __t.elapsed().as_millis() as u64,
+                });
+                __r
+            }};
+        }
+
+        // Cross-turn decrypt-once mirror (board 0026): serve the cached plaintext snapshot when
+        // aven-db's frontier_epoch() is unchanged (ZERO decrypt), else rebuild once. gist/working
+        // recall + the L3 ranker + every entity card read from it. The brain CONSUMES aven-db's
+        // O(1) freshness token; the frontier/sync SSOT lives in aven-db.
+        let snap = phase!("snapshot (epoch-cached)", self.snapshot().await?);
+
+        let l0 = phase!("l0 self", snap.l0_self());
+        let gist: Vec<String> = phase!(
+            "l1 gist",
+            snap.recall(&Filter::default(), opts.gist_n + 16)
+                .into_iter()
+                .filter(|m| m.stream != "self")
+                .take(opts.gist_n)
+                .map(|m| truncate(&m.content, 160))
+                .collect()
+        );
 
         // Working window: last N turns of the filtered stream, chronological.
-        let mut working = self.recall(&opts.filter, opts.working_n).await?;
+        let mut working = phase!("working window", snap.recall(&opts.filter, opts.working_n));
         working.reverse();
         let working_ids: std::collections::HashSet<String> =
             working.iter().map(|m| id_str(&m.id)).collect();
@@ -1390,51 +1798,68 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             }
         }
 
-        // L3: traced hybrid recall across everything, excluding the window.
-        let recalled: Vec<ScoredMemory> = self
-            .search_traced(&recall_query, opts.recall_k * 2, &Filter::default())
-            .await?
-            .into_iter()
-            .filter(|s| !working_ids.contains(&id_str(&s.memory.id)) && s.memory.stream != "self")
-            .take(opts.recall_k)
-            .collect();
+        // L3: traced hybrid recall across everything, excluding the window. Runs the shared
+        // pure ranker over the CACHED snapshot — zero decrypt on an unchanged turn.
+        let recall_qvec = self.embedder.embed(&recall_query).await;
+        let recalled: Vec<ScoredMemory> = phase!(
+            "recall (vector+bm25)",
+            snap.rank(&recall_query, &recall_qvec, opts.recall_k * 2, &Filter::default())
+                .into_iter()
+                .filter(|s| {
+                    !working_ids.contains(&id_str(&s.memory.id)) && s.memory.stream != "self"
+                })
+                .take(opts.recall_k)
+                .collect()
+        );
 
-        // L2: entity cards for entities named in the (enriched) query — plus entities
-        // promoted from the top recalled memories. The recall-promotion path bridges
-        // queries that don't literally name an entity (e.g. "who scored?" → recalled
-        // chunk contains "Julian Quinones" → entity card surfaces without substring match).
-        let mut cards: Vec<EntityCard> = Vec::new();
-        // L2a: literal/substring match against the query (fast, deterministic)
-        for name in self.entities_in_query(&recall_query).await? {
-            if cards.len() >= opts.entity_cards {
-                break;
-            }
-            if let Some(card) = self.entity_card(&name).await? {
-                cards.push(card);
-            }
-        }
-        // L2b: entity promotion — extract names from top recalled chunks, dedupe vs L2a.
-        if cards.len() < opts.entity_cards {
-            for scored in recalled.iter().take(4) {
-                if cards.len() >= opts.entity_cards {
-                    break;
-                }
-                for name in extract_auto_entities(&scored.memory.content).into_iter().take(4) {
-                    if cards.len() >= opts.entity_cards {
-                        break;
-                    }
-                    let norm = normalize_name(&name);
-                    if cards.iter().any(|c: &EntityCard| normalize_name(&c.name) == norm) {
-                        continue;
-                    }
-                    if let Some(card) = self.entity_card(&name).await? {
-                        cards.push(card);
-                    }
+        // L2: entity cards for entities named in the (enriched) query — plus entities promoted
+        // from the top recalled memories (bridges queries that don't literally name the answer,
+        // e.g. "who was the referee?" → a recalled chunk has the name).
+        //
+        // PERF (board: recall cost): cards are built from the pre-decrypted `snap` (zero extra
+        // decrypt). We still resolve to AT MOST `entity_cards` cards, ranking candidate NAMES
+        // typed-first via the snapshot's name→kind map, then building only the survivors.
+        let cards: Vec<EntityCard> = phase!("entity cards", {
+            let mut candidate_names: Vec<String> = snap.entities_in_query(&recall_query);
+            for scored in recalled.iter().take(6) {
+                for name in extract_auto_entities(&scored.memory.content).into_iter().take(6) {
+                    candidate_names.push(name);
                 }
             }
-        }
+            // name→kind from the snapshot, for cheap existence check + typed-first rank.
+            let kind_by_norm: std::collections::HashMap<String, String> = snap
+                .entities
+                .iter()
+                .map(|e| (normalize_name(&e.name), e.kind.clone()))
+                .collect();
+            // Dedupe by normalized name; keep only names that resolve to a real entity.
+            let mut seen = std::collections::HashSet::new();
+            let mut ranked: Vec<(String, String)> = Vec::new(); // (name, kind)
+            for name in candidate_names {
+                let norm = normalize_name(&name);
+                if !seen.insert(norm.clone()) {
+                    continue;
+                }
+                if let Some(kind) = kind_by_norm.get(&norm) {
+                    ranked.push((name, kind.clone()));
+                }
+            }
+            // Typed entities first ("referee"/"player"/"team" beat a generic `unknown` noun like
+            // "WM"); stable sort preserves query→recall order within each tier.
+            ranked.sort_by_key(|(_, kind)| (kind.is_empty() || kind == "unknown") as u8);
+            ranked.truncate(opts.entity_cards);
+            // Build cards for ONLY the survivors — from the snapshot, no decrypt.
+            let mut cards: Vec<EntityCard> = Vec::new();
+            for (name, _) in ranked {
+                if let Some(card) = snap.entity_card(&name) {
+                    cards.push(card);
+                }
+            }
+            cards
+        });
 
         // Budgeted assembly: pin L0+L1 → working newest-first → recall by rank → cards.
+        let __pack_t = std::time::Instant::now();
         let mut prompt = String::new();
         prompt.push_str("# Self\n");
         prompt.push_str(&l0);
@@ -1505,6 +1930,11 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             }
         }
 
+        timings.push(TraceTiming {
+            label: "pack".to_string(),
+            ms: __pack_t.elapsed().as_millis() as u64,
+        });
+
         let trace = ContextTrace {
             query: recall_query,
             l0_self: l0,
@@ -1536,6 +1966,7 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
                 dropped_working,
             },
             embedder: self.embedder.name().to_string(),
+            timings,
             assembled_at_ms: now_ms(),
         };
 
@@ -1562,7 +1993,7 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         let mut facts_extracted = 0usize;
         for _ in 0..16 {
             match self.extract_batch(EXTRACT_BATCH_MAX).await? {
-                Some((_, n_facts, _)) => facts_extracted += n_facts,
+                Some((_, _, n_facts, _)) => facts_extracted += n_facts,
                 None => break,
             }
         }
@@ -1594,12 +2025,18 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         const MERGE: i64 = 100;
         if cursor < ENRICH_CAP {
             return Ok(match self.enrich_one().await? {
-                Some(snip) => {
+                Some((snip, entities, facts)) => {
                     let next = cursor + 1;
+                    let detail = match (entities, facts) {
+                        (0, 0) => String::new(),
+                        (e, 0) => format!(" · {e} entities"),
+                        (0, f) => format!(" · {f} facts"),
+                        (e, f) => format!(" · {e} entities, {f} facts"),
+                    };
                     DreamStep::ok(
                         "enrich",
-                        format!("Graphed “{snip}”"),
-                        1,
+                        format!("Graphed \"{snip}\"{detail}"),
+                        (entities + facts) as i64,
                         if next < ENRICH_CAP { next } else { EXTRACT },
                     )
                 }
@@ -1658,6 +2095,7 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
                 label: "Dreaming complete".into(),
                 count: 0,
                 tokens: 0,
+                entities: Vec::new(),
                 next_cursor: cursor,
                 done: true,
             },
@@ -1668,7 +2106,8 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
     /// `extracted` fact-mining marker doesn't count). Returns a short snippet of what it
     /// graphed, or `None` when there's nothing left. One `write_graph` per call so the
     /// stepped dream logs + yields per memory.
-    async fn enrich_one(&self) -> Result<Option<String>, BrainError> {
+    /// Returns `Some((snippet, entities, facts))` or `None` when nothing left to graph.
+    async fn enrich_one(&self) -> Result<Option<(String, usize, usize)>, BrainError> {
         let built: std::collections::HashSet<String> = self
             .links()
             .await?
@@ -1678,9 +2117,9 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             .collect();
         for m in self.recall(&Filter::default(), 64).await? {
             if !built.contains(&id_str(&m.id)) {
-                self.write_graph(m.id, &m.content).await?;
+                let (entities, facts) = self.write_graph(m.id, &m.content).await?;
                 let snip: String = m.content.chars().take(56).collect();
-                return Ok(Some(snip));
+                return Ok(Some((snip, entities, facts)));
             }
         }
         Ok(None)
@@ -1695,10 +2134,11 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
     /// Returns `(memories mined, facts written, tokens spent)`, or `None` when
     /// everything is already extracted. Extractor errors fail the step WITHOUT marking,
     /// so the batch retries next dream.
+    /// Returns `(memories_mined, entities_typed, facts_written, tokens)` or `None`.
     async fn extract_batch(
         &self,
         cap: usize,
-    ) -> Result<Option<(usize, usize, i64)>, BrainError> {
+    ) -> Result<Option<(usize, Vec<DreamEntity>, usize, i64)>, BrainError> {
         if !self.extractor.enabled() {
             return Ok(None);
         }
@@ -1733,6 +2173,18 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             .await
             .map_err(|e| BrainError::Write(format!("extractor: {e}")))?;
 
+        // Apply typed entities FIRST so fact subjects/objects fuzzy-match the now-kinded
+        // rows (richer L2 cards: "Lozano (player)" instead of "(unknown)"). Collect the
+        // (name, kind) pairs for clickable cards in the dreaming log's extract step.
+        let mut typed: Vec<DreamEntity> = Vec::new();
+        for e in &out.entities {
+            if e.name.trim().is_empty() {
+                continue;
+            }
+            self.upsert_entity_with_kind(&e.name, &e.kind).await?;
+            typed.push(DreamEntity { name: e.name.clone(), kind: e.kind.clone() });
+        }
+
         let mut written = 0usize;
         let mut seen: std::collections::HashSet<(String, String, String)> =
             std::collections::HashSet::new();
@@ -1755,7 +2207,7 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             self.add_note_link(input.memory_id, input.memory_id, EXTRACTED_KIND)
                 .await?;
         }
-        Ok(Some((batch.len(), written, out.tokens)))
+        Ok(Some((batch.len(), typed, written, out.tokens)))
     }
 
     /// Claim healer (cross-device): collapse duplicate OPEN claims per
@@ -2156,53 +2608,55 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
     /// Link column order: owner, from, to, kind, class, valid_from, valid_to,
     /// confidence, strength, stability, access_count, last_access, source_memory.
     async fn links(&self) -> Result<Vec<LinkRow>, BrainError> {
-        let rows = self
-            .client
-            .query(
-                QueryBuilder::new(LINKS)
-                    .filter_eq("owner", Value::Uuid(self.owner))
-                    .build(),
-                None,
-            )
-            .await
-            .map_err(|e| BrainError::Read(format!("{e:?}")))?;
-        Ok(rows
+        Ok(self
+            .raw_rows(LINKS)
+            .await?
             .iter()
-            .map(|(id, v)| LinkRow {
-                id: *id,
-                from: self.open_at(LINKS, "from", id, v, 1).unwrap_or_default(),
-                to: self.open_at(LINKS, "to", id, v, 2).unwrap_or_default(),
-                kind: self.open_at(LINKS, "kind", id, v, 3).unwrap_or_default(),
-                class: self.open_at(LINKS, "class", id, v, 4).unwrap_or_default(),
-                valid_from: self
-                    .open_at(LINKS, "valid_from", id, v, 5)
-                    .and_then(|s| s.parse().ok()),
-                valid_to: self
-                    .open_at(LINKS, "valid_to", id, v, 6)
-                    .and_then(|s| s.parse().ok()),
-                confidence: self
-                    .open_at(LINKS, "confidence", id, v, 7)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0.0),
-                strength: self
-                    .open_at(LINKS, "strength", id, v, 8)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0.0),
-                stability: self
-                    .open_at(LINKS, "stability", id, v, 9)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0.0),
-                access_count: self
-                    .open_at(LINKS, "access_count", id, v, 10)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0),
-                last_access: self
-                    .open_at(LINKS, "last_access", id, v, 11)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0),
-                source_memory: self.open_at(LINKS, "source_memory", id, v, 12),
-            })
+            .map(|(id, v)| self.decode_link(*id, v))
             .collect())
+    }
+
+    /// Decode one raw link row → `LinkRow` (one decrypt point, shared by the loader + reconcile).
+    fn decode_link(&self, id: ObjectId, v: &[Value]) -> LinkRow {
+        LinkRow {
+            id,
+            from: self.open_at(LINKS, "from", &id, v, 1).unwrap_or_default(),
+            to: self.open_at(LINKS, "to", &id, v, 2).unwrap_or_default(),
+            kind: self.open_at(LINKS, "kind", &id, v, 3).unwrap_or_default(),
+            class: self.open_at(LINKS, "class", &id, v, 4).unwrap_or_default(),
+            valid_from: self.open_at(LINKS, "valid_from", &id, v, 5).and_then(|s| s.parse().ok()),
+            valid_to: self.open_at(LINKS, "valid_to", &id, v, 6).and_then(|s| s.parse().ok()),
+            confidence: self
+                .open_at(LINKS, "confidence", &id, v, 7)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0.0),
+            strength: self
+                .open_at(LINKS, "strength", &id, v, 8)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0.0),
+            stability: self
+                .open_at(LINKS, "stability", &id, v, 9)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0.0),
+            access_count: self
+                .open_at(LINKS, "access_count", &id, v, 10)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0),
+            last_access: self
+                .open_at(LINKS, "last_access", &id, v, 11)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0),
+            source_memory: self.open_at(LINKS, "source_memory", &id, v, 12),
+        }
+    }
+
+    /// Decode one raw memory row → `(Memory, embedding)` (shared by loader + reconcile).
+    fn decode_memory(&self, id: ObjectId, vals: &[Value]) -> (Memory, Option<Vec<f32>>) {
+        let m = self.open_memory(id, vals);
+        let emb = self
+            .open_at(MEMORIES, "embedding", &id, vals, 2)
+            .and_then(|s| decode_embedding(&s));
+        (m, emb)
     }
 
     /// The L0 self text (reserved `self` stream).
@@ -2214,21 +2668,6 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             .next()
             .map(|m| m.content)
             .unwrap_or_else(|| "(self not set)".to_string()))
-    }
-
-    /// Entity names that appear in the query (wikilinks ∪ case-insensitive name match).
-    async fn entities_in_query(&self, query: &str) -> Result<Vec<String>, BrainError> {
-        let mut names = extract_wikilinks(query);
-        let lower = query.to_lowercase();
-        for e in self.entities().await? {
-            if names.iter().any(|n| normalize_name(n) == normalize_name(&e.name)) {
-                continue;
-            }
-            if lower.contains(&normalize_name(&e.name)) {
-                names.push(e.name);
-            }
-        }
-        Ok(names)
     }
 
     /// Build the graph for a new memory: upsert entities for each wikilink, record an
@@ -2253,23 +2692,36 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             if built.contains(&id_str(&m.id)) {
                 continue;
             }
-            self.write_graph(m.id, &m.content).await?;
+            let _ = self.write_graph(m.id, &m.content).await?;
             n += 1;
         }
         Ok(n)
     }
 
-    async fn write_graph(&self, memory_id: ObjectId, content: &str) -> Result<(), BrainError> {
+    /// Returns `(entities_mentioned, facts_written)` for dreaming log display.
+    async fn write_graph(
+        &self,
+        memory_id: ObjectId,
+        content: &str,
+    ) -> Result<(usize, usize), BrainError> {
         let mut names = extract_wikilinks(content);
-        for auto in extract_auto_entities(content) {
-            // A pasted wall of text (e.g. a match report) can mention hundreds of names; without
-            // a cap each one triggers a fuzzy entity scan and the O(n²) bonding loop below
-            // explodes into tens of thousands of writes, freezing the serial avenDB runtime.
-            if names.len() >= MAX_GRAPH_ENTITIES {
-                break;
-            }
-            if !names.iter().any(|n| normalize_name(n) == normalize_name(&auto)) {
-                names.push(auto);
+        // The capitalized-word heuristic assumes English (capitalized ⇒ proper noun), but
+        // GERMAN capitalizes every common noun ("Statistiken", "Tore", "Umgebung") — so it
+        // floods the graph with untyped junk. When an LLM extractor is configured it is the
+        // entity authority (typed, real entities, mined in dreaming), so we SKIP the noisy
+        // deterministic auto-entities entirely and keep only explicit [[wikilinks]]. With no
+        // extractor (offline), the heuristic stays as the best-effort fallback.
+        if !self.extractor.enabled() {
+            for auto in extract_auto_entities(content) {
+                // A pasted wall of text can mention hundreds of names; without a cap each one
+                // triggers a fuzzy entity scan and the O(n²) bonding loop below explodes into
+                // tens of thousands of writes, freezing the serial avenDB runtime.
+                if names.len() >= MAX_GRAPH_ENTITIES {
+                    break;
+                }
+                if !names.iter().any(|n| normalize_name(n) == normalize_name(&auto)) {
+                    names.push(auto);
+                }
             }
         }
         names.truncate(MAX_GRAPH_ENTITIES); // wikilinks alone could already exceed the cap
@@ -2286,7 +2738,9 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         }
         // SPO claims from the closed predicate templates (high precision, low recall). Capped for
         // the same runaway-write protection as the entity graph above.
-        for (subj, pred, obj) in extract_spo(content).into_iter().take(MAX_GRAPH_FACTS) {
+        let spo: Vec<_> = extract_spo(content).into_iter().take(MAX_GRAPH_FACTS).collect();
+        let facts = spo.len();
+        for (subj, pred, obj) in spo {
             self.add_fact_with_confidence(&subj, &pred, &obj, Some(memory_id), 0.6)
                 .await?;
         }
@@ -2294,7 +2748,7 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         // (short queries, single-word messages). Without this, enrich_one re-processes
         // the same entity-free memory every dream pass → infinite loop in the dreaming log.
         self.add_note_link(memory_id, memory_id, "refers_to").await?;
-        Ok(())
+        Ok((entity_ids.len(), facts))
     }
 
     /// Find an entity whose normalized name matches exactly OR fuzzily (Levenshtein
@@ -2363,6 +2817,42 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             return Ok(id);
         }
         self.create_entity(name).await
+    }
+
+    /// Upsert an entity (fuzzy-matched to existing) AND set its domain `kind` from the
+    /// extractor (board 0024). A blank/`unknown` kind never DOWNGRADES an already-typed
+    /// row; a real kind UPGRADES an `unknown` one — so L2 cards gain "player"/"team"/…
+    /// labels as dreaming mines them, and re-runs are idempotent.
+    async fn upsert_entity_with_kind(
+        &self,
+        name: &str,
+        kind: &str,
+    ) -> Result<ObjectId, BrainError> {
+        let kind = kind.trim();
+        // Reuse the fuzzy matcher so typed entities and fact subjects converge on one row.
+        let id = self.upsert_entity_fuzzy(name).await?;
+        if kind.is_empty() || kind == "unknown" {
+            return Ok(id);
+        }
+        let current = self
+            .entities()
+            .await?
+            .into_iter()
+            .find(|e| e.id == id)
+            .map(|e| e.kind)
+            .unwrap_or_default();
+        if current == kind {
+            return Ok(id);
+        }
+        // Only fill an empty/unknown kind — don't clobber a kind the model already assigned.
+        if current.is_empty() || current == "unknown" {
+            let sealed = self.sv(ENTITIES, "kind", *id.uuid(), kind)?;
+            self.client
+                .update(id, vec![("kind".to_string(), sealed)])
+                .await
+                .map_err(|e| BrainError::Write(format!("{e:?}")))?;
+        }
+        Ok(id)
     }
 
     async fn create_entity(&self, name: &str) -> Result<ObjectId, BrainError> {
@@ -2505,9 +2995,18 @@ fn extract_wikilinks(content: &str) -> Vec<String> {
 /// that is a capitalized stop-word ("I", "The", …). High precision, low recall —
 /// misses are fine: retrieval doesn't depend on the graph, and dreaming catches more.
 fn extract_auto_entities(content: &str) -> Vec<String> {
-    const CAP_STOPWORDS: [&str; 22] = [
-        "i", "the", "a", "an", "we", "he", "she", "they", "it", "but", "and", "so", "btw",
-        "ok", "okay", "yes", "no", "my", "our", "your", "this", "that",
+    // Capitalized function words that leak through as false-positive single-token "entities"
+    // (the `In (unknown)` / `AI (unknown)` garbage). English + the common German set, since
+    // notes are frequently German (e.g. WM-2026 match reports).
+    const CAP_STOPWORDS: &[&str] = &[
+        // English
+        "i", "the", "a", "an", "we", "he", "she", "they", "it", "but", "and", "so", "btw", "ok",
+        "okay", "yes", "no", "my", "our", "your", "this", "that", "as", "at", "to", "of", "on",
+        "or", "if", "is", "be", "by", "do", "go", "me", "us", "up", "in", "im", "for", "from",
+        "was", "are", "his", "her", "who", "why", "how", "what", "when", "then",
+        // German
+        "der", "die", "das", "und", "ich", "wir", "ihr", "sie", "er", "es", "den", "dem", "ein",
+        "eine", "mit", "auf", "von", "aber", "auch", "nicht",
     ];
     let mut out: Vec<String> = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -2529,7 +3028,15 @@ fn extract_auto_entities(content: &str) -> Vec<String> {
         let name = run.join(" ");
         run.clear();
         let norm = name.to_lowercase();
-        if single && (run_started_sentence || stop.contains(&norm.as_str())) {
+        // Single capitalized tokens are the main false-positive source: a sentence-initial
+        // word ("In der…"), a stop-word, or a 2-char fragment ("AI", "It"). Proper-noun PHRASES
+        // (multi-word runs) keep the ≥2-char floor. Real 2-char single names are rare and the
+        // cloud extractor catches them anyway (additive graph).
+        if single
+            && (run_started_sentence
+                || stop.contains(&norm.as_str())
+                || name.chars().count() < 3)
+        {
             return;
         }
         if name.chars().count() >= 2 && seen.insert(norm) {
@@ -2541,7 +3048,7 @@ fn extract_auto_entities(content: &str) -> Vec<String> {
         let ends_sentence = raw.ends_with(['.', '!', '?']);
         // Wikilink markup is the explicit channel — its extractor owns those tokens.
         if raw.contains('[') || raw.contains(']') {
-            flush(&mut run, run_started_sentence, &mut out, &mut seen, &CAP_STOPWORDS);
+            flush(&mut run, run_started_sentence, &mut out, &mut seen, CAP_STOPWORDS);
             sentence_start = ends_sentence;
             continue;
         }
@@ -2549,7 +3056,7 @@ fn extract_auto_entities(content: &str) -> Vec<String> {
         let word: String = trimmed.chars().take_while(|c| c.is_alphanumeric()).collect();
         let word = word.as_str();
         if word.is_empty() {
-            flush(&mut run, run_started_sentence, &mut out, &mut seen, &CAP_STOPWORDS);
+            flush(&mut run, run_started_sentence, &mut out, &mut seen, CAP_STOPWORDS);
             sentence_start = sentence_start || ends_sentence;
             continue;
         }
@@ -2561,11 +3068,11 @@ fn extract_auto_entities(content: &str) -> Vec<String> {
             }
             run.push(word.to_string());
         } else {
-            flush(&mut run, run_started_sentence, &mut out, &mut seen, &CAP_STOPWORDS);
+            flush(&mut run, run_started_sentence, &mut out, &mut seen, CAP_STOPWORDS);
         }
         sentence_start = ends_sentence;
     }
-    flush(&mut run, run_started_sentence, &mut out, &mut seen, &CAP_STOPWORDS);
+    flush(&mut run, run_started_sentence, &mut out, &mut seen, CAP_STOPWORDS);
     out
 }
 
@@ -2869,6 +3376,7 @@ mod tests {
             .await
             .expect("open brain")
     }
+
 
     // ───────────────────────── recall eval (the scoreboard) ─────────────────────────
     //
@@ -3328,6 +3836,39 @@ mod tests {
         assert!(card.render().contains("Bob"));
     }
 
+    /// Board 0024 (typed L2 cards): the extractor's typed entities UPGRADE an `unknown`
+    /// entity's kind to the domain label ("player", "team") and re-runs are idempotent —
+    /// but a kind already assigned is never clobbered.
+    #[tokio::test]
+    async fn typed_entity_upgrades_unknown_kind_without_clobber() {
+        let brain = test_brain("test-typed-kind").await;
+
+        // Deterministic write creates the entity with kind "unknown".
+        brain.remember("[[Lozano]] scored the opener").await.unwrap();
+        let before = brain.entities().await.unwrap();
+        let lozano = before.iter().find(|e| e.name == "Lozano").expect("Lozano entity");
+        assert_eq!(lozano.kind, "unknown", "deterministic graph defaults to unknown");
+
+        // The extractor's typed entity upgrades the kind on the SAME (fuzzy-matched) row.
+        brain.upsert_entity_with_kind("Lozano", "player").await.unwrap();
+        let after = brain.entities().await.unwrap();
+        assert_eq!(after.len(), before.len(), "upgrade reuses the row, never duplicates");
+        assert_eq!(
+            after.iter().find(|e| e.name == "Lozano").unwrap().kind,
+            "player",
+            "unknown → player"
+        );
+
+        // A blank/unknown kind never DOWNGRADES, and a real kind never CLOBBERS an existing one.
+        brain.upsert_entity_with_kind("Lozano", "unknown").await.unwrap();
+        brain.upsert_entity_with_kind("Lozano", "referee").await.unwrap();
+        assert_eq!(
+            brain.entities().await.unwrap().iter().find(|e| e.name == "Lozano").unwrap().kind,
+            "player",
+            "kind is sticky once assigned"
+        );
+    }
+
     /// Board 0025 (THE GATE): the four tool-backing primitives behind the agentic
     /// memory surface — importance ranks, forget removes, attest strengthens, an
     /// explicit link traverses.
@@ -3504,9 +4045,11 @@ mod tests {
         assert_eq!(brain.facts("Yaya Sithole").await.unwrap().len(), sithole.len());
     }
 
-    /// Board 0024: the stepped dream emits the `extract` phase with REAL tokens (the
-    /// panel's per-step cost), and every phase of the pass appears in the step log —
-    /// the Dreaming tab is a complete receipt.
+    /// Board 0024: the stepped dream is a complete receipt. Extraction runs OFF the actor
+    /// (the Tinfoil HTTP call must not block the avenDB mailbox), so `dream_step` emits the
+    /// `extract_ready` SIGNAL among every other phase, and the real mining + token cost
+    /// happen in `extract_one_batch` (what `brain_do_extract` calls). This test asserts both
+    /// halves: the full phase log AND that the off-actor batch yields facts + real tokens.
     #[tokio::test]
     async fn extractor_stepped_dream_emits_extract_phase_with_tokens() {
         use crate::extractor::MockExtractor;
@@ -3516,23 +4059,26 @@ mod tests {
         brain.remember("met Sarah at the Lumen Labs office").await.unwrap();
 
         let mut phases: Vec<String> = Vec::new();
-        let mut extract_tokens = 0i64;
         let mut cursor = 0i64;
         for _ in 0..64 {
             let step = brain.dream_step(cursor, now_ms()).await.unwrap();
-            if step.phase == "extract" {
-                extract_tokens += step.tokens;
-            }
             phases.push(step.phase.clone());
             if step.done {
                 break;
             }
             cursor = step.next_cursor;
         }
-        for phase in ["enrich", "extract", "merge", "decay", "verify", "consolidate", "done"] {
+        // The stepped dream signals off-actor extraction (`extract_ready`) and logs every
+        // other phase — the Dreaming tab shows the complete pass.
+        for phase in ["enrich", "extract_ready", "merge", "decay", "verify", "consolidate", "done"]
+        {
             assert!(phases.contains(&phase.to_string()), "phase `{phase}` logged: {phases:?}");
         }
-        assert!(extract_tokens > 0, "the extract step surfaces real tokens: {phases:?}");
+        // The real mining (the part with token cost) runs off-actor and surfaces facts + tokens.
+        let (_mems, _ents, facts, tokens) =
+            brain.extract_one_batch().await.unwrap().expect("a batch to mine");
+        assert!(facts > 0, "the off-actor batch writes facts: {facts}");
+        assert!(tokens > 0, "the off-actor batch surfaces real tokens: {tokens}");
     }
 
     #[tokio::test]

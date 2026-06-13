@@ -250,6 +250,7 @@ pub fn run() {
 			network::network_seed,
 			network::aven_ceo_identity,
 			avendb::avendb_runtime,
+		avendb::brain_runtime,
 			avendb::self_storage_paths,
 			avendb::self_clear_avendb_database,
 			avendb::self_clear_aven_os_data,

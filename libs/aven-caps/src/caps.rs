@@ -10,7 +10,7 @@ use base64::Engine;
 pub use biscuit_auth::Biscuit;
 use biscuit_auth::{
 	builder::{Algorithm, AuthorizerBuilder, BlockBuilder},
-	KeyPair, PublicKey,
+	AuthorizerLimits, KeyPair, PublicKey,
 };
 use ed25519_dalek::SigningKey;
 use uuid::Uuid;
@@ -1007,6 +1007,17 @@ deny if true;
 	let mut a = AuthorizerBuilder::new()
 		.code(&dsl)
 		.map_err(|e| format!("authz-code:{e}"))?
+		// biscuit's DEFAULT datalog budget is 1ms / 1000 facts / 100 iterations — far too tight:
+		// under CPU load (dreaming + extraction + embedding churning) a trivially-allowable check
+		// can blow past 1ms and surface as a spurious `biscuit_deny:RunLimit(Timeout)`, denying a
+		// legit tool call. Authorization is pure in-memory datalog, so a 100ms ceiling is still
+		// effectively instant while immune to scheduler jitter; raise fact/iteration headroom too
+		// for large rosters.
+		.set_limits(AuthorizerLimits {
+			max_time: std::time::Duration::from_millis(100),
+			max_facts: 10_000,
+			max_iterations: 1_000,
+		})
 		.time()
 		.build(&chain.biscuit)
 		.map_err(|e| format!("authz-build:{e}"))?;

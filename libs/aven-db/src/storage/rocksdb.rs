@@ -507,6 +507,9 @@ impl Storage for RocksDBStorage {
         encoded_visible_rows: &[super::OwnedVisibleRowBytes],
         index_mutations: &[IndexMutation<'_>],
     ) -> Result<(), StorageError> {
+        // Store change-log (board 0026/0027): record committed history-row ids — local OR synced
+        // (the single sink both write paths funnel through) — for the frontier delta feed.
+        crate::frontier_epoch::record(encoded_history_rows.iter().map(|r| r.row_id));
         self.with_inner_mut(|inner| {
             let txn = RefCell::new(inner.db.transaction());
             let mut seen_row_raw_tables = std::collections::HashSet::new();

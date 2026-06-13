@@ -19,7 +19,7 @@ import { vaultUiSettingsGet } from '$lib/settings/vault-ui-settings'
 import { navigateApp } from '$lib/shell'
 import HumanSafeGate from '$lib/shell/HumanSafeGate.svelte'
 import MobileShellNav from '$lib/shell/MobileShellNav.svelte'
-import NetworkGate from '$lib/shell/NetworkGate.svelte'
+import { copyToClipboard } from '$lib/runtime/clipboard'
 import '../app.css'
 
 if (browser) installConsoleCapture()
@@ -118,6 +118,7 @@ const meshAllowed = $derived(sessionKind === 'unlocked' && $avendbSessionReady)
 // land and hydrate avenCEO into the vault. Sandbox (non-tauri) is never gated.
 const identitiesStore = avenDbStore('safes')
 let membership = $state<'owner' | 'member' | 'none' | 'unknown'>('unknown')
+let networkBannerDismissed = $state(false)
 $effect(() => {
 	void sessionKind
 	void $avendbSessionReady
@@ -159,12 +160,35 @@ $effect(() => {
 // network invite/SYNC caps are granted to). Created locally — no network needed — so it
 // gates BEFORE the invite gate. avenCEO syncs in as type "aven", so it never satisfies this.
 const hasHumanSafe = $derived(identitiesStore.rows.some((r) => r.type === 'human'))
-const appAccessState = $derived.by<'app' | 'human' | 'gate' | 'checking'>(() => {
-	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked') return 'app'
-	if (membership === 'unknown' || !identitiesStore.loaded) return 'checking'
-	if (!hasHumanSafe) return 'human'
-	return membership === 'none' ? 'gate' : 'app'
+/** This device's human SAFE did:safe — shared with a founder to be vouched onto the network. */
+const ownDid = $derived.by(() => {
+	const human = identitiesStore.rows.find((r) => r.type === 'human')
+	return human ? `did:safe:${String(human.owner ?? '').trim()}` : ''
 })
+let ownDidCopied = $state(false)
+async function copyOwnDid(): Promise<void> {
+	if (!ownDid) return
+	if (await copyToClipboard(ownDid)) {
+		ownDidCopied = true
+		setTimeout(() => (ownDidCopied = false), 1500)
+	}
+}
+const appAccessState = $derived.by<'app' | 'human' | 'checking'>(() => {
+	if (!browser || !isTauriRuntime() || sessionKind !== 'unlocked') return 'app'
+	// Only the LOCAL prerequisites gate the app: the vault is unlocked, the safes store has
+	// loaded, and a human SAFE exists (created locally, no network). avenCEO membership does
+	// NOT gate the app — avenOS is local-first; the network is only for sync between devices.
+	// A non-member uses Talk/Todos/brain fully offline; membership gates the SYNC/server layer
+	// (the aven-node won't grant caps/keyshares to a non-member, so peers stay unreadable) and
+	// surfaces as a NON-blocking banner, never a full-screen wall.
+	if (!identitiesStore.loaded) return 'checking'
+	if (!hasHumanSafe) return 'human'
+	return 'app'
+})
+/** Show a dismissible "join the network" banner when unlocked + set up but not yet admitted. */
+const showNetworkBanner = $derived(
+	appAccessState === 'app' && membership === 'none' && !networkBannerDismissed
+)
 
 // After the invite gate opens, land on /identities (not /intents) — the user
 // creates an identity (+ New) or opens ones shared with them via caps.
@@ -270,9 +294,34 @@ $effect(() => {
 			</div>
 		{:else if appAccessState === 'human'}
 			<HumanSafeGate />
-		{:else if appAccessState === 'gate'}
-			<NetworkGate />
 		{:else}
+			{#if showNetworkBanner}
+				<!-- Non-blocking: the app is NOT invite-gated (local-first). This only flags that the
+				     SYNC/server layer isn't joined yet, and offers the did:safe to be vouched in. -->
+				<div
+					class="border-primary/30 bg-primary/5 text-foreground flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-1.5 text-xs sm:px-6"
+				>
+					<span class="font-medium">{t('networkGate.bannerTitle')}</span>
+					<span class="text-muted-foreground min-w-0">{t('networkGate.bannerBody')}</span>
+					{#if ownDid}
+						<button
+							type="button"
+							class="border-border/60 hover:bg-card ml-auto rounded-md border px-2 py-0.5 font-mono text-[10px]"
+							onclick={() => void copyOwnDid()}
+						>
+							{ownDidCopied ? t('networkGate.copied') : t('networkGate.copyDid')}
+						</button>
+					{/if}
+					<button
+						type="button"
+						class="text-muted-foreground hover:text-foreground shrink-0 px-1 font-semibold"
+						aria-label={t('common.dismiss')}
+						onclick={() => (networkBannerDismissed = true)}
+					>
+						×
+					</button>
+				</div>
+			{/if}
 			<header
 				class="shrink-0 bg-background/90 px-3 pt-[max(0.375rem,env(safe-area-inset-top))] pb-1 backdrop-blur-sm sm:px-6 sm:pt-3 sm:pb-2"
 			>

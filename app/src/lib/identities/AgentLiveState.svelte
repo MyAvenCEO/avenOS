@@ -40,7 +40,7 @@ const confirmTitles = $derived(agent.pendingConfirm?.titles ?? [])
 
 {#if live.kind !== 'idle'}
 	<div
-		class="pointer-events-auto mb-2 flex w-full max-w-md justify-center px-4"
+		class="pointer-events-auto mb-2 flex w-full max-w-lg justify-center px-4"
 		transition:fade={{ duration: 120 }}
 	>
 		{#if live.kind === 'confirm'}
@@ -154,7 +154,7 @@ const confirmTitles = $derived(agent.pendingConfirm?.titles ?? [])
 			{@const r = agent.lastReply}
 			<button
 				type="button"
-				class="border-border/60 bg-card/95 text-foreground ring-primary/15 flex w-full flex-col gap-1 rounded-2xl border px-4 py-2.5 text-left shadow-lg ring-1 backdrop-blur transition hover:bg-card"
+				class="border-border/60 bg-card/95 text-foreground ring-primary/15 flex max-h-[50vh] w-full flex-col gap-1 overflow-y-auto rounded-2xl border px-4 py-2.5 text-left shadow-lg ring-1 backdrop-blur transition hover:bg-card"
 				onclick={() => agent.dismissReply()}
 				aria-label={t('identities.talk.dismissReply')}
 			>

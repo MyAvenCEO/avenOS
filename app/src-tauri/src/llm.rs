@@ -209,12 +209,20 @@ pub struct TinfoilExtractor;
 const EXTRACTOR_MODEL: &str = "glm-5-1";
 
 #[cfg(feature = "tinfoil")]
-const EXTRACTOR_SYSTEM: &str = "You mine typed facts from a user's private notes. \
-Given numbered memory blocks, return ONLY a JSON array (no prose, no code fences) of \
-facts: {\"source\": <block number>, \"subject\": string, \"predicate\": string, \
-\"object\": string, \"confidence\": number 0..1}. Subjects and objects are short \
-entity names; predicates are lowercase snake_case relations (e.g. works_at, scored, \
-received). Only facts the text actually states — return [] when there are none.";
+const EXTRACTOR_SYSTEM: &str = "You mine a knowledge graph from a user's private notes. \
+Given numbered memory blocks, return ONLY a JSON object (no prose, no code fences) with \
+two keys:\n\
+\"entities\": array of {\"name\": string, \"kind\": string} — every distinct named thing, \
+with a SPECIFIC lowercase kind (e.g. person, player, team, referee, match, competition, \
+stadium, city, country, org, product, date). Be exhaustive: list every player, team, \
+official, place and event the text names.\n\
+\"facts\": array of {\"source\": <block number>, \"subject\": string, \"predicate\": string, \
+\"object\": string, \"confidence\": number 0..1} — predicates are lowercase snake_case \
+relations (e.g. plays_for, scored, scored_in, assisted, booked, sent_off, defeated, \
+drew_with, refereed, hosted_in, took_place_on). Be exhaustive: capture goals, cards, \
+results, lineups, dates.\n\
+Subjects/objects/names are short entity names. Only what the text actually states — \
+return {\"entities\":[],\"facts\":[]} when there is nothing.";
 
 #[cfg(feature = "tinfoil")]
 impl aven_brain::Extractor for TinfoilExtractor {
@@ -237,11 +245,12 @@ impl aven_brain::Extractor for TinfoilExtractor {
 		let turn =
 			aven_ai::tinfoil::chat(messages, serde_json::Value::Null, EXTRACTOR_MODEL).await?;
 		let text = turn.content.unwrap_or_default();
-		// Tolerate fenced/prefixed output: parse from the first '[' to the last ']'.
-		let json = match (text.find('['), text.rfind(']')) {
-			(Some(a), Some(b)) if a < b => &text[a..=b],
-			_ => return Err(format!("extractor returned no JSON array: {text:.120}")),
-		};
+		#[derive(Deserialize)]
+		struct RawEntity {
+			name: String,
+			#[serde(default)]
+			kind: Option<String>,
+		}
 		#[derive(Deserialize)]
 		struct RawFact {
 			source: usize,
@@ -251,9 +260,43 @@ impl aven_brain::Extractor for TinfoilExtractor {
 			#[serde(default)]
 			confidence: Option<f32>,
 		}
-		let raw: Vec<RawFact> =
-			serde_json::from_str(json).map_err(|e| format!("extractor JSON: {e}"))?;
-		let facts = raw
+		#[derive(Deserialize, Default)]
+		struct RawOut {
+			#[serde(default)]
+			entities: Vec<RawEntity>,
+			#[serde(default)]
+			facts: Vec<RawFact>,
+		}
+		// Preferred shape is a JSON object `{entities, facts}`; tolerate a bare facts array
+		// (older/looser output) by parsing the outermost object, else the outermost array.
+		let out: RawOut = if let (Some(a), Some(b)) = (text.find('{'), text.rfind('}')) {
+			serde_json::from_str(&text[a..=b]).map_err(|e| format!("extractor JSON: {e}"))?
+		} else if let (Some(a), Some(b)) = (text.find('['), text.rfind(']')) {
+			RawOut {
+				entities: Vec::new(),
+				facts: serde_json::from_str(&text[a..=b])
+					.map_err(|e| format!("extractor JSON: {e}"))?,
+			}
+		} else {
+			return Err(format!("extractor returned no JSON: {text:.120}"));
+		};
+		let entities = out
+			.entities
+			.into_iter()
+			.filter(|e| !e.name.trim().is_empty())
+			.map(|e| aven_brain::ExtractedEntity {
+				name: e.name,
+				kind: e
+					.kind
+					.unwrap_or_default()
+					.trim()
+					.to_lowercase()
+					.replace(' ', "_"),
+			})
+			.filter(|e| !e.kind.is_empty())
+			.collect();
+		let facts = out
+			.facts
 			.into_iter()
 			.filter(|f| {
 				f.source < batch.len()
@@ -271,9 +314,61 @@ impl aven_brain::Extractor for TinfoilExtractor {
 				source_memory: batch[f.source].memory_id,
 			})
 			.collect();
-		Ok(aven_brain::Extraction { facts, tokens: turn.total_tokens })
+		Ok(aven_brain::Extraction { entities, facts, tokens: turn.total_tokens })
+	}
+
+	async fn summarize_self(
+		&self,
+		owner_memories: &[String],
+		current: &str,
+	) -> Result<Option<aven_brain::SelfSummary>, String> {
+		if owner_memories.is_empty() {
+			return Ok(None);
+		}
+		let mut blocks = String::new();
+		for m in owner_memories {
+			blocks.push_str("- ");
+			blocks.push_str(m);
+			blocks.push('\n');
+		}
+		let user = format!(
+			"CURRENT PROFILE:\n{}\n\nTHE USER'S OWN MESSAGES (newest first):\n{}",
+			if current.trim().is_empty() || current.contains("self not set") {
+				"(none yet)"
+			} else {
+				current
+			},
+			blocks
+		);
+		let messages = vec![
+			serde_json::json!({ "role": "system", "content": SELF_SYSTEM }),
+			serde_json::json!({ "role": "user", "content": user }),
+		];
+		let turn =
+			aven_ai::tinfoil::chat(messages, serde_json::Value::Null, EXTRACTOR_MODEL).await?;
+		let text = turn.content.unwrap_or_default();
+		let text = text.trim();
+		// The model returns NONE (sentinel) when there's nothing durable to record.
+		if text.is_empty() || text.eq_ignore_ascii_case("none") {
+			return Ok(None);
+		}
+		Ok(Some(aven_brain::SelfSummary {
+			text: text.to_string(),
+			tokens: turn.total_tokens,
+		}))
 	}
 }
+
+/// System prompt for the L0-self synthesizer (board: auto self). Distils a stable,
+/// first-person-free profile of WHO the user is from their own messages, merged with the
+/// current profile — durable identity only, not transient chatter.
+#[cfg(feature = "tinfoil")]
+const SELF_SYSTEM: &str = "You maintain a concise profile of a person from THEIR OWN \
+messages. Output ONLY the profile prose (no preamble, no bullet labels): who they are — \
+name, age, role/work, location, languages, durable goals and preferences. Merge new \
+durable facts into the current profile; when a fact changes (e.g. a new age), keep the \
+latest. Ignore one-off chatter and questions. 1–4 short sentences, third person (\"Samuel \
+is …\"). If there is nothing durable to record, output exactly: NONE";
 
 pub fn spawn_model_download(app: &AppHandle) {
 	if !instance_enabled() {

@@ -50,3 +50,25 @@ export async function avenDbRuntime<T = unknown>(
 	}
 	throw lastErr
 }
+
+/**
+ * Brain-specific IPC — routes to `brain_runtime` (Rust), which runs OUTSIDE the
+ * avenDB actor mailbox. Brain tool calls (search, ingest, context assembly) and
+ * todo/message CRUD can now execute concurrently instead of queuing behind each other.
+ */
+export async function brainRuntime<T = unknown>(
+	op: string,
+	payload: Record<string, unknown> = {}
+): Promise<T> {
+	let lastErr: unknown
+	for (let attempt = 0; attempt < 6; attempt++) {
+		try {
+			return await invoke<T>('brain_runtime', { op, payload })
+		} catch (e) {
+			lastErr = e
+			if (!isTransientShellError(e)) throw e
+			await sleep(250 + attempt * 350)
+		}
+	}
+	throw lastErr
+}
