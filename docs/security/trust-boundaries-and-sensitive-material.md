@@ -151,6 +151,51 @@ Rust spawn path only — `secrets_get_for_child(id)` → inject `STRIPE_SECRET_K
 
 ---
 
+## The hosted relay (aven-node) — what it can see, and who can reach it
+
+The tables above stop at the device. The hosted **aven-node** relay (the Sprite at
+`wss://<sprite>.sprites.app/sync`) is a separate trust boundary, so spell out what it
+holds and what it exposes.
+
+**avenCEO is the relay's access-control SSOT.** The relay *owns* the well-known avenCEO
+control identity: it mints avenCEO's genesis and wraps the avenCEO DEK to itself, so it
+**can** decrypt avenCEO and read its membership roster (admins from the biscuit chain;
+members from avenCEO-keyshare `recipient_did`). All **node/server caps are enforced
+against avenCEO**: connection admission (only avenCEO members get full sync; unknown DIDs
+get a restricted onboarding tier), the per-identity upload quota, and rate limiting. The
+`AVEN_SERVER_SEED` is therefore a crown-jewel secret — it is the avenCEO owner key, the
+relay transport key, and the avenCEO-DEK unwrap key at once (see
+`docs/audit/2026-06-12-aven-node-sprite-security-audit.md`, A5/A9).
+
+**The relay is blind to user sparks.** Every *user* identity's content is sealed under
+that identity's DEK, which the relay never holds; its capability chain (`genesis_b64`,
+`issuer_pubkey_b64`) is sealed too. So the relay cannot decrypt user content and cannot
+evaluate per-spark membership — that enforcement stays on the client
+(`biscuit_resolver.rs`, fail-closed).
+
+**What the relay (and, after admission, fellow members) can see in cleartext** — the
+minimal routing/relationship metadata blind sync needs, never message content:
+
+| Plaintext column | On table | Why it's unsealed |
+| ---- | ---- | ---- |
+| `owner` | identity-scoped tables | route a row to its identity's members |
+| `type` | `safes` | distinguish `human` / `aven` identities for the roster |
+| `recipient_did`, `wrapper_did` | `keyshares` | deliver a DEK to exactly its addressed recipient |
+| `wrap_did` | `safes` | wrap the identity DEK to a SAFE's members |
+| `dek_version`, `*_at_ms` | various | DEK rotation + ordering |
+
+**Residual exposure (member-visible, not public):** the above lets a connected party
+infer the membership graph (who holds keyshares for whom) and activity timing. Cap-gated
+admission means this is exposed **only to avenCEO members**, not the public internet — a
+non-member cannot open `/sync`. Tightening the member-visible graph further (e.g. salted
+routing tags for `recipient_did`) is tracked as follow-on work; until then, treat the
+member-visible metadata graph as a known, accepted residual.
+
+**Public surface:** exactly one ingress — the Sprite public URL → port 8080 (`/sync` +
+`/health`). `/health` returns only `ok`. Nothing else on the machine is reachable.
+
+---
+
 ## Related docs
 
 - [Vault plugin architecture](../vault/developers/01-architecture.md)
