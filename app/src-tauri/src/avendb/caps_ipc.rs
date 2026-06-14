@@ -556,7 +556,7 @@ pub(crate) async fn avendb_ipc_spark_admin_add(
 	propagate_keyshares_for_member(client.as_ref(), shell, identity_uuid, &signer_did, true).await?;
 
 	if !already_owner {
-		let new_biscuit = crate::identity_acc::attenuate_add_owner_third_party(
+		let new_biscuit = crate::identity_acc::attenuate_add_admin_third_party(
 			&shell.vault.biscuit_kp,
 			&bisc_identity.biscuit,
 			identity_uuid,

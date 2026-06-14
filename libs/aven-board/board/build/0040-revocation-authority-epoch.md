@@ -179,6 +179,16 @@ cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node
 
 Newest entry first.
 
+- `2026-06-15` — **S1c: renamed the cap role `owns`/owner → `admin` end-to-end** (user terminology
+  fix — "owner" is reserved for the SAFE a value belongs to; a subject's role OVER a SAFE is `admin`).
+  Full rename incl. the biscuit WIRE fact `owns($p, safe)` → `admin($p, safe)` (mint + authorizer
+  rule, kept in sync → genesis-format change, dev-flush), `OWNER_RIGHTS` → `ADMIN_RIGHTS`, the
+  grant-kind label `"owns"` → `"admin"`, `attenuate_add_owner_third_party` → `..._admin_...`, + the
+  test (`admin_is_the_single_role`). Contained to `caps.rs` + 1 fn-call each in aven_ceo.rs/app
+  (glob re-export auto-followed). `owner: Uuid` (the value-owner SAFE) deliberately UNCHANGED.
+  aven-caps 47 + biscuit_resolver 15 + apply-gate 3 green; app(desktop-ai) + aven-node build clean
+  (genesis_then_authorize proves the mint↔query predicate stayed consistent). Semantically correct:
+  a subject doesn't OWN a SAFE, it ADMINISTERS it; the SAFE owns data.
 - `2026-06-15` — **Build: S3 epoch-guard primitive landed green** (+ renumbered 0038→0040 after a
   parallel session shipped a CalVer 0038/0039; merged main, clean). `ingest_genesis_opened` gained
   `(epoch, high_water)` and rejects `epoch < high_water` — the rollback-rejection primitive;
