@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-self"
-version = "26.6.1-next.5"
+version = "26.6.1-next.6"
 description = "Tauri plugin: Secure-Enclave P-256 PEER_ID device key + ECDH against hardcoded NETWORK_SEED."
 authors = ["Aven"]
 license = "MIT OR Apache-2.0"

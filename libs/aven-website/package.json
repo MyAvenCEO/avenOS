@@ -1,7 +1,7 @@
 {
 	"name": "@avenos/aven-website",
 	"private": true,
-	"version": "26.6.1-next.5",
+	"version": "26.6.1-next.6",
 	"type": "module",
 	"scripts": {
 		"dev": "bun --env-file=../../.env x --bun vite dev",

@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.5...v) (2026-06-14)
+
+
+### Features
+
+* **relay:** enforce AVEN_SIGNER_SECRET on every deploy without wiping data ([dadf091](https://github.com/MyAvenCEO/avenOS/commit/dadf09160bca814a1d8c31f4c97972ecc0e96c59))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.4...v) (2026-06-14)
 
 
