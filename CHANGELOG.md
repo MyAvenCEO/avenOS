@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.13...v) (2026-06-14)
+
+
+### Bug Fixes
+
+* **ios:** select latest Xcode (iOS 26 SDK) — App Store rejects 18.5-SDK builds ([95cf2ca](https://github.com/MyAvenCEO/avenOS/commit/95cf2ca488a43f9caf6208a47bda1a2654bdae58))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.12...v) (2026-06-14)
 
 
