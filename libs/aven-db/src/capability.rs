@@ -63,6 +63,25 @@ impl ResourceCoord {
 /// kept in sync by this note.
 pub const OWNER_BINDING_META_KEY: &str = "_owner_binding";
 
+/// Project the owning SAFE's UUID out of an [`OWNER_BINDING_META_KEY`] metadata string,
+/// WITHOUT verifying the signature (verification is the app's job on the apply path via
+/// `aven-caps`). The engine needs the owner only as a **query discriminator** — ownership
+/// truth still lives solely in the signed binding; this is a read-only projection of it,
+/// not a second source. It lets `filter_eq("$owner", …)` resolve against the immutable
+/// header instead of a mutable `owner` data column (board 0037).
+///
+/// Layout (must match `aven_caps::ownership::OwnerBinding::encode`, kept in sync by this
+/// note — the engine cannot depend on `aven-caps`): base64(no-pad) of
+/// `value_id(16) ‖ owner(16) ‖ sig(64) ‖ author_did`, so the owner is bytes `[16..32]`.
+pub fn owner_uuid_from_binding_meta(meta: &str) -> Option<uuid::Uuid> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD_NO_PAD
+        .decode(meta.as_bytes())
+        .ok()?;
+    let owner = bytes.get(16..32)?;
+    uuid::Uuid::from_slice(owner).ok()
+}
+
 /// Row-metadata key the per-row **edit signature** travels under (base64) — an Ed25519
 /// signature by the authoring device over the row's content digest, read back as opaque
 /// proof by [`CapabilityResolver::verify_on_apply`].
@@ -133,6 +152,27 @@ pub trait CapabilityResolver: Send + Sync {
 /// `CapabilityResolver` split: the engine owns the hook point, the app owns the crypto.
 pub trait EditSigner: Send + Sync {
     fn sign_row(&self, row_id: ObjectId, digest: &[u8; 32]) -> Option<(String, String)>;
+}
+
+/// App-installed minter for the **owner-binding** ([`OWNER_BINDING_META_KEY`]) — the lowest-level,
+/// non-bypassable counterpart of [`EditSigner`]. The engine stays crypto-agnostic: at the single
+/// deep author funnel, for **every owner-scoped row** it calls [`OwnerBinder::bind_row`] with the
+/// row id + its `owner`, and stamps the returned `(metadata_key, value)` into the batch **before**
+/// the edit-sig digest is computed — so the owner-binding is itself integrity-signed and travels
+/// E2E, verified by every peer's fail-closed [`CapabilityResolver::verify_on_apply`].
+///
+/// This is the *private-first / 100%-at-the-DB-level* invariant: just as the [`crate::Sealer`] seam
+/// makes "no plaintext on disk" a property of the engine (not a call-site discipline), the binder
+/// makes **"no unbound owner-scoped row, ever"** a property of the write core. A syncing engine with
+/// an owner-scoped write but **no** binder installed (or a binder that returns `None`) **fails the
+/// write** — an unbound owned row cannot be authored, by construction.
+///
+/// Returns `None` only when the device key isn't ready; the engine treats that as fail-closed on
+/// owner-scoped tables. Non-owner-scoped (local/non-E2E) rows never invoke the binder.
+pub trait OwnerBinder: Send + Sync {
+    /// Mint the owner-binding for a row of `owner` identified by `row_id`. Returns
+    /// `(OWNER_BINDING_META_KEY, base64_value)` to stamp, or `None` if not ready.
+    fn bind_row(&self, row_id: ObjectId, owner: uuid::Uuid) -> Option<(String, String)>;
 }
 
 /// Permissive default — local-only mode and tests.

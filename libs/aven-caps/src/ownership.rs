@@ -237,7 +237,7 @@ mod tests {
 	}
 
 	#[test]
-	fn owner_binding_meta_string_roundtrip() {
+	fn owner_binding_string_roundtrip() {
 		let b = mint_owner_binding(&sk(7), Uuid::from_u128(0xAA), Uuid::from_u128(0xBB)).unwrap();
 		let back = OwnerBinding::from_meta_str(&b.to_meta_string()).unwrap();
 		assert_eq!(b, back);

@@ -27,14 +27,13 @@ async fn wrap_all_dek_versions_to_recipient(
 	let urn = engine::safe_urn(identity_uuid);
 
 	let ks_schema = engine::resolved_table_schema(client, "keyshares").await?;
-	let ks_spark_ix = engine::col_ix(&ks_schema, "owner")?;
 	let ks_ver_ix = engine::col_ix(&ks_schema, "dek_version")?;
 	let ks_recip_ix = engine::col_ix(&ks_schema, "recipient_did")?;
 
 	// Versions the recipient ALREADY has → skip (idempotent re-grant; no duplicate rows).
 	let mut have: std::collections::BTreeSet<i64> = std::collections::BTreeSet::new();
-	for (_oid, vals) in engine::exec_list_rows(client, "keyshares").await? {
-		if engine::uuid_cell_at(vals.as_slice(), ks_spark_ix)? != identity_uuid {
+	for (oid, vals) in engine::exec_list_rows(client, "keyshares").await? {
+		if engine::owner_of_row(client, "keyshares", oid).await? != Some(identity_uuid) {
 			continue;
 		}
 		match vals.get(ks_recip_ix) {
@@ -80,9 +79,8 @@ async fn wrap_all_dek_versions_to_recipient(
 		ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 		let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
 		let ks_oid = ObjectId::new();
-		let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity_uuid)?;
 		client
-			.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+			.create("keyshares", identity_uuid, Some(ks_oid), ks_vals)
 			.await
 			.map_err(format_avendb_err)?;
 	}
@@ -112,9 +110,8 @@ async fn update_identity_genesis(
 		&mut patch,
 	)?;
 	let ops = patch_updates(&sparks_schema, patch)?;
-	let upd_meta = owner_binding_meta(&shell.signing_key, sparks_oid, identity)?;
 	client
-		.update_with_metadata(sparks_oid, ops, upd_meta)
+		.update(sparks_oid, ops)
 		.await
 		.map_err(format_avendb_err)?;
 	Ok(())
@@ -143,9 +140,8 @@ async fn wrap_self_keyshare(
 	ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 	let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
 	let ks_oid = ObjectId::new();
-	let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity)?;
 	client
-		.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+		.create("keyshares", identity, Some(ks_oid), ks_vals)
 		.await
 		.map_err(format_avendb_err)?;
 	Ok(())
@@ -156,12 +152,11 @@ async fn wrap_self_keyshare(
 /// grant case). `None` for pre-wrap-key rows.
 async fn find_safe_wrap_did(client: &AvenDbClient, safe_id: Uuid) -> Result<Option<String>, String> {
 	let schema = engine::resolved_table_schema(client, "safes").await?;
-	let id_ix = engine::col_ix(&schema, "owner")?;
 	let Ok(wd_ix) = engine::col_ix(&schema, "wrap_did") else {
 		return Ok(None);
 	};
-	for (_oid, vals) in engine::exec_list_rows(client, "safes").await? {
-		if engine::uuid_cell_at(vals.as_slice(), id_ix)? != safe_id {
+	for (oid, vals) in engine::exec_list_rows(client, "safes").await? {
+		if engine::owner_of_row(client, "safes", oid).await? != Some(safe_id) {
 			continue;
 		}
 		return Ok(match vals.get(wd_ix) {
@@ -261,11 +256,10 @@ async fn upsert_controller_copy_row(
 	});
 	let ctrl_did = crate::identity_acc::safe_did(controller_id);
 	let sc_schema = engine::resolved_table_schema(client, "safe_controllers").await?;
-	let own_ix = engine::col_ix(&sc_schema, "owner")?;
 	let did_ix = engine::col_ix(&sc_schema, "controller_did")?;
 	let mut existing: Option<ObjectId> = None;
 	for (oid, vals) in engine::exec_list_rows(client, "safe_controllers").await? {
-		if engine::uuid_cell_at(vals.as_slice(), own_ix)? == owner_safe
+		if engine::owner_of_row(client, "safe_controllers", oid).await? == Some(owner_safe)
 			&& matches!(vals.get(did_ix), Some(Value::Text(s)) if s == &ctrl_did)
 		{
 			existing = Some(oid);
@@ -303,8 +297,7 @@ async fn upsert_controller_copy_row(
 		patch.insert("issuer_pubkey_b64".into(), JsonValue::String(issuer_b64));
 		seal_copy_cells(&mut patch, *oid.uuid())?;
 		let ops = patch_updates(&sc_schema, patch)?;
-		let meta = owner_binding_meta(&shell.signing_key, oid, owner_safe)?;
-		client.update_with_metadata(oid, ops, meta).await.map_err(format_avendb_err)?;
+		client.update(oid, ops).await.map_err(format_avendb_err)?;
 	} else {
 		let now_ms: i64 = std::time::SystemTime::now()
 			.duration_since(std::time::UNIX_EPOCH)
@@ -320,9 +313,8 @@ async fn upsert_controller_copy_row(
 		let oid = ObjectId::new();
 		seal_copy_cells(&mut row, *oid.uuid())?;
 		let vals = insert_values("safe_controllers", &sc_schema, row)?;
-		let meta = owner_binding_meta(&shell.signing_key, oid, owner_safe)?;
 		client
-			.create_checked_with_id_and_metadata("safe_controllers", oid, vals, meta)
+			.create("safe_controllers", owner_safe, Some(oid), vals)
 			.await
 			.map_err(format_avendb_err)?;
 	}
@@ -402,12 +394,11 @@ async fn cascade_rotate_one(
 	};
 
 	let ks_schema = engine::resolved_table_schema(client, "keyshares").await?;
-	let ks_spark_ix = engine::col_ix(&ks_schema, "owner")?;
 	let ks_recip_ix = engine::col_ix(&ks_schema, "recipient_did")?;
 	let mut prior_holders: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
 	let mut stale_rows: Vec<(ObjectId, String)> = Vec::new();
 	for (oid, vals) in engine::exec_list_rows(client, "keyshares").await? {
-		if engine::uuid_cell_at(vals.as_slice(), ks_spark_ix)? != safe_id {
+		if engine::owner_of_row(client, "keyshares", oid).await? != Some(safe_id) {
 			continue;
 		}
 		if let Some(Value::Text(s)) = vals.get(ks_recip_ix) {
@@ -442,105 +433,29 @@ async fn cascade_rotate_one(
 		ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 		let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
 		let ks_oid = ObjectId::new();
-		let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, safe_id)?;
 		client
-			.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+			.create("keyshares", safe_id, Some(ks_oid), ks_vals)
 			.await
 			.map_err(format_avendb_err)?;
 	}
 
 	let sparks_schema = engine::resolved_table_schema(client, "safes").await?;
-	let id_ix = engine::col_ix(&sparks_schema, "owner")?;
-	for (oid, vals) in engine::exec_list_rows(client, "safes").await? {
-		if engine::uuid_cell_at(vals.as_slice(), id_ix)? == safe_id {
+	for (oid, _vals) in engine::exec_list_rows(client, "safes").await? {
+		if engine::owner_of_row(client, "safes", oid).await? == Some(safe_id) {
 			let mut patch = Map::new();
 			patch.insert("current_dek_version".into(), JsonValue::Number(new_v.into()));
 			let ops = patch_updates(&sparks_schema, patch)?;
-			let upd_meta = owner_binding_meta(&shell.signing_key, oid, safe_id)?;
-			client.update_with_metadata(oid, ops, upd_meta).await.map_err(format_avendb_err)?;
+			client.update(oid, ops).await.map_err(format_avendb_err)?;
 			break;
 		}
 	}
 
 	for (oid, recip) in stale_rows {
 		if !keeper(&recip) {
-			let del_meta = owner_binding_meta(&shell.signing_key, oid, safe_id)?;
-			let _ = client.delete_with_metadata(oid, del_meta).await;
+			let _ = client.delete(oid).await;
 		}
 	}
 	Ok(())
-}
-
-async fn safe_type_of(client: &AvenDbClient, safe_uuid: Uuid) -> Result<Option<String>, String> {
-	let schema = engine::resolved_table_schema(client, "safes").await?;
-	let id_ix = engine::col_ix(&schema, "owner")?;
-	let type_ix = engine::col_ix(&schema, "type")?;
-	for (_oid, vals) in engine::exec_list_rows(client, "safes").await? {
-		if engine::uuid_cell_at(vals.as_slice(), id_ix)? == safe_uuid {
-			return Ok(match vals.get(type_ix) {
-				Some(Value::Text(s)) => Some(s.trim().to_string()),
-				_ => None,
-			});
-		}
-	}
-	Ok(None)
-}
-
-async fn enforce_member_type_rule(
-	client: &AvenDbClient,
-	target_safe: Uuid,
-	member_did: &str,
-) -> Result<(), String> {
-	let target_type = safe_type_of(client, target_safe)
-		.await?
-		.unwrap_or_else(|| "aven".to_string());
-	match target_type.as_str() {
-		"aven" => {
-			// An aven is a (potentially autonomous) self-serving entity. It admits BOTH:
-			//  - its own `did:key` signers (e.g. a server node's env-seed key) — so an aven
-			//    deployed on a node owns itself directly; and
-			//  - human owners via `did:safe:` pointing at a human-type SAFE.
-			// (The ≥1-human-owner anti-lockout guard ensures a human always remains.)
-			// It does NOT admit aven/spark SAFE DIDs as members.
-			if member_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX) {
-				let Some(member_id) = crate::identity_acc::resolve_safe_did(member_did) else {
-					return Err(format!("invalid SAFE DID: {member_did}"));
-				};
-				let member_type = safe_type_of(client, member_id).await?;
-				if member_type.as_deref() != Some("human") {
-					return Err(format!(
-						"an aven SAFE admits human SAFE DIDs (did:safe:…) or signer DIDs (did:key:…) — {member_did} is {}",
-						member_type.as_deref().unwrap_or("unknown (no local safes row)")
-					));
-				}
-			}
-			Ok(())
-		}
-		"spark" => {
-			let Some(member_id) = crate::identity_acc::resolve_safe_did(member_did) else {
-				return Err(
-					"a spark SAFE admits aven SAFE DIDs (did:safe:…) — signers join through an aven SAFE"
-						.into(),
-				);
-			};
-			let member_type = safe_type_of(client, member_id).await?;
-			if member_type.as_deref() != Some("aven") {
-				return Err(format!(
-					"a spark SAFE admits aven SAFEs only — {member_did} is {}",
-					member_type.as_deref().unwrap_or("unknown (no local safes row)")
-				));
-			}
-			Ok(())
-		}
-		_ => {
-			if member_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX) {
-				return Err(format!(
-					"a {target_type} SAFE admits signer DIDs (did:key:…) only — a SAFE cannot be a member of a {target_type} SAFE"
-				));
-			}
-			Ok(())
-		}
-	}
 }
 
 async fn find_controlled_safe_of_type(
@@ -550,12 +465,13 @@ async fn find_controlled_safe_of_type(
 ) -> Result<Option<Uuid>, String> {
 	let avenceo = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
 	let schema = engine::resolved_table_schema(client, "safes").await?;
-	let id_ix = engine::col_ix(&schema, "owner")?;
 	let type_ix = engine::col_ix(&schema, "type")?;
 	let created_ix = engine::col_ix(&schema, "created_at_ms")?;
 	let mut candidates: Vec<(i64, Uuid)> = Vec::new();
-	for (_oid, vals) in engine::exec_list_rows(client, "safes").await? {
-		let sid = engine::uuid_cell_at(vals.as_slice(), id_ix)?;
+	for (oid, vals) in engine::exec_list_rows(client, "safes").await? {
+		let Some(sid) = engine::owner_of_row(client, "safes", oid).await? else {
+			continue;
+		};
 		if sid == avenceo {
 			continue;
 		}
@@ -606,7 +522,7 @@ pub(crate) async fn avendb_ipc_spark_admin_add(
 		return Err("cannot grant a identity to your own DID".into());
 	}
 
-	enforce_member_type_rule(client.as_ref(), identity_uuid, &signer_did).await?;
+	// Ownership is type-agnostic (board 0040): any did:key or did:safe subject may be admitted.
 	let is_safe_member = signer_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX);
 
 	if !is_safe_member {
@@ -640,7 +556,7 @@ pub(crate) async fn avendb_ipc_spark_admin_add(
 	propagate_keyshares_for_member(client.as_ref(), shell, identity_uuid, &signer_did, true).await?;
 
 	if !already_owner {
-		let new_biscuit = crate::identity_acc::attenuate_add_owner_third_party(
+		let new_biscuit = crate::identity_acc::attenuate_add_admin_third_party(
 			&shell.vault.biscuit_kp,
 			&bisc_identity.biscuit,
 			identity_uuid,
@@ -766,9 +682,8 @@ pub(crate) async fn avendb_ipc_spark_replicate_add(
 	ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 	let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
 	let ks_oid = ObjectId::new();
-	let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity_uuid)?;
 	client
-		.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+		.create("keyshares", identity_uuid, Some(ks_oid), ks_vals)
 		.await
 		.map_err(format_avendb_err)?;
 
@@ -842,7 +757,7 @@ pub(crate) async fn avendb_ipc_spark_reader_add(
 		return Err("cannot grant read to your own DID".into());
 	}
 
-	enforce_member_type_rule(client.as_ref(), identity_uuid, &signer_did).await?;
+	// Ownership is type-agnostic (board 0040): any did:key or did:safe subject may be admitted.
 	let is_safe_member = signer_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX);
 
 	if !is_safe_member {
@@ -913,12 +828,11 @@ pub(crate) async fn avendb_ipc_aven_ceo_claim(
 	let identity_uuid = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
 
 	let sparks_schema = engine::resolved_table_schema(client.as_ref(), "safes").await?;
-	let identity_id_ix = engine::col_ix(&sparks_schema, "owner")?;
 	let issuer_ix = engine::col_ix(&sparks_schema, "issuer_pubkey_b64")?;
 	let sparks_rows = engine::exec_list_rows(client.as_ref(), "safes").await?;
 	let my_issuer = crate::identity_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public());
-	for (_oid, vals) in &sparks_rows {
-		if engine::uuid_cell_at(vals.as_slice(), identity_id_ix)? == identity_uuid {
+	for (oid, vals) in &sparks_rows {
+		if engine::owner_of_row(client.as_ref(), "safes", *oid).await? == Some(identity_uuid) {
 			let issuer = match vals.get(issuer_ix) {
 				Some(Value::Text(s)) => s.clone(),
 				_ => String::new(),
@@ -977,8 +891,7 @@ pub(crate) async fn avendb_ipc_aven_ceo_claim(
 		&mut row,
 	)?;
 	let sparks_vals = insert_values("safes", &sparks_schema, row)?;
-	let sparks_meta = owner_binding_meta(&shell.signing_key, sparks_oid, identity_uuid)?;
-	client.create_checked_with_id_and_metadata("safes", sparks_oid, sparks_vals, sparks_meta).await.map_err(format_avendb_err)?;
+	client.create("safes", identity_uuid, Some(sparks_oid), sparks_vals).await.map_err(format_avendb_err)?;
 
 	wrap_self_keyshare(client.as_ref(), shell, identity_uuid, &dek_plain, dek_ver).await?;
 
@@ -1106,9 +1019,8 @@ pub(crate) async fn avendb_ipc_create_identity(
 		&mut row,
 	)?;
 	let sparks_vals = insert_values("safes", &sparks_schema, row)?;
-	let sparks_meta = owner_binding_meta(&shell.signing_key, sparks_oid, identity_uuid)?;
 	client
-		.create_checked_with_id_and_metadata("safes", sparks_oid, sparks_vals, sparks_meta)
+		.create("safes", identity_uuid, Some(sparks_oid), sparks_vals)
 		.await
 		.map_err(format_avendb_err)?;
 
@@ -1146,9 +1058,8 @@ pub(crate) async fn avendb_ipc_create_identity(
 			ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 			let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
 			let ks_oid = ObjectId::new();
-			let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity_uuid)?;
 			client
-				.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+				.create("keyshares", identity_uuid, Some(ks_oid), ks_vals)
 				.await
 				.map_err(format_avendb_err)?;
 		}
@@ -1240,10 +1151,9 @@ pub(crate) async fn avendb_ipc_create_collection_group(
 	let group_id = crate::identity_acc::derive_subgroup_id(parent_id, &label);
 
 	let sparks_schema = engine::resolved_table_schema(client.as_ref(), "safes").await?;
-	let id_ix = engine::col_ix(&sparks_schema, "owner")?;
 	// Idempotent: if the group's row already exists, return it (deterministic id).
-	for (_oid, vals) in engine::exec_list_rows(client.as_ref(), "safes").await? {
-		if engine::uuid_cell_at(vals.as_slice(), id_ix)? == group_id {
+	for (oid, _vals) in engine::exec_list_rows(client.as_ref(), "safes").await? {
+		if engine::owner_of_row(client.as_ref(), "safes", oid).await? == Some(group_id) {
 			return Ok(group_id.to_string());
 		}
 	}
@@ -1280,9 +1190,8 @@ pub(crate) async fn avendb_ipc_create_collection_group(
 		&mut row,
 	)?;
 	let sparks_vals = insert_values("safes", &sparks_schema, row)?;
-	let sparks_meta = owner_binding_meta(&shell.signing_key, sparks_oid, group_id)?;
 	client
-		.create_checked_with_id_and_metadata("safes", sparks_oid, sparks_vals, sparks_meta)
+		.create("safes", group_id, Some(sparks_oid), sparks_vals)
 		.await
 		.map_err(format_avendb_err)?;
 
@@ -1308,11 +1217,10 @@ async fn ensure_aven_ceo_owner_row(
 ) -> Result<(), String> {
 	let signer_did = shell.signer_did.as_str();
 	let signers_schema = engine::resolved_table_schema(client, "signers").await?;
-	let identity_ix = engine::col_ix(&signers_schema, "owner")?;
 	let did_ix = engine::col_ix(&signers_schema, "signer_did")?;
 	let rows = engine::exec_list_rows(client, "signers").await?;
-	for (_o, vals) in &rows {
-		let sid = engine::uuid_cell_at(vals.as_slice(), identity_ix).ok();
+	for (o, vals) in &rows {
+		let sid = engine::owner_of_row(client, "signers", *o).await?;
 		let d = match vals.get(did_ix) {
 			Some(Value::Text(s)) => s.as_str(),
 			_ => "",
@@ -1358,8 +1266,7 @@ async fn ensure_aven_ceo_owner_row(
 		)?,
 	}
 	let prow_vals = insert_values("signers", &signers_schema, prow)?;
-	let prow_meta = owner_binding_meta(&shell.signing_key, prow_oid, identity_uuid)?;
-	client.create_checked_with_id_and_metadata("signers", prow_oid, prow_vals, prow_meta).await.map_err(format_avendb_err)?;
+	client.create("signers", identity_uuid, Some(prow_oid), prow_vals).await.map_err(format_avendb_err)?;
 	Ok(())
 }
 
@@ -1448,7 +1355,8 @@ pub(crate) async fn avendb_ipc_aven_ceo_add_member(
 	// avenCEO (an aven SAFE) admits human did:safe owners OR did:key signers. The network
 	// invite prefers a person's human did:safe — the SYNC/membership cap then lives on the
 	// human SAFE, and its device signers inherit it through SAFE membership.
-	enforce_member_type_rule(client.as_ref(), identity_uuid, &signer_did).await?;
+	// Ownership is type-agnostic (board 0040): ANY subject — a did:key signer or a did:safe
+	// (any SAFE type) — may be admitted. No type-restriction gate; `type` is a UI label only.
 
 	// did:key members are direct P2P sync peers; did:safe members receive keys via the
 	// SAFE's wrap key (propagate_keyshares_for_member), never as a registered peer.
@@ -1485,8 +1393,7 @@ pub(crate) async fn avendb_ipc_aven_ceo_add_member(
 	prow.insert("added_at_ms".into(), JsonValue::Number(now_ms.into()));
 	let prow_vals = insert_values("signers", &signers_schema, prow)?;
 	let member_oid = ObjectId::new();
-	let prow_meta = owner_binding_meta(&shell.signing_key, member_oid, identity_uuid)?;
-	client.create_checked_with_id_and_metadata("signers", member_oid, prow_vals, prow_meta).await.map_err(format_avendb_err)?;
+	client.create("signers", identity_uuid, Some(member_oid), prow_vals).await.map_err(format_avendb_err)?;
 
 	// 2. Keyshare: wrap EVERY held avenCEO DEK version to the member so it can decrypt the
 	//    sealed roster fields (and prior-version data after any rotation). Idempotent.
@@ -1545,12 +1452,11 @@ pub(crate) async fn avendb_ipc_aven_ceo_publish_profile(
 	let identity_uuid = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
 
 	let signers_schema = engine::resolved_table_schema(client.as_ref(), "signers").await?;
-	let identity_ix = engine::col_ix(&signers_schema, "owner")?;
 	let did_ix = engine::col_ix(&signers_schema, "signer_did")?;
 	let rows = engine::exec_list_rows(client.as_ref(), "signers").await?;
 	let mut own_oid: Option<ObjectId> = None;
 	for (oid, vals) in rows {
-		let sid = engine::uuid_cell_at(vals.as_slice(), identity_ix).ok();
+		let sid = engine::owner_of_row(client.as_ref(), "signers", oid).await?;
 		let did = match vals.get(did_ix) {
 			Some(Value::Text(s)) => s.as_str(),
 			_ => "",
@@ -1600,8 +1506,7 @@ pub(crate) async fn avendb_ipc_aven_ceo_publish_profile(
 		&mut patch,
 	)?;
 	let ops = patch_updates(&signers_schema, patch)?;
-	let upd_meta = owner_binding_meta(&shell.signing_key, own_oid, identity_uuid)?;
-	client.update_with_metadata(own_oid, ops, upd_meta).await.map_err(format_avendb_err)?;
+	client.update(own_oid, ops).await.map_err(format_avendb_err)?;
 	Ok(())
 }
 
@@ -1840,64 +1745,6 @@ pub(crate) async fn avendb_ipc_spark_admin_list(
 /// revoked peer keeps only what it already decrypted (not retroactive — physics).
 /// Owner-scoped: the re-mint re-roots the chain to this device's biscuit key and
 /// updates the stored issuer (the common case is This device = OWNER).
-/// Count how many of `owner_dids` are HUMAN owners, for the ≥1-human-owner anti-lockout
-/// guard. Classification (matches the agreed taxonomy):
-///   - `did:safe:X`  → human iff the `safes` row for X has `type == "human"`.
-///   - `did:key:…`   → a signer; human UNLESS its `signers` row marks
-///     `signer_type == "env_seed"` (a server/aven-node key). Unknown/missing signer
-///     rows default to human (a real remote person we don't yet track locally).
-async fn count_human_owners(client: &AvenDbClient, owner_dids: &[String]) -> Result<usize, String> {
-	use crate::identity_acc::{resolve_safe_did, SAFE_DID_PREFIX};
-
-	// safe uuid → type
-	let safes_schema = engine::resolved_table_schema(client, "safes").await?;
-	let s_owner_ix = engine::col_ix(&safes_schema, "owner")?;
-	let s_type_ix = engine::col_ix(&safes_schema, "type")?;
-	let mut safe_type: std::collections::HashMap<Uuid, String> = std::collections::HashMap::new();
-	for (_o, vals) in engine::exec_list_rows(client, "safes").await.unwrap_or_default() {
-		if let Ok(u) = engine::uuid_cell_at(vals.as_slice(), s_owner_ix) {
-			let ty = match vals.get(s_type_ix) {
-				Some(Value::Text(t)) => t.trim().to_string(),
-				_ => String::new(),
-			};
-			safe_type.insert(u, ty);
-		}
-	}
-
-	// signer did → signer_type
-	let sg_schema = engine::resolved_table_schema(client, "signers").await?;
-	let sg_did_ix = engine::col_ix(&sg_schema, "signer_did")?;
-	let sg_type_ix = engine::col_ix(&sg_schema, "signer_type")?;
-	let mut signer_type: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-	for (_o, vals) in engine::exec_list_rows(client, "signers").await.unwrap_or_default() {
-		if let Some(Value::Text(d)) = vals.get(sg_did_ix) {
-			let ty = match vals.get(sg_type_ix) {
-				Some(Value::Text(t)) => t.trim().to_string(),
-				_ => String::new(),
-			};
-			signer_type.insert(d.trim().to_string(), ty);
-		}
-	}
-
-	let mut humans = 0usize;
-	for did in owner_dids {
-		let did = did.trim();
-		if did.starts_with(SAFE_DID_PREFIX) {
-			if resolve_safe_did(did)
-				.and_then(|u| safe_type.get(&u))
-				.map(|t| t == "human")
-				.unwrap_or(false)
-			{
-				humans += 1;
-			}
-		} else if signer_type.get(did).map(String::as_str).unwrap_or("") != "env_seed" {
-			// did:key signer — human unless explicitly an env_seed server key.
-			humans += 1;
-		}
-	}
-	Ok(humans)
-}
-
 pub(crate) async fn avendb_ipc_spark_admin_revoke(
 	app: &tauri::AppHandle,
 	avendb: &ManagedAvenDb,
@@ -1931,33 +1778,24 @@ pub(crate) async fn avendb_ipc_spark_admin_revoke(
 		.copied()
 		.ok_or_else(|| format!("missing dek version for identity {identity_uuid}"))?;
 	let ks_schema = engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
-	let ks_spark_ix = engine::col_ix(&ks_schema, "owner")?;
 	let ks_recip_ix = engine::col_ix(&ks_schema, "recipient_did")?;
 	let ks_rows_now = engine::exec_list_rows(client.as_ref(), "keyshares").await?;
 	let mut prior_holders: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-	for (_oid, vals) in &ks_rows_now {
-		if engine::uuid_cell_at(vals.as_slice(), ks_spark_ix)? == identity_uuid {
+	for (oid, vals) in &ks_rows_now {
+		if engine::owner_of_row(client.as_ref(), "keyshares", *oid).await? == Some(identity_uuid) {
 			if let Some(Value::Text(s)) = vals.get(ks_recip_ix) {
 				prior_holders.insert(s.clone());
 			}
 		}
 	}
 
+	// Anti-lockout (board 0040): ownership is type-agnostic — a SAFE must keep ≥1 `owns`
+	// subject (any key or SAFE), NOT "≥1 human". That invariant is enforced fail-closed
+	// INSIDE `rebuild_identity_biscuit_excluding` (it returns Err if the re-mint would
+	// leave zero owners), BEFORE any DB mutation — so the single core check above is the
+	// last-owner guard; there is no separate type-coupled human-count rule.
 	let new_biscuit =
 		crate::identity_acc::rebuild_identity_biscuit_excluding(&shell.vault, identity_uuid, &signer_did)?;
-
-	// Anti-lockout (CAPS-level, fail-closed before any DB mutation): every SAFE must
-	// always keep at least one HUMAN owner, so an autonomous aven/server owner can never
-	// be the last one standing. Classify the post-revoke owner set and reject if it would
-	// leave zero humans.
-	let post_owners: Vec<String> = crate::identity_acc::identity_admins(&new_biscuit, identity_uuid)?
-		.into_iter()
-		.collect();
-	if count_human_owners(client.as_ref(), &post_owners).await? == 0 {
-		return Err(
-			"cannot remove the last human owner — every SAFE must keep at least one human owner".into(),
-		);
-	}
 
 	let new_v = cur_v + 1;
 	let new_dek = crate::crypto::random_identity_dek();
@@ -1978,9 +1816,8 @@ pub(crate) async fn avendb_ipc_spark_admin_revoke(
 		ks.insert("wrapped_dek".into(), JsonValue::String(wrapped));
 		let ks_vals = insert_values("keyshares", &ks_schema, ks)?;
 		let ks_oid = ObjectId::new();
-		let ks_meta = owner_binding_meta(&shell.signing_key, ks_oid, identity_uuid)?;
 		client
-			.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_vals, ks_meta)
+			.create("keyshares", identity_uuid, Some(ks_oid), ks_vals)
 			.await
 			.map_err(format_avendb_err)?;
 	}
@@ -1993,11 +1830,10 @@ pub(crate) async fn avendb_ipc_spark_admin_revoke(
 	let revoke_genesis_b64 = genesis_b64.clone();
 	let issuer_b64 = crate::identity_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public());
 	let sparks_schema = engine::resolved_table_schema(client.as_ref(), "safes").await?;
-	let identity_id_ix = engine::col_ix(&sparks_schema, "owner")?;
 	let sparks_rows = engine::exec_list_rows(client.as_ref(), "safes").await?;
 	let mut sparks_oid: Option<ObjectId> = None;
-	for (oid, vals) in sparks_rows {
-		if engine::uuid_cell_at(vals.as_slice(), identity_id_ix)? == identity_uuid {
+	for (oid, _vals) in sparks_rows {
+		if engine::owner_of_row(client.as_ref(), "safes", oid).await? == Some(identity_uuid) {
 			sparks_oid = Some(oid);
 			break;
 		}
@@ -2020,27 +1856,24 @@ pub(crate) async fn avendb_ipc_spark_admin_revoke(
 		&mut patch,
 	)?;
 	let ops = patch_updates(&sparks_schema, patch)?;
-	let upd_meta = owner_binding_meta(&shell.signing_key, sparks_oid, identity_uuid)?;
 	client
-		.update_with_metadata(sparks_oid, ops, upd_meta)
+		.update(sparks_oid, ops)
 		.await
 		.map_err(format_avendb_err)?;
 
-	let ks_spark_ix = engine::col_ix(&ks_schema, "owner")?;
 	let ks_recip_ix = engine::col_ix(&ks_schema, "recipient_did")?;
 	let ks_rows = engine::exec_list_rows(client.as_ref(), "keyshares").await?;
 	for (oid, vals) in ks_rows {
-		let sid = engine::uuid_cell_at(vals.as_slice(), ks_spark_ix)?;
+		let sid = engine::owner_of_row(client.as_ref(), "keyshares", oid).await?;
 		let recip = match vals.get(ks_recip_ix) {
 			Some(Value::Text(s)) => s.as_str(),
 			_ => continue,
 		};
-		if sid == identity_uuid
+		if sid == Some(identity_uuid)
 			&& (recip == signer_did.as_str()
 				|| !crate::identity_acc::chain_still_member(&shell.vault, &new_biscuit, identity_uuid, recip))
 		{
-			let del_meta = owner_binding_meta(&shell.signing_key, oid, identity_uuid)?;
-			let _ = client.delete_with_metadata(oid, del_meta).await;
+			let _ = client.delete(oid).await;
 		}
 	}
 
@@ -2048,14 +1881,12 @@ pub(crate) async fn avendb_ipc_spark_admin_revoke(
 		.await?;
 	if signer_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX) {
 		if let Ok(sc_schema) = engine::resolved_table_schema(client.as_ref(), "safe_controllers").await {
-			let own_ix = engine::col_ix(&sc_schema, "owner")?;
 			let did_ix = engine::col_ix(&sc_schema, "controller_did")?;
 			for (oid, vals) in engine::exec_list_rows(client.as_ref(), "safe_controllers").await? {
-				if engine::uuid_cell_at(vals.as_slice(), own_ix)? == identity_uuid
+				if engine::owner_of_row(client.as_ref(), "safe_controllers", oid).await? == Some(identity_uuid)
 					&& matches!(vals.get(did_ix), Some(Value::Text(s)) if s.as_str() == signer_did.as_str())
 				{
-					let del_meta = owner_binding_meta(&shell.signing_key, oid, identity_uuid)?;
-					let _ = client.delete_with_metadata(oid, del_meta).await;
+					let _ = client.delete(oid).await;
 				}
 			}
 		}

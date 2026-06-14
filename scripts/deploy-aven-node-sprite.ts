@@ -5,7 +5,7 @@
  *
  *   bun run deploy:server:sprite          # uses .env
  *
- * Rotate the relay identity: change AVEN_SERVER_SEED in .env (e.g.
+ * Rotate the relay identity: change AVEN_SIGNER_SECRET in .env (e.g.
  * `openssl rand -hex 32`) and re-run. The seed IS the server's ed25519 private
  * key, so its DID changes with it — after a rotation, re-share each spark to the
  * new relay DID ("Replicate this spark here"). The seed is gitignored (lives only
@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url'
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 const SPRITE = process.env.AVEN_CEO_SPRITE?.trim() || 'aven-ceo'
-const SEED = process.env.AVEN_SERVER_SEED?.trim() || ''
+const SEED = process.env.AVEN_SIGNER_SECRET?.trim() || ''
 const BIN =
 	process.env.AVEN_SERVER_BIN?.trim() || '/home/sprite/aven-build/target/rust/release/aven-node'
 const DATA_DIR = process.env.AVEN_SERVER_DATA_DIR?.trim() || '/home/sprite/aven-data'
@@ -57,7 +57,7 @@ const BUILD_INVOCATION =
 
 if (!/^[0-9a-fA-F]{64}$/.test(SEED)) {
 	console.error(
-		'AVEN_SERVER_SEED must be set in .env to a 64-char hex string (run: openssl rand -hex 32).'
+		'AVEN_SIGNER_SECRET must be set to a 64-char hex string (run: openssl rand -hex 32).'
 	)
 	process.exit(1)
 }
@@ -181,7 +181,7 @@ if (WANT_BUILD) {
 console.log(`Deploying aven-node → Sprite "${SPRITE}" (binary: ${BIN})`)
 
 const envPairs = [
-	`AVEN_SERVER_SEED=${SEED}`,
+	`AVEN_SIGNER_SECRET=${SEED}`,
 	`AVEN_SERVER_BIND=${BIND}`,
 	`AVEN_SERVER_HEALTH_BIND=${HEALTH}`,
 	`AVEN_SERVER_PIN_FILE=${PIN_FILE}`,

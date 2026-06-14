@@ -279,7 +279,7 @@ async fn owner_count(
 	client
 		.query(
 			QueryBuilder::new(table)
-				.filter_eq("owner", Value::Uuid(owner))
+				.filter_eq("$owner", Value::Uuid(owner))
 				.build(),
 			None,
 		)

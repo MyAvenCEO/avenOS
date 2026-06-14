@@ -223,7 +223,7 @@ impl TryFrom<WriteContextPayloadWire> for WriteContext {
             batch_mode,
             batch_id,
             target_branch_name: value.target_branch_name,
-            extra_metadata: None,
+            ..Default::default()
         })
     }
 }

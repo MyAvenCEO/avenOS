@@ -691,6 +691,14 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
     pub fn schema_manager(&self) -> &SchemaManager {
         &self.schema_manager
     }
+
+    /// The raw owner-binding metadata string for a row, or `None`. The app reads ownership back
+    /// from this for the sync ACL (board 0037) — ownership lives only in the immutable header.
+    pub fn owner_binding_for(&self, table: &str, row_id: ObjectId) -> Option<String> {
+        self.schema_manager
+            .query_manager()
+            .owner_binding_for_row(self.storage(), table, row_id)
+    }
 }
 
 impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {

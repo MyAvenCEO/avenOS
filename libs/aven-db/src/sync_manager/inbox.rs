@@ -1160,7 +1160,7 @@ impl SyncManager {
             }
             SyncPayload::EvictResource { resource } => {
                 // Best-effort eviction notice (M2). The receiver-drop (resolver-enumerate
-                // the resource's rows → local hard-delete via delete_with_metadata(Hard +
+                // the resource's rows → local hard-delete (Hard +
                 // NoSync)) and the sender trigger (revoke flow) are the focused completion
                 // — see SSOT M2. Logged-only here so a stray/forged notice can NEVER delete
                 // data before that wiring + its live revoke→evict test exist.

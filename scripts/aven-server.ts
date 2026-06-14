@@ -24,9 +24,6 @@ const GREEN = '\x1b[32m'
 const BOLD = '\x1b[1m'
 
 export const SERVER_HTTP_PORT = 8080
-/** Stable dev identity for the relay (32-byte hex) — keeps the aven's DID and the
- *  avenCEO owner constant across runs (so members stay admitted between restarts). */
-export const DEV_SERVER_SEED = 'a0b1c2d3e4f5060718293a4b5c6d7e8f00112233445566778899aabbccddeeff'
 export const LOCAL_WS = `ws://127.0.0.1:${SERVER_HTTP_PORT}/sync`
 
 /** Wait until a TCP port is accepting connections (or timeout). */
@@ -68,7 +65,7 @@ export function spawnAvenServer(env: Record<string, string> = {}): ChildProcess 
 			...process.env,
 			...env,
 			AVEN_SERVER_HEALTH_BIND: `127.0.0.1:${SERVER_HTTP_PORT}`,
-			AVEN_SERVER_SEED: process.env.AVEN_SERVER_SEED?.trim() || DEV_SERVER_SEED,
+			AVEN_SIGNER_SECRET: process.env.AVEN_SIGNER_SECRET?.trim() ?? '',
 			RUST_LOG: env.RUST_LOG ?? process.env.RUST_LOG ?? 'info'
 		},
 		stdio: ['ignore', 'pipe', 'pipe']

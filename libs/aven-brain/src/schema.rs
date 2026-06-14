@@ -32,8 +32,8 @@ pub fn brain_schema(_embed_dim: usize) -> Schema {
         // ── memories: evidence — verbatim content + embedding + artifact columns ──
         .table(
             TableSchema::builder(MEMORIES)
-                // routing — one brain per SAFE; every query is owner-scoped.
-                .column("owner", ColumnType::Uuid)
+                // Ownership is the immutable signed binding, not a column (board 0037);
+                // owner-scoped queries filter the `$owner` header projection.
                 .column("content", ColumnType::Text)
                 // Sealed packed-f32 embedding (base64 inside the AEAD payload). The
                 // dim lives in the payload, not the storage type — sealed cells are text.
@@ -64,17 +64,15 @@ pub fn brain_schema(_embed_dim: usize) -> Schema {
                 // Appended LAST: open_memory reads cells by index.
                 .nullable_column("importance", ColumnType::Text)
                 // Indexes only over plaintext routing — indexing ciphertext is noise.
-                .index_only(["owner", "content_hash"]),
+                .index_only(["content_hash"]),
         )
         // ── entities: pure interpretation — names with NO backing artifact row ───
         .table(
             TableSchema::builder(ENTITIES)
-                .column("owner", ColumnType::Uuid)
                 .column("name", ColumnType::Text)
                 .column("kind", ColumnType::Text)
                 // JSON rides as a sealed text payload.
-                .nullable_column("properties", ColumnType::Text)
-                .index_only(["owner"]),
+                .nullable_column("properties", ColumnType::Text),
         )
         // ── links: the one edge primitive — endpoints are ANY row ids ────────────
         // NOTE: `access_count` should use a Counter merge strategy so co-access sums
@@ -83,7 +81,6 @@ pub fn brain_schema(_embed_dim: usize) -> Schema {
         // topology itself is content, not routing.
         .table(
             TableSchema::builder(LINKS)
-                .column("owner", ColumnType::Uuid)
                 // Row id strings (memory / entity / artifact row), sealed.
                 .column("from", ColumnType::Text)
                 .column("to", ColumnType::Text)
@@ -100,8 +97,7 @@ pub fn brain_schema(_embed_dim: usize) -> Schema {
                 .nullable_column("access_count", ColumnType::Text)
                 .nullable_column("last_access", ColumnType::Text)
                 // evidence: the memory row a claim was extracted from. Sealed.
-                .nullable_column("source_memory", ColumnType::Text)
-                .index_only(["owner"]),
+                .nullable_column("source_memory", ColumnType::Text),
         )
         .build()
 }
@@ -162,8 +158,12 @@ mod tests {
     fn memory_carries_artifact_columns_for_neighbors_citations_and_idempotency() {
         let schema = brain_schema(EMBED_DIM);
         let memories = schema.get(&TableName::new(MEMORIES)).unwrap();
+        // Ownership is the signed binding header, not a column (board 0037).
+        assert!(
+            memories.columns.column("owner").is_none(),
+            "memories must NOT carry an `owner` column — ownership is the binding"
+        );
         for col in [
-            "owner",
             "stream",
             "author_role",
             "source",
@@ -193,8 +193,11 @@ mod tests {
     fn links_carry_all_three_class_column_groups() {
         let schema = brain_schema(EMBED_DIM);
         let links = schema.get(&TableName::new(LINKS)).unwrap();
+        assert!(
+            links.columns.column("owner").is_none(),
+            "links must NOT carry an `owner` column — ownership is the binding"
+        );
         for col in [
-            "owner",
             "from",
             "to",
             "kind",

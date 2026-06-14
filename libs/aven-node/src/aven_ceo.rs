@@ -6,7 +6,7 @@
 //! there is no claim race. See `docs/ServerRootedAvenCeoPlan.md`.
 
 use aven_caps::caps::{
-	attenuate_add_owner_third_party, biscuit_from_storage, build_vault_from_signing_key,
+	attenuate_add_admin_third_party, biscuit_from_storage, build_vault_from_signing_key,
 	decode_issuer_pubkey_b64, encode_issuer_pubkey_b64, identity_admins, mint_safe_genesis, safe_did,
 	BiscuitVault,
 };
@@ -32,13 +32,6 @@ fn bigint_at(vals: &[Value], ix: usize) -> i64 {
 		Some(Value::BigInt(i)) => *i,
 		Some(Value::Integer(i)) => *i as i64,
 		_ => 0,
-	}
-}
-fn uuid_matches(vals: &[Value], ix: usize, want: Uuid) -> bool {
-	match vals.get(ix) {
-		Some(Value::Uuid(o)) => *o.uuid() == want,
-		Some(Value::Text(s)) => Uuid::parse_str(s.trim()).map(|u| u == want).unwrap_or(false),
-		_ => false,
 	}
 }
 
@@ -70,17 +63,15 @@ pub async fn avenceo_genesis_b64(engine: &AvenDbClient, avenceo_id: Uuid) -> Res
 	let tbl = schema
 		.get(&TableName::new("safes"))
 		.ok_or("avenceo: no safes table")?;
-	let sid_ix = col_ix(tbl, "owner")?;
 	let gen_ix = col_ix(tbl, "genesis_b64")?;
 	let q = QueryBuilder::new(TableName::new("safes")).build();
 	let rows = engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))?;
-	for (_oid, vals) in rows {
-		let matches = match vals.get(sid_ix) {
-			Some(Value::Uuid(o)) => *o.uuid() == avenceo_id,
-			Some(Value::Text(s)) => Uuid::parse_str(s.trim()).map(|u| u == avenceo_id).unwrap_or(false),
-			_ => false,
+	for (oid, vals) in rows {
+		let owner: Option<Uuid> = match engine.owner_binding_for("safes", oid).map_err(|e| format!("owner_binding:{e:?}"))? {
+			Some(meta) => aven_db::capability::owner_uuid_from_binding_meta(&meta),
+			None => None,
 		};
-		if matches {
+		if owner == Some(avenceo_id) {
 			return Ok(vals.get(gen_ix).and_then(|v| match v {
 				Value::Text(s) => Some(s.clone()),
 				_ => None,
@@ -92,22 +83,6 @@ pub async fn avenceo_genesis_b64(engine: &AvenDbClient, avenceo_id: Uuid) -> Res
 
 /// Ensure the server owns avenCEO: mint its genesis (server = owner) + a self
 /// keyshare if not already present. Idempotent — safe to call on every boot.
-/// Mint a signed owner-binding for a freshly generated server row id, as the metadata
-/// entry to stamp at create — so the server's avenCEO control rows carry a binding and
-/// pass the same verify-on-apply gate as everything else (no exclusions).
-fn owner_binding_meta(
-	signing: &SigningKey,
-	row_id: ObjectId,
-	owner: Uuid,
-) -> Result<std::collections::HashMap<String, String>, String> {
-	let binding = aven_caps::ownership::mint_owner_binding(signing, *row_id.uuid(), owner)?;
-	let mut meta = std::collections::HashMap::new();
-	meta.insert(
-		aven_caps::ownership::OWNER_BINDING_META_KEY.to_string(),
-		binding.to_meta_string(),
-	);
-	Ok(meta)
-}
 
 /// Seal a trust-root identity cell (`genesis_b64` / `issuer_pubkey_b64`) under the avenCEO
 /// DEK, byte-identically to the app's `seal_column_plain` so the hardened client can open it.
@@ -182,7 +157,6 @@ pub async fn ensure_avenceo_owned(
 	let sealed_issuer =
 		seal_identity_cell(dek.expose(), avenceo_id, sparks_tbl, "issuer_pubkey_b64", dek_ver, &issuer_b64)?;
 	let sparks_row = named_row(&[
-			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 			// avenCEO is an aven SAFE (autonomous network control identity) owned directly
 			// by this node's env-seed server signer; it admits human owners via did:safe.
 			("type", Value::Text("aven".into())),
@@ -197,9 +171,8 @@ pub async fn ensure_avenceo_owned(
 		],
 	);
 	let sparks_oid = ObjectId::new();
-	let sparks_meta = owner_binding_meta(signing, sparks_oid, avenceo_id)?;
 	engine
-		.create_checked_with_id_and_metadata("safes", sparks_oid, sparks_row, sparks_meta)
+		.create("safes", avenceo_id, Some(sparks_oid), sparks_row)
 		.await
 		.map_err(|e| format!("create safes:{e:?}"))?;
 
@@ -209,7 +182,6 @@ pub async fn ensure_avenceo_owned(
 	let aad = keyshare_wrap_aad(&urn, &vault.signer_did, &vault.signer_did, dek_ver);
 	let wrapped = encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
 	let ks_row = named_row(&[
-			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 			("dek_version", Value::BigInt(dek_ver)),
 			("recipient_did", Value::Text(vault.signer_did.clone())),
 			("wrapper_did", Value::Text(vault.signer_did.clone())),
@@ -217,9 +189,8 @@ pub async fn ensure_avenceo_owned(
 		],
 	);
 	let ks_oid = ObjectId::new();
-	let ks_meta = owner_binding_meta(signing, ks_oid, avenceo_id)?;
 	engine
-		.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_row, ks_meta)
+		.create("keyshares", avenceo_id, Some(ks_oid), ks_row)
 		.await
 		.map_err(|e| format!("create keyshares:{e:?}"))?;
 
@@ -229,7 +200,6 @@ pub async fn ensure_avenceo_owned(
 	// server signer as NON-human. Owned by avenCEO so it syncs to its members.
 	if schema.get(&TableName::new("signers")).is_some() {
 		let signers_row = named_row(&[
-				("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 				("signer_did", Value::Text(vault.signer_did.clone())),
 				("device_label", Value::Text(aven_name.into())),
 				("kind", Value::Text("remote".into())),
@@ -239,9 +209,8 @@ pub async fn ensure_avenceo_owned(
 			],
 		);
 		let signers_oid = ObjectId::new();
-		let signers_meta = owner_binding_meta(signing, signers_oid, avenceo_id)?;
 		engine
-			.create_checked_with_id_and_metadata("signers", signers_oid, signers_row, signers_meta)
+			.create("signers", avenceo_id, Some(signers_oid), signers_row)
 			.await
 			.map_err(|e| format!("create signers:{e:?}"))?;
 	}
@@ -257,13 +226,16 @@ async fn read_avenceo_identity(
 ) -> Result<Option<(ObjectId, String, String, i64)>, String> {
 	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
 	let tbl = schema.get(&TableName::new("safes")).ok_or("avenceo: no safes table")?;
-	let sid_ix = col_ix(tbl, "owner")?;
 	let gen_ix = col_ix(tbl, "genesis_b64")?;
 	let iss_ix = col_ix(tbl, "issuer_pubkey_b64")?;
 	let ver_ix = col_ix(tbl, "current_dek_version")?;
 	let q = QueryBuilder::new(TableName::new("safes")).build();
 	for (oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
-		if uuid_matches(&vals, sid_ix, avenceo_id) {
+		let owner: Option<Uuid> = match engine.owner_binding_for("safes", oid).map_err(|e| format!("owner_binding:{e:?}"))? {
+			Some(meta) => aven_db::capability::owner_uuid_from_binding_meta(&meta),
+			None => None,
+		};
+		if owner == Some(avenceo_id) {
 			return Ok(Some((oid, text_at(&vals, gen_ix), text_at(&vals, iss_ix), bigint_at(&vals, ver_ix))));
 		}
 	}
@@ -280,13 +252,16 @@ async fn read_server_dek(
 ) -> Result<[u8; 32], String> {
 	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
 	let tbl = schema.get(&TableName::new("keyshares")).ok_or("avenceo: no keyshares table")?;
-	let sid_ix = col_ix(tbl, "owner")?;
 	let ver_ix = col_ix(tbl, "dek_version")?;
 	let recip_ix = col_ix(tbl, "recipient_did")?;
 	let wrap_ix = col_ix(tbl, "wrapped_dek")?;
 	let q = QueryBuilder::new(TableName::new("keyshares")).build();
-	for (_oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
-		if uuid_matches(&vals, sid_ix, avenceo_id)
+	for (oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
+		let owner: Option<Uuid> = match engine.owner_binding_for("keyshares", oid).map_err(|e| format!("owner_binding:{e:?}"))? {
+			Some(meta) => aven_db::capability::owner_uuid_from_binding_meta(&meta),
+			None => None,
+		};
+		if owner == Some(avenceo_id)
 			&& bigint_at(&vals, ver_ix) == dek_ver
 			&& text_at(&vals, recip_ix) == vault.signer_did
 		{
@@ -340,15 +315,18 @@ pub async fn grant_first_human_admin(
 	// so the blind server reads them without the SAFE's DEK. wrap_did is required to deliver
 	// the avenCEO DEK to the SAFE's members.
 	let type_ix = col_ix(sparks_tbl, "type")?;
-	let owner_ix = col_ix(sparks_tbl, "owner")?;
 	let wrap_ix = col_ix(sparks_tbl, "wrap_did")?;
 	let q = QueryBuilder::new(TableName::new("safes")).build();
 	let mut human: Option<(Uuid, String)> = None;
-	for (_oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
+	for (oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
 		if text_at(&vals, type_ix) != "human" {
 			continue;
 		}
-		let Some(owner_uuid) = uuid_at(&vals, owner_ix) else { continue };
+		let owner: Option<Uuid> = match engine.owner_binding_for("safes", oid).map_err(|e| format!("owner_binding:{e:?}"))? {
+			Some(meta) => aven_db::capability::owner_uuid_from_binding_meta(&meta),
+			None => None,
+		};
+		let Some(owner_uuid) = owner else { continue };
 		let wrap_did = text_at(&vals, wrap_ix);
 		if wrap_did.is_empty() {
 			continue;
@@ -361,18 +339,16 @@ pub async fn grant_first_human_admin(
 	};
 	let human_did = safe_did(human_uuid);
 
-	// Append owns(humanSAFE) (server-signed) and persist re-sealed genesis.
-	let new_chain = attenuate_add_owner_third_party(&vault.biscuit_kp, &chain, avenceo_id, &human_did)?;
+	// Append admin(humanSAFE) (server-signed) and persist re-sealed genesis.
+	let new_chain = attenuate_add_admin_third_party(&vault.biscuit_kp, &chain, avenceo_id, &human_did)?;
 	let new_genesis_b64 =
 		URL_SAFE_NO_PAD.encode(new_chain.to_vec().map_err(|e| format!("genesis_encode:{e:?}"))?);
 	let resealed_genesis =
 		seal_identity_cell(&dek, avenceo_id, sparks_tbl, "genesis_b64", dek_ver, &new_genesis_b64)?;
-	let upd_meta = owner_binding_meta(signing, sparks_oid, avenceo_id)?;
 	engine
-		.update_with_metadata(
+		.update(
 			sparks_oid,
 			vec![("genesis_b64".to_string(), Value::Text(resealed_genesis))],
-			upd_meta,
 		)
 		.await
 		.map_err(|e| format!("update genesis:{e:?}"))?;
@@ -385,7 +361,6 @@ pub async fn grant_first_human_admin(
 	let aad = keyshare_wrap_aad(&urn, &wrap_did, &vault.signer_did, dek_ver);
 	let wrapped = encrypt_keyshare_payload(&kek, &dek, &aad)?;
 	let ks_row = named_row(&[
-			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 			("dek_version", Value::BigInt(dek_ver)),
 			("recipient_did", Value::Text(wrap_did.clone())),
 			("wrapper_did", Value::Text(vault.signer_did.clone())),
@@ -393,9 +368,8 @@ pub async fn grant_first_human_admin(
 		],
 	);
 	let ks_oid = ObjectId::new();
-	let ks_meta = owner_binding_meta(signing, ks_oid, avenceo_id)?;
 	engine
-		.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_row, ks_meta)
+		.create("keyshares", avenceo_id, Some(ks_oid), ks_row)
 		.await
 		.map_err(|e| format!("create keyshares:{e:?}"))?;
 
@@ -406,12 +380,4 @@ pub async fn grant_first_human_admin(
 	}
 	tracing::info!(%avenceo_id, %human_did, "granted FIRST human SAFE admin on avenCEO (server-signed); DEK wrapped to wrap_did");
 	Ok(())
-}
-
-fn uuid_at(vals: &[Value], ix: usize) -> Option<Uuid> {
-	match vals.get(ix) {
-		Some(Value::Uuid(o)) => Some(*o.uuid()),
-		Some(Value::Text(s)) => Uuid::parse_str(s.trim()).ok(),
-		_ => None,
-	}
 }

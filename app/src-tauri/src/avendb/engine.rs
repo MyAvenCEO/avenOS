@@ -94,14 +94,6 @@ pub(crate) fn col_ix(tbl: &TableSchema, name: &str) -> Result<usize, String> {
 		.ok_or_else(|| format!("manifest_missing_col:{name}"))
 }
 
-pub(crate) fn uuid_cell_at(vals: &[Value], ix: usize) -> Result<Uuid, String> {
-	match vals.get(ix).ok_or("col_ix_oob")? {
-		Value::Uuid(oid) => Ok(*oid.uuid()),
-		Value::Text(s) => Uuid::parse_str(s.trim()).map_err(|e| format!("uuid_parse:{e}")),
-		x => Err(format!("expected_uuid_cell:{x:?}")),
-	}
-}
-
 pub(super) fn bigint_i64(v: &Value) -> Result<i64, String> {
 	match v {
 		Value::BigInt(i) => Ok(*i),
@@ -214,19 +206,42 @@ fn hydrate_i64_at(
 	}
 }
 
-pub(super) fn identity_uuid_row(schema: &TableSchema, vals: &[Value]) -> Result<Uuid, String> {
-	let ix = col_ix(schema, "owner")?;
-	uuid_cell_at(vals, ix)
+/// The owning SAFE of a value, read from its immutable signed owner-binding (board 0037) —
+/// the single source of ownership now that there is no `owner` data column. Returns `None`
+/// when the row carries no binding (a binder-less/legacy row); callers fall back to the
+/// device default where that is sound. Parsing (not signature verification — that is the
+/// apply gate's job) mirrors the engine's `$owner` projection.
+pub(crate) async fn owner_of_row(
+	client: &AvenDbClient,
+	table: &str,
+	row_id: ObjectId,
+) -> Result<Option<Uuid>, String> {
+	let Some(meta) = client
+		.owner_binding_for(table, row_id)
+		.map_err(super::format_avendb_err)?
+	else {
+		return Ok(None);
+	};
+	let binding = aven_caps::ownership::OwnerBinding::from_meta_str(&meta)
+		.map_err(|e| format!("owner_binding_parse:{e}"))?;
+	Ok(Some(binding.owner))
 }
 
-/// Owner identity from a name-keyed row (the `create_checked` input shape, board 0020).
-pub(super) fn identity_uuid_named(
-	vals: &std::collections::HashMap<String, Value>,
+/// The owning SAFE for a CREATE: the value's owner is established once, at create, as the
+/// `create(table, owner, …)` argument and minted into the immutable binding (board 0037).
+/// It is NOT a data column — the caller passes it as a logical `owner` routing field in the
+/// IPC payload, or it defaults to the device's primary SAFE. Schema-free on purpose (there is
+/// no `owner` column to look up).
+pub(super) fn resolve_create_owner(
+	values: &Map<String, JsonValue>,
+	default: Uuid,
 ) -> Result<Uuid, String> {
-	match vals.get("owner").ok_or("missing `owner` cell")? {
-		Value::Uuid(oid) => Ok(*oid.uuid()),
-		Value::Text(s) => Uuid::parse_str(s.trim()).map_err(|e| format!("uuid_parse:{e}")),
-		x => Err(format!("expected_uuid_cell:{x:?}")),
+	match values.get("owner") {
+		None | Some(JsonValue::Null) => Ok(default),
+		Some(JsonValue::String(s)) => {
+			Uuid::parse_str(s.trim()).map_err(|e| format!("owner_uuid_parse:{e}"))
+		}
+		Some(x) => Err(format!("expected owner uuid string, got {x:?}")),
 	}
 }
 
@@ -285,26 +300,6 @@ pub(super) fn wrap_signing_key_from_seed_b64(seed_b64: &str) -> Result<ed25519_d
 	Ok(ed25519_dalek::SigningKey::from_bytes(&seed))
 }
 
-pub(super) fn identity_uuid_from_json_row(
-	tbl: &TableSchema,
-	row: &Map<String, JsonValue>,
-) -> Result<Uuid, String> {
-	let ix = col_ix(tbl, "owner")?;
-	let desc = tbl.columns.columns.get(ix).ok_or("identity_desc_ix")?;
-	let raw = row
-		.get("owner")
-		.ok_or_else(|| "missing_spark_id".to_string())?;
-	let v =
-		super::json_cell_to_avendb(raw, &desc.column_type, desc.nullable)?;
-	match v {
-		Value::Uuid(oid) => Ok(*oid.uuid()),
-		Value::Text(s) => {
-			Uuid::parse_str(s.trim()).map_err(|e| format!("uuid_parse:{e}"))
-		}
-		x => Err(format!("expected_uuid_cell:{x:?}")),
-	}
-}
-
 pub(super) fn place_secrets_for_insert(
 	tbl: &TableSchema,
 	table: &str,
@@ -346,24 +341,6 @@ pub(super) fn place_secrets_for_insert(
 			}
 		}
 	}
-	Ok(())
-}
-
-pub(super) fn inject_default_identity(
-	values: &mut Map<String, JsonValue>,
-	tbl: &TableSchema,
-	default: Uuid,
-) -> Result<(), String> {
-	if col_ix(tbl, "owner").is_err() {
-		return Ok(());
-	}
-	if values.contains_key("owner") {
-		return Ok(());
-	}
-	values.insert(
-		"owner".into(),
-		JsonValue::String(default.to_string()),
-	);
 	Ok(())
 }
 
@@ -620,9 +597,11 @@ pub(super) fn row_to_public_map(
 	oid: ObjectId,
 	vals: &[Value],
 	meta_key: &str,
+	identity: Uuid,
 ) -> Result<Map<String, JsonValue>, String> {
 	let secrets = secret_manifest().get(table);
-	let identity = identity_uuid_row(schema, vals).unwrap_or(state.default_identity);
+	// Ownership (the unseal AAD identity) is resolved by the caller from the row's signed
+	// binding (board 0037) — there is no `owner` column to derive it from here.
 	let mut miss = Vec::new();
 	let cols = &schema.columns.columns;
 	let mut m = Map::new();
@@ -680,6 +659,11 @@ pub(super) fn row_to_public_map(
 		};
 		m.insert(name.to_string(), jv);
 	}
+	// Surface ownership in the public/IPC shape as a projection of the immutable binding
+	// (board 0037): storage has no `owner` column, but the UI + API still read `owner` as the
+	// owning SAFE (e.g. the identities grid keys rows by it). Sourced from the binding, never
+	// a stored column.
+	m.insert("owner".into(), JsonValue::String(identity.to_string()));
 	if !miss.is_empty() {
 		m.insert(meta_key.into(), json!(miss));
 	}
@@ -722,9 +706,9 @@ pub(crate) async fn find_identity_oid(
 	schema: &TableSchema,
 	identity: Uuid,
 ) -> Result<ObjectId, String> {
-	let id_ix = col_ix(schema, "owner")?;
-	for (oid, vals) in exec_list_rows(client, "safes").await? {
-		if uuid_cell_at(vals.as_slice(), id_ix)? == identity {
+	let _ = schema;
+	for (oid, _vals) in exec_list_rows(client, "safes").await? {
+		if owner_of_row(client, "safes", oid).await? == Some(identity) {
 			return Ok(oid);
 		}
 	}
@@ -746,14 +730,12 @@ pub(super) async fn build_object_owner_map(
 ) -> Result<HashMap<(String, ObjectId), Uuid>, String> {
 	let mut out = HashMap::new();
 	for table in crate::identity_sync::identity_scoped_table_names() {
-		let schema = resolved_table_schema(client, table).await?;
-		let identity_ix = col_ix(&schema, "owner")?;
 		let q = QueryBuilder::new(TableName::new(table))
 			.include_deleted()
 			.build();
 		let rows = client.query(q, None).await.map_err(super::format_avendb_err)?;
-		for (oid, vals) in rows {
-			if let Ok(sid) = uuid_cell_at(vals.as_slice(), identity_ix) {
+		for (oid, _vals) in rows {
+			if let Some(sid) = owner_of_row(client, table, oid).await? {
 				out.insert((table.clone(), oid), sid);
 			}
 		}
@@ -795,7 +777,9 @@ pub(super) async fn query_table_publish(
 	let mut out = Vec::with_capacity(rows.len());
 	let mut skipped_unauthorized_rows = 0usize;
 	for (oid, vals) in rows {
-		let identity_row = identity_uuid_row(&table_schema, &vals).unwrap_or(state.default_identity);
+		let identity_row = owner_of_row(client, table, oid)
+			.await?
+			.unwrap_or(state.default_identity);
 		match authorize_gate(state, table, AccOp::Read, identity_row, Some(*oid.uuid())) {
 			Ok(()) => {}
 			Err(_) => {
@@ -810,6 +794,7 @@ pub(super) async fn query_table_publish(
 			oid,
 			&vals,
 			meta_key,
+			identity_row,
 		)?);
 	}
 	Ok((out, skipped_unauthorized_rows))
@@ -889,7 +874,6 @@ pub(super) async fn hydrate_shell(
 	}
 
 	let sparks_schema = resolved_table_schema(client, "safes").await?;
-	let identity_id_ix = col_ix(&sparks_schema, "owner")?;
 	let issuer_ix = col_ix(&sparks_schema, "issuer_pubkey_b64")?;
 	let genesis_ix = col_ix(&sparks_schema, "genesis_b64")?;
 	let ver_ix = col_ix(&sparks_schema, "current_dek_version")?;
@@ -928,7 +912,6 @@ pub(super) async fn hydrate_shell(
 
 	if !sparks_rows.is_empty() {
 		let ks_schema = resolved_table_schema(client, "keyshares").await?;
-		let ks_spark_ix = col_ix(&ks_schema, "owner")?;
 		let ks_ver_ix = col_ix(&ks_schema, "dek_version")?;
 		let ks_recip_ix = col_ix(&ks_schema, "recipient_did")?;
 		let ks_wrapper_ix = col_ix(&ks_schema, "wrapper_did")?;
@@ -951,8 +934,10 @@ pub(super) async fn hydrate_shell(
 			unlocked: bool,
 		}
 		let mut ks_rows: Vec<KsRow> = Vec::new();
-		for (_oid, vals) in all_keyshares {
-			let sid = uuid_cell_at(vals.as_slice(), ks_spark_ix)?;
+		for (oid, vals) in all_keyshares {
+			let sid = owner_of_row(client, "keyshares", oid)
+				.await?
+				.ok_or("ks_missing_owner")?;
 			let dv = bigint_i64(vals.get(ks_ver_ix).ok_or("ks_missing_ver")?)?;
 			let recipient = match vals.get(ks_recip_ix).ok_or("ks_missing_recip")? {
 				Value::Text(s) => s.trim().to_string(),
@@ -988,8 +973,8 @@ pub(super) async fn hydrate_shell(
 			.map(|d| d.column_type.clone());
 		let mut safe_wrap_cells: HashMap<Uuid, (String, Value)> = HashMap::new();
 		if let (Some(wd_ix), Some(wp_ix)) = (wrap_did_ix, wrap_priv_ix) {
-			for (_oid, vals) in &sparks_rows {
-				let Ok(sid) = uuid_cell_at(vals.as_slice(), identity_id_ix) else {
+			for (oid, vals) in &sparks_rows {
+				let Some(sid) = owner_of_row(client, "safes", *oid).await? else {
 					continue;
 				};
 				let wd = match vals.get(wd_ix) {
@@ -1093,11 +1078,11 @@ pub(super) async fn hydrate_shell(
 			deks.len(),
 		);
 
-		for (_oid, vals) in &sparks_rows {
-			let sid = match uuid_cell_at(vals.as_slice(), identity_id_ix) {
-				Ok(s) => s,
-				Err(e) => {
-					log::warn!(target: "avenos::avendb", "hydrate_shell: skip identity row (owner): {e}");
+		for (oid, vals) in &sparks_rows {
+			let sid = match owner_of_row(client, "safes", *oid).await? {
+				Some(s) => s,
+				None => {
+					log::warn!(target: "avenos::avendb", "hydrate_shell: skip identity row (no owner-binding)");
 					continue;
 				}
 			};
@@ -1149,12 +1134,17 @@ pub(super) async fn hydrate_shell(
 				}
 				None => None,
 			};
+			// Authority epoch (board 0040): primary safes genesis. S4a wires the live epoch
+			// (= current_dek_version, unsealed below) + per-SAFE high-water; until then the
+			// guard is seeded (0,0 = trust-on-first-use, accept).
 			if let Err(e) = identity_acc::ingest_genesis_opened(
 				&mut vault,
 				sid,
 				&genesis_b64,
 				issuer_opened.as_deref(),
 				biscuit_root_pub,
+				0,
+				0,
 			) {
 				log::warn!(
 					target: "avenos::avendb",
@@ -1203,8 +1193,7 @@ pub(super) async fn hydrate_shell(
 		// controller they are NOT members of (N-hop authorize + verify-on-apply).
 		// Primary `safes` rows always win; copies only fill the gaps.
 		if let Ok(sc_schema) = resolved_table_schema(client, "safe_controllers").await {
-			if let (Ok(own_ix), Ok(did_ix), Ok(gen_ix), Ok(iss_ix)) = (
-				col_ix(&sc_schema, "owner"),
+			if let (Ok(did_ix), Ok(gen_ix), Ok(iss_ix)) = (
 				col_ix(&sc_schema, "controller_did"),
 				col_ix(&sc_schema, "genesis_b64"),
 				col_ix(&sc_schema, "issuer_pubkey_b64"),
@@ -1212,7 +1201,7 @@ pub(super) async fn hydrate_shell(
 				let sc_gen_ty = sc_schema.columns.columns.get(gen_ix).map(|d| d.column_type.clone());
 				let sc_iss_ty = sc_schema.columns.columns.get(iss_ix).map(|d| d.column_type.clone());
 				for (oid, vals) in exec_list_rows(client, "safe_controllers").await.unwrap_or_default() {
-					let Ok(row_owner) = uuid_cell_at(vals.as_slice(), own_ix) else {
+					let Some(row_owner) = owner_of_row(client, "safe_controllers", oid).await? else {
 						continue;
 					};
 					let ctrl_did = match vals.get(did_ix) {
@@ -1252,12 +1241,16 @@ pub(super) async fn hydrate_shell(
 					let iss_opened = vals
 						.get(iss_ix)
 						.and_then(|c| hydrate_text_at(&deks, row_owner, &iss_coord, c, true).ok());
+					// Controller-copy genesis. Copy-freshness is a follow-on card, so the epoch
+					// guard is a no-op here (0,0); the primary safes genesis above is authoritative.
 					if let Err(e) = identity_acc::ingest_genesis_opened(
 						&mut vault,
 						ctrl_id,
 						&gen_b64,
 						iss_opened.as_deref(),
 						biscuit_root_pub,
+						0,
+						0,
 					) {
 						log::warn!(
 							target: "avenos::avendb",
@@ -1286,7 +1279,23 @@ pub(super) async fn hydrate_shell(
 		let has_local = existing_peers
 			.iter()
 			.any(|(_o, vals)| matches!(vals.get(did_ix), Some(Value::Text(s)) if s == &vault.signer_did));
-		if !has_local {
+		// Every owner-scoped row belongs to a SAFE (board 0037): the device self-signer is owned by
+		// the device's first identity. With ZERO identities there is nothing to own it — DEFER
+		// (skip) rather than author an ownerless owned row, which the fail-closed funnel rejects.
+		// This branch re-runs every hydrate, so the self-signer lands as soon as an identity exists.
+		let self_owner = {
+			let mut ks: Vec<Uuid> = vault.safes.keys().cloned().collect();
+			ks.sort();
+			ks.into_iter().next()
+		};
+		if !has_local && self_owner.is_none() {
+			log::info!(
+				target: "avenos::avendb",
+				"deferred device self-signer — no SAFE owner yet (registers once an identity exists)"
+			);
+		}
+		if !has_local && self_owner.is_some() {
+			let self_owner = self_owner.expect("checked is_some");
 			let device_label = manifest_opt
 				.as_ref()
 				.map(|m| m.device_label.trim().to_string())
@@ -1314,8 +1323,9 @@ pub(super) async fn hydrate_shell(
 				.into_iter()
 				.collect(),
 			)?;
+			// Owner-scoped create (board 0037): the funnel mints the owner-binding from `self_owner`.
 			client
-				.create_checked("signers", peer_vals)
+				.create("signers", self_owner, None, peer_vals)
 				.await
 				.map_err(super::format_avendb_err)?;
 		}

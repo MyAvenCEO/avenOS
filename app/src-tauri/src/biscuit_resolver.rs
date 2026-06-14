@@ -14,7 +14,10 @@
 
 use std::sync::{Arc, RwLock};
 
-use aven_db::{AccOp, CapDecision, CapabilityResolver, EditSigner, ObjectId, ResourceCoord, SyncTargetId};
+use aven_db::{
+	AccOp, CapDecision, CapabilityResolver, EditSigner, ObjectId, OwnerBinder, ResourceCoord,
+	SyncTargetId,
+};
 
 use crate::avendb::engine::ShellState;
 use crate::identity_sync::SyncAclSnapshot;
@@ -283,13 +286,41 @@ impl EditSigner for AppEditSigner {
 	}
 }
 
+/// App-side author **owner-binder** (board 0037) — the device-key counterpart of [`AppEditSigner`].
+/// Installed via [`aven_db::AvenDbClient::set_owner_binder`]; the deep author funnel invokes it for
+/// every owner-scoped row with the row id + its owner SAFE, minting the `_owner_binding` assertion
+/// `(value_id → owner)` signed by the device key. The funnel now REQUIRES it for owner-scoped writes
+/// (unconditional, fail-closed), so installing it is what lets the device author owned data at all —
+/// replacing per-call-site binding stamping with one structural invariant (the funnel).
+pub struct AppOwnerBinder {
+	signing_key: ed25519_dalek::SigningKey,
+}
+
+impl AppOwnerBinder {
+	pub fn new(signing_key: ed25519_dalek::SigningKey) -> Self {
+		Self { signing_key }
+	}
+}
+
+impl OwnerBinder for AppOwnerBinder {
+	fn bind_row(&self, row_id: ObjectId, owner: uuid::Uuid) -> Option<(String, String)> {
+		let binding =
+			aven_caps::ownership::mint_owner_binding(&self.signing_key, *row_id.uuid(), owner)
+				.ok()?;
+		Some((
+			aven_caps::ownership::OWNER_BINDING_META_KEY.to_string(),
+			binding.to_meta_string(),
+		))
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use std::collections::HashMap;
 
 	use aven_caps::caps::{
-		attenuate_add_owner_third_party, attenuate_add_reader_third_party,
+		attenuate_add_admin_third_party, attenuate_add_reader_third_party,
 		build_vault_from_signing_key, mint_safe_genesis, rebuild_identity_biscuit_excluding,
 		BiscuitIdentity, BiscuitVault,
 	};
