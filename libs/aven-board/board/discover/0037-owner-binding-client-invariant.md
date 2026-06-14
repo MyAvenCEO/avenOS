@@ -179,3 +179,15 @@ grep -rn "owner_binding_meta" app/src-tauri/src            # expect: gone from w
   independently deployable; binder installation (app `AppOwnerBinder` + node `ServerOwnerBinder`) lands
   together with it. (c) Lower-risk order: install binders + own `signers` by the device SAFE FIRST (the
   actual onboarding fix, works against today's relay), THEN drop the column.
+- `2026-06-14` — **Binders-first onboarding fix built** (commits `49816947`, `79bf4d89`): (1) installed
+  the `OwnerBinder` on every peer — aven-node `ServerOwnerBinder` (before the avenCEO genesis mint) + app
+  `AppOwnerBinder` (at connect, same device key as the edit-signer) — so the funnel auto-stamps every
+  owner-bearing row's binding (this auto-fixes the 3 `signers` writes the card flagged, which HAD owners
+  but no binding). (2) made `signers` always belong to a SAFE: `add_remote_signer` defers (in-memory
+  `PENDING_SIGNERS` + `drain_pending_signers`, drained at each entry) when no SAFE exists yet; the
+  zero-identity device self-signer in `hydrate_shell` is owned by the first identity SAFE or deferred —
+  no ownerless owned row is ever authored. Build/test verified: aven-db 710 tests, aven-node builds, app
+  `cargo check --features desktop-ai` exits 0. **Not yet verified live** — needs the credentialed `WIPE=1`
+  flush+redeploy. Remaining: (a) DRY cleanup — remove the now-redundant manual `owner_binding_meta`
+  stamping (idempotent with the funnel, harmless until then); (b) the SSOT column drop (Stage 2);
+  (c) flush+redeploy + live proof.
