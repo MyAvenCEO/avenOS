@@ -1,3 +1,20 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.2...v) (2026-06-14)
+
+
+### Bug Fixes
+
+* **0037:** re-project owner into the public/IPC row shape (UI read row.owner) ([5f8d6c3](https://github.com/MyAvenCEO/avenOS/commit/5f8d6c35ad10754b97a68440f27f2327a32a0f53))
+* **0037:** signers rows always belong to a SAFE — defer when none exists ([79bf4d8](https://github.com/MyAvenCEO/avenOS/commit/79bf4d891f295231b894e046866845a85a392699))
+* **release:** push the tag explicitly — --follow-tags skips lightweight tags ([c7e447d](https://github.com/MyAvenCEO/avenOS/commit/c7e447daaacd5d4962726a0b9749b91cb64be555))
+
+
+### Features
+
+* **0037 Stage 2a:** make owner_scoped a declarative flag (authoritative) ([4e976f7](https://github.com/MyAvenCEO/avenOS/commit/4e976f761b7d4c35f70937c1f6663c671557239b))
+* **0037:** install OwnerBinder on every peer (aven-node + app) ([4981694](https://github.com/MyAvenCEO/avenOS/commit/49816947268640da94279fea448ce517966459a3))
+* **aven-db 0037:** owner-binding as a per-peer authoring invariant ([7bba627](https://github.com/MyAvenCEO/avenOS/commit/7bba6272e0511a75c4e30a131caf4f2faf7e5eed))
+* **ci:** deploy aven-node relay to its Sprite on each next release ([aea4fb9](https://github.com/MyAvenCEO/avenOS/commit/aea4fb9cb30d9db0a3bbc725895173b6873a7645))
+* **maia-city:** HEARTS economy — per-tick mint ledger + HUD ([7ce8d1c](https://github.com/MyAvenCEO/avenOS/commit/7ce8d1c29d44ee53c4b62b7eee1556a41f5f353d))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.1...v) (2026-06-14)
 
 

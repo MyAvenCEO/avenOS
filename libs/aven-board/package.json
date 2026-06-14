@@ -1,7 +1,7 @@
 {
 	"name": "@avenos/aven-board",
 	"private": true,
-	"version": "26.6.1-next.2",
+	"version": "26.6.1-next.3",
 	"type": "module",
 	"description": "aven-board — git-based, markdown-first kanban board for AvenOS (idea → plan → test → done).",
 	"main": "./src/index.ts",

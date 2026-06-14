@@ -1,6 +1,6 @@
 [package]
 name = "aven-node"
-version = "26.6.1-next.2"
+version = "26.6.1-next.3"
 edition = "2021"
 description = "AvenOS aven-node — headless durable blind replica over an authenticated TLS sync transport: stores & forwards encrypted spark batches it cannot decrypt (one fly deploy)."
 license = "MIT OR Apache-2.0"
