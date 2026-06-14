@@ -1591,14 +1591,6 @@ pub(crate) fn avendb_ipc_role_caps() -> std::collections::BTreeMap<String, Vec<S
 			crate::identity_acc::grant_kind_caps(role).iter().map(|c| c.to_string()).collect(),
 		);
 	}
-	// TIER-0 (board 0049): the avenCEO `reader` button admits a network member via
-	// avendb_ipc_aven_ceo_add_member — which grants the registry DIRECTORY read + a BLIND
-	// admission (the `relay` bundle: replicate/quota/rate_limit), NOT a plain `read`. Assemble
-	// the preview from the SSOT relay bundle + the `directory` cap (the same cap
-	// identity_cap_report emits for a registry-scoped read) so the chip set is honest.
-	let mut tier0 = vec!["directory".to_string()];
-	tier0.extend(crate::identity_acc::grant_kind_caps("relay").iter().map(|c| c.to_string()));
-	m.insert("tier0".to_string(), tier0);
 	m
 }
 
@@ -1701,15 +1693,25 @@ async fn finish_spark_admin_grant(
 /// source of truth the UI renders (no hardcoded cap lists client-side).
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SubjectFactDto {
+	/// The literal biscuit predicate: `owns` | `reads` | `replicate` | `grant`.
+	pub predicate: String,
+	/// Operations this fact authorizes (owns → read/write/delete/admit/rotate_dek; reads → read;
+	/// replicate → replicate; grant → the granted op).
+	pub ops: Vec<String>,
+	/// Raw resource prefix (the source of truth for scope).
+	pub prefix: String,
+	/// Derived human scope token: `safe` | `directory` | `<table>` | `<table>:<row>`.
+	pub scope: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SubjectCapsDto {
 	pub did: String,
-	/// PRIMARY (highest-rank) role: `admin` | `reader` | `relay` | `member`.
-	pub grant: String,
-	/// EVERY named role this DID holds (admin/reader/relay), rank-ordered — the UI lists them
-	/// all so no role hides behind the primary. Empty when only granular grants (`grant`="member").
-	pub roles: Vec<String>,
-	/// Effective caps (e.g. `read`, `write`, `delete`, `admit`, `rotate_dek`, `replicate`).
-	pub caps: Vec<String>,
+	/// The RAW wire facts this DID holds — no role bundles, no quota/rate sugar. The UI renders
+	/// these directly + a plain-language summary derived from (predicate, scope).
+	pub facts: Vec<SubjectFactDto>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -1764,9 +1766,16 @@ pub(crate) async fn avendb_ipc_spark_admin_list(
 		.into_iter()
 		.map(|s| SubjectCapsDto {
 			did: s.did,
-			grant: s.grant.to_string(),
-			roles: s.roles.iter().map(|r| r.to_string()).collect(),
-			caps: s.caps.iter().map(|c| c.to_string()).collect(),
+			facts: s
+				.facts
+				.into_iter()
+				.map(|f| SubjectFactDto {
+					predicate: f.predicate,
+					ops: f.ops,
+					prefix: f.prefix,
+					scope: f.scope,
+				})
+				.collect(),
 		})
 		.collect();
 	let viewer_owns = engine::authorize_gate(
