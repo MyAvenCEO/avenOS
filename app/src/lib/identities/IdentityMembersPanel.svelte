@@ -703,38 +703,38 @@ async function copyOwnDid(): Promise<void> {
 					{:else if accessEntries.length === 0}
 						<p class="text-muted-foreground text-sm">{t('identities.share.noOneListed')}</p>
 					{:else}
-						<ul class="flex flex-col gap-2">
+						<ul class="flex flex-col gap-1.5">
 							{#each accessEntries as entry (entry.did)}
-								<li class="rounded-xl border border-border/50 bg-background/40 px-4 py-3">
-									<!-- The DID (did:key / did:safe) is the row identity (board 0049). The friendly
-									     label rides alongside; under it, every role + cap this DID holds. -->
-									<p
-										class="text-foreground/90 min-w-0 font-mono text-[11px] leading-snug select-text break-all"
-										title={entry.did}
-									>
-										{entry.did}
-									</p>
-									<p class="mt-0.5 min-w-0 text-sm font-semibold" title={entry.label}>
-										{entry.label}
-									</p>
-									<!-- did:safe / signer-type chips, then a copy/revoke control. -->
-									<div class="mt-2 flex flex-wrap items-center gap-1.5">
+								<li class="rounded-xl border border-border/50 bg-background/40 px-3.5 py-2.5">
+									<!-- Header: DID (row identity) + friendly label + chips + copy/revoke, all on one line. -->
+									<div class="flex items-center gap-2">
+										<div class="min-w-0 flex-1">
+											<p class="truncate text-sm font-semibold leading-tight" title={entry.label}>
+												{entry.label}
+											</p>
+											<p
+												class="text-muted-foreground truncate font-mono text-[10px] leading-tight select-text"
+												title={entry.did}
+											>
+												{entry.did}
+											</p>
+										</div>
 										{#if entry.safeType}
 											<span
-												class="bg-accent text-accent-foreground rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase"
+												class="bg-accent text-accent-foreground shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wider uppercase"
 												>{t('identities.share.safeChip', { type: entry.safeType })}</span
 											>
 										{/if}
 										{#if entry.signerType}
 											<span
-												class="bg-accent text-accent-foreground rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase"
+												class="bg-accent text-accent-foreground shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wider uppercase"
 												>{t(signerTypeLabelKey(entry.signerType))}</span
 											>
 										{/if}
 										{#if entry.isThisDevice}
 											<button
 												type="button"
-												class="bg-muted hover:bg-muted/70 ml-auto rounded-md px-2.5 py-1 text-[11px] font-medium"
+												class="bg-muted hover:bg-muted/70 shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium"
 												onclick={() => void copyOwnDid()}
 											>
 												{didCopied ? t('peers.copied') : t('common.copyDid')}
@@ -742,7 +742,7 @@ async function copyOwnDid(): Promise<void> {
 										{:else if amOwner}
 											<button
 												type="button"
-												class="border-destructive/40 text-destructive hover:bg-destructive/10 ml-auto rounded-md border px-2.5 py-1 text-[11px] font-medium disabled:opacity-50"
+												class="border-destructive/40 text-destructive hover:bg-destructive/10 shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-medium disabled:opacity-50"
 												disabled={revokeBusyDid !== undefined}
 												onclick={() => void revokeAdmin(entry.did, entry.label)}
 											>
@@ -750,32 +750,27 @@ async function copyOwnDid(): Promise<void> {
 											</button>
 										{/if}
 									</div>
-									<!-- The RAW wire facts this DID holds (board 0049): one row per fact —
-									     the literal predicate + scope + a plain summary + the ops it authorizes.
-									     No role bundles, no quota/rate sugar. -->
+									<!-- The RAW wire facts this DID holds (board 0049): one compact row per fact —
+									     predicate chip + plain summary + the ops it authorizes, all inline. -->
 									{#if entry.facts.length === 0}
-										<p class="text-muted-foreground mt-2 text-[11px] italic">
+										<p class="text-muted-foreground mt-1.5 text-[11px] italic">
 											{t('identities.share.noFacts')}
 										</p>
 									{:else}
-										<ul class="mt-2 flex flex-col gap-1.5">
+										<ul class="mt-1.5 flex flex-col gap-1">
 											{#each entry.facts as fact, i (fact.predicate + fact.prefix + i)}
-												<li class="border-border/40 flex flex-col gap-1 rounded-lg border bg-background/30 px-2.5 py-1.5">
-													<div class="flex flex-wrap items-center gap-1.5">
+												<li class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+													<span
+														class="bg-primary/10 text-primary rounded px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wider lowercase"
+														>{predicateLabel(fact.predicate)}</span
+													>
+													<span class="text-muted-foreground text-[11px]">{factSummary(fact)}</span>
+													{#each fact.ops as op (op)}
 														<span
-															class="bg-primary/10 text-primary rounded px-2 py-0.5 font-mono text-[10px] font-bold tracking-wider lowercase"
-															>{predicateLabel(fact.predicate)}</span
+															class="bg-muted text-muted-foreground rounded px-1 py-0.5 text-[9px] font-medium tracking-wide uppercase"
+															title={capDescription(op)}>{capLabel(op)}</span
 														>
-														<span class="text-muted-foreground text-[11px]">{factSummary(fact)}</span>
-													</div>
-													<div class="flex flex-wrap items-center gap-1">
-														{#each fact.ops as op (op)}
-															<span
-																class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wider uppercase"
-																title={capDescription(op)}>{capLabel(op)}</span
-															>
-														{/each}
-													</div>
+													{/each}
 												</li>
 											{/each}
 										</ul>
