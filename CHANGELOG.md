@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.9...v) (2026-06-14)
+
+
+### Bug Fixes
+
+* **ci:** install Pillow on the iOS runner (generate-ios-icons.py needs PIL) ([4db0fa8](https://github.com/MyAvenCEO/avenOS/commit/4db0fa83ee7232f9d9e8ec2f6f42c9c358eed4fd))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.8...v) (2026-06-14)
 
 

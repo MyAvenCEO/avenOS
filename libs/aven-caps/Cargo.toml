@@ -1,6 +1,6 @@
 [package]
 name = "aven-caps"
-version = "26.6.1-next.9"
+version = "26.6.1-next.10"
 edition = "2021"
 description = "AvenOS capability + keyshare primitives — biscuit caps (mint/grant/authorize/report) + per-spark DEK keyshare crypto. Single source of truth shared by the app and the aven-node."
 license = "MIT OR Apache-2.0"
