@@ -1,178 +1,165 @@
 ---
-title: Cryptographically-enforced revocation — a monotonic authority epoch + forced re-hydrate
-summary: Revocation of a per-SAFE / SAFE-in-SAFE delegation is not yet rollback-proof in untrusted P2P. The crypto primitives are sound (signed owner-binding + edit-sig verified at every hop incl blind relays; Ed25519 biscuit chain with did:safe: controller delegation enforced at members; DEK rotation for post-revoke confidentiality), but the genesis biscuit — the SAFE's authority document — is re-minted on revoke yet `ingest_genesis_opened` accepts ANY validly-signed genesis with no freshness guard, so a stale (pre-revoke, still-validly-signed) genesis can overwrite a newer one, and members keep authorizing against a stale in-memory vault until they happen to re-hydrate. Bind a monotonic authority epoch (= the SAFE's `dek_version`) as a signed fact in the genesis; reject ingesting/authorizing any epoch below a persisted per-SAFE high-water mark (unify with the existing DEK-downgrade defense) → post-sync rollback becomes UNREPRESENTABLE; and force a vault re-hydrate when a newer-epoch genesis for a held SAFE is applied → the new biscuit is enforced immediately, so a revoked device's writes are DenyPermanent at every legit member.
-owner: claude (aven-caps + app/biscuit_resolver + app/engine hydrate)
+title: SAFE delegation model — one universal owned-by-subjects model, cryptographically enforced in untrusted P2P
+summary: Re-architect the per-SAFE / SAFE-in-SAFE delegation under the compact/simplify/consolidate lens AND make it rollback-proof against untrusted peers. Three eliminations + two crypto-hardenings, one coherent model. ELIMINATE the arbitrary type rules (an `aven` SAFE may only admit `human` SAFEs, a `spark` only `aven`, `find_controlled_safe_of_type` hardcoding human←aven←spark) — the security CORE (aven-caps) is already type-agnostic, these exception rules live only in caps_ipc.rs. Collapse to ONE universal model: any SAFE is owned by any set of subjects, each a key (`did:key:`) or another SAFE (`did:safe:`); `type` is a UI label with ZERO core ACC semantics. CONSOLIDATE roles: there is no OWNER-vs-ADMIN tier — `owns` IS the single full-rights role (read/write/delete/admit/rotate_dek); `reads`/`replicate` are orthogonal sharing tiers, not an admin hierarchy. ENFORCE one core invariant: a SAFE can never reach zero `owns` subjects (anti-lockout), type-agnostic, at the genesis funnel. Then HARDEN: a monotonic authority epoch (= the SAFE's `dek_version`) bound as a signed fact in the genesis so ingest/authorize reject any epoch below a persisted per-SAFE high-water (rollback UNREPRESENTABLE, not raced), plus forced re-hydrate when a newer-epoch genesis for a held SAFE is applied (immediate enforcement — a revoked device's writes are DenyPermanent at every legit member).
+owner: claude (aven-caps + app/caps_ipc + app/biscuit_resolver + app/engine hydrate)
 created: 2026-06-14
 updated: 2026-06-14
-tags: [aven-caps, security, revocation, sync, p2p, biscuit, rollback]
-goal: "Per-SAFE and SAFE-in-SAFE authority is rollback-proof under untrusted P2P via a monotonic epoch bound into the genesis, plus forced re-hydrate on a newer epoch. Provable from command output: (1) `cargo test -p aven-caps authority_epoch` passes new tests proving the epoch is a signed fact carried in the genesis (survives encode/decode), `ingest_genesis_opened` REJECTS a validly-signed genesis whose epoch < the per-SAFE high-water mark and ACCEPTS one >=, and `authorize`/`authorize_signed_edit` deny a cap rooted in a below-high-water (superseded) genesis; (2) `cargo test -p aven-os-app --features desktop-ai revocation_epoch` passes an in-process two-vault integration test: after a revoke bumps owner epoch v->v+1, a batch authored by the revoked signer is `DenyPermanent` at the legit member's `verify_on_apply`, AND a replayed pre-revoke (epoch v) genesis is rejected by ingest so it cannot re-instate the revoked member, AND applying the newer-epoch (v+1) genesis for a held SAFE triggers a vault re-hydrate so enforcement is immediate (no stale-authority window); (3) `cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node` exits 0 and the existing biscuit_resolver / owner_binder / apply-gate suites stay green (no regression to the 0037 binding enforcement). Out of scope (follow-on cards): controller-copy freshness, fail-closed revoked-device UX, multi-SAFE cascade hardening, and the live 2-device manual check (review's job)."
+tags: [aven-caps, security, revocation, sync, p2p, biscuit, rollback, elimination, ssot]
+goal: "The SAFE delegation model is ONE universal owned-by-subjects model, cryptographically enforced and rollback-proof in untrusted P2P. Provable from command output: (1) ELIMINATION — `grep -rn 'find_controlled_safe_of_type\\|safe_type_of' app/src-tauri/src` shows the type-RESTRICTION gating is gone (no match arm rejects an owner by SAFE type; `type` no longer gates ACC), and a new `cargo test -p aven-os-app --features desktop-ai universal_ownership` proves any SAFE can be owned by any subject — a SAFE admits another SAFE of ANY type AND a `did:key:` directly (cases the old rules rejected). (2) ROLE CONSOLIDATION — `cargo test -p aven-caps owns_is_the_single_role` proves `owns` carries exactly OWNER_RIGHTS (read/write/delete/admit/rotate_dek) and there is no separate admin cap; `reads`/`replicate` are the only other (sharing) tiers. (3) LAST-OWNER INVARIANT — `cargo test -p aven-caps last_owner_invariant` proves a genesis re-mint / revoke that would leave zero `owns` subjects FAILS (type-agnostic; not 'last human'). (4) AUTHORITY EPOCH — `cargo test -p aven-caps authority_epoch` proves the epoch is a signed genesis fact surviving encode/decode, `ingest_genesis_opened` rejects epoch < per-SAFE high-water and accepts >=, and `authorize`/`authorize_signed_edit` deny a cap rooted in a below-high-water (superseded) genesis. (5) FORCED RE-HYDRATE / E2E — `cargo test -p aven-os-app --features desktop-ai revocation_epoch` (in-process two-vault): after a revoke bumps epoch v->v+1, the revoked signer's batch is DenyPermanent at the legit member, a replayed pre-revoke (epoch v) genesis is rejected by ingest so it cannot re-instate the revoked member, and applying the v+1 genesis for a held SAFE forces a re-hydrate (no stale-authority window). (6) `cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node` exits 0 with the existing biscuit_resolver / owner_binder / apply-gate suites green (0037 binding enforcement intact); the type-rule elimination is NET-SUBTRACTIVE on caps_ipc.rs (git diff --stat). Out of scope (follow-on cards): safe_controllers controller-copy freshness, fail-closed revoked-device UX, multi-SAFE cascade hardening, live 2-device manual check (review's job)."
 ---
 
-# Cryptographically-enforced revocation — a monotonic authority epoch + forced re-hydrate
+# SAFE delegation model — one universal owned-by-subjects model, cryptographically enforced
 
 ## Context
 
-Found live while testing board [[0037]] (owner-binding) onboarding: when device **MacB** is
-removed as a signer/owner of a human SAFE (nested under the avenCEO SAFE via `did:safe:`
-controller chaining), MacB keeps **stale access** — it still sees and writes into the human SAFE
-and the avenCEO SAFE, the human SAFE shows "unnamed", and revocation does not reliably propagate.
+Found live testing board [[owner-binding-ssot-0037]] onboarding: when device **MacB** is removed as
+an owner of a human SAFE (nested under the avenCEO SAFE via `did:safe:` controller chaining), MacB
+keeps **stale access** — still sees + writes into both SAFEs, the human SAFE shows "unnamed", and
+revocation does not reliably propagate. Investigating it surfaced both a **security-resilience gap**
+and an **over-complicated model with arbitrary exception rules** — this card consolidates the fix
+under the compact/simplify/consolidate elimination lens.
 
-The enforcement model was **verified in code** and the cryptographic *primitives* are sound:
-- `verify_on_apply` (`app/src-tauri/src/biscuit_resolver.rs:144-248`) checks the **signed
-  owner-binding** (authenticity, can't relabel/forge ownership) + the **edit-sig over the
-  receiver-computed digest** (integrity, can't tamper) at **every hop, including untrusted blind
-  relays** — no vault needed.
-- Authorization is enforced **at members** via `authorize_signed_edit` walking the Ed25519
-  **biscuit chain** (`owns($p, "safe:<uuid>")`), with SAFE-in-SAFE nesting expressed as a
-  `did:safe:` controller fact (`mint_safe_genesis_with_controller`, `libs/aven-caps/src/caps.rs:307`).
-  Blind relays correctly forward without authz (they can't read the data either).
-- Post-revoke **confidentiality** is enforced by **DEK rotation** — the rotated DEK is never
-  wrapped to the revoked peer (`caps_ipc.rs` rotate path), so it cannot decrypt v+1 ciphertext.
-  (MacB's human SAFE showing "unnamed" is rotation *working*: MacB lost the key to read the
-  re-sealed name.)
+**Verified in code — the crypto PRIMITIVES are sound** and hold at untrusted relays/members:
+`verify_on_apply` (`app/src-tauri/src/biscuit_resolver.rs:144-248`) checks the signed owner-binding
+(authenticity) + edit-sig over the receiver digest (integrity) at **every hop incl blind relays**;
+`authorize_signed_edit` walks the Ed25519 biscuit chain at members; DEK rotation handles post-revoke
+confidentiality (MacB's "unnamed" is rotation *working* — it lost the key to read the re-sealed name).
 
-**The gap is not in the primitives — it is freshness/rollback on the genesis (the authority
-document).** The genesis biscuit is re-minted on revoke (`rebuild_identity_biscuit_excluding` →
-`mint_safe_genesis`, re-rooted, `caps.rs:516-540`), but:
+**Three things to simplify (first principles — these exception rules / overloads shouldn't exist):**
 
-1. **`ingest_genesis_opened` (`caps.rs:586-606`) inserts the biscuit UNCONDITIONALLY** — it
-   verifies the signature but has **no monotonic/epoch guard**. The *old* genesis is *also*
-   validly signed by the same SAFE root key, so signature validity cannot distinguish current
-   from stale. Today, rollback safety leans on hydrate ordering ("primary safes row wins") +
-   the write-gate + LWW — **not** on the genesis being intrinsically rollback-proof. A
-   stale-but-valid genesis (or a stale `safe_controllers` copy) can overwrite a newer one.
-2. **Revocation does not force re-hydrate** — the new biscuit syncs as a re-sealed `safes` row,
-   but members keep authorizing against the **in-memory vault from last hydrate** until they
-   happen to re-hydrate → the stale-authority window where a revoked device's writes are still
-   accepted.
+1. **Arbitrary type-restricted ownership.** The security CORE (`aven-caps`) is **already
+   type-agnostic** — `mint_safe_genesis` just takes owner/controller DIDs, no human/aven/spark. The
+   restrictions live ONLY in the app (`caps_ipc.rs:480-530` `allow_set_safe_membership` + `1010-1028`
+   `find_controlled_safe_of_type`): an `aven` SAFE may admit only `human` SAFEs, a `spark` only `aven`,
+   other types only keys; and controllers are hardcoded `human ← aven ← spark`. **These are arbitrary
+   app-layer exceptions.** Collapse to ONE universal model: a SAFE is owned by any set of subjects,
+   each a `did:key:` (a signer) or a `did:safe:` (another SAFE of ANY type). `type` becomes a pure UI
+   label with zero core-ACC meaning — the system makes no user-facing distinction.
 
-**Why biscuit-native epoch (not revocation-IDs or TTL):** biscuits are stateless offline tokens
-with no inherent "newest". Revocation IDs need a *synced revocation list* (an online/shared-state
-dependency — wrong for untrusted blind-relay P2P). TTL/expiry caveats need trusted clocks and
-force re-issue churn without immediate revocation. A **monotonic authority epoch as a signed fact
-+ a verifier-side high-water mark** is the offline-friendly equivalent of a revocation list:
-instead of "is this token revoked?", the verifier asks "is this authority ≥ the freshest epoch
-I have seen?".
+2. **OWNER-vs-ADMIN is a phantom distinction.** The cap vocabulary (`caps.rs:138-146`) is three
+   *attachment kinds*: `owns` → `OWNER_RIGHTS = [read, write, delete, admit, rotate_dek]`,
+   `reads` → `[read]`, `replicate` → blind store-forward. **`owns` IS admin** (it carries `admit` +
+   `rotate_dek`). There is no separate admin tier. The OWNER-vs-ADMIN feeling is a NAMING overload:
+   0037's value-*owner* (the SAFE a value's binding names) vs the *`owns` subject* of a SAFE.
+   Consolidate to one role (`owns`); `reads`/`replicate` are orthogonal *sharing* tiers, documented
+   as such — no admin hierarchy introduced.
 
-**The honest boundary (TOFU):** a verifier with *no* high-water mark for a SAFE accepts whatever
-epoch it first sees — trust-on-first-use, inherent to any anchor-less offline system. Mitigated by
-convergence (LWW on the `safes` row picks the highest `dek_version`; an attacker can't forge a
-higher one without the gated admin write) and by encryption (a device that can't get the current
-DEK can't read anyway). The epoch guarantees **no rollback after first sync**; it does not invent
-an online trust anchor and must not pretend to.
+3. **Last-admin anti-lockout is type-coupled and scattered.** The revoke path guards `≥1 human owner`
+   (`count_human_owners`). With the type distinction gone, this consolidates to ONE type-agnostic core
+   invariant — **a SAFE can never reach zero `owns` subjects** — enforced once at the genesis
+   mint/revoke funnel, not per-call-site, not "last human".
 
-This is a security re-architecture of revocation resilience, distinct from board 0037 (whose owner-
-column drop is **done and green on main**). First slice (this card): the **monotonic authority
-epoch + forced re-hydrate** — the cryptographic keystone. Follow-on cards: controller-copy
-freshness, fail-closed revoked-device UX, multi-SAFE cascade hardening.
+**Two things to harden (the rollback gap):** the genesis biscuit is re-minted on revoke, but
+`ingest_genesis_opened` (`libs/aven-caps/src/caps.rs:586-606`) inserts ANY validly-signed genesis with
+**no freshness guard** — the *old* genesis is also validly signed, so a stale one can roll back
+authority; and members keep authorizing against the **stale in-memory vault from last hydrate**.
+
+**The biscuit-native fix for freshness:** biscuits are stateless offline tokens — no inherent "newest".
+Revocation-IDs need a synced revocation list (online dependency, wrong for blind-relay P2P); TTL needs
+trusted clocks. The offline-friendly equivalent is a **monotonic authority epoch as a signed fact +
+verifier high-water mark**: "is this authority ≥ the freshest epoch I've seen?". **Honest boundary:**
+first-contact is trust-on-first-use (a verifier with no high-water accepts what it first sees),
+inherent to any anchor-less offline system — mitigated by LWW convergence (highest `dek_version` wins;
+an attacker can't forge a higher one without the gated admin write) + encryption. The epoch guarantees
+no rollback **after first sync**; it must not pretend to invent an online anchor.
+
+This is net-ADDITIVE for the crypto core but net-SUBTRACTIVE for the model (deleting the type rules).
 
 ## Goal
 
-A revoked per-SAFE / SAFE-in-SAFE delegation cannot be rolled back or out-waited under untrusted
-P2P: authority is gated by a signed monotonic epoch, and a newer epoch is enforced immediately.
+The SAFE delegation model is one universal owned-by-subjects model — any SAFE owned by any
+keys/SAFEs, one `owns` role, a last-owner invariant — and authority is rollback-proof under untrusted
+P2P via a signed monotonic epoch + forced re-hydrate. Completion = the frontmatter `goal:`.
 
-**Completion condition** (identical to frontmatter `goal:`):
-
-> Per-SAFE and SAFE-in-SAFE authority is rollback-proof under untrusted P2P via a monotonic epoch
-> bound into the genesis, plus forced re-hydrate on a newer epoch — proven by:
-> `cargo test -p aven-caps authority_epoch` (epoch is a signed genesis fact surviving round-trip;
-> `ingest_genesis_opened` rejects epoch < high-water, accepts ≥; `authorize`/`authorize_signed_edit`
-> deny a superseded-genesis cap); `cargo test -p aven-os-app --features desktop-ai revocation_epoch`
-> (in-process two-vault test: post-revoke the revoked signer's batch is `DenyPermanent` at the legit
-> member, a replayed pre-revoke genesis is rejected by ingest, and applying the newer-epoch genesis
-> for a held SAFE forces a re-hydrate so enforcement is immediate); and
-> `cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node` exits 0 with the
-> existing biscuit_resolver / owner_binder / apply-gate suites green.
+**Completion condition** (identical to the frontmatter `goal:`).
 
 ## Approach
 
-**One unified counter — `dek_version` IS the authority epoch.** Every revoke already rotates the
-DEK (v→v+1) and `current_dek_version` is already edit-sig-authenticated and downgrade-defended.
-Don't invent a second counter (two counters = two rollback surfaces). The epoch = the
-`dek_version` the genesis was minted at.
+**The one model.** A SAFE is `(id, {owns subjects})` where each subject is a `did:key:` or a
+`did:safe:` (any other SAFE, any `type`). No type gates ownership. `owns` = full rights; `reads` /
+`replicate` are orthogonal sharing tiers. Invariant: never zero `owns`. The mint/revoke funnel
+(`mint_safe_genesis` / `rebuild_identity_biscuit_excluding`) is the ONE place authority changes — it
+stamps the epoch and enforces the last-owner invariant.
 
-1. **Bind the epoch into the genesis as a signed fact.** `mint_safe_genesis` /
-   `mint_safe_genesis_with_controller` add `authority_epoch(N)` (N = `dek_version` at mint). It is
-   in the root-signed block → can't be stripped (breaks the sig) or forged higher (needs the root
-   key, only the re-mint path wields it). Add a reader (`genesis_authority_epoch(&Biscuit) -> u64`).
-2. **Persist a per-SAFE monotonic high-water mark, unified with the DEK-downgrade defense.** The
-   shell already tracks `max dek_version` per identity (`identity_versions` / the downgrade
-   defense in `engine.rs`). Treat that max as the authority high-water.
-3. **`ingest_genesis_opened` rejects stale epochs.** Take the current high-water for `owner`;
-   reject a genesis whose `authority_epoch < high_water` (rollback unrepresentable); on accept,
-   bump the high-water to the genesis epoch. (Signature check stays.)
-4. **`authorize` / `authorize_signed_edit` deny a superseded cap.** If the loaded/presented genesis
-   for `owner` carries an epoch below the high-water, deny — a member can't be tricked into
-   authorizing against stale authority even if a stale genesis slipped into the vault.
-5. **Forced re-hydrate on a newer epoch.** When the app applies a `safes`-row update for a HELD
-   SAFE whose epoch > the loaded vault's epoch, trigger a vault re-hydrate (or a targeted
-   re-ingest of that SAFE's genesis) so the new biscuit is enforced on the very next `verify_on_apply`
-   — no stale-authority window. Wire at the inbound-apply / change-notification path in the app.
+**Eliminations (net-subtractive, app-layer):** delete the `safe_type_of`-based gating in
+`allow_set_safe_membership`; delete the type-coupling in `find_controlled_safe_of_type` (a controller
+may be ANY specified SAFE/key — keep choosing a sensible default but never *reject* by type); replace
+`count_human_owners`-at-revoke with the type-agnostic last-`owns` invariant at the funnel.
 
-**Trade-offs / out of scope (follow-on cards):** controller-copy (`safe_controllers`) freshness
-guard; the revoked device fail-closing its own UI on detected loss-of-membership; multi-SAFE
-cascade-rotation hardening (mandatory/idempotent); the live 2-device manual onboarding+revoke check
-(review's job). This card is net-ADDITIVE (a security feature, not an elimination) — the 0037
-net-subtractive rule does not apply.
+**Hardenings (aven-caps + app):** epoch = `dek_version`, stamped as a signed `authority_epoch(N)` fact
+in the genesis; `ingest_genesis_opened` + `authorize`/`authorize_signed_edit` reject epoch <
+per-SAFE high-water (unified with the existing DEK-downgrade `max dek_version`); the app forces a
+re-hydrate when a higher-epoch genesis for a held SAFE is applied.
+
+**Build slices (each independently verifiable; land in order):**
+- **S1 — universal model:** delete type-restriction rules + the OWNER/ADMIN naming consolidation;
+  `universal_ownership` + `owns_is_the_single_role` tests. (net-subtractive)
+- **S2 — last-owner invariant:** type-agnostic, at the funnel; `last_owner_invariant` test.
+- **S3 — authority epoch:** signed genesis fact + ingest/authorize high-water guard;
+  `authority_epoch` tests.
+- **S4 — forced re-hydrate + E2E:** re-hydrate on newer epoch; `revocation_epoch` two-vault test.
+
+**Out of scope (follow-on cards):** `safe_controllers` controller-copy freshness guard; the revoked
+device fail-closing its own UI on detected loss-of-membership; multi-SAFE cascade-rotation hardening;
+the live 2-device manual onboarding+revoke check (review's job).
 
 ## Steps
 
-1. aven-caps: add `authority_epoch(N)` fact to `mint_safe_genesis` + `mint_safe_genesis_with_controller`;
-   add `genesis_authority_epoch()` reader; thread the mint-time `dek_version` in. Unit-test the fact
-   round-trips through encode/decode.
-2. aven-caps: `ingest_genesis_opened(... , high_water: u64)` rejects `epoch < high_water`, returns the
-   accepted epoch (so the caller can bump high-water). Unit-test reject-stale / accept-newer.
-3. aven-caps: `authorize` / `authorize_signed_edit` deny when the effective genesis epoch for `owner`
-   is below the high-water. Unit-test superseded-genesis denial.
-4. app: feed the per-SAFE high-water (existing `identity_versions` max) into `ingest_genesis_opened`
-   at hydrate; persist/bump it on accept.
-5. app: forced re-hydrate — on applying a `safes` update for a held SAFE with a higher epoch than the
-   loaded vault, re-ingest/re-hydrate that SAFE's genesis. Wire at the inbound-apply path.
-6. app: the in-process two-vault `revocation_epoch` integration test (revoke → DenyPermanent at member,
-   replayed pre-revoke genesis rejected, newer-epoch forces re-hydrate).
-7. Build aven-caps + app(desktop-ai) + aven-node green; existing biscuit_resolver / owner_binder /
-   apply-gate suites stay green; run the new tests.
+1. **S1a** caps_ipc: delete the `safe_type_of` match gating in `allow_set_safe_membership` (any subject
+   admitted); delete the type-coupling in `find_controlled_safe_of_type` (controller = any specified
+   SAFE/key, sensible default kept, no rejection-by-type). Migrate `create_identity` accordingly.
+2. **S1b** aven-caps: assert + document the single role — `owns_is_the_single_role` test over
+   `OWNER_RIGHTS` / `grant_kind_caps`; clarify the value-owner (binding) vs `owns`-subject naming in docs.
+3. **S2** aven-caps: `mint_safe_genesis` / `rebuild_identity_biscuit_excluding` enforce ≥1 `owns`
+   subject (type-agnostic last-owner invariant); replace the `count_human_owners` revoke guard.
+4. **S3** aven-caps: `authority_epoch(N)` signed fact in genesis (N = `dek_version`),
+   `genesis_authority_epoch()` reader; `ingest_genesis_opened(..., high_water)` rejects `epoch < hw`
+   and returns the accepted epoch; `authorize`/`authorize_signed_edit` deny a below-hw genesis.
+5. **S4a** app: feed per-SAFE high-water (existing `identity_versions` max) into ingest at hydrate;
+   persist/bump on accept.
+6. **S4b** app: force re-hydrate on applying a higher-epoch `safes` update for a held SAFE
+   (inbound-apply/change path).
+7. Tests: `universal_ownership`, `owns_is_the_single_role`, `last_owner_invariant`, `authority_epoch`,
+   `revocation_epoch`. Build aven-caps + app(desktop-ai) + aven-node green; existing suites green.
 
 ## Files to touch
 
+- `app/src-tauri/src/avendb/caps_ipc.rs` — delete `safe_type_of` gating in `allow_set_safe_membership`;
+  de-type-couple `find_controlled_safe_of_type`; revoke path uses the funnel invariant not `count_human_owners`.
 - `libs/aven-caps/src/caps.rs` — `mint_safe_genesis` / `mint_safe_genesis_with_controller`
-  (`authority_epoch` fact), `genesis_authority_epoch()` reader, `ingest_genesis_opened` (epoch guard +
-  return accepted epoch), `authorize` (superseded-genesis denial).
-- `libs/aven-caps/src/ownership.rs` — `authorize_signed_edit` superseded-genesis denial; new
-  `authority_epoch` unit tests.
-- `app/src-tauri/src/avendb/engine.rs` — `hydrate_shell`: feed per-SAFE high-water (`identity_versions`
-  max) into `ingest_genesis_opened`; persist/bump high-water on accept.
-- `app/src-tauri/src/biscuit_resolver.rs` — ensure `verify_on_apply` authz reflects the epoch guard.
-- `app/src-tauri/src/avendb/mod.rs` (or the inbound-apply/change path) — forced re-hydrate on a
-  higher-epoch `safes` update for a held SAFE.
-- `libs/aven-caps/src/caps.rs` / `ownership.rs` test mods + an app `tests/revocation_epoch.rs`
-  (in-process two-vault integration test).
+  (`authority_epoch` fact + last-`owns` invariant), `genesis_authority_epoch()`, `ingest_genesis_opened`
+  (epoch guard + return), `authorize` (superseded-genesis denial), `rebuild_identity_biscuit_excluding`
+  (last-owner invariant); `owns_is_the_single_role` / `last_owner_invariant` / `authority_epoch` tests.
+- `libs/aven-caps/src/ownership.rs` — `authorize_signed_edit` superseded-genesis denial.
+- `app/src-tauri/src/avendb/engine.rs` — `hydrate_shell` feeds per-SAFE high-water into ingest.
+- `app/src-tauri/src/avendb/mod.rs` (inbound-apply/change path) — forced re-hydrate on higher epoch.
+- `app/src-tauri/src/biscuit_resolver.rs` — `verify_on_apply` reflects the epoch guard.
+- app `tests/` — `universal_ownership`, `revocation_epoch` (in-process two-vault).
 
 ## Acceptance criteria
 
-Each box checkable from the transcript (a command + its output proves it).
+Each box checkable from the transcript.
 
-- [ ] `cargo test -p aven-caps authority_epoch` passes — epoch is a signed genesis fact surviving
-      encode/decode; `ingest_genesis_opened` rejects `epoch < high_water` and accepts `>=`.
-- [ ] aven-caps: a cap rooted in a below-high-water (superseded) genesis is denied by
-      `authorize` / `authorize_signed_edit` (named test green).
-- [ ] `cargo test -p aven-os-app --features desktop-ai revocation_epoch` passes — post-revoke the
-      revoked signer's batch is `DenyPermanent` at the legit member; a replayed pre-revoke genesis is
-      rejected by ingest (cannot re-instate the revoked member); applying the newer-epoch genesis for a
-      held SAFE forces a re-hydrate (enforcement is immediate, no stale-authority window).
-- [ ] `cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node` exits 0.
-- [ ] No regression: existing `biscuit_resolver`, `owner_binder`, and aven-node apply-gate suites stay
-      green (the 0037 binding enforcement is intact).
+- [ ] `grep -rn 'find_controlled_safe_of_type\|safe_type_of' app/src-tauri/src` shows no type-RESTRICTION gating remains (`type` no longer rejects an owner).
+- [ ] `cargo test -p aven-os-app --features desktop-ai universal_ownership` — a SAFE admits another SAFE of any type AND a `did:key:` directly (old rules rejected these).
+- [ ] `cargo test -p aven-caps owns_is_the_single_role` — `owns` = OWNER_RIGHTS; no separate admin cap; only other tiers are `reads`/`replicate`.
+- [ ] `cargo test -p aven-caps last_owner_invariant` — a mint/revoke leaving zero `owns` subjects FAILS (type-agnostic).
+- [ ] `cargo test -p aven-caps authority_epoch` — epoch is a signed genesis fact (round-trips); ingest rejects epoch < high-water, accepts ≥; superseded-genesis cap denied.
+- [ ] `cargo test -p aven-os-app --features desktop-ai revocation_epoch` — post-revoke the revoked signer's batch is `DenyPermanent` at the member; replayed pre-revoke genesis rejected; newer epoch forces re-hydrate (immediate enforcement).
+- [ ] `cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node` exits 0; existing `biscuit_resolver` / `owner_binder` / apply-gate suites green.
+- [ ] The type-rule elimination is net-subtractive on `caps_ipc.rs` (`git diff --stat`).
 
 ## Verification
 
 ```bash
+grep -rn 'find_controlled_safe_of_type\|safe_type_of' app/src-tauri/src   # no type-restriction gating
+cargo test -p aven-caps owns_is_the_single_role
+cargo test -p aven-caps last_owner_invariant
 cargo test -p aven-caps authority_epoch
+cargo test -p aven-os-app --features desktop-ai universal_ownership
 cargo test -p aven-os-app --features desktop-ai revocation_epoch
 cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node
-# regression guard:
-cargo test -p aven-os-app --features desktop-ai biscuit_resolver
-cargo test -p aven-db owner_binder
+# regression: cargo test -p aven-os-app --features desktop-ai biscuit_resolver; cargo test -p aven-db owner_binder
 # (live 2-device revoke check is review's job, not part of the metric)
 ```
 
@@ -192,13 +179,17 @@ cargo test -p aven-db owner_binder
 
 Newest entry first.
 
-- `2026-06-14` — Discovery. Born mid-session from a live revocation bug found while testing board
-  0037 onboarding. Verified the enforcement model in code: the owner-binding + edit-sig + biscuit-chain
-  primitives are cryptographically sound and hold at untrusted relays/members; the gap is genesis
-  freshness/rollback (`ingest_genesis_opened` has no epoch guard) + no forced re-hydrate. Chose the
-  biscuit-native fix: a monotonic authority epoch (= `dek_version`) bound as a signed genesis fact +
-  a verifier high-water mark (unified with the DEK-downgrade defense) → post-sync rollback
-  unrepresentable; forced re-hydrate on a newer epoch → immediate enforcement. Sliced to epoch +
-  re-hydrate (the keystone); controller-copy freshness, fail-closed revoked-device UX, and cascade
-  hardening are follow-on cards. Made "done" provable via aven-caps `authority_epoch` tests + an
-  in-process two-vault `revocation_epoch` integration test (no live multi-device needed for the metric).
+- `2026-06-14` — Discovery (expanded under the compact/simplify/consolidate lens). Verified in code:
+  (a) the SAFE-in-SAFE type rules (`aven`←`human`, `spark`←`aven`, controller hierarchy) are arbitrary
+  app-layer exceptions — `aven-caps` core is already type-agnostic — so they collapse to ONE universal
+  owned-by-subjects model (`type` = UI label only); (b) there is no OWNER-vs-ADMIN tier — `owns` is the
+  single full-rights role, `reads`/`replicate` are orthogonal sharing tiers (the split is a value-owner
+  vs `owns`-subject naming overload); (c) last-admin anti-lockout is type-coupled + scattered → one
+  type-agnostic last-`owns` invariant at the genesis funnel. Plus the crypto rollback fix: a monotonic
+  authority epoch (= `dek_version`) bound as a signed genesis fact + verifier high-water (unified with
+  the DEK-downgrade defense) → post-sync rollback unrepresentable; forced re-hydrate on a newer epoch →
+  immediate enforcement. Sliced S1–S4 (model first, then crypto). Made "done" provable via aven-caps
+  unit tests + in-process two-vault `universal_ownership` / `revocation_epoch` (no live multi-device for
+  the metric). Follow-on cards: controller-copy freshness, fail-closed revoked-device UX, cascade.
+- `2026-06-14` — Original discovery (revocation epoch + re-hydrate only); superseded by the expanded
+  model-consolidation scope above.
