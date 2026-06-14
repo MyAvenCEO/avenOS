@@ -63,6 +63,25 @@ impl ResourceCoord {
 /// kept in sync by this note.
 pub const OWNER_BINDING_META_KEY: &str = "_owner_binding";
 
+/// Project the owning SAFE's UUID out of an [`OWNER_BINDING_META_KEY`] metadata string,
+/// WITHOUT verifying the signature (verification is the app's job on the apply path via
+/// `aven-caps`). The engine needs the owner only as a **query discriminator** — ownership
+/// truth still lives solely in the signed binding; this is a read-only projection of it,
+/// not a second source. It lets `filter_eq("$owner", …)` resolve against the immutable
+/// header instead of a mutable `owner` data column (board 0037).
+///
+/// Layout (must match `aven_caps::ownership::OwnerBinding::encode`, kept in sync by this
+/// note — the engine cannot depend on `aven-caps`): base64(no-pad) of
+/// `value_id(16) ‖ owner(16) ‖ sig(64) ‖ author_did`, so the owner is bytes `[16..32]`.
+pub fn owner_uuid_from_binding_meta(meta: &str) -> Option<uuid::Uuid> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD_NO_PAD
+        .decode(meta.as_bytes())
+        .ok()?;
+    let owner = bytes.get(16..32)?;
+    uuid::Uuid::from_slice(owner).ok()
+}
+
 /// Row-metadata key the per-row **edit signature** travels under (base64) — an Ed25519
 /// signature by the authoring device over the row's content digest, read back as opaque
 /// proof by [`CapabilityResolver::verify_on_apply`].
