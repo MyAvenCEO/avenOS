@@ -320,7 +320,7 @@ mod tests {
 	use std::collections::HashMap;
 
 	use aven_caps::caps::{
-		attenuate_add_owner_third_party, attenuate_add_reader_third_party,
+		attenuate_add_admin_third_party, attenuate_add_reader_third_party,
 		build_vault_from_signing_key, mint_safe_genesis, rebuild_identity_biscuit_excluding,
 		BiscuitIdentity, BiscuitVault,
 	};

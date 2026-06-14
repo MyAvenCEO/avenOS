@@ -6,7 +6,7 @@
 //! there is no claim race. See `docs/ServerRootedAvenCeoPlan.md`.
 
 use aven_caps::caps::{
-	attenuate_add_owner_third_party, biscuit_from_storage, build_vault_from_signing_key,
+	attenuate_add_admin_third_party, biscuit_from_storage, build_vault_from_signing_key,
 	decode_issuer_pubkey_b64, encode_issuer_pubkey_b64, identity_admins, mint_safe_genesis, safe_did,
 	BiscuitVault,
 };
@@ -339,8 +339,8 @@ pub async fn grant_first_human_admin(
 	};
 	let human_did = safe_did(human_uuid);
 
-	// Append owns(humanSAFE) (server-signed) and persist re-sealed genesis.
-	let new_chain = attenuate_add_owner_third_party(&vault.biscuit_kp, &chain, avenceo_id, &human_did)?;
+	// Append admin(humanSAFE) (server-signed) and persist re-sealed genesis.
+	let new_chain = attenuate_add_admin_third_party(&vault.biscuit_kp, &chain, avenceo_id, &human_did)?;
 	let new_genesis_b64 =
 		URL_SAFE_NO_PAD.encode(new_chain.to_vec().map_err(|e| format!("genesis_encode:{e:?}"))?);
 	let resealed_genesis =
