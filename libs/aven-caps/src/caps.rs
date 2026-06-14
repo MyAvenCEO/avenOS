@@ -1632,6 +1632,41 @@ mod tests {
 	}
 
 	#[test]
+	fn tier0_minimal_grant() {
+		// Board 0049: a TIER-0 network member is admitted to the avenCEO REGISTRY sub-group (the
+		// directory) ONLY — it reads the directory but is DENIED avenCEO's content. `extends` is
+		// one-directional (registry inherits avenCEO members, NOT the reverse), so a registry-only
+		// member cannot read avenCEO. This is "admission + directory, no roster-content decrypt".
+		let seed = "ceo.aven/testnet/abagana";
+		let mut founder = vault(&[1u8; 32]); // the avenCEO owner
+		let member = vault(&[2u8; 32]); // a TIER-0 network member
+		let avenceo = aven_ceo_identity(seed);
+		let registry = aven_ceo_registry_group(seed);
+
+		// avenCEO genesis (founder owns it) + a registry sub-group extending it.
+		let ceo = mint_safe_genesis(&founder, avenceo).unwrap();
+		founder.safes.insert(avenceo, BiscuitIdentity { owner: avenceo, biscuit: ceo });
+		let reg = mint_group_genesis_extending(&founder, registry, avenceo).unwrap();
+		// Admit the member as a registry READER (the TIER-0 directory grant).
+		let reg = attenuate_add_reader_third_party(&founder.biscuit_kp, &reg, registry, &member.signer_did)
+			.unwrap();
+		founder.safes.insert(registry, BiscuitIdentity { owner: registry, biscuit: reg });
+
+		// TIER-0 member READS the registry/profile directory…
+		authorize(&founder, registry, AccOp::Read, "profile", Some(uuid::Uuid::new_v4()), &member.signer_did)
+			.unwrap();
+		// …but is DENIED avenCEO content (not an avenCEO member; extends is one-directional).
+		assert!(
+			authorize(&founder, avenceo, AccOp::Read, "messages", Some(uuid::Uuid::new_v4()), &member.signer_did)
+				.is_err(),
+			"a registry-only TIER-0 member must NOT read avenCEO content"
+		);
+		// Inheritance sanity: the avenCEO owner (a parent member) DOES read the registry directory.
+		authorize(&founder, registry, AccOp::Read, "profile", Some(uuid::Uuid::new_v4()), &founder.signer_did.clone())
+			.unwrap();
+	}
+
+	#[test]
 	fn group_inherits_parent_members() {
 		let mut v = vault(&[11u8; 32]); // creator / admin
 		let reader = vault(&[12u8; 32]); // a parent member (delegated reader)
