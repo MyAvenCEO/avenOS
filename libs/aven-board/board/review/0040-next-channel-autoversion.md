@@ -23,7 +23,7 @@ push a unique prerelease tag. Versioning is **CalVer** (date-based, continuous
 release cycles) — not semver bump-from-commit-type.
 
 **This card is Milestone 1 only: tags + changelog, fully automatic. NO app build,
-NO upload, NO deploy.** Milestone 2 is a separate card ([[0039-next-channel-release-deploy]]).
+NO upload, NO deploy.** Milestone 2 is a separate card ([[0041-next-channel-release-deploy]]).
 
 ### Decisions locked in discovery (all confirmed by the user)
 
@@ -191,7 +191,7 @@ bun run lint
 ## Hand-off
 
 ```
-/aven-build 0038
+/aven-build 0040
 ```
 
 …or hand the condition straight to the goal loop:
@@ -208,4 +208,4 @@ Newest entry first.
 - `2026-06-14` — Build: implemented `scripts/next-version.ts` (pure CalVer derivation), `scripts/set-version.ts` (unified stamper, 19 files), `scripts/release-next.ts` (CI orchestrator), `commitlint.config.cjs`, `CHANGELOG.md` seed, and both workflows; added devDeps (semver, conventional-changelog-cli, @commitlint/*) + script entries. Verified: `next-version --channel next` → `26.6.1-next.1` (valid semver); stamper diff = exactly 19 version files on a clean tree; `changelog` non-empty; commitlint accepts `feat:` / rejects `nope`; both workflows pass yaml-lint; no build/deploy or semantic-release strings; `bun run check` exit 0; added files biome-clean. **Discrepancy from spec:** whole-repo `bun run lint` was already red (pre-existing format debt in 5 untouched files) — narrowed the gate to "added files pass biome" + flagged the debt as a follow-on. Moved build → review.
 - `2026-06-14` — Pivot to **CalVer**. Dropped semver bump-from-commit-type and semantic-release entirely; version is now `YY.M.micro` (unpadded month — `26.06.x` is invalid semver, `26.6.x` is legal), monthly-reset micro, derived by a pure bun script from date + git tags. No genesis tag needed. Tooling = custom bun derivation + conventional-changelog + `gh`. commitlint kept (now for changelog quality, not versioning). First next tag today → `v26.6.1-next.1`. Rewrote the card.
 - `2026-06-14` — (superseded) explored semantic-release + commit-analyzer bump rules, genesis tag, and an "explicit major marker" before the CalVer pivot made bump-decisions moot.
-- `2026-06-14` — Discovery: surveyed versioning (all `0.0.1`, zero tags, no changelog tooling, commits already conventional). Carved Milestone 1 (tags + changelog only) here; Milestone 2 (release + TestFlight + node deploy) → ideate card 0039. Moved ideate → discover.
+- `2026-06-14` — Discovery: surveyed versioning (all `0.0.1`, zero tags, no changelog tooling, commits already conventional). Carved Milestone 1 (tags + changelog only) here; Milestone 2 (release + TestFlight + node deploy) → ideate card 0041. Moved ideate → discover.
