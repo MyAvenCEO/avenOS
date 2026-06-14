@@ -315,7 +315,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "aven-ai"
-version = "0.0.1"
+version = "26.6.1-next.14"
 dependencies = [
  "bzip2",
  "half",
@@ -335,7 +335,7 @@ dependencies = [
 
 [[package]]
 name = "aven-brain"
-version = "0.0.1"
+version = "26.6.1-next.14"
 dependencies = [
  "aven-ai",
  "aven-caps",
@@ -354,7 +354,7 @@ dependencies = [
 
 [[package]]
 name = "aven-caps"
-version = "0.0.1"
+version = "26.6.1-next.14"
 dependencies = [
  "aven-db",
  "base64 0.22.1",
@@ -374,7 +374,7 @@ dependencies = [
 
 [[package]]
 name = "aven-db"
-version = "0.0.1"
+version = "26.6.1-next.14"
 dependencies = [
  "ahash",
  "async-trait",
@@ -408,7 +408,7 @@ dependencies = [
 
 [[package]]
 name = "aven-os-app"
-version = "0.0.1"
+version = "26.6.1-next.14"
 dependencies = [
  "ar",
  "async-trait",
@@ -449,7 +449,7 @@ dependencies = [
 
 [[package]]
 name = "aven-p2p"
-version = "0.0.1"
+version = "26.6.1-next.14"
 dependencies = [
  "async-trait",
  "aven-db",
@@ -5342,7 +5342,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6410,7 +6410,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-sandbox-quickjs"
-version = "0.1.0"
+version = "26.6.1-next.14"
 dependencies = [
  "rquickjs",
  "serde",
@@ -6422,7 +6422,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-self"
-version = "0.1.0"
+version = "26.6.1-next.14"
 dependencies = [
  "base64 0.22.1",
  "dirs 6.0.0",
@@ -6448,7 +6448,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-vault"
-version = "0.1.0"
+version = "26.6.1-next.14"
 dependencies = [
  "serde",
  "tauri",
