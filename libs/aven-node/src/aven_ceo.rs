@@ -92,22 +92,6 @@ pub async fn avenceo_genesis_b64(engine: &AvenDbClient, avenceo_id: Uuid) -> Res
 
 /// Ensure the server owns avenCEO: mint its genesis (server = owner) + a self
 /// keyshare if not already present. Idempotent — safe to call on every boot.
-/// Mint a signed owner-binding for a freshly generated server row id, as the metadata
-/// entry to stamp at create — so the server's avenCEO control rows carry a binding and
-/// pass the same verify-on-apply gate as everything else (no exclusions).
-fn owner_binding_meta(
-	signing: &SigningKey,
-	row_id: ObjectId,
-	owner: Uuid,
-) -> Result<std::collections::HashMap<String, String>, String> {
-	let binding = aven_caps::ownership::mint_owner_binding(signing, *row_id.uuid(), owner)?;
-	let mut meta = std::collections::HashMap::new();
-	meta.insert(
-		aven_caps::ownership::OWNER_BINDING_META_KEY.to_string(),
-		binding.to_meta_string(),
-	);
-	Ok(meta)
-}
 
 /// Seal a trust-root identity cell (`genesis_b64` / `issuer_pubkey_b64`) under the avenCEO
 /// DEK, byte-identically to the app's `seal_column_plain` so the hardened client can open it.
@@ -364,12 +348,10 @@ pub async fn grant_first_human_admin(
 		URL_SAFE_NO_PAD.encode(new_chain.to_vec().map_err(|e| format!("genesis_encode:{e:?}"))?);
 	let resealed_genesis =
 		seal_identity_cell(&dek, avenceo_id, sparks_tbl, "genesis_b64", dek_ver, &new_genesis_b64)?;
-	let upd_meta = owner_binding_meta(signing, sparks_oid, avenceo_id)?;
 	engine
-		.update_with_metadata(
+		.update(
 			sparks_oid,
 			vec![("genesis_b64".to_string(), Value::Text(resealed_genesis))],
-			upd_meta,
 		)
 		.await
 		.map_err(|e| format!("update genesis:{e:?}"))?;

@@ -111,9 +111,8 @@ async fn update_identity_genesis(
 		&mut patch,
 	)?;
 	let ops = patch_updates(&sparks_schema, patch)?;
-	let upd_meta = owner_binding_meta(&shell.signing_key, sparks_oid, identity)?;
 	client
-		.update_with_metadata(sparks_oid, ops, upd_meta)
+		.update(sparks_oid, ops)
 		.await
 		.map_err(format_avendb_err)?;
 	Ok(())
@@ -301,8 +300,7 @@ async fn upsert_controller_copy_row(
 		patch.insert("issuer_pubkey_b64".into(), JsonValue::String(issuer_b64));
 		seal_copy_cells(&mut patch, *oid.uuid())?;
 		let ops = patch_updates(&sc_schema, patch)?;
-		let meta = owner_binding_meta(&shell.signing_key, oid, owner_safe)?;
-		client.update_with_metadata(oid, ops, meta).await.map_err(format_avendb_err)?;
+		client.update(oid, ops).await.map_err(format_avendb_err)?;
 	} else {
 		let now_ms: i64 = std::time::SystemTime::now()
 			.duration_since(std::time::UNIX_EPOCH)
@@ -452,16 +450,14 @@ async fn cascade_rotate_one(
 			let mut patch = Map::new();
 			patch.insert("current_dek_version".into(), JsonValue::Number(new_v.into()));
 			let ops = patch_updates(&sparks_schema, patch)?;
-			let upd_meta = owner_binding_meta(&shell.signing_key, oid, safe_id)?;
-			client.update_with_metadata(oid, ops, upd_meta).await.map_err(format_avendb_err)?;
+			client.update(oid, ops).await.map_err(format_avendb_err)?;
 			break;
 		}
 	}
 
 	for (oid, recip) in stale_rows {
 		if !keeper(&recip) {
-			let del_meta = owner_binding_meta(&shell.signing_key, oid, safe_id)?;
-			let _ = client.delete_with_metadata(oid, del_meta).await;
+			let _ = client.delete(oid).await;
 		}
 	}
 	Ok(())
@@ -1589,8 +1585,7 @@ pub(crate) async fn avendb_ipc_aven_ceo_publish_profile(
 		&mut patch,
 	)?;
 	let ops = patch_updates(&signers_schema, patch)?;
-	let upd_meta = owner_binding_meta(&shell.signing_key, own_oid, identity_uuid)?;
-	client.update_with_metadata(own_oid, ops, upd_meta).await.map_err(format_avendb_err)?;
+	client.update(own_oid, ops).await.map_err(format_avendb_err)?;
 	Ok(())
 }
 
@@ -2008,9 +2003,8 @@ pub(crate) async fn avendb_ipc_spark_admin_revoke(
 		&mut patch,
 	)?;
 	let ops = patch_updates(&sparks_schema, patch)?;
-	let upd_meta = owner_binding_meta(&shell.signing_key, sparks_oid, identity_uuid)?;
 	client
-		.update_with_metadata(sparks_oid, ops, upd_meta)
+		.update(sparks_oid, ops)
 		.await
 		.map_err(format_avendb_err)?;
 
@@ -2027,8 +2021,7 @@ pub(crate) async fn avendb_ipc_spark_admin_revoke(
 			&& (recip == signer_did.as_str()
 				|| !crate::identity_acc::chain_still_member(&shell.vault, &new_biscuit, identity_uuid, recip))
 		{
-			let del_meta = owner_binding_meta(&shell.signing_key, oid, identity_uuid)?;
-			let _ = client.delete_with_metadata(oid, del_meta).await;
+			let _ = client.delete(oid).await;
 		}
 	}
 
@@ -2042,8 +2035,7 @@ pub(crate) async fn avendb_ipc_spark_admin_revoke(
 				if engine::uuid_cell_at(vals.as_slice(), own_ix)? == identity_uuid
 					&& matches!(vals.get(did_ix), Some(Value::Text(s)) if s.as_str() == signer_did.as_str())
 				{
-					let del_meta = owner_binding_meta(&shell.signing_key, oid, identity_uuid)?;
-					let _ = client.delete_with_metadata(oid, del_meta).await;
+					let _ = client.delete(oid).await;
 				}
 			}
 		}

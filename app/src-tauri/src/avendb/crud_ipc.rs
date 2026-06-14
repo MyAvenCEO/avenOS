@@ -73,25 +73,6 @@ pub(crate) async fn avendb_ipc_avendb_get(
 	}
 }
 
-/// Mint a signed owner-binding for a freshly generated `row_id` and return it as the
-/// row-metadata entry to stamp at create. EVERY identity-scoped create (data AND
-/// control-plane) routes a binding through this, so the row carries its proof on the
-/// wire and is verified on apply — the basis for deny-by-default (private by default).
-pub(crate) fn owner_binding_meta(
-	signing_key: &ed25519_dalek::SigningKey,
-	row_id: ObjectId,
-	owner: Uuid,
-) -> Result<std::collections::HashMap<String, String>, String> {
-	let binding =
-		aven_caps::ownership::mint_owner_binding(signing_key, *row_id.uuid(), owner)?;
-	let mut meta = std::collections::HashMap::new();
-	meta.insert(
-		aven_caps::ownership::OWNER_BINDING_META_KEY.to_string(),
-		binding.to_meta_string(),
-	);
-	Ok(meta)
-}
-
 async fn finish_spark_data_write(
 	app: &tauri::AppHandle,
 	avendb: &ManagedAvenDb,
@@ -205,9 +186,8 @@ pub(crate) async fn avendb_ipc_avendb_create(
 			);
 		}
 		let ops = patch_updates(&tbl, ph)?;
-		let upd_meta = owner_binding_meta(&shell.signing_key, oid, identity)?;
 		client
-			.update_with_metadata(oid, ops, upd_meta)
+			.update(oid, ops)
 			.await
 			.map_err(format_avendb_err)?;
 	}
@@ -326,9 +306,8 @@ pub(crate) async fn avendb_ipc_avendb_update(
 
 	let ops = patch_updates(&tbl, sealed_patch)?;
 
-	let upd_meta = owner_binding_meta(&shell.signing_key, oid, identity)?;
 	client
-		.update_with_metadata(oid, ops, upd_meta)
+		.update(oid, ops)
 		.await
 		.map_err(|e| {
 			let msg = format_avendb_err(e);
@@ -396,9 +375,8 @@ pub(crate) async fn avendb_ipc_avendb_delete(
 		Some(uuid),
 	)?;
 
-	let del_meta = owner_binding_meta(&shell.signing_key, oid, identity)?;
 	client
-		.delete_with_metadata(oid, del_meta)
+		.delete(oid)
 		.await
 		.map_err(|e| {
 			let msg = format_avendb_err(e);

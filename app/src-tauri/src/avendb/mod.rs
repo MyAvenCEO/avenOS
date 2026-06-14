@@ -206,7 +206,7 @@ pub(super) fn json_to_text_storage_cell(
 }
 
 /// JSON boundary → name-keyed cells for the universal schema-checked create
-/// (`create_checked*`, board 0020). This only decodes JSON per the column's type;
+/// (the one `create`, board 0020+0037). This only decodes JSON per the column's type;
 /// row resolution (missing-required error, nullable Null-fill) is owned by
 /// aven-db's `resolve_named_row`. Unknown keys error here — never silently dropped.
 pub(super) fn insert_values(

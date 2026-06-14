@@ -219,7 +219,7 @@ pub(super) fn identity_uuid_row(schema: &TableSchema, vals: &[Value]) -> Result<
 	uuid_cell_at(vals, ix)
 }
 
-/// Owner identity from a name-keyed row (the `create_checked` input shape, board 0020).
+/// Owner identity from a name-keyed row (the `create` input shape, board 0020+0037).
 pub(super) fn identity_uuid_named(
 	vals: &std::collections::HashMap<String, Value>,
 ) -> Result<Uuid, String> {
