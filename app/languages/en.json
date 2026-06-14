@@ -596,7 +596,7 @@
 			},
 			"accessLevel": "Access level",
 			"grantAccess": "Grant access",
-			"quickRelay": "Sync on the connected aven",
+			"quickRelay": "Relay to the connected aven",
 			"capsLegendTitle": "How these permissions work",
 			"capDesc": {
 				"read": "Holds the key — can decrypt and read all of this identity's data.",

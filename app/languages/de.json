@@ -583,7 +583,7 @@
 			},
 			"accessLevel": "Zugriffsstufe",
 			"grantAccess": "Zugriff gewähren",
-			"quickRelay": "Auf dem verbundenen Aven synchronisieren",
+			"quickRelay": "An den verbundenen Aven relayen",
 			"capsLegendTitle": "Wie diese Berechtigungen funktionieren",
 			"capDesc": {
 				"read": "Hält den Schlüssel — kann die Daten dieser Identität entschlüsseln und lesen.",
