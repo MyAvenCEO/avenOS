@@ -48,8 +48,11 @@ function main(): void {
 
 	run('git add -A')
 	run(`git commit -m "chore(release): ${tag} [skip ci]"`)
-	run(`git tag ${tag}`)
-	run('git push origin HEAD --follow-tags')
+	// Annotated tag + EXPLICIT tag push: `--follow-tags` skips lightweight tags, so
+	// push the ref and the tag separately to guarantee the tag lands before the release.
+	run(`git tag -a ${tag} -m ${tag}`)
+	run('git push origin HEAD')
+	run(`git push origin ${tag}`)
 
 	// GitHub prerelease for the `next` channel (gh is preinstalled on GitHub runners).
 	run(`gh release create ${tag} --prerelease --title ${tag} --generate-notes`)
