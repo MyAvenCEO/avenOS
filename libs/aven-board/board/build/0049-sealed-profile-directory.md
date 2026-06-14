@@ -110,6 +110,18 @@ cd app && bun run check && bun test tests
 
 Newest first.
 
+- `2026-06-15` — **Build started; card → build/.** Landed the one bounded, independent, verifiable
+  piece: the label SSOT `grants.tier0` = **"TIER-0"** (en+de), replacing "Invited" (i18n-access-labels
+  test green). **The remainder (S1–S3) is deliberately NOT bashed at session-tail** — it is deep,
+  security-critical crypto plumbing whose only real proof is a live 2-device run (the relay must see
+  only ciphertext): S1 = a SEALED `profile` table owned by the avenCEO registry sub-group
+  (`aven_ceo_registry_group`) with its OWN DEK domain (manifest table + `mint_group_genesis_extending`
+  + hydrate loading the registry-group DEK + sealing profile cells under the sub-group AAD coordinates,
+  the [[identities-sealed-cell-aad-row-split]] failure class) + seal `safes.username_slug`; S2 = migrate
+  discovery to read the sealed `profile`; S3 = `avendb_ipc_aven_ceo_add_member` → registry-group
+  membership (directory DEK) + admission/quota/rate ONLY (drop full reads + content keyshare) +
+  `tier0_minimal_grant` (needs S1's DEK domain first). Handed to `/goal` for a focused continuation with
+  the flush + live 2-device validation. Card stays in build/.
 - `2026-06-15` — Discovery (rewritten around the sealed profile-directory, per the plaintext audit).
   Audit found content fully sealed but the roster plaintext (membership + trust graph readable by the
   blind relay) and TIER-0 over-granted full roster `reads` + decrypt keyshare. Confirmed with the user:

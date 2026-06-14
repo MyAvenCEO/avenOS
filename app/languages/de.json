@@ -579,7 +579,7 @@
 				"admin": "Admin",
 				"reader": "Leser",
 				"relay": "Relay",
-				"tier0": "Eingeladen"
+				"tier0": "TIER-0"
 			},
 			"accessLevel": "Zugriffsstufe",
 			"grantAccess": "Zugriff gewähren",

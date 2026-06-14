@@ -592,7 +592,7 @@
 				"admin": "Admin",
 				"reader": "Reader",
 				"relay": "Relay",
-				"tier0": "Invited"
+				"tier0": "TIER-0"
 			},
 			"accessLevel": "Access level",
 			"grantAccess": "Grant access",
