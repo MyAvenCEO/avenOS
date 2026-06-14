@@ -581,6 +581,24 @@
 				"relay": "Relay",
 				"tier0": "TIER-0"
 			},
+			"predicate": {
+				"owns": "owns",
+				"reads": "reads",
+				"replicate": "replicate",
+				"grant": "grant"
+			},
+			"scope": {
+				"safe": "die ganze SAFE",
+				"directory": "das Verzeichnis"
+			},
+			"factSummary": {
+				"owns": "Volle Kontrolle über {scope} (lesen, schreiben, löschen, zulassen, Schlüssel rotieren)",
+				"reads": "Liest {scope}",
+				"replicate": "Blindes Relay von {scope} — speichert & leitet weiter, hält keinen Schlüssel",
+				"grant": "Eingegrenzte Zuteilung auf {scope}"
+			},
+			"networkPolicyNote": "Netzwerk-Richtlinie (keine Zuteilung pro Mitglied): das Relay begrenzt jede Identität auf 10 MB Speicher und drosselt eingehende Schreibvorgänge — vom aven-node durchgesetzt, für alle gleich.",
+			"noFacts": "Keine Berechtigungen auf dieser SAFE.",
 			"accessLevel": "Zugriffsstufe",
 			"willGrant": "Gewährt",
 			"grantAccess": "Zugriff gewähren",

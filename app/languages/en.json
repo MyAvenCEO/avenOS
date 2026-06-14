@@ -594,6 +594,24 @@
 				"relay": "Relay",
 				"tier0": "TIER-0"
 			},
+			"predicate": {
+				"owns": "owns",
+				"reads": "reads",
+				"replicate": "replicate",
+				"grant": "grant"
+			},
+			"scope": {
+				"safe": "the whole SAFE",
+				"directory": "the directory"
+			},
+			"factSummary": {
+				"owns": "Full control of {scope} (read, write, delete, admit, rotate key)",
+				"reads": "Reads {scope}",
+				"replicate": "Blind relay of {scope} — stores & forwards, holds no key",
+				"grant": "Scoped grant on {scope}"
+			},
+			"networkPolicyNote": "Network policy (not a per-member grant): the relay caps every identity at 10 MB storage and rate-limits inbound writes — enforced by the aven-node, equally for all.",
+			"noFacts": "No capabilities on this SAFE.",
 			"accessLevel": "Access level",
 			"willGrant": "Will grant",
 			"grantAccess": "Grant access",
