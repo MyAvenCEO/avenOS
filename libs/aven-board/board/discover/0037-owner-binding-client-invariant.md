@@ -5,7 +5,7 @@ owner: claude (aven-db + aven-caps + app + relay)
 created: 2026-06-14
 updated: 2026-06-14
 tags: [aven-db, aven-caps, security, sync, onboarding, ssot, elimination]
-goal: "Ownership is an aven-db core primitive — every value is intrinsically `(id, owner, data)` with the owner carried ONLY by the immutable signed owner-binding, and the owner-binding sprawl is eliminated to one owned CRUD. Provable from command output: (1) ELIMINATIONS — each grep returns ZERO hits: `grep -rn '\"owner\"' libs/aven-schema/schema.manifest.json` (column gone from all tables); `grep -rn 'owner_scoped' libs/aven-db/src libs/aven-schema` (no flag); `grep -rn 'owner_binding_meta\\|owner_invariant_ok\\|create_checked\\|create_owned\\|create_checked_with_id_and_metadata\\|update_with_metadata\\|delete_with_metadata\\|existing_binding\\|owner_binding_target\\|already_bound' libs app` (every legacy symbol gone — one `create(table, owner, fields)` is the sole owned-create, and update/delete carry the binding as value identity, never re-stamp it). (2) `cargo test -p aven-db owner_binder` passes the rewritten owned-CRUD tests (create requires an owner+binder or fails closed; update/delete preserve the create-time binding; ownership reads back from the binding). (3) `cargo build -p aven-db -p aven-node -p aven-os-app --features desktop-ai` exits 0; aven-db + aven-node suites green. (4) CONSTRAINT held: every synced batch still carries the binding AND an edit-sig that covers it (no relay can strip ownership in flight) — proven by the relay/client `verify_on_apply` tests staying green. (5) LIVE: a freshly-flushed relay + fresh device completes first-human onboarding with ZERO `relay-deny[no-binding]` and `granted FIRST human SAFE admin` fires (recorded)."
+goal: "Ownership is an aven-db core primitive — every value is intrinsically `(id, owner, data)` with the owner carried ONLY by the immutable signed owner-binding, and the owner-binding sprawl is eliminated to one owned CRUD. Provable from command output: (1) ELIMINATIONS — each grep returns ZERO hits: `grep -rn '\"owner\"' libs/aven-schema/schema.manifest.json` (column gone from all tables); `grep -rn 'owner_scoped' libs/aven-db/src libs/aven-schema` (no flag); `grep -rn 'owner_binding_meta\\|owner_invariant_ok\\|create_checked\\|create_owned\\|create_checked_with_id_and_metadata\\|update_with_metadata\\|delete_with_metadata\\|existing_binding\\|owner_binding_target\\|already_bound' libs app` (every legacy symbol gone — one `create(table, owner, fields)` is the sole owned-create, and update/delete carry the binding as value identity, never re-stamp it). (2) `cargo test -p aven-db owner_binder` passes the rewritten owned-CRUD tests (create requires an owner+binder or fails closed; update/delete preserve the create-time binding; ownership reads back from the binding). (3) `cargo build -p aven-db -p aven-node -p aven-os-app --features desktop-ai` exits 0; aven-db + aven-node suites green. (4) CONSTRAINT held: every synced batch still carries the binding AND an edit-sig that covers it (no relay can strip ownership in flight) — proven by the relay/client `verify_on_apply` tests staying green. (5) LIVE: a freshly-flushed relay + fresh device completes first-human onboarding with ZERO `relay-deny[no-binding]` and `granted FIRST human SAFE admin` fires (recorded). (6) ELIMINATION (rule-measured): `git diff --stat` is NET-SUBTRACTIVE (deletions > insertions) across the surface, NO shim/fallback/parallel path remains (`grep already_bound\\|owner_binding_target\\|fallback` → 0), and the now-dead metadata-passing wrappers (`insert_with_id_and_metadata`/`update_with_metadata`/`delete_with_metadata`/`create_checked_with_id_and_metadata`) are deleted at every layer."
 ---
 
 # Ownership is an aven-db core primitive (one owned CRUD)
@@ -59,8 +59,10 @@ onboarding works against a freshly-flushed relay. Completion = the frontmatter `
 > owner carried ONLY by the immutable signed owner-binding — proven by: the elimination greps all
 > return zero; `cargo test -p aven-db owner_binder` green; `cargo build -p aven-db -p aven-node
 > -p aven-os-app --features desktop-ai` exits 0 with aven-db + aven-node suites green; every synced
-> batch still carries binding + covering edit-sig (verify_on_apply tests green); and a freshly-flushed
-> relay + fresh device onboards with zero `relay-deny[no-binding]` and the admin grant fires.
+> batch still carries binding + covering edit-sig (verify_on_apply tests green); a freshly-flushed
+> relay + fresh device onboards with zero `relay-deny[no-binding]` and the admin grant fires; and the
+> change is net-subtractive (`git diff --stat`: deletions > insertions) with no shim/fallback/parallel
+> path and the dead `*_with_metadata` wrappers deleted at every layer.
 
 ## Approach (irreducible owned-CRUD — eliminate, don't optimize)
 
@@ -84,6 +86,25 @@ onboarding works against a freshly-flushed relay. Completion = the frontmatter `
 - **Relay/resolver:** every value row requires a valid binding + covering edit-sig (already
   fail-closed on main); with the column gone, the owner-relabel guard's job is done by immutability.
 - **Out of scope:** the schema catalogue (non-value infrastructure, separate path/trust).
+
+### Elimination discipline (from the compact/simplify/consolidate rule)
+
+This is an **elimination, not an addition** — measured the rule's way:
+- **Net-subtractive.** The owner-binding surface must end with **more lines deleted than added** —
+  `git diff --stat` over the build proves it. If the diff is net-positive, the consolidation failed
+  (we added a layer instead of removing the source).
+- **One universal owned-CRUD interface**, not N ad-hoc paths. `create / read / update / delete` (owner
+  intrinsic) replaces ~26 `owner_binding_meta` + `*_with_metadata` + `create_*` variants. The rule's
+  DRY test: one generic interface for all moving pieces, module-specific ones deleted.
+- **No shim, fallback, parallel path, or commented-out code** — the exact trap to avoid (this session
+  produced an `already_bound`/column-decode fallback that had to be reverted). 100% migrate every call
+  site, *then* delete; never leave the old path beside the new one. The stashed owner-channel WIP is
+  either fully integrated or dropped — not a second path.
+- **Question existence of every symbol touched.** After deleting `owner_binding_meta` etc., the
+  metadata-passing **plumbing wrappers become dead** — `insert_with_id_and_metadata`,
+  `update_with_metadata`, `delete_with_metadata`, `create_checked_with_id_and_metadata` at the
+  runtime/client layers: if owner-binding was their only caller, **delete them too** (don't leave dead
+  wrappers). Sweep adjacent confirmed-dead code on the surface you touch.
 
 ## Steps
 
@@ -121,6 +142,9 @@ onboarding works against a freshly-flushed relay. Completion = the frontmatter `
 - [ ] Every synced batch carries binding + covering edit-sig — `verify_on_apply` relay/client tests green (no relay can strip ownership).
 - [ ] **Delegation roots in the binding**: biscuit authorization is checked against `binding.owner` (the value's true owner) and no other owner source — per-SAFE, per-op (`peers`→Admit, `keyshares`→RotateDek, `delete`→Delete, else Write). Proven by the `biscuit_resolver` / `authorize_signed_edit` tests staying green; making ownership immutable makes the owner-relabel→bypass attack unrepresentable.
 - [ ] Live: freshly-flushed relay + fresh first-human onboarding → zero `relay-deny[no-binding]`, `granted FIRST human SAFE admin` fires (recorded).
+- [ ] **Net-subtractive** (elimination, not addition): `git diff --stat` for the build shows **more deletions than insertions** across the owner-binding surface (record the `N insertions(+), M deletions(-)` line; M > N).
+- [ ] **No shim / fallback / parallel path / dead code**: `grep -rn 'already_bound\|owner_binding_target\|fallback\|transitional\|legacy owner\|#\[allow(deprecated)\]' libs app` → 0; no commented-out old owner code; the stashed owner-channel WIP is integrated or dropped, not a second path.
+- [ ] **Dead plumbing wrappers deleted**: `grep -rn 'insert_with_id_and_metadata\|update_with_metadata\|delete_with_metadata\|create_checked_with_id_and_metadata' libs app` → 0 (owner-binding was their only use; gone at the runtime + client layers too).
 
 ## Verification
 
