@@ -184,6 +184,9 @@ jobs:
       - name: Add the iOS Rust target
         run: rustup target add aarch64-apple-ios
 
+      - name: Install Pillow (generate-ios-icons.py needs PIL)
+        run: python3 -m pip install --break-system-packages --quiet Pillow
+
       - name: Materialize signing cert + iOS provisioning profile + API key
         # tauri-ios-asc.ts (manual CI signing) reads these PATHS and lets Tauri import the
         # cert into a keychain via IOS_CERTIFICATE — so no manual keychain step is needed here.
