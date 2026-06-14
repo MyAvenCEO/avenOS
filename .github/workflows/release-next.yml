@@ -188,6 +188,11 @@ jobs:
       - name: Set marketing version to the stable CalVer (strip -next.N for App Store)
         run: bun run set-version "$(bun run --silent next-version)"
 
+      - name: Select latest Xcode (App Store requires the iOS 26 SDK)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
       - name: Add the iOS Rust target
         run: rustup target add aarch64-apple-ios
 
