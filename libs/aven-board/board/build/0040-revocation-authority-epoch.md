@@ -166,7 +166,7 @@ cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node
 ## Hand-off
 
 ```
-/aven-build 0038
+/aven-build 0040
 ```
 
 …or hand the condition straight to the goal loop:

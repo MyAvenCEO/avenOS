@@ -1204,7 +1204,7 @@ mod tests {
 
 	#[test]
 	fn owns_is_the_single_role() {
-		// Board 0038: `owns` IS the single full-rights role — it carries `admit` + `rotate_dek`,
+		// board 0040: `owns` IS the single full-rights role — it carries `admit` + `rotate_dek`,
 		// so it IS "admin". There is no separate admin tier. `reads`/`replicate` are orthogonal
 		// SHARING tiers, not an admin hierarchy. Any other label grants nothing (no phantom role).
 		assert_eq!(grant_kind_caps("owns"), OWNER_RIGHTS.to_vec());
@@ -1219,7 +1219,7 @@ mod tests {
 
 	#[test]
 	fn last_owner_invariant() {
-		// Board 0038: a SAFE can never reach zero `owns` subjects (type-agnostic anti-lockout).
+		// board 0040: a SAFE can never reach zero `owns` subjects (type-agnostic anti-lockout).
 		// The minting owner is structurally permanent — `mint_safe_genesis` re-grants it on every
 		// re-mint — so excluding ANY subject (even the owner's own DID) still leaves ≥1 owner,
 		// and the fail-closed guard in `rebuild_identity_biscuit_excluding` backstops the rest.

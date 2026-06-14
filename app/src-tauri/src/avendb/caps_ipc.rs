@@ -522,7 +522,7 @@ pub(crate) async fn avendb_ipc_spark_admin_add(
 		return Err("cannot grant a identity to your own DID".into());
 	}
 
-	// Ownership is type-agnostic (board 0038): any did:key or did:safe subject may be admitted.
+	// Ownership is type-agnostic (board 0040): any did:key or did:safe subject may be admitted.
 	let is_safe_member = signer_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX);
 
 	if !is_safe_member {
@@ -757,7 +757,7 @@ pub(crate) async fn avendb_ipc_spark_reader_add(
 		return Err("cannot grant read to your own DID".into());
 	}
 
-	// Ownership is type-agnostic (board 0038): any did:key or did:safe subject may be admitted.
+	// Ownership is type-agnostic (board 0040): any did:key or did:safe subject may be admitted.
 	let is_safe_member = signer_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX);
 
 	if !is_safe_member {
@@ -1355,7 +1355,7 @@ pub(crate) async fn avendb_ipc_aven_ceo_add_member(
 	// avenCEO (an aven SAFE) admits human did:safe owners OR did:key signers. The network
 	// invite prefers a person's human did:safe — the SYNC/membership cap then lives on the
 	// human SAFE, and its device signers inherit it through SAFE membership.
-	// Ownership is type-agnostic (board 0038): ANY subject — a did:key signer or a did:safe
+	// Ownership is type-agnostic (board 0040): ANY subject — a did:key signer or a did:safe
 	// (any SAFE type) — may be admitted. No type-restriction gate; `type` is a UI label only.
 
 	// did:key members are direct P2P sync peers; did:safe members receive keys via the
@@ -1789,7 +1789,7 @@ pub(crate) async fn avendb_ipc_spark_admin_revoke(
 		}
 	}
 
-	// Anti-lockout (board 0038): ownership is type-agnostic — a SAFE must keep ≥1 `owns`
+	// Anti-lockout (board 0040): ownership is type-agnostic — a SAFE must keep ≥1 `owns`
 	// subject (any key or SAFE), NOT "≥1 human". That invariant is enforced fail-closed
 	// INSIDE `rebuild_identity_biscuit_excluding` (it returns Err if the re-mint would
 	// leave zero owners), BEFORE any DB mutation — so the single core check above is the
