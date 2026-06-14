@@ -1,13 +1,16 @@
 #!/usr/bin/env bun
 /**
  * Stamp ONE unified version across the whole monorepo — the "standardize across
- * subpackages" core. Rewrites only the version field in:
+ * subpackages" core. Rewrites only version fields in:
  *   - every workspace package.json (app, libs/*, docs — NOT ARCHIVE/* or root)
  *   - every first-party Cargo.toml `[package].version` (libs/**, app/src-tauri)
+ *   - **internal** crate dependency requirements inside those Cargo.toml (so e.g.
+ *     `aven-db = { version = "X", … }` tracks aven-db's own version — external deps
+ *     like tokio are left untouched). Without this, bumping a crate past `^0.0.1`
+ *     breaks cargo resolution for any sibling that pins it.
  *   - app/src-tauri/tauri.conf.json
  *
- * Idempotent and surgical: touches nothing but the version line, so a release
- * commit's diff is only version-bearing files.
+ * Idempotent and surgical: touches only version-bearing lines.
  *
  *   bun ./scripts/set-version.ts 26.6.1-next.1
  */
@@ -32,8 +35,45 @@ function setJsonVersion(rel: string, version: string): boolean {
 	return true
 }
 
-/** Replace only the version under the first `[package]` table, never a dependency spec. */
-function setCargoVersion(rel: string, version: string): boolean {
+/** The crate name declared under this Cargo.toml's `[package]` table, if any. */
+function cargoPackageName(rel: string): string | null {
+	const file = path.join(repoRoot, rel)
+	let raw: string
+	try {
+		raw = readFileSync(file, 'utf8')
+	} catch {
+		return null
+	}
+	let inPackage = false
+	for (const line of raw.split('\n')) {
+		const t = line.trim()
+		if (t.startsWith('[')) inPackage = t === '[package]'
+		if (inPackage) {
+			const m = t.match(/^name\s*=\s*"([^"]+)"/)
+			if (m) return m[1]
+		}
+	}
+	return null
+}
+
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** Rewrite an internal crate dep's version on a single line, if present. */
+function rewriteDepLine(line: string, internal: Set<string>, version: string): string {
+	for (const n of internal) {
+		const esc = escapeRe(n)
+		// inline table:  name = { version = "X", … }
+		const table = new RegExp(`^(\\s*${esc}\\s*=\\s*\\{[^}]*\\bversion\\s*=\\s*")[^"]*(")`)
+		if (table.test(line)) return line.replace(table, `$1${version}$2`)
+		// bare string:   name = "X"
+		const bare = new RegExp(`^(\\s*${esc}\\s*=\\s*")[^"]*(")`)
+		if (bare.test(line)) return line.replace(bare, `$1${version}$2`)
+	}
+	return line
+}
+
+/** Set `[package].version` and stamp internal dep requirements; leave external deps alone. */
+function setCargo(rel: string, version: string, internal: Set<string>): boolean {
 	const file = path.join(repoRoot, rel)
 	let raw: string
 	try {
@@ -43,14 +83,22 @@ function setCargoVersion(rel: string, version: string): boolean {
 	}
 	const lines = raw.split('\n')
 	let inPackage = false
+	let pkgDone = false
 	let changed = false
 	for (let i = 0; i < lines.length; i++) {
 		const t = lines[i].trim()
 		if (t.startsWith('[')) inPackage = t === '[package]'
-		if (inPackage && /^version\s*=/.test(t)) {
-			lines[i] = lines[i].replace(/version\s*=\s*"[^"]*"/, `version = "${version}"`)
+		if (inPackage && !pkgDone && /^version\s*=/.test(t)) {
+			const next = lines[i].replace(/version\s*=\s*"[^"]*"/, `version = "${version}"`)
+			if (next !== lines[i]) changed = true
+			lines[i] = next
+			pkgDone = true
+			continue
+		}
+		const next = rewriteDepLine(lines[i], internal, version)
+		if (next !== lines[i]) {
+			lines[i] = next
 			changed = true
-			break
 		}
 	}
 	if (!changed) return false
@@ -83,12 +131,21 @@ function main(): void {
 	]
 	const cargoTargets = [...scan('libs/**/Cargo.toml'), ...scan('app/src-tauri/Cargo.toml')]
 
+	// Every first-party crate name → so we only rewrite INTERNAL dep requirements.
+	const internal = new Set<string>()
+	for (const rel of cargoTargets) {
+		const name = cargoPackageName(rel)
+		if (name) internal.add(name)
+	}
+
 	let count = 0
 	for (const rel of jsonTargets) if (setJsonVersion(rel, version)) count++
-	for (const rel of cargoTargets) if (setCargoVersion(rel, version)) count++
+	for (const rel of cargoTargets) if (setCargo(rel, version, internal)) count++
 	if (setJsonVersion('app/src-tauri/tauri.conf.json', version)) count++
 
-	console.log(`set-version: stamped ${version} across ${count} files`)
+	console.log(
+		`set-version: stamped ${version} across ${count} files (${internal.size} internal crates)`
+	)
 }
 
 main()
