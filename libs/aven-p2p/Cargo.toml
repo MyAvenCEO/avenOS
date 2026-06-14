@@ -1,6 +1,6 @@
 [package]
 name = "aven-p2p"
-version = "26.6.1-next.14"
+version = "26.6.1-next.15"
 edition = "2021"
 description = "AvenOS sync transport — authenticated TLS ServerSyncTransport + ServerListener (N-client fan-out) over the avenDB SyncTransport seam."
 license = "MIT OR Apache-2.0"

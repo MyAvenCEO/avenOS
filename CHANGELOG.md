@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.14...v) (2026-06-14)
+
+
+### Bug Fixes
+
+* **aven-caps:** update cap_report_reflects_biscuit_grants to raw-facts API ([581236b](https://github.com/MyAvenCEO/avenOS/commit/581236b82bf027fd0e19e9f2fea8713ba45346fe))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.13...v) (2026-06-14)
 
 
