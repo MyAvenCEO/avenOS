@@ -134,9 +134,21 @@ export type IdentityGrant = 'admin' | 'reader' | 'relay'
 /** One subject's caps on a identity, derived from the biscuit by `identity_cap_report`. */
 export type IdentitySubjectCaps = {
 	did: string
+	/** PRIMARY (highest-rank) role. */
 	grant: IdentityGrant
+	/** EVERY named role this DID holds (admin/reader/relay), rank-ordered — the UI lists them
+	 *  all so no role hides behind the primary. Empty when the subject has only granular grants. */
+	roles: IdentityGrant[]
 	/** Effective caps, e.g. read, write, delete, admit, rotate_dek, replicate. */
 	caps: string[]
+}
+
+/** The role → caps SSOT (`grant_kind_caps`): the exact caps each role applies. Powers the
+ *  GIVE ACCESS preview so the form shows what a grant confers BEFORE pressing the button. */
+export type RoleCapsMap = Record<string, string[]>
+
+export async function roleCaps(): Promise<RoleCapsMap> {
+	return avenDbRuntime<RoleCapsMap>('roleCaps', {})
 }
 
 export type IdentityAdminListReply = {

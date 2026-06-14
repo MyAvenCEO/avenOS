@@ -1555,8 +1555,17 @@ pub(crate) async fn avendb_ipc_aven_ceo_membership(
 	}
 	// Merely HYDRATING the avenCEO genesis is NOT membership — the genesis syncs widely, so a
 	// device can hold the identity in its vault with no grant at all. Membership requires an
-	// actual cap to THIS device (a `reads` or `replicate` grant). Without one, the device has
-	// only *seen* avenCEO and must stay on the invite gate — no auto-progress without caps.
+	// actual credential. Board 0049: the network-admission credential is holding the avenCEO
+	// REGISTRY sub-group DEK (every TIER-0 member is wrapped it at add_member, and it's
+	// unwrapped here in hydrate whether the member is a did:key or did:safe). That is the
+	// decryption-grounded signal of "admitted to the network" — it works transitively (the
+	// keyshare rides the SAFE wrap key) where a direct DID match on the biscuit does not.
+	let registry_id = crate::identity_acc::derive_subgroup_id(identity_uuid, "registry");
+	if shell.deks.keys().any(|(sid, _)| *sid == registry_id) {
+		return Ok("member".to_string());
+	}
+	// Legacy fallback: a direct `reads`/`replicate` grant to THIS device's signer (pre-0049
+	// admission, or a non-registry relay-style admission).
 	let did = shell.signer_did.trim();
 	let is_reader = crate::identity_acc::identity_readers(&bisc.biscuit, identity_uuid)?
 		.iter()
@@ -1569,6 +1578,28 @@ pub(crate) async fn avendb_ipc_aven_ceo_membership(
 	} else {
 		Ok("none".to_string())
 	}
+}
+
+/// The role → caps SSOT (board 0047 `grant_kind_caps`), surfaced so the GIVE ACCESS form can
+/// PREVIEW the exact caps a role will apply BEFORE the grant — the UI defines no cap vocabulary
+/// of its own. Keyed by role name (`admin`/`reader`/`relay`); each value is the cap list.
+pub(crate) fn avendb_ipc_role_caps() -> std::collections::BTreeMap<String, Vec<String>> {
+	let mut m = std::collections::BTreeMap::new();
+	for role in ["admin", "reader", "relay"] {
+		m.insert(
+			role.to_string(),
+			crate::identity_acc::grant_kind_caps(role).iter().map(|c| c.to_string()).collect(),
+		);
+	}
+	// TIER-0 (board 0049): the avenCEO `reader` button admits a network member via
+	// avendb_ipc_aven_ceo_add_member — which grants the registry DIRECTORY read + a BLIND
+	// admission (the `relay` bundle: replicate/quota/rate_limit), NOT a plain `read`. Assemble
+	// the preview from the SSOT relay bundle + the `directory` cap (the same cap
+	// identity_cap_report emits for a registry-scoped read) so the chip set is honest.
+	let mut tier0 = vec!["directory".to_string()];
+	tier0.extend(crate::identity_acc::grant_kind_caps("relay").iter().map(|c| c.to_string()));
+	m.insert("tier0".to_string(), tier0);
+	m
 }
 
 /// Self-healing keyshare invariant: every transitive OWNS signer of a SAFE this
@@ -1672,8 +1703,11 @@ async fn finish_spark_admin_grant(
 #[serde(rename_all = "camelCase")]
 pub struct SubjectCapsDto {
 	pub did: String,
-	/// `owns` | `reads` | `replicate`
+	/// PRIMARY (highest-rank) role: `admin` | `reader` | `relay` | `member`.
 	pub grant: String,
+	/// EVERY named role this DID holds (admin/reader/relay), rank-ordered — the UI lists them
+	/// all so no role hides behind the primary. Empty when only granular grants (`grant`="member").
+	pub roles: Vec<String>,
 	/// Effective caps (e.g. `read`, `write`, `delete`, `admit`, `rotate_dek`, `replicate`).
 	pub caps: Vec<String>,
 }
@@ -1731,6 +1765,7 @@ pub(crate) async fn avendb_ipc_spark_admin_list(
 		.map(|s| SubjectCapsDto {
 			did: s.did,
 			grant: s.grant.to_string(),
+			roles: s.roles.iter().map(|r| r.to_string()).collect(),
 			caps: s.caps.iter().map(|c| c.to_string()).collect(),
 		})
 		.collect();
