@@ -122,9 +122,8 @@ pub(crate) async fn avendb_ipc_avendb_create(
 		let identity = engine::identity_uuid_from_json_row(&tbl, &values)?;
 		let vals = insert_values("signers", &tbl, values)?;
 		let oid = ObjectId::new();
-		let prow_meta = owner_binding_meta(&shell.signing_key, oid, identity)?;
 		client
-			.create_checked_with_id_and_metadata(&table, oid, vals.clone(), prow_meta)
+			.create(&table, identity, Some(oid), vals.clone())
 			.await
 			.map_err(format_avendb_err)?;
 
@@ -175,9 +174,8 @@ pub(crate) async fn avendb_ipc_avendb_create(
 		// Stamp a signed owner-binding (digest-covered) so every peer verifies it on
 		// apply; the id is fixed up-front so the binding's value_id == the row id.
 		let oid = ObjectId::new();
-		let extra_meta = owner_binding_meta(&shell.signing_key, oid, identity_gate)?;
 		let oid = client
-			.create_checked_with_id_and_metadata(&table, oid, vals.clone(), extra_meta)
+			.create(&table, identity_gate, Some(oid), vals.clone())
 			.await
 			.map_err(format_avendb_err)?;
 
