@@ -200,6 +200,18 @@ jobs:
       - name: Install Pillow (generate-ios-icons.py needs PIL)
         run: python3 -m pip install --break-system-packages --quiet Pillow
 
+      - name: Cache sherpa-onnx iOS static libs
+        uses: actions/cache@v4
+        with:
+          path: app/src-tauri/vendor/sherpa-ios/lib
+          key: sherpa-ios-${{ hashFiles('scripts/build-sherpa-ios.sh') }}
+
+      - name: Build sherpa-onnx iOS static libs (on-device STT)
+        # sherpa-onnx-sys has no iOS prebuilt; build the loose .a archives from source and
+        # stage them where SHERPA_ONNX_LIB_DIR expects. Idempotent — a cache hit makes it a
+        # no-op; a miss is a ~20-min from-source build, then cached for future runs.
+        run: bash scripts/build-sherpa-ios.sh
+
       - name: Materialize signing cert + iOS provisioning profile + API key
         # tauri-ios-asc.ts (manual CI signing) reads these PATHS and lets Tauri import the
         # cert into a keychain via IOS_CERTIFICATE — so no manual keychain step is needed here.
