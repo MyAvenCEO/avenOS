@@ -56,6 +56,10 @@ export type AvenDbSessionReply = {
 	defaultSparkUrn: string
 	/** did:key of the aven-node relay this device is synced through, if any. */
 	relayDid?: string | null
+	/** SAFE uuids this device was REVOKED from (board 0047, fail-closed): the genesis no longer
+	 *  opens with any held DEK and no admin cap remains. The UI locks these identities (no
+	 *  read/write) and their local cache is purged — the revoked device self-locks. */
+	revokedSelf?: string[]
 }
 
 export async function avendbSession(): Promise<AvenDbSessionReply> {
