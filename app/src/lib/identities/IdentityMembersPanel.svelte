@@ -647,18 +647,10 @@ async function copyOwnDid(): Promise<void> {
 							>
 								{adminBusy ? '…' : t('identities.share.grantAccess')}
 							</button>
-							{#if session?.relayDid}
-								<!-- Quick action: grant the already-connected relay a blind replicate cap -->
-								<button
-									type="button"
-									class="bg-muted hover:bg-muted/70 ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium disabled:opacity-50"
-									title={session.relayDid}
-									disabled={adminBusy}
-									onclick={() => void grantAccess({ did: session?.relayDid ?? undefined, kind: 'relay' })}
-								>
-									⚡ {t('identities.share.quickRelay')}
-								</button>
-							{/if}
+							<!-- The connected relay is auto-granted RELAY at SAFE creation
+							     (auto_relay_sync_on_create). To re-add a relay manually, grant the
+							     RELAY role to its DID via the unified "Give access" flow above — no
+							     bespoke button (board 0047 DRY: one manual path = the RELAY role). -->
 						</div>
 						{#if adminErr}
 							<p class="text-destructive text-sm">{adminErr}</p>
