@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.11...v) (2026-06-14)
+
+
+### Bug Fixes
+
+* **ios:** build sherpa-onnx iOS static libs in CI (+ cache) for on-device STT ([bbdf0ec](https://github.com/MyAvenCEO/avenOS/commit/bbdf0ec366b56fa13335b452ff654d9fdd7bcd30))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.10...v) (2026-06-14)
 
 
