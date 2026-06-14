@@ -34,14 +34,6 @@ fn bigint_at(vals: &[Value], ix: usize) -> i64 {
 		_ => 0,
 	}
 }
-#[allow(dead_code)]
-fn uuid_matches(vals: &[Value], ix: usize, want: Uuid) -> bool {
-	match vals.get(ix) {
-		Some(Value::Uuid(o)) => *o.uuid() == want,
-		Some(Value::Text(s)) => Uuid::parse_str(s.trim()).map(|u| u == want).unwrap_or(false),
-		_ => false,
-	}
-}
 
 fn now_ms() -> i64 {
 	std::time::SystemTime::now()
