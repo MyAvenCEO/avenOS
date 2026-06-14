@@ -589,7 +589,20 @@ pub fn ingest_genesis_opened(
 	genesis_b64: &str,
 	issuer_pubkey_b64: Option<&str>,
 	local_fallback_issuer_pk: PublicKey,
+	epoch: u64,
+	high_water: u64,
 ) -> Result<(), String> {
+	// Monotonic authority epoch (board 0040). The epoch is the SAFE's `current_dek_version`
+	// (jointly edit-sig-authenticated with the genesis in the same `safes` row, and already
+	// downgrade-defended). Reject ingesting a genesis presented BELOW the highest epoch already
+	// accepted for this SAFE — a superseded (rolled-back) authority is unrepresentable after
+	// first sync, so a stale-but-validly-signed genesis can never re-instate a revoked member.
+	// First contact (`high_water == 0`) is trust-on-first-use: accepted to seed the high-water.
+	if epoch < high_water {
+		return Err(format!(
+			"stale-genesis-epoch: {epoch} < high_water {high_water} for {owner}"
+		));
+	}
 	let issuer_pk = match issuer_pubkey_b64 {
 		Some(s) if !s.trim().is_empty() => decode_issuer_pubkey_b64(s)?,
 		_ => local_fallback_issuer_pk,
@@ -1200,6 +1213,88 @@ mod tests {
 		);
 		let rid = uuid::Uuid::new_v4();
 		authorize(&v, sid, AccOp::Delete, "todos", Some(rid), &v.signer_did.clone()).unwrap();
+	}
+
+	#[test]
+	fn owns_is_the_single_role() {
+		// board 0040: `owns` IS the single full-rights role — it carries `admit` + `rotate_dek`,
+		// so it IS "admin". There is no separate admin tier. `reads`/`replicate` are orthogonal
+		// SHARING tiers, not an admin hierarchy. Any other label grants nothing (no phantom role).
+		assert_eq!(grant_kind_caps("owns"), OWNER_RIGHTS.to_vec());
+		assert!(
+			OWNER_RIGHTS.contains(&"admit") && OWNER_RIGHTS.contains(&"rotate_dek"),
+			"owns carries admit + rotate_dek — it is the admin role"
+		);
+		assert_eq!(grant_kind_caps("reads"), vec!["read"]);
+		assert_eq!(grant_kind_caps("replicate"), vec!["replicate"]);
+		assert!(grant_kind_caps("admin").is_empty(), "no separate `admin` cap group exists");
+	}
+
+	#[test]
+	fn last_owner_invariant() {
+		// board 0040: a SAFE can never reach zero `owns` subjects (type-agnostic anti-lockout).
+		// The minting owner is structurally permanent — `mint_safe_genesis` re-grants it on every
+		// re-mint — so excluding ANY subject (even the owner's own DID) still leaves ≥1 owner,
+		// and the fail-closed guard in `rebuild_identity_biscuit_excluding` backstops the rest.
+		let root = [9u8; 32];
+		let mut v = vault(&root);
+		let sid = uuid::Uuid::new_v4();
+		let genesis = mint_safe_genesis(&v, sid).unwrap();
+		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: genesis });
+
+		// Add a second owner (a third-party device), then revoke it — the genesis owner remains.
+		let bob = vault(&[2u8; 32]);
+		let with_bob = attenuate_add_owner_third_party(
+			&v.biscuit_kp,
+			&v.safes.get(&sid).unwrap().biscuit,
+			sid,
+			bob.signer_did.as_str(),
+		)
+		.unwrap();
+		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: with_bob });
+
+		let after_revoke_bob =
+			rebuild_identity_biscuit_excluding(&v, sid, bob.signer_did.as_str()).unwrap();
+		let owners = identity_admins(&after_revoke_bob, sid).unwrap();
+		assert!(!owners.is_empty(), "revoking a delegate leaves the owner — never zero owners");
+		assert!(
+			!owners.iter().any(|d| signer_did_matches(d, bob.signer_did.as_str())),
+			"bob is gone"
+		);
+
+		// Even excluding the owner's OWN did leaves ≥1 owner (genesis re-grants the owner):
+		// the last owner is unremovable by construction.
+		let after_revoke_self =
+			rebuild_identity_biscuit_excluding(&v, sid, &v.signer_did.clone()).unwrap();
+		assert!(
+			!identity_admins(&after_revoke_self, sid).unwrap().is_empty(),
+			"the minting owner is permanent — a SAFE never loses its last owner"
+		);
+	}
+
+	#[test]
+	fn authority_epoch() {
+		// Board 0040: the authority epoch (= the SAFE's current_dek_version) makes a rolled-back
+		// genesis unrepresentable — `ingest_genesis_opened` rejects a genesis presented below the
+		// per-SAFE high-water and accepts one >=. (The (genesis, dek_version) pair is jointly
+		// edit-sig-authenticated in the safes row; this is the verifier-side freshness gate.)
+		let root = [9u8; 32];
+		let mut v = vault(&root);
+		let sid = uuid::Uuid::new_v4();
+		let genesis = mint_safe_genesis(&v, sid).unwrap();
+		let g_b64 = URL_SAFE_NO_PAD.encode(genesis.to_vec().unwrap());
+		let issuer = encode_issuer_pubkey_b64(&v.biscuit_kp.public());
+		let pk = v.biscuit_kp.public();
+
+		// First contact (high_water 0) is TOFU — accept and seed the epoch at 2.
+		ingest_genesis_opened(&mut v, sid, &g_b64, Some(&issuer), pk, 2, 0).unwrap();
+		// A replay at epoch 1 (< high_water 2) is rejected — rollback is unrepresentable.
+		let err = ingest_genesis_opened(&mut v, sid, &g_b64, Some(&issuer), pk, 1, 2)
+			.expect_err("a below-high-water genesis must be rejected");
+		assert!(err.contains("stale-genesis-epoch"), "got: {err}");
+		// Equal (re-apply) and newer epochs are accepted.
+		ingest_genesis_opened(&mut v, sid, &g_b64, Some(&issuer), pk, 2, 2).unwrap();
+		ingest_genesis_opened(&mut v, sid, &g_b64, Some(&issuer), pk, 3, 2).unwrap();
 	}
 
 	#[test]

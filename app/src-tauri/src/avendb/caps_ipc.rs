@@ -458,77 +458,6 @@ async fn cascade_rotate_one(
 	Ok(())
 }
 
-async fn safe_type_of(client: &AvenDbClient, safe_uuid: Uuid) -> Result<Option<String>, String> {
-	let schema = engine::resolved_table_schema(client, "safes").await?;
-	let type_ix = engine::col_ix(&schema, "type")?;
-	for (oid, vals) in engine::exec_list_rows(client, "safes").await? {
-		if engine::owner_of_row(client, "safes", oid).await? == Some(safe_uuid) {
-			return Ok(match vals.get(type_ix) {
-				Some(Value::Text(s)) => Some(s.trim().to_string()),
-				_ => None,
-			});
-		}
-	}
-	Ok(None)
-}
-
-async fn enforce_member_type_rule(
-	client: &AvenDbClient,
-	target_safe: Uuid,
-	member_did: &str,
-) -> Result<(), String> {
-	let target_type = safe_type_of(client, target_safe)
-		.await?
-		.unwrap_or_else(|| "aven".to_string());
-	match target_type.as_str() {
-		"aven" => {
-			// An aven is a (potentially autonomous) self-serving entity. It admits BOTH:
-			//  - its own `did:key` signers (e.g. a server node's env-seed key) — so an aven
-			//    deployed on a node owns itself directly; and
-			//  - human owners via `did:safe:` pointing at a human-type SAFE.
-			// (The ≥1-human-owner anti-lockout guard ensures a human always remains.)
-			// It does NOT admit aven/spark SAFE DIDs as members.
-			if member_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX) {
-				let Some(member_id) = crate::identity_acc::resolve_safe_did(member_did) else {
-					return Err(format!("invalid SAFE DID: {member_did}"));
-				};
-				let member_type = safe_type_of(client, member_id).await?;
-				if member_type.as_deref() != Some("human") {
-					return Err(format!(
-						"an aven SAFE admits human SAFE DIDs (did:safe:…) or signer DIDs (did:key:…) — {member_did} is {}",
-						member_type.as_deref().unwrap_or("unknown (no local safes row)")
-					));
-				}
-			}
-			Ok(())
-		}
-		"spark" => {
-			let Some(member_id) = crate::identity_acc::resolve_safe_did(member_did) else {
-				return Err(
-					"a spark SAFE admits aven SAFE DIDs (did:safe:…) — signers join through an aven SAFE"
-						.into(),
-				);
-			};
-			let member_type = safe_type_of(client, member_id).await?;
-			if member_type.as_deref() != Some("aven") {
-				return Err(format!(
-					"a spark SAFE admits aven SAFEs only — {member_did} is {}",
-					member_type.as_deref().unwrap_or("unknown (no local safes row)")
-				));
-			}
-			Ok(())
-		}
-		_ => {
-			if member_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX) {
-				return Err(format!(
-					"a {target_type} SAFE admits signer DIDs (did:key:…) only — a SAFE cannot be a member of a {target_type} SAFE"
-				));
-			}
-			Ok(())
-		}
-	}
-}
-
 async fn find_controlled_safe_of_type(
 	client: &AvenDbClient,
 	shell: &engine::ShellState,
@@ -593,7 +522,7 @@ pub(crate) async fn avendb_ipc_spark_admin_add(
 		return Err("cannot grant a identity to your own DID".into());
 	}
 
-	enforce_member_type_rule(client.as_ref(), identity_uuid, &signer_did).await?;
+	// Ownership is type-agnostic (board 0040): any did:key or did:safe subject may be admitted.
 	let is_safe_member = signer_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX);
 
 	if !is_safe_member {
@@ -828,7 +757,7 @@ pub(crate) async fn avendb_ipc_spark_reader_add(
 		return Err("cannot grant read to your own DID".into());
 	}
 
-	enforce_member_type_rule(client.as_ref(), identity_uuid, &signer_did).await?;
+	// Ownership is type-agnostic (board 0040): any did:key or did:safe subject may be admitted.
 	let is_safe_member = signer_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX);
 
 	if !is_safe_member {
@@ -1426,7 +1355,8 @@ pub(crate) async fn avendb_ipc_aven_ceo_add_member(
 	// avenCEO (an aven SAFE) admits human did:safe owners OR did:key signers. The network
 	// invite prefers a person's human did:safe — the SYNC/membership cap then lives on the
 	// human SAFE, and its device signers inherit it through SAFE membership.
-	enforce_member_type_rule(client.as_ref(), identity_uuid, &signer_did).await?;
+	// Ownership is type-agnostic (board 0040): ANY subject — a did:key signer or a did:safe
+	// (any SAFE type) — may be admitted. No type-restriction gate; `type` is a UI label only.
 
 	// did:key members are direct P2P sync peers; did:safe members receive keys via the
 	// SAFE's wrap key (propagate_keyshares_for_member), never as a registered peer.
@@ -1815,63 +1745,6 @@ pub(crate) async fn avendb_ipc_spark_admin_list(
 /// revoked peer keeps only what it already decrypted (not retroactive — physics).
 /// Owner-scoped: the re-mint re-roots the chain to this device's biscuit key and
 /// updates the stored issuer (the common case is This device = OWNER).
-/// Count how many of `owner_dids` are HUMAN owners, for the ≥1-human-owner anti-lockout
-/// guard. Classification (matches the agreed taxonomy):
-///   - `did:safe:X`  → human iff the `safes` row for X has `type == "human"`.
-///   - `did:key:…`   → a signer; human UNLESS its `signers` row marks
-///     `signer_type == "env_seed"` (a server/aven-node key). Unknown/missing signer
-///     rows default to human (a real remote person we don't yet track locally).
-async fn count_human_owners(client: &AvenDbClient, owner_dids: &[String]) -> Result<usize, String> {
-	use crate::identity_acc::{resolve_safe_did, SAFE_DID_PREFIX};
-
-	// safe uuid → type
-	let safes_schema = engine::resolved_table_schema(client, "safes").await?;
-	let s_type_ix = engine::col_ix(&safes_schema, "type")?;
-	let mut safe_type: std::collections::HashMap<Uuid, String> = std::collections::HashMap::new();
-	for (o, vals) in engine::exec_list_rows(client, "safes").await.unwrap_or_default() {
-		if let Some(u) = engine::owner_of_row(client, "safes", o).await? {
-			let ty = match vals.get(s_type_ix) {
-				Some(Value::Text(t)) => t.trim().to_string(),
-				_ => String::new(),
-			};
-			safe_type.insert(u, ty);
-		}
-	}
-
-	// signer did → signer_type
-	let sg_schema = engine::resolved_table_schema(client, "signers").await?;
-	let sg_did_ix = engine::col_ix(&sg_schema, "signer_did")?;
-	let sg_type_ix = engine::col_ix(&sg_schema, "signer_type")?;
-	let mut signer_type: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-	for (_o, vals) in engine::exec_list_rows(client, "signers").await.unwrap_or_default() {
-		if let Some(Value::Text(d)) = vals.get(sg_did_ix) {
-			let ty = match vals.get(sg_type_ix) {
-				Some(Value::Text(t)) => t.trim().to_string(),
-				_ => String::new(),
-			};
-			signer_type.insert(d.trim().to_string(), ty);
-		}
-	}
-
-	let mut humans = 0usize;
-	for did in owner_dids {
-		let did = did.trim();
-		if did.starts_with(SAFE_DID_PREFIX) {
-			if resolve_safe_did(did)
-				.and_then(|u| safe_type.get(&u))
-				.map(|t| t == "human")
-				.unwrap_or(false)
-			{
-				humans += 1;
-			}
-		} else if signer_type.get(did).map(String::as_str).unwrap_or("") != "env_seed" {
-			// did:key signer — human unless explicitly an env_seed server key.
-			humans += 1;
-		}
-	}
-	Ok(humans)
-}
-
 pub(crate) async fn avendb_ipc_spark_admin_revoke(
 	app: &tauri::AppHandle,
 	avendb: &ManagedAvenDb,
@@ -1916,21 +1789,13 @@ pub(crate) async fn avendb_ipc_spark_admin_revoke(
 		}
 	}
 
+	// Anti-lockout (board 0040): ownership is type-agnostic — a SAFE must keep ≥1 `owns`
+	// subject (any key or SAFE), NOT "≥1 human". That invariant is enforced fail-closed
+	// INSIDE `rebuild_identity_biscuit_excluding` (it returns Err if the re-mint would
+	// leave zero owners), BEFORE any DB mutation — so the single core check above is the
+	// last-owner guard; there is no separate type-coupled human-count rule.
 	let new_biscuit =
 		crate::identity_acc::rebuild_identity_biscuit_excluding(&shell.vault, identity_uuid, &signer_did)?;
-
-	// Anti-lockout (CAPS-level, fail-closed before any DB mutation): every SAFE must
-	// always keep at least one HUMAN owner, so an autonomous aven/server owner can never
-	// be the last one standing. Classify the post-revoke owner set and reject if it would
-	// leave zero humans.
-	let post_owners: Vec<String> = crate::identity_acc::identity_admins(&new_biscuit, identity_uuid)?
-		.into_iter()
-		.collect();
-	if count_human_owners(client.as_ref(), &post_owners).await? == 0 {
-		return Err(
-			"cannot remove the last human owner — every SAFE must keep at least one human owner".into(),
-		);
-	}
 
 	let new_v = cur_v + 1;
 	let new_dek = crate::crypto::random_identity_dek();

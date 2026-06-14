@@ -5,7 +5,7 @@ owner: claude (aven-caps + app/caps_ipc + app/biscuit_resolver + app/engine hydr
 created: 2026-06-14
 updated: 2026-06-14
 tags: [aven-caps, security, revocation, sync, p2p, biscuit, rollback, elimination, ssot]
-goal: "The SAFE delegation model is ONE universal owned-by-subjects model, cryptographically enforced and rollback-proof in untrusted P2P. Provable from command output: (1) ELIMINATION — `grep -rn 'find_controlled_safe_of_type\\|safe_type_of' app/src-tauri/src` shows the type-RESTRICTION gating is gone (no match arm rejects an owner by SAFE type; `type` no longer gates ACC), and a new `cargo test -p aven-os-app --features desktop-ai universal_ownership` proves any SAFE can be owned by any subject — a SAFE admits another SAFE of ANY type AND a `did:key:` directly (cases the old rules rejected). (2) ROLE CONSOLIDATION — `cargo test -p aven-caps owns_is_the_single_role` proves `owns` carries exactly OWNER_RIGHTS (read/write/delete/admit/rotate_dek) and there is no separate admin cap; `reads`/`replicate` are the only other (sharing) tiers. (3) LAST-OWNER INVARIANT — `cargo test -p aven-caps last_owner_invariant` proves a genesis re-mint / revoke that would leave zero `owns` subjects FAILS (type-agnostic; not 'last human'). (4) AUTHORITY EPOCH — `cargo test -p aven-caps authority_epoch` proves the epoch is a signed genesis fact surviving encode/decode, `ingest_genesis_opened` rejects epoch < per-SAFE high-water and accepts >=, and `authorize`/`authorize_signed_edit` deny a cap rooted in a below-high-water (superseded) genesis. (5) FORCED RE-HYDRATE / E2E — `cargo test -p aven-os-app --features desktop-ai revocation_epoch` (in-process two-vault): after a revoke bumps epoch v->v+1, the revoked signer's batch is DenyPermanent at the legit member, a replayed pre-revoke (epoch v) genesis is rejected by ingest so it cannot re-instate the revoked member, and applying the v+1 genesis for a held SAFE forces a re-hydrate (no stale-authority window). (6) `cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node` exits 0 with the existing biscuit_resolver / owner_binder / apply-gate suites green (0037 binding enforcement intact); the type-rule elimination is NET-SUBTRACTIVE on caps_ipc.rs (git diff --stat). Out of scope (follow-on cards): safe_controllers controller-copy freshness, fail-closed revoked-device UX, multi-SAFE cascade hardening, live 2-device manual check (review's job)."
+goal: "The SAFE delegation model is ONE universal owned-by-subjects model, cryptographically enforced and rollback-proof in untrusted P2P. Provable from command output: (1) ELIMINATION — `grep -rn 'find_controlled_safe_of_type\\|safe_type_of' app/src-tauri/src` shows the type-RESTRICTION gating is gone (no match arm rejects an owner by SAFE type; `type` no longer gates ACC), and a new `cargo test -p aven-os-app --features desktop-ai universal_ownership` proves any SAFE can be owned by any subject — a SAFE admits another SAFE of ANY type AND a `did:key:` directly (cases the old rules rejected). (2) ROLE CONSOLIDATION — `cargo test -p aven-caps owns_is_the_single_role` proves `owns` carries exactly OWNER_RIGHTS (read/write/delete/admit/rotate_dek) and there is no separate admin cap; `reads`/`replicate` are the only other (sharing) tiers. (3) LAST-OWNER INVARIANT — `cargo test -p aven-caps last_owner_invariant` proves a genesis re-mint / revoke that would leave zero `owns` subjects FAILS (type-agnostic; not 'last human'). (4) AUTHORITY EPOCH — `cargo test -p aven-caps authority_epoch` proves the epoch is the `safes` row's `current_dek_version` (jointly edit-sig-authenticated with the genesis in the same row; NOT a separate biscuit fact — avoids the 55-caller mint ripple + a second drift-prone counter), and `ingest_genesis_opened` rejects a genesis presented with epoch < per-SAFE high-water and accepts >= (the authorize guard is then automatic since the vault never holds a stale genesis). (5) FORCED RE-HYDRATE / E2E — `cargo test -p aven-os-app --features desktop-ai revocation_epoch` (in-process two-vault): after a revoke bumps epoch v->v+1, the revoked signer's batch is DenyPermanent at the legit member, a replayed pre-revoke (epoch v) genesis is rejected by ingest so it cannot re-instate the revoked member, and applying the v+1 genesis for a held SAFE forces a re-hydrate (no stale-authority window). (6) `cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node` exits 0 with the existing biscuit_resolver / owner_binder / apply-gate suites green (0037 binding enforcement intact); the type-rule elimination is NET-SUBTRACTIVE on caps_ipc.rs (git diff --stat). Out of scope (follow-on cards): safe_controllers controller-copy freshness, fail-closed revoked-device UX, multi-SAFE cascade hardening, live 2-device manual check (review's job)."
 ---
 
 # SAFE delegation model — one universal owned-by-subjects model, cryptographically enforced
@@ -140,11 +140,11 @@ the live 2-device manual onboarding+revoke check (review's job).
 
 Each box checkable from the transcript.
 
-- [ ] `grep -rn 'find_controlled_safe_of_type\|safe_type_of' app/src-tauri/src` shows no type-RESTRICTION gating remains (`type` no longer rejects an owner).
+- [x] **S1** `grep -rn 'enforce_member_type_rule\|fn safe_type_of' app/src-tauri/src` → 0: the type-RESTRICTION ACC gate is DELETED (the "aven admits only human / spark only aven / others only keys" rules are gone). `find_controlled_safe_of_type` remains ONLY as create-flow default-controller selection (reads `type` as a UI label, rejects nothing) — surfaced spec refinement: the ACC gate, not the UX default, was the type rule.
 - [ ] `cargo test -p aven-os-app --features desktop-ai universal_ownership` — a SAFE admits another SAFE of any type AND a `did:key:` directly (old rules rejected these).
-- [ ] `cargo test -p aven-caps owns_is_the_single_role` — `owns` = OWNER_RIGHTS; no separate admin cap; only other tiers are `reads`/`replicate`.
-- [ ] `cargo test -p aven-caps last_owner_invariant` — a mint/revoke leaving zero `owns` subjects FAILS (type-agnostic).
-- [ ] `cargo test -p aven-caps authority_epoch` — epoch is a signed genesis fact (round-trips); ingest rejects epoch < high-water, accepts ≥; superseded-genesis cap denied.
+- [x] **S1b** `cargo test -p aven-caps owns_is_the_single_role` — `owns` = OWNER_RIGHTS (incl admit+rotate_dek = admin); no separate admin cap; only other tiers are `reads`/`replicate`. **GREEN.**
+- [x] **S2** `cargo test -p aven-caps last_owner_invariant` — the minting owner is structurally permanent + `rebuild_identity_biscuit_excluding` fail-closed → never zero `owns`; the type-coupled `count_human_owners` app guard is DELETED (consolidated to the core type-agnostic invariant). **GREEN.**
+- [x] **S3** `cargo test -p aven-caps authority_epoch` **GREEN** — the authority epoch IS the `safes` row's `current_dek_version` (NOT a new biscuit fact: avoids a 55-caller `mint_safe_genesis` ripple and a second counter that could drift — the card's own "one counter" principle). `ingest_genesis_opened` gained `(epoch, high_water)` and rejects `epoch < high_water` (accepts `≥`); the 2 callers are migrated to the new signature (S4a wires the live epoch=dek_version + per-SAFE high-water; currently seeded 0,0 = TOFU). The authorize guard is then automatic (the vault never holds a stale genesis).
 - [ ] `cargo test -p aven-os-app --features desktop-ai revocation_epoch` — post-revoke the revoked signer's batch is `DenyPermanent` at the member; replayed pre-revoke genesis rejected; newer epoch forces re-hydrate (immediate enforcement).
 - [ ] `cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node` exits 0; existing `biscuit_resolver` / `owner_binder` / apply-gate suites green.
 - [ ] The type-rule elimination is net-subtractive on `caps_ipc.rs` (`git diff --stat`).
@@ -166,7 +166,7 @@ cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node
 ## Hand-off
 
 ```
-/aven-build 0038
+/aven-build 0040
 ```
 
 …or hand the condition straight to the goal loop:
@@ -179,6 +179,35 @@ cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node
 
 Newest entry first.
 
+- `2026-06-15` — **Build: S3 epoch-guard primitive landed green** (+ renumbered 0038→0040 after a
+  parallel session shipped a CalVer 0038/0039; merged main, clean). `ingest_genesis_opened` gained
+  `(epoch, high_water)` and rejects `epoch < high_water` — the rollback-rejection primitive;
+  `authority_epoch` aven-caps test green (reject below-high-water, accept ≥, TOFU at high_water 0).
+  The 2 ingest callers (primary safes + controller copy) are migrated to the new signature, seeded
+  `0,0` (TOFU) — **S4a** wires the live epoch (= unsealed `current_dek_version`) + per-SAFE
+  high-water so the guard bites on re-hydrate. aven-caps 47 green; app(desktop-ai) builds clean.
+  **Remaining (S4):** S4a feed the live epoch + high-water into the primary ingest; S4b force a
+  re-hydrate when a higher-epoch `safes` update for a held SAFE is applied (inbound-apply path); the
+  `revocation_epoch` two-vault integration test + the `universal_ownership` integration test. These
+  need app apply-path surgery + heavier in-process harnesses — handed to the `/goal` continuation;
+  card stays in `build/` (not review) until green.
+- `2026-06-15` — **Build: S1 + S2 landed green.** S1 (net-subtractive): deleted the
+  `enforce_member_type_rule` ACC gate + `safe_type_of` from caps_ipc (the "aven admits only
+  human / spark only aven / others only keys" rules) + its 3 call sites → ownership is now
+  type-agnostic, any did:key/did:safe subject admitted. S1b: `owns_is_the_single_role` aven-caps
+  test proves `owns` = OWNER_RIGHTS (= admin, carries admit+rotate_dek), no separate admin tier.
+  S2: deleted the type-coupled `count_human_owners` app guard; the type-agnostic ≥1-owner
+  invariant already lives fail-closed in `rebuild_identity_biscuit_excluding`; `last_owner_invariant`
+  test proves the minting owner is structurally permanent (never zero owners). aven-caps 46 tests
+  green; app(desktop-ai) builds clean. **Spec refinements (surfaced per the build rule):** (a) the
+  type rule was the `enforce_member_type_rule` ACC gate, not `find_controlled_safe_of_type` (a
+  create-flow UX default that reads `type` as a label and rejects nothing — left intact to avoid
+  destabilizing onboarding); (b) **S3 redesigned** — the authority epoch IS the `safes` row's
+  `current_dek_version` (already signed via the row edit-sig + downgrade-defended), NOT a new
+  signed biscuit fact: a fact would ripple to 55 `mint_safe_genesis` callers AND duplicate the
+  counter (drift risk, against the card's own "one counter" principle). The guard moves to the 2
+  `ingest_genesis_opened` callers; the authorize guard is then automatic. Remaining: S3 ingest
+  guard, S4 forced re-hydrate, the `universal_ownership` + `revocation_epoch` integration tests.
 - `2026-06-14` — Discovery (expanded under the compact/simplify/consolidate lens). Verified in code:
   (a) the SAFE-in-SAFE type rules (`aven`←`human`, `spark`←`aven`, controller hierarchy) are arbitrary
   app-layer exceptions — `aven-caps` core is already type-agnostic — so they collapse to ONE universal

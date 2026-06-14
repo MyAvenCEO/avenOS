@@ -1134,12 +1134,17 @@ pub(super) async fn hydrate_shell(
 				}
 				None => None,
 			};
+			// Authority epoch (board 0040): primary safes genesis. S4a wires the live epoch
+			// (= current_dek_version, unsealed below) + per-SAFE high-water; until then the
+			// guard is seeded (0,0 = trust-on-first-use, accept).
 			if let Err(e) = identity_acc::ingest_genesis_opened(
 				&mut vault,
 				sid,
 				&genesis_b64,
 				issuer_opened.as_deref(),
 				biscuit_root_pub,
+				0,
+				0,
 			) {
 				log::warn!(
 					target: "avenos::avendb",
@@ -1236,12 +1241,16 @@ pub(super) async fn hydrate_shell(
 					let iss_opened = vals
 						.get(iss_ix)
 						.and_then(|c| hydrate_text_at(&deks, row_owner, &iss_coord, c, true).ok());
+					// Controller-copy genesis. Copy-freshness is a follow-on card, so the epoch
+					// guard is a no-op here (0,0); the primary safes genesis above is authoritative.
 					if let Err(e) = identity_acc::ingest_genesis_opened(
 						&mut vault,
 						ctrl_id,
 						&gen_b64,
 						iss_opened.as_deref(),
 						biscuit_root_pub,
+						0,
+						0,
 					) {
 						log::warn!(
 							target: "avenos::avendb",
