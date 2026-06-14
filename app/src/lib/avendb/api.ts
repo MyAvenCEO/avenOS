@@ -134,9 +134,21 @@ export type IdentityGrant = 'admin' | 'reader' | 'relay'
 /** One subject's caps on a identity, derived from the biscuit by `identity_cap_report`. */
 export type IdentitySubjectCaps = {
 	did: string
+	/** PRIMARY (highest-rank) role. */
 	grant: IdentityGrant
+	/** EVERY named role this DID holds (admin/reader/relay), rank-ordered — the UI lists them
+	 *  all so no role hides behind the primary. Empty when the subject has only granular grants. */
+	roles: IdentityGrant[]
 	/** Effective caps, e.g. read, write, delete, admit, rotate_dek, replicate. */
 	caps: string[]
+}
+
+/** The role → caps SSOT (`grant_kind_caps`): the exact caps each role applies. Powers the
+ *  GIVE ACCESS preview so the form shows what a grant confers BEFORE pressing the button. */
+export type RoleCapsMap = Record<string, string[]>
+
+export async function roleCaps(): Promise<RoleCapsMap> {
+	return avenDbRuntime<RoleCapsMap>('roleCaps', {})
 }
 
 export type IdentityAdminListReply = {
@@ -177,6 +189,22 @@ export type PeerRow = {
 /** List trusted peers (devices I'm P2P-connected with). */
 export async function peerList(): Promise<PeerRow[]> {
 	return avenDbRuntime<PeerRow[]>('peerList', {})
+}
+
+/** One network directory entry from the SEALED `profile` table (board 0049), decrypted
+ *  under the avenCEO registry sub-group DEK. A blind relay (no registry DEK) sees nothing. */
+export type ProfileRow = {
+	id: string
+	/** 'SIGNER' (a did:key device/peer) | 'SAFE' (a did:safe identity). */
+	subjectType: string
+	did: string
+	displayName: string
+}
+
+/** The network directory: every member from the sealed profile table. The directory SSOT —
+ *  replaces scanning the plaintext signers/safes roster. Requires the registry DEK to decrypt. */
+export async function profileDirectory(): Promise<ProfileRow[]> {
+	return avenDbRuntime<ProfileRow[]>('profileDirectory', {})
 }
 
 /** First contact: add a trusted peer by DID (dev paste-DID shortcut). */

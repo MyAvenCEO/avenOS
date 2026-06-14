@@ -582,6 +582,7 @@
 				"tier0": "TIER-0"
 			},
 			"accessLevel": "Zugriffsstufe",
+			"willGrant": "Gewährt",
 			"grantAccess": "Zugriff gewähren",
 			"capsLegendTitle": "Wie diese Berechtigungen funktionieren",
 			"capDesc": {

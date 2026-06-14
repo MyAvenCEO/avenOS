@@ -145,6 +145,54 @@ fn peer_timestamp_ms(v: &Value) -> Option<i64> {
 	}
 }
 
+/// One network directory entry — a row of the SEALED `profile` table (board 0049),
+/// decrypted under the avenCEO registry sub-group DEK. This is the SSOT for "who is on
+/// the network", replacing the plaintext signers/safes roster scan: a blind relay (no
+/// registry DEK) sees only ciphertext; a TIER-0 member (registry DEK) reads names + DIDs.
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileRowReply {
+	pub id: String,
+	/// SIGNER (a did:key device/peer) | SAFE (a did:safe identity).
+	pub subject_type: String,
+	pub did: String,
+	pub display_name: String,
+}
+
+/// List the network directory from the sealed `profile` table, decrypting each cell under
+/// the registry sub-group DEK held in `shell`. Rows whose cells can't be opened (no DEK, or
+/// a different owner) are skipped — a blind relay therefore returns an empty directory.
+pub async fn list_profile_directory(
+	client: &AvenDbClient,
+	shell: &engine::ShellState,
+) -> Result<Vec<ProfileRowReply>, String> {
+	let avenceo = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
+	let registry_id = crate::identity_acc::derive_subgroup_id(avenceo, "registry");
+	let schema = engine::resolved_table_schema(client, "profile").await?;
+	let type_ix = engine::col_ix(&schema, "subject_type")?;
+	let did_ix = engine::col_ix(&schema, "did")?;
+	let name_ix = engine::col_ix(&schema, "display_name")?;
+	let mut out = Vec::new();
+	for (oid, vals) in engine::exec_list_rows(client, "profile").await? {
+		if engine::owner_of_row(client, "profile", oid).await? != Some(registry_id) {
+			continue;
+		}
+		let row = oid.uuid();
+		let Ok(did) = engine::open_sealed_cell_text(shell, "profile", &schema, registry_id, *row, did_ix, &vals)
+		else {
+			continue; // no DEK → blind: skip rather than leak ciphertext
+		};
+		let subject_type =
+			engine::open_sealed_cell_text(shell, "profile", &schema, registry_id, *row, type_ix, &vals)
+				.unwrap_or_default();
+		let display_name =
+			engine::open_sealed_cell_text(shell, "profile", &schema, registry_id, *row, name_ix, &vals)
+				.unwrap_or_default();
+		out.push(ProfileRowReply { id: row.to_string(), subject_type, did, display_name });
+	}
+	Ok(out)
+}
+
 /// Add a trusted peer (a device DID I'm P2P-connected with) to the local
 /// `peers` table (`kind=remote`, `status=active`). This flat list IS the trust
 /// set — no `humans` coupling. First-contact / pairing primitive (plan §8 step

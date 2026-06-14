@@ -252,6 +252,19 @@ pub(crate) async fn avendb_ipc_peer_list(
 	crate::signers::list_signer_rows(client.as_ref()).await
 }
 
+/// The network directory (board 0049): every member from the SEALED `profile` table,
+/// decrypted under the registry sub-group DEK. Replaces scanning the plaintext avenCEO
+/// roster — a blind relay (no registry DEK) gets an empty list.
+pub(crate) async fn avendb_ipc_profile_directory(
+	app: &tauri::AppHandle,
+	avendb: &ManagedAvenDb,
+	self_state: &SelfState,
+) -> Result<Vec<crate::signers::ProfileRowReply>, String> {
+	let client = with_connected_client(avendb, app, self_state).await?;
+	let shell = avendb_shell_ready(app, avendb, self_state, client.clone()).await?;
+	crate::signers::list_profile_directory(client.as_ref(), shell.as_ref()).await
+}
+
 /// First-contact / pairing: add a trusted peer (device DID) to My Network.
 pub(crate) async fn avendb_ipc_peer_add(
 	app: &tauri::AppHandle,

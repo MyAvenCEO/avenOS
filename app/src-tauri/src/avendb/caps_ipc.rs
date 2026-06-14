@@ -1371,74 +1371,96 @@ pub(crate) async fn avendb_ipc_aven_ceo_add_member(
 	// Only the avenCEO owner may add members.
 	engine::authorize_gate(shell, "safes", crate::identity_acc::AccOp::Write, identity_uuid, None)?;
 
-	// Fail fast (before creating the roster row) if this device doesn't hold the avenCEO
-	// DEK — without it we can't mint the member's keyshare.
-	if !shell.deks.keys().any(|(sid, _)| *sid == identity_uuid) {
-		return Err("avenCEO identity not claimed / not loaded on this device".to_string());
+	// Board 0049: a TIER-0 member is admitted to the avenCEO REGISTRY sub-group (the sealed
+	// directory) — NOT to avenCEO content. The grant is the MINIMAL set:
+	//   • registry-group membership: the registry DEK keyshare (decrypt the directory) + a
+	//     `reads` cap on the registry + write-own profile row;
+	//   • avenCEO admission/quota/rate: a BLIND `replicate` cap only (node-enforced 10 MB +
+	//     rate-limit) — NO avenCEO content keyshare and NO avenCEO `reads`.
+	// extends(avenCEO) is one-directional, so a registry-only member is DENIED avenCEO content
+	// (proved by aven-caps::tier0_minimal_grant).
+	let registry_id = crate::identity_acc::derive_subgroup_id(identity_uuid, "registry");
+
+	// Fail fast: this device must hold the REGISTRY DEK to mint the member's directory keyshare.
+	if !shell.deks.keys().any(|(sid, _)| *sid == registry_id) {
+		return Err("registry directory key not held on this device — re-sync to receive it".to_string());
 	}
 
 	let _ = client.flush_peer_sync().await;
 
-	// 1. Create the member's roster row — its object id scopes the write grant.
-	let now_ms: i64 = std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.map(|d| d.as_millis() as i64)
-		.unwrap_or(0);
-	let signers_schema = engine::resolved_table_schema(client.as_ref(), "signers").await?;
+	// 1. Create the member's SEALED profile row in the directory (owned by the registry group).
+	//    Its object id scopes the member's write-own-row grant. display_name is left null —
+	//    the member self-publishes it via publish_profile.
+	let profile_schema = engine::resolved_table_schema(client.as_ref(), "profile").await?;
 	let mut prow = Map::new();
-	prow.insert("owner".into(), JsonValue::String(identity_uuid.to_string()));
-	prow.insert("signer_did".into(), JsonValue::String(signer_did.clone()));
-	prow.insert("kind".into(), JsonValue::String("member".into()));
-	prow.insert("status".into(), JsonValue::String("active".into()));
-	prow.insert("added_at_ms".into(), JsonValue::Number(now_ms.into()));
-	let prow_vals = insert_values("signers", &signers_schema, prow)?;
+	prow.insert(
+		"subject_type".into(),
+		JsonValue::String(if is_safe_member { "SAFE" } else { "SIGNER" }.into()),
+	);
+	prow.insert("did".into(), JsonValue::String(signer_did.clone()));
+	let prow_vals = insert_values("profile", &profile_schema, prow)?;
 	let member_oid = ObjectId::new();
-	client.create("signers", identity_uuid, Some(member_oid), prow_vals).await.map_err(format_avendb_err)?;
+	client.create("profile", registry_id, Some(member_oid), prow_vals).await.map_err(format_avendb_err)?;
 
-	// 2. Keyshare: wrap EVERY held avenCEO DEK version to the member so it can decrypt the
-	//    sealed roster fields (and prior-version data after any rotation). Idempotent.
-	//    did:safe member → deliver via the SAFE's wrap key + transitive signers; did:key
-	//    member → wrap directly to the signer.
+	// 2. Registry DEK keyshare → the member can DECRYPT the directory (and ONLY the directory;
+	//    it never receives the avenCEO content DEK). did:safe → via the SAFE's wrap key; did:key
+	//    → wrapped directly to the signer. Idempotent.
 	if is_safe_member {
-		propagate_keyshares_for_member(client.as_ref(), shell, identity_uuid, &signer_did, false).await?;
+		propagate_keyshares_for_member(client.as_ref(), shell, registry_id, &signer_did, false).await?;
 	} else {
-		wrap_all_dek_versions_to_recipient(client.as_ref(), shell, identity_uuid, &signer_did).await?;
+		wrap_all_dek_versions_to_recipient(client.as_ref(), shell, registry_id, &signer_did).await?;
 	}
 
-	// 3. Membership bundle in the biscuit: reads (whole roster) + write (own row only).
-	let bisc = shell
+	// 3a. Registry biscuit: reads (the directory) + write (own profile row only).
+	let reg_bisc = shell
 		.vault
 		.safes
-		.get(&identity_uuid)
-		.ok_or_else(|| "avenCEO identity not loaded in vault".to_string())?;
-	let row_prefix = format!("safe:{identity_uuid}:signers:{}", member_oid.uuid());
-	let chain = crate::identity_acc::attenuate_add_reader_third_party(
+		.get(&registry_id)
+		.ok_or_else(|| "registry sub-group not loaded in vault".to_string())?;
+	let row_prefix = format!("safe:{registry_id}:profile:{}", member_oid.uuid());
+	let reg_chain = crate::identity_acc::attenuate_add_reader_third_party(
 		&shell.vault.biscuit_kp,
-		&bisc.biscuit,
-		identity_uuid,
+		&reg_bisc.biscuit,
+		registry_id,
 		&signer_did,
 	)?;
-	let chain = crate::identity_acc::attenuate_add_grant_third_party(
+	let reg_chain = crate::identity_acc::attenuate_add_grant_third_party(
 		&shell.vault.biscuit_kp,
-		&chain,
+		&reg_chain,
 		&signer_did,
 		"write",
 		&row_prefix,
 	)?;
-	let genesis_b64 =
-		URL_SAFE_NO_PAD.encode(chain.to_vec().map_err(|e| format!("biscuit_encode:{e:?}"))?);
+	let reg_genesis_b64 =
+		URL_SAFE_NO_PAD.encode(reg_chain.to_vec().map_err(|e| format!("biscuit_encode:{e:?}"))?);
+	update_identity_genesis(client.as_ref(), shell, registry_id, reg_genesis_b64).await?;
 
-	// Sealed write (private-by-default; board 0015 — see admin_add).
-	update_identity_genesis(client.as_ref(), shell, identity_uuid, genesis_b64).await?;
+	// 3b. avenCEO biscuit: admission/quota/rate ONLY — a BLIND `replicate` cap (no keyshare, no
+	//     content reads). This admits the member to sync on the network and rides the 10 MB
+	//     quota + rate-limit cap-report; it conveys NO ability to decrypt avenCEO content.
+	let ceo_bisc = shell
+		.vault
+		.safes
+		.get(&identity_uuid)
+		.ok_or_else(|| "avenCEO identity not loaded in vault".to_string())?;
+	let ceo_chain = crate::identity_acc::attenuate_add_replicate_third_party(
+		&shell.vault.biscuit_kp,
+		&ceo_bisc.biscuit,
+		identity_uuid,
+		&signer_did,
+	)?;
+	let ceo_genesis_b64 =
+		URL_SAFE_NO_PAD.encode(ceo_chain.to_vec().map_err(|e| format!("biscuit_encode:{e:?}"))?);
+	update_identity_genesis(client.as_ref(), shell, identity_uuid, ceo_genesis_b64).await?;
 
 	finish_spark_admin_grant(app, avendb, self_state, client, identity_uuid).await?;
 	Ok(())
 }
 
-/// Member self-publishes its profile into its OWN avenCEO roster row (the row the
-/// owner created at `add_member`). Finds the row by this device's DID and updates
-/// `account_name` + `device_label`; the local biscuit gate authorizes the write
-/// via the row-scoped `grant(did,"write",identity:avenCEO:signers:<ownRow>)`.
+/// Member self-publishes its directory entry into its OWN sealed `profile` row (the row
+/// the owner created at `add_member`, owned by the avenCEO registry sub-group). Finds the
+/// row by this device's DID and updates the sealed `display_name`; the local biscuit gate
+/// authorizes the write via the row-scoped `grant(did,"write",safe:<registry>:profile:<ownRow>)`.
 pub(crate) async fn avendb_ipc_aven_ceo_publish_profile(
 	app: &tauri::AppHandle,
 	avendb: &ManagedAvenDb,
@@ -1450,62 +1472,57 @@ pub(crate) async fn avendb_ipc_aven_ceo_publish_profile(
 	let shell_arc = avendb_shell_ready(app, avendb, self_state, client.clone()).await?;
 	let shell = shell_arc.as_ref();
 	let identity_uuid = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
+	let registry_id = crate::identity_acc::derive_subgroup_id(identity_uuid, "registry");
 
-	let signers_schema = engine::resolved_table_schema(client.as_ref(), "signers").await?;
-	let did_ix = engine::col_ix(&signers_schema, "signer_did")?;
-	let rows = engine::exec_list_rows(client.as_ref(), "signers").await?;
+	// Find this device's own profile row in the registry directory (by sealed-then-unsealed
+	// `did`). `did` is sealed under the registry DEK, which this member holds.
+	let profile_schema = engine::resolved_table_schema(client.as_ref(), "profile").await?;
+	let did_ix = engine::col_ix(&profile_schema, "did")?;
+	let rows = engine::exec_list_rows(client.as_ref(), "profile").await?;
 	let mut own_oid: Option<ObjectId> = None;
 	for (oid, vals) in rows {
-		let sid = engine::owner_of_row(client.as_ref(), "signers", oid).await?;
-		let did = match vals.get(did_ix) {
-			Some(Value::Text(s)) => s.as_str(),
-			_ => "",
-		};
-		if sid == Some(identity_uuid) && did == shell.signer_did.as_str() {
+		if engine::owner_of_row(client.as_ref(), "profile", oid).await? != Some(registry_id) {
+			continue;
+		}
+		let did = engine::open_sealed_cell_text(shell, "profile", &profile_schema, registry_id, *oid.uuid(), did_ix, &vals)
+			.unwrap_or_default();
+		if did == shell.signer_did {
 			own_oid = Some(oid);
 			break;
 		}
 	}
 	let own_oid = own_oid
-		.ok_or_else(|| "no avenCEO roster row for this device yet — ask an admin to add your DID".to_string())?;
+		.ok_or_else(|| "no directory profile row for this device yet — ask an admin to add your DID".to_string())?;
 
-	// Biscuit gate: this device holds write on its own row (and nothing else).
+	// Biscuit gate: this device holds write on its own profile row (and nothing else).
 	engine::authorize_gate(
 		shell,
-		"signers",
+		"profile",
 		crate::identity_acc::AccOp::Write,
-		identity_uuid,
+		registry_id,
 		Some(*own_oid.uuid()),
 	)?;
 
-	// Auto-publish from this device's identity when the caller passes blanks
-	// (name from humans.first_name, label from the local device peer row).
+	// Auto-publish from this device's identity when the caller passes blanks (name from
+	// humans.first_name, label from the local device peer row). One sealed display_name —
+	// prefer the account/identity name, fall back to the device label.
 	let (def_name, def_label) = read_own_profile(client.as_ref(), &shell.signer_did).await;
-	let name = if account_name.trim().is_empty() {
-		def_name
-	} else {
-		account_name.trim().to_string()
-	};
-	let label = if device_label.trim().is_empty() {
-		def_label
-	} else {
-		device_label.trim().to_string()
-	};
+	let name = if account_name.trim().is_empty() { def_name } else { account_name.trim().to_string() };
+	let label = if device_label.trim().is_empty() { def_label } else { device_label.trim().to_string() };
+	let display_name = if name.is_empty() { label } else { name };
 
 	let mut patch = Map::new();
-	patch.insert("account_name".into(), JsonValue::String(name));
-	patch.insert("device_label".into(), JsonValue::String(label));
-	// Private-by-default: seal account_name/device_label under the identity DEK, scoped
-	// to this member's own roster row, before building the patch ops.
+	patch.insert("display_name".into(), JsonValue::String(display_name));
+	// Private-by-default: seal display_name under the registry DEK, scoped to this row.
 	engine::seal_sensitive_in_patch(
 		shell,
-		"signers",
-		&signers_schema,
-		identity_uuid,
+		"profile",
+		&profile_schema,
+		registry_id,
 		*own_oid.uuid(),
 		&mut patch,
 	)?;
-	let ops = patch_updates(&signers_schema, patch)?;
+	let ops = patch_updates(&profile_schema, patch)?;
 	client.update(own_oid, ops).await.map_err(format_avendb_err)?;
 	Ok(())
 }
@@ -1538,8 +1555,17 @@ pub(crate) async fn avendb_ipc_aven_ceo_membership(
 	}
 	// Merely HYDRATING the avenCEO genesis is NOT membership — the genesis syncs widely, so a
 	// device can hold the identity in its vault with no grant at all. Membership requires an
-	// actual cap to THIS device (a `reads` or `replicate` grant). Without one, the device has
-	// only *seen* avenCEO and must stay on the invite gate — no auto-progress without caps.
+	// actual credential. Board 0049: the network-admission credential is holding the avenCEO
+	// REGISTRY sub-group DEK (every TIER-0 member is wrapped it at add_member, and it's
+	// unwrapped here in hydrate whether the member is a did:key or did:safe). That is the
+	// decryption-grounded signal of "admitted to the network" — it works transitively (the
+	// keyshare rides the SAFE wrap key) where a direct DID match on the biscuit does not.
+	let registry_id = crate::identity_acc::derive_subgroup_id(identity_uuid, "registry");
+	if shell.deks.keys().any(|(sid, _)| *sid == registry_id) {
+		return Ok("member".to_string());
+	}
+	// Legacy fallback: a direct `reads`/`replicate` grant to THIS device's signer (pre-0049
+	// admission, or a non-registry relay-style admission).
 	let did = shell.signer_did.trim();
 	let is_reader = crate::identity_acc::identity_readers(&bisc.biscuit, identity_uuid)?
 		.iter()
@@ -1552,6 +1578,28 @@ pub(crate) async fn avendb_ipc_aven_ceo_membership(
 	} else {
 		Ok("none".to_string())
 	}
+}
+
+/// The role → caps SSOT (board 0047 `grant_kind_caps`), surfaced so the GIVE ACCESS form can
+/// PREVIEW the exact caps a role will apply BEFORE the grant — the UI defines no cap vocabulary
+/// of its own. Keyed by role name (`admin`/`reader`/`relay`); each value is the cap list.
+pub(crate) fn avendb_ipc_role_caps() -> std::collections::BTreeMap<String, Vec<String>> {
+	let mut m = std::collections::BTreeMap::new();
+	for role in ["admin", "reader", "relay"] {
+		m.insert(
+			role.to_string(),
+			crate::identity_acc::grant_kind_caps(role).iter().map(|c| c.to_string()).collect(),
+		);
+	}
+	// TIER-0 (board 0049): the avenCEO `reader` button admits a network member via
+	// avendb_ipc_aven_ceo_add_member — which grants the registry DIRECTORY read + a BLIND
+	// admission (the `relay` bundle: replicate/quota/rate_limit), NOT a plain `read`. Assemble
+	// the preview from the SSOT relay bundle + the `directory` cap (the same cap
+	// identity_cap_report emits for a registry-scoped read) so the chip set is honest.
+	let mut tier0 = vec!["directory".to_string()];
+	tier0.extend(crate::identity_acc::grant_kind_caps("relay").iter().map(|c| c.to_string()));
+	m.insert("tier0".to_string(), tier0);
+	m
 }
 
 /// Self-healing keyshare invariant: every transitive OWNS signer of a SAFE this
@@ -1655,8 +1703,11 @@ async fn finish_spark_admin_grant(
 #[serde(rename_all = "camelCase")]
 pub struct SubjectCapsDto {
 	pub did: String,
-	/// `owns` | `reads` | `replicate`
+	/// PRIMARY (highest-rank) role: `admin` | `reader` | `relay` | `member`.
 	pub grant: String,
+	/// EVERY named role this DID holds (admin/reader/relay), rank-ordered — the UI lists them
+	/// all so no role hides behind the primary. Empty when only granular grants (`grant`="member").
+	pub roles: Vec<String>,
 	/// Effective caps (e.g. `read`, `write`, `delete`, `admit`, `rotate_dek`, `replicate`).
 	pub caps: Vec<String>,
 }
@@ -1714,6 +1765,7 @@ pub(crate) async fn avendb_ipc_spark_admin_list(
 		.map(|s| SubjectCapsDto {
 			did: s.did,
 			grant: s.grant.to_string(),
+			roles: s.roles.iter().map(|r| r.to_string()).collect(),
 			caps: s.caps.iter().map(|c| c.to_string()).collect(),
 		})
 		.collect();

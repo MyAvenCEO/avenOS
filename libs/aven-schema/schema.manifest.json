@@ -107,9 +107,8 @@
 				{
 					"name": "username_slug",
 					"type": "text",
-					"plaintext": true,
 					"nullable": true,
-					"comment": "human-identity profile handle (null for aven)"
+					"comment": "sealed (board 0049) — human-identity profile handle (null for aven); was plaintext, now sealed at rest so a blind relay cannot read handles"
 				},
 				{
 					"name": "name",
@@ -459,6 +458,26 @@
 					"type": "text",
 					"exposeTs": "bigint",
 					"comment": "sealed at rest"
+				}
+			]
+		},
+		"profile": {
+			"columns": [
+				{
+					"name": "subject_type",
+					"type": "text",
+					"comment": "sealed (board 0049) — SIGNER (a did:key device/peer) | SAFE (a did:safe identity). Sealed: only registry-DEK holders read the directory."
+				},
+				{
+					"name": "did",
+					"type": "text",
+					"comment": "sealed (board 0049) — the did:key (SIGNER) or did:safe (SAFE) this profile describes; the link to the roster subject"
+				},
+				{
+					"name": "display_name",
+					"type": "text",
+					"nullable": true,
+					"comment": "sealed (board 0049) — human-facing directory name (device label / account / identity name)"
 				}
 			]
 		}
