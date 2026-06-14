@@ -53,6 +53,10 @@ function capDescription(key: string): string {
 // Role label (Admin/Reader/Relay, board 0047) — distinct from cap labels so a relay
 // shows "Relay" (role) + "Replicate" (cap), not two "Replicate" badges.
 function grantLabel(grant: IdentityGrant): string {
+	// On the avenCEO/network identity a `reader` grant IS the network admission (avenCeoAddMember)
+	// — i.e. TIER-0. Label it as such so "invite a member to the network" is unambiguous (board
+	// 0047: reads-on-avenCEO = TIER-0; the dual label resolved at the presentation layer).
+	if (isAvenCeo && grant === 'reader') return t('identities.share.grants.tier0')
 	return t(`identities.share.grants.${grant}`)
 }
 /// Display order for the Capabilities tab; any unknown cap falls in after these.
@@ -84,6 +88,8 @@ let activeTab = $state<MembersTab>('members')
 const GRANT_KINDS: IdentityGrant[] = ['admin', 'reader', 'relay']
 let grantKind = $state<IdentityGrant>('admin')
 function grantDescKey(grant: IdentityGrant): string {
+	// avenCEO `reader` = TIER-0 network admission (see grantLabel).
+	if (isAvenCeo && grant === 'reader') return 'identities.share.grantDescTier0'
 	return grant === 'admin'
 		? 'identities.share.grantDescAdmin'
 		: grant === 'reader'
