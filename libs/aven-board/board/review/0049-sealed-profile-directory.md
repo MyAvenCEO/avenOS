@@ -86,7 +86,7 @@ only) + `tier0_minimal_grant`. S4 = transparent display + label + i18n.
 - [x] No plaintext membership: `profile` rows (subject_type/did/display_name) are sealed + `safes.username_slug` no longer `plaintext:true` (manifest); `aven-caps::profile_seal_registry_dek_separation` proves a profile cell decrypts ONLY under the registry-group DEK (the avenCEO content DEK / blind relay sees ciphertext).
 - [x] `aven-caps::tier0_minimal_grant` — a TIER-0 (registry-only) member READS the registry/profile directory but a read of avenCEO content is DENIED (extends is one-directional); the DEK separation test proves it holds the registry DEK, not the avenCEO content DEK.
 - [x] Discovery reads the sealed `profile` table, not the plaintext `signers`/`safes` roster: `signers::list_profile_directory` + the `profileDirectory` IPC decrypt the directory under the registry DEK (a blind relay gets an empty list).
-- [~] Label is "TIER-0" (en+de, committed) + `bun test` i18n coverage green (no raw keys). The full per-subject transparent caps RENDER is **S4** (a separate slice, not in this S1–S3 /goal).
+- [x] Members UI renders each subject's DID + EVERY role it holds + exact `identity_cap_report` caps in one list (no role hidden — the standalone TIER-0 block is gone); GIVE ACCESS previews the caps a selected role applies (`roleCaps` SSOT); label is "TIER-0"; `bun test` i18n coverage green (no raw keys). The "Not on the network yet" banner now reacts to real caps (registry DEK = admitted). **S4 built (app svelte-check 0 errors).**
 - [x] `cargo build --features desktop-ai` exits 0 (app) + `cargo test -p aven-caps` 51 pass; `bun run check` 0 errors; `bun test` 39 pass.
 
 ## Verification
@@ -110,6 +110,20 @@ cd app && bun run check && bun test tests
 
 Newest first.
 
+- `2026-06-14` — **S4 BUILT (transparent caps UI; green).** Three fixes from live UI feedback:
+  (a) **banner reacts to caps** — `avenCeoMembership` returns `member` when the device holds the
+  registry directory DEK (the new TIER-0 credential), so the "Not on the network yet" banner clears
+  for both did:key and did:safe members (the registry keyshare rides the SAFE wrap key — works
+  transitively where a direct biscuit DID match doesn't). (b) **WHO HAS ACCESS = one row per DID** —
+  `identity_cap_report`/`SubjectCaps` now expose EVERY named role per DID (rank-ordered, not just the
+  primary); the panel shows the DID as the row identity with all roles + caps in one list, and the
+  standalone "you are TIER-0" explainer block is removed (no role hidden behind a label). (c) **GIVE
+  ACCESS preview** — new `roleCaps` IPC surfaces `grant_kind_caps` (+ an SSOT-derived `tier0` bundle =
+  directory + relay admission); the form previews the exact cap chips a selected role applies before
+  the grant. Gates: aven-caps 51 pass; app `cargo build --features desktop-ai` exit 0; app
+  `svelte-check` 0 errors; `bun run check` 0 errors; `bun test` 39 pass. All acceptance criteria now
+  checked; remaining = the live flush + 2-device validation (relay sees only ciphertext; a TIER-0
+  member sees directory names but not avenCEO content) — the human's review sign-off.
 - `2026-06-14` — **S1–S3 BUILT (green); card → review/.** Implemented the sealed profile directory
   end-to-end. **S1:** (a) keystone aven-caps proofs — `tier0_minimal_grant` (a registry-only member
   reads the directory but is DENIED avenCEO content; `extends` one-directional) + `profile_seal_registry_dek_separation`
