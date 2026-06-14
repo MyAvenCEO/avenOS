@@ -240,15 +240,16 @@ async fn add_remote_signer_inner(
 		.map(|d| d.as_millis() as i64)
 		.unwrap_or(0);
 	let mut values: Map<String, JsonValue> = Map::new();
-	values.insert("owner".into(), JsonValue::String(owner.to_string()));
 	values.insert("signer_did".into(), JsonValue::String(signer_did.to_string()));
 	values.insert("device_label".into(), JsonValue::String(label));
 	values.insert("kind".into(), JsonValue::String("remote".into()));
 	values.insert("added_at_ms".into(), JsonValue::Number(now_ms.into()));
 	values.insert("status".into(), JsonValue::String("active".into()));
 	let row_vals = crate::avendb::insert_values("signers", &schema, values)?;
+	// Owner-scoped create (board 0037): the funnel mints the owner-binding from `owner`; ownership
+	// lives in the immutable header, not a data column. One channel, no per-call-site stamping.
 	client
-		.create_checked("signers", row_vals)
+		.create_owned("signers", owner, row_vals)
 		.await
 		.map_err(crate::avendb::format_avendb_err)?;
 	Ok(())

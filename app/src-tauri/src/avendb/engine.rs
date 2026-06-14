@@ -1320,7 +1320,6 @@ pub(super) async fn hydrate_shell(
 				"signers",
 				&signers_schema_seed,
 				vec![
-					("owner".into(), JsonValue::String(self_owner.to_string())),
 					("signer_did".into(), JsonValue::String(vault.signer_did.clone())),
 					("device_label".into(), JsonValue::String(device_label)),
 					("kind".into(), JsonValue::String("local".into())),
@@ -1331,8 +1330,9 @@ pub(super) async fn hydrate_shell(
 				.into_iter()
 				.collect(),
 			)?;
+			// Owner-scoped create (board 0037): the funnel mints the owner-binding from `self_owner`.
 			client
-				.create_checked("signers", peer_vals)
+				.create_owned("signers", self_owner, peer_vals)
 				.await
 				.map_err(super::format_avendb_err)?;
 		}

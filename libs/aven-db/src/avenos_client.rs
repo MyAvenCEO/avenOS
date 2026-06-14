@@ -534,6 +534,24 @@ impl AvenDbClient {
         Ok(object_id)
     }
 
+    /// Create a row on an **owner-scoped** table, owned by `owner` (board 0037). The deep author
+    /// funnel mints the owner-binding from `owner` and fails closed without it — ownership lives in
+    /// the immutable header, never a data column. Use this for owned creates instead of stamping a
+    /// binding into metadata at the call-site.
+    pub async fn create_owned(
+        &self,
+        table: &str,
+        owner: uuid::Uuid,
+        fields: std::collections::HashMap<String, Value>,
+    ) -> Result<ObjectId> {
+        let map = self.resolve_named_row(table, fields)?;
+        let (object_id, _, _) = self
+            .runtime
+            .insert_owned(table, map, None, None, owner)
+            .map_err(|e| AvenDbError::Write(e.to_string()))?;
+        Ok(object_id)
+    }
+
     /// [`create_checked`] + a caller-supplied id and row metadata (e.g. the owner-binding).
     pub async fn create_checked_with_id_and_metadata(
         &self,

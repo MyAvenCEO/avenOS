@@ -364,6 +364,39 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         Ok((row_id, row_values, batch_id))
     }
 
+    /// The raw owner-binding metadata string for a row, or `None`. Lets the app recover the owning
+    /// SAFE from the immutable header for the sync ACL (board 0037).
+    pub fn owner_binding_for(
+        &self,
+        table: &str,
+        row_id: ObjectId,
+    ) -> Result<Option<String>, RuntimeError> {
+        let core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        Ok(core.owner_binding_for(table, row_id))
+    }
+
+    /// Insert a row into an **owner-scoped** table owned by `owner` (board 0037). The deep author
+    /// funnel mints the row's owner-binding `(value_id → owner)` from it — ownership travels in the
+    /// immutable signed header, not a data column.
+    pub fn insert_owned(
+        &self,
+        table: &str,
+        values: HashMap<String, Value>,
+        object_id: Option<ObjectId>,
+        session: Option<&Session>,
+        owner: uuid::Uuid,
+    ) -> Result<DirectInsertResult, RuntimeError> {
+        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        let ctx = session
+            .cloned()
+            .map(WriteContext::from_session)
+            .unwrap_or_default()
+            .with_owner(owner);
+        let ((row_id, row_values), batch_id) =
+            core.insert_with_id(table, values, object_id, Some(&ctx))?;
+        Ok((row_id, row_values, batch_id))
+    }
+
     /// Update a row (partial update by column name).
     pub fn update(
         &self,
