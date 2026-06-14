@@ -1,7 +1,7 @@
 {
 	"name": "@avenos/aven-ui",
 	"private": true,
-	"version": "26.6.1-next.10",
+	"version": "26.6.1-next.11",
 	"type": "module",
 	"description": "Framework-agnostic JSON view/style/state UI engine (Maia-inspired).",
 	"main": "./src/index.ts",

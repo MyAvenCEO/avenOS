@@ -1,3 +1,17 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.10...v) (2026-06-14)
+
+
+### Bug Fixes
+
+* **ci:** valid YAML (colon-space in step name broke it) + restore unified CalVer ([b09a83c](https://github.com/MyAvenCEO/avenOS/commit/b09a83c3778a8362c36ebc75e9694ddc401ca5f9))
+* **ios:** fetch onnxruntime dylib before build (satisfies the bundled resource) ([d4b5471](https://github.com/MyAvenCEO/avenOS/commit/d4b547145412e2823d11c9011cca0aa2fa0f1d69))
+* **relay:** reset Rust crate versions to 0.0.1 on next (stop sprite cache churn) ([522ec7e](https://github.com/MyAvenCEO/avenOS/commit/522ec7e53f29dba138fad658dd12653ce98006c7))
+* **release:** stop stamping Rust crate versions — only package.json + tauri.conf.json ([c552a2d](https://github.com/MyAvenCEO/avenOS/commit/c552a2d103c2cedea242fe4406c0e573f0bd44fa))
+
+
+### Performance Improvements
+
+* **ci:** cache Rust builds for mac + iOS jobs (Swatinem/rust-cache) ([aafde0e](https://github.com/MyAvenCEO/avenOS/commit/aafde0e2eb5204ae35ea53e28024c4fd96b99abc))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.9...v) (2026-06-14)
 
 

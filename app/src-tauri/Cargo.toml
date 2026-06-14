@@ -18,7 +18,7 @@ incremental = false
 
 [package]
 name = "aven-os-app"
-version = "0.0.1"
+version = "26.6.1-next.11"
 description = "Aven OS desktop shell"
 authors = ["Aven"]
 edition = "2021"
@@ -80,7 +80,7 @@ async-trait = "0.1"
 # the future Gemma/LLM path. The heavy native deps live here, gated by its
 # `stt` / `gemma` features. Only compiled with `local-voice` / `gemma`.
 aven-ai = { path = "../../libs/aven-ai", optional = true, default-features = false }
-aven-db = { version = "0.0.1", default-features = false, features = ["client-p2p"] }
+aven-db = { version = "26.6.1-next.11", default-features = false, features = ["client-p2p"] }
 aven-brain = { path = "../../libs/aven-brain" }
 aven-caps = { path = "../../libs/aven-caps" }
 aven-p2p = { path = "../../libs/aven-p2p" }
