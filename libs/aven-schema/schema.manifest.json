@@ -1,6 +1,7 @@
 {
 	"tables": {
 		"signers": {
+			"owner_scoped": true,
 			"columns": [
 				{
 					"name": "owner",
@@ -55,6 +56,7 @@
 			]
 		},
 		"keyshares": {
+			"owner_scoped": true,
 			"columns": [
 				{
 					"name": "owner",
@@ -89,6 +91,7 @@
 			]
 		},
 		"safes": {
+			"owner_scoped": true,
 			"columns": [
 				{
 					"name": "owner",
@@ -160,6 +163,7 @@
 			]
 		},
 		"safe_controllers": {
+			"owner_scoped": true,
 			"columns": [
 				{
 					"name": "owner",
@@ -198,6 +202,7 @@
 			]
 		},
 		"todos": {
+			"owner_scoped": true,
 			"columns": [
 				{
 					"name": "owner",
@@ -222,6 +227,7 @@
 			]
 		},
 		"messages": {
+			"owner_scoped": true,
 			"columns": [
 				{
 					"name": "owner",
@@ -254,6 +260,7 @@
 			]
 		},
 		"files": {
+			"owner_scoped": true,
 			"columns": [
 				{
 					"name": "owner",
@@ -296,6 +303,7 @@
 			]
 		},
 		"memories": {
+			"owner_scoped": true,
 			"columns": [
 				{
 					"name": "owner",
@@ -394,6 +402,7 @@
 			]
 		},
 		"entities": {
+			"owner_scoped": true,
 			"columns": [
 				{
 					"name": "owner",
@@ -420,6 +429,7 @@
 			]
 		},
 		"links": {
+			"owner_scoped": true,
 			"columns": [
 				{
 					"name": "owner",
@@ -498,6 +508,7 @@
 			]
 		},
 		"context_traces": {
+			"owner_scoped": true,
 			"columns": [
 				{
 					"name": "owner",

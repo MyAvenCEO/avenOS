@@ -51,6 +51,10 @@ pub struct ManifestColumn {
 #[derive(Debug, Clone, Deserialize)]
 pub struct ManifestTable {
     pub columns: Vec<ManifestColumn>,
+    /// Whether every row of this table is owned by a SAFE (board 0037) — the declarative source of
+    /// truth for owner-scoping. Replaces the legacy "has an `owner` column" heuristic; absent = false.
+    #[serde(default)]
+    pub owner_scoped: bool,
 }
 
 /// The whole manifest.
@@ -128,13 +132,16 @@ pub fn manifest_to_schema(m: Manifest) -> Result<Schema, String> {
     let mut builder = SchemaBuilder::new();
     for (table_name, def) in m.tables {
         let mut tb = TableSchemaBuilder::new(&table_name);
-        for col in def.columns {
-            let ct = column_type_from_manifest(&col)?;
+        for col in &def.columns {
+            let ct = column_type_from_manifest(col)?;
             tb = if col.nullable {
                 tb.nullable_column(&col.name, ct)
             } else {
                 tb.column(&col.name, ct)
             };
+        }
+        if def.owner_scoped {
+            tb = tb.owner_scoped();
         }
         builder = builder.table(tb);
     }

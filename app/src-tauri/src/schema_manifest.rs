@@ -176,7 +176,10 @@ pub fn manifest_spark_scoped_table_names() -> Result<Vec<String>, String> {
 	let m = read_manifest()?;
 	Ok(m.tables
 		.iter()
-		.filter(|(_, def)| def.columns.iter().any(|c| c.name == "owner"))
+		// Owner-scoping is the declarative `owner_scoped` flag (board 0037); a legacy `owner`
+		// column is still honoured as a fallback during the SSOT migration so a not-yet-flagged
+		// table is never silently un-scoped. Once the column is dropped, the flag stands alone.
+		.filter(|(_, def)| def.owner_scoped || def.columns.iter().any(|c| c.name == "owner"))
 		.map(|(name, _)| name.clone())
 		.collect())
 }
