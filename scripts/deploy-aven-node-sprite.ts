@@ -24,8 +24,7 @@ import { fileURLToPath } from 'node:url'
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 const SPRITE = process.env.AVEN_CEO_SPRITE?.trim() || 'aven-ceo'
-// Canonical AVEN_SIGNER_SECRET; AVEN_SERVER_SEED kept as a legacy fallback.
-const SEED = process.env.AVEN_SIGNER_SECRET?.trim() || process.env.AVEN_SERVER_SEED?.trim() || ''
+const SEED = process.env.AVEN_SIGNER_SECRET?.trim() || ''
 const BIN =
 	process.env.AVEN_SERVER_BIN?.trim() || '/home/sprite/aven-build/target/rust/release/aven-node'
 const DATA_DIR = process.env.AVEN_SERVER_DATA_DIR?.trim() || '/home/sprite/aven-data'
@@ -182,10 +181,7 @@ if (WANT_BUILD) {
 console.log(`Deploying aven-node → Sprite "${SPRITE}" (binary: ${BIN})`)
 
 const envPairs = [
-	// Write both names: the new binary reads AVEN_SIGNER_SECRET first, the legacy
-	// fallback keeps an older binary working through the transition.
 	`AVEN_SIGNER_SECRET=${SEED}`,
-	`AVEN_SERVER_SEED=${SEED}`,
 	`AVEN_SERVER_BIND=${BIND}`,
 	`AVEN_SERVER_HEALTH_BIND=${HEALTH}`,
 	`AVEN_SERVER_PIN_FILE=${PIN_FILE}`,

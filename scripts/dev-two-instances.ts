@@ -41,7 +41,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { homedir, platform } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { DEV_SERVER_SEED, LOCAL_WS, SERVER_HTTP_PORT, waitForPort } from './aven-server.ts'
+import { LOCAL_WS, SERVER_HTTP_PORT, waitForPort } from './aven-server.ts'
 import { ensureOnnxruntimeDylib } from './fetch-onnxruntime.ts'
 import { freeDevServerPort } from './free-dev-server-port.ts'
 import { ensureLinuxNativeDeps } from './linux-native-deps.ts'
@@ -85,8 +85,8 @@ const GREEN = '\x1b[32m'
 
 // Both instances dial an aven-node over a WebSocket (`/sync`, nonce-bound did:key
 // challenge) — one relay, N clients, the same transport prod uses.
-// SERVER_HTTP_PORT / DEV_SERVER_SEED / LOCAL_WS come from ./aven-server.ts (shared
-// with the single-instance dev launchers so the relay identity never drifts).
+// SERVER_HTTP_PORT / LOCAL_WS come from ./aven-server.ts (shared with the single-instance
+// dev launchers). The relay identity is AVEN_SIGNER_SECRET from .env (no built-in default).
 //
 // ── Sync relay endpoint ───────────────────────────────────────────────────────
 // Default: a LOCAL aven-node on ws://127.0.0.1:8080/sync (built & run here). To
@@ -201,10 +201,7 @@ function spawnAvenServer(colour: string, env: Record<string, string>) {
 			env: {
 				...env,
 				AVEN_SERVER_HEALTH_BIND: `127.0.0.1:${SERVER_HTTP_PORT}`,
-				AVEN_SIGNER_SECRET:
-					process.env.AVEN_SIGNER_SECRET?.trim() ||
-					process.env.AVEN_SERVER_SEED?.trim() ||
-					DEV_SERVER_SEED,
+				AVEN_SIGNER_SECRET: process.env.AVEN_SIGNER_SECRET?.trim() ?? '',
 				RUST_LOG: env.RUST_LOG ?? 'info'
 			}
 		}
