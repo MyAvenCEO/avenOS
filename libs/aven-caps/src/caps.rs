@@ -1299,6 +1299,79 @@ mod tests {
 	}
 
 	#[test]
+	fn revocation_epoch() {
+		// Board 0040: a revoked admin is DENIED, and a rolled-back (pre-revoke) genesis replayed at
+		// a lower epoch is REJECTED by ingest — so revocation can never be undone after first sync.
+		let mut alice = vault(&[1u8; 32]);
+		let bob = vault(&[2u8; 32]);
+		let sid = uuid::Uuid::new_v4();
+		let genesis = mint_safe_genesis(&alice, sid).unwrap();
+		let pre_revoke =
+			attenuate_add_admin_third_party(&alice.biscuit_kp, &genesis, sid, bob.signer_did.as_str())
+				.unwrap();
+		alice.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: pre_revoke.clone() });
+		// Pre-revoke, bob is an admin and authorizes.
+		authorize(&alice, sid, AccOp::Write, "todos", None, &bob.signer_did).unwrap();
+
+		// Revoke bob → he is no longer an admin and is denied.
+		let post_revoke =
+			rebuild_identity_biscuit_excluding(&alice, sid, bob.signer_did.as_str()).unwrap();
+		alice.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: post_revoke.clone() });
+		assert!(
+			authorize(&alice, sid, AccOp::Write, "todos", None, &bob.signer_did).is_err(),
+			"a revoked admin must be denied"
+		);
+		assert!(
+			!identity_admins(&post_revoke, sid)
+				.unwrap()
+				.iter()
+				.any(|d| signer_did_matches(d, bob.signer_did.as_str())),
+			"bob is gone from the admin set"
+		);
+
+		// Rollback rejection: the post-revoke authority is at epoch 2 (revoke bumps dek_version).
+		// A replay of the pre-revoke (bob-included) genesis at epoch 1 < high-water 2 is rejected by
+		// ingest, so it can never re-instate bob into a verifier that has already seen epoch 2.
+		let issuer = encode_issuer_pubkey_b64(&alice.biscuit_kp.public());
+		let pk = alice.biscuit_kp.public();
+		let post_b64 = URL_SAFE_NO_PAD.encode(post_revoke.to_vec().unwrap());
+		let pre_b64 = URL_SAFE_NO_PAD.encode(pre_revoke.to_vec().unwrap());
+		let mut verifier = vault(&[7u8; 32]);
+		ingest_genesis_opened(&mut verifier, sid, &post_b64, Some(&issuer), pk, 2, 0).unwrap();
+		let err = ingest_genesis_opened(&mut verifier, sid, &pre_b64, Some(&issuer), pk, 1, 2)
+			.expect_err("a pre-revoke genesis replayed at a lower epoch must be rejected");
+		assert!(err.contains("stale-genesis-epoch"), "got: {err}");
+	}
+
+	#[test]
+	fn universal_ownership() {
+		// Board 0040: any SAFE is owned by any subjects — a did:safe controller of ANY "type" AND a
+		// raw did:key, with no type restriction (the cap core never had types). Both become admins.
+		let alice = vault(&[1u8; 32]);
+		let controller_safe = uuid::Uuid::new_v4(); // an arbitrary other SAFE (any UI "type")
+		let child = uuid::Uuid::new_v4();
+		let genesis =
+			mint_safe_genesis_with_controller(&alice, child, &safe_did(controller_safe)).unwrap();
+		let keyholder = vault(&[2u8; 32]);
+		let chain = attenuate_add_admin_third_party(
+			&alice.biscuit_kp,
+			&genesis,
+			child,
+			keyholder.signer_did.as_str(),
+		)
+		.unwrap();
+		let admins = identity_admins(&chain, child).unwrap();
+		assert!(
+			admins.iter().any(|d| d.contains(&controller_safe.to_string())),
+			"a did:safe controller of any type is an admin"
+		);
+		assert!(
+			admins.iter().any(|d| signer_did_matches(d, keyholder.signer_did.as_str())),
+			"a did:key may be admitted directly"
+		);
+	}
+
+	#[test]
 	fn third_party_grant_allows_second_device() {
 		let root_alice = [1u8; 32];
 		let root_bob = [2u8; 32];
