@@ -52,7 +52,9 @@ pub(crate) async fn avendb_ipc_avendb_get(
 	let tbl = engine::resolved_table_schema(client.as_ref(), &table).await?;
 	match engine::find_row_snapshot(client.as_ref(), &table, &tbl, uuid).await? {
 		Some((oid, vals)) => {
-			let identity_row = engine::identity_uuid_row(&tbl, &vals).unwrap_or(shell.default_identity);
+			let identity_row = engine::owner_of_row(client.as_ref(), &table, oid)
+				.await?
+				.unwrap_or(shell.default_identity);
 			engine::authorize_gate(
 				&shell,
 				&table,
@@ -67,29 +69,11 @@ pub(crate) async fn avendb_ipc_avendb_get(
 				oid,
 				&vals,
 				ENCRYPTED_META,
+				identity_row,
 			)
 		}
 		None => Err(format!("row not found table={table} id={uuid}")),
 	}
-}
-
-/// Mint a signed owner-binding for a freshly generated `row_id` and return it as the
-/// row-metadata entry to stamp at create. EVERY identity-scoped create (data AND
-/// control-plane) routes a binding through this, so the row carries its proof on the
-/// wire and is verified on apply — the basis for deny-by-default (private by default).
-pub(crate) fn owner_binding_meta(
-	signing_key: &ed25519_dalek::SigningKey,
-	row_id: ObjectId,
-	owner: Uuid,
-) -> Result<std::collections::HashMap<String, String>, String> {
-	let binding =
-		aven_caps::ownership::mint_owner_binding(signing_key, *row_id.uuid(), owner)?;
-	let mut meta = std::collections::HashMap::new();
-	meta.insert(
-		aven_caps::ownership::OWNER_BINDING_META_KEY.to_string(),
-		binding.to_meta_string(),
-	);
-	Ok(meta)
 }
 
 async fn finish_spark_data_write(
@@ -119,12 +103,11 @@ pub(crate) async fn avendb_ipc_avendb_create(
 	let tbl = engine::resolved_table_schema(client.as_ref(), &table).await?;
 
 	if table == "signers" {
-		let identity = engine::identity_uuid_from_json_row(&tbl, &values)?;
+		let identity = engine::resolve_create_owner(&values, shell.default_identity)?;
 		let vals = insert_values("signers", &tbl, values)?;
 		let oid = ObjectId::new();
-		let prow_meta = owner_binding_meta(&shell.signing_key, oid, identity)?;
 		client
-			.create_checked_with_id_and_metadata(&table, oid, vals.clone(), prow_meta)
+			.create(&table, identity, Some(oid), vals.clone())
 			.await
 			.map_err(format_avendb_err)?;
 
@@ -140,6 +123,7 @@ pub(crate) async fn avendb_ipc_avendb_create(
 			oid,
 			&vals_fresh,
 			ENCRYPTED_META,
+			identity,
 		)?;
 
 		let _ = avendb.change_tx.send(table.clone());
@@ -154,8 +138,7 @@ pub(crate) async fn avendb_ipc_avendb_create(
 
 	let mut plaintext = std::collections::HashMap::new();
 
-	engine::inject_default_identity(&mut values, &tbl, shell.default_identity)?;
-	let identity_gate = engine::identity_uuid_from_json_row(&tbl, &values)?;
+	let identity_gate = engine::resolve_create_owner(&values, shell.default_identity)?;
 	engine::authorize_gate(
 		&shell,
 		&table,
@@ -175,9 +158,8 @@ pub(crate) async fn avendb_ipc_avendb_create(
 		// Stamp a signed owner-binding (digest-covered) so every peer verifies it on
 		// apply; the id is fixed up-front so the binding's value_id == the row id.
 		let oid = ObjectId::new();
-		let extra_meta = owner_binding_meta(&shell.signing_key, oid, identity_gate)?;
 		let oid = client
-			.create_checked_with_id_and_metadata(&table, oid, vals.clone(), extra_meta)
+			.create(&table, identity_gate, Some(oid), vals.clone())
 			.await
 			.map_err(format_avendb_err)?;
 
@@ -186,7 +168,7 @@ pub(crate) async fn avendb_ipc_avendb_create(
 	}
 
 	if !plaintext.is_empty() {
-		let identity = engine::identity_uuid_named(&vals)?;
+		let identity = identity_gate;
 		let mut ph = JsonRow::new();
 		for (col, pt) in plaintext {
 			let cd = tbl
@@ -207,9 +189,8 @@ pub(crate) async fn avendb_ipc_avendb_create(
 			);
 		}
 		let ops = patch_updates(&tbl, ph)?;
-		let upd_meta = owner_binding_meta(&shell.signing_key, oid, identity)?;
 		client
-			.update_with_metadata(oid, ops, upd_meta)
+			.update(oid, ops)
 			.await
 			.map_err(format_avendb_err)?;
 	}
@@ -226,6 +207,7 @@ pub(crate) async fn avendb_ipc_avendb_create(
 		oid,
 		&vals_fresh,
 		ENCRYPTED_META,
+		identity_gate,
 	)?;
 
 	let _ = avendb.change_tx.send(table.clone());
@@ -283,7 +265,10 @@ pub(crate) async fn avendb_ipc_avendb_update(
 		shell.avendb_write_branch,
 		oid.uuid()
 	);
-	let identity = engine::identity_uuid_row(&tbl, &old_vals)?;
+	let _ = &old_vals;
+	let identity = engine::owner_of_row(client.as_ref(), &table, oid)
+		.await?
+		.ok_or_else(|| format!("no owner-binding for {table}/{uuid}"))?;
 
 	engine::authorize_gate(
 		&shell,
@@ -328,9 +313,8 @@ pub(crate) async fn avendb_ipc_avendb_update(
 
 	let ops = patch_updates(&tbl, sealed_patch)?;
 
-	let upd_meta = owner_binding_meta(&shell.signing_key, oid, identity)?;
 	client
-		.update_with_metadata(oid, ops, upd_meta)
+		.update(oid, ops)
 		.await
 		.map_err(|e| {
 			let msg = format_avendb_err(e);
@@ -388,7 +372,10 @@ pub(crate) async fn avendb_ipc_avendb_delete(
 		shell.avendb_write_branch,
 		oid.uuid()
 	);
-	let identity = engine::identity_uuid_row(&tbl, &row_vals)?;
+	let _ = &row_vals;
+	let identity = engine::owner_of_row(client.as_ref(), &table, oid)
+		.await?
+		.ok_or_else(|| format!("no owner-binding for {table}/{uuid}"))?;
 
 	engine::authorize_gate(
 		&shell,
@@ -398,9 +385,8 @@ pub(crate) async fn avendb_ipc_avendb_delete(
 		Some(uuid),
 	)?;
 
-	let del_meta = owner_binding_meta(&shell.signing_key, oid, identity)?;
 	client
-		.delete_with_metadata(oid, del_meta)
+		.delete(oid)
 		.await
 		.map_err(|e| {
 			let msg = format_avendb_err(e);

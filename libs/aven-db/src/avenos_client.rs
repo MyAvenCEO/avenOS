@@ -274,6 +274,29 @@ impl AvenDbClient {
             .map_err(|e| AvenDbError::Sync(format!("set_edit_signer: {e}")))
     }
 
+    /// Inject the owner-binder for the local write path. The app provides a binder backed by its
+    /// device key so every locally-authored **owner-scoped** row carries an Ed25519-signed
+    /// owner-binding (`OWNER_BINDING_META_KEY`), minted at the deep author funnel and verified on
+    /// apply by every peer (board 0037). Required to author any owner-scoped row: the funnel fails
+    /// closed without a binder, on every peer, local or syncing, no exceptions.
+    pub fn set_owner_binder(
+        &self,
+        binder: std::sync::Arc<dyn crate::capability::OwnerBinder>,
+    ) -> Result<()> {
+        self.runtime
+            .set_owner_binder(binder)
+            .map_err(|e| AvenDbError::Sync(format!("set_owner_binder: {e}")))
+    }
+
+    /// The raw owner-binding metadata string for a row, or `None` if it carries none. Lets the
+    /// app recover the owning SAFE from the immutable signed header (board 0037) — there is no
+    /// `owner` data column, so ownership is read back here and parsed via `aven-caps`.
+    pub fn owner_binding_for(&self, table: &str, row_id: ObjectId) -> Result<Option<String>> {
+        self.runtime
+            .owner_binding_for(table, row_id)
+            .map_err(|e| AvenDbError::Query(format!("owner_binding_for: {e}")))
+    }
+
     /// Peer client ids with a live registered sync link (for mesh status UI).
     pub fn peer_client_ids(&self) -> Result<Vec<PeerId>> {
         self.runtime
@@ -507,33 +530,24 @@ impl AvenDbClient {
         crate::frontier_epoch::changes_since(cursor)
     }
 
-    pub async fn create_checked(
+    /// The sole create. Every value is owned by a SAFE (board 0037) — ownership is an aven-db core
+    /// primitive, like `_id`: a value IS `(id, owner, data)` and the deep author funnel mints the
+    /// immutable owner-binding `(value_id → owner)` from `owner`, failing closed without it. There is
+    /// no unowned create because aven-db cannot represent an unowned value. `id` is supplied when the
+    /// caller needs a deterministic value id (else engine-assigned).
+    pub async fn create(
         &self,
         table: &str,
+        owner: uuid::Uuid,
+        id: Option<ObjectId>,
         fields: std::collections::HashMap<String, Value>,
     ) -> Result<ObjectId> {
         let map = self.resolve_named_row(table, fields)?;
         let (object_id, _, _) = self
             .runtime
-            .insert(table, map, None)
+            .insert_owned(table, map, id, None, owner)
             .map_err(|e| AvenDbError::Write(e.to_string()))?;
         Ok(object_id)
-    }
-
-    /// [`create_checked`] + a caller-supplied id and row metadata (e.g. the owner-binding).
-    pub async fn create_checked_with_id_and_metadata(
-        &self,
-        table: &str,
-        object_id: ObjectId,
-        fields: std::collections::HashMap<String, Value>,
-        extra_metadata: std::collections::HashMap<String, String>,
-    ) -> Result<ObjectId> {
-        let map = self.resolve_named_row(table, fields)?;
-        let (oid, _, _) = self
-            .runtime
-            .insert_with_id_and_metadata(table, map, Some(object_id), None, extra_metadata)
-            .map_err(|e| AvenDbError::Write(e.to_string()))?;
-        Ok(oid)
     }
 
     /// Resolve a name→value map into a full row map in schema order, filling missing
@@ -572,16 +586,6 @@ impl AvenDbClient {
                 "create {table}: unknown column `{unknown}` (not in schema)"
             )));
         }
-        // Owner invariant — an owner-bearing table holds owned data ONLY. A table whose
-        // `owner` column is non-nullable must never receive a Null/absent owner: reject it on
-        // every create path so an ownerless value can't enter an owned (SAFE-scoped) table,
-        // zero exceptions. One schema-driven rule (`owner_invariant_ok`), shared & tested.
-        if !crate::owner_invariant_ok(table_schema, row.get("owner")) {
-            return Err(AvenDbError::Schema(format!(
-                "create {table}: owner-bearing table requires a non-null `owner` \
-                 (ownerless value rejected)"
-            )));
-        }
         Ok(row)
     }
 
@@ -592,36 +596,9 @@ impl AvenDbClient {
         Ok(())
     }
 
-    /// Update a row, stamping extra row metadata (e.g. a re-minted owner-binding) into
-    /// the edit's batch — so every write is authenticated on apply, not just creates.
-    pub async fn update_with_metadata(
-        &self,
-        object_id: ObjectId,
-        updates: Vec<(String, Value)>,
-        extra_metadata: std::collections::HashMap<String, String>,
-    ) -> Result<()> {
-        self.runtime
-            .update_with_metadata(object_id, updates, None, extra_metadata)
-            .map_err(|e| AvenDbError::Write(e.to_string()))?;
-        Ok(())
-    }
-
     pub async fn delete(&self, object_id: ObjectId) -> Result<()> {
         self.runtime
             .delete(object_id, None)
-            .map_err(|e| AvenDbError::Write(e.to_string()))?;
-        Ok(())
-    }
-
-    /// Delete a row, stamping a re-minted owner-binding into the tombstone batch so the
-    /// delete is authenticated on apply.
-    pub async fn delete_with_metadata(
-        &self,
-        object_id: ObjectId,
-        extra_metadata: std::collections::HashMap<String, String>,
-    ) -> Result<()> {
-        self.runtime
-            .delete_with_metadata(object_id, None, extra_metadata)
             .map_err(|e| AvenDbError::Write(e.to_string()))?;
         Ok(())
     }

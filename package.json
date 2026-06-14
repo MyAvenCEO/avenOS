@@ -27,6 +27,10 @@
 		"release:app:mac": "bun ./scripts/release-app.ts mac",
 		"release:app:ios": "bun ./scripts/release-app.ts ios",
 		"fetch:webcm": "bun run ./scripts/fetch-webcm.ts",
+		"next-version": "bun ./scripts/next-version.ts",
+		"set-version": "bun ./scripts/set-version.ts",
+		"changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
+		"release:next": "bun ./scripts/release-next.ts",
 		"dev:all": "concurrently -k -c auto -n site,app \"bun run dev:aven-website\" \"bun run --cwd app dev\"",
 		"dev:ocr-example": "bun --env-file=.env --filter @avenos/ocr-example dev",
 		"build": "bun --env-file=.env --filter @avenos/aven-website build",
@@ -39,6 +43,10 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.14",
-		"concurrently": "^9.2.1"
+		"@commitlint/cli": "^21.0.2",
+		"@commitlint/config-conventional": "^21.0.2",
+		"concurrently": "^9.2.1",
+		"conventional-changelog-cli": "^5.0.0",
+		"semver": "^7.8.4"
 	}
 }

@@ -6,9 +6,9 @@
 //! there is no claim race. See `docs/ServerRootedAvenCeoPlan.md`.
 
 use aven_caps::caps::{
-	attenuate_add_owner_third_party, biscuit_from_storage, build_vault_from_signing_key,
-	decode_issuer_pubkey_b64, encode_issuer_pubkey_b64, identity_admins, mint_safe_genesis, safe_did,
-	BiscuitVault,
+	attenuate_add_admin_third_party, biscuit_from_storage, build_vault_from_signing_key,
+	decode_issuer_pubkey_b64, derive_subgroup_id, encode_issuer_pubkey_b64, identity_admins,
+	mint_group_genesis_extending, mint_safe_genesis, safe_did, BiscuitVault,
 };
 use aven_caps::crypto::{
 	cell_seal_aad, column_type_slug, decrypt_keyshare_payload, derive_kek_x25519,
@@ -32,13 +32,6 @@ fn bigint_at(vals: &[Value], ix: usize) -> i64 {
 		Some(Value::BigInt(i)) => *i,
 		Some(Value::Integer(i)) => *i as i64,
 		_ => 0,
-	}
-}
-fn uuid_matches(vals: &[Value], ix: usize, want: Uuid) -> bool {
-	match vals.get(ix) {
-		Some(Value::Uuid(o)) => *o.uuid() == want,
-		Some(Value::Text(s)) => Uuid::parse_str(s.trim()).map(|u| u == want).unwrap_or(false),
-		_ => false,
 	}
 }
 
@@ -70,17 +63,15 @@ pub async fn avenceo_genesis_b64(engine: &AvenDbClient, avenceo_id: Uuid) -> Res
 	let tbl = schema
 		.get(&TableName::new("safes"))
 		.ok_or("avenceo: no safes table")?;
-	let sid_ix = col_ix(tbl, "owner")?;
 	let gen_ix = col_ix(tbl, "genesis_b64")?;
 	let q = QueryBuilder::new(TableName::new("safes")).build();
 	let rows = engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))?;
-	for (_oid, vals) in rows {
-		let matches = match vals.get(sid_ix) {
-			Some(Value::Uuid(o)) => *o.uuid() == avenceo_id,
-			Some(Value::Text(s)) => Uuid::parse_str(s.trim()).map(|u| u == avenceo_id).unwrap_or(false),
-			_ => false,
+	for (oid, vals) in rows {
+		let owner: Option<Uuid> = match engine.owner_binding_for("safes", oid).map_err(|e| format!("owner_binding:{e:?}"))? {
+			Some(meta) => aven_db::capability::owner_uuid_from_binding_meta(&meta),
+			None => None,
 		};
-		if matches {
+		if owner == Some(avenceo_id) {
 			return Ok(vals.get(gen_ix).and_then(|v| match v {
 				Value::Text(s) => Some(s.clone()),
 				_ => None,
@@ -92,22 +83,6 @@ pub async fn avenceo_genesis_b64(engine: &AvenDbClient, avenceo_id: Uuid) -> Res
 
 /// Ensure the server owns avenCEO: mint its genesis (server = owner) + a self
 /// keyshare if not already present. Idempotent — safe to call on every boot.
-/// Mint a signed owner-binding for a freshly generated server row id, as the metadata
-/// entry to stamp at create — so the server's avenCEO control rows carry a binding and
-/// pass the same verify-on-apply gate as everything else (no exclusions).
-fn owner_binding_meta(
-	signing: &SigningKey,
-	row_id: ObjectId,
-	owner: Uuid,
-) -> Result<std::collections::HashMap<String, String>, String> {
-	let binding = aven_caps::ownership::mint_owner_binding(signing, *row_id.uuid(), owner)?;
-	let mut meta = std::collections::HashMap::new();
-	meta.insert(
-		aven_caps::ownership::OWNER_BINDING_META_KEY.to_string(),
-		binding.to_meta_string(),
-	);
-	Ok(meta)
-}
 
 /// Seal a trust-root identity cell (`genesis_b64` / `issuer_pubkey_b64`) under the avenCEO
 /// DEK, byte-identically to the app's `seal_column_plain` so the hardened client can open it.
@@ -182,7 +157,6 @@ pub async fn ensure_avenceo_owned(
 	let sealed_issuer =
 		seal_identity_cell(dek.expose(), avenceo_id, sparks_tbl, "issuer_pubkey_b64", dek_ver, &issuer_b64)?;
 	let sparks_row = named_row(&[
-			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 			// avenCEO is an aven SAFE (autonomous network control identity) owned directly
 			// by this node's env-seed server signer; it admits human owners via did:safe.
 			("type", Value::Text("aven".into())),
@@ -197,9 +171,8 @@ pub async fn ensure_avenceo_owned(
 		],
 	);
 	let sparks_oid = ObjectId::new();
-	let sparks_meta = owner_binding_meta(signing, sparks_oid, avenceo_id)?;
 	engine
-		.create_checked_with_id_and_metadata("safes", sparks_oid, sparks_row, sparks_meta)
+		.create("safes", avenceo_id, Some(sparks_oid), sparks_row)
 		.await
 		.map_err(|e| format!("create safes:{e:?}"))?;
 
@@ -209,7 +182,6 @@ pub async fn ensure_avenceo_owned(
 	let aad = keyshare_wrap_aad(&urn, &vault.signer_did, &vault.signer_did, dek_ver);
 	let wrapped = encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
 	let ks_row = named_row(&[
-			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 			("dek_version", Value::BigInt(dek_ver)),
 			("recipient_did", Value::Text(vault.signer_did.clone())),
 			("wrapper_did", Value::Text(vault.signer_did.clone())),
@@ -217,9 +189,8 @@ pub async fn ensure_avenceo_owned(
 		],
 	);
 	let ks_oid = ObjectId::new();
-	let ks_meta = owner_binding_meta(signing, ks_oid, avenceo_id)?;
 	engine
-		.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_row, ks_meta)
+		.create("keyshares", avenceo_id, Some(ks_oid), ks_row)
 		.await
 		.map_err(|e| format!("create keyshares:{e:?}"))?;
 
@@ -229,7 +200,6 @@ pub async fn ensure_avenceo_owned(
 	// server signer as NON-human. Owned by avenCEO so it syncs to its members.
 	if schema.get(&TableName::new("signers")).is_some() {
 		let signers_row = named_row(&[
-				("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 				("signer_did", Value::Text(vault.signer_did.clone())),
 				("device_label", Value::Text(aven_name.into())),
 				("kind", Value::Text("remote".into())),
@@ -239,14 +209,83 @@ pub async fn ensure_avenceo_owned(
 			],
 		);
 		let signers_oid = ObjectId::new();
-		let signers_meta = owner_binding_meta(signing, signers_oid, avenceo_id)?;
 		engine
-			.create_checked_with_id_and_metadata("signers", signers_oid, signers_row, signers_meta)
+			.create("signers", avenceo_id, Some(signers_oid), signers_row)
 			.await
 			.map_err(|e| format!("create signers:{e:?}"))?;
 	}
 
+	// Board 0049: the SEALED profile directory lives in a registry SUB-GROUP that EXTENDS avenCEO.
+	// It has its OWN dek so a TIER-0 member can be granted the directory (registry dek) WITHOUT the
+	// avenCEO content dek. extends() is one-directional: avenCEO members inherit into the registry,
+	// a registry-only member is denied avenCEO content. Minted here so it's part of network genesis.
+	mint_avenceo_registry_subgroup(engine, vault, signing, avenceo_id, &schema, aven_name).await?;
+
 	tracing::info!(%avenceo_id, owner_did = %vault.signer_did, "minted avenCEO genesis — server is owner");
+	Ok(())
+}
+
+/// Mint (idempotently) the avenCEO **registry** sub-group: an `extends(avenCEO)` group with its
+/// OWN dek that owns the sealed `profile` directory. The server self-wraps the registry dek so
+/// hydrate loads it; `avendb_ipc_aven_ceo_add_member` later wraps it to each TIER-0 member.
+pub async fn mint_avenceo_registry_subgroup(
+	engine: &AvenDbClient,
+	vault: &BiscuitVault,
+	signing: &SigningKey,
+	avenceo_id: Uuid,
+	schema: &aven_db::Schema,
+	aven_name: &str,
+) -> Result<(), String> {
+	let registry_id = derive_subgroup_id(avenceo_id, "registry");
+	// Idempotent: skip if the registry safes row already exists.
+	if avenceo_genesis_b64(engine, registry_id).await?.is_some() {
+		return Ok(());
+	}
+	let genesis = mint_group_genesis_extending(vault, registry_id, avenceo_id)?;
+	let genesis_b64 =
+		URL_SAFE_NO_PAD.encode(genesis.to_vec().map_err(|e| format!("reg_genesis_encode:{e:?}"))?);
+	let issuer_b64 = encode_issuer_pubkey_b64(&vault.biscuit_kp.public());
+	let dek_ver = 1i64;
+	let dek = random_identity_dek();
+
+	let sparks_tbl = schema.get(&TableName::new("safes")).ok_or("avenceo: no safes table")?;
+	let sealed_genesis =
+		seal_identity_cell(dek.expose(), registry_id, sparks_tbl, "genesis_b64", dek_ver, &genesis_b64)?;
+	let sealed_issuer =
+		seal_identity_cell(dek.expose(), registry_id, sparks_tbl, "issuer_pubkey_b64", dek_ver, &issuer_b64)?;
+	let sparks_row = named_row(&[
+			("type", Value::Text("aven".into())),
+			("safe_did", Value::Text(safe_did(registry_id))),
+			("name", Value::Text(format!("{aven_name} registry"))),
+			("issuer_pubkey_b64", Value::Text(sealed_issuer)),
+			("genesis_b64", Value::Text(sealed_genesis)),
+			("current_dek_version", Value::BigInt(dek_ver)),
+			("created_at_ms", Value::BigInt(now_ms())),
+		],
+	);
+	engine
+		.create("safes", registry_id, Some(ObjectId::new()), sparks_row)
+		.await
+		.map_err(|e| format!("create registry safes:{e:?}"))?;
+
+	// Self keyshare: wrap the registry dek to the server so hydrate loads deks[(registry,v)].
+	let kek = derive_kek_x25519(signing, &vault.ed25519_public)?;
+	let urn = format!("safe:{registry_id}");
+	let aad = keyshare_wrap_aad(&urn, &vault.signer_did, &vault.signer_did, dek_ver);
+	let wrapped = encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
+	let ks_row = named_row(&[
+			("dek_version", Value::BigInt(dek_ver)),
+			("recipient_did", Value::Text(vault.signer_did.clone())),
+			("wrapper_did", Value::Text(vault.signer_did.clone())),
+			("wrapped_dek", Value::Text(wrapped)),
+		],
+	);
+	engine
+		.create("keyshares", registry_id, Some(ObjectId::new()), ks_row)
+		.await
+		.map_err(|e| format!("create registry keyshares:{e:?}"))?;
+
+	tracing::info!(%registry_id, parent = %avenceo_id, "minted avenCEO registry sub-group (sealed profile directory)");
 	Ok(())
 }
 
@@ -257,13 +296,16 @@ async fn read_avenceo_identity(
 ) -> Result<Option<(ObjectId, String, String, i64)>, String> {
 	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
 	let tbl = schema.get(&TableName::new("safes")).ok_or("avenceo: no safes table")?;
-	let sid_ix = col_ix(tbl, "owner")?;
 	let gen_ix = col_ix(tbl, "genesis_b64")?;
 	let iss_ix = col_ix(tbl, "issuer_pubkey_b64")?;
 	let ver_ix = col_ix(tbl, "current_dek_version")?;
 	let q = QueryBuilder::new(TableName::new("safes")).build();
 	for (oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
-		if uuid_matches(&vals, sid_ix, avenceo_id) {
+		let owner: Option<Uuid> = match engine.owner_binding_for("safes", oid).map_err(|e| format!("owner_binding:{e:?}"))? {
+			Some(meta) => aven_db::capability::owner_uuid_from_binding_meta(&meta),
+			None => None,
+		};
+		if owner == Some(avenceo_id) {
 			return Ok(Some((oid, text_at(&vals, gen_ix), text_at(&vals, iss_ix), bigint_at(&vals, ver_ix))));
 		}
 	}
@@ -280,13 +322,16 @@ async fn read_server_dek(
 ) -> Result<[u8; 32], String> {
 	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
 	let tbl = schema.get(&TableName::new("keyshares")).ok_or("avenceo: no keyshares table")?;
-	let sid_ix = col_ix(tbl, "owner")?;
 	let ver_ix = col_ix(tbl, "dek_version")?;
 	let recip_ix = col_ix(tbl, "recipient_did")?;
 	let wrap_ix = col_ix(tbl, "wrapped_dek")?;
 	let q = QueryBuilder::new(TableName::new("keyshares")).build();
-	for (_oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
-		if uuid_matches(&vals, sid_ix, avenceo_id)
+	for (oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
+		let owner: Option<Uuid> = match engine.owner_binding_for("keyshares", oid).map_err(|e| format!("owner_binding:{e:?}"))? {
+			Some(meta) => aven_db::capability::owner_uuid_from_binding_meta(&meta),
+			None => None,
+		};
+		if owner == Some(avenceo_id)
 			&& bigint_at(&vals, ver_ix) == dek_ver
 			&& text_at(&vals, recip_ix) == vault.signer_did
 		{
@@ -340,15 +385,18 @@ pub async fn grant_first_human_admin(
 	// so the blind server reads them without the SAFE's DEK. wrap_did is required to deliver
 	// the avenCEO DEK to the SAFE's members.
 	let type_ix = col_ix(sparks_tbl, "type")?;
-	let owner_ix = col_ix(sparks_tbl, "owner")?;
 	let wrap_ix = col_ix(sparks_tbl, "wrap_did")?;
 	let q = QueryBuilder::new(TableName::new("safes")).build();
 	let mut human: Option<(Uuid, String)> = None;
-	for (_oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
+	for (oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
 		if text_at(&vals, type_ix) != "human" {
 			continue;
 		}
-		let Some(owner_uuid) = uuid_at(&vals, owner_ix) else { continue };
+		let owner: Option<Uuid> = match engine.owner_binding_for("safes", oid).map_err(|e| format!("owner_binding:{e:?}"))? {
+			Some(meta) => aven_db::capability::owner_uuid_from_binding_meta(&meta),
+			None => None,
+		};
+		let Some(owner_uuid) = owner else { continue };
 		let wrap_did = text_at(&vals, wrap_ix);
 		if wrap_did.is_empty() {
 			continue;
@@ -361,18 +409,16 @@ pub async fn grant_first_human_admin(
 	};
 	let human_did = safe_did(human_uuid);
 
-	// Append owns(humanSAFE) (server-signed) and persist re-sealed genesis.
-	let new_chain = attenuate_add_owner_third_party(&vault.biscuit_kp, &chain, avenceo_id, &human_did)?;
+	// Append admin(humanSAFE) (server-signed) and persist re-sealed genesis.
+	let new_chain = attenuate_add_admin_third_party(&vault.biscuit_kp, &chain, avenceo_id, &human_did)?;
 	let new_genesis_b64 =
 		URL_SAFE_NO_PAD.encode(new_chain.to_vec().map_err(|e| format!("genesis_encode:{e:?}"))?);
 	let resealed_genesis =
 		seal_identity_cell(&dek, avenceo_id, sparks_tbl, "genesis_b64", dek_ver, &new_genesis_b64)?;
-	let upd_meta = owner_binding_meta(signing, sparks_oid, avenceo_id)?;
 	engine
-		.update_with_metadata(
+		.update(
 			sparks_oid,
 			vec![("genesis_b64".to_string(), Value::Text(resealed_genesis))],
-			upd_meta,
 		)
 		.await
 		.map_err(|e| format!("update genesis:{e:?}"))?;
@@ -385,7 +431,6 @@ pub async fn grant_first_human_admin(
 	let aad = keyshare_wrap_aad(&urn, &wrap_did, &vault.signer_did, dek_ver);
 	let wrapped = encrypt_keyshare_payload(&kek, &dek, &aad)?;
 	let ks_row = named_row(&[
-			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 			("dek_version", Value::BigInt(dek_ver)),
 			("recipient_did", Value::Text(wrap_did.clone())),
 			("wrapper_did", Value::Text(vault.signer_did.clone())),
@@ -393,11 +438,18 @@ pub async fn grant_first_human_admin(
 		],
 	);
 	let ks_oid = ObjectId::new();
-	let ks_meta = owner_binding_meta(signing, ks_oid, avenceo_id)?;
 	engine
-		.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_row, ks_meta)
+		.create("keyshares", avenceo_id, Some(ks_oid), ks_row)
 		.await
 		.map_err(|e| format!("create keyshares:{e:?}"))?;
+
+	// Board 0049: also wrap the REGISTRY sub-group DEK to the human SAFE. The admin inherits
+	// registry *authorization* via extends(avenCEO) (one-directional), but still needs the
+	// registry DEK to DECRYPT the sealed profile directory and to grant it onward to TIER-0
+	// members (avendb_ipc_aven_ceo_add_member). Best-effort: the registry is minted at genesis.
+	if let Err(e) = wrap_registry_dek_to_wrap_did(engine, signing, &vault, avenceo_id, &wrap_did).await {
+		tracing::warn!(%avenceo_id, "registry DEK wrap to human admin failed: {e}");
+	}
 
 	// Re-announce so the device re-pulls the updated avenCEO genesis + keyshare and its gate
 	// opens (its earlier pulls were denied before it held a cap).
@@ -408,10 +460,37 @@ pub async fn grant_first_human_admin(
 	Ok(())
 }
 
-fn uuid_at(vals: &[Value], ix: usize) -> Option<Uuid> {
-	match vals.get(ix) {
-		Some(Value::Uuid(o)) => Some(*o.uuid()),
-		Some(Value::Text(s)) => Uuid::parse_str(s.trim()).ok(),
-		_ => None,
-	}
+/// Wrap the avenCEO **registry** sub-group DEK (held by the server) to a recipient `wrap_did`
+/// so that recipient can decrypt the sealed profile directory. Idempotent at the read level —
+/// duplicate keyshare rows are harmless (hydrate unwraps the first that opens).
+async fn wrap_registry_dek_to_wrap_did(
+	engine: &AvenDbClient,
+	signing: &SigningKey,
+	vault: &BiscuitVault,
+	avenceo_id: Uuid,
+	wrap_did: &str,
+) -> Result<(), String> {
+	let registry_id = derive_subgroup_id(avenceo_id, "registry");
+	let Some((_oid, _g, _i, reg_dek_ver)) = read_avenceo_identity(engine, registry_id).await? else {
+		return Err("registry sub-group not minted".into());
+	};
+	let reg_dek = read_server_dek(engine, vault, signing, registry_id, reg_dek_ver).await?;
+	let wrap_pk = aven_db::did_key::ed25519_public_from_signer_did(wrap_did)?;
+	let kek = derive_kek_x25519(signing, &wrap_pk)?;
+	let urn = format!("safe:{registry_id}");
+	let aad = keyshare_wrap_aad(&urn, wrap_did, &vault.signer_did, reg_dek_ver);
+	let wrapped = encrypt_keyshare_payload(&kek, &reg_dek, &aad)?;
+	let ks_row = named_row(&[
+			("dek_version", Value::BigInt(reg_dek_ver)),
+			("recipient_did", Value::Text(wrap_did.to_string())),
+			("wrapper_did", Value::Text(vault.signer_did.clone())),
+			("wrapped_dek", Value::Text(wrapped)),
+		],
+	);
+	engine
+		.create("keyshares", registry_id, Some(ObjectId::new()), ks_row)
+		.await
+		.map_err(|e| format!("create registry keyshares:{e:?}"))?;
+	tracing::info!(%registry_id, %wrap_did, "wrapped registry DEK to human admin (directory decrypt)");
+	Ok(())
 }

@@ -1,9 +1,8 @@
-//! The universal schema-checked CRUD surface (board 0020).
+//! The universal owned `create` surface (board 0020 + 0037).
 //!
-//! `create_checked` is THE row-write path — name-keyed and resolved against the
-//! live schema, so a manifest column-order change can never silently corrupt a
-//! write (the positional `create(Vec<Value>)` it replaced zipped by index; that's
-//! how the brain's embedding vector once landed in a text column without a sound).
+//! `create(table, owner, id?, fields)` is THE row-write path — name-keyed and resolved against the
+//! live schema, so a manifest column-order change can never silently corrupt a write; and every
+//! value is owned by a SAFE (board 0037), so the owner is a required argument, not data.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -50,8 +49,10 @@ async fn frontier_epoch_advances_on_commit_and_is_stable() {
     let e0 = c.frontier_epoch();
 
     let write = |title: &'static str| {
-        c.create_checked(
+        c.create(
             "notes",
+            uuid::Uuid::new_v4(),
+            None,
             HashMap::from([
                 ("owner".to_string(), Value::Uuid(ObjectId::from_uuid(uuid::Uuid::new_v4()))),
                 ("title".to_string(), Value::Text(title.into())),
@@ -79,8 +80,10 @@ async fn frontier_epoch_advances_on_commit_and_is_stable() {
 async fn changes_since_returns_only_the_delta() {
     let c = client("changes-since").await;
     let mk = |title: &'static str| {
-        c.create_checked(
+        c.create(
             "notes",
+            uuid::Uuid::new_v4(),
+            None,
             HashMap::from([
                 ("owner".to_string(), Value::Uuid(ObjectId::from_uuid(uuid::Uuid::new_v4()))),
                 ("title".to_string(), Value::Text(title.into())),
@@ -122,8 +125,10 @@ async fn changes_since_returns_only_the_delta() {
 async fn unknown_column_is_rejected() {
     let c = client("unknown-col").await;
     let err = c
-        .create_checked(
+        .create(
             "notes",
+            uuid::Uuid::new_v4(),
+            None,
             HashMap::from([
                 ("owner".to_string(), Value::Uuid(ObjectId::from_uuid(uuid::Uuid::new_v4()))),
                 ("title".to_string(), Value::Text("t".into())),
@@ -143,8 +148,10 @@ async fn unknown_column_is_rejected() {
 async fn missing_required_column_is_rejected() {
     let c = client("missing-required").await;
     let err = c
-        .create_checked(
+        .create(
             "notes",
+            uuid::Uuid::new_v4(),
+            None,
             HashMap::from([("title".to_string(), Value::Text("no owner".into()))]),
         )
         .await
@@ -160,8 +167,10 @@ async fn missing_nullable_is_null_filled_and_row_reads_back() {
     let c = client("null-fill").await;
     let owner = uuid::Uuid::new_v4();
     let id = c
-        .create_checked(
+        .create(
             "notes",
+            uuid::Uuid::new_v4(),
+            None,
             HashMap::from([
                 ("owner".to_string(), Value::Uuid(ObjectId::from_uuid(owner))),
                 ("title".to_string(), Value::Text("hello".into())),

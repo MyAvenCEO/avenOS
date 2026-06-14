@@ -345,20 +345,34 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
 
     /// Insert with an explicit id AND extra row metadata (e.g. an owner-binding header)
     /// merged into the committed row's metadata map — covered by the row digest.
-    pub fn insert_with_id_and_metadata(
+    /// The raw owner-binding metadata string for a row, or `None`. Lets the app recover the owning
+    /// SAFE from the immutable header for the sync ACL (board 0037).
+    pub fn owner_binding_for(
+        &self,
+        table: &str,
+        row_id: ObjectId,
+    ) -> Result<Option<String>, RuntimeError> {
+        let core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        Ok(core.owner_binding_for(table, row_id))
+    }
+
+    /// Insert a row into an **owner-scoped** table owned by `owner` (board 0037). The deep author
+    /// funnel mints the row's owner-binding `(value_id → owner)` from it — ownership travels in the
+    /// immutable signed header, not a data column.
+    pub fn insert_owned(
         &self,
         table: &str,
         values: HashMap<String, Value>,
         object_id: Option<ObjectId>,
         session: Option<&Session>,
-        extra_metadata: HashMap<String, String>,
+        owner: uuid::Uuid,
     ) -> Result<DirectInsertResult, RuntimeError> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
         let ctx = session
             .cloned()
             .map(WriteContext::from_session)
             .unwrap_or_default()
-            .with_extra_metadata(extra_metadata);
+            .with_owner(owner);
         let ((row_id, row_values), batch_id) =
             core.insert_with_id(table, values, object_id, Some(&ctx))?;
         Ok((row_id, row_values, batch_id))
@@ -374,25 +388,6 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
         let owned = session.cloned().map(WriteContext::from_session);
         Ok(core.update(object_id, values, owned.as_ref())?)
-    }
-
-    /// Update a row AND merge extra row metadata (e.g. a re-minted owner-binding) into
-    /// the resulting batch's metadata — so an edit carries the same authenticated proof
-    /// as a create, verified on apply.
-    pub fn update_with_metadata(
-        &self,
-        object_id: ObjectId,
-        values: Vec<(String, Value)>,
-        session: Option<&Session>,
-        extra_metadata: HashMap<String, String>,
-    ) -> Result<BatchId, RuntimeError> {
-        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        let ctx = session
-            .cloned()
-            .map(WriteContext::from_session)
-            .unwrap_or_default()
-            .with_extra_metadata(extra_metadata);
-        Ok(core.update(object_id, values, Some(&ctx))?)
     }
 
     /// Create or update a row with a caller-supplied external row id.
@@ -417,23 +412,6 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
         let owned = session.cloned().map(WriteContext::from_session);
         Ok(core.delete(object_id, owned.as_ref())?)
-    }
-
-    /// Delete a row, stamping extra metadata (a re-minted owner-binding) into the
-    /// tombstone batch — so deletes are authenticated on apply like any other write.
-    pub fn delete_with_metadata(
-        &self,
-        object_id: ObjectId,
-        session: Option<&Session>,
-        extra_metadata: HashMap<String, String>,
-    ) -> Result<BatchId, RuntimeError> {
-        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
-        let ctx = session
-            .cloned()
-            .map(WriteContext::from_session)
-            .unwrap_or_default()
-            .with_extra_metadata(extra_metadata);
-        Ok(core.delete(object_id, Some(&ctx))?)
     }
 
     /// Wait for a batch to settle at the requested durability tier.
@@ -596,6 +574,17 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
     ) -> Result<(), RuntimeError> {
         let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
         core.set_edit_signer(signer);
+        Ok(())
+    }
+
+    /// Inject the owner-binder for the local write path (the app's device-key binder). Required to
+    /// author any owner-scoped row — the funnel fails closed without it, on every peer (board 0037).
+    pub fn set_owner_binder(
+        &self,
+        binder: std::sync::Arc<dyn crate::capability::OwnerBinder>,
+    ) -> Result<(), RuntimeError> {
+        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        core.set_owner_binder(binder);
         Ok(())
     }
 

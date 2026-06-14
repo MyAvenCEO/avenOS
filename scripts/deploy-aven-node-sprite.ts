@@ -5,11 +5,13 @@
  *
  *   bun run deploy:server:sprite          # uses .env
  *
- * Rotate the relay identity: change AVEN_SERVER_SEED in .env (e.g.
- * `openssl rand -hex 32`) and re-run. The seed IS the server's ed25519 private
- * key, so its DID changes with it — after a rotation, re-share each spark to the
- * new relay DID ("Replicate this spark here"). The seed is gitignored (lives only
- * in .env locally and in the Sprite service env remotely); it is never committed.
+ * Signer seed is enforced on every deploy (no WIPE needed): the deploy compares a
+ * sha256 fingerprint of AVEN_SIGNER_SECRET against one stored on the Sprite. Same seed
+ * → fast `restart`. Changed seed → the service is recreated with the new env while the
+ * data store is KEPT (only WIPE=1 drops the store). Rotate the relay identity by changing
+ * AVEN_SIGNER_SECRET (e.g. `openssl rand -hex 32`) and re-running: its DID changes with
+ * it, so re-share each spark to the new relay DID ("Replicate this spark here"). The seed
+ * is gitignored (only in .env locally / the Sprite service env remotely); never committed.
  *
  * Build: plain `deploy:server:sprite` only (re)wires the Service from .env — it does
  * not build (the binary at AVEN_SERVER_BIN must already exist). When AVEN_SERVER_BUILD_REF
@@ -24,7 +26,7 @@ import { fileURLToPath } from 'node:url'
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 const SPRITE = process.env.AVEN_CEO_SPRITE?.trim() || 'aven-ceo'
-const SEED = process.env.AVEN_SERVER_SEED?.trim() || ''
+const SEED = process.env.AVEN_SIGNER_SECRET?.trim() || ''
 const BIN =
 	process.env.AVEN_SERVER_BIN?.trim() || '/home/sprite/aven-build/target/rust/release/aven-node'
 const DATA_DIR = process.env.AVEN_SERVER_DATA_DIR?.trim() || '/home/sprite/aven-data'
@@ -57,7 +59,7 @@ const BUILD_INVOCATION =
 
 if (!/^[0-9a-fA-F]{64}$/.test(SEED)) {
 	console.error(
-		'AVEN_SERVER_SEED must be set in .env to a 64-char hex string (run: openssl rand -hex 32).'
+		'AVEN_SIGNER_SECRET must be set to a 64-char hex string (run: openssl rand -hex 32).'
 	)
 	process.exit(1)
 }
@@ -181,7 +183,7 @@ if (WANT_BUILD) {
 console.log(`Deploying aven-node → Sprite "${SPRITE}" (binary: ${BIN})`)
 
 const envPairs = [
-	`AVEN_SERVER_SEED=${SEED}`,
+	`AVEN_SIGNER_SECRET=${SEED}`,
 	`AVEN_SERVER_BIND=${BIND}`,
 	`AVEN_SERVER_HEALTH_BIND=${HEALTH}`,
 	`AVEN_SERVER_PIN_FILE=${PIN_FILE}`,
@@ -192,20 +194,32 @@ const envPairs = [
 const probe = onSprite(['/.sprite/bin/sprite-env', 'services', 'get', 'aven-node'])
 const exists = (probe.stdout ?? '').includes('"name"')
 
+// Enforce the configured signer seed on EVERY deploy without wiping data. We store a
+// sha256 *fingerprint* of the seed on the Sprite (never the seed itself) and compare:
+//   • seed unchanged + service exists + no WIPE → `restart` (fast, avoids the self-heal/
+//     re-pull that delete+create triggers; the running env is already correct).
+//   • seed changed / new service / WIPE → delete+create so the new env (incl.
+//     AVEN_SIGNER_SECRET) is applied. The data dir is removed ONLY on WIPE, so a seed
+//     rotation alone re-applies the identity while preserving the durable store.
+const FP_FILE = process.env.AVEN_SERVER_SIGNER_FP_FILE?.trim() || '/home/sprite/.aven-signer.fp'
+const signerFp = createHash('sha256').update(SEED).digest('hex')
+const currentFp = (onSprite(['sh', '-lc', `cat ${FP_FILE} 2>/dev/null`]).stdout ?? '').trim()
+const seedUnchanged = currentFp === signerFp
+
 let boot = ''
-if (exists && !process.env.WIPE) {
-	// Binary-only redeploy: `restart` re-execs the (rebuilt) binary at the same path
-	// and reopens the durable store cleanly. We deliberately avoid delete+create —
-	// recreating the service makes the fresh process treat the freshly-finalized
-	// store as unfinalized and triggers a needless self-heal/re-pull. NOTE: restart
-	// keeps the EXISTING service env; to change the seed/config, deploy with WIPE=1.
-	console.log('Restarting existing service (preserves the durable store)…')
+if (exists && !process.env.WIPE && seedUnchanged) {
+	console.log('Restarting existing service (seed unchanged; preserves the durable store)…')
 	onSprite(['/.sprite/bin/sprite-env', 'services', 'restart', 'aven-node'])
 	onSprite(['sh', '-c', 'sleep 3'])
 } else {
-	// Fresh deploy or rotation (WIPE=1): stop + wait for the process to exit (so
-	// RocksDB finalizes) + delete + optional wipe + create from the .env config.
-	console.log(process.env.WIPE ? 'WIPE=1 — fresh deploy (new store)…' : 'Creating service…')
+	// stop + wait for the process to exit (so RocksDB finalizes) + delete + (WIPE only)
+	// drop the store + create from config so the env — including the seed — is enforced.
+	const reason = process.env.WIPE
+		? 'WIPE=1 — fresh deploy (new store)'
+		: !exists
+			? 'creating service'
+			: 'seed changed — re-applying env, keeping the store'
+	console.log(`${reason}…`)
 	onSprite(['/.sprite/bin/sprite-env', 'services', 'stop', 'aven-node'])
 	onSprite([
 		'sh',
@@ -229,6 +243,8 @@ if (exists && !process.env.WIPE) {
 		envPairs
 	])
 	boot = `${r.stdout ?? ''}${r.stderr ?? ''}`
+	// Record the seed fingerprint so the next deploy detects an unchanged seed and restarts.
+	onSprite(['sh', '-lc', `printf %s ${signerFp} > ${FP_FILE}`])
 }
 
 // Verify via the authoritative service state.

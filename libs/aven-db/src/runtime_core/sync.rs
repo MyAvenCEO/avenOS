@@ -28,6 +28,19 @@ impl<S: Storage, Sch: Scheduler> RuntimeCore<S, Sch> {
             .set_edit_signer(signer);
     }
 
+    /// Inject the owner-binder for the local write path (the app's device-key binder). Required to
+    /// author any owner-scoped row — the deep author funnel mints + stamps the owner-binding for
+    /// every owner-scoped row and fails closed without a binder, on every peer (board 0037).
+    pub fn set_owner_binder(
+        &mut self,
+        binder: std::sync::Arc<dyn crate::capability::OwnerBinder>,
+    ) {
+        self.schema_manager
+            .query_manager_mut()
+            .sync_manager_mut()
+            .set_owner_binder(binder);
+    }
+
     /// Push a sync message to the inbox (from network).
     pub fn push_sync_inbox(&mut self, entry: InboxEntry) {
         if entry.payload.writes_storage() {

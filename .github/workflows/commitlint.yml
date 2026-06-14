@@ -1,0 +1,29 @@
+name: commitlint
+
+# Enforce conventional commits on every PR so the CalVer changelog stays clean and
+# grouped. Versions are date-driven (not derived from commit type), but the changelog is.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  commitlint:
+    name: lint PR commits
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint commit range
+        run: bunx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose

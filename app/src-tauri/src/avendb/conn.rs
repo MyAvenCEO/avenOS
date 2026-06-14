@@ -55,6 +55,10 @@ pub struct AvenDbSessionReply {
 	/// did:key of the aven-node relay this device is synced through, if any —
 	/// lets the UI offer a one-click "replicate this identity to the relay".
 	pub relay_did: Option<String>,
+	/// SAFE uuids this device was REVOKED from (board 0047, fail-closed): it holds the SAFE's
+	/// row but can no longer open the re-sealed genesis with any DEK it holds AND holds no admin
+	/// cap. The UI LOCKS these identities (no read/write) and purges their local cache.
+	pub revoked_self: Vec<String>,
 }
 
 #[derive(Clone, serde::Serialize)]

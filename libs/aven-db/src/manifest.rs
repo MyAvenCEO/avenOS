@@ -128,8 +128,8 @@ pub fn manifest_to_schema(m: Manifest) -> Result<Schema, String> {
     let mut builder = SchemaBuilder::new();
     for (table_name, def) in m.tables {
         let mut tb = TableSchemaBuilder::new(&table_name);
-        for col in def.columns {
-            let ct = column_type_from_manifest(&col)?;
+        for col in &def.columns {
+            let ct = column_type_from_manifest(col)?;
             tb = if col.nullable {
                 tb.nullable_column(&col.name, ct)
             } else {

@@ -3,13 +3,6 @@
 		"signers": {
 			"columns": [
 				{
-					"name": "owner",
-					"type": "uuid",
-					"plaintext": true,
-					"nullable": true,
-					"comment": "routing — caps-only sync. null = device-local trust-set row (not synced); admin-identity id = network roster row (syncs to admin-identity members)"
-				},
-				{
 					"name": "signer_did",
 					"type": "text",
 					"plaintext": true,
@@ -57,12 +50,6 @@
 		"keyshares": {
 			"columns": [
 				{
-					"name": "owner",
-					"type": "uuid",
-					"plaintext": true,
-					"comment": "routing — keyshare lookup"
-				},
-				{
 					"name": "dek_version",
 					"type": "bigint",
 					"plaintext": true,
@@ -90,12 +77,6 @@
 		},
 		"safes": {
 			"columns": [
-				{
-					"name": "owner",
-					"type": "uuid",
-					"plaintext": true,
-					"comment": "routing — SAFE row identity (self-owned)"
-				},
 				{
 					"name": "type",
 					"type": "text",
@@ -126,9 +107,8 @@
 				{
 					"name": "username_slug",
 					"type": "text",
-					"plaintext": true,
 					"nullable": true,
-					"comment": "human-identity profile handle (null for aven)"
+					"comment": "sealed (board 0049) — human-identity profile handle (null for aven); was plaintext, now sealed at rest so a blind relay cannot read handles"
 				},
 				{
 					"name": "name",
@@ -162,12 +142,6 @@
 		"safe_controllers": {
 			"columns": [
 				{
-					"name": "owner",
-					"type": "uuid",
-					"plaintext": true,
-					"comment": "routing — the controlled SAFE; rows sync to exactly its members"
-				},
-				{
 					"name": "controller_did",
 					"type": "text",
 					"plaintext": true,
@@ -200,12 +174,6 @@
 		"todos": {
 			"columns": [
 				{
-					"name": "owner",
-					"type": "uuid",
-					"plaintext": true,
-					"comment": "routing — ACC + sync"
-				},
-				{
 					"name": "title",
 					"type": "text"
 				},
@@ -223,12 +191,6 @@
 		},
 		"messages": {
 			"columns": [
-				{
-					"name": "owner",
-					"type": "uuid",
-					"plaintext": true,
-					"comment": "routing — biscuit + P2P sync"
-				},
 				{
 					"name": "created_at_ms",
 					"type": "text",
@@ -255,12 +217,6 @@
 		},
 		"files": {
 			"columns": [
-				{
-					"name": "owner",
-					"type": "uuid",
-					"plaintext": true,
-					"comment": "routing — ACC + sync"
-				},
 				{
 					"name": "intent_id",
 					"type": "text",
@@ -297,12 +253,6 @@
 		},
 		"memories": {
 			"columns": [
-				{
-					"name": "owner",
-					"type": "uuid",
-					"plaintext": true,
-					"comment": "routing — ACC + sync (one brain per SAFE)"
-				},
 				{
 					"name": "content",
 					"type": "text",
@@ -396,12 +346,6 @@
 		"entities": {
 			"columns": [
 				{
-					"name": "owner",
-					"type": "uuid",
-					"plaintext": true,
-					"comment": "routing — ACC + sync"
-				},
-				{
 					"name": "name",
 					"type": "text",
 					"comment": "sealed at rest — entity name"
@@ -421,12 +365,6 @@
 		},
 		"links": {
 			"columns": [
-				{
-					"name": "owner",
-					"type": "uuid",
-					"plaintext": true,
-					"comment": "routing — ACC + sync"
-				},
 				{
 					"name": "from",
 					"type": "text",
@@ -500,12 +438,6 @@
 		"context_traces": {
 			"columns": [
 				{
-					"name": "owner",
-					"type": "uuid",
-					"plaintext": true,
-					"comment": "routing — ACC + sync"
-				},
-				{
 					"name": "message_id",
 					"type": "text",
 					"comment": "sealed — the user message row this context served"
@@ -526,6 +458,26 @@
 					"type": "text",
 					"exposeTs": "bigint",
 					"comment": "sealed at rest"
+				}
+			]
+		},
+		"profile": {
+			"columns": [
+				{
+					"name": "subject_type",
+					"type": "text",
+					"comment": "sealed (board 0049) — SIGNER (a did:key device/peer) | SAFE (a did:safe identity). Sealed: only registry-DEK holders read the directory."
+				},
+				{
+					"name": "did",
+					"type": "text",
+					"comment": "sealed (board 0049) — the did:key (SIGNER) or did:safe (SAFE) this profile describes; the link to the roster subject"
+				},
+				{
+					"name": "display_name",
+					"type": "text",
+					"nullable": true,
+					"comment": "sealed (board 0049) — human-facing directory name (device label / account / identity name)"
 				}
 			]
 		}

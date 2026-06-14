@@ -135,16 +135,19 @@ pub fn resolve_safe_did(did: &str) -> Option<Uuid> {
 /// source of truth for the rights vocabulary: [`mint_safe_genesis`] grants exactly
 /// these, and [`identity_cap_report`] reports exactly these for an owner, so genesis
 /// and the UI cap display can never drift.
-pub const OWNER_RIGHTS: &[&str] = &["read", "write", "delete", "admit", "rotate_dek"];
+pub const ADMIN_RIGHTS: &[&str] = &["read", "write", "delete", "admit", "rotate_dek"];
 
-/// Effective caps for a grant kind (`owns`/`reads`/`replicate`). Single mapping
-/// from "how a subject is attached" → "what it may do". Owner = all OWNER_RIGHTS;
-/// reader = read; replica = blind replicate (store-and-forward, no read).
-pub fn grant_kind_caps(grant: &str) -> Vec<&'static str> {
-	match grant {
-		"owns" => OWNER_RIGHTS.to_vec(),
-		"reads" => vec!["read"],
-		"replicate" => vec!["replicate"],
+/// THE role → caps SSOT (board 0047): a role IS a named bundle of caps. `identity_cap_report`
+/// derives every holder's caps from this map, so the displayed caps can never drift from the
+/// role. Roles: `admin` = full control (ADMIN_RIGHTS); `reader` = read-only; `relay` = blind
+/// store-and-forward (`replicate`, NO decrypt) + the service policy the relay enforces (per-
+/// identity `quota` + `rate_limit`). The role NAME is this report/UI layer; the underlying biscuit
+/// wire predicates stay `reads`/`replicate` (only `owns`→`admin` needed a wire rename, board 0040).
+pub fn grant_kind_caps(role: &str) -> Vec<&'static str> {
+	match role {
+		"admin" => ADMIN_RIGHTS.to_vec(),
+		"reader" => vec!["read"],
+		"relay" => vec!["replicate", "quota", "rate_limit"],
 		_ => vec![],
 	}
 }
@@ -152,8 +155,13 @@ pub fn grant_kind_caps(grant: &str) -> Vec<&'static str> {
 /// One subject's effective caps on a identity, derived purely from the biscuit chain.
 pub struct SubjectCaps {
 	pub did: String,
-	/// `owns` | `reads` | `replicate` | `member` (a subject with only granular grants)
+	/// The PRIMARY (highest-rank) role — `admin` | `reader` | `relay` | `member`. Kept for
+	/// existing single-role consumers; the full set is in `roles`.
 	pub grant: String,
+	/// EVERY named role this DID holds (admin/reader/relay), rank-ordered. A subject can hold
+	/// more than one (e.g. relay + reader); the UI lists them all so no role is hidden behind
+	/// the primary. Empty when the subject has only granular grants (`grant` = "member").
+	pub roles: Vec<String>,
 	pub caps: Vec<String>,
 }
 
@@ -166,44 +174,49 @@ pub fn identity_cap_report(chain: &Biscuit, owner: Uuid) -> Result<Vec<SubjectCa
 	use std::collections::BTreeMap;
 	let owners = identity_admins(chain, owner)?;
 	let owner_set: HashSet<String> = owners.iter().map(|d| d.trim().to_string()).collect();
-	// did → (role, ordered unique caps)
-	let mut acc: BTreeMap<String, (String, Vec<String>)> = BTreeMap::new();
-	fn add(acc: &mut BTreeMap<String, (String, Vec<String>)>, did: &str, role: &str, cap: &str) {
-		let e = acc.entry(did.to_string()).or_insert_with(|| (role.to_string(), Vec::new()));
-		// Role precedence: owns > reads > replicate > member.
-		let rank = |r: &str| match r { "owns" => 3, "reads" => 2, "replicate" => 1, _ => 0 };
+	// did → (primary role, all named roles rank-ordered, ordered unique caps)
+	let mut acc: BTreeMap<String, (String, Vec<String>, Vec<String>)> = BTreeMap::new();
+	let rank = |r: &str| match r { "admin" => 3, "reader" => 2, "relay" => 1, _ => 0 };
+	let add = |acc: &mut BTreeMap<String, (String, Vec<String>, Vec<String>)>, did: &str, role: &str, cap: &str| {
+		let e = acc.entry(did.to_string()).or_insert_with(|| (role.to_string(), Vec::new(), Vec::new()));
+		// Role precedence: admin > reader > relay > member (board 0047 — roles are named cap
+		// bundles; the role NAME is this report/UI layer, the wire predicates stay reads/replicate).
 		if rank(role) > rank(&e.0) {
 			e.0 = role.to_string();
 		}
-		if !cap.is_empty() && !e.1.iter().any(|x| x == cap) {
-			e.1.push(cap.to_string());
+		// Track every NAMED role (rank > 0) so the UI lists them all; "member" (granular-only) is
+		// the no-named-role placeholder and is not a listable role.
+		if rank(role) > 0 && !e.1.iter().any(|x| x == role) {
+			e.1.push(role.to_string());
 		}
-	}
+		if !cap.is_empty() && !e.2.iter().any(|x| x == cap) {
+			e.2.push(cap.to_string());
+		}
+	};
 
+	// Every role's caps come from the ONE `grant_kind_caps` SSOT (board 0047) — the displayed
+	// caps can never drift from the role. `relay` carries `replicate` + the service policy
+	// (`quota`/`rate_limit`) the holding node ENFORCES; the report just makes them transparent.
 	for did in &owners {
-		for c in OWNER_RIGHTS {
-			add(&mut acc, did, "owns", c);
+		for c in grant_kind_caps("admin") {
+			add(&mut acc, did, "admin", c);
 		}
 	}
 	for did in identity_readers(chain, owner)? {
 		if owner_set.contains(did.trim()) {
 			continue;
 		}
-		add(&mut acc, &did, "reads", "read");
+		for c in grant_kind_caps("reader") {
+			add(&mut acc, &did, "reader", c);
+		}
 	}
 	for did in identity_replicas(chain, owner)? {
 		if owner_set.contains(did.trim()) {
 			continue;
 		}
-		// A blind relay's effective caps = `replicate` (the biscuit grant) + the bounds
-		// that grant implies on the aven that holds it: a per-identity 10 MB storage
-		// `quota` + inbound `rate_limit`. We report them HERE (the single biscuit-reading
-		// cap source the UI consumes) so they are NOT synthesized client-side and the
-		// displayed caps can never drift from the grant. The node still ENFORCES the
-		// resource bounds (it owns its storage); the report makes them transparent.
-		add(&mut acc, &did, "replicate", "replicate");
-		add(&mut acc, &did, "replicate", "quota");
-		add(&mut acc, &did, "replicate", "rate_limit");
+		for c in grant_kind_caps("relay") {
+			add(&mut acc, &did, "relay", c);
+		}
 	}
 	// Granular grants (row/table-scoped) — fold the op into the subject's caps.
 	for (did, op, prefix) in identity_grants(chain, owner)? {
@@ -226,7 +239,10 @@ pub fn identity_cap_report(chain: &Biscuit, owner: Uuid) -> Result<Vec<SubjectCa
 
 	Ok(acc
 		.into_iter()
-		.map(|(did, (grant, caps))| SubjectCaps { did, grant, caps })
+		.map(|(did, (grant, mut roles, caps))| {
+			roles.sort_by(|a, b| rank(b).cmp(&rank(a)));
+			SubjectCaps { did, grant, roles, caps }
+		})
 		.collect())
 }
 
@@ -283,7 +299,7 @@ pub fn mint_safe_genesis(
 		);
 	let mut bb = Biscuit::builder().fact(own_f.as_str()).map_err(|e| format!("genesis-own-fact:{e}"))?;
 
-	for op in OWNER_RIGHTS {
+	for op in ADMIN_RIGHTS {
 		let rf = format!(
 				"right(\"{op}\", \"{}\")",
 				prefix_lit.replace('"', "\\\"")
@@ -318,7 +334,7 @@ pub fn mint_safe_genesis_with_controller(
 	);
 	let mut bb = Biscuit::builder().fact(own_f.as_str()).map_err(|e| format!("genesis-own-fact:{e}"))?;
 
-	for op in OWNER_RIGHTS {
+	for op in ADMIN_RIGHTS {
 		let rf = format!(
 			"right(\"{op}\", \"{}\")",
 			prefix_lit.replace('"', "\\\"")
@@ -334,7 +350,7 @@ pub fn mint_safe_genesis_with_controller(
 
 /// Mint a **sub-group** genesis biscuit (M9 group-owned values). Like
 /// [`mint_safe_genesis`] — the creating vault is the group's `owns` admin with full
-/// [`OWNER_RIGHTS`] over the group's resource prefix — but it also records
+/// [`ADMIN_RIGHTS`] over the group's resource prefix — but it also records
 /// `extends("identity:<parent>")`. That fact makes the group **inherit** the parent
 /// group's members: the live authorizer, on a local deny, consults the parent chain, so a
 /// member of the parent is a member here with no per-group re-grant (cheap fine
@@ -357,7 +373,7 @@ pub fn mint_group_genesis_extending(
 	let mut bb = Biscuit::builder()
 		.fact(own_f.as_str())
 		.map_err(|e| format!("group-own-fact:{e}"))?;
-	for op in OWNER_RIGHTS {
+	for op in ADMIN_RIGHTS {
 		let rf = format!("right(\"{op}\", \"{}\")", prefix_lit.replace('"', "\\\""));
 		bb = bb.fact(rf.as_str()).map_err(|e| format!("group-right:{e}"))?;
 	}
@@ -387,7 +403,7 @@ pub fn group_extends_parent(chain: &Biscuit) -> Result<Option<Uuid>, String> {
 /// Append a third-party biscuit block granting `new_signer_did` an [`owns`] fact on this Identity,
 /// signed by `delegating_kp` (typically the device's biscuit [`KeyPair`], i.e. same key that
 /// anchored the genesis or a prior delegated admin's key — see biscuit third-party semantics).
-pub fn attenuate_add_owner_third_party(
+pub fn attenuate_add_admin_third_party(
 	delegating_kp: &KeyPair,
 	chain: &Biscuit,
 	owner: Uuid,
@@ -415,7 +431,7 @@ pub fn attenuate_add_owner_third_party(
 
 /// Append a third-party block granting `replica_did` a [`replicate`] right over
 /// this Identity's resource prefix, signed by `delegating_kp` (an admin's biscuit
-/// key). Unlike [`attenuate_add_owner_third_party`] this grants **no `owns`** and
+/// key). Unlike [`attenuate_add_admin_third_party`] this grants **no `owns`** and
 /// implies **no keyshare** — the holder may store & forward the identity's encrypted
 /// batches (blind relay / backup) but is not a member and cannot decrypt.
 pub fn attenuate_add_replicate_third_party(
@@ -545,7 +561,7 @@ pub fn rebuild_identity_biscuit_excluding(
 		admins.into_iter().filter(|d| !excluded(d) && !is_owner(d)).collect();
 	admin_dids.sort();
 	for did in &admin_dids {
-		biscuit = attenuate_add_owner_third_party(kp, &biscuit, owner, did)?;
+		biscuit = attenuate_add_admin_third_party(kp, &biscuit, owner, did)?;
 	}
 	// Delegated readers (Member). Skip any DID already re-granted the strictly-greater
 	// owns above, and the owner/excluded DID.
@@ -589,7 +605,20 @@ pub fn ingest_genesis_opened(
 	genesis_b64: &str,
 	issuer_pubkey_b64: Option<&str>,
 	local_fallback_issuer_pk: PublicKey,
+	epoch: u64,
+	high_water: u64,
 ) -> Result<(), String> {
+	// Monotonic authority epoch (board 0040). The epoch is the SAFE's `current_dek_version`
+	// (jointly edit-sig-authenticated with the genesis in the same `safes` row, and already
+	// downgrade-defended). Reject ingesting a genesis presented BELOW the highest epoch already
+	// accepted for this SAFE — a superseded (rolled-back) authority is unrepresentable after
+	// first sync, so a stale-but-validly-signed genesis can never re-instate a revoked member.
+	// First contact (`high_water == 0`) is trust-on-first-use: accepted to seed the high-water.
+	if epoch < high_water {
+		return Err(format!(
+			"stale-genesis-epoch: {epoch} < high_water {high_water} for {owner}"
+		));
+	}
 	let issuer_pk = match issuer_pubkey_b64 {
 		Some(s) if !s.trim().is_empty() => decode_issuer_pubkey_b64(s)?,
 		_ => local_fallback_issuer_pk,
@@ -632,6 +661,12 @@ pub fn biscuit_from_storage(genesis_b64: &str, root: PublicKey) -> Result<Biscui
 fn trusted_subject_dids(b: &Biscuit, identity_urn: &str) -> Result<HashSet<String>, String> {
 	let mut authorizer =
 		b.authorizer().map_err(|e| format!("b-authorizer:{e}"))?;
+	// WIRE PREDICATE IS `owns` — STABLE, do NOT rename. The genesis biscuit (incl. the persisted
+	// avenCEO genesis on the relay) is signed over this predicate; renaming it is a genesis-format
+	// break that orphans every existing biscuit (the 0040 owns→admin wire rename did exactly that
+	// and broke first-admin claim — reverted). The role is NAMED "admin" only at the report/UI
+	// layer (`grant_kind_caps`, `identity_cap_report`); the wire stays `owns`. Same rule as
+	// reads/replicate: the wire predicate is internal, the role label is presentation.
 	let rule = format!(r#"signers($p) <- owns($p, "{identity}")"#, identity = identity_urn);
 	let admins: Vec<(String,)> = authorizer
 		.query_all(rule.as_str())
@@ -1203,6 +1238,164 @@ mod tests {
 	}
 
 	#[test]
+	fn role_caps() {
+		// Board 0047: a role IS a named cap bundle, and `grant_kind_caps` is the ONE SSOT.
+		// admin = full rights (incl admit+rotate_dek = "owner" is reserved for the value-owner
+		// SAFE, board 0040); reader = read-only; relay = blind replicate + service policy.
+		assert_eq!(grant_kind_caps("admin"), ADMIN_RIGHTS.to_vec());
+		assert!(
+			ADMIN_RIGHTS.contains(&"admit") && ADMIN_RIGHTS.contains(&"rotate_dek"),
+			"admin is the full-rights role"
+		);
+		assert_eq!(grant_kind_caps("reader"), vec!["read"]);
+		assert_eq!(grant_kind_caps("relay"), vec!["replicate", "quota", "rate_limit"]);
+		// The old wire-predicate labels are NOT roles — they grant nothing through the SSOT.
+		for dead in ["owns", "reads", "replicate"] {
+			assert!(grant_kind_caps(dead).is_empty(), "`{dead}` is not a role name");
+		}
+	}
+
+	#[test]
+	fn last_owner_invariant() {
+		// board 0040: a SAFE can never reach zero `owns` subjects (type-agnostic anti-lockout).
+		// The minting owner is structurally permanent — `mint_safe_genesis` re-grants it on every
+		// re-mint — so excluding ANY subject (even the owner's own DID) still leaves ≥1 owner,
+		// and the fail-closed guard in `rebuild_identity_biscuit_excluding` backstops the rest.
+		let root = [9u8; 32];
+		let mut v = vault(&root);
+		let sid = uuid::Uuid::new_v4();
+		let genesis = mint_safe_genesis(&v, sid).unwrap();
+		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: genesis });
+
+		// Add a second owner (a third-party device), then revoke it — the genesis owner remains.
+		let bob = vault(&[2u8; 32]);
+		let with_bob = attenuate_add_admin_third_party(
+			&v.biscuit_kp,
+			&v.safes.get(&sid).unwrap().biscuit,
+			sid,
+			bob.signer_did.as_str(),
+		)
+		.unwrap();
+		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: with_bob });
+
+		let after_revoke_bob =
+			rebuild_identity_biscuit_excluding(&v, sid, bob.signer_did.as_str()).unwrap();
+		let owners = identity_admins(&after_revoke_bob, sid).unwrap();
+		assert!(!owners.is_empty(), "revoking a delegate leaves the owner — never zero owners");
+		assert!(
+			!owners.iter().any(|d| signer_did_matches(d, bob.signer_did.as_str())),
+			"bob is gone"
+		);
+
+		// Even excluding the owner's OWN did leaves ≥1 owner (genesis re-grants the owner):
+		// the last owner is unremovable by construction.
+		let after_revoke_self =
+			rebuild_identity_biscuit_excluding(&v, sid, &v.signer_did.clone()).unwrap();
+		assert!(
+			!identity_admins(&after_revoke_self, sid).unwrap().is_empty(),
+			"the minting owner is permanent — a SAFE never loses its last owner"
+		);
+	}
+
+	#[test]
+	fn authority_epoch() {
+		// Board 0040: the authority epoch (= the SAFE's current_dek_version) makes a rolled-back
+		// genesis unrepresentable — `ingest_genesis_opened` rejects a genesis presented below the
+		// per-SAFE high-water and accepts one >=. (The (genesis, dek_version) pair is jointly
+		// edit-sig-authenticated in the safes row; this is the verifier-side freshness gate.)
+		let root = [9u8; 32];
+		let mut v = vault(&root);
+		let sid = uuid::Uuid::new_v4();
+		let genesis = mint_safe_genesis(&v, sid).unwrap();
+		let g_b64 = URL_SAFE_NO_PAD.encode(genesis.to_vec().unwrap());
+		let issuer = encode_issuer_pubkey_b64(&v.biscuit_kp.public());
+		let pk = v.biscuit_kp.public();
+
+		// First contact (high_water 0) is TOFU — accept and seed the epoch at 2.
+		ingest_genesis_opened(&mut v, sid, &g_b64, Some(&issuer), pk, 2, 0).unwrap();
+		// A replay at epoch 1 (< high_water 2) is rejected — rollback is unrepresentable.
+		let err = ingest_genesis_opened(&mut v, sid, &g_b64, Some(&issuer), pk, 1, 2)
+			.expect_err("a below-high-water genesis must be rejected");
+		assert!(err.contains("stale-genesis-epoch"), "got: {err}");
+		// Equal (re-apply) and newer epochs are accepted.
+		ingest_genesis_opened(&mut v, sid, &g_b64, Some(&issuer), pk, 2, 2).unwrap();
+		ingest_genesis_opened(&mut v, sid, &g_b64, Some(&issuer), pk, 3, 2).unwrap();
+	}
+
+	#[test]
+	fn revocation_epoch() {
+		// Board 0040: a revoked admin is DENIED, and a rolled-back (pre-revoke) genesis replayed at
+		// a lower epoch is REJECTED by ingest — so revocation can never be undone after first sync.
+		let mut alice = vault(&[1u8; 32]);
+		let bob = vault(&[2u8; 32]);
+		let sid = uuid::Uuid::new_v4();
+		let genesis = mint_safe_genesis(&alice, sid).unwrap();
+		let pre_revoke =
+			attenuate_add_admin_third_party(&alice.biscuit_kp, &genesis, sid, bob.signer_did.as_str())
+				.unwrap();
+		alice.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: pre_revoke.clone() });
+		// Pre-revoke, bob is an admin and authorizes.
+		authorize(&alice, sid, AccOp::Write, "todos", None, &bob.signer_did).unwrap();
+
+		// Revoke bob → he is no longer an admin and is denied.
+		let post_revoke =
+			rebuild_identity_biscuit_excluding(&alice, sid, bob.signer_did.as_str()).unwrap();
+		alice.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: post_revoke.clone() });
+		assert!(
+			authorize(&alice, sid, AccOp::Write, "todos", None, &bob.signer_did).is_err(),
+			"a revoked admin must be denied"
+		);
+		assert!(
+			!identity_admins(&post_revoke, sid)
+				.unwrap()
+				.iter()
+				.any(|d| signer_did_matches(d, bob.signer_did.as_str())),
+			"bob is gone from the admin set"
+		);
+
+		// Rollback rejection: the post-revoke authority is at epoch 2 (revoke bumps dek_version).
+		// A replay of the pre-revoke (bob-included) genesis at epoch 1 < high-water 2 is rejected by
+		// ingest, so it can never re-instate bob into a verifier that has already seen epoch 2.
+		let issuer = encode_issuer_pubkey_b64(&alice.biscuit_kp.public());
+		let pk = alice.biscuit_kp.public();
+		let post_b64 = URL_SAFE_NO_PAD.encode(post_revoke.to_vec().unwrap());
+		let pre_b64 = URL_SAFE_NO_PAD.encode(pre_revoke.to_vec().unwrap());
+		let mut verifier = vault(&[7u8; 32]);
+		ingest_genesis_opened(&mut verifier, sid, &post_b64, Some(&issuer), pk, 2, 0).unwrap();
+		let err = ingest_genesis_opened(&mut verifier, sid, &pre_b64, Some(&issuer), pk, 1, 2)
+			.expect_err("a pre-revoke genesis replayed at a lower epoch must be rejected");
+		assert!(err.contains("stale-genesis-epoch"), "got: {err}");
+	}
+
+	#[test]
+	fn universal_ownership() {
+		// Board 0040: any SAFE is owned by any subjects — a did:safe controller of ANY "type" AND a
+		// raw did:key, with no type restriction (the cap core never had types). Both become admins.
+		let alice = vault(&[1u8; 32]);
+		let controller_safe = uuid::Uuid::new_v4(); // an arbitrary other SAFE (any UI "type")
+		let child = uuid::Uuid::new_v4();
+		let genesis =
+			mint_safe_genesis_with_controller(&alice, child, &safe_did(controller_safe)).unwrap();
+		let keyholder = vault(&[2u8; 32]);
+		let chain = attenuate_add_admin_third_party(
+			&alice.biscuit_kp,
+			&genesis,
+			child,
+			keyholder.signer_did.as_str(),
+		)
+		.unwrap();
+		let admins = identity_admins(&chain, child).unwrap();
+		assert!(
+			admins.iter().any(|d| d.contains(&controller_safe.to_string())),
+			"a did:safe controller of any type is an admin"
+		);
+		assert!(
+			admins.iter().any(|d| signer_did_matches(d, keyholder.signer_did.as_str())),
+			"a did:key may be admitted directly"
+		);
+	}
+
+	#[test]
 	fn third_party_grant_allows_second_device() {
 		let root_alice = [1u8; 32];
 		let root_bob = [2u8; 32];
@@ -1213,7 +1406,7 @@ mod tests {
 		let genesis = mint_safe_genesis(&alice, sid).unwrap();
 		let issuer_pk = alice.biscuit_kp.public();
 
-		let chain = attenuate_add_owner_third_party(
+		let chain = attenuate_add_admin_third_party(
 			&alice.biscuit_kp,
 			&genesis,
 			sid,
@@ -1269,7 +1462,7 @@ mod tests {
 		let genesis = mint_safe_genesis(&server, sid).unwrap();
 
 		// aven-node adds A (delegating key = the server/root key).
-		let chain1 = attenuate_add_owner_third_party(
+		let chain1 = attenuate_add_admin_third_party(
 			&server.biscuit_kp,
 			&genesis,
 			sid,
@@ -1281,7 +1474,7 @@ mod tests {
 			.expect("1-level grant chain must re-verify against root");
 
 		// A adds B (delegating key = A's key, NOT the root) on the round-tripped chain.
-		let chain2 = attenuate_add_owner_third_party(
+		let chain2 = attenuate_add_admin_third_party(
 			&a.biscuit_kp,
 			&chain1_rt,
 			sid,
@@ -1452,6 +1645,41 @@ mod tests {
 	}
 
 	#[test]
+	fn tier0_minimal_grant() {
+		// Board 0049: a TIER-0 network member is admitted to the avenCEO REGISTRY sub-group (the
+		// directory) ONLY — it reads the directory but is DENIED avenCEO's content. `extends` is
+		// one-directional (registry inherits avenCEO members, NOT the reverse), so a registry-only
+		// member cannot read avenCEO. This is "admission + directory, no roster-content decrypt".
+		let seed = "ceo.aven/testnet/abagana";
+		let mut founder = vault(&[1u8; 32]); // the avenCEO owner
+		let member = vault(&[2u8; 32]); // a TIER-0 network member
+		let avenceo = aven_ceo_identity(seed);
+		let registry = aven_ceo_registry_group(seed);
+
+		// avenCEO genesis (founder owns it) + a registry sub-group extending it.
+		let ceo = mint_safe_genesis(&founder, avenceo).unwrap();
+		founder.safes.insert(avenceo, BiscuitIdentity { owner: avenceo, biscuit: ceo });
+		let reg = mint_group_genesis_extending(&founder, registry, avenceo).unwrap();
+		// Admit the member as a registry READER (the TIER-0 directory grant).
+		let reg = attenuate_add_reader_third_party(&founder.biscuit_kp, &reg, registry, &member.signer_did)
+			.unwrap();
+		founder.safes.insert(registry, BiscuitIdentity { owner: registry, biscuit: reg });
+
+		// TIER-0 member READS the registry/profile directory…
+		authorize(&founder, registry, AccOp::Read, "profile", Some(uuid::Uuid::new_v4()), &member.signer_did)
+			.unwrap();
+		// …but is DENIED avenCEO content (not an avenCEO member; extends is one-directional).
+		assert!(
+			authorize(&founder, avenceo, AccOp::Read, "messages", Some(uuid::Uuid::new_v4()), &member.signer_did)
+				.is_err(),
+			"a registry-only TIER-0 member must NOT read avenCEO content"
+		);
+		// Inheritance sanity: the avenCEO owner (a parent member) DOES read the registry directory.
+		authorize(&founder, registry, AccOp::Read, "profile", Some(uuid::Uuid::new_v4()), &founder.signer_did.clone())
+			.unwrap();
+	}
+
+	#[test]
 	fn group_inherits_parent_members() {
 		let mut v = vault(&[11u8; 32]); // creator / admin
 		let reader = vault(&[12u8; 32]); // a parent member (delegated reader)
@@ -1526,7 +1754,7 @@ mod tests {
 
 		let genesis = mint_safe_genesis(&owner, sid).unwrap();
 		let chain =
-			attenuate_add_owner_third_party(&owner.biscuit_kp, &genesis, sid, &admin2.signer_did).unwrap();
+			attenuate_add_admin_third_party(&owner.biscuit_kp, &genesis, sid, &admin2.signer_did).unwrap();
 		let mut v = owner;
 		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
 
@@ -1561,16 +1789,16 @@ mod tests {
 		chain = attenuate_add_replicate_third_party(&owner.biscuit_kp, &chain, sid, &replica.signer_did).unwrap();
 
 		let report = identity_cap_report(&chain, sid).unwrap();
-		// Single source: owner caps == OWNER_RIGHTS, reader == [read], replica == [replicate].
-		let owner_rights: Vec<String> = OWNER_RIGHTS.iter().map(|s| s.to_string()).collect();
+		// Single source: owner caps == ADMIN_RIGHTS, reader == [read], replica == [replicate].
+		let owner_rights: Vec<String> = ADMIN_RIGHTS.iter().map(|s| s.to_string()).collect();
 		let o = report.iter().find(|s| signer_did_matches(&s.did, &owner.signer_did)).unwrap();
-		assert_eq!(o.grant, "owns");
+		assert_eq!(o.grant, "admin");
 		assert_eq!(o.caps, owner_rights);
 		let r = report.iter().find(|s| signer_did_matches(&s.did, &reader.signer_did)).unwrap();
-		assert_eq!(r.grant, "reads");
+		assert_eq!(r.grant, "reader");
 		assert_eq!(r.caps, vec!["read".to_string()]);
 		let p = report.iter().find(|s| signer_did_matches(&s.did, &replica.signer_did)).unwrap();
-		assert_eq!(p.grant, "replicate");
+		assert_eq!(p.grant, "relay");
 		// A relay's effective caps now report the bounds its grant implies on the aven:
 		// the blind `replicate` + a per-identity 10 MB `quota` + inbound `rate_limit`.
 		assert_eq!(
@@ -1592,9 +1820,9 @@ mod tests {
 		let sid = uuid::Uuid::new_v4();
 
 		let mut chain = mint_safe_genesis(&alice, sid).unwrap();
-		chain = attenuate_add_owner_third_party(&alice.biscuit_kp, &chain, sid, &bob.signer_did).unwrap();
+		chain = attenuate_add_admin_third_party(&alice.biscuit_kp, &chain, sid, &bob.signer_did).unwrap();
 		chain =
-			attenuate_add_owner_third_party(&alice.biscuit_kp, &chain, sid, &carol.signer_did).unwrap();
+			attenuate_add_admin_third_party(&alice.biscuit_kp, &chain, sid, &carol.signer_did).unwrap();
 
 		let mut v = alice;
 		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: chain });
@@ -1685,7 +1913,7 @@ mod tests {
 			.insert(bob_human_id, BiscuitIdentity { owner: bob_human_id, biscuit: bob_human });
 
 		let genesis = mint_safe_genesis(&alice, aven_id).unwrap();
-		let chain = attenuate_add_owner_third_party(
+		let chain = attenuate_add_admin_third_party(
 			&alice.biscuit_kp,
 			&genesis,
 			aven_id,
@@ -1738,7 +1966,7 @@ mod tests {
 		let spark_id = uuid::Uuid::new_v4();
 
 		let mut h = mint_safe_genesis(&alice, human_id).unwrap();
-		h = attenuate_add_owner_third_party(&alice.biscuit_kp, &h, human_id, &bob.signer_did).unwrap();
+		h = attenuate_add_admin_third_party(&alice.biscuit_kp, &h, human_id, &bob.signer_did).unwrap();
 		alice.safes.insert(human_id, BiscuitIdentity { owner: human_id, biscuit: h });
 		let a = mint_safe_genesis_with_controller(&alice, aven_id, &safe_did(human_id)).unwrap();
 		alice.safes.insert(aven_id, BiscuitIdentity { owner: aven_id, biscuit: a });
@@ -1776,10 +2004,10 @@ mod tests {
 			.insert(bob_human_id, BiscuitIdentity { owner: bob_human_id, biscuit: bob_human });
 
 		let mut chain = mint_safe_genesis(&alice, aven_id).unwrap();
-		chain = attenuate_add_owner_third_party(&alice.biscuit_kp, &chain, aven_id, &safe_did(bob_human_id))
+		chain = attenuate_add_admin_third_party(&alice.biscuit_kp, &chain, aven_id, &safe_did(bob_human_id))
 			.unwrap();
 		chain =
-			attenuate_add_owner_third_party(&alice.biscuit_kp, &chain, aven_id, &carol.signer_did).unwrap();
+			attenuate_add_admin_third_party(&alice.biscuit_kp, &chain, aven_id, &carol.signer_did).unwrap();
 		alice.safes.insert(aven_id, BiscuitIdentity { owner: aven_id, biscuit: chain });
 
 		// Before revoke: bob is a member through H2.
@@ -1836,7 +2064,7 @@ mod tests {
 		let spark_id = uuid::Uuid::new_v4();
 
 		let mut h = mint_safe_genesis(&alice, human_id).unwrap();
-		h = attenuate_add_owner_third_party(&alice.biscuit_kp, &h, human_id, &bob.signer_did).unwrap();
+		h = attenuate_add_admin_third_party(&alice.biscuit_kp, &h, human_id, &bob.signer_did).unwrap();
 		alice.safes.insert(human_id, BiscuitIdentity { owner: human_id, biscuit: h });
 		let a = mint_safe_genesis_with_controller(&alice, aven_id, &safe_did(human_id)).unwrap();
 		alice.safes.insert(aven_id, BiscuitIdentity { owner: aven_id, biscuit: a });

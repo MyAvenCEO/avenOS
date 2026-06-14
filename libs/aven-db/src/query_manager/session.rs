@@ -183,27 +183,33 @@ pub struct WriteContext {
     pub batch_id: Option<BatchId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_branch_name: Option<String>,
-    /// Extra entries merged into the committed row's metadata map (e.g. the
-    /// owner-binding header stamped at create). Covered by the row digest.
+    /// Extra entries merged into the committed row's metadata map. Covered by the row digest.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extra_metadata: Option<std::collections::HashMap<String, String>>,
+    /// The owning SAFE for an **owner-scoped** create (board 0037). The deep author funnel mints
+    /// the row's owner-binding `(value_id → owner)` from it — ownership travels in the immutable
+    /// signed header, never a data column. Required on a create to an owner-scoped table (else the
+    /// write fails closed); not needed on update/delete (the immutable binding is carried forward).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<uuid::Uuid>,
 }
 
 impl WriteContext {
     pub fn from_session(session: Session) -> Self {
         Self {
             session: Some(session),
-            attribution: None,
-            updated_at: None,
-            batch_mode: None,
-            batch_id: None,
-            target_branch_name: None,
-            extra_metadata: None,
+            ..Default::default()
         }
     }
 
     pub fn with_extra_metadata(mut self, extra: std::collections::HashMap<String, String>) -> Self {
         self.extra_metadata = Some(extra);
+        self
+    }
+
+    /// Set the owning SAFE for an owner-scoped create (board 0037).
+    pub fn with_owner(mut self, owner: uuid::Uuid) -> Self {
+        self.owner = Some(owner);
         self
     }
 
@@ -327,11 +333,7 @@ mod tests {
         let context = WriteContext {
             session: Some(Session::new("session-user")),
             attribution: Some("attributed-user".into()),
-            updated_at: None,
-            batch_mode: None,
-            batch_id: None,
-            target_branch_name: None,
-            extra_metadata: None,
+            ..Default::default()
         };
 
         assert_eq!(context.author_principal(), "attributed-user");

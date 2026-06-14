@@ -202,7 +202,7 @@ pub enum SyncPayload {
     /// **Eviction notice** (best-effort, trust-based): an admin tells a *revoked* peer
     /// to drop its now-orphaned local rows for `resource` (an identity urn). The receiver
     /// hard-deletes those rows **locally only** — the engine forwards it to the app, which
-    /// applies `delete_with_metadata(Hard + NoSync)` so no false tombstone propagates.
+    /// applies a Hard + NoSync delete so no false tombstone propagates.
     /// Not a security boundary (backward reads are unrecoverable); it is cleanup so an
     /// honest revoked peer doesn't retain stale data. Applied on trust — a revoked peer
     /// can't self-verify revocation (it still holds the old biscuit), so a misfired notice
