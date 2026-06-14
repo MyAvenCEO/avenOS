@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Aven.Toolkit.Core\Aven.Toolkit.Core.csproj" />
+    <ProjectReference Include="..\..\src\Aven.Toolkit.Artifacts\Aven.Toolkit.Artifacts.csproj" />
+    <ProjectReference Include="..\..\src\Aven.Toolkit.Llm\Aven.Toolkit.Llm.csproj" />
+  </ItemGroup>
+
+</Project>

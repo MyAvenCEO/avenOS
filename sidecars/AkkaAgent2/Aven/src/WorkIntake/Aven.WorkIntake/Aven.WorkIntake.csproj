@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Akka.Hosting" />
+    <PackageReference Include="Akka.Persistence" />
+    <ProjectReference Include="..\..\Agent\Aven.RoleAgents.Contracts\Aven.RoleAgents.Contracts.csproj" />
+    <ProjectReference Include="..\Aven.WorkIntake.Contracts\Aven.WorkIntake.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\..\Toolkit\src\Aven.Toolkit.Core\Aven.Toolkit.Core.csproj" />
+    <ProjectReference Include="..\..\Aven.ActorKernel\Aven.ActorKernel.csproj" />
+    <ProjectReference Include="..\..\Aven.Contracts\Aven.Contracts.csproj" />
+    <ProjectReference Include="..\..\Delivery\Aven.DurableDelivery\Aven.DurableDelivery.csproj" />
+    <ProjectReference Include="..\..\Delivery\Aven.DurableDelivery.Contracts\Aven.DurableDelivery.Contracts.csproj" />
+    <ProjectReference Include="..\..\Aven.Roles\Aven.Roles.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

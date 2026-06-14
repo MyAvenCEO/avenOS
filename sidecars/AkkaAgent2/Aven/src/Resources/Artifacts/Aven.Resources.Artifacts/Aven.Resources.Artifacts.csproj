@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Aven.ActorKernel\Aven.ActorKernel.csproj" />
+    <ProjectReference Include="..\..\..\Capabilities\Aven.Capabilities\Aven.Capabilities.csproj" />
+    <ProjectReference Include="..\..\..\Aven.Contracts\Aven.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Toolkit\src\Aven.Toolkit.Artifacts\Aven.Toolkit.Artifacts.csproj" />
+    <ProjectReference Include="..\Aven.Resources.Artifacts.Contracts\Aven.Resources.Artifacts.Contracts.csproj" />
+    <ProjectReference Include="..\..\Runtime\Aven.Resources.Runtime\Aven.Resources.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\Delivery\Aven.DurableDelivery.Contracts\Aven.DurableDelivery.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\Capabilities\Aven.Capabilities.Contracts\Aven.Capabilities.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\Aven.Events\Aven.Events.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Akka.Persistence" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+  </ItemGroup>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+</Project>

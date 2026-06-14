@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Aven.Sidecar</RootNamespace>
+    <AssemblyName>Aven.Sidecar</AssemblyName>
+  </PropertyGroup>
+
+  <!--
+    RuntimeCompositionRoot currently lives inside Aven.Api (a Microsoft.NET.Sdk.Web
+    project), so the sidecar references it directly per the milestone plan (M2 step 1:
+    "Reference Aven.Api initially if RuntimeCompositionRoot stays there"). Pulling in the
+    ASP.NET shared framework is required because the referenced assembly depends on it.
+    If this proves awkward, the plan's M2 re-evaluation trigger is to extract an
+    Aven.RuntimeHost project — not done yet to keep the first slice minimal.
+  -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aven.Api\Aven.Api.csproj" />
+    <ProjectReference Include="..\Aven.Sidecar.Protocol\Aven.Sidecar.Protocol.csproj" />
+  </ItemGroup>
+
+</Project>

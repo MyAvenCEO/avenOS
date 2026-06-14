@@ -1,3 +1,4 @@
+mod agent_sidecar;
 mod asr;
 mod embed_model;
 mod llm;
@@ -173,6 +174,7 @@ pub fn run() {
 		.plugin(tauri_plugin_sandbox_quickjs::init())
 		.plugin(tauri_plugin_clipboard_manager::init())
 		.manage(avendb::ManagedAvenDb::default())
+		.manage(agent_sidecar::AgentSidecarState::default())
 		.setup(|app| {
 			if let Err(e) = schema_manifest::install_runtime_schema_files(app.handle()) {
 				log::error!("schema runtime install: {e}");
@@ -238,6 +240,7 @@ pub fn run() {
 						_ = sigint.recv() => log::info!("SIGINT received → draining AvenDb"),
 						_ = sigterm.recv() => log::info!("SIGTERM received → draining AvenDb"),
 					}
+					agent_sidecar::drain(&handle_for_signal).await;
 					drain_avendb_async(handle_for_signal.clone()).await;
 					handle_for_signal.exit(130);
 				});
@@ -251,6 +254,10 @@ pub fn run() {
 			network::aven_ceo_identity,
 			avendb::avendb_runtime,
 		avendb::brain_runtime,
+			agent_sidecar::agent_sidecar_status,
+			agent_sidecar::agent_sidecar_start,
+			agent_sidecar::agent_sidecar_stop,
+			agent_sidecar::agent_sidecar_invoke,
 			avendb::self_storage_paths,
 			avendb::self_clear_avendb_database,
 			avendb::self_clear_aven_os_data,
@@ -301,6 +308,8 @@ pub fn run() {
 					}
 					api.prevent_exit();
 					let exit_code = code.unwrap_or(0);
+					// Stop the .NET sidecar child before we leave, so it is never orphaned.
+					agent_sidecar::drain_blocking(app_handle);
 					drain_avendb_blocking(app_handle);
 					app_handle.exit(exit_code);
 				}

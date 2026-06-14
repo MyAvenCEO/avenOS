@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RoleRegistry\Aven.Roles.Contracts\Aven.Roles.Contracts.csproj" />
+    <ProjectReference Include="..\..\WorkIntake\Aven.WorkIntake.Contracts\Aven.WorkIntake.Contracts.csproj" />
+    <ProjectReference Include="..\..\Aven.Contracts\Aven.Contracts.csproj" />
+    <ProjectReference Include="..\..\Aven.Events\Aven.Events.csproj" />
+    <ProjectReference Include="..\..\Resources\Llm\Aven.Resources.Llm.Contracts\Aven.Resources.Llm.Contracts.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

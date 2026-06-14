@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Akka.Persistence" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aven.Contracts\Aven.Contracts.csproj" />
+    <ProjectReference Include="..\Aven.Events\Aven.Events.csproj" />
+    <ProjectReference Include="..\..\..\Toolkit\src\Aven.Toolkit.Core\Aven.Toolkit.Core.csproj" />
+    <ProjectReference Include="..\..\..\Toolkit\src\Aven.Toolkit.Tracing\Aven.Toolkit.Tracing.csproj" />
+    <ProjectReference Include="..\Aven.Trace.Contracts\Aven.Trace.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,6 +1,7 @@
 <script lang="ts">
 import { browser } from '$app/environment'
 import { page } from '$app/state'
+import { isBrainEnabled } from '$lib/agent-sidecar/mode'
 import { avenDbStore } from '$lib/avendb/store.svelte'
 import { t } from '$lib/i18n'
 import AgentLiveState from '$lib/identities/AgentLiveState.svelte'
@@ -56,7 +57,8 @@ const agent = setIdentityAgent(
 			tauri,
 			unlocked,
 			// Brain view → memory-managed; everywhere else → plain traditional chat (no brain).
-			mode: isBrainView ? 'brain' : 'plain'
+			// In the .NET sidecar path Brain is out of scope (D7): never enter brain mode.
+			mode: isBrainView && brainEnabled ? 'brain' : 'plain'
 		})
 	})
 )
@@ -65,6 +67,8 @@ const path = $derived(page.url.pathname)
 // The Brain view is the memory-managed chat (agent `brain` mode + the roundtrip aside). The plain
 // Talk view (and everywhere else) runs the agent in `plain` mode — traditional session, no brain.
 const isBrainView = $derived(path.includes('/brain'))
+// Brain is hidden/disabled in the .NET sidecar path (D7). One source of truth: agent-sidecar/mode.
+const brainEnabled = $derived(isBrainEnabled())
 // Both Talk and Brain use the full-height chat layout.
 const isTalkView = $derived(path.includes('/talk') || isBrainView)
 const isGalleryView = $derived(path.includes('/gallery'))
@@ -104,11 +108,15 @@ const navSections = $derived(
 						label: t('nav.talk'),
 						match: (p) => p.startsWith(`${identityBase}/talk`)
 					},
-					{
-						href: `${identityBase}/brain`,
-						label: t('nav.brain'),
-						match: (p) => p.startsWith(`${identityBase}/brain`)
-					},
+					...(brainEnabled
+						? [
+								{
+									href: `${identityBase}/brain`,
+									label: t('nav.brain'),
+									match: (p: string) => p.startsWith(`${identityBase}/brain`)
+								}
+							]
+						: []),
 					{
 						href: `${identityBase}/todos`,
 						label: t('nav.todos'),
@@ -139,10 +147,10 @@ const navSections = $derived(
 // The 420px right column (Brain roundtrip aside) only exists on the Brain view; everywhere else
 // is a clean 2-column layout (no brain panel).
 const identityGridClass = $derived(
-	isBrainView
-		? 'md:grid-cols-[8.5rem_minmax(0,1fr)_420px]'
-		: 'md:grid-cols-[8.5rem_minmax(0,1fr)]'
-)
+		isBrainView && brainEnabled
+			? 'md:grid-cols-[8.5rem_minmax(0,1fr)_420px]'
+			: 'md:grid-cols-[8.5rem_minmax(0,1fr)]'
+	)
 
 const mainClass = $derived(
 	isTalkView
@@ -179,7 +187,7 @@ const innerContentClass = $derived(
 	asideLabel={t('nav.identityViews')}
 	asideRightLabel="Brain roundtrip"
 	sections={navSections}
-	asideRight={isBrainView ? brainAside : undefined}
+	asideRight={isBrainView && brainEnabled ? brainAside : undefined}
 	desktopGridClass={identityGridClass}
 	sectionLabelClass="px-0 md:px-2"
 	{mainClass}

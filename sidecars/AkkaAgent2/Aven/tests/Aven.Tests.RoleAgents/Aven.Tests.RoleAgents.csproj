@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Akka.Persistence.Sqlite" />
+    <PackageReference Include="Akka.TestKit.Xunit2" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aven.Testing\Aven.Testing.csproj" />
+    <ProjectReference Include="..\..\src\Agent\Aven.RoleAgents\Aven.RoleAgents.csproj" />
+    <ProjectReference Include="..\..\src\RoleRegistry\Aven.RoleAgents.Registry\Aven.RoleAgents.Registry.csproj" />
+    <ProjectReference Include="..\..\src\WorkIntake\Aven.WorkIntake\Aven.WorkIntake.csproj" />
+    <ProjectReference Include="..\..\src\Aven.Akka.Hosting\Aven.Akka.Hosting.csproj" />
+    <ProjectReference Include="..\..\src\Aven.Contracts\Aven.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Resources\Artifacts\Aven.Resources.Artifacts.Contracts\Aven.Resources.Artifacts.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Resources\Human\Aven.Resources.Human\Aven.Resources.Human.csproj" />
+    <ProjectReference Include="..\..\src\Resources\Human\Aven.Resources.Human.Contracts\Aven.Resources.Human.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Resources\Llm\Aven.Resources.Llm\Aven.Resources.Llm.csproj" />
+    <ProjectReference Include="..\..\src\Resources\Llm\Aven.Resources.Llm.Contracts\Aven.Resources.Llm.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Resources\Metadata\Aven.Resources.Metadata.Contracts\Aven.Resources.Metadata.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Aven.Roles\Aven.Roles.csproj" />
+    <ProjectReference Include="..\..\src\Scheduling\Aven.Scheduling.Contracts\Aven.Scheduling.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

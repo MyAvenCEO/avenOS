@@ -466,7 +466,10 @@
 			"confirmDeleteMany": "{count} Todos löschen?",
 			"confirmDeletePrompt": "Aven möchte dies von deiner Liste entfernen. Das lässt sich nicht rückgängig machen.",
 			"confirmAccept": "Löschen",
-			"confirmReject": "Behalten"
+			"confirmReject": "Behalten",
+			"approvalNeeded": "Zustimmung erforderlich",
+			"promptAccept": "Zustimmen",
+			"promptReject": "Ablehnen"
 		},
 		"todos": {
 			"title": "Todos",

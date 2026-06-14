@@ -1,0 +1,12 @@
+global using ITraceQueryService = Aven.Toolkit.Tracing.ITraceQueryService;
+global using TraceSubjectDto = Aven.Toolkit.Tracing.TraceSubjectDto;
+global using TraceLinkDto = Aven.Toolkit.Tracing.TraceLinkDto;
+global using TraceInvariantDto = Aven.Toolkit.Tracing.TraceInvariantDto;
+global using TraceTimelineItemDto = Aven.Toolkit.Tracing.TraceTimelineItemDto;
+global using TraceTimelineResult = Aven.Toolkit.Tracing.TraceTimelineResult;
+global using TraceQueryOptions = Aven.Toolkit.Tracing.TraceQueryOptions;
+global using TraceStuckQueryOptions = Aven.Toolkit.Tracing.TraceStuckQueryOptions;
+global using TraceProjectionOptions = Aven.Toolkit.Tracing.TraceProjectionOptions;
+global using TraceProjectionHealth = Aven.Toolkit.Tracing.TraceProjectionHealth;
+global using TraceEntityRefDto = Aven.Toolkit.Tracing.TraceEntityRefDto;
+global using TraceEntityDetail = Aven.Toolkit.Tracing.TraceEntityDetail;

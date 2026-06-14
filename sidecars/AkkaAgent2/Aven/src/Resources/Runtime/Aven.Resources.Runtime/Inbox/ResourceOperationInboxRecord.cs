@@ -1,0 +1,28 @@
+namespace Aven.Resources.Runtime.Inbox;
+
+public sealed record ResourceOperationInboxRecord(
+    string OperationKey,
+    string CallerValue,
+    string CallerProtocol,
+    string RequestId,
+    string OperationType,
+    string ResourceKind,
+    string RecipientValue,
+    string RecipientProtocol,
+    string ReplyToValue,
+    string ReplyToProtocol,
+    string CorrelationId,
+    string PayloadJson,
+    string PayloadHash,
+    ResourceOperationInboxStatus Status,
+    DateTimeOffset AcceptedAt,
+    DateTimeOffset? StartedAt,
+    DateTimeOffset? CompletedAt,
+    string? LastErrorCode,
+    string? LastErrorMessage,
+    int AttemptCount,
+    string? ResolvedCapabilityId = null,
+    string? TerminalReplyKind = null,
+    string? TerminalReplyPayloadJson = null,
+    ResourceOperationTerminalReplyDeliveryStatus? TerminalReplyDeliveryStatus = null,
+    DateTimeOffset? TerminalReplyDeliveredAt = null);

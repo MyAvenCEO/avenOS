@@ -479,7 +479,10 @@
 			"confirmDeleteMany": "Delete {count} todos?",
 			"confirmDeletePrompt": "Aven asked to remove this from your list. This can’t be undone.",
 			"confirmAccept": "Delete",
-			"confirmReject": "Keep"
+			"confirmReject": "Keep",
+			"approvalNeeded": "Approval needed",
+			"promptAccept": "Approve",
+			"promptReject": "Decline"
 		},
 		"todos": {
 			"title": "Todos",

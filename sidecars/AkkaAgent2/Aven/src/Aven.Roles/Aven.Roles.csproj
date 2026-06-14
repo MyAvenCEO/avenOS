@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aven.Contracts\Aven.Contracts.csproj" />
+    <ProjectReference Include="..\Resources\Artifacts\Aven.Resources.Artifacts.Contracts\Aven.Resources.Artifacts.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\Toolkit\src\Aven.Toolkit.Artifacts\Aven.Toolkit.Artifacts.csproj" />
+    <ProjectReference Include="..\Resources\Human\Aven.Resources.Human.Contracts\Aven.Resources.Human.Contracts.csproj" />
+    <ProjectReference Include="..\Resources\Llm\Aven.Resources.Llm.Contracts\Aven.Resources.Llm.Contracts.csproj" />
+    <ProjectReference Include="..\Resources\Metadata\Aven.Resources.Metadata.Contracts\Aven.Resources.Metadata.Contracts.csproj" />
+    <ProjectReference Include="..\Resources\Shell\Aven.Resources.Shell.Contracts\Aven.Resources.Shell.Contracts.csproj" />
+    <ProjectReference Include="..\Scheduling\Aven.Scheduling.Contracts\Aven.Scheduling.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Accounting\Schemas\Json\accounting_invoice_schema_essence.json" />
+    <EmbeddedResource Include="Accounting\Schemas\Json\accounting_bank_statement_schema_essence.json" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

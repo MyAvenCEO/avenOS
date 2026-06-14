@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Akka.Persistence.Sqlite" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Aven.Api\Aven.Api.csproj" />
+    <ProjectReference Include="..\..\src\Agent\Aven.RoleAgents\Aven.RoleAgents.csproj" />
+    <ProjectReference Include="..\..\src\Aven.Contracts\Aven.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Resources\Metadata\Aven.Resources.Metadata\Aven.Resources.Metadata.csproj" />
+    <ProjectReference Include="..\..\src\Resources\Human\Aven.Resources.Human\Aven.Resources.Human.csproj" />
+    <ProjectReference Include="..\..\src\Resources\Shell\Aven.Resources.Shell\Aven.Resources.Shell.csproj" />
+    <ProjectReference Include="..\..\src\Resources\Shell\Aven.Resources.Shell.Contracts\Aven.Resources.Shell.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Scheduling\Aven.Scheduling\Aven.Scheduling.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="TestFixtures\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

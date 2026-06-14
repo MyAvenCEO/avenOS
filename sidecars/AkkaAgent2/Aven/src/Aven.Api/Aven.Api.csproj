@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Akka.Persistence.Sqlite" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Agent\Aven.RoleAgents\Aven.RoleAgents.csproj" />
+    <ProjectReference Include="..\RoleRegistry\Aven.RoleAgents.Registry\Aven.RoleAgents.Registry.csproj" />
+    <ProjectReference Include="..\WorkIntake\Aven.WorkIntake\Aven.WorkIntake.csproj" />
+    <ProjectReference Include="..\Aven.Akka.Hosting\Aven.Akka.Hosting.csproj" />
+    <ProjectReference Include="..\Resources\Runtime\Aven.Resources.Runtime\Aven.Resources.Runtime.csproj" />
+    <ProjectReference Include="..\Resources\Shell\Aven.Resources.Shell\Aven.Resources.Shell.csproj" />
+    <ProjectReference Include="..\Capabilities\Aven.Capabilities\Aven.Capabilities.csproj" />
+    <ProjectReference Include="..\Aven.Contracts\Aven.Contracts.csproj" />
+    <ProjectReference Include="..\Submission\Aven.Submission\Aven.Submission.csproj" />
+    <ProjectReference Include="..\Routing\Aven.Routing\Aven.Routing.csproj" />
+    <ProjectReference Include="..\Resources\Metadata\Aven.Resources.Metadata\Aven.Resources.Metadata.csproj" />
+    <ProjectReference Include="..\Resources\Artifacts\Aven.Resources.Artifacts\Aven.Resources.Artifacts.csproj" />
+    <ProjectReference Include="..\Resources\Human\Aven.Resources.Human\Aven.Resources.Human.csproj" />
+    <ProjectReference Include="..\Resources\Llm\Aven.Resources.Llm\Aven.Resources.Llm.csproj" />
+    <ProjectReference Include="..\Aven.Roles\Aven.Roles.csproj" />
+    <ProjectReference Include="..\Scheduling\Aven.Scheduling\Aven.Scheduling.csproj" />
+    <ProjectReference Include="..\SchemaRegistry\Aven.SchemaRegistry\Aven.SchemaRegistry.csproj" />
+    <ProjectReference Include="..\..\..\Toolkit\src\Aven.Toolkit.Core\Aven.Toolkit.Core.csproj" />
+    <ProjectReference Include="..\..\..\Toolkit\src\Aven.Toolkit.Tracing\Aven.Toolkit.Tracing.csproj" />
+    <ProjectReference Include="..\Aven.Trace\Aven.Trace.csproj" />
+  </ItemGroup>
+
+</Project>

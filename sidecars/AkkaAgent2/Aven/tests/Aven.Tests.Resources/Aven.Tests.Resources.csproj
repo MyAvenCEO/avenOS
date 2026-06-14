@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Akka.Persistence.Sqlite" />
+    <PackageReference Include="Akka.TestKit.Xunit2" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Aven.Testing\Aven.Testing.csproj" />
+    <ProjectReference Include="..\..\src\Aven.Api\Aven.Api.csproj" />
+    <ProjectReference Include="..\..\src\Resources\Runtime\Aven.Resources.Runtime\Aven.Resources.Runtime.csproj" />
+    <ProjectReference Include="..\..\src\Resources\Shell\Aven.Resources.Shell\Aven.Resources.Shell.csproj" />
+    <ProjectReference Include="..\..\src\Resources\Shell\Aven.Resources.Shell.Contracts\Aven.Resources.Shell.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Aven.Contracts\Aven.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Delivery\Aven.DurableDelivery\Aven.DurableDelivery.csproj" />
+    <ProjectReference Include="..\..\src\Resources\Artifacts\Aven.Resources.Artifacts\Aven.Resources.Artifacts.csproj" />
+    <ProjectReference Include="..\..\src\Resources\Human\Aven.Resources.Human\Aven.Resources.Human.csproj" />
+    <ProjectReference Include="..\..\..\Toolkit\src\Aven.Toolkit.Llm\Aven.Toolkit.Llm.csproj" />
+    <ProjectReference Include="..\..\src\Resources\Llm\Aven.Resources.Llm\Aven.Resources.Llm.csproj" />
+    <ProjectReference Include="..\..\src\Resources\Metadata\Aven.Resources.Metadata\Aven.Resources.Metadata.csproj" />
+    <ProjectReference Include="..\..\src\Scheduling\Aven.Scheduling\Aven.Scheduling.csproj" />
+  </ItemGroup>
+</Project>

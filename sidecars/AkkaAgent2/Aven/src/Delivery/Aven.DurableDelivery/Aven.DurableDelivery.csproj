@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Aven.ActorKernel\Aven.ActorKernel.csproj" />
+    <ProjectReference Include="..\..\Aven.Contracts\Aven.Contracts.csproj" />
+    <ProjectReference Include="..\Aven.DurableDelivery.Contracts\Aven.DurableDelivery.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\..\Toolkit\src\Aven.Toolkit.Core\Aven.Toolkit.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Akka.Persistence" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

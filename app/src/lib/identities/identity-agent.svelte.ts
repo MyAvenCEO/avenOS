@@ -11,6 +11,18 @@
  */
 
 import { getContext, setContext } from 'svelte'
+import {
+	answerHumanPrompt,
+	cancelHumanPrompt,
+	getMessageResult,
+	listenAgentSidecarEvents,
+	listHumanPrompts,
+	submitMessage,
+	type AgentRuntimeEvent,
+	type AgentSubmitInput,
+	type SubmitResult
+} from '$lib/agent-sidecar/api'
+import { isDotnetSidecarMode } from '$lib/agent-sidecar/mode'
 import { persistSparkFiles } from '$lib/avendb/intent-files'
 import type { AvenDbStore } from '$lib/avendb/store.svelte'
 import {
@@ -65,6 +77,9 @@ import {
 
 /** Deterministic author DID for on-device agent replies (role-tagged in the row). */
 const AGENT_DID = 'did:aven:agent:lfm2'
+
+/** Deterministic author DID for .NET sidecar-backed agent replies (D5 row owner). */
+const DOTNET_AGENT_DID = 'did:aven:agent:dotnet'
 
 /** How long the floating reply chip lingers on non-talk views before auto-dismissing. */
 const FLOATING_REPLY_MS = 9000
@@ -163,10 +178,30 @@ export type ToolBadge = {
  * unified live-state renders an accept/cancel card before the action actually runs. Currently
  * only `todos delete` is gated.
  */
+export type PromptChoice = { id: string; label: string; kind?: 'primary' | 'danger' | 'secondary' }
+
+/**
+ * Generalized so it covers BOTH the legacy current-cloud `todos delete` confirmation AND a .NET
+ * sidecar human prompt (M5/M7). The delete card keeps using `titles`; sidecar prompts carry a
+ * `promptId` + `title`/`body`/`choices` and answer/cancel through the runtime instead of a local
+ * resolver. `destructive` keeps the red card styling.
+ */
 export type PendingConfirm = {
-	action: 'delete'
-	/** Human-readable titles of the todos that would be removed — shown in the confirm card. */
+	action: 'delete' | 'prompt'
+	/** Human-readable titles of the todos that would be removed — shown in the legacy delete card. */
 	titles: string[]
+	/** Sidecar human-prompt id (action === 'prompt'); answered/cancelled via the .NET runtime. */
+	promptId?: string
+	/** Reply row this prompt belongs to, for event correlation. */
+	replyId?: string
+	/** Prompt heading (sidecar prompts). */
+	title?: string
+	/** Prompt body text (sidecar prompts). */
+	body?: string
+	/** Show the red destructive styling. */
+	destructive?: boolean
+	/** Optional explicit choices; when absent the card shows accept/cancel. */
+	choices?: PromptChoice[]
 }
 
 /** A short "running" label for a tool call before its result is known (in the user's language-ish). */
@@ -613,7 +648,19 @@ export function createIdentityAgent(deps: {
 		}
 	}
 
+	/**
+	 * Public submit — routes to the active agent runtime (D12). `dotnet-sidecar` sends the turn to
+	 * the .NET runtime over the stdio bridge; `current-cloud` keeps the existing frontend tool loop +
+	 * Brain. Selected from one place (`$lib/agent-sidecar/mode`).
+	 */
 	async function submit(message: string, files: File[]): Promise<void> {
+		if (isDotnetSidecarMode()) {
+			return submitWithDotnetSidecar(message, files)
+		}
+		return submitWithCurrentCloud(message, files)
+	}
+
+	async function submitWithCurrentCloud(message: string, files: File[]): Promise<void> {
 		const env = deps.env()
 		const body = message.trim()
 		const did = env.authorDid?.trim()
@@ -767,6 +814,335 @@ export function createIdentityAgent(deps: {
 		}
 	}
 
+	// ─────────────────────────── .NET sidecar runtime (D12) ───────────────────────────
+	// Replaces the frontend tool loop + Brain with the durable .NET runtime over the stdio
+	// bridge. Rows stay app-owned in avenDB (D5); .NET owns orchestration. Live state
+	// (streaming, tool badges, HITL) is driven by `agent-sidecar:event` (wired here; the
+	// .NET event projection lands in M8) with a bounded poll for the settled reply (M6).
+
+	/** Reply rows this agent is awaiting from the sidecar (events for others are ignored). */
+	const sidecarReplies = new Set<string>()
+	/** Sidecar tool id → local badge id, so tool.completed resolves the right pill. */
+	const sidecarToolBadge = new Map<string, number>()
+	/** Prompt ids already answered/cancelled this session — don't re-surface them while polling. */
+	const sidecarAnsweredPrompts = new Set<string>()
+	let sidecarListenerStarted = false
+
+	async function ensureSidecarListener(): Promise<void> {
+		if (sidecarListenerStarted) return
+		sidecarListenerStarted = true
+		try {
+			// App-lifetime subscription (the factory has no teardown hook); narrowed events route
+			// into the live-state fields via onSidecarEvent.
+			await listenAgentSidecarEvents(onSidecarEvent)
+		} catch {
+			sidecarListenerStarted = false
+		}
+	}
+
+	function dropStreaming(replyId: string): void {
+		const { [replyId]: _drop, ...rest } = streaming
+		streaming = rest
+	}
+
+	async function persistSidecarReply(replyId: string, body: string): Promise<void> {
+		streaming = { ...streaming, [replyId]: body }
+		await deps.messages.update(replyId, { body }).catch(() => {})
+	}
+
+	/** Close out a sidecar turn: stop tracking the reply, clear live state, free the composer. */
+	function endSidecarTurn(replyId: string): void {
+		sidecarReplies.delete(replyId)
+		if (streamingId === replyId) streamingId = undefined
+		dropStreaming(replyId)
+		// Never leave a HITL card dangling once its turn has ended.
+		if (pendingConfirm?.action === 'prompt' && pendingConfirm.replyId === replyId) {
+			pendingConfirm = undefined
+		}
+		busy = false
+		phase = 'idle'
+	}
+
+	/** Route a narrowed sidecar event into the existing live-state fields, keyed by replyId. */
+	function onSidecarEvent(ev: AgentRuntimeEvent): void {
+		if ('replyId' in ev && ev.replyId && !sidecarReplies.has(ev.replyId)) {
+			// Allow a resolved-prompt event to still clear a matching card; ignore everything else.
+			if (ev.type !== 'humanPrompt.resolved') return
+		}
+		switch (ev.type) {
+			case 'run.started':
+				phase = 'thinking'
+				break
+			case 'message.delta':
+				streaming = { ...streaming, [ev.replyId]: (streaming[ev.replyId] ?? '') + ev.text }
+				break
+			case 'message.completed':
+				void persistSidecarReply(ev.replyId, ev.text).then(() => showFloating(respondRecord(ev.text)))
+				endSidecarTurn(ev.replyId)
+				break
+			case 'tool.started': {
+				const id = startToolBadge(ev.name, {})
+				sidecarToolBadge.set(ev.toolId, id)
+				phase = 'tool'
+				break
+			}
+			case 'tool.completed': {
+				const id = sidecarToolBadge.get(ev.toolId)
+				if (id != null) {
+					finishToolBadge(id, ev.label, ev.ok)
+					sidecarToolBadge.delete(ev.toolId)
+				}
+				break
+			}
+			case 'humanPrompt.created':
+				pendingConfirm = {
+					action: 'prompt',
+					titles: [],
+					promptId: ev.promptId,
+					replyId: ev.replyId,
+					title: ev.title,
+					body: ev.body,
+					destructive: false,
+					choices: Array.isArray(ev.choices) ? (ev.choices as PromptChoice[]) : undefined
+				}
+				break
+			case 'humanPrompt.resolved':
+				if (pendingConfirm?.promptId === ev.promptId) pendingConfirm = undefined
+				break
+			case 'run.failed':
+				void persistSidecarReply(ev.replyId, `⚠️ ${ev.message}`)
+				endSidecarTurn(ev.replyId)
+				break
+			case 'runtime.health':
+				// A sidecar crash fails every in-flight turn immediately (no hung composer).
+				if (ev.status === 'crashed') {
+					for (const rid of [...sidecarReplies]) {
+						void persistSidecarReply(
+							rid,
+							`⚠️ ${ev.message ?? 'The agent runtime stopped unexpectedly.'}`
+						)
+						endSidecarTurn(rid)
+					}
+				}
+				break
+		}
+	}
+
+	/** Best-effort current sub-view name for `sourceView`, from the URL last segment. */
+	function currentView(): string | undefined {
+		const path = globalThis.location?.pathname ?? ''
+		const seg = path.split('/').filter(Boolean).pop()
+		return seg || undefined
+	}
+
+	/** Map the structured submit response into the reply row. Accepted turns poll for the
+	 *  settled reply (M6 — temporary debt; live events replace this in M8). */
+	async function handleSubmitResult(replyId: string, res: SubmitResult): Promise<void> {
+		switch (res.status) {
+			case 'accepted': {
+				const agentId = typeof res.agentId === 'string' ? res.agentId : undefined
+				if (!agentId) {
+					// No routed agent id — rely entirely on live events to complete the turn; free the
+					// composer state machine but keep the reply tracked so events can still land.
+					break
+				}
+				// Live events (run.started / tool.* / message.completed / run.failed / humanPrompt.*)
+				// drive the turn for immediacy (M8). The supervisor below is a sparse recovery
+				// backstop reading truth via methods in case an event is missed (spec §9.2).
+				await superviseSidecarTurn(replyId, agentId)
+				break
+			}
+			case 'clarification':
+				await persistSidecarReply(replyId, clarificationText(res))
+				endSidecarTurn(replyId)
+				break
+			case 'rejected':
+			case 'conflict':
+				await persistSidecarReply(replyId, `⚠️ ${submitErrorText(res)}`)
+				endSidecarTurn(replyId)
+				break
+			default:
+				endSidecarTurn(replyId)
+		}
+	}
+
+	/** Recovery backstop for a sidecar turn. Live events drive immediacy; this loop polls truth
+	 *  (`messages.result`) on a SPARSE interval only to catch a missed completion/prompt event,
+	 *  and finalizes on the deadline (spec §9.2: events for immediacy, methods for truth). It
+	 *  exits the instant a live event ends the turn. */
+	async function superviseSidecarTurn(replyId: string, agentId: string): Promise<void> {
+		const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+		const deadline = Date.now() + 90_000
+		while (Date.now() < deadline) {
+			// A live message.completed/run.failed event may have already finished this turn.
+			if (!sidecarReplies.has(replyId)) return
+			await sleep(3_000)
+			if (!sidecarReplies.has(replyId)) return
+			// Recovery for a missed humanPrompt.created event.
+			await pollHumanPrompt(replyId, agentId)
+			try {
+				const result = await getMessageResult(agentId)
+				if (result.settled) {
+					if (!sidecarReplies.has(replyId)) return
+					if (pendingConfirm?.action === 'prompt' && pendingConfirm.replyId === replyId) {
+						pendingConfirm = undefined
+					}
+					const summary = (result.summary ?? '').trim() || 'Done.'
+					await persistSidecarReply(replyId, summary)
+					showFloating(respondRecord(summary))
+					endSidecarTurn(replyId)
+					return
+				}
+			} catch {
+				// Transient (agent not yet visible, etc.) — keep supervising within the bound.
+			}
+		}
+		if (sidecarReplies.has(replyId)) {
+			await persistSidecarReply(
+				replyId,
+				'⚠️ The agent is taking longer than expected. It may still be working — check back shortly.'
+			)
+			endSidecarTurn(replyId)
+		}
+	}
+
+	/** Bounded poll for an open .NET human prompt belonging to this run; surface it as the live
+	 *  HITL card. Replaced by `humanPrompt.created` events in M8 (D11). */
+	async function pollHumanPrompt(replyId: string, agentId: string): Promise<void> {
+		// One card at a time — if this reply already shows a prompt, wait for the human.
+		if (pendingConfirm?.action === 'prompt' && pendingConfirm.replyId === replyId) return
+		try {
+			const { prompts } = await listHumanPrompts()
+			const open = prompts.find(
+				(p) =>
+					p.status === 'Open' &&
+					!sidecarAnsweredPrompts.has(p.promptId) &&
+					(p.replyTo ?? '').includes(agentId)
+			)
+			if (open) {
+				pendingConfirm = {
+					action: 'prompt',
+					titles: [],
+					promptId: open.promptId,
+					replyId,
+					title: t('identities.talk.approvalNeeded'),
+					body: open.promptText,
+					destructive: true
+				}
+			}
+		} catch {
+			// Best-effort; keep polling.
+		}
+	}
+
+	function clarificationText(res: SubmitResult): string {
+		const decision = res.decision as { candidateRoleAgentIds?: unknown[] } | undefined
+		const n = Array.isArray(decision?.candidateRoleAgentIds) ? decision!.candidateRoleAgentIds!.length : 0
+		return n > 1
+			? 'I need a bit more detail to route this — there are several agents it could go to.'
+			: 'I need a bit more detail to handle this message.'
+	}
+
+	function submitErrorText(res: SubmitResult): string {
+		const error = res.error as { message?: string; code?: string } | undefined
+		return error?.message?.trim() || `The runtime could not accept this message (${res.status}).`
+	}
+
+	async function submitWithDotnetSidecar(message: string, files: File[]): Promise<void> {
+		const env = deps.env()
+		const body = message.trim()
+		const did = env.authorDid?.trim()
+		if (
+			(!body && files.length === 0) ||
+			!did ||
+			!env.tauri ||
+			!env.unlocked ||
+			!env.canonicalSparkId ||
+			busy
+		) {
+			return
+		}
+		busy = true
+		err = undefined
+		toolBadges = []
+		phase = 'thinking'
+		let replyId: string | undefined
+		try {
+			await ensureSidecarListener()
+			const row = await deps.messages.create({
+				owner: env.canonicalSparkId,
+				created_at_ms: Date.now(),
+				author_did: did,
+				role: 'user',
+				body
+			})
+			const reply = await deps.messages.create({
+				owner: env.canonicalSparkId,
+				created_at_ms: Date.now(),
+				author_did: DOTNET_AGENT_DID,
+				role: 'agent',
+				body: ''
+			})
+			replyId = reply.id
+			streamingId = reply.id
+			streaming = { ...streaming, [reply.id]: '' }
+			sidecarReplies.add(reply.id)
+
+			if (files.length > 0) {
+				const { stored, errors } = await persistSparkFiles(row.id, files, {
+					identityId: env.canonicalSparkId
+				})
+				if (errors.length > 0) {
+					err =
+						stored > 0
+							? `Message sent; ${stored} file(s) saved. ${errors.join('; ')}`
+							: `Message sent but files failed: ${errors.join('; ')}`
+				}
+			}
+
+			const input: AgentSubmitInput = {
+				identityId: env.canonicalSparkId,
+				messageId: row.id,
+				replyId: reply.id,
+				text: body,
+				sourceView: currentView(),
+				attachments: []
+			}
+			const res = await submitMessage(input)
+			await handleSubmitResult(reply.id, res)
+		} catch (e) {
+			const msg = e instanceof Error ? e.message : String(e)
+			if (replyId) {
+				await persistSidecarReply(replyId, `⚠️ ${msg}`)
+				endSidecarTurn(replyId)
+			} else {
+				err = msg
+				busy = false
+				phase = 'idle'
+			}
+		}
+	}
+
+	/** Resolve a pending HITL card — sidecar prompts answer/cancel through the .NET runtime; the
+	 *  legacy current-cloud delete gate resolves its local promise. */
+	async function resolvePending(accepted: boolean): Promise<void> {
+		const p = pendingConfirm
+		if (p?.action === 'prompt' && p.promptId) {
+			const promptId = p.promptId
+			// Don't re-surface this prompt while polling, even before .NET marks it resolved.
+			sidecarAnsweredPrompts.add(promptId)
+			try {
+				if (accepted) await answerHumanPrompt(promptId, 'accept')
+				else await cancelHumanPrompt(promptId, 'user_cancelled')
+			} catch (e) {
+				err = e instanceof Error ? e.message : String(e)
+			}
+			if (pendingConfirm?.promptId === promptId) pendingConfirm = undefined
+			return
+		}
+		settleConfirm(accepted)
+	}
+
 	return {
 		get streaming() {
 			return streaming
@@ -794,10 +1170,10 @@ export function createIdentityAgent(deps: {
 		},
 		submit,
 		confirmPending() {
-			settleConfirm(true)
+			void resolvePending(true)
 		},
 		cancelPending() {
-			settleConfirm(false)
+			void resolvePending(false)
 		},
 		dismissReply() {
 			lastReply = undefined

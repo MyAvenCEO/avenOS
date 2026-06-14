@@ -36,6 +36,10 @@ const live = $derived.by((): Live => {
 
 // Title line for the delete confirmation card.
 const confirmTitles = $derived(agent.pendingConfirm?.titles ?? [])
+// A generic sidecar human prompt (action === 'prompt') vs. the legacy todos-delete gate.
+const promptCard = $derived(
+	agent.pendingConfirm?.action === 'prompt' ? agent.pendingConfirm : undefined
+)
 </script>
 
 {#if live.kind !== 'idle'}
@@ -43,7 +47,44 @@ const confirmTitles = $derived(agent.pendingConfirm?.titles ?? [])
 		class="pointer-events-auto mb-2 flex w-full max-w-lg justify-center px-4"
 		transition:fade={{ duration: 120 }}
 	>
-		{#if live.kind === 'confirm'}
+		{#if live.kind === 'confirm' && promptCard}
+			<!-- Generic .NET sidecar human prompt (HITL). Same compact card location + destructive
+			     styling option as the delete gate; answer/cancel go to the .NET runtime. -->
+			<div
+				class="bg-card/95 flex w-full flex-col gap-2.5 rounded-2xl border px-4 py-3 shadow-lg backdrop-blur {promptCard.destructive
+					? 'border-red-500/40 ring-1 ring-red-500/10'
+					: 'border-border/60 ring-1 ring-primary/15'}"
+			>
+				<div class="min-w-0 flex-1">
+					<p class="text-foreground text-sm font-semibold leading-snug">
+						{promptCard.title ?? t('identities.talk.approvalNeeded')}
+					</p>
+					{#if promptCard.body?.trim()}
+						<p class="text-muted-foreground mt-0.5 whitespace-pre-wrap text-xs leading-snug">
+							{promptCard.body}
+						</p>
+					{/if}
+				</div>
+				<div class="flex justify-end gap-2">
+					<button
+						type="button"
+						class="border-border/70 text-foreground hover:bg-muted rounded-full border px-3.5 py-1.5 text-xs font-semibold transition"
+						onclick={() => agent.cancelPending()}
+					>
+						{t('identities.talk.promptReject')}
+					</button>
+					<button
+						type="button"
+						class="rounded-full px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition {promptCard.destructive
+							? 'bg-red-600 hover:bg-red-700'
+							: 'bg-primary hover:bg-primary/90'}"
+						onclick={() => agent.confirmPending()}
+					>
+						{t('identities.talk.promptAccept')}
+					</button>
+				</div>
+			</div>
+		{:else if live.kind === 'confirm'}
 			<!-- HITL gate: the human must accept before a destructive (delete) action runs.
 			     (Explicit red — this theme has no `destructive` color token.) -->
 			<div

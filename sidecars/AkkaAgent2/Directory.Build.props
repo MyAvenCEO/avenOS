@@ -1,0 +1,18 @@
+<Project>
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**/bin/**;**/obj/**</DefaultItemExcludes>
+    <AvenArtifactsRoot Condition="'$(AvenArtifactsRoot)' == ''">$(HOME)/.aven-artifacts/$(MSBuildProjectName)/</AvenArtifactsRoot>
+    <BaseOutputPath>$(AvenArtifactsRoot)bin/</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(AvenArtifactsRoot)obj/</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="**/bin/**/*.cs" />
+    <Compile Remove="**/obj/**/*.cs" />
+    <EmbeddedResource Remove="**/bin/**" />
+    <EmbeddedResource Remove="**/obj/**" />
+    <None Remove="**/bin/**" />
+    <None Remove="**/obj/**" />
+  </ItemGroup>
+</Project>

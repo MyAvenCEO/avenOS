@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startSyncRelay } from './aven-server.ts'
+import { ensureSidecar } from './ensure-sidecar.ts'
 import { ensureOnnxruntimeDylib } from './fetch-onnxruntime.ts'
 import { freeDevServerPort } from './free-dev-server-port.ts'
 
@@ -46,6 +47,10 @@ async function main() {
 
 	const env: Record<string, string> = { ...process.env, AVENOS_SERVER_WS_URL: wsUrl }
 	if (ortDylib) env.AVENOS_ORT_DYLIB = ortDylib
+
+	// Build the .NET stdio sidecar and point the Tauri manager at it (M9). Best-effort;
+	// opt into it with PUBLIC_AGENT_RUNTIME=dotnet-sidecar (default stays current-cloud).
+	ensureSidecar(repoRoot, env)
 
 	const child = Bun.spawn(['bun', '--env-file=.env', 'run', '--cwd', 'app', 'tauri:dev'], {
 		cwd: repoRoot,

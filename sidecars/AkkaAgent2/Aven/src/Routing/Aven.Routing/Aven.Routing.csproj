@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Akka.Persistence" />
+    <ProjectReference Include="..\..\Aven.ActorKernel\Aven.ActorKernel.csproj" />
+    <ProjectReference Include="..\..\Delivery\Aven.DurableDelivery.Contracts\Aven.DurableDelivery.Contracts.csproj" />
+    <ProjectReference Include="..\..\RoleRegistry\Aven.RoleAgents.Registry\Aven.RoleAgents.Registry.csproj" />
+    <ProjectReference Include="..\..\RoleRegistry\Aven.Roles.Contracts\Aven.Roles.Contracts.csproj" />
+    <ProjectReference Include="..\..\Aven.Contracts\Aven.Contracts.csproj" />
+    <ProjectReference Include="..\..\Resources\Llm\Aven.Resources.Llm\Aven.Resources.Llm.csproj" />
+    <ProjectReference Include="..\..\Resources\Llm\Aven.Resources.Llm.Contracts\Aven.Resources.Llm.Contracts.csproj" />
+    <ProjectReference Include="..\Aven.Routing.Contracts\Aven.Routing.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\..\Toolkit\src\Aven.Toolkit.Core\Aven.Toolkit.Core.csproj" />
+    <ProjectReference Include="..\..\WorkIntake\Aven.WorkIntake\Aven.WorkIntake.csproj" />
+    <ProjectReference Include="..\..\WorkIntake\Aven.WorkIntake.Contracts\Aven.WorkIntake.Contracts.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

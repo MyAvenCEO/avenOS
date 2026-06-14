@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Aven.ActorKernel\Aven.ActorKernel.csproj" />
+    <ProjectReference Include="..\..\..\Capabilities\Aven.Capabilities\Aven.Capabilities.csproj" />
+    <ProjectReference Include="..\..\..\Aven.Contracts\Aven.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Toolkit\src\Aven.Toolkit.Artifacts\Aven.Toolkit.Artifacts.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Toolkit\src\Aven.Toolkit.Llm\Aven.Toolkit.Llm.csproj" />
+    <ProjectReference Include="..\Aven.Resources.Llm.Contracts\Aven.Resources.Llm.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\SchemaRegistry\Aven.SchemaRegistry\Aven.SchemaRegistry.csproj" />
+    <ProjectReference Include="..\..\Runtime\Aven.Resources.Runtime\Aven.Resources.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\Delivery\Aven.DurableDelivery.Contracts\Aven.DurableDelivery.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\Capabilities\Aven.Capabilities.Contracts\Aven.Capabilities.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\SchemaRegistry\Aven.SchemaRegistry.Contracts\Aven.SchemaRegistry.Contracts.csproj" />
+    <ProjectReference Include="..\..\Artifacts\Aven.Resources.Artifacts.Contracts\Aven.Resources.Artifacts.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\Aven.Events\Aven.Events.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Akka.Persistence" />
+  </ItemGroup>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+</Project>

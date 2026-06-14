@@ -1,0 +1,16 @@
+global using Aven.Contracts.Capabilities;
+global using Aven.Contracts.Identifiers;
+global using Aven.Toolkit.Core.Identifiers;
+global using CapabilityConstraints = Aven.Toolkit.Capabilities.CapabilityConstraints;
+global using SchemaRef = Aven.Toolkit.Core.Identifiers.SchemaRef;
+global using Aven.Contracts.Operations;
+global using OperationError = Aven.Toolkit.Core.Operations.OperationError;
+global using OperationValue = Aven.Toolkit.Core.Operations.OperationValue;
+global using MetadataSubject = Aven.Toolkit.Metadata.MetadataSubject;
+global using MetadataQuery = Aven.Toolkit.Metadata.MetadataQuery;
+global using MetadataQueryResult = Aven.Toolkit.Metadata.MetadataQueryResult;
+global using MetadataValidationResult = Aven.Toolkit.Metadata.MetadataValidationResult;
+global using Aven.Resources.Metadata.Contracts;
+global using Aven.Resources.Metadata.Contracts.Models;
+global using Aven.Resources.Metadata.Contracts.Responses;
+global using Aven.Capabilities.Clients;

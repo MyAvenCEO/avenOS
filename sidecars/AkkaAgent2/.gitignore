@@ -1,0 +1,17 @@
+bin/
+obj/
+/packages/
+riderModule.iml
+/_ReSharper.Caches/
+.idea/
+*.user
+*.suo
+TestResults/
+*.db
+*.sqlite
+*.sqlite3
+appsettings.Local.json
+appsettings.OpenAI.local.json
+appsettings.*.local.json
+.env.local
+Docs/aven_reverse_engineering_bundle/
