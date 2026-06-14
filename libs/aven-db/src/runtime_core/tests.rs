@@ -1576,5 +1576,6 @@ fn noop_waker() -> std::task::Waker {
 
 mod basic;
 mod fk_remove_error;
+mod owner_binder;
 mod schema_catalogue;
 mod write_batch;

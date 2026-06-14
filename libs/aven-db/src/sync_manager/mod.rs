@@ -120,6 +120,17 @@ pub struct SyncManager {
     /// calls `set_edit_signer`). Invoked by `authored_row_batch` to stamp an
     /// `EDIT_SIG_META_KEY` signature over each locally-authored row's content digest.
     pub(super) edit_signer: Option<std::sync::Arc<dyn crate::capability::EditSigner>>,
+
+    /// App-installed owner-binder for the local write path (`None` until the app calls
+    /// `set_owner_binder`). Invoked by `authored_row_batch` for every **owner-scoped** row to
+    /// mint the `OWNER_BINDING_META_KEY` assertion `(value_id → owner)` and stamp it **before**
+    /// the edit-sig digest, so the binding is itself integrity-signed and travels E2E. The
+    /// counterpart of [`edit_signer`](Self::edit_signer); see [`crate::capability::OwnerBinder`].
+    ///
+    /// **Unconditional invariant:** owner-scoped rows can only be authored when a binder is
+    /// installed — a peer with no binder (no device key) cannot author owned data at all, on
+    /// every peer, local or syncing, no exceptions (board 0037).
+    pub(super) owner_binder: Option<std::sync::Arc<dyn crate::capability::OwnerBinder>>,
 }
 
 impl std::fmt::Debug for SyncManager {
@@ -211,6 +222,7 @@ impl SyncManager {
             // into `AllowAllResolver` explicitly.
             resolver: std::sync::Arc::new(crate::capability::DenyAllResolver),
             edit_signer: None,
+            owner_binder: None,
         }
     }
 
@@ -224,6 +236,12 @@ impl SyncManager {
     /// backed by its device key; without it, locally-authored rows carry no edit-signature.
     pub fn set_edit_signer(&mut self, signer: std::sync::Arc<dyn crate::capability::EditSigner>) {
         self.edit_signer = Some(signer);
+    }
+
+    /// Inject the owner-binder for the local write path (the app's device-key binder). Required to
+    /// author any owner-scoped row: without it an owner-scoped write fails closed on every peer.
+    pub fn set_owner_binder(&mut self, binder: std::sync::Arc<dyn crate::capability::OwnerBinder>) {
+        self.owner_binder = Some(binder);
     }
 
     pub fn reserve_timestamp(&mut self) -> u64 {

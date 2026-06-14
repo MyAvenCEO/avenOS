@@ -274,6 +274,20 @@ impl AvenDbClient {
             .map_err(|e| AvenDbError::Sync(format!("set_edit_signer: {e}")))
     }
 
+    /// Inject the owner-binder for the local write path. The app provides a binder backed by its
+    /// device key so every locally-authored **owner-scoped** row carries an Ed25519-signed
+    /// owner-binding (`OWNER_BINDING_META_KEY`), minted at the deep author funnel and verified on
+    /// apply by every peer (board 0037). Required to author any owner-scoped row: the funnel fails
+    /// closed without a binder, on every peer, local or syncing, no exceptions.
+    pub fn set_owner_binder(
+        &self,
+        binder: std::sync::Arc<dyn crate::capability::OwnerBinder>,
+    ) -> Result<()> {
+        self.runtime
+            .set_owner_binder(binder)
+            .map_err(|e| AvenDbError::Sync(format!("set_owner_binder: {e}")))
+    }
+
     /// Peer client ids with a live registered sync link (for mesh status UI).
     pub fn peer_client_ids(&self) -> Result<Vec<PeerId>> {
         self.runtime

@@ -599,6 +599,17 @@ impl<S: Storage + Send + 'static> TokioRuntime<S> {
         Ok(())
     }
 
+    /// Inject the owner-binder for the local write path (the app's device-key binder). Required to
+    /// author any owner-scoped row — the funnel fails closed without it, on every peer (board 0037).
+    pub fn set_owner_binder(
+        &self,
+        binder: std::sync::Arc<dyn crate::capability::OwnerBinder>,
+    ) -> Result<(), RuntimeError> {
+        let mut core = self.core.lock().map_err(|_| RuntimeError::LockError)?;
+        core.set_owner_binder(binder);
+        Ok(())
+    }
+
     /// Peer client ids currently registered for P2P sync (live transport links).
     pub fn peer_client_ids(&self) -> Result<Vec<PeerId>, RuntimeError> {
         let core = self.core.lock().map_err(|_| RuntimeError::LockError)?;

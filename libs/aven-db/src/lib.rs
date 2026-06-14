@@ -49,7 +49,7 @@ pub use avenos_client::{AvenDbClient, PeerInboundParkedHook};
 pub use sync_manager::RowBatchKey;
 pub use capability::{
     AccOp, AllowAllResolver, CapDecision, CapabilityResolver, DenyAllResolver, EditSigner,
-    ResourceCoord, may_hold,
+    OwnerBinder, ResourceCoord, may_hold,
 };
 pub use sync_targets::SyncTargetId;
 pub use query_manager::graph_nodes::sort::UnsealFn;

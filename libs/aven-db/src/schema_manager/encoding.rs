@@ -247,6 +247,9 @@ fn decode_table_entry_with_version(
             columns: descriptor,
             indexed_columns,
             policies: TablePolicies::default(),
+            // owner-scoping is derived from the locally-loaded manifest, not the catalogue wire
+            // form (board 0037); default false here. Stage 2 makes the flag authoritative.
+            owner_scoped: false,
         },
     ))
 }
@@ -973,6 +976,9 @@ fn decode_table_schema(
         columns: descriptor,
         indexed_columns: None,
         policies: TablePolicies::default(),
+        // owner-scoping is derived from the locally-loaded manifest, not the catalogue wire form
+        // (board 0037); default false here. Stage 2 makes the flag authoritative.
+        owner_scoped: false,
     })
 }
 
@@ -986,6 +992,9 @@ fn decode_table_schema_v1(
         columns: descriptor,
         indexed_columns: None,
         policies: TablePolicies::default(),
+        // owner-scoping is derived from the locally-loaded manifest, not the catalogue wire form
+        // (board 0037); default false here. Stage 2 makes the flag authoritative.
+        owner_scoped: false,
     })
 }
 

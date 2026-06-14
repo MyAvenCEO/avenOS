@@ -58,6 +58,14 @@ struct RowBatchAuthoring<'a> {
     batch_id: Option<BatchId>,
     /// Extra metadata to merge into the committed row (e.g. the owner-binding).
     extra_metadata: Option<std::collections::HashMap<String, String>>,
+    /// Whether this row belongs to an owner-scoped table — if so, [`authored_row_batch`] mints +
+    /// stamps the owner-binding via the installed `OwnerBinder`, and fails closed (on every peer)
+    /// when no binding can be produced.
+    owner_scoped: bool,
+    /// The row's owner (the SAFE) for the owner-binding, when `owner_scoped`. Decoded from the
+    /// row's `owner` column at the call-site (Stage 1); becomes an explicit write param once the
+    /// column is dropped (Stage 2). `None` on an owner-scoped row is a fail-closed condition.
+    owner: Option<uuid::Uuid>,
 }
 
 struct PreparedLocalRowHistoryWrite<'a> {
@@ -220,6 +228,8 @@ impl QueryManager {
         provenance: &'a RowProvenance,
         delete_kind: Option<DeleteKind>,
         write_context: Option<&WriteContext>,
+        owner_scoped: bool,
+        owner: Option<uuid::Uuid>,
     ) -> RowBatchAuthoring<'a> {
         RowBatchAuthoring {
             provenance,
@@ -227,7 +237,32 @@ impl QueryManager {
             row_state: Self::resolve_write_row_state(write_context),
             batch_id: write_context.and_then(WriteContext::batch_id),
             extra_metadata: write_context.and_then(|c| c.extra_metadata.clone()),
+            owner_scoped,
+            owner,
         }
+    }
+
+    /// Owner-binding invariant input for a row about to be authored: returns
+    /// `(owner_scoped, owner)`. **Stage 1**: owner-scoped is determined by the presence of an
+    /// `owner` column (matches [`crate::query_manager::types::schema::table_schema_is_owner_scoped`]),
+    /// and the owner is decoded from that column in `data`. Self-contained so the deep author
+    /// funnel can auto-stamp the binding without threading the owner through every call-site.
+    /// Once the column is dropped (Stage 2) this is replaced by the declarative `owner_scoped`
+    /// flag + an explicit owner write param.
+    fn owner_binding_target(
+        descriptor: &RowDescriptor,
+        data: &[u8],
+    ) -> (bool, Option<uuid::Uuid>) {
+        let Some(idx) = descriptor.column_index("owner") else {
+            return (false, None);
+        };
+        let owner = crate::row_format::decode_row(descriptor, data)
+            .ok()
+            .and_then(|values| match values.into_iter().nth(idx) {
+                Some(Value::Uuid(oid)) => Some(*oid.uuid()),
+                _ => None,
+            });
+        (true, owner)
     }
 
     fn authored_row_batch(
@@ -237,7 +272,7 @@ impl QueryManager {
         parents: impl IntoIterator<Item = BatchId>,
         data: Vec<u8>,
         authoring: RowBatchAuthoring<'_>,
-    ) -> StoredRowBatch {
+    ) -> Result<StoredRowBatch, QueryError> {
         let mut metadata: std::collections::HashMap<String, String> =
             Self::row_commit_metadata(authoring.provenance, authoring.delete_kind)
                 .into_iter()
@@ -273,18 +308,47 @@ impl QueryManager {
             )
         };
 
+        // Owner-binding invariant (board 0037): for every owner-scoped row, mint + stamp the
+        // owner-binding `(value_id → owner)` BEFORE the edit-sig digest, so the binding is itself
+        // integrity-signed and travels E2E. This makes "no unbound owner-scoped row, ever" a
+        // property of the write core, not a per-call-site chore — enforced unconditionally on
+        // every peer (local, headless, syncing), no exceptions.
+        if authoring.owner_scoped {
+            // Per-peer authoring invariant (board 0037): every owner-scoped row MUST be rooted in
+            // a SAFE and carry its signed owner-binding — on EVERY peer, local or syncing, with NO
+            // exceptions. An ownerless owned row, or one this peer cannot bind (no binder = no
+            // device key), is the "lesser security" P2P forbids, so the write fails by
+            // construction. This is the lowest-level counterpart of the `Sealer` ("no plaintext")
+            // and `EditSigner` ("no unsigned row"). The SSOT migration (Stage 2) makes the owner a
+            // required write parameter, turning this runtime gate into a compile-time guarantee.
+            let stamped = authoring
+                .owner
+                .and_then(|owner| {
+                    self.sync_manager
+                        .owner_binder
+                        .clone()
+                        .and_then(|binder| binder.bind_row(row_id, owner))
+                })
+                .map(|(key, value)| batch.set_metadata_entry(key, value))
+                .is_some();
+            if !stamped {
+                return Err(QueryError::OwnerBindingRequired { row_id });
+            }
+        }
+
         // Author edit-signature (audit #29): once the batch is assembled, sign its content
         // digest with the device key and stamp it under `EDIT_SIG_META_KEY` so `data` +
         // `metadata` are authenticated end-to-end. The digest EXCLUDES the edit-sig slot, so
         // stamping it back does not change the digest the receiver recomputes. No signer
-        // installed (local-only / tests) → unsigned, exactly as before.
+        // installed (local-only / tests) → unsigned, exactly as before. The owner-binding stamped
+        // just above IS covered by this digest (it is ordinary metadata), so it is authenticated.
         if let Some(signer) = self.sync_manager.edit_signer.clone() {
             let digest = batch.content_digest();
             if let Some((key, value)) = signer.sign_row(row_id, &digest.0) {
                 batch.set_metadata_entry(key, value);
             }
         }
-        batch
+        Ok(batch)
     }
 
     fn apply_local_row_batch<H: Storage>(
@@ -772,13 +836,15 @@ impl QueryManager {
         } = commit;
         let parents = self.parent_ids_for_write(storage, table, id, branch, write_context);
 
+        let (owner_scoped, owner) =
+            Self::owner_binding_target(prepared.descriptor.as_ref(), &prepared.new_data);
         let row = self.authored_row_batch(
             id,
             branch,
             parents,
             prepared.new_data.clone(),
-            self.row_batch_authoring(provenance, None, write_context),
-        );
+            self.row_batch_authoring(provenance, None, write_context, owner_scoped, owner),
+        )?;
         let branch_name = BranchName::new(branch);
         let (batch_id, visibility_change) = self.apply_local_row_history_write(
             storage,
@@ -1061,13 +1127,14 @@ impl QueryManager {
                 &table_write.row_layout,
             )
         };
+        let (owner_scoped, owner) = Self::owner_binding_target(descriptor, &data);
         let row = self.authored_row_batch(
             object_id,
             branch,
             vec![],
             data.clone(),
-            self.row_batch_authoring(&provenance, None, write_context),
-        );
+            self.row_batch_authoring(&provenance, None, write_context, owner_scoped, owner),
+        )?;
         let branch_name = BranchName::new(branch);
         let (row_batch_id, visibility_change) = self
             .apply_local_row_history_write_with_prepared_context(
@@ -1923,13 +1990,20 @@ impl QueryManager {
         let delete_provenance =
             self.row_provenance_for_update(old_provenance_for_policy, write_context, timestamp);
 
+        let (owner_scoped, owner) = Self::owner_binding_target(descriptor, old_data_for_policy);
         let delete_row = self.authored_row_batch(
             id,
             branch,
             parents,
             old_data_for_policy.to_vec(),
-            self.row_batch_authoring(&delete_provenance, Some(DeleteKind::Soft), write_context),
-        );
+            self.row_batch_authoring(
+                &delete_provenance,
+                Some(DeleteKind::Soft),
+                write_context,
+                owner_scoped,
+                owner,
+            ),
+        )?;
         let index_mutations = if Self::write_context_is_open_batch(write_context) {
             Vec::new()
         } else {
@@ -2045,13 +2119,14 @@ impl QueryManager {
         let row_provenance = self.row_provenance_for_update(&old_provenance, None, timestamp);
 
         // Add commit with row data (no delete metadata = undelete)
+        let (owner_scoped, owner) = Self::owner_binding_target(descriptor, &new_data);
         let row = self.authored_row_batch(
             id,
             branch.as_str(),
             parents,
             new_data.clone(),
-            self.row_batch_authoring(&row_provenance, None, None),
-        );
+            self.row_batch_authoring(&row_provenance, None, None, owner_scoped, owner),
+        )?;
         let index_mutations = Self::index_mutations_for_undelete_on_branch(
             &table,
             branch.as_str(),
@@ -2145,14 +2220,27 @@ impl QueryManager {
         let timestamp = self.reserve_write_timestamp();
         let delete_provenance = self.row_provenance_for_update(&old_provenance, None, timestamp);
 
-        // Add commit with empty content + delete: hard metadata
+        // Add commit with empty content + delete: hard metadata. The tombstone carries no
+        // `data`, so the owner is recovered from the pre-delete row content when available;
+        // a row already soft-deleted (no `old_data`) yields no owner here (Stage 2 will recover
+        // it from the row's stored owner-binding).
+        let (owner_scoped, owner) = match old_data.as_deref() {
+            Some(d) => Self::owner_binding_target(descriptor, d),
+            None => (descriptor.column_index("owner").is_some(), None),
+        };
         let delete_row = self.authored_row_batch(
             id,
             branch.as_str(),
             parents,
             vec![],
-            self.row_batch_authoring(&delete_provenance, Some(DeleteKind::Hard), None),
-        );
+            self.row_batch_authoring(
+                &delete_provenance,
+                Some(DeleteKind::Hard),
+                None,
+                owner_scoped,
+                owner,
+            ),
+        )?;
         let index_mutations = Self::index_mutations_for_hard_delete_on_branch(
             &table,
             branch.as_str(),

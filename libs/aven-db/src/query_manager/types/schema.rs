@@ -394,10 +394,21 @@ pub struct TableSchema {
     /// Access control policies.
     #[serde(default, skip_serializing_if = "table_policies_are_default")]
     pub policies: TablePolicies,
+    /// Whether every row of this table is **owned by a SAFE** — the declarative source of truth
+    /// for owner-scoping (board 0037). When true, the deep author funnel requires an owner +
+    /// minted owner-binding for every write, and the binding (not a data column) carries the
+    /// owner in the row's immutable header. Replaces the legacy "has an `owner` column" heuristic;
+    /// hash-neutral (see `SchemaHash::compute`) so flagging a table needs no redeploy on its own.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub owner_scoped: bool,
 }
 
 fn table_policies_are_default(policies: &TablePolicies) -> bool {
     *policies == TablePolicies::default()
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 impl TableSchema {
@@ -409,6 +420,7 @@ impl TableSchema {
             columns,
             indexed_columns: None,
             policies: TablePolicies::default(),
+            owner_scoped: false,
         }
     }
 
@@ -418,6 +430,7 @@ impl TableSchema {
             columns,
             indexed_columns: None,
             policies,
+            owner_scoped: false,
         }
     }
 
@@ -453,6 +466,7 @@ pub struct TableSchemaBuilder {
     columns: Vec<ColumnDescriptor>,
     indexed_columns: Option<Vec<ColumnName>>,
     policies: TablePolicies,
+    owner_scoped: bool,
 }
 
 impl TableSchemaBuilder {
@@ -463,7 +477,15 @@ impl TableSchemaBuilder {
             columns: Vec::new(),
             indexed_columns: None,
             policies: TablePolicies::default(),
+            owner_scoped: false,
         }
+    }
+
+    /// Mark this table as **owner-scoped** — every row is owned by a SAFE, enforced at the deep
+    /// author funnel via the owner-binding (board 0037). The declarative source of truth.
+    pub fn owner_scoped(mut self) -> Self {
+        self.owner_scoped = true;
+        self
     }
 
     /// Add a column to the table.
@@ -537,6 +559,7 @@ impl TableSchemaBuilder {
             columns: RowDescriptor::new(self.columns),
             indexed_columns: self.indexed_columns,
             policies: self.policies,
+            owner_scoped: self.owner_scoped,
         }
     }
 
@@ -547,6 +570,7 @@ impl TableSchemaBuilder {
             columns: RowDescriptor::new(self.columns),
             indexed_columns: self.indexed_columns,
             policies: self.policies,
+            owner_scoped: self.owner_scoped,
         };
         (name, schema)
     }
