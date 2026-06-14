@@ -1794,26 +1794,20 @@ mod tests {
 		chain = attenuate_add_replicate_third_party(&owner.biscuit_kp, &chain, sid, &replica.signer_did).unwrap();
 
 		let report = identity_cap_report(&chain, sid).unwrap();
-		// Single source: owner caps == ADMIN_RIGHTS, reader == [read], replica == [replicate].
+		// Board 0049: the report returns RAW wire facts per DID (predicate + ops + scope), not
+		// role bundles. owner holds `owns` (ADMIN_RIGHTS over the whole SAFE); reader holds
+		// `reads` (read); replica holds `replicate`. quota/rate are flat node policy, NOT caps.
 		let owner_rights: Vec<String> = ADMIN_RIGHTS.iter().map(|s| s.to_string()).collect();
 		let o = report.iter().find(|s| signer_did_matches(&s.did, &owner.signer_did)).unwrap();
-		assert_eq!(o.grant, "admin");
-		assert_eq!(o.caps, owner_rights);
+		let owns = o.facts.iter().find(|f| f.predicate == "owns").unwrap();
+		assert_eq!(owns.ops, owner_rights);
+		assert_eq!(owns.scope, "safe");
 		let r = report.iter().find(|s| signer_did_matches(&s.did, &reader.signer_did)).unwrap();
-		assert_eq!(r.grant, "reader");
-		assert_eq!(r.caps, vec!["read".to_string()]);
+		let reads = r.facts.iter().find(|f| f.predicate == "reads").unwrap();
+		assert_eq!(reads.ops, vec!["read".to_string()]);
 		let p = report.iter().find(|s| signer_did_matches(&s.did, &replica.signer_did)).unwrap();
-		assert_eq!(p.grant, "relay");
-		// A relay's effective caps now report the bounds its grant implies on the aven:
-		// the blind `replicate` + a per-identity 10 MB `quota` + inbound `rate_limit`.
-		assert_eq!(
-			p.caps,
-			vec![
-				"replicate".to_string(),
-				"quota".to_string(),
-				"rate_limit".to_string()
-			]
-		);
+		let rep = p.facts.iter().find(|f| f.predicate == "replicate").unwrap();
+		assert_eq!(rep.ops, vec!["replicate".to_string()]);
 	}
 
 	#[test]
