@@ -122,9 +122,10 @@ export async function sparkReaderAdd(payload: {
 	})
 }
 
-/** A subject's grant kind, read from the identity biscuit. Single source of truth — the
- *  set of cap strings is defined in Rust (`identity_acc`), never hardcoded client-side. */
-export type IdentityGrant = 'owns' | 'reads' | 'replicate'
+/** A subject's role on a SAFE — a named bundle of caps (board 0047). SSOT = Rust
+ *  `grant_kind_caps`; the cap strings are never hardcoded client-side. (Wire biscuit
+ *  predicates stay reads/replicate; these are the report/UI role names.) */
+export type IdentityGrant = 'admin' | 'reader' | 'relay'
 
 /** One subject's caps on a identity, derived from the biscuit by `identity_cap_report`. */
 export type IdentitySubjectCaps = {

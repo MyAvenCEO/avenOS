@@ -137,14 +137,17 @@ pub fn resolve_safe_did(did: &str) -> Option<Uuid> {
 /// and the UI cap display can never drift.
 pub const ADMIN_RIGHTS: &[&str] = &["read", "write", "delete", "admit", "rotate_dek"];
 
-/// Effective caps for a grant kind (`owns`/`reads`/`replicate`). Single mapping
-/// from "how a subject is attached" → "what it may do". Owner = all ADMIN_RIGHTS;
-/// reader = read; replica = blind replicate (store-and-forward, no read).
-pub fn grant_kind_caps(grant: &str) -> Vec<&'static str> {
-	match grant {
+/// THE role → caps SSOT (board 0047): a role IS a named bundle of caps. `identity_cap_report`
+/// derives every holder's caps from this map, so the displayed caps can never drift from the
+/// role. Roles: `admin` = full control (ADMIN_RIGHTS); `reader` = read-only; `relay` = blind
+/// store-and-forward (`replicate`, NO decrypt) + the service policy the relay enforces (per-
+/// identity `quota` + `rate_limit`). The role NAME is this report/UI layer; the underlying biscuit
+/// wire predicates stay `reads`/`replicate` (only `owns`→`admin` needed a wire rename, board 0040).
+pub fn grant_kind_caps(role: &str) -> Vec<&'static str> {
+	match role {
 		"admin" => ADMIN_RIGHTS.to_vec(),
-		"reads" => vec!["read"],
-		"replicate" => vec!["replicate"],
+		"reader" => vec!["read"],
+		"relay" => vec!["replicate", "quota", "rate_limit"],
 		_ => vec![],
 	}
 }
@@ -170,8 +173,9 @@ pub fn identity_cap_report(chain: &Biscuit, owner: Uuid) -> Result<Vec<SubjectCa
 	let mut acc: BTreeMap<String, (String, Vec<String>)> = BTreeMap::new();
 	fn add(acc: &mut BTreeMap<String, (String, Vec<String>)>, did: &str, role: &str, cap: &str) {
 		let e = acc.entry(did.to_string()).or_insert_with(|| (role.to_string(), Vec::new()));
-		// Role precedence: owns > reads > replicate > member.
-		let rank = |r: &str| match r { "admin" => 3, "reads" => 2, "replicate" => 1, _ => 0 };
+		// Role precedence: admin > reader > relay > member (board 0047 — roles are named cap
+		// bundles; the role NAME is this report/UI layer, the wire predicates stay reads/replicate).
+		let rank = |r: &str| match r { "admin" => 3, "reader" => 2, "relay" => 1, _ => 0 };
 		if rank(role) > rank(&e.0) {
 			e.0 = role.to_string();
 		}
@@ -180,8 +184,11 @@ pub fn identity_cap_report(chain: &Biscuit, owner: Uuid) -> Result<Vec<SubjectCa
 		}
 	}
 
+	// Every role's caps come from the ONE `grant_kind_caps` SSOT (board 0047) — the displayed
+	// caps can never drift from the role. `relay` carries `replicate` + the service policy
+	// (`quota`/`rate_limit`) the holding node ENFORCES; the report just makes them transparent.
 	for did in &owners {
-		for c in ADMIN_RIGHTS {
+		for c in grant_kind_caps("admin") {
 			add(&mut acc, did, "admin", c);
 		}
 	}
@@ -189,21 +196,17 @@ pub fn identity_cap_report(chain: &Biscuit, owner: Uuid) -> Result<Vec<SubjectCa
 		if owner_set.contains(did.trim()) {
 			continue;
 		}
-		add(&mut acc, &did, "reads", "read");
+		for c in grant_kind_caps("reader") {
+			add(&mut acc, &did, "reader", c);
+		}
 	}
 	for did in identity_replicas(chain, owner)? {
 		if owner_set.contains(did.trim()) {
 			continue;
 		}
-		// A blind relay's effective caps = `replicate` (the biscuit grant) + the bounds
-		// that grant implies on the aven that holds it: a per-identity 10 MB storage
-		// `quota` + inbound `rate_limit`. We report them HERE (the single biscuit-reading
-		// cap source the UI consumes) so they are NOT synthesized client-side and the
-		// displayed caps can never drift from the grant. The node still ENFORCES the
-		// resource bounds (it owns its storage); the report makes them transparent.
-		add(&mut acc, &did, "replicate", "replicate");
-		add(&mut acc, &did, "replicate", "quota");
-		add(&mut acc, &did, "replicate", "rate_limit");
+		for c in grant_kind_caps("relay") {
+			add(&mut acc, &did, "relay", c);
+		}
 	}
 	// Granular grants (row/table-scoped) — fold the op into the subject's caps.
 	for (did, op, prefix) in identity_grants(chain, owner)? {
@@ -1216,19 +1219,21 @@ mod tests {
 	}
 
 	#[test]
-	fn admin_is_the_single_role() {
-		// board 0040: `admin` IS the single full-rights role — it carries `admit` + `rotate_dek`.
-		// "owner" is RESERVED for the SAFE a value belongs to (the 0037 binding); a subject's role
-		// OVER a SAFE is `admin`. `reads`/`replicate` are orthogonal SHARING tiers, not a hierarchy.
-		// Any other label (incl. the old `owns`) grants nothing.
+	fn role_caps() {
+		// Board 0047: a role IS a named cap bundle, and `grant_kind_caps` is the ONE SSOT.
+		// admin = full rights (incl admit+rotate_dek = "owner" is reserved for the value-owner
+		// SAFE, board 0040); reader = read-only; relay = blind replicate + service policy.
 		assert_eq!(grant_kind_caps("admin"), ADMIN_RIGHTS.to_vec());
 		assert!(
 			ADMIN_RIGHTS.contains(&"admit") && ADMIN_RIGHTS.contains(&"rotate_dek"),
-			"admin carries admit + rotate_dek — it is the full-rights role"
+			"admin is the full-rights role"
 		);
-		assert_eq!(grant_kind_caps("reads"), vec!["read"]);
-		assert_eq!(grant_kind_caps("replicate"), vec!["replicate"]);
-		assert!(grant_kind_caps("owns").is_empty(), "the old `owns` label grants nothing — renamed to `admin`");
+		assert_eq!(grant_kind_caps("reader"), vec!["read"]);
+		assert_eq!(grant_kind_caps("relay"), vec!["replicate", "quota", "rate_limit"]);
+		// The old wire-predicate labels are NOT roles — they grant nothing through the SSOT.
+		for dead in ["owns", "reads", "replicate"] {
+			assert!(grant_kind_caps(dead).is_empty(), "`{dead}` is not a role name");
+		}
 	}
 
 	#[test]
@@ -1736,10 +1741,10 @@ mod tests {
 		assert_eq!(o.grant, "admin");
 		assert_eq!(o.caps, owner_rights);
 		let r = report.iter().find(|s| signer_did_matches(&s.did, &reader.signer_did)).unwrap();
-		assert_eq!(r.grant, "reads");
+		assert_eq!(r.grant, "reader");
 		assert_eq!(r.caps, vec!["read".to_string()]);
 		let p = report.iter().find(|s| signer_did_matches(&s.did, &replica.signer_did)).unwrap();
-		assert_eq!(p.grant, "replicate");
+		assert_eq!(p.grant, "relay");
 		// A relay's effective caps now report the bounds its grant implies on the aven:
 		// the blind `replicate` + a per-identity 10 MB `quota` + inbound `rate_limit`.
 		assert_eq!(

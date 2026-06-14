@@ -576,15 +576,12 @@
 			"noHolders": "Niemand",
 			"grantLabel": "Zuteilung",
 			"grants": {
-				"owns": "Eigentümer",
-				"reads": "Mitglied",
-				"replicate": "Sync"
+				"admin": "Admin",
+				"reader": "Leser",
+				"relay": "Relay"
 			},
 			"accessLevel": "Zugriffsstufe",
 			"grantAccess": "Zugriff gewähren",
-			"grantDescOwns": "Volle Kontrolle — lesen, schreiben und Mitglieder verwalten.",
-			"grantDescReads": "Nur-Lese-Mitglied.",
-			"grantDescReplicate": "Blindes Sync — der Aven leitet die verschlüsselten Daten dieser Identität (bis 10 MB), die er nicht lesen kann, an deine anderen Geräte weiter. Er hält keinen Schlüssel, ist also kein lesbares Backup.",
 			"quickRelay": "Auf dem verbundenen Aven synchronisieren",
 			"capsLegendTitle": "Wie diese Berechtigungen funktionieren",
 			"capDesc": {
@@ -599,7 +596,10 @@
 				"owns": "Volle Kontrolle — lesen, schreiben, löschen und Mitglieder verwalten.",
 				"reads": "Nur-Lese-Mitglied — kann entschlüsseln und lesen, aber nicht schreiben."
 			},
-			"syncRelay": "Sync-Relay"
+			"syncRelay": "Sync-Relay",
+			"grantDescAdmin": "Volle Kontrolle — lesen, schreiben und Mitglieder verwalten.",
+			"grantDescReader": "Nur-Lese-Mitglied.",
+			"grantDescRelay": "Blindes Sync — der Aven leitet die verschlüsselten Daten dieser Identität (bis 10 MB), die er nicht lesen kann, an deine anderen Geräte weiter. Er hält keinen Schlüssel, ist also kein lesbares Backup."
 		},
 		"avenCeoTitle": "avenCEO",
 		"avenCeoClaimedSub": "Verzeichnis & Mitglieder dieses Netzwerks",
