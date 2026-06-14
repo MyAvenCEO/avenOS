@@ -23,7 +23,7 @@ use axum::response::Response;
 use axum::routing::get;
 use axum::Router;
 use ed25519_dalek::SigningKey;
-use aven_db::{AppContext, AppId, EditSigner, AvenDbClient, ObjectId, PeerId};
+use aven_db::{AppContext, AppId, EditSigner, AvenDbClient, ObjectId, OwnerBinder, PeerId};
 use tokio::signal::unix::{signal, SignalKind};
 
 use ws_server::WsServerListener;
@@ -246,6 +246,28 @@ impl EditSigner for ServerEditSigner {
     }
 }
 
+/// Server-side **owner-binder** — the aven-node counterpart of the app's `AppOwnerBinder` and the
+/// peer-side requirement of board 0037's unconditional owner-binding invariant. Installed via
+/// [`aven_db::AvenDbClient::set_owner_binder`] so the deep author funnel auto-mints a valid
+/// `_owner_binding` for every owner-scoped row the server authors (the avenCEO genesis + the
+/// auto-admin grant). Without it, those owner-scoped writes fail closed at the funnel and the
+/// first user never receives admin — the binder is now mandatory, exactly like the edit-signer.
+struct ServerOwnerBinder {
+    signing_key: SigningKey,
+}
+
+impl OwnerBinder for ServerOwnerBinder {
+    fn bind_row(&self, row_id: ObjectId, owner: uuid::Uuid) -> Option<(String, String)> {
+        let binding =
+            aven_caps::ownership::mint_owner_binding(&self.signing_key, *row_id.uuid(), owner)
+                .ok()?;
+        Some((
+            aven_caps::ownership::OWNER_BINDING_META_KEY.to_string(),
+            binding.to_meta_string(),
+        ))
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
@@ -333,6 +355,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         signing_key: identity.clone(),
     })) {
         tracing::warn!("install server edit signer: {e}");
+    }
+
+    // Owner-bind every owner-scoped row the server authors (board 0037): the deep author funnel
+    // now REQUIRES a binder for owner-scoped writes (unconditional, fail-closed), so without this
+    // the avenCEO genesis below cannot be authored. Must precede the genesis mint.
+    if let Err(e) = engine.set_owner_binder(std::sync::Arc::new(ServerOwnerBinder {
+        signing_key: identity.clone(),
+    })) {
+        tracing::warn!("install server owner binder: {e}");
     }
 
     // S.3 — the server is the avenCEO owner: mint its genesis on startup (idempotent).

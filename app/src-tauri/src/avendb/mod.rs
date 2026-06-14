@@ -377,13 +377,24 @@ async fn avendb_connect(
 	// unsigned. The key is the same device key that mints owner-bindings.
 	match crate::avendb_auth::signing_key_from_device_root(&root) {
 		Ok(signing_key) => {
-			let signer =
-				std::sync::Arc::new(crate::biscuit_resolver::AppEditSigner::new(signing_key));
+			let signer = std::sync::Arc::new(crate::biscuit_resolver::AppEditSigner::new(
+				signing_key.clone(),
+			));
 			if let Err(e) = client.set_edit_signer(signer) {
 				log::warn!("install author edit-signer: {e}");
 			}
+			// Install the author owner-binder (board 0037): the funnel now REQUIRES it for every
+			// owner-scoped write (unconditional, fail-closed), so the device can only author owned
+			// rows once this is in place. Same device key as the edit-signer. Installed at connect
+			// (before any identity row is authored) so no owner-scoped row ships unbound.
+			let binder = std::sync::Arc::new(crate::biscuit_resolver::AppOwnerBinder::new(
+				signing_key,
+			));
+			if let Err(e) = client.set_owner_binder(binder) {
+				log::warn!("install author owner-binder: {e}");
+			}
 		}
-		Err(e) => log::warn!("derive signing key for edit-signer: {e}"),
+		Err(e) => log::warn!("derive signing key for edit-signer + owner-binder: {e}"),
 	}
 
 	crate::schema_migrations::stamp_current_vault_snapshot(&data_dir, &schema)?;

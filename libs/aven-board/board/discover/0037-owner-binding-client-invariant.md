@@ -164,3 +164,18 @@ grep -rn "owner_binding_meta" app/src-tauri/src            # expect: gone from w
   tables live in the app manifest); aven-node builds green. The transitional `owner_binding_target`
   decodes the owner from the `owner` column for now; Stage 2 replaces it with an explicit required `owner`
   write parameter once the column is dropped — turning this runtime gate into a compile-time guarantee.
+- `2026-06-14` — **Rebased onto `main`** (course-correction): the harness worktree was cut from `4527c94d`,
+  ~50 commits BEHIND `main` (`15003db7`) — it predated `3d8cb819 enforce owner-binding system-wide` (the
+  merge that caused this regression) and lacked the helper fns + the live relay/app code. Stage 1 was sound
+  but on the wrong base. Committed Stage 1 and rebased onto main (3 files auto-merged; kept this SSOT card
+  over main's original; 3 catalogue-encoding `TableSchema` initializers got `owner_scoped: false`).
+  Re-verified: **710 aven-db tests pass** on the real base. Findings: (a) **the relay is ALREADY
+  fail-closed** on main (`ServerApplyGate`, main.rs:173 denies bindingless spark-scoped rows via
+  `owner_scoped_table_names`) — the "relay gap" was a stale-worktree artifact; the only relay change needed
+  is making `owner_scoped_table_names` read the new flag once the column drops. (b) **Unconditional
+  enforcement ⇒ every writer needs a binder**: aven-node authors the avenCEO genesis (owner-scoped
+  `sparks`/`keyshares`/`signers` in `aven_ceo.rs`, currently stamping bindings MANUALLY) and must instead
+  install a `ServerOwnerBinder` (like `ServerEditSigner`) or those writes fail closed — so Stage 1 is NOT
+  independently deployable; binder installation (app `AppOwnerBinder` + node `ServerOwnerBinder`) lands
+  together with it. (c) Lower-risk order: install binders + own `signers` by the device SAFE FIRST (the
+  actual onboarding fix, works against today's relay), THEN drop the column.
