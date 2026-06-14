@@ -288,6 +288,15 @@ impl AvenDbClient {
             .map_err(|e| AvenDbError::Sync(format!("set_owner_binder: {e}")))
     }
 
+    /// The raw owner-binding metadata string for a row, or `None` if it carries none. Lets the
+    /// app recover the owning SAFE from the immutable signed header (board 0037) — there is no
+    /// `owner` data column, so ownership is read back here and parsed via `aven-caps`.
+    pub fn owner_binding_for(&self, table: &str, row_id: ObjectId) -> Result<Option<String>> {
+        self.runtime
+            .owner_binding_for(table, row_id)
+            .map_err(|e| AvenDbError::Query(format!("owner_binding_for: {e}")))
+    }
+
     /// Peer client ids with a live registered sync link (for mesh status UI).
     pub fn peer_client_ids(&self) -> Result<Vec<PeerId>> {
         self.runtime

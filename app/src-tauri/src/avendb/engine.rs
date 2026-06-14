@@ -219,6 +219,27 @@ pub(super) fn identity_uuid_row(schema: &TableSchema, vals: &[Value]) -> Result<
 	uuid_cell_at(vals, ix)
 }
 
+/// The owning SAFE of a value, read from its immutable signed owner-binding (board 0037) —
+/// the single source of ownership now that there is no `owner` data column. Returns `None`
+/// when the row carries no binding (a binder-less/legacy row); callers fall back to the
+/// device default where that is sound. Parsing (not signature verification — that is the
+/// apply gate's job) mirrors the engine's `$owner` projection.
+pub(crate) async fn owner_of_row(
+	client: &AvenDbClient,
+	table: &str,
+	row_id: ObjectId,
+) -> Result<Option<Uuid>, String> {
+	let Some(meta) = client
+		.owner_binding_for(table, row_id)
+		.map_err(super::format_avendb_err)?
+	else {
+		return Ok(None);
+	};
+	let binding = aven_caps::ownership::OwnerBinding::from_meta_str(&meta)
+		.map_err(|e| format!("owner_binding_parse:{e}"))?;
+	Ok(Some(binding.owner))
+}
+
 /// Owner identity from a name-keyed row (the `create` input shape, board 0020+0037).
 pub(super) fn identity_uuid_named(
 	vals: &std::collections::HashMap<String, Value>,
@@ -746,14 +767,12 @@ pub(super) async fn build_object_owner_map(
 ) -> Result<HashMap<(String, ObjectId), Uuid>, String> {
 	let mut out = HashMap::new();
 	for table in crate::identity_sync::identity_scoped_table_names() {
-		let schema = resolved_table_schema(client, table).await?;
-		let identity_ix = col_ix(&schema, "owner")?;
 		let q = QueryBuilder::new(TableName::new(table))
 			.include_deleted()
 			.build();
 		let rows = client.query(q, None).await.map_err(super::format_avendb_err)?;
-		for (oid, vals) in rows {
-			if let Ok(sid) = uuid_cell_at(vals.as_slice(), identity_ix) {
+		for (oid, _vals) in rows {
+			if let Some(sid) = owner_of_row(client, table, oid).await? {
 				out.insert((table.clone(), oid), sid);
 			}
 		}
