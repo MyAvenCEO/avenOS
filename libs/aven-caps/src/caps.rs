@@ -147,103 +147,104 @@ pub fn grant_kind_caps(role: &str) -> Vec<&'static str> {
 	match role {
 		"admin" => ADMIN_RIGHTS.to_vec(),
 		"reader" => vec!["read"],
-		"relay" => vec!["replicate", "quota", "rate_limit"],
+		// `relay` puts ONE wire fact on the chain: `replicate` (blind store-and-forward). The
+		// 10 MB quota + rate-limit are NOT caps — they're flat aven-node policy keyed on the
+		// owner-binding, applied to every identity (see main.rs::quota_for / inbox.rs rate limit).
+		"relay" => vec!["replicate"],
 		_ => vec![],
 	}
 }
 
-/// One subject's effective caps on a identity, derived purely from the biscuit chain.
-pub struct SubjectCaps {
-	pub did: String,
-	/// The PRIMARY (highest-rank) role — `admin` | `reader` | `relay` | `member`. Kept for
-	/// existing single-role consumers; the full set is in `roles`.
-	pub grant: String,
-	/// EVERY named role this DID holds (admin/reader/relay), rank-ordered. A subject can hold
-	/// more than one (e.g. relay + reader); the UI lists them all so no role is hidden behind
-	/// the primary. Empty when the subject has only granular grants (`grant` = "member").
-	pub roles: Vec<String>,
-	pub caps: Vec<String>,
+/// ONE raw wire fact a DID holds on a SAFE — exactly as signed into the biscuit, no role
+/// bundling. `predicate` is the literal biscuit fact (`owns`/`reads`/`replicate`/`grant`);
+/// `ops` are the operations it authorizes (owns → ADMIN_RIGHTS; reads → [read]; replicate →
+/// [replicate]; grant → [the granted op]); `prefix` is the raw resource scope; `scope` is the
+/// derived human token (`safe` whole-SAFE | `directory` | `<table>` | `<table>:<row>`).
+pub struct SubjectFact {
+	pub predicate: String,
+	pub ops: Vec<String>,
+	pub prefix: String,
+	pub scope: String,
 }
 
-/// THE single source of truth for "who holds what cap on this identity": read the
-/// biscuit chain (`owns`/`reads`/`replicate` + granular `grant(did,op,prefix)`)
-/// and report each subject's role + effective caps, MERGED per DID. Owner role
-/// takes precedence; granular ops (e.g. a member's row-scoped `write`) fold into
-/// that subject's cap set so they surface in the UI. Sorted by DID.
+/// One subject's RAW capabilities on a SAFE — the literal wire facts it holds, derived purely
+/// from the biscuit chain. No synthesized role bundles, no `quota`/`rate_limit` sugar (those are
+/// flat aven-node policy, not per-subject caps). The UI renders these facts + a plain summary.
+pub struct SubjectCaps {
+	pub did: String,
+	pub facts: Vec<SubjectFact>,
+}
+
+/// Derive the human scope token for a resource prefix `safe:<uuid>:<tail>`: empty tail → `safe`
+/// (the whole SAFE); `safes:`/`signers:`/`profile:` → `directory`; `<table>:` → `<table>`;
+/// `<table>:<row>` → `<table>:<row>`. Display only — the raw `prefix` is the source of truth.
+fn scope_for_prefix(prefix: &str) -> String {
+	let tail = match prefix.strip_prefix("safe:") {
+		Some(rest) => rest.split_once(':').map(|(_uuid, t)| t).unwrap_or(""),
+		None => prefix,
+	};
+	let tail = tail.trim_end_matches(':');
+	if tail.is_empty() {
+		"safe".to_string()
+	} else if tail == "safes" || tail == "signers" || tail == "profile" {
+		"directory".to_string()
+	} else {
+		tail.to_string()
+	}
+}
+
+/// THE single source of truth for "who holds what on this SAFE": read the biscuit chain and
+/// report each DID's RAW wire facts — `owns` (carries ADMIN_RIGHTS over the SAFE), `reads`,
+/// `replicate`, and every granular `grant(did,op,prefix)` — with their exact scope. No role
+/// names, no bundles, no quota/rate (flat node policy, reported separately). Merged + sorted by DID.
 pub fn identity_cap_report(chain: &Biscuit, owner: Uuid) -> Result<Vec<SubjectCaps>, String> {
 	use std::collections::BTreeMap;
-	let owners = identity_admins(chain, owner)?;
-	let owner_set: HashSet<String> = owners.iter().map(|d| d.trim().to_string()).collect();
-	// did → (primary role, all named roles rank-ordered, ordered unique caps)
-	let mut acc: BTreeMap<String, (String, Vec<String>, Vec<String>)> = BTreeMap::new();
-	let rank = |r: &str| match r { "admin" => 3, "reader" => 2, "relay" => 1, _ => 0 };
-	let add = |acc: &mut BTreeMap<String, (String, Vec<String>, Vec<String>)>, did: &str, role: &str, cap: &str| {
-		let e = acc.entry(did.to_string()).or_insert_with(|| (role.to_string(), Vec::new(), Vec::new()));
-		// Role precedence: admin > reader > relay > member (board 0047 — roles are named cap
-		// bundles; the role NAME is this report/UI layer, the wire predicates stay reads/replicate).
-		if rank(role) > rank(&e.0) {
-			e.0 = role.to_string();
-		}
-		// Track every NAMED role (rank > 0) so the UI lists them all; "member" (granular-only) is
-		// the no-named-role placeholder and is not a listable role.
-		if rank(role) > 0 && !e.1.iter().any(|x| x == role) {
-			e.1.push(role.to_string());
-		}
-		if !cap.is_empty() && !e.2.iter().any(|x| x == cap) {
-			e.2.push(cap.to_string());
-		}
+	let safe_prefix = format!("{}:", safe_urn_for(owner));
+	let mut acc: BTreeMap<String, Vec<SubjectFact>> = BTreeMap::new();
+	let push = |acc: &mut BTreeMap<String, Vec<SubjectFact>>, did: &str, fact: SubjectFact| {
+		acc.entry(did.trim().to_string()).or_default().push(fact);
 	};
 
-	// Every role's caps come from the ONE `grant_kind_caps` SSOT (board 0047) — the displayed
-	// caps can never drift from the role. `relay` carries `replicate` + the service policy
-	// (`quota`/`rate_limit`) the holding node ENFORCES; the report just makes them transparent.
+	// owns → ADMIN_RIGHTS over the whole SAFE prefix (the genesis emits owns + right(op,prefix)).
+	let owners = identity_admins(chain, owner)?;
 	for did in &owners {
-		for c in grant_kind_caps("admin") {
-			add(&mut acc, did, "admin", c);
-		}
+		push(&mut acc, did, SubjectFact {
+			predicate: "owns".to_string(),
+			ops: ADMIN_RIGHTS.iter().map(|s| s.to_string()).collect(),
+			prefix: safe_prefix.clone(),
+			scope: "safe".to_string(),
+		});
 	}
+	// reads → read over the whole SAFE prefix.
 	for did in identity_readers(chain, owner)? {
-		if owner_set.contains(did.trim()) {
-			continue;
-		}
-		for c in grant_kind_caps("reader") {
-			add(&mut acc, &did, "reader", c);
-		}
+		push(&mut acc, &did, SubjectFact {
+			predicate: "reads".to_string(),
+			ops: vec!["read".to_string()],
+			prefix: safe_prefix.clone(),
+			scope: "safe".to_string(),
+		});
 	}
+	// replicate → blind store-and-forward over the whole SAFE prefix (no key).
 	for did in identity_replicas(chain, owner)? {
-		if owner_set.contains(did.trim()) {
-			continue;
-		}
-		for c in grant_kind_caps("relay") {
-			add(&mut acc, &did, "relay", c);
-		}
+		push(&mut acc, &did, SubjectFact {
+			predicate: "replicate".to_string(),
+			ops: vec!["replicate".to_string()],
+			prefix: safe_prefix.clone(),
+			scope: "safe".to_string(),
+		});
 	}
-	// Granular grants (row/table-scoped) — fold the op into the subject's caps.
+	// Granular grant(did, op, prefix) — the literal scoped op (e.g. a member's row-scoped write).
 	for (did, op, prefix) in identity_grants(chain, owner)? {
-		if owner_set.contains(did.trim()) {
-			continue;
-		}
-		// Honesty: a read SCOPED to the registry tables (`safes:` / `peers:`) is the
-		// SYNC peer's directory access — it reads the member directory, NOT the identity's
-		// data. Report it as the distinct cap `directory` so the badge can never imply broad
-		// read access (a full-identity read is still reported as `read`).
-		let cap: &str = if op == "read"
-			&& (prefix.ends_with(":safes:") || prefix.ends_with(":signers:"))
-		{
-			"directory"
-		} else {
-			op.as_str()
-		};
-		add(&mut acc, &did, "member", cap);
+		let scope = scope_for_prefix(&prefix);
+		push(&mut acc, &did, SubjectFact {
+			predicate: "grant".to_string(),
+			ops: vec![op],
+			prefix,
+			scope,
+		});
 	}
 
-	Ok(acc
-		.into_iter()
-		.map(|(did, (grant, mut roles, caps))| {
-			roles.sort_by(|a, b| rank(b).cmp(&rank(a)));
-			SubjectCaps { did, grant, roles, caps }
-		})
-		.collect())
+	Ok(acc.into_iter().map(|(did, facts)| SubjectCaps { did, facts }).collect())
 }
 
 pub fn biscuit_keypair_from_ed25519_signing(secret32: &[u8; 32]) -> Result<KeyPair, String> {
@@ -1248,7 +1249,8 @@ mod tests {
 			"admin is the full-rights role"
 		);
 		assert_eq!(grant_kind_caps("reader"), vec!["read"]);
-		assert_eq!(grant_kind_caps("relay"), vec!["replicate", "quota", "rate_limit"]);
+		// relay = ONE wire fact (replicate). quota/rate-limit are flat node policy, not caps.
+		assert_eq!(grant_kind_caps("relay"), vec!["replicate"]);
 		// The old wire-predicate labels are NOT roles — they grant nothing through the SSOT.
 		for dead in ["owns", "reads", "replicate"] {
 			assert!(grant_kind_caps(dead).is_empty(), "`{dead}` is not a role name");
