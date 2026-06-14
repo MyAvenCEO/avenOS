@@ -68,7 +68,10 @@ export function spawnAvenServer(env: Record<string, string> = {}): ChildProcess 
 			...process.env,
 			...env,
 			AVEN_SERVER_HEALTH_BIND: `127.0.0.1:${SERVER_HTTP_PORT}`,
-			AVEN_SERVER_SEED: process.env.AVEN_SERVER_SEED?.trim() || DEV_SERVER_SEED,
+			AVEN_SIGNER_SECRET:
+				process.env.AVEN_SIGNER_SECRET?.trim() ||
+				process.env.AVEN_SERVER_SEED?.trim() ||
+				DEV_SERVER_SEED,
 			RUST_LOG: env.RUST_LOG ?? process.env.RUST_LOG ?? 'info'
 		},
 		stdio: ['ignore', 'pipe', 'pipe']

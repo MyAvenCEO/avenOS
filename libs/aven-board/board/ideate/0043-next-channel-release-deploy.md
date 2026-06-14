@@ -1,6 +1,6 @@
 ---
 title: "next" channel — release + TestFlight + node-server deploy (Milestone 2)
-summary: Extend the `next` auto-version pipeline (card 0038) so the same merge-to-next trigger also builds the apps, uploads to TestFlight, and deploys the aven-node server — fully via GitHub CI on a macOS runner.
+summary: Extend the `next` auto-version pipeline (card 0042) so the same merge-to-next trigger also builds the apps, uploads to TestFlight, and deploys the aven-node server — fully via GitHub CI on a macOS runner.
 owner: claude
 created: 2026-06-14
 updated: 2026-06-14
@@ -12,7 +12,7 @@ goal: <rough — to be made measurable in discovery>
 
 ## Context
 
-Builds on [[0038-next-channel-autoversion]] (Milestone 1 — CalVer tags + changelog
+Builds on [[0042-next-channel-autoversion]] (Milestone 1 — CalVer tags + changelog
 only). Once a merge to `next` produces a unique CalVer prerelease tag
 (`vYY.M.micro-next.N`, e.g. `v26.6.1-next.1`), Milestone 2 hangs the actual delivery
 off that tag/trigger:
@@ -43,5 +43,5 @@ release commit) before building.
 
 ## Next step
 
-Run `/aven-discover 0039` to uncover the real goal and make it measurable, after
-Milestone 1 (0038) lands.
+Run `/aven-discover 0043` to uncover the real goal and make it measurable, after
+Milestone 1 (0042) lands.
