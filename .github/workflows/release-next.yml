@@ -1,9 +1,10 @@
 name: release-next
 
-# CalVer staging channel. On merge into `next`, derive the next prerelease version
-# (YY.M.micro-next.N), stamp it across every package, regenerate the changelog, tag,
-# and cut a GitHub prerelease. Milestone 1: tags + changelog ONLY — no app build, no
-# upload, no server deploy (that is a later milestone).
+# CalVer staging channel. On merge into `next`:
+#   1. release  — derive YY.M.micro-next.N, stamp every package, changelog, tag, prerelease.
+#   2. deploy   — rebuild + restart the aven-node relay on its Sprite at the release commit
+#                 (NEVER wipes — schema changes ride the migration/lens architecture; wipe
+#                 is a manual-only recovery via WIPE=1). App build / TestFlight is still later.
 
 on:
   push:
@@ -42,3 +43,38 @@ jobs:
         run: bun run release:next
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-relay:
+    name: deploy aven-node relay (Sprite)
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout next at the release commit (full history)
+        uses: actions/checkout@v5
+        with:
+          ref: next
+          fetch-depth: 0
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install the sprite CLI
+        run: |
+          curl -fsSL https://sprites.dev/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Authenticate sprite CLI
+        run: sprite auth setup --token "$SPRITE_API_KEY"
+        env:
+          SPRITE_API_KEY: ${{ secrets.SPRITE_API_KEY }}
+
+      - name: Deploy relay at the release commit (restart, never wipe)
+        # Ships a source tarball of the release commit to the Sprite, rebuilds aven-node,
+        # and restarts the service (preserves the durable store). Blocks ~10–15 min on the
+        # on-Sprite cargo build so a failed deploy surfaces here. WIPE is deliberately unset.
+        run: bun ./scripts/deploy-aven-node-sprite.ts
+        env:
+          AVEN_SIGNER_SECRET: ${{ secrets.AVEN_SIGNER_SECRET }}
+          # Build from the checked-out HEAD (the release/bump commit the tag points to),
+          # so the relay's schema hash matches what the apps will ship from the same commit.
+          AVEN_SERVER_BUILD: "1"

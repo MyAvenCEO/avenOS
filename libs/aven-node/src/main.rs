@@ -57,8 +57,10 @@ impl Config {
         // avenCEO identity id is `sha256("avenos:avenCEO:v1:" + network_seed)`, so a
         // mismatch makes the server mint avenCEO under a different id than devices
         // look for — they'd never converge and every device stays at the invite gate.
-        let network_seed =
-            var("AVEN_SERVER_NETWORK_SEED").unwrap_or_else(|| "ceo.aven/testnet/abagana".into());
+        // Canonical var is NETWORK_SEED; AVEN_SERVER_NETWORK_SEED is the legacy fallback.
+        let network_seed = var("NETWORK_SEED")
+            .or_else(|| var("AVEN_SERVER_NETWORK_SEED"))
+            .unwrap_or_else(|| "ceo.aven/testnet/abagana".into());
         let server_name = var("AVEN_SERVER_NAME").unwrap_or_else(|| "avenCEO".into());
         // Explicit override (headless/Sprite) wins; otherwise place the server's
         // store as a sibling of the device identities, derived from the network seed.
