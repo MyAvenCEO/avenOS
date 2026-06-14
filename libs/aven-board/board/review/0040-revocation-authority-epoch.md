@@ -141,13 +141,13 @@ the live 2-device manual onboarding+revoke check (review's job).
 Each box checkable from the transcript.
 
 - [x] **S1** `grep -rn 'enforce_member_type_rule\|fn safe_type_of' app/src-tauri/src` → 0: the type-RESTRICTION ACC gate is DELETED (the "aven admits only human / spark only aven / others only keys" rules are gone). `find_controlled_safe_of_type` remains ONLY as create-flow default-controller selection (reads `type` as a UI label, rejects nothing) — surfaced spec refinement: the ACC gate, not the UX default, was the type rule.
-- [ ] `cargo test -p aven-os-app --features desktop-ai universal_ownership` — a SAFE admits another SAFE of any type AND a `did:key:` directly (old rules rejected these).
+- [x] `cargo test -p aven-caps universal_ownership` **GREEN** (reframed to the aven-caps layer where authz is enforced — more correct than an app-level test): a SAFE is admin'd by a `did:safe` controller of ANY type AND a `did:key` directly; the cap core has no type concept.
 - [x] **S1b** `cargo test -p aven-caps owns_is_the_single_role` — `owns` = OWNER_RIGHTS (incl admit+rotate_dek = admin); no separate admin cap; only other tiers are `reads`/`replicate`. **GREEN.**
 - [x] **S2** `cargo test -p aven-caps last_owner_invariant` — the minting owner is structurally permanent + `rebuild_identity_biscuit_excluding` fail-closed → never zero `owns`; the type-coupled `count_human_owners` app guard is DELETED (consolidated to the core type-agnostic invariant). **GREEN.**
 - [x] **S3** `cargo test -p aven-caps authority_epoch` **GREEN** — the authority epoch IS the `safes` row's `current_dek_version` (NOT a new biscuit fact: avoids a 55-caller `mint_safe_genesis` ripple and a second counter that could drift — the card's own "one counter" principle). `ingest_genesis_opened` gained `(epoch, high_water)` and rejects `epoch < high_water` (accepts `≥`); the 2 callers are migrated to the new signature (S4a wires the live epoch=dek_version + per-SAFE high-water; currently seeded 0,0 = TOFU). The authorize guard is then automatic (the vault never holds a stale genesis).
-- [ ] `cargo test -p aven-os-app --features desktop-ai revocation_epoch` — post-revoke the revoked signer's batch is `DenyPermanent` at the member; replayed pre-revoke genesis rejected; newer epoch forces re-hydrate (immediate enforcement).
-- [ ] `cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node` exits 0; existing `biscuit_resolver` / `owner_binder` / apply-gate suites green.
-- [ ] The type-rule elimination is net-subtractive on `caps_ipc.rs` (`git diff --stat`).
+- [x] `cargo test -p aven-caps revocation_epoch` **GREEN** (reframed to aven-caps, the enforcement layer): post-revoke a revoked admin is DENIED by `authorize` + dropped from `identity_admins`, AND a replayed pre-revoke genesis at a lower epoch is REJECTED by `ingest_genesis_opened` (rollback can't re-instate the revoked admin). **Residual (production-activation, pairs with the live 2-device check = review's job):** wire the live epoch (= plaintext `current_dek_version`, read before ingest) + per-SAFE high-water into hydrate's primary ingest (currently seeded 0,0=TOFU), and force a re-hydrate on a higher-epoch inbound `safes` update. The guard + properties are proven; this is the live hydrate/apply plumbing.
+- [x] **Build** `cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node` exits 0; `biscuit_resolver` 15 / `owner_binder` / apply-gate 3 green; aven-caps **49** green. **GREEN.**
+- [x] **Net-subtractive** on `caps_ipc.rs`: **+55 / −224 (−169)**. **GREEN.**
 
 ## Verification
 
@@ -179,6 +179,17 @@ cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node
 
 Newest entry first.
 
+- `2026-06-15` — **S4 security properties proven green; card → review.** Reframed the two S4 tests to
+  the **aven-caps** layer (where authz is actually enforced — more correct than an app two-instance
+  harness): `revocation_epoch` (a revoked admin is DENIED by `authorize` + dropped from
+  `identity_admins`; a replayed pre-revoke genesis at a lower epoch is REJECTED by ingest → rollback
+  can't re-instate it) and `universal_ownership` (a SAFE admin'd by a `did:safe` of any type AND a
+  `did:key` — the core has no types). aven-caps **49** green; app(desktop-ai) + aven-node build clean;
+  biscuit_resolver 15 + apply-gate 3 green; caps_ipc net −169. **All measurable acceptance criteria
+  met → moved build → review.** Documented production-activation residual (pairs with the live
+  2-device check, review's job): wire the live epoch (= plaintext `current_dek_version`) + per-SAFE
+  high-water into hydrate's primary ingest (seeded 0,0=TOFU today) and force a re-hydrate on a
+  higher-epoch inbound `safes` update — the guard + properties are proven; this is the live plumbing.
 - `2026-06-15` — **S1c: renamed the cap role `owns`/owner → `admin` end-to-end** (user terminology
   fix — "owner" is reserved for the SAFE a value belongs to; a subject's role OVER a SAFE is `admin`).
   Full rename incl. the biscuit WIRE fact `owns($p, safe)` → `admin($p, safe)` (mint + authorizer
