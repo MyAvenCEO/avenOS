@@ -131,6 +131,11 @@ This is an **elimination, not an addition** — measured the rule's way:
   `engine.rs` (`build_object_owner_map` → binding read; device self-signer via `create`),
   `signers.rs` (via `create`), `biscuit_resolver.rs` (tests).
 - `libs/aven-node/src/aven_ceo.rs` (genesis via `create`; delete `owner_binding_meta`).
+- `libs/aven-brain/src/brain.rs` (5 `create_checked_with_id_and_metadata` sites + its `binding_meta`
+  helper → the one `create`; brain memories/entities/links are owned values too — **surfaced during
+  build; the discover spec missed aven-brain**).
+- `libs/aven-db/tests/create_checked.rs` + `libs/aven-db/Cargo.toml` (the `create_checked` contract
+  test from board 0020 — rewrite to the one `create` or delete; drop the `[[test]] name="create_checked"`).
 
 ## Acceptance criteria
 
@@ -168,6 +173,24 @@ cargo build -p aven-db -p aven-node -p aven-os-app --features desktop-ai
 
 Newest first.
 
+- `2026-06-14` — **Build started; card → `build/`.** Engine foundation committed green (`cf340d34`):
+  `WriteContext.owner` mint funnel, `owner_binding_for` read-back, `create_owned`/`insert_owned`,
+  signers + device self-signer authored owned; aven-db `owner_binder` tests pass. **Scope correction
+  (build surfaced what discover missed):** the create-collapse is **cross-crate** — `create_checked*`
+  is used by **aven-brain** (`brain.rs`, 5 sites + its `binding_meta`) and by aven-db's own
+  `tests/create_checked.rs` contract test (board 0020) + its `Cargo.toml` `[[test]]` entry, on top of
+  caps_ipc/crud_ipc/aven_ceo (~20+ call sites over 4 crates). This is a single ATOMIC migration with no
+  green intermediate once the old create methods are deleted, so it is **handed to the `/goal`
+  cross-turn loop** rather than landed half-done. Remaining build steps, in order (each ends compiling):
+  (1) `create_owned`→`create(table, owner, id?, fields)`, migrate ALL ~20 callers (aven-brain, aven-node,
+  app, the contract test), then delete `create_checked`/`create_checked_with_id_and_metadata`;
+  (2) migrate the 11 `update_with_metadata`/`delete_with_metadata` sites → plain `update`/`delete`, delete
+  those wrappers (runtime+client); (3) delete `owner_binding_meta` (crud_ipc + aven_ceo) + brain
+  `binding_meta`; (4) `build_object_owner_map` → `owner_binding_for` + `OwnerBinding::from_meta_str`;
+  (5) drop the `owner` column (11 manifest tables) + `owner_scoped` flag + `owner_invariant_ok` +
+  resolve_named_row check + the `existing_binding` field (inherit via the helper, not a named branch);
+  (6) rewrite `owner_binder` tests; build aven-db+brain+node+app green; run the elimination greps (all 0)
+  + `git diff --stat` net-subtractive; (7) flush + `WIPE=1` redeploy + live onboarding (review's job).
 - `2026-06-14` — **Re-discovered under the elimination lens.** Confirmed with the user that ownership is
   a CORE PRIMITIVE of aven-db (like `_id`), not a flag/mode/option — a value *is* `(id, owner, data)`,
   the owner carried only by the immutable signed binding; aven-db cannot represent an unowned value.
