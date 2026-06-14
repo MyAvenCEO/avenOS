@@ -1,6 +1,6 @@
 [package]
 name = "aven-db"
-version = "26.6.1-next.3"
+version = "26.6.1-next.4"
 edition = "2024"
 description = "avenDB — AvenOS local-first DB core (CRDT, vector + BM25, RocksDB). Import as `aven_db`."
 license = "MIT OR Apache-2.0"

@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.3...v) (2026-06-14)
+
+
+### Bug Fixes
+
+* **ci:** deploy-relay uses the next Environment + correct SPRITES_API_KEY name ([728fb0e](https://github.com/MyAvenCEO/avenOS/commit/728fb0e54a00a41e7f6dfbb5d64fb368c2732b66))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.2...v) (2026-06-14)
 
 

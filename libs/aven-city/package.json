@@ -1,7 +1,7 @@
 {
 	"name": "@avenos/aven-city",
 	"private": true,
-	"version": "26.6.1-next.3",
+	"version": "26.6.1-next.4",
 	"type": "module",
 	"description": "avenCITY — Threlte/Three.js city game for AvenOS.",
 	"main": "./src/index.ts",
