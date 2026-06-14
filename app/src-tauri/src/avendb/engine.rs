@@ -1286,7 +1286,23 @@ pub(super) async fn hydrate_shell(
 		let has_local = existing_peers
 			.iter()
 			.any(|(_o, vals)| matches!(vals.get(did_ix), Some(Value::Text(s)) if s == &vault.signer_did));
-		if !has_local {
+		// Every owner-scoped row belongs to a SAFE (board 0037): the device self-signer is owned by
+		// the device's first identity. With ZERO identities there is nothing to own it — DEFER
+		// (skip) rather than author an ownerless owned row, which the fail-closed funnel rejects.
+		// This branch re-runs every hydrate, so the self-signer lands as soon as an identity exists.
+		let self_owner = {
+			let mut ks: Vec<Uuid> = vault.safes.keys().cloned().collect();
+			ks.sort();
+			ks.into_iter().next()
+		};
+		if !has_local && self_owner.is_none() {
+			log::info!(
+				target: "avenos::avendb",
+				"deferred device self-signer — no SAFE owner yet (registers once an identity exists)"
+			);
+		}
+		if !has_local && self_owner.is_some() {
+			let self_owner = self_owner.expect("checked is_some");
 			let device_label = manifest_opt
 				.as_ref()
 				.map(|m| m.device_label.trim().to_string())
@@ -1304,6 +1320,7 @@ pub(super) async fn hydrate_shell(
 				"signers",
 				&signers_schema_seed,
 				vec![
+					("owner".into(), JsonValue::String(self_owner.to_string())),
 					("signer_did".into(), JsonValue::String(vault.signer_did.clone())),
 					("device_label".into(), JsonValue::String(device_label)),
 					("kind".into(), JsonValue::String("local".into())),
