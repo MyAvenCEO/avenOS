@@ -532,6 +532,37 @@ fn aad_row_for(table: &str, col: &str, identity: Uuid, object_row: Uuid) -> Uuid
 	}
 }
 
+/// Open one sealed (or cleartext) text cell from a raw stored row, under the owner
+/// `identity`'s held DEK and the correct per-column AAD coordinate (`aad_row_for`). Used by
+/// self-publish/discovery to match a member's own profile row by its sealed `did`. Returns the
+/// plaintext, or an error if no held DEK opens it. `require_sealed=false` (display cells).
+pub(super) fn open_sealed_cell_text(
+	state: &ShellState,
+	table: &str,
+	tbl: &TableSchema,
+	identity: Uuid,
+	object_row: Uuid,
+	col_ix: usize,
+	vals: &[Value],
+) -> Result<String, String> {
+	let desc = tbl
+		.columns
+		.columns
+		.get(col_ix)
+		.ok_or_else(|| format!("open_sealed_cell_text: col_ix {col_ix} out of range"))?;
+	let name = desc.name_str();
+	let coord = CellCoord {
+		table,
+		column: name,
+		row: aad_row_for(table, name, identity, object_row),
+		storage_ty: &desc.column_type,
+	};
+	let cell = vals
+		.get(col_ix)
+		.ok_or_else(|| format!("open_sealed_cell_text: no cell at {col_ix}"))?;
+	hydrate_text_at(&state.deks, identity, &coord, cell, false)
+}
+
 /// UPDATE path: seal every registry-sensitive column in `patch` under the identity's current
 /// DEK (read from `ShellState`). Apply before `patch_updates` at every identity-scoped write so
 /// genesis/issuer/name/account_name/… never ship cleartext (the generic update path already
