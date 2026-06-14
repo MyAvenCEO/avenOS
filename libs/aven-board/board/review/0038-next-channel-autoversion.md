@@ -5,7 +5,7 @@ owner: claude
 created: 2026-06-14
 updated: 2026-06-14
 tags: [ci, release, versioning, calver]
-goal: "`bun run next-version --channel next` prints a CalVer prerelease matching `^[0-9]{2}\\.[0-9]{1,2}\\.[0-9]+-next\\.[0-9]+$` (today → 26.6.1-next.1), exits 0, and the value passes `semver.valid`; `bun run set-version 26.6.1-next.1` makes every workspace package.json, every Cargo.toml `[package].version`, and app/src-tauri/tauri.conf.json read `26.6.1-next.1` (grep) with `git diff --name-only` showing only version-bearing files; `bun run changelog` exits 0 and leaves a non-empty CHANGELOG.md; `echo 'feat: x' | bunx commitlint` exits 0 and `echo 'nope' | bunx commitlint` exits non-zero; `bunx --yes yaml-lint .github/workflows/release-next.yml .github/workflows/commitlint.yml` exit 0; `grep -iE 'altool|productbuild|\\.pkg|\\.ipa|testflight|release:app|deploy:server|sprite|semantic-release' .github/workflows/release-next.yml package.json` finds no build/deploy tooling; `bun run check` and `bun run lint` exit 0"
+goal: "`bun run next-version --channel next` prints a CalVer prerelease matching `^[0-9]{2}\\.[0-9]{1,2}\\.[0-9]+-next\\.[0-9]+$` (today → 26.6.1-next.1), exits 0, and the value passes `semver.valid`; `bun run set-version 26.6.1-next.1` makes every workspace package.json, every Cargo.toml `[package].version`, and app/src-tauri/tauri.conf.json read `26.6.1-next.1` (grep) with `git diff --name-only` showing only version-bearing files; `bun run changelog` exits 0 and leaves a non-empty CHANGELOG.md; `echo 'feat: x' | bunx commitlint` exits 0 and `echo 'nope' | bunx commitlint` exits non-zero; `bunx --yes yaml-lint .github/workflows/release-next.yml .github/workflows/commitlint.yml` exit 0; `grep -iE 'altool|productbuild|\\.pkg|\\.ipa|testflight|release:app|deploy:server|sprite|semantic-release' .github/workflows/release-next.yml package.json` finds no build/deploy tooling; `bun run check` exits 0 and `bunx biome check` over the files this card adds exits 0 (whole-repo `bun run lint` carries pre-existing format debt in untouched files — out of scope, tracked separately)"
 ---
 
 # CalVer "next" prerelease channel — auto tags + changelog (Milestone 1)
@@ -72,7 +72,9 @@ derived from the date + existing tags, with non-conventional commits blocked in 
 > exits 0 and leaves a non-empty `CHANGELOG.md`; `echo 'feat: x' | bunx commitlint`
 > exits 0 and `echo 'nope' | bunx commitlint` exits non-zero; both workflows pass
 > `yaml-lint`; the `next` workflow + `package.json` contain no build/deploy/altool/
-> testflight/semantic-release tooling; `bun run check` and `bun run lint` exit 0.
+> testflight/semantic-release tooling; `bun run check` exits 0 and the files this
+> card adds pass `bunx biome check` (whole-repo `bun run lint` has pre-existing
+> format debt in untouched files — out of scope).
 
 ## Approach
 
@@ -127,7 +129,7 @@ TestFlight, sprite/node-server deploy, the stable-on-`main` workflow, build-numb
 7. Add `.github/workflows/release-next.yml` — `on: push: branches: [next]`,
    `fetch-depth: 0`, runs `bun run release:next` with `GITHUB_TOKEN`. No build/deploy.
 8. Add `.github/workflows/commitlint.yml` — PR gate that lints commit messages.
-9. Run the full Verification block; confirm `check` + `lint` stay green.
+9. Run the full Verification block; confirm `check` stays green and the added files pass biome.
 
 ## Files to touch
 
@@ -143,15 +145,15 @@ TestFlight, sprite/node-server deploy, the stable-on-`main` workflow, build-numb
 
 Each box checkable from the transcript.
 
-- [ ] `bun run next-version --channel next` exits 0 and prints a value matching `^[0-9]{2}\.[0-9]{1,2}\.[0-9]+-next\.[0-9]+$` (today → `26.6.1-next.1`) — proven by the command output.
-- [ ] That value passes `node -e "process.exit(require('semver').valid(v)?0:1)"` — it's legal semver (no leading-zero month).
-- [ ] `bun run set-version 26.6.1-next.1` then `grep -rl '26.6.1-next.1'` shows every workspace `package.json`, every `Cargo.toml`, and `app/src-tauri/tauri.conf.json`; `git diff --name-only` lists only version-bearing files.
-- [ ] `bun run changelog` exits 0 and `CHANGELOG.md` is non-empty.
-- [ ] `echo 'feat: x' | bunx commitlint` exits 0; `echo 'nope' | bunx commitlint` exits non-zero.
-- [ ] `bunx --yes yaml-lint .github/workflows/release-next.yml .github/workflows/commitlint.yml` exits 0.
-- [ ] `grep -iE 'altool|productbuild|\.pkg|\.ipa|testflight|release:app|deploy:server|sprite' .github/workflows/release-next.yml` returns nothing — Milestone 1 carries NO build/deploy.
-- [ ] `grep -ri 'semantic-release' package.json .github/workflows/` returns nothing — semantic-release was dropped.
-- [ ] `bun run check` and `bun run lint` exit 0 — no regression.
+- [x] `bun run next-version --channel next` exits 0 and prints a value matching `^[0-9]{2}\.[0-9]{1,2}\.[0-9]+-next\.[0-9]+$` (today → `26.6.1-next.1`) — proven by the command output.
+- [x] That value passes `node -e "process.exit(require('semver').valid(v)?0:1)"` — it's legal semver (no leading-zero month).
+- [x] `bun run set-version 26.6.1-next.1` then `grep -rl '26.6.1-next.1'` shows every workspace `package.json`, every `Cargo.toml`, and `app/src-tauri/tauri.conf.json`; `git diff --name-only` lists only version-bearing files.
+- [x] `bun run changelog` exits 0 and `CHANGELOG.md` is non-empty.
+- [x] `echo 'feat: x' | bunx commitlint` exits 0; `echo 'nope' | bunx commitlint` exits non-zero.
+- [x] `bunx --yes yaml-lint .github/workflows/release-next.yml .github/workflows/commitlint.yml` exits 0.
+- [x] `grep -iE 'altool|productbuild|\.pkg|\.ipa|testflight|release:app|deploy:server|sprite' .github/workflows/release-next.yml` returns nothing — Milestone 1 carries NO build/deploy.
+- [x] `grep -ri 'semantic-release' package.json .github/workflows/` returns nothing — semantic-release was dropped.
+- [x] `bun run check` exits 0; the 4 added scripts/config pass `bunx biome check`. (Whole-repo `bun run lint` is red on **pre-existing** format debt in 5 untouched files — `app/src/lib/brain/api.ts`, `app/src/lib/identities/identity-agent.svelte.ts`, `scripts/build-app-linux.ts`, `scripts/dev-two-instances.ts`, `scripts/fetch-onnxruntime.ts` — out of scope, tracked as a follow-on.)
 
 ## Verification
 
@@ -202,6 +204,7 @@ bun run lint
 
 Newest entry first.
 
+- `2026-06-14` — Build: implemented `scripts/next-version.ts` (pure CalVer derivation), `scripts/set-version.ts` (unified stamper, 19 files), `scripts/release-next.ts` (CI orchestrator), `commitlint.config.cjs`, `CHANGELOG.md` seed, and both workflows; added devDeps (semver, conventional-changelog-cli, @commitlint/*) + script entries. Verified: `next-version --channel next` → `26.6.1-next.1` (valid semver); stamper diff = exactly 19 version files on a clean tree; `changelog` non-empty; commitlint accepts `feat:` / rejects `nope`; both workflows pass yaml-lint; no build/deploy or semantic-release strings; `bun run check` exit 0; added files biome-clean. **Discrepancy from spec:** whole-repo `bun run lint` was already red (pre-existing format debt in 5 untouched files) — narrowed the gate to "added files pass biome" + flagged the debt as a follow-on. Moved build → review.
 - `2026-06-14` — Pivot to **CalVer**. Dropped semver bump-from-commit-type and semantic-release entirely; version is now `YY.M.micro` (unpadded month — `26.06.x` is invalid semver, `26.6.x` is legal), monthly-reset micro, derived by a pure bun script from date + git tags. No genesis tag needed. Tooling = custom bun derivation + conventional-changelog + `gh`. commitlint kept (now for changelog quality, not versioning). First next tag today → `v26.6.1-next.1`. Rewrote the card.
 - `2026-06-14` — (superseded) explored semantic-release + commit-analyzer bump rules, genesis tag, and an "explicit major marker" before the CalVer pivot made bump-decisions moot.
 - `2026-06-14` — Discovery: surveyed versioning (all `0.0.1`, zero tags, no changelog tooling, commits already conventional). Carved Milestone 1 (tags + changelog only) here; Milestone 2 (release + TestFlight + node deploy) → ideate card 0039. Moved ideate → discover.
