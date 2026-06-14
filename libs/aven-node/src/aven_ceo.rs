@@ -443,11 +443,54 @@ pub async fn grant_first_human_admin(
 		.await
 		.map_err(|e| format!("create keyshares:{e:?}"))?;
 
+	// Board 0049: also wrap the REGISTRY sub-group DEK to the human SAFE. The admin inherits
+	// registry *authorization* via extends(avenCEO) (one-directional), but still needs the
+	// registry DEK to DECRYPT the sealed profile directory and to grant it onward to TIER-0
+	// members (avendb_ipc_aven_ceo_add_member). Best-effort: the registry is minted at genesis.
+	if let Err(e) = wrap_registry_dek_to_wrap_did(engine, signing, &vault, avenceo_id, &wrap_did).await {
+		tracing::warn!(%avenceo_id, "registry DEK wrap to human admin failed: {e}");
+	}
+
 	// Re-announce so the device re-pulls the updated avenCEO genesis + keyshare and its gate
 	// opens (its earlier pulls were denied before it held a cap).
 	if let Err(e) = engine.rebroadcast_all_peer_clients_and_flush().await {
 		tracing::warn!("avenCEO human-admin re-announce failed: {e}");
 	}
 	tracing::info!(%avenceo_id, %human_did, "granted FIRST human SAFE admin on avenCEO (server-signed); DEK wrapped to wrap_did");
+	Ok(())
+}
+
+/// Wrap the avenCEO **registry** sub-group DEK (held by the server) to a recipient `wrap_did`
+/// so that recipient can decrypt the sealed profile directory. Idempotent at the read level —
+/// duplicate keyshare rows are harmless (hydrate unwraps the first that opens).
+async fn wrap_registry_dek_to_wrap_did(
+	engine: &AvenDbClient,
+	signing: &SigningKey,
+	vault: &BiscuitVault,
+	avenceo_id: Uuid,
+	wrap_did: &str,
+) -> Result<(), String> {
+	let registry_id = derive_subgroup_id(avenceo_id, "registry");
+	let Some((_oid, _g, _i, reg_dek_ver)) = read_avenceo_identity(engine, registry_id).await? else {
+		return Err("registry sub-group not minted".into());
+	};
+	let reg_dek = read_server_dek(engine, vault, signing, registry_id, reg_dek_ver).await?;
+	let wrap_pk = aven_db::did_key::ed25519_public_from_signer_did(wrap_did)?;
+	let kek = derive_kek_x25519(signing, &wrap_pk)?;
+	let urn = format!("safe:{registry_id}");
+	let aad = keyshare_wrap_aad(&urn, wrap_did, &vault.signer_did, reg_dek_ver);
+	let wrapped = encrypt_keyshare_payload(&kek, &reg_dek, &aad)?;
+	let ks_row = named_row(&[
+			("dek_version", Value::BigInt(reg_dek_ver)),
+			("recipient_did", Value::Text(wrap_did.to_string())),
+			("wrapper_did", Value::Text(vault.signer_did.clone())),
+			("wrapped_dek", Value::Text(wrapped)),
+		],
+	);
+	engine
+		.create("keyshares", registry_id, Some(ObjectId::new()), ks_row)
+		.await
+		.map_err(|e| format!("create registry keyshares:{e:?}"))?;
+	tracing::info!(%registry_id, %wrap_did, "wrapped registry DEK to human admin (directory decrypt)");
 	Ok(())
 }
