@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process'
  * `tauri ios build --export-method app-store-connect --target aarch64` from app.
  *
  * Signing modes (first match wins):
- * 1. **Manual CI** — `AVEN_IOS_APP_STORE_MOBILEPROVISION`, `AVEN_IOS_CERTIFICATE_P12`, `AVEN_IOS_CERTIFICATE_PASSWORD`.
+ * 1. **Manual CI** — `AVEN_IOS_APP_STORE_MOBILEPROVISION`, `APPLE_CERTS_P12`, `APPLE_CERTS_P12_PASSWORD`.
  *    Uses `--archive-only` then `xcodebuild -exportArchive` (Tauri export re-imports a placeholder cert).
  * 2. **Automatic CI** — `APPLE_API_ISSUER` + `APPLE_API_KEY` + `APPLE_API_KEY_PATH` (+ team).
  *
@@ -513,8 +513,7 @@ function findIpa(): string | null {
 function configureSigning(env: NodeJS.ProcessEnv): 'automatic' | 'manual' {
 	const hasProfile = Boolean(process.env.AVEN_IOS_APP_STORE_MOBILEPROVISION?.trim())
 	const hasP12 = Boolean(
-		process.env.AVEN_IOS_CERTIFICATE_P12?.trim() &&
-			process.env.AVEN_IOS_CERTIFICATE_PASSWORD?.trim()
+		process.env.APPLE_CERTS_P12?.trim() && process.env.APPLE_CERTS_P12_PASSWORD?.trim()
 	)
 
 	if (hasProfile && hasP12) {
@@ -522,9 +521,9 @@ function configureSigning(env: NodeJS.ProcessEnv): 'automatic' | 'manual' {
 			'AVEN_IOS_APP_STORE_MOBILEPROVISION',
 			process.env.AVEN_IOS_APP_STORE_MOBILEPROVISION
 		)
-		const p12Path = mustFile('AVEN_IOS_CERTIFICATE_P12', process.env.AVEN_IOS_CERTIFICATE_P12)
+		const p12Path = mustFile('APPLE_CERTS_P12', process.env.APPLE_CERTS_P12)
 		// biome-ignore lint/style/noNonNullAssertion: intentional crash when the secret is unset — same behavior as before, release scripts fail loud.
-		const p12Password = process.env.AVEN_IOS_CERTIFICATE_PASSWORD!.trim()
+		const p12Password = process.env.APPLE_CERTS_P12_PASSWORD!.trim()
 		env.IOS_MOBILE_PROVISION = fileToBase64(profilePath)
 		env.IOS_CERTIFICATE = fileToBase64(p12Path)
 		env.IOS_CERTIFICATE_PASSWORD = p12Password
@@ -536,7 +535,7 @@ function configureSigning(env: NodeJS.ProcessEnv): 'automatic' | 'manual' {
 		console.log('[tauri-ios-asc] signing=automatic (App Store Connect API key)')
 		if (hasProfile) {
 			console.warn(
-				'[tauri-ios-asc] AVEN_IOS_APP_STORE_MOBILEPROVISION is set but manual p12 env is missing — automatic signing may fail if ASC has no cloud profile for ceo.aven.os. Export Apple Distribution .p12 and set AVEN_IOS_CERTIFICATE_P12 + AVEN_IOS_CERTIFICATE_PASSWORD.'
+				'[tauri-ios-asc] AVEN_IOS_APP_STORE_MOBILEPROVISION is set but manual p12 env is missing — automatic signing may fail if ASC has no cloud profile for ceo.aven.os. Export Apple Distribution .p12 and set APPLE_CERTS_P12 + APPLE_CERTS_P12_PASSWORD.'
 			)
 		}
 		return 'automatic'
@@ -544,7 +543,7 @@ function configureSigning(env: NodeJS.ProcessEnv): 'automatic' | 'manual' {
 
 	if (hasProfile) {
 		console.error(
-			'tauri-ios-asc: AVEN_IOS_APP_STORE_MOBILEPROVISION is set — also set AVEN_IOS_CERTIFICATE_P12 and AVEN_IOS_CERTIFICATE_PASSWORD (Keychain → export Apple Distribution .p12), or configure APPLE_API_* for automatic signing.'
+			'tauri-ios-asc: AVEN_IOS_APP_STORE_MOBILEPROVISION is set — also set APPLE_CERTS_P12 and APPLE_CERTS_P12_PASSWORD (Keychain → export Apple Distribution .p12), or configure APPLE_API_* for automatic signing.'
 		)
 		process.exit(1)
 	}
