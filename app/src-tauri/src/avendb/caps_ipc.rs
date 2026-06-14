@@ -27,14 +27,13 @@ async fn wrap_all_dek_versions_to_recipient(
 	let urn = engine::safe_urn(identity_uuid);
 
 	let ks_schema = engine::resolved_table_schema(client, "keyshares").await?;
-	let ks_spark_ix = engine::col_ix(&ks_schema, "owner")?;
 	let ks_ver_ix = engine::col_ix(&ks_schema, "dek_version")?;
 	let ks_recip_ix = engine::col_ix(&ks_schema, "recipient_did")?;
 
 	// Versions the recipient ALREADY has → skip (idempotent re-grant; no duplicate rows).
 	let mut have: std::collections::BTreeSet<i64> = std::collections::BTreeSet::new();
-	for (_oid, vals) in engine::exec_list_rows(client, "keyshares").await? {
-		if engine::uuid_cell_at(vals.as_slice(), ks_spark_ix)? != identity_uuid {
+	for (oid, vals) in engine::exec_list_rows(client, "keyshares").await? {
+		if engine::owner_of_row(client, "keyshares", oid).await? != Some(identity_uuid) {
 			continue;
 		}
 		match vals.get(ks_recip_ix) {
@@ -153,12 +152,11 @@ async fn wrap_self_keyshare(
 /// grant case). `None` for pre-wrap-key rows.
 async fn find_safe_wrap_did(client: &AvenDbClient, safe_id: Uuid) -> Result<Option<String>, String> {
 	let schema = engine::resolved_table_schema(client, "safes").await?;
-	let id_ix = engine::col_ix(&schema, "owner")?;
 	let Ok(wd_ix) = engine::col_ix(&schema, "wrap_did") else {
 		return Ok(None);
 	};
-	for (_oid, vals) in engine::exec_list_rows(client, "safes").await? {
-		if engine::uuid_cell_at(vals.as_slice(), id_ix)? != safe_id {
+	for (oid, vals) in engine::exec_list_rows(client, "safes").await? {
+		if engine::owner_of_row(client, "safes", oid).await? != Some(safe_id) {
 			continue;
 		}
 		return Ok(match vals.get(wd_ix) {
@@ -258,11 +256,10 @@ async fn upsert_controller_copy_row(
 	});
 	let ctrl_did = crate::identity_acc::safe_did(controller_id);
 	let sc_schema = engine::resolved_table_schema(client, "safe_controllers").await?;
-	let own_ix = engine::col_ix(&sc_schema, "owner")?;
 	let did_ix = engine::col_ix(&sc_schema, "controller_did")?;
 	let mut existing: Option<ObjectId> = None;
 	for (oid, vals) in engine::exec_list_rows(client, "safe_controllers").await? {
-		if engine::uuid_cell_at(vals.as_slice(), own_ix)? == owner_safe
+		if engine::owner_of_row(client, "safe_controllers", oid).await? == Some(owner_safe)
 			&& matches!(vals.get(did_ix), Some(Value::Text(s)) if s == &ctrl_did)
 		{
 			existing = Some(oid);
@@ -397,12 +394,11 @@ async fn cascade_rotate_one(
 	};
 
 	let ks_schema = engine::resolved_table_schema(client, "keyshares").await?;
-	let ks_spark_ix = engine::col_ix(&ks_schema, "owner")?;
 	let ks_recip_ix = engine::col_ix(&ks_schema, "recipient_did")?;
 	let mut prior_holders: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
 	let mut stale_rows: Vec<(ObjectId, String)> = Vec::new();
 	for (oid, vals) in engine::exec_list_rows(client, "keyshares").await? {
-		if engine::uuid_cell_at(vals.as_slice(), ks_spark_ix)? != safe_id {
+		if engine::owner_of_row(client, "keyshares", oid).await? != Some(safe_id) {
 			continue;
 		}
 		if let Some(Value::Text(s)) = vals.get(ks_recip_ix) {
@@ -444,9 +440,8 @@ async fn cascade_rotate_one(
 	}
 
 	let sparks_schema = engine::resolved_table_schema(client, "safes").await?;
-	let id_ix = engine::col_ix(&sparks_schema, "owner")?;
-	for (oid, vals) in engine::exec_list_rows(client, "safes").await? {
-		if engine::uuid_cell_at(vals.as_slice(), id_ix)? == safe_id {
+	for (oid, _vals) in engine::exec_list_rows(client, "safes").await? {
+		if engine::owner_of_row(client, "safes", oid).await? == Some(safe_id) {
 			let mut patch = Map::new();
 			patch.insert("current_dek_version".into(), JsonValue::Number(new_v.into()));
 			let ops = patch_updates(&sparks_schema, patch)?;
@@ -465,10 +460,9 @@ async fn cascade_rotate_one(
 
 async fn safe_type_of(client: &AvenDbClient, safe_uuid: Uuid) -> Result<Option<String>, String> {
 	let schema = engine::resolved_table_schema(client, "safes").await?;
-	let id_ix = engine::col_ix(&schema, "owner")?;
 	let type_ix = engine::col_ix(&schema, "type")?;
-	for (_oid, vals) in engine::exec_list_rows(client, "safes").await? {
-		if engine::uuid_cell_at(vals.as_slice(), id_ix)? == safe_uuid {
+	for (oid, vals) in engine::exec_list_rows(client, "safes").await? {
+		if engine::owner_of_row(client, "safes", oid).await? == Some(safe_uuid) {
 			return Ok(match vals.get(type_ix) {
 				Some(Value::Text(s)) => Some(s.trim().to_string()),
 				_ => None,
@@ -542,12 +536,13 @@ async fn find_controlled_safe_of_type(
 ) -> Result<Option<Uuid>, String> {
 	let avenceo = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
 	let schema = engine::resolved_table_schema(client, "safes").await?;
-	let id_ix = engine::col_ix(&schema, "owner")?;
 	let type_ix = engine::col_ix(&schema, "type")?;
 	let created_ix = engine::col_ix(&schema, "created_at_ms")?;
 	let mut candidates: Vec<(i64, Uuid)> = Vec::new();
-	for (_oid, vals) in engine::exec_list_rows(client, "safes").await? {
-		let sid = engine::uuid_cell_at(vals.as_slice(), id_ix)?;
+	for (oid, vals) in engine::exec_list_rows(client, "safes").await? {
+		let Some(sid) = engine::owner_of_row(client, "safes", oid).await? else {
+			continue;
+		};
 		if sid == avenceo {
 			continue;
 		}
@@ -904,12 +899,11 @@ pub(crate) async fn avendb_ipc_aven_ceo_claim(
 	let identity_uuid = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
 
 	let sparks_schema = engine::resolved_table_schema(client.as_ref(), "safes").await?;
-	let identity_id_ix = engine::col_ix(&sparks_schema, "owner")?;
 	let issuer_ix = engine::col_ix(&sparks_schema, "issuer_pubkey_b64")?;
 	let sparks_rows = engine::exec_list_rows(client.as_ref(), "safes").await?;
 	let my_issuer = crate::identity_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public());
-	for (_oid, vals) in &sparks_rows {
-		if engine::uuid_cell_at(vals.as_slice(), identity_id_ix)? == identity_uuid {
+	for (oid, vals) in &sparks_rows {
+		if engine::owner_of_row(client.as_ref(), "safes", *oid).await? == Some(identity_uuid) {
 			let issuer = match vals.get(issuer_ix) {
 				Some(Value::Text(s)) => s.clone(),
 				_ => String::new(),
@@ -1228,10 +1222,9 @@ pub(crate) async fn avendb_ipc_create_collection_group(
 	let group_id = crate::identity_acc::derive_subgroup_id(parent_id, &label);
 
 	let sparks_schema = engine::resolved_table_schema(client.as_ref(), "safes").await?;
-	let id_ix = engine::col_ix(&sparks_schema, "owner")?;
 	// Idempotent: if the group's row already exists, return it (deterministic id).
-	for (_oid, vals) in engine::exec_list_rows(client.as_ref(), "safes").await? {
-		if engine::uuid_cell_at(vals.as_slice(), id_ix)? == group_id {
+	for (oid, _vals) in engine::exec_list_rows(client.as_ref(), "safes").await? {
+		if engine::owner_of_row(client.as_ref(), "safes", oid).await? == Some(group_id) {
 			return Ok(group_id.to_string());
 		}
 	}
@@ -1295,11 +1288,10 @@ async fn ensure_aven_ceo_owner_row(
 ) -> Result<(), String> {
 	let signer_did = shell.signer_did.as_str();
 	let signers_schema = engine::resolved_table_schema(client, "signers").await?;
-	let identity_ix = engine::col_ix(&signers_schema, "owner")?;
 	let did_ix = engine::col_ix(&signers_schema, "signer_did")?;
 	let rows = engine::exec_list_rows(client, "signers").await?;
-	for (_o, vals) in &rows {
-		let sid = engine::uuid_cell_at(vals.as_slice(), identity_ix).ok();
+	for (o, vals) in &rows {
+		let sid = engine::owner_of_row(client, "signers", *o).await?;
 		let d = match vals.get(did_ix) {
 			Some(Value::Text(s)) => s.as_str(),
 			_ => "",
@@ -1530,12 +1522,11 @@ pub(crate) async fn avendb_ipc_aven_ceo_publish_profile(
 	let identity_uuid = crate::identity_acc::aven_ceo_identity(tauri_plugin_self::network::NETWORK_SEED);
 
 	let signers_schema = engine::resolved_table_schema(client.as_ref(), "signers").await?;
-	let identity_ix = engine::col_ix(&signers_schema, "owner")?;
 	let did_ix = engine::col_ix(&signers_schema, "signer_did")?;
 	let rows = engine::exec_list_rows(client.as_ref(), "signers").await?;
 	let mut own_oid: Option<ObjectId> = None;
 	for (oid, vals) in rows {
-		let sid = engine::uuid_cell_at(vals.as_slice(), identity_ix).ok();
+		let sid = engine::owner_of_row(client.as_ref(), "signers", oid).await?;
 		let did = match vals.get(did_ix) {
 			Some(Value::Text(s)) => s.as_str(),
 			_ => "",
@@ -1835,11 +1826,10 @@ async fn count_human_owners(client: &AvenDbClient, owner_dids: &[String]) -> Res
 
 	// safe uuid → type
 	let safes_schema = engine::resolved_table_schema(client, "safes").await?;
-	let s_owner_ix = engine::col_ix(&safes_schema, "owner")?;
 	let s_type_ix = engine::col_ix(&safes_schema, "type")?;
 	let mut safe_type: std::collections::HashMap<Uuid, String> = std::collections::HashMap::new();
-	for (_o, vals) in engine::exec_list_rows(client, "safes").await.unwrap_or_default() {
-		if let Ok(u) = engine::uuid_cell_at(vals.as_slice(), s_owner_ix) {
+	for (o, vals) in engine::exec_list_rows(client, "safes").await.unwrap_or_default() {
+		if let Some(u) = engine::owner_of_row(client, "safes", o).await? {
 			let ty = match vals.get(s_type_ix) {
 				Some(Value::Text(t)) => t.trim().to_string(),
 				_ => String::new(),
@@ -1915,12 +1905,11 @@ pub(crate) async fn avendb_ipc_spark_admin_revoke(
 		.copied()
 		.ok_or_else(|| format!("missing dek version for identity {identity_uuid}"))?;
 	let ks_schema = engine::resolved_table_schema(client.as_ref(), "keyshares").await?;
-	let ks_spark_ix = engine::col_ix(&ks_schema, "owner")?;
 	let ks_recip_ix = engine::col_ix(&ks_schema, "recipient_did")?;
 	let ks_rows_now = engine::exec_list_rows(client.as_ref(), "keyshares").await?;
 	let mut prior_holders: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-	for (_oid, vals) in &ks_rows_now {
-		if engine::uuid_cell_at(vals.as_slice(), ks_spark_ix)? == identity_uuid {
+	for (oid, vals) in &ks_rows_now {
+		if engine::owner_of_row(client.as_ref(), "keyshares", *oid).await? == Some(identity_uuid) {
 			if let Some(Value::Text(s)) = vals.get(ks_recip_ix) {
 				prior_holders.insert(s.clone());
 			}
@@ -1976,11 +1965,10 @@ pub(crate) async fn avendb_ipc_spark_admin_revoke(
 	let revoke_genesis_b64 = genesis_b64.clone();
 	let issuer_b64 = crate::identity_acc::encode_issuer_pubkey_b64(&shell.vault.biscuit_kp.public());
 	let sparks_schema = engine::resolved_table_schema(client.as_ref(), "safes").await?;
-	let identity_id_ix = engine::col_ix(&sparks_schema, "owner")?;
 	let sparks_rows = engine::exec_list_rows(client.as_ref(), "safes").await?;
 	let mut sparks_oid: Option<ObjectId> = None;
-	for (oid, vals) in sparks_rows {
-		if engine::uuid_cell_at(vals.as_slice(), identity_id_ix)? == identity_uuid {
+	for (oid, _vals) in sparks_rows {
+		if engine::owner_of_row(client.as_ref(), "safes", oid).await? == Some(identity_uuid) {
 			sparks_oid = Some(oid);
 			break;
 		}
@@ -2008,16 +1996,15 @@ pub(crate) async fn avendb_ipc_spark_admin_revoke(
 		.await
 		.map_err(format_avendb_err)?;
 
-	let ks_spark_ix = engine::col_ix(&ks_schema, "owner")?;
 	let ks_recip_ix = engine::col_ix(&ks_schema, "recipient_did")?;
 	let ks_rows = engine::exec_list_rows(client.as_ref(), "keyshares").await?;
 	for (oid, vals) in ks_rows {
-		let sid = engine::uuid_cell_at(vals.as_slice(), ks_spark_ix)?;
+		let sid = engine::owner_of_row(client.as_ref(), "keyshares", oid).await?;
 		let recip = match vals.get(ks_recip_ix) {
 			Some(Value::Text(s)) => s.as_str(),
 			_ => continue,
 		};
-		if sid == identity_uuid
+		if sid == Some(identity_uuid)
 			&& (recip == signer_did.as_str()
 				|| !crate::identity_acc::chain_still_member(&shell.vault, &new_biscuit, identity_uuid, recip))
 		{
@@ -2029,10 +2016,9 @@ pub(crate) async fn avendb_ipc_spark_admin_revoke(
 		.await?;
 	if signer_did.starts_with(crate::identity_acc::SAFE_DID_PREFIX) {
 		if let Ok(sc_schema) = engine::resolved_table_schema(client.as_ref(), "safe_controllers").await {
-			let own_ix = engine::col_ix(&sc_schema, "owner")?;
 			let did_ix = engine::col_ix(&sc_schema, "controller_did")?;
 			for (oid, vals) in engine::exec_list_rows(client.as_ref(), "safe_controllers").await? {
-				if engine::uuid_cell_at(vals.as_slice(), own_ix)? == identity_uuid
+				if engine::owner_of_row(client.as_ref(), "safe_controllers", oid).await? == Some(identity_uuid)
 					&& matches!(vals.get(did_ix), Some(Value::Text(s)) if s.as_str() == signer_did.as_str())
 				{
 					let _ = client.delete(oid).await;

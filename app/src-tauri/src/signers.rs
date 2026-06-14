@@ -54,11 +54,9 @@ fn value_as_text(v: &Value) -> Option<&str> {
 /// hold that identity. Returns `None` before any identity exists (pre-bootstrap).
 pub async fn default_spark_id(client: &AvenDbClient) -> Result<Option<uuid::Uuid>, String> {
 	let rows = engine::exec_list_rows(client, "safes").await?;
-	let schema = engine::resolved_table_schema(client, "safes").await?;
-	let identity_ix = engine::col_ix(&schema, "owner")?;
 	let mut ids: Vec<uuid::Uuid> = Vec::new();
-	for (_oid, vals) in rows {
-		if let Ok(sid) = engine::uuid_cell_at(vals.as_slice(), identity_ix) {
+	for (oid, _vals) in rows {
+		if let Some(sid) = engine::owner_of_row(client, "safes", oid).await? {
 			ids.push(sid);
 		}
 	}

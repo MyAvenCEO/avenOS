@@ -52,7 +52,9 @@ pub(crate) async fn avendb_ipc_avendb_get(
 	let tbl = engine::resolved_table_schema(client.as_ref(), &table).await?;
 	match engine::find_row_snapshot(client.as_ref(), &table, &tbl, uuid).await? {
 		Some((oid, vals)) => {
-			let identity_row = engine::identity_uuid_row(&tbl, &vals).unwrap_or(shell.default_identity);
+			let identity_row = engine::owner_of_row(client.as_ref(), &table, oid)
+				.await?
+				.unwrap_or(shell.default_identity);
 			engine::authorize_gate(
 				&shell,
 				&table,
@@ -67,6 +69,7 @@ pub(crate) async fn avendb_ipc_avendb_get(
 				oid,
 				&vals,
 				ENCRYPTED_META,
+				identity_row,
 			)
 		}
 		None => Err(format!("row not found table={table} id={uuid}")),
@@ -100,7 +103,7 @@ pub(crate) async fn avendb_ipc_avendb_create(
 	let tbl = engine::resolved_table_schema(client.as_ref(), &table).await?;
 
 	if table == "signers" {
-		let identity = engine::identity_uuid_from_json_row(&tbl, &values)?;
+		let identity = engine::resolve_create_owner(&values, shell.default_identity)?;
 		let vals = insert_values("signers", &tbl, values)?;
 		let oid = ObjectId::new();
 		client
@@ -120,6 +123,7 @@ pub(crate) async fn avendb_ipc_avendb_create(
 			oid,
 			&vals_fresh,
 			ENCRYPTED_META,
+			identity,
 		)?;
 
 		let _ = avendb.change_tx.send(table.clone());
@@ -134,8 +138,7 @@ pub(crate) async fn avendb_ipc_avendb_create(
 
 	let mut plaintext = std::collections::HashMap::new();
 
-	engine::inject_default_identity(&mut values, &tbl, shell.default_identity)?;
-	let identity_gate = engine::identity_uuid_from_json_row(&tbl, &values)?;
+	let identity_gate = engine::resolve_create_owner(&values, shell.default_identity)?;
 	engine::authorize_gate(
 		&shell,
 		&table,
@@ -165,7 +168,7 @@ pub(crate) async fn avendb_ipc_avendb_create(
 	}
 
 	if !plaintext.is_empty() {
-		let identity = engine::identity_uuid_named(&vals)?;
+		let identity = identity_gate;
 		let mut ph = JsonRow::new();
 		for (col, pt) in plaintext {
 			let cd = tbl
@@ -204,6 +207,7 @@ pub(crate) async fn avendb_ipc_avendb_create(
 		oid,
 		&vals_fresh,
 		ENCRYPTED_META,
+		identity_gate,
 	)?;
 
 	let _ = avendb.change_tx.send(table.clone());
@@ -261,7 +265,10 @@ pub(crate) async fn avendb_ipc_avendb_update(
 		shell.avendb_write_branch,
 		oid.uuid()
 	);
-	let identity = engine::identity_uuid_row(&tbl, &old_vals)?;
+	let _ = &old_vals;
+	let identity = engine::owner_of_row(client.as_ref(), &table, oid)
+		.await?
+		.ok_or_else(|| format!("no owner-binding for {table}/{uuid}"))?;
 
 	engine::authorize_gate(
 		&shell,
@@ -365,7 +372,10 @@ pub(crate) async fn avendb_ipc_avendb_delete(
 		shell.avendb_write_branch,
 		oid.uuid()
 	);
-	let identity = engine::identity_uuid_row(&tbl, &row_vals)?;
+	let _ = &row_vals;
+	let identity = engine::owner_of_row(client.as_ref(), &table, oid)
+		.await?
+		.ok_or_else(|| format!("no owner-binding for {table}/{uuid}"))?;
 
 	engine::authorize_gate(
 		&shell,

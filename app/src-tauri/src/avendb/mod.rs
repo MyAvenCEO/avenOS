@@ -221,6 +221,13 @@ pub(super) fn insert_values(
 			// Reserved: the row id is engine-assigned, not a column (mirrors patch_updates).
 			continue;
 		}
+		if key == "owner" {
+			// Reserved routing field (board 0037): ownership is the immutable signed binding
+			// established via `create(table, owner, …)`, never a data column. A logical `owner`
+			// in the IPC payload selects the owning SAFE; it is consumed by the create arg, not
+			// stored — so skip it here rather than reject it as an unknown column.
+			continue;
+		}
 		let cd = row_desc
 			.column(key)
 			.ok_or_else(|| format!("create {table}: unknown column `{key}` (not in schema)"))?;

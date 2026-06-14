@@ -34,6 +34,7 @@ fn bigint_at(vals: &[Value], ix: usize) -> i64 {
 		_ => 0,
 	}
 }
+#[allow(dead_code)]
 fn uuid_matches(vals: &[Value], ix: usize, want: Uuid) -> bool {
 	match vals.get(ix) {
 		Some(Value::Uuid(o)) => *o.uuid() == want,
@@ -70,17 +71,15 @@ pub async fn avenceo_genesis_b64(engine: &AvenDbClient, avenceo_id: Uuid) -> Res
 	let tbl = schema
 		.get(&TableName::new("safes"))
 		.ok_or("avenceo: no safes table")?;
-	let sid_ix = col_ix(tbl, "owner")?;
 	let gen_ix = col_ix(tbl, "genesis_b64")?;
 	let q = QueryBuilder::new(TableName::new("safes")).build();
 	let rows = engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))?;
-	for (_oid, vals) in rows {
-		let matches = match vals.get(sid_ix) {
-			Some(Value::Uuid(o)) => *o.uuid() == avenceo_id,
-			Some(Value::Text(s)) => Uuid::parse_str(s.trim()).map(|u| u == avenceo_id).unwrap_or(false),
-			_ => false,
+	for (oid, vals) in rows {
+		let owner: Option<Uuid> = match engine.owner_binding_for("safes", oid).map_err(|e| format!("owner_binding:{e:?}"))? {
+			Some(meta) => aven_db::capability::owner_uuid_from_binding_meta(&meta),
+			None => None,
 		};
-		if matches {
+		if owner == Some(avenceo_id) {
 			return Ok(vals.get(gen_ix).and_then(|v| match v {
 				Value::Text(s) => Some(s.clone()),
 				_ => None,
@@ -166,7 +165,6 @@ pub async fn ensure_avenceo_owned(
 	let sealed_issuer =
 		seal_identity_cell(dek.expose(), avenceo_id, sparks_tbl, "issuer_pubkey_b64", dek_ver, &issuer_b64)?;
 	let sparks_row = named_row(&[
-			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 			// avenCEO is an aven SAFE (autonomous network control identity) owned directly
 			// by this node's env-seed server signer; it admits human owners via did:safe.
 			("type", Value::Text("aven".into())),
@@ -192,7 +190,6 @@ pub async fn ensure_avenceo_owned(
 	let aad = keyshare_wrap_aad(&urn, &vault.signer_did, &vault.signer_did, dek_ver);
 	let wrapped = encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
 	let ks_row = named_row(&[
-			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 			("dek_version", Value::BigInt(dek_ver)),
 			("recipient_did", Value::Text(vault.signer_did.clone())),
 			("wrapper_did", Value::Text(vault.signer_did.clone())),
@@ -211,7 +208,6 @@ pub async fn ensure_avenceo_owned(
 	// server signer as NON-human. Owned by avenCEO so it syncs to its members.
 	if schema.get(&TableName::new("signers")).is_some() {
 		let signers_row = named_row(&[
-				("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 				("signer_did", Value::Text(vault.signer_did.clone())),
 				("device_label", Value::Text(aven_name.into())),
 				("kind", Value::Text("remote".into())),
@@ -238,13 +234,16 @@ async fn read_avenceo_identity(
 ) -> Result<Option<(ObjectId, String, String, i64)>, String> {
 	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
 	let tbl = schema.get(&TableName::new("safes")).ok_or("avenceo: no safes table")?;
-	let sid_ix = col_ix(tbl, "owner")?;
 	let gen_ix = col_ix(tbl, "genesis_b64")?;
 	let iss_ix = col_ix(tbl, "issuer_pubkey_b64")?;
 	let ver_ix = col_ix(tbl, "current_dek_version")?;
 	let q = QueryBuilder::new(TableName::new("safes")).build();
 	for (oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
-		if uuid_matches(&vals, sid_ix, avenceo_id) {
+		let owner: Option<Uuid> = match engine.owner_binding_for("safes", oid).map_err(|e| format!("owner_binding:{e:?}"))? {
+			Some(meta) => aven_db::capability::owner_uuid_from_binding_meta(&meta),
+			None => None,
+		};
+		if owner == Some(avenceo_id) {
 			return Ok(Some((oid, text_at(&vals, gen_ix), text_at(&vals, iss_ix), bigint_at(&vals, ver_ix))));
 		}
 	}
@@ -261,13 +260,16 @@ async fn read_server_dek(
 ) -> Result<[u8; 32], String> {
 	let schema = engine.schema().await.map_err(|e| format!("schema:{e:?}"))?;
 	let tbl = schema.get(&TableName::new("keyshares")).ok_or("avenceo: no keyshares table")?;
-	let sid_ix = col_ix(tbl, "owner")?;
 	let ver_ix = col_ix(tbl, "dek_version")?;
 	let recip_ix = col_ix(tbl, "recipient_did")?;
 	let wrap_ix = col_ix(tbl, "wrapped_dek")?;
 	let q = QueryBuilder::new(TableName::new("keyshares")).build();
-	for (_oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
-		if uuid_matches(&vals, sid_ix, avenceo_id)
+	for (oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
+		let owner: Option<Uuid> = match engine.owner_binding_for("keyshares", oid).map_err(|e| format!("owner_binding:{e:?}"))? {
+			Some(meta) => aven_db::capability::owner_uuid_from_binding_meta(&meta),
+			None => None,
+		};
+		if owner == Some(avenceo_id)
 			&& bigint_at(&vals, ver_ix) == dek_ver
 			&& text_at(&vals, recip_ix) == vault.signer_did
 		{
@@ -321,15 +323,18 @@ pub async fn grant_first_human_admin(
 	// so the blind server reads them without the SAFE's DEK. wrap_did is required to deliver
 	// the avenCEO DEK to the SAFE's members.
 	let type_ix = col_ix(sparks_tbl, "type")?;
-	let owner_ix = col_ix(sparks_tbl, "owner")?;
 	let wrap_ix = col_ix(sparks_tbl, "wrap_did")?;
 	let q = QueryBuilder::new(TableName::new("safes")).build();
 	let mut human: Option<(Uuid, String)> = None;
-	for (_oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
+	for (oid, vals) in engine.query(q, None).await.map_err(|e| format!("query:{e:?}"))? {
 		if text_at(&vals, type_ix) != "human" {
 			continue;
 		}
-		let Some(owner_uuid) = uuid_at(&vals, owner_ix) else { continue };
+		let owner: Option<Uuid> = match engine.owner_binding_for("safes", oid).map_err(|e| format!("owner_binding:{e:?}"))? {
+			Some(meta) => aven_db::capability::owner_uuid_from_binding_meta(&meta),
+			None => None,
+		};
+		let Some(owner_uuid) = owner else { continue };
 		let wrap_did = text_at(&vals, wrap_ix);
 		if wrap_did.is_empty() {
 			continue;
@@ -364,7 +369,6 @@ pub async fn grant_first_human_admin(
 	let aad = keyshare_wrap_aad(&urn, &wrap_did, &vault.signer_did, dek_ver);
 	let wrapped = encrypt_keyshare_payload(&kek, &dek, &aad)?;
 	let ks_row = named_row(&[
-			("owner", Value::Uuid(ObjectId::from_uuid(avenceo_id))),
 			("dek_version", Value::BigInt(dek_ver)),
 			("recipient_did", Value::Text(wrap_did.clone())),
 			("wrapper_did", Value::Text(vault.signer_did.clone())),
@@ -384,12 +388,4 @@ pub async fn grant_first_human_admin(
 	}
 	tracing::info!(%avenceo_id, %human_did, "granted FIRST human SAFE admin on avenCEO (server-signed); DEK wrapped to wrap_did");
 	Ok(())
-}
-
-fn uuid_at(vals: &[Value], ix: usize) -> Option<Uuid> {
-	match vals.get(ix) {
-		Some(Value::Uuid(o)) => Some(*o.uuid()),
-		Some(Value::Text(s)) => Uuid::parse_str(s.trim()).ok(),
-		_ => None,
-	}
 }

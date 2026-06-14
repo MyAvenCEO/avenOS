@@ -1019,6 +1019,27 @@ impl ReadSnapshot {
     }
 }
 
+/// Install a deterministic ephemeral owner-binder on a headless in-memory store so authored
+/// values carry a real-layout owner-binding (board 0037) — without it, `$owner` would be Null
+/// and the brain's owner-scoped reads return nothing. Used only by the in-memory constructors;
+/// a real peer's store gets the app's device-key binder. The fixed key never signs anything
+/// that is verified (in-memory brains never sync), so its identity is irrelevant.
+fn install_ephemeral_owner_binder(client: &AvenDbClient) {
+    struct EphemeralBinder(ed25519_dalek::SigningKey);
+    impl aven_db::OwnerBinder for EphemeralBinder {
+        fn bind_row(&self, row_id: ObjectId, owner: uuid::Uuid) -> Option<(String, String)> {
+            let binding =
+                aven_caps::ownership::mint_owner_binding(&self.0, *row_id.uuid(), owner).ok()?;
+            Some((
+                aven_db::capability::OWNER_BINDING_META_KEY.to_string(),
+                binding.to_meta_string(),
+            ))
+        }
+    }
+    let sk = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
+    let _ = client.set_owner_binder(Arc::new(EphemeralBinder(sk)));
+}
+
 impl<E: Embedder> Brain<E> {
     /// Open an ephemeral, in-memory brain for `owner` (tests / dev) with a
     /// random-key sealer. Nothing persists; nothing else can open its cells.
@@ -1035,8 +1056,12 @@ impl<E: Embedder> Brain<E> {
         let client = AvenDbClient::connect_headless_in_memory(context, Arc::new(NullSyncTransport))
             .await
             .map_err(|e| BrainError::Open(format!("{e:?}")))?;
+        // Ownership is the immutable binding, not an `owner` column (board 0037): the brain's
+        // own owner-scoped queries (`filter_eq("$owner", …)`) read it from the header, so the
+        // store needs a binder even in-memory. Production reuses the app's signing-key binder;
+        // here we install an ephemeral one (never syncs, so the key identity is irrelevant).
+        install_ephemeral_owner_binder(&client);
         let sealer = Arc::new(KeySealer::random(*owner.uuid()));
-        // In-memory brains never sync, so no binding is required (None).
         Ok(Self::over(Arc::new(client), owner, embedder, sealer, None))
     }
 
@@ -1285,7 +1310,6 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         let oid = ObjectId::new();
         let row = *oid.uuid();
         let fields = HashMap::from([
-            ("owner".to_string(), Value::Uuid(self.owner)),
             ("content".to_string(), self.sv(MEMORIES, "content", row, content)?),
             (
                 "embedding".to_string(),
@@ -1567,7 +1591,7 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         self.client
             .query(
                 QueryBuilder::new(table)
-                    .filter_eq("owner", Value::Uuid(self.owner))
+                    .filter_eq("$owner", Value::Uuid(self.owner))
                     .build(),
                 None,
             )
@@ -1579,8 +1603,8 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
     fn decode_entity(&self, id: ObjectId, v: &[Value]) -> Entity {
         Entity {
             id,
-            name: self.open_at(ENTITIES, "name", &id, v, 1).unwrap_or_default(),
-            kind: self.open_at(ENTITIES, "kind", &id, v, 2).unwrap_or_default(),
+            name: self.open_at(ENTITIES, "name", &id, v, 0).unwrap_or_default(),
+            kind: self.open_at(ENTITIES, "kind", &id, v, 1).unwrap_or_default(),
         }
     }
 
@@ -1595,7 +1619,7 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             .map(|(id, vals)| {
                 let m = self.open_memory(*id, vals);
                 let emb = self
-                    .open_at(MEMORIES, "embedding", id, vals, 2)
+                    .open_at(MEMORIES, "embedding", id, vals, 1)
                     .and_then(|s| decode_embedding(&s));
                 (*id, m, emb)
             })
@@ -1789,7 +1813,6 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
                 *self.owner.uuid(),
                 Some(oid),
                 HashMap::from([
-                    ("owner".to_string(), Value::Uuid(self.owner)),
                     ("from".to_string(), self.sv(LINKS, "from", row, &subj_s)?),
                     ("to".to_string(), self.sv(LINKS, "to", row, &id_str(&obj))?),
                     ("kind".to_string(), self.sv(LINKS, "kind", row, predicate)?),
@@ -2666,7 +2689,7 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         let rows = self.memory_rows().await?;
         let mut n = 0usize;
         for (id, vals) in &rows {
-            let Some(content) = self.open_at(MEMORIES, "content", id, vals, 1) else {
+            let Some(content) = self.open_at(MEMORIES, "content", id, vals, 0) else {
                 continue;
             };
             let emb = self.embedder.embed(&content).await;
@@ -2879,7 +2902,7 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         self.client
             .query(
                 QueryBuilder::new(MEMORIES)
-                    .filter_eq("owner", Value::Uuid(self.owner))
+                    .filter_eq("$owner", Value::Uuid(self.owner))
                     .filter_is_null("superseded_by")
                     .build(),
                 None,
@@ -2895,16 +2918,16 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
     fn open_memory(&self, id: ObjectId, vals: &[Value]) -> Memory {
         Memory {
             id,
-            content: self.open_at(MEMORIES, "content", &id, vals, 1).unwrap_or_default(),
-            stream: self.open_at(MEMORIES, "stream", &id, vals, 3).unwrap_or_default(),
+            content: self.open_at(MEMORIES, "content", &id, vals, 0).unwrap_or_default(),
+            stream: self.open_at(MEMORIES, "stream", &id, vals, 2).unwrap_or_default(),
             author_role: self
-                .open_at(MEMORIES, "author_role", &id, vals, 4)
+                .open_at(MEMORIES, "author_role", &id, vals, 3)
                 .unwrap_or_default(),
-            source: self.open_at(MEMORIES, "source", &id, vals, 5),
-            veracity: self.open_at(MEMORIES, "veracity", &id, vals, 13),
+            source: self.open_at(MEMORIES, "source", &id, vals, 4),
+            veracity: self.open_at(MEMORIES, "veracity", &id, vals, 12),
             // Pre-importance rows (and lens-migrated nulls) score neutral.
             importance: self
-                .open_at(MEMORIES, "importance", &id, vals, 15)
+                .open_at(MEMORIES, "importance", &id, vals, 14)
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0.5),
         }
@@ -2926,33 +2949,33 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
     fn decode_link(&self, id: ObjectId, v: &[Value]) -> LinkRow {
         LinkRow {
             id,
-            from: self.open_at(LINKS, "from", &id, v, 1).unwrap_or_default(),
-            to: self.open_at(LINKS, "to", &id, v, 2).unwrap_or_default(),
-            kind: self.open_at(LINKS, "kind", &id, v, 3).unwrap_or_default(),
-            class: self.open_at(LINKS, "class", &id, v, 4).unwrap_or_default(),
-            valid_from: self.open_at(LINKS, "valid_from", &id, v, 5).and_then(|s| s.parse().ok()),
-            valid_to: self.open_at(LINKS, "valid_to", &id, v, 6).and_then(|s| s.parse().ok()),
+            from: self.open_at(LINKS, "from", &id, v, 0).unwrap_or_default(),
+            to: self.open_at(LINKS, "to", &id, v, 1).unwrap_or_default(),
+            kind: self.open_at(LINKS, "kind", &id, v, 2).unwrap_or_default(),
+            class: self.open_at(LINKS, "class", &id, v, 3).unwrap_or_default(),
+            valid_from: self.open_at(LINKS, "valid_from", &id, v, 4).and_then(|s| s.parse().ok()),
+            valid_to: self.open_at(LINKS, "valid_to", &id, v, 5).and_then(|s| s.parse().ok()),
             confidence: self
-                .open_at(LINKS, "confidence", &id, v, 7)
+                .open_at(LINKS, "confidence", &id, v, 6)
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0.0),
             strength: self
-                .open_at(LINKS, "strength", &id, v, 8)
+                .open_at(LINKS, "strength", &id, v, 7)
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0.0),
             stability: self
-                .open_at(LINKS, "stability", &id, v, 9)
+                .open_at(LINKS, "stability", &id, v, 8)
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0.0),
             access_count: self
-                .open_at(LINKS, "access_count", &id, v, 10)
+                .open_at(LINKS, "access_count", &id, v, 9)
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0),
             last_access: self
-                .open_at(LINKS, "last_access", &id, v, 11)
+                .open_at(LINKS, "last_access", &id, v, 10)
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0),
-            source_memory: self.open_at(LINKS, "source_memory", &id, v, 12),
+            source_memory: self.open_at(LINKS, "source_memory", &id, v, 11),
         }
     }
 
@@ -2960,7 +2983,7 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
     fn decode_memory(&self, id: ObjectId, vals: &[Value]) -> (Memory, Option<Vec<f32>>) {
         let m = self.open_memory(id, vals);
         let emb = self
-            .open_at(MEMORIES, "embedding", &id, vals, 2)
+            .open_at(MEMORIES, "embedding", &id, vals, 1)
             .and_then(|s| decode_embedding(&s));
         (m, emb)
     }
@@ -3102,7 +3125,6 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
                 *self.owner.uuid(),
                 Some(oid),
                 HashMap::from([
-                    ("owner".to_string(), Value::Uuid(self.owner)),
                     ("from".to_string(), self.sv(LINKS, "from", row, &from_s)?),
                     ("to".to_string(), self.sv(LINKS, "to", row, &to_s)?),
                     ("kind".to_string(), self.sv(LINKS, "kind", row, kind)?),
@@ -3170,7 +3192,6 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
                 *self.owner.uuid(),
                 Some(oid),
                 HashMap::from([
-                    ("owner".to_string(), Value::Uuid(self.owner)),
                     ("name".to_string(), self.sv(ENTITIES, "name", row, name)?),
                     ("kind".to_string(), self.sv(ENTITIES, "kind", row, "unknown")?),
                 ]),
@@ -3235,7 +3256,6 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
                     *self.owner.uuid(),
                     Some(oid),
                     HashMap::from([
-                        ("owner".to_string(), Value::Uuid(self.owner)),
                         ("from".to_string(), self.sv(LINKS, "from", row, &a_s)?),
                         ("to".to_string(), self.sv(LINKS, "to", row, &b_s)?),
                         ("kind".to_string(), self.sv(LINKS, "kind", row, BOND_KIND)?),
@@ -3265,7 +3285,7 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             .client
             .query(
                 QueryBuilder::new(MEMORIES)
-                    .filter_eq("owner", Value::Uuid(self.owner))
+                    .filter_eq("$owner", Value::Uuid(self.owner))
                     .filter_eq("content_hash", Value::Bytea(mac.to_vec()))
                     .build(),
                 None,
@@ -3700,6 +3720,7 @@ mod tests {
         let client = AvenDbClient::connect_headless_in_memory(context, Arc::new(NullSyncTransport))
             .await
             .expect("connect");
+        install_ephemeral_owner_binder(&client);
         let sealer: Arc<dyn Sealer> = Arc::new(KeySealer::random(*owner.uuid()));
         (Arc::new(client), owner, sealer)
     }
@@ -3712,7 +3733,7 @@ mod tests {
 
         // Brain A writes a dream step + an activity step, then is dropped.
         {
-            let brain = Brain::over(client.clone(), owner, StubEmbedder::new(EMBED_DIM), sealer.clone());
+            let brain = Brain::over(client.clone(), owner, StubEmbedder::new(EMBED_DIM), sealer.clone(), None);
             let step = DreamStep {
                 phase: "extract".into(),
                 label: "typed 3 entities".into(),
@@ -3731,7 +3752,7 @@ mod tests {
 
         // A FRESH Brain over the same client reads the log back identically (oldest-first).
         let reopened =
-            Brain::over(client.clone(), owner, StubEmbedder::new(EMBED_DIM), sealer.clone());
+            Brain::over(client.clone(), owner, StubEmbedder::new(EMBED_DIM), sealer.clone(), None);
         let log = reopened.read_log().await.unwrap();
         assert_eq!(log.len(), 2, "both entries survive a fresh Brain instance");
         assert_eq!(log[0].kind, "dream");
@@ -3745,7 +3766,7 @@ mod tests {
         // Sealed at rest: a brain with a DIFFERENT key over the SAME store can't read the log
         // (the bytes are ciphertext, not plaintext) — its read yields nothing decodable.
         let wrong_key: Arc<dyn Sealer> = Arc::new(KeySealer::random(*owner.uuid()));
-        let intruder = Brain::over(client.clone(), owner, StubEmbedder::new(EMBED_DIM), wrong_key);
+        let intruder = Brain::over(client.clone(), owner, StubEmbedder::new(EMBED_DIM), wrong_key, None);
         assert!(
             intruder.read_log().await.unwrap().is_empty(),
             "log is sealed — the wrong key decodes nothing"
