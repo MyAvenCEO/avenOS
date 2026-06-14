@@ -18,7 +18,7 @@ incremental = false
 
 [package]
 name = "aven-os-app"
-version = "26.6.1-next.4"
+version = "26.6.1-next.5"
 description = "Aven OS desktop shell"
 authors = ["Aven"]
 edition = "2021"

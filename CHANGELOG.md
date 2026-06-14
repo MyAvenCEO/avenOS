@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.4...v) (2026-06-14)
+
+
+### Bug Fixes
+
+* **ci:** use singular SPRITE_API_KEY env secret name ([9eb914e](https://github.com/MyAvenCEO/avenOS/commit/9eb914e713b2a16b2e9c2aad7de3de91cbf2c9e6))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.3...v) (2026-06-14)
 
 
