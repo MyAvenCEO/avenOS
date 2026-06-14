@@ -1,0 +1,44 @@
+name: release-next
+
+# CalVer staging channel. On merge into `next`, derive the next prerelease version
+# (YY.M.micro-next.N), stamp it across every package, regenerate the changelog, tag,
+# and cut a GitHub prerelease. Milestone 1: tags + changelog ONLY — no app build, no
+# upload, no server deploy (that is a later milestone).
+
+on:
+  push:
+    branches: [next]
+
+concurrency:
+  group: release-next
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: tag + changelog
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history + tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Configure git identity
+        run: |
+          git config user.name "aven-release-bot"
+          git config user.email "release@aven.os"
+
+      - name: Derive CalVer, stamp, changelog, tag, prerelease
+        run: bun run release:next
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
