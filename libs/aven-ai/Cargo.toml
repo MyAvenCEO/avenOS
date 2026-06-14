@@ -1,6 +1,6 @@
 [package]
 name = "aven-ai"
-version = "26.6.1-next.12"
+version = "26.6.1-next.13"
 edition = "2021"
 description = "AvenOS on-device AI core (Tauri-free): speech-to-text via sherpa-onnx (Parakeet), model download/cache primitives, and a future on-device LLM path. Shared by the app."
 license = "MIT OR Apache-2.0"

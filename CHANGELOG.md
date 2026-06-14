@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.12...v) (2026-06-14)
+
+
+### Bug Fixes
+
+* **ios:** import Apple Distribution cert into a default keychain for exportArchive ([2b90b2f](https://github.com/MyAvenCEO/avenOS/commit/2b90b2f72c3d633bc9c6c2ef9731348c5e0c79b8))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.11...v) (2026-06-14)
 
 
