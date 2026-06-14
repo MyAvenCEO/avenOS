@@ -107,11 +107,11 @@ longer control — the revoked device must self-purge.)
 
 Each box checkable from the transcript.
 
-- [ ] `cargo test -p aven-caps role_caps` — one `role → caps` SSOT returns the right bundle per role (admin/reader/relay + tier); no ad-hoc cap lists.
-- [ ] No raw keys: a test/check proves every role + cap key `identity_cap_report` can emit has a real translation (rendered label != upcased key) in every locale, AND the TS `IdentityGrant`/`GRANT_KINDS`/`grantDescKey` include the report's role names — the `IDENTITIES.SHARE.GRANTS.ADMIN` regression is gone.
-- [ ] TIER-0 admission is surfaced as its own role (from `avenCeoMembership`), distinct from the per-SAFE RELAY grant — the "two sync words" smear is gone.
-- [ ] `cargo test -p aven-os-app --features desktop-ai revoked_self_fail_closed` — a SAFE re-sealed beyond held DEKs + no admin cap → `RevokedSelf` (lock + purge); `Active` when a DEK/cap is held.
-- [ ] `cargo build -p aven-caps -p aven-os-app --features desktop-ai` exits 0; `bun run check` passes.
+- [x] **S2** `cargo test -p aven-caps role_caps` **GREEN** — one `role → caps` SSOT (`grant_kind_caps`): admin → ADMIN_RIGHTS, reader → [read], relay → [replicate, quota, rate_limit]; `identity_cap_report` derives all caps from it (no drift). aven-caps 49 green.
+- [x] **S1+S2** No raw keys: `bun test tests/i18n-access-labels.test.ts` **GREEN (7 pass)** — every role + cap the report emits has a non-empty translation in en+de; TS `IdentityGrant`/`GRANT_KINDS`/`grantDescKey` + grant dispatch + all literals use the role names; i18n `grants.{admin,reader,relay}` + `grantDesc{Admin,Reader,Relay}`. The `IDENTITIES.SHARE.GRANTS.ADMIN` regression is gone. App svelte-check 0 errors.
+- [ ] **S3** TIER-0 admission surfaced as its own role (from `avenCeoMembership`), distinct from RELAY — the "two sync words" smear gone. *(remaining)*
+- [ ] **S4** `cargo test -p aven-os-app --features desktop-ai revoked_self_fail_closed` — re-sealed-beyond-held-DEKs + no admin cap → `RevokedSelf` (lock + purge). *(remaining)*
+- [x] `cargo build -p aven-caps -p aven-os-app --features desktop-ai` exits 0; app svelte-check 0 errors. **GREEN.**
 
 ## Verification
 
@@ -140,6 +140,18 @@ bun run check
 
 Newest entry first.
 
+- `2026-06-15` — **Build: S1 + S2 landed green** (the user's reported bug — the raw
+  `IDENTITIES.SHARE.GRANTS.ADMIN` key — is fixed + test-guarded). Made `grant_kind_caps` the ONE
+  `role → caps` SSOT (admin → ADMIN_RIGHTS, reader → [read], relay → [replicate, quota, rate_limit]);
+  `identity_cap_report` now derives every holder's caps from it (no drift) and emits role labels
+  admin/reader/relay (renamed reads→reader, replicate→relay; wire predicates kept). Propagated
+  end-to-end: TS `IdentityGrant`/`GRANT_KINDS`/`grantDescKey`/`grantAccess` dispatch + all literals;
+  i18n `grants.{admin,reader,relay}` + `grantDesc{Admin,Reader,Relay}` (en/de). `role_caps` test +
+  `bun test i18n-access-labels` (7 pass — no raw keys, both locales) + cap_report test fixed. aven-caps
+  49 green; app svelte-check 0 errors; app(desktop-ai) builds clean. **Remaining (handed to /goal):**
+  S3 — surface TIER-0 admission (from `avenCeoMembership`) distinct from RELAY (de-smear the two "sync"
+  words); S4 — the `revoked_self_fail_closed` hydrate decision (re-sealed beyond held DEKs + no admin
+  cap → lock + local-purge). Card stays in build/ until S3+S4 close.
 - `2026-06-15` — Discovery. Born from live 0040 testing: a raw-key i18n regression
   (`IDENTITIES.SHARE.GRANTS.ADMIN`) + smeared sync vocabulary + a revoked device that never self-locks.
   User reframed the fix as the right model: **a role IS a named bundle of caps** (ADMIN / READER /
