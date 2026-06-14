@@ -1,7 +1,7 @@
 {
 	"name": "@avenos/docs",
 	"private": true,
-	"version": "26.6.1-next.6",
+	"version": "26.6.1-next.7",
 	"type": "module",
 	"description": "Markdown documentation topics for AvenOS (e.g. device identity / Self). Consumed by @AvenOS/app via Vite raw imports.",
 	"scripts": {

@@ -1,3 +1,14 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.6...v) (2026-06-14)
+
+
+### Bug Fixes
+
+* **0047:** relabel the quick-relay button to RELAY vocabulary (last sync-word smear) ([f44d32b](https://github.com/MyAvenCEO/avenOS/commit/f44d32b0244372b635338562a1c0870ff028ad23))
+
+
+### Features
+
+* **ci:** build macOS app + upload to TestFlight on each next release ([ab8cd01](https://github.com/MyAvenCEO/avenOS/commit/ab8cd0142ce80ccdc989a3a21f36ea9c86026241))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.5...v) (2026-06-14)
 
 
