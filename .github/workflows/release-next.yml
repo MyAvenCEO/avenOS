@@ -9,6 +9,8 @@ name: release-next
 #   3. release-macos — build the signed Mac App Store .pkg on a macOS runner and upload it to
 #                      TestFlight (CFBundleVersion = github.run_number). Apple creds are
 #                      REPOSITORY secrets (cross-channel: next AND main); see job for the list.
+#   4. release-ios   — build the signed .ipa on a macOS runner (tauri ios init + manual signing)
+#                      and upload to TestFlight. Reuses the same repo Apple secrets + IOS_MOBILEPROVISION_BASE64.
 
 on:
   push:
@@ -155,5 +157,61 @@ jobs:
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           AVEN_PKG_INSTALLER_IDENTITY: ${{ secrets.AVEN_PKG_INSTALLER_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+
+  release-ios:
+    name: iOS build → TestFlight
+    needs: release
+    runs-on: macos-15 # Apple Silicon; builds the aarch64-apple-ios .ipa
+    # Reuses the same repository Apple secrets as the macOS job (cross-channel).
+    steps:
+      - name: Checkout next at the release commit (full history + tags)
+        uses: actions/checkout@v5
+        with:
+          ref: next
+          fetch-depth: 0
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Set marketing version to the stable CalVer (strip -next.N for App Store)
+        run: bun run set-version "$(bun run --silent next-version)"
+
+      - name: Add the iOS Rust target
+        run: rustup target add aarch64-apple-ios
+
+      - name: Materialize signing cert + iOS provisioning profile + API key
+        # tauri-ios-asc.ts (manual CI signing) reads these PATHS and lets Tauri import the
+        # cert into a keychain via IOS_CERTIFICATE — so no manual keychain step is needed here.
+        env:
+          CERTS_P12_B64: ${{ secrets.APPLE_CERTS_P12_BASE64 }}
+          IOS_PROFILE_B64: ${{ secrets.IOS_MOBILEPROVISION_BASE64 }}
+          API_KEY_B64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/apple"
+          echo "$CERTS_P12_B64" | base64 -d > "$RUNNER_TEMP/apple/certs.p12"
+          echo "$IOS_PROFILE_B64" | base64 -d > "$RUNNER_TEMP/apple/app.mobileprovision"
+          echo "$API_KEY_B64" | base64 -d > "$RUNNER_TEMP/apple/AuthKey_${APPLE_API_KEY}.p8"
+          {
+            echo "APPLE_CERTS_P12=$RUNNER_TEMP/apple/certs.p12"
+            echo "AVEN_IOS_APP_STORE_MOBILEPROVISION=$RUNNER_TEMP/apple/app.mobileprovision"
+            echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/apple/AuthKey_${APPLE_API_KEY}.p8"
+          } >> "$GITHUB_ENV"
+
+      - name: Generate the iOS Xcode project (gen/apple is not committed)
+        working-directory: app
+        run: CI=true bunx tauri ios init --ci
+
+      - name: Build signed .ipa + upload to TestFlight
+        run: bun run release:app:ios ${{ github.run_number }}
+        env:
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+          APPLE_CERTS_P12_PASSWORD: ${{ secrets.APPLE_CERTS_P12_PASSWORD }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
