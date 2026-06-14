@@ -5,13 +5,14 @@ import {
 	type AvenDbRow,
 	type AvenDbSessionReply,
 	avenCeoAddMember,
-	avenCeoMembership,
 	avenDbStatus,
 	avendbSession,
 	type IdentityGrant,
 	type IdentitySubjectCaps,
 	type PeerRow,
 	peerList,
+	type RoleCapsMap,
+	roleCaps,
 	sparkAdminAdd,
 	sparkAdminList,
 	sparkAdminRevoke,
@@ -87,6 +88,16 @@ let activeTab = $state<MembersTab>('members')
 // (`grant_kind_caps` SSOT) and show on the resulting member card (none hardcoded here).
 const GRANT_KINDS: IdentityGrant[] = ['admin', 'reader', 'relay']
 let grantKind = $state<IdentityGrant>('admin')
+// Role → caps SSOT (`grant_kind_caps`, + the avenCEO `tier0` bundle). Drives the GIVE ACCESS
+// preview: the exact caps the selected role will apply, shown BEFORE the grant. No cap
+// vocabulary is defined here — we render whatever the backend SSOT returns.
+let roleCapsMap = $state<RoleCapsMap>({})
+// The caps the currently-selected role will confer once granted. On avenCEO, the `reader`
+// button is TIER-0 admission (avenCeoAddMember) — preview the `tier0` bundle, not plain read.
+const previewCaps = $derived.by((): string[] => {
+	const key = isAvenCeo && grantKind === 'reader' ? 'tier0' : grantKind
+	return roleCapsMap[key] ?? []
+})
 function grantDescKey(grant: IdentityGrant): string {
 	// avenCEO `reader` = TIER-0 network admission (see grantLabel).
 	if (isAvenCeo && grant === 'reader') return 'identities.share.grantDescTier0'
@@ -130,11 +141,9 @@ const tauri = $derived(browser && isTauriRuntime())
 // locks the identity. The local cache is purged by the shell — physics: we can't delete bytes
 // remotely, so the revoked device self-locks + self-purges.
 const isRevokedSelf = $derived((session?.revokedSelf ?? []).includes(identityId.trim()))
-// TIER-0 network admission (board 0047): "you may sync on this network at all" — granted to me
-// BY the network (avenCEO roster), distinct from the per-SAFE RELAY grant I authorize. Surfaced
-// as its own role so the two "sync" concepts (admission vs relay) are no longer smeared.
-let admission = $state<'owner' | 'member' | 'none'>('none')
-const showTier0 = $derived(admission !== 'none')
+// TIER-0 network admission (board 0047/0049) is no longer a SEPARATE badge — it surfaces as a
+// per-DID role in WHO HAS ACCESS, alongside the holder's real caps (no role hidden). The global
+// banner in +layout uses avenCeoMembership for the "on the network" gate.
 
 // The admin roster lives inside the identity's biscuit (`genesis_b64`). That field
 // rides the reactive `identities` table store, so a remote admin grant (e.g. the AI
@@ -229,6 +238,8 @@ type IdentityAccessEntry = {
 	label: string
 	isThisDevice: boolean
 	grant: IdentityGrant
+	/// EVERY named role this DID holds (admin/reader/relay), rank-ordered — all shown, none hidden.
+	roles: IdentityGrant[]
 	capabilities: string[]
 	/// Set when the member is a SAFE (did:safe:) — its type label for the chip.
 	safeType?: string
@@ -260,6 +271,7 @@ const accessEntries = $derived.by((): IdentityAccessEntry[] => {
 				label: String(safe?.name ?? '') || t('common.unnamed'),
 				isThisDevice,
 				grant: s.grant,
+				roles: s.roles ?? [s.grant],
 				capabilities: s.caps,
 				safeType: String(safe?.type ?? 'safe')
 			}
@@ -277,7 +289,15 @@ const accessEntries = $derived.by((): IdentityAccessEntry[] => {
 		// did:key signer — surface how its key is held (env_seed for the server,
 		// apple_se for a human device). isThisDevice has no peer row → apple_se.
 		const signerType = peer?.signerType?.trim() || (isThisDevice ? 'apple_se' : undefined)
-		return { did: s.did, label, isThisDevice, grant: s.grant, capabilities: s.caps, signerType }
+		return {
+			did: s.did,
+			label,
+			isThisDevice,
+			grant: s.grant,
+			roles: s.roles ?? [s.grant],
+			capabilities: s.caps,
+			signerType
+		}
 	})
 })
 
@@ -333,9 +353,11 @@ async function loadSessionAndAdmins(): Promise<void> {
 				if (gen !== adminLoadGen) return
 				session = nextSession
 
-				// TIER-0 admission (board 0047): a local vault check of network membership.
-				admission = await avenCeoMembership().catch(() => 'none' as const)
+				// Role → caps SSOT for the GIVE ACCESS preview (best-effort; the form still works
+				// without it — the preview just stays empty).
+				roleCapsMap = await roleCaps().catch(() => ({}) as RoleCapsMap)
 				if (gen !== adminLoadGen) return
+
 
 				knownPeers = (await peerList()).filter((p) => p.status === 'active')
 				if (gen !== adminLoadGen) return
@@ -643,6 +665,21 @@ async function copyOwnDid(): Promise<void> {
 							<p class="text-muted-foreground text-xs leading-relaxed">
 								{t(grantDescKey(grantKind))}
 							</p>
+							<!-- Caps preview (SSOT): the exact caps this role applies once granted —
+							     shown BEFORE the button so the grant is never opaque. -->
+							{#if previewCaps.length > 0}
+								<div class="flex flex-wrap items-center gap-1.5">
+									<span class="text-muted-foreground text-[10px] font-medium tracking-wide uppercase"
+										>{t('identities.share.willGrant')}</span
+									>
+									{#each previewCaps as cap (cap)}
+										<span
+											class="bg-primary/10 text-primary rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase"
+											title={capDescription(cap)}>{capLabel(cap)}</span
+										>
+									{/each}
+								</div>
+							{/if}
 						</div>
 						<div class="flex flex-wrap items-center gap-2">
 							<button
@@ -683,16 +720,6 @@ async function copyOwnDid(): Promise<void> {
 							{t('identities.share.revokedSelfLocked')}
 						</p>
 					{/if}
-					{#if showTier0}
-						<!-- TIER-0 network admission (board 0047): granted to this device BY the
-						     network (avenCEO roster) — distinct from a per-SAFE RELAY grant. -->
-						<div class="flex items-center gap-2 text-xs">
-							<span class="rounded bg-foreground px-2 py-1 font-bold tracking-widest text-background uppercase">
-								{t('identities.share.grants.tier0')}
-							</span>
-							<span class="opacity-60">{t('identities.share.grantDescTier0')}</span>
-						</div>
-					{/if}
 					{#if err}
 						<p
 							class="text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm select-text"
@@ -707,15 +734,17 @@ async function copyOwnDid(): Promise<void> {
 						<ul class="flex flex-col gap-2">
 							{#each accessEntries as entry (entry.did)}
 								<li class="rounded-xl border border-border/50 bg-background/40 px-4 py-3">
-									<p class="min-w-0 text-sm font-semibold" title={entry.label}>{entry.label}</p>
-									{#if !entry.isThisDevice}
-										<p
-											class="text-muted-foreground mt-0.5 font-mono text-[11px] leading-snug select-text break-all"
-											title={entry.did}
-										>
-											{entry.did}
-										</p>
-									{/if}
+									<!-- The DID (did:key / did:safe) is the row identity (board 0049). The friendly
+									     label rides alongside; under it, every role + cap this DID holds. -->
+									<p
+										class="text-foreground/90 min-w-0 font-mono text-[11px] leading-snug select-text break-all"
+										title={entry.did}
+									>
+										{entry.did}
+									</p>
+									<p class="mt-0.5 min-w-0 text-sm font-semibold" title={entry.label}>
+										{entry.label}
+									</p>
 									<div class="mt-2 flex flex-wrap items-center gap-1.5">
 										<!-- Grant kind (owns/reads/replicate) — primary; effective caps — muted. Biscuit caps + synthesized SYNC policy caps (10 MB / rate). Hover/legend = description. -->
 										{#if entry.safeType}
@@ -730,10 +759,14 @@ async function copyOwnDid(): Promise<void> {
 												>{t(signerTypeLabelKey(entry.signerType))}</span
 											>
 										{/if}
-										<span
-											class="bg-primary/10 text-primary rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase"
-											>{grantLabel(entry.grant)}</span
-										>
+										<!-- EVERY role this DID holds (board 0049 transparency) — all listed, none
+										     hidden behind a primary. Falls back to the single grant if roles empty. -->
+										{#each (entry.roles.length > 0 ? entry.roles : [entry.grant]) as role (role)}
+											<span
+												class="bg-primary/10 text-primary rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase"
+												>{grantLabel(role)}</span
+											>
+										{/each}
 										{#each entry.capabilities as cap (cap)}
 											<span
 												class="bg-muted text-muted-foreground rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase"
@@ -858,10 +891,12 @@ async function copyOwnDid(): Promise<void> {
 									>{t(signerTypeLabelKey(entry.signerType))}</span
 								>
 							{/if}
-							<span
-								class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase"
-								>{grantLabel(entry.grant)}</span
-							>
+							{#each (entry.roles.length > 0 ? entry.roles : [entry.grant]) as role (role)}
+								<span
+									class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase"
+									>{grantLabel(role)}</span
+								>
+							{/each}
 							{#each entry.capabilities as cap (cap)}
 								<span
 									class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase"

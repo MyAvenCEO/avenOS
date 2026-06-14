@@ -595,6 +595,36 @@ mod tests {
 	}
 
 	#[test]
+	fn profile_seal_registry_dek_separation() {
+		// Board 0049: a SEALED `profile` row lives in the avenCEO REGISTRY sub-group and is sealed
+		// under that sub-group's OWN dek (distinct from the avenCEO content dek). This proves the
+		// two-key separation that backs TIER-0: a member holding ONLY the registry dek opens the
+		// directory, while the avenCEO content dek (held by full members) cannot — and a blind relay
+		// holding NEITHER decrypts nothing.
+		let registry_dek = random_identity_dek();
+		let avenceo_content_dek = random_identity_dek();
+		let registry = uuid::Uuid::from_u128(0x5e9_15418);
+		let urn = format!("safe:{registry}");
+		let row = uuid::Uuid::from_u128(0x0f11e); // any profile row
+		let slug = column_type_slug(&ColumnType::Text);
+
+		// Seal a profile cell under the REGISTRY dek at its sub-group coordinate.
+		let aad = cell_seal_aad(&urn, "profile", "display_name", row, 1, slug);
+		let env = seal_text_cell_payload(registry_dek.expose(), &aad, "Abagana").unwrap();
+
+		// The registry dek (the TIER-0 grant) opens the directory cell.
+		assert_eq!(
+			open_text_cell_payload(registry_dek.expose(), &env, &aad).unwrap().0,
+			"Abagana"
+		);
+		// The avenCEO CONTENT dek must NOT open a registry-sealed profile — distinct key domains.
+		assert!(
+			open_text_cell_payload(avenceo_content_dek.expose(), &env, &aad).is_err(),
+			"the avenCEO content dek must not open a registry-sub-group-sealed profile cell"
+		);
+	}
+
+	#[test]
 	fn group_key_two_level_inheritance() {
 		// The 2-level hierarchy that makes per-row groups affordable:
 		// parent group key -> child group key -> a value DEK.

@@ -595,6 +595,7 @@
 				"tier0": "TIER-0"
 			},
 			"accessLevel": "Access level",
+			"willGrant": "Will grant",
 			"grantAccess": "Grant access",
 			"capsLegendTitle": "How these permissions work",
 			"capDesc": {
