@@ -13,6 +13,7 @@ import {
 	peerList,
 	type RoleCapsMap,
 	roleCaps,
+	type SubjectFact,
 	sparkAdminAdd,
 	sparkAdminList,
 	sparkAdminRevoke,
@@ -60,44 +61,36 @@ function grantLabel(grant: IdentityGrant): string {
 	if (isAvenCeo && grant === 'reader') return t('identities.share.grants.tier0')
 	return t(`identities.share.grants.${grant}`)
 }
-/// Display order for the Capabilities tab; any unknown cap falls in after these.
-const CAP_ORDER = [
-	'read',
-	'write',
-	'delete',
-	'admit',
-	'rotate_dek',
-	'replicate',
-	'quota',
-	'rate_limit'
-]
+// Plain-language helpers for the RAW wire facts (identity_cap_report). The panel labels the
+// literal predicate / op / scope tokens the biscuit reports — it defines no cap vocabulary of
+// its own. A `grant`'s scope can be a raw table / table:row token, shown verbatim.
+function predicateLabel(p: string): string {
+	return t(`identities.share.predicate.${p}`)
+}
+function scopeLabel(scope: string): string {
+	return scope === 'safe' || scope === 'directory'
+		? t(`identities.share.scope.${scope}`)
+		: scope
+}
+// One plain-language line per fact, from (predicate, scope) — e.g. "Full control of the whole SAFE".
+function factSummary(f: SubjectFact): string {
+	return t(`identities.share.factSummary.${f.predicate}`, { scope: scopeLabel(f.scope) })
+}
 
-// Distinct effective caps across all access holders (incl. synthesized SYNC policy
-// caps), ordered — drives the "how these permissions work" legend (H2).
-const capsInUse = $derived.by((): string[] => {
+// Distinct ops across all holders, ordered — drives the "how these permissions work" legend.
+const opsInUse = $derived.by((): string[] => {
+	const order = ['read', 'write', 'delete', 'admit', 'rotate_dek', 'replicate']
 	const set = new Set<string>()
-	for (const e of accessEntries) for (const c of e.capabilities) set.add(c)
-	return [...CAP_ORDER.filter((c) => set.has(c)), ...[...set].filter((c) => !CAP_ORDER.includes(c))]
+	for (const e of accessEntries) for (const f of e.facts) for (const op of f.ops) set.add(op)
+	return [...order.filter((c) => set.has(c)), ...[...set].filter((c) => !order.includes(c))]
 })
 
-type MembersTab = 'members' | 'caps'
-let activeTab = $state<MembersTab>('members')
-
-// Unified "Give access": one DID + a role (board 0047 — a role IS a named cap
-// bundle: admin/reader/relay). The caps each confers come from the backend
-// (`grant_kind_caps` SSOT) and show on the resulting member card (none hardcoded here).
+// Unified "Give access": one DID + a role (admin/reader/relay). The ops each role puts on the
+// wire come from the `grant_kind_caps` SSOT (roleCaps IPC) — shown as the GIVE ACCESS preview.
 const GRANT_KINDS: IdentityGrant[] = ['admin', 'reader', 'relay']
 let grantKind = $state<IdentityGrant>('admin')
-// Role → caps SSOT (`grant_kind_caps`, + the avenCEO `tier0` bundle). Drives the GIVE ACCESS
-// preview: the exact caps the selected role will apply, shown BEFORE the grant. No cap
-// vocabulary is defined here — we render whatever the backend SSOT returns.
 let roleCapsMap = $state<RoleCapsMap>({})
-// The caps the currently-selected role will confer once granted. On avenCEO, the `reader`
-// button is TIER-0 admission (avenCeoAddMember) — preview the `tier0` bundle, not plain read.
-const previewCaps = $derived.by((): string[] => {
-	const key = isAvenCeo && grantKind === 'reader' ? 'tier0' : grantKind
-	return roleCapsMap[key] ?? []
-})
+const previewCaps = $derived.by((): string[] => roleCapsMap[grantKind] ?? [])
 function grantDescKey(grant: IdentityGrant): string {
 	// avenCEO `reader` = TIER-0 network admission (see grantLabel).
 	if (isAvenCeo && grant === 'reader') return 'identities.share.grantDescTier0'
@@ -237,10 +230,9 @@ type IdentityAccessEntry = {
 	did: string
 	label: string
 	isThisDevice: boolean
-	grant: IdentityGrant
-	/// EVERY named role this DID holds (admin/reader/relay), rank-ordered — all shown, none hidden.
-	roles: IdentityGrant[]
-	capabilities: string[]
+	/// The RAW wire facts this DID holds (owns/reads/replicate/grant + ops + scope) — rendered
+	/// directly, no role bundling.
+	facts: SubjectFact[]
 	/// Set when the member is a SAFE (did:safe:) — its type label for the chip.
 	safeType?: string
 	/// Set when the member is a signer (did:key:) — how its key is held
@@ -270,9 +262,7 @@ const accessEntries = $derived.by((): IdentityAccessEntry[] => {
 				did: s.did,
 				label: String(safe?.name ?? '') || t('common.unnamed'),
 				isThisDevice,
-				grant: s.grant,
-				roles: s.roles ?? [s.grant],
-				capabilities: s.caps,
+				facts: s.facts ?? [],
 				safeType: String(safe?.type ?? 'safe')
 			}
 		}
@@ -293,9 +283,7 @@ const accessEntries = $derived.by((): IdentityAccessEntry[] => {
 			did: s.did,
 			label,
 			isThisDevice,
-			grant: s.grant,
-			roles: s.roles ?? [s.grant],
-			capabilities: s.caps,
+			facts: s.facts ?? [],
 			signerType
 		}
 	})
@@ -308,26 +296,11 @@ const accessEntries = $derived.by((): IdentityAccessEntry[] => {
 // N-hop SAFE-in-SAFE walk) — DID-equality alone misses transitive control,
 // e.g. a human-SAFE signer managing the aven SAFE its human SAFE owns.
 const amOwner = $derived(
-	viewerOwns || accessEntries.some((e) => e.isThisDevice && e.grant === 'admin')
+	viewerOwns ||
+		accessEntries.some(
+			(e) => e.isThisDevice && e.facts.some((f) => f.predicate === 'owns')
+		)
 )
-
-// Cap-centric view (Tab 2): invert subjects → for each actual cap, who holds it.
-// Pure projection of the same single source — guarantees the two tabs agree.
-type CapHolders = { cap: string; holders: IdentityAccessEntry[] }
-const capabilityRows = $derived.by((): CapHolders[] => {
-	const map = new Map<string, IdentityAccessEntry[]>()
-	for (const e of accessEntries)
-		for (const cap of e.capabilities) {
-			const list = map.get(cap) ?? []
-			list.push(e)
-			map.set(cap, list)
-		}
-	const ordered = [
-		...CAP_ORDER.filter((c) => map.has(c)),
-		...[...map.keys()].filter((c) => !CAP_ORDER.includes(c))
-	]
-	return ordered.map((cap) => ({ cap, holders: map.get(cap) ?? [] }))
-})
 
 let adminLoadGen = 0
 
@@ -594,7 +567,6 @@ async function copyOwnDid(): Promise<void> {
 		<p class="text-muted-foreground text-sm">{t('identities.share.noOneListed')}</p>
 	{:else}
 		<div class="flex flex-col gap-8">
-			{#if activeTab === 'members'}
 				{#if amOwner}
 					<!-- Give access (owner-only): a read-only member sees the roster, not this form. -->
 					<section
@@ -745,8 +717,8 @@ async function copyOwnDid(): Promise<void> {
 									<p class="mt-0.5 min-w-0 text-sm font-semibold" title={entry.label}>
 										{entry.label}
 									</p>
+									<!-- did:safe / signer-type chips, then a copy/revoke control. -->
 									<div class="mt-2 flex flex-wrap items-center gap-1.5">
-										<!-- Grant kind (owns/reads/replicate) — primary; effective caps — muted. Biscuit caps + synthesized SYNC policy caps (10 MB / rate). Hover/legend = description. -->
 										{#if entry.safeType}
 											<span
 												class="bg-accent text-accent-foreground rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase"
@@ -759,21 +731,6 @@ async function copyOwnDid(): Promise<void> {
 												>{t(signerTypeLabelKey(entry.signerType))}</span
 											>
 										{/if}
-										<!-- EVERY role this DID holds (board 0049 transparency) — all listed, none
-										     hidden behind a primary. Falls back to the single grant if roles empty. -->
-										{#each (entry.roles.length > 0 ? entry.roles : [entry.grant]) as role (role)}
-											<span
-												class="bg-primary/10 text-primary rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase"
-												>{grantLabel(role)}</span
-											>
-										{/each}
-										{#each entry.capabilities as cap (cap)}
-											<span
-												class="bg-muted text-muted-foreground rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase"
-												title={capDescription(cap)}
-												>{capLabel(cap)}</span
-											>
-										{/each}
 										{#if entry.isThisDevice}
 											<button
 												type="button"
@@ -793,9 +750,45 @@ async function copyOwnDid(): Promise<void> {
 											</button>
 										{/if}
 									</div>
+									<!-- The RAW wire facts this DID holds (board 0049): one row per fact —
+									     the literal predicate + scope + a plain summary + the ops it authorizes.
+									     No role bundles, no quota/rate sugar. -->
+									{#if entry.facts.length === 0}
+										<p class="text-muted-foreground mt-2 text-[11px] italic">
+											{t('identities.share.noFacts')}
+										</p>
+									{:else}
+										<ul class="mt-2 flex flex-col gap-1.5">
+											{#each entry.facts as fact, i (fact.predicate + fact.prefix + i)}
+												<li class="border-border/40 flex flex-col gap-1 rounded-lg border bg-background/30 px-2.5 py-1.5">
+													<div class="flex flex-wrap items-center gap-1.5">
+														<span
+															class="bg-primary/10 text-primary rounded px-2 py-0.5 font-mono text-[10px] font-bold tracking-wider lowercase"
+															>{predicateLabel(fact.predicate)}</span
+														>
+														<span class="text-muted-foreground text-[11px]">{factSummary(fact)}</span>
+													</div>
+													<div class="flex flex-wrap items-center gap-1">
+														{#each fact.ops as op (op)}
+															<span
+																class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wider uppercase"
+																title={capDescription(op)}>{capLabel(op)}</span
+															>
+														{/each}
+													</div>
+												</li>
+											{/each}
+										</ul>
+									{/if}
 								</li>
 							{/each}
 						</ul>
+						<!-- Network policy (NOT a per-DID cap): the relay enforces a flat 10 MB storage
+						     quota + inbound rate-limit on every identity that syncs (main.rs::quota_for /
+						     inbox.rs). Shown once, honestly, so no DID chip implies a per-subject grant. -->
+						<p class="text-muted-foreground mt-1 text-[11px] leading-relaxed">
+							{t('identities.share.networkPolicyNote')}
+						</p>
 						{#if revokeErr}
 							<p class="text-destructive text-sm">
 								{t('identities.share.revokeFailed')}: {revokeErr}
@@ -804,7 +797,7 @@ async function copyOwnDid(): Promise<void> {
 						{#if revokeNote}
 							<p class="text-muted-foreground text-sm">{revokeNote}</p>
 						{/if}
-						{#if capsInUse.length > 0}
+						{#if opsInUse.length > 0}
 							<details class="border-border/40 mt-1 rounded-lg border bg-background/30 px-3 py-2">
 								<summary
 									class="text-muted-foreground hover:text-foreground cursor-pointer text-[11px] font-medium select-none"
@@ -812,14 +805,14 @@ async function copyOwnDid(): Promise<void> {
 									{t('identities.share.capsLegendTitle')}
 								</summary>
 								<ul class="mt-2 flex flex-col gap-1.5">
-									{#each capsInUse as cap (cap)}
+									{#each opsInUse as op (op)}
 										<li class="flex items-start gap-2">
 											<span
 												class="bg-muted text-muted-foreground mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wider uppercase"
-												>{capLabel(cap)}</span
+												>{capLabel(op)}</span
 											>
 											<span class="text-muted-foreground text-[11px] leading-snug"
-												>{capDescription(cap)}</span
+												>{capDescription(op)}</span
 											>
 										</li>
 									{/each}
@@ -845,7 +838,6 @@ async function copyOwnDid(): Promise<void> {
 							: t('peers.copyDebug')}
 					</button>
 				</section>
-			{/if}
 		</div>
 	{/if}
 {:else if tauri && unlocked && identityId.trim()}
@@ -891,20 +883,13 @@ async function copyOwnDid(): Promise<void> {
 									>{t(signerTypeLabelKey(entry.signerType))}</span
 								>
 							{/if}
-							{#each (entry.roles.length > 0 ? entry.roles : [entry.grant]) as role (role)}
-								<span
-									class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase"
-									>{grantLabel(role)}</span
-								>
-							{/each}
-							{#each entry.capabilities as cap (cap)}
-								<span
-									class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase"
-									title={capDescription(cap)}
-									>{capLabel(cap)}</span
-								>
-							{/each}
-						</div>
+								{#each entry.facts as fact, i (fact.predicate + fact.prefix + i)}
+									<span
+										class="bg-primary/10 text-primary rounded px-1.5 py-0.5 font-mono text-[9px] font-medium tracking-wide lowercase"
+										title={factSummary(fact)}>{predicateLabel(fact.predicate)}:{scopeLabel(fact.scope)}</span
+									>
+								{/each}
+							</div>
 					</li>
 				{/each}
 			</ul>

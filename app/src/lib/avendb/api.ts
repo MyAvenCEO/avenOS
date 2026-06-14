@@ -9,6 +9,12 @@ export async function avenCeoSparkId(): Promise<string> {
 	return invoke<string>('aven_ceo_identity')
 }
 
+/** The well-known Addressbook spark id (the sealed network directory, controlled by avenCEO).
+ *  Used to nest the Addressbook inside avenCEO instead of showing it as a separate spark card. */
+export async function avenCeoAddressbookId(): Promise<string> {
+	return invoke<string>('aven_ceo_addressbook_id')
+}
+
 /** Network membership for the invite-only gate: 'owner' | 'member' | 'none'.
  *  A local vault check — the server grants caps; this reads what we hold. */
 export async function avenCeoMembership(): Promise<'owner' | 'member' | 'none'> {
@@ -131,16 +137,24 @@ export async function sparkReaderAdd(payload: {
  *  predicates stay reads/replicate; these are the report/UI role names.) */
 export type IdentityGrant = 'admin' | 'reader' | 'relay'
 
-/** One subject's caps on a identity, derived from the biscuit by `identity_cap_report`. */
+/** ONE raw wire fact a DID holds — the literal biscuit predicate, no role bundling. */
+export type SubjectFact = {
+	/** The literal biscuit predicate: 'owns' | 'reads' | 'replicate' | 'grant'. */
+	predicate: string
+	/** Operations this fact authorizes (owns → read/write/delete/admit/rotate_dek; reads → read;
+	 *  replicate → replicate; grant → the granted op). */
+	ops: string[]
+	/** Raw resource prefix (source of truth for scope). */
+	prefix: string
+	/** Derived human scope token: 'safe' | 'directory' | '<table>' | '<table>:<row>'. */
+	scope: string
+}
+
+/** One subject's RAW capabilities on a SAFE — the literal wire facts from `identity_cap_report`,
+ *  no synthesized role bundles, no quota/rate sugar. The UI renders these + a plain summary. */
 export type IdentitySubjectCaps = {
 	did: string
-	/** PRIMARY (highest-rank) role. */
-	grant: IdentityGrant
-	/** EVERY named role this DID holds (admin/reader/relay), rank-ordered — the UI lists them
-	 *  all so no role hides behind the primary. Empty when the subject has only granular grants. */
-	roles: IdentityGrant[]
-	/** Effective caps, e.g. read, write, delete, admit, rotate_dek, replicate. */
-	caps: string[]
+	facts: SubjectFact[]
 }
 
 /** The role → caps SSOT (`grant_kind_caps`): the exact caps each role applies. Powers the

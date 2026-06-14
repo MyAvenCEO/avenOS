@@ -249,6 +249,7 @@ pub fn run() {
 			avenos_recent_rust_logs,
 			network::network_seed,
 			network::aven_ceo_identity,
+			network::aven_ceo_addressbook_id,
 			avendb::avendb_runtime,
 		avendb::brain_runtime,
 			avendb::self_storage_paths,

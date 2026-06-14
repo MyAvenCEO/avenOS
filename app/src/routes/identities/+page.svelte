@@ -24,6 +24,9 @@ const canCreateHuman = $derived(humans.length === 0)
 const avens = $derived(
 	identities.filter((i) => i.type !== 'human' && i.type !== 'group' && i.type !== 'spark')
 )
+// The Addressbook is a standalone spark SAFE controlled by avenCEO via the SAFE-in-SAFE owns
+// chain — it shows as a spark card like every other spark (each controlled by its aven). Its
+// avenCEO ownership is visible inside it (WHO HAS ACCESS), not a reason to hide the card.
 const sparks = $derived(identities.filter((i) => i.type === 'spark'))
 const loading = $derived(tauri && unlocked && !identitiesStore.loaded && !identitiesStore.error)
 

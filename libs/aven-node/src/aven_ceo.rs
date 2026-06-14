@@ -8,7 +8,7 @@
 use aven_caps::caps::{
 	attenuate_add_admin_third_party, biscuit_from_storage, build_vault_from_signing_key,
 	decode_issuer_pubkey_b64, derive_subgroup_id, encode_issuer_pubkey_b64, identity_admins,
-	mint_group_genesis_extending, mint_safe_genesis, safe_did, BiscuitVault,
+	mint_safe_genesis, mint_safe_genesis_with_controller, safe_did, BiscuitVault,
 };
 use aven_caps::crypto::{
 	cell_seal_aad, column_type_slug, decrypt_keyshare_payload, derive_kek_x25519,
@@ -215,48 +215,52 @@ pub async fn ensure_avenceo_owned(
 			.map_err(|e| format!("create signers:{e:?}"))?;
 	}
 
-	// Board 0049: the SEALED profile directory lives in a registry SUB-GROUP that EXTENDS avenCEO.
-	// It has its OWN dek so a TIER-0 member can be granted the directory (registry dek) WITHOUT the
-	// avenCEO content dek. extends() is one-directional: avenCEO members inherit into the registry,
-	// a registry-only member is denied avenCEO content. Minted here so it's part of network genesis.
-	mint_avenceo_registry_subgroup(engine, vault, signing, avenceo_id, &schema, aven_name).await?;
+	// Board 0049: the SEALED profile directory lives in the Addressbook — a spark SAFE CONTROLLED
+	// BY avenCEO (owns(avenCEO, addressbook), the same controller chain as human→aven→spark). Its
+	// OWN dek lets a directory member decrypt the Addressbook WITHOUT the avenCEO content dek, and
+	// authority flows avenCEO→Addressbook only (never back). Minted as part of network genesis.
+	mint_avenceo_addressbook(engine, vault, signing, avenceo_id, &schema).await?;
 
 	tracing::info!(%avenceo_id, owner_did = %vault.signer_did, "minted avenCEO genesis — server is owner");
 	Ok(())
 }
 
-/// Mint (idempotently) the avenCEO **registry** sub-group: an `extends(avenCEO)` group with its
-/// OWN dek that owns the sealed `profile` directory. The server self-wraps the registry dek so
-/// hydrate loads it; `avendb_ipc_aven_ceo_add_member` later wraps it to each TIER-0 member.
-pub async fn mint_avenceo_registry_subgroup(
+/// Mint (idempotently) the **Addressbook**: a `spark` SAFE **controlled by avenCEO** (the same
+/// owns-controller chain every spark uses — `owns(avenCEO, addressbook)`), with its OWN dek that
+/// owns the sealed `profile` directory. avenCEO (and its transitive controllers) administer it;
+/// its own dek keeps a directory member from reading avenCEO content. The server self-wraps the
+/// addressbook dek so hydrate loads it; `avendb_ipc_aven_ceo_add_member` later wraps it to each
+/// directory member. The id stays `derive_subgroup_id(avenCEO,"registry")` (stable address).
+pub async fn mint_avenceo_addressbook(
 	engine: &AvenDbClient,
 	vault: &BiscuitVault,
 	signing: &SigningKey,
 	avenceo_id: Uuid,
 	schema: &aven_db::Schema,
-	aven_name: &str,
 ) -> Result<(), String> {
-	let registry_id = derive_subgroup_id(avenceo_id, "registry");
-	// Idempotent: skip if the registry safes row already exists.
-	if avenceo_genesis_b64(engine, registry_id).await?.is_some() {
+	let addressbook_id = derive_subgroup_id(avenceo_id, "registry");
+	// Idempotent: skip if the Addressbook safes row already exists.
+	if avenceo_genesis_b64(engine, addressbook_id).await?.is_some() {
 		return Ok(());
 	}
-	let genesis = mint_group_genesis_extending(vault, registry_id, avenceo_id)?;
+	// Controlled by avenCEO: the genesis records owns(avenCEO_did, addressbook) — the same
+	// controller mechanism as human→aven→spark, resolved by the N-hop authorize walk.
+	let genesis = mint_safe_genesis_with_controller(vault, addressbook_id, &safe_did(avenceo_id))?;
 	let genesis_b64 =
-		URL_SAFE_NO_PAD.encode(genesis.to_vec().map_err(|e| format!("reg_genesis_encode:{e:?}"))?);
+		URL_SAFE_NO_PAD.encode(genesis.to_vec().map_err(|e| format!("addrbook_genesis_encode:{e:?}"))?);
 	let issuer_b64 = encode_issuer_pubkey_b64(&vault.biscuit_kp.public());
 	let dek_ver = 1i64;
 	let dek = random_identity_dek();
 
 	let sparks_tbl = schema.get(&TableName::new("safes")).ok_or("avenceo: no safes table")?;
 	let sealed_genesis =
-		seal_identity_cell(dek.expose(), registry_id, sparks_tbl, "genesis_b64", dek_ver, &genesis_b64)?;
+		seal_identity_cell(dek.expose(), addressbook_id, sparks_tbl, "genesis_b64", dek_ver, &genesis_b64)?;
 	let sealed_issuer =
-		seal_identity_cell(dek.expose(), registry_id, sparks_tbl, "issuer_pubkey_b64", dek_ver, &issuer_b64)?;
+		seal_identity_cell(dek.expose(), addressbook_id, sparks_tbl, "issuer_pubkey_b64", dek_ver, &issuer_b64)?;
 	let sparks_row = named_row(&[
-			("type", Value::Text("aven".into())),
-			("safe_did", Value::Text(safe_did(registry_id))),
-			("name", Value::Text(format!("{aven_name} registry"))),
+			("type", Value::Text("spark".into())),
+			("safe_did", Value::Text(safe_did(addressbook_id))),
+			("name", Value::Text("Addressbook".into())),
 			("issuer_pubkey_b64", Value::Text(sealed_issuer)),
 			("genesis_b64", Value::Text(sealed_genesis)),
 			("current_dek_version", Value::BigInt(dek_ver)),
@@ -264,13 +268,13 @@ pub async fn mint_avenceo_registry_subgroup(
 		],
 	);
 	engine
-		.create("safes", registry_id, Some(ObjectId::new()), sparks_row)
+		.create("safes", addressbook_id, Some(ObjectId::new()), sparks_row)
 		.await
-		.map_err(|e| format!("create registry safes:{e:?}"))?;
+		.map_err(|e| format!("create addressbook safes:{e:?}"))?;
 
-	// Self keyshare: wrap the registry dek to the server so hydrate loads deks[(registry,v)].
+	// Self keyshare: wrap the addressbook dek to the server so hydrate loads deks[(addressbook,v)].
 	let kek = derive_kek_x25519(signing, &vault.ed25519_public)?;
-	let urn = format!("safe:{registry_id}");
+	let urn = format!("safe:{addressbook_id}");
 	let aad = keyshare_wrap_aad(&urn, &vault.signer_did, &vault.signer_did, dek_ver);
 	let wrapped = encrypt_keyshare_payload(&kek, dek.expose(), &aad)?;
 	let ks_row = named_row(&[
@@ -281,11 +285,11 @@ pub async fn mint_avenceo_registry_subgroup(
 		],
 	);
 	engine
-		.create("keyshares", registry_id, Some(ObjectId::new()), ks_row)
+		.create("keyshares", addressbook_id, Some(ObjectId::new()), ks_row)
 		.await
-		.map_err(|e| format!("create registry keyshares:{e:?}"))?;
+		.map_err(|e| format!("create addressbook keyshares:{e:?}"))?;
 
-	tracing::info!(%registry_id, parent = %avenceo_id, "minted avenCEO registry sub-group (sealed profile directory)");
+	tracing::info!(%addressbook_id, controller = %avenceo_id, "minted Addressbook spark (avenCEO-controlled sealed profile directory)");
 	Ok(())
 }
 
