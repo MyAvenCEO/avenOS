@@ -624,12 +624,10 @@ pub fn is_owner_scoped_table(schema: &Schema, table: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// True when this table is **owner-scoped** — every row is owned by a SAFE (board 0037). The
-/// declarative [`TableSchema::owner_scoped`] flag is the source of truth; during the SSOT migration
-/// a legacy `owner` column is still honoured as a fallback so a not-yet-flagged table is never
-/// silently un-scoped. Once the column is dropped, the flag stands alone. See [`is_owner_scoped_table`].
+/// True when this table is **owner-scoped** — every row is owned by a SAFE (board 0037), declared by
+/// the [`TableSchema::owner_scoped`] flag. The single source of truth. See [`is_owner_scoped_table`].
 pub fn table_schema_is_owner_scoped(table: &TableSchema) -> bool {
-    table.owner_scoped || table.columns.column("owner").is_some()
+    table.owner_scoped
 }
 
 /// The **owner invariant** for a resolved row: a table whose `owner` column is
