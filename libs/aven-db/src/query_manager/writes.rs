@@ -68,7 +68,7 @@ struct RowBatchAuthoring<'a> {
     /// The existing row's owner-binding for an **update/delete** — the binding is immutable
     /// (`(value_id, owner)` only, never batch content), so it is carried forward verbatim rather
     /// than re-minted; this also makes owner immutability structural (an update can't relabel).
-    existing_binding: Option<(String, String)>,
+    inherited_binding: Option<(String, String)>,
 }
 
 struct PreparedLocalRowHistoryWrite<'a> {
@@ -234,7 +234,7 @@ impl QueryManager {
         write_context: Option<&WriteContext>,
         owner_scoped: bool,
         owner: Option<uuid::Uuid>,
-        existing_binding: Option<(String, String)>,
+        inherited_binding: Option<(String, String)>,
     ) -> RowBatchAuthoring<'a> {
         RowBatchAuthoring {
             provenance,
@@ -244,7 +244,7 @@ impl QueryManager {
             extra_metadata: write_context.and_then(|c| c.extra_metadata.clone()),
             owner_scoped,
             owner,
-            existing_binding,
+            inherited_binding,
         }
     }
 
@@ -348,7 +348,7 @@ impl QueryManager {
         // batch — and reusing it makes owner relabeling structurally impossible). Neither available
         // (no prior binding AND no owner/binder) → the write fails by construction.
         if authoring.owner_scoped {
-            let stamped = match authoring.existing_binding {
+            let stamped = match authoring.inherited_binding {
                 Some((key, value)) => {
                     batch.set_metadata_entry(key, value);
                     true
@@ -871,7 +871,7 @@ impl QueryManager {
 
         // Update: the owner-binding is immutable, so carry it forward from the existing row.
         let owner_scoped = self.table_is_owner_scoped(table);
-        let existing_binding = if owner_scoped {
+        let inherited_binding = if owner_scoped {
             self.existing_owner_binding(storage, table, id, branch)
         } else {
             None
@@ -887,7 +887,7 @@ impl QueryManager {
                 write_context,
                 owner_scoped,
                 write_context.and_then(|c| c.owner),
-                existing_binding,
+                inherited_binding,
             ),
         )?;
         let branch_name = BranchName::new(branch);
@@ -2045,7 +2045,7 @@ impl QueryManager {
 
         // Soft delete: carry the immutable owner-binding forward onto the tombstone.
         let owner_scoped = self.table_is_owner_scoped(table);
-        let existing_binding = if owner_scoped {
+        let inherited_binding = if owner_scoped {
             self.existing_owner_binding(storage, table, id, branch)
         } else {
             None
@@ -2061,7 +2061,7 @@ impl QueryManager {
                 write_context,
                 owner_scoped,
                 write_context.and_then(|c| c.owner),
-                existing_binding,
+                inherited_binding,
             ),
         )?;
         let index_mutations = if Self::write_context_is_open_batch(write_context) {
@@ -2180,7 +2180,7 @@ impl QueryManager {
 
         // Undelete: carry the immutable owner-binding forward from the soft-delete tombstone.
         let owner_scoped = self.table_is_owner_scoped(&table);
-        let existing_binding = if owner_scoped {
+        let inherited_binding = if owner_scoped {
             self.existing_owner_binding(storage, &table, id, branch.as_str())
         } else {
             None
@@ -2190,7 +2190,7 @@ impl QueryManager {
             branch.as_str(),
             parents,
             new_data.clone(),
-            self.row_batch_authoring(&row_provenance, None, None, owner_scoped, None, existing_binding),
+            self.row_batch_authoring(&row_provenance, None, None, owner_scoped, None, inherited_binding),
         )?;
         let index_mutations = Self::index_mutations_for_undelete_on_branch(
             &table,
@@ -2288,7 +2288,7 @@ impl QueryManager {
         // Hard delete: the tombstone carries no `data`, so carry the immutable owner-binding
         // forward from the row's latest batch (covers an already soft-deleted row too).
         let owner_scoped = self.table_is_owner_scoped(&table);
-        let existing_binding = if owner_scoped {
+        let inherited_binding = if owner_scoped {
             self.existing_owner_binding(storage, &table, id, branch.as_str())
         } else {
             None
@@ -2304,7 +2304,7 @@ impl QueryManager {
                 None,
                 owner_scoped,
                 None,
-                existing_binding,
+                inherited_binding,
             ),
         )?;
         let index_mutations = Self::index_mutations_for_hard_delete_on_branch(

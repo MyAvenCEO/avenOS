@@ -291,7 +291,7 @@ impl EditSigner for AppEditSigner {
 /// every owner-scoped row with the row id + its owner SAFE, minting the `_owner_binding` assertion
 /// `(value_id → owner)` signed by the device key. The funnel now REQUIRES it for owner-scoped writes
 /// (unconditional, fail-closed), so installing it is what lets the device author owned data at all —
-/// replacing the per-IPC-call-site `owner_binding_meta(...)` stamping with one structural invariant.
+/// replacing per-call-site binding stamping with one structural invariant (the funnel).
 pub struct AppOwnerBinder {
 	signing_key: ed25519_dalek::SigningKey,
 }
