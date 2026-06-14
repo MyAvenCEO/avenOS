@@ -94,14 +94,6 @@ pub(crate) fn col_ix(tbl: &TableSchema, name: &str) -> Result<usize, String> {
 		.ok_or_else(|| format!("manifest_missing_col:{name}"))
 }
 
-pub(crate) fn uuid_cell_at(vals: &[Value], ix: usize) -> Result<Uuid, String> {
-	match vals.get(ix).ok_or("col_ix_oob")? {
-		Value::Uuid(oid) => Ok(*oid.uuid()),
-		Value::Text(s) => Uuid::parse_str(s.trim()).map_err(|e| format!("uuid_parse:{e}")),
-		x => Err(format!("expected_uuid_cell:{x:?}")),
-	}
-}
-
 pub(super) fn bigint_i64(v: &Value) -> Result<i64, String> {
 	match v {
 		Value::BigInt(i) => Ok(*i),
