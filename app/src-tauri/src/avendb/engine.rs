@@ -659,6 +659,11 @@ pub(super) fn row_to_public_map(
 		};
 		m.insert(name.to_string(), jv);
 	}
+	// Surface ownership in the public/IPC shape as a projection of the immutable binding
+	// (board 0037): storage has no `owner` column, but the UI + API still read `owner` as the
+	// owning SAFE (e.g. the identities grid keys rows by it). Sourced from the binding, never
+	// a stored column.
+	m.insert("owner".into(), JsonValue::String(identity.to_string()));
 	if !miss.is_empty() {
 		m.insert(meta_key.into(), json!(miss));
 	}
