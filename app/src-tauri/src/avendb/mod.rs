@@ -951,6 +951,8 @@ pub(crate) async fn avendb_runtime_dispatch(
 			serde_json::to_value(snap).map_err(|e| e.to_string())
 		}
 		"peerlist" => serde_json::to_value(avendb_ipc_peer_list(app, mj, ss).await?).map_err(|e| e.to_string()),
+		"profiledirectory" => serde_json::to_value(avendb_ipc_profile_directory(app, mj, ss).await?).map_err(|e| e.to_string()),
+		"rolecaps" => serde_json::to_value(avendb_ipc_role_caps()).map_err(|e| e.to_string()),
 		"peeradd" => {
 			let signer_did = pj_str(&pj, "signerDid")?;
 			let label = pj
@@ -1027,7 +1029,7 @@ pub(crate) async fn avendb_runtime_dispatch(
 			Ok(serde_json::Value::Null)
 		}
 		other => Err(format!(
-			"avendb_runtime: unknown op `{other}` — valid ops: bootstrap, status, session, list, explorerList, get, create, update, delete, subscribe, unsubscribe, peerMeshRefresh, meshStatus, peerList, peerAdd, peerRevoke, sparkAdminAdd, sparkAdminList, sparkAdminRevoke, sparkReplicateAdd, sparkReaderAdd, avenCeoClaim"
+			"avendb_runtime: unknown op `{other}` — valid ops: bootstrap, status, session, list, explorerList, get, create, update, delete, subscribe, unsubscribe, peerMeshRefresh, meshStatus, peerList, profileDirectory, roleCaps, peerAdd, peerRevoke, sparkAdminAdd, sparkAdminList, sparkAdminRevoke, sparkReplicateAdd, sparkReaderAdd, avenCeoClaim"
 		)),
 	}
 }

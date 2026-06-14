@@ -155,8 +155,13 @@ pub fn grant_kind_caps(role: &str) -> Vec<&'static str> {
 /// One subject's effective caps on a identity, derived purely from the biscuit chain.
 pub struct SubjectCaps {
 	pub did: String,
-	/// `owns` | `reads` | `replicate` | `member` (a subject with only granular grants)
+	/// The PRIMARY (highest-rank) role — `admin` | `reader` | `relay` | `member`. Kept for
+	/// existing single-role consumers; the full set is in `roles`.
 	pub grant: String,
+	/// EVERY named role this DID holds (admin/reader/relay), rank-ordered. A subject can hold
+	/// more than one (e.g. relay + reader); the UI lists them all so no role is hidden behind
+	/// the primary. Empty when the subject has only granular grants (`grant` = "member").
+	pub roles: Vec<String>,
 	pub caps: Vec<String>,
 }
 
@@ -169,20 +174,25 @@ pub fn identity_cap_report(chain: &Biscuit, owner: Uuid) -> Result<Vec<SubjectCa
 	use std::collections::BTreeMap;
 	let owners = identity_admins(chain, owner)?;
 	let owner_set: HashSet<String> = owners.iter().map(|d| d.trim().to_string()).collect();
-	// did → (role, ordered unique caps)
-	let mut acc: BTreeMap<String, (String, Vec<String>)> = BTreeMap::new();
-	fn add(acc: &mut BTreeMap<String, (String, Vec<String>)>, did: &str, role: &str, cap: &str) {
-		let e = acc.entry(did.to_string()).or_insert_with(|| (role.to_string(), Vec::new()));
+	// did → (primary role, all named roles rank-ordered, ordered unique caps)
+	let mut acc: BTreeMap<String, (String, Vec<String>, Vec<String>)> = BTreeMap::new();
+	let rank = |r: &str| match r { "admin" => 3, "reader" => 2, "relay" => 1, _ => 0 };
+	let add = |acc: &mut BTreeMap<String, (String, Vec<String>, Vec<String>)>, did: &str, role: &str, cap: &str| {
+		let e = acc.entry(did.to_string()).or_insert_with(|| (role.to_string(), Vec::new(), Vec::new()));
 		// Role precedence: admin > reader > relay > member (board 0047 — roles are named cap
 		// bundles; the role NAME is this report/UI layer, the wire predicates stay reads/replicate).
-		let rank = |r: &str| match r { "admin" => 3, "reader" => 2, "relay" => 1, _ => 0 };
 		if rank(role) > rank(&e.0) {
 			e.0 = role.to_string();
 		}
-		if !cap.is_empty() && !e.1.iter().any(|x| x == cap) {
-			e.1.push(cap.to_string());
+		// Track every NAMED role (rank > 0) so the UI lists them all; "member" (granular-only) is
+		// the no-named-role placeholder and is not a listable role.
+		if rank(role) > 0 && !e.1.iter().any(|x| x == role) {
+			e.1.push(role.to_string());
 		}
-	}
+		if !cap.is_empty() && !e.2.iter().any(|x| x == cap) {
+			e.2.push(cap.to_string());
+		}
+	};
 
 	// Every role's caps come from the ONE `grant_kind_caps` SSOT (board 0047) — the displayed
 	// caps can never drift from the role. `relay` carries `replicate` + the service policy
@@ -229,7 +239,10 @@ pub fn identity_cap_report(chain: &Biscuit, owner: Uuid) -> Result<Vec<SubjectCa
 
 	Ok(acc
 		.into_iter()
-		.map(|(did, (grant, caps))| SubjectCaps { did, grant, caps })
+		.map(|(did, (grant, mut roles, caps))| {
+			roles.sort_by(|a, b| rank(b).cmp(&rank(a)));
+			SubjectCaps { did, grant, roles, caps }
+		})
 		.collect())
 }
 
@@ -1629,6 +1642,41 @@ mod tests {
 		let id = uuid::Uuid::new_v4();
 		let plain = mint_safe_genesis(&v, id).unwrap();
 		assert_eq!(group_extends_parent(&plain).unwrap(), None);
+	}
+
+	#[test]
+	fn tier0_minimal_grant() {
+		// Board 0049: a TIER-0 network member is admitted to the avenCEO REGISTRY sub-group (the
+		// directory) ONLY — it reads the directory but is DENIED avenCEO's content. `extends` is
+		// one-directional (registry inherits avenCEO members, NOT the reverse), so a registry-only
+		// member cannot read avenCEO. This is "admission + directory, no roster-content decrypt".
+		let seed = "ceo.aven/testnet/abagana";
+		let mut founder = vault(&[1u8; 32]); // the avenCEO owner
+		let member = vault(&[2u8; 32]); // a TIER-0 network member
+		let avenceo = aven_ceo_identity(seed);
+		let registry = aven_ceo_registry_group(seed);
+
+		// avenCEO genesis (founder owns it) + a registry sub-group extending it.
+		let ceo = mint_safe_genesis(&founder, avenceo).unwrap();
+		founder.safes.insert(avenceo, BiscuitIdentity { owner: avenceo, biscuit: ceo });
+		let reg = mint_group_genesis_extending(&founder, registry, avenceo).unwrap();
+		// Admit the member as a registry READER (the TIER-0 directory grant).
+		let reg = attenuate_add_reader_third_party(&founder.biscuit_kp, &reg, registry, &member.signer_did)
+			.unwrap();
+		founder.safes.insert(registry, BiscuitIdentity { owner: registry, biscuit: reg });
+
+		// TIER-0 member READS the registry/profile directory…
+		authorize(&founder, registry, AccOp::Read, "profile", Some(uuid::Uuid::new_v4()), &member.signer_did)
+			.unwrap();
+		// …but is DENIED avenCEO content (not an avenCEO member; extends is one-directional).
+		assert!(
+			authorize(&founder, avenceo, AccOp::Read, "messages", Some(uuid::Uuid::new_v4()), &member.signer_did)
+				.is_err(),
+			"a registry-only TIER-0 member must NOT read avenCEO content"
+		);
+		// Inheritance sanity: the avenCEO owner (a parent member) DOES read the registry directory.
+		authorize(&founder, registry, AccOp::Read, "profile", Some(uuid::Uuid::new_v4()), &founder.signer_did.clone())
+			.unwrap();
 	}
 
 	#[test]
