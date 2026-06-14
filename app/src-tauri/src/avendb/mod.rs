@@ -653,6 +653,8 @@ fn avendb_session_reply_from_shell(shell: &engine::ShellState) -> AvenDbSessionR
 		// This shell-only path has no relay handle; the live relay DID is filled
 		// by `avendb_ipc_session` (which can read `ManagedAvenDb`).
 		relay_did: None,
+		// Fail-closed revocation (board 0047): the UI locks these identities + purges their cache.
+		revoked_self: shell.revoked_self.iter().map(|u| u.to_string()).collect(),
 	}
 }
 
@@ -755,6 +757,7 @@ pub(crate) async fn avendb_ipc_session(
 		signer_did_short: engine::short_signer_did(&shell.signer_did),
 		default_spark_urn: engine::safe_urn(shell.default_identity),
 		relay_did,
+		revoked_self: shell.revoked_self.iter().map(|u| u.to_string()).collect(),
 	})
 }
 

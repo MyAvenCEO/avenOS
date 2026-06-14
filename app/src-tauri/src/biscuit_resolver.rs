@@ -351,6 +351,7 @@ mod tests {
 			identity_versions: HashMap::new(),
 			issuers: HashMap::new(),
 			avendb_write_branch: "main".into(),
+			revoked_self: std::collections::HashSet::new(),
 		})
 	}
 

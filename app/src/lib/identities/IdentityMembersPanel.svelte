@@ -5,6 +5,7 @@ import {
 	type AvenDbRow,
 	type AvenDbSessionReply,
 	avenCeoAddMember,
+	avenCeoMembership,
 	avenDbStatus,
 	avendbSession,
 	type IdentityGrant,
@@ -49,8 +50,8 @@ function capLabel(key: string): string {
 function capDescription(key: string): string {
 	return t(`identities.share.capDesc.${key}`)
 }
-// Role/grant label (Owner/Member/Relay) — distinct from cap labels so a relay
-// shows "Relay" (grant) + "Replicate" (cap), not two "Replicate" badges.
+// Role label (Admin/Reader/Relay, board 0047) — distinct from cap labels so a relay
+// shows "Relay" (role) + "Replicate" (cap), not two "Replicate" badges.
 function grantLabel(grant: IdentityGrant): string {
 	return t(`identities.share.grants.${grant}`)
 }
@@ -77,17 +78,17 @@ const capsInUse = $derived.by((): string[] => {
 type MembersTab = 'members' | 'caps'
 let activeTab = $state<MembersTab>('members')
 
-// Unified "Give access": one DID + a grant kind. The biscuit model has three
-// grant bundles (owns/reads/replicate); the actual caps each confers come from
-// the backend and show on the resulting member card (no caps hardcoded here).
-const GRANT_KINDS: IdentityGrant[] = ['owns', 'reads', 'replicate']
-let grantKind = $state<IdentityGrant>('owns')
+// Unified "Give access": one DID + a role (board 0047 — a role IS a named cap
+// bundle: admin/reader/relay). The caps each confers come from the backend
+// (`grant_kind_caps` SSOT) and show on the resulting member card (none hardcoded here).
+const GRANT_KINDS: IdentityGrant[] = ['admin', 'reader', 'relay']
+let grantKind = $state<IdentityGrant>('admin')
 function grantDescKey(grant: IdentityGrant): string {
-	return grant === 'owns'
-		? 'identities.share.grantDescOwns'
-		: grant === 'reads'
-			? 'identities.share.grantDescReads'
-			: 'identities.share.grantDescReplicate'
+	return grant === 'admin'
+		? 'identities.share.grantDescAdmin'
+		: grant === 'reader'
+			? 'identities.share.grantDescReader'
+			: 'identities.share.grantDescRelay'
 }
 
 const LOCAL_IPC_BUDGET_MS = 12_000
@@ -118,6 +119,16 @@ let didCopied = $state(false)
 const sessionKind = $derived($deviceSession.kind)
 const unlocked = $derived(sessionKind === 'unlocked')
 const tauri = $derived(browser && isTauriRuntime())
+// Fail-closed revocation (board 0047): this device was revoked from the identity (genesis
+// re-sealed beyond every held DEK + no admin cap). The shell reports it on hydrate; the UI
+// locks the identity. The local cache is purged by the shell — physics: we can't delete bytes
+// remotely, so the revoked device self-locks + self-purges.
+const isRevokedSelf = $derived((session?.revokedSelf ?? []).includes(identityId.trim()))
+// TIER-0 network admission (board 0047): "you may sync on this network at all" — granted to me
+// BY the network (avenCEO roster), distinct from the per-SAFE RELAY grant I authorize. Surfaced
+// as its own role so the two "sync" concepts (admission vs relay) are no longer smeared.
+let admission = $state<'owner' | 'member' | 'none'>('none')
+const showTier0 = $derived(admission !== 'none')
 
 // The admin roster lives inside the identity's biscuit (`genesis_b64`). That field
 // rides the reactive `identities` table store, so a remote admin grant (e.g. the AI
@@ -158,7 +169,7 @@ const memberSafeType = $derived(
 )
 const memberDidsLower = $derived(new Set(subjects.map((s) => s.did.trim().toLowerCase())))
 const eligibleMemberSafes = $derived.by(() => {
-	if (!memberSafeType || grantKind === 'replicate') return []
+	if (!memberSafeType || grantKind === 'relay') return []
 	return identitiesStore.rows.filter(
 		(r) =>
 			r.type === memberSafeType &&
@@ -271,7 +282,7 @@ const accessEntries = $derived.by((): IdentityAccessEntry[] => {
 // N-hop SAFE-in-SAFE walk) — DID-equality alone misses transitive control,
 // e.g. a human-SAFE signer managing the aven SAFE its human SAFE owns.
 const amOwner = $derived(
-	viewerOwns || accessEntries.some((e) => e.isThisDevice && e.grant === 'owns')
+	viewerOwns || accessEntries.some((e) => e.isThisDevice && e.grant === 'admin')
 )
 
 // Cap-centric view (Tab 2): invert subjects → for each actual cap, who holds it.
@@ -315,6 +326,10 @@ async function loadSessionAndAdmins(): Promise<void> {
 				const nextSession = await avendbSession()
 				if (gen !== adminLoadGen) return
 				session = nextSession
+
+				// TIER-0 admission (board 0047): a local vault check of network membership.
+				admission = await avenCeoMembership().catch(() => 'none' as const)
+				if (gen !== adminLoadGen) return
 
 				knownPeers = (await peerList()).filter((p) => p.status === 'active')
 				if (gen !== adminLoadGen) return
@@ -385,10 +400,10 @@ async function grantAccess(opts?: { did?: string; kind?: IdentityGrant }): Promi
 	adminErr = undefined
 	addNote = undefined
 	try {
-		if (kind === 'owns') await sparkAdminAdd({ identityId: sid, signerDid: did })
-		else if (kind === 'reads')
+		if (kind === 'admin') await sparkAdminAdd({ identityId: sid, signerDid: did })
+		else if (kind === 'reader')
 			if (isAvenCeo)
-				// On avenCEO, "Member" is the full membership bundle (reads + keyshare +
+				// On avenCEO, "Reader" is the full membership bundle (reads + keyshare +
 				// row-scoped self-publish write); elsewhere it's a plain read grant.
 				await avenCeoAddMember(did)
 			else await sparkReaderAdd({ identityId: sid, signerDid: did })
@@ -560,7 +575,7 @@ async function copyOwnDid(): Promise<void> {
 						<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
 							{t('identities.share.giveAccess')}
 						</h2>
-						{#if memberSafeType && grantKind !== 'replicate'}
+						{#if memberSafeType && grantKind !== 'relay'}
 							<!-- SAFE-in-SAFE picker: aven SAFEs admit human SAFEs, spark SAFEs admit
 					     aven SAFEs (backend-enforced). Picking fills the DID input below. -->
 							<div class="flex flex-col gap-1.5">
@@ -589,7 +604,7 @@ async function copyOwnDid(): Promise<void> {
 						{/if}
 						<input
 							class="border-border/60 bg-background/40 w-full rounded-lg border px-3 py-2 font-mono text-[12px]"
-							placeholder={memberSafeType && grantKind !== 'replicate'
+							placeholder={memberSafeType && grantKind !== 'relay'
 						? t('identities.share.safeDidPlaceholder')
 						: targetType === 'human'
 							? t('identities.share.signerDidPlaceholder')
@@ -639,7 +654,7 @@ async function copyOwnDid(): Promise<void> {
 									class="bg-muted hover:bg-muted/70 ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium disabled:opacity-50"
 									title={session.relayDid}
 									disabled={adminBusy}
-									onclick={() => void grantAccess({ did: session?.relayDid ?? undefined, kind: 'replicate' })}
+									onclick={() => void grantAccess({ did: session?.relayDid ?? undefined, kind: 'relay' })}
 								>
 									⚡ {t('identities.share.quickRelay')}
 								</button>
@@ -662,6 +677,24 @@ async function copyOwnDid(): Promise<void> {
 					<h2 class="text-xs font-bold tracking-widest uppercase opacity-60">
 						{t('identities.share.whoHasAccess')}
 					</h2>
+					{#if isRevokedSelf}
+						<!-- Fail-closed revocation (board 0047): this device was revoked → locked. -->
+						<p
+							class="text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm select-text"
+						>
+							{t('identities.share.revokedSelfLocked')}
+						</p>
+					{/if}
+					{#if showTier0}
+						<!-- TIER-0 network admission (board 0047): granted to this device BY the
+						     network (avenCEO roster) — distinct from a per-SAFE RELAY grant. -->
+						<div class="flex items-center gap-2 text-xs">
+							<span class="rounded bg-foreground px-2 py-1 font-bold tracking-widest text-background uppercase">
+								{t('identities.share.grants.tier0')}
+							</span>
+							<span class="opacity-60">{t('identities.share.grantDescTier0')}</span>
+						</div>
+					{/if}
 					{#if err}
 						<p
 							class="text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm select-text"

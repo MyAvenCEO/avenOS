@@ -23,8 +23,8 @@ AVEN_PKG_INSTALLER_IDENTITY="3rd Party Mac Developer Installer: Your Org (YOURTE
 
 # If APPLE_API_* is set below, automatic CI signing is used instead (no p12/mobileprovision paths needed).
 # iOS manual signing — export a distribution-only .p12 (not the dev cert) from Keychain Access.
-# AVEN_IOS_CERTIFICATE_P12="/absolute/path/Apple_Distribution_Visioncreator_only.p12"
-# AVEN_IOS_CERTIFICATE_PASSWORD="your-p12-export-password"
+# APPLE_CERTS_P12="/absolute/path/Apple_Distribution_Visioncreator_only.p12"
+# APPLE_CERTS_P12_PASSWORD="your-p12-export-password"
 # AVEN_IOS_APP_STORE_MOBILEPROVISION="/absolute/path/iOS_App_Store_Connect_ceo_aven_os.mobileprovision"
 
 # App Store Connect API (optional CLI uploads / Developer ID notarization — NOT used by build-appstore-macos.ts)

@@ -56,6 +56,10 @@ export type AvenDbSessionReply = {
 	defaultSparkUrn: string
 	/** did:key of the aven-node relay this device is synced through, if any. */
 	relayDid?: string | null
+	/** SAFE uuids this device was REVOKED from (board 0047, fail-closed): the genesis no longer
+	 *  opens with any held DEK and no admin cap remains. The UI locks these identities (no
+	 *  read/write) and their local cache is purged — the revoked device self-locks. */
+	revokedSelf?: string[]
 }
 
 export async function avendbSession(): Promise<AvenDbSessionReply> {
@@ -122,9 +126,10 @@ export async function sparkReaderAdd(payload: {
 	})
 }
 
-/** A subject's grant kind, read from the identity biscuit. Single source of truth — the
- *  set of cap strings is defined in Rust (`identity_acc`), never hardcoded client-side. */
-export type IdentityGrant = 'owns' | 'reads' | 'replicate'
+/** A subject's role on a SAFE — a named bundle of caps (board 0047). SSOT = Rust
+ *  `grant_kind_caps`; the cap strings are never hardcoded client-side. (Wire biscuit
+ *  predicates stay reads/replicate; these are the report/UI role names.) */
+export type IdentityGrant = 'admin' | 'reader' | 'relay'
 
 /** One subject's caps on a identity, derived from the biscuit by `identity_cap_report`. */
 export type IdentitySubjectCaps = {
