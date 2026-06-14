@@ -54,11 +54,9 @@ fn value_as_text(v: &Value) -> Option<&str> {
 /// hold that identity. Returns `None` before any identity exists (pre-bootstrap).
 pub async fn default_spark_id(client: &AvenDbClient) -> Result<Option<uuid::Uuid>, String> {
 	let rows = engine::exec_list_rows(client, "safes").await?;
-	let schema = engine::resolved_table_schema(client, "safes").await?;
-	let identity_ix = engine::col_ix(&schema, "owner")?;
 	let mut ids: Vec<uuid::Uuid> = Vec::new();
-	for (_oid, vals) in rows {
-		if let Ok(sid) = engine::uuid_cell_at(vals.as_slice(), identity_ix) {
+	for (oid, _vals) in rows {
+		if let Some(sid) = engine::owner_of_row(client, "safes", oid).await? {
 			ids.push(sid);
 		}
 	}
@@ -151,7 +149,52 @@ fn peer_timestamp_ms(v: &Value) -> Option<i64> {
 /// `peers` table (`kind=remote`, `status=active`). This flat list IS the trust
 /// set — no `humans` coupling. First-contact / pairing primitive (plan §8 step
 /// 10 — the dev paste-DID shortcut). Idempotent: re-adding active peer is a no-op.
+/// Trust-set rows deferred because no SAFE existed yet to own them (board 0037): we never author
+/// an ownerless owned row, so the pairing/grant DID is queued here and replayed by
+/// [`drain_pending_signers`] once the device has an identity. In-memory — a restart mid-onboarding
+/// drops the queue, but the user-initiated pairing/grant that produced it is idempotent and re-runs.
+static PENDING_SIGNERS: std::sync::OnceLock<std::sync::Mutex<Vec<(String, String)>>> =
+	std::sync::OnceLock::new();
+
+fn pending_signers() -> &'static std::sync::Mutex<Vec<(String, String)>> {
+	PENDING_SIGNERS.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+
+/// Replay any deferred trust-set rows now that the device may have an identity (board 0037). A no-op
+/// until a SAFE exists. Safe to call from any path that establishes or observes the default identity
+/// (it is also called at the top of every [`add_remote_signer`], so an onboarding backlog drains as
+/// soon as one signer-add runs after the SAFE lands).
+pub async fn drain_pending_signers(client: &AvenDbClient) -> Result<(), String> {
+	if default_spark_id(client).await?.is_none() {
+		return Ok(());
+	}
+	let queued: Vec<(String, String)> = {
+		let mut guard = pending_signers()
+			.lock()
+			.map_err(|_| "pending signers lock".to_string())?;
+		std::mem::take(&mut *guard)
+	};
+	for (did, label) in queued {
+		add_remote_signer_inner(client, &did, &label).await?;
+	}
+	Ok(())
+}
+
+/// Add a trusted peer (a device DID I'm P2P-connected with) to the local
+/// `signers` table (`kind=remote`, `status=active`). This flat list IS the trust
+/// set — no `humans` coupling. First-contact / pairing primitive. Idempotent.
 pub async fn add_remote_signer(
+	client: &AvenDbClient,
+	signer_did: &str,
+	device_label: &str,
+) -> Result<(), String> {
+	// Replay anything deferred before this call — onboarding fires several signer-adds, so a
+	// backlog queued before the SAFE existed lands as soon as one does (board 0037).
+	drain_pending_signers(client).await?;
+	add_remote_signer_inner(client, signer_did, device_label).await
+}
+
+async fn add_remote_signer_inner(
 	client: &AvenDbClient,
 	signer_did: &str,
 	device_label: &str,
@@ -169,30 +212,42 @@ pub async fn add_remote_signer(
 		return set_signer_status(client, signer_did, "active").await;
 	}
 
-	let schema = engine::resolved_table_schema(client, "signers").await?;
-	let now_ms: i64 = std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.map(|d| d.as_millis() as i64)
-		.unwrap_or(0);
 	// Store the caller's label verbatim (empty allowed). Grant-side callers pass an
 	// empty label because they don't know the peer's real name — the UI then falls back
 	// to the short DID (and to the roster name once the peer self-publishes) instead of
 	// showing a misleading role word like "Replication Server" as if it were the device.
 	let label = device_label.trim().to_string();
+	// Every owner-scoped row belongs to a SAFE (board 0037): scope the trust-set row to the
+	// device's default identity. If none exists yet there is nothing to own it — DEFER rather than
+	// author an ownerless owned row (which the fail-closed funnel would reject anyway).
+	let Some(owner) = default_spark_id(client).await? else {
+		pending_signers()
+			.lock()
+			.map_err(|_| "pending signers lock".to_string())?
+			.push((signer_did.to_string(), label));
+		log::info!(
+			target: "avenos::signers",
+			"deferred remote signer {signer_did} — no SAFE owner yet (replays once an identity exists)"
+		);
+		return Ok(());
+	};
+
+	let schema = engine::resolved_table_schema(client, "signers").await?;
+	let now_ms: i64 = std::time::SystemTime::now()
+		.duration_since(std::time::UNIX_EPOCH)
+		.map(|d| d.as_millis() as i64)
+		.unwrap_or(0);
 	let mut values: Map<String, JsonValue> = Map::new();
-	// Scope the trust-set row to the device's default identity so it syncs across the
-	// user's own devices (caps-only). If no identity exists yet it stays null = local.
-	if let Some(sid) = default_spark_id(client).await? {
-		values.insert("owner".into(), JsonValue::String(sid.to_string()));
-	}
 	values.insert("signer_did".into(), JsonValue::String(signer_did.to_string()));
 	values.insert("device_label".into(), JsonValue::String(label));
 	values.insert("kind".into(), JsonValue::String("remote".into()));
 	values.insert("added_at_ms".into(), JsonValue::Number(now_ms.into()));
 	values.insert("status".into(), JsonValue::String("active".into()));
 	let row_vals = crate::avendb::insert_values("signers", &schema, values)?;
+	// Owner-scoped create (board 0037): the funnel mints the owner-binding from `owner`; ownership
+	// lives in the immutable header, not a data column. One channel, no per-call-site stamping.
 	client
-		.create_checked("signers", row_vals)
+		.create("signers", owner, None, row_vals)
 		.await
 		.map_err(crate::avendb::format_avendb_err)?;
 	Ok(())

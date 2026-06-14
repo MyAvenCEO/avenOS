@@ -58,6 +58,15 @@ struct RowBatchAuthoring<'a> {
     batch_id: Option<BatchId>,
     /// Extra metadata to merge into the committed row (e.g. the owner-binding).
     extra_metadata: Option<std::collections::HashMap<String, String>>,
+    /// The owning SAFE for a **create** (from `WriteContext.owner`). Ownership is intrinsic
+    /// (board 0037): a value is owned iff its create carried an owner — the funnel then mints the
+    /// immutable binding `(value_id → owner)` from it and the binding rides along forever. There is
+    /// no per-table flag; the presence of an owner (or an inherited binding) IS owned-ness.
+    owner: Option<uuid::Uuid>,
+    /// The existing row's owner-binding for an **update/delete** — the binding is immutable
+    /// (`(value_id, owner)` only, never batch content), so it is carried forward verbatim rather
+    /// than re-minted; this also makes owner immutability structural (an update can't relabel).
+    inherited_binding: Option<(String, String)>,
 }
 
 struct PreparedLocalRowHistoryWrite<'a> {
@@ -220,6 +229,8 @@ impl QueryManager {
         provenance: &'a RowProvenance,
         delete_kind: Option<DeleteKind>,
         write_context: Option<&WriteContext>,
+        owner: Option<uuid::Uuid>,
+        inherited_binding: Option<(String, String)>,
     ) -> RowBatchAuthoring<'a> {
         RowBatchAuthoring {
             provenance,
@@ -227,7 +238,48 @@ impl QueryManager {
             row_state: Self::resolve_write_row_state(write_context),
             batch_id: write_context.and_then(WriteContext::batch_id),
             extra_metadata: write_context.and_then(|c| c.extra_metadata.clone()),
+            owner,
+            inherited_binding,
         }
+    }
+
+    /// The owner-binding on the row's latest batch (for carry-forward on update/delete/undelete —
+    /// includes soft-delete tombstones, which carry it forward too). The binding is opaque to the
+    /// engine: it only copies the [`crate::capability::OWNER_BINDING_META_KEY`] metadata string
+    /// forward; immutability of `(value_id, owner)` is what makes reuse sound.
+    fn existing_owner_binding<H: Storage>(
+        &self,
+        storage: &H,
+        table: &str,
+        row_id: ObjectId,
+        branch: &str,
+    ) -> Option<(String, String)> {
+        let row = storage
+            .scan_history_row_batches(table, row_id)
+            .ok()?
+            .into_iter()
+            .filter(|row| row.branch.as_str() == branch)
+            .max_by_key(|row| (row.updated_at, row.batch_id()))?;
+        let value = row.metadata.get(crate::capability::OWNER_BINDING_META_KEY)?;
+        Some((
+            crate::capability::OWNER_BINDING_META_KEY.to_string(),
+            value.clone(),
+        ))
+    }
+
+    /// The raw owner-binding metadata string on a row's latest batch on the current branch, or
+    /// `None` if the row carries none. The app reads ownership back from this (board 0037): it
+    /// parses the binding (via aven-caps) to recover the owning SAFE for the sync ACL — ownership
+    /// lives only in the immutable header, so there is no `owner` column to read.
+    pub fn owner_binding_for_row<H: Storage>(
+        &self,
+        storage: &H,
+        table: &str,
+        row_id: ObjectId,
+    ) -> Option<String> {
+        let branch = self.current_branch();
+        self.existing_owner_binding(storage, table, row_id, &branch)
+            .map(|(_, value)| value)
     }
 
     fn authored_row_batch(
@@ -237,7 +289,7 @@ impl QueryManager {
         parents: impl IntoIterator<Item = BatchId>,
         data: Vec<u8>,
         authoring: RowBatchAuthoring<'_>,
-    ) -> StoredRowBatch {
+    ) -> Result<StoredRowBatch, QueryError> {
         let mut metadata: std::collections::HashMap<String, String> =
             Self::row_commit_metadata(authoring.provenance, authoring.delete_kind)
                 .into_iter()
@@ -273,18 +325,53 @@ impl QueryManager {
             )
         };
 
+        // Ownership is an aven-db core primitive (board 0037): on a real avenOS peer EVERY value is
+        // owned by a SAFE — no ownerless values, no per-table flag, no per-write conditional. The
+        // installed `OwnerBinder` IS the peer's identity (its device key); its presence means this
+        // engine authors owned values, so every authored value MUST carry its signed owner-binding
+        // `(value_id → owner)` in the immutable header (stamped BEFORE the edit-sig digest, so it is
+        // itself integrity-signed and travels E2E — the lowest-level counterpart of the `Sealer`
+        // "no plaintext" and `EditSigner` "no unsigned row"). A CREATE mints from `WriteContext.owner`
+        // (REQUIRED — a create with no owner FAILS, there is no path to an ownerless value); an
+        // UPDATE/DELETE inherits the value's existing binding verbatim (it covers only `(value_id,
+        // owner)`, both immutable — valid for every batch, and reusing it makes owner relabeling
+        // structurally impossible). A binder-less engine has no SAFE/identity (generic/test store) and
+        // authors no owned values — the only configuration without this enforcement.
+        if self.sync_manager.owner_binder.is_some() {
+            let stamped = match authoring.inherited_binding {
+                Some((key, value)) => {
+                    batch.set_metadata_entry(key, value);
+                    true
+                }
+                None => authoring
+                    .owner
+                    .and_then(|owner| {
+                        self.sync_manager
+                            .owner_binder
+                            .clone()
+                            .and_then(|binder| binder.bind_row(row_id, owner))
+                    })
+                    .map(|(key, value)| batch.set_metadata_entry(key, value))
+                    .is_some(),
+            };
+            if !stamped {
+                return Err(QueryError::OwnerBindingRequired { row_id });
+            }
+        }
+
         // Author edit-signature (audit #29): once the batch is assembled, sign its content
         // digest with the device key and stamp it under `EDIT_SIG_META_KEY` so `data` +
         // `metadata` are authenticated end-to-end. The digest EXCLUDES the edit-sig slot, so
         // stamping it back does not change the digest the receiver recomputes. No signer
-        // installed (local-only / tests) → unsigned, exactly as before.
+        // installed (local-only / tests) → unsigned, exactly as before. The owner-binding stamped
+        // just above IS covered by this digest (it is ordinary metadata), so it is authenticated.
         if let Some(signer) = self.sync_manager.edit_signer.clone() {
             let digest = batch.content_digest();
             if let Some((key, value)) = signer.sign_row(row_id, &digest.0) {
                 batch.set_metadata_entry(key, value);
             }
         }
-        batch
+        Ok(batch)
     }
 
     fn apply_local_row_batch<H: Storage>(
@@ -772,13 +859,21 @@ impl QueryManager {
         } = commit;
         let parents = self.parent_ids_for_write(storage, table, id, branch, write_context);
 
+        // Update: the owner-binding is immutable, so carry it forward from the existing row.
+            let inherited_binding = self.existing_owner_binding(storage, table, id, branch);
         let row = self.authored_row_batch(
             id,
             branch,
             parents,
             prepared.new_data.clone(),
-            self.row_batch_authoring(provenance, None, write_context),
-        );
+            self.row_batch_authoring(
+                provenance,
+                None,
+                write_context,
+                write_context.and_then(|c| c.owner),
+                inherited_binding,
+            ),
+        )?;
         let branch_name = BranchName::new(branch);
         let (batch_id, visibility_change) = self.apply_local_row_history_write(
             storage,
@@ -1061,13 +1156,20 @@ impl QueryManager {
                 &table_write.row_layout,
             )
         };
+        // Create: mint the binding from the owning SAFE supplied on the write context.
         let row = self.authored_row_batch(
             object_id,
             branch,
             vec![],
             data.clone(),
-            self.row_batch_authoring(&provenance, None, write_context),
-        );
+            self.row_batch_authoring(
+                &provenance,
+                None,
+                write_context,
+                write_context.and_then(|c| c.owner),
+                None,
+            ),
+        )?;
         let branch_name = BranchName::new(branch);
         let (row_batch_id, visibility_change) = self
             .apply_local_row_history_write_with_prepared_context(
@@ -1923,13 +2025,21 @@ impl QueryManager {
         let delete_provenance =
             self.row_provenance_for_update(old_provenance_for_policy, write_context, timestamp);
 
+        // Soft delete: carry the immutable owner-binding forward onto the tombstone.
+            let inherited_binding = self.existing_owner_binding(storage, table, id, branch);
         let delete_row = self.authored_row_batch(
             id,
             branch,
             parents,
             old_data_for_policy.to_vec(),
-            self.row_batch_authoring(&delete_provenance, Some(DeleteKind::Soft), write_context),
-        );
+            self.row_batch_authoring(
+                &delete_provenance,
+                Some(DeleteKind::Soft),
+                write_context,
+                write_context.and_then(|c| c.owner),
+                inherited_binding,
+            ),
+        )?;
         let index_mutations = if Self::write_context_is_open_batch(write_context) {
             Vec::new()
         } else {
@@ -2044,14 +2154,15 @@ impl QueryManager {
         let timestamp = self.reserve_write_timestamp();
         let row_provenance = self.row_provenance_for_update(&old_provenance, None, timestamp);
 
-        // Add commit with row data (no delete metadata = undelete)
+        // Undelete: carry the immutable owner-binding forward from the soft-delete tombstone.
+            let inherited_binding = self.existing_owner_binding(storage, &table, id, branch.as_str());
         let row = self.authored_row_batch(
             id,
             branch.as_str(),
             parents,
             new_data.clone(),
-            self.row_batch_authoring(&row_provenance, None, None),
-        );
+            self.row_batch_authoring(&row_provenance, None, None, None, inherited_binding),
+        )?;
         let index_mutations = Self::index_mutations_for_undelete_on_branch(
             &table,
             branch.as_str(),
@@ -2145,14 +2256,22 @@ impl QueryManager {
         let timestamp = self.reserve_write_timestamp();
         let delete_provenance = self.row_provenance_for_update(&old_provenance, None, timestamp);
 
-        // Add commit with empty content + delete: hard metadata
+        // Hard delete: the tombstone carries no `data`, so carry the immutable owner-binding
+        // forward from the row's latest batch (covers an already soft-deleted row too).
+            let inherited_binding = self.existing_owner_binding(storage, &table, id, branch.as_str());
         let delete_row = self.authored_row_batch(
             id,
             branch.as_str(),
             parents,
             vec![],
-            self.row_batch_authoring(&delete_provenance, Some(DeleteKind::Hard), None),
-        );
+            self.row_batch_authoring(
+                &delete_provenance,
+                Some(DeleteKind::Hard),
+                None,
+                None,
+                inherited_binding,
+            ),
+        )?;
         let index_mutations = Self::index_mutations_for_hard_delete_on_branch(
             &table,
             branch.as_str(),

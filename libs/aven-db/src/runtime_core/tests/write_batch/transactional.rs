@@ -13,13 +13,9 @@ fn rc_transactional_update_can_modify_row_inserted_earlier_in_same_batch() {
     let mut core = create_test_runtime();
     let batch_id = BatchId::new();
     let write_context = WriteContext {
-        session: None,
-        attribution: None,
-        updated_at: None,
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: Some(batch_id),
-        target_branch_name: None,
-        extra_metadata: None,
+        ..Default::default()
     };
 
     let inserted_user_id = ObjectId::new();
@@ -87,13 +83,9 @@ fn rc_transactional_same_row_same_batch_collapses_to_one_live_staged_member() {
 
     let batch_id = BatchId::new();
     let write_context = WriteContext {
-        session: None,
-        attribution: None,
-        updated_at: None,
         batch_mode: Some(crate::batch_fate::BatchMode::Transactional),
         batch_id: Some(batch_id),
-        target_branch_name: None,
-        extra_metadata: None,
+        ..Default::default()
     };
 
     core.update(

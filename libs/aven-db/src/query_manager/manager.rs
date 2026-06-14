@@ -70,6 +70,13 @@ pub enum QueryError {
     UnknownSchema(SchemaHash),
     /// Storage / branch inconsistency that should not be collapsed into `ObjectNotFound`.
     InternalError(String),
+    /// Fail-closed owner-binding invariant: a syncing engine tried to author a row on an
+    /// owner-scoped table but no valid owner-binding could be produced (no binder installed,
+    /// the binder returned `None`, or the row carried no owner). An unbound owned row must
+    /// never be authored — see [`crate::capability::OwnerBinder`].
+    OwnerBindingRequired {
+        row_id: ObjectId,
+    },
 }
 
 impl std::fmt::Display for QueryError {
@@ -117,6 +124,11 @@ impl std::fmt::Display for QueryError {
                 )
             }
             QueryError::InternalError(msg) => write!(f, "internal error: {msg}"),
+            QueryError::OwnerBindingRequired { row_id } => write!(
+                f,
+                "owner-binding required: cannot author unbound row {:?} on an owner-scoped table",
+                row_id
+            ),
         }
     }
 }

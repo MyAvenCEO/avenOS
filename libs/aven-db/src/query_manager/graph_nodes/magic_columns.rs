@@ -305,6 +305,29 @@ impl MagicColumnsNode {
         Some(projected)
     }
 
+    /// The owning SAFE projected from the row's signed owner-binding header on the current
+    /// branch — the engine's read-only view of ownership (board 0037, the `$owner` magic
+    /// column). Mirrors `QueryManager::existing_owner_binding`: latest batch on the branch,
+    /// then [`crate::capability::owner_uuid_from_binding_meta`] projects the owner without
+    /// touching the signature (verification is the apply path's job).
+    fn header_owner(
+        &self,
+        table: &str,
+        row_id: ObjectId,
+        io: &dyn Storage,
+    ) -> Option<uuid::Uuid> {
+        let meta = io
+            .scan_history_row_batches(table, row_id)
+            .ok()?
+            .into_iter()
+            .filter(|batch| batch.branch.as_str() == self.branch)
+            .max_by_key(|batch| (batch.updated_at, batch.batch_id))?
+            .metadata
+            .get(crate::capability::OWNER_BINDING_META_KEY)?
+            .clone();
+        crate::capability::owner_uuid_from_binding_meta(&meta)
+    }
+
     fn evaluate_magic_column(
         &self,
         kind: MagicColumnKind,
@@ -319,6 +342,10 @@ impl MagicColumnsNode {
             MagicColumnKind::CreatedAt => Value::Timestamp(row.provenance.created_at),
             MagicColumnKind::UpdatedBy => Value::Text(row.provenance.updated_by.clone()),
             MagicColumnKind::UpdatedAt => Value::Timestamp(row.provenance.updated_at),
+            MagicColumnKind::Owner => self
+                .header_owner(table_name.as_str(), row.id, io)
+                .map(|owner| Value::Uuid(ObjectId::from_uuid(owner)))
+                .unwrap_or(Value::Null),
             MagicColumnKind::CanRead | MagicColumnKind::CanEdit | MagicColumnKind::CanDelete => {
                 let _ = (
                     table_name,

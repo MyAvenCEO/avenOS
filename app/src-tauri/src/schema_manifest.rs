@@ -174,11 +174,9 @@ pub fn manifest_sensitive_columns() -> Result<HashMap<String, HashSet<String>>, 
 /// for which tables participate in biscuit-gated P2P sync and ACL object maps.
 pub fn manifest_spark_scoped_table_names() -> Result<Vec<String>, String> {
 	let m = read_manifest()?;
-	Ok(m.tables
-		.iter()
-		.filter(|(_, def)| def.columns.iter().any(|c| c.name == "owner"))
-		.map(|(name, _)| name.clone())
-		.collect())
+	// Ownership is intrinsic — EVERY value is owned by a SAFE (board 0037), so every manifest table
+	// is identity-scoped. (The catalogue/schema infrastructure is a separate subsystem, not a value.)
+	Ok(m.tables.keys().cloned().collect())
 }
 
 /// Build a AvenDb [`Schema`] from a manifest JSON file (e.g. migration snapshots).

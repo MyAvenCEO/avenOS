@@ -49,7 +49,7 @@ pub use avenos_client::{AvenDbClient, PeerInboundParkedHook};
 pub use sync_manager::RowBatchKey;
 pub use capability::{
     AccOp, AllowAllResolver, CapDecision, CapabilityResolver, DenyAllResolver, EditSigner,
-    ResourceCoord, may_hold,
+    OwnerBinder, ResourceCoord, may_hold,
 };
 pub use sync_targets::SyncTargetId;
 pub use query_manager::graph_nodes::sort::UnsealFn;
@@ -69,11 +69,6 @@ pub use query_manager::session::Session;
 pub use query_manager::types::{
     ColumnType, OrderedRowDelta, Row, RowDelta, Schema, SchemaBuilder, TableName, TableSchema,
     Value,
-};
-#[cfg(feature = "client-p2p")]
-pub use query_manager::types::schema::{
-    is_owner_scoped_table, owner_invariant_ok, owner_scoped_table_names,
-    table_schema_is_owner_scoped,
 };
 #[cfg(feature = "client-p2p")]
 pub use schema_manager::AppId;
