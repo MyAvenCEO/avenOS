@@ -48,6 +48,8 @@ jobs:
     name: deploy aven-node relay (Sprite)
     needs: release
     runs-on: ubuntu-latest
+    # Pull AVEN_SIGNER_SECRET + SPRITES_API_KEY from the `next` GitHub Environment.
+    environment: next
     steps:
       - name: Checkout next at the release commit (full history)
         uses: actions/checkout@v5
@@ -66,7 +68,7 @@ jobs:
       - name: Authenticate sprite CLI
         run: sprite auth setup --token "$SPRITE_API_KEY"
         env:
-          SPRITE_API_KEY: ${{ secrets.SPRITE_API_KEY }}
+          SPRITE_API_KEY: ${{ secrets.SPRITES_API_KEY }}
 
       - name: Deploy relay at the release commit (restart, never wipe)
         # Ships a source tarball of the release commit to the Sprite, rebuilds aven-node,
