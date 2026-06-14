@@ -106,6 +106,25 @@ This is an **elimination, not an addition** — measured the rule's way:
   runtime/client layers: if owner-binding was their only caller, **delete them too** (don't leave dead
   wrappers). Sweep adjacent confirmed-dead code on the surface you touch.
 
+### The column drop needs an engine feature first (discovered in build; user-confirmed)
+
+The `owner` column is **not only** the ownership mirror — it is **load-bearing in three ways**, and a
+clean drop must preserve the other two:
+1. **Ownership truth** → the binding (done on the write side).
+2. **Sealing/auth identity key** → binding-derivable (~5 `identity_uuid_row` read sites + the seal path).
+3. **Query discriminator** → `filter_eq("owner", X)` separates SAFEs in the **shared** store
+   (brain.rs:1570/2882/3268, brain_ipc:282). The binding lives in **batch metadata**, which the query
+   engine **cannot filter or index** — so dropping the column breaks owner-scoped queries (the brain).
+
+**Decision (user-confirmed):** add a new aven-db capability — **index the header-owner**: extract the
+owner from the `_owner_binding` metadata at index-maintenance time and maintain a queryable index, so
+`filter_eq("owner", …)` resolves against the immutable signed header (not a data column). THEN migrate
+the read helpers + sealing to the binding, remove `"owner"` from the value maps, and drop the 11 columns.
+This is a substantial engine feature — its own focused build phase (the **keystone**), distinct from the
+now-complete consolidation. Sketch: a `header_owner` virtual indexed attribute in the engine's index
+maintenance (`indices.rs` / `storage` index-lookup + the query planner's predicate resolution), keyed on
+`OwnerBinding::owner` parsed from the row's `_owner_binding` meta; the relay/app already mint + carry it.
+
 ## Steps
 
 1. aven-db: finalize the funnel to mint-on-create / inherit-on-update-delete (no carry-forward branch);
@@ -172,6 +191,24 @@ cargo build -p aven-db -p aven-node -p aven-os-app --features desktop-ai
 ## Progress log
 
 Newest first.
+
+- `2026-06-14` — **Consolidation COMPLETE & green; column drop scoped as the keystone engine feature.**
+  Executed end-to-end (commits `cf340d34`→`1dcd6f8e`, `main..HEAD` net-subtractive 908+/549-): ONE
+  `create(table, owner, id?, fields)` (deleted `create_checked`/`create_owned`/
+  `create_checked_with_id_and_metadata` across aven-db/app/aven-node/**aven-brain** + the contract test);
+  eliminated `owner_binding_meta` (~26 sites), `update_with_metadata`/`delete_with_metadata`,
+  `insert_with_id_and_metadata`, `owner_invariant_ok`, the `owner_scoped` flag + all its helpers
+  (`is_owner_scoped_table`/`table_schema_is_owner_scoped`/`owner_scoped_table_names`), and the
+  column-decode/already-present/carry-forward sources (all greps → 0). **No-iff enforcement**: the
+  installed `OwnerBinder` IS the peer's identity — when present, EVERY authored value must carry a
+  binding (a create with no owner FAILS; no ownerless values), an update/delete inherits the immutable
+  binding; a binder-less engine is the generic/test store. Relay (`ServerApplyGate`) now requires a
+  binding on EVERY applied row. Rewrote + deduped the `owner_binder` tests to the final model. aven-db
+  708 lib + all integration tests green; aven-node + app(desktop-ai) + aven-brain build green.
+  **Discovered + user-confirmed**: the `owner` COLUMN is also a query discriminator (`filter_eq(owner)`
+  separates SAFEs in the shared store) — so the clean drop needs a new engine **header-owner index** (see
+  the section above) before migrating reads + dropping the 11 columns. That keystone is the only
+  remaining acceptance criterion (`manifest "owner" → 0`); everything else is met.
 
 - `2026-06-14` — **Build started; card → `build/`.** Engine foundation committed green (`cf340d34`):
   `WriteContext.owner` mint funnel, `owner_binding_for` read-back, `create_owned`/`insert_owned`,
