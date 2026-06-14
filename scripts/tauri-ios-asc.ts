@@ -29,6 +29,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { applyAppleEnvLocal } from './apple-env'
+import { ensureOnnxruntimeDylib } from './fetch-onnxruntime.ts'
 import {
 	readRustToolchainChannel,
 	rustToolchainShellExports,
@@ -560,6 +561,10 @@ async function main() {
 
 	syncEntitlements()
 	generateIosIconsFromSource()
+	// tauri.conf.json declares onnxruntime/libonnxruntime.dylib as a bundled resource, so
+	// generate_context! requires the file to exist at build time. Fetch it (same as the mac
+	// build); the standalone dylib is stripped from the archive later (Apple bans it on iOS).
+	ensureOnnxruntimeDylib('arm64')
 	writeAvenIosCompileEnv()
 	patchPodfile()
 	ensureRustToolchainReady()
