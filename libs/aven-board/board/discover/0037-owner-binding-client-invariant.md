@@ -119,6 +119,7 @@ onboarding works against a freshly-flushed relay. Completion = the frontmatter `
 - [ ] `cargo test -p aven-db owner_binder` passes the owned-CRUD tests (create requires owner+binder or fails; update/delete preserve the create-time binding; ownership reads back from the binding).
 - [ ] `cargo build -p aven-db -p aven-node -p aven-os-app --features desktop-ai` exits 0; aven-db + aven-node suites green.
 - [ ] Every synced batch carries binding + covering edit-sig — `verify_on_apply` relay/client tests green (no relay can strip ownership).
+- [ ] **Delegation roots in the binding**: biscuit authorization is checked against `binding.owner` (the value's true owner) and no other owner source — per-SAFE, per-op (`peers`→Admit, `keyshares`→RotateDek, `delete`→Delete, else Write). Proven by the `biscuit_resolver` / `authorize_signed_edit` tests staying green; making ownership immutable makes the owner-relabel→bypass attack unrepresentable.
 - [ ] Live: freshly-flushed relay + fresh first-human onboarding → zero `relay-deny[no-binding]`, `granted FIRST human SAFE admin` fires (recorded).
 
 ## Verification
