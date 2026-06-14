@@ -1,211 +1,163 @@
 ---
-title: Owner-binding is the SOLE source of ownership — auto-stamp every owner-scoped row, drop the `owner` column (SSOT)
-summary: First-human onboarding broke because ownership lives in TWO places — a mutable `owner` data column AND an immutable author-signed owner-binding — kept equal only by per-call-site discipline that three `signers` writes forgot, so the relay (correctly fail-closed) denied those unbound rows and no admin was ever granted. The fix is the SSOT end-state, not a patch: make the signed owner-binding the ONE source of ownership, auto-stamped at the deepest aven-db author funnel for every owner-scoped row (mirroring the injected EditSigner), and DELETE the redundant mutable `owner` column from all tables. Dev-only / flush-from-scratch is authorized, so we go straight to the end-state in one coordinated schema bump — no intermediate dual-representation stage. Trust-root model: a value's owner (its SAFE) is fixed by the signed binding; all access beyond the owner flows ONLY through admin-role caps.
+title: Ownership is an aven-db core primitive — one owned CRUD, value identity is the signed binding
+summary: Re-discovered under the compact/simplify/consolidate lens. Ownership is NOT a configurable option, a per-table flag, or a sync-mode — it is a CORE PRIMITIVE of aven-db, exactly like `_id`. A value IS `(id, owner, data)` whose `(id, owner)` identity is immutable and carried by the Ed25519 owner-binding in the row's signed header. You cannot represent an unowned value. This collapses the whole owner-binding sprawl to its irreducible core: ONE `create(table, owner, fields)` (owner required), the binding established once at create and inherited by every later batch (no carry-forward branch), and ownership read back from the binding. DELETE end-to-end: the `owner` data column (all 11 tables), the `owner_scoped` flag, `owner_binding_meta` (~26 sites), `owner_invariant_ok`, `update_with_metadata`/`delete_with_metadata` binding-passing, `create_checked`/`create_checked_with_id_and_metadata`/`create_owned`, and every column-decode / already-present / carry-forward source. Security improves BY the simplification: one signed source = no confused-deputy; structural (not remembered) = no silent auth gap; immutable identity = the owner-relabel attack is unrepresentable, not merely guarded.
 owner: claude (aven-db + aven-caps + app + relay)
 created: 2026-06-14
 updated: 2026-06-14
-tags: [aven-db, aven-caps, security, sync, onboarding, schema, ssot]
-goal: "Ownership has exactly ONE representation — the author-signed owner-binding in the row's immutable authenticated header — and it is non-bypassable at the deepest aven-db core, enforced as a PER-PEER authoring invariant (every peer — local, headless, syncing — no `require` switch, no exceptions). Provable from command output: (1) `cargo test -p aven-db owner_binder` passes with THREE tests — `owner_scoped_write_auto_stamps_binding` (a write to an owner-scoped table through a peer with an installed OwnerBinder carries the OwnerBinding even though the CALL-SITE passed none), `owner_scoped_write_without_binder_fails_closed` (any peer with no binder REFUSES an owner-scoped write — no unbound owned row can be authored), and `ownerless_owner_scoped_write_fails_closed` (an owner-scoped write with a NULL owner REFUSES even where the column is nullable — every owned row belongs to a SAFE). (2) `grep -rn '\"owner\"' libs/aven-schema/schema.manifest.json` returns ZERO data-column hits — the mutable owner column is gone from all tables; owner-scoped-ness is declared by an explicit `owner_scoped` table flag, not column presence, and `owner` is a required write parameter. (3) `grep -rn 'owner_binding_meta' app/src-tauri/src` shows per-call-site stamping removed from write paths. (4) `cargo build -p aven-db -p aven-node -p aven-os-app --features desktop-ai` exits 0 and the aven-db + aven-node suites stay green. (5) Relay `verify_on_apply` stays fail-closed on ALL owner-scoped tables (no exemptions). (6) LIVE proof recorded in the card: a freshly-flushed relay + fresh device completes first-human onboarding with ZERO `relay-deny[no-binding]` and `granted FIRST human SAFE admin` fires."
+tags: [aven-db, aven-caps, security, sync, onboarding, ssot, elimination]
+goal: "Ownership is an aven-db core primitive — every value is intrinsically `(id, owner, data)` with the owner carried ONLY by the immutable signed owner-binding, and the owner-binding sprawl is eliminated to one owned CRUD. Provable from command output: (1) ELIMINATIONS — each grep returns ZERO hits: `grep -rn '\"owner\"' libs/aven-schema/schema.manifest.json` (column gone from all tables); `grep -rn 'owner_scoped' libs/aven-db/src libs/aven-schema` (no flag); `grep -rn 'owner_binding_meta\\|owner_invariant_ok\\|create_checked\\|create_owned\\|create_checked_with_id_and_metadata\\|update_with_metadata\\|delete_with_metadata\\|existing_binding\\|owner_binding_target\\|already_bound' libs app` (every legacy symbol gone — one `create(table, owner, fields)` is the sole owned-create, and update/delete carry the binding as value identity, never re-stamp it). (2) `cargo test -p aven-db owner_binder` passes the rewritten owned-CRUD tests (create requires an owner+binder or fails closed; update/delete preserve the create-time binding; ownership reads back from the binding). (3) `cargo build -p aven-db -p aven-node -p aven-os-app --features desktop-ai` exits 0; aven-db + aven-node suites green. (4) CONSTRAINT held: every synced batch still carries the binding AND an edit-sig that covers it (no relay can strip ownership in flight) — proven by the relay/client `verify_on_apply` tests staying green. (5) LIVE: a freshly-flushed relay + fresh device completes first-human onboarding with ZERO `relay-deny[no-binding]` and `granted FIRST human SAFE admin` fires (recorded)."
 ---
 
-# Owner-binding is the SOLE source of ownership (SSOT)
+# Ownership is an aven-db core primitive (one owned CRUD)
 
 ## Context
 
-Debugging the live relay (clean release-104 deploy) found first-human onboarding fully broken: the log
-floods `relay-deny[no-binding]: spark-scoped row missing owner-binding table=keyshares … DenyPermanent`,
-**no `granted FIRST human SAFE admin`** ever fires, and avenCEO's only owner is the **server key**
-(`did:key:z6Mkvy…qpp3`) — so a fresh mac/iOS/Linux can't claim admin.
+First-human onboarding broke because ownership lived in TWO places — a mutable `owner` data column
+AND the immutable author-signed owner-binding — kept equal only by per-call-site discipline that three
+`signers` writes forgot. The relay (correctly fail-closed) denied those unbound rows and no admin was
+ever granted. Through this session the architecture **re-derived itself** to its irreducible core, and
+this card re-scopes 0037 to that end-state under the compact/simplify/consolidate elimination rule.
 
-**Root cause (confirmed):** ownership is represented in **two** places that must stay equal:
-1. the **mutable `owner` data column** (11 tables in `schema.manifest.json`), and
-2. the **immutable author-signed owner-binding** (`OWNER_BINDING_META_KEY`, an Ed25519 assertion
-   `(value_id → owner)` in the row's authenticated header, covered by the row digest, blind-verifiable
-   by a keyless relay).
+**The core principle (confirmed with the user):** ownership is **not a feature, option, flag, or
+mode** — it is a **CORE PRIMITIVE of aven-db itself, like `_id`.** A value *is* `(id, owner, data)`
+whose `(id, owner)` identity is **immutable** and carried by the Ed25519 owner-binding
+`(value_id → owner)` in the row's signed header. **aven-db cannot represent an unowned value** — there
+is no API to make one, no "unowned mode," no per-table choice. Authoring a value *is* establishing its
+owner-binding, inseparably.
 
-The merged *"enforce owner-binding system-wide"* change made the relay's `verify_on_apply`
-**fail-closed on every owner-scoped table** (correct — the relay verifies *authenticity + integrity*
-of each row via the author's pubkey, no DEK needed; KEEP IT). But on the client the binding is stamped
-**manually, per IPC call-site** (`owner_binding_meta(...)`), and **three `signers` writes forgot**:
-- `app/src-tauri/src/signers.rs:195` → `create_checked("signers", …)` (no binding)
-- `app/src-tauri/src/signers.rs:229` → `update(oid, …)` (no binding)
-- `app/src-tauri/src/avendb/engine.rs:1318` → `create_checked("signers", …)` (no binding)
+**Why this is correct for a local-first P2P biscuit-capability architecture** (not taste — necessity):
+- **P2P has no central authority to vouch for data.** Every row crossing between peers must be
+  self-authenticating; an *unowned value is an un-attributable value* — a hole in the trust model.
+- **Capabilities root in identities (SAFEs).** A cap only means something about a value if that value
+  has an owner the chain roots in. One owner per value = the clean root caps always assumed.
+- **CRDT/local-first:** a *mutable* owner column is a divergence surface (two peers LWW-conflict on
+  owner) — the exact drift that broke onboarding. Ownership in the immutable signed header cannot
+  diverge. The dual representation wasn't redundant, it was *wrong*.
 
-`signers` is owner-scoped, so the relay `DenyPermanent`s those unbound rows → the device's signer never
-lands → `grant_first_human_admin` (`aven_ceo.rs:312`) finds no synced human SAFE → never grants.
+**Security improves BY the simplification** (the cleanup IS the hardening): one signed source =
+no confused-deputy between column-trusting and binding-trusting code; a **structural** invariant
+(can't author a value without its binding) = no *remembered*-at-26-sites auth gap; an **immutable**
+identity = the owner-relabel attack is *unrepresentable*, not merely guarded (the relay's special
+owner-relabel denial becomes unnecessary); ~26 hand-stamping sites → one audited `create` = a smaller
+trusted computing base; one read path for ownership = peers cannot hold disagreeing ownership views.
 
-**The real flaw is the dual representation itself.** A mutable mirror kept equal by call-site discipline
-*will* drift (it did). SSOT/DRY/KISS says: the signed binding is the trust root; delete the mirror.
-
-**Architecture (confirmed with the user):**
-- **Owner-binding = trust root.** The signed `(value_id → owner)` in the immutable header IS the
-  ownership. There is no second notion of owner. Blind-verifiable, so a keyless relay can fail-closed on
-  authenticity. Do **not** exempt trust tables — that's lesser security, unacceptable in P2P.
-- **All access beyond the owner flows ONLY through admin-role caps.** The biscuit chain roots on the
-  bound owner; additional members / delegated writes / admin grants are minted as caps that chain from
-  that owner/admin. The binding authenticates ownership; caps authorize everything else. Clean split.
-- **The `owner` column is deleted.** Owner-scoped-ness becomes an explicit declarative `owner_scoped`
-  table flag in the manifest (not column-presence). Owner-scoped lookups/indexes derive the owner from
-  the binding, not a data cell.
-- **Dev-only / flush-from-scratch is authorized**, so this is ONE coordinated schema bump to the
-  end-state — no intermediate "auto-stamp but keep the column" stage to ship and later tear out.
-
-**Nullable-`signers` carve-out must be resolved.** Today `owner_invariant_ok` lets a *nullable* `owner`
-column pass with NULL (the "device-local trust-set" carve-out), yet the relay fail-closes on the
-`signers` table — a NULL-owner row **cannot** be bound (nothing to bind to) but is denied anyway. In the
-SSOT model every row of an `owner_scoped` table MUST have an owner (so it can be bound). Resolve by
-either: (a) `signers` rows always carry the device's own SAFE as owner (then they bind + sync cleanly),
-or (b) `signers` is marked NOT `owner_scoped` and is device-local / non-syncing. The build picks the one
-that makes onboarding pass; whichever it is, **no `owner_scoped` table may hold an unbindable row**.
+**The boundary (confirmed from code):** the value funnel (`authored_row_batch`) only ever authors
+**values** (the manifest tables). The **schema catalogue** (schema defs + lenses) DOES sync but on a
+**separate** path (`SyncPayload::CatalogueEntryUpdated` / `upsert_catalogue_entry`, never the funnel)
+with its **own** trust model (inbound peer catalogue writes are rejected — `inbox.rs:1118`; hash/
+publisher authenticated, not SAFE-owned). Storage internals (`_id`/`_id_deleted` indexes, sync
+bookkeeping) are device-local. So the catalogue is **not a value** — out of scope, no contradiction.
 
 ## Goal
 
-Ownership has exactly one representation — the signed binding — enforced non-bypassably at the deepest
-aven-db core, fail-closed, E2E. The mutable `owner` column no longer exists. Completion = frontmatter `goal:`.
+Ownership is intrinsic to every aven-db value; the owner-binding sprawl is gone; first-human
+onboarding works against a freshly-flushed relay. Completion = the frontmatter `goal:`.
 
-## Approach (SSOT — one authority, mirror the EditSigner, drop the column)
+**Completion condition** (identical to frontmatter `goal:`):
 
-- **aven-db — auto-stamp (the invariant):** add an `OwnerBinder` trait (capability.rs, analogue of
-  `EditSigner`) — `fn bind_row(&self, row_id, owner: Uuid) -> Option<(String, String)>` returning
-  `OWNER_BINDING_META_KEY` + serialized binding — plus `AvenDbClient::set_owner_binder(...)` and the
-  plumbing that mirrors `edit_signer` (sync_manager field+setter, runtime_core/sync.rs,
-  runtime_tokio.rs, avenos_client.rs, lib.rs export). At the single deep author funnel
-  (`writes.rs::authored_row_batch`), for any **owner-scoped** row, mint + stamp the binding **before**
-  the edit-sig digest (so the binding is itself integrity-signed and travels E2E). Fail-closed: a
-  SYNCING engine writing an owner-scoped row with **no** binder installed (or a binder returning `None`)
-  **fails the write** — an unbound owned row cannot be authored, by construction. Local/headless
-  (`NullSyncTransport`, tests) may write unbound (they never reach a fail-closed relay).
-- **aven-db — drop the column (the SSOT):** replace `table_schema_is_owner_scoped` (column-presence)
-  with an explicit `owner_scoped: bool` on `TableSchema`, sourced from a new manifest field. Remove the
-  `owner` column from all 11 tables in `schema.manifest.json`. Migrate every owner-scoped read path
-  (`owner_invariant_ok`, owner indexes, any `column("owner")` lookup, ACL `build_object_spark_id_map`)
-  to derive the owner from the binding instead of the data cell. `owner_scoped_table_names` now filters
-  on the flag.
-- **App:** install an aven-caps-backed `AppOwnerBinder` (`mint_owner_binding(device_key, row_id, owner)`)
-  beside `set_edit_signer` (avendb/mod.rs:381). **Remove the manual `owner_binding_meta`** from the IPC
-  call-sites (DRY — the invariant owns it). Drop any `owner`-column writes from row construction.
-- **Relay:** unchanged logic — stays fail-closed on all `owner_scoped` tables (verify). It already trusts
-  the binding, never a column value, so dropping the column doesn't touch its trust path.
-- **Flush + redeploy:** rebuild + WIPE the relay and flush clients so the new schema hash is the only one
-  in the network (dev-only authorized).
+> Ownership is an aven-db core primitive — every value is intrinsically `(id, owner, data)` with the
+> owner carried ONLY by the immutable signed owner-binding — proven by: the elimination greps all
+> return zero; `cargo test -p aven-db owner_binder` green; `cargo build -p aven-db -p aven-node
+> -p aven-os-app --features desktop-ai` exits 0 with aven-db + aven-node suites green; every synced
+> batch still carries binding + covering edit-sig (verify_on_apply tests green); and a freshly-flushed
+> relay + fresh device onboards with zero `relay-deny[no-binding]` and the admin grant fires.
+
+## Approach (irreducible owned-CRUD — eliminate, don't optimize)
+
+- **aven-db — ownership is intrinsic.** `WriteContext.owner` carries the owning SAFE; the deep author
+  funnel `authored_row_batch` mints the owner-binding from it on CREATE and stamps it into the immutable
+  header BEFORE the edit-sig digest (so it is itself integrity-signed). UPDATE/DELETE **inherit** the
+  value's existing binding — it is the value's identity, established once, never re-stamped or re-minted
+  (eliminate the `existing_binding` carry-forward branch; the engine preserves the value's binding the
+  same way it preserves `_id`). No owner-binding ⇒ no value ⇒ the write fails by construction. Decide in
+  build the cleanest place for "inherit the binding" so update/delete need zero owner input.
+- **One create.** `AvenDbClient::create(table, owner, id?, fields)` is the **sole** owned-create.
+  DELETE `create_checked`, `create_owned`, `create_checked_with_id_and_metadata`. `owner` is required.
+- **Read ownership back from the binding.** `AvenDbClient::owner_binding_for` (built) returns the raw
+  binding; the app parses it (`aven_caps::ownership::OwnerBinding::from_meta_str`) to recover the owner.
+  The sync ACL `build_object_owner_map` reads ownership from the binding, not a column.
+- **Eliminate everywhere:** the `owner` column (all 11 manifest tables); the `owner_scoped` flag
+  (no per-table option — ownership is intrinsic); `owner_binding_meta` (~26 caps_ipc/crud_ipc/aven_ceo
+  sites → the one `create`); `owner_invariant_ok` + its `resolve_named_row` check; the
+  `update_with_metadata`/`delete_with_metadata` owner-binding passing (→ plain `update`/`delete`); any
+  column-decode (`owner_binding_target`) or already-present source.
+- **Relay/resolver:** every value row requires a valid binding + covering edit-sig (already
+  fail-closed on main); with the column gone, the owner-relabel guard's job is done by immutability.
+- **Out of scope:** the schema catalogue (non-value infrastructure, separate path/trust).
 
 ## Steps
 
-1. aven-db `OwnerBinder` trait + `set_owner_binder` plumbing + auto-stamp at `authored_row_batch` before
-   the edit-sig digest; the two gating tests (`owner_scoped_write_auto_stamps_binding`,
-   `owner_scoped_write_without_binder_fails_closed`).
-2. Declarative `owner_scoped` flag (manifest + `TableSchema`); delete the `owner` column from all 11
-   tables; migrate owner-scoped reads/indexes/ACL to binding-derived owner; resolve the `signers`
-   carve-out. aven-db + aven-node suites green.
-3. App: install `AppOwnerBinder`; remove per-call-site `owner_binding_meta` and `owner`-column writes;
-   `cargo build -p aven-db -p aven-node -p aven-os-app --features desktop-ai` exits 0.
-4. Flush + redeploy relay (`WIPE=1` deploy) and clients; fresh device onboards → tail the relay → zero
-   `relay-deny[no-binding]` + `granted FIRST human SAFE admin` fires; record the live result in the card.
+1. aven-db: finalize the funnel to mint-on-create / inherit-on-update-delete (no carry-forward branch);
+   `WriteContext.owner`; the one `create`; rewrite the `owner_binder` tests to the owned-CRUD API.
+2. aven-db: drop the `owner_scoped` flag (TableSchema + builder + manifest parse); delete
+   `owner_invariant_ok` + the `resolve_named_row` check + exports + their schema.rs tests.
+3. Manifest: delete the `owner` column from all 11 tables (schema-hash bump → coordinated redeploy).
+4. App: migrate ~26 `caps_ipc`/`crud_ipc` create sites to the one `create`; updates/deletes to plain
+   `update`/`delete`; delete `owner_binding_meta`; migrate `build_object_owner_map` to the binding read.
+5. aven-node `aven_ceo.rs`: author the avenCEO genesis via the one `create`; delete its
+   `owner_binding_meta`.
+6. Build aven-db + aven-node + app green; run the eliminated-symbol greps (all zero).
+7. Flush + `WIPE=1` relay redeploy + fresh client; live onboarding proof recorded.
 
 ## Files to touch
 
-- `libs/aven-db/src/capability.rs` (OwnerBinder trait — present), `query_manager/writes.rs` (funnel
-  stamp), `query_manager/types/schema.rs` (`owner_scoped` flag, drop column-presence detection),
-  `sync_manager/mod.rs` + `runtime_core/sync.rs` + `runtime_tokio.rs` + `avenos_client.rs` + `lib.rs`
-  (set_owner_binder plumbing + export).
-- `libs/aven-schema/schema.manifest.json` (drop 11 `owner` columns; add `owner_scoped` flag per table).
-- `app/src-tauri/src/biscuit_resolver.rs` (`AppOwnerBinder`, beside `AppEditSigner`) + `avendb/mod.rs`
-  (install), `app/src-tauri/src/signers.rs`, `app/src-tauri/src/avendb/engine.rs`, `caps_ipc.rs`,
-  `crud_ipc.rs` (drop manual stamping + owner-column writes).
-- aven-node ACL (`build_object_spark_id_map` / owner-scoped lookups) — binding-derived owner.
+- `libs/aven-db/src/query_manager/writes.rs` (funnel: mint-on-create / inherit binding), `session.rs`
+  (`WriteContext.owner`), `avenos_client.rs` (one `create`, `owner_binding_for` — built), `runtime_*`
+  (plumbing — built), `query_manager/types/schema.rs` (drop `owner_scoped` + `owner_invariant_ok`),
+  `manifest.rs` (drop flag parse), `schema_manager/encoding.rs` (drop `owner_scoped`), `lib.rs` (exports).
+- `libs/aven-schema/schema.manifest.json` (drop 11 `owner` columns).
+- `app/src-tauri/src/avendb/caps_ipc.rs`, `crud_ipc.rs` (one `create`; delete `owner_binding_meta`),
+  `engine.rs` (`build_object_owner_map` → binding read; device self-signer via `create`),
+  `signers.rs` (via `create`), `biscuit_resolver.rs` (tests).
+- `libs/aven-node/src/aven_ceo.rs` (genesis via `create`; delete `owner_binding_meta`).
 
 ## Acceptance criteria
 
-- [ ] `owner_scoped_write_auto_stamps_binding` passes — owner-scoped write carries the binding with the call-site passing none.
-- [ ] `owner_scoped_write_without_binder_fails_closed` passes — a syncing client can't author an unbound owner-scoped row.
-- [ ] `grep -rn '"owner"' libs/aven-schema/schema.manifest.json` returns ZERO data-column hits (column gone); owner-scoped-ness is the `owner_scoped` flag.
-- [ ] `grep -rn 'owner_binding_meta' app/src-tauri/src` shows the per-call-site stamping gone from write paths.
+- [ ] `grep -rn '"owner"' libs/aven-schema/schema.manifest.json` → 0 (column gone from all tables).
+- [ ] `grep -rn 'owner_scoped' libs/aven-db/src libs/aven-schema` → 0 (no flag — ownership is intrinsic).
+- [ ] `grep -rn 'owner_binding_meta\|owner_invariant_ok\|create_checked\|create_owned\|create_checked_with_id_and_metadata\|update_with_metadata\|delete_with_metadata\|existing_binding\|owner_binding_target\|already_bound' libs app` → 0.
+- [ ] `cargo test -p aven-db owner_binder` passes the owned-CRUD tests (create requires owner+binder or fails; update/delete preserve the create-time binding; ownership reads back from the binding).
 - [ ] `cargo build -p aven-db -p aven-node -p aven-os-app --features desktop-ai` exits 0; aven-db + aven-node suites green.
-- [ ] Relay `verify_on_apply` still fail-closed on ALL owner-scoped tables (no exemptions).
+- [ ] Every synced batch carries binding + covering edit-sig — `verify_on_apply` relay/client tests green (no relay can strip ownership).
 - [ ] Live: freshly-flushed relay + fresh first-human onboarding → zero `relay-deny[no-binding]`, `granted FIRST human SAFE admin` fires (recorded).
 
 ## Verification
 
-```
+```bash
+grep -rn '"owner"' libs/aven-schema/schema.manifest.json                 # 0
+grep -rn 'owner_scoped' libs/aven-db/src libs/aven-schema                # 0
+grep -rn 'owner_binding_meta\|owner_invariant_ok\|create_checked\|create_owned\|update_with_metadata\|delete_with_metadata\|existing_binding\|owner_binding_target\|already_bound' libs app  # 0
 cargo test -p aven-db owner_binder
 cargo build -p aven-db -p aven-node -p aven-os-app --features desktop-ai
-grep -rn '"owner"' libs/aven-schema/schema.manifest.json   # expect: no data-column hits
-grep -rn "owner_binding_meta" app/src-tauri/src            # expect: gone from write paths
-# runtime: WIPE=1 redeploy relay, then:
-#   sprite exec -s aven-ceo -- tail -f /.sprite/logs/services/aven-node.log
+# runtime: WIPE=1 redeploy relay, then tail /.sprite/logs/services/aven-node.log
 #   (no relay-deny[no-binding]; "granted FIRST human SAFE admin")
+```
+
+## Hand-off
+
+```
+/aven-build 0037
 ```
 
 ## Progress log
 
-- `2026-06-14` — Discovery: root-caused broken onboarding to manual per-call-site owner-binding stamping
-  (3 `signers` sites forgot) vs the now-fail-closed relay. Reviewed the crypto: the OwnerBinding
-  primitive (Ed25519 `(value_id→owner)`, domain-separated, blind-verifiable, in the immutable digest-
-  covered header) is sound and the right choice; the real flaw is the **dual owner representation**
-  (mutable column vs signed binding). User authorized dev-only flush-from-scratch + schema change, so the
-  card is the **SSOT end-state in one bump**: auto-stamp the binding at the deepest author funnel (mirror
-  EditSigner) AND delete the `owner` column, owner-scoped-ness becoming a declarative `owner_scoped` flag,
-  owner-scoped reads/indexes/ACL deriving owner from the binding. Trust-root model confirmed: owner =
-  signed binding (the SAFE), all further access only via admin-role caps. Open design point flagged for
-  build: resolve the nullable-`signers` carve-out (every `owner_scoped` row must be bindable).
-- `2026-06-14` — **Stage 1 built + green** (the permanent enforcement core): added the `OwnerBinder`
-  capability seam (`set_owner_binder` plumbed through sync_manager → runtime_core → runtime_tokio →
-  AvenDbClient, exported from the crate root) and wired the mint+stamp into the single deep author funnel
-  `QueryManager::authored_row_batch` (libs/aven-db/src/query_manager/writes.rs) — stamped BEFORE the
-  edit-sig digest so the binding is itself integrity-signed, across all five write paths (insert / update /
-  soft-delete / undelete / hard-delete). **Refined the invariant per the user (twice): enforcement is
-  UNCONDITIONAL and PER-PEER — not a sync-engine policy.** Dropped the `require_owner_binding` switch
-  entirely: on EVERY peer (local, headless, syncing) an owner-scoped row that cannot be bound — no binder
-  (no device key) or no owner SAFE — fails the write (`QueryError::OwnerBindingRequired`). No local
-  carve-out: an ownerless owned row is refused even where the column is nullable (the legacy `signers`
-  carve-out is thereby eliminated; the app must always own its trust-set rows by the device SAFE). New
-  error variant + three gating tests (`runtime_core/tests/owner_binder.rs`). `cargo test -p aven-db`:
-  **707 passed, 0 failed** (zero blast radius — no aven-db test table is owner-scoped; all owner-scoped
-  tables live in the app manifest); aven-node builds green. The transitional `owner_binding_target`
-  decodes the owner from the `owner` column for now; Stage 2 replaces it with an explicit required `owner`
-  write parameter once the column is dropped — turning this runtime gate into a compile-time guarantee.
-- `2026-06-14` — **Rebased onto `main`** (course-correction): the harness worktree was cut from `4527c94d`,
-  ~50 commits BEHIND `main` (`15003db7`) — it predated `3d8cb819 enforce owner-binding system-wide` (the
-  merge that caused this regression) and lacked the helper fns + the live relay/app code. Stage 1 was sound
-  but on the wrong base. Committed Stage 1 and rebased onto main (3 files auto-merged; kept this SSOT card
-  over main's original; 3 catalogue-encoding `TableSchema` initializers got `owner_scoped: false`).
-  Re-verified: **710 aven-db tests pass** on the real base. Findings: (a) **the relay is ALREADY
-  fail-closed** on main (`ServerApplyGate`, main.rs:173 denies bindingless spark-scoped rows via
-  `owner_scoped_table_names`) — the "relay gap" was a stale-worktree artifact; the only relay change needed
-  is making `owner_scoped_table_names` read the new flag once the column drops. (b) **Unconditional
-  enforcement ⇒ every writer needs a binder**: aven-node authors the avenCEO genesis (owner-scoped
-  `sparks`/`keyshares`/`signers` in `aven_ceo.rs`, currently stamping bindings MANUALLY) and must instead
-  install a `ServerOwnerBinder` (like `ServerEditSigner`) or those writes fail closed — so Stage 1 is NOT
-  independently deployable; binder installation (app `AppOwnerBinder` + node `ServerOwnerBinder`) lands
-  together with it. (c) Lower-risk order: install binders + own `signers` by the device SAFE FIRST (the
-  actual onboarding fix, works against today's relay), THEN drop the column.
-- `2026-06-14` — **Binders-first onboarding fix built** (commits `49816947`, `79bf4d89`): (1) installed
-  the `OwnerBinder` on every peer — aven-node `ServerOwnerBinder` (before the avenCEO genesis mint) + app
-  `AppOwnerBinder` (at connect, same device key as the edit-signer) — so the funnel auto-stamps every
-  owner-bearing row's binding (this auto-fixes the 3 `signers` writes the card flagged, which HAD owners
-  but no binding). (2) made `signers` always belong to a SAFE: `add_remote_signer` defers (in-memory
-  `PENDING_SIGNERS` + `drain_pending_signers`, drained at each entry) when no SAFE exists yet; the
-  zero-identity device self-signer in `hydrate_shell` is owned by the first identity SAFE or deferred —
-  no ownerless owned row is ever authored. Build/test verified: aven-db 710 tests, aven-node builds, app
-  `cargo check --features desktop-ai` exits 0. **Not yet verified live** — needs the credentialed `WIPE=1`
-  flush+redeploy. Remaining: (a) DRY cleanup — remove the now-redundant manual `owner_binding_meta`
-  stamping (idempotent with the funnel, harmless until then); (b) the SSOT column drop (Stage 2);
-  (c) flush+redeploy + live proof.
-- `2026-06-14` — **Stage 2a done** (commit `4e976f76`): `owner_scoped` is now a declarative,
-  authoritative flag — parsed from the manifest (set on all 11 tables) into `TableSchema.owner_scoped`,
-  read by `table_schema_is_owner_scoped` (column kept as transition fallback) so the engine funnel, the
-  app `is_spark_scoped_table`, and the relay `owner_scoped_table_names` all inherit it. Hash-neutral, no
-  redeploy. aven-db 710 tests + app check green. Owner-scoping is now decoupled from the column — the
-  column is pure data, ready to drop.
-  **Stage 2b (the actual column removal) scoped — it is the large, careful migration:** confirmed the
-  app's `insert_values` **errors on unknown columns**, so dropping `owner` from the manifest forces
-  every write site that currently passes `owner` in its values map (the ~25 `caps_ipc` sites + `signers`
-  + `engine.rs` + node `aven_ceo.rs`) to drop it AND pass the owner via an explicit param. So Stage 2b =
-  (1) add an explicit `owner` write parameter threaded `create_checked/update → insert → authored_row_batch`
-  (replacing the funnel's transitional `owner_binding_target` column-decode); (2) drop the 11 `owner`
-  columns from the manifest (schema-hash bump → coordinated redeploy); (3) migrate the owner READS off the
-  column — `owner_invariant_ok` (avenos_client.rs:593), the ACL `build_object_spark_id_map`, owner indexes,
-  catalogue encode/decode (`owner_scoped: false` placeholders), all now deriving from the binding header;
-  (4) remove the now-redundant manual `owner_binding_meta` stampings. Best done as a focused unit — the
-  foundation (Stage 1 enforcement + binders + signers ownership + authoritative flag) is all in place and
-  committed, so 2b is mechanical-but-broad with a schema-hash redeploy at the end.
+Newest first.
+
+- `2026-06-14` — **Re-discovered under the elimination lens.** Confirmed with the user that ownership is
+  a CORE PRIMITIVE of aven-db (like `_id`), not a flag/mode/option — a value *is* `(id, owner, data)`,
+  the owner carried only by the immutable signed binding; aven-db cannot represent an unowned value.
+  Collapsed to one `create(table, owner, fields)`; the binding is the value's identity (no carry-forward
+  branch — update/delete inherit it); eliminate the column, `owner_scoped` flag, `owner_binding_meta`,
+  `owner_invariant_ok`, the `*_with_metadata` binding-passing, and the legacy create variants. Established
+  WHY this is necessary for local-first P2P biscuit-cap (un-attributable = un-authenticatable; mutable
+  owner = CRDT divergence) and HOW it hardens security (one source = no confused-deputy; structural = no
+  remembered gap; immutable = relabel unrepresentable; smaller TCB). Boundary confirmed from code: the
+  value funnel only authors values; the schema catalogue syncs on a separate path with its own trust and
+  is out of scope. Hard constraint kept: every synced batch carries binding + covering edit-sig.
+  Engine foundation (WriteContext.owner mint funnel + `owner_binding_for` read-back + one `create`) is
+  built and green at the aven-db level, UNCOMMITTED on branch `claude/thirsty-hellman-5cb9e6` (rebased
+  onto main); the app-wide create-site migration + column drop is the remaining atomic build.
+- `2026-06-14` — Stage 2a (committed `4e976f76`, since superseded by the intrinsic-ownership framing):
+  `owner_scoped` made a declarative flag — now to be deleted entirely (ownership is not optional).
+- `2026-06-14` — Stage 1 (committed `7bba6272`): per-peer owner-binding invariant at the deep author
+  funnel; `OwnerBinder` seam; binders installed on both peers; signers ownership; 710 aven-db tests green.
