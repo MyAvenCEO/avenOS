@@ -1,6 +1,6 @@
 [package]
 name = "avenos-schema-hash"
-version = "26.6.1-next.10"
+version = "0.0.1"
 edition = "2021"
 publish = false
 
