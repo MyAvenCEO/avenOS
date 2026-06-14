@@ -179,6 +179,22 @@ export async function peerList(): Promise<PeerRow[]> {
 	return avenDbRuntime<PeerRow[]>('peerList', {})
 }
 
+/** One network directory entry from the SEALED `profile` table (board 0049), decrypted
+ *  under the avenCEO registry sub-group DEK. A blind relay (no registry DEK) sees nothing. */
+export type ProfileRow = {
+	id: string
+	/** 'SIGNER' (a did:key device/peer) | 'SAFE' (a did:safe identity). */
+	subjectType: string
+	did: string
+	displayName: string
+}
+
+/** The network directory: every member from the sealed profile table. The directory SSOT —
+ *  replaces scanning the plaintext signers/safes roster. Requires the registry DEK to decrypt. */
+export async function profileDirectory(): Promise<ProfileRow[]> {
+	return avenDbRuntime<ProfileRow[]>('profileDirectory', {})
+}
+
 /** First contact: add a trusted peer by DID (dev paste-DID shortcut). */
 export async function peerAdd(payload: { signerDid: string; label?: string }): Promise<void> {
 	await avenDbRuntime('peerAdd', { signerDid: payload.signerDid, label: payload.label ?? '' })

@@ -536,7 +536,7 @@ fn aad_row_for(table: &str, col: &str, identity: Uuid, object_row: Uuid) -> Uuid
 /// `identity`'s held DEK and the correct per-column AAD coordinate (`aad_row_for`). Used by
 /// self-publish/discovery to match a member's own profile row by its sealed `did`. Returns the
 /// plaintext, or an error if no held DEK opens it. `require_sealed=false` (display cells).
-pub(super) fn open_sealed_cell_text(
+pub(crate) fn open_sealed_cell_text(
 	state: &ShellState,
 	table: &str,
 	tbl: &TableSchema,
