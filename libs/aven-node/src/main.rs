@@ -44,11 +44,15 @@ struct Config {
 impl Config {
     fn from_env() -> Self {
         let var = |k: &str| std::env::var(k).ok().filter(|s| !s.is_empty());
-        let seed = var("AVEN_SERVER_SEED").and_then(|h| {
-            let bytes = hex::decode(h.trim()).ok()?;
-            let arr: [u8; 32] = bytes.try_into().ok()?;
-            Some(arr)
-        });
+        // The relay's ed25519 identity seed. Canonical var is AVEN_SIGNER_SECRET;
+        // AVEN_SERVER_SEED is the legacy name, kept as a fallback for transition.
+        let seed = var("AVEN_SIGNER_SECRET")
+            .or_else(|| var("AVEN_SERVER_SEED"))
+            .and_then(|h| {
+                let bytes = hex::decode(h.trim()).ok()?;
+                let arr: [u8; 32] = bytes.try_into().ok()?;
+                Some(arr)
+            });
         // MUST equal the device's `tauri_plugin_self::network::NETWORK_SEED`: the
         // avenCEO identity id is `sha256("avenos:avenCEO:v1:" + network_seed)`, so a
         // mismatch makes the server mint avenCEO under a different id than devices
@@ -96,7 +100,7 @@ fn load_identity(cfg: &Config) -> SigningKey {
         Some(seed) => SigningKey::from_bytes(&seed),
         None => {
             tracing::warn!(
-                "AVEN_SERVER_SEED unset — generated an ephemeral identity (set AVEN_SERVER_SEED \
+                "AVEN_SIGNER_SECRET unset — generated an ephemeral identity (set AVEN_SIGNER_SECRET \
                  for a stable DID across restarts)"
             );
             SigningKey::generate(&mut rand::rngs::OsRng)

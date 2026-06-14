@@ -176,8 +176,7 @@ function spawnTauri(label: 'A' | 'B', colour: string, env: Record<string, string
 	// For B: also pass the overlay as inline JSON to `tauri dev --config '{...}'`.
 	// Do NOT use `--` before --config — that routes it to cargo, not to the Tauri CLI.
 	const featureArgs = ['--features', 'desktop-ai']
-	const extraArgs =
-		label === 'B' ? ['--config', TAURI_B_CONFIG, ...featureArgs] : [...featureArgs]
+	const extraArgs = label === 'B' ? ['--config', TAURI_B_CONFIG, ...featureArgs] : [...featureArgs]
 
 	return spawnLabelled(label, colour, 'bun', ['--bun', 'x', 'tauri', 'dev', ...extraArgs], {
 		cwd: appDir,
@@ -202,7 +201,10 @@ function spawnAvenServer(colour: string, env: Record<string, string>) {
 			env: {
 				...env,
 				AVEN_SERVER_HEALTH_BIND: `127.0.0.1:${SERVER_HTTP_PORT}`,
-				AVEN_SERVER_SEED: process.env.AVEN_SERVER_SEED?.trim() || DEV_SERVER_SEED,
+				AVEN_SIGNER_SECRET:
+					process.env.AVEN_SIGNER_SECRET?.trim() ||
+					process.env.AVEN_SERVER_SEED?.trim() ||
+					DEV_SERVER_SEED,
 				RUST_LOG: env.RUST_LOG ?? 'info'
 			}
 		}
@@ -245,7 +247,9 @@ async function main() {
 	try {
 		baseEnv.AVENOS_ORT_DYLIB = ensureOnnxruntimeDylib(process.arch === 'x64' ? 'x86_64' : 'arm64')
 	} catch (e) {
-		console.warn(`[dev:app2x] onnxruntime provisioning skipped: ${e instanceof Error ? e.message : e}`)
+		console.warn(
+			`[dev:app2x] onnxruntime provisioning skipped: ${e instanceof Error ? e.message : e}`
+		)
 	}
 
 	// Resolve the sync relay: a remote Sprite-hosted server over its public wss URL
