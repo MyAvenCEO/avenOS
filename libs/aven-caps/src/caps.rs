@@ -1203,6 +1203,63 @@ mod tests {
 	}
 
 	#[test]
+	fn owns_is_the_single_role() {
+		// Board 0038: `owns` IS the single full-rights role — it carries `admit` + `rotate_dek`,
+		// so it IS "admin". There is no separate admin tier. `reads`/`replicate` are orthogonal
+		// SHARING tiers, not an admin hierarchy. Any other label grants nothing (no phantom role).
+		assert_eq!(grant_kind_caps("owns"), OWNER_RIGHTS.to_vec());
+		assert!(
+			OWNER_RIGHTS.contains(&"admit") && OWNER_RIGHTS.contains(&"rotate_dek"),
+			"owns carries admit + rotate_dek — it is the admin role"
+		);
+		assert_eq!(grant_kind_caps("reads"), vec!["read"]);
+		assert_eq!(grant_kind_caps("replicate"), vec!["replicate"]);
+		assert!(grant_kind_caps("admin").is_empty(), "no separate `admin` cap group exists");
+	}
+
+	#[test]
+	fn last_owner_invariant() {
+		// Board 0038: a SAFE can never reach zero `owns` subjects (type-agnostic anti-lockout).
+		// The minting owner is structurally permanent — `mint_safe_genesis` re-grants it on every
+		// re-mint — so excluding ANY subject (even the owner's own DID) still leaves ≥1 owner,
+		// and the fail-closed guard in `rebuild_identity_biscuit_excluding` backstops the rest.
+		let root = [9u8; 32];
+		let mut v = vault(&root);
+		let sid = uuid::Uuid::new_v4();
+		let genesis = mint_safe_genesis(&v, sid).unwrap();
+		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: genesis });
+
+		// Add a second owner (a third-party device), then revoke it — the genesis owner remains.
+		let bob = vault(&[2u8; 32]);
+		let with_bob = attenuate_add_owner_third_party(
+			&v.biscuit_kp,
+			&v.safes.get(&sid).unwrap().biscuit,
+			sid,
+			bob.signer_did.as_str(),
+		)
+		.unwrap();
+		v.safes.insert(sid, BiscuitIdentity { owner: sid, biscuit: with_bob });
+
+		let after_revoke_bob =
+			rebuild_identity_biscuit_excluding(&v, sid, bob.signer_did.as_str()).unwrap();
+		let owners = identity_admins(&after_revoke_bob, sid).unwrap();
+		assert!(!owners.is_empty(), "revoking a delegate leaves the owner — never zero owners");
+		assert!(
+			!owners.iter().any(|d| signer_did_matches(d, bob.signer_did.as_str())),
+			"bob is gone"
+		);
+
+		// Even excluding the owner's OWN did leaves ≥1 owner (genesis re-grants the owner):
+		// the last owner is unremovable by construction.
+		let after_revoke_self =
+			rebuild_identity_biscuit_excluding(&v, sid, &v.signer_did.clone()).unwrap();
+		assert!(
+			!identity_admins(&after_revoke_self, sid).unwrap().is_empty(),
+			"the minting owner is permanent — a SAFE never loses its last owner"
+		);
+	}
+
+	#[test]
 	fn third_party_grant_allows_second_device() {
 		let root_alice = [1u8; 32];
 		let root_bob = [2u8; 32];
