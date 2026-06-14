@@ -191,3 +191,21 @@ grep -rn "owner_binding_meta" app/src-tauri/src            # expect: gone from w
   flush+redeploy. Remaining: (a) DRY cleanup — remove the now-redundant manual `owner_binding_meta`
   stamping (idempotent with the funnel, harmless until then); (b) the SSOT column drop (Stage 2);
   (c) flush+redeploy + live proof.
+- `2026-06-14` — **Stage 2a done** (commit `4e976f76`): `owner_scoped` is now a declarative,
+  authoritative flag — parsed from the manifest (set on all 11 tables) into `TableSchema.owner_scoped`,
+  read by `table_schema_is_owner_scoped` (column kept as transition fallback) so the engine funnel, the
+  app `is_spark_scoped_table`, and the relay `owner_scoped_table_names` all inherit it. Hash-neutral, no
+  redeploy. aven-db 710 tests + app check green. Owner-scoping is now decoupled from the column — the
+  column is pure data, ready to drop.
+  **Stage 2b (the actual column removal) scoped — it is the large, careful migration:** confirmed the
+  app's `insert_values` **errors on unknown columns**, so dropping `owner` from the manifest forces
+  every write site that currently passes `owner` in its values map (the ~25 `caps_ipc` sites + `signers`
+  + `engine.rs` + node `aven_ceo.rs`) to drop it AND pass the owner via an explicit param. So Stage 2b =
+  (1) add an explicit `owner` write parameter threaded `create_checked/update → insert → authored_row_batch`
+  (replacing the funnel's transitional `owner_binding_target` column-decode); (2) drop the 11 `owner`
+  columns from the manifest (schema-hash bump → coordinated redeploy); (3) migrate the owner READS off the
+  column — `owner_invariant_ok` (avenos_client.rs:593), the ACL `build_object_spark_id_map`, owner indexes,
+  catalogue encode/decode (`owner_scoped: false` placeholders), all now deriving from the binding header;
+  (4) remove the now-redundant manual `owner_binding_meta` stampings. Best done as a focused unit — the
+  foundation (Stage 1 enforcement + binders + signers ownership + authoritative flag) is all in place and
+  committed, so 2b is mechanical-but-broad with a schema-hash redeploy at the end.
