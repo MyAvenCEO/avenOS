@@ -1,3 +1,15 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.8...v) (2026-06-14)
+
+
+### Bug Fixes
+
+* **0047:** on avenCEO, label the reader grant as TIER-0 (the network invite) ([1534c40](https://github.com/MyAvenCEO/avenOS/commit/1534c4071b8d0489ef057fbed6d32e4dc35cb01e))
+* **caps:** revert the owns→admin WIRE-fact rename — it broke first-admin claim ([206bf1c](https://github.com/MyAvenCEO/avenOS/commit/206bf1c5024d8aa37a45d305d9d2da1baf761a0d))
+
+
+### Features
+
+* **ci:** build iOS app + upload to TestFlight on each next release ([9ecd684](https://github.com/MyAvenCEO/avenOS/commit/9ecd684dfefd8c9596aaa270f684b68000d464af))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.7...v) (2026-06-14)
 
 
