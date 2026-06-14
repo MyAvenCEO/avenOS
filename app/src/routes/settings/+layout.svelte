@@ -1,4 +1,5 @@
 <script lang="ts">
+import { getVersion } from '@tauri-apps/api/app'
 import { browser } from '$app/environment'
 import { page } from '$app/state'
 import { t } from '$lib/i18n'
@@ -17,6 +18,7 @@ const ctx = provideSelfContext()
 const sessionKind = $derived($deviceSession.kind)
 
 let vaults = $state<VaultListEntry[]>([])
+let appVersion = $state('')
 
 const path = $derived(page.url.pathname)
 
@@ -25,6 +27,19 @@ const navSections = $derived(asideNavSectionsFromRoutes(settingsNavSections(), p
 $effect(() => {
 	void sessionKind
 	void ctx.refresh()
+})
+
+// App version (from tauri.conf.json via the Tauri runtime) — reflects the CalVer
+// release version once a `next` build has stamped it. Tauri-only.
+$effect(() => {
+	if (!browser || !isTauriRuntime()) return
+	void (async () => {
+		try {
+			appVersion = await getVersion()
+		} catch {
+			appVersion = ''
+		}
+	})()
 })
 
 $effect(() => {
@@ -93,6 +108,9 @@ async function logout(): Promise<void> {
 				</svg>
 				{t('selfNav.logout')}
 			</button>
+			{#if appVersion}
+				<p class="text-muted-foreground/60 mt-2 px-2.5 text-[10px] tabular-nums">v{appVersion}</p>
+			{/if}
 		</div>
 	{/snippet}
 
