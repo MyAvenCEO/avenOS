@@ -104,6 +104,12 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Set marketing version to the stable CalVer (strip -next.N for App Store)
+        # Apple rejects non-numeric CFBundleShortVersionString, so the app ships the stable
+        # CalVer (e.g. 26.6.1) as its marketing version; github.run_number is the unique
+        # CFBundleVersion that distinguishes the many -next.N builds under it.
+        run: bun run set-version "$(bun run --silent next-version)"
+
       - name: Import signing certs into a temporary keychain
         env:
           DIST_P12_B64: ${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 }}
