@@ -144,7 +144,7 @@ Each box checkable from the transcript.
 - [ ] `cargo test -p aven-os-app --features desktop-ai universal_ownership` — a SAFE admits another SAFE of any type AND a `did:key:` directly (old rules rejected these).
 - [x] **S1b** `cargo test -p aven-caps owns_is_the_single_role` — `owns` = OWNER_RIGHTS (incl admit+rotate_dek = admin); no separate admin cap; only other tiers are `reads`/`replicate`. **GREEN.**
 - [x] **S2** `cargo test -p aven-caps last_owner_invariant` — the minting owner is structurally permanent + `rebuild_identity_biscuit_excluding` fail-closed → never zero `owns`; the type-coupled `count_human_owners` app guard is DELETED (consolidated to the core type-agnostic invariant). **GREEN.**
-- [ ] **S3 (design refined — see progress log):** `cargo test -p aven-caps authority_epoch` — the authority epoch IS the `safes` row's `current_dek_version` (NOT a new biscuit fact: avoids a 55-caller `mint_safe_genesis` ripple and a second counter that could drift from the row — the card's own "one counter" principle). The `(genesis_b64, current_dek_version)` pair is jointly edit-sig-authenticated in the row; `ingest_genesis_opened` rejects a genesis presented with `epoch < per-SAFE high-water` and accepts `≥`; the authorize guard is then automatic (the vault never holds a stale genesis).
+- [x] **S3** `cargo test -p aven-caps authority_epoch` **GREEN** — the authority epoch IS the `safes` row's `current_dek_version` (NOT a new biscuit fact: avoids a 55-caller `mint_safe_genesis` ripple and a second counter that could drift — the card's own "one counter" principle). `ingest_genesis_opened` gained `(epoch, high_water)` and rejects `epoch < high_water` (accepts `≥`); the 2 callers are migrated to the new signature (S4a wires the live epoch=dek_version + per-SAFE high-water; currently seeded 0,0 = TOFU). The authorize guard is then automatic (the vault never holds a stale genesis).
 - [ ] `cargo test -p aven-os-app --features desktop-ai revocation_epoch` — post-revoke the revoked signer's batch is `DenyPermanent` at the member; replayed pre-revoke genesis rejected; newer epoch forces re-hydrate (immediate enforcement).
 - [ ] `cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node` exits 0; existing `biscuit_resolver` / `owner_binder` / apply-gate suites green.
 - [ ] The type-rule elimination is net-subtractive on `caps_ipc.rs` (`git diff --stat`).
@@ -179,6 +179,18 @@ cargo build -p aven-caps -p aven-os-app --features desktop-ai -p aven-node
 
 Newest entry first.
 
+- `2026-06-15` — **Build: S3 epoch-guard primitive landed green** (+ renumbered 0038→0040 after a
+  parallel session shipped a CalVer 0038/0039; merged main, clean). `ingest_genesis_opened` gained
+  `(epoch, high_water)` and rejects `epoch < high_water` — the rollback-rejection primitive;
+  `authority_epoch` aven-caps test green (reject below-high-water, accept ≥, TOFU at high_water 0).
+  The 2 ingest callers (primary safes + controller copy) are migrated to the new signature, seeded
+  `0,0` (TOFU) — **S4a** wires the live epoch (= unsealed `current_dek_version`) + per-SAFE
+  high-water so the guard bites on re-hydrate. aven-caps 47 green; app(desktop-ai) builds clean.
+  **Remaining (S4):** S4a feed the live epoch + high-water into the primary ingest; S4b force a
+  re-hydrate when a higher-epoch `safes` update for a held SAFE is applied (inbound-apply path); the
+  `revocation_epoch` two-vault integration test + the `universal_ownership` integration test. These
+  need app apply-path surgery + heavier in-process harnesses — handed to the `/goal` continuation;
+  card stays in `build/` (not review) until green.
 - `2026-06-15` — **Build: S1 + S2 landed green.** S1 (net-subtractive): deleted the
   `enforce_member_type_rule` ACC gate + `safe_type_of` from caps_ipc (the "aven admits only
   human / spark only aven / others only keys" rules) + its 3 call sites → ownership is now
