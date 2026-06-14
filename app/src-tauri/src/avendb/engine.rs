@@ -43,6 +43,53 @@ pub(crate) struct ShellState {
 	/// use this branch only; empty `Query.branches` expands to **all live schema branches**, so merged
 	/// reads can expose rows whose tips are not writable on `current_branch()` (ObjectNotFound).
 	pub(crate) avendb_write_branch: String,
+	/// SAFEs this device was REVOKED from (board 0047, fail-closed): it holds a row for the SAFE
+	/// (it was a member) but can no longer open the re-sealed genesis with any DEK it holds AND
+	/// holds no admin cap → cut off. The UI locks these identities and the local cache is purged.
+	/// Physics: we can't delete bytes on a device we no longer control, so the revoked device
+	/// self-purges + self-locks on hydrate.
+	pub(crate) revoked_self: std::collections::HashSet<Uuid>,
+}
+
+/// Self-access verdict for a SAFE this device considered itself a member of (board 0047).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SelfAccess {
+	/// Still has some access: the genesis opens with a held DEK (reader/admin) OR an admin cap
+	/// remains (a key-rotation lag re-keys shortly).
+	Active,
+	/// Fail-closed: the genesis no longer opens with any held DEK (rotated away) AND no admin cap
+	/// remains → this device was revoked. Lock the identity out + purge its local cache.
+	RevokedSelf,
+}
+
+/// Fail-closed revocation decision (board 0047) for a SAFE this device is a member of. Pure so it
+/// is testable in isolation; the hydrate path supplies the two facts. RevokedSelf ONLY when the
+/// device both lost the key (can't open the current genesis) AND holds no admin cap — a legit
+/// reader still opens the genesis, an admin still holds the cap (and a blind relay is never a
+/// member, so this is never called for it).
+pub(crate) fn self_access_for_member_safe(can_open_genesis: bool, holds_admin_cap: bool) -> SelfAccess {
+	if !can_open_genesis && !holds_admin_cap {
+		SelfAccess::RevokedSelf
+	} else {
+		SelfAccess::Active
+	}
+}
+
+#[cfg(test)]
+mod revoked_self_tests {
+	use super::{self_access_for_member_safe, SelfAccess};
+
+	#[test]
+	fn revoked_self_fail_closed() {
+		// Lost the DEK (genesis won't open) AND no admin cap → revoked, fail-closed.
+		assert_eq!(self_access_for_member_safe(false, false), SelfAccess::RevokedSelf);
+		// Still opens the genesis (reader or admin keyshare held) → active, not revoked.
+		assert_eq!(self_access_for_member_safe(true, false), SelfAccess::Active);
+		assert_eq!(self_access_for_member_safe(true, true), SelfAccess::Active);
+		// Holds an admin cap but the genesis didn't open yet (DEK-rotation lag) → active; a current
+		// admin re-keys itself, it is not locked out.
+		assert_eq!(self_access_for_member_safe(false, true), SelfAccess::Active);
+	}
 }
 
 fn avendb_cell_json(cell: &Value) -> JsonValue {
@@ -879,6 +926,10 @@ pub(super) async fn hydrate_shell(
 	let ver_ix = col_ix(&sparks_schema, "current_dek_version")?;
 
 	let mut identity_versions = HashMap::new();
+	// SAFEs whose genesis would not open with any DEK we hold (board 0047, fail-closed): candidates
+	// for "this device was revoked". Finalized after the vault is built (a controller-admin may still
+	// authorize sid through a parent chain → Active, not revoked).
+	let mut genesis_open_failed: std::collections::HashSet<Uuid> = std::collections::HashSet::new();
 	let sparks_rows = exec_list_rows(client, "safes").await?;
 	let ver_storage_ty = sparks_schema
 		.columns
@@ -1108,6 +1159,10 @@ pub(super) async fn hydrate_shell(
 						target: "avenos::avendb",
 						"hydrate_shell: skip identity {sid} (genesis open): {e}",
 					);
+					// Fail-closed (board 0047): we hold this SAFE's row but its genesis is re-sealed
+					// beyond every DEK we hold. Candidate for RevokedSelf — finalized below once the
+					// vault is built (a controller-admin may still authorize it via a parent chain).
+					genesis_open_failed.insert(sid);
 					continue;
 				}
 			};
@@ -1337,6 +1392,28 @@ pub(super) async fn hydrate_shell(
 	// the invite. `default_identity` is a nil sentinel until then (no fallback owner).
 	let default_identity = identity_keys.first().copied().unwrap_or_else(Uuid::nil);
 
+	// Finalize fail-closed revocation (board 0047): a genesis-open-failed SAFE is RevokedSelf
+	// UNLESS we still hold an admin cap on it through a loaded chain (e.g. a controller SAFE we
+	// admin) — that case re-keys shortly, so it stays Active. The UI locks `revoked_self` + the
+	// local cache is purged (the revoked device self-purges; we can't delete bytes remotely).
+	let revoked_self: std::collections::HashSet<Uuid> = genesis_open_failed
+		.into_iter()
+		.filter(|sid| {
+			let holds_admin =
+				identity_acc::authorize(&vault, *sid, AccOp::Write, "safes", None, &vault.signer_did)
+					.is_ok();
+			matches!(self_access_for_member_safe(false, holds_admin), SelfAccess::RevokedSelf)
+		})
+		.collect();
+	if !revoked_self.is_empty() {
+		log::warn!(
+			target: "avenos::avendb",
+			"hydrate_shell: REVOKED from {} SAFE(s) — fail-closed lock + purge (board 0047): {:?}",
+			revoked_self.len(),
+			revoked_self,
+		);
+	}
+
 	log::debug!(
 		target: "avenos::avendb",
 		"hydrate_shell ready avendb_write_branch={avendb_write_branch} default_identity={default_identity}"
@@ -1351,5 +1428,6 @@ pub(super) async fn hydrate_shell(
 		identity_versions,
 		issuers,
 		avendb_write_branch,
+		revoked_self,
 	})
 }

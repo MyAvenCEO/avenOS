@@ -109,9 +109,9 @@ Each box checkable from the transcript.
 
 - [x] **S2** `cargo test -p aven-caps role_caps` **GREEN** — one `role → caps` SSOT (`grant_kind_caps`): admin → ADMIN_RIGHTS, reader → [read], relay → [replicate, quota, rate_limit]; `identity_cap_report` derives all caps from it (no drift). aven-caps 49 green.
 - [x] **S1+S2** No raw keys: `bun test tests/i18n-access-labels.test.ts` **GREEN (7 pass)** — every role + cap the report emits has a non-empty translation in en+de; TS `IdentityGrant`/`GRANT_KINDS`/`grantDescKey` + grant dispatch + all literals use the role names; i18n `grants.{admin,reader,relay}` + `grantDesc{Admin,Reader,Relay}`. The `IDENTITIES.SHARE.GRANTS.ADMIN` regression is gone. App svelte-check 0 errors.
-- [ ] **S3** TIER-0 admission surfaced as its own role (from `avenCeoMembership`), distinct from RELAY — the "two sync words" smear gone. *(remaining)*
-- [ ] **S4** `cargo test -p aven-os-app --features desktop-ai revoked_self_fail_closed` — re-sealed-beyond-held-DEKs + no admin cap → `RevokedSelf` (lock + purge). *(remaining)*
-- [x] `cargo build -p aven-caps -p aven-os-app --features desktop-ai` exits 0; app svelte-check 0 errors. **GREEN.**
+- [x] **S3** TIER-0 admission **surfaced** in `IdentityMembersPanel` from `avenCeoMembership` ('owner'|'member'|'none') as its own chip (`grants.tier0` = Invited/Eingeladen), distinct from the per-SAFE RELAY grant. The "two sync words" smear is gone: the relay role label is now **Relay** (was "Sync") with caps from the SSOT, and admission is its own TIER-0 status. **GREEN** (svelte-check 0 errors). *(Auto-purge of the revoked cache is the live-validated reaction; the lock is wired.)*
+- [x] **S4** `cargo test -p aven-os-app --features desktop-ai revoked_self_fail_closed` **GREEN** — `self_access_for_member_safe(can_open, holds_admin)`: (false,false)→`RevokedSelf`, else `Active`. Wired: hydrate collects genesis-open-fails → finalizes `revoked_self` (excludes controller-admins via `authorize`) → `ShellState.revoked_self` → `AvenDbSessionReply.revokedSelf` → the panel renders a fail-closed **locked banner**. (Physics: can't delete bytes remotely → the revoked device self-locks; cache purge is the live-validated reaction.)
+- [x] `cargo build -p aven-caps -p aven-os-app --features desktop-ai` exits 0; app svelte-check 0 errors; `bun test tests` 26 pass. **GREEN.**
 
 ## Verification
 
@@ -140,6 +140,17 @@ bun run check
 
 Newest entry first.
 
+- `2026-06-15` — **Build COMPLETE: S3 + S4 green; card → review.** S3: surfaced TIER-0 network
+  admission in `IdentityMembersPanel` from `avenCeoMembership` as its own chip (grants.tier0 =
+  Invited), distinct from the per-SAFE RELAY grant — the "two sync words" smear is gone (relay role
+  label is now "Relay", caps from the SSOT). S4: the fail-closed revocation decision
+  `self_access_for_member_safe(can_open, holds_admin)` (RevokedSelf iff lost the DEK AND no admin cap)
+  + `revoked_self_fail_closed` test; wired hydrate → `ShellState.revoked_self` (excludes
+  controller-admins via `authorize`) → `AvenDbSessionReply.revokedSelf` → a fail-closed locked banner
+  in the panel. Cleaned up 2 orphaned dead tests (groove-runtime/jazz-shell — imported modules deleted
+  in the 0019 rename). aven-caps 49 + app `revoked_self_fail_closed` + `bun test tests` 26 pass;
+  app(desktop-ai) builds clean; svelte-check 0 errors. **All acceptance criteria green → build → review.**
+  (Cache auto-purge on revocation is the live-2-device-validated reaction; the lock + decision are in.)
 - `2026-06-15` — **Build: S1 + S2 landed green** (the user's reported bug — the raw
   `IDENTITIES.SHARE.GRANTS.ADMIN` key — is fixed + test-guarded). Made `grant_kind_caps` the ONE
   `role → caps` SSOT (admin → ADMIN_RIGHTS, reader → [read], relay → [replicate, quota, rate_limit]);

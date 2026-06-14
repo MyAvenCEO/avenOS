@@ -591,11 +591,12 @@
 			"grants": {
 				"admin": "Admin",
 				"reader": "Reader",
-				"relay": "Relay"
+				"relay": "Relay",
+				"tier0": "Invited"
 			},
 			"accessLevel": "Access level",
 			"grantAccess": "Grant access",
-			"quickRelay": "Sync on the connected aven",
+			"quickRelay": "Relay to the connected aven",
 			"capsLegendTitle": "How these permissions work",
 			"capDesc": {
 				"read": "Holds the key — can decrypt and read all of this identity's data.",
@@ -613,7 +614,9 @@
 			"syncRelay": "Sync relay",
 			"grantDescAdmin": "Full control — read, write, and manage members.",
 			"grantDescReader": "Read-only member.",
-			"grantDescRelay": "Blind sync — the aven relays this identity’s encrypted data it cannot read (up to 10 MB) to your other devices. It holds no key, so it is not a readable backup."
+			"grantDescRelay": "Blind sync — the aven relays this identity’s encrypted data it cannot read (up to 10 MB) to your other devices. It holds no key, so it is not a readable backup.",
+			"grantDescTier0": "Network admission — you are invited to sync on this network (welcome tier: a per-identity storage + rate budget). Granted by the network, distinct from a relay you authorize.",
+			"revokedSelfLocked": "You were removed from this identity — it is locked here and your local copy is being cleared. You can no longer read new data or write."
 		},
 		"avenCeoTitle": "avenCEO",
 		"avenCeoClaimedSub": "This network's roster & members",
