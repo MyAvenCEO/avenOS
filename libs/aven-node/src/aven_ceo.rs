@@ -197,9 +197,8 @@ pub async fn ensure_avenceo_owned(
 		],
 	);
 	let sparks_oid = ObjectId::new();
-	let sparks_meta = owner_binding_meta(signing, sparks_oid, avenceo_id)?;
 	engine
-		.create_checked_with_id_and_metadata("safes", sparks_oid, sparks_row, sparks_meta)
+		.create("safes", avenceo_id, Some(sparks_oid), sparks_row)
 		.await
 		.map_err(|e| format!("create safes:{e:?}"))?;
 
@@ -217,9 +216,8 @@ pub async fn ensure_avenceo_owned(
 		],
 	);
 	let ks_oid = ObjectId::new();
-	let ks_meta = owner_binding_meta(signing, ks_oid, avenceo_id)?;
 	engine
-		.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_row, ks_meta)
+		.create("keyshares", avenceo_id, Some(ks_oid), ks_row)
 		.await
 		.map_err(|e| format!("create keyshares:{e:?}"))?;
 
@@ -239,9 +237,8 @@ pub async fn ensure_avenceo_owned(
 			],
 		);
 		let signers_oid = ObjectId::new();
-		let signers_meta = owner_binding_meta(signing, signers_oid, avenceo_id)?;
 		engine
-			.create_checked_with_id_and_metadata("signers", signers_oid, signers_row, signers_meta)
+			.create("signers", avenceo_id, Some(signers_oid), signers_row)
 			.await
 			.map_err(|e| format!("create signers:{e:?}"))?;
 	}
@@ -393,9 +390,8 @@ pub async fn grant_first_human_admin(
 		],
 	);
 	let ks_oid = ObjectId::new();
-	let ks_meta = owner_binding_meta(signing, ks_oid, avenceo_id)?;
 	engine
-		.create_checked_with_id_and_metadata("keyshares", ks_oid, ks_row, ks_meta)
+		.create("keyshares", avenceo_id, Some(ks_oid), ks_row)
 		.await
 		.map_err(|e| format!("create keyshares:{e:?}"))?;
 

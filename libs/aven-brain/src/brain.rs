@@ -1077,26 +1077,6 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         }
     }
 
-    /// Row metadata stamping the **owner-binding** for a freshly-created row owned by this
-    /// brain's SAFE — so the row passes the fail-closed apply gate on every peer (relay
-    /// included). Mirrors the app's `crud_ipc::owner_binding_meta`. Empty when there is no
-    /// signer (in-memory/test brains, which never sync). The edit-signature is added
-    /// automatically by the client's installed `EditSigner`.
-    fn binding_meta(&self, oid: ObjectId) -> HashMap<String, String> {
-        let Some(sk) = self.signer.as_ref() else {
-            return HashMap::new();
-        };
-        match aven_caps::ownership::mint_owner_binding(sk, *oid.uuid(), *self.owner.uuid()) {
-            Ok(binding) => HashMap::from([(
-                aven_caps::ownership::OWNER_BINDING_META_KEY.to_string(),
-                binding.to_meta_string(),
-            )]),
-            // Minting only fails on a malformed key (never with a real device key); fall back
-            // to no binding rather than failing the write.
-            Err(_e) => HashMap::new(),
-        }
-    }
-
     /// The embedder's short name (for traces).
     pub fn embedder_name(&self) -> &'static str {
         self.embedder.name()
@@ -1372,7 +1352,7 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         ]);
         let memory_id = self
             .client
-            .create_checked_with_id_and_metadata(MEMORIES, oid, fields, self.binding_meta(oid))
+            .create(MEMORIES, *self.owner.uuid(), Some(oid), fields)
             .await
             .map_err(|e| BrainError::Write(format!("{e:?}")))?;
 
@@ -1804,9 +1784,10 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         let oid = ObjectId::new();
         let row = *oid.uuid();
         self.client
-            .create_checked_with_id_and_metadata(
+            .create(
                 LINKS,
-                oid,
+                *self.owner.uuid(),
+                Some(oid),
                 HashMap::from([
                     ("owner".to_string(), Value::Uuid(self.owner)),
                     ("from".to_string(), self.sv(LINKS, "from", row, &subj_s)?),
@@ -1834,7 +1815,6 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
                         )?,
                     ),
                 ]),
-                self.binding_meta(oid),
             )
             .await
             .map_err(|e| BrainError::Write(format!("{e:?}")))
@@ -3117,9 +3097,10 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         let oid = ObjectId::new();
         let row = *oid.uuid();
         self.client
-            .create_checked_with_id_and_metadata(
+            .create(
                 LINKS,
-                oid,
+                *self.owner.uuid(),
+                Some(oid),
                 HashMap::from([
                     ("owner".to_string(), Value::Uuid(self.owner)),
                     ("from".to_string(), self.sv(LINKS, "from", row, &from_s)?),
@@ -3130,7 +3111,6 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
                         self.sv(LINKS, "class", row, LinkClass::Note.as_str())?,
                     ),
                 ]),
-                self.binding_meta(oid),
             )
             .await
             .map_err(|e| BrainError::Write(format!("{e:?}")))?;
@@ -3185,15 +3165,15 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
         let oid = ObjectId::new();
         let row = *oid.uuid();
         self.client
-            .create_checked_with_id_and_metadata(
+            .create(
                 ENTITIES,
-                oid,
+                *self.owner.uuid(),
+                Some(oid),
                 HashMap::from([
                     ("owner".to_string(), Value::Uuid(self.owner)),
                     ("name".to_string(), self.sv(ENTITIES, "name", row, name)?),
                     ("kind".to_string(), self.sv(ENTITIES, "kind", row, "unknown")?),
                 ]),
-                self.binding_meta(oid),
             )
             .await
             .map_err(|e| BrainError::Write(format!("{e:?}")))
@@ -3250,9 +3230,10 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
             let oid = ObjectId::new();
             let row = *oid.uuid();
             self.client
-                .create_checked_with_id_and_metadata(
+                .create(
                     LINKS,
-                    oid,
+                    *self.owner.uuid(),
+                    Some(oid),
                     HashMap::from([
                         ("owner".to_string(), Value::Uuid(self.owner)),
                         ("from".to_string(), self.sv(LINKS, "from", row, &a_s)?),
@@ -3270,7 +3251,6 @@ impl<E: Embedder, X: Extractor> Brain<E, X> {
                             self.sv(LINKS, "last_access", row, &now.to_string())?,
                         ),
                     ]),
-                    self.binding_meta(oid),
                 )
                 .await
                 .map_err(|e| BrainError::Write(format!("{e:?}")))?;

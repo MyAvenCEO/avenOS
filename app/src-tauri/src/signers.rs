@@ -249,7 +249,7 @@ async fn add_remote_signer_inner(
 	// Owner-scoped create (board 0037): the funnel mints the owner-binding from `owner`; ownership
 	// lives in the immutable header, not a data column. One channel, no per-call-site stamping.
 	client
-		.create_owned("signers", owner, row_vals)
+		.create("signers", owner, None, row_vals)
 		.await
 		.map_err(crate::avendb::format_avendb_err)?;
 	Ok(())

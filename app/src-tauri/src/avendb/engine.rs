@@ -1332,7 +1332,7 @@ pub(super) async fn hydrate_shell(
 			)?;
 			// Owner-scoped create (board 0037): the funnel mints the owner-binding from `self_owner`.
 			client
-				.create_owned("signers", self_owner, peer_vals)
+				.create("signers", self_owner, None, peer_vals)
 				.await
 				.map_err(super::format_avendb_err)?;
 		}

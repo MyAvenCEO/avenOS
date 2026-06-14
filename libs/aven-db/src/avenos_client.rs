@@ -521,51 +521,24 @@ impl AvenDbClient {
         crate::frontier_epoch::changes_since(cursor)
     }
 
-    pub async fn create_checked(
-        &self,
-        table: &str,
-        fields: std::collections::HashMap<String, Value>,
-    ) -> Result<ObjectId> {
-        let map = self.resolve_named_row(table, fields)?;
-        let (object_id, _, _) = self
-            .runtime
-            .insert(table, map, None)
-            .map_err(|e| AvenDbError::Write(e.to_string()))?;
-        Ok(object_id)
-    }
-
-    /// Create a row on an **owner-scoped** table, owned by `owner` (board 0037). The deep author
-    /// funnel mints the owner-binding from `owner` and fails closed without it — ownership lives in
-    /// the immutable header, never a data column. Use this for owned creates instead of stamping a
-    /// binding into metadata at the call-site.
-    pub async fn create_owned(
+    /// The sole create. Every value is owned by a SAFE (board 0037) — ownership is an aven-db core
+    /// primitive, like `_id`: a value IS `(id, owner, data)` and the deep author funnel mints the
+    /// immutable owner-binding `(value_id → owner)` from `owner`, failing closed without it. There is
+    /// no unowned create because aven-db cannot represent an unowned value. `id` is supplied when the
+    /// caller needs a deterministic value id (else engine-assigned).
+    pub async fn create(
         &self,
         table: &str,
         owner: uuid::Uuid,
+        id: Option<ObjectId>,
         fields: std::collections::HashMap<String, Value>,
     ) -> Result<ObjectId> {
         let map = self.resolve_named_row(table, fields)?;
         let (object_id, _, _) = self
             .runtime
-            .insert_owned(table, map, None, None, owner)
+            .insert_owned(table, map, id, None, owner)
             .map_err(|e| AvenDbError::Write(e.to_string()))?;
         Ok(object_id)
-    }
-
-    /// [`create_checked`] + a caller-supplied id and row metadata (e.g. the owner-binding).
-    pub async fn create_checked_with_id_and_metadata(
-        &self,
-        table: &str,
-        object_id: ObjectId,
-        fields: std::collections::HashMap<String, Value>,
-        extra_metadata: std::collections::HashMap<String, String>,
-    ) -> Result<ObjectId> {
-        let map = self.resolve_named_row(table, fields)?;
-        let (oid, _, _) = self
-            .runtime
-            .insert_with_id_and_metadata(table, map, Some(object_id), None, extra_metadata)
-            .map_err(|e| AvenDbError::Write(e.to_string()))?;
-        Ok(oid)
     }
 
     /// Resolve a name→value map into a full row map in schema order, filling missing
