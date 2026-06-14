@@ -1,3 +1,10 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.7...v) (2026-06-14)
+
+
+### Bug Fixes
+
+* **0047:** drop the redundant quick-relay button + orphaned i18n (RELAY role is the one manual path) ([4c8cde2](https://github.com/MyAvenCEO/avenOS/commit/4c8cde283bce711f86a51174daa65d2a44e6c1e8))
+* **release:** stamp internal crate dep requirements with the unified version ([1a8e444](https://github.com/MyAvenCEO/avenOS/commit/1a8e444e16132e0a75359989b9e2f3e47dded33f))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.6...v) (2026-06-14)
 
 
