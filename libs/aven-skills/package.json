@@ -1,7 +1,7 @@
 {
 	"name": "@avenos/aven-skills",
 	"private": true,
-	"version": "26.6.1-next.1",
+	"version": "26.6.1-next.2",
 	"type": "module",
 	"description": "Generic, config-driven data-ingestor skills (source → map → target) for AvenOS.",
 	"main": "./src/index.ts",

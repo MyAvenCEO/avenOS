@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-vault"
-version = "26.6.1-next.1"
+version = "26.6.1-next.2"
 description = "Tauri plugin: Stronghold secrets CRUD (borrows session from tauri-plugin-self)."
 authors = ["Aven"]
 license = "MIT OR Apache-2.0"

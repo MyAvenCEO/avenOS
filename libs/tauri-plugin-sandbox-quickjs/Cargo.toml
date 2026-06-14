@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-sandbox-quickjs"
-version = "26.6.1-next.1"
+version = "26.6.1-next.2"
 description = "Tauri plugin: QuickJS sandbox for @avenos/aven-ui fixture logic."
 authors = ["Aven"]
 license = "MIT OR Apache-2.0"

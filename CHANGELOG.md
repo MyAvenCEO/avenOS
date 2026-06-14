@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.1...v) (2026-06-14)
+
+
+### Bug Fixes
+
+* **release:** push the tag explicitly — --follow-tags skips lightweight tags ([7e46305](https://github.com/MyAvenCEO/avenOS/commit/7e46305c0ad8a42803f59016868656d12d2fef37))
 #  (2026-06-14)
 
 

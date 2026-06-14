@@ -1,6 +1,6 @@
 [package]
 name = "aven-brain"
-version = "26.6.1-next.1"
+version = "26.6.1-next.2"
 edition = "2021"
 description = "AvenOS local-first AI memory brain — memories, entities, facts, relations over aven-db (CRDT, vector + BM25 retrieval). One brain per identity."
 license = "MIT OR Apache-2.0"
