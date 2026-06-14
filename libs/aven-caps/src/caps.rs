@@ -1646,36 +1646,39 @@ mod tests {
 
 	#[test]
 	fn tier0_minimal_grant() {
-		// Board 0049: a TIER-0 network member is admitted to the avenCEO REGISTRY sub-group (the
-		// directory) ONLY — it reads the directory but is DENIED avenCEO's content. `extends` is
-		// one-directional (registry inherits avenCEO members, NOT the reverse), so a registry-only
-		// member cannot read avenCEO. This is "admission + directory, no roster-content decrypt".
+		// Board 0049: the directory lives in the ADDRESSBOOK — a spark SAFE CONTROLLED BY avenCEO
+		// (owns(avenCEO, addressbook), the same controller chain as human→aven→spark). A directory
+		// member is granted `reads` on the Addressbook ONLY: it reads the directory but is DENIED
+		// avenCEO content, because authority flows avenCEO→Addressbook, never back. Its own dek (the
+		// seal test) is what stops it decrypting avenCEO content even though it can read the directory.
 		let seed = "ceo.aven/testnet/abagana";
-		let mut founder = vault(&[1u8; 32]); // the avenCEO owner
-		let member = vault(&[2u8; 32]); // a TIER-0 network member
+		let mut founder = vault(&[1u8; 32]); // owns avenCEO (its device signer)
+		let member = vault(&[2u8; 32]); // a directory (TIER-0) member
 		let avenceo = aven_ceo_identity(seed);
-		let registry = aven_ceo_registry_group(seed);
+		let addressbook = aven_ceo_registry_group(seed); // id stays derive_subgroup_id(avenCEO,"registry")
 
-		// avenCEO genesis (founder owns it) + a registry sub-group extending it.
+		// avenCEO genesis — founder's signer owns it directly.
 		let ceo = mint_safe_genesis(&founder, avenceo).unwrap();
 		founder.safes.insert(avenceo, BiscuitIdentity { owner: avenceo, biscuit: ceo });
-		let reg = mint_group_genesis_extending(&founder, registry, avenceo).unwrap();
-		// Admit the member as a registry READER (the TIER-0 directory grant).
-		let reg = attenuate_add_reader_third_party(&founder.biscuit_kp, &reg, registry, &member.signer_did)
+		// Addressbook = spark CONTROLLED BY avenCEO: genesis records owns(avenCEO_did, addressbook).
+		let ab = mint_safe_genesis_with_controller(&founder, addressbook, &safe_did(avenceo)).unwrap();
+		// Admit the member as an Addressbook READER (the directory grant).
+		let ab = attenuate_add_reader_third_party(&founder.biscuit_kp, &ab, addressbook, &member.signer_did)
 			.unwrap();
-		founder.safes.insert(registry, BiscuitIdentity { owner: registry, biscuit: reg });
+		founder.safes.insert(addressbook, BiscuitIdentity { owner: addressbook, biscuit: ab });
 
-		// TIER-0 member READS the registry/profile directory…
-		authorize(&founder, registry, AccOp::Read, "profile", Some(uuid::Uuid::new_v4()), &member.signer_did)
+		// The member READS the Addressbook directory…
+		authorize(&founder, addressbook, AccOp::Read, "profile", Some(uuid::Uuid::new_v4()), &member.signer_did)
 			.unwrap();
-		// …but is DENIED avenCEO content (not an avenCEO member; extends is one-directional).
+		// …but is DENIED avenCEO content (it holds nothing on avenCEO; the controller edge is one-way).
 		assert!(
 			authorize(&founder, avenceo, AccOp::Read, "messages", Some(uuid::Uuid::new_v4()), &member.signer_did)
 				.is_err(),
-			"a registry-only TIER-0 member must NOT read avenCEO content"
+			"an Addressbook-only member must NOT read avenCEO content"
 		);
-		// Inheritance sanity: the avenCEO owner (a parent member) DOES read the registry directory.
-		authorize(&founder, registry, AccOp::Read, "profile", Some(uuid::Uuid::new_v4()), &founder.signer_did.clone())
+		// Controller chain: the avenCEO controller (founder) reaches the Addressbook via the N-hop
+		// walk — owns(avenCEO,addressbook) → resolve avenCEO → owns(founderSigner,avenCEO) → match.
+		authorize(&founder, addressbook, AccOp::Read, "profile", Some(uuid::Uuid::new_v4()), &founder.signer_did.clone())
 			.unwrap();
 	}
 
