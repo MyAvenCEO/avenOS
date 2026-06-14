@@ -394,21 +394,10 @@ pub struct TableSchema {
     /// Access control policies.
     #[serde(default, skip_serializing_if = "table_policies_are_default")]
     pub policies: TablePolicies,
-    /// Whether every row of this table is **owned by a SAFE** — the declarative source of truth
-    /// for owner-scoping (board 0037). When true, the deep author funnel requires an owner +
-    /// minted owner-binding for every write, and the binding (not a data column) carries the
-    /// owner in the row's immutable header. Replaces the legacy "has an `owner` column" heuristic;
-    /// hash-neutral (see `SchemaHash::compute`) so flagging a table needs no redeploy on its own.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub owner_scoped: bool,
 }
 
 fn table_policies_are_default(policies: &TablePolicies) -> bool {
     *policies == TablePolicies::default()
-}
-
-fn is_false(value: &bool) -> bool {
-    !*value
 }
 
 impl TableSchema {
@@ -420,7 +409,6 @@ impl TableSchema {
             columns,
             indexed_columns: None,
             policies: TablePolicies::default(),
-            owner_scoped: false,
         }
     }
 
@@ -430,7 +418,6 @@ impl TableSchema {
             columns,
             indexed_columns: None,
             policies,
-            owner_scoped: false,
         }
     }
 
@@ -466,7 +453,6 @@ pub struct TableSchemaBuilder {
     columns: Vec<ColumnDescriptor>,
     indexed_columns: Option<Vec<ColumnName>>,
     policies: TablePolicies,
-    owner_scoped: bool,
 }
 
 impl TableSchemaBuilder {
@@ -477,15 +463,7 @@ impl TableSchemaBuilder {
             columns: Vec::new(),
             indexed_columns: None,
             policies: TablePolicies::default(),
-            owner_scoped: false,
         }
-    }
-
-    /// Mark this table as **owner-scoped** — every row is owned by a SAFE, enforced at the deep
-    /// author funnel via the owner-binding (board 0037). The declarative source of truth.
-    pub fn owner_scoped(mut self) -> Self {
-        self.owner_scoped = true;
-        self
     }
 
     /// Add a column to the table.
@@ -559,7 +537,6 @@ impl TableSchemaBuilder {
             columns: RowDescriptor::new(self.columns),
             indexed_columns: self.indexed_columns,
             policies: self.policies,
-            owner_scoped: self.owner_scoped,
         }
     }
 
@@ -570,7 +547,6 @@ impl TableSchemaBuilder {
             columns: RowDescriptor::new(self.columns),
             indexed_columns: self.indexed_columns,
             policies: self.policies,
-            owner_scoped: self.owner_scoped,
         };
         (name, schema)
     }
@@ -608,55 +584,6 @@ impl SchemaBuilder {
 
 /// Schema mapping table names to their table schemas.
 pub type Schema = HashMap<TableName, TableSchema>;
-
-/// The single source of truth for "is this table identity (SAFE) scoped?": a table is
-/// spark/identity-scoped **iff it carries an `owner` column**. Identity-scoped rows are
-/// the E2E, per-SAFE-identity data whose owner-binding is mandatory on apply (no table
-/// exceptions). Both the app's inbound gate (`biscuit_resolver`) and the relay's
-/// (`aven-node`) classify rows with this one predicate so the two can never disagree.
-///
-/// Derived from the live schema, so it cannot drift from the manifest. Unknown tables
-/// (not in this schema) return `false` — they are not identity-scoped E2E data.
-pub fn is_owner_scoped_table(schema: &Schema, table: &str) -> bool {
-    schema
-        .get(&TableName::new(table))
-        .map(table_schema_is_owner_scoped)
-        .unwrap_or(false)
-}
-
-/// True when this table is **owner-scoped** — every row is owned by a SAFE (board 0037), declared by
-/// the [`TableSchema::owner_scoped`] flag. The single source of truth. See [`is_owner_scoped_table`].
-pub fn table_schema_is_owner_scoped(table: &TableSchema) -> bool {
-    table.owner_scoped
-}
-
-/// The **owner invariant** for a resolved row: a table whose `owner` column is
-/// non-nullable must hold a non-null `owner` value — an ownerless value may never enter an
-/// owned (SAFE-scoped) table, on any create/write path, zero exceptions. Returns `true`
-/// when the row satisfies the invariant.
-///
-/// A *nullable* `owner` column (e.g. `signers` device-local trust-set rows) is the schema's
-/// deliberate local carve-out and always passes; a table with no `owner` column is not
-/// owned and always passes. Pure + schema-driven so the same rule can be unit-tested and
-/// reused by every write surface.
-pub fn owner_invariant_ok(table: &TableSchema, owner_value: Option<&Value>) -> bool {
-    match table.columns.column("owner") {
-        Some(col) if !col.nullable => !matches!(owner_value, None | Some(Value::Null)),
-        _ => true,
-    }
-}
-
-/// All identity (SAFE) scoped table names in the schema — those carrying an `owner`
-/// column. Sorted for stable output. See [`is_owner_scoped_table`].
-pub fn owner_scoped_table_names(schema: &Schema) -> Vec<String> {
-    let mut names: Vec<String> = schema
-        .iter()
-        .filter(|(_, t)| table_schema_is_owner_scoped(t))
-        .map(|(n, _)| n.as_str().to_string())
-        .collect();
-    names.sort();
-    names
-}
 
 /// Validate that no INHERITS cycles exist in the schema.
 ///
@@ -916,41 +843,3 @@ pub fn validate_policy_no_cycles(
     Ok(())
 }
 
-#[cfg(test)]
-mod owner_invariant_tests {
-    //! The owner invariant: an owner-bearing table whose `owner` is non-nullable must hold a
-    //! non-null owner; a nullable-owner table (local carve-out) and a table with no owner
-    //! column always pass. One schema-driven rule, enforced on every create/write path.
-    use super::*;
-
-    fn tbl_nonnull_owner() -> TableSchema {
-        TableSchema::builder("todos").column("owner", ColumnType::Text).build()
-    }
-    fn tbl_nullable_owner() -> TableSchema {
-        TableSchema::builder("signers").nullable_column("owner", ColumnType::Text).build()
-    }
-    fn tbl_no_owner() -> TableSchema {
-        TableSchema::builder("humans").column("name", ColumnType::Text).build()
-    }
-
-    #[test]
-    fn nonnull_owner_rejects_null_or_absent() {
-        let t = tbl_nonnull_owner();
-        assert!(!owner_invariant_ok(&t, None), "absent owner on owned table must be rejected");
-        assert!(!owner_invariant_ok(&t, Some(&Value::Null)), "null owner on owned table must be rejected");
-        assert!(owner_invariant_ok(&t, Some(&Value::Text("safe-uuid".into()))), "a real owner passes");
-    }
-
-    #[test]
-    fn nullable_owner_allows_null() {
-        let t = tbl_nullable_owner();
-        assert!(owner_invariant_ok(&t, Some(&Value::Null)), "nullable owner (local row) may be null");
-        assert!(owner_invariant_ok(&t, None), "nullable owner may be absent");
-    }
-
-    #[test]
-    fn no_owner_column_always_ok() {
-        let t = tbl_no_owner();
-        assert!(owner_invariant_ok(&t, None), "a table with no owner column is not owned");
-    }
-}

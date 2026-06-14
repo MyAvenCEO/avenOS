@@ -120,26 +120,7 @@ async fn sync_handler(
 /// reject a forged or relabeled row whose owner-binding signature is invalid, before
 /// storing or forwarding it (members enforce membership on their side). Outbound stays
 /// permissive: the relay stores & forwards ciphertext for everyone.
-struct ServerApplyGate {
-    /// Identity (SAFE) scoped tables — those carrying an `owner` column, derived once from
-    /// the live schema (`aven_db::owner_scoped_table_names`). A row on one of these MUST
-    /// carry an owner-binding to apply; the relay denies a bindingless one fail-closed,
-    /// byte-for-byte with the client gate (`biscuit_resolver.rs`). Non-owner-scoped tables
-    /// (local/non-E2E) are not gated here.
-    spark_scoped: std::collections::HashSet<String>,
-}
-
-impl ServerApplyGate {
-    fn new(schema: &aven_db::Schema) -> Self {
-        Self {
-            spark_scoped: aven_db::owner_scoped_table_names(schema).into_iter().collect(),
-        }
-    }
-
-    fn is_spark_scoped(&self, table: &str) -> bool {
-        self.spark_scoped.contains(table)
-    }
-}
+struct ServerApplyGate;
 
 impl aven_db::CapabilityResolver for ServerApplyGate {
     fn may_sync(
@@ -166,19 +147,15 @@ impl aven_db::CapabilityResolver for ServerApplyGate {
         proof: Option<&[u8]>,
         edit_sig: Option<&[u8]>,
     ) -> aven_db::CapDecision {
-        // A3 — fail-closed, no exceptions: a spark/identity-scoped (owner-bearing) row MUST
-        // carry an owner-binding to apply, exactly like the client gate (`biscuit_resolver.rs`).
-        // The relay was the last fail-OPEN peer; this closes it. Non-owner-scoped tables
-        // (local/non-E2E) carry no binding and stay permissive.
+        // Fail-closed, no exceptions: EVERY value is owned (board 0037), so every applied row MUST
+        // carry an owner-binding — exactly like the client gate (`biscuit_resolver.rs`). A missing
+        // binding is a forged/ownerless row; reject it before storing or forwarding.
         let Some(proof) = proof else {
-            if self.is_spark_scoped(&res.table) {
-                tracing::warn!(
-                    table = %res.table, row = %res.row_id.uuid(),
-                    "relay-deny[no-binding]: spark-scoped row missing owner-binding"
-                );
-                return aven_db::CapDecision::DenyPermanent;
-            }
-            return aven_db::CapDecision::Allow;
+            tracing::warn!(
+                table = %res.table, row = %res.row_id.uuid(),
+                "relay-deny[no-binding]: owned row missing owner-binding"
+            );
+            return aven_db::CapDecision::DenyPermanent;
         };
         let Ok(meta) = std::str::from_utf8(proof) else {
             return aven_db::CapDecision::DenyPermanent;
@@ -309,7 +286,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Identity-scoped (owner-bearing) tables, derived once from the live schema — the relay
     // apply gate denies a bindingless row on any of these (A3, fail-closed). Computed before
     // `schema` is moved into the engine context below.
-    let apply_gate = ServerApplyGate::new(&schema);
+    let apply_gate = ServerApplyGate;
     let data_dir = cfg.data_dir.clone();
     tracing::info!(data_dir = %data_dir.display(), "durable storage (RocksDB)");
     let ctx = AppContext {
@@ -465,20 +442,16 @@ fn store_is_corrupt(e: &impl std::fmt::Display) -> bool {
 
 #[cfg(test)]
 mod apply_gate_tests {
-    //! A3 — the relay apply gate is fail-closed on identity (SAFE) scoped rows, byte-for-byte
-    //! with the client gate: a spark-scoped row with no owner-binding is rejected; a
-    //! non-spark-scoped row without one is allowed; a validly bound + edit-signed row is
-    //! accepted; a forged/relabeled/tampered one is rejected.
+    //! The relay apply gate is fail-closed: EVERY value is owned (board 0037), so any row with no
+    //! owner-binding is rejected; a validly bound + edit-signed row is accepted; a forged /
+    //! relabeled / tampered one is rejected.
     use super::ServerApplyGate;
     use aven_caps::ownership::{mint_owner_binding, sign_batch};
     use aven_db::{AccOp, CapDecision, CapabilityResolver, ObjectId, PeerId, ResourceCoord, SyncTargetId};
     use uuid::Uuid;
 
-    /// A gate whose only identity-scoped table is `todos` (no schema needed for the unit).
     fn gate() -> ServerApplyGate {
-        ServerApplyGate {
-            spark_scoped: ["todos".to_string()].into_iter().collect(),
-        }
+        ServerApplyGate
     }
 
     fn subject() -> SyncTargetId {
@@ -497,19 +470,11 @@ mod apply_gate_tests {
     }
 
     #[test]
-    fn apply_gate_denies_spark_scoped_row_without_binding() {
+    fn apply_gate_denies_any_row_without_binding() {
         let g = gate();
         let res = coord("todos", Uuid::from_u128(0x11));
         let d = g.verify_on_apply(&subject(), AccOp::Write, &res, &[9u8; 32], None, None);
-        assert!(is_deny(d), "spark-scoped row with no owner-binding must be denied");
-    }
-
-    #[test]
-    fn apply_gate_allows_non_spark_scoped_without_binding() {
-        let g = gate();
-        let res = coord("humans", Uuid::from_u128(0x22)); // not owner-scoped → not gated
-        let d = g.verify_on_apply(&subject(), AccOp::Write, &res, &[9u8; 32], None, None);
-        assert!(is_allow(d), "non-spark-scoped row without a binding stays permissive");
+        assert!(is_deny(d), "every value is owned — a row with no owner-binding must be denied");
     }
 
     #[test]

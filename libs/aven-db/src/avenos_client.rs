@@ -577,16 +577,6 @@ impl AvenDbClient {
                 "create {table}: unknown column `{unknown}` (not in schema)"
             )));
         }
-        // Owner invariant — an owner-bearing table holds owned data ONLY. A table whose
-        // `owner` column is non-nullable must never receive a Null/absent owner: reject it on
-        // every create path so an ownerless value can't enter an owned (SAFE-scoped) table,
-        // zero exceptions. One schema-driven rule (`owner_invariant_ok`), shared & tested.
-        if !crate::owner_invariant_ok(table_schema, row.get("owner")) {
-            return Err(AvenDbError::Schema(format!(
-                "create {table}: owner-bearing table requires a non-null `owner` \
-                 (ownerless value rejected)"
-            )));
-        }
         Ok(row)
     }
 
