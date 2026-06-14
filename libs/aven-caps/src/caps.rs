@@ -280,7 +280,7 @@ pub fn mint_safe_genesis(
 	let identity_urn = safe_urn_for(owner);
 	let prefix_lit = format!("{identity_urn}:");
 	let own_f = format!(
-			"admin(\"{}\", \"{}\")",
+			"owns(\"{}\", \"{}\")",
 			vault.signer_did.replace('"', "\\\""),
 			identity_urn.replace('"', "\\\"")
 		);
@@ -315,7 +315,7 @@ pub fn mint_safe_genesis_with_controller(
 	let identity_urn = safe_urn_for(owner);
 	let prefix_lit = format!("{identity_urn}:");
 	let own_f = format!(
-		"admin(\"{}\", \"{}\")",
+		"owns(\"{}\", \"{}\")",
 		controller_did.replace('\\', "\\\\").replace('"', "\\\""),
 		identity_urn.replace('"', "\\\"")
 	);
@@ -353,7 +353,7 @@ pub fn mint_group_genesis_extending(
 	let prefix_lit = format!("{group_urn}:");
 	let parent_urn = safe_urn_for(parent_id);
 	let own_f = format!(
-		"admin(\"{}\", \"{}\")",
+		"owns(\"{}\", \"{}\")",
 		vault.signer_did.replace('"', "\\\""),
 		group_urn.replace('"', "\\\"")
 	);
@@ -401,7 +401,7 @@ pub fn attenuate_add_admin_third_party(
 		.map_err(|e| format!("tp_request:{e:?}"))?;
 	let identity_str = safe_urn_for(owner);
 	let own_f = format!(
-		"admin(\"{}\", \"{}\")",
+		"owns(\"{}\", \"{}\")",
 		new_signer_did.replace('\\', "\\\\").replace('"', "\\\""),
 		identity_str.replace('\\', "\\\\").replace('"', "\\\"")
 	);
@@ -648,7 +648,13 @@ pub fn biscuit_from_storage(genesis_b64: &str, root: PublicKey) -> Result<Biscui
 fn trusted_subject_dids(b: &Biscuit, identity_urn: &str) -> Result<HashSet<String>, String> {
 	let mut authorizer =
 		b.authorizer().map_err(|e| format!("b-authorizer:{e}"))?;
-	let rule = format!(r#"signers($p) <- admin($p, "{identity}")"#, identity = identity_urn);
+	// WIRE PREDICATE IS `owns` — STABLE, do NOT rename. The genesis biscuit (incl. the persisted
+	// avenCEO genesis on the relay) is signed over this predicate; renaming it is a genesis-format
+	// break that orphans every existing biscuit (the 0040 owns→admin wire rename did exactly that
+	// and broke first-admin claim — reverted). The role is NAMED "admin" only at the report/UI
+	// layer (`grant_kind_caps`, `identity_cap_report`); the wire stays `owns`. Same rule as
+	// reads/replicate: the wire predicate is internal, the role label is presentation.
+	let rule = format!(r#"signers($p) <- owns($p, "{identity}")"#, identity = identity_urn);
 	let admins: Vec<(String,)> = authorizer
 		.query_all(rule.as_str())
 		.map_err(|e| format!("b-query-own:{e}"))?;
