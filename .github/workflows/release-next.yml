@@ -112,7 +112,7 @@ jobs:
         # CFBundleVersion that distinguishes the many -next.N builds under it.
         run: bun run set-version "$(bun run --silent next-version)"
 
-      - name: Cache Rust build (warm builds: ~30m → single digits)
+      - name: Cache Rust build (warm deps reused across runs)
         uses: Swatinem/rust-cache@v2
         with:
           # All cargo builds redirect to repo-root target/rust via .cargo/config.toml.
@@ -191,7 +191,7 @@ jobs:
       - name: Add the iOS Rust target
         run: rustup target add aarch64-apple-ios
 
-      - name: Cache Rust build (warm builds: ~30m → single digits)
+      - name: Cache Rust build (warm deps reused across runs)
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: app/src-tauri -> ../../target/rust
