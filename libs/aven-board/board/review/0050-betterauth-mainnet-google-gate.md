@@ -189,6 +189,17 @@ curl -fsS "$BETTER_AUTH_URL/api/auth/get-session"   # expect HTTP 200 JSON
 
 Newest entry first.
 
+- `2026-06-15` — Follow-ups (user requests): (1) **Co-located the server as a standalone
+  lib** — `libs/betterauth` scripts (`dev`/`start`/`db:migrate`/`db:generate`) now load
+  `../../.env` themselves, so `cd libs/betterauth && bun run dev` runs the server on its
+  own; added `README.md`; root `dev:auth` slimmed to a thin `--filter` alias. (2) **Wired
+  Polar** (account connection only) via `@polar-sh/better-auth@1.8.4` + `@polar-sh/sdk@0.48.1`:
+  `polar({ client: new Polar({ accessToken: POLAR_API_KEY, server: POLAR_SERVER ?? 'sandbox' }),
+  createCustomerOnSignUp: true })`, conditional on `POLAR_API_KEY` (server still boots
+  without it); products/checkout/portal deferred. Standalone `bun run start` boots green,
+  `get-session` → 200 with Polar enabled. Remaining: validate the OAuth flow in the
+  **Tauri app** (Google may block the embedded WebView → may need system-browser +
+  deep-link) + live sign-in (HITL).
 - `2026-06-15` — Build: scaffolded `libs/betterauth` (`@avenos/betterauth`) — Hono +
   Better Auth + `kysely-neon` `NeonDialect`. `bunx @better-auth/cli migrate` created
   `user/session/account/verification` in Neon (project `mainnet/alberobello`); verified

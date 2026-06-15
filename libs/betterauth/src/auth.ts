@@ -1,3 +1,5 @@
+import { polar } from '@polar-sh/better-auth'
+import { Polar } from '@polar-sh/sdk'
 import { betterAuth } from 'better-auth'
 import { NeonDialect } from 'kysely-neon'
 
@@ -19,6 +21,38 @@ function requireEnv(name: string): string {
 	if (!value) throw new Error(`[betterauth] missing env ${name}`)
 	return value
 }
+
+function optionalEnv(name: string): string | undefined {
+	const value = process.env[name]
+	return value && value.length > 0 ? value : undefined
+}
+
+/**
+ * Polar account link. Wired ONLY when POLAR_API_KEY is present, so the server still
+ * boots without billing configured. Account connection only: `createCustomerOnSignUp`
+ * creates a Polar customer per Better Auth user — products/checkout/portal come later
+ * (`use: []`). POLAR_SERVER selects sandbox vs production and MUST match the env the
+ * POLAR_API_KEY was issued in (default: sandbox).
+ */
+const polarToken = optionalEnv('POLAR_API_KEY') ?? optionalEnv('POLAR_ACCESS_TOKEN')
+if (!polarToken) {
+	console.warn('[betterauth] POLAR_API_KEY not set — Polar account link disabled')
+}
+const polarPlugins = polarToken
+	? [
+			polar({
+				client: new Polar({
+					accessToken: polarToken,
+					server: (optionalEnv('POLAR_SERVER') as 'sandbox' | 'production') ?? 'sandbox'
+				}),
+				createCustomerOnSignUp: true,
+				// Account link only — products/checkout/portal come later. The plugin's types
+				// (1.8.4) require a non-empty `use`, but the runtime accepts [] (per the docs).
+				// @ts-expect-error empty `use` is valid at runtime for account-connection-only
+				use: []
+			})
+		]
+	: []
 
 /**
  * Self-hosted Better Auth instance. Database is Neon Postgres via the community
@@ -43,6 +77,7 @@ export const auth = betterAuth({
 		}
 	},
 	trustedOrigins: TRUSTED_ORIGINS,
+	plugins: polarPlugins,
 	advanced: {
 		defaultCookieAttributes: {
 			sameSite: 'none',
