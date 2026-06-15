@@ -1,6 +1,7 @@
 import { polar } from '@polar-sh/better-auth'
 import { Polar } from '@polar-sh/sdk'
 import { betterAuth } from 'better-auth'
+import { bearer } from 'better-auth/plugins'
 import { NeonDialect } from 'kysely-neon'
 
 /**
@@ -11,9 +12,10 @@ import { NeonDialect } from 'kysely-neon'
 export const TRUSTED_ORIGINS = [
 	'http://localhost:5173', // sveltekit/vite default
 	'http://localhost:5182', // this worktree's preview (see .claude/launch.json)
-	'http://localhost:1420', // tauri dev
-	'http://tauri.localhost',
-	'tauri://localhost'
+	'http://localhost:1420', // tauri dev (localhost form)
+	'http://127.0.0.1:1420', // tauri dev (devUrl is 127.0.0.1:1420 — a distinct origin)
+	'http://tauri.localhost', // tauri prod webview (windows/linux)
+	'tauri://localhost' // tauri prod webview (macos)
 ]
 
 function requireEnv(name: string): string {
@@ -77,7 +79,10 @@ export const auth = betterAuth({
 		}
 	},
 	trustedOrigins: TRUSTED_ORIGINS,
-	plugins: polarPlugins,
+	// `bearer` lets the Tauri app authenticate with an Authorization: Bearer token
+	// instead of a cookie — WKWebView drops the cross-site session cookie, so the
+	// desktop native sign-in path stores + sends the token returned by the server.
+	plugins: [bearer(), ...polarPlugins],
 	advanced: {
 		defaultCookieAttributes: {
 			sameSite: 'none',

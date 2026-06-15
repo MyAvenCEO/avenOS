@@ -172,6 +172,9 @@ pub fn run() {
 		.plugin(tauri_plugin_vault::init())
 		.plugin(tauri_plugin_sandbox_quickjs::init())
 		.plugin(tauri_plugin_clipboard_manager::init())
+		// Native Google sign-in (system browser + local redirect on desktop) — avoids
+		// Google's embedded-WebView block; returns an idToken we hand to Better Auth. board 0050.
+		.plugin(tauri_plugin_google_auth::init())
 		.manage(avendb::ManagedAvenDb::default())
 		.setup(|app| {
 			if let Err(e) = schema_manifest::install_runtime_schema_files(app.handle()) {
@@ -250,6 +253,7 @@ pub fn run() {
 			network::network_seed,
 			network::aven_ceo_identity,
 			network::aven_ceo_addressbook_id,
+			network::google_oauth_config,
 			avendb::avendb_runtime,
 		avendb::brain_runtime,
 			avendb::self_storage_paths,

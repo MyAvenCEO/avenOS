@@ -189,6 +189,21 @@ curl -fsS "$BETTER_AUTH_URL/api/auth/get-session"   # expect HTTP 200 JSON
 
 Newest entry first.
 
+- `2026-06-15` — Native Tauri Google sign-in (resolves the embedded-WebView block):
+  added **`tauri-plugin-google-auth` v0.5.1** (Rust: registered in `lib.rs` builder +
+  `google-auth:default` capability; crate + dep tree resolve via `cargo add --dry-run`)
+  and its JS api `@choochmeque/tauri-plugin-google-auth-api@0.5.1`. Desktop does native
+  Google sign-in (system browser + local redirect) → idToken → Better Auth **idToken
+  sign-in** (`signIn.social({ idToken })`). Added the **`bearer` plugin** server-side +
+  a bearer-capable `auth-client.ts` (stores `set-auth-token`, sends `Authorization:
+  Bearer`) so WKWebView's dropped cross-site cookie doesn't matter. `AuthGate` is now
+  runtime-aware (Tauri → native; web → redirect). Client id/secret come from a new
+  `google_oauth_config` Tauri command reading the **Rust process env** — secret never
+  enters the JS/web bundle. Verified: server boots with bearer (get-session 200),
+  `libs/betterauth` tsc=0, app svelte-check=0, biome clean. **Unverified here:** the
+  Rust compile (no full Tauri build in this env) and the live Google round-trip — both
+  validated by `bun run dev:app:mac` (HITL). Google console: add `http://localhost` as
+  an authorized redirect URI on the existing client.
 - `2026-06-15` — Follow-ups (user requests): (1) **Co-located the server as a standalone
   lib** — `libs/betterauth` scripts (`dev`/`start`/`db:migrate`/`db:generate`) now load
   `../../.env` themselves, so `cd libs/betterauth && bun run dev` runs the server on its

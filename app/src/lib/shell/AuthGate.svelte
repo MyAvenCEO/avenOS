@@ -1,6 +1,7 @@
 <script lang="ts">
 import { authClient } from '$lib/auth/auth-client'
 import { t } from '$lib/i18n'
+import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 
 // Protected-screen gate for mainnet/alberobello: no session ⇒ Continue with Google;
 // session ⇒ render the slotted children (the mocked chat). board 0050.
@@ -11,14 +12,42 @@ const session = authClient.useSession()
 let signingIn = $state(false)
 let error = $state<string | null>(null)
 
+/**
+ * Desktop (Tauri): Google blocks OAuth inside the embedded WebView, so we use the
+ * native plugin (system browser + local redirect) to get a Google idToken, then hand it
+ * to Better Auth's idToken sign-in. The client id/secret come from a Tauri command that
+ * reads the Rust process env — never bundled into the frontend. On success the bearer
+ * token is captured by the auth client; reload re-runs the session check and opens the gate.
+ */
+async function signInTauri(): Promise<void> {
+	const { invoke } = await import('@tauri-apps/api/core')
+	const cfg = await invoke<{ client_id: string; client_secret: string }>('google_oauth_config')
+	const { signIn: nativeGoogleSignIn } = await import('@choochmeque/tauri-plugin-google-auth-api')
+	const res = await nativeGoogleSignIn({
+		clientId: cfg.client_id,
+		clientSecret: cfg.client_secret,
+		scopes: ['openid', 'email', 'profile']
+	})
+	if (!res.idToken) throw new Error('Google did not return an idToken')
+	const out = await authClient.signIn.social({
+		provider: 'google',
+		idToken: { token: res.idToken, accessToken: res.accessToken }
+	})
+	if (out.error) throw new Error(out.error.message ?? 'sign-in failed')
+	window.location.reload()
+}
+
+/** Web: standard Better Auth redirect flow (works in a real browser). */
+async function signInWeb(): Promise<void> {
+	await authClient.signIn.social({ provider: 'google', callbackURL: window.location.href })
+}
+
 async function continueWithGoogle(): Promise<void> {
 	signingIn = true
 	error = null
 	try {
-		await authClient.signIn.social({
-			provider: 'google',
-			callbackURL: window.location.href
-		})
+		if (isTauriRuntime()) await signInTauri()
+		else await signInWeb()
 	} catch (e) {
 		signingIn = false
 		error = e instanceof Error ? e.message : String(e)

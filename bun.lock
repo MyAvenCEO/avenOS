@@ -26,6 +26,7 @@
         "@avenos/aven-skills": "workspace:*",
         "@avenos/aven-ui": "workspace:*",
         "@avenos/docs": "workspace:*",
+        "@choochmeque/tauri-plugin-google-auth-api": "^0.5.1",
         "@tauri-apps/api": "^2",
         "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
         "@xterm/addon-fit": "^0.11.0",
@@ -258,6 +259,8 @@
     "@chevrotain/types": ["@chevrotain/types@10.5.0", "", {}, "sha512-f1MAia0x/pAVPWH/T73BJVyO2XU5tI4/iE7cnxb7tqdNTNhQI3Uq3XkqcoteTmD4t1aM0LbHCJOhgIDn07kl2A=="],
 
     "@chevrotain/utils": ["@chevrotain/utils@10.5.0", "", {}, "sha512-hBzuU5+JjB2cqNZyszkDHZgOSrUUT8V3dhgRl8Q9Gp6dAj/H5+KILGjbhDpc3Iy9qmqlm/akuOI2ut9VUtzJxQ=="],
+
+    "@choochmeque/tauri-plugin-google-auth-api": ["@choochmeque/tauri-plugin-google-auth-api@0.5.1", "", { "dependencies": { "@tauri-apps/api": "^2.0.0" } }, "sha512-eo+Akrk0J2V2mJooE8TFSiLGgVNRbpp2FvNKDuObdWt9eshnKeiaeLN749+tPdQULJNiAI9/ttRBmWavs8WV4g=="],
 
     "@clack/core": ["@clack/core@0.5.0", "", { "dependencies": { "picocolors": "^1.0.0", "sisteransi": "^1.0.5" } }, "sha512-p3y0FIOwaYRUPRcMO7+dlmLh8PSRcrjuTndsiA0WAFbWES0mLZlrjVoBRZ9DzkPFJZG6KGkJmoEAY0ZcVWTkow=="],
 
