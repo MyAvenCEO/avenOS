@@ -978,5 +978,30 @@
 		"checking": "Checking network membership…",
 		"bannerTitle": "Not on the network yet",
 		"bannerBody": "You're fully set up locally. Share your human SAFE ID with a founder to sync across devices."
+	},
+	"networkSelect": {
+		"kicker": "Select network",
+		"title": "Choose your world.",
+		"subtitle": "Pick the network you want to enter. You can't switch later from inside the app.",
+		"enter": "Enter",
+		"testnet": {
+			"tag": "testnet / abagana",
+			"title": "Abagana",
+			"body": "The full experience: create your vault, sign up, hold accounts, and sync across devices. This is where everything we've built today lives."
+		},
+		"mainnet": {
+			"tag": "mainnet / alberobello",
+			"title": "Alberobello",
+			"body": "The new world — a separate network with its own onboarding. Right now it opens straight into a chat."
+		}
+	},
+	"mainnet": {
+		"chat": {
+			"tag": "mainnet / alberobello",
+			"title": "Alberobello",
+			"empty": "Say something to get started. This is a mocked chat — nothing is sent.",
+			"placeholder": "Message Alberobello… (mock — not sent)",
+			"mockReply": "This is a mocked reply. Mainnet chat isn't wired to a backend yet."
+		}
 	}
 }

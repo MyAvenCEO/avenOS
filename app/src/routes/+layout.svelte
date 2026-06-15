@@ -14,7 +14,10 @@ import { attachAvenosRuntimeBridge, avendbSessionReady } from '$lib/runtime/aven
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
 import { displayTitleForSession } from '$lib/settings/active-vault-ui'
 import { attachSelfRustEventMirrors, deviceSession } from '$lib/settings/device-session-store'
+import { selectedNetwork } from '$lib/settings/network-store'
 import LockGate from '$lib/settings/LockGate.svelte'
+import MainnetChat from '$lib/shell/MainnetChat.svelte'
+import NetworkSelect from '$lib/shell/NetworkSelect.svelte'
 import { type VaultListEntry, vaultCardTitle, vaultList } from '$lib/settings/vault'
 import { vaultUiSettingsGet } from '$lib/settings/vault-ui-settings'
 import { navigateApp } from '$lib/shell'
@@ -303,6 +306,13 @@ $effect(() => {
 </svelte:head>
 
 <div class="box-border flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-background">
+	{#if $selectedNetwork === null}
+		<!-- Step 0: Select Network. All current features (vault, signup, accounts, sync) live on
+		     testnet/abagana. mainnet/alberobello is a separate world (mocked chat UI for now). -->
+		<NetworkSelect />
+	{:else if $selectedNetwork === 'mainnet'}
+		<MainnetChat />
+	{:else}
 	<LockGate />
 	{#if !shellLocked}
 		{#if appAccessState === 'checking'}
@@ -444,5 +454,6 @@ $effect(() => {
 
 			<MobileShellNav {selfNavLabel} {selfActive} />
 		{/if}
+	{/if}
 	{/if}
 </div>

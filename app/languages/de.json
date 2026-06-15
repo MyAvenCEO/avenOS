@@ -955,5 +955,30 @@
 		"checking": "Prüfe Netzwerk-Mitgliedschaft…",
 		"bannerTitle": "Noch nicht im Netzwerk",
 		"bannerBody": "Lokal bist du vollständig eingerichtet. Teile deine humanSAFE-ID mit einem Gründer, um über Geräte hinweg zu synchronisieren."
+	},
+	"networkSelect": {
+		"kicker": "Netzwerk wählen",
+		"title": "Wähle deine Welt.",
+		"subtitle": "Wähle das Netzwerk, das du betreten möchtest. Später kannst du innerhalb der App nicht mehr wechseln.",
+		"enter": "Betreten",
+		"testnet": {
+			"tag": "testnet / abagana",
+			"title": "Abagana",
+			"body": "Das volle Erlebnis: Vault erstellen, anmelden, Konten halten und über Geräte hinweg synchronisieren. Hier lebt alles, was wir bisher gebaut haben."
+		},
+		"mainnet": {
+			"tag": "mainnet / alberobello",
+			"title": "Alberobello",
+			"body": "Die neue Welt — ein separates Netzwerk mit eigenem Onboarding. Im Moment öffnet es direkt einen Chat."
+		}
+	},
+	"mainnet": {
+		"chat": {
+			"tag": "mainnet / alberobello",
+			"title": "Alberobello",
+			"empty": "Schreib etwas, um zu beginnen. Dies ist ein nachgebildeter Chat — nichts wird gesendet.",
+			"placeholder": "Nachricht an Alberobello… (Mock — nicht gesendet)",
+			"mockReply": "Dies ist eine nachgebildete Antwort. Der Mainnet-Chat ist noch nicht an ein Backend angebunden."
+		}
 	}
 }
