@@ -1,7 +1,9 @@
 <script lang="ts">
 import { tick } from 'svelte'
+import { authClient, setBearerToken } from '$lib/auth/auth-client'
 import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
+import { clearNetwork } from '$lib/settings/network-store'
 
 type ChatMessage = {
 	id: number
@@ -44,14 +46,35 @@ function handleTranscribeError(message: string): void {
 	]
 	scrollToBottom()
 }
+
+// Sign out of Better Auth (best-effort), drop the bearer token, and forget the network
+// choice so the app returns to the Select Network intro.
+async function logout(): Promise<void> {
+	try {
+		await authClient.signOut()
+	} catch {
+		/* sign out locally regardless of a network error */
+	}
+	setBearerToken(null)
+	clearNetwork()
+}
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col bg-background">
-	<header class="shrink-0 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 text-center">
+	<header
+		class="relative shrink-0 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 text-center"
+	>
 		<p class="text-primary text-[10px] font-bold tracking-[0.18em] uppercase">
 			{t('mainnet.chat.tag')}
 		</p>
 		<h1 class="font-display text-lg font-medium tracking-tight">{t('mainnet.chat.title')}</h1>
+		<button
+			type="button"
+			class="text-muted-foreground hover:text-foreground absolute top-[max(0.75rem,env(safe-area-inset-top))] right-4 text-xs font-semibold transition-colors"
+			onclick={() => void logout()}
+		>
+			{t('mainnet.chat.logout')}
+		</button>
 	</header>
 
 	<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-4">

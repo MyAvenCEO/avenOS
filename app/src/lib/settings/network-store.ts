@@ -23,3 +23,9 @@ export function selectNetwork(id: NetworkId): void {
 	if (browser) localStorage.setItem(STORAGE_KEY, id)
 	selectedNetwork.set(id)
 }
+
+/** Forget the network choice → the app returns to the Select Network intro. */
+export function clearNetwork(): void {
+	if (browser) localStorage.removeItem(STORAGE_KEY)
+	selectedNetwork.set(null)
+}
