@@ -1,5 +1,13 @@
 [
   {
+    "id": "day1-birth",
+    "title": "Day 1 \u2014 Birth",
+    "src": "/skills/editing/day1-birth.mp4",
+    "html": "/skills/editing/day1-birth.html",
+    "script": "",
+    "durationSec": 58.02
+  },
+  {
     "id": "hello-world",
     "title": "Hello, avenSKILLS",
     "src": "/skills/editing/hello-world.mp4",
