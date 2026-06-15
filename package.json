@@ -12,6 +12,7 @@
 		"dev": "bun --env-file=.env run dev:aven-website",
 		"dev:aven-website": "bun --env-file=.env --filter @avenos/aven-website dev",
 		"dev:app": "bun --env-file=.env run --cwd app dev",
+		"dev:auth": "bun --env-file=.env --filter @avenos/betterauth dev",
 		"dev:app:all": "bun --env-file=.env ./scripts/dev-app-all.ts",
 		"dev:app:mac": "bun --env-file=.env ./scripts/dev-app-macos.ts",
 		"dev:app:ios": "bun --env-file=.env ./scripts/dev-app-ios.ts",

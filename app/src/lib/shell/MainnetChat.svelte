@@ -30,18 +30,13 @@ function handleSubmit(text: string, files: File[]): void {
 	messages = [...messages, { id: nextId++, role: 'user', text: `${trimmed}${fileNote}` }]
 	scrollToBottom()
 
-	messages = [
-		...messages,
-		{ id: nextId++, role: 'assistant', text: t('mainnet.chat.mockReply') }
-	]
+	messages = [...messages, { id: nextId++, role: 'assistant', text: t('mainnet.chat.mockReply') }]
 	scrollToBottom()
 }
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col bg-background">
-	<header
-		class="shrink-0 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 text-center"
-	>
+	<header class="shrink-0 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 text-center">
 		<p class="text-primary text-[10px] font-bold tracking-[0.18em] uppercase">
 			{t('mainnet.chat.tag')}
 		</p>

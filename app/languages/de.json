@@ -973,6 +973,14 @@
 		}
 	},
 	"mainnet": {
+		"auth": {
+			"tag": "mainnet / alberobello",
+			"title": "Bei Alberobello anmelden",
+			"subtitle": "Alberobello ist ohne Einladung, aber angemeldet. Melde dich mit Google an, um den Chat zu betreten.",
+			"continueGoogle": "Mit Google fortfahren",
+			"signingIn": "Google wird geöffnet…",
+			"loading": "Sitzung wird geprüft…"
+		},
 		"chat": {
 			"tag": "mainnet / alberobello",
 			"title": "Alberobello",

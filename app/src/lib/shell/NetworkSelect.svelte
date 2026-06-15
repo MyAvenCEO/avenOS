@@ -23,12 +23,12 @@ function choose(id: NetworkId): void {
 }
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto bg-background p-6">
+<div
+	class="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto bg-background p-6"
+>
 	<div class="w-full max-w-3xl">
 		<div class="mb-8 text-center">
-			<p
-				class="text-muted-foreground text-[10px] font-bold tracking-[0.2em] uppercase"
-			>
+			<p class="text-muted-foreground text-[10px] font-bold tracking-[0.2em] uppercase">
 				{t('networkSelect.kicker')}
 			</p>
 			<h1 class="font-display mt-2 text-2xl font-medium tracking-tight sm:text-3xl">
@@ -46,9 +46,7 @@ function choose(id: NetworkId): void {
 					class="border-border bg-card hover:border-primary/60 hover:bg-card/80 group flex flex-col rounded-[var(--radius-lg)] border p-5 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
 					onclick={() => choose(option.id)}
 				>
-					<span
-						class="text-primary text-[10px] font-bold tracking-[0.18em] uppercase"
-					>
+					<span class="text-primary text-[10px] font-bold tracking-[0.18em] uppercase">
 						{t(option.tagKey)}
 					</span>
 					<span class="font-display mt-2 text-lg font-medium tracking-tight">
@@ -60,7 +58,8 @@ function choose(id: NetworkId): void {
 					<span
 						class="text-primary mt-4 text-xs font-semibold opacity-0 transition-opacity group-hover:opacity-100"
 					>
-						{t('networkSelect.enter')} →
+						{t('networkSelect.enter')}
+						→
 					</span>
 				</button>
 			{/each}
