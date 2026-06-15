@@ -3,9 +3,9 @@ name: release-next
 # CalVer staging channel. On merge into `next` (deploy-relay + release-macos run in
 # parallel after the tag is cut):
 #   1. release       — derive YY.M.micro-next.N, stamp every package, changelog, tag, prerelease.
-#   2. deploy-relay  — rebuild + restart the aven-node relay on its Sprite at the release commit
-#                      (NEVER wipes — schema changes ride the migration/lens architecture; wipe
-#                      is a manual-only recovery via WIPE=1).
+#   2. deploy-relay  — rebuild the aven-node relay on its Sprite at the release commit and
+#                      recreate it from a WIPED store (WIPE=1). `next` is a throwaway dev/staging
+#                      channel, so every deploy resets the relay to a clean slate.
 #   3. release-macos — build the signed Mac App Store .pkg on a macOS runner and upload it to
 #                      TestFlight (CFBundleVersion = github.run_number). Apple creds are
 #                      REPOSITORY secrets (cross-channel: next AND main); see job for the list.
@@ -76,16 +76,19 @@ jobs:
         env:
           SPRITE_API_KEY: ${{ secrets.SPRITE_API_KEY }}
 
-      - name: Deploy relay at the release commit (restart, never wipe)
+      - name: Deploy relay at the release commit (clean-slate WIPE — next is staging)
         # Ships a source tarball of the release commit to the Sprite, rebuilds aven-node,
-        # and restarts the service (preserves the durable store). Blocks ~10–15 min on the
-        # on-Sprite cargo build so a failed deploy surfaces here. WIPE is deliberately unset.
+        # and recreates the service from a WIPED store. `next` is a throwaway dev/staging
+        # channel, so every deploy resets the relay to a clean slate (devices re-onboard,
+        # sparks re-replicate). Blocks ~10–15 min on the on-Sprite cargo build.
         run: bun ./scripts/deploy-aven-node-sprite.ts
         env:
           AVEN_SIGNER_SECRET: ${{ secrets.AVEN_SIGNER_SECRET }}
           # Build from the checked-out HEAD (the release/bump commit the tag points to),
           # so the relay's schema hash matches what the apps will ship from the same commit.
           AVEN_SERVER_BUILD: "1"
+          # Staging: wipe + recreate the durable store on every deploy.
+          WIPE: "1"
 
   release-macos:
     name: macOS build → TestFlight
