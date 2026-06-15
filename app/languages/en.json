@@ -1009,7 +1009,8 @@
 			"title": "Alberobello",
 			"empty": "Say something to get started. This is a mocked chat — nothing is sent.",
 			"placeholder": "Message Alberobello… (mock — not sent)",
-			"mockReply": "This is a mocked reply. Mainnet chat isn't wired to a backend yet."
+			"mockReply": "This is a mocked reply. Mainnet chat isn't wired to a backend yet.",
+			"voiceError": "Voice transcription failed: {message}"
 		}
 	}
 }

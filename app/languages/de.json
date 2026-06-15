@@ -986,7 +986,8 @@
 			"title": "Alberobello",
 			"empty": "Schreib etwas, um zu beginnen. Dies ist ein nachgebildeter Chat — nichts wird gesendet.",
 			"placeholder": "Nachricht an Alberobello… (Mock — nicht gesendet)",
-			"mockReply": "Dies ist eine nachgebildete Antwort. Der Mainnet-Chat ist noch nicht an ein Backend angebunden."
+			"mockReply": "Dies ist eine nachgebildete Antwort. Der Mainnet-Chat ist noch nicht an ein Backend angebunden.",
+			"voiceError": "Sprachtranskription fehlgeschlagen: {message}"
 		}
 	}
 }

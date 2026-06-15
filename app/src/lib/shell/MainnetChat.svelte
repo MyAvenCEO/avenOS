@@ -33,6 +33,17 @@ function handleSubmit(text: string, files: File[]): void {
 	messages = [...messages, { id: nextId++, role: 'assistant', text: t('mainnet.chat.mockReply') }]
 	scrollToBottom()
 }
+
+// Voice input is already wired: in the Tauri runtime IntentComposer transcribes on-device
+// (Parakeet) and calls onSubmitMessage with the transcript, which flows through handleSubmit
+// above. Surface transcription failures here so they aren't silent.
+function handleTranscribeError(message: string): void {
+	messages = [
+		...messages,
+		{ id: nextId++, role: 'assistant', text: t('mainnet.chat.voiceError', { message }) }
+	]
+	scrollToBottom()
+}
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col bg-background">
@@ -71,6 +82,7 @@ function handleSubmit(text: string, files: File[]): void {
 				placeholder={t('mainnet.chat.placeholder')}
 				enableAttachments={true}
 				onSubmitMessage={handleSubmit}
+				onTranscribeError={handleTranscribeError}
 			/>
 		</div>
 	</div>
