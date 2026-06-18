@@ -18,8 +18,10 @@ type UsageStats = { total: UsageStat; week: UsageStat }
 let messages = $state<ChatMessage[]>([])
 let busy = $state(false)
 let usage = $state<UsageStats | null>(null)
+let currentSessionId = $state<string | null>(null)
 let nextId = 0
 let scrollEl = $state<HTMLDivElement | null>(null)
+let initialized = false
 
 const AI_BASE = import.meta.env.PUBLIC_BETTER_AUTH_URL as string | undefined
 const SYSTEM_PROMPT =
@@ -51,7 +53,50 @@ async function refreshUsage(): Promise<void> {
 	}
 }
 
+// Restore the user's most recent conversation from the database on first load.
+async function loadHistory(): Promise<void> {
+	if (!AI_BASE) return
+	const token = getBearerToken()
+	if (!token) return
+	try {
+		const sres = await fetch(`${AI_BASE}/api/ai/sessions`, {
+			credentials: 'include',
+			headers: { Authorization: `Bearer ${token}` }
+		})
+		if (!sres.ok) return
+		const { sessions } = (await sres.json()) as { sessions: { id: string }[] }
+		const sid = sessions?.[0]?.id
+		if (!sid) return
+		const mres = await fetch(`${AI_BASE}/api/ai/sessions/${sid}/messages`, {
+			credentials: 'include',
+			headers: { Authorization: `Bearer ${token}` }
+		})
+		if (!mres.ok) return
+		const { messages: rows } = (await mres.json()) as {
+			messages: { role: string; content: string }[]
+		}
+		currentSessionId = sid
+		messages = rows.map((r) => ({
+			id: nextId++,
+			role: r.role === 'assistant' ? 'assistant' : 'user',
+			text: r.content
+		}))
+		scrollToBottom()
+	} catch {
+		/* start fresh on failure */
+	}
+}
+
+/** Start a new conversation: next message creates a fresh server-side session. */
+function newChat(): void {
+	messages = []
+	currentSessionId = null
+}
+
 $effect(() => {
+	if (initialized) return
+	initialized = true
+	void loadHistory()
 	void refreshUsage()
 })
 
@@ -81,8 +126,14 @@ async function streamTinfoil(
 			'Content-Type': 'application/json',
 			...(token ? { Authorization: `Bearer ${token}` } : {})
 		},
-		body: JSON.stringify({ messages: toOpenAi(history), stream: true })
+		body: JSON.stringify({
+			messages: toOpenAi(history),
+			stream: true,
+			sessionId: currentSessionId ?? undefined
+		})
 	})
+	const sid = res.headers.get('X-Session-Id')
+	if (sid) currentSessionId = sid
 	if (!res.ok || !res.body) {
 		const err = (await res.json().catch(() => null)) as { error?: string; detail?: string } | null
 		throw new Error(
@@ -187,6 +238,14 @@ async function logout(): Promise<void> {
 			{t('mainnet.chat.tag')}
 		</p>
 		<h1 class="font-display text-lg font-medium tracking-tight">{t('mainnet.chat.title')}</h1>
+		<button
+			type="button"
+			class="text-muted-foreground hover:text-foreground absolute top-[max(0.75rem,env(safe-area-inset-top))] left-4 text-xs font-semibold transition-colors disabled:opacity-40"
+			onclick={newChat}
+			disabled={busy || messages.length === 0}
+		>
+			{t('mainnet.chat.newChat')}
+		</button>
 		<button
 			type="button"
 			class="text-muted-foreground hover:text-foreground absolute top-[max(0.75rem,env(safe-area-inset-top))] right-4 text-xs font-semibold transition-colors"

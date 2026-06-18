@@ -1013,6 +1013,7 @@
 			"aiError": "AI request failed: {message}",
 			"voiceError": "Voice transcription failed: {message}",
 			"logout": "Log out",
+			"newChat": "New chat",
 			"usageWeek": "This week",
 			"usageTotal": "Total",
 			"usageTokens": "tokens"

@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { aiChat, aiUsage } from './ai'
+import { aiChat, aiSessionMessages, aiSessions, aiUsage } from './ai'
 import { auth, TRUSTED_ORIGINS } from './auth'
 import { syncPricing } from './usage'
 
@@ -13,6 +13,7 @@ const corsOptions = {
 	origin: (origin: string) => (TRUSTED_ORIGINS.includes(origin) ? origin : ''),
 	allowHeaders: ['Content-Type', 'Authorization'],
 	allowMethods: ['POST', 'GET', 'OPTIONS'],
+	exposeHeaders: ['X-Session-Id'],
 	credentials: true
 }
 app.use('/api/auth/*', cors(corsOptions))
@@ -23,6 +24,8 @@ app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 // Authenticated Tinfoil proxy — only signed-in users can run inference. board 0051.
 app.post('/api/ai/chat', aiChat)
 app.get('/api/ai/usage', aiUsage)
+app.get('/api/ai/sessions', aiSessions)
+app.get('/api/ai/sessions/:id/messages', aiSessionMessages)
 
 app.get('/', (c) => c.text('avenOS betterauth server'))
 

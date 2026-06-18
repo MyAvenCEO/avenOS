@@ -26,9 +26,27 @@ export interface ModelPricingTable {
 	updated_at: Generated<Date>
 }
 
+export interface AiChatSessionTable {
+	id: string
+	user_id: string
+	title: string
+	created_at: Generated<Date>
+	updated_at: Generated<Date>
+}
+
+export interface AiMessageTable {
+	id: string
+	session_id: string
+	role: string
+	content: string
+	created_at: Generated<Date>
+}
+
 export interface Database {
 	ai_usage: AiUsageTable
 	model_pricing: ModelPricingTable
+	ai_chat_session: AiChatSessionTable
+	ai_message: AiMessageTable
 }
 
 let cached: Kysely<Database> | null = null

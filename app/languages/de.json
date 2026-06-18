@@ -990,6 +990,7 @@
 			"aiError": "KI-Anfrage fehlgeschlagen: {message}",
 			"voiceError": "Sprachtranskription fehlgeschlagen: {message}",
 			"logout": "Abmelden",
+			"newChat": "Neuer Chat",
 			"usageWeek": "Diese Woche",
 			"usageTotal": "Gesamt",
 			"usageTokens": "Tokens"
