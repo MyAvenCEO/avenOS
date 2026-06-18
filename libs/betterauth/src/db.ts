@@ -42,11 +42,21 @@ export interface AiMessageTable {
 	created_at: Generated<Date>
 }
 
+// Partial view of Better Auth's user table — only the columns we read/write directly
+// (tier for product tiers, role for admin). Better Auth owns the full schema.
+export interface UserTable {
+	id: string
+	email: string
+	role: string | null
+	tier: string | null
+}
+
 export interface Database {
 	ai_usage: AiUsageTable
 	model_pricing: ModelPricingTable
 	ai_chat_session: AiChatSessionTable
 	ai_message: AiMessageTable
+	user: UserTable
 }
 
 let cached: Kysely<Database> | null = null

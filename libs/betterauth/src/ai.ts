@@ -1,6 +1,8 @@
 import type { Context } from 'hono'
 import { auth } from './auth'
 import { ensureSession, getSessionMessages, listSessions, persistMessage } from './chat'
+import { creditStatus } from './credits'
+import { db } from './db'
 import { getUsageStats, recordUsage, type TokenUsage } from './usage'
 
 /**
@@ -35,6 +37,20 @@ export async function aiChat(c: Context): Promise<Response> {
 	const wantStream = body?.stream === true
 	const userId = session.user.id
 	const model = body?.model ?? TINFOIL_MODEL
+
+	// Hard credit cap: block inference once the tier's weekly allowance is spent. board 0052.
+	const credit = await creditStatus(userId)
+	if (credit.remainingUsd <= 0) {
+		return c.json(
+			{
+				error: 'out_of_credits',
+				tier: credit.tier,
+				allowanceUsd: credit.allowanceUsd,
+				spentUsd: credit.spentUsd
+			},
+			402
+		)
+	}
 
 	// Persist the new user turn (the last user message) into the caller's session.
 	const lastUserText =
@@ -140,11 +156,15 @@ export async function aiChat(c: Context): Promise<Response> {
 	return c.json({ content, usage: data.usage ?? null, sessionId: chatSessionId })
 }
 
-/** Session-gated: the signed-in user's token usage (all-time total + current week). */
+/** Session-gated: the signed-in user's token usage (all-time + week) + tier credit status. */
 export async function aiUsage(c: Context): Promise<Response> {
 	const session = await auth.api.getSession({ headers: c.req.raw.headers })
 	if (!session) return c.json({ error: 'unauthorized' }, 401)
-	return c.json(await getUsageStats(session.user.id))
+	const [stats, credit] = await Promise.all([
+		getUsageStats(session.user.id),
+		creditStatus(session.user.id)
+	])
+	return c.json({ ...stats, credit })
 }
 
 /** Session-gated: the caller's own chat sessions (most recent first). */
@@ -163,4 +183,22 @@ export async function aiSessionMessages(c: Context): Promise<Response> {
 	const messages = await getSessionMessages(session.user.id, id)
 	if (!messages) return c.json({ error: 'not_found' }, 404)
 	return c.json({ messages })
+}
+
+/** Admin-gated: set a user's product tier (free | avenCITY). board 0052. */
+export async function aiSetTier(c: Context): Promise<Response> {
+	const session = await auth.api.getSession({ headers: c.req.raw.headers })
+	if (!session) return c.json({ error: 'unauthorized' }, 401)
+	if ((session.user as { role?: string }).role !== 'admin') {
+		return c.json({ error: 'forbidden' }, 403)
+	}
+	const body = (await c.req.json().catch(() => null)) as {
+		userId?: string
+		tier?: string
+	} | null
+	if (!body?.userId || (body.tier !== 'free' && body.tier !== 'avenCITY')) {
+		return c.json({ error: 'userId and tier (free|avenCITY) required' }, 400)
+	}
+	await db().updateTable('user').set({ tier: body.tier }).where('id', '=', body.userId).execute()
+	return c.json({ ok: true, userId: body.userId, tier: body.tier })
 }

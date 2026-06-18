@@ -1003,7 +1003,11 @@
 			"adminRolesHint": "Der erste (Genesis-)Admin wird in der Neon-Datenbank gesetzt; Admins verwalten hier die Rollen aller anderen.",
 			"usageWeek": "Diese Woche",
 			"usageTotal": "Gesamt",
-			"usageTokens": "Tokens"
+			"usageTokens": "Tokens",
+			"credits": "Guthaben",
+			"creditsLeft": "übrig",
+			"outOfCredits": "Kein KI-Guthaben mehr diese Woche — dein Kontingent wird montags zurückgesetzt.",
+			"adminTier": "Stufe"
 		}
 	}
 }

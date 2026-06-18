@@ -80,6 +80,13 @@ export const auth = betterAuth({
 			clientSecret: requireEnv('GOOGLE_CLIENT_SECRET')
 		}
 	},
+	// Product tier on the user (free | avenCITY). Assigned by an admin; gates the weekly
+	// AI credit allowance. `input: false` so it can't be set by the client at sign-up. board 0052.
+	user: {
+		additionalFields: {
+			tier: { type: 'string', required: false, defaultValue: 'free', input: false }
+		}
+	},
 	trustedOrigins: TRUSTED_ORIGINS,
 	// `bearer` lets the Tauri app authenticate with an Authorization: Bearer token
 	// instead of a cookie — WKWebView drops the cross-site session cookie, so the

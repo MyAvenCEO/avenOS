@@ -14,7 +14,8 @@ type ChatMessage = {
 }
 
 type UsageStat = { tokens: number; costUsd: number }
-type UsageStats = { total: UsageStat; week: UsageStat }
+type Credit = { tier: string; allowanceUsd: number; spentUsd: number; remainingUsd: number }
+type UsageStats = { total: UsageStat; week: UsageStat; credit?: Credit }
 type SessionRow = { id: string; title: string }
 
 let messages = $state<ChatMessage[]>([])
@@ -165,6 +166,10 @@ async function streamTinfoil(
 	})
 	const sid = res.headers.get('X-Session-Id')
 	if (sid) currentSessionId = sid
+	if (res.status === 402) {
+		void refreshUsage()
+		throw new Error(t('mainnet.chat.outOfCredits'))
+	}
 	if (!res.ok || !res.body) {
 		const err = (await res.json().catch(() => null)) as { error?: string; detail?: string } | null
 		throw new Error(
@@ -338,26 +343,51 @@ async function logout(): Promise<void> {
 		{#if usage}
 			<div class="shrink-0 px-4 pb-2">
 				<div
-					class="border-border bg-card mx-auto flex w-full max-w-2xl items-stretch divide-x divide-border rounded-[var(--radius-lg)] border text-center"
+					class="border-border bg-card mx-auto w-full max-w-2xl overflow-hidden rounded-[var(--radius-lg)] border"
 				>
-					<div class="flex-1 px-3 py-2">
-						<div class="text-muted-foreground text-[10px] font-bold tracking-[0.14em] uppercase">
-							{t('mainnet.chat.usageWeek')}
+					{#if usage.credit}
+						<div
+							class="border-border flex items-center justify-between gap-2 border-b px-3 py-1.5 text-xs"
+						>
+							<span
+								class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider {usage
+									.credit.tier === 'avenCITY'
+									? 'bg-primary/15 text-primary'
+									: 'bg-muted text-muted-foreground'}"
+							>
+								{usage.credit.tier}
+							</span>
+							<span class="text-muted-foreground tabular-nums">
+								{t('mainnet.chat.credits')}:
+								<span
+									class={usage.credit.remainingUsd <= 0 ? 'text-destructive' : 'text-foreground'}
+								>
+									{fmtCost(usage.credit.remainingUsd)}
+								</span>
+								/ {fmtCost(usage.credit.allowanceUsd)} {t('mainnet.chat.creditsLeft')}
+							</span>
 						</div>
-						<div class="mt-0.5 text-sm font-medium tabular-nums">
-							{fmtTokens(usage.week.tokens)}
-							<span class="text-muted-foreground text-xs">{t('mainnet.chat.usageTokens')}</span>
-							<span class="text-primary ml-1">{fmtCost(usage.week.costUsd)}</span>
+					{/if}
+					<div class="flex items-stretch divide-x divide-border text-center">
+						<div class="flex-1 px-3 py-2">
+							<div class="text-muted-foreground text-[10px] font-bold tracking-[0.14em] uppercase">
+								{t('mainnet.chat.usageWeek')}
+							</div>
+							<div class="mt-0.5 text-sm font-medium tabular-nums">
+								{fmtTokens(usage.week.tokens)}
+								<span class="text-muted-foreground text-xs">{t('mainnet.chat.usageTokens')}</span>
+								<span class="text-primary ml-1">{fmtCost(usage.week.costUsd)}</span>
+							</div>
 						</div>
-					</div>
-					<div class="flex-1 px-3 py-2">
-						<div class="text-muted-foreground text-[10px] font-bold tracking-[0.14em] uppercase">
-							{t('mainnet.chat.usageTotal')}
-						</div>
-						<div class="mt-0.5 text-sm font-medium tabular-nums">
-							{fmtTokens(usage.total.tokens)}
-							<span class="text-muted-foreground text-xs">{t('mainnet.chat.usageTokens')}</span>
-							<span class="text-primary ml-1">{fmtCost(usage.total.costUsd)}</span>
+						<div class="flex-1 px-3 py-2">
+							<div class="text-muted-foreground text-[10px] font-bold tracking-[0.14em] uppercase">
+								{t('mainnet.chat.usageTotal')}
+							</div>
+							<div class="mt-0.5 text-sm font-medium tabular-nums">
+								{fmtTokens(usage.total.tokens)}
+								<span class="text-muted-foreground text-xs">{t('mainnet.chat.usageTokens')}</span>
+								<span class="text-primary ml-1">{fmtCost(usage.total.costUsd)}</span>
+							</div>
 						</div>
 					</div>
 				</div>

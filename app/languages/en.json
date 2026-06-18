@@ -1026,7 +1026,11 @@
 			"adminRolesHint": "The first (genesis) admin is set in the Neon database; admins manage everyone else's role here.",
 			"usageWeek": "This week",
 			"usageTotal": "Total",
-			"usageTokens": "tokens"
+			"usageTokens": "tokens",
+			"credits": "Credits",
+			"creditsLeft": "left",
+			"outOfCredits": "Out of AI credits for this week — your allowance resets on Monday.",
+			"adminTier": "Tier"
 		}
 	}
 }

@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { aiChat, aiSessionMessages, aiSessions, aiUsage } from './ai'
+import { aiChat, aiSessionMessages, aiSessions, aiSetTier, aiUsage } from './ai'
 import { auth, TRUSTED_ORIGINS } from './auth'
 import { syncPricing } from './usage'
 
@@ -21,6 +21,7 @@ const corsOptions = {
 }
 app.use('/api/auth/*', cors(corsOptions))
 app.use('/api/ai/*', cors(corsOptions))
+app.use('/api/admin/*', cors(corsOptions))
 
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
@@ -29,6 +30,7 @@ app.post('/api/ai/chat', aiChat)
 app.get('/api/ai/usage', aiUsage)
 app.get('/api/ai/sessions', aiSessions)
 app.get('/api/ai/sessions/:id/messages', aiSessionMessages)
+app.post('/api/admin/set-tier', aiSetTier)
 
 app.get('/', (c) => c.text('avenOS betterauth server'))
 
