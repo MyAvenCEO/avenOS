@@ -45,7 +45,9 @@ const polarPlugins = polarToken
 			polar({
 				client: new Polar({
 					accessToken: polarToken,
-					server: (optionalEnv('POLAR_SERVER') as 'sandbox' | 'production') ?? 'sandbox'
+					// Default to production (polar.sh) — tokens minted there 401 against sandbox.
+					// Set POLAR_SERVER=sandbox explicitly for sandbox.polar.sh tokens.
+					server: (optionalEnv('POLAR_SERVER') as 'sandbox' | 'production') ?? 'production'
 				}),
 				createCustomerOnSignUp: true,
 				// Account link only — products/checkout/portal come later. The plugin's types

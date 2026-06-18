@@ -129,16 +129,15 @@ the frontend gate.
 - [x] Server boots; `curl …/api/auth/get-session` → **HTTP 200**, body `null`.
 - [x] Better Auth tables exist in Neon — Neon MCP `run_sql` returned `account, session,
       user, verification` in the public schema (project `mainnet/alberobello`).
-- [x] Mainnet renders `AuthGate` **signed-out ⇒ Continue with Google** — preview
-      screenshot + network shows `GET localhost:8787/api/auth/get-session → 200` from the
-      browser (cross-origin client↔server wired). **signed-in ⇒ MainnetChat is HITL**
-      (needs a real Google login) — for review.
+- [x] Mainnet renders `AuthGate` **signed-out ⇒ Continue with Google** (preview screenshot
+      + browser `GET …/get-session → 200`) AND **signed-in ⇒ MainnetChat** — confirmed live
+      in the Tauri app: native Google sign-in → landed in the chat (user-verified).
 - [x] testnet branch logic unchanged — `git diff` shows the testnet block is a
       whitespace-only re-indent (biome, from nesting) + alphabetical import reorder; the
       only functional change is the mainnet `{:else if}` arm wrapping `MainnetChat` in
       `AuthGate`.
-- [ ] A Google sign-in creates a user — **HITL/review**: `SELECT id, email, "createdAt"
-      FROM "user" ORDER BY "createdAt" DESC` via Neon MCP after a live sign-in.
+- [x] A Google sign-in creates a user — confirmed: Neon MCP `SELECT … FROM "user"` returns
+      `samuel@andert.me` (emailVerified=true) created via the live native sign-in.
 
 ## Verification
 
@@ -189,6 +188,18 @@ curl -fsS "$BETTER_AUTH_URL/api/auth/get-session"   # expect HTTP 200 JSON
 
 Newest entry first.
 
+- `2026-06-16` — **End-to-end GREEN in the Tauri app (user-verified).** `bun run
+  dev:app:mac` compiled the app crate **with** the plugin + `google_oauth_config` command
+  (`Finished dev` in 15s, no errors — Rust integration confirmed). Live flow: Select
+  Network → mainnet → Continue with Google → system browser → back into the app → chat.
+  Neon `user` table now has `samuel@andert.me` (emailVerified). Polar fix along the way:
+  the token is a **production** token, but the user switched to a **sandbox** token +
+  `POLAR_SERVER=sandbox` (default changed to `production`; a server/token mismatch had
+  rolled back signup with a 401). Also shipped: voice-transcription error surfacing in the
+  mock chat + a **Log out** button (signs out, clears bearer + network → Select Network).
+  Committed `Cargo.lock` + regenerated Tauri capability schemas (google-auth permission).
+  All acceptance criteria met except repo-wide `bun run lint` (pre-existing red on
+  unrelated files). Ready for ship sign-off.
 - `2026-06-15` — Native Tauri Google sign-in (resolves the embedded-WebView block):
   added **`tauri-plugin-google-auth` v0.5.1** (Rust: registered in `lib.rs` builder +
   `google-auth:default` capability; crate + dep tree resolve via `cargo add --dry-run`)
