@@ -5,7 +5,7 @@ owner: claude
 created: 2026-06-16
 updated: 2026-06-16
 tags: [auth, authz, billing, admin]
-goal: "Slice 1 done: Better Auth admin plugin wired; `role` column on user (migrated); first admin bootstrapped in Neon; the admin-gated user-management endpoint returns 401 unauthenticated (verified) and is reachable only by admins; an admin can grant/revoke admin via setRole; a frontend admin panel lists users for admins only. lib tsc + app svelte-check + biome clean. Tiers (manual) + credit budgets (hard-cap) are follow-on slices."
+goal: "Slice 1 done: Better Auth admin plugin wired; `role` column on user (migrated); admin granted SOLELY by flipping `role` in the Neon DB (no hardcoded admin, no in-app granting); the admin-gated list-users endpoint returns 401 unauthenticated (verified) and is admin-only; a READ-ONLY frontend admin panel lists all users + their role, shown only to admins. lib tsc + app svelte-check + biome clean. Tiers (manual) + credit budgets (hard-cap) are follow-on slices."
 ---
 
 # Roles, tiers, admin & credits
@@ -98,9 +98,10 @@ roles/RLS are for direct-DB access you don't have yet.**
       admin (`samuel@andert.me`) bootstrapped via Neon `UPDATE`.
 - [x] Admin-gated user management via the plugin's `/api/auth/admin/*` routes — **401**
       unauthenticated (verified `GET …/admin/list-users` → 401); admin-only by the plugin.
-- [x] An admin can grant/revoke admin via `authClient.admin.setRole` (give/remove).
-- [x] Frontend admin panel (`AdminPanel.svelte`) lists users + toggles role; the Admin
-      entry shows only when `session.user.role === 'admin'`.
+- [x] **No hardcoded admin** — `admin()` has no `adminUserIds`; admin = the `role` column,
+      flipped SOLELY in the Neon DB (Tables UI / SQL editor). No in-app role granting.
+- [x] Frontend admin panel (`AdminPanel.svelte`) is **read-only**: lists all users + their
+      role badge for admins only; the Admin entry shows only when `session.user.role === 'admin'`.
 - [x] `bun --cwd libs/betterauth run check` = 0; app `svelte-check` = 0; biome clean; migrate applied.
 
 ## Hand-off

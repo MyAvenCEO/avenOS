@@ -1021,8 +1021,7 @@
 			"adminClose": "Close",
 			"adminLoading": "Loading users…",
 			"adminEmpty": "No users.",
-			"adminGrant": "Make admin",
-			"adminRevoke": "Revoke admin",
+			"adminRolesHint": "Roles are changed only in the Neon database (no in-app granting).",
 			"usageWeek": "This week",
 			"usageTotal": "Total",
 			"usageTokens": "tokens"

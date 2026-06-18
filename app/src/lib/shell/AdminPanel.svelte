@@ -2,9 +2,10 @@
 import { authClient } from '$lib/auth/auth-client'
 import { t } from '$lib/i18n'
 
-// Admin-only overlay: list all users and grant/revoke the admin role. The endpoints
-// (Better Auth admin plugin) are server-gated to admins; a non-admin can't reach them.
-// board 0052.
+// Admin-only overlay: READ-ONLY list of all users + their role. Roles are changed
+// SOLELY by flipping the `role` column in the Neon DB (Tables UI / SQL editor) — not
+// from the app — so admin can't be minted in-app. The list endpoint (Better Auth admin
+// plugin) is server-gated to admins; a non-admin can't reach it. board 0052.
 let { onClose }: { onClose: () => void } = $props()
 
 type AdminUser = { id: string; email: string; role?: string | null }
@@ -25,13 +26,6 @@ async function load(): Promise<void> {
 	} finally {
 		loading = false
 	}
-}
-
-async function toggleRole(u: AdminUser): Promise<void> {
-	const role = u.role === 'admin' ? 'user' : 'admin'
-	const res = await authClient.admin.setRole({ userId: u.id, role })
-	if (res.error) error = res.error.message ?? 'failed'
-	else await load()
 }
 
 $effect(() => {
@@ -67,21 +61,20 @@ $effect(() => {
 			{:else}
 				{#each users as u (u.id)}
 					<div class="flex items-center justify-between gap-2 rounded-[var(--radius)] px-3 py-2">
-						<div class="min-w-0">
-							<div class="truncate text-sm font-medium">{u.email}</div>
-							<div class="text-muted-foreground text-[11px] uppercase tracking-wider">
-								{u.role ?? 'user'}
-							</div>
-						</div>
-						<button
-							type="button"
-							class="border-border hover:bg-background shrink-0 rounded-[var(--radius)] border px-2.5 py-1 text-xs font-semibold transition-colors"
-							onclick={() => void toggleRole(u)}
+						<div class="min-w-0 truncate text-sm font-medium">{u.email}</div>
+						<span
+							class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider {u.role ===
+							'admin'
+								? 'bg-primary/15 text-primary'
+								: 'bg-muted text-muted-foreground'}"
 						>
-							{u.role === 'admin' ? t('mainnet.chat.adminRevoke') : t('mainnet.chat.adminGrant')}
-						</button>
+							{u.role ?? 'user'}
+						</span>
 					</div>
 				{/each}
+				<p class="text-muted-foreground px-3 pt-2 text-[11px] leading-relaxed">
+					{t('mainnet.chat.adminRolesHint')}
+				</p>
 			{/if}
 		</div>
 	</div>

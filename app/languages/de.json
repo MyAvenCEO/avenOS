@@ -998,8 +998,7 @@
 			"adminClose": "Schließen",
 			"adminLoading": "Benutzer werden geladen…",
 			"adminEmpty": "Keine Benutzer.",
-			"adminGrant": "Zum Admin machen",
-			"adminRevoke": "Admin entziehen",
+			"adminRolesHint": "Rollen werden ausschließlich in der Neon-Datenbank geändert (keine Vergabe in der App).",
 			"usageWeek": "Diese Woche",
 			"usageTotal": "Gesamt",
 			"usageTokens": "Tokens"
