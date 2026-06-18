@@ -113,6 +113,15 @@ roles/RLS are for direct-DB access you don't have yet.**
 
 ## Progress log
 
+- `2026-06-16` — Slices 2+3 BUILT (avenCITY tier + $3/wk hard credit cap): `tier` field
+  on user (free|avenCITY, nullable, migrated); `credits.ts` with `WEEKLY_CREDIT_USD
+  { free: 0, avenCITY: 3 }` and `creditStatus()` (allowance vs week spend from
+  `ai_usage`); proxy returns **402 out_of_credits** once the weekly allowance is spent;
+  `/api/ai/usage` returns credit status; admin-gated `POST /api/admin/set-tier` (403
+  non-admin) + tier toggle in the admin panel; usage card shows tier + remaining credits;
+  chat surfaces an out-of-credits message. Manual tier assignment (Polar billing still a
+  future slice). lib tsc + svelte-check + biome clean; endpoints 401 unauthenticated.
+
 - `2026-06-16` — Slice 1 BUILT (roles + admin): Better Auth `admin` plugin (server) +
   `adminClient` (app); Better Auth migrate added `role`/`banned`/`banReason`/`banExpires`
   on user + `impersonatedBy` on session; bootstrapped `samuel@andert.me` → admin in Neon;
