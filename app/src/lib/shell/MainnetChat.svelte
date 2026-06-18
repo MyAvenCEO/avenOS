@@ -4,6 +4,7 @@ import { authClient, getBearerToken, setBearerToken } from '$lib/auth/auth-clien
 import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import { clearNetwork } from '$lib/settings/network-store'
+import AdminPanel from '$lib/shell/AdminPanel.svelte'
 
 type ChatMessage = {
 	id: number
@@ -24,6 +25,13 @@ let currentSessionId = $state<string | null>(null)
 let nextId = 0
 let scrollEl = $state<HTMLDivElement | null>(null)
 let initialized = false
+
+// Admin: the panel is gated server-side too; we only show the entry point to admins.
+const sessionStore = authClient.useSession()
+const isAdmin = $derived(
+	($sessionStore.data?.user as { role?: string } | undefined)?.role === 'admin'
+)
+let adminOpen = $state(false)
 
 const AI_BASE = import.meta.env.PUBLIC_BETTER_AUTH_URL as string | undefined
 const SYSTEM_PROMPT =
@@ -301,14 +309,31 @@ async function logout(): Promise<void> {
 				{t('mainnet.chat.tag')}
 			</p>
 			<h1 class="font-display text-lg font-medium tracking-tight">{t('mainnet.chat.title')}</h1>
-			<button
-				type="button"
-				class="text-muted-foreground hover:text-foreground absolute top-[max(0.75rem,env(safe-area-inset-top))] right-4 text-xs font-semibold transition-colors"
-				onclick={() => void logout()}
+			<div
+				class="absolute top-[max(0.75rem,env(safe-area-inset-top))] right-4 flex items-center gap-3"
 			>
-				{t('mainnet.chat.logout')}
-			</button>
+				{#if isAdmin}
+					<button
+						type="button"
+						class="text-muted-foreground hover:text-foreground text-xs font-semibold transition-colors"
+						onclick={() => (adminOpen = true)}
+					>
+						{t('mainnet.chat.adminButton')}
+					</button>
+				{/if}
+				<button
+					type="button"
+					class="text-muted-foreground hover:text-foreground text-xs font-semibold transition-colors"
+					onclick={() => void logout()}
+				>
+					{t('mainnet.chat.logout')}
+				</button>
+			</div>
 		</header>
+
+		{#if adminOpen}
+			<AdminPanel onClose={() => (adminOpen = false)} />
+		{/if}
 
 		{#if usage}
 			<div class="shrink-0 px-4 pb-2">

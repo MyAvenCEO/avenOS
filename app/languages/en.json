@@ -1016,6 +1016,13 @@
 			"newChat": "New chat",
 			"noSessions": "No conversations yet.",
 			"untitled": "Untitled",
+			"adminButton": "Admin",
+			"adminTitle": "Users",
+			"adminClose": "Close",
+			"adminLoading": "Loading users…",
+			"adminEmpty": "No users.",
+			"adminGrant": "Make admin",
+			"adminRevoke": "Revoke admin",
 			"usageWeek": "This week",
 			"usageTotal": "Total",
 			"usageTokens": "tokens"

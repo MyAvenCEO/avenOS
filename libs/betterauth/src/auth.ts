@@ -1,7 +1,7 @@
 import { polar } from '@polar-sh/better-auth'
 import { Polar } from '@polar-sh/sdk'
 import { betterAuth } from 'better-auth'
-import { bearer } from 'better-auth/plugins'
+import { admin, bearer } from 'better-auth/plugins'
 import { NeonDialect } from 'kysely-neon'
 
 /**
@@ -84,7 +84,9 @@ export const auth = betterAuth({
 	// `bearer` lets the Tauri app authenticate with an Authorization: Bearer token
 	// instead of a cookie — WKWebView drops the cross-site session cookie, so the
 	// desktop native sign-in path stores + sends the token returned by the server.
-	plugins: [bearer(), ...polarPlugins],
+	// `admin` adds a `role` field (user|admin) + admin-gated user management
+	// (list/setRole/ban/impersonate). First admin is bootstrapped in Neon. board 0052.
+	plugins: [bearer(), admin(), ...polarPlugins],
 	advanced: {
 		defaultCookieAttributes: {
 			sameSite: 'none',

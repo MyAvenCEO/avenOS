@@ -993,6 +993,13 @@
 			"newChat": "Neuer Chat",
 			"noSessions": "Noch keine Unterhaltungen.",
 			"untitled": "Ohne Titel",
+			"adminButton": "Admin",
+			"adminTitle": "Benutzer",
+			"adminClose": "Schließen",
+			"adminLoading": "Benutzer werden geladen…",
+			"adminEmpty": "Keine Benutzer.",
+			"adminGrant": "Zum Admin machen",
+			"adminRevoke": "Admin entziehen",
 			"usageWeek": "Diese Woche",
 			"usageTotal": "Gesamt",
 			"usageTokens": "Tokens"

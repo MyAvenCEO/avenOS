@@ -5,7 +5,7 @@ owner: claude
 created: 2026-06-16
 updated: 2026-06-16
 tags: [auth, authz, billing, admin]
-goal: "<set on slice 1 — e.g. an `admin`-gated GET /api/admin/users returns all users (403 for non-admins, 401 unauthenticated); a non-admin cannot list users; role stored on the user via the Better Auth admin plugin; lib tsc + app svelte-check + biome clean; migration applied>"
+goal: "Slice 1 done: Better Auth admin plugin wired; `role` column on user (migrated); first admin bootstrapped in Neon; the admin-gated user-management endpoint returns 401 unauthenticated (verified) and is reachable only by admins; an admin can grant/revoke admin via setRole; a frontend admin panel lists users for admins only. lib tsc + app svelte-check + biome clean. Tiers (manual) + credit budgets (hard-cap) are follow-on slices."
 ---
 
 # Roles, tiers, admin & credits
@@ -84,20 +84,24 @@ roles/RLS are for direct-DB access you don't have yet.**
 3. **AI credit budgets** — per-tier weekly allowance enforced in the proxy (402 when out);
    show remaining credits in the usage card. (follow-on card)
 
-## Decisions to confirm (interview)
+## Decisions (confirmed)
 
-- Tier source of truth = **Polar subscription** (webhook-synced), with admin override? (rec: yes)
-- Credits = **hard cap** (block at 402 when the weekly allowance is spent) vs soft warn? (rec: hard cap)
-- Admin bootstrap = **manual Neon `UPDATE`** for the first admin, then API-managed? (rec: yes)
-- Authorization in the **app layer** (Better Auth admin + tier middleware), RLS deferred? (rec: yes)
+- Tier source of truth = **manual roles for now** (assign by hand via admin tooling); wire
+  **Polar** billing later (slice 2).
+- Credits = **hard cap** (block at 402 when the weekly allowance is spent) — slice 3.
+- Admin bootstrap = **manual Neon `UPDATE`** for the first admin, then API-managed. ✓
+- Authorization in the **app layer** (Better Auth admin + tier middleware), RLS deferred. ✓
 
-## Acceptance criteria (slice 1 — finalize after interview)
+## Acceptance criteria (slice 1)
 
-- [ ] `admin` plugin added; `role` column on user (migration); first admin bootstrapped.
-- [ ] `GET /api/admin/users` returns all users for an admin; **403** for a non-admin; **401** unauthenticated.
-- [ ] An admin can `setRole(userId, 'admin'|'user')` (give/remove); change reflected.
-- [ ] Minimal frontend admin view lists users (admin only).
-- [ ] `bun --cwd libs/betterauth run check` + app `svelte-check` + biome clean; migration applied.
+- [x] `admin` plugin added; `role`/`banned`/… columns on user (Better Auth migrate); first
+      admin (`samuel@andert.me`) bootstrapped via Neon `UPDATE`.
+- [x] Admin-gated user management via the plugin's `/api/auth/admin/*` routes — **401**
+      unauthenticated (verified `GET …/admin/list-users` → 401); admin-only by the plugin.
+- [x] An admin can grant/revoke admin via `authClient.admin.setRole` (give/remove).
+- [x] Frontend admin panel (`AdminPanel.svelte`) lists users + toggles role; the Admin
+      entry shows only when `session.user.role === 'admin'`.
+- [x] `bun --cwd libs/betterauth run check` = 0; app `svelte-check` = 0; biome clean; migrate applied.
 
 ## Hand-off
 
@@ -107,7 +111,12 @@ roles/RLS are for direct-DB access you don't have yet.**
 
 ## Progress log
 
-- `2026-06-16` — Discovery drafted: app-layer authz (Better Auth admin plugin + Polar
-  entitlements), tiers from Polar, credits computed from `ai_usage`, RLS deferred to a
-  future Data-API card. Slice 1 = roles + admin. Awaiting decision confirmations to set
-  the measurable `goal` and start building.
+- `2026-06-16` — Slice 1 BUILT (roles + admin): Better Auth `admin` plugin (server) +
+  `adminClient` (app); Better Auth migrate added `role`/`banned`/`banReason`/`banExpires`
+  on user + `impersonatedBy` on session; bootstrapped `samuel@andert.me` → admin in Neon;
+  `AdminPanel.svelte` lists users + grant/revoke via `setRole`, shown only to admins.
+  Verified: `…/admin/list-users` → 401 unauthenticated; lib tsc + svelte-check + biome
+  clean. Decisions: manual tiers for now, hard-cap credits, app-layer authz, RLS deferred.
+  Moved discover → review. Slices 2 (Polar tiers) + 3 (credit budgets) remain.
+- `2026-06-16` — Discovery drafted: app-layer authz, tiers from Polar, credits from
+  `ai_usage`, RLS deferred to a future Data-API card. Slice 1 = roles + admin.
