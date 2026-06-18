@@ -13,7 +13,10 @@ const corsOptions = {
 	origin: (origin: string) => (TRUSTED_ORIGINS.includes(origin) ? origin : ''),
 	allowHeaders: ['Content-Type', 'Authorization'],
 	allowMethods: ['POST', 'GET', 'OPTIONS'],
-	exposeHeaders: ['X-Session-Id'],
+	// `set-auth-token` MUST be exposed so the app (cross-origin) can read the bearer token
+	// the bearer plugin returns and persist it — WKWebView drops the cross-site cookie, so
+	// this token is how the desktop app stays signed in. board 0050/0052.
+	exposeHeaders: ['X-Session-Id', 'set-auth-token'],
 	credentials: true
 }
 app.use('/api/auth/*', cors(corsOptions))
