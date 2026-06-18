@@ -1014,6 +1014,8 @@
 			"voiceError": "Voice transcription failed: {message}",
 			"logout": "Log out",
 			"newChat": "New chat",
+			"noSessions": "No conversations yet.",
+			"untitled": "Untitled",
 			"usageWeek": "This week",
 			"usageTotal": "Total",
 			"usageTokens": "tokens"

@@ -991,6 +991,8 @@
 			"voiceError": "Sprachtranskription fehlgeschlagen: {message}",
 			"logout": "Abmelden",
 			"newChat": "Neuer Chat",
+			"noSessions": "Noch keine Unterhaltungen.",
+			"untitled": "Ohne Titel",
 			"usageWeek": "Diese Woche",
 			"usageTotal": "Gesamt",
 			"usageTokens": "Tokens"

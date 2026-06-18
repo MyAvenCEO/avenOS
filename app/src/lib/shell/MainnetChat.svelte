@@ -14,10 +14,12 @@ type ChatMessage = {
 
 type UsageStat = { tokens: number; costUsd: number }
 type UsageStats = { total: UsageStat; week: UsageStat }
+type SessionRow = { id: string; title: string }
 
 let messages = $state<ChatMessage[]>([])
 let busy = $state(false)
 let usage = $state<UsageStats | null>(null)
+let sessions = $state<SessionRow[]>([])
 let currentSessionId = $state<string | null>(null)
 let nextId = 0
 let scrollEl = $state<HTMLDivElement | null>(null)
@@ -53,29 +55,40 @@ async function refreshUsage(): Promise<void> {
 	}
 }
 
-// Restore the user's most recent conversation from the database on first load.
-async function loadHistory(): Promise<void> {
+// Refresh the user's session list (most-recent first) for the left switcher.
+async function refreshSessions(): Promise<void> {
 	if (!AI_BASE) return
 	const token = getBearerToken()
 	if (!token) return
 	try {
-		const sres = await fetch(`${AI_BASE}/api/ai/sessions`, {
+		const res = await fetch(`${AI_BASE}/api/ai/sessions`, {
 			credentials: 'include',
 			headers: { Authorization: `Bearer ${token}` }
 		})
-		if (!sres.ok) return
-		const { sessions } = (await sres.json()) as { sessions: { id: string }[] }
-		const sid = sessions?.[0]?.id
-		if (!sid) return
-		const mres = await fetch(`${AI_BASE}/api/ai/sessions/${sid}/messages`, {
+		if (res.ok) {
+			const { sessions: rows } = (await res.json()) as { sessions: SessionRow[] }
+			sessions = rows ?? []
+		}
+	} catch {
+		/* keep the current list on failure */
+	}
+}
+
+// Load one session's messages into the chat view.
+async function loadSessionMessages(id: string): Promise<void> {
+	if (!AI_BASE) return
+	const token = getBearerToken()
+	if (!token) return
+	try {
+		const res = await fetch(`${AI_BASE}/api/ai/sessions/${id}/messages`, {
 			credentials: 'include',
 			headers: { Authorization: `Bearer ${token}` }
 		})
-		if (!mres.ok) return
-		const { messages: rows } = (await mres.json()) as {
+		if (!res.ok) return
+		const { messages: rows } = (await res.json()) as {
 			messages: { role: string; content: string }[]
 		}
-		currentSessionId = sid
+		currentSessionId = id
 		messages = rows.map((r) => ({
 			id: nextId++,
 			role: r.role === 'assistant' ? 'assistant' : 'user',
@@ -83,12 +96,19 @@ async function loadHistory(): Promise<void> {
 		}))
 		scrollToBottom()
 	} catch {
-		/* start fresh on failure */
+		/* ignore */
 	}
+}
+
+/** Switch to a session from the left list. */
+function selectSession(id: string): void {
+	if (busy || id === currentSessionId) return
+	void loadSessionMessages(id)
 }
 
 /** Start a new conversation: next message creates a fresh server-side session. */
 function newChat(): void {
+	if (busy) return
 	messages = []
 	currentSessionId = null
 }
@@ -96,7 +116,10 @@ function newChat(): void {
 $effect(() => {
 	if (initialized) return
 	initialized = true
-	void loadHistory()
+	void (async () => {
+		await refreshSessions()
+		if (sessions.length > 0) await loadSessionMessages(sessions[0].id)
+	})()
 	void refreshUsage()
 })
 
@@ -203,6 +226,7 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 		busy = false
 		scrollToBottom()
 		void refreshUsage()
+		void refreshSessions()
 	}
 }
 
@@ -230,93 +254,125 @@ async function logout(): Promise<void> {
 }
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col bg-background">
-	<header
-		class="relative shrink-0 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 text-center"
+<div class="flex min-h-0 flex-1 bg-background">
+	<!-- Left: session switcher -->
+	<aside
+		class="border-border hidden w-56 shrink-0 flex-col border-r pt-[max(0.75rem,env(safe-area-inset-top))] sm:flex"
 	>
-		<p class="text-primary text-[10px] font-bold tracking-[0.18em] uppercase">
-			{t('mainnet.chat.tag')}
-		</p>
-		<h1 class="font-display text-lg font-medium tracking-tight">{t('mainnet.chat.title')}</h1>
-		<button
-			type="button"
-			class="text-muted-foreground hover:text-foreground absolute top-[max(0.75rem,env(safe-area-inset-top))] left-4 text-xs font-semibold transition-colors disabled:opacity-40"
-			onclick={newChat}
-			disabled={busy || messages.length === 0}
-		>
-			{t('mainnet.chat.newChat')}
-		</button>
-		<button
-			type="button"
-			class="text-muted-foreground hover:text-foreground absolute top-[max(0.75rem,env(safe-area-inset-top))] right-4 text-xs font-semibold transition-colors"
-			onclick={() => void logout()}
-		>
-			{t('mainnet.chat.logout')}
-		</button>
-	</header>
-
-	{#if usage}
-		<div class="shrink-0 px-4 pb-2">
-			<div
-				class="border-border bg-card mx-auto flex w-full max-w-2xl items-stretch divide-x divide-border rounded-[var(--radius-lg)] border text-center"
+		<div class="px-3 pb-2">
+			<button
+				type="button"
+				class="border-border hover:bg-card flex w-full items-center justify-center gap-1.5 rounded-[var(--radius)] border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40"
+				onclick={newChat}
+				disabled={busy || (messages.length === 0 && currentSessionId === null)}
 			>
-				<div class="flex-1 px-3 py-2">
-					<div class="text-muted-foreground text-[10px] font-bold tracking-[0.14em] uppercase">
-						{t('mainnet.chat.usageWeek')}
+				+ {t('mainnet.chat.newChat')}
+			</button>
+		</div>
+		<div class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+			{#if sessions.length === 0}
+				<p class="text-muted-foreground px-2 py-2 text-[11px] leading-relaxed">
+					{t('mainnet.chat.noSessions')}
+				</p>
+			{/if}
+			{#each sessions as s (s.id)}
+				<button
+					type="button"
+					class="mb-0.5 block w-full truncate rounded-[var(--radius)] px-2.5 py-1.5 text-left text-[13px] transition-colors {s.id ===
+					currentSessionId
+						? 'bg-primary/10 text-foreground font-medium'
+						: 'text-muted-foreground hover:bg-card'}"
+					title={s.title}
+					onclick={() => selectSession(s.id)}
+					disabled={busy}
+				>
+					{s.title || t('mainnet.chat.untitled')}
+				</button>
+			{/each}
+		</div>
+	</aside>
+
+	<!-- Right: the conversation -->
+	<div class="flex min-h-0 flex-1 flex-col">
+		<header
+			class="relative shrink-0 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 text-center"
+		>
+			<p class="text-primary text-[10px] font-bold tracking-[0.18em] uppercase">
+				{t('mainnet.chat.tag')}
+			</p>
+			<h1 class="font-display text-lg font-medium tracking-tight">{t('mainnet.chat.title')}</h1>
+			<button
+				type="button"
+				class="text-muted-foreground hover:text-foreground absolute top-[max(0.75rem,env(safe-area-inset-top))] right-4 text-xs font-semibold transition-colors"
+				onclick={() => void logout()}
+			>
+				{t('mainnet.chat.logout')}
+			</button>
+		</header>
+
+		{#if usage}
+			<div class="shrink-0 px-4 pb-2">
+				<div
+					class="border-border bg-card mx-auto flex w-full max-w-2xl items-stretch divide-x divide-border rounded-[var(--radius-lg)] border text-center"
+				>
+					<div class="flex-1 px-3 py-2">
+						<div class="text-muted-foreground text-[10px] font-bold tracking-[0.14em] uppercase">
+							{t('mainnet.chat.usageWeek')}
+						</div>
+						<div class="mt-0.5 text-sm font-medium tabular-nums">
+							{fmtTokens(usage.week.tokens)}
+							<span class="text-muted-foreground text-xs">{t('mainnet.chat.usageTokens')}</span>
+							<span class="text-primary ml-1">{fmtCost(usage.week.costUsd)}</span>
+						</div>
 					</div>
-					<div class="mt-0.5 text-sm font-medium tabular-nums">
-						{fmtTokens(usage.week.tokens)}
-						<span class="text-muted-foreground text-xs">{t('mainnet.chat.usageTokens')}</span>
-						<span class="text-primary ml-1">{fmtCost(usage.week.costUsd)}</span>
-					</div>
-				</div>
-				<div class="flex-1 px-3 py-2">
-					<div class="text-muted-foreground text-[10px] font-bold tracking-[0.14em] uppercase">
-						{t('mainnet.chat.usageTotal')}
-					</div>
-					<div class="mt-0.5 text-sm font-medium tabular-nums">
-						{fmtTokens(usage.total.tokens)}
-						<span class="text-muted-foreground text-xs">{t('mainnet.chat.usageTokens')}</span>
-						<span class="text-primary ml-1">{fmtCost(usage.total.costUsd)}</span>
+					<div class="flex-1 px-3 py-2">
+						<div class="text-muted-foreground text-[10px] font-bold tracking-[0.14em] uppercase">
+							{t('mainnet.chat.usageTotal')}
+						</div>
+						<div class="mt-0.5 text-sm font-medium tabular-nums">
+							{fmtTokens(usage.total.tokens)}
+							<span class="text-muted-foreground text-xs">{t('mainnet.chat.usageTokens')}</span>
+							<span class="text-primary ml-1">{fmtCost(usage.total.costUsd)}</span>
+						</div>
 					</div>
 				</div>
 			</div>
-		</div>
-	{/if}
+		{/if}
 
-	<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-4">
-		<div class="mx-auto flex w-full max-w-2xl flex-col gap-3 py-4">
-			{#if messages.length === 0}
-				<div class="text-muted-foreground py-16 text-center text-sm leading-relaxed">
-					{t('mainnet.chat.empty')}
-				</div>
-			{/if}
-			{#each messages as message (message.id)}
-				<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
-					<div
-						class="max-w-[80%] rounded-[var(--radius-lg)] px-3.5 py-2 text-sm leading-relaxed {message.role ===
+		<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-4">
+			<div class="mx-auto flex w-full max-w-2xl flex-col gap-3 py-4">
+				{#if messages.length === 0}
+					<div class="text-muted-foreground py-16 text-center text-sm leading-relaxed">
+						{t('mainnet.chat.empty')}
+					</div>
+				{/if}
+				{#each messages as message (message.id)}
+					<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
+						<div
+							class="max-w-[80%] rounded-[var(--radius-lg)] px-3.5 py-2 text-sm leading-relaxed {message.role ===
 						'user'
 							? 'bg-primary text-primary-foreground'
 							: 'border-border bg-card text-foreground border'}{message.pending
 							? ' animate-pulse italic opacity-60'
 							: ''}"
-					>
-						{message.text}
+						>
+							{message.text}
+						</div>
 					</div>
-				</div>
-			{/each}
+				{/each}
+			</div>
 		</div>
-	</div>
 
-	<div class="shrink-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-		<div class="mx-auto w-full max-w-2xl">
-			<IntentComposer
-				placeholder={t('mainnet.chat.placeholder')}
-				enableAttachments={true}
-				submitBusy={busy}
-				onSubmitMessage={handleSubmit}
-				onTranscribeError={handleTranscribeError}
-			/>
+		<div class="shrink-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+			<div class="mx-auto w-full max-w-2xl">
+				<IntentComposer
+					placeholder={t('mainnet.chat.placeholder')}
+					enableAttachments={true}
+					submitBusy={busy}
+					onSubmitMessage={handleSubmit}
+					onTranscribeError={handleTranscribeError}
+				/>
+			</div>
 		</div>
 	</div>
 </div>
