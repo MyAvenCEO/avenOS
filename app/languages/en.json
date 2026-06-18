@@ -1012,7 +1012,10 @@
 			"thinking": "Thinking…",
 			"aiError": "AI request failed: {message}",
 			"voiceError": "Voice transcription failed: {message}",
-			"logout": "Log out"
+			"logout": "Log out",
+			"usageWeek": "This week",
+			"usageTotal": "Total",
+			"usageTokens": "tokens"
 		}
 	}
 }

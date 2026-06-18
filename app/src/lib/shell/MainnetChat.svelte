@@ -12,8 +12,12 @@ type ChatMessage = {
 	pending?: boolean
 }
 
+type UsageStat = { tokens: number; costUsd: number }
+type UsageStats = { total: UsageStat; week: UsageStat }
+
 let messages = $state<ChatMessage[]>([])
 let busy = $state(false)
+let usage = $state<UsageStats | null>(null)
 let nextId = 0
 let scrollEl = $state<HTMLDivElement | null>(null)
 
@@ -26,6 +30,30 @@ function scrollToBottom(): void {
 		if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight
 	})
 }
+
+const fmtTokens = (n: number): string => n.toLocaleString()
+const fmtCost = (n: number): string => `$${n < 1 ? n.toFixed(4) : n.toFixed(2)}`
+
+// Pull the signed-in user's token-usage stats (all-time total + current week) from the
+// session-gated endpoint. Refreshed on mount and after each completion.
+async function refreshUsage(): Promise<void> {
+	if (!AI_BASE) return
+	const token = getBearerToken()
+	if (!token) return
+	try {
+		const res = await fetch(`${AI_BASE}/api/ai/usage`, {
+			credentials: 'include',
+			headers: { Authorization: `Bearer ${token}` }
+		})
+		if (res.ok) usage = (await res.json()) as UsageStats
+	} catch {
+		/* leave the card hidden on failure */
+	}
+}
+
+$effect(() => {
+	void refreshUsage()
+})
 
 function toOpenAi(history: ChatMessage[]): { role: string; content: string }[] {
 	return [
@@ -123,6 +151,7 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 	} finally {
 		busy = false
 		scrollToBottom()
+		void refreshUsage()
 	}
 }
 
@@ -166,6 +195,35 @@ async function logout(): Promise<void> {
 			{t('mainnet.chat.logout')}
 		</button>
 	</header>
+
+	{#if usage}
+		<div class="shrink-0 px-4 pb-2">
+			<div
+				class="border-border bg-card mx-auto flex w-full max-w-2xl items-stretch divide-x divide-border rounded-[var(--radius-lg)] border text-center"
+			>
+				<div class="flex-1 px-3 py-2">
+					<div class="text-muted-foreground text-[10px] font-bold tracking-[0.14em] uppercase">
+						{t('mainnet.chat.usageWeek')}
+					</div>
+					<div class="mt-0.5 text-sm font-medium tabular-nums">
+						{fmtTokens(usage.week.tokens)}
+						<span class="text-muted-foreground text-xs">{t('mainnet.chat.usageTokens')}</span>
+						<span class="text-primary ml-1">{fmtCost(usage.week.costUsd)}</span>
+					</div>
+				</div>
+				<div class="flex-1 px-3 py-2">
+					<div class="text-muted-foreground text-[10px] font-bold tracking-[0.14em] uppercase">
+						{t('mainnet.chat.usageTotal')}
+					</div>
+					<div class="mt-0.5 text-sm font-medium tabular-nums">
+						{fmtTokens(usage.total.tokens)}
+						<span class="text-muted-foreground text-xs">{t('mainnet.chat.usageTokens')}</span>
+						<span class="text-primary ml-1">{fmtCost(usage.total.costUsd)}</span>
+					</div>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-4">
 		<div class="mx-auto flex w-full max-w-2xl flex-col gap-3 py-4">

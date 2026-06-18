@@ -14,6 +14,7 @@
 		"start": "bun --env-file=../../.env src/server.ts",
 		"db:generate": "bun --env-file=../../.env x @better-auth/cli@latest generate --config src/auth.ts -y",
 		"db:migrate": "bun --env-file=../../.env x @better-auth/cli@latest migrate --config src/auth.ts -y",
+		"db:migrate:usage": "bun --env-file=../../.env src/migrate.ts",
 		"check": "tsc -p tsconfig.json --noEmit"
 	},
 	"dependencies": {

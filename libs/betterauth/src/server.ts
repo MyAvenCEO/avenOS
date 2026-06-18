@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { aiChat } from './ai'
+import { aiChat, aiUsage } from './ai'
 import { auth, TRUSTED_ORIGINS } from './auth'
+import { syncPricing } from './usage'
 
 const app = new Hono()
 
@@ -21,8 +22,13 @@ app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
 // Authenticated Tinfoil proxy — only signed-in users can run inference. board 0051.
 app.post('/api/ai/chat', aiChat)
+app.get('/api/ai/usage', aiUsage)
 
 app.get('/', (c) => c.text('avenOS betterauth server'))
+
+// Best-effort: refresh per-model pricing from Tinfoil on boot (recordUsage also
+// lazily syncs if a model is unseen). Never blocks startup.
+void syncPricing().catch((e) => console.error('[betterauth] pricing sync failed:', e))
 
 const port = Number(new URL(process.env.BETTER_AUTH_URL ?? 'http://localhost:8787').port || 8787)
 
