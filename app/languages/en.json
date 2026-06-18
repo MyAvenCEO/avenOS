@@ -1021,7 +1021,9 @@
 			"adminClose": "Close",
 			"adminLoading": "Loading users…",
 			"adminEmpty": "No users.",
-			"adminRolesHint": "Roles are changed only in the Neon database (no in-app granting).",
+			"adminGrant": "Make admin",
+			"adminRevoke": "Revoke admin",
+			"adminRolesHint": "The first (genesis) admin is set in the Neon database; admins manage everyone else's role here.",
 			"usageWeek": "This week",
 			"usageTotal": "Total",
 			"usageTokens": "tokens"
