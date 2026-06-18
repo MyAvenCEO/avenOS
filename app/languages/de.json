@@ -987,6 +987,7 @@
 			"empty": "Schreib etwas, um zu beginnen — deine Nachricht läuft auf privater KI (Tinfoil).",
 			"placeholder": "Nachricht an Alberobello…",
 			"thinking": "Denkt nach…",
+			"noReply": "Keine Antwort erhalten — bitte versuche es erneut.",
 			"aiError": "KI-Anfrage fehlgeschlagen: {message}",
 			"voiceError": "Sprachtranskription fehlgeschlagen: {message}",
 			"logout": "Abmelden",

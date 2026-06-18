@@ -1010,6 +1010,7 @@
 			"empty": "Say something to get started — your message runs on private AI (Tinfoil).",
 			"placeholder": "Message Alberobello…",
 			"thinking": "Thinking…",
+			"noReply": "No response came through — please try again.",
 			"aiError": "AI request failed: {message}",
 			"voiceError": "Voice transcription failed: {message}",
 			"logout": "Log out",

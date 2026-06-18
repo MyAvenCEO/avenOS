@@ -45,8 +45,6 @@ function scrollToBottom(): void {
 	})
 }
 
-const fmtTokens = (n: number): string => n.toLocaleString()
-
 // Pull the signed-in user's token-usage stats (all-time total + current week) from the
 // session-gated endpoint. Refreshed on mount and after each completion.
 async function refreshUsage(): Promise<void> {
@@ -224,7 +222,7 @@ async function handleSubmit(text: string, files: File[]): Promise<void> {
 			messages = messages.map((m) => (m.id === pendingId ? { ...m, text: acc } : m))
 			scrollToBottom()
 		})
-		const finalText = acc.trim() || '(empty reply)'
+		const finalText = acc.trim() || t('mainnet.chat.noReply')
 		messages = messages.map((m) =>
 			m.id === pendingId ? { ...m, text: finalText, pending: false } : m
 		)
@@ -373,20 +371,16 @@ async function logout(): Promise<void> {
 							<div class="text-muted-foreground text-[10px] font-bold tracking-[0.14em] uppercase">
 								{t('mainnet.chat.usageWeek')}
 							</div>
-							<div class="mt-0.5 text-sm font-medium tabular-nums">
-								{fmtTokens(usage.week.tokens)}
-								<span class="text-muted-foreground text-xs">{t('mainnet.chat.usageTokens')}</span>
-								<span class="text-primary ml-1">{fmtMinds(usage.week.costUsd)}</span>
+							<div class="text-primary mt-0.5 text-sm font-medium tabular-nums">
+								{fmtMinds(usage.week.costUsd)}
 							</div>
 						</div>
 						<div class="flex-1 px-3 py-2">
 							<div class="text-muted-foreground text-[10px] font-bold tracking-[0.14em] uppercase">
 								{t('mainnet.chat.usageTotal')}
 							</div>
-							<div class="mt-0.5 text-sm font-medium tabular-nums">
-								{fmtTokens(usage.total.tokens)}
-								<span class="text-muted-foreground text-xs">{t('mainnet.chat.usageTokens')}</span>
-								<span class="text-primary ml-1">{fmtMinds(usage.total.costUsd)}</span>
+							<div class="text-primary mt-0.5 text-sm font-medium tabular-nums">
+								{fmtMinds(usage.total.costUsd)}
 							</div>
 						</div>
 					</div>
