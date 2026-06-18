@@ -10,9 +10,13 @@ export function usdToMinds(usd: number): number {
 	return usd * MINDS_PER_USD
 }
 
-/** Format a USD amount as MINDS for display, e.g. 3.5 → "35 MINDS", 0.0012 → "0.01 MINDS". */
+/**
+ * Format a USD amount as MINDS for display: 3.5 → "35 MINDS", 0.12 → "0.12 MINDS".
+ * A tiny non-zero amount shows "<0.01 MINDS" rather than rounding to 0.
+ */
 export function fmtMinds(usd: number): string {
 	const minds = usd * MINDS_PER_USD
+	if (minds > 0 && minds < 0.01) return '<0.01 MINDS'
 	const n = minds >= 100 ? Math.round(minds) : Number(minds.toFixed(2))
 	return `${n.toLocaleString()} MINDS`
 }
