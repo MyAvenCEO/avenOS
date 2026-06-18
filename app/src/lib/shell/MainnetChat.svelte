@@ -1,6 +1,7 @@
 <script lang="ts">
 import { tick } from 'svelte'
 import { authClient, getBearerToken, setBearerToken } from '$lib/auth/auth-client'
+import { fmtMinds } from '$lib/billing/minds'
 import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import { clearNetwork } from '$lib/settings/network-store'
@@ -45,7 +46,6 @@ function scrollToBottom(): void {
 }
 
 const fmtTokens = (n: number): string => n.toLocaleString()
-const fmtCost = (n: number): string => `$${n < 1 ? n.toFixed(4) : n.toFixed(2)}`
 
 // Pull the signed-in user's token-usage stats (all-time total + current week) from the
 // session-gated endpoint. Refreshed on mount and after each completion.
@@ -362,9 +362,9 @@ async function logout(): Promise<void> {
 								<span
 									class={usage.credit.remainingUsd <= 0 ? 'text-destructive' : 'text-foreground'}
 								>
-									{fmtCost(usage.credit.remainingUsd)}
+									{fmtMinds(usage.credit.remainingUsd)}
 								</span>
-								/ {fmtCost(usage.credit.allowanceUsd)} {t('mainnet.chat.creditsLeft')}
+								/ {fmtMinds(usage.credit.allowanceUsd)} {t('mainnet.chat.creditsLeft')}
 							</span>
 						</div>
 					{/if}
@@ -376,7 +376,7 @@ async function logout(): Promise<void> {
 							<div class="mt-0.5 text-sm font-medium tabular-nums">
 								{fmtTokens(usage.week.tokens)}
 								<span class="text-muted-foreground text-xs">{t('mainnet.chat.usageTokens')}</span>
-								<span class="text-primary ml-1">{fmtCost(usage.week.costUsd)}</span>
+								<span class="text-primary ml-1">{fmtMinds(usage.week.costUsd)}</span>
 							</div>
 						</div>
 						<div class="flex-1 px-3 py-2">
@@ -386,7 +386,7 @@ async function logout(): Promise<void> {
 							<div class="mt-0.5 text-sm font-medium tabular-nums">
 								{fmtTokens(usage.total.tokens)}
 								<span class="text-muted-foreground text-xs">{t('mainnet.chat.usageTokens')}</span>
-								<span class="text-primary ml-1">{fmtCost(usage.total.costUsd)}</span>
+								<span class="text-primary ml-1">{fmtMinds(usage.total.costUsd)}</span>
 							</div>
 						</div>
 					</div>

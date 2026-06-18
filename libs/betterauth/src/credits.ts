@@ -1,12 +1,20 @@
 import { sql } from 'kysely'
 import { db } from './db'
 
-// Per-tier weekly AI credit allowance, in USD. Spend is the sum of ai_usage.cost_usd
-// since the start of the current week (Monday, UTC). avenCITY = the first paid tier.
-// board 0052.
-export const WEEKLY_CREDIT_USD: Record<string, number> = {
+// Weekly price of each tier, in EUR. avenCITY = the first paid tier. board 0052.
+export const TIER_PRICE_EUR: Record<string, number> = {
 	free: 0,
-	avenCITY: 3
+	avenCITY: 7
+}
+
+// We grant HALF the tier's weekly price as the AI credit allowance. This €-price → $-allowance
+// rule lives HERE, deliberately separate from the $ → MINDS display ratio
+// (app/src/lib/billing/minds.ts). Internal accounting stays in USD; the frontend shows MINDS.
+// (The € figure is treated 1:1 as the USD basis for now — a real FX rate would slot in here.)
+export const ALLOWANCE_FRACTION = 0.5
+
+export function weeklyAllowanceUsd(tier: string): number {
+	return (TIER_PRICE_EUR[tier] ?? 0) * ALLOWANCE_FRACTION
 }
 
 export type CreditStatus = {
@@ -29,7 +37,7 @@ export async function tierOf(userId: string): Promise<string> {
 /** Weekly credit status for a user: allowance (by tier), spent this week, remaining. */
 export async function creditStatus(userId: string): Promise<CreditStatus> {
 	const tier = await tierOf(userId)
-	const allowanceUsd = WEEKLY_CREDIT_USD[tier] ?? 0
+	const allowanceUsd = weeklyAllowanceUsd(tier)
 	const spentRow = await db()
 		.selectFrom('ai_usage')
 		.select(({ fn }) => fn.sum('cost_usd').as('cost'))
