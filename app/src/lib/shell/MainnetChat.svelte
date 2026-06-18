@@ -1,6 +1,6 @@
 <script lang="ts">
 import { tick } from 'svelte'
-import { authClient, setBearerToken } from '$lib/auth/auth-client'
+import { authClient, getBearerToken, setBearerToken } from '$lib/auth/auth-client'
 import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
 import { clearNetwork } from '$lib/settings/network-store'
@@ -9,11 +9,17 @@ type ChatMessage = {
 	id: number
 	role: 'user' | 'assistant'
 	text: string
+	pending?: boolean
 }
 
 let messages = $state<ChatMessage[]>([])
+let busy = $state(false)
 let nextId = 0
 let scrollEl = $state<HTMLDivElement | null>(null)
+
+const AI_BASE = import.meta.env.PUBLIC_BETTER_AUTH_URL as string | undefined
+const SYSTEM_PROMPT =
+	'You are a helpful assistant inside the avenOS Alberobello chat. Be concise and friendly.'
 
 function scrollToBottom(): void {
 	void tick().then(() => {
@@ -21,19 +27,103 @@ function scrollToBottom(): void {
 	})
 }
 
-// Local echo mock — submitted messages append to an in-memory list (user bubble +
-// a canned assistant reply). No backend, no persistence: mainnet currently renders
-// only this mocked chat UI.
-function handleSubmit(text: string, files: File[]): void {
+function toOpenAi(history: ChatMessage[]): { role: string; content: string }[] {
+	return [
+		{ role: 'system', content: SYSTEM_PROMPT },
+		...history.filter((m) => !m.pending).map((m) => ({ role: m.role, content: m.text }))
+	]
+}
+
+/**
+ * Stream a completion from the authenticated Tinfoil proxy. The server enforces the
+ * Better Auth session (only signed-in users can run inference); we send the bearer token
+ * (WKWebView drops the cross-site cookie). The proxy pipes Tinfoil's OpenAI-style SSE
+ * through; we parse `data:` events and emit each `delta.content` chunk via `onDelta`.
+ */
+async function streamTinfoil(
+	history: ChatMessage[],
+	onDelta: (chunk: string) => void
+): Promise<void> {
+	if (!AI_BASE) throw new Error('auth server URL not configured')
+	const token = getBearerToken()
+	const res = await fetch(`${AI_BASE}/api/ai/chat`, {
+		method: 'POST',
+		credentials: 'include',
+		headers: {
+			'Content-Type': 'application/json',
+			...(token ? { Authorization: `Bearer ${token}` } : {})
+		},
+		body: JSON.stringify({ messages: toOpenAi(history), stream: true })
+	})
+	if (!res.ok || !res.body) {
+		const err = (await res.json().catch(() => null)) as { error?: string; detail?: string } | null
+		throw new Error(
+			err?.error ? `${err.error}${err.detail ? `: ${err.detail}` : ''}` : `HTTP ${res.status}`
+		)
+	}
+	const reader = res.body.getReader()
+	const decoder = new TextDecoder()
+	let buf = ''
+	while (true) {
+		const { done, value } = await reader.read()
+		if (done) break
+		buf += decoder.decode(value, { stream: true })
+		const events = buf.split('\n\n')
+		buf = events.pop() ?? ''
+		for (const event of events) {
+			const dataLine = event.split('\n').find((l) => l.startsWith('data:'))
+			if (!dataLine) continue
+			const payload = dataLine.slice(5).trim()
+			if (payload === '[DONE]') return
+			try {
+				const json = JSON.parse(payload) as { choices?: { delta?: { content?: string } }[] }
+				const delta = json.choices?.[0]?.delta?.content
+				if (delta) onDelta(delta)
+			} catch {
+				/* skip keep-alives / partial frames */
+			}
+		}
+	}
+}
+
+// Real inference via the authenticated proxy: append the user message + a pending
+// placeholder, then stream the AI reply into it token-by-token (or surface an error).
+async function handleSubmit(text: string, files: File[]): Promise<void> {
 	const trimmed = text.trim()
 	const fileNote = files.length > 0 ? ` (${files.length} attachment(s))` : ''
 	if (trimmed === '' && files.length === 0) return
 
-	messages = [...messages, { id: nextId++, role: 'user', text: `${trimmed}${fileNote}` }]
+	const pendingId = nextId + 1
+	messages = [
+		...messages,
+		{ id: nextId, role: 'user', text: `${trimmed}${fileNote}` },
+		{ id: pendingId, role: 'assistant', text: t('mainnet.chat.thinking'), pending: true }
+	]
+	nextId += 2
 	scrollToBottom()
-
-	messages = [...messages, { id: nextId++, role: 'assistant', text: t('mainnet.chat.mockReply') }]
-	scrollToBottom()
+	busy = true
+	let acc = ''
+	try {
+		await streamTinfoil(messages, (chunk) => {
+			acc += chunk
+			messages = messages.map((m) => (m.id === pendingId ? { ...m, text: acc } : m))
+			scrollToBottom()
+		})
+		const finalText = acc.trim() || '(empty reply)'
+		messages = messages.map((m) =>
+			m.id === pendingId ? { ...m, text: finalText, pending: false } : m
+		)
+	} catch (e) {
+		const message = e instanceof Error ? e.message : String(e)
+		messages = messages.map((m) =>
+			m.id === pendingId
+				? { ...m, text: t('mainnet.chat.aiError', { message }), pending: false }
+				: m
+		)
+	} finally {
+		busy = false
+		scrollToBottom()
+	}
 }
 
 // Voice input is already wired: in the Tauri runtime IntentComposer transcribes on-device
@@ -90,7 +180,9 @@ async function logout(): Promise<void> {
 						class="max-w-[80%] rounded-[var(--radius-lg)] px-3.5 py-2 text-sm leading-relaxed {message.role ===
 						'user'
 							? 'bg-primary text-primary-foreground'
-							: 'border-border bg-card text-foreground border'}"
+							: 'border-border bg-card text-foreground border'}{message.pending
+							? ' animate-pulse italic opacity-60'
+							: ''}"
 					>
 						{message.text}
 					</div>
@@ -104,6 +196,7 @@ async function logout(): Promise<void> {
 			<IntentComposer
 				placeholder={t('mainnet.chat.placeholder')}
 				enableAttachments={true}
+				submitBusy={busy}
 				onSubmitMessage={handleSubmit}
 				onTranscribeError={handleTranscribeError}
 			/>

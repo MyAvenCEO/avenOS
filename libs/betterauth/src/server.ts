@@ -1,23 +1,26 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { aiChat } from './ai'
 import { auth, TRUSTED_ORIGINS } from './auth'
 
 const app = new Hono()
 
-// CORS must be registered BEFORE the auth routes. Credentials are required so the
-// session cookie rides cross-origin requests from the app; origin is reflected only
-// for trusted origins (a wildcard is illegal together with credentials).
-app.use(
-	'/api/auth/*',
-	cors({
-		origin: (origin) => (TRUSTED_ORIGINS.includes(origin) ? origin : ''),
-		allowHeaders: ['Content-Type', 'Authorization'],
-		allowMethods: ['POST', 'GET', 'OPTIONS'],
-		credentials: true
-	})
-)
+// CORS must be registered BEFORE the routes. Credentials are required so the session
+// cookie / bearer token rides cross-origin requests from the app; origin is reflected
+// only for trusted origins (a wildcard is illegal together with credentials).
+const corsOptions = {
+	origin: (origin: string) => (TRUSTED_ORIGINS.includes(origin) ? origin : ''),
+	allowHeaders: ['Content-Type', 'Authorization'],
+	allowMethods: ['POST', 'GET', 'OPTIONS'],
+	credentials: true
+}
+app.use('/api/auth/*', cors(corsOptions))
+app.use('/api/ai/*', cors(corsOptions))
 
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
+
+// Authenticated Tinfoil proxy — only signed-in users can run inference. board 0051.
+app.post('/api/ai/chat', aiChat)
 
 app.get('/', (c) => c.text('avenOS betterauth server'))
 

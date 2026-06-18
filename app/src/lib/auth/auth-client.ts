@@ -18,6 +18,11 @@ function storedToken(): string {
 	return localStorage.getItem(BEARER_KEY) ?? ''
 }
 
+/** The persisted bearer token, for authenticating direct calls to the server (e.g. the AI proxy). */
+export function getBearerToken(): string {
+	return storedToken()
+}
+
 export function setBearerToken(token: string | null): void {
 	if (typeof localStorage === 'undefined') return
 	if (token) localStorage.setItem(BEARER_KEY, token)

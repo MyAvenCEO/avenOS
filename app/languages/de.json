@@ -984,9 +984,10 @@
 		"chat": {
 			"tag": "mainnet / alberobello",
 			"title": "Alberobello",
-			"empty": "Schreib etwas, um zu beginnen. Dies ist ein nachgebildeter Chat — nichts wird gesendet.",
-			"placeholder": "Nachricht an Alberobello… (Mock — nicht gesendet)",
-			"mockReply": "Dies ist eine nachgebildete Antwort. Der Mainnet-Chat ist noch nicht an ein Backend angebunden.",
+			"empty": "Schreib etwas, um zu beginnen — deine Nachricht läuft auf privater KI (Tinfoil).",
+			"placeholder": "Nachricht an Alberobello…",
+			"thinking": "Denkt nach…",
+			"aiError": "KI-Anfrage fehlgeschlagen: {message}",
 			"voiceError": "Sprachtranskription fehlgeschlagen: {message}",
 			"logout": "Abmelden"
 		}

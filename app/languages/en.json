@@ -1007,9 +1007,10 @@
 		"chat": {
 			"tag": "mainnet / alberobello",
 			"title": "Alberobello",
-			"empty": "Say something to get started. This is a mocked chat — nothing is sent.",
-			"placeholder": "Message Alberobello… (mock — not sent)",
-			"mockReply": "This is a mocked reply. Mainnet chat isn't wired to a backend yet.",
+			"empty": "Say something to get started — your message runs on private AI (Tinfoil).",
+			"placeholder": "Message Alberobello…",
+			"thinking": "Thinking…",
+			"aiError": "AI request failed: {message}",
 			"voiceError": "Voice transcription failed: {message}",
 			"logout": "Log out"
 		}
