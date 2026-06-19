@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.31...v) (2026-06-19)
+
+
+### Bug Fixes
+
+* **app:** default production builds to the deployed auth API (.env.production) ([f57217b](https://github.com/MyAvenCEO/avenOS/commit/f57217b73b52f0abc6a070503982233885cd439e))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.30...v) (2026-06-19)
 
 
