@@ -16,6 +16,9 @@ name: release-next
 #                      REPOSITORY secrets (cross-channel: next AND main); see job for the list.
 #   4. release-ios   — build the signed .ipa on a macOS runner (tauri ios init + manual signing)
 #                      and upload to TestFlight. Reuses the same repo Apple secrets + IOS_MOBILEPROVISION_BASE64.
+#   5. release-linux — build the x86_64 Linux app (.deb + AppImage) on ubuntu and attach it to
+#                      the GitHub prerelease (Linux has no app store, so the release asset IS the
+#                      distribution channel). Same env baking as macOS/iOS (auth URL + Google).
 
 on:
   push:
@@ -365,3 +368,64 @@ jobs:
           # client the auth server verifies the idToken audience against.
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+
+  release-linux:
+    name: Linux x86_64 build → release asset
+    needs: release
+    runs-on: ubuntu-latest
+    # `next` env for the Google Desktop client (baked into the binary via network.rs option_env!).
+    environment: next
+    steps:
+      - name: Checkout next at the release commit (full history + tags)
+        uses: actions/checkout@v5
+        with:
+          ref: next
+          fetch-depth: 0
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Linux native deps (webkit2gtk, libsoup, AppImage tooling)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libsoup-3.0-dev \
+            build-essential curl wget file libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev libfuse2
+
+      - name: Cache Rust build (warm deps reused across runs)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri -> ../../target/rust
+          key: linux
+
+      - name: Build the Linux app (.deb + AppImage)
+        # Same env baking as the macOS/iOS jobs: PUBLIC_BETTER_AUTH_URL into the Vite bundle,
+        # the Google Desktop client into the Rust binary. APPIMAGE_EXTRACT_AND_RUN avoids the
+        # FUSE requirement on the CI runner. No App Store signing — Linux ships via this asset.
+        run: bun run build:app:linux
+        env:
+          PUBLIC_BETTER_AUTH_URL: https://api.next.aven.ceo
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+
+      - name: Upload the .deb + AppImage to the prerelease
+        # Attach to the release the `release` job already created for this tag (the cargo target
+        # dir is redirected to target/rust via .cargo/config.toml).
+        run: |
+          set -euo pipefail
+          TAG="v$(node -p "require('./app/src-tauri/tauri.conf.json').version")"
+          shopt -s nullglob
+          files=( target/rust/release/bundle/deb/*.deb target/rust/release/bundle/appimage/*.AppImage )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::no Linux bundles found under target/rust/release/bundle"
+            exit 1
+          fi
+          echo "uploading to $TAG: ${files[*]}"
+          gh release upload "$TAG" "${files[@]}" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
