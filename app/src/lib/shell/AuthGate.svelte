@@ -1,5 +1,5 @@
 <script lang="ts">
-import { AUTH_BASE_URL, authClient } from '$lib/auth/auth-client'
+import { authClient } from '$lib/auth/auth-client'
 import DebugCopy from '$lib/debug/DebugCopy.svelte'
 import { t } from '$lib/i18n'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
@@ -13,19 +13,6 @@ const session = authClient.useSession()
 
 let signingIn = $state(false)
 let error = $state<string | null>(null)
-// TEMP diagnostic (board 0050): the raw baked env + the resolved base + a live connectivity
-// probe, surfaced in the UI so a shipped build can be debugged without devtools.
-const bakedEnv = (import.meta.env.PUBLIC_BETTER_AUTH_URL as string | undefined) ?? 'UNSET'
-let diag = $state<string | null>(null)
-
-async function probe(): Promise<string> {
-	try {
-		const r = await fetch(`${AUTH_BASE_URL}/api/auth/get-session`, { method: 'GET' })
-		return `probe ${AUTH_BASE_URL} → HTTP ${r.status}`
-	} catch (e) {
-		return `probe ${AUTH_BASE_URL} → ${e instanceof Error ? e.message : String(e)}`
-	}
-}
 
 /**
  * Desktop (Tauri): Google blocks OAuth inside the embedded WebView, so we use the
@@ -66,7 +53,6 @@ async function continueWithGoogle(): Promise<void> {
 	} catch (e) {
 		signingIn = false
 		error = e instanceof Error ? e.message : String(e)
-		diag = `baked=${bakedEnv} · ${await probe()}`
 	}
 }
 </script>
@@ -122,9 +108,6 @@ async function continueWithGoogle(): Promise<void> {
 			</button>
 			{#if error}
 				<p class="text-destructive mt-3 text-xs">{error}</p>
-			{/if}
-			{#if diag}
-				<p class="text-muted-foreground mt-2 text-[10px] break-all">{diag}</p>
 			{/if}
 			<div class="mt-4">
 				<DebugCopy />

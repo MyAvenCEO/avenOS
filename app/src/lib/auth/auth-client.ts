@@ -3,8 +3,9 @@ import { createAuthClient } from 'better-auth/svelte'
 
 /**
  * Client for the self-hosted Better Auth server (libs/betterauth). Points at
- * PUBLIC_BETTER_AUTH_URL (the auth server origin, e.g. http://localhost:8787) — a
- * different origin than the app. board 0050.
+ * PUBLIC_BETTER_AUTH_URL (the auth server origin, a different origin than the app):
+ * the launcher's localhost in dev, the deployed API in production (see AUTH_BASE_URL).
+ * board 0050.
  *
  * Bearer token: the Tauri WebView (WKWebView) drops the cross-site session cookie, so
  * we also support token auth. The server's `bearer` plugin returns a token in the
