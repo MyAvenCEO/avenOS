@@ -159,7 +159,7 @@ const selectors: StyleDef['selectors'] = {
 		overflowY: 'auto',
 		display: 'flex',
 		flexDirection: 'column',
-		gap: '10px'
+		gap: '12px'
 	},
 	'.td-list li.empty': {
 		textAlign: 'center',

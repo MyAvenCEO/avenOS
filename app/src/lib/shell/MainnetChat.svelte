@@ -309,15 +309,13 @@ function handleTranscribeError(message: string): void {
 				{/if}
 				{#each messages as message (message.id)}
 					{#if message.vibe}
-						<!-- A live vibe card flowed into the stream for the schema this turn touched. -->
-						<div class="flex justify-start">
-							<div
-								class="border-border bg-card h-72 w-full max-w-[80%] overflow-hidden rounded-[var(--radius-lg)] border p-2"
-							>
-								{#if message.vibe === 'todos'}
-									<TodosVibe containerName={`aven-vibes-chat-${message.id}`} />
-								{/if}
-							</div>
+						<!-- The vibe flows into the stream with NO card chrome of its own — just the vibe,
+						     shown as-is. The container only caps the height and scrolls; the vibe sizes
+						     to its inner content. -->
+						<div class="max-h-[80vh] w-full overflow-y-auto">
+							{#if message.vibe === 'todos'}
+								<TodosVibe containerName={`aven-vibes-chat-${message.id}`} />
+							{/if}
 						</div>
 					{:else}
 						<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
