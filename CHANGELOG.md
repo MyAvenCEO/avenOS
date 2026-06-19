@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.2...v) (2026-06-19)
+
+
+### Bug Fixes
+
+* **app:** auth base-url fallback + sign-in diagnostics ([53289ee](https://github.com/MyAvenCEO/avenOS/commit/53289ee2ace256f75c84b1de5011f8bb12d65f7b))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.1...v) (2026-06-19)
 
 
