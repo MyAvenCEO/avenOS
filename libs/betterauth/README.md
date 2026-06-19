@@ -63,32 +63,37 @@ server to fly.io as a **single machine** (`--ha=false`) serving `https://api.nex
 Config: [`fly.toml`](./fly.toml) + [`Dockerfile`](./Dockerfile) (build context = repo root).
 Stateless — the schema self-bootstraps on boot, so every deploy is safe.
 
-### One-time setup
+### One-time setup (infra only — NO secrets here)
 
 ```sh
 # 1. Create the app (name must match fly.toml's `app`).
 fly apps create aven-api-next
 
-# 2. Runtime secrets (NOT in git / not in GitHub — set directly on the app).
-fly secrets set --app aven-api-next \
-  BETTER_AUTH_SECRET="$(openssl rand -base64 32)" \
-  NEON_PG_KEY="postgresql://…neon…/neondb?sslmode=require" \
-  GOOGLE_CLIENT_ID="…" \
-  GOOGLE_CLIENT_SECRET="…" \
-  TINFOIL_API_KEY="…" \
-  POLAR_API_KEY="…"            # optional; omit to disable the Polar link
-
-# 3. Custom domain + TLS.
+# 2. Custom domain + TLS.
 fly certs add --app aven-api-next api.next.aven.ceo
 #   then add the DNS record fly prints — typically:
 #   CNAME  api.next  aven-api-next.fly.dev   (+ the _acme-challenge record fly shows)
 ```
 
-### CI / GitHub
+Runtime secrets are NOT set by hand — CI stages them onto the app from the `next` GitHub
+Environment on every deploy (see below).
 
-- **`FLY_API_TOKEN`** — add to the **`next` GitHub Environment** (Settings → Environments →
-  next → secrets). Mint with `fly tokens create deploy -a aven-api-next`. CI uses only this;
-  all other config lives in `fly.toml` (`[env]`) or `fly secrets`.
+### CI / GitHub — single source of truth for secrets
+
+The `next` GitHub Environment (Settings → Environments → next → Secrets) holds everything;
+the `deploy-auth` job stages these onto the fly app, then deploys. Add:
+
+| Secret | Notes |
+| --- | --- |
+| `FLY_API_TOKEN` | deploy auth — `fly tokens create deploy -a aven-api-next` |
+| `BETTER_AUTH_SECRET` | session/token signing key — generate ONCE (`openssl rand -base64 32`) and keep STABLE; changing it logs everyone out |
+| `NEON_PG_KEY` | Postgres connection string |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth web client |
+| `TINFOIL_API_KEY` | private AI inference key |
+| `POLAR_API_KEY` | optional — Polar link is disabled if absent |
+
+Non-secret config (`BETTER_AUTH_URL`, `PUBLIC_BETTER_AUTH_URL`, `POLAR_SERVER`) lives in
+`fly.toml` `[env]`, not here.
 
 ### Also required for the app to actually use it
 

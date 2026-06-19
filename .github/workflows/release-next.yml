@@ -7,8 +7,10 @@ name: release-next
 #                      recreate it from a WIPED store (WIPE=1). `next` is a throwaway dev/staging
 #                      channel, so every deploy resets the relay to a clean slate.
 #   2b. deploy-auth  — deploy the betterauth (Bun/Hono) API to fly.io as a single machine
-#                      (https://api.next.aven.ceo). Stateless — schema self-bootstraps; the
-#                      `next` GitHub Environment supplies FLY_API_TOKEN.
+#                      (https://api.next.aven.ceo). Stateless — schema self-bootstraps. The
+#                      `next` GitHub Environment is the single source of truth for ALL secrets
+#                      (FLY_API_TOKEN + the runtime secrets); the job stages them onto the fly
+#                      app before deploying.
 #   3. release-macos — build the signed Mac App Store .pkg on a macOS runner and upload it to
 #                      TestFlight (CFBundleVersion = github.run_number). Apple creds are
 #                      REPOSITORY secrets (cross-channel: next AND main); see job for the list.
@@ -108,12 +110,34 @@ jobs:
       - name: Set up flyctl
         uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - name: Deploy to fly (single machine)
-        # Build context is the repo root; config + Dockerfile live in libs/betterauth.
-        # --ha=false provisions exactly ONE machine (no high-availability pair).
-        run: flyctl deploy --remote-only --ha=false --config libs/betterauth/fly.toml --dockerfile libs/betterauth/Dockerfile .
+      - name: Sync secrets from the next environment, then deploy (single machine)
+        # The `next` GitHub Environment is the single source of truth for runtime secrets:
+        # stage them onto the fly app, then deploy so ONE release applies both the new image
+        # and the staged secrets. BETTER_AUTH_SECRET must stay STABLE across deploys (it signs
+        # sessions/bearer tokens — changing it logs everyone out), so it lives here, not
+        # regenerated. POLAR_API_KEY is optional (only staged when present).
+        # Build context is the repo root; --ha=false provisions exactly ONE machine.
+        run: |
+          set -euo pipefail
+          APP=aven-api-next
+          args=(
+            "BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET"
+            "NEON_PG_KEY=$NEON_PG_KEY"
+            "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID"
+            "GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET"
+            "TINFOIL_API_KEY=$TINFOIL_API_KEY"
+          )
+          if [ -n "${POLAR_API_KEY:-}" ]; then args+=("POLAR_API_KEY=$POLAR_API_KEY"); fi
+          flyctl secrets set --app "$APP" --stage "${args[@]}"
+          flyctl deploy --remote-only --ha=false --config libs/betterauth/fly.toml --dockerfile libs/betterauth/Dockerfile .
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          NEON_PG_KEY: ${{ secrets.NEON_PG_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          TINFOIL_API_KEY: ${{ secrets.TINFOIL_API_KEY }}
+          POLAR_API_KEY: ${{ secrets.POLAR_API_KEY }}
 
   release-macos:
     name: macOS build → TestFlight
