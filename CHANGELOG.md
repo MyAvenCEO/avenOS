@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.21...v) (2026-06-19)
+
+
+### Features
+
+* **betterauth:** self-bootstrap schema on startup (fresh DB just works) ([99d7e25](https://github.com/MyAvenCEO/avenOS/commit/99d7e2533af079fdcb2d5044165bb6ba47a56739))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.20...v) (2026-06-19)
 
 
