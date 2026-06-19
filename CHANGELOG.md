@@ -1,3 +1,15 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.20...v) (2026-06-19)
+
+
+### Features
+
+* **betterauth:** auto-promote the first signup to admin (first user only) ([07b2ff2](https://github.com/MyAvenCEO/avenOS/commit/07b2ff21cd5abab75a4ee3f08a3d921b0a5b9b01))
+* **mainnet:** drop chat title + hardcoded TodosCard; compact todos vibe styling ([dcbd518](https://github.com/MyAvenCEO/avenOS/commit/dcbd518a001156e83dc31d46199cbb5c8bfe2029))
+* **mainnet:** flow vibe cards inline per request instead of a pinned card ([27ecbb1](https://github.com/MyAvenCEO/avenOS/commit/27ecbb16c486f0b6162c74f2ce74423a1961b8ad))
+* **mainnet:** persist a vibe marker so cards survive session reload ([c2af0cf](https://github.com/MyAvenCEO/avenOS/commit/c2af0cf5bbc4c9bc82a56bcfdc73ceaaf18875dc))
+* **mainnet:** show weekly credits-left in top nav, drop the usage card ([ba2c9c1](https://github.com/MyAvenCEO/avenOS/commit/ba2c9c1b09c015ee448c3f45ce948180474b58d8))
+* **mainnet:** unified TodosVibe in both chat stream + Vibes tab; bigger row gap ([a044ce8](https://github.com/MyAvenCEO/avenOS/commit/a044ce8e9ffa2d6ea03443bc896754eced143445))
+* **mainnet:** unify nav (Admin/Log out on the Chat|Vibes line) + Vibes select rail ([739c2b0](https://github.com/MyAvenCEO/avenOS/commit/739c2b01f4f8709c8e58c0419cbc312a7c28a336))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.19...v) (2026-06-19)
 
 
