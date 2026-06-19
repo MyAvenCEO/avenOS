@@ -156,8 +156,10 @@ jobs:
     name: macOS build → TestFlight
     needs: release
     runs-on: macos-15 # Apple Silicon (free on public repos); builds the aarch64 .app
-    # Apple credentials are REPOSITORY secrets (cross-channel — they sign next AND main),
-    # so this job is intentionally NOT scoped to the `next` environment.
+    # Scoped to `next` so the build can bake the next-channel Google OAuth creds into the
+    # binary. Apple credentials are REPOSITORY secrets (cross-channel — signing next AND main);
+    # repo secrets stay available inside an environment-scoped job, so this is additive.
+    environment: next
     steps:
       - name: Checkout next at the release commit (full history + tags)
         uses: actions/checkout@v5
@@ -234,12 +236,19 @@ jobs:
           # Point the shipped next build at the deployed auth API (baked into the Vite bundle
           # via the PUBLIC_ prefix). A real env var, so it wins over any .env file.
           PUBLIC_BETTER_AUTH_URL: https://api.next.aven.ceo
+          # Bake the native-sign-in Google Desktop client into the Rust binary (network.rs
+          # option_env!), so the shipped app has it without a process env. Must be the SAME
+          # client the auth server verifies the idToken audience against.
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
 
   release-ios:
     name: iOS build → TestFlight
     needs: release
     runs-on: macos-15 # Apple Silicon; builds the aarch64-apple-ios .ipa
-    # Reuses the same repository Apple secrets as the macOS job (cross-channel).
+    # Scoped to `next` to bake the next-channel Google OAuth creds (additive — repo Apple
+    # secrets stay available). Reuses the same repository Apple secrets as the macOS job.
+    environment: next
     steps:
       - name: Checkout next at the release commit (full history + tags)
         uses: actions/checkout@v5
@@ -341,3 +350,8 @@ jobs:
           # Point the shipped next build at the deployed auth API (baked into the Vite bundle
           # via the PUBLIC_ prefix). A real env var, so it wins over any .env file.
           PUBLIC_BETTER_AUTH_URL: https://api.next.aven.ceo
+          # Bake the native-sign-in Google Desktop client into the Rust binary (network.rs
+          # option_env!), so the shipped app has it without a process env. Must be the SAME
+          # client the auth server verifies the idToken audience against.
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}

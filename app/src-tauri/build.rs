@@ -3,6 +3,12 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 fn main() {
+	// Google OAuth client creds (board 0050) are read via `option_env!` in network.rs so they
+	// bake into the shipped binary. cargo doesn't track option_env! deps, so without these the
+	// crate wouldn't recompile when the creds change between (cached) builds — declare them.
+	println!("cargo:rerun-if-env-changed=GOOGLE_CLIENT_ID");
+	println!("cargo:rerun-if-env-changed=GOOGLE_CLIENT_SECRET");
+
 	// `sherpa-onnx-sys` emits the C++ runtime + Foundation link directives only
 	// for `target_os = "linux" | "macos"`; for iOS its build script falls through
 	// to a no-op. Statically linking sherpa-onnx (+ onnxruntime) on iOS therefore
