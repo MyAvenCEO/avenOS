@@ -977,7 +977,8 @@
 			"chat": "Chat",
 			"vibes": "Vibes",
 			"schemas": "Schemas",
-			"db": "DB"
+			"db": "DB",
+			"admin": "Admin"
 		},
 		"vibes": {
 			"select": "Vibe wählen"

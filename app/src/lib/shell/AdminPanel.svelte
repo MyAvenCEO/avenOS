@@ -4,12 +4,10 @@ import { t } from '$lib/i18n'
 
 const AI_BASE = import.meta.env.PUBLIC_BETTER_AUTH_URL as string | undefined
 
-// Admin-only overlay: list all users and grant/revoke roles. The GENESIS (first) admin
-// is set solely by flipping `role` in the Neon DB — no hardcoded admin. From there, an
-// admin manages everyone else's role here (Better Auth admin plugin, server-gated to
+// Admin-only view (a normal in-place screen, reached from the left nav): list all users and
+// grant/revoke roles + tiers. The GENESIS (first) admin is auto-assigned to the first signup;
+// from there an admin manages everyone else here (Better Auth admin plugin, server-gated to
 // admins; a non-admin can't reach these endpoints). board 0052.
-let { onClose }: { onClose: () => void } = $props()
-
 type AdminUser = { id: string; email: string; role?: string | null; tier?: string | null }
 
 let users = $state<AdminUser[]>([])
@@ -75,34 +73,21 @@ $effect(() => {
 })
 </script>
 
-<div
-	class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm"
-	role="dialog"
-	aria-modal="true"
->
-	<div
-		class="border-border bg-card flex max-h-[80vh] w-full max-w-md flex-col rounded-[var(--radius-lg)] border"
-	>
-		<div class="border-border flex items-center justify-between border-b px-4 py-3">
-			<h2 class="font-display text-base font-medium">{t('mainnet.chat.adminTitle')}</h2>
-			<button
-				type="button"
-				class="text-muted-foreground hover:text-foreground text-xs font-semibold"
-				onclick={onClose}
+<div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
+	<div class="mx-auto flex w-full max-w-2xl flex-col">
+		<h2 class="text-foreground mb-3 text-base font-semibold">{t('mainnet.chat.adminTitle')}</h2>
+		{#if loading}
+			<p class="text-muted-foreground p-3 text-sm">{t('mainnet.chat.adminLoading')}</p>
+		{:else if error}
+			<p class="text-destructive p-3 text-sm">{error}</p>
+		{:else if users.length === 0}
+			<p class="text-muted-foreground p-3 text-sm">{t('mainnet.chat.adminEmpty')}</p>
+		{:else}
+			<div
+				class="border-border divide-border/60 divide-y overflow-hidden rounded-[var(--radius-lg)] border"
 			>
-				{t('mainnet.chat.adminClose')}
-			</button>
-		</div>
-		<div class="min-h-0 flex-1 overflow-y-auto p-2">
-			{#if loading}
-				<p class="text-muted-foreground p-3 text-sm">{t('mainnet.chat.adminLoading')}</p>
-			{:else if error}
-				<p class="text-destructive p-3 text-sm">{error}</p>
-			{:else if users.length === 0}
-				<p class="text-muted-foreground p-3 text-sm">{t('mainnet.chat.adminEmpty')}</p>
-			{:else}
 				{#each users as u (u.id)}
-					<div class="flex items-center justify-between gap-2 rounded-[var(--radius)] px-3 py-2">
+					<div class="flex items-center justify-between gap-2 px-3 py-2.5">
 						<div class="min-w-0 truncate text-sm font-medium">{u.email}</div>
 						<div class="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
 							<span
@@ -115,7 +100,7 @@ $effect(() => {
 							</span>
 							<button
 								type="button"
-								class="border-border hover:bg-background rounded-[var(--radius)] border px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-40"
+								class="border-border hover:bg-card rounded-[var(--radius)] border px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-40"
 								onclick={() => void toggleRole(u)}
 								disabled={pendingId !== null}
 							>
@@ -131,7 +116,7 @@ $effect(() => {
 							</span>
 							<button
 								type="button"
-								class="border-border hover:bg-background rounded-[var(--radius)] border px-2 py-0.5 text-[11px] font-semibold transition-colors disabled:opacity-40"
+								class="border-border hover:bg-card rounded-[var(--radius)] border px-2 py-0.5 text-[11px] font-semibold transition-colors disabled:opacity-40"
 								onclick={() => void toggleTier(u)}
 								disabled={pendingId !== null}
 							>
@@ -140,10 +125,10 @@ $effect(() => {
 						</div>
 					</div>
 				{/each}
-				<p class="text-muted-foreground px-3 pt-2 text-[11px] leading-relaxed">
-					{t('mainnet.chat.adminRolesHint')}
-				</p>
-			{/if}
-		</div>
+			</div>
+			<p class="text-muted-foreground px-1 pt-3 text-[11px] leading-relaxed">
+				{t('mainnet.chat.adminRolesHint')}
+			</p>
+		{/if}
 	</div>
 </div>
