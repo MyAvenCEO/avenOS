@@ -996,6 +996,10 @@
 		}
 	},
 	"mainnet": {
+		"nav": {
+			"chat": "Chat",
+			"vibes": "Vibes"
+		},
 		"auth": {
 			"tag": "mainnet / alberobello",
 			"title": "Sign in to Alberobello",

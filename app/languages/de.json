@@ -973,6 +973,10 @@
 		}
 	},
 	"mainnet": {
+		"nav": {
+			"chat": "Chat",
+			"vibes": "Vibes"
+		},
 		"auth": {
 			"tag": "mainnet / alberobello",
 			"title": "Bei Alberobello anmelden",

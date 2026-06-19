@@ -22,7 +22,7 @@ import { vaultUiSettingsGet } from '$lib/settings/vault-ui-settings'
 import { navigateApp } from '$lib/shell'
 import AuthGate from '$lib/shell/AuthGate.svelte'
 import HumanSafeGate from '$lib/shell/HumanSafeGate.svelte'
-import MainnetChat from '$lib/shell/MainnetChat.svelte'
+import MainnetShell from '$lib/shell/MainnetShell.svelte'
 import MobileShellNav from '$lib/shell/MobileShellNav.svelte'
 import NetworkSelect from '$lib/shell/NetworkSelect.svelte'
 import '../app.css'
@@ -312,9 +312,9 @@ $effect(() => {
 		     testnet/abagana. mainnet/alberobello is a separate world (mocked chat UI for now). -->
 		<NetworkSelect />
 	{:else if $selectedNetwork === 'mainnet'}
-		<!-- Protected screen: Google sign-in (self-hosted Better Auth) gates the chat (board 0050). -->
+		<!-- Protected screen: Google sign-in gates the mainnet shell (Chat | Vibes). board 0050/0054. -->
 		<AuthGate>
-			<MainnetChat />
+			<MainnetShell />
 		</AuthGate>
 	{:else}
 		<LockGate />
