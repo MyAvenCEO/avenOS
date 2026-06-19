@@ -30,8 +30,14 @@ export function setBearerToken(token: string | null): void {
 	else localStorage.removeItem(BEARER_KEY)
 }
 
+// Auth server origin. Baked from PUBLIC_BETTER_AUTH_URL at build (localhost in dev via the
+// launcher; the deployed API in production via app/.env.production). Fall back to the next
+// API so a shipped build can never silently point at the app's own origin (→ "Load failed").
+export const AUTH_BASE_URL =
+	(import.meta.env.PUBLIC_BETTER_AUTH_URL as string | undefined) || 'https://api.next.aven.ceo'
+
 export const authClient = createAuthClient({
-	baseURL: import.meta.env.PUBLIC_BETTER_AUTH_URL as string | undefined,
+	baseURL: AUTH_BASE_URL,
 	fetchOptions: {
 		auth: {
 			type: 'Bearer',
