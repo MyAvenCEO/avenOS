@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.5...v) (2026-06-19)
+
+
+### Bug Fixes
+
+* **app:** grant microphone entitlement so voice transcription works (MAS) ([f22a9fd](https://github.com/MyAvenCEO/avenOS/commit/f22a9fddba2bc43b407fed6a80dc3890a4eec1f9))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.19-next.4...v) (2026-06-19)
 
 
