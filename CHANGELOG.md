@@ -1,3 +1,9 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.22...v) (2026-06-19)
+
+
+### Bug Fixes
+
+* **betterauth:** non-blocking Polar customer link + polarLinked flag ([2edd57b](https://github.com/MyAvenCEO/avenOS/commit/2edd57b342ed1d614ce1495636e09a8847abf717))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.21...v) (2026-06-19)
 
 
