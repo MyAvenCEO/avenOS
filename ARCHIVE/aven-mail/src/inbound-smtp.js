@@ -1,4 +1,4 @@
-import { createLogger } from '@MaiaOS/logs'
+import { createLogger } from './log.js'
 import { domainToUnicode } from 'node:url'
 import { SMTPServer } from 'smtp-server'
 import { ingestRfc822 } from './ingest.js'

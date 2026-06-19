@@ -1,5 +1,5 @@
 {
-	"name": "@avenos/mail",
+	"name": "@avenos/aven-mail",
 	"version": "26.4.212041-next",
 	"type": "module",
 	"main": "./src/index.js",
@@ -10,7 +10,6 @@
 		".": "./src/index.js"
 	},
 	"dependencies": {
-		"@MaiaOS/logs": "workspace:*",
 		"smtp-server": "3.13.6"
 	}
 }
