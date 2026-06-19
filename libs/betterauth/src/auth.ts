@@ -3,6 +3,7 @@ import { Polar } from '@polar-sh/sdk'
 import { betterAuth } from 'better-auth'
 import { admin, bearer } from 'better-auth/plugins'
 import { NeonDialect } from 'kysely-neon'
+import { db } from './db'
 
 /**
  * Origins allowed to call the auth API with credentials. The mainnet app runs on a
@@ -87,12 +88,35 @@ export const auth = betterAuth({
 			tier: { type: 'string', required: false, defaultValue: 'free', input: false }
 		}
 	},
+	// Bootstrap the very first user to sign up as admin — and ONLY the first. Every later
+	// signup keeps the default role. Replaces the manual "first admin in Neon" step. board 0052.
+	databaseHooks: {
+		user: {
+			create: {
+				before: async (user) => {
+					try {
+						const row = await db()
+							.selectFrom('user')
+							.select(({ fn }) => fn.countAll<string>().as('n'))
+							.executeTakeFirst()
+						if (!row || Number(row.n) === 0) {
+							return { data: { ...user, role: 'admin' } }
+						}
+					} catch (e) {
+						console.error('[betterauth] first-admin bootstrap check failed:', e)
+					}
+					return { data: user }
+				}
+			}
+		}
+	},
 	trustedOrigins: TRUSTED_ORIGINS,
 	// `bearer` lets the Tauri app authenticate with an Authorization: Bearer token
 	// instead of a cookie — WKWebView drops the cross-site session cookie, so the
 	// desktop native sign-in path stores + sends the token returned by the server.
 	// `admin` adds a `role` field (user|admin) + admin-gated user management
-	// (list/setRole/ban/impersonate). First admin is bootstrapped in Neon. board 0052.
+	// (list/setRole/ban/impersonate). The first user to sign up is auto-promoted to admin
+	// via the databaseHooks below; every later signup is a normal user. board 0052.
 	plugins: [bearer(), admin(), ...polarPlugins],
 	advanced: {
 		defaultCookieAttributes: {
