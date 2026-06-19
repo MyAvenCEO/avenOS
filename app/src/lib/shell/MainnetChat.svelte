@@ -4,6 +4,7 @@ import { getBearerToken } from '$lib/auth/auth-client'
 import { fmtMinds } from '$lib/billing/minds'
 import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
+import TodosVibe from '$lib/shell/TodosVibe.svelte'
 
 type ChatMessage = {
 	id: number
@@ -333,6 +334,13 @@ function handleTranscribeError(message: string): void {
 				</div>
 			</div>
 		{/if}
+
+		<!-- The unified todos vibe in the chat stream (same component as the Vibes tab). -->
+		<div class="h-64 shrink-0 px-4 pb-2">
+			<div class="mx-auto h-full w-full max-w-2xl">
+				<TodosVibe containerName="aven-vibes-chat-todos" />
+			</div>
+		</div>
 
 		<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-4">
 			<div class="mx-auto flex w-full max-w-2xl flex-col gap-3 py-4">
