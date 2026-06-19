@@ -218,6 +218,9 @@ jobs:
           AVEN_PKG_INSTALLER_IDENTITY: ${{ secrets.AVEN_PKG_INSTALLER_IDENTITY }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          # Point the shipped next build at the deployed auth API (baked into the Vite bundle
+          # via the PUBLIC_ prefix). A real env var, so it wins over any .env file.
+          PUBLIC_BETTER_AUTH_URL: https://api.next.aven.ceo
 
   release-ios:
     name: iOS build → TestFlight
@@ -322,3 +325,6 @@ jobs:
           APPLE_CERTS_P12_PASSWORD: ${{ secrets.APPLE_CERTS_P12_PASSWORD }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          # Point the shipped next build at the deployed auth API (baked into the Vite bundle
+          # via the PUBLIC_ prefix). A real env var, so it wins over any .env file.
+          PUBLIC_BETTER_AUTH_URL: https://api.next.aven.ceo
