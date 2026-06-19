@@ -2,6 +2,7 @@
 import { authClient } from '$lib/auth/auth-client'
 import { t } from '$lib/i18n'
 import { isTauriRuntime } from '$lib/sandbox/tauri-vibe-webview'
+import { clearNetwork } from '$lib/settings/network-store'
 
 // Protected-screen gate for mainnet/alberobello: no session ⇒ Continue with Google;
 // session ⇒ render the slotted children (the mocked chat). board 0050.
@@ -107,6 +108,13 @@ async function continueWithGoogle(): Promise<void> {
 			{#if error}
 				<p class="text-destructive mt-3 text-xs">{error}</p>
 			{/if}
+			<button
+				type="button"
+				class="text-muted-foreground hover:text-foreground mt-4 text-[11px] font-semibold underline-offset-2 hover:underline"
+				onclick={() => clearNetwork()}
+			>
+				← {t('networkSelect.kicker')}
+			</button>
 		</div>
 	</div>
 {/if}

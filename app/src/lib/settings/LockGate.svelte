@@ -24,6 +24,7 @@ import {
 	setUnlockedWithIdentity
 } from '$lib/settings/device-session-store'
 import { NETWORK_SEED } from '$lib/settings/network'
+import { clearNetwork } from '$lib/settings/network-store'
 import {
 	signerTypeLabelKey,
 	type VaultListEntry,
@@ -398,6 +399,13 @@ async function finalizeCreate(): Promise<void> {
 					{t('lockGate.tagline')}
 				</p>
 				<p class="font-mono text-muted-foreground/80 text-[10px]">{NETWORK_SEED}</p>
+				<button
+					type="button"
+					class="text-muted-foreground hover:text-foreground text-[11px] font-semibold underline-offset-2 hover:underline"
+					onclick={() => clearNetwork()}
+				>
+					← {t('networkSelect.kicker')}
+				</button>
 			</div>
 
 			{#if err}
