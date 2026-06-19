@@ -27,6 +27,8 @@ Thumbs.db
 .env.*
 !.env.example
 !.env.test
+# Committed: non-secret PUBLIC_ build config for production builds (the deployed auth API).
+!.env.production
 
 # Jaensen local SQLite (do not commit)
 /.jaensen/state.db
