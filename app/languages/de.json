@@ -977,6 +977,9 @@
 			"chat": "Chat",
 			"vibes": "Vibes"
 		},
+		"vibes": {
+			"select": "Vibe wählen"
+		},
 		"auth": {
 			"tag": "mainnet / alberobello",
 			"title": "Bei Alberobello anmelden",

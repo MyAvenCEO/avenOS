@@ -1,11 +1,9 @@
 <script lang="ts">
 import { tick } from 'svelte'
-import { authClient, getBearerToken, setBearerToken } from '$lib/auth/auth-client'
+import { getBearerToken } from '$lib/auth/auth-client'
 import { fmtMinds } from '$lib/billing/minds'
 import { t } from '$lib/i18n'
 import IntentComposer from '$lib/intent-mock/IntentComposer.svelte'
-import { clearNetwork } from '$lib/settings/network-store'
-import AdminPanel from '$lib/shell/AdminPanel.svelte'
 import TodosCard from '$lib/shell/TodosCard.svelte'
 
 type ChatMessage = {
@@ -28,13 +26,6 @@ let currentSessionId = $state<string | null>(null)
 let nextId = 0
 let scrollEl = $state<HTMLDivElement | null>(null)
 let initialized = false
-
-// Admin: the panel is gated server-side too; we only show the entry point to admins.
-const sessionStore = authClient.useSession()
-const isAdmin = $derived(
-	($sessionStore.data?.user as { role?: string } | undefined)?.role === 'admin'
-)
-let adminOpen = $state(false)
 
 const AI_BASE = import.meta.env.PUBLIC_BETTER_AUTH_URL as string | undefined
 const SYSTEM_PROMPT =
@@ -252,18 +243,6 @@ function handleTranscribeError(message: string): void {
 	]
 	scrollToBottom()
 }
-
-// Sign out of Better Auth (best-effort), drop the bearer token, and forget the network
-// choice so the app returns to the Select Network intro.
-async function logout(): Promise<void> {
-	try {
-		await authClient.signOut()
-	} catch {
-		/* sign out locally regardless of a network error */
-	}
-	setBearerToken(null)
-	clearNetwork()
-}
 </script>
 
 <div class="flex min-h-0 flex-1 bg-background">
@@ -306,38 +285,12 @@ async function logout(): Promise<void> {
 
 	<!-- Right: the conversation -->
 	<div class="flex min-h-0 flex-1 flex-col">
-		<header
-			class="relative shrink-0 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 text-center"
-		>
+		<header class="shrink-0 px-4 pt-2 pb-2 text-center">
 			<p class="text-primary text-[10px] font-bold tracking-[0.18em] uppercase">
 				{t('mainnet.chat.tag')}
 			</p>
 			<h1 class="font-display text-lg font-medium tracking-tight">{t('mainnet.chat.title')}</h1>
-			<div
-				class="absolute top-[max(0.75rem,env(safe-area-inset-top))] right-4 flex items-center gap-3"
-			>
-				{#if isAdmin}
-					<button
-						type="button"
-						class="text-muted-foreground hover:text-foreground text-xs font-semibold transition-colors"
-						onclick={() => (adminOpen = true)}
-					>
-						{t('mainnet.chat.adminButton')}
-					</button>
-				{/if}
-				<button
-					type="button"
-					class="text-muted-foreground hover:text-foreground text-xs font-semibold transition-colors"
-					onclick={() => void logout()}
-				>
-					{t('mainnet.chat.logout')}
-				</button>
-			</div>
 		</header>
-
-		{#if adminOpen}
-			<AdminPanel onClose={() => (adminOpen = false)} />
-		{/if}
 
 		{#if usage}
 			<div class="shrink-0 px-4 pb-2">

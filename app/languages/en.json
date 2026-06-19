@@ -1000,6 +1000,9 @@
 			"chat": "Chat",
 			"vibes": "Vibes"
 		},
+		"vibes": {
+			"select": "Select vibe"
+		},
 		"auth": {
 			"tag": "mainnet / alberobello",
 			"title": "Sign in to Alberobello",
