@@ -2,6 +2,7 @@
 import { authClient, setBearerToken } from '$lib/auth/auth-client'
 import { fmtMinds } from '$lib/billing/minds'
 import { refreshUsage, usage } from '$lib/data/usage-store'
+import DebugCopy from '$lib/debug/DebugCopy.svelte'
 import { t } from '$lib/i18n'
 import { clearNetwork } from '$lib/settings/network-store'
 import AdminPanel from '$lib/shell/AdminPanel.svelte'
@@ -89,6 +90,7 @@ async function logout(): Promise<void> {
 			>
 				{t('mainnet.chat.logout')}
 			</button>
+			<span class="normal-case opacity-50"><DebugCopy compact /></span>
 		</div>
 	</nav>
 
