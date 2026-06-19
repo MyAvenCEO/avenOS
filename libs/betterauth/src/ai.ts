@@ -1,7 +1,9 @@
+import { DATA_TOOLS } from '@avenos/aven-vibes/tools'
 import type { Context } from 'hono'
 import { auth } from './auth'
 import { ensureSession, getSessionMessages, listSessions, persistMessage } from './chat'
 import { creditStatus } from './credits'
+import { executeDataTool, schemasPromptHint } from './data'
 import { db } from './db'
 import { getUsageStats, recordUsage, type TokenUsage } from './usage'
 
@@ -62,82 +64,25 @@ export async function aiChat(c: Context): Promise<Response> {
 		console.error('[ai] persist user message failed:', e)
 	)
 
+	// Streaming path: run a tool loop (Tinfoil + the data_crud tool) and stream ONLY the
+	// assistant's content to the client; tool calls (schema-validated CRUD on /api/data)
+	// run server-side between rounds, transparent to the client. board 0054.
+	if (wantStream) {
+		return streamWithTools({ key, model, messages, userId, chatSessionId })
+	}
+
+	// Non-streaming fallback: a single completion, no tools.
 	const upstream = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
 		method: 'POST',
 		headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-		body: JSON.stringify({ model, messages, stream: wantStream })
+		body: JSON.stringify({ model, messages, stream: false })
 	}).catch((e) => {
 		throw new Error(`tinfoil fetch failed: ${e instanceof Error ? e.message : String(e)}`)
 	})
-
 	if (!upstream.ok) {
 		const detail = await upstream.text().catch(() => '')
 		return c.json({ error: `tinfoil_error_${upstream.status}`, detail: detail.slice(0, 500) }, 502)
 	}
-
-	// Streaming: tee Tinfoil's OpenAI-style SSE — forward each chunk to the client AND
-	// accumulate the assistant content + capture the (cumulative) `usage` so we can
-	// persist the message and record usage once the stream ends. Session id is returned
-	// to the client via the X-Session-Id header (exposed by CORS).
-	if (wantStream && upstream.body) {
-		const reader = upstream.body.getReader()
-		const decoder = new TextDecoder()
-		let buf = ''
-		let lastUsage: TokenUsage | null = null
-		let assistant = ''
-		const stream = new ReadableStream<Uint8Array>({
-			async start(controller) {
-				try {
-					while (true) {
-						const { done, value } = await reader.read()
-						if (done) break
-						controller.enqueue(value)
-						buf += decoder.decode(value, { stream: true })
-						const events = buf.split('\n\n')
-						buf = events.pop() ?? ''
-						for (const ev of events) {
-							const line = ev.split('\n').find((l) => l.startsWith('data:'))
-							if (!line) continue
-							const payload = line.slice(5).trim()
-							if (payload === '[DONE]') continue
-							try {
-								const json = JSON.parse(payload) as {
-									usage?: TokenUsage
-									choices?: { delta?: { content?: string } }[]
-								}
-								if (json.usage) lastUsage = json.usage
-								const delta = json.choices?.[0]?.delta?.content
-								if (delta) assistant += delta
-							} catch {
-								/* keep-alive / partial frame */
-							}
-						}
-					}
-				} finally {
-					controller.close()
-					if (assistant) {
-						await persistMessage(chatSessionId, 'assistant', assistant).catch((e) =>
-							console.error('[ai] persist assistant (stream) failed:', e)
-						)
-					}
-					if (lastUsage) {
-						await recordUsage(userId, model, lastUsage).catch((e) =>
-							console.error('[ai] recordUsage (stream) failed:', e)
-						)
-					}
-				}
-			}
-		})
-		return new Response(stream, {
-			status: 200,
-			headers: {
-				'Content-Type': 'text/event-stream; charset=utf-8',
-				'Cache-Control': 'no-cache, no-transform',
-				'X-Session-Id': chatSessionId
-			}
-		})
-	}
-
 	const data = (await upstream.json()) as {
 		choices?: { message?: { content?: string } }[]
 		usage?: TokenUsage
@@ -154,6 +99,150 @@ export async function aiChat(c: Context): Promise<Response> {
 		)
 	}
 	return c.json({ content, usage: data.usage ?? null, sessionId: chatSessionId })
+}
+
+type ToolCallAcc = { id: string; name: string; args: string }
+type StreamDelta = {
+	content?: string
+	tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[]
+}
+
+/**
+ * Stream a completion to the client while running a server-side tool loop: each round
+ * calls Tinfoil with the `data_crud` tool; content deltas are re-emitted to the client as
+ * OpenAI-style SSE, tool calls are assembled and executed against the data store (scoped to
+ * the user), their results fed back, until the model returns a final answer. board 0054.
+ */
+function streamWithTools(opts: {
+	key: string
+	model: string
+	messages: unknown[]
+	userId: string
+	chatSessionId: string
+}): Response {
+	const { key, model, messages, userId, chatSessionId } = opts
+	const encoder = new TextEncoder()
+	const stream = new ReadableStream<Uint8Array>({
+		async start(controller) {
+			const emit = (obj: unknown) =>
+				controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`))
+			const msgs: unknown[] = [...messages]
+			let assistant = ''
+			let promptTokens = 0
+			let completionTokens = 0
+			try {
+				// Tell the model the exact schema field names so data_crud writes validate.
+				const hint = await schemasPromptHint(userId).catch(() => '')
+				if (hint) msgs.unshift({ role: 'system', content: hint })
+				for (let round = 0; round < 5; round++) {
+					const res = await fetch(`${TINFOIL_BASE_URL}/chat/completions`, {
+						method: 'POST',
+						headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+						body: JSON.stringify({ model, messages: msgs, tools: DATA_TOOLS, stream: true })
+					})
+					if (!res.ok || !res.body) {
+						emit({ choices: [{ delta: { content: `\n[ai error ${res.status}]` } }] })
+						break
+					}
+					const reader = res.body.getReader()
+					const decoder = new TextDecoder()
+					let buf = ''
+					const calls: Record<number, ToolCallAcc> = {}
+					let roundContent = ''
+					let roundPrompt = 0
+					let roundCompletion = 0
+					while (true) {
+						const { done, value } = await reader.read()
+						if (done) break
+						buf += decoder.decode(value, { stream: true })
+						const events = buf.split('\n\n')
+						buf = events.pop() ?? ''
+						for (const ev of events) {
+							const line = ev.split('\n').find((l) => l.startsWith('data:'))
+							if (!line) continue
+							const payload = line.slice(5).trim()
+							if (payload === '[DONE]') continue
+							let json: { usage?: TokenUsage; choices?: { delta?: StreamDelta }[] }
+							try {
+								json = JSON.parse(payload)
+							} catch {
+								continue
+							}
+							if (json.usage) {
+								roundPrompt = json.usage.prompt_tokens ?? roundPrompt
+								roundCompletion = json.usage.completion_tokens ?? roundCompletion
+							}
+							const delta = json.choices?.[0]?.delta
+							if (!delta) continue
+							if (typeof delta.content === 'string' && delta.content) {
+								roundContent += delta.content
+								assistant += delta.content
+								emit({ choices: [{ delta: { content: delta.content } }] })
+							}
+							for (const tc of delta.tool_calls ?? []) {
+								const i = tc.index ?? 0
+								let acc = calls[i]
+								if (!acc) {
+									acc = { id: '', name: '', args: '' }
+									calls[i] = acc
+								}
+								if (tc.id) acc.id = tc.id
+								if (tc.function?.name) acc.name = tc.function.name
+								if (tc.function?.arguments) acc.args += tc.function.arguments
+							}
+						}
+					}
+					promptTokens += roundPrompt
+					completionTokens += roundCompletion
+					const callList = Object.values(calls)
+					if (callList.length === 0) break // model gave its final answer (already streamed)
+					// Tool round: record the assistant tool-call turn, run each tool, feed results back.
+					msgs.push({
+						role: 'assistant',
+						content: roundContent || null,
+						tool_calls: callList.map((tc) => ({
+							id: tc.id,
+							type: 'function',
+							function: { name: tc.name, arguments: tc.args }
+						}))
+					})
+					for (const tc of callList) {
+						let result: unknown
+						try {
+							result = await executeDataTool(userId, JSON.parse(tc.args || '{}'))
+						} catch (e) {
+							result = { ok: false, error: e instanceof Error ? e.message : String(e) }
+						}
+						msgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) })
+					}
+				}
+			} catch (e) {
+				emit({
+					choices: [{ delta: { content: `\n[ai error: ${e instanceof Error ? e.message : e}]` } }]
+				})
+			} finally {
+				controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+				controller.close()
+				if (assistant) {
+					await persistMessage(chatSessionId, 'assistant', assistant).catch((err) =>
+						console.error('[ai] persist assistant (stream) failed:', err)
+					)
+				}
+				await recordUsage(userId, model, {
+					prompt_tokens: promptTokens,
+					completion_tokens: completionTokens
+				}).catch((err) => console.error('[ai] recordUsage (stream) failed:', err))
+			}
+		}
+	})
+	return new Response(stream, {
+		status: 200,
+		headers: {
+			'Content-Type': 'text/event-stream; charset=utf-8',
+			'Cache-Control': 'no-cache, no-transform',
+			'X-Session-Id': chatSessionId
+		}
+	})
 }
 
 /** Session-gated: the signed-in user's token usage (all-time + week) + tier credit status. */

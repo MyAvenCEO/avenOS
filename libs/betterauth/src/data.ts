@@ -35,7 +35,9 @@ function validate(jsonSchema: unknown, data: unknown): string[] | null {
 		return [`invalid schema: ${e instanceof Error ? e.message : String(e)}`]
 	}
 	if (check(data)) return null
-	return (check.errors ?? []).map((e) => `${e.instancePath || '/'} ${e.message ?? 'invalid'}`.trim())
+	return (check.errors ?? []).map((e) =>
+		`${e.instancePath || '/'} ${e.message ?? 'invalid'}`.trim()
+	)
 }
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
@@ -187,4 +189,128 @@ export async function deleteValue(c: Context): Promise<Response> {
 	if (!id) return c.json({ error: 'id required' }, 400)
 	await db().deleteFrom('data_value').where('id', '=', id).where('user_id', '=', uid).execute()
 	return c.json({ ok: true, id })
+}
+
+// ── LLM tool executor ──────────────────────────────────────────────────────────
+// Runs the generic `data_crud` tool (schema @avenos/aven-vibes/tools) against the store,
+// scoped to a user. Validates writes against the schema; never throws (returns {ok,...}).
+
+type DataCrudArgs = {
+	schema?: string
+	action?: 'list' | 'create' | 'update' | 'delete'
+	items?: Record<string, unknown>[]
+	id?: string
+}
+
+/** A system-prompt hint listing the user's schemas + their JSON Schema, so the LLM uses
+ *  the exact field names when calling data_crud (else writes fail validation). */
+export async function schemasPromptHint(uid: string): Promise<string> {
+	const rows = await db()
+		.selectFrom('data_schema')
+		.select(['name', 'json_schema'])
+		.where('user_id', '=', uid)
+		.execute()
+	if (rows.length === 0) return ''
+	const lines = rows.map((r) => `- ${r.name}: ${JSON.stringify(asJson(r.json_schema))}`)
+	return `The data_crud tool operates on these schemas for the current user. Use EXACTLY these field names (values are validated against the schema):\n${lines.join('\n')}`
+}
+
+export async function executeDataTool(uid: string, args: DataCrudArgs): Promise<unknown> {
+	const name = args?.schema
+	if (!name) return { ok: false, error: 'schema name required' }
+	const schema = await db()
+		.selectFrom('data_schema')
+		.select(['id', 'json_schema'])
+		.where('user_id', '=', uid)
+		.where('name', '=', name)
+		.executeTakeFirst()
+	if (!schema) return { ok: false, error: `no schema named "${name}"` }
+	const jsonSchema = asJson(schema.json_schema)
+
+	if (args.action === 'list') {
+		const rows = await db()
+			.selectFrom('data_value')
+			.select(['id', 'data'])
+			.where('user_id', '=', uid)
+			.where('schema_id', '=', schema.id)
+			.orderBy('created_at', 'asc')
+			.execute()
+		return {
+			ok: true,
+			action: 'list',
+			items: rows.map((r) => ({ id: r.id, ...(asJson(r.data) as object) }))
+		}
+	}
+
+	if (args.action === 'create') {
+		const created: string[] = []
+		const errors: string[] = []
+		for (const item of args.items ?? []) {
+			const e = validate(jsonSchema, item)
+			if (e) {
+				errors.push(...e)
+				continue
+			}
+			const id = randomUUID()
+			await db()
+				.insertInto('data_value')
+				.values({
+					id,
+					user_id: uid,
+					schema_id: schema.id,
+					data: jsonb(item),
+					created_at: new Date(),
+					updated_at: new Date()
+				})
+				.execute()
+			created.push(id)
+		}
+		return { ok: errors.length === 0, action: 'create', created, errors }
+	}
+
+	if (args.action === 'update') {
+		const updated: string[] = []
+		const errors: string[] = []
+		for (const item of args.items ?? []) {
+			const { id, ...data } = item as { id?: string } & Record<string, unknown>
+			if (!id) {
+				errors.push('update item missing id')
+				continue
+			}
+			const e = validate(jsonSchema, data)
+			if (e) {
+				errors.push(...e)
+				continue
+			}
+			const owns = await db()
+				.selectFrom('data_value')
+				.select('id')
+				.where('id', '=', id)
+				.where('user_id', '=', uid)
+				.executeTakeFirst()
+			if (!owns) {
+				errors.push(`no value ${id}`)
+				continue
+			}
+			await db()
+				.updateTable('data_value')
+				.set({ data: jsonb(data), updated_at: new Date() })
+				.where('id', '=', id)
+				.execute()
+			updated.push(id)
+		}
+		return { ok: errors.length === 0, action: 'update', updated, errors }
+	}
+
+	if (args.action === 'delete') {
+		if (!args.id) return { ok: false, error: 'delete requires id' }
+		await db()
+			.deleteFrom('data_value')
+			.where('id', '=', args.id)
+			.where('user_id', '=', uid)
+			.execute()
+		return { ok: true, action: 'delete', deleted: [args.id] }
+	}
+
+	return { ok: false, error: `unknown action: ${args.action}` }
 }

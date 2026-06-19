@@ -126,6 +126,7 @@
       "name": "@avenos/betterauth",
       "version": "26.6.1-next.17",
       "dependencies": {
+        "@avenos/aven-vibes": "workspace:*",
         "@neondatabase/serverless": "^0.10.4",
         "@polar-sh/better-auth": "^1.8.4",
         "@polar-sh/sdk": "^0.48.1",
