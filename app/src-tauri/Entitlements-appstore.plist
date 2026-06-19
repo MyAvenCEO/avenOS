@@ -17,5 +17,10 @@
 	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
+	<!-- Microphone: voice notes are captured in the WebView (getUserMedia) and transcribed
+	     on-device (Parakeet). Without this the sandbox blocks mic access and WKWebView won't
+	     even expose navigator.mediaDevices. NSMicrophoneUsageDescription is in Info.plist. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
 </dict>
 </plist>
