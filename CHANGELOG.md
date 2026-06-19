@@ -1,3 +1,12 @@
+# [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.19...v) (2026-06-19)
+
+
+### Features
+
+* **ai:** LLM tool-calling CRUD on /api/data via a streaming tool loop ([5b0c807](https://github.com/MyAvenCEO/avenOS/commit/5b0c807f93406f970895374912efeddd82622ec3))
+* **aven-vibes:** standalone vibes lib (engine + todos vibe) copied from aven-ui ([ceb1177](https://github.com/MyAvenCEO/avenOS/commit/ceb1177d27c57753c953363f510523edbbab6e88))
+* **data:** generic schema-driven user data store + todos example card ([873038a](https://github.com/MyAvenCEO/avenOS/commit/873038aacd4f161cdb40d5c56fc36572e65e1df4))
+* **mainnet:** Chat | Vibes nav + Vibes view (todos vibe wired to /api/data) ([ddbe349](https://github.com/MyAvenCEO/avenOS/commit/ddbe349431f20a735a40976360a8473e57074954))
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.18...v) (2026-06-19)
 # [](https://github.com/MyAvenCEO/avenOS/compare/v26.6.1-next.17...v) (2026-06-19)
 
